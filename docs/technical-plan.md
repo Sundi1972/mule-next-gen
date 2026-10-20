@@ -38,7 +38,9 @@ This means the client is designed phone-first and portrait-first: big touch targ
 
 ```
 packages/engine   rules, economy, map, AI "hands", balancing simulator (no I/O)
-apps/server       game rooms, phase timers, WebSocket protocol, AI brain   (stage 1b)
+packages/tabletop game-agnostic rooms: seats, boards, reconnects, host hand-over, private views, chat, clock sync
+packages/protocol M.U.L.E. moves and views sent between server and screens
+apps/server       WebSocket server hosting M.U.L.E. in tabletop rooms, phase timers, AI brain (stage 1b)
 apps/web          React client: lobby, map, development, auction, chat     (stage 1b)
 docs/             this plan and other technical notes
 ```
@@ -46,6 +48,7 @@ docs/             this plan and other technical notes
 ## Architecture
 
 - **The server is authoritative.** Clients send intents ("claim this plot", "my auction price is 42"), the server validates them with the engine and broadcasts the new state. Nobody can cheat by editing their client.
+- **Rooms are their own reusable layer.** `packages/tabletop` knows nothing about M.U.L.E.: it seats players, connects big screens, gives a dropped phone its seat back by a secret token, hands hosting on when the host leaves, keeps whispers private and answers clock-sync pings. A game plugs in by supplying `start`, `handle` and `viewFor(seat or null)`, where `null` is the public view a big screen gets. A second game could reuse it unchanged.
 - **The engine is pure.** Every rule is a function of the game state and a seeded random number generator. Any game can be replayed from its seed and its list of actions, which makes bugs reproducible and allows replays later.
 - **Phases run on server timers.** Planning phases end when the timer runs out or everyone presses Ready. Real-time phases tick on the server (about 10 times a second for the land grant cursor and the auction) and send small updates to clients.
 - **AI players are split in two.** The "hands" in `packages/engine/src/ai` act instantly in real-time phases. The "brain" runs on the server during planning, using a Claude model to set priorities, negotiate and chat. Rookie, Trader and Tycoon map to model size and thinking budget. Stage 1 ships with the hands only.
