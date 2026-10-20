@@ -10,6 +10,8 @@ import {
   importPrice,
   installMule,
   isGameOver,
+  monthlyDemand,
+  mulePrice,
   outfitMule,
   rawOutput,
   runAuction,
@@ -47,29 +49,53 @@ describe('createGame', () => {
 });
 
 describe('prices', () => {
-  it('stay between the export floor and the import cap while imports are affordable', () => {
+  it('have no floor and no cap: only supply and demand', () => {
     const state = newGame();
     state.store.stock.food = 0;
-    expect(colonyPrice(state, 'food')).toBe(Math.round(importPrice(state, 'food')));
+    expect(colonyPrice(state, 'food')).toBeGreaterThan(importPrice(state, 'food') * 10);
     state.store.stock.food = 10_000;
-    expect(colonyPrice(state, 'food')).toBe(Math.round(exportPrice(state, 'food')));
-  });
-
-  it('break through the import cap when the colony cannot pay for imports', () => {
-    const state = newGame();
-    state.store.stock.food = 0;
-    state.store.fund = 0;
-    expect(colonyPrice(state, 'food')).toBeGreaterThan(importPrice(state, 'food'));
+    expect(colonyPrice(state, 'food')).toBeLessThan(exportPrice(state, 'food'));
   });
 
   it('react more strongly to a Food shortage than an Alloy shortage', () => {
     const state = newGame();
-    // One month of cover each, with no money for imports so neither is capped.
-    state.store.fund = 0;
-    state.store.stock.food = 22;
-    state.store.stock.alloy = 4;
+    // One month of cover each.
+    const demand = monthlyDemand(state);
+    state.store.stock.food = demand.food;
+    state.store.stock.alloy = demand.alloy;
     const prices = allPrices(state);
     expect(prices.food / 30).toBeGreaterThan(prices.alloy / 90);
+  });
+
+  it('make MULEs dearer when Alloy is scarce', () => {
+    const state = newGame();
+    state.store.stock.alloy = 20;
+    const cheap = mulePrice(state);
+    state.store.stock.alloy = 1;
+    expect(mulePrice(state)).toBeGreaterThan(cheap);
+  });
+
+  it('let players trade with each other at any price they agree on', () => {
+    const state = newGame();
+    state.players[0]!.stock.food = 5;
+    state.players[1]!.money = 10_000;
+    const trades = runAuction(state, 'food', [
+      { playerId: 'p0', side: 'sell', quantity: 1, limit: 4000 },
+      { playerId: 'p1', side: 'buy', quantity: 1, limit: 6000 },
+    ]);
+    expect(trades[0]).toMatchObject({ seller: 'p0', buyer: 'p1', price: 5000 });
+  });
+});
+
+describe('the store', () => {
+  it('buys only what it can use and can afford', () => {
+    const state = newGame();
+    state.players[0]!.stock.water = 500;
+    const trades = runAuction(state, 'water', [{ playerId: 'p0', side: 'sell', quantity: 500, limit: 1 }]);
+    const bought = trades.reduce((n, t) => n + t.quantity, 0);
+    expect(bought).toBeGreaterThan(0);
+    expect(bought).toBeLessThan(500);
+    expect(state.store.fund).toBeGreaterThanOrEqual(0);
   });
 });
 
@@ -163,13 +189,14 @@ describe('month flow', () => {
 });
 
 describe('simulator', () => {
-  it('plays a full AI game with sane prices', () => {
+  it('plays a full AI game without the colony going broke', () => {
     const state = playAiGame(7, 4);
     expect(state.phase).toBe('gameOver');
+    expect(state.store.fund).toBeGreaterThan(0);
     for (const report of state.history) {
       for (const price of Object.values(report.prices)) {
         expect(price).toBeGreaterThan(0);
-        expect(price).toBeLessThan(2000);
+        expect(Number.isFinite(price)).toBe(true);
       }
     }
   });

@@ -56,18 +56,28 @@ docs/             this plan and other technical notes
 
 | Stage | Contents |
 | --- | --- |
-| 1a (this PR) | Engine: map generation for 2 to 6 players, terrain and traits, production with adjacency and the Energy rule, factories, the colony price formula with export floor, import cap and crisis cap, the auction, upkeep, spoilage, depots, the store's imports, export ship and MULE building, land rush ending, simple AI, simulator, tests |
+| 1a (this PR) | Engine: map generation for 2 to 6 players, terrain and traits, production with adjacency and the Energy rule, factories, the colony price formula (pure supply and demand, no floor or cap), the auction, upkeep, spoilage, depots, the store's imports, export ship and MULE building, land rush ending, simple AI, simulator, tests |
 | 1b | Game server and phone-first web client: room codes and QR join, one full month with friends and AI players, the optional `/table` view, chat |
 | 2 | Events and hedging, tile surveys, special fields and super tiles, storage buildings, speculation tools |
 | 3 | Politics: council, Governor, Sheriff, Land Baron, laws, taxes and colony projects; LLM AI brain and personas |
 | 4 | Polish: art, sound, onboarding, Capacitor builds, accounts, hosting |
 
-## What the first simulator runs showed
+## How the economy stays stable without price limits
 
-The first runs found three economy bugs that a design doc alone wouldn't have caught, and all three are fixed here:
+Prices have no floor and no cap. A glut can push a price close to nothing, and a shortage can push it as high as anyone will pay. Stability comes from how the colony's actors behave, not from limits:
 
-- The colony fund went negative because the store bought players' overflow without checking its money.
-- Prices exploded into the thousands once the fund was empty, so crisis prices now stop at 2.5 times the import price.
+- **The store is a merchant, not a bottomless buyer.** It fills its shelves up to three months of demand, never spends more than half its fund on one good in a month, and only imports when the colony price is above what the import costs.
+- **Colonists pay for their Food and Water** out of off-world wages, up to what they can afford. When the price is higher, they go short, just as when the shelves are empty.
+- **MULEs cost their labour plus the Alloy inside them at today's price**, as in the original. A Smithore shortage makes MULEs dear.
+- **Off-world buyers are real demand.** The export ship buys Smithore, Crystite and the processed goods, up to what its buyers want.
+- **The reference price learns only from trades between players**, and only from the part of the price that the shortage alone doesn't explain. It drifts slowly back toward the off-world price, because ships keep bringing that price into the colony.
+
+## What the simulator showed
+
+The first runs found economy bugs that a design doc alone wouldn't have caught:
+
+- Without price limits, the store spent its whole fund in the first month buying at shortage prices and importing. It could then no longer build MULEs, and the colony starved. The merchant rules above fixed this.
+- The reference price followed the store's own shortage price upward, so prices compounded into the billions. Learning only from trades between players fixed this.
 - MULE production stopped because nobody made Alloy. The store now has a small Smithore smelter, as the original's store did, and Smithore demand includes it.
 
-With 4 or 6 AI players, Food now ranges from about 21 to 120 credits, and about 1 in 12 colonies hits a Food shortage at least once. Alloy, Electronics and Medicine sit at their caps, because the simple AI doesn't build factories yet; that comes with the smarter AI.
+With 4 AI players over 100 games, Food has a median of about 79 credits, with spikes to 2,683 when the shelves are empty. About 1 colony in 8 runs short of Food at least once, and in 17% of months no MULE is for sale. Electronics and Medicine sit at shortage prices because the simple AI doesn't build factories yet; that comes with the smarter AI.

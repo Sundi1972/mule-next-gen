@@ -35,10 +35,28 @@ export const PRICE = {
   importFactor: 1.6,
   /** The store sells this much above and buys this much below the colony price. */
   storeSpread: 0.1,
-  /** In a crisis, when the colony can't pay for imports, prices can still rise only this far above the import price. */
-  crisisFactor: 2.5,
+  /** The store fills its shelves up to this many months of demand. */
+  storeMaxCover: 3,
+  /** The most of its fund the store spends on one good in one month. */
+  storeBudgetShare: 0.5,
+  /** Share of normal spoilage the store suffers, thanks to its cold store and silos. */
+  storeSpoilage: 0.25,
   /** How fast the reference price follows the last clearing price (0..1). */
   refDrift: 0.25,
+  /** How fast the reference price drifts back toward the off-world price (0..1). */
+  worldPull: 0.1,
+};
+
+/**
+ * Off-world demand per player per month: what the export ship's buyers take.
+ * Food, Water and Energy don't travel well, so only the colony wants them.
+ */
+export const EXPORT_DEMAND: Partial<Record<Good, number>> = {
+  smithore: 1,
+  crystite: 2,
+  alloy: 1,
+  electronics: 1,
+  medicine: 0.5,
 };
 
 /** Factory recipes: inputs consumed per unit of output. */
@@ -102,6 +120,8 @@ export const UPKEEP = {
   energyPerPlot: 1,
   /** Colonists need 1 Food and 1 Water per this many colonists. */
   colonistsPerUnit: 10,
+  /** What colonists can pay per unit of Food and Water they need, from their off-world wages. */
+  colonistBudget: { food: 300, water: 200 },
   /** Units of each good a player's home depot holds. */
   depotCapacity: 10,
 };
@@ -115,8 +135,8 @@ export const START = {
 };
 
 export const MULE = {
-  /** Base price of an empty MULE at the store. */
-  price: 100,
+  /** Labour in an empty MULE. Its price is this plus the colony price of the Alloy it is built from. */
+  labour: 40,
   /** Alloy the store needs to build one MULE. */
   alloyPerMule: 1,
   /** The store's own small smelter: Smithore per unit of Alloy (factories are more efficient). */

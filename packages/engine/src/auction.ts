@@ -1,4 +1,4 @@
-import { colonyPrice, driftReference, storeQuotes } from './economy.js';
+import { driftReference, storeQuotes, storeWants } from './economy.js';
 import type { GameState, Good } from './types.js';
 
 export interface Order {
@@ -79,16 +79,16 @@ export function runAuction(state: GameState, good: Good, orders: Order[]): Trade
   for (const buy of buys) {
     if (buy.quantity > 0 && buy.limit >= quotes.sell) settle(buy.playerId, STORE_ID, buy.quantity, quotes.sell);
   }
+  let wants = storeWants(state, good, quotes.buy);
   for (const sell of sells) {
-    if (sell.quantity > 0 && sell.limit <= quotes.buy) settle(STORE_ID, sell.playerId, sell.quantity, quotes.buy);
+    if (wants <= 0) break;
+    if (sell.quantity > 0 && sell.limit <= quotes.buy) wants -= settle(STORE_ID, sell.playerId, Math.min(sell.quantity, wants), quotes.buy);
   }
 
-  const volume = trades.reduce((n, t) => n + t.quantity, 0);
-  if (volume > 0) {
-    const average = trades.reduce((n, t) => n + t.price * t.quantity, 0) / volume;
-    driftReference(state, good, average);
-  } else {
-    driftReference(state, good, colonyPrice(state, good));
-  }
+  // Only trades between players teach the market something: store trades are
+  // at the store's own quote.
+  const between = trades.filter((t) => t.buyer !== STORE_ID && t.seller !== STORE_ID);
+  const volume = between.reduce((n, t) => n + t.quantity, 0);
+  driftReference(state, good, volume > 0 ? between.reduce((n, t) => n + t.price * t.quantity, 0) / volume : null);
   return trades;
 }

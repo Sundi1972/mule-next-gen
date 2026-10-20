@@ -1,6 +1,6 @@
 import type { Order } from '../auction.js';
 import { MULE, UPKEEP } from '../config.js';
-import { allPrices, storeQuotes } from '../economy.js';
+import { allPrices, mulePrice, storeQuotes } from '../economy.js';
 import { buyMule, claimPlot, freePlots, installMule, outfitMule } from '../game.js';
 import { rawOutput } from '../production.js';
 import { RAW_GOODS, type GameState, type Good, type RawGood, type Stock, type Tile } from '../types.js';
@@ -48,7 +48,7 @@ export function aiDevelop(state: GameState, playerId: string): void {
   const idle = state.tiles.filter((t) => t.owner === playerId && !t.outfit);
   for (const tile of idle) {
     const { good } = bestGoodFor(state, tile, playerId, prices);
-    if (player.money < MULE.price + MULE.outfitCost[good] + 100) return;
+    if (player.money < mulePrice(state) + MULE.outfitCost[good] + 100) return;
     if (state.store.mules <= 0) return;
     buyMule(state, playerId);
     outfitMule(state, playerId, good);

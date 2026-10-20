@@ -93,6 +93,8 @@ export interface MonthReport {
   produced: Record<string, Stock>;
   prices: Stock;
   shortages: Good[];
+  /** MULEs left in the store after development. */
+  storeMules: number;
 }
 
 export interface GameState {

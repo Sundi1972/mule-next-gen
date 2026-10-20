@@ -47,7 +47,8 @@ export function playAiGame(seed: number, players: number): GameState {
 function main() {
   const games = arg('games', 100);
   const players = arg('players', 4);
-  const priceRange = Object.fromEntries(GOODS.map((g) => [g, { min: Infinity, max: 0, sum: 0, n: 0 }]));
+  const priceRange = Object.fromEntries(GOODS.map((g) => [g, { min: Infinity, max: 0, all: [] as number[] }]));
+  let mulesShort = 0;
   let starved = 0;
   let months = 0;
   const scores: number[] = [];
@@ -56,13 +57,13 @@ function main() {
     const state = playAiGame(seed, players);
     months += state.month;
     if (state.history.some((h) => h.shortages.includes('food'))) starved++;
+    mulesShort += state.history.filter((h) => h.storeMules === 0).length;
     for (const report of state.history) {
       for (const good of GOODS) {
         const r = priceRange[good]!;
         r.min = Math.min(r.min, report.prices[good]);
         r.max = Math.max(r.max, report.prices[good]);
-        r.sum += report.prices[good];
-        r.n++;
+        r.all.push(report.prices[good]);
       }
     }
     for (const p of state.players) scores.push(score(state, p.id));
@@ -71,10 +72,13 @@ function main() {
   console.log(`${games} games, ${players} AI players, average length ${(months / games).toFixed(1)} months`);
   console.log(`Colonies with a Food shortage at least once: ${((starved / games) * 100).toFixed(0)}%`);
   console.log(`Average final score: ${Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)}`);
-  console.log('Prices (min / avg / max):');
+  console.log(`Months with no MULE for sale: ${((mulesShort / months) * 100).toFixed(0)}%`);
+  console.log('Prices (min / median / 90th percentile / max):');
   for (const good of GOODS) {
     const r = priceRange[good]!;
-    console.log(`  ${good.padEnd(12)} ${r.min} / ${Math.round(r.sum / r.n)} / ${r.max}`);
+    const sorted = [...r.all].sort((a, b) => a - b);
+    const at = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
+    console.log(`  ${good.padEnd(12)} ${r.min} / ${at(0.5)} / ${at(0.9)} / ${r.max}`);
   }
 }
 

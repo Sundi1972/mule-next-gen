@@ -1,6 +1,6 @@
 import { runAuction, type Order, type Trade } from './auction.js';
 import { GAME, GOOD_CONFIG, MULE, START } from './config.js';
-import { allPrices } from './economy.js';
+import { allPrices, mulePrice } from './economy.js';
 import { generateMap, tileAt } from './map.js';
 import { runProduction } from './production.js';
 import { createRng } from './rng.js';
@@ -91,9 +91,10 @@ export function buyMule(state: GameState, playerId: string): void {
   const p = player(state, playerId);
   if (p.carriedMule) throw new RuleError('Already leading a MULE');
   if (state.store.mules <= 0) throw new RuleError('The store is out of MULEs');
-  if (p.money < MULE.price) throw new RuleError('Not enough money');
-  p.money -= MULE.price;
-  state.store.fund += MULE.price;
+  const price = mulePrice(state);
+  if (p.money < price) throw new RuleError('Not enough money');
+  p.money -= price;
+  state.store.fund += price;
   state.store.mules--;
   p.carriedMule = 'empty';
 }
@@ -141,7 +142,7 @@ export function advancePhase(state: GameState): void {
     // A MULE nobody installed runs away at the end of development.
     for (const p of state.players) p.carriedMule = null;
     const produced = runProduction(state);
-    state.history.push({ month: state.month, produced, prices: allPrices(state), shortages: [] });
+    state.history.push({ month: state.month, produced, prices: allPrices(state), shortages: [], storeMules: state.store.mules });
   }
   if (next === 'upkeep') {
     const shortages = runUpkeep(state);
@@ -172,6 +173,6 @@ export function score(state: GameState, playerId: string): number {
   const prices = allPrices(state);
   const goods = GOODS.reduce((sum, g) => sum + p.stock[g] * prices[g], 0);
   const plots = state.tiles.filter((t) => t.owner === playerId);
-  const land = plots.length * 300 + plots.filter((t) => t.outfit).length * MULE.price;
+  const land = plots.length * 300 + plots.filter((t) => t.outfit).length * mulePrice(state);
   return Math.round(p.money + goods + land);
 }

@@ -1,5 +1,5 @@
-import { GAME, GOOD_CONFIG, MULE, PRICE, UPKEEP } from './config.js';
-import { cover, exportPrice, importPrice, monthlyDemand, storeQuotes } from './economy.js';
+import { EXPORT_DEMAND, GAME, GOOD_CONFIG, MULE, PRICE, UPKEEP } from './config.js';
+import { colonyPrice, cover, exportPrice, importPrice, monthlyDemand, storeQuotes, storeWants } from './economy.js';
 import { addStock, emptyStock } from './stock.js';
 import { GOODS, type GameState, type Good } from './types.js';
 
@@ -22,15 +22,21 @@ export function runUpkeep(state: GameState): Good[] {
     player.stock.water = Math.max(0, player.stock.water - UPKEEP.water);
   }
 
-  // Colonists eat from the colony store.
+  // Colonists buy their Food and Water from the store at the colony price,
+  // out of wages paid from off-world. When the price is more than they can
+  // pay, they go short, just as when the shelves are empty.
   const colonistNeed = state.colonists / UPKEEP.colonistsPerUnit;
   let fed = true;
   for (const good of ['food', 'water'] as const) {
-    if (state.store.stock[good] < colonistNeed) {
+    const price = colonyPrice(state, good);
+    const budget = colonistNeed * UPKEEP.colonistBudget[good];
+    const bought = Math.min(colonistNeed, state.store.stock[good], budget / price);
+    if (bought < colonistNeed) {
       shortages.add(good);
       fed = false;
     }
-    state.store.stock[good] = Math.max(0, state.store.stock[good] - colonistNeed);
+    state.store.stock[good] = Math.max(0, state.store.stock[good] - bought);
+    state.store.fund += Math.round(bought * price);
   }
   state.colonists = Math.round(state.colonists * (fed ? 1.04 : 0.95));
 
@@ -41,28 +47,31 @@ export function runUpkeep(state: GameState): Good[] {
       player.stock[good] = Math.floor(kept);
       const overflow = player.stock[good] - UPKEEP.depotCapacity;
       if (overflow > 0) {
-        // Sold to the store at half price, as far as the fund can pay; the rest is lost.
+        // Sold to the store at half price, as far as the store wants it; the rest is lost.
         const price = Math.max(1, Math.floor(storeQuotes(state, good).buy / 2));
-        const paid = Math.min(overflow, Math.floor(Math.max(0, state.store.fund) / price));
+        const paid = Math.min(overflow, storeWants(state, good, price));
         player.stock[good] -= overflow;
         player.money += paid * price;
-        state.store.stock[good] += overflow;
+        state.store.stock[good] += paid;
         state.store.fund -= paid * price;
       }
     }
   }
   for (const good of GOODS) {
-    state.store.stock[good] = Math.floor(state.store.stock[good] * (1 - GOOD_CONFIG[good].spoilage));
+    // The store has proper storage, so its goods spoil much more slowly.
+    state.store.stock[good] = Math.floor(state.store.stock[good] * (1 - GOOD_CONFIG[good].spoilage * PRICE.storeSpoilage));
   }
 
   const demand = monthlyDemand(state);
 
   // The export ship calls every few months and buys the store's surplus
-  // (anything above two months of cover) at the export price.
+  // (anything above two months of cover) at the export price, as far as
+  // off-world buyers want it.
   if (state.month % GAME.exportShipEvery === 0) {
     for (const good of GOODS) {
       const keep = Math.ceil(demand[good] * PRICE.targetCover);
-      const surplus = state.store.stock[good] - keep;
+      const hold = (EXPORT_DEMAND[good] ?? 0) * state.players.length * GAME.exportShipEvery;
+      const surplus = Math.min(hold, state.store.stock[good] - keep);
       if (surplus > 0) {
         state.store.stock[good] -= surplus;
         state.store.fund += Math.floor(surplus * exportPrice(state, good));
@@ -70,12 +79,15 @@ export function runUpkeep(state: GameState): Good[] {
     }
   }
 
-  // The store orders imports for anything under one month of cover.
+  // The store orders imports for anything under one month of cover, but only
+  // when the colony price is above what an import costs: a merchant doesn't
+  // import at a loss.
   for (const good of GOODS) {
     if (demand[good] <= 0 || cover(state, good, demand) >= 1) continue;
+    if (colonyPrice(state, good, demand) < importPrice(state, good)) continue;
     const want = Math.ceil(demand[good] * 2 - state.store.stock[good]);
     const unit = Math.ceil(importPrice(state, good));
-    const affordable = Math.min(want, Math.floor(state.store.fund / unit));
+    const affordable = Math.min(want, Math.floor((Math.max(0, state.store.fund) * PRICE.storeBudgetShare) / unit));
     if (affordable > 0) {
       state.store.pendingImports[good] += affordable;
       state.store.fund -= affordable * unit;
