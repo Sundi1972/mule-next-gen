@@ -1,0 +1,73 @@
+# Technical plan
+
+How M.U.L.E. Next Gen is built. The game design lives in the design doc; this
+file covers the code.
+
+## Goals
+
+- **Online multiplayer** for 2 to 6 players, each on their own PC or phone, with AI players filling empty seats.
+- **Quasi real-time:** simultaneous planning phases and real-time action phases, with nobody waiting for another player's turn.
+- **One codebase** for web and mobile.
+- **A realistic economy** whose numbers can be tuned without touching rules code.
+
+## Stack
+
+| Part | Choice | Why |
+| --- | --- | --- |
+| Language | TypeScript everywhere | One language for client, server and rules |
+| Web client | React 18, Vite, Tailwind 4 | Same stack as Helvetiq |
+| Mobile | Capacitor wrapping the web client | Same code in the app stores |
+| Map rendering | SVG first, PixiJS if large maps need it | SVG is quick to build and style; PixiJS for animation-heavy phases later |
+| Game server | Node 22 with WebSockets (`ws`) | Authoritative, real-time, simple to host |
+| Rules | `@mule/engine`, a pure TypeScript package | Deterministic, testable, shared by server, simulator and AI |
+| AI brain | Claude models through the Anthropic API, called from the server | Strategy, negotiation and chat during planning phases |
+| Tests | Vitest | Fast and works with TypeScript and Vite |
+| Repo | pnpm workspace monorepo | One install, shared packages |
+
+## Play modes
+
+The same server and client support three ways to play, and the phone is the main device in all of them:
+
+- **Solo:** one player against AI players. AI personas have to carry the social side of the game, so their chat, deals and grudges matter as much as their strategy.
+- **Kitchen table:** everyone sits together, each with their own phone. One person creates a game and the others join by scanning a QR code or typing a 4-letter room code; no accounts needed. Public things (the map, auctions, council votes) show on every phone, and optionally on a shared TV or laptop through a `/table` view. Private things (your stock, whispers, secret sabotage orders, survey results) stay on your own phone, so you can plot against someone sitting next to you.
+- **Remote online:** the same thing over the internet, with in-game table chat replacing talking across the table.
+
+This means the client is designed phone-first and portrait-first: big touch targets, a zoomable map, and short real-time phases that work with one thumb. A screen that only works on a laptop is a bug.
+
+## Repository layout
+
+```
+packages/engine   rules, economy, map, AI "hands", balancing simulator (no I/O)
+apps/server       game rooms, phase timers, WebSocket protocol, AI brain   (stage 1b)
+apps/web          React client: lobby, map, development, auction, chat     (stage 1b)
+docs/             this plan and other technical notes
+```
+
+## Architecture
+
+- **The server is authoritative.** Clients send intents ("claim this plot", "my auction price is 42"), the server validates them with the engine and broadcasts the new state. Nobody can cheat by editing their client.
+- **The engine is pure.** Every rule is a function of the game state and a seeded random number generator. Any game can be replayed from its seed and its list of actions, which makes bugs reproducible and allows replays later.
+- **Phases run on server timers.** Planning phases end when the timer runs out or everyone presses Ready. Real-time phases tick on the server (about 10 times a second for the land grant cursor and the auction) and send small updates to clients.
+- **AI players are split in two.** The "hands" in `packages/engine/src/ai` act instantly in real-time phases. The "brain" runs on the server during planning, using a Claude model to set priorities, negotiate and chat. Rookie, Trader and Tycoon map to model size and thinking budget. Stage 1 ships with the hands only.
+- **All balancing numbers live in `packages/engine/src/config.ts`.** The simulator (`pnpm sim`) plays hundreds of AI-only games and reports price ranges and how often colonies starve.
+- **Persistence.** In memory for the prototype. Later, Postgres for accounts and finished games and Redis for live rooms, so a server restart doesn't kill a game.
+
+## Delivery stages
+
+| Stage | Contents |
+| --- | --- |
+| 1a (this PR) | Engine: map generation for 2 to 6 players, terrain and traits, production with adjacency and the Energy rule, factories, the colony price formula with export floor, import cap and crisis cap, the auction, upkeep, spoilage, depots, the store's imports, export ship and MULE building, land rush ending, simple AI, simulator, tests |
+| 1b | Game server and phone-first web client: room codes and QR join, one full month with friends and AI players, the optional `/table` view, chat |
+| 2 | Events and hedging, tile surveys, special fields and super tiles, storage buildings, speculation tools |
+| 3 | Politics: council, Governor, Sheriff, Land Baron, laws, taxes and colony projects; LLM AI brain and personas |
+| 4 | Polish: art, sound, onboarding, Capacitor builds, accounts, hosting |
+
+## What the first simulator runs showed
+
+The first runs found three economy bugs that a design doc alone wouldn't have caught, and all three are fixed here:
+
+- The colony fund went negative because the store bought players' overflow without checking its money.
+- Prices exploded into the thousands once the fund was empty, so crisis prices now stop at 2.5 times the import price.
+- MULE production stopped because nobody made Alloy. The store now has a small Smithore smelter, as the original's store did, and Smithore demand includes it.
+
+With 4 or 6 AI players, Food now ranges from about 21 to 120 credits, and about 1 in 12 colonies hits a Food shortage at least once. Alloy, Electronics and Medicine sit at their caps, because the simple AI doesn't build factories yet; that comes with the smarter AI.

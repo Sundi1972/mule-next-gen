@@ -1,0 +1,12 @@
+{
+  "name": "mule-next-gen",
+  "private": true,
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@10.28.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "sim": "pnpm --filter @mule/engine sim"
+  }
+}
