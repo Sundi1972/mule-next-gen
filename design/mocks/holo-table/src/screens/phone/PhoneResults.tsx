@@ -64,7 +64,7 @@ export function PhoneResults() {
 
         <Panel title="Only you know" aside="PRIVATE">
           <p className="leading-snug">
-            Your survey of plot 9·3 found a <strong className="text-holo">rich Crystite vein</strong> under your Energy plant. Worth 3 per month as a Crystite mine.
+            Your geo analysis of plot 9·3 rates its <strong className="text-holo">Crystite 3 of 4</strong>, under your Energy plant. As a Crystite mine it would make about 3 a month.
           </p>
           <Button size="md" variant="outline">Plan a switch next month</Button>
         </Panel>

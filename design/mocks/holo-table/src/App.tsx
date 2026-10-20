@@ -1,10 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
+import { setTheme, useTheme } from '@mule/ui';
 import { PhoneAuction } from './screens/phone/PhoneAuction';
 import { PhoneDevelop } from './screens/phone/PhoneDevelop';
 import { PhoneLandGrant } from './screens/phone/PhoneLandGrant';
 import { PhoneLobby } from './screens/phone/PhoneLobby';
 import { PhonePlanning } from './screens/phone/PhonePlanning';
 import { PhoneResults } from './screens/phone/PhoneResults';
+import { MapLab } from './screens/MapLab';
 import { System } from './screens/System';
 import { TvAuction } from './screens/tv/TvAuction';
 import { TvDevelop } from './screens/tv/TvDevelop';
@@ -55,6 +57,7 @@ export function App() {
   if (kind === 'phone' && step) return <PhoneOnly step={step} />;
   if (kind === 'tv' && step) return <TvOnly step={step} />;
   if (kind === 'system') return <System />;
+  if (kind === 'map') return <MapLab />;
   return <Overview />;
 }
 
@@ -133,15 +136,40 @@ function Overview() {
   );
 }
 
+/** Switches between day and night. The choice is remembered on this device. */
+export function ThemeToggle() {
+  const theme = useTheme();
+  const next = theme === 'light' ? 'dark' : 'light';
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        setTheme(next);
+        try {
+          localStorage.setItem('mule-theme', next);
+        } catch {
+          // Not remembered; fine for a prototype.
+        }
+      }}
+      className="rounded-chip border border-holo-line px-2 py-0.5 hover:border-holo hover:text-holo"
+    >
+      {theme === 'light' ? 'Night' : 'Day'}
+    </button>
+  );
+}
+
 function StepNav({ step, kind }: { step: Step; kind: 'phone' | 'tv' }) {
   const i = STEPS.indexOf(step);
   const prev = STEPS[i - 1];
   const next = STEPS[i + 1];
   return (
     <nav aria-label="Prototype" className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-holo-faint bg-void px-3 font-mono text-xs text-ink-3">
-      {prev ? <a href={`#${kind}-${prev.id}`} className="hover:text-holo">‹ {prev.title}</a> : <span />}
-      <a href="#all" className="hover:text-holo">All screens</a>
-      {next ? <a href={`#${kind}-${next.id}`} className="hover:text-holo">{next.title} ›</a> : <span />}
+      {prev ? <a href={`#${kind}-${prev.id}`} className="truncate hover:text-holo" title={prev.title}>‹ {kind === 'phone' ? 'Back' : prev.title}</a> : <span />}
+      <span className="flex items-center gap-3">
+        <a href="#all" className="whitespace-nowrap hover:text-holo">All screens</a>
+        <ThemeToggle />
+      </span>
+      {next ? <a href={`#${kind}-${next.id}`} className="truncate hover:text-holo" title={next.title}>{kind === 'phone' ? 'Next' : next.title} ›</a> : <span />}
     </nav>
   );
 }

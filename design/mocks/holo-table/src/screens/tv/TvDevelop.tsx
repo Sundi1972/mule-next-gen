@@ -16,7 +16,7 @@ export function TvDevelop() {
     <div className="flex h-[720px] w-[1280px] flex-col gap-5 bg-table p-10 text-ink">
       <TvHeader phase="Development" seconds={seconds} />
       <div className="flex min-h-0 flex-1 gap-6">
-        <HoloMap width={MAP_W} height={MAP_H} tiles={TILES} avatars={avatars} showOutput density="tv" className="w-[860px] shrink-0 self-start" />
+        <HoloMap width={MAP_W} height={MAP_H} tiles={TILES} avatars={avatars} showOutput density="tv" hideGround className="w-[860px] shrink-0 self-start" />
         <div className="flex min-w-0 flex-1 flex-col gap-4">
           <div className="flex flex-col gap-3 rounded-panel border border-holo-line bg-panel p-5">
             <span className="label-caps">Colony store</span>
@@ -35,7 +35,7 @@ export function TvDevelop() {
           <ul className="flex flex-col gap-2 font-mono text-base">
             <li className="text-ink"><span className="text-holo">MIA</span> installed a Food MULE</li>
             <li className="text-ink"><span className="text-holo">OSSA</span> bought a MULE</li>
-            <li className="text-ink-2"><span className="text-holo">JONAS</span> is surveying a plot</li>
+            <li className="text-ink-2"><span className="text-holo">JONAS</span> is running a geo analysis</li>
           </ul>
           <ul className="mt-auto flex flex-col gap-2">
             {SEATS.map((s) => (

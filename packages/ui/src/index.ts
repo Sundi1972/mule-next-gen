@@ -1,7 +1,10 @@
 export * from './components/AuctionSlider';
 export * from './components/Button';
 export * from './components/GoodTag';
+export * from './components/GoodIcon';
 export * from './components/HoloMap';
+export * from './components/Landscape';
+export * from './components/theme';
 export * from './components/Panel';
 export * from './components/PhaseBar';
 export * from './components/PlayerMark';
@@ -9,3 +12,4 @@ export * from './components/Stat';
 export * from './components/Ticker';
 export * from './components/Timer';
 export * from './components/tokens';
+export { renderLandscape, type LandscapeInput, type LandscapeTheme } from './terrain/landscape';

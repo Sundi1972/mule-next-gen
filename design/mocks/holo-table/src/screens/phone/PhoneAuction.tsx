@@ -30,16 +30,16 @@ export function PhoneAuction() {
   return (
     <PhoneShell phase="Goods auction" seconds={seconds}>
       <div className="flex h-full flex-col gap-3">
-        <div className="flex gap-1.5 overflow-x-auto">
+        <div className="grid grid-cols-5 gap-1">
           {GOODS.map((g) => (
             <button
               key={g}
               type="button"
               aria-pressed={good === g}
               onClick={() => setGood(g)}
-              className={cx('h-10 shrink-0 rounded-chip border px-3', good === g ? 'border-holo bg-holo-soft' : 'border-holo-faint')}
+              className={cx('flex h-10 min-w-0 items-center justify-center rounded-chip border', good === g ? 'border-holo bg-holo-soft' : 'border-holo-faint')}
             >
-              <GoodTag good={g} />
+              <GoodTag good={g} className="gap-1 text-[11px]" />
             </button>
           ))}
         </div>

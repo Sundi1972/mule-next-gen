@@ -15,7 +15,7 @@ export function TvEvent() {
             <h2 className="font-display text-7xl font-bold leading-none text-alert-ink">Sabotage!</h2>
             <p className="font-display text-3xl leading-tight">Lena's Smithore mine is offline for one month.</p>
           </div>
-          <HoloMap width={MAP_W} height={MAP_H} tiles={TILES} density="tv" className="w-[520px]" />
+          <HoloMap width={MAP_W} height={MAP_H} tiles={TILES} density="tv" hideGround className="w-[520px]" />
           <div className="flex items-center gap-4 rounded-panel border border-holo-line bg-panel px-5 py-4">
             <span className="font-display text-2xl font-semibold">Who did it?</span>
             <span className="text-xl text-ink-2">The Sheriff investigates next month.</span>

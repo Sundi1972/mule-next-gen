@@ -12,7 +12,7 @@ export function TvLandGrant() {
     <div className="flex h-[720px] w-[1280px] flex-col gap-5 bg-table p-10 text-ink">
       <TvHeader phase="Land grant" seconds={seconds} />
       <div className="flex min-h-0 flex-1 gap-6">
-        <HoloMap width={MAP_W} height={MAP_H} tiles={TILES} cursor={cursor} density="tv" className="w-[860px] shrink-0 self-start" />
+        <HoloMap width={MAP_W} height={MAP_H} tiles={TILES} cursor={cursor} density="tv" hideGround className="w-[860px] shrink-0 self-start" />
         <div className="flex min-w-0 flex-1 flex-col gap-5">
           <div className="flex flex-col gap-1 rounded-panel border-2 border-holo bg-holo-soft p-5 shadow-glow">
             <span className="label-caps">Cursor on</span>

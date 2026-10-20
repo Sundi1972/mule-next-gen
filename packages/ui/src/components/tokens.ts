@@ -29,7 +29,7 @@ export const SLOT_CLIP: Record<Slot, string> = {
   5: 'polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)',
 };
 
-export type Good = 'food' | 'water' | 'energy' | 'smithore' | 'crystite' | 'alloy' | 'electronics' | 'medicine';
+export type Good = 'food' | 'water' | 'energy' | 'smithore' | 'crystite' | 'rareEarth' | 'alloy' | 'electronics' | 'medicine';
 
 export const GOOD_CODE: Record<Good, string> = {
   food: 'FOOD',
@@ -37,6 +37,7 @@ export const GOOD_CODE: Record<Good, string> = {
   energy: 'NRG',
   smithore: 'ORE',
   crystite: 'CRY',
+  rareEarth: 'REE',
   alloy: 'ALY',
   electronics: 'ELC',
   medicine: 'MED',
@@ -48,6 +49,7 @@ export const GOOD_NAME: Record<Good, string> = {
   energy: 'Energy',
   smithore: 'Smithore',
   crystite: 'Crystite',
+  rareEarth: 'Rare earth',
   alloy: 'Alloy',
   electronics: 'Electronics',
   medicine: 'Medicine',
@@ -55,11 +57,11 @@ export const GOOD_NAME: Record<Good, string> = {
 
 export type Terrain =
   | 'river' | 'lake' | 'plains' | 'forest' | 'swamp' | 'hills' | 'mountains'
-  | 'desert' | 'ice' | 'volcanic' | 'crater' | 'wasteland' | 'store';
+  | 'desert' | 'tundra' | 'ice' | 'volcanic' | 'crater' | 'wasteland' | 'store';
 
 export const TERRAIN_NAME: Record<Terrain, string> = {
   river: 'River', lake: 'Lake', plains: 'Plains', forest: 'Forest', swamp: 'Swamp', hills: 'Hills',
-  mountains: 'Mountains', desert: 'Desert', ice: 'Ice', volcanic: 'Volcanic', crater: 'Crater',
+  mountains: 'Mountains', desert: 'Desert', tundra: 'Tundra', ice: 'Ice field', volcanic: 'Volcanic', crater: 'Crater',
   wasteland: 'Wasteland', store: 'Colony store',
 };
 

@@ -1,4 +1,4 @@
-import { AuctionSlider, Button, GOOD_NAME, GoodTag, HoloMap, Panel, PlayerMark, SLOT_SHAPE_NAME, Stat, Ticker, Timer, type Good, type Slot } from '@mule/ui';
+import { AuctionSlider, Button, GOOD_NAME, GoodIcon, HoloMap, Landscape, Panel, PlayerMark, SLOT_SHAPE_NAME, Stat, TERRAIN_NAME, Ticker, Timer, useTheme, type Good, type Slot, type Terrain } from '@mule/ui';
 import { useState, type ReactNode } from 'react';
 import { MAP_H, MAP_W, MARKET, TILES } from '../data';
 
@@ -6,12 +6,13 @@ const SURFACES = ['void', 'table', 'panel', 'raised'];
 const HOLO = ['holo', 'holo-strong', 'holo-soft', 'holo-line'];
 const INK = ['ink', 'ink-2', 'ink-3'];
 const SIGNALS = ['alert', 'warn', 'ok', 'rise', 'fall'];
-const TERRAIN = ['river', 'lake', 'plains', 'forest', 'swamp', 'hills', 'mountains', 'desert', 'ice', 'volcanic', 'crater', 'wasteland', 'store'];
-const GOODS: Good[] = ['food', 'water', 'energy', 'smithore', 'crystite', 'alloy', 'electronics', 'medicine'];
+const TERRAIN: Terrain[] = ['plains', 'river', 'lake', 'forest', 'swamp', 'hills', 'mountains', 'desert', 'tundra', 'ice', 'volcanic', 'crater'];
+const GOODS: Good[] = ['food', 'water', 'energy', 'smithore', 'rareEarth', 'crystite', 'alloy', 'electronics', 'medicine'];
 const SLOTS: Slot[] = [0, 1, 2, 3, 4, 5];
 
 const PRINCIPLES = [
-  ['The map is a hologram', 'Land is tinted glass on a faint grid over a dark table. Owned land glows in its owner’s colour.'],
+  ['The map is a living landscape', 'Rivers, forests, dunes, ranges and ice are painted at full screen resolution. A fine grid marks the plots, and owned land is edged in its owner’s colour.'],
+  ['Day by default, night on request', 'The light theme reads well in a bright kitchen. Night mode turns the same map dark with glowing contour lines.'],
   ['Numbers are first-class', 'Every price, count and timer is set in JetBrains Mono with tabular figures, like a trading screen.'],
   ['Colour never works alone', 'Each player has a colour and a shape. Rise and fall come with arrows. Alerts come with words.'],
   ['Public on the big screen, private on the phone', 'The board shows what everyone may know. Stock, whispers and secret orders exist only on your phone.'],
@@ -36,6 +37,18 @@ function Swatch({ token }: { token: string }) {
   );
 }
 
+function TerrainCard({ terrain }: { terrain: Terrain }) {
+  const theme = useTheme();
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="relative overflow-hidden rounded-control border border-map-edge" style={{ aspectRatio: '3 / 2' }}>
+        <Landscape width={3} height={2} terrain={new Array(6).fill(terrain)} theme={theme} seed={terrain.length * 13} className="absolute inset-0" />
+      </div>
+      <span className="font-mono text-xs text-ink-2">{TERRAIN_NAME[terrain]}</span>
+    </div>
+  );
+}
+
 export function System() {
   const [price, setPrice] = useState(84);
   return (
@@ -46,8 +59,8 @@ export function System() {
           <span className="label-caps text-holo!">Design system · @mule/ui</span>
           <h1 className="font-display text-5xl font-semibold">Holo table</h1>
           <p className="max-w-3xl text-lg text-ink-2">
-            The colony map is a hologram projected above a dark command table. Land is tinted glass, numbers float above each plot, and the market
-            reads like a live trading screen.
+            The colony map is a painted landscape under a fine plot grid, like a planning table in a colony control room. Numbers float above each
+            plot, and the market reads like a live trading screen. Day is the default; switch to Night with the toggle at the top.
           </p>
         </header>
 
@@ -74,9 +87,12 @@ export function System() {
               <div className="flex flex-wrap gap-3">{(list as string[]).map((t) => <Swatch key={t} token={t} />)}</div>
             </div>
           ))}
-          <div className="flex flex-col gap-2">
-            <span className="label-caps">Terrain glass</span>
-            <div className="flex flex-wrap gap-3">{TERRAIN.map((t) => <Swatch key={t} token={`t-${t}`} />)}</div>
+        </Section>
+
+        <Section title="Terrain">
+          <p className="max-w-3xl text-ink-2">Terrain sets the odds of what lies underground. Only a geo analysis shows the real ratings of a plot.</p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {TERRAIN.map((t) => <TerrainCard key={t} terrain={t} />)}
           </div>
         </Section>
 
@@ -92,7 +108,7 @@ export function System() {
           <div className="flex flex-wrap gap-4">
             {GOODS.map((g) => (
               <div key={g} className="flex flex-col gap-1 rounded-control border border-holo-faint bg-panel px-3 py-2">
-                <GoodTag good={g} />
+                <GoodIcon good={g} size={28} />
                 <span className="text-sm text-ink-2">{GOOD_NAME[g]}</span>
               </div>
             ))}

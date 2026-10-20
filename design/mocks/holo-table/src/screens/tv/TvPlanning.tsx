@@ -14,7 +14,7 @@ export function TvPlanning() {
       <TvHeader phase="Planning · council table" seconds={seconds} />
       <div className="flex min-h-0 flex-1 gap-6">
         <div className="flex w-[700px] shrink-0 flex-col gap-4">
-          <HoloMap width={MAP_W} height={MAP_H} tiles={TILES} showOutput density="tv" />
+          <HoloMap width={MAP_W} height={MAP_H} tiles={TILES} showOutput density="tv" hideGround />
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             {SEATS.map((s) => (
               <span key={s.slot} className={cx('flex items-center gap-2 font-display text-base font-semibold', !READY.has(s.slot) && 'opacity-45')}>

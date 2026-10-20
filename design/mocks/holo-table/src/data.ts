@@ -32,20 +32,20 @@ export const MAP_W = 15;
 export const MAP_H = 9;
 
 const ROWS = [
-  'iimmhpfRpdhmmvv',
-  'ilmhppfRpddhmvc',
+  'iitmhpfRpdhmmvv',
+  'itmhppfRpddhmvc',
   'llhpfpsRppdhhmc',
-  'fhpppsfRpppdhmw',
-  'ffpfpppSppdddhw',
-  'ffsppfpRpphhmmw',
-  'ispfppfRppphmmc',
-  'iippffpRpdhhmvv',
-  'iiipfppRpddhmvv',
+  'llpppsfRpppdhmt',
+  'ffpfpppSppdddht',
+  'ffsppfpRpphhmmt',
+  'tspfppfRppphmmc',
+  'itppffpRpdhhmvv',
+  'iitpfppRpddhmvv',
 ];
 
 const KEY: Record<string, Terrain> = {
   i: 'ice', l: 'lake', m: 'mountains', h: 'hills', p: 'plains', f: 'forest', s: 'swamp',
-  R: 'river', d: 'desert', v: 'volcanic', c: 'crater', w: 'wasteland', S: 'store',
+  R: 'river', d: 'desert', v: 'volcanic', c: 'crater', t: 'tundra', S: 'store',
 };
 
 type Plot = [Slot, Good, number, MapTile['flag']?];
@@ -70,6 +70,18 @@ const OWNED: Record<string, Plot> = {
   '7,6': [5, 'food', 4],
 };
 
+/** Heiko's own geo analyses: only his phone shows these. */
+const GROUND: Record<string, MapTile['ground']> = {
+  '9,5': { food: 3, energy: 2 },
+  '11,2': { smithore: 4, rareEarth: 2 },
+  '14,2': { crystite: 4, rareEarth: 1 },
+  '13,7': { rareEarth: 3, energy: 3 },
+  '10,6': { smithore: 2 },
+  '3,3': { food: 2, water: 1 },
+  '7,3': { food: 3, water: 2 },
+  '8,3': { energy: 3 },
+};
+
 export function baseTiles(): MapTile[] {
   const tiles: MapTile[] = [];
   ROWS.forEach((row, y) =>
@@ -84,6 +96,7 @@ export function baseTiles(): MapTile[] {
         ...(plot ? { good: plot[1], output: plot[2] } : {}),
         ...(plot?.[3] ? { flag: plot[3] } : {}),
         ...(terrain === 'mountains' ? { peaks: 1 + ((x * 7 + y * 3) % 3) } : {}),
+        ...(GROUND[`${x},${y}`] ? { ground: GROUND[`${x},${y}`] } : {}),
       });
     }),
   );

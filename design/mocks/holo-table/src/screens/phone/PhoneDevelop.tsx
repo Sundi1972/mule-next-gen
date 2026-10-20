@@ -1,4 +1,4 @@
-import { Button, cx, GOOD_NAME, GoodTag, HoloMap, Panel, TERRAIN_NAME, type Good, type MapTile } from '@mule/ui';
+import { Button, cx, GOOD_NAME, GoodIcon, GoodTag, HoloMap, Panel, TERRAIN_NAME, type Good, type MapTile, type Terrain } from '@mule/ui';
 import { useState } from 'react';
 import { MAP_H, MAP_W, ME, MULE_PRICE, TILES } from '../../data';
 import { useCountdown } from '../../proto';
@@ -10,21 +10,57 @@ const OUTFITS: { good: Good; cost: number }[] = [
   { good: 'energy', cost: 50 },
   { good: 'smithore', cost: 75 },
   { good: 'crystite', cost: 100 },
-  { good: 'alloy', cost: 125 },
+  { good: 'rareEarth', cost: 100 },
 ];
 
 type Carry = null | 'empty' | Good;
 
+const RAW: Good[] = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth'];
+
+/** What the terrain hints at before anyone looks underground. From the design doc's terrain odds. */
+const ODDS: Partial<Record<Terrain, string>> = {
+  river: 'Often good for Food and Water. Poor for mining.',
+  lake: 'Often good for Water and Food. Nothing to mine.',
+  plains: 'Often good for Food and Energy. Few minerals.',
+  forest: 'Often good for Food. Poor for Energy.',
+  swamp: 'Often good for Water. Some Rare earth.',
+  hills: 'Good odds of Smithore. Some Crystite and Rare earth.',
+  mountains: 'Very good odds of Smithore and Rare earth.',
+  desert: 'Often good for Energy. Some Crystite and Rare earth.',
+  tundra: 'Often good for Energy and Water. Some minerals.',
+  ice: 'Often good for Water. Little else.',
+  volcanic: 'Good odds of Rare earth and Energy.',
+  crater: 'Very good odds of Crystite.',
+};
+
+/** A made-up but stable analysis result for any plot. */
+function analyse(t: MapTile): Partial<Record<Good, number>> {
+  const r = (k: number) => ((t.x * 31 + t.y * 17 + k * 13) % 5);
+  return { food: r(1), water: r(2), energy: r(3), smithore: r(4) % 4, crystite: r(5) % 3, rareEarth: r(6) % 4 };
+}
+
 export function PhoneDevelop() {
   const seconds = useCountdown(45);
   const [tiles, setTiles] = useState(TILES);
-  const [selected, setSelected] = useState<MapTile | null>(TILES.find((t) => t.x === 8 && t.y === 4) ?? null);
+  const [selected, setSelected] = useState<MapTile | null>(TILES.find((t) => t.x === 9 && t.y === 5) ?? null);
   const [carry, setCarry] = useState<Carry>(null);
   const [money, setMoney] = useState(1240);
-  const [surveying, setSurveying] = useState(false);
+  const [scanning, setScanning] = useState<MapTile | null>(null);
 
   const mine = selected && selected.owner === ME;
   const free = selected && selected.owner === null && selected.terrain !== 'store';
+
+  const startScan = () => {
+    if (!selected) return;
+    const target = selected;
+    setScanning(target);
+    window.setTimeout(() => {
+      const ground = target.ground ?? analyse(target);
+      setTiles((ts) => ts.map((t) => (t.x === target.x && t.y === target.y ? { ...t, ground } : t)));
+      setSelected((s) => (s && s.x === target.x && s.y === target.y ? { ...s, ground } : s));
+      setScanning(null);
+    }, 2400);
+  };
 
   const install = () => {
     if (!selected || !carry || carry === 'empty') return;
@@ -72,21 +108,49 @@ export function PhoneDevelop() {
                 Making {GOOD_NAME[selected.good]}, <span className="font-mono font-bold text-ink">+{selected.output}</span> last month.
               </span>
             )}
-            <span className={cx('text-sm', surveying ? 'text-holo' : 'text-ink-3')}>
-              {surveying ? 'Survey running · 12 s left · results arrive privately' : 'Hidden traits unknown. A survey reveals them.'}
-            </span>
+            {selected.terrain !== 'store' && selected.ground && <GroundCard ground={selected.ground} />}
+            {selected.terrain !== 'store' && !selected.ground && (
+              <span className={cx('text-sm', scanning ? 'text-holo' : 'text-ink-2')}>
+                {scanning ? 'Geo analysis running. Only you will see the result.' : ODDS[selected.terrain]}
+              </span>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <Button size="md" disabled={!(carry && carry !== 'empty') || !mine} onClick={install}>
                 Install here
               </Button>
-              <Button size="md" variant="outline" disabled={surveying || !mine} onClick={() => setSurveying(true)}>
-                Survey · 15 s
+              <Button size="md" variant="outline" disabled={!!scanning || !!selected.ground || selected.terrain === 'store'} onClick={startScan}>
+                {selected.ground ? 'Analysed' : scanning ? 'Analysing…' : 'Geo analysis · 8 s'}
               </Button>
             </div>
-            {!mine && <span className="text-xs text-ink-3">Tap one of your glowing plots to work on it.</span>}
+            {!mine && <span className="text-xs text-ink-3">You can analyse any plot. To install, tap one of your own.</span>}
           </Panel>
         )}
       </div>
     </PhoneShell>
+  );
+}
+
+/** The private result of a geo analysis: every raw good, rated 0 to 4. */
+function GroundCard({ ground }: { ground: Partial<Record<Good, number>> }) {
+  return (
+    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-control bg-raised p-3">
+      <span className="label-caps col-span-2 flex justify-between">
+        Underground <span className="text-holo">Only you</span>
+      </span>
+      {RAW.map((g) => {
+        const n = ground[g] ?? 0;
+        return (
+          <span key={g} className={cx('flex items-center gap-2', n === 0 && 'opacity-50')}>
+            <GoodIcon good={g} size={16} />
+            <span className="flex-1 text-sm">{GOOD_NAME[g]}</span>
+            <span className="flex gap-0.5" aria-label={`${n} of 4`}>
+              {[1, 2, 3, 4].map((i) => (
+                <span key={i} className="size-2 rounded-full" style={{ background: i <= n ? `var(--color-g-${g})` : 'var(--color-holo-line)' }} />
+              ))}
+            </span>
+          </span>
+        );
+      })}
+    </div>
   );
 }
