@@ -39,6 +39,7 @@ try {
 
   await host.getByTestId('kick-s2').click();
   check(await shows(host.getByTestId('host-dialog').getByText('Remove Mia?')), 'B-AC-6: the kick control asks "Remove Mia?" first');
+  check(await host.getByTestId('host-dialog-cancel').evaluate((el) => el === document.activeElement), 'B-AC-6: the confirm puts focus on Cancel');
   await host.getByTestId('host-dialog-cancel').click();
   check(await gone(host.getByTestId('host-dialog')), 'B-AC-6: Cancel closes the confirm');
   await host.waitForTimeout(CANCEL_SETTLE_MS);

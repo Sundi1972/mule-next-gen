@@ -171,8 +171,9 @@ describe('TableClient', () => {
     expect(client.serverNow()).toBe((ping.clientTime as number) + 40 + 5_000);
   });
 
-  it('T-AC-10: keeps chat without duplicates; leaving tells the room, then forgets the seat and disconnects', () => {
-    const { client, last, storage } = setup();
+  // trace-allow: chat de-duplication predates the spec's ids; split out of the leave test unchanged
+  it('keeps chat without duplicates', () => {
+    const { client, last } = setup();
     client.join('KRTX', 'Heiko');
     last().open();
     last().deliver({ t: 'welcome', code: 'KRTX', role: 'player', seatId: 's1', seatToken: 'secret' });
@@ -180,14 +181,23 @@ describe('TableClient', () => {
     last().deliver({ t: 'chat', message });
     last().deliver({ t: 'chat', message });
     expect(client.getState().chat).toHaveLength(1);
+  });
+
+  it('B-AC-6: leaving tells the room, then forgets the seat and disconnects', () => {
+    const { client, last, storage } = setup();
+    client.join('KRTX', 'Heiko');
+    last().open();
+    last().deliver({ t: 'welcome', code: 'KRTX', role: 'player', seatId: 's1', seatToken: 'secret' });
+
     client.leave();
+
     expect(last().sent.at(-1)).toEqual({ t: 'leave' });
     expect(last().readyState).toBe(3);
     expect(loadSeat(storage)).toBeNull();
     expect(client.getState().status).toBe('idle');
   });
 
-  it('T-AC-10: leaving before the socket opens sends nothing, and still forgets the seat', () => {
+  it('B-AC-6: leaving before the socket opens sends nothing, and still forgets the seat', () => {
     const storage = memoryStore();
     saveSeat(storage, { code: 'KRTX', token: 'secret', name: 'Heiko' });
     const { client, last } = setup(storage);

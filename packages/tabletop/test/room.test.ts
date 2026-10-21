@@ -380,22 +380,28 @@ describe('Room: the host kicks a seat or closes the table, in the lobby (RULE-5)
 });
 
 describe('Room: a player leaves the table (RULE-5, AM-15)', () => {
-  it("T-AC-10: RULE-5 leave from a screen another device took the seat from lets go of that screen only: the seat stays with the live device", async () => {
-    const { room, heiko, mia } = lobby();
-    const phone = join(room, 'Mia', mia.last('welcome')!.seatToken!);
-    await flush();
+  it.each(['heiko', 'mia'] as const)(
+    "T-AC-10: RULE-5 leave, superseded screen (AM-18) — %s's old screen lets go of that screen only: no error, and every seat stays with its live device",
+    async (who) => {
+      const { room, heiko, mia } = lobby();
+      const old = { heiko, mia }[who];
+      const seatId = old.from.seatId!;
+      const live = join(room, who, old.last('welcome')!.seatToken!);
+      await flush();
 
-    leave(room, mia);
-    await flush();
+      leave(room, old);
+      await flush();
 
-    expect(seatIds(room)).toEqual(['s1', 's2', 's3']);
-    expect(heiko.last('view')!.view.seats.find((s) => s.id === 's2')?.connected).toBe(true);
-    pick(room, phone, 'fox');
-    expect(phone.last('error')).toBeUndefined();
-    expect(pickOf(room, phone)).toBe('fox');
-    room.receive(mia, mia.from, { t: 'chat', text: 'still here?' });
-    expect(mia.last('error')?.message).toBe('Join the game first');
-  });
+      expect(old.last('error')).toBeUndefined();
+      expect(seatIds(room)).toEqual(['s1', 's2', 's3']);
+      expect(live.last('view')!.view.seats.find((s) => s.id === seatId)?.connected).toBe(true);
+      pick(room, live, 'fox');
+      expect(live.last('error')).toBeUndefined();
+      expect(pickOf(room, live)).toBe('fox');
+      room.receive(old, old.from, { t: 'chat', text: 'still here?' });
+      expect(old.last('error')?.message).toBe('Join the game first');
+    },
+  );
 
   it.each([
     { row: '1: the host leaves the lobby', sender: 'heiko', error: 'Close the table instead' },
