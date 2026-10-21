@@ -43,6 +43,14 @@ describe('T-AC-3: listing a plot or a MULE (RULE-1)', () => {
     expect(state.listings).toEqual([]);
   });
 
+  it('T-AC-3: RULE-1 — a malformed kind or unsold is refused, and nothing is listed', () => {
+    const state = newGame();
+    own(state, 0, 0, 'brix', 'food');
+    refused(() => list(state, 'brix', keep({ kind: 'house', x: 0, y: 0 } as never)), 'Not a plot');
+    refused(() => list(state, 'brix', { item: plotAt(0, 0), minimum: 250, unsold: 'burn' as never }), 'Pick store or keep');
+    expect(state.listings).toEqual([]);
+  });
+
   it("T-AC-3: RULE-1 row 3 — Ossa can't list Lena's plot, nor a free one", () => {
     const state = newGame();
     own(state, 6, 4, 'lena');
