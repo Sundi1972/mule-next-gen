@@ -1,3 +1,4 @@
+export * from './components/AirGauge';
 export * from './components/AuctionSlider';
 export * from './components/Button';
 export * from './components/GoodTag';
@@ -12,6 +13,7 @@ export * from './components/Creature';
 export * from './components/MuleIcon';
 export * from './components/species';
 export * from './components/Stat';
+export * from './components/Store';
 export * from './components/Ticker';
 export * from './components/Timer';
 export * from './components/tokens';
