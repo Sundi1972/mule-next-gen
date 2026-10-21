@@ -113,26 +113,29 @@ export interface PlayOptions {
   onDecision?: (r: DecisionRecord) => void;
   /** Called after each phase is played, before the game moves on: for diagnostics. */
   onPhase?: (state: GameState) => void;
-  /** The decider for a seat; null or absent plays the default pick. */
-  deciderFor?(seatId: string, spec: SeatSpec, index: number): Decider | null;
-  /** Awaited by playGameAsync at every tick step and at the end of every phase; playGame ignores it. */
-  between?(): Promise<void> | void;
+  /**
+   * The decider for a seat; null or absent plays the default pick.
+   * playGame never waits, so an async decider's answers arrive too late; use playGameAsync.
+   */
+  deciderFor?: (seatId: string, spec: SeatSpec, index: number) => Decider | null;
+  /** Awaited by playGameAsync at every tick step and at least once at the end of every phase; playGame ignores it. */
+  between?: () => Promise<void> | void;
 }
 
 /** Plays one game to the end; the same game, step for step, as playGameAsync without hooks. */
 export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions = {}): PlayedGame {
-  const steps = playSteps(seed, specs, options);
+  const game = playSteps(seed, specs, options);
   for (;;) {
-    const step = steps.next();
+    const step = game.next();
     if (step.done) return step.value;
   }
 }
 
 /** Plays one game, awaiting `options.between` at every step so a decider's answer can arrive before simulated time moves on. */
 export async function playGameAsync(seed: number, specs: SeatSpec[], options: PlayOptions = {}): Promise<PlayedGame> {
-  const steps = playSteps(seed, specs, options);
+  const game = playSteps(seed, specs, options);
   for (;;) {
-    const step = steps.next();
+    const step = game.next();
     if (step.done) return step.value;
     await options.between?.();
   }

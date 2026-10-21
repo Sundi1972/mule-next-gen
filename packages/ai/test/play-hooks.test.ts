@@ -3,7 +3,7 @@ import type { GameState } from '@mule/engine';
 import type { DecisionRecord } from '../src/brain.js';
 import type { Choice, Decider } from '../src/decider.js';
 import { simSeats } from '../src/lineup.js';
-import { playGame, playGameAsync, type PlayedGame, type PlayOptions } from '../src/play.js';
+import { playGame, playGameAsync, type PlayedGame, type PlayOptions, type SeatSpec } from '../src/play.js';
 
 const SPECS = (seed: number) => simSeats(4, 'trader', seed);
 // A full game takes 1-2 s alone and several times that while the whole workspace tests in parallel.
@@ -59,7 +59,7 @@ describe('playGameAsync', GAMES, () => {
     expect(fingerprint(awaited, async_.records)).toBe(fingerprint(played, sync.records));
   }, 120_000);
 
-  it('T-AC-6: deciderFor returning null for every seat plays the same game as no hook', async () => {
+  it('INV-between: deciderFor returning null for every seat plays the same game as no hook', async () => {
     const plain = recording();
     const played = playGame(7, SPECS(7), plain.options);
     const hooked = recording({ deciderFor: () => null });
@@ -71,7 +71,7 @@ describe('playGameAsync', GAMES, () => {
     expect(fingerprint(awaited, awaitedHooks.records)).toBe(fingerprint(played, plain.records));
   });
 
-  it('T-AC-6: between runs at least once in every phase of the game, planning and upkeep included', async () => {
+  it('INV-between: between runs at least once in every phase of the game, planning and upkeep included', async () => {
     let live: GameState | null = null;
     const played = new Set<string>();
     const calls: Record<string, number> = {};
@@ -94,10 +94,18 @@ describe('playGameAsync', GAMES, () => {
 });
 
 describe('deciderFor', GAMES, () => {
-  it('UBER-AC-1: a seat given a decider plays its pick; the other seats keep the default pick', () => {
-    const run = recording({ deciderFor: (seatId) => (seatId === 'ai0' ? { name: 'always-b', decide: () => PICK_B } : null) });
-    playGame(101, SPECS(101), run.options);
+  it('INV-between: a seat given a decider plays its pick; the other seats keep the default pick', () => {
+    const specs = SPECS(101);
+    const asked: [string, SeatSpec, number][] = [];
+    const run = recording({
+      deciderFor: (seatId, spec, index) => {
+        asked.push([seatId, spec, index]);
+        return seatId === 'ai0' ? { name: 'always-b', decide: () => PICK_B } : null;
+      },
+    });
+    playGame(101, specs, run.options);
 
+    expect(asked).toEqual(specs.map((spec, i) => [`ai${i}`, spec, i]));
     const mine = withChoice(seatRecords(run.records, 'ai0'));
     expect(mine.length).toBeGreaterThan(10);
     for (const r of mine) expect({ by: r.by, pick: r.pick.id }).toEqual({ by: 'llm', pick: 'B' });
@@ -106,7 +114,7 @@ describe('deciderFor', GAMES, () => {
     for (const r of others) expect(r.by).toBe('top');
   });
 
-  it('UBER-AC-1: an async decider answer that arrives in between is played, not the fallback', async () => {
+  it('INV-between: an async decider answer that arrives in between is played, not the fallback', async () => {
     const late = lateB();
     const run = recording({
       deciderFor: (seatId) => (seatId === 'ai0' ? late.decider : null),
@@ -122,7 +130,7 @@ describe('deciderFor', GAMES, () => {
     for (const r of mine) expect({ by: r.by, pick: r.pick.id, note: r.note }).toEqual({ by: 'llm', pick: 'B', note: undefined });
   });
 
-  it('UBER-AC-1: the same late decider under synchronous playGame always falls back, so between is what lets the answer in', () => {
+  it('INV-between: the same late decider under synchronous playGame always falls back, so between is what lets the answer in', () => {
     const late = lateB();
     const run = recording({ deciderFor: (seatId) => (seatId === 'ai0' ? late.decider : null) });
     playGame(101, SPECS(101), run.options);
