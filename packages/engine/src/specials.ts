@@ -143,7 +143,7 @@ function relicsTouching(state: GameState, tile: Tile): number {
 }
 
 /** What touching relics add to any working plot. */
-export function relicBonus(state: GameState, tile: Tile): number {
+function relicBonus(state: GameState, tile: Tile): number {
   return relicsTouching(state, tile) * EFFECT.relic;
 }
 
