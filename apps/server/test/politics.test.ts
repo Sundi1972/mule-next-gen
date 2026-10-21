@@ -232,7 +232,7 @@ describe('the election runs first in planning', () => {
   });
 
   it('C9: a phone that reconnects during the election is no longer Done', () => {
-    const g = started();
+    const g = started({ phaseScale: 0.1 });
     g.game.handle('lena', { type: 'ready' });
     g.game.connectionChanged('lena', false);
     g.game.connectionChanged('brix', false);
@@ -245,6 +245,17 @@ describe('the election runs first in planning', () => {
     g.game.handle('ossa', { type: 'ready' });
     g.advance(WALK.tickMs);
     expect(election(g.game).stage, 'nominate waits for Brix').toBe('nominate');
+
+    // Ossa's phone is down when the election ends; it comes back in planning proper.
+    g.game.connectionChanged('ossa', false);
+    untilStage(g, 'over');
+    g.game.connectionChanged('ossa', true);
+    for (let ms = 0; ms < 1_200_000 && g.game.viewFor(null).month < 4; ms += 100) g.advance(100);
+    expect(election(g.game).stage).toBe('nominate');
+    g.game.handle('ossa', { type: 'ready' });
+    g.game.connectionChanged('ossa', false);
+    g.game.connectionChanged('ossa', true);
+    expect(election(g.game).done, "month 1's dropped phone is no reason to undo Ossa's own Done in month 4").toContain('ossa');
   });
 
   it('C9: month 2 has no election; month 4 opens one, with no stale deadline', () => {
