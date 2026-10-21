@@ -189,6 +189,16 @@ export function wantsPlot(plan: LandPlan, obs: GameState, index: number, sweep: 
   return lit.utility >= (open[0]?.utility ?? 0) * share;
 }
 
+// --- Values for lot bids ----------------------------------------------------
+
+export function plotValue(obs: GameState, mind: Mind, index: number): number {
+  throw new Error('NotImplemented: plotValue');
+}
+
+export function muleValue(obs: GameState, mind: Mind): number {
+  throw new Error('NotImplemented: muleValue');
+}
+
 // --- Development -------------------------------------------------------------
 
 export type DevAction = { kind: 'install'; index: number; outfit: Outfit } | { kind: 'stop' };
