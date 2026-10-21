@@ -256,7 +256,8 @@ export const SMALL_MAP = buildMap(SMALL_SPEC);
  * A 19×11 map for 5 players that meets every map rule, built like MID_SPEC:
  * 193 plots of non-river land, a river with the large band's 4 bends, the
  * same diagonal stripes, and five Smithore seams (20 plots) leaving the
- * corner (0,0) exactly 6 steps from one. Five special fields, ruins twice.
+ * corner (0,0) exactly 6 steps from one. Five special fields, ruins twice;
+ * the crystal cavern sits on a hill rated Crystite 3.
  */
 export const LARGE_SPEC: MapSpec = {
   terrain: [
@@ -352,7 +353,7 @@ export const LARGE_SPEC: MapSpec = {
       '0000000000010000000',
     ],
   },
-  specials: [[1, 1, 'ruins'], [5, 4, 'ruins'], [16, 0, 'geyser'], [13, 8, 'oasis'], [2, 8, 'relic']],
+  specials: [[1, 1, 'ruins'], [5, 4, 'ruins'], [16, 0, 'geyser'], [13, 8, 'oasis'], [2, 8, 'crystalCavern']],
 };
 
 export const LARGE_MAP = buildMap(LARGE_SPEC);
