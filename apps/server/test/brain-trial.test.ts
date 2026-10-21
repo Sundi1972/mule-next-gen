@@ -50,8 +50,8 @@ function asked(params: SdkParams): { name: string; kind: DecisionKind; chars: nu
 const neverAnswers = (options: { signal?: AbortSignal }) =>
   new Promise<never>((_, reject) => options.signal?.addEventListener('abort', () => reject(new Anthropic.APIUserAbortError())));
 
-const run = (argv: string[], env: Record<string, string | undefined> = KEY) => {
-  const out: string[] = [];
+/** Starts a run; it calls the SDK before it first yields, so set `sdk.create` before this. */
+const run = (argv: string[], env: Record<string, string | undefined> = KEY, out: string[] = []) => {
   return { out, result: trial(argv, env, { dataDir: dir, now: () => TODAY, out: (l) => out.push(l) }) };
 };
 
@@ -77,14 +77,14 @@ describe('brain:trial', () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       const requests: Array<ReturnType<typeof asked>> = [];
       let printedAtFirstCall: string[] | null = null;
-      const { out, result } = run(['--games', '2', '--seed', '101', '--max-usd', '1']);
+      const out: string[] = [];
       sdk.create = (params, options) => {
         printedAtFirstCall ??= [...out];
         const request = asked(params);
         requests.push(request);
         return request.name === 'AI 1' ? Promise.resolve(sdkMessage(USABLE, BILLED)) : neverAnswers(options);
       };
-      const { code, report } = await drive(result);
+      const { code, report } = await drive(run(['--games', '2', '--seed', '101', '--max-usd', '1'], KEY, out).result);
 
       expect(code).toBe(0);
       expect(sdk.built).toHaveLength(2); // one client per game
@@ -244,14 +244,14 @@ describe('brain:trial', () => {
     GAMES_MS,
   );
 
-  it('UBER-AC-2: a land grant, auction or land auction still open when its phase ends was cut off by its tick limit', () => {
-    const at = (s: Partial<GameState>) => ({ month: 3, players: [], tiles: [], ...s }) as unknown as GameState;
-    expect(cutOffPhase(at({ phase: 'auction', auction: { stage: 'trading' } as GameState['auction'] }))).toBe('month 3 auction');
-    expect(cutOffPhase(at({ phase: 'auction', auction: { stage: 'over' } as GameState['auction'] }))).toBeNull();
-    expect(cutOffPhase(at({ phase: 'auction', auction: null }))).toBeNull();
-    expect(cutOffPhase(at({ phase: 'landAuction', landAuction: { stage: 'bidding' } as GameState['landAuction'] }))).toBe('month 3 landAuction');
-    expect(cutOffPhase(at({ phase: 'landAuction', landAuction: { stage: 'over' } as GameState['landAuction'] }))).toBeNull();
-    expect(cutOffPhase(at({ phase: 'development' }))).toBeNull();
+  it('UBER-AC-2: an auction or land auction still open when its phase ends was cut off by its tick limit', () => {
+    const at = (phase: string, s: object = {}) => ({ month: 3, phase, ...s }) as unknown as GameState;
+    expect(cutOffPhase(at('auction', { auction: { stage: 'walk' } }))).toBe('month 3 auction');
+    expect(cutOffPhase(at('auction', { auction: { stage: 'over' } }))).toBeNull();
+    expect(cutOffPhase(at('auction', { auction: null }))).toBeNull();
+    expect(cutOffPhase(at('landAuction', { landAuction: { stage: 'walk' } }))).toBe('month 3 landAuction');
+    expect(cutOffPhase(at('landAuction', { landAuction: { stage: 'over' } }))).toBeNull();
+    expect(cutOffPhase(at('development'))).toBeNull();
   });
 
   it('UBER-AC-1, UBER-AC-2: the verdict holds at 80% model share and under $0.06 a seat-game, fails just past either bound or on a stall, and is not proven on fewer games than planned', () => {

@@ -26,6 +26,32 @@ export interface CallRecord extends Usage {
   outcome: Outcome;
 }
 
+/** A call's line in the ledger file. See RULE-4. */
+export interface CallLine extends Usage {
+  t: string;
+  game: string;
+  seat: string;
+  persona: AiPersonaId;
+  level: AiLevelId;
+  model: string;
+  kind: DecisionKind;
+  usd: number;
+  ms: number;
+  timed_out: boolean;
+  outcome: Outcome;
+}
+
+/** A game's total line in the ledger file: model calls only, settled before finish. See RULE-4. */
+export interface GameLine {
+  t: string;
+  game: string;
+  type: 'game';
+  seats: number;
+  calls: number;
+  usd: number;
+  by_seat: Record<string, { calls: number; usd: number }>;
+}
+
 export interface Ledger {
   /** Appends the call's line and charges its seat; a call in a finished game gets its line but no charge. See RULE-4. */
   record(call: CallRecord): void;
@@ -97,7 +123,7 @@ export function createLedger(opts: { path?: string; clock?: () => Date } = {}): 
         if (call.outcome !== 'budget') total.calls += 1;
         total.usd += cost;
       }
-      append({
+      const line: CallLine = {
         t: clock().toISOString(),
         game: call.game,
         seat: call.seat,
@@ -113,7 +139,8 @@ export function createLedger(opts: { path?: string; clock?: () => Date } = {}): 
         ms: call.ms,
         timed_out: call.outcome === 'timeout',
         outcome: call.outcome,
-      });
+      };
+      append(line);
     },
 
     seatSpent: (game, seat) => games.get(game)?.get(seat)?.usd ?? 0,
@@ -131,7 +158,8 @@ export function createLedger(opts: { path?: string; clock?: () => Date } = {}): 
         calls += t.calls;
         cost += t.usd;
       }
-      append({ t: clock().toISOString(), game, type: 'game', seats: seats.size, calls, usd: cost, by_seat });
+      const line: GameLine = { t: clock().toISOString(), game, type: 'game', seats: seats.size, calls, usd: cost, by_seat };
+      append(line);
     },
   };
 }
