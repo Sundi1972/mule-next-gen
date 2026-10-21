@@ -31,6 +31,7 @@ import {
   outfitMule,
   RuleError,
   score,
+  scoreParts,
   setLotWalk,
   setWalk,
   shipAnnounced,
@@ -540,7 +541,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     ];
   }
 
-  /** What one player may see, or with `null` what everyone may see. Stock and hidden ground stay private. */
+  /** What one player may see, or with `null` what everyone may see. Stock, hidden ground and score parts stay private. */
   viewFor(seatId: string | null): MuleView {
     const state = this.requireState();
     const prices = allPrices(state);
@@ -630,7 +631,14 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       },
       treasury: { money: state.treasury.money, salesTax: state.treasury.salesTax },
       news: this.news,
-      scores: state.phase === 'gameOver' ? this.seats.map((s) => ({ id: s.id, score: score(state, s.id) })) : null,
+      scores:
+        state.phase === 'gameOver'
+          ? this.seats.map((s) => {
+              if (s.id !== seatId) return { id: s.id, score: score(state, s.id) };
+              const { total, ...parts } = scoreParts(state, s.id);
+              return { id: s.id, score: total, parts };
+            })
+          : null,
       auction: this.auctionView(),
       listings: state.listings.map(listingView),
       lotSlots: { used: state.listings.length, max: LOTS.maxLotsPerMonth },
