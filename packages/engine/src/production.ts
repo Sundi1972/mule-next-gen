@@ -12,6 +12,7 @@ import {
   type MinedGood,
   type Outfit,
   type ProcessedGood,
+  type ProductionLine,
   type RawGood,
   type Stock,
   type Tile,
@@ -58,24 +59,36 @@ export function adjacencyBonus(state: GameState, tile: Tile): number {
  * then traits, the owner's species, adjacency and pollution.
  */
 export function rawOutput(state: GameState, tile: Tile): number {
+  return rawOutputParts(state, tile).reduce((n, p) => n + p.delta, 0);
+}
+
+type Part = ProductionLine['parts'][number];
+
+/** The same output as `rawOutput`, part by part, so the month report can say why a plot made what it made. */
+export function rawOutputParts(state: GameState, tile: Tile): Part[] {
   const good = tile.outfit;
-  if (!good || !isRaw(good)) return 0;
+  if (!good || !isRaw(good)) return [];
   const species = state.players.find((p) => p.id === tile.owner)?.species;
-  let output: number;
+  const parts: Part[] = [];
+  const add = (why: Part['why'], delta: number) => {
+    if (delta !== 0) parts.push({ why, delta });
+  };
   if (isMined(good)) {
     // A deposit of 0 means there is nothing to mine.
-    if (tile.ground[good] <= 0) return 0;
-    output = tile.ground[good];
-    if (tile.traits.includes('thinVein')) output -= Math.floor(tile.runMonths / THIN_VEIN_MONTHS);
-    if (species === 'mollox') output += SPECIES_PERK.molloxMine;
+    if (tile.ground[good] <= 0) return [{ why: 'ground', delta: 0 }];
+    parts.push({ why: 'ground', delta: tile.ground[good] });
+    if (tile.traits.includes('thinVein')) add('trait', -Math.floor(tile.runMonths / THIN_VEIN_MONTHS));
+    if (species === 'mollox') add('species', SPECIES_PERK.molloxMine);
   } else {
-    output = Math.max(GROWN_MIN, GROWN_BASE + tile.ground[good]);
-    if (good === 'food' && species === 'bramblet') output += SPECIES_PERK.brambletFood;
+    parts.push({ why: 'ground', delta: Math.max(GROWN_MIN, GROWN_BASE + tile.ground[good]) });
+    if (good === 'food' && species === 'bramblet') add('species', SPECIES_PERK.brambletFood);
   }
-  for (const trait of tile.traits) output += TRAIT_EFFECT[trait]?.[good] ?? 0;
-  if (output > 0) output += adjacencyBonus(state, tile);
-  output -= pollutionLoss(state, tile, good);
-  return Math.max(0, output);
+  for (const trait of tile.traits) add('trait', TRAIT_EFFECT[trait]?.[good] ?? 0);
+  const sum = () => parts.reduce((n, p) => n + p.delta, 0);
+  if (sum() > 0) add('cluster', adjacencyBonus(state, tile));
+  add('pollution', -pollutionLoss(state, tile, good));
+  if (sum() < 0) add('floor', -sum());
+  return parts;
 }
 
 /** What pollution takes from a plot making this good: 1 per plot level, plus farm and well losses in toxic air. */
@@ -178,20 +191,33 @@ export function energyUseOf(state: GameState, tile: Tile): number {
  * 4. pollution spreads and the air gauge moves.
  * Returns what each player produced and the air points each caused.
  */
-export function runProduction(state: GameState): { produced: Record<string, Stock>; pollutionBy: Record<string, number> } {
+export function runProduction(state: GameState): {
+  produced: Record<string, Stock>;
+  pollutionBy: Record<string, number>;
+  lines: ProductionLine[];
+} {
   const produced: Record<string, Stock> = {};
   for (const player of state.players) produced[player.id] = emptyStock();
 
   const working = state.tiles.filter((t) => t.owner && t.outfit);
   const playerById = new Map(state.players.map((p) => [p.id, p]));
+  const indexOf = new Map(state.tiles.map((t, i) => [t, i]));
   const ran = new Set<Tile>();
-
-  for (const tile of working.filter((t) => t.outfit === 'energy')) {
-    const amount = rawOutput(state, tile);
-    playerById.get(tile.owner!)!.stock.energy += amount;
-    produced[tile.owner!]!.energy += amount;
+  const lines: ProductionLine[] = [];
+  const credit = (tile: Tile, good: Good, parts: Part[]) => {
+    const made = parts.reduce((n, p) => n + p.delta, 0);
+    playerById.get(tile.owner!)!.stock[good] += made;
+    produced[tile.owner!]![good] += made;
+    lines.push({ tile: indexOf.get(tile)!, good, made, parts });
     ran.add(tile);
-  }
+  };
+  /** Halves what the parts add up to, rounding down, as a part of its own. */
+  const halve = (parts: Part[], why: Part['why']) => {
+    const made = parts.reduce((n, p) => n + p.delta, 0);
+    if (made > 0) parts.push({ why, delta: Math.floor(made / 2) - made });
+  };
+
+  for (const tile of working.filter((t) => t.outfit === 'energy')) credit(tile, 'energy', rawOutputParts(state, tile));
 
   // Who is short of Water is decided before anything runs, so a well
   // harvested this month waters next month's crops, not this month's.
@@ -200,14 +226,12 @@ export function runProduction(state: GameState): { produced: Record<string, Stoc
   for (const tile of working.filter((t) => t.outfit !== 'energy' && isRaw(t.outfit!))) {
     const owner = playerById.get(tile.owner!)!;
     const good = tile.outfit as RawGood;
-    let amount = rawOutput(state, tile);
+    const parts = rawOutputParts(state, tile);
     const energy = energyUseOf(state, tile);
     if (owner.stock.energy >= energy) owner.stock.energy -= energy;
-    else amount = Math.floor(amount / 2);
-    if (dry.has(owner.id) && UPKEEP.irrigated.includes(good)) amount = Math.floor(amount / 2);
-    owner.stock[good] += amount;
-    produced[tile.owner!]![good] += amount;
-    ran.add(tile);
+    else halve(parts, 'noEnergy');
+    if (dry.has(owner.id) && UPKEEP.irrigated.includes(good)) halve(parts, 'noWater');
+    credit(tile, good, parts);
   }
 
   for (const good of PROCESSED_GOODS) {
@@ -217,9 +241,7 @@ export function runProduction(state: GameState): { produced: Record<string, Stoc
       const inputs = { ...RECIPES[good].inputs, energy: fit.energy };
       if (!hasStock(owner.stock, inputs)) continue;
       addStock(owner.stock, inputs, -1);
-      owner.stock[good] += fit.output;
-      produced[tile.owner!]![good] += fit.output;
-      ran.add(tile);
+      credit(tile, good, [{ why: 'factory', delta: fit.output }]);
     }
   }
 
@@ -230,7 +252,7 @@ export function runProduction(state: GameState): { produced: Record<string, Stoc
   }
 
   const pollutionBy = runPollution(state);
-  return { produced, pollutionBy };
+  return { produced, pollutionBy, lines };
 }
 
 /** Raw goods a plot is rated for, best first, from the ground card. */
