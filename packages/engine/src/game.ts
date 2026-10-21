@@ -2,6 +2,7 @@ import { endAuction, startAuction } from './auction.js';
 import { RuleError } from './errors.js';
 import { DEFAULT_SPECIES, DEVELOPMENT, GAME, GOOD_CONFIG, MULE, POLLUTION, SPECIES_PERK, START, TAX, UPKEEP } from './config.js';
 import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './economy.js';
+import { isListed } from './lots.js';
 import { generateMap, tileAt, tileIndex } from './map.js';
 import { airBand } from './pollution.js';
 import { needsOf, runProduction } from './production.js';
@@ -101,7 +102,7 @@ export function freePlots(state: GameState) {
 
 // --- Planning: geo drone ----------------------------------------------------
 
-/** Orders a geo drone to analyse up to two free plots from orbit. The results arrive when the land grant starts. */
+/** Orders a geo drone to analyse up to two free or listed plots from orbit. The results arrive when the land grant starts. */
 export function orderGeoDrone(state: GameState, playerId: string, plots: { x: number; y: number }[]): void {
   requirePhase(state, 'planning');
   const p = player(state, playerId);
@@ -109,7 +110,7 @@ export function orderGeoDrone(state: GameState, playerId: string, plots: { x: nu
   if (plots.length === 0 || plots.length > DEVELOPMENT.dronePlots) throw new RuleError(`Pick 1 to ${DEVELOPMENT.dronePlots} plots`);
   const indices = plots.map(({ x, y }) => {
     const tile = plotAt(state, x, y);
-    if (tile.owner) throw new RuleError('The drone only flies over free plots');
+    if (tile.owner && !isListed(state, x, y)) throw new RuleError('The drone only flies over free or listed plots');
     return tileIndex(state.width, x, y);
   });
   if (p.money < DEVELOPMENT.droneFee) throw new RuleError('Not enough money');
