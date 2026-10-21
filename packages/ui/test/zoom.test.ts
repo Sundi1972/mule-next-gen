@@ -53,7 +53,8 @@ describe("T-AC-8: zoomBox for RULE-4's examples", () => {
     const box = zoomBox(map(mine([0, 0], [1, 0])), W, H, ME);
 
     expect(box).not.toBeNull();
-    expect(box!.scale).toBeCloseTo(5.5, 5);
+    // The clipped 3×2 box would give 5.5; AM-12 caps it at 3.
+    expect(box!.scale).toBeCloseTo(3, 5);
     expect(box!.x).toBeCloseTo(0, 5);
     expect(box!.y).toBeCloseTo(0, 5);
     expectInsideMap(box!);
@@ -63,9 +64,9 @@ describe("T-AC-8: zoomBox for RULE-4's examples", () => {
     const box = zoomBox(map(mine([18, 10])), W, H, ME);
 
     expect(box).not.toBeNull();
-    expect(box!.scale).toBeCloseTo(5.5, 5);
-    expect(box!.x).toBeCloseTo(W - W / 5.5, 5);
-    expect(box!.y).toBeCloseTo(H - 2, 5);
+    expect(box!.scale).toBeCloseTo(3, 5);
+    expect(box!.x).toBeCloseTo(W - W / 3, 5);
+    expect(box!.y).toBeCloseTo(H - H / 3, 5);
     expectInsideMap(box!);
   });
 
@@ -73,9 +74,20 @@ describe("T-AC-8: zoomBox for RULE-4's examples", () => {
     const box = zoomBox(map(mine([9, 5])), W, H, ME);
 
     expect(box).not.toBeNull();
-    expect(box!.scale).toBeCloseTo(11 / 3, 5);
-    expect(box!.x).toBeCloseTo(9.5 - W / (11 / 3) / 2, 5);
-    expect(box!.y).toBeCloseTo(4, 5);
+    expect(box!.scale).toBeCloseTo(3, 5);
+    expect(box!.x).toBeCloseTo(9.5 - W / 3 / 2, 5);
+    expect(box!.y).toBeCloseTo(5.5 - H / 3 / 2, 5);
+    expectInsideMap(box!);
+  });
+
+  it('T-AC-8: caps the zoom at 3× (AM-12): a single interior plot would give 11/3, and the view re-centres on it', () => {
+    const box = zoomBox(map(mine([6, 3])), W, H, ME);
+
+    expect(box).not.toBeNull();
+    expect(box!.scale).toBeCloseTo(3, 5);
+    // The 3×3 box spans x 5..8, y 2..5; the 3× view is 19/3 by 11/3, centred on (6.5, 3.5).
+    expect(box!.x).toBeCloseTo(6.5 - W / 3 / 2, 5);
+    expect(box!.y).toBeCloseTo(3.5 - H / 3 / 2, 5);
     expectInsideMap(box!);
   });
 
