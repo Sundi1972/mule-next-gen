@@ -200,12 +200,13 @@ export function Auction() {
 }
 
 /** A big button you hold: walking while pressed, standing when let go. */
-function Hold({ label, glyph, disabled, onHold }: { label: string; glyph: string; disabled: boolean; onHold: (on: boolean) => void }) {
+export function Hold({ label, glyph, disabled, onHold }: { label: string; glyph: string; disabled: boolean; onHold: (on: boolean) => void }) {
   return (
     <button
       type="button"
       aria-label={`Hold to walk ${label.toLowerCase()}`}
       disabled={disabled}
+      data-testid={`hold-${label.toLowerCase()}`}
       className="flex h-16 touch-none select-none flex-col items-center justify-center rounded-control border-2 border-holo bg-holo-soft font-display text-sm font-semibold text-holo active:bg-holo active:text-on-holo disabled:opacity-35"
       onPointerDown={(e) => {
         e.preventDefault();

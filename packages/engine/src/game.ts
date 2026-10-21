@@ -2,7 +2,8 @@ import { endAuction, startAuction } from './auction.js';
 import { RuleError } from './errors.js';
 import { DEFAULT_SPECIES, DEVELOPMENT, GAME, GOOD_CONFIG, MULE, POLLUTION, SPECIES_PERK, START, TAX, UPKEEP } from './config.js';
 import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './economy.js';
-import { generateMap, tileAt, tileIndex } from './map.js';
+import { endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
+import { generateMap, tileIndex } from './map.js';
 import { airBand } from './pollution.js';
 import { needsOf, runProduction } from './production.js';
 import { createRng } from './rng.js';
@@ -71,6 +72,8 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
     landRanOutMonth: null,
     history: [],
     auction: null,
+    listings: [],
+    landAuction: null,
   };
   // The first month's prices start where supply and demand put them.
   for (const good of GOODS) state.store.posted[good] = Math.round(targetPrice(state, good));
@@ -87,19 +90,13 @@ function requirePhase(state: GameState, phase: Phase): void {
   if (state.phase !== phase) throw new RuleError(`Not allowed during ${state.phase}`);
 }
 
-function plotAt(state: GameState, x: number, y: number): Tile {
-  const tile = tileAt(state.tiles, state.width, x, y);
-  if (!tile || tile.terrain === 'store') throw new RuleError('Not a plot');
-  return tile;
-}
-
 export function freePlots(state: GameState) {
   return state.tiles.filter((t) => t.owner === null && t.terrain !== 'store');
 }
 
 // --- Planning: geo drone ----------------------------------------------------
 
-/** Orders a geo drone to analyse up to two free plots from orbit. The results arrive when the land grant starts. */
+/** Orders a geo drone to analyse up to two free or listed plots from orbit. The results arrive when the land grant starts. */
 export function orderGeoDrone(state: GameState, playerId: string, plots: { x: number; y: number }[]): void {
   requirePhase(state, 'planning');
   const p = player(state, playerId);
@@ -107,7 +104,7 @@ export function orderGeoDrone(state: GameState, playerId: string, plots: { x: nu
   if (plots.length === 0 || plots.length > DEVELOPMENT.dronePlots) throw new RuleError(`Pick 1 to ${DEVELOPMENT.dronePlots} plots`);
   const indices = plots.map(({ x, y }) => {
     const tile = plotAt(state, x, y);
-    if (tile.owner) throw new RuleError('The drone only flies over free plots');
+    if (tile.owner && !isListed(state, x, y)) throw new RuleError('The drone only flies over free or listed plots');
     return tileIndex(state.width, x, y);
   });
   if (p.money < DEVELOPMENT.droneFee) throw new RuleError('Not enough money');
@@ -306,16 +303,18 @@ export function visitPub(state: GameState, playerId: string, secondsLeft: number
 
 // --- Phase flow -------------------------------------------------------------
 
-const ORDER: Phase[] = ['planning', 'landGrant', 'development', 'production', 'auction', 'upkeep'];
+const ORDER: Phase[] = ['planning', 'landGrant', 'landAuction', 'development', 'production', 'auction', 'upkeep'];
 
 /**
  * Moves to the next phase. Production and upkeep resolve on their own when
- * entered; the auction runs live through stepAuction() until its last good
- * is done, and leaving it early ends the goods still to come.
+ * entered; the land auction and the goods auction run live through
+ * stepLandAuction() and stepAuction(), and leaving one early ends what is
+ * still to come. With nothing listed the land auction is skipped.
  */
 export function advancePhase(state: GameState): void {
   if (state.phase === 'gameOver') return;
-  const next = ORDER[(ORDER.indexOf(state.phase) + 1) % ORDER.length]!;
+  let next = ORDER[(ORDER.indexOf(state.phase) + 1) % ORDER.length]!;
+  if (next === 'landAuction' && state.listings.length === 0) next = 'development';
   state.phase = next;
 
   if (next === 'landGrant') {
@@ -327,7 +326,10 @@ export function advancePhase(state: GameState): void {
     }
     newSweep(state, 0);
   }
+  if (next === 'landAuction') startLandAuction(state);
   if (next === 'development') {
+    // Lots the land auction didn't reach are kept.
+    endLandAuction(state);
     state.grant = null;
     state.store.mulesAtStart = state.store.mules;
     startDevelopment(state);

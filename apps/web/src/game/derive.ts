@@ -11,6 +11,7 @@ import { SPECIES, type Good, type MapTile, type Slot, type Species } from '@mule
 export const PHASE_NAME: Record<MuleView['phase'], string> = {
   planning: 'Planning',
   landGrant: 'Land grant',
+  landAuction: 'Land auction',
   development: 'Development',
   production: 'Production',
   auction: 'Goods auction',
