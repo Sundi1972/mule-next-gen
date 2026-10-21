@@ -16,15 +16,16 @@ describe("planning's This month you need (RULE-8)", () => {
   });
 
   it('B-AC-14 (negative): a good she does not need this month has no row; the rest follow by need, with what needs them', () => {
-    // An Alloy factory takes 2 Smithore, an Electronics one 1 Rare Earth and 1 Alloy; bad air asks a Medicine. Ties keep the goods' order.
-    const need = stock({ food: 3, water: 2, smithore: 2, rareEarth: 1, alloy: 1, medicine: 1, energy: 7 });
+    // An Alloy factory takes 2 Smithore, an Electronics one 1 Rare Earth and 1 Alloy; bad air asks Medicine, here 3,
+    // so Medicine, last of the goods, leads the rest. Ties keep the goods' order. No Energy need: no Energy row.
+    const need = stock({ food: 3, water: 2, smithore: 2, rareEarth: 1, alloy: 1, medicine: 3, energy: 0 });
     const rows = needRows(need, stock({ smithore: 2 }), plots('smithore', 'alloy', 'electronics', 'energy', 'greenBelt'));
-    expect(rows.map((r) => r.good)).toEqual(['food', 'water', 'energy', 'smithore', 'rareEarth', 'alloy', 'medicine']);
+    expect(rows.map((r) => r.good)).toEqual(['food', 'water', 'medicine', 'smithore', 'rareEarth', 'alloy']);
     expect(rows.find((r) => r.good === 'crystite')).toBeUndefined();
+    expect(rows.find((r) => r.good === 'energy')).toBeUndefined();
     expect(Object.fromEntries(rows.map((r) => [r.good, r.why]))).toEqual({
       food: 'upkeep',
       water: 'upkeep',
-      energy: 'a mine and 2 factories',
       smithore: 'Alloy inputs',
       alloy: 'Electronics inputs',
       rareEarth: 'Electronics inputs',
@@ -34,7 +35,10 @@ describe("planning's This month you need (RULE-8)", () => {
   });
 
   it('B-AC-14: Now says to plan and press Ready, names the land grant next, and lists the SHORT goods or says she has what she needs', () => {
-    const short = planNow(needRows(stock({ food: 3, water: 2, energy: 4 }), stock({ food: 1, water: 2, energy: 3 }), plots('food')));
+    // Energy is burned by the farm and the mine (UPKEEP.energyUse) and the Alloy factory (its recipe), not the power plant.
+    const rows = needRows(stock({ food: 3, water: 2, energy: 5 }), stock({ food: 1, water: 2, energy: 3 }), plots('food', 'energy', 'smithore', 'alloy'));
+    expect(rows.find((r) => r.good === 'energy')).toMatchObject({ short: 2, why: 'a farm, a mine and a factory' });
+    const short = planNow(rows);
     expect(short.title).toBe('Plan your month, then press Ready');
     expect(short.detail).toMatch(/land grant/);
     expect(short.detail).toMatch(/short of Food and Energy/);

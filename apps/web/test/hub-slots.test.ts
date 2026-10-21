@@ -4,7 +4,6 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { AgendaRow, DeskTabs, MapTools } from '../src/phone/hub/Hub';
 import { drawnSlots, type AgendaSlot, type DeskSlot, type HubSeat, type HubSlots, type MapToolSlot } from '../src/phone/hub/slots';
-import { HUB_SLOTS } from '../src/phone/hub/today';
 
 const self = { id: 's1', name: 'Lena' } as PlayerView;
 const seat = (id = 's1'): HubSeat => ({ view: { month: 4 } as MuleView, me: { id } as MyView, self: { ...self, id } });
@@ -19,10 +18,10 @@ const governor = desk('governor', { show: (s) => s.self.id === 's9' });
 const slots: HubSlots = {
   nows: [],
   banners: [{ id: 'offices', show: () => false, Body: Nothing }],
-  beneath: [{ id: 'prices', Body: Nothing }],
+  beneath: [{ id: 'prices', Body: Nothing }, { id: 'hidden', show: () => false, Body: Nothing }],
   desks: [desk('colony'), governor, desk('market')],
   tools: [tool('look'), tool('guard', { show: () => false })],
-  agenda: [agenda('drone', { tool: 'look' }), agenda('governor', { desk: 'governor' }), agenda('council', { desk: 'council' }), agenda('guard', { tool: 'guard' })],
+  agenda: [agenda('drone', { tool: 'look' }), agenda('governor', { desk: 'governor' }), agenda('council', { desk: 'council' }), agenda('guard', { tool: 'guard' }), agenda('quiet', { tool: 'look' }, { show: () => false })],
 };
 
 describe('the hub slots (C17)', () => {
@@ -32,7 +31,7 @@ describe('the hub slots (C17)', () => {
     expect(drawn.tools.map((t) => t.id)).toEqual(['look']);
     expect(drawn.banners).toEqual([]);
     expect(drawn.beneath.map((b) => b.id)).toEqual(['prices']);
-    // A door into a desk or tool that isn't drawn is not drawn either.
+    // A door into a desk or tool that isn't drawn is not drawn either; nor is a door whose own show() says no.
     expect(drawn.agenda.map((a) => a.key)).toEqual(['drone']);
 
     const tabs = renderToStaticMarkup(createElement(DeskTabs, { desks: drawn.desks, active: 'colony', onPick: () => {} }));
@@ -43,6 +42,7 @@ describe('the hub slots (C17)', () => {
     expect(row).toContain('data-testid="agenda-drone"');
     expect(row).not.toContain('agenda-governor');
     expect(row).not.toContain('agenda-council');
+    expect(row).not.toContain('agenda-quiet');
     const tools = renderToStaticMarkup(createElement(MapTools, { tools: drawn.tools, active: 'look', onPick: () => {}, hint: null }));
     expect(tools).toContain('data-testid="tool-look"');
     expect(tools).not.toContain('tool-guard');
@@ -52,14 +52,5 @@ describe('the hub slots (C17)', () => {
     const drawn = drawnSlots(slots, seat('s9'));
     expect(drawn.desks.map((d) => d.id)).toEqual(['colony', 'governor', 'market']);
     expect(drawn.agenda.map((a) => a.key)).toEqual(['drone', 'governor']);
-  });
-
-  it("C17: today's hub registers only what exists: Colony, Talk, Market; Look, Geo drone, Sell a plot; no politics", () => {
-    expect(HUB_SLOTS.desks.map((d) => d.id)).toEqual(['colony', 'talk', 'market']);
-    expect(HUB_SLOTS.tools.map((t) => t.id)).toEqual(['look', 'drone', 'list']);
-    expect(HUB_SLOTS.agenda.map((a) => a.key)).toEqual(['drone', 'list']);
-    expect(HUB_SLOTS.banners).toEqual([]);
-    expect(HUB_SLOTS.beneath.map((b) => b.id)).toEqual(['market-strip']);
-    expect(HUB_SLOTS.nows).toEqual([]);
   });
 });

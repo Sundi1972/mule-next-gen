@@ -17,6 +17,9 @@ const HUNGRY_FOOD = 2;
 const FIRST: Good[] = ['food', 'water', 'energy'];
 /** Desks only an office holder has (WS7); nobody holds an office before politics exists. */
 const OFFICE_DESKS = ['governor', 'sheriff'];
+/** C17: what exists today, and nothing else, is drawn. */
+const TODAYS_DESKS = ['colony', 'talk', 'market'];
+const TODAYS_TOOLS = ['look', 'drone', 'list'];
 /** B-AC-12: the stage's content fills at least this share of the stage's height. */
 const FILL = 0.8;
 
@@ -24,6 +27,7 @@ type Shown = {
   phase: string | null;
   onStage: { agenda: boolean; map: boolean; marketStrip: boolean };
   desks: string[];
+  tools: string[];
   needs: { good: string; text: string }[];
   thisMonthInColony: boolean;
   nowFirst: boolean;
@@ -49,8 +53,6 @@ export async function planningIsTheHub(phone: Page, server: MuleServer, code: st
   check(me.stock.food === HUNGRY_FOOD, `B-AC-14: makeHungry seated ${SEAT} at ${HUNGRY_FOOD} Food, got ${me.stock.food}`);
   const need = monthNeeds(state, SEAT);
   const have = { ...me.stock };
-  // The seed changed the state behind the game's back; send every screen the view it now makes.
-  (room as unknown as { broadcast(): void }).broadcast();
 
   const planning = phone.locator('[data-phase=planning]');
   await planning.getByTestId('desk-colony').click({ timeout });
@@ -93,6 +95,8 @@ function checkHub(f: Shown, at: string): void {
   check(f.thisMonthInColony, `B-AC-14: at ${at} the Colony desk holds "This month you need"`);
   const offices = f.desks.filter((d) => OFFICE_DESKS.includes(d));
   check(offices.length === 0, `B-AC-14 (negative): a player without an office sees no office desk, got ${offices.join(', ')}`);
+  check(JSON.stringify(f.desks) === JSON.stringify(TODAYS_DESKS), `B-AC-14: at ${at} the desks drawn are exactly ${TODAYS_DESKS.join(', ')}, got ${f.desks.join(', ')}`);
+  check(JSON.stringify(f.tools) === JSON.stringify(TODAYS_TOOLS), `B-AC-14: at ${at} the map tools drawn are exactly ${TODAYS_TOOLS.join(', ')}, got ${f.tools.join(', ')}`);
   check(f.reviewLabels.length === 0, `C17: unbuilt slots are not drawn, and no SOON or slice label shows; got ${f.reviewLabels.join(' | ')}`);
   check(f.nowFirst, `B-AC-12: at ${at} planning's rail opens with Now`);
   check(f.fill >= FILL, `B-AC-12: at ${at} the hub fills ${(f.fill * 100).toFixed(0)}% of the stage's height, under ${FILL * 100}%`);
@@ -119,6 +123,7 @@ async function read(phone: Page): Promise<Shown> {
         marketStrip: !!stage?.querySelector('[data-testid=market-strip]') && (stage.querySelector('[data-testid=market-strip]') as HTMLElement).offsetParent !== null,
       },
       desks: [...(tabs?.querySelectorAll('[data-testid^="desk-"]') ?? [])].map((d) => d.getAttribute('data-testid')!.slice('desk-'.length)),
+      tools: [...(screen?.querySelectorAll('[data-testid=map-tools] [data-testid^="tool-"]') ?? [])].map((t) => t.getAttribute('data-testid')!.slice('tool-'.length)),
       needs: [...(guide?.querySelectorAll('[data-testid^="need-"]') ?? [])].map((n) => ({ good: n.getAttribute('data-testid')!.slice('need-'.length), text: (n as HTMLElement).innerText })),
       thisMonthInColony: !!guide?.querySelector('[data-testid=desk-body-colony] [data-testid=this-month]'),
       nowFirst: !!body && body.firstElementChild === guide?.querySelector('[data-testid=now]'),
