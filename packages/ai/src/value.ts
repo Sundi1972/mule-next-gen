@@ -35,6 +35,8 @@ export interface Mind {
   persona: AiPersonaWeights;
   levelId: string;
   level: AiLevelConfig;
+  /** Seeded per seat: breaks ties between plots it values the same, so seats don't all follow the map's order. */
+  salt?: number;
 }
 
 export interface Yield {

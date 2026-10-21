@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, AI_LEVELS, AI_PERSONAS, createGame, EVENTS, GAME, GOODS, mulePriceFor, observe, type GameState } from '@mule/engine';
+import { advancePhase, AI_LEVELS, AI_PERSONAS, createGame, EVENTS, GAME, GOODS, mulePriceFor, observe, STRATEGIST, type GameState } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
 import { AiSeat } from '../src/seat.js';
-import { developDecision, goodPlan, muleValue, plotValue, tradeDecision } from '../src/strategist.js';
+import { developDecision, goodPlan, landDecision, muleValue, plotValue, tradeDecision, wantsPlot } from '../src/strategist.js';
 import { cashReserve, installGain, type Mind } from '../src/value.js';
 
 const fourSeats = (seed: number) => createGame({ seed, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI${i}`, isAi: true })) });
@@ -41,6 +41,26 @@ function developmentWithWater(water: number): GameState {
 }
 
 const traderMind: Mind = { me: 'ai0', personaId: 'trader', persona: AI_PERSONAS.trader, levelId: 'trader', level: AI_LEVELS.trader };
+
+describe('land claims off reading order', () => {
+  it('T-AC-10: in the first sweep a seat lets go of a plot outside its top open plots, and seats break ties differently', () => {
+    const state = fourSeats(3);
+    while (state.phase !== 'landGrant') advancePhase(state);
+    const obs = observe(state, 'ai0');
+    const mind = (salt: number): Mind => ({ ...traderMind, salt });
+    const ranking = landDecision(obs, mind(1)).all[0]!.action.ranking;
+    const top = GAME.claimsPerGrant + STRATEGIST.grantSpare;
+    // A plot that clears grantShare of the best, but ranks below the seat's top open plots.
+    const outside = ranking.slice(top).find((s) => s.utility >= ranking[0]!.utility * STRATEGIST.grantShare);
+    expect(outside).toBeDefined();
+    const plan = landDecision(obs, mind(1)).all[0]!.action;
+    expect(wantsPlot(plan, obs, outside!.index, 0, mind(1))).toBe(false);
+    expect(wantsPlot(plan, obs, ranking[0]!.index, 0, mind(1))).toBe(true);
+    // Tied plots: two salts order them differently, so seats don't all reach for the same first rows.
+    const order = (salt: number) => landDecision(obs, mind(salt)).all[0]!.action.ranking.map((s) => s.index);
+    expect(order(1)).not.toEqual(order(2));
+  });
+});
 
 describe('cash reserve', () => {
   it('T-AC-3: a Water farm whose own first output covers the gap is not vetoed by the reserve', () => {
