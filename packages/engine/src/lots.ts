@@ -1,8 +1,8 @@
-import { GAME, LOTS } from './config.js';
+import { GAME, LOTS, WALK } from './config.js';
 import { mulePrice } from './economy.js';
 import { RuleError } from './errors.js';
 import { tileAt } from './map.js';
-import type { GameState, Listing, LotItem, Tile } from './types.js';
+import type { GameState, LandAuction, Listing, LotItem, Tile } from './types.js';
 
 /**
  * The land auction's lots. In planning a player lists a plot they own, or
@@ -63,10 +63,35 @@ export function unlist(state: GameState, playerId: string, id: string): void {
   state.listings = state.listings.filter((l) => l !== listing);
 }
 
+/** Opens the land auction: the month's first lot comes up in its intro. */
 export function startLandAuction(state: GameState): void {
-  throw new Error('NotImplemented: startLandAuction');
+  const [lot, ...queue] = state.listings;
+  state.landAuction = {
+    queue,
+    lot: lot ?? null,
+    stage: lot ? 'intro' : 'over',
+    clockMs: LOTS.introMs,
+    elapsed: 0,
+    ticks: 0,
+    lo: 0,
+    hi: 0,
+    speed: WALK.minSpeed,
+    walkers: [],
+    deals: [],
+    turns: {},
+    units: 0,
+    between: { units: 0, value: 0 },
+    done: [],
+    aside: {},
+    result: null,
+    number: lot ? 1 : 0,
+    count: state.listings.length,
+  };
 }
 
+/** Ends the land auction at once: every lot not yet at its bell is kept, so nothing moves without a bell. */
 export function endLandAuction(state: GameState): void {
-  throw new Error('NotImplemented: endLandAuction');
+  const a = state.landAuction;
+  if (!a) return;
+  Object.assign(a, { queue: [], lot: null, stage: 'over', clockMs: 0, walkers: [], done: [], aside: {} } satisfies Partial<LandAuction>);
 }

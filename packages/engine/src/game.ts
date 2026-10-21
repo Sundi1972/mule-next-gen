@@ -2,7 +2,7 @@ import { endAuction, startAuction } from './auction.js';
 import { RuleError } from './errors.js';
 import { DEFAULT_SPECIES, DEVELOPMENT, GAME, GOOD_CONFIG, MULE, POLLUTION, SPECIES_PERK, START, TAX, UPKEEP } from './config.js';
 import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './economy.js';
-import { isListed } from './lots.js';
+import { endLandAuction, isListed, startLandAuction } from './lots.js';
 import { generateMap, tileAt, tileIndex } from './map.js';
 import { airBand } from './pollution.js';
 import { needsOf, runProduction } from './production.js';
@@ -305,16 +305,18 @@ export function visitPub(state: GameState, playerId: string, secondsLeft: number
 
 // --- Phase flow -------------------------------------------------------------
 
-const ORDER: Phase[] = ['planning', 'landGrant', 'development', 'production', 'auction', 'upkeep'];
+const ORDER: Phase[] = ['planning', 'landGrant', 'landAuction', 'development', 'production', 'auction', 'upkeep'];
 
 /**
  * Moves to the next phase. Production and upkeep resolve on their own when
- * entered; the auction runs live through stepAuction() until its last good
- * is done, and leaving it early ends the goods still to come.
+ * entered; the land auction and the goods auction run live through
+ * stepLandAuction() and stepAuction(), and leaving one early ends what is
+ * still to come. With nothing listed the land auction is skipped.
  */
 export function advancePhase(state: GameState): void {
   if (state.phase === 'gameOver') return;
-  const next = ORDER[(ORDER.indexOf(state.phase) + 1) % ORDER.length]!;
+  let next = ORDER[(ORDER.indexOf(state.phase) + 1) % ORDER.length]!;
+  if (next === 'landAuction' && state.listings.length === 0) next = 'development';
   state.phase = next;
 
   if (next === 'landGrant') {
@@ -326,7 +328,12 @@ export function advancePhase(state: GameState): void {
     }
     newSweep(state, 0);
   }
+  if (next === 'landAuction') startLandAuction(state);
   if (next === 'development') {
+    // Lots the land auction didn't reach are kept.
+    endLandAuction(state);
+    state.landAuction = null;
+    state.listings = [];
     state.grant = null;
     state.store.mulesAtStart = state.store.mules;
     startDevelopment(state);
