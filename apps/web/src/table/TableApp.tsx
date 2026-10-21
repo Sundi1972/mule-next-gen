@@ -169,7 +169,9 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   else if (phase === 'development')
     side = (
       <>
-        <StoreInterior mules={game.storeMules} mulePrice={game.mulePrice} prices={{}} />
+        <div className="h-[240px]">
+          <StoreInterior mules={game.storeMules} mulePrice={game.mulePrice} prices={{}} tv />
+        </div>
         <ul className="mt-auto grid grid-cols-2 gap-x-4 gap-y-2">
           {game.players.map((p, i) => (
             <li key={p.id} className={cx('flex items-center gap-2', p.doneDeveloping && 'opacity-50')}>
