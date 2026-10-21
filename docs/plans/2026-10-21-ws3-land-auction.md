@@ -14,7 +14,7 @@
 AM-1 (the colony's occasional plot, spec §8) serves G-1 and G-2 more completely. It rides PR-3, after the core, as the PM ruled.
 
 **Non-goals (spec §0), lifted verbatim. A task serving one is cut:**
-- Colony plots under the hammer (00-concept's "three or four more each month"). The lots are shaped so the colony can be a seller, and `LOTS.colonyPlots` stays 0. Switching it on is a later, measured change agreed with WS1, because it moves G-1's land supply. *Needs its own spec.*
+- 00-concept's "three or four more each month" colony plots. Only the one occasional colony plot of AM-1 (spec §8) is in scope; more is a later, measured change agreed with WS1, because it moves G-1's land supply. *Needs its own spec.*
 - AI seats listing their own lots: that needs WS1's sell-side value.
 - Direct trades between players, deal cards, and selling plot upgrades on their own.
 - Balance numbers outside the LOTS block.
@@ -56,10 +56,10 @@ Every handoff carries the standing authority line, verbatim:
 > Naming, internal structure, helper decomposition and test fixtures are yours. Everything else in your payload is specified. If you need to change anything outside it — including because it appears impossible — stop and report to the lead with the element id and the goal it fails. Do not deviate: you can see one task, and the lead can see the whole graph.
 
 **PR-1**
-- `may_edit`: `packages/engine/src/{lots.ts (new),game.ts,types.ts,index.ts}` · `packages/engine/src/config.ts` (the LOTS block only) · `packages/engine/test/lots*.test.ts` (new) · `packages/protocol/src/index.ts` · `apps/server/src/mule-game.ts` · `apps/server/test/land-auction.test.ts` (new) · `apps/web/src/components/AuctionParts.tsx` · `apps/web/e2e/auction-steps.ts` (new)
-- `may_edit_content`: `apps/web/src/phone/Planning.tsx` (Sell tab), `apps/web/src/phone/LandAuction.tsx` (new) and `apps/web/src/table/TvLandAuction.tsx` (new), grafted from `design/mocks/land-auction/src/screens/{PhoneSell,PhoneLandAuction,TvLandAuction}.tsx` at e3421df. Wire data, handlers and intents only; keep the composition, layout, tokens and every `data-testid`.
+- `may_edit`: `packages/engine/src/{lots.ts (new),game.ts,types.ts,index.ts}` · `packages/engine/src/config.ts` (the LOTS block only) · `packages/engine/test/lots*.test.ts` (new) · `packages/protocol/src/index.ts` · `apps/server/src/mule-game.ts` · `apps/server/test/land-auction.test.ts` (new) · `apps/server/test/land-auction-wire.test.ts` (new, added in execution) · `apps/server/src/server.ts` (`isIntent`'s `list`/`unlist` cases, added in execution: the e2e found the wire refused them) · `apps/web/src/components/AuctionParts.tsx` · `apps/web/e2e/auction-steps.ts` (new)
+- `may_edit_content`: `apps/web/src/phone/Planning.tsx` (Sell tab) and `apps/web/src/phone/Sell.tsx` (new in execution: the Sell tab moved out of Planning.tsx), `apps/web/src/phone/LandAuction.tsx` (new) and `apps/web/src/table/TvLandAuction.tsx` (new), grafted from `design/mocks/land-auction/src/screens/{PhoneSell,PhoneLandAuction,TvLandAuction}.tsx` at e3421df. Wire data, handlers and intents only; keep the composition, layout, tokens and every `data-testid`.
 - Named one-liners only: `apps/web/src/game/derive.ts::PHASE_NAME` (E1, one entry) · `apps/web/src/table/TableApp.tsx` (E2: `export` on TvHeader, plus one route line) · `apps/web/src/phone/PhoneApp.tsx` (one route line) · `apps/web/src/phone/Auction.tsx` (E3: `export` on Hold)
-- `must_not_edit`: `packages/ai/**` (WS1/WS2; WS3's lot hand is PR-2) · `packages/engine/src/{walk,auction,economy,observe}.ts` (walk.ts is reused unchanged; the rest are WS1's) · `packages/ui/**` (WS4; C12 is done) · `apps/web/e2e/{smoke,harness,screens}.ts` (WS4) · `design/mocks/**` (the approved spec of the screens) · `apps/server/src/server.ts` (no change needed)
+- `must_not_edit`: `packages/ai/**` (WS1/WS2; WS3's lot hand is PR-2) · `packages/engine/src/{walk,auction,economy,observe}.ts` (walk.ts is reused unchanged; the rest are WS1's) · `packages/ui/**` (WS4; C12 is done) · `apps/web/e2e/{smoke,harness,screens}.ts` (WS4) · `design/mocks/**` (the approved spec of the screens)
 
 **PR-3**
 - `may_edit`: `packages/engine/src/{lots.ts,game.ts}` (colonyLot + its call in advancePhase) · `packages/engine/src/config.ts` (LOTS block only) · `packages/engine/test/lots-colony.test.ts` (new)
@@ -83,7 +83,16 @@ Every handoff carries the standing authority line, verbatim:
 
 ### Waves
 
-- **Wave 1 = PR-1.** Tasks 1.1→1.6 run in order, since the engine is one module chain. After Task 1.6 freezes the protocol, Task 1.7 (server) and Tasks 1.8→1.10 (web) run in parallel. They're safe together because their files are disjoint and both consume the shape Task 1.6 froze. Task 1.11 (e2e) runs last.
+- **Wave 1 = PR-1.** Tasks 1.1→1.6 run in order, since the engine is one module chain. After Task 1.6 freezes the protocol, Tasks 1.9 and 1.10 (phone, TV) can start. **Correction found in execution:** Task 1.7 (server) depends on Task 1.4, not 1.6, because it calls lots.ts's list/unlist and stepLandAuction. Task 1.8 (Sell tab) depends on Task 1.2 (the storePaysFor export). Once 1.4 is done, 1.7 and 1.8 run in parallel. They're safe together because their files are disjoint and both consume the frozen shape. Task 1.11 (e2e) runs last, after every branch is merged into ws3-pr1-slice.
+- **Status (2026-10-21, session 2):**
+  - **Engine:** 1.1–1.6 DONE at cc86b4a; ae90cff exports `standing()` and adds `storePaysAt`. Review: with fixes → fix round 1 DONE at bfd0942 (branch ws3-pr1-engfix); scoped re-review: all findings ADDRESSED, M12/M15/M18 now die.
+  - **Screens:** 1.9, 1.10 COMPLETE at f21d181 (branch ws3-pr1-web); re-review: everything ADDRESSED.
+  - **Server:** 1.7 COMPLETE. Review: with fixes (a dropped phone holding Up kept bidding; six surviving mutants) → fix round 1 at 6fb845a; re-review: READY. `listedOutfits` is gone (AM-2), `list()` takes the intent, and the land auction's clock honours `phaseScale` (c8294f1).
+  - **Sell tab:** 1.8 COMPLETE (review fixes at f282496; the tab lives in `phone/Sell.tsx`).
+  - **e2e:** 1.11 COMPLETE (f6e4172). It found a wire bug: `isIntent` refused `list`/`unlist`, fixed test-first (5f2ea12 → 9097208).
+  - **PR-1 boundary:** every branch merged into ws3-pr1-slice and synced with feat/strategist a6c18ac (c87fab7). Goal check G-1 DELIVERED in a browser. Sub-PR #21 open into ws3-auctions. Code review: with fixes (two proof gaps); boundary fix round, maintainability review and render gate in progress.
+  - **Merge rule (PM, session 2):** sub-PR merges into ws3-auctions go to the PM, because Heiko hasn't typed that rule into this session.
+  - **Standing ruling (Heiko via the PM):** no handovers; this session carries PR-1, PR-2 and PR-3.
 - **Wave 2 = PR-2.** It starts when PR-1 is merged into `ws3-auctions`. **Freeze point:** the stubs for `plotValue`/`muleValue` have WS1's announced signatures `(obs, mind, index)` / `(obs, mind)` returning credits (WS1, 2026-10-21), so WS1's export later swaps in with one line.
 - **Wave 3 = PR-3** (spec §8 AM-1). It starts when PR-2 is merged into `ws3-auctions`, because the sim needs the lot hand to play a colony lot. C14 and C15 ship together, so the sim is never handed a phase it can't play.
 - No migration slot: there are no migrations (spec §5).
@@ -104,7 +113,7 @@ Every handoff carries the standing authority line, verbatim:
 - Modify: `apps/web/src/game/derive.ts::PHASE_NAME` (E1: `landAuction: 'Land auction'`)
 - Modify: `apps/server/src/mule-game.ts::PHASE_MS` (exclude `'landAuction'` from its key type, as `'auction'` is)
 
-- [ ] **Step 1: Add the LOTS block per spec §1 C5.** Values: perPlayer 2, maxLotsPerMonth 4, introMs 3000, walkMs 12000, resultMs 2500, boardLow 0.7, boardHigh 2, storePlotShare 2/3, storeMuleShare 0.5, colonyPlots 0. Each gets a one-line doc comment in the WALK block's style.
+- [ ] **Step 1: Add the LOTS block per spec §1 C5.** Values: perPlayer 2, maxLotsPerMonth 4, introMs 3000, walkMs 12000, resultMs 2500, boardLow 0.7, boardHigh 2, storePlotShare 2/3, storeMuleShare 0.5. (AM-1 superseded the planned `colonyPlots 0`; PR-3 Task 3.1 adds colonyPlotChance and colonyPlotShare.) Each gets a one-line doc comment in the WALK block's style.
 - [ ] **Step 2: Add the types per spec §3 and §2.** Shape them on `design/mocks/land-auction/src/proto.ts` (the view types), but as engine state: `LandAuction extends WalkBoard` with `queue`, `lot`, `stage: 'intro'|'walk'|'result'|'over'`, `done`, `result`, `number`, `count`.
 - [ ] **Step 3: Apply E1 and the PHASE_MS key fix in the same commit**
 - [ ] **Step 4: Run** `pnpm typecheck`. Expected: every package `Done`, exit 0.
@@ -255,7 +264,9 @@ Every handoff carries the standing authority line, verbatim:
 **Files:**
 - Create: `apps/web/e2e/auction-steps.ts` (exported step functions for WS4's smoke.ts hooks; when run directly it plays the whole flow, following the `packages/ai/src/sim.ts` pattern `if (process.argv[1]?.endsWith(...)) main()`)
 
-- [ ] **Step 1: Implement C13: write the browser flow `UBER-AC-1: list, bid on two phones, sold at the bell` (also proves B-AC-1 and B-AC-2 in the browser).** Use the harness's `startServer`, `launch`, `PHONE` and `TV`: the test owns its server on a free port, never the rig (CLAUDE.md, ephemeral environments). Three phone contexts join one room by code, plus a TV. The seller claims a plot in month 1 and lists it in month 2 planning (Sell tab: `tab-sell`, then a map plot, then `list`). Two other phones hold Up (`hold-up`) to different heights. After the bell, assert on the phones (`result` data-kind sold, the buyer's `money` dropped by the bid) and on the TV (`tv-result`). `B-AC-1`: the TV and the other phones show the listing during planning (`listing-<id>`).
+**Hooks contract (CT-3, WS4):** export the steps as WS4's `AuctionSteps` type from `apps/web/e2e/harness.ts` (`import type`, never from smoke.ts). `landAuction(ctx, month)` runs right after each month's land grant (months 1 and 2). `listedSale(ctx)` runs in month 2 planning, before "I'm ready", returns within ~2 s and leaves the phone on planning. No hook presses "I'm ready", the pub or Done, and every server wait goes through `phaseScale`. Also hold Up through one bell, then bid on lot 2 (the web review's deferred case).
+
+- [ ] **Step 1: Implement C13: write the browser flow `UBER-AC-1: list, bid on two phones, sold at the bell` (also proves B-AC-1 and B-AC-2 in the browser).** Use the harness's `startServer`, `launch`, `PHONE` and `TV`: the test owns its server on a free port, never the rig (CLAUDE.md, ephemeral environments). Three phone contexts join one room by code, plus a TV. The seller claims a plot in month 1 and lists it in month 2 planning (Sell tab: `tab-sell`, then a map plot, then `list`). Two other phones hold Up (`hold-up`) to different heights. After the bell, assert on the phones (`result` data-kind sold, the buyer's `money` dropped by the bid) and on the TV (`tv-result`). `B-AC-1`: the other phones show the listing during planning (`listing-<id>`). (Corrected in execution: the TV's planning screen has no listing UI and no approved mock for one; B-AC-1 asks for every seat's view, which the phones are.)
   Altitude: promise, in a real browser against the real server (proving-acs, "Front to back").
 - [ ] **Step 2: Run** `pnpm --filter @mule/web build && pnpm --filter @mule/web exec tsx e2e/auction-steps.ts`. Expected before 1.7–1.10: FAIL. After them: exit 0 with the harness's ✓ lines.
 - [ ] **Step 3: Also run WS4's** `pnpm e2e`. Expected: unchanged, exit 0.

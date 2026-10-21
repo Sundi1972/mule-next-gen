@@ -165,7 +165,8 @@ senior       junior would: put a fixed storePlotPrice of 200. · senior does: ta
              GAME.plotScore (WS1's PR #11), so it can't drift past the score if the score changes.
              storePlotShare and storeMuleShare are flagged to WS1 as touching land supply.
 mechanism    sprout
-call sites   lots.ts (C1, C3), mule-game.ts (C7 view), web screens (C9–C11, via the view only)
+call sites   lots.ts (C1, C3), mule-game.ts (C7 view), web screens (C9–C11, via the view, plus the
+             Sell tab's reads of LOTS.perPlayer, storePaysAt and isListed: AM-3)
 depends_on   none (GAME.plotScore landed with WS1's PR #11, merged into feat/strategist at aa84a1b)
 ```
 
@@ -465,6 +466,9 @@ The machine-readable proposal is `design/mocks/land-auction/src/proto.ts`; the m
 | `MuleView.landAuction: LandAuctionView \| null` | ADDED | no | C6 |
 | `Phase` + `'landAuction'` (engine, mirrored in the view) | MODIFIED | for `Record<Phase,…>` users: derive.ts PHASE_NAME (E1), mule-game.ts PHASE_MS | C2 |
 | `GameState.listings`, `GameState.landAuction` (engine) | ADDED | no | C1, C3 |
+| engine `LotItem` = `{kind:'plot',x,y} \| {kind:'mule',x,y,outfit:Outfit}` (the view's union); `list()` snapshots the outfit (AM-2) | ADDED | no | C1 |
+| engine `list(state, seat, req: ListRequest)`, `ListRequest = {item:{kind,x,y}, minimum, unsold}`: the `list` intent's fields, passed straight through (AM-2) | ADDED | no | C1 |
+| engine export `plotAt` from lots.ts, the one copy game.ts imports (AM-2) | ADDED | no | C1 |
 | `WalkBoard` `lines?` | ADDED | no | C12 (done) |
 
 Worked example: `ListingView` `{ id: 'l2', seller: 'brix', item: { kind: 'plot', x: 5, y: 3 }, minimum: 250, unsold: 'keep', storePays: 200 }`. `LandAuctionView` mid-walk: `design/mocks/land-auction/src/fixture.ts::WALK`.
@@ -533,11 +537,42 @@ because   Heiko's ruling on the land auction itself: G-1 (a live land auction at
           is met more fully, since a month nobody lists can still have one.
 goal      G-1, G-2: unchanged; served more completely
 folded    §0 non-goal narrowed to "three or four a month" · C5 numbers · C14, C15 · RULE-7 ·
-          B-AC-8, T-AC-6, T-AC-7 · §9 E5 · mocks 3d5f9e3 (colony intro and nobody-bid states,
-          sent to Heiko for approval) · its own PR after the core (plan PR-3)
+          B-AC-8, T-AC-6, T-AC-7 · §9 E5 · mocks: colony intro and nobody-bid states
+          (#colony-intro, #colony-kept, #tv-colony-intro, #tv-colony-kept), approved by Heiko
+          at 3d5f9e3 · cap: a full month means no colony lot (PM ruling (a)) · its own PR
+          after the core (plan PR-3)
 minimum   colonyPlotShare = storePlotShare's 2/3 of GAME.plotScore: the colony asks what the
           store would pay for land, so it never sells for less than land is worth to the store,
           and it moves with the score (WS1's reason for a share, not a number).
+
+AM-2 · 2026-10-21 · WS3 (engine review, Important 1) · during PR-1, before the server built on it
+
+target    §3 (engine LotItem, list(), plotAt)
+said      the engine's LotItem carries no outfit; the server reads tile.outfit (a session-1 decision)
+did       LotItem is the view's union {kind:'plot',x,y} | {kind:'mule',x,y,outfit}; list() snapshots
+          the outfit and resolve() uses lot.item.outfit. list() takes a ListRequest shaped like the
+          intent. plotAt moved into lots.ts and is exported, so game.ts and lots.ts share one copy.
+because   resolve() clears tile.outfit when the store buys a MULE back, while the lot is still up
+          in the result stage, so the server could no longer fill ListingView.item.outfit. The
+          outfit needs one owner, and the engine is it (the server's listedOutfits map goes).
+goal      G-1 unchanged; no screen or rule changes
+folded    §3 rows · engine fix round 1 (bfd0942) · the server fix round deletes listedOutfits
+
+AM-3 · 2026-10-21 · WS3 (PR-1 maintainability review, Important 2) · at the PR-1 boundary
+
+target    §1 C5 call sites
+said      the web reads lot numbers via the view only
+did       the Sell tab (apps/web/src/phone/Sell.tsx) also imports three pure engine exports:
+          LOTS.perPlayer, storePaysAt(kind, mulePrice) for the unsaved form's store price, and
+          isListed(view, x, y), typed structurally so it takes the view. With them it pre-checks
+          RULE-1 rows 5–7 (already listed, per-player cap, full month) to disable List. Its copy
+          is the approved mock's; the engine's RuleError text stays the server's refusal, shown
+          as a toast if a race gets past the pre-check.
+because   the plan chose this in Task 1.2/1.8: one formula and one rule with the engine as owner,
+          instead of the phone re-deriving the store price or the listed test. Putting the same
+          numbers into MuleView would duplicate them without removing the pre-check.
+goal      G-1 unchanged
+folded    §1 C5 call sites · plan Tasks 1.2, 1.8
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
