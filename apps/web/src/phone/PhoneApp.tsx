@@ -6,6 +6,7 @@ import { Auction } from './Auction';
 import { Develop } from './Develop';
 import { GameOver } from './GameOver';
 import { PhoneGameProvider } from './game';
+import { LandAuction } from './LandAuction';
 import { LandGrant } from './LandGrant';
 import { Entry, Lobby } from './Lobby';
 import { EmoteBubbles } from './parts';
@@ -61,6 +62,8 @@ function PhoneScreens({ room }: { room: string }) {
     <Develop />
   ) : view.phase === 'auction' ? (
     <Auction />
+  ) : view.phase === 'landAuction' ? (
+    <LandAuction />
   ) : (
     <Results />
   );
