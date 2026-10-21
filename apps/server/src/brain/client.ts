@@ -13,6 +13,14 @@ export interface HaikuSdk {
   };
 }
 
+/**
+ * The real SDK, with the key passed in (HC-2). `authToken: null` stops the SDK reading ANTHROPIC_AUTH_TOKEN, and an
+ * explicit credential stops it falling back to an `ant auth` profile.
+ */
+export function createAnthropicSdk(apiKey: string): HaikuSdk {
+  return new Anthropic({ apiKey, authToken: null });
+}
+
 export interface HaikuReply {
   text: string;
   usage: Usage;

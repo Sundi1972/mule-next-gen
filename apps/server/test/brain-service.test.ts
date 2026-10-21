@@ -125,6 +125,7 @@ describe('brain service', () => {
     expect(keys).toEqual(['test-key-not-real']);
   });
 
+  // trace-allow: spec §9 names this import check as the ownership boundary's enforcement; it has no AC or INV id.
   it('§9: only brain/client.ts imports @anthropic-ai/sdk', () => {
     const src = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'src');
     const files: string[] = [];
