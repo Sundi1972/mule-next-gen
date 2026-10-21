@@ -57,8 +57,6 @@ const clock = (step: number) => {
   return () => (n++ === 0 ? 1000 : 1000 + step);
 };
 
-const ZERO = { input: 0, cached_read: 0, cache_write: 0, output: 0 };
-
 describe('Haiku client', () => {
   it('INV-HC3: the request is Haiku, thinking off, cached system, structured output, no retries, timeout = waitMs; no timer outlives it', async () => {
     const { sdk, calls } = stub(async () => reply());
@@ -112,7 +110,6 @@ describe('Haiku client', () => {
       const f = settled as CallFailed;
       expect(f.outcome).toBe('timeout');
       expect(f.auth).toBe(false);
-      expect(f.usage).toEqual(ZERO);
       expect(f.ms).toBe(5000);
     } finally {
       vi.useRealTimers();
@@ -154,7 +151,6 @@ describe('Haiku client', () => {
     const f = err as CallFailed;
     expect(f.outcome).toBe('timeout');
     expect(f.auth).toBe(false);
-    expect(f.usage).toEqual(ZERO);
     expect(f.ms).toBe(900);
   });
 
@@ -176,7 +172,6 @@ describe('Haiku client', () => {
     expect(f.outcome).toBe('error');
     expect(f.auth).toBe(true);
     expect(f.ms).toBe(5);
-    expect(f.usage).toEqual(ZERO);
   });
 
   const apiErrors: Array<{ name: string; make: (leak: string) => Error; message: string }> = [

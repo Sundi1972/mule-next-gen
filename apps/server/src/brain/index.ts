@@ -1,8 +1,8 @@
 import { BRAIN, type AiLevelId, type AiPersonaId } from '@mule/engine';
 import { LlmDecider, ReplyRejected, type Complete, type Decider, type DecisionRecord } from '@mule/ai';
-import { createBudget } from './budget.js';
+import { createBudget, worstCaseUsd } from './budget.js';
 import { billUnknown, CallFailed, createAnthropicSdk, createHaikuComplete, type HaikuReply, type HaikuSdk } from './client.js';
-import { createLedger, type Outcome, type Usage } from './ledger.js';
+import { createLedger, NO_USAGE, type Outcome, type Usage } from './ledger.js';
 
 /** The seat a decider is built for: its id, persona and level. */
 export interface BrainSeat {
@@ -23,15 +23,13 @@ export interface BrainService {
 
 export interface BrainOptions {
   gameId: string;
-  /** Only ANTHROPIC_API_KEY is read from it. */
+  /** Only API_KEY_ENV is read from it. */
   env?: Readonly<Record<string, string | undefined>>;
   logPath?: string;
   /** Builds the SDK from the key; called once, and never without a key. */
   sdkFactory?: (apiKey: string) => HaikuSdk;
   now?: () => number;
 }
-
-const NO_USAGE: Usage = { input: 0, cached_read: 0, cache_write: 0, output: 0 };
 
 /** The port refused before calling. `lockedNow` is true for the refusal that locked the seat, the only one with a line. */
 class BudgetSpent extends Error {
@@ -58,7 +56,7 @@ export function outcomeOf(reply: Pick<HaikuReply, 'stopReason'> | null, failure:
 
 const passThrough = (): ((record: DecisionRecord) => void) => () => {};
 
-/** RULE-3 row 1: without the key there is no client and no decider, so nothing can make a paid call. */
+/** Without the key there is no client and no decider, so nothing can make a paid call. See RULE-3. */
 const CLASSIC: BrainService = {
   deciderFor: () => null,
   chatter: passThrough,
@@ -96,7 +94,7 @@ export function createBrain(options: BrainOptions): BrainService {
       (slot: CallSlot): Complete =>
       async (prompt, waitMs) => {
         if (finished) throw new Error('game over');
-        slot.worstUsd = budget.worstCase(prompt);
+        slot.worstUsd = worstCaseUsd(prompt);
         const { allowed, lockedNow } = budget.allow(gameId, seat.id, slot.worstUsd);
         if (!allowed) throw new BudgetSpent(lockedNow);
         slot.called = true;
@@ -122,8 +120,8 @@ export function createBrain(options: BrainOptions): BrainService {
           if (failure instanceof BudgetSpent) {
             if (failure.lockedNow) write(context.kind, 'budget', NO_USAGE, 0);
           } else if (slot.called) {
-            const source = failure instanceof CallFailed ? failure : slot.reply;
-            write(context.kind, outcomeOf(slot.reply, failure), source?.usage ?? NO_USAGE, source?.ms ?? 0);
+            const ms = slot.reply?.ms ?? (failure instanceof CallFailed ? failure.ms : 0);
+            write(context.kind, outcomeOf(slot.reply, failure), slot.reply?.usage ?? NO_USAGE, ms);
             if (slot.reply === null && billUnknown(failure) && !finished) budget.countUnknownBill(gameId, seat.id, slot.worstUsd);
           }
         }

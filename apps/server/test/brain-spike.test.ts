@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BRAIN } from '@mule/engine';
 import { buildPrompt, PERSONAS, WAIT_MS, type Prompt, type ShortOption } from '@mule/ai';
 import { CallFailed, createHaikuComplete, type HaikuReply, type HaikuSdk } from '../src/brain/client.js';
-import { createBudget } from '../src/brain/budget.js';
+import { worstCaseUsd } from '../src/brain/budget.js';
 import { createLedger } from '../src/brain/ledger.js';
 import { capFor, collectPrompts, main, renderReport, runSpike, type SpikeItem } from '../src/brain/spike.js';
 
@@ -71,7 +71,7 @@ const timedOut = (kind: SpikeItem['kind'] = 'develop') => new CallFailed('model 
 
 const run = (list: SpikeItem[], complete: (p: Prompt, waitMs: number) => Promise<HaikuReply>, cap: number = BRAIN.spikeCapUsd, at = file) => {
   const ledger = createLedger({ path: at, clock: () => TODAY });
-  return runSpike({ prompts: list, complete, ledger, budget: createBudget(ledger), cap, now: () => TODAY, log: () => {} });
+  return runSpike({ prompts: list, complete, ledger, worstCase: worstCaseUsd, cap, now: () => TODAY, log: () => {} });
 };
 const ledgerLines = (at = file): Record<string, unknown>[] =>
   fs
@@ -237,7 +237,7 @@ describe('brain:spike', () => {
     expect(out.at(-1)).toBe('Stopped: the API refused the credentials (401/403). Nothing more was called.');
   });
 
-  it('INV-key-read: with the key unset or blank, main names the variable in one line, builds no client and exits 1', async () => {
+  it('B-AC-3: with the key unset or blank, main names the variable in one line, builds no client and exits 1', async () => {
     const out: string[] = [];
     for (const env of [{}, { ANTHROPIC_API_KEY: '   ' }]) {
       const code = await main(['--calls', '3'], env, { dataDir: dir, now: () => TODAY, out: (l) => out.push(l) });
@@ -266,7 +266,6 @@ describe('brain:spike', () => {
     expect(out.join('\n')).not.toContain(KEY.ANTHROPIC_API_KEY);
     expect(out).toContainEqual(expect.stringMatching(/^develop\s/));
     expect(ledgerLines()).toHaveLength(4);
-    if (process.env.SPIKE_SAMPLE_OUT) fs.writeFileSync(process.env.SPIKE_SAMPLE_OUT, out.join('\n'));
   });
 
   it('INV-spike-cap: main --max-usd 0.01 prints cap $0.01 and keeps the counted spend within it', async () => {
@@ -323,7 +322,7 @@ describe('brain:spike', () => {
     expect(second[0]).toContain(file);
     expect(calls).toBe(2);
     expect(sdk.built).toHaveLength(3);
-  });
+  }, 30_000); // four runs, each playing a strategist game to collect prompts
 
   it("INV-spike-cap: main accepts pnpm's leading --, and refuses an unknown, malformed or stray argument with usage and no call", async () => {
     let calls = 0;

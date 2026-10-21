@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BRAIN } from '@mule/engine';
 import type { Prompt } from '@mule/ai';
-import { createBudget } from '../src/brain/budget.js';
-import { usd } from '../src/brain/ledger.js';
+import { createBudget, worstCaseUsd } from '../src/brain/budget.js';
 
 /** A budget over a fake ledger whose totals the test sets directly. */
 function setup() {
@@ -110,18 +109,17 @@ describe('RULE-3 budget table', () => {
   });
 
   it('B-AC-4 (RULE-3): worstCase counts system, user and schema, rounds tokens up, prices input at the cache-write rate', () => {
-    const { budget } = setup();
     // 3,000 chars at 3 per token = 1,000 tokens × 0.125 + 200 × 0.50 per MTok, by hand
-    expect(budget.worstCase(promptOf(3000))).toBeCloseTo(0.000225, 12);
+    expect(worstCaseUsd(promptOf(3000))).toBeCloseTo(0.000225, 12);
     // 3,001 chars = 1,001 tokens: pins ceil
-    expect(budget.worstCase(promptOf(3001))).toBeCloseTo(0.000225125, 12);
+    expect(worstCaseUsd(promptOf(3001))).toBeCloseTo(0.000225125, 12);
     // the schema's JSON is what carries a prompt over a token boundary: without it these chars price one token less
     const sys = 'x'.repeat(1000);
-    const user = 'y'.repeat(3000 - 1000 - SCHEMA_CHARS + 1 - 0);
+    const user = 'y'.repeat(3000 - 1000 - SCHEMA_CHARS + 1);
     const chars = 1000 + user.length; // system + user alone
     expect(chars + SCHEMA_CHARS).toBe(3001);
     const tokensWithout = Math.ceil(chars / 3);
     expect(tokensWithout).toBeLessThan(1001);
-    expect(budget.worstCase({ system: sys, user, schema: SCHEMA })).toBeCloseTo(1001 * 0.125e-6 + 200 * 0.5e-6, 12);
+    expect(worstCaseUsd({ system: sys, user, schema: SCHEMA })).toBeCloseTo(1001 * 0.125e-6 + 200 * 0.5e-6, 12);
   });
 });

@@ -11,6 +11,8 @@ export interface Usage {
   output: number;
 }
 
+export const NO_USAGE: Readonly<Usage> = Object.freeze({ input: 0, cached_read: 0, cache_write: 0, output: 0 });
+
 export type Outcome = RejectOutcome | 'llm' | 'refused' | 'timeout' | 'error' | 'budget';
 
 export interface CallRecord extends Usage {
@@ -25,17 +27,20 @@ export interface CallRecord extends Usage {
 }
 
 export interface Ledger {
-  /** Appends one RULE-4 line and charges the seat, unless its game is finished. */
+  /** Appends the call's line and charges its seat; a call in a finished game gets its line but no charge. See RULE-4. */
   record(call: CallRecord): void;
   /** US dollars charged to a seat so far this game. */
   seatSpent(game: string, seat: string): number;
-  /** Appends the game's total line. */
+  /**
+   * Appends the game's total line, once; a second call is a no-op. Terminal: the game's totals are released, so
+   * seatSpent reads 0 afterwards, and later records are written but not totalled.
+   */
   finish(game: string): void;
 }
 
 const PER_MILLION = 1_000_000;
 
-/** RULE-4: dollars for one call, prices per million tokens from BRAIN. */
+/** Dollars for one call's usage, at BRAIN's prices per million tokens. See RULE-4. */
 export function usd(u: Usage): number {
   const p = BRAIN.pricesPerMTok;
   return (u.input * p.input + u.cached_read * p.cacheRead + u.cache_write * p.cacheWrite + u.output * p.output) / PER_MILLION;
@@ -113,7 +118,6 @@ export function createLedger(opts: { path?: string; clock?: () => Date } = {}): 
 
     seatSpent: (game, seat) => games.get(game)?.get(seat)?.usd ?? 0,
 
-    /** Writes the game's total line once and releases its totals; a second finish of the same game is a no-op. */
     finish(game) {
       if (finished.has(game)) return;
       finished.add(game);

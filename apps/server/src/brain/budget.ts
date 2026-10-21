@@ -2,12 +2,29 @@ import type { Prompt } from '@mule/ai';
 import { BRAIN } from '@mule/engine';
 import { usd, type Ledger } from './ledger.js';
 
+/** Characters the model reads for a prompt: system, user and the schema's JSON. */
+export function promptChars(prompt: Prompt): number {
+  return prompt.system.length + prompt.user.length + JSON.stringify(prompt.schema).length;
+}
+
+/** The most a call with this prompt can cost: the whole prompt as input at the dearer rate, and a full reply. See RULE-3. */
+export function worstCaseUsd(prompt: Prompt): number {
+  const tokens = Math.ceil(promptChars(prompt) / BRAIN.charsPerToken);
+  // A first call writes the cache, which can cost more than plain input: price at the dearer of the two.
+  const p = BRAIN.pricesPerMTok;
+  const asWrite = p.cacheWrite >= p.input;
+  return usd({
+    input: asWrite ? 0 : tokens,
+    cached_read: 0,
+    cache_write: asWrite ? tokens : 0,
+    output: BRAIN.maxTokens,
+  });
+}
+
 export interface Budget {
-  /** Dollars the next call could cost at worst: the prompt as input, a full reply as output. */
-  worstCase(prompt: Prompt): number;
   /**
-   * RULE-3: may this seat make a call costing up to `nextUsd`? A refusal locks the seat for the rest of the game;
-   * `lockedNow` is true only for the refusal that locked it.
+   * May this seat make a call costing up to `nextUsd`? A refusal locks the seat for the rest of the game;
+   * `lockedNow` is true only for the refusal that locked it. See RULE-3.
    */
   allow(game: string, seat: string, nextUsd: number): { allowed: boolean; lockedNow: boolean };
   /** Counts a call whose bill is unknown toward the seat's spend at its worst case; its ledger line is left as it is. */
@@ -16,7 +33,7 @@ export interface Budget {
   release(game: string): void;
 }
 
-/** Pure decision over the ledger's in-memory totals; no I/O. */
+/** Per-seat spend checks over the ledger's in-memory totals plus unknown bills; never reads the file. */
 export function createBudget(ledger: Pick<Ledger, 'seatSpent'>): Budget {
   // game -> seats locked out. A locked seat never calls again, so it cannot flip between Smart and Classic.
   const locked = new Map<string, Set<string>>();
@@ -25,21 +42,6 @@ export function createBudget(ledger: Pick<Ledger, 'seatSpent'>): Budget {
   const spentBy = (game: string, seat: string) => ledger.seatSpent(game, seat) + (unknown.get(game)?.get(seat) ?? 0);
 
   return {
-    worstCase(prompt) {
-      const chars = prompt.system.length + prompt.user.length + JSON.stringify(prompt.schema).length;
-      const tokens = Math.ceil(chars / BRAIN.charsPerToken);
-      // A first call writes the cache, which can cost more than plain input: price at the dearer of the two.
-      const p = BRAIN.pricesPerMTok;
-      const asWrite = p.cacheWrite >= p.input;
-      return usd({
-        input: asWrite ? 0 : tokens,
-        cached_read: 0,
-        cache_write: asWrite ? tokens : 0,
-        output: BRAIN.maxTokens,
-      });
-    },
-
-    // RULE-3 row 1 (no API key, no decider at all) lives in createBrain, not here.
     allow(game, seat, nextUsd) {
       if (locked.get(game)?.has(seat)) return { allowed: false, lockedNow: false };
       const spent = spentBy(game, seat);

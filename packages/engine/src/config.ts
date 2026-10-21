@@ -578,7 +578,7 @@ export const BRAIN = {
   pricesPerMTok: { input: 0.1, cacheRead: 0.01, cacheWrite: 0.125, output: 0.5 },
   /** Reply cap, in tokens. */
   maxTokens: 200,
-  /** Prompt characters per token, as the budget assumes: conservative until Spike S1 measures it. */
+  /** Prompt characters per token, as the budget assumes: conservative, not yet measured. */
   charsPerToken: 3,
   /** Longest chat line an AI says, in characters. */
   maxLineChars: 140,

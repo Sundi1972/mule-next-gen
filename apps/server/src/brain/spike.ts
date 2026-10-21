@@ -1,11 +1,7 @@
 /**
- * brain:spike (Spike S1): measures Haiku's latency and cost on real decisions from one strategist game.
- *
- *   pnpm --filter @mule/server brain:spike -- --calls 50 --max-usd 0.05 --seed 101
- *
- * It spends real money, so it is run by a person who has cleared it, never by tests (tests pass fakes).
- * The cap is a hard ceiling in code (AM-1): --max-usd can lower it, never raise it above BRAIN.spikeCapUsd.
- * One run per clearance (AM-10): it refuses to start when today's ledger already exists.
+ * Measures Haiku's latency and cost on real decisions from one strategist game.
+ * Usage: pnpm --filter @mule/server brain:spike -- --calls 50 --max-usd 0.05 --seed 101
+ * Spends real money; cap = min(flag, BRAIN.spikeCapUsd); one run per day.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -28,8 +24,8 @@ import {
 } from '@mule/ai';
 import { billUnknown, CallFailed, createAnthropicSdk, createHaikuComplete, type HaikuReply } from './client.js';
 import { API_KEY_ENV, apiKeyFrom, outcomeOf } from './index.js';
-import { createBudget, type Budget } from './budget.js';
-import { createLedger, usd, type Ledger, type Outcome, type Usage } from './ledger.js';
+import { promptChars, worstCaseUsd } from './budget.js';
+import { createLedger, NO_USAGE, usd, type Ledger, type Outcome } from './ledger.js';
 
 /** One real decision turned into a prompt, with what is needed to rebuild and attribute it. */
 export interface SpikeItem {
@@ -75,10 +71,10 @@ export interface SpikeReport {
   calls: number;
   /** Dollars the ledger charged (what the API billed). */
   ledgerUsd: number;
-  /** Ledger dollars plus each call whose bill is unknown at its worst case (AM-10): what the cap is checked against. */
+  /** Ledger dollars plus each call whose bill is unknown at its worst case: what the cap is checked against. */
   countedUsd: number;
   cap: number;
-  /** The first call's latency whatever its outcome (AM-8); 0 when nothing was called. */
+  /** The first call's latency whatever its outcome; 0 when nothing was called. */
   firstMs: number;
   /** One row per kind called, in KINDS order, then the pooled row. */
   kinds: KindRow[];
@@ -93,7 +89,7 @@ export interface SpikeReport {
   stopped: StopReason;
 }
 
-/** AM-1: a flag may lower the cap, never raise it. An unusable flag gives 0, so nothing is called. */
+/** A flag may lower the cap, never raise it. An unusable flag gives 0, so nothing is called. */
 export function capFor(flagMaxUsd: number): number {
   return Number.isFinite(flagMaxUsd) && flagMaxUsd > 0 ? Math.min(flagMaxUsd, BRAIN.spikeCapUsd) : 0;
 }
@@ -105,36 +101,35 @@ interface Collected {
   summary: string | null;
 }
 
+/** A seat's place in the game's player list, which follows the order of the specs it was created from. */
+const seatIndex = (state: GameState, seatId: string): number => state.players.findIndex((p) => p.id === seatId);
+
 /**
  * Real prompts from one strategist game, taken round-robin by kind. The situation summary is computed from the game
- * state at the end of the phase the decision was made in (not the instant of the decision): approximate, as agreed.
+ * state at the end of the phase the decision was made in, not at the instant of the decision, so it is approximate.
  */
 export function collectPrompts(seed: number, calls: number): SpikeItem[] {
   const specs = simSeats(4, 'trader', seed);
-  const mindOf = (i: number): Mind => ({
-    me: `ai${i}`,
-    personaId: specs[i]!.persona,
-    persona: AI_PERSONAS[specs[i]!.persona],
-    levelId: specs[i]!.level,
-    level: AI_LEVELS[specs[i]!.level],
-  });
-  const collected: Collected[] = [];
-  let last: GameState | null = null;
-  const summarise = (state: GameState, c: Collected) => {
-    const i = Number(c.record.seat.slice(2));
-    c.summary = situation(observe(state, c.record.seat), mindOf(i));
+  const seatOf = (state: GameState, seatId: string) => {
+    const i = seatIndex(state, seatId);
+    const spec = specs[i]!;
+    const mind: Mind = { me: seatId, personaId: spec.persona, persona: AI_PERSONAS[spec.persona], levelId: spec.level, level: AI_LEVELS[spec.level] };
+    return { spec, mind, name: state.players[i]!.name };
   };
-  playGame(seed, specs, {
+  const collected: Collected[] = [];
+  const summarise = (state: GameState, c: Collected) => {
+    c.summary = situation(observe(state, c.record.seat), seatOf(state, c.record.seat).mind);
+  };
+  const { state: final } = playGame(seed, specs, {
     onDecision: (r) => {
       // Brain.ask asks the model only when there is a choice to make.
       if (r.shortlist.length >= 2) collected.push({ record: r, summary: null });
     },
     onPhase: (state) => {
-      last = state;
       for (const c of collected) if (c.summary === null) summarise(state, c);
     },
   });
-  if (last) for (const c of collected) if (c.summary === null) summarise(last, c);
+  for (const c of collected) if (c.summary === null) summarise(final, c);
 
   const buckets = new Map<DecisionKind, Collected[]>(KINDS.map((k) => [k, collected.filter((c) => c.record.kind === k)]));
   const picked: Collected[] = [];
@@ -150,27 +145,26 @@ export function collectPrompts(seed: number, calls: number): SpikeItem[] {
     if (!took) break;
   }
 
-  const maxMonths = last ? observe(last, 'ai0').maxMonths : 0;
   return picked.map((c) => {
-    const i = Number(c.record.seat.slice(2));
-    const mind = mindOf(i);
+    const { spec, mind, name } = seatOf(final, c.record.seat);
     const context: DecisionContext = {
       kind: c.record.kind,
       seat: c.record.seat,
-      name: `AI ${i + 1}`,
+      name,
       month: c.record.month,
-      maxMonths,
+      maxMonths: final.maxMonths,
       summary: c.summary ?? '',
-      seed: (seed * 2_654_435_761 + c.record.id * 40_503 + c.record.month * 977) >>> 0,
+      // buildPrompt reads neither the seed nor the tolerance.
+      seed: 0,
       pickTolerance: mind.level.pickTolerance,
       tableTalk: [],
     };
     return {
-      prompt: buildPrompt(c.record.shortlist, PERSONAS[specs[i]!.persona], context),
+      prompt: buildPrompt(c.record.shortlist, PERSONAS[spec.persona], context),
       kind: c.record.kind,
       seat: c.record.seat,
-      persona: specs[i]!.persona,
-      level: specs[i]!.level,
+      persona: spec.persona,
+      level: spec.level,
       shortlist: c.record.shortlist,
       context,
     };
@@ -181,7 +175,8 @@ export interface SpikeOptions {
   prompts: SpikeItem[];
   complete: (prompt: Prompt, waitMs: number) => Promise<HaikuReply>;
   ledger: Ledger;
-  budget: Pick<Budget, 'worstCase'>;
+  /** Dollars a call with this prompt could cost at most. */
+  worstCase: (prompt: Prompt) => number;
   /** Dollars. Callers pass capFor(flag); runSpike trusts it only up to BRAIN.spikeCapUsd. */
   cap: number;
   /** Called once, just before the first call starts; a run that calls nothing never calls it. */
@@ -197,7 +192,6 @@ interface Settled {
   ms: number;
 }
 
-const NO_USAGE: Usage = { input: 0, cached_read: 0, cache_write: 0, output: 0 };
 const ascending = (a: number, b: number) => a - b;
 const day = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -231,7 +225,7 @@ function kindRow(kind: KindRow['kind'], waitMs: number | null, settled: Settled[
 
 /** Sends the prompts one at a time and never starts a call that could take the counted spend past the cap. */
 export async function runSpike(options: SpikeOptions): Promise<SpikeReport> {
-  const { prompts, complete, ledger, budget, now, log } = options;
+  const { prompts, complete, ledger, worstCase, now, log } = options;
   const cap = Math.min(options.cap, BRAIN.spikeCapUsd);
   const game = `spike-${day(now())}`;
 
@@ -245,7 +239,7 @@ export async function runSpike(options: SpikeOptions): Promise<SpikeReport> {
   let stopped: StopReason = 'done';
 
   for (const it of prompts) {
-    const worst = budget.worstCase(it.prompt);
+    const worst = worstCase(it.prompt);
     // Written as !(<=) so a NaN refuses instead of slipping through.
     if (!(ledgerUsd + unknownUsd + worst <= cap)) {
       stopped = 'cap';
@@ -274,7 +268,7 @@ export async function runSpike(options: SpikeOptions): Promise<SpikeReport> {
     cacheRead += usage.cached_read;
     cacheWrite += usage.cache_write;
     const tokens = usage.input + usage.cached_read + usage.cache_write;
-    if (tokens > 0) perToken.push((it.prompt.system.length + it.prompt.user.length + JSON.stringify(it.prompt.schema).length) / tokens);
+    if (tokens > 0) perToken.push(promptChars(it.prompt) / tokens);
     if (auth) authFailures += 1;
     log(`call ${settled.length}/${prompts.length} ${it.kind} ${outcome} ${Math.round(ms)} ms, counted $${(ledgerUsd + unknownUsd).toFixed(5)}`);
     if (auth) {
@@ -307,7 +301,7 @@ export async function runSpike(options: SpikeOptions): Promise<SpikeReport> {
 }
 
 const pct = (x: number) => `${(x * 100).toFixed(0)}%`;
-const latencyText = (l: Latency | null) => (l === null ? '—' :'ms' in l ? `${Math.round(l.ms)} ms` : `> ${l.overMs} ms`);
+const latencyText = (l: Latency | null) => (l === null ? '—' : 'ms' in l ? `${Math.round(l.ms)} ms` : `> ${l.overMs} ms`);
 
 /** Rows as columns two spaces apart; the last column is not padded. */
 function table(rows: string[][]): string[] {
@@ -408,7 +402,7 @@ export async function main(argv: readonly string[], env: Readonly<Record<string,
     prompts,
     complete: createHaikuComplete(createAnthropicSdk(key)),
     ledger,
-    budget: createBudget(ledger),
+    worstCase: worstCaseUsd,
     cap,
     claim,
     now,
@@ -419,9 +413,19 @@ export async function main(argv: readonly string[], env: Readonly<Record<string,
   return report.stopped === 'auth' ? 2 : 0;
 }
 
-// Runs only as the script itself, never when a test imports it. realpath: Node resolves the main module through links.
-const invokedAs = process.argv[1];
-if (invokedAs !== undefined && import.meta.url === pathToFileURL(fs.realpathSync(invokedAs)).href) {
+/** Whether this module is the script Node was started with; never throws, so importing it is always safe. */
+function isMainModule(): boolean {
+  const invokedAs = process.argv[1];
+  if (invokedAs === undefined) return false;
+  try {
+    // realpath: Node resolves the main module through links.
+    return import.meta.url === pathToFileURL(fs.realpathSync(invokedAs)).href;
+  } catch {
+    return false;
+  }
+}
+
+if (isMainModule()) {
   main(process.argv.slice(2), process.env).then(
     (code) => process.exit(code),
     () => {

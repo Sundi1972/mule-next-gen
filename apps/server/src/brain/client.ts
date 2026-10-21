@@ -29,16 +29,14 @@ export interface HaikuReply {
   text: string;
   usage: Usage;
   ms: number;
-  /** 'refusal' when the model's safeguards declined (AM-8); the server's wrapper records outcome 'refused'. */
+  /** 'refusal' when the model's safeguards declined. */
   stopReason: Anthropic.Message['stop_reason'];
 }
 
-const NO_USAGE: Usage = { input: 0, cached_read: 0, cache_write: 0, output: 0 };
 const MAX_MESSAGE = 80;
 
 /** A call that returned no reply. The message is ours and short; the SDK's text never leaves this file. */
 export class CallFailed extends Error {
-  readonly usage: Usage = { ...NO_USAGE };
   constructor(
     message: string,
     readonly outcome: 'timeout' | 'error',
@@ -85,7 +83,7 @@ export function createHaikuComplete(
 ): (prompt: Prompt, waitMs: number) => Promise<HaikuReply> {
   return async (prompt, waitMs) => {
     const start = now();
-    // The SDK's timeout stops at the response headers; this abort bounds the body read too (AM-8).
+    // The SDK's timeout stops at the response headers; this abort bounds the body read too.
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), waitMs);
     let res: Anthropic.Message;
