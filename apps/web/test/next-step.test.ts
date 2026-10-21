@@ -20,7 +20,7 @@ const BASE: DevelopState = {
   pubPayout: 96,
 };
 const at = (s: Partial<DevelopState>) => nextStep({ ...BASE, ...s });
-const text = (node: unknown) => renderToStaticMarkup(createElement(Fragment, null, node as never)).replace(/<[^>]+>/g, '');
+const text = (node: unknown) => renderToStaticMarkup(createElement(Fragment, null, node as never)).replace(/<[^>]+>/g, '').replace(/&#x27;/g, "'").replace(/&amp;/g, '&');
 
 describe('RULE-7: development says what to do next', () => {
   it('T-AC-9 row 1: while the card shows, you eat and your bar fills; the corral glows', () => {

@@ -39,7 +39,8 @@ describe('the MULE as a character (C19)', () => {
   it('B-AC-16: an owned MULE wears a saddle cloth in its owner colour; a store MULE has none', () => {
     const owned = renderToStaticMarkup(createElement(Mule, { owner: SLOT_COLOR[2] }));
     expect(owned).toContain(SADDLE);
-    expect(owned).toMatch(new RegExp(`<path[^>]*fill="${SLOT_COLOR[2]}"[^>]*${SADDLE}|<path[^>]*${SADDLE}[^>]*fill="${SLOT_COLOR[2]}"`));
+    const cloth = owned.match(/<path[^>]*data-part="saddle"[^>]*>/)?.[0];
+    expect(cloth).toContain(`fill="${SLOT_COLOR[2]}"`);
     const stock = renderToStaticMarkup(createElement(Mule, {}));
     expect(stock).not.toContain(SADDLE);
   });
