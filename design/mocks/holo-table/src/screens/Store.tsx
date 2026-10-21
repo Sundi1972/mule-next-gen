@@ -1,5 +1,6 @@
 import { cx, GOOD_NAME, GoodIcon, MuleIcon, PlayerMark, type Good, type Slot } from '@mule/ui';
 import type { ReactNode } from 'react';
+import { FACTORIES } from './factory';
 
 export const OUTFITS: { good: Good; cost: number }[] = [
   { good: 'food', cost: 25 },
@@ -83,6 +84,16 @@ export function StoreInterior({ mules, mulePrice, pubPayout, visitors = {}, open
           <span className={cx('font-semibold', tv ? 'text-base' : 'text-sm')}>{GOOD_NAME[o.good]}</span>
           <span data-num className={cx('font-mono text-ink-2', tv ? 'text-sm' : 'text-xs')}>
             {o.cost} cr
+          </span>
+        </Room>
+      ))}
+      <span className={cx('label-caps col-span-3', tv ? 'pt-1' : 'pt-0.5')}>Works · factory fits</span>
+      {FACTORIES.map((f) => (
+        <Room key={f.good} shop={f.good}>
+          <GoodIcon good={f.good} size={tv ? 26 : 22} />
+          <span className={cx('font-semibold leading-tight', tv ? 'text-base' : 'text-sm')}>{f.name}</span>
+          <span data-num className={cx('font-mono text-ink-2', tv ? 'text-sm' : 'text-xs')}>
+            {f.cost} cr
           </span>
         </Room>
       ))}

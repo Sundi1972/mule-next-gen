@@ -1,6 +1,7 @@
 import { Button, cx, GOOD_NAME, GoodIcon, HoloMap, MuleIcon, Panel, TERRAIN_NAME, type Good, type MapTile, type Terrain } from '@mule/ui';
 import { useState } from 'react';
-import { bookFor, MAP_H, MAP_W, ME, MONTH, MULE_PRICE, TILES } from '../../data';
+import { bookFor, MAP_H, MAP_W, ME, MONTH, MULE_PRICE, MY_STOCK, TILES } from '../../data';
+import { FACTORIES, factoryFit, isFactory, type Factory } from '../factory';
 import { useCountdown } from '../../proto';
 import { FoodTime, OUTFITS, StoreInterior, type Shop } from '../Store';
 import { PhoneShell } from './Shell';
@@ -61,7 +62,7 @@ export function PhoneDevelop() {
   };
 
   const pubPayout = Math.round(20 + (60 + MONTH * 20) * (seconds / TOTAL));
-  const open: Shop[] = carry === null ? ['corral', 'pub'] : carry === 'empty' ? [...OUTFITS.map((o) => o.good), 'pub'] : ['pub'];
+  const open: Shop[] = carry === null ? ['corral', 'pub'] : carry === 'empty' ? [...OUTFITS.map((o) => o.good), ...FACTORIES.map((f) => f.good), 'pub'] : ['pub'];
   const onShop = (shop: Shop) => {
     if (shop === 'pub') return setPub(pubPayout);
     if (shop === 'corral') {
@@ -70,15 +71,21 @@ export function PhoneDevelop() {
       setMules((n) => n - 1);
       return;
     }
-    const outfit = OUTFITS.find((o) => o.good === shop)!;
+    const outfit = OUTFITS.find((o) => o.good === shop) ?? FACTORIES.find((f) => f.good === shop)!;
     setCarry(shop);
     setMoney((m) => m - outfit.cost);
+    // Point at an empty plot of yours, so the fit shows as soon as you walk out.
+    const empty = tiles.find((t) => t.owner === ME && !t.good);
+    if (empty) setSelected(empty);
   };
+
+  const fit = selected && carry && carry !== 'empty' && isFactory(carry) ? factoryFit(carry, selected, tiles, ME, MY_STOCK) : null;
 
   const install = () => {
     if (!selected || !carry || carry === 'empty') return;
-    setTiles((ts) => ts.map((t) => (t.x === selected.x && t.y === selected.y ? { ...t, owner: ME, good: carry, output: 3 } : t)));
-    setSelected({ ...selected, owner: ME, good: carry, output: 3 });
+    const output = fit ? fit.makes : 3;
+    setTiles((ts) => ts.map((t) => (t.x === selected.x && t.y === selected.y ? { ...t, owner: ME, good: carry, output } : t)));
+    setSelected({ ...selected, owner: ME, good: carry, output });
     setCarry(null);
   };
 
@@ -129,7 +136,7 @@ export function PhoneDevelop() {
             <StoreInterior mules={mules} mulePrice={MULE_PRICE} pubPayout={pubPayout} open={open} onShop={onShop} visitors={{ corral: [5] }} />
             <p className="text-sm text-ink-2">
               {carry === null && 'Tap the corral to buy an empty MULE, or the pub to cash out and end your turn.'}
-              {carry === 'empty' && 'Lead your MULE to an outfitter. It can make only that good.'}
+              {carry === 'empty' && 'Lead your MULE to an outfitter for a farm or mine, or to the works for a factory. It can make only that good.'}
               {carry && carry !== 'empty' && 'Your MULE is ready. Walk out and install it on one of your plots.'}
             </p>
             <Button size="lg" variant={carry && carry !== 'empty' ? 'holo' : 'outline'} className="w-full" onClick={() => setPlace('map')}>
@@ -150,8 +157,9 @@ export function PhoneDevelop() {
                 Making {GOOD_NAME[selected.good]}, <span className="font-mono font-bold text-ink">+{selected.output}</span> last month.
               </span>
             )}
-            {selected.terrain !== 'store' && selected.ground && <GroundCard ground={selected.ground} />}
-            {selected.terrain !== 'store' && !selected.ground && (
+            {fit && carry && carry !== 'empty' && isFactory(carry) && <FitCard factory={carry} fit={fit} />}
+            {!fit && selected.terrain !== 'store' && selected.ground && <GroundCard ground={selected.ground} />}
+            {!fit && selected.terrain !== 'store' && !selected.ground && (
               <span className={cx('text-sm', scanning ? 'text-holo' : 'text-ink-2')}>
                 {scanning ? 'Geo analysis running. Only you will see the result.' : ODDS[selected.terrain]}
               </span>
@@ -195,6 +203,42 @@ function GroundCard({ ground }: { ground: Partial<Record<Good, number>> }) {
           </span>
         );
       })}
+    </div>
+  );
+}
+
+/** How well a factory would do on this plot, and why, before you install it. */
+function FitCard({ factory, fit }: { factory: Factory; fit: ReturnType<typeof factoryFit> }) {
+  const spec = FACTORIES.find((f) => f.good === factory)!;
+  return (
+    <div className="flex flex-col gap-2 rounded-control bg-raised p-3">
+      <span className="label-caps flex justify-between">
+        {spec.name} here
+        <span className={cx(fit.score > 0 ? 'text-ok' : fit.score < 0 ? 'text-alert' : 'text-ink-2')}>{fit.verdict}</span>
+      </span>
+      <span className="flex items-center gap-1.5 text-sm">
+        {(Object.entries(spec.inputs) as [Good, number][]).map(([g, n], i) => (
+          <span key={g} className="flex items-center gap-1">
+            {i > 0 && <span className="text-ink-3">+</span>}
+            <span data-num className="font-mono">{n}</span>
+            <GoodIcon good={g} size={14} />
+          </span>
+        ))}
+        <span className="text-ink-3">→</span>
+        <span data-num className="font-mono font-bold">{fit.makes}</span>
+        <GoodIcon good={factory} size={16} />
+        <span className="text-ink-2">a month</span>
+      </span>
+      <ul className="flex flex-col gap-1 text-sm">
+        {fit.lines.map((l) => (
+          <li key={l.text} className="flex gap-2">
+            <span className={cx('font-mono font-bold', l.tone === 'good' ? 'text-ok' : l.tone === 'bad' ? 'text-alert' : 'text-ink-3')}>
+              {l.tone === 'good' ? '+' : l.tone === 'bad' ? '−' : '·'}
+            </span>
+            <span className="text-ink-2">{l.text}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

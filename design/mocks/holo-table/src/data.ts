@@ -51,7 +51,7 @@ const KEY: Record<string, Terrain> = {
   R: 'river', d: 'desert', v: 'volcanic', c: 'crater', t: 'tundra', S: 'store',
 };
 
-type Plot = [Slot, Good, number, MapTile['flag']?];
+type Plot = [Slot, Good | null, number, MapTile['flag']?];
 
 const OWNED: Record<string, Plot> = {
   '7,3': [0, 'food', 4],
@@ -71,6 +71,11 @@ const OWNED: Record<string, Plot> = {
   '10,4': [5, 'energy', 5],
   '11,4': [5, 'energy', 5],
   '7,6': [5, 'food', 4],
+  '13,3': [3, 'alloy', 2],
+  '6,6': [5, 'medicine', 3],
+  // Heiko's land that is still waiting for a MULE.
+  '9,2': [0, null, 0],
+  '10,2': [0, null, 0],
 };
 
 /** Heiko's own geo analyses: only his phone shows these. */
@@ -96,7 +101,7 @@ export function baseTiles(): MapTile[] {
         y,
         terrain,
         owner: plot ? plot[0] : null,
-        ...(plot ? { good: plot[1], output: plot[2] } : {}),
+        ...(plot?.[1] ? { good: plot[1], output: plot[2] } : {}),
         ...(plot?.[3] ? { flag: plot[3] } : {}),
         ...(terrain === 'mountains' ? { peaks: 1 + ((x * 7 + y * 3) % 3) } : {}),
         ...(GROUND[`${x},${y}`] ? { ground: GROUND[`${x},${y}`] } : {}),
