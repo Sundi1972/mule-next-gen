@@ -184,6 +184,10 @@ export class Room<Intent, View> {
         this.pick(seatId, msg.pick);
         this.broadcast();
         return;
+      case 'color':
+        this.paint(seatId, msg.color);
+        this.broadcast();
+        return;
       case 'intent':
         if (!this.started) throw new TableError('The game has not started');
         this.game.handle(seatId, msg.intent);
@@ -260,6 +264,18 @@ export class Room<Intent, View> {
     if (!this.picks.includes(pick)) throw new TableError('Unknown choice');
     const seat = this.seats.find((s) => s.id === seatId);
     if (seat) seat.pick = pick;
+  }
+
+  /** A human seat takes a colour before Start; an AI holding it moves to the lowest free one. See RULE-7. */
+  private paint(seatId: string, colour: number): void {
+    if (this.started) throw new TableError('The game has already started');
+    if (!Number.isInteger(colour) || colour < 0 || colour >= this.opts.maxSeats) throw new TableError('Unknown colour');
+    const seat = this.seats.find((s) => s.id === seatId)!;
+    const holder = this.seats.find((s) => s.color === colour && s !== seat);
+    if (holder && !holder.isAi) throw new TableError('That colour is taken');
+    seat.color = colour;
+    // Chosen once the sender let go of its own, so a full table still has one free.
+    if (holder) holder.color = this.lowestFreeColour();
   }
 
   /** The host removes a seat, and its token with it, before Start. See RULE-5. */
