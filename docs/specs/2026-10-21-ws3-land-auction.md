@@ -432,6 +432,10 @@ not leading and leaderBid + 1 ≤ limit              → walk up to target = min
 otherwise                                          → stop, press Done
 overshoot = a seeded share, in [LOTS.aiOvershoot], of (limit − leaderBid − 1),
 rounded down: it climbs toward the limit, never past it.                               AM-4
+With no leader yet, the target is the minimum, with no overshoot (overshoot is for
+overtaking). An AI that takes the lead part-way to its target walks on to it, then stands.
+A step that would round past the limit waits for a shorter tick; the AI presses Done only
+when a WALK.tickMs step would pass the limit too.
 It re-aims only after the level's reactMs plus seeded jitter, and starts after a seeded delay,
 so there is no fixed habit to read.
 examples  limit 504, leader at 370, overshoot share 0.1 → target min(504, 371 + 13) = 384
