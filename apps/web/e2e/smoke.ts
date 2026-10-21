@@ -77,7 +77,10 @@ try {
   await phone.getByRole('button', { name: 'Add AI player' }).click();
   await phone.getByRole('button', { name: 'Add AI player' }).click();
   await phone.locator('[data-testid=seats] li').nth(2).waitFor();
-  await phone.getByText('Big screen connected').waitFor();
+  // Once the TV has joined, the card shrinks; the check below fails if it never does.
+  await phone
+    .waitForFunction(() => (document.querySelector('[data-testid=room-qr]')?.getBoundingClientRect().width ?? Infinity) < 60, null, { timeout: 5_000 })
+    .catch(() => undefined);
   const compactQr = await qrWidth();
   check(compactQr > 0 && compactQr < 60, `B-AC-4: with a big screen the lobby shows the compact room card, QR ${compactQr} px`);
 
