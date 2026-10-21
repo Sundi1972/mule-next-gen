@@ -102,7 +102,7 @@ const MAX_BADGES = 2;
  * Built field by field from the report, so the stock players held never
  * reaches a screen through it.
  */
-function productionView(state: GameState): ProductionView | null {
+function productionView(state: GameState, lengthMs: number): ProductionView | null {
   const report = state.history.at(-1);
   if (!report) return null;
   const at = (index: number) => ({ x: index % state.width, y: Math.floor(index / state.width) });
@@ -130,7 +130,7 @@ function productionView(state: GameState): ProductionView | null {
     ...(e.direction ? { from: e.direction } : {}),
     hits: e.plots.map((p) => ({ ...at(p.index), order: p.order, delta: p.delta })),
   }));
-  return { lines, events };
+  return { lines, events, lengthMs };
 }
 
 /** M.U.L.E. as a game hosted by a @tabletop/core room. */
@@ -694,7 +694,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       listings: state.listings.map(listingView),
       lotSlots: { used: state.listings.length, max: LOTS.maxLotsPerMonth },
       landAuction: landAuctionView(state),
-      production: state.phase === 'production' || state.phase === 'upkeep' ? productionView(state) : null,
+      production: state.phase === 'production' || state.phase === 'upkeep' ? productionView(state, PHASE_MS.production * this.phaseScale) : null,
     };
   }
 

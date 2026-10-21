@@ -1,4 +1,4 @@
-import { createContext, useContext, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
+import { createContext, useContext, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { GoodIcon } from './GoodIcon';
 import { HoloMap, type MapTile } from './HoloMap';
 import { cx, SLOT_COLOR, type Good, type Slot } from './tokens';
@@ -37,11 +37,13 @@ export interface ShowData {
   /** In reading order, the order they fill. */
   lines: ShowLine[];
   events: ShowEvent[];
+  /** How long the phase runs, in ms: the whole timeline plays over it. */
+  lengthMs: number;
 }
 
 type Hit = ShowEvent['hits'][number];
 
-// --- The timeline, in seconds from the phase's start ----------------------------
+// --- The timeline, in show seconds: 0 at the phase's start, SHOW.end at its scheduled end ---
 
 export const SHOW = {
   fillStart: 0.6,
@@ -51,18 +53,21 @@ export const SHOW = {
   flyStart: 9.6,
   flyStep: 0.09,
   flight: 0.9,
-  /** The server's production phase lasts exactly this long. */
   end: 15,
 } as const;
 
 export const fillAt = (i: number) => SHOW.fillStart + i * SHOW.fillStep;
 export const flyAt = (i: number) => SHOW.flyStart + i * SHOW.flyStep;
 
-/** Seconds into the show, from when the phase ends on the server's clock. */
-export function showTime(phaseEndsAt: number | null, serverNow: number): number {
-  if (phaseEndsAt === null) return SHOW.end;
-  return Math.min(SHOW.end, Math.max(0, SHOW.end - (phaseEndsAt - serverNow) / 1000));
+/** Where the show is, from how much of the phase's scheduled length has passed on the server's clock. */
+export function showTime(phaseEndsAt: number | null, serverNow: number, lengthMs: number): number {
+  if (phaseEndsAt === null || lengthMs <= 0) return SHOW.end;
+  const done = 1 - (phaseEndsAt - serverNow) / lengthMs;
+  return Math.min(SHOW.end, Math.max(0, done * SHOW.end));
 }
+
+/** How often a screen redraws the show: 40 ms over a 15 s phase, more often over a shorter one, so a short-lived badge still gets drawn. */
+export const frameMs = (lengthMs: number) => Math.min(40, Math.max(16, lengthMs / 375));
 
 /** The latest a hit may land, so a plot's goods never fly before the event has reached it. */
 const LAST_HIT = SHOW.flyStart - 0.5;
@@ -202,10 +207,15 @@ export function ProductionMap({ width, height, tiles, production, t, slots, only
   const quaking = ev?.kind === 'quake' && since > 0.6 && since < 2.4;
   const shake = quaking ? `translate(${Math.sin(t * 70) * (tv ? 4 : 2)}px, ${Math.cos(t * 55) * (tv ? 2 : 1)}px)` : undefined;
   const grid = { width, height };
+  // The show redraws every frame; the painted map under it only when the map changes.
+  const land = useMemo(
+    () => <HoloMap width={width} height={height} tiles={tiles} density={tv ? 'tv' : 'phone'} hideGround {...(focus !== undefined ? { focusSlot: focus } : {})} className="w-full" />,
+    [width, height, tiles, tv, focus],
+  );
 
   return (
     <div ref={map} className={cx('relative', className)} style={{ transform: shake }} data-testid="map-show">
-      <HoloMap width={width} height={height} tiles={tiles} density={tv ? 'tv' : 'phone'} hideGround {...(focus !== undefined ? { focusSlot: focus } : {})} className="w-full" />
+      {land}
       {/* Event layers sit over the land, under the bars. */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-panel" {...(ev ? { 'data-event': ev.kind } : {})}>
         {ev && <EventLayer ev={ev} t={t} tv={tv} grid={grid} />}
@@ -222,7 +232,6 @@ export function ProductionMap({ width, height, tiles, production, t, slots, only
               tv={tv}
               grid={grid}
               colour={SLOT_COLOR[slots[l.owner] ?? 0]}
-              badges={tv ? 2 : 1}
               target={geom?.to[l.owner]}
               size={geom?.size}
             />
@@ -242,7 +251,6 @@ function PlotBars({
   tv,
   grid,
   colour,
-  badges,
   target,
   size,
 }: {
@@ -253,7 +261,6 @@ function PlotBars({
   tv: boolean;
   grid: Grid;
   colour: string;
-  badges: number;
   target: { x: number; y: number } | undefined;
   size: { w: number; h: number } | undefined;
 }) {
@@ -268,8 +275,12 @@ function PlotBars({
   const gone = t >= flyAt(index) + SHOW.flight;
   const from = size ? { x: ((line.x + 0.5) / grid.width) * size.w, y: ((line.y + 0.5) / grid.height) * size.h } : null;
   const fly = flying && target && from ? `translate(${target.x - from.x}px, ${target.y - from.y}px) scale(0.35)` : 'none';
-  const bar = tv ? 'h-3.5 w-1.5' : 'h-2 w-1';
-  const chip = tv ? 'px-1 py-0.5 text-[11px]' : 'px-0.5 text-[7px]';
+  // On the phone a bar is outlined so a one-unit plot doesn't blend into its border.
+  const bar = tv ? 'h-3.5 w-1.5' : 'h-3 w-1.5 ring-1 ring-void/70';
+  const chip = tv ? 'px-1 py-0.5 text-[11px]' : 'px-0.5 text-[9px]';
+  const eventBadge = struck && hit!.delta !== 0;
+  // The TV has room for two reasons beside the event's badge; the phone for one badge, and the event's wins.
+  const reasons = line.parts.slice(0, tv ? 2 : eventBadge ? 0 : 1);
 
   return (
     <div
@@ -279,17 +290,18 @@ function PlotBars({
     >
       {filled && !flying && (
         <span className={cx('absolute flex flex-col items-end', tv ? 'right-1 top-1 gap-0.5' : 'right-0.5 top-0.5 gap-px')}>
-          {line.parts.slice(0, badges).map((p) => {
+          {reasons.map((p) => {
             const b = REASON_BADGE[p.why];
             return (
-              <span key={p.why} className={cx('flex items-center rounded-chip font-mono font-bold leading-none shadow-chip animate-[badge-in_0.3s_ease-out]', b.tone(p.delta), tv ? 'gap-0.5' : '', chip)}>
+              <span key={p.why} data-badge="reason" className={cx('flex items-center rounded-chip font-mono font-bold leading-none shadow-chip animate-[badge-in_0.3s_ease-out]', b.tone(p.delta), tv ? 'gap-0.5' : '', chip)}>
                 {b.icon && <GoodIcon good={b.icon} size={tv ? 10 : 6} />}
                 {b.text(p.delta)}
               </span>
             );
           })}
-          {struck && hit!.delta !== 0 && (
+          {eventBadge && (
             <span
+              data-badge="event"
               className={cx('rounded-chip font-mono font-bold leading-none shadow-chip animate-[badge-in_0.3s_ease-out]', hit!.delta > 0 ? 'bg-ok text-on-holo' : 'bg-alert text-white', chip)}
               data-testid={`hit-${line.x}-${line.y}`}
             >
@@ -300,7 +312,7 @@ function PlotBars({
       )}
       {/* One bar per unit, at most eight; they fly home together. */}
       <span
-        className={cx('flex w-fit flex-wrap-reverse items-end', tv ? 'max-w-[44px] gap-[3px]' : 'max-w-[22px] gap-px', gone && 'opacity-0')}
+        className={cx('flex w-fit flex-wrap-reverse items-end', tv ? 'max-w-[44px] gap-[3px]' : 'max-w-[30px] gap-px', gone && 'opacity-0')}
         style={{ transform: fly, transition: flying ? `transform ${SHOW.flight}s cubic-bezier(0.55, 0, 0.75, 0.2), opacity 0.15s ${SHOW.flight - 0.1}s` : 'none', transformOrigin: 'center' }}
       >
         {filled &&

@@ -1,18 +1,19 @@
 import type { ProductionView } from '@mule/protocol';
-import { Button, cx, EventCard, GOOD_NAME, GoodIcon, harvest, landed, landing, ProductionMap, SHOW, ShowRoot, showTime, type Good, type Slot } from '@mule/ui';
+import { useMemo } from 'react';
+import { Button, cx, EventCard, frameMs, GOOD_NAME, GoodIcon, harvest, landed, landing, ProductionMap, SHOW, ShowRoot, showTime, type Good, type Slot } from '@mule/ui';
 import { mapTiles, slotOf } from '../game/derive';
 import { useClient, useServerNow } from '../net/react';
 import { usePhoneGame } from './game';
 import { PhoneShell } from './Shell';
 
-const FRAME_MS = 40;
 const GOODS: Good[] = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine'];
 
 /** Production on your phone: only your plots fill, and your harvest flies into your private stock strip. */
 export function Production({ production }: { production: ProductionView }) {
   const client = useClient();
   const { view, me, self } = usePhoneGame();
-  const t = showTime(view.phaseEndsAt, useServerNow(FRAME_MS));
+  const t = showTime(view.phaseEndsAt, useServerNow(frameMs(production.lengthMs)), production.lengthMs);
+  const tiles = useMemo(() => mapTiles(view), [view]);
   const ev = production.events[0] ?? null;
   const slots = Object.fromEntries(view.players.map((p) => [p.id, (slotOf(view, p.id) ?? 0) as Slot]));
   const mine = harvest(production, me.id);
@@ -56,7 +57,7 @@ export function Production({ production }: { production: ProductionView }) {
       <ShowRoot className="flex min-h-0 flex-1 flex-col">
         <div className="flex min-h-0 flex-1 items-center justify-center [container-type:size]">
           <div style={{ width: `min(100cqw, calc(100cqh * ${view.width} / ${view.height}))` }}>
-            <ProductionMap width={view.width} height={view.height} tiles={mapTiles(view)} production={production} t={t} slots={slots} only={me.id} />
+            <ProductionMap width={view.width} height={view.height} tiles={tiles} production={production} t={t} slots={slots} only={me.id} />
           </div>
         </div>
         <div

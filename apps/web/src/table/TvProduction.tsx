@@ -1,15 +1,14 @@
 import type { MuleView, ProductionView } from '@mule/protocol';
-import { Creature, cx, EventCard, GoodIcon, landed, landing, ProductionMap, SeatSpeciesProvider, SHOW, ShowRoot, showTime, SLOT_COLOR, useSeatSpecies, type Good, type Slot } from '@mule/ui';
+import { useMemo } from 'react';
+import { Creature, cx, EventCard, frameMs, GoodIcon, landed, landing, ProductionMap, SeatSpeciesProvider, SHOW, ShowRoot, showTime, SLOT_COLOR, useSeatSpecies, type Good, type Slot } from '@mule/ui';
 import { fmt, mapTiles, seatSpecies, slotOf } from '../game/derive';
 import { useServerNow } from '../net/react';
 import { TvHeader } from './TableApp';
 
-/** How often the show redraws, in ms. */
-const FRAME_MS = 40;
-
 /** The big screen during production: the map show, the event, and every player's slot where their goods land. */
 export function TvProduction({ game, production }: { game: MuleView; production: ProductionView }) {
-  const t = showTime(game.phaseEndsAt, useServerNow(FRAME_MS));
+  const t = showTime(game.phaseEndsAt, useServerNow(frameMs(production.lengthMs)), production.lengthMs);
+  const tiles = useMemo(() => mapTiles(game), [game]);
   const ev = production.events[0] ?? null;
   const slots = Object.fromEntries(game.players.map((p) => [p.id, (slotOf(game, p.id) ?? 0) as Slot]));
   return (
@@ -17,7 +16,7 @@ export function TvProduction({ game, production }: { game: MuleView; production:
       <ShowRoot className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-6 text-ink" data-phase="production">
         <TvHeader game={game} title="Production" />
         <div className="flex min-h-0 flex-1 gap-6">
-          <ProductionMap width={game.width} height={game.height} tiles={mapTiles(game)} production={production} t={t} slots={slots} tv className="w-[820px] shrink-0 self-start" />
+          <ProductionMap width={game.width} height={game.height} tiles={tiles} production={production} t={t} slots={slots} tv className="w-[820px] shrink-0 self-start" />
           <div className="flex min-w-0 flex-1 flex-col gap-4">
             <EventCard ev={ev} t={t} tv />
             {(!ev || t < SHOW.cardAt) && (

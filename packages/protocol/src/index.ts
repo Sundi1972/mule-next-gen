@@ -245,6 +245,8 @@ export interface ProductionView {
   /** In reading order: row by row, left to right. */
   lines: ProductionLineView[];
   events: ProductionEventView[];
+  /** How long the production phase was scheduled to run, in ms; the show's timeline stretches over it. */
+  lengthMs: number;
 }
 
 /** One screen's view of the game: a player's private view, or the public one for a board. */
