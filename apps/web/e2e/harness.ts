@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { chromium, type Browser } from 'playwright';
@@ -12,13 +13,19 @@ export async function startServer(): Promise<{ server: MuleServer; base: string 
   return { server, base: `http://127.0.0.1:${port}` };
 }
 
-/** Chromium from the preinstalled browsers; falls back to the plain binary if the versions don't match. */
+const PREINSTALLED_CHROMIUM = '/opt/pw-browsers/chromium';
+
+/**
+ * Chromium from Playwright's own cache (`playwright install chromium`), or from
+ * PLAYWRIGHT_BROWSERS_PATH when set. Sandboxes without that cache ship a plain
+ * binary at /opt/pw-browsers instead.
+ */
 export async function launch(): Promise<Browser> {
-  process.env.PLAYWRIGHT_BROWSERS_PATH ??= '/opt/pw-browsers';
   try {
     return await chromium.launch();
-  } catch {
-    return chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+  } catch (err) {
+    if (!existsSync(PREINSTALLED_CHROMIUM)) throw err;
+    return chromium.launch({ executablePath: PREINSTALLED_CHROMIUM });
   }
 }
 
