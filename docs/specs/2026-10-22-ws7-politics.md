@@ -315,8 +315,11 @@ inputs    candidates (0, 1, 2+); ballots: voter → candidate | none; weight = R
           moment the ballot closes
 first match wins
   #   when                                       then                          how
-  1   0 candidates, office governor              the richest player (money;    appointed
-                                                 tie → lower seat)
+  1   0 candidates, office governor              the richest player who does   appointed
+                                                 not run for Sheriff (money;
+                                                 tie → lower seat); if every
+                                                 player runs for Sheriff, the
+                                                 richest player (AM-2)
   2   0 candidates, office sheriff               the richest player who is     appointed
                                                  not the new Governor
   3   1 candidate                                that candidate                unopposed
@@ -496,6 +499,21 @@ because   P-1: the table must always end up with a Governor and a Sheriff; witho
           VoteHand, no server tick) would never fill an office in the sim (UBER-AC-1).
 goal      P-1, more robustly than as specified
 folded    C3 tomorrow + RULE-1 note below; plan Task 1.4 step 1 adds the test
+```
+
+```
+AM-2 · 2026-10-22 · lead · PR-1 fix round 1
+
+target    §2 RULE-3 row 1
+said      0 candidates for Governor → the richest player is appointed
+did       the richest player who does not run for Sheriff; only if every player runs for
+          Sheriff, the richest player (who then can't be Sheriff: row 2's exclusion holds)
+because   P-1: the implementer found that RULE-3 as written makes the richest player both
+          Governor (row 1) and Sheriff (row 3) when they run unopposed for Sheriff and nobody
+          runs for Governor, breaking "one player never holds both offices". Respecting the
+          candidacy a player chose keeps the table's choices meaningful.
+goal      P-1 — still met
+folded    RULE-3 row 1; test `AM-2: …` in PR-1
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
