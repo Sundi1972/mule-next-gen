@@ -22,7 +22,7 @@ Approved as drafted on 2026-10-21 (PM, for Heiko). Both goals trace to Mission G
 - **UBER-AC-2:** in a seeded server test where every AI seat bids on a listed plot and a listed MULE, no AI pays more than its `plotValue`/`muleValue` (stubbed until WS1 exports them), and the phase ends on its own clock with `ANTHROPIC_API_KEY` unset.
 
 **Non-goals:**
-- Colony plots under the hammer (00-concept's "three or four more each month"). The lots are shaped so the colony can be a seller, and `LOTS.colonyPlots` stays 0. Switching it on is a later, measured change agreed with WS1, because it moves G-1's land supply. *Needs its own spec.*
+- 00-concept's "three or four more each month" colony plots. Only the one occasional colony plot of AM-1 (§8) is in scope; more is a later, measured change agreed with WS1, because it moves G-1's land supply. *Needs its own spec.*
 - AI seats listing their own lots: that needs WS1's sell-side value.
 - Direct trades between players, deal cards, and selling plot upgrades on their own.
 - Balance numbers outside the LOTS block.
@@ -157,7 +157,9 @@ today        none. WALK holds the goods auction's numbers.  anchors: packages/en
              verified_by: read
 tomorrow     MUST hold perPlayer (2), maxLotsPerMonth (4), introMs (3000), walkMs (12000),
              resultMs (2500), boardLow/boardHigh (board range as shares of the minimum),
-             storePlotShare (2/3 of GAME.plotScore), storeMuleShare (0.5), colonyPlots (0).
+             storePlotShare (2/3 of GAME.plotScore), storeMuleShare (0.5), colonyPlotChance (0.1;
+             Heiko's range 1/10 to 1/8, WS1 may tune within it), colonyPlotShare (2/3 of
+             GAME.plotScore: the colony plot's minimum, AM-1).
 seam         config.ts, a new LOTS block (WS3's, per SEAMS.md)
 senior       junior would: put a fixed storePlotPrice of 200. · senior does: take a share of
              GAME.plotScore (WS1's PR #11), so it can't drift past the score if the score changes.
@@ -221,7 +223,7 @@ senior       junior would: reuse AuctionHand with a fake good. · senior does: a
              smaller hand, since the lot has one side and one unit and ends at the bell; it
              reuses AuctionHand's reaction-time and jitter idea and the level's reactMs.
 mechanism    sprout
-call sites   mule-game.ts (C7); later packages/ai/src/play.ts once colony plots exist (non-goal)
+call sites   mule-game.ts (C7); packages/ai/src/play.ts (C15, the sim)
 reuse check  plotValue/muleValue don't exist yet (WS1 confirmed 2026-10-21) → stubs in lot.ts:
              plot = GAME.plotScore + mulePrice if it has a MULE; MULE = mulePrice. Replaced by
              WS1's exports, same signatures.
@@ -290,6 +292,43 @@ tomorrow     MUST provide, in apps/web/e2e/auction-steps.ts, functions WS4's smo
 seam         apps/web/e2e/auction-steps.ts (new, WS3) — smoke.ts stays WS4's
 mechanism    sprout
 depends_on   C7, C9, C10
+```
+
+```
+C14 · ADDED · the colony sometimes puts one free plot up after the land grant (AM-1)
+today        land changes hands only through the grant; the colony never sells.
+             anchors: packages/engine/src/game.ts::advancePhase, packages/engine/src/game.ts::freePlots
+             verified_by: read
+tomorrow     MUST, when the land grant ends, with chance LOTS.colonyPlotChance from a seeded
+             RNG, list one free plot picked at random (seller 'colony', minimum
+             round(LOTS.colonyPlotShare × GAME.plotScore), unsold 'keep'), first in the line-up.
+             MUST NOT when no land is free or the month's slots are full. Proceeds go to store
+             capital (RULE-5 row 1); unsold, it stays free land.
+logic        → §2 RULE-7
+seam         lots.ts: colonyLot(state), called from game.ts::advancePhase on leaving landGrant,
+             before RULE-2's skip check (so a colony lot alone opens the phase)
+senior       junior would: Math.random() at the grant's end. · senior does: a seed from
+             (seed, month) as game.ts's newSweep does, so games replay from seed + actions (HC-1).
+mechanism    sprout
+call sites   game.ts::advancePhase only
+reuse check  game.ts::freePlots (reused for the candidates); rng.ts::createRng and its shuffle/
+             int (reused), seeded like game.ts's newSweep
+depends_on   C1, C2, C3 (data)
+```
+
+```
+C15 · MODIFIED · the simulator plays the land auction (AM-1; named edit E5 in WS1's play.ts)
+today        packages/ai/src/play.ts's phase switch has no landAuction case; RULE-2's skip keeps
+             the sim out of it while nothing is listed. With colony plots it is reached.
+             anchors: packages/ai/src/play.ts
+             verified_by: read
+tomorrow     MUST step stepLandAuction and every AI seat's lot hand on WALK.tickMs until the
+             land auction is over, as its 'auction' case does for goods, and count lots sold
+             and unsold in the sim's report.
+seam         play.ts's switch, one new case beside 'auction' (WS1's file; WS1 agrees the edit)
+mechanism    in_place
+call sites   pnpm sim (packages/ai/src/sim.ts → play.ts); CI's 20-game smoke run
+depends_on   C8 (the lot hand), C14
 ```
 
 ---
@@ -393,6 +432,25 @@ It re-aims only after the level's reactMs plus seeded jitter, and starts after a
 so there is no fixed habit to read.
 ```
 
+```
+RULE-7 · Does the colony put a plot up this month? (AM-1)        shape: decision table
+inputs  roll ∈ [0,1) from createRng(seed, month) · free = freePlots(state) · total listings
+first match wins
+  #  when                                   then
+  1  roll ≥ LOTS.colonyPlotChance           no colony lot
+  2  free is empty                          no colony lot
+  3  total ≥ LOTS.maxLotsPerMonth           no colony lot (players' listings came first, in
+                                            planning; the colony never bumps one)
+  4  otherwise                              list one plot from free, picked with the same RNG,
+                                            seller 'colony', at the FRONT of the line-up
+evaluated_at  advancePhase leaving landGrant (after the grant's claims, so the plot is still free)
+unknown   nothing can be absent: free is a list, possibly empty.
+outcome   sold → owner = winner; store.capital += bid (no sales tax: the colony is not a
+          player). unsold → stays free land (nothing moves).
+examples  seed s, month m with roll 0.05 and free land → one colony lot first · roll 0.5 → none
+          · roll 0.05, no free land → none · 4 listings already → none
+```
+
 ---
 
 ## §3 · Contracts & Data Models `[handoff]`
@@ -444,20 +502,43 @@ Observed at the server's `viewFor` (MuleView) and the engine's GameState after a
 | T-AC-3 (serves all) | RULE-1's every row as a test, incl. the drone row (C4) | C1 C4 | — |
 | T-AC-4 (serves B-AC-7) | A seeded server test with 3 AI seats, one listed plot and one listed MULE: winners paid ≤ stub value, the phase reached development, and no LLM call was made | C8 C7 | — |
 | T-AC-5 (serves B-AC-5) | The existing server phase-walk test is green unchanged | C2 C7 | — |
+| B-AC-8 (AM-1) | Given a month whose seeded roll is under LOTS.colonyPlotChance and free land is left · When the land grant ends · Then the colony's plot is lot 1 at the colony minimum, every seat can bid, and a sale pays the bid into store capital; unsold, it stays free land | C14 C3 C7 C10 C11 | a roll at or over the chance, no free land, or a full month → no colony lot |
+| T-AC-6 (serves B-AC-8) | RULE-7's examples as engine tests, and the same seed replays the same colony lot in the same month | C14 | — |
+| T-AC-7 (serves B-AC-8, G-1 measured) | `pnpm sim -- --games 40 --seed 101` plays land auctions: the report counts colony lots offered and sold, their rate is near LOTS.colonyPlotChance over the months with free land, and every game still ends | C15 | — |
 
 Invariants, asserted by every engine test: money is conserved across a lot; a plot never has two owners; a MULE is never both on a plot and in a hand.
 
 ## §7 · Risks & Spikes `[review-only]`
 
 - **AI values during landAuction:** `packages/ai/src/outlook.ts` holds `BEFORE_PRODUCTION = {planning, landGrant, development}`. Without 'landAuction' in it, an AI would value a plot during the auction as if this month's production were past. Mitigation: E4, WS1 adds the entry in its next PR (ruled 2026-10-21); C8 does not merge before it.
-- **The sim never runs lots:** `packages/ai/src/play.ts` has no 'landAuction' case. That's safe while AIs don't list (RULE-2 skips the phase); colony plots will need a case. Mitigation: noted in the colony-plots non-goal; T-AC-5 pins the skip.
+- **The sim must run lots (AM-1):** `packages/ai/src/play.ts` has no 'landAuction' case. That's safe until colony plots ship (RULE-2 skips the phase when nothing is listed), and needed from then on. Mitigation: C15 (E5) ships in the same PR as C14, so the sim is never handed a phase it can't play; T-AC-7 measures it.
+- **Colony plots move G-1's land supply:** about 1 extra plot sold per 10 months. Mitigation: both numbers in LOTS, WS1 tunes within Heiko's 1/10–1/8 range, and T-AC-7 reports the rate.
 - **Pace:** 4 lots × ~17.5 s ≈ 70 s. Mitigation: LOTS.maxLotsPerMonth (PM edit 1); Done on every buyer ends a walk early (RULE-4).
 - **WS1's value functions are not in yet:** plotValue/muleValue are stubs (GAME.plotScore has landed). Mitigation: one helper reads each, so the switch is one line.
 - No spike needed.
 
 ## §8 · Amendments `[review-only]`
 
-None yet.
+```
+AM-1 · 2026-10-21 · Heiko (via the PM) · after approval, before the plan ran
+
+target    §0 Non-goals (colony plots), §1 C5, new C14 and C15, §2 RULE-7, §6 B-AC-8,
+          T-AC-6, T-AC-7, §9 E5
+said      colony plots stay off (LOTS.colonyPlots = 0) until a later measured change with WS1
+did       as in the original, after the land grant the colony sometimes (LOTS.colonyPlotChance
+          0.1, range 1/10 to 1/8) puts ONE free plot up, first in the line-up, counting
+          toward the month's cap, at LOTS.colonyPlotShare × GAME.plotScore. Unsold, it stays
+          free land; AI seats bid on it; the sim plays the land auction so G-1 measures it.
+because   Heiko's ruling on the land auction itself: G-1 (a live land auction at the table)
+          is met more fully, since a month nobody lists can still have one.
+goal      G-1, G-2: unchanged; served more completely
+folded    §0 non-goal narrowed to "three or four a month" · C5 numbers · C14, C15 · RULE-7 ·
+          B-AC-8, T-AC-6, T-AC-7 · §9 E5 · mocks 3d5f9e3 (colony intro and nobody-bid states,
+          sent to Heiko for approval) · its own PR after the core (plan PR-3)
+minimum   colonyPlotShare = storePlotShare's 2/3 of GAME.plotScore: the colony asks what the
+          store would pay for land, so it never sells for less than land is worth to the store,
+          and it moves with the score (WS1's reason for a share, not a number).
+```
 
 ## §9 · Ownership Boundaries `[handoff]`
 
@@ -477,3 +558,4 @@ Named edits outside WS3's paths (each PM-approved, additive):
 - **E2** `apps/web/src/table/TableApp.tsx`: export `TvHeader` (WS4 agreed).
 - **E3** `apps/web/src/phone/Auction.tsx`: export `Hold` (WS3's own file).
 - **E4** `packages/ai/src/outlook.ts::BEFORE_PRODUCTION`: add `'landAuction'`. Ruled (a): WS1 adds it in its next PR, before WS3's AI-hand PR; WS3 stubs around it until then.
+- **E5** `packages/ai/src/play.ts`: one `'landAuction'` case in the sim's phase switch (C15, AM-1). The PM agrees it with WS1.
