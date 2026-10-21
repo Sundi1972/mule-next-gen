@@ -189,15 +189,19 @@ today        handle() routes intents by type; enterPhase schedules a timer per p
 tomorrow     MUST route list/unlist; route 'ready' and 'walk' to lots.ts during landAuction.
              MUST run landAuction on a tick like the goods auction (WALK.tickMs, no phaseEndsAt),
              count away players as done, and step each AI's LotHand. MUST put each lot's result
-             in the news and build MuleView.landAuction.
+             in the news and build MuleView.landAuction. MUST honour WS4's test-only phaseScale
+             as the goods auction tick does (dt / phaseScale after the stall clamp, to the hands
+             and to stepLandAuction), so the e2e stays fast.
 logic        → §2 RULE-4 (done), RULE-6 (AI)
 seam         mule-game.ts: handle, enterPhase, a new scheduleLandAuctionTick beside scheduleAuctionTick
 senior       junior would: give landAuction a PHASE_MS timeout. · senior does: let the lots'
              own clocks end it, as the goods auction does, and exclude it from PHASE_MS and
              checkAllReady, so a slow phone can't end a lot early.
 mechanism    in_place
-call sites   server.ts constructs MuleGame (unchanged); WS2's approved edits to the constructor,
-             start() and heard() are kept on merge.
+call sites   server.ts constructs MuleGame (unchanged by WS3); kept on merge: WS2's edits
+             (constructor brain, start() decider/onDecision, heard(), brain.finish on gameOver)
+             and WS4's (maxMonths/phaseScale options, species in start(), `picks: SPECIES` in
+             server.ts, phaseScale in scheduleAuctionTick and startDevelopment).
 pin          apps/server/test/mule-game.test.ts (existing phase walk) stays green with no listings
 depends_on   C2, C3, C6 (contract), C8
 ```
@@ -437,7 +441,7 @@ Invariants, asserted by every engine test: money is conserved across a lot; a pl
 
 ## §7 · Risks & Spikes `[review-only]`
 
-- **AI values during landAuction:** `packages/ai/src/outlook.ts` holds `BEFORE_PRODUCTION = {planning, landGrant, development}`. Without 'landAuction' in it, an AI would value a plot during the auction as if this month's production were past. Mitigation: named edit E4 in WS1's file (one entry), before C8 lands.
+- **AI values during landAuction:** `packages/ai/src/outlook.ts` holds `BEFORE_PRODUCTION = {planning, landGrant, development}`. Without 'landAuction' in it, an AI would value a plot during the auction as if this month's production were past. Mitigation: E4, WS1 adds the entry in its next PR (ruled 2026-10-21); C8 does not merge before it.
 - **The sim never runs lots:** `packages/ai/src/play.ts` has no 'landAuction' case. That's safe while AIs don't list (RULE-2 skips the phase); colony plots will need a case. Mitigation: noted in the colony-plots non-goal; T-AC-5 pins the skip.
 - **Pace:** 4 lots × ~17.5 s ≈ 70 s. Mitigation: LOTS.maxLotsPerMonth (PM edit 1); Done on every buyer ends a walk early (RULE-4).
 - **WS1's numbers are not in yet:** plotValue/muleValue are stubs, and GAME.plotScore is waiting on PR #11. Mitigation: one helper reads each, so the switch is one line.
@@ -464,4 +468,4 @@ Named edits outside WS3's paths (each PM-approved, additive):
 - **E1** `apps/web/src/game/derive.ts::PHASE_NAME`: one line, `landAuction: 'Land auction'` (WS4 agreed).
 - **E2** `apps/web/src/table/TableApp.tsx`: export `TvHeader` (WS4 agreed).
 - **E3** `apps/web/src/phone/Auction.tsx`: export `Hold` (WS3's own file).
-- **E4** `packages/ai/src/outlook.ts::BEFORE_PRODUCTION`: add `'landAuction'` (WS1's file; **not yet asked**).
+- **E4** `packages/ai/src/outlook.ts::BEFORE_PRODUCTION`: add `'landAuction'`. Ruled (a): WS1 adds it in its next PR, before WS3's AI-hand PR; WS3 stubs around it until then.
