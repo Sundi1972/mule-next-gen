@@ -424,10 +424,7 @@ export function scoreParts(state: GameState, playerId: string): ScoreParts {
   return { money, goods: before - money - land - muleValue, plots, land, mules, muleValue, cut: before - total, total };
 }
 
-/**
- * Final score: money, plus goods and land at today's colony prices. A
- * colony that ends in Collapse cuts everyone's score by a fifth.
- */
+/** Final score: scoreParts().total. */
 export function score(state: GameState, playerId: string): number {
   return scoreParts(state, playerId).total;
 }

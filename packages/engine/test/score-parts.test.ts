@@ -98,7 +98,7 @@ function endState(seed: number): GameState {
   return state;
 }
 
-/** One player, `plots` plots of which `mules` carry a MULE at 150, goods worth 610 (61 Food at 10). */
+/** Player a: `plots` plots of which `mules` carry a MULE at 150, goods worth 610 (61 Food at 10). */
 function workedExample(options: { money: number; air: number; plots: number; mules: number }): GameState {
   const state = createGame({
     seed: 7,
@@ -126,12 +126,13 @@ function workedExample(options: { money: number; air: number; plots: number; mul
 describe('T-AC-6: score parts add up and score() is unchanged', () => {
   const states = Array.from({ length: 200 }, (_, i) => endState(1000 + i * 7919));
 
-  it('for 200 seeded end states, every player: score() = scoreParts().total = today\'s formula, and the lines add up', () => {
+  it('T-AC-6: for 200 seeded end states, every player: score() = scoreParts().total = today\'s formula, and the lines add up', () => {
     for (const state of states) {
       for (const p of state.players) {
         const parts = scoreParts(state, p.id);
         expect(score(state, p.id)).toBe(parts.total);
         expect(parts.total).toBe(todaysScore(state, p.id));
+        expect(parts.money).toBe(Math.round(p.money));
         for (const line of Object.values(parts)) expect(Number.isInteger(line)).toBe(true);
         expect(parts.money + parts.goods + parts.land + parts.muleValue).toBe(parts.total + parts.cut);
         if (!colonyFailed(state)) expect(parts.cut).toBe(0);
@@ -139,20 +140,22 @@ describe('T-AC-6: score parts add up and score() is unchanged', () => {
     }
   });
 
-  it('the 200 states cover Collapse, fractional money, MULE owners and finished games', () => {
+  it('T-AC-6 coverage: the 200 states cover Collapse, fractional and .5 money, MULE owners and finished games', () => {
     const collapse = states.filter((s) => colonyFailed(s)).length;
     const passed = states.length - collapse;
     const fractional = states.filter((s) => s.players.some((p) => !Number.isInteger(p.money))).length;
+    const halfMoney = states.flatMap((s) => s.players).filter((p) => p.money % 1 === 0.5).length;
     const muleOwners = states.filter((s) => s.tiles.some((t) => t.owner && t.outfit)).length;
     const finished = states.filter((s) => s.phase === 'gameOver').length;
     expect(collapse).toBeGreaterThanOrEqual(40);
     expect(passed).toBeGreaterThanOrEqual(40);
     expect(fractional).toBeGreaterThanOrEqual(40);
+    expect(halfMoney).toBeGreaterThanOrEqual(40);
     expect(muleOwners).toBeGreaterThanOrEqual(40);
     expect(finished).toBeGreaterThanOrEqual(5);
   });
 
-  it('RULE-3 example: 2140 money, 610 goods, 6 plots, 5 MULEs at 150, air passed → 5300, cut 0', () => {
+  it('T-AC-6: RULE-3 example: 2140 money, 610 goods, 6 plots, 5 MULEs at 150, air passed → 5300, cut 0', () => {
     const state = workedExample({ money: 2140, air: 0, plots: 6, mules: 5 });
     expect(mulePrice(state)).toBe(150);
     expect(scoreParts(state, 'a')).toEqual({
@@ -168,7 +171,7 @@ describe('T-AC-6: score parts add up and score() is unchanged', () => {
     expect(score(state, 'a')).toBe(5300);
   });
 
-  it('RULE-3 example: the same in Collapse → 4240, cut 1060', () => {
+  it('T-AC-6: RULE-3 example: the same in Collapse → 4240, cut 1060', () => {
     const state = workedExample({ money: 2140, air: COLLAPSE_AIR, plots: 6, mules: 5 });
     expect(colonyFailed(state)).toBe(true);
     expect(scoreParts(state, 'a')).toEqual({
@@ -184,12 +187,16 @@ describe('T-AC-6: score parts add up and score() is unchanged', () => {
     expect(score(state, 'a')).toBe(4240);
   });
 
-  it('a sum on a floating-point rounding edge still scores exactly as today', () => {
-    // (money + goods) + land lands on 2510.5, money + (goods + land) on 2510.4999…: order of addition decides the round.
-    const state = workedExample({ money: 100.5 - 5 * 2 ** -44, air: 0, plots: 6, mules: 0 });
-    expect(todaysScore(state, 'a')).toBe(2511);
+  // Each row's sum sits on a .5 edge where another grouping of the addition rounds the other way:
+  // the first catches money + (goods + land), the second ((money + goods) + land) + muleValue.
+  it.each([
+    { money: 100.5 - 5 * 2 ** -44, plots: 6, mules: 0, today: 2511 },
+    { money: 100.5 - 10 * 2 ** -44, plots: 8, mules: 7, today: 4160 },
+  ])('T-AC-6: a sum on a floating-point rounding edge still scores exactly as today: $today', ({ money, plots, mules, today }) => {
+    const state = workedExample({ money, air: 0, plots, mules });
+    expect(todaysScore(state, 'a')).toBe(today);
     const parts = scoreParts(state, 'a');
-    expect(parts.total).toBe(2511);
-    expect(parts.money + parts.goods + parts.land + parts.muleValue).toBe(2511);
+    expect(parts.total).toBe(today);
+    expect(parts.money + parts.goods + parts.land + parts.muleValue).toBe(today);
   });
 });
