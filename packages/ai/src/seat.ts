@@ -93,7 +93,7 @@ export class AiSeat {
     const index = grant.order[grant.step];
     if (index === undefined) return null;
     const obs = observe(state, this.id);
-    if (!wantsPlot(plan, obs, index, grant.sweep)) return null;
+    if (!wantsPlot(plan, obs, index, grant.sweep, this.mind)) return null;
     if (this.rng.next() < this.mind.level.missChance) return null;
     return this.rng.int(...this.mind.level.reactMs) + this.rng.int(...AI_HANDS.grant.choiceMs);
   }

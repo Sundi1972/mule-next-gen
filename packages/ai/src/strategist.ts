@@ -4,6 +4,7 @@ import {
   GAME,
   GOOD_CONFIG,
   mulePrice,
+  mulePriceFor,
   neighbours,
   POLLUTION,
   PROCESSED_GOODS,
@@ -172,9 +173,13 @@ export function landDecision(obs: GameState, mind: Mind): Shortlist<LandPlan> {
 /**
  * Whether the hands should press for the lit plot: it must clear a share of
  * the best plot still free in the plan's ranking (lower after the first
- * sweep, so the seat doesn't end the month empty-handed).
+ * sweep, so the seat doesn't end the month empty-handed). Never while the
+ * seat already holds a month's worth of idle plots it can't pay to develop:
+ * hoarded land earns nothing and every idle plot counts as Smithore demand.
  */
-export function wantsPlot(plan: LandPlan, obs: GameState, index: number, sweep: number): boolean {
+export function wantsPlot(plan: LandPlan, obs: GameState, index: number, sweep: number, mind: Mind): boolean {
+  const idle = obs.tiles.filter((t) => t.owner === mind.me && !t.outfit).length;
+  if (idle >= mind.level.mulesPerMonth && me(obs, mind).money < (idle + 1) * mulePriceFor(obs, mind.me)) return false;
   const free = new Set(obs.tiles.map((t, i) => (t.owner === null && t.terrain !== 'store' ? i : -1)).filter((i) => i >= 0));
   const open = plan.ranking.filter((s) => free.has(s.index));
   const lit = open.find((s) => s.index === index);
