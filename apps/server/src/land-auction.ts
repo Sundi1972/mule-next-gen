@@ -1,4 +1,4 @@
-import { lotLeader, LOTS, standing, type GameState, type Listing, type LotResult } from '@mule/engine';
+import { COLONY_SELLER, lotLeader, LOTS, standing, type GameState, type Listing, type LotResult } from '@mule/engine';
 import type { ListingView, LotWalkerView, MuleView } from '@mule/protocol';
 
 /* The land auction as the screens and the news see it: pure functions of the game state and seat names. */
@@ -56,7 +56,7 @@ export function landAuctionView(state: GameState): MuleView['landAuction'] {
 export function lotNews(lot: Listing, result: LotResult, nameOf: (seatId: string) => string): string {
   const { x, y } = lot.item;
   const what = lot.item.kind === 'plot' ? `plot ${x}·${y}` : `the MULE on plot ${x}·${y}`;
-  const seller = lot.seller === 'colony' ? 'the colony' : nameOf(lot.seller);
+  const seller = lot.seller === COLONY_SELLER ? 'the colony' : nameOf(lot.seller);
   return result.kind === 'sold'
     ? `${nameOf(result.buyer)} bought ${what} from ${seller} for ${result.price}.`
     : result.kind === 'store'

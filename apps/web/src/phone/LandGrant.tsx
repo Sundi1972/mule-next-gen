@@ -1,5 +1,5 @@
 import { GAME } from '@mule/engine';
-import { cx, HoloMap, TERRAIN_NAME } from '@mule/ui';
+import { cx, HoloMap, TERRAIN_NAME, ZoomMap } from '@mule/ui';
 import { mapTiles, PHASE_NAME, plotName, secondsUntil, TERRAIN_ODDS, tileAt } from '../game/derive';
 import { useClient, useServerNow } from '../net/react';
 import { GroundCard } from './ground';
@@ -57,9 +57,11 @@ export function LandGrant() {
         </button>
       }
     >
-      <p className="pb-1.5 font-mono text-[11px] text-ink-3">PLOTS LIGHT UP AT RANDOM · TAP CLAIM WHEN YOURS IS LIT</p>
+      <p className="pb-1.5 font-mono text-[11px] text-ink-3">PLOTS LIGHT UP ROW BY ROW · TAP CLAIM WHEN YOURS IS LIT</p>
       <MapFit width={view.width} height={view.height}>
-        <HoloMap width={view.width} height={view.height} tiles={mapTiles(view)} cursor={lit} focusSlot={slot} />
+        <ZoomMap width={view.width} height={view.height} tiles={mapTiles(view)} slot={slot}>
+          <HoloMap width={view.width} height={view.height} tiles={mapTiles(view)} cursor={lit} focusSlot={slot} />
+        </ZoomMap>
       </MapFit>
     </PhoneShell>
   );
