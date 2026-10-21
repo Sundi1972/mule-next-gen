@@ -196,3 +196,8 @@ function decide(state: GameState, election: Election, office: Office, governor: 
   const most = tied.reduce((best, id) => (plotsOf(state, id) > plotsOf(state, best) ? id : best));
   return { winner: most, how: 'tieRule', tallies };
 }
+
+/** RULE-6: the Governor sets the sales tax in whole percent, within maxStep of the month's starting rate. */
+export function setSalesTax(state: GameState, id: string, percent: number): void {
+  throw new Error('NotImplemented: setSalesTax');
+}

@@ -9,8 +9,10 @@ import {
   POLITICS,
   RuleError,
   runFor,
+  setSalesTax,
   stepElection,
   TAX,
+  taxSale,
   voteWeight,
   type Election,
   type GameState,
@@ -56,6 +58,14 @@ function governorBallot(): GameState {
   runOutClock(state);
   expect(electionOf(state).stage).toBe('ballot');
   return state;
+}
+
+/** Month 1: `id` runs alone for Governor and takes office when the reveal ends. */
+function seatGovernor(state: GameState, id: string): void {
+  runFor(state, id, 'governor');
+  runOutClock(state);
+  runOutClock(state);
+  expect(politicsOf(state).governor).toBe(id);
 }
 
 /** Hands `count` more free plots to a player. */
@@ -383,5 +393,57 @@ describe('FM-WS3-4: what-if copies', () => {
     expect(sim.politics?.governor).not.toBeNull();
 
     expect(state.politics).toEqual(before);
+  });
+});
+
+describe('C5: the Governor sets the sales tax', () => {
+  it('T-AC-3: tax bounds from the month\'s starting rate', () => {
+    const state = newGame();
+    seatGovernor(state, 'lena');
+    expect(() => setSalesTax(state, 'lena', 11)).toThrow(RuleError);
+    expect(() => setSalesTax(state, 'lena', 7.5)).toThrow(RuleError);
+    expect(state.treasury.salesTax).toBe(0.05);
+    setSalesTax(state, 'lena', 0);
+    expect(state.treasury.salesTax).toBe(0);
+    setSalesTax(state, 'lena', 10);
+    expect(state.treasury.salesTax).toBe(0.1);
+
+    toNextPlanning(state);
+    setSalesTax(state, 'lena', 15);
+    toNextPlanning(state);
+    expect(politicsOf(state).taxAtStart).toBe(0.15);
+    for (const refused of [9, 16]) expect(() => setSalesTax(state, 'lena', refused)).toThrow(RuleError);
+    setSalesTax(state, 'lena', 10);
+    expect(state.treasury.salesTax).toBe(0.1);
+    setSalesTax(state, 'lena', 15);
+    expect(state.treasury.salesTax).toBe(0.15);
+  });
+
+  it('T-AC-3: only the Governor, only in planning, not during the election', () => {
+    const state = newGame();
+    expect(() => setSalesTax(state, 'lena', 6)).toThrow(RuleError);
+    seatGovernor(state, 'lena');
+    expect(() => setSalesTax(state, 'brix', 6)).toThrow(new RuleError('Only the Governor sets the tax'));
+    advancePhase(state);
+    expect(() => setSalesTax(state, 'lena', 6)).toThrow(RuleError);
+    while (state.month < 4) toNextPlanning(state);
+    expect(electionOf(state).stage).toBe('nominate');
+    expect(() => setSalesTax(state, 'lena', 6)).toThrow(RuleError);
+    expect(state.treasury.salesTax).toBe(TAX.salesTax);
+
+    const off = newGame({ politics: false });
+    expect(() => setSalesTax(off, 'lena', 6)).toThrow(RuleError);
+    expect(off.treasury.salesTax).toBe(TAX.salesTax);
+  });
+
+  it('C5: a sale after setTax is taxed at the new rate', () => {
+    const state = newGame();
+    seatGovernor(state, 'lena');
+    setSalesTax(state, 'lena', 8);
+    const fund = state.treasury.money;
+
+    expect(taxSale(state, 'brix', 1000)).toBe(920);
+    expect(state.treasury.money).toBe(fund + 80);
+    expect(state.treasury.paid.brix).toBe(80);
   });
 });
