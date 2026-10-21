@@ -465,3 +465,20 @@ describe('Room: a player leaves the table (RULE-5, AM-15)', () => {
     expect(back.last('welcome')!.seatId).toBe('s4');
   });
 });
+
+const colours = (room: Room<Intent, View>) => room.viewFor(null).seats.map((s) => s.color);
+
+describe('Room: every seat holds its own colour (RULE-7)', () => {
+  it('T-AC-12: RULE-7 on a new seat — humans and AI take the lowest free colour, and a kick frees one', () => {
+    const { room, heiko } = lobby();
+    room.receive(heiko, heiko.from, { t: 'addAi' });
+    expect(colours(room)).toEqual([0, 1, 2, 3]);
+
+    kick(room, heiko, 's2');
+    expect(colours(room)).toEqual([0, 2, 3]);
+
+    join(room, 'Jonas');
+    room.receive(heiko, heiko.from, { t: 'addAi' });
+    expect(colours(room)).toEqual([0, 2, 3, 1, 4]);
+  });
+});
