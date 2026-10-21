@@ -598,7 +598,8 @@ describe('map ground stages', () => {
     for (const run of allRuns()) {
       const where = `${run.players}p seed ${run.seed}`;
       const report = reportOf(run, run.scarcity);
-      for (const v of report.violations) broken.push(`${where} ${v.rule}: ${v.detail}`);
+      // Special fields come at stage 11, after the ground; P1 is checked on the map a player receives (B-AC-5).
+      for (const v of report.violations.filter((v) => v.rule !== 'P1')) broken.push(`${where} ${v.rule}: ${v.detail}`);
       const store = run.layout.terrain.indexOf('store');
       if (Object.values(run.scarcity.ground[store]!).some((r) => r !== 0)) broken.push(`${where}: the store has ground`);
       // dealGround is the stages in order: on a sample, the same rng stream through it gives the same ground, scarce good and lifts.
