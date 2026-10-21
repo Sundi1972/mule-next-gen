@@ -6,9 +6,11 @@ import type { GameState, ProductionLine, RawGood, SpecialField, SpecialKind, Ter
 
 /**
  * Stage 11 of the map generator (spec RULE-5): special fields placed on a
- * finished map. Each one goes on a plot that already fits its kind, so nothing
- * is retried; a kind with no fitting plot is swapped for another, at most
- * MAP.special.kindDraws times per map.
+ * finished map. A depth-first search over the slots: each slot draws a kind,
+ * then a plot that already fits it and keeps the spacing, and the search backs
+ * up to the next draw when the slots left can no longer bring the count, the
+ * kinds and both river sides. Nothing is regenerated, and the search tries at
+ * most MAP.special.placementTries plots per map.
  */
 
 const KINDS = Object.keys(MAP.special.on) as SpecialKind[];
@@ -16,56 +18,68 @@ const SALVAGE = ['alloy', 'electronics'] as const;
 
 type Side = 'left' | 'right';
 
-export interface SpecialPlacement {
-  map: GameMap;
-  /** Kinds drawn that no plot could take, so another kind was drawn instead. */
-  redraws: number;
+interface Slot {
+  tile: Tile;
+  kind: SpecialKind;
 }
 
-/** Places the map's special fields. Pure: every choice comes from `rng`; never throws. */
+export interface SpecialPlacement {
+  map: GameMap;
+  /** Plots the search tried, those it backed out of included. */
+  tries: number;
+}
+
+/**
+ * Places the map's special fields. Pure: every choice comes from `rng`. Throws
+ * when no placement meets RULE-5 within the bound, so a map never comes out short.
+ */
 export function placeSpecials(map: GameMap, players: number, rng: Rng): SpecialPlacement {
   const count = MAP.specials[sizeBand(players)];
   const store = map.tiles.find((t) => t.terrain === 'store');
   const sideOf = riverSides(map);
+  // With no river there are no sides to fill, as the checker reads it.
+  const sides: Side[] = map.tiles.some((t) => t.terrain === 'river') ? ['left', 'right'] : [];
   const open = map.tiles.filter((t) => isOpen(map, t, store));
-  const placed: { tile: Tile; kind: SpecialKind }[] = [];
-  let draws = 0;
-  let redraws = 0;
+  const placed: Slot[] = [];
+  let tries = 0;
 
-  while (placed.length < count && draws < MAP.special.kindDraws) {
+  const fill = (): boolean => {
+    if (placed.length === count) return true;
     const left = count - placed.length;
     const used = new Set(placed.map((p) => p.kind));
-    const sides = new Set(placed.map((p) => sideOf(p.tile)));
     // The last slots go to kinds and sides still missing, so the map ends with enough of each.
     const mustNewKind = left <= MAP.special.minKinds - used.size;
-    const missingSides = (['left', 'right'] as Side[]).filter((s) => !sides.has(s));
-    const mustSide = left <= missingSides.length ? missingSides : undefined;
+    const missingSides = sides.filter((s) => !placed.some((p) => sideOf(p.tile) === s));
+    const mustSide = left <= missingSides.length;
     const spaced = open.filter(
-      (t) => placed.every((p) => steps(p.tile, t) >= MAP.special.spacing) && (!mustSide || mustSide.includes(sideOf(t)!)),
+      (t) => placed.every((p) => steps(p.tile, t) >= MAP.special.spacing) && (!mustSide || missingSides.includes(sideOf(t)!)),
     );
-
-    let kinds = KINDS.filter((k) => placed.filter((p) => p.kind === k).length < MAP.special.maxPerKind && (!mustNewKind || !used.has(k)));
-    let slot: { tile: Tile; kind: SpecialKind } | undefined;
-    while (!slot && kinds.length > 0 && draws < MAP.special.kindDraws) {
-      const kind = rng.pick(kinds);
-      draws++;
-      const fits = spaced.filter((t) => fitsKind(map, t, kind, store));
-      if (fits.length > 0) slot = { tile: rng.pick(fits), kind };
-      else {
-        redraws++;
-        kinds = kinds.filter((k) => k !== kind);
+    const kinds = KINDS.filter((k) => placed.filter((p) => p.kind === k).length < MAP.special.maxPerKind && (!mustNewKind || !used.has(k)));
+    for (const kind of drawn(kinds, rng)) {
+      for (const tile of drawn(spaced.filter((t) => fitsKind(map, t, kind, store)), rng)) {
+        // At the bound the map is not placed short: the generator stops loudly.
+        if (++tries > MAP.special.placementTries) throw new Error(`special fields: no placement within ${MAP.special.placementTries} tries`);
+        placed.push({ tile, kind });
+        if (fill()) return true;
+        placed.pop();
       }
     }
-    if (!slot) break;
-    placed.push(slot);
-  }
+    return false;
+  };
+  if (!fill()) throw new Error(`special fields: no placement of ${count} meets RULE-5 on this map`);
 
   const fields = new Map(placed.map(({ tile, kind }) => [tile, specialField(kind, rng)]));
   const tiles = map.tiles.map((t) => {
     const special = fields.get(t);
     return special ? { ...t, special } : t;
   });
-  return { map: { ...map, tiles }, redraws };
+  return { map: { ...map, tiles }, tries };
+}
+
+/** The items in an order drawn from `rng`, one draw per item taken, so an early stop draws no more. */
+function* drawn<T>(items: readonly T[], rng: Rng): Generator<T> {
+  const rest = [...items];
+  while (rest.length > 0) yield rest.splice(Math.floor(rng.next() * rest.length), 1)[0]!;
 }
 
 function specialField(kind: SpecialKind, rng: Rng): SpecialField {

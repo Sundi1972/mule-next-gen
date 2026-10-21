@@ -425,8 +425,11 @@ export const MAP = {
     oasisDeserts: 2,
     /** Least Crystite rating under a crystal cavern. */
     cavernCrystite: 1,
-    /** Kinds the generator draws for one map, in all, before it stops short. Read by the generator, not the checker. */
-    kindDraws: 30,
+    /**
+     * Plots the generator's placement search tries for one map, backtracking included; real maps need
+     * 3 to 10. At the bound it throws rather than place the map short. Read by the generator, not the checker.
+     */
+    placementTries: 10_000,
   },
   /** What special fields do (spec RULE-6). Output bonuses count before adjacency. */
   specialEffect: {
