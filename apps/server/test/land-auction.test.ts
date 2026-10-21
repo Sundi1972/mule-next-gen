@@ -142,13 +142,18 @@ describe('land auction on the server', () => {
     expect(intro.phaseEndsAt).toBeNull();
     expect(intro.landAuction).toMatchObject({ stage: 'intro', total: LOTS.introMs / 1_000, number: 1, count: 2, lot: { seller: 'b', minimum: 250, item: { kind: 'plot', ...plot } } });
     expect(intro.landAuction!.next.map((l) => l.seller)).toEqual(['l']);
-    expect(walker(intro, 'o')).toMatchObject({ side: 'buyer', done: false });
+    expect(walker(intro, 'o')).toMatchObject({ side: 'buyer', done: false, price: intro.landAuction!.lo });
     expect(walker(intro, 'o')!.aside).toBeUndefined();
     expect(walker(game.viewFor('l'), 'l')).toMatchObject({ side: 'buyer' });
     expect(walker(intro, 'b')).toBeUndefined();
     const before = game.viewFor(null);
 
+    // Ossa is ready first: every screen shows her done while Lena still reads the lot.
+    game.handle('o', { type: 'ready' });
+    expect(walker(game.viewFor('o'), 'o')!.done).toBe(true);
+    expect(walker(game.viewFor('o'), 'l')!.done).toBe(false);
     skipIntro(game, advance);
+    expect(game.viewFor('o').landAuction!.total).toBe(LOTS.walkMs / 1_000);
     const ossa = walkUpTo(game, advance, 'o', 310);
     const lena = walkUpTo(game, advance, 'l', 290);
     expect(ossa).toBeGreaterThanOrEqual(310);
@@ -159,6 +164,7 @@ describe('land auction on the server', () => {
 
     const after = game.viewFor('b');
     expect(after.landAuction!.result).toEqual({ kind: 'sold', buyer: 'o', price: ossa });
+    expect(after.landAuction!.total).toBe(LOTS.resultMs / 1_000);
     expect(tile(after, plot).owner).toBe('o');
     expect(tile(after, plot).outfit).toBe('food');
     expect(money(after, 'o')).toBe(money(before, 'o') - ossa);
@@ -174,6 +180,13 @@ describe('land auction on the server', () => {
     expect(walker(second, 'o')).toMatchObject({ side: 'pass', aside: 'money' });
     expect(walker(second, 'b')).toMatchObject({ side: 'pass', aside: 'money' });
     expect(walker(second, 'l')).toBeUndefined();
+
+    // With no buyer the bell rings as the intro ends; the result still says why each seat sat it out.
+    for (let i = 0; i < 200 && game.viewFor(null).landAuction!.stage === 'intro'; i++) advance(WALK.tickMs);
+    const unsold = game.viewFor('o');
+    expect(unsold.landAuction).toMatchObject({ stage: 'result', number: 2, result: { kind: 'kept' } });
+    expect(walker(unsold, 'o')).toMatchObject({ aside: 'money' });
+    expect(walker(unsold, 'b')).toMatchObject({ aside: 'money' });
 
     for (let i = 0; i < 200 && game.viewFor(null).phase === 'landAuction'; i++) advance(WALK.tickMs);
     const dev = game.viewFor(null);
@@ -222,6 +235,13 @@ describe('land auction on the server', () => {
       toLandAuction(game, advance);
       const before = game.viewFor(null);
       skipIntro(game, advance);
+      // A tick that comes a whole walk late moves a bid no further than three ticks would, and the lot keeps walking.
+      const start = game.viewFor(null);
+      game.handle('o', { type: 'walk', dir: 'up' });
+      advance(LOTS.walkMs);
+      const stalled = game.viewFor(null);
+      expect(stalled.landAuction!.stage).toBe('walk');
+      expect(walker(stalled, 'o')!.at - walker(start, 'o')!.at).toBeLessThanOrEqual((start.landAuction!.speed * 3 * WALK.tickMs) / 1_000);
       const bid = walkUpTo(game, advance, 'o', 238);
       expect(bid).toBeLessThan(250);
       expect(game.viewFor('o').landAuction!.leader).toBeNull();

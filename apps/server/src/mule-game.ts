@@ -280,8 +280,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     // The land auction runs on its lots' own clocks, not a phase timer.
     if (state.phase === 'landAuction') {
       this.phaseEndsAt = null;
-      const n = state.listings.length;
-      this.news = [`The land auction opens: ${n} ${n === 1 ? 'lot' : 'lots'}. Walk up to bid.`, ...this.news].slice(0, 3);
       this.scheduleLandAuctionTick(this.ctx.now());
       return;
     }
