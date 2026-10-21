@@ -14,7 +14,8 @@ import type { GameState, ProductionLine, RawGood, SpecialField, SpecialKind, Ter
  */
 
 const KINDS = Object.keys(MAP.special.on) as SpecialKind[];
-const SALVAGE = ['alloy', 'electronics'] as const;
+/** The goods ruins may pay, read from what each pays. */
+const SALVAGE = Object.keys(MAP.specialEffect.salvage) as NonNullable<SpecialField['salvage']>[];
 
 type Side = 'left' | 'right';
 
