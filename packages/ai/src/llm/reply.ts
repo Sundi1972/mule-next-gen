@@ -2,7 +2,7 @@ import { BRAIN } from '@mule/engine';
 import type { ShortOption } from '../decider.js';
 
 /** What a model's reply came to: the option and line it chose, or why it cannot be used. */
-export type ParsedReply = { ok: true; optionId: string; line: string | null } | { ok: false; reason: string };
+export type ParsedReply = { ok: true; optionId: string; line: string | null } | { ok: false; outcome: 'unreadable' | 'off_list'; reason: string };
 
 const QUOTE_MARKS = '"\'“”‘’';
 
@@ -38,7 +38,7 @@ function nameForNote(option: string): string {
 
 /** Reads a model's JSON reply against the shortlist. Never throws. */
 export function parseReply(text: string, shortlist: ShortOption[]): ParsedReply {
-  const unreadable: ParsedReply = { ok: false, reason: 'unreadable reply' };
+  const unreadable: ParsedReply = { ok: false, outcome: 'unreadable', reason: 'unreadable reply' };
   let reply: unknown;
   try {
     reply = JSON.parse(text);
@@ -48,6 +48,6 @@ export function parseReply(text: string, shortlist: ShortOption[]): ParsedReply 
   if (typeof reply !== 'object' || reply === null) return unreadable;
   const { option, line } = reply as { option?: unknown; line?: unknown };
   if (typeof option !== 'string') return unreadable;
-  if (!shortlist.some((o) => o.id === option)) return { ok: false, reason: `named ${nameForNote(option)}, not on the list` };
+  if (!shortlist.some((o) => o.id === option)) return { ok: false, outcome: 'off_list', reason: `named ${nameForNote(option)}, not on the list` };
   return { ok: true, optionId: option, line: clean(line) };
 }
