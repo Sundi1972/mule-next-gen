@@ -468,7 +468,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         if (state.phase !== 'landAuction' || !a) return;
         const now = this.ctx.now();
         // A stalled server loop must not teleport walkers across the board.
-        const dt = Math.min(Math.max(0, now - last), WALK.tickMs * 3);
+        const dt = Math.min(Math.max(0, now - last), WALK.tickMs * 3) / this.phaseScale;
         for (const seat of this.seats) {
           if (!this.away.has(seat.id)) continue;
           // A dropped phone has finished bidding: its walker stops where it is.
