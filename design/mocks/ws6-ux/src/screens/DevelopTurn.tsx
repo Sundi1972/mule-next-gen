@@ -5,7 +5,8 @@ import { mapTiles, plotName } from '../../../../../apps/web/src/game/derive';
 import { MapFit } from '../../../../../apps/web/src/phone/Shell';
 import { H, ME, VIEW, W } from '../fixture';
 import { GameShell, useWide, type Now } from '../proposed/GameShell';
-import { OTHERS, SPOT, StoreHall, walkSeconds, Walker, type Spot, type Visitor } from './Store';
+import { Hall, HallWalker, SPOT, walkSeconds, type Spot, type Visitor } from '../proposed/Hall';
+import { OTHERS } from './Store';
 
 /**
  * Responsive redesign: development (Heiko 2026-10-22, "I had no clue what to do
@@ -18,10 +19,9 @@ import { OTHERS, SPOT, StoreHall, walkSeconds, Walker, type Spot, type Visitor }
  * 3. Walking is walking: your creature waddles from room to room and out of
  *    the door onto the map, at R1's placeholder speeds; the clock never stops.
  *
- * On a wide screen the store and the colony map are both on stage, the store
- * above the map, so walking out of the door is visibly walking onto the map
- * (Heiko chose this, variant A, 2026-10-22). On a phone held sideways one place
- * shows at a time.
+ * One place at a time at every size (AM-8, Heiko's second look: "I don't need
+ * the map when we are in the store"): the store fills the stage; walking out
+ * of a door, the colony map replaces it and your colonist walks on to your plot.
  */
 
 const FULL = 50;
@@ -168,7 +168,7 @@ export function DevelopTurn({ start = 'start' }: { start?: Start }) {
   const view = installed ? { ...VIEW, tiles: VIEW.tiles.map((x) => (x.x === EMPTY_PLOT.x && x.y === EMPTY_PLOT.y ? { ...x, outfit: 'energy' as const } : x)) } : VIEW;
 
   const hallStage = (
-    <Hall
+    <WideHall
       visitors={[...turn.others, ...(place === 'store' ? [turn.hall] : [])]}
       mules={turn.corral}
       mulePrice={ME.mulePrice}
@@ -193,7 +193,7 @@ export function DevelopTurn({ start = 'start' }: { start?: Start }) {
           selected={outfitted ? EMPTY_PLOT : null}
           onTile={(x) => (place === 'map' ? turn.walkTo(x.x, x.y) : undefined)}
         />
-        {place === 'map' && <Walker v={me} tv />}
+        {place === 'map' && <MapWalker v={me} />}
         {place === 'map' && outfitted && !turn.atPlot && (
           <span
             className="pointer-events-none absolute -translate-x-1/2 -translate-y-[170%] rounded-full bg-holo px-1.5 font-mono text-[10px] font-bold leading-4 text-on-holo shadow-glow"
@@ -207,12 +207,7 @@ export function DevelopTurn({ start = 'start' }: { start?: Start }) {
     </MapFit>
   );
 
-  const stageLabel = (text: string, here: boolean) => (
-    <span className={cx('label-caps mb-1.5 hidden @min-[1100px]:flex items-center gap-2 text-sm!', here && 'text-holo!')}>
-      {text}
-      {here && <span className="rounded-full bg-holo px-1.5 font-mono text-[10px] font-bold text-on-holo">YOU ARE HERE</span>}
-    </span>
-  );
+
 
   return (
     <GameShell
@@ -255,23 +250,17 @@ export function DevelopTurn({ start = 'start' }: { start?: Start }) {
         </>
       }
     >
-        <div className="flex min-h-0 flex-1 flex-col gap-2 @min-[1100px]:gap-5" data-testid="dev-stage">
-          <section className={cx('min-h-0 flex-col', place === 'store' ? 'flex flex-1 @min-[1100px]:flex-none' : 'hidden @min-[1100px]:flex')} data-testid="stage-store">
-            {stageLabel('The store', place === 'store')}
-            <div className="h-full min-h-[300px] @min-[1100px]:h-[330px]">{hallStage}</div>
-          </section>
-          <section className={cx('min-h-0 flex-1 flex-col', place === 'map' ? 'flex' : 'hidden @min-[1100px]:flex')} data-testid="stage-map">
-            {stageLabel('Your colony · walk out of the store to reach it', place === 'map')}
-            {mapStage}
-          </section>
-        </div>
+      {/* One place at a time, at every size (AM-8): in the store the store fills the stage; out of the door, the colony. */}
+      <div className="flex min-h-0 flex-1 flex-col" data-testid="dev-stage">
+        {place === 'store' ? <div className="min-h-[300px] flex-1">{hallStage}</div> : mapStage}
+      </div>
     </GameShell>
   );
 }
 
 /** The hall at the shell's size: the big screen's type when wide, the phone's otherwise. */
-function Hall(props: Omit<Parameters<typeof StoreHall>[0], 'tv'>) {
-  return <StoreHall {...props} tv={useWide()} />;
+function WideHall(props: Omit<Parameters<typeof Hall>[0], 'wide'>) {
+  return <Hall {...props} wide={useWide()} />;
 }
 
 /** Your plots and what they make: why the guide suggests a good. Wide screens only. */
@@ -296,6 +285,11 @@ function YourPlots() {
       <span className="text-sm text-ink-2">Each month a farm or a well burns 1 Energy, a mine 2, an Energy plot none.</span>
     </section>
   );
+}
+
+/** Your colonist on the colony map, leading its MULE. */
+function MapWalker({ v }: { v: Visitor }) {
+  return <HallWalker v={v} wide={useWide()} />;
 }
 
 /** The start of the turn (spec AM-3: it blocks nothing; a tap on a room dismisses it). */
