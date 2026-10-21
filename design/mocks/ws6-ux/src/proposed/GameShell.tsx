@@ -1,10 +1,10 @@
 import { Button, cx, PlayerMark, SPECIES_NAME, Timer } from '@mule/ui';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Qr } from '../../../../../apps/web/src/components/Qr';
 import { ThemeToggle } from '../../../../../apps/web/src/components/ThemeToggle';
 import { fmt } from '../../../../../apps/web/src/game/derive';
 import { usePhoneGame } from '../../../../../apps/web/src/phone/game';
 import { SeatRow, Ticker, useChat } from './Chat';
+import { HandoffCode, useHandoffCode, type CodeState } from './HandoffCode';
 
 /**
  * The responsive redesign of PhoneShell (GRAFT TARGET apps/web/src/phone/Shell.tsx).
@@ -76,15 +76,16 @@ export function GameShell({
   now: Now;
   rail?: ReactNode;
   footer?: ReactNode;
-  /** Mock only: open with the hand-off dialog showing (#game-handoff). */
-  handoff?: boolean;
+  /** Mock only: open with the hand-off dialog showing (#game-handoff), its code in that state. */
+  handoff?: boolean | CodeState;
   /** Seats this screen draws as creatures (they wrap them in Speaker): their bubbles pop there, not in the seat row. */
   anchored?: string[];
   children: ReactNode;
 }) {
   const chat = useChat();
   const { view, self, slot } = usePhoneGame();
-  const [handoff, setHandoff] = useState(handoffOpen);
+  const [handoff, setHandoff] = useState(!!handoffOpen);
+  const code = useHandoffCode(typeof handoffOpen === 'string' ? handoffOpen : 'ready');
   const root = useRef<HTMLDivElement>(null);
   const [wide, setWide] = useState(false);
   useEffect(() => {
@@ -157,10 +158,7 @@ export function GameShell({
             <div className="flex max-w-[560px] flex-col gap-3 rounded-sheet border-2 border-holo bg-panel p-4 shadow-glow @min-[1100px]/shell:max-w-[720px] @min-[1100px]/shell:gap-5 @min-[1100px]/shell:p-8">
               <h2 className="font-display text-xl font-semibold @min-[1100px]/shell:text-3xl">Move to your phone</h2>
               <div className="flex items-center gap-4">
-                <Qr text={`https://mule.example/handoff/${self.id}-7f3a`} size={120} className="p-2! @min-[1100px]/shell:hidden" />
-                <span className="hidden @min-[1100px]/shell:block">
-                  <Qr text={`https://mule.example/handoff/${self.id}-7f3a`} size={220} className="p-3!" />
-                </span>
+                <HandoffCode url={`https://mule.example/handoff/${self.id}-7f3a`} state={code.state} onRenew={code.renew} />
                 <p className="text-sm text-ink-2 @min-[1100px]/shell:text-lg">
                   Scan this with your phone. It becomes <strong className="text-ink">you, {self.name}</strong>, mid-game, with your money, goods and plots. This screen then steps aside. The code works once, for 2 minutes; the game doesn't pause.
                 </p>
