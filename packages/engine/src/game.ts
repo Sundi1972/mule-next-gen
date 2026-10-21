@@ -394,7 +394,7 @@ export function score(state: GameState, playerId: string): number {
   const prices = allPrices(state);
   const goods = GOODS.reduce((sum, g) => sum + p.stock[g] * prices[g], 0);
   const plots = state.tiles.filter((t) => t.owner === playerId);
-  const land = plots.length * 300 + plots.filter((t) => t.outfit).length * mulePrice(state);
+  const land = plots.length * GAME.plotScore + plots.filter((t) => t.outfit).length * mulePrice(state);
   const total = p.money + goods + land;
   return Math.round(colonyFailed(state) ? total * POLLUTION.collapseScore : total);
 }
