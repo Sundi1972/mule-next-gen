@@ -47,6 +47,8 @@ export function Develop() {
     else if (shop === 'corral') client.intent({ type: 'buyMule' });
     else client.intent({ type: 'outfit', outfit: shop });
   };
+  // The pub's own sum, from the time left now: see visitPub in the engine.
+  const pubPayout = Math.round(DEVELOPMENT.pub.base + (DEVELOPMENT.pub.start + view.month * DEVELOPMENT.pub.perMonth) * Math.min(1, seconds / Math.max(me.devSeconds, 1)));
   const mine = tile?.owner === me.id;
   const free = tile && tile.owner === null && tile.terrain !== 'store';
   const owner = tile?.owner ? view.players.find((p) => p.id === tile.owner) : undefined;
@@ -188,7 +190,18 @@ export function Develop() {
       }
     >
       {place === 'store' ? (
-        <StoreInterior mules={view.storeMules} mulePrice={me.mulePrice} prices={me.outfitCosts} open={open} onShop={onShop} visitors={{}} wide />
+        <div className="h-full min-h-[300px]">
+          <StoreInterior
+            mules={view.storeMules}
+            mulePrice={me.mulePrice}
+            prices={me.outfitCosts}
+            pubPayout={pubPayout}
+            open={open}
+            onShop={onShop}
+            onDoor={() => setPlace('map')}
+            me={{ id: me.id, slot, leading: carry, time: seconds / DEVELOPMENT.fullSeconds }}
+          />
+        </div>
       ) : (
         <MapFit width={view.width} height={view.height}>
           <HoloMap
