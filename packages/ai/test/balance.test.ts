@@ -161,6 +161,37 @@ describe('surplus to a short store', () => {
   });
 });
 
+/** The month-1 auction with the store's shelves full, ai0 holding `stock` of `good`, and the sales tax at `tax`. */
+function auctionAtTax(tax: number, good: 'food' | 'water', stock: number): GameState {
+  const state = auctionWithShelf(40);
+  state.store.stock.food = 40;
+  state.players[0]!.stock[good] = stock;
+  state.treasury.salesTax = tax;
+  return state;
+}
+
+describe('the sales tax', () => {
+  it('T-AC-9: at a 15% tax a seat sells the same resale stock for 85% of the gain, and values its own use the same', () => {
+    const sell = (tax: number) => {
+      const obs = observe(auctionAtTax(tax, 'water', 30), 'ai0');
+      return tradeDecision(obs, traderMind, goodPlan(obs, traderMind, 'water')).all.find((c) => c.key === 'sell')!;
+    };
+    const [free, taxed] = [sell(0), sell(0.15)];
+    expect(free).toBeDefined();
+    expect((taxed.action as { keep: number }).keep).toBe((free.action as { keep: number }).keep);
+    expect(taxed.value).toBeCloseTo(free.value * 0.85, 6);
+
+    const food = (tax: number) => goodPlan(observe(auctionAtTax(tax, 'food', 20), 'ai0'), traderMind, 'food').values;
+    const [v0, v15] = [food(0), food(0.15)];
+    const resale0 = v0.keep[v0.block]!;
+    const own = [...Array(v0.block).keys()].filter((k) => k >= v0.floorUnits && v0.keep[k]! > resale0);
+    expect(own.length).toBeGreaterThan(0);
+    for (const k of own) expect(v15.keep[k]).toBe(v0.keep[k]);
+    // Negative case: a unit held for resale next month is taxed when it sells, so it is worth 85%.
+    expect(v15.keep[v15.block]).toBeCloseTo(resale0 * 0.85, 6);
+  });
+});
+
 describe('production events and the outlook', () => {
   it('T-AC-7: a seat’s outlook forecasts the same with events on as off: it never sees next month’s event', () => {
     const forecast = (seed: number, chance: number) => {
