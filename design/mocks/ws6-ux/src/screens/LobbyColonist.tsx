@@ -59,21 +59,21 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
     : { step: 1, of: 2, title: 'Make your colonist', detail: 'Pick a species and a colour. Heiko, the host, starts the game when everyone is here.' };
 
   return (
-    <div className="h-full @container">
+    <div className="h-full @container/shell">
       <div className="relative flex h-full bg-table text-ink" data-testid="lobby">
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-y-auto p-2.5 @min-[1100px]:gap-6 @min-[1100px]:p-8">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-y-auto p-2.5 @min-[1100px]/shell:gap-6 @min-[1100px]/shell:p-8">
           <header className="flex items-center gap-3">
-            <span className="font-display text-sm font-semibold @min-[1100px]:text-lg">
+            <span className="font-display text-sm font-semibold @min-[1100px]/shell:text-lg">
               M.U.L.E. <span className="text-holo">Next Gen</span>
             </span>
-            <span className="ml-auto font-mono text-xs text-ink-3 @min-[1100px]:text-sm">ROOM {CODE}</span>
+            <span className="ml-auto font-mono text-xs text-ink-3 @min-[1100px]/shell:text-sm">ROOM {CODE}</span>
             <ThemeToggle />
           </header>
-          <div className="flex min-h-0 flex-1 gap-3 @min-[1100px]:gap-8">
+          <div className="flex min-h-0 flex-1 gap-3 @min-[1100px]/shell:gap-8">
             <ColonistHero seat={me} />
-            <div className="flex min-w-0 flex-1 flex-col gap-2 @min-[1100px]:gap-6">
+            <div className="flex min-w-0 flex-1 flex-col gap-2 @min-[1100px]/shell:gap-6">
               <Picker label="Species">
-                <div className="grid grid-cols-6 gap-1 @min-[1100px]:grid-cols-3 @min-[1100px]:gap-3" data-testid="species-pick">
+                <div className="grid grid-cols-6 gap-1 @min-[1100px]/shell:grid-cols-3 @min-[1100px]/shell:gap-3" data-testid="species-pick">
                   {SPECIES.map((sp) => (
                     <button
                       key={sp}
@@ -81,23 +81,23 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
                       aria-pressed={sp === me.species}
                       onClick={() => set({ species: sp })}
                       className={cx(
-                        'flex flex-col items-center gap-0.5 rounded-control border bg-panel px-1 py-1 text-center @min-[1100px]:flex-row @min-[1100px]:items-start @min-[1100px]:gap-3 @min-[1100px]:p-3 @min-[1100px]:text-left',
+                        'flex flex-col items-center gap-0.5 rounded-control border bg-panel px-1 py-1 text-center @min-[1100px]/shell:flex-row @min-[1100px]/shell:items-start @min-[1100px]/shell:gap-3 @min-[1100px]/shell:p-3 @min-[1100px]/shell:text-left',
                         sp === me.species ? 'border-2 border-holo bg-holo-soft shadow-glow' : 'border-holo-line hover:border-holo',
                       )}
                       data-testid={`species-${sp}`}
                     >
-                      <Creature species={sp} color={SLOT_COLOR[me.colour]} size={30} className="@min-[1100px]:hidden" />
-                      <Creature species={sp} color={SLOT_COLOR[me.colour]} size={56} className="hidden shrink-0 @min-[1100px]:block" />
+                      <Creature species={sp} color={SLOT_COLOR[me.colour]} size={30} className="@min-[1100px]/shell:hidden" />
+                      <Creature species={sp} color={SLOT_COLOR[me.colour]} size={56} className="hidden shrink-0 @min-[1100px]/shell:block" />
                       <span className="flex min-w-0 flex-col gap-0.5">
-                        <span className="text-[11px] font-semibold @min-[1100px]:font-display @min-[1100px]:text-lg">{SPECIES_NAME[sp]}</span>
-                        <span className="hidden text-sm leading-snug text-ink-2 @min-[1100px]:block">{SPECIES_PERK[sp]}</span>
+                        <span className="text-[11px] font-semibold @min-[1100px]/shell:font-display @min-[1100px]/shell:text-lg">{SPECIES_NAME[sp]}</span>
+                        <span className="hidden text-sm leading-snug text-ink-2 @min-[1100px]/shell:block">{SPECIES_PERK[sp]}</span>
                       </span>
                     </button>
                   ))}
                 </div>
               </Picker>
               <Picker label="Colour">
-                <div className="flex flex-wrap gap-1.5 @min-[1100px]:gap-3" data-testid="colour-pick">
+                <div className="flex flex-wrap gap-1.5 @min-[1100px]/shell:gap-3" data-testid="colour-pick">
                   {([0, 1, 2, 3, 4, 5] as Slot[]).map((c) => {
                     const owner = takenBy(c);
                     const mine = c === me.colour;
@@ -110,17 +110,17 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
                         disabled={!!owner}
                         onClick={() => set({ colour: c })}
                         className={cx(
-                          'flex items-center gap-1.5 rounded-full border py-0.5 pl-0.5 pr-2 @min-[1100px]:gap-2 @min-[1100px]:py-1 @min-[1100px]:pl-1 @min-[1100px]:pr-3',
+                          'flex items-center gap-1.5 rounded-full border py-0.5 pl-0.5 pr-2 @min-[1100px]/shell:gap-2 @min-[1100px]/shell:py-1 @min-[1100px]/shell:pl-1 @min-[1100px]/shell:pr-3',
                           mine ? 'border-2 border-holo bg-holo-soft' : owner ? 'border-holo-faint opacity-60' : 'border-holo-line hover:border-holo',
                         )}
                         data-testid={`colour-${c}`}
                       >
-                        <span className="grid size-6 place-items-center rounded-full @min-[1100px]:size-9" style={{ background: SLOT_COLOR[c] }}>
+                        <span className="grid size-6 place-items-center rounded-full @min-[1100px]/shell:size-9" style={{ background: SLOT_COLOR[c] }}>
                           {owner && <Creature species={owner.species} color="#ffffff" size={18} />}
                           {mine && <span className="font-bold text-white">✓</span>}
                         </span>
-                        <span className="text-[11px] font-semibold @min-[1100px]:text-base">{COLOUR_NAME[c]}</span>
-                        {owner && <span className="hidden text-sm text-ink-3 @min-[1100px]:inline">{owner.name}</span>}
+                        <span className="text-[11px] font-semibold @min-[1100px]/shell:text-base">{COLOUR_NAME[c]}</span>
+                        {owner && <span className="hidden text-sm text-ink-3 @min-[1100px]/shell:inline">{owner.name}</span>}
                       </button>
                     );
                   })}
@@ -129,16 +129,16 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
             </div>
           </div>
         </main>
-        <aside className="flex w-(--rail) shrink-0 flex-col border-l border-holo-faint bg-void/40 @min-[1100px]:w-[400px]" data-testid="guide">
-          <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 @min-[1100px]:gap-4 @min-[1100px]:px-5 @min-[1100px]:py-5">
+        <aside className="flex w-(--rail) shrink-0 flex-col border-l border-holo-faint bg-void/40 @min-[1100px]/shell:w-[400px]" data-testid="guide">
+          <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-5">
             <NowCard now={now} />
             <section className="flex flex-col gap-1.5">
-              <h2 className="label-caps @min-[1100px]:text-xs!">At the table · {seats.length} of 6</h2>
+              <h2 className="label-caps @min-[1100px]/shell:text-xs!">At the table · {seats.length} of 6</h2>
               <ul className="flex flex-col overflow-hidden rounded-panel border border-holo-line" data-testid="seats">
                 {seats.map((s) => (
-                  <li key={s.id} className="flex items-center gap-2 border-t border-holo-faint bg-panel px-2 py-1 first:border-t-0 @min-[1100px]:gap-3 @min-[1100px]:px-3 @min-[1100px]:py-2">
+                  <li key={s.id} className="flex items-center gap-2 border-t border-holo-faint bg-panel px-2 py-1 first:border-t-0 @min-[1100px]/shell:gap-3 @min-[1100px]/shell:px-3 @min-[1100px]/shell:py-2">
                     <Creature species={s.species} color={SLOT_COLOR[s.colour]} size={22} />
-                    <span className="min-w-0 flex-1 truncate text-sm font-semibold @min-[1100px]:text-base">
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold @min-[1100px]/shell:text-base">
                       {s.name}
                       {s.id === meId && ' (you)'}
                     </span>
@@ -167,8 +167,8 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
               </button>
             )}
             {host && (
-              <section className="flex flex-col gap-1 border-t border-holo-faint pt-2 @min-[1100px]:pt-3" data-testid="host-tools">
-                <span className="label-caps @min-[1100px]:text-xs!">You host this table</span>
+              <section className="flex flex-col gap-1 border-t border-holo-faint pt-2 @min-[1100px]/shell:pt-3" data-testid="host-tools">
+                <span className="label-caps @min-[1100px]/shell:text-xs!">You host this table</span>
                 <button type="button" className="text-left text-sm text-holo underline-offset-2 hover:underline" onClick={() => setDialog('handoff')} data-testid="host-to-phone">
                   Move the host to my phone…
                 </button>
@@ -178,13 +178,13 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
               </section>
             )}
           </div>
-          <div className="flex flex-col gap-2 border-t border-holo-faint bg-void/60 px-3 py-2.5 @min-[1100px]:px-5 @min-[1100px]:py-4">
+          <div className="flex flex-col gap-2 border-t border-holo-faint bg-void/60 px-3 py-2.5 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4">
             {host ? (
               <>
                 <Button size="md" variant="outline" disabled={seats.length >= 6} data-testid="add-ai">
                   Add AI player
                 </Button>
-                <Button size="md" className="@min-[1100px]:h-14 @min-[1100px]:text-lg" disabled={seats.length < 2} data-testid="start-game">
+                <Button size="md" className="@min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" disabled={seats.length < 2} data-testid="start-game">
                   Start game · {seats.length} players
                 </Button>
               </>
@@ -207,18 +207,18 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
 /** You, large: the stage of the lobby. On a phone it is a narrow column; on a laptop the hero of the page. */
 function ColonistHero({ seat }: { seat: Seat }) {
   return (
-    <section className="flex w-[150px] shrink-0 flex-col items-center justify-center gap-1 rounded-sheet border border-holo-line bg-panel p-2 text-center @min-[1100px]:w-[360px] @min-[1100px]:gap-4 @min-[1100px]:p-8" data-testid="hero">
+    <section className="flex w-[150px] shrink-0 flex-col items-center justify-center gap-1 rounded-sheet border border-holo-line bg-panel p-2 text-center @min-[1100px]/shell:w-[360px] @min-[1100px]/shell:gap-4 @min-[1100px]/shell:p-8" data-testid="hero">
       <span className="grid place-items-center rounded-full" style={{ background: `radial-gradient(circle, ${SLOT_COLOR[seat.colour]}33 0%, transparent 70%)` }}>
-        <Creature species={seat.species} color={SLOT_COLOR[seat.colour]} size={72} className="@min-[1100px]:hidden" />
-        <Creature species={seat.species} color={SLOT_COLOR[seat.colour]} size={200} className="hidden @min-[1100px]:block" />
+        <Creature species={seat.species} color={SLOT_COLOR[seat.colour]} size={72} className="@min-[1100px]/shell:hidden" />
+        <Creature species={seat.species} color={SLOT_COLOR[seat.colour]} size={200} className="hidden @min-[1100px]/shell:block" />
       </span>
-      <span className="font-display text-lg font-semibold leading-tight @min-[1100px]:text-4xl" data-testid="hero-name">
+      <span className="font-display text-lg font-semibold leading-tight @min-[1100px]/shell:text-4xl" data-testid="hero-name">
         {seat.name}
       </span>
-      <span className="label-caps text-[10px]! @min-[1100px]:text-sm!">
+      <span className="label-caps text-[10px]! @min-[1100px]/shell:text-sm!">
         {SPECIES_NAME[seat.species]} · {COLOUR_NAME[seat.colour]}
       </span>
-      <p className="text-[11px] leading-snug text-ink-2 @min-[1100px]:text-lg" data-testid="hero-perk">
+      <p className="text-[11px] leading-snug text-ink-2 @min-[1100px]/shell:text-lg" data-testid="hero-perk">
         {SPECIES_PERK[seat.species]}
       </p>
     </section>
@@ -227,8 +227,8 @@ function ColonistHero({ seat }: { seat: Seat }) {
 
 function Picker({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <fieldset className="flex flex-col gap-1 @min-[1100px]:gap-3">
-      <legend className="label-caps mb-1 @min-[1100px]:text-sm!">{label}</legend>
+    <fieldset className="flex flex-col gap-1 @min-[1100px]/shell:gap-3">
+      <legend className="label-caps mb-1 @min-[1100px]/shell:text-sm!">{label}</legend>
       {children}
     </fieldset>
   );
@@ -237,14 +237,14 @@ function Picker({ label, children }: { label: string; children: ReactNode }) {
 /** How the others join: the room's QR and code. */
 function JoinCard() {
   return (
-    <section className="flex items-center gap-2 rounded-panel border border-holo-line bg-panel p-1.5 @min-[1100px]:gap-4 @min-[1100px]:p-3" data-testid="room-card">
-      <Qr text={`https://mule.example/join/${CODE}`} size={44} className="p-1! @min-[1100px]:hidden" />
-      <span className="hidden @min-[1100px]:block">
+    <section className="flex items-center gap-2 rounded-panel border border-holo-line bg-panel p-1.5 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:p-3" data-testid="room-card">
+      <Qr text={`https://mule.example/join/${CODE}`} size={44} className="p-1! @min-[1100px]/shell:hidden" />
+      <span className="hidden @min-[1100px]/shell:block">
         <Qr text={`https://mule.example/join/${CODE}`} size={96} className="p-2!" />
       </span>
       <span className="flex flex-col">
-        <span className="label-caps text-[10px]! @min-[1100px]:text-xs!">Join with</span>
-        <span className="font-mono text-xl font-bold tracking-[0.2em] text-holo @min-[1100px]:text-4xl" data-testid="room-code">
+        <span className="label-caps text-[10px]! @min-[1100px]/shell:text-xs!">Join with</span>
+        <span className="font-mono text-xl font-bold tracking-[0.2em] text-holo @min-[1100px]/shell:text-4xl" data-testid="room-code">
           {CODE}
         </span>
       </span>
@@ -272,13 +272,13 @@ function Dialog({
   if (dialog === 'handoff')
     body = (
       <>
-        <h2 className="font-display text-xl font-semibold @min-[1100px]:text-3xl">{host ? 'Move the host to your phone' : 'Move to your phone'}</h2>
+        <h2 className="font-display text-xl font-semibold @min-[1100px]/shell:text-3xl">{host ? 'Move the host to your phone' : 'Move to your phone'}</h2>
         <div className="flex items-center gap-4">
-          <Qr text={`https://mule.example/host/${CODE}/heiko-7f3a`} size={120} className="p-2! @min-[1100px]:hidden" />
-          <span className="hidden @min-[1100px]:block">
+          <Qr text={`https://mule.example/host/${CODE}/heiko-7f3a`} size={120} className="p-2! @min-[1100px]/shell:hidden" />
+          <span className="hidden @min-[1100px]/shell:block">
             <Qr text={`https://mule.example/host/${CODE}/heiko-7f3a`} size={220} className="p-3!" />
           </span>
-          <p className="text-sm text-ink-2 @min-[1100px]:text-lg">
+          <p className="text-sm text-ink-2 @min-[1100px]/shell:text-lg">
             Scan this with your phone. It becomes <strong className="text-ink">you, {me.name}{host ? ', the host' : ''}</strong>, with your colonist. This screen then steps aside. The code works once, for 2 minutes.
           </p>
         </div>
@@ -290,8 +290,8 @@ function Dialog({
   else if (dialog === 'close')
     body = (
       <>
-        <h2 className="font-display text-xl font-semibold @min-[1100px]:text-3xl">Close the room?</h2>
-        <p className="text-sm text-ink-2 @min-[1100px]:text-lg">Everyone at the table goes back to the start screen. The code {CODE} stops working.</p>
+        <h2 className="font-display text-xl font-semibold @min-[1100px]/shell:text-3xl">Close the room?</h2>
+        <p className="text-sm text-ink-2 @min-[1100px]/shell:text-lg">Everyone at the table goes back to the start screen. The code {CODE} stops working.</p>
         <div className="grid grid-cols-2 gap-2">
           <Button size="md" variant="outline" onClick={onClose}>
             Keep it open
@@ -306,8 +306,8 @@ function Dialog({
     const s = seats.find((x) => x.id === dialog.kick)!;
     body = (
       <>
-        <h2 className="font-display text-xl font-semibold @min-[1100px]:text-3xl">Remove {s.name}?</h2>
-        <p className="text-sm text-ink-2 @min-[1100px]:text-lg">{s.ai ? 'The AI leaves the table.' : `${s.name}'s phone goes back to the start screen. They can join again with the code.`}</p>
+        <h2 className="font-display text-xl font-semibold @min-[1100px]/shell:text-3xl">Remove {s.name}?</h2>
+        <p className="text-sm text-ink-2 @min-[1100px]/shell:text-lg">{s.ai ? 'The AI leaves the table.' : `${s.name}'s phone goes back to the start screen. They can join again with the code.`}</p>
         <div className="grid grid-cols-2 gap-2">
           <Button size="md" variant="outline" onClick={onClose}>
             Keep {s.ai ? 'it' : s.name}
@@ -321,7 +321,7 @@ function Dialog({
   }
   return (
     <div className="absolute inset-0 z-10 grid place-items-center bg-void/70 p-4" role="dialog" aria-modal data-testid="host-dialog">
-      <div className="flex max-w-[560px] flex-col gap-3 rounded-sheet border-2 border-holo bg-panel p-4 shadow-glow @min-[1100px]:max-w-[720px] @min-[1100px]:gap-5 @min-[1100px]:p-8">{body}</div>
+      <div className="flex max-w-[560px] flex-col gap-3 rounded-sheet border-2 border-holo bg-panel p-4 shadow-glow @min-[1100px]/shell:max-w-[720px] @min-[1100px]/shell:gap-5 @min-[1100px]/shell:p-8">{body}</div>
     </div>
   );
 }

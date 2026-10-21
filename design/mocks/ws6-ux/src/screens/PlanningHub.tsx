@@ -67,7 +67,7 @@ function Glyph({ d, size = 18, className }: { d: string; size?: number; classNam
 function Soon({ part = false, slice }: { part?: boolean; slice?: number }) {
   const next = slice === 1;
   return (
-    <span className={cx('rounded-chip border px-1 font-mono text-[9px] font-bold leading-4 @min-[1100px]:text-[10px]', next ? 'border-holo/60 text-holo' : 'border-warn/50 text-warn')}>
+    <span className={cx('rounded-chip border px-1 font-mono text-[9px] font-bold leading-4 @min-[1100px]/shell:text-[10px]', next ? 'border-holo/60 text-holo' : 'border-warn/50 text-warn')}>
       {slice ? (next ? 'WS7 · SLICE 1 · NEXT' : `LATER · WS7 SLICE ${slice}`) : part ? 'PART SOON' : 'SOON · WS7'}
     </span>
   );
@@ -76,7 +76,7 @@ function Soon({ part = false, slice }: { part?: boolean; slice?: number }) {
 /** Only you see this. */
 function Private({ text = 'ONLY YOU' }: { text?: string }) {
   return (
-    <span className="inline-flex items-center gap-0.5 rounded-chip bg-holo-soft px-1 font-mono text-[9px] font-bold leading-4 text-holo @min-[1100px]:text-[10px]">
+    <span className="inline-flex items-center gap-0.5 rounded-chip bg-holo-soft px-1 font-mono text-[9px] font-bold leading-4 text-holo @min-[1100px]/shell:text-[10px]">
       <svg aria-hidden viewBox="0 0 24 24" width={10} height={10} fill="none" stroke="currentColor" strokeWidth={2.4}>
         <rect x={5} y={11} width={14} height={10} rx={2} />
         <path d="M8 11V7a4 4 0 0 1 8 0v4" />
@@ -88,8 +88,8 @@ function Private({ text = 'ONLY YOU' }: { text?: string }) {
 
 function Section({ title, badge, children, testid }: { title: ReactNode; badge?: ReactNode; children: ReactNode; testid?: string }) {
   return (
-    <section className="flex flex-col gap-1.5 @min-[1100px]:gap-2" data-testid={testid}>
-      <h3 className="label-caps flex items-center gap-1.5 @min-[1100px]:text-xs!">
+    <section className="flex flex-col gap-1.5 @min-[1100px]/shell:gap-2" data-testid={testid}>
+      <h3 className="label-caps flex items-center gap-1.5 @min-[1100px]/shell:text-xs!">
         {title}
         {badge}
       </h3>
@@ -124,26 +124,26 @@ function Agenda({ office, after, onDesk, onTool }: { office: Office; after: bool
   ];
   return (
     <section className="flex flex-col gap-1.5" data-testid="agenda">
-      <span className="label-caps flex items-center justify-between @min-[1100px]:text-sm!">
-        This month · month 4 <span className="font-mono text-[10px] text-ink-3 @min-[1100px]:text-xs">EXPORT SHIP NEXT MONTH · LAND BARON: OSSA</span>
+      <span className="label-caps flex items-center justify-between @min-[1100px]/shell:text-sm!">
+        This month · month 4 <span className="font-mono text-[10px] text-ink-3 @min-[1100px]/shell:text-xs">EXPORT SHIP NEXT MONTH · LAND BARON: OSSA</span>
       </span>
-      <div className="flex gap-1.5 overflow-x-auto pb-1 @min-[1100px]:grid @min-[1100px]:grid-cols-[repeat(auto-fit,minmax(0,1fr))] @min-[1100px]:grid-flow-col @min-[1100px]:gap-2 @min-[1100px]:overflow-visible">
+      <div className="flex gap-1.5 overflow-x-auto pb-1 @min-[1100px]/shell:grid @min-[1100px]/shell:grid-cols-[repeat(auto-fit,minmax(0,1fr))] @min-[1100px]/shell:grid-flow-col @min-[1100px]/shell:gap-2 @min-[1100px]/shell:overflow-visible">
         {items.map((it) => (
           <button
             key={it.key}
             type="button"
             onClick={it.go}
             className={cx(
-              'flex min-w-[124px] shrink-0 flex-col items-start gap-0.5 rounded-control border bg-panel px-2 py-1 text-left hover:border-holo @min-[1100px]:min-w-0 @min-[1100px]:px-3 @min-[1100px]:py-2',
+              'flex min-w-[124px] shrink-0 flex-col items-start gap-0.5 rounded-control border bg-panel px-2 py-1 text-left hover:border-holo @min-[1100px]/shell:min-w-0 @min-[1100px]/shell:px-3 @min-[1100px]/shell:py-2',
               it.key === 'election' ? 'border-2 border-holo bg-holo-soft' : 'border-holo-line',
             )}
             data-testid={`agenda-${it.key}`}
           >
             <span className="flex w-full items-center gap-1">
-              <span className="truncate text-xs font-semibold @min-[1100px]:text-base">{it.title}</span>
+              <span className="truncate text-xs font-semibold @min-[1100px]/shell:text-base">{it.title}</span>
               {it.locked && <Private text="" />}
             </span>
-            <span className="truncate text-[10px] text-ink-2 @min-[1100px]:text-sm">{it.sub}</span>
+            <span className="truncate text-[10px] text-ink-2 @min-[1100px]/shell:text-sm">{it.sub}</span>
             {it.status !== 'today' && <Soon part={it.status === 'part'} {...(it.slice ? { slice: it.slice } : {})} />}
           </button>
         ))}
@@ -159,7 +159,7 @@ function Offices({ after, office }: { after: boolean; office: Office }) {
   const sheriff = !after ? 'brix' : office === 'governor' ? 'brix' : 'lena';
   const term = after ? 'M4–6' : 'M1–3';
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-control border border-holo-line bg-panel px-2 py-1 text-xs @min-[1100px]:gap-x-5 @min-[1100px]:px-3 @min-[1100px]:py-1.5 @min-[1100px]:text-sm" data-testid="offices">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-control border border-holo-line bg-panel px-2 py-1 text-xs @min-[1100px]/shell:gap-x-5 @min-[1100px]/shell:px-3 @min-[1100px]/shell:py-1.5 @min-[1100px]/shell:text-sm" data-testid="offices">
       <span>
         Governor <Who id={gov} size={14} /> <span className="font-mono text-ink-3">{term}</span>
       </span>
@@ -214,7 +214,7 @@ function TalkDesk() {
             role="tab"
             aria-selected={channel === c.id}
             onClick={() => setChannel(c.id)}
-            className={cx('flex items-center gap-1 rounded-chip border px-2 py-0.5 text-xs @min-[1100px]:text-sm', channel === c.id ? 'border-holo bg-holo-soft' : 'border-holo-line')}
+            className={cx('flex items-center gap-1 rounded-chip border px-2 py-0.5 text-xs @min-[1100px]/shell:text-sm', channel === c.id ? 'border-holo bg-holo-soft' : 'border-holo-line')}
             data-testid={`channel-${c.id}`}
           >
             {c.label}
@@ -243,9 +243,9 @@ function TalkDesk() {
               <span className="label-caps flex justify-between">
                 Deal card from Ossa <span className="text-ink-3">expires at Ready</span>
               </span>
-              <span className="font-display font-semibold @min-[1100px]:text-lg">Non-aggression pact · 3 months</span>
-              <span className="text-xs text-ink-2 @min-[1100px]:text-sm">Neither of you may sabotage the other until month 7. Breaking it costs a lot of reputation (you 74, Ossa 61).</span>
-              <span className="font-display font-semibold @min-[1100px]:text-lg">+ Vote together on the land tax</span>
+              <span className="font-display font-semibold @min-[1100px]/shell:text-lg">Non-aggression pact · 3 months</span>
+              <span className="text-xs text-ink-2 @min-[1100px]/shell:text-sm">Neither of you may sabotage the other until month 7. Breaking it costs a lot of reputation (you 74, Ossa 61).</span>
+              <span className="font-display font-semibold @min-[1100px]/shell:text-lg">+ Vote together on the land tax</span>
               <span className="grid grid-cols-2 gap-1.5">
                 <Button size="md">Accept</Button>
                 <Button size="md" variant="outline">
@@ -262,7 +262,7 @@ function TalkDesk() {
           + Deal
         </Button>
       </div>
-      <p className="text-[11px] leading-snug text-ink-3 @min-[1100px]:text-xs">
+      <p className="text-[11px] leading-snug text-ink-3 @min-[1100px]/shell:text-xs">
         Deal cards: a non-aggression pact, a joint venture, a promise, or lending your votes for a month. Goods, money, plots and MULEs never change hands in a deal: they go to auction.
       </p>
     </>
@@ -280,7 +280,7 @@ const WEIGHTS = [
 function VoteWeights() {
   return (
     <Section title="Votes this month" badge={<Soon slice={1} />} testid="vote-weights">
-      <table className="w-full text-left text-xs @min-[1100px]:text-sm">
+      <table className="w-full text-left text-xs @min-[1100px]/shell:text-sm">
         <thead className="text-ink-3">
           <tr>
             <th className="font-normal">Player</th>
@@ -323,7 +323,7 @@ function CouncilDesk({ election }: { election: Election }) {
   const [law, setLaw] = useState<'yes' | 'no' | null>(null);
   const Ballot = ({ title, cands, pick, onPick }: { title: string; cands: { id: string; promise: string }[]; pick: string | null; onPick: (id: string | null) => void }) => (
     <fieldset className="flex flex-col gap-1">
-      <legend className="mb-1 text-sm font-semibold @min-[1100px]:text-base">{title}</legend>
+      <legend className="mb-1 text-sm font-semibold @min-[1100px]/shell:text-base">{title}</legend>
       {[...cands, { id: '', promise: '' }].map((c) => (
         <label key={c.id || 'abstain'} className={cx('flex cursor-pointer items-start gap-2 rounded-control border p-1.5 text-sm', (pick ?? '') === c.id ? 'border-holo bg-holo-soft' : 'border-holo-line')}>
           <input type="radio" name={title} checked={(pick ?? '') === c.id} onChange={() => onPick(c.id || null)} className="mt-1 accent-[var(--color-holo)]" />
@@ -343,7 +343,7 @@ function CouncilDesk({ election }: { election: Election }) {
   return (
     <>
       <Section title={election === 'nominate' ? 'Election · who runs' : 'Election · secret ballot'} badge={<Soon slice={1} />} testid="election">
-        <span className="flex items-center justify-between rounded-control bg-holo-soft px-2 py-1 font-mono text-[10px] font-bold text-holo @min-[1100px]:text-xs" data-testid="election-stage">
+        <span className="flex items-center justify-between rounded-control bg-holo-soft px-2 py-1 font-mono text-[10px] font-bold text-holo @min-[1100px]/shell:text-xs" data-testid="election-stage">
           {election === 'nominate' ? '1 NOMINATE · 2 BALLOT · 3 REVEAL' : '1 NOMINATE ✓ · 2 BALLOT · 3 REVEAL'}
           <span data-num>0:14</span>
         </span>
@@ -362,7 +362,7 @@ function CouncilDesk({ election }: { election: Election }) {
               When you can't run, the button says why: “Candidates are closed” or “Two Governor terms in a row”.
             </span>
             {running && (
-              <span className="flex items-center justify-between gap-2 text-xs text-ink-2 @min-[1100px]:text-sm">
+              <span className="flex items-center justify-between gap-2 text-xs text-ink-2 @min-[1100px]/shell:text-sm">
                 You run for {running === 'sheriff' ? 'Sheriff' : 'Governor'}; one office at a time.
                 <button type="button" className="text-holo underline" onClick={() => setRunning(null)} data-testid="withdraw">
                   Withdraw
@@ -388,10 +388,10 @@ function CouncilDesk({ election }: { election: Election }) {
           <>
             <Ballot title="Governor" cands={[{ id: 'ossa', promise: 'No land tax' }, { id: 'kai', promise: 'Cleanup squad from month 5' }]} pick={gov} onPick={setGov} />
             <Ballot title="Sheriff" cands={[{ id: 'brix', promise: 'Guards on every factory' }, { id: 'lena', promise: 'I will catch the saboteur' }]} pick={sheriff} onPick={setSheriff} />
-            <span className="flex items-center gap-1.5 text-xs text-ink-2 @min-[1100px]:text-sm" data-testid="voted">
+            <span className="flex items-center gap-1.5 text-xs text-ink-2 @min-[1100px]/shell:text-sm" data-testid="voted">
               Voted: {voted.map((id) => <Who key={id} id={id} size={14} />)} · 3 of 4. Never shown: for whom.
             </span>
-            <span className="text-xs text-ink-2 @min-[1100px]:text-sm" data-testid="vote-weight">
+            <span className="text-xs text-ink-2 @min-[1100px]/shell:text-sm" data-testid="vote-weight">
               Your vote weighs <strong className="text-ink">2</strong>. Change it until the ballot closes; the result shows on every screen together.
             </span>
           </>
@@ -428,7 +428,7 @@ function MarketDesk({ onTool }: { onTool: (t: Tool) => void }) {
   return (
     <>
       <Section title="Sell at the auction after planning" testid="list-asset">
-        <p className="text-xs text-ink-2 @min-[1100px]:text-sm">Everything of value is sold at auction, so everyone gets a fair chance to bid.</p>
+        <p className="text-xs text-ink-2 @min-[1100px]/shell:text-sm">Everything of value is sold at auction, so everyone gets a fair chance to bid.</p>
         <div className="grid grid-cols-2 gap-1.5">
           <Button size="md" variant="outline" onClick={() => onTool('list')} data-testid="list-plot">
             A plot…
@@ -447,7 +447,7 @@ function MarketDesk({ onTool }: { onTool: (t: Tool) => void }) {
           <li>A colony plot · from 180 cr</li>
         </ul>
       </Section>
-      <div className="@min-[1100px]:hidden">
+      <div className="@min-[1100px]/shell:hidden">
         <MarketStrip />
       </div>
     </>
@@ -466,7 +466,7 @@ function SecretDesk({ onTool }: { onTool: (t: Tool) => void }) {
   const [pick, setPick] = useState('power');
   return (
     <>
-      <div className="flex flex-col gap-1 rounded-panel border border-holo bg-holo-soft p-2 text-xs @min-[1100px]:text-sm" data-testid="secret-banner">
+      <div className="flex flex-col gap-1 rounded-panel border border-holo bg-holo-soft p-2 text-xs @min-[1100px]/shell:text-sm" data-testid="secret-banner">
         <span className="flex items-center gap-1.5">
           <Private /> <Soon slice={4} />
         </span>
@@ -481,7 +481,7 @@ function SecretDesk({ onTool }: { onTool: (t: Tool) => void }) {
                 <span className="flex min-w-0 flex-col">
                   <span className="font-semibold">{s.name}</span>
                   <span className="text-xs text-ink-2">{s.effect}</span>
-                  <span className="font-mono text-[10px] text-ink-3 @min-[1100px]:text-xs">
+                  <span className="font-mono text-[10px] text-ink-3 @min-[1100px]/shell:text-xs">
                     {s.cost} CR · WORKS {s.ok}% · CAUGHT {s.caught}%
                   </span>
                 </span>
@@ -519,14 +519,14 @@ function GovernorDesk() {
           <Button size="md" variant="outline" aria-label="One point lower" disabled={tax <= Math.max(0, START - 5)} onClick={() => setTax((x) => x - 1)} data-testid="tax-down">
             −
           </Button>
-          <span data-num className="flex-1 text-center font-mono text-3xl font-bold @min-[1100px]:text-4xl" data-testid="tax-value">
+          <span data-num className="flex-1 text-center font-mono text-3xl font-bold @min-[1100px]/shell:text-4xl" data-testid="tax-value">
             {tax}%
           </span>
           <Button size="md" variant="outline" aria-label="One point higher" disabled={tax >= Math.min(15, START + 5)} onClick={() => setTax((x) => x + 1)} data-testid="tax-up">
             +
           </Button>
         </div>
-        <span className="text-xs text-ink-2 @min-[1100px]:text-sm">
+        <span className="text-xs text-ink-2 @min-[1100px]/shell:text-sm">
           Last month {START}%. This month {Math.max(0, START - 5)}–{Math.min(15, START + 5)}%. At last month's sales this collects about <strong className="text-ink">{Math.round(tax * 21)} cr</strong>.
         </span>
         <Button size="md" data-testid="tax-confirm">
@@ -661,7 +661,7 @@ export function PlanningHub({
                 aria-selected={desk === d.id}
                 onClick={() => setDesk(d.id)}
                 className={cx(
-                  'relative flex flex-col items-center gap-0.5 rounded-control border px-0.5 py-1 text-[10px] font-semibold @min-[1100px]:py-2 @min-[1100px]:text-xs',
+                  'relative flex flex-col items-center gap-0.5 rounded-control border px-0.5 py-1 text-[10px] font-semibold @min-[1100px]/shell:py-2 @min-[1100px]/shell:text-xs',
                   desk === d.id ? 'border-holo bg-holo-soft text-holo' : 'border-holo-line text-ink-2',
                   d.office && 'border-warn/60',
                 )}
@@ -679,13 +679,13 @@ export function PlanningHub({
               </button>
             ))}
           </div>
-          <div className="flex flex-col gap-2.5 @min-[1100px]:gap-4" data-testid={`desk-body-${desk}`}>
+          <div className="flex flex-col gap-2.5 @min-[1100px]/shell:gap-4" data-testid={`desk-body-${desk}`}>
             {deskBody}
           </div>
         </>
       }
       footer={
-        <Button size="lg" className="w-full @min-[1100px]:h-14 @min-[1100px]:text-lg" data-testid="ready">
+        <Button size="lg" className="w-full @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" data-testid="ready">
           I'm ready
         </Button>
       }
@@ -722,7 +722,7 @@ function HubStage({
     target: 'Tap the plot to sabotage. Nobody sees this.',
   };
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 @min-[1100px]:gap-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 @min-[1100px]/shell:gap-4">
       <Offices after={after} office={office} />
       <Agenda office={office} after={after} onDesk={setDesk} onTool={setTool} />
       <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label="Map tools" data-testid="map-tools">
@@ -732,7 +732,7 @@ function HubStage({
             type="button"
             aria-pressed={tool === t.id}
             onClick={() => setTool(t.id)}
-            className={cx('flex h-7 items-center gap-1 rounded-control border px-2 text-[11px] font-semibold @min-[1100px]:h-9 @min-[1100px]:px-3 @min-[1100px]:text-sm', tool === t.id ? 'border-holo bg-holo-soft text-holo' : 'border-holo-line text-ink-2')}
+            className={cx('flex h-7 items-center gap-1 rounded-control border px-2 text-[11px] font-semibold @min-[1100px]/shell:h-9 @min-[1100px]/shell:px-3 @min-[1100px]/shell:text-sm', tool === t.id ? 'border-holo bg-holo-soft text-holo' : 'border-holo-line text-ink-2')}
             data-testid={`tool-${t.id}`}
           >
             {t.label}
@@ -747,7 +747,7 @@ function HubStage({
           <HoloMap width={W} height={H} tiles={tiles} focusSlot={0} density={wide ? 'tv' : 'phone'} selected={tool === 'look' ? null : tool === 'drone' ? { x: 9, y: 4 } : tool === 'target' ? { x: 11, y: 2 } : tool === 'list' ? { x: 5, y: 6 } : null} />
         </MapFit>
       </div>
-      <div className="hidden @min-[1100px]:block">
+      <div className="hidden @min-[1100px]/shell:block">
         <MarketStrip />
       </div>
     </div>

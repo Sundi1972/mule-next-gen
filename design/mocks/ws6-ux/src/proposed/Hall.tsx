@@ -108,7 +108,7 @@ function Room({
         </span>
       )}
       {disabled && lock && (
-        <span className="shrink-0 bg-void/60 px-1 py-px font-mono text-[7px] uppercase leading-tight text-ink-2 @min-[1100px]:py-0.5 @min-[1100px]:text-[11px]">{lock}</span>
+        <span className="shrink-0 bg-void/60 px-1 py-px font-mono text-[7px] uppercase leading-tight text-ink-2 @min-[1100px]/shell:py-0.5 @min-[1100px]/shell:text-[11px]">{lock}</span>
       )}
     </Tag>
   );

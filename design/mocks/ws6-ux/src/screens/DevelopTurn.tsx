@@ -216,12 +216,12 @@ export function DevelopTurn({ start = 'start' }: { start?: Start }) {
       now={now}
       rail={
         <>
-          <div className="flex items-center gap-2.5 @min-[1100px]:text-lg" data-testid="mule">
+          <div className="flex items-center gap-2.5 @min-[1100px]/shell:text-lg" data-testid="mule">
             <span className={cx('flex items-center', leading === null ? 'text-ink-3' : 'text-ink')}>
               <MuleIcon size={22} />
               {outfitted && <GoodIcon good={leading as Good} size={14} />}
             </span>
-            <span className="flex-1 font-display text-sm font-semibold leading-tight @min-[1100px]:text-lg">
+            <span className="flex-1 font-display text-sm font-semibold leading-tight @min-[1100px]/shell:text-lg">
               {leading === null ? (installed ? 'MULE installed' : 'No MULE yet') : leading === 'empty' ? 'Empty MULE in tow' : `${GOOD_NAME[leading]} MULE in tow`}
             </span>
           </div>
@@ -232,15 +232,15 @@ export function DevelopTurn({ start = 'start' }: { start?: Start }) {
       footer={
         <>
           {place === 'map' && outfitted && turn.atPlot ? (
-            <Button size="md" className="w-full @min-[1100px]:h-14 @min-[1100px]:text-lg" onClick={turn.install} data-testid="install">
+            <Button size="md" className="w-full @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" onClick={turn.install} data-testid="install">
               Install here
             </Button>
           ) : place === 'store' ? (
-            <Button size="md" variant={outfitted ? 'holo' : 'outline'} className="w-full @min-[1100px]:h-14 @min-[1100px]:text-lg" onClick={() => turn.go('doorR')}>
+            <Button size="md" variant={outfitted ? 'holo' : 'outline'} className="w-full @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" onClick={() => turn.go('doorR')}>
               Walk out to the map
             </Button>
           ) : (
-            <Button size="md" variant="outline" className="w-full @min-[1100px]:h-14 @min-[1100px]:text-lg" onClick={turn.back}>
+            <Button size="md" variant="outline" className="w-full @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" onClick={turn.back}>
               Store
             </Button>
           )}
@@ -269,7 +269,7 @@ function YourPlots() {
   const by = new Map<string, number>();
   for (const x of mine) by.set(x.outfit ?? 'none', (by.get(x.outfit ?? 'none') ?? 0) + 1);
   return (
-    <section className="hidden flex-col gap-2 border-t border-holo-faint pt-4 @min-[1100px]:flex" data-testid="your-plots">
+    <section className="hidden flex-col gap-2 border-t border-holo-faint pt-4 @min-[1100px]/shell:flex" data-testid="your-plots">
       <span className="label-caps text-xs!">Your {mine.length} plots</span>
       <ul className="flex flex-col gap-1.5 text-base">
         {[...by].map(([k, n]) => (
@@ -297,13 +297,13 @@ function FillCard({ t }: { t: number }) {
   const share = Math.min(1, t / 2);
   return (
     <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-void/55 animate-[card-in_0.3s_ease-out]" data-testid="fill-card">
-      <div className="flex w-[64%] max-w-[560px] flex-col gap-1.5 rounded-panel border-2 border-holo bg-panel p-3 shadow-glow @min-[1100px]:gap-3 @min-[1100px]:p-6">
+      <div className="flex w-[64%] max-w-[560px] flex-col gap-1.5 rounded-panel border-2 border-holo bg-panel p-3 shadow-glow @min-[1100px]/shell:gap-3 @min-[1100px]/shell:p-6">
         <span className="label-caps">Start of your turn</span>
-        <span className="font-display text-lg font-semibold leading-tight @min-[1100px]:text-3xl">You eat {ME.needs.food} Food and fill up your time bar.</span>
-        <div className="relative h-3 overflow-hidden rounded-full bg-raised @min-[1100px]:h-4">
+        <span className="font-display text-lg font-semibold leading-tight @min-[1100px]/shell:text-3xl">You eat {ME.needs.food} Food and fill up your time bar.</span>
+        <div className="relative h-3 overflow-hidden rounded-full bg-raised @min-[1100px]/shell:h-4">
           <div className="absolute inset-y-0 left-0 rounded-full bg-holo" style={{ width: `${share * 100}%` }} />
         </div>
-        <span data-num className="font-mono text-sm font-bold text-holo @min-[1100px]:text-lg">
+        <span data-num className="font-mono text-sm font-bold text-holo @min-[1100px]/shell:text-lg">
           {Math.round(share * FULL)} s: full time
         </span>
       </div>

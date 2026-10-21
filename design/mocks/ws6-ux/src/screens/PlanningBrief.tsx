@@ -66,15 +66,15 @@ export function PlanningBrief({ mode: start = 'look' }: { mode?: Mode }) {
         <>
           <ThisMonth />
           {mode === 'drone' && lastTile && (
-            <div className="flex flex-col gap-0.5 rounded-control border border-holo-line bg-panel p-2 @min-[1100px]:p-3" data-testid="drone-pick">
+            <div className="flex flex-col gap-0.5 rounded-control border border-holo-line bg-panel p-2 @min-[1100px]/shell:p-3" data-testid="drone-pick">
               <span className="label-caps flex justify-between">
                 Plot {plotName(lastTile.x, lastTile.y)} <span className="text-holo">PICKED</span>
               </span>
               <span className="font-display text-lg font-semibold">{TERRAIN_NAME[lastTile.terrain]}</span>
-              <span className="text-xs text-ink-2 @min-[1100px]:text-sm">{TERRAIN_ODDS[lastTile.terrain]}</span>
+              <span className="text-xs text-ink-2 @min-[1100px]/shell:text-sm">{TERRAIN_ODDS[lastTile.terrain]}</span>
             </div>
           )}
-          <section className="hidden min-h-[220px] flex-col gap-2 @min-[1100px]:flex" data-testid="talk">
+          <section className="hidden min-h-[220px] flex-col gap-2 @min-[1100px]/shell:flex" data-testid="talk">
             <News />
             <div className="flex min-h-[180px] flex-col">
               <Chat />
@@ -89,22 +89,22 @@ export function PlanningBrief({ mode: start = 'look' }: { mode?: Mode }) {
               {picked.length === 0 ? 'Pick a free plot' : `Send the drone · 40 cr`}
             </Button>
           )}
-          <Button size="lg" className="w-full @min-[1100px]:h-14 @min-[1100px]:text-lg" data-testid="ready">
+          <Button size="lg" className="w-full @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" data-testid="ready">
             I'm ready
           </Button>
         </>
       }
     >
-      <div className="flex min-h-0 flex-1 flex-col gap-2 @min-[1100px]:gap-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 @min-[1100px]/shell:gap-4">
         <div className="flex items-center gap-2">
-          <div role="tablist" aria-label="Show" className="flex gap-1 rounded-control border border-holo-line bg-void p-1 @min-[1100px]:hidden">
+          <div role="tablist" aria-label="Show" className="flex gap-1 rounded-control border border-holo-line bg-void p-1 @min-[1100px]/shell:hidden">
             {(['map', 'market', 'talk'] as const).map((t) => (
               <button key={t} role="tab" type="button" aria-selected={tab === t} onClick={() => setTab(t)} className={cx('h-7 rounded-[8px] px-2.5 text-[12px] font-semibold', tab === t ? 'bg-holo-soft text-holo' : 'text-ink-2')}>
                 {t === 'map' ? 'Map' : t === 'market' ? 'Market' : 'News & chat'}
               </button>
             ))}
           </div>
-          <span className="label-caps hidden text-sm! @min-[1100px]:inline">The colony</span>
+          <span className="label-caps hidden text-sm! @min-[1100px]/shell:inline">The colony</span>
           <div role="group" aria-label="Map mode" className={cx('ml-auto flex gap-1 rounded-control border border-holo-line bg-void p-1', tab !== 'map' && 'max-[0px]:hidden')}>
             {(['look', 'drone'] as const).map((m) => (
               <button
@@ -112,7 +112,7 @@ export function PlanningBrief({ mode: start = 'look' }: { mode?: Mode }) {
                 type="button"
                 aria-pressed={mode === m}
                 onClick={() => setMode(m)}
-                className={cx('h-7 rounded-[8px] px-2.5 text-[12px] font-semibold @min-[1100px]:h-9 @min-[1100px]:px-4 @min-[1100px]:text-sm', mode === m ? 'bg-holo-soft text-holo' : 'text-ink-2')}
+                className={cx('h-7 rounded-[8px] px-2.5 text-[12px] font-semibold @min-[1100px]/shell:h-9 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-sm', mode === m ? 'bg-holo-soft text-holo' : 'text-ink-2')}
                 data-testid={`mode-${m}`}
               >
                 {m === 'look' ? 'Look' : 'Geo drone · 40 cr'}
@@ -120,15 +120,15 @@ export function PlanningBrief({ mode: start = 'look' }: { mode?: Mode }) {
             ))}
           </div>
         </div>
-        <div className={cx('min-h-0 flex-1 flex-col', tab === 'map' ? 'flex' : 'hidden @min-[1100px]:flex')} data-testid="plan-map">
+        <div className={cx('min-h-0 flex-1 flex-col', tab === 'map' ? 'flex' : 'hidden @min-[1100px]/shell:flex')} data-testid="plan-map">
           <MapFit width={W} height={H}>
             <HoloMap width={W} height={H} tiles={tiles} onTile={onTile} selected={last ?? null} focusSlot={0} />
           </MapFit>
         </div>
-        <div className={cx(tab === 'market' ? 'block' : 'hidden @min-[1100px]:block')}>
+        <div className={cx(tab === 'market' ? 'block' : 'hidden @min-[1100px]/shell:block')}>
           <MarketStrip />
         </div>
-        <div className={cx('min-h-0 flex-1 flex-col gap-2 @min-[1100px]:hidden', tab === 'talk' ? 'flex' : 'hidden')}>
+        <div className={cx('min-h-0 flex-1 flex-col gap-2 @min-[1100px]/shell:hidden', tab === 'talk' ? 'flex' : 'hidden')}>
           <News />
           <Chat />
         </div>
@@ -140,24 +140,24 @@ export function PlanningBrief({ mode: start = 'look' }: { mode?: Mode }) {
 /** Each good you need this month against what you hold: SHORT or OK, with the reason. */
 export function ThisMonth() {
   return (
-    <section className="flex flex-col gap-1.5 @min-[1100px]:gap-2.5" data-testid="this-month">
-      <span className="label-caps @min-[1100px]:text-xs!">This month you need</span>
+    <section className="flex flex-col gap-1.5 @min-[1100px]/shell:gap-2.5" data-testid="this-month">
+      <span className="label-caps @min-[1100px]/shell:text-xs!">This month you need</span>
       {NEEDS.map((n) => {
         const ok = n.have >= n.need;
         return (
           <div key={n.good} className="grid grid-cols-[auto_1fr_auto] items-center gap-x-2 gap-y-0.5" data-testid={`need-${n.good}`}>
             <GoodIcon good={n.good} size={16} />
-            <span className="text-sm font-semibold @min-[1100px]:text-base">
-              {GOOD_NAME[n.good]} <span className="font-normal text-ink-3 text-xs @min-[1100px]:text-sm">· {n.why}</span>
+            <span className="text-sm font-semibold @min-[1100px]/shell:text-base">
+              {GOOD_NAME[n.good]} <span className="font-normal text-ink-3 text-xs @min-[1100px]/shell:text-sm">· {n.why}</span>
             </span>
-            <span data-num className={cx('font-mono text-xs font-bold @min-[1100px]:text-sm', ok ? 'text-ok' : 'text-alert')}>
+            <span data-num className={cx('font-mono text-xs font-bold @min-[1100px]/shell:text-sm', ok ? 'text-ok' : 'text-alert')}>
               {ok ? 'OK' : `SHORT ${n.need - n.have}`}
             </span>
             <div className="relative col-span-3 h-2 overflow-hidden rounded-full bg-raised">
               <div className={cx('absolute inset-y-0 left-0 rounded-full', ok ? 'bg-ok' : 'bg-alert')} style={{ width: `${Math.min(1, n.have / Math.max(n.need, n.have)) * 100}%` }} />
               <div className="absolute inset-y-0 border-l-2 border-ink" style={{ left: `${(n.need / Math.max(n.need, n.have)) * 100}%` }} title={`need ${n.need}`} />
             </div>
-            <span className="col-span-3 font-mono text-[10px] text-ink-3 @min-[1100px]:text-xs">
+            <span className="col-span-3 font-mono text-[10px] text-ink-3 @min-[1100px]/shell:text-xs">
               HAVE {n.have} · NEED {n.need}
             </span>
           </div>
@@ -171,20 +171,20 @@ export function ThisMonth() {
 export function MarketStrip() {
   return (
     <section className="flex flex-col gap-1" data-testid="market-strip">
-      <span className="label-caps flex justify-between @min-[1100px]:text-xs!">
+      <span className="label-caps flex justify-between @min-[1100px]/shell:text-xs!">
         Store prices <span>MULE {VIEW.mulePrice} cr · {VIEW.storeMules} left · export ship in month {VIEW.ship.arrives}</span>
       </span>
-      <div className="grid grid-cols-3 gap-1 @min-[1100px]:grid-cols-5 @min-[1100px]:gap-2">
+      <div className="grid grid-cols-3 gap-1 @min-[1100px]/shell:grid-cols-5 @min-[1100px]/shell:gap-2">
         {MARKET.map((r) => (
-          <div key={r.good} className="flex items-center gap-2 rounded-control border border-holo-faint bg-panel px-2 py-1 @min-[1100px]:px-3 @min-[1100px]:py-2">
+          <div key={r.good} className="flex items-center gap-2 rounded-control border border-holo-faint bg-panel px-2 py-1 @min-[1100px]/shell:px-3 @min-[1100px]/shell:py-2">
             <GoodIcon good={r.good} size={18} />
             <span className="flex min-w-0 flex-col">
-              <span className="truncate text-xs font-semibold @min-[1100px]:text-sm">{GOOD_NAME[r.good]}</span>
-              <span data-num className="font-mono text-sm font-bold @min-[1100px]:text-lg">
+              <span className="truncate text-xs font-semibold @min-[1100px]/shell:text-sm">{GOOD_NAME[r.good]}</span>
+              <span data-num className="font-mono text-sm font-bold @min-[1100px]/shell:text-lg">
                 {r.storeSells ?? '—'} <span className="text-[10px] font-normal text-ink-3">cr</span>
               </span>
             </span>
-            <span className={cx('ml-auto font-mono text-[10px] @min-[1100px]:text-xs', r.storeStock === 0 ? 'text-alert' : 'text-ink-3')}>{r.storeStock === 0 ? 'SOLD OUT' : `${r.storeStock} left`}</span>
+            <span className={cx('ml-auto font-mono text-[10px] @min-[1100px]/shell:text-xs', r.storeStock === 0 ? 'text-alert' : 'text-ink-3')}>{r.storeStock === 0 ? 'SOLD OUT' : `${r.storeStock} left`}</span>
           </div>
         ))}
       </div>
@@ -200,7 +200,7 @@ function Chat() {
   ];
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-1.5" data-testid="chat">
-      <span className="label-caps @min-[1100px]:text-xs!">Chat</span>
+      <span className="label-caps @min-[1100px]/shell:text-xs!">Chat</span>
       <ul className="flex flex-col gap-1 text-sm">
         {lines.map((l) => (
           <li key={l.text}>
@@ -216,7 +216,7 @@ function Chat() {
 export function News() {
   return (
     <section className="flex flex-col gap-1" data-testid="news">
-      <span className="label-caps @min-[1100px]:text-xs!">News</span>
+      <span className="label-caps @min-[1100px]/shell:text-xs!">News</span>
       <ul className="flex flex-col gap-1 text-sm">
         {[...VIEW.news, 'A Smithore shortage is expected: the store has only 2 left.'].map((n) => (
           <li key={n} className="flex gap-2">
