@@ -3,7 +3,7 @@ import { advancePhase, createGame, expectedGround, isGameOver, observe, stepAuct
 import { applyAction, playGame } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
 import { candidate, consider, shortlist } from '../src/utility.js';
-import { simSeats } from '../src/sim.js';
+import { simSeats } from '../src/lineup.js';
 
 describe('utility scoring', () => {
   it('drops vetoed options and keeps the near-best few', () => {
