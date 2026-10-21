@@ -245,7 +245,7 @@ Every handoff carries the standing authority line, verbatim:
 
 **ACs verified:** B-AC-1 (server half) · **Spec:** §1 C9, §2 RULE-1
 
-- [ ] **Step 1: Write failing tests** `C9: in month 1 the planning timer starts only after the election is over` (phaseEndsAt null during the election; set once over), `C9: ready during an election marks Done for the stage`, `C9: an away seat is marked Done`, `C9: month 2 has no election`. Altitude: contract at `MuleGame` with a fake clock, as the land-auction server tests do.
+- [ ] **Step 1: Write failing tests** `C9: in month 1 the planning timer starts only after the election is over` (phaseEndsAt null during the election; set once over), `C9: ready during an election marks Done for the stage`, `C9: an away seat is marked Done`, `C9: month 2 has no election`, `C9: the election's clocks scale with phaseScale` (WS3 review note: stage lengths come from POLITICS × phaseScale, never wall-clock). Altitude: contract at `MuleGame` with a fake clock, as the land-auction server tests do.
 - [ ] **Step 2:** Run — Expected: FAIL.
 - [ ] **Step 3: Implement** the election tick in `enterPhase` for planning (copy `scheduleLandAuctionTick`'s shape: stepElection + each AI seat's VoteHand tick; when over, start the PHASE_MS.planning timer and `seat.planMonth`), `ready` → `electionDone` during the election, run/vote/setTax in `handle`, VoteHand constructed beside LotHand in `start`, AI moves through `aiAct`.
 - [ ] **Step 4:** Run — Expected: PASS; `pnpm --filter @mule/server test` all green.
@@ -311,7 +311,7 @@ Every handoff carries the standing authority line, verbatim:
 
 ### Gate: end of slice 1 (before the lane PR)
 
-- [ ] WS1's sim rows on both seed sets (1-40, 101-140): row 0 equals trunk byte for byte (T-AC-4); row 1 checks identical to row 0; rows 2 and 3 checks reported. UBER-AC-1 line by line: elections in months 1/4/7/10 fill both offices in every game; the Governor sets a tax every month; the law line reads "slice 2" (UBER-AC-1's law clause is proven in slice 2).
+- [ ] WS1's sim rows on all three seed sets WS1 balances against (PM 2026-10-22), before and after politics (nothing politics-on reaches trunk before Heiko's OK): row 0 equals trunk byte for byte (T-AC-4); row 1 checks identical to row 0; rows 2 and 3 checks reported. UBER-AC-1 line by line: elections in months 1/4/7/10 fill both offices in every game; the Governor sets a tax every month; the law line reads "slice 2" (UBER-AC-1's law clause is proven in slice 2).
 - [ ] T-AC-4 and T-AC-7 green in WS1's C10 PR (row 0 byte-identical; observe() and cloneForSim never expose or share another seat's ballot); WS7 reviews that PR
 - [ ] Money rows (2, 3) and the term score sent to Heiko through the PM; his OK recorded in SEAMS
 - [ ] `pnpm typecheck && pnpm test` and CI `e2e` green on `ws7-politics`
