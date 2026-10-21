@@ -64,7 +64,13 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
         step: 2,
         of: 2,
         title: seats.length < 2 ? 'Wait for players, or add an AI' : 'Start when everyone is here',
-        detail: `${seats.length} at the table, ${humans} on phones. Others join with the code ${CODE} or the QR. Everyone can change their colonist until you start.`,
+        // On a phone with no TV the join card sits right under this card, so the detail stays short.
+        detail: (
+          <>
+            <span className="@min-[1100px]/shell:hidden">{`${seats.length} at the table. Others join with the code ${CODE} or the QR below.`}</span>
+            <span className="hidden @min-[1100px]/shell:inline">{`${seats.length} at the table, ${humans} on phones. Others join with the code ${CODE} or the QR. Everyone can change their colonist until you start.`}</span>
+          </>
+        ),
       }
     : picked
       ? { step: 2, of: 2, title: 'Wait for Heiko to start', detail: 'You can change your colonist until Heiko starts the game.' }
@@ -144,7 +150,8 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
           </div>
         </main>
         <aside className="flex w-(--rail) shrink-0 flex-col border-l border-holo-faint bg-void/40 @min-[1100px]/shell:w-[400px]" data-testid="guide">
-          <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-5">
+          {/* No TV here: on a phone the join card goes right under Now, above the seats, so the QR is in view (WS4's B-AC-4). */}
+          <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 *:order-3 [&>[data-testid=now]]:order-1! @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-5">
             <NowCard now={now} />
             <section className="flex flex-col gap-1.5">
               <h2 className="label-caps @min-[1100px]/shell:text-xs!">At the table · {seats.length} of 6</h2>
@@ -174,7 +181,7 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
                 ))}
               </ul>
             </section>
-            <JoinCard />
+            <JoinCard className="order-2! @min-[1100px]/shell:order-3!" />
             {!host && (
               <button type="button" className="text-left text-sm text-holo underline-offset-2 hover:underline" onClick={() => setDialog('handoff')} data-testid="move-to-phone">
                 Playing on a laptop? Move to my phone…
@@ -204,7 +211,8 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
               </>
             ) : (
               <>
-                <span className="text-center text-sm text-ink-2">Waiting for Heiko to start…</span>
+                {/* Once Now says "Wait for Heiko to start", the footer doesn't repeat it. */}
+                {!picked && <span className="text-center text-sm text-ink-2">Waiting for Heiko to start…</span>}
                 <Button size="md" variant="ghost">
                   Leave table
                 </Button>
@@ -249,9 +257,9 @@ function Picker({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /** How the others join: the room's QR and code. */
-function JoinCard() {
+function JoinCard({ className }: { className?: string }) {
   return (
-    <section className="flex items-center gap-2 rounded-panel border border-holo-line bg-panel p-1.5 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:p-3" data-testid="room-card">
+    <section className={cx('flex items-center gap-2 rounded-panel border border-holo-line bg-panel p-1.5 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:p-3', className)} data-testid="room-card">
       <Qr text={`https://mule.example/join/${CODE}`} size={44} className="p-1! @min-[1100px]/shell:hidden" />
       <span className="hidden @min-[1100px]/shell:block">
         <Qr text={`https://mule.example/join/${CODE}`} size={96} className="p-2!" />
