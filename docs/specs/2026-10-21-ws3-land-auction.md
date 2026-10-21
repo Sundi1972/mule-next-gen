@@ -430,7 +430,7 @@ leading                                            → stand still
 not leading and leaderBid + 1 ≤ limit              → walk up to target = min(limit,
                                                      leaderBid + 1 + overshoot)        AM-4
 otherwise                                          → stop, press Done
-overshoot = a seeded share, in [AI_HANDS.lot.overshoot], of (limit − leaderBid − 1),
+overshoot = a seeded share, in [LOTS.aiOvershoot], of (limit − leaderBid − 1),
 rounded down: it climbs toward the limit, never past it.                               AM-4
 It re-aims only after the level's reactMs plus seeded jitter, and starts after a seeded delay,
 so there is no fixed habit to read.
@@ -586,7 +586,8 @@ target    §2 RULE-6
 said      a leading AI stands still and never presses Done; an AI overtakes by exactly +1
 did       a leading AI presses Done once every other buyer is done, so the bell rings at once;
           an overtake aims at min(limit, leaderBid + 1 + overshoot), with overshoot a seeded
-          share (AI_HANDS.lot.overshoot in config.ts) of the gap to its limit
+          share (LOTS.aiOvershoot in config.ts; the lot hand's timings are LOTS.aiIntroMs and
+          LOTS.aiStartMs, in WS3's LOTS block rather than WS1's AI_HANDS) of the gap to its limit
 because   built literally, every AI-contested lot ran its full 12 s walk, and land sold well
           under what a losing AI would pay (370 against a limit of 504 in PR-2's test): +1 steps
           after a reaction time can't climb far before the clock runs out
