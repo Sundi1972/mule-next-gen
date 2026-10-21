@@ -6,6 +6,7 @@ import {
   list,
   LOTS,
   lotDone,
+  lotLeader,
   observe,
   RuleError,
   setLotWalk,
@@ -110,7 +111,11 @@ function play(state: GameState, hands: LotHand[], dts = DTS): { samples: Sample[
     if (a.stage === 'over') break;
     if (a.lot) for (const h of hands) if (!worth.has(`${a.lot.id}:${h.mind.me}`)) worth.set(`${a.lot.id}:${h.mind.me}`, worthOf(state, h.mind, a.lot));
     const dt = dts[t % dts.length]!;
+    const leaderBefore = a.stage === 'walk' ? lotLeader(state)?.id : undefined;
+    const standing = new Set(a.walkers.filter((w) => w.dir === 0).map((w) => w.id));
     for (const h of hands) h.tick(state, dt, actFor(state, h.mind.me));
+    // Leading, an AI stands still (RULE-6): it may finish an overtake it started, but never sets off again.
+    if (leaderBefore && standing.has(leaderBefore)) expect(a.walkers.find((w) => w.id === leaderBefore)!.dir, `${leaderBefore} leads`).toBe(0);
     const lot = a.lot!;
     const result = stepLandAuction(state, dt);
     if (result) bells.push({ lot, walkMs: a.elapsed, result });
@@ -253,6 +258,33 @@ describe('AI seats at the land auction', () => {
         expect(price('a2')).toBe(start);
         expect(result).toEqual({ kind: 'sold', buyer: 'a1', price: limit });
       }
+    }
+  });
+
+  it('B-AC-7: on long ticks, against a bid one under its limit, an AI never steps past its limit', () => {
+    const LONG = WALK.tickMs * 3;
+    for (const seed of SEEDS) {
+      const { state, hands, seats } = landAuction(seed, { money: { a1: FLUSH, a2: 360, a3: 100 } });
+      const ai = hands[1]!;
+      const { limit } = worthOf(state, seats[1]!.mind, state.listings[0]!);
+      const a = state.landAuction!;
+      const price = (id: string) => Math.round(a.walkers.find((w) => w.id === id)!.price);
+      lotDone(state, 'a1');
+      while (a.stage === 'intro') {
+        ai.tick(state, LONG, actFor(state, 'a2'));
+        stepLandAuction(state, LONG);
+      }
+      setLotWalk(state, 'a1', 1);
+      while (price('a1') < limit - 1) stepLandAuction(state, 1);
+      setLotWalk(state, 'a1', 0);
+      lotDone(state, 'a1');
+      let result: LotResult | null = null;
+      for (let t = 0; !result && t < 20_000; t++) {
+        ai.tick(state, LONG, actFor(state, 'a2'));
+        result = stepLandAuction(state, LONG);
+        expect(price('a2'), `seed ${seed}`).toBeLessThanOrEqual(limit);
+      }
+      expect(result?.kind).toBe('sold');
     }
   });
 });
