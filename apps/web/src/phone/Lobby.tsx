@@ -160,23 +160,34 @@ export function Lobby() {
             </fieldset>
           )}
           <div className="mt-auto grid grid-cols-[auto_1fr] items-center gap-2">
-            <div className="flex items-center gap-3 rounded-panel border border-holo-line bg-panel p-2" data-testid="room-card">
-              <div className="shrink-0" data-testid="room-qr">
-                <Qr text={url} size={44} className="p-1.5!" />
-              </div>
-              <div className="flex min-w-0 flex-col">
-                <span className="label-caps">Room code</span>
-                <span className="font-mono text-2xl font-bold tracking-[0.2em] text-holo" data-testid="room-code">
-                  {view.code}
-                </span>
-              </div>
-            </div>
+            <RoomCard code={view.code} url={url} compact={view.boards > 0} />
             <BoardStatus code={view.code} boards={view.boards} />
           </div>
         </div>
         <SeatRail table={view} mine={mine} species={species} />
       </div>
     </Frame>
+  );
+}
+
+/**
+ * The way in for the others: QR and room code. With no big screen it is the only
+ * QR at the table, so it is drawn big with the join link; with one, it shrinks.
+ */
+function RoomCard({ code, url, compact }: { code: string; url: string; compact: boolean }) {
+  return (
+    <div className="flex items-center gap-3 rounded-panel border border-holo-line bg-panel p-2" data-testid="room-card">
+      <div className="shrink-0" data-testid="room-qr">
+        {compact ? <Qr text={url} size={44} className="p-1.5!" /> : <Qr text={url} size={88} className="p-2!" />}
+      </div>
+      <div className="flex min-w-0 flex-col">
+        <span className="label-caps">Room code</span>
+        <span className={cx('font-mono font-bold tracking-[0.2em] text-holo', compact ? 'text-2xl' : 'text-4xl')} data-testid="room-code">
+          {code}
+        </span>
+        {!compact && <span className="truncate font-mono text-xs text-ink-3">{url.replace(/^https?:\/\//, '')}</span>}
+      </div>
+    </div>
   );
 }
 
