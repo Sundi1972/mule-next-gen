@@ -1,12 +1,12 @@
 import { DEVELOPMENT, UPKEEP, type Good, type Stock } from '@mule/engine';
 import type { MyView, TileView } from '@mule/protocol';
-import { AirGauge, Button, cx, FACTORY_GOODS, FoodTime, GOOD_NAME, GoodIcon, HoloMap, MuleIcon, OUTFIT_GOODS, PlayerMark, StoreInterior, TERRAIN_NAME, ZoomMap, type Shop } from '@mule/ui';
+import { AirGauge, Button, cx, FoodTime, GOOD_NAME, GoodIcon, HoloMap, MuleIcon, PlayerMark, StoreInterior, TERRAIN_NAME, ZoomMap, type Shop } from '@mule/ui';
 import { useEffect, useRef, useState } from 'react';
 import { mapTiles, PHASE_NAME, plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
 import { useClient, useServerNow } from '../net/react';
 import { usePhoneGame } from './game';
 import { GroundCard, Traits } from './ground';
-import { nextStep } from './next-step';
+import { nearest, nextStep, openShops } from './next-step';
 import { MapFit, PhoneShell, useWide } from './Shell';
 
 const OUTFIT_NAME = (o: TileView['outfit']) => (o === null ? '' : o === 'greenBelt' ? 'Green belt' : GOOD_NAME[o]);
@@ -48,7 +48,6 @@ export function Develop() {
   if (self.doneDeveloping || seconds <= 0) return <Done pub={self.doneDeveloping} />;
 
   const filling = (now - devStartedAt) / 1000 < FILL_CARD_SECONDS && !cardDismissed;
-  const open: Shop[] = carry === null ? ['corral', 'pub'] : carry === 'empty' ? [...OUTFIT_GOODS, ...FACTORY_GOODS, 'greenBelt', 'pub'] : ['pub'];
   const freePlots = view.tiles.filter((t) => t.owner === me.id && !t.outfit);
   const storeTile = view.tiles.find((t) => t.terrain === 'store') ?? { x: Math.floor(view.width / 2), y: Math.floor(view.height / 2) };
   // You walk out through a door yourself (RULE-7 row 4); with an outfitted MULE, a plot of yours is picked for you.
@@ -58,7 +57,7 @@ export function Develop() {
     if (!outfitted) return;
     setSelected((s) => {
       if (s && tileAt(view, s.x, s.y)?.owner === me.id) return s;
-      const pick = nearestTo(freePlots, storeTile) ?? view.tiles.find((t) => t.owner === me.id);
+      const pick = nearest(freePlots, storeTile) ?? view.tiles.find((t) => t.owner === me.id);
       return pick ? { x: pick.x, y: pick.y } : s;
     });
   };
@@ -80,7 +79,7 @@ export function Develop() {
     filling,
     carry,
     place,
-    atOwnPlot: mine,
+    atOwnPlot: place === 'map' && mine,
     installed,
     seconds,
     freePlots,
@@ -222,7 +221,7 @@ export function Develop() {
               mulePrice={me.mulePrice}
               prices={me.outfitCosts}
               pubPayout={pubPayout}
-              open={open}
+              open={openShops(guide.locks)}
               onShop={onShop}
               onDoor={walkOut}
               next={guide.next}
@@ -259,13 +258,6 @@ export function Develop() {
       </div>
     </PhoneShell>
   );
-}
-
-/** The nearest of these plots to a plot, or null with none. */
-function nearestTo<T extends { x: number; y: number }>(plots: T[], from: { x: number; y: number }): T | null {
-  let best: T | null = null;
-  for (const p of plots) if (!best || Math.hypot(p.x - from.x, p.y - from.y) < Math.hypot(best.x - from.x, best.y - from.y)) best = p;
-  return best;
 }
 
 /** The hall at the shell's size: the laptop's type and creatures when wide, the phone's otherwise. */

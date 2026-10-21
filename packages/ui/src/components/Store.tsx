@@ -6,7 +6,7 @@ import { useSeatSpecies } from './species';
 import { cx, GOOD_NAME, SLOT_COLOR, type Good, type Slot } from './tokens';
 
 /** Outfitters for farms and mines, in the order the store shows them. */
-export const OUTFIT_GOODS: Good[] = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth'];
+export const OUTFIT_GOODS: OutfitGood[] = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth'];
 
 /** The works counter fits a MULE as one of these factories. */
 export const FACTORY_GOODS = ['alloy', 'electronics', 'medicine'] as const satisfies readonly Good[];
@@ -147,8 +147,8 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onSho
             style={inRow(X0 + COL * i + 0.4, X0 + COL * (i + 1) - 0.4)}
             onTap={tap(g)}
             disabled={!usable(g)}
-            next={glows(g as OutfitGood)}
-            lock={locks?.[g as OutfitGood]}
+            next={glows(g)}
+            lock={locks?.[g]}
             className="bg-panel"
           >
             <Awning color={`var(--color-g-${g})`} />

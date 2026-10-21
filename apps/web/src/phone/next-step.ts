@@ -1,5 +1,5 @@
 import type { Good, Outfit } from '@mule/engine';
-import { GOOD_NAME, OUTFIT_GOODS, type OutfitGood, type StoreRoom } from '@mule/ui';
+import { FACTORY_GOODS, GOOD_NAME, OUTFIT_GOODS, type OutfitGood, type Shop, type StoreRoom } from '@mule/ui';
 import { createElement, Fragment, type ReactNode } from 'react';
 import { plotName } from '../game/derive';
 import type { Now } from './Shell';
@@ -46,14 +46,14 @@ export interface NextStep {
 /** Seconds left at which Now turns amber. */
 export const WARN_SECONDS = 10;
 
-const ROOMS_FOR_A_MULE: StoreRoom[] = [...OUTFIT_GOODS.map((g) => g as OutfitGood), 'works', 'greenBelt'];
+const ROOMS_FOR_A_MULE: StoreRoom[] = [...OUTFIT_GOODS, 'works', 'greenBelt'];
 
 const outfitName = (o: Outfit) => (o === 'greenBelt' ? 'Green belt' : GOOD_NAME[o]);
 
 /** The raw good with the largest shortfall this month, first in the outfitters' order on a tie; null with none short. */
 export function largestShortfall(month: NonNullable<DevelopState['month']>): { good: OutfitGood; need: number; have: number } | null {
   let best: { good: OutfitGood; need: number; have: number } | null = null;
-  for (const g of OUTFIT_GOODS as OutfitGood[]) {
+  for (const g of OUTFIT_GOODS) {
     const need = month.needs[g] ?? 0;
     const have = month.have[g] ?? 0;
     if (need - have > 0 && (!best || need - have > best.need - best.have)) best = { good: g, need, have };
@@ -61,8 +61,9 @@ export function largestShortfall(month: NonNullable<DevelopState['month']>): { g
   return best;
 }
 
-function nearest(plots: DevelopState['freePlots'], from: DevelopState['from']): { x: number; y: number } | null {
-  let best: { x: number; y: number } | null = null;
+/** The nearest of these plots to a plot, or null with none. */
+export function nearest<T extends { x: number; y: number }>(plots: T[], from: { x: number; y: number }): T | null {
+  let best: T | null = null;
   let d = Infinity;
   for (const p of plots) {
     const e = Math.hypot(p.x - from.x, p.y - from.y);
@@ -76,6 +77,21 @@ function locksFor(carry: DevelopState['carry']): NextStep['locks'] {
   if (carry === null) return Object.fromEntries(ROOMS_FOR_A_MULE.map((r) => [r, 'needs a MULE']));
   if (carry === 'empty') return { corral: 'one at a time' };
   return { corral: 'one at a time', ...Object.fromEntries(ROOMS_FOR_A_MULE.map((r) => [r, ''])) };
+}
+
+/**
+ * The shops the hall opens: every one RULE-7's locks leave unlocked. The works' three fits open and close with the
+ * works; the corral and the pub are never locked for want of a MULE.
+ */
+export function openShops(locks: NextStep['locks']): Shop[] {
+  const shops: [Shop, StoreRoom][] = [
+    ...OUTFIT_GOODS.map((g): [Shop, StoreRoom] => [g, g]),
+    ...FACTORY_GOODS.map((g): [Shop, StoreRoom] => [g, 'works']),
+    ['greenBelt', 'greenBelt'],
+    ['corral', 'corral'],
+    ['pub', 'pub'],
+  ];
+  return shops.filter(([, room]) => locks[room] === undefined).map(([shop]) => shop);
 }
 
 /** RULE-7, development's next step: a decision table, first match wins. */
