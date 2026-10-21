@@ -73,19 +73,24 @@ export function airUnitCost(obs: GameState): number {
 /** A good's price with `extra` more units in the colony. */
 export type PriceOf = (good: Good, extra?: number) => number;
 
+/** What a seller keeps of a sale at `price` once the sales tax has gone to the colony fund. */
+export const afterTax = (obs: GameState, price: number) => price * (1 - obs.treasury.salesTax);
+
+/** The sale price that leaves a seller `kept` after the sales tax. */
+export const beforeTax = (obs: GameState, kept: number) => kept / Math.max(0.01, 1 - obs.treasury.salesTax);
 
 /** Net credits a month from running this outfit here, at the given prices (the outlook's by default, its own extra supply included). */
 export function monthlyNet(obs: GameState, o: Outlook, y: Yield, outfit: Outfit, mind: Mind, price?: PriceOf): number {
   const full = mind.level.fullScoring;
   if (outfit === 'greenBelt') return full ? POLLUTION.greenBeltAir * airUnitCost(obs) - 5 : -5;
   const P: PriceOf = price ?? ((g, extra = 0) => o.price(g, extra));
-  let revenue = y.made * P(outfit, y.made);
+  let revenue = afterTax(obs, y.made * P(outfit, y.made));
   if (full && (outfit === 'food' || outfit === 'water' || outfit === 'energy')) {
-    // The units that cover its own shortfall are worth what going short would cost it.
+    // The units that cover its own shortfall are worth what going short would cost it, and pay no tax.
     const short = Math.max(0, monthNeeds(obs, mind.me)[outfit] - o.made[outfit]);
     const own = Math.min(y.made, short);
     const floor = obs.store.refPrice[outfit] * STRATEGIST.selfSupply;
-    revenue += own * Math.max(0, floor - P(outfit, y.made));
+    revenue += own * Math.max(0, floor - afterTax(obs, P(outfit, y.made)));
   }
   const energy = outfit === 'energy' ? 0 : y.energy * P('energy', -y.energy);
   const inputs = (Object.entries(y.inputs) as [Good, number][]).reduce((n, [g, q]) => n + q * P(g, -q), 0);
@@ -223,7 +228,7 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
     const drink = needsOf(obs, me).water;
     if (farms.length > 0) {
       block = drink + Math.ceil(drink / keepRate);
-      use = (farms.reduce((n, t) => n + rawOutput(obs, t), 0) * 0.5 * P('food')) / block;
+      use = (farms.reduce((n, t) => n + rawOutput(obs, t), 0) * 0.5 * afterTax(obs, P('food'))) / block;
     }
   } else if (good === 'energy') {
     const own = mine.filter((t) => t.outfit === 'energy').reduce((n, t) => n + rawOutput(obs, t), 0);
@@ -233,7 +238,7 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
       const runs = mine
         .filter((t) => t.outfit !== 'energy')
         .reduce((n, t) => n + (isRaw(t.outfit!) ? 0.5 * rawOutput(obs, t) * P(t.outfit as Good) : factoryFit(obs, t, t.outfit as never, me).output * P(t.outfit as Good)), 0);
-      use = runs / Math.max(1, need);
+      use = afterTax(obs, runs) / Math.max(1, need);
     }
   } else if (good === 'medicine' && need > 0) {
     block = Math.ceil(need / keepRate);
@@ -245,15 +250,15 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
     const q = RECIPES[t.outfit].inputs[good];
     if (!q || good === 'energy') continue;
     const units = Object.values(RECIPES[t.outfit].inputs).reduce((n, x) => n + (x ?? 0), 0);
-    const each = (factoryFit(obs, t, t.outfit, me).output * P(t.outfit)) / units;
+    const each = afterTax(obs, factoryFit(obs, t, t.outfit, me).output * P(t.outfit)) / units;
     const add = Math.ceil(q / keepRate);
     use = (use * block + each * add) / Math.max(1, block + add);
     block += add;
   }
 
-  // Beyond the block: resale next month, after spoilage and the depot limit.
+  // Beyond the block: resale next month, after spoilage, the sales tax and the depot limit.
   const haircut = full ? 1 - STRATEGIST.forecastHaircut * mind.persona.risk : 1;
-  const resale = P(good) * keepRate * haircut;
+  const resale = afterTax(obs, P(good)) * keepRate * haircut;
   const resaleBuy = resale * Math.min(1, mind.persona.speculate) * (1 - 0.1 * mind.persona.risk);
   const depot = full ? Math.ceil(UPKEEP.depotCapacity / Math.max(0.05, keepRate)) : 99;
   const eaten = good === 'food' || good === 'water' ? needsOf(obs, me)[good] : 0;
