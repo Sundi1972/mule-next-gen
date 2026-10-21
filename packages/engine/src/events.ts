@@ -39,7 +39,7 @@ const steps = (a: Tile, b: Tile) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y -
  * The plots' deltas are 0 here; production fills them in.
  */
 export function planEvent(state: GameState): MonthEvent | null {
-  if (state.month < EVENTS.firstMonth) return null;
+  if (state.whatIf || state.month < EVENTS.firstMonth) return null;
   const base = (state.seed * 2_654_435_761 + state.month * 40_503) >>> 0;
   const rng = createRng(base);
   if (!rng.chance(EVENTS.chance)) return null;

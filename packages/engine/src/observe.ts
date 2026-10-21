@@ -91,6 +91,8 @@ export function knowsGround(state: GameState, playerId: string, tile: Tile): boo
 export function cloneForSim(state: GameState): GameState {
   return {
     ...state,
+    // A what-if never rolls a production event: seeded from the game, it would show the real one ahead of time.
+    whatIf: true,
     tiles: state.tiles.map((t) => ({ ...t, ground: { ...t.ground }, traits: t.traits.slice() })),
     players: state.players.map((p) => ({ ...p, stock: { ...p.stock }, analysed: p.analysed.slice(), droneOrder: p.droneOrder.slice() })),
     store: {
