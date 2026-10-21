@@ -1,7 +1,7 @@
 import { DEVELOPMENT, UPKEEP, type Good } from '@mule/engine';
 import type { TileView } from '@mule/protocol';
 import { AirGauge, Button, cx, FoodTime, GOOD_NAME, GoodIcon, HoloMap, MuleIcon, PlayerMark, StoreInterior, TERRAIN_NAME, ZoomMap, type Shop } from '@mule/ui';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { mapTiles, PHASE_NAME, plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
 import { useClient, useServerNow } from '../net/react';
 import { usePhoneGame } from './game';
@@ -37,13 +37,14 @@ export function Develop() {
   const [zoomed, setZoomed] = useState(false);
   const tile = selected ? tileAt(view, selected.x, selected.y) : undefined;
   const outfitted = carry !== null && carry !== 'empty';
-  // RULE-7's "installed this turn": an outfitted MULE in tow becomes none only by installing it.
+  // RULE-7's "installed this turn": an outfitted MULE in tow becomes none only by installing it. Worked out while
+  // rendering, so the frame that loses the MULE already shows row 7, never row 2.
   const [installed, setInstalled] = useState(false);
-  const carried = useRef(carry);
-  useEffect(() => {
-    if (carried.current !== null && carried.current !== 'empty' && carry === null) setInstalled(true);
-    carried.current = carry;
-  }, [carry]);
+  const [carried, setCarried] = useState(carry);
+  if (carried !== carry) {
+    setCarried(carry);
+    if (carried !== null && carried !== 'empty' && carry === null) setInstalled(true);
+  }
 
   if (self.doneDeveloping || seconds <= 0) return <Done pub={self.doneDeveloping} />;
 
@@ -137,7 +138,7 @@ export function Develop() {
           {place === 'map' && tile && (
             <section className="flex flex-col gap-2 border-t border-holo-faint pt-2.5">
               <header className="flex items-baseline justify-between gap-2">
-                <h2 className="font-display text-lg font-semibold leading-tight">
+                <h2 className="font-display text-lg font-semibold leading-tight" data-testid="plot-title">
                   {TERRAIN_NAME[tile.terrain]} <span className="font-mono text-sm font-normal text-ink-3">{plotName(tile.x, tile.y)}</span>
                 </h2>
                 <span className="font-mono text-xs text-holo">{mine ? 'YOURS' : free ? 'FREE' : 'OWNED'}</span>

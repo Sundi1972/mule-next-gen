@@ -70,9 +70,9 @@ const band = (b: { y0: number; y1: number }): CSSProperties => ({ top: `${b.y0}%
 
 /** Type and creature sizes: the phone's, the big screen's side panel, and the shell's wide layout. */
 const SIZES = {
-  phone: { name: 'text-[11px]', price: 'text-[10px]', small: 'text-[8px]', icon: 20, fit: 16, mule: 30, creature: 28, led: 32, bar: 'h-1 w-8', sign: 'h-5 w-5', chimney: 'h-3 w-3', caps: 'text-[8px]!', door: 'text-base', doorNote: 'text-[7px]' },
-  tv: { name: 'text-sm', price: 'text-sm', small: 'text-xs', icon: 30, fit: 22, mule: 44, creature: 40, led: 44, bar: 'h-1.5 w-10', sign: 'h-7 w-7', chimney: 'h-4 w-4', caps: 'text-xs!', door: 'text-xl', doorNote: 'text-[10px]' },
-  wide: { name: 'text-lg', price: 'text-base', small: 'text-sm', icon: 40, fit: 30, mule: 84, creature: 52, led: 60, bar: 'h-2 w-14', sign: 'h-10 w-10', chimney: 'h-5 w-5', caps: 'text-xs!', door: 'text-3xl', doorNote: 'text-xs' },
+  phone: { lock: 'py-px text-[7px]', name: 'text-[11px]', price: 'text-[10px]', small: 'text-[8px]', icon: 20, fit: 16, mule: 30, creature: 28, led: 32, bar: 'h-1 w-8', sign: 'h-5 w-5', chimney: 'h-3 w-3', caps: 'text-[8px]!', door: 'text-base', doorNote: 'text-[7px]' },
+  tv: { lock: 'py-0.5 text-[10px]', name: 'text-sm', price: 'text-sm', small: 'text-xs', icon: 30, fit: 22, mule: 44, creature: 40, led: 44, bar: 'h-1.5 w-10', sign: 'h-7 w-7', chimney: 'h-4 w-4', caps: 'text-xs!', door: 'text-xl', doorNote: 'text-[10px]' },
+  wide: { lock: 'py-0.5 text-[11px]', name: 'text-lg', price: 'text-base', small: 'text-sm', icon: 40, fit: 30, mule: 84, creature: 52, led: 60, bar: 'h-2 w-14', sign: 'h-10 w-10', chimney: 'h-5 w-5', caps: 'text-xs!', door: 'text-3xl', doorNote: 'text-xs' },
 };
 type Sizes = (typeof SIZES)[keyof typeof SIZES];
 
@@ -140,7 +140,7 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onSho
 
       <div className="absolute inset-x-0" style={band(TOP)} data-testid="row-outfitters">
         {OUTFIT_GOODS.map((g, i) => (
-          <Room
+          <Room z={z}
             key={g}
             shop={g}
             testid={`booth-${g}`}
@@ -171,7 +171,7 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onSho
         <Door side="L" onTap={onDoor} next={glows('doorL')} z={z} />
 
         {/* The works: three fitting bays under a chimney. */}
-        <Room testid="booth-works" style={inRow(...BOTTOM.works)} disabled={!worksOpen} next={glows('works')} lock={locks?.works} className="bg-panel">
+        <Room z={z} testid="booth-works" style={inRow(...BOTTOM.works)} disabled={!worksOpen} next={glows('works')} lock={locks?.works} className="bg-panel">
           <span className="flex items-center justify-center gap-1.5 border-b border-holo-faint bg-raised/60 py-0.5">
             <svg aria-hidden viewBox="0 0 16 16" className={z.chimney}>
               <path d="M2 14V7l4 2V7l4 2V3h4v11z" fill="var(--color-ink-3)" />
@@ -203,7 +203,7 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onSho
         </Room>
 
         {/* The green belt: a little greenhouse. */}
-        <Room shop="greenBelt" testid="booth-greenBelt" style={inRow(...BOTTOM.greenBelt)} onTap={tap('greenBelt')} disabled={!usable('greenBelt')} next={glows('greenBelt')} lock={locks?.greenBelt} className="bg-ok/10">
+        <Room z={z} shop="greenBelt" testid="booth-greenBelt" style={inRow(...BOTTOM.greenBelt)} onTap={tap('greenBelt')} disabled={!usable('greenBelt')} next={glows('greenBelt')} lock={locks?.greenBelt} className="bg-ok/10">
           <svg aria-hidden viewBox="0 0 40 24" preserveAspectRatio="none" className="h-[22%] w-full shrink-0">
             <path d="M0 24 L20 2 L40 24 Z" fill="var(--color-ok)" fillOpacity={0.35} stroke="var(--color-ok)" strokeWidth={1} />
             <path d="M20 2 V24 M10 13 H30" stroke="var(--color-ok)" strokeWidth={0.8} />
@@ -219,7 +219,7 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onSho
         </Room>
 
         {/* The corral: a pen of MULE characters, none of them anyone's yet. */}
-        <Room shop="corral" testid="booth-corral" style={inRow(...BOTTOM.corral)} onTap={tap('corral')} disabled={!usable('corral') || mules === 0} next={glows('corral')} lock={locks?.corral} className="bg-holo-soft">
+        <Room z={z} shop="corral" testid="booth-corral" style={inRow(...BOTTOM.corral)} onTap={tap('corral')} disabled={!usable('corral') || mules === 0} next={glows('corral')} lock={locks?.corral} className="bg-holo-soft">
           <span className="relative flex flex-1 items-end justify-center overflow-hidden px-1 pt-3">
             {/* The fence. */}
             <svg aria-hidden viewBox="0 0 100 20" preserveAspectRatio="none" className="absolute inset-x-0 bottom-0 h-[22%] w-full">
@@ -241,7 +241,7 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onSho
         </Room>
 
         {/* The pub: warm light, a sign. */}
-        <Room
+        <Room z={z}
           shop="pub"
           testid="booth-pub"
           style={{ ...inRow(...BOTTOM.pub), background: 'radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--color-warn) 30%, transparent), color-mix(in srgb, var(--color-warn) 8%, var(--color-panel)) 70%)' }}
@@ -277,6 +277,7 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onSho
 
 /** A room you can walk to: a real button, glowing when the guide points at it, legible and saying why when closed. */
 function Room({
+  z,
   shop,
   testid,
   style,
@@ -287,6 +288,7 @@ function Room({
   className,
   children,
 }: {
+  z: Sizes;
   shop?: Shop;
   testid: string;
   style: CSSProperties;
@@ -320,7 +322,7 @@ function Room({
         </span>
       )}
       {disabled && lock && (
-        <span className="shrink-0 bg-void/60 px-1 py-px font-mono text-[7px] uppercase leading-tight text-ink-2 @min-[1100px]/shell:py-0.5 @min-[1100px]/shell:text-[11px]" data-lock>
+        <span className={cx('shrink-0 bg-void/60 px-1 font-mono uppercase leading-tight text-ink-2', z.lock)} data-lock>
           {lock}
         </span>
       )}
@@ -333,7 +335,7 @@ function Awning({ color }: { color: string }) {
   return (
     <svg aria-hidden viewBox="0 0 60 10" preserveAspectRatio="none" className="h-[16%] min-h-3 w-full shrink-0">
       <path d="M0 0 H60 V5 Q57.5 10 55 5 Q52.5 10 50 5 Q47.5 10 45 5 Q42.5 10 40 5 Q37.5 10 35 5 Q32.5 10 30 5 Q27.5 10 25 5 Q22.5 10 20 5 Q17.5 10 15 5 Q12.5 10 10 5 Q7.5 10 5 5 Q2.5 10 0 5 Z" fill={color} />
-      <path d="M10 0 V5 M20 0 V5 M30 0 V5 M40 0 V5 M50 0 V5" stroke="#000" strokeOpacity={0.18} strokeWidth={4} />
+      <path d="M10 0 V5 M20 0 V5 M30 0 V5 M40 0 V5 M50 0 V5" stroke="var(--color-awning-stripe)" strokeOpacity={0.18} strokeWidth={4} />
     </svg>
   );
 }
@@ -377,7 +379,7 @@ function Colonist({ at, slot, leading, time, testid, z }: { at: { x: number; y: 
         <span className="rounded-full ring-2 ring-holo ring-offset-1 ring-offset-table">
           <Creature species={species} color={SLOT_COLOR[slot]} size={z.creature} />
         </span>
-        {leading && <Mule size={z.led} state="idle" good={leading === 'empty' ? null : leading} owner={SLOT_COLOR[slot]} facing={left ? 'left' : 'right'} />}
+        {leading && <Mule size={z.led} state="idle" good={leading === 'empty' ? null : leading} owner={slot} facing={left ? 'left' : 'right'} />}
       </span>
     </div>
   );
