@@ -66,8 +66,8 @@ describe('RULE-6: what special fields do', () => {
     const state = colony();
     const well = worked(plot(state, 0, 0, 'tundra'), 'water', 'p0', { kind: 'geyser' });
     const power = worked(plot(state, 0, 4, 'volcanic'), 'energy', 'p1', { kind: 'geyser' });
-    // A hot spring takes 1 Water: 2 - 1 = 1 without the geyser. With it, 3, and the own neighbour well adds 1.
-    const spring = worked(plot(state, 6, 0, 'tundra'), 'water', 'p2', { kind: 'geyser' });
+    // Rated -1 (1 Water) on a hot spring (-1): 0 without the geyser, no neighbour bonus. With it, 2, and the own neighbour well adds 1.
+    const spring = worked(plot(state, 6, 0, 'tundra', { water: -1 }), 'water', 'p2', { kind: 'geyser' });
     spring.traits = ['hotSpring'];
     const twin = worked(plot(state, 7, 0, 'tundra'), 'water', 'p2');
     const run = runProduction(state);
@@ -75,7 +75,7 @@ describe('RULE-6: what special fields do', () => {
     expect(run.produced.p1!.energy).toBe(4);
     expect(madeOn(run, state, well)).toBe(4);
     expect(madeOn(run, state, power)).toBe(4);
-    expect(madeOn(run, state, spring)).toBe(4);
+    expect(madeOn(run, state, spring)).toBe(3);
     expect(madeOn(run, state, twin)).toBe(3);
   });
 
