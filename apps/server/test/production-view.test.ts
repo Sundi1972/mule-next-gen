@@ -1,6 +1,6 @@
 import { emptyStock, type GameState, type MonthEvent, type ProductionLine } from '@mule/engine';
 import { describe, expect, it } from 'vitest';
-import { MuleGame } from '../src/mule-game.js';
+import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
 import { fakeContext, seats } from './fake-context.js';
 
 /** Stock numbers no plot could make in a month, so finding one in a view can only mean it leaked. */
@@ -12,10 +12,11 @@ function inProduction() {
   const fake = fakeContext();
   const game = new MuleGame(fake.ctx, 7);
   game.start(seats);
-  for (let i = 0; game.viewFor(null).phase !== 'production'; i++) {
-    expect(i).toBeLessThan(10);
-    fake.advance(game.viewFor(null).phaseEndsAt! - fake.ctx.now());
-  }
+  fake.advance(game.viewFor(null).phaseEndsAt! - fake.ctx.now());
+  while (game.viewFor(null).phase === 'landGrant') fake.advance(GRANT_TICK_MS);
+  // Small steps, so the AI seat develops its land.
+  while (game.viewFor(null).phase === 'development') fake.advance(100);
+  expect(game.viewFor(null).phase).toBe('production');
   const state: GameState = game['state']!;
   return { game, state, ...fake };
 }
@@ -123,6 +124,7 @@ describe('the production view', () => {
     const { game, state } = inProduction();
     const report = state.history.at(-1)!;
     const lines = game.viewFor(null).production!.lines;
+    expect(lines.length).toBeGreaterThan(0);
     expect(lines).toHaveLength(report.lines!.length);
     const order = lines.map((l) => l.y * state.width + l.x);
     expect(order).toEqual([...order].sort((a, b) => a - b));
