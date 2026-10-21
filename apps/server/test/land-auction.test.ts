@@ -52,9 +52,9 @@ const at = (p: Plot) => `${p.x}·${p.y}`;
  * Everyone goes to the pub, the goods auction runs out, and the game stops
  * in month 2's planning.
  */
-function toMonth2Planning(opts: { mule?: boolean } = {}) {
+function toMonth2Planning(opts: { mule?: boolean; phaseScale?: number } = {}) {
   const { ctx, advance } = fakeContext();
-  const game = new MuleGame(ctx, 7);
+  const game = new MuleGame(ctx, 7, { phaseScale: opts.phaseScale });
   game.start(seats);
   const phases: string[] = [game.viewFor(null).phase];
   const note = () => {
@@ -331,6 +331,15 @@ describe('land auction on the server', () => {
     const v = game.viewFor('o');
     expect(v.lotSlots).toEqual({ used: 4, max: 4 });
     expect(v.listings.map((l) => l.seller)).toEqual(['b', 'b', 'l', 'l']);
+  });
+
+  it('UBER-AC-1 / CT-3: with phaseScale 0.1 a lot walks for a tenth of LOTS.walkMs, so the e2e can play it', () => {
+    const { game, advance, plots } = toMonth2Planning({ phaseScale: 0.1 });
+    game.handle('b', { type: 'list', item: { kind: 'plot', ...plots.b![0]! }, minimum: 250, unsold: 'keep' });
+    toLandAuction(game, advance);
+    skipIntro(game, advance);
+    for (let t = 0; t < LOTS.walkMs * 0.1 + 2 * WALK.tickMs; t += WALK.tickMs) advance(WALK.tickMs);
+    expect(game.viewFor(null).landAuction!.stage).toBe('result');
   });
 
   it('T-AC-5: with nothing listed the game goes from the land grant straight to development', () => {
