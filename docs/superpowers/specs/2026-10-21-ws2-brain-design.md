@@ -1,0 +1,310 @@
+# WS2 Brain: Haiku decider, table chat, cost log and seat budget
+
+Spec class: **Programme** (cross-component contract with packages/tabletop; new sole owner of the cost log; 4 PRs).
+Serves Mission Goal **G-2**. §0 approved by the PM, 2026-10-21 (option A, as written).
+Design source: `docs/design/06-ai-players.md` ("Recommended design", "Cost monitoring", "Pricing AI players",
+"Levels, fallbacks and safety").
+
+---
+
+## §0 · Business Goals & Value
+
+**G-2a · Goal** `[handoff]`: A Smart AI player decides in character and talks at the table like a person.
+- Who benefits `[review-only]`: the family playing with AI seats, at the kitchen table or solo.
+- Today `[review-only]`: the server builds every `AiSeat` without a decider, so 100% of AI decisions are the strategist's
+  top pick, and the persona lines they carry reach nobody: the room has no way for a game to post chat, and player chat
+  never reaches `AiSeat.hear`. Zero AI lines reach the table. `verified_by: read`
+  (`apps/server/src/mule-game.ts::MuleGame`, `packages/tabletop/src/room.ts::GameContext`).
+- Value `[review-only]`: the model is "what makes the AI feel like a person" (design doc), and the Smart seat is the
+  product priced at about $0.10 per seat per game. Without it there is only Classic AI.
+- **UBER-AC-1** `[handoff]`: the 20-game trial with the key set reports ≥ 80% of Smart decisions made by the model and
+  ≥ 1 in-character line per Smart seat per month in the room's chat; a line a player types in a live game appears,
+  quoted as table talk, in that seat's next prompt.
+
+**G-2b · Goal** `[handoff]`: Smart AI never stalls a game and never costs more than its budget.
+- Who benefits `[review-only]`: the players (no waiting on a model) and Heiko as operator (no loss on a seat).
+- Today `[review-only]`: no model call exists, so nothing is measured; the $0.03 per seat in the design doc and our
+  ~$0.01 (84 calls × ~$0.0001) are estimates. `verified_by: none_exists`
+- Value `[review-only]`: the Smart seat's price can be set from measured cost, and the no-loss guarantee is code, not a
+  promise.
+- **UBER-AC-2** `[handoff]`: over 20 Haiku-versus-strategist games the cost log sums to < $0.06 per Smart seat per
+  game; with `ANTHROPIC_API_KEY` unset the same games finish with zero stalled phases and every AI seat plays Classic.
+  Past $0.06 a seat plays on as Classic.
+
+**Non-goals** `[handoff]`: lobby Smart/Classic picker, credit packs and pricing, cost dashboard, monthly account and
+service caps with alerts, memory and grudges, whispers, deal negotiation, the model proposing its own variants,
+bring-your-own-key, other providers, MCP seats, a new chat filter (AI lines pass the room's existing `moderate`),
+balance tuning (WS1).
+
+**Rough cost** `[review-only]`: chosen approach 4 PRs, 2 to 3 days of agent work. Thin baseline 1 PR, about 1 day.
+
+### §0.1 Decision Record `[review-only]`
+
+- **Chosen: Haiku decider + chat seam + cost log + budget + trial.** 4 PRs (§1). Players see and hear the character;
+  cost is measured per call and capped per seat.
+- **Thin baseline: decider only, lines kept in the decision log.** 1 PR. Loses because no line reaches the table:
+  `GameContext` has no chat method (check: `packages/tabletop/src/room.ts::GameContext` has `now`, `schedule`,
+  `changed` only), so "chats in character" in G-2 fails. Ruled out by the PM, 2026-10-21.
+
+### §0.2 Constraints `[handoff]`
+
+```
+HC-1  Call the model only from apps/server/src/brain/**. packages/ai and packages/engine stay free of I/O.
+                                                   source: SEAMS.md WS2->server, CLAUDE.md   breach: fatal
+HC-2  Read the key only from process.env.ANTHROPIC_API_KEY, pass it to the SDK explicitly, never log, print, store or
+      commit it, never put it in .env.example. With it unset, construct no client at all: the SDK would otherwise find
+      ANTHROPIC_AUTH_TOKEN or an `ant auth` profile and spend money in a "key unset" run.
+                                                   source: Heiko ruling, claude-api auth order   breach: fatal
+HC-3  Never let the game wait on a model. Every call carries a timeout no longer than the hands' wait for that
+      decision and no SDK retries; every failure path ends in the strategist's top pick.
+                                                   source: design doc "Fallbacks"               breach: fatal
+HC-4  Player chat reaches the model only as quoted table talk inside a delimited block, never as instructions.
+                                                   source: design doc "Safety"                  breach: fatal
+HC-5  Model claude-haiku-5-5. No paid call (spike or trial) without the PM's clearance.
+                                                   source: Heiko ruling, PM 2026-10-21           breach: fatal
+HC-6  Do not change the shape of Decider, ShortOption or DecisionContext (frozen WS1->WS2 contract).
+                                                   source: SEAMS.md                              breach: decision
+```
+
+---
+
+## §1 · Solution Design `[handoff]`
+
+```
+C1 · ADDED · the prompt a Smart seat sends, and the parse of its reply (pure)
+
+today        nothing builds a model prompt. packages/ai/src/personas.ts::Persona has a `card` written for a model;
+             packages/ai/src/summary.ts::situation writes the seat's situation lines; DecisionContext carries
+             tableTalk. Nobody reads them for a model.                        verified_by: read
+tomorrow     buildPrompt(shortlist, persona, context) MUST return { system, user, schema }: `system` is stable per
+             persona (rules of the reply + persona card) so it caches; `user` holds the decision kind, month,
+             situation, the options A-E (label, rationale, utility) and the table talk quoted in a delimited block.
+             parseReply(text, shortlist) MUST return { optionId, line } or null (RULE-1).
+logic        → §2 RULE-1, RULE-2
+seam         packages/ai/src/llm/prompt.ts, packages/ai/src/llm/reply.ts (new) — pure, next to the Decider it serves
+senior       junior would: build the prompt in the server with string concat and JSON.parse the reply raw.
+             senior does: reuses Persona.card, situation() and toOptions() as they are; keeps the stable part first
+             so it caches (≥ 512 tokens, Haiku's minimum); quotes table talk, caps its length; a reply naming an
+             option off the list or with junk is null, never a guess.
+mechanism    sprout
+call sites   C2 only
+pin          none, because ADDED
+depends_on   —
+
+C2 · ADDED · an LLM decider that asks through a port and answers in character
+
+today        packages/ai/src/decider.ts::Decider has one implementation, TopPickDecider. Brain already falls back to
+             the top pick when a decider is slow, throws, rejects or names an option not on the list
+             (packages/ai/src/brain.ts::Brain.ask, ::Brain.settle).                verified_by: read
+tomorrow     LlmDecider MUST implement Decider unchanged (HC-6). It takes a `complete` port
+             (prompt, waitMs) => Promise<{ text: string }>, builds the prompt (C1), awaits the port, parses the
+             reply and returns { optionId, line, by: 'llm' }; a null parse rejects with "unreadable reply".
+             Brain.ask MUST record the rejection's message in the note ("decider failed: budget spent").
+logic        → §2 RULE-1
+seam         packages/ai/src/llm/decider.ts (new); one-line note change in packages/ai/src/brain.ts::Brain.ask
+senior       junior would: give the decider an Anthropic client. senior does: a port, so packages/ai stays pure
+             (HC-1) and every test drives it with a fake; waitMs comes from the Pending, not a guess.
+mechanism    sprout (decider), in_place (note)
+call sites   Brain.ask is called from packages/ai/src/seat.ts::AiSeat.planMonth,
+             packages/ai/src/hands/develop.ts (DevelopHand), packages/ai/src/hands/auction.ts (AuctionHand)
+pin          Brain's fallback behaviour: packages/ai/test/ai.test.ts (existing) plus new
+             packages/ai/test/llm-decider.test.ts cases for slow, throwing, junk and off-list answers.
+depends_on   C1 (data, not stubbable)
+
+C3 · ADDED · the server's Haiku client, cost log and per-seat budget
+
+today        apps/server has no model dependency and no cost record of any kind.          verified_by: read
+tomorrow     createBrain({ apiKey, logPath, gameId, client? }) MUST return null-decider service when apiKey is
+             unset (HC-2) and otherwise a service whose deciderFor(seat) gives an LlmDecider wired to a port that:
+             checks the seat budget (RULE-3), calls claude-haiku-5-5 with thinking disabled, structured output
+             (option enum + line), max_tokens BRAIN.maxTokens, timeout = waitMs, maxRetries 0; appends one ledger
+             line per call (RULE-4) whatever the outcome; and charges the seat. finish(state) appends the game total.
+logic        → §2 RULE-3, RULE-4
+seam         apps/server/src/brain/{index,client,ledger,budget}.ts (new); BRAIN block in
+             packages/engine/src/config.ts (WS2's block per SEAMS.md)
+senior       junior would: new Anthropic() with no arguments, default retries, log console.log.
+             senior does: explicit apiKey or no client at all (HC-2: the SDK's credential chain would otherwise
+             pick up a profile); no retries past the hands' window; price table and budget in BRAIN, not inline;
+             a timed-out call is still logged and charged at its billed tokens (zero if none came back).
+mechanism    sprout
+call sites   C5 (MuleGame), C6 (trial), spike command
+pin          none, because ADDED
+depends_on   C2 (data, not stubbable)
+
+C4 · ADDED · a chat seam on the room: a game can speak and hear       (packages/tabletop — WS4 owns; PM clears)
+
+today        packages/tabletop/src/room.ts::GameContext offers now, schedule, changed. Room.chat moderates and
+             delivers a player's line but tells the game nothing.              verified_by: read
+tomorrow     GameContext.say?(from, text, to?) MUST post a line as seat `from` through the same path as a player's
+             chat (moderate, 280 chars, whisper rules). Game.heard?(from, text, to?) MUST be called after Room.chat
+             accepted a player's line, with the moderated text. Both optional: purely additive.
+seam         packages/tabletop/src/room.ts::GameContext, ::Game, Room.chat (private)
+senior       junior would: give MuleGame a reference to the room, or add an AI-chat protocol message.
+             senior does: two optional members on the existing interfaces, so every existing Game and test context
+             still compiles and AI lines are ordinary chat on every screen.
+mechanism    in_place
+call sites   GameContext is built in Room (packages/tabletop/src/room.ts) and in
+             apps/server/test/mule-game.test.ts; Game is implemented by MuleGame and the room tests' secretsGame.
+pin          packages/tabletop/test/room.test.ts (existing chat and whisper tests stay green).
+depends_on   —
+
+C5 · MODIFIED · MuleGame plays Smart seats and lets AI seats speak and hear   (apps/server/src/mule-game.ts — WS3 owns)
+
+today        MuleGame.start builds AiSeat with id, name, persona, level, seed; no decider, no onDecision.
+             No gameOver hook beyond the news line.                             verified_by: read
+tomorrow     the constructor MUST take an optional BrainService (default: createBrain from the environment);
+             start() MUST pass decider: brain.deciderFor(seat) and onDecision: brain.chatter(seat, line =>
+             ctx.say?.(seat.id, line)) (RULE-2 throttle); heard() MUST pass a public line, or a whisper to that
+             seat, to every other AI seat's hear(); the gameOver branch MUST call brain.finish(state).
+seam         apps/server/src/mule-game.ts::MuleGame (constructor, start, new heard, enterPhase gameOver branch)
+senior       junior would: spread brain logic through MuleGame. senior does: four one-line touch points into one
+             BrainService, so WS3's file carries no brain logic.
+mechanism    in_place
+call sites   apps/server/src/server.ts (createGame), apps/server/test/mule-game.test.ts
+pin          apps/server/test/mule-game.test.ts and server.test.ts stay green with the key unset.
+depends_on   C3 (contract, stubbable), C4 (contract, stubbable)
+
+C6 · ADDED · the G-2 trial and the latency spike, each one command
+
+today        packages/ai/src/play.ts::playGame plays headless games but takes no decider and runs time faster than
+             real time, so a model's reply would always arrive after its decision settled.  verified_by: read
+tomorrow     `pnpm --filter @mule/server brain:spike -- --calls 50 --max-usd 0.05` MUST replay recorded decisions
+             to Haiku and report latency p50/p90, share answered within each wait, and cost.
+             `pnpm --filter @mule/server brain:trial -- --games 20 --seed 101` MUST play games with Smart seats
+             against strategist seats, pausing simulated time while a decision is open (up to its waitMs, real
+             time), and print the UBER-AC-1 and UBER-AC-2 figures from the decision records and the ledger.
+             Both refuse to start without the key and print the cap first.
+seam         apps/server/src/brain/{spike,trial}.ts (new); playGame gains an optional per-seat decider and an
+             async between-ticks hook (packages/ai/src/play.ts — WS1 owns; PM clears)
+senior       junior would: copy the 80-line game loop into the trial. senior does: one loop, two optional hooks,
+             so the trial cannot drift from the simulator WS1 tunes against.
+mechanism    wrap
+call sites   packages/ai/src/sim.ts::main, packages/ai/test/ai.test.ts (both keep calling playGame unchanged)
+pin          `pnpm sim -- --games 40 --seed 101` output byte-identical before and after (positive control: run it).
+depends_on   C3 (data, not stubbable)
+```
+
+**Reuse checks for the ADDED changes** (repo not prism-indexed; grep over `packages/*/src apps/*/src`):
+- `prompt|ledger|budget|costUsd|usd|jsonl|appendFile|say\(|heard`: only in-game money budgets
+  (`strategist.ts`, `hands/auction.ts`, `engine/src/auction.ts`) and the `hear` doc comment in `brain.ts`. No prompt, cost
+  or ledger code exists.
+- Widened to `llm|anthropic|claude|haiku|token`: hits are `installMule` and the room's seat `token`. No model client
+  exists.
+- C1 reuses `Persona.card`, `situation()` and `toOptions()` rather than writing new ones; C6 wraps `playGame` rather than
+  copying its loop.
+
+---
+
+## §2 · The Logic `[handoff]`
+
+```
+RULE-1 · What the decider returns                               shape: decision table
+inputs   reply  text | none          none = timed out, transport error or budget spent
+         parsed { option, line } | invalid
+  #  when                                       then
+  1  reply none                                 reject (Brain plays top pick, note says why)
+  2  parsed invalid (not JSON, missing option)  reject "unreadable reply"
+  3  option not among the shortlist's ids       reject "named X, not on the list"
+  4  otherwise                                  { optionId, line: clean(line), by: 'llm' }
+clean    trim, one line, strip surrounding quotes, cap BRAIN.maxLineChars; empty → null (stays quiet)
+examples junk text → top pick · "F" with 3 options → top pick · {B, "Mine."} → B, "Mine."
+
+RULE-2 · Which lines reach the table chat                        shape: decision table
+inputs   record.line  string | null;   linesThisMonth  0..n (per seat)
+  #  when                                       then
+  1  line null                                  nothing
+  2  linesThisMonth ≥ BRAIN.linesPerMonth       nothing (keeps the table readable)
+  3  otherwise                                  ctx.say(seat, line); linesThisMonth += 1
+Applies to Smart and Classic seats alike (Classic lines are the persona templates).
+
+RULE-3 · Whether a seat may call the model                       shape: decision table
+inputs   spent  $ so far this game (ledger);  next  $ worst case for this call
+         (input estimate × input price + BRAIN.maxTokens × output price)
+  #  when                                       then
+  1  no API key                                 no decider at all (Classic for the whole game)
+  2  spent + next > BRAIN.seatBudgetUsd         reject "budget spent"; the seat stays Classic for the rest
+                                                of the game (no further calls)
+  3  otherwise                                  call
+boundary seatBudgetUsd = 0.06, one constant in BRAIN.
+
+RULE-4 · What one ledger line holds                              shape: record
+  t, game, seat, persona, level, model, kind, input, cached_read, cache_write, output, usd, ms, timed_out, outcome
+  outcome ∈ llm | timeout | error | unreadable | off_list | budget
+  usd = input×in + cached_read×read + cache_write×write + output×out, prices from BRAIN (per million tokens)
+  game total line: { t, game, type: 'game', seats, calls, usd, by_seat }
+unknown  a timed-out call has no usage: tokens 0, usd 0, outcome timeout (the API may still bill a little; the
+         trial compares the ledger with the console bill once, see §7).
+```
+
+---
+
+## §3 · Contracts & Data Models `[handoff]`
+
+- **GameContext.say / Game.heard** (C4), ADDED, non-breaking (optional members).
+  `say?(from: string, text: string, to?: string): void` · `heard?(from: string, text: string, to?: string): void`.
+- **Complete port** (C2), ADDED, internal to WS2: `(prompt: { system: string; user: string; schema: object },
+  waitMs: number) => Promise<{ text: string }>`.
+- **Ledger line** (RULE-4), ADDED, JSONL at `MULE_BRAIN_LOG` (default `apps/server/data/brain-costs.jsonl`,
+  gitignored). Example: `{"t":"2026-10-21T18:02:11Z","game":"g-101-…","seat":"s2","persona":"aggressive",
+  "level":"trader","model":"claude-haiku-5-5","kind":"develop","input":410,"cached_read":620,"cache_write":0,
+  "output":38,"usd":0.0000682,"ms":840,"timed_out":false,"outcome":"llm"}`.
+- **BRAIN config block** (C3), ADDED in `packages/engine/src/config.ts`: model, seatBudgetUsd, prices per million
+  (input 0.10, cacheRead 0.01, cacheWrite 0.125, output 0.50), maxTokens, maxLineChars, linesPerMonth, maxTalkChars.
+
+## §4 · Failure & Ops `[handoff]`
+
+| Question | Answer |
+|---|---|
+| Dependency unavailable or slow? | Anthropic API down, slow or 429 → the call times out or errors inside the hands' wait → top pick, template line; logged with its outcome (C3, RULE-1). |
+| Retry, poison, page? | No retries (HC-3). Nothing pages; a run of errors shows in the ledger outcomes. A 401 (bad key) makes every call `error`: the game plays Classic. |
+| Idempotency? | A decision is asked once; a late answer is dropped by Brain. Ledger lines are append-only. |
+| What can race? | A reply landing after the Pending settled: Brain ignores it (existing). Two seats appending to the ledger: one process, appendFile per line. |
+| What works when broken? | Everything: with no client the game is Classic AI with template chat. |
+| How does an operator know? | The ledger: outcomes per call and totals per game; the trial prints the G-2 figures. |
+
+## §5 · Delivery `[handoff]`
+
+Code-only. New env vars: `ANTHROPIC_API_KEY` (operator sets it in the server environment; never in a file in the repo),
+`MULE_BRAIN_LOG` (optional). `.gitignore` gains `apps/server/data/`.
+
+## §6 · Acceptance Criteria `[handoff]`
+
+| id | Given / When / Then | observed_at | negative case | changes |
+|---|---|---|---|---|
+| B-AC-1 | Given a game with an AI seat and a fake model that answers B with "Mine." / When the seat makes its land decision / Then the seat plays option B and every phone and the TV show "Mine." from that seat in chat. | room chat messages sent to connections (server test through Room) | fake answers "F" → seat plays its top pick, a template line is shown | C2 C3 C4 C5 |
+| B-AC-2 | Given a player says "give me your Crystite" at the table / When an AI seat next decides / Then the prompt holds the line quoted inside the table-talk block, and the seat's move is still one of its shortlist options. | the prompt the fake client receives; the action applied | a whisper between two humans is not heard by the AI | C1 C4 C5 |
+| B-AC-3 | Given the key is unset / When a full game runs / Then it finishes, no phase waits on a model, every AI decision is by `top`, and no client is constructed. | game reaches gameOver; decision records; client factory never called | AUTH_TOKEN set but API_KEY unset → still no client | C3 C5 |
+| B-AC-4 | Given a seat's ledger spend reaches $0.06 / When it next decides / Then no call is made, it plays its top pick, and it makes no further calls this game. | fake client call count; ledger | spend $0.059 and next call worst case $0.0005 → call made | C3 |
+| T-AC-1 (B-AC-1) | parseReply follows RULE-1 rows 1-4 and clean(). | parseReply return value | — | C1 |
+| T-AC-2 (B-AC-2) | buildPrompt's system text is identical for two decisions of the same persona (cacheable) and ≥ 512 tokens by count_tokens estimate; table talk is length-capped and delimited. | buildPrompt return value | different persona → different system | C1 |
+| T-AC-3 (B-AC-1) | A fake port that never resolves, rejects, or resolves after waitMs all end in the top pick with the outcome noted. | Brain decision record | resolves in time → by 'llm' | C2 |
+| T-AC-4 (B-AC-4) | Each call, whatever the outcome, appends one RULE-4 line; finish() appends one game line whose usd equals the sum. | ledger file in a temp dir | — | C3 |
+| T-AC-5 (B-AC-1) | At most BRAIN.linesPerMonth lines per seat per month reach ctx.say (RULE-2). | ctx.say calls | null line → no say | C5 |
+| T-AC-6 (UBER-AC-2) | `pnpm sim -- --games 40 --seed 101` output is unchanged by C6's hooks. | sim stdout diff | — | C6 |
+
+Invariant for every test: an AI seat's applied action is always one of its shortlist options.
+
+## §7 · Risks & Spikes `[review-only]`
+
+- **Latency vs. the hands' wait** (1.5 s develop, 2.5 s auction status; land waits until the first plot lights).
+  Spike: `brain:spike`, 50 calls, ≤ $0.05, timebox 1 hour once cleared. Stop condition: p90 known per decision kind.
+  Blocks UBER-AC-1's 80% bar. Mitigation if too slow: ask the develop decision at planning start (WS1's hands, a PM
+  decision), not a longer wait (that would slow the game).
+- **Timed-out calls may still be billed.** Mitigation: the trial compares the ledger total with the console's bill
+  once; if they differ by more than 10%, charge a timed-out call at its worst case in RULE-3.
+- **Prompt under 512 tokens never caches.** Mitigation: T-AC-2 checks the stable part's size; the cost estimate
+  holds even uncached (~$0.0002 a call).
+
+## §8 · Amendments `[review-only]`
+
+(none yet)
+
+## §9 · Ownership Boundaries `[handoff]`
+
+### Ownership: model calls and their cost
+- Sole owner:      apps/server/src/brain/**
+- Read contract:   the ledger file (JSONL, RULE-4); BrainService.deciderFor / chatter / finish
+- Write contract:  only apps/server/src/brain/ledger.ts appends to the ledger; only brain/client.ts imports
+                   @anthropic-ai/sdk
+- Enforcement:     package boundary (packages/ai and packages/engine do not depend on the SDK; a test in
+                   apps/server asserts no other src file imports it) plus SEAMS.md
