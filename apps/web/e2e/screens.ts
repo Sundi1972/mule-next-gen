@@ -99,7 +99,9 @@ try {
   await phoneShot(phone, '4-map');
   await phone.getByRole('button', { name: /Install here|Replace MULE/ }).click();
   await phone.getByText('No MULE').first().waitFor();
-  await phone.getByRole('button', { name: /Geo analysis/ }).click();
+  // The plot may already be analysed: the drone's picks can be the plots the grant gave us.
+  const analyse = phone.getByRole('button', { name: /Geo analysis/ });
+  if ((await analyse.count()) > 0) await analyse.click();
   await phone.getByTestId('ground').waitFor();
   await phoneShot(phone, '4-analysed');
   await phone.getByRole('button', { name: 'Go to the pub and end your turn' }).click();
