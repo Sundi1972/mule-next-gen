@@ -212,7 +212,7 @@ describe('Room: a seat picks one of the game\'s choices in the lobby (RULE-1)', 
     ]);
   });
 
-  it('T-AC-5: a picked seat keeps its pick when the phone reloads and rejoins with its seat token', async () => {
+  it('T-AC-5: a picked seat keeps its pick and its token when the phone reloads and rejoins with its seat token', async () => {
     const { room } = pickRoom();
     const first = join(room, 'Heiko');
     join(room, 'Mia');
@@ -224,6 +224,7 @@ describe('Room: a seat picks one of the game\'s choices in the lobby (RULE-1)', 
     await flush();
 
     expect(again.last('welcome')!.seatId).toBe('s1');
+    expect(again.last('welcome')!.seatToken).toBe(token);
     expect(again.last('view')!.view.seats[0]).toStrictEqual({ id: 's1', name: 'Heiko', isAi: false, connected: true, pick: 'cat' });
   });
 });
@@ -464,4 +465,258 @@ describe('Room: a player leaves the table (RULE-5, AM-15)', () => {
     const back = join(room, 'Mia', oldToken);
     expect(back.last('welcome')!.seatId).toBe('s4');
   });
+});
+
+const TWO_MINUTES = 2 * 60_000;
+
+/** A lobby (Heiko hosts, Mia, Brix) on a fake clock, with what the game has heard. */
+function clockLobby() {
+  const clock = { now: 10_000 };
+  const heard = { starts: 0, changes: [] as [string, boolean][] };
+  const room = new Room<Intent, View>({
+    code: 'KRTX',
+    createGame: () => ({
+      ...secretsGame(),
+      start: () => void heard.starts++,
+      connectionChanged: (seatId, connected) => void heard.changes.push([seatId, connected]),
+    }),
+    aiNames: ['Brix'],
+    newToken: () => `t${++tokens}`,
+    now: () => clock.now,
+    picks: CHOICES,
+  });
+  return { ...lobby(room), clock, heard };
+}
+
+type Ctx = ReturnType<typeof clockLobby> & { phone: Screen | null };
+
+function handoff(room: Room<Intent, View>, screen: Screen): string {
+  room.receive(screen, screen.from, { t: 'handoff' });
+  return screen.last('handoffCode')?.code ?? '';
+}
+
+function joinWith(room: Room<Intent, View>, handoffCode: string): Screen {
+  const screen = new Screen();
+  room.receive(screen, screen.from, { t: 'join', code: room.code, name: 'Phone', handoff: handoffCode });
+  return screen;
+}
+
+describe('Room: a one-time code moves a seat to another device (RULE-6, AM-16)', () => {
+  it.each(['heiko', 'mia'] as const)(
+    'T-AC-11: RULE-6 handoff row 2 — %s gets a code expiring 2 minutes from now, on its own connection only',
+    (who) => {
+      const { room, heiko, mia, clock } = clockLobby();
+      const board = watch(room);
+      clock.now = 50_000;
+      const screen = { heiko, mia }[who];
+
+      room.receive(screen, screen.from, { t: 'handoff' });
+
+      const sent = screen.last('handoffCode')!;
+      expect(sent).toStrictEqual({ t: 'handoffCode', code: expect.any(String), expiresAt: 50_000 + TWO_MINUTES });
+      expect(sent.code).not.toBe(screen.last('welcome')!.seatToken);
+      for (const other of [heiko, mia, board].filter((s) => s !== screen)) expect(other.last('handoffCode')).toBeUndefined();
+    },
+  );
+
+  it.each(['a board', 'a screen that never joined', 'a screen whose seat another device took by token'] as const)(
+    'T-AC-11: RULE-6 handoff row 1 — %s is refused "Join the game first", and no code is issued',
+    (sender) => {
+      const { room, mia } = clockLobby();
+      const screens = {
+        'a board': () => watch(room),
+        'a screen that never joined': () => new Screen(),
+        'a screen whose seat another device took by token': () => {
+          join(room, 'Mia', mia.last('welcome')!.seatToken!);
+          return mia;
+        },
+      };
+      const screen = screens[sender]();
+
+      room.receive(screen, screen.from, { t: 'handoff' });
+
+      expect(screen.last('error')?.message).toBe('Join the game first');
+      expect(screen.last('handoffCode')).toBeUndefined();
+    },
+  );
+
+  it('T-AC-11: RULE-6 join row 2 — in the lobby the code moves Mia\'s seat: the old phone hears "moved" last and is refused, the new one gets the seat and a new token, the old token is dead', async () => {
+    const { room, heiko, mia } = clockLobby();
+    pick(room, mia, 'fox');
+    const oldToken = mia.last('welcome')!.seatToken!;
+    const code = handoff(room, mia);
+
+    const phone = joinWith(room, code);
+    await flush();
+
+    expect(mia.inbox.at(-1)).toStrictEqual({ t: 'removed', reason: 'moved' });
+    const welcome = phone.last('welcome')!;
+    expect(welcome.seatId).toBe('s2');
+    expect(welcome.seatToken).toEqual(expect.any(String));
+    expect(welcome.seatToken).not.toBe(oldToken);
+    expect(welcome.seatToken).not.toBe(code);
+    expect(heiko.last('view')!.view.seats).toStrictEqual([
+      { id: 's1', name: 'Heiko', isAi: false, connected: true },
+      { id: 's2', name: 'Mia', isAi: false, connected: true, pick: 'fox' },
+      { id: 's3', name: 'Brix', isAi: true, connected: true },
+    ]);
+
+    pick(room, mia, 'owl');
+    expect(mia.last('error')?.message).toBe('Join the game first');
+    expect(pickOf(room, phone)).toBe('fox');
+
+    expect(join(room, 'Mia', oldToken).last('welcome')!.seatId).toBe('s4');
+    room.disconnect(phone);
+    expect(join(room, 'Mia', welcome.seatToken!).last('welcome')!.seatId).toBe('s2');
+  });
+
+  it("T-AC-11: RULE-6 join row 2 — after Start the code moves the seat: the same seat id, the game hears nothing, the old phone's intents are refused, the old token is refused", async () => {
+    const { room, heiko, mia, heard } = clockLobby();
+    room.receive(heiko, heiko.from, { t: 'start' });
+    room.receive(mia, mia.from, { t: 'intent', intent: { secret: 'I own the smithore' } });
+    const oldToken = mia.last('welcome')!.seatToken!;
+
+    const phone = joinWith(room, handoff(room, mia));
+    await flush();
+
+    expect(mia.inbox.at(-1)).toStrictEqual({ t: 'removed', reason: 'moved' });
+    expect(phone.last('welcome')!.seatId).toBe('s2');
+    expect(phone.last('view')!.view.game).toStrictEqual({ mySecret: 'I own the smithore', secretsTold: 1 });
+    expect(heard).toStrictEqual({ starts: 1, changes: [] });
+
+    room.receive(mia, mia.from, { t: 'intent', intent: { secret: 'a second secret' } });
+    expect(mia.last('error')?.message).toBe('Join the game first');
+    expect(room.viewFor('s2').game).toStrictEqual({ mySecret: 'I own the smithore', secretsTold: 1 });
+
+    expect(join(room, 'Mia', oldToken).last('error')?.message).toBe('This game has already started');
+  });
+
+  it('T-AC-11: RULE-6 join row 2 — a seat whose old device has dropped is taken without a "removed", and the game hears it is back', async () => {
+    const { room, heiko, mia, heard } = clockLobby();
+    room.receive(heiko, heiko.from, { t: 'start' });
+    const code = handoff(room, mia);
+    room.disconnect(mia);
+    const inboxBefore = mia.inbox.length;
+
+    const phone = joinWith(room, code);
+    await flush();
+
+    expect(phone.last('welcome')!.seatId).toBe('s2');
+    expect(mia.inbox.length).toBe(inboxBefore);
+    expect(heard.changes).toStrictEqual([
+      ['s2', false],
+      ['s2', true],
+    ]);
+    expect(heiko.last('view')!.view.seats.find((s) => s.id === 's2')?.connected).toBe(true);
+  });
+
+  it.each([
+    { row: 'an unknown code', holder: 'mia', setup: (_ctx: Ctx) => 'no-such-code' },
+    {
+      row: 'the same code again',
+      holder: 'phone',
+      setup: (ctx: Ctx) => {
+        const code = handoff(ctx.room, ctx.mia);
+        ctx.phone = joinWith(ctx.room, code);
+        return code;
+      },
+    },
+    {
+      row: 'a superseded code',
+      holder: 'mia',
+      setup: (ctx: Ctx) => {
+        const older = handoff(ctx.room, ctx.mia);
+        handoff(ctx.room, ctx.mia);
+        return older;
+      },
+    },
+    {
+      row: 'a code at exactly now + 2 min',
+      holder: 'mia',
+      setup: (ctx: Ctx) => {
+        const code = handoff(ctx.room, ctx.mia);
+        ctx.clock.now += TWO_MINUTES;
+        return code;
+      },
+    },
+    {
+      row: 'a code for a kicked seat',
+      holder: null,
+      setup: (ctx: Ctx) => {
+        const code = handoff(ctx.room, ctx.mia);
+        kick(ctx.room, ctx.heiko, 's2');
+        return code;
+      },
+    },
+    {
+      row: 'a code for a closed table',
+      holder: null,
+      setup: (ctx: Ctx) => {
+        const code = handoff(ctx.room, ctx.mia);
+        close(ctx.room, ctx.heiko);
+        return code;
+      },
+    },
+  ] as const)('T-AC-11: RULE-6 join row 1 — $row is refused "That link has expired" and changes nothing', async ({ setup, holder }) => {
+    const ctx: Ctx = { ...clockLobby(), phone: null };
+    const code = setup(ctx);
+    await flush();
+    const before = ctx.room.viewFor(null);
+
+    const stranger = joinWith(ctx.room, code);
+    await flush();
+
+    expect(stranger.last('error')?.message).toBe('That link has expired');
+    expect(stranger.last('welcome')).toBeUndefined();
+    expect(stranger.from.seatId).toBeNull();
+    expect(ctx.room.viewFor(null)).toStrictEqual(before);
+    if (holder) {
+      const live = holder === 'mia' ? ctx.mia : ctx.phone!;
+      expect(live.last('removed')).toBeUndefined();
+      pick(ctx.room, live, 'owl');
+      expect(live.last('error')).toBeUndefined();
+      expect(pickOf(ctx.room, live)).toBe('owl');
+    }
+  });
+
+  it('T-AC-11: RULE-6 boundaries — a code 1 ms before expiry still moves the seat, and of two codes the newer one does', () => {
+    const { room, mia, clock } = clockLobby();
+    handoff(room, mia);
+    const newer = handoff(room, mia);
+    clock.now += TWO_MINUTES - 1;
+
+    const phone = joinWith(room, newer);
+
+    expect(phone.last('welcome')!.seatId).toBe('s2');
+    expect(mia.last('removed')).toStrictEqual({ t: 'removed', reason: 'moved' });
+  });
+
+  it.each([
+    { how: 'a handoff code', msg: { t: 'kick', seatId: 's2' } },
+    { how: 'a handoff code', msg: { t: 'start' } },
+    { how: 'a handoff code', msg: { t: 'addAi' } },
+    { how: 'a handoff code', msg: { t: 'pick', pick: 'owl' } },
+    { how: 'a handoff code', msg: { t: 'chat', text: 'still here?' } },
+    { how: 'a handoff code', msg: { t: 'handoff' } },
+    { how: 'its token', msg: { t: 'kick', seatId: 's2' } },
+    { how: 'its token', msg: { t: 'close' } },
+  ] as const)(
+    'T-AC-11: a host screen whose seat another device took by $how sends $msg.t and is refused like a board ("Join the game first"); nothing changes',
+    async ({ how, msg }) => {
+      const { room, heiko, mia } = clockLobby();
+      const live = how === 'its token' ? join(room, 'Heiko', heiko.last('welcome')!.seatToken!) : joinWith(room, handoff(room, heiko));
+      await flush();
+      const before = room.viewFor(null);
+      const seen = heiko.inbox.length;
+
+      room.receive(heiko, heiko.from, msg);
+      await flush();
+
+      expect(heiko.inbox.slice(seen)).toStrictEqual([{ t: 'error', message: 'Join the game first' }]);
+      expect(room.viewFor(null)).toStrictEqual(before);
+      expect(mia.last('removed')).toBeUndefined();
+      expect(mia.last('chat')).toBeUndefined();
+      expect(live.last('error')).toBeUndefined();
+    },
+  );
 });
