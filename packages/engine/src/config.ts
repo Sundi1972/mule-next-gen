@@ -1,4 +1,4 @@
-import type { Outfit, GrownGood, Good, MinedGood, ProcessedGood, RawGood, Species, Stock, Terrain, TileTrait } from './types.js';
+import type { Outfit, GrownGood, Good, MinedGood, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
 
 /**
  * Every balancing number lives here, so playtests and the simulator can tune
@@ -403,6 +403,31 @@ export const MAP = {
   peak: { high: 4, medium: 3, low: { min: 1, max: 2 }, count: { min: 3, max: 4 } },
   /** Chance a map has one scarce good. Read by the generator and the map-quality test, not the checker. */
   scarceChance: 0.25,
+  /** Special fields on each map. */
+  specials: { small: 3, mid: 4, large: 5 } satisfies Record<SizeBand, number>,
+  /** Where special fields may go (spec RULE-5), read by the generator and the checker. */
+  special: {
+    /** Terrains each kind may sit on. Ruins and relics take any dry land: every land terrain but the river and lakes. */
+    on: {
+      ruins: ['plains', 'forest', 'hills', 'desert', 'tundra', 'mountains', 'swamp', 'volcanic', 'crater', 'ice'],
+      crystalCavern: ['crater', 'mountains', 'hills'],
+      geyser: ['volcanic', 'tundra', 'ice'],
+      oasis: ['desert'],
+      relic: ['plains', 'forest', 'hills', 'desert', 'tundra', 'mountains', 'swamp', 'volcanic', 'crater', 'ice'],
+    } satisfies Record<SpecialKind, ShareTerrain[]>,
+    maxPerKind: 2,
+    minKinds: 3,
+    /** Fewest steps between two special fields. */
+    spacing: 4,
+    /** Fewest steps from a relic to the store. */
+    relicFromStore: 2,
+    /** Fewest of an oasis's 4 neighbours that are desert. */
+    oasisDeserts: 2,
+    /** Least Crystite rating under a crystal cavern. */
+    cavernCrystite: 1,
+    /** Kinds the generator draws for one map, in all, before it stops short. Read by the generator, not the checker. */
+    kindDraws: 30,
+  },
   /** Tuning for the layout stages (map-layout.ts): how the generator meets the rules above, not rules themselves. */
   layout: {
     /** The budget never gives a terrain more than this share, so jitter can't take plains near maxTerrainShare. */

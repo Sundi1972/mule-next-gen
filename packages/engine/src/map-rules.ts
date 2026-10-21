@@ -1,11 +1,11 @@
 import { MAP, sizeBand, type FloorGood, type ShareTerrain, type SizeBand } from './config.js';
 import { neighbours, tileIndex } from './map.js';
-import { RAW_GOODS, type RawGood, type Terrain, type Tile } from './types.js';
+import { RAW_GOODS, type RawGood, type SpecialKind, type Terrain, type Tile } from './types.js';
 
 /**
  * The map rules as a checker: every rule a map breaks, and the numbers the map
  * gallery prints. S9 (honest hints) holds only over many maps, so the map-quality
- * test checks it; P1 (special fields) joins once special fields exist.
+ * test checks it.
  */
 
 export type GameMap = { width: number; height: number; tiles: Tile[] };
@@ -79,6 +79,7 @@ interface Facts {
   riverRows: number[][];
   hasRiver: boolean;
   store: Tile | undefined;
+  specials: Tile[];
 }
 
 type Steps = (tile: Tile) => number;
@@ -86,7 +87,7 @@ type Steps = (tile: Tile) => number;
 /** Checks a map against every map rule (spec RULE-1). Pure. */
 export function checkMap(map: GameMap, players: number): MapReport {
   const facts = gatherFacts(map, players);
-  const rows = [floors, oneScarce, reach, allTerrains, shares, noDominant, noSpecks, noBlob, riverShape, riverBends, seams, rings];
+  const rows = [floors, oneScarce, reach, allTerrains, shares, noDominant, noSpecks, noBlob, riverShape, riverBends, seams, rings, specialFields];
   return { violations: rows.flatMap((row) => row(facts)), metrics: metrics(facts) };
 }
 
@@ -110,6 +111,7 @@ function gatherFacts(map: GameMap, players: number): Facts {
     riverRows,
     hasRiver: riverRows.some((row) => row.length > 0),
     store: map.tiles.find((t) => t.terrain === 'store'),
+    specials: map.tiles.filter((t) => t.special),
   };
 }
 
@@ -369,6 +371,68 @@ function rings(f: Facts): Violation[] {
   });
 }
 
+const SPECIAL_KINDS = Object.keys(MAP.special.on) as SpecialKind[];
+
+/** P1 (RULE-5): the count, the kinds, each plot's fit, the spacing and both river sides. */
+function specialFields(f: Facts): Violation[] {
+  const out: Violation[] = [];
+  const { special } = MAP;
+  const needed = MAP.specials[f.band];
+  if (f.specials.length !== needed) out.push({ rule: 'P1', detail: `${f.specials.length} special fields, ${needed} needed` });
+  const kinds = SPECIAL_KINDS.filter((k) => f.specials.some((t) => t.special!.kind === k));
+  for (const kind of kinds) {
+    const of = f.specials.filter((t) => t.special!.kind === kind);
+    if (of.length > special.maxPerKind) out.push({ rule: 'P1', detail: `${kind} ${of.length} times, at most ${special.maxPerKind}`, at: plots(of) });
+  }
+  if (kinds.length < special.minKinds) out.push({ rule: 'P1', detail: `${kinds.length} kinds of special field, ${special.minKinds} needed` });
+  for (const t of f.specials) {
+    const fault = misplaced(f, t);
+    if (fault) out.push({ rule: 'P1', detail: `${t.special!.kind} at ${at(t)} ${fault}`, at: plots([t]) });
+  }
+  for (const [i, a] of f.specials.entries()) {
+    const steps = distances(f.map, [a]);
+    for (const b of f.specials.slice(i + 1).filter((b) => steps(b) < special.spacing)) {
+      const detail = `${a.special!.kind} at ${at(a)} and ${b.special!.kind} at ${at(b)} are ${steps(b)} steps apart, ${special.spacing} needed`;
+      out.push({ rule: 'P1', detail, at: plots([a, b]) });
+    }
+  }
+  // With no river, S6 reports it; a missing side would only restate that.
+  if (f.hasRiver) {
+    const side = (t: Tile, s: 'left' | 'right') => {
+      const cols = f.riverRows[t.y]!;
+      return cols.length > 0 && (s === 'left' ? t.x < cols[0]! : t.x > cols[cols.length - 1]!);
+    };
+    for (const s of ['left', 'right'] as const) {
+      if (!f.specials.some((t) => side(t, s))) out.push({ rule: 'P1', detail: `no special field ${s} of the river` });
+    }
+  }
+  return out;
+}
+
+/** Why a special field's plot breaks RULE-5's rows for its kind, or undefined when it fits. */
+function misplaced(f: Facts, t: Tile): string | undefined {
+  const { kind, salvage } = t.special!;
+  const { special } = MAP;
+  if (t.terrain === 'river' || t.terrain === 'lake' || t.terrain === 'store') return `is on ${t.terrain}`;
+  if (f.store && neighbours(f.map.tiles, f.map.width, f.store).includes(t)) return 'touches the store';
+  const allowed: readonly Terrain[] = special.on[kind];
+  if (!allowed.includes(t.terrain)) return `is on ${t.terrain}; allowed on ${allowed.join(', ')}`;
+  if (kind === 'crystalCavern' && t.ground.crystite < special.cavernCrystite) {
+    return `has crystite ${t.ground.crystite}, at least ${special.cavernCrystite} needed`;
+  }
+  if (kind === 'oasis') {
+    const deserts = neighbours(f.map.tiles, f.map.width, t).filter((n) => n.terrain === 'desert').length;
+    if (deserts < special.oasisDeserts) return `has ${deserts} desert neighbours, ${special.oasisDeserts} needed`;
+  }
+  if (kind === 'relic' && f.store) {
+    const away = distances(f.map, [f.store])(t);
+    if (away < special.relicFromStore) return `is ${away} steps from the store, ${special.relicFromStore} needed`;
+  }
+  if (kind === 'ruins' && !salvage) return 'has no salvage';
+  if (kind !== 'ruins' && salvage) return 'has salvage, which only ruins carry';
+  return undefined;
+}
+
 function metrics(f: Facts): MapReport['metrics'] {
   const n = f.nonRiver.length;
   const below = belowNormal(f);
@@ -381,7 +445,6 @@ function metrics(f: Facts): MapReport['metrics'] {
     peaks: { crystite: peaksOf(f, 'crystite').length, rareEarth: peaksOf(f, 'rareEarth').length },
     worstReach: Object.fromEntries(FLOOR_GOODS.map((g) => [g, worstReach(f, g)])) as Record<FloorGood, number>,
     scarce: below.length === 1 ? below[0]! : null,
-    // Special fields don't exist yet; they are counted once they do.
-    specials: 0,
+    specials: f.specials.length,
   };
 }
