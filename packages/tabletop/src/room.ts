@@ -22,6 +22,8 @@ export interface GameContext {
   schedule(ms: number, fn: () => void): () => void;
   /** Tell every screen that the game's view changed. */
   changed(): void;
+  /** Posts a chat line as seat `from`, exactly as if that seat's player had typed it. */
+  say?(from: string, text: string, to?: string): void;
 }
 
 /** The part a game supplies. The room does everything else. */
@@ -33,6 +35,8 @@ export interface Game<Intent, GameView> {
   viewFor(seatId: string | null): GameView;
   /** A player's phone dropped or came back. The game may let AI play their routine moves meanwhile. */
   connectionChanged?(seatId: string, connected: boolean): void;
+  /** A player's delivered, moderated line: public, or whispered to an AI seat. Lines from `say` never come back. */
+  heard?(from: string, text: string, to?: string): void;
   dispose?(): void;
 }
 
@@ -51,6 +55,16 @@ export interface RoomOptions<Intent, GameView> {
   isUserError?(err: unknown): boolean;
   now?(): number;
   newToken?(): string;
+}
+
+/**
+ * A typed name on one line, at most 16 code points: a line break in a name would forge a line in an AI's prompt.
+ * The removed class is a copy of @mule/ai's prompt-text class, which tabletop cannot import. NFC, not NFKC, so
+ * a name shows as typed. Capping by code point never splits an emoji's surrogate pair. See B-AC-5.
+ */
+function cleanName(name: string): string {
+  const oneLine = name.normalize('NFC').replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, '').trim();
+  return Array.from(oneLine).slice(0, 16).join('');
 }
 
 interface Seat<View> extends SeatInfo {
@@ -104,6 +118,7 @@ export class Room<Intent, View> {
         };
       },
       changed: () => this.broadcast(),
+      say: (from, text, to) => void this.deliver(from, text, to),
     });
   }
 
@@ -189,7 +204,7 @@ export class Room<Intent, View> {
     } else {
       if (this.started) throw new TableError('This game has already started');
       if (this.seats.length >= this.opts.maxSeats) throw new TableError('The table is full');
-      seat = this.addSeat(name.trim().slice(0, 16) || 'Player', false);
+      seat = this.addSeat(cleanName(name) || 'Player', false);
       seat.conn = conn;
     }
     conn.send({ t: 'welcome', code: this.code, role: 'player', seatId: seat.id, seatToken: seat.token });
@@ -235,8 +250,17 @@ export class Room<Intent, View> {
   }
 
   private chat(from: string, text: string, to?: string): void {
+    const line = this.deliver(from, text, to);
+    if (!line) return;
+    // A whisper between two humans stays private from the game too.
+    if (line.to && !this.seats.find((s) => s.id === line.to)?.isAi) return;
+    this.game.heard?.(line.from, line.text, line.to);
+  }
+
+  /** Sends one cleaned chat line to the screens it is for. Returns it, or null when moderation dropped it. */
+  private deliver(from: string, text: string, to?: string): ChatMessage | null {
     const clean = this.opts.moderate(text.trim().slice(0, 280));
-    if (!clean) return;
+    if (!clean) return null;
     if (to && !this.seats.some((s) => s.id === to)) throw new TableError('Nobody by that name at the table');
     const message: ChatMessage = { id: ++this.chatId, from, text: clean, at: this.opts.now(), ...(to ? { to } : {}) };
     if (to) {
@@ -245,6 +269,7 @@ export class Room<Intent, View> {
     } else {
       this.everyone((c) => c.send({ t: 'chat', message }));
     }
+    return message;
   }
 
   private everyone(fn: (conn: Connection<View>) => void): void {
