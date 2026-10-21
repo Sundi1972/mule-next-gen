@@ -1,7 +1,7 @@
 import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { nextStep, type DevelopState } from '../src/phone/next-step';
+import { nextStep, openShops, type DevelopState } from '../src/phone/next-step';
 
 /** Lena in the store at the start of the turn's clock, nothing in tow, a free plot of hers at 5·7. */
 const BASE: DevelopState = {
@@ -40,7 +40,11 @@ describe('RULE-7: development says what to do next', () => {
     expect(r.now).toMatchObject({ step: 2, of: 3, title: 'Choose what your MULE makes' });
     // Alloy is short by more, but it is not a raw good: the works is never named for it.
     expect(r.next).toEqual(['energy']);
-    expect(text(r.now.detail)).toContain("You're short of Energy");
+    expect(text(r.now.detail)).toContain("You're short of Energy: you need 4, you have 1.");
+    // On a tie the first outfitter in the hall's order glows.
+    const tie = at({ carry: 'empty', month: { needs: { water: 3, energy: 3, smithore: 3 }, have: { water: 1, energy: 1, smithore: 1 } } });
+    expect(tie.next).toEqual(['water']);
+    expect(text(tie.now.detail)).toContain("You're short of Water: you need 3, you have 1.");
   });
 
   it('T-AC-9 row 3 (negative): with no shortfall no outfitter glows, "any outfitter or the works"', () => {
@@ -60,6 +64,10 @@ describe('RULE-7: development says what to do next', () => {
     const r = at({ carry: 'energy' });
     expect(r.now).toMatchObject({ step: 3, of: 3, title: 'Walk out and install it' });
     expect(r.next).toEqual(['doorL', 'doorR']);
+    // In the store, a plot of yours still selected on the map is not where you stand: row 4 comes first.
+    const selected = at({ carry: 'energy', atOwnPlot: true });
+    expect(selected.now.title).toBe('Walk out and install it');
+    expect(selected.next).toEqual(['doorL', 'doorR']);
   });
 
   it('T-AC-9 row 5: on the map, not at a plot of yours, walk to your nearest plot with no MULE', () => {
@@ -99,9 +107,12 @@ describe('RULE-7: development says what to do next', () => {
     expect(late.now.warn).toBe(true);
     expect(late.now.title).toBe(calm.now.title);
     expect(at({ seconds: 10 }).now.warn).toBe(true);
+    // Every row warns, the stepless row 7 too.
+    expect(at({ installed: true, seconds: 8 }).now.warn).toBe(true);
+    expect(at({ installed: true, seconds: 30 }).now.warn).toBe(false);
   });
 
-  it('T-AC-9 locks: no MULE closes the outfitters, works and green belt; any MULE closes the corral', () => {
+  it('T-AC-9 locks: no MULE closes the outfitters, works and green belt; any MULE closes the corral; the hall opens the rest', () => {
     const none = at({}).locks;
     for (const room of ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'works', 'greenBelt'] as const) expect(none[room]).toBe('needs a MULE');
     expect(none.corral).toBeUndefined();
@@ -112,5 +123,10 @@ describe('RULE-7: development says what to do next', () => {
     expect(outfitted.food).toBe('');
     expect(outfitted.works).toBe('');
     expect(outfitted.pub).toBeUndefined();
+    // The hall opens exactly the rooms these locks leave unlocked.
+    const sorted = (shops: string[]) => [...shops].sort();
+    expect(sorted(openShops(at({}).locks))).toEqual(['corral', 'pub']);
+    expect(sorted(openShops(at({ carry: 'empty' }).locks))).toEqual(sorted(['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine', 'greenBelt', 'pub']));
+    expect(openShops(at({ carry: 'energy' }).locks)).toEqual(['pub']);
   });
 });
