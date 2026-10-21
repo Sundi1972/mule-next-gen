@@ -90,7 +90,7 @@ export function dealLine(view: MuleView, d: AuctionView['deals'][number], meId?:
 /** A side as the status screen names it, on the phone and the TV. */
 export const SIDE_WORD: Record<AuctionSide, string> = { buyer: 'Buy', seller: 'Sell', pass: 'Pass' };
 
-/** The side a tap on the status screen asks for: the tapped side, or pass when it is already yours. */
+/** Two buttons and no Pass: a second tap on your side is how you sit a good out. */
 export function toggleSide(current: AuctionSide | undefined, tapped: AuctionRole): AuctionSide {
   return current === tapped ? 'pass' : tapped;
 }
