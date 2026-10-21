@@ -51,6 +51,7 @@ export interface ListRequest {
 export function list(state: GameState, playerId: string, lot: ListRequest): Listing {
   requirePlanning(state);
   const { item, minimum, unsold } = lot;
+  if (item.kind !== 'plot' && item.kind !== 'mule') throw new RuleError('Not a plot');
   const tile = lotPlot(state, item.x, item.y);
   if (tile.owner !== playerId) throw new RuleError('Not your plot');
   if (item.kind === 'mule' && tile.outfit === null) throw new RuleError('No MULE on that plot');
@@ -58,6 +59,7 @@ export function list(state: GameState, playerId: string, lot: ListRequest): List
   if (state.listings.filter((l) => l.seller === playerId).length >= LOTS.perPlayer) throw new RuleError(`You can list ${LOTS.perPlayer} lots a month`);
   if (state.listings.length >= LOTS.maxLotsPerMonth) throw new RuleError('The auction is full this month');
   if (!Number.isInteger(minimum) || minimum < 1) throw new RuleError('Pick a minimum of 1 or more');
+  if (unsold !== 'store' && unsold !== 'keep') throw new RuleError('Pick store or keep');
   // A plot is listed at most once a month, so its place names the listing.
   const listing: Listing = {
     id: `${item.kind}-${item.x}-${item.y}`,
