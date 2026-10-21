@@ -25,6 +25,7 @@ export interface GroundDeal {
   ground: Ground[];
   /** The map's one scarce good, or null when it has none. */
   scarce: FloorGood | null;
+  lifts: Lift[];
 }
 
 type LandTerrain = Exclude<Terrain, 'store'>;
@@ -38,7 +39,7 @@ export function dealGround(layout: Layout, players: number, rng: Rng): GroundDea
   const peaks = placePeaks(dealOdds(layout, players, rng), rng);
   const scarce = pickScarce(rng);
   const done = applyScarcity(joinSeams(repairReach(liftFloors(peaks, scarce))), scarce);
-  return { ground: done.ground, scarce };
+  return { ground: done.ground, scarce, lifts: [] };
 }
 
 /**
@@ -102,14 +103,26 @@ export function liftFloors(dealt: Dealt, scarce: FloorGood | null): Dealt {
   return { ...dealt, ground };
 }
 
+export type Lift = ReachLift | SeamLift;
+
 /** A rating stage 7 raised because no swap could bring a plot within reach. */
-export interface Lift {
+export interface ReachLift {
+  kind: 'reach';
   plot: number;
   good: FloorGood;
   /** The rating before the lift; after it, the plot holds exactly the good threshold. */
   from: number;
+  stranded: number;
   /** The plot's terrain odds give no chance of a good rating: no plot that could be good was in reach. */
   impossible: boolean;
+}
+
+export interface SeamLift {
+  kind: 'seam';
+  plot: number;
+  good: 'smithore';
+  from: number;
+  joins: number;
 }
 
 /**
@@ -153,7 +166,7 @@ export function repairReach(dealt: Dealt): Dealt & { lifts: Lift[] } {
         (a, b) =>
           capable(b) - capable(a) || away(a.i) - away(b.i) || b.mean - a.mean || rating(b.i) - rating(a.i) || b.touches - a.touches || b.reaches - a.reaches || suit(a.i, b.i),
       )[0]!;
-      lifts.push({ plot: pick.i, good, from: rating(pick.i), impossible: pick.odds === 0 });
+      lifts.push({ kind: 'reach', plot: pick.i, good, from: rating(pick.i), stranded: -1, impossible: pick.odds === 0 });
       ground[pick.i]![good] = MAP.goodAt[good];
       cover.move([], [pick.i]);
     }
@@ -166,12 +179,12 @@ export function repairReach(dealt: Dealt): Dealt & { lifts: Lift[] } {
  * nobody and leaves fewer isolated plots: it trades with a plot of its own terrain, or a
  * good plot of a neighbour's terrain trades with that neighbour.
  */
-export function joinSeams(dealt: Dealt): Dealt {
+export function joinSeams(dealt: Dealt): Dealt & { lifts: Lift[] } {
   const grid = gridOf(dealt.layout);
   const ground = copyGround(dealt);
   const cover = coverage(grid, MAP.reach[sizeBand(dealt.players)].smithore, grid.land.filter((i) => isGood(ground, i, 'smithore')));
   seamTrades(grid, ground, dealt.fields.smithore, cover);
-  return { ...dealt, ground };
+  return { ...dealt, ground, lifts: [] };
 }
 
 /**
@@ -181,14 +194,14 @@ export function joinSeams(dealt: Dealt): Dealt {
  * keeps the reach. For Smithore, lone plots go first, a bounded search tries other sets when
  * the first would break the seams (S8), and the seam trades run again afterwards.
  */
-export function applyScarcity(dealt: Dealt, scarce: FloorGood | null): Dealt {
+export function applyScarcity(dealt: Dealt, scarce: FloorGood | null): Dealt & { lifts: Lift[] } {
   const ground = copyGround(dealt);
-  if (scarce === null) return { ...dealt, ground };
+  if (scarce === null) return { ...dealt, ground, lifts: [] };
   const grid = gridOf(dealt.layout);
   const field = dealt.fields[scarce];
   const goods = grid.land.filter((i) => isGood(ground, i, scarce));
   const cut = goods.length - (Math.ceil(MAP.normalLo[scarce] * dealt.players) - 1);
-  if (cut <= 0) return { ...dealt, ground };
+  if (cut <= 0) return { ...dealt, ground, lifts: [] };
   const lone = (i: number) => (scarce === 'smithore' && isLoneGood(grid, ground, i, scarce) ? 0 : 1);
   const order = [...goods].sort((a, b) => lone(a) - lone(b) || field[a]! - field[b]! || a - b);
   const cover = coverage(grid, MAP.reach[sizeBand(dealt.players)][scarce], goods);
@@ -236,7 +249,7 @@ export function applyScarcity(dealt: Dealt, scarce: FloorGood | null): Dealt {
     cover.move([move.lower, move.from], [move.to]);
   }
   if (scarce === 'smithore') seamTrades(grid, ground, field, cover);
-  return { ...dealt, ground };
+  return { ...dealt, ground, lifts: [] };
 }
 
 /** A good plot to lower, paired with an in-terrain move (from a good plot to a plot of its terrain) that together strand nobody. */
