@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WALK, type AuctionSide, type GameState } from '@mule/engine';
+import { storeForSale, UPKEEP, WALK, type AuctionSide, type GameState, type Good } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
 import { fakeContext, seats } from './fake-context.js';
@@ -36,6 +36,16 @@ function walkTogether(game: MuleGame) {
   game.handle('s2', { type: 'walk', dir: 'up' });
 }
 
+/** Plays the first month until the good is up in the auction; nobody presses anything. */
+function toGood(good: Good) {
+  const { ctx, advance } = fakeContext();
+  const game = new MuleGame(ctx, 7);
+  game.start(seats);
+  for (let i = 0; i < 20_000 && game.viewFor(null).auction?.good !== good; i++) advance(WALK.tickMs);
+  expect(game.viewFor(null).auction?.good, `${good} comes up in the first month's auction`).toBe(good);
+  return game;
+}
+
 function expectUnitsMatchEngine(view: MuleView, state: GameState) {
   const auction = view.auction!;
   for (const w of auction.walkers) {
@@ -44,16 +54,17 @@ function expectUnitsMatchEngine(view: MuleView, state: GameState) {
 }
 
 const keysOf = (o: object) => Object.keys(o).sort();
+const NEW_FIELD = 'a new board field: check it against HC-2';
 
 /** Every field the board's auction carries is one of these, so no other good's stock can ride along. */
 function expectBoardKeys(auction: NonNullable<MuleView['auction']>) {
-  expect(keysOf(auction)).toEqual(
-    ['deals', 'good', 'hi', 'lo', 'next', 'seconds', 'shipPays', 'skipped', 'slowed', 'speed', 'stage', 'status', 'storeBuys', 'storeSells', 'total', 'units', 'walkers'],
+  expect(keysOf(auction), NEW_FIELD).toEqual(
+    ['deals', 'good', 'hi', 'lo', 'next', 'seconds', 'shipPays', 'skipped', 'slowed', 'speed', 'stage', 'status', 'storeBuys', 'storeForSale', 'storeSells', 'total', 'units', 'walkers'],
   );
-  for (const w of auction.walkers) expect(keysOf(w)).toEqual(['at', 'dir', 'done', 'id', 'price', 'side', 'units']);
-  for (const r of auction.status) expect(keysOf(r)).toEqual(['had', 'id', 'made', 'need', 'now', 'spoils', 'used']);
-  for (const d of auction.deals) expect(keysOf(d)).toEqual(['buyer', 'price', 'seller', 'units']);
-  for (const k of auction.skipped) expect(keysOf(k)).toEqual(['good', 'reason']);
+  for (const w of auction.walkers) expect(keysOf(w), NEW_FIELD).toEqual(['at', 'dir', 'done', 'id', 'price', 'side', 'units']);
+  for (const r of auction.status) expect(keysOf(r), NEW_FIELD).toEqual(['had', 'id', 'made', 'need', 'now', 'spoils', 'used']);
+  for (const d of auction.deals) expect(keysOf(d), NEW_FIELD).toEqual(['buyer', 'price', 'seller', 'units']);
+  for (const k of auction.skipped) expect(keysOf(k), NEW_FIELD).toEqual(['good', 'reason']);
   for (const g of auction.next) expect(typeof g).toBe('string');
 }
 
@@ -95,8 +106,8 @@ describe('the goods auction walkers carry their units', () => {
     expect(passer.units).toBeGreaterThan(0);
   });
 
-  // trace-allow: guards the spec's HC-2 invariant, which has no INV id: the TV holds no player stock but the good up
-  it("HC-2: the board view carries no stock of any good but the one that's up", () => {
+  // trace-allow: guards the spec's HC-2 invariant, which has no INV id: the board's auction holds no player stock but the good up's
+  it("HC-2: the board's auction carries no stock of any good but the one that's up", () => {
     const { game, advance, good } = toWalk();
     walkTogether(game);
     let dealsSeen = 0;
@@ -108,5 +119,25 @@ describe('the goods auction walkers carry their units', () => {
       advance(WALK.tickMs);
     }
     expect(dealsSeen, 'frames with units changing hands, so the deal keys were checked').toBeGreaterThan(0);
+  });
+});
+
+describe("the board's store count", () => {
+  it("B-AC-3: the board's store count is what the store will sell (stock less the colonists' Food and Water reserve)", () => {
+    const smithore = toGood('smithore');
+    const board = smithore.viewFor(null);
+    const forSale = storeForSale(engineOf(smithore), 'smithore');
+    expect(forSale, 'the store has Smithore to sell').toBeGreaterThan(0);
+    expect(board.auction!.storeForSale).toBe(forSale);
+
+    const food = toGood('food');
+    const state = engineOf(food);
+    const reserve = Math.ceil(state.colonists / UPKEEP.colonistsPerUnit);
+    expect(reserve, "the colonists' Food reserve").toBeGreaterThan(1);
+    state.store.stock.food = reserve - 1;
+    const view = food.viewFor(null);
+    expect(view.auction!.storeForSale, "Food inside the colonists' reserve is not for sale").toBe(0);
+    expect(view.auction!.storeSells, 'so the store has no selling line').toBeNull();
+    expect(view.market.find((r) => r.good === 'food')!.storeStock, "the market still shows the store's real stock").toBe(reserve - 1);
   });
 });

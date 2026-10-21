@@ -1,7 +1,7 @@
 import type { AuctionView } from '@mule/protocol';
 import { Button, cx, GOOD_NAME, GoodTag, TimeBar, WalkBoard } from '@mule/ui';
 import { useCallback, useEffect, useRef } from 'react';
-import { boardWalkers, dealLine, skippedLine, StatusTable } from '../components/AuctionParts';
+import { boardWalkers, dealLine, LineReadout, skippedLine, StatusTable } from '../components/AuctionParts';
 import { PHASE_NAME } from '../game/derive';
 import { useAuctionSound } from '../game/sound';
 import { useClient } from '../net/react';
@@ -67,6 +67,7 @@ export function Auction() {
   const done = mine?.done ?? false;
   const myDeal = auction.deals.find((d) => d.buyer === me.id || d.seller === me.id);
   const skipped = skippedLine(auction);
+  const walkers = boardWalkers(view, auction);
   const declare = (side: Side) => client.intent({ type: 'declare', side });
 
   const sides = (compact: boolean) => (
@@ -92,7 +93,7 @@ export function Auction() {
   );
 
   const doneButton = (
-    <Button size="md" variant={done ? 'outline' : 'holo'} className="h-10 w-full" disabled={done} onClick={() => client.intent({ type: 'ready' })}>
+    <Button size="md" variant={done ? 'outline' : 'holo'} className="h-10 w-full" disabled={done} data-testid="done" onClick={() => client.intent({ type: 'ready' })}>
       {done ? 'Done · waiting' : stage === 'status' ? 'Ready' : stage === 'declare' ? 'Done choosing' : `Done with ${GOOD_NAME[good]}`}
     </Button>
   );
@@ -134,11 +135,15 @@ export function Auction() {
         <>
           {sides(true)}
           <div className={cx('rounded-control border px-2.5 py-1.5 text-xs leading-snug', myDeal ? 'border-holo bg-holo-soft text-ink' : 'border-holo-faint text-ink-2')} data-testid="my-deal">
-            {myDeal ? dealLine(view, myDeal, me.id) : mine?.side === 'pass' ? 'You passed on this good.' : mine?.side === 'seller' ? 'Walk down to ask less.' : 'Walk up to bid more.'}
+            {myDeal
+              ? dealLine(view, myDeal, me.id)
+              : mine?.side === 'pass'
+                ? 'You passed on this good.'
+                : mine?.side === 'seller'
+                  ? 'Walk down to meet the highest bid.'
+                  : 'Walk up to meet the lowest ask.'}
           </div>
-          <span data-num className="font-mono text-[10px] text-ink-3">
-            {auction.units} UNIT{auction.units === 1 ? '' : 'S'} TRADED · YOU {mine?.side === 'seller' ? 'ASK' : 'BID'} {mine && mine.side !== 'pass' ? mine.price : '—'}
-          </span>
+          <LineReadout walkers={walkers} trading={auction.deals.length > 0} meId={me.id} />
         </>
       )}
     </>
@@ -183,11 +188,13 @@ export function Auction() {
           <WalkBoard
             lo={auction.lo}
             hi={auction.hi}
-            walkers={boardWalkers(view, auction)}
+            walkers={walkers}
             deals={auction.deals}
             storeBuys={auction.storeBuys}
             storeSells={auction.storeSells}
             shipPays={auction.shipPays}
+            storeStock={auction.storeForSale}
+            marks={{ ask: true, bid: true }}
             stage={stage === 'walk' ? 'walk' : 'declare'}
             meId={me.id}
             {...(onBoard ? { onDir: (d: -1 | 0 | 1) => walk(d > 0 ? 'up' : d < 0 ? 'down' : 'stop') } : {})}
