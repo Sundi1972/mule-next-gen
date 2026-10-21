@@ -384,12 +384,13 @@ invariant  the fund never goes below 0.
 ```
 RULE-8 · VoteHand (Classic AI seats)                                 shape: decision table
 run       in nominate, once, after a seeded delay in POLITICS.ai.actMs:
-          governor if POLITICS.ai.runGovernor[persona] ≥ a seeded draw, else sheriff if
-          POLITICS.ai.runSheriff[persona] ≥ a seeded draw, else none; never against RULE-2.
+          governor if a seeded draw < POLITICS.ai.runGovernor[persona], else sheriff if a
+          seeded draw < POLITICS.ai.runSheriff[persona], else none; never against RULE-2.
 vote      in ballot, per contested office: itself if it runs; otherwise the candidate with
           the fewest plots, so the table leans against the biggest landowner (the design's
-          "council reins in the runaway leader"); ties → lower seat. Rookie votes for a seeded
-          random candidate instead.
+          "council reins in the runaway leader"); ties → lower seat. A Rookie that does not
+          run votes for a seeded random candidate instead of the fewest-plots rule; a Rookie
+          candidate votes for itself like any candidate (AM-7).
 done      Done right after acting in each stage.
 tax       as Governor, once per planning after the election: step toward the persona's target
           (POLITICS.ai.taxTarget: trader 5, cautious 4, aggressive 8, saboteur 10) by at most
@@ -584,6 +585,19 @@ because   P-1: without the desks, a real month 1 would run an election no phone 
           exactly that. A feature switched on before its screens exist serves no player.
 goal      P-1 — met when PR-4 lands; nothing politics-on reaches trunk before then anyway
 folded    C9 tomorrow; plan Task 3.2's C1 test; PR-4 adds the flip and its test
+```
+
+```
+AM-7 · 2026-10-22 · lead · PR-2 review
+
+target    §2 RULE-8 (run draw, Rookie vote)
+did       the run draw reads "a seeded draw < p" (the engine's rng.chance convention; p = 0
+          means never); a Rookie candidate votes for itself, only a non-candidate Rookie picks
+          at random
+because   P-1: the review found RULE-8 ambiguous on both points; the chosen readings keep a
+          candidate's own vote certain at every level
+goal      P-1 — still met
+folded    RULE-8 text; PR-2 test row for the Rookie candidate
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
