@@ -140,12 +140,12 @@ export class TableClient {
   /** Give up the seat on this phone: tell the room, forget the seat and disconnect. */
   leave(): void {
     if (this.socket?.readyState === OPEN) this.raw({ t: 'leave' });
+    clearSeat(this.storage);
     this.letGo(null);
   }
 
-  /** Forgets the seat and drops the socket; with no target left, its close starts no reconnect. */
+  /** Drops the target and the socket, so its close starts no reconnect. */
   private letGo(notice: string | null): void {
-    clearSeat(this.storage);
     this.target = null;
     this.stopTimers();
     const s = this.socket;
@@ -278,6 +278,8 @@ export class TableClient {
         this.toast(msg.message);
         return;
       case 'removed':
+        // A board never holds a seat; the one saved here belongs to a phone tab in the same browser.
+        if (this.state.role === 'player') clearSeat(this.storage);
         this.letGo(REMOVED[msg.reason]);
         return;
     }

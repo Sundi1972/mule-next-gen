@@ -265,8 +265,11 @@ export class Room<Intent, View> {
 
   /** In the lobby the sender's seat goes, token and all; after Start only this screen lets go and the seat waits, away. See RULE-5. */
   private leave(conn: Connection<View>, from: { seatId: string | null }, seatId: string): void {
-    if (!this.started && seatId === this.hostId) throw new TableError('Close the table instead');
+    const live = this.seats.find((s) => s.id === seatId)?.conn === conn;
+    if (live && !this.started && seatId === this.hostId) throw new TableError('Close the table instead');
     from.seatId = null;
+    // A screen another device took the seat from lets go of itself only.
+    if (!live) return;
     if (this.started) {
       this.disconnect(conn);
       return;
