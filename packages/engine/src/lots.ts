@@ -1,7 +1,9 @@
 import { GAME, LOTS, WALK } from './config.js';
 import { mulePrice, taxSale } from './economy.js';
 import { RuleError } from './errors.js';
+import { freePlots } from './game.js';
 import { tileAt } from './map.js';
+import { createRng } from './rng.js';
 import type { GameState, LandAuction, Listing, LotItem, LotResult, Tile } from './types.js';
 import { stepBoard, takeSide, type WalkMarket } from './walk.js';
 
@@ -67,6 +69,36 @@ export function list(state: GameState, playerId: string, lot: ListRequest): List
     storePays: storePaysFor(state, item.kind),
   };
   state.listings.push(listing);
+  return listing;
+}
+
+/** The seller of a plot the colony puts up. It is not a player: its proceeds go to store capital. */
+export const COLONY_SELLER = 'colony';
+
+/**
+ * Sometimes puts one free plot up for the colony, first in the line-up (spec RULE-7).
+ * Call on leaving the land grant, so the plot is still free. Returns the listing, or null.
+ */
+export function colonyLot(state: GameState): Listing | null {
+  // An AI's look-ahead neither foresees the real colony lot nor imagines one from its zeroed seed.
+  if (state.whatIf) return null;
+  // Its own RNG from (seed, month) alone: sharing one would shift every draw after it when a colony lot appears.
+  const rng = createRng((state.seed * 53 + state.month * 6_151) >>> 0);
+  if (rng.next() >= LOTS.colonyPlotChance) return null;
+  const free = freePlots(state);
+  if (free.length === 0 || state.listings.length >= LOTS.maxLotsPerMonth) return null;
+  const { x, y } = rng.pick(free);
+  const listing: Listing = {
+    id: `plot-${x}-${y}`,
+    seller: COLONY_SELLER,
+    item: { kind: 'plot', x, y },
+    minimum: Math.round(LOTS.colonyPlotShare * GAME.plotScore),
+    unsold: 'keep',
+    // Unsold, it stays free land: the store never pays for it.
+    storePays: 0,
+  };
+  // A new array, not unshift: cloneForSim shares this one with the real game.
+  state.listings = [listing, ...state.listings];
   return listing;
 }
 

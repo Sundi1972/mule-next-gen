@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   advancePhase,
+  COLONY_SELLER,
   createGame,
   list,
   LOTS,
@@ -228,7 +229,7 @@ describe('T-AC-2: resolution at the bell (RULE-5), money and MULEs conserved', (
   it('T-AC-2: RULE-5 row 1, the colony as seller — every seat can bid, and the price goes to store capital untaxed', () => {
     const state = newGame();
     own(state, 5, 3, null);
-    state.listings.push({ id: 'colony-5-3', seller: 'colony', item: { kind: 'plot', x: 5, y: 3 }, minimum: 200, unsold: 'keep', storePays: 0 });
+    state.listings.push({ id: 'plot-5-3', seller: COLONY_SELLER, item: { kind: 'plot', x: 5, y: 3 }, minimum: 200, unsold: 'keep', storePays: 0 });
     auction(state, []);
     const capital = state.store.capital;
     const before = totals(state);
