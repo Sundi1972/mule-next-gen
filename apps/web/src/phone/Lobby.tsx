@@ -180,7 +180,7 @@ const BIG_QR = 88;
  */
 function RoomCard({ code, url, compact }: { code: string; url: string; compact: boolean }) {
   return (
-    <div className="flex items-center gap-3 rounded-panel border border-holo-line bg-panel p-2" data-testid="room-card">
+    <div className="flex max-w-88 items-center gap-3 rounded-panel border border-holo-line bg-panel p-2" data-testid="room-card">
       <div className="shrink-0" data-testid="room-qr">
         <Qr text={url} size={compact ? COMPACT_QR : BIG_QR} className={compact ? 'p-1.5!' : 'p-2!'} />
       </div>
