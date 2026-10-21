@@ -92,6 +92,27 @@ describe('phaseScale and maxMonths', () => {
     expect(game.viewFor(null).auction!.stage).toBe('declare');
   });
 
+  it('T-AC-6: production lasts 15 s and ends early when all are ready', () => {
+    const toProduction = () => {
+      const g = toDevelopment();
+      while (g.game.viewFor(null).phase === 'development') g.advance(100);
+      expect(g.game.viewFor(null).phase).toBe('production');
+      return g;
+    };
+    const timed = toProduction();
+    expect(timed.game.viewFor(null).phaseEndsAt! - timed.ctx.now()).toBe(15_000);
+    timed.advance(14_999);
+    expect(timed.game.viewFor(null).phase).toBe('production');
+    timed.advance(1);
+    expect(timed.game.viewFor(null).phase).toBe('auction');
+
+    const early = toProduction();
+    early.game.handle('s1', { type: 'ready' });
+    expect(early.game.viewFor(null).phase).toBe('production');
+    early.game.handle('s2', { type: 'ready' });
+    expect(early.game.viewFor(null).phase).toBe('auction');
+  });
+
   it('T-AC-2: maxMonths reaches the game and every view', () => {
     const { game } = started({ maxMonths: 2 });
     expect(game.viewFor(null).maxMonths).toBe(2);
