@@ -60,7 +60,11 @@ describe('T-AC-4: every call appends one RULE-4 line; finish appends a game line
     l.record(call({ seat: 's3', outcome: 'timeout', input: 0, cached_read: 0, cache_write: 0, output: 0 }));
     l.record(call({ seat: 's1' }));
     l.record(call({ game: 'other', seat: 's1', output: 1038 }));
+    const one = (410 * 0.1 + 620 * 0.01 + 50 * 0.125 + 38 * 0.5) / 1_000_000;
+    expect(l.seatSpent('g1', 's1')).toBeCloseTo(2 * one, 12);
+    expect(l.seatSpent('other', 's1')).toBeCloseTo(one + 1000 * 0.5e-6, 12);
     l.finish('g1');
+    expect(l.seatSpent('other', 's1')).toBeCloseTo(one + 1000 * 0.5e-6, 12);
     const all = lines();
     const sum = all
       .filter((x) => x.type === undefined && x.game === 'g1')
@@ -69,15 +73,12 @@ describe('T-AC-4: every call appends one RULE-4 line; finish appends a game line
     expect(game).toHaveLength(1);
     expect(game[0]).toMatchObject({ t: NOW, game: 'g1', type: 'game', seats: 3, calls: 4 });
     expect(game[0]!.usd as number).toBeCloseTo(sum, 12);
-    const one = (410 * 0.1 + 620 * 0.01 + 50 * 0.125 + 38 * 0.5) / 1_000_000;
     const bySeat = game[0]!.by_seat as Record<string, { calls: number; usd: number }>;
     expect(bySeat.s1!.calls).toBe(2);
     expect(bySeat.s1!.usd).toBeCloseTo(2 * one, 12);
     expect(bySeat.s2!.calls).toBe(1);
     expect(bySeat.s2!.usd).toBeCloseTo(one + 100 * 0.5e-6, 12);
     expect(bySeat.s3).toEqual({ calls: 1, usd: 0 });
-    expect(l.seatSpent('g1', 's1')).toBeCloseTo(2 * one, 12);
-    expect(l.seatSpent('other', 's1')).toBeCloseTo(one + 1000 * 0.5e-6, 12);
   });
 
   it('T-AC-4: finish for a game with no calls writes calls 0 and usd 0', () => {

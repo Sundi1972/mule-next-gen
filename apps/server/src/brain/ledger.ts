@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BRAIN } from '@mule/engine';
+import { BRAIN, type AiLevelId, type AiPersonaId } from '@mule/engine';
+import type { DecisionKind, RejectOutcome } from '@mule/ai';
 
 export interface Usage {
   input: number;
@@ -10,15 +11,15 @@ export interface Usage {
   output: number;
 }
 
-export type Outcome = 'llm' | 'timeout' | 'error' | 'unreadable' | 'off_list' | 'budget';
+export type Outcome = RejectOutcome | 'llm' | 'timeout' | 'error' | 'budget';
 
 export interface CallRecord extends Usage {
   game: string;
   seat: string;
-  persona: string;
-  level: string;
+  persona: AiPersonaId;
+  level: AiLevelId;
   model: string;
-  kind: string;
+  kind: DecisionKind;
   ms: number;
   outcome: Outcome;
 }
@@ -58,23 +59,35 @@ export function createLedger(opts: { path?: string; clock?: () => Date } = {}): 
   const file = opts.path ?? defaultLedgerPath();
   const clock = opts.clock ?? (() => new Date());
   const games = new Map<string, Map<string, Total>>();
+  const finished = new Set<string>();
   let dirReady = false;
 
+  let reported = false;
+
+  /** Never throws: a ledger I/O fault must not reach the game. Reports the first fault only. */
   const append = (line: object): void => {
-    if (!dirReady) {
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      dirReady = true;
+    try {
+      if (!dirReady) {
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        dirReady = true;
+      }
+      fs.appendFileSync(file, `${JSON.stringify(line)}\n`);
+    } catch (e) {
+      if (reported) return;
+      reported = true;
+      console.error(`brain ledger: cannot append to ${file}: ${e instanceof Error ? e.message : String(e)}`);
     }
-    fs.appendFileSync(file, `${JSON.stringify(line)}\n`);
   };
 
   return {
     record(call) {
-      const timedOut = call.outcome === 'timeout';
-      const used: Usage = timedOut
-        ? { input: 0, cached_read: 0, cache_write: 0, output: 0 }
-        : { input: call.input, cached_read: call.cached_read, cache_write: call.cache_write, output: call.output };
-      const cost = usd(used);
+      const cost = usd(call);
+      const seats = games.get(call.game) ?? new Map<string, Total>();
+      games.set(call.game, seats);
+      const total = seats.get(call.seat) ?? { calls: 0, usd: 0 };
+      seats.set(call.seat, total);
+      total.calls += 1;
+      total.usd += cost;
       append({
         t: clock().toISOString(),
         game: call.game,
@@ -83,24 +96,25 @@ export function createLedger(opts: { path?: string; clock?: () => Date } = {}): 
         level: call.level,
         model: call.model,
         kind: call.kind,
-        ...used,
+        input: call.input,
+        cached_read: call.cached_read,
+        cache_write: call.cache_write,
+        output: call.output,
         usd: cost,
         ms: call.ms,
-        timed_out: timedOut,
+        timed_out: call.outcome === 'timeout',
         outcome: call.outcome,
       });
-      const seats = games.get(call.game) ?? new Map<string, Total>();
-      games.set(call.game, seats);
-      const total = seats.get(call.seat) ?? { calls: 0, usd: 0 };
-      seats.set(call.seat, total);
-      total.calls += 1;
-      total.usd += cost;
     },
 
     seatSpent: (game, seat) => games.get(game)?.get(seat)?.usd ?? 0,
 
+    /** Writes the game's total line once and releases its totals; a second finish of the same game is a no-op. */
     finish(game) {
+      if (finished.has(game)) return;
+      finished.add(game);
       const seats = games.get(game) ?? new Map<string, Total>();
+      games.delete(game);
       const by_seat: Record<string, Total> = {};
       let calls = 0;
       let cost = 0;
