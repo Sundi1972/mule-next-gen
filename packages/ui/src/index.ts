@@ -9,6 +9,7 @@ export * from './components/theme';
 export * from './components/Panel';
 export * from './components/PhaseBar';
 export * from './components/PlayerMark';
+export * from './components/ProductionMap';
 export * from './components/Creature';
 export * from './components/MuleIcon';
 export * from './components/species';
