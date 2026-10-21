@@ -15,6 +15,7 @@ import {
   fitFilter,
   GAME,
   GOODS,
+  goodsMarket,
   type AiLevelId,
   grantDone,
   hasAnalysed,
@@ -44,6 +45,7 @@ import {
   stepAuction,
   stepLandAuction,
   storeBuyLine,
+  storeForSale,
   storeQuotes,
   storeSellLine,
   unlist as unlistLot,
@@ -703,6 +705,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const state = this.requireState();
     const a = state.auction;
     if (state.phase !== 'auction' || !a || !a.good || a.stage === 'over') return null;
+    const market = goodsMarket(state);
     const prices = a.walkers.map((w) => w.price);
     const lines = [storeBuyLine(state), storeSellLine(state), shipLine(state)].filter((n): n is number => n !== null);
     return {
@@ -714,10 +717,19 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       next: [...a.queue],
       storeBuys: storeBuyLine(state),
       storeSells: storeSellLine(state),
+      storeForSale: storeForSale(state, a.good),
       shipPays: shipLine(state),
       ...boardRange(a.lo, a.hi, [...prices, ...lines]),
       speed: a.speed,
-      walkers: a.walkers.map((w) => ({ id: w.id, side: w.side, price: Math.round(w.price), at: w.price, dir: w.dir, done: a.done.includes(w.id) })),
+      walkers: a.walkers.map((w) => ({
+        id: w.id,
+        side: w.side,
+        price: Math.round(w.price),
+        at: w.price,
+        dir: w.dir,
+        done: a.done.includes(w.id),
+        units: market.units(w.id),
+      })),
       deals: a.deals.map(({ buyer, seller, price, units }) => ({ buyer, seller, price, units })),
       units: a.units,
       status: a.status,
