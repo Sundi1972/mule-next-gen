@@ -232,7 +232,8 @@ describe('land auction on the server', () => {
       for (const id of humans) expect(money(after, id)).toBe(money(before, id));
       expect(after.news[0]).toBe(`Nobody bid 250 on plot ${at(plot)}: Brix keeps it.`);
     }
-    // store: nobody walks. Lena's phone drops, then Brix's and Ossa's in the walk: a dropped phone counts as done, and the lot still runs to its bell.
+    // store: nobody bids the minimum. Lena's phone drops, then Ossa's while she holds Up, and Brix's:
+    // a dropped phone counts as done, its bid stands where it was, and the lot still runs to its bell.
     {
       const { game, advance, plots } = toMonth2Planning({ mule: true });
       const plot = plots.b![0]!;
@@ -246,6 +247,10 @@ describe('land auction on the server', () => {
       game.handle('o', { type: 'ready' });
       advance(WALK.tickMs);
       expect(game.viewFor(null).landAuction!.stage).toBe('walk');
+      game.handle('o', { type: 'walk', dir: 'up' });
+      advance(WALK.tickMs);
+      const dropped = walker(game.viewFor(null), 'o')!.at;
+      expect(dropped).toBeGreaterThan(walker(before, 'o')!.at);
       game.connectionChanged('b', false);
       game.connectionChanged('o', false);
       expect(game.viewFor(null).phase).toBe('landAuction');
@@ -253,6 +258,7 @@ describe('land auction on the server', () => {
       const after = game.viewFor('b');
       expect(after.phase).toBe('landAuction');
       expect(after.landAuction!.result).toEqual({ kind: 'store', price: storePays });
+      expect(walker(after, 'o')!.at).toBe(dropped);
       expect(money(after, 'b')).toBe(money(before, 'b') + storePays);
       expect(money(after, 'o')).toBe(money(before, 'o'));
       expect(tile(after, plot).owner).toBeNull();
