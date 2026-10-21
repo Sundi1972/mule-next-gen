@@ -198,8 +198,13 @@ async function claimOne(p: Page): Promise<void> {
   }
 }
 
-const meets = (a: Rect, b: Rect) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
-const inside = (a: Rect, box: Rect) => a.l >= box.l - 0.5 && a.r <= box.r + 0.5 && a.t >= box.t - 0.5 && a.b <= box.b + 0.5;
+function meets(a: Rect, b: Rect): boolean {
+  return a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
+}
+
+function inside(a: Rect, box: Rect): boolean {
+  return a.l >= box.l - 0.5 && a.r <= box.r + 0.5 && a.t >= box.t - 0.5 && a.b <= box.b + 0.5;
+}
 
 /** B-AC-18: in every sample, no two bubbles meet, no bubble meets the ticker, and each bubble stays inside its frame. */
 function noOverlaps(who: string, samples: Sample[]): string {
@@ -263,7 +268,7 @@ function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
     check(seen.phase === phase, `B-AC-17: on ${who} line ${line.id} shows in the ticker in the phase it was said in, ${phase}, not ${seen.phase}`);
   }
 
-  let bubbles = 0;
+  const anchors = { creature: 0, seatRow: 0 };
   for (const b of schedule(wire)) {
     if (b.to - b.from < SHORTEST_LOOKED_FOR_MS) continue;
     const line = wire.lines.find((l) => l.id === b.id)!;
@@ -278,8 +283,9 @@ function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
     const at = shown.speakers.includes(line.from) ? line.from : 'seat-row';
     check(bubble.anchor === at, `B-AC-17: on ${who} line ${b.id}'s bubble sits at ${at === 'seat-row' ? 'the seat row' : 'its speaker'}, got ${bubble.anchor}`);
     if (at === 'seat-row' && line.from !== wire.seatId) check(shown.speaking.includes(line.from), `B-AC-17: on ${who} the seat row lights ${line.from}'s seat while its bubble shows`);
-    bubbles++;
+    anchors[at === 'seat-row' ? 'seatRow' : 'creature']++;
   }
+  const bubbles = anchors.creature + anchors.seatRow;
   check(bubbles >= 4, `B-AC-17: on ${who} bubbles showed in each phase, got ${bubbles}`);
 
   for (const s of samples)
@@ -288,7 +294,7 @@ function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
       check(line, `B-AC-17: on ${who} a bubble shows line ${x.line}, which this page never received`);
       check(phaseAt(wire, line.at) === phaseAt(wire, s.t - PHASE_LAG_MS), `B-AC-17: on ${who} after the phase changed, line ${x.line}'s bubble from the phase before still shows`);
     }
-  return `${wire.lines.length} lines (${[...byPhase].map(([p, n]) => `${p} ${n}`).join(', ')}), ${bubbles} bubbles at their speakers`;
+  return `${wire.lines.length} lines (${[...byPhase].map(([p, n]) => `${p} ${n}`).join(', ')}), ${bubbles} bubbles at their speakers (${anchors.creature} at a creature, ${anchors.seatRow} at the seat row)`;
 }
 
 type Seen = { who: string; wire: Wire; samples: Sample[] };
