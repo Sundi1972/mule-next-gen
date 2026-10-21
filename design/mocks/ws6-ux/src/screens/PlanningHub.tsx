@@ -48,10 +48,10 @@ const ICON: Record<Desk, string> = {
 const DESKS: { id: Desk; label: string; status: Status; locked?: boolean; office?: Office }[] = [
   { id: 'colony', label: 'Colony', status: 'today' },
   { id: 'talk', label: 'Talk', status: 'part' },
-  { id: 'council', label: 'Council', status: 'soon' },
+  { id: 'council', label: 'Council', status: 'part' },
   { id: 'market', label: 'Market', status: 'today' },
   { id: 'secret', label: 'Secret', status: 'soon', locked: true },
-  { id: 'governor', label: 'Governor', status: 'soon', office: 'governor' },
+  { id: 'governor', label: 'Governor', status: 'part', office: 'governor' },
   { id: 'sheriff', label: 'Sheriff', status: 'soon', office: 'sheriff', locked: true },
 ];
 
@@ -64,8 +64,13 @@ function Glyph({ d, size = 18, className }: { d: string; size?: number; classNam
 }
 
 /** Built by WS7, not yet in the game. */
-function Soon({ part = false }: { part?: boolean }) {
-  return <span className="rounded-chip border border-warn/50 px-1 font-mono text-[9px] font-bold leading-4 text-warn @min-[1100px]:text-[10px]">{part ? 'PART SOON' : 'SOON · WS7'}</span>;
+function Soon({ part = false, slice }: { part?: boolean; slice?: number }) {
+  const next = slice === 1;
+  return (
+    <span className={cx('rounded-chip border px-1 font-mono text-[9px] font-bold leading-4 @min-[1100px]:text-[10px]', next ? 'border-holo/60 text-holo' : 'border-warn/50 text-warn')}>
+      {slice ? (next ? 'WS7 · SLICE 1 · NEXT' : `LATER · WS7 SLICE ${slice}`) : part ? 'PART SOON' : 'SOON · WS7'}
+    </span>
+  );
 }
 
 /** Only you see this. */
@@ -106,16 +111,16 @@ const Who = ({ id, size = 16 }: { id: string; size?: number }) => {
 
 // --- This month: everything the month allows, as doors into the desks ---------------------------
 
-function Agenda({ office, onDesk, onTool }: { office: Office; onDesk: (d: Desk) => void; onTool: (t: Tool) => void }) {
-  const items: { key: string; title: string; sub: string; status: Status; locked?: boolean; go: () => void }[] = [
-    { key: 'election', title: 'Election day', sub: 'Vote for Governor and Sheriff', status: 'soon', go: () => onDesk('council') },
-    { key: 'law', title: 'Law vote', sub: 'Price cap: Food at 1.5×', status: 'soon', go: () => onDesk('council') },
-    { key: 'deals', title: '2 deal offers', sub: 'Ossa, Kai', status: 'soon', locked: true, go: () => onDesk('talk') },
+function Agenda({ office, after, onDesk, onTool }: { office: Office; after: boolean; onDesk: (d: Desk) => void; onTool: (t: Tool) => void }) {
+  const items: { key: string; title: string; sub: string; status: Status; slice?: number; locked?: boolean; go: () => void }[] = [
+    ...(after ? [] : [{ key: 'election', title: 'Election day', sub: 'Run, then vote: Governor and Sheriff', status: 'soon' as Status, slice: 1, go: () => onDesk('council') }]),
+    { key: 'law', title: 'Law vote', sub: 'Price cap: Food at 1.5×', status: 'soon', slice: 2, go: () => onDesk('council') },
+    { key: 'deals', title: '2 deal offers', sub: 'Ossa, Kai', status: 'soon', slice: 3, locked: true, go: () => onDesk('talk') },
     { key: 'drone', title: 'Geo drone', sub: '2 plots · 40 cr', status: 'today', locked: true, go: () => onTool('drone') },
     { key: 'list', title: 'Sell a plot or MULE', sub: 'At the auction after planning', status: 'today', go: () => onDesk('market') },
-    { key: 'sabotage', title: 'Sabotage', sub: 'One secret order', status: 'soon', locked: true, go: () => onDesk('secret') },
-    ...(office === 'sheriff' ? [{ key: 'sheriff', title: "Sheriff's desk", sub: '2 guards · 1 inspection', status: 'soon' as Status, locked: true, go: () => onDesk('sheriff') }] : []),
-    ...(office === 'governor' ? [{ key: 'governor', title: "Governor's desk", sub: 'Tax, budget, a law', status: 'soon' as Status, go: () => onDesk('governor') }] : []),
+    { key: 'sabotage', title: 'Sabotage', sub: 'One secret order', status: 'soon', slice: 4, locked: true, go: () => onDesk('secret') },
+    ...(office === 'sheriff' ? [{ key: 'sheriff', title: "Sheriff's desk", sub: '2 guards · 1 inspection', status: 'soon' as Status, slice: 4, locked: true, go: () => onDesk('sheriff') }] : []),
+    ...(office === 'governor' ? [{ key: 'governor', title: "Governor's desk", sub: 'Set the sales tax', status: 'soon' as Status, slice: 1, go: () => onDesk('governor') }] : []),
   ];
   return (
     <section className="flex flex-col gap-1.5" data-testid="agenda">
@@ -139,11 +144,34 @@ function Agenda({ office, onDesk, onTool }: { office: Office; onDesk: (d: Desk) 
               {it.locked && <Private text="" />}
             </span>
             <span className="truncate text-[10px] text-ink-2 @min-[1100px]:text-sm">{it.sub}</span>
-            {it.status !== 'today' && <Soon part={it.status === 'part'} />}
+            {it.status !== 'today' && <Soon part={it.status === 'part'} {...(it.slice ? { slice: it.slice } : {})} />}
           </button>
         ))}
       </div>
     </section>
+  );
+}
+
+/** Who holds which office, on every planning screen and the TV (WS7 slice 1). */
+function Offices({ after, office }: { after: boolean; office: Office }) {
+  // Before the vote, last term's holders; after it, the winners (the reveal: Kai and Lena, or Lena as Governor in that state).
+  const gov = !after ? 'ossa' : office === 'governor' ? 'lena' : 'kai';
+  const sheriff = !after ? 'brix' : office === 'governor' ? 'brix' : 'lena';
+  const term = after ? 'M4–6' : 'M1–3';
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-control border border-holo-line bg-panel px-2 py-1 text-xs @min-[1100px]:gap-x-5 @min-[1100px]:px-3 @min-[1100px]:py-1.5 @min-[1100px]:text-sm" data-testid="offices">
+      <span>
+        Governor <Who id={gov} size={14} /> <span className="font-mono text-ink-3">{term}</span>
+      </span>
+      <span>
+        Sheriff <Who id={sheriff} size={14} /> <span className="font-mono text-ink-3">{term}</span>
+      </span>
+      <span>
+        Land Baron <Who id="ossa" size={14} /> <span className="font-mono text-ink-3">9 PLOTS</span>
+      </span>
+      <span className="ml-auto font-mono text-ink-3">{after ? 'NEXT ELECTION M7' : 'ELECTION NOW · NEXT M7'}</span>
+      <Soon slice={1} />
+    </div>
   );
 }
 
@@ -154,12 +182,13 @@ function ColonyDesk() {
     <>
       <ThisMonth />
       <News />
-      <Section title="Colony" testid="colony-facts">
+      <Section title="Colony" badge={<Soon slice={1} />} testid="colony-facts">
         <ul className="flex flex-col gap-1 text-sm">
-          <li>
-            Governor <Who id="ossa" /> · Sheriff <Who id="brix" /> (until this election)
+          <li data-testid="tax-readonly">Sales tax 5% (set by Ossa, ±0) · colony fund 840 cr</li>
+          <li>From the fund each month: Governor 50 cr, Sheriff 30 cr</li>
+          <li data-testid="land-baron">
+            Land Baron <Who id="ossa" /> · 9 plots: +1 vote, breaks a tied election. Whoever owns the most plots, checked every planning phase.
           </li>
-          <li>Sales tax 5% · laws in force: Export tax 20%</li>
           <li>Air 22 · clean</li>
         </ul>
       </Section>
@@ -205,7 +234,7 @@ function TalkDesk() {
           </ul>
         </Section>
       ) : (
-        <Section title={channel === 'pact' ? 'Pact channel' : 'Whisper'} badge={<><Private text="ONLY YOU TWO" /><Soon /></>} testid="whisper">
+        <Section title={channel === 'pact' ? 'Pact channel' : 'Whisper'} badge={<><Private text="ONLY YOU TWO" /><Soon slice={3} /></>} testid="whisper">
           <ul className="flex flex-col gap-1.5 text-sm">
             <li>
               <Who id="ossa" size={14} />: Kai is leading. Let's not hurt each other, and vote together on the land tax?
@@ -240,39 +269,133 @@ function TalkDesk() {
   );
 }
 
-function CouncilDesk() {
+/** Everyone's votes and where they come from (05 "How you get more votes"); public. */
+const WEIGHTS = [
+  { id: 'lena', base: 1, land: 0, rep: 0, baron: 0, taxes: 1 },
+  { id: 'ossa', base: 1, land: 0, rep: 0, baron: 1, taxes: 0 },
+  { id: 'brix', base: 1, land: 0, rep: 0, baron: 0, taxes: 1 },
+  { id: 'kai', base: 1, land: 0, rep: 0, baron: 0, taxes: 0 },
+];
+
+function VoteWeights() {
+  return (
+    <Section title="Votes this month" badge={<Soon slice={1} />} testid="vote-weights">
+      <table className="w-full text-left text-xs @min-[1100px]:text-sm">
+        <thead className="text-ink-3">
+          <tr>
+            <th className="font-normal">Player</th>
+            <th className="text-right font-normal" title="1 each">Base</th>
+            <th className="text-right font-normal" title="+1 per 10 plots">Land</th>
+            <th className="text-right font-normal" title="+1 at 70, −1 below 30; everyone 50 until slice 3">Rep.</th>
+            <th className="text-right font-normal">Baron</th>
+            <th className="text-right font-normal" title="+1 per 300 cr paid, at most +2">Taxes</th>
+            <th className="text-right font-semibold text-ink">Votes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {WEIGHTS.map((w) => (
+            <tr key={w.id} className={cx('border-t border-holo-faint', w.id === 'lena' && 'bg-holo-soft')} data-testid={`weight-${w.id}`}>
+              <td className="py-1">
+                <Who id={w.id} size={14} />
+              </td>
+              {[w.base, w.land, w.rep, w.baron, w.taxes].map((n, i) => (
+                <td key={i} data-num className="text-right font-mono">
+                  {i === 0 ? n : n > 0 ? `+${n}` : n < 0 ? n : '·'}
+                </td>
+              ))}
+              <td data-num className="text-right font-mono font-bold">
+                {w.base + w.land + w.rep + w.baron + w.taxes}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Section>
+  );
+}
+
+export type Election = 'nominate' | 'ballot';
+
+function CouncilDesk({ election }: { election: Election }) {
+  const [running, setRunning] = useState<'governor' | 'sheriff' | null>('sheriff');
   const [gov, setGov] = useState<string | null>('kai');
   const [sheriff, setSheriff] = useState<string | null>(null);
   const [law, setLaw] = useState<'yes' | 'no' | null>(null);
-  const Ballot = ({ title, cands, pick, onPick }: { title: string; cands: { id: string; promise: string }[]; pick: string | null; onPick: (id: string) => void }) => (
+  const Ballot = ({ title, cands, pick, onPick }: { title: string; cands: { id: string; promise: string }[]; pick: string | null; onPick: (id: string | null) => void }) => (
     <fieldset className="flex flex-col gap-1">
       <legend className="mb-1 text-sm font-semibold @min-[1100px]:text-base">{title}</legend>
-      {cands.map((c) => (
-        <label key={c.id} className={cx('flex cursor-pointer items-start gap-2 rounded-control border p-1.5 text-sm', pick === c.id ? 'border-holo bg-holo-soft' : 'border-holo-line')}>
-          <input type="radio" name={title} checked={pick === c.id} onChange={() => onPick(c.id)} className="mt-1 accent-[var(--color-holo)]" />
-          <span className="flex flex-col">
-            <Who id={c.id} />
-            <span className="text-xs text-ink-2">“{c.promise}”</span>
-          </span>
+      {[...cands, { id: '', promise: '' }].map((c) => (
+        <label key={c.id || 'abstain'} className={cx('flex cursor-pointer items-start gap-2 rounded-control border p-1.5 text-sm', (pick ?? '') === c.id ? 'border-holo bg-holo-soft' : 'border-holo-line')}>
+          <input type="radio" name={title} checked={(pick ?? '') === c.id} onChange={() => onPick(c.id || null)} className="mt-1 accent-[var(--color-holo)]" />
+          {c.id ? (
+            <span className="flex flex-col">
+              <Who id={c.id} />
+              <span className="text-xs text-ink-2">“{c.promise}”</span>
+            </span>
+          ) : (
+            <span className="text-ink-2">Abstain</span>
+          )}
         </label>
       ))}
     </fieldset>
   );
+  const voted = ['ossa', 'kai', 'brix'];
   return (
     <>
-      <Section title="Election · secret ballot" badge={<Soon />} testid="election">
-        <Ballot title="Governor" cands={[{ id: 'ossa', promise: 'No land tax' }, { id: 'kai', promise: 'Cleanup squad from month 5' }]} pick={gov} onPick={setGov} />
-        <Ballot title="Sheriff" cands={[{ id: 'brix', promise: 'Guards on every factory' }, { id: 'lena', promise: 'I will catch the saboteur' }]} pick={sheriff} onPick={setSheriff} />
-        <span className="text-xs text-ink-2 @min-[1100px]:text-sm" data-testid="vote-weight">
-          Your vote weighs <strong className="text-ink">2</strong>: 1 for being here, +1 for reputation 74 (land +1 per 10 plots, Land Baron +1, taxes paid +1 per 300 cr).
+      <Section title={election === 'nominate' ? 'Election · who runs' : 'Election · secret ballot'} badge={<Soon slice={1} />} testid="election">
+        <span className="flex items-center justify-between rounded-control bg-holo-soft px-2 py-1 font-mono text-[10px] font-bold text-holo @min-[1100px]:text-xs" data-testid="election-stage">
+          {election === 'nominate' ? '1 NOMINATE · 2 BALLOT · 3 REVEAL' : '1 NOMINATE ✓ · 2 BALLOT · 3 REVEAL'}
+          <span data-num>0:14</span>
         </span>
-        <span className="flex items-center justify-between gap-2 rounded-control bg-holo-soft px-2 py-1.5 text-xs @min-[1100px]:text-sm" data-testid="ballot-closes">
-          You are running for Sheriff. Ballots close with planning; the result shows on every screen together.
-          <span data-num className="font-mono font-bold text-holo">1:14</span>
-        </span>
+        {election === 'nominate' ? (
+          <>
+            <div className="grid grid-cols-2 gap-1.5" data-testid="run">
+              <Button size="md" variant={running === 'governor' ? 'holo' : 'outline'} disabled={running === 'sheriff'} onClick={() => setRunning('governor')} data-testid="run-governor">
+                Run for Governor
+              </Button>
+              <Button size="md" variant={running === 'sheriff' ? 'holo' : 'outline'} disabled={running === 'governor'} onClick={() => setRunning('sheriff')} data-testid="run-sheriff">
+                Run for Sheriff
+              </Button>
+            </div>
+            {running && (
+              <span className="flex items-center justify-between gap-2 text-xs text-ink-2 @min-[1100px]:text-sm">
+                You run for {running === 'sheriff' ? 'Sheriff' : 'Governor'}; one office at a time.
+                <button type="button" className="text-holo underline" onClick={() => setRunning(null)} data-testid="withdraw">
+                  Withdraw
+                </button>
+              </span>
+            )}
+            <ul className="flex flex-col gap-1 text-sm" data-testid="candidates">
+              <li>
+                Governor: <Who id="ossa" size={14} />, <Who id="kai" size={14} />
+              </li>
+              <li>
+                Sheriff: <Who id="brix" size={14} />
+                {running === 'sheriff' && (
+                  <>
+                    , <Who id="lena" size={14} />
+                  </>
+                )}
+              </li>
+            </ul>
+            <span className="text-xs text-ink-3">Nobody runs: the richest player is appointed. One candidate: elected unopposed, no ballot.</span>
+          </>
+        ) : (
+          <>
+            <Ballot title="Governor" cands={[{ id: 'ossa', promise: 'No land tax' }, { id: 'kai', promise: 'Cleanup squad from month 5' }]} pick={gov} onPick={setGov} />
+            <Ballot title="Sheriff" cands={[{ id: 'brix', promise: 'Guards on every factory' }, { id: 'lena', promise: 'I will catch the saboteur' }]} pick={sheriff} onPick={setSheriff} />
+            <span className="flex items-center gap-1.5 text-xs text-ink-2 @min-[1100px]:text-sm" data-testid="voted">
+              Voted: {voted.map((id) => <Who key={id} id={id} size={14} />)} · 3 of 4. Never shown: for whom.
+            </span>
+            <span className="text-xs text-ink-2 @min-[1100px]:text-sm" data-testid="vote-weight">
+              Your vote weighs <strong className="text-ink">2</strong>. Change it until the ballot closes; the result shows on every screen together.
+            </span>
+          </>
+        )}
       </Section>
-      <Section title="Law vote" badge={<Soon />} testid="law-vote">
-        <div className="flex flex-col gap-1.5 rounded-panel border border-holo-line bg-panel p-2">
+      <VoteWeights />
+      <Section title="Law vote" badge={<Soon slice={2} />} testid="law-vote">
+        <div className="flex flex-col gap-1.5 rounded-panel border border-holo-line bg-panel p-2 opacity-80">
           <span className="text-sm">
             <Who id="ossa" size={14} /> proposes: <strong>Price cap on Food at 1.5×</strong> (no Food trades above 45 cr).
           </span>
@@ -286,9 +409,12 @@ function CouncilDesk() {
             </Button>
           </span>
         </div>
-        <button type="button" className="text-left text-sm text-holo underline-offset-2 hover:underline" data-testid="overrule">
-          Call an overrule vote on the Governor's tax…
-        </button>
+        <span className="flex items-center gap-1.5">
+          <button type="button" className="text-left text-sm text-holo underline-offset-2 hover:underline" data-testid="overrule">
+            Call an overrule vote on the Governor's tax…
+          </button>
+          <Soon slice={5} />
+        </span>
       </Section>
     </>
   );
@@ -338,7 +464,7 @@ function SecretDesk({ onTool }: { onTool: (t: Tool) => void }) {
     <>
       <div className="flex flex-col gap-1 rounded-panel border border-holo bg-holo-soft p-2 text-xs @min-[1100px]:text-sm" data-testid="secret-banner">
         <span className="flex items-center gap-1.5">
-          <Private /> <Soon />
+          <Private /> <Soon slice={4} />
         </span>
         Only you see this. It plays out in production. If it is detected, everyone learns it was you.
       </div>
@@ -377,22 +503,34 @@ const BUDGET = [
 ];
 
 function GovernorDesk() {
-  const [tax, setTax] = useState(5);
+  const START = 5;
+  const [tax, setTax] = useState(8);
   const [lines, setLines] = useState<Record<string, number>>({ reserve: 100, security: 200, environment: 200, welfare: 0, projects: 300 });
   const fund = 840;
   const spent = Object.values(lines).reduce((a, b) => a + b, 0);
   return (
     <>
-      <Section title="Sales tax" badge={<Soon />} testid="gov-tax">
+      <Section title="Sales tax" badge={<Soon slice={1} />} testid="gov-tax">
         <div className="flex items-center gap-2">
-          <input type="range" min={0} max={10} value={tax} onChange={(e) => setTax(+e.target.value)} className="flex-1 accent-[var(--color-holo)]" aria-label="Sales tax" />
-          <span data-num className="w-10 text-right font-mono font-bold">
+          <Button size="md" variant="outline" aria-label="One point lower" disabled={tax <= Math.max(0, START - 5)} onClick={() => setTax((x) => x - 1)} data-testid="tax-down">
+            −
+          </Button>
+          <span data-num className="flex-1 text-center font-mono text-3xl font-bold @min-[1100px]:text-4xl" data-testid="tax-value">
             {tax}%
           </span>
+          <Button size="md" variant="outline" aria-label="One point higher" disabled={tax >= Math.min(15, START + 5)} onClick={() => setTax((x) => x + 1)} data-testid="tax-up">
+            +
+          </Button>
         </div>
-        <span className="text-xs text-ink-3">0–15%, at most 5 points up or down a month. The colony can overrule it.</span>
+        <span className="text-xs text-ink-2 @min-[1100px]:text-sm">
+          Last month {START}%. This month {Math.max(0, START - 5)}–{Math.min(15, START + 5)}%. At last month's sales this collects about <strong className="text-ink">{Math.round(tax * 21)} cr</strong>.
+        </span>
+        <Button size="md" data-testid="tax-confirm">
+          Set the tax at {tax}%
+        </Button>
+        <span className="text-xs text-ink-3">Everyone sees “Sales tax {tax}% (set by you, {tax - START >= 0 ? '+' : ''}{tax - START})”. You can change it until planning ends.</span>
       </Section>
-      <Section title={`Budget · fund ${fund} cr · ${fund - spent} left`} testid="gov-budget">
+      <Section title={`Budget · fund ${fund} cr · ${fund - spent} left`} badge={<Soon slice={5} />} testid="gov-budget">
         {BUDGET.map((b) => (
           <div key={b.id} className="flex flex-col">
             <span className="flex items-center gap-2 text-sm">
@@ -415,7 +553,7 @@ function GovernorDesk() {
           </div>
         ))}
       </Section>
-      <Section title="This month's law" testid="gov-law">
+      <Section title="This month's law" badge={<Soon slice={2} />} testid="gov-law">
         <select className="h-9 rounded-control border border-holo-line bg-panel px-2 text-sm" aria-label="Propose a law">
           <option>Propose a law…</option>
           <option>Price cap (a good, 1.2 / 1.5 / 2×)</option>
@@ -431,7 +569,7 @@ function SheriffDesk({ onTool }: { onTool: (t: Tool) => void }) {
   return (
     <>
       <div className="flex items-center gap-1.5 text-xs text-ink-2">
-        <Private text="ONLY THE SHERIFF" /> <Soon />
+        <Private text="ONLY THE SHERIFF" /> <Soon slice={4} />
       </div>
       <Section title="Guards · 2 of 2 placed" testid="sheriff-guards">
         <span className="text-sm text-ink-2">Hidden until they catch someone. Sabotage on a guarded plot fails and the saboteur is revealed.</span>
@@ -467,16 +605,28 @@ function SheriffDesk({ onTool }: { onTool: (t: Tool) => void }) {
 
 // --- The hub ----------------------------------------------------------------------------------
 
-export function PlanningHub({ desk: start = 'colony', office = 'sheriff', tool: startTool = 'look' }: { desk?: Desk; office?: Office; tool?: Tool }) {
+export function PlanningHub({
+  desk: start = 'colony',
+  office = 'sheriff',
+  tool: startTool = 'look',
+  election = 'ballot',
+}: {
+  desk?: Desk;
+  office?: Office;
+  tool?: Tool;
+  election?: Election | 'done';
+}) {
   const [desk, setDesk] = useState<Desk>(start);
   const [tool, setTool] = useState<Tool>(startTool);
   const desks = DESKS.filter((d) => !d.office || d.office === office);
-  const now: Now = {
-    step: 1,
-    of: 2,
-    title: 'Vote in the election, then plan your month',
-    detail: 'It is election month: Governor and Sheriff. Then everything below is yours until you press Ready.',
-  };
+  const now: Now =
+    election === 'nominate'
+      ? { step: 1, of: 3, title: 'Run for an office, or press Done', detail: 'Election month: Governor and Sheriff. Then the secret ballot, then the result on every screen at once.' }
+      : election === 'ballot'
+        ? { step: 2, of: 3, title: 'Cast your secret vote', detail: 'One vote per office, or abstain; your vote weighs 2. Then everything below is yours until you press Ready.' }
+        : office === 'governor'
+          ? { title: 'Set the sales tax, then plan your month', detail: 'You are the new Governor (months 4–6). The tax is yours to set until planning ends.' }
+          : { title: 'Plan your month, then press Ready', detail: 'Next is the land grant. Kai, the new Governor, is setting the tax.' };
   const tools: { id: Tool; label: string; status: Status; locked?: boolean; show: boolean }[] = [
     { id: 'look', label: 'Look', status: 'today', show: true },
     { id: 'drone', label: 'Geo drone', status: 'today', locked: true, show: true },
@@ -489,7 +639,7 @@ export function PlanningHub({ desk: start = 'colony', office = 'sheriff', tool: 
     tool === 'drone' && t.x === 9 && t.y === 4 ? { ...t, flag: 'survey' } : tool === 'target' && t.x === 11 && t.y === 2 ? { ...t, flag: 'sabotage' } : tool === 'list' && t.x === 5 && t.y === 6 ? { ...t, flag: 'sale' } : t,
   );
   const deskBody =
-    desk === 'colony' ? <ColonyDesk /> : desk === 'talk' ? <TalkDesk /> : desk === 'council' ? <CouncilDesk /> : desk === 'market' ? <MarketDesk onTool={setTool} /> : desk === 'secret' ? <SecretDesk onTool={setTool} /> : desk === 'governor' ? <GovernorDesk /> : <SheriffDesk onTool={setTool} />;
+    desk === 'colony' ? <ColonyDesk /> : desk === 'talk' ? <TalkDesk /> : desk === 'council' ? <CouncilDesk election={election === 'done' ? 'ballot' : election} /> : desk === 'market' ? <MarketDesk onTool={setTool} /> : desk === 'secret' ? <SecretDesk onTool={setTool} /> : desk === 'governor' ? <GovernorDesk /> : <SheriffDesk onTool={setTool} />;
 
   return (
     <GameShell
@@ -536,7 +686,7 @@ export function PlanningHub({ desk: start = 'colony', office = 'sheriff', tool: 
         </Button>
       }
     >
-      <HubStage tools={tools.filter((t) => t.show)} tool={tool} setTool={setTool} tiles={tiles} office={office} setDesk={setDesk} />
+      <HubStage tools={tools.filter((t) => t.show)} tool={tool} setTool={setTool} tiles={tiles} office={office} after={election === 'done'} setDesk={setDesk} />
     </GameShell>
   );
 }
@@ -547,6 +697,7 @@ function HubStage({
   setTool,
   tiles,
   office,
+  after,
   setDesk,
 }: {
   tools: { id: Tool; label: string; status: Status; locked?: boolean }[];
@@ -554,6 +705,7 @@ function HubStage({
   setTool: (t: Tool) => void;
   tiles: MapTile[];
   office: Office;
+  after: boolean;
   setDesk: (d: Desk) => void;
 }) {
   const wide = useWide();
@@ -567,7 +719,8 @@ function HubStage({
   };
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 @min-[1100px]:gap-4">
-      <Agenda office={office} onDesk={setDesk} onTool={setTool} />
+      <Offices after={after} office={office} />
+      <Agenda office={office} after={after} onDesk={setDesk} onTool={setTool} />
       <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label="Map tools" data-testid="map-tools">
         {tools.map((t) => (
           <button

@@ -5,7 +5,7 @@ import { DevelopTurn, type Start } from './screens/DevelopTurn';
 import { LobbyColonist, type LobbyState } from './screens/LobbyColonist';
 import { PlanningBrief } from './screens/PlanningBrief';
 import { MuleSheet } from './screens/MuleSheet';
-import { PlanningHub, type Desk, type Office } from './screens/PlanningHub';
+import { PlanningHub, type Desk, type Election, type Office } from './screens/PlanningHub';
 import { PhoneElectionResult, TvElection } from './screens/Election';
 import { EVENTS, type EventKind } from './production';
 import { PhoneGoodsWalk, TvGoodsWalk, useWalkSim } from './screens/GoodsAuction';
@@ -146,13 +146,14 @@ const PLAN_STATES = [
   { id: 'plan-drone', title: 'Geo drone mode on the map', mode: 'drone' as const },
 ];
 
-const HUB_STATES: { id: string; title: string; desk: Desk; office: Office }[] = [
-  { id: 'hub', title: 'This month, the colony desk (Lena, running for Sheriff)', desk: 'colony', office: 'none' },
-  { id: 'hub-council', title: 'Council: election and law vote', desk: 'council', office: 'none' },
+const HUB_STATES: { id: string; title: string; desk: Desk; office: Office; election?: Election | 'done' }[] = [
+  { id: 'hub', title: 'This month, the colony desk', desk: 'colony', office: 'none' },
+  { id: 'hub-nominate', title: 'Election 1: who runs', desk: 'council', office: 'none', election: 'nominate' },
+  { id: 'hub-council', title: 'Election 2: the secret ballot', desk: 'council', office: 'none' },
   { id: 'hub-talk', title: 'Talk: a whisper with a deal card', desk: 'talk', office: 'none' },
   { id: 'hub-market', title: 'Market: sell a plot or MULE', desk: 'market', office: 'none' },
   { id: 'hub-secret', title: 'Secret: a sabotage order', desk: 'secret', office: 'none' },
-  { id: 'hub-governor', title: "As Governor: the Governor's desk", desk: 'governor', office: 'governor' },
+  { id: 'hub-governor', title: "As Governor, after the election: the tax", desk: 'governor', office: 'governor', election: 'done' },
   { id: 'hub-sheriff', title: "As Sheriff: the Sheriff's desk", desk: 'sheriff', office: 'sheriff' },
 ];
 
@@ -186,12 +187,12 @@ export default function App() {
         </p>
         <LaptopFrame>
           <Game>
-            <PlanningHub key={`${hash}-l`} desk={hub.desk} office={hub.office} />
+            <PlanningHub key={`${hash}-l`} desk={hub.desk} office={hub.office} {...(hub.election ? { election: hub.election } : {})} />
           </Game>
         </LaptopFrame>
         <PhoneFrame>
           <Game>
-            <PlanningHub key={`${hash}-p`} desk={hub.desk} office={hub.office} />
+            <PlanningHub key={`${hash}-p`} desk={hub.desk} office={hub.office} {...(hub.election ? { election: hub.election } : {})} />
           </Game>
         </PhoneFrame>
       </Page>
