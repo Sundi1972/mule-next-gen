@@ -14,3 +14,5 @@ export * from './pollution.js';
 export * from './game.js';
 export * from './observe.js';
 export * from './map-rules.js';
+export { layoutMap, type Layout } from './map-layout.js';
+export { dealGround, type GroundDeal, type Lift } from './map-ground.js';

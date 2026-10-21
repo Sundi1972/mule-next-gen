@@ -89,8 +89,8 @@ export const MINERAL_ODDS = {
   none: [1, 0, 0, 0, 0],
   low: [0.7, 0.2, 0.1, 0, 0],
   medium: [0.4, 0.3, 0.2, 0.1, 0],
-  high: [0.1, 0.2, 0.35, 0.25, 0.1],
-  veryHigh: [0.05, 0.1, 0.25, 0.35, 0.25],
+  high: [0.05, 0.15, 0.3, 0.3, 0.2],
+  veryHigh: [0.02, 0.08, 0.15, 0.4, 0.35],
 } as const;
 
 type LandTerrain = Exclude<Terrain, 'store'>;
@@ -102,20 +102,20 @@ type LandTerrain = Exclude<Terrain, 'store'>;
  */
 export const TERRAIN_ODDS: Record<
   LandTerrain,
-  { grown: Partial<Record<GrownGood, 'good' | 'poor'>>; mined: Record<MinedGood, keyof typeof MINERAL_ODDS> }
+  { grown: Partial<Record<GrownGood, 'good' | 'poor'>>; mined: { smithore: keyof typeof MINERAL_ODDS } }
 > = {
-  river: { grown: { food: 'good', water: 'good' }, mined: { smithore: 'low', crystite: 'none', rareEarth: 'low' } },
-  lake: { grown: { water: 'good', food: 'good' }, mined: { smithore: 'none', crystite: 'none', rareEarth: 'none' } },
-  plains: { grown: { food: 'good', energy: 'good' }, mined: { smithore: 'low', crystite: 'low', rareEarth: 'low' } },
-  forest: { grown: { food: 'good', energy: 'poor' }, mined: { smithore: 'low', crystite: 'none', rareEarth: 'low' } },
-  swamp: { grown: { water: 'good', food: 'poor' }, mined: { smithore: 'low', crystite: 'low', rareEarth: 'medium' } },
-  hills: { grown: { food: 'poor' }, mined: { smithore: 'high', crystite: 'medium', rareEarth: 'medium' } },
-  mountains: { grown: { food: 'poor', energy: 'poor' }, mined: { smithore: 'veryHigh', crystite: 'medium', rareEarth: 'high' } },
-  desert: { grown: { energy: 'good', water: 'poor', food: 'poor' }, mined: { smithore: 'low', crystite: 'medium', rareEarth: 'medium' } },
-  tundra: { grown: { energy: 'good', water: 'good', food: 'poor' }, mined: { smithore: 'medium', crystite: 'low', rareEarth: 'medium' } },
-  ice: { grown: { water: 'good', food: 'poor', energy: 'poor' }, mined: { smithore: 'none', crystite: 'low', rareEarth: 'low' } },
-  volcanic: { grown: { energy: 'good', food: 'poor' }, mined: { smithore: 'medium', crystite: 'low', rareEarth: 'high' } },
-  crater: { grown: { food: 'poor' }, mined: { smithore: 'low', crystite: 'veryHigh', rareEarth: 'medium' } },
+  river: { grown: { food: 'good', water: 'good' }, mined: { smithore: 'low' } },
+  lake: { grown: { water: 'good', food: 'good' }, mined: { smithore: 'none' } },
+  plains: { grown: { food: 'good', energy: 'good' }, mined: { smithore: 'low' } },
+  forest: { grown: { food: 'good', energy: 'poor' }, mined: { smithore: 'low' } },
+  swamp: { grown: { water: 'good', food: 'poor' }, mined: { smithore: 'low' } },
+  hills: { grown: { food: 'poor' }, mined: { smithore: 'high' } },
+  mountains: { grown: { food: 'poor', energy: 'poor' }, mined: { smithore: 'veryHigh' } },
+  desert: { grown: { energy: 'good', water: 'poor', food: 'poor' }, mined: { smithore: 'low' } },
+  tundra: { grown: { energy: 'good', water: 'good', food: 'poor' }, mined: { smithore: 'medium' } },
+  ice: { grown: { water: 'good', food: 'poor', energy: 'poor' }, mined: { smithore: 'none' } },
+  volcanic: { grown: { energy: 'good', food: 'poor' }, mined: { smithore: 'medium' } },
+  crater: { grown: { food: 'poor' }, mined: { smithore: 'low' } },
 };
 
 /** How hazard traits change output. Traits not listed only change event risks. */
@@ -340,6 +340,12 @@ export type ShareTerrain = Exclude<LandTerrain, 'river'>;
  * plots per player.
  */
 export const MAP = {
+  /**
+   * The honest map-wide average Crystite and Rare earth rating, shown as the
+   * hint on every terrain: both exist only in random rings, so no terrain
+   * says where they are. Measured: the mean over maps of 2 to 6 players, each map counted once (about 0.82 small, 0.60 mid, 0.41 large).
+   */
+  unknownMineral: 0.6,
   /** A plot is good for a raw good at this rating or more. */
   goodAt: { food: 1, water: 1, energy: 1, smithore: 3, crystite: 3, rareEarth: 3 } satisfies Record<RawGood, number>,
   /** Every map has at least this many good plots per player. */
@@ -386,12 +392,70 @@ export const MAP = {
    */
   honesty: 0.3,
   /**
+   * Largest gap, on one part of the map (each edge row or column, or the interior), between the mean of
+   * rating minus hint and zero. The hint is the same everywhere, so ground that is poorer by place misleads.
+   */
+  placeHonesty: 0.1,
+  /**
    * Crystite and Rare earth come in rings: a peak plot rated `high`, the plots
    * one step from it `medium`, two steps `low`, and 0 beyond.
    */
   peak: { high: 4, medium: 3, low: { min: 1, max: 2 }, count: { min: 3, max: 4 } },
   /** Chance a map has one scarce good. Read by the generator and the map-quality test, not the checker. */
   scarceChance: 0.25,
+  /** Tuning for the layout stages (map-layout.ts): how the generator meets the rules above, not rules themselves. */
+  layout: {
+    /** The budget never gives a terrain more than this share, so jitter can't take plains near maxTerrainShare. */
+    shareCap: 0.3,
+    /** Plots a region aims for: each terrain's count is split into regions about this size. */
+    avgRegion: 6,
+    /** A region's seed scores its distance to seeds of its own terrain up to this many steps, and to any seed up to seedSpacing. */
+    twinSpacing: 8,
+    seedSpacing: 4,
+    /** Growth steps, per free plot, before the regions stop growing. */
+    growPasses: 4,
+    /** Rounds of planting new regions in pockets the first growth left. */
+    refillRounds: 3,
+    /** Sweeps over the plots no region reached. */
+    leftoverPasses: 10,
+    /** Most fixes the repair makes to one layout. */
+    repairMoves: 120,
+    /** Of those, how many may leave the layout no better, to step off a dead end. */
+    sidewaysMoves: 30,
+    /** Of those, how many may leave it worse, when nothing better or level is left; the best layout seen is kept. */
+    worseMoves: 10,
+    /** Those level and worse moves skip plots the last this-many changed plots include, so they can't undo themselves. */
+    tabu: 6,
+    /** When no single move helps, runs of up to this many moves are searched, keeping the beamWidth least-bad at each step. */
+    lookahead: 3,
+    beamWidth: 12,
+    /** Moves that search may measure on one layout, in all, before it gives up. */
+    lookaheadEvaluations: 20000,
+    /** Edge plots of each big patch tried as the start of a carved region. */
+    carveStarts: 3,
+  },
+  /** Tuning for the ground stages (map-ground.ts): how the generator meets the rules above, not rules themselves. */
+  ground: {
+    /**
+     * The smooth fields that rank plots: one random blob per `area` plots of the box padded by blobPad (at least minBlobs), each a bump of
+     * this `spread` (variance, in plots squared). Smithore's are narrow, so its rich plots gather into seams.
+     */
+    blobs: {
+      grown: { area: 14, spread: 2.5 },
+      smithore: { area: 10, spread: 1.3 },
+    },
+    minBlobs: 3,
+    /** Plots past each edge the blob centres may fall, so the field is as strong at the edges as inside. */
+    blobPad: 3,
+    /** Random jitter on every plot's field, so a flat stretch still ranks by rng rather than by index. */
+    fieldNoise: 0.15,
+    /** Most repairs the reach stage makes for one good. */
+    reachPasses: 200,
+    /** Sweeps the seam stage makes over the isolated good Smithore plots. */
+    seamPasses: 4,
+    /** Most plots the scarcity stage tries, searching for a set to lower that keeps reach and the seams. */
+    scarcityTries: 4000,
+  },
 };
 
 export const GAME = {
