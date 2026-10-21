@@ -293,11 +293,7 @@ export interface LiveAuction extends WalkBoard {
 }
 
 /** What is for sale: a plot with whatever stands on it, or the MULE off one of the seller's plots. */
-export interface LotItem {
-  kind: 'plot' | 'mule';
-  x: number;
-  y: number;
-}
+export type LotItem = { kind: 'plot'; x: number; y: number } | { kind: 'mule'; x: number; y: number; outfit: Outfit };
 
 /** One lot for the land auction, public from the moment it is listed in planning. */
 export interface Listing {
