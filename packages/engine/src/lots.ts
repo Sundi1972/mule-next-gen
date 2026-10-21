@@ -80,6 +80,8 @@ export const COLONY_SELLER = 'colony';
  * Call on leaving the land grant, so the plot is still free. Returns the listing, or null.
  */
 export function colonyLot(state: GameState): Listing | null {
+  // An AI's look-ahead neither foresees the real colony lot nor imagines one from its zeroed seed.
+  if (state.whatIf) return null;
   // Its own RNG from (seed, month) alone: sharing one would shift every draw after it when a colony lot appears.
   const rng = createRng((state.seed * 53 + state.month * 6_151) >>> 0);
   if (rng.next() >= LOTS.colonyPlotChance) return null;

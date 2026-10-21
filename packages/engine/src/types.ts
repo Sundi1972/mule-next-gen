@@ -237,7 +237,7 @@ export interface ProductionLine {
 }
 
 export interface GameState {
-  /** Set on a what-if copy (an AI's look-ahead): no production event is ever rolled on it. */
+  /** Set on a what-if copy (an AI's look-ahead): no production event and no colony lot is ever rolled on it. */
   whatIf?: true;
   seed: number;
   month: number;
