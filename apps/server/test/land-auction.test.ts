@@ -296,7 +296,11 @@ describe('land auction on the server', () => {
     toLandAuction(game, advance);
     const before = game.viewFor(null);
     skipIntro(game, advance);
-    const bid = walkUpTo(game, advance, 'l', 110);
+    // Lena bids past the board's top (twice the minimum): the board grows a margin at both ends, as the goods board does.
+    const bid = walkUpTo(game, advance, 'l', 210);
+    const grown = game.viewFor(null);
+    expect(grown.landAuction!.hi).toBeGreaterThan(walker(grown, 'l')!.at);
+    expect(grown.landAuction!.lo).toBeLessThan(walker(grown, 'o')!.at);
     ringBell(game, advance, ['o', 'l']);
     const sold = game.viewFor('l');
     expect(sold.landAuction!.result).toEqual({ kind: 'sold', buyer: 'l', price: bid });
