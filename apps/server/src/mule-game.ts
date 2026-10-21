@@ -147,6 +147,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private seats: (SeatInfo & { color: string })[] = [];
   private readonly ready = new Set<string>();
   private readonly away = new Set<string>();
+  /** Seats the server pressed Done for in this election stage because their phone dropped. */
+  private readonly doneForAway = new Set<string>();
   /** Trades between players in the good that is up, for the news when it closes. */
   private dealsInGood: Trade[] = [];
   /** When each player's development time runs out, epoch ms. */
@@ -302,8 +304,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   connectionChanged(seatId: string, connected: boolean): void {
     if (connected) this.away.delete(seatId);
     else this.away.add(seatId);
-    // The server pressed Done for the dropped phone; back at the table, the player decides again.
-    if (connected && this.electionOpen()) electionDone(this.requireState(), seatId, false);
+    // A Done the server pressed for the dropped phone is taken back; one the player pressed stands.
+    if (connected && this.electionOpen() && this.doneForAway.delete(seatId)) electionDone(this.requireState(), seatId, false);
     // Nobody waits for a phone that dropped.
     this.checkAllReady();
   }
@@ -424,9 +426,13 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         // A stalled server loop must not skip a stage.
         const dt = Math.min(Math.max(0, now - last), WALK.tickMs * 3) / this.phaseScale;
         // Until the AI seats have a vote hand of their own, they sit the election out.
+        const done = state.politics!.election!.done;
+        for (const id of this.away) if (!done.includes(id)) this.doneForAway.add(id);
         for (const seat of this.seats) if (seat.isAi || this.away.has(seat.id)) electionDone(state, seat.id);
         const shown = resultShown(state);
+        const stage = state.politics!.election!.stage;
         stepElection(state, dt);
+        if (state.politics!.election!.stage !== stage) this.doneForAway.clear();
         const result = state.politics!.election!.result;
         if (!shown && result && resultShown(state)) this.addNews(electionNews(result, (id) => this.nameOf(id)));
         if (this.electionOpen()) this.scheduleElectionTick(now);
