@@ -1,0 +1,507 @@
+<title>Walk Auction</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: a landscape phone (844x390) scaled to fit; board on the left, control rail on the right, as in the game client. */
+:root {
+  --page: #e4eaef; --table: #eef2f5; --panel: #ffffff; --raised: #f4f7f9;
+  --ink: #0f1d2b; --ink-2: #44576b; --ink-3: #5f7183;
+  --line: rgb(16 36 54 / 0.14); --faint: rgb(16 36 54 / 0.06);
+  --holo: #0b7a96; --holo-strong: #075a70; --holo-soft: rgb(11 122 150 / 0.1); --on-holo: #ffffff;
+  --rise: #c9243f; --fall: #10875a; --warn: #b86e00;
+  --p1: #f0622a; --p2: #2f7de1; --p3: #16a35e; --p4: #e0a400;
+  --g-food: #5f9e12; --g-energy: #d99a00;
+  --shadow: 0 12px 36px rgb(16 36 54 / 0.16), 0 2px 6px rgb(16 36 54 / 0.08);
+  --font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --page: #03060b; --table: #060a12; --panel: #0b1622; --raised: #102031;
+  --ink: #e3f6ff; --ink-2: #9fb7c9; --ink-3: #7a93a6;
+  --line: rgb(56 225 255 / 0.22); --faint: rgb(56 225 255 / 0.08);
+  --holo: #38e1ff; --holo-strong: #8aeeff; --holo-soft: rgb(56 225 255 / 0.12); --on-holo: #021a22;
+  --rise: #ff8fa6; --fall: #5ef0a0; --warn: #ffb547;
+  --p1: #ff7a45; --p2: #4d9dff; --p3: #3ddc84; --p4: #ffd23f;
+  --g-food: #a3e635; --g-energy: #facc15;
+  --shadow: 0 0 0 1px rgb(56 225 255 / 0.18), 0 12px 40px rgb(0 0 0 / 0.6);
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --page: #03060b; --table: #060a12; --panel: #0b1622; --raised: #102031;
+  --ink: #e3f6ff; --ink-2: #9fb7c9; --ink-3: #7a93a6;
+  --line: rgb(56 225 255 / 0.22); --faint: rgb(56 225 255 / 0.08);
+  --holo: #38e1ff; --holo-strong: #8aeeff; --holo-soft: rgb(56 225 255 / 0.12); --on-holo: #021a22;
+  --rise: #ff8fa6; --fall: #5ef0a0; --warn: #ffb547;
+  --p1: #ff7a45; --p2: #4d9dff; --p3: #3ddc84; --p4: #ffd23f;
+  --g-food: #a3e635; --g-energy: #facc15;
+  --shadow: 0 0 0 1px rgb(56 225 255 / 0.18), 0 12px 40px rgb(0 0 0 / 0.6);
+  color-scheme: dark;
+}
+body { background: var(--page); color: var(--ink); font-family: var(--font-sans);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 28px; }
+.wrap { max-width: 900px; margin: 0 auto; display: grid; gap: 14px; }
+.top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 10px 20px; }
+h1 { font-family: var(--font-display); font-size: 22px; margin: 0; text-wrap: balance; }
+.scen { display: flex; gap: 8px; flex-wrap: wrap; }
+.scen button { font: 500 13px var(--font-sans); padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+.scen button[aria-pressed="true"] { background: var(--holo); color: var(--on-holo); border-color: var(--holo); }
+.hint { margin: 0; color: var(--ink-2); font-size: 13px; line-height: 1.5; max-width: 70ch; }
+kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; background: var(--panel); }
+
+.fit { position: relative; width: 100%; }
+.phone { position: absolute; left: 0; top: 0; width: 844px; height: 390px; transform-origin: 0 0; display: grid; grid-template-columns: 1fr 248px; grid-template-rows: 100%;
+  background: var(--table); border-radius: 22px; overflow: hidden; box-shadow: var(--shadow); user-select: none; -webkit-user-select: none; touch-action: none; }
+.main { position: relative; padding: 12px 12px 12px 14px; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.rail { background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.rhead { padding: 10px 14px 8px; border-bottom: 1px solid var(--line); display: grid; gap: 4px; }
+.eyebrow { font: 500 10px var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); }
+.rtitle { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.rtitle b { font: 600 17px var(--font-display); }
+.clock { font: 700 14px var(--font-mono); color: var(--holo); border: 1px solid var(--line); border-radius: 8px; padding: 3px 8px; font-variant-numeric: tabular-nums; min-width: 52px; text-align: center; }
+.clock.slow { color: var(--warn); }
+.clock { transition: color .4s, border-color .4s; }
+.tbar { position: relative; flex: none; height: 14px; border-radius: 7px; background: var(--faint); border: 1px solid var(--line); }
+.tbar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 7px; transition: background-color .5s; background-size: 17px 17px; }
+.tbar.slow i { background-image: repeating-linear-gradient(-45deg, rgb(255 255 255 / .38) 0 6px, transparent 6px 12px); animation: stripes .5s linear infinite; }
+.tbar.hurry { animation: hurry .45s ease-in-out infinite alternate; }
+.tbar b { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font: 700 9.5px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); background: var(--panel); padding: 1px 5px; border-radius: 4px; }
+.tbar b:empty { display: none; }
+@keyframes stripes { to { background-position: 17px 0; } }
+@keyframes hurry { from { box-shadow: 0 0 0 0 transparent; transform: translateX(0); } to { box-shadow: 0 0 14px 2px color-mix(in srgb, var(--rise) 55%, transparent); transform: translateX(1px); } }
+@media (prefers-reduced-motion: reduce) { .tbar.hurry, .tbar.slow i { animation: none; } }
+.me { display: flex; align-items: center; justify-content: space-between; font: 600 14px var(--font-sans); }
+.me span:last-child { font: 700 14px var(--font-mono); }
+.rbody { flex: 1; padding: 8px 14px; display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow: hidden; }
+.rfoot { padding: 8px 14px 10px; display: grid; gap: 6px; border-top: 1px solid var(--line); }
+.btn { font: 600 15px var(--font-sans); border-radius: 12px; border: 1px solid transparent; padding: 11px 10px; cursor: pointer; background: var(--holo); color: var(--on-holo); }
+.btn.ghost { background: var(--raised); color: var(--ink); border-color: var(--line); }
+.btn:focus-visible, .seg button:focus-visible, .scen button:focus-visible { outline: 3px solid var(--holo-soft); outline-offset: 2px; }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 12px; }
+.seg button { font: 600 12.5px var(--font-sans); border: 0; border-radius: 9px; padding: 7px 4px; background: transparent; color: var(--ink-2); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--holo); color: var(--on-holo); }
+.stat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; font-family: var(--font-mono); }
+.stat div { display: grid; gap: 2px; }
+.stat small { font-size: 10px; letter-spacing: 0.1em; color: var(--ink-3); text-transform: uppercase; }
+.stat b { font-size: 16px; font-variant-numeric: tabular-nums; }
+.pos { color: var(--fall); } .neg { color: var(--rise); }
+.walk { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.walk .btn { font-size: 20px; padding: 10px 0; touch-action: none; }
+.btn.slim { padding: 8px 10px; font-size: 14px; }
+.walk .btn.on { box-shadow: 0 0 0 3px var(--holo-soft); filter: brightness(1.12); }
+.note { margin: 0; font-size: 12px; color: var(--ink-2); line-height: 1.4; }
+.note b { color: var(--ink); }
+.warn { color: var(--warn); }
+
+/* Board */
+.board { position: relative; flex: 1; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); overflow: hidden; }
+.axis { position: absolute; left: 0; top: 0; bottom: 0; width: 44px; border-right: 1px solid var(--faint); }
+.tick { position: absolute; left: 6px; font: 500 10px var(--font-mono); color: var(--ink-3); transform: translateY(-50%); font-variant-numeric: tabular-nums; }
+.grid { position: absolute; left: 44px; right: 0; height: 1px; background: var(--faint); }
+.pline { position: absolute; left: 44px; right: 0; border-top: 2px dashed; }
+.pline span { position: absolute; right: 8px; top: -19px; font: 700 11px var(--font-mono); letter-spacing: 0.04em; }
+.pline.sell { border-color: var(--rise); color: var(--rise); }
+.pline.buy { border-color: var(--fall); color: var(--fall); }
+.pline.buy span { top: 3px; }
+.ceil { position: absolute; left: 52px; top: 8px; font: 700 10.5px var(--font-mono); letter-spacing: 0.08em; color: var(--rise); text-transform: uppercase; }
+.zone { position: absolute; left: 0; width: 44px; text-align: center; font: 700 9.5px var(--font-mono); letter-spacing: 0.08em; color: var(--ink-3); text-transform: uppercase; }
+.col { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--faint); }
+.cr { position: absolute; width: 96px; margin-left: -48px; display: flex; flex-direction: column; align-items: center; transform: translateY(-21px); transition: opacity .3s; }
+.cr svg { width: 38px; height: 38px; overflow: visible; filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.2)); }
+.cr .tag { margin-top: 1px; font: 700 11px var(--font-mono); padding: 1px 6px; border-radius: 6px; background: var(--panel); border: 1.5px solid; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cr .who { font: 600 10.5px var(--font-sans); color: var(--ink-2); white-space: nowrap; }
+.cr.out { opacity: 0.32; }
+.cr.mine .tag { box-shadow: 0 0 0 3px var(--holo-soft); }
+.bubble { position: absolute; left: 50%; top: -8px; font: 700 12px var(--font-mono); color: var(--fall); pointer-events: none; }
+.band { position: absolute; height: 4px; margin-top: -2px; border-radius: 2px; background: var(--holo); box-shadow: 0 0 10px var(--holo); }
+.deal { position: absolute; left: 52px; bottom: 8px; right: 8px; font: 600 12px var(--font-mono); color: var(--holo-strong); display: flex; gap: 14px; flex-wrap: wrap; }
+.deal span { background: var(--holo-soft); border-radius: 6px; padding: 2px 6px; }
+
+/* Status screen */
+.title { display: flex; align-items: baseline; gap: 10px; }
+.title h2 { margin: 0; font: 600 20px var(--font-display); }
+.chip { font: 500 11px var(--font-mono); color: var(--ink-2); background: var(--raised); border: 1px solid var(--line); border-radius: 6px; padding: 3px 7px; }
+table { border-collapse: collapse; width: 100%; font-family: var(--font-mono); font-size: 13px; font-variant-numeric: tabular-nums; background: var(--panel); border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
+th { font: 500 10px var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--faint); }
+th:first-child, td:first-child { text-align: left; }
+td.name { display: flex; align-items: center; gap: 6px; font: 600 13px var(--font-sans); }
+td.name svg { width: 22px; height: 22px; }
+.skipped { font-size: 12px; color: var(--ink-3); }
+.goodico { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: 1px; }
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <h1>Walk auction prototype</h1>
+    <div class="scen" role="group" aria-label="Pick a good">
+      <button type="button" id="scen-food" data-s="food" aria-pressed="true">Food: you have spare</button>
+      <button type="button" id="scen-energy" data-s="energy" aria-pressed="false">Energy: store sold out</button>
+    </div>
+  </div>
+  <div class="fit" id="fit"><div class="phone" id="phone"></div></div>
+  <p class="hint">Hold <b>▲</b> or <b>▼</b> in the rail (or <kbd>↑</kbd> <kbd>↓</kbd>) to walk (sound on for the clock and the trade ticks). Sellers start at the top and walk down; buyers start at the bottom and walk up. When you meet someone, units change hands with a tick that speeds up the longer you stay. Walk onto a store line to trade with the store. The clock runs at quarter speed while a trade is on. The other three players are played by the computer, and the numbers are made up.</p>
+</div>
+
+<script>
+(() => {
+const SPECIES = {
+  quibbit: (b, s, l) => `<ellipse cx="8" cy="28.5" rx="4" ry="1.8" fill="${s}"/><ellipse cx="24" cy="28.5" rx="4" ry="1.8" fill="${s}"/><ellipse cx="16" cy="21" rx="13.5" ry="8" fill="${b}" stroke="${s}" stroke-width="1.2"/><circle cx="10" cy="12" r="5" fill="${b}" stroke="${s}" stroke-width="1.2"/><circle cx="22" cy="12" r="5" fill="${b}" stroke="${s}" stroke-width="1.2"/><ellipse cx="16" cy="24" rx="8" ry="3.6" fill="${l}" opacity=".6"/>${eye(10,12,3.2)}${eye(22,12,3.2)}<path d="M7.5 20 Q16 26.5 24.5 20" stroke="#0f1d2b" stroke-width="1.2" fill="none" stroke-linecap="round"/><circle cx="27" cy="26" r="3.3" fill="#f2c94c" stroke="#a87b00" stroke-width=".9"/>`,
+  bramblet: (b, s, l) => `<path d="M16 11 V5" stroke="#2f8f4a" stroke-width="1.4" stroke-linecap="round"/><path d="M16 7 C12 2.5 7.5 4.5 8.5 8 C11 9.5 14 9 16 7Z" fill="#46b866" stroke="#2f8f4a" stroke-width=".8"/><path d="M16 6 C19 2 24 3 23.5 6.5 C21 8 18 7.8 16 6Z" fill="#5cc97a" stroke="#2f8f4a" stroke-width=".8"/><ellipse cx="11" cy="29" rx="3.2" ry="1.8" fill="${s}"/><ellipse cx="21" cy="29" rx="3.2" ry="1.8" fill="${s}"/><ellipse cx="16" cy="20" rx="10.5" ry="9.5" fill="${b}" stroke="${s}" stroke-width="1.2"/><ellipse cx="16" cy="23" rx="6" ry="4.5" fill="${l}" opacity=".55"/>${eye(12.5,18,3)}${eye(19.5,18,3)}<path d="M13.5 24 Q16 26.3 18.5 24" stroke="#0f1d2b" stroke-width="1.1" fill="none" stroke-linecap="round"/>`,
+  gearling: (b, s, l) => `<path d="M16 9 V4.5" stroke="${s}" stroke-width="1.4"/><circle cx="16" cy="4" r="2.2" fill="${l}" stroke="${s}"/><rect x="2.5" y="15" width="4" height="7" rx="1.5" fill="${s}"/><rect x="25.5" y="15" width="4" height="7" rx="1.5" fill="${s}"/><rect x="10" y="26" width="4" height="4" rx="1" fill="${s}"/><rect x="18" y="26" width="4" height="4" rx="1" fill="${s}"/><rect x="5.5" y="9" width="21" height="18" rx="5" fill="${b}" stroke="${s}" stroke-width="1.2"/><rect x="9" y="13" width="14" height="7" rx="3.5" fill="#fff" stroke="${s}" stroke-width=".8"/><circle cx="18" cy="16.5" r="2.4" fill="#0f1d2b"/><circle cx="18.8" cy="15.8" r=".7" fill="#fff"/><path d="M12 23.5 H20" stroke="${s}" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="1.6 1.4"/>`,
+  mollox: (b, s, l) => `<circle cx="7" cy="11" r="3.4" fill="${b}" stroke="${s}" stroke-width="1.2"/><circle cx="25" cy="11" r="3.4" fill="${b}" stroke="${s}" stroke-width="1.2"/><ellipse cx="16" cy="19.5" rx="12.5" ry="10" fill="${b}" stroke="${s}" stroke-width="1.2"/><path d="M4 26 l-1.5 3 M6.5 27 l-.8 3.2 M9 27.5 l0 3" stroke="${l}" stroke-width="1.5" stroke-linecap="round"/><path d="M28 26 l1.5 3 M25.5 27 l.8 3.2 M23 27.5 l0 3" stroke="${l}" stroke-width="1.5" stroke-linecap="round"/><ellipse cx="16" cy="22.5" rx="5" ry="3.6" fill="${l}"/><ellipse cx="16" cy="20.6" rx="1.9" ry="1.4" fill="#0f1d2b"/><circle cx="11.5" cy="16" r="1.7" fill="#0f1d2b"/><circle cx="20.5" cy="16" r="1.7" fill="#0f1d2b"/>`,
+};
+function eye(x, y, r) { return `<circle cx="${x}" cy="${y}" r="${r}" fill="#fff"/><circle cx="${x+r*.2}" cy="${y+r*.15}" r="${r*.5}" fill="#0f1d2b"/><circle cx="${x+r*.35}" cy="${y-r*.15}" r="${r*.18}" fill="#fff"/>`; }
+function creature(p) {
+  const c = `var(${p.color})`;
+  return `<svg viewBox="0 0 32 32" aria-hidden="true">${SPECIES[p.sp](c, `color-mix(in srgb, ${c} 62%, black)`, `color-mix(in srgb, ${c} 45%, white)`)}</svg>`;
+}
+
+// Made-up month-3 numbers for two goods.
+const SCEN = {
+  food: { good: 'Food', gvar: '--g-food', month: 3, storeStock: 6, storeBuy: 18, storeSell: 34, min: 12, max: 40,
+    skipped: 'Crystite, Electronics, Medicine', ship: 'Ship not in port',
+    players: [
+      { id: 'h', name: 'Heiko', sp: 'quibbit', color: '--p1', ai: false, money: 851, had: 4, used: 3, spoiled: 1, made: 9, need: 3 },
+      { id: 'l', name: 'Lena', sp: 'bramblet', color: '--p2', ai: true, money: 640, had: 2, used: 3, spoiled: 0, made: 2, need: 4, limit: 31 },
+      { id: 'b', name: 'Brix', sp: 'gearling', color: '--p3', ai: true, money: 520, had: 3, used: 2, spoiled: 0, made: 5, need: 2, limit: 22 },
+      { id: 'o', name: 'Ossa', sp: 'mollox', color: '--p4', ai: true, money: 910, had: 2, used: 2, spoiled: 0, made: 0, need: 4, limit: 27 },
+    ] },
+  energy: { good: 'Energy', gvar: '--g-energy', month: 3, storeStock: 0, storeBuy: 20, storeSell: null, min: 15, max: 80,
+    skipped: 'Crystite, Electronics, Medicine', ship: 'Ship not in port',
+    players: [
+      { id: 'h', name: 'Heiko', sp: 'quibbit', color: '--p1', ai: false, money: 851, had: 3, used: 3, spoiled: 0, made: 0, need: 4 },
+      { id: 'l', name: 'Lena', sp: 'bramblet', color: '--p2', ai: true, money: 640, had: 1, used: 2, spoiled: 0, made: 2, need: 3, limit: 66 },
+      { id: 'b', name: 'Brix', sp: 'gearling', color: '--p3', ai: true, money: 520, had: 0, used: 2, spoiled: 0, made: 3, need: 2, limit: 42 },
+      { id: 'o', name: 'Ossa', sp: 'mollox', color: '--p4', ai: true, money: 910, had: 2, used: 1, spoiled: 0, made: 12, need: 1, limit: 52 },
+    ] },
+};
+const T = { status: 8, declare: 6, walk: 20, cross: 5, tick0: 400, tickF: 0.8, tickMin: 60, slow: 0.25 };
+
+let S, raf, last, seed = 7, dir = 0, audio;
+const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+const $ = (q) => document.querySelector(q);
+const phone = $('#phone'), fit = $('#fit');
+
+function start(key) {
+  const sc = SCEN[key];
+  seed = 7;
+  S = { key, sc, phase: 'status', t: T.status, min: sc.min, max: sc.max, storeStock: sc.storeStock, storeSell: sc.storeSell,
+    trades: [], pairs: new Map(), bubbles: [], deals: [],
+    players: sc.players.map((p) => {
+      const now = p.had - p.used - p.spoiled + p.made;
+      const side = now > p.need ? 'sell' : now < p.need ? 'buy' : 'pass';
+      return { ...p, now, have: now, side, pos: 0, out: false, done: false, start: { money: p.money, have: now }, move: 0, pause: 0 };
+    }) };
+  document.querySelectorAll('.scen button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.s === key)));
+  render(); cancelAnimationFrame(raf); last = performance.now(); raf = requestAnimationFrame(loop);
+}
+const me = () => S.players[0];
+const fmt = (n) => (n > 0 ? '+' : '') + n;
+const startPos = (p) => (p.side === 'sell' ? S.max : S.min);
+
+function setPhase(ph) {
+  S.phase = ph;
+  if (ph === 'declare') S.t = T.declare;
+  if (ph === 'walk') { S.t = T.walk; S.players.forEach((p) => { p.pos = startPos(p); p.out = p.side === 'pass'; p.pause = rnd() * 0.8; }); }
+  render();
+}
+
+
+function aiDir(p, dt) {
+  if (p.side === 'sell' && p.have <= p.need) { p.out = true; p.done = true; return 0; }
+  if (p.side === 'buy' && p.have >= p.need) { p.out = true; p.done = true; return 0; }
+  p.pause -= dt;
+  if (p.pause > 0) return 0;
+  if (p.pause < -0.9 - rnd() * 0.8) p.pause = rnd() < 0.35 ? 0.3 + rnd() * 0.7 : 0;
+  if (p.side === 'sell') return p.pos > p.limit + 0.4 ? -0.75 : 0;
+  return p.pos < p.limit - 0.4 ? 0.75 : 0;
+}
+
+function step(dt) {
+  const range = S.max - S.min, speed = range / T.cross;
+  const buyers = () => S.players.filter((p) => !p.out && p.side === 'buy');
+  const sellers = () => S.players.filter((p) => !p.out && p.side === 'sell' && p.have > 0);
+  for (const p of S.players) {
+    if (p.out || p.side === 'pass') continue;
+    const d = p.ai ? aiDir(p, dt) : dir;
+    p.moving = d;
+    if (!d) continue;
+    let pos = p.pos + d * speed * dt;
+    if (p.side === 'sell') {
+      const bid = Math.max(S.sc.storeBuy, ...buyers().map((b) => b.pos));
+      // No ceiling when the store is sold out: a seller at the top pushes the scale up.
+      if (!S.storeSell && pos > S.max) S.max = pos;
+      pos = Math.max(bid, Math.min(S.storeSell ? S.max : Math.max(S.max, pos), pos));
+    } else {
+      const ask = Math.min(S.storeSell ?? Infinity, ...sellers().map((s) => s.pos), S.max);
+      pos = Math.min(ask, Math.max(S.min, pos));
+    }
+    p.pos = pos;
+  }
+  // Grow the scale when a buyer presses against the top and the store is sold out.
+  const topBuyer = Math.max(...buyers().map((b) => b.pos), S.min);
+  if (!S.storeSell && topBuyer > S.max - range * 0.08) S.max += range * 0.25 * dt;
+
+  // Who is touching whom right now.
+  const matched = [];
+  const bs = buyers(), ss = sellers();
+  if (bs.length && ss.length) {
+    const b = bs.reduce((a, x) => (x.pos > a.pos ? x : a)), s = ss.reduce((a, x) => (x.pos < a.pos ? x : a));
+    if (b.pos >= s.pos - 0.05) matched.push({ key: b.id + '>' + s.id, b, s, price: Math.round(s.pos) });
+  }
+  for (const b of bs) if (S.storeSell && S.storeStock > 0 && b.pos >= S.storeSell - 0.05) matched.push({ key: b.id + '>store', b, s: null, price: S.storeSell });
+  for (const s of ss) if (s.pos <= S.sc.storeBuy + 0.05) matched.push({ key: 'store>' + s.id, b: null, s, price: S.sc.storeBuy });
+
+  const now = performance.now(), seen = new Set();
+  for (const m of matched) {
+    seen.add(m.key);
+    let pr = S.pairs.get(m.key);
+    if (!pr) { pr = { n: 0, next: now + T.tick0 }; S.pairs.set(m.key, pr); }
+    pr.m = m;
+    if (now >= pr.next) { trade(m); pr.n++; pr.next = now + Math.max(T.tickMin, T.tick0 * Math.pow(T.tickF, pr.n)); }
+  }
+  for (const k of [...S.pairs.keys()]) if (!seen.has(k)) S.pairs.delete(k);
+  S.trading = S.pairs.size > 0;
+
+  // Nothing left that could trade: end at once.
+  const canBuy = buyers().filter((b) => b.money >= S.sc.storeBuy);
+  const anySeller = sellers().length > 0 || (S.storeSell && S.storeStock > 0);
+  const anyBuyer = canBuy.length > 0 || sellers().length > 0; // the store always buys
+  const humanIn = !me().out;
+  if (!anySeller || !anyBuyer || (!humanIn && !S.players.some((p) => p.ai && !p.out))) return finish();
+  if (S.players.every((p) => p.out || p.done)) return finish();
+}
+
+function trade(m) {
+  const { b, s, price } = m;
+  if (b && b.money < price) { b.out = true; return; }
+  if (s && s.have <= 0) return;
+  if (!s && S.storeStock <= 0) return;
+  if (b) { b.money -= price; b.have++; }
+  if (s) { s.money += price; s.have--; } else S.storeStock--;
+  S.trades.push({ b: b ? b.name : 'Store', s: s ? s.name : 'Store', price });
+  [b, s].forEach((p, i) => p && S.bubbles.push({ id: p.id, txt: i ? '+' + price + ' cr' : '+1', t: performance.now() }));
+  click(price);
+  if (s && s.have <= 0 && s.ai) s.out = true;
+}
+
+function finish() { S.phase = 'result'; S.pairs.clear(); S.trading = false; dir = 0; bell(); render(); }
+// The end of a good: three bell strikes (dong, dong, dong), each built from inharmonic partials that ring out.
+function bell() {
+  if (!audio || audio.state !== 'running') return;
+  try {
+    const base = 520, out = audio.createGain();
+    out.gain.value = 0.22; out.connect(audio.destination);
+    for (const at of [0, 0.6, 1.2]) [[1, 1, 2.6], [2.0, 0.5, 1.8], [2.76, 0.35, 1.4], [5.4, 0.18, 0.8], [8.9, 0.08, 0.5]].forEach(([r, a, d]) => {
+      const t = audio.currentTime + at;
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.type = 'sine'; o.frequency.value = base * r;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(a, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(g).connect(out); o.start(t); o.stop(t + d + 0.05);
+    });
+  } catch (e) {}
+}
+
+function loop(t) {
+  const dt = Math.min(0.05, (t - last) / 1000); last = t;
+  if (S.phase !== 'result') {
+    if (S.phase === 'walk') step(dt);
+    if (S.phase !== 'result') {
+      S.t -= dt * (S.trading ? T.slow : 1);
+      if (S.t <= 0) { if (S.phase === 'status') setPhase('declare'); else if (S.phase === 'declare') setPhase('walk'); else finish(); }
+    }
+    if (S.phase === 'walk') drawBoard();
+    updateClock();
+    if (S.phase === 'walk' || S.phase === 'declare') {
+      const f = S.t / T[S.phase], now = performance.now();
+      const gap = (f > 0.5 ? 1000 : f > 0.25 ? 500 : f > 0.12 ? 250 : 160) / (S.trading ? T.slow : 1);
+      if (!S.nextTick || now - S.nextTick > 2000) S.nextTick = now + 200;
+      if (now >= S.nextTick) { clockTick(f); S.nextTick = now + gap; }
+    }
+  }
+  raf = requestAnimationFrame(loop);
+}
+
+function unlock() { try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume && audio.resume(); } catch (e) {} }
+// The clock: a soft tick-tock that gets faster and louder as time runs out.
+function clockTick(f) {
+  if (!audio || audio.state !== 'running') return;
+  S.tock = !S.tock;
+  try {
+    const t = audio.currentTime, o = audio.createOscillator(), g = audio.createGain(), bp = audio.createBiquadFilter();
+    o.type = 'triangle'; o.frequency.value = S.tock ? 1250 : 1650;
+    bp.type = 'bandpass'; bp.frequency.value = o.frequency.value; bp.Q.value = 6;
+    const v = f > 0.5 ? 0.05 : f > 0.25 ? 0.09 : 0.16;
+    g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
+    o.connect(bp).connect(g).connect(audio.destination); o.start(t); o.stop(t + 0.035);
+  } catch (e) {}
+}
+function click(price) {
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = 'square'; o.frequency.value = 900 + (price % 7) * 40;
+    g.gain.setValueAtTime(0.06, audio.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + 0.04);
+    o.connect(g).connect(audio.destination); o.start(); o.stop(audio.currentTime + 0.05);
+  } catch (e) {}
+}
+
+// ---------- rendering ----------
+function rail(body, foot) {
+  const sc = S.sc, label = { status: 'Status', declare: 'Buy, sell or pass', walk: 'Walk', result: 'Done' }[S.phase];
+  return `<aside class="rail">
+    <div class="rhead">
+      <span class="eyebrow">Month ${sc.month} / 12 · Goods auction</span>
+      <div class="rtitle"><b><i class="goodico" style="background:var(${sc.gvar})"></i>${sc.good} · ${label}</b><span class="clock" id="clock"></span></div>
+      <div class="me"><span>${me().name}</span><span id="money">${me().money} cr</span></div>
+    </div>
+    <div class="rbody">${body}</div>
+    <div class="rfoot">${foot}</div>
+  </aside>`;
+}
+function updateClock() {
+  const c = $('#clock'); if (!c) return;
+  const s = Math.max(0, Math.ceil(S.t));
+  c.textContent = S.phase === 'result' ? '—' : '0:' + String(s).padStart(2, '0');
+  c.classList.toggle('slow', !!S.trading);
+  const m = $('#money'); if (m) m.textContent = me().money + ' cr';
+  const tot = T[S.phase] || 1, f = Math.max(0, Math.min(1, S.t / tot));
+  const col = S.phase === 'result' ? 'var(--line)' : f > 0.5 ? 'var(--fall)' : f > 0.25 ? 'var(--warn)' : 'var(--rise)';
+  if (S.phase !== 'result') { c.style.color = col; c.style.borderColor = col; }
+  const tb = $('#tbar');
+  if (tb) {
+    const i = tb.firstElementChild;
+    i.style.width = (f * 100).toFixed(2) + '%'; i.style.backgroundColor = col;
+    tb.classList.toggle('hurry', f <= 0.25 && !S.trading);
+    tb.classList.toggle('slow', !!S.trading);
+    $('#tlabel').textContent = S.trading ? 'Trading · clock slowed' : f <= 0.25 ? 'Hurry' : '';
+  }
+}
+
+function render() {
+  const sc = S.sc, p = me();
+  let main = '', body = '', foot = '';
+  if (S.phase === 'status') {
+    main = `<div class="title"><h2>${sc.good}: where everyone stands</h2><span class="chip">Store ${S.storeStock} · ${sc.ship}</span></div>
+      <table><thead><tr><th>Player</th><th>Had</th><th>Used</th><th>Spoiled</th><th>Made</th><th>Now</th><th>Need</th><th>Spare</th></tr></thead><tbody>
+      ${S.players.map((q) => { const d = q.now - q.need; return `<tr><td class="name">${creature(q)}${q.name}</td><td>${q.had}</td><td>−${q.used}</td><td>${q.spoiled ? '−' + q.spoiled : 0}</td><td>+${q.made}</td><td><b>${q.now}</b></td><td>${q.need}</td><td class="${d > 0 ? 'pos' : d < 0 ? 'neg' : ''}">${d ? fmt(d) : '0'}</td></tr>`; }).join('')}
+      </tbody></table>
+      <span class="skipped">Skipped this month: ${sc.skipped}. Nobody had any to sell or needed them.</span>`;
+    const d = p.now - p.need;
+    body = `<div class="stat"><div><small>Have</small><b>${p.now}</b></div><div><small>Need</small><b>${p.need}</b></div><div><small>${d >= 0 ? 'Spare' : 'Short'}</small><b class="${d >= 0 ? 'pos' : 'neg'}">${fmt(d)}</b></div></div>
+      <p class="note">Need is what your crews and plots use next month. ${d > 0 ? 'Your spare can go to market.' : d < 0 ? 'You are short. Without it, plots and crews suffer.' : ''}</p>`;
+    foot = `<button class="btn" id="go" type="button">Start the auction</button>`;
+  } else if (S.phase === 'declare') {
+    main = boardShell();
+    body = `<p class="note">Choose before the walk starts. You can switch sides during the walk too.</p>
+      <div class="seg" role="group" aria-label="Your side">${['sell', 'buy', 'pass'].map((s) => `<button type="button" id="side-${s}" data-side="${s}" aria-pressed="${p.side === s}">${{ sell: 'Sell', buy: 'Buy', pass: 'Pass' }[s]}</button>`).join('')}</div>
+      <p class="note">${S.players.slice(1).map((q) => `<b>${q.name}</b> ${q.side === 'sell' ? 'sells' : q.side === 'buy' ? 'buys' : 'passes'}`).join(' · ')}</p>`;
+    foot = `<button class="btn" id="ready" type="button">Ready</button>`;
+  } else if (S.phase === 'walk') {
+    main = boardShell();
+    body = walkBody();
+    foot = `<div class="walk"><button class="btn" id="up" type="button" aria-label="Walk up">▲</button><button class="btn" id="down" type="button" aria-label="Walk down">▼</button></div>
+      <button class="btn ghost slim" id="done" type="button">Done</button>`;
+  } else {
+    main = `<div class="title"><h2>${sc.good} sold</h2><span class="chip">${S.trades.length} units changed hands</span></div>
+      <table><thead><tr><th>Player</th><th>Units</th><th>Credits</th><th>Now have</th><th>Need</th></tr></thead><tbody>
+      ${S.players.map((q) => { const du = q.have - q.start.have, dm = q.money - q.start.money; return `<tr><td class="name">${creature(q)}${q.name}</td><td class="${du > 0 ? 'pos' : du < 0 ? 'neg' : ''}">${du ? fmt(du) : '0'}</td><td class="${dm > 0 ? 'pos' : dm < 0 ? 'neg' : ''}">${dm ? fmt(dm) : '0'}</td><td>${q.have}</td><td>${q.need}</td></tr>`; }).join('')}
+      <tr><td class="name">Store</td><td colspan="4">${S.storeStock} left</td></tr></tbody></table>
+      <span class="skipped">${priceSummary()}</span>`;
+    body = `<p class="note">In the game, the next good starts here. In this prototype you can play this one again or try the other.</p>`;
+    foot = `<button class="btn" id="again" type="button">Play again</button><button class="btn ghost" id="other" type="button">Try ${S.key === 'food' ? 'Energy' : 'Food'}</button>`;
+  }
+  phone.innerHTML = `<section class="main">${main}</section>${rail(body, foot)}`;
+  wire(); updateClock();
+  if (S.phase === 'declare' || S.phase === 'walk') { if (S.phase === 'declare') S.players.forEach((q) => (q.pos = startPos(q))); drawBoard(); }
+}
+function priceSummary() {
+  if (!S.trades.length) return 'No trades this time.';
+  const ps = S.trades.map((t) => t.price);
+  return `Prices paid: ${Math.min(...ps)} to ${Math.max(...ps)} cr. The ${S.sc.good} price next month starts from these.`;
+}
+function walkBody() {
+  const p = me(), d = p.have - p.need;
+  const other = p.side === 'sell' ? 'buy' : 'sell';
+  const warn = p.side === 'sell' && p.have <= p.need ? `<p class="note warn">You are now selling into your own need.</p>` : '';
+  return `<div class="stat"><div><small>Have</small><b id="have">${p.have}</b></div><div><small>Need</small><b>${p.need}</b></div><div><small>${d >= 0 ? 'Spare' : 'Short'}</small><b class="${d >= 0 ? 'pos' : 'neg'}" id="spare">${fmt(d)}</b></div></div>
+    <p class="note" id="you">${youLine()}</p>${warn}
+    ${p.out ? '' : `<div class="seg" style="grid-template-columns:1fr 1fr"><button type="button" id="switch">Switch to ${other === 'buy' ? 'buying' : 'selling'}</button><button type="button" id="pass">Pass</button></div>`}`;
+}
+function youLine() {
+  const p = me();
+  if (p.out) return p.side === 'pass' ? 'You are sitting this one out.' : 'You are done with this good.';
+  if (p.side === 'sell') return `You ask <b>${Math.round(p.pos)} cr</b>. Walk down to sell sooner.`;
+  return `You bid <b>${Math.round(p.pos)} cr</b>. Walk up to buy sooner.`;
+}
+
+function boardShell() {
+  return `<div class="tbar" id="tbar"><i></i><b id="tlabel"></b></div><div class="board" id="board"><div class="axis" id="axis"></div><div id="layer"></div></div>`;
+}
+function drawBoard() {
+  const board = $('#board'); if (!board) return;
+  const H = board.clientHeight, W = board.clientWidth, top = 34, bot = 46;
+  const y = (pr) => top + (S.max - pr) / (S.max - S.min) * (H - top - bot);
+  const xs = S.players.map((_, i) => 44 + (W - 44 - 120) * (i + 0.5) / S.players.length);
+  let h = '';
+  const step = niceStep(S.max - S.min);
+  for (let v = Math.ceil(S.min / step) * step; v <= S.max; v += step) h += `<div class="grid" style="top:${y(v)}px"></div><div class="tick" style="top:${y(v)}px">${v}</div>`;
+  if (S.storeSell) h += `<div class="pline sell" style="top:${y(S.storeSell)}px"><span>Store sells ${S.storeSell} · ${S.storeStock} left</span></div>`;
+  else h += `<div class="ceil">Store sold out · no ceiling</div>`;
+  h += `<div class="pline buy" style="top:${y(S.sc.storeBuy)}px"><span>Store buys ${S.sc.storeBuy}</span></div>`;
+  h += `<div class="zone" style="top:6px">▼ Sell</div><div class="zone" style="bottom:6px">▲ Buy</div>`;
+  S.players.forEach((p, i) => (h += `<div class="col" style="left:${xs[i]}px"></div>`));
+  // Bands between matched pairs.
+  for (const [, pr] of S.pairs) {
+    const m = pr.m; if (!m) continue;
+    const a = m.b ? xs[S.players.indexOf(m.b)] : W - 110, b = m.s ? xs[S.players.indexOf(m.s)] : W - 110;
+    h += `<div class="band" style="top:${y(m.price)}px;left:${Math.min(a, b)}px;width:${Math.max(6, Math.abs(a - b))}px"></div>`;
+  }
+  const now = performance.now();
+  S.bubbles = S.bubbles.filter((b) => now - b.t < 700);
+  S.players.forEach((p, i) => {
+    const lab = p.side === 'pass' ? 'pass' : `${p.side === 'sell' ? 'ask' : 'bid'} ${Math.round(p.pos)}`;
+    const units = p.side === 'sell' ? `${p.have} to sell` : p.side === 'buy' ? `has ${p.have}` : '';
+    const bub = S.bubbles.filter((b) => b.id === p.id).slice(-1).map((b) => { const a = (now - b.t) / 700; return `<span class="bubble" style="opacity:${1 - a};transform:translate(-50%,${-22 * a}px)">${b.txt}</span>`; }).join('');
+    const py = p.side === 'pass' ? H / 2 : y(p.pos);
+    h += `<div class="cr ${p.out ? 'out' : ''} ${p.ai ? '' : 'mine'}" style="left:${xs[i]}px;top:${py}px">${bub}${creature(p)}<span class="tag" style="border-color:var(${p.color})">${lab}</span><span class="who">${p.name}${units ? ' · ' + units : ''}</span></div>`;
+  });
+  const deals = [...S.pairs.values()].map((pr) => { const m = pr.m; return `<span>${m.s ? m.s.name : 'Store'} → ${m.b ? m.b.name : 'Store'} at ${m.price} · ${pr.n} ${pr.n === 1 ? 'unit' : 'units'}</span>`; });
+  if (deals.length) h += `<div class="deal">${deals.join('')}</div>`;
+  $('#layer').innerHTML = h;
+  if (S.phase === 'walk') {
+    const p = me();
+    const hv = $('#have'); if (hv) { hv.textContent = p.have; const d = p.have - p.need; const sp = $('#spare'); sp.textContent = fmt(d); sp.className = d >= 0 ? 'pos' : 'neg'; }
+    const yl = $('#you'); if (yl) yl.innerHTML = youLine();
+  }
+}
+function niceStep(r) { return r > 120 ? 20 : r > 60 ? 10 : 5; }
+
+function wire() {
+  const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
+  on('go', () => { unlock(); setPhase('declare'); });
+  on('ready', () => { unlock(); setPhase('walk'); });
+  on('again', () => start(S.key));
+  on('other', () => start(S.key === 'food' ? 'energy' : 'food'));
+  on('done', () => { me().done = true; me().out = true; dir = 0; render(); });
+  on('pass', () => { me().out = true; me().done = true; dir = 0; render(); });
+  on('switch', () => { const p = me(); p.side = p.side === 'sell' ? 'buy' : 'sell'; p.pos = startPos(p); dir = 0; S.pairs.clear(); render(); });
+  document.querySelectorAll('[data-side]').forEach((b) => b.addEventListener('click', () => { me().side = b.dataset.side; render(); }));
+  for (const [id, d] of [['up', 1], ['down', -1]]) {
+    const el = document.getElementById(id); if (!el) continue;
+    const go = (e) => { e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch (x) {} dir = d; el.classList.add('on'); unlock(); };
+    const stop = () => { if (dir === d) dir = 0; el.classList.remove('on'); };
+    el.addEventListener('pointerdown', go); el.addEventListener('pointerup', stop); el.addEventListener('pointercancel', stop);
+  }
+}
+addEventListener('keydown', (e) => { if (S.phase !== 'walk' || me().out) return; if (e.key === 'ArrowUp') { dir = 1; e.preventDefault(); } if (e.key === 'ArrowDown') { dir = -1; e.preventDefault(); } });
+addEventListener('keyup', (e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') dir = 0; });
+document.querySelectorAll('.scen button').forEach((b) => b.addEventListener('click', () => start(b.dataset.s)));
+
+function scale() { const s = Math.min(1, fit.clientWidth / 844); phone.style.transform = `scale(${s})`; fit.style.height = 390 * s + 'px'; }
+new ResizeObserver(scale).observe(fit); scale();
+start('food');
+})();
+</script>
