@@ -17,9 +17,6 @@ function toWalk(s2Side: AuctionSide = 'buyer') {
   while (game.viewFor('s1').phase === 'development') advance(1_000);
   while (game.viewFor('s1').phase === 'production') advance(1_000);
   expect(game.viewFor('s1').phase).toBe('auction');
-  game.handle('s1', { type: 'ready' });
-  game.handle('s2', { type: 'ready' });
-  advance(WALK.tickMs * 2);
   game.handle('s1', { type: 'declare', side: 'seller' });
   game.handle('s2', { type: 'declare', side: s2Side });
   game.handle('s1', { type: 'ready' });
