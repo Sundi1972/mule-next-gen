@@ -11,7 +11,7 @@ export interface Usage {
   output: number;
 }
 
-export type Outcome = RejectOutcome | 'llm' | 'timeout' | 'error' | 'budget';
+export type Outcome = RejectOutcome | 'llm' | 'refused' | 'timeout' | 'error' | 'budget';
 
 export interface CallRecord extends Usage {
   game: string;
