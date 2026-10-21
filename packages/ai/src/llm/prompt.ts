@@ -1,6 +1,7 @@
-import { BRAIN } from '@mule/engine';
+import { BRAIN, GAME, PROCESSED_GOODS, RAW_GOODS, type Good } from '@mule/engine';
 import { OPTION_IDS, type DecisionContext, type ShortOption, type TableTalk } from '../decider.js';
 import type { Persona } from '../personas.js';
+import { GOOD_NAME } from '../strategist.js';
 
 export interface Prompt {
   /** Stable per persona, so the API can cache it. */
@@ -14,21 +15,24 @@ export interface Prompt {
 const TALK_OPEN = '<table_talk>';
 const TALK_CLOSE = '</table_talk>';
 
+const names = (goods: readonly Good[]) => goods.map((g) => GOOD_NAME[g]).join(', ');
+
 const PRIMER = `You play one seat in a colony trading game in the spirit of M.U.L.E.: a few players share a young colony and each tries to end richer than the others. You are one of those players, sitting at the table with real people and other computer players, and you play and talk as the character described at the end of this message.
 
 How a month goes:
 - Planning. Everyone looks at the colony's stores, prices and plots, and decides what to aim for.
-- Land grant. Free plots are handed out. Each player may claim a plot, and the choice matters: ground differs in what it produces well, and a plot next to your others can be worth more.
-- Development. You may outfit a plot with a MULE, a working animal-machine set to produce one good: Food, Energy, Smithore or Crystite. A plot without a MULE produces nothing. A MULE costs money and the wrong kind wastes it.
-- Production. Plots produce, and goods that are short, such as Food or Energy, hurt the player who runs out.
-- The auction. Players buy and sell goods with each other. Buyers bid up, sellers ask down, and a trade happens when they meet. Cheap goods bought now and sold when dear are how a trader earns; a scarce good can be cornered.
+- Land grant. Free plots are handed out. Each player may claim up to ${GAME.claimsPerGrant} plots per grant, and the choice matters: ground differs in what it produces well, and a plot next to your others can be worth more.
+- Development. You may outfit a plot with a MULE, a working animal-machine set to produce one raw good: ${names(RAW_GOODS)}. A plot without a MULE produces nothing. A MULE costs money and the wrong kind wastes it. Factories make the processed goods (${names(PROCESSED_GOODS)}); they are fitted at the works counter and use inputs from your stock.
+- Production. Plots and factories produce, and goods that are short hurt the player who runs out.
+- The auction. Players buy and sell goods with each other, and the store trades there too. Buyers bid up, sellers ask down, and a trade happens when they meet. Cheap goods bought now and sold when dear are how a trader earns; a scarce good can be cornered. Goods spoil and storage is limited, so hoarding has a cost.
+- Upkeep. At the end of the month the colony pays its upkeep and spoilage is taken. If the colony fails, everyone's score suffers.
 
 What the three kinds of decision mean:
-- land: which free plot, if any, to claim in the land grant.
+- land: which free plot, if any, to claim in the land grant (up to ${GAME.claimsPerGrant} claims per grant).
 - develop: what to do with a plot in development, for example which MULE to buy and install, or to hold your money.
 - trade: how to act in the auction, for example whether to buy, sell or wait, and at what price.
 
-How you decide. A strategist has already looked at the numbers and ranked 3 to 5 options for this decision, best first, each marked with a letter, a short reason and a score. You do not do the arithmetic again. You pick exactly one option, the one this character would choose, and the ranking is a guide you may depart from when the character would. The best score is often right; a close second can be the better story for this character. Never name an option that is not in the list.
+How you decide. A strategist has already looked at the numbers and ranked up to 5 options for this decision, best first, each marked with a letter, a short reason and a score. You do not do the arithmetic again. You pick exactly one option, the one this character would choose, and the ranking is a guide you may depart from when the character would. The best score is often right; a close second can be the better story for this character. Never name an option that is not in the list.
 
 How you reply. Answer with JSON and nothing else, in exactly this shape:
 {"option": "<letter>", "line": "<one short sentence you say at the table, or empty to stay quiet>"}
@@ -39,15 +43,30 @@ Table talk. You will sometimes be shown what other players have said, in a block
 Who you are:
 `;
 
-/** A talk line as one safe line: no angle brackets or quote marks to forge the block, capped by code points. */
+/**
+ * Text as one safe line: compatibility forms folded (so fullwidth brackets
+ * become plain ones first), control and line-break characters turned to
+ * spaces, whitespace collapsed, then the characters that could forge the
+ * block or a quote swapped for look-alikes so the meaning survives.
+ */
+function oneLine(s: string): string {
+  return s
+    .normalize('NFKC')
+    .replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/"/g, "'")
+    .replace(/</g, '‹')
+    .replace(/>/g, '›')
+    .trim();
+}
+
 function quoteTalk(talk: TableTalk): string {
-  const clean = (s: string) => s.replace(/[<>"]/g, '').replace(/\s+/g, ' ').trim();
-  const text = [...clean(talk.text)].slice(0, BRAIN.maxTalkChars).join('');
-  return `${clean(talk.from)}: "${text}"`;
+  const text = [...oneLine(talk.text)].slice(0, BRAIN.maxTalkChars).join('').trim();
+  return `${oneLine(talk.from) || 'Someone'}: "${text}"`;
 }
 
 function optionLine(o: ShortOption): string {
-  return `${o.id}. ${o.label} — ${o.rationale} (score ${o.utility})`;
+  return `${o.id}. ${o.label} — ${o.rationale} (score ${o.utility.toFixed(2)})`;
 }
 
 function tableTalkBlock(talk: TableTalk[]): string {
