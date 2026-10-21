@@ -11,3 +11,8 @@ body {
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
 }
+
+/* The phone is played sideways: the side rail holds the controls next to the map. */
+:root {
+  --rail: clamp(232px, 31vw, 300px);
+}

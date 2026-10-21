@@ -67,149 +67,138 @@ export function Auction() {
   const placed = order && order.side === side && order.limit === clamped && order.quantity === qty;
   const maxQty = side === 'sell' ? me.stock[good] : 99;
 
+  const placeOrder = (
+    <Button
+      size="md"
+      variant={placed ? 'outline' : 'holo'}
+      className="w-full px-2 text-[13px] leading-tight"
+      disabled={!!placed || (side === 'sell' && me.stock[good] === 0) || self.ready}
+      onClick={() => client.intent({ type: 'setOrder', good, side, quantity: qty, limit: clamped })}
+    >
+      {placed ? `Order placed · ${side} ${qty} ${GOOD_NAME[good]}` : `${side === 'sell' ? 'Sell' : 'Buy'} ${qty} ${GOOD_NAME[good]} at ${side === 'sell' ? 'least' : 'most'} ${clamped}`}
+    </Button>
+  );
+
   return (
     <PhoneShell
       phase={PHASE_NAME.auction}
       seconds={secondsUntil(view.phaseEndsAt, now)}
+      fill
+      rail={
+        <>
+          <div className="flex flex-col gap-1 rounded-control border border-holo-faint bg-panel px-2.5 py-1.5" data-testid="good-row">
+            <span className="flex items-center justify-between gap-2">
+              <GoodTag good={good} name />
+              <span className="font-mono text-[10px] text-ink-3">
+                STORE <strong data-num className="text-sm text-ink">{row.storeStock}</strong> · {row.shipPays !== null ? 'SHIP' : 'DEMAND'}{' '}
+                <strong data-num className="text-sm text-ink">{row.shipPays ?? row.demand}</strong>
+              </span>
+            </span>
+            <div className="grid grid-cols-4 gap-1 font-mono text-[10px] text-ink-3">
+              <span className="flex flex-col">
+                HAVE<strong data-num className="text-sm text-ink">{me.stock[good]}</strong>
+              </span>
+              <span className="flex flex-col">
+                NEED<strong data-num className="text-sm text-ink">{needOf(good)}</strong>
+              </span>
+              <span className="flex flex-col">
+                {spare < 0 ? 'SHORT' : 'SPARE'}
+                <strong data-num className={cx('text-sm', spare < 0 ? 'text-alert' : spare > 0 ? 'text-ok' : 'text-ink')}>
+                  {spare > 0 ? '+' : ''}
+                  {spare}
+                </strong>
+              </span>
+              <span className="flex flex-col">
+                COVER<strong data-num className={cx('text-sm', row.cover < 0.5 ? 'text-alert' : row.cover < 1 ? 'text-warn' : 'text-ink')}>{row.cover >= 99 ? '—' : `${row.cover} mo`}</strong>
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-1 rounded-control border border-holo-line bg-void p-1">
+            {(['sell', 'buy'] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                aria-pressed={side === s}
+                onClick={() => {
+                  setSide(s);
+                  if (s === 'sell') setQty((q) => Math.min(q, Math.max(1, me.stock[good])));
+                }}
+                className={cx('h-8 rounded-[8px] font-display text-sm font-semibold', side === s ? 'bg-holo text-on-holo' : 'text-ink-2')}
+              >
+                {s === 'sell' ? `Sell · have ${me.stock[good]}` : 'Buy'}
+              </button>
+            ))}
+          </div>
+
+          <Button size="md" variant="ghost" className="h-9" disabled={!order || self.ready} onClick={() => client.intent({ type: 'setOrder', good, side: 'none', quantity: 0, limit: 1 })}>
+            {order ? `Cancel ${order.side} order` : 'No order for this good'}
+          </Button>
+        </>
+      }
       footer={
-        <Button size="lg" variant={self.ready ? 'outline' : 'holo'} className="w-full" disabled={self.ready} onClick={() => client.intent({ type: 'ready' })}>
-          {self.ready ? 'Done · waiting for the others' : 'Done trading'}
-        </Button>
+        <>
+          {placeOrder}
+          <Button size="md" variant={self.ready ? 'outline' : 'holo'} className="w-full" disabled={self.ready} onClick={() => client.intent({ type: 'ready' })}>
+            {self.ready ? 'Done · waiting for the others' : 'Done trading'}
+          </Button>
+        </>
       }
     >
-      <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-5 gap-1">
-          {view.market.map((r) => (
-            <button
-              key={r.good}
-              type="button"
-              aria-pressed={good === r.good}
-              onClick={() => setGood(r.good)}
-              className={cx('relative flex h-10 min-w-0 items-center justify-center rounded-chip border', good === r.good ? 'border-holo bg-holo-soft' : 'border-holo-faint')}
-            >
-              <GoodTag good={r.good} className="gap-1 text-[11px]" />
-              {me.orders[r.good] && <span aria-label="order placed" className="absolute right-0.5 top-0.5 size-1.5 rounded-full bg-holo" />}
-            </button>
-          ))}
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] gap-2.5">
+        <div className="min-h-0 overflow-y-auto">
+          <table className="w-full text-sm">
+            <caption className="label-caps pb-1 text-left">Pick a good</caption>
+            <thead>
+              <tr className="text-left font-mono text-[10px] text-ink-3">
+                <th className="pb-1 font-medium">GOOD</th>
+                <th className="pb-1 text-right font-medium">BUYS</th>
+                <th className="pb-1 text-right font-medium">SELLS</th>
+                <th className="pb-1 text-right font-medium">YOU</th>
+                <th className="pb-1 text-right font-medium">ORDER</th>
+              </tr>
+            </thead>
+            <tbody data-num className="font-mono">
+              {view.market.map((r) => {
+                const o = me.orders[r.good];
+                return (
+                  <tr key={r.good} className={cx('cursor-pointer border-t border-holo-faint', r.good === good && 'bg-holo-soft')} onClick={() => setGood(r.good)}>
+                    <td className="py-0">
+                      <button type="button" aria-pressed={good === r.good} className="flex h-[30px] w-full items-center pl-1 text-left" onClick={() => setGood(r.good)}>
+                        <GoodTag good={r.good} />
+                      </button>
+                    </td>
+                    <td className="text-right text-fall">{dash(r.storeBuys)}</td>
+                    <td className="text-right text-rise">{dash(r.storeSells)}</td>
+                    <td className={cx('text-right', spareOf(r.good) < 0 && 'text-alert')}>{me.stock[r.good]}</td>
+                    <td className="pr-1 text-right text-xs text-holo">{o ? `${o.side === 'buy' ? 'B' : 'S'}${o.quantity}@${o.limit}` : ''}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-
-        <div className="flex flex-col gap-2 rounded-control border border-holo-faint bg-panel px-3 py-2" data-testid="good-row">
-          <div className="flex items-baseline justify-between font-mono text-xs text-ink-2">
-            <span>
-              STORE <strong data-num className="text-base text-ink">{row.storeStock}</strong>
+        <div className="flex min-h-0 flex-col gap-2">
+          <div className="min-h-0 flex-1">
+            <AuctionSlider value={clamped} min={min} max={max} storeBuys={row.storeBuys} storeSells={row.storeSells} side={side} onChange={setLimit} className="min-h-0!" />
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="label-caps">Units</span>
+            <Button size="md" variant="outline" className="w-11 px-0" aria-label="Fewer" onClick={() => setQty((q) => Math.max(1, q - 1))}>
+              −
+            </Button>
+            <span data-num className="w-7 text-center font-mono text-xl font-bold">
+              {qty}
             </span>
-            <span>
-              YOU HAVE <strong data-num className="text-base text-ink">{me.stock[good]}</strong>
-            </span>
-            <span>
-              NEED <strong data-num className="text-base text-ink">{needOf(good)}</strong>
-            </span>
-            <span>
-              {spare < 0 ? 'SHORT' : 'SPARE'}{' '}
-              <strong data-num className={cx('text-base', spare < 0 ? 'text-alert' : spare > 0 ? 'text-ok' : 'text-ink')}>
-                {spare > 0 ? '+' : ''}
-                {spare}
-              </strong>
+            <Button size="md" variant="outline" className="w-11 px-0" aria-label="More" disabled={qty >= maxQty} onClick={() => setQty((q) => q + 1)}>
+              +
+            </Button>
+            <span data-num className="ml-auto font-mono text-xs text-ink-2">
+              = {qty * clamped} cr
             </span>
           </div>
-          <div className="grid grid-cols-4 gap-1 border-t border-holo-faint pt-2 font-mono text-[11px] text-ink-3">
-            <span className="flex flex-col">
-              STORE BUYS<strong data-num className="text-sm text-fall">{row.storeBuys ?? 'not buying'}</strong>
-            </span>
-            <span className="flex flex-col">
-              STORE SELLS<strong data-num className="text-sm text-rise">{row.storeSells ?? 'sold out'}</strong>
-            </span>
-            <span className="flex flex-col">
-              COVER<strong data-num className={cx('text-sm', row.cover < 0.5 ? 'text-alert' : row.cover < 1 ? 'text-warn' : 'text-ink')}>{row.cover >= 99 ? '—' : `${row.cover} mo`}</strong>
-            </span>
-            <span className="flex flex-col">
-              {row.shipPays !== null ? 'SHIP PAYS' : 'DEMAND'}
-              <strong data-num className="text-sm text-ink">{row.shipPays ?? row.demand}</strong>
-            </span>
-          </div>
+          <p className="shrink-0 rounded-control border border-holo-faint px-2.5 py-1.5 text-xs text-ink-2">{store}</p>
         </div>
-
-        <div className="grid grid-cols-2 gap-1 rounded-control border border-holo-line bg-void p-1">
-          {(['sell', 'buy'] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              aria-pressed={side === s}
-              onClick={() => {
-                setSide(s);
-                if (s === 'sell') setQty((q) => Math.min(q, Math.max(1, me.stock[good])));
-              }}
-              className={cx('h-10 rounded-[8px] font-display font-semibold', side === s ? 'bg-holo text-on-holo' : 'text-ink-2')}
-            >
-              {s === 'sell' ? `Sell · you have ${me.stock[good]}` : 'Buy'}
-            </button>
-          ))}
-        </div>
-
-        <div className="h-64">
-          <AuctionSlider value={clamped} min={min} max={max} storeBuys={row.storeBuys} storeSells={row.storeSells} side={side} onChange={setLimit} />
-        </div>
-
-        <p className="min-h-10 rounded-control border border-holo-faint px-3 py-2 text-sm text-ink-2">{store}</p>
-
-        <div className="flex items-center gap-3">
-          <span className="label-caps">Units</span>
-          <Button size="md" variant="outline" className="w-12" aria-label="Fewer" onClick={() => setQty((q) => Math.max(1, q - 1))}>
-            −
-          </Button>
-          <span data-num className="w-8 text-center font-mono text-xl font-bold">
-            {qty}
-          </span>
-          <Button size="md" variant="outline" className="w-12" aria-label="More" disabled={qty >= maxQty} onClick={() => setQty((q) => q + 1)}>
-            +
-          </Button>
-          <span data-num className="ml-auto font-mono text-sm text-ink-2">
-            = {qty * clamped} cr
-          </span>
-        </div>
-
-        <div className="grid grid-cols-[1fr_auto] gap-2">
-          <Button
-            size="md"
-            variant={placed ? 'outline' : 'holo'}
-            disabled={!!placed || (side === 'sell' && me.stock[good] === 0) || self.ready}
-            onClick={() => client.intent({ type: 'setOrder', good, side, quantity: qty, limit: clamped })}
-          >
-            {placed ? `Order placed · ${side} ${qty} ${GOOD_NAME[good]}` : `${side === 'sell' ? 'Sell' : 'Buy'} ${qty} ${GOOD_NAME[good]} at ${side === 'sell' ? 'least' : 'most'} ${clamped}`}
-          </Button>
-          <Button size="md" variant="ghost" disabled={!order || self.ready} onClick={() => client.intent({ type: 'setOrder', good, side: 'none', quantity: 0, limit: 1 })}>
-            Cancel
-          </Button>
-        </div>
-
-        <table className="mt-2 w-full text-sm">
-          <caption className="label-caps pb-1 text-left">All goods</caption>
-          <thead>
-            <tr className="text-left font-mono text-[11px] text-ink-3">
-              <th className="pb-1 font-medium">GOOD</th>
-              <th className="pb-1 text-right font-medium">BUYS</th>
-              <th className="pb-1 text-right font-medium">SELLS</th>
-              <th className="pb-1 text-right font-medium">YOU</th>
-              <th className="pb-1 text-right font-medium">ORDER</th>
-            </tr>
-          </thead>
-          <tbody data-num className="font-mono">
-            {view.market.map((r) => {
-              const o = me.orders[r.good];
-              return (
-                <tr key={r.good} className={cx('border-t border-holo-faint', r.good === good && 'bg-holo-soft')} onClick={() => setGood(r.good)}>
-                  <td className="py-1.5">
-                    <GoodTag good={r.good} />
-                  </td>
-                  <td className="py-1.5 text-right">{dash(r.storeBuys)}</td>
-                  <td className="py-1.5 text-right">{dash(r.storeSells)}</td>
-                  <td className={cx('py-1.5 text-right', spareOf(r.good) < 0 && 'text-alert')}>{me.stock[r.good]}</td>
-                  <td className="py-1.5 text-right text-holo">{o ? `${o.side === 'buy' ? 'B' : 'S'} ${o.quantity}@${o.limit}` : ''}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
       </div>
     </PhoneShell>
   );

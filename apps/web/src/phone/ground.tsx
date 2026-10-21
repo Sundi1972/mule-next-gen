@@ -1,5 +1,5 @@
 import type { TileView } from '@mule/protocol';
-import { cx, GOOD_NAME, GoodIcon, type Good } from '@mule/ui';
+import { cx, GOOD_NAME, GoodTag, type Good } from '@mule/ui';
 import { groundPips } from '../game/derive';
 
 const RAW: Good[] = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth'];
@@ -7,7 +7,7 @@ const RAW: Good[] = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEar
 /** The private result of a geo analysis: every raw good, rated. */
 export function GroundCard({ ground }: { ground: NonNullable<TileView['ground']> }) {
   return (
-    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-control bg-raised p-3" data-testid="ground">
+    <div className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-control bg-raised px-2.5 py-2" data-testid="ground">
       <span className="label-caps col-span-2 flex justify-between">
         Underground <span className="text-holo">Only you</span>
       </span>
@@ -15,10 +15,9 @@ export function GroundCard({ ground }: { ground: NonNullable<TileView['ground']>
         const raw = ground[g as keyof typeof ground] ?? 0;
         const n = groundPips(g, raw);
         return (
-          <span key={g} className={cx('flex items-center gap-2', n === 0 && 'opacity-50')}>
-            <GoodIcon good={g} size={16} />
-            <span className="flex-1 text-sm">{GOOD_NAME[g]}</span>
-            <span className="flex gap-0.5" aria-label={`${n} of 4`}>
+          <span key={g} className={cx('flex items-center gap-1.5', n === 0 && 'opacity-50')} title={GOOD_NAME[g]}>
+            <GoodTag good={g} className="flex-1 text-[11px]" />
+            <span className="flex gap-0.5" aria-label={`${GOOD_NAME[g]} ${n} of 4`}>
               {[1, 2, 3, 4].map((i) => (
                 <span key={i} className="size-2 rounded-full" style={{ background: i <= n ? `var(--color-g-${g})` : 'var(--color-holo-line)' }} />
               ))}

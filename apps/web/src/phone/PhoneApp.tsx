@@ -11,9 +11,27 @@ import { Entry, Lobby } from './Lobby';
 import { EmoteBubbles } from './parts';
 import { Planning } from './Planning';
 import { Results } from './Results';
+import { TurnSideways } from './Shell';
 
-/** The phone: your private controller. Which screen shows follows the game's phase. */
+/**
+ * The phone: your private controller, played sideways. Held upright it asks to be
+ * turned; the game stays mounted underneath so nothing is lost while turning.
+ */
 export function PhoneApp({ room }: { room: string }) {
+  return (
+    <>
+      <div className="h-full portrait:hidden">
+        <PhoneScreens room={room} />
+      </div>
+      <div className="h-full landscape:hidden">
+        <TurnSideways />
+      </div>
+    </>
+  );
+}
+
+/** Which screen shows follows the game's phase. */
+function PhoneScreens({ room }: { room: string }) {
   const client = useClient();
   const state = useClientState();
 
@@ -51,7 +69,7 @@ export function PhoneApp({ room }: { room: string }) {
     <SeatSpeciesProvider value={seatSpecies(view)}>
       <PhoneGameProvider value={{ table, view, me, self, slot }}>
         {/* Keyed by phase so each phase starts with fresh screen state. */}
-        <div key={`${view.month}-${view.phase}`} className="mx-auto h-full max-w-xl" data-phase={view.phase}>
+        <div key={`${view.month}-${view.phase}`} className="h-full" data-phase={view.phase}>
           {screen}
         </div>
         <EmoteBubbles view={view} />

@@ -19,85 +19,85 @@ export function Results() {
     <PhoneShell
       phase={harvest ? 'Harvest' : PHASE_NAME.upkeep}
       seconds={secondsUntil(view.phaseEndsAt, now)}
-      footer={
-        <Button size="lg" variant={self.ready ? 'outline' : 'holo'} className="w-full" disabled={self.ready} onClick={() => client.intent({ type: 'ready' })}>
-          {self.ready ? 'Waiting for the others' : harvest ? 'On to the auction' : `On to month ${Math.min(view.month + 1, view.maxMonths)}`}
-        </Button>
-      }
-    >
-      <div className="flex flex-col gap-4">
-        <div className="flex items-end justify-between rounded-panel border border-holo-line bg-panel p-4">
-          <div className="flex flex-col">
-            <span className="label-caps">Your money</span>
-            <span data-num className="font-mono text-3xl font-bold">
-              {fmt(self.money)} cr
-            </span>
+      rail={
+        <>
+          <div className="flex items-end justify-between">
+            <div className="flex flex-col">
+              <span className="label-caps">Rank</span>
+              <span data-num className="font-mono text-2xl font-bold text-holo">
+                #{rank} <span className="text-sm font-normal text-ink-3">of {view.players.length}</span>
+              </span>
+            </div>
             <span className="text-sm text-ink-3">
               {self.plots} plot{self.plots === 1 ? '' : 's'}
             </span>
           </div>
-          <div className="flex flex-col items-end">
-            <span className="label-caps">Rank</span>
-            <span data-num className="font-mono text-3xl font-bold text-holo">
-              #{rank}
-            </span>
-            <span className="text-sm text-ink-3">of {view.players.length}</span>
-          </div>
-        </div>
-
-        <Panel title={harvest ? 'Your harvest this month' : 'Made this month'} aside="PRIVATE">
-          {made.length === 0 ? (
-            <p className="text-sm text-ink-2">Your plots made nothing this month. Install MULEs during development to start producing.</p>
-          ) : (
-            <ul className="grid grid-cols-3 gap-2" data-testid="produced">
-              {made.map(([g, n]) => (
-                <li key={g} className="flex flex-col gap-1 rounded-control bg-raised px-2 py-2">
-                  <GoodTag good={g} name className="text-[11px]" />
-                  <span data-num className="font-mono text-xl font-bold">
-                    +{n}
+          <section className="flex flex-col gap-1.5">
+            <h2 className="label-caps flex justify-between">
+              Standings <span className="text-holo">BY MONEY</span>
+            </h2>
+            <ol className="flex flex-col gap-1.5">
+              {ranking.map((r, i) => (
+                <li key={r.player.id} className="flex items-center gap-2 text-sm">
+                  <span data-num className="w-4 font-mono text-xs text-ink-3">
+                    {i + 1}
+                  </span>
+                  <PlayerMark slot={r.slot} size={12} />
+                  <span className="min-w-0 flex-1 truncate font-semibold">{r.player.id === self.id ? 'You' : r.player.name}</span>
+                  <span data-num className="font-mono text-xs">
+                    {fmt(r.value)}
                   </span>
                 </li>
               ))}
-            </ul>
-          )}
-        </Panel>
-
-        <StockPanel title={harvest ? 'Your stock now' : 'Your stock after upkeep'} />
-
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-panel border border-holo-line bg-holo-line">
-          <div className="flex flex-col gap-1 bg-panel p-3">
-            <span className="label-caps">Colonists</span>
-            <span data-num className="font-mono text-2xl font-bold">
-              {fmt(view.colonists)}
-            </span>
-          </div>
-          <div className="flex flex-col gap-1 bg-panel p-3">
-            <span className="label-caps">Food cover</span>
-            <span data-num className="font-mono text-2xl font-bold">
-              {view.market.find((r) => r.good === 'food')?.cover ?? 0} mo
-            </span>
-          </div>
+            </ol>
+          </section>
+        </>
+      }
+      footer={
+        <Button size="lg" variant={self.ready ? 'outline' : 'holo'} className="w-full px-2" disabled={self.ready} onClick={() => client.intent({ type: 'ready' })}>
+          {self.ready ? 'Waiting for the others' : harvest ? 'On to the auction' : `On to month ${Math.min(view.month + 1, view.maxMonths)}`}
+        </Button>
+      }
+    >
+      <div className="grid grid-cols-2 items-start gap-2.5">
+        <div className="flex flex-col gap-2.5">
+          <Panel title={harvest ? 'Your harvest' : 'Made this month'} aside="PRIVATE" className="gap-2 p-3">
+            {made.length === 0 ? (
+              <p className="text-sm text-ink-2">Your plots made nothing this month. Install MULEs during development to start producing.</p>
+            ) : (
+              <ul className="grid grid-cols-3 gap-1.5" data-testid="produced">
+                {made.map(([g, n]) => (
+                  <li key={g} className="flex flex-col gap-0.5 rounded-control bg-raised px-2 py-1.5">
+                    <GoodTag good={g} className="text-[11px]" />
+                    <span data-num className="font-mono text-lg font-bold">
+                      +{n}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+          <StockPanel title={harvest ? 'Your stock now' : 'Your stock after upkeep'} />
         </div>
-        <AirGauge level={view.air.level} band={view.air.band} />
-        <NewsPanel news={view.news} />
-        <ShipLine view={view} />
-
-        <Panel title="Standings" aside="BY MONEY">
-          <ol className="flex flex-col gap-2">
-            {ranking.map((r, i) => (
-              <li key={r.player.id} className="flex items-center gap-3">
-                <span data-num className="w-5 font-mono text-sm text-ink-3">
-                  {i + 1}
-                </span>
-                <PlayerMark slot={r.slot} size={14} />
-                <span className="flex-1 font-semibold">{r.player.id === self.id ? 'You' : r.player.name}</span>
-                <span data-num className="font-mono text-sm">
-                  {fmt(r.value)}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </Panel>
+        <div className="flex flex-col gap-2.5">
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-panel border border-holo-line bg-holo-line">
+            <div className="flex flex-col gap-0.5 bg-panel px-3 py-2">
+              <span className="label-caps">Colonists</span>
+              <span data-num className="font-mono text-xl font-bold">
+                {fmt(view.colonists)}
+              </span>
+            </div>
+            <div className="flex flex-col gap-0.5 bg-panel px-3 py-2">
+              <span className="label-caps">Food cover</span>
+              <span data-num className="font-mono text-xl font-bold">
+                {view.market.find((r) => r.good === 'food')?.cover ?? 0} mo
+              </span>
+            </div>
+          </div>
+          <AirGauge level={view.air.level} band={view.air.band} />
+          <ShipLine view={view} />
+          <NewsPanel news={view.news} />
+        </div>
       </div>
     </PhoneShell>
   );
