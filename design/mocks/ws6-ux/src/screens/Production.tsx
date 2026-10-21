@@ -196,7 +196,8 @@ function PlotBars({ line, index, t, ev, tv, target, size }: { line: PlotLine; in
   // The plot's centre in map pixels, to fly from.
   const from = size ? { x: ((line.x + 0.5) / W) * size.w, y: ((line.y + 0.5) / H) * size.h } : null;
   const fly = flying && target && from ? `translate(${target.x - from.x}px, ${target.y - from.y}px) scale(0.35)` : 'none';
-  const bar = tv ? 'h-3.5 w-1.5' : 'h-2 w-1';
+  // On the phone a bar is outlined so a one-unit plot doesn't blend into its border.
+  const bar = tv ? 'h-3.5 w-1.5' : 'h-3 w-1.5 ring-1 ring-void/70';
   const shown = Math.min(units, 8);
   const struckAgo = struck ? t - hitAt(ev!, hit!) : 0;
 
@@ -209,10 +210,10 @@ function PlotBars({ line, index, t, ev, tv, target, size }: { line: PlotLine; in
       {/* Badges, top right: why this plot made what it made, and what the event did. */}
       {filled && !flying && (
         <span className={cx('absolute flex flex-col items-end', tv ? 'right-1 top-1 gap-0.5' : 'right-0.5 top-0.5 gap-px')}>
-          {line.parts.map((p) => {
+          {line.parts.slice(0, tv ? 2 : 1).map((p) => {
             const b = PART_BADGE[p.why];
             return (
-              <span key={p.why} className={cx('flex items-center rounded-chip font-mono font-bold leading-none shadow-chip animate-[badge-in_0.3s_ease-out]', b.tone, tv ? 'gap-0.5 px-1 py-0.5 text-[11px]' : 'px-0.5 text-[7px]')}>
+              <span key={p.why} className={cx('flex items-center rounded-chip font-mono font-bold leading-none shadow-chip animate-[badge-in_0.3s_ease-out]', b.tone, tv ? 'gap-0.5 px-1 py-0.5 text-[11px]' : 'px-0.5 text-[9px]')}>
                 {b.icon && <GoodIcon good={b.icon} size={tv ? 10 : 6} />}
                 {b.text(p.delta)}
               </span>
@@ -223,7 +224,7 @@ function PlotBars({ line, index, t, ev, tv, target, size }: { line: PlotLine; in
               className={cx(
                 'rounded-chip font-mono font-bold leading-none shadow-chip animate-[badge-in_0.3s_ease-out]',
                 typeof hit!.delta === 'number' && hit!.delta > 0 ? 'bg-ok text-on-holo' : 'bg-alert text-white',
-                tv ? 'px-1 py-0.5 text-[11px]' : 'px-0.5 text-[7px]',
+                tv ? 'px-1 py-0.5 text-[11px]' : 'px-0.5 text-[9px]',
               )}
               data-testid={`hit-${line.x}-${line.y}`}
             >
@@ -234,7 +235,7 @@ function PlotBars({ line, index, t, ev, tv, target, size }: { line: PlotLine; in
       )}
       {/* The bars, bottom left, one per unit; they fly home together. */}
       <span
-        className={cx('flex w-fit flex-wrap-reverse items-end', tv ? 'max-w-[44px] gap-[3px]' : 'max-w-[22px] gap-px', gone && 'opacity-0')}
+        className={cx('flex w-fit flex-wrap-reverse items-end', tv ? 'max-w-[44px] gap-[3px]' : 'max-w-[30px] gap-px', gone && 'opacity-0')}
         style={{ transform: fly, transition: flying ? `transform ${SHOW.flight}s cubic-bezier(0.55, 0, 0.75, 0.2), opacity 0.15s ${SHOW.flight - 0.1}s` : 'none', transformOrigin: 'center' }}
       >
         {filled &&
