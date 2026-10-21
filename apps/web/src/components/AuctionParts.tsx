@@ -1,6 +1,7 @@
-import type { AuctionView, MuleView } from '@mule/protocol';
-import { Creature, cx, GOOD_NAME, SLOT_COLOR, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
-import { slotOf } from '../game/derive';
+import type { AuctionView, LandAuctionView, ListingView, MuleView } from '@mule/protocol';
+import { Creature, cx, GOOD_NAME, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
+import { plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
+import { GroundCard } from '../phone/ground';
 
 /** The auction's walkers as the board draws them, in seat order. */
 export function boardWalkers(view: MuleView, auction: AuctionView): BoardWalker[] {
@@ -91,5 +92,98 @@ export function StatusTable({ view, auction, meId, tv = false }: { view: MuleVie
         })}
       </tbody>
     </table>
+  );
+}
+
+/* The land auction's lot pieces: the phone uses all of them, the big screen only sellerName, lotWhat and lotWalkers. */
+
+export function sellerName(view: MuleView, id: string): string {
+  return id === 'colony' ? 'The colony' : (view.players.find((p) => p.id === id)?.name ?? id);
+}
+
+/** What happens if nobody bids the minimum. A colony plot nobody buys stays free land. */
+export function unsoldText(lot: ListingView): string {
+  if (lot.seller === 'colony') return 'Stays free land';
+  return lot.unsold === 'store' ? `Store pays ${lot.storePays}` : 'Seller keeps it';
+}
+
+/** What stands on the lot: "Energy MULE", "no MULE", or for a MULE lot the MULE itself. */
+export function lotWhat(view: MuleView, lot: ListingView): string {
+  if (lot.item.kind === 'mule') return `${lot.item.outfit === 'greenBelt' ? 'Green belt' : GOOD_NAME[lot.item.outfit]} MULE`;
+  const t = tileAt(view, lot.item.x, lot.item.y);
+  return t?.outfit ? `with its ${t.outfit === 'greenBelt' ? 'green belt' : `${GOOD_NAME[t.outfit]} MULE`}` : 'no MULE on it';
+}
+
+/** The lot's buyers as the walk board draws them. The seller isn't on the board. */
+export function lotWalkers(view: MuleView, lot: LandAuctionView): BoardWalker[] {
+  return lot.walkers.map((w) => ({
+    id: w.id,
+    name: view.players.find((p) => p.id === w.id)?.name ?? w.id,
+    slot: (slotOf(view, w.id) ?? 0) as Slot,
+    side: w.side,
+    price: w.price,
+    at: w.at,
+    done: w.done,
+  }));
+}
+
+/** The lot up for sale: what it is, whose, the minimum, and what happens if nobody bids it. */
+export function LotCard({ view, lot, compact = false }: { view: MuleView; lot: ListingView; compact?: boolean }) {
+  const t = tileAt(view, lot.item.x, lot.item.y);
+  const seller = slotOf(view, lot.seller);
+  return (
+    <div className="flex flex-col gap-1 rounded-control border border-holo-faint bg-panel px-2.5 py-1.5" data-testid="lot-card">
+      <span className="label-caps flex items-center justify-between gap-2">
+        {lot.item.kind === 'mule' ? 'MULE for sale' : 'Plot for sale'}
+        <span className="flex items-center gap-1 normal-case" data-testid="lot-seller">
+          {seller !== null && <PlayerMark slot={seller as Slot} size={10} />}
+          {sellerName(view, lot.seller)}
+        </span>
+      </span>
+      <span className="flex items-center gap-1.5 font-display text-lg font-semibold leading-tight" data-testid="lot-name">
+        {lot.item.kind === 'mule' && <MuleIcon size={20} className="text-holo" />}
+        {lot.item.kind === 'mule' ? lotWhat(view, lot) : t ? TERRAIN_NAME[t.terrain] : ''}
+        <span className="font-mono text-sm text-ink-3">{plotName(lot.item.x, lot.item.y)}</span>
+      </span>
+      {lot.item.kind === 'plot' && <span className="text-xs text-ink-2" data-testid="lot-what">{lotWhat(view, lot)}</span>}
+      {!compact && lot.item.kind === 'plot' && t && (t.ground ? <GroundCard ground={t.ground} /> : <span className="text-xs text-ink-3">{TERRAIN_ODDS[t.terrain]}</span>)}
+      <div className="grid grid-cols-2 gap-2 border-t border-holo-faint pt-1 font-mono text-[10px] text-ink-3">
+        <span className="flex flex-col" data-testid="lot-minimum">
+          MINIMUM<strong data-num className="text-sm text-ink">{lot.minimum} cr</strong>
+        </span>
+        <span className="flex flex-col" data-testid="lot-unsold">
+          IF UNSOLD
+          <strong className="text-sm text-ink-2">{unsoldText(lot)}</strong>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** Who wins if the bell rang now, said from this phone's point of view. */
+export function leaderLine(view: MuleView, lot: LandAuctionView, meId: string): { text: string; tone: 'lead' | 'behind' | 'none' } {
+  const mine = lot.walkers.find((w) => w.id === meId);
+  const what = lot.lot.item.kind === 'mule' ? 'MULE' : 'plot';
+  if (lot.lot.seller === meId) return { text: lot.leader ? `${sellerName(view, lot.leader.id)} bids ${lot.leader.bid}. Your ${what} sells at the bell.` : `No bid at your minimum yet.`, tone: 'none' };
+  if (!mine || mine.side === 'pass') return { text: mine && 'aside' in mine && mine.aside === 'mule' ? 'You already lead a MULE: install it first.' : `You can't pay the minimum of ${lot.lot.minimum}.`, tone: 'none' };
+  if (!lot.leader) return { text: `Walk up past ${lot.lot.minimum} to bid.`, tone: 'behind' };
+  if (lot.leader.id === meId) return { text: `You lead at ${lot.leader.bid}. It's yours at the bell.`, tone: 'lead' };
+  return { text: `${sellerName(view, lot.leader.id)} leads at ${lot.leader.bid}. Walk up to outbid.`, tone: 'behind' };
+}
+
+export function LeaderBox({ view, lot, meId, className }: { view: MuleView; lot: LandAuctionView; meId: string; className?: string }) {
+  const line = leaderLine(view, lot, meId);
+  return (
+    <div
+      className={cx(
+        'rounded-control border px-2.5 py-1.5 text-xs leading-snug',
+        line.tone === 'lead' ? 'border-ok bg-holo-soft text-ink' : line.tone === 'behind' ? 'border-holo bg-holo-soft text-ink' : 'border-holo-faint text-ink-2',
+        className,
+      )}
+      data-testid="leader"
+      data-tone={line.tone}
+    >
+      {line.text}
+    </div>
   );
 }

@@ -5,12 +5,13 @@ import { mapTiles, PHASE_NAME, plotName, secondsUntil, TERRAIN_ODDS, tileAt } fr
 import { useClient, useClientState, useServerNow } from '../net/react';
 import { usePhoneGame } from './game';
 import { Chat, MarketCells, NewsPanel, ShipLine, StockPanel } from './parts';
+import { SellMap, SellRail, useSellForm } from './Sell';
 import { MapFit, PhoneShell } from './Shell';
 
-type Tab = 'colony' | 'drone' | 'chat';
+type Tab = 'colony' | 'drone' | 'sell' | 'chat';
 type Plot = { x: number; y: number };
 
-/** Planning: everyone at once. Look at the colony, send a geo drone, talk, then press ready. */
+/** Planning: everyone at once. Look at the colony, send a geo drone, sell a lot, talk, then press ready. */
 export function Planning() {
   const client = useClient();
   const { view, me, self } = usePhoneGame();
@@ -19,6 +20,7 @@ export function Planning() {
   const [tab, setTab] = useState<Tab>('colony');
   const [seenChat, setSeenChat] = useState(chat.length);
   const [picked, setPicked] = useState<Plot[]>([]);
+  const sell = useSellForm();
   const unread = tab === 'chat' ? 0 : chat.length - seenChat;
   const waiting = view.players.filter((p) => !p.isAi && !p.ready && p.id !== self.id).length;
   const ordered = me.droneOrder.length > 0;
@@ -27,6 +29,7 @@ export function Planning() {
   const tabs: { id: Tab; label: string; badge?: number }[] = [
     { id: 'colony', label: 'Colony' },
     { id: 'drone', label: 'Geo drone' },
+    { id: 'sell', label: 'Sell' },
     { id: 'chat', label: 'Chat', ...(unread > 0 ? { badge: unread } : {}) },
   ];
 
@@ -37,18 +40,19 @@ export function Planning() {
       fill={tab !== 'colony'}
       rail={
         <>
-          <div role="tablist" aria-label="Planning" className="grid shrink-0 grid-cols-[1fr_1.3fr_1fr] gap-1 rounded-control border border-holo-line bg-void p-1">
+          <div role="tablist" aria-label="Planning" className="grid shrink-0 grid-cols-[0.9fr_1.15fr_0.75fr_0.8fr] gap-1 rounded-control border border-holo-line bg-void p-1">
             {tabs.map((t) => (
               <button
                 key={t.id}
                 role="tab"
                 type="button"
                 aria-selected={tab === t.id}
+                data-testid={`tab-${t.label.toLowerCase().replace(' ', '-')}`}
                 onClick={() => {
                   setTab(t.id);
                   if (t.id === 'chat') setSeenChat(chat.length);
                 }}
-                className={cx('relative h-9 whitespace-nowrap rounded-[8px] text-[13px] font-semibold', tab === t.id ? 'bg-holo-soft text-holo' : 'text-ink-2')}
+                className={cx('relative h-9 whitespace-nowrap rounded-[8px] text-[12px] font-semibold', tab === t.id ? 'bg-holo-soft text-holo' : 'text-ink-2')}
               >
                 {t.label}
                 {t.badge && <span className="absolute -right-1 -top-1 size-4 rounded-full bg-holo text-center font-mono text-[10px] font-bold leading-4 text-on-holo">{t.badge}</span>}
@@ -56,6 +60,7 @@ export function Planning() {
             ))}
           </div>
           {tab === 'drone' && <DroneRail chosen={chosen} ordered={ordered} />}
+          {tab === 'sell' && <SellRail sell={sell} />}
         </>
       }
       footer={
@@ -65,7 +70,12 @@ export function Planning() {
               {picked.length === 0 ? 'Pick a free plot' : `Send the drone · ${DEVELOPMENT.droneFee} cr`}
             </Button>
           )}
-          <Button size="lg" variant={self.ready ? 'outline' : 'holo'} className="w-full px-2" disabled={self.ready} onClick={() => client.intent({ type: 'ready' })}>
+          {tab === 'sell' && sell.tile && (
+            <Button size="md" className="w-full px-2" disabled={!!sell.blocked} onClick={sell.list} data-testid="list">
+              {sell.blocked ?? `Put it up for auction · ≥${sell.minimum}`}
+            </Button>
+          )}
+          <Button size="lg" variant={self.ready ? 'outline' : 'holo'} className="w-full px-2" disabled={self.ready} onClick={() => client.intent({ type: 'ready' })} data-testid="ready">
             {self.ready ? `Ready · waiting for ${waiting} other${waiting === 1 ? '' : 's'}` : "I'm ready"}
           </Button>
         </>
@@ -73,6 +83,7 @@ export function Planning() {
     >
       {tab === 'colony' && <Colony />}
       {tab === 'drone' && <DroneMap chosen={chosen} ordered={ordered} setPicked={setPicked} />}
+      {tab === 'sell' && <SellMap sell={sell} />}
       {tab === 'chat' && <Chat />}
     </PhoneShell>
   );

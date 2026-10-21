@@ -12,4 +12,5 @@ export * from './utility.js';
 export * from './value.js';
 export * from './hands/auction.js';
 export * from './hands/develop.js';
+export * from './hands/lot.js';
 export * from './llm/index.js';
