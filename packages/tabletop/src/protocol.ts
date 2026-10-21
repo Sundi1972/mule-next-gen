@@ -16,6 +16,8 @@ export type ClientEnvelope<Intent> =
   | { t: 'kick'; seatId: string }
   /** The host ends the room, in the lobby. */
   | { t: 'close' }
+  /** Give up your seat in the lobby; after Start, only this screen lets go. */
+  | { t: 'leave' }
   /** Make this seat's one choice from the game's list, in the lobby. */
   | { t: 'pick'; pick: string }
   | { t: 'intent'; intent: Intent }
