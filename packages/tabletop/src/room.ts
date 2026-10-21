@@ -54,7 +54,7 @@ export interface RoomOptions<Intent, GameView> {
   /** Called once the room has ended, closed by the host or stopped by a game error, and is disposed. */
   onClose?(): void;
   /** Hears a game error that ended the room, for logging. The players are only told the table stopped. */
-  onError?: (err: unknown) => void;
+  onError?(err: unknown): void;
 }
 
 interface Seat<View> extends SeatInfo {
@@ -317,7 +317,12 @@ export class Room<Intent, View> {
     this.everyone((c) => c.send({ t: 'removed', reason }));
     this.seats.length = 0;
     this.boards.clear();
-    this.dispose();
+    // The timers are already cleared when the game's own dispose runs; a throw there must still let the registry drop the room.
+    try {
+      this.dispose();
+    } catch (err) {
+      this.opts.onError(err);
+    }
     this.opts.onClose();
   }
 
