@@ -106,10 +106,24 @@ describe('T-AC-6: the colony sometimes puts a free plot up (RULE-7)', () => {
     expect(state.landAuction).toBeNull();
   });
 
-  it('T-AC-6: RULE-7 row 1 — about colonyPlotChance of months with free land bring a colony lot', () => {
-    const share = colonySeeds.length / SCAN;
-    expect(share).toBeGreaterThan(LOTS.colonyPlotChance / 2);
-    expect(share).toBeLessThan(LOTS.colonyPlotChance * 2);
+  it('T-AC-6: RULE-7 row 1 — about colonyPlotChance of (seed, month) pairs with free land bring a colony lot, rolled per month and on varied plots', () => {
+    const months = [1, 2, 3, 5, 8];
+    const lots = Array.from({ length: SCAN / 2 }, (_, i) => i + 1).map((seed) =>
+      months.map((month) => {
+        const state = newGame(seed);
+        state.month = month;
+        leaveGrant(state);
+        return colonyLotUp(state) ? live(state).lot!.item : null;
+      }),
+    );
+    const share = lots.flat().filter(Boolean).length / (lots.length * months.length);
+    expect(share).toBeGreaterThan(LOTS.colonyPlotChance * 0.7);
+    expect(share).toBeLessThan(LOTS.colonyPlotChance * 1.3);
+    // The month is in the roll: some seed has a colony lot in one month and not in another.
+    expect(lots.some((row) => row.some(Boolean) && !row.every(Boolean))).toBe(true);
+    // The plot is drawn, not the first free one.
+    const picked = new Set(lots.flat().flatMap((item) => (item ? [`${item.x},${item.y}`] : [])));
+    expect(picked.size).toBeGreaterThan(1);
   });
 
   it('T-AC-6: RULE-7 example roll under the chance, no free land — no colony lot', () => {
@@ -147,22 +161,17 @@ describe('T-AC-6: the colony sometimes puts a free plot up (RULE-7)', () => {
     expect(again.listings).toEqual(first.listings);
   });
 
-  it("T-AC-6: a look-ahead clone that rolls a colony lot leaves the real game's listings alone", () => {
+  it("T-AC-6: RULE-7 row 0 (AM-5) — a what-if copy leaving the land grant in a colony month lists nothing, and the real game still gets the colony's lot", () => {
     const state = newGame(COLONY_SEED);
     toPhase(state, 'landGrant');
     const sim = cloneForSim(state);
     advancePhase(sim);
-    expect(sim.listings.map((l) => l.seller)).toEqual([COLONY_SELLER]);
-    expect(state.listings).toEqual([]);
+    expect(sim.listings).toEqual([]);
+    expect(sim.phase).toBe('development');
+    advancePhase(state);
+    expect(state.listings.map((l) => l.seller)).toEqual([COLONY_SELLER]);
   });
 
-  it('T-AC-6: a colony month keeps the land grant in reading order', () => {
-    const state = newGame(COLONY_SEED);
-    toPhase(state, 'landGrant');
-    const order = state.grant!.order;
-    expect(order).toEqual(freePlots(state).map((t) => t.y * state.width + t.x));
-    expect(order).toEqual([...order].sort((x, y) => x - y));
-  });
 });
 
 describe('B-AC-8: the colony plot at the land auction (RULE-5 row 1)', () => {
