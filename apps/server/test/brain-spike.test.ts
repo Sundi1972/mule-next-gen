@@ -40,18 +40,23 @@ const rig = () => {
   const ledger = createLedger({ path: file, clock: () => new Date('2026-10-21T00:00:00Z') });
   return { ledger, budget: createBudget(ledger) };
 };
-const run = (list: SpikeItem[], complete: (p: Prompt, waitMs: number) => Promise<HaikuReply>, cap = BRAIN.spikeCapUsd) =>
+const run = (list: SpikeItem[], complete: (p: Prompt, waitMs: number) => Promise<HaikuReply>, cap: number = BRAIN.spikeCapUsd) =>
   runSpike({ prompts: list, complete, ...rig(), cap, now: () => new Date('2026-10-21T00:00:00Z'), log: () => {} });
 const ledgerLines = (): Record<string, unknown>[] =>
-  fs.readFileSync(file, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as Record<string, unknown>);
+  fs
+    .readFileSync(file, 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l) as Record<string, unknown>)
+    .filter((l) => l.type !== 'game'); // the closing total line is not a call
 
 describe('brain:spike', () => {
   it('§7-S1: the spike stops at its hard cap even when --max-usd is higher', async () => {
     expect(capFor(1)).toBe(BRAIN.spikeCapUsd);
     expect(capFor(0.01)).toBe(0.01);
     const waits: number[] = [];
-    // 90,000 input tokens is 0.009 USD plus output: about five calls reach 0.05.
-    const report = await run(items(40), async (_p, w) => (waits.push(w), reply(100, { input: 90_000, cached_read: 0, cache_write: 0 })), capFor(1));
+    // 270,000 chars estimate to 90,000 tokens, and the fake bills exactly that: 0.009 USD a call, so five calls fit.
+    const report = await run(items(40, 270_000), async (_p, w) => (waits.push(w), reply(100, { input: 90_000, cached_read: 0, cache_write: 0 })), capFor(1));
     expect(report.stopped).toBe('cap');
     expect(report.countedUsd).toBeLessThanOrEqual(BRAIN.spikeCapUsd);
     expect(report.calls).toBeGreaterThan(0);

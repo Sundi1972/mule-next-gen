@@ -56,9 +56,14 @@ const CLASSIC: BrainService = {
   finish: () => {},
 };
 
-/** The brain for one game. Reads only env.ANTHROPIC_API_KEY (HC-2); a blank key counts as unset. */
+/** The one place the key is read (HC-2): only ANTHROPIC_API_KEY, trimmed; a blank key is null. */
+export function apiKeyFrom(env: Readonly<Record<string, string | undefined>>): string | null {
+  return env.ANTHROPIC_API_KEY?.trim() || null;
+}
+
+/** The brain for one game. A missing or blank key plays Classic. */
 export function createBrain(options: BrainOptions): BrainService {
-  const apiKey = (options.env ?? process.env).ANTHROPIC_API_KEY?.trim();
+  const apiKey = apiKeyFrom(options.env ?? process.env);
   if (!apiKey) return CLASSIC;
 
   const { gameId } = options;
