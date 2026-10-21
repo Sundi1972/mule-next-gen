@@ -48,13 +48,18 @@ function main() {
   let minCapital = Infinity;
   let minFund = Infinity;
   let collapsed = 0;
+  let eventMonths = 0;
+  let distinctEvents = 0;
+  const byEvent: Record<string, number> = {};
   const wins: Record<string, number> = {};
   const auction = { between: 0, store: 0, ship: 0, ms: 0 };
+  const lots = { sold: 0, unsold: 0, colonyOffered: 0, colonySold: 0, stalled: 0 };
 
   for (let seed = first; seed < first + games; seed++) {
     const specs = simSeats(players, level, seed, persona);
-    const { state, broke, auction: a } = playGame(seed, specs);
+    const { state, broke, auction: a, lots: l } = playGame(seed, specs);
     for (const k of ['between', 'store', 'ship', 'ms'] as const) auction[k] += a[k];
+    for (const k of Object.keys(lots) as (keyof typeof lots)[]) lots[k] += l[k];
     months += state.history.length;
     soldOut += state.history.filter((h) => h.corralSoldOut).length;
     if (state.history.some((h) => h.prices.food > 3 * GOOD_CONFIG.food.refPrice)) foodSpike++;
@@ -70,6 +75,10 @@ function main() {
     developed += mine.filter((t) => t.outfit).length;
     if (state.players.some((p) => broke.some((_, m) => [0, 1, 2].every((k) => broke[m + k]?.includes(p.id))))) longBroke++;
     if (colonyFailed(state)) collapsed++;
+    const keys = state.history.flatMap((h) => h.events ?? []).map((e) => e.key);
+    eventMonths += state.history.filter((h) => (h.events ?? []).length > 0).length;
+    distinctEvents += new Set(keys).size;
+    for (const k of keys) byEvent[k] = (byEvent[k] ?? 0) + 1;
     const ranked = state.players.map((p, i) => ({ p, i })).sort((a, b) => score(state, b.p.id) - score(state, a.p.id));
     const winner = ranked[0]!;
     wins[winner.p.species] = (wins[winner.p.species] ?? 0) + 1;
@@ -95,6 +104,15 @@ function main() {
   console.log(`     Wins by persona: ${Object.entries(byPersona).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
   console.log(
     `     Live auction a month: ${(auction.between / months).toFixed(1)} units between players, ${(auction.store / months).toFixed(1)} with the store, ${(auction.ship / months).toFixed(1)} to the ship; ${(auction.ms / months / 1000).toFixed(0)} s of auction time`,
+  );
+  console.log(`     Land auction: ${lots.sold} lots sold, ${lots.unsold} unsold; colony lots ${lots.colonyOffered} offered, ${lots.colonySold} sold, in ${months} months, stalled ${lots.stalled}`);
+  console.log(
+    `     Events in ${pct(eventMonths, months)} of months, ${(distinctEvents / games).toFixed(1)} different a game: ${
+      Object.entries(byEvent)
+        .sort((a, b) => b[1] - a[1])
+        .map(([k, n]) => `${k} ${n}`)
+        .join(', ') || 'none'
+    }`,
   );
   console.log('\nPosted prices (min / median / 90th percentile / max):');
   for (const good of GOODS) {

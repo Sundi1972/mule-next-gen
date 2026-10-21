@@ -1,3 +1,4 @@
+import { COLONY_SELLER } from '@mule/engine';
 import type { LandAuctionView, MuleView } from '@mule/protocol';
 import { Button, cx, HoloMap, TimeBar, WalkBoard } from '@mule/ui';
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
@@ -199,7 +200,7 @@ function IntroLine({ view, lot, meId }: { view: MuleView; lot: LandAuctionView; 
   return (
     <div className="rounded-control border border-holo bg-holo-soft px-2.5 py-1.5 text-xs leading-snug text-ink" data-testid="intro-line">
       <span className="label-caps block text-holo">
-        Lot {lot.number} of {lot.count} · {lot.lot.seller === 'colony' ? 'The colony sells free land' : `${sellerName(view, lot.lot.seller)} sells`}
+        Lot {lot.number} of {lot.count} · {lot.lot.seller === COLONY_SELLER ? 'The colony sells free land' : `${sellerName(view, lot.lot.seller)} sells`}
       </span>
       {text}
     </div>
@@ -223,7 +224,7 @@ function ResultBanner({ view, lot, meId }: { view: MuleView; lot: LandAuctionVie
         ? seller
           ? `Nobody bid ${lot.lot.minimum}. You get ${r.price} cr.`
           : `Nobody bid ${lot.lot.minimum}. The store paid ${r.price} cr${lot.lot.item.kind === 'plot' ? ' and the plot is free land again' : ''}.`
-        : lot.lot.seller === 'colony'
+        : lot.lot.seller === COLONY_SELLER
           ? `Nobody bid ${lot.lot.minimum}. It stays free land.`
           : `Nobody bid ${lot.lot.minimum}. ${seller ? 'You keep it.' : `${sellerName(view, lot.lot.seller)} keeps it.`}`;
   const good = r.kind === 'sold' && (r.buyer === meId || seller);

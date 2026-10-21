@@ -1,3 +1,4 @@
+import { COLONY_SELLER } from '@mule/engine';
 import type { AuctionView, LandAuctionView, ListingView, MuleView } from '@mule/protocol';
 import { Creature, cx, GOOD_NAME, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
 import { plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
@@ -98,12 +99,12 @@ export function StatusTable({ view, auction, meId, tv = false }: { view: MuleVie
 /* The land auction's lot pieces: the phone uses all of them, the big screen only sellerName, lotWhat and lotWalkers. */
 
 export function sellerName(view: MuleView, id: string): string {
-  return id === 'colony' ? 'The colony' : (view.players.find((p) => p.id === id)?.name ?? id);
+  return id === COLONY_SELLER ? 'The colony' : (view.players.find((p) => p.id === id)?.name ?? id);
 }
 
 /** What happens if nobody bids the minimum. A colony plot nobody buys stays free land. */
 export function unsoldText(lot: ListingView): string {
-  if (lot.seller === 'colony') return 'Stays free land';
+  if (lot.seller === COLONY_SELLER) return 'Stays free land';
   return lot.unsold === 'store' ? `Store pays ${lot.storePays}` : 'Seller keeps it';
 }
 
