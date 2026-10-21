@@ -50,3 +50,13 @@ export function openPlanning(state: GameState): void {
     ? { stage: 'nominate', clockMs: POLITICS.nominateMs, candidates: { governor: [], sheriff: [] }, ballots: {}, done: [], result: null }
     : null;
 }
+
+export interface VoteWeight {
+  total: number;
+  parts: { base: number; land: number; reputation: number; baron: number; taxes: number };
+}
+
+/** RULE-4: a player's votes, part by part. Derived from the state on every call. */
+export function voteWeight(state: GameState, id: string): VoteWeight {
+  throw new Error('NotImplemented: voteWeight');
+}
