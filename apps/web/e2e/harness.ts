@@ -22,7 +22,9 @@ export async function launch(): Promise<Browser> {
   }
 }
 
-export const PHONE = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
+/** The phone is played sideways. 844x390 is a small phone on its side; PHONE_WIDE is a large one. */
+export const PHONE = { viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
+export const PHONE_WIDE = { width: 932, height: 430 };
 export const TV = { viewport: { width: 1920, height: 1080 } };
 
 export function check(cond: unknown, message: string): asserts cond {
