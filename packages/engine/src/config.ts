@@ -315,6 +315,62 @@ export function mapSize(players: number): { width: number; height: number } {
   return { width: 19, height: 11 };
 }
 
+type SizeBand = 'small' | 'mid' | 'large';
+type FloorGood = 'food' | 'water' | 'energy' | 'smithore';
+
+/**
+ * What every map must meet (the map rules), read by the checker, the
+ * generator and the map gallery. Size bands follow mapSize: small is 2-3
+ * players, mid 4, large 5-6. Counts are good plots per player.
+ */
+export const MAP = {
+  /** A plot is good for a raw good at this rating or more. */
+  goodAt: { food: 1, water: 1, energy: 1, smithore: 3, crystite: 3, rareEarth: 3 } satisfies Record<RawGood, number>,
+  /** Every map has at least this many good plots per player. */
+  floor: { food: 10, water: 10, energy: 10, smithore: 3 } satisfies Record<FloorGood, number>,
+  /** Lower edge of the normal range: a good below it is the map's scarce good, and at most one may be. */
+  normalLo: { food: 12, water: 13, energy: 13, smithore: 4 } satisfies Record<FloorGood, number>,
+  /** Most steps from any land plot to a good plot of each good. */
+  reach: {
+    small: { food: 3, water: 3, energy: 3, smithore: 5 },
+    mid: { food: 3, water: 3, energy: 3, smithore: 5 },
+    large: { food: 4, water: 4, energy: 4, smithore: 6 },
+  } satisfies Record<SizeBand, Record<FloorGood, number>>,
+  /** Fewest river bends: rows holding two river plots. */
+  bends: { small: 2, mid: 3, large: 4 } satisfies Record<SizeBand, number>,
+  /** Target share of non-river land for each terrain. */
+  shares: {
+    plains: 0.24,
+    forest: 0.11,
+    hills: 0.1,
+    desert: 0.09,
+    tundra: 0.08,
+    mountains: 0.07,
+    swamp: 0.07,
+    lake: 0.06,
+    volcanic: 0.06,
+    crater: 0.06,
+    ice: 0.06,
+  } satisfies Record<Exclude<LandTerrain, 'river'>, number>,
+  /** A terrain's share may stray this fraction of its target, plus one plot. */
+  jitter: 1 / 3,
+  /** Smallest connected same-terrain region. */
+  minRegion: 3,
+  /** Largest region, as a share of non-river land (rounded up to whole plots). */
+  maxRegionShare: 0.12,
+  /** Share of good Smithore plots that touch another good Smithore plot. */
+  seamShare: 0.7,
+  /** Largest gap between a terrain's mean rating over many maps and the hint players see. */
+  honesty: 0.3,
+  /**
+   * Crystite and Rare earth come in rings: a peak plot rated `high`, the plots
+   * one step from it `medium`, two steps `low`, and 0 beyond.
+   */
+  peak: { high: 4, medium: 3, low: { min: 1, max: 2 }, count: { min: 3, max: 4 } },
+  /** Chance a map has one scarce good. */
+  scarceChance: 0.25,
+};
+
 export const GAME = {
   maxMonths: 12,
   /** Months the game continues after the last free plot is claimed. */
