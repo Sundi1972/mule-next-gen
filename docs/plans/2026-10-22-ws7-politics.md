@@ -85,7 +85,7 @@ Every handoff carries the standing authority line, verbatim:
 
 **PR-3**
 - named edits (WS3 reviews): `packages/protocol/src/index.ts` (three MuleIntent members; `MuleView.politics`, `MyView.politics`) · `apps/server/src/server.ts` (`isIntent` cases run/vote/setTax) · `apps/server/src/mule-game.ts` (election tick, intents, VoteHand construction, politics view)
-- `may_edit`: `apps/server/test/politics.test.ts` (new)
+- `may_edit`: `apps/server/test/politics.test.ts` (new) · `apps/server/src/politics-view.ts` (new, AM-8 c; WS3 reviews)
 - `must_not_edit`: `packages/engine/**`, `packages/ai/**`, `apps/web/**`
 
 **PR-4**
@@ -272,6 +272,8 @@ Every handoff carries the standing authority line, verbatim:
 - [ ] The existing smoke e2e passes unchanged
 - [ ] WS3 reviewed; CI green
 
+**PR-4 base and hub API (WS6, 2026-10-22):** the hub frame is in `apps/web/src/phone/hub/` (WS6 #50, ws6-ux 5be0a5e); PR-4 starts once it reaches trunk and PR-3 is merged (no basing on ws6-ux). Entries go in `HUB_SLOTS` in `hub/today.tsx` (API in `hub/slots.ts`): `desks` (DeskSlot; office desks use `show(seat)`), `agenda`, `tools`, `banners` (the offices strip), `nows` (election steps; first non-null wins). A slot for a feature that doesn't exist is not drawn (no SOON labels). Extend the expected desk/tool lists in `apps/web/e2e/hub-steps.ts` (B-AC-14) in the same PR; WS6 reviews that line and runs the render gate on `#hub-council`, `#hub-governor`, `#tv-election` (slice 1 only). Scaffold: `design/mocks/ws6-ux/src/screens/{PlanningHub,Election}.tsx` at ab2dc5f.
+
 ### Task 4.1: Graft the desks — C11
 
 **Phase:** P3 · **Depends on:** PR-3 merged; WS6's hub mock approved (drawn at ws6-ux b28ee91; the approved SHA is pinned here when Heiko rules) · **ACs verified:** B-AC-1 · **Spec:** §1 C11
@@ -284,11 +286,12 @@ Every handoff carries the standing authority line, verbatim:
 
 ### Task 4.2: UBER-AC-2 end to end
 
+- [ ] **Step 0 (AM-6):** flip `createMuleServer`'s `politics` default to true, with the test `C1: the server a player joins plays politics by default`, and adjust WS4's smoke (named edit) so its month-1 'I'm ready' also clears the election.
 - [ ] **Step 1:** Extend the e2e: the winner sets 8%; the next sale at the auction is taxed at 8% (assert the seller's money in their phone's view). This is UBER-AC-2 verbatim.
 - [ ] **Step 2:** Run — Expected: PASS.
 - [ ] **Step 3:** Commit `test(e2e): UBER-AC-2 election to taxed sale`.
 
-### Task 4.2b: Offices held on the game-over screen — C7 (PM ruling 2026-10-22, option A)
+### Task 4.2b: Offices held on the game-over screen — C7 (PM ruling 2026-10-22, option A) — MOVED INTO PR-1 (#52's e2e needed it)
 
 **Depends on:** PR-1 (the `office` score line) · **ACs verified:** C7 (visible half) · named edit in WS4's `apps/web/src/phone/GameOver.tsx`, WS4 reviews
 
