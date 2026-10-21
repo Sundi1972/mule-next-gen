@@ -1,4 +1,4 @@
-import { AuctionSlider, Button, GOOD_NAME, GoodIcon, HoloMap, Landscape, Panel, PlayerMark, SLOT_SHAPE_NAME, Stat, TERRAIN_NAME, Ticker, Timer, useTheme, type Good, type Slot, type Terrain } from '@mule/ui';
+import { AuctionSlider, Button, GOOD_NAME, GoodIcon, HoloMap, Landscape, Panel, Creature, PlayerMark, SLOT_COLOR, SPECIES, SPECIES_NAME, SPECIES_PERK, Stat, TERRAIN_NAME, Ticker, Timer, useTheme, type Good, type Slot, type Terrain } from '@mule/ui';
 import { useState, type ReactNode } from 'react';
 import { MAP_H, MAP_W, MARKET, TILES } from '../data';
 
@@ -14,7 +14,7 @@ const PRINCIPLES = [
   ['The map is a living landscape', 'Rivers, forests, dunes, ranges and ice are painted at full screen resolution. A fine grid marks the plots, and owned land is edged in its owner’s colour.'],
   ['Day by default, night on request', 'The light theme reads well in a bright kitchen. Night mode turns the same map dark with glowing contour lines.'],
   ['Numbers are first-class', 'Every price, count and timer is set in JetBrains Mono with tabular figures, like a trading screen.'],
-  ['Colour never works alone', 'Each player has a colour and a shape. Rise and fall come with arrows. Alerts come with words.'],
+  ['Colour never works alone', 'Each player is a creature of their species, in their colour, with their name beside it. Rise and fall come with arrows. Alerts come with words.'],
   ['Public on the big screen, private on the phone', 'The board shows what everyone may know. Stock, whispers and secret orders exist only on your phone.'],
   ['Made for thumbs and for across the room', 'Phone targets are at least 44 px. Big-screen type is readable from three metres.'],
 ];
@@ -97,13 +97,25 @@ export function System() {
         </Section>
 
         <Section title="Players and goods">
-          <div className="flex flex-wrap gap-6">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {SPECIES.map((sp, i) => (
+              <Panel key={sp} className="flex-row! items-center gap-4">
+                <Creature species={sp} color={SLOT_COLOR[i as Slot]} size={64} className="shrink-0" />
+                <div className="flex flex-col gap-1">
+                  <h3 className="font-display text-lg font-semibold">{SPECIES_NAME[sp]}</h3>
+                  <p className="text-sm text-ink-2">{SPECIES_PERK[sp]}</p>
+                </div>
+              </Panel>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-end gap-5">
             {SLOTS.map((s) => (
-              <div key={s} className="flex flex-col items-center gap-2">
-                <PlayerMark slot={s} size={40} />
-                <span className="font-mono text-xs text-ink-2">p{s + 1} · {SLOT_SHAPE_NAME[s]}</span>
+              <div key={s} className="flex flex-col items-center gap-1.5">
+                <Creature species="bramblet" color={SLOT_COLOR[s]} size={36} />
+                <span className="font-mono text-xs text-ink-2">p{s + 1}</span>
               </div>
             ))}
+            <span className="pb-6 text-sm text-ink-3">One species in all six colours. Colour tells players apart.</span>
           </div>
           <div className="flex flex-wrap gap-4">
             {GOODS.map((g) => (

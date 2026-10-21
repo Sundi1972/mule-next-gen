@@ -1,4 +1,4 @@
-import type { Good, MapAvatar, MapTile, Slot, Terrain, TickerItem } from '@mule/ui';
+import type { Good, MapAvatar, MapTile, Slot, Species, Terrain, TickerItem } from '@mule/ui';
 
 /**
  * Made-up game data for the prototype: month 4 of a six-player game at a
@@ -11,6 +11,7 @@ export const MONTH = 4;
 export interface Seat {
   slot: Slot;
   name: string;
+  species: Species;
   ai?: 'Rookie' | 'Trader' | 'Tycoon';
   persona?: string;
   money: number;
@@ -18,15 +19,17 @@ export interface Seat {
 }
 
 export const SEATS: Seat[] = [
-  { slot: 0, name: 'Heiko', money: 1240, plots: 4 },
-  { slot: 1, name: 'Mia', money: 1415, plots: 3 },
-  { slot: 2, name: 'Jonas', money: 860, plots: 2 },
-  { slot: 3, name: 'Brix', ai: 'Trader', persona: 'grumpy miner', money: 1105, plots: 3 },
-  { slot: 4, name: 'Lena', money: 990, plots: 2 },
-  { slot: 5, name: 'Ossa', ai: 'Tycoon', persona: 'smooth talker', money: 1680, plots: 3 },
+  { slot: 0, name: 'Heiko', species: 'zipwing', money: 1240, plots: 4 },
+  { slot: 1, name: 'Mia', species: 'bramblet', money: 1415, plots: 3 },
+  { slot: 2, name: 'Jonas', species: 'gearling', money: 860, plots: 2 },
+  { slot: 3, name: 'Brix', species: 'mollox', ai: 'Trader', persona: 'grumpy miner', money: 1105, plots: 3 },
+  { slot: 4, name: 'Lena', species: 'glimmer', money: 990, plots: 2 },
+  { slot: 5, name: 'Ossa', species: 'quibbit', ai: 'Tycoon', persona: 'smooth talker', money: 1680, plots: 3 },
 ];
 
 export const ME: Slot = 0;
+
+export const SEAT_SPECIES = Object.fromEntries(SEATS.map((s) => [s.slot, s.species])) as Record<Slot, Species>;
 
 export const MAP_W = 15;
 export const MAP_H = 9;
@@ -169,3 +172,57 @@ export const MONTH_END_SEATS = SEATS.map((s) => (s.slot === 0 ? { ...s, money: s
 
 /** Public score: money plus 300 per plot. */
 export const RANKING = MONTH_END_SEATS.map((s) => ({ ...s, score: s.money + s.plots * 300 })).sort((a, b) => b.score - a.score);
+
+/** What each player holds and needs of a good this month, as the auction shows it. */
+export interface BookRow {
+  slot: Slot;
+  has: number;
+  needs: number;
+}
+
+const FOOD_BOOK: BookRow[] = [
+  { slot: 0, has: 6, needs: 3 },
+  { slot: 1, has: 7, needs: 3 },
+  { slot: 2, has: 5, needs: 2 },
+  { slot: 3, has: 0, needs: 3 },
+  { slot: 4, has: 1, needs: 4 },
+  { slot: 5, has: 2, needs: 6 },
+];
+
+export const STORE_STOCK: Partial<Record<Good, number>> = { food: 8, water: 12, energy: 5, smithore: 9, crystite: 0 };
+
+/** The auction book for a good. Food is hand-made; the others are spread from it so every tab looks plausible. */
+export function bookFor(good: Good): BookRow[] {
+  if (good === 'food') return FOOD_BOOK;
+  const shift = good.length;
+  return FOOD_BOOK.map((r, i) => {
+    const needs = ((r.needs + shift + i) % 4) + 1;
+    const has = i === 0 ? (MY_STOCK[good] ?? 0) : (r.has * 3 + shift * (i + 1)) % 9;
+    return { slot: r.slot, has, needs };
+  });
+}
+
+/** Buyers at the store's price, in the order the store serves them. Ossa is a Quibbit, so she is first in line. */
+export const STORE_QUEUE: { slot: Slot; wants: number }[] = [
+  { slot: 5, wants: 4 },
+  { slot: 4, wants: 3 },
+  { slot: 3, wants: 3 },
+];
+
+/**
+ * The store hands out units in turns, one per buyer per round, until it is
+ * empty or everyone has what they asked for.
+ */
+export function storeTurns(stock: number, queue: { slot: Slot; wants: number }[]): Slot[] {
+  const left = queue.map((q) => q.wants);
+  const out: Slot[] = [];
+  while (out.length < stock && left.some((n) => n > 0)) {
+    queue.forEach((q, i) => {
+      if (out.length < stock && left[i]! > 0) {
+        out.push(q.slot);
+        left[i]! -= 1;
+      }
+    });
+  }
+  return out;
+}

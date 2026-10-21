@@ -1,6 +1,6 @@
 import { AuctionSlider, Button, cx, GoodTag, PlayerMark, type Good } from '@mule/ui';
 import { useState } from 'react';
-import { MARKET, MY_STOCK, seat } from '../../data';
+import { bookFor, MARKET, ME, seat, STORE_QUEUE, STORE_STOCK } from '../../data';
 import { auctionPositions, useCountdown, useNow } from '../../proto';
 import { PhoneShell } from './Shell';
 
@@ -17,7 +17,10 @@ export function PhoneAuction() {
   const market = MARKET.find((m) => m.good === good)!;
   const storeBuys = Math.round(market.price * 0.9);
   const storeSells = Math.round(market.price * 1.1);
-  const have = MY_STOCK[good] ?? 0;
+  const book = bookFor(good);
+  const mine = book.find((r) => r.slot === ME)!;
+  const have = mine.has;
+  const stock = STORE_STOCK[good] ?? 0;
   const { buyers, sellers } = auctionPositions(now);
 
   // Who would trade with you right now, at the midpoint of both prices.
@@ -44,6 +47,34 @@ export function PhoneAuction() {
           ))}
         </div>
 
+        <div className="flex flex-col gap-2 rounded-control border border-holo-faint bg-panel px-3 py-2">
+          <div className="flex items-baseline justify-between font-mono text-xs text-ink-2">
+            <span>STORE <strong data-num className="text-base text-ink">{stock}</strong></span>
+            <span>YOU HAVE <strong data-num className="text-base text-ink">{mine.has}</strong></span>
+            <span>NEED <strong data-num className="text-base text-ink">{mine.needs}</strong></span>
+            <span>
+              SPARE{' '}
+              <strong data-num className={cx('text-base', mine.has - mine.needs < 0 ? 'text-alert' : 'text-ok')}>
+                {mine.has - mine.needs > 0 ? '+' : ''}
+                {mine.has - mine.needs}
+              </strong>
+            </span>
+          </div>
+          <div className="grid grid-cols-6 gap-1 border-t border-holo-faint pt-2">
+            {book.map((r) => {
+              const spare = r.has - r.needs;
+              return (
+                <span key={r.slot} className="flex flex-col items-center" aria-label={`${seat(r.slot).name}: has ${r.has}, needs ${r.needs}`}>
+                  <PlayerMark slot={r.slot} size={20} glow={false} />
+                  <span data-num className={cx('font-mono text-xs font-bold', spare > 0 ? 'text-ok' : spare < 0 ? 'text-alert' : 'text-ink-3')}>
+                    {spare > 0 ? `+${spare}` : spare < 0 ? `−${-spare}` : '0'}
+                  </span>
+                </span>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 gap-1 rounded-control border border-holo-line bg-void p-1">
           {(['sell', 'buy'] as const).map((s) => (
             <button key={s} type="button" aria-pressed={side === s} onClick={() => setSide(s)} className={cx('h-10 rounded-[8px] font-display font-semibold', side === s ? 'bg-holo text-on-holo' : 'text-ink-2')}>
@@ -68,6 +99,9 @@ export function PhoneAuction() {
           ) : store ? (
             <span>
               {side === 'sell' ? 'The store buys' : 'The store sells'} at <span data-num className="font-mono font-bold">{side === 'sell' ? storeBuys : storeSells}</span>
+              {side === 'buy' && (
+                <span className="text-ink-2">. {STORE_QUEUE.length} others are buying too, so it hands out one unit each in turns.</span>
+              )}
             </span>
           ) : (
             <span className="text-ink-3">No trade at this price yet. Move toward the middle.</span>

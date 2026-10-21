@@ -37,7 +37,7 @@ export function TvLandGrant() {
               );
             })}
           </ul>
-          <p className="mt-auto font-display text-2xl leading-snug text-ink-2">Press CLAIM on your phone when the cursor is on the plot you want.</p>
+          <p className="mt-auto font-display text-2xl leading-snug text-ink-2">Free plots light up one by one, in random order. Tap CLAIM on your phone when yours is lit.</p>
         </div>
       </div>
     </div>

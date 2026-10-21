@@ -11,24 +11,6 @@ export const SLOT_COLOR: Record<Slot, string> = {
   5: 'var(--color-p6)',
 };
 
-export const SLOT_SHAPE_NAME: Record<Slot, string> = {
-  0: 'circle',
-  1: 'square',
-  2: 'triangle',
-  3: 'diamond',
-  4: 'hexagon',
-  5: 'star',
-};
-
-export const SLOT_CLIP: Record<Slot, string> = {
-  0: 'circle(50% at 50% 50%)',
-  1: 'inset(4% round 18%)',
-  2: 'polygon(50% 4%, 96% 92%, 4% 92%)',
-  3: 'polygon(50% 0, 100% 50%, 50% 100%, 0 50%)',
-  4: 'polygon(25% 4%, 75% 4%, 100% 50%, 75% 96%, 25% 96%, 0 50%)',
-  5: 'polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)',
-};
-
 export type Good = 'food' | 'water' | 'energy' | 'smithore' | 'crystite' | 'rareEarth' | 'alloy' | 'electronics' | 'medicine';
 
 export const GOOD_CODE: Record<Good, string> = {

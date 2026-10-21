@@ -30,7 +30,7 @@ export function PhoneLandGrant() {
   return (
     <PhoneShell phase="Land grant" seconds={seconds}>
       <div className="flex h-full flex-col gap-4">
-        <p className="font-mono text-xs text-ink-3">WATCH THE BIG SCREEN · PRESS WHEN THE CURSOR IS ON YOUR PLOT</p>
+        <p className="font-mono text-xs text-ink-3">PLOTS LIGHT UP AT RANDOM · TAP CLAIM WHEN YOURS IS LIT</p>
         <HoloMap width={MAP_W} height={MAP_H} tiles={tiles} cursor={cursor} />
         <div className="flex flex-col gap-1 rounded-panel border border-holo-line bg-panel p-4">
           <span className="label-caps">Cursor on</span>

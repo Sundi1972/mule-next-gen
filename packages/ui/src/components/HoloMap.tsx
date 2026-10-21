@@ -160,7 +160,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
           className="pointer-events-none absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 transition-[left,top] duration-700 ease-out"
           style={{ left: `${((a.x + 0.5) / width) * 100}%`, top: `${((a.y + 0.5) / height) * 100}%` }}
         >
-          <PlayerMark slot={a.slot} size={tv ? 26 : 14} label={a.name} className="drop-shadow-md" />
+          <PlayerMark slot={a.slot} size={tv ? 38 : 18} label={a.name} className="drop-shadow-md" />
           {a.carrying && (
             <span className={cx('flex items-center gap-0.5 rounded-full bg-map-chip px-1 font-mono font-bold text-ink shadow-chip', tv ? 'text-[11px]' : 'text-[7px]')}>
               MULE{a.carrying !== 'empty' && <GoodIcon good={a.carrying} size={tv ? 12 : 8} />}

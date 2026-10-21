@@ -1,4 +1,4 @@
-import { Button, cx, PlayerMark, SLOT_SHAPE_NAME, type Slot } from '@mule/ui';
+import { Button, Creature, cx, PlayerMark, SLOT_COLOR, SPECIES, SPECIES_NAME, SPECIES_PERK, useSeatSpecies, type Slot, type Species } from '@mule/ui';
 import { useState } from 'react';
 import { ROOM_CODE, SEATS } from '../../data';
 
@@ -7,6 +7,7 @@ const SLOTS: Slot[] = [0, 1, 2, 3, 4, 5];
 export function PhoneLobby() {
   const [name, setName] = useState('Heiko');
   const [slot, setSlot] = useState<Slot>(0);
+  const [species, setSpecies] = useState<Species>(useSeatSpecies(0));
   const taken = new Set(SEATS.filter((s) => s.slot !== 0).map((s) => s.slot));
 
   return (
@@ -23,7 +24,7 @@ export function PhoneLobby() {
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 py-5">
         <div className="flex flex-col gap-1">
           <h1 className="font-display text-3xl font-semibold">You're at the table</h1>
-          <p className="text-ink-2">Pick a name and a mark. Your avatar is already on the big screen.</p>
+          <p className="text-ink-2">Pick a name, a species and a colour. Your creature is already on the big screen.</p>
         </div>
 
         <label className="flex flex-col gap-2">
@@ -37,7 +38,31 @@ export function PhoneLobby() {
         </label>
 
         <fieldset className="flex flex-col gap-2">
-          <legend className="label-caps mb-2">Your colour and shape</legend>
+          <legend className="label-caps mb-2">Your species</legend>
+          <div className="grid grid-cols-3 gap-2">
+            {SPECIES.map((sp) => (
+              <button
+                key={sp}
+                type="button"
+                aria-pressed={sp === species}
+                onClick={() => setSpecies(sp)}
+                className={cx(
+                  'flex flex-col items-center gap-1 rounded-control border bg-panel pb-2 pt-3',
+                  sp === species ? 'border-holo shadow-glow' : 'border-holo-faint',
+                )}
+              >
+                <Creature species={sp} color={SLOT_COLOR[slot]} size={44} />
+                <span className="text-sm font-semibold">{SPECIES_NAME[sp]}</span>
+              </button>
+            ))}
+          </div>
+          <p className="rounded-control bg-holo-soft px-3 py-2 text-sm text-ink">
+            <strong>{SPECIES_NAME[species]}.</strong> {SPECIES_PERK[species]}
+          </p>
+        </fieldset>
+
+        <fieldset className="flex flex-col gap-2">
+          <legend className="label-caps mb-2">Your colour</legend>
           <div className="grid grid-cols-6 gap-2">
             {SLOTS.map((s) => {
               const isTaken = taken.has(s) && s !== slot;
@@ -47,14 +72,14 @@ export function PhoneLobby() {
                   type="button"
                   disabled={isTaken}
                   aria-pressed={s === slot}
-                  aria-label={`${SLOT_SHAPE_NAME[s]}${isTaken ? ', taken' : ''}`}
+                  aria-label={`Colour ${s + 1}${isTaken ? ', taken' : ''}`}
                   onClick={() => setSlot(s)}
                   className={cx(
-                    'flex h-14 items-center justify-center rounded-control border bg-panel disabled:opacity-30',
+                    'flex h-12 items-center justify-center rounded-control border bg-panel disabled:opacity-25',
                     s === slot ? 'border-holo shadow-glow' : 'border-holo-faint',
                   )}
                 >
-                  <PlayerMark slot={s} size={24} glow={s === slot} />
+                  <span className="size-6 rounded-full" style={{ background: SLOT_COLOR[s] }} />
                 </button>
               );
             })}
@@ -66,7 +91,7 @@ export function PhoneLobby() {
           <ul className="flex flex-col overflow-hidden rounded-panel border border-holo-line">
             {SEATS.map((s) => (
               <li key={s.slot} className="flex items-center gap-3 border-t border-holo-faint bg-panel px-3 py-2.5 first:border-t-0">
-                <PlayerMark slot={s.slot === 0 ? slot : s.slot} size={16} />
+                <PlayerMark slot={s.slot === 0 ? slot : s.slot} species={s.slot === 0 ? species : undefined} size={22} />
                 <span className="flex-1 font-semibold">
                   {s.slot === 0 ? `${name || 'You'} (you)` : s.name}
                   {s.persona && <span className="font-normal text-ink-3"> · {s.persona}</span>}
