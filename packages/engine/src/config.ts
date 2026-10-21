@@ -520,6 +520,21 @@ export const POLITICS = {
   pay: { governor: 50, sheriff: 30 },
   /** Score per term served in either office. A placeholder until the sim balances it. */
   termScore: 100,
+  /** How Classic AI seats run, vote and set the tax (VoteHand). Placeholders until the sim balances them. */
+  ai: {
+    /** Ms a seat waits before acting in a nominate or ballot stage, drawn per stage: a human's pause, well inside the stage's clock. */
+    actMs: [800, 2_500] as [number, number],
+    /** Chance per election that a persona runs for Governor. */
+    runGovernor: { trader: 0.5, cautious: 0.3, aggressive: 0.8, saboteur: 0.6 } as Record<AiPersonaId, number>,
+    /** Chance it runs for Sheriff when it does not run for Governor. */
+    runSheriff: { trader: 0.3, cautious: 0.4, aggressive: 0.3, saboteur: 0.7 } as Record<AiPersonaId, number>,
+    /** The sales tax in whole percent a persona steers toward as Governor. */
+    taxTarget: { trader: 5, cautious: 4, aggressive: 8, saboteur: 10 } as Record<AiPersonaId, number>,
+    /** Whole percent a Governor adds when the colony fund is low. */
+    taxFundBump: 2,
+    /** The fund is low under this many months of both offices' pay. */
+    fundMonths: 3,
+  },
 };
 
 /**
