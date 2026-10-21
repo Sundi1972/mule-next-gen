@@ -585,6 +585,12 @@ export const AI_HANDS = {
     /** How long it waits for the decider at the status screen before it plays its own top option. */
     decideWaitMs: 2_500,
   },
+  lot: {
+    /** Delay after a lot's intro opens before it presses Done. */
+    introMs: [400, 1_200] as [number, number],
+    /** Delay after a lot's walk starts before it first moves, scaled by patience. */
+    startMs: [300, 1_200] as [number, number],
+  },
   grant: {
     /** A go/no-go choice takes this much longer than a bare reaction. */
     choiceMs: [150, 300] as [number, number],
