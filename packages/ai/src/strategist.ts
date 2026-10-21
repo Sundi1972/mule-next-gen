@@ -226,7 +226,9 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number):
       let veto: string | null = null;
       if (obs.store.mules <= 0) veto = 'the corral is empty';
       else if (mulesSoFar >= mind.level.mulesPerMonth) veto = `already led ${mulesSoFar} MULEs out this month`;
-      else if (cashAfter < keepBack) veto = `it would leave ${cr(cashAfter)}, under the ${cr(keepBack)} kept for upkeep`;
+      else if (cashAfter < 0) veto = `it costs ${cr(cost)}, more than the ${cr(p.money)} on hand`;
+      // What the MULE makes arrives before the auction the reserve is kept for, so it counts toward it.
+      else if (cashAfter + Math.max(0, net) < keepBack) veto = `it would leave ${cr(cashAfter)}, under the ${cr(keepBack)} kept for upkeep`;
       else if (!canFeed(obs, mind.me, outfit)) veto = `nothing to feed the ${outfitName(outfit)} with`;
       cands.push(
         candidate<DevAction>(

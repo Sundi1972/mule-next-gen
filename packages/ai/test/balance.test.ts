@@ -45,28 +45,30 @@ const traderMind: Mind = { me: 'ai0', personaId: 'trader', persona: AI_PERSONAS.
 describe('cash reserve', () => {
   it('T-AC-3: a Water farm whose own first output covers the gap is not vetoed by the reserve', () => {
     // ai0 holds one idle river plot, and neither Food nor Water: the reserve holds back cash for next month's Food.
-    const arrange = () => {
+    const arrange = (mind: Mind = traderMind) => {
       const state = developmentWithWater(0);
       const tile = state.tiles.find((t) => t.terrain === 'river' && !t.owner)!;
       tile.owner = 'ai0';
       state.players[0]!.stock.food = 0;
       const obs = observe(state, 'ai0');
       const o = outlook(obs, 'ai0', { lookAhead: true });
-      const { cost, net } = installGain(obs, o, obs.tiles[state.tiles.indexOf(tile)]!, 'water', traderMind);
-      return { state, keepBack: cashReserve(obs, traderMind, o, 'water'), cost, net };
+      const { cost, net } = installGain(obs, o, obs.tiles[state.tiles.indexOf(tile)]!, 'water', mind);
+      return { state, mind, keepBack: cashReserve(obs, mind, o, 'water'), cost, net };
     };
-    const waterVeto = (money: (a: ReturnType<typeof arrange>) => number) => {
-      const a = arrange();
+    const waterVeto = (money: (a: ReturnType<typeof arrange>) => number, mind?: Mind) => {
+      const a = arrange(mind);
       a.state.players[0]!.money = money(a);
-      const c = developDecision(observe(a.state, 'ai0'), traderMind, 0).all.find((x) => x.key.startsWith('install:water'))!;
+      const c = developDecision(observe(a.state, 'ai0'), a.mind, 0).all.find((x) => x.key.startsWith('install:water'))!;
       return c.veto;
     };
     const { net } = arrange();
     expect(net).toBeGreaterThan(0);
     // One credit under today's reserve, but the farm's own output closes the gap: live.
     expect(waterVeto((a) => a.cost + a.keepBack - 1)).toBeNull();
-    // Negative cases: even with its output it falls short, or it can't pay at all.
-    expect(waterVeto((a) => a.cost + a.keepBack - Math.ceil(a.net) - 1)).toMatch(/kept for upkeep/);
+    // Negative cases: a seat so careful its reserve is more than the farm makes, one credit short even
+    // with the output; or a seat that can't pay at all.
+    const careful: Mind = { ...traderMind, persona: { ...AI_PERSONAS.trader, reserve: 20 } };
+    expect(waterVeto((a) => a.cost + a.keepBack - Math.ceil(a.net) - 1, careful)).toMatch(/kept for upkeep/);
     expect(waterVeto((a) => a.cost - 1)).not.toBeNull();
   });
 });
