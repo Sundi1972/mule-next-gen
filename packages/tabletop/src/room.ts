@@ -11,6 +11,8 @@ export interface SeatInfo {
   id: string;
   name: string;
   isAi: boolean;
+  /** Absent means not chosen: the game applies its own default. */
+  pick?: string;
 }
 
 /** What a room offers the game it hosts. */
@@ -41,6 +43,8 @@ export interface RoomOptions<Intent, GameView> {
   maxSeats?: number;
   aiNames?: string[];
   emotes?: readonly string[];
+  /** The values a seat may pick in the lobby. Absent: the game has no choices to make. */
+  picks?: readonly string[];
   /** Cleans chat text, for example with a family-friendly filter. Return '' to drop the message. */
   moderate?(text: string): string;
   /** Errors whose message is shown to the player instead of thrown. */
@@ -65,7 +69,8 @@ export class Room<Intent, View> {
   private readonly seats: Seat<View>[] = [];
   private readonly boards = new Set<Connection<View>>();
   private readonly game: Game<Intent, View>;
-  private readonly opts: Required<Omit<RoomOptions<Intent, View>, 'createGame' | 'code'>>;
+  private readonly opts: Required<Omit<RoomOptions<Intent, View>, 'createGame' | 'code' | 'picks'>>;
+  private readonly picks: readonly string[] | undefined;
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private started = false;
   private nextSeat = 1;
@@ -74,6 +79,7 @@ export class Room<Intent, View> {
 
   constructor(options: RoomOptions<Intent, View>) {
     this.code = options.code;
+    this.picks = options.picks;
     this.opts = {
       minSeats: options.minSeats ?? 2,
       maxSeats: options.maxSeats ?? 6,
@@ -151,7 +157,11 @@ export class Room<Intent, View> {
         if (this.started) throw new TableError('The game has already started');
         if (this.seats.length < this.opts.minSeats) throw new TableError(`At least ${this.opts.minSeats} players are needed`);
         this.started = true;
-        this.game.start(this.seats.map(({ id, name, isAi }) => ({ id, name, isAi })));
+        this.game.start(this.seats.map(({ id, name, isAi, pick }) => ({ id, name, isAi, ...(pick !== undefined ? { pick } : {}) })));
+        this.broadcast();
+        return;
+      case 'pick':
+        this.pick(seatId, msg.pick);
         this.broadcast();
         return;
       case 'intent':
@@ -211,6 +221,15 @@ export class Room<Intent, View> {
     return this.opts.aiNames.find((n) => !used.has(n)) ?? `AI ${this.seats.length + 1}`;
   }
 
+  /** A human seat makes its own choice from the game's list, before Start. See RULE-1. */
+  private pick(seatId: string, pick: string): void {
+    if (!this.picks) throw new TableError('This game has no choices to make');
+    if (this.started) throw new TableError('The game has already started');
+    if (!this.picks.includes(pick)) throw new TableError('Unknown choice');
+    const seat = this.seats.find((s) => s.id === seatId);
+    if (seat) seat.pick = pick;
+  }
+
   private requireHost(seatId: string): void {
     if (seatId !== this.hostId) throw new TableError('Only the host can do that');
   }
@@ -250,7 +269,13 @@ export class Room<Intent, View> {
       code: this.code,
       status: this.started ? 'playing' : 'lobby',
       hostId: this.hostId,
-      seats: this.seats.map((s) => ({ id: s.id, name: s.name, isAi: s.isAi, connected: s.isAi || s.conn !== null })),
+      seats: this.seats.map((s) => ({
+        id: s.id,
+        name: s.name,
+        isAi: s.isAi,
+        connected: s.isAi || s.conn !== null,
+        ...(s.pick !== undefined ? { pick: s.pick } : {}),
+      })),
       boards: this.boards.size,
       game: this.started ? this.game.viewFor(seatId) : null,
     };

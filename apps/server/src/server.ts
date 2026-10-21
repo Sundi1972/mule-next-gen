@@ -1,7 +1,7 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
-import { RuleError } from '@mule/engine';
+import { RuleError, SPECIES } from '@mule/engine';
 import { EMOTES, type MuleIntent, type MuleView } from '@mule/protocol';
 import { RoomRegistry, TableError, type ClientEnvelope, type Connection, type Room } from '@tabletop/core';
 import { WebSocketServer, type WebSocket } from 'ws';
@@ -40,6 +40,7 @@ export function createMuleServer(
     createGame: (ctx) => new MuleGame(ctx, seed(), { maxMonths: options.maxMonths, phaseScale: options.phaseScale }),
     aiNames: AI_NAMES,
     emotes: EMOTES,
+    picks: SPECIES,
     isUserError: (err) => err instanceof RuleError || err instanceof TableError,
   });
   const staticDir = options.staticDir && existsSync(options.staticDir) ? resolve(options.staticDir) : null;
@@ -156,6 +157,8 @@ function parse(text: string): ClientEnvelope<MuleIntent> | null {
       return str(m.text) && (m.to === undefined || str(m.to)) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'emote':
       return str(m.emote) ? (m as ClientEnvelope<MuleIntent>) : null;
+    case 'pick':
+      return str(m.pick) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'ping':
       return num(m.clientTime) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'intent':

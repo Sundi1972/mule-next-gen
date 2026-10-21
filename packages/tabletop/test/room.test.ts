@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Room, RoomRegistry, TableError, type Connection, type Game, type ServerEnvelope } from '../src/index.js';
+import { Room, RoomRegistry, TableError, type Connection, type Game, type SeatInfo, type ServerEnvelope } from '../src/index.js';
 
 type Intent = { secret: string };
 type View = { mySecret: string | null; secretsTold: number };
@@ -111,6 +111,118 @@ describe('Room', () => {
     const screen = new Screen();
     room.receive(screen, screen.from, { t: 'ping', clientTime: 1 });
     expect(screen.last('pong')).toEqual({ t: 'pong', clientTime: 1, serverTime: 5_000 });
+  });
+});
+
+/** A room whose game offers three choices and remembers the seats it was started with. */
+function pickRoom(options: { picks?: readonly string[] } = { picks: ['fox', 'owl', 'cat'] }) {
+  const startedWith: SeatInfo[][] = [];
+  const room = new Room<Intent, View>({
+    code: 'KRTX',
+    createGame: () => ({ ...secretsGame(), start: (seats) => void startedWith.push(seats) }),
+    aiNames: ['Brix'],
+    newToken: () => `t${++tokens}`,
+    ...options,
+  });
+  return { room, startedWith };
+}
+
+const pick = (room: Room<Intent, View>, screen: Screen, value: string) => room.receive(screen, screen.from, { t: 'pick', pick: value });
+const pickOf = (room: Room<Intent, View>, screen: Screen) => room.viewFor(null).seats.find((s) => s.id === screen.from.seatId)?.pick;
+
+describe('Room: a seat picks one of the game\'s choices in the lobby (RULE-1)', () => {
+  it.each([
+    { row: '1: picks absent', picks: undefined, started: false, value: 'fox', error: 'This game has no choices to make' },
+    { row: '1: picks absent, first match over row 2', picks: undefined, started: true, value: 'fox', error: 'This game has no choices to make' },
+    { row: '2: a pick after Start', picks: ['fox', 'owl', 'cat'], started: true, value: 'owl', error: 'The game has already started' },
+    { row: '2: first match over row 3', picks: ['fox', 'owl', 'cat'], started: true, value: 'dragon', error: 'The game has already started' },
+    { row: '3: "dragon" is not a choice', picks: ['fox', 'owl', 'cat'], started: false, value: 'dragon', error: 'Unknown choice' },
+  ])('T-AC-4: RULE-1 row $row → refused, and the seat keeps no pick', ({ picks, started, value, error }) => {
+    const { room } = pickRoom(picks ? { picks } : {});
+    const heiko = join(room, 'Heiko');
+    join(room, 'Mia');
+    if (started) room.receive(heiko, heiko.from, { t: 'start' });
+
+    pick(room, heiko, value);
+
+    expect(heiko.last('error')?.message).toBe(error);
+    expect(pickOf(room, heiko)).toBeUndefined();
+  });
+
+  it('T-AC-4: RULE-1 row 4 — the host picks "fox", and the next view shows it on the host seat only', async () => {
+    const { room } = pickRoom();
+    const heiko = join(room, 'Heiko');
+    const mia = join(room, 'Mia');
+    await flush();
+
+    pick(room, heiko, 'fox');
+    await flush();
+
+    expect(heiko.last('error')).toBeUndefined();
+    expect(mia.last('view')!.view.seats).toStrictEqual([
+      { id: 's1', name: 'Heiko', isAi: false, connected: true, pick: 'fox' },
+      { id: 's2', name: 'Mia', isAi: false, connected: true },
+    ]);
+  });
+
+  it('T-AC-4: a refused pick leaves an earlier pick in place; a later valid pick replaces it', () => {
+    const { room } = pickRoom();
+    const heiko = join(room, 'Heiko');
+
+    pick(room, heiko, 'fox');
+    pick(room, heiko, 'dragon');
+    expect(heiko.last('error')?.message).toBe('Unknown choice');
+    expect(pickOf(room, heiko)).toBe('fox');
+
+    pick(room, heiko, 'owl');
+    expect(pickOf(room, heiko)).toBe('owl');
+  });
+
+  it("T-AC-4: any human seat's pick lands on the sender's seat, not the host's; duplicates are allowed", () => {
+    const { room } = pickRoom();
+    const heiko = join(room, 'Heiko');
+    const mia = join(room, 'Mia');
+
+    pick(room, mia, 'cat');
+    pick(room, heiko, 'cat');
+
+    expect(mia.last('error')).toBeUndefined();
+    expect(heiko.last('error')).toBeUndefined();
+    expect(pickOf(room, mia)).toBe('cat');
+    expect(pickOf(room, heiko)).toBe('cat');
+  });
+
+  it('T-AC-4: Game.start receives each seat\'s pick; an unpicked seat and an AI seat carry none', () => {
+    const { room, startedWith } = pickRoom();
+    const heiko = join(room, 'Heiko');
+    join(room, 'Mia');
+    room.receive(heiko, heiko.from, { t: 'addAi' });
+    pick(room, heiko, 'owl');
+
+    room.receive(heiko, heiko.from, { t: 'start' });
+
+    expect(startedWith).toStrictEqual([
+      [
+        { id: 's1', name: 'Heiko', isAi: false, pick: 'owl' },
+        { id: 's2', name: 'Mia', isAi: false },
+        { id: 's3', name: 'Brix', isAi: true },
+      ],
+    ]);
+  });
+
+  it('T-AC-5: a picked seat keeps its pick when the phone reloads and rejoins with its seat token', async () => {
+    const { room } = pickRoom();
+    const first = join(room, 'Heiko');
+    join(room, 'Mia');
+    pick(room, first, 'cat');
+    const token = first.last('welcome')!.seatToken!;
+
+    room.disconnect(first);
+    const again = join(room, 'Heiko', token);
+    await flush();
+
+    expect(again.last('welcome')!.seatId).toBe('s1');
+    expect(again.last('view')!.view.seats[0]).toStrictEqual({ id: 's1', name: 'Heiko', isAi: false, connected: true, pick: 'cat' });
   });
 });
 

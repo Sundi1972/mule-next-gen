@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { advancePhase, AI_LEVELS, AI_PERSONAS, createGame, GAME, mulePriceFor, observe, type GameState } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
 import { AiSeat } from '../src/seat.js';
-import { developDecision, muleValue, plotValue } from '../src/strategist.js';
+import { developDecision, goodPlan, muleValue, plotValue, tradeDecision } from '../src/strategist.js';
 import { cashReserve, installGain, type Mind } from '../src/value.js';
 
 const fourSeats = (seed: number) => createGame({ seed, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI${i}`, isAi: true })) });
@@ -133,5 +133,30 @@ describe('values for lot bids (WS3 caps AI bids at these)', () => {
     state.tiles.find((t) => t.terrain === 'river' && !t.owner)!.owner = 'ai0';
     const obs = observe(state, 'ai0');
     expect(muleValue(obs, traderMind)).toBeGreaterThanOrEqual(mulePriceFor(obs, 'ai0'));
+  });
+});
+
+/** The auction of month 1, with the store's Water shelf at `shelf` and ai0 holding 8 Water and no Water farm. */
+function auctionWithShelf(shelf: number): GameState {
+  const state = fourSeats(3);
+  while (state.phase !== 'auction') advancePhase(state);
+  state.store.stock.water = shelf;
+  state.players[0]!.stock.water = 8;
+  return state;
+}
+
+describe('surplus to a short store', () => {
+  it('T-AC-8: with the store’s Water shelf under the colonists’ need, a seat offers its Water beyond its own needs', () => {
+    // 100 colonists need 5 Water a month; the shelf holds 2.
+    const obs = observe(auctionWithShelf(2), 'ai0');
+    const plan = goodPlan(obs, traderMind, 'water');
+    const sell = tradeDecision(obs, traderMind, plan).all.find((c) => c.key === 'sell' && !c.veto);
+    expect(sell).toBeDefined();
+    // It keeps what next month takes and sells the rest.
+    expect((sell!.action as { keep: number }).keep).toBeLessThanOrEqual(Math.max(plan.values.block, plan.values.need));
+    // Negative case: with the shelf full, it holds Water as before, as a bet on the price.
+    const full = observe(auctionWithShelf(40), 'ai0');
+    const before = tradeDecision(full, traderMind, goodPlan(full, traderMind, 'water')).all.find((c) => c.key === 'sell');
+    expect(before === undefined || (before.action as { keep: number }).keep > plan.values.block).toBe(true);
   });
 });
