@@ -1,6 +1,7 @@
 import { BRAIN, type AiLevelId, type AiPersonaId } from '@mule/engine';
 import { LlmDecider, ReplyRejected, type Complete, type Decider, type DecisionRecord } from '@mule/ai';
 import { createBudget, worstCaseUsd } from './budget.js';
+import { chatter } from './chat.js';
 import { billUnknown, CallFailed, createAnthropicSdk, createHaikuComplete, type HaikuReply, type HaikuSdk } from './client.js';
 import { createLedger, NO_USAGE, type Outcome, type Usage } from './ledger.js';
 
@@ -15,7 +16,7 @@ export interface BrainSeat {
 export interface BrainService {
   /** A decider for a Smart seat, or null: the seat plays Classic. */
   deciderFor(seat: BrainSeat): Decider | null;
-  /** The seat's onDecision callback. Passes nothing to the table yet. */
+  /** The seat's onDecision callback: passes its lines to `say`, a few a month (RULE-2). Never throws. */
   chatter(seat: BrainSeat, say: (line: string) => void): (record: DecisionRecord) => void;
   /** Writes the game's total line and closes the game: no decider makes a call for it afterwards. */
   finish(): void;
@@ -54,12 +55,10 @@ export function outcomeOf(reply: Pick<HaikuReply, 'stopReason'> | null, failure:
   return 'error';
 }
 
-const passThrough = (): ((record: DecisionRecord) => void) => () => {};
-
 /** Without the key there is no client and no decider, so nothing can make a paid call. See RULE-3. */
 const CLASSIC: BrainService = {
   deciderFor: () => null,
-  chatter: passThrough,
+  chatter: (_seat, say) => chatter(say),
   finish: () => {},
 };
 
@@ -131,7 +130,7 @@ export function createBrain(options: BrainOptions): BrainService {
 
   return {
     deciderFor,
-    chatter: passThrough,
+    chatter: (_seat, say) => chatter(say),
     finish() {
       finished = true;
       ledger.finish(gameId);
