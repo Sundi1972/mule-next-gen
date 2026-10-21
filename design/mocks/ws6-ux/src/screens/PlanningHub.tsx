@@ -114,7 +114,7 @@ const Who = ({ id, size = 16 }: { id: string; size?: number }) => {
 function Agenda({ office, after, onDesk, onTool }: { office: Office; after: boolean; onDesk: (d: Desk) => void; onTool: (t: Tool) => void }) {
   const items: { key: string; title: string; sub: string; status: Status; slice?: number; locked?: boolean; go: () => void }[] = [
     ...(after ? [] : [{ key: 'election', title: 'Election day', sub: 'Run, then vote: Governor and Sheriff', status: 'soon' as Status, slice: 1, go: () => onDesk('council') }]),
-    { key: 'law', title: 'Law vote', sub: 'Price cap: Food at 1.5×', status: 'soon', slice: 2, go: () => onDesk('council') },
+    { key: 'law', title: 'Law vote', sub: 'Pollution tax: 20 cr a point', status: 'soon', slice: 2, go: () => onDesk('council') },
     { key: 'deals', title: '2 deal offers', sub: 'Ossa, Kai', status: 'soon', slice: 3, locked: true, go: () => onDesk('talk') },
     { key: 'drone', title: 'Geo drone', sub: '2 plots · 40 cr', status: 'today', locked: true, go: () => onTool('drone') },
     { key: 'list', title: 'Sell a plot or MULE', sub: 'At the auction after planning', status: 'today', go: () => onDesk('market') },
@@ -401,9 +401,9 @@ function CouncilDesk({ election }: { election: Election }) {
       <Section title="Law vote" badge={<Soon slice={2} />} testid="law-vote">
         <div className="flex flex-col gap-1.5 rounded-panel border border-holo-line bg-panel p-2 opacity-80">
           <span className="text-sm">
-            <Who id="ossa" size={14} /> proposes: <strong>Price cap on Food at 1.5×</strong> (no Food trades above 45 cr).
+            <Who id="ossa" size={14} /> proposes: <strong>Pollution tax at 20 cr per air point</strong> (each polluter pays for the air it fouls, into the colony fund).
           </span>
-          <span className="text-xs text-ink-2">For you: you hold 9 Food and need 5; you sell 4 at most 45.</span>
+          <span className="text-xs text-ink-2">For you: none of your plots pollute, so you pay nothing; Kai's smelter would pay about 40 cr a month.</span>
           <span className="grid grid-cols-2 gap-1.5">
             <Button size="md" variant={law === 'yes' ? 'holo' : 'outline'} onClick={() => setLaw('yes')}>
               Yes
@@ -560,9 +560,11 @@ function GovernorDesk() {
       <Section title="This month's law" badge={<Soon slice={2} />} testid="gov-law">
         <select className="h-9 rounded-control border border-holo-line bg-panel px-2 text-sm" aria-label="Propose a law">
           <option>Propose a law…</option>
-          <option>Price cap (a good, 1.2 / 1.5 / 2×)</option>
+          <option>Export tax (10 / 20 / 30%)</option>
           <option>Land tax (5 / 10 / 20 cr a plot)</option>
-          <option>Green zone (river, lake, both)</option>
+          <option>Pollution tax (10 / 20 / 40 cr per air point)</option>
+          <option>Emission cap (air 40 / 50 / 60)</option>
+          <option>Sabotage ban (fines 2× / 3×)</option>
         </select>
       </Section>
     </>
