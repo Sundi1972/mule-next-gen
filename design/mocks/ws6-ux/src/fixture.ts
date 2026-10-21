@@ -86,7 +86,7 @@ export const SMITHORE_HOLD: Record<string, { units: number; need: number }> = {
 
 const BASE: AuctionView = {
   good: 'smithore', stage: 'walk', seconds: 9.2, total: 15, slowed: false, next: ['crystite', 'alloy'],
-  storeBuys: 54, storeSells: 66, shipPays: null, lo: 40, hi: 84, speed: 7.3, walkers: [], deals: [], units: 0,
+  storeBuys: 54, storeSells: 66, shipPays: null, lo: 40, hi: 84, speed: 7.3, walkers: [], deals: [], units: 0, storeForSale: 2,
   status: [
     { id: 'lena', had: 0, used: 0, made: 0, now: 0, need: 2, spoils: 0 },
     { id: 'ossa', had: 2, used: 0, made: 5, now: 7, need: 3, spoils: 0 },
@@ -96,7 +96,10 @@ const BASE: AuctionView = {
   skipped: [{ good: 'water', reason: 'nobody buys' }],
 };
 
-const walker = (id: string, side: 'buyer' | 'seller' | 'pass', at: number, done = false) => ({ id, side, price: Math.round(at), at, dir: 0 as const, done });
+/** A walker carries its stock of the good up now, as the status table has it. */
+const walker = (id: string, side: 'buyer' | 'seller' | 'pass', at: number, done = false) => ({
+  id, side, price: Math.round(at), at, dir: 0 as const, done, units: BASE.status.find((s) => s.id === id)?.now ?? 0,
+});
 
 /** The bell has just rung: sellers at the top, buyers at the bottom, the two lines as far apart as they get. */
 export const SMITHORE_START: AuctionView = {
