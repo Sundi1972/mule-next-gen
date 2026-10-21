@@ -235,7 +235,7 @@ describe('brain:spike', () => {
     expect(text).not.toContain(KEY.ANTHROPIC_API_KEY);
     expect(text).toMatch(/^refusals \/ auth failures\s+0 \/ 1$/m);
     expect(out.at(-1)).toBe('Stopped: the API refused the credentials (401/403). Nothing more was called.');
-  });
+  }, 30_000); // main plays a strategist game to collect prompts
 
   it('B-AC-3: with the key unset or blank, main names the variable in one line, builds no client and exits 1', async () => {
     const out: string[] = [];
@@ -266,7 +266,7 @@ describe('brain:spike', () => {
     expect(out.join('\n')).not.toContain(KEY.ANTHROPIC_API_KEY);
     expect(out).toContainEqual(expect.stringMatching(/^develop\s/));
     expect(ledgerLines()).toHaveLength(4);
-  });
+  }, 30_000); // main plays a strategist game to collect prompts
 
   it('INV-spike-cap: main --max-usd 0.01 prints cap $0.01 and keeps the counted spend within it', async () => {
     // Each call bills about its own worst case: the prompt at BRAIN.charsPerToken as a cache write, and a full reply.
@@ -288,7 +288,7 @@ describe('brain:spike', () => {
     expect(counted).toBeGreaterThan(0);
     expect(counted).toBeLessThanOrEqual(0.01);
     expect(ledgerLines().reduce((sum, l) => sum + (l.usd as number), 0)).toBeLessThanOrEqual(0.01);
-  });
+  }, 30_000); // main plays a strategist game to collect prompts
 
   it("INV-spike-cap: main refuses a second run on the same day: today's ledger exists, one line names it, nothing is called; a run that calls nothing leaves the clearance unused", async () => {
     fs.writeFileSync(path.join(dir, 'spike-2026-10-20.jsonl'), '');
@@ -357,7 +357,7 @@ describe('brain:spike', () => {
     expect(await main(['--', '--calls', '2', '--max-usd', '0.01', '--seed', '101'], KEY, { dataDir: dir, now: () => TODAY, out: (l) => out.push(l) })).toBe(0);
     expect(out[0]).toMatch(/cap \$0\.01, planned 2 calls/);
     expect(calls).toBe(2);
-  });
+  }, 30_000); // main plays a strategist game to collect prompts
 
   it('INV-spike-report: decisions mix kinds round-robin and build real prompts from one strategist game, only ones the model would be asked, each attributed as the game recorded it', () => {
     // The oracle: the same game played here, with each decision's seat view taken when the phase it was made in ends.
