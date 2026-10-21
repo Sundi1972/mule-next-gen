@@ -302,6 +302,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   connectionChanged(seatId: string, connected: boolean): void {
     if (connected) this.away.delete(seatId);
     else this.away.add(seatId);
+    // The server pressed Done for the dropped phone; back at the table, the player decides again.
+    if (connected && this.electionOpen()) electionDone(this.requireState(), seatId, false);
     // Nobody waits for a phone that dropped.
     this.checkAllReady();
   }
