@@ -152,7 +152,11 @@ function parse(text: string): ClientEnvelope<MuleIntent> | null {
       return str(m.code) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'addAi':
     case 'start':
+    case 'close':
+    case 'leave':
       return m as ClientEnvelope<MuleIntent>;
+    case 'kick':
+      return str(m.seatId) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'chat':
       return str(m.text) && (m.to === undefined || str(m.to)) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'emote':
