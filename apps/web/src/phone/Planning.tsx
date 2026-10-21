@@ -1,4 +1,4 @@
-import { DEVELOPMENT, LOTS, storePaysAt } from '@mule/engine';
+import { DEVELOPMENT, isListed, LOTS, storePaysAt } from '@mule/engine';
 import { Button, cx, GOOD_NAME, HoloMap, PlayerMark, TERRAIN_NAME, type MapTile, type Slot } from '@mule/ui';
 import { useState } from 'react';
 import { lotWhat, sellerName } from '../components/AuctionParts';
@@ -107,7 +107,7 @@ function useSellForm() {
   const full = view.lotSlots.used >= view.lotSlots.max;
   const atLimit = mine.length >= LOTS.perPlayer;
   const tile = picked ? tileAt(view, picked.x, picked.y) : undefined;
-  const listedHere = !!picked && view.listings.some((l) => l.item.x === picked.x && l.item.y === picked.y);
+  const listedHere = !!picked && isListed(view, picked.x, picked.y);
   const blocked = full
     ? 'The auction is full this month.'
     : atLimit
@@ -256,7 +256,7 @@ function SellRail({ sell }: { sell: SellForm }) {
 /** Your plots to tap, with every listed plot marked for sale. */
 function SellMap({ sell }: { sell: SellForm }) {
   const { view, slot } = usePhoneGame();
-  const tiles: MapTile[] = mapTiles(view).map((t) => (view.listings.some((l) => l.item.x === t.x && l.item.y === t.y) ? { ...t, flag: 'sale' } : t));
+  const tiles: MapTile[] = mapTiles(view).map((t) => (isListed(view, t.x, t.y) ? { ...t, flag: 'sale' } : t));
   return (
     <>
       <p className="pb-1.5 font-mono text-[11px] text-ink-3">TAP ONE OF YOUR PLOTS · LISTED PLOTS ARE MARKED FOR SALE</p>
