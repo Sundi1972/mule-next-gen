@@ -59,41 +59,43 @@ HC-1 (concepts, not copies) · HC-2 (the TV shows no holdings except the goods a
 | path | touched by | resolution |
 |---|---|---|
 | `packages/ui/src/components/WalkBoard.tsx` | A.1; WS4's own PRs | **serialised**: A.1 is reviewed by WS4 and rebased onto ws4's latest WalkBoard (PR-2c's insets) before it starts |
-| `apps/web/e2e/auction-steps.ts` | A.5 only | the e2e changes are all in A.5, after A.3 and A.4 |
+| `apps/web/e2e/auction-steps.ts` | A.5; PR-3 (land plan, +100 lines for the colony lot) | **serialised**: the e2e changes are all in A.5, after A.3 and A.4, and after ws3-ws6a has merged the lane with PR-3 (found in execution) |
+| `apps/web/src/phone/LandAuction.tsx`, `apps/web/src/table/TvLandAuction.tsx`, `apps/web/src/components/AuctionParts.tsx` | A.3/A.4; PR-3 (COLONY_SELLER, a few lines) | small merge; it auto-merged when ws3-ws6a took the lane (found in execution) |
 | `apps/web/src/components/AuctionParts.tsx` | A.3 (`boardWalkers`), A.4 (none expected) | **same task** if A.4 needs it |
 
 ### Waves
 - **Wave 1:** A.1 (C1, the board) and A.2 (C2, the contract) in parallel. Their files are disjoint, and A.2's `units` field is optional to every reader.
 - **Wave 2:** A.3 (goods screens) and A.4 (land line) in parallel, both after A.1. A.3 also needs A.2. Their screen files are disjoint, and both consume the frozen board props.
 - **Wave 3:** A.5 (e2e + render gate) after every branch is merged into `ws3-ws6a`.
+- **Status (2026-10-22):** A.1–A.4 COMPLETE and merged into ws3-ws6a, each reviewed (A.1 and A.2 after one fix round). A.1 also gained WS4's floor-inset condition: the units label clears the names strip (measured 4 px phone, 2 px TV). WS4 has approved both named edits (WalkBoard, TvAuction). ws3-ws6a has merged the lane and feat/strategist 8683d21. A.5 in progress. Lead rulings: on an exact tie the first walker keeps the line; zero surplus reads "3 (0)"; the land line stays on the result screen at the winning bid.
 - No migration slot: no state or storage changes.
 
 ## Tasks
 
 ### Task A.1 — C1: the walk board draws the two lines, units under creatures, and the store's stock
 **Depends on:** — · **ACs verified:** T-AC-1 (unit), B-AC-1/2/3/5 (render, via A.5) · **Spec:** §1 C1, §2 RULE-1
-- [ ] **Step 1: Write the failing test `T-AC-1: bestPrices returns the lowest seller with units and the highest buyer`**, covering each RULE-1 example and the unknown-units row. Altitude: unit (pure function). Trap: sellers with 0 units don't count; units absent means "has units".
-- [ ] **Step 2: Implement C1 per spec §1 C1 and §2 RULE-1.** Graft `design/mocks/ws6-ux/src/proposed/WalkBoard.tsx` at 1b69e37: diff it against the package file and take every `WS6:` hunk. Props are optional, and callers that pass none render exactly as today (the pin). Mechanism: in_place.
-- [ ] **Step 3: Run** `pnpm --filter @mule/ui typecheck` and the existing web/e2e suites. Expected: green, with today's callers unchanged.
-- [ ] **Step 4: Commit** `feat(ui): the walk board draws the two moving lines, units and the store's stock (verifies T-AC-1)`. WS4 reviews this diff before A.3/A.4 merge.
+- [x] **Step 1: Write the failing test `T-AC-1: bestPrices returns the lowest seller with units and the highest buyer`**, covering each RULE-1 example and the unknown-units row. Altitude: unit (pure function). Trap: sellers with 0 units don't count; units absent means "has units".
+- [x] **Step 2: Implement C1 per spec §1 C1 and §2 RULE-1.** Graft `design/mocks/ws6-ux/src/proposed/WalkBoard.tsx` at 1b69e37: diff it against the package file and take every `WS6:` hunk. Props are optional, and callers that pass none render exactly as today (the pin). Mechanism: in_place.
+- [x] **Step 3: Run** `pnpm --filter @mule/ui typecheck` and the existing web/e2e suites. Expected: green, with today's callers unchanged.
+- [x] **Step 4: Commit** `feat(ui): the walk board draws the two moving lines, units and the store's stock (verifies T-AC-1)`. WS4 reviews this diff before A.3/A.4 merge.
 
 ### Task A.2 — C2: walkers carry their units
 **Depends on:** — · **ACs verified:** T-AC-2 · **Spec:** §1 C2
-- [ ] **Step 1: Write the failing server test `T-AC-2: the auction view's walkers carry units equal to the engine's stock after every traded unit`** in `apps/server/test/auction-units.test.ts`. Altitude: promise, at `viewFor`, in both a player's view and the board view (HC-2's exemption: units are public for the good that's up).
-- [ ] **Step 2: Implement C2:** `WalkerView.units` in the protocol, filled from `state.players[].stock[good]` where the server builds the auction's walkers. Mechanism: in_place.
-- [ ] **Step 3: Commit** `feat(server): auction walkers carry their units (verifies T-AC-2)`.
+- [x] **Step 1: Write the failing server test `T-AC-2: the auction view's walkers carry units equal to the engine's stock after every traded unit`** in `apps/server/test/auction-units.test.ts`. Altitude: promise, at `viewFor`, in both a player's view and the board view (HC-2's exemption: units are public for the good that's up).
+- [x] **Step 2: Implement C2:** `WalkerView.units` in the protocol, filled from `state.players[].stock[good]` where the server builds the auction's walkers. Mechanism: in_place.
+- [x] **Step 3: Commit** `feat(server): auction walkers carry their units (verifies T-AC-2)`.
 
 ### Task A.3 — C3: the goods auction screens use the lines, units and stock
 **Depends on:** A.1, A.2 · **ACs verified:** B-AC-1, B-AC-2, B-AC-3 (UI half, via A.5) · **Spec:** §1 C3
-- [ ] **Step 1: Implement C3 by grafting `design/mocks/ws6-ux/src/screens/GoodsAuction.tsx` (PhoneGoodsWalk, TvGoodsWalk, LineReadout) at 1b69e37** into `apps/web/src/phone/Auction.tsx` and, as a named edit, `TableApp.tsx::TvAuction`. Both pass `marks {ask: true, bid: true}`, units and surplus (via `AuctionParts::boardWalkers`), and `storeStock` from `view.market`. The rail and TV panel add the words readout from `bestPrices`. Replace the mock's `SMITHORE_*` fixtures with the live view. Mechanism: fill_scaffold.
+- [x] **Step 1: Implement C3 by grafting `design/mocks/ws6-ux/src/screens/GoodsAuction.tsx` (PhoneGoodsWalk, TvGoodsWalk, LineReadout) at 1b69e37** into `apps/web/src/phone/Auction.tsx` and, as a named edit, `TableApp.tsx::TvAuction`. Both pass `marks {ask: true, bid: true}`, units and surplus (via `AuctionParts::boardWalkers`), and `storeStock` from `view.auction.storeForSale` (PM ruling, 2026-10-22: a new view field, the engine's storeForSale, so Food and Water exclude the colonists' reserve; `view.market` keeps the real stock for the other panels; WS6 amends C3 and B-AC-3). The rail and TV panel add the words readout from `bestPrices`. Replace the mock's `SMITHORE_*` fixtures with the live view. Mechanism: fill_scaffold.
   Plan-drift correction: spec C3 says the phone rail drops a "STORE HAS" line, but today's Auction.tsx has none (grep for "store has" in apps/web/src finds nothing, 2026-10-21). There's nothing to drop; the stock appears on the board only (C1's `storeStock`), as the mock shows.
-- [ ] **Step 2: Run** `pnpm --filter @mule/web typecheck`, `test` and `build`. Expected: green.
-- [ ] **Step 3: Commit** `feat(web): the goods auction shows the two lines, everyone's units and the store's stock`.
+- [x] **Step 2: Run** `pnpm --filter @mule/web typecheck`, `test` and `build`. Expected: green.
+- [x] **Step 3: Commit** `feat(web): the goods auction shows the two lines, everyone's units and the store's stock`.
 
 ### Task A.4 — C5: the land auction draws the highest-bid line
 **Depends on:** A.1 · **ACs verified:** B-AC-5 (via A.5) · **Spec:** §1 C5
-- [ ] **Step 1: Implement C5.** In `LandAuction.tsx` and `TvLandAuction.tsx`, pass `marks {ask: false, bid: true}` to the board, per `design/mocks/ws6-ux/src/screens/LandLine.tsx` (#land-under, #land-walk, #land-lead). Nothing else changes.
-- [ ] **Step 2: Commit** `feat(web): the land auction draws the highest-bid line`.
+- [x] **Step 1: Implement C5.** In `LandAuction.tsx` and `TvLandAuction.tsx`, pass `marks {ask: false, bid: true}` to the board, per `design/mocks/ws6-ux/src/screens/LandLine.tsx` (#land-under, #land-walk, #land-lead). Nothing else changes.
+- [x] **Step 2: Commit** `feat(web): the land auction draws the highest-bid line`.
 
 ### Task A.5 — e2e and render gate
 **Depends on:** A.3, A.4 merged into `ws3-ws6a` · **ACs verified:** B-AC-1, B-AC-2, B-AC-3, B-AC-5 (browser), T-AC-8
@@ -107,7 +109,7 @@ HC-1 (concepts, not copies) · HC-2 (the TV shows no holdings except the goods a
 ### WS6-PR-1 merge gate
 - [ ] B-AC-1/2/3/5, T-AC-1 and T-AC-2 are green and AC-named; tests precede the implementation
 - [ ] Front to back: A.5 drives the change in a real browser and asserts the server's view (units after trades)
-- [ ] WS4 has reviewed the WalkBoard and TvAuction named edits
+- [x] WS4 has reviewed the WalkBoard and TvAuction named edits
 - [ ] The render gate passes against the mocks at 1b69e37
 - [ ] `pnpm typecheck` · `pnpm test` · `pnpm e2e` · `tsx e2e/auction-steps.ts` green; the sim is unchanged (no rule changes)
 - [ ] Goal check in a browser: a person reads the two lines closing in and sees a trade where they meet
