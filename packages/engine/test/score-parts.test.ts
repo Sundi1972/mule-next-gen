@@ -93,7 +93,7 @@ function endState(seed: number): GameState {
   const players = Array.from({ length: rng.int(2, 6) }, (_, i) => ({ id: `p${i}`, name: `P${i}`, isAi: true }));
   const state = createGame({ seed, players });
   const lastMonth = rng.int(1, state.maxMonths);
-  while (state.phase !== 'gameOver' && state.month < lastMonth) playMonth(state, rng);
+  while (state.phase !== 'gameOver' && state.month <= lastMonth) playMonth(state, rng);
   perturb(state, rng);
   return state;
 }
@@ -138,15 +138,17 @@ describe('T-AC-6: score parts add up and score() is unchanged', () => {
     }
   });
 
-  it('the 200 states cover Collapse, fractional money and MULE owners', () => {
+  it('the 200 states cover Collapse, fractional money, MULE owners and finished games', () => {
     const collapse = states.filter((s) => colonyFailed(s)).length;
     const passed = states.length - collapse;
     const fractional = states.filter((s) => s.players.some((p) => !Number.isInteger(p.money))).length;
     const muleOwners = states.filter((s) => s.tiles.some((t) => t.owner && t.outfit)).length;
+    const finished = states.filter((s) => s.phase === 'gameOver').length;
     expect(collapse).toBeGreaterThanOrEqual(40);
     expect(passed).toBeGreaterThanOrEqual(40);
     expect(fractional).toBeGreaterThanOrEqual(40);
     expect(muleOwners).toBeGreaterThanOrEqual(40);
+    expect(finished).toBeGreaterThanOrEqual(5);
   });
 
   it('RULE-3 example: 2140 money, 610 goods, 6 plots, 5 MULEs at 150, air passed → 5300, cut 0', () => {
