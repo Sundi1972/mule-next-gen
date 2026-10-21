@@ -241,7 +241,7 @@ export function Hall({
             {mules === 0 ? (
               <span className="mb-[18%] font-mono text-sm font-bold text-alert">SOLD OUT</span>
             ) : (
-              Array.from({ length: Math.min(mules, wide ? 4 : 3) }, (_, i) => <Mule key={i} size={wide ? 96 : 30} facing={i % 2 ? 'left' : 'right'} className="relative -mx-1 mb-1" />)
+              Array.from({ length: Math.min(mules, 3) }, (_, i) => <Mule key={i} size={wide ? 84 : 30} facing={i % 2 ? 'left' : 'right'} className="relative -mx-1 mb-1" />)
             )}
           </span>
           <span className="flex items-baseline justify-center gap-2 bg-void/40 py-0.5">
