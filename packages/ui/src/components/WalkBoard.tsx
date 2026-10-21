@@ -209,7 +209,7 @@ export function WalkBoard({
         </div>
 
         {/* Names along the bottom; a player who passed sits there, off the board. */}
-        <div className={cx('absolute inset-x-0 bottom-0 flex border-t border-holo-faint bg-void/90', tv ? 'h-10' : 'h-6')} style={{ paddingRight: gutter }}>
+        <div className={cx('absolute inset-x-0 bottom-0 flex border-t border-holo-faint bg-void/90', tv ? 'h-10' : 'h-6')} style={{ paddingRight: gutter }} data-testid="walk-names">
           {walkers.map((w) => (
             <span
               key={w.id}
