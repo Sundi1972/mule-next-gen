@@ -357,6 +357,20 @@ const SCARCITY_FIXTURES = [
     ...(out.lifts.length !== 0 ? [`${out.lifts.length} seam lifts kept with no plot lowered to pay for them`] : []),
     ...(smithoreCount(out.ground) !== 7 ? [`${smithoreCount(out.ground)} good Smithore plots, the cut leaves 7`] : []),
   ]),
+  // Plains everywhere but the good plots and plot 54: lifting plains would raise its mean least (many plots), but its
+  // odds give no good Smithore, so the one seam lift must be the hills plot 54.
+  scarcityFixture(
+    'only capable terrain lifted',
+    {
+      players: 2,
+      width: 61,
+      height: 1,
+      smithore: goodAt(0, 1, 2, 11, 22, 33, 44, 55),
+      plains: Array.from({ length: 61 }, (_, i) => i).filter((i) => ![0, 1, 2, 11, 22, 33, 44, 55, 54].includes(i)),
+    },
+    [],
+    (out) => (out.lifts.length === 0 ? ['no seam lift; the fixture needs one'] : []),
+  ),
   // The cut lowers plot 0 (rated 2 after), the cheapest plot to lift next to the lone plot 1; it must not be lifted again.
   scarcityFixture(
     'lowered plot not lifted',
