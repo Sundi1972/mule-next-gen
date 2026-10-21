@@ -67,25 +67,22 @@ try {
   const lobbySeats = phone.getByTestId('seats').locator('li');
   const hostMark = lobbySeats.nth(0).getByRole('img', { name: 'Mollox' });
   await phone.getByTestId('species-mollox').click({ timeout: 3_000 });
-  const zipwingChip = await phone.getByTestId('species-zipwing').locator('svg').innerHTML();
   await hostMark.waitFor({ timeout: 3_000 });
   check((await phone.getByTestId('species-mollox').getAttribute('aria-pressed')) === 'true', 'the Mollox chip shows as chosen');
   check((await lobbySeats.nth(1).getByRole('img', { name: 'Bramblet' }).count()) === 1, 'the first AI (seat 2) keeps its default, Bramblet');
   const tvLobbySeats = tv.locator('li');
   await tvLobbySeats.nth(0).getByRole('img', { name: 'Mollox' }).waitFor({ timeout: 3_000 });
   check((await tvLobbySeats.nth(1).getByRole('img', { name: 'Bramblet' }).count()) === 1, 'the TV lobby shows the first AI as a Bramblet');
-  // The shell labels your creature "You", so after Start it is recognised by its drawing.
-  const molloxDrawing = await hostMark.locator('svg').innerHTML();
-  check(molloxDrawing !== zipwingChip, 'a Mollox is drawn differently from the seat default, a Zipwing');
 
   await phone.getByRole('button', { name: 'Start game' }).click();
 
-  // B-AC-1: after Start the host plays a Mollox, on the phone and on the TV.
-  const youMark = phone.locator('[data-phase]').getByRole('img', { name: 'You', exact: true });
-  check((await youMark.locator('svg').innerHTML({ timeout: 5_000 })) === molloxDrawing, 'the phone shell draws your creature as a Mollox');
-  await tv.locator('li').filter({ hasText: 'Heiko' }).getByRole('img', { name: 'Mollox' }).first().waitFor({ timeout: 5_000 });
-  check((await tv.getByRole('img', { name: 'Zipwing' }).count()) === 0, 'nobody on the TV plays the seat-1 default, Zipwing');
-  check((await tv.getByRole('img', { name: 'Bramblet' }).count()) >= 1, 'the TV still shows the first AI as a Bramblet');
+  // B-AC-1: after Start the host plays a Mollox, on the phone and on the TV's game screen (not its lobby).
+  await phone.locator('[data-phase]').getByRole('img', { name: 'You, Mollox', exact: true }).waitFor({ timeout: 5_000 });
+  const tvGame = tv.locator('[data-phase]');
+  await tvGame.waitFor({ timeout: 5_000 });
+  await tvGame.locator('li').filter({ hasText: 'Heiko' }).getByRole('img', { name: 'Mollox' }).first().waitFor({ timeout: 3_000 });
+  check((await tvGame.getByRole('img', { name: 'Zipwing' }).count()) === 0, 'nobody in the TV game plays the seat-1 default, Zipwing');
+  check((await tvGame.getByRole('img', { name: 'Bramblet' }).count()) >= 1, 'the TV game still shows the first AI as a Bramblet');
 
   // Month 1.
   await phone.getByRole('button', { name: "I'm ready" }).click();
