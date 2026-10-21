@@ -1,9 +1,9 @@
 import type { AddressInfo } from 'node:net';
-import type { AiAction } from '@mule/ai';
+import { Brain, type AiAction } from '@mule/ai';
 import type { MuleView, ServerEnvelope } from '@mule/protocol';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
-import { POLITICS, WALK, type GameState } from '@mule/engine';
+import { openPlanning, POLITICS, WALK, type GameState } from '@mule/engine';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
 import { createMuleServer, type MuleServer } from '../src/server.js';
 import { fakeContext } from './fake-context.js';
@@ -12,6 +12,7 @@ let running: MuleServer | null = null;
 afterEach(async () => {
   await running?.close();
   running = null;
+  vi.restoreAllMocks();
 });
 
 /** A real server on a free port, and Brix's phone seated in a started room with one AI seat. */
@@ -72,8 +73,8 @@ describe('politics over the wire', () => {
   it('C9: the wire accepts run, vote and setTax and refuses malformed ones', async () => {
     const phone = await seatedPhone({ politics: true });
     phone.intent({ type: 'run', office: 'governor' });
-    const running = await phone.waitForGame((g) => g.me?.politics?.running === 'governor');
-    expect(running.politics!.election!.candidates.governor).toEqual([running.me!.id]);
+    const candidate = await phone.waitForGame((g) => g.me?.politics?.running === 'governor');
+    expect(candidate.politics!.election!.candidates.governor).toEqual([candidate.me!.id]);
 
     // Well-formed, so they reach the rules, which refuse them in nominate.
     let error = phone.nextError();
@@ -137,19 +138,35 @@ function tickFor(g: Started, ms: number) {
   for (let t = 0; t < Math.round(ms / WALK.tickMs); t++) g.advance(WALK.tickMs);
 }
 
+/** Arranges each player's money, the ground truth for who is appointed. */
+function setMoney(game: MuleGame, money: Record<string, number>) {
+  for (const p of engineOf(game).players) p.money = money[p.id]!;
+}
+
 /** Every screen at once: the three phones and the board. */
 const screens = (game: MuleGame) => [...humans.map((id) => game.viewFor(id)), game.viewFor(null)];
 
 describe('the election runs first in planning', () => {
   it('C9: in month 1 the planning timer starts only after the election is over', () => {
+    // Each AI seat's land plan is a 'land' ask of its brain, made when planning proper starts.
+    const landAsks: { seat: string; at: number }[] = [];
+    const ask = Brain.prototype.ask;
+    let now = () => 0;
+    vi.spyOn(Brain.prototype, 'ask').mockImplementation(function (this: Brain, ...args) {
+      if (args[0] === 'land') landAsks.push({ seat: this.mind.me, at: now() });
+      return ask.apply(this, args) as never;
+    });
     const g = started();
+    now = g.ctx.now;
     let overAt: number | null = null;
     for (let ms = 0; ms < 120_000 && overAt === null; ms += WALK.tickMs) {
       expect(g.game.viewFor(null).phaseEndsAt, `no planning timer at ${g.ctx.now()} ms`).toBeNull();
+      expect(landAsks, `no AI land plan during the election, at ${g.ctx.now()} ms`).toEqual([]);
       g.advance(WALK.tickMs);
       if (election(g.game).stage === 'over') overAt = g.ctx.now();
     }
     expect(overAt, 'nobody ran: nominate, then the reveal').toBe(POLITICS.nominateMs + POLITICS.revealMs);
+    expect(landAsks, 'one land plan per AI seat, as the election ends').toEqual([{ seat: 'ai1', at: overAt }]);
     expect(g.game.viewFor(null).phase).toBe('planning');
     expect(g.game.viewFor(null).phaseEndsAt).toBe(overAt! + PHASE_MS.planning);
     g.advance(PHASE_MS.planning - 1);
@@ -188,19 +205,40 @@ describe('the election runs first in planning', () => {
 
   it('C9: an away seat is marked Done', () => {
     const g = started();
+    g.game.handle('lena', { type: 'run', office: 'governor' });
+    g.game.handle('brix', { type: 'run', office: 'governor' });
     g.game.handle('lena', { type: 'ready' });
+    g.game.handle('brix', { type: 'ready' });
     g.game.connectionChanged('ossa', false);
+    expect(g.game.viewFor(null).phase, 'a dropped phone does not end planning during the election').toBe('planning');
+    g.advance(WALK.tickMs);
+    expect(election(g.game).stage, 'Ossa counted as Done, so nominate ended').toBe('ballot');
+
+    g.game.handle('lena', { type: 'vote', office: 'governor', candidate: 'lena' });
+    g.game.handle('lena', { type: 'ready' });
     g.game.connectionChanged('brix', false);
-    expect(g.game.viewFor(null).phase, 'dropped phones do not end planning during the election').toBe('planning');
     g.game.connectionChanged('lena', false);
     expect(g.game.viewFor(null).phase, 'not even when every phone has dropped').toBe('planning');
-    expect(election(g.game).stage).toBe('nominate');
+    expect(election(g.game).stage).toBe('ballot');
     g.advance(WALK.tickMs);
-    expect(election(g.game).stage, 'Ossa counted as Done, so nominate ended').not.toBe('nominate');
+    expect(election(g.game).stage, 'Brix and Ossa counted as Done, so the ballot ended').toBe('reveal');
     expect(g.game.viewFor(null).phase).toBe('planning');
   });
 
-  it('C9: month 2 has no election', () => {
+  it('C9: a phone that reconnects during the election is no longer Done', () => {
+    const g = started();
+    g.game.connectionChanged('brix', false);
+    g.advance(WALK.tickMs);
+    expect(election(g.game).done).toContain('brix');
+    g.game.connectionChanged('brix', true);
+    expect(election(g.game).done, 'back at the table, Brix decides for himself').not.toContain('brix');
+    g.game.handle('lena', { type: 'ready' });
+    g.game.handle('ossa', { type: 'ready' });
+    g.advance(WALK.tickMs);
+    expect(election(g.game).stage, 'nominate waits for Brix').toBe('nominate');
+  });
+
+  it('C9: month 2 has no election; month 4 opens one, with no stale deadline', () => {
     const g = started({ phaseScale: 0.1 });
     for (let ms = 0; ms < 600_000 && g.game.viewFor(null).month === 1; ms += 100) g.advance(100);
     const view = g.game.viewFor(null);
@@ -209,13 +247,24 @@ describe('the election runs first in planning', () => {
     expect(view.politics!.election).toBeNull();
     expect(view.phaseEndsAt, 'planning runs on its timer at once').not.toBeNull();
     expect(view.phaseEndsAt! - g.ctx.now()).toBeGreaterThan(PHASE_MS.planning * 0.1 - 100);
+
+    for (let ms = 0; ms < 1_200_000 && g.game.viewFor(null).month < 4; ms += 100) g.advance(100);
+    const month4 = g.game.viewFor(null);
+    expect(month4.month).toBe(4);
+    expect(month4.phase).toBe('planning');
+    expect(month4.politics!.election!.stage).toBe('nominate');
+    expect(month4.phaseEndsAt, "no deadline left over from upkeep").toBeNull();
   });
 
   it.each([1, 0.1])("C9: the election's clocks scale with phaseScale (%s)", (phaseScale) => {
     const g = started({ phaseScale });
     const nominate = POLITICS.nominateMs * phaseScale;
     expect(election(g.game).total, 'the stage length in game seconds').toBe(POLITICS.nominateMs / 1_000);
-    tickFor(g, nominate - WALK.tickMs);
+    // A stalled server loop: one late tick moves the clock at most three ticks' worth.
+    g.advance(10_000);
+    expect(election(g.game).stage).toBe('nominate');
+    expect(election(g.game).seconds).toBeCloseTo(POLITICS.nominateMs / 1_000 - (3 * WALK.tickMs) / phaseScale / 1_000);
+    tickFor(g, nominate - 3 * WALK.tickMs - WALK.tickMs);
     expect(election(g.game).stage).toBe('nominate');
     expect(election(g.game).seconds).toBeCloseTo(WALK.tickMs / phaseScale / 1_000);
     g.advance(WALK.tickMs);
@@ -232,6 +281,8 @@ describe('the election runs first in planning', () => {
 describe('the politics view', () => {
   it('B-AC-1 (server): two humans run for Governor and vote; after the reveal every view shows the same result in the same tick, and the winner has the tax desk', () => {
     const g = started();
+    // Nobody runs for Sheriff: the richest player who is not the new Governor is appointed.
+    setMoney(g.game, { lena: 900, brix: 1_000, ossa: 1_300, ai1: 1_100 });
     g.game.handle('lena', { type: 'run', office: 'governor' });
     g.game.handle('brix', { type: 'run', office: 'governor' });
     allReady(g.game);
@@ -256,19 +307,26 @@ describe('the politics view', () => {
       }
       g.advance(WALK.tickMs);
     }
-    expect(shownAt! - revealAt, 'shown after the countdown').toBeGreaterThanOrEqual(POLITICS.revealCountdownMs);
+    expect(shownAt! - revealAt, 'shown the moment the countdown ends').toBe(POLITICS.revealCountdownMs);
 
+    tickFor(g, 1_000);
+    const line = 'Brix is Governor (elected) · Ossa is Sheriff (appointed).';
     for (const view of screens(g.game)) {
       const governor = view.politics!.election!.result!.governor;
       expect(governor).toEqual({ winner: 'brix', how: 'votes', tallies: [{ id: 'brix', votes: 2 }, { id: 'lena', votes: 1 }] });
+      expect(view.politics!.election!.result!.sheriff).toEqual({ winner: 'ossa', how: 'appointed', tallies: [] });
       expect(view.politics!.governor).toBe('brix');
-      expect(view.news[0]).toMatch(/Brix is Governor/);
+      expect(view.news[0]).toBe(line);
+      expect(view.news.filter((n) => n === line), 'the reveal makes the news once').toHaveLength(1);
     }
     const brix = g.game.viewFor('brix');
     expect(brix.politics!.weights.find((w) => w.id === 'brix'), 'month 1: no land, no taxes paid, no Baron').toEqual({ id: 'brix', votes: 1, parts: { base: 1, land: 0, reputation: 0, baron: 0, taxes: 0 } });
     expect(brix.politics!.tax).toEqual({ percent: 5, start: 5, low: 0, high: 10 });
     expect(brix.me!.politics).toEqual({ running: 'governor', ballot: { governor: 'brix' }, canRun: { governor: 'closed', sheriff: 'closed' } });
     expect(brix.phaseEndsAt, 'planning has started, so the Governor can set the tax').not.toBeNull();
+    expect(() => g.game.handle('lena', { type: 'setTax', percent: 8 })).toThrow('Only the Governor sets the tax');
+    g.game.handle('brix', { type: 'setTax', percent: 8 });
+    for (const view of screens(g.game)) expect(view.politics!.tax.percent).toBe(8);
   });
 
   it('B-AC-2: after the Governor sets 8%, the next auction sale is taxed at 8%', () => {
@@ -320,8 +378,26 @@ describe('the politics view', () => {
 
   it('B-AC-3 (view): nobody runs → the views show the richest as Governor and the richest other as Sheriff, how appointed', () => {
     const g = started();
-    const money = { lena: 900, brix: 1_200, ossa: 1_100, ai1: 1_000 };
-    for (const p of engineOf(g.game).players) p.money = money[p.id as keyof typeof money];
+    setMoney(g.game, { lena: 900, brix: 1_200, ossa: 1_100, ai1: 1_000 });
+    // Brix holds 10 plots and has paid 650 in sales tax; planning opens again so he is the month's Land Baron.
+    const state = engineOf(g.game);
+    state.tiles.slice(0, 10).forEach((t) => (t.owner = 'brix'));
+    state.treasury.paid.brix = 650;
+    state.treasury.money = 412;
+    openPlanning(state);
+
+    g.game.handle('ossa', { type: 'run', office: 'sheriff' });
+    expect(g.game.viewFor('ossa').me!.politics!.running).toBe('sheriff');
+    g.game.handle('ossa', { type: 'run', office: null });
+    expect(g.game.viewFor('ossa').me!.politics!.running).toBeNull();
+    expect(g.game.viewFor(null).politics!.term, 'nobody holds office yet').toBeNull();
+
+    const board = g.game.viewFor(null).politics!;
+    expect(board.baron).toBe('brix');
+    expect(board.fund).toBe(g.game.viewFor(null).treasury.money);
+    expect(board.fund).toBe(412);
+    expect(board.weights.find((w) => w.id === 'brix'), '1 + 10 plots + Baron + 650 tax paid (capped at 2)').toEqual({ id: 'brix', votes: 5, parts: { base: 1, land: 1, reputation: 0, baron: 1, taxes: 2 } });
+
     allReady(g.game);
     untilStage(g, 'over');
     for (const view of screens(g.game)) {
@@ -387,9 +463,11 @@ function expectBoardKeys(board: MuleView) {
   const e = politics.election!;
   expect(keysOf(e), NEW_FIELD).toEqual(['candidates', 'done', 'result', 'seconds', 'stage', 'total', 'voted']);
   expect(keysOf(e.candidates), NEW_FIELD).toEqual(['governor', 'sheriff']);
+  const seatIds = people.map((p) => p.id);
+  if (e.result) expect(keysOf(e.result), NEW_FIELD).toEqual(['governor', 'sheriff']);
   for (const office of Object.values(e.result ?? {})) {
     expect(keysOf(office), NEW_FIELD).toEqual(['how', 'tallies', 'winner']);
     for (const t of office.tallies) expect(keysOf(t), NEW_FIELD).toEqual(['id', 'votes']);
   }
-  for (const id of [...e.voted, ...e.done]) expect(typeof id).toBe('string');
+  for (const id of [...e.voted, ...e.done]) expect(seatIds, 'voted and done name seats, nothing more').toContain(id);
 }
