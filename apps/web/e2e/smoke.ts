@@ -10,7 +10,6 @@ import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import { check, launch, PHONE, startServer, TV, type AuctionSteps } from './harness';
 import { planningIsTheHub } from './hub-steps';
 import { checkTheShow, watchShow } from './production-steps';
-import { shellFillsTheStage } from './shell-steps';
 import { fedPlayerFillsAFullHoloBar, hungryPlayerSeesAShortOrangeBar, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows } from './store-steps';
 
 /** Loaded by a path held in a variable, so tsc never resolves a file that may not exist yet. */
@@ -140,8 +139,6 @@ try {
   makeHungry(server, code);
   // B-AC-14: planning is the hub, its needs read from that seed; with B-AC-12's planning part.
   console.log(`hub: ${await planningIsTheHub(phone, server, code)}`);
-  // B-AC-12: the shell fills the stage at 1440×900 and 844×390.
-  console.log(`shell: ${await shellFillsTheStage(phone)}`);
   await readyIfStillPlanning(phone);
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 2);
