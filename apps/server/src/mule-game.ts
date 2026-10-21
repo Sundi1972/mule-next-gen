@@ -700,5 +700,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   dispose(): void {
     for (const cancel of this.cancels) cancel();
     this.cancels = [];
+    this.brain.finish();
   }
 }

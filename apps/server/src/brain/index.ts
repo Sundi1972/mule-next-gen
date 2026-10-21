@@ -18,7 +18,7 @@ export interface BrainService {
   deciderFor(seat: BrainSeat): Decider | null;
   /** The seat's onDecision callback: passes its lines to `say`, a few a month (RULE-2). Never throws. */
   chatter(seat: BrainSeat, say: (line: string) => void): (record: DecisionRecord) => void;
-  /** Writes the game's total line and closes the game: no decider makes a call for it afterwards. */
+  /** Writes the game's total line and closes the game: no decider makes a call for it afterwards. A second call does nothing. */
   finish(): void;
 }
 
