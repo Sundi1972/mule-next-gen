@@ -278,20 +278,21 @@ async function checkTheFloorClearsTheNames(phone: Page, tv: Page): Promise<boole
 
 /**
  * FM-2: every walker on the auction board is drawn above the names strip. Read in one pass, since walkers move.
- * False, measuring nothing, unless the host's walker is still a buyer on that board.
+ * False, measuring nothing, unless the host's walker is still a buyer on that board and has stopped sliding.
  */
 async function checkWalkersClearTheNames(page: Page, screen: string): Promise<boolean> {
   const board = page.locator('[data-phase=auction]').getByTestId('walk-board');
-  const { hostSide, namesTop, walkers } = await board.evaluate(
+  const { hostSide, hostSliding, namesTop, walkers } = await board.evaluate(
     (el, host) => ({
       hostSide: el.querySelector(`[data-testid=${host}]`)?.getAttribute('data-side') ?? null,
+      hostSliding: (el.querySelector(`[data-testid=${host}]`)?.getAnimations().length ?? 0) > 0,
       namesTop: el.querySelector('[data-testid=walk-names]')?.getBoundingClientRect().top ?? null,
       walkers: [...el.querySelectorAll('[data-testid^="walker-"]')].map((w) => ({ id: w.getAttribute('data-testid'), bottom: w.getBoundingClientRect().bottom })),
     }),
     HOST_WALKER,
     { timeout: PRESS_MS },
   );
-  if (hostSide !== 'buyer') return false;
+  if (hostSide !== 'buyer' || hostSliding) return false;
   check(namesTop !== null, `FM-2: the ${screen} board has a names strip`);
   check(walkers.length > 0, `FM-2: the ${screen} board draws a walker`);
   for (const w of walkers) {
@@ -316,13 +317,15 @@ async function checkTheScoresAddUp(phone: Page, tv: Page): Promise<void> {
     return readNumber(await row.locator('td').last().textContent(), `the phone's part-${part}`);
   };
   const parts = Object.fromEntries(await Promise.all(PART_LINES.map(async (p) => [p, await line(p)] as const)));
-  const cut = Math.abs(await line('collapse'));
+  // The Collapse line is shown as a negative number; read it signed so a positive one fails.
+  const cut = -(await line('collapse'));
+  check(cut >= 0, `B-AC-3: the phone's Collapse line takes points off, but it reads +${-cut}`);
   const total = await line('total');
   const sum = PART_LINES.reduce((s, p) => s + parts[p]!, 0) - cut;
   check(sum === total, `B-AC-3: the phone's lines ${PART_LINES.map((p) => `${p} ${parts[p]}`).join(' + ')} − collapse ${cut} = ${sum}, but its final score reads ${total}`);
 
   await tvEnd.getByTestId('tv-scores').waitFor({ timeout: 5_000 });
-  const hostRow = tvEnd.getByTestId('tv-scores').locator('li').filter({ hasText: 'Heiko' });
+  const hostRow = tvEnd.getByTestId('tv-scores').locator('li').filter({ has: tv.getByText('Heiko', { exact: true }) });
   check((await hostRow.count()) === 1, 'B-AC-3: the TV lists the host once in its final scores');
   const onTv = readNumber(await hostRow.locator('[data-num]').last().textContent(), "the host's TV score");
   check(onTv === total, `B-AC-3: the phone's final score ${total} is the host's score on the TV, ${onTv}`);
