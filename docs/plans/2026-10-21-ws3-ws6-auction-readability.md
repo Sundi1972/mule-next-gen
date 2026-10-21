@@ -67,6 +67,7 @@ HC-1 (concepts, not copies) · HC-2 (the TV shows no holdings except the goods a
 - **Wave 1:** A.1 (C1, the board) and A.2 (C2, the contract) in parallel. Their files are disjoint, and A.2's `units` field is optional to every reader.
 - **Wave 2:** A.3 (goods screens) and A.4 (land line) in parallel, both after A.1. A.3 also needs A.2. Their screen files are disjoint, and both consume the frozen board props.
 - **Wave 3:** A.5 (e2e + render gate) after every branch is merged into `ws3-ws6a`.
+- **WS6-PR-1: COMPLETE.** Sub-PR #44 merged into ws3-auctions; lane PR #47 merged into feat/strategist with Heiko's OK (trunk 9c06f51). Goal check DELIVERED in a browser: on the TV the tags closed 12/6 → 9/6, both lines gave way at the trade ("MET: TRADING"), and came back at 9/8. CI now runs `tsx e2e/auction-steps.ts` after the smoke (named edit in WS4's ci.yml, PM ruling).
 - **Status (2026-10-22):** A.1–A.4 COMPLETE and merged into ws3-ws6a, each reviewed (A.1 and A.2 after one fix round). A.1 also gained WS4's floor-inset condition: the units label clears the names strip (measured 4 px phone, 2 px TV). WS4 has approved both named edits (WalkBoard, TvAuction). ws3-ws6a has merged the lane and feat/strategist 8683d21. A.5 COMPLETE: reviewed, two fix rounds, then a scoped re-review READY. The render gate's scoped run passes 16/16; the literal run has 0 DIFFERS, and its findings are only trunk testids the mock omits. Lead rulings: on an exact tie the first walker keeps the line; zero surplus reads "3 (0)"; the land line stays on the result screen at the winning bid.
 - No migration slot: no state or storage changes.
 
@@ -107,13 +108,13 @@ HC-1 (concepts, not copies) · HC-2 (the TV shows no holdings except the goods a
 - [x] **Step 3: Commit** `test(web): the auction lines, units and stock front to back (verifies B-AC-1, B-AC-2, B-AC-3, B-AC-5)`.
 
 ### WS6-PR-1 merge gate
-- [ ] B-AC-1/2/3/5, T-AC-1 and T-AC-2 are green and AC-named; tests precede the implementation
-- [ ] Front to back: A.5 drives the change in a real browser and asserts the server's view (units after trades)
+- [x] B-AC-1/2/3/5, T-AC-1 and T-AC-2 are green and AC-named; tests precede the implementation
+- [x] Front to back: A.5 drives the change in a real browser and asserts the server's view (units after trades)
 - [x] WS4 has reviewed the WalkBoard and TvAuction named edits
-- [ ] The render gate passes against the mocks at 1b69e37
-- [ ] `pnpm typecheck` · `pnpm test` · `pnpm e2e` · `tsx e2e/auction-steps.ts` green; the sim is unchanged (no rule changes)
-- [ ] Goal check in a browser: a person reads the two lines closing in and sees a trade where they meet
-- [ ] The PM has the PR link and results; Heiko's OK before the lane merges into feat/strategist
+- [x] The render gate passes against the mocks at 1b69e37
+- [x] `pnpm typecheck` · `pnpm test` · `pnpm e2e` · `tsx e2e/auction-steps.ts` green; the sim is unchanged (no rule changes)
+- [x] Goal check in a browser: a person reads the two lines closing in and sees a trade where they meet
+- [x] The PM has the PR link and results; Heiko's OK before the lane merges into feat/strategist
 
 ## Risks
 - **The board edit collides with WS4's own WalkBoard work** (PR-2c's insets landed in #26). Mitigation: A.1 starts from the trunk's WalkBoard, and WS4 reviews it.
