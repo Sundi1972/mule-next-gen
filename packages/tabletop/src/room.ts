@@ -51,8 +51,10 @@ export interface RoomOptions<Intent, GameView> {
   isUserError?(err: unknown): boolean;
   now?(): number;
   newToken?(): string;
-  /** Called once the host has closed the room and it is disposed. */
+  /** Called once the room has ended, closed by the host or stopped by a game error, and is disposed. */
   onClose?(): void;
+  /** Hears a game error that ended the room, for logging. The players are only told the table stopped. */
+  onError?: (err: unknown) => void;
 }
 
 interface Seat<View> extends SeatInfo {
@@ -76,6 +78,7 @@ export class Room<Intent, View> {
   private readonly picks: readonly string[] | undefined;
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private started = false;
+  private endedBy: 'closed' | 'error' | null = null;
   private nextSeat = 1;
   private chatId = 0;
   private broadcastQueued = false;
@@ -93,13 +96,21 @@ export class Room<Intent, View> {
       now: options.now ?? Date.now,
       newToken: options.newToken ?? (() => crypto.randomUUID()),
       onClose: options.onClose ?? (() => {}),
+      onError: options.onError ?? (() => {}),
     };
     this.game = options.createGame({
       now: this.opts.now,
       schedule: (ms, fn) => {
         const timer = setTimeout(() => {
           this.timers.delete(timer);
-          fn();
+          if (this.endedBy) return;
+          // A throw here would be uncaught and take the whole server down with this one table.
+          try {
+            fn();
+          } catch (err) {
+            this.opts.onError(err);
+            this.fail();
+          }
         }, ms);
         this.timers.add(timer);
         return () => {
@@ -123,10 +134,17 @@ export class Room<Intent, View> {
 
   /** Handles one message from a screen. `from` is null until the screen has joined. */
   receive(conn: Connection<View>, from: { seatId: string | null }, msg: ClientEnvelope<Intent>): void {
+    // A failed game must never see another message. A closed room has no game running and still refuses screens out loud.
+    if (this.endedBy === 'error') return;
     try {
       this.apply(conn, from, msg);
     } catch (err) {
-      if (!this.opts.isUserError(err)) throw err;
+      if (!this.opts.isUserError(err)) {
+        // A bug ends this table only; its state can no longer be trusted, and every other table plays on.
+        this.opts.onError(err);
+        this.fail();
+        return;
+      }
       conn.send({ t: 'error', message: (err as Error).message });
     }
   }
@@ -285,7 +303,18 @@ export class Room<Intent, View> {
   private close(by: string): void {
     this.requireHost(by);
     if (this.started) throw new TableError('The game has already started');
-    this.everyone((c) => c.send({ t: 'removed', reason: 'closed' }));
+    this.end('closed');
+  }
+
+  /** Stops the room after a game error: every screen is told and let go, then the room is disposed. */
+  fail(): void {
+    this.end('error');
+  }
+
+  private end(reason: 'closed' | 'error'): void {
+    if (this.endedBy) return;
+    this.endedBy = reason;
+    this.everyone((c) => c.send({ t: 'removed', reason }));
     this.seats.length = 0;
     this.boards.clear();
     this.dispose();

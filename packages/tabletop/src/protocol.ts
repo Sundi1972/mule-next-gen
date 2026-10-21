@@ -34,7 +34,7 @@ export type ServerEnvelope<GameView> =
   | { t: 'pong'; clientTime: number; serverTime: number }
   | { t: 'error'; message: string }
   /** This screen no longer holds a seat or watches the room; the room refuses what it sends next. */
-  | { t: 'removed'; reason: 'kicked' | 'closed' | 'moved' };
+  | { t: 'removed'; reason: 'kicked' | 'closed' | 'moved' | 'error' };
 
 export interface ChatMessage {
   id: number;
