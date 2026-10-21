@@ -38,6 +38,17 @@ describe("T-AC-8: zoomBox for RULE-4's examples", () => {
     expectInsideMap(box!);
   });
 
+  it('T-AC-8: a wide strip along the bottom edge: width sets the scale, the view grows down and stays inside', () => {
+    const box = zoomBox(map(mine([3, 10], [14, 10])), W, H, ME);
+
+    expect(box).not.toBeNull();
+    // The box spans x 2..16 and y 9..11 (clipped): 14 wide binds, so the view is 11/scale tall, pushed up to fit.
+    expect(box!.scale).toBeCloseTo(W / 14, 5);
+    expect(box!.x).toBeCloseTo(2, 5);
+    expect(box!.y).toBeCloseTo(H - H / (W / 14), 5);
+    expectInsideMap(box!);
+  });
+
   it('T-AC-8: clips the box at the top-left corner and keeps the view inside the map', () => {
     const box = zoomBox(map(mine([0, 0], [1, 0])), W, H, ME);
 
