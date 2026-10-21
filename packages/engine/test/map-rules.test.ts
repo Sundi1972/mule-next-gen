@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { checkMap } from '../src/index.js';
+import { checkMap, createRng } from '../src/index.js';
+import { legacyGenerateMap } from './fixtures/legacy-map.js';
 import { buildMap, MID_MAP, MID_SPEC, SMALL_MAP, withGround, withTerrain, type TestMap } from './fixtures/map-fixtures.js';
 
 function rulesBroken(map: TestMap, players: number): string[] {
@@ -74,5 +75,12 @@ describe('checkMap', () => {
 
     expect(rulesBroken(noCrystite, 4)).toEqual(['S10']);
     expect(details(noCrystite, 4, 'S10')).toContain('crystite');
+  });
+
+  it("T-AC-2: today's generator fails S7 on seed 1", () => {
+    const report = checkMap(legacyGenerateMap(4, createRng(1)), 4);
+
+    expect(report.violations.map((v) => v.rule)).toContain('S7');
+    expect(report.metrics.bends).toBe(0);
   });
 });
