@@ -492,11 +492,21 @@ describe('RULE-3: tally and winner', () => {
 
 describe('FM-WS3-4: what-if copies', () => {
   it('FM-WS3-4: playing a month forward on a cloneForSim copy leaves the real game\'s election and offices untouched', () => {
-    const state = governorBallot();
+    const state = newGame();
+    runFor(state, 'lena', 'governor');
+    runFor(state, 'brix', 'governor');
+    const nominated = structuredClone(state.politics);
+    const nominating = cloneForSim(state);
+    runFor(nominating, 'ossa', 'governor');
+    runFor(nominating, 'lena', 'sheriff');
+    expect(state.politics).toEqual(nominated);
+
+    runOutClock(state);
     castVote(state, 'ossa', 'governor', 'brix');
     const before = structuredClone(state.politics);
 
     const sim = cloneForSim(state);
+    castVote(sim, 'ossa', 'governor', 'lena');
     castVote(sim, 'ai1', 'governor', 'lena');
     toNextPlanning(sim);
     expect(sim.politics?.governor).not.toBeNull();
