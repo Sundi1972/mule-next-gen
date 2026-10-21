@@ -1,7 +1,7 @@
 import type { GameContext } from '@tabletop/core';
 import { describe, expect, it } from 'vitest';
 import { WALK } from '@mule/engine';
-import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
+import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
 
 /**
  * A context with a manual clock that also records the wait each timer was
@@ -92,6 +92,8 @@ describe('phaseScale and maxMonths', () => {
     expect(game.viewFor(null).phase).toBe('planning');
     advance(1);
     expect(game.viewFor(null).phase).toBe('landGrant');
+    // The land grant's light keeps its real pace, so AI thumbs can still beat it.
+    expect(waits.at(-1)).toBe(GRANT_TICK_MS);
   });
 
   it.each([
@@ -103,20 +105,17 @@ describe('phaseScale and maxMonths', () => {
     const view = game.viewFor('s1');
     const now = ctx.now();
     expect(view.me!.devEndsAt! - now).toBeCloseTo(view.me!.devSeconds * msPerSecond, 6);
-    // Development's own limit, 55 s (a full 50 s clock plus 5), scaled the same way.
-    expect(view.phaseEndsAt! - now).toBeCloseTo(55 * msPerSecond, 6);
+    expect(view.phaseEndsAt! - now).toBeCloseTo(PHASE_MS.development * (phaseScale ?? 1), 6);
     // Each player's clock is checked the moment it runs out.
     expect(waits).toContainEqual(expect.closeTo(view.me!.devSeconds * msPerSecond + 1, 6));
   });
 
-  it.each([
-    // phaseScale, game seconds left on the status screen after one 100 ms tick, after a 1 s stall
-    [undefined, 5.9, 5.7],
-    [1, 5.9, 5.7],
-    // A tenth of real time: one tick is a whole game second; the stall clamp (300 ms) applies before scaling.
-    [0.1, 5, 3],
-  ])('T-AC-2: with phaseScale %s the auction status clock reads %s s after a tick and %s s after a stall', (phaseScale, afterTick, afterStall) => {
+  it.each([[undefined], [1], [0.1]])('T-AC-2: with phaseScale %s the auction status clock runs tick / phaseScale, clamped for a stall before scaling', (phaseScale) => {
     const opts = phaseScale === undefined ? undefined : { phaseScale };
+    const scale = phaseScale ?? 1;
+    // Game seconds left on the status screen after one tick, and after a 1 s stall clamped to three ticks.
+    const afterTick = (WALK.statusMs - WALK.tickMs / scale) / 1_000;
+    const afterStall = (WALK.statusMs - (WALK.tickMs * 3) / scale) / 1_000;
     const ticked = toAuction(opts);
     ticked.advance(WALK.tickMs);
     expect(ticked.game.viewFor(null).auction!.seconds).toBeCloseTo(afterTick, 6);
