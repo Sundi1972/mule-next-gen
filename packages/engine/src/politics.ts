@@ -176,11 +176,7 @@ function takeOffice(state: GameState, politics: Politics): void {
 function decide(state: GameState, election: Election, office: Office, governor: string | null): OfficeResult {
   const seat = (id: string) => state.players.findIndex((p) => p.id === id);
   const candidates = election.candidates[office].filter((c) => c !== governor);
-  if (candidates.length === 0) {
-    const others = state.players.filter((p) => p.id !== governor);
-    const richest = others.reduce((best, p) => (p.money > best.money ? p : best));
-    return { winner: richest.id, how: 'appointed', tallies: [] };
-  }
+  if (candidates.length === 0) return { winner: appointee(state, election, office, governor), how: 'appointed', tallies: [] };
   const tallies = candidates.map((id) => ({ id, votes: 0 }));
   for (const [voter, ballot] of Object.entries(election.ballots)) {
     const line = tallies.find((t) => t.id === ballot[office]);
@@ -195,6 +191,20 @@ function decide(state: GameState, election: Election, office: Office, governor: 
   if (baronPick !== undefined && tied.includes(baronPick)) return { winner: baronPick, how: 'baron', tallies };
   const most = tied.reduce((best, id) => (plotsOf(state, id) > plotsOf(state, best) ? id : best));
   return { winner: most, how: 'tieRule', tallies };
+}
+
+/**
+ * RULE-3 rows 1-2: the richest eligible player, the lower seat on a tie. The
+ * Governor comes from the players not running for Sheriff, or from everyone
+ * if all of them are (AM-2); the Sheriff is never the new Governor.
+ */
+function appointee(state: GameState, election: Election, office: Office, governor: string | null): string {
+  const pool =
+    office === 'governor'
+      ? state.players.filter((p) => !election.candidates.sheriff.includes(p.id))
+      : state.players.filter((p) => p.id !== governor);
+  const eligible = pool.length > 0 ? pool : state.players;
+  return eligible.reduce((best, p) => (p.money > best.money ? p : best)).id;
 }
 
 /** RULE-6: the Governor sets the sales tax in whole percent, within maxStep of the month's starting rate. */
