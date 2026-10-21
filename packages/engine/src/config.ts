@@ -392,6 +392,11 @@ export const MAP = {
    */
   honesty: 0.3,
   /**
+   * Largest gap, on one part of the map (each edge row or column, or the interior), between the mean of
+   * rating minus hint and zero. The hint is the same everywhere, so ground that is poorer by place misleads.
+   */
+  placeHonesty: 0.15,
+  /**
    * Crystite and Rare earth come in rings: a peak plot rated `high`, the plots
    * one step from it `medium`, two steps `low`, and 0 beyond.
    */

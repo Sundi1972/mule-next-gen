@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { checkMap, createGame, expectedGround, MAP, TERRAIN_ODDS, type GameMap, type MapReport, type RuleId, type Terrain } from '../src/index.js';
+import { checkMap, createGame, expectedGround, MAP, TERRAIN_ODDS, type GameMap, type MapReport, type RuleId, type Terrain, type Tile } from '../src/index.js';
 
 const SEEDS = 1000;
 const PLAYER_COUNTS = [2, 3, 4, 5, 6];
@@ -34,6 +34,32 @@ interface Drift {
 
 function drift(label: string, ratings: number[], hint: number): Drift {
   return { label, mean: ratings.reduce((a, b) => a + b, 0) / ratings.length, hint };
+}
+
+/** Which part of the map a plot sits on: an edge row or column, or the interior. */
+function placeOf(tile: Tile, map: GameMap): string {
+  if (tile.y === 0) return 'top row';
+  if (tile.y === map.height - 1) return 'bottom row';
+  if (tile.x === 0) return 'left column';
+  if (tile.x === map.width - 1) return 'right column';
+  return 'interior';
+}
+
+/** Per part of the map and hinted good: the mean of rating minus its terrain's hint, against 0. */
+function placeDrifts(built: Built[]): Drift[] {
+  const gaps = new Map<string, number[]>();
+  for (const { map } of built) {
+    for (const tile of map.tiles) {
+      if (tile.terrain === 'store') continue;
+      const hint = expectedGround(tile.terrain);
+      for (const good of HINTED) {
+        const label = `${placeOf(tile, map)} ${good}`;
+        if (!gaps.has(label)) gaps.set(label, []);
+        gaps.get(label)!.push(tile.ground[good] - hint[good]);
+      }
+    }
+  }
+  return [...gaps].map(([label, ratings]) => drift(label, ratings, 0));
 }
 
 /** Every failing line, capped, with a count of the rest. */
@@ -99,8 +125,10 @@ describe('map quality, every map createGame deals', () => {
       const plots = land.filter((p) => p.players === players);
       for (const good of MINERALS) drifts.push(drift(`${players} players ${good}`, plots.map((p) => p.tile.ground[good]), MAP.unknownMineral));
     }
-    const offenders = drifts
+    const misleading = drifts
       .filter((d) => Math.abs(d.mean - d.hint) > MAP.honesty)
+      .concat(placeDrifts(built).filter((d) => Math.abs(d.mean - d.hint) > MAP.placeHonesty));
+    const offenders = misleading
       .sort((a, b) => Math.abs(b.mean - b.hint) - Math.abs(a.mean - a.hint))
       .map((d) => `${d.label}: mean ${d.mean.toFixed(3)}, hint ${d.hint.toFixed(3)}, off by ${(d.mean - d.hint).toFixed(3)}`);
     expect(offenders, listed(offenders)).toEqual([]);
