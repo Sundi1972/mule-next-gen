@@ -328,6 +328,11 @@ const readLines = () => ({
   bid: document.querySelectorAll('[data-testid=line-bid]').length,
   gap: document.querySelectorAll('[data-testid=gap-label]').length,
 });
+const readTags = () => ({
+  ask: document.querySelector('[data-testid=tag-ask]')?.textContent ?? null,
+  bid: document.querySelector('[data-testid=tag-bid]')?.textContent ?? null,
+  gap: document.querySelector('[data-testid=gap-label]')?.textContent ?? null,
+});
 const readReadout = () => [...document.querySelectorAll('[data-testid=line-readout] dd')].slice(0, 2).map((dd) => dd.textContent);
 const readUnits = () =>
   Object.fromEntries(
@@ -416,7 +421,11 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
       return untilShows(s, readReadout, [`${ask.price} · ${who(ask.id)}`, `${bid.price} · ${who(bid.id)}`], 'B-AC-1: the readout names who holds each line');
     }),
   );
-  console.log(`✓ B-AC-1 (WS6): ${a.good} walk, the red line at ${ask.price} and the green at ${bid.price} with the gap on three phones and the TV; the readout names ${seller.name} and ${buyer.name}, "You" on their own phones`);
+  const tags = { ask: String(ask.price), bid: String(bid.price), gap: `${ask.price - bid.price} APART` };
+  await Promise.all(screens.map((s) => untilShows(s, readTags, tags, "B-AC-1: the lines sit at the server's lowest ask and highest bid, with the gap between them")));
+  console.log(
+    `✓ B-AC-1 (WS6): ${a.good} walk, the red line tagged ${ask.price} and the green ${bid.price}, "${tags.gap}", on three phones and the TV; the readout names ${seller.name} and ${buyer.name}, "You" on their own phones`,
+  );
 
   const storeShows = async (forSale: number, sells: number | null) => {
     const line = forSale > 0 ? `SELLS ${sells} · ${forSale} LEFT` : 'SOLD OUT';
