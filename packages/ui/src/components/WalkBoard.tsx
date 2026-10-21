@@ -169,7 +169,7 @@ export function WalkBoard({
     >
       {/* Price axis */}
       <div className={cx('relative shrink-0 border-r border-holo-faint', tv ? 'w-16' : 'w-9')}>
-        <div className={cx('absolute inset-x-0', tv ? 'bottom-20 top-12' : 'bottom-12 top-6')}>
+        <div className={cx('absolute inset-x-0', tv ? 'bottom-23 top-12' : 'bottom-14 top-6')}>
           {ticks(lo, hi).map((v) => (
             <span key={v} data-num className={cx('absolute right-1.5 -translate-y-1/2 font-mono text-ink-3', tv ? 'text-base' : 'text-[10px]')} style={{ top: `${pct(v)}%` }}>
               {v}
@@ -184,11 +184,11 @@ export function WalkBoard({
         {stage === 'declare' && (
           <>
             <div className={cx('absolute inset-x-0 top-0 bg-rise/5', tv ? 'h-24' : 'h-12')} />
-            <div className={cx('absolute inset-x-0 bottom-0 bg-fall/5', tv ? 'h-36' : 'h-18')} />
+            <div className={cx('absolute inset-x-0 bottom-0 bg-fall/5', tv ? 'h-39' : 'h-20')} />
             <span className={cx('absolute inset-x-0 text-center font-display font-semibold text-rise/80', tv ? 'top-28 text-xl' : 'top-14 text-[11px]')}>
               ▼ SELLERS START AT THE TOP AND WALK DOWN TO ASK LESS
             </span>
-            <span className={cx('absolute inset-x-0 text-center font-display font-semibold text-fall/80', tv ? 'bottom-40 text-xl' : 'bottom-20 text-[11px]')}>
+            <span className={cx('absolute inset-x-0 text-center font-display font-semibold text-fall/80', tv ? 'bottom-43 text-xl' : 'bottom-22 text-[11px]')}>
               ▲ BUYERS START AT THE BOTTOM AND WALK UP TO BID MORE
             </span>
           </>
@@ -200,7 +200,7 @@ export function WalkBoard({
           ))}
         </div>
 
-        <div ref={area} className={cx('absolute inset-x-0', tv ? 'bottom-20 top-12' : 'bottom-12 top-6')}>
+        <div ref={area} className={cx('absolute inset-x-0', tv ? 'bottom-23 top-12' : 'bottom-14 top-6')}>
           {storeStock === 0 && storeSells === null && (
             <span
               data-num
