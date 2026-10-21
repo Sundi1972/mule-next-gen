@@ -1,0 +1,29 @@
+/* The app's own entry: Tailwind, the @mule/ui theme and the app's base styles. Never copy token values here. */
+@import "../../../../apps/web/src/index.css";
+/* The mock composes the app's real phone and table components, so their classes are scanned too. */
+@source "../../../../apps/web/src";
+
+/* DS-GAP (WS6): the production show's motion, to move into packages/ui/src/theme.css beside the other keyframes once approved. */
+@keyframes bar-in { from { transform: scaleY(0); transform-origin: bottom; opacity: 0; } to { transform: scaleY(1); transform-origin: bottom; opacity: 1; } }
+@keyframes badge-in { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes card-in { from { transform: translateY(-12px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes dust-drift { from { background-position: 0 0; } to { background-position: 40px 0; } }
+@keyframes crack-flash { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+@keyframes crawl { from { transform: translate(0, 0); } to { transform: translate(3px, -2px); } }
+@keyframes shimmer { from { opacity: 0.75; } to { opacity: 1; } }
+@keyframes flicker { from { transform: scaleY(0.9) translateY(4%); opacity: 0.85; } to { transform: scaleY(1.08); opacity: 1; } }
+@keyframes twinkle { from { transform: rotate(45deg) scale(0.4); opacity: 0.3; } to { transform: rotate(45deg) scale(1.1); opacity: 1; } }
+
+/* DS-GAP (WS6, responsive redesign): a walking creature waddles; the room the guide points at breathes. */
+@keyframes waddle { 0%, 100% { transform: translateY(0) rotate(-5deg); } 50% { transform: translateY(-3px) rotate(5deg); } }
+@keyframes beckon { 0%, 100% { box-shadow: 0 0 0 0 var(--color-holo-line); } 50% { box-shadow: 0 0 0 6px var(--color-holo-faint), var(--shadow-glow); } }
+
+/* DS-GAP (WS6, the MULE character): its metal, to move into packages/ui/src/theme.css beside the player colours. */
+:root { --color-mule-metal: #c9d3df; --color-mule-shade: #2c3a49; --color-mule-belly: #e9eef4; }
+:root[data-theme='light'] { --color-mule-metal: #dfe6ee; --color-mule-shade: #4b5b6d; --color-mule-belly: #f4f7fa; }
+@keyframes mule-breathe { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-0.6px) scaleY(1.01); } }
+@keyframes mule-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.2px); } }
+@keyframes mule-step { 0%, 100% { transform: rotate(-16deg); } 50% { transform: rotate(16deg); } }
+@keyframes mule-blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(0.1); } }
+@keyframes mule-work { 0%, 100% { opacity: 0.75; } 50% { opacity: 1; filter: brightness(1.25); } }
+@media (prefers-reduced-motion: reduce) { [class*='animate-[mule-'] { animation: none !important; } }
