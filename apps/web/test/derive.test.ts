@@ -28,6 +28,9 @@ function view(extra: Partial<MuleView> = {}): MuleView {
     news: [],
     scores: null,
     auction: null,
+    listings: [],
+    lotSlots: { used: 0, max: 4 },
+    landAuction: null,
     ...extra,
   };
 }
