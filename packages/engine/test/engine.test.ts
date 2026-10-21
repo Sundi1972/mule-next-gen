@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  advanceGrant,
   advancePhase,
+  GAME,
+  grantDone,
   postPrices,
   storeQuotes,
   buyMule,
@@ -172,6 +175,20 @@ describe('production', () => {
     p0.stock.energy = 2;
     expect(runProduction(state).produced.p0!.alloy).toBe(2);
     expect(p0.stock.smithore).toBe(0);
+  });
+});
+
+describe('land grant', () => {
+  it('FM-grant-stall: a land grant where nobody presses ends after GAME.grantSweeps sweeps', () => {
+    const state = createGame({ seed: 4, players: players(4) });
+    while (state.phase !== 'landGrant') advancePhase(state);
+    let steps = 0;
+    while (!grantDone(state) && steps++ < 10_000) advanceGrant(state);
+    expect(grantDone(state)).toBe(true);
+    expect(state.grant!.sweep).toBe(GAME.grantSweeps);
+    // Free land is left and nobody claimed: the sweep limit ended it, not the land or the claims.
+    expect(state.tiles.some((t) => t.terrain !== 'store' && !t.owner)).toBe(true);
+    expect(state.players.every((p) => p.claimsThisGrant === 0)).toBe(true);
   });
 });
 
