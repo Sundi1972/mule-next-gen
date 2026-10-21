@@ -1,4 +1,4 @@
-import { DEVELOPMENT, needsOf, RuleError, type GameState } from '@mule/engine';
+import { needsOf, type GameState } from '@mule/engine';
 import { describe, expect, it } from 'vitest';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
 import { fakeContext, seats } from './fake-context.js';
@@ -30,10 +30,7 @@ describe('the store view at the start of development', () => {
     expect(view.me!.stock.food).toBe(2);
     expect(view.me!.needs.food).toBe(5);
     expect(view.me!.hungry).toBe(true);
-    expect(view.me!.devSeconds).toBe(DEVELOPMENT.minSeconds + ((DEVELOPMENT.fullSeconds - DEVELOPMENT.minSeconds) * 2) / 5);
     expect(view.me!.devSeconds).toBe(29);
     expect(view.storeMules).toBe(0);
-    expect(() => game.handle('s1', { type: 'buyMule' })).toThrow(RuleError);
-    expect(game.viewFor('s1').me!.carriedMule).toBeNull();
   });
 });

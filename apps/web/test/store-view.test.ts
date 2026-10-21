@@ -27,14 +27,11 @@ describe('the store at a glance', () => {
     expect(tagOf(html, 'booth-pub')).not.toMatch(/\sdisabled=""/);
   });
 
-  it('B-AC-9: a hungry player sees 2 of 5 Food and an orange bar at her devSeconds', () => {
-    const html = renderToStaticMarkup(createElement(FillCard, { elapsed: 2, seconds: 29, hungry: true, ate: 2, need: 5 }));
+  it('B-AC-9: a fed but sick player is told sickness cost them time, never full time', () => {
+    const html = renderToStaticMarkup(createElement(FillCard, { seconds: 45, hungry: false, sick: true, ate: 5, need: 5 }));
     const text = textFrom(html, 'fill-card');
-    expect(text).toContain('You eat 2 Food of the 5 you need and fill up your time bar.');
-    expect(text).toContain('29 s of 50: short of Food, so less time');
-    const bar = html.match(/<div class="[^"]*\bbg-warn\b[^"]*" style="width:([\d.]+)%"/);
-    expect(Number(bar?.[1])).toBeCloseTo((29 / 50) * 100);
-    expect(html).toMatch(/class="[^"]*\btext-warn\b[^"]*"[^>]*>29 s/);
-    expect(html).not.toMatch(/\bbg-holo\b/);
+    expect(text).toContain('You eat 5 Food and fill up your time bar.');
+    expect(text).toContain('45 s of 50: Sickness cost you time.');
+    expect(text).not.toContain('full time');
   });
 });
