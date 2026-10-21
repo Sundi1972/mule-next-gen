@@ -161,6 +161,44 @@ function oddsOf(terrain: LandTerrain, good: FloorGood): { values: number[]; weig
   return { values: [-2, -1, 0, 1, 2, 3], weights: GROWN_ODDS[odds.grown[good] ?? 'neutral'] };
 }
 
+/** Chance a plot of the terrain is dealt a good rating for the good, from the published odds. */
+function chanceOfGood(terrain: LandTerrain, good: FloorGood): number {
+  const { values, weights } = oddsOf(terrain, good);
+  return values.reduce((sum, v, k) => sum + (v >= MAP.goodAt[good] ? weights[k]! : 0), 0);
+}
+
+/**
+ * Replays the floor-lift rule from stage 6's input: each lift goes to the capable terrain whose
+ * mean it raises least (counting earlier lifts on it), offering that terrain's highest-field plot
+ * not yet good; then the likelier terrain, then the higher field. Names the first lift that differs.
+ */
+function floorLiftOrder(run: Run, good: FloorGood): string[] {
+  const before = run.peaks.ground;
+  const after = run.floors.ground;
+  const field = run.peaks.fields[good];
+  const threshold = MAP.goodAt[good];
+  const lifted = new Set(run.layout.terrain.flatMap((_, i) => (after[i]![good] !== before[i]![good] ? [i] : [])));
+  const terrains = [...plotsByTerrain(run.layout)].filter(([t]) => canBeGood(t, good));
+  const target = Math.ceil((good === run.scarce ? MAP.floor[good] : MAP.normalLo[good]) * run.players);
+  let have = run.layout.terrain.filter((_, i) => before[i]![good] >= threshold).length;
+  const gained = new Map<LandTerrain, number>();
+  const done = new Set<number>();
+  while (have < target) {
+    const offers = terrains.flatMap(([terrain, plots]) => {
+      const next = plots.filter((i) => before[i]![good] < threshold && !done.has(i)).sort((a, b) => field[b]! - field[a]! || a - b)[0];
+      if (next === undefined) return [];
+      return [{ terrain, i: next, rise: ((gained.get(terrain) ?? 0) + threshold - before[next]![good]) / plots.length, odds: chanceOfGood(terrain, good) }];
+    });
+    const pick = offers.sort((a, b) => a.rise - b.rise || b.odds - a.odds || field[b.i]! - field[a.i]! || a.i - b.i)[0];
+    if (!pick) break;
+    if (!lifted.has(pick.i)) return [`${good} floor lift ${done.size + 1} should go to plot ${pick.i} (${pick.terrain}, mean +${pick.rise.toFixed(3)}), the least rise`];
+    gained.set(pick.terrain, (gained.get(pick.terrain) ?? 0) + threshold - before[pick.i]![good]);
+    done.add(pick.i);
+    have++;
+  }
+  return done.size === lifted.size ? [] : [`${good}: ${lifted.size} floor lifts, the rule makes ${done.size}`];
+}
+
 /** Whether the terrain's odds give any chance of a good rating for the good. */
 function canBeGood(terrain: LandTerrain, good: FloorGood): boolean {
   const { values, weights } = oddsOf(terrain, good);
@@ -212,53 +250,133 @@ function onlyLowered(expected: number[], after: number[], good: FloorGood): bool
   return (got.get(under) ?? 0) - (want.get(under) ?? 0) === removed;
 }
 
+/** A hand-built map: hills except `plains`, the store at the centre, every grown good rated good, Smithore and field per plot. */
+interface FixtureSpec {
+  players: number;
+  width: number;
+  height: number;
+  /** Smithore rating of each plot (the store's is ignored). */
+  smithore: (i: number) => number;
+  plains?: number[];
+  /** Field of each plot for every good; it fixes the lowering and lifting order. */
+  field?: (i: number) => number;
+}
+
+function buildFixture(spec: FixtureSpec): { layout: Layout; dealt: Dealt } {
+  const { players, width, height } = spec;
+  const terrain: Terrain[] = Array.from({ length: width * height }, (_, i) => (spec.plains?.includes(i) ? 'plains' : 'hills'));
+  terrain[Math.floor(height / 2) * width + Math.floor(width / 2)] = 'store';
+  const layout: Layout = { width, height, terrain };
+  const ground = terrain.map((t, i) =>
+    t === 'store' ? { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0 } : { food: 3, water: 3, energy: 3, smithore: spec.smithore(i), crystite: 0, rareEarth: 0 },
+  );
+  const field = terrain.map((_, i) => spec.field?.(i) ?? i);
+  const base = dealOdds(layout, players, createRng(1));
+  return { layout, dealt: { ...base, ground, fields: { food: field, water: field, energy: field, smithore: field } } };
+}
+
+/** Good Smithore (rated 3) on exactly these plots, 0 elsewhere. */
+const goodAt = (...plots: number[]) => (i: number) => (plots.includes(i) ? 3 : 0);
+
 /**
- * A hand-built hills map with the store at its centre, every grown good rated good, and good
- * Smithore exactly on `smithore` (x,y) plots, run through stage 9 with Smithore scarce. The
- * field rises with the plot index, so the lowering order is fixed.
+ * What every seam lift must be: on a terrain whose odds allow good Smithore, beside the plot it
+ * joins, raised from below the threshold to exactly it, and still good when its stage ends.
  */
-function scarcityFixture(name: string, players: number, width: number, height: number, smithore: [number, number][], expect: (out: ReturnType<typeof applyScarcity>, report: MapReport) => string[]) {
+function seamLiftProblems(layout: Layout, before: Ground[], after: Ground[], lifts: Lift[]): string[] {
+  return lifts.flatMap((lift) => {
+    const problems: string[] = [];
+    const terrain = layout.terrain[lift.plot] as LandTerrain;
+    if (!canBeGood(terrain, 'smithore')) problems.push(`seam lift at ${lift.plot} on ${terrain}, whose odds give no good Smithore`);
+    if (lift.kind === 'seam' && steps(layout, lift.plot, lift.joins) !== 1) problems.push(`seam lift at ${lift.plot} doesn't touch the plot ${lift.joins} it joins`);
+    if (before[lift.plot]!.smithore >= MAP.goodAt.smithore) problems.push(`seam lift at ${lift.plot} on a plot already good before the stage`);
+    if (after[lift.plot]!.smithore !== MAP.goodAt.smithore) problems.push(`seam lift at ${lift.plot} ends rated ${after[lift.plot]!.smithore}, not ${MAP.goodAt.smithore}`);
+    return problems;
+  });
+}
+
+const smithoreCount = (ground: Ground[]) => ground.filter((g) => g.smithore >= MAP.goodAt.smithore).length;
+
+/**
+ * Stage 9 on a fixture with Smithore scarce: reach, floors and the scarce band always hold, the
+ * listed `also` rules too, and every seam lift is a proper one; `expect` adds the fixture's own point.
+ */
+function scarcityFixture(name: string, spec: FixtureSpec, also: RuleId[], expect: (out: ReturnType<typeof applyScarcity>) => string[]) {
   return {
     check(): string[] {
-      const terrain: Terrain[] = Array.from({ length: width * height }, () => 'hills');
-      terrain[Math.floor(height / 2) * width + Math.floor(width / 2)] = 'store';
-      const layout: Layout = { width, height, terrain };
-      const base = dealOdds(layout, players, createRng(1));
-      const ground = terrain.map((t, i) => {
-        const good = smithore.some(([x, y]) => y * width + x === i);
-        return t === 'store' ? { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0 } : { food: 3, water: 3, energy: 3, smithore: good ? 3 : 0, crystite: 0, rareEarth: 0 };
-      });
-      const rising = terrain.map((_, i) => i);
-      const out = applyScarcity({ ...base, ground, fields: { food: rising, water: rising, energy: rising, smithore: rising } }, 'smithore');
-      const report = checkMap(toMap(layout, out.ground), players);
-      const problems = report.violations.filter((v) => ['F1', 'F2', 'F3', 'S8'].includes(v.rule)).map((v) => `${v.rule}: ${v.detail}`);
+      const { layout, dealt } = buildFixture(spec);
+      const out = applyScarcity(dealt, 'smithore');
+      const report = checkMap(toMap(layout, out.ground), spec.players);
+      const problems = report.violations.filter((v) => ['F1', 'F2', 'F3', ...also].includes(v.rule)).map((v) => `${v.rule}: ${v.detail}`);
       if (report.metrics.scarce !== 'smithore') problems.push(`scarce on the map ${report.metrics.scarce ?? 'none'}, not smithore`);
-      return [...problems, ...expect(out, report)].map((p) => `fixture ${name}: ${p}`);
+      problems.push(...seamLiftProblems(layout, dealt.ground, out.ground, out.lifts), ...expect(out));
+      return problems.map((p) => `fixture ${name}: ${p}`);
     },
   };
 }
 
-const smithoreCount = (out: { ground: Ground[] }) => out.ground.filter((g) => g.smithore >= MAP.goodAt.smithore).length;
-
+// Rows below are 1 plot high, 2 players (band 6-7, Smithore reach 5): lone good plots 11 apart each cover a stretch nobody else does.
 const SCARCITY_FIXTURES = [
   // 3 players: band 9-11. 12 good plots, 7 in seams and 5 alone: lowering one lone plot leaves 7 of 11 joined (64%),
   // two leave 7 of 10 (70%), so only a deeper cut keeps S8.
-  scarcityFixture('deeper cut', 3, 13, 4, [[0, 0], [1, 0], [2, 0], [4, 0], [5, 0], [10, 0], [11, 0], [0, 2], [3, 2], [7, 3], [9, 2], [12, 2]], (out) => {
-    const problems: string[] = [];
-    if (out.lifts.length > 0) problems.push(`${out.lifts.length} seam lifts where a deeper cut was enough`);
-    if (smithoreCount(out) !== 10) problems.push(`${smithoreCount(out)} good Smithore plots, the deeper cut leaves 10`);
-    return problems;
-  }),
-  // 2 players: band 6-7. 8 good plots, two pairs and 4 alone: no 6 or 7 of them keep S8, so one seam lift joins a lone
-  // plot and one more lone plot is lowered, keeping the count in the band.
-  scarcityFixture('seam lift', 2, 9, 3, [[0, 0], [1, 0], [7, 0], [8, 0], [0, 2], [3, 2], [5, 2], [8, 2]], (out) => {
-    const problems: string[] = [];
-    if (out.lifts.length !== 1) problems.push(`${out.lifts.length} seam lifts, one is needed`);
-    for (const lift of out.lifts) if (Math.abs((lift.plot % 9) - (lift.joins % 9)) + Math.abs(Math.floor(lift.plot / 9) - Math.floor(lift.joins / 9)) !== 1) problems.push(`seam lift at ${lift.plot} doesn't touch ${lift.joins}`);
-    if (smithoreCount(out) !== 7) problems.push(`${smithoreCount(out)} good Smithore plots, the band's top is 7`);
-    return problems;
-  }),
+  scarcityFixture(
+    'deeper cut',
+    { players: 3, width: 13, height: 4, smithore: goodAt(0, 1, 2, 4, 5, 10, 11, 26, 29, 46, 35, 38) },
+    ['S8'],
+    (out) => [
+      ...(out.lifts.length > 0 ? [`${out.lifts.length} seam lifts where a deeper cut was enough`] : []),
+      ...(smithoreCount(out.ground) !== 10 ? [`${smithoreCount(out.ground)} good Smithore plots, the deeper cut leaves 10`] : []),
+    ],
+  ),
+  // Two pairs and 4 alone: no 6 or 7 of them keep S8, so one seam lift joins a lone plot and one more lone plot is lowered.
+  scarcityFixture('seam lift', { players: 2, width: 9, height: 3, smithore: goodAt(0, 1, 7, 8, 18, 21, 23, 26) }, ['S8'], (out) => [
+    ...(out.lifts.length !== 1 ? [`${out.lifts.length} seam lifts, one is needed`] : []),
+    ...(smithoreCount(out.ground) !== 7 ? [`${smithoreCount(out.ground)} good Smithore plots, the band's top is 7`] : []),
+  ]),
+  // Found by a random search: an earlier round's seam lift was taken as a later round's extra lowering.
+  scarcityFixture(
+    'earlier lift kept',
+    {
+      players: 2,
+      width: 24,
+      height: 3,
+      plains: [1, 5, 9, 15, 16, 17, 21, 22, 24, 31, 33, 34, 35, 39, 40, 41, 50],
+      smithore: (i) => [3, 0, 1, 0, 1, 2, 1, 2, 2, 0, 2, 2, 1, 1, 3, 1, 1, 0, 0, 1, 1, 1, 0, 1, 0, 2, 2, 1, 2, 2, 0, 2, 2, 0, 0, 2, 0, 0, 0, 1, 0, 0, 1, 3, 3, 0, 3, 1, 2, 0, 2, 1, 2, 2, 1, 3, 2, 2, 2, 0, 2, 2, 2, 2, 1, 3, 1, 1, 2, 2, 2, 3][i]!,
+      field: (i) => [0.8912, 0.957, 0.5126, 0.6173, 0.738, 0.7134, 0.5593, 0.247, 0.9104, 0.3185, 0.5954, 0.7563, 0.9891, 0.3924, 0.3901, 0.7292, 0.003, 0.724, 0.7333, 0.5105, 0.664, 0.2738, 0.6762, 0.7504, 0.1425, 0.1046, 0.1252, 0.8169, 0.3618, 0.1007, 0.5379, 0.3017, 0.0383, 0.6856, 0.818, 0.4187, 0.2549, 0.7445, 0.7969, 0.6604, 0.3946, 0.5593, 0.986, 0.8464, 0.1567, 0.9528, 0.6907, 0.4417, 0.0567, 0.8106, 0.9018, 0.9273, 0.0126, 0.0845, 0.503, 0.345, 0.5048, 0.9073, 0.4143, 0.3464, 0.5476, 0.387, 0.7351, 0.5458, 0.7701, 0.168, 0.1961, 0.9856, 0.4274, 0.6428, 0.5826, 0.2659][i]!,
+    },
+    [],
+    () => [],
+  ),
+  // A triple, then lone plots 11 apart: the cheapest extra lowering after a seam lift is a lone plot, which reach pins; only
+  // a triple member may go. Plains beside the last lone plot outranks the hills one by field, so the lift must skip it.
+  scarcityFixture('reach blocks the cheapest extra', { players: 2, width: 61, height: 1, smithore: goodAt(0, 1, 2, 11, 22, 33, 44, 55), plains: [56] }, [], (out) =>
+    out.lifts.length === 0 ? ['no seam lift; the fixture needs one'] : [],
+  ),
+  // A pair, then lone plots 11 apart that reach all pins: after the one possible cut, a seam lift finds no plot to lower
+  // with it, so the lift is undone and the count stays at the band's top.
+  scarcityFixture('no extra, lift undone', { players: 2, width: 72, height: 1, smithore: goodAt(0, 1, 11, 22, 33, 44, 55, 66) }, [], (out) => [
+    ...(out.lifts.length !== 0 ? [`${out.lifts.length} seam lifts kept with no plot lowered to pay for them`] : []),
+    ...(smithoreCount(out.ground) !== 7 ? [`${smithoreCount(out.ground)} good Smithore plots, the cut leaves 7`] : []),
+  ]),
+  // The cut lowers plot 0 (rated 2 after), the cheapest plot to lift next to the lone plot 1; it must not be lifted again.
+  scarcityFixture(
+    'lowered plot not lifted',
+    { players: 2, width: 50, height: 1, smithore: goodAt(0, 1, 11, 22, 33, 42, 43, 44), field: (i) => ({ 0: 0.5, 1: 0.9, 42: 0.95, 43: 0.96, 44: 0.97 })[i] ?? 0.1 },
+    [],
+    (out) => (out.lifts.length === 0 ? ['no seam lift; the fixture needs one'] : []),
+  ),
 ];
+
+/** Stage 8 on a fixture: two pairs and five lone plots that reach pins: S8 needs two seam lifts (4 of 9 joined, 6 of 10, then 8 of 11). */
+function twoSeamLiftsFixture(): string[] {
+  const spec: FixtureSpec = { players: 2, width: 72, height: 1, smithore: goodAt(0, 1, 11, 22, 33, 34, 45, 56, 67) };
+  const { layout, dealt } = buildFixture(spec);
+  const out = joinSeams(dealt);
+  const report = checkMap(toMap(layout, out.ground), spec.players);
+  const problems = report.violations.filter((v) => ['F3', 'S8'].includes(v.rule)).map((v) => `${v.rule}: ${v.detail}`);
+  if (out.lifts.length !== 2) problems.push(`${out.lifts.length} seam lifts, two are needed`);
+  problems.push(...seamLiftProblems(layout, dealt.ground, out.ground, out.lifts));
+  return problems.map((p) => `fixture two seam lifts: ${p}`);
+}
 
 /** Non-scarce goods must stay at or above their normal lower edge. */
 function belowNormal(run: Run, report: MapReport): string[] {
@@ -330,9 +448,27 @@ describe('map ground stages', () => {
           const skipped = plots.find((i) => before[i]![good] < MAP.goodAt[good] && !lifted.includes(i) && field[i]! > lowestLifted);
           if (skipped !== undefined) out.push(`${good} on ${terrain}: plot ${skipped} has a higher field than a lifted plot but wasn't lifted`);
         }
+        out.push(...floorLiftOrder(run, good));
       }
       return out;
     });
+    // S9's margin: what the floor lifts add to each terrain's mean, per player count, stays inside the honesty bound.
+    for (const players of PLAYERS) {
+      const drift = new Map<string, { sum: number; plots: number }>();
+      for (const run of stageRuns().filter((r) => r.players === players)) {
+        for (const [terrain, plots] of plotsByTerrain(run.layout)) {
+          for (const good of FLOOR_GOODS) {
+            const d = drift.get(`${terrain} ${good}`) ?? { sum: 0, plots: 0 };
+            for (const i of plots) d.sum += run.floors.ground[i]![good] - run.peaks.ground[i]![good];
+            d.plots += plots.length;
+            drift.set(`${terrain} ${good}`, d);
+          }
+        }
+      }
+      for (const [key, d] of drift) {
+        if (d.sum / d.plots > MAP.honesty) broken.push(`${players}p: floor lifts raise ${key} by ${(d.sum / d.plots).toFixed(3)} on average, over ${MAP.honesty}`);
+      }
+    }
     expect(broken, broken.join('\n')).toEqual([]);
   });
 
@@ -343,7 +479,8 @@ describe('map ground stages', () => {
 
   it('T-AC-5: seams stage meets S8', () => {
     // RULE-4: seams may not undo reach.
-    const broken = failures(allRuns(), (r) => r.seams, ['S8', 'F3']);
+    const broken = failures(allRuns(), (r) => r.seams, ['S8', 'F3'], (run) => seamLiftProblems(run.layout, run.reach.ground, run.seams.ground, run.seamLifts));
+    broken.push(...twoSeamLiftsFixture());
     expect(broken, broken.join('\n')).toEqual([]);
   });
 
@@ -359,6 +496,7 @@ describe('map ground stages', () => {
         if (run.scarcityLifts.length > 0 || JSON.stringify(run.scarcity.ground) !== JSON.stringify(run.seams.ground)) out.push('no scarce good, yet the stage changed the ground');
         return out;
       }
+      out.push(...seamLiftProblems(run.layout, run.seams.ground, run.scarcity.ground, run.scarcityLifts));
       const other = run.layout.terrain.findIndex((_, i) => FLOOR_GOODS.some((g) => g !== good && run.scarcity.ground[i]![g] !== run.seams.ground[i]![g]));
       if (other >= 0) out.push(`plot ${other}: a good other than the scarce ${good} changed`);
       // Per terrain: stage 8's ratings, with some good ones now exactly one under the threshold and the recorded seam lifts at it.
