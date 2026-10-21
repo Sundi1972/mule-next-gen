@@ -1,5 +1,6 @@
-import { cx, PlayerMark, SPECIES_NAME, Timer } from '@mule/ui';
+import { Button, cx, PlayerMark, SPECIES_NAME, Timer } from '@mule/ui';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Qr } from '../../../../../apps/web/src/components/Qr';
 import { ThemeToggle } from '../../../../../apps/web/src/components/ThemeToggle';
 import { fmt } from '../../../../../apps/web/src/game/derive';
 import { usePhoneGame } from '../../../../../apps/web/src/phone/game';
@@ -65,6 +66,7 @@ export function GameShell({
   now,
   rail,
   footer,
+  handoff: handoffOpen = false,
   children,
 }: {
   phase: string;
@@ -72,9 +74,12 @@ export function GameShell({
   now: Now;
   rail?: ReactNode;
   footer?: ReactNode;
+  /** Mock only: open with the hand-off dialog showing (#game-handoff). */
+  handoff?: boolean;
   children: ReactNode;
 }) {
   const { view, self, slot } = usePhoneGame();
+  const [handoff, setHandoff] = useState(handoffOpen);
   const root = useRef<HTMLDivElement>(null);
   const [wide, setWide] = useState(false);
   useEffect(() => {
@@ -87,7 +92,7 @@ export function GameShell({
   return (
     <Wide.Provider value={wide}>
     <div ref={root} className="h-full @container/shell">
-      <div className="flex h-full bg-table text-ink" data-testid="game-shell">
+      <div className="relative flex h-full bg-table text-ink" data-testid="game-shell">
         <main className="flex min-h-0 min-w-0 flex-1 flex-col p-2.5 @min-[1100px]/shell:p-6" data-testid="stage">
           {children}
         </main>
@@ -106,6 +111,20 @@ export function GameShell({
               <PlayerMark slot={slot} species={self.species} size={12} label={`You, ${SPECIES_NAME[self.species]}`} />
               <span className="min-w-0 truncate text-sm font-semibold @min-[1100px]/shell:text-base">{self.name}</span>
               <ThemeToggle className="ml-1 shrink-0" />
+              {/* Move this seat to another device mid-game (WS4's hand-off): an icon on a phone, labelled on a laptop. */}
+              <button
+                type="button"
+                onClick={() => setHandoff(true)}
+                className="flex h-7 shrink-0 items-center gap-1 rounded-chip border border-holo-line px-1.5 text-xs text-holo hover:border-holo @min-[1100px]/shell:h-8 @min-[1100px]/shell:px-2.5 @min-[1100px]/shell:text-sm"
+                aria-label="Move to my phone"
+                data-testid="move-to-phone"
+              >
+                <svg aria-hidden viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                  <rect x={7} y={2.5} width={10} height={19} rx={2} />
+                  <path d="M11 18.5h2" />
+                </svg>
+                <span className="hidden @min-[1100px]/shell:inline">To my phone</span>
+              </button>
               <span data-num className="ml-auto shrink-0 font-mono text-sm font-bold text-ink @min-[1100px]/shell:text-lg" data-testid="money">
                 {fmt(self.money)} cr
               </span>
@@ -121,6 +140,25 @@ export function GameShell({
             </div>
           )}
         </aside>
+        {handoff && (
+          <div className="absolute inset-0 z-40 grid place-items-center bg-void/70 p-4" role="dialog" aria-modal data-testid="host-dialog">
+            <div className="flex max-w-[560px] flex-col gap-3 rounded-sheet border-2 border-holo bg-panel p-4 shadow-glow @min-[1100px]/shell:max-w-[720px] @min-[1100px]/shell:gap-5 @min-[1100px]/shell:p-8">
+              <h2 className="font-display text-xl font-semibold @min-[1100px]/shell:text-3xl">Move to your phone</h2>
+              <div className="flex items-center gap-4">
+                <Qr text={`https://mule.example/handoff/${self.id}-7f3a`} size={120} className="p-2! @min-[1100px]/shell:hidden" />
+                <span className="hidden @min-[1100px]/shell:block">
+                  <Qr text={`https://mule.example/handoff/${self.id}-7f3a`} size={220} className="p-3!" />
+                </span>
+                <p className="text-sm text-ink-2 @min-[1100px]/shell:text-lg">
+                  Scan this with your phone. It becomes <strong className="text-ink">you, {self.name}</strong>, mid-game, with your money, goods and plots. This screen then steps aside. The code works once, for 2 minutes; the game doesn't pause.
+                </p>
+              </div>
+              <Button size="md" variant="outline" onClick={() => setHandoff(false)} data-testid="handoff-done">
+                Done
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
     </Wide.Provider>

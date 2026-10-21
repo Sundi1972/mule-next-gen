@@ -160,6 +160,25 @@ const HUB_STATES: { id: string; title: string; desk: Desk; office: Office; elect
 export default function App() {
   const hash = useHash();
 
+  if (hash === 'game-handoff')
+    return (
+      <Page title="Mid-game: move to your phone (WS4's hand-off, any game screen)">
+        <p className="max-w-[900px] text-sm text-ink-2">
+          The phone button sits in the guide's header beside the theme toggle on every game screen: an icon on a phone, “To my phone” on a laptop. It opens the same dialog as the lobby's, over the whole screen; the game keeps running.
+        </p>
+        <LaptopFrame>
+          <Game view={{ ...VIEW, month: 4 }}>
+            <PlanningHub key="gh-l" desk="colony" office="none" election="done" handoff />
+          </Game>
+        </LaptopFrame>
+        <PhoneFrame>
+          <Game view={{ ...VIEW, month: 4 }}>
+            <PlanningHub key="gh-p" desk="colony" office="none" election="done" />
+          </Game>
+        </PhoneFrame>
+      </Page>
+    );
+
   if (hash === 'tv-election' || hash === 'tv-election-result')
     return (
       <Page title={`The ballot reveal · ${hash === 'tv-election' ? 'countdown, then the result' : 'the result'} (WS7 slice 1)`}>
@@ -370,7 +389,7 @@ export default function App() {
       </ul>
       <h2 className="label-caps mt-8">Redesign 2026-10-22 · phone and laptop (Heiko's points)</h2>
       <div className="mt-2 flex flex-col gap-2">
-        <Links states={[{ id: 'mule', title: 'The MULE: model sheet' }]} />
+        <Links states={[{ id: 'mule', title: 'The MULE: model sheet' }, { id: 'game-handoff', title: 'Mid-game: move to your phone' }]} />
         <Links states={HUB_STATES} />
         <Links states={[{ id: 'tv-election', title: 'Election: the ballot reveal (TV and phone)' }]} />
         <Links states={LOBBY_STATES} />

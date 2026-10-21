@@ -614,11 +614,14 @@ export function PlanningHub({
   office = 'sheriff',
   tool: startTool = 'look',
   election = 'ballot',
+  handoff = false,
 }: {
   desk?: Desk;
   office?: Office;
   tool?: Tool;
   election?: Election | 'done';
+  /** Mock only: open with the in-game hand-off dialog (#game-handoff). */
+  handoff?: boolean;
 }) {
   const [desk, setDesk] = useState<Desk>(start);
   const [tool, setTool] = useState<Tool>(startTool);
@@ -650,6 +653,7 @@ export function PlanningHub({
       phase="Planning"
       seconds={74}
       now={now}
+      handoff={handoff}
       rail={
         <>
           <div role="tablist" aria-label="Desks" className="grid grid-cols-4 gap-1" data-testid="desks">
