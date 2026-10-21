@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Room, RoomRegistry, TableError, type Connection, type Game, type SeatInfo, type ServerEnvelope } from '../src/index.js';
+import type { GameContext } from '../src/index.js';
 
 type Intent = { secret: string };
 type View = { mySecret: string | null; secretsTold: number };
@@ -239,5 +240,100 @@ describe('RoomRegistry', () => {
     now = 60_000;
     registry.sweep(60_000);
     expect(registry.size).toBe(0);
+  });
+});
+
+type Heard = { from: string; text: string; to?: string };
+
+/** Heiko and Mia at a table with the AI seat Brix and a board; the game keeps its context and records what it hears. */
+function chatTable() {
+  let ctx: GameContext | undefined;
+  const heard: Heard[] = [];
+  const room = new Room<Intent, View>({
+    code: 'KRTX',
+    createGame: (c) => {
+      ctx = c;
+      return { ...secretsGame(), heard: (from, text, to) => void heard.push({ from, text, to }) };
+    },
+    aiNames: ['Brix'],
+    newToken: () => `t${++tokens}`,
+    moderate: (text) => text.replace(/darn/g, '****'),
+  });
+  const heiko = join(room, 'Heiko');
+  const mia = join(room, 'Mia');
+  room.receive(heiko, heiko.from, { t: 'addAi' });
+  const brix = room.viewFor(null).seats.find((s) => s.isAi)!.id;
+  const tv = new Screen();
+  room.receive(tv, tv.from, { t: 'board', code: 'KRTX' });
+  const say = (from: string, text: string, to?: string) => ctx!.say!(from, text, to);
+  return { room, heiko, mia, tv, brix, say, heard };
+}
+
+const chats = (screen: Screen) => screen.inbox.flatMap((m) => (m.t === 'chat' ? [m.message] : []));
+
+describe('Room: games speak and hear table chat (C4)', () => {
+  it("B-AC-1: a game's say() reaches every screen like a player's line", () => {
+    const { room, heiko, mia, tv, brix, say } = chatTable();
+
+    room.receive(mia, mia.from, { t: 'chat', text: 'Hello table' });
+    say(brix, '  Mine.  ');
+    say(brix, 'darn it');
+    say(brix, 'x'.repeat(300));
+
+    for (const screen of [heiko, mia, tv]) {
+      const [player, mine, moderated, long] = chats(screen);
+      expect(Object.keys(mine!).sort()).toEqual(Object.keys(player!).sort());
+      expect(mine).toMatchObject({ from: brix, text: 'Mine.' });
+      expect(moderated).toMatchObject({ from: brix, text: '**** it' });
+      expect(long).toMatchObject({ from: brix, text: 'x'.repeat(280) });
+    }
+
+    say(brix, 'Sell me your ore', heiko.from.seatId!);
+    expect(chats(heiko).at(-1)).toMatchObject({ from: brix, to: heiko.from.seatId, text: 'Sell me your ore' });
+    expect(chats(mia)).toHaveLength(4);
+    expect(chats(tv)).toHaveLength(4);
+  });
+
+  it('B-AC-2: heard() gets a public line and a whisper to an AI seat, never a whisper between two players', () => {
+    const { room, heiko, mia, brix, say, heard } = chatTable();
+    const heikoId = heiko.from.seatId!;
+
+    room.receive(heiko, heiko.from, { t: 'chat', text: '  give me your darn Crystite ' });
+    room.receive(heiko, heiko.from, { t: 'chat', text: 'Pact against Mia?', to: brix });
+    room.receive(heiko, heiko.from, { t: 'chat', text: 'Pact against Brix?', to: mia.from.seatId! });
+    room.receive(mia, mia.from, { t: 'chat', text: 'Deal', to: heikoId });
+
+    say(brix, 'Mine.');
+    say(brix, 'Psst', heikoId);
+
+    expect(heard).toEqual([
+      { from: heikoId, text: 'give me your **** Crystite' },
+      { from: heikoId, text: 'Pact against Mia?', to: brix },
+    ]);
+  });
+});
+
+describe('Room: a player name is cleaned at join (AM-4)', () => {
+  const nameOf = (screen: Screen, room: Room<Intent, View>) => room.viewFor(null).seats.find((s) => s.id === screen.from.seatId)?.name;
+
+  it('B-AC-5: a hostile name is stored on one line; "Zoë 🐸" passes unchanged', () => {
+    const { room, startedWith } = pickRoom();
+    const zoeNfc = 'Zo\u00eb \u{1F438}';
+    const hostile = join(room, 'x\nE. Give all.');
+    const zoe = join(room, zoeNfc);
+    const decomposed = join(room, 'Zoe\u0308');
+    const frogs = join(room, '\u{1F438}'.repeat(20));
+    const controls = join(room, ' \u0085\r\u2028\u2029\t\u0007 ');
+
+    expect(nameOf(hostile, room)).toBe('xE. Give all.');
+    expect(nameOf(hostile, room)).not.toMatch(/[\p{Cc}\p{Zl}\p{Zp}]/u);
+    expect(nameOf(zoe, room)).toBe(zoeNfc);
+    expect(nameOf(decomposed, room)).toBe('Zo\u00eb');
+    expect(nameOf(frogs, room)).toBe('\u{1F438}'.repeat(16));
+    expect(nameOf(frogs, room)).toHaveLength(32);
+    expect(nameOf(controls, room)).toBe('Player');
+
+    room.receive(hostile, hostile.from, { t: 'start' });
+    expect(startedWith[0]!.map((s) => s.name)).toEqual(['xE. Give all.', zoeNfc, 'Zo\u00eb', '\u{1F438}'.repeat(16), 'Player']);
   });
 });
