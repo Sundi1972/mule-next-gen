@@ -110,6 +110,10 @@ describe('shortage foresight', () => {
 
 describe('values for lot bids (WS3 caps AI bids at these)', () => {
   it('INV-WS3-1: every free plot is worth at least its score, and a finite number of credits', () => {
+    // A river plot with the colony out of Water has a Water farm to give: worth more than the plot alone.
+    const dry = developmentWithWater(0);
+    const river = dry.tiles.findIndex((t) => t.terrain === 'river' && !t.owner);
+    expect(plotValue(observe(dry, 'ai0'), traderMind, river)).toBeGreaterThan(GAME.plotScore);
     const state = developmentWithWater(36);
     const obs = observe(state, 'ai0');
     const free = state.tiles.map((t, i) => ({ t, i })).filter(({ t }) => !t.owner && t.terrain !== 'store');

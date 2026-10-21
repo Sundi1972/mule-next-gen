@@ -191,12 +191,34 @@ export function wantsPlot(plan: LandPlan, obs: GameState, index: number, sweep: 
 
 // --- Values for lot bids ----------------------------------------------------
 
+/**
+ * What a plot is worth to the seat, in credits: the best gain it sees from
+ * developing it (never below nothing) plus what the plot adds to the score.
+ * The most the seat bids for it at a lot.
+ */
 export function plotValue(obs: GameState, mind: Mind, index: number): number {
-  throw new Error('NotImplemented: plotValue');
+  const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
+  const best = Math.max(0, ...plotGains(obs, o, obs.tiles[index]!, mind).values());
+  return Math.round(best + GAME.plotScore);
 }
 
+/**
+ * What one more MULE is worth to the seat, in credits: its best use on an
+ * idle plot of its own, before paying the store's price for it. Nothing
+ * without idle land. The most the seat bids for a MULE at a lot.
+ */
 export function muleValue(obs: GameState, mind: Mind): number {
-  throw new Error('NotImplemented: muleValue');
+  const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
+  const price = mulePriceFor(obs, mind.me);
+  let best = 0;
+  for (const tile of obs.tiles) {
+    if (tile.owner !== mind.me || tile.outfit) continue;
+    for (const outfit of OUTFITS) {
+      if (isFactoryGood(outfit) && !canFeed(obs, mind.me, outfit)) continue;
+      best = Math.max(best, installGain(obs, o, tile, outfit, mind).gain + price);
+    }
+  }
+  return Math.round(best);
 }
 
 // --- Development -------------------------------------------------------------
