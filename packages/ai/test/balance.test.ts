@@ -73,6 +73,29 @@ describe('cash reserve', () => {
   });
 });
 
+describe('factories', () => {
+  it('T-AC-4: in month 1 with start stock and no farms, no factory needing Food or Water is a live option', () => {
+    const arrange = (farms: boolean) => {
+      const state = fourSeats(3);
+      while (state.phase !== 'development') advancePhase(state);
+      const free = state.tiles.filter((t) => !t.owner && t.terrain !== 'store');
+      free[0]!.owner = 'ai0';
+      if (farms) {
+        Object.assign(free[1]!, { owner: 'ai0', outfit: 'food' });
+        Object.assign(free[2]!, { owner: 'ai0', outfit: 'water' });
+      }
+      state.players[0]!.money = 5_000;
+      return developDecision(observe(state, 'ai0'), traderMind, 0).all.filter((c) => c.key.startsWith('install:medicine'));
+    };
+    // Start stock (6 Food, 6 Water) can't feed the household, the new crew and the works for two months.
+    const bare = arrange(false);
+    expect(bare.length).toBeGreaterThan(0);
+    for (const c of bare) expect(c.veto ?? '').toMatch(/nothing to feed/);
+    // Negative case: its own Food and Water farms feed the works.
+    for (const c of arrange(true)) expect(c.veto ?? '').not.toMatch(/nothing to feed/);
+  });
+});
+
 describe('shortage foresight', () => {
   it('T-AC-5: a seat prices Water at what colonists would pay once its outlook shows Water running short', () => {
     // Colonists pay at most 120 a unit, the store adds 10%: 120 / 1.1 is about 109.
