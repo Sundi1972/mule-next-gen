@@ -99,18 +99,18 @@ export function plotName(x: number, y: number): string {
   return `${x + 1}·${y + 1}`;
 }
 
-/** What a plot is good for, in one line. From the design doc's terrain odds. */
+/** What a plot is good for, in one line. From the design doc's terrain odds; Crystite and Rare earth turn up anywhere, so no line names them. */
 export const TERRAIN_ODDS: Partial<Record<TileView['terrain'], string>> = {
-  river: 'Often good for Food and Water. Poor for mining.',
-  lake: 'Often good for Water and Food. Nothing to mine.',
-  plains: 'Often good for Food and Energy. Few minerals.',
+  river: 'Often good for Food and Water. Poor for Smithore.',
+  lake: 'Often good for Water and Food. No Smithore.',
+  plains: 'Often good for Food and Energy. Little Smithore.',
   forest: 'Often good for Food. Poor for Energy.',
-  swamp: 'Often good for Water. Some Rare earth.',
-  hills: 'Good odds of Smithore. Some Crystite and Rare earth.',
-  mountains: 'Very good odds of Smithore and Rare earth.',
-  desert: 'Often good for Energy. Some Crystite and Rare earth.',
-  tundra: 'Often good for Energy and Water. Some minerals.',
+  swamp: 'Often good for Water. Poor for Food.',
+  hills: 'Good odds of Smithore. Poor for Food.',
+  mountains: 'Very good odds of Smithore. Poor for Food and Energy.',
+  desert: 'Often good for Energy. Poor for Water and Food.',
+  tundra: 'Often good for Energy and Water. Some Smithore.',
   ice: 'Often good for Water. Little else.',
-  volcanic: 'Good odds of Rare earth and Energy.',
-  crater: 'Very good odds of Crystite.',
+  volcanic: 'Often good for Energy. Some Smithore.',
+  crater: 'Poor for Food. Little Smithore.',
 };
