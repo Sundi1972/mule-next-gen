@@ -32,7 +32,7 @@ interface Case {
   map: TestMap;
   /** A word the violation's detail must carry, naming what broke. */
   mentions: string;
-  /** Metrics the broken map must report. */
+  /** Metrics the broken map must report, each field whole. */
   metrics?: Partial<MapReport['metrics']>;
 }
 
@@ -45,6 +45,7 @@ interface Twin {
 const MID: Twin = { name: 'mid', map: MID_MAP, players: 4 };
 const SMALL: Twin = { name: 'small', map: SMALL_MAP, players: 2 };
 const LARGE: Twin = { name: 'large', map: LARGE_MAP, players: 5 };
+const SMALL_3: Twin = { name: 'small at 3 players', map: SMALL_MAP, players: 3 };
 
 function row(
   rule: string,
@@ -70,6 +71,8 @@ const PLAINS_REGION_15 = withTerrain(MID_MAP, [[10, 2, 'P']]);
 const SEAMS_75 = withGround(MID_MAP, 'smithore', [[4, 2, 0], [3, 3, 0], [5, 2, 3], [2, 4, 3]]);
 const CRYSTITE_4 = buildMap({ ...MID_SPEC, ground: { ...MID_SPEC.ground, crystite: CRYSTITE_4_PEAKS } });
 
+const share = (count: number, of: number) => count / of;
+
 const cases: Case[] = [
   // Smithore 2 is not good, so it still counts as missing.
   row('F1', 'smithore 11 good plots, 2.75 per player under the floor of 3', SMITHORE_12, (m) => withGround(m, 'smithore', [[11, 5, 2]]), '2.75', {
@@ -85,19 +88,36 @@ const cases: Case[] = [
     MID_MAP,
     (m) => withGround(m, 'energy', [[4, 4, 0], [5, 4, 0], [5, 5, 0], [6, 5, 0], [6, 6, 0], [7, 6, 0], [7, 7, 0]]),
     '(6,5)',
+    { worstReach: { food: 2, water: 2, energy: 4, smithore: 5 } },
   ),
   row('F3', 'large: the corner (0,0) 7 steps from good smithore, reach 6', LARGE, (m) => withGround(m, 'smithore', [[4, 2, 0], [4, 3, 0], [6, 2, 3], [6, 3, 3]]), '7 steps'),
-  row('S1', 'the crater turned to plains', MID_MAP, (m) => withTerrain(m, [[2, 7, 'P'], [3, 7, 'P'], [4, 7, 'P'], [2, 8, 'P'], [3, 8, 'P'], [4, 8, 'P']]), 'crater'),
+  row('S1', 'the crater turned to plains', MID_MAP, (m) => withTerrain(m, [[2, 7, 'P'], [3, 7, 'P'], [4, 7, 'P'], [2, 8, 'P'], [3, 8, 'P'], [4, 8, 'P']]), 'crater', {
+    shares: {
+      plains: share(34, 122),
+      forest: share(13, 122),
+      hills: share(12, 122),
+      desert: share(11, 122),
+      tundra: share(10, 122),
+      mountains: share(9, 122),
+      swamp: share(9, 122),
+      lake: share(7, 122),
+      volcanic: share(9, 122),
+      ice: share(8, 122),
+    },
+  }),
   row('S2', 'ice 3 plots, under its least share of 4 in 122', ICE_4, (m) => withTerrain(m, [[5, 7, 'C']]), 'ice'),
+  row('S2', 'lake 11 plots, over its most share of 10 in 122', LAKE_SPECK_3, (m) => withTerrain(m, [[10, 0, 'L']]), 'lake'),
   row('S3', 'plains 16 of 47 plots, inside its share yet over a third', SMALL, (m) => withTerrain(m, [[8, 2, 'P']]), 'plains'),
   row('S4', 'a two-plot lake', LAKE_SPECK_3, (m) => withTerrain(m, [[9, 0, 'P']]), 'lake'),
   row('S5', 'a plains region of 16, over ceil(0.12 × 122) = 15', PLAINS_REGION_15, (m) => withTerrain(m, [[9, 3, 'P']]), 'plains'),
-  row('S6', 'river at columns 5 and 7 in row 7', MID_MAP, (m) => withTerrain(m, [[5, 7, '~']]), 'row 7'),
+  row('S6', 'river at columns 5 and 7 in row 7, which is no bend', MID_MAP, (m) => withTerrain(m, [[5, 7, '~']]), 'row 7', { bends: 3 }),
   row('S6', 'row 7 with no river', MID_MAP, (m) => withTerrain(m, [[7, 7, 'D']]), 'row 7'),
   row('S6', 'row 0 with no river', MID_MAP, (m) => withTerrain(m, [[6, 0, 'L'], [7, 0, 'L'], [8, 0, 'L']]), 'row 0'),
   row('S6', 'row 8 river teleported from column 7 to 10', MID_MAP, (m) => withTerrain(m, [[7, 8, 'V'], [10, 8, '~']]), 'row 8'),
+  row('S6', 'row 8 river a diagonal step from row 7', MID_MAP, (m) => withTerrain(m, [[7, 8, 'I'], [8, 8, '~']]), 'row 8'),
   row('S7', 'mid: a river with 2 bends, 3 needed', MID_MAP, (m) => withTerrain(m, [[5, 0, '~'], [6, 0, 'P'], [6, 1, 'P'], [10, 0, 'T']]), '2 bends'),
   row('S7', 'small: a river with 1 bend, 2 needed', SMALL, (m) => withTerrain(m, [[8, 0, 'T'], [7, 0, '~'], [8, 1, 'F']]), '1 bend'),
+  row('S7', 'small at 3 players: a river with 1 bend, 2 needed', SMALL_3, (m) => withTerrain(m, [[8, 0, 'T'], [7, 0, '~'], [8, 1, 'F']]), '1 bend'),
   row('S7', 'large: a river with 3 bends, 4 needed', LARGE, (m) => withTerrain(m, [[11, 10, 'V']]), '3 bends'),
   row('S7', 'small: a river plot in column 9 of 11', SMALL, (m) => withTerrain(m, [[9, 0, '~'], [9, 1, 'T']]), 'column 9'),
   row('S7', 'the store moved off the river', MID_MAP, (m) => withTerrain(m, [[8, 4, '#'], [7, 4, 'S']]), 'store'),
@@ -105,11 +125,12 @@ const cases: Case[] = [
   row('S8', '11 of 16 good smithore plots in seams', SEAMS_75, (m) => withGround(m, 'smithore', [[10, 3, 0], [12, 4, 3], [13, 4, 2]]), 'smithore'),
   row('S10', 'crystite 2 beside a peak', MID_MAP, (m) => withGround(m, 'crystite', [[8, 2, 2]]), 'crystite'),
   row('S10', 'crystite 0 two steps from a peak', MID_MAP, (m) => withGround(m, 'crystite', [[8, 3, 0]]), 'crystite'),
+  row('S10', 'crystite 3 two steps from a peak', MID_MAP, (m) => withGround(m, 'crystite', [[8, 3, 3]]), 'crystite'),
   row('S10', 'crystite 1 outside every ring', MID_MAP, (m) => withGround(m, 'crystite', [[0, 0, 1]]), 'crystite'),
-  row('S10', 'five crystite peaks, 4 allowed', CRYSTITE_4, () => buildMap({ ...MID_SPEC, ground: { ...MID_SPEC.ground, crystite: CRYSTITE_5_PEAKS } }), '5 peaks'),
+  row('S10', 'five crystite peaks, 4 allowed', CRYSTITE_4, () => buildMap({ ...MID_SPEC, ground: { ...MID_SPEC.ground, crystite: CRYSTITE_5_PEAKS } }), '5 peaks', {
+    peaks: { crystite: 5, rareEarth: 3 },
+  }),
 ];
-
-const share = (count: number, of: number) => count / of;
 
 const arranged: { twin: Twin; metrics: MapReport['metrics'] }[] = [
   {
@@ -141,7 +162,7 @@ const arranged: { twin: Twin; metrics: MapReport['metrics'] }[] = [
   {
     twin: SMALL,
     metrics: {
-      perPlayer: { food: 27, water: 27, energy: 27, smithore: 4, crystite: 5.5, rareEarth: 5.5 },
+      perPlayer: { food: 27, water: 27, energy: 27, smithore: 6, crystite: 5.5, rareEarth: 5.5 },
       shares: {
         plains: share(15, 47),
         forest: share(4, 47),
@@ -198,7 +219,8 @@ describe('checkMap', () => {
       expect(rulesBroken(twin, players)).toEqual([]);
       expect(rulesBroken(map, players)).toEqual([rule]);
       expect(details(map, players, rule)).toContain(mentions);
-      if (metrics) expect(checkMap(map, players).metrics).toMatchObject(metrics);
+      const reported = checkMap(map, players).metrics;
+      for (const [field, value] of Object.entries(metrics ?? {})) expect(reported[field as keyof typeof reported]).toEqual(value);
     });
   }
 
@@ -219,7 +241,7 @@ describe('checkMap', () => {
     ]);
 
     expect(rulesBroken(dry, 4)).toEqual(['S6']);
-    expect(details(dry, 4, 'S6')).toContain('no river');
+    expect(details(dry, 4, 'S6')).toBe('no river on the map');
   });
 
   it('T-AC-1: S10 is reported alone for a mineral with no peak', () => {
