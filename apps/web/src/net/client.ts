@@ -332,6 +332,11 @@ export class TableClient {
     this.send({ t: 'pick', pick: species });
   }
 
+  /** Takes a colour for this seat, in the lobby. */
+  color(colour: number): void {
+    this.send({ t: 'color', color: colour });
+  }
+
   start(): void {
     this.send({ t: 'start' });
   }

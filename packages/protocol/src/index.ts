@@ -55,6 +55,8 @@ export interface PlayerView {
   name: string;
   isAi: boolean;
   color: string;
+  /** The player's colour index, the one their seat chose in the lobby. */
+  slot: number;
   species: Species;
   money: number;
   plots: number;
