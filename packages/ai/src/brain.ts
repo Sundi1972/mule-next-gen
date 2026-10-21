@@ -93,13 +93,13 @@ export class Brain {
             if (!pending.settled) pending.answer = c;
           },
           (err: unknown) => {
-            const message = err instanceof Error ? err.message : String(err);
+            const message = err instanceof Error ? [...err.message].slice(0, 80).join('') : 'unknown error';
             if (!pending.settled) pending.answer = { ...fallback, by: 'fallback', note: `decider failed: ${message}` };
           },
         );
       } else pending.answer = r;
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = err instanceof Error ? [...err.message].slice(0, 80).join('') : 'unknown error';
       pending.answer = { ...fallback, by: 'fallback', note: `decider failed: ${message}` };
     }
     return pending;

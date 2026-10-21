@@ -7,10 +7,18 @@ import { parseReply } from './reply.js';
 /** The port to a language model: the prompt and the longest the seat will wait, back comes the model's text. */
 export type Complete = (prompt: Prompt, waitMs: number) => Promise<{ text: string }>;
 
-/** A reply the decider could not use. */
+/** A reply the decider could not use: its message is the parse's reason, its outcome says which kind. */
 export class ReplyRejected extends Error {
-  declare readonly outcome: 'unreadable' | 'off_list';
+  constructor(
+    message: string,
+    readonly outcome: 'unreadable' | 'off_list',
+  ) {
+    super(message);
+    this.name = 'ReplyRejected';
+  }
 }
+
+const UNREADABLE = 'unreadable reply';
 
 /** What the hands wait for the decider, by kind of decision; the port's client enforces it. */
 const WAIT_MS: Record<DecisionKind, number> = {
@@ -28,7 +36,7 @@ export class LlmDecider implements Decider {
   async decide(shortlist: ShortOption[], persona: Persona, context: DecisionContext): Promise<Choice> {
     const { text } = await this.complete(buildPrompt(shortlist, persona, context), WAIT_MS[context.kind]);
     const reply = parseReply(text, shortlist);
-    if (!reply.ok) throw new Error(reply.reason);
+    if (!reply.ok) throw new ReplyRejected(reply.reason, reply.reason === UNREADABLE ? 'unreadable' : 'off_list');
     return { optionId: reply.optionId, line: reply.line, by: 'llm' };
   }
 }
