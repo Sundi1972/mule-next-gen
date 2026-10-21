@@ -139,12 +139,13 @@ export function settleSpecials(state: GameState, lines: readonly ProductionLine[
     if (special?.kind === 'ruins' && special.salvage && tile.owner) {
       state.players.find((p) => p.id === tile.owner)!.stock[special.salvage] += EFFECT.salvage[special.salvage];
       delete tile.special;
-    } else if (special?.kind === 'crystalCavern' && mined.has(index) && collapses(state, index)) {
+    } else if (special?.kind === 'crystalCavern' && mined.has(index) && !state.whatIf && collapses(state, index)) {
       delete tile.special;
     }
   });
 }
 
+// A what-if copy has a stand-in seed, so it can't know the real draw and imagines none, like events and colony lots.
 function collapses(state: GameState, index: number): boolean {
   // Its own RNG from (seed, month, plot): no other draw in the game shifts it.
   const rng = createRng((Math.imul(state.seed, 0x9e3779b1) + Math.imul(state.month, 0x85ebca77) + Math.imul(index, 0xc2b2ae3d)) >>> 0);
