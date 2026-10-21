@@ -54,25 +54,57 @@ export interface Visitor {
   time: number;
   leading: 'empty' | Good | null;
   me?: boolean;
+  /** Walking right now: the creature waddles until it arrives. */
+  moving?: boolean;
 }
 
 // --- The hall -------------------------------------------------------------------------
 
-function Booth({ testid, onTap, disabled, className, style, children }: { testid: string; onTap?: () => void; disabled?: boolean; className?: string; style?: CSSProperties; children: ReactNode }) {
+function Booth({
+  testid,
+  onTap,
+  disabled,
+  next,
+  lockNote,
+  tv = false,
+  className,
+  style,
+  children,
+}: {
+  testid: string;
+  onTap?: () => void;
+  disabled?: boolean;
+  /** The room the guide points at: it glows and says "tap". */
+  next?: boolean;
+  /** Why a closed room is closed; with it the room stays legible instead of fading out. */
+  lockNote?: string | undefined;
+  tv?: boolean;
+  className?: string;
+  style?: CSSProperties;
+  children: ReactNode;
+}) {
   const Tag = onTap ? 'button' : 'div';
   return (
     <Tag
       {...(onTap ? { type: 'button' as const, onClick: onTap, disabled } : {})}
       className={cx(
         'relative flex flex-col items-center justify-center gap-0.5 rounded-control border bg-panel text-center transition-opacity',
-        disabled ? 'border-holo-faint opacity-40' : 'border-holo-line',
+        disabled ? (lockNote !== undefined ? 'border-holo-faint opacity-70 saturate-50' : 'border-holo-faint opacity-40') : 'border-holo-line',
         onTap && !disabled && 'hover:border-holo active:bg-holo-soft',
+        next && !disabled && 'z-[1] border-2 border-holo animate-[beckon_1.6s_ease-in-out_infinite]',
         className,
       )}
       style={style}
       data-testid={testid}
+      {...(next && !disabled ? { 'data-next': true } : {})}
     >
       {children}
+      {next && !disabled && (
+        <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-full bg-holo px-1.5 font-mono text-[9px] font-bold leading-4 text-on-holo shadow-glow" data-testid="tap-here">
+          TAP
+        </span>
+      )}
+      {disabled && lockNote && <span className={cx('mt-0.5 font-mono uppercase leading-tight text-ink-3', tv ? 'text-[10px]' : 'text-[7px]')}>{lockNote}</span>}
     </Tag>
   );
 }
@@ -87,6 +119,8 @@ export function StoreHall({
   onSpot,
   tv = false,
   overlay,
+  next = [],
+  locks,
 }: {
   visitors: Visitor[];
   mules: number;
@@ -98,7 +132,12 @@ export function StoreHall({
   onSpot?: (spot: Spot, fit?: Good) => void;
   tv?: boolean;
   overlay?: ReactNode;
+  /** Rooms the guide points at now. */
+  next?: Spot[];
+  /** Why each closed room is closed (e.g. "needs a MULE"); closed rooms without one fade as before. */
+  locks?: Partial<Record<Spot, string>>;
 }) {
+  const nx = (s: Spot) => next.includes(s);
   const can = (s: Spot) => !open || open.includes(s);
   const tap = (s: Spot, fit?: Good) => (onSpot ? () => onSpot(s, fit) : undefined);
   const icon = tv ? 30 : 22;
@@ -110,7 +149,7 @@ export function StoreHall({
       <div aria-hidden className="absolute inset-x-0 top-[38%] h-[24%] bg-raised/60" />
       <div className="absolute inset-x-1.5 top-1.5 grid h-[36%] grid-cols-6 gap-1.5" data-testid="row-outfitters">
         {OUTFITTERS.map((g, i) => (
-          <Booth key={g} testid={`booth-${g}`} onTap={tap(g)} disabled={!can(g)} className={i === 3 ? 'ml-1.5' : ''} style={{ borderTop: `4px solid var(--color-g-${g})` }}>
+          <Booth key={g} testid={`booth-${g}`} onTap={tap(g)} disabled={!can(g)} next={nx(g)} lockNote={locks?.[g]} tv={tv} className={i === 3 ? 'ml-1.5' : ''} style={{ borderTop: `4px solid var(--color-g-${g})` }}>
             <GoodIcon good={g} size={icon} />
             <span className={cx('font-semibold leading-tight', label)}>{GOOD_NAME[g]}</span>
             <span data-num className={price}>
@@ -120,8 +159,8 @@ export function StoreHall({
         ))}
       </div>
       <div className="absolute inset-x-1.5 bottom-1.5 grid h-[36%] grid-cols-12 gap-1.5" data-testid="row-services">
-        <Door side="L" onTap={tap('doorL')} tv={tv} />
-        <Booth testid="booth-works" className="col-span-4 px-1" disabled={!can('works')}>
+        <Door side="L" onTap={tap('doorL')} tv={tv} next={nx('doorL')} />
+        <Booth testid="booth-works" className="col-span-4 px-1" disabled={!can('works')} next={nx('works')} lockNote={locks?.works} tv={tv}>
           <span className={cx('label-caps', tv ? 'text-xs!' : 'text-[8px]!')}>Works · factory fits</span>
           <span className="grid w-full grid-cols-3 gap-1">
             {FACTORIES.map((f) => (
@@ -141,13 +180,13 @@ export function StoreHall({
             ))}
           </span>
         </Booth>
-        <Booth testid="booth-greenBelt" onTap={tap('greenBelt')} disabled={!can('greenBelt')} className="col-span-1 px-0.5" style={{ borderBottom: '4px solid var(--color-ok)' }}>
+        <Booth testid="booth-greenBelt" onTap={tap('greenBelt')} disabled={!can('greenBelt')} next={nx('greenBelt')} lockNote={locks?.greenBelt} tv={tv} className="col-span-1 px-0.5" style={{ borderBottom: '4px solid var(--color-ok)' }}>
           <span className={cx('font-semibold leading-tight', label)}>Green belt</span>
           <span data-num className={price}>
             {prices.greenBelt} cr
           </span>
         </Booth>
-        <Booth testid="booth-corral" onTap={tap('corral')} disabled={!can('corral') || mules === 0} className="col-span-3" style={{ borderBottom: '4px solid var(--color-holo)' }}>
+        <Booth testid="booth-corral" onTap={tap('corral')} disabled={!can('corral') || mules === 0} next={nx('corral')} lockNote={locks?.corral} tv={tv} className="col-span-3" style={{ borderBottom: '4px solid var(--color-holo)' }}>
           <span className="flex items-center gap-0.5 text-ink">
             {Array.from({ length: Math.min(mules, 5) }, (_, i) => (
               <MuleIcon key={i} size={tv ? 26 : 17} />
@@ -159,14 +198,14 @@ export function StoreHall({
             {mulePrice} cr
           </span>
         </Booth>
-        <Booth testid="booth-pub" onTap={tap('pub')} disabled={!can('pub')} className="col-span-2" style={{ borderBottom: '4px solid var(--color-warn)' }}>
+        <Booth testid="booth-pub" onTap={tap('pub')} disabled={!can('pub')} next={nx('pub')} lockNote={locks?.pub} tv={tv} className="col-span-2" style={{ borderBottom: '4px solid var(--color-warn)' }}>
           <span className={cx('font-semibold leading-tight', label)}>Pub</span>
           <span data-num className={price}>
             ≈{pubPayout} cr
           </span>
           <span className={cx('text-ink-3', tv ? 'text-xs' : 'text-[8px]')}>ends your turn</span>
         </Booth>
-        <Door side="R" onTap={tap('doorR')} tv={tv} />
+        <Door side="R" onTap={tap('doorR')} tv={tv} next={nx('doorR')} />
       </div>
       {visitors.map((v) => (
         <Walker key={v.id} v={v} tv={tv} />
@@ -176,12 +215,15 @@ export function StoreHall({
   );
 }
 
-function Door({ side, onTap, tv }: { side: 'L' | 'R'; onTap: (() => void) | undefined; tv: boolean }) {
+function Door({ side, onTap, tv, next = false }: { side: 'L' | 'R'; onTap: (() => void) | undefined; tv: boolean; next?: boolean }) {
   const Tag = onTap ? 'button' : 'div';
   return (
     <Tag
       {...(onTap ? { type: 'button' as const, onClick: onTap } : {})}
-      className="flex flex-col items-center justify-center rounded-control border border-dashed border-holo-line text-holo enabled:hover:bg-holo-soft"
+      className={cx(
+        'flex flex-col items-center justify-center rounded-control border border-dashed border-holo-line text-holo enabled:hover:bg-holo-soft',
+        next && 'border-2 border-solid border-holo bg-holo-soft animate-[beckon_1.6s_ease-in-out_infinite]',
+      )}
       data-testid={`door-${side}`}
       aria-label="Out to the map"
     >
@@ -192,7 +234,7 @@ function Door({ side, onTap, tv }: { side: 'L' | 'R'; onTap: (() => void) | unde
 }
 
 /** A creature on the store floor (or the map), with its time bar over its head and the MULE it leads. */
-function Walker({ v, tv }: { v: Visitor; tv: boolean }) {
+export function Walker({ v, tv }: { v: Visitor; tv: boolean }) {
   const slot = (slotOf(VIEW, v.id) ?? 0) as Slot;
   return (
     <div
@@ -201,7 +243,7 @@ function Walker({ v, tv }: { v: Visitor; tv: boolean }) {
       data-testid={`visitor-${v.id}`}
     >
       <TimeOverHead share={v.time} slot={slot} tv={tv} />
-      <span className="flex items-end">
+      <span className={cx('flex items-end', v.moving && 'animate-[waddle_0.36s_ease-in-out_infinite]')}>
         <CreatureOf slot={slot} size={tv ? 40 : 26} me={!!v.me} />
         {v.leading && (
           <span className="flex items-center rounded-full bg-map-chip px-0.5 shadow-chip text-ink">
@@ -234,7 +276,7 @@ function TimeOverHead({ share, slot, tv }: { share: number; slot: Slot; tv: bool
 // --- The phone: tap to walk ----------------------------------------------------------------
 
 /** The others in the store, on a loop: Ossa buys a MULE and outfits it for Energy, Brix browses, Kai leaves. */
-const OTHERS: { id: string; path: Spot[]; leading: (Visitor['leading'])[] }[] = [
+export const OTHERS: { id: string; path: Spot[]; leading: (Visitor['leading'])[] }[] = [
   { id: 'ossa', path: ['doorR', 'corral', 'energy', 'doorL'], leading: [null, 'empty', 'energy', 'energy'] },
   { id: 'brix', path: ['smithore', 'works', 'corral', 'smithore'], leading: ['empty', 'empty', 'empty', 'empty'] },
   { id: 'kai', path: ['water', 'doorR', 'doorR', 'water'], leading: ['water', 'water', null, null] },

@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { LAND_LEAD, LAND_UNDER, LAND_WALK, SMITHORE_MID, SMITHORE_SOLD_OUT, SMITHORE_START, SMITHORE_STATUS, SMITHORE_TRADE, TRADE_MOVED, VIEW } from './fixture';
-import { Board, Game, PhoneFrame, TvFrame, useHash } from './harness';
+import { Board, Game, LaptopFrame, PhoneFrame, TvFrame, useHash } from './harness';
+import { DevelopTurn, type Start } from './screens/DevelopTurn';
 import { EVENTS, type EventKind } from './production';
 import { PhoneGoodsWalk, TvGoodsWalk, useWalkSim } from './screens/GoodsAuction';
 import { PhoneLandLine, TvLandLine } from './screens/LandLine';
@@ -118,8 +119,39 @@ function PlayableShow() {
   );
 }
 
+const DEV_STATES: { id: string; title: string; variant: 'A' | 'B'; start: Start }[] = [
+  { id: 'dev-a', title: 'A · store and map together: start of turn', variant: 'A', start: 'start' },
+  { id: 'dev-a-outfitted', title: 'A · MULE outfitted: walk out', variant: 'A', start: 'outfitted' },
+  { id: 'dev-a-map', title: 'A · on the map: to your plot', variant: 'A', start: 'map' },
+  { id: 'dev-a-installed', title: 'A · installed: what next', variant: 'A', start: 'installed' },
+  { id: 'dev-b', title: 'B · one place at a time: start of turn', variant: 'B', start: 'start' },
+  { id: 'dev-b-outfitted', title: 'B · MULE outfitted: walk out', variant: 'B', start: 'outfitted' },
+  { id: 'dev-b-map', title: 'B · on the map: to your plot', variant: 'B', start: 'map' },
+];
+
 export default function App() {
   const hash = useHash();
+
+  const dev = DEV_STATES.find((s) => s.id === hash);
+  if (dev)
+    return (
+      <Page title={`Development, redesigned · ${dev.title}`}>
+        <Links states={DEV_STATES} current={hash} />
+        <p className="max-w-[900px] text-sm text-ink-2">
+          Playable. The rail always opens with "Now": the one next step and why. The room for it glows and says TAP; rooms you can't use yet say why. Your Zipwing walks (and waddles) from room to room and out of the door; the clock never stops. Laptop window (1440 × 900) first, then the phone held sideways.
+        </p>
+        <LaptopFrame>
+          <Game>
+            <DevelopTurn key={`${hash}-l`} variant={dev.variant} start={dev.start} />
+          </Game>
+        </LaptopFrame>
+        <PhoneFrame>
+          <Game>
+            <DevelopTurn key={`${hash}-p`} variant={dev.variant} start={dev.start} />
+          </Game>
+        </PhoneFrame>
+      </Page>
+    );
 
   if (hash === 'walk') return <Page title="Goods auction · the walk, playable · phone and TV"><PlayableWalk /></Page>;
   if (hash === 'production') return <Page title="Production show · TV and phone"><PlayableShow /></Page>;
@@ -230,6 +262,10 @@ export default function App() {
           </a>
         </li>
       </ul>
+      <h2 className="label-caps mt-8">Redesign 2026-10-22 · phone and laptop (Heiko's points)</h2>
+      <div className="mt-2">
+        <Links states={DEV_STATES} />
+      </div>
       <h2 className="label-caps mt-8">Goods auction · every state</h2>
       <div className="mt-2">
         <Links states={AUCTION_STATES} />

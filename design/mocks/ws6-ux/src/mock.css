@@ -13,3 +13,7 @@
 @keyframes shimmer { from { opacity: 0.75; } to { opacity: 1; } }
 @keyframes flicker { from { transform: scaleY(0.9) translateY(4%); opacity: 0.85; } to { transform: scaleY(1.08); opacity: 1; } }
 @keyframes twinkle { from { transform: rotate(45deg) scale(0.4); opacity: 0.3; } to { transform: rotate(45deg) scale(1.1); opacity: 1; } }
+
+/* DS-GAP (WS6, responsive redesign): a walking creature waddles; the room the guide points at breathes. */
+@keyframes waddle { 0%, 100% { transform: translateY(0) rotate(-5deg); } 50% { transform: translateY(-3px) rotate(5deg); } }
+@keyframes beckon { 0%, 100% { box-shadow: 0 0 0 0 var(--color-holo-line); } 50% { box-shadow: 0 0 0 6px var(--color-holo-faint), var(--shadow-glow); } }

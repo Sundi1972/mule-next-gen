@@ -67,6 +67,19 @@ export function TvFrame({ children }: { children: ReactNode }) {
   );
 }
 
+/** A laptop browser window (1440 × 900), the size Heiko played at, scaled down to fit the page. */
+export function LaptopFrame({ children, scale = 0.62 }: { children: ReactNode; scale?: number }) {
+  return (
+    <div className="max-w-full overflow-x-auto">
+      <div className="overflow-hidden rounded-panel border border-holo-line shadow-map" style={{ width: 1440 * scale, height: 900 * scale }} data-testid="laptop-frame">
+        <div className="origin-top-left" style={{ width: 1440, height: 900, transform: `scale(${scale})` }}>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Routes are hash tokens (#auction-mid), so a link opens one screen directly. */
 export function useHash(): string {
   const [hash, setHash] = useState(() => window.location.hash.slice(1));
