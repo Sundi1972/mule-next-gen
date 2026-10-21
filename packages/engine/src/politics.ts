@@ -6,7 +6,7 @@
 import { POLITICS } from './config.js';
 import { RuleError } from './errors.js';
 import { player } from './game.js';
-import type { Election, GameState, Office, OfficeResult, Politics } from './types.js';
+import type { CanRun, Election, GameState, Office, OfficeResult, Politics } from './types.js';
 
 /** Politics as it stands before the first planning phase: no offices, no Baron. */
 export function newPolitics(): Politics {
@@ -89,6 +89,11 @@ function liveElection(state: GameState, id: string): Election {
 
 function contested(election: Election, office: Office): boolean {
   return election.candidates[office].length > 1;
+}
+
+/** RULE-2 rows 1-2 for each office: true, or why the player may not run now. Running for the other office is no refusal. */
+export function canRun(state: GameState, id: string): Record<Office, CanRun> {
+  throw new Error('NotImplemented: canRun');
 }
 
 /** RULE-2: runs for an office, moving any candidacy for the other one; null withdraws. Only in nominate. */

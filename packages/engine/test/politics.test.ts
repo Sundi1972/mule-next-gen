@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   advancePhase,
+  canRun,
   castVote,
   cloneForSim,
   createGame,
@@ -283,9 +284,14 @@ describe('C3: the election', () => {
 describe('RULE-2: who may run', () => {
   it('RULE-2 row 1: candidates are closed once nominate ends', () => {
     const state = governorBallot();
+    expect(canRun(state, 'ossa')).toEqual({ governor: 'closed', sheriff: 'closed' });
     expect(() => runFor(state, 'ossa', 'sheriff')).toThrow(new RuleError('Candidates are closed'));
     expect(() => runFor(state, 'lena', null)).toThrow(RuleError);
     expect(electionOf(state).candidates).toEqual({ governor: ['lena', 'brix'], sheriff: [] });
+
+    toNextPlanning(state);
+    expect(politicsOf(state).election).toBeNull();
+    expect(canRun(state, 'ossa')).toEqual({ governor: 'closed', sheriff: 'closed' });
   });
 
   it('RULE-2 row 2: two Governor terms in a row refuse a third Governor run', () => {
@@ -299,6 +305,8 @@ describe('RULE-2: who may run', () => {
     while (state.month < 7) toNextPlanning(state);
     expect(politicsOf(state).governorRun).toEqual({ id: 'lena', terms: 2 });
 
+    expect(canRun(state, 'lena')).toEqual({ governor: 'termLimit', sheriff: true });
+    expect(canRun(state, 'brix')).toEqual({ governor: true, sheriff: true });
     expect(() => runFor(state, 'lena', 'governor')).toThrow(new RuleError('Two Governor terms in a row'));
     expect(electionOf(state).candidates.governor).toEqual([]);
     runFor(state, 'brix', 'governor');
@@ -309,7 +317,9 @@ describe('RULE-2: who may run', () => {
 
   it('RULE-2 row 3: running for the other office moves the candidacy', () => {
     const state = newGame();
+    expect(canRun(state, 'lena')).toEqual({ governor: true, sheriff: true });
     runFor(state, 'lena', 'governor');
+    expect(canRun(state, 'lena')).toEqual({ governor: true, sheriff: true });
     runFor(state, 'lena', 'sheriff');
     expect(electionOf(state).candidates).toEqual({ governor: [], sheriff: ['lena'] });
     runFor(state, 'lena', 'sheriff');
