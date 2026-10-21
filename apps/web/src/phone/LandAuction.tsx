@@ -87,8 +87,8 @@ export function LandAuction() {
               Bidding starts soon
             </p>
           ) : (
-            <Button size="md" variant="outline" className="h-10 w-full" data-testid="ready" onClick={ready}>
-              Ready to bid
+            <Button size="md" variant="outline" className="h-10 w-full" disabled={done} data-testid="ready" onClick={ready}>
+              {done ? 'Ready · waiting' : 'Ready to bid'}
             </Button>
           )
         }
