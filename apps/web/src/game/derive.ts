@@ -81,6 +81,13 @@ export function standings(view: MuleView): { player: PlayerView; slot: Slot; val
     .sort((a, b) => b.value - a.value);
 }
 
+/** The colony verdict at game over, in one line everyone can repeat at the table. Air in Collapse fails it. */
+export function colonyVerdict(air: MuleView['air']): { failed: boolean; title: string; line: string } {
+  return air.band === 'collapse'
+    ? { failed: true, title: 'The colony failed', line: 'The air ended in Collapse. The Federation cuts every score by a fifth.' }
+    : { failed: false, title: 'The colony passed', line: 'The air stayed out of Collapse. Every score counts in full.' };
+}
+
 /** Seconds until an epoch-ms deadline by the server's clock. */
 export function secondsUntil(endsAt: number | null | undefined, serverNow: number): number | undefined {
   return endsAt == null ? undefined : Math.max(0, (endsAt - serverNow) / 1000);

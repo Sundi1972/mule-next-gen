@@ -334,7 +334,8 @@ async function checkTheScoresAddUp(phone: Page, tv: Page): Promise<void> {
     ['phone', end.getByTestId('verdict')],
     ['TV', tvEnd.getByTestId('tv-verdict')],
   ] as const) {
-    const text = (await verdict.textContent()) ?? '';
+    // As read on screen: textContent runs the title into the gauge ("passedColony air"), innerText keeps them apart.
+    const text = await verdict.innerText();
     const says = /\bfailed\b/.test(text) ? 'failed' : /\bpassed\b/.test(text) ? 'passed' : 'neither';
     check(says === expected, `B-AC-3: the ${screen} verdict reads "${says}", but the TV's air gauge shows ${gauge}: "${text}"`);
   }
