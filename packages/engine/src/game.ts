@@ -391,16 +391,41 @@ export function colonyFailed(state: GameState): boolean {
   return airBand(state.air).name === 'collapse';
 }
 
+export interface ScoreParts {
+  money: number;
+  goods: number;
+  plots: number;
+  land: number;
+  mules: number;
+  muleValue: number;
+  /** What Collapse took off: 0 unless the colony failed. */
+  cut: number;
+  total: number;
+}
+
 /**
- * Final score: money, plus goods and land at today's colony prices. A
- * colony that ends in Collapse cuts everyone's score by a fifth.
+ * A final score line by line: money, goods at today's colony prices, land,
+ * installed MULEs at the store price, and the Collapse cut. The lines add up
+ * to total + cut exactly; goods absorbs the rounding. See spec RULE-3.
  */
-export function score(state: GameState, playerId: string): number {
+export function scoreParts(state: GameState, playerId: string): ScoreParts {
   const p = player(state, playerId);
   const prices = allPrices(state);
-  const goods = GOODS.reduce((sum, g) => sum + p.stock[g] * prices[g], 0);
-  const plots = state.tiles.filter((t) => t.owner === playerId);
-  const land = plots.length * GAME.plotScore + plots.filter((t) => t.outfit).length * mulePrice(state);
-  const total = p.money + goods + land;
-  return Math.round(colonyFailed(state) ? total * POLLUTION.collapseScore : total);
+  const stockValue = GOODS.reduce((sum, g) => sum + p.stock[g] * prices[g], 0);
+  const owned = state.tiles.filter((t) => t.owner === playerId);
+  const plots = owned.length;
+  const mules = owned.filter((t) => t.outfit).length;
+  const land = plots * GAME.plotScore;
+  const muleValue = mules * mulePrice(state);
+  // Keep this exact order of addition: regrouping it moves Math.round at .5 edges and changes scores.
+  const raw = p.money + stockValue + (land + muleValue);
+  const before = Math.round(raw);
+  const total = colonyFailed(state) ? Math.round(raw * POLLUTION.collapseScore) : before;
+  const money = Math.round(p.money);
+  return { money, goods: before - money - land - muleValue, plots, land, mules, muleValue, cut: before - total, total };
+}
+
+/** Final score: scoreParts().total. */
+export function score(state: GameState, playerId: string): number {
+  return scoreParts(state, playerId).total;
 }
