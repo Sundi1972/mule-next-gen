@@ -1,5 +1,5 @@
-import { DEVELOPMENT, UPKEEP, type Good, type Stock } from '@mule/engine';
-import type { MyView, TileView } from '@mule/protocol';
+import { DEVELOPMENT, UPKEEP, type Good } from '@mule/engine';
+import type { TileView } from '@mule/protocol';
 import { AirGauge, Button, cx, FoodTime, GOOD_NAME, GoodIcon, HoloMap, MuleIcon, PlayerMark, StoreInterior, TERRAIN_NAME, ZoomMap, type Shop } from '@mule/ui';
 import { useEffect, useRef, useState } from 'react';
 import { mapTiles, PHASE_NAME, plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
@@ -73,8 +73,6 @@ export function Develop() {
   const free = tile && tile.owner === null && tile.terrain !== 'store';
   const owner = tile?.owner ? view.players.find((p) => p.id === tile.owner) : undefined;
 
-  // The engine's monthNeeds reaches the view with PR-9 (MyView.monthNeeds); until then RULE-7 row 3 glows nothing.
-  const monthNeeds = (me as MyView & { monthNeeds?: Stock }).monthNeeds;
   const guide = nextStep({
     filling,
     carry,
@@ -84,7 +82,7 @@ export function Develop() {
     seconds,
     freePlots,
     from: storeTile,
-    month: monthNeeds ? { needs: monthNeeds, have: me.stock } : undefined,
+    month: { needs: me.monthNeeds, have: me.stock },
     ate: Math.min(me.stock.food, me.needs.food),
     devSeconds: me.devSeconds,
     mulePrice: me.mulePrice,

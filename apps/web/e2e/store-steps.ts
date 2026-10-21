@@ -155,7 +155,9 @@ type Game = { state: GameState; devEndsAt: Map<string, number>; ctx: { now(): nu
 function gameOf(server: MuleServer, code: string): Game {
   const room = server.registry.get(code);
   check(room, `a room ${code} on the server`);
-  return (room as unknown as { game: Game }).game;
+  const game = (room as unknown as { game: Game }).game;
+  check(typeof game?.ctx?.now === 'function' && typeof game.ctx.changed === 'function' && game.devEndsAt instanceof Map, 'the room game still exposes ctx and devEndsAt');
+  return game;
 }
 
 /**
@@ -282,10 +284,19 @@ export async function theLedMuleLightsUp(phone: Page, server: MuleServer, code: 
   check(empty.led[0]!.saddled, 'B-AC-16: the MULE she leads wears her colour');
   check(empty.nowStep === 'Step 2 of 3' && empty.nowTitle === 'Choose what your MULE makes', `B-AC-15: Now says step 2, choose what it makes, got ${empty.nowStep} "${empty.nowTitle}"`);
   check(empty.locks['booth-corral'] === 'one at a time', `B-AC-15: with a MULE in tow the corral says "one at a time", got "${empty.locks['booth-corral']}"`);
-  // Row 3 names the largest raw shortfall in monthNeeds, once the view carries it (PR-9); before that, nothing.
+  // Row 3 glows the outfitter of the largest raw shortfall in the engine's monthNeeds; with none short, nothing.
   const short = largestRawShortfall(server, code, seat);
-  const glow = empty.next;
-  check(glow.length === 0 || (short !== null && JSON.stringify(glow) === JSON.stringify([`booth-${short}`])), `B-AC-15: an empty MULE glows nothing or the ${short ?? 'no'} outfitter (largest shortfall), got ${glow.join(', ')}`);
+  const want = short === null ? [] : [`booth-${short}`];
+  check(JSON.stringify(empty.next) === JSON.stringify(want), `B-AC-15: an empty MULE glows ${short === null ? 'nothing (no shortfall)' : `the ${short} outfitter (largest shortfall)`}, got [${empty.next.join(', ')}]`);
+  // Both branches every run: with her Water emptied for a moment there is a shortfall, and its outfitter glows.
+  const seeded = await withNoWater(server, code, seat, async (lack) => {
+    const r = await hallWhen(phone, (h) => JSON.stringify(h.next) === JSON.stringify([`booth-${lack}`]));
+    check(JSON.stringify(r.next) === JSON.stringify([`booth-${lack}`]), `B-AC-15: short of ${lack}, an empty MULE glows the ${lack} outfitter, got [${r.next.join(', ')}]`);
+    check(r.nowTitle === 'Choose what your MULE makes', `B-AC-15: Now still says choose what it makes, got "${r.nowTitle}"`);
+    return lack;
+  });
+  const back = await hallWhen(phone, (h) => JSON.stringify(h.next) === JSON.stringify(want));
+  check(JSON.stringify(back.next) === JSON.stringify(want), `B-AC-15: with her Water back the glow returns to [${want.join(', ')}], got [${back.next.join(', ')}]`);
 
   await phone.locator('[data-shop=energy]:not([disabled])').click({ timeout: 2_000 });
   const lit = await hallWhen(phone, (r) => r.led[0]?.good === 'energy' && r.next.length === 2);
@@ -316,5 +327,27 @@ export async function theLedMuleLightsUp(phone: Page, server: MuleServer, code: 
   check(title === 'Install your Energy MULE here', `B-AC-15: on her selected plot Now says install it here, got "${title}"`);
   await dev.getByRole('button', { name: 'Store', exact: true }).click({ timeout: 2_000 });
   await phone.getByTestId('store-hall').waitFor({ timeout: 2_000 });
-  return sizes.join(', ');
+  return `${sizes.join(', ')}; row 3 glowed ${short ?? 'nothing (no shortfall)'}, then ${seeded} when short`;
+}
+
+/**
+ * Test fixture: empties the seat's Water while `fn` runs, so monthNeeds has a shortfall, then puts it back. Nothing
+ * is produced or eaten during development, so the game goes on as if it never happened. `fn` gets the engine's
+ * largest raw shortfall at that moment.
+ */
+async function withNoWater<T>(server: MuleServer, code: string, seat: string, fn: (lack: string) => Promise<T>): Promise<T> {
+  const game = gameOf(server, code);
+  const p = game.state.players.find((q) => q.id === seat);
+  check(p, `seat ${seat} in the game`);
+  const kept = p.stock.water;
+  p.stock.water = 0;
+  game.ctx.changed();
+  try {
+    const lack = largestRawShortfall(server, code, seat);
+    check(lack !== null, 'with no Water the seat is short of something this month');
+    return await fn(lack);
+  } finally {
+    p.stock.water = kept;
+    game.ctx.changed();
+  }
 }

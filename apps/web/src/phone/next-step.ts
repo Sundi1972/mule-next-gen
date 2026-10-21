@@ -21,8 +21,8 @@ export interface DevelopState {
   /** Where "nearest" is measured from: the store's plot, where you walk out. */
   from: { x: number; y: number };
   /**
-   * The month's needs (the engine's monthNeeds) and what you hold, for row 3's glow. Undefined while the view
-   * carries no monthNeeds: then row 3 glows nothing.
+   * The month's needs (the engine's monthNeeds) and what you hold, for row 3's glow. Undefined when they are
+   * unknown: then row 3 glows nothing.
    */
   month?: { needs: Partial<Record<Good, number>>; have: Partial<Record<Good, number>> } | undefined;
   /** For the words: Food eaten, this month's seconds, the corral, the pub. */
