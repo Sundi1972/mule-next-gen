@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import {
   applyScarcity,
   dealGround,
@@ -9,6 +9,7 @@ import {
   placePeaks,
   repairReach,
   type Dealt,
+  type Lift,
 } from '../src/map-ground.js';
 import { layoutMap, type Layout } from '../src/map-layout.js';
 import {
@@ -30,8 +31,6 @@ import {
 const PLAYERS = [2, 3, 4, 5, 6];
 const SEEDS = 200;
 const FLOOR_GOODS: FloorGood[] = ['food', 'water', 'energy', 'smithore'];
-// Ground stages draw from their own rng, so every stage test sees the same layouts whatever the stages draw.
-const GROUND_SEED_OFFSET = 1_000_003;
 
 type LandTerrain = Exclude<Terrain, 'store'>;
 
@@ -45,6 +44,7 @@ interface Run {
   scarce: FloorGood | null;
   floors: Dealt;
   reach: Dealt;
+  lifts: Lift[];
   seams: Dealt;
   scarcity: Dealt;
 }
@@ -53,21 +53,28 @@ let runs: Run[] | undefined;
 
 function allRuns(): Run[] {
   if (runs) return runs;
-  const keep = (d: Dealt): Dealt => ({ ...d, ground: structuredClone(d.ground), fields: structuredClone(d.fields) });
+  const keep = (d: Dealt): Dealt => ({
+    ...d,
+    ground: d.ground.map((g) => ({ ...g })),
+    fields: { food: [...d.fields.food], water: [...d.fields.water], energy: [...d.fields.energy], smithore: [...d.fields.smithore] },
+  });
   // Filled locally and kept only when complete: a stage that throws must fail every test, not leave an empty cache.
   const built: Run[] = [];
   for (const players of PLAYERS) {
     for (let seed = 1; seed <= SEEDS; seed++) {
-      const layout = layoutMap(players, createRng(seed));
-      const rng = createRng(seed + GROUND_SEED_OFFSET);
+      // One rng from the layout on into the ground, as the generator runs them.
+      const rng = createRng(seed);
+      const layout = layoutMap(players, rng);
       const odds = keep(dealOdds(layout, players, rng));
       const peaks = keep(placePeaks(odds, rng));
       const scarce = pickScarce(rng);
       const floors = keep(liftFloors(peaks, scarce));
-      const reach = keep(repairReach(floors));
+      const reached = repairReach(floors);
+      const lifts = reached.lifts.map((l) => ({ ...l }));
+      const reach = keep(reached);
       const seams = keep(joinSeams(reach));
       const scarcity = keep(applyScarcity(seams, scarce));
-      built.push({ players, seed, layout, odds, peaks, scarce, floors, reach, seams, scarcity });
+      built.push({ players, seed, layout, odds, peaks, scarce, floors, reach, lifts, seams, scarcity });
     }
   }
   runs = built;
@@ -127,6 +134,11 @@ function belowNormal(run: Run, report: MapReport): string[] {
 }
 
 describe('map ground stages', () => {
+  // One shared, read-only build of every stage's output; each test then only checks it.
+  beforeAll(() => {
+    allRuns();
+  }, 30_000);
+
   it('T-AC-5: ground stage deals each terrain its odds by stratified draw', () => {
     const broken: string[] = [];
     for (const run of allRuns()) {
@@ -189,15 +201,30 @@ describe('map ground stages', () => {
     expect(broken, broken.join('\n')).toEqual([]);
   });
 
-  it('T-AC-5: stages 7-8 keep each terrain\'s ratings', () => {
+  it("T-AC-5: stages 7-8 keep each terrain's ratings but for stage 7's recorded lifts", () => {
     const broken: string[] = [];
-    const ratings = (d: Dealt, plots: number[], good: FloorGood) => plots.map((i) => d.ground[i]![good]).sort((a, b) => a - b).join(',');
+    const sorted = (ratings: number[]) => [...ratings].sort((a, b) => a - b).join(',');
     for (const run of allRuns()) {
+      const where = `${run.players}p seed ${run.seed}`;
+      for (const lift of run.lifts) {
+        const terrain = run.layout.terrain[lift.plot] as LandTerrain;
+        if (lift.from >= MAP.goodAt[lift.good]) broken.push(`${where}: lift of ${lift.good} at plot ${lift.plot} from ${lift.from}, already good`);
+        const canBeGood = oddsOf(terrain, lift.good).weights.some((w, k) => w > 0 && oddsOf(terrain, lift.good).values[k]! >= MAP.goodAt[lift.good]);
+        if (lift.impossible === canBeGood) broken.push(`${where}: lift of ${lift.good} on ${terrain} marked impossible ${lift.impossible}`);
+      }
       for (const [terrain, plots] of plotsByTerrain(run.layout)) {
         for (const good of FLOOR_GOODS) {
-          const before = ratings(run.floors, plots, good);
-          const after = ratings(run.seams, plots, good);
-          if (before !== after) broken.push(`${run.players}p seed ${run.seed} ${terrain} ${good}: [${before}] became [${after}]`);
+          // Each lift swaps one `from` in the terrain's ratings for exactly the threshold; nothing else may change them.
+          const expected = plots.map((i) => run.floors.ground[i]![good]);
+          for (const lift of run.lifts.filter((l) => l.good === good && plots.includes(l.plot))) {
+            const at = expected.indexOf(lift.from);
+            if (at >= 0) expected[at] = MAP.goodAt[good];
+            else broken.push(`${where} ${terrain} ${good}: lift from ${lift.from}, which the terrain never held`);
+          }
+          const after = plots.map((i) => run.seams.ground[i]![good]);
+          if (sorted(expected) !== sorted(after)) {
+            broken.push(`${where} ${terrain} ${good}: expected [${sorted(expected)}], got [${sorted(after)}]`);
+          }
         }
       }
     }
@@ -206,18 +233,19 @@ describe('map ground stages', () => {
 
   it('T-AC-5: a laid-out map dealt its ground breaks no map rule', () => {
     const broken: string[] = [];
-    for (const players of PLAYERS) {
-      for (let seed = 1; seed <= SEEDS; seed++) {
-        const rng = createRng(seed);
-        const layout = layoutMap(players, rng);
-        const { ground, scarce } = dealGround(layout, players, rng);
-        const report = checkMap(toMap(layout, ground), players);
-        const where = `${players}p seed ${seed}`;
-        for (const v of report.violations) broken.push(`${where} ${v.rule}: ${v.detail}`);
-        if (report.metrics.scarce !== scarce) broken.push(`${where}: reported scarce ${scarce ?? 'none'}, the map has ${report.metrics.scarce ?? 'none'}`);
-        const store = layout.terrain.indexOf('store');
-        if (Object.values(ground[store]!).some((r) => r !== 0)) broken.push(`${where}: the store has ground`);
-      }
+    for (const run of allRuns()) {
+      const where = `${run.players}p seed ${run.seed}`;
+      const report = checkMap(toMap(run.layout, run.scarcity.ground), run.players);
+      for (const v of report.violations) broken.push(`${where} ${v.rule}: ${v.detail}`);
+      if (report.metrics.scarce !== run.scarce) broken.push(`${where}: picked scarce ${run.scarce ?? 'none'}, the map has ${report.metrics.scarce ?? 'none'}`);
+      const store = run.layout.terrain.indexOf('store');
+      if (Object.values(run.scarcity.ground[store]!).some((r) => r !== 0)) broken.push(`${where}: the store has ground`);
+      // dealGround is the stages in order: on a sample, the same rng stream through it gives the same ground and scarce good.
+      if (run.seed % 20 !== 0) continue;
+      const rng = createRng(run.seed);
+      const layout = layoutMap(run.players, rng);
+      const dealt = dealGround(layout, run.players, rng);
+      if (JSON.stringify(dealt) !== JSON.stringify({ ground: run.scarcity.ground, scarce: run.scarce })) broken.push(`${where}: dealGround differs from the stages run in order`);
     }
     expect(broken, broken.join('\n')).toEqual([]);
   });

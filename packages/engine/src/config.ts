@@ -420,6 +420,26 @@ export const MAP = {
     /** Edge plots of each big patch tried as the start of a carved region, when a speck is stuck. */
     carveStarts: 3,
   },
+  /** Tuning for the ground stages (map-ground.ts): how the generator meets the rules above, not rules themselves. */
+  ground: {
+    /**
+     * The smooth fields that rank plots: one random blob per `area` plots (at least minBlobs), each a bump of
+     * this `spread` (variance, in plots squared). Smithore's are narrow, so its rich plots gather into seams.
+     */
+    blobs: {
+      grown: { area: 14, spread: 2.5 },
+      smithore: { area: 10, spread: 1.3 },
+    },
+    minBlobs: 3,
+    /** Random jitter on every plot's field, so a flat stretch still ranks by rng rather than by index. */
+    fieldNoise: 0.15,
+    /** Most repairs the reach stage makes for one good. */
+    reachPasses: 200,
+    /** Sweeps the seam stage makes over the isolated good Smithore plots. */
+    seamPasses: 4,
+    /** Most plots the scarcity stage tries, searching for a set to lower that keeps reach and the seams. */
+    scarcityTries: 4000,
+  },
 };
 
 export const GAME = {
