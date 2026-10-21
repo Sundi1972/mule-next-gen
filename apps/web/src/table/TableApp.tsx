@@ -9,17 +9,18 @@ import { colonyVerdict, fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, player, plo
 import { useAuctionSound } from '../game/sound';
 import { useClient, useClientState, useServerNow } from '../net/react';
 import { TvLandAuction } from './TvLandAuction';
+import { TvProduction } from './TvProduction';
 
 /** The big screen: the public view everyone at the table shares. It has no controls. */
 export function TableApp({ room }: { room: string }) {
   const client = useClient();
-  const { view, role } = useClientState();
+  const { view, role, notice } = useClientState();
   useEffect(() => {
     if (room) client.watch(room);
   }, [client, room]);
 
   let screen: ReactNode;
-  if (!room) screen = <PickRoom />;
+  if (!room || notice) screen = <PickRoom notice={notice} />;
   else if (!view || role !== 'board') screen = <Waiting code={room} />;
   else if (view.status === 'lobby' || !view.game) screen = <TvLobby table={view} />;
   else screen = <TvGame table={view} game={view.game} />;
@@ -33,7 +34,8 @@ export function TableApp({ room }: { room: string }) {
   );
 }
 
-function PickRoom() {
+/** Asks for a room code; `notice` says why the last room let this screen go. */
+function PickRoom({ notice }: { notice: string | null }) {
   const [code, setCode] = useState('');
   return (
     <form
@@ -46,6 +48,11 @@ function PickRoom() {
       <h1 className="font-display text-6xl font-semibold">
         M.U.L.E. <span className="text-holo">Next Gen</span> · big screen
       </h1>
+      {notice && (
+        <p role="status" className="font-display text-3xl font-semibold text-warn">
+          {notice}
+        </p>
+      )}
       <p className="font-display text-2xl text-ink-2">Type the room code shown on the host's phone.</p>
       <input
         value={code}
@@ -145,6 +152,8 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
     );
   }
 
+  if (phase === 'production' && game.production) return <TvProduction game={game} production={game.production} />;
+
   let side: ReactNode;
   if (phase === 'landGrant')
     side = (
@@ -169,7 +178,9 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   else if (phase === 'development')
     side = (
       <>
-        <StoreInterior mules={game.storeMules} mulePrice={game.mulePrice} prices={{}} />
+        <div className="h-[240px]">
+          <StoreInterior mules={game.storeMules} mulePrice={game.mulePrice} prices={{}} tv />
+        </div>
         <ul className="mt-auto grid grid-cols-2 gap-x-4 gap-y-2">
           {game.players.map((p, i) => (
             <li key={p.id} className={cx('flex items-center gap-2', p.doneDeveloping && 'opacity-50')}>
