@@ -150,9 +150,14 @@ export function advanceGrant(state: GameState): Tile | null {
   }
 }
 
-/** The grant ends when every player has used their claims or no free land is left. */
+/**
+ * The grant ends when every player has used their claims, no free land is
+ * left, or the light has swept the free plots GAME.grantSweeps times: a
+ * player who doesn't want land must not hold the table up.
+ */
 export function grantDone(state: GameState): boolean {
-  return freePlots(state).length === 0 || state.players.every((p) => p.claimsThisGrant >= GAME.claimsPerGrant);
+  if (freePlots(state).length === 0 || (state.grant?.sweep ?? 0) >= GAME.grantSweeps) return true;
+  return state.players.every((p) => p.claimsThisGrant >= GAME.claimsPerGrant);
 }
 
 /** Claims the lit plot. The coordinates say which plot the player saw lit, so a late press can't grab the next one. */

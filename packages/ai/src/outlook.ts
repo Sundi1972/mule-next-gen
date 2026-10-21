@@ -11,7 +11,10 @@ import {
   runUpkeep,
   emptyStock,
   GOODS,
+  MULE,
+  PRICE,
   STRATEGIST,
+  UPKEEP,
   type GameState,
   type Good,
   type Stock,
@@ -44,7 +47,7 @@ export interface Outlook {
   later(good: Good, extra?: number): number;
 }
 
-const BEFORE_PRODUCTION = new Set(['planning', 'landGrant', 'development']);
+const BEFORE_PRODUCTION = new Set(['planning', 'landGrant', 'landAuction', 'development']);
 
 export function outlook(obs: GameState, me: string, options: { lookAhead: boolean; apply?: (sim: GameState) => void; months?: number }): Outlook {
   const months = options.months ?? STRATEGIST.outlookMonths;
@@ -78,7 +81,7 @@ export function outlook(obs: GameState, me: string, options: { lookAhead: boolea
   const off = exportDemand(sim);
   const seat = sim.players.find((p) => p.id === me)!;
   const cache = new Map<string, number>();
-  let future: Stock | null = null;
+  let future: Future | null = null;
   const o: Outlook = {
     stage: sim,
     final: false,
@@ -96,29 +99,51 @@ export function outlook(obs: GameState, me: string, options: { lookAhead: boolea
     later(good, extra = 0) {
       future ??= rollForward(sim, months);
       const base = Math.max(1, o.price(good));
-      return future[good] * (extra === 0 ? 1 : o.price(good, extra) / base);
+      return future.prices[good] * (extra === 0 ? 1 : o.price(good, extra) / base);
     },
   };
   return o;
 }
 
+interface Future {
+  prices: Stock;
+}
+
 /**
- * Plays the status quo forward on a copy: nobody claims, builds or trades;
- * plots produce, everyone eats, the store builds MULEs and posts prices.
- * Returns the prices it posts at the last auction reached.
+ * Plays the status quo forward on a copy: nobody claims, builds or trades,
+ * except that the seats buy the MULEs they claim land for, so the corral
+ * drains as it does in play; plots produce, everyone eats, the store builds
+ * MULEs and posts prices. Returns the prices posted `months` on, raised
+ * where the rollout (run on to the horizon) shows a shortage the price
+ * hasn't caught up with yet: Food or Water colonists went short of count at
+ * what colonists would pay, and Smithore, when the corral can't build its
+ * monthly target, at its price at the horizon.
  */
-function rollForward(stage: GameState, months: number): Stock {
+function rollForward(stage: GameState, months: number): Future {
   const sim = cloneForSim(stage);
-  const target = Math.min(sim.month + months, endMonth(sim));
+  const from = sim.history.length;
+  const asked = Math.min(sim.month + months, endMonth(sim));
+  const target = Math.min(sim.month + Math.max(months, STRATEGIST.horizon), endMonth(sim));
+  const muleTarget = sim.players.length * GAME.claimsPerGrant + MULE.spareInCorral;
   let prices: Stock = { ...sim.store.posted };
-  for (let guard = 0; guard < months * 8 && sim.phase !== 'gameOver'; guard++) {
+  let last: Stock = prices;
+  let corralShort = false;
+  for (let guard = 0; guard < (target - sim.month + 1) * 8 && sim.phase !== 'gameOver'; guard++) {
     advancePhase(sim);
+    if (sim.phase === 'production') sim.store.mules = Math.max(0, sim.store.mules - sim.players.length * GAME.claimsPerGrant);
+    if (sim.phase === 'planning' && sim.store.mules < muleTarget) corralShort = true;
     if (sim.phase === 'auction') {
-      prices = { ...sim.store.posted };
+      last = { ...sim.store.posted };
+      if (sim.month <= asked) prices = last;
       if (sim.month >= target) break;
     }
   }
-  return prices;
+  prices = { ...prices };
+  for (const good of new Set(sim.history.slice(Math.max(0, from - 1)).flatMap((h) => h.shortages))) {
+    prices[good] = Math.max(prices[good], (UPKEEP.colonistBudget[good] ?? 0) / (1 + PRICE.storeSpread));
+  }
+  if (corralShort) prices.smithore = Math.max(prices.smithore, last.smithore);
+  return { prices };
 }
 
 function produce(sim: GameState, me: string): Stock {

@@ -32,10 +32,12 @@ export interface MuleServer {
  * The game server: an HTTP server for the web client and `POST /rooms`, and a
  * WebSocket endpoint at `/ws` where phones and boards talk to their room.
  */
-export function createMuleServer(options: { staticDir?: string; seed?: () => number } = {}): MuleServer {
+export function createMuleServer(
+  options: { staticDir?: string; seed?: () => number; maxMonths?: number; phaseScale?: number } = {},
+): MuleServer {
   const seed = options.seed ?? (() => Math.floor(Math.random() * 2 ** 31));
   const registry = new RoomRegistry<MuleIntent, MuleView>({
-    createGame: (ctx) => new MuleGame(ctx, seed()),
+    createGame: (ctx) => new MuleGame(ctx, seed(), { maxMonths: options.maxMonths, phaseScale: options.phaseScale }),
     aiNames: AI_NAMES,
     emotes: EMOTES,
     isUserError: (err) => err instanceof RuleError || err instanceof TableError,

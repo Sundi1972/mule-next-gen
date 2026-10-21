@@ -4,6 +4,7 @@ import {
   GAME,
   GOOD_CONFIG,
   mulePrice,
+  mulePriceFor,
   neighbours,
   POLLUTION,
   PROCESSED_GOODS,
@@ -172,9 +173,13 @@ export function landDecision(obs: GameState, mind: Mind): Shortlist<LandPlan> {
 /**
  * Whether the hands should press for the lit plot: it must clear a share of
  * the best plot still free in the plan's ranking (lower after the first
- * sweep, so the seat doesn't end the month empty-handed).
+ * sweep, so the seat doesn't end the month empty-handed). Never while the
+ * seat already holds a month's worth of idle plots it can't pay to develop:
+ * hoarded land earns nothing and every idle plot counts as Smithore demand.
  */
-export function wantsPlot(plan: LandPlan, obs: GameState, index: number, sweep: number): boolean {
+export function wantsPlot(plan: LandPlan, obs: GameState, index: number, sweep: number, mind: Mind): boolean {
+  const idle = obs.tiles.filter((t) => t.owner === mind.me && !t.outfit).length;
+  if (idle >= mind.level.mulesPerMonth && me(obs, mind).money < (idle + 1) * mulePriceFor(obs, mind.me)) return false;
   const free = new Set(obs.tiles.map((t, i) => (t.owner === null && t.terrain !== 'store' ? i : -1)).filter((i) => i >= 0));
   const open = plan.ranking.filter((s) => free.has(s.index));
   const lit = open.find((s) => s.index === index);
@@ -182,6 +187,38 @@ export function wantsPlot(plan: LandPlan, obs: GameState, index: number, sweep: 
   if (sweep > 1) return true;
   const share = sweep === 0 ? STRATEGIST.grantShare : STRATEGIST.grantLaterShare;
   return lit.utility >= (open[0]?.utility ?? 0) * share;
+}
+
+// --- Values for lot bids ----------------------------------------------------
+
+/**
+ * What a plot is worth to the seat, in credits: the best gain it sees from
+ * developing it (never below nothing) plus what the plot adds to the score.
+ * The most the seat bids for it at a lot.
+ */
+export function plotValue(obs: GameState, mind: Mind, index: number): number {
+  const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
+  const best = Math.max(0, ...plotGains(obs, o, obs.tiles[index]!, mind).values());
+  return Math.round(best + GAME.plotScore);
+}
+
+/**
+ * What one more MULE is worth to the seat, in credits: its best use on an
+ * idle plot of its own, before paying the store's price for it. Nothing
+ * without idle land. The most the seat bids for a MULE at a lot.
+ */
+export function muleValue(obs: GameState, mind: Mind): number {
+  const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
+  const price = mulePriceFor(obs, mind.me);
+  let best = 0;
+  for (const tile of obs.tiles) {
+    if (tile.owner !== mind.me || tile.outfit) continue;
+    for (const outfit of OUTFITS) {
+      if (isFactoryGood(outfit) && !canFeed(obs, mind.me, outfit)) continue;
+      best = Math.max(best, installGain(obs, o, tile, outfit, mind).gain + price);
+    }
+  }
+  return Math.round(best);
 }
 
 // --- Development -------------------------------------------------------------
@@ -221,7 +258,9 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number):
       let veto: string | null = null;
       if (obs.store.mules <= 0) veto = 'the corral is empty';
       else if (mulesSoFar >= mind.level.mulesPerMonth) veto = `already led ${mulesSoFar} MULEs out this month`;
-      else if (cashAfter < keepBack) veto = `it would leave ${cr(cashAfter)}, under the ${cr(keepBack)} kept for upkeep`;
+      else if (cashAfter < 0) veto = `it costs ${cr(cost)}, more than the ${cr(p.money)} on hand`;
+      // What the MULE makes arrives before the auction the reserve is kept for, so it counts toward it.
+      else if (cashAfter + Math.max(0, net) < keepBack) veto = `it would leave ${cr(cashAfter)}, under the ${cr(keepBack)} kept for upkeep`;
       else if (!canFeed(obs, mind.me, outfit)) veto = `nothing to feed the ${outfitName(outfit)} with`;
       cands.push(
         candidate<DevAction>(
