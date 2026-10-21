@@ -171,7 +171,7 @@ describe('TableClient', () => {
     expect(client.serverNow()).toBe((ping.clientTime as number) + 40 + 5_000);
   });
 
-  it('keeps chat without duplicates, and leaving forgets the seat', () => {
+  it('T-AC-10: keeps chat without duplicates; leaving tells the room, then forgets the seat and disconnects', () => {
     const { client, last, storage } = setup();
     client.join('KRTX', 'Heiko');
     last().open();
@@ -181,8 +181,33 @@ describe('TableClient', () => {
     last().deliver({ t: 'chat', message });
     expect(client.getState().chat).toHaveLength(1);
     client.leave();
+    expect(last().sent.at(-1)).toEqual({ t: 'leave' });
+    expect(last().readyState).toBe(3);
     expect(loadSeat(storage)).toBeNull();
     expect(client.getState().status).toBe('idle');
+  });
+
+  it.each([
+    { reason: 'kicked', message: 'The host removed you from the table' },
+    { reason: 'closed', message: 'The host closed the table' },
+    { reason: 'moved', message: "You're playing on another device now" },
+  ] as const)('B-AC-6: removed $reason → the seat is forgotten, the start screen gives the reason, and the phone never reconnects', ({ reason, message }) => {
+    const { client, sockets, last, storage, advance } = setup();
+    client.join('KRTX', 'Heiko');
+    last().open();
+    last().deliver({ t: 'welcome', code: 'KRTX', role: 'player', seatId: 's2', seatToken: 'secret' });
+    last().deliver({ t: 'view', view: lobbyView('KRTX') });
+
+    last().deliver({ t: 'removed', reason });
+    last().drop();
+    advance(10_000);
+
+    expect(loadSeat(storage)).toBeNull();
+    expect(client.getState()).toMatchObject({ status: 'idle', role: null, seatId: null, view: null, notice: message });
+    expect(sockets).toHaveLength(1);
+
+    client.join('KRTX', 'Heiko');
+    expect(client.getState().notice).toBeNull();
   });
 });
 

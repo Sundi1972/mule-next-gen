@@ -23,7 +23,7 @@ const inputClass = 'h-11 rounded-control border border-holo-line bg-panel px-3 t
 /** Before you have a seat: start a new game or join one by its code. */
 export function Entry({ initialCode }: { initialCode: string }) {
   const client = useClient();
-  const { status } = useClientState();
+  const { status, notice } = useClientState();
   const saved = client.savedSeat();
   const [name, setName] = useState(saved?.name ?? '');
   const [code, setCode] = useState(initialCode);
@@ -48,6 +48,11 @@ export function Entry({ initialCode }: { initialCode: string }) {
       <div className="grid min-h-0 flex-1 grid-cols-2 gap-6 overflow-y-auto px-4 py-4">
         <div className="flex flex-col gap-2">
           <h1 className="font-display text-3xl font-semibold">{initialCode ? 'Join the table' : 'Pull up a chair'}</h1>
+          {notice && (
+            <p role="status" className="rounded-control border border-warn/40 bg-warn/10 px-3 py-1.5 text-sm font-semibold text-ink" data-testid="removed-notice">
+              {notice}
+            </p>
+          )}
           <p className="text-ink-2">Everyone plays on their own phone. One of you starts a game; the others join with its code.</p>
           <p className="mt-auto text-sm text-ink-3">
             Got a TV or laptop? Open <span className="font-mono text-ink-2">/table</span> on it for the big screen.
@@ -217,11 +222,16 @@ function BoardStatus({ code, boards }: { code: string; boards: number }) {
   );
 }
 
-/** The seat rail: everyone at the table as the creature they play, yours among them. The host adds AI players and starts. */
+type HostDialog = { kind: 'kick'; seatId: string; name: string } | { kind: 'close' };
+
+/** The seat rail: everyone at the table as the creature they play, yours among them. The host adds AI players, removes seats, starts or closes the room. */
 function SeatRail({ table, mine, species }: { table: TableView<unknown>; mine: number; species: Species[] }) {
   const client = useClient();
   const { seatId } = useClientState();
   const isHost = table.hostId === seatId;
+  const [asked, setAsked] = useState<HostDialog | null>(null);
+  // A seat that left while the host was deciding has nothing left to remove.
+  const dialog = asked?.kind === 'kick' && !table.seats.some((s) => s.id === asked.seatId) ? null : asked;
   return (
     <div className="flex w-(--rail) shrink-0 flex-col border-l border-holo-faint bg-void/40">
       <section className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-3 py-3">
@@ -245,28 +255,75 @@ function SeatRail({ table, mine, species }: { table: TableView<unknown>; mine: n
                   >
                     {s.isAi ? 'AI' : s.id === table.hostId ? 'HOST' : s.connected ? 'READY' : 'AWAY'}
                   </span>
+                  {isHost && !isMine && (
+                    <Button
+                      variant="ghost"
+                      size="md"
+                      className="-my-1 h-8! w-8! px-0!"
+                      aria-label={`Remove ${s.name}`}
+                      onClick={() => setAsked({ kind: 'kick', seatId: s.id, name: s.name })}
+                      data-testid={`kick-${s.id}`}
+                    >
+                      ✕
+                    </Button>
+                  )}
                 </div>
               </li>
             );
           })}
         </ul>
       </section>
-      <div className="flex flex-col gap-2 border-t border-holo-faint bg-void/60 px-3 py-2.5">
-        {isHost ? (
-          <>
-            <Button size="md" variant="outline" disabled={table.seats.length >= 6} onClick={() => client.addAi()} data-testid="add-ai">
-              Add AI player
-            </Button>
-            <Button size="md" disabled={table.seats.length < 2} onClick={() => client.start()} data-testid="start-game">
-              Start game
-            </Button>
-          </>
-        ) : (
+      {isHost ? (
+        <div className="flex flex-col gap-2 border-t border-holo-faint bg-void/60 px-3 py-2.5" data-testid="host-tools">
+          {dialog ? (
+            <HostConfirm
+              dialog={dialog}
+              onCancel={() => setAsked(null)}
+              onConfirm={() => {
+                setAsked(null);
+                if (dialog.kind === 'kick') client.kick(dialog.seatId);
+                else client.closeTable();
+              }}
+            />
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                <Button size="md" variant="outline" className="whitespace-nowrap px-1!" disabled={table.seats.length >= 6} onClick={() => client.addAi()} data-testid="add-ai">
+                  Add AI player
+                </Button>
+                <Button size="md" variant="ghost" className="whitespace-nowrap px-1!" onClick={() => setAsked({ kind: 'close' })} data-testid="close-room">
+                  Close the room
+                </Button>
+              </div>
+              <Button size="md" disabled={table.seats.length < 2} onClick={() => client.start()} data-testid="start-game">
+                Start game
+              </Button>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2 border-t border-holo-faint bg-void/60 px-3 py-2.5">
           <Button size="md" variant="ghost" onClick={() => client.leave()}>
             Leave table
           </Button>
-        )}
-      </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Asks the host before a seat or the whole room goes; nothing is sent until they confirm. */
+function HostConfirm({ dialog, onConfirm, onCancel }: { dialog: HostDialog; onConfirm: () => void; onCancel: () => void }) {
+  const question = dialog.kind === 'kick' ? `Remove ${dialog.name}?` : 'Close the room?';
+  return (
+    <div role="alertdialog" aria-label={question} className="grid grid-cols-2 gap-2" data-testid="host-dialog">
+      <p className="col-span-2 truncate text-sm font-semibold">{question}</p>
+      <Button variant="danger" size="md" onClick={onConfirm} data-testid={dialog.kind === 'kick' ? 'kick-confirm' : 'close-confirm'}>
+        {dialog.kind === 'kick' ? 'Remove' : 'Close'}
+      </Button>
+      <Button variant="ghost" size="md" onClick={onCancel} data-testid="host-dialog-cancel">
+        Cancel
+      </Button>
     </div>
   );
 }

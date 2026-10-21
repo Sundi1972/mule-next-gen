@@ -8,6 +8,8 @@ import { check, launch, PHONE, startServer, TV } from './harness';
 const SHOWN_MS = 5_000;
 /** Longer than the client's first reconnect pause, so a phone that tried to come back would be seen. */
 const STAYS_GONE_MS = 1_500;
+/** Time for a message a cancelled confirm wrongly sent to come back as a change. */
+const CANCEL_SETTLE_MS = 500;
 const KICKED = 'The host removed you from the table';
 const CLOSED = 'The host closed the table';
 
@@ -30,16 +32,17 @@ try {
   const mia = await joinRoom(await phone('mia'), code, 'Mia');
   check(await shows(seat(host, 'Mia')), 'B-AC-6: Mia joins the host\'s seat rail');
   check(await shows(host.getByTestId('kick-s2')), 'B-AC-6: the host has a kick control on Mia\'s seat');
-  check(await shows(host.getByTestId('close-table')), 'B-AC-6: the host has a close control');
+  check(await shows(host.getByTestId('host-tools').getByTestId('close-room')), 'B-AC-6: the host has a close control among the host tools');
   check(await shows(seat(mia, 'Heiko')), 'B-AC-6: Mia sees the host in her seat rail');
   check((await mia.locator('[data-testid^=kick-]').count()) === 0, 'B-AC-6: a non-host phone has no kick control');
-  check((await mia.getByTestId('close-table').count()) === 0, 'B-AC-6: a non-host phone has no close control');
+  check((await mia.getByTestId('close-room').count()) === 0 && (await mia.getByTestId('host-tools').count()) === 0, 'B-AC-6: a non-host phone has no close control and no host tools');
 
   await host.getByTestId('kick-s2').click();
-  check(await shows(host.getByText('Remove Mia?')), 'B-AC-6: the kick control asks "Remove Mia?" first');
-  await host.getByTestId('kick-cancel').click();
-  check(await gone(host.getByTestId('kick-confirm')), 'B-AC-6: Cancel closes the confirm');
-  check((await seat(host, 'Mia').count()) === 1 && (await mia.getByText("You're at the table").count()) === 1, 'B-AC-6: Cancel removes nobody');
+  check(await shows(host.getByTestId('host-dialog').getByText('Remove Mia?')), 'B-AC-6: the kick control asks "Remove Mia?" first');
+  await host.getByTestId('host-dialog-cancel').click();
+  check(await gone(host.getByTestId('host-dialog')), 'B-AC-6: Cancel closes the confirm');
+  await host.waitForTimeout(CANCEL_SETTLE_MS);
+  check((await seat(host, 'Mia').count()) === 1 && (await mia.getByText("You're at the table").count()) === 1, 'B-AC-6: Cancel on the kick confirm removes nobody');
 
   await kick(host, 's2');
   check(await shows(mia.getByText(KICKED)), `B-AC-6: the kicked phone shows "${KICKED}"`);
@@ -65,7 +68,18 @@ try {
   await mia.getByRole('button', { name: `Join game ${code}` }).click();
   check(await shows(seat(host, 'Mia')), 'B-AC-6: a kicked player can join again by code, as a newcomer');
 
-  await host.getByTestId('close-table').click();
+  await host.getByTestId('close-room').click();
+  check(await shows(host.getByTestId('host-dialog').getByText('Close the room?')), 'B-AC-6: the close control asks "Close the room?" first');
+  await host.getByTestId('host-dialog-cancel').click();
+  check(await gone(host.getByTestId('host-dialog')), 'B-AC-6: Cancel closes the close confirm');
+  await host.waitForTimeout(CANCEL_SETTLE_MS);
+  check(
+    (await host.getByText("You're at the table").count()) === 1 && (await mia.getByText("You're at the table").count()) === 1 && (await seat(host, 'Mia').count()) === 1,
+    'B-AC-6: Cancel on the close confirm keeps the room',
+  );
+
+  await host.getByTestId('close-room').click();
+  await host.getByTestId('close-confirm').click();
   for (const [who, page] of [['host', host], ['Mia', mia]] as const) {
     check(await shows(page.getByText(CLOSED)), `B-AC-6: ${who} shows "${CLOSED}"`);
     check(await onStartScreen(page), `B-AC-6: ${who} is on the start screen after the close`);
