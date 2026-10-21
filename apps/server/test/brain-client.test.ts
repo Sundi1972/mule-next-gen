@@ -60,9 +60,15 @@ const clock = (step: number) => {
 const ZERO = { input: 0, cached_read: 0, cache_write: 0, output: 0 };
 
 describe('Haiku client', () => {
-  it('INV-HC3: the request is Haiku, thinking off, cached system, structured output, no retries, timeout = waitMs', async () => {
+  it('INV-HC3: the request is Haiku, thinking off, cached system, structured output, no retries, timeout = waitMs; no timer outlives it', async () => {
     const { sdk, calls } = stub(async () => reply());
-    await createHaikuComplete(sdk)(PROMPT, 7000);
+    vi.useFakeTimers();
+    try {
+      await createHaikuComplete(sdk)(PROMPT, 7000);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
     expect(calls).toHaveLength(1);
     expect(calls[0]!.params).toEqual({
       model: BRAIN.model,
@@ -101,6 +107,7 @@ describe('Haiku client', () => {
       expect(settled).toBeUndefined();
       await vi.advanceTimersByTimeAsync(1);
       await p;
+      expect(vi.getTimerCount()).toBe(0);
       expect(settled).toBeInstanceOf(CallFailed);
       const f = settled as CallFailed;
       expect(f.outcome).toBe('timeout');

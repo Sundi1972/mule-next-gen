@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AI_LEVELS, AI_PERSONAS, BRAIN, createGame, observe } from '@mule/engine';
-import { Brain, candidate, consider, PERSONAS, shortlist, TopPickDecider, type Decider, type DecisionRecord, type Mind } from '@mule/ai';
+import { Brain, candidate, consider, PERSONAS, shortlist, TopPickDecider, type Complete, type Decider, type DecisionRecord, type Mind, type Prompt } from '@mule/ai';
 import type { HaikuSdk } from '../src/brain/client.js';
 import { API_KEY_ENV, createBrain, type BrainSeat, type BrainService } from '../src/brain/index.js';
 
@@ -24,6 +24,20 @@ vi.mock('@anthropic-ai/sdk', async (importOriginal) => {
   }
   Object.setPrototypeOf(CountingAnthropic, real.Anthropic);
   return { ...real, default: CountingAnthropic, Anthropic: CountingAnthropic };
+});
+
+/** The port each LlmDecider was built with, newest last, so a test can call one directly. */
+const ports = vi.hoisted(() => [] as Array<(prompt: unknown, waitMs: number) => Promise<unknown>>);
+
+vi.mock('@mule/ai', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@mule/ai')>();
+  class PortCapturingLlmDecider extends real.LlmDecider {
+    constructor(complete: Complete) {
+      super(complete);
+      ports.push(complete as (prompt: unknown, waitMs: number) => Promise<unknown>);
+    }
+  }
+  return { ...real, LlmDecider: PortCapturingLlmDecider };
 });
 
 // Dummy values only: no test reads, prints or sends a real credential, and no test builds a real client.
@@ -72,16 +86,18 @@ function message(text: string, billed: Billed = {}, stop_reason: string = 'end_t
   } as unknown as Message; // the stub omits server-only Message fields
 }
 
+type Params = Parameters<Create>[0];
+
 /** A stand-in for the SDK: the client's real code runs on top of it, and it counts the calls it gets. */
-function fakeSdk(answer: (n: number) => Message | Promise<Message>) {
+function fakeSdk(answer: (n: number, params: Params) => Message | Promise<Message>) {
   const sdk = {
     calls: 0,
     messages: {
-      create: (() => {
+      create: ((params: Params) => {
         sdk.calls += 1;
         const n = sdk.calls;
-        return Promise.resolve().then(() => answer(n));
-      }) as unknown as Create,
+        return Promise.resolve().then(() => answer(n, params));
+      }) as unknown as Create, // the stub implements only the non-streaming overload the client calls
     },
   };
   return sdk;
@@ -101,6 +117,7 @@ let dir: string;
 let file: string;
 beforeEach(() => {
   built.options.length = 0;
+  ports.length = 0;
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'brain-service-'));
   file = path.join(dir, 'costs.jsonl');
 });
@@ -118,14 +135,14 @@ const serviceOn = (sdk: HaikuSdk) => createBrain({ gameId: GAME, env: KEY, logPa
  * A real Brain on a decider from the service for seat p0. `ask` starts one develop decision, `settle` ends it as the
  * hand would after its wait; `decide` does both. `topPick` is what TopPickDecider picks given the same arguments.
  */
-function seatOn(service: BrainService) {
+function seatOn(service: BrainService, options = list) {
   const inner = service.deciderFor(SEAT)!;
   let seen: Parameters<Decider['decide']> | null = null;
   const watched: Decider = { name: inner.name, decide: (...args) => ((seen = args), inner.decide(...args)) };
   const records: DecisionRecord[] = [];
   const brain = new Brain(mind, PERSONAS.trader, 'The Gambler', 11, watched, (r) => records.push(r));
   const ask = () => {
-    const pending = brain.ask('develop', list(), obs, WAIT, null, 'summary');
+    const pending = brain.ask('develop', options(), obs, WAIT, null, 'summary');
     const topPick = new TopPickDecider().decide(...seen!).optionId;
     const settle = () => ({ settled: brain.resolve(pending, WAIT, obs)!, record: records[records.length - 1]! });
     return { pending, topPick, settle };
@@ -261,6 +278,66 @@ describe('brain service', () => {
     });
   });
 
+  it('B-AC-4: a seat whose calls all time out or lose the connection locks before its counted spend passes the budget; a 500 counts $0', async () => {
+    // Labels this long make each call's worst case about $0.0134, so only a handful fit in the seat's budget.
+    const long = () =>
+      shortlist(['a', 'b', 'c'].map((a, i) => candidate(a, a.repeat(105_000), a, 10, [consider('fit', 0.9 - i * 0.05, 1, 'fits')])), 3, 0.5);
+    /** RULE-3's worst case for the request the SDK received, from BRAIN's prices (not from the budget under test). */
+    const worstOf = (params: Params): number => {
+      const system = (params.system as { text: string }[])[0]!.text;
+      const user = params.messages[0]!.content as string;
+      const schema = JSON.stringify(params.output_config!.format!.schema);
+      const tokens = Math.ceil((system.length + user.length + schema.length) / BRAIN.charsPerToken);
+      const p = BRAIN.pricesPerMTok;
+      return (tokens * Math.max(p.input, p.cacheWrite) + BRAIN.maxTokens * p.output) / 1_000_000;
+    };
+    const cases = [
+      { name: 'timeout', error: () => new Anthropic.APIConnectionTimeoutError(), outcome: 'timeout', locks: true },
+      { name: 'lost connection', error: () => new Anthropic.APIConnectionError({ message: 'socket hang up' }), outcome: 'error', locks: true },
+      {
+        name: '500',
+        error: () => Anthropic.APIError.generate(500, { type: 'error', error: { type: 'api_error', message: 'x' } }, 'x', new Headers()),
+        outcome: 'error',
+        locks: false,
+      },
+    ];
+    for (const c of cases) {
+      fs.rmSync(file, { force: true });
+      const worst: number[] = [];
+      const sdk = fakeSdk((_n, params) => {
+        worst.push(worstOf(params));
+        throw c.error();
+      });
+      const service = serviceOn(sdk);
+      const { decide } = seatOn(service, long);
+
+      const notes: (string | undefined)[] = [];
+      for (let i = 0; i < 8; i++) notes.push((await decide()).record.note);
+
+      if (!c.locks) {
+        // An error the API answered with a status was not billed: the seat keeps calling.
+        expect(sdk.calls, c.name).toBe(8);
+        expect(notes, c.name).not.toContain('decider failed: budget spent');
+        continue;
+      }
+      const calls = sdk.calls;
+      expect(calls, c.name).toBeGreaterThan(0);
+      expect(new Set(worst).size, c.name).toBe(1);
+      const each = worst[0]!;
+      // It called while its counted spend left room for one more worst case, and not once past that.
+      expect(calls * each, c.name).toBeLessThanOrEqual(BRAIN.seatBudgetUsd);
+      expect((calls + 1) * each, c.name).toBeGreaterThan(BRAIN.seatBudgetUsd);
+      expect(notes.slice(calls), c.name).toEqual(Array(8 - calls).fill('decider failed: budget spent'));
+
+      // The ledger still records the usage it was given, so the game total stays the sum of its call lines.
+      service.finish();
+      const all = lines();
+      expect(all.map((l) => l.type ?? l.outcome), c.name).toEqual([...Array(calls).fill(c.outcome), 'budget', 'game']);
+      expect(all.every((l) => l.usd === 0), c.name).toBe(true);
+      expect(all.at(-1), c.name).toMatchObject({ type: 'game', calls, usd: 0 });
+    }
+  });
+
   const ZERO = { input: 0, cached_read: 0, cache_write: 0, output: 0 };
   const USED = { input: 410, cached_read: 620, cache_write: 50, output: 38 };
   const rows: {
@@ -378,6 +455,13 @@ describe('brain service', () => {
     expect(after.settled.choice).toMatchObject({ by: 'fallback', optionId: after.topPick });
     expect(after.record.note).toBe('decider failed: game over');
     expect(sdk.calls).toBe(1);
+
+    // The port itself refuses once the game is finished, whatever calls it: finish released the seat's lock.
+    expect(ports.length).toBeGreaterThan(0);
+    const prompt: Prompt = { system: 's', user: 'u', schema: { type: 'object' } as Prompt['schema'] };
+    for (const port of ports) await expect(port(prompt, WAIT)).rejects.toThrow('game over');
+    expect(sdk.calls).toBe(1);
+
     service.finish();
     expect(lines()).toHaveLength(3);
   });

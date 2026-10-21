@@ -56,6 +56,18 @@ describe('RULE-3 budget table', () => {
     expect(budget.allow('g', 'nan-next', 0)).toEqual(LOCKED);
   });
 
+  it('B-AC-4 (RULE-3): a negative or non-finite next, or a non-finite spent, fails closed even when the sum would fit', () => {
+    const { budget, setSpent } = setup();
+    setSpent('g', 'neg-next', 0.0596);
+    expect(budget.allow('g', 'neg-next', -0.0005)).toEqual(LOCKS);
+    expect(budget.allow('g', 'neg-inf-next', -Infinity)).toEqual(LOCKS);
+    expect(budget.allow('g', 'inf-next', Infinity)).toEqual(LOCKS);
+    setSpent('g', 'neg-inf-spent', -Infinity);
+    expect(budget.allow('g', 'neg-inf-spent', 0.0005)).toEqual(LOCKS);
+    // Negative: a next of exactly 0 is a valid worst case.
+    expect(budget.allow('g', 'zero-next', 0)).toEqual(CALL);
+  });
+
   it('B-AC-4 (RULE-3): exactly at the boundary (spent + next = 0.06) → call', () => {
     const { budget, setSpent } = setup();
     setSpent('g', 's', 0.05);

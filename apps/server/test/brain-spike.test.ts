@@ -4,7 +4,7 @@ import path from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BRAIN } from '@mule/engine';
-import { buildPrompt, PERSONAS, WAIT_MS, type Prompt } from '@mule/ai';
+import { buildPrompt, PERSONAS, WAIT_MS, type Prompt, type ShortOption } from '@mule/ai';
 import { CallFailed, createHaikuComplete, type HaikuReply, type HaikuSdk } from '../src/brain/client.js';
 import { createBudget } from '../src/brain/budget.js';
 import { createLedger } from '../src/brain/ledger.js';
@@ -45,8 +45,12 @@ const USER = 600;
 const prompt = (system = SYSTEM): Prompt => ({ system: 's'.repeat(system), user: 'u'.repeat(USER), schema: { type: 'object' } as Prompt['schema'] });
 const SCHEMA_CHARS = JSON.stringify({ type: 'object' }).length;
 
+const option = (id: string): ShortOption => ({ id, key: id.toLowerCase(), label: `Option ${id}`, utility: 0.5, value: 1, rationale: 'fits' });
+const SHORTLIST = [option('A'), option('B')];
+
+// The context only feeds buildPrompt, which these fixtures replace with a prompt of a chosen size.
 const item = (n: number, system = SYSTEM, kind: SpikeItem['kind'] = 'develop'): SpikeItem =>
-  ({ prompt: prompt(system), kind, seat: `ai${n % 4}`, persona: 'trader', level: 'trader' }) as SpikeItem;
+  ({ prompt: prompt(system), kind, seat: `ai${n % 4}`, persona: 'trader', level: 'trader', shortlist: SHORTLIST }) as SpikeItem;
 const items = (n: number, system = SYSTEM) => Array.from({ length: n }, (_, i) => item(i, system));
 
 /** RULE-3's worst case for a prompt of `system` chars, from BRAIN's prices (not from the budget under test). */
@@ -56,8 +60,9 @@ const worstOf = (system: number): number => {
   return (tokens * Math.max(p.input, p.cacheWrite) + BRAIN.maxTokens * p.output) / 1_000_000;
 };
 
-const reply = (ms: number, billed: Partial<HaikuReply['usage']> = {}, stopReason: HaikuReply['stopReason'] = 'end_turn'): HaikuReply => ({
-  text: '{}',
+const USABLE = '{"option":"A","line":"Mine."}';
+const reply = (ms: number, billed: Partial<HaikuReply['usage']> = {}, stopReason: HaikuReply['stopReason'] = 'end_turn', text = USABLE): HaikuReply => ({
+  text,
   ms,
   stopReason,
   usage: { input: 100, cached_read: 10, cache_write: 5, output: 20, ...billed },
@@ -81,7 +86,7 @@ const failing = (error: () => unknown) => createHaikuComplete({ messages: { crea
 
 /** An SDK message billed `usage`. */
 const message = (usage: Partial<Anthropic.Usage> = {}) => ({
-  content: [{ type: 'text', text: '{}' }],
+  content: [{ type: 'text', text: USABLE }],
   stop_reason: 'end_turn',
   usage: { input_tokens: 120, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: 20, ...usage },
 });
@@ -117,13 +122,17 @@ describe('brain:spike', () => {
     const fits = Math.floor(BRAIN.spikeCapUsd / worst);
     expect(fits).toBeLessThan(50);
     const unknownBills = [
-      () => new Anthropic.APIConnectionTimeoutError(),
-      () => new Anthropic.APIConnectionError({ message: 'socket hang up' }),
-      () => new TypeError('fetch failed'),
+      failing(() => new Anthropic.APIConnectionTimeoutError()),
+      failing(() => new Anthropic.APIConnectionError({ message: 'socket hang up' })),
+      failing(() => new TypeError('fetch failed')),
+      // A raw Error at the runSpike seam, not a CallFailed: nothing shows the API answered.
+      async (): Promise<HaikuReply> => {
+        throw new Error('raw');
+      },
     ];
-    for (const [i, error] of unknownBills.entries()) {
+    for (const [i, complete] of unknownBills.entries()) {
       const at = path.join(dir, `unknown-${i}.jsonl`);
-      const report = await run(items(50, 150_000), failing(error), BRAIN.spikeCapUsd, at);
+      const report = await run(items(50, 150_000), complete, BRAIN.spikeCapUsd, at);
       expect(report.calls).toBe(fits);
       expect(report.stopped).toBe('cap');
       expect(report.ledgerUsd).toBe(0);
@@ -138,6 +147,8 @@ describe('brain:spike', () => {
     expect(answered.calls).toBe(50);
     expect(answered.countedUsd).toBe(0);
     expect(answered.stopped).toBe('done');
+    expect(answered.kinds[0]).toMatchObject({ kind: 'develop', calls: 50, timeouts: 0, errors: 50 });
+    expect(rowOf(renderReport(answered), 'develop')).toMatch(/^develop\s+50\s+0\s+50\s+—\s+—\s+—\s+0% within 1500 ms\s+—$/);
 
     // Boundary: a cap of exactly three worst cases lets the third call start (<=) and stops the fourth.
     const exact = await run(items(10, 150_000), failing(() => timedOut()), worst + worst + worst, path.join(dir, 'exact.jsonl'));
@@ -145,14 +156,16 @@ describe('brain:spike', () => {
     expect(exact.stopped).toBe('cap');
   });
 
-  it('INV-spike-report: a timed-out call is not "within", and a percentile that falls among timeouts prints as "> wait ms"', async () => {
+  it('INV-spike-report: a timed-out call is not "within", a percentile among timeouts prints as "> wait ms", and replies are classified as the service does', async () => {
     const answeredMs = [300, 600, 900, 1200, WAIT_MS.develop];
     const inputs = [100, 150, 200, 250, 300];
+    // Answered: a usable reply, a refusal, an option off the shortlist, junk, a usable reply.
+    const texts = [USABLE, USABLE, '{"option":"C","line":"x"}', 'not json', USABLE];
     let n = 0;
     const report = await run(items(10), async () => {
       const i = n++;
       if (i >= 5) throw timedOut();
-      return reply(answeredMs[i]!, { input: inputs[i]! }, i === 1 ? 'refusal' : 'end_turn');
+      return reply(answeredMs[i]!, { input: inputs[i]! }, i === 1 ? 'refusal' : 'end_turn', texts[i]);
     });
     expect(report.calls).toBe(10);
     expect(report.stopped).toBe('done');
@@ -161,8 +174,10 @@ describe('brain:spike', () => {
 
     const lines = renderReport(report);
     // A latency of exactly the wait counts as within: 5 of 10.
-    expect(rowOf(lines, 'develop')).toMatch(/^develop\s+10\s+5\s+0\s+1500 ms\s+> 1500 ms\s+> 1500 ms\s+50% within 1500 ms$/);
-    expect(rowOf(lines, 'all')).toMatch(/^all\s+10\s+5\s+0\s+—\s+—\s+—\s+50% within own wait$/);
+    // Usable replies: 2 of the 5 answered named an option on the list and were not refused.
+    expect(rowOf(lines, 'develop')).toMatch(/^develop\s+10\s+5\s+0\s+1500 ms\s+> 1500 ms\s+> 1500 ms\s+50% within 1500 ms\s+40% of 5$/);
+    expect(rowOf(lines, 'all')).toMatch(/^all\s+10\s+5\s+0\s+—\s+—\s+—\s+50% within own wait\s+40% of 5$/);
+    expect(lines).toContainEqual(expect.stringMatching(/^unreadable \/ off-list replies\s+1 \/ 1$/));
     expect(rowOf(lines, 'land')).toBeUndefined();
     expect(lines).toContainEqual(expect.stringMatching(/^first-call latency\s+300 ms$/));
     expect(lines).toContainEqual(expect.stringMatching(/^refusals \/ auth failures\s+1 \/ 0$/));
@@ -175,7 +190,7 @@ describe('brain:spike', () => {
     expect(lines).toContainEqual(
       expect.stringMatching(new RegExp(`^chars per input token min / median / max\\s+${min.toFixed(2)} / ${median.toFixed(2)} / ${max.toFixed(2)}$`)),
     );
-    expect(ledgerLines().map((l) => l.outcome)).toEqual(['llm', 'refused', 'llm', 'llm', 'llm', 'timeout', 'timeout', 'timeout', 'timeout', 'timeout']);
+    expect(ledgerLines().map((l) => l.outcome)).toEqual(['llm', 'refused', 'off_list', 'unreadable', 'llm', 'timeout', 'timeout', 'timeout', 'timeout', 'timeout']);
   });
 
   it("INV-spike-report: a mixed-kind run waits each call at its own kind's wait, logs its kind, and reports a row per kind plus pooled", async () => {
@@ -195,11 +210,11 @@ describe('brain:spike', () => {
 
     // A trade answer at 2 s is inside trade's 2.5 s wait but outside develop's 1.5 s: each row uses its own kind's wait.
     const lines = renderReport(report);
-    expect(rowOf(lines, 'land')).toMatch(/^land\s+3\s+0\s+0\s+4000 ms\s+4000 ms\s+4000 ms\s+100% within 5000 ms$/);
-    expect(rowOf(lines, 'develop')).toMatch(/^develop\s+3\s+0\s+0\s+1000 ms\s+1000 ms\s+1000 ms\s+100% within 1500 ms$/);
-    expect(rowOf(lines, 'trade')).toMatch(/^trade\s+4\s+1\s+0\s+2000 ms\s+> 2500 ms\s+> 2500 ms\s+75% within 2500 ms$/);
+    expect(rowOf(lines, 'land')).toMatch(/^land\s+3\s+0\s+0\s+4000 ms\s+4000 ms\s+4000 ms\s+100% within 5000 ms\s+100% of 3$/);
+    expect(rowOf(lines, 'develop')).toMatch(/^develop\s+3\s+0\s+0\s+1000 ms\s+1000 ms\s+1000 ms\s+100% within 1500 ms\s+100% of 3$/);
+    expect(rowOf(lines, 'trade')).toMatch(/^trade\s+4\s+1\s+0\s+2000 ms\s+> 2500 ms\s+> 2500 ms\s+75% within 2500 ms\s+100% of 3$/);
     // Across mixed waits a pooled percentile mixes upper and lower bounds, so the pooled row prints none.
-    expect(rowOf(lines, 'all')).toMatch(/^all\s+10\s+1\s+0\s+—\s+—\s+—\s+90% within own wait$/);
+    expect(rowOf(lines, 'all')).toMatch(/^all\s+10\s+1\s+0\s+—\s+—\s+—\s+90% within own wait\s+100% of 9$/);
     expect(report.kinds.at(-1)).toMatchObject({ kind: 'all', p50: null, p90: null, max: null });
   });
 
@@ -276,10 +291,27 @@ describe('brain:spike', () => {
     expect(ledgerLines().reduce((sum, l) => sum + (l.usd as number), 0)).toBeLessThanOrEqual(0.01);
   });
 
-  it("INV-spike-cap: main refuses a second run on the same day: today's ledger exists, one line names it, nothing is called", async () => {
+  it("INV-spike-cap: main refuses a second run on the same day: today's ledger exists, one line names it, nothing is called; a run that calls nothing leaves the clearance unused", async () => {
     fs.writeFileSync(path.join(dir, 'spike-2026-10-20.jsonl'), '');
     let calls = 0;
     sdk.create = () => (calls++, Promise.resolve(message()));
+
+    // A cap below the first call's worst case calls nothing, writes no ledger and leaves today's clearance unused.
+    const none: string[] = [];
+    expect(await main(['--calls', '2', '--max-usd', '0.0001'], KEY, { dataDir: dir, now: () => TODAY, out: (l) => none.push(l) })).toBe(0);
+    expect(calls).toBe(0);
+    expect(none).toContainEqual(expect.stringMatching(/^calls made \/ planned\s+0 \/ 2$/));
+    expect(fs.existsSync(file)).toBe(false);
+
+    // The ledger is created exclusively as the first call starts: one that appears after the check stops the run uncalled.
+    const appears = (l: string) => {
+      if (l.startsWith('brain:spike model')) fs.writeFileSync(file, '');
+    };
+    await expect(main(['--calls', '2'], KEY, { dataDir: dir, now: () => TODAY, out: appears })).rejects.toThrow('EEXIST');
+    expect(calls).toBe(0);
+    expect(fs.readFileSync(file, 'utf8')).toBe('');
+    fs.rmSync(file);
+
     const first: string[] = [];
     expect(await main(['--calls', '2'], KEY, { dataDir: dir, now: () => TODAY, out: (l) => first.push(l) })).toBe(0);
     expect(calls).toBe(2);
@@ -290,7 +322,7 @@ describe('brain:spike', () => {
     expect(second).toHaveLength(1);
     expect(second[0]).toContain(file);
     expect(calls).toBe(2);
-    expect(sdk.built).toHaveLength(1);
+    expect(sdk.built).toHaveLength(3);
   });
 
   it("INV-spike-cap: main accepts pnpm's leading --, and refuses an unknown, malformed or stray argument with usage and no call", async () => {
@@ -309,6 +341,10 @@ describe('brain:spike', () => {
       ['stray'],
       ['--calls', '3', 'stray'],
       ['--calls', '3', '--'],
+      ['--calls', '0'],
+      ['--calls', '1.5'],
+      ['--seed', '1.5'],
+      ['--max-usd', 'Infinity'],
     ];
     for (const argv of refused) {
       const out: string[] = [];
@@ -324,12 +360,14 @@ describe('brain:spike', () => {
     expect(calls).toBe(2);
   });
 
-  it('INV-spike-report: decisions mix kinds round-robin and build real prompts from one strategist game', () => {
-    const list = collectPrompts(101, 6);
-    expect(list).toHaveLength(6);
+  it('INV-spike-report: decisions mix kinds round-robin and build real prompts from one strategist game, only ones the model would be asked', () => {
+    const list = collectPrompts(101, 50);
+    expect(list).toHaveLength(50);
     // Round-robin: the first three are three different kinds.
     expect(new Set(list.slice(0, 3).map((i) => i.kind)).size).toBe(3);
     for (const it of list) {
+      // Brain.ask never asks the model with fewer than two options.
+      expect(it.shortlist.length).toBeGreaterThanOrEqual(2);
       expect(it.prompt).toEqual(buildPrompt(it.shortlist, PERSONAS[it.persona], it.context));
       expect(it.prompt.system.length).toBeGreaterThan(0);
       expect(it.context).toMatchObject({ kind: it.kind, seat: it.seat, tableTalk: [] });
