@@ -98,6 +98,7 @@ try {
   await shot(tv, 'tv-4-develop');
   await outfittersOpenWithAnEmptyMule(phone);
   await phone.locator('[data-shop=food]:not([disabled])').click();
+  await phone.getByRole('button', { name: 'Walk out to the map' }).click();
   await phone.getByRole('button', { name: /Install here|Replace MULE/ }).waitFor();
   await phoneShot(phone, '4-map');
   await phone.getByRole('button', { name: /Install here|Replace MULE/ }).click();
