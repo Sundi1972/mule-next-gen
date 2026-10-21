@@ -9,6 +9,7 @@ import {
   POLITICS,
   RuleError,
   runFor,
+  scoreParts,
   setSalesTax,
   stepElection,
   TAX,
@@ -88,6 +89,12 @@ describe('C1, C2: the host option and the month opening', () => {
     expect(state.politics).toBeNull();
     expect(state.treasury.salesTax).toBe(TAX.salesTax);
     expect(state.treasury.money).toBe(500 + taxesPaid);
+
+    // The same month with politics on differs only by the offices' pay.
+    const on = newGame();
+    on.treasury.money = 500;
+    toNextPlanning(on);
+    expect(on.treasury.money).toBe(state.treasury.money - POLITICS.pay.governor - POLITICS.pay.sheriff);
   });
 
   it('RULE-5 row 1: the one player with strictly the most plots becomes the Land Baron when planning opens', () => {
@@ -445,5 +452,32 @@ describe('C5: the Governor sets the sales tax', () => {
     expect(taxSale(state, 'brix', 1000)).toBe(920);
     expect(state.treasury.money).toBe(fund + 80);
     expect(state.treasury.paid.brix).toBe(80);
+  });
+});
+
+describe('C6, C7: office pay and the term score', () => {
+  it.each([
+    { fund: 20, governor: 20, sheriff: 0, left: 0 },
+    { fund: 100, governor: 50, sheriff: 30, left: 20 },
+  ])('T-AC-5: pay never takes the fund below 0: fund $fund → Governor $governor, Sheriff $sheriff', ({ fund, governor, sheriff, left }) => {
+    const state = newGame();
+    seatGovernor(state, 'lena');
+    expect(politicsOf(state).sheriff).toBe('brix');
+    while (state.phase !== 'auction') advancePhase(state);
+    state.treasury.money = fund;
+    const money = { lena: player(state, 'lena').money, brix: player(state, 'brix').money };
+
+    advancePhase(state);
+    expect(state.phase).toBe('upkeep');
+    expect(player(state, 'lena').money - money.lena).toBe(governor);
+    expect(player(state, 'brix').money - money.brix).toBe(sheriff);
+    expect(state.treasury.money).toBe(left);
+    expect(state.history.at(-1)?.colonyFund).toBe(left);
+  });
+
+  it('T-AC-5: the office score line is 0 with politics off', () => {
+    const state = newGame({ politics: false });
+    toNextPlanning(state);
+    for (const id of SEATS) expect(scoreParts(state, id).office).toBe(0);
   });
 });
