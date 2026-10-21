@@ -271,9 +271,8 @@ export function stepLandAuction(state: GameState, dt: number): LotResult | null 
   return null;
 }
 
-/** Ends the land auction at once: every lot not yet at its bell is kept, so nothing moves without a bell. */
+/** Ends the land auction at once: every lot not yet at its bell is kept, so nothing moves without a bell, and the month's listings are gone. */
 export function endLandAuction(state: GameState): void {
-  const a = state.landAuction;
-  if (!a) return;
-  Object.assign(a, { ...idleBoard(), queue: [] });
+  state.landAuction = null;
+  state.listings = [];
 }
