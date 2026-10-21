@@ -1,6 +1,6 @@
 # The original against ours, phase by phase (WS6 UX & Gameplay)
 
-2026-10-21 · WS6-1 · branch `ws6-ux` from feat/strategist 59be9f2 · serves G-3 (a family plays a whole game at the
+2026-10-21 · WS6-1 · branch `ws6-ux` (base feat/strategist 59be9f2, land auction read at 407e5a1) · serves G-3 (a family plays a whole game at the
 kitchen table) and, through readability, G-1.
 
 **Concepts, not copies.** Everything below takes an idea or a piece of information design from the original. None of
@@ -22,7 +22,7 @@ disagree, both are named.
 | 3 | Start of turn | "You eat some food and fill up your time bar": the bar fills in front of you, so Food = time is felt rather than read | **Adopt** | Same as 2 |
 | 4 | Production | Every plot shows what it made, as bars in the owner's colour; events put +1 / −1 badges on the plots they hit; then the goods **fly home** into each player's slot | **Adopt**, with the reasons on each plot (no Energy, no Water, cluster, pollution). Needs per-plot output from the engine | WS6 (the show), engine edit by WS1 |
 | 5 | Events | Random events hit during production, on the map | **Gap, not ours to fill:** the engine has **no event system at all** today (§3). The production show is designed so events slot in | PM: no lane owns events |
-| 6 | Auction board | Two dashed lines span the board: the **lowest ask** pushed down by sellers, the **highest bid** pushed up by buyers. When they meet, units trade | **Adopt**. We have the walk, the store lines and the ship line, but not these two lines | WS3 |
+| 6 | Auction board | Two dashed lines span the board: the **lowest ask** pushed down by sellers, the **highest bid** pushed up by buyers. When they meet, units trade | **Adopt** on the goods auction; the land auction (buyers only) gets the highest-bid line alone. We have the walk, the store, ship and MIN lines, but not these | WS3 |
 | 7 | Auction board | Each creature shows its units and surplus ("16 (+16)"); the store's stock and buying price sit on the board | **Adopt** | WS3 |
 | 8 | Status screen | One screen per good, before its auction: last round, produced, used/lost, total, needed, surplus, plus the store's price and stock, and you **declare buy or sell on that same screen** | We already have it (StatusTable) with one more column (Spoils). **Adapt:** add store price and stock; fold the declare into it (R2) | WS3 |
 | 9 | Colony bar | An always-visible bottom bar: every player's money, plus your own stock | **Adapt:** on the TV, everyone's money (public); on the phone, your own 9 goods (private) | WS4 (shell, TV) |
@@ -278,6 +278,20 @@ the floor at the bottom and its stock is on the board. Each creature shows its u
 
 **Phone and TV.** The TV is the auction's stage: all columns, the two lines, the store. The phone keeps a smaller
 board plus the two big hold buttons and your own line.
+
+### The land auction (WS3, merged in #12, read at feat/strategist 407e5a1)
+
+(`apps/web/src/phone/LandAuction.tsx`, `apps/web/src/table/TvLandAuction.tsx`, `packages/engine/src/lots.ts`.)
+One lot at a time: an intro that lights the plot on the map, a walk on the same WalkBoard where **only buyers walk**
+(up from the bottom, toward and past the seller's MIN line), and a result. It sells to the highest bid at the bell, as
+the original's land auction did (Heiko's ruling Q2 A). The rail's leader box says in words who wins at the bell, and
+the TV keeps the map small beside the board so the room never loses where the plot is.
+
+**Verdict: well made; one thing to adopt.** With buyers only there is no lowest ask, so the land board needs only
+the **highest-bid line**: one dashed line across the board, pushed up by whoever leads, labelled with the leader's
+name and bid, and turning to "SOLD" style when the bell rings over the MIN line. It says on the board, where everyone
+is looking, what the leader box says in the rail. It is the same change to WalkBoard as the goods auction's two lines
+(an optional prop: which lines to draw), so one edit gives both auctions their lines.
 
 ---
 
