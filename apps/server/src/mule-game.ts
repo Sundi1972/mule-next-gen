@@ -634,6 +634,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           name: s.name,
           isAi: s.isAi,
           color: PLAYER_COLORS[s.color % PLAYER_COLORS.length]!,
+          slot: s.color,
           species: p.species,
           money: p.money,
           plots: state.tiles.filter((t) => t.owner === s.id).length,

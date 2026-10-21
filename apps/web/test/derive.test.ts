@@ -3,7 +3,7 @@ import type { MuleView, PlayerView, TileView } from '@mule/protocol';
 import { describe, expect, it } from 'vitest';
 import { colonyVerdict, groundPips, mapTiles, secondsUntil, slotOf, standings } from '../src/game/derive';
 
-const p = (id: string, money: number): PlayerView => ({ id, name: id, isAi: false, color: '', species: 'zipwing', money, plots: 0, ready: false, doneDeveloping: false });
+const p = (id: string, money: number, slot: number): PlayerView => ({ id, name: id, isAi: false, color: '', slot, species: 'zipwing', money, plots: 0, ready: false, doneDeveloping: false });
 const tile = (x: number, y: number, extra: Partial<TileView> = {}): TileView => ({ x, y, terrain: 'plains', peaks: 0, owner: null, outfit: null, pollution: 0, filter: false, ...extra });
 
 function view(extra: Partial<MuleView> = {}): MuleView {
@@ -17,7 +17,7 @@ function view(extra: Partial<MuleView> = {}): MuleView {
     height: 1,
     tiles: [tile(0, 0, { owner: 's2', outfit: 'energy' }), tile(1, 0, { outfit: 'greenBelt', owner: 's1', ground: { food: -2, water: 3, energy: 0, smithore: 4, crystite: 0, rareEarth: 1 }, pollution: 2 })],
     lit: null,
-    players: [p('s1', 500), p('s2', 900)],
+    players: [p('s1', 500, 0), p('s2', 900, 1)],
     me: null,
     market: [],
     storeMules: 0,
