@@ -11,11 +11,14 @@ export interface ZoomBox {
   y: number;
 }
 
+/** The most a zoom magnifies: past this the map's strokes and the cursor ring swell into thick frames (AM-12). */
+export const MAX_ZOOM = 3;
+
 /** Two pointer-ups this close in time and space are a double-tap. */
 const DOUBLE_TAP_MS = 300;
 const DOUBLE_TAP_SLOP = 24;
 
-/** Your plots plus a ring of one plot around them, grown to the map's shape and kept inside it; null if you own none. */
+/** Your plots plus a ring of one plot around them, grown to the map's shape, at most MAX_ZOOM, kept inside the map; null if you own none. */
 export function zoomBox(tiles: MapTile[], width: number, height: number, slot: Slot): ZoomBox | null {
   const mine = tiles.filter((t) => t.owner === slot);
   if (mine.length === 0) return null;
@@ -23,7 +26,7 @@ export function zoomBox(tiles: MapTile[], width: number, height: number, slot: S
   const x1 = Math.min(width, Math.max(...mine.map((t) => t.x)) + 2);
   const y0 = Math.max(0, Math.min(...mine.map((t) => t.y)) - 1);
   const y1 = Math.min(height, Math.max(...mine.map((t) => t.y)) + 2);
-  const scale = Math.min(width / (x1 - x0), height / (y1 - y0));
+  const scale = Math.min(MAX_ZOOM, width / (x1 - x0), height / (y1 - y0));
   const viewW = width / scale;
   const viewH = height / scale;
   const clamp = (v: number, max: number) => Math.min(Math.max(v, 0), max);
