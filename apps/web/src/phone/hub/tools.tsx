@@ -1,9 +1,10 @@
-import { DEVELOPMENT, isListed } from '@mule/engine';
+import { DEVELOPMENT } from '@mule/engine';
 import { Button, GOOD_NAME, HoloMap, TERRAIN_NAME, type MapTile } from '@mule/ui';
 import { mapTiles, player, plotName, TERRAIN_ODDS, tileAt } from '../../game/derive';
 import { useClient } from '../../net/react';
 import { usePhoneGame } from '../game';
 import { GroundCard } from '../ground';
+import { SellMap } from '../Sell';
 import { MapFit, useWide } from '../Shell';
 import { useToday } from './state';
 
@@ -115,18 +116,9 @@ export function DroneAction() {
 
 /** Sell a plot: tap one of yours, with every listed plot marked for sale; the Market desk holds the form. */
 export function SellPlotMap() {
-  const { view, slot } = usePhoneGame();
   const { sell } = useToday();
   const wide = useWide();
-  const tiles: MapTile[] = mapTiles(view).map((t) => (isListed(view, t.x, t.y) ? { ...t, flag: 'sale' } : t));
-  return (
-    <>
-      <p className="pb-1.5 font-mono text-[11px] text-ink-3">TAP ONE OF YOUR PLOTS · LISTED PLOTS ARE MARKED FOR SALE</p>
-      <MapFit width={view.width} height={view.height}>
-        <HoloMap width={view.width} height={view.height} tiles={tiles} onTile={sell.pick} selected={sell.picked} focusSlot={slot} density={wide ? 'tv' : 'phone'} />
-      </MapFit>
-    </>
-  );
+  return <SellMap sell={sell} density={wide ? 'tv' : 'phone'} />;
 }
 
 export function ListAction() {

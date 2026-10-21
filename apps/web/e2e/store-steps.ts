@@ -60,7 +60,9 @@ export function makeHungry(server: MuleServer, code: string, seat = 's1'): void 
   p.stock.medicine = Math.max(1, p.stock.medicine);
   // The seed changed the state behind the game's back, and the room only broadcasts after an intent or a phase
   // change; its private broadcast() is the one way to show the seed in the phase it was made in (B-AC-14).
-  (room as unknown as { broadcast(): void }).broadcast();
+  const seeded = room as unknown as { broadcast(): void };
+  check(typeof seeded.broadcast === 'function', 'the room still has broadcast() for test seeding');
+  seeded.broadcast();
 }
 
 /** B-AC-9: a hungry player sees 2 of 5 Food and an orange bar at her devSeconds. Call as development starts after makeHungry. */
