@@ -101,6 +101,9 @@ interface Bell {
   result: LotResult;
 }
 
+/** The bid a hand is walking to. Private to the hand; the leading rule is a promise about it. */
+const targetOf = (hand: LotHand) => (hand as unknown as { target: number | null }).target;
+
 /** Runs the land auction to its end, the hands ticking before each step with the same dt. Every AI walker on every walk tick, and every bell. */
 function play(state: GameState, hands: LotHand[], dts = DTS): { samples: Sample[]; bells: Bell[] } {
   const samples: Sample[] = [];
@@ -111,11 +114,16 @@ function play(state: GameState, hands: LotHand[], dts = DTS): { samples: Sample[
     if (a.stage === 'over') break;
     if (a.lot) for (const h of hands) if (!worth.has(`${a.lot.id}:${h.mind.me}`)) worth.set(`${a.lot.id}:${h.mind.me}`, worthOf(state, h.mind, a.lot));
     const dt = dts[t % dts.length]!;
-    const leaderBefore = a.stage === 'walk' ? lotLeader(state)?.id : undefined;
-    const standing = new Set(a.walkers.filter((w) => w.dir === 0).map((w) => w.id));
+    const leader = a.stage === 'walk' ? hands.find((h) => h.mind.me === lotLeader(state)?.id) : undefined;
+    const walker = leader && a.walkers.find((w) => w.id === leader.mind.me)!;
+    const before = leader && { target: targetOf(leader), bid: Math.round(walker!.price) };
     for (const h of hands) h.tick(state, dt, actFor(state, h.mind.me));
-    // Leading, an AI stands still (RULE-6): it may finish an overtake it started, but never sets off again.
-    if (leaderBefore && standing.has(leaderBefore)) expect(a.walkers.find((w) => w.id === leaderBefore)!.dir, `${leaderBefore} leads`).toBe(0);
+    // Leading (RULE-6), an AI may finish walking to the target it set before it took the lead, but never raises it, and stands once there.
+    if (leader && before) {
+      const after = targetOf(leader);
+      if (after !== null) expect(after, `${leader.mind.me} leads`).toBeLessThanOrEqual(before.target ?? -Infinity);
+      if (before.target === null || before.bid >= before.target) expect(walker!.dir, `${leader.mind.me} leads at its target`).toBe(0);
+    }
     const lot = a.lot!;
     const result = stepLandAuction(state, dt);
     if (result) bells.push({ lot, walkMs: a.elapsed, result });
@@ -164,6 +172,12 @@ describe('AI seats at the land auction', () => {
         if (kind === 'mule' && pressed.some((s) => s.limit === s.value)) valueCapped++;
       }
     }
+    // Two long ticks, then a short one: a leader that stood through a long tick may finish its walk on the short one.
+    for (const seed of SEEDS)
+      for (const money of [SHORT, {}, flushMoney()]) {
+        const { state, hands } = landAuction(seed, { money });
+        for (const s of play(state, hands, [300, 300, 37]).samples) expect(s.price, `seed ${seed}, ${s.id} on ${s.lot.id}`).toBeLessThanOrEqual(Math.max(s.limit, s.lo));
+      }
     expect(moneyCapped, 'in every short run some AI bid a plot up to money − reserve').toBe(SEEDS.length);
     expect(valueCapped, 'in every flush run some AI bid a MULE up to its value').toBe(SEEDS.length);
   });
