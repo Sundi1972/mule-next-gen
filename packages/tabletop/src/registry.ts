@@ -8,7 +8,7 @@ export class RoomRegistry<Intent, View> {
   private readonly rooms = new Map<string, { room: Room<Intent, View>; idleSince: number | null }>();
 
   constructor(
-    private readonly options: Omit<RoomOptions<Intent, View>, 'code'>,
+    private readonly options: Omit<RoomOptions<Intent, View>, 'code' | 'onClose'>,
     private readonly random: () => number = Math.random,
     private readonly now: () => number = Date.now,
   ) {}
@@ -18,7 +18,7 @@ export class RoomRegistry<Intent, View> {
     do {
       code = Array.from({ length: 4 }, () => CODE_LETTERS[Math.floor(this.random() * CODE_LETTERS.length)]).join('');
     } while (this.rooms.has(code));
-    const room = new Room<Intent, View>({ ...this.options, code });
+    const room = new Room<Intent, View>({ ...this.options, code, onClose: () => this.rooms.delete(code) });
     this.rooms.set(code, { room, idleSince: null });
     return room;
   }

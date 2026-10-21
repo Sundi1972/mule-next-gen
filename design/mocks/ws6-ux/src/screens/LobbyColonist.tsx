@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { Qr } from '../../../../../apps/web/src/components/Qr';
 import { ThemeToggle } from '../../../../../apps/web/src/components/ThemeToggle';
 import { NowCard, type Now } from '../proposed/GameShell';
+import { HandoffCode, useHandoffCode, type CodeState } from '../proposed/HandoffCode';
 
 /**
  * Responsive redesign: the lobby as "make your colonist" (Heiko 2026-10-22:
@@ -38,13 +39,13 @@ const CODE = 'MTWR';
 /** Names for the six player colours (theme --color-p1..p6). DS-GAP: the names belong beside SLOT_COLOR in @mule/ui. */
 const COLOUR_NAME: Record<Slot, string> = { 0: 'Ember', 1: 'Cobalt', 2: 'Jade', 3: 'Sun', 4: 'Violet', 5: 'Rose' };
 
-export type LobbyState = 'guest' | 'host' | 'handoff' | 'kick' | 'close';
+export type LobbyState = 'guest' | 'host' | 'handoff' | 'handoff-waiting' | 'handoff-expired' | 'kick' | 'close';
 
 export function LobbyColonist({ state }: { state: LobbyState }) {
   const host = state !== 'guest';
   const meId = host ? 'heiko' : 'lena';
   const [seats, setSeats] = useState(SEATS);
-  const [dialog, setDialog] = useState<null | 'handoff' | 'close' | { kick: string }>(state === 'handoff' ? 'handoff' : state === 'close' ? 'close' : state === 'kick' ? { kick: 'lena' } : null);
+  const [dialog, setDialog] = useState<null | 'handoff' | 'close' | { kick: string }>(state.startsWith('handoff') ? 'handoff' : state === 'close' ? 'close' : state === 'kick' ? { kick: 'lena' } : null);
   const me = seats.find((s) => s.id === meId)!;
   const set = (patch: Partial<Seat>) => setSeats((all) => all.map((s) => (s.id === meId ? { ...s, ...patch } : s)));
   const takenBy = (c: Slot) => seats.find((s) => s.colour === c && s.id !== meId);
@@ -198,7 +199,7 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
             )}
           </div>
         </aside>
-        {dialog && <Dialog dialog={dialog} seats={seats} me={me} host={host} onClose={() => setDialog(null)} onKick={(id) => (setSeats((all) => all.filter((s) => s.id !== id)), setDialog(null))} />}
+        {dialog && <Dialog dialog={dialog} seats={seats} me={me} host={host} onClose={() => setDialog(null)} onKick={(id) => (setSeats((all) => all.filter((s) => s.id !== id)), setDialog(null))} code={state === 'handoff-expired' ? 'expired' : state === 'handoff-waiting' ? 'waiting' : 'ready'} />}
       </div>
     </div>
   );
@@ -260,6 +261,7 @@ function Dialog({
   host,
   onClose,
   onKick,
+  code,
 }: {
   dialog: 'handoff' | 'close' | { kick: string };
   seats: Seat[];
@@ -267,17 +269,16 @@ function Dialog({
   host: boolean;
   onClose: () => void;
   onKick: (id: string) => void;
+  code: CodeState;
 }) {
+  const handoff = useHandoffCode(code);
   let body: ReactNode;
   if (dialog === 'handoff')
     body = (
       <>
         <h2 className="font-display text-xl font-semibold @min-[1100px]/shell:text-3xl">{host ? 'Move the host to your phone' : 'Move to your phone'}</h2>
         <div className="flex items-center gap-4">
-          <Qr text={`https://mule.example/host/${CODE}/heiko-7f3a`} size={120} className="p-2! @min-[1100px]/shell:hidden" />
-          <span className="hidden @min-[1100px]/shell:block">
-            <Qr text={`https://mule.example/host/${CODE}/heiko-7f3a`} size={220} className="p-3!" />
-          </span>
+          <HandoffCode url={`https://mule.example/host/${CODE}/heiko-7f3a`} state={handoff.state} onRenew={handoff.renew} />
           <p className="text-sm text-ink-2 @min-[1100px]/shell:text-lg">
             Scan this with your phone. It becomes <strong className="text-ink">you, {me.name}{host ? ', the host' : ''}</strong>, with your colonist. This screen then steps aside. The code works once, for 2 minutes.
           </p>
