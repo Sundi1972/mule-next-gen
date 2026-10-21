@@ -28,10 +28,17 @@ function newGame(n = 4): GameState {
   return createGame({ seed: 42, players: players(n) });
 }
 
-function plainTile(state: GameState, x: number, y: number, terrain: Tile['terrain'] = 'plains'): Tile {
+const flatGround = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0 };
+
+function plainTile(state: GameState, x: number, y: number, terrain: Tile['terrain'] = 'plains', ground: Partial<Tile['ground']> = {}): Tile {
   const tile = state.tiles[y * state.width + x]!;
-  Object.assign(tile, { terrain, traits: [], peaks: 0, crystite: 0, owner: null, outfit: null });
+  Object.assign(tile, { terrain, traits: [], peaks: 0, ground: { ...flatGround, ...ground }, owner: null, outfit: null, pollution: 0, filter: false, runMonths: 0 });
   return tile;
+}
+
+/** Moves the land grant's light to this tile, as the server's clock would. */
+function light(state: GameState, tile: Tile): void {
+  state.grant!.order[state.grant!.step] = state.tiles.indexOf(tile);
 }
 
 describe('createGame', () => {
@@ -120,20 +127,20 @@ describe('production', () => {
     p0.stock.energy = 0;
     const full = rawOutput(state, tile);
     const produced = runProduction(state);
-    expect(produced.p0!.food).toBe(Math.floor(full / 2));
+    expect(produced.produced.p0!.food).toBe(Math.floor(full / 2));
   });
 
   it('runs factories only when the inputs are in stock', () => {
     const state = newGame();
-    const tile = plainTile(state, 0, 0, 'wasteland');
+    const tile = plainTile(state, 0, 0, 'crater');
     tile.owner = 'p0';
     tile.outfit = 'alloy';
     const p0 = state.players[0]!;
     p0.stock.smithore = 0;
-    expect(runProduction(state).p0!.alloy).toBe(0);
+    expect(runProduction(state).produced.p0!.alloy).toBe(0);
     p0.stock.smithore = 2;
     p0.stock.energy = 1;
-    expect(runProduction(state).p0!.alloy).toBe(2);
+    expect(runProduction(state).produced.p0!.alloy).toBe(2);
     expect(p0.stock.smithore).toBe(0);
   });
 });
@@ -154,6 +161,7 @@ describe('auction', () => {
   it('never sells more than a player owns', () => {
     const state = newGame();
     state.players[0]!.stock.crystite = 2;
+    state.players[1]!.money = 100_000;
     const trades = runAuction(state, 'crystite', [
       { playerId: 'p0', side: 'sell', quantity: 10, limit: 1 },
       { playerId: 'p1', side: 'buy', quantity: 10, limit: 500 },
@@ -167,6 +175,7 @@ describe('month flow', () => {
     const state = newGame();
     advancePhase(state); // landGrant
     const tile = state.tiles.find((t) => t.terrain === 'plains')!;
+    light(state, tile);
     claimPlot(state, 'p0', tile.x, tile.y);
     expect(() => claimPlot(state, 'p1', tile.x, tile.y)).toThrow(RuleError);
     advancePhase(state); // development

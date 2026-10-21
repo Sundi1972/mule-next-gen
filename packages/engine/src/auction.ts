@@ -1,12 +1,37 @@
 import { driftReference, storeQuotes, storeWants } from './economy.js';
 import type { GameState, Good } from './types.js';
 
+/**
+ * The store hands out units in turns: one to each waiting player, round by
+ * round, until it runs out or everyone has what they asked for. `wants` are
+ * in turn order; returns how many each gets. 8 units for wants of 4, 3, 3
+ * gives 3, 3, 2.
+ */
+export function takeTurns(capacity: number, wants: number[]): number[] {
+  const got = wants.map(() => 0);
+  let left = Math.max(0, Math.floor(capacity));
+  while (left > 0) {
+    let handed = 0;
+    for (let i = 0; i < wants.length && left > 0; i++) {
+      if (got[i]! < wants[i]!) {
+        got[i]!++;
+        left--;
+        handed++;
+      }
+    }
+    if (handed === 0) break;
+  }
+  return got;
+}
+
 export interface Order {
   playerId: string;
   side: 'buy' | 'sell';
   quantity: number;
   /** Highest price a buyer pays, or lowest price a seller accepts, per unit. */
   limit: number;
+  /** When the player reached their price (any increasing clock). Earlier goes first in the store's turns. */
+  at?: number;
 }
 
 export interface Trade {
@@ -75,15 +100,28 @@ export function runAuction(state: GameState, good: Good, orders: Order[]): Trade
     if (sell.quantity === 0) si++;
   }
 
-  // Leftovers against the store.
-  for (const buy of buys) {
-    if (buy.quantity > 0 && buy.limit >= quotes.sell) settle(buy.playerId, STORE_ID, buy.quantity, quotes.sell);
-  }
-  let wants = storeWants(state, good, quotes.buy);
-  for (const sell of sells) {
-    if (wants <= 0) break;
-    if (sell.quantity > 0 && sell.limit <= quotes.buy) wants -= settle(STORE_ID, sell.playerId, Math.min(sell.quantity, wants), quotes.buy);
-  }
+  // Leftovers against the store, in turns. A Quibbit is always first in
+  // line; otherwise whoever reached the price first goes first.
+  const turnOrder = <T extends Order>(list: T[]) =>
+    list
+      .map((o, i) => ({ o, i }))
+      .sort((a, b) => {
+        const q = Number(players.get(b.o.playerId)?.species === 'quibbit') - Number(players.get(a.o.playerId)?.species === 'quibbit');
+        return q || (a.o.at ?? Infinity) - (b.o.at ?? Infinity) || a.i - b.i;
+      })
+      .map(({ o }) => o);
+
+  const storeBuyers = turnOrder(buys.filter((b) => b.quantity > 0 && b.limit >= quotes.sell));
+  const buyerWants = storeBuyers.map((b) => Math.min(b.quantity, Math.floor((players.get(b.playerId)?.money ?? 0) / quotes.sell)));
+  takeTurns(state.store.stock[good], buyerWants).forEach((n, i) => {
+    if (n > 0) settle(storeBuyers[i]!.playerId, STORE_ID, n, quotes.sell);
+  });
+
+  const storeSellers = turnOrder(sells.filter((o) => o.quantity > 0 && o.limit <= quotes.buy));
+  const room = Math.min(storeWants(state, good, quotes.buy), Math.floor(Math.max(0, state.store.fund) / quotes.buy));
+  takeTurns(room, storeSellers.map((o) => o.quantity)).forEach((n, i) => {
+    if (n > 0) settle(STORE_ID, storeSellers[i]!.playerId, n, quotes.buy);
+  });
 
   // Only trades between players teach the market something: store trades are
   // at the store's own quote.

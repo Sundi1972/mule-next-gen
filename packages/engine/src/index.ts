@@ -7,5 +7,6 @@ export * from './production.js';
 export * from './economy.js';
 export * from './auction.js';
 export * from './upkeep.js';
+export * from './pollution.js';
 export * from './game.js';
 export * from './ai/simple.js';

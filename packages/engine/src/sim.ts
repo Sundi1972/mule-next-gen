@@ -5,7 +5,8 @@
  *   pnpm sim -- --games 200 --players 4
  */
 import { aiClaim, aiDevelop, aiOrders } from './ai/simple.js';
-import { advancePhase, createGame, score, settleAuction } from './game.js';
+import { GAME } from './config.js';
+import { advanceGrant, advancePhase, colonyFailed, createGame, grantDone, score, settleAuction } from './game.js';
 import type { Order } from './auction.js';
 import { GOODS, type GameState, type Good } from './types.js';
 
@@ -22,11 +23,20 @@ export function playAiGame(seed: number, players: number): GameState {
   let guard = 0;
   while (state.phase !== 'gameOver' && guard++ < 500) {
     switch (state.phase) {
-      case 'landGrant':
-        for (let round = 0; round < 2; round++) for (const p of state.players) aiClaim(state, p.id);
+      case 'landGrant': {
+        // Walk the light across the free plots; the first AI that wants the lit plot takes it.
+        let steps = 0;
+        while (!grantDone(state) && steps++ < 2_000) {
+          const order = state.players.filter((p) => p.claimsThisGrant < GAME.claimsPerGrant);
+          const start = steps % order.length;
+          for (let i = 0; i < order.length; i++) if (aiClaim(state, order[(start + i) % order.length]!.id)) break;
+          advanceGrant(state);
+        }
         break;
+      }
       case 'development':
-        for (const p of state.players) aiDevelop(state, p.id);
+        // Everyone develops at once in the real game; rotate who reaches the corral first.
+        state.players.forEach((_, i) => aiDevelop(state, state.players[(i + state.month) % state.players.length]!.id));
         break;
       case 'auction': {
         const orders: Partial<Record<Good, Order[]>> = {};
@@ -49,6 +59,9 @@ function main() {
   const players = arg('players', 4);
   const priceRange = Object.fromEntries(GOODS.map((g) => [g, { min: Infinity, max: 0, all: [] as number[] }]));
   let mulesShort = 0;
+  let collapsed = 0;
+  const airs: number[] = [];
+  const factories = { alloy: 0, electronics: 0, medicine: 0 };
   let starved = 0;
   let months = 0;
   const scores: number[] = [];
@@ -58,6 +71,9 @@ function main() {
     months += state.month;
     if (state.history.some((h) => h.shortages.includes('food'))) starved++;
     mulesShort += state.history.filter((h) => h.storeMules === 0).length;
+    if (colonyFailed(state)) collapsed++;
+    airs.push(Math.max(...state.history.map((h) => h.air)));
+    for (const t of state.tiles) if (t.outfit === 'alloy' || t.outfit === 'electronics' || t.outfit === 'medicine') factories[t.outfit]++;
     for (const report of state.history) {
       for (const good of GOODS) {
         const r = priceRange[good]!;
@@ -73,6 +89,9 @@ function main() {
   console.log(`Colonies with a Food shortage at least once: ${((starved / games) * 100).toFixed(0)}%`);
   console.log(`Average final score: ${Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)}`);
   console.log(`Months with no MULE for sale: ${((mulesShort / months) * 100).toFixed(0)}%`);
+  const sortedAir = [...airs].sort((a, b) => a - b);
+  console.log(`Colony air at its worst: median ${sortedAir[Math.floor(airs.length / 2)]}, max ${sortedAir.at(-1)}; ended in Collapse: ${((collapsed / games) * 100).toFixed(0)}%`);
+  console.log(`Factories at game end, per game: Alloy ${(factories.alloy / games).toFixed(1)}, Electronics ${(factories.electronics / games).toFixed(1)}, Medicine ${(factories.medicine / games).toFixed(1)}`);
   console.log('Prices (min / median / 90th percentile / max):');
   for (const good of GOODS) {
     const r = priceRange[good]!;

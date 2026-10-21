@@ -1,4 +1,5 @@
-import { EXPORT_DEMAND, GAME, GOOD_CONFIG, MULE, PRICE, UPKEEP } from './config.js';
+import { EXPORT_DEMAND, GAME, GOOD_CONFIG, MULE, POLLUTION, PRICE, UPKEEP } from './config.js';
+import { airBand } from './pollution.js';
 import { colonyPrice, cover, exportPrice, importPrice, monthlyDemand, storeQuotes, storeWants } from './economy.js';
 import { addStock, emptyStock } from './stock.js';
 import { GOODS, type GameState, type Good } from './types.js';
@@ -17,7 +18,6 @@ export function runUpkeep(state: GameState): Good[] {
 
   // Players. Energy for plots was already paid in production.
   for (const player of state.players) {
-    player.hungry = player.stock.food < UPKEEP.food;
     player.stock.food = Math.max(0, player.stock.food - UPKEEP.food);
     player.stock.water = Math.max(0, player.stock.water - UPKEEP.water);
   }
@@ -38,7 +38,9 @@ export function runUpkeep(state: GameState): Good[] {
     state.store.stock[good] = Math.max(0, state.store.stock[good] - bought);
     state.store.fund += Math.round(bought * price);
   }
-  state.colonists = Math.round(state.colonists * (fed ? 1.04 : 0.95));
+  // In Collapse colonists leave whatever they eat.
+  const growth = airBand(state.air).name === 'collapse' ? 1 - POLLUTION.collapseLeave : fed ? 1.04 : 0.95;
+  state.colonists = Math.round(state.colonists * growth);
 
   // Spoilage, then overflow above the depot is sold to the store at half price.
   for (const player of state.players) {

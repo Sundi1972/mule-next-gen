@@ -1,4 +1,5 @@
-import { EXPORT_DEMAND, GOOD_CONFIG, MULE, PRICE, UPKEEP } from './config.js';
+import { EXPORT_DEMAND, GOOD_CONFIG, MULE, POLLUTION, PRICE, UPKEEP } from './config.js';
+import { airBand } from './pollution.js';
 import { emptyStock } from './stock.js';
 import { GOODS, type GameState, type Good, type Stock } from './types.js';
 
@@ -15,14 +16,18 @@ export function monthlyDemand(state: GameState): Stock {
   demand.food = players * UPKEEP.food + colonistUnits;
   demand.water = players * UPKEEP.water + colonistUnits;
   demand.energy = workingPlots * UPKEEP.energyPerPlot + colonistUnits / 2;
-  demand.medicine = state.colonists / 50;
+  // Sick colonists in dirty air need more Medicine.
+  const sick = airBand(state.air).devPenalty > 0;
+  demand.medicine = (state.colonists / 50) * (sick ? POLLUTION.sickMedicineDemand : 1);
   // The store builds MULEs from Alloy; expect about one sale per player.
   demand.alloy = players * MULE.alloyPerMule;
   // Factories pull raw inputs.
   const factories = (good: Good) => state.tiles.filter((t) => t.outfit === good).length;
   // Alloy factories, and the store's own smelter for MULEs.
   demand.smithore = factories('alloy') * 2 + players * MULE.storeSmithorePerAlloy;
-  demand.crystite = factories('electronics');
+  demand.rareEarth = factories('electronics');
+  // Crystite is a pure off-world luxury: only the export ship wants it.
+  demand.crystite = 0;
   demand.electronics = 0;
   // Off-world buyers, served by the export ship.
   for (const good of GOODS) demand[good] += (EXPORT_DEMAND[good] ?? 0) * players;
@@ -36,9 +41,10 @@ export function cover(state: GameState, good: Good, demand = monthlyDemand(state
   return state.store.stock[good] / need;
 }
 
-/** What the export ship pays per unit. */
+/** What the export ship pays per unit. Off-world buyers pay more for goods from a clean colony. */
 export function exportPrice(state: GameState, good: Good): number {
-  return state.store.offWorld[good] * PRICE.exportFactor;
+  const clean = airBand(state.air).name === 'clean' ? 1 + POLLUTION.cleanExportBonus : 1;
+  return state.store.offWorld[good] * PRICE.exportFactor * clean;
 }
 
 /** What an import costs the colony fund per unit. */
@@ -72,11 +78,14 @@ export function allPrices(state: GameState): Stock {
 }
 
 /**
- * What an empty MULE costs at the store: its labour plus the Alloy inside it
- * at today's price. As in the original, a Smithore shortage makes MULEs dear.
+ * What an empty MULE costs at the store: its labour plus the Alloy inside it.
+ * The store can smelt that Alloy from Smithore itself, so it charges the
+ * cheaper of the two. As in the original, a Smithore shortage makes MULEs dear.
  */
 export function mulePrice(state: GameState): number {
-  return MULE.labour + MULE.alloyPerMule * colonyPrice(state, 'alloy');
+  const demand = monthlyDemand(state);
+  const alloy = Math.min(colonyPrice(state, 'alloy', demand), MULE.storeSmithorePerAlloy * colonyPrice(state, 'smithore', demand));
+  return MULE.labour + MULE.alloyPerMule * alloy;
 }
 
 /** What the store charges and what it pays. */
