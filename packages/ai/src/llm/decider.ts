@@ -7,6 +7,11 @@ import { parseReply } from './reply.js';
 /** The port to a language model: the prompt and the longest the seat will wait, back comes the model's text. */
 export type Complete = (prompt: Prompt, waitMs: number) => Promise<{ text: string }>;
 
+/** A reply the decider could not use. */
+export class ReplyRejected extends Error {
+  declare readonly outcome: 'unreadable' | 'off_list';
+}
+
 /** What the hands wait for the decider, by kind of decision; the port's client enforces it. */
 const WAIT_MS: Record<DecisionKind, number> = {
   develop: AI_HANDS.develop.decideWaitMs,

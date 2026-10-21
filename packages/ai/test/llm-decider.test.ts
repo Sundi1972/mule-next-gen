@@ -4,7 +4,9 @@ import { Brain, type DecisionRecord } from '../src/brain.js';
 import { PERSONAS, type DecisionKind } from '../src/personas.js';
 import { candidate, consider, shortlist } from '../src/utility.js';
 import type { Mind } from '../src/value.js';
-import { LlmDecider, type Complete } from '../src/llm/decider.js';
+import type { Choice, Decider } from '../src/decider.js';
+import { LlmDecider, ReplyRejected, type Complete } from '../src/llm/decider.js';
+import type { Prompt } from '../src/llm/prompt.js';
 
 const mind: Mind = { me: 'p0', personaId: 'trader', persona: AI_PERSONAS.trader, levelId: 'rookie', level: AI_LEVELS.rookie };
 const state = createGame({ seed: 7, players: [0, 1, 2].map((i) => ({ id: `p${i}`, name: `P${i}`, isAi: true })) });
@@ -18,33 +20,71 @@ const flush = async () => {
 };
 
 /** Drives Brain with an LlmDecider on a fake port and settles it as the hands would. */
-async function run(port: Complete, kind: DecisionKind = 'develop', waitMs = 1_500, dt = waitMs) {
+async function run(decider: Decider, kind: DecisionKind = 'develop', waitMs = 1_500, dt = waitMs, heard?: { from: string; text: string }) {
   const records: DecisionRecord[] = [];
-  const brain = new Brain(mind, PERSONAS.trader, 'The Gambler', 11, new LlmDecider(port), (r) => records.push(r));
+  const brain = new Brain(mind, PERSONAS.trader, 'The Gambler', 11, decider, (r) => records.push(r));
+  if (heard) brain.hear(heard);
   const pending = brain.ask(kind, list(), obs, waitMs, null, 'summary');
   await flush();
   const settled = brain.resolve(pending, dt, obs);
-  return { record: records[0]!, settled };
+  return { record: records[0]!, records, settled, brain, pending };
+}
+
+/** An LlmDecider that keeps the error it rejected with, so the test can see its type. */
+function spied(port: Complete) {
+  const inner = new LlmDecider(port);
+  const spy = { rejection: undefined as unknown, name: inner.name } as Decider & { rejection: unknown };
+  spy.decide = async (...args): Promise<Choice> => {
+    try {
+      return await inner.decide(...args);
+    } catch (err) {
+      spy.rejection = err;
+      throw err;
+    }
+  };
+  return spy;
 }
 
 const never: Complete = () => new Promise(() => {});
 const replies = (text: string): Complete => async () => ({ text });
 
+const sync = (fn: () => never): Decider => ({ name: 'sync', decide: fn });
+const bigMessage = 'x'.repeat(300);
+
 describe('LlmDecider behind Brain', () => {
-  const rows: { name: string; port: Complete; by: 'llm' | 'fallback'; note?: string; pick?: string; line?: string }[] = [
-    { name: 'the port never resolves', port: never, by: 'fallback', note: 'decider too slow' },
-    { name: 'the port rejects', port: () => Promise.reject(new Error('budget spent')), by: 'fallback', note: 'decider failed: budget spent' },
-    { name: 'the reply names an option off the list', port: replies('{"option":"F","line":"x"}'), by: 'fallback', note: 'named F, not on the list' },
-    { name: 'the reply is junk', port: replies('not json at all'), by: 'fallback', note: 'unreadable reply' },
-    { name: 'the reply is good and in time', port: replies('{"option":"B","line":"Mine."}'), by: 'llm', pick: 'B', line: 'Mine.' },
+  const rows: {
+    name: string;
+    decider: () => Decider & { rejection?: unknown };
+    by: 'llm' | 'fallback';
+    note?: string;
+    exactNote?: string;
+    outcome?: 'unreadable' | 'off_list';
+    pick?: string;
+    line?: string;
+  }[] = [
+    { name: 'the port never resolves', decider: () => new LlmDecider(never), by: 'fallback', note: 'decider too slow' },
+    { name: 'the port rejects', decider: () => new LlmDecider(() => Promise.reject(new Error('budget spent'))), by: 'fallback', exactNote: 'decider failed: budget spent' },
+    { name: 'the reply names an option off the list', decider: () => spied(replies('{"option":"F","line":"x"}')), by: 'fallback', note: 'named F, not on the list', outcome: 'off_list' },
+    { name: 'the reply is junk', decider: () => spied(replies('not json at all')), by: 'fallback', note: 'unreadable reply', outcome: 'unreadable' },
+    { name: 'the reply is good and in time', decider: () => new LlmDecider(replies('{"option":"B","line":"Mine."}')), by: 'llm', pick: 'B', line: 'Mine.' },
+    { name: 'a decider throws synchronously', decider: () => sync(() => { throw new Error('boom'); }), by: 'fallback', exactNote: 'decider failed: boom' },
+    { name: 'the port rejects with a non-Error', decider: () => new LlmDecider(() => Promise.reject({})), by: 'fallback', exactNote: 'decider failed: unknown error' },
+    { name: 'the port rejects with a 300-char message', decider: () => new LlmDecider(() => Promise.reject(new Error(bigMessage))), by: 'fallback', exactNote: `decider failed: ${'x'.repeat(80)}` },
   ];
 
   for (const row of rows) {
     it(`T-AC-3: ${row.name}, so the seat plays ${row.by === 'llm' ? "the model's pick" : 'a shortlist action with its reason noted'}`, async () => {
-      const { record, settled } = await run(row.port);
+      const decider = row.decider();
+      const { record, settled } = await run(decider);
       expect(record.by).toBe(row.by);
-      if (row.note) expect(record.note).toContain(row.note);
+      if (row.exactNote) expect(record.note).toBe(row.exactNote);
+      else if (row.note) expect(record.note).toContain(row.note);
       else expect(record.note).toBeUndefined();
+      if (row.outcome) {
+        expect(decider.rejection).toBeInstanceOf(ReplyRejected);
+        expect((decider.rejection as ReplyRejected).outcome).toBe(row.outcome);
+        expect(record.note).toBe(`decider failed: ${(decider.rejection as ReplyRejected).message}`);
+      }
       if (row.pick) {
         expect(record.pick.id).toBe(row.pick);
         expect(record.line).toBe(row.line);
@@ -53,17 +93,42 @@ describe('LlmDecider behind Brain', () => {
     });
   }
 
-  it('T-AC-3 (AM-2): the port is given the hands wait for the kind: develop 1500, trade 2500, land 5000', async () => {
-    const waits: Record<string, number> = {};
+  it('T-AC-3: the port answers after resolve gave up, and there is still exactly one record: the top pick, too slow', async () => {
+    let answer!: (r: { text: string }) => void;
+    const late: Complete = () => new Promise((r) => (answer = r));
+    const { records, settled, brain, pending } = await run(new LlmDecider(late), 'develop', 1_500, 1_500);
+    expect(records).toHaveLength(1);
+    expect(records[0]!.note).toBe('decider too slow');
+    expect(records[0]!.by).toBe('fallback');
+    expect(records[0]!.pick.id).toBe(pending.fallback.optionId);
+    answer({ text: '{"option":"C","line":"too late"}' });
+    await flush();
+    expect(brain.resolve(pending, 10, obs)).toBe(settled);
+    expect(records).toHaveLength(1);
+    expect(brain.log).toHaveLength(1);
+    expect(settled!.choice.optionId).toBe(pending.fallback.optionId);
+  });
+
+  it('T-AC-3 (AM-2): the port gets this decision\'s prompt and the hands wait for the kind: develop, trade, land', async () => {
+    const seen: Record<string, { waitMs: number; prompt: Prompt }> = {};
     for (const kind of ['develop', 'trade', 'land'] as const) {
-      const port: Complete = async (_p, waitMs) => {
-        waits[kind] = waitMs;
+      const port: Complete = async (prompt, waitMs) => {
+        seen[kind] = { waitMs, prompt };
         return { text: '{"option":"A","line":null}' };
       };
-      const { settled } = await run(port, kind, 1);
+      const { settled } = await run(new LlmDecider(port), kind, 1, 1, { from: 'Ann', text: 'sell me your smithore' });
       expect(actions).toContain(settled!.action);
     }
-    expect(waits).toEqual({ develop: AI_HANDS.develop.decideWaitMs, trade: AI_HANDS.auction.decideWaitMs, land: BRAIN.landTimeoutMs });
-    expect(waits).toEqual({ develop: 1_500, trade: 2_500, land: 5_000 });
+    expect(Object.fromEntries(Object.entries(seen).map(([k, v]) => [k, v.waitMs]))).toEqual({
+      develop: AI_HANDS.develop.decideWaitMs,
+      trade: AI_HANDS.auction.decideWaitMs,
+      land: BRAIN.landTimeoutMs,
+    });
+    for (const { prompt } of Object.values(seen)) {
+      for (const a of actions) expect(prompt.user).toContain(`Option ${a}`);
+      expect(prompt.system).toContain(PERSONAS.trader.card);
+      const talk = prompt.user.slice(prompt.user.indexOf('<table_talk>'), prompt.user.indexOf('</table_talk>'));
+      expect(talk).toContain('sell me your smithore');
+    }
   });
 });
