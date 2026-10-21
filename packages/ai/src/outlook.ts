@@ -44,7 +44,7 @@ export interface Outlook {
   later(good: Good, extra?: number): number;
 }
 
-const BEFORE_PRODUCTION = new Set(['planning', 'landGrant', 'development']);
+const BEFORE_PRODUCTION = new Set(['planning', 'landGrant', 'landAuction', 'development']);
 
 export function outlook(obs: GameState, me: string, options: { lookAhead: boolean; apply?: (sim: GameState) => void; months?: number }): Outlook {
   const months = options.months ?? STRATEGIST.outlookMonths;
