@@ -170,6 +170,10 @@ export function Lobby() {
   );
 }
 
+// With padding the QR's footprint is 56 px (the mock's compact card) or 104 px (B-AC-4 asks for at least 100).
+const COMPACT_QR = 44;
+const BIG_QR = 88;
+
 /**
  * The way in for the others: QR and room code. With no big screen it is the only
  * QR at the table, so it is drawn big with the join link; with one, it shrinks.
@@ -178,7 +182,7 @@ function RoomCard({ code, url, compact }: { code: string; url: string; compact: 
   return (
     <div className="flex items-center gap-3 rounded-panel border border-holo-line bg-panel p-2" data-testid="room-card">
       <div className="shrink-0" data-testid="room-qr">
-        {compact ? <Qr text={url} size={44} className="p-1.5!" /> : <Qr text={url} size={88} className="p-2!" />}
+        <Qr text={url} size={compact ? COMPACT_QR : BIG_QR} className={compact ? 'p-1.5!' : 'p-2!'} />
       </div>
       <div className="flex min-w-0 flex-col">
         <span className="label-caps">Room code</span>
