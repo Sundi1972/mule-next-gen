@@ -127,7 +127,7 @@ describe('prompt building', () => {
       // @ts-expect-error assignment to a read-only property
       p.schema.type = 'array';
     });
-    const s = p.schema as { properties: { option: { enum: string[] } }; required: string[]; additionalProperties: boolean };
+    const s = p.schema;
     for (const o of three) expect(s.properties.option.enum).toContain(o.id);
     expect([...s.required].sort()).toEqual(['line', 'option']);
     expect(s.additionalProperties).toBe(false);

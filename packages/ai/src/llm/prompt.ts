@@ -2,15 +2,25 @@ import { BRAIN, GAME, PROCESSED_GOODS, RAW_GOODS, UPKEEP, type Good } from '@mul
 import { OPTION_IDS, type DecisionContext, type ShortOption, type TableTalk } from '../decider.js';
 import type { Persona } from '../personas.js';
 import { GOOD_NAME } from '../strategist.js';
-import { capCodePoints, toOneLine } from './text.js';
+import { capCodePoints, toOneLine } from '../text.js';
 
 export interface Prompt {
   /** Stable per persona, so the API can cache it. */
   system: string;
   /** Everything that varies from one decision to the next. */
   user: string;
-  /** The reply's JSON schema. */
-  schema: object;
+  /** The reply's JSON schema; shared and frozen, so read-only to every client. */
+  schema: PromptSchema;
+}
+
+export interface PromptSchema {
+  readonly type: 'object';
+  readonly properties: {
+    readonly option: { readonly type: 'string'; readonly enum: readonly string[] };
+    readonly line: { readonly type: 'string' };
+  };
+  readonly required: readonly string[];
+  readonly additionalProperties: false;
 }
 
 const TALK_OPEN = '<table_talk>';
@@ -23,10 +33,10 @@ const PRIMER = `You play one seat in a colony trading game in the spirit of M.U.
 How a month goes:
 - Planning. Everyone looks at the colony's stores, prices and plots, and decides what to aim for.
 - Land grant. Free plots are handed out. Each player may claim up to ${GAME.claimsPerGrant} plots per grant, and the choice matters: ground differs in what it produces well, and a plot next to your others can be worth more.
-- Development. You may outfit a plot with a MULE, a working machine the store builds from Smithore, set to produce one raw good: ${names(RAW_GOODS)}. A plot without a MULE produces nothing. A MULE costs money and the wrong kind wastes it. Factories make the processed goods (${names(PROCESSED_GOODS)}); they are fitted at the works counter and use inputs from your stock.
+- Development. You may outfit a plot with a MULE, a working machine the store builds from ${GOOD_NAME.smithore}, set to produce one raw good: ${names(RAW_GOODS)}. A plot without a MULE produces nothing. A MULE costs money and the wrong kind wastes it. Factories make the processed goods (${names(PROCESSED_GOODS)}); they are fitted at the works counter and use inputs from your stock.
 - Production. Plots and factories produce, and goods that are short hurt the player who runs out.
 - The auction. Players buy and sell goods with each other, and the store trades there too. Buyers bid up, sellers ask down, and a trade happens when they meet. Cheap goods bought now and sold when dear are how a trader earns; a scarce good can be cornered. Goods spoil and storage is limited, so hoarding has a cost.
-- Upkeep. At the end of the month each player eats Food and Water from their own stock, goods spoil, and anything above the depot limit of ${UPKEEP.depotCapacity} is lost. If the colony fails, everyone's score suffers.
+- Upkeep. At the end of the month each player eats ${GOOD_NAME.food} and ${GOOD_NAME.water} from their own stock, goods spoil, and anything above the depot limit of ${UPKEEP.depotCapacity} is lost. If the colony fails, everyone's score suffers.
 
 What the three kinds of decision mean:
 - land: which free plot, if any, to claim in the land grant (up to ${GAME.claimsPerGrant} claims per grant).
@@ -45,7 +55,7 @@ Who you are:
 `;
 
 /** Text as one line; NFKC runs first so fullwidth brackets and quotes fold before they are mapped. */
-function oneLine(s: string): string {
+function quotableLine(s: string): string {
   return toOneLine(s.normalize('NFKC'))
     .replace(/"/g, "'")
     .replace(/</g, '‹')
@@ -54,8 +64,8 @@ function oneLine(s: string): string {
 }
 
 function quoteTalk(talk: TableTalk): string {
-  const text = capCodePoints(oneLine(talk.text), BRAIN.maxTalkChars).trim();
-  return `${oneLine(talk.from) || 'Someone'}: "${text}"`;
+  const text = capCodePoints(quotableLine(talk.text), BRAIN.maxTalkChars).trim();
+  return `${quotableLine(talk.from) || 'Someone'}: "${text}"`;
 }
 
 function optionLine(o: ShortOption): string {
@@ -73,7 +83,7 @@ function deepFreeze<T extends object>(o: T): T {
 }
 
 // A fixed A-E enum on purpose: one schema per persona keeps the request byte-stable and cacheable; parseReply rejects an off-list letter.
-const SCHEMA = deepFreeze({
+const SCHEMA: PromptSchema = deepFreeze({
   type: 'object',
   properties: {
     option: { type: 'string', enum: [...OPTION_IDS] },

@@ -18,8 +18,8 @@ export class ReplyRejected extends Error {
   }
 }
 
-/** What the hands wait for the decider, by kind of decision; the port's client enforces it. */
-const WAIT_MS: Record<DecisionKind, number> = {
+/** How long the port may take, by kind: the hands' own wait for develop and trade, BRAIN.landTimeoutMs for land (AM-2), whose hands wait for no fixed time. */
+export const WAIT_MS: Record<DecisionKind, number> = {
   develop: AI_HANDS.develop.decideWaitMs,
   trade: AI_HANDS.auction.decideWaitMs,
   land: BRAIN.landTimeoutMs,

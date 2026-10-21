@@ -1,6 +1,6 @@
 import type { GameState } from '@mule/engine';
 import { TopPickDecider, toOptions, type Choice, type DecisionContext, type Decider, type ShortOption, type TableTalk } from './decider.js';
-import { capCodePoints, toOneLine } from './llm/text.js';
+import { capCodePoints, toOneLine } from './text.js';
 import type { DecisionKind, Persona } from './personas.js';
 import type { Consideration, Shortlist } from './utility.js';
 import type { Mind } from './value.js';

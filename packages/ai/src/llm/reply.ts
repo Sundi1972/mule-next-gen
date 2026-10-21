@@ -1,6 +1,6 @@
 import { BRAIN } from '@mule/engine';
 import type { ShortOption } from '../decider.js';
-import { capCodePoints, toOneLine } from './text.js';
+import { capCodePoints, toOneLine } from '../text.js';
 
 /** Why a reply cannot be used: not readable at all, or naming an option off the list. */
 export type RejectOutcome = 'unreadable' | 'off_list';
@@ -10,6 +10,7 @@ export type ParsedReply = { ok: true; optionId: string; line: string | null } | 
 
 const QUOTE_MARKS = '"\'“”‘’';
 
+// Long enough to recognise a stray option letter or word, short enough that the note stays one glance.
 const NOTE_NAME_CHARS = 8;
 
 function isQuote(char: string | undefined): boolean {
