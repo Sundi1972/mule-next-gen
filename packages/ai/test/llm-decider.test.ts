@@ -7,7 +7,7 @@ import type { Mind } from '../src/value.js';
 import type { Choice, Decider } from '../src/decider.js';
 import { LlmDecider, ReplyRejected, WAIT_MS, type Complete } from '../src/llm/decider.js';
 import { playGame } from '../src/play.js';
-import { simSeats } from '../src/sim.js';
+import { simSeats } from '../src/lineup.js';
 import type { Prompt } from '../src/llm/prompt.js';
 import type { RejectOutcome } from '../src/llm/reply.js';
 
