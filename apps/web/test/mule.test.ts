@@ -30,7 +30,7 @@ const store = (props: Partial<StoreInteriorProps>) =>
 
 describe('the MULE as a character (C19)', () => {
   it('B-AC-16: a Mule shows its state and its good, in its attributes and in its drawing', () => {
-    const lit = renderToStaticMarkup(createElement(Mule, { state: 'installed', good: 'energy', owner: SLOT_COLOR[0] }));
+    const lit = renderToStaticMarkup(createElement(Mule, { state: 'installed', good: 'energy', owner: 0 }));
     expect(lit).toMatch(/^<svg[^>]*data-mule-state="installed"[^>]*data-good="energy"/);
     const empty = renderToStaticMarkup(createElement(Mule, {}));
     expect(empty).toMatch(/^<svg[^>]*data-mule-state="idle"[^>]*data-good="empty"/);
@@ -41,7 +41,7 @@ describe('the MULE as a character (C19)', () => {
     for (const s of stops(energy)) expect(s).toContain('stop-color="var(--color-g-energy)"');
     // The glyph is the good's own icon, nested in the MULE's drawing; an empty pod is dark and bare.
     expect(energy.match(/<svg/g)).toHaveLength(2);
-    for (const s of stops(empty)) expect(s).toContain('stop-color="var(--color-raised)"');
+    for (const s of stops(empty)) expect(s).toContain('stop-color="var(--color-mule-pod)"');
     expect(empty.match(/<svg/g)).toHaveLength(1);
     // Idle it breathes and blinks, legs still and straight.
     expect(energy).toContain('animate-[mule-breathe');
@@ -62,11 +62,14 @@ describe('the MULE as a character (C19)', () => {
     expect(kneel).not.toMatch(/animate-\[mule-(breathe|blink|step|bob)/);
   });
 
-  it('B-AC-16: an owned MULE wears a saddle cloth in its owner colour; a store MULE has none', () => {
-    const owned = renderToStaticMarkup(createElement(Mule, { owner: SLOT_COLOR[2] }));
+  it('B-AC-16: an owned MULE wears a saddle cloth in its owner seat colour; a store MULE has none', () => {
+    const owned = renderToStaticMarkup(createElement(Mule, { owner: 2 }));
     expect(owned).toContain(SADDLE);
     const cloth = owned.match(/<path[^>]*data-part="saddle"[^>]*>/)?.[0];
     expect(cloth).toContain(`fill="${SLOT_COLOR[2]}"`);
+    expect(cloth).toContain('data-slot="2"');
+    // Its antenna tips wear the seat's colour too.
+    expect(owned.match(new RegExp(`<circle[^>]*fill="${SLOT_COLOR[2].replace(/[()]/g, '\\$&')}"`, 'g'))).toHaveLength(2);
     const stock = renderToStaticMarkup(createElement(Mule, {}));
     expect(stock).not.toContain(SADDLE);
   });
@@ -88,6 +91,9 @@ describe('the MULE as a character (C19)', () => {
     expect(mulesIn(lit)[0]).toContain('data-good="energy"');
     expect(lit).toContain('stop-color="var(--color-g-energy)"');
     expect(lit).toContain(SADDLE);
+    // Your seat's colour: the cloth names your slot.
+    expect(lit.match(/<path[^>]*data-part="saddle"[^>]*>/)?.[0]).toContain('data-slot="0"');
+    expect(element(store({ me: { ...me, slot: 3, leading: 'energy' } }), 'visitor-lena').match(/<path[^>]*data-part="saddle"[^>]*>/)?.[0]).toContain('data-slot="3"');
     // With no MULE in tow your colonist leads none.
     expect(mulesIn(element(store({ me: { ...me, leading: null } }), 'visitor-lena'))).toHaveLength(0);
   });

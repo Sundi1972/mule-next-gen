@@ -178,7 +178,7 @@ type HallRead = {
   taps: string[];
   locks: Record<string, string>;
   corralMules: { state: string | null; good: string | null; saddled: boolean }[];
-  led: { good: string | null; saddled: boolean }[];
+  led: { good: string | null; saddled: boolean; slot: string | null }[];
   nowTitle: string;
   nowStep: string | null;
 };
@@ -190,7 +190,7 @@ const READ_HALL = `(() => {
   const id = (el) => el.getAttribute('data-testid');
   const locks = {};
   for (const el of hall.querySelectorAll('[data-lock]')) locks[id(el.closest('[data-testid]'))] = el.textContent;
-  const mule = (svg) => ({ state: svg.getAttribute('data-mule-state'), good: svg.getAttribute('data-good'), saddled: !!svg.querySelector('[data-part=saddle]') });
+  const mule = (svg) => ({ state: svg.getAttribute('data-mule-state'), good: svg.getAttribute('data-good'), saddled: !!svg.querySelector('[data-part=saddle]'), slot: svg.querySelector('[data-part=saddle]')?.getAttribute('data-slot') ?? null });
   return {
     next: [...hall.querySelectorAll('[data-next]')].map(id),
     taps: [...hall.querySelectorAll('[data-testid=tap-here]')].map((t) => id(t.parentElement)),
@@ -238,6 +238,13 @@ export async function theCorralGlowsWithNoMule(phone: Page, server: MuleServer, 
   check(r.led.length === 0, `B-AC-16: with no MULE in tow your colonist leads none, got ${r.led.length}`);
 }
 
+/** The seat's colour slot: its place at the table, as the phones count it (derive.ts slotOf). */
+function seatSlot(server: MuleServer, code: string, seat: string): number {
+  const i = gameOf(server, code).state.players.findIndex((p) => p.id === seat);
+  check(i >= 0, `seat ${seat} in the game`);
+  return i % 6;
+}
+
 /** The engine's raw good with the largest shortfall for the seat this month, or null with none short (RULE-7 row 3). */
 function largestRawShortfall(server: MuleServer, code: string, seat: string): string | null {
   const { state } = gameOf(server, code);
@@ -273,15 +280,18 @@ async function hallGap(phone: Page): Promise<{ w: number; h: number; wide: strin
 }
 
 /**
- * B-AC-15 and B-AC-16 from an empty MULE to an outfitted one: the led MULE is empty (step 2), RULE-7 row 3 glows
- * at most the engine's largest raw shortfall; outfitted for Energy it is lit with Energy and saddled, both doors
- * glow (step 3); the hall fills the stage at 1440×900 and 844×390, and the rail opens with Now (B-AC-12); walking out lands on the map with a plot of
- * yours selected. Ends back in the store, at 844×390. Call right after buying the MULE.
+ * B-AC-15 and B-AC-16 from an empty MULE to an installed one: the led MULE is empty and wears her seat's colour
+ * (step 2); RULE-7 row 3 glows exactly the engine's largest raw shortfall; outfitted for Energy it is lit with
+ * Energy, both doors glow (step 3); the hall fills the stage at 1440×900 and 844×390, and the rail opens with Now
+ * (B-AC-12); walking out lands on the map with a plot of hers selected; installed, Now says what next (row 7).
+ * Ends back in the store, at 844×390. Call right after buying the MULE.
  */
 export async function theLedMuleLightsUp(phone: Page, server: MuleServer, code: string, seat = 's1'): Promise<string> {
   const empty = await hallWhen(phone, (r) => r.led[0]?.good === 'empty');
   check(empty.led.length === 1 && empty.led[0]!.good === 'empty', `B-AC-16: the MULE she leads is empty, got ${JSON.stringify(empty.led)}`);
-  check(empty.led[0]!.saddled, 'B-AC-16: the MULE she leads wears her colour');
+  check(empty.led[0]!.saddled, 'B-AC-16: the MULE she leads wears a saddle cloth');
+  const slot = String(seatSlot(server, code, seat));
+  check(empty.led[0]!.slot === slot, `B-AC-16: the MULE she leads wears her seat's colour (slot ${slot}), got slot ${empty.led[0]!.slot}`);
   check(empty.nowStep === 'Step 2 of 3' && empty.nowTitle === 'Choose what your MULE makes', `B-AC-15: Now says step 2, choose what it makes, got ${empty.nowStep} "${empty.nowTitle}"`);
   check(empty.locks['booth-corral'] === 'one at a time', `B-AC-15: with a MULE in tow the corral says "one at a time", got "${empty.locks['booth-corral']}"`);
   // Row 3 glows the outfitter of the largest raw shortfall in the engine's monthNeeds; with none short, nothing.
@@ -301,7 +311,7 @@ export async function theLedMuleLightsUp(phone: Page, server: MuleServer, code: 
   await phone.locator('[data-shop=energy]:not([disabled])').click({ timeout: 2_000 });
   const lit = await hallWhen(phone, (r) => r.led[0]?.good === 'energy' && r.next.length === 2);
   check(lit.led[0]?.good === 'energy', `B-AC-16: outfitted, the MULE she leads is lit with Energy, got ${JSON.stringify(lit.led)}`);
-  check(lit.led[0]!.saddled, 'B-AC-16: the outfitted MULE she leads keeps her saddle cloth');
+  check(lit.led[0]!.saddled && lit.led[0]!.slot === slot, `B-AC-16: the outfitted MULE she leads keeps her saddle cloth (slot ${slot}), got ${lit.led[0]!.slot}`);
   check(JSON.stringify(lit.next) === '["door-L","door-R"]', `B-AC-15: with an Energy MULE in the store both doors carry data-next, got ${lit.next.join(', ')}`);
   check(lit.nowStep === 'Step 3 of 3' && lit.nowTitle === 'Walk out and install it', `B-AC-15: Now says step 3, walk out, got ${lit.nowStep} "${lit.nowTitle}"`);
   check(lit.corralMules.every((m) => !m.saddled), 'B-AC-16 (negative): the corral MULEs stay unsaddled');
@@ -325,6 +335,21 @@ export async function theLedMuleLightsUp(phone: Page, server: MuleServer, code: 
   check(await install.isEnabled(), 'B-AC-15: walked out with an Energy MULE, a plot of hers is selected to install on');
   const title = (await phone.getByTestId('now-title').textContent()) ?? '';
   check(title === 'Install your Energy MULE here', `B-AC-15: on her selected plot Now says install it here, got "${title}"`);
+  // Installed, Now moves on to row 7 in the same frame the MULE leaves her: never back to "Buy a MULE".
+  const titles = phone.evaluate(`new Promise((resolve) => {
+    const seen = [];
+    const read = () => document.querySelector('[data-testid=now-title]')?.textContent ?? '';
+    const watch = new MutationObserver(() => {
+      seen.push(read());
+      if (seen.at(-1) === 'MULE installed. What next?') { watch.disconnect(); resolve(seen); }
+    });
+    watch.observe(document.body, { subtree: true, childList: true, characterData: true });
+    setTimeout(() => { watch.disconnect(); resolve(seen); }, 3000);
+  })`) as Promise<string[]>;
+  await install.click({ timeout: 2_000 });
+  const after = await titles;
+  check(after.at(-1) === 'MULE installed. What next?', `B-AC-15: after installing Now says "MULE installed. What next?", saw ${JSON.stringify(after)}`);
+  check(!after.includes('Buy a MULE at the corral'), `B-AC-15: no frame shows "Buy a MULE" between the install and row 7, saw ${JSON.stringify(after)}`);
   await dev.getByRole('button', { name: 'Store', exact: true }).click({ timeout: 2_000 });
   await phone.getByTestId('store-hall').waitFor({ timeout: 2_000 });
   return `${sizes.join(', ')}; row 3 glowed ${short ?? 'nothing (no shortfall)'}, then ${seeded} when short`;
