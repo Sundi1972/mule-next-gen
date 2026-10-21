@@ -541,7 +541,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     ];
   }
 
-  /** What one player may see, or with `null` what everyone may see. Stock and hidden ground stay private. */
+  /** What one player may see, or with `null` what everyone may see. Stock, hidden ground and score parts stay private. */
   viewFor(seatId: string | null): MuleView {
     const state = this.requireState();
     const prices = allPrices(state);

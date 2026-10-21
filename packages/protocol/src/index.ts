@@ -206,6 +206,9 @@ export interface ShipView {
   wants: Partial<Record<Good, number>> | null;
 }
 
+/** A player's own score, line by line, as their phone receives it at game over. */
+export type ScorePartsView = Omit<ScoreParts, 'total'>;
+
 /** One screen's view of the game: a player's private view, or the public one for a board. */
 export interface MuleView {
   finished: boolean;
@@ -232,7 +235,7 @@ export interface MuleView {
   treasury: { money: number; salesTax: number };
   news: string[];
   /** At game over; `parts` only on the viewer's own entry, never in the board view (goods are private). */
-  scores: { id: string; score: number; parts?: Omit<ScoreParts, 'total'> }[] | null;
+  scores: { id: string; score: number; parts?: ScorePartsView }[] | null;
   /** The live goods auction while it runs. */
   auction: AuctionView | null;
   /** This month's lots for the land auction, in line-up order. */
