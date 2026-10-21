@@ -70,6 +70,7 @@ export class Room<Intent, View> {
   private readonly boards = new Set<Connection<View>>();
   private readonly game: Game<Intent, View>;
   private readonly opts: Required<Omit<RoomOptions<Intent, View>, 'createGame' | 'code' | 'picks'>>;
+  private readonly picks: readonly string[] | undefined;
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private started = false;
   private nextSeat = 1;
@@ -78,6 +79,7 @@ export class Room<Intent, View> {
 
   constructor(options: RoomOptions<Intent, View>) {
     this.code = options.code;
+    this.picks = options.picks;
     this.opts = {
       minSeats: options.minSeats ?? 2,
       maxSeats: options.maxSeats ?? 6,
@@ -155,7 +157,11 @@ export class Room<Intent, View> {
         if (this.started) throw new TableError('The game has already started');
         if (this.seats.length < this.opts.minSeats) throw new TableError(`At least ${this.opts.minSeats} players are needed`);
         this.started = true;
-        this.game.start(this.seats.map(({ id, name, isAi }) => ({ id, name, isAi })));
+        this.game.start(this.seats.map(({ id, name, isAi, pick }) => ({ id, name, isAi, ...(pick !== undefined ? { pick } : {}) })));
+        this.broadcast();
+        return;
+      case 'pick':
+        this.pick(seatId, msg.pick);
         this.broadcast();
         return;
       case 'intent':
@@ -215,6 +221,15 @@ export class Room<Intent, View> {
     return this.opts.aiNames.find((n) => !used.has(n)) ?? `AI ${this.seats.length + 1}`;
   }
 
+  /** RULE-1: a human seat makes its own choice from the game's list, before Start. */
+  private pick(seatId: string, pick: string): void {
+    if (!this.picks) throw new TableError('This game has no choices to make');
+    if (this.started) throw new TableError('The game has already started');
+    if (!this.picks.includes(pick)) throw new TableError('Unknown choice');
+    const seat = this.seats.find((s) => s.id === seatId);
+    if (seat) seat.pick = pick;
+  }
+
   private requireHost(seatId: string): void {
     if (seatId !== this.hostId) throw new TableError('Only the host can do that');
   }
@@ -254,7 +269,13 @@ export class Room<Intent, View> {
       code: this.code,
       status: this.started ? 'playing' : 'lobby',
       hostId: this.hostId,
-      seats: this.seats.map((s) => ({ id: s.id, name: s.name, isAi: s.isAi, connected: s.isAi || s.conn !== null })),
+      seats: this.seats.map((s) => ({
+        id: s.id,
+        name: s.name,
+        isAi: s.isAi,
+        connected: s.isAi || s.conn !== null,
+        ...(s.pick !== undefined ? { pick: s.pick } : {}),
+      })),
       boards: this.boards.size,
       game: this.started ? this.game.viewFor(seatId) : null,
     };
