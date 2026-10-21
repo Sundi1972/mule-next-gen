@@ -3,6 +3,7 @@ import { Creature } from './Creature';
 import { GoodIcon } from './GoodIcon';
 import { Mule } from './Mule';
 import { useSeatSpecies } from './species';
+import type { CreatureWrap } from './WalkBoard';
 import { cx, GOOD_NAME, SLOT_COLOR, type Good, type Slot } from './tokens';
 
 /** Outfitters for farms and mines, in the order the store shows them. */
@@ -106,6 +107,8 @@ export interface StoreInteriorProps {
   tv?: boolean;
   /** The shell's wide layout (laptop and up): bigger type and creatures. */
   wide?: boolean;
+  /** Wraps the colonist's creature, such as in a chat bubble's anchor. */
+  wrapCreature?: CreatureWrap;
 }
 
 /**
@@ -115,7 +118,7 @@ export interface StoreInteriorProps {
  * airlock door to the colony at each end. It fills whatever stage it is given. The room the guide names glows and
  * says TAP; a closed room stays legible and says why.
  */
-export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onShop, onDoor, next = [], locks, me, overlay, tv = false, wide = false }: StoreInteriorProps) {
+export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onShop, onDoor, next = [], locks, me, overlay, tv = false, wide = false, wrapCreature }: StoreInteriorProps) {
   const usable = (s: Shop) => !open || open.includes(s);
   const tap = (s: Shop) => (onShop ? () => onShop(s) : undefined);
   const cost = (s: Shop) => (prices[s] === undefined ? null : `${prices[s]} cr`);
@@ -269,7 +272,7 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onSho
         <Door side="R" onTap={onDoor} next={glows('doorR')} z={z} />
       </div>
 
-      {me && <Colonist at={SPOT[spotFor(me.leading)]} slot={me.slot} leading={me.leading} time={me.time} testid={`visitor-${me.id}`} z={z} />}
+      {me && <Colonist at={SPOT[spotFor(me.leading)]} id={me.id} slot={me.slot} leading={me.leading} time={me.time} testid={`visitor-${me.id}`} z={z} wrap={wrapCreature} />}
       {overlay}
     </div>
   );
@@ -367,7 +370,7 @@ function Door({ side, onTap, next, z }: { side: 'L' | 'R'; onTap: (() => void) |
  * Your colonist on the floor with your time bar, leading your MULE (the character, not the glyph). Before R1 it
  * stands at the room it used; it never walks, so the waddle and the MULE's walk cycle (C14) do not play yet.
  */
-function Colonist({ at, slot, leading, time, testid, z }: { at: { x: number; y: number }; slot: Slot; leading: Leading; time: number; testid: string; z: Sizes }) {
+function Colonist({ at, id, slot, leading, time, testid, z, wrap = (_, c) => c }: { at: { x: number; y: number }; id: string; slot: Slot; leading: Leading; time: number; testid: string; z: Sizes; wrap?: CreatureWrap | undefined }) {
   const species = useSeatSpecies(slot);
   const left = at.x > 50;
   return (
@@ -376,9 +379,12 @@ function Colonist({ at, slot, leading, time, testid, z }: { at: { x: number; y: 
         <span className="block h-full rounded-full" style={{ width: `${Math.max(0, Math.min(1, time)) * 100}%`, background: SLOT_COLOR[slot] }} />
       </span>
       <span className={cx('flex items-end', left && 'flex-row-reverse')}>
-        <span className="rounded-full ring-2 ring-holo ring-offset-1 ring-offset-table">
-          <Creature species={species} color={SLOT_COLOR[slot]} size={z.creature} />
-        </span>
+        {wrap(
+          id,
+          <span className="rounded-full ring-2 ring-holo ring-offset-1 ring-offset-table">
+            <Creature species={species} color={SLOT_COLOR[slot]} size={z.creature} />
+          </span>,
+        )}
         {leading && <Mule size={z.led} state="idle" good={leading === 'empty' ? null : leading} owner={slot} facing={left ? 'left' : 'right'} />}
       </span>
     </div>
