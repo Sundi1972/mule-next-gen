@@ -139,7 +139,8 @@ export async function checkTheShow({ phone, tv, phoneView, tvView, shot }: ShowC
   for (const g of GOODS) {
     const made = harvest[me.id]?.[g] ?? 0;
     check(after[g] === me.stock[g], `B-AC-8: the strip ends on the phone's ${g} stock ${me.stock[g]}, reads ${after[g]}`);
-    if (made > 0) check(before[g] === me.stock[g] - made, `B-AC-8: the strip counts ${g} up from ${me.stock[g] - made}, it read ${before[g]} before landing`);
+    const start = Math.max(0, me.stock[g] - made);
+    if (made > 0) check(before[g] === start, `B-AC-8: the strip counts ${g} up from ${start}, it read ${before[g]} before landing`);
   }
   console.log(`production show: ${me.id} harvested ${JSON.stringify(harvest[me.id] ?? {})} from ${myLines.length} plots; the TV slots and the phone strip agree`);
 }

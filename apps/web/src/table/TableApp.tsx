@@ -9,6 +9,7 @@ import { colonyVerdict, fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, player, plo
 import { useAuctionSound } from '../game/sound';
 import { useClient, useClientState, useServerNow } from '../net/react';
 import { TvLandAuction } from './TvLandAuction';
+import { TvProduction } from './TvProduction';
 
 /** The big screen: the public view everyone at the table shares. It has no controls. */
 export function TableApp({ room }: { room: string }) {
@@ -144,6 +145,8 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
       </SeatSpeciesProvider>
     );
   }
+
+  if (phase === 'production' && game.production) return <TvProduction game={game} production={game.production} />;
 
   let side: ReactNode;
   if (phase === 'landGrant')

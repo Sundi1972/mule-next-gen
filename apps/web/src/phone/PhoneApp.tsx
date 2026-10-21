@@ -11,6 +11,7 @@ import { LandGrant } from './LandGrant';
 import { Entry, Lobby } from './Lobby';
 import { EmoteBubbles } from './parts';
 import { Planning } from './Planning';
+import { Production } from './Production';
 import { Results } from './Results';
 import { TurnSideways } from './Shell';
 
@@ -64,6 +65,8 @@ function PhoneScreens({ room }: { room: string }) {
     <Auction />
   ) : view.phase === 'landAuction' ? (
     <LandAuction />
+  ) : view.phase === 'production' && view.production ? (
+    <Production production={view.production} />
   ) : (
     <Results />
   );
