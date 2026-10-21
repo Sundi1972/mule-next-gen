@@ -2,6 +2,7 @@ import { ADJACENCY, FACTORY, FACTORY_FIT, GROWN_BASE, GROWN_MIN, POLLUTION, RECI
 import { eventOutput, planEvent } from './events.js';
 import { neighbours } from './map.js';
 import { airBand, runPollution } from './pollution.js';
+import { relicBonus, settleSpecials, specialBonus } from './specials.js';
 import { addStock, emptyStock, hasStock } from './stock.js';
 import {
   GROWN_GOODS,
@@ -86,6 +87,7 @@ export function rawOutputParts(state: GameState, tile: Tile): Part[] {
     if (good === 'food' && species === 'bramblet') add('species', SPECIES_PERK.brambletFood);
   }
   for (const trait of tile.traits) add('trait', TRAIT_EFFECT[trait]?.[good] ?? 0);
+  add('special', specialBonus(state, tile, good));
   const sum = () => parts.reduce((n, p) => n + p.delta, 0);
   if (sum() > 0) add('cluster', adjacencyBonus(state, tile));
   add('pollution', -pollutionLoss(state, tile, good));
@@ -148,6 +150,11 @@ export function factoryFit(state: GameState, tile: Tile, good: ProcessedGood, ow
   if (tile.outfit === good && tile.runMonths >= FACTORY.experienceMonths) {
     output += FACTORY.experienceBonus;
     lines.push({ tone: 'good', text: `Running for ${tile.runMonths} months: experience, +1` });
+  }
+  const relics = relicBonus(state, tile);
+  if (relics > 0) {
+    output += relics;
+    lines.push({ tone: 'good', text: `Next to ${relics === 1 ? 'an alien relic' : `${relics} alien relics`}: +${relics}` });
   }
   const loss = pollutionLoss(state, tile, good);
   if (loss > 0) {
@@ -263,6 +270,7 @@ export function runProduction(state: GameState): {
     tile.runMonths = ran.has(tile) ? tile.runMonths + 1 : 0;
   }
 
+  settleSpecials(state, lines);
   const pollutionBy = runPollution(state);
   return { produced, pollutionBy, lines, events: event ? [event] : [] };
 }
