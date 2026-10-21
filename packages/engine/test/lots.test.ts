@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, createGame, DEVELOPMENT, list, mulePrice, orderGeoDrone, RuleError, unlist, type GameState, type Tile } from '../src/index.js';
+import { advancePhase, createGame, DEVELOPMENT, endLandAuction, list, mulePrice, orderGeoDrone, RuleError, unlist, type GameState, type Tile } from '../src/index.js';
 
 const SEATS = ['brix', 'ossa', 'lena', 'tam'];
 
@@ -14,7 +14,7 @@ function own(state: GameState, x: number, y: number, owner: string | null, outfi
 }
 
 function toPhase(state: GameState, phase: GameState['phase']): void {
-  while (state.phase !== phase) advancePhase(state);
+  for (let steps = 0; state.phase !== phase && steps < 10; steps++) advancePhase(state);
 }
 
 const plotAt = (x: number, y: number) => ({ kind: 'plot' as const, x, y });
@@ -160,5 +160,51 @@ describe('T-AC-3: the geo drone over listed plots (RULE-1 drone row, C4)', () =>
     refused(() => orderGeoDrone(state, 'ossa', [{ x: 6, y: 4 }]), 'The drone only flies over free or listed plots');
     expect(state.players[1]!.money).toBe(money);
     expect(state.players[1]!.droneOrder).toEqual([]);
+  });
+});
+
+describe('the land auction phase (RULE-2)', () => {
+  it('B-AC-5: no listings ⇒ landGrant → development', () => {
+    const state = newGame();
+    toPhase(state, 'landGrant');
+    advancePhase(state);
+    expect(state.phase).toBe('development');
+    expect(state.landAuction).toBeNull();
+  });
+
+  it('RULE-2 (serves B-AC-5): one listing ⇒ landGrant → landAuction, with that lot up first in its intro', () => {
+    const state = newGame();
+    own(state, 6, 4, 'lena');
+    const listing = list(state, 'lena', keep(plotAt(6, 4)));
+    toPhase(state, 'landGrant');
+    advancePhase(state);
+    expect(state.phase).toBe('landAuction');
+    expect(state.landAuction).toMatchObject({ stage: 'intro', lot: listing, number: 1, count: 1, result: null });
+  });
+
+  it('RULE-2 (serves B-AC-3): endLandAuction resolves every remaining lot as kept, and leaving the phase clears the listings', () => {
+    const state = newGame();
+    own(state, 6, 4, 'lena');
+    own(state, 5, 3, 'brix', 'food');
+    list(state, 'lena', { item: plotAt(6, 4), minimum: 1, unsold: 'store' });
+    list(state, 'brix', { item: muleAt(5, 3), minimum: 1, unsold: 'store' });
+    toPhase(state, 'landAuction');
+    const money = state.players.map((p) => p.money);
+    const capital = state.store.capital;
+    const corral = state.store.mules;
+
+    endLandAuction(state);
+
+    expect(state.landAuction?.stage).toBe('over');
+    expect(state.players.map((p) => p.money)).toEqual(money);
+    expect(state.store.capital).toBe(capital);
+    expect(state.store.mules).toBe(corral);
+    expect(state.tiles[4 * state.width + 6]).toMatchObject({ owner: 'lena' });
+    expect(state.tiles[3 * state.width + 5]).toMatchObject({ owner: 'brix', outfit: 'food' });
+
+    advancePhase(state);
+    expect(state.phase).toBe('development');
+    expect(state.listings).toEqual([]);
+    expect(state.landAuction).toBeNull();
   });
 });

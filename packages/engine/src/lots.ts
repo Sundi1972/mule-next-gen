@@ -62,3 +62,11 @@ export function unlist(state: GameState, playerId: string, id: string): void {
   if (listing.seller !== playerId) throw new RuleError('Not your listing');
   state.listings = state.listings.filter((l) => l !== listing);
 }
+
+export function startLandAuction(state: GameState): void {
+  throw new Error('NotImplemented: startLandAuction');
+}
+
+export function endLandAuction(state: GameState): void {
+  throw new Error('NotImplemented: endLandAuction');
+}
