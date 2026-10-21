@@ -11,18 +11,17 @@ import { OTHERS, SPOT, StoreHall, walkSeconds, Walker, type Spot, type Visitor }
  * Responsive redesign: development (Heiko 2026-10-22, "I had no clue what to do
  * on this screen"; "a catastrophe on large screens").
  *
- * Three fixes, in both variants and at both sizes:
+ * Three fixes, at both sizes:
  * 1. "Now" opens the rail: the one next step and why, step n of 3.
  * 2. The room for that step glows and says TAP; rooms you can't use yet stay
  *    legible and say why ("needs a MULE") instead of fading to nothing.
  * 3. Walking is walking: your creature waddles from room to room and out of
  *    the door onto the map, at R1's placeholder speeds; the clock never stops.
  *
- * Variant A (overview): on a wide screen the store and the colony map are both
- * on stage, the store above the map, so walking out of the door is visibly
- * walking onto the map. Variant B (one place at a time): the store fills the
- * stage, as in the original, and the map replaces it when you walk out.
- * On a phone held sideways both variants show one place at a time.
+ * On a wide screen the store and the colony map are both on stage, the store
+ * above the map, so walking out of the door is visibly walking onto the map
+ * (Heiko chose this, variant A, 2026-10-22). On a phone held sideways one place
+ * shows at a time.
  */
 
 const FULL = 50;
@@ -152,7 +151,7 @@ function guide(turn: ReturnType<typeof useTurn>, pub: number): { now: Now; next:
   };
 }
 
-export function DevelopTurn({ variant, start = 'start' }: { variant: 'A' | 'B'; start?: Start }) {
+export function DevelopTurn({ start = 'start' }: { start?: Start }) {
   const turn = useTurn(start);
   const { leading, place, installed } = turn;
   const pub = Math.round(20 + (60 + VIEW.month * 20) * (turn.left / FULL));
@@ -256,8 +255,7 @@ export function DevelopTurn({ variant, start = 'start' }: { variant: 'A' | 'B'; 
         </>
       }
     >
-      {variant === 'A' ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-2 @min-[1100px]:gap-5" data-variant="A">
+        <div className="flex min-h-0 flex-1 flex-col gap-2 @min-[1100px]:gap-5" data-testid="dev-stage">
           <section className={cx('min-h-0 flex-col', place === 'store' ? 'flex flex-1 @min-[1100px]:flex-none' : 'hidden @min-[1100px]:flex')} data-testid="stage-store">
             {stageLabel('The store', place === 'store')}
             <div className="h-full min-h-[300px] @min-[1100px]:h-[330px]">{hallStage}</div>
@@ -267,17 +265,6 @@ export function DevelopTurn({ variant, start = 'start' }: { variant: 'A' | 'B'; 
             {mapStage}
           </section>
         </div>
-      ) : (
-        <div className="flex min-h-0 flex-1 flex-col" data-variant="B">
-          {place === 'store' ? (
-            <div className="flex min-h-0 flex-1 items-center justify-center">
-              <div className="h-full min-h-[300px] w-full @min-[1100px]:h-auto @min-[1100px]:aspect-[2/1] @min-[1100px]:max-h-full">{hallStage}</div>
-            </div>
-          ) : (
-            mapStage
-          )}
-        </div>
-      )}
     </GameShell>
   );
 }

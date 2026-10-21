@@ -24,6 +24,8 @@ const DECISIONS = [
   'Tap to walk (R1): tap a room and your creature walks there; time keeps running, so walking costs time. Placeholders until WS1’s sim: the hall in about 2 s, 0.6 s a tile on the map. Zipwings walk twice as fast.',
   'Everyone in the store walks the same floor, each with a time bar over their head, as in the original.',
   'Start of turn: “You eat 5 Food and fill up your time bar”: the bar fills in front of you, shorter when you are short of Food.',
+  'Redesign (Heiko, 2026-10-22): every player screen is a stage (what you act on) and a guide rail that opens with “Now”, the next step and why; from a phone held sideways to a laptop, using the space.',
+  'Development on a laptop: the store above the map (Heiko chose A), so walking out of the door lands you on the map; the next room glows and says TAP.',
 ];
 
 const STORE_STATES = [
@@ -121,14 +123,11 @@ function PlayableShow() {
   );
 }
 
-const DEV_STATES: { id: string; title: string; variant: 'A' | 'B'; start: Start }[] = [
-  { id: 'dev-a', title: 'A · store and map together: start of turn', variant: 'A', start: 'start' },
-  { id: 'dev-a-outfitted', title: 'A · MULE outfitted: walk out', variant: 'A', start: 'outfitted' },
-  { id: 'dev-a-map', title: 'A · on the map: to your plot', variant: 'A', start: 'map' },
-  { id: 'dev-a-installed', title: 'A · installed: what next', variant: 'A', start: 'installed' },
-  { id: 'dev-b', title: 'B · one place at a time: start of turn', variant: 'B', start: 'start' },
-  { id: 'dev-b-outfitted', title: 'B · MULE outfitted: walk out', variant: 'B', start: 'outfitted' },
-  { id: 'dev-b-map', title: 'B · on the map: to your plot', variant: 'B', start: 'map' },
+const DEV_STATES: { id: string; title: string; start: Start }[] = [
+  { id: 'dev', title: 'Start of the turn: buy a MULE', start: 'start' },
+  { id: 'dev-outfitted', title: 'MULE outfitted: walk out', start: 'outfitted' },
+  { id: 'dev-map', title: 'On the map: to your plot', start: 'map' },
+  { id: 'dev-installed', title: 'Installed: what next', start: 'installed' },
 ];
 
 const LOBBY_STATES: { id: string; title: string; state: LobbyState }[] = [
@@ -190,12 +189,12 @@ export default function App() {
         </p>
         <LaptopFrame>
           <Game>
-            <DevelopTurn key={`${hash}-l`} variant={dev.variant} start={dev.start} />
+            <DevelopTurn key={`${hash}-l`} start={dev.start} />
           </Game>
         </LaptopFrame>
         <PhoneFrame>
           <Game>
-            <DevelopTurn key={`${hash}-p`} variant={dev.variant} start={dev.start} />
+            <DevelopTurn key={`${hash}-p`} start={dev.start} />
           </Game>
         </PhoneFrame>
       </Page>
