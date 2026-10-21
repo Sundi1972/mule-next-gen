@@ -1,4 +1,5 @@
 import type { AddressInfo } from 'node:net';
+import type { AiAction } from '@mule/ai';
 import type { MuleView, ServerEnvelope } from '@mule/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
@@ -14,8 +15,8 @@ afterEach(async () => {
 });
 
 /** A real server on a free port, and Brix's phone seated in a started room with one AI seat. */
-async function seatedPhone() {
-  running = createMuleServer({ seed: () => 42 });
+async function seatedPhone(options: { politics?: boolean } = {}) {
+  running = createMuleServer({ seed: () => 42, ...options });
   await new Promise<void>((r) => running!.server.listen(0, r));
   const { port } = running.server.address() as AddressInfo;
   const { code } = (await (await fetch(`http://localhost:${port}/rooms`, { method: 'POST' })).json()) as { code: string };
@@ -53,16 +54,23 @@ async function seatedPhone() {
 }
 
 describe('politics over the wire', () => {
-  it('C1: the server a player joins plays politics by default', async () => {
-    const { first } = await seatedPhone();
-    expect(first.month).toBe(1);
-    expect(first.politics, 'the board-wide politics view').toBeTruthy();
-    expect(first.politics!.election?.stage).toBe('nominate');
-    expect(first.me!.politics, "the phone's own politics").toBeTruthy();
+  it('C1: a server created with politics on plays the election; the default server plays none until the screens ship (AM-6)', async () => {
+    const on = await seatedPhone({ politics: true });
+    expect(on.first.month).toBe(1);
+    expect(on.first.politics, 'the board-wide politics view').toBeTruthy();
+    expect(on.first.politics!.election?.stage).toBe('nominate');
+    expect(on.first.phaseEndsAt, 'planning waits for the election').toBeNull();
+    expect(on.first.me!.politics, "the phone's own politics").toBeTruthy();
+    await running!.close();
+
+    const dark = await seatedPhone();
+    expect(dark.first.politics).toBeNull();
+    expect(dark.first.me!.politics).toBeNull();
+    expect(dark.first.phaseEndsAt, "planning's timer runs at once").not.toBeNull();
   });
 
   it('C9: the wire accepts run, vote and setTax and refuses malformed ones', async () => {
-    const phone = await seatedPhone();
+    const phone = await seatedPhone({ politics: true });
     phone.intent({ type: 'run', office: 'governor' });
     const running = await phone.waitForGame((g) => g.me?.politics?.running === 'governor');
     expect(running.politics!.election!.candidates.governor).toEqual([running.me!.id]);
@@ -167,6 +175,15 @@ describe('the election runs first in planning', () => {
     const view = g.game.viewFor(null);
     expect(view.phase).toBe('planning');
     expect(view.phaseEndsAt).toBeNull();
+  });
+
+  it("C9: an AI seat's Done during the election is Done for the stage", () => {
+    const g = started();
+    const aiAct = (seatId: string, action: AiAction) => (g.game as unknown as { aiAct(id: string, a: AiAction): boolean }).aiAct(seatId, action);
+    expect(election(g.game).done).toEqual([]);
+    expect(aiAct('ai1', { type: 'done', done: true }), 'the rules took it').toBe(true);
+    expect(election(g.game).done).toEqual(['ai1']);
+    expect(g.game.viewFor(null).phase).toBe('planning');
   });
 
   it('C9: an away seat is marked Done', () => {
