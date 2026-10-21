@@ -1,21 +1,49 @@
-import { MAP, sizeBand, type FloorGood, type SizeBand } from './config.js';
+import { MAP, sizeBand, type FloorGood, type ShareTerrain, type SizeBand } from './config.js';
 import { neighbours, tileIndex } from './map.js';
 import { RAW_GOODS, type RawGood, type Terrain, type Tile } from './types.js';
 
-/** The map rules as a checker: every rule a map breaks, and the numbers the map gallery prints. */
+/**
+ * The map rules as a checker: every rule a map breaks, and the numbers the map
+ * gallery prints. S9 (honest hints) holds only over many maps, so the map-quality
+ * test checks it; P1 (special fields) joins once special fields exist.
+ */
 
-type GameMap = { width: number; height: number; tiles: Tile[] };
-type ShareTerrain = keyof typeof MAP.shares;
+export type GameMap = { width: number; height: number; tiles: Tile[] };
 type Mineral = 'crystite' | 'rareEarth';
 
+export type RuleId = 'F1' | 'F2' | 'F3' | 'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'S6' | 'S7' | 'S8' | 'S10';
+
+/** Each rule's short title, for labelling violations. */
+export const RULE_TITLES: Record<RuleId, string> = {
+  F1: 'Floors',
+  F2: 'One scarce good at most',
+  F3: 'Reach',
+  S1: 'All terrains',
+  S2: 'Shares',
+  S3: 'No dominant terrain',
+  S4: 'No specks',
+  S5: 'No blob',
+  S6: 'River shape',
+  S7: 'River bends',
+  S8: 'Smithore seams',
+  S10: 'Crystite and Rare earth rings',
+};
+
+export interface Violation {
+  rule: RuleId;
+  detail: string;
+  /** The offending plots, where the rule has them. */
+  at?: { x: number; y: number }[];
+}
+
 export interface MapReport {
-  /** One entry per broken rule instance; `rule` is the row id ('F1', 'S7', ...). */
-  violations: { rule: string; detail: string }[];
+  /** One entry per broken rule instance. */
+  violations: Violation[];
   metrics: {
     /** Good plots per player. */
     perPlayer: Record<RawGood, number>;
-    /** Share of non-river land for each land terrain on the map. */
-    shares: Partial<Record<Exclude<Terrain, 'river' | 'store'>, number>>;
+    /** Share of non-river land for each land terrain; absent terrains are omitted. */
+    shares: Partial<Record<ShareTerrain, number>>;
     biggestRegion: number;
     bends: number;
     /** Share of good Smithore plots touching another; 0 when there are none. */
@@ -52,7 +80,6 @@ interface Facts {
   store: Tile | undefined;
 }
 
-type Violation = MapReport['violations'][number];
 type Steps = (tile: Tile) => number;
 
 /** Checks a map against every map rule (spec RULE-1). Pure. */
@@ -145,13 +172,14 @@ function riverBendCount(f: Facts): number {
   return f.riverRows.filter((cols) => cols.length === 2 && cols[1]! - cols[0]! === 1).length;
 }
 
-function touchingSmithore(f: Facts): number {
+function isolatedSmithore(f: Facts): Tile[] {
   const goodSet = new Set(f.good.smithore);
-  return f.good.smithore.filter((t) => neighbours(f.map.tiles, f.map.width, t).some((n) => goodSet.has(n))).length;
+  return f.good.smithore.filter((t) => !neighbours(f.map.tiles, f.map.width, t).some((n) => goodSet.has(n)));
 }
 
 function seamShareOf(f: Facts): number {
-  return f.good.smithore.length === 0 ? 0 : touchingSmithore(f) / f.good.smithore.length;
+  const count = f.good.smithore.length;
+  return count === 0 ? 0 : (count - isolatedSmithore(f).length) / count;
 }
 
 function peaksOf(f: Facts, mineral: Mineral): Tile[] {
@@ -159,9 +187,11 @@ function peaksOf(f: Facts, mineral: Mineral): Tile[] {
 }
 
 const at = (t: Tile) => `(${t.x},${t.y})`;
+const plots = (tiles: Tile[]) => tiles.map(({ x, y }) => ({ x, y }));
 const round = (n: number) => Number(n.toFixed(2));
 const pct = (n: number) => `${round(n * 100)}%`;
 
+/** F1 floors: enough good plots per player of each floor good. */
 function floors(f: Facts): Violation[] {
   return FLOOR_GOODS.filter((g) => perPlayer(f, g) < MAP.floor[g]).map((g) => ({
     rule: 'F1',
@@ -169,6 +199,7 @@ function floors(f: Facts): Violation[] {
   }));
 }
 
+/** F2: at most one floor good below its normal range. */
 function oneScarce(f: Facts): Violation[] {
   const below = belowNormal(f);
   if (below.length <= 1) return [];
@@ -176,6 +207,7 @@ function oneScarce(f: Facts): Violation[] {
   return [{ rule: 'F2', detail: `${below.length} goods below normal, at most 1 may be: ${list}` }];
 }
 
+/** F3 reach: every land plot, the river included, near a good plot of each floor good. */
 function reach(f: Facts): Violation[] {
   return FLOOR_GOODS.flatMap((g) => {
     const limit = MAP.reach[f.band][g];
@@ -184,16 +216,18 @@ function reach(f: Facts): Violation[] {
     const far = f.land.filter((t) => steps(t) > limit);
     if (far.length === 0) return [];
     const worst = far.reduce((a, b) => (steps(b) > steps(a) ? b : a));
-    return [{ rule: 'F3', detail: `${g}: plot ${at(worst)} is ${steps(worst)} steps from a good plot, reach ${limit} (${far.length} too far)` }];
+    const detail = `${g}: plot ${at(worst)} is ${steps(worst)} steps from a good plot, reach ${limit} (${far.length} too far)`;
+    return [{ rule: 'F3', detail, at: plots(far) }];
   });
 }
 
+/** S1: all 11 land terrains present. */
 function allTerrains(f: Facts): Violation[] {
   const missing = SHARE_TERRAINS.filter((t) => terrainCount(f, t) === 0);
   return missing.map((t) => ({ rule: 'S1', detail: `no ${t} on the map` }));
 }
 
-// A terrain that is absent is S1's violation, so S2 judges only the terrains present.
+/** S2 shares: each terrain present within its target share. An absent terrain is S1's alone. */
 function shares(f: Facts): Violation[] {
   const n = f.nonRiver.length;
   return SHARE_TERRAINS.flatMap((t) => {
@@ -206,47 +240,60 @@ function shares(f: Facts): Violation[] {
   });
 }
 
+/** S3: no terrain over MAP.maxTerrainShare of non-river land. */
 function noDominant(f: Facts): Violation[] {
   const n = f.nonRiver.length;
-  return SHARE_TERRAINS.filter((t) => terrainCount(f, t) * 3 > n).map((t) => ({
+  return SHARE_TERRAINS.filter((t) => terrainCount(f, t) / n > MAP.maxTerrainShare + EPS).map((t) => ({
     rule: 'S3',
-    detail: `${t} ${terrainCount(f, t)} of ${n} plots, over a third of non-river land`,
+    detail: `${t} ${terrainCount(f, t)} of ${n} plots, over ${pct(MAP.maxTerrainShare)} of non-river land`,
   }));
 }
 
+/** S4 no specks: every same-terrain region at least MAP.minRegion plots. */
 function noSpecks(f: Facts): Violation[] {
-  return f.regions
-    .filter((r) => r.length < MAP.minRegion)
-    .map((r) => ({ rule: 'S4', detail: `${r[0]!.terrain} region of ${r.length} plots at ${at(r[0]!)}, fewer than ${MAP.minRegion}` }));
+  return f.regions.filter((r) => r.length < MAP.minRegion).map((r) => ({
+    rule: 'S4',
+    detail: `${r[0]!.terrain} region of ${r.length} plots at ${at(r[0]!)}, fewer than ${MAP.minRegion}`,
+    at: plots(r),
+  }));
 }
 
 function regionCap(f: Facts): number {
   return Math.ceil(MAP.maxRegionShare * f.nonRiver.length - EPS);
 }
 
+/** S5 no blob: no region over its share of non-river land. */
 function noBlob(f: Facts): Violation[] {
   const cap = regionCap(f);
-  return f.regions
-    .filter((r) => r.length > cap)
-    .map((r) => ({ rule: 'S5', detail: `${r[0]!.terrain} region of ${r.length} plots at ${at(r[0]!)}, over the cap of ${cap}` }));
+  return f.regions.filter((r) => r.length > cap).map((r) => ({
+    rule: 'S5',
+    detail: `${r[0]!.terrain} region of ${r.length} plots at ${at(r[0]!)}, over the cap of ${cap}`,
+    at: plots(r),
+  }));
 }
 
+/** S6 river shape: every row holds 1 river plot or 2 touching, each sharing a column with the row above. */
 function riverShape(f: Facts): Violation[] {
   if (!f.hasRiver) return [{ rule: 'S6', detail: 'no river on the map' }];
-  return f.riverRows.flatMap((cols, y) => {
+  return f.riverRows.flatMap((cols, y): Violation[] => {
     if (cols.length === 0) return [{ rule: 'S6', detail: `row ${y} holds no river` }];
+    const where = cols.map((x) => ({ x, y }));
     if (cols[cols.length - 1]! - cols[0]! > 1) {
-      return [{ rule: 'S6', detail: `row ${y} holds river at columns ${cols.join(', ')}; a row holds 1 river plot or 2 touching` }];
+      return [{ rule: 'S6', detail: `row ${y} holds river at columns ${cols.join(', ')}; a row holds 1 river plot or 2 touching`, at: where }];
     }
     const above = f.riverRows[y - 1];
     if (above && above.length > 0 && !cols.some((x) => above.includes(x))) {
-      return [{ rule: 'S6', detail: `row ${y}'s river (column ${cols.join(', ')}) does not touch row ${y - 1}'s (column ${above.join(', ')})` }];
+      const detail = `row ${y}'s river (column ${cols.join(', ')}) does not touch row ${y - 1}'s (column ${above.join(', ')})`;
+      return [{ rule: 'S6', detail, at: where }];
     }
     return [];
   });
 }
 
-// With no river at all, S6 reports it; zero bends would only restate that.
+/**
+ * S7: enough bends, MAP.riverMargin columns from each side, and a river plot
+ * touching the store. With no river at all, S6 reports it; zero bends would only restate that.
+ */
 function riverBends(f: Facts): Violation[] {
   if (!f.hasRiver) return [];
   const out: Violation[] = [];
@@ -255,21 +302,24 @@ function riverBends(f: Facts): Violation[] {
   if (bends < needed) out.push({ rule: 'S7', detail: `${bends} ${bends === 1 ? 'bend' : 'bends'}, ${needed} needed` });
   const { width } = f.map;
   for (const [y, cols] of f.riverRows.entries()) {
-    for (const x of cols.filter((c) => c < 2 || c > width - 3)) {
-      out.push({ rule: 'S7', detail: `river at column ${x} in row ${y}, closer than 2 columns to the side` });
+    for (const x of cols.filter((c) => c < MAP.riverMargin || c > width - 1 - MAP.riverMargin)) {
+      out.push({ rule: 'S7', detail: `river at column ${x} in row ${y}, closer than ${MAP.riverMargin} columns to the side`, at: [{ x, y }] });
     }
   }
   const store = f.store;
   const touchesStore = store !== undefined && neighbours(f.map.tiles, width, store).some((t) => t.terrain === 'river');
-  if (!touchesStore) out.push({ rule: 'S7', detail: 'no river plot touches the store' });
+  if (!touchesStore) out.push({ rule: 'S7', detail: 'no river plot touches the store', ...(store ? { at: plots([store]) } : {}) });
   return out;
 }
 
+/** S8 seams: enough good Smithore plots touching another. */
 function seams(f: Facts): Violation[] {
   const share = seamShareOf(f);
   if (share + EPS >= MAP.seamShare) return [];
-  const detail = `${touchingSmithore(f)} of ${f.good.smithore.length} good smithore plots touch another (${pct(share)}), ${pct(MAP.seamShare)} needed`;
-  return [{ rule: 'S8', detail }];
+  const count = f.good.smithore.length;
+  const isolated = isolatedSmithore(f);
+  const detail = `${count - isolated.length} of ${count} good smithore plots touch another (${pct(share)}), ${pct(MAP.seamShare)} needed`;
+  return [{ rule: 'S8', detail, at: plots(isolated) }];
 }
 
 function ringRating(steps: number): (rating: number) => boolean {
@@ -287,6 +337,7 @@ function ringWants(steps: number): string {
   return 'outside every ring needs 0';
 }
 
+/** S10 rings: 3 to 4 peaks per mineral, and every plot rated by its steps to the nearest peak. */
 function rings(f: Facts): Violation[] {
   const { count } = MAP.peak;
   return MINERALS.flatMap((m) => {
@@ -300,7 +351,7 @@ function rings(f: Facts): Violation[] {
     const first = wrong[0];
     if (first) {
       const more = wrong.length > 1 ? ` (${wrong.length - 1} more plots off the rings)` : '';
-      out.push({ rule: 'S10', detail: `${m} at ${at(first)} is rated ${first.ground[m]}; ${ringWants(steps(first))}${more}` });
+      out.push({ rule: 'S10', detail: `${m} at ${at(first)} is rated ${first.ground[m]}; ${ringWants(steps(first))}${more}`, at: plots(wrong) });
     }
     return out;
   });
@@ -318,6 +369,7 @@ function metrics(f: Facts): MapReport['metrics'] {
     peaks: { crystite: peaksOf(f, 'crystite').length, rareEarth: peaksOf(f, 'rareEarth').length },
     worstReach: Object.fromEntries(FLOOR_GOODS.map((g) => [g, worstReach(f, g)])) as Record<FloorGood, number>,
     scarce: below.length === 1 ? below[0]! : null,
+    // Special fields don't exist yet; they are counted once they do.
     specials: 0,
   };
 }

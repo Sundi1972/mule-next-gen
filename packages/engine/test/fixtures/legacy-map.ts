@@ -3,6 +3,7 @@ import {
   mapSize,
   MINED_GOODS,
   RAW_GOODS,
+  type GameMap,
   type GrownGood,
   type Ground,
   type MinedGood,
@@ -17,7 +18,8 @@ import {
  * river, terrain grown from random seeds, ground rolled per plot. The map
  * gallery shows it as "current", and it proves the map rules can fail.
  * The odds tables are copied here, not imported, so a later retune of the
- * engine's odds leaves this map unchanged.
+ * engine's odds leaves this map unchanged. Map size is the one thing not
+ * frozen: it comes from the engine's mapSize (and so sizeBand).
  */
 
 const GROWN_ODDS = {
@@ -59,7 +61,7 @@ const LAND_TERRAINS: Exclude<Terrain, 'store'>[] = [
 
 const TRAITS: TileTrait[] = ['bedrock', 'sheltered', 'hotSpring', 'thinVein', 'toxic', 'unstable', 'infested', 'floodPlain'];
 
-export function legacyGenerateMap(players: number, rng: Rng): { width: number; height: number; tiles: Tile[] } {
+export function legacyGenerateMap(players: number, rng: Rng): GameMap {
   const { width, height } = mapSize(players);
   const midX = Math.floor(width / 2);
   const midY = Math.floor(height / 2);

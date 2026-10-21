@@ -1,12 +1,6 @@
-import { RAW_GOODS, zeroGround, type RawGood, type Terrain, type Tile } from '../../src/index.js';
+import { RAW_GOODS, zeroGround, type GameMap, type RawGood, type Terrain, type Tile } from '../../src/index.js';
 
 /** Hand-built maps for the map-rule tests: terrain and ground drawn as ASCII, one character per plot. */
-
-export interface TestMap {
-  width: number;
-  height: number;
-  tiles: Tile[];
-}
 
 /** Terrain rows, and for each raw good either rating rows (digits; `.` on the store) or one rating for every plot. */
 export interface MapSpec {
@@ -30,7 +24,7 @@ const TERRAIN_BY_LETTER: Record<string, Terrain> = {
   '#': 'store',
 };
 
-export function buildMap(spec: MapSpec): TestMap {
+export function buildMap(spec: MapSpec): GameMap {
   const height = spec.terrain.length;
   const width = spec.terrain[0]!.length;
   const tiles: Tile[] = [];
@@ -56,7 +50,7 @@ function rating(layer: string[] | number, x: number, y: number): number {
 }
 
 /** A copy of the map with some plots' terrain changed: [x, y, letter]. */
-export function withTerrain(map: TestMap, edits: [number, number, string][]): TestMap {
+export function withTerrain(map: GameMap, edits: [number, number, string][]): GameMap {
   const tiles = map.tiles.map((t) => ({ ...t, ground: { ...t.ground } }));
   for (const [x, y, letter] of edits) {
     const terrain = TERRAIN_BY_LETTER[letter];
@@ -67,10 +61,16 @@ export function withTerrain(map: TestMap, edits: [number, number, string][]): Te
 }
 
 /** A copy of the map with one good's rating changed on some plots: [x, y, rating]. */
-export function withGround(map: TestMap, good: RawGood, edits: [number, number, number][]): TestMap {
+export function withGround(map: GameMap, good: RawGood, edits: [number, number, number][]): GameMap {
   const tiles = map.tiles.map((t) => ({ ...t, ground: { ...t.ground } }));
   for (const [x, y, value] of edits) tiles[y * map.width + x]!.ground[good] = value;
   return { ...map, tiles };
+}
+
+/** The map flipped left to right: every rule is symmetric, so it passes or fails as the original does. */
+export function mirrored(map: GameMap): GameMap {
+  const tiles = map.tiles.map((t) => ({ ...map.tiles[t.y * map.width + (map.width - 1 - t.x)]!, x: t.x, y: t.y }));
+  return { ...map, tiles: tiles.map((t) => ({ ...t, ground: { ...t.ground } })) };
 }
 
 /**
@@ -164,31 +164,23 @@ export const MID_SPEC: MapSpec = {
 
 export const MID_MAP = buildMap(MID_SPEC);
 
-/** MID_SPEC's Crystite with a fourth peak at (4,3): still within the 3 to 4 peaks allowed. */
-export const CRYSTITE_4_PEAKS = [
-  '000000023200000',
-  '000020234320000',
-  '000232023200000',
-  '002343202000000',
-  '0002320.0000020',
-  '020020000000232',
-  '232000000002343',
-  '343200000000232',
-  '232000000000020',
-];
+/** MID_MAP with a fourth Crystite peak at (4,3) and its ring: still within the 3 to 4 peaks allowed. */
+export const MID_CRYSTITE_4_PEAKS = withGround(MID_MAP, 'crystite', [
+  [4, 1, 2],
+  [3, 2, 2], [4, 2, 3], [5, 2, 2],
+  [2, 3, 2], [3, 3, 3], [4, 3, 4], [5, 3, 3], [6, 3, 2],
+  [3, 4, 2], [4, 4, 3], [5, 4, 2],
+  [4, 5, 2],
+]);
 
-/** CRYSTITE_4_PEAKS with a fifth peak at (10,4). */
-export const CRYSTITE_5_PEAKS = [
-  '000000023200000',
-  '000020234320000',
-  '000232023220000',
-  '002343202232000',
-  '0002320.2343220',
-  '020020000232232',
-  '232000000022343',
-  '343200000000232',
-  '232000000000020',
-];
+/** MID_CRYSTITE_4_PEAKS with a fifth peak at (10,4) and its ring. */
+export const MID_CRYSTITE_5_PEAKS = withGround(MID_CRYSTITE_4_PEAKS, 'crystite', [
+  [10, 2, 2],
+  [9, 3, 2], [10, 3, 3], [11, 3, 2],
+  [8, 4, 2], [9, 4, 3], [10, 4, 4], [11, 4, 3], [12, 4, 2],
+  [9, 5, 2], [10, 5, 3], [11, 5, 2],
+  [10, 6, 2],
+]);
 
 /**
  * An 11×5 map for 2 players with 47 plots of non-river land: plains 15 in

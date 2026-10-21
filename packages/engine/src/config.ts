@@ -331,6 +331,9 @@ export function mapSize(players: number): { width: number; height: number } {
 /** The goods every map guarantees a floor, reach and normal range for. */
 export type FloorGood = 'food' | 'water' | 'energy' | 'smithore';
 
+/** The 11 land terrains other than the river: the ones with a target share. */
+export type ShareTerrain = Exclude<LandTerrain, 'river'>;
+
 /**
  * What every map must meet (the map rules), read by the checker, the
  * generator and the map gallery. Size bands are sizeBand's. Counts are good
@@ -364,23 +367,30 @@ export const MAP = {
     volcanic: 0.06,
     crater: 0.06,
     ice: 0.06,
-  } satisfies Record<Exclude<LandTerrain, 'river'>, number>,
+  } satisfies Record<ShareTerrain, number>,
   /** A terrain's share may stray this fraction of its target, plus one plot. */
   jitter: 1 / 3,
+  /** No terrain may cover more than this share of non-river land. */
+  maxTerrainShare: 1 / 3,
+  /** The river keeps at least this many columns from each side edge. */
+  riverMargin: 2,
   /** Smallest connected same-terrain region. */
   minRegion: 3,
   /** Largest region, as a share of non-river land (rounded up to whole plots). */
   maxRegionShare: 0.12,
   /** Share of good Smithore plots that touch another good Smithore plot. */
   seamShare: 0.7,
-  /** Largest gap between a terrain's mean rating over many maps and the hint players see. */
+  /**
+   * Largest gap between a terrain's mean rating over many maps and the hint
+   * players see. Read by the generator and the map-quality test, not the checker.
+   */
   honesty: 0.3,
   /**
    * Crystite and Rare earth come in rings: a peak plot rated `high`, the plots
    * one step from it `medium`, two steps `low`, and 0 beyond.
    */
   peak: { high: 4, medium: 3, low: { min: 1, max: 2 }, count: { min: 3, max: 4 } },
-  /** Chance a map has one scarce good. */
+  /** Chance a map has one scarce good. Read by the generator and the map-quality test, not the checker. */
   scarceChance: 0.25,
 };
 
