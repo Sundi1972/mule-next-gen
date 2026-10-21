@@ -138,7 +138,7 @@ export function useAuctionSound(auction: AuctionView | null) {
     for (let i = 0; i < n; i++) unitClick(price, (i * 0.1) / n);
   }, [auction]);
 
-  // The clock's tick-tock: the status countdown's last seconds and the walk.
+  // The clock's tick-tock: the status countdown and the walk.
   useEffect(() => {
     let next = 0;
     const timer = window.setInterval(() => {
