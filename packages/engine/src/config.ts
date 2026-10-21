@@ -403,6 +403,12 @@ export const LOTS = {
   storePlotShare: 2 / 3,
   /** What the store pays for an unsold MULE, as a share of this month's MULE price. */
   storeMuleShare: 0.5,
+  /** An AI seat presses Done on a lot's intro after this long. */
+  aiIntroMs: [400, 1_200] as [number, number],
+  /** An AI seat first moves this long after a lot's walk starts, scaled by its patience. */
+  aiStartMs: [300, 1_200] as [number, number],
+  /** An AI's overtake goes past the leader by this share of the gap to its limit, drawn per overtake. */
+  aiOvershoot: [0.1, 0.35] as [number, number],
 };
 
 /**
