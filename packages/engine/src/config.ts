@@ -609,8 +609,11 @@ export const BRAIN = {
   pricesPerMTok: { input: 0.1, cacheRead: 0.01, cacheWrite: 0.125, output: 0.5 },
   /** Reply cap, in tokens. */
   maxTokens: 200,
-  /** Prompt characters per token, as the budget assumes: conservative, not yet measured. */
-  charsPerToken: 3,
+  /**
+   * Prompt characters per token, as the budget assumes. Haiku 5.5 measured 2.56 to 2.65 on real prompts; this sits
+   * below the lowest so the worst case never undercounts.
+   */
+  charsPerToken: 2.5,
   /** Longest chat line an AI says, in characters. */
   maxLineChars: 140,
   /** Most chat lines per AI seat per game month. */

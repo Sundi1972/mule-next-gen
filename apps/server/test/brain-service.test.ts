@@ -5,26 +5,15 @@ import { fileURLToPath } from 'node:url';
 import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AI_LEVELS, AI_PERSONAS, BRAIN, createGame, observe } from '@mule/engine';
-import { Brain, candidate, consider, PERSONAS, shortlist, TopPickDecider, type Complete, type Decider, type DecisionRecord, type Mind, type Prompt } from '@mule/ai';
+import { Brain, candidate, consider, PERSONAS, shortlist, TopPickDecider, WAIT_MS, type Complete, type Decider, type DecisionRecord, type Mind, type Prompt } from '@mule/ai';
 import type { HaikuSdk } from '../src/brain/client.js';
 import { API_KEY_ENV, createBrain, type BrainSeat, type BrainService } from '../src/brain/index.js';
+import { NO_USAGE, type Usage } from '../src/brain/ledger.js';
+import { fakeSdk, KEY, readLedger, sdkMessage, worstUsdOf, type SdkMessage, type SdkModuleFake, type SdkParams } from './brain-fakes.js';
 
-/** What the SDK constructor was given, once per construction. */
-const built = vi.hoisted(() => ({ options: [] as unknown[] }));
-
-// The SDK module with a counting constructor that builds nothing: no network, no credential chain. Statics such as
-// the error classes resolve to the real ones through the prototype chain, so the client's instanceof checks still hold.
-vi.mock('@anthropic-ai/sdk', async (importOriginal) => {
-  const real = await importOriginal<typeof import('@anthropic-ai/sdk')>();
-  class CountingAnthropic {
-    readonly messages = { create: () => Promise.reject(new Error('no network in tests')) };
-    constructor(options: unknown) {
-      built.options.push(options);
-    }
-  }
-  Object.setPrototypeOf(CountingAnthropic, real.Anthropic);
-  return { ...real, default: CountingAnthropic, Anthropic: CountingAnthropic };
-});
+/** The SDK module's constructor: records its options and builds nothing, so no network and no credential chain. */
+const sdkModule = vi.hoisted((): SdkModuleFake => ({ built: [], create: null }));
+vi.mock('@anthropic-ai/sdk', async (original) => (await import('./brain-fakes.js')).fakeSdkModule(original, sdkModule));
 
 /** The port each LlmDecider was built with, newest last, so a test can call one directly. */
 const ports = vi.hoisted(() => [] as Array<(prompt: unknown, waitMs: number) => Promise<unknown>>);
@@ -40,8 +29,6 @@ vi.mock('@mule/ai', async (importOriginal) => {
   return { ...real, LlmDecider: PortCapturingLlmDecider };
 });
 
-// Dummy values only: no test reads, prints or sends a real credential, and no test builds a real client.
-const KEY = { ANTHROPIC_API_KEY: 'test-key-not-real' };
 const SEAT: BrainSeat = { id: 'p0', persona: 'trader', level: 'rookie' };
 const GAME = 'g-test';
 /** The SDK's other credential sources (auth token, profile, workload federation), read from its source. */
@@ -57,51 +44,11 @@ const OTHER_CREDENTIALS = [
   'ANTHROPIC_WORKSPACE_ID',
   'ANTHROPIC_SCOPE',
 ];
-const WAIT = 1_500; // the develop hand's wait, which LlmDecider uses for kind 'develop'
 
 const mind: Mind = { me: 'p0', personaId: 'trader', persona: AI_PERSONAS.trader, levelId: 'rookie', level: AI_LEVELS.rookie };
 const obs = observe(createGame({ seed: 7, players: [0, 1, 2].map((i) => ({ id: `p${i}`, name: `P${i}`, isAi: true })) }), 'p0');
 const list = () =>
   shortlist(['a', 'b', 'c'].map((a, i) => candidate(a, `Option ${a}`, a, 10, [consider('fit', 0.9 - i * 0.05, 1, 'fits')])), 3, 0.5);
-
-type Create = HaikuSdk['messages']['create'];
-type Message = Awaited<ReturnType<Create>>;
-type Billed = { input?: number; cached_read?: number; cache_write?: number; output?: number };
-
-function message(text: string, billed: Billed = {}, stop_reason: string = 'end_turn'): Message {
-  return {
-    id: 'm',
-    type: 'message',
-    role: 'assistant',
-    model: BRAIN.model,
-    content: [{ type: 'text', text }],
-    stop_reason,
-    stop_sequence: null,
-    usage: {
-      input_tokens: billed.input ?? 0,
-      cache_read_input_tokens: billed.cached_read ?? 0,
-      cache_creation_input_tokens: billed.cache_write ?? 0,
-      output_tokens: billed.output ?? 0,
-    },
-  } as unknown as Message; // the stub omits server-only Message fields
-}
-
-type Params = Parameters<Create>[0];
-
-/** A stand-in for the SDK: the client's real code runs on top of it, and it counts the calls it gets. */
-function fakeSdk(answer: (n: number, params: Params) => Message | Promise<Message>) {
-  const sdk = {
-    calls: 0,
-    messages: {
-      create: ((params: Params) => {
-        sdk.calls += 1;
-        const n = sdk.calls;
-        return Promise.resolve().then(() => answer(n, params));
-      }) as unknown as Create, // the stub implements only the non-streaming overload the client calls
-    },
-  };
-  return sdk;
-}
 
 /** Every clock read moves 40 ms on, so each call takes 40 ms. */
 const ticking = () => {
@@ -116,7 +63,7 @@ const flush = async () => {
 let dir: string;
 let file: string;
 beforeEach(() => {
-  built.options.length = 0;
+  sdkModule.built = [];
   ports.length = 0;
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'brain-service-'));
   file = path.join(dir, 'costs.jsonl');
@@ -126,8 +73,9 @@ afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-const lines = (): Record<string, unknown>[] =>
-  fs.existsSync(file) ? fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>) : [];
+const lines = () => readLedger(file);
+/** Plain input tokens that bill `usd`. */
+const inputTokensFor = (usd: number) => Math.round((usd * 1_000_000) / BRAIN.pricesPerMTok.input);
 
 const serviceOn = (sdk: HaikuSdk) => createBrain({ gameId: GAME, env: KEY, logPath: file, sdkFactory: () => sdk, now: ticking() });
 
@@ -142,9 +90,9 @@ function seatOn(service: BrainService, options = list) {
   const records: DecisionRecord[] = [];
   const brain = new Brain(mind, PERSONAS.trader, 'The Gambler', 11, watched, (r) => records.push(r));
   const ask = () => {
-    const pending = brain.ask('develop', options(), obs, WAIT, null, 'summary');
+    const pending = brain.ask('develop', options(), obs, WAIT_MS.develop, null, 'summary');
     const topPick = new TopPickDecider().decide(...seen!).optionId;
-    const settle = () => ({ settled: brain.resolve(pending, WAIT, obs)!, record: records[records.length - 1]! });
+    const settle = () => ({ settled: brain.resolve(pending, WAIT_MS.develop, obs)!, record: records[records.length - 1]! });
     return { pending, topPick, settle };
   };
   const decide = async () => {
@@ -160,7 +108,7 @@ describe('brain service', () => {
     const keys: string[] = [];
     const sdkFactory = (apiKey: string) => {
       keys.push(apiKey);
-      return fakeSdk(() => message('{}'));
+      return fakeSdk(() => sdkMessage('{}'));
     };
 
     const unset = [
@@ -187,7 +135,7 @@ describe('brain service', () => {
     expect(createBrain({ gameId: GAME, logPath: file }).deciderFor(SEAT)).toBeNull();
 
     expect(keys).toEqual([]);
-    expect(built.options).toEqual([]);
+    expect(sdkModule.built).toEqual([]);
 
     // Negative: a (dummy) key builds exactly one client, with that key, and seats get deciders.
     const keyed = createBrain({ gameId: GAME, env: KEY, logPath: file, sdkFactory });
@@ -202,7 +150,7 @@ describe('brain service', () => {
     vi.stubEnv('ANTHROPIC_LOG', 'debug');
     const viaSdk = createBrain({ gameId: GAME, env: KEY, logPath: file });
     expect(viaSdk.deciderFor(SEAT)).not.toBeNull();
-    expect(built.options).toEqual([{ apiKey: 'test-key-not-real', authToken: null, baseURL: 'https://api.anthropic.com', logLevel: 'off' }]);
+    expect(sdkModule.built).toEqual([{ apiKey: 'test-key-not-real', authToken: null, baseURL: 'https://api.anthropic.com', logLevel: 'off' }]);
   });
 
   it("INV-key-read: the key's env name appears in production source only in brain/index.ts", () => {
@@ -251,12 +199,12 @@ describe('brain service', () => {
   });
 
   it('B-AC-4: a seat at its budget makes no call, plays its top pick and calls no more this game', async () => {
-    // Call 1 bills $0.059; call 2 bills $0.001, which brings the seat to $0.06.
-    const billed: Billed[] = [{ input: 590_000 }, { input: 10_000 }];
-    const sdk = fakeSdk((n) => message('{"option":"B","line":"Mine."}', billed[n - 1] ?? { input: 1 }));
+    // Call 1 bills all but $0.001 of the seat's budget; call 2 bills that $0.001, which spends it exactly.
+    const billed: Partial<Usage>[] = [{ input: inputTokensFor(BRAIN.seatBudgetUsd - 0.001) }, { input: inputTokensFor(0.001) }];
+    const sdk = fakeSdk((n) => sdkMessage('{"option":"B","line":"Mine."}', billed[n - 1] ?? { input: 1 }));
     const { decide } = seatOn(serviceOn(sdk));
 
-    // Negative: below the budget the call is made, even at $0.059 spent.
+    // Negative: below the budget the call is made, even with only $0.001 left.
     for (let i = 0; i < 2; i++) {
       const { settled } = await decide();
       expect(settled.choice).toMatchObject({ by: 'llm', optionId: 'B' });
@@ -274,25 +222,23 @@ describe('brain service', () => {
     const all = lines();
     expect(all.map((l) => l.outcome)).toEqual(['llm', 'llm', 'budget']);
     expect(all[2]).toMatchObject({
-      game: GAME, seat: 'p0', kind: 'develop', input: 0, cached_read: 0, cache_write: 0, output: 0, usd: 0, ms: 0, outcome: 'budget',
+      game: GAME, seat: 'p0', kind: 'develop', ...NO_USAGE, usd: 0, ms: 0, outcome: 'budget',
     });
   });
 
   it('B-AC-4: a seat whose calls all time out or lose the connection locks before its counted spend passes the budget; a 500 or a reply, even an unusable one, counts only its bill', async () => {
-    // Labels this long make each call's worst case about $0.0134, so only a handful fit in the seat's budget.
+    // Labels this long make each call's worst case a large share of the seat's budget, so only a handful fit.
     const long = () =>
       shortlist(['a', 'b', 'c'].map((a, i) => candidate(a, a.repeat(105_000), a, 10, [consider('fit', 0.9 - i * 0.05, 1, 'fits')])), 3, 0.5);
-    /** RULE-3's worst case for the request the SDK received, from BRAIN's prices (not from the budget under test). */
-    const worstOf = (params: Params): number => {
+    /** RULE-3's worst case for the request the SDK received. */
+    const worstOf = (params: SdkParams): number => {
       const system = (params.system as { text: string }[])[0]!.text;
       const user = params.messages[0]!.content as string;
       const schema = JSON.stringify(params.output_config!.format!.schema);
-      const tokens = Math.ceil((system.length + user.length + schema.length) / BRAIN.charsPerToken);
-      const p = BRAIN.pricesPerMTok;
-      return (tokens * Math.max(p.input, p.cacheWrite) + BRAIN.maxTokens * p.output) / 1_000_000;
+      return worstUsdOf(system.length + user.length + schema.length);
     };
     // Replies here bill nothing, so a seat that locks could only have been charged a worst case.
-    const cases: { name: string; answer: () => Message; outcome: string; locks: boolean }[] = [
+    const cases: { name: string; answer: () => SdkMessage; outcome: string; locks: boolean }[] = [
       {
         name: 'timeout',
         answer: () => {
@@ -317,8 +263,8 @@ describe('brain service', () => {
         outcome: 'error',
         locks: false,
       },
-      { name: 'unreadable reply', answer: () => message('not json at all'), outcome: 'unreadable', locks: false },
-      { name: 'off-list reply', answer: () => message('{"option":"F","line":"x"}'), outcome: 'off_list', locks: false },
+      { name: 'unreadable reply', answer: () => sdkMessage('not json at all'), outcome: 'unreadable', locks: false },
+      { name: 'off-list reply', answer: () => sdkMessage('{"option":"F","line":"x"}'), outcome: 'off_list', locks: false },
     ];
     for (const c of cases) {
       fs.rmSync(file, { force: true });
@@ -358,30 +304,29 @@ describe('brain service', () => {
     }
   });
 
-  const ZERO = { input: 0, cached_read: 0, cache_write: 0, output: 0 };
   const USED = { input: 410, cached_read: 620, cache_write: 50, output: 38 };
   const rows: {
     name: string;
-    answer: () => Message;
+    answer: () => SdkMessage;
     outcome: string;
-    usage: typeof ZERO;
+    usage: Usage;
     by: 'llm' | 'fallback';
     note?: string;
   }[] = [
-    { name: 'a good reply', answer: () => message('{"option":"B","line":"Mine."}', USED), outcome: 'llm', usage: USED, by: 'llm' },
-    { name: 'a refusal whose text parses', answer: () => message('{"option":"B","line":"Mine."}', USED, 'refusal'), outcome: 'refused', usage: USED, by: 'llm' },
-    { name: 'a refusal with no usable text', answer: () => message('', USED, 'refusal'), outcome: 'refused', usage: USED, by: 'fallback', note: 'decider failed: unreadable reply' },
-    { name: 'junk', answer: () => message('not json at all', USED), outcome: 'unreadable', usage: USED, by: 'fallback', note: 'decider failed: unreadable reply' },
-    { name: 'an off-list letter', answer: () => message('{"option":"F","line":"x"}', USED), outcome: 'off_list', usage: USED, by: 'fallback', note: 'decider failed: named F, not on the list' },
+    { name: 'a good reply', answer: () => sdkMessage('{"option":"B","line":"Mine."}', USED), outcome: 'llm', usage: USED, by: 'llm' },
+    { name: 'a refusal whose text parses', answer: () => sdkMessage('{"option":"B","line":"Mine."}', USED, 'refusal'), outcome: 'refused', usage: USED, by: 'llm' },
+    { name: 'a refusal with no usable text', answer: () => sdkMessage('', USED, 'refusal'), outcome: 'refused', usage: USED, by: 'fallback', note: 'decider failed: unreadable reply' },
+    { name: 'junk', answer: () => sdkMessage('not json at all', USED), outcome: 'unreadable', usage: USED, by: 'fallback', note: 'decider failed: unreadable reply' },
+    { name: 'an off-list letter', answer: () => sdkMessage('{"option":"F","line":"x"}', USED), outcome: 'off_list', usage: USED, by: 'fallback', note: 'decider failed: named F, not on the list' },
     {
       name: 'a timeout',
       answer: () => {
         throw new Anthropic.APIConnectionTimeoutError();
       },
       outcome: 'timeout',
-      usage: ZERO,
+      usage: NO_USAGE,
       by: 'fallback',
-      note: `decider failed: model call timed out (wait ${WAIT} ms)`,
+      note: `decider failed: model call timed out (wait ${WAIT_MS.develop} ms)`,
     },
     {
       name: 'a 500',
@@ -389,7 +334,7 @@ describe('brain service', () => {
         throw Anthropic.APIError.generate(500, { type: 'error', error: { type: 'api_error', message: 'x' } }, 'x', new Headers());
       },
       outcome: 'error',
-      usage: ZERO,
+      usage: NO_USAGE,
       by: 'fallback',
       note: 'decider failed: model call failed: api status 500',
     },
@@ -416,8 +361,8 @@ describe('brain service', () => {
   }
 
   it('INV-one-in-flight: a second decision for a busy seat makes no call and writes no line, from any decider for that seat', async () => {
-    let answer!: (m: Message) => void;
-    const sdk = fakeSdk((n) => (n === 1 ? new Promise<Message>((r) => (answer = r)) : message('{"option":"C","line":""}', USED)));
+    let answer!: (m: SdkMessage) => void;
+    const sdk = fakeSdk((n) => (n === 1 ? new Promise<SdkMessage>((r) => (answer = r)) : sdkMessage('{"option":"C","line":""}', USED)));
     const service = serviceOn(sdk);
     const a = seatOn(service);
     const b = seatOn(service); // a second decider for the same seat id
@@ -440,7 +385,7 @@ describe('brain service', () => {
     expect(lines()).toEqual([]);
 
     // The call settles late: it was billed, so it gets its line, and the seat may call again.
-    answer(message('{"option":"B","line":"Mine."}', USED));
+    answer(sdkMessage('{"option":"B","line":"Mine."}', USED));
     await flush();
     expect(lines().map((l) => l.outcome)).toEqual(['llm']);
 
@@ -451,7 +396,8 @@ describe('brain service', () => {
   });
 
   it('INV-finish: finish writes the game line once, counting model calls only, and the game makes no further calls', async () => {
-    const sdk = fakeSdk(() => message('{"option":"B","line":"Mine."}', { input: 600_000 })); // $0.06 a call
+    // One call bills the seat's whole budget.
+    const sdk = fakeSdk(() => sdkMessage('{"option":"B","line":"Mine."}', { input: inputTokensFor(BRAIN.seatBudgetUsd) }));
     const service = serviceOn(sdk);
     const seat = seatOn(service);
 
@@ -465,8 +411,8 @@ describe('brain service', () => {
     const all = lines();
     expect(all.map((l) => l.type ?? l.outcome)).toEqual(['llm', 'budget', 'game']);
     expect(all[2]).toMatchObject({
-      game: GAME, type: 'game', seats: 1, calls: 1, usd: expect.closeTo(0.06, 10),
-      by_seat: { p0: { calls: 1, usd: expect.closeTo(0.06, 10) } },
+      game: GAME, type: 'game', seats: 1, calls: 1, usd: expect.closeTo(BRAIN.seatBudgetUsd, 10),
+      by_seat: { p0: { calls: 1, usd: expect.closeTo(BRAIN.seatBudgetUsd, 10) } },
     });
 
     // Terminal: no new deciders, and an existing one makes no call and writes no line.
@@ -479,7 +425,7 @@ describe('brain service', () => {
     // The port itself refuses once the game is finished, whatever calls it: finish released the seat's lock.
     expect(ports.length).toBeGreaterThan(0);
     const prompt: Prompt = { system: 's', user: 'u', schema: { type: 'object' } as Prompt['schema'] };
-    for (const port of ports) await expect(port(prompt, WAIT)).rejects.toThrow('game over');
+    for (const port of ports) await expect(port(prompt, WAIT_MS.develop)).rejects.toThrow('game over');
     expect(sdk.calls).toBe(1);
 
     service.finish();

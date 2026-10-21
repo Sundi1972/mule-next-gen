@@ -5,29 +5,15 @@ import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BRAIN, observe, type GameState } from '@mule/engine';
 import { PERSONAS, playGame, simSeats, situation, WAIT_MS, type DecisionRecord, type Prompt, type ShortOption } from '@mule/ai';
-import { CallFailed, createHaikuComplete, type HaikuReply, type HaikuSdk } from '../src/brain/client.js';
+import { CallFailed, createHaikuComplete, type HaikuReply } from '../src/brain/client.js';
 import { worstCaseUsd } from '../src/brain/budget.js';
 import { createLedger } from '../src/brain/ledger.js';
 import { capFor, collectPrompts, main, renderReport, runSpike, type SpikeItem } from '../src/brain/spike.js';
+import { fakeSdk, KEY, readLedger, sdkMessage, worstUsdOf, type SdkModuleFake } from './brain-fakes.js';
 
 /** The SDK module's client: records its options and answers through `sdk.create`; it never reaches the network. */
-const sdk = vi.hoisted(() => ({ built: [] as unknown[], create: (_params: unknown): Promise<unknown> => Promise.reject(new Error('no reply set')) }));
-
-// Statics such as the error classes resolve to the real ones through the prototype chain, so instanceof still holds.
-vi.mock('@anthropic-ai/sdk', async (importOriginal) => {
-  const real = await importOriginal<typeof import('@anthropic-ai/sdk')>();
-  class FakeAnthropic {
-    readonly messages = { create: (params: unknown) => sdk.create(params) };
-    constructor(options: unknown) {
-      sdk.built.push(options);
-    }
-  }
-  Object.setPrototypeOf(FakeAnthropic, real.Anthropic);
-  return { ...real, default: FakeAnthropic, Anthropic: FakeAnthropic };
-});
-
-// Dummy values only: nothing here reads a real credential, calls the network or builds a real client.
-const KEY = { ANTHROPIC_API_KEY: 'test-key-not-real' };
+const sdk = vi.hoisted((): SdkModuleFake => ({ built: [], create: null }));
+vi.mock('@anthropic-ai/sdk', async (original) => (await import('./brain-fakes.js')).fakeSdkModule(original, sdk));
 const TODAY = new Date('2026-10-21T00:00:00Z');
 
 let dir: string;
@@ -36,7 +22,7 @@ beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'brain-spike-'));
   file = path.join(dir, 'spike-2026-10-21.jsonl');
   sdk.built = [];
-  sdk.create = () => Promise.reject(new Error('no reply set'));
+  sdk.create = null;
 });
 afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
@@ -53,12 +39,8 @@ const item = (n: number, system = SYSTEM, kind: SpikeItem['kind'] = 'develop'): 
   ({ prompt: prompt(system), kind, seat: `ai${n % 4}`, persona: 'trader', level: 'trader', shortlist: SHORTLIST }) as SpikeItem;
 const items = (n: number, system = SYSTEM) => Array.from({ length: n }, (_, i) => item(i, system));
 
-/** RULE-3's worst case for a prompt of `system` chars, from BRAIN's prices (not from the budget under test). */
-const worstOf = (system: number): number => {
-  const p = BRAIN.pricesPerMTok;
-  const tokens = Math.ceil((system + USER + SCHEMA_CHARS) / BRAIN.charsPerToken);
-  return (tokens * Math.max(p.input, p.cacheWrite) + BRAIN.maxTokens * p.output) / 1_000_000;
-};
+/** RULE-3's worst case for a prompt of `system` chars. */
+const worstOf = (system: number): number => worstUsdOf(system + USER + SCHEMA_CHARS);
 
 const USABLE = '{"option":"A","line":"Mine."}';
 const reply = (ms: number, billed: Partial<HaikuReply['usage']> = {}, stopReason: HaikuReply['stopReason'] = 'end_turn', text = USABLE): HaikuReply => ({
@@ -73,23 +55,18 @@ const run = (list: SpikeItem[], complete: (p: Prompt, waitMs: number) => Promise
   const ledger = createLedger({ path: at, clock: () => TODAY });
   return runSpike({ prompts: list, complete, ledger, worstCase: worstCaseUsd, cap, now: () => TODAY, log: () => {} });
 };
-const ledgerLines = (at = file): Record<string, unknown>[] =>
-  fs
-    .readFileSync(at, 'utf8')
-    .trim()
-    .split('\n')
-    .map((l) => JSON.parse(l) as Record<string, unknown>)
-    .filter((l) => l.type !== 'game'); // the closing total line is not a call
+const ledgerLines = (at = file) => readLedger(at).filter((l) => l.type !== 'game'); // the closing total line is not a call
 
 /** The real client over an SDK whose every call fails with `error()`. */
-const failing = (error: () => unknown) => createHaikuComplete({ messages: { create: () => Promise.reject(error()) } } as HaikuSdk);
+const failing = (error: () => unknown) =>
+  createHaikuComplete(
+    fakeSdk(() => {
+      throw error();
+    }),
+  );
 
-/** An SDK message billed `usage`. */
-const message = (usage: Partial<Anthropic.Usage> = {}) => ({
-  content: [{ type: 'text', text: USABLE }],
-  stop_reason: 'end_turn',
-  usage: { input_tokens: 120, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: 20, ...usage },
-});
+/** A usable SDK reply with a small bill. */
+const usableReply = () => Promise.resolve(sdkMessage(USABLE, { input: 120, output: 20 }));
 
 /** One line per prefix: the report row that starts with it. */
 const rowOf = (lines: string[], start: string) => lines.find((l) => l.startsWith(`${start} `));
@@ -98,7 +75,7 @@ describe('brain:spike', () => {
   it('INV-spike-cap: a cap above BRAIN.spikeCapUsd is clamped, and the run stops at the first call whose worst case would pass it', async () => {
     expect(capFor(1)).toBe(BRAIN.spikeCapUsd);
     expect(capFor(0.01)).toBe(0.01);
-    // Each prompt estimates to 90,205 tokens priced as a cache write; the fake bills 90,000 plain input tokens.
+    // Each prompt's worst case prices about 270,000 chars as a cache write; the fake bills 90,000 plain input tokens.
     const p = BRAIN.pricesPerMTok;
     const billed = (90_000 * p.input + 20 * p.output) / 1_000_000;
     const worst = worstOf(270_000);
@@ -148,7 +125,7 @@ describe('brain:spike', () => {
     expect(answered.countedUsd).toBe(0);
     expect(answered.stopped).toBe('done');
     expect(answered.kinds[0]).toMatchObject({ kind: 'develop', calls: 50, timeouts: 0, errors: 50 });
-    expect(rowOf(renderReport(answered), 'develop')).toMatch(/^develop\s+50\s+0\s+50\s+—\s+—\s+—\s+0% within 1500 ms\s+—$/);
+    expect(rowOf(renderReport(answered), 'develop')).toMatch(new RegExp(`^develop\\s+50\\s+0\\s+50\\s+—\\s+—\\s+—\\s+0% within ${WAIT_MS.develop} ms\\s+—$`));
 
     // Boundary: a cap of exactly three worst cases lets the third call start (<=) and stops the fourth.
     const exact = await run(items(10, 150_000), failing(() => timedOut()), worst + worst + worst, path.join(dir, 'exact.jsonl'));
@@ -175,7 +152,8 @@ describe('brain:spike', () => {
     const lines = renderReport(report);
     // A latency of exactly the wait counts as within: 5 of 10.
     // Usable replies: 2 of the 5 answered named an option on the list and were not refused.
-    expect(rowOf(lines, 'develop')).toMatch(/^develop\s+10\s+5\s+0\s+1500 ms\s+> 1500 ms\s+> 1500 ms\s+50% within 1500 ms\s+40% of 5$/);
+    const wait = WAIT_MS.develop;
+    expect(rowOf(lines, 'develop')).toMatch(new RegExp(`^develop\\s+10\\s+5\\s+0\\s+${wait} ms\\s+> ${wait} ms\\s+> ${wait} ms\\s+50% within ${wait} ms\\s+40% of 5$`));
     expect(rowOf(lines, 'all')).toMatch(/^all\s+10\s+5\s+0\s+—\s+—\s+—\s+50% within own wait\s+40% of 5$/);
     expect(lines).toContainEqual(expect.stringMatching(/^unreadable \/ off-list replies\s+1 \/ 1$/));
     expect(rowOf(lines, 'land')).toBeUndefined();
@@ -208,11 +186,13 @@ describe('brain:spike', () => {
     expect(ledgerLines().map((l) => l.kind)).toEqual(kinds);
     expect(report.kinds.map((r) => r.kind)).toEqual(['land', 'develop', 'trade', 'all']);
 
-    // A trade answer at 2 s is inside trade's 2.5 s wait but outside develop's 1.5 s: each row uses its own kind's wait.
+    // A land answer at 4 s is inside land's wait but outside develop's and trade's: each row uses its own kind's wait.
+    expect(answerMs.land).toBeLessThanOrEqual(WAIT_MS.land);
+    expect(answerMs.land).toBeGreaterThan(Math.max(WAIT_MS.develop, WAIT_MS.trade));
     const lines = renderReport(report);
-    expect(rowOf(lines, 'land')).toMatch(/^land\s+3\s+0\s+0\s+4000 ms\s+4000 ms\s+4000 ms\s+100% within 5000 ms\s+100% of 3$/);
-    expect(rowOf(lines, 'develop')).toMatch(/^develop\s+3\s+0\s+0\s+1000 ms\s+1000 ms\s+1000 ms\s+100% within 1500 ms\s+100% of 3$/);
-    expect(rowOf(lines, 'trade')).toMatch(/^trade\s+4\s+1\s+0\s+2000 ms\s+> 2500 ms\s+> 2500 ms\s+75% within 2500 ms\s+100% of 3$/);
+    expect(rowOf(lines, 'land')).toMatch(new RegExp(`^land\\s+3\\s+0\\s+0\\s+4000 ms\\s+4000 ms\\s+4000 ms\\s+100% within ${WAIT_MS.land} ms\\s+100% of 3$`));
+    expect(rowOf(lines, 'develop')).toMatch(new RegExp(`^develop\\s+3\\s+0\\s+0\\s+1000 ms\\s+1000 ms\\s+1000 ms\\s+100% within ${WAIT_MS.develop} ms\\s+100% of 3$`));
+    expect(rowOf(lines, 'trade')).toMatch(new RegExp(`^trade\\s+4\\s+1\\s+0\\s+2000 ms\\s+> ${WAIT_MS.trade} ms\\s+> ${WAIT_MS.trade} ms\\s+75% within ${WAIT_MS.trade} ms\\s+100% of 3$`));
     // Across mixed waits a pooled percentile mixes upper and lower bounds, so the pooled row prints none.
     expect(rowOf(lines, 'all')).toMatch(/^all\s+10\s+1\s+0\s+—\s+—\s+—\s+90% within own wait\s+100% of 9$/);
     expect(report.kinds.at(-1)).toMatchObject({ kind: 'all', p50: null, p90: null, max: null });
@@ -255,7 +235,7 @@ describe('brain:spike', () => {
     sdk.create = () => {
       calls++;
       atFirstCall ??= [...out];
-      return Promise.resolve(message());
+      return usableReply();
     };
     const code = await main(['--calls', '4', '--max-usd', '1', '--seed', '101'], KEY, { dataDir: dir, now: () => TODAY, out: (l) => out.push(l) });
     expect(code).toBe(0);
@@ -275,7 +255,7 @@ describe('brain:spike', () => {
       calls++;
       const { system, messages } = params as { system: { text: string }[]; messages: { content: string }[] };
       const chars = system[0]!.text.length + messages[0]!.content.length;
-      return Promise.resolve(message({ input_tokens: 0, cache_creation_input_tokens: Math.ceil(chars / BRAIN.charsPerToken), output_tokens: BRAIN.maxTokens }));
+      return Promise.resolve(sdkMessage(USABLE, { cache_write: Math.ceil(chars / BRAIN.charsPerToken), output: BRAIN.maxTokens }));
     };
     const out: string[] = [];
     const code = await main(['--calls', '50', '--max-usd', '0.01'], KEY, { dataDir: dir, now: () => TODAY, out: (l) => out.push(l) });
@@ -293,7 +273,7 @@ describe('brain:spike', () => {
   it("INV-spike-cap: main refuses a second run on the same day: today's ledger exists, one line names it, nothing is called; a run that calls nothing leaves the clearance unused", async () => {
     fs.writeFileSync(path.join(dir, 'spike-2026-10-20.jsonl'), '');
     let calls = 0;
-    sdk.create = () => (calls++, Promise.resolve(message()));
+    sdk.create = () => (calls++, usableReply());
 
     // A cap below the first call's worst case calls nothing, writes no ledger and leaves today's clearance unused.
     const none: string[] = [];
@@ -326,7 +306,7 @@ describe('brain:spike', () => {
 
   it("INV-spike-cap: main accepts pnpm's leading --, and refuses an unknown, malformed or stray argument with usage and no call", async () => {
     let calls = 0;
-    sdk.create = () => (calls++, Promise.resolve(message()));
+    sdk.create = () => (calls++, usableReply());
     const refused = [
       ['--calls=3'],
       ['--max-usd=0.01'],

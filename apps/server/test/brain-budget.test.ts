@@ -114,17 +114,21 @@ describe('RULE-3 budget table', () => {
   });
 
   it('B-AC-4 (RULE-3): worstCase counts system, user and schema, rounds tokens up, prices input at the cache-write rate', () => {
-    // 3,000 chars at 3 per token = 1,000 tokens × 0.125 + 200 × 0.50 per MTok, by hand
-    expect(worstCaseUsd(promptOf(3000))).toBeCloseTo(0.000225, 12);
-    // 3,001 chars = 1,001 tokens: pins ceil
-    expect(worstCaseUsd(promptOf(3001))).toBeCloseTo(0.000225125, 12);
+    const p = BRAIN.pricesPerMTok;
+    const priced = (tokens: number) => (tokens * p.cacheWrite + BRAIN.maxTokens * p.output) / 1_000_000;
+    const TOKENS = 1000;
+    const whole = TOKENS * BRAIN.charsPerToken; // chars that make exactly TOKENS tokens
+    expect(Number.isInteger(whole)).toBe(true);
+    expect(worstCaseUsd(promptOf(whole))).toBeCloseTo(priced(TOKENS), 12);
+    // one char more is one token more: pins ceil
+    expect(worstCaseUsd(promptOf(whole + 1))).toBeCloseTo(priced(TOKENS + 1), 12);
     // the schema's JSON is what carries a prompt over a token boundary: without it these chars price one token less
     const sys = 'x'.repeat(1000);
-    const user = 'y'.repeat(3000 - 1000 - SCHEMA_CHARS + 1);
+    const user = 'y'.repeat(whole - 1000 - SCHEMA_CHARS + 1);
     const chars = 1000 + user.length; // system + user alone
-    expect(chars + SCHEMA_CHARS).toBe(3001);
-    const tokensWithout = Math.ceil(chars / 3);
-    expect(tokensWithout).toBeLessThan(1001);
-    expect(worstCaseUsd({ system: sys, user, schema: SCHEMA })).toBeCloseTo(1001 * 0.125e-6 + 200 * 0.5e-6, 12);
+    expect(chars + SCHEMA_CHARS).toBe(whole + 1);
+    const tokensWithout = Math.ceil(chars / BRAIN.charsPerToken);
+    expect(tokensWithout).toBeLessThan(TOKENS + 1);
+    expect(worstCaseUsd({ system: sys, user, schema: SCHEMA })).toBeCloseTo(priced(TOKENS + 1), 12);
   });
 });
