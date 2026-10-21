@@ -7,6 +7,7 @@ import type { Mind } from '../src/value.js';
 import type { Choice, Decider } from '../src/decider.js';
 import { LlmDecider, ReplyRejected, type Complete } from '../src/llm/decider.js';
 import type { Prompt } from '../src/llm/prompt.js';
+import type { RejectOutcome } from '../src/llm/reply.js';
 
 const mind: Mind = { me: 'p0', personaId: 'trader', persona: AI_PERSONAS.trader, levelId: 'rookie', level: AI_LEVELS.rookie };
 const state = createGame({ seed: 7, players: [0, 1, 2].map((i) => ({ id: `p${i}`, name: `P${i}`, isAi: true })) });
@@ -58,7 +59,7 @@ describe('LlmDecider behind Brain', () => {
     by: 'llm' | 'fallback';
     note?: string;
     exactNote?: string;
-    outcome?: 'unreadable' | 'off_list';
+    outcome?: RejectOutcome;
     pick?: string;
     line?: string;
   }[] = [
@@ -69,14 +70,16 @@ describe('LlmDecider behind Brain', () => {
     { name: 'the reply is good and in time', decider: () => new LlmDecider(replies('{"option":"B","line":"Mine."}')), by: 'llm', pick: 'B', line: 'Mine.' },
     { name: 'a decider throws synchronously', decider: () => sync(() => { throw new Error('boom'); }), by: 'fallback', exactNote: 'decider failed: boom' },
     { name: 'the port rejects with a non-Error', decider: () => new LlmDecider(() => Promise.reject({})), by: 'fallback', exactNote: 'decider failed: unknown error' },
+    { name: 'the port rejects with an empty Error', decider: () => new LlmDecider(() => Promise.reject(new Error(''))), by: 'fallback', exactNote: 'decider failed: unknown error' },
     { name: 'the port rejects with a 300-char message', decider: () => new LlmDecider(() => Promise.reject(new Error(bigMessage))), by: 'fallback', exactNote: `decider failed: ${'x'.repeat(80)}` },
   ];
 
   for (const row of rows) {
     it(`T-AC-3: ${row.name}, so the seat plays ${row.by === 'llm' ? "the model's pick" : 'a shortlist action with its reason noted'}`, async () => {
       const decider = row.decider();
-      const { record, settled } = await run(decider);
+      const { record, settled, pending } = await run(decider);
       expect(record.by).toBe(row.by);
+      if (row.by === 'fallback') expect(record.pick.id).toBe(pending.fallback.optionId);
       if (row.exactNote) expect(record.note).toBe(row.exactNote);
       else if (row.note) expect(record.note).toContain(row.note);
       else expect(record.note).toBeUndefined();

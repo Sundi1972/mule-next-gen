@@ -26,6 +26,7 @@ describe('reply parsing', () => {
     { name: 'row 4: a leading apostrophe alone stays', text: reply("'tis mine"), expected: picked('A', "'tis mine") },
     { name: 'row 4: a trailing apostrophe alone stays', text: reply("the Players'"), expected: picked('A', "the Players'") },
     { name: 'row 4: any whitespace run collapses to one space', text: reply('one\r\n\ttwo'), expected: picked('A', 'one two') },
+    { name: 'row 4: NEL and ESC are control characters and become a space', text: reply('one\u0085two\u001b[31m'), expected: picked('A', 'one two [31m') },
     { name: 'row 4: an empty line becomes null', text: reply('  '), expected: picked('A', null) },
     { name: 'row 4: a quotes-only line becomes null', text: reply('""'), expected: picked('A', null) },
     { name: 'row 4: a single quote mark becomes null', text: reply('"'), expected: picked('A', null) },

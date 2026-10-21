@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BRAIN, GAME, GOODS, UPKEEP } from '@mule/engine';
-import type { DecisionContext, ShortOption } from '../src/decider.js';
+import { OPTION_IDS, type DecisionContext, type ShortOption } from '../src/decider.js';
 import { PERSONAS } from '../src/personas.js';
 import { GOOD_NAME } from '../src/strategist.js';
 import { buildPrompt } from '../src/llm/prompt.js';
@@ -56,7 +56,7 @@ describe('prompt building', () => {
     expect(a().system).toContain('a working machine the store builds from Smithore');
     expect(a().system).toContain(`each player eats Food and Water from their own stock, goods spoil, and anything above the depot limit of ${UPKEEP.depotCapacity} is lost`);
     expect(a().system).not.toContain('animal-machine');
-    expect(a().system).toContain('up to 5 options');
+    expect(a().system).toContain(`up to ${OPTION_IDS.length} options`);
   });
 
   it('T-AC-2: a table-talk instruction appears only inside the delimited block of user', () => {
