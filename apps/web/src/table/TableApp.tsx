@@ -8,6 +8,7 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { fmt, mapTiles, PHASE_NAME, player, plotName, seatSpecies, secondsUntil, slotOf, standings, tileAt } from '../game/derive';
 import { useAuctionSound } from '../game/sound';
 import { useClient, useClientState, useServerNow } from '../net/react';
+import { TvLandAuction } from './TvLandAuction';
 
 /** The big screen: the public view everyone at the table shares. It has no controls. */
 export function TableApp({ room }: { room: string }) {
@@ -109,7 +110,7 @@ function TvLobby({ table }: { table: TableView<MuleView> }) {
   );
 }
 
-function TvHeader({ game, title, seconds }: { game: MuleView; title: string; seconds?: number | undefined }) {
+export function TvHeader({ game, title, seconds }: { game: MuleView; title: string; seconds?: number | undefined }) {
   return (
     <header className="flex items-end justify-between gap-6">
       <div className="flex flex-col gap-1">
@@ -201,6 +202,14 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
     return (
       <SeatSpeciesProvider value={seatSpecies(game)}>
         <TvAuction table={table} game={game} auction={game.auction} />
+      </SeatSpeciesProvider>
+    );
+  }
+
+  if (phase === 'landAuction' && game.landAuction && !game.finished) {
+    return (
+      <SeatSpeciesProvider value={seatSpecies(game)}>
+        <TvLandAuction table={table} game={game} lot={game.landAuction} />
       </SeatSpeciesProvider>
     );
   }
