@@ -19,4 +19,5 @@ export * from './components/Timer';
 export * from './components/TimeBar';
 export * from './components/WalkBoard';
 export * from './components/tokens';
+export * from './components/ZoomMap';
 export { renderLandscape, type LandscapeInput, type LandscapeTheme } from './terrain/landscape';
