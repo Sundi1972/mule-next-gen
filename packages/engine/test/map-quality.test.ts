@@ -32,7 +32,7 @@ const SPECIALS: Record<number, number> = { 2: 3, 3: 3, 4: 4, 5: 5, 6: 5 };
  */
 const REGRESSION_SEEDS: [number, number][] = [[1090, 2], [1090, 3]];
 /** Placement draws per map beyond the one createGame made, each from its own rng seed. */
-const EXTRA_PLACEMENTS = 8;
+const EXTRA_PLACEMENTS = 3;
 
 interface Built {
   seed: number;

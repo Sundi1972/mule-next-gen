@@ -46,12 +46,13 @@ export function placeSpecials(map: GameMap, players: number, rng: Rng): SpecialP
   let tries = 0;
 
   const fill = (): boolean => {
-    if (placed.length === count) return true;
-    const left = count - placed.length;
     const used = new Set(placed.map((p) => p.kind));
+    const missingSides = sides.filter((s) => !placed.some((p) => sideOf(p.tile) === s));
+    // Checked here too, so a count below minKinds or 2 can't end a placement short of kinds or sides.
+    if (placed.length === count) return used.size >= MAP.special.minKinds && missingSides.length === 0;
+    const left = count - placed.length;
     // The last slots go to kinds and sides still missing, so the map ends with enough of each.
     const mustNewKind = left <= MAP.special.minKinds - used.size;
-    const missingSides = sides.filter((s) => !placed.some((p) => sideOf(p.tile) === s));
     const mustSide = left <= missingSides.length;
     const spaced = open.filter(
       (t) => placed.every((p) => steps(p.tile, t) >= MAP.special.spacing) && (!mustSide || missingSides.includes(sideOf(t)!)),
