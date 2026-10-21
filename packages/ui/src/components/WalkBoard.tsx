@@ -53,6 +53,7 @@ export function WalkBoard({
   storeBuys,
   storeSells,
   shipPays,
+  lines: extra = [],
   stage,
   meId,
   onDir,
@@ -66,6 +67,8 @@ export function WalkBoard({
   storeBuys: number | null;
   storeSells: number | null;
   shipPays: number | null;
+  /** More price lines, drawn like the store's: a seller's minimum at the land auction. */
+  lines?: { id: string; label: string; price: number }[];
   stage: 'declare' | 'walk';
   meId?: string;
   onDir?: (dir: -1 | 0 | 1) => void;
@@ -100,6 +103,7 @@ export function WalkBoard({
     { key: 'sells', price: storeSells, who: 'STORE', what: 'SELLS', tone: 'border-rise text-rise' },
     { key: 'buys', price: storeBuys, who: 'STORE', what: 'BUYS', tone: 'border-fall text-fall' },
     { key: 'ship', price: shipPays, who: 'SHIP', what: 'PAYS', tone: 'border-warn text-warn' },
+    ...extra.map((l) => ({ key: `line-${l.id}`, price: l.price, who: l.label, what: '', tone: 'border-holo text-holo' })),
   ].filter((l): l is typeof l & { price: number } => l.price !== null);
   // The lines' labels sit in a gutter on the right, clear of the creatures.
   const gutter = tv ? 104 : 56;
@@ -130,7 +134,7 @@ export function WalkBoard({
     >
       {/* Price axis */}
       <div className={cx('relative shrink-0 border-r border-holo-faint', tv ? 'w-16' : 'w-9')}>
-        <div className={cx('absolute inset-x-0', tv ? 'bottom-12 top-12' : 'bottom-7 top-6')}>
+        <div className={cx('absolute inset-x-0', tv ? 'bottom-20 top-12' : 'bottom-12 top-6')}>
           {ticks(lo, hi).map((v) => (
             <span key={v} data-num className={cx('absolute right-1.5 -translate-y-1/2 font-mono text-ink-3', tv ? 'text-base' : 'text-[10px]')} style={{ top: `${pct(v)}%` }}>
               {v}
@@ -143,11 +147,11 @@ export function WalkBoard({
         {stage === 'declare' && (
           <>
             <div className={cx('absolute inset-x-0 top-0 bg-rise/5', tv ? 'h-24' : 'h-12')} />
-            <div className={cx('absolute inset-x-0 bottom-0 bg-fall/5', tv ? 'h-28' : 'h-14')} />
+            <div className={cx('absolute inset-x-0 bottom-0 bg-fall/5', tv ? 'h-36' : 'h-18')} />
             <span className={cx('absolute inset-x-0 text-center font-display font-semibold text-rise/80', tv ? 'top-28 text-xl' : 'top-14 text-[11px]')}>
               ▼ SELLERS START AT THE TOP AND WALK DOWN TO ASK LESS
             </span>
-            <span className={cx('absolute inset-x-0 text-center font-display font-semibold text-fall/80', tv ? 'bottom-32 text-xl' : 'bottom-16 text-[11px]')}>
+            <span className={cx('absolute inset-x-0 text-center font-display font-semibold text-fall/80', tv ? 'bottom-40 text-xl' : 'bottom-20 text-[11px]')}>
               ▲ BUYERS START AT THE BOTTOM AND WALK UP TO BID MORE
             </span>
           </>
@@ -159,7 +163,7 @@ export function WalkBoard({
           ))}
         </div>
 
-        <div ref={area} className={cx('absolute inset-x-0', tv ? 'bottom-12 top-12' : 'bottom-7 top-6')}>
+        <div ref={area} className={cx('absolute inset-x-0', tv ? 'bottom-20 top-12' : 'bottom-12 top-6')}>
           {lines.map((l) => (
             <div key={l.key} className={cx('absolute inset-x-0 border-t-2 border-dashed', l.tone)} style={{ top: `${pct(l.price)}%` }}>
               <span
@@ -168,9 +172,7 @@ export function WalkBoard({
                 style={{ width: gutter }}
               >
                 <span className="font-normal opacity-80">{l.who}</span>
-                <span>
-                  {l.what} {l.price}
-                </span>
+                <span>{l.what ? `${l.what} ${l.price}` : l.price}</span>
               </span>
             </div>
           ))}
@@ -209,7 +211,7 @@ export function WalkBoard({
         </div>
 
         {/* Names along the bottom; a player who passed sits there, off the board. */}
-        <div className={cx('absolute inset-x-0 bottom-0 flex border-t border-holo-faint bg-void/90', tv ? 'h-10' : 'h-6')} style={{ paddingRight: gutter }}>
+        <div className={cx('absolute inset-x-0 bottom-0 flex border-t border-holo-faint bg-void/90', tv ? 'h-10' : 'h-6')} style={{ paddingRight: gutter }} data-testid="walk-names">
           {walkers.map((w) => (
             <span
               key={w.id}

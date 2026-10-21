@@ -101,6 +101,7 @@ export interface Player {
 export type Phase =
   | 'planning'
   | 'landGrant'
+  | 'landAuction'
   | 'development'
   | 'production'
   | 'auction'
@@ -142,7 +143,7 @@ export interface ExportShip {
   bought: Partial<Stock>;
 }
 
-/** The land grant: free plots light up one at a time, in a random order each sweep. */
+/** The land grant: free plots light up one at a time, in reading order each sweep. */
 export interface Grant {
   /** Tile indices in the order they light up this sweep. */
   order: number[];
@@ -195,6 +196,10 @@ export interface GameState {
   history: MonthReport[];
   /** The live goods auction, while the auction phase runs. */
   auction: LiveAuction | null;
+  /** This month's lots, in listing order. Made in planning, cleared when the land auction ends. */
+  listings: Listing[];
+  /** The live land auction, while the landAuction phase runs. */
+  landAuction: LandAuction | null;
 }
 
 export type AuctionRole = 'buyer' | 'seller';
@@ -285,4 +290,43 @@ export interface LiveAuction extends WalkBoard {
   status: StatusRow[];
   /** Goods skipped since the last one that came up, shown as one line. */
   skipped: { good: Good; reason: SkipReason }[];
+}
+
+/** What is for sale: a plot with whatever stands on it, or the MULE off one of the seller's plots. */
+export type LotItem = { kind: 'plot'; x: number; y: number } | { kind: 'mule'; x: number; y: number; outfit: Outfit };
+
+/** One lot for the land auction, public from the moment it is listed in planning. */
+export interface Listing {
+  id: string;
+  /** A player's id, or 'colony' for a plot the colony puts up: its proceeds go to store capital. */
+  seller: string;
+  item: LotItem;
+  minimum: number;
+  /** If no bid reaches the minimum: the store buys it at storePays, or the seller keeps it. */
+  unsold: 'store' | 'keep';
+  /** Fixed when the lot is listed. */
+  storePays: number;
+}
+
+export type LotResult = { kind: 'sold'; buyer: string; price: number } | { kind: 'store'; price: number } | { kind: 'kept' };
+
+/**
+ * The live land auction: one lot at a time, each with an intro, a walk and
+ * a result. Only buyers walk; the highest bid at or over the minimum wins at
+ * the bell. clockMs is the intro's, the walk's or the result's clock, by stage.
+ */
+export interface LandAuction extends WalkBoard {
+  /** Lots still to come after the current one. */
+  queue: Listing[];
+  lot: Listing | null;
+  stage: 'intro' | 'walk' | 'result' | 'over';
+  /** Players who pressed Done in this stage. */
+  done: string[];
+  /** Players who can't bid on this lot, and why: too little money, or already leading a MULE. */
+  aside: Record<string, 'money' | 'mule'>;
+  /** The lot's outcome, from the bell until the next lot comes up. */
+  result: LotResult | null;
+  /** This lot's place in the month's line-up, from 1, and the line-up's length. */
+  number: number;
+  count: number;
 }
