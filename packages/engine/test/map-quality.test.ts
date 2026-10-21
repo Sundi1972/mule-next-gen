@@ -1,10 +1,13 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { checkMap, createGame, type GameMap, type MapReport, type RuleId } from '../src/index.js';
+import { checkMap, createGame, expectedGround, MAP, TERRAIN_ODDS, type GameMap, type MapReport, type RuleId, type Terrain } from '../src/index.js';
 
 const SEEDS = 1000;
 const PLAYER_COUNTS = [2, 3, 4, 5, 6];
 const TIMEOUT = 120_000;
 const MAX_LINES = 30;
+const LAND = Object.keys(TERRAIN_ODDS) as Exclude<Terrain, 'store'>[];
+const HINTED = ['food', 'water', 'energy', 'smithore'] as const;
+const MINERALS = ['crystite', 'rareEarth'] as const;
 
 interface Built {
   seed: number;
@@ -21,6 +24,16 @@ function newGame(seed: number, players: number) {
 function received(seed: number, players: number): GameMap {
   const { width, height, tiles } = newGame(seed, players);
   return { width, height, tiles };
+}
+
+interface Drift {
+  label: string;
+  mean: number;
+  hint: number;
+}
+
+function drift(label: string, ratings: number[], hint: number): Drift {
+  return { label, mean: ratings.reduce((a, b) => a + b, 0) / ratings.length, hint };
 }
 
 /** Every failing line, capped, with a count of the rest. */
@@ -73,5 +86,23 @@ describe('map quality, every map createGame deals', () => {
       }
     }
     expect(failures, listed(failures)).toEqual([]);
+  }, TIMEOUT);
+
+  it('B-AC-4: hints are honest', () => {
+    const land = built.flatMap((b) => b.map.tiles.filter((t) => t.terrain !== 'store').map((t) => ({ players: b.players, tile: t })));
+    const drifts: Drift[] = [];
+    for (const terrain of LAND) {
+      const plots = land.filter((p) => p.tile.terrain === terrain);
+      for (const good of HINTED) drifts.push(drift(`${terrain} ${good}`, plots.map((p) => p.tile.ground[good]), expectedGround(terrain)[good]));
+    }
+    for (const players of PLAYER_COUNTS) {
+      const plots = land.filter((p) => p.players === players);
+      for (const good of MINERALS) drifts.push(drift(`${players} players ${good}`, plots.map((p) => p.tile.ground[good]), MAP.unknownMineral));
+    }
+    const offenders = drifts
+      .filter((d) => Math.abs(d.mean - d.hint) > MAP.honesty)
+      .sort((a, b) => Math.abs(b.mean - b.hint) - Math.abs(a.mean - a.hint))
+      .map((d) => `${d.label}: mean ${d.mean.toFixed(3)}, hint ${d.hint.toFixed(3)}, off by ${(d.mean - d.hint).toFixed(3)}`);
+    expect(offenders, listed(offenders)).toEqual([]);
   }, TIMEOUT);
 });
