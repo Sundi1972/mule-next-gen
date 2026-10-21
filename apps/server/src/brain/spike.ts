@@ -13,8 +13,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { AI_LEVELS, AI_PERSONAS, BRAIN, observe, type AiLevelId, type AiPersonaId, type GameState } from '@mule/engine';
 import {
   buildPrompt,
+  parseReply,
   PERSONAS,
   playGame,
+  ReplyRejected,
   simSeats,
   situation,
   WAIT_MS,
@@ -24,10 +26,10 @@ import {
   type Prompt,
   type ShortOption,
 } from '@mule/ai';
-import { CallFailed, createAnthropicSdk, createHaikuComplete, type HaikuReply } from './client.js';
-import { API_KEY_ENV, apiKeyFrom } from './index.js';
+import { billUnknown, CallFailed, createAnthropicSdk, createHaikuComplete, type HaikuReply } from './client.js';
+import { API_KEY_ENV, apiKeyFrom, outcomeOf } from './index.js';
 import { createBudget, type Budget } from './budget.js';
-import { createLedger, usd, type Ledger, type Usage } from './ledger.js';
+import { createLedger, usd, type Ledger, type Outcome, type Usage } from './ledger.js';
 
 /** One real decision turned into a prompt, with what is needed to rebuild and attribute it. */
 export interface SpikeItem {
@@ -62,6 +64,10 @@ export interface KindRow {
   max: Latency | null;
   /** Share of calls answered within their kind's wait; a timeout or an error is not within. */
   within: number;
+  /** Calls that brought a reply back, usable or not. */
+  answered: number;
+  /** Share of answered calls whose reply the game could use (outcome llm); null when none was answered. */
+  usable: number | null;
 }
 
 export interface SpikeReport {
@@ -77,6 +83,8 @@ export interface SpikeReport {
   /** One row per kind called, in KINDS order, then the pooled row. */
   kinds: KindRow[];
   refusals: number;
+  unreadable: number;
+  offList: number;
   authFailures: number;
   cacheRead: number;
   cacheWrite: number;
@@ -118,7 +126,8 @@ export function collectPrompts(seed: number, calls: number): SpikeItem[] {
   };
   playGame(seed, specs, {
     onDecision: (r) => {
-      if (r.shortlist.length > 0) collected.push({ record: r, summary: null });
+      // Brain.ask asks the model only when there is a choice to make.
+      if (r.shortlist.length >= 2) collected.push({ record: r, summary: null });
     },
     onPhase: (state) => {
       last = state;
@@ -175,6 +184,8 @@ export interface SpikeOptions {
   budget: Pick<Budget, 'worstCase'>;
   /** Dollars. Callers pass capFor(flag); runSpike trusts it only up to BRAIN.spikeCapUsd. */
   cap: number;
+  /** Called once, just before the first call starts; a run that calls nothing never calls it. */
+  claim?: () => void;
   now: () => Date;
   log: (line: string) => void;
 }
@@ -182,7 +193,7 @@ export interface SpikeOptions {
 /** One settled call, as the report needs it. */
 interface Settled {
   kind: DecisionKind;
-  outcome: 'llm' | 'refused' | 'timeout' | 'error';
+  outcome: Exclude<Outcome, 'budget'>;
   ms: number;
 }
 
@@ -193,7 +204,7 @@ const day = (d: Date) => d.toISOString().slice(0, 10);
 /** Nearest-rank quantile of a non-empty ascending list. */
 const nearest = <T>(sorted: readonly T[], q: number): T => sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(q * sorted.length) - 1))]!;
 
-const isAnswered = (s: Settled) => s.outcome === 'llm' || s.outcome === 'refused';
+const isAnswered = (s: Settled) => s.outcome !== 'timeout' && s.outcome !== 'error';
 
 function kindRow(kind: KindRow['kind'], waitMs: number | null, settled: Settled[]): KindRow {
   const answered = settled.filter(isAnswered).map((s) => s.ms).sort(ascending);
@@ -202,6 +213,7 @@ function kindRow(kind: KindRow['kind'], waitMs: number | null, settled: Settled[
   const ranked: Latency[] = [...answered.map((ms) => ({ ms })), ...timedOut.map((overMs) => ({ overMs }))];
   const at = (q: number) => (waitMs === null || ranked.length === 0 ? null : nearest(ranked, q));
   const within = settled.filter((s) => isAnswered(s) && s.ms <= WAIT_MS[s.kind]).length;
+  const usable = settled.filter((s) => s.outcome === 'llm').length;
   return {
     kind,
     waitMs,
@@ -212,6 +224,8 @@ function kindRow(kind: KindRow['kind'], waitMs: number | null, settled: Settled[
     p90: at(0.9),
     max: at(1),
     within: settled.length === 0 ? 0 : within / settled.length,
+    answered: answered.length,
+    usable: answered.length === 0 ? null : usable / answered.length,
   };
 }
 
@@ -223,7 +237,6 @@ export async function runSpike(options: SpikeOptions): Promise<SpikeReport> {
 
   let ledgerUsd = 0;
   let unknownUsd = 0;
-  let refusals = 0;
   let authFailures = 0;
   let cacheRead = 0;
   let cacheWrite = 0;
@@ -238,35 +251,30 @@ export async function runSpike(options: SpikeOptions): Promise<SpikeReport> {
       stopped = 'cap';
       break;
     }
-    let outcome: Settled['outcome'];
-    let usage: Usage;
-    let ms: number;
-    let auth = false;
-    let billUnknown = false;
+    if (settled.length === 0) options.claim?.();
+    let reply: HaikuReply | null = null;
+    let failure: unknown;
     try {
-      const r = await complete(it.prompt, WAIT_MS[it.kind]);
-      outcome = r.stopReason === 'refusal' ? 'refused' : 'llm';
-      usage = r.usage;
-      ms = r.ms;
+      reply = await complete(it.prompt, WAIT_MS[it.kind]);
+      const parsed = parseReply(reply.text, it.shortlist);
+      if (!parsed.ok) failure = new ReplyRejected(parsed.reason, parsed.outcome);
     } catch (e) {
-      // CallFailed carries our own short message; anything else is counted as an error and its text is dropped.
-      const failed = e instanceof CallFailed ? e : null;
-      outcome = failed?.outcome ?? 'error';
-      usage = failed?.usage ?? NO_USAGE;
-      ms = failed?.ms ?? 0;
-      auth = failed?.auth ?? false;
-      // Only an HTTP status shows the API answered and billed nothing; a timeout or a lost connection may be billed.
-      billUnknown = failed === null || failed.status === null;
+      // Anything but a CallFailed is counted as an error, and its text is dropped.
+      failure = e ?? new Error('unknown error');
     }
+    const failed = failure instanceof CallFailed ? failure : null;
+    const outcome = outcomeOf(reply, failure);
+    const usage = reply?.usage ?? NO_USAGE;
+    const ms = reply?.ms ?? failed?.ms ?? 0;
+    const auth = failed?.auth ?? false;
     settled.push({ kind: it.kind, outcome, ms });
     ledger.record({ game, seat: it.seat, persona: it.persona, level: it.level, model: BRAIN.model, kind: it.kind, ms, outcome, ...usage });
     ledgerUsd += usd(usage);
-    if (billUnknown) unknownUsd += worst;
+    if (reply === null && billUnknown(failure)) unknownUsd += worst;
     cacheRead += usage.cached_read;
     cacheWrite += usage.cache_write;
     const tokens = usage.input + usage.cached_read + usage.cache_write;
     if (tokens > 0) perToken.push((it.prompt.system.length + it.prompt.user.length + JSON.stringify(it.prompt.schema).length) / tokens);
-    if (outcome === 'refused') refusals += 1;
     if (auth) authFailures += 1;
     log(`call ${settled.length}/${prompts.length} ${it.kind} ${outcome} ${Math.round(ms)} ms, counted $${(ledgerUsd + unknownUsd).toFixed(5)}`);
     if (auth) {
@@ -274,8 +282,9 @@ export async function runSpike(options: SpikeOptions): Promise<SpikeReport> {
       break;
     }
   }
-  ledger.finish(game);
+  if (settled.length > 0) ledger.finish(game);
 
+  const count = (outcome: Settled['outcome']) => settled.filter((s) => s.outcome === outcome).length;
   const called = KINDS.filter((k) => settled.some((s) => s.kind === k));
   const ratios = [...perToken].sort(ascending);
   return {
@@ -286,7 +295,9 @@ export async function runSpike(options: SpikeOptions): Promise<SpikeReport> {
     cap,
     firstMs: settled[0]?.ms ?? 0,
     kinds: [...called.map((k) => kindRow(k, WAIT_MS[k], settled.filter((s) => s.kind === k))), kindRow('all', null, settled)],
-    refusals,
+    refusals: count('refused'),
+    unreadable: count('unreadable'),
+    offList: count('off_list'),
     authFailures,
     cacheRead,
     cacheWrite,
@@ -313,11 +324,12 @@ export function renderReport(r: SpikeReport): string[] {
     [`counted spend (cap $${r.cap.toFixed(2)})`, `$${r.countedUsd.toFixed(5)}`],
     ['first-call latency', `${Math.round(r.firstMs)} ms`],
     ['refusals / auth failures', `${r.refusals} / ${r.authFailures}`],
+    ['unreadable / off-list replies', `${r.unreadable} / ${r.offList}`],
     ['cache read / write tokens', `${r.cacheRead} / ${r.cacheWrite}`],
     ['chars per input token min / median / max', r.charsPerToken ? [r.charsPerToken.min, r.charsPerToken.median, r.charsPerToken.max].map((x) => x.toFixed(2)).join(' / ') : 'n/a'],
   ]);
   const kinds = table([
-    ['kind', 'calls', 'timeouts', 'errors', 'p50', 'p90', 'max', 'answered in time'],
+    ['kind', 'calls', 'timeouts', 'errors', 'p50', 'p90', 'max', 'answered in time', 'usable replies'],
     ...r.kinds.map((k) => [
       k.kind,
       String(k.calls),
@@ -327,6 +339,7 @@ export function renderReport(r: SpikeReport): string[] {
       latencyText(k.p90),
       latencyText(k.max),
       `${pct(k.within)} within ${k.waitMs === null ? 'own wait' : `${k.waitMs} ms`}`,
+      k.usable === null ? '—' : `${pct(k.usable)} of ${k.answered}`,
     ]),
   ]);
   return [...totals, '', ...kinds];
@@ -386,12 +399,18 @@ export async function main(argv: readonly string[], env: Readonly<Record<string,
   const ledger = createLedger({ path: ledgerPath });
   out(`brain:spike model ${BRAIN.model}, cap $${cap.toFixed(2)}, planned ${prompts.length} calls, ledger ${ledgerPath}`);
 
+  // 'wx' creates the file or fails: the day's clearance is used once, by the run that starts the first call.
+  const claim = () => {
+    fs.mkdirSync(path.dirname(ledgerPath), { recursive: true });
+    fs.closeSync(fs.openSync(ledgerPath, 'wx'));
+  };
   const report = await runSpike({
     prompts,
     complete: createHaikuComplete(createAnthropicSdk(key)),
     ledger,
     budget: createBudget(ledger),
     cap,
+    claim,
     now,
     log: out,
   });

@@ -52,6 +52,11 @@ export class CallFailed extends Error {
   }
 }
 
+/** Whether a failed call may still have been billed: only an HTTP status shows the API answered and billed nothing. */
+export function billUnknown(failure: unknown): boolean {
+  return !(failure instanceof CallFailed) || failure.status === null;
+}
+
 function fail(e: unknown, ms: number, waitMs: number, aborted: boolean): CallFailed {
   // Our own abort is checked first: an abort during the body read surfaces as a raw DOMException, not an SDK error.
   if (aborted || e instanceof Anthropic.APIConnectionTimeoutError || e instanceof Anthropic.APIUserAbortError) {

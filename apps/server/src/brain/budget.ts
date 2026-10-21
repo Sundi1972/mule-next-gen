@@ -10,7 +10,9 @@ export interface Budget {
    * `lockedNow` is true only for the refusal that locked it.
    */
   allow(game: string, seat: string, nextUsd: number): { allowed: boolean; lockedNow: boolean };
-  /** Forgets a finished game's locks. */
+  /** Counts a call whose bill is unknown toward the seat's spend at its worst case; its ledger line is left as it is. */
+  countUnknownBill(game: string, seat: string, worstUsd: number): void;
+  /** Forgets a finished game's locks and unknown bills. */
   release(game: string): void;
 }
 
@@ -18,6 +20,9 @@ export interface Budget {
 export function createBudget(ledger: Pick<Ledger, 'seatSpent'>): Budget {
   // game -> seats locked out. A locked seat never calls again, so it cannot flip between Smart and Classic.
   const locked = new Map<string, Set<string>>();
+  // game -> seat -> worst cases of its calls whose bill is unknown.
+  const unknown = new Map<string, Map<string, number>>();
+  const spentBy = (game: string, seat: string) => ledger.seatSpent(game, seat) + (unknown.get(game)?.get(seat) ?? 0);
 
   return {
     worstCase(prompt) {
@@ -37,8 +42,10 @@ export function createBudget(ledger: Pick<Ledger, 'seatSpent'>): Budget {
     // RULE-3 row 1 (no API key, no decider at all) lives in createBrain, not here.
     allow(game, seat, nextUsd) {
       if (locked.get(game)?.has(seat)) return { allowed: false, lockedNow: false };
-      // Written as !(<=) so a NaN in either number refuses instead of slipping through.
-      if (!(ledger.seatSpent(game, seat) + nextUsd <= BRAIN.seatBudgetUsd)) {
+      const spent = spentBy(game, seat);
+      // A negative or infinite term could hide spend; !(<=) also refuses a NaN.
+      const sane = Number.isFinite(spent) && Number.isFinite(nextUsd) && nextUsd >= 0;
+      if (!sane || !(spent + nextUsd <= BRAIN.seatBudgetUsd)) {
         const seats = locked.get(game) ?? new Set<string>();
         seats.add(seat);
         locked.set(game, seats);
@@ -47,8 +54,15 @@ export function createBudget(ledger: Pick<Ledger, 'seatSpent'>): Budget {
       return { allowed: true, lockedNow: false };
     },
 
+    countUnknownBill(game, seat, worstUsd) {
+      const seats = unknown.get(game) ?? new Map<string, number>();
+      seats.set(seat, (seats.get(seat) ?? 0) + worstUsd);
+      unknown.set(game, seats);
+    },
+
     release(game) {
       locked.delete(game);
+      unknown.delete(game);
     },
   };
 }

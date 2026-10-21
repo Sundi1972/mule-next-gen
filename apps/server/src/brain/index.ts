@@ -1,7 +1,7 @@
 import { BRAIN, type AiLevelId, type AiPersonaId } from '@mule/engine';
 import { LlmDecider, ReplyRejected, type Complete, type Decider, type DecisionRecord } from '@mule/ai';
 import { createBudget } from './budget.js';
-import { CallFailed, createAnthropicSdk, createHaikuComplete, type HaikuReply, type HaikuSdk } from './client.js';
+import { billUnknown, CallFailed, createAnthropicSdk, createHaikuComplete, type HaikuReply, type HaikuSdk } from './client.js';
 import { createLedger, type Outcome, type Usage } from './ledger.js';
 
 /** The seat a decider is built for: its id, persona and level. */
@@ -44,7 +44,16 @@ class BudgetSpent extends Error {
 /** One decision's call, as the port saw it. */
 interface CallSlot {
   called: boolean;
+  worstUsd: number;
   reply: HaikuReply | null;
+}
+
+/** A settled call's ledger outcome: from the reply's stop reason or the failure's type, never from message text. See RULE-4. */
+export function outcomeOf(reply: Pick<HaikuReply, 'stopReason'> | null, failure: unknown): Exclude<Outcome, 'budget'> {
+  if (reply?.stopReason === 'refusal') return 'refused';
+  if (failure === undefined) return 'llm';
+  if (failure instanceof CallFailed || failure instanceof ReplyRejected) return failure.outcome;
+  return 'error';
 }
 
 const passThrough = (): ((record: DecisionRecord) => void) => () => {};
@@ -86,20 +95,14 @@ export function createBrain(options: BrainOptions): BrainService {
     const portFor =
       (slot: CallSlot): Complete =>
       async (prompt, waitMs) => {
-        const { allowed, lockedNow } = budget.allow(gameId, seat.id, budget.worstCase(prompt));
+        if (finished) throw new Error('game over');
+        slot.worstUsd = budget.worstCase(prompt);
+        const { allowed, lockedNow } = budget.allow(gameId, seat.id, slot.worstUsd);
         if (!allowed) throw new BudgetSpent(lockedNow);
         slot.called = true;
         slot.reply = await haiku(prompt, waitMs);
         return { text: slot.reply.text };
       };
-
-    /** RULE-4: the outcome from the reply's stop reason or the error's type, never from message text. */
-    const outcomeOf = (slot: CallSlot, err: unknown): Outcome => {
-      if (slot.reply?.stopReason === 'refusal') return 'refused';
-      if (err === undefined) return 'llm';
-      if (err instanceof CallFailed || err instanceof ReplyRejected) return err.outcome;
-      return 'error';
-    };
 
     return {
       name: 'llm',
@@ -107,7 +110,7 @@ export function createBrain(options: BrainOptions): BrainService {
         if (finished) throw new Error('game over');
         if (busy.has(seat.id)) throw new Error('busy');
         busy.add(seat.id);
-        const slot: CallSlot = { called: false, reply: null };
+        const slot: CallSlot = { called: false, worstUsd: 0, reply: null };
         let failure: unknown;
         try {
           return await new LlmDecider(portFor(slot)).decide(shortlist, persona, context);
@@ -120,7 +123,8 @@ export function createBrain(options: BrainOptions): BrainService {
             if (failure.lockedNow) write(context.kind, 'budget', NO_USAGE, 0);
           } else if (slot.called) {
             const source = failure instanceof CallFailed ? failure : slot.reply;
-            write(context.kind, outcomeOf(slot, failure), source?.usage ?? NO_USAGE, source?.ms ?? 0);
+            write(context.kind, outcomeOf(slot.reply, failure), source?.usage ?? NO_USAGE, source?.ms ?? 0);
+            if (slot.reply === null && billUnknown(failure) && !finished) budget.countUnknownBill(gameId, seat.id, slot.worstUsd);
           }
         }
       },
