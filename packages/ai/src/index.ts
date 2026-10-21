@@ -6,7 +6,6 @@ export * from './outlook.js';
 export * from './personas.js';
 export * from './play.js';
 export * from './seat.js';
-export { simSeats } from './sim.js';
 export * from './strategist.js';
 export * from './summary.js';
 export * from './utility.js';
