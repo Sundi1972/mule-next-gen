@@ -121,7 +121,7 @@ export function StoreHall({
       </div>
       <div className="absolute inset-x-1.5 bottom-1.5 grid h-[36%] grid-cols-12 gap-1.5" data-testid="row-services">
         <Door side="L" onTap={tap('doorL')} tv={tv} />
-        <Booth testid="booth-works" className="col-span-3 px-1" disabled={!can('works')}>
+        <Booth testid="booth-works" className="col-span-4 px-1" disabled={!can('works')}>
           <span className={cx('label-caps', tv ? 'text-xs!' : 'text-[8px]!')}>Works · factory fits</span>
           <span className="grid w-full grid-cols-3 gap-1">
             {FACTORIES.map((f) => (
@@ -141,7 +141,7 @@ export function StoreHall({
             ))}
           </span>
         </Booth>
-        <Booth testid="booth-greenBelt" onTap={tap('greenBelt')} disabled={!can('greenBelt')} className="col-span-2" style={{ borderBottom: '4px solid var(--color-ok)' }}>
+        <Booth testid="booth-greenBelt" onTap={tap('greenBelt')} disabled={!can('greenBelt')} className="col-span-1 px-0.5" style={{ borderBottom: '4px solid var(--color-ok)' }}>
           <span className={cx('font-semibold leading-tight', label)}>Green belt</span>
           <span data-num className={price}>
             {prices.greenBelt} cr
