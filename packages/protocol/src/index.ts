@@ -1,4 +1,4 @@
-import type { AuctionSide, Good, Ground, Outfit, Phase, ScoreParts, SkipReason, Species, StatusRow, Stock, Terrain, TileTrait } from '@mule/engine';
+import type { AuctionSide, EventKey, EventKind, Good, Ground, MonthEvent, Outfit, Phase, ScoreParts, SkipReason, Species, StatusRow, Stock, Terrain, TileTrait } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -97,6 +97,8 @@ export interface WalkerView {
   at: number;
   dir: -1 | 0 | 1;
   done: boolean;
+  /** Their stock of the good up now, live as units trade; public like the status table. */
+  units: number;
 }
 
 /** Units changing hands right now: between two players, or with the store or the ship ('store', 'ship'). */
@@ -122,6 +124,8 @@ export interface AuctionView {
   /** What the store pays and charges, or null while it doesn't trade at that line. */
   storeBuys: number | null;
   storeSells: number | null;
+  /** Units the store will sell of this good: its stock less the colonists' Food and Water reserve. */
+  storeForSale: number;
   /** What the export ship pays for the next unit, while it is in port and wants this good. */
   shipPays: number | null;
   /** The board's price range: it grows when a walker goes past it. */
@@ -155,7 +159,7 @@ export interface ListingView {
 }
 
 /** A buyer on a lot's board. Everyone but the seller, if they can pay the minimum (and, for a MULE, has no MULE in hand). */
-export interface LotWalkerView extends WalkerView {
+export interface LotWalkerView extends Omit<WalkerView, 'units'> {
   /** Why a player stands aside, for the names along the bottom. */
   aside?: 'money' | 'mule';
 }
@@ -209,6 +213,46 @@ export interface ShipView {
 /** A player's own score, line by line, as their phone receives it at game over. */
 export type ScorePartsView = Omit<ScoreParts, 'total'>;
 
+/** A reason a plot made more or less than its ground gives, as a badge on the map. */
+export type ProductionReason = 'cluster' | 'species' | 'trait' | 'pollution' | 'noEnergy' | 'noWater';
+
+/** One working plot in the month's production show. Public, like the auction's status table. */
+export interface ProductionLineView {
+  x: number;
+  y: number;
+  owner: string;
+  good: Good;
+  /** Units the plot made before the month's event; an event hit adds its delta on top. */
+  made: number;
+  /** Its badges: at most two reasons, biggest change first. */
+  parts: { why: ProductionReason; delta: number }[];
+}
+
+/** The month's event as the map shows it. */
+export interface ProductionEventView {
+  key: EventKey;
+  kind: EventKind;
+  title: string;
+  line: string;
+  sign: MonthEvent['sign'];
+  scope: MonthEvent['scope'];
+  /** Where it starts: a colony sweep's edge point, otherwise its first plot or its source. */
+  origin: { x: number; y: number };
+  /** For a colony sweep, the map edge it blows in from. */
+  from?: 'n' | 'e' | 's' | 'w';
+  /** The plots it hit, in the order it reached them, and how many units each gained or lost. */
+  hits: { x: number; y: number; order: number; delta: number }[];
+}
+
+/** What every plot made this month and what the month's event did: never anything a player holds. */
+export interface ProductionView {
+  /** In reading order: row by row, left to right. */
+  lines: ProductionLineView[];
+  events: ProductionEventView[];
+  /** How long the production phase was scheduled to run, in ms; the show's timeline stretches over it. */
+  lengthMs: number;
+}
+
 /** One screen's view of the game: a player's private view, or the public one for a board. */
 export interface MuleView {
   finished: boolean;
@@ -244,6 +288,8 @@ export interface MuleView {
   lotSlots: { used: number; max: number };
   /** The live land auction while it runs. */
   landAuction: LandAuctionView | null;
+  /** The month's production show, during production and upkeep. */
+  production: ProductionView | null;
 }
 
 export const PLAYER_COLORS = ['#e4572e', '#3a86ff', '#2bb673', '#f2a541', '#9b5de5', '#00b4d8'];

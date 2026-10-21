@@ -1,20 +1,46 @@
-import { COLONY_SELLER } from '@mule/engine';
-import type { AuctionView, LandAuctionView, ListingView, MuleView } from '@mule/protocol';
-import { Creature, cx, GOOD_NAME, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
+import { COLONY_SELLER, SHIP_ID, STORE_ID } from '@mule/engine';
+import type { AuctionView, DealView, LandAuctionView, ListingView, MuleView } from '@mule/protocol';
+import { bestPrices, Creature, cx, GOOD_NAME, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
 import { plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
 import { GroundCard } from '../phone/ground';
 
-/** The auction's walkers as the board draws them, in seat order. */
+/** The auction's walkers as the board draws them, in seat order, with their units and the surplus over this month's need. */
 export function boardWalkers(view: MuleView, auction: AuctionView): BoardWalker[] {
-  return auction.walkers.map((w) => ({
-    id: w.id,
-    name: view.players.find((p) => p.id === w.id)?.name ?? w.id,
-    slot: slotOf(view, w.id) ?? 0,
-    side: w.side,
-    price: w.price,
-    at: w.at,
-    done: w.done,
-  }));
+  return auction.walkers.map((w) => {
+    const need = auction.status.find((r) => r.id === w.id)?.need;
+    return {
+      id: w.id,
+      name: view.players.find((p) => p.id === w.id)?.name ?? w.id,
+      slot: slotOf(view, w.id) ?? 0,
+      side: w.side,
+      price: w.price,
+      at: w.at,
+      done: w.done,
+      units: w.units,
+      ...(need === undefined ? {} : { surplus: w.units - need }),
+    };
+  });
+}
+
+/** Who holds each moving line, in words beside the board; the TV adds the gap between them. */
+export function LineReadout({ walkers, trading, meId, tv = false }: { walkers: BoardWalker[]; trading: boolean; meId?: string; tv?: boolean }) {
+  const { ask, bid } = bestPrices(walkers);
+  const who = (w: BoardWalker) => (w.id === meId ? 'You' : w.name);
+  const gap = ask && bid ? ask.price - bid.price : null;
+  return (
+    <dl className={cx('grid grid-cols-[auto_1fr] items-baseline gap-x-2 font-mono', tv ? 'gap-y-1 text-lg' : 'gap-y-0.5 text-[11px]')} data-testid="line-readout">
+      <dt className="text-rise">LOWEST ASK</dt>
+      <dd data-num className="font-bold text-rise">{ask ? `${ask.price} · ${who(ask)}` : '—'}</dd>
+      <dt className="text-fall">HIGHEST BID</dt>
+      <dd data-num className="font-bold text-fall">{bid ? `${bid.price} · ${who(bid)}` : '—'}</dd>
+      {tv && (
+        <>
+          <dt className="text-ink-3">GAP</dt>
+          <dd data-num className="font-bold text-ink">{trading ? 'MET: TRADING' : gap === null ? '—' : `${gap} apart`}</dd>
+        </>
+      )}
+    </dl>
+  );
 }
 
 const REASON: Record<AuctionView['skipped'][number]['reason'], string> = {
@@ -28,6 +54,30 @@ export function skippedLine(auction: AuctionView): string | null {
   if (auction.skipped.length === 0) return null;
   const reasons = [...new Set(auction.skipped.map((s) => REASON[s.reason]))];
   return `Skipped: ${auction.skipped.map((s) => GOOD_NAME[s.good]).join(', ')}: ${reasons.join(', ')}`;
+}
+
+/** A running deal as the TV lists it, under the identity it keeps while it runs. */
+export interface DealRow {
+  key: string;
+  deal: DealView;
+}
+
+/** A deal's identity, as the engine keys it: a house's deal stays one deal as it serves whoever is next in line. */
+export function dealKey(d: DealView): string {
+  const house = (id: string) => id === STORE_ID || id === SHIP_ID;
+  return house(d.buyer) ? `${d.buyer}<` : house(d.seller) ? `${d.seller}>` : `${d.buyer}<${d.seller}`;
+}
+
+/**
+ * The deals now running, newest first: those already in `rows` keep their order (with the latest units),
+ * deals that just started go on top in the server's order, and deals that ended drop out.
+ */
+export function newestFirst(rows: readonly DealRow[], deals: readonly DealView[]): DealRow[] {
+  const running = new Map(deals.map((d) => [dealKey(d), d]));
+  const kept = rows.filter((r) => running.has(r.key)).map((r) => ({ key: r.key, deal: running.get(r.key)! }));
+  const known = new Set(kept.map((r) => r.key));
+  const started = [...running].filter(([key]) => !known.has(key)).map(([key, deal]) => ({ key, deal }));
+  return [...started, ...kept];
 }
 
 /** Who is trading with whom, in words. */

@@ -32,6 +32,7 @@ function view(extra: Partial<MuleView> = {}): MuleView {
     listings: [],
     lotSlots: { used: 0, max: 4 },
     landAuction: null,
+    production: null,
     ...extra,
   };
 }

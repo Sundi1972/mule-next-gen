@@ -408,10 +408,16 @@ describe('AI seats at the land auction, on the server', () => {
     expect(elapsed).toBeLessThanOrEqual(longest);
     expect(asked.slice(askedBefore).filter((phase) => phase === 'landAuction')).toEqual([]);
     const longestWait = Math.max(...waits) / 1_000;
+    // A lot still contested at the bell (someone else could pay more) may run its full walk; AM-4's early bell is for a lot the others have given up.
+    const contested = (id: string) => {
+      const r = results.get(id)?.result;
+      return r?.kind === 'sold' && AIS.some((a) => a.id !== r.buyer && (worth.get(`${id}:${a.id}`)?.limit ?? 0) >= r.price + 1);
+    };
     for (const lot of before.listings) {
       expect(left.get(`${lot.id}:intro`), `${lot.id}'s intro ends before LOTS.introMs`).toBeGreaterThan(longestWait);
-      expect(left.get(`${lot.id}:walk`), `${lot.id}'s walk ends before LOTS.walkMs`).toBeGreaterThan(longestWait);
+      if (!contested(lot.id)) expect(left.get(`${lot.id}:walk`), `${lot.id}'s walk ends before LOTS.walkMs`).toBeGreaterThan(longestWait);
     }
+    expect(before.listings.some((lot) => !contested(lot.id)), 'at least one lot is settled early, so AM-4 is still asserted').toBe(true);
     const sold = [...results.values()].flatMap((la) => (la.result?.kind === 'sold' ? [{ lot: la.lot.id, ...la.result }] : []));
     expect(sold.length, 'an AI bought a lot').toBeGreaterThan(0);
     const paid = (v: MuleView, id: string) => v.players.find((p) => p.id === id)!.money;
