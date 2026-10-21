@@ -1,4 +1,4 @@
-import type { AuctionSide, Good, Ground, Outfit, Phase, SkipReason, Species, StatusRow, Stock, Terrain, TileTrait } from '@mule/engine';
+import type { AuctionSide, Good, Ground, Outfit, Phase, ScoreParts, SkipReason, Species, StatusRow, Stock, Terrain, TileTrait } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -206,6 +206,9 @@ export interface ShipView {
   wants: Partial<Record<Good, number>> | null;
 }
 
+/** A player's own score, line by line, as their phone receives it at game over. */
+export type ScorePartsView = Omit<ScoreParts, 'total'>;
+
 /** One screen's view of the game: a player's private view, or the public one for a board. */
 export interface MuleView {
   finished: boolean;
@@ -231,7 +234,8 @@ export interface MuleView {
   /** The colony fund and the sales tax rate. */
   treasury: { money: number; salesTax: number };
   news: string[];
-  scores: { id: string; score: number }[] | null;
+  /** At game over; `parts` only on the viewer's own entry, never in the board view (goods are private). */
+  scores: { id: string; score: number; parts?: ScorePartsView }[] | null;
   /** The live goods auction while it runs. */
   auction: AuctionView | null;
   /** This month's lots for the land auction, in line-up order. */
