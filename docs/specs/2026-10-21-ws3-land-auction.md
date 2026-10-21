@@ -165,7 +165,8 @@ senior       junior would: put a fixed storePlotPrice of 200. · senior does: ta
              GAME.plotScore (WS1's PR #11), so it can't drift past the score if the score changes.
              storePlotShare and storeMuleShare are flagged to WS1 as touching land supply.
 mechanism    sprout
-call sites   lots.ts (C1, C3), mule-game.ts (C7 view), web screens (C9–C11, via the view only)
+call sites   lots.ts (C1, C3), mule-game.ts (C7 view), web screens (C9–C11, via the view, plus the
+             Sell tab's reads of LOTS.perPlayer, storePaysAt and isListed: AM-3)
 depends_on   none (GAME.plotScore landed with WS1's PR #11, merged into feat/strategist at aa84a1b)
 ```
 
@@ -556,6 +557,22 @@ because   resolve() clears tile.outfit when the store buys a MULE back, while th
           outfit needs one owner, and the engine is it (the server's listedOutfits map goes).
 goal      G-1 unchanged; no screen or rule changes
 folded    §3 rows · engine fix round 1 (bfd0942) · the server fix round deletes listedOutfits
+
+AM-3 · 2026-10-21 · WS3 (PR-1 maintainability review, Important 2) · at the PR-1 boundary
+
+target    §1 C5 call sites
+said      the web reads lot numbers via the view only
+did       the Sell tab (apps/web/src/phone/Sell.tsx) also imports three pure engine exports:
+          LOTS.perPlayer, storePaysAt(kind, mulePrice) for the unsaved form's store price, and
+          isListed(view, x, y), typed structurally so it takes the view. With them it pre-checks
+          RULE-1 rows 5–7 (already listed, per-player cap, full month) to disable List. Its copy
+          is the approved mock's; the engine's RuleError text stays the server's refusal, shown
+          as a toast if a race gets past the pre-check.
+because   the plan chose this in Task 1.2/1.8: one formula and one rule with the engine as owner,
+          instead of the phone re-deriving the store price or the listed test. Putting the same
+          numbers into MuleView would duplicate them without removing the pre-check.
+goal      G-1 unchanged
+folded    §1 C5 call sites · plan Tasks 1.2, 1.8
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
