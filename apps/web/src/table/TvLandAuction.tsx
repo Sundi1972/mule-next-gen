@@ -1,3 +1,4 @@
+import { COLONY_SELLER } from '@mule/engine';
 import type { LandAuctionView, MuleView, TableView } from '@mule/protocol';
 import { cx, GOOD_NAME, HoloMap, MuleIcon, PlayerMark, TERRAIN_NAME, TimeBar, WalkBoard, type Slot } from '@mule/ui';
 import { lotWalkers, lotWhat, sellerName } from '../components/AuctionParts';
@@ -29,7 +30,7 @@ export function TvLandAuction({ table, game, lot }: { table: TableView<MuleView>
             <TimeBar size="tv" seconds={lot.seconds} total={lot.total} />
             <p className="font-display text-2xl leading-snug text-ink-2" data-testid="tv-intro-line">
               Bidding starts in {Math.ceil(lot.seconds)} s.{' '}
-              {lot.lot.seller === 'colony' ? 'The colony is selling a free plot. Everyone can bid' : `Everyone but ${sellerName(view, lot.lot.seller)} can bid`}: hold Up on your phone.
+              {lot.lot.seller === COLONY_SELLER ? 'The colony is selling a free plot. Everyone can bid' : `Everyone but ${sellerName(view, lot.lot.seller)} can bid`}: hold Up on your phone.
             </p>
           </div>
         </div>
@@ -72,7 +73,7 @@ function TvLotCard({ view, lot, big = false }: { view: MuleView; lot: LandAuctio
     <div className={cx('flex flex-col gap-1 rounded-panel border-2 border-holo bg-holo-soft shadow-glow', big ? 'p-5' : 'p-4')} data-testid="tv-lot">
       <span className="label-caps flex items-center gap-2 text-base!">
         {lot.lot.item.kind === 'mule' ? 'MULE for sale' : 'Plot for sale'} · {seller !== null && <PlayerMark slot={seller as Slot} size={16} />}{' '}
-        {lot.lot.seller === 'colony' ? 'The colony · free land' : sellerName(view, lot.lot.seller)}
+        {lot.lot.seller === COLONY_SELLER ? 'The colony · free land' : sellerName(view, lot.lot.seller)}
       </span>
       <span className={cx('flex items-center gap-2 font-display font-semibold leading-tight', big ? 'text-4xl' : 'text-2xl')}>
         {lot.lot.item.kind === 'mule' && <MuleIcon size={big ? 40 : 28} className="text-holo" />}
@@ -119,7 +120,7 @@ function TvResult({ view, lot }: { view: MuleView; lot: LandAuctionView }) {
           ? `${sellerName(view, r.buyer)} · ${r.price}`
           : r.kind === 'store'
             ? `Store pays ${r.price}`
-            : lot.lot.seller === 'colony'
+            : lot.lot.seller === COLONY_SELLER
               ? 'Stays free land'
               : `${sellerName(view, lot.lot.seller)} keeps it`}
       </span>
