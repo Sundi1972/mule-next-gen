@@ -107,7 +107,7 @@ describe('T-AC-3: listing a plot or a MULE (RULE-1)', () => {
 
     expect(state.listings).toEqual([
       expect.objectContaining({ seller: 'lena', item: plotAt(6, 4), minimum: 250, unsold: 'keep', storePays: 200 }),
-      expect.objectContaining({ seller: 'brix', item: muleAt(5, 3), minimum: 80, unsold: 'store', storePays: muleShare }),
+      expect.objectContaining({ seller: 'brix', item: { ...muleAt(5, 3), outfit: 'smithore' }, minimum: 80, unsold: 'store', storePays: muleShare }),
     ]);
     expect(new Set(state.listings.map((l) => l.id)).size).toBe(2);
   });

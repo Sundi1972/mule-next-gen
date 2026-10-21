@@ -192,9 +192,12 @@ describe('T-AC-2: resolution at the bell (RULE-5), money and MULEs conserved', (
     const capital = state.store.capital;
     const corral = state.store.mules;
     const before = totals(state);
+    const sold = { kind: 'mule', x: 5, y: 3, outfit: 'smithore' };
+    expect(state.listings[0]!.item).toEqual(sold);
 
     bell(state);
 
+    expect(live(state).lot!.item).toEqual(sold);
     expect(live(state).result).toEqual({ kind: 'store', price: pays });
     expect(money(state, 'brix')).toBe(1000 + pays);
     expect(state.store.capital).toBe(capital - pays);
@@ -208,10 +211,13 @@ describe('T-AC-2: resolution at the bell (RULE-5), money and MULEs conserved', (
     own(state, 5, 3, 'brix', 'smithore');
     auction(state, [['brix', mule(5, 3, 50)]]);
     const before = totals(state);
+    const sold = { kind: 'mule', x: 5, y: 3, outfit: 'smithore' };
+    expect(state.listings[0]!.item).toEqual(sold);
 
     walkTo(state, 'lena', 60);
     bell(state);
 
+    expect(live(state).lot!.item).toEqual(sold);
     expect(live(state).result).toEqual({ kind: 'sold', buyer: 'lena', price: 60 });
     expect(hand(state, 'lena')).toBe('smithore');
     expect(tileOf(state, 5, 3)).toMatchObject({ owner: 'brix', outfit: null, runMonths: 0 });
