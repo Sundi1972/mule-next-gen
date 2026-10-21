@@ -55,6 +55,7 @@ export class AiSeat {
       persona: AI_PERSONAS[options.persona],
       levelId: options.level,
       level: AI_LEVELS[options.level],
+      salt: (options.seed ^ 0x27d4eb2d) >>> 0,
     };
     this.rng = createRng(options.seed >>> 0);
     this.brain = new Brain(this.mind, PERSONAS[options.persona], options.name, options.seed, options.decider ?? null, options.onDecision);
