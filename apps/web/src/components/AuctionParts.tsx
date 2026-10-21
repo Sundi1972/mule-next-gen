@@ -163,7 +163,8 @@ export function LotCard({ view, lot, compact = false }: { view: MuleView; lot: L
 /** Who wins if the bell rang now, said from this phone's point of view. */
 export function leaderLine(view: MuleView, lot: LandAuctionView, meId: string): { text: string; tone: 'lead' | 'behind' | 'none' } {
   const mine = lot.walkers.find((w) => w.id === meId);
-  if (lot.lot.seller === meId) return { text: lot.leader ? `${sellerName(view, lot.leader.id)} bids ${lot.leader.bid}. Your plot sells at the bell.` : `No bid at your minimum yet.`, tone: 'none' };
+  const what = lot.lot.item.kind === 'mule' ? 'MULE' : 'plot';
+  if (lot.lot.seller === meId) return { text: lot.leader ? `${sellerName(view, lot.leader.id)} bids ${lot.leader.bid}. Your ${what} sells at the bell.` : `No bid at your minimum yet.`, tone: 'none' };
   if (!mine || mine.side === 'pass') return { text: mine && 'aside' in mine && mine.aside === 'mule' ? 'You already lead a MULE: install it first.' : `You can't pay the minimum of ${lot.lot.minimum}.`, tone: 'none' };
   if (!lot.leader) return { text: `Walk up past ${lot.lot.minimum} to bid.`, tone: 'behind' };
   if (lot.leader.id === meId) return { text: `You lead at ${lot.leader.bid}. It's yours at the bell.`, tone: 'lead' };
