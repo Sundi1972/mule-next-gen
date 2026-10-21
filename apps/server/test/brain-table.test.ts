@@ -339,6 +339,22 @@ describe('the brain at the table', () => {
     expect(land.lines.filter((l) => l.includes('Give all.'))).toHaveLength(shown === 'Zoë 🐸' ? 0 : 1);
   });
 
+  it.each([
+    { when: 'mid-game', toGameOver: false },
+    { when: 'after gameOver', toGameOver: true },
+  ])('INV-finish: a room disposed $when writes exactly one game line', async ({ toGameOver }) => {
+    const sdk = fakeSdk(() => reply('A', ''));
+    const t = table({ humans: ['Heiko'], ais: 2, brain: smart(sdk) });
+    expect(await t.runUntil(() => sdk.calls > 0)).toBe(true);
+    if (toGameOver) expect(await t.toGameOver()).toBe(true);
+    else expect(t.finished()).toBe(false);
+
+    t.room.dispose();
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(readLedger(path.join(dir, 'costs.jsonl')).filter((l) => l.type === 'game' && l.game === 'g-table')).toHaveLength(1);
+  });
+
   it('FM-api-error: with every model call failing and every say throwing, the game still reaches gameOver on top picks', async () => {
     const sdk = fakeSdk(() => {
       throw new Error('api down');
