@@ -1,0 +1,13 @@
+@import "tailwindcss";
+@import "@mule/ui/theme.css";
+@source "../../../packages/ui/src";
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}

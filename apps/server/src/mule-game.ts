@@ -395,6 +395,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
             sick: me.sick,
             needs: needsOf(state, me.id),
             devEndsAt: state.phase === 'development' ? (this.devEndsAt.get(me.id) ?? null) : null,
+            devSeconds: me.devSeconds,
+            produced: state.history.at(-1)?.produced[me.id] ?? null,
             mulePrice: mulePriceFor(state, me.id),
             outfitCosts: Object.fromEntries(outfits.map((o) => [o, outfitCostFor(state, me.id, o)])) as Record<Outfit, number>,
             droneOrder: me.droneOrder.map((i) => ({ x: i % state.width, y: Math.floor(i / state.width) })),

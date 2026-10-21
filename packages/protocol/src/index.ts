@@ -67,6 +67,10 @@ export interface MyView {
   needs: { food: number; water: number };
   /** Epoch ms when this player's development time runs out, during development. */
   devEndsAt: number | null;
+  /** Seconds of development time this player got this month, before analyses. */
+  devSeconds: number;
+  /** What this player's plots made in the latest production, or null before the first harvest. */
+  produced: Stock | null;
   /** What this player pays for a MULE and for each outfit. */
   mulePrice: number;
   outfitCosts: Record<Outfit, number>;

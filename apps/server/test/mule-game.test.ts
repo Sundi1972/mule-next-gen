@@ -110,4 +110,21 @@ describe('MuleGame', () => {
     }).toThrow('time is up');
     expect(game.viewFor('s1').phase).toBe('production');
   });
+
+  it('tells each player their development time and what their plots made', () => {
+    const { ctx, advance } = fakeContext();
+    const game = new MuleGame(ctx, 7);
+    game.start(seats);
+    expect(game.viewFor('s1').me!.produced).toBeNull();
+    advance(PHASE_MS.planning);
+    while (game.viewFor('s1').phase === 'landGrant') advance(GRANT_TICK_MS);
+    const dev = game.viewFor('s1').me!;
+    expect(dev.devSeconds).toBeGreaterThan(0);
+    expect(dev.devEndsAt! - ctx.now()).toBe(dev.devSeconds * 1_000);
+    while (game.viewFor('s1').phase === 'development') advance(1_000);
+    expect(game.viewFor('s1').phase).toBe('production');
+    const produced = game.viewFor('s1').me!.produced;
+    expect(produced).not.toBeNull();
+    expect(produced!.food).toBeGreaterThanOrEqual(0);
+  });
 });

@@ -10,21 +10,26 @@ export function AuctionSlider({ value, min, max, storeBuys, storeSells, side, on
   value: number;
   min: number;
   max: number;
-  storeBuys: number;
-  storeSells: number;
+  /** Null when the store isn't buying. */
+  storeBuys: number | null;
+  /** Null when the store is sold out. */
+  storeSells: number | null;
   side: 'buy' | 'sell';
   onChange(value: number): void;
   className?: string;
 }) {
   const pct = (v: number) => ((v - min) / (max - min)) * 100;
+  // Only the store prices it quotes, and only where they fit on the track.
+  const marks = (list: { v: number | null; label: string; tone: string }[]) =>
+    list.filter((m): m is { v: number; label: string; tone: string } => m.v !== null && m.v >= min && m.v <= max);
   return (
     <div className={cx('relative flex h-full min-h-64 w-full select-none', className)}>
       <div className="relative mx-auto h-full w-24 overflow-hidden rounded-panel border border-holo-line bg-void">
         <div className="absolute inset-x-0 bottom-0 bg-holo-soft transition-[height]" style={{ height: `${pct(value)}%` }} />
-        {[
+        {marks([
           { v: storeSells, label: 'Store sells', tone: 'text-rise border-rise' },
           { v: storeBuys, label: 'Store buys', tone: 'text-fall border-fall' },
-        ].map((m) => (
+        ]).map((m) => (
           <div key={m.label} className={cx('absolute inset-x-0 border-t border-dashed', m.tone)} style={{ bottom: `${pct(m.v)}%` }} />
         ))}
         <div
@@ -35,10 +40,10 @@ export function AuctionSlider({ value, min, max, storeBuys, storeSells, side, on
         </div>
       </div>
       <div className="pointer-events-none absolute inset-y-0 left-0 w-[calc(50%-56px)]">
-        {[
+        {marks([
           { v: storeSells, label: `Store sells ${storeSells}`, tone: 'text-rise' },
           { v: storeBuys, label: `Store buys ${storeBuys}`, tone: 'text-fall' },
-        ].map((m) => (
+        ]).map((m) => (
           <span key={m.label} data-num className={cx('absolute right-2 translate-y-1/2 whitespace-nowrap font-mono text-xs font-bold', m.tone)} style={{ bottom: `${pct(m.v)}%` }}>
             {m.label}
           </span>
