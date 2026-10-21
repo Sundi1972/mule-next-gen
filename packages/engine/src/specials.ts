@@ -1,6 +1,7 @@
 import { MAP, sizeBand } from './config.js';
 import { neighbours } from './grid.js';
 import type { GameMap } from './map-rules.js';
+import type { FitLine } from './production.js';
 import { createRng, type Rng } from './rng.js';
 import type { GameState, ProductionLine, RawGood, SpecialField, SpecialKind, Terrain, Tile } from './types.js';
 
@@ -123,7 +124,7 @@ const EFFECT = MAP.specialEffect;
 
 /**
  * What special fields add to a raw plot making `good`: its own field's bonus,
- * plus one per relic beside it. Production counts it before adjacency.
+ * plus MAP.specialEffect.relic per touching relic. Production counts it before adjacency.
  */
 export function specialBonus(state: GameState, tile: Tile, good: RawGood): number {
   return ownBonus(tile.special?.kind, good) + relicBonus(state, tile);
@@ -136,11 +137,25 @@ function ownBonus(kind: SpecialKind | undefined, good: RawGood): number {
   return 0;
 }
 
-/** What the relics among a plot's 4 neighbours add to any working plot there, whoever owns them. */
-export function relicBonus(state: GameState, tile: Tile): number {
-  return neighbours(state.tiles, state.width, tile).filter((n) => n.special?.kind === 'relic').length * EFFECT.relic;
+/** The relics among a plot's 4 neighbours, whoever owns them; a relic on the plot itself is not one of them. */
+function relicsTouching(state: GameState, tile: Tile): number {
+  return neighbours(state.tiles, state.width, tile).filter((n) => n.special?.kind === 'relic').length;
 }
 
+/** What touching relics add to any working plot. */
+export function relicBonus(state: GameState, tile: Tile): number {
+  return relicsTouching(state, tile) * EFFECT.relic;
+}
+
+/** A factory's relic bonus and the line the phone lists for it, counting the relics; null when none touches the plot. */
+export function relicFit(state: GameState, tile: Tile): { bonus: number; line: FitLine } | null {
+  const relics = relicsTouching(state, tile);
+  if (relics === 0) return null;
+  const bonus = relicBonus(state, tile);
+  return { bonus, line: { tone: 'good', text: `Next to ${relics === 1 ? 'an alien relic' : `${relics} alien relics`}: +${bonus}` } };
+}
+
+// A what-if copy pays salvage, which is certain, so an AI's look-ahead sees it; collapse needs the real seed, so it imagines none.
 /**
  * The month's change to special fields, once production has run: ruins with
  * an owner pay their salvage into the owner's stock and become a plain plot;
