@@ -1,6 +1,7 @@
 import {
   airBand,
   airPoints,
+  crewOf,
   DEVELOPMENT,
   factoryFit,
   GOOD_CONFIG,
@@ -125,17 +126,30 @@ export function installGain(obs: GameState, o: Outlook, tile: Tile, outfit: Outf
   return { gain: running - cost + residual, cost, net, y };
 }
 
-/** True when the factory could run: every input other than Energy comes from the seat's own plots or sits in its stock for a few runs. */
+/**
+ * True when the factory could run: every input other than Energy comes from
+ * the seat's own plots, or its stock lasts STRATEGIST.factoryInputMonths
+ * months of runs while the household, the new factory's crew included, eats
+ * and drinks from the same stock and what is left spoils between months.
+ */
 export function canFeed(obs: GameState, me: string, outfit: Outfit): boolean {
   if (!isFactory(outfit)) return true;
   const p = obs.players.find((q) => q.id === me)!;
-  const needs = needsOf(obs, me);
-  return (Object.entries(RECIPES[outfit].inputs) as [Good, number][]).every(
-    ([g, q]) =>
-      g === 'energy' ||
-      obs.tiles.some((t) => t.owner === me && t.outfit === g) ||
-      p.stock[g] - (g === 'food' || g === 'water' ? needs[g] : 0) >= q * STRATEGIST.factoryInputMonths,
-  );
+  const crew = crewOf(obs, me) + UPKEEP.crew.factory;
+  const household: Partial<Stock> = {
+    food: UPKEEP.baseFood + Math.ceil(crew / UPKEEP.crewPerFood),
+    water: UPKEEP.baseWater + Math.ceil(crew / UPKEEP.crewPerWater),
+  };
+  return (Object.entries(RECIPES[outfit].inputs) as [Good, number][]).every(([g, q]) => {
+    if (g === 'energy' || obs.tiles.some((t) => t.owner === me && t.outfit === g)) return true;
+    let carry = p.stock[g];
+    for (let m = 0; m < STRATEGIST.factoryInputMonths; m++) {
+      carry -= (household[g] ?? 0) + q;
+      if (carry < 0) return false;
+      carry = Math.floor(carry * (1 - GOOD_CONFIG[g].spoilage));
+    }
+    return true;
+  });
 }
 
 /** What a second of development time is worth to the seat: the pub's rate at least, more while it has land to develop. */
