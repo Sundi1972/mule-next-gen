@@ -186,12 +186,12 @@ export default function App() {
           Month 4, an election month. Everything the month allows sits in “This month” and in the desks; SOON marks what WS7 builds; the lock marks what only you see. Laptop (1440 × 900), then the phone held sideways.
         </p>
         <LaptopFrame>
-          <Game>
+          <Game view={{ ...VIEW, month: 4 }}>
             <PlanningHub key={`${hash}-l`} desk={hub.desk} office={hub.office} {...(hub.election ? { election: hub.election } : {})} />
           </Game>
         </LaptopFrame>
         <PhoneFrame>
-          <Game>
+          <Game view={{ ...VIEW, month: 4 }}>
             <PlanningHub key={`${hash}-p`} desk={hub.desk} office={hub.office} {...(hub.election ? { election: hub.election } : {})} />
           </Game>
         </PhoneFrame>
