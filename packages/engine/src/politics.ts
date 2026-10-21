@@ -93,15 +93,21 @@ function contested(election: Election, office: Office): boolean {
 
 /** RULE-2 rows 1-2 for each office: true, or why the player may not run now. Running for the other office is no refusal. */
 export function canRun(state: GameState, id: string): Record<Office, CanRun> {
-  throw new Error('NotImplemented: canRun');
+  player(state, id);
+  const politics = state.politics;
+  if (state.phase !== 'planning' || politics?.election?.stage !== 'nominate') return { governor: 'closed', sheriff: 'closed' };
+  const run = politics.governorRun;
+  const termLimit = run?.id === id && run.terms >= POLITICS.governorTermsInRow;
+  return { governor: termLimit ? 'termLimit' : true, sheriff: true };
 }
+
+const REFUSAL = { closed: 'Candidates are closed', termLimit: 'Two Governor terms in a row' } as const;
 
 /** RULE-2: runs for an office, moving any candidacy for the other one; null withdraws. Only in nominate. */
 export function runFor(state: GameState, id: string, office: Office | null): void {
   const election = liveElection(state, id);
-  if (election.stage !== 'nominate') throw new RuleError('Candidates are closed');
-  const run = state.politics!.governorRun;
-  if (office === 'governor' && run?.id === id && run.terms >= POLITICS.governorTermsInRow) throw new RuleError('Two Governor terms in a row');
+  const why = office === null ? (election.stage === 'nominate' ? true : 'closed') : canRun(state, id)[office];
+  if (why !== true) throw new RuleError(REFUSAL[why]);
   if (office && election.candidates[office].includes(id)) return;
   const { candidates } = edit(state).election!;
   for (const o of OFFICES) candidates[o] = candidates[o].filter((c) => c !== id);
