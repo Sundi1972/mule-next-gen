@@ -120,7 +120,7 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, visitors = 
       </div>
       <div className="absolute inset-x-1.5 bottom-1.5 grid h-[36%] grid-cols-12 gap-1.5" data-testid="row-services">
         <Door side="L" onTap={onDoor} tv={tv} />
-        <Booth testid="booth-works" className="col-span-3 px-1" disabled={!FACTORY_GOODS.some(usable)}>
+        <Booth testid="booth-works" className="col-span-4 px-1" disabled={!FACTORY_GOODS.some(usable)}>
           <span className={cx('label-caps', tv ? 'text-xs!' : 'text-[8px]!')}>Works · factory fits</span>
           <span className="grid w-full grid-cols-3 gap-1">
             {FACTORY_GOODS.map((g) => (
@@ -142,7 +142,7 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, visitors = 
             ))}
           </span>
         </Booth>
-        <Booth shop="greenBelt" testid="booth-greenBelt" onTap={tap('greenBelt')} disabled={!usable('greenBelt')} className="col-span-2" style={{ borderBottom: '4px solid var(--color-ok)' }}>
+        <Booth shop="greenBelt" testid="booth-greenBelt" onTap={tap('greenBelt')} disabled={!usable('greenBelt')} className="col-span-1 px-0.5" style={{ borderBottom: '4px solid var(--color-ok)' }}>
           <span className={cx('font-semibold leading-tight', label)}>Green belt</span>
           <span data-num className={price}>
             {cost('greenBelt')}

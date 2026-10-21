@@ -26,6 +26,7 @@ export function Develop() {
   const seconds = me.devEndsAt === null ? 0 : Math.max(0, (me.devEndsAt - now) / 1000);
   const carry = me.carriedMule;
   const [place, setPlace] = useState<'store' | 'map'>('store');
+  const [cardDismissed, setCardDismissed] = useState(false);
   const [selected, setSelected] = useState<{ x: number; y: number } | null>(null);
   const tile = selected ? tileAt(view, selected.x, selected.y) : undefined;
   const outfitted = carry !== null && carry !== 'empty';
@@ -46,9 +47,10 @@ export function Develop() {
 
   const step = carry === null ? 1 : carry === 'empty' ? 2 : 3;
   const elapsed = Math.max(0, me.devSeconds - seconds);
-  const filling = elapsed < FILL_CARD_SECONDS;
-  const open: Shop[] = filling ? [] : carry === null ? ['corral', 'pub'] : carry === 'empty' ? [...OUTFIT_GOODS, ...FACTORY_GOODS, 'greenBelt', 'pub'] : ['pub'];
+  const filling = elapsed < FILL_CARD_SECONDS && !cardDismissed;
+  const open: Shop[] = carry === null ? ['corral', 'pub'] : carry === 'empty' ? [...OUTFIT_GOODS, ...FACTORY_GOODS, 'greenBelt', 'pub'] : ['pub'];
   const onShop = (shop: Shop) => {
+    setCardDismissed(true);
     if (shop === 'pub') client.intent({ type: 'pub' });
     else if (shop === 'corral') client.intent({ type: 'buyMule' });
     else client.intent({ type: 'outfit', outfit: shop });
@@ -204,7 +206,10 @@ export function Develop() {
             pubPayout={pubPayout}
             open={open}
             onShop={onShop}
-            onDoor={() => setPlace('map')}
+            onDoor={() => {
+              setCardDismissed(true);
+              setPlace('map');
+            }}
             me={{ id: me.id, slot, leading: carry, time: seconds / DEVELOPMENT.fullSeconds }}
             overlay={filling && <FillCard elapsed={elapsed} seconds={me.devSeconds} hungry={me.hungry} ate={Math.min(me.stock.food, me.needs.food)} need={me.needs.food} />}
           />
@@ -226,11 +231,12 @@ export function Develop() {
 }
 
 /** The start of the turn: you eat, and your time bar fills to what the Food bought, short and orange when hungry. */
-function FillCard({ elapsed, seconds, hungry, ate, need }: { elapsed: number; seconds: number; hungry: boolean; ate: number; need: number }) {
+export function FillCard({ elapsed, seconds, hungry, ate, need }: { elapsed: number; seconds: number; hungry: boolean; ate: number; need: number }) {
   const full = DEVELOPMENT.fullSeconds;
   const share = Math.min(1, elapsed / FILL_RISE_SECONDS) * Math.min(1, seconds / full);
   return (
-    <div className="absolute inset-0 flex items-center justify-center bg-void/55" data-testid="fill-card">
+    // Taps go through to the rooms underneath: the clock is already running.
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-void/55" data-testid="fill-card">
       <div className="flex w-[64%] flex-col gap-1.5 rounded-panel border-2 border-holo bg-panel p-3 shadow-glow">
         <span className="label-caps">Start of your turn</span>
         <span className="font-display text-lg font-semibold leading-tight">
