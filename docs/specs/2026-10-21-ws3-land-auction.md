@@ -225,9 +225,8 @@ senior       junior would: reuse AuctionHand with a fake good. · senior does: a
              reuses AuctionHand's reaction-time and jitter idea and the level's reactMs.
 mechanism    sprout
 call sites   mule-game.ts (C7); packages/ai/src/play.ts (C15, the sim)
-reuse check  plotValue/muleValue don't exist yet (WS1 confirmed 2026-10-21) → stubs in lot.ts:
-             plot = GAME.plotScore + mulePrice if it has a MULE; MULE = mulePrice. Replaced by
-             WS1's exports, same signatures.
+reuse check  WS1's plotValue(obs, mind, index) and muleValue(obs, mind) are exported from
+             packages/ai/src/strategist.ts (PR #17); lot.ts imports them, with no stubs.
 depends_on   C3 (data); WS1 plotValue/muleValue (contract, stubbable); WS1 cashReserve (exists)
 ```
 
