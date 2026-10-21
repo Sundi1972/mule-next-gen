@@ -1,5 +1,6 @@
 /**
  * T-AC-1: a phone plays a whole two-month game, lobby to final scores, against the real server.
+ * On the way it proves B-AC-1 (the species you pick is the one you play) and B-AC-4 (the room card with no TV).
  * Run with `pnpm --filter @mule/web e2e`; replay a red run's map with `MULE_E2E_SEED=<seed>`.
  */
 import { existsSync } from 'node:fs';
