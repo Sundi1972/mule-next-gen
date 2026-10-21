@@ -145,7 +145,9 @@ function IntroLine({ view, lot, meId }: { view: LotsView; lot: LandAuctionView; 
           : `You can't pay the minimum of ${lot.lot.minimum}: you sit this one out.`;
   return (
     <div className="rounded-control border border-holo bg-holo-soft px-2.5 py-1.5 text-xs leading-snug text-ink" data-testid="intro-line">
-      <span className="label-caps block text-holo">Lot {lot.number} of {lot.count} · {sellerName(view, lot.lot.seller)} sells</span>
+      <span className="label-caps block text-holo">
+        Lot {lot.number} of {lot.count} · {lot.lot.seller === 'colony' ? 'The colony sells free land' : `${sellerName(view, lot.lot.seller)} sells`}
+      </span>
       {text}
     </div>
   );
@@ -168,7 +170,9 @@ function ResultBanner({ view, lot, meId }: { view: LotsView; lot: LandAuctionVie
         ? seller
           ? `Nobody bid ${lot.lot.minimum}. You get ${r.price} cr.`
           : `Nobody bid ${lot.lot.minimum}. The store paid ${r.price} cr${lot.lot.item.kind === 'plot' ? ' and the plot is free land again' : ''}.`
-        : `Nobody bid ${lot.lot.minimum}. ${seller ? 'You keep it.' : `${sellerName(view, lot.lot.seller)} keeps it.`}`;
+        : lot.lot.seller === 'colony'
+          ? `Nobody bid ${lot.lot.minimum}. It stays free land.`
+          : `Nobody bid ${lot.lot.minimum}. ${seller ? 'You keep it.' : `${sellerName(view, lot.lot.seller)} keeps it.`}`;
   const good = r.kind === 'sold' && (r.buyer === meId || seller);
   return (
     <div

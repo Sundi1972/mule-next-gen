@@ -29,7 +29,8 @@ export function TvLandAuction({ lot }: { lot: LandAuctionView }) {
             <TvLotCard view={view} lot={lot} big />
             <TimeBar size="tv" seconds={lot.seconds} total={lot.total} />
             <p className="font-display text-2xl leading-snug text-ink-2" data-testid="tv-intro-line">
-              Bidding starts in {Math.ceil(lot.seconds)} s. Everyone but {sellerName(view, lot.lot.seller)} can bid: hold Up on your phone.
+              Bidding starts in {Math.ceil(lot.seconds)} s.{' '}
+              {lot.lot.seller === 'colony' ? 'The colony is selling a free plot. Everyone can bid' : `Everyone but ${sellerName(view, lot.lot.seller)} can bid`}: hold Up on your phone.
             </p>
           </div>
         </div>
@@ -88,7 +89,8 @@ function TvLotCard({ view, lot, big = false }: { view: LotsView; lot: LandAuctio
   return (
     <div className={cx('flex flex-col gap-1 rounded-panel border-2 border-holo bg-holo-soft shadow-glow', big ? 'p-5' : 'p-4')} data-testid="tv-lot">
       <span className="label-caps flex items-center gap-2 text-base!">
-        {lot.lot.item.kind === 'mule' ? 'MULE for sale' : 'Plot for sale'} · {seller !== null && <PlayerMark slot={seller as Slot} size={16} />} {sellerName(view, lot.lot.seller)}
+        {lot.lot.item.kind === 'mule' ? 'MULE for sale' : 'Plot for sale'} · {seller !== null && <PlayerMark slot={seller as Slot} size={16} />}{' '}
+        {lot.lot.seller === 'colony' ? 'The colony · free land' : sellerName(view, lot.lot.seller)}
       </span>
       <span className={cx('flex items-center gap-2 font-display font-semibold leading-tight', big ? 'text-4xl' : 'text-2xl')}>
         {lot.lot.item.kind === 'mule' && <MuleIcon size={big ? 40 : 28} className="text-holo" />}
@@ -131,7 +133,13 @@ function TvResult({ view, lot }: { view: LotsView; lot: LandAuctionView }) {
     <div className="flex flex-col gap-1 rounded-panel border-2 border-ok bg-holo-soft p-4 shadow-glow" data-testid="tv-result" data-kind={r.kind}>
       <span className="label-caps text-base!">{r.kind === 'sold' ? 'Sold' : 'Unsold'}</span>
       <span className="font-display text-4xl font-bold leading-tight text-ok">
-        {r.kind === 'sold' ? `${sellerName(view, r.buyer)} · ${r.price}` : r.kind === 'store' ? `Store pays ${r.price}` : `${sellerName(view, lot.lot.seller)} keeps it`}
+        {r.kind === 'sold'
+          ? `${sellerName(view, r.buyer)} · ${r.price}`
+          : r.kind === 'store'
+            ? `Store pays ${r.price}`
+            : lot.lot.seller === 'colony'
+              ? 'Stays free land'
+              : `${sellerName(view, lot.lot.seller)} keeps it`}
       </span>
     </div>
   );

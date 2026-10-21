@@ -77,6 +77,20 @@ export const WALK: LandAuctionView = {
   leader: { id: 'ossa', bid: 310 }, result: null, next: [LISTINGS[2]!],
 };
 
+/** A colony plot: one free plot the colony put up after the land grant. It always comes up first. */
+export const COLONY_LOT: ListingView = { id: 'c1', seller: 'colony', item: { kind: 'plot', x: 8, y: 4 }, minimum: 200, unsold: 'keep', storePays: 200 };
+export const COLONY_INTRO: LandAuctionView = {
+  ...WALK, lot: COLONY_LOT, stage: 'intro', seconds: 3, total: 3, number: 1, count: 3, leader: null, lo: 140, hi: 400,
+  walkers: [
+    { id: 'lena', side: 'buyer', price: 140, at: 140, dir: 0, done: false },
+    { id: 'ossa', side: 'buyer', price: 140, at: 140, dir: 0, done: false },
+    { id: 'brix', side: 'buyer', price: 140, at: 140, dir: 0, done: false },
+    { id: 'kai', side: 'buyer', price: 140, at: 140, dir: 0, done: false },
+  ],
+  next: [LISTINGS[1]!, LISTINGS[2]!],
+};
+export const COLONY_KEPT: LandAuctionView = { ...COLONY_INTRO, stage: 'result', seconds: 2.5, total: 2.5, result: { kind: 'kept' } };
+
 /** The same lot in its intro: the plot lit on the map, bidding about to start. */
 export const INTRO: LandAuctionView = {
   ...WALK, stage: 'intro', seconds: 3, total: 3, leader: null,

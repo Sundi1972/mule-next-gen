@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { INTRO, KEPT, LISTINGS, SOLD, STORE, VIEW, WALK, WON } from './fixture';
+import { COLONY_INTRO, COLONY_KEPT, INTRO, KEPT, LISTINGS, SOLD, STORE, VIEW, WALK, WON } from './fixture';
 import { Game, PhoneFrame, TvFrame, useLotFlow } from './harness';
 import type { LandAuctionView, LotsView } from './proto';
 import { PhoneLandAuction } from './screens/PhoneLandAuction';
@@ -45,6 +45,8 @@ const PHONE_STATES: { id: string; title: string; lot: LandAuctionView; seat?: st
   { id: 'seller-walk', title: "Seller's view · walk", lot: WALK, seat: 'brix' },
   { id: 'seller-sold', title: "Seller's view · sold", lot: SOLD, seat: 'brix' },
   { id: 'aside', title: "Can't pay the minimum (Kai)", lot: WALK, seat: 'kai' },
+  { id: 'colony-intro', title: 'Colony plot · intro', lot: COLONY_INTRO },
+  { id: 'colony-kept', title: 'Colony plot · nobody bid', lot: COLONY_KEPT },
 ];
 
 const TV_STATES = [
@@ -52,6 +54,8 @@ const TV_STATES = [
   { id: 'tv-walk', title: 'Walk', lot: WALK },
   { id: 'tv-sold', title: 'Sold', lot: SOLD },
   { id: 'tv-kept', title: 'Unsold', lot: KEPT },
+  { id: 'tv-colony-intro', title: 'Colony plot · intro', lot: COLONY_INTRO },
+  { id: 'tv-colony-kept', title: 'Colony plot · nobody bid', lot: COLONY_KEPT },
 ];
 
 /** The whole lot, playable: intro, then hold Up or Down (or drag on the board), then the result. */

@@ -12,6 +12,12 @@ export function sellerName(view: LotsView, id: string): string {
   return id === 'colony' ? 'The colony' : (view.players.find((p) => p.id === id)?.name ?? id);
 }
 
+/** What happens if nobody bids the minimum. A colony plot nobody buys stays free land. */
+export function unsoldText(lot: ListingView): string {
+  if (lot.seller === 'colony') return 'Stays free land';
+  return lot.unsold === 'store' ? `Store pays ${lot.storePays}` : 'Seller keeps it';
+}
+
 /** What stands on the lot: "Energy MULE", "no MULE", or for a MULE lot the MULE itself. */
 export function lotWhat(view: LotsView, lot: ListingView): string {
   if (lot.item.kind === 'mule') return `${lot.item.outfit === 'greenBelt' ? 'Green belt' : GOOD_NAME[lot.item.outfit]} MULE`;
@@ -58,7 +64,7 @@ export function LotCard({ view, lot, compact = false }: { view: LotsView; lot: L
         </span>
         <span className="flex flex-col" data-testid="lot-unsold">
           IF UNSOLD
-          <strong className="text-sm text-ink-2">{lot.unsold === 'store' ? `Store pays ${lot.storePays}` : 'Seller keeps it'}</strong>
+          <strong className="text-sm text-ink-2">{unsoldText(lot)}</strong>
         </span>
       </div>
     </div>
