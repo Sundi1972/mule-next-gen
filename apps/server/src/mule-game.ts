@@ -91,14 +91,21 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /** The AI players: strategist, decider and hands, keyed by seat id. */
   private readonly ai = new Map<string, AiSeat>();
 
+  /** Real time per unit of game time: 1 is real time, 0.1 ten times faster. Test-only. */
+  private readonly phaseScale: number;
+
   constructor(
     private readonly ctx: GameContext,
     private readonly seed: number,
-  ) {}
+    private readonly options: { maxMonths?: number; phaseScale?: number } = {},
+  ) {
+    this.phaseScale = options.phaseScale ?? 1;
+    if (!(this.phaseScale > 0 && this.phaseScale <= 1)) throw new RangeError(`phaseScale must be in (0, 1], got ${this.phaseScale}`);
+  }
 
   start(seats: SeatInfo[]): void {
     this.seats = seats.map((s, i) => ({ ...s, color: PLAYER_COLORS[i % PLAYER_COLORS.length]! }));
-    this.state = createGame({ seed: this.seed, players: seats.map(({ id, name, isAi }) => ({ id, name, isAi })) });
+    this.state = createGame({ seed: this.seed, players: seats.map(({ id, name, isAi }) => ({ id, name, isAi })), maxMonths: this.options.maxMonths });
     this.ai.clear();
     seats.forEach((s, i) => {
       if (!s.isAi) return;
@@ -249,7 +256,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       return;
     }
 
-    const ms = PHASE_MS[state.phase];
+    const ms = PHASE_MS[state.phase] * this.phaseScale;
     this.phaseEndsAt = this.ctx.now() + ms;
     this.cancels.push(
       this.ctx.schedule(ms, () => {
@@ -316,9 +323,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const now = this.ctx.now();
     this.devEndsAt.clear();
     for (const p of state.players) {
-      this.devEndsAt.set(p.id, now + p.devSeconds * 1_000);
+      this.devEndsAt.set(p.id, now + p.devSeconds * 1_000 * this.phaseScale);
       // Check when this player's time runs out, so the phase ends as soon as everyone's has.
-      this.cancels.push(this.ctx.schedule(p.devSeconds * 1_000 + 1, () => {
+      this.cancels.push(this.ctx.schedule(p.devSeconds * 1_000 * this.phaseScale + 1, () => {
         this.checkDevelopmentOver();
         this.ctx.changed();
       }));
@@ -344,7 +351,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           const left = ((this.devEndsAt.get(seat.id) ?? now) - now) / 1_000;
           if (p.doneDeveloping || left <= 0) continue;
           seat.developTick(state, dt, left, (a) => this.aiAct(seat.id, a));
-          if (state.phase !== 'development') return;
+          if (state.phase !== 'development') break;
         }
         this.checkDevelopmentOver();
         if (state.phase === 'development') this.scheduleAiDevelop(month, now);
@@ -394,7 +401,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         if (state.phase !== 'auction' || !state.auction) return;
         const now = this.ctx.now();
         // A stalled server loop must not teleport walkers across the board.
-        const dt = Math.min(Math.max(0, now - last), WALK.tickMs * 3);
+        const dt = Math.min(Math.max(0, now - last), WALK.tickMs * 3) / this.phaseScale;
         const good = state.auction.good;
         for (const seat of this.seats) {
           try {
