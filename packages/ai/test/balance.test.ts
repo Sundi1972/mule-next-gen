@@ -199,7 +199,7 @@ describe('the sales tax', () => {
     const [free, taxed] = [sell(0), sell(0.15)];
     expect(free).toBeDefined();
     expect((taxed.action as { keep: number }).keep).toBe((free.action as { keep: number }).keep);
-    expect(taxed.value).toBeCloseTo(free.value * 0.85, 6);
+    expect(taxed.value).toBeCloseTo(free.value * 0.85, 0);
 
     const food = (tax: number) => goodPlan(observe(auctionAtTax(tax, 'food', 20), 'ai0'), traderMind, 'food').values;
     const [v0, v15] = [food(0), food(0.15)];

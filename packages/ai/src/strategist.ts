@@ -21,7 +21,7 @@ import {
 } from '@mule/engine';
 import { outlook, type Outlook } from './outlook.js';
 import { candidate, consider, curve, shortlist, type Candidate, type Shortlist } from './utility.js';
-import { canFeed, cashReserve, installGain, unitValues, yieldOf, type Mind, type UnitValues } from './value.js';
+import { afterTax, canFeed, cashReserve, installGain, unitValues, yieldOf, type Mind, type UnitValues } from './value.js';
 
 /**
  * The strategist: for each of the month's decisions it lists the options,
@@ -351,7 +351,7 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
   // month's own needs is worth no more than the store pays now: a hungry colony shrinks, and a unit
   // held for next month's price stays out of reach of the people who need it.
   if ((good === 'food' || good === 'water') && obs.store.stock[good] < obs.colonists / UPKEEP.colonistsPerUnit) {
-    const now = expectedPrices(obs, good).sell;
+    const now = afterTax(obs, expectedPrices(obs, good).sell);
     for (let k = values.block; k < values.keep.length; k++) values.keep[k] = Math.min(values.keep[k]!, now - 1);
   }
   const reserve = cashReserve(obs, mind);
@@ -408,15 +408,16 @@ export function tradeDecision(obs: GameState, mind: Mind, plan: GoodPlan): Short
     consider('Sure thing', sure, mind.persona.risk, sureWhy),
   ];
 
-  // Sell: down to the units worth more to it than the sale.
+  // Sell: down to the units worth more to it than what the sale leaves after tax.
+  const kept = afterTax(obs, sell);
   let keepAt = h;
-  while (keepAt > 0 && (v.keep[keepAt - 1] ?? 0) < sell) keepAt--;
+  while (keepAt > 0 && (v.keep[keepAt - 1] ?? 0) < kept) keepAt--;
   const sellTo = (keep: number, label: string, key: string) => {
     let gain = 0;
-    for (let k = keep; k < h; k++) gain += sell - (v.keep[k] ?? 0);
+    for (let k = keep; k < h; k++) gain += kept - (v.keep[k] ?? 0);
     const veto = keep < v.floorUnits ? `it needs ${v.floorUnits} ${GOOD_NAME[good]} itself` : null;
     cands.push(
-      candidate<TradeAction>(key, label, { side: 'seller', keep }, gain, gainCons(gain, p.money + (h - keep) * sell, 0.9, `sells ${h - keep} at about ${sell}, worth ${cr(gain)} more than keeping them`, 'the store or the ship will take them'), veto),
+      candidate<TradeAction>(key, label, { side: 'seller', keep }, gain, gainCons(gain, p.money + (h - keep) * kept, 0.9,`sells ${h - keep} at about ${sell}, worth ${cr(gain)} more than keeping them`, 'the store or the ship will take them'), veto),
     );
   };
   if (keepAt < h) {
