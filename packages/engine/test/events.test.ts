@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   advancePhase,
   buildEvent,
+  cloneForSim,
   createGame,
   createRng,
   EVENTS,
@@ -195,5 +196,18 @@ describe('events in production', () => {
         expect([key, seen > 0]).toEqual([key, true]);
       });
     }
+  });
+});
+
+describe('what-if copies', () => {
+  it('T-AC-2: no event is ever rolled on a what-if copy of the game', () => {
+    withEvents({ chance: 1 }, () => {
+      for (let seed = 1; seed <= 10; seed++) {
+        const state = colonyForEvents(seed);
+        state.month = 3;
+        expect(planEvent(state)).not.toBeNull();
+        expect(planEvent(cloneForSim(state))).toBeNull();
+      }
+    });
   });
 });
