@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -25,11 +25,11 @@ export type AuctionSteps = {
 /**
  * The real game server, serving the built client from apps/web/dist on a free
  * port. Options (a short game, faster phases) go straight to the server.
+ * Always Classic: clears the model key and points the brain ledger at a temp file.
  */
 export async function startServer(options: Omit<NonNullable<Parameters<typeof createMuleServer>[0]>, 'staticDir'> = {}): Promise<{ server: MuleServer; base: string }> {
-  // A developer's e2e run must never pay for model calls or write to the real cost ledger.
   delete process.env.ANTHROPIC_API_KEY;
-  process.env.MULE_BRAIN_LOG = join(mkdtempSync(join(tmpdir(), 'mule-e2e-brain-')), 'brain-costs.jsonl');
+  process.env.MULE_BRAIN_LOG = join(tmpdir(), 'mule-e2e-brain-costs.jsonl');
   const staticDir = fileURLToPath(new URL('../dist', import.meta.url));
   const server = createMuleServer({ ...options, staticDir });
   await new Promise<void>((r) => server.server.listen(0, '127.0.0.1', r));

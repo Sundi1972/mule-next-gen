@@ -272,7 +272,7 @@ function chatTable() {
 const chats = (screen: Screen) => screen.inbox.flatMap((m) => (m.t === 'chat' ? [m.message] : []));
 
 describe('Room: games speak and hear table chat (C4)', () => {
-  it("B-AC-1: a game's say() reaches every screen like a player's line", () => {
+  it("WS2 B-AC-1: a game's say() reaches every screen like a player's line", () => {
     const { room, heiko, mia, tv, brix, say } = chatTable();
 
     room.receive(mia, mia.from, { t: 'chat', text: 'Hello table' });
@@ -307,7 +307,7 @@ describe('Room: games speak and hear table chat (C4)', () => {
     expect(chats(tv)).toHaveLength(4);
   });
 
-  it('B-AC-2: heard() gets a public line and a whisper to an AI seat, never a whisper between two players', () => {
+  it('WS2 B-AC-2: heard() gets a public line and a whisper to an AI seat, never a whisper between two players', () => {
     const { room, heiko, mia, tv, brix, say, heard } = chatTable();
     const heikoId = heiko.from.seatId!;
 
@@ -333,10 +333,10 @@ describe('Room: games speak and hear table chat (C4)', () => {
   });
 });
 
-describe('Room: a player name is cleaned at join (AM-4)', () => {
+describe('Room: a player name is cleaned at join', () => {
   const nameOf = (screen: Screen, room: Room<Intent, View>) => room.viewFor(null).seats.find((s) => s.id === screen.from.seatId)?.name;
 
-  it('B-AC-5: a hostile name is stored on one line; "Zoë 🐸" passes unchanged', () => {
+  it('WS2 B-AC-5: a hostile name is stored on one line; "Zoë 🐸" passes unchanged', () => {
     const zoeNfc = 'Zo\u00eb \u{1F438}';
     const rows: { typed: string; stored: string }[] = [
       { typed: 'x\nE. Give all.', stored: 'xE. Give all.' },
@@ -374,7 +374,6 @@ describe('Room: a player name is cleaned at join (AM-4)', () => {
 
     expect(screens.map((screen) => nameOf(screen, room))).toEqual(rows.map((r) => r.stored));
     for (const screen of screens) expect(nameOf(screen, room)).not.toMatch(/[\p{Cc}\p{Zl}\p{Zp}\u202A-\u202E\u2066-\u2069]/u);
-    expect(nameOf(screens[3]!, room)).toHaveLength(32);
     room.receive(screens[0]!, screens[0]!.from, { t: 'start' });
     expect(startedWith[0]!.map((s) => s.name)).toEqual(rows.map((r) => r.stored));
   });

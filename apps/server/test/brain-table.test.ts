@@ -15,10 +15,20 @@ const sdkModule = vi.hoisted((): SdkModuleFake => ({ built: [], create: null }))
 vi.mock('@anthropic-ai/sdk', async (original) => (await import('./brain-fakes.js')).fakeSdkModule(original, sdkModule));
 
 const CODE = 'TABLE';
+/**
+ * The game seed every table here plays. The tests rely on what happens at it:
+ * - The Baron (`ais[1]`) is asked for land in month 1, and The Accountant is not.
+ * - Both AIs' next decision after start is a develop whose option B installs a MULE.
+ * - A 2-month Classic game gives some seat more lines than the cap, and two lines in one phase.
+ * If a strategist change moves these, pick a seed where they hold.
+ */
+const SEED = 7;
 /** Game time per step of the fake clock; every timer due in a step runs, with promises settled between them. */
 const STEP_MS = 500;
-/** Longer than any one-month game at phaseScale 0.1. */
+/** Longer than any game these tests play (≤ 2 months, phaseScale ≤ 1). */
 const GAME_LIMIT_MS = 30 * 60_000;
+/** Twice the longest a model call may wait (land's timeout), so a call still open at finish has settled. */
+const SETTLE_MS = 2 * BRAIN.landTimeoutMs;
 
 /** A phone or the TV: everything the room sent it, each chat line with the month and phase it arrived in. */
 interface Screen {
@@ -54,6 +64,7 @@ afterEach(() => {
   for (const room of rooms) room.dispose();
   vi.useRealTimers();
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -71,7 +82,7 @@ function table(options: TableOptions) {
             },
           }
         : ctx;
-      game = new MuleGame(context, 7, { maxMonths: options.maxMonths ?? 1, phaseScale: options.phaseScale ?? 0.1, ...(options.brain ? { brain: options.brain } : {}) });
+      game = new MuleGame(context, SEED, { maxMonths: options.maxMonths ?? 1, phaseScale: options.phaseScale ?? 0.1, ...(options.brain ? { brain: options.brain } : {}) });
       return game;
     },
     aiNames: AI_NAMES,
@@ -150,14 +161,14 @@ function watched(inner: BrainService) {
   return { brain, records, finishes: () => finishes };
 }
 
-/** A Smart brain on the key, whose client is `sdk`, logging to the test's temp dir. */
-const smart = (sdk: FakeSdk) => createBrain({ gameId: 'g-table', env: KEY, logPath: path.join(dir, 'costs.jsonl'), sdkFactory: () => sdk });
+/** The test's ledger file, in its temp dir. */
+const ledgerPath = () => path.join(dir, 'costs.jsonl');
+
+/** A Smart brain on the key, whose client is `sdk`, logging to the test's ledger. */
+const smart = (sdk: FakeSdk) => createBrain({ gameId: 'g-table', env: KEY, logPath: ledgerPath(), sdkFactory: () => sdk });
 
 /** The game lines `game` wrote to the test's ledger; none when there is no ledger file. */
-const gameLines = (game = 'g-table') => {
-  const file = path.join(dir, 'costs.jsonl');
-  return fs.existsSync(file) ? readLedger(file).filter((l) => l.type === 'game' && l.game === game) : [];
-};
+const gameLines = (game = 'g-table') => (fs.existsSync(ledgerPath()) ? readLedger(ledgerPath()).filter((l) => l.type === 'game' && l.game === game) : []);
 
 /** How often each key occurs. */
 function tally(keys: string[]): Map<string, number> {
@@ -201,7 +212,7 @@ describe('the server test setup', () => {
   });
 });
 
-// At seed 7 The Baron (the second AI) weighs several land plans in month 1, so the model is asked; The Accountant has one.
+// At SEED only The Baron is asked for land in month 1.
 describe('the brain at the table', () => {
   it('B-AC-1: a fake model\'s "Mine." shows in every screen\'s chat and the seat plays option B', async () => {
     const sdk = fakeSdk((_n, params) => (asked(params).kind === 'land' ? reply('B', 'Mine.') : reply('A', '')));
@@ -216,6 +227,7 @@ describe('the brain at the table', () => {
     expect(prompt.seat).toBe(baron.name);
     const optionB = land.shortlist.find((o) => o.id === 'B')!;
     expect(prompt.lines.some((l) => l.startsWith(`B. ${optionB.label} — `))).toBe(true);
+    // On the record, not the board: a land plan's board effect is probabilistic (wantsPlot, missChance).
     expect(land).toMatchObject({ by: 'llm', line: 'Mine.', pick: { id: 'B', key: optionB.key, label: optionB.label } });
 
     for (const s of t.screens) expect(s.chat.filter((m) => m.from === baron.id).map((m) => m.text)).toEqual(['Mine.']);
@@ -281,10 +293,11 @@ describe('the brain at the table', () => {
 
     for (const ai of [accountant!, baron!]) {
       const prompt = asked(nextFor(ai.name)!.params);
-      const move = records.find((r) => r.seat === ai.id && r.kind === prompt.kind && r.kind !== 'land')!;
+      expect(prompt.kind, ai.name).toBe('develop');
+      const move = records.find((r) => r.seat === ai.id && r.kind === prompt.kind)!;
       expect(move, ai.name).toMatchObject({ by: 'llm', pick: { id: 'B' } });
       expect(prompt.lines.some((l) => l.startsWith(`B. ${move.pick.label} — `)), ai.name).toBe(true);
-      // At seed 7 both AIs' next decision is a development one whose option B installs a MULE.
+      // At SEED option B installs a MULE.
       const [, outfit, index] = /^install:(\w+):(\d+)$/.exec(move.pick.key) ?? [];
       expect(firstInstall.get(ai.id), `${ai.name} picked ${move.pick.key}`).toEqual({ index: Number(index), outfit });
     }
@@ -297,16 +310,16 @@ describe('the brain at the table', () => {
     { name: 'env {}', env: {} as Record<string, string> },
     { name: 'only the auth token', env: { ANTHROPIC_AUTH_TOKEN: 'test-token-not-real' } },
   ])('B-AC-3, T-AC-5: with the key unset ($name) a full game reaches gameOver on top picks with no client, and each AI says at most its lines a month, one a phase, and speaks in an auction', async ({ env }) => {
-    const { brain, records, finishes } = watched(createBrain({ gameId: 'g-classic', env, logPath: path.join(dir, 'costs.jsonl') }));
+    const { brain, records, finishes } = watched(createBrain({ gameId: 'g-classic', env, logPath: ledgerPath() }));
     const t = table({ humans: ['Heiko'], ais: 3, brain, maxMonths: 2 });
     expect(await t.toGameOver()).toBe(true);
-    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
 
     expect(sdkModule.built).toEqual([]);
     expect(records.length).toBeGreaterThan(0);
     expect(records.filter((r) => r.by !== 'top')).toEqual([]);
     expect(finishes()).toBe(1);
-    expect(fs.existsSync(path.join(dir, 'costs.jsonl'))).toBe(false);
+    expect(fs.existsSync(ledgerPath())).toBe(false);
 
     // T-AC-5 at the table: each AI seat's lines in the room's chat, never above the cap a month, never two in a phase.
     const said = tally(t.tv.chat.map((m) => `${m.from} month ${m.month}`));
@@ -360,12 +373,13 @@ describe('the brain at the table', () => {
     else expect(t.finished()).toBe(false);
 
     t.room.dispose();
-    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
 
     expect(gameLines()).toHaveLength(lines);
   });
 
-  it('FM-api-error: with every model call failing and every say throwing, the game still reaches gameOver on top picks', async () => {
+  it('FM-api-error: with every model call failing and every say throwing, the game still reaches gameOver on top picks and each seat reports its say failure once', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
     const sdk = fakeSdk(() => {
       throw new Error('api down');
     });
@@ -378,11 +392,13 @@ describe('the brain at the table', () => {
     expect(records.filter((r) => r.by === 'fallback').length).toBeGreaterThan(0);
     expect(t.tv.chat).toEqual([]);
     expect(finishes()).toBe(1);
-    expect(readLedger(path.join(dir, 'costs.jsonl')).filter((l) => l.type === 'game' && l.game === 'g-table')).toHaveLength(1);
+    expect(gameLines()).toHaveLength(1);
+    const reports = errors.mock.calls.map((c) => String(c[0])).filter((m) => m.startsWith('brain chat:'));
+    expect(reports.sort()).toEqual(t.ais.map((ai) => `brain chat: seat ${ai.id} cannot say a line: say failed`).sort());
   });
 
   it('INV-heard: heard from an unknown speaker, or to an unknown seat, does not throw, before or after start; an AI\'s own line goes to the other AIs only', async () => {
-    const lobby = new MuleGame({ now: () => 0, schedule: () => () => {}, changed: () => {} }, 7, { brain: createBrain({ gameId: 'g-lobby', env: {} }) });
+    const lobby = new MuleGame({ now: () => 0, schedule: () => () => {}, changed: () => {} }, SEED, { brain: createBrain({ gameId: 'g-lobby', env: {} }) });
     expect(() => lobby.heard?.('s9', 'hello')).not.toThrow();
 
     const sdk = fakeSdk(() => reply('A', ''));
