@@ -28,7 +28,8 @@ export const listedSale: NonNullable<AuctionSteps['listedSale']> = async ({ phon
   await planning.getByTestId('tab-sell').click({ timeout: PRESS_MS });
   smokeListing = await listPlot(phone, SMOKE_PHONE_SLOT, 0);
   if (smokeListing === null) {
-    console.log('auction steps: the phone owns no plot to list');
+    // Becomes a check once the smoke claims a plot in month 1 (WS4).
+    console.log("auction steps: SKIPPED listedSale (the smoke's phone owns no plot)");
   } else {
     check(await planning.getByTestId(`listing-${smokeListing}`).isVisible(), `the phone's line-up shows ${smokeListing}`);
     console.log(`auction steps: listed ${smokeListing}`);
@@ -45,9 +46,10 @@ export const landAuction: NonNullable<AuctionSteps['landAuction']> = async ({ ph
   const lots = phone.locator('[data-phase=landAuction]');
   await lots.waitFor({ timeout: within(0.1, LOTS.introMs) });
   await tv.locator('[data-phase=landAuction]').getByTestId('tv-lot').waitFor({ timeout: within(0.1, LOTS.introMs) });
-  // No AI bids in PR-1, so nobody reaches the minimum and the seller keeps the plot.
+  // Whether an AI bids decides sold or kept (the listing keeps it unsold); either way both screens show the bell.
   const [mine, shown] = await Promise.all([resultOn(phone, 'result', 0.1), resultOn(tv, 'tv-result', 0.1)]);
-  check(mine.kind === 'kept' && shown.kind === 'kept', `the unbid lot is kept, phone ${mine.kind}, TV ${shown.kind}`);
+  const rang = (kind: string) => kind === 'kept' || kind === 'sold';
+  check(rang(mine.kind) && rang(shown.kind), `the lot ends sold or kept, phone ${mine.kind}, TV ${shown.kind}`);
   smokeListing = null;
 };
 
