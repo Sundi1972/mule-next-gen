@@ -16,6 +16,25 @@ export function createRng(seed: number) {
       return items[Math.floor(next() * items.length)] as T;
     },
     chance: (p: number) => next() < p,
+    /** Index drawn from a list of weights that need not sum to 1. */
+    weighted: (weights: readonly number[]): number => {
+      const total = weights.reduce((a, b) => a + b, 0);
+      let r = next() * total;
+      for (let i = 0; i < weights.length; i++) {
+        r -= weights[i]!;
+        if (r < 0) return i;
+      }
+      return weights.length - 1;
+    },
+    /** A shuffled copy (Fisher-Yates). */
+    shuffle: <T>(items: readonly T[]): T[] => {
+      const out = [...items];
+      for (let i = out.length - 1; i > 0; i--) {
+        const j = Math.floor(next() * (i + 1));
+        [out[i], out[j]] = [out[j]!, out[i]!];
+      }
+      return out;
+    },
   };
 }
 

@@ -170,12 +170,17 @@ function isIntent(v: unknown): v is MuleIntent {
   switch (i.type) {
     case 'ready':
     case 'buyMule':
+    case 'pub':
       return true;
     case 'claim':
     case 'install':
+    case 'analyse':
+    case 'filter':
       return int(i.x) && int(i.y);
+    case 'drone':
+      return Array.isArray(i.plots) && i.plots.length <= 4 && i.plots.every((p: unknown) => typeof p === 'object' && p !== null && int((p as Record<string, unknown>).x) && int((p as Record<string, unknown>).y));
     case 'outfit':
-      return typeof i.good === 'string';
+      return typeof i.outfit === 'string';
     case 'setOrder':
       return typeof i.good === 'string' && ['buy', 'sell', 'none'].includes(i.side as string) && Number.isFinite(i.quantity) && Number.isFinite(i.limit);
     default:

@@ -1,20 +1,19 @@
-import { mapSize } from './config.js';
+import { GROWN_ODDS, MINERAL_ODDS, TERRAIN_ODDS, mapSize } from './config.js';
 import type { Rng } from './rng.js';
-import type { Terrain, Tile, TileTrait } from './types.js';
+import { GROWN_GOODS, MINED_GOODS, type Ground, type Terrain, type Tile, type TileTrait } from './types.js';
 
-const LAND_TERRAINS: Terrain[] = [
+const LAND_TERRAINS: Exclude<Terrain, 'store'>[] = [
   'plains', 'plains', 'plains', 'hills', 'mountains', 'forest', 'swamp',
-  'desert', 'ice', 'lake', 'volcanic', 'crater', 'wasteland',
+  'desert', 'tundra', 'ice', 'lake', 'volcanic', 'crater',
 ];
 
-const TRAITS: TileTrait[] = [
-  'fertile', 'richVein', 'spring', 'bedrock', 'sheltered', 'hotSpring', 'thinVein', 'toxic', 'unstable',
-];
+const TRAITS: TileTrait[] = ['bedrock', 'sheltered', 'hotSpring', 'thinVein', 'toxic', 'unstable', 'infested', 'floodPlain'];
 
 /**
  * Builds the map: a river runs top to bottom through the middle column, the
  * store sits at the centre, and the rest is grown from random terrain seeds
- * so similar terrain forms regions rather than noise.
+ * so similar terrain forms regions rather than noise. Every plot then rolls
+ * its hidden ground rating from its terrain's odds.
  */
 export function generateMap(players: number, rng: Rng): { width: number; height: number; tiles: Tile[] } {
   const { width, height } = mapSize(players);
@@ -45,7 +44,7 @@ export function generateMap(players: number, rng: Rng): { width: number; height:
         }
         terrain = best.terrain;
       }
-      const traitCount = terrain === 'store' ? 0 : rng.pick([0, 0, 1, 1, 2]);
+      const traitCount = terrain === 'store' ? 0 : rng.pick([0, 0, 0, 1, 1, 2]);
       const traits: TileTrait[] = [];
       for (let i = 0; i < traitCount; i++) {
         const trait = rng.pick(TRAITS);
@@ -56,20 +55,45 @@ export function generateMap(players: number, rng: Rng): { width: number; height:
         y,
         terrain,
         peaks: terrain === 'mountains' ? rng.int(1, 3) : 0,
-        crystite: crystiteFor(terrain, rng),
+        ground: rollGround(terrain, rng),
         traits,
         owner: null,
         outfit: null,
+        pollution: 0,
+        filter: false,
+        runMonths: 0,
       });
     }
   }
   return { width, height, tiles };
 }
 
-function crystiteFor(terrain: Terrain, rng: Rng): number {
-  if (terrain === 'store' || terrain === 'river') return 0;
-  const chance = terrain === 'crater' ? 0.8 : terrain === 'hills' ? 0.35 : 0.15;
-  return rng.chance(chance) ? rng.int(1, 4) : 0;
+export function rollGround(terrain: Terrain, rng: Rng): Ground {
+  const ground = zeroGround();
+  if (terrain === 'store') return ground;
+  const odds = TERRAIN_ODDS[terrain];
+  for (const g of GROWN_GOODS) ground[g] = rng.weighted(GROWN_ODDS[odds.grown[g] ?? 'neutral']) - 2;
+  for (const g of MINED_GOODS) ground[g] = rng.weighted(MINERAL_ODDS[odds.mined[g]]);
+  return ground;
+}
+
+/** The average rating a plot of this terrain rolls for a good: what a player can expect before analysing it. */
+export function expectedGround(terrain: Terrain): Ground {
+  const ground = zeroGround();
+  if (terrain === 'store') return ground;
+  const mean = (weights: readonly number[], offset: number) => weights.reduce((sum, w, i) => sum + w * (i + offset), 0);
+  const odds = TERRAIN_ODDS[terrain];
+  for (const g of GROWN_GOODS) ground[g] = mean(GROWN_ODDS[odds.grown[g] ?? 'neutral'], -2);
+  for (const g of MINED_GOODS) ground[g] = mean(MINERAL_ODDS[odds.mined[g]], 0);
+  return ground;
+}
+
+export function zeroGround(): Ground {
+  return Object.fromEntries([...GROWN_GOODS, ...MINED_GOODS].map((g) => [g, 0])) as Ground;
+}
+
+export function tileIndex(width: number, x: number, y: number): number {
+  return y * width + x;
 }
 
 export function tileAt(tiles: Tile[], width: number, x: number, y: number): Tile | undefined {

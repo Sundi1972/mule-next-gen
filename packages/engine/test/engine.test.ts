@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   advancePhase,
-  allPrices,
+  postPrices,
+  storeQuotes,
   buyMule,
   claimPlot,
   colonyPrice,
   createGame,
-  exportPrice,
-  importPrice,
+  shipPrice,
+  targetPrice,
   installMule,
   isGameOver,
   monthlyDemand,
@@ -18,6 +19,7 @@ import {
   runProduction,
   RuleError,
   type GameState,
+  type Good,
   type Tile,
 } from '../src/index.js';
 import { playAiGame } from '../src/sim.js';
@@ -28,10 +30,23 @@ function newGame(n = 4): GameState {
   return createGame({ seed: 42, players: players(n) });
 }
 
-function plainTile(state: GameState, x: number, y: number, terrain: Tile['terrain'] = 'plains'): Tile {
+const flatGround = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0 };
+
+function plainTile(state: GameState, x: number, y: number, terrain: Tile['terrain'] = 'plains', ground: Partial<Tile['ground']> = {}): Tile {
   const tile = state.tiles[y * state.width + x]!;
-  Object.assign(tile, { terrain, traits: [], peaks: 0, crystite: 0, owner: null, outfit: null });
+  Object.assign(tile, { terrain, traits: [], peaks: 0, ground: { ...flatGround, ...ground }, owner: null, outfit: null, pollution: 0, filter: false, runMonths: 0 });
   return tile;
+}
+
+/** Empties a good from the whole colony: the store's shelf and every player's depot. */
+function emptyColony(state: GameState, good: Good): void {
+  state.store.stock[good] = 0;
+  for (const p of state.players) p.stock[good] = 0;
+}
+
+/** Moves the land grant's light to this tile, as the server's clock would. */
+function light(state: GameState, tile: Tile): void {
+  state.grant!.order[state.grant!.step] = state.tiles.indexOf(tile);
 }
 
 describe('createGame', () => {
@@ -49,30 +64,62 @@ describe('createGame', () => {
 });
 
 describe('prices', () => {
-  it('have no floor and no cap: only supply and demand', () => {
+  it('target high when the shelf is empty and low in a glut', () => {
     const state = newGame();
-    state.store.stock.food = 0;
-    expect(colonyPrice(state, 'food')).toBeGreaterThan(importPrice(state, 'food') * 10);
+    emptyColony(state, 'food');
+    expect(targetPrice(state, 'food')).toBeGreaterThan(state.store.refPrice.food * 10);
     state.store.stock.food = 10_000;
-    expect(colonyPrice(state, 'food')).toBeLessThan(exportPrice(state, 'food'));
+    expect(targetPrice(state, 'food')).toBeLessThan(state.store.refPrice.food / 10);
+  });
+
+  it('move toward the target with momentum, and keep climbing while a shortage lasts', () => {
+    const state = newGame();
+    emptyColony(state, 'food');
+    const ref = state.store.refPrice.food;
+    const start = colonyPrice(state, 'food');
+    // A cheap good climbs by half its reference price, a dear one by half its price.
+    const step = (p: number) => Math.round(p + 0.5 * Math.max(p, ref));
+    postPrices(state);
+    expect(colonyPrice(state, 'food')).toBe(step(start));
+    postPrices(state);
+    expect(colonyPrice(state, 'food')).toBe(step(step(start)));
+    for (let i = 0; i < 6; i++) postPrices(state);
+    expect(colonyPrice(state, 'food')).toBeGreaterThan(ref * 10);
+  });
+
+  it('let a good only off-world buyers want cost no more than they pay', () => {
+    const state = newGame();
+    emptyColony(state, 'crystite');
+    for (let i = 0; i < 8; i++) postPrices(state);
+    expect(colonyPrice(state, 'crystite')).toBe(state.store.offWorld.crystite);
+  });
+
+  it('post no store sell price for a good the store does not have', () => {
+    const state = newGame();
+    state.store.stock.electronics = 0;
+    expect(storeQuotes(state, 'electronics').sell).toBeNull();
+    expect(shipPrice(state, 'food')).toBeNull();
   });
 
   it('react more strongly to a Food shortage than an Alloy shortage', () => {
     const state = newGame();
     // One month of cover each.
     const demand = monthlyDemand(state);
+    emptyColony(state, 'food');
+    emptyColony(state, 'alloy');
     state.store.stock.food = demand.food;
     state.store.stock.alloy = demand.alloy;
-    const prices = allPrices(state);
-    expect(prices.food / 30).toBeGreaterThan(prices.alloy / 90);
+    expect(targetPrice(state, 'food') / 30).toBeGreaterThan(targetPrice(state, 'alloy') / 90);
   });
 
   it('make MULEs dearer when Alloy is scarce', () => {
     const state = newGame();
-    state.store.stock.alloy = 20;
     const cheap = mulePrice(state);
-    state.store.stock.alloy = 1;
+    state.store.posted.alloy *= 3;
+    state.store.posted.smithore *= 3;
     expect(mulePrice(state)).toBeGreaterThan(cheap);
+    state.store.muleFactor = 1.15;
+    expect(mulePrice(state)).toBeGreaterThan(cheap * 1.15);
   });
 
   it('let players trade with each other at any price they agree on', () => {
@@ -90,12 +137,13 @@ describe('prices', () => {
 describe('the store', () => {
   it('buys only what it can use and can afford', () => {
     const state = newGame();
+    state.store.stock.water = 0;
     state.players[0]!.stock.water = 500;
     const trades = runAuction(state, 'water', [{ playerId: 'p0', side: 'sell', quantity: 500, limit: 1 }]);
     const bought = trades.reduce((n, t) => n + t.quantity, 0);
     expect(bought).toBeGreaterThan(0);
     expect(bought).toBeLessThan(500);
-    expect(state.store.fund).toBeGreaterThanOrEqual(0);
+    expect(state.store.capital).toBeGreaterThanOrEqual(0);
   });
 });
 
@@ -120,20 +168,34 @@ describe('production', () => {
     p0.stock.energy = 0;
     const full = rawOutput(state, tile);
     const produced = runProduction(state);
-    expect(produced.p0!.food).toBe(Math.floor(full / 2));
+    expect(produced.produced.p0!.food).toBe(Math.floor(full / 2));
+  });
+
+  it('halves Food farms whose owner is short of Water', () => {
+    const state = newGame();
+    const tile = plainTile(state, 0, 0, 'river');
+    tile.owner = 'p0';
+    tile.outfit = 'food';
+    const p0 = state.players[0]!;
+    p0.stock.energy = 5;
+    const full = rawOutput(state, tile);
+    p0.stock.water = 0;
+    expect(runProduction(state).produced.p0!.food).toBe(Math.floor(full / 2));
+    p0.stock.water = 5;
+    expect(runProduction(state).produced.p0!.food).toBe(full);
   });
 
   it('runs factories only when the inputs are in stock', () => {
     const state = newGame();
-    const tile = plainTile(state, 0, 0, 'wasteland');
+    const tile = plainTile(state, 0, 0, 'crater');
     tile.owner = 'p0';
     tile.outfit = 'alloy';
     const p0 = state.players[0]!;
     p0.stock.smithore = 0;
-    expect(runProduction(state).p0!.alloy).toBe(0);
+    expect(runProduction(state).produced.p0!.alloy).toBe(0);
     p0.stock.smithore = 2;
-    p0.stock.energy = 1;
-    expect(runProduction(state).p0!.alloy).toBe(2);
+    p0.stock.energy = 2;
+    expect(runProduction(state).produced.p0!.alloy).toBe(2);
     expect(p0.stock.smithore).toBe(0);
   });
 });
@@ -148,12 +210,13 @@ describe('auction', () => {
       { playerId: 'p1', side: 'buy', quantity: 3, limit: 30 },
     ]);
     expect(trades[0]).toMatchObject({ buyer: 'p1', seller: 'p0', quantity: 3, price: 25 });
-    expect(buyer!.stock.water).toBe(4 + 3);
+    expect(buyer!.stock.water).toBe(6 + 3);
   });
 
   it('never sells more than a player owns', () => {
     const state = newGame();
     state.players[0]!.stock.crystite = 2;
+    state.players[1]!.money = 100_000;
     const trades = runAuction(state, 'crystite', [
       { playerId: 'p0', side: 'sell', quantity: 10, limit: 1 },
       { playerId: 'p1', side: 'buy', quantity: 10, limit: 500 },
@@ -167,6 +230,7 @@ describe('month flow', () => {
     const state = newGame();
     advancePhase(state); // landGrant
     const tile = state.tiles.find((t) => t.terrain === 'plains')!;
+    light(state, tile);
     claimPlot(state, 'p0', tile.x, tile.y);
     expect(() => claimPlot(state, 'p1', tile.x, tile.y)).toThrow(RuleError);
     advancePhase(state); // development
@@ -192,7 +256,7 @@ describe('simulator', () => {
   it('plays a full AI game without the colony going broke', () => {
     const state = playAiGame(7, 4);
     expect(state.phase).toBe('gameOver');
-    expect(state.store.fund).toBeGreaterThan(0);
+    expect(state.store.capital).toBeGreaterThan(0);
     for (const report of state.history) {
       for (const price of Object.values(report.prices)) {
         expect(price).toBeGreaterThan(0);
