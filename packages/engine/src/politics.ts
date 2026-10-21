@@ -125,6 +125,8 @@ export function castVote(state: GameState, id: string, office: Office, candidate
   const ballot = (ballots[id] ??= {});
   if (candidate === null) delete ballot[office];
   else ballot[office] = candidate;
+  // An empty entry would still show the voter among those who have voted.
+  if (Object.keys(ballot).length === 0) delete ballots[id];
 }
 
 /** Done for the current stage (or undone); every player Done ends the stage at the next step. */
