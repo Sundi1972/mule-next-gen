@@ -321,7 +321,7 @@ function HostConfirm({ dialog, onConfirm, onCancel }: { dialog: HostDialog; onCo
       <Button variant="danger" size="md" onClick={onConfirm} data-testid={dialog.kind === 'kick' ? 'kick-confirm' : 'close-confirm'}>
         {dialog.kind === 'kick' ? 'Remove' : 'Close'}
       </Button>
-      <Button variant="ghost" size="md" onClick={onCancel} data-testid="host-dialog-cancel">
+      <Button variant="ghost" size="md" autoFocus onClick={onCancel} data-testid="host-dialog-cancel">
         Cancel
       </Button>
     </div>
