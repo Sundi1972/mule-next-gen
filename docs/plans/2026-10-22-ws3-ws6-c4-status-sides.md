@@ -43,7 +43,7 @@
   - WS1 owns `packages/ai/src/hands/auction.ts` and `packages/ai/src/play.ts` (WS6 §7 R-2: "WS1 owns the AI hand edit").
 - N/A checked: no migration, no new contract beyond §3's row, no spike (WS6 §7: "No spike needed").
 
-**Reading of RULE-2 row 4, recorded:** "during the walk switching side works as today". So the walk keeps today's Buy/Seller/Pass picker on the phone. The goods mock's walk has no picker; the mock shows layout, and the rule governs. Wave A placed the picker after `line-readout` (1216dd5), and that stays. WS4's FM-2 smoke, which clicks "Buyer" during the walk, is unaffected. This corrects a note in the wave A plan and has been sent to WS6 as a non-blocking question.
+**Reading of RULE-2 row 4, recorded:** "during the walk switching side works as today". So the walk keeps today's Buy/Seller/Pass picker on the phone. The goods mock's walk has no picker; the mock shows layout, and the rule governs. Wave A placed the picker after `line-readout` (1216dd5), and that stays. WS4's FM-2 smoke, which clicks "Buyer" during the walk, is unaffected. This corrects a note in the wave A plan. **CLOSED (2026-10-22): WS6 confirms this reading. The walk keeps the picker, the mock simply doesn't draw it, and there is no spec change.**
 
 ---
 
