@@ -1,40 +1,64 @@
 import {
+  advanceGrant,
   advancePhase,
   aiClaim,
   aiDevelop,
   aiOrders,
+  airBand,
   allPrices,
+  analysePlot,
   buyMule,
   claimPlot,
   cover,
   createGame,
+  DEVELOPMENT,
+  fitFilter,
   GAME,
   GOODS,
+  grantDone,
+  hasAnalysed,
   installMule,
+  litPlot,
   monthlyDemand,
   mulePrice,
+  mulePriceFor,
+  needsOf,
+  orderGeoDrone,
+  outfitCostFor,
   outfitMule,
   RuleError,
   score,
   settleAuction,
+  shipAnnounced,
+  shipInPort,
+  shipPrice,
   storeQuotes,
+  visitPub,
   type GameState,
   type Good,
   type Order,
+  type Outfit,
   type Phase,
 } from '@mule/engine';
 import { PLAYER_COLORS, type MuleIntent, type MuleView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 
-/** How long each phase lasts, in milliseconds. Phases also end early when every connected player is ready. */
+/**
+ * The longest each phase lasts, in milliseconds. Phases also end early when
+ * every connected player is ready; the land grant ends when the claims are
+ * used, development when everyone is out of time or at the pub.
+ */
 export const PHASE_MS: Record<Exclude<Phase, 'gameOver'>, number> = {
   planning: 45_000,
-  landGrant: 20_000,
-  development: 45_000,
+  landGrant: 60_000,
+  development: (DEVELOPMENT.fullSeconds + 5) * 1_000,
   production: 5_000,
   auction: 30_000,
   upkeep: 8_000,
 };
+
+/** How long each free plot stays lit in the land grant. */
+export const GRANT_TICK_MS = 650;
 
 export const AI_NAMES = ['The Accountant', 'The Baron', 'The Grudge', 'The Gambler', 'The Good Neighbour'];
 
@@ -47,6 +71,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private readonly ready = new Set<string>();
   private readonly away = new Set<string>();
   private readonly orders = new Map<string, Partial<Record<Good, StandingOrder>>>();
+  /** When each player's development time runs out, epoch ms. */
+  private readonly devEndsAt = new Map<string, number>();
   private cancels: (() => void)[] = [];
   private news: string[] = [];
   private phaseEndsAt: number | null = null;
@@ -70,18 +96,42 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         this.ready.add(seatId);
         this.checkAllReady();
         return;
+      case 'drone':
+        orderGeoDrone(state, seatId, intent.plots);
+        return;
       case 'claim':
         claimPlot(state, seatId, intent.x, intent.y);
+        if (grantDone(state)) this.nextPhase();
         return;
       case 'buyMule':
+        this.requireTime(seatId);
         buyMule(state, seatId);
         return;
       case 'outfit':
-        outfitMule(state, seatId, intent.good);
+        this.requireTime(seatId);
+        outfitMule(state, seatId, intent.outfit);
         return;
       case 'install':
+        this.requireTime(seatId);
         installMule(state, seatId, intent.x, intent.y);
         return;
+      case 'analyse': {
+        this.requireTime(seatId);
+        const seconds = analysePlot(state, seatId, intent.x, intent.y);
+        this.devEndsAt.set(seatId, this.devEndsAt.get(seatId)! - seconds * 1_000);
+        this.checkDevelopmentOver();
+        return;
+      }
+      case 'filter':
+        this.requireTime(seatId);
+        fitFilter(state, seatId, intent.x, intent.y);
+        return;
+      case 'pub': {
+        const payout = visitPub(state, seatId, this.requireTime(seatId));
+        this.news = [`${this.nameOf(seatId)} went to the pub and won ${payout}.`, ...this.news].slice(0, 3);
+        this.checkDevelopmentOver();
+        return;
+      }
       case 'setOrder': {
         if (state.phase !== 'auction') throw new RuleError('The auction is not running');
         const mine = this.orders.get(seatId) ?? {};
@@ -93,6 +143,18 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     }
   }
 
+  /** Seconds of development time this player has left; throws when it has run out. */
+  private requireTime(seatId: string): number {
+    const ends = this.devEndsAt.get(seatId);
+    const left = ends === undefined ? 0 : (ends - this.ctx.now()) / 1_000;
+    if (left <= 0) throw new RuleError('Your development time is up');
+    return left;
+  }
+
+  private nameOf(seatId: string): string {
+    return this.seats.find((s) => s.id === seatId)?.name ?? seatId;
+  }
+
   connectionChanged(seatId: string, connected: boolean): void {
     if (connected) this.away.delete(seatId);
     else this.away.add(seatId);
@@ -101,8 +163,23 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   }
 
   private checkAllReady(): void {
-    const waiting = this.seats.filter((s) => !s.isAi && !this.away.has(s.id) && !this.ready.has(s.id));
+    const waiting = this.seats.filter((s) => !s.isAi && !this.away.has(s.id) && !this.ready.has(s.id) && !this.doneDeveloping(s.id));
     if (this.state && this.state.phase !== 'gameOver' && waiting.length === 0) this.nextPhase();
+  }
+
+  /** During development: true once a player went to the pub or ran out of time. */
+  private doneDeveloping(seatId: string): boolean {
+    const state = this.requireState();
+    if (state.phase !== 'development') return false;
+    const p = state.players.find((q) => q.id === seatId);
+    return !!p?.doneDeveloping || (this.devEndsAt.get(seatId) ?? 0) <= this.ctx.now();
+  }
+
+  /** Development ends once every player, AI included, is at the pub or out of time. */
+  private checkDevelopmentOver(): void {
+    const state = this.requireState();
+    if (state.phase !== 'development') return;
+    if (this.seats.every((s) => s.isAi || this.away.has(s.id) || this.doneDeveloping(s.id))) this.nextPhase();
   }
 
   private requireState(): GameState {
@@ -140,15 +217,56 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       }),
     );
 
-    if (state.phase === 'landGrant') {
-      this.scheduleAi((id) => {
-        for (let i = 0; i < GAME.claimsPerGrant; i++) aiClaim(state, id);
-      });
-    }
-    if (state.phase === 'development') this.scheduleAi((id) => aiDevelop(state, id));
+    if (state.phase === 'landGrant') this.scheduleGrantTick();
+    if (state.phase === 'development') this.startDevelopment();
     if (state.phase === 'auction') this.orders.clear();
     if (state.phase === 'production') this.reportProduction();
     if (state.phase === 'upkeep') this.reportUpkeep();
+  }
+
+  /**
+   * The land grant's light moves on every tick. Before it moves, AI players
+   * get their chance at the plot that was lit, after humans had the whole
+   * tick to press. One AI at most takes it, in a rotating order.
+   */
+  private scheduleGrantTick(): void {
+    const state = this.requireState();
+    this.cancels.push(
+      this.ctx.schedule(GRANT_TICK_MS, () => {
+        if (state.phase !== 'landGrant') return;
+        const ais = this.seats.filter((s) => s.isAi);
+        const start = (state.grant?.step ?? 0) % Math.max(1, ais.length);
+        for (let i = 0; i < ais.length; i++) {
+          try {
+            if (aiClaim(state, ais[(start + i) % ais.length]!.id)) break;
+          } catch (err) {
+            if (!(err instanceof RuleError)) throw err;
+          }
+        }
+        if (grantDone(state)) this.nextPhase();
+        else {
+          advanceGrant(state);
+          this.scheduleGrantTick();
+        }
+        this.ctx.changed();
+      }),
+    );
+  }
+
+  /** Each player gets their own clock: Food, sickness and analyses set how long they have. */
+  private startDevelopment(): void {
+    const state = this.requireState();
+    const now = this.ctx.now();
+    this.devEndsAt.clear();
+    for (const p of state.players) {
+      this.devEndsAt.set(p.id, now + p.devSeconds * 1_000);
+      // Check when this player's time runs out, so the phase ends as soon as everyone's has.
+      this.cancels.push(this.ctx.schedule(p.devSeconds * 1_000 + 1, () => {
+        this.checkDevelopmentOver();
+        this.ctx.changed();
+      }));
+    }
+    this.scheduleAi((id) => aiDevelop(state, id));
   }
 
   /** AI players act after a short, varied delay, so real-time phases feel like a race. */
@@ -206,20 +324,28 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   private reportUpkeep(): void {
     const state = this.requireState();
-    const shortages = state.history.at(-1)?.shortages ?? [];
+    const report = state.history.at(-1);
+    const shortages = report?.shortages ?? [];
     const hungry = state.players.filter((p) => p.hungry).map((p) => p.name);
     this.news = [
-      shortages.length > 0 ? `Colony shortage of ${shortages.join(' and ')}! Colonists are leaving.` : 'The colony is fed and growing.',
+      shortages.length > 0
+        ? `The store ran out of ${shortages.join(' and ')}! Colonists are leaving.`
+        : report?.colonistsHungry
+          ? 'Colonists could not afford their Food and Water. Some are leaving.'
+          : 'The colony is fed and growing.',
       ...(hungry.length > 0 ? [`Hungry this month: ${hungry.join(', ')}.`] : []),
     ];
   }
 
-  /** What one player may see, or with `null` what everyone may see. Stock and hidden tile data stay private. */
+  /** What one player may see, or with `null` what everyone may see. Stock and hidden ground stay private. */
   viewFor(seatId: string | null): MuleView {
     const state = this.requireState();
     const prices = allPrices(state);
     const demand = monthlyDemand(state);
     const me = seatId ? state.players.find((p) => p.id === seatId) : undefined;
+    const lit = litPlot(state);
+    const band = airBand(state.air).name;
+    const outfits: Outfit[] = [...GOODS, 'greenBelt'];
     return {
       finished: state.phase === 'gameOver',
       month: state.month,
@@ -228,31 +354,50 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       phaseEndsAt: this.phaseEndsAt,
       width: state.width,
       height: state.height,
-      tiles: state.tiles.map((t) => ({
-        x: t.x,
-        y: t.y,
-        terrain: t.terrain,
-        peaks: t.peaks,
-        owner: t.owner,
-        outfit: t.outfit,
-        ...(me && t.owner === me.id ? { crystite: t.crystite, traits: t.traits } : {}),
-      })),
-      players: this.seats.map((s) => ({
-        id: s.id,
-        name: s.name,
-        isAi: s.isAi,
-        color: s.color,
-        money: state.players.find((p) => p.id === s.id)?.money ?? 0,
-        plots: state.tiles.filter((t) => t.owner === s.id).length,
-        ready: this.ready.has(s.id),
-      })),
+      tiles: state.tiles.map((t) => {
+        const analysed = !!me && hasAnalysed(me, state, t);
+        return {
+          x: t.x,
+          y: t.y,
+          terrain: t.terrain,
+          peaks: t.peaks,
+          owner: t.owner,
+          outfit: t.outfit,
+          pollution: t.pollution,
+          filter: t.filter,
+          ...(analysed ? { ground: t.ground } : {}),
+          ...(analysed || (me && t.owner === me.id) ? { traits: t.traits } : {}),
+        };
+      }),
+      lit: lit ? { x: lit.x, y: lit.y } : null,
+      players: this.seats.map((s) => {
+        const p = state.players.find((q) => q.id === s.id)!;
+        return {
+          id: s.id,
+          name: s.name,
+          isAi: s.isAi,
+          color: s.color,
+          species: p.species,
+          money: p.money,
+          plots: state.tiles.filter((t) => t.owner === s.id).length,
+          ready: this.ready.has(s.id),
+          doneDeveloping: p.doneDeveloping,
+        };
+      }),
       me: me
         ? {
             id: me.id,
+            species: me.species,
             stock: me.stock,
             carriedMule: me.carriedMule,
             claimsLeft: GAME.claimsPerGrant - me.claimsThisGrant,
             hungry: me.hungry,
+            sick: me.sick,
+            needs: needsOf(state, me.id),
+            devEndsAt: state.phase === 'development' ? (this.devEndsAt.get(me.id) ?? null) : null,
+            mulePrice: mulePriceFor(state, me.id),
+            outfitCosts: Object.fromEntries(outfits.map((o) => [o, outfitCostFor(state, me.id, o)])) as Record<Outfit, number>,
+            droneOrder: me.droneOrder.map((i) => ({ x: i % state.width, y: Math.floor(i / state.width) })),
             orders: this.orders.get(me.id) ?? {},
           }
         : null,
@@ -266,11 +411,20 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           storeSells: quotes.sell,
           storeStock: state.store.stock[good],
           cover: Number.isFinite(c) ? Math.round(c * 10) / 10 : 99,
+          demand: Math.round(demand[good] * 10) / 10,
+          shipPays: shipInPort(state) ? shipPrice(state, good) : null,
         };
       }),
       storeMules: state.store.mules,
       mulePrice: mulePrice(state),
       colonists: state.colonists,
+      air: { level: Math.round(state.air), band },
+      ship: {
+        arrives: state.ship.arrives,
+        inPort: shipInPort(state),
+        wants: shipAnnounced(state) ? { ...state.ship.hold } : null,
+      },
+      treasury: { money: state.treasury.money, salesTax: state.treasury.salesTax },
       news: this.news,
       scores: state.phase === 'gameOver' ? this.seats.map((s) => ({ id: s.id, score: score(state, s.id) })) : null,
     };
