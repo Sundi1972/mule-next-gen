@@ -101,8 +101,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private phaseEndsAt: number | null = null;
   /** The AI players: strategist, decider and hands, keyed by seat id. */
   private readonly ai = new Map<string, AiSeat>();
-  /** The outfit of each MULE listed, by listing id: the screens still name it after the bell takes it off the plot. */
-  private readonly listedOutfits = new Map<string, Outfit>();
 
   constructor(
     private readonly ctx: GameContext,
@@ -196,12 +194,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         if (intent.dir !== 'stop') auctionDone(state, seatId, false);
         return;
       }
-      case 'list': {
-        const tile = state.tiles.find((t) => t.x === intent.item.x && t.y === intent.item.y);
-        const listing = listLot(state, seatId, { item: intent.item, minimum: intent.minimum, unsold: intent.unsold });
-        if (listing.item.kind === 'mule' && tile?.outfit) this.listedOutfits.set(listing.id, tile.outfit);
+      case 'list':
+        listLot(state, seatId, intent);
         return;
-      }
       case 'unlist':
         unlistLot(state, seatId, intent.id);
         return;
@@ -681,14 +676,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     };
   }
 
-  /** A listing as every screen sees it. A MULE lot names its outfit, from the plot or, once the bell took it off, as it was listed. */
+  /** A listing as every screen sees it. A MULE lot names its outfit as listed, so it still shows once the bell takes the MULE off the plot. */
   private listingView(l: Listing): ListingView {
-    const { kind, x, y } = l.item;
-    const base = { id: l.id, seller: l.seller, minimum: l.minimum, unsold: l.unsold, storePays: l.storePays };
-    if (kind === 'plot') return { ...base, item: { kind, x, y } };
-    const tile = this.requireState().tiles.find((t) => t.x === x && t.y === y);
-    // Listing a MULE requires one on the plot, so one of the two always has it.
-    return { ...base, item: { kind, x, y, outfit: tile?.outfit ?? this.listedOutfits.get(l.id)! } };
+    const { id, seller, item, minimum, unsold, storePays } = l;
+    return { id, seller, item: { ...item }, minimum, unsold, storePays };
   }
 
   /**

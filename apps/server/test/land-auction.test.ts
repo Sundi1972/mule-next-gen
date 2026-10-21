@@ -280,6 +280,8 @@ describe('land auction on the server', () => {
     ringBell(game, advance, ['o', 'l']);
     const sold = game.viewFor('l');
     expect(sold.landAuction!.result).toEqual({ kind: 'sold', buyer: 'l', price: bid });
+    // The bell took the MULE off the plot; the lot still names its outfit.
+    expect(tile(sold, plot).outfit).toBeNull();
     expect(sold.landAuction!.lot.item).toEqual({ kind: 'mule', x: plot.x, y: plot.y, outfit: 'food' });
     expect(sold.news[0]).toBe(`Lena bought the MULE on plot ${at(plot)} from Brix for ${bid}.`);
 
