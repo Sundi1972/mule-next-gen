@@ -13,12 +13,15 @@ export interface HaikuSdk {
   };
 }
 
+/** The public API host, pinned so a gateway URL left in the environment never receives the key (HC-2). */
+const API_HOST = 'https://api.anthropic.com';
+
 /**
  * The real SDK, with the key passed in (HC-2). `authToken: null` stops the SDK reading ANTHROPIC_AUTH_TOKEN, and an
  * explicit credential stops it falling back to an `ant auth` profile.
  */
 export function createAnthropicSdk(apiKey: string): HaikuSdk {
-  return new Anthropic({ apiKey, authToken: null });
+  return new Anthropic({ apiKey, authToken: null, baseURL: API_HOST });
 }
 
 export interface HaikuReply {

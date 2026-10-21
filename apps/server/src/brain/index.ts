@@ -1,4 +1,4 @@
-import { BRAIN, type AiLevelId, type AiPersonaId, type GameState } from '@mule/engine';
+import { BRAIN, type AiLevelId, type AiPersonaId } from '@mule/engine';
 import { LlmDecider, ReplyRejected, type Complete, type Decider, type DecisionRecord } from '@mule/ai';
 import { createBudget } from './budget.js';
 import { CallFailed, createAnthropicSdk, createHaikuComplete, type HaikuReply, type HaikuSdk } from './client.js';
@@ -15,10 +15,10 @@ export interface BrainSeat {
 export interface BrainService {
   /** A decider for a Smart seat, or null: the seat plays Classic. */
   deciderFor(seat: BrainSeat): Decider | null;
-  /** The seat's onDecision callback. Passes nothing to the table yet; RULE-2 lands in PR-3. */
+  /** The seat's onDecision callback. Passes nothing to the table yet. */
   chatter(seat: BrainSeat, say: (line: string) => void): (record: DecisionRecord) => void;
-  /** Writes the game's total line and forgets its budget locks. */
-  finish(state?: GameState): void;
+  /** Writes the game's total line and closes the game: no decider makes a call for it afterwards. */
+  finish(): void;
 }
 
 export interface BrainOptions {
@@ -33,9 +33,9 @@ export interface BrainOptions {
 
 const NO_USAGE: Usage = { input: 0, cached_read: 0, cache_write: 0, output: 0 };
 
-/** The port refused before calling. `locks` is true for the refusal that locked the seat, the only one with a line. */
+/** The port refused before calling. `lockedNow` is true for the refusal that locked the seat, the only one with a line. */
 class BudgetSpent extends Error {
-  constructor(readonly locks: boolean) {
+  constructor(readonly lockedNow: boolean) {
     super('budget spent');
     this.name = 'BudgetSpent';
   }
@@ -56,19 +56,21 @@ const CLASSIC: BrainService = {
   finish: () => {},
 };
 
-/** The brain for one game. Reads only env.ANTHROPIC_API_KEY (HC-2). */
+/** The brain for one game. Reads only env.ANTHROPIC_API_KEY (HC-2); a blank key counts as unset. */
 export function createBrain(options: BrainOptions): BrainService {
-  const apiKey = (options.env ?? process.env).ANTHROPIC_API_KEY;
+  const apiKey = (options.env ?? process.env).ANTHROPIC_API_KEY?.trim();
   if (!apiKey) return CLASSIC;
 
   const { gameId } = options;
   const haiku = createHaikuComplete((options.sdkFactory ?? createAnthropicSdk)(apiKey), options.now);
   const ledger = createLedger(options.logPath === undefined ? {} : { path: options.logPath });
   const budget = createBudget(ledger);
-  const lockLogged = new Set<string>();
+  // Seat ids with a model call open, across every decider for that seat.
+  const busy = new Set<string>();
+  let finished = false;
 
-  function deciderFor(seat: BrainSeat): Decider {
-    let busy = false;
+  function deciderFor(seat: BrainSeat): Decider | null {
+    if (finished) return null;
 
     const write = (kind: DecisionRecord['kind'], outcome: Outcome, usage: Usage, ms: number) =>
       ledger.record({ game: gameId, seat: seat.id, persona: seat.persona, level: seat.level, model: BRAIN.model, kind, ms, outcome, ...usage });
@@ -76,11 +78,8 @@ export function createBrain(options: BrainOptions): BrainService {
     const portFor =
       (slot: CallSlot): Complete =>
       async (prompt, waitMs) => {
-        if (!budget.allow(gameId, seat.id, budget.worstCase(prompt))) {
-          const locks = !lockLogged.has(seat.id);
-          lockLogged.add(seat.id);
-          throw new BudgetSpent(locks);
-        }
+        const { allowed, lockedNow } = budget.allow(gameId, seat.id, budget.worstCase(prompt));
+        if (!allowed) throw new BudgetSpent(lockedNow);
         slot.called = true;
         slot.reply = await haiku(prompt, waitMs);
         return { text: slot.reply.text };
@@ -97,8 +96,9 @@ export function createBrain(options: BrainOptions): BrainService {
     return {
       name: 'llm',
       async decide(shortlist, persona, context) {
-        if (busy) throw new Error('busy');
-        busy = true;
+        if (finished) throw new Error('game over');
+        if (busy.has(seat.id)) throw new Error('busy');
+        busy.add(seat.id);
         const slot: CallSlot = { called: false, reply: null };
         let failure: unknown;
         try {
@@ -107,9 +107,9 @@ export function createBrain(options: BrainOptions): BrainService {
           failure = err ?? new Error('unknown error');
           throw err;
         } finally {
-          busy = false;
+          busy.delete(seat.id);
           if (failure instanceof BudgetSpent) {
-            if (failure.locks) write(context.kind, 'budget', NO_USAGE, 0);
+            if (failure.lockedNow) write(context.kind, 'budget', NO_USAGE, 0);
           } else if (slot.called) {
             const source = failure instanceof CallFailed ? failure : slot.reply;
             write(context.kind, outcomeOf(slot, failure), source?.usage ?? NO_USAGE, source?.ms ?? 0);
@@ -123,9 +123,9 @@ export function createBrain(options: BrainOptions): BrainService {
     deciderFor,
     chatter: passThrough,
     finish() {
+      finished = true;
       ledger.finish(gameId);
       budget.release(gameId);
-      lockLogged.clear();
     },
   };
 }

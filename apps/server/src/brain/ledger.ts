@@ -25,7 +25,7 @@ export interface CallRecord extends Usage {
 }
 
 export interface Ledger {
-  /** Appends one RULE-4 line and charges the seat. */
+  /** Appends one RULE-4 line and charges the seat, unless its game is finished. */
   record(call: CallRecord): void;
   /** US dollars charged to a seat so far this game. */
   seatSpent(game: string, seat: string): number;
@@ -82,12 +82,16 @@ export function createLedger(opts: { path?: string; clock?: () => Date } = {}): 
   return {
     record(call) {
       const cost = usd(call);
-      const seats = games.get(call.game) ?? new Map<string, Total>();
-      games.set(call.game, seats);
-      const total = seats.get(call.seat) ?? { calls: 0, usd: 0 };
-      seats.set(call.seat, total);
-      total.calls += 1;
-      total.usd += cost;
+      // A call that settles after finish still gets its line, but the finished game's totals stay closed.
+      if (!finished.has(call.game)) {
+        const seats = games.get(call.game) ?? new Map<string, Total>();
+        games.set(call.game, seats);
+        const total = seats.get(call.seat) ?? { calls: 0, usd: 0 };
+        seats.set(call.seat, total);
+        // A budget refusal is a line, not a model call.
+        if (call.outcome !== 'budget') total.calls += 1;
+        total.usd += cost;
+      }
       append({
         t: clock().toISOString(),
         game: call.game,

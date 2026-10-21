@@ -5,8 +5,11 @@ import { usd, type Ledger } from './ledger.js';
 export interface Budget {
   /** Dollars the next call could cost at worst: the prompt as input, a full reply as output. */
   worstCase(prompt: Prompt): number;
-  /** RULE-3: may this seat make a call costing up to `nextUsd`? A refusal locks the seat for the rest of the game. */
-  allow(game: string, seat: string, nextUsd: number): boolean;
+  /**
+   * RULE-3: may this seat make a call costing up to `nextUsd`? A refusal locks the seat for the rest of the game;
+   * `lockedNow` is true only for the refusal that locked it.
+   */
+  allow(game: string, seat: string, nextUsd: number): { allowed: boolean; lockedNow: boolean };
   /** Forgets a finished game's locks. */
   release(game: string): void;
 }
@@ -33,15 +36,15 @@ export function createBudget(ledger: Pick<Ledger, 'seatSpent'>): Budget {
 
     // RULE-3 row 1 (no API key, no decider at all) lives in createBrain, not here.
     allow(game, seat, nextUsd) {
-      if (locked.get(game)?.has(seat)) return false;
+      if (locked.get(game)?.has(seat)) return { allowed: false, lockedNow: false };
       // Written as !(<=) so a NaN in either number refuses instead of slipping through.
       if (!(ledger.seatSpent(game, seat) + nextUsd <= BRAIN.seatBudgetUsd)) {
         const seats = locked.get(game) ?? new Set<string>();
         seats.add(seat);
         locked.set(game, seats);
-        return false;
+        return { allowed: false, lockedNow: true };
       }
-      return true;
+      return { allowed: true, lockedNow: false };
     },
 
     release(game) {
