@@ -1,5 +1,5 @@
-import { COLONY_SELLER } from '@mule/engine';
-import type { AuctionView, LandAuctionView, ListingView, MuleView } from '@mule/protocol';
+import { COLONY_SELLER, SHIP_ID, STORE_ID } from '@mule/engine';
+import type { AuctionView, DealView, LandAuctionView, ListingView, MuleView } from '@mule/protocol';
 import { bestPrices, Creature, cx, GOOD_NAME, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
 import { plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
 import { GroundCard } from '../phone/ground';
@@ -54,6 +54,30 @@ export function skippedLine(auction: AuctionView): string | null {
   if (auction.skipped.length === 0) return null;
   const reasons = [...new Set(auction.skipped.map((s) => REASON[s.reason]))];
   return `Skipped: ${auction.skipped.map((s) => GOOD_NAME[s.good]).join(', ')}: ${reasons.join(', ')}`;
+}
+
+/** A running deal as the TV lists it, under the identity it keeps while it runs. */
+export interface DealRow {
+  key: string;
+  deal: DealView;
+}
+
+/** A deal's identity, as the engine keys it: a house's deal stays one deal as it serves whoever is next in line. */
+export function dealKey(d: DealView): string {
+  const house = (id: string) => id === STORE_ID || id === SHIP_ID;
+  return house(d.buyer) ? `${d.buyer}<` : house(d.seller) ? `${d.seller}>` : `${d.buyer}<${d.seller}`;
+}
+
+/**
+ * The deals now running, newest first: those already in `rows` keep their order (with the latest units),
+ * deals that just started go on top in the server's order, and deals that ended drop out.
+ */
+export function newestFirst(rows: readonly DealRow[], deals: readonly DealView[]): DealRow[] {
+  const running = new Map(deals.map((d) => [dealKey(d), d]));
+  const kept = rows.filter((r) => running.has(r.key)).map((r) => ({ key: r.key, deal: running.get(r.key)! }));
+  const known = new Set(kept.map((r) => r.key));
+  const started = [...running].filter(([key]) => !known.has(key)).map(([key, deal]) => ({ key, deal }));
+  return [...started, ...kept];
 }
 
 /** Who is trading with whom, in words. */

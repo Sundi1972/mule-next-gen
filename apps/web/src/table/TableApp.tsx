@@ -1,6 +1,6 @@
-import type { MuleView, TableView } from '@mule/protocol';
+import type { DealView, MuleView, TableView } from '@mule/protocol';
 import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PlayerMark, SeatSpeciesProvider, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard, type Slot } from '@mule/ui';
-import { boardWalkers, dealLine, LineReadout, skippedLine, StatusTable } from '../components/AuctionParts';
+import { boardWalkers, dealLine, LineReadout, newestFirst, skippedLine, StatusTable, type DealRow } from '../components/AuctionParts';
 import { useEffect, useState, type ReactNode } from 'react';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
@@ -287,12 +287,26 @@ function MarketTiles({ game }: { game: MuleView }) {
   );
 }
 
+/**
+ * The running deals, newest first, each keeping its place for as long as it runs. The rows live in state and
+ * follow each new deals list during render (React's "adjust state when a prop changes"), so a discarded render
+ * leaves nothing behind.
+ */
+function useNewestFirst(deals: DealView[]): DealRow[] {
+  const [held, setHeld] = useState(() => ({ from: deals, rows: newestFirst([], deals) }));
+  if (held.from === deals) return held.rows;
+  const rows = newestFirst(held.rows, deals);
+  setHeld({ from: deals, rows });
+  return rows;
+}
+
 /** The auction on the big screen: the whole board, large, with every creature walking live. */
 function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game: MuleView; auction: NonNullable<MuleView['auction']> }) {
   useAuctionSound(auction);
   const skipped = skippedLine(auction);
   const walkers = boardWalkers(game, auction);
   const stock = auction.storeForSale;
+  const deals = useNewestFirst(auction.deals);
   const stageName = auction.stage === 'status' ? 'Status' : auction.stage === 'declare' ? 'Buy, sell or pass?' : auction.slowed ? 'Trading · clock slowed' : 'Walk';
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-8 text-ink" data-phase="auction">
@@ -356,14 +370,15 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
           {auction.shipPays !== null && (
             <p className="rounded-control border border-warn/60 px-3 py-2 font-mono text-lg text-warn">Export ship pays {auction.shipPays}</p>
           )}
-          <ul className="flex flex-col gap-2">
-            {auction.deals.map((d) => (
-              <li key={`${d.buyer}-${d.seller}`} className="rounded-control border border-holo bg-holo-soft px-3 py-2 font-mono text-lg font-bold text-holo">
-                {dealLine(game, d)}
+          {/* Each row is one line. A row that doesn't fit below the others wraps into a second column, which the clip hides. */}
+          <ul className="flex min-h-0 flex-1 flex-col flex-wrap gap-2 overflow-hidden">
+            {deals.map(({ key, deal }) => (
+              <li key={key} className="w-full truncate rounded-control border border-holo bg-holo-soft px-3 py-2 font-mono text-lg font-bold text-holo">
+                {dealLine(game, deal)}
               </li>
             ))}
           </ul>
-          <p className="mt-auto text-base leading-snug text-ink-2">
+          <p className={cx('mt-auto text-base leading-snug text-ink-2', auction.deals.length > 0 && 'hidden')}>
             {auction.stage === 'walk'
               ? 'Sellers push the red line down, buyers push the green line up. When the two lines meet, the goods change hands.'
               : auction.stage === 'declare'
