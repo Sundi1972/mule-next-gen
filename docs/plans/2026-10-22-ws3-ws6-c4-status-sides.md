@@ -70,7 +70,7 @@
 > Naming, internal structure, helper decomposition and test fixtures are yours. Everything else in your payload is specified. If you need to change anything outside it — including because it appears impossible — stop and report to the lead with the element id and the goal it fails. Do not deviate: you can see one task, and the lead can see the whole graph.
 
 - `may_edit`:
-  - C4.1: `packages/engine/src/auction.ts`, `packages/engine/src/config.ts` (the WALK block only), `packages/engine/test/auction.test.ts`, `packages/protocol/src/index.ts` (the `AuctionView.stage` type), `apps/server/src/mule-game.ts`, and the `apps/server/test/` files that assert the stage: `mule-game.test.ts`, `auction-units.test.ts`, `phase-scale.test.ts`.
+  - C4.1: `packages/engine/src/auction.ts`, `packages/engine/src/types.ts` (LiveAuction's stage union and its doc lines only; added in execution, since the union lives there and not in auction.ts), `packages/engine/src/config.ts` (the WALK block, its doc included), `packages/engine/test/auction.test.ts`, `packages/protocol/src/index.ts` (the `AuctionView.stage` type), `apps/server/src/mule-game.ts`, and the `apps/server/test/` files that assert the stage: `mule-game.test.ts`, `auction-units.test.ts`, `phase-scale.test.ts`.
   - C4.4: `apps/web/e2e/auction-steps.ts`.
 - `may_edit_content`: `apps/web/src/phone/Auction.tsx` (the status branch, grafted from `PhoneStatusDeclare`).
 - **Named edits in other lanes' files:**
