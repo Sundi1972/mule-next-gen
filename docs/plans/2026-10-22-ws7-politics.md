@@ -91,6 +91,7 @@ Every handoff carries the standing authority line, verbatim:
 **PR-4**
 - `may_edit_content`: the politics desks in WS6's hub, grafted from WS6's approved mock at its pinned SHA: wire data, handlers and intents; keep composition, layout, tokens and every `data-testid`.
 - `may_edit`: `apps/web/e2e/politics.ts` (new e2e)
+- named edit (WS4 reviews, PM ruling 2026-10-22): `apps/web/src/phone/GameOver.tsx`, one "Offices held +N" row
 - `must_not_edit`: the hub frame (WS6's PR-9), `apps/web/src/phone/{PhoneApp,Shell}.tsx` and `apps/web/src/table/TableApp.tsx` except one route/slot line each (WS4 reviews)
 
 ### Contention
@@ -152,7 +153,7 @@ Every handoff carries the standing authority line, verbatim:
   - Invariant in each: nobody holds both offices.
   Altitude: unit — the engine is the boundary where the result is fixed; the screens only show it (B-AC-1 is proven at the screen in PR-4). Trap: weights are read when the ballot closes, not when the vote is cast — assert with a plot that changes hands in between only if setup allows; otherwise note it in the test name.
 - [ ] **Step 2:** Run — Expected: FAIL.
-- [ ] **Step 3: Implement C3** per §1 C3 and §2 RULE-1–3: `runFor`, `castVote`, `electionDone`, `stepElection(state, dt)` (returns the result on entering reveal, else null), seating winners when the reveal ends and counting terms. Path: `politics.ts`. No RNG anywhere (HC-1, WS1 agreement).
+- [ ] **Step 3: Implement C3** per §1 C3 and §2 RULE-1–3: `runFor`, `castVote`, `electionDone`, `canRun` (AM-3), `stepElection(state, dt)` (returns the result on entering reveal, else null), seating winners when the reveal ends and counting terms. Path: `politics.ts`. No RNG anywhere (HC-1, WS1 agreement).
 - [ ] **Step 4:** Run — Expected: PASS.
 - [ ] **Step 5:** Commit `feat(engine): election with nominate, ballot and reveal (C3)`.
 
@@ -254,7 +255,7 @@ Every handoff carries the standing authority line, verbatim:
 
 **ACs verified:** B-AC-5, B-AC-2 · **Spec:** §2 RULE-9
 
-- [ ] **Step 1: Write failing tests** `B-AC-5: another phone and the TV never receive Brix's ballot` (serialize `viewFor('ossa')` and `viewFor(null)`; Brix's choice absent; `viewFor('brix')` has it), and `B-AC-2: after the Governor sets 8%, the next auction sale is taxed at 8%` (drive one sale through the server's auction tick; assert the seller's money in the view). Altitude: promise at the server's view — what each screen receives.
+- [ ] **Step 1: Write failing tests** `B-AC-5: another phone and the TV never receive Brix's ballot` (serialize `viewFor('ossa')` and `viewFor(null)`; Brix's choice absent; `viewFor('brix')` has it), plus an exact-keys allow-list on the board's `politics` view and its `election` (the `expectBoardKeys` pattern in `apps/server/test/auction-units.test.ts`, HC-2 since #47), so a new field must be checked before it reaches the TV, and `B-AC-2: after the Governor sets 8%, the next auction sale is taxed at 8%` (drive one sale through the server's auction tick; assert the seller's money in the view). Altitude: promise at the server's view — what each screen receives.
 - [ ] **Step 2:** Run — Expected: FAIL.
 - [ ] **Step 3: Implement** the politics view per spec §3 (public part on every view; `me.politics` only on the owner's), and the news line on each reveal.
 - [ ] **Step 4:** Run — Expected: PASS.
@@ -286,6 +287,16 @@ Every handoff carries the standing authority line, verbatim:
 - [ ] **Step 1:** Extend the e2e: the winner sets 8%; the next sale at the auction is taxed at 8% (assert the seller's money in their phone's view). This is UBER-AC-2 verbatim.
 - [ ] **Step 2:** Run — Expected: PASS.
 - [ ] **Step 3:** Commit `test(e2e): UBER-AC-2 election to taxed sale`.
+
+### Task 4.2b: Offices held on the game-over screen — C7 (PM ruling 2026-10-22, option A)
+
+**Depends on:** PR-1 (the `office` score line) · **ACs verified:** C7 (visible half) · named edit in WS4's `apps/web/src/phone/GameOver.tsx`, WS4 reviews
+
+- [ ] **Step 1:** Write the failing test `C7: the game-over lines a player sees add up to their final score, an "Offices held +N" row included` (an officeholder's phone at game over; sum the rendered line values; equals the shown total). Altitude: promise, the rendered screen.
+- [ ] **Step 2:** Run — Expected: FAIL (no office row).
+- [ ] **Step 3:** Add one row "Offices held +N" from `parts.office`, in the existing rows' markup; shown only when N > 0.
+- [ ] **Step 4:** Run — Expected: PASS.
+- [ ] **Step 5:** Commit `feat(web): offices held on the game-over breakdown (C7)`.
 
 ### Task 4.3: PR-4 integration check
 
