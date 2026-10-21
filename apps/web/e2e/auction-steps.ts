@@ -36,20 +36,37 @@ export const listedSale: NonNullable<AuctionSteps['listedSale']> = async ({ phon
   await planning.getByTestId('tab-colony').click({ timeout: PRESS_MS });
 };
 
-/** After each land grant: with the phone's listing up, the lot shows on the phone and the TV and runs to its bell. */
+/**
+ * After each land grant: every lot shows on the phone and the TV and runs to its bell, pressing nothing.
+ * Any month may open with the colony's lot (B-AC-8); in month 2 the phone's own listing follows it.
+ */
 export const landAuction: NonNullable<AuctionSteps['landAuction']> = async ({ phone, tv, check }, month) => {
-  if (month !== 2 || smokeListing === null) {
-    check((await phone.locator('[data-phase=landAuction]').count()) === 0, `month ${month}: no land auction without a listing`);
+  const listing = month === 2 ? smokeListing : null;
+  smokeListing = null;
+  await phone.locator('[data-phase]:not([data-phase=landGrant])').waitFor({ timeout: within(0.1, LOTS.introMs) });
+  if ((await phone.locator('[data-phase=landAuction]').count()) === 0) {
+    check(listing === null, `month ${month}: the phone's listing ${listing} opens a land auction`);
     return;
   }
-  const lots = phone.locator('[data-phase=landAuction]');
-  await lots.waitFor({ timeout: within(0.1, LOTS.introMs) });
-  await tv.locator('[data-phase=landAuction]').getByTestId('tv-lot').waitFor({ timeout: within(0.1, LOTS.introMs) });
-  // Whether an AI bids decides sold or kept (the listing keeps it unsold); either way both screens show the bell.
-  const [mine, shown] = await Promise.all([resultOn(phone, 'result', 0.1), resultOn(tv, 'tv-result', 0.1)]);
   const rang = (kind: string) => kind === 'kept' || kind === 'sold';
-  check(rang(mine.kind) && rang(shown.kind), `the lot ends sold or kept, phone ${mine.kind}, TV ${shown.kind}`);
-  smokeListing = null;
+  for (let n = 1; n <= LOTS.maxLotsPerMonth; n++) {
+    const lot = await lotUp(phone, within(0.1, LOTS.resultMs + LOTS.introMs));
+    if (!lot) {
+      check(listing === null, `month ${month}: the phone's listing ${listing} came up before the land auction ended`);
+      return;
+    }
+    const colony = lot.seller.includes(COLONY_NAME);
+    check(colony || listing !== null, `month ${month}: with nothing listed only the colony sells, got a lot from "${lot.seller}"`);
+    if (colony) check(lot.number === 1, `B-AC-8: the colony's lot is first in line, got lot ${lot.number} of ${lot.count}`);
+    // Whether an AI bids decides sold or kept (both lots stay with their seller unsold); either way both screens show the bell.
+    const [mine, shown] = await Promise.all([resultOn(phone, 'result', 0.1), resultOn(tv, 'tv-result', 0.1)]);
+    check(rang(mine.kind) && rang(shown.kind), `month ${month}: lot ${lot.number} ends sold or kept, phone ${mine.kind}, TV ${shown.kind}`);
+    if (colony) console.log(`auction steps: B-AC-8, month ${month} opened with the colony's lot, ${shown.kind}`);
+    if (colony && listing === null) check(lot.count === 1, `month ${month}: with nothing listed the colony's lot is the only one, got ${lot.count}`);
+    if (!colony || listing === null) return;
+    await Promise.all([phone.getByTestId('result').waitFor({ state: 'hidden', timeout: within(0.1, LOTS.resultMs) }), tv.getByTestId('tv-result').waitFor({ state: 'hidden', timeout: within(0.1, LOTS.resultMs) })]);
+  }
+  check(false, `month ${month}: the land auction ends within ${LOTS.maxLotsPerMonth} lots`);
 };
 
 // --- UBER-AC-1, front to back ----------------------------------------------------
@@ -110,9 +127,11 @@ async function playTheLandAuction(browser: Browser, base: string): Promise<void>
   await brix.page.getByRole('button', { name: 'Start game' }).click();
   console.log(`✓ three phones and a TV at table ${code}`);
 
-  // Month 1: everyone claims (Brix and Lena list theirs in month 2), so the grant ends early; nothing is listed, so no land auction.
+  // Month 1: everyone claims (Brix and Lena list theirs in month 2), so the grant ends early. Nothing is listed, so only the colony's lot can follow.
   await everyone(phones, (p) => readyInPlanning(p.page));
   await everyone(phones, (p) => claimPlots(p.page));
+  await brix.page.locator('[data-phase]:not([data-phase=landGrant])').waitFor({ timeout: within(SCALE, LOTS.introMs) });
+  if ((await brix.page.locator('[data-phase=landAuction]').count()) > 0) await followTheColonyLot(phones, tv, 1);
   await everyone(phones, (p) => goToThePub(p.page));
   await everyone(phones, (p) => pressDoneThroughTheAuction(p.page));
   console.log('✓ month 1: everyone claimed');
@@ -139,9 +158,11 @@ async function playTheLandAuction(browser: Browser, base: string): Promise<void>
   await everyone(phones, (p) => readyInPlanning(p.page));
   await everyone(phones, (p) => claimPlots(p.page));
 
-  // Lot 1: Lena stops low, Ossa holds Up past her and is still holding when the bell rings.
+  // Brix's lot 1: Lena stops low, Ossa holds Up past her and is still holding when the bell rings. The colony's lot may come up before it.
   await everyone(phones, (p) => p.page.locator('[data-phase=landAuction]').waitFor({ timeout: within(SCALE, PHASE_MS.landGrant) }));
-  await brix.page.getByTestId('seller-wait').or(brix.page.getByTestId('seller-note')).waitFor({ timeout: within(SCALE, LOTS.introMs) });
+  const opening = await lotUp(brix.page, within(SCALE, LOTS.introMs));
+  if (opening?.seller.includes(COLONY_NAME)) await followTheColonyLot(phones, tv, 2);
+  await brix.page.getByTestId('seller-wait').or(brix.page.getByTestId('seller-note')).waitFor({ timeout: within(SCALE, LOTS.resultMs + LOTS.introMs) });
   await tv.getByTestId('tv-lot').waitFor({ timeout: within(SCALE, LOTS.introMs) });
   const before = await moneyOf(phones);
   const bell1 = watchTheBell(phones, tv);
@@ -177,8 +198,8 @@ async function playTheLandAuction(browser: Browser, base: string): Promise<void>
   check(lot1.phones[brix.name]!.money === before[brix.name]! + proceeds, `Brix got ${proceeds} after tax: ${before[brix.name]} → ${lot1.phones[brix.name]!.money}`);
   console.log(`✓ B-AC-2: lot 1 sold to Ossa at ${price} over Lena's ${lenaBid}; Ossa −${price}, Brix +${proceeds}, on the phones and the TV`);
 
-  // Lot 2: Ossa held Up through lot 1's bell; her first press now must move her walker.
-  await ossa.page.getByText(`Land auction · 2 of 2`).waitFor({ timeout: within(SCALE, LOTS.resultMs + LOTS.introMs) });
+  // Brix's lot 2: Ossa held Up through lot 1's bell; her first press now must move her walker.
+  await nextLotFrom(ossa.page, brix.name);
   const before2 = await moneyOf([ossa]);
   const bell2 = watchTheBell(phones, tv);
   bell2.catch(() => undefined);
@@ -211,6 +232,24 @@ async function playTheLandAuction(browser: Browser, base: string): Promise<void>
 }
 
 /**
+ * B-AC-8, when the seed rolls it: the colony's lot is first on every phone and the TV, every phone
+ * can hold Up on it, and with nobody bidding it stays free land. Presses nothing; returns once its result is gone.
+ */
+async function followTheColonyLot(phones: Phone[], tv: Page, month: number): Promise<void> {
+  const bell = watchTheBell(phones, tv);
+  bell.catch(() => undefined);
+  const screens = [...phones.map((p) => ({ name: `${p.name}'s phone`, page: p.page })), { name: 'the TV', page: tv }];
+  const lots = await Promise.all(screens.map((s) => lotUp(s.page, within(SCALE, LOTS.introMs))));
+  lots.forEach((lot, i) => check(lot?.seller.includes(COLONY_NAME) && lot.number === 1, `B-AC-8: ${screens[i]!.name} shows the colony's lot first, got ${JSON.stringify(lot)}`));
+  await everyone(phones, (p) => p.page.locator('[data-testid=hold-up]:not([disabled])').waitFor({ timeout: within(SCALE, LOTS.introMs + LOTS.walkMs) }));
+  const rang = await bell;
+  check(rang.tv.kind === 'kept' && rang.tv.text.includes('Stays free land'), `B-AC-8: nobody bid, so the TV says it stays free land: "${rang.tv.text}"`);
+  for (const p of phones) check(rang.phones[p.name]!.kind === 'kept', `B-AC-8: ${p.name}'s phone shows the colony's lot unsold, got ${rang.phones[p.name]!.kind}`);
+  await everyone(phones, (p) => p.page.getByTestId('result').waitFor({ state: 'hidden', timeout: within(SCALE, LOTS.resultMs) }));
+  console.log(`✓ B-AC-8: month ${month} opened with the colony's lot on every phone and the TV; every phone could bid, and unbid it stays free land`);
+}
+
+/**
  * B-AC-6: with two lots already up, Lena lists two more and fills the month;
  * Ossa's Sell tab then reads full and refuses a fifth. Lena unlists both, so
  * the auction that follows is the one with Brix's two lots.
@@ -240,6 +279,39 @@ async function fillTheMonthThenUnlist(lena: Phone, ossa: Phone): Promise<void> {
 }
 
 // --- Steps on one page -------------------------------------------------------------
+
+/** The seller of the colony's lot, as the lot card names it. */
+const COLONY_NAME = 'The colony';
+
+type LotUp = { number: number; count: number; seller: string };
+
+/** The lot on a phone's or the TV's land auction screen, once its card shows; null once the page has left the land auction. */
+async function lotUp(page: Page, timeout: number): Promise<LotUp | null> {
+  const handle = await page.waitForFunction(
+    () => {
+      const root = document.querySelector('[data-phase]');
+      if (!root) return null;
+      if (root.getAttribute('data-phase') !== 'landAuction') return { over: true };
+      const header = /Land auction · (\d+) of (\d+)/.exec(root.textContent ?? '');
+      const card = root.querySelector('[data-testid=lot-seller], [data-testid=tv-lot]');
+      if (!header || !card) return null;
+      return { over: false, number: Number(header[1]), count: Number(header[2]), seller: card.textContent ?? '' };
+    },
+    undefined,
+    { timeout, polling: 'raf' },
+  );
+  const r = (await handle.jsonValue()) as ({ over: true } | ({ over: false } & LotUp));
+  return r.over ? null : { number: r.number, count: r.count, seller: r.seller };
+}
+
+/** Waits for the next lot from `seller`: the last lot's result gone and the card naming them. */
+async function nextLotFrom(page: Page, seller: string): Promise<void> {
+  await page.waitForFunction(
+    (name) => !document.querySelector('[data-testid=result]') && (document.querySelector('[data-testid=lot-seller]')?.textContent ?? '').includes(name),
+    seller,
+    { timeout: within(SCALE, LOTS.resultMs + LOTS.introMs), polling: 'raf' },
+  );
+}
 
 /** A budget for a phase of `ms` game time at this scale, plus room for the browser and the network. */
 function within(scale: number, ms: number): number {

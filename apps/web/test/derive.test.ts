@@ -1,6 +1,7 @@
+import { POLLUTION } from '@mule/engine';
 import type { MuleView, PlayerView, TileView } from '@mule/protocol';
 import { describe, expect, it } from 'vitest';
-import { groundPips, mapTiles, secondsUntil, slotOf, standings } from '../src/game/derive';
+import { colonyVerdict, groundPips, mapTiles, secondsUntil, slotOf, standings } from '../src/game/derive';
 
 const p = (id: string, money: number): PlayerView => ({ id, name: id, isAi: false, color: '', species: 'zipwing', money, plots: 0, ready: false, doneDeveloping: false });
 const tile = (x: number, y: number, extra: Partial<TileView> = {}): TileView => ({ x, y, terrain: 'plains', peaks: 0, owner: null, outfit: null, pollution: 0, filter: false, ...extra });
@@ -61,5 +62,18 @@ describe('reading the view', () => {
     expect(secondsUntil(null, 0)).toBeUndefined();
     expect(secondsUntil(10_000, 7_500)).toBe(2.5);
     expect(secondsUntil(10_000, 12_000)).toBe(0);
+  });
+
+  it('B-AC-3: colonyVerdict says failed only in Collapse, and "a fifth" is 1 − POLLUTION.collapseScore', () => {
+    expect(colonyVerdict({ level: 86, band: 'collapse' })).toEqual({
+      failed: true,
+      title: 'The colony failed',
+      line: 'The air ended in Collapse. The Federation cuts every score by a fifth.',
+    });
+    for (const band of ['clean', 'smoggy', 'toxic'] as const) {
+      expect(colonyVerdict({ level: 79, band })).toEqual({ failed: false, title: 'The colony passed', line: 'The air stayed out of Collapse. Every score counts in full.' });
+    }
+    // The copy says "a fifth" in words; a new collapseScore has to change the copy with it.
+    expect(1 - POLLUTION.collapseScore).toBeCloseTo(0.2, 10);
   });
 });

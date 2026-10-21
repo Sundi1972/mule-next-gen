@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, AI_LEVELS, AI_PERSONAS, createGame, GAME, mulePriceFor, observe, type GameState } from '@mule/engine';
+import { advancePhase, AI_LEVELS, AI_PERSONAS, createGame, EVENTS, GAME, GOODS, mulePriceFor, observe, type GameState } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
 import { AiSeat } from '../src/seat.js';
 import { developDecision, goodPlan, muleValue, plotValue, tradeDecision } from '../src/strategist.js';
@@ -158,5 +158,25 @@ describe('surplus to a short store', () => {
     const full = observe(auctionWithShelf(40), 'ai0');
     const before = tradeDecision(full, traderMind, goodPlan(full, traderMind, 'water')).all.find((c) => c.key === 'sell');
     expect(before === undefined || (before.action as { keep: number }).keep > plan.values.block).toBe(true);
+  });
+});
+
+describe('production events and the outlook', () => {
+  it('T-AC-7: a seat’s outlook forecasts the same with events on as off: it never sees next month’s event', () => {
+    const forecast = (seed: number, chance: number) => {
+      const saved = EVENTS.chance;
+      EVENTS.chance = chance;
+      try {
+        const state = fourSeats(seed);
+        while (state.phase !== 'development') advancePhase(state);
+        const free = state.tiles.filter((t) => !t.owner && t.terrain !== 'store');
+        state.players.forEach((p, i) => (['food', 'energy', 'water'] as const).forEach((o, k) => Object.assign(free[i * 3 + k]!, { owner: p.id, outfit: o })));
+        const o = outlook(observe(state, 'ai0'), 'ai0', { lookAhead: true });
+        return GOODS.map((g) => [o.price(g), o.later(g)]);
+      } finally {
+        EVENTS.chance = saved;
+      }
+    };
+    for (let seed = 1; seed <= 6; seed++) expect(forecast(seed, 1)).toEqual(forecast(seed, 0));
   });
 });

@@ -173,9 +173,72 @@ export interface MonthReport {
   colonyFund: number;
   /** Colonists short of Food or Water this month. */
   colonistsHungry: boolean;
+  /** The production events that fired this month (none in most months). Absent in older reports. */
+  events?: MonthEvent[];
+  /** Events announced ahead of time. Absent in older reports. */
+  warnings?: EventWarning[];
+  /** Every working plot's output, part by part. Absent in older reports. */
+  lines?: ProductionLine[];
+}
+
+export type EventKey =
+  | 'dustStorm'
+  | 'drought'
+  | 'acidRain'
+  | 'solarFlare'
+  | 'cometPass'
+  | 'flood'
+  | 'volcanicAsh'
+  | 'pestSwarm'
+  | 'wildfire'
+  | 'bumperHarvest';
+
+/** How the screens animate an event; several events share a kind. */
+export type EventKind = 'storm' | 'drought' | 'flare' | 'comet' | 'flood' | 'quake' | 'blight' | 'fire' | 'bounty';
+
+export interface MonthEvent {
+  key: EventKey;
+  kind: EventKind;
+  /** Two to four words, e.g. "Dust storm". */
+  title: string;
+  /** One plain sentence of the effect. */
+  line: string;
+  scope: 'colony' | 'local' | 'personal';
+  /** Where the animation starts: an edge point for a colony sweep, the first plot otherwise. */
+  origin: { x: number; y: number };
+  /** For a colony sweep, the map edge it comes in from. */
+  direction?: 'n' | 'e' | 's' | 'w';
+  /** Each plot hit, in the order the event reached it, and how much its output changed. */
+  plots: { index: number; order: number; good: Good; delta: number }[];
+  /** For a personal event, the player whose land it started on. */
+  player?: string;
+  sign: 'good' | 'bad' | 'mixed';
+  when: 'afterProduction';
+}
+
+export interface EventWarning {
+  key: EventKey;
+  title: string;
+  line: string;
+  arrivesMonth: number;
+  visibility: 'public' | 'observatory';
+}
+
+export interface ProductionLine {
+  tile: number;
+  good: Good;
+  made: number;
+  /** What made up the output, in order; the deltas sum to `made`. */
+  parts: {
+    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'noEnergy' | 'noWater' | 'event' | 'factory';
+    delta: number;
+    event?: EventKey;
+  }[];
 }
 
 export interface GameState {
+  /** Set on a what-if copy (an AI's look-ahead): no production event and no colony lot is ever rolled on it. */
+  whatIf?: true;
   seed: number;
   month: number;
   maxMonths: number;

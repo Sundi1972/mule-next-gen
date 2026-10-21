@@ -57,7 +57,7 @@ export function LandGrant() {
         </button>
       }
     >
-      <p className="pb-1.5 font-mono text-[11px] text-ink-3">PLOTS LIGHT UP AT RANDOM · TAP CLAIM WHEN YOURS IS LIT</p>
+      <p className="pb-1.5 font-mono text-[11px] text-ink-3">PLOTS LIGHT UP ROW BY ROW · TAP CLAIM WHEN YOURS IS LIT</p>
       <MapFit width={view.width} height={view.height}>
         <HoloMap width={view.width} height={view.height} tiles={mapTiles(view)} cursor={lit} focusSlot={slot} />
       </MapFit>
