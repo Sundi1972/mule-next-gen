@@ -134,6 +134,11 @@ function scorePlot(obs: GameState, gains: Map<Outfit, number>, tile: Tile, focus
   return candidate(`plot:${index}`, plotName(tile), { index, outfit: best.outfit }, best.gain + GAME.plotScore, cons);
 }
 
+/** Where a plot falls among plots the seat values the same: seeded per seat, so ties don't follow the map's reading order. */
+function tieOrder(mind: Mind, index: number): number {
+  return Math.imul((mind.salt ?? 0) ^ Math.imul(index + 1, 0x9e3779b1), 0x85ebca6b) >>> 0;
+}
+
 /** The land plans for this month, each with its full ranking of free plots. */
 export function landDecision(obs: GameState, mind: Mind): Shortlist<LandPlan> {
   const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
@@ -150,7 +155,7 @@ export function landDecision(obs: GameState, mind: Mind): Shortlist<LandPlan> {
   const plans = focuses.map((focus) => {
     const ranking = free
       .map((t) => scorePlot(obs, gains.get(t)!, t, focus, mind, leader))
-      .sort((a, b) => b.utility - a.utility)
+      .sort((a, b) => b.utility - a.utility || tieOrder(mind, a.action.index) - tieOrder(mind, b.action.index))
       .map((c): PlotScore => ({ index: c.action.index, utility: c.utility, value: c.value, outfit: c.action.outfit, label: c.label }));
     const top = ranking.slice(0, claims);
     const worth = top.reduce((n, s) => n + s.value, 0);
@@ -174,7 +179,9 @@ export function landDecision(obs: GameState, mind: Mind): Shortlist<LandPlan> {
 /**
  * Whether the hands should press for the lit plot: it must clear a share of
  * the best plot still free in the plan's ranking (lower after the first
- * sweep, so the seat doesn't end the month empty-handed). Never while the
+ * sweep, so the seat doesn't end the month empty-handed), and in the first
+ * two sweeps be among its top open plots: the grant lights plots in reading
+ * order, and the first that will do would always be near the top. Never while the
  * seat already holds a month's worth of idle plots it can't pay to develop:
  * hoarded land earns nothing and every idle plot counts as Smithore demand.
  */
@@ -183,9 +190,11 @@ export function wantsPlot(plan: LandPlan, obs: GameState, index: number, sweep: 
   if (idle >= mind.level.mulesPerMonth && me(obs, mind).money < (idle + 1) * mulePriceFor(obs, mind.me)) return false;
   const free = new Set(obs.tiles.map((t, i) => (t.owner === null && t.terrain !== 'store' ? i : -1)).filter((i) => i >= 0));
   const open = plan.ranking.filter((s) => free.has(s.index));
-  const lit = open.find((s) => s.index === index);
+  const rank = open.findIndex((s) => s.index === index);
+  const lit = open[rank];
   if (!lit) return sweep > 1;
   if (sweep > 1) return true;
+  if (rank >= (GAME.claimsPerGrant + STRATEGIST.grantSpare) * (sweep + 1)) return false;
   const share = sweep === 0 ? STRATEGIST.grantShare : STRATEGIST.grantLaterShare;
   return lit.utility >= (open[0]?.utility ?? 0) * share;
 }
