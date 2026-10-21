@@ -136,7 +136,7 @@ export function GameShell({
             </div>
             {/* Live table chat (C20): everyone's seat, the bubble's fallback anchor, and the last lines. */}
             {chat && (
-              <div className="flex flex-col gap-1 border-t border-holo-faint pt-1.5 @min-[1100px]/shell:gap-2 @min-[1100px]/shell:pt-2.5" data-testid="table-chat">
+              <div className="relative flex flex-col gap-1 border-t border-holo-faint pt-1.5 @min-[1100px]/shell:gap-2 @min-[1100px]/shell:pt-2.5" data-testid="table-chat">
                 <SeatRow anchored={anchored} />
                 <Ticker />
               </div>

@@ -166,7 +166,7 @@ function ChatPage() {
   return (
     <Page title="Live table chat · every screen, every phase">
       <p className="max-w-[900px] text-sm text-ink-2">
-        A line every 3 s. The bubble pops at the speaker's creature where the screen draws one (the store hall, the TV's map), otherwise at their place in the guide's seat row; the ticker keeps the last lines. The third line is Ossa's whisper to Lena: it shows only on Lena's screens, with a lock, never on the TV.
+        Lines arrive in a rhythm with some only a second apart. One bubble at a time per screen, in a queue: each shows at least 2 s, and a line that would wait over 4 s is left to the ticker, so bubbles never cover each other or the ticker. The bubble pops at the speaker's creature where the screen draws one (the store hall, the TV's map), staying inside the stage; otherwise it opens left of the guide and the speaker's seat lights up. The third line is Ossa's whisper to Lena: it shows only on Lena's screens, with a lock, never on the TV.
       </p>
       <ChatProvider value={lena}>
         <LaptopFrame>
