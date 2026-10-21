@@ -141,7 +141,7 @@ try {
   // B-AC-14: planning is the hub, its needs read from that seed; with B-AC-12's planning part.
   console.log(`hub: ${await planningIsTheHub(phone, server, code)}`);
   // B-AC-12: the shell fills the stage at 1440×900 and 844×390.
-  console.log(`shell: ${await shellFillsTheStage(phone, server, code)}`);
+  console.log(`shell: ${await shellFillsTheStage(phone)}`);
   await readyIfStillPlanning(phone);
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 2);
