@@ -10,6 +10,10 @@ import { MapFit, PhoneShell } from './Shell';
 
 const OUTFIT_NAME = (o: TileView['outfit']) => (o === null ? '' : o === 'greenBelt' ? 'Green belt' : GOOD_NAME[o]);
 
+/** How long the start-of-turn card stays on the store floor, and how long its bar takes to fill. */
+const FILL_CARD_SECONDS = 2.2;
+const FILL_RISE_SECONDS = 2;
+
 /**
  * Development: your own clock runs. Buy a MULE in the store, outfit it, walk
  * out and install it on one of your plots. Analyse ground, fit filters, or
@@ -41,7 +45,9 @@ export function Develop() {
   if (self.doneDeveloping || seconds <= 0) return <Done pub={self.doneDeveloping} />;
 
   const step = carry === null ? 1 : carry === 'empty' ? 2 : 3;
-  const open: Shop[] = carry === null ? ['corral', 'pub'] : carry === 'empty' ? [...OUTFIT_GOODS, ...FACTORY_GOODS, 'greenBelt', 'pub'] : ['pub'];
+  const elapsed = Math.max(0, me.devSeconds - seconds);
+  const filling = elapsed < FILL_CARD_SECONDS;
+  const open: Shop[] = filling ? [] : carry === null ? ['corral', 'pub'] : carry === 'empty' ? [...OUTFIT_GOODS, ...FACTORY_GOODS, 'greenBelt', 'pub'] : ['pub'];
   const onShop = (shop: Shop) => {
     if (shop === 'pub') client.intent({ type: 'pub' });
     else if (shop === 'corral') client.intent({ type: 'buyMule' });
@@ -200,6 +206,7 @@ export function Develop() {
             onShop={onShop}
             onDoor={() => setPlace('map')}
             me={{ id: me.id, slot, leading: carry, time: seconds / DEVELOPMENT.fullSeconds }}
+            overlay={filling && <FillCard elapsed={elapsed} seconds={me.devSeconds} hungry={me.hungry} ate={Math.min(me.stock.food, me.needs.food)} need={me.needs.food} />}
           />
         </div>
       ) : (
@@ -215,6 +222,29 @@ export function Develop() {
         </MapFit>
       )}
     </PhoneShell>
+  );
+}
+
+/** The start of the turn: you eat, and your time bar fills to what the Food bought, short and orange when hungry. */
+function FillCard({ elapsed, seconds, hungry, ate, need }: { elapsed: number; seconds: number; hungry: boolean; ate: number; need: number }) {
+  const full = DEVELOPMENT.fullSeconds;
+  const share = Math.min(1, elapsed / FILL_RISE_SECONDS) * Math.min(1, seconds / full);
+  return (
+    <div className="absolute inset-0 flex items-center justify-center bg-void/55" data-testid="fill-card">
+      <div className="flex w-[64%] flex-col gap-1.5 rounded-panel border-2 border-holo bg-panel p-3 shadow-glow">
+        <span className="label-caps">Start of your turn</span>
+        <span className="font-display text-lg font-semibold leading-tight">
+          You eat {ate} Food{hungry ? ` of the ${need} you need` : ''} and fill up your time bar.
+        </span>
+        <div className="relative h-3 overflow-hidden rounded-full bg-raised">
+          <div className={cx('absolute inset-y-0 left-0 rounded-full', hungry ? 'bg-warn' : 'bg-holo')} style={{ width: `${share * 100}%` }} />
+          {hungry && <div className="absolute inset-y-0 border-l-2 border-dashed border-ink-3" style={{ left: '100%', transform: 'translateX(-2px)' }} />}
+        </div>
+        <span data-num className={cx('font-mono text-sm font-bold', hungry ? 'text-warn' : 'text-holo')}>
+          {Math.round(share * full)} s{hungry ? ` of ${full}: short of Food, so less time` : ': full time'}
+        </span>
+      </div>
+    </div>
   );
 }
 
