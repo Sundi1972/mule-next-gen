@@ -376,15 +376,44 @@ describe('RULE-3: tally and winner', () => {
     expect(result?.governor).toMatchObject({ winner, how: 'tieRule' });
   });
 
-  it('T-AC-2 invariant: one player never holds both offices — the Sheriff race excludes the new Governor', () => {
+  it('T-AC-2 invariant: one player never holds both offices when the richest runs alone for Sheriff', () => {
     const state = newGame();
     for (const [id, money] of [['lena', 2000], ['brix', 900], ['ossa', 1000], ['ai1', 800]] as const) player(state, id).money = money;
     runFor(state, 'lena', 'sheriff');
-    const result = runOutClock(state);
-    expect(result?.governor).toMatchObject({ winner: 'lena', how: 'appointed' });
-    expect(result?.sheriff).toMatchObject({ winner: 'ossa', how: 'appointed' });
     runOutClock(state);
+    runOutClock(state);
+    expect(politicsOf(state).governor).not.toBeNull();
     expect(politicsOf(state).governor).not.toBe(politicsOf(state).sheriff);
+  });
+
+  it('AM-2: nobody runs for Governor and the richest runs alone for Sheriff → they are Sheriff (\'unopposed\') and the richest other player is appointed Governor', () => {
+    const state = newGame();
+    for (const [id, money] of [['lena', 2000], ['brix', 900], ['ossa', 1000], ['ai1', 800]] as const) player(state, id).money = money;
+    runFor(state, 'lena', 'sheriff');
+
+    const result = runOutClock(state);
+    expect(result).toEqual({
+      governor: { winner: 'ossa', how: 'appointed', tallies: [] },
+      sheriff: { winner: 'lena', how: 'unopposed', tallies: [{ id: 'lena', votes: 0 }] },
+    });
+    runOutClock(state);
+    expect(politicsOf(state)).toMatchObject({ governor: 'ossa', sheriff: 'lena' });
+  });
+
+  it('AM-2: every player runs for Sheriff → the richest is appointed Governor and the Sheriff race excludes them', () => {
+    const state = newGame();
+    for (const [id, money] of [['lena', 2000], ['brix', 900], ['ossa', 1000], ['ai1', 800]] as const) player(state, id).money = money;
+    for (const id of SEATS) runFor(state, id, 'sheriff');
+    runOutClock(state);
+    castVote(state, 'lena', 'sheriff', 'lena');
+    castVote(state, 'brix', 'sheriff', 'ossa');
+    castVote(state, 'ossa', 'sheriff', 'ossa');
+
+    const result = runOutClock(state);
+    expect(result).toEqual({
+      governor: { winner: 'lena', how: 'appointed', tallies: [] },
+      sheriff: { winner: 'ossa', how: 'votes', tallies: [{ id: 'ossa', votes: 2 }, { id: 'brix', votes: 0 }, { id: 'ai1', votes: 0 }] },
+    });
   });
 });
 
