@@ -1,4 +1,4 @@
-import { GROWN_ODDS, MINERAL_ODDS, TERRAIN_ODDS, mapSize } from './config.js';
+import { GROWN_ODDS, MAP, MINERAL_ODDS, TERRAIN_ODDS, mapSize } from './config.js';
 import type { Rng } from './rng.js';
 import { GROWN_GOODS, MINED_GOODS, type Ground, type Terrain, type Tile, type TileTrait } from './types.js';
 
@@ -73,7 +73,7 @@ export function rollGround(terrain: Terrain, rng: Rng): Ground {
   if (terrain === 'store') return ground;
   const odds = TERRAIN_ODDS[terrain];
   for (const g of GROWN_GOODS) ground[g] = rng.weighted(GROWN_ODDS[odds.grown[g] ?? 'neutral']) - 2;
-  for (const g of MINED_GOODS) ground[g] = rng.weighted(MINERAL_ODDS[odds.mined[g]]);
+  ground.smithore = rng.weighted(MINERAL_ODDS[odds.mined.smithore]);
   return ground;
 }
 
@@ -84,7 +84,10 @@ export function expectedGround(terrain: Terrain): Ground {
   const mean = (weights: readonly number[], offset: number) => weights.reduce((sum, w, i) => sum + w * (i + offset), 0);
   const odds = TERRAIN_ODDS[terrain];
   for (const g of GROWN_GOODS) ground[g] = mean(GROWN_ODDS[odds.grown[g] ?? 'neutral'], -2);
-  for (const g of MINED_GOODS) ground[g] = mean(MINERAL_ODDS[odds.mined[g]], 0);
+  ground.smithore = mean(MINERAL_ODDS[odds.mined.smithore], 0);
+  // Rings hold the rest, so no terrain hints at them.
+  ground.crystite = MAP.unknownMineral;
+  ground.rareEarth = MAP.unknownMineral;
   return ground;
 }
 
