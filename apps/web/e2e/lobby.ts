@@ -1,8 +1,11 @@
 /**
- * B-AC-6: in the lobby the host kicks a phone and an AI, a player leaves, and the host closes the table.
- * Every removed phone lands on the start screen with the reason. Run with `pnpm --filter @mule/web e2e`.
+ * The phone lobby against the real server. B-AC-6: the host kicks a phone and an AI, a player leaves, and the host
+ * closes the table. B-AC-13: the "make your colonist" lobby at a phone's and a laptop's size. B-AC-8: a picked
+ * colour follows the player into the game. Run with `pnpm --filter @mule/web e2e`.
  */
-import type { Locator, Page } from 'playwright';
+import { COLOUR_NAME, SPECIES, type Slot } from '@mule/ui';
+import type { BrowserContextOptions, Locator, Page } from 'playwright';
+import { PHASE_MS } from '../../server/src/mule-game.js';
 import { check, launch, PHONE, startServer, TV } from './harness';
 
 const SHOWN_MS = 5_000;
@@ -12,12 +15,50 @@ const STAYS_GONE_MS = 1_500;
 const CANCEL_SETTLE_MS = 500;
 const KICKED = 'The host removed you from the table';
 const CLOSED = 'The host closed the table';
+const LAPTOP: BrowserContextOptions = { viewport: { width: 1440, height: 900 } };
+/** The rail's width in the wide layout, which applies from a shell width of 1100 px (HC-8). */
+const WIDE_RAIL_PX = 400;
+const NARROWED_SHELL_PX = 1000;
+const PHASE_SCALE = 0.1;
+const within = (ms: number) => ms * PHASE_SCALE + 3_000;
+/** A land auction, when the month has one, runs on its own clock: PHASE_MS has no entry for it. */
+const LAND_AUCTION_ALLOWANCE_MS = 20_000;
+
+const EVERYONE_IDS = [
+  'lobby', 'hero', 'hero-name', 'hero-perk', 'species-pick', 'colour-pick', 'seats', 'guide', 'room-card', 'room-code', 'room-qr', 'now', 'now-title', 'now-steps',
+  ...SPECIES.map((sp) => `species-${sp}`),
+  ...[0, 1, 2, 3, 4, 5].map((c) => `colour-${c}`),
+];
+const HOST_IDS = ['host-tools', 'close-room', 'add-ai', 'start-game'];
 
 const started = Date.now();
 const { server, base } = await startServer();
+// B-AC-8 plays on into the land grant, so its table runs a fast clock.
+const fast = await startServer({ phaseScale: PHASE_SCALE });
 const browser = await launch();
 const errors: string[] = [];
+/** Failed checks that need the room to take a colour (RULE-7): collected, so the checks after them still run. */
+const colourRoomReds: string[] = [];
 try {
+  await kickLeaveAndClose();
+  await colonistLobby(PHONE, '844x390', false);
+  await colonistLobby(LAPTOP, '1440x900', true);
+  await colourIntoTheGame();
+  check(colourRoomReds.length === 0, `the room takes picked colours:\n  ${colourRoomReds.join('\n  ')}`);
+  check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
+  console.log(`e2e lobby: ok (${((Date.now() - started) / 1000).toFixed(1)} s)`);
+} catch (err) {
+  console.error('e2e lobby: FAILED');
+  if (errors.length > 0) console.error(`page errors: ${errors.join('; ')}`);
+  throw err;
+} finally {
+  await browser.close();
+  await server.close();
+  await fast.server.close();
+}
+process.exit(0);
+
+async function kickLeaveAndClose(): Promise<void> {
   const host = await phone('host');
   await host.goto(base);
   await host.getByPlaceholder('Heiko').fill('Heiko');
@@ -29,7 +70,7 @@ try {
   tv.on('pageerror', (e) => errors.push(`tv: ${e.message}`));
   await tv.goto(`${base}/table?room=${code}`);
 
-  const mia = await joinRoom(await phone('mia'), code, 'Mia');
+  const mia = await joinRoom(await phone('mia'), base, code, 'Mia');
   check(await shows(seat(host, 'Mia')), 'B-AC-6: Mia joins the host\'s seat rail');
   check(await shows(host.getByTestId('kick-s2')), 'B-AC-6: the host has a kick control on Mia\'s seat');
   check(await shows(host.getByTestId('host-tools').getByTestId('close-room')), 'B-AC-6: the host has a close control among the host tools');
@@ -58,7 +99,7 @@ try {
   check(await gone(host.getByTestId('kick-s3')), 'B-AC-6: the host\'s seat rail loses the AI');
   check((await rail(host).count()) === 1, `B-AC-6: only the host is left, got ${await rail(host).count()} seats`);
 
-  const jonas = await joinRoom(await phone('jonas'), code, 'Jonas');
+  const jonas = await joinRoom(await phone('jonas'), base, code, 'Jonas');
   check(await shows(seat(host, 'Jonas')), 'B-AC-6: Jonas joins the host\'s seat rail');
   await host.getByTestId('kick-s4').click();
   check(await shows(host.getByTestId('host-dialog').getByText('Remove Jonas?')), 'B-AC-6: the host is asked "Remove Jonas?"');
@@ -89,31 +130,183 @@ try {
     check(await onStartScreen(page), `B-AC-6: ${who} is on the start screen after the close`);
   }
   check(await shows(tv.getByText("Type the room code shown on the host's phone.")), 'B-AC-6: the TV goes back to its room picker');
-
-  check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
-  console.log(`e2e lobby: ok (room ${code}, ${((Date.now() - started) / 1000).toFixed(1)} s)`);
-} catch (err) {
-  console.error('e2e lobby: FAILED');
-  if (errors.length > 0) console.error(`page errors: ${errors.join('; ')}`);
-  throw err;
-} finally {
-  await browser.close();
-  await server.close();
 }
-process.exit(0);
 
-async function phone(who: string): Promise<Page> {
-  const page = await (await browser.newContext(PHONE)).newPage();
+/** B-AC-13 at one size: four seats, Heiko hosting, Lena on her phone. */
+async function colonistLobby(size: BrowserContextOptions, label: string, wide: boolean): Promise<void> {
+  const tag = `B-AC-13 (${label})`;
+  const heiko = await phone(`heiko ${label}`, size);
+  const code = await hostRoom(heiko, base);
+  const lena = await joinRoom(await phone(`lena ${label}`, size), base, code, 'Lena');
+  await heiko.getByTestId('add-ai').click();
+  await heiko.getByTestId('add-ai').click();
+  await rail(lena).nth(3).waitFor({ timeout: SHOWN_MS });
+
+  for (const [who, page] of [['Heiko', heiko], ['Lena', lena]] as const) {
+    const missing = await missingIds(page, EVERYONE_IDS);
+    check(missing.length === 0, `${tag}: ${who} sees the whole lobby, missing ${missing.join(', ')}`);
+  }
+  const hostMissing = await missingIds(heiko, [...HOST_IDS, 'kick-s2', 'kick-s3', 'kick-s4']);
+  check(hostMissing.length === 0, `${tag}: the host sees the host tools and a ✕ on every other seat, missing ${hostMissing.join(', ')}`);
+  const lenaHas = [];
+  for (const id of [...HOST_IDS, 'host-dialog', 'kick-confirm', 'close-confirm']) if ((await lena.getByTestId(id).count()) > 0) lenaHas.push(id);
+  if ((await lena.locator('[data-testid^=kick-]').count()) > 0) lenaHas.push('kick-<seat>');
+  check(lenaHas.length === 0, `${tag}: a player who is not the host has none of the host's controls, has ${lenaHas.join(', ')}`);
+  check((await lena.getByTestId('hero-name').textContent())?.trim() === 'Lena', `${tag}: Lena's hero is Lena`);
+
+  const heikos = lena.getByTestId('colour-0');
+  check(await heikos.isDisabled(), `${tag}: Heiko's colour is disabled for Lena`);
+  check((await heikos.getAttribute('aria-label')) === `${COLOUR_NAME[0]}, taken by Heiko`, `${tag}: Heiko's colour names him, got "${await heikos.getAttribute('aria-label')}"`);
+  const ai = await aiName(heiko, 's3');
+  const aisColour = lena.getByTestId('colour-2');
+  check(await aisColour.isEnabled(), `${tag}: an AI's colour can still be taken (RULE-7)`);
+  check((await aisColour.getAttribute('aria-label')) === `${COLOUR_NAME[2]}, ${ai}'s: tap to take it`, `${tag}: an AI's colour names the AI, got "${await aisColour.getAttribute('aria-label')}"`);
+
+  await heikos.click({ force: true });
+  await lena.waitForTimeout(CANCEL_SETTLE_MS);
+  check(
+    (await lena.getByTestId('colour-1').getAttribute('aria-pressed')) === 'true' && (await heikos.getAttribute('aria-label')) === `${COLOUR_NAME[0]}, taken by Heiko`,
+    `${tag}: Lena cannot pick Heiko's colour`,
+  );
+
+  const violet = 4 as Slot;
+  await lena.getByTestId(`colour-${violet}`).click();
+  colourRoom(await shows(lena.locator(`[data-testid=colour-${violet}][aria-pressed=true]`)), `${tag}: Lena picks ${COLOUR_NAME[violet]} and it is hers`);
+  const lenas = heiko.locator(`[data-testid=colour-${violet}][aria-label="${COLOUR_NAME[violet]}, taken by Lena"]`);
+  colourRoom((await shows(lenas)) && (await lenas.isDisabled()), `${tag}: the host sees ${COLOUR_NAME[violet]} disabled and naming Lena`);
+
+  await heiko.getByTestId('kick-s2').click();
+  check(await shows(heiko.getByTestId('host-dialog').getByText('Remove Lena?')), `${tag}: removing Lena asks first`);
+  check(await shows(heiko.getByTestId('kick-confirm')), `${tag}: the removal waits for kick-confirm`);
+  await heiko.getByTestId('host-dialog-cancel').click();
+  check(await gone(heiko.getByTestId('host-dialog')), `${tag}: Keep closes the question`);
+  await heiko.getByTestId('close-room').click();
+  check(await shows(heiko.getByTestId('host-dialog').getByText('Close the room?')), `${tag}: closing the room asks first`);
+  check(await shows(heiko.getByTestId('close-confirm')), `${tag}: the close waits for close-confirm`);
+  await heiko.getByTestId('host-dialog-cancel').click();
+  check(await gone(heiko.getByTestId('host-dialog')), `${tag}: Keep it open closes the question`);
+  await heiko.waitForTimeout(CANCEL_SETTLE_MS);
+  check((await seat(heiko, 'Lena').count()) === 1 && (await lena.getByTestId('lobby').count()) === 1, `${tag}: cancelling either question sends nothing`);
+
+  const railPx = await railWidth(heiko);
+  check(wide ? railPx === WIDE_RAIL_PX : railPx < WIDE_RAIL_PX, `${tag}: the ${wide ? 'wide' : 'phone'} layout, rail ${railPx} px`);
+  if (wide) {
+    await shellWidth(heiko, `${NARROWED_SHELL_PX}px`);
+    const narrowed = await railWidth(heiko);
+    check(narrowed < WIDE_RAIL_PX, `${tag}: HC-8, a ${NARROWED_SHELL_PX} px shell in a 1440 px window is the phone layout, rail ${narrowed} px`);
+    await shellWidth(heiko, '');
+  }
+  await heiko.context().close();
+  await lena.context().close();
+}
+
+/** B-AC-8: two phones and an AI; phone 1 takes the AI's colour, phone 2 cannot, and the game draws phone 1 in it. */
+async function colourIntoTheGame(): Promise<void> {
+  const heiko = await phone('heiko B-AC-8');
+  const code = await hostRoom(heiko, fast.base);
+  const mia = await joinRoom(await phone('mia B-AC-8'), fast.base, code, 'Mia');
+  const tv = await (await browser.newContext(TV)).newPage();
+  tv.on('pageerror', (e) => errors.push(`tv B-AC-8: ${e.message}`));
+  await tv.goto(`${fast.base}/table?room=${code}`);
+  // AIs fill colours 2..5; removing the first three leaves one AI on Rose, a colour no seat's position would give.
+  for (let i = 0; i < 4; i++) await heiko.getByTestId('add-ai').click();
+  await rail(heiko).nth(5).waitFor({ timeout: SHOWN_MS });
+  for (const id of ['s3', 's4', 's5']) {
+    await kick(heiko, id);
+    await heiko.getByTestId(`kick-${id}`).waitFor({ state: 'detached', timeout: SHOWN_MS });
+  }
+  const rose = 5 as Slot;
+  const ai = await aiName(heiko, 's6');
+
+  const take = heiko.getByTestId(`colour-${rose}`);
+  check((await take.isEnabled()) && (await take.getAttribute('aria-label')) === `${COLOUR_NAME[rose]}, ${ai}'s: tap to take it`, `B-AC-8: phone 1 can take ${ai}'s ${COLOUR_NAME[rose]}`);
+  await take.click();
+  colourRoom(await shows(heiko.locator(`[data-testid=colour-${rose}][aria-pressed=true]`)), `B-AC-8: phone 1 takes ${COLOUR_NAME[rose]}`);
+  const heikos = mia.locator(`[data-testid=colour-${rose}][aria-label="${COLOUR_NAME[rose]}, taken by Heiko"]`);
+  colourRoom(await shows(heikos), `B-AC-8: phone 2 sees ${COLOUR_NAME[rose]} as Heiko's`);
+  const aiNow: Slot[] = [];
+  for (const c of [0, 1, 2, 3, 4] as Slot[]) if ((await mia.getByTestId(`colour-${c}`).getAttribute('aria-label')) === `${COLOUR_NAME[c]}, ${ai}'s: tap to take it`) aiNow.push(c);
+  colourRoom(aiNow.length === 1, `B-AC-8: ${ai} shows another colour, got ${aiNow.map((c) => COLOUR_NAME[c]).join(', ') || 'none'}`);
+
+  colourRoom((await heikos.count()) === 1 && (await heikos.isDisabled()), `B-AC-8: phone 2's ${COLOUR_NAME[rose]} is disabled`);
+  await mia.getByTestId(`colour-${rose}`).click({ force: true });
+  await mia.waitForTimeout(CANCEL_SETTLE_MS);
+  check((await mia.getByTestId('colour-1').getAttribute('aria-pressed')) === 'true', 'B-AC-8: phone 2 is refused: it keeps its own colour');
+  colourRoom((await heikos.count()) === 1, `B-AC-8: phone 2 is refused: ${COLOUR_NAME[rose]} stays Heiko's`);
+
+  const inRose = `[data-slot="${rose}"]`;
+  colourRoom(await shows(heikoOn(tv.locator('li')).locator(inRose)), `B-AC-8: the TV lobby draws Heiko's mark in ${COLOUR_NAME[rose]}`);
+
+  await heiko.getByTestId('start-game').click();
+  const roster = heikoOn(tv.locator('[data-phase=planning] li, [data-phase=landGrant] li'));
+  colourRoom(await shows(roster.locator(inRose)), `B-AC-8: the TV's game roster draws Heiko in ${COLOUR_NAME[rose]}`);
+  const grant = heiko.locator('[data-phase=landGrant]');
+  await grant.waitFor({ timeout: within(PHASE_MS.planning) });
+  try {
+    await grant.getByRole('button', { name: /CLAIM/ }).click({ timeout: within(PHASE_MS.landGrant) });
+  } catch {
+    check(false, 'B-AC-8: phone 1 claims a plot in the land grant');
+  }
+  const development = tv.locator('[data-phase=development]');
+  await development.waitFor({ timeout: within(PHASE_MS.landGrant + PHASE_MS.development) + LAND_AUCTION_ALLOWANCE_MS });
+  colourRoom(await shows(heikoOn(development.locator('li')).locator(inRose)), `B-AC-8: the TV's development roster draws Heiko in ${COLOUR_NAME[rose]}`);
+  colourRoom(await shows(development.locator(`[aria-label*="owned by"] ${inRose}`).first()), `B-AC-8: the TV map draws Heiko's plot in ${COLOUR_NAME[rose]}`);
+  await heiko.context().close();
+  await mia.context().close();
+  await tv.context().close();
+}
+
+/** Heiko's row among these: the colour is read from `data-slot` on his PlayerMark. */
+function heikoOn(rows: Locator): Locator {
+  return rows.filter({ hasText: 'Heiko' }).first();
+}
+
+function colourRoom(cond: boolean, message: string): void {
+  if (!cond) colourRoomReds.push(message);
+}
+
+async function phone(who: string, size: BrowserContextOptions = PHONE): Promise<Page> {
+  const page = await (await browser.newContext(size)).newPage();
   page.on('pageerror', (e) => errors.push(`${who}: ${e.message}`));
   return page;
 }
 
-async function joinRoom(page: Page, code: string, name: string): Promise<Page> {
-  await page.goto(`${base}/?room=${code}`);
+async function hostRoom(page: Page, at: string): Promise<string> {
+  await page.goto(at);
+  await page.getByPlaceholder('Heiko').fill('Heiko');
+  await page.getByRole('button', { name: 'Start a new game' }).click();
+  await page.getByText("You're at the table").waitFor();
+  return (await page.getByTestId('room-code').textContent())?.trim() ?? '';
+}
+
+async function joinRoom(page: Page, at: string, code: string, name: string): Promise<Page> {
+  await page.goto(`${at}/?room=${code}`);
   await page.getByPlaceholder('Heiko').fill(name);
   await page.getByRole('button', { name: `Join game ${code}` }).click();
   await page.getByText("You're at the table").waitFor();
   return page;
+}
+
+/** An AI's name, from the host's ✕ on its seat. */
+async function aiName(host: Page, seatId: string): Promise<string> {
+  return ((await host.getByTestId(`kick-${seatId}`).getAttribute('aria-label')) ?? '').replace(/^Remove /, '');
+}
+
+async function missingIds(page: Page, ids: string[]): Promise<string[]> {
+  const missing = [];
+  for (const id of ids) if (!(await page.getByTestId(id).isVisible())) missing.push(id);
+  return missing;
+}
+
+function railWidth(page: Page): Promise<number> {
+  return page.getByTestId('guide').evaluate((el) => Math.round(el.getBoundingClientRect().width));
+}
+
+/** Sizes the lobby's shell, the container its layout reads, without touching the window. */
+async function shellWidth(page: Page, width: string): Promise<void> {
+  await page.getByTestId('lobby').evaluate((el, w) => {
+    (el.parentElement as HTMLElement).style.width = w;
+  }, width);
 }
 
 function rail(page: Page): Locator {
