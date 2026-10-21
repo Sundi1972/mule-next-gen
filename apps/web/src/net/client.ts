@@ -1,4 +1,5 @@
 import type { ChatMessage, ClientEnvelope, MuleIntent, MuleView, ServerEnvelope, TableView } from '@mule/protocol';
+import type { Species } from '@mule/ui';
 import { ClockSync } from './clock';
 import { clearSeat, loadSeat, saveSeat, type KeyValueStore } from './seat';
 
@@ -302,6 +303,11 @@ export class TableClient {
 
   addAi(): void {
     this.send({ t: 'addAi' });
+  }
+
+  /** Chooses what this seat plays as, in the lobby. */
+  pick(species: Species): void {
+    this.send({ t: 'pick', pick: species });
   }
 
   start(): void {

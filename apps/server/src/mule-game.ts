@@ -33,6 +33,8 @@ import {
   shipInPort,
   shipLine,
   shipPrice,
+  SPECIES,
+  type Species,
   stepAuction,
   storeBuyLine,
   storeQuotes,
@@ -75,6 +77,11 @@ export const AI_DEV_TICK_MS = 100;
 /** The level AI seats play at until the lobby lets the host choose. */
 export const DEFAULT_AI_LEVEL: AiLevelId = 'trader';
 
+/** A seat's lobby pick as a species; anything else leaves the engine's default. */
+function isSpecies(pick: string | undefined): pick is Species {
+  return (SPECIES as readonly (string | undefined)[]).includes(pick);
+}
+
 /** M.U.L.E. as a game hosted by a @tabletop/core room. */
 export class MuleGame implements Game<MuleIntent, MuleView> {
   private state: GameState | null = null;
@@ -105,7 +112,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   start(seats: SeatInfo[]): void {
     this.seats = seats.map((s, i) => ({ ...s, color: PLAYER_COLORS[i % PLAYER_COLORS.length]! }));
-    this.state = createGame({ seed: this.seed, players: seats.map(({ id, name, isAi }) => ({ id, name, isAi })), maxMonths: this.options.maxMonths });
+    this.state = createGame({ seed: this.seed, players: seats.map(({ id, name, isAi, pick }) => ({ id, name, isAi, ...(isSpecies(pick) ? { species: pick } : {}) })), maxMonths: this.options.maxMonths });
     this.ai.clear();
     seats.forEach((s, i) => {
       if (!s.isAi) return;

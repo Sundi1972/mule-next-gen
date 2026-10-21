@@ -1,52 +1,16 @@
-import type { GameContext } from '@tabletop/core';
 import { describe, expect, it } from 'vitest';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
-
-/**
- * A context with a manual clock that records the phase each broadcast went out
- * in. Copied from mule-game.test.ts, which belongs to another team.
- */
-function fakeContext(phaseNow: () => string) {
-  let now = 0;
-  const broadcasts: { at: number; phase: string }[] = [];
-  const timers: { at: number; fn: () => void }[] = [];
-  const ctx: GameContext = {
-    now: () => now,
-    schedule: (ms, fn) => {
-      const t = { at: now + ms, fn };
-      timers.push(t);
-      return () => {
-        const i = timers.indexOf(t);
-        if (i >= 0) timers.splice(i, 1);
-      };
-    },
-    changed: () => broadcasts.push({ at: now, phase: phaseNow() }),
-  };
-  const advance = (ms: number) => {
-    now += ms;
-    for (let due = timers.filter((t) => t.at <= now); due.length > 0; due = timers.filter((t) => t.at <= now)) {
-      for (const t of due) {
-        const i = timers.indexOf(t);
-        if (i < 0) continue;
-        timers.splice(i, 1);
-        t.fn();
-      }
-    }
-  };
-  return { ctx, advance, broadcasts };
-}
+import { fakeContext, seats } from './fake-context.js';
 
 const humans = ['s1', 's2'];
-const seats = [
-  { id: 's1', name: 'Heiko', isAi: false },
-  { id: 's2', name: 'Mia', isAi: false },
-  { id: 's3', name: 'The Baron', isAi: true },
-];
 
 /** Plays to development, then lets the humans either go to the pub at once or sit idle. */
 function developmentEnds(seed: number, humansGoToPub: boolean) {
   let game: MuleGame | null = null;
-  const { ctx, advance, broadcasts } = fakeContext(() => game!.viewFor(null).phase);
+  const broadcasts: { at: number; phase: string }[] = [];
+  const { ctx, advance } = fakeContext({
+    onChanged: (at) => broadcasts.push({ at, phase: game!.viewFor(null).phase }),
+  });
   game = new MuleGame(ctx, seed);
   game.start(seats);
   advance(PHASE_MS.planning);

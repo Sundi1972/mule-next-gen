@@ -1,5 +1,6 @@
-import type { MuleView, PlayerView, TileView } from '@mule/protocol';
-import type { Good, MapTile, Slot, Species } from '@mule/ui';
+import { DEFAULT_SPECIES } from '@mule/engine';
+import type { MuleView, PlayerView, TableView, TileView } from '@mule/protocol';
+import { SPECIES, type Good, type MapTile, type Slot, type Species } from '@mule/ui';
 
 /**
  * Small, pure readings of the view for the screens. No rules live here: the
@@ -25,11 +26,18 @@ export function slotOf(view: Pick<MuleView, 'players'>, seatId: string | null | 
 }
 
 export function seatSpecies(view: Pick<MuleView, 'players'>): Record<Slot, Species> {
-  const out: Record<Slot, Species> = { 0: 'zipwing', 1: 'bramblet', 2: 'gearling', 3: 'mollox', 4: 'glimmer', 5: 'quibbit' };
+  const out = Object.fromEntries(DEFAULT_SPECIES.map((sp, i) => [i, sp])) as Record<Slot, Species>;
   view.players.forEach((p, i) => {
     if (i < 6) out[i as Slot] = p.species;
   });
   return out;
+}
+
+type SeatView = TableView<unknown>['seats'][number];
+
+/** In the lobby, what a seat will play as: its pick, or until it picks, its seat's default. */
+export function lobbySeatSpecies(seat: SeatView, index: number): Species {
+  return SPECIES.find((sp) => sp === seat.pick) ?? DEFAULT_SPECIES[index % DEFAULT_SPECIES.length]!;
 }
 
 /** The design system rates ground 0 to 4; grown goods come as -2 to +3, shown on the same pips. */
