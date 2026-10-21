@@ -164,7 +164,7 @@ senior       junior would: put a fixed storePlotPrice of 200. · senior does: ta
              storePlotShare and storeMuleShare are flagged to WS1 as touching land supply.
 mechanism    sprout
 call sites   lots.ts (C1, C3), mule-game.ts (C7 view), web screens (C9–C11, via the view only)
-depends_on   none (GAME.plotScore from WS1 PR #11 is stubbable: 300 until it lands)
+depends_on   none (GAME.plotScore landed with WS1's PR #11, merged into feat/strategist at aa84a1b)
 ```
 
 ```
@@ -268,7 +268,7 @@ depends_on   C6 (contract)
 ```
 
 ```
-C12 · MODIFIED · the walk board draws extra price lines — DONE (12f4ecf, WS4 reviewed)
+C12 · MODIFIED · the walk board draws extra price lines — DONE (b23655a, WS4 reviewed as 12f4ecf before a rebase)
 today        only storeBuys, storeSells and shipPays.  anchors: packages/ui/src/components/WalkBoard.tsx::WalkBoard
 tomorrow     optional `lines?: { id; label; price }[]`, drawn like the store's; callers unchanged.
 mechanism    in_place
@@ -444,7 +444,7 @@ Invariants, asserted by every engine test: money is conserved across a lot; a pl
 - **AI values during landAuction:** `packages/ai/src/outlook.ts` holds `BEFORE_PRODUCTION = {planning, landGrant, development}`. Without 'landAuction' in it, an AI would value a plot during the auction as if this month's production were past. Mitigation: E4, WS1 adds the entry in its next PR (ruled 2026-10-21); C8 does not merge before it.
 - **The sim never runs lots:** `packages/ai/src/play.ts` has no 'landAuction' case. That's safe while AIs don't list (RULE-2 skips the phase); colony plots will need a case. Mitigation: noted in the colony-plots non-goal; T-AC-5 pins the skip.
 - **Pace:** 4 lots × ~17.5 s ≈ 70 s. Mitigation: LOTS.maxLotsPerMonth (PM edit 1); Done on every buyer ends a walk early (RULE-4).
-- **WS1's numbers are not in yet:** plotValue/muleValue are stubs, and GAME.plotScore is waiting on PR #11. Mitigation: one helper reads each, so the switch is one line.
+- **WS1's value functions are not in yet:** plotValue/muleValue are stubs (GAME.plotScore has landed). Mitigation: one helper reads each, so the switch is one line.
 - No spike needed.
 
 ## §8 · Amendments `[review-only]`

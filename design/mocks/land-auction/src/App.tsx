@@ -184,7 +184,7 @@ export default function App() {
       <div className="mt-2">
         <Links states={TV_STATES} />
       </div>
-      <p className="mt-8 text-xs text-ink-3">Layout B (map beside the board) was not chosen; it stays in git at 059b6ef.</p>
+      <p className="mt-8 text-xs text-ink-3">Layout B (map beside the board) was not chosen; it stays in git at ce8427f.</p>
     </div>
   );
 }
