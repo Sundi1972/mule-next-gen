@@ -52,6 +52,10 @@ try {
   await phone.getByText("You're at the table").waitFor();
   const code = (await phone.getByTestId('room-code').textContent())?.trim() ?? '';
   check(/^[A-Z]{4}$/.test(code), `room code, got "${code}"`);
+  // B-AC-4: with no big screen, the phone lobby's QR is big enough to scan across the table.
+  const qrWidth = async () => (await phone.getByTestId('room-qr').boundingBox())?.width ?? 0;
+  const bigQr = await qrWidth();
+  check(bigQr >= 100, `with no big screen the lobby QR is at least 100 px wide, got ${bigQr}`);
 
   const tv = await (await browser.newContext(TV)).newPage();
   tv.on('pageerror', (e) => errors.push(`tv: ${e.message}`));
@@ -62,6 +66,8 @@ try {
   await phone.getByRole('button', { name: 'Add AI player' }).click();
   await phone.locator('[data-testid=seats] li').nth(2).waitFor();
   await phone.getByText('Big screen connected').waitFor();
+  const compactQr = await qrWidth();
+  check(compactQr > 0 && compactQr < 60, `with a big screen the lobby shows the compact room card, QR ${compactQr} px`);
 
   // B-AC-1: the host picks Mollox; the lobby rail and the TV lobby show it, the AI seats keep their defaults.
   const lobbySeats = phone.getByTestId('seats').locator('li');
