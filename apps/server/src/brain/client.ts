@@ -13,13 +13,13 @@ export interface HaikuSdk {
   };
 }
 
-/** The public API host, pinned so a gateway URL left in the environment never receives the key (HC-2). */
+/** The public API host, pinned so a gateway URL left in the environment never receives the key. See HC-2. */
 const API_HOST = 'https://api.anthropic.com';
 
 /**
- * The real SDK, with the key passed in (HC-2). `authToken: null` stops the SDK reading ANTHROPIC_AUTH_TOKEN, and an
+ * The real SDK, with the key passed in explicitly. `authToken: null` stops the SDK reading ANTHROPIC_AUTH_TOKEN, and an
  * explicit credential stops it falling back to an `ant auth` profile. `logLevel: 'off'` overrides ANTHROPIC_LOG, whose
- * debug level would log requests, prompts included.
+ * debug level would log requests, prompts included. See HC-2.
  */
 export function createAnthropicSdk(apiKey: string): HaikuSdk {
   return new Anthropic({ apiKey, authToken: null, baseURL: API_HOST, logLevel: 'off' });
@@ -50,8 +50,12 @@ export class CallFailed extends Error {
   }
 }
 
-/** Whether a failed call may still have been billed: only an HTTP status shows the API answered and billed nothing. */
-export function billUnknown(failure: unknown): boolean {
+/**
+ * Whether a settled call's bill is unknown. A reply carries its usage, and an HTTP status shows the API answered and
+ * billed nothing; anything else (a timeout, a lost connection, a raw error) may have been billed.
+ */
+export function billUnknown(reply: HaikuReply | null, failure: unknown): boolean {
+  if (reply !== null) return false;
   return !(failure instanceof CallFailed) || failure.status === null;
 }
 

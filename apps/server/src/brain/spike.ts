@@ -62,7 +62,7 @@ export interface KindRow {
   within: number;
   /** Calls that brought a reply back, usable or not. */
   answered: number;
-  /** Share of answered calls whose reply the game could use (outcome llm); null when none was answered. */
+  /** Share of answered calls with outcome llm: an option on the list, not refused. Null when none was answered. */
   usable: number | null;
 }
 
@@ -264,7 +264,7 @@ export async function runSpike(options: SpikeOptions): Promise<SpikeReport> {
     settled.push({ kind: it.kind, outcome, ms });
     ledger.record({ game, seat: it.seat, persona: it.persona, level: it.level, model: BRAIN.model, kind: it.kind, ms, outcome, ...usage });
     ledgerUsd += usd(usage);
-    if (reply === null && billUnknown(failure)) unknownUsd += worst;
+    if (billUnknown(reply, failure)) unknownUsd += worst;
     cacheRead += usage.cached_read;
     cacheWrite += usage.cache_write;
     const tokens = usage.input + usage.cached_read + usage.cache_write;

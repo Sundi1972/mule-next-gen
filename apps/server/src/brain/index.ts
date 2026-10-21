@@ -11,7 +11,7 @@ export interface BrainSeat {
   level: AiLevelId;
 }
 
-/** What the game sees of the brain (§9 read contract). */
+/** What the game sees of the brain: its read contract with MuleGame. */
 export interface BrainService {
   /** A decider for a Smart seat, or null: the seat plays Classic. */
   deciderFor(seat: BrainSeat): Decider | null;
@@ -63,10 +63,10 @@ const CLASSIC: BrainService = {
   finish: () => {},
 };
 
-/** The key's environment variable: the only place its name is written (INV-key-read). */
+/** The key's environment variable: the only place in production source its name is written. */
 export const API_KEY_ENV = 'ANTHROPIC_API_KEY';
 
-/** The one place the key is read (HC-2): only API_KEY_ENV, trimmed; a blank key is null. */
+/** The one place the key is read: only API_KEY_ENV, trimmed; a blank key is null. See HC-2. */
 export function apiKeyFrom(env: Readonly<Record<string, string | undefined>>): string | null {
   return env[API_KEY_ENV]?.trim() || null;
 }
@@ -122,7 +122,7 @@ export function createBrain(options: BrainOptions): BrainService {
           } else if (slot.called) {
             const ms = slot.reply?.ms ?? (failure instanceof CallFailed ? failure.ms : 0);
             write(context.kind, outcomeOf(slot.reply, failure), slot.reply?.usage ?? NO_USAGE, ms);
-            if (slot.reply === null && billUnknown(failure) && !finished) budget.countUnknownBill(gameId, seat.id, slot.worstUsd);
+            if (billUnknown(slot.reply, failure) && !finished) budget.countUnknownBill(gameId, seat.id, slot.worstUsd);
           }
         }
       },
