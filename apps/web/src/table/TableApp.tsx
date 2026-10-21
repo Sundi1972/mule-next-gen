@@ -156,7 +156,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
           )}
         </div>
         <Players game={game} right={(p) => <span className="font-mono text-lg text-ink-2">{p.plots} plots</span>} />
-        <p className="mt-auto font-display text-2xl leading-snug text-ink-2">Free plots light up one by one, in random order. Tap CLAIM on your phone when yours is lit.</p>
+        <p className="mt-auto font-display text-2xl leading-snug text-ink-2">Free plots light up one by one, row by row from the top. Tap CLAIM on your phone when yours is lit.</p>
       </>
     );
   else if (phase === 'development')
