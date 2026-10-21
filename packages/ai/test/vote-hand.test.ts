@@ -47,8 +47,9 @@ function classicHands(gameSeed: number, level: AiLevelId = 'trader'): VoteHand[]
 }
 
 /** Each AiAction through the engine call a phone's intent reaches, as play.ts and the server map it; false on a RuleError. */
-function engineAct(state: GameState, id: string, refused: AiAction[]): Act {
+function engineAct(state: GameState, id: string, refused: AiAction[], sent: AiAction[] = []): Act {
   return (action) => {
+    sent.push(action);
     try {
       switch (action.type) {
         case 'run':
@@ -129,9 +130,11 @@ function ballotWith(candidates: Partial<Record<Office, string[]>>, plots: Record
 }
 
 /** Ticks one seat's hand through the ballot stage's opening, nobody else acting. */
-function tickAlone(state: GameState, hand: VoteHand, refused: AiAction[] = []): AiAction[] {
-  for (let t = 0; t < PAUSE_MS; t += WALK.tickMs) hand.tick(state, WALK.tickMs, engineAct(state, hand.mind.me, refused));
-  return refused;
+function tickAlone(state: GameState, hand: VoteHand): { refused: AiAction[]; sent: AiAction[] } {
+  const refused: AiAction[] = [];
+  const sent: AiAction[] = [];
+  for (let t = 0; t < PAUSE_MS; t += WALK.tickMs) hand.tick(state, WALK.tickMs, engineAct(state, hand.mind.me, refused, sent));
+  return { refused, sent };
 }
 
 afterEach(() => vi.unstubAllEnvs());
@@ -165,6 +168,7 @@ describe('VoteHand on a Classic table', () => {
   it.each([
     { persona: 'aggressive' as const, percent: 8 },
     { persona: 'cautious' as const, percent: 4 },
+    { persona: 'trader' as const, percent: 5 },
   ])('T-AC-6: an AI Governor sets a tax inside RULE-6 ($persona → $percent%)', ({ persona, percent }) => {
     const state = newGame();
     runFor(state, 'ai2', 'governor');
@@ -173,12 +177,17 @@ describe('VoteHand on a Classic table', () => {
     state.treasury.money = 1_000;
     const hands = SEATS.map((id, i) => handOf(mindOf(id, id === 'ai2' ? persona : PERSONAS[i]!), i));
     const refused: AiAction[] = [];
+    const sent = new Map(SEATS.map((id) => [id, [] as AiAction[]]));
 
-    for (let t = 0; t < PAUSE_MS; t += WALK.tickMs) for (const h of hands) h.tick(state, WALK.tickMs, engineAct(state, h.mind.me, refused));
+    for (let t = 0; t < PAUSE_MS; t += WALK.tickMs)
+      for (const h of hands) h.tick(state, WALK.tickMs, engineAct(state, h.mind.me, refused, sent.get(h.mind.me)));
 
     // The month opened at 5%: RULE-6 allows 0..10.
     expect(Math.round(state.treasury.salesTax * 100)).toBe(percent);
     expect(refused).toEqual([]);
+    // Once per planning, and only to change the rate; nobody else touches it.
+    expect(sent.get('ai2')).toEqual(percent === 5 ? [] : [{ type: 'setTax', percent }]);
+    for (const id of ['ai0', 'ai1', 'ai3']) expect(sent.get(id)).toEqual([]);
   });
 });
 
@@ -190,9 +199,13 @@ describe('RULE-8: how a seat votes', () => {
     const state = ballotWith(candidates, plots);
     const hand = handOf(mindOf('ai0', 'trader'), 11);
 
-    const refused = tickAlone(state, hand);
+    const { refused, sent } = tickAlone(state, hand);
 
     expect(refused).toEqual([]);
+    expect(sent).toEqual([
+      { type: 'vote', office: 'governor', candidate: want },
+      { type: 'done', done: true },
+    ]);
     expect(electionOf(state).ballots.ai0).toEqual({ governor: want });
     expect(electionOf(state).done).toContain('ai0');
   });
@@ -201,7 +214,7 @@ describe('RULE-8: how a seat votes', () => {
     const state = ballotWith({ governor: ['ai1', 'ai2'], sheriff: ['ai0', 'ai3'] }, { ai0: 6, ai1: 5, ai2: 0, ai3: 1 });
     const hand = handOf(mindOf('ai1', 'cautious'), 12);
 
-    const refused = tickAlone(state, hand);
+    const { refused } = tickAlone(state, hand);
 
     expect(refused).toEqual([]);
     expect(electionOf(state).ballots.ai1).toEqual({ governor: 'ai1', sheriff: 'ai3' });
@@ -214,7 +227,7 @@ describe('RULE-8: how a seat votes', () => {
       const state = ballotWith({ governor: candidates }, { ai1: 0, ai2: 2, ai3: 4 });
       const hand = handOf(mindOf('ai0', 'trader', 'rookie'), seed);
 
-      const refused = tickAlone(state, hand);
+      const { refused } = tickAlone(state, hand);
 
       expect(refused).toEqual([]);
       const pick = electionOf(state).ballots.ai0?.governor;
