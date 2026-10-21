@@ -5,7 +5,7 @@
  */
 import { POLITICS } from './config.js';
 import { player } from './game.js';
-import type { Election, GameState, Politics } from './types.js';
+import type { Election, GameState, Office, OfficeResult, Politics } from './types.js';
 
 /** Politics as it stands before the first planning phase: no offices, no Baron. */
 export function newPolitics(): Politics {
@@ -72,4 +72,24 @@ export function voteWeight(state: GameState, id: string): VoteWeight {
     taxes: Math.min(taxCap, Math.floor((state.treasury.paid[id] ?? 0) / taxPerVote)),
   };
   return { total: parts.base + parts.land + parts.reputation + parts.baron + parts.taxes, parts };
+}
+
+/** RULE-2: runs for an office, moving any candidacy for the other one; null withdraws. Only in nominate. */
+export function runFor(state: GameState, id: string, office: Office | null): void {
+  throw new Error('NotImplemented: runFor');
+}
+
+/** Casts, changes or (with null) clears a secret ballot for a contested office. Only in the ballot stage. */
+export function castVote(state: GameState, id: string, office: Office, candidate: string | null): void {
+  throw new Error('NotImplemented: castVote');
+}
+
+/** Done for the current stage (or undone); every player Done ends the stage at the next step. */
+export function electionDone(state: GameState, id: string, done = true): void {
+  throw new Error('NotImplemented: electionDone');
+}
+
+/** Advances the election by dt ms of game time. Returns the result in the step the ballot closes. */
+export function stepElection(state: GameState, dt: number): Record<Office, OfficeResult> | null {
+  throw new Error('NotImplemented: stepElection');
 }
