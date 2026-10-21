@@ -340,6 +340,12 @@ export type ShareTerrain = Exclude<LandTerrain, 'river'>;
  * plots per player.
  */
 export const MAP = {
+  /**
+   * The honest map-wide average Crystite and Rare earth rating, shown as the
+   * hint on every terrain: both exist only in random rings, so no terrain
+   * says where they are. Provisional until measured.
+   */
+  unknownMineral: 0.6,
   /** A plot is good for a raw good at this rating or more. */
   goodAt: { food: 1, water: 1, energy: 1, smithore: 3, crystite: 3, rareEarth: 3 } satisfies Record<RawGood, number>,
   /** Every map has at least this many good plots per player. */
