@@ -16,9 +16,9 @@ export interface BrainSeat {
 export interface BrainService {
   /** A decider for a Smart seat, or null: the seat plays Classic. */
   deciderFor(seat: BrainSeat): Decider | null;
-  /** The seat's onDecision callback: passes its lines to `say`, a few a month (RULE-2). Never throws. */
+  /** The seat's onDecision callback: passes its lines to `say`: at most BRAIN.linesPerMonth a month and one a phase. Never throws. See RULE-2. */
   chatter(seat: BrainSeat, say: (line: string) => void): (record: DecisionRecord) => void;
-  /** Writes the game's total line and closes the game: no decider makes a call for it afterwards. A second call does nothing. */
+  /** Closes the game; a Smart brain also writes its total line. A second call does nothing. */
   finish(): void;
 }
 
@@ -58,7 +58,7 @@ export function outcomeOf(reply: Pick<HaikuReply, 'stopReason'> | null, failure:
 /** Without the key there is no client and no decider, so nothing can make a paid call. See RULE-3. */
 const CLASSIC: BrainService = {
   deciderFor: () => null,
-  chatter: (_seat, say) => chatter(say),
+  chatter: (seat, say) => chatter(seat.id, say),
   finish: () => {},
 };
 
@@ -82,9 +82,12 @@ export function createBrain(options: BrainOptions): BrainService {
   // Seat ids with a model call open, across every decider for that seat.
   const busy = new Set<string>();
   let finished = false;
+  // A game that never asked for a decider (a lobby abandoned before Start) leaves no game line.
+  let asked = false;
 
   function deciderFor(seat: BrainSeat): Decider | null {
     if (finished) return null;
+    asked = true;
 
     const write = (kind: DecisionRecord['kind'], outcome: Outcome, usage: Usage, ms: number) =>
       ledger.record({ game: gameId, seat: seat.id, persona: seat.persona, level: seat.level, model: BRAIN.model, kind, ms, outcome, ...usage });
@@ -130,10 +133,10 @@ export function createBrain(options: BrainOptions): BrainService {
 
   return {
     deciderFor,
-    chatter: (_seat, say) => chatter(say),
+    chatter: (seat, say) => chatter(seat.id, say),
     finish() {
       finished = true;
-      ledger.finish(gameId);
+      if (asked) ledger.finish(gameId);
       budget.release(gameId);
     },
   };

@@ -242,7 +242,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.news = [line, ...this.news].slice(0, 3);
   }
 
-  /** A player's line reaches the AI seats it was for: a public line every one, a whisper only its addressee. Never throws. */
+  /** A player's line reaches the AI seats it was for: a public line every other AI seat, a whisper only its addressee. Never throws. */
   heard(from: string, text: string, to?: string): void {
     const line = { from: this.nameOf(from), text };
     for (const seat of this.ai.values()) if (to === undefined ? seat.id !== from : seat.id === to) seat.hear(line);
