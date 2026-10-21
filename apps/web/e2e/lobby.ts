@@ -59,9 +59,12 @@ try {
 
   const jonas = await joinRoom(await phone('jonas'), code, 'Jonas');
   check(await shows(seat(host, 'Jonas')), 'B-AC-6: Jonas joins the host\'s seat rail');
+  await host.getByTestId('kick-s4').click();
+  check(await shows(host.getByTestId('host-dialog').getByText('Remove Jonas?')), 'B-AC-6: the host is asked "Remove Jonas?"');
   await jonas.getByRole('button', { name: 'Leave table' }).click();
   check(await onStartScreen(jonas), 'B-AC-6: Jonas is back on the start screen after leaving');
   check(await gone(seat(host, 'Jonas')), 'B-AC-6: the seat rail loses Jonas when he leaves: no AWAY seat is left');
+  check(await gone(host.getByTestId('host-dialog')), 'B-AC-6: the host\'s question about Jonas goes with his seat');
   check((await rail(host).getByText('AWAY').count()) === 0, 'B-AC-6: no AWAY seat in the host\'s rail');
 
   await mia.getByPlaceholder('Heiko').fill('Mia');

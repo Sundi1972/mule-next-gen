@@ -329,14 +329,17 @@ describe('Room: the host kicks a seat or closes the table, in the lobby (RULE-5)
     ]);
   });
 
-  it('T-AC-10: an AI added after a kick never repeats a name still at the table', () => {
+  it('T-AC-10: an AI added after a kick never repeats a name still at the table, an AI\'s or a human\'s', () => {
     const { room, heiko } = lobby();
     room.receive(heiko, heiko.from, { t: 'addAi' });
+    room.receive(heiko, heiko.from, { t: 'addAi' });
+    join(room, 'AI 6');
     kick(room, heiko, 's2');
+    kick(room, heiko, 's4');
 
     room.receive(heiko, heiko.from, { t: 'addAi' });
 
-    expect(room.viewFor(null).seats.map((s) => s.name)).toEqual(['Heiko', 'Brix', 'AI 4', 'AI 5']);
+    expect(room.viewFor(null).seats.map((s) => s.name)).toEqual(['Heiko', 'Brix', 'AI 5', 'AI 6', 'AI 7']);
   });
 
   it.each([
@@ -425,6 +428,7 @@ describe('Room: a player leaves the table (RULE-5, AM-15)', () => {
     const { room, heiko, mia } = lobby();
     const board = watch(room);
     const oldToken = mia.last('welcome')!.seatToken!;
+    await flush();
 
     leave(room, mia);
     await flush();

@@ -187,6 +187,19 @@ describe('TableClient', () => {
     expect(client.getState().status).toBe('idle');
   });
 
+  it('T-AC-10: leaving before the socket opens sends nothing, and still forgets the seat', () => {
+    const storage = memoryStore();
+    saveSeat(storage, { code: 'KRTX', token: 'secret', name: 'Heiko' });
+    const { client, last } = setup(storage);
+    client.join('KRTX', 'Heiko');
+
+    client.leave();
+
+    expect(last().sent).toEqual([]);
+    expect(loadSeat(storage)).toBeNull();
+    expect(client.getState().status).toBe('idle');
+  });
+
   it.each([
     { reason: 'kicked', message: 'The host removed you from the table' },
     { reason: 'closed', message: 'The host closed the table' },
