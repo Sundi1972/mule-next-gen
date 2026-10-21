@@ -34,7 +34,7 @@ const PRESS_MS = 2_000;
 /** The auction offers at most 9 goods of 3 stages each; more Done presses than that means it is not moving on. */
 const MAX_AUCTION_PRESSES = 40;
 
-const SEED = Number(process.env.MULE_E2E_SEED ?? Math.floor(Math.random() * 2 ** 31));
+const SEED = seedFrom(process.env.MULE_E2E_SEED);
 const steps = await loadAuctionSteps();
 const { server, base } = await startServer({ maxMonths: 2, phaseScale: PHASE_SCALE, seed: () => SEED });
 const browser = await launch();
@@ -141,17 +141,18 @@ async function pressDoneThroughTheAuction(phone: Page): Promise<void> {
     check(pressed < MAX_AUCTION_PRESSES, `auction still running after ${MAX_AUCTION_PRESSES} Done presses`);
     await done.or(over).first().waitFor({ timeout: AUCTION_STAGE_MS });
     if (await over.count()) return;
+    let label: string;
     try {
       // The button was on screen a moment ago, so pressing it is quick or the stage has moved on.
-      const label = await done.innerText({ timeout: PRESS_MS });
+      label = await done.innerText({ timeout: PRESS_MS });
       await done.click({ timeout: PRESS_MS });
-      // Pressed, it turns to 'Done · waiting'; 'Ready' on the status screen stays until the next stage.
-      await phone.locator('[data-phase=auction]').getByRole('button', { name: label, exact: true }).waitFor({ state: 'hidden', timeout: AUCTION_STAGE_MS });
     } catch (err) {
       // The stage closed on its own clock under the press; the bounded wait above decides what comes next.
       if (err instanceof playwrightErrors.TimeoutError) continue;
       throw err;
     }
+    // Pressed, it turns to 'Done · waiting'; 'Ready' on the status screen stays until the next stage.
+    await phone.locator('[data-phase=auction]').getByRole('button', { name: label, exact: true }).waitFor({ state: 'hidden', timeout: AUCTION_STAGE_MS });
   }
 }
 
@@ -182,6 +183,15 @@ async function recordPhases(context: BrowserContext): Promise<Shown[]> {
 /** Each phase with how long it stayed on screen, e.g. "planning 1.2s, landGrant 5.9s". */
 function timeline(seen: Shown[]): string {
   return seen.map((s, i) => `${s.phase} ${(((seen[i + 1]?.at ?? s.at) - s.at) / 1_000).toFixed(1)}s`).join(', ');
+}
+
+/** The game's seed: MULE_E2E_SEED when set, a fresh random one otherwise. */
+function seedFrom(value: string | undefined): number {
+  if (value === undefined) return Math.floor(Math.random() * 2 ** 31);
+  // Digits only, since Number('') is 0 and would pass the checks below.
+  const n = /^\d+$/.test(value) ? Number(value) : NaN;
+  if (!(Number.isSafeInteger(n) && n >= 0)) throw new Error(`bad MULE_E2E_SEED "${value}"`);
+  return n;
 }
 
 function isSubsequence(wanted: string[], got: string[]): boolean {
