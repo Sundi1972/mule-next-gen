@@ -51,6 +51,8 @@ export interface RoomOptions<Intent, GameView> {
   isUserError?(err: unknown): boolean;
   now?(): number;
   newToken?(): string;
+  /** Called once the host has closed the room and it is disposed. */
+  onClose?(): void;
 }
 
 interface Seat<View> extends SeatInfo {
@@ -62,7 +64,8 @@ interface Seat<View> extends SeatInfo {
  * One table: seats for players (human or AI), any number of boards, and the
  * game they play. Human seats have a secret token, so a phone that drops can
  * take its seat back. The host is the first connected human, and hosting
- * moves on when the host leaves.
+ * moves on when the host leaves. Before Start the host may kick a seat or close the room,
+ * and a player may give up their seat.
  */
 export class Room<Intent, View> {
   readonly code: string;
@@ -89,6 +92,7 @@ export class Room<Intent, View> {
       isUserError: options.isUserError ?? ((err) => err instanceof TableError),
       now: options.now ?? Date.now,
       newToken: options.newToken ?? (() => crypto.randomUUID()),
+      onClose: options.onClose ?? (() => {}),
     };
     this.game = options.createGame({
       now: this.opts.now,
@@ -143,7 +147,11 @@ export class Room<Intent, View> {
       return;
     }
     const seatId = from.seatId;
-    if (!seatId) throw new TableError('Join the game first');
+    if (!seatId || !this.seats.some((s) => s.id === seatId)) {
+      // A kicked or closed-out screen still carries its old seat id. Ids are never reused, so it can't land on another seat.
+      from.seatId = null;
+      throw new TableError('Join the game first');
+    }
     switch (msg.t) {
       case 'addAi':
         this.requireHost(seatId);
@@ -159,6 +167,16 @@ export class Room<Intent, View> {
         this.started = true;
         this.game.start(this.seats.map(({ id, name, isAi, pick }) => ({ id, name, isAi, ...(pick !== undefined ? { pick } : {}) })));
         this.broadcast();
+        return;
+      case 'kick':
+        this.kick(seatId, msg.seatId);
+        this.broadcast();
+        return;
+      case 'close':
+        this.close(seatId);
+        return;
+      case 'leave':
+        this.leave(conn, from, seatId);
         return;
       case 'pick':
         this.pick(seatId, msg.pick);
@@ -218,7 +236,11 @@ export class Room<Intent, View> {
 
   private nextAiName(): string {
     const used = new Set(this.seats.map((s) => s.name));
-    return this.opts.aiNames.find((n) => !used.has(n)) ?? `AI ${this.seats.length + 1}`;
+    const named = this.opts.aiNames.find((n) => !used.has(n));
+    if (named) return named;
+    let n = this.seats.length + 1;
+    while (used.has(`AI ${n}`)) n++;
+    return `AI ${n}`;
   }
 
   /** A human seat makes its own choice from the game's list, before Start. See RULE-1. */
@@ -228,6 +250,46 @@ export class Room<Intent, View> {
     if (!this.picks.includes(pick)) throw new TableError('Unknown choice');
     const seat = this.seats.find((s) => s.id === seatId);
     if (seat) seat.pick = pick;
+  }
+
+  /** The host removes a seat, and its token with it, before Start. See RULE-5. */
+  private kick(by: string, target: string): void {
+    this.requireHost(by);
+    if (this.started) throw new TableError('The game has already started');
+    const seat = this.seats.find((s) => s.id === target);
+    if (!seat) throw new TableError('No such seat');
+    if (target === this.hostId) throw new TableError('Close the table instead');
+    this.seats.splice(this.seats.indexOf(seat), 1);
+    seat.conn?.send({ t: 'removed', reason: 'kicked' });
+  }
+
+  /** In the lobby the sender's seat goes, token and all; after Start only this screen lets go and the seat waits, away. See RULE-5. */
+  private leave(conn: Connection<View>, from: { seatId: string | null }, seatId: string): void {
+    const seat = this.seats.find((s) => s.id === seatId);
+    // A screen another device took the seat from lets go of itself only.
+    if (seat?.conn !== conn) {
+      from.seatId = null;
+      return;
+    }
+    if (!this.started && seatId === this.hostId) throw new TableError('Close the table instead');
+    from.seatId = null;
+    if (this.started) {
+      this.disconnect(conn);
+      return;
+    }
+    this.seats.splice(this.seats.indexOf(seat), 1);
+    this.broadcast();
+  }
+
+  /** The host ends the room before Start: every screen is told and let go, then the room is disposed. See RULE-5. */
+  private close(by: string): void {
+    this.requireHost(by);
+    if (this.started) throw new TableError('The game has already started');
+    this.everyone((c) => c.send({ t: 'removed', reason: 'closed' }));
+    this.seats.length = 0;
+    this.boards.clear();
+    this.dispose();
+    this.opts.onClose();
   }
 
   private requireHost(seatId: string): void {
