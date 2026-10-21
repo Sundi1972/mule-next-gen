@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   advancePhase,
   castVote,
+  cloneForSim,
   createGame,
   electionDone,
   player,
@@ -367,5 +368,20 @@ describe('RULE-3: tally and winner', () => {
     expect(result?.sheriff).toMatchObject({ winner: 'ossa', how: 'appointed' });
     runOutClock(state);
     expect(politicsOf(state).governor).not.toBe(politicsOf(state).sheriff);
+  });
+});
+
+describe('FM-WS3-4: what-if copies', () => {
+  it('FM-WS3-4: playing a month forward on a cloneForSim copy leaves the real game\'s election and offices untouched', () => {
+    const state = governorBallot();
+    castVote(state, 'ossa', 'governor', 'brix');
+    const before = structuredClone(state.politics);
+
+    const sim = cloneForSim(state);
+    castVote(sim, 'ai1', 'governor', 'lena');
+    toNextPlanning(sim);
+    expect(sim.politics?.governor).not.toBeNull();
+
+    expect(state.politics).toEqual(before);
   });
 });
