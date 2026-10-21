@@ -1,11 +1,12 @@
 /**
  * T-AC-1: a phone plays a whole two-month game, lobby to final scores, against the real server.
+ * On the way it proves B-AC-1 (the species you pick is the one you play) and B-AC-4 (the room card with no TV).
  * Run with `pnpm --filter @mule/web e2e`; replay a red run's map with `MULE_E2E_SEED=<seed>`.
  */
 import { existsSync } from 'node:fs';
-import { WALK } from '@mule/engine';
+import { GAME, WALK } from '@mule/engine';
 import { errors as playwrightErrors, type BrowserContext, type Page } from 'playwright';
-import { PHASE_MS } from '../../server/src/mule-game.js';
+import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import { check, launch, PHONE, startServer, TV, type AuctionSteps } from './harness';
 
 /** Loaded by a path held in a variable, so tsc never resolves a file that may not exist yet. */
@@ -96,6 +97,7 @@ try {
   await claim.waitFor({ timeout: 5_000 });
   check(await claim.isVisible(), 'CLAIM button visible');
   await tv.getByTestId('tv-phase').filter({ hasText: 'Land grant' }).waitFor({ timeout: 3_000 });
+  await claimAPlot(phone);
 
   // Reload: the phone takes its seat back by itself.
   await phone.reload();
@@ -105,6 +107,7 @@ try {
 
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 1);
+  await checkOwnsAPlot(phone);
   await goToThePub(phone);
   await pressDoneThroughTheAuction(phone);
 
@@ -158,6 +161,42 @@ async function readyIfStillPlanning(phone: Page): Promise<void> {
     if (err instanceof playwrightErrors.TimeoutError && (await over.count())) return;
     throw err;
   }
+}
+
+/**
+ * Presses CLAIM until the claims counter drops. The lit plot moves on every
+ * tick and an AI can take it first, so a press may be refused; press again.
+ */
+async function claimAPlot(phone: Page): Promise<void> {
+  const grant = phone.locator('[data-phase=landGrant]');
+  const claim = grant.getByRole('button', { name: /CLAIM/ });
+  const unclaimed = grant.getByText(`${GAME.claimsPerGrant} OF ${GAME.claimsPerGrant} CLAIMS LEFT`, { exact: true });
+  const deadline = Date.now() + within(PHASE_MS.landGrant);
+  for (;;) {
+    check((await grant.count()) > 0 && Date.now() < deadline, 'AM-7: the phone claims a plot in the month-1 land grant');
+    if ((await unclaimed.count()) === 0) return;
+    try {
+      // Waits until a free plot is lit, which enables the button.
+      await claim.click({ timeout: deadline - Date.now() });
+      await unclaimed.waitFor({ state: 'hidden', timeout: 2 * GRANT_TICK_MS });
+    } catch (err) {
+      if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
+    }
+  }
+}
+
+/** Development: walk out to the map and tap a plot in your colour; the phone calls it yours. */
+async function checkOwnsAPlot(phone: Page): Promise<void> {
+  const dev = phone.locator('[data-phase=development]');
+  await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: within(PHASE_MS.landGrant + PHASE_MS.development) });
+  await dev.getByRole('button', { name: /, free\b/ }).first().waitFor({ timeout: 3_000 });
+  // The host sits in seat 1, and the map names each plot's owner by seat.
+  const mine = dev.getByRole('button', { name: /owned by player 1\b/ });
+  const plots = await mine.count();
+  check(plots >= 1, `T-AC-1: the phone owns a plot before month 2; its map shows ${plots} plots in its colour`);
+  await mine.first().click({ timeout: PRESS_MS });
+  const yours = await dev.getByText('YOURS', { exact: true }).waitFor({ timeout: PRESS_MS }).then(() => true, () => false);
+  check(yours, 'T-AC-1: the phone calls the plot in its colour YOURS');
 }
 
 /** Waits until the phone has moved past planning and the land grant. */
