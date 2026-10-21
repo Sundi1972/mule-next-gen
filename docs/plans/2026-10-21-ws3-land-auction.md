@@ -91,7 +91,14 @@ Every handoff carries the standing authority line, verbatim:
   - **Sell tab:** 1.8 COMPLETE (review fixes at f282496; the tab lives in `phone/Sell.tsx`).
   - **e2e:** 1.11 COMPLETE (f6e4172). It found a wire bug: `isIntent` refused `list`/`unlist`, fixed test-first (5f2ea12 → 9097208).
   - **PR-1: COMPLETE, merged into ws3-auctions** (#21 at 1520ce0, CI green). Goal check G-1 DELIVERED in a browser. Code review, maintainability review and render gate all closed. The lane is synced with feat/strategist c58bea1, which has the reading-order land grant (#23, Heiko's ruling).
-  - **PR-2: in progress** on ws3-pr2-ai. WS1's real `plotValue`/`muleValue` are on feat/strategist (#17), so Task 2.1 imports them directly and **Task 2.3 is not needed**. WS1's E4 is merged, so PR-2's gate is met.
+  - **PR-2: COMPLETE.** Sub-PR #30 merged into ws3-auctions (214d693 → 9049efa); lane PR #31 merged into feat/strategist (aab7a38). Goal check G-2 DELIVERED in a browser (The Accountant bought at 252 over a 250 minimum, bell at 3.8 s). WS1's real `plotValue`/`muleValue` were imported directly, so **Task 2.3 was not needed**.
+  - **PR-3: in progress.** Base branch ws3-pr3-colony (9049efa); implementation on ws3-pr3-impl (522b4f0). Code-quality review with mutation sweep running against 522b4f0.
+    - The colony mock states were approved at 3d5f9e3, so that merge-gate line is met.
+    - WS1 approved E5 (e297916) and allowed one named-edit line in `packages/ai/src/sim.ts`'s report block (the lot line); the PM recorded it in SEAMS. WS1's nit, a `stalled` counter in `PlayedGame.lots`, goes in the fix round.
+    - The cloneForSim leak (what-if copies sharing `listings` and `landAuction`) is fixed on WS1's side by #33 (FM-WS3-4 in `packages/engine/test/observe.test.ts`); PR-3's own new-array fix in `colonyLot` stacks with it.
+    - **Pending, after #33 merges:** `colonyLot` rolls nothing when `state.whatIf` is set (spec §2 RULE-7). Verified when the sim's seed 110 returns to its base result.
+    - Still owed: fix round, sync with feat/strategist, sub-PR into ws3-auctions, lane PR.
+  - **WS6 wave A** (WS6 spec C1–C3, C5): planned in `docs/plans/2026-10-21-ws3-ws6-auction-readability.md` on branch ws3-ws6a.
   - **Merge rule (PM, session 2):** sub-PR merges into ws3-auctions go to the PM, because Heiko hasn't typed that rule into this session.
   - **Standing ruling (Heiko via the PM):** no handovers; this session carries PR-1, PR-2 and PR-3.
 - **Wave 2 = PR-2.** It starts when PR-1 is merged into `ws3-auctions`. **Freeze point:** the stubs for `plotValue`/`muleValue` have WS1's announced signatures `(obs, mind, index)` / `(obs, mind)` returning credits (WS1, 2026-10-21), so WS1's export later swaps in with one line.
