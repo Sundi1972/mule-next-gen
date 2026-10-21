@@ -68,6 +68,11 @@
   - (a) C4.4 fixes `apps/web/e2e/screens.ts:127–134` ('Seller' plus 'Done choosing') and drops the dead 'Done choosing' match at `smoke.ts:256`;
   - (b) C4.3's fix round makes `sound.ts` tick during the status countdown as well as the walk. Status is 8 s, under WS4's 10 s threshold, so the tick covers the whole countdown. The comment at :141 becomes "the status countdown's last seconds and the walk".
 - **CLOSED:** WS6 confirms the walk-picker reading (above).
+- **Later the same day:** the C4.1 fix round was re-reviewed APPROVED. The C4.3 fix round (sound ruling (b), the `toggleSide` table) and C4.4 are DONE. C4.4's review was READY; its fix round adds a timing message for a tap that misses the bell.
+  - **WS3 measured the sim:** byte-identical to trunk 6df42d2 on seeds 101 and 1.
+  - **Render gate on `#status`:** 0 DIFFERS. Goal check in the browser: DELIVERED.
+  - `ws3-c4` @ dc03028: typecheck 0, all suites green.
+  - **Sub-PR #57 → `ws3-auctions`**, waiting on CI. The PM merges it.
 
 ---
 
@@ -148,7 +153,7 @@
 - [x] **Step 1:** WS1 moves `hands/auction.ts`'s `'declare'` branch (lines 89–92) into its status handling, so the AI picks its side during status. It must not wait for a stage that no longer exists.
 - [x] **Step 2:** `play.ts`'s `case 'declare'` still calls `declareRole`. WS1 confirms it needs no change, or changes it.
 - [x] **Step 3:** `pnpm typecheck` for packages/ai is 0; `pnpm --filter @mule/ai test` is green.
-- [ ] **Step 4: T-AC-3's sim rows.** Run `pnpm sim -- --games 40 --seed 101` on `ws3-c4` and on the base. Any change in the 10 checks goes to WS1 (WS6 §7 R-2), and WS1 signs it off before merge.
+- [x] **Step 4: T-AC-3's sim rows.** Run `pnpm sim -- --games 40 --seed 101` on `ws3-c4` and on the base. Any change in the 10 checks goes to WS1 (WS6 §7 R-2), and WS1 signs it off before merge.
 
 ### Task C4.3: C4, the status screens get Buy and Sell
 
@@ -169,7 +174,7 @@
 
 **Depends on:** C4.2 and C4.3 merged into `ws3-c4` · **ACs verified:** B-AC-4, UBER-AC-1 (last clause), T-AC-8, T-AC-3 sim rows · **Tier:** promise
 
-- [ ] **Step 1:** In `auction-steps.ts`'s direct run, against the server's view:
+- [x] **Step 1:** In `auction-steps.ts`'s direct run, against the server's view:
   - **B-AC-4:** a player with 0 units of the good starts the walk as a buyer if they do nothing; Sell is disabled for them; tapping Buy passes instead. Assert their walker's `side` in `viewFor` and on the phone.
   - **B-AC-4, the surplus side (from the C4.3 review, mutant M4):** a player with surplus opens status with `side-seller` checked. Tapping Buy from Sell lands on `buyer` in `viewFor`.
   - Replace `pickSide`'s Seller-after-Ready step at :408, and fix `screens.ts:127–134` and `smoke.ts:256` per WS4's ruling (a).
@@ -178,18 +183,18 @@
   - Replace the `WALK.declareMs` budget at :411 with `WALK.statusMs`.
 
   Altitude: promise, three phones and the TV. Run on seeds 25 and 7 and two random seeds.
-- [ ] **Step 2: Render gate (T-AC-8):** capture the mock's `#status` on phone and TV against the built status screen. `render-gate.mjs` must PASS, after renaming any `result` testid key first (known tool bug).
-- [ ] **Step 3: Commit** `test(web): sides are picked on the status screen, front to back (verifies B-AC-4)`.
+- [x] **Step 2: Render gate (T-AC-8):** capture the mock's `#status` on phone and TV against the built status screen. `render-gate.mjs` must PASS, after renaming any `result` testid key first (known tool bug).
+- [x] **Step 3: Commit** `test(web): sides are picked on the status screen, front to back (verifies B-AC-4)`.
 
 ### PR merge gate
 
-- [ ] T-AC-3 and B-AC-4 are green and AC-named; the RED commit precedes C4.1's implementation
-- [ ] The stage contract is exercised on the consumer side: the phone, the TV, the AI hand and the server all compile against `'status' | 'walk'`, and C4.4 drives them
-- [ ] Front to back: C4.4 drives the status screen in a real browser and asserts the server's walker sides
-- [ ] WS1 has written C4.2 and signed off T-AC-3's sim rows; WS4 has reviewed the TvAuction and sound.ts named edits
-- [ ] The render gate passes against `#status` at 25a2512
+- [x] T-AC-3 and B-AC-4 are green and AC-named; the RED commit precedes C4.1's implementation
+- [x] The stage contract is exercised on the consumer side: the phone, the TV, the AI hand and the server all compile against `'status' | 'walk'`, and C4.4 drives them
+- [x] Front to back: C4.4 drives the status screen in a real browser and asserts the server's walker sides
+- [x] WS1 has written C4.2 and signed off T-AC-3's sim rows; WS4 has reviewed the TvAuction and sound.ts named edits
+- [x] The render gate passes against `#status` at 25a2512
 - [ ] `pnpm typecheck` · `pnpm test` · `pnpm --filter @mule/web e2e` · `tsx e2e/auction-steps.ts` are green (CI runs all of them)
-- [ ] Goal check in a browser: a person sees their side already picked on the status screen, changes it with one tap, and the walk starts with no Buyer/Seller/Pass screen between
+- [x] Goal check in a browser: a person sees their side already picked on the status screen, changes it with one tap, and the walk starts with no Buyer/Seller/Pass screen between
 - [ ] The PM has the PR link and results; Heiko's OK before the lane merges into feat/strategist
 
 ## Risks
@@ -198,7 +203,7 @@
 - **A shorter month:** a good's status and declare took 11 s and will take 8 s. Every e2e budget that adds them is checked in C4.4.
 
 ## Pre-implementation checklist
-- [ ] WS6's spec C4 approved (Heiko approved WS6's screens; the PM relayed C4 to WS3 as WS6-PR-2)
-- [ ] WS1 agrees to write C4.2 on `ws3-c4` and names when (asked)
-- [ ] Base `ws3-auctions` @ b00686a green: the tree equals ff4ba58's. Measured there: `pnpm typecheck` 0 · `pnpm test` 0 (tabletop 39, ui 8, engine 114, ai 12, web 47, server 59) · `pnpm --filter @mule/web e2e` ok (smoke, zoom, lobby) · `tsx e2e/auction-steps.ts` ✓
-- [ ] The base sim, to compare against, is measured at C4.2 Step 4
+- [x] WS6's spec C4 approved (Heiko approved WS6's screens; the PM relayed C4 to WS3 as WS6-PR-2)
+- [x] WS1 agrees to write C4.2 on `ws3-c4` and names when (asked)
+- [x] Base `ws3-auctions` @ b00686a green: the tree equals ff4ba58's. Measured there: `pnpm typecheck` 0 · `pnpm test` 0 (tabletop 39, ui 8, engine 114, ai 12, web 47, server 59) · `pnpm --filter @mule/web e2e` ok (smoke, zoom, lobby) · `tsx e2e/auction-steps.ts` ✓
+- [x] The base sim, to compare against, is measured at C4.2 Step 4
