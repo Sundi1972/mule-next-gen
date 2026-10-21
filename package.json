@@ -5,8 +5,10 @@
   "packageManager": "pnpm@10.28.0",
   "engines": { "node": ">=22" },
   "scripts": {
+    "dev": "pnpm --parallel --filter @mule/server --filter @mule/web dev",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "sim": "pnpm --filter @mule/engine sim"
+    "sim": "pnpm --filter @mule/engine sim",
+    "e2e": "pnpm --filter @mule/web e2e"
   }
 }
