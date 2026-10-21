@@ -12,6 +12,10 @@ export type ClientEnvelope<Intent> =
   | { t: 'board'; code: string }
   | { t: 'addAi' }
   | { t: 'start' }
+  /** The host removes a seat, in the lobby. */
+  | { t: 'kick'; seatId: string }
+  /** The host ends the room, in the lobby. */
+  | { t: 'close' }
   /** Make this seat's one choice from the game's list, in the lobby. */
   | { t: 'pick'; pick: string }
   | { t: 'intent'; intent: Intent }
@@ -26,7 +30,9 @@ export type ServerEnvelope<GameView> =
   | { t: 'chat'; message: ChatMessage }
   | { t: 'emote'; from: string; emote: string }
   | { t: 'pong'; clientTime: number; serverTime: number }
-  | { t: 'error'; message: string };
+  | { t: 'error'; message: string }
+  /** This screen no longer holds a seat or watches the room; the room refuses what it sends next. */
+  | { t: 'removed'; reason: 'kicked' | 'closed' | 'moved' };
 
 export interface ChatMessage {
   id: number;
