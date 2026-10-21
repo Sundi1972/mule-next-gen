@@ -7,10 +7,15 @@ const OUTFITTERS = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEart
 const SERVICES = ['door-L', 'booth-works', 'booth-greenBelt', 'booth-corral', 'booth-pub', 'door-R'];
 const FITS = ['alloy', 'electronics', 'medicine'];
 
-/** B-AC-9 (negative case): a fed player's bar is full and holo-coloured. Call as development starts. */
+/**
+ * B-AC-9 (negative case): a fed player's bar is full and holo-coloured, and the card never costs time:
+ * a tap on the corral while it shows buys the MULE and ends the card. Call as development starts, with no MULE in tow.
+ */
 export async function fedPlayerFillsAFullHoloBar(phone: Page): Promise<void> {
   const card = phone.getByTestId('fill-card');
   await card.waitFor({ timeout: 3_000 });
+  const corral = await phone.locator('[data-shop=corral]').boundingBox();
+  check(corral, 'B-AC-9: the corral is on the floor under the card');
   const said = await card.innerText();
   check(/You eat \d+ Food and fill up your time bar/.test(said) && !/you need/.test(said), `B-AC-9: a fed player is told they ate and fill up, got "${said}"`);
   // The card fills for about 2 s and then goes, so read it every frame.
@@ -30,7 +35,16 @@ export async function fedPlayerFillsAFullHoloBar(phone: Page): Promise<void> {
     .then((h) => h.jsonValue());
   check(full && full.share > 0.99, `B-AC-9: a fed player's bar fills the track, got ${full?.share}`);
   check(full.bar === full.label, `B-AC-9: a fed player's bar is holo-coloured like its label, bar ${full.bar}, label ${full.label}`);
-  await card.waitFor({ state: 'detached', timeout: 3_000 });
+  // A raw pointer tap at the corral's centre, so the card would take it if it caught taps.
+  check(await card.isVisible(), 'B-AC-9: the card still shows when the corral is tapped');
+  await phone.mouse.click(corral.x + corral.width / 2, corral.y + corral.height / 2);
+  const bought = await phone
+    .getByTestId('mule')
+    .filter({ hasText: 'Empty MULE in tow' })
+    .waitFor({ timeout: 2_000 })
+    .then(() => true, () => false);
+  check(bought, 'B-AC-9: a tap on the corral while the card shows buys the MULE');
+  check((await card.count()) === 0, 'B-AC-9: a tap on a room ends the card');
 }
 
 /** B-AC-10: the store is one hall, two rows, and the outfitters stay shut with no MULE in tow. Call before buying. */
