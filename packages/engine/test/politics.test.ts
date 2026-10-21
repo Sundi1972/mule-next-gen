@@ -25,9 +25,11 @@ import {
   type GameState,
   type Office,
   type Politics,
+  type Rng,
 } from '../src/index.js';
 
 const SEATS = ['lena', 'brix', 'ossa', 'ai1'];
+const OFFICES: Office[] = ['governor', 'sheriff'];
 
 function newGame(options: { politics?: boolean; seats?: string[] } = {}): GameState {
   const seats = options.seats ?? SEATS;
@@ -74,6 +76,41 @@ function seatGovernor(state: GameState, id: string): void {
   runOutClock(state);
   runOutClock(state);
   expect(politicsOf(state).governor).toBe(id);
+}
+
+/** Plays on, nobody acting, up to the planning phase of month `month`. */
+function toMonth(state: GameState, month: number): void {
+  while (state.month < month) toNextPlanning(state);
+}
+
+function setMoney(state: GameState, money: Record<string, number>): void {
+  for (const [id, amount] of Object.entries(money)) player(state, id).money = amount;
+}
+
+/**
+ * One election month played at random: candidacies, ballots, Done presses
+ * and clock steps. Yields after every step. It may stop before the election
+ * is over, so the rest is closed by AM-1 when planning ends.
+ */
+function* playRandomElection(state: GameState, rng: Rng, seats: string[]): Generator<string> {
+  const choices: (Office | null)[] = ['governor', 'sheriff', null, null];
+  state.treasury.money += rng.int(0, 100);
+  for (const id of seats) {
+    try {
+      runFor(state, id, rng.pick(choices));
+    } catch (e) {
+      if (!(e instanceof RuleError)) throw e;
+    }
+  }
+  for (let round = 0; round < 50 && electionOf(state).stage !== 'over' && !rng.chance(0.1); round++) {
+    const e = electionOf(state);
+    if (e.stage === 'ballot') {
+      for (const id of seats) for (const o of OFFICES) if (e.candidates[o].length > 1 && rng.chance(0.7)) castVote(state, id, o, rng.pick(e.candidates[o]));
+    }
+    for (const id of seats) if (rng.chance(0.5)) electionDone(state, id);
+    stepElection(state, rng.int(1, 25_000));
+    yield `month ${state.month} ${electionOf(state).stage}`;
+  }
 }
 
 /** Hands `count` more free plots to a player. */
@@ -318,12 +355,12 @@ describe('RULE-2: who may run', () => {
   it('RULE-2 row 2: two Governor terms in a row refuse a third Governor run', () => {
     const state = newGame();
     for (const month of [1, 4]) {
-      while (state.month < month) toNextPlanning(state);
+      toMonth(state, month);
       runFor(state, 'lena', 'governor');
       advancePhase(state);
       expect(politicsOf(state)).toMatchObject({ governor: 'lena', termStart: month });
     }
-    while (state.month < 7) toNextPlanning(state);
+    toMonth(state, 7);
     expect(politicsOf(state).governorRun).toEqual({ id: 'lena', terms: 2 });
 
     expect(canRun(state, 'lena')).toEqual({ governor: 'termLimit', sheriff: true });
@@ -359,7 +396,7 @@ describe('RULE-2: who may run', () => {
 describe('RULE-3: tally and winner', () => {
   it('B-AC-3: nobody runs → the richest player is Governor and the richest other player Sheriff, both appointed', () => {
     const state = newGame();
-    for (const [id, money] of [['lena', 900], ['brix', 1200], ['ossa', 1000], ['ai1', 1000]] as const) player(state, id).money = money;
+    setMoney(state, { lena: 900, brix: 1200, ossa: 1000, ai1: 1000 });
     const result = runOutClock(state);
     expect(result).toEqual({
       governor: { winner: 'brix', how: 'appointed', tallies: [] },
@@ -372,8 +409,7 @@ describe('RULE-3: tally and winner', () => {
   it('T-AC-2 RULE-3 row 4: the strictly highest weighted total wins, and every candidate is tallied highest first', () => {
     const state = newGame();
     give(state, 'lena', 23);
-    toNextPlanning(state);
-    while (state.month < 4) toNextPlanning(state);
+    toMonth(state, 4);
     expect(voteWeight(state, 'lena').total).toBe(4);
     runFor(state, 'lena', 'governor');
     runFor(state, 'brix', 'governor');
@@ -388,8 +424,7 @@ describe('RULE-3: tally and winner', () => {
   it('B-AC-4: a 2–2 tie goes to the candidate the Land Baron voted for', () => {
     const state = newGame();
     give(state, 'ossa', 3);
-    toNextPlanning(state);
-    while (state.month < 4) toNextPlanning(state);
+    toMonth(state, 4);
     expect(politicsOf(state).baron).toBe('ossa');
     runFor(state, 'lena', 'governor');
     runFor(state, 'brix', 'governor');
@@ -410,8 +445,7 @@ describe('RULE-3: tally and winner', () => {
     give(state, 'ossa', 3);
     give(state, 'lena', plots.lena);
     give(state, 'brix', plots.brix);
-    toNextPlanning(state);
-    while (state.month < 4) toNextPlanning(state);
+    toMonth(state, 4);
     expect(politicsOf(state).baron).toBe('ossa');
     state.treasury.paid = { lena: 600, brix: 600 };
     runFor(state, 'brix', 'governor');
@@ -433,8 +467,6 @@ describe('RULE-3: tally and winner', () => {
   });
 
   it('T-AC-2 invariant: one player never holds both offices and the fund never goes below 0, over 150 seeded games of random candidacies, ballots, Done presses and AM-1 closes', () => {
-    const choices: (Office | null)[] = ['governor', 'sheriff', null, null];
-    const offices: Office[] = ['governor', 'sheriff'];
     const broken: string[] = [];
     const hows = new Set<string>();
     for (let seed = 1; seed <= 150; seed++) {
@@ -448,41 +480,23 @@ describe('RULE-3: tally and winner', () => {
         if (governor !== null && governor === sheriff) broken.push(`seed ${seed} ${when}: ${governor} holds both offices`);
         if (state.treasury.money < 0) broken.push(`seed ${seed} ${when}: fund ${state.treasury.money}`);
       };
+
       while (state.phase !== 'gameOver') {
-        const election = politicsOf(state).election;
-        if (state.phase === 'planning' && election) {
-          state.treasury.money += rng.int(0, 100);
-          for (const id of seats) {
-            try {
-              runFor(state, id, rng.pick(choices));
-            } catch (e) {
-              if (!(e instanceof RuleError)) throw e;
-            }
-          }
-          // Each round may be the last: the rest is closed by AM-1 when planning ends.
-          for (let round = 0; round < 50 && electionOf(state).stage !== 'over' && !rng.chance(0.1); round++) {
-            const e = electionOf(state);
-            if (e.stage === 'ballot') {
-              for (const id of seats) for (const o of offices) if (e.candidates[o].length > 1 && rng.chance(0.7)) castVote(state, id, o, rng.pick(e.candidates[o]));
-            }
-            for (const id of seats) if (rng.chance(0.5)) electionDone(state, id);
-            stepElection(state, rng.int(1, 25_000));
-            check(`month ${state.month} ${electionOf(state).stage}`);
-          }
-        }
+        if (state.phase === 'planning' && politicsOf(state).election) for (const when of playRandomElection(state, rng, seats)) check(when);
         advancePhase(state);
         check(`month ${state.month} ${state.phase}`);
         const result = politicsOf(state).election?.result;
-        if (result) for (const o of offices) hows.add(result[o].how);
+        if (result) for (const o of OFFICES) hows.add(result[o].how);
       }
     }
+
     expect(broken).toEqual([]);
     expect([...hows].sort()).toEqual(['appointed', 'baron', 'tieRule', 'unopposed', 'votes']);
   });
 
   it('AM-2: nobody runs for Governor and the richest runs alone for Sheriff → they are Sheriff (\'unopposed\') and the richest other player is appointed Governor', () => {
     const state = newGame();
-    for (const [id, money] of [['lena', 2000], ['brix', 900], ['ossa', 1000], ['ai1', 800]] as const) player(state, id).money = money;
+    setMoney(state, { lena: 2000, brix: 900, ossa: 1000, ai1: 800 });
     runFor(state, 'lena', 'sheriff');
 
     const result = runOutClock(state);
@@ -496,7 +510,7 @@ describe('RULE-3: tally and winner', () => {
 
   it('AM-2: every player runs for Sheriff → the richest is appointed Governor and the Sheriff race excludes them', () => {
     const state = newGame();
-    for (const [id, money] of [['lena', 2000], ['brix', 900], ['ossa', 1000], ['ai1', 800]] as const) player(state, id).money = money;
+    setMoney(state, { lena: 2000, brix: 900, ossa: 1000, ai1: 800 });
     for (const id of SEATS) runFor(state, id, 'sheriff');
     runOutClock(state);
     castVote(state, 'lena', 'sheriff', 'lena');
@@ -581,7 +595,7 @@ describe('C5: the Governor sets the sales tax', () => {
     expect(() => setSalesTax(state, 'brix', 6)).toThrow(new RuleError('Only the Governor sets the tax'));
     advancePhase(state);
     expect(() => setSalesTax(state, 'lena', 6)).toThrow(RuleError);
-    while (state.month < 4) toNextPlanning(state);
+    toMonth(state, 4);
     expect(electionOf(state).stage).toBe('nominate');
     expect(() => setSalesTax(state, 'lena', 6)).toThrow(RuleError);
     expect(state.treasury.salesTax).toBe(TAX.salesTax);
