@@ -2,11 +2,13 @@ import { Button, cx, GoodTag, Panel, PlayerMark, Ticker, type Good, type Slot } 
 import { useState } from 'react';
 import { DEALS, MARKET, MY_STOCK, NEWS, seat, SEATS, TABLE_CHAT, WHISPERS } from '../../data';
 import { useCountdown } from '../../proto';
+import { Council } from './Council';
 import { PhoneShell } from './Shell';
 
-type Tab = 'colony' | 'deals' | 'chat' | 'secret';
+type Tab = 'colony' | 'council' | 'deals' | 'chat' | 'secret';
 const TABS: { id: Tab; label: string; badge?: number }[] = [
   { id: 'colony', label: 'Colony' },
+  { id: 'council', label: 'Council', badge: 1 },
   { id: 'deals', label: 'Deals', badge: 2 },
   { id: 'chat', label: 'Chat', badge: 1 },
   { id: 'secret', label: 'Secret' },
@@ -27,7 +29,7 @@ export function PhonePlanning() {
         </Button>
       }
     >
-      <div role="tablist" aria-label="Planning" className="mb-4 grid grid-cols-4 gap-1 rounded-control border border-holo-line bg-void p-1">
+      <div role="tablist" aria-label="Planning" className="mb-4 grid grid-cols-5 gap-1 rounded-control border border-holo-line bg-void p-1">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -35,14 +37,15 @@ export function PhonePlanning() {
             type="button"
             aria-selected={tab === t.id}
             onClick={() => setTab(t.id)}
-            className={cx('relative h-10 rounded-[8px] text-sm font-semibold', tab === t.id ? 'bg-holo-soft text-holo' : 'text-ink-2')}
+            className={cx('relative h-10 rounded-[8px] text-[13px] font-semibold', tab === t.id ? 'bg-holo-soft text-holo' : 'text-ink-2')}
           >
             {t.label}
-            {t.badge && <span className="absolute right-1 top-1 size-4 rounded-full bg-holo font-mono text-[10px] font-bold leading-4 text-on-holo">{t.badge}</span>}
+            {t.badge && <span className="absolute right-0.5 top-0.5 size-3.5 rounded-full bg-holo font-mono text-[9px] font-bold leading-[14px] text-on-holo">{t.badge}</span>}
           </button>
         ))}
       </div>
       {tab === 'colony' && <Colony />}
+      {tab === 'council' && <Council />}
       {tab === 'deals' && <Deals />}
       {tab === 'chat' && <Chat />}
       {tab === 'secret' && <Secret />}
