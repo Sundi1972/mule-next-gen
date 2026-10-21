@@ -32,8 +32,11 @@ export function Game({ view = VIEW, seat = 'lena', children }: { view?: LotsView
 /** A phone held sideways at the e2e harness's size (844 × 390). */
 export function PhoneFrame({ children }: { children: ReactNode }) {
   return (
-    <div className="h-[390px] w-[844px] overflow-hidden rounded-sheet border border-holo-line shadow-map" data-testid="phone-frame">
-      {children}
+    // A narrow window scrolls the frame, never the page.
+    <div className="max-w-full overflow-x-auto">
+      <div className="h-[390px] w-[844px] overflow-hidden rounded-sheet border border-holo-line shadow-map" data-testid="phone-frame">
+        {children}
+      </div>
     </div>
   );
 }
@@ -41,10 +44,12 @@ export function PhoneFrame({ children }: { children: ReactNode }) {
 /** The big screen at its design size (1280 × 720), scaled down to fit the page. */
 export function TvFrame({ children }: { children: ReactNode }) {
   return (
-    // The outer box takes the scaled size, so the page doesn't scroll sideways.
-    <div className="overflow-hidden rounded-panel border border-holo-line" style={{ width: 960, height: 540 }} data-testid="tv-frame">
-      <div className="origin-top-left scale-[0.75]" style={{ width: 1280, height: 720 }}>
-        {children}
+    // The inner box takes the scaled size; a narrow window scrolls it, never the page.
+    <div className="max-w-full overflow-x-auto">
+      <div className="overflow-hidden rounded-panel border border-holo-line" style={{ width: 960, height: 540 }} data-testid="tv-frame">
+        <div className="origin-top-left scale-[0.75]" style={{ width: 1280, height: 720 }}>
+          {children}
+        </div>
       </div>
     </div>
   );
