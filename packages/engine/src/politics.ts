@@ -4,6 +4,7 @@
  * GameState.politics. No randomness: ties break by rule, so a replay needs no extra seed.
  */
 import { POLITICS } from './config.js';
+import { player } from './game.js';
 import type { Election, GameState, Politics } from './types.js';
 
 /** Politics as it stands before the first planning phase: no offices, no Baron. */
@@ -29,10 +30,13 @@ function edit(state: GameState): Politics {
   return state.politics;
 }
 
+function plotsOf(state: GameState, id: string): number {
+  return state.tiles.filter((t) => t.owner === id).length;
+}
+
 /** RULE-5: strictly the most plots wins; a tie keeps the current Baron if they are in it, else nobody. */
 function landBaron(state: GameState, current: string | null): string | null {
-  const plots = new Map(state.players.map((p) => [p.id, 0]));
-  for (const tile of state.tiles) if (tile.owner && plots.has(tile.owner)) plots.set(tile.owner, plots.get(tile.owner)! + 1);
+  const plots = new Map(state.players.map((p) => [p.id, plotsOf(state, p.id)]));
   const most = Math.max(...plots.values());
   if (most === 0) return null;
   const top = [...plots].filter(([, n]) => n === most).map(([id]) => id);
@@ -58,5 +62,14 @@ export interface VoteWeight {
 
 /** RULE-4: a player's votes, part by part. Derived from the state on every call. */
 export function voteWeight(state: GameState, id: string): VoteWeight {
-  throw new Error('NotImplemented: voteWeight');
+  const { plotsPerVote, repHigh, repLow, taxPerVote, taxCap } = POLITICS.weight;
+  const { reputation } = player(state, id);
+  const parts = {
+    base: 1,
+    land: Math.floor(plotsOf(state, id) / plotsPerVote),
+    reputation: reputation >= repHigh ? 1 : reputation < repLow ? -1 : 0,
+    baron: state.politics?.baron === id ? 1 : 0,
+    taxes: Math.min(taxCap, Math.floor((state.treasury.paid[id] ?? 0) / taxPerVote)),
+  };
+  return { total: parts.base + parts.land + parts.reputation + parts.baron + parts.taxes, parts };
 }
