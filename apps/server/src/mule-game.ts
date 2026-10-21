@@ -56,7 +56,7 @@ import {
   type Trade,
 } from '@mule/engine';
 import { AiSeat, LotHand, personaFor, type AiAction } from '@mule/ai';
-import { PLAYER_COLORS, type MuleIntent, type MuleView } from '@mule/protocol';
+import { PLAYER_COLORS, type MuleIntent, type MuleView, type ProductionReason, type ProductionView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
 
@@ -72,7 +72,7 @@ export const PHASE_MS: Record<Exclude<Phase, 'gameOver' | 'auction' | 'landAucti
   planning: 45_000,
   landGrant: 60_000,
   development: (DEVELOPMENT.fullSeconds + 5) * 1_000,
-  production: 5_000,
+  production: 15_000,
   upkeep: 8_000,
 };
 
@@ -90,6 +90,47 @@ export const DEFAULT_AI_LEVEL: AiLevelId = 'trader';
 /** A seat's lobby pick as a species; anything else leaves the engine's default. */
 function isSpecies(pick: string | undefined): pick is Species {
   return (SPECIES as readonly (string | undefined)[]).includes(pick);
+}
+
+/** The reasons a plot's badges may name; its ground, the output floor, a factory's fit and the event never get one. */
+const BADGE_REASONS: readonly ProductionReason[] = ['cluster', 'species', 'trait', 'pollution', 'noEnergy', 'noWater'];
+const MAX_BADGES = 2;
+
+/**
+ * The month's production as every screen may see it: each working plot with
+ * what it made before the event and its biggest reasons, and the event's hits.
+ * Built field by field from the report, so the stock players held never
+ * reaches a screen through it.
+ */
+function productionView(state: GameState, lengthMs: number): ProductionView | null {
+  const report = state.history.at(-1);
+  if (!report) return null;
+  const at = (index: number) => ({ x: index % state.width, y: Math.floor(index / state.width) });
+  const isBadge = (why: string): why is ProductionReason => (BADGE_REASONS as readonly string[]).includes(why);
+  const lines = [...(report.lines ?? [])]
+    .sort((a, b) => a.tile - b.tile)
+    .map((line) => ({
+      ...at(line.tile),
+      owner: state.tiles[line.tile]!.owner!,
+      good: line.good,
+      made: line.made - line.parts.reduce((n, p) => n + (p.why === 'event' ? p.delta : 0), 0),
+      parts: line.parts
+        .flatMap(({ why, delta }) => (isBadge(why) && delta !== 0 ? [{ why, delta }] : []))
+        .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+        .slice(0, MAX_BADGES),
+    }));
+  const events = (report.events ?? []).map((e) => ({
+    key: e.key,
+    kind: e.kind,
+    title: e.title,
+    line: e.line,
+    sign: e.sign,
+    scope: e.scope,
+    origin: { ...e.origin },
+    ...(e.direction ? { from: e.direction } : {}),
+    hits: e.plots.map((p) => ({ ...at(p.index), order: p.order, delta: p.delta })),
+  }));
+  return { lines, events, lengthMs };
 }
 
 /** M.U.L.E. as a game hosted by a @tabletop/core room. */
@@ -665,6 +706,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       listings: state.listings.map(listingView),
       lotSlots: { used: state.listings.length, max: LOTS.maxLotsPerMonth },
       landAuction: landAuctionView(state),
+      production: state.phase === 'production' || state.phase === 'upkeep' ? productionView(state, PHASE_MS.production * this.phaseScale) : null,
     };
   }
 
