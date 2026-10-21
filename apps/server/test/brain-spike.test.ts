@@ -162,7 +162,7 @@ describe('brain:spike', () => {
     const lines = renderReport(report);
     // A latency of exactly the wait counts as within: 5 of 10.
     expect(rowOf(lines, 'develop')).toMatch(/^develop\s+10\s+5\s+0\s+1500 ms\s+> 1500 ms\s+> 1500 ms\s+50% within 1500 ms$/);
-    expect(rowOf(lines, 'all')).toMatch(/^all\s+10\s+5\s+0\s+1500 ms\s+> 1500 ms\s+> 1500 ms\s+50% within own wait$/);
+    expect(rowOf(lines, 'all')).toMatch(/^all\s+10\s+5\s+0\s+—\s+—\s+—\s+50% within own wait$/);
     expect(rowOf(lines, 'land')).toBeUndefined();
     expect(lines).toContainEqual(expect.stringMatching(/^first-call latency\s+300 ms$/));
     expect(lines).toContainEqual(expect.stringMatching(/^refusals \/ auth failures\s+1 \/ 0$/));
@@ -198,7 +198,9 @@ describe('brain:spike', () => {
     expect(rowOf(lines, 'land')).toMatch(/^land\s+3\s+0\s+0\s+4000 ms\s+4000 ms\s+4000 ms\s+100% within 5000 ms$/);
     expect(rowOf(lines, 'develop')).toMatch(/^develop\s+3\s+0\s+0\s+1000 ms\s+1000 ms\s+1000 ms\s+100% within 1500 ms$/);
     expect(rowOf(lines, 'trade')).toMatch(/^trade\s+4\s+1\s+0\s+2000 ms\s+> 2500 ms\s+> 2500 ms\s+75% within 2500 ms$/);
-    expect(rowOf(lines, 'all')).toMatch(/^all\s+10\s+1\s+0\s+2000 ms\s+4000 ms\s+> 2500 ms\s+90% within own wait$/);
+    // Across mixed waits a pooled percentile mixes upper and lower bounds, so the pooled row prints none.
+    expect(rowOf(lines, 'all')).toMatch(/^all\s+10\s+1\s+0\s+—\s+—\s+—\s+90% within own wait$/);
+    expect(report.kinds.at(-1)).toMatchObject({ kind: 'all', p50: null, p90: null, max: null });
   });
 
   it('FM-auth: a 401 from the SDK stops brain:spike after one call with exit 2, and prints none of the SDK text', async () => {

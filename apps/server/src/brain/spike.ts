@@ -53,7 +53,10 @@ export interface KindRow {
   calls: number;
   timeouts: number;
   errors: number;
-  /** Over answered and timed-out calls, timeouts ranked slowest; errors are not timed. Null when there are none. */
+  /**
+   * Over answered and timed-out calls, timeouts ranked slowest; errors are not timed. Null when there are none, and
+   * always on the pooled row: across mixed waits a rank mixes upper and lower bounds.
+   */
   p50: Latency | null;
   p90: Latency | null;
   max: Latency | null;
@@ -197,7 +200,7 @@ function kindRow(kind: KindRow['kind'], waitMs: number | null, settled: Settled[
   const timedOut = settled.filter((s) => s.outcome === 'timeout').map((s) => WAIT_MS[s.kind]).sort(ascending);
   // A timed-out call ranks slower than every answer; all that is known of its latency is that it passed its wait.
   const ranked: Latency[] = [...answered.map((ms) => ({ ms })), ...timedOut.map((overMs) => ({ overMs }))];
-  const at = (q: number) => (ranked.length === 0 ? null : nearest(ranked, q));
+  const at = (q: number) => (waitMs === null || ranked.length === 0 ? null : nearest(ranked, q));
   const within = settled.filter((s) => isAnswered(s) && s.ms <= WAIT_MS[s.kind]).length;
   return {
     kind,
@@ -293,7 +296,7 @@ export async function runSpike(options: SpikeOptions): Promise<SpikeReport> {
 }
 
 const pct = (x: number) => `${(x * 100).toFixed(0)}%`;
-const latencyText = (l: Latency | null) => (l === null ? 'n/a' : 'ms' in l ? `${Math.round(l.ms)} ms` : `> ${l.overMs} ms`);
+const latencyText = (l: Latency | null) => (l === null ? '—' :'ms' in l ? `${Math.round(l.ms)} ms` : `> ${l.overMs} ms`);
 
 /** Rows as columns two spaces apart; the last column is not padded. */
 function table(rows: string[][]): string[] {
