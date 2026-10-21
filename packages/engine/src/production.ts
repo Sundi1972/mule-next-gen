@@ -171,7 +171,8 @@ export function energyUseOf(state: GameState, tile: Tile): number {
 /**
  * Runs one production phase. Order matters and mirrors the design:
  * 1. Energy plots produce first, so their output can power the rest;
- * 2. every other working raw plot needs 1 Energy, or produces half;
+ * 2. every other working raw plot needs its Energy, or produces half, and a
+ *    farm whose owner is short of Water produces half again;
  * 3. factories convert inputs from the owner's stock, Alloy first because
  *    Electronics needs it; in an Energy shortage they are served last;
  * 4. pollution spreads and the air gauge moves.
@@ -192,6 +193,10 @@ export function runProduction(state: GameState): { produced: Record<string, Stoc
     ran.add(tile);
   }
 
+  // Who is short of Water is decided before anything runs, so a well
+  // harvested this month waters next month's crops, not this month's.
+  const dry = new Set(state.players.filter((p) => p.stock.water < needsOf(state, p.id).water).map((p) => p.id));
+
   for (const tile of working.filter((t) => t.outfit !== 'energy' && isRaw(t.outfit!))) {
     const owner = playerById.get(tile.owner!)!;
     const good = tile.outfit as RawGood;
@@ -199,6 +204,7 @@ export function runProduction(state: GameState): { produced: Record<string, Stoc
     const energy = energyUseOf(state, tile);
     if (owner.stock.energy >= energy) owner.stock.energy -= energy;
     else amount = Math.floor(amount / 2);
+    if (dry.has(owner.id) && UPKEEP.irrigated.includes(good)) amount = Math.floor(amount / 2);
     owner.stock[good] += amount;
     produced[tile.owner!]![good] += amount;
     ran.add(tile);

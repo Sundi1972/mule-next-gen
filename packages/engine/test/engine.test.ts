@@ -171,6 +171,20 @@ describe('production', () => {
     expect(produced.produced.p0!.food).toBe(Math.floor(full / 2));
   });
 
+  it('halves Food farms whose owner is short of Water', () => {
+    const state = newGame();
+    const tile = plainTile(state, 0, 0, 'river');
+    tile.owner = 'p0';
+    tile.outfit = 'food';
+    const p0 = state.players[0]!;
+    p0.stock.energy = 5;
+    const full = rawOutput(state, tile);
+    p0.stock.water = 0;
+    expect(runProduction(state).produced.p0!.food).toBe(Math.floor(full / 2));
+    p0.stock.water = 5;
+    expect(runProduction(state).produced.p0!.food).toBe(full);
+  });
+
   it('runs factories only when the inputs are in stock', () => {
     const state = newGame();
     const tile = plainTile(state, 0, 0, 'crater');

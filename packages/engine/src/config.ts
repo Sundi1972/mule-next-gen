@@ -208,6 +208,11 @@ export const UPKEEP = {
    * their recipe says. Without it a raw plot makes half, a factory nothing.
    */
   energyUse: { food: 1, water: 1, energy: 0, smithore: 2, crystite: 2, rareEarth: 2 } satisfies Record<RawGood, number>,
+  /**
+   * Plots that need irrigation: when their owner holds less Water than the
+   * household and crew need, they make half (on top of any Energy shortfall).
+   */
+  irrigated: ['food'] as RawGood[],
   /** Colonists need 1 Food and 1 Water a month per this many colonists. */
   colonistsPerUnit: 20,
   /**
