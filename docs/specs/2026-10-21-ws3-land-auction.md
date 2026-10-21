@@ -1,6 +1,6 @@
 # WS3 · Land auction: plots and MULEs sold at a live auction
 
-**Lane:** WS3 Auctions · **Class:** Programme · **Status:** DRAFT. §0 is approved; the D1–D8 design is approved with the PM's edits. Mocks are in review: the walk layout (A/B) is with Heiko, and the remaining screens come after his pick. **Serves Mission Goal G-3.**
+**Lane:** WS3 Auctions · **Class:** Programme · **Status:** APPROVED (2026-10-21). §0, the D1–D8 design with the PM's edits, and every screen mock (Heiko, at e3421df) are approved. **Serves Mission Goal G-3.**
 **Branch:** `ws3-auctions` (base `feat/strategist` 145925e) · **Mocks:** `design/mocks/land-auction/` · **Rulings:** relayed by the PM ("Mule next-gen"), 2026-10-21.
 
 ---
@@ -235,8 +235,9 @@ today        three tabs: Colony, Geo drone, Chat.  anchors: apps/web/src/phone/P
 tomorrow     MUST add a 'Sell' tab: the month's public line-up with slots left, then pick one of
              your plots, choose plot or MULE, minimum, unsold choice, list / unlist.
 ux           mock design/mocks/land-auction/src/screens/PhoneSell.tsx · routes #sell-empty,
-             #sell, #sell-full · approved at <commit, pending> · GRAFT TARGET:
-             apps/web/src/phone/Planning.tsx
+             #sell, #sell-full · approved by Heiko at e3421df (artifact C9ouLiaXrSzRBsaQFtn4m6)
+             · fixtures to replace: fixture.ts VIEW/LISTINGS, the local listings state (→ the
+             server's view and list/unlist intents) · GRAFT TARGET: apps/web/src/phone/Planning.tsx
 mechanism    fill_scaffold
 depends_on   C6 (contract)
 ```
@@ -247,10 +248,13 @@ today        none; the phone routes by phase.  anchors: apps/web/src/phone/Phone
              verified_by: read
 tomorrow     MUST show the lot's intro, the walk and the result, and the seller's own view.
              One route line in PhoneApp.tsx (SEAMS allows it).
-ux           mock design/mocks/land-auction/src/screens/PhoneWalkA.tsx | PhoneWalkB.tsx — walk
-             layout pending Heiko's pick; intro, result and seller view built after it ·
-             GRAFT TARGET: new apps/web/src/phone/LandAuction.tsx (+ lot parts into
-             apps/web/src/components/AuctionParts.tsx; Hold exported from Auction.tsx, E3)
+ux           mock design/mocks/land-auction/src/screens/PhoneLandAuction.tsx (layout A, Heiko's
+             pick) · routes #intro #walk #sold #won #store #kept #seller-walk #seller-sold #aside,
+             playable at #lot · approved by Heiko at e3421df (artifact C9ouLiaXrSzRBsaQFtn4m6) ·
+             fixtures to replace: fixture.ts VIEW/INTRO/WALK/SOLD/WON/STORE/KEPT (→ view.landAuction),
+             harness useLotFlow (→ the server's tick) · GRAFT TARGET: new
+             apps/web/src/phone/LandAuction.tsx; parts.tsx → apps/web/src/components/AuctionParts.tsx;
+             Hold exported from apps/web/src/phone/Auction.tsx (E3). Keep every data-testid.
 mechanism    fill_scaffold
 depends_on   C6 (contract), C12 (done)
 ```
@@ -262,7 +266,11 @@ today        TableApp shows the goods auction in TvAuction; nothing for lots.
              verified_by: read
 tomorrow     MUST show the lot lit on the map with its seller, minimum and the live board, then
              the result. One route line in TableApp.tsx; TvHeader exported (E2).
-ux           mock pending (built to the walk choice) · GRAFT TARGET: new apps/web/src/table/TvLandAuction.tsx
+ux           mock design/mocks/land-auction/src/screens/TvLandAuction.tsx · routes #tv-intro
+             #tv-walk #tv-sold #tv-kept · approved by Heiko at e3421df (artifact
+             C9ouLiaXrSzRBsaQFtn4m6) · fixtures to replace: fixture.ts (→ the board's public view);
+             its Header copy → TableApp.tsx's exported TvHeader (E2) · GRAFT TARGET: new
+             apps/web/src/table/TvLandAuction.tsx. Keep every data-testid.
 mechanism    fill_scaffold
 depends_on   C6 (contract)
 ```
