@@ -1,13 +1,18 @@
 import { GAME, LOTS, WALK } from './config.js';
-import { mulePrice } from './economy.js';
+import { mulePrice, taxSale } from './economy.js';
 import { RuleError } from './errors.js';
 import { tileAt } from './map.js';
 import type { GameState, LandAuction, Listing, LotItem, LotResult, Tile } from './types.js';
+import { stepBoard, takeSide, type WalkMarket } from './walk.js';
 
 /**
  * The land auction's lots. In planning a player lists a plot they own, or
  * the MULE on one, with a minimum and what happens if nobody bids it. After
- * the land grant the lots come up one at a time in listing order.
+ * the land grant the lots come up one at a time in listing order, each with
+ * an intro, a walk and a result. Only buyers walk, on the walk board of
+ * walk.ts with nobody to trade with, and the highest bid at or over the
+ * minimum wins at the bell. Everything is a pure function of the game state
+ * and the time step.
  */
 
 /** What the store pays for an unsold lot of this kind, today. A listing fixes it when it is made. */
@@ -63,14 +68,15 @@ export function unlist(state: GameState, playerId: string, id: string): void {
   state.listings = state.listings.filter((l) => l !== listing);
 }
 
+// --- The land auction -------------------------------------------------------
+
 /** Opens the land auction: the month's first lot comes up in its intro. */
 export function startLandAuction(state: GameState): void {
-  const [lot, ...queue] = state.listings;
   state.landAuction = {
-    queue,
-    lot: lot ?? null,
-    stage: lot ? 'intro' : 'over',
-    clockMs: LOTS.introMs,
+    queue: [...state.listings],
+    lot: null,
+    stage: 'over',
+    clockMs: 0,
     elapsed: 0,
     ticks: 0,
     lo: 0,
@@ -84,21 +90,190 @@ export function startLandAuction(state: GameState): void {
     done: [],
     aside: {},
     result: null,
-    number: lot ? 1 : 0,
+    number: 0,
     count: state.listings.length,
+  };
+  nextLot(state);
+}
+
+function nextLot(state: GameState): void {
+  const a = state.landAuction!;
+  const lot = a.queue.shift();
+  if (!lot) {
+    Object.assign(a, { lot: null, stage: 'over', clockMs: 0, walkers: [], done: [], aside: {} } satisfies Partial<LandAuction>);
+    return;
+  }
+  const lo = Math.floor(lot.minimum * LOTS.boardLow);
+  const hi = Math.ceil(lot.minimum * LOTS.boardHigh);
+  Object.assign(a, {
+    lot,
+    stage: 'intro',
+    clockMs: LOTS.introMs,
+    elapsed: 0,
+    lo,
+    hi,
+    speed: Math.max(WALK.minSpeed, (hi - lo) / WALK.crossSeconds),
+    walkers: [],
+    deals: [],
+    turns: {},
+    units: 0,
+    between: { units: 0, value: 0 },
+    done: [],
+    aside: {},
+    result: null,
+    number: a.number + 1,
+  } satisfies Partial<LandAuction>);
+}
+
+/** Where each player but the seller stands on this lot: a buyer, or aside for too little money or a MULE already in hand. */
+function standing(state: GameState, lot: Listing): { id: string; aside: 'money' | 'mule' | null }[] {
+  return state.players
+    .filter((p) => p.id !== lot.seller)
+    .map((p) => ({ id: p.id, aside: p.money < lot.minimum ? 'money' : lot.item.kind === 'mule' && p.carriedMule !== null ? 'mule' : null }));
+}
+
+/** The lot as a market for the walk board: buyers' money and seat order, and nobody to trade with, so stepBoard never trades. */
+function lotMarket(state: GameState): WalkMarket {
+  const players = new Map(state.players.map((p, i) => [p.id, { p, i }]));
+  return {
+    units: () => 0,
+    money: (id) => players.get(id)?.p.money ?? 0,
+    houseSells: null,
+    houseBuys: [],
+    floor: () => null,
+    first: () => false,
+    seat: (id) => players.get(id)?.i ?? 0,
+    trade: () => {},
   };
 }
 
+/** The highest rounded bid at or over the minimum and who holds it (first there, then seat order), or null if no bid reaches it. */
+export function lotLeader(state: GameState): { id: string; bid: number } | null {
+  const a = state.landAuction;
+  if (!a?.lot) return null;
+  const minimum = a.lot.minimum;
+  const seat = (id: string) => state.players.findIndex((p) => p.id === id);
+  const best = a.walkers
+    .filter((w) => w.side === 'buyer' && Math.round(w.price) >= minimum)
+    .sort((x, y) => Math.round(y.price) - Math.round(x.price) || x.since - y.since || seat(x.id) - seat(y.id))[0];
+  return best ? { id: best.id, bid: Math.round(best.price) } : null;
+}
+
+function startWalk(state: GameState): void {
+  const a = state.landAuction!;
+  const players = standing(state, a.lot!);
+  Object.assign(a, {
+    stage: 'walk',
+    clockMs: LOTS.walkMs,
+    elapsed: 0,
+    done: [],
+    walkers: players.map(({ id }) => ({ id, side: 'pass', price: 0, dir: 0, since: 0 })),
+    aside: Object.fromEntries(players.flatMap((x) => (x.aside ? [[x.id, x.aside]] : []))),
+  } satisfies Partial<LandAuction>);
+  const market = lotMarket(state);
+  for (const { id, aside } of players) if (!aside) takeSide(a, market, id, 'buyer');
+}
+
+/** Moves the lot to its winner, or applies the seller's unsold choice. */
+function resolve(state: GameState, lot: Listing, leader: { id: string; bid: number } | null): LotResult {
+  const tile = tileAt(state.tiles, state.width, lot.item.x, lot.item.y)!;
+  const seller = state.players.find((p) => p.id === lot.seller);
+  const clearMule = () => {
+    tile.outfit = null;
+    tile.runMonths = 0;
+  };
+  if (leader) {
+    const winner = state.players.find((p) => p.id === leader.id)!;
+    winner.money -= leader.bid;
+    // The colony is not a player: its proceeds go to store capital, untaxed.
+    if (seller) seller.money += taxSale(state, seller.id, leader.bid);
+    else state.store.capital += leader.bid;
+    if (lot.item.kind === 'plot') tile.owner = winner.id;
+    else {
+      winner.carriedMule = tile.outfit;
+      clearMule();
+    }
+    return { kind: 'sold', buyer: winner.id, price: leader.bid };
+  }
+  if (lot.unsold === 'store' && seller && state.store.capital >= lot.storePays) {
+    seller.money += lot.storePays;
+    state.store.capital -= lot.storePays;
+    if (tile.outfit) state.store.mules++;
+    clearMule();
+    if (lot.item.kind === 'plot') tile.owner = null;
+    return { kind: 'store', price: lot.storePays };
+  }
+  return { kind: 'kept' };
+}
+
+function ringBell(state: GameState): LotResult {
+  const a = state.landAuction!;
+  const result = resolve(state, a.lot!, lotLeader(state));
+  for (const w of a.walkers) w.dir = 0;
+  Object.assign(a, { stage: 'result', clockMs: LOTS.resultMs, done: [], result } satisfies Partial<LandAuction>);
+  return result;
+}
+
+const buyerIds = (a: LandAuction) => a.walkers.filter((w) => w.side === 'buyer').map((w) => w.id);
+
+/** Hold up, hold down or stand still during a lot's walk. Walking takes back a Done. */
 export function setLotWalk(state: GameState, playerId: string, dir: -1 | 0 | 1): void {
-  throw new Error('NotImplemented: setLotWalk');
+  const a = state.landAuction;
+  if (state.phase !== 'landAuction' || a?.stage !== 'walk') throw new RuleError('Not walking yet');
+  const w = a.walkers.find((x) => x.id === playerId);
+  if (!w || w.side !== 'buyer') throw new RuleError("You can't bid on this lot");
+  w.dir = dir;
+  if (dir !== 0) lotDone(state, playerId, false);
 }
 
+/** Done with this lot's intro or walk, or not done after all. */
 export function lotDone(state: GameState, playerId: string, done = true): void {
-  throw new Error('NotImplemented: lotDone');
+  const a = state.landAuction;
+  if (state.phase !== 'landAuction' || !a || (a.stage !== 'intro' && a.stage !== 'walk')) return;
+  const has = a.done.includes(playerId);
+  if (done && !has) a.done.push(playerId);
+  if (!done && has) a.done = a.done.filter((id) => id !== playerId);
 }
 
+/**
+ * Advances the land auction by dt ms of game time. The intro ends on its
+ * clock or once every buyer is done. The walk's bell rings on its clock,
+ * once every buyer is done, or at once when nobody can bid. The result
+ * stays up on its own clock before the next lot. Returns the lot's result
+ * in the step its bell rings.
+ */
 export function stepLandAuction(state: GameState, dt: number): LotResult | null {
-  throw new Error('NotImplemented: stepLandAuction');
+  const a = state.landAuction;
+  if (state.phase !== 'landAuction' || !a?.lot || a.stage === 'over') return null;
+  a.ticks++;
+
+  if (a.stage === 'intro') {
+    a.clockMs -= dt;
+    const buyers = standing(state, a.lot).filter((x) => !x.aside);
+    const allDone = buyers.length > 0 && buyers.every((x) => a.done.includes(x.id));
+    if (a.clockMs > 0 && !allDone) return null;
+    startWalk(state);
+    return buyerIds(a).length === 0 ? ringBell(state) : null;
+  }
+
+  if (a.stage === 'result') {
+    a.clockMs -= dt;
+    if (a.clockMs <= 0) nextLot(state);
+    return null;
+  }
+
+  const money = new Map(state.players.map((p) => [p.id, p.money]));
+  const before = new Map(a.walkers.map((w) => [w.id, { bid: Math.round(w.price), since: w.since }]));
+  stepBoard(a, lotMarket(state), dt);
+  for (const w of a.walkers) {
+    if (w.side !== 'buyer') continue;
+    w.price = Math.min(w.price, money.get(w.id)!);
+    // Pressing against your money leaves your bid where it was, so it mustn't cost you your place as first there.
+    const was = before.get(w.id)!;
+    if (Math.round(w.price) === was.bid) w.since = was.since;
+  }
+  if (a.clockMs <= 0 || buyerIds(a).every((id) => a.done.includes(id))) return ringBell(state);
+  return null;
 }
 
 /** Ends the land auction at once: every lot not yet at its bell is kept, so nothing moves without a bell. */
