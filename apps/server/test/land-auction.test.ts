@@ -140,7 +140,7 @@ describe('land auction on the server', () => {
     // Intro of lot 1: both other seats see themselves as buyers; the seller watches.
     const intro = game.viewFor('o');
     expect(intro.phaseEndsAt).toBeNull();
-    expect(intro.landAuction).toMatchObject({ stage: 'intro', number: 1, count: 2, lot: { seller: 'b', minimum: 250, item: { kind: 'plot', ...plot } } });
+    expect(intro.landAuction).toMatchObject({ stage: 'intro', total: LOTS.introMs / 1_000, number: 1, count: 2, lot: { seller: 'b', minimum: 250, item: { kind: 'plot', ...plot } } });
     expect(intro.landAuction!.next.map((l) => l.seller)).toEqual(['l']);
     expect(walker(intro, 'o')).toMatchObject({ side: 'buyer', done: false });
     expect(walker(intro, 'o')!.aside).toBeUndefined();
@@ -167,7 +167,8 @@ describe('land auction on the server', () => {
     expect(after.news[0]).toBe(`Ossa bought plot ${at(plot)} from Brix for ${ossa}.`);
 
     // Lot 2's intro: nobody but its seller has 5000, so both sit it out for money.
-    advance(LOTS.resultMs);
+    // The fake clock runs one tick per advance, so the result's clock is run down tick by tick.
+    for (let t = 0; t < LOTS.resultMs; t += WALK.tickMs) advance(WALK.tickMs);
     const second = game.viewFor('o');
     expect(second.landAuction).toMatchObject({ stage: 'intro', number: 2, count: 2, lot: { seller: 'l' } });
     expect(walker(second, 'o')).toMatchObject({ side: 'pass', aside: 'money' });
@@ -231,7 +232,7 @@ describe('land auction on the server', () => {
       for (const id of humans) expect(money(after, id)).toBe(money(before, id));
       expect(after.news[0]).toBe(`Nobody bid 250 on plot ${at(plot)}: Brix keeps it.`);
     }
-    // store: nobody walks; Lena's phone drops and counts as done.
+    // store: nobody walks. Lena's phone drops, then Brix's and Ossa's in the walk: a dropped phone counts as done, and the lot still runs to its bell.
     {
       const { game, advance, plots } = toMonth2Planning({ mule: true });
       const plot = plots.b![0]!;
@@ -245,7 +246,9 @@ describe('land auction on the server', () => {
       game.handle('o', { type: 'ready' });
       advance(WALK.tickMs);
       expect(game.viewFor(null).landAuction!.stage).toBe('walk');
-      game.handle('o', { type: 'ready' });
+      game.connectionChanged('b', false);
+      game.connectionChanged('o', false);
+      expect(game.viewFor(null).phase).toBe('landAuction');
       advance(WALK.tickMs);
       const after = game.viewFor('b');
       expect(after.phase).toBe('landAuction');
