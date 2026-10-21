@@ -23,7 +23,8 @@ export interface GameContext {
   /** Tell every screen that the game's view changed. */
   changed(): void;
   /**
-   * Posts a chat line as seat `from`, exactly as if that seat's player had typed it.
+   * Posts a chat line as seat `from`. The line follows a player's trim, cap, moderation and whisper rules, but the
+   * game's `heard` never receives it.
    * Throws TableError for an unknown `from` or `to`. It runs outside the room's error handling, so the caller must
    * not let it throw: from a timer, a throw is unhandled.
    */
@@ -66,12 +67,13 @@ export interface RoomOptions<Intent, GameView> {
 }
 
 /**
- * A typed name on one line, at most 16 code points, with no control characters or line or paragraph separators: a
- * line break in a name would forge a line in an AI's prompt. NFC, not NFKC, so a name shows as typed. Capping by
- * code point never splits an emoji's surrogate pair. See B-AC-5.
+ * A typed name on one line, at most 16 code points, with no control characters, line or paragraph separators, or bidi
+ * overrides and isolates: a line break in a name would forge a line in an AI's prompt, and a bidi control would make
+ * it read differently from how it is stored. Other format characters stay, so a ZWJ emoji survives. NFC, not NFKC,
+ * so a name shows as typed. Capping by code point never splits an emoji's surrogate pair. See B-AC-5.
  */
 function cleanName(name: string): string {
-  const oneLine = name.normalize('NFC').replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, '').trim();
+  const oneLine = name.normalize('NFC').replace(/[\p{Cc}\p{Zl}\p{Zp}\u202A-\u202E\u2066-\u2069]/gu, '').trim();
   return Array.from(oneLine).slice(0, 16).join('').trim();
 }
 
@@ -265,12 +267,16 @@ export class Room<Intent, View> {
     this.game.heard?.(line.from, line.text, line.to);
   }
 
-  /** Sends one cleaned chat line to the screens it is for. Returns it, or null when moderation dropped it. */
+  /**
+   * Sends one cleaned chat line to the screens it is for. Returns it, or null when moderation dropped it.
+   * Throws TableError for an unknown sender or recipient.
+   */
   private deliver(from: string, text: string, to?: string): ChatMessage | null {
-    const clean = this.opts.moderate(text.trim().slice(0, 280));
-    if (!clean) return null;
+    // Checked before moderation, so an unknown seat throws whatever the text.
     if (!this.seats.some((s) => s.id === from)) throw new TableError('Nobody by that name at the table');
     if (to && !this.seats.some((s) => s.id === to)) throw new TableError('Nobody by that name at the table');
+    const clean = this.opts.moderate(text.trim().slice(0, 280));
+    if (!clean) return null;
     const message: ChatMessage = { id: ++this.chatId, from, text: clean, at: this.opts.now(), ...(to ? { to } : {}) };
     if (to) {
       // A whisper reaches only its two ends, never a board.
