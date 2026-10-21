@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { SMALL_MAP, withSpecials, withTerrain } from './fixtures/map-fixtures.js';
 import {
   checkMap,
   createGame,
@@ -161,6 +162,13 @@ describe('map quality, every map createGame deals', () => {
       }
     }
     expect(failures, listed(failures)).toEqual([]);
+
+    // A map with no dry land right of the river can't hold RULE-5: placement says so rather than place it short.
+    const rightOfRiver: [number, number, string][] = [[9, 0], [10, 0], [9, 1], [10, 1], [8, 2], [9, 2], [10, 2], [7, 3], [8, 3], [9, 3], [10, 3], [7, 4], [8, 4], [9, 4], [10, 4]].map(
+      ([x, y]) => [x!, y!, 'L'],
+    );
+    const flooded = withTerrain(withSpecials(SMALL_MAP, [[0, 3, null], [6, 1, null], [10, 4, null]]), rightOfRiver);
+    expect(() => placeSpecials(flooded, 2, createRng(1))).toThrow(/special fields/);
   }, TIMEOUT);
 
   it('B-AC-4: hints are honest', () => {
