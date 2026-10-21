@@ -556,6 +556,22 @@ goal      P-1 — still met
 folded    §9 write contract lists closeElection; C1 senior notes copy-on-write
 ```
 
+```
+AM-5 · 2026-10-22 · lead · PR-3
+
+target    §1 C1 / C9 (where the host option's default lives on the server)
+said      createGame({ politics }) defaults on
+did       the engine's createGame still defaults on (the sim plays politics). The server's
+          MuleGame takes politics?: boolean defaulting OFF, and createMuleServer, which every
+          real table goes through, passes politics: true. Existing server tests that build
+          MuleGame directly (WS1/WS3/WS4 files) keep today's planning timing untouched.
+because   P-1: the election first in month 1 changes planning's timing, and seven server test
+          files of other lanes assume 45 s planning; editing them all is churn in files WS7
+          may not touch, while the product default (what a table plays) stays on.
+goal      P-1 — still met (a table plays politics by default; test C1 proves it)
+folded    C9 tomorrow; plan Task 3.2 adds `C1: the server a player joins plays politics by default`
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: politics state
