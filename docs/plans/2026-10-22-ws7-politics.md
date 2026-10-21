@@ -254,7 +254,7 @@ Every handoff carries the standing authority line, verbatim:
 
 **ACs verified:** B-AC-5, B-AC-2 · **Spec:** §2 RULE-9
 
-- [ ] **Step 1: Write failing tests** `B-AC-5: another phone and the TV never receive Brix's ballot` (serialize `viewFor('ossa')` and `viewFor(null)`; Brix's choice absent; `viewFor('brix')` has it), and `B-AC-2: after the Governor sets 8%, the next auction sale is taxed at 8%` (drive one sale through the server's auction tick; assert the seller's money in the view). Altitude: promise at the server's view — what each screen receives.
+- [ ] **Step 1: Write failing tests** `B-AC-5: another phone and the TV never receive Brix's ballot` (serialize `viewFor('ossa')` and `viewFor(null)`; Brix's choice absent; `viewFor('brix')` has it), plus an exact-keys allow-list on the board's `politics` view and its `election` (the `expectBoardKeys` pattern in `apps/server/test/auction-units.test.ts`, HC-2 since #47), so a new field must be checked before it reaches the TV, and `B-AC-2: after the Governor sets 8%, the next auction sale is taxed at 8%` (drive one sale through the server's auction tick; assert the seller's money in the view). Altitude: promise at the server's view — what each screen receives.
 - [ ] **Step 2:** Run — Expected: FAIL.
 - [ ] **Step 3: Implement** the politics view per spec §3 (public part on every view; `me.politics` only on the owner's), and the news line on each reveal.
 - [ ] **Step 4:** Run — Expected: PASS.
