@@ -40,8 +40,15 @@ function lotPlot(state: GameState, x: number, y: number): Tile {
   return tile;
 }
 
+/** What a player asks to list: the MULE's outfit is read off the plot. */
+export interface ListRequest {
+  item: { kind: LotItem['kind']; x: number; y: number };
+  minimum: number;
+  unsold: Listing['unsold'];
+}
+
 /** Lists a plot the player owns, or the MULE on it, for this month's land auction. Returns the listing. */
-export function list(state: GameState, playerId: string, lot: { item: LotItem; minimum: number; unsold: Listing['unsold'] }): Listing {
+export function list(state: GameState, playerId: string, lot: ListRequest): Listing {
   requirePlanning(state);
   const { item, minimum, unsold } = lot;
   const tile = lotPlot(state, item.x, item.y);
@@ -55,7 +62,8 @@ export function list(state: GameState, playerId: string, lot: { item: LotItem; m
   const listing: Listing = {
     id: `${item.kind}-${item.x}-${item.y}`,
     seller: playerId,
-    item: { kind: item.kind, x: item.x, y: item.y },
+    // Nothing installs between planning and the land auction, so the outfit seen now is the one sold.
+    item: item.kind === 'plot' ? { kind: 'plot', x: item.x, y: item.y } : { kind: 'mule', x: item.x, y: item.y, outfit: tile.outfit! },
     minimum,
     unsold,
     storePays: storePaysFor(state, item.kind),
@@ -195,7 +203,7 @@ function resolve(state: GameState, lot: Listing, leader: { id: string; bid: numb
     else state.store.capital += leader.bid;
     if (lot.item.kind === 'plot') tile.owner = winner.id;
     else {
-      winner.carriedMule = tile.outfit;
+      winner.carriedMule = lot.item.outfit;
       clearMule();
     }
     return { kind: 'sold', buyer: winner.id, price: leader.bid };
