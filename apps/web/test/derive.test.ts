@@ -39,11 +39,11 @@ function view(extra: Partial<MuleView> = {}): MuleView {
 
 describe('reading the view', () => {
   it("T-AC-13: gives each seat its colour slot by the seat's chosen colour, not its place at the table", () => {
-    const chosen = view({ players: [p('s1', 500, 4), p('s2', 900, 2)] });
-    expect(slotOf(chosen, 's1')).toBe(4);
+    const chosen = view({ players: [p('s1', 500, 5), p('s2', 900, 2)] });
+    expect(slotOf(chosen, 's1')).toBe(5);
     expect(slotOf(chosen, 's2')).toBe(2);
-    expect(mapTiles(chosen).map((t) => t.owner)).toEqual([2, 4]);
-    expect(standings(chosen).map((s) => [s.player.id, s.slot])).toEqual([['s2', 2], ['s1', 4]]);
+    expect(mapTiles(chosen).map((t) => t.owner)).toEqual([2, 5]);
+    expect(standings(chosen).map((s) => [s.player.id, s.slot])).toEqual([['s2', 2], ['s1', 5]]);
     expect(slotOf(chosen, 'nobody')).toBeNull();
     expect(slotOf(chosen, null)).toBeNull();
   });

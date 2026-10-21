@@ -499,18 +499,19 @@ describe('Room: every seat holds its own colour (RULE-7)', () => {
     expect(colours(room)).toEqual([0, 1, 2]);
   });
 
-  it('T-AC-12: RULE-7 row 4 — Heiko takes Brix\'s colour: Brix (AI) moves to the lowest free colour, and every screen sees it', async () => {
+  it('T-AC-12: RULE-7 row 4 — Mia takes Brix\'s colour: Brix (AI) moves to the lowest free colour, not to Mia\'s old one, and every screen sees it', async () => {
     const { room, heiko, mia } = lobby();
     room.receive(heiko, heiko.from, { t: 'addAi' });
+    paint(room, heiko, 4);
     await flush();
 
-    paint(room, heiko, 2);
+    paint(room, mia, 2);
     await flush();
 
-    expect(heiko.last('error')).toBeUndefined();
-    expect(mia.last('view')!.view.seats.map((s) => [s.name, s.color])).toEqual([
-      ['Heiko', 2],
-      ['Mia', 1],
+    expect(mia.last('error')).toBeUndefined();
+    expect(heiko.last('view')!.view.seats.map((s) => [s.name, s.color])).toEqual([
+      ['Heiko', 4],
+      ['Mia', 2],
       ['Brix', 0],
       ['AI 4', 3],
     ]);
@@ -564,10 +565,12 @@ describe('Room: every seat holds its own colour (RULE-7)', () => {
       for (let step = 0; step < 80; step++) {
         const screen = any(screens);
         const op = any(['join', 'color', 'color', 'color', 'addAi', 'kick', 'leave'] as const);
+        const intended = Math.floor(random() * 8) - 1;
         const before = byId();
+        const displaced = room.viewFor(null).seats.find((s) => s.isAi && s.color === intended && s.id !== screen.from.seatId);
         const errors = screen.inbox.filter((m) => m.t === 'error').length;
         if (op === 'join') screens.push(join(room, `P${step}`));
-        if (op === 'color') paint(room, screen, Math.floor(random() * 8) - 1);
+        if (op === 'color') paint(room, screen, intended);
         if (op === 'addAi') room.receive(screen, screen.from, { t: 'addAi' });
         if (op === 'kick') kick(room, screen, any([...before.keys(), 's99']));
         if (op === 'leave') leave(room, screen);
@@ -575,7 +578,14 @@ describe('Room: every seat holds its own colour (RULE-7)', () => {
         const now = colours(room);
         expect(new Set(now).size, `seed ${seed} step ${step} ${op}`).toBe(now.length);
         expect(now.every((c) => Number.isInteger(c) && c >= 0 && c < 6)).toBe(true);
-        if (op === 'color' && screen.inbox.filter((m) => m.t === 'error').length > errors) expect(byId()).toEqual(before);
+        const refused = screen.inbox.filter((m) => m.t === 'error').length > errors;
+        if (op === 'color' && refused) expect(byId()).toEqual(before);
+        if (op === 'color' && !refused && displaced) {
+          const others = new Set(room.viewFor(null).seats.filter((s) => s.id !== displaced.id).map((s) => s.color));
+          let lowest = 0;
+          while (others.has(lowest)) lowest++;
+          expect(byId().get(displaced.id), `seed ${seed} step ${step}: the displaced AI`).toBe(lowest);
+        }
       }
     },
   );

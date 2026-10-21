@@ -83,7 +83,7 @@ describe('the game draws each player in the colour their seat chose', () => {
     expect(shared.view.game!.players.map((p) => p.slot)).toEqual([0, 1, 2]);
   });
 
-  it('T-AC-13: a colour that is not a number is a bad message, and changes nothing', async () => {
+  it('T-AC-12: a colour that is not a number is a bad message, and changes nothing', async () => {
     const { mia, tv } = await table();
 
     mia.send({ t: 'color', color: 'red' });
