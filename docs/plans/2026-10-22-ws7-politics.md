@@ -91,6 +91,7 @@ Every handoff carries the standing authority line, verbatim:
 **PR-4**
 - `may_edit_content`: the politics desks in WS6's hub, grafted from WS6's approved mock at its pinned SHA: wire data, handlers and intents; keep composition, layout, tokens and every `data-testid`.
 - `may_edit`: `apps/web/e2e/politics.ts` (new e2e)
+- named edit (WS4 reviews, PM ruling 2026-10-22): `apps/web/src/phone/GameOver.tsx`, one "Offices held +N" row
 - `must_not_edit`: the hub frame (WS6's PR-9), `apps/web/src/phone/{PhoneApp,Shell}.tsx` and `apps/web/src/table/TableApp.tsx` except one route/slot line each (WS4 reviews)
 
 ### Contention
@@ -286,6 +287,16 @@ Every handoff carries the standing authority line, verbatim:
 - [ ] **Step 1:** Extend the e2e: the winner sets 8%; the next sale at the auction is taxed at 8% (assert the seller's money in their phone's view). This is UBER-AC-2 verbatim.
 - [ ] **Step 2:** Run — Expected: PASS.
 - [ ] **Step 3:** Commit `test(e2e): UBER-AC-2 election to taxed sale`.
+
+### Task 4.2b: Offices held on the game-over screen — C7 (PM ruling 2026-10-22, option A)
+
+**Depends on:** PR-1 (the `office` score line) · **ACs verified:** C7 (visible half) · named edit in WS4's `apps/web/src/phone/GameOver.tsx`, WS4 reviews
+
+- [ ] **Step 1:** Write the failing test `C7: the game-over lines a player sees add up to their final score, an "Offices held +N" row included` (an officeholder's phone at game over; sum the rendered line values; equals the shown total). Altitude: promise, the rendered screen.
+- [ ] **Step 2:** Run — Expected: FAIL (no office row).
+- [ ] **Step 3:** Add one row "Offices held +N" from `parts.office`, in the existing rows' markup; shown only when N > 0.
+- [ ] **Step 4:** Run — Expected: PASS.
+- [ ] **Step 5:** Commit `feat(web): offices held on the game-over breakdown (C7)`.
 
 ### Task 4.3: PR-4 integration check
 
