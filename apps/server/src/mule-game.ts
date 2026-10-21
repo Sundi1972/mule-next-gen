@@ -6,11 +6,13 @@ import {
   analysePlot,
   auctionDone,
   buyMule,
+  castVote,
   claimPlot,
   cover,
   createGame,
   createRng,
   declareRole,
+  electionDone,
   DEVELOPMENT,
   fitFilter,
   GAME,
@@ -32,9 +34,11 @@ import {
   outfitCostFor,
   outfitMule,
   RuleError,
+  runFor,
   score,
   scoreParts,
   setLotWalk,
+  setSalesTax,
   setWalk,
   shipAnnounced,
   shipInPort,
@@ -43,6 +47,7 @@ import {
   SPECIES,
   type Species,
   stepAuction,
+  stepElection,
   stepLandAuction,
   storeBuyLine,
   storeForSale,
@@ -61,6 +66,7 @@ import { AiSeat, LotHand, personaFor, type AiAction } from '@mule/ai';
 import { PLAYER_COLORS, type MuleIntent, type MuleView, type ProductionReason, type ProductionView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
+import { electionNews, myPoliticsView, politicsView, resultShown } from './politics-view.js';
 
 /**
  * The longest each phase lasts, in milliseconds. Phases also end early when
@@ -141,6 +147,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private seats: (SeatInfo & { color: string })[] = [];
   private readonly ready = new Set<string>();
   private readonly away = new Set<string>();
+  /** Seats the server pressed Done for in this election stage because their phone dropped. */
+  private readonly doneForAway = new Set<string>();
   /** Trades between players in the good that is up, for the news when it closes. */
   private dealsInGood: Trade[] = [];
   /** When each player's development time runs out, epoch ms. */
@@ -159,7 +167,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   constructor(
     private readonly ctx: GameContext,
     private readonly seed: number,
-    private readonly options: { maxMonths?: number; phaseScale?: number } = {},
+    /** `politics` plays elections, offices and the Governor's tax; off unless the server is created with it on. */
+    private readonly options: { maxMonths?: number; phaseScale?: number; politics?: boolean } = {},
   ) {
     this.phaseScale = options.phaseScale ?? 1;
     if (!(this.phaseScale > 0 && this.phaseScale <= 1)) throw new RangeError(`phaseScale must be in (0, 1], got ${this.phaseScale}`);
@@ -167,7 +176,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   start(seats: SeatInfo[]): void {
     this.seats = seats.map((s, i) => ({ ...s, color: PLAYER_COLORS[i % PLAYER_COLORS.length]! }));
-    this.state = createGame({ seed: this.seed, players: seats.map(({ id, name, isAi, pick }) => ({ id, name, isAi, ...(isSpecies(pick) ? { species: pick } : {}) })), maxMonths: this.options.maxMonths });
+    this.state = createGame({ seed: this.seed, players: seats.map(({ id, name, isAi, pick }) => ({ id, name, isAi, ...(isSpecies(pick) ? { species: pick } : {}) })), maxMonths: this.options.maxMonths, politics: this.options.politics ?? false });
     this.ai.clear();
     this.lotHands.clear();
     seats.forEach((s, i) => {
@@ -191,6 +200,11 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const state = this.requireState();
     switch (intent.type) {
       case 'ready':
+        // During the election, ready is Done for the stage; it never ends planning.
+        if (this.electionOpen()) {
+          electionDone(state, seatId);
+          return;
+        }
         if (state.phase === 'auction') {
           auctionDone(state, seatId);
           return;
@@ -258,6 +272,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       case 'unlist':
         unlistLot(state, seatId, intent.id);
         return;
+      case 'run':
+        runFor(state, seatId, intent.office);
+        return;
+      case 'vote':
+        castVote(state, seatId, intent.office, intent.candidate);
+        return;
+      case 'setTax':
+        setSalesTax(state, seatId, intent.percent);
+        return;
     }
   }
 
@@ -281,13 +304,16 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   connectionChanged(seatId: string, connected: boolean): void {
     if (connected) this.away.delete(seatId);
     else this.away.add(seatId);
+    // A Done the server pressed for the dropped phone is taken back; one the player pressed stands.
+    if (connected && this.electionOpen() && this.doneForAway.delete(seatId)) electionDone(this.requireState(), seatId, false);
     // Nobody waits for a phone that dropped.
     this.checkAllReady();
   }
 
   private checkAllReady(): void {
+    // The auctions and the election end on their own clocks.
+    if (this.electionOpen()) return;
     const waiting = this.seats.filter((s) => !s.isAi && !this.away.has(s.id) && !this.ready.has(s.id) && !this.doneDeveloping(s.id));
-    // The auctions end on their own, good by good and lot by lot.
     const phase = this.state?.phase;
     if (phase && phase !== 'gameOver' && phase !== 'auction' && phase !== 'landAuction' && waiting.length === 0) this.nextPhase();
   }
@@ -346,16 +372,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       this.scheduleLandAuctionTick(this.ctx.now());
       return;
     }
-    const ms = PHASE_MS[state.phase] * this.phaseScale;
-    this.phaseEndsAt = this.ctx.now() + ms;
-    this.cancels.push(
-      this.ctx.schedule(ms, () => {
-        this.nextPhase();
-        this.ctx.changed();
-      }),
-    );
+    // In an election month the election runs first, on its own clocks; planning's timer starts once it is over.
+    if (this.electionOpen()) {
+      this.phaseEndsAt = null;
+      this.scheduleElectionTick(this.ctx.now());
+      return;
+    }
+    this.startPhaseTimer(state.phase);
 
-    if (state.phase === 'planning') for (const seat of this.ai.values()) seat.planMonth(state);
+    if (state.phase === 'planning') this.startPlanning();
     if (state.phase === 'landGrant') {
       this.aiGrantBids();
       this.scheduleGrantTick();
@@ -363,6 +388,61 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     if (state.phase === 'development') this.startDevelopment();
     if (state.phase === 'production') this.reportProduction();
     if (state.phase === 'upkeep') this.reportUpkeep();
+  }
+
+  private startPhaseTimer(phase: keyof typeof PHASE_MS): void {
+    const ms = PHASE_MS[phase] * this.phaseScale;
+    this.phaseEndsAt = this.ctx.now() + ms;
+    this.cancels.push(
+      this.ctx.schedule(ms, () => {
+        this.nextPhase();
+        this.ctx.changed();
+      }),
+    );
+  }
+
+  private startPlanning(): void {
+    const state = this.requireState();
+    for (const seat of this.ai.values()) seat.planMonth(state);
+  }
+
+  /** True while this month's election runs, before planning proper. */
+  private electionOpen(): boolean {
+    const state = this.state;
+    const election = state?.politics?.election;
+    return state?.phase === 'planning' && !!election && election.stage !== 'over';
+  }
+
+  /**
+   * Steps the election every WALK.tickMs until it is over, then starts planning's
+   * timer and the AI land plans. AI seats and dropped phones count as Done.
+   */
+  private scheduleElectionTick(last: number): void {
+    const state = this.requireState();
+    this.cancels.push(
+      this.ctx.schedule(WALK.tickMs, () => {
+        if (!this.electionOpen()) return;
+        const now = this.ctx.now();
+        // A stalled server loop must not skip a stage.
+        const dt = Math.min(Math.max(0, now - last), WALK.tickMs * 3) / this.phaseScale;
+        // Until the AI seats have a vote hand of their own, they sit the election out.
+        const done = state.politics!.election!.done;
+        for (const id of this.away) if (!done.includes(id)) this.doneForAway.add(id);
+        for (const seat of this.seats) if (seat.isAi || this.away.has(seat.id)) electionDone(state, seat.id);
+        const shown = resultShown(state);
+        const stage = state.politics!.election!.stage;
+        stepElection(state, dt);
+        if (state.politics!.election!.stage !== stage) this.doneForAway.clear();
+        const result = state.politics!.election!.result;
+        if (!shown && result && resultShown(state)) this.addNews(electionNews(result, (id) => this.nameOf(id)));
+        if (this.electionOpen()) this.scheduleElectionTick(now);
+        else {
+          this.startPhaseTimer('planning');
+          this.startPlanning();
+        }
+        this.ctx.changed();
+      }),
+    );
   }
 
   /** The land grant's light moves on every tick; each new plot gets the AI players' bids. */
@@ -467,7 +547,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           else setWalk(state, seatId, action.dir);
           break;
         case 'done':
-          if (state.phase === 'landAuction') lotDone(state, seatId, action.done);
+          if (this.electionOpen()) electionDone(state, seatId, action.done);
+          else if (state.phase === 'landAuction') lotDone(state, seatId, action.done);
           else auctionDone(state, seatId, action.done);
           break;
         default:
@@ -657,6 +738,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
             mulePrice: mulePriceFor(state, me.id),
             outfitCosts: Object.fromEntries(outfits.map((o) => [o, outfitCostFor(state, me.id, o)])) as Record<Outfit, number>,
             droneOrder: me.droneOrder.map((i) => ({ x: i % state.width, y: Math.floor(i / state.width) })),
+            politics: myPoliticsView(state, me.id),
           }
         : null,
       market: GOODS.map((good) => {
@@ -697,6 +779,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       lotSlots: { used: state.listings.length, max: LOTS.maxLotsPerMonth },
       landAuction: landAuctionView(state),
       production: state.phase === 'production' || state.phase === 'upkeep' ? productionView(state, PHASE_MS.production * this.phaseScale) : null,
+      politics: politicsView(state),
     };
   }
 

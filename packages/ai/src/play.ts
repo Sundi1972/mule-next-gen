@@ -112,10 +112,12 @@ export interface PlayOptions {
   onDecision?: (r: DecisionRecord) => void;
   /** Called after each phase is played, before the game moves on: for diagnostics. */
   onPhase?: (state: GameState) => void;
+  /** The host option: false plays without offices, elections or a moving tax. On by default, as in createGame. */
+  politics?: boolean;
 }
 
 export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions = {}): PlayedGame {
-  const state = createGame({ seed, players: specs.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
+  const state = createGame({ seed, players: specs.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })), politics: options.politics });
   let decisions = 0;
   const seats = specs.map(
     (s, i) =>
