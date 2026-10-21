@@ -10,7 +10,8 @@ import { MARKET } from '../fixture';
 /**
  * R2: the status screen and the declare are one stage, as in the original's
  * production summary. You read everyone's numbers and pick your side on the
- * same screen. Nothing pressed by the bell means Pass.
+ * same screen. Your side starts where the engine's defaultSide puts it (short →
+ * Buy, surplus → Sell, even → Pass: spec AM-1); tap to change it.
  */
 
 export type Side = 'buyer' | 'seller' | 'pass';
@@ -36,7 +37,7 @@ function StoreBox({ good, tv = false }: { good: AuctionView['good']; tv?: boolea
   );
 }
 
-export function PhoneStatusDeclare({ view, auction, start = 'pass' }: { view: MuleView; auction: AuctionView; start?: Side }) {
+export function PhoneStatusDeclare({ view, auction, start = 'buyer' }: { view: MuleView; auction: AuctionView; start?: Side }) {
   const [side, setSide] = useState<Side>(start);
   const row = auction.status.find((r) => r.id === 'lena')!;
   const spare = row.now - row.need;
@@ -78,7 +79,7 @@ export function PhoneStatusDeclare({ view, auction, start = 'pass' }: { view: Mu
             ))}
           </div>
           <span className="text-center font-mono text-[10px] text-ink-3" data-testid="side-now">
-            {side === 'pass' ? 'NOTHING PICKED: YOU PASS AT THE BELL' : `YOU ${side === 'buyer' ? 'BUY' : 'SELL'} · TAP AGAIN TO PASS`}
+            {side === 'pass' ? 'YOU SIT THIS GOOD OUT' : `YOU ${side === 'buyer' ? 'BUY' : 'SELL'} · TAP AGAIN TO PASS`}
           </span>
         </div>
       }
@@ -94,8 +95,8 @@ export function PhoneStatusDeclare({ view, auction, start = 'pass' }: { view: Mu
   );
 }
 
-/** Who has picked a side so far: public, as the original's creatures stood at the top or bottom of the board. */
-const PICKED: Record<string, Side | null> = { lena: null, ossa: 'seller', brix: 'seller', kai: 'buyer' };
+/** Everyone's side, starting from the engine's default: public, as the original's creatures stood at the top or bottom of the board. */
+const PICKED: Record<string, Side | null> = { lena: 'buyer', ossa: 'seller', brix: 'seller', kai: 'buyer' };
 
 export function TvStatusDeclare({ view, auction }: { view: MuleView; auction: AuctionView }) {
   return (
@@ -128,7 +129,7 @@ export function TvStatusDeclare({ view, auction }: { view: MuleView; auction: Au
               );
             })}
           </ul>
-          <p className="mt-auto text-base leading-snug text-ink-2">Pick Buy or Sell on your phone before the bell. Nothing picked means you sit this good out.</p>
+          <p className="mt-auto text-base leading-snug text-ink-2">Your side is picked for you from what you have and need. Change it on your phone before the bell.</p>
         </div>
       </div>
     </div>

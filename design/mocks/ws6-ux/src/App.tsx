@@ -13,7 +13,7 @@ const DECISIONS = [
   'Goods auction (Heiko chose variant A, plain lines): two moving lines, the lowest ask (red, pushed down by sellers) and the highest bid (green, pushed up by buyers), the gap labelled. When they meet they become the glowing trade bar.',
   'Units and surplus under every creature ("12 (+8)"); the store’s stock on its selling line, or SOLD OUT with no ceiling.',
   'The store and ship lines stay but go thinner: they are limits, not moves.',
-  'Buy or Sell is picked on the status screen (R2): one stage per good fewer. Nothing picked by the bell means Pass. The status table shows on the TV (Heiko’s exemption from “the TV never shows stock”).',
+  'Buy or Sell is picked on the status screen (R2): one stage per good fewer. Your side starts where the numbers point (short → Buy, surplus → Sell: spec AM-1); tap to change it. The status table shows on the TV (Heiko’s exemption from “the TV never shows stock”).',
   'Land auction: buyers only, so one line: the highest bid, naming who wins at the bell.',
   'Production (R3, ~15 s): plots fill with one bar per unit in the owner’s colour, badges say why (+1 cluster, ½ no Water…), the event plays over the map in its own way, then the goods fly home: TV into the public colony bar, phone into your private 9-goods strip.',
   'What each plot made is public (as in the original and our status screen); what you hold stays on your phone.',
@@ -178,7 +178,7 @@ export default function App() {
             <PhoneStatusDeclare view={VIEW} auction={SMITHORE_STATUS} />
           </Game>
         </PhoneFrame>
-        <p className="max-w-[844px] text-sm text-ink-2">Tap Buy or Sell; tap it again to go back to Pass. Lena has no Smithore, so Sell is off.</p>
+        <p className="max-w-[844px] text-sm text-ink-2">Lena is short, so she starts as a buyer; tap Buy again to pass. She has no Smithore, so Sell is off.</p>
         <TvFrame>
           <Board>
             <TvStatusDeclare view={VIEW} auction={SMITHORE_STATUS} />
