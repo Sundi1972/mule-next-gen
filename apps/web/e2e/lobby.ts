@@ -19,6 +19,8 @@ const LAPTOP: BrowserContextOptions = { viewport: { width: 1440, height: 900 } }
 /** The rail's width in the wide layout, which applies from a shell width of 1100 px (HC-8). */
 const WIDE_RAIL_PX = 400;
 const NARROWED_SHELL_PX = 1000;
+/** The hero's width in the wide layout; the phone layout's is far narrower. */
+const WIDE_HERO_PX = 360;
 const PHASE_SCALE = 0.1;
 const within = (ms: number) => ms * PHASE_SCALE + 3_000;
 /** A land auction, when the month has one, runs on its own clock: PHASE_MS has no entry for it. */
@@ -50,6 +52,7 @@ try {
 } catch (err) {
   console.error('e2e lobby: FAILED');
   if (errors.length > 0) console.error(`page errors: ${errors.join('; ')}`);
+  if (colourRoomReds.length > 0) console.error(`room colour checks that failed before this:\n  ${colourRoomReds.join('\n  ')}`);
   throw err;
 } finally {
   await browser.close();
@@ -115,6 +118,7 @@ async function kickLeaveAndClose(): Promise<void> {
 
   await host.getByTestId('close-room').click();
   check(await shows(host.getByTestId('host-dialog').getByText('Close the room?')), 'B-AC-6: the close control asks "Close the room?" first');
+  check(await host.getByTestId('host-dialog-cancel').evaluate((el) => el === document.activeElement), 'B-AC-6: the close confirm puts focus on Cancel');
   await host.getByTestId('host-dialog-cancel').click();
   check(await gone(host.getByTestId('host-dialog')), 'B-AC-6: Cancel closes the close confirm');
   await host.waitForTimeout(CANCEL_SETTLE_MS);
@@ -153,7 +157,18 @@ async function colonistLobby(size: BrowserContextOptions, label: string, wide: b
   if ((await lena.locator('[data-testid^=kick-]').count()) > 0) lenaHas.push('kick-<seat>');
   check(lenaHas.length === 0, `${tag}: a player who is not the host has none of the host's controls, has ${lenaHas.join(', ')}`);
   check((await lena.getByTestId('hero-name').textContent())?.trim() === 'Lena', `${tag}: Lena's hero is Lena`);
+  check((await nowTitle(heiko)) === 'Start when everyone is here', `${tag}: the host's Now, got "${await nowTitle(heiko)}"`);
+  check((await nowTitle(lena)) === 'Make your colonist', `${tag}: Lena's Now before she picks, got "${await nowTitle(lena)}"`);
+  check((await lena.getByText('Waiting for Heiko to start…').count()) === 1, `${tag}: before she picks, Lena's footer says she waits for Heiko`);
+  if (!wide)
+    for (const [who, page] of [['the host', heiko], ['a guest', lena]] as const) {
+      const where = await qrInRail(page);
+      check(where.inside && where.scrollTop === 0, `B-AC-4 (${label}): with no TV, ${who} sees the whole room QR in the rail without scrolling, ${JSON.stringify(where)}`);
+    }
+  check((await joinCardFirst(heiko)) === !wide, `${tag}: with no TV the join card comes ${wide ? 'after' : 'before'} the seats in the markup`);
 
+  const own = lena.getByTestId('colour-1');
+  check((await own.isEnabled()) && (await own.getAttribute('aria-label')) === COLOUR_NAME[1], `${tag}: Lena's own colour is hers to keep, labelled "${await own.getAttribute('aria-label')}"`);
   const heikos = lena.getByTestId('colour-0');
   check(await heikos.isDisabled(), `${tag}: Heiko's colour is disabled for Lena`);
   check((await heikos.getAttribute('aria-label')) === `${COLOUR_NAME[0]}, taken by Heiko`, `${tag}: Heiko's colour names him, got "${await heikos.getAttribute('aria-label')}"`);
@@ -174,30 +189,47 @@ async function colonistLobby(size: BrowserContextOptions, label: string, wide: b
   colourRoom(await shows(lena.locator(`[data-testid=colour-${violet}][aria-pressed=true]`)), `${tag}: Lena picks ${COLOUR_NAME[violet]} and it is hers`);
   const lenas = heiko.locator(`[data-testid=colour-${violet}][aria-label="${COLOUR_NAME[violet]}, taken by Lena"]`);
   colourRoom((await shows(lenas)) && (await lenas.isDisabled()), `${tag}: the host sees ${COLOUR_NAME[violet]} disabled and naming Lena`);
+  check(await shows(lena.getByTestId('now-title').getByText('Wait for Heiko to start', { exact: true })), `${tag}: Lena's Now after she picks, got "${await nowTitle(lena)}"`);
+  check(
+    (await lena.getByText('Waiting for Heiko to start…').count()) === 0 && (await lena.getByRole('button', { name: 'Leave table' }).count()) === 1,
+    `${tag}: once Now says to wait, the footer keeps only Leave table`,
+  );
 
-  await heiko.getByTestId('kick-s2').click();
-  check(await shows(heiko.getByTestId('host-dialog').getByText('Remove Lena?')), `${tag}: removing Lena asks first`);
+  const kickLena = heiko.getByTestId('kick-s2');
+  await kickLena.click();
+  check(await shows(heiko.getByRole('dialog', { name: 'Remove Lena?' })), `${tag}: removing Lena asks first, in a dialog named by its question`);
   check(await shows(heiko.getByTestId('kick-confirm')), `${tag}: the removal waits for kick-confirm`);
-  await heiko.getByTestId('host-dialog-cancel').click();
-  check(await gone(heiko.getByTestId('host-dialog')), `${tag}: Keep closes the question`);
-  await heiko.getByTestId('close-room').click();
-  check(await shows(heiko.getByTestId('host-dialog').getByText('Close the room?')), `${tag}: closing the room asks first`);
+  await heiko.keyboard.press('Escape');
+  check(await gone(heiko.getByTestId('host-dialog')), `${tag}: Escape closes the question`);
+  check(await kickLena.evaluate((el) => el === document.activeElement), `${tag}: focus goes back to Lena's ✕`);
+  const closeRoom = heiko.getByTestId('close-room');
+  await closeRoom.click();
+  check(await shows(heiko.getByRole('dialog', { name: 'Close the room?' })), `${tag}: closing the room asks first, in a dialog named by its question`);
   check(await shows(heiko.getByTestId('close-confirm')), `${tag}: the close waits for close-confirm`);
+  check(await heiko.getByTestId('host-dialog-cancel').evaluate((el) => el === document.activeElement), `${tag}: the close confirm puts focus on Cancel`);
   await heiko.getByTestId('host-dialog-cancel').click();
   check(await gone(heiko.getByTestId('host-dialog')), `${tag}: Keep it open closes the question`);
+  check(await closeRoom.evaluate((el) => el === document.activeElement), `${tag}: focus goes back to Close the room`);
   await heiko.waitForTimeout(CANCEL_SETTLE_MS);
-  check((await seat(heiko, 'Lena').count()) === 1 && (await lena.getByTestId('lobby').count()) === 1, `${tag}: cancelling either question sends nothing`);
+  check((await seat(heiko, 'Lena').count()) === 1 && (await lena.getByTestId('lobby').count()) === 1, `${tag}: Escape and Cancel send nothing`);
 
   const railPx = await railWidth(heiko);
   check(wide ? railPx === WIDE_RAIL_PX : railPx < WIDE_RAIL_PX, `${tag}: the ${wide ? 'wide' : 'phone'} layout, rail ${railPx} px`);
   if (wide) {
     await shellWidth(heiko, `${NARROWED_SHELL_PX}px`);
     const narrowed = await railWidth(heiko);
-    check(narrowed < WIDE_RAIL_PX, `${tag}: HC-8, a ${NARROWED_SHELL_PX} px shell in a 1440 px window is the phone layout, rail ${narrowed} px`);
+    const hero = await heiko.getByTestId('hero').evaluate((el) => Math.round(el.getBoundingClientRect().width));
+    const rows = await speciesRows(heiko);
+    check(
+      narrowed < WIDE_RAIL_PX && hero < WIDE_HERO_PX && rows === 1 && (await joinCardFirst(heiko)),
+      `${tag}: HC-8, a ${NARROWED_SHELL_PX} px shell in a 1440 px window is the phone layout: rail ${narrowed} px, hero ${hero} px, species in ${rows} row(s), join card first`,
+    );
     await shellWidth(heiko, '');
   }
-  await heiko.context().close();
+
   await lena.context().close();
+  check(await shows(rail(heiko).filter({ hasText: 'Lena' }).getByText('AWAY', { exact: true })), `${tag}: the host sees Lena AWAY once her phone has gone`);
+  await heiko.context().close();
 }
 
 /** B-AC-8: two phones and an AI; phone 1 takes the AI's colour, phone 2 cannot, and the game draws phone 1 in it. */
@@ -217,6 +249,9 @@ async function colourIntoTheGame(): Promise<void> {
   }
   const rose = 5 as Slot;
   const ai = await aiName(heiko, 's6');
+  check((await nowTitle(mia)) === 'Make your colonist', `B-AC-13: Mia's Now before she picks, got "${await nowTitle(mia)}"`);
+  await mia.getByTestId('species-mollox').click();
+  check(await shows(mia.getByTestId('now-title').getByText('Wait for Heiko to start', { exact: true })), `B-AC-13: a species pick alone moves Mia's Now on, got "${await nowTitle(mia)}"`);
 
   const take = heiko.getByTestId(`colour-${rose}`);
   check((await take.isEnabled()) && (await take.getAttribute('aria-label')) === `${COLOUR_NAME[rose]}, ${ai}'s: tap to take it`, `B-AC-8: phone 1 can take ${ai}'s ${COLOUR_NAME[rose]}`);
@@ -296,6 +331,34 @@ async function missingIds(page: Page, ids: string[]): Promise<string[]> {
   const missing = [];
   for (const id of ids) if (!(await page.getByTestId(id).isVisible())) missing.push(id);
   return missing;
+}
+
+async function nowTitle(page: Page): Promise<string> {
+  return ((await page.getByTestId('now-title').textContent()) ?? '').trim();
+}
+
+/** Whether the room QR lies inside the rail's visible scroll area, and how far that area is scrolled. */
+function qrInRail(page: Page): Promise<{ inside: boolean; scrollTop: number; qr: number[]; body: number[] }> {
+  return page.getByTestId('guide').evaluate((guide) => {
+    const body = guide.firstElementChild as HTMLElement;
+    const b = body.getBoundingClientRect();
+    const q = guide.querySelector('[data-testid=room-qr]')!.getBoundingClientRect();
+    return { inside: q.top >= b.top && q.bottom <= b.bottom, scrollTop: body.scrollTop, qr: [q.top, q.bottom], body: [b.top, b.bottom] };
+  });
+}
+
+/** Whether the join card comes before the seat list in the markup (and so for a screen reader). */
+function joinCardFirst(page: Page): Promise<boolean> {
+  return page.getByTestId('guide').evaluate((guide) => {
+    const card = guide.querySelector('[data-testid=room-card]')!;
+    const seats = guide.querySelector('[data-testid=seats]')!;
+    return (card.compareDocumentPosition(seats) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+  });
+}
+
+/** How many rows the six species chips take. */
+function speciesRows(page: Page): Promise<number> {
+  return page.getByTestId('species-pick').evaluate((grid) => new Set([...grid.children].map((el) => Math.round(el.getBoundingClientRect().top))).size);
 }
 
 function railWidth(page: Page): Promise<number> {
