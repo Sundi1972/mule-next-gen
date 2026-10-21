@@ -623,7 +623,7 @@ export const AI_HANDS = {
     filterMs: [1_200, 2_000] as [number, number],
     pubMs: [800, 1_500] as [number, number],
     /** The most it waits for its decider before it plays its own top option. */
-    decideWaitMs: 1_500,
+    decideWaitMs: 2_500,
   },
   auction: {
     /** Delay after the walk starts before it first moves, scaled by patience. */
