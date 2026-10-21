@@ -44,7 +44,8 @@ async function firstLabel(phone: Page, timeout: number): Promise<string> {
 
 /**
  * Seats the human at 2 Food against a need of 5 for the next development, through the in-process
- * server. Call before development starts. A Medicine keeps the air from making them sick as well.
+ * server, and sends every screen the view that makes. Call before development starts. A Medicine keeps
+ * the air from making them sick as well.
  */
 export function makeHungry(server: MuleServer, code: string, seat = 's1'): void {
   const room = server.registry.get(code);
@@ -57,6 +58,11 @@ export function makeHungry(server: MuleServer, code: string, seat = 's1'): void 
   check(p, `seat ${seat} in the game`);
   p.stock.food = 2;
   p.stock.medicine = Math.max(1, p.stock.medicine);
+  // The seed changed the state behind the game's back, and the room only broadcasts after an intent or a phase
+  // change; its private broadcast() is the one way to show the seed in the phase it was made in (B-AC-14).
+  const seeded = room as unknown as { broadcast(): void };
+  check(typeof seeded.broadcast === 'function', 'the room still has broadcast() for test seeding');
+  seeded.broadcast();
 }
 
 /** B-AC-9: a hungry player sees 2 of 5 Food and an orange bar at her devSeconds. Call as development starts after makeHungry. */

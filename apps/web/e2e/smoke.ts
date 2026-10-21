@@ -8,6 +8,7 @@ import { GAME, WALK } from '@mule/engine';
 import { errors as playwrightErrors, type BrowserContext, type Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import { check, launch, PHONE, startServer, TV, type AuctionSteps } from './harness';
+import { planningIsTheHub } from './hub-steps';
 import { checkTheShow, watchShow } from './production-steps';
 import { fedPlayerFillsAFullHoloBar, hungryPlayerSeesAShortOrangeBar, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows } from './store-steps';
 
@@ -136,6 +137,8 @@ try {
   await phone.locator('[data-phase=planning]').waitFor({ timeout: within(PHASE_MS.upkeep) });
   await steps.listedSale?.({ phone, tv, check });
   makeHungry(server, code);
+  // B-AC-14: planning is the hub, its needs read from that seed; with B-AC-12's planning part.
+  console.log(`hub: ${await planningIsTheHub(phone, server, code)}`);
   await readyIfStillPlanning(phone);
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 2);
