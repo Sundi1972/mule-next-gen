@@ -92,7 +92,7 @@ describe('phaseScale and maxMonths', () => {
     expect(game.viewFor(null).auction!.stage).toBe('declare');
   });
 
-  it('T-AC-6: production lasts 15 s and ends early when all are ready', () => {
+  it('T-AC-6: production lasts 15 s (scaled by phaseScale, and the view says so) and ends early when all are ready', () => {
     const toProduction = () => {
       const g = toDevelopment();
       while (g.game.viewFor(null).phase === 'development') g.advance(100);
@@ -101,10 +101,18 @@ describe('phaseScale and maxMonths', () => {
     };
     const timed = toProduction();
     expect(timed.game.viewFor(null).phaseEndsAt! - timed.ctx.now()).toBe(15_000);
+    expect(timed.game.viewFor(null).production!.lengthMs).toBe(15_000);
     timed.advance(14_999);
     expect(timed.game.viewFor(null).phase).toBe('production');
     timed.advance(1);
     expect(timed.game.viewFor(null).phase).toBe('auction');
+
+    // A faster game plays the same show, faster: the view says how long the phase was given.
+    const fast = toDevelopment({ phaseScale: 0.1 });
+    while (fast.game.viewFor(null).phase === 'development') fast.advance(10);
+    expect(fast.game.viewFor(null).phase).toBe('production');
+    expect(fast.game.viewFor(null).phaseEndsAt! - fast.ctx.now()).toBe(1_500);
+    expect(fast.game.viewFor('s1').production!.lengthMs).toBe(1_500);
 
     const early = toProduction();
     early.game.handle('s1', { type: 'ready' });
