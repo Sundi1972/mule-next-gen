@@ -41,3 +41,5 @@ jobs:
         run: pnpm --filter @mule/web exec tsx e2e/smoke.ts
         env:
           MULE_E2E_SEED: '1'
+      - name: Land and goods auction e2e
+        run: pnpm --filter @mule/web exec tsx e2e/auction-steps.ts
