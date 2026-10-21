@@ -2,8 +2,8 @@ import { endAuction, startAuction } from './auction.js';
 import { RuleError } from './errors.js';
 import { DEFAULT_SPECIES, DEVELOPMENT, GAME, GOOD_CONFIG, MULE, POLLUTION, SPECIES_PERK, START, TAX, UPKEEP } from './config.js';
 import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './economy.js';
-import { endLandAuction, isListed, startLandAuction } from './lots.js';
-import { generateMap, tileAt, tileIndex } from './map.js';
+import { endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
+import { generateMap, tileIndex } from './map.js';
 import { airBand } from './pollution.js';
 import { needsOf, runProduction } from './production.js';
 import { createRng } from './rng.js';
@@ -88,12 +88,6 @@ export function player(state: GameState, id: string): Player {
 
 function requirePhase(state: GameState, phase: Phase): void {
   if (state.phase !== phase) throw new RuleError(`Not allowed during ${state.phase}`);
-}
-
-function plotAt(state: GameState, x: number, y: number): Tile {
-  const tile = tileAt(state.tiles, state.width, x, y);
-  if (!tile || tile.terrain === 'store') throw new RuleError('Not a plot');
-  return tile;
 }
 
 export function freePlots(state: GameState) {
