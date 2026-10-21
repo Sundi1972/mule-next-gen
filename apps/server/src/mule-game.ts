@@ -56,7 +56,7 @@ import type { Game, GameContext, SeatInfo } from '@tabletop/core';
  * has no fixed length: it runs good by good on its own clocks (WALK in the
  * engine's config), stepped by the server every WALK.tickMs.
  */
-export const PHASE_MS: Record<Exclude<Phase, 'gameOver' | 'auction'>, number> = {
+export const PHASE_MS: Record<Exclude<Phase, 'gameOver' | 'auction' | 'landAuction'>, number> = {
   planning: 45_000,
   landGrant: 60_000,
   development: (DEVELOPMENT.fullSeconds + 5) * 1_000,
@@ -249,6 +249,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       return;
     }
 
+    // The land auction runs on its lots' own clocks, not a phase timer.
+    if (state.phase === 'landAuction') return;
     const ms = PHASE_MS[state.phase];
     this.phaseEndsAt = this.ctx.now() + ms;
     this.cancels.push(

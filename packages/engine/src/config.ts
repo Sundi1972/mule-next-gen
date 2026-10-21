@@ -379,6 +379,31 @@ export const WALK = {
 };
 
 /**
+ * The land auction, after the land grant: plots and MULEs players listed in
+ * planning come up one at a time, each with an intro, a walk and a result.
+ * The walk reuses WALK's speed and tick; the highest bid at the bell wins.
+ */
+export const LOTS = {
+  /** Lots one player may list in a month. */
+  perPlayer: 2,
+  /** Lots the land auction takes in a month, from all sellers together. */
+  maxLotsPerMonth: 4,
+  /** The intro: the lot lit on the map with its seller and minimum. */
+  introMs: 3_000,
+  /** The walk's clock for one lot. */
+  walkMs: 12_000,
+  /** The result on screen before the next lot comes up. */
+  resultMs: 2_500,
+  /** The board runs from this share of the minimum (where buyers start) to boardHigh's. */
+  boardLow: 0.7,
+  boardHigh: 2,
+  /** What the store pays for an unsold plot, as a share of GAME.plotScore, so it can't drift past the score. */
+  storePlotShare: 2 / 3,
+  /** What the store pays for an unsold MULE, as a share of this month's MULE price. */
+  storeMuleShare: 0.5,
+};
+
+/**
  * AI players. The strategist scores options with named considerations; a
  * persona is a set of weights on them, and a level sets how complete the
  * scoring is, how many near-best options reach the decider and how fast the
