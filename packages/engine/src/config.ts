@@ -482,6 +482,10 @@ export const LOTS = {
   storePlotShare: 2 / 3,
   /** What the store pays for an unsold MULE, as a share of this month's MULE price. */
   storeMuleShare: 0.5,
+  /** The chance, each month, that the colony puts one free plot up after the land grant. Heiko's range: 1/10 to 1/8. */
+  colonyPlotChance: 0.1,
+  /** The colony plot's minimum, as a share of GAME.plotScore: what the store would pay for land. */
+  colonyPlotShare: 2 / 3,
   /** An AI seat presses Done on a lot's intro after this long. */
   aiIntroMs: [400, 1_200] as [number, number],
   /** An AI seat first moves this long after a lot's walk starts, scaled by its patience. */

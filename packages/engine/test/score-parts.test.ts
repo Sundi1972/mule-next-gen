@@ -56,7 +56,9 @@ function playMonth(state: GameState, rng: Rng): void {
     advanceGrant(state);
   }
 
-  advancePhase(state);
+  // A colony lot can open the land auction after the grant; nobody bids, so it is kept.
+  do advancePhase(state);
+  while (state.phase === 'landAuction');
   for (const p of state.players) {
     const bare = state.tiles.filter((t) => t.owner === p.id && !t.outfit);
     if (bare.length > 0 && rng.chance(0.7)) {

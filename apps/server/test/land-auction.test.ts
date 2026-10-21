@@ -1,6 +1,6 @@
 import type { GameContext } from '@tabletop/core';
 import { describe, expect, it } from 'vitest';
-import { GAME, LOTS, RuleError, TAX, WALK } from '@mule/engine';
+import { advancePhase, COLONY_SELLER, createGame, GAME, LOTS, RuleError, TAX, WALK, type GameState } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
 
@@ -362,4 +362,50 @@ describe('land auction on the server', () => {
     expect(phases.slice(-3)).toEqual(['planning', 'landGrant', 'development']);
     expect(game.viewFor(null).landAuction).toBeNull();
   });
+
+  it('B-AC-8: a colony lot comes up first, every seat can bid, sale → store capital', () => {
+    const seed = colonySeed();
+    const { ctx, advance } = fakeContext();
+    const game = new MuleGame(ctx, seed);
+    game.start(seats);
+    for (const id of humans) game.handle(id, { type: 'ready' });
+    while (game.viewFor(null).phase === 'landGrant') advance(GRANT_TICK_MS);
+    expect(game.viewFor(null).phase).toBe('landAuction');
+
+    const intro = game.viewFor('o');
+    const lot = intro.landAuction!.lot!;
+    expect(lot).toMatchObject({ seller: COLONY_SELLER, minimum: Math.round(LOTS.colonyPlotShare * GAME.plotScore), unsold: 'keep', item: { kind: 'plot' } });
+    expect(intro.landAuction).toMatchObject({ number: 1, count: 1 });
+    expect(game.viewFor(null).landAuction!.lot).toEqual(lot);
+    for (const id of humans) expect(walker(game.viewFor(id), id)).toMatchObject({ side: 'buyer' });
+    const before = game.viewFor(null);
+    const capital = storeCapital(game);
+
+    skipIntro(game, advance);
+    const bid = walkUpTo(game, advance, 'o', lot.minimum + 30);
+    ringBell(game, advance, humans);
+
+    const after = game.viewFor('l');
+    expect(after.landAuction!.result).toEqual({ kind: 'sold', buyer: 'o', price: bid });
+    expect(tile(after, lot.item).owner).toBe('o');
+    expect(money(after, 'o')).toBe(money(before, 'o') - bid);
+    for (const id of ['b', 'l']) expect(money(after, id)).toBe(money(before, id));
+    expect(after.treasury.money).toBe(before.treasury.money);
+    expect(storeCapital(game)).toBe(capital + bid);
+    expect(after.news[0]).toBe(`Ossa bought plot ${at(lot.item)} from the colony for ${bid}.`);
+  });
 });
+
+/** The first seed whose month-1 roll brings a colony lot, found by playing the engine, never by mocking its RNG. */
+function colonySeed(): number {
+  for (let seed = 1; seed < 1_000; seed++) {
+    const state = createGame({ seed, players: seats });
+    while (state.phase !== 'landGrant') advancePhase(state);
+    advancePhase(state);
+    if (state.landAuction?.lot?.seller === COLONY_SELLER) return seed;
+  }
+  throw new Error('no colony seed under 1000');
+}
+
+// The view carries no store capital, so it is read from the game's own state.
+const storeCapital = (game: MuleGame) => (game as unknown as { state: GameState }).state.store.capital;
