@@ -13,7 +13,7 @@ import { EmoteBubbles } from './parts';
 import { Planning } from './Planning';
 import { Production } from './Production';
 import { Results } from './Results';
-import { TurnSideways } from './Shell';
+import { ShellLayer, TurnSideways } from './Shell';
 
 /**
  * The phone: your private controller, played sideways. Held upright it asks to be
@@ -74,11 +74,13 @@ function PhoneScreens({ room }: { room: string }) {
   return (
     <SeatSpeciesProvider value={seatSpecies(view)}>
       <PhoneGameProvider value={{ table, view, me, self, slot }}>
-        {/* Keyed by phase so each phase starts with fresh screen state. */}
-        <div key={`${view.month}-${view.phase}`} className="h-full" data-phase={view.phase}>
-          {screen}
-        </div>
-        <EmoteBubbles view={view} />
+        {/* Emotes float inside each screen's shell, clear of its rail. */}
+        <ShellLayer.Provider value={<EmoteBubbles view={view} />}>
+          {/* Keyed by phase so each phase starts with fresh screen state. */}
+          <div key={`${view.month}-${view.phase}`} className="h-full" data-phase={view.phase}>
+            {screen}
+          </div>
+        </ShellLayer.Provider>
       </PhoneGameProvider>
     </SeatSpeciesProvider>
   );

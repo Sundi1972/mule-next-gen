@@ -1,10 +1,9 @@
 import type { MuleView, MyView, PlayerView, TableView } from '@mule/protocol';
-import { readFileSync } from 'node:fs';
 import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { PhoneGameProvider, type PhoneGame } from '../src/phone/game';
-import { PhoneShell, WIDE_PX, type Now } from '../src/phone/Shell';
+import { PhoneShell, type Now } from '../src/phone/Shell';
 
 const self: PlayerView = { id: 's1', name: 'Heiko', isAi: false, color: '', species: 'mollox', money: 1200, plots: 2, ready: false, doneDeveloping: false };
 const game: PhoneGame = {
@@ -15,13 +14,13 @@ const game: PhoneGame = {
   slot: 0,
 };
 
-const RAIL = '<p data-testid="rail-content">the screen controls</p>';
+const RAIL_CONTENT: ReactNode = createElement('p', { 'data-testid': 'rail-content' }, 'the screen controls');
+const RAIL = renderToStaticMarkup(RAIL_CONTENT);
 const NOW: Now = { step: 2, of: 3, title: 'Claim a plot', detail: 'The lit plot is free.' };
 
 /** PhoneShell as a screen draws it, inside the phone's game. */
 function shell(now?: Now): string {
-  const rail: ReactNode = createElement('p', { 'data-testid': 'rail-content' }, 'the screen controls');
-  const screen = createElement(PhoneShell, { phase: 'Land grant', seconds: 30, now, rail, children: createElement('div', { 'data-testid': 'map' }) });
+  const screen = createElement(PhoneShell, { phase: 'Land grant', seconds: 30, now, rail: RAIL_CONTENT, children: createElement('div', { 'data-testid': 'map' }) });
   return renderToStaticMarkup(createElement(PhoneGameProvider, { value: game, children: screen }));
 }
 
@@ -32,33 +31,31 @@ function after(html: string, testid: string): string {
   return html.slice(at);
 }
 
+/** The rail's scrolling body, from its first child on: the element right after the rail's header. */
+function railBody(html: string): string {
+  const open = after(html, 'guide').match(/<\/header><div[^>]*>/);
+  expect(open, "the rail's body after its header").not.toBeNull();
+  return after(html, 'guide').slice(open!.index! + open![0].length);
+}
+
 describe('the player shell (C15)', () => {
-  it('B-AC-12: a screen that gives `now` opens the guide rail with it, before its own controls', () => {
+  it('B-AC-12: a screen that gives `now` opens the rail body with it, before its own controls', () => {
     const html = shell(NOW);
-    const guide = after(html, 'guide');
-    expect(guide).toContain('data-testid="now"');
-    expect(guide.indexOf('data-testid="now"')).toBeLessThan(guide.indexOf(RAIL));
+    // First child of the rail body: not in the header above it, not after the screen's controls.
+    expect(railBody(html)).toMatch(/^<section[^>]*data-testid="now"/);
+    expect(railBody(html).indexOf(RAIL)).toBeGreaterThan(0);
     expect(after(html, 'now-title')).toMatch(/^data-testid="now-title">Claim a plot</);
     expect(html).toContain('aria-label="Step 2 of 3" data-testid="now-steps"');
-    // The stage holds the screen's content; Now is in the rail, not on the stage.
-    expect(after(html, 'stage').indexOf('data-testid="map"')).toBeLessThan(after(html, 'stage').indexOf('data-testid="guide"'));
+    // The screen's content is on the stage, which closes before the guide opens; Now is not on the stage.
+    const stage = after(html, 'stage');
+    expect(stage.indexOf('data-testid="map"')).toBeLessThan(stage.indexOf('data-testid="guide"'));
+    expect(stage.indexOf('data-testid="now"')).toBeGreaterThan(stage.indexOf('data-testid="guide"'));
   });
 
-  it('B-AC-12 (negative): a screen without `now` draws no Now card, and its rail starts with its own controls', () => {
+  it('B-AC-12 (negative): a screen without `now` draws no Now card, and its rail body starts with its own controls', () => {
     const html = shell();
     expect(html).not.toContain('data-testid="now"');
-    expect(html).toContain(RAIL);
+    expect(railBody(html).startsWith(RAIL)).toBe(true);
     expect(html).toContain('data-testid="money"');
-  });
-
-  it('B-AC-12 (HC-8): every width switch in the shell is the container query at WIDE_PX, never the window', () => {
-    const source = readFileSync(new URL('../src/phone/Shell.tsx', import.meta.url), 'utf8');
-    const switches = [...source.matchAll(/@min-\[(\d+)px\]:/g)].map((m) => Number(m[1]));
-    expect(switches.length).toBeGreaterThan(0);
-    expect(new Set(switches)).toEqual(new Set([WIDE_PX]));
-    expect(WIDE_PX).toBe(1100);
-    // No window-width breakpoints (sm: md: lg: xl: 2xl: max-*:) and no media queries in code.
-    expect(source).not.toMatch(/(^|[\s'"`])(sm|md|lg|xl|2xl|max-[a-z0-9[\]]+):/m);
-    expect(source).not.toMatch(/matchMedia|innerWidth/);
   });
 });

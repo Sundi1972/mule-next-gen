@@ -137,8 +137,8 @@ try {
   await phone.locator('[data-phase=planning]').waitFor({ timeout: within(PHASE_MS.upkeep) });
   await steps.listedSale?.({ phone, tv, check });
   makeHungry(server, code);
-  // B-AC-12: the shell fills the stage and opens its rail with Now, at 1440×900 and 844×390.
-  console.log(`shell: ${await shellFillsTheStage(phone)}`);
+  // B-AC-12: the shell fills the stage at 1440×900 and 844×390.
+  console.log(`shell: ${await shellFillsTheStage(phone, server, code)}`);
   await readyIfStillPlanning(phone);
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 2);
