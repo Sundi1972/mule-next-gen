@@ -1,5 +1,6 @@
-/** Map zoom on the phone: the view that frames a player's own land. See spec C11, RULE-4. */
+/** Map zoom on the phone: a double-tap or the corner button frames a player's own land. See spec C11, RULE-4. */
 
+import { useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import type { MapTile } from './HoloMap';
 import type { Slot } from './tokens';
 
@@ -9,6 +10,10 @@ export interface ZoomBox {
   x: number;
   y: number;
 }
+
+/** Two pointer-ups this close in time and space are a double-tap. */
+const DOUBLE_TAP_MS = 300;
+const DOUBLE_TAP_SLOP = 24;
 
 /** Your plots plus a ring of one plot around them, grown to the map's shape and kept inside it; null if you own none. */
 export function zoomBox(tiles: MapTile[], width: number, height: number, slot: Slot): ZoomBox | null {
@@ -27,4 +32,75 @@ export function zoomBox(tiles: MapTile[], width: number, height: number, slot: S
     x: clamp((x0 + x1) / 2 - viewW / 2, width - viewW),
     y: clamp((y0 + y1) / 2 - viewH / 2, height - viewH),
   };
+}
+
+export interface ZoomMapProps {
+  width: number;
+  height: number;
+  tiles: MapTile[];
+  /** Whose land the zoom frames. */
+  slot: Slot;
+  /** The map, drawn at the viewport's full width. */
+  children: ReactNode;
+}
+
+/**
+ * Wraps a map so a double-tap on it, or the corner button, toggles between the whole colony and your own land.
+ * Taps still reach the map at once; with no land of your own there is no button and a double-tap does nothing.
+ */
+export function ZoomMap({ width, height, tiles, slot, children }: ZoomMapProps) {
+  const box = zoomBox(tiles, width, height, slot);
+  const [zoomed, setZoomed] = useState(false);
+  const last = useRef<{ t: number; x: number; y: number } | null>(null);
+  if (zoomed && !box) setZoomed(false);
+
+  const onPointerUp = (e: PointerEvent) => {
+    const prev = last.current;
+    const near = prev && e.timeStamp - prev.t < DOUBLE_TAP_MS && Math.hypot(e.clientX - prev.x, e.clientY - prev.y) < DOUBLE_TAP_SLOP;
+    if (near) {
+      last.current = null;
+      if (box) setZoomed((z) => !z);
+    } else {
+      last.current = { t: e.timeStamp, x: e.clientX, y: e.clientY };
+    }
+  };
+
+  const on = zoomed && box;
+  return (
+    <div className="relative overflow-hidden rounded-panel" data-testid="map-viewport">
+      <div
+        className="origin-top-left touch-manipulation transition-transform duration-300 ease-out"
+        style={on ? { transform: `scale(${on.scale}) translate(${(-on.x / width) * 100}%, ${(-on.y / height) * 100}%)` } : undefined}
+        onPointerUp={onPointerUp}
+        data-testid="map"
+        data-zoomed={on ? 'yes' : 'no'}
+      >
+        {children}
+      </div>
+      {box && (
+        <button
+          type="button"
+          onClick={() => setZoomed((z) => !z)}
+          aria-pressed={zoomed}
+          aria-label={zoomed ? 'Show the whole colony' : 'Zoom to your land'}
+          className="absolute right-1.5 top-1.5 flex size-11 items-center justify-center rounded-control border border-holo-line bg-panel/85 text-ink shadow-glow backdrop-blur-sm hover:border-holo"
+          data-testid="zoom-button"
+        >
+          <ZoomGlyph zoomed={zoomed} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ZoomGlyph({ zoomed }: { zoomed: boolean }) {
+  // DS-GAP: @mule/ui has no icon set; this magnifier is drawn inline until it has one.
+  return (
+    <svg aria-hidden viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="M15.5 15.5 L21 21" />
+      <path d="M7.5 10.5 H13.5" />
+      {!zoomed && <path d="M10.5 7.5 V13.5" />}
+    </svg>
+  );
 }

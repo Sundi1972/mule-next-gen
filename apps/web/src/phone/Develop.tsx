@@ -1,6 +1,6 @@
 import { DEVELOPMENT } from '@mule/engine';
 import type { TileView } from '@mule/protocol';
-import { AirGauge, Button, cx, FACTORY_GOODS, FoodTime, GOOD_NAME, HoloMap, MuleIcon, OUTFIT_GOODS, PlayerMark, StoreInterior, TERRAIN_NAME, type Shop } from '@mule/ui';
+import { AirGauge, Button, cx, FACTORY_GOODS, FoodTime, GOOD_NAME, HoloMap, MuleIcon, OUTFIT_GOODS, PlayerMark, StoreInterior, TERRAIN_NAME, ZoomMap, type Shop } from '@mule/ui';
 import { useEffect, useState } from 'react';
 import { mapTiles, PHASE_NAME, plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
 import { useClient, useServerNow } from '../net/react';
@@ -51,6 +51,7 @@ export function Develop() {
   const free = tile && tile.owner === null && tile.terrain !== 'store';
   const owner = tile?.owner ? view.players.find((p) => p.id === tile.owner) : undefined;
 
+  const tiles = mapTiles(view);
   const pub = (
     <Button size="md" variant="ghost" className="flex-1 whitespace-nowrap px-2" aria-label="Go to the pub and end your turn" onClick={() => client.intent({ type: 'pub' })}>
       Pub · end turn
@@ -191,14 +192,16 @@ export function Develop() {
         <StoreInterior mules={view.storeMules} mulePrice={me.mulePrice} prices={me.outfitCosts} open={open} onShop={onShop} visitors={{}} wide />
       ) : (
         <MapFit width={view.width} height={view.height}>
-          <HoloMap
-            width={view.width}
-            height={view.height}
-            tiles={mapTiles(view)}
-            focusSlot={slot}
-            selected={selected}
-            onTile={(t) => (t.terrain === 'store' ? setPlace('store') : setSelected({ x: t.x, y: t.y }))}
-          />
+          <ZoomMap width={view.width} height={view.height} tiles={tiles} slot={slot}>
+            <HoloMap
+              width={view.width}
+              height={view.height}
+              tiles={tiles}
+              focusSlot={slot}
+              selected={selected}
+              onTile={(t) => (t.terrain === 'store' ? setPlace('store') : setSelected({ x: t.x, y: t.y }))}
+            />
+          </ZoomMap>
         </MapFit>
       )}
     </PhoneShell>

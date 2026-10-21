@@ -69,7 +69,7 @@ try {
   await phone.waitForTimeout(QUIET_MS);
   check(intents.length === sent, `T-AC-9: a double-tap sends no intent, sent ${intents.length - sent}`);
   await checkReadout(dev, target, 'T-AC-9: the double-tap selects the tapped plot');
-  await checkZoomedToOwnLand(phone, dev, 'B-AC-2: after a double-tap');
+  const zoomed = await checkZoomedToOwnLand(phone, dev, 'B-AC-2: after a double-tap');
 
   await doubleTap(phone, tilePlot(dev, target));
   await checkWholeMap(phone, dev, 'B-AC-2: after a second double-tap');
@@ -80,7 +80,7 @@ try {
   await checkWholeMap(phone, dev, 'B-AC-2: after the zoom button again');
 
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
-  console.log(`e2e zoom: ok (seed ${SEED}, plots ${claimed.map((p) => `${p.x + 1}·${p.y + 1}`).join(' ')}, whole ${whole[0]?.toFixed(1)} px)`);
+  console.log(`e2e zoom: ok (seed ${SEED}, plots ${claimed.map((p) => `${p.x + 1}·${p.y + 1}`).join(' ')}, whole ${whole[0]?.toFixed(1)} px, zoomed ${zoomed[0]?.toFixed(1)} px)`);
 } catch (err) {
   console.error(`e2e zoom: FAILED (seed ${SEED})`);
   if (errors.length > 0) console.error(`page errors: ${errors.join('; ')}`);
@@ -187,7 +187,7 @@ async function checkReadout(dev: Locator, plot: Plot, message: string): Promise<
 }
 
 /** B-AC-2: each of your plots is at least 44 px wide and inside the map's viewport. */
-async function checkZoomedToOwnLand(phone: Page, dev: Locator, when: string): Promise<void> {
+async function checkZoomedToOwnLand(phone: Page, dev: Locator, when: string): Promise<number[]> {
   const own = dev.getByRole('button', { name: OWN });
   await settle(phone, own);
   const sizes = await widths(own);
@@ -195,6 +195,7 @@ async function checkZoomedToOwnLand(phone: Page, dev: Locator, when: string): Pr
   const view = await viewport(dev);
   const outside = (await boxes(own)).filter((b) => !inside(b, view)).length;
   check(outside === 0, `${when} all your plots are inside the map's viewport, ${outside} are not`);
+  return sizes;
 }
 
 /** B-AC-2: every one of the map's plots lies inside its viewport. */
@@ -228,7 +229,9 @@ async function viewport(screen: Locator): Promise<Box> {
 
 type Box = { x: number; y: number; width: number; height: number };
 
-const inside = (b: Box, v: Box) => b.x >= v.x - 0.5 && b.y >= v.y - 0.5 && b.x + b.width <= v.x + v.width + 0.5 && b.y + b.height <= v.y + v.height + 0.5;
+function inside(b: Box, v: Box): boolean {
+  return b.x >= v.x - 0.5 && b.y >= v.y - 0.5 && b.x + b.width <= v.x + v.width + 0.5 && b.y + b.height <= v.y + v.height + 0.5;
+}
 
 async function boxes(list: Locator): Promise<Box[]> {
   return list.evaluateAll((els) => els.map((e) => e.getBoundingClientRect()).map(({ x, y, width, height }) => ({ x, y, width, height })));
