@@ -2,6 +2,7 @@ import type { AddressInfo } from 'node:net';
 import type { MuleView, ServerEnvelope } from '@mule/protocol';
 import { expect, it } from 'vitest';
 import WebSocket from 'ws';
+import { AI_NAMES } from '../src/mule-game.js';
 import { createMuleServer } from '../src/server.js';
 
 type Envelope = ServerEnvelope<MuleView>;
@@ -60,7 +61,7 @@ it('T-AC-3: a species picked over the socket reaches the game; a seat that never
     expect(started.view.game?.players.map((p) => [p.name, p.isAi, p.species])).toEqual([
       ['Heiko', false, 'zipwing'], // never picked (its refused pick stored nothing): DEFAULT_SPECIES[0]
       ['Mia', false, 'quibbit'], // picked: not DEFAULT_SPECIES[1], which is bramblet
-      ['The Accountant', true, 'gearling'], // AI seats never pick: DEFAULT_SPECIES[2]
+      [AI_NAMES[0], true, 'gearling'], // AI seats never pick: DEFAULT_SPECIES[2]
     ]);
     const miaView = (await mia.next((m) => m.t === 'view' && m.view.status === 'playing')) as Extract<Envelope, { t: 'view' }>;
     expect(miaView.view.game?.me?.species).toBe('quibbit');

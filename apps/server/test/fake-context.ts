@@ -1,6 +1,6 @@
 import type { GameContext } from '@tabletop/core';
 
-/** The three seats every WS4 server test plays with. */
+/** The three seats these server tests play with. */
 export const seats = [
   { id: 's1', name: 'Heiko', isAi: false },
   { id: 's2', name: 'Mia', isAi: false },
