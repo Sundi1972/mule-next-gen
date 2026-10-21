@@ -153,7 +153,7 @@ Every handoff carries the standing authority line, verbatim:
   - Invariant in each: nobody holds both offices.
   Altitude: unit — the engine is the boundary where the result is fixed; the screens only show it (B-AC-1 is proven at the screen in PR-4). Trap: weights are read when the ballot closes, not when the vote is cast — assert with a plot that changes hands in between only if setup allows; otherwise note it in the test name.
 - [ ] **Step 2:** Run — Expected: FAIL.
-- [ ] **Step 3: Implement C3** per §1 C3 and §2 RULE-1–3: `runFor`, `castVote`, `electionDone`, `stepElection(state, dt)` (returns the result on entering reveal, else null), seating winners when the reveal ends and counting terms. Path: `politics.ts`. No RNG anywhere (HC-1, WS1 agreement).
+- [ ] **Step 3: Implement C3** per §1 C3 and §2 RULE-1–3: `runFor`, `castVote`, `electionDone`, `canRun` (AM-3), `stepElection(state, dt)` (returns the result on entering reveal, else null), seating winners when the reveal ends and counting terms. Path: `politics.ts`. No RNG anywhere (HC-1, WS1 agreement).
 - [ ] **Step 4:** Run — Expected: PASS.
 - [ ] **Step 5:** Commit `feat(engine): election with nominate, ballot and reveal (C3)`.
 

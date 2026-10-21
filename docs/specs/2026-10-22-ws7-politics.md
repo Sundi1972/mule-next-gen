@@ -136,7 +136,7 @@ tomorrow     MUST let a player run for one office or withdraw during nominate, c
              office, and seat the winners for their term. MUST throw RuleError for anything the
              rules refuse.
 logic        → §2 RULE-1 (stages), RULE-2 (who may run), RULE-3 (tally and winner)
-seam         politics.ts (new): runFor / castVote / electionDone / stepElection — the same shape as
+seam         politics.ts (new): runFor / castVote / electionDone / stepElection / canRun (AM-3) — the same shape as
              lots.ts::lotDone / stepLandAuction, which the server and sim already drive
 senior       junior would: count at the end of planning (approach 1). · senior does: a clocked
              stage machine with a reveal, ending early when all are done, and no RNG (ties
@@ -196,6 +196,8 @@ today        scoreParts = money + goods + land + MULEs, minus the Collapse cut.
              verified_by: read
 tomorrow     MUST add an `office` line: POLITICS.termScore per term served (a term counts when
              it has started). 0 with politics off.
+             The Collapse cut does not reduce the office line: it is a reward for service, not
+             colony wealth (AM-3).
 logic        → §2 RULE-7
 seam         scoreParts (named edit, WS3 reviews; WS1 checks the sim's score report)
 pin          scoreParts' addition-order comment: the office line is added after `raw` is
@@ -403,6 +405,10 @@ RULE-9 · Who sees what                                               shape: dec
   a ballot (who someone voted for)             yes             no             no
   the result (totals per candidate, how)       yes             yes            yes
   offices, terms, Baron, tax, fund, weights    yes             yes            yes
+accepted  `how: 'baron'` tells the table the Land Baron's ballot named the winner of a tie, and
+          'tieRule' that it named neither tied candidate. Breaking ties is the Baron's public
+          act (05-colony-politics), so this one disclosure is by design (AM-3); no other ballot
+          is ever revealed.
 ```
 
 ## §3 · Contracts & Data Models `[handoff]`
@@ -514,6 +520,22 @@ because   P-1: the implementer found that RULE-3 as written makes the richest pl
           candidacy a player chose keeps the table's choices meaningful.
 goal      P-1 — still met
 folded    RULE-3 row 1; test `AM-2: …` in PR-1
+```
+
+```
+AM-3 · 2026-10-22 · lead · PR-1 code review
+
+target    §1 C3 seam, §1 C7, §2 RULE-9; plan PR-1 scope
+did       (a) politics.ts exports canRun(state, id) → Record<Office, CanRun>, and runFor uses it,
+          so the server's MyView.politics.canRun (§3) reads the engine's RULE-2 instead of
+          restating it in PR-3 (which may not edit the engine). (b) Recorded that Collapse does
+          not cut the office line. (c) Accepted that how: 'baron' / 'tieRule' disclose the Baron's
+          tie vote. (d) A cleared ballot leaves no entry, so "who has voted" can't show a voter
+          who cleared theirs.
+because   P-1: the reviewer found PR-3 had no engine source for canRun (a plan gap) and named
+          two rules the spec implied but never stated.
+goal      P-1 — still met
+folded    C3 seam, C7 tomorrow, RULE-9 note; plan Task 1.4 adds canRun
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
