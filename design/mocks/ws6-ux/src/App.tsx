@@ -6,6 +6,7 @@ import { LobbyColonist, type LobbyState } from './screens/LobbyColonist';
 import { PlanningBrief } from './screens/PlanningBrief';
 import { MuleSheet } from './screens/MuleSheet';
 import { PlanningHub, type Desk, type Office } from './screens/PlanningHub';
+import { PhoneElectionResult, TvElection } from './screens/Election';
 import { EVENTS, type EventKind } from './production';
 import { PhoneGoodsWalk, TvGoodsWalk, useWalkSim } from './screens/GoodsAuction';
 import { PhoneLandLine, TvLandLine } from './screens/LandLine';
@@ -157,6 +158,23 @@ const HUB_STATES: { id: string; title: string; desk: Desk; office: Office }[] = 
 
 export default function App() {
   const hash = useHash();
+
+  if (hash === 'tv-election' || hash === 'tv-election-result')
+    return (
+      <Page title={`The ballot reveal · ${hash === 'tv-election' ? 'countdown, then the result' : 'the result'} (WS7 slice 1)`}>
+        <Links states={[{ id: 'tv-election', title: 'Countdown, then reveal' }, { id: 'tv-election-result', title: 'The result' }]} current={hash} />
+        <TvFrame>
+          <Board>
+            <TvElection key={hash} revealed={hash === 'tv-election-result'} />
+          </Board>
+        </TvFrame>
+        <PhoneFrame>
+          <Game>
+            <PhoneElectionResult />
+          </Game>
+        </PhoneFrame>
+      </Page>
+    );
 
   const hub = HUB_STATES.find((s) => s.id === hash);
   if (hub)
@@ -353,6 +371,7 @@ export default function App() {
       <div className="mt-2 flex flex-col gap-2">
         <Links states={[{ id: 'mule', title: 'The MULE: model sheet' }]} />
         <Links states={HUB_STATES} />
+        <Links states={[{ id: 'tv-election', title: 'Election: the ballot reveal (TV and phone)' }]} />
         <Links states={LOBBY_STATES} />
         <Links states={PLAN_STATES} />
         <Links states={DEV_STATES} />

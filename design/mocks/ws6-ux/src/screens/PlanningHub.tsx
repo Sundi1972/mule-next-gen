@@ -263,8 +263,12 @@ function CouncilDesk() {
       <Section title="Election · secret ballot" badge={<Soon />} testid="election">
         <Ballot title="Governor" cands={[{ id: 'ossa', promise: 'No land tax' }, { id: 'kai', promise: 'Cleanup squad from month 5' }]} pick={gov} onPick={setGov} />
         <Ballot title="Sheriff" cands={[{ id: 'brix', promise: 'Guards on every factory' }, { id: 'lena', promise: 'I will catch the saboteur' }]} pick={sheriff} onPick={setSheriff} />
-        <span className="text-xs text-ink-2 @min-[1100px]:text-sm">
-          Your vote weighs <strong className="text-ink">2</strong>: 1 for being here, +1 for reputation 74. You are running for Sheriff.
+        <span className="text-xs text-ink-2 @min-[1100px]:text-sm" data-testid="vote-weight">
+          Your vote weighs <strong className="text-ink">2</strong>: 1 for being here, +1 for reputation 74 (land +1 per 10 plots, Land Baron +1, taxes paid +1 per 300 cr).
+        </span>
+        <span className="flex items-center justify-between gap-2 rounded-control bg-holo-soft px-2 py-1.5 text-xs @min-[1100px]:text-sm" data-testid="ballot-closes">
+          You are running for Sheriff. Ballots close with planning; the result shows on every screen together.
+          <span data-num className="font-mono font-bold text-holo">1:14</span>
         </span>
       </Section>
       <Section title="Law vote" badge={<Soon />} testid="law-vote">
