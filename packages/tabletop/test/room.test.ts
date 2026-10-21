@@ -378,3 +378,227 @@ describe('Room: a player name is cleaned at join', () => {
     expect(startedWith[0]!.map((s) => s.name)).toEqual(rows.map((r) => r.stored));
   });
 });
+
+const kick = (room: Room<Intent, View>, screen: Screen, seatId: string) => room.receive(screen, screen.from, { t: 'kick', seatId });
+const close = (room: Room<Intent, View>, screen: Screen) => room.receive(screen, screen.from, { t: 'close' });
+const leave = (room: Room<Intent, View>, screen: Screen) => room.receive(screen, screen.from, { t: 'leave' });
+const seatIds = (room: Room<Intent, View>) => room.viewFor(null).seats.map((s) => s.id);
+
+function watch(room: Room<Intent, View>): Screen {
+  const board = new Screen();
+  room.receive(board, board.from, { t: 'board', code: room.code });
+  return board;
+}
+
+/** Heiko hosts; Mia is a second phone; then an AI joins (s1, s2, s3). */
+function lobby(room: Room<Intent, View> = pickRoom().room) {
+  const heiko = join(room, 'Heiko');
+  const mia = join(room, 'Mia');
+  room.receive(heiko, heiko.from, { t: 'addAi' });
+  return { room, heiko, mia };
+}
+
+describe('Room: the host kicks a seat or closes the table, in the lobby (RULE-5)', () => {
+  it.each([
+    { row: '1: Mia is not the host', sender: 'mia', started: false, target: 's3', error: 'Only the host can do that' },
+    { row: '1: first match over row 2', sender: 'mia', started: true, target: 's3', error: 'Only the host can do that' },
+    { row: '2: the game has started', sender: 'heiko', started: true, target: 's2', error: 'The game has already started' },
+    { row: '2: first match over row 3', sender: 'heiko', started: true, target: 's99', error: 'The game has already started' },
+    { row: '3: s99 is no seat here', sender: 'heiko', started: false, target: 's99', error: 'No such seat' },
+    { row: '4: the host kicks itself', sender: 'heiko', started: false, target: 's1', error: 'Close the table instead' },
+    { row: 'none: a board has no seat (AM-15)', sender: 'board', started: false, target: 's2', error: 'Join the game first' },
+  ] as const)('T-AC-10: RULE-5 kick row $row → refused, and every seat stays', ({ sender, started, target, error }) => {
+    const { room, heiko, mia } = lobby();
+    const board = watch(room);
+    if (started) room.receive(heiko, heiko.from, { t: 'start' });
+    const screen = { heiko, mia, board }[sender];
+
+    kick(room, screen, target);
+
+    expect(screen.last('error')?.message).toBe(error);
+    expect(seatIds(room)).toEqual(['s1', 's2', 's3']);
+    expect(mia.last('removed')).toBeUndefined();
+  });
+
+  it('T-AC-10: RULE-5 kick row 5 — the host kicks Brix (AI): the seat leaves every view, nobody is told "removed"', async () => {
+    const { room, heiko, mia } = lobby();
+
+    kick(room, heiko, 's3');
+    await flush();
+
+    expect(heiko.last('error')).toBeUndefined();
+    expect(mia.last('view')!.view.seats.map((s) => s.name)).toEqual(['Heiko', 'Mia']);
+    expect([...heiko.inbox, ...mia.inbox].some((m) => m.t === 'removed')).toBe(false);
+  });
+
+  it('T-AC-10: RULE-5 kick row 5 — the host kicks Mia: her phone hears "kicked" last, she leaves every view, and her later messages are refused', async () => {
+    const { room, heiko, mia } = lobby();
+    await flush();
+
+    kick(room, heiko, 's2');
+    await flush();
+
+    expect(mia.inbox.at(-1)).toStrictEqual({ t: 'removed', reason: 'kicked' });
+    expect(heiko.last('view')!.view.seats.map((s) => s.name)).toEqual(['Heiko', 'Brix']);
+
+    room.receive(mia, mia.from, { t: 'chat', text: 'still here?' });
+    expect(mia.last('error')?.message).toBe('Join the game first');
+    expect(heiko.last('chat')).toBeUndefined();
+  });
+
+  it("T-AC-10: a kicked seat's token no longer joins: it makes a newcomer with a new id, a new token and no pick; ids are never reused", () => {
+    const { room, heiko, mia } = lobby();
+    pick(room, mia, 'fox');
+    const oldToken = mia.last('welcome')!.seatToken!;
+    kick(room, heiko, 's2');
+    kick(room, heiko, 's3');
+
+    const back = join(room, 'Mia', oldToken);
+    room.receive(heiko, heiko.from, { t: 'addAi' });
+
+    const welcome = back.last('welcome')!;
+    expect(welcome.seatId).toBe('s4');
+    expect(welcome.seatToken).not.toBe(oldToken);
+    expect(room.viewFor(null).seats).toStrictEqual([
+      { id: 's1', name: 'Heiko', isAi: false, connected: true },
+      { id: 's4', name: 'Mia', isAi: false, connected: true },
+      { id: 's5', name: 'Brix', isAi: true, connected: true },
+    ]);
+  });
+
+  it('T-AC-10: an AI added after a kick never repeats a name still at the table, an AI\'s or a human\'s', () => {
+    const { room, heiko } = lobby();
+    room.receive(heiko, heiko.from, { t: 'addAi' });
+    room.receive(heiko, heiko.from, { t: 'addAi' });
+    join(room, 'AI 6');
+    kick(room, heiko, 's2');
+    kick(room, heiko, 's4');
+
+    room.receive(heiko, heiko.from, { t: 'addAi' });
+
+    expect(room.viewFor(null).seats.map((s) => s.name)).toEqual(['Heiko', 'Brix', 'AI 5', 'AI 6', 'AI 7']);
+  });
+
+  it.each([
+    { row: '1: Mia is not the host', sender: 'mia', started: false, error: 'Only the host can do that' },
+    { row: '1: first match over row 2', sender: 'mia', started: true, error: 'Only the host can do that' },
+    { row: '2: the game has started', sender: 'heiko', started: true, error: 'The game has already started' },
+  ] as const)('T-AC-10: RULE-5 close row $row → refused, and the room stays open in the registry', ({ sender, started, error }) => {
+    const registry = new RoomRegistry<Intent, View>({ createGame: secretsGame });
+    const { room, heiko, mia } = lobby(registry.create());
+    if (started) room.receive(heiko, heiko.from, { t: 'start' });
+    const screen = { heiko, mia }[sender];
+
+    close(room, screen);
+
+    expect(screen.last('error')?.message).toBe(error);
+    expect(registry.get(room.code)).toBe(room);
+    expect([...heiko.inbox, ...mia.inbox].some((m) => m.t === 'removed')).toBe(false);
+  });
+
+  it('T-AC-10: RULE-5 close row 3 — every seat and board hears "closed" last, the game is disposed, the registry drops the room, later messages are refused', async () => {
+    let disposed = false;
+    const registry = new RoomRegistry<Intent, View>({ createGame: () => ({ ...secretsGame(), dispose: () => void (disposed = true) }) });
+    const { room, heiko, mia } = lobby(registry.create());
+    const tv = new Screen();
+    room.receive(tv, tv.from, { t: 'board', code: room.code });
+
+    close(room, heiko);
+    await flush();
+
+    for (const screen of [heiko, mia, tv]) expect(screen.inbox.at(-1)).toStrictEqual({ t: 'removed', reason: 'closed' });
+    expect(disposed).toBe(true);
+    expect(registry.get(room.code)).toBeUndefined();
+    expect(registry.size).toBe(0);
+
+    room.receive(mia, mia.from, { t: 'start' });
+    expect(mia.last('error')?.message).toBe('Join the game first');
+  });
+});
+
+describe('Room: a player leaves the table (RULE-5, AM-15)', () => {
+  it.each(['heiko', 'mia'] as const)(
+    "T-AC-10: RULE-5 leave, superseded screen (AM-18) — %s's old screen lets go of that screen only: no error, and every seat stays with its live device",
+    async (who) => {
+      const { room, heiko, mia } = lobby();
+      const old = { heiko, mia }[who];
+      const seatId = old.from.seatId!;
+      const live = join(room, who, old.last('welcome')!.seatToken!);
+      await flush();
+
+      leave(room, old);
+      await flush();
+
+      expect(old.last('error')).toBeUndefined();
+      expect(seatIds(room)).toEqual(['s1', 's2', 's3']);
+      expect(live.last('view')!.view.seats.find((s) => s.id === seatId)?.connected).toBe(true);
+      pick(room, live, 'fox');
+      expect(live.last('error')).toBeUndefined();
+      expect(pickOf(room, live)).toBe('fox');
+      room.receive(old, old.from, { t: 'chat', text: 'still here?' });
+      expect(old.last('error')?.message).toBe('Join the game first');
+    },
+  );
+
+  it.each([
+    { row: '1: the host leaves the lobby', sender: 'heiko', error: 'Close the table instead' },
+    { row: 'none: a board has no seat', sender: 'board', error: 'Join the game first' },
+  ] as const)('T-AC-10: RULE-5 leave row $row → refused, and every seat stays', async ({ sender, error }) => {
+    const { room, heiko, mia } = lobby();
+    const board = watch(room);
+    const screen = { heiko, board }[sender];
+
+    leave(room, screen);
+    await flush();
+
+    expect(screen.last('error')?.message).toBe(error);
+    expect(seatIds(room)).toEqual(['s1', 's2', 's3']);
+    expect(mia.last('view')!.view.seats.every((s) => s.connected)).toBe(true);
+  });
+
+  it.each(['heiko', 'mia'] as const)(
+    'T-AC-10: RULE-5 leave row 2 — after Start, %s leaving lets go of this phone only: the seat stays, away, and the game hears it',
+    async (who) => {
+      const changes: [string, boolean][] = [];
+      const room = new Room<Intent, View>({
+        code: 'KRTX',
+        createGame: () => ({ ...secretsGame(), connectionChanged: (seatId, connected) => void changes.push([seatId, connected]) }),
+        aiNames: ['Brix'],
+        newToken: () => `t${++tokens}`,
+      });
+      const { heiko, mia } = lobby(room);
+      room.receive(heiko, heiko.from, { t: 'start' });
+      const screen = { heiko, mia }[who];
+      const other = who === 'heiko' ? mia : heiko;
+      const seatId = screen.from.seatId!;
+
+      leave(room, screen);
+      await flush();
+
+      expect(screen.last('error')).toBeUndefined();
+      expect(seatIds(room)).toEqual(['s1', 's2', 's3']);
+      expect(other.last('view')!.view.seats.find((s) => s.id === seatId)?.connected).toBe(false);
+      expect(changes).toEqual([[seatId, false]]);
+      room.receive(screen, screen.from, { t: 'intent', intent: { secret: 'still here?' } });
+      expect(screen.last('error')?.message).toBe('Join the game first');
+    },
+  );
+
+  it("T-AC-10: RULE-5 leave row 3 — Mia leaves the lobby: her seat leaves every view, nobody is left away, and her token no longer joins", async () => {
+    const { room, heiko, mia } = lobby();
+    const board = watch(room);
+    const oldToken = mia.last('welcome')!.seatToken!;
+    await flush();
+
+    leave(room, mia);
+    await flush();
+
+    expect(mia.last('error')).toBeUndefined();
+    for (const screen of [heiko, board]) expect(screen.last('view')!.view.seats.map((s) => s.name)).toEqual(['Heiko', 'Brix']);
+    room.receive(mia, mia.from, { t: 'chat', text: 'still here?' });
+    expect(mia.last('error')?.message).toBe('Join the game first');
+
+    const back = join(room, 'Mia', oldToken);
+    expect(back.last('welcome')!.seatId).toBe('s4');
+  });
+});
