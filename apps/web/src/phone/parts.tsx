@@ -193,12 +193,12 @@ function ChatLine({ line, view }: { line: ChatMessage; view: MuleView }) {
   );
 }
 
-/** Emotes float up briefly on every screen. */
+/** Emotes float up briefly on every screen, drawn by the shell (ShellLayer) just left of its rail. */
 export function EmoteBubbles({ view }: { view: MuleView }) {
   const { emotes } = useClientState();
   if (emotes.length === 0) return null;
   return (
-    <div className="pointer-events-none fixed right-[calc(var(--rail)+0.75rem+env(safe-area-inset-right))] top-3 z-30 flex flex-col items-end gap-1.5">
+    <div className="pointer-events-none absolute right-[calc(var(--rail)+0.75rem+env(safe-area-inset-right))] top-3 z-30 flex flex-col items-end gap-1.5" data-testid="emotes">
       {emotes.map((e) => (
         <span key={e.id} className="flex items-center gap-1.5 rounded-full border border-holo-line bg-panel px-3 py-1 text-sm font-semibold shadow-chip">
           <PlayerMark slot={slotOf(view, e.from) ?? 0} size={14} glow={false} />
