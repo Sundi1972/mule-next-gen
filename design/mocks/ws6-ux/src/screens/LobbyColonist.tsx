@@ -39,15 +39,17 @@ const CODE = 'MTWR';
 /** Names for the six player colours (theme --color-p1..p6). DS-GAP: the names belong beside SLOT_COLOR in @mule/ui. */
 const COLOUR_NAME: Record<Slot, string> = { 0: 'Ember', 1: 'Cobalt', 2: 'Jade', 3: 'Sun', 4: 'Violet', 5: 'Rose' };
 
-export type LobbyState = 'guest' | 'host' | 'handoff' | 'handoff-waiting' | 'handoff-expired' | 'kick' | 'close';
+export type LobbyState = 'guest' | 'host' | 'away' | 'handoff' | 'handoff-waiting' | 'handoff-expired' | 'kick' | 'close';
 
 export function LobbyColonist({ state }: { state: LobbyState }) {
   const host = state !== 'guest';
   const meId = host ? 'heiko' : 'lena';
-  const [seats, setSeats] = useState(SEATS);
+  const [seats, setSeats] = useState(state === 'away' ? SEATS.map((s) => (s.id === 'lena' ? { ...s, away: true } : s)) : SEATS);
+  /** A guest who has picked waits for the host (WS4's third Now). */
+  const [picked, setPicked] = useState(false);
   const [dialog, setDialog] = useState<null | 'handoff' | 'close' | { kick: string }>(state.startsWith('handoff') ? 'handoff' : state === 'close' ? 'close' : state === 'kick' ? { kick: 'lena' } : null);
   const me = seats.find((s) => s.id === meId)!;
-  const set = (patch: Partial<Seat>) => setSeats((all) => all.map((s) => (s.id === meId ? { ...s, ...patch } : s)));
+  const set = (patch: Partial<Seat>) => (setPicked(true), setSeats((all) => all.map((s) => (s.id === meId ? { ...s, ...patch } : s))));
   const takenBy = (c: Slot) => seats.find((s) => s.colour === c && s.id !== meId);
   /** Taking an AI's colour (WS4 RULE-7 row 4): it is yours, and the AI moves to the lowest free colour. */
   const take = (c: Slot) =>
@@ -64,7 +66,9 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
         title: seats.length < 2 ? 'Wait for players, or add an AI' : 'Start when everyone is here',
         detail: `${seats.length} at the table, ${humans} on phones. Others join with the code ${CODE} or the QR. Everyone can change their colonist until you start.`,
       }
-    : { step: 1, of: 2, title: 'Make your colonist', detail: 'Pick a species and a colour. Heiko, the host, starts the game when everyone is here.' };
+    : picked
+      ? { step: 2, of: 2, title: 'Wait for Heiko to start', detail: 'You can change your colonist until Heiko starts the game.' }
+      : { step: 1, of: 2, title: 'Make your colonist', detail: 'Pick a species and a colour. Heiko, the host, starts the game when everyone is here.' };
 
   return (
     <div className="h-full @container/shell">
@@ -152,8 +156,8 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
                       {s.name}
                       {s.id === meId && ' (you)'}
                     </span>
-                    <span className={cx('rounded-chip px-1.5 font-mono text-[10px] font-bold', s.ai ? 'bg-holo-soft text-holo' : s.id === 'heiko' ? 'bg-warn/15 text-warn' : 'bg-ok/10 text-ok')}>
-                      {s.ai ? 'AI' : s.id === 'heiko' ? 'HOST' : 'PHONE'}
+                    <span className={cx('rounded-chip px-1.5 font-mono text-[10px] font-bold', s.ai ? 'bg-holo-soft text-holo' : s.id === 'heiko' ? 'bg-warn/15 text-warn' : s.away ? 'bg-warn/15 text-warn' : 'bg-ok/10 text-ok')}>
+                      {s.ai ? 'AI' : s.id === 'heiko' ? 'HOST' : s.away ? 'AWAY' : 'PHONE'}
                     </span>
                     {host && s.id !== meId && (
                       <button

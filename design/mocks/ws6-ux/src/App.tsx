@@ -138,6 +138,7 @@ const DEV_STATES: { id: string; title: string; start: Start }[] = [
 const LOBBY_STATES: { id: string; title: string; state: LobbyState }[] = [
   { id: 'lobby', title: 'A player: make your colonist', state: 'guest' },
   { id: 'lobby-host', title: 'The host', state: 'host' },
+  { id: 'lobby-away', title: 'Host: a phone has lost its connection', state: 'away' },
   { id: 'lobby-kick', title: 'Host: remove a player', state: 'kick' },
   { id: 'lobby-handoff', title: 'Host: move the host to my phone', state: 'handoff' },
   { id: 'lobby-handoff-waiting', title: 'Hand-off: making the code', state: 'handoff-waiting' },
