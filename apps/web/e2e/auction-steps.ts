@@ -130,7 +130,7 @@ async function playTheLandAuction(browser: Browser, base: string): Promise<void>
   // Month 1: everyone claims (Brix and Lena list theirs in month 2), so the grant ends early. Nothing is listed, so only the colony's lot can follow.
   await everyone(phones, (p) => readyInPlanning(p.page));
   await everyone(phones, (p) => claimPlots(p.page));
-  await brix.page.locator('[data-phase]:not([data-phase=landGrant])').waitFor({ timeout: within(SCALE, LOTS.introMs) });
+  await brix.page.locator('[data-phase]:not([data-phase=landGrant])').waitFor({ timeout: within(SCALE, PHASE_MS.landGrant) });
   if ((await brix.page.locator('[data-phase=landAuction]').count()) > 0) await followTheColonyLot(phones, tv, 1);
   await everyone(phones, (p) => goToThePub(p.page));
   await everyone(phones, (p) => pressDoneThroughTheAuction(p.page));
