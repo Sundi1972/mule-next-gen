@@ -481,4 +481,116 @@ describe('Room: every seat holds its own colour (RULE-7)', () => {
     room.receive(heiko, heiko.from, { t: 'addAi' });
     expect(colours(room)).toEqual([0, 2, 3, 1, 4]);
   });
+
+  it.each([
+    { row: '1: the game has started', started: true, colour: 4, error: 'The game has already started' },
+    { row: '1: first match over row 2', started: true, colour: 9, error: 'The game has already started' },
+    { row: '2: 6 is past the palette', started: false, colour: 6, error: 'Unknown colour' },
+    { row: '2: -1 is before the palette', started: false, colour: -1, error: 'Unknown colour' },
+    { row: '2: 1.5 is no colour index', started: false, colour: 1.5, error: 'Unknown colour' },
+    { row: "3: Mia, a human, holds 1", started: false, colour: 1, error: 'That colour is taken' },
+  ])('T-AC-12: RULE-7 row $row → refused, and every colour stays', ({ started, colour, error }) => {
+    const { room, heiko } = lobby();
+    if (started) room.receive(heiko, heiko.from, { t: 'start' });
+
+    paint(room, heiko, colour);
+
+    expect(heiko.last('error')?.message).toBe(error);
+    expect(colours(room)).toEqual([0, 1, 2]);
+  });
+
+  it('T-AC-12: RULE-7 row 4 — Heiko takes Brix\'s colour: Brix (AI) moves to the lowest free colour, and every screen sees it', async () => {
+    const { room, heiko, mia } = lobby();
+    room.receive(heiko, heiko.from, { t: 'addAi' });
+    await flush();
+
+    paint(room, heiko, 2);
+    await flush();
+
+    expect(heiko.last('error')).toBeUndefined();
+    expect(mia.last('view')!.view.seats.map((s) => [s.name, s.color])).toEqual([
+      ['Heiko', 2],
+      ['Mia', 1],
+      ['Brix', 0],
+      ['AI 4', 3],
+    ]);
+  });
+
+  it('T-AC-12: RULE-7 row 4 at a full table — the AI takes the colour the human let go of', () => {
+    const { room, heiko } = lobby();
+    for (let i = 0; i < 3; i++) room.receive(heiko, heiko.from, { t: 'addAi' });
+
+    paint(room, heiko, 5);
+
+    expect(heiko.last('error')).toBeUndefined();
+    expect(colours(room)).toEqual([5, 1, 2, 3, 4, 0]);
+  });
+
+  it('T-AC-12: RULE-7 row 5 — Mia takes a free colour, and her own again changes nothing', async () => {
+    const { room, heiko, mia } = lobby();
+
+    paint(room, mia, 4);
+    paint(room, mia, 4);
+    await flush();
+
+    expect(mia.last('error')).toBeUndefined();
+    expect(heiko.last('view')!.view.seats.map((s) => s.color)).toEqual([0, 4, 2]);
+  });
+
+  it('T-AC-12: Game.start receives the colour each seat chose', () => {
+    const { room, startedWith } = pickRoom();
+    const { heiko, mia } = lobby(room);
+    paint(room, mia, 5);
+    paint(room, heiko, 2);
+
+    room.receive(heiko, heiko.from, { t: 'start' });
+
+    expect(startedWith[0]!.map((s) => [s.name, s.color])).toEqual([
+      ['Heiko', 2],
+      ['Mia', 5],
+      ['Brix', 0],
+    ]);
+  });
+
+  it.each(Array.from({ length: 40 }, (_, i) => i + 1))(
+    'T-AC-12: RULE-7 invariant — over random joins, colour picks, AI adds, kicks and leaves (seed %i), no two seats share a colour and a refused pick changes nothing',
+    (seed) => {
+      const random = mulberry32(seed);
+      const any = <T,>(list: readonly T[]): T => list[Math.floor(random() * list.length)]!;
+      const room = newRoom();
+      const screens = [join(room, 'Host')];
+      const byId = () => new Map(room.viewFor(null).seats.map((s) => [s.id, s.color]));
+
+      for (let step = 0; step < 80; step++) {
+        const screen = any(screens);
+        const op = any(['join', 'color', 'color', 'color', 'addAi', 'kick', 'leave'] as const);
+        const before = byId();
+        const errors = screen.inbox.filter((m) => m.t === 'error').length;
+        if (op === 'join') screens.push(join(room, `P${step}`));
+        if (op === 'color') paint(room, screen, Math.floor(random() * 8) - 1);
+        if (op === 'addAi') room.receive(screen, screen.from, { t: 'addAi' });
+        if (op === 'kick') kick(room, screen, any([...before.keys(), 's99']));
+        if (op === 'leave') leave(room, screen);
+
+        const now = colours(room);
+        expect(new Set(now).size, `seed ${seed} step ${step} ${op}`).toBe(now.length);
+        expect(now.every((c) => Number.isInteger(c) && c >= 0 && c < 6)).toBe(true);
+        if (op === 'color' && screen.inbox.filter((m) => m.t === 'error').length > errors) expect(byId()).toEqual(before);
+      }
+    },
+  );
 });
+
+const paint = (room: Room<Intent, View>, screen: Screen, color: number) => room.receive(screen, screen.from, { t: 'color', color });
+
+/** A small seeded PRNG, so a failing sequence replays from its seed. */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
