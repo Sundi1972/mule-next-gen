@@ -304,6 +304,11 @@ export class TableClient {
     this.send({ t: 'addAi' });
   }
 
+  /** Chooses what this seat plays as, in the lobby. */
+  pick(pick: string): void {
+    this.send({ t: 'pick', pick });
+  }
+
   start(): void {
     this.send({ t: 'start' });
   }
