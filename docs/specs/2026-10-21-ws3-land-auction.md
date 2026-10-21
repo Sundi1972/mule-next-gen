@@ -423,13 +423,20 @@ examples  bids 310 (Ossa) and 290 (Lena), min 250 → Ossa pays 310, Brix gets 2
 ```
 RULE-6 · How an AI bids                                         shape: formula + rules
 limit = max(0, min(money − cashReserve(obs, mind), value))
-        value = plotValue(obs, mind, index) | muleValue(obs, mind)     (stub until WS1)
-limit < minimum or not a buyer           → stand still, press Done
-leading                                  → stand still
-not leading and leaderBid + 1 ≤ limit    → walk up until its rounded bid > leaderBid
-otherwise                                → stop, press Done
+        value = plotValue(obs, mind, index) | muleValue(obs, mind)     (WS1's)
+limit < minimum or not a buyer                     → stand still, press Done
+leading, and every other buyer is done             → press Done (the bell rings now)   AM-4
+leading                                            → stand still
+not leading and leaderBid + 1 ≤ limit              → walk up to target = min(limit,
+                                                     leaderBid + 1 + overshoot)        AM-4
+otherwise                                          → stop, press Done
+overshoot = a seeded share, in [AI_HANDS.lot.overshoot], of (limit − leaderBid − 1),
+rounded down: it climbs toward the limit, never past it.                               AM-4
 It re-aims only after the level's reactMs plus seeded jitter, and starts after a seeded delay,
 so there is no fixed habit to read.
+examples  limit 504, leader at 370, overshoot share 0.1 → target min(504, 371 + 13) = 384
+          · limit 372, leader at 370, share 0.5 → target min(372, 371 + 0) = 371
+          · leader is an AI, both others pressed Done → it presses Done and the bell rings
 ```
 
 ```
@@ -572,6 +579,20 @@ because   the plan chose this in Task 1.2/1.8: one formula and one rule with the
           numbers into MuleView would duplicate them without removing the pre-check.
 goal      G-1 unchanged
 folded    §1 C5 call sites · plan Tasks 1.2, 1.8
+
+AM-4 · 2026-10-21 · Heiko (via the PM, "Quick and sensible") · during PR-2, before its review closed
+
+target    §2 RULE-6
+said      a leading AI stands still and never presses Done; an AI overtakes by exactly +1
+did       a leading AI presses Done once every other buyer is done, so the bell rings at once;
+          an overtake aims at min(limit, leaderBid + 1 + overshoot), with overshoot a seeded
+          share (AI_HANDS.lot.overshoot in config.ts) of the gap to its limit
+because   built literally, every AI-contested lot ran its full 12 s walk, and land sold well
+          under what a losing AI would pay (370 against a limit of 504 in PR-2's test): +1 steps
+          after a reaction time can't climb far before the clock runs out
+goal      G-2 served more fully: AIs bid quickly and sensibly; the cap (HC-3) is unchanged
+folded    RULE-6 rows and examples · PR-2 fix round (tests: the early bell, the overshoot under
+          the cap)
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
