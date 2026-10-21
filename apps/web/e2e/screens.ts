@@ -10,6 +10,7 @@ import { join, resolve } from 'node:path';
 import type { Page } from 'playwright';
 import { launch, PHONE, PHONE_WIDE, startServer, TV } from './harness';
 import { checkTheShow, watchViews } from './production-steps';
+import { fedPlayerFillsAFullHoloBar, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows } from './store-steps';
 
 const out = resolve(process.argv[2] ?? 'screens');
 mkdirSync(out, { recursive: true });
@@ -90,17 +91,20 @@ try {
 
   // Development: buy a MULE, outfit it for Food, install it, analyse, then the pub.
   await phase(phone, 'development');
+  await storeIsOneHallWithTwoRows(phone);
+  // Buys the MULE through the corral while the start-of-turn card still shows.
+  await fedPlayerFillsAFullHoloBar(phone);
   await phoneShot(phone, '4-store');
   await shot(tv, 'tv-4-develop');
-  await phone.locator('[data-shop=corral]').click();
+  await outfittersOpenWithAnEmptyMule(phone);
   await phone.locator('[data-shop=food]:not([disabled])').click();
   await phone.getByRole('button', { name: /Install here|Replace MULE/ }).waitFor();
   await phoneShot(phone, '4-map');
   await phone.getByRole('button', { name: /Install here|Replace MULE/ }).click();
   await phone.getByText('No MULE').first().waitFor();
-  // The drone may have analysed this plot already in planning.
+  // The plot may already be analysed: the drone's picks can be the plots the grant gave us.
   const analyse = phone.getByRole('button', { name: /Geo analysis/ });
-  if (await analyse.count()) await analyse.click();
+  if ((await analyse.count()) > 0) await analyse.click();
   await phone.getByTestId('ground').waitFor();
   await phoneShot(phone, '4-analysed');
   await phone.getByRole('button', { name: 'Go to the pub and end your turn' }).click();
