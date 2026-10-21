@@ -16,11 +16,9 @@ import {
   mulePriceFor,
   outfitMule,
   rawOutput,
-  runAuction,
   runPollution,
   RuleError,
   score,
-  takeTurns,
   visitPub,
   type GameState,
   type Species,
@@ -100,26 +98,6 @@ describe('species perks', () => {
 
     expect(mulePriceFor(state, 'p2')).toBeLessThan(mulePrice(state));
     expect(mulePriceFor(state, 'p0')).toBe(mulePrice(state));
-  });
-});
-
-describe('the store sells in turns', () => {
-  it('hands out one unit per buyer per round', () => {
-    expect(takeTurns(8, [4, 3, 3])).toEqual([3, 3, 2]);
-    expect(takeTurns(20, [4, 3, 3])).toEqual([4, 3, 3]);
-    expect(takeTurns(0, [4])).toEqual([0]);
-  });
-
-  it('puts a Quibbit first in line, then whoever reached the price first', () => {
-    const state = newGame(['zipwing', 'bramblet', 'quibbit', 'mollox']);
-    state.store.stock.energy = 2;
-    for (const p of state.players) p.money = 10_000;
-    const trades = runAuction(state, 'energy', [
-      { playerId: 'p0', side: 'buy', quantity: 2, limit: 9_999, at: 1 },
-      { playerId: 'p1', side: 'buy', quantity: 2, limit: 9_999, at: 2 },
-      { playerId: 'p2', side: 'buy', quantity: 2, limit: 9_999, at: 3 },
-    ]);
-    expect(trades.map((t) => t.buyer)).toEqual(['p2', 'p0']);
   });
 });
 

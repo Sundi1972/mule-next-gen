@@ -1,6 +1,6 @@
-import type { Order } from '../auction.js';
-import { DEVELOPMENT, GAME, GOOD_CONFIG, POLLUTION, PRICE, RECIPES, UPKEEP } from '../config.js';
-import { colonyPrice, colonySupply, monthlyDemand, riseCap, storeQuotes } from '../economy.js';
+import { auctionDone, declareRole, setWalk, shipLine, storeBuyLine, storeSellLine } from '../auction.js';
+import { DEVELOPMENT, GAME, GOOD_CONFIG, POLLUTION, PRICE, RECIPES, WALK } from '../config.js';
+import { colonyPrice, colonySupply, monthlyDemand, riseCap } from '../economy.js';
 import {
   analysePlot,
   buyMule,
@@ -16,6 +16,7 @@ import {
   player,
 } from '../game.js';
 import { expectedGround } from '../map.js';
+import { createRng } from '../rng.js';
 import { airPoints } from '../pollution.js';
 import { energyUseOf, factoryFit, isFactory, isRaw, needsOf, rawOutput } from '../production.js';
 import { GOODS, PROCESSED_GOODS, RAW_GOODS, type GameState, type Good, type Outfit, type Stock, type Tile } from '../types.js';
@@ -248,29 +249,83 @@ export function useValue(state: GameState, playerId: string, good: Good, market:
   return Math.max(...values);
 }
 
-/** Keeps enough for next month and sells the rest. */
-export function aiOrders(state: GameState, playerId: string): Partial<Record<Good, Order[]>> {
+/**
+ * An AI player at the live auction. It keeps what it needs for next month
+ * and sells the rest, or buys up to what it needs while the good is worth
+ * it, never spending more than half its money on one good. It walks toward
+ * its limit (the store's line, or what the good is worth to it), stopping at
+ * a better offer from another player on the way, and pauses now and then so
+ * it looks alive. The pauses come from the game seed, so a replay walks the same.
+ * Call it before every stepAuction().
+ */
+export function aiAuction(state: GameState, playerId: string, dt: number): void {
+  const a = state.auction;
+  if (state.phase !== 'auction' || !a || !a.good || a.stage === 'over') return;
+  const good = a.good;
   const me = player(state, playerId);
-  const keep = aiKeep(state, playerId);
-  const market = forecastMarket(state);
-  const orders: Partial<Record<Good, Order[]>> = {};
-  for (const good of GOODS) {
-    const quotes = storeQuotes(state, good);
-    const posted = colonyPrice(state, good);
-    const target = keep[good] ?? 0;
-    const have = me.stock[good];
-    if (have > target) {
-      // Sell at the store's price, or a little under the posted price when the store isn't buying.
-      orders[good] = [{ playerId, side: 'sell', quantity: have - target, limit: quotes.buy ?? Math.max(1, Math.floor(posted * 0.8)) }];
-    } else if (have < target) {
-      // Buy at the store's price if the good is worth it, otherwise bid what
-      // it is worth to tempt another player; never spend more than half its
-      // money on one good.
-      const worth = Math.ceil(useValue(state, playerId, good, market));
-      const limit = quotes.sell !== null && quotes.sell <= worth ? quotes.sell : worth;
-      const quantity = Math.min(target - have, Math.floor(me.money / 2 / Math.max(1, limit)));
-      if (quantity > 0) orders[good] = [{ playerId, side: 'buy', quantity, limit }];
-    }
+  if (a.stage === 'status') {
+    auctionDone(state, playerId);
+    return;
   }
-  return orders;
+  const plan = (a.ai[playerId] ??= planAuction(state, playerId, good));
+  if (a.stage === 'declare') {
+    // Sell the spare, buy what it lacks, or pass when it has exactly what it keeps.
+    declareRole(state, playerId, me.stock[good] > plan.keep ? 'seller' : me.stock[good] < plan.keep ? 'buyer' : 'pass');
+    auctionDone(state, playerId);
+    return;
+  }
+  const w = a.walkers.find((x) => x.id === playerId);
+  if (!w || w.side === 'pass') return;
+  const rng = createRng((state.seed * 2_654_435_761 + state.month * 97_003 + a.ticks * 7_919 + state.players.indexOf(me) * 104_729 + a.queue.length) >>> 0);
+  if (plan.waitMs > 0) {
+    plan.waitMs -= dt;
+    setWalk(state, playerId, 0);
+    auctionDone(state, playerId, false);
+    return;
+  }
+  if (w.dir !== 0 && rng.chance((WALK.aiPausePerSecond * dt) / 1000)) {
+    plan.waitMs = rng.int(...WALK.aiPauseMs);
+    setWalk(state, playerId, 0);
+    return;
+  }
+  const others = a.walkers.filter((x) => x.id !== playerId);
+  let target: number;
+  let finished: boolean;
+  if (w.side === 'seller') {
+    finished = me.stock[good] <= plan.keep;
+    // The store or the ship, whichever pays more, or a little under the posted price when neither is buying.
+    const floor = Math.max(storeBuyLine(state) ?? 0, shipLine(state) ?? 0);
+    const limit = floor > 0 ? floor : Math.max(1, Math.floor(colonyPrice(state, good) * 0.8));
+    // A better bid from a player who can pay it, on the way down.
+    const bids = others.filter((x) => x.side === 'buyer' && player(state, x.id).money >= Math.round(x.price)).map((x) => Math.round(x.price));
+    target = finished ? a.hi : Math.max(limit, ...bids);
+  } else {
+    finished = me.stock[good] >= plan.keep || me.money - Math.max(1, Math.round(w.price)) < plan.budget;
+    // The store's price if the good is worth it, otherwise what it is worth, to tempt another player.
+    const sell = storeSellLine(state);
+    const limit = sell !== null && sell <= plan.worth ? sell : plan.worth;
+    const asks = others.filter((x) => x.side === 'seller' && player(state, x.id).stock[good] > 0).map((x) => Math.round(x.price));
+    const best = Math.min(Infinity, ...asks);
+    target = finished ? a.lo : best <= limit ? best : limit;
+  }
+  // Walk until the rounded price is on the target. A seller may end a little
+  // under it and a buyer a little over, never by more than one step, so it never wobbles.
+  const step = (a.speed * dt) / 1000;
+  const p = Math.round(w.price);
+  const dir = w.side === 'seller' ? (p > target ? -1 : w.price < target - step ? 1 : 0) : p < target ? 1 : w.price > target + step ? -1 : 0;
+  setWalk(state, playerId, dir);
+  const reached = dir === 0;
+  // Done once it has what it came for, or stands at its price while nobody is trading.
+  auctionDone(state, playerId, finished || (reached && a.deals.length === 0));
+}
+
+/** What an AI wants from this good: how much it keeps, what one more unit is worth to it, the money it won't spend, and how long it takes to react. */
+export function planAuction(state: GameState, playerId: string, good: Good): { keep: number; worth: number; budget: number; waitMs: number } {
+  const me = player(state, playerId);
+  const keep = aiKeep(state, playerId)[good] ?? 0;
+  const rng = createRng((state.seed * 31 + state.month * 1_009 + state.players.indexOf(me) * 7 + good.length) >>> 0);
+  const waitMs = rng.int(...WALK.aiReactMs);
+  if (me.stock[good] > keep) return { keep, worth: 0, budget: 0, waitMs };
+  // Never spends more than half its money on one good.
+  return { keep, worth: Math.ceil(useValue(state, playerId, good)), budget: Math.ceil(me.money / 2), waitMs };
 }

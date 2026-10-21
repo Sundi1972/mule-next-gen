@@ -153,6 +153,8 @@ export interface Grant {
 
 export interface MonthReport {
   month: number;
+  /** Each player's stock just before production, for the auction's status screen. */
+  before: Record<string, Stock>;
   produced: Record<string, Stock>;
   prices: Stock;
   /** Goods the store ran out of before its colonists had enough. */
@@ -191,4 +193,98 @@ export interface GameState {
   /** Month in which the last free plot was claimed, if it happened. */
   landRanOutMonth: number | null;
   history: MonthReport[];
+  /** The live goods auction, while the auction phase runs. */
+  auction: LiveAuction | null;
+}
+
+export type AuctionRole = 'buyer' | 'seller';
+/** A player's side for one lot: buying, selling, or sitting it out. */
+export type AuctionSide = AuctionRole | 'pass';
+
+/** One player at a walk auction. On the board, a buyer's height is their bid and a seller's their ask. */
+export interface Walker {
+  id: string;
+  side: AuctionSide;
+  /** Price units, not rounded. */
+  price: number;
+  /** Holding up (1), down (-1) or standing (0). */
+  dir: -1 | 0 | 1;
+  /** Board time (ms into the walk) when their rounded price last changed: who got there first. */
+  since: number;
+}
+
+/** A buyer and a seller, either of them perhaps a house (the store, the ship), exchanging units right now. */
+export interface Deal {
+  buyer: string;
+  seller: string;
+  price: number;
+  /** Units this deal has moved since the pair met. Each one goes faster. */
+  units: number;
+  /** Ms towards the next unit. */
+  progress: number;
+}
+
+/**
+ * A walk-auction board, generic over what is sold: a good at the goods
+ * auction, later a plot or a MULE at the land auction. What is sold, who
+ * holds it and the house lines come from a WalkMarket each step.
+ */
+export interface WalkBoard {
+  /** Ms left on the walk clock. */
+  clockMs: number;
+  /** Ms since the walk started, and steps taken, for tie-breaks and seeded AI pauses. */
+  elapsed: number;
+  ticks: number;
+  /** The board's starting range: sellers start at the top, buyers at the bottom. */
+  lo: number;
+  hi: number;
+  /** Price units per second. */
+  speed: number;
+  walkers: Walker[];
+  deals: Deal[];
+  /** Units each player got in a house's turns, keyed house:player, so a house serves one per player per round. */
+  turns: Record<string, number>;
+  /** Units sold on this board so far. */
+  units: number;
+  /** Units and value traded between players: the market learns only from these. */
+  between: { units: number; value: number };
+}
+
+/** One player's line on the status screen before a good comes up. */
+export interface StatusRow {
+  id: string;
+  /** Before production. */
+  had: number;
+  /** Burnt in production: Energy for plots, factory inputs. */
+  used: number;
+  made: number;
+  now: number;
+  /** What they need for next month. */
+  need: number;
+  /** What would spoil or overflow the depot at month end if they kept everything over their need. */
+  spoils: number;
+}
+
+/** Why a good was skipped without a screen of its own. */
+export type SkipReason = 'nobody has any' | 'nobody buys' | 'nobody trading';
+
+/** The live goods auction: goods one at a time, each with a status screen, a declare and a walk. */
+export interface LiveAuction extends WalkBoard {
+  /** clockMs is the status screen's, the declare's or the walk's clock, by stage. */
+  /** Goods still to come after the current one. */
+  queue: Good[];
+  good: Good | null;
+  stage: 'status' | 'declare' | 'walk' | 'over';
+  /** Store prices for this good, fixed when it comes up. Whether the store trades at them depends on its stock and budget. */
+  storeBuy: number;
+  storeSell: number;
+  /** Units the store will still buy of this good, from its demand and its budget. */
+  storeBudget: number;
+  /** Players who pressed Done in this stage. */
+  done: string[];
+  status: StatusRow[];
+  /** Goods skipped since the last one that came up, shown as one line. */
+  skipped: { good: Good; reason: SkipReason }[];
+  /** Per AI player, what it plans for this good. */
+  ai: Record<string, { keep: number; worth: number; budget: number; waitMs: number }>;
 }

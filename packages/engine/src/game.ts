@@ -1,4 +1,5 @@
-import { runAuction, type Order, type Trade } from './auction.js';
+import { endAuction, startAuction } from './auction.js';
+import { RuleError } from './errors.js';
 import { DEFAULT_SPECIES, DEVELOPMENT, GAME, GOOD_CONFIG, MULE, POLLUTION, SPECIES_PERK, START, TAX, UPKEEP } from './config.js';
 import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './economy.js';
 import { generateMap, tileAt, tileIndex } from './map.js';
@@ -16,7 +17,7 @@ export interface NewPlayer {
   species?: Species;
 }
 
-export class RuleError extends Error {}
+export { RuleError };
 
 export function createGame(options: { seed: number; players: NewPlayer[]; maxMonths?: number }): GameState {
   if (options.players.length < 2 || options.players.length > 6) {
@@ -69,6 +70,7 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
     grant: null,
     landRanOutMonth: null,
     history: [],
+    auction: null,
   };
   // The first month's prices start where supply and demand put them.
   for (const good of GOODS) state.store.posted[good] = Math.round(targetPrice(state, good));
@@ -304,8 +306,8 @@ const ORDER: Phase[] = ['planning', 'landGrant', 'development', 'production', 'a
 
 /**
  * Moves to the next phase. Production and upkeep resolve on their own when
- * entered; the auction needs everyone's orders, so it resolves through
- * settleAuction() instead.
+ * entered; the auction runs live through stepAuction() until its last good
+ * is done, and leaving it early ends the goods still to come.
  */
 export function advancePhase(state: GameState): void {
   if (state.phase === 'gameOver') return;
@@ -334,9 +336,11 @@ export function advancePhase(state: GameState): void {
     // MULEs get dearer each month the corral sells out, and cheaper when they are left over.
     if (soldOut) state.store.muleFactor *= 1 + MULE.scarcityUp;
     else if (state.store.mules * 2 >= state.store.mulesAtStart) state.store.muleFactor = Math.max(MULE.minFactor, state.store.muleFactor * (1 - MULE.surplusDown));
+    const before = Object.fromEntries(state.players.map((p) => [p.id, { ...p.stock }]));
     const { produced, pollutionBy } = runProduction(state);
     state.history.push({
       month: state.month,
+      before,
       produced,
       prices: allPrices(state),
       shortages: [],
@@ -350,8 +354,14 @@ export function advancePhase(state: GameState): void {
       colonistsHungry: false,
     });
   }
-  if (next === 'auction') postPrices(state);
+  if (next === 'auction') {
+    postPrices(state);
+    startAuction(state);
+  }
   if (next === 'upkeep') {
+    // Goods the auction didn't reach trade nothing.
+    endAuction(state);
+    state.auction = null;
     const { shortages, hungry } = runUpkeep(state);
     const report = state.history.at(-1);
     if (report) {
@@ -363,15 +373,6 @@ export function advancePhase(state: GameState): void {
     if (isGameOver(state)) state.phase = 'gameOver';
   }
   if (next === 'planning') state.month++;
-}
-
-export function settleAuction(state: GameState, orders: Partial<Record<Good, Order[]>>): Trade[] {
-  requirePhase(state, 'auction');
-  const trades: Trade[] = [];
-  for (const good of GOODS) trades.push(...runAuction(state, good, orders[good] ?? []));
-  const report = state.history.at(-1);
-  if (report) report.prices = allPrices(state);
-  return trades;
 }
 
 export function isGameOver(state: GameState): boolean {

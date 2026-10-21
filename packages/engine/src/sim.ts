@@ -5,11 +5,11 @@
  *
  *   pnpm sim -- --games 200 --players 4
  */
-import { aiClaim, aiDevelop, aiOrders } from './ai/simple.js';
-import { GAME, GOOD_CONFIG } from './config.js';
-import { advanceGrant, advancePhase, colonyFailed, createGame, grantDone, score, settleAuction } from './game.js';
-import type { Order } from './auction.js';
-import { GOODS, type GameState, type Good } from './types.js';
+import { aiAuction, aiClaim, aiDevelop } from './ai/simple.js';
+import { SHIP_ID, stepAuction, STORE_ID } from './auction.js';
+import { GAME, GOOD_CONFIG, WALK } from './config.js';
+import { advanceGrant, advancePhase, colonyFailed, createGame, grantDone, score } from './game.js';
+import { GOODS, type GameState } from './types.js';
 
 function arg(name: string, fallback: number): number {
   const i = process.argv.indexOf(`--${name}`);
@@ -20,6 +20,8 @@ export interface SimGame {
   state: GameState;
   /** Per month, the ids of players who were broke (under 100 credits) with idle land. */
   broke: string[][];
+  /** Units traded at the live auction: between players, with the store (both ways) and to the ship; and its game-time in ms. */
+  auction: { between: number; store: number; ship: number; ms: number };
 }
 
 export function playAiGame(seed: number, players: number): GameState {
@@ -32,6 +34,7 @@ export function simulate(seed: number, players: number): SimGame {
     players: Array.from({ length: players }, (_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })),
   });
   const broke: string[][] = [];
+  const auction = { between: 0, store: 0, ship: 0, ms: 0 };
   let guard = 0;
   while (state.phase !== 'gameOver' && guard++ < 500) {
     switch (state.phase) {
@@ -51,13 +54,16 @@ export function simulate(seed: number, players: number): SimGame {
         state.players.forEach((_, i) => aiDevelop(state, state.players[(i + state.month) % state.players.length]!.id));
         break;
       case 'auction': {
-        const orders: Partial<Record<Good, Order[]>> = {};
-        for (const p of state.players) {
-          for (const [good, list] of Object.entries(aiOrders(state, p.id)) as [Good, Order[]][]) {
-            (orders[good] ??= []).push(...list);
+        // The live auction, tick by tick, exactly as the server runs it.
+        for (let ticks = 0; state.auction && state.auction.stage !== 'over' && ticks < 100_000; ticks++) {
+          for (const p of state.players) aiAuction(state, p.id, WALK.tickMs);
+          for (const t of stepAuction(state, WALK.tickMs)) {
+            if (t.buyer === SHIP_ID) auction.ship++;
+            else if (t.buyer === STORE_ID || t.seller === STORE_ID) auction.store++;
+            else auction.between++;
           }
+          auction.ms += WALK.tickMs;
         }
-        settleAuction(state, orders);
         break;
       }
       case 'upkeep':
@@ -70,7 +76,7 @@ export function simulate(seed: number, players: number): SimGame {
     }
     advancePhase(state);
   }
-  return { state, broke };
+  return { state, broke, auction };
 }
 
 const pct = (n: number, of: number) => `${((n / Math.max(1, of)) * 100).toFixed(0)}%`;
@@ -95,9 +101,11 @@ function main() {
   let minFund = Infinity;
   let collapsed = 0;
   const wins: Record<string, number> = {};
+  const auction = { between: 0, store: 0, ship: 0, ms: 0 };
 
   for (let seed = 1; seed <= games; seed++) {
-    const { state, broke } = simulate(seed, players);
+    const { state, broke, auction: a } = simulate(seed, players);
+    for (const k of ['between', 'store', 'ship', 'ms'] as const) auction[k] += a[k];
     months += state.history.length;
     soldOut += state.history.filter((h) => h.corralSoldOut).length;
     if (state.history.some((h) => h.prices.food > 3 * GOOD_CONFIG.food.refPrice)) foodSpike++;
@@ -132,6 +140,9 @@ function main() {
   console.log(`${check(minFund >= 0)} Lowest colony fund ${minFund} (target 0 or more)`);
   console.log(`${check(collapsed / games <= 0.1)} Ended in Collapse: ${pct(collapsed, games)} (target 10% or less)`);
   console.log(`     Wins by species: ${Object.entries(wins).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
+  console.log(
+    `     Live auction a month: ${(auction.between / months).toFixed(1)} units between players, ${(auction.store / months).toFixed(1)} with the store, ${(auction.ship / months).toFixed(1)} to the ship; ${(auction.ms / months / 1000).toFixed(0)} s of auction time`,
+  );
   console.log('\nPosted prices (min / median / 90th percentile / max):');
   for (const good of GOODS) {
     const all = prices[good]!;

@@ -15,7 +15,6 @@ import {
   mulePrice,
   outfitMule,
   rawOutput,
-  runAuction,
   runProduction,
   RuleError,
   type GameState,
@@ -122,29 +121,6 @@ describe('prices', () => {
     expect(mulePrice(state)).toBeGreaterThan(cheap * 1.15);
   });
 
-  it('let players trade with each other at any price they agree on', () => {
-    const state = newGame();
-    state.players[0]!.stock.food = 5;
-    state.players[1]!.money = 10_000;
-    const trades = runAuction(state, 'food', [
-      { playerId: 'p0', side: 'sell', quantity: 1, limit: 4000 },
-      { playerId: 'p1', side: 'buy', quantity: 1, limit: 6000 },
-    ]);
-    expect(trades[0]).toMatchObject({ seller: 'p0', buyer: 'p1', price: 5000 });
-  });
-});
-
-describe('the store', () => {
-  it('buys only what it can use and can afford', () => {
-    const state = newGame();
-    state.store.stock.water = 0;
-    state.players[0]!.stock.water = 500;
-    const trades = runAuction(state, 'water', [{ playerId: 'p0', side: 'sell', quantity: 500, limit: 1 }]);
-    const bought = trades.reduce((n, t) => n + t.quantity, 0);
-    expect(bought).toBeGreaterThan(0);
-    expect(bought).toBeLessThan(500);
-    expect(state.store.capital).toBeGreaterThanOrEqual(0);
-  });
 });
 
 describe('production', () => {
@@ -197,31 +173,6 @@ describe('production', () => {
     p0.stock.energy = 2;
     expect(runProduction(state).produced.p0!.alloy).toBe(2);
     expect(p0.stock.smithore).toBe(0);
-  });
-});
-
-describe('auction', () => {
-  it('matches players first at the midpoint of their limits', () => {
-    const state = newGame();
-    const [seller, buyer] = state.players;
-    seller!.stock.water = 5;
-    const trades = runAuction(state, 'water', [
-      { playerId: 'p0', side: 'sell', quantity: 5, limit: 20 },
-      { playerId: 'p1', side: 'buy', quantity: 3, limit: 30 },
-    ]);
-    expect(trades[0]).toMatchObject({ buyer: 'p1', seller: 'p0', quantity: 3, price: 25 });
-    expect(buyer!.stock.water).toBe(6 + 3);
-  });
-
-  it('never sells more than a player owns', () => {
-    const state = newGame();
-    state.players[0]!.stock.crystite = 2;
-    state.players[1]!.money = 100_000;
-    const trades = runAuction(state, 'crystite', [
-      { playerId: 'p0', side: 'sell', quantity: 10, limit: 1 },
-      { playerId: 'p1', side: 'buy', quantity: 10, limit: 500 },
-    ]);
-    expect(trades.reduce((n, t) => n + t.quantity, 0)).toBe(2);
   });
 });
 
