@@ -1,6 +1,7 @@
 export * from './actions.js';
 export * from './brain.js';
 export * from './decider.js';
+export * from './lineup.js';
 export * from './outlook.js';
 export * from './personas.js';
 export * from './play.js';

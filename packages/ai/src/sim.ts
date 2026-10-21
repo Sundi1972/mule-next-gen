@@ -8,7 +8,8 @@
  *   pnpm sim -- --persona cautious     (every seat the same persona; default: they rotate)
  */
 import { AI_LEVELS, AI_PERSONAS, colonyFailed, GOOD_CONFIG, GOODS, score, type AiLevelId, type AiPersonaId } from '@mule/engine';
-import { playGame, type SeatSpec } from './play.js';
+import { simSeats } from './lineup.js';
+import { playGame } from './play.js';
 
 function arg(name: string, fallback: number): number {
   const i = process.argv.indexOf(`--${name}`);
@@ -18,13 +19,6 @@ function arg(name: string, fallback: number): number {
 function argText(name: string): string | null {
   const i = process.argv.indexOf(`--${name}`);
   return i >= 0 ? (process.argv[i + 1] ?? null) : null;
-}
-
-export const ROTATION: AiPersonaId[] = ['trader', 'aggressive', 'cautious', 'saboteur'];
-
-/** Seats for a simulator game: one level, personas rotating by seat (and by seed, so no persona always sits first). */
-export function simSeats(players: number, level: AiLevelId, seed: number, persona: AiPersonaId | null = null): SeatSpec[] {
-  return Array.from({ length: players }, (_, i) => ({ level, persona: persona ?? ROTATION[(i + seed) % ROTATION.length]! }));
 }
 
 const pct = (n: number, of: number) => `${((n / Math.max(1, of)) * 100).toFixed(0)}%`;

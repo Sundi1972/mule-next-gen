@@ -3,7 +3,7 @@ import { advancePhase, createGame, expectedGround, isGameOver, observe, stepAuct
 import { applyAction, playGame } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
 import { candidate, consider, shortlist } from '../src/utility.js';
-import { simSeats } from '../src/sim.js';
+import { simSeats } from '../src/lineup.js';
 
 describe('utility scoring', () => {
   it('drops vetoed options and keeps the near-best few', () => {
@@ -68,5 +68,5 @@ describe('headless games', () => {
     expect(state.tiles.some((t) => t.owner && t.outfit)).toBe(true);
     const again = run().state;
     expect(again.players.map((p) => p.money)).toEqual(state.players.map((p) => p.money));
-  });
+  }, 30_000); // plays two full games with look-ahead seats: about 4-5 s locally, so vitest's 5 s default flakes on slow runners
 });

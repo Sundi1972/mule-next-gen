@@ -114,15 +114,17 @@ describe('Room', () => {
   });
 });
 
-/** A room whose game offers three choices and remembers the seats it was started with. */
-function pickRoom(options: { picks?: readonly string[] } = { picks: ['fox', 'owl', 'cat'] }) {
+const CHOICES = ['fox', 'owl', 'cat'];
+
+/** A room whose game offers `picks` (null: no choices at all) and remembers the seats it was started with. */
+function pickRoom(picks: readonly string[] | null = CHOICES) {
   const startedWith: SeatInfo[][] = [];
   const room = new Room<Intent, View>({
     code: 'KRTX',
     createGame: () => ({ ...secretsGame(), start: (seats) => void startedWith.push(seats) }),
     aiNames: ['Brix'],
     newToken: () => `t${++tokens}`,
-    ...options,
+    ...(picks === null ? {} : { picks }),
   });
   return { room, startedWith };
 }
@@ -132,13 +134,13 @@ const pickOf = (room: Room<Intent, View>, screen: Screen) => room.viewFor(null).
 
 describe('Room: a seat picks one of the game\'s choices in the lobby (RULE-1)', () => {
   it.each([
-    { row: '1: picks absent', picks: undefined, started: false, value: 'fox', error: 'This game has no choices to make' },
-    { row: '1: picks absent, first match over row 2', picks: undefined, started: true, value: 'fox', error: 'This game has no choices to make' },
+    { row: '1: picks absent', picks: null, started: false, value: 'fox', error: 'This game has no choices to make' },
+    { row: '1: picks absent, first match over row 2', picks: null, started: true, value: 'fox', error: 'This game has no choices to make' },
     { row: '2: a pick after Start', picks: ['fox', 'owl', 'cat'], started: true, value: 'owl', error: 'The game has already started' },
     { row: '2: first match over row 3', picks: ['fox', 'owl', 'cat'], started: true, value: 'dragon', error: 'The game has already started' },
     { row: '3: "dragon" is not a choice', picks: ['fox', 'owl', 'cat'], started: false, value: 'dragon', error: 'Unknown choice' },
   ])('T-AC-4: RULE-1 row $row → refused, and the seat keeps no pick', ({ picks, started, value, error }) => {
-    const { room } = pickRoom(picks ? { picks } : {});
+    const { room } = pickRoom(picks);
     const heiko = join(room, 'Heiko');
     join(room, 'Mia');
     if (started) room.receive(heiko, heiko.from, { t: 'start' });
