@@ -1,205 +1,230 @@
-import type { MarketRow } from '@mule/protocol';
-import { AuctionSlider, Button, cx, GOOD_NAME, GoodTag, type Good } from '@mule/ui';
-import { useEffect, useState } from 'react';
-import { PHASE_NAME, secondsUntil } from '../game/derive';
-import { useClient, useServerNow } from '../net/react';
+import type { AuctionView } from '@mule/protocol';
+import { Button, cx, GOOD_NAME, GoodTag, TimeBar, WalkBoard } from '@mule/ui';
+import { useCallback, useEffect, useRef } from 'react';
+import { boardWalkers, dealLine, skippedLine, StatusTable } from '../components/AuctionParts';
+import { PHASE_NAME } from '../game/derive';
+import { useAuctionSound } from '../game/sound';
+import { useClient } from '../net/react';
 import { usePhoneGame } from './game';
 import { PhoneShell } from './Shell';
 
-const dash = (n: number | null) => (n === null ? '—' : String(n));
-
-/** A slider range around today's prices, so both store quotes fit with room either side. */
-function range(row: MarketRow) {
-  const prices = [row.price, row.storeBuys, row.storeSells, row.shipPays].filter((p): p is number => p !== null && p > 0);
-  const lo = Math.min(...prices);
-  const hi = Math.max(...prices);
-  return { min: Math.max(1, Math.floor(lo * 0.5)), max: Math.max(Math.ceil(hi * 1.5), Math.floor(lo * 0.5) + 10) };
-}
+type Side = AuctionView['walkers'][number]['side'];
+const SIDE_NAME: Record<Side, string> = { buyer: 'Buyer', seller: 'Seller', pass: 'Pass' };
 
 /**
- * The goods auction: for each good, set a standing order to buy or sell, with
- * how many and your price limit. The market clears when the timer runs out
- * or everyone is done.
+ * The goods auction, the original's walk: goods come up one at a time. A
+ * status screen shows what everyone has; you declare Buyer, Seller or Pass;
+ * then you hold Up or Down (or drag on the board) to walk your creature.
+ * Your height is your bid or your ask; meet someone and units change hands.
  */
 export function Auction() {
   const client = useClient();
   const { view, me, self } = usePhoneGame();
-  const now = useServerNow();
-  const needOf = (g: Good) => (g === 'food' ? me.needs.food : g === 'water' ? me.needs.water : 0);
-  const spareOf = (g: Good) => me.stock[g] - needOf(g);
-  const [good, setGood] = useState<Good>(() => view.market.find((r) => spareOf(r.good) > 0)?.good ?? 'food');
-  const row = view.market.find((r) => r.good === good) ?? view.market[0]!;
-  const order = me.orders[good];
-  const { min, max } = range(row);
-  const spare = spareOf(good);
+  const auction = view.auction;
+  useAuctionSound(auction);
+  const dir = useRef<'up' | 'down' | 'stop'>('stop');
+  const walk = useCallback(
+    (next: 'up' | 'down' | 'stop') => {
+      if (dir.current === next) return;
+      dir.current = next;
+      client.intent({ type: 'walk', dir: next });
+    },
+    [client],
+  );
+  const stage = auction?.stage;
+  const mine = auction?.walkers.find((w) => w.id === me.id);
+  const onBoard = stage === 'walk' && mine !== undefined && mine.side !== 'pass';
 
-  const [side, setSide] = useState<'buy' | 'sell'>('sell');
-  const [limit, setLimit] = useState(row.price);
-  const [qty, setQty] = useState(1);
-  // Switching goods starts from your order for it, or from what you could sell or need to buy.
+  // The arrow keys walk too, on a laptop.
   useEffect(() => {
-    if (order) {
-      setSide(order.side);
-      setLimit(order.limit);
-      setQty(order.quantity);
-      return;
-    }
-    const s = spare > 0 ? 'sell' : 'buy';
-    setSide(s);
-    setLimit(s === 'sell' ? (row.storeBuys ?? row.price) : (row.storeSells ?? row.price));
-    setQty(Math.max(1, Math.abs(spare)));
-    // Only when the good changes: the view updating must not undo what the player is setting.
-  }, [good]);
+    if (!onBoard) return;
+    const down = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowUp') walk('up');
+      if (e.key === 'ArrowDown') walk('down');
+    };
+    const up = (e: KeyboardEvent) => (e.key === 'ArrowUp' || e.key === 'ArrowDown') && walk('stop');
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+    };
+  }, [onBoard, walk]);
 
-  const clamped = Math.min(max, Math.max(min, limit));
-  const store =
-    side === 'sell'
-      ? row.storeBuys !== null && clamped <= row.storeBuys
-        ? `The store buys at ${row.storeBuys}, so you sell at least there.`
-        : row.storeBuys === null
-          ? 'The store is not buying. Only other players or the ship can buy from you.'
-          : 'Above the store price: you sell only to a player who bids this much.'
-      : row.storeSells !== null && clamped >= row.storeSells
-        ? `The store sells at ${row.storeSells}. Buyers at its price get one unit each in turns.`
-        : row.storeSells === null
-          ? 'The store is sold out. Only other players can sell to you.'
-          : 'Below the store price: you buy only from a player who asks this little.';
-  const placed = order && order.side === side && order.limit === clamped && order.quantity === qty;
-  const maxQty = side === 'sell' ? me.stock[good] : 99;
+  if (!auction) {
+    return (
+      <PhoneShell phase={PHASE_NAME.auction}>
+        <p className="text-ink-2">The auction is closing…</p>
+      </PhoneShell>
+    );
+  }
 
-  const placeOrder = (
-    <Button
-      size="md"
-      variant={placed ? 'outline' : 'holo'}
-      className="w-full px-2 text-[13px] leading-tight"
-      disabled={!!placed || (side === 'sell' && me.stock[good] === 0) || self.ready}
-      onClick={() => client.intent({ type: 'setOrder', good, side, quantity: qty, limit: clamped })}
-    >
-      {placed ? `Order placed · ${side} ${qty} ${GOOD_NAME[good]}` : `${side === 'sell' ? 'Sell' : 'Buy'} ${qty} ${GOOD_NAME[good]} at ${side === 'sell' ? 'least' : 'most'} ${clamped}`}
+  const good = auction.good;
+  const row = auction.status.find((r) => r.id === me.id);
+  const have = me.stock[good];
+  const need = row?.need ?? 0;
+  const spare = have - need;
+  const done = mine?.done ?? false;
+  const myDeal = auction.deals.find((d) => d.buyer === me.id || d.seller === me.id);
+  const skipped = skippedLine(auction);
+  const declare = (side: Side) => client.intent({ type: 'declare', side });
+
+  const sides = (compact: boolean) => (
+    <div className={cx('grid grid-cols-3 gap-1 rounded-control border border-holo-line bg-void p-1')} role="radiogroup" aria-label="Your side">
+      {(['buyer', 'seller', 'pass'] as const).map((s) => (
+        <button
+          key={s}
+          type="button"
+          role="radio"
+          aria-checked={mine?.side === s}
+          disabled={s === 'seller' && have === 0}
+          onClick={() => declare(s)}
+          className={cx(
+            'rounded-[8px] font-display font-semibold disabled:opacity-35',
+            compact ? 'h-8 text-xs' : 'h-11 text-sm',
+            mine?.side === s ? (s === 'seller' ? 'bg-rise text-on-holo' : s === 'buyer' ? 'bg-fall text-on-holo' : 'bg-raised text-ink') : 'text-ink-2',
+          )}
+        >
+          {SIDE_NAME[s]}
+        </button>
+      ))}
+    </div>
+  );
+
+  const doneButton = (
+    <Button size="md" variant={done ? 'outline' : 'holo'} className="h-10 w-full" disabled={done} onClick={() => client.intent({ type: 'ready' })}>
+      {done ? 'Done · waiting' : stage === 'status' ? 'Ready' : stage === 'declare' ? 'Done choosing' : `Done with ${GOOD_NAME[good]}`}
     </Button>
   );
 
-  return (
-    <PhoneShell
-      phase={PHASE_NAME.auction}
-      seconds={secondsUntil(view.phaseEndsAt, now)}
-      fill
-      rail={
-        <>
-          <div className="flex flex-col gap-1 rounded-control border border-holo-faint bg-panel px-2.5 py-1.5" data-testid="good-row">
-            <span className="flex items-center justify-between gap-2">
-              <GoodTag good={good} name />
-              <span className="font-mono text-[10px] text-ink-3">
-                STORE <strong data-num className="text-sm text-ink">{row.storeStock}</strong> · {row.shipPays !== null ? 'SHIP' : 'DEMAND'}{' '}
-                <strong data-num className="text-sm text-ink">{row.shipPays ?? row.demand}</strong>
-              </span>
-            </span>
-            <div className="grid grid-cols-4 gap-1 font-mono text-[10px] text-ink-3">
-              <span className="flex flex-col">
-                HAVE<strong data-num className="text-sm text-ink">{me.stock[good]}</strong>
-              </span>
-              <span className="flex flex-col">
-                NEED<strong data-num className="text-sm text-ink">{needOf(good)}</strong>
-              </span>
-              <span className="flex flex-col">
-                {spare < 0 ? 'SHORT' : 'SPARE'}
-                <strong data-num className={cx('text-sm', spare < 0 ? 'text-alert' : spare > 0 ? 'text-ok' : 'text-ink')}>
-                  {spare > 0 ? '+' : ''}
-                  {spare}
-                </strong>
-              </span>
-              <span className="flex flex-col">
-                COVER<strong data-num className={cx('text-sm', row.cover < 0.5 ? 'text-alert' : row.cover < 1 ? 'text-warn' : 'text-ink')}>{row.cover >= 99 ? '—' : `${row.cover} mo`}</strong>
-              </span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-1 rounded-control border border-holo-line bg-void p-1">
-            {(['sell', 'buy'] as const).map((s) => (
-              <button
-                key={s}
-                type="button"
-                aria-pressed={side === s}
-                onClick={() => {
-                  setSide(s);
-                  if (s === 'sell') setQty((q) => Math.min(q, Math.max(1, me.stock[good])));
-                }}
-                className={cx('h-8 rounded-[8px] font-display text-sm font-semibold', side === s ? 'bg-holo text-on-holo' : 'text-ink-2')}
-              >
-                {s === 'sell' ? `Sell · have ${me.stock[good]}` : 'Buy'}
-              </button>
-            ))}
-          </div>
-
-          <Button size="md" variant="ghost" className="h-9" disabled={!order || self.ready} onClick={() => client.intent({ type: 'setOrder', good, side: 'none', quantity: 0, limit: 1 })}>
-            {order ? `Cancel ${order.side} order` : 'No order for this good'}
-          </Button>
-        </>
-      }
-      footer={
-        <>
-          {placeOrder}
-          <Button size="md" variant={self.ready ? 'outline' : 'holo'} className="w-full" disabled={self.ready} onClick={() => client.intent({ type: 'ready' })}>
-            {self.ready ? 'Done · waiting for the others' : 'Done trading'}
-          </Button>
-        </>
-      }
-    >
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] gap-2.5">
-        <div className="min-h-0 overflow-y-auto">
-          <table className="w-full text-sm">
-            <caption className="label-caps pb-1 text-left">Pick a good</caption>
-            <thead>
-              <tr className="text-left font-mono text-[10px] text-ink-3">
-                <th className="pb-1 font-medium">GOOD</th>
-                <th className="pb-1 text-right font-medium">BUYS</th>
-                <th className="pb-1 text-right font-medium">SELLS</th>
-                <th className="pb-1 text-right font-medium">YOU</th>
-                <th className="pb-1 text-right font-medium">ORDER</th>
-              </tr>
-            </thead>
-            <tbody data-num className="font-mono">
-              {view.market.map((r) => {
-                const o = me.orders[r.good];
-                return (
-                  <tr key={r.good} className={cx('cursor-pointer border-t border-holo-faint', r.good === good && 'bg-holo-soft')} onClick={() => setGood(r.good)}>
-                    <td className="py-0">
-                      <button type="button" aria-pressed={good === r.good} className="flex h-[30px] w-full items-center pl-1 text-left" onClick={() => setGood(r.good)}>
-                        <GoodTag good={r.good} />
-                      </button>
-                    </td>
-                    <td className="text-right text-fall">{dash(r.storeBuys)}</td>
-                    <td className="text-right text-rise">{dash(r.storeSells)}</td>
-                    <td className={cx('text-right', spareOf(r.good) < 0 && 'text-alert')}>{me.stock[r.good]}</td>
-                    <td className="pr-1 text-right text-xs text-holo">{o ? `${o.side === 'buy' ? 'B' : 'S'}${o.quantity}@${o.limit}` : ''}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <div className="flex min-h-0 flex-col gap-2">
-          <div className="min-h-0 flex-1">
-            <AuctionSlider value={clamped} min={min} max={max} storeBuys={row.storeBuys} storeSells={row.storeSells} side={side} onChange={setLimit} className="min-h-0!" />
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <span className="label-caps">Units</span>
-            <Button size="md" variant="outline" className="w-11 px-0" aria-label="Fewer" onClick={() => setQty((q) => Math.max(1, q - 1))}>
-              −
-            </Button>
-            <span data-num className="w-7 text-center font-mono text-xl font-bold">
-              {qty}
-            </span>
-            <Button size="md" variant="outline" className="w-11 px-0" aria-label="More" disabled={qty >= maxQty} onClick={() => setQty((q) => q + 1)}>
-              +
-            </Button>
-            <span data-num className="ml-auto font-mono text-xs text-ink-2">
-              = {qty * clamped} cr
-            </span>
-          </div>
-          <p className="shrink-0 rounded-control border border-holo-faint px-2.5 py-1.5 text-xs text-ink-2">{store}</p>
+  const rail = (
+    <>
+      <div className={cx('flex rounded-control border border-holo-faint bg-panel px-2.5 py-1.5', stage === 'walk' ? 'items-center justify-between gap-2' : 'flex-col gap-1')} data-testid="good-row">
+        <GoodTag good={good} name />
+        <div className={cx('grid grid-cols-3 font-mono text-[10px] text-ink-3', stage === 'walk' ? 'gap-2.5' : 'gap-1')}>
+          <span className="flex flex-col">
+            HAVE<strong data-num className="text-sm text-ink">{have}</strong>
+          </span>
+          <span className="flex flex-col">
+            NEED<strong data-num className="text-sm text-ink">{need}</strong>
+          </span>
+          <span className="flex flex-col">
+            {spare < 0 ? 'SHORT' : 'SPARE'}
+            <strong data-num className={cx('text-sm', spare < 0 ? 'text-alert' : spare > 0 ? 'text-ok' : 'text-ink')}>
+              {spare > 0 ? '+' : ''}
+              {spare}
+            </strong>
+          </span>
         </div>
       </div>
+      {stage === 'status' && (
+        <p className="text-xs leading-snug text-ink-2">
+          Everyone's {GOOD_NAME[good]} before it goes on sale.
+          {auction.next.length > 0 && <span className="text-ink-3"> Then {auction.next.map((g) => GOOD_NAME[g]).join(', ')}.</span>}
+        </p>
+      )}
+      {stage === 'declare' && (
+        <>
+          <span className="label-caps">Buy, sell or pass?</span>
+          {sides(false)}
+          <p className="text-xs leading-snug text-ink-2">Sellers start at the top and walk down. Buyers start at the bottom and walk up.</p>
+        </>
+      )}
+      {stage === 'walk' && (
+        <>
+          {sides(true)}
+          <div className={cx('rounded-control border px-2.5 py-1.5 text-xs leading-snug', myDeal ? 'border-holo bg-holo-soft text-ink' : 'border-holo-faint text-ink-2')} data-testid="my-deal">
+            {myDeal ? dealLine(view, myDeal, me.id) : mine?.side === 'pass' ? 'You passed on this good.' : mine?.side === 'seller' ? 'Walk down to ask less.' : 'Walk up to bid more.'}
+          </div>
+          <span data-num className="font-mono text-[10px] text-ink-3">
+            {auction.units} UNIT{auction.units === 1 ? '' : 'S'} TRADED · YOU {mine?.side === 'seller' ? 'ASK' : 'BID'} {mine && mine.side !== 'pass' ? mine.price : '—'}
+          </span>
+        </>
+      )}
+    </>
+  );
+
+  const footer =
+    stage === 'walk' ? (
+      <>
+        <div className="grid grid-cols-2 gap-2">
+          <Hold label="Up" glyph="▲" disabled={!onBoard} onHold={(on) => walk(on ? 'up' : 'stop')} />
+          <Hold label="Down" glyph="▼" disabled={!onBoard} onHold={(on) => walk(on ? 'down' : 'stop')} />
+        </div>
+        {doneButton}
+      </>
+    ) : (
+      doneButton
+    );
+
+  return (
+    <PhoneShell phase={`${GOOD_NAME[good]} auction`} fill rail={rail} footer={footer}>
+      <TimeBar seconds={auction.seconds} total={auction.total} slowed={auction.slowed} className="mb-1.5" />
+      {skipped && (
+        <p className="mb-1.5 shrink-0 truncate font-mono text-[11px] text-ink-3" data-testid="skipped">
+          {skipped}
+        </p>
+      )}
+      {stage === 'status' ? (
+        <div className="min-h-0 flex-1 overflow-y-auto rounded-panel border border-holo-line bg-panel px-2 py-1.5">
+          <StatusTable view={view} auction={auction} meId={self.id} />
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col gap-1.5">
+          {auction.deals.some((d) => d !== myDeal) && (
+            <div className="flex shrink-0 gap-2 overflow-hidden" data-testid="deals">
+              {auction.deals.filter((d) => d !== myDeal).map((d) => (
+                <span key={`${d.buyer}-${d.seller}`} className="truncate rounded-chip border border-holo bg-holo-soft px-2 py-0.5 font-mono text-[11px] font-bold text-holo">
+                  {dealLine(view, d, me.id)}
+                </span>
+              ))}
+            </div>
+          )}
+          <WalkBoard
+            lo={auction.lo}
+            hi={auction.hi}
+            walkers={boardWalkers(view, auction)}
+            deals={auction.deals}
+            storeBuys={auction.storeBuys}
+            storeSells={auction.storeSells}
+            shipPays={auction.shipPays}
+            stage={stage === 'walk' ? 'walk' : 'declare'}
+            meId={me.id}
+            {...(onBoard ? { onDir: (d: -1 | 0 | 1) => walk(d > 0 ? 'up' : d < 0 ? 'down' : 'stop') } : {})}
+            className="min-h-0 flex-1"
+          />
+        </div>
+      )}
     </PhoneShell>
+  );
+}
+
+/** A big button you hold: walking while pressed, standing when let go. */
+function Hold({ label, glyph, disabled, onHold }: { label: string; glyph: string; disabled: boolean; onHold: (on: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={`Hold to walk ${label.toLowerCase()}`}
+      disabled={disabled}
+      className="flex h-16 touch-none select-none flex-col items-center justify-center rounded-control border-2 border-holo bg-holo-soft font-display text-sm font-semibold text-holo active:bg-holo active:text-on-holo disabled:opacity-35"
+      onPointerDown={(e) => {
+        e.preventDefault();
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          // A synthetic press has no pointer to capture.
+        }
+        onHold(true);
+      }}
+      onPointerUp={() => onHold(false)}
+      onPointerCancel={() => onHold(false)}
+      onLostPointerCapture={() => onHold(false)}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <span aria-hidden className="text-2xl leading-none">
+        {glyph}
+      </span>
+      {label}
+    </button>
   );
 }

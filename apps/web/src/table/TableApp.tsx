@@ -1,10 +1,12 @@
 import type { MuleView, TableView } from '@mule/protocol';
-import { AirGauge, Button, cx, GoodTag, HoloMap, PlayerMark, SeatSpeciesProvider, StoreInterior, TERRAIN_NAME, Timer, type Slot } from '@mule/ui';
+import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PlayerMark, SeatSpeciesProvider, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard, type Slot } from '@mule/ui';
+import { boardWalkers, dealLine, skippedLine, StatusTable } from '../components/AuctionParts';
 import { useEffect, useState, type ReactNode } from 'react';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { fmt, mapTiles, PHASE_NAME, player, plotName, seatSpecies, secondsUntil, slotOf, standings, tileAt } from '../game/derive';
+import { useAuctionSound } from '../game/sound';
 import { useClient, useClientState, useServerNow } from '../net/react';
 
 /** The big screen: the public view everyone at the table shares. It has no controls. */
@@ -121,7 +123,7 @@ function TvHeader({ game, title, seconds }: { game: MuleView; title: string; sec
       <div className="flex items-center gap-4">
         <ThemeToggle />
         <AirGauge level={game.air.level} band={game.air.band} tv />
-        {seconds !== undefined && <Timer seconds={seconds} className="h-14 px-5 text-3xl" />}
+        {seconds !== undefined && <Timer seconds={seconds} className="h-14! px-5! text-3xl!" />}
       </div>
     </header>
   );
@@ -171,7 +173,6 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         </ul>
       </>
     );
-  else if (phase === 'auction') side = <MarketTable game={game} />;
   else if (phase === 'production' || phase === 'upkeep') side = <MonthEnd game={game} />;
   else
     side = (
@@ -195,6 +196,14 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         <Players game={game} className="mt-auto" right={(p) => <span className="font-mono text-sm text-ink-3">{p.isAi ? 'AI' : p.ready ? 'READY' : '…'}</span>} />
       </>
     );
+
+  if (phase === 'auction' && game.auction && !game.finished) {
+    return (
+      <SeatSpeciesProvider value={seatSpecies(game)}>
+        <TvAuction table={table} game={game} auction={game.auction} />
+      </SeatSpeciesProvider>
+    );
+  }
 
   return (
     <SeatSpeciesProvider value={seatSpecies(game)}>
@@ -262,30 +271,82 @@ function MarketTiles({ game }: { game: MuleView }) {
   );
 }
 
-function MarketTable({ game }: { game: MuleView }) {
-  const ship = game.ship.inPort;
-  const cols = ship ? 'grid-cols-[1fr_48px_48px_44px_44px_48px]' : 'grid-cols-[1fr_52px_52px_52px_52px]';
+/** The auction on the big screen: the whole board, large, with every creature walking live. */
+function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game: MuleView; auction: NonNullable<MuleView['auction']> }) {
+  useAuctionSound(auction);
+  const skipped = skippedLine(auction);
+  const stageName = auction.stage === 'status' ? 'Status' : auction.stage === 'declare' ? 'Buy, sell or pass?' : auction.slowed ? 'Trading · clock slowed' : 'Walk';
   return (
-    <div className="flex flex-col rounded-panel border border-holo-line bg-panel px-4 py-3">
-      <div className={cx('grid gap-2 pb-1.5', cols)}>
-        <span className="label-caps">Good</span>
-        <span className="label-caps text-right">Buys</span>
-        <span className="label-caps text-right">Sells</span>
-        <span className="label-caps text-right">Stock</span>
-        <span className="label-caps text-right">Cover</span>
-        {ship && <span className="label-caps text-right">Ship</span>}
-      </div>
-      {game.market.map((r) => (
-        <div key={r.good} className={cx('grid items-center gap-2 border-t border-holo-faint py-1.5', cols)} data-num>
-          <GoodTag good={r.good} name className="min-w-0 [&>span]:truncate" />
-          <span className="text-right font-mono text-lg text-fall">{r.storeBuys ?? '—'}</span>
-          <span className="text-right font-mono text-lg text-rise">{r.storeSells ?? 'out'}</span>
-          <span className="text-right font-mono text-lg">{r.storeStock}</span>
-          <span className={cx('text-right font-mono text-lg', r.cover < 0.5 ? 'text-alert' : r.cover < 1 ? 'text-warn' : 'text-ink-2')}>{r.cover >= 99 ? '—' : r.cover}</span>
-          {ship && <span className="text-right font-mono text-lg text-ink-2">{r.shipPays ?? '—'}</span>}
+    <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-8 text-ink" data-phase="auction">
+      <TvHeader game={game} title={`Auction · ${GOOD_NAME[auction.good]}`} />
+      <div className="flex min-h-0 flex-1 gap-6">
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <TimeBar size="tv" seconds={auction.seconds} total={auction.total} slowed={auction.slowed} />
+          {skipped && (
+            <p className="font-mono text-base text-ink-3" data-testid="skipped">
+              {skipped}
+            </p>
+          )}
+          {auction.stage === 'status' ? (
+            <div className="min-h-0 flex-1 rounded-panel border border-holo-line bg-panel px-5 py-4">
+              <StatusTable view={game} auction={auction} tv />
+            </div>
+          ) : (
+            <WalkBoard
+              size="tv"
+              lo={auction.lo}
+              hi={auction.hi}
+              walkers={boardWalkers(game, auction)}
+              deals={auction.deals}
+              storeBuys={auction.storeBuys}
+              storeSells={auction.storeSells}
+              shipPays={auction.shipPays}
+              stage={auction.stage === 'walk' ? 'walk' : 'declare'}
+              className="min-h-0 flex-1"
+            />
+          )}
         </div>
-      ))}
-      <p className="pt-2 text-sm text-ink-3">Orders stay on the phones. The market clears when the timer runs out or everyone is done.</p>
+        <div className="flex w-[300px] shrink-0 flex-col gap-4">
+          <div className="flex flex-col gap-1 rounded-panel border-2 border-holo bg-holo-soft p-4 shadow-glow">
+            <GoodTag good={auction.good} name className="text-2xl" />
+            <span className={cx('font-display text-xl font-semibold', auction.slowed && 'text-warn')}>{stageName}</span>
+            <span data-num className="font-mono text-lg text-ink-2" data-testid="tv-units">
+              {auction.units} unit{auction.units === 1 ? '' : 's'} traded
+            </span>
+          </div>
+          <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-panel border border-holo-line bg-holo-line font-mono">
+            <div className="flex flex-col bg-panel p-3">
+              <dt className="label-caps">Store sells</dt>
+              <dd data-num className="text-2xl font-bold text-rise">{auction.storeSells ?? 'out'}</dd>
+            </div>
+            <div className="flex flex-col bg-panel p-3">
+              <dt className="label-caps">Store buys</dt>
+              <dd data-num className="text-2xl font-bold text-fall">{auction.storeBuys ?? '—'}</dd>
+            </div>
+          </dl>
+          {auction.shipPays !== null && (
+            <p className="rounded-control border border-warn/60 px-3 py-2 font-mono text-lg text-warn">Export ship pays {auction.shipPays}</p>
+          )}
+          <ul className="flex flex-col gap-2">
+            {auction.deals.map((d) => (
+              <li key={`${d.buyer}-${d.seller}`} className="rounded-control border border-holo bg-holo-soft px-3 py-2 font-mono text-lg font-bold text-holo">
+                {dealLine(game, d)}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-auto text-base leading-snug text-ink-2">
+            {auction.stage === 'walk'
+              ? 'Hold Up or Down on your phone. Meet another player and you trade at the seller’s price.'
+              : auction.stage === 'declare'
+                ? 'Sellers start at the top and walk down. Buyers start at the bottom and walk up.'
+                : 'What everyone has before this good goes on sale.'}
+          </p>
+          <span className="font-mono text-sm text-ink-3">
+            ROOM {table.code}
+            {auction.next.length > 0 ? ` · NEXT ${auction.next.map((g) => GOOD_NAME[g].toUpperCase()).join(', ')}` : ''}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }

@@ -16,5 +16,7 @@ export * from './components/Stat';
 export * from './components/Store';
 export * from './components/Ticker';
 export * from './components/Timer';
+export * from './components/TimeBar';
+export * from './components/WalkBoard';
 export * from './components/tokens';
 export { renderLandscape, type LandscapeInput, type LandscapeTheme } from './terrain/landscape';
