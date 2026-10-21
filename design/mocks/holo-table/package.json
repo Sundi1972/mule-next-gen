@@ -1,0 +1,26 @@
+{
+  "name": "mock-holo-table",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5288 --host",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "echo 'no tests'"
+  },
+  "dependencies": {
+    "@mule/ui": "workspace:*",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.17",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.7.0",
+    "tailwindcss": "^4.1.17",
+    "typescript": "^5.6.0",
+    "vite": "^7.1.10"
+  }
+}
