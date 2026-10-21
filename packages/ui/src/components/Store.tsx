@@ -33,13 +33,15 @@ export interface StoreInteriorProps {
   open?: Shop[];
   onShop?(shop: Shop): void;
   tv?: boolean;
+  /** Laid out for a short, wide area, such as a phone held sideways: all outfitters in one row. */
+  wide?: boolean;
 }
 
 /**
  * Inside the colony store, as in the original: the corral sells empty MULEs,
  * each outfitter fits a MULE for one good, and the pub ends your turn for cash.
  */
-export function StoreInterior({ mules, mulePrice, pubPayout, prices, visitors = {}, open, onShop, tv = false }: StoreInteriorProps) {
+export function StoreInterior({ mules, mulePrice, pubPayout, prices, visitors = {}, open, onShop, tv = false, wide = false }: StoreInteriorProps) {
   const usable = (s: Shop) => !open || open.includes(s);
   const cost = (s: Shop) => (prices[s] === undefined ? '' : `${prices[s]} cr`);
   const Room = ({ shop, className, children }: { shop: Shop; className?: string; children: ReactNode }) => {
@@ -68,41 +70,58 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, visitors = 
     );
   };
   const small = cx('font-mono text-ink-2', tv ? 'text-sm' : 'text-xs');
+  const belt = prices.greenBelt !== undefined;
+  // MULEs drawn in the corral before the rest are counted.
+  const shown = wide && belt ? 6 : 8;
+  // Wide: a twelve-column grid, so the corral, pub and green belt share the first row and all six outfitters fit the second.
+  const span = wide
+    ? { corral: belt ? 'col-span-5' : 'col-span-8', pub: belt ? 'col-span-3' : 'col-span-4', outfit: 'col-span-2', all: 'col-span-12', factory: 'col-span-4', belt: 'col-span-4' }
+    : { corral: 'col-span-2', pub: '', outfit: '', all: 'col-span-3', factory: '', belt: 'col-span-3' };
+  const beltRoom = belt && (
+    <Room shop="greenBelt" className={cx(span.belt, !wide && 'flex-row! items-center! gap-3!')}>
+      <span className="font-semibold">Green belt</span>
+      <span className={cx('text-xs text-ink-2', !wide && 'flex-1')}>Makes nothing, cleans the air around it</span>
+      <span data-num className={small}>
+        {cost('greenBelt')}
+      </span>
+    </Room>
+  );
 
   return (
-    <div className={cx('grid grid-cols-3 rounded-panel border border-holo-line bg-table', tv ? 'gap-2 p-3' : 'gap-2 p-2')}>
-      <Room shop="corral" className="col-span-2">
+    <div className={cx('grid rounded-panel border border-holo-line bg-table', wide ? 'grid-cols-12' : 'grid-cols-3', tv ? 'gap-2 p-3' : 'gap-2 p-2')}>
+      <Room shop="corral" className={span.corral}>
         <span className="label-caps">Corral</span>
         <span className="flex flex-wrap items-center gap-1 text-ink">
-          {Array.from({ length: Math.min(mules, 8) }, (_, i) => (
+          {Array.from({ length: Math.min(mules, shown) }, (_, i) => (
             <MuleIcon key={i} size={tv ? 30 : 24} />
           ))}
-          {mules > 8 && <span data-num className="font-mono text-sm font-bold">+{mules - 8}</span>}
+          {mules > shown && <span data-num className="font-mono text-sm font-bold">+{mules - shown}</span>}
           {mules === 0 && <span className="text-sm text-alert">Sold out</span>}
         </span>
         <span data-num className={small}>
           Empty MULE · {mulePrice} cr
         </span>
       </Room>
-      <Room shop="pub">
+      <Room shop="pub" className={span.pub}>
         <span className="label-caps">Pub</span>
         <span className={cx('font-display font-semibold', tv ? 'text-lg' : 'text-base')}>Cash out</span>
         <span data-num className={small}>
           {pubPayout == null ? 'ends your turn' : `about ${pubPayout} cr`}
         </span>
       </Room>
+      {wide && beltRoom}
       {OUTFIT_GOODS.map((g) => (
-        <Room key={g} shop={g}>
+        <Room key={g} shop={g} className={span.outfit}>
           <GoodIcon good={g} size={tv ? 26 : 22} />
-          <span className={cx('font-semibold', tv ? 'text-base' : 'text-sm')}>{GOOD_NAME[g]}</span>
+          <span className={cx('font-semibold', tv ? 'text-base' : 'text-sm', wide && 'leading-tight')}>{GOOD_NAME[g]}</span>
           <span data-num className={small}>
             {cost(g)}
           </span>
         </Room>
       ))}
-      <span className={cx('label-caps col-span-3', tv ? 'pt-1' : 'pt-0.5')}>Works · factory fits</span>
+      <span className={cx('label-caps', span.all, tv ? 'pt-1' : 'pt-0.5')}>Works · factory fits</span>
       {FACTORY_GOODS.map((g) => (
-        <Room key={g} shop={g}>
+        <Room key={g} shop={g} className={span.factory}>
           <GoodIcon good={g} size={tv ? 26 : 22} />
           <span className={cx('font-semibold leading-tight', tv ? 'text-base' : 'text-sm')}>{FACTORY_NAME[g]}</span>
           <span data-num className={small}>
@@ -110,15 +129,7 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, visitors = 
           </span>
         </Room>
       ))}
-      {prices.greenBelt !== undefined && (
-        <Room shop="greenBelt" className="col-span-3 flex-row! items-center! gap-3!">
-          <span className="font-semibold">Green belt</span>
-          <span className="flex-1 text-xs text-ink-2">Makes nothing, cleans the air around it</span>
-          <span data-num className={small}>
-            {cost('greenBelt')}
-          </span>
-        </Room>
-      )}
+      {!wide && beltRoom}
     </div>
   );
 }

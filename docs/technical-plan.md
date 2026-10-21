@@ -32,7 +32,7 @@ The same server and client support three ways to play, and the phone is the main
 - **Kitchen table:** everyone sits together, each with their own phone. One person creates a game and the others join by scanning a QR code or typing a 4-letter room code; no accounts needed. Public things (the map, auctions, council votes) show on every phone, and optionally on a shared TV or laptop through a `/table` view. Private things (your stock, whispers, secret sabotage orders, survey results) stay on your own phone, so you can plot against someone sitting next to you.
 - **Remote online:** the same thing over the internet, with in-game table chat replacing talking across the table.
 
-This means the client is designed phone-first and portrait-first: big touch targets, a zoomable map, and short real-time phases that work with one thumb. A screen that only works on a laptop is a bug.
+This means the client is designed phone-first and played sideways (landscape only, about 844x390 to 932x430): the colony map gets as much of the screen as possible, and the controls sit in a narrow side rail within thumb reach. Held upright, the phone shows a "Turn your phone sideways" screen; a native shell (Capacitor) can lock the orientation later. Big touch targets and short real-time phases still apply. A screen that only works on a laptop is a bug.
 
 ## Repository layout
 
