@@ -162,6 +162,7 @@ describe('the live auction: goods one at a time', () => {
     startAuction(state, ['food']);
     stepAuction(state, TICK);
     expect(a(state).stage).toBe('status');
+    auctionDone(state, 'p0');
     declareRole(state, 'p0', 'buyer');
     expect(walker(state, 'p0')).toMatchObject({ side: 'buyer', price: a(state).lo });
     declareRole(state, 'p2', 'seller');
@@ -170,8 +171,8 @@ describe('the live auction: goods one at a time', () => {
     expect(walker(state, 'p1').side).toBe('pass');
     expect(() => declareRole(state, 'p3', 'seller')).toThrow(new RuleError('You have none to sell'));
     expect(walker(state, 'p3').side).toBe('buyer');
-    // Picking a side is not pressing Done: the status screen keeps its clock.
-    expect(a(state).done).toEqual([]);
+    // Picking a side neither presses Done nor takes it back: p0 stays done, the others are not.
+    expect(a(state).done).toEqual(['p0']);
     stepAuction(state, TICK);
     expect(a(state).stage).toBe('status');
     toWalk(state);
@@ -461,13 +462,15 @@ describe('changing sides and ending early', () => {
     return state;
   }
 
-  it('lets a player switch sides mid-walk: the creature jumps to the new start edge and never trades at once', () => {
+  it('T-AC-3: lets a player switch sides mid-walk: the creature jumps to the new start edge, is no longer done, and never trades at once', () => {
     const state = waterPair();
     walker(state, 'p0').price = 95;
     walker(state, 'p1').price = 95;
     expect(run(state, WALK.tradeStartMs)).toHaveLength(1);
-    // p1 sells instead: back to the top, above every bid.
+    // p1 sells instead: back to the top, above every bid, and on the walk again.
+    auctionDone(state, 'p1');
     declareRole(state, 'p1', 'seller');
+    expect(a(state).done).not.toContain('p1');
     expect(walker(state, 'p1')).toMatchObject({ side: 'seller', price: a(state).hi, dir: 0 });
     // p0 buys instead: back to the bottom, under every ask.
     declareRole(state, 'p0', 'buyer');
