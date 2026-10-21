@@ -9,6 +9,7 @@ import {
   claimPlot,
   cover,
   createGame,
+  createRng,
   declareRole,
   DEVELOPMENT,
   fitFilter,
@@ -54,7 +55,7 @@ import {
   type Phase,
   type Trade,
 } from '@mule/engine';
-import { AiSeat, personaFor, type AiAction } from '@mule/ai';
+import { AiSeat, LotHand, personaFor, type AiAction } from '@mule/ai';
 import { PLAYER_COLORS, type MuleIntent, type MuleView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
@@ -106,6 +107,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private phaseEndsAt: number | null = null;
   /** The AI players: strategist, decider and hands, keyed by seat id. */
   private readonly ai = new Map<string, AiSeat>();
+  /** Each AI player's hand at the land auction, keyed by seat id. */
+  private readonly lotHands = new Map<string, LotHand>();
 
   /** Real time per unit of game time: 1 is real time, 0.1 ten times faster. Test-only. */
   private readonly phaseScale: number;
@@ -123,19 +126,19 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.seats = seats.map((s, i) => ({ ...s, color: PLAYER_COLORS[i % PLAYER_COLORS.length]! }));
     this.state = createGame({ seed: this.seed, players: seats.map(({ id, name, isAi, pick }) => ({ id, name, isAi, ...(isSpecies(pick) ? { species: pick } : {}) })), maxMonths: this.options.maxMonths });
     this.ai.clear();
+    this.lotHands.clear();
     seats.forEach((s, i) => {
       if (!s.isAi) return;
-      this.ai.set(
-        s.id,
-        new AiSeat({
-          id: s.id,
-          name: s.name,
-          persona: personaFor(s.name, i),
-          level: DEFAULT_AI_LEVEL,
-          // From the game seed and the seat, so a replay plays the same AI.
-          seed: (this.seed * 7_919 + i * 104_729 + 17) >>> 0,
-        }),
-      );
+      const seat = new AiSeat({
+        id: s.id,
+        name: s.name,
+        persona: personaFor(s.name, i),
+        level: DEFAULT_AI_LEVEL,
+        // From the game seed and the seat, so a replay plays the same AI.
+        seed: (this.seed * 7_919 + i * 104_729 + 17) >>> 0,
+      });
+      this.ai.set(s.id, seat);
+      this.lotHands.set(s.id, new LotHand(seat.mind, createRng((seat.options.seed ^ 0xc2b2ae35) >>> 0)));
     });
     this.news = ['Welcome to the colony. Talk tactics, then grab land.'];
     this.enterPhase();
@@ -416,11 +419,13 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           claimPlot(state, seatId, action.x, action.y);
           break;
         case 'walk':
-          // The hands set Done themselves, so walking doesn't take it back here.
-          setWalk(state, seatId, action.dir);
+          // The goods hands set Done themselves, so walking doesn't take it back here; at the land auction the engine does.
+          if (state.phase === 'landAuction') setLotWalk(state, seatId, action.dir);
+          else setWalk(state, seatId, action.dir);
           break;
         case 'done':
-          auctionDone(state, seatId, action.done);
+          if (state.phase === 'landAuction') lotDone(state, seatId, action.done);
+          else auctionDone(state, seatId, action.done);
           break;
         default:
           this.handle(seatId, action);
@@ -469,7 +474,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     );
   }
 
-  /** Steps the land auction every WALK.tickMs until its last lot is over. */
+  /** Steps the land auction every WALK.tickMs until its last lot is over; the AI hands move first, with the same dt. */
   private scheduleLandAuctionTick(last: number): void {
     const state = this.requireState();
     this.cancels.push(
@@ -480,6 +485,11 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         // A stalled server loop must not teleport walkers across the board.
         const dt = Math.min(Math.max(0, now - last), WALK.tickMs * 3) / this.phaseScale;
         for (const seat of this.seats) {
+          const hand = this.lotHands.get(seat.id);
+          if (hand) {
+            hand.tick(state, dt, (action) => this.aiAct(seat.id, action));
+            continue;
+          }
           if (!this.away.has(seat.id)) continue;
           // A dropped phone has finished bidding: its walker stops where it is.
           try {
