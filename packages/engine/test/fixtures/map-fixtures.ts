@@ -164,19 +164,47 @@ export const MID_SPEC: MapSpec = {
 
 export const MID_MAP = buildMap(MID_SPEC);
 
+/** MID_SPEC's Crystite with a fourth peak at (4,3): still within the 3 to 4 peaks allowed. */
+export const CRYSTITE_4_PEAKS = [
+  '000000023200000',
+  '000020234320000',
+  '000232023200000',
+  '002343202000000',
+  '0002320.0000020',
+  '020020000000232',
+  '232000000002343',
+  '343200000000232',
+  '232000000000020',
+];
+
+/** CRYSTITE_4_PEAKS with a fifth peak at (10,4). */
+export const CRYSTITE_5_PEAKS = [
+  '000000023200000',
+  '000020234320000',
+  '000232023220000',
+  '002343202232000',
+  '0002320.2343220',
+  '020020000232232',
+  '232000000022343',
+  '343200000000232',
+  '232000000000020',
+];
+
 /**
  * An 11×5 map for 2 players with 47 plots of non-river land: plains 15 in
  * three regions of 5, the other terrains 3 or 4. Only on non-river land under
  * 75 plots can plains pass its share yet exceed a third (16 of 47), so the
  * no-dominant-terrain rule is tested here rather than on a real map size.
+ * Its river has the small band's 2 bends and touches column 8, the right
+ * edge it may use.
  */
 export const SMALL_SPEC: MapSpec = {
   terrain: [
-    'PPP~PPPFFTT',
-    'PPL~~PPFFTD',
-    'HLLC~#SMMDD',
-    'HHCC~SSVMPP',
-    'IIIC~~VVPPP',
+    'PPPHHHDD~TT',
+    'PPLLLDD~~FT',
+    'SSSVV#~~FFF',
+    'IIIVCC~PPMM',
+    'PPPPPC~PPPM',
   ],
   ground: {
     food: 1,
@@ -207,3 +235,107 @@ export const SMALL_SPEC: MapSpec = {
 };
 
 export const SMALL_MAP = buildMap(SMALL_SPEC);
+
+/**
+ * A 19×11 map for 5 players that meets every map rule, built like MID_SPEC:
+ * 193 plots of non-river land, a river with the large band's 4 bends, the
+ * same diagonal stripes, and five Smithore seams (20 plots) leaving the
+ * corner (0,0) exactly 6 steps from one.
+ */
+export const LARGE_SPEC: MapSpec = {
+  terrain: [
+    'FFFFPPP~PPPPPPTTTTT',
+    'FFFFPPP~~PPPPPTTTTT',
+    'FFFFPPPP~PPPPPLLLTT',
+    'FFFFPPPP~PPPPLLLLMM',
+    'FFFFPPPP~PPPLLLLLMM',
+    'FFFFPPPP~#SSSSSMMMM',
+    'HHHHHHHP~~SSSSSMMMM',
+    'HHHHHIIII~SSSSDDDMM',
+    'HHHHHIIII~~DDDDDDVV',
+    'HHHCCCCIII~DDDDDVVV',
+    'HHCCCCCCCC~~VVVVVVV',
+  ],
+  ground: {
+    food: [
+      '1100011000110001100',
+      '1000110001100011000',
+      '0001100011000110001',
+      '0011000110001100011',
+      '0110001100011000110',
+      '110001100.110001100',
+      '1000110001100011000',
+      '0001100011000110001',
+      '0011000110001100011',
+      '0110001100011000110',
+      '1100011000110001100',
+    ],
+    water: [
+      '0011000110001100011',
+      '0110001100011000110',
+      '1100011000110001100',
+      '1000110001100011000',
+      '0001100011000110001',
+      '001100011.001100011',
+      '0110001100011000110',
+      '1100011000110001100',
+      '1000110001100011000',
+      '0001100011000110001',
+      '0011000110001100011',
+    ],
+    energy: [
+      '1100011000110001100',
+      '0110001100011000110',
+      '0011000110001100011',
+      '0001100011000110001',
+      '1000110001100011000',
+      '110001100.110001100',
+      '0110001100011000110',
+      '0011000110001100011',
+      '0001100011000110001',
+      '1000110001100011000',
+      '1100011000110001100',
+    ],
+    smithore: [
+      '0000000000000000000',
+      '0000000033000000000',
+      '0000330033000330000',
+      '0000330000000330000',
+      '0000000000000000000',
+      '000000000.000000000',
+      '0000000000000000000',
+      '0000330000000330000',
+      '0000330000000330000',
+      '0000000000000000000',
+      '0000000000000000000',
+    ],
+    crystite: [
+      '0000000000200000000',
+      '0000000002320000000',
+      '0000000023432000000',
+      '0000000002320000000',
+      '0000000000200000000',
+      '000000000.000000200',
+      '0000000000000002320',
+      '0020000000000023432',
+      '0232000000000002320',
+      '2343200000000000200',
+      '0232000000000000000',
+    ],
+    rareEarth: [
+      '0013100000000000010',
+      '0134310000000000131',
+      '0013100000000001343',
+      '0001000000000000131',
+      '0000000000000000010',
+      '000000000.000000000',
+      '0000000000010000000',
+      '0000000000131000000',
+      '0000000001343100000',
+      '0000000000131000000',
+      '0000000000010000000',
+    ],
+  },
+};
+
+export const LARGE_MAP = buildMap(LARGE_SPEC);

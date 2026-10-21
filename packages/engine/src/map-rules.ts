@@ -16,8 +16,8 @@ export interface MapReport {
   metrics: {
     /** Good plots per player. */
     perPlayer: Record<RawGood, number>;
-    /** Each land terrain's share of non-river land (the river and the store have none). */
-    shares: Record<Terrain, number>;
+    /** Share of non-river land for each land terrain on the map. */
+    shares: Partial<Record<Exclude<Terrain, 'river' | 'store'>, number>>;
     biggestRegion: number;
     bends: number;
     /** Share of good Smithore plots touching another; 0 when there are none. */
@@ -315,7 +315,7 @@ function metrics(f: Facts): MapReport['metrics'] {
   const below = belowNormal(f);
   return {
     perPlayer: Object.fromEntries(RAW_GOODS.map((g) => [g, perPlayer(f, g)])) as Record<RawGood, number>,
-    shares: Object.fromEntries(SHARE_TERRAINS.map((t) => [t, n === 0 ? 0 : terrainCount(f, t) / n])) as Record<Terrain, number>,
+    shares: Object.fromEntries(SHARE_TERRAINS.map((t) => [t, n === 0 ? 0 : terrainCount(f, t) / n])) as MapReport['metrics']['shares'],
     biggestRegion: Math.max(0, ...f.regions.map((r) => r.length)),
     bends: riverBendCount(f),
     seamShare: seamShareOf(f),
