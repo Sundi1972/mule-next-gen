@@ -35,7 +35,8 @@ const SEATS: Seat[] = [
   { id: 'baron', name: 'The Baron', species: 'mollox', colour: 3, ai: true },
 ];
 const CODE = 'MTWR';
-const COLOUR_NAME: Record<Slot, string> = { 0: 'Ember', 1: 'Cobalt', 2: 'Jade', 3: 'Amber', 4: 'Violet', 5: 'Teal' };
+/** Names for the six player colours (theme --color-p1..p6). DS-GAP: the names belong beside SLOT_COLOR in @mule/ui. */
+const COLOUR_NAME: Record<Slot, string> = { 0: 'Ember', 1: 'Cobalt', 2: 'Jade', 3: 'Sun', 4: 'Violet', 5: 'Rose' };
 
 export type LobbyState = 'guest' | 'host' | 'handoff' | 'kick' | 'close';
 
