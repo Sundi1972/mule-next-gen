@@ -6,6 +6,7 @@ import { PhoneGoodsWalk, TvGoodsWalk, useWalkSim, type LineStyle } from './scree
 import { PhoneLandLine, TvLandLine } from './screens/LandLine';
 import { PhoneProduction, ShowControls, TvProduction, useShow } from './screens/Production';
 import { PhoneStatusDeclare, TvStatusDeclare } from './screens/StatusDeclare';
+import { PhoneStore, TvDevelop } from './screens/Store';
 
 const DECISIONS = [
   'Concepts from the original, never its art or layout: every screen here is our holo-table style on @mule/ui.',
@@ -16,6 +17,16 @@ const DECISIONS = [
   'Land auction: buyers only, so one line: the highest bid, naming who wins at the bell.',
   'Production (R3, ~15 s): plots fill with one bar per unit in the owner’s colour, badges say why (+1 cluster, ½ no Water…), the event plays over the map in its own way, then the goods fly home: TV into the public colony bar, phone into your private 9-goods strip.',
   'What each plot made is public (as in the original and our status screen); what you hold stays on your phone.',
+  'Store (D1, Heiko): one hall, two rows. Top: the six outfitters, crops left, mines right. Bottom: the works (three factory fits), green belt, MULE corral, pub, with a door to the map at each end.',
+  'Tap to walk (R1): tap a room and your creature walks there; time keeps running, so walking costs time. Placeholders until WS1’s sim: the hall in about 2 s, 0.6 s a tile on the map. Zipwings walk twice as fast.',
+  'Everyone in the store walks the same floor, each with a time bar over their head, as in the original.',
+  'Start of turn: “You eat 5 Food and fill up your time bar”: the bar fills in front of you, shorter when you are short of Food.',
+];
+
+const STORE_STATES = [
+  { id: 'store', title: 'Fed: full time' },
+  { id: 'store-hungry', title: 'Short of Food: less time' },
+  { id: 'store-soldout', title: 'Corral sold out' },
 ];
 
 const AUCTION_STATES = [
@@ -148,6 +159,34 @@ export default function App() {
       </Page>
     );
 
+  const store = STORE_STATES.find((st) => st.id === hash);
+  if (store)
+    return (
+      <Page title={`Store · ${store.title}`}>
+        <Links states={STORE_STATES} current={hash} />
+        <PhoneFrame>
+          <Game>
+            <PhoneStore key={hash} hungry={hash === 'store-hungry'} mules={hash === 'store-soldout' ? 0 : 5} />
+          </Game>
+        </PhoneFrame>
+        <p className="max-w-[844px] text-sm text-ink-2">
+          The first 2 s: you eat and your bar fills. Then tap the corral, an outfitter (or a fit at the works), and a door: your Zipwing walks each leg while the clock runs. Ossa, Brix and Kai are in the store too. Reload the page to start the turn again.
+        </p>
+      </Page>
+    );
+
+  if (hash === 'tv-develop')
+    return (
+      <Page title="Development on the big screen · everyone walking">
+        <TvFrame>
+          <Board>
+            <TvDevelop />
+          </Board>
+        </TvFrame>
+        <p className="max-w-[960px] text-sm text-ink-2">Ossa leads an Energy MULE out to a far plot, Kai walks to the lakes, Brix goes into the store; whoever is inside shows on the store floor at the right.</p>
+      </Page>
+    );
+
   if (hash === 'status')
     return (
       <Page title="Before each good · status and Buy / Sell on one screen (R2)">
@@ -220,7 +259,10 @@ export default function App() {
       <div className="mt-2">
         <Links states={LAND_STATES} />
       </div>
-      <p className="mt-8 text-xs text-ink-3">Next, after these: the store interior (one hall, two rows, D1), the start-of-turn time fill, and creatures walking on the TV map.</p>
+      <h2 className="label-caps mt-8">Store and development (D1, R1)</h2>
+      <div className="mt-2">
+        <Links states={[...STORE_STATES, { id: 'tv-develop', title: 'Big screen: everyone walking' }]} />
+      </div>
     </div>
   );
 }
