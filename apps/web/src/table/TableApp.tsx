@@ -1,7 +1,7 @@
-import type { MuleView, TableView } from '@mule/protocol';
+import type { DealView, MuleView, TableView } from '@mule/protocol';
 import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PlayerMark, SeatSpeciesProvider, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard, type Slot } from '@mule/ui';
-import { boardWalkers, dealLine, LineReadout, skippedLine, StatusTable } from '../components/AuctionParts';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { boardWalkers, dealLine, LineReadout, newestFirst, skippedLine, StatusTable, type DealRow } from '../components/AuctionParts';
+import { useEffect, useState, type ReactNode } from 'react';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -287,22 +287,17 @@ function MarketTiles({ game }: { game: MuleView }) {
   );
 }
 
-type Deal = NonNullable<MuleView['auction']>['deals'][number];
-const HOUSES = new Set(['store', 'ship']);
-
-/** A deal's identity while it runs, as the engine keys it: a house's deal stays one deal as it serves whoever is next in line. */
-function dealKey(d: Deal): string {
-  return HOUSES.has(d.buyer) ? `${d.buyer}<` : HOUSES.has(d.seller) ? `${d.seller}>` : `${d.buyer}<${d.seller}`;
-}
-
-/** The running deals, newest first, each keeping its place for as long as it runs. */
-function useNewestFirst(deals: Deal[]): { key: string; deal: Deal }[] {
-  const started = useRef(new Map<string, number>());
-  const count = useRef(0);
-  const running = new Set(deals.map(dealKey));
-  for (const key of started.current.keys()) if (!running.has(key)) started.current.delete(key);
-  for (const key of running) if (!started.current.has(key)) started.current.set(key, count.current++);
-  return deals.map((deal) => ({ key: dealKey(deal), deal })).sort((x, y) => started.current.get(y.key)! - started.current.get(x.key)!);
+/**
+ * The running deals, newest first, each keeping its place for as long as it runs. The rows live in state and
+ * follow each new deals list during render (React's "adjust state when a prop changes"), so a discarded render
+ * leaves nothing behind.
+ */
+function useNewestFirst(deals: DealView[]): DealRow[] {
+  const [held, setHeld] = useState(() => ({ from: deals, rows: newestFirst([], deals) }));
+  if (held.from === deals) return held.rows;
+  const rows = newestFirst(held.rows, deals);
+  setHeld({ from: deals, rows });
+  return rows;
 }
 
 /** The auction on the big screen: the whole board, large, with every creature walking live. */
@@ -375,10 +370,10 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
           {auction.shipPays !== null && (
             <p className="rounded-control border border-warn/60 px-3 py-2 font-mono text-lg text-warn">Export ship pays {auction.shipPays}</p>
           )}
-          {/* Rows that don't fit wrap into a second column, which the clip hides: never half a row. */}
+          {/* Each row is one line. A row that doesn't fit below the others wraps into a second column, which the clip hides. */}
           <ul className="flex min-h-0 flex-1 flex-col flex-wrap gap-2 overflow-hidden">
             {deals.map(({ key, deal }) => (
-              <li key={key} className="w-full rounded-control border border-holo bg-holo-soft px-3 py-2 font-mono text-lg font-bold text-holo">
+              <li key={key} className="w-full truncate rounded-control border border-holo bg-holo-soft px-3 py-2 font-mono text-lg font-bold text-holo">
                 {dealLine(game, deal)}
               </li>
             ))}
