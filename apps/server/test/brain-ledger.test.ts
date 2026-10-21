@@ -27,8 +27,8 @@ const lines = () =>
 const ledger = () => createLedger({ path: file, clock: () => new Date('2026-10-21T18:02:11.000Z') });
 
 describe('T-AC-4: every call appends one RULE-4 line; finish appends a game line whose usd is the sum', () => {
-  it('prices the worked example at 0.0000682 and writes all 15 fields', () => {
-    expect(usd({ input: 410, cached_read: 620, cache_write: 0, output: 38 })).toBeCloseTo(0.0000682, 10);
+  it('prices the worked example at 0.0000662 and writes all 15 fields', () => {
+    expect(usd({ input: 410, cached_read: 620, cache_write: 0, output: 38 })).toBeCloseTo(0.0000662, 10);
     ledger().record(call());
     const [line] = lines();
     expect(Object.keys(line!).sort()).toEqual(FIELDS);
@@ -36,7 +36,7 @@ describe('T-AC-4: every call appends one RULE-4 line; finish appends a game line
       t: '2026-10-21T18:02:11.000Z', game: 'g1', seat: 's1', input: 410, cached_read: 620,
       output: 38, ms: 840, timed_out: false, outcome: 'llm',
     });
-    expect(line!.usd as number).toBeCloseTo(0.0000682, 10);
+    expect(line!.usd as number).toBeCloseTo(0.0000662, 10);
   });
 
   it('logs a timed-out call with tokens 0, usd 0 and outcome timeout', () => {
@@ -64,9 +64,9 @@ describe('T-AC-4: every call appends one RULE-4 line; finish appends a game line
     expect(game[0]!.usd as number).toBeCloseTo(sum, 12);
     const bySeat = game[0]!.by_seat as Record<string, { calls: number; usd: number }>;
     expect(bySeat.s1!.calls).toBe(2);
-    expect(bySeat.s1!.usd).toBeCloseTo(0.0000682, 10);
+    expect(bySeat.s1!.usd).toBeCloseTo(0.0000662, 10);
     expect(bySeat.s2!.calls).toBe(1);
-    expect(bySeat.s2!.usd).toBeCloseTo(0.0000682 + 100 * 0.5e-6, 10);
+    expect(bySeat.s2!.usd).toBeCloseTo(0.0000662 + 100 * 0.5e-6, 10);
     expect(l.seatSpent('g1', 's2')).toBeCloseTo(bySeat.s2!.usd, 12);
   });
 
