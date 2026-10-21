@@ -199,5 +199,16 @@ function decide(state: GameState, election: Election, office: Office, governor: 
 
 /** RULE-6: the Governor sets the sales tax in whole percent, within maxStep of the month's starting rate. */
 export function setSalesTax(state: GameState, id: string, percent: number): void {
-  throw new Error('NotImplemented: setSalesTax');
+  player(state, id);
+  const politics = state.politics;
+  if (!politics) throw new RuleError('This game plays without a Governor');
+  if (state.phase !== 'planning') throw new RuleError('The tax is set in planning');
+  if (politics.election && politics.election.stage !== 'over') throw new RuleError('Wait for the election to end');
+  if (politics.governor !== id) throw new RuleError('Only the Governor sets the tax');
+  const { min, max, maxStep } = POLITICS.tax;
+  const start = Math.round(politics.taxAtStart * 100);
+  const low = Math.max(min, start - maxStep);
+  const high = Math.min(max, start + maxStep);
+  if (!Number.isInteger(percent) || percent < low || percent > high) throw new RuleError(`The tax can be ${low}% to ${high}% this month`);
+  state.treasury.salesTax = percent / 100;
 }
