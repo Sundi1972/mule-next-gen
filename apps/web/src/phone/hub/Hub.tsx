@@ -8,11 +8,6 @@ import { PhoneShell, useWide, type Now } from '../Shell';
 import { needRows, planNow } from './needs';
 import { drawnSlots, type AgendaSlot, type DeskSlot, type HubSeat, type HubSlots, type MapToolSlot } from './slots';
 
-/*
- * Planning as the hub (C17, scaffold design/mocks/ws6-ux/src/screens/PlanningHub.tsx at ab2dc5f): the frame. What
- * fills it comes from the HubSlots it is given (./slots.ts); it draws only those, so it grows without a redesign.
- */
-
 /** The hub's open desk and map tool, for any slot's components to read and change. */
 export interface HubNav {
   desk: string;
@@ -136,7 +131,7 @@ function Glyph({ d, size = 18 }: { d: string; size?: number }) {
 /** Only you see what this leads to. */
 export function Lock({ size = 10 }: { size?: number }) {
   return (
-    <span className="inline-flex items-center rounded-chip bg-holo-soft px-1 leading-4 text-holo" aria-label="Only you see this">
+    <span role="img" className="inline-flex items-center rounded-chip bg-holo-soft px-1 leading-4 text-holo" aria-label="Only you see this">
       <svg aria-hidden viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth={2.4}>
         <rect x={5} y={11} width={14} height={10} rx={2} />
         <path d="M8 11V7a4 4 0 0 1 8 0v4" />

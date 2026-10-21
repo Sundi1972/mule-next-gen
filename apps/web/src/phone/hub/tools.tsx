@@ -1,11 +1,10 @@
-import { DEVELOPMENT } from '@mule/engine';
+import { DEVELOPMENT, isListed } from '@mule/engine';
 import { Button, GOOD_NAME, HoloMap, TERRAIN_NAME, type MapTile } from '@mule/ui';
 import { mapTiles, player, plotName, TERRAIN_ODDS, tileAt } from '../../game/derive';
 import { useClient } from '../../net/react';
 import { usePhoneGame } from '../game';
 import { GroundCard } from '../ground';
-import { SellMap } from '../Sell';
-import { MapFit } from '../Shell';
+import { MapFit, useWide } from '../Shell';
 import { useToday } from './state';
 
 /* Today's map tools: Look, the geo drone (planning's drone flow) and selling a plot (the Sell form's map). */
@@ -16,13 +15,14 @@ const free = (t: MapTile) => t.owner === null && t.terrain !== 'store';
 export function LookMap() {
   const { view, slot } = usePhoneGame();
   const { looked, setLooked } = useToday();
+  const wide = useWide();
   const tap = (t: MapTile) => {
     if (t.terrain === 'store') return;
     setLooked(looked?.x === t.x && looked.y === t.y ? null : { x: t.x, y: t.y });
   };
   return (
     <MapFit width={view.width} height={view.height}>
-      <HoloMap width={view.width} height={view.height} tiles={mapTiles(view)} onTile={tap} selected={looked} focusSlot={slot} />
+      <HoloMap width={view.width} height={view.height} tiles={mapTiles(view)} onTile={tap} selected={looked} focusSlot={slot} density={wide ? 'tv' : 'phone'} />
     </MapFit>
   );
 }
@@ -63,6 +63,7 @@ function useDrone() {
 export function DroneMap() {
   const { view } = usePhoneGame();
   const { ordered, chosen, setPicked } = useDrone();
+  const wide = useWide();
   const tiles: MapTile[] = mapTiles(view).map((t) => (chosen.some((p) => p.x === t.x && p.y === t.y) ? { ...t, flag: 'survey' } : t));
   const toggle = (t: MapTile) => {
     if (ordered || !free(t)) return;
@@ -70,7 +71,7 @@ export function DroneMap() {
   };
   return (
     <MapFit width={view.width} height={view.height}>
-      <HoloMap width={view.width} height={view.height} tiles={tiles} onTile={toggle} selected={chosen.at(-1) ?? null} />
+      <HoloMap width={view.width} height={view.height} tiles={tiles} onTile={toggle} selected={chosen.at(-1) ?? null} density={wide ? 'tv' : 'phone'} />
     </MapFit>
   );
 }
@@ -112,10 +113,20 @@ export function DroneAction() {
   );
 }
 
-/** Sell a plot: tap one of yours; the Market desk holds the form. */
+/** Sell a plot: tap one of yours, with every listed plot marked for sale; the Market desk holds the form. */
 export function SellPlotMap() {
+  const { view, slot } = usePhoneGame();
   const { sell } = useToday();
-  return <SellMap sell={sell} />;
+  const wide = useWide();
+  const tiles: MapTile[] = mapTiles(view).map((t) => (isListed(view, t.x, t.y) ? { ...t, flag: 'sale' } : t));
+  return (
+    <>
+      <p className="pb-1.5 font-mono text-[11px] text-ink-3">TAP ONE OF YOUR PLOTS · LISTED PLOTS ARE MARKED FOR SALE</p>
+      <MapFit width={view.width} height={view.height}>
+        <HoloMap width={view.width} height={view.height} tiles={tiles} onTile={sell.pick} selected={sell.picked} focusSlot={slot} density={wide ? 'tv' : 'phone'} />
+      </MapFit>
+    </>
+  );
 }
 
 export function ListAction() {

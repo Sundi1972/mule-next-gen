@@ -1,4 +1,4 @@
-import { GOODS, isFactory, RECIPES, type Good, type Outfit, type ProcessedGood, type Stock } from '@mule/engine';
+import { GOODS, isFactory, RECIPES, UPKEEP, type Good, type Outfit, type RawGood, type Stock } from '@mule/engine';
 import { GOOD_NAME } from '@mule/ui';
 import type { Now } from '../Shell';
 
@@ -16,6 +16,16 @@ export interface NeedRow {
 /** RULE-8: these lead, in this order; then the rest by need. */
 const FIRST: Good[] = ['food', 'water', 'energy'];
 
+/** What a plot making a raw good is called. */
+const PLOT: Record<RawGood, [one: string, many: string]> = {
+  food: ['farm', 'farms'],
+  water: ['well', 'wells'],
+  energy: ['power plant', 'power plants'],
+  smithore: ['mine', 'mines'],
+  crystite: ['mine', 'mines'],
+  rareEarth: ['mine', 'mines'],
+};
+
 /** "a farm", "3 farms". */
 const count = (n: number, one: string, many: string) => (n === 1 ? `a ${one}` : `${n} ${many}`);
 const and = (parts: string[]) => (parts.length <= 1 ? (parts[0] ?? '') : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`);
@@ -29,18 +39,22 @@ export function needRows(need: Stock, stock: Stock, plots: readonly { outfit: Ou
   const outfits = plots.map((p) => p.outfit).filter((o): o is Outfit => !!o && o !== 'greenBelt');
   const factories = outfits.filter(isFactory);
   const why = (g: Good): string => {
-    const usedBy = (factories.filter((f, i) => factories.indexOf(f) === i) as ProcessedGood[]).filter((f) => (RECIPES[f].inputs[g] ?? 0) > 0);
+    const usedBy = [...new Set(factories)].filter((f) => (RECIPES[f].inputs[g] ?? 0) > 0);
     const inputs = usedBy.length > 0 ? `${and(usedBy.map((f) => GOOD_NAME[f]))} inputs` : '';
     if (g === 'food' || g === 'water') return usedBy.length > 0 ? `upkeep and ${inputs}` : 'upkeep';
     if (g === 'energy') {
-      const n = (o: Outfit[]) => outfits.filter((x) => o.includes(x)).length;
-      const burners = [
-        [n(['food']), 'farm', 'farms'],
-        [n(['water']), 'well', 'wells'],
-        [n(['smithore', 'crystite', 'rareEarth']), 'mine', 'mines'],
-        [factories.length, 'factory', 'factories'],
-      ] as const;
-      return and(burners.filter(([k]) => k > 0).map(([k, one, many]) => count(k, one, many)));
+      // Raw plots that burn Energy (UPKEEP.energyUse), counted by what they are called; factories by recipe.
+      const burners = new Map<string, [number, string]>();
+      for (const raw of Object.keys(UPKEEP.energyUse) as RawGood[]) {
+        const k = outfits.filter((o) => o === raw).length;
+        if (UPKEEP.energyUse[raw] <= 0 || k === 0) continue;
+        const [one, many] = PLOT[raw];
+        burners.set(one, [(burners.get(one)?.[0] ?? 0) + k, many]);
+      }
+      const words = [...burners].map(([one, [k, many]]) => count(k, one, many));
+      const burning = factories.filter((f) => (RECIPES[f].inputs.energy ?? 0) > 0).length;
+      if (burning > 0) words.push(count(burning, 'factory', 'factories'));
+      return and(words);
     }
     if (inputs) return inputs;
     return g === 'medicine' ? 'bad air' : '';

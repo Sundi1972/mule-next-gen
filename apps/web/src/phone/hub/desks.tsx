@@ -8,8 +8,6 @@ import { useHub } from './Hub';
 import { needRows } from './needs';
 import { useToday } from './state';
 
-/* Today's desks, from the scaffold's PlanningHub.tsx and PlanningBrief.tsx (ThisMonth, MarketStrip, News) at ab2dc5f. */
-
 function Section({ title, children, testid }: { title: ReactNode; children: ReactNode; testid?: string }) {
   return (
     <section className="flex flex-col gap-1.5 @min-[1100px]/shell:gap-2" data-testid={testid}>

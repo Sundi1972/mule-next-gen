@@ -7,7 +7,6 @@ import type { Now } from '../Shell';
  * item a door into a desk or a map tool), the map tools and the colony map; the rail holds Now, the open tool's
  * panel, the desks and the open desk's body. The hub draws only the entries present in its HubSlots, and of those
  * only the ones whose `show(seat)` says yes (omitted: always); an agenda item whose door is not drawn is not drawn.
- * In the game a slot whose feature does not exist yet is simply absent: there are no SOON or slice labels.
  *
  * Today's entries are in ./today.tsx (HUB_SLOTS). WS7 adds its own to those lists, in the order they should show:
  * the Council, Secret, Governor's and Sheriff's desks (an office desk's `show` asks whether this seat holds the

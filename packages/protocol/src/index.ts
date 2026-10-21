@@ -73,10 +73,7 @@ export interface MyView {
   sick: boolean;
   /** Food and Water this player's household and crew need each month. */
   needs: { food: number; water: number };
-  /**
-   * What this player needs of each good this month: the engine's monthNeeds, the same the goods auction's status
-   * screen measures against. Planning's "This month you need" reads it; the screen never counts needs itself.
-   */
+  /** What this player needs of each good this month: the engine's monthNeeds. */
   monthNeeds: Stock;
   /** Epoch ms when this player's development time runs out, during development. */
   devEndsAt: number | null;
