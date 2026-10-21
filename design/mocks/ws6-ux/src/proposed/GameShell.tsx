@@ -4,6 +4,7 @@ import { Qr } from '../../../../../apps/web/src/components/Qr';
 import { ThemeToggle } from '../../../../../apps/web/src/components/ThemeToggle';
 import { fmt } from '../../../../../apps/web/src/game/derive';
 import { usePhoneGame } from '../../../../../apps/web/src/phone/game';
+import { SeatRow, Ticker, useChat } from './Chat';
 
 /**
  * The responsive redesign of PhoneShell (GRAFT TARGET apps/web/src/phone/Shell.tsx).
@@ -67,6 +68,7 @@ export function GameShell({
   rail,
   footer,
   handoff: handoffOpen = false,
+  anchored = [],
   children,
 }: {
   phase: string;
@@ -76,8 +78,11 @@ export function GameShell({
   footer?: ReactNode;
   /** Mock only: open with the hand-off dialog showing (#game-handoff). */
   handoff?: boolean;
+  /** Seats this screen draws as creatures (they wrap them in Speaker): their bubbles pop there, not in the seat row. */
+  anchored?: string[];
   children: ReactNode;
 }) {
+  const chat = useChat();
   const { view, self, slot } = usePhoneGame();
   const [handoff, setHandoff] = useState(handoffOpen);
   const root = useRef<HTMLDivElement>(null);
@@ -129,6 +134,13 @@ export function GameShell({
                 {fmt(self.money)} cr
               </span>
             </div>
+            {/* Live table chat (C20): everyone's seat, the bubble's fallback anchor, and the last lines. */}
+            {chat && (
+              <div className="flex flex-col gap-1 border-t border-holo-faint pt-1.5 @min-[1100px]/shell:gap-2 @min-[1100px]/shell:pt-2.5" data-testid="table-chat">
+                <SeatRow anchored={anchored} />
+                <Ticker />
+              </div>
+            )}
           </header>
           <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 *:shrink-0 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4">
             <NowCard now={now} />

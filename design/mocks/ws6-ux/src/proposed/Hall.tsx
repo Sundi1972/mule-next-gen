@@ -3,6 +3,7 @@ import { Creature, cx, GOOD_NAME, GoodIcon, SLOT_COLOR, useSeatSpecies, type Slo
 import type { CSSProperties, ReactNode } from 'react';
 import { slotOf } from '../../../../../apps/web/src/game/derive';
 import { VIEW } from '../fixture';
+import { Speaker } from './Chat';
 import { Mule } from './Mule';
 
 /**
@@ -322,9 +323,11 @@ export function HallWalker({ v, wide }: { v: Visitor; wide: boolean }) {
         <span className="block h-full rounded-full" style={{ width: `${Math.max(0, Math.min(1, v.time)) * 100}%`, background: SLOT_COLOR[slot] }} />
       </span>
       <span className={cx('flex items-end', left ? 'flex-row-reverse' : '', v.moving && 'animate-[waddle_0.36s_ease-in-out_infinite]')}>
-        <span className={cx('rounded-full', v.me && 'ring-2 ring-holo ring-offset-1 ring-offset-table')}>
-          <Creature species={species} color={SLOT_COLOR[slot]} size={wide ? 52 : 28} />
-        </span>
+        <Speaker id={v.id}>
+          <span className={cx('rounded-full', v.me && 'ring-2 ring-holo ring-offset-1 ring-offset-table')}>
+            <Creature species={species} color={SLOT_COLOR[slot]} size={wide ? 52 : 28} />
+          </span>
+        </Speaker>
         {v.leading && <Mule size={wide ? 60 : 32} state={v.moving ? 'walk' : 'idle'} good={v.leading === 'empty' ? null : v.leading} owner={SLOT_COLOR[slot]} facing={left ? 'left' : 'right'} />}
       </span>
     </div>
