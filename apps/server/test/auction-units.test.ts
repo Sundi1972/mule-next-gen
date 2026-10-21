@@ -65,13 +65,14 @@ describe('the goods auction walkers carry their units', () => {
     expect(stockOf('s2')).toBeGreaterThan(start.s2);
   });
 
-  it('carries units on every walker from the first frame of the walk', () => {
+  it('T-AC-2: every walker carries units from the first frame of the walk, before any trade', () => {
     const { game } = toWalk();
     const view = game.viewFor(null);
     expect(view.auction!.walkers.length).toBe(seats.length);
     expectUnitsMatchEngine(view, engineOf(game));
   });
 
+  // trace-allow: guards the spec's HC-2 invariant, which has no INV id: the TV holds no player stock but the good up
   it("HC-2: the board view carries no stock of any good but the one that's up", () => {
     const { game, good } = toWalk();
     const view = game.viewFor(null);
