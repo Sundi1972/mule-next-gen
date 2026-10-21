@@ -384,12 +384,13 @@ invariant  the fund never goes below 0.
 ```
 RULE-8 · VoteHand (Classic AI seats)                                 shape: decision table
 run       in nominate, once, after a seeded delay in POLITICS.ai.actMs:
-          governor if POLITICS.ai.runGovernor[persona] ≥ a seeded draw, else sheriff if
-          POLITICS.ai.runSheriff[persona] ≥ a seeded draw, else none; never against RULE-2.
+          governor if a seeded draw < POLITICS.ai.runGovernor[persona], else sheriff if a
+          seeded draw < POLITICS.ai.runSheriff[persona], else none; never against RULE-2.
 vote      in ballot, per contested office: itself if it runs; otherwise the candidate with
           the fewest plots, so the table leans against the biggest landowner (the design's
-          "council reins in the runaway leader"); ties → lower seat. Rookie votes for a seeded
-          random candidate instead.
+          "council reins in the runaway leader"); ties → lower seat. A Rookie that does not
+          run votes for a seeded random candidate instead of the fewest-plots rule; a Rookie
+          candidate votes for itself like any candidate (AM-7).
 done      Done right after acting in each stage.
 tax       as Governor, once per planning after the election: step toward the persona's target
           (POLITICS.ai.taxTarget: trader 5, cautious 4, aggressive 8, saboteur 10) by at most
@@ -554,6 +555,49 @@ because   P-1: one source for each rule. The reviewer found RULE-6 and RULE-1 wo
           copied into the AI hand and the server, and the copy-on-write choice was unrecorded.
 goal      P-1 — still met
 folded    §9 write contract lists closeElection; C1 senior notes copy-on-write
+```
+
+```
+AM-5 · 2026-10-22 · lead · PR-3
+
+target    §1 C1 / C9 (where the host option's default lives on the server)
+said      createGame({ politics }) defaults on
+did       the engine's createGame still defaults on (the sim plays politics). The server's
+          MuleGame takes politics?: boolean defaulting OFF, and createMuleServer, which every
+          real table goes through, passes politics: true. Existing server tests that build
+          MuleGame directly (WS1/WS3/WS4 files) keep today's planning timing untouched.
+because   P-1: the election first in month 1 changes planning's timing, and seven server test
+          files of other lanes assume 45 s planning; editing them all is churn in files WS7
+          may not touch, while the product default (what a table plays) stays on.
+goal      P-1 — still met (a table plays politics by default; test C1 proves it)
+folded    C9 tomorrow; plan Task 3.2 adds `C1: the server a player joins plays politics by default`
+```
+
+```
+AM-6 · 2026-10-22 · lead · PR-3
+
+target    AM-5 (the server's default); §5 Delivery
+said      createMuleServer passes politics: true
+did       createMuleServer takes politics?: boolean defaulting OFF until PR-4 ships the desks;
+          PR-4 flips the default on together with its election e2e. The engine (sim) stays on.
+because   P-1: without the desks, a real month 1 would run an election no phone can see (20 s
+          of nominate, a reveal, then a second "I'm ready"), and WS4's smoke e2e times out on
+          exactly that. A feature switched on before its screens exist serves no player.
+goal      P-1 — met when PR-4 lands; nothing politics-on reaches trunk before then anyway
+folded    C9 tomorrow; plan Task 3.2's C1 test; PR-4 adds the flip and its test
+```
+
+```
+AM-7 · 2026-10-22 · lead · PR-2 review
+
+target    §2 RULE-8 (run draw, Rookie vote)
+did       the run draw reads "a seeded draw < p" (the engine's rng.chance convention; p = 0
+          means never); a Rookie candidate votes for itself, only a non-candidate Rookie picks
+          at random
+because   P-1: the review found RULE-8 ambiguous on both points; the chosen readings keep a
+          candidate's own vote certain at every level
+goal      P-1 — still met
+folded    RULE-8 text; PR-2 test row for the Rookie candidate
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
