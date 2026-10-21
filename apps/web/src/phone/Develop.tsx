@@ -23,6 +23,8 @@ export function Develop() {
   const carry = me.carriedMule;
   const [place, setPlace] = useState<'store' | 'map'>('store');
   const [selected, setSelected] = useState<{ x: number; y: number } | null>(null);
+  // Kept here, not in the map, so the zoom survives a trip into the store.
+  const [zoomed, setZoomed] = useState(false);
   const tile = selected ? tileAt(view, selected.x, selected.y) : undefined;
   const outfitted = carry !== null && carry !== 'empty';
 
@@ -192,7 +194,7 @@ export function Develop() {
         <StoreInterior mules={view.storeMules} mulePrice={me.mulePrice} prices={me.outfitCosts} open={open} onShop={onShop} visitors={{}} wide />
       ) : (
         <MapFit width={view.width} height={view.height}>
-          <ZoomMap width={view.width} height={view.height} tiles={tiles} slot={slot}>
+          <ZoomMap width={view.width} height={view.height} tiles={tiles} slot={slot} zoomed={zoomed} onZoomedChange={setZoomed}>
             <HoloMap
               width={view.width}
               height={view.height}

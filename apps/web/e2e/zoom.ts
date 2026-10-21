@@ -19,6 +19,8 @@ const SPAN = { w: 10, h: 5 };
 const MIN_PLOT_PX = 44;
 /** RULE-4's double-tap window: a tap that selects later than this was held back to wait for a second one. */
 const DOUBLE_TAP_MS = 300;
+/** A selection that hasn't shown by now never will: the probe gives up rather than hang. */
+const SELECT_GIVE_UP_MS = 2_000;
 /** T-AC-9 watches the wire from the first tap to this long after the second. */
 const QUIET_MS = 400;
 const OWN = /owned by player 1\b/;
@@ -27,13 +29,13 @@ const SEED = seedFrom(process.env.MULE_E2E_SEED);
 const { server, base } = await startServer({ maxMonths: 1, phaseScale: PHASE_SCALE, seed: () => SEED });
 const browser = await launch();
 const errors: string[] = [];
-const intents: number[] = [];
+let intents = 0;
 try {
   const phone = await (await browser.newContext(PHONE)).newPage();
   phone.on('pageerror', (e) => errors.push(e.message));
   phone.on('websocket', (ws) =>
     ws.on('framesent', ({ payload }) => {
-      if (typeof payload === 'string' && (JSON.parse(payload) as { t?: string }).t === 'intent') intents.push(Date.now());
+      if (typeof payload === 'string' && (JSON.parse(payload) as { t?: string }).t === 'intent') intents++;
     }),
   );
 
@@ -50,7 +52,7 @@ try {
   await grant.getByRole('button', { name: /CLAIM/ }).waitFor({ timeout: 5_000 });
   await checkNoZoomWithoutLand(phone, grant);
   const claimed = await claimACompactBlock(phone, grant);
-  check(intents.length >= GAME.claimsPerGrant, `T-AC-9: the frame watcher saw the claims go out, ${intents.length} intents`);
+  check(intents >= GAME.claimsPerGrant, `T-AC-9: the frame watcher saw the claims go out, ${intents} intents`);
 
   const dev = phone.locator('[data-phase=development]');
   await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: REACH_DEVELOPMENT_MS });
@@ -64,12 +66,16 @@ try {
   await checkASingleTapSelectsAtOnce(phone, dev, whole);
 
   const target = claimed[0]!;
-  const sent = intents.length;
+  const sent = intents;
   await doubleTap(phone, tilePlot(dev, target));
   await phone.waitForTimeout(QUIET_MS);
-  check(intents.length === sent, `T-AC-9: a double-tap sends no intent, sent ${intents.length - sent}`);
+  check(intents === sent, `T-AC-9: a double-tap sends no intent, sent ${intents - sent}`);
   await checkReadout(dev, target, 'T-AC-9: the double-tap selects the tapped plot');
   const zoomed = await checkZoomedToOwnLand(phone, dev, 'B-AC-2: after a double-tap');
+
+  await dev.getByRole('button', { name: 'Store', exact: true }).tap({ timeout: 2_000 });
+  await dev.getByRole('button', { name: 'Walk out to the map' }).tap({ timeout: 2_000 });
+  await checkZoomedToOwnLand(phone, dev, 'B-AC-2: zoom survives a store trip:');
 
   await doubleTap(phone, tilePlot(dev, target));
   await checkWholeMap(phone, dev, 'B-AC-2: after a second double-tap');
@@ -154,10 +160,11 @@ async function checkASingleTapSelectsAtOnce(phone: Page, dev: Locator, whole: nu
   const index = labels.flatMap((label, i) => (/, free\b/.test(label) ? [i] : [])).at(-1) ?? -1;
   check(index >= 0, 'T-AC-9: the map has a free plot to tap');
   const target = { x: index % MAP_W, y: Math.floor(index / MAP_W) };
-  const sent = intents.length;
+  const sent = intents;
   const lag = dev.evaluate(
-    (el, name) =>
+    (el, { name, giveUpMs }) =>
       new Promise<number>((resolve) => {
+        setTimeout(() => resolve(Infinity), giveUpMs);
         let up = 0;
         document.addEventListener('pointerup', () => (up = performance.now()), { capture: true, once: true });
         // No named functions in here: tsx wraps them with a `__name` helper the page lacks.
@@ -169,14 +176,14 @@ async function checkASingleTapSelectsAtOnce(phone: Page, dev: Locator, whole: nu
         });
         watch.observe(el, { subtree: true, childList: true, characterData: true });
       }),
-    plotName(target),
+    { name: plotName(target), giveUpMs: SELECT_GIVE_UP_MS },
   );
   const tile = tilePlot(dev, target);
   await tile.tap({ timeout: 2_000 });
   const ms = await lag;
   check(ms < DOUBLE_TAP_MS, `T-AC-9: a single tap selects at once, it took ${ms.toFixed(0)} ms`);
   await phone.waitForTimeout(QUIET_MS);
-  check(intents.length === sent, `T-AC-9: a single tap sends no intent, sent ${intents.length - sent}`);
+  check(intents === sent, `T-AC-9: a single tap sends no intent, sent ${intents - sent}`);
   const now = await widths(dev.getByRole('button', { name: OWN }));
   check(now.every((w, i) => Math.abs(w - whole[i]!) < 0.5), `T-AC-9: a single tap doesn't zoom, plots ${whole.join(', ')} → ${now.join(', ')}`);
 }

@@ -45,24 +45,31 @@ export interface ZoomMapProps {
   slot: Slot;
   /** The map, drawn at the viewport's full width. */
   children: ReactNode;
+  /** Set both to keep the zoom outside, e.g. across a screen that unmounts the map; otherwise it is kept here. */
+  zoomed?: boolean;
+  onZoomedChange?(zoomed: boolean): void;
 }
 
 /**
  * Wraps a map so a double-tap on it, or the corner button, toggles between the whole colony and your own land.
  * Taps still reach the map at once; with no land of your own there is no button and a double-tap does nothing.
  */
-export function ZoomMap({ width, height, tiles, slot, children }: ZoomMapProps) {
+export function ZoomMap({ width, height, tiles, slot, children, zoomed: held, onZoomedChange }: ZoomMapProps) {
   const box = zoomBox(tiles, width, height, slot);
-  const [zoomed, setZoomed] = useState(false);
+  const [kept, setKept] = useState(false);
+  const zoomed = (held ?? kept) && box !== null;
+  const toggle = () => {
+    setKept(!zoomed);
+    onZoomedChange?.(!zoomed);
+  };
   const last = useRef<{ t: number; x: number; y: number } | null>(null);
-  if (zoomed && !box) setZoomed(false);
 
   const onPointerUp = (e: PointerEvent) => {
     const prev = last.current;
     const near = prev && e.timeStamp - prev.t < DOUBLE_TAP_MS && Math.hypot(e.clientX - prev.x, e.clientY - prev.y) < DOUBLE_TAP_SLOP;
     if (near) {
       last.current = null;
-      if (box) setZoomed((z) => !z);
+      if (box) toggle();
     } else {
       last.current = { t: e.timeStamp, x: e.clientX, y: e.clientY };
     }
@@ -70,9 +77,9 @@ export function ZoomMap({ width, height, tiles, slot, children }: ZoomMapProps) 
 
   const on = zoomed && box;
   return (
-    <div className="relative overflow-hidden rounded-panel" data-testid="map-viewport">
+    <div className="relative touch-manipulation overflow-hidden rounded-panel" data-testid="map-viewport">
       <div
-        className="origin-top-left touch-manipulation transition-transform duration-300 ease-out"
+        className="origin-top-left transition-transform duration-300 ease-out"
         style={on ? { transform: `scale(${on.scale}) translate(${(-on.x / width) * 100}%, ${(-on.y / height) * 100}%)` } : undefined}
         onPointerUp={onPointerUp}
         data-testid="map"
@@ -83,7 +90,7 @@ export function ZoomMap({ width, height, tiles, slot, children }: ZoomMapProps) 
       {box && (
         <button
           type="button"
-          onClick={() => setZoomed((z) => !z)}
+          onClick={toggle}
           aria-pressed={zoomed}
           aria-label={zoomed ? 'Show the whole colony' : 'Zoom to your land'}
           className="absolute right-1.5 top-1.5 flex size-11 items-center justify-center rounded-control border border-holo-line bg-panel/85 text-ink shadow-glow backdrop-blur-sm hover:border-holo"
