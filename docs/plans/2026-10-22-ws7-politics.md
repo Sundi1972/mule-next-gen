@@ -14,6 +14,8 @@ This plan covers slice 1 only. Each later slice (D1: council laws, deal cards an
 | P-2 [spec §0] | players who cooperate or scheme; solo players | binding pacts, visible trust | UBER-AC-3 | slice 3 (D1 order, Heiko 2026-10-22) |
 | P-3 [spec §0] | risk-takers; the Sheriff | secret sabotage and getting caught | UBER-AC-4 | slice 4 (D1 order) |
 
+<!-- plan-check limitation: the script matches goal rows by `G-n`; this lane's goals are `P-n` so they never read as Mission goals (Mission G-4 is the one they serve; WS6 did the same with UX-n). The goals table's delivery column was checked by hand: P-1 first delivered in PR-1+PR-2, P-2/P-3 in later slices by Heiko's D1. -->
+
 P-2 and P-3 come after PR-2 on purpose: Heiko ruled the slice order (D1, votes first). UBER-AC-2 lands in PR-4 because its screens need WS6's hub mock, which is not drawn yet (spec §1 C11 depends_on); PR-1 to PR-3 are each usable on their own: PR-1+PR-2 give Heiko the sim row, PR-3 makes politics playable over the wire for any client.
 
 **Non-goals (spec §0), lifted verbatim. A task serving one is cut:**
@@ -141,7 +143,7 @@ Every handoff carries the standing authority line, verbatim:
 
 **Depends on:** 1.3 · **ACs verified:** T-AC-1, T-AC-2, B-AC-3, B-AC-4 · **Spec:** §1 C3, §2 RULE-1, RULE-2, RULE-3
 
-- [ ] **Step 1: Write failing tests**, named after the ACs:
+- [ ] **Step 1: Write failing tests T-AC-1, T-AC-2, B-AC-3, B-AC-4 and RULE-1/RULE-2**, named after the ACs:
   - `T-AC-1: the election steps nominate → ballot → reveal → over on its clocks`, and `T-AC-1: a stage ends early when every player is Done`, and `T-AC-1: a vote after the ballot closed throws RuleError`.
   - `RULE-1 row 2: no contested office skips the ballot`.
   - `RULE-2` one test per row (closed, two terms in a row, switching office, withdraw).
@@ -298,6 +300,7 @@ Every handoff carries the standing authority line, verbatim:
 ### Gate: end of slice 1 (before the lane PR)
 
 - [ ] WS1's sim rows on both seed sets (1-40, 101-140): row 0 equals trunk byte for byte (T-AC-4); row 1 checks identical to row 0; rows 2 and 3 checks reported. UBER-AC-1 line by line: elections in months 1/4/7/10 fill both offices in every game; the Governor sets a tax every month; the law line reads "slice 2" (UBER-AC-1's law clause is proven in slice 2).
+- [ ] T-AC-4 and T-AC-7 green in WS1's C10 PR (row 0 byte-identical; observe() and cloneForSim never expose or share another seat's ballot); WS7 reviews that PR
 - [ ] Money rows (2, 3) and the term score sent to Heiko through the PM; his OK recorded in SEAMS
 - [ ] `pnpm typecheck && pnpm test` and CI `e2e` green on `ws7-politics`
 - [ ] Spec §8 updated with any amendment made in execution
