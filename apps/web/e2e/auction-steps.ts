@@ -62,6 +62,7 @@ export const landAuction: NonNullable<AuctionSteps['landAuction']> = async ({ ph
     const [mine, shown] = await Promise.all([resultOn(phone, 'result', 0.1), resultOn(tv, 'tv-result', 0.1)]);
     check(rang(mine.kind) && rang(shown.kind), `month ${month}: lot ${lot.number} ends sold or kept, phone ${mine.kind}, TV ${shown.kind}`);
     if (colony) console.log(`auction steps: B-AC-8, month ${month} opened with the colony's lot, ${shown.kind}`);
+    if (colony && listing === null) check(lot.count === 1, `month ${month}: with nothing listed the colony's lot is the only one, got ${lot.count}`);
     if (!colony || listing === null) return;
     await Promise.all([phone.getByTestId('result').waitFor({ state: 'hidden', timeout: within(0.1, LOTS.resultMs) }), tv.getByTestId('tv-result').waitFor({ state: 'hidden', timeout: within(0.1, LOTS.resultMs) })]);
   }
@@ -129,6 +130,7 @@ async function playTheLandAuction(browser: Browser, base: string): Promise<void>
   // Month 1: everyone claims (Brix and Lena list theirs in month 2), so the grant ends early. Nothing is listed, so only the colony's lot can follow.
   await everyone(phones, (p) => readyInPlanning(p.page));
   await everyone(phones, (p) => claimPlots(p.page));
+  await brix.page.locator('[data-phase]:not([data-phase=landGrant])').waitFor({ timeout: within(SCALE, LOTS.introMs) });
   if ((await brix.page.locator('[data-phase=landAuction]').count()) > 0) await followTheColonyLot(phones, tv, 1);
   await everyone(phones, (p) => goToThePub(p.page));
   await everyone(phones, (p) => pressDoneThroughTheAuction(p.page));
