@@ -132,6 +132,7 @@ describe('T-AC-6: score parts add up and score() is unchanged', () => {
         const parts = scoreParts(state, p.id);
         expect(score(state, p.id)).toBe(parts.total);
         expect(parts.total).toBe(todaysScore(state, p.id));
+        for (const line of Object.values(parts)) expect(Number.isInteger(line)).toBe(true);
         expect(parts.money + parts.goods + parts.land + parts.muleValue).toBe(parts.total + parts.cut);
         if (!colonyFailed(state)) expect(parts.cut).toBe(0);
       }
