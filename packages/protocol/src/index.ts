@@ -97,6 +97,8 @@ export interface WalkerView {
   at: number;
   dir: -1 | 0 | 1;
   done: boolean;
+  /** Their stock of the good up now, live as units trade; public like the status table. */
+  units: number;
 }
 
 /** Units changing hands right now: between two players, or with the store or the ship ('store', 'ship'). */
@@ -122,6 +124,8 @@ export interface AuctionView {
   /** What the store pays and charges, or null while it doesn't trade at that line. */
   storeBuys: number | null;
   storeSells: number | null;
+  /** Units the store will sell of this good: its stock less the colonists' Food and Water reserve. */
+  storeForSale: number;
   /** What the export ship pays for the next unit, while it is in port and wants this good. */
   shipPays: number | null;
   /** The board's price range: it grows when a walker goes past it. */
@@ -155,7 +159,7 @@ export interface ListingView {
 }
 
 /** A buyer on a lot's board. Everyone but the seller, if they can pay the minimum (and, for a MULE, has no MULE in hand). */
-export interface LotWalkerView extends WalkerView {
+export interface LotWalkerView extends Omit<WalkerView, 'units'> {
   /** Why a player stands aside, for the names along the bottom. */
   aside?: 'money' | 'mule';
 }
