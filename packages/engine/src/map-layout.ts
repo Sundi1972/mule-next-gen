@@ -1,4 +1,5 @@
 import { MAP, mapSize, sizeBand, type ShareTerrain } from './config.js';
+import { regionCap, shareBand } from './map-rules.js';
 import type { Rng } from './rng.js';
 import type { Terrain } from './types.js';
 
@@ -30,7 +31,7 @@ type Band = { lo: number; hi: number };
 type Cells = (Terrain | null)[];
 
 const SHARE_TERRAINS = Object.keys(MAP.shares) as ShareTerrain[];
-// The checker compares fractions with this slack; the bands and the cap must round the same way.
+// A share exactly on S3's ceiling must not lose a plot to float rounding.
 const EPS = 1e-9;
 
 /** Lays out a map's river, terrain shares and regions (spec RULE-2 stages 1-3). Pure: every choice comes from `rng`. */
@@ -155,22 +156,14 @@ function zeroBudget(): Budget {
 
 /** The plot counts S1-S3 allow each terrain on this much free land, never under one whole region. */
 function shareBands(freeLand: number): Record<ShareTerrain, Band> {
-  const n = freeLand;
-  const top = Math.floor(Math.min(MAP.layout.shareCap, MAP.maxTerrainShare) * n + EPS);
+  // Below S3's ceiling by MAP.layout.shareCap, and never under a whole region, whatever the shares become.
+  const top = Math.floor(Math.min(MAP.layout.shareCap, MAP.maxTerrainShare) * freeLand + EPS);
   return Object.fromEntries(
     SHARE_TERRAINS.map((t) => {
-      const target = MAP.shares[t];
-      const tolerance = target * MAP.jitter + 1 / n;
-      const lo = Math.max(MAP.minRegion, Math.ceil((target - tolerance) * n - EPS));
-      const hi = Math.min(top, Math.floor((target + tolerance) * n + EPS));
-      return [t, { lo, hi }];
+      const band = shareBand(t, freeLand);
+      return [t, { lo: Math.max(MAP.minRegion, band.min), hi: Math.min(top, band.max) }];
     }),
   ) as Record<ShareTerrain, Band>;
-}
-
-/** S5's cap on one region, rounded exactly as the checker rounds it. */
-function regionCap(freeLand: number): number {
-  return Math.ceil(MAP.maxRegionShare * freeLand - EPS);
 }
 
 /** Each terrain's count split into regions of minRegion to cap plots, about avgRegion each. */
