@@ -465,6 +465,9 @@ The machine-readable proposal is `design/mocks/land-auction/src/proto.ts`; the m
 | `MuleView.landAuction: LandAuctionView \| null` | ADDED | no | C6 |
 | `Phase` + `'landAuction'` (engine, mirrored in the view) | MODIFIED | for `Record<Phase,…>` users: derive.ts PHASE_NAME (E1), mule-game.ts PHASE_MS | C2 |
 | `GameState.listings`, `GameState.landAuction` (engine) | ADDED | no | C1, C3 |
+| engine `LotItem` = `{kind:'plot',x,y} \| {kind:'mule',x,y,outfit:Outfit}` (the view's union); `list()` snapshots the outfit (AM-2) | ADDED | no | C1 |
+| engine `list(state, seat, req: ListRequest)`, `ListRequest = {item:{kind,x,y}, minimum, unsold}`: the `list` intent's fields, passed straight through (AM-2) | ADDED | no | C1 |
+| engine export `plotAt` from lots.ts, the one copy game.ts imports (AM-2) | ADDED | no | C1 |
 | `WalkBoard` `lines?` | ADDED | no | C12 (done) |
 
 Worked example: `ListingView` `{ id: 'l2', seller: 'brix', item: { kind: 'plot', x: 5, y: 3 }, minimum: 250, unsold: 'keep', storePays: 200 }`. `LandAuctionView` mid-walk: `design/mocks/land-auction/src/fixture.ts::WALK`.
@@ -540,6 +543,19 @@ folded    §0 non-goal narrowed to "three or four a month" · C5 numbers · C14,
 minimum   colonyPlotShare = storePlotShare's 2/3 of GAME.plotScore: the colony asks what the
           store would pay for land, so it never sells for less than land is worth to the store,
           and it moves with the score (WS1's reason for a share, not a number).
+
+AM-2 · 2026-10-21 · WS3 (engine review, Important 1) · during PR-1, before the server built on it
+
+target    §3 (engine LotItem, list(), plotAt)
+said      the engine's LotItem carries no outfit; the server reads tile.outfit (a session-1 decision)
+did       LotItem is the view's union {kind:'plot',x,y} | {kind:'mule',x,y,outfit}; list() snapshots
+          the outfit and resolve() uses lot.item.outfit. list() takes a ListRequest shaped like the
+          intent. plotAt moved into lots.ts and is exported, so game.ts and lots.ts share one copy.
+because   resolve() clears tile.outfit when the store buys a MULE back, while the lot is still up
+          in the result stage, so the server could no longer fill ListingView.item.outfit. The
+          outfit needs one owner, and the engine is it (the server's listedOutfits map goes).
+goal      G-1 unchanged; no screen or rule changes
+folded    §3 rows · engine fix round 1 (bfd0942) · the server fix round deletes listedOutfits
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`

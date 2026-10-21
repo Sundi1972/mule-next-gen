@@ -14,7 +14,7 @@
 AM-1 (the colony's occasional plot, spec §8) serves G-1 and G-2 more completely. It rides PR-3, after the core, as the PM ruled.
 
 **Non-goals (spec §0), lifted verbatim. A task serving one is cut:**
-- Colony plots under the hammer (00-concept's "three or four more each month"). The lots are shaped so the colony can be a seller, and `LOTS.colonyPlots` stays 0. Switching it on is a later, measured change agreed with WS1, because it moves G-1's land supply. *Needs its own spec.*
+- 00-concept's "three or four more each month" colony plots. Only the one occasional colony plot of AM-1 (spec §8) is in scope; more is a later, measured change agreed with WS1, because it moves G-1's land supply. *Needs its own spec.*
 - AI seats listing their own lots: that needs WS1's sell-side value.
 - Direct trades between players, deal cards, and selling plot upgrades on their own.
 - Balance numbers outside the LOTS block.
@@ -84,7 +84,13 @@ Every handoff carries the standing authority line, verbatim:
 ### Waves
 
 - **Wave 1 = PR-1.** Tasks 1.1→1.6 run in order, since the engine is one module chain. After Task 1.6 freezes the protocol, Tasks 1.9 and 1.10 (phone, TV) can start. **Correction found in execution:** Task 1.7 (server) depends on Task 1.4, not 1.6, because it calls lots.ts's list/unlist and stepLandAuction. Task 1.8 (Sell tab) depends on Task 1.2 (the storePaysFor export). Once 1.4 is done, 1.7 and 1.8 run in parallel. They're safe together because their files are disjoint and both consume the frozen shape. Task 1.11 (e2e) runs last, after every branch is merged into ws3-pr1-slice.
-- **Status (2026-10-21, end of session 1):** 1.1, 1.6, 1.2, 1.3, 1.4, 1.5 DONE (ws3-pr1-slice @ cc86b4a), reviewed: pending. 1.9, 1.10 DONE (ws3-pr1-web), reviewed: fix round 1 in progress. 1.7, 1.8 in progress (ws3-pr1-server, ws3-pr1-sell). 1.11 not started.
+- **Status (2026-10-21, session 2):**
+  - **Engine:** 1.1–1.6 DONE at cc86b4a; ae90cff exports `standing()` and adds `storePaysAt`. Review: with fixes → fix round 1 DONE at bfd0942 (branch ws3-pr1-engfix); scoped re-review: all findings ADDRESSED, M12/M15/M18 now die.
+  - **Screens:** 1.9, 1.10 COMPLETE at f21d181 (branch ws3-pr1-web); re-review: everything ADDRESSED.
+  - **Server:** 1.7 DONE at 7025e94 (branch ws3-pr1-server). Review: with fixes (a dropped phone holding Up keeps bidding; six surviving mutants). The fix round also deletes `listedOutfits` (the engine's `LotItem` carries the outfit, spec §8 AM-2), calls `list()` with a `ListRequest`, and puts `phaseScale` on the land auction's dt line.
+  - **Not started:** 1.8 (re-dispatch from ae90cff or later), 1.11.
+  - **Merge rule (PM, session 2):** sub-PR merges into ws3-auctions go to the PM, because Heiko hasn't typed that rule into this session.
+  - **Standing ruling (Heiko via the PM):** no handovers; this session carries PR-1, PR-2 and PR-3.
 - **Wave 2 = PR-2.** It starts when PR-1 is merged into `ws3-auctions`. **Freeze point:** the stubs for `plotValue`/`muleValue` have WS1's announced signatures `(obs, mind, index)` / `(obs, mind)` returning credits (WS1, 2026-10-21), so WS1's export later swaps in with one line.
 - **Wave 3 = PR-3** (spec §8 AM-1). It starts when PR-2 is merged into `ws3-auctions`, because the sim needs the lot hand to play a colony lot. C14 and C15 ship together, so the sim is never handed a phase it can't play.
 - No migration slot: there are no migrations (spec §5).
@@ -105,7 +111,7 @@ Every handoff carries the standing authority line, verbatim:
 - Modify: `apps/web/src/game/derive.ts::PHASE_NAME` (E1: `landAuction: 'Land auction'`)
 - Modify: `apps/server/src/mule-game.ts::PHASE_MS` (exclude `'landAuction'` from its key type, as `'auction'` is)
 
-- [ ] **Step 1: Add the LOTS block per spec §1 C5.** Values: perPlayer 2, maxLotsPerMonth 4, introMs 3000, walkMs 12000, resultMs 2500, boardLow 0.7, boardHigh 2, storePlotShare 2/3, storeMuleShare 0.5, colonyPlots 0. Each gets a one-line doc comment in the WALK block's style.
+- [ ] **Step 1: Add the LOTS block per spec §1 C5.** Values: perPlayer 2, maxLotsPerMonth 4, introMs 3000, walkMs 12000, resultMs 2500, boardLow 0.7, boardHigh 2, storePlotShare 2/3, storeMuleShare 0.5. (AM-1 superseded the planned `colonyPlots 0`; PR-3 Task 3.1 adds colonyPlotChance and colonyPlotShare.) Each gets a one-line doc comment in the WALK block's style.
 - [ ] **Step 2: Add the types per spec §3 and §2.** Shape them on `design/mocks/land-auction/src/proto.ts` (the view types), but as engine state: `LandAuction extends WalkBoard` with `queue`, `lot`, `stage: 'intro'|'walk'|'result'|'over'`, `done`, `result`, `number`, `count`.
 - [ ] **Step 3: Apply E1 and the PHASE_MS key fix in the same commit**
 - [ ] **Step 4: Run** `pnpm typecheck`. Expected: every package `Done`, exit 0.
@@ -255,6 +261,8 @@ Every handoff carries the standing authority line, verbatim:
 
 **Files:**
 - Create: `apps/web/e2e/auction-steps.ts` (exported step functions for WS4's smoke.ts hooks; when run directly it plays the whole flow, following the `packages/ai/src/sim.ts` pattern `if (process.argv[1]?.endsWith(...)) main()`)
+
+**Hooks contract (CT-3, WS4):** export the steps as WS4's `AuctionSteps` type from `apps/web/e2e/harness.ts` (`import type`, never from smoke.ts). `landAuction(ctx, month)` runs right after each month's land grant (months 1 and 2). `listedSale(ctx)` runs in month 2 planning, before "I'm ready", returns within ~2 s and leaves the phone on planning. No hook presses "I'm ready", the pub or Done, and every server wait goes through `phaseScale`. Also hold Up through one bell, then bid on lot 2 (the web review's deferred case).
 
 - [ ] **Step 1: Implement C13: write the browser flow `UBER-AC-1: list, bid on two phones, sold at the bell` (also proves B-AC-1 and B-AC-2 in the browser).** Use the harness's `startServer`, `launch`, `PHONE` and `TV`: the test owns its server on a free port, never the rig (CLAUDE.md, ephemeral environments). Three phone contexts join one room by code, plus a TV. The seller claims a plot in month 1 and lists it in month 2 planning (Sell tab: `tab-sell`, then a map plot, then `list`). Two other phones hold Up (`hold-up`) to different heights. After the bell, assert on the phones (`result` data-kind sold, the buyer's `money` dropped by the bid) and on the TV (`tv-result`). `B-AC-1`: the TV and the other phones show the listing during planning (`listing-<id>`).
   Altitude: promise, in a real browser against the real server (proving-acs, "Front to back").
