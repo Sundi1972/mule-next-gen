@@ -18,7 +18,7 @@ export interface BrainService {
   deciderFor(seat: BrainSeat): Decider | null;
   /** The seat's onDecision callback: passes its lines to `say`: at most BRAIN.linesPerMonth a month and one a phase. Never throws. See RULE-2. */
   chatter(seat: BrainSeat, say: (line: string) => void): (record: DecisionRecord) => void;
-  /** Closes the game; a Smart brain also writes its total line. A second call does nothing. */
+  /** Closes the game; a Smart brain that built a decider also writes its total line. A second call does nothing. */
   finish(): void;
 }
 
