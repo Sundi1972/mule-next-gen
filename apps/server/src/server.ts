@@ -31,13 +31,14 @@ export interface MuleServer {
 /**
  * The game server: an HTTP server for the web client and `POST /rooms`, and a
  * WebSocket endpoint at `/ws` where phones and boards talk to their room.
+ * Games play without politics unless `politics` is set: it stays dark until its screens ship.
  */
 export function createMuleServer(
-  options: { staticDir?: string; seed?: () => number; maxMonths?: number; phaseScale?: number } = {},
+  options: { staticDir?: string; seed?: () => number; maxMonths?: number; phaseScale?: number; politics?: boolean } = {},
 ): MuleServer {
   const seed = options.seed ?? (() => Math.floor(Math.random() * 2 ** 31));
   const registry = new RoomRegistry<MuleIntent, MuleView>({
-    createGame: (ctx) => new MuleGame(ctx, seed(), { maxMonths: options.maxMonths, phaseScale: options.phaseScale }),
+    createGame: (ctx) => new MuleGame(ctx, seed(), { maxMonths: options.maxMonths, phaseScale: options.phaseScale, politics: options.politics ?? false }),
     aiNames: AI_NAMES,
     emotes: EMOTES,
     picks: SPECIES,
@@ -172,6 +173,8 @@ function parse(text: string): ClientEnvelope<MuleIntent> | null {
   }
 }
 
+const isOffice = (x: unknown) => x === 'governor' || x === 'sheriff';
+
 function isIntent(v: unknown): v is MuleIntent {
   if (typeof v !== 'object' || v === null) return false;
   const i = v as Record<string, unknown>;
@@ -200,6 +203,12 @@ function isIntent(v: unknown): v is MuleIntent {
     }
     case 'unlist':
       return typeof i.id === 'string';
+    case 'run':
+      return i.office === null || isOffice(i.office);
+    case 'vote':
+      return isOffice(i.office) && (i.candidate === null || typeof i.candidate === 'string');
+    case 'setTax':
+      return int(i.percent);
     default:
       return false;
   }
