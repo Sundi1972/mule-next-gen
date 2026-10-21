@@ -188,6 +188,7 @@ describe('RULE-6: cavern collapse', () => {
     };
   }
 
+  // Thousands of production runs, to measure the rate; past vitest's 5 s default on a CI runner.
   it('T-AC-6: a cavern’s collapse is the same on replay, and comes about 6 times in 100', () => {
     const { base, caverns } = cavernGame();
     let produced = 0;
@@ -244,7 +245,7 @@ describe('RULE-6: cavern collapse', () => {
       expect(month.caverns[1]!.made, `mined on 0, seed ${seed}`).toBe(0);
       expect(month.caverns.map((c) => c.collapsed), `farmed and mined on 0, seed ${seed}`).toEqual([false, false]);
     }
-  });
+  }, 30_000);
 });
 
 describe('RULE-6: a plot without a special field', () => {
