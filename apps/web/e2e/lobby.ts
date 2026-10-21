@@ -6,7 +6,7 @@
 import { COLOUR_NAME, SPECIES, type Slot } from '@mule/ui';
 import type { BrowserContextOptions, Locator, Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
-import { check, launch, PHONE, startServer, TV } from './harness';
+import { check, claimAPlot, launch, PHONE, startServer, TV } from './harness';
 
 const SHOWN_MS = 5_000;
 /** Longer than the client's first reconnect pause, so a phone that tried to come back would be seen. */
@@ -277,11 +277,7 @@ async function colourIntoTheGame(): Promise<void> {
   colourRoom(await shows(roster.locator(inRose)), `B-AC-8: the TV's game roster draws Heiko in ${COLOUR_NAME[rose]}`);
   const grant = heiko.locator('[data-phase=landGrant]');
   await grant.waitFor({ timeout: within(PHASE_MS.planning) });
-  try {
-    await grant.getByRole('button', { name: /CLAIM/ }).click({ timeout: within(PHASE_MS.landGrant) });
-  } catch {
-    check(false, 'B-AC-8: phone 1 claims a plot in the land grant');
-  }
+  await claimAPlot(heiko, within(PHASE_MS.landGrant), 'B-AC-8: phone 1 claims a plot in the land grant');
   const development = tv.locator('[data-phase=development]');
   await development.waitFor({ timeout: within(PHASE_MS.landGrant + PHASE_MS.development) + LAND_AUCTION_ALLOWANCE_MS });
   colourRoom(await shows(heikoOn(development.locator('li')).locator(inRose)), `B-AC-8: the TV's development roster draws Heiko in ${COLOUR_NAME[rose]}`);
