@@ -8,7 +8,7 @@ import type { MuleIntent, MuleView } from '@mule/protocol';
 import { Room, TableError, type ChatMessage, type ClientEnvelope, type Connection, type GameContext, type ServerEnvelope } from '@tabletop/core';
 import { createBrain, type BrainService } from '../src/brain/index.js';
 import { AI_NAMES, MuleGame } from '../src/mule-game.js';
-import { fakeSdk, KEY, promptOf, sdkMessage, type FakeSdk, type SdkModuleFake, type SdkParams } from './brain-fakes.js';
+import { fakeSdk, KEY, promptOf, readLedger, sdkMessage, type FakeSdk, type SdkModuleFake, type SdkParams } from './brain-fakes.js';
 
 /** The SDK module's constructor: records its options and builds nothing, so no network and no credential chain. */
 const sdkModule = vi.hoisted((): SdkModuleFake => ({ built: [], create: null }));
@@ -20,11 +20,11 @@ const STEP_MS = 500;
 /** Longer than any one-month game at phaseScale 0.1. */
 const GAME_LIMIT_MS = 30 * 60_000;
 
-/** A phone or the TV: everything the room sent it, each chat line with the month it arrived in. */
+/** A phone or the TV: everything the room sent it, each chat line with the month and phase it arrived in. */
 interface Screen {
   conn: Connection<MuleView>;
   from: { seatId: string | null };
-  chat: Array<ChatMessage & { month: number }>;
+  chat: Array<ChatMessage & { month: number; phase: string }>;
 }
 
 interface TableOptions {
@@ -33,6 +33,8 @@ interface TableOptions {
   /** Absent: MuleGame's default brain, from the environment. */
   brain?: BrainService;
   maxMonths?: number;
+  /** Default 0.1. At 1 the AI hands have the phase's full time, as in a real game. */
+  phaseScale?: number;
   sayThrows?: boolean;
 }
 
@@ -67,21 +69,24 @@ function table(options: TableOptions) {
             },
           }
         : ctx;
-      game = new MuleGame(context, 7, { maxMonths: options.maxMonths ?? 1, phaseScale: 0.1, ...(options.brain ? { brain: options.brain } : {}) });
+      game = new MuleGame(context, 7, { maxMonths: options.maxMonths ?? 1, phaseScale: options.phaseScale ?? 0.1, ...(options.brain ? { brain: options.brain } : {}) });
       return game;
     },
     aiNames: AI_NAMES,
     isUserError: (err) => err instanceof RuleError || err instanceof TableError,
   });
   rooms.push(room);
-  const month = () => game?.viewFor(null).month ?? 0;
+  const when = () => {
+    const view = game?.viewFor(null);
+    return { month: view?.month ?? 0, phase: view?.phase ?? 'lobby' };
+  };
   const screen = (): Screen => {
     const s: Screen = {
       from: { seatId: null },
       chat: [],
       conn: {
         send: (msg: ServerEnvelope<MuleView>) => {
-          if (msg.t === 'chat') s.chat.push({ ...msg.message, month: month() });
+          if (msg.t === 'chat') s.chat.push({ ...msg.message, ...when() });
         },
       },
     };
@@ -146,6 +151,13 @@ function watched(inner: BrainService) {
 /** A Smart brain on the key, whose client is `sdk`, logging to the test's temp dir. */
 const smart = (sdk: FakeSdk) => createBrain({ gameId: 'g-table', env: KEY, logPath: path.join(dir, 'costs.jsonl'), sdkFactory: () => sdk });
 
+/** How often each key occurs. */
+function tally(keys: string[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const k of keys) counts.set(k, (counts.get(k) ?? 0) + 1);
+  return counts;
+}
+
 /** The model's reply, as the structured output the client asks for. */
 const reply = (option: string, line: string) => sdkMessage(JSON.stringify({ option, line }));
 
@@ -165,8 +177,9 @@ function asked(params: SdkParams) {
 }
 
 describe('the server test setup', () => {
-  // trace-allow: positive control for the test setup that clears the key (plan Task 3.3 SAFETY), not a product promise
-  it('builds no client from the shell and logs to a temp file; only a key a test stubs builds one', () => {
+  it('INV-test-key: the shell\'s key and auth token are cleared and the ledger logs to a temp file; only a key a test stubs builds a client', () => {
+    expect(process.env.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(process.env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
     const log = process.env.MULE_BRAIN_LOG ?? '';
     expect(log.startsWith(os.tmpdir())).toBe(true);
     expect(log.split(path.sep).join('/')).not.toContain('apps/server/data');
@@ -223,10 +236,10 @@ describe('the brain at the table', () => {
     for (const s of t.screens) expect(s.chat.filter((m) => m.from === baron.id).map((m) => m.text)).toEqual([top.line]);
   });
 
-  it('B-AC-2: a player\'s line is quoted in the AI\'s next prompt and its move is still on its shortlist', async () => {
+  it('B-AC-2: a player\'s line is quoted in the AI\'s next prompt, and the option it names there is the move applied on the board', async () => {
     const sdk = fakeSdk(() => reply('B', ''));
     const { brain, records } = watched(smart(sdk));
-    const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain });
+    const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain, phaseScale: 1 });
     const [heiko, mia] = t.phones;
     const [accountant, baron] = t.ais;
 
@@ -245,15 +258,27 @@ describe('the brain at the table', () => {
     expect(asked(nextFor(accountant!.name)!.params).talk).toContain('Mia: "psst, Accountant only"');
     expect(asked(nextFor(baron!.name)!.params).user).not.toContain('psst');
 
-    // The move each AI made on that prompt: the option the fake named, from that decision's own shortlist.
+    // The move each AI made on that prompt: option B as the prompt listed it, and that MULE the first it puts on the board.
+    const board = t.game().viewFor(null).tiles;
+    const firstInstall = new Map<string, { index: number; outfit: string | null }>();
+    const watchBoard = () =>
+      t.game().viewFor(null).tiles.forEach((tile, index) => {
+        if (tile.owner && tile.outfit !== board[index]!.outfit && !firstInstall.has(tile.owner)) firstInstall.set(tile.owner, { index, outfit: tile.outfit });
+      });
+    const bothInstalled = () => {
+      watchBoard();
+      return firstInstall.has(accountant!.id) && firstInstall.has(baron!.id);
+    };
+    expect(await t.runUntil(bothInstalled)).toBe(true);
+
     for (const ai of [accountant!, baron!]) {
-      const kind = asked(nextFor(ai.name)!.params).kind;
-      const settled = () => records.find((r) => r.seat === ai.id && r.kind === kind && r.kind !== 'land');
-      expect(await t.runUntil(() => !!settled())).toBe(true);
-      const move = settled()!;
-      expect(move.by).toBe('llm');
-      expect(move.shortlist.map((o) => o.key)).toContain(move.pick.key);
-      expect(move.pick.id).toBe('B');
+      const prompt = asked(nextFor(ai.name)!.params);
+      const move = records.find((r) => r.seat === ai.id && r.kind === prompt.kind && r.kind !== 'land')!;
+      expect(move, ai.name).toMatchObject({ by: 'llm', pick: { id: 'B' } });
+      expect(prompt.lines.some((l) => l.startsWith(`B. ${move.pick.label} — `)), ai.name).toBe(true);
+      // At seed 7 both AIs' next decision is a development one whose option B installs a MULE.
+      const [, outfit, index] = /^install:(\w+):(\d+)$/.exec(move.pick.key) ?? [];
+      expect(firstInstall.get(ai.id), `${ai.name} picked ${move.pick.key}`).toEqual({ index: Number(index), outfit });
     }
 
     expect(await t.toGameOver()).toBe(true);
@@ -263,7 +288,7 @@ describe('the brain at the table', () => {
   it.each([
     { name: 'env {}', env: {} as Record<string, string> },
     { name: 'only the auth token', env: { ANTHROPIC_AUTH_TOKEN: 'test-token-not-real' } },
-  ])('B-AC-3: with the key unset ($name) a full game reaches gameOver, every decision is by top, no client is built', async ({ env }) => {
+  ])('B-AC-3, T-AC-5: with the key unset ($name) a full game reaches gameOver on top picks with no client, and each AI says at most its lines a month, one a phase', async ({ env }) => {
     const { brain, records, finishes } = watched(createBrain({ gameId: 'g-classic', env, logPath: path.join(dir, 'costs.jsonl') }));
     const t = table({ humans: ['Heiko'], ais: 3, brain, maxMonths: 2 });
     expect(await t.toGameOver()).toBe(true);
@@ -275,15 +300,18 @@ describe('the brain at the table', () => {
     expect(finishes()).toBe(1);
     expect(fs.existsSync(path.join(dir, 'costs.jsonl'))).toBe(false);
 
-    // T-AC-5 at the table: each AI seat's lines in the room's chat, per month, never above the cap.
-    const said = new Map<string, number>();
-    for (const m of t.tv.chat) said.set(`${m.from} month ${m.month}`, (said.get(`${m.from} month ${m.month}`) ?? 0) + 1);
-    const spoken = new Map<string, number>();
-    for (const r of records) if (r.line) spoken.set(`${r.seat} month ${r.month}`, (spoken.get(`${r.seat} month ${r.month}`) ?? 0) + 1);
+    // T-AC-5 at the table: each AI seat's lines in the room's chat, never above the cap a month, never two in a phase.
+    const said = tally(t.tv.chat.map((m) => `${m.from} month ${m.month}`));
+    const saidInPhase = tally(t.tv.chat.map((m) => `${m.from} month ${m.month} ${m.phase}`));
+    const lined = records.filter((r) => r.line);
+    const spoken = tally(lined.map((r) => `${r.seat} month ${r.month}`));
+    const spokenInPhase = tally(lined.map((r) => `${r.seat} month ${r.month} ${r.phase}`));
     expect([...said.keys()].every((k) => t.ais.some((a) => k.startsWith(`${a.id} `)))).toBe(true);
     expect(Math.max(...said.values())).toBe(BRAIN.linesPerMonth);
     expect([...spoken.values()].some((n) => n > BRAIN.linesPerMonth), 'some seat had more lines than the cap to say').toBe(true);
+    expect([...spokenInPhase.values()].some((n) => n > 1), 'some seat had two lines to say in one phase').toBe(true);
     for (const [key, n] of said) expect(n, key).toBeLessThanOrEqual(BRAIN.linesPerMonth);
+    for (const [key, n] of saidInPhase) expect(n, key).toBe(1);
   });
 
   it('B-AC-3: MuleGame\'s default brain, with only the auth token in the environment, plays a full game and builds no client', async () => {
@@ -324,18 +352,41 @@ describe('the brain at the table', () => {
     expect(records.filter((r) => r.by === 'fallback').length).toBeGreaterThan(0);
     expect(t.tv.chat).toEqual([]);
     expect(finishes()).toBe(1);
+    expect(readLedger(path.join(dir, 'costs.jsonl')).filter((l) => l.type === 'game' && l.game === 'g-table')).toHaveLength(1);
   });
 
-  // trace-allow: AM-12 says heard must never throw; spec section 6 names no id for that failure surface
-  it('heard from an unknown speaker, or to an unknown seat, does not throw, before or after start', () => {
+  it('INV-heard: heard from an unknown speaker, or to an unknown seat, does not throw, before or after start; an AI\'s own line goes to the other AIs only', async () => {
     const lobby = new MuleGame({ now: () => 0, schedule: () => () => {}, changed: () => {} }, 7, { brain: createBrain({ gameId: 'g-lobby', env: {} }) });
     expect(() => lobby.heard?.('s9', 'hello')).not.toThrow();
 
-    const t = table({ humans: ['Heiko'], ais: 2, brain: createBrain({ gameId: 'g-heard', env: {} }) });
+    const sdk = fakeSdk(() => reply('A', ''));
+    const t = table({ humans: ['Heiko'], ais: 2, brain: smart(sdk) });
     const game = t.game();
     expect(typeof game.heard).toBe('function');
     expect(() => game.heard?.('s9', 'hello')).not.toThrow();
     expect(() => game.heard?.('s9', 'psst', 's8')).not.toThrow();
     expect(() => game.heard?.(t.humans[0]!.id, 'psst', 's8')).not.toThrow();
+
+    const [accountant, baron] = t.ais;
+    const before = sdk.requests.length;
+    game.heard?.(accountant!.id, 'my own words');
+    const nextFor = (name: string) => sdk.requests.slice(before).find((r) => asked(r.params).seat === name);
+    expect(await t.runUntil(() => !!nextFor(accountant!.name) && !!nextFor(baron!.name))).toBe(true);
+    expect(asked(nextFor(baron!.name)!.params).talk).toContain(`${accountant!.name}: "my own words"`);
+    expect(asked(nextFor(accountant!.name)!.params).user).not.toContain('my own words');
+  });
+
+  it('T-AC-4: two games made in the same clock tick from the same seed write their game lines to the ledger under different ids', async () => {
+    const ledger = path.join(dir, 'default-ledger.jsonl');
+    vi.stubEnv('MULE_BRAIN_LOG', ledger);
+    vi.stubEnv('ANTHROPIC_API_KEY', KEY.ANTHROPIC_API_KEY);
+    const first = table({ humans: ['Heiko'], ais: 1 });
+    const second = table({ humans: ['Heiko'], ais: 1 });
+    expect(await first.runUntil(() => first.finished() && second.finished())).toBe(true);
+
+    expect(sdkModule.built).toHaveLength(2);
+    const games = readLedger(ledger).filter((l) => l.type === 'game');
+    expect(games).toHaveLength(2);
+    expect(new Set(games.map((l) => l.game)).size).toBe(2);
   });
 });

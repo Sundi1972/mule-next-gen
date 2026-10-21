@@ -12,6 +12,7 @@ const CAP = BRAIN.linesPerMonth;
 interface Step {
   seat: string;
   month: number;
+  phase: string;
   line: string | null;
 }
 
@@ -24,17 +25,17 @@ interface Row {
   said: Array<[string, string]>;
 }
 
-/** `count` distinct lines for one seat in one month. */
+/** `count` distinct lines for one seat in one month, each in a phase of its own. */
 const linesOf = (seat: string, month: number, count: number, from = 1): Step[] =>
-  Array.from({ length: count }, (_, i) => ({ seat, month, line: `${seat} m${month} #${from + i}` }));
+  Array.from({ length: count }, (_, i) => ({ seat, month, phase: `phase ${from + i}`, line: `${seat} m${month} #${from + i}` }));
 const said = (steps: Step[]): Array<[string, string]> => steps.map((s) => [s.seat, s.line!]);
 
-const record = ({ seat, month, line }: Step): DecisionRecord => ({
+const record = ({ seat, month, phase, line }: Step): DecisionRecord => ({
   id: 0,
   seat,
   kind: 'develop',
   month,
-  phase: 'develop',
+  phase,
   topic: null,
   candidates: [],
   shortlist: [],
@@ -47,11 +48,21 @@ const record = ({ seat, month, line }: Step): DecisionRecord => ({
 const rows: Row[] = [
   (() => {
     const kept = linesOf('p0', 1, CAP);
-    return { name: 'a null line says nothing and uses no slot', steps: [{ seat: 'p0', month: 1, line: null }, ...kept], said: said(kept) };
+    return { name: 'a null line says nothing, uses no slot and leaves its phase open', steps: [{ seat: 'p0', month: 1, phase: 'phase 1', line: null }, ...kept], said: said(kept) };
   })(),
   (() => {
     const kept = linesOf('p0', 1, CAP);
-    return { name: 'the cap reached says nothing more', steps: [...kept, ...linesOf('p0', 1, 2, CAP + 1)], said: said(kept) };
+    return { name: 'each new phase in the same month says, up to the cap', steps: kept, said: said(kept) };
+  })(),
+  (() => {
+    const first = { seat: 'p0', month: 1, phase: 'phase 1', line: 'p0 first' };
+    const again = { seat: 'p0', month: 1, phase: 'phase 1', line: 'p0 again' };
+    const rest = linesOf('p0', 1, CAP - 1, 2);
+    return { name: 'a second line in the same phase says nothing and uses no slot', steps: [first, again, ...rest], said: said([first, ...rest]) };
+  })(),
+  (() => {
+    const kept = linesOf('p0', 1, CAP);
+    return { name: 'the month cap still binds across phases', steps: [...kept, ...linesOf('p0', 1, 2, CAP + 1)], said: said(kept) };
   })(),
   (() => {
     const first = linesOf('p0', 1, CAP);
@@ -63,23 +74,32 @@ const rows: Row[] = [
     };
   })(),
   (() => {
+    const at = (month: number, line: string): Step => ({ seat: 'p0', month, phase: 'auction', line });
+    return { name: 'the phase memory resets with the month', steps: [at(1, 'm1 a'), at(1, 'm1 b'), at(2, 'm2 a'), at(2, 'm2 b')], said: said([at(1, 'm1 a'), at(2, 'm2 a')]) };
+  })(),
+  (() => {
     const p0 = linesOf('p0', 1, CAP + 1);
     const p1 = linesOf('p1', 1, CAP + 1);
     return {
-      name: 'two seats are counted separately',
+      name: 'two seats are counted separately, in the same phases',
       steps: p0.flatMap((s, i) => [s, p1[i]!]),
       said: p0.slice(0, CAP).flatMap((s, i) => [...said([s]), ...said([p1[i]!])]),
     };
   })(),
   (() => {
     const kept = linesOf('p0', 1, CAP);
-    const blanks = ['', '   ', '\n\t '].map((line) => ({ seat: 'p0', month: 1, line }));
-    return { name: 'a blank line says nothing and uses no slot', steps: [...blanks, ...kept], said: said(kept) };
+    const blanks = ['', '   ', '\n\t '].map((line) => ({ seat: 'p0', month: 1, phase: 'phase 1', line }));
+    return { name: 'a blank line says nothing, uses no slot and leaves its phase open', steps: [...blanks, ...kept], said: said(kept) };
   })(),
   (() => {
-    const failing = { seat: 'p0', month: 1, line: 'p0 boom' };
+    const failing = { seat: 'p0', month: 1, phase: 'phase 1', line: 'p0 boom' };
     const rest = linesOf('p0', 1, CAP);
-    return { name: 'a throwing say does not escape and uses its slot', steps: [failing, ...rest], sayThrowsOn: failing.line, said: said([failing, ...rest.slice(0, CAP - 1)]) };
+    return {
+      name: 'a throwing say does not escape, uses its slot and marks its phase said',
+      steps: [failing, ...rest],
+      sayThrowsOn: failing.line,
+      said: said([failing, ...rest.slice(1)]),
+    };
   })(),
 ];
 
@@ -112,8 +132,8 @@ afterEach(() => {
 });
 
 describe('table chat throttle', () => {
-  it('T-AC-5: at most BRAIN.linesPerMonth lines per seat per month reach say', () => {
-    expect(CAP).toBeGreaterThan(0);
+  it('T-AC-5: at most BRAIN.linesPerMonth lines per seat per month, and one per phase, reach say', () => {
+    expect(CAP).toBeGreaterThan(1);
     for (const row of rows) {
       const service = createBrain({
         gameId: 'g-chat',
@@ -126,7 +146,7 @@ describe('table chat throttle', () => {
     }
   });
 
-  it('T-AC-5: the Classic brain (no key) keeps its template lines to the same cap', () => {
+  it('T-AC-5: the Classic brain (no key) keeps its template lines to the same cap and one per phase', () => {
     for (const row of rows) {
       const service = createBrain({ gameId: 'g-chat', env: {}, logPath: path.join(dir, 'costs.jsonl') });
       expect(service.deciderFor({ id: 'p0', persona: 'trader', level: 'rookie' }), 'Classic').toBeNull();
