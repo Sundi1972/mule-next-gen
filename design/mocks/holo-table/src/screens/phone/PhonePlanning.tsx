@@ -54,10 +54,10 @@ function Colony() {
   return (
     <div className="flex flex-col gap-4">
       <Panel title="Your stock" aside="Depot 10 each">
-        <div className="grid grid-cols-5 gap-2">
+        <div className="grid grid-cols-6 gap-1">
           {(Object.entries(MY_STOCK) as [Good, number][]).map(([good, n]) => (
-            <div key={good} className="flex flex-col items-start gap-1">
-              <GoodTag good={good} />
+            <div key={good} className="flex min-w-0 flex-col items-start gap-1">
+              <GoodTag good={good} className="gap-1 text-[11px]" />
               <span data-num className="font-mono text-xl font-bold">{n}</span>
             </div>
           ))}

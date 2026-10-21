@@ -25,18 +25,18 @@ export function TvDevelop() {
         <HoloMap width={MAP_W} height={MAP_H} tiles={TILES} avatars={avatars} showOutput density="tv" hideGround className="w-[860px] shrink-0 self-start" />
         <div className="flex min-w-0 flex-1 flex-col gap-4">
           <StoreInterior mules={4} mulePrice={MULE_PRICE} pubPayout={Math.round(20 + (60 + MONTH * 20) * (seconds / TOTAL))} visitors={{ corral: [5] }} />
-          <div className="mt-auto flex flex-col gap-1.5">
-            <span className="label-caps">Time left · set by Food</span>
+          <div className="mt-auto grid grid-cols-2 gap-x-4 gap-y-1.5">
+            <span className="label-caps col-span-2">Time left · set by Food</span>
             {TIMES.map((t) => {
               const left = Math.max(0, t.time - elapsed);
               return (
                 <div key={t.slot} className="flex items-center gap-2">
                   <PlayerMark slot={t.slot} size={20} glow={false} />
-                  <span className="w-14 truncate text-sm font-semibold">{seat(t.slot).name}</span>
+                  <span className="w-11 truncate text-sm font-semibold">{seat(t.slot).name}</span>
                   <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-raised">
                     <div className={cx('absolute inset-y-0 left-0 rounded-full', left === 0 ? 'bg-ink-3' : t.food < t.need ? 'bg-warn' : 'bg-holo')} style={{ width: `${(left / TOTAL) * 100}%` }} />
                   </div>
-                  <span data-num className={cx('w-10 text-right font-mono text-sm', left === 0 ? 'text-ink-3' : 'text-ink')}>{left === 0 ? 'done' : `${Math.ceil(left)}s`}</span>
+                  <span data-num className={cx('w-9 text-right font-mono text-sm', left === 0 ? 'text-ink-3' : 'text-ink')}>{left === 0 ? 'done' : `${Math.ceil(left)}s`}</span>
                 </div>
               );
             })}

@@ -18,6 +18,8 @@ export interface MapTile {
   flag?: 'survey' | 'sabotage' | 'sale';
   /** What a geo analysis found here, only on the map of the player who ran it. Ratings 1 to 4. */
   ground?: Partial<Record<Good, number>>;
+  /** Local pollution, 0 clean to 3 toxic. Drawn as a brown haze over the land. */
+  pollution?: number;
 }
 
 export interface MapAvatar {
@@ -87,6 +89,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
             t.owner !== null ? `owned by player ${t.owner + 1}` : t.terrain === 'store' ? '' : 'free',
             t.good ? `${GOOD_NAME[t.good]}${t.output ? ` +${t.output}` : ''}` : '',
             ...ground.map(([g, n]) => `${GOOD_NAME[g]} ${n} of 4`),
+            t.pollution ? `pollution ${t.pollution} of 3` : '',
           ]
             .filter(Boolean)
             .join(', ');
@@ -97,6 +100,13 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
               {...(onTile ? { type: 'button' as const, onClick: () => onTile(t), 'aria-label': label } : { 'aria-label': label })}
               className={cx('relative flex items-center justify-center transition-opacity', faded && 'opacity-40', onTile && 'cursor-pointer')}
             >
+              {!!t.pollution && (
+                <span
+                  aria-hidden
+                  className="absolute inset-0"
+                  style={{ background: `radial-gradient(circle at 50% 55%, rgb(110 82 40 / ${0.25 + t.pollution * 0.18}), rgb(110 82 40 / ${0.12 + t.pollution * 0.12}) 80%)` }}
+                />
+              )}
               {owner && (
                 <span
                   aria-hidden

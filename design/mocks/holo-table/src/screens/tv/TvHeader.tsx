@@ -1,6 +1,7 @@
 import { Timer } from '@mule/ui';
 import type { ReactNode } from 'react';
 import { MONTH } from '../../data';
+import { AirGauge } from '../Air';
 
 /** The top of every big screen: month, phase and time left, sized to read from across the room. */
 export function TvHeader({ phase, seconds, right }: { phase: string; seconds?: number; right?: ReactNode }) {
@@ -12,6 +13,7 @@ export function TvHeader({ phase, seconds, right }: { phase: string; seconds?: n
       </div>
       <div className="flex items-center gap-4">
         {right}
+        <AirGauge tv />
         {seconds !== undefined && <Timer seconds={seconds} className="h-14 px-5 text-3xl" />}
       </div>
     </header>

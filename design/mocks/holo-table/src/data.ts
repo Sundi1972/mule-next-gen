@@ -90,6 +90,12 @@ const GROUND: Record<string, MapTile['ground']> = {
   '8,3': { energy: 3 },
 };
 
+/** Pollution around Brix's smelter and mines: the land near heavy industry turns brown. */
+const POLLUTION: Record<string, number> = { '13,3': 2, '12,3': 2, '14,3': 1, '13,2': 1, '13,4': 1, '12,2': 1, '11,3': 1, '12,4': 1 };
+
+/** The colony's air, 0 to 100. 30 and up is Smoggy. */
+export const COLONY_AIR = 34;
+
 export function baseTiles(): MapTile[] {
   const tiles: MapTile[] = [];
   ROWS.forEach((row, y) =>
@@ -105,6 +111,7 @@ export function baseTiles(): MapTile[] {
         ...(plot?.[3] ? { flag: plot[3] } : {}),
         ...(terrain === 'mountains' ? { peaks: 1 + ((x * 7 + y * 3) % 3) } : {}),
         ...(GROUND[`${x},${y}`] ? { ground: GROUND[`${x},${y}`] } : {}),
+        ...(POLLUTION[`${x},${y}`] ? { pollution: POLLUTION[`${x},${y}`] } : {}),
       });
     }),
   );
@@ -125,7 +132,7 @@ export const MARKET: TickerItem[] = [
 
 export const MULE_PRICE = 380;
 
-export const MY_STOCK: Partial<Record<Good, number>> = { food: 6, water: 4, energy: 9, smithore: 0, crystite: 2 };
+export const MY_STOCK: Partial<Record<Good, number>> = { food: 6, water: 4, energy: 9, smithore: 0, crystite: 2, medicine: 1 };
 
 export const NEWS = [
   { tone: 'warn' as const, text: 'Observatory: a drought is likely next month.' },

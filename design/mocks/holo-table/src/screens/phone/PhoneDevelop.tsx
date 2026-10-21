@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { bookFor, MAP_H, MAP_W, ME, MONTH, MULE_PRICE, MY_STOCK, TILES } from '../../data';
 import { FACTORIES, factoryFit, isFactory, type Factory } from '../factory';
 import { useCountdown } from '../../proto';
+import { AirGauge } from '../Air';
 import { FoodTime, OUTFITS, StoreInterior, type Shop } from '../Store';
 import { PhoneShell } from './Shell';
 
@@ -108,6 +109,8 @@ export function PhoneDevelop() {
     <PhoneShell phase="Development" seconds={seconds}>
       <div className="flex flex-col gap-3">
         <FoodTime seconds={seconds} total={TOTAL} food={FOOD.has} need={FOOD.needs} />
+        <AirGauge />
+        <p className="-mt-1 text-xs text-ink-3">The air is smoggy, so everyone loses 5 s. You have 1 Medicine, so you don't.</p>
         <ol className="grid grid-cols-3 gap-1.5 text-xs">
           {['Buy a MULE', 'Outfit it', 'Install on your plot'].map((label, i) => (
             <li
@@ -155,6 +158,12 @@ export function PhoneDevelop() {
             {mine && selected.good && (
               <span className="text-ink-2">
                 Making {GOOD_NAME[selected.good]}, <span className="font-mono font-bold text-ink">+{selected.output}</span> last month.
+              </span>
+            )}
+            {!!selected.pollution && (
+              <span className="rounded-control bg-[rgb(120_96_60/0.14)] px-3 py-2 text-sm text-ink">
+                <strong>{['', 'Dusty', 'Polluted', 'Toxic'][selected.pollution]} land.</strong> Food, Water and Medicine here make {selected.pollution} less. It
+                clears by 1 a month once no polluter is next to it.
               </span>
             )}
             {fit && carry && carry !== 'empty' && isFactory(carry) && <FitCard factory={carry} fit={fit} />}
