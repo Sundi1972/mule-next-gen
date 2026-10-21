@@ -285,6 +285,8 @@ export interface OfficeResult {
   tallies: { id: string; votes: number }[];
 }
 
+export type ElectionResult = Record<Office, OfficeResult>;
+
 /** One election, nominate → ballot → reveal → over, inside a planning phase. */
 export interface Election {
   stage: 'nominate' | 'ballot' | 'reveal' | 'over';
@@ -296,7 +298,7 @@ export interface Election {
   /** Players who pressed Done in this stage. */
   done: string[];
   /** Fixed when the ballot closes, then shown on every screen. */
-  result: Record<Office, OfficeResult> | null;
+  result: ElectionResult | null;
 }
 
 export interface Politics {

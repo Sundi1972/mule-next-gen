@@ -6,25 +6,34 @@
 import { POLITICS } from './config.js';
 import { RuleError } from './errors.js';
 import { player } from './game.js';
-import type { CanRun, Election, GameState, Office, OfficeResult, Politics } from './types.js';
+import type { CanRun, Election, ElectionResult, GameState, Office, OfficeResult, Politics } from './types.js';
+
+/** Read-only all the way down: an election read before edit() may be shared with a what-if copy. */
+type Shared<T> = { readonly [K in keyof T]: T[K] extends object ? Shared<T[K]> : T[K] };
+
+const OFFICES: readonly Office[] = ['governor', 'sheriff'];
 
 /** Politics as it stands before the first planning phase: no offices, no Baron. */
 export function newPolitics(): Politics {
   return { governor: null, sheriff: null, termStart: 1, terms: {}, governorRun: null, baron: null, taxAtStart: 0, election: null };
 }
 
-/** The politics object, copied before a write: a what-if copy of the game may share this object. */
+/** A what-if copy may share politics, so every write copies it first. */
 function edit(state: GameState): Politics {
   state.politics = structuredClone(state.politics!);
   return state.politics;
 }
 
-/** Plots a player owns: the count the Land Baron, vote weight and the tie rule go by. */
-export function plotsOwned(state: GameState, id: string): number {
-  return state.tiles.filter((t) => t.owner === id).length;
+function currentElection(state: GameState): Shared<Election> | null {
+  return state.politics?.election ?? null;
 }
 
-/** RULE-5: strictly the most plots wins; a tie keeps the current Baron if they are in it, else nobody. */
+/** Plots a player owns: the count the Land Baron, vote weight and the tie rule go by. */
+export function plotsOwned(state: GameState, playerId: string): number {
+  return state.tiles.filter((t) => t.owner === playerId).length;
+}
+
+/** Strictly the most plots wins; a tie keeps the current Baron if they are in it, else nobody. See WS7 spec RULE-5. */
 function landBaron(state: GameState, current: string | null): string | null {
   const plots = new Map(state.players.map((p) => [p.id, plotsOwned(state, p.id)]));
   const most = Math.max(...plots.values());
@@ -34,7 +43,7 @@ function landBaron(state: GameState, current: string | null): string | null {
   return current !== null && top.includes(current) ? current : null;
 }
 
-/** When planning opens: fixes the month's Land Baron and starting tax, and opens the election in an election month. */
+/** When planning opens: fixes the month's Land Baron and starting tax, and opens the election in an election month. See WS7 spec RULE-1, RULE-5. */
 export function openPlanning(state: GameState): void {
   if (!state.politics) return;
   const p = edit(state);
@@ -45,91 +54,101 @@ export function openPlanning(state: GameState): void {
     : null;
 }
 
+/** The next election month after this one, or null if the game ends first. See WS7 spec RULE-1. */
+export function nextElectionMonth(state: GameState): number | null {
+  return POLITICS.electionMonths.find((m) => m > state.month && m <= state.maxMonths) ?? null;
+}
+
+/** How long a stage's clock runs. See WS7 spec RULE-1. */
+export function electionStageMs(stage: Election['stage']): number {
+  return { nominate: POLITICS.nominateMs, ballot: POLITICS.ballotMs, reveal: POLITICS.revealMs, over: 0 }[stage];
+}
+
 export interface VoteWeight {
   total: number;
   parts: { base: number; land: number; reputation: number; baron: number; taxes: number };
 }
 
-/** RULE-4: a player's votes, part by part. Derived from the state on every call. */
-export function voteWeight(state: GameState, id: string): VoteWeight {
+/** A player's votes, part by part, derived from the state on every call. See WS7 spec RULE-4. */
+export function voteWeight(state: GameState, playerId: string): VoteWeight {
   const { plotsPerVote, repHigh, repLow, taxPerVote, taxCap } = POLITICS.weight;
-  const { reputation } = player(state, id);
+  const { reputation } = player(state, playerId);
   const parts = {
     base: 1,
-    land: Math.floor(plotsOwned(state, id) / plotsPerVote),
+    land: Math.floor(plotsOwned(state, playerId) / plotsPerVote),
     reputation: reputation >= repHigh ? 1 : reputation < repLow ? -1 : 0,
-    baron: state.politics?.baron === id ? 1 : 0,
-    taxes: Math.min(taxCap, Math.floor((state.treasury.paid[id] ?? 0) / taxPerVote)),
+    baron: state.politics?.baron === playerId ? 1 : 0,
+    taxes: Math.min(taxCap, Math.floor((state.treasury.paid[playerId] ?? 0) / taxPerVote)),
   };
   return { total: parts.base + parts.land + parts.reputation + parts.baron + parts.taxes, parts };
 }
 
-const OFFICES: readonly Office[] = ['governor', 'sheriff'];
-
-type ElectionResult = Record<Office, OfficeResult>;
-
 /** This month's election while planning runs; a RuleError when there is none. */
-function liveElection(state: GameState, id: string): Election {
-  player(state, id);
-  const election = state.politics?.election;
+function liveElection(state: GameState): Shared<Election> {
+  const election = currentElection(state);
   if (state.phase !== 'planning' || !election) throw new RuleError('No election this month');
   return election;
 }
 
-function contested(election: Election, office: Office): boolean {
+function contested(election: Shared<Election>, office: Office): boolean {
   return election.candidates[office].length > 1;
 }
 
-/** RULE-2 rows 1-2 for each office: true, or why the player may not run now. Running for the other office is no refusal. */
-export function canRun(state: GameState, id: string): Record<Office, CanRun> {
-  player(state, id);
-  const politics = state.politics;
-  if (state.phase !== 'planning' || politics?.election?.stage !== 'nominate') return { governor: 'closed', sheriff: 'closed' };
-  const run = politics.governorRun;
-  const termLimit = run?.id === id && run.terms >= POLITICS.governorTermsInRow;
+/** Per office: true, or why the player may not run now. Running for the other office is no refusal. See WS7 spec RULE-2. */
+export function canRun(state: GameState, playerId: string): Record<Office, CanRun> {
+  const { id } = player(state, playerId);
+  if (state.phase !== 'planning' || currentElection(state)?.stage !== 'nominate') return { governor: 'closed', sheriff: 'closed' };
+  const run = state.politics!.governorRun;
+  const termLimit = run?.id === id && run.terms >= POLITICS.maxGovernorTermsInRow;
   return { governor: termLimit ? 'termLimit' : true, sheriff: true };
 }
 
-const REFUSAL = { closed: 'Candidates are closed', termLimit: 'Two Governor terms in a row' } as const;
+const REFUSAL = {
+  closed: 'Candidates are closed',
+  termLimit: `${POLITICS.maxGovernorTermsInRow} Governor terms in a row`,
+} as const;
 
-/** RULE-2: runs for an office, moving any candidacy for the other one; null withdraws. Only in nominate. */
-export function runFor(state: GameState, id: string, office: Office | null): void {
-  const election = liveElection(state, id);
-  const why = office === null ? (election.stage === 'nominate' ? true : 'closed') : canRun(state, id)[office];
+/** Runs for an office, moving any candidacy for the other one; null withdraws. Only in nominate. See WS7 spec RULE-2. */
+export function runFor(state: GameState, playerId: string, office: Office | null): void {
+  const allowed = canRun(state, playerId);
+  const election = liveElection(state);
+  const why = office === null ? (election.stage === 'nominate' ? true : 'closed') : allowed[office];
   if (why !== true) throw new RuleError(REFUSAL[why]);
-  if (office && election.candidates[office].includes(id)) return;
+  if (office && election.candidates[office].includes(playerId)) return;
   const { candidates } = edit(state).election!;
-  for (const o of OFFICES) candidates[o] = candidates[o].filter((c) => c !== id);
-  if (office) candidates[office].push(id);
+  for (const o of OFFICES) candidates[o] = candidates[o].filter((c) => c !== playerId);
+  if (office) candidates[office].push(playerId);
 }
 
 /** Casts, changes or (with null) clears a secret ballot for a contested office. Only in the ballot stage. */
-export function castVote(state: GameState, id: string, office: Office, candidate: string | null): void {
-  const election = liveElection(state, id);
+export function castVote(state: GameState, voterId: string, office: Office, candidate: string | null): void {
+  const voter = player(state, voterId);
+  const election = liveElection(state);
   if (election.stage === 'nominate') throw new RuleError('The ballot is not open yet');
   if (election.stage !== 'ballot') throw new RuleError('The ballot is closed');
   if (!contested(election, office)) throw new RuleError('There is no vote for this office');
   if (candidate !== null && !election.candidates[office].includes(candidate)) throw new RuleError('Not a candidate');
   const { ballots } = edit(state).election!;
-  const ballot = (ballots[id] ??= {});
+  const ballot = (ballots[voter.id] ??= {});
   if (candidate === null) delete ballot[office];
   else ballot[office] = candidate;
   // An empty entry would still show the voter among those who have voted.
-  if (Object.keys(ballot).length === 0) delete ballots[id];
+  if (Object.keys(ballot).length === 0) delete ballots[voter.id];
 }
 
 /** Done for the current stage (or undone); every player Done ends the stage at the next step. */
-export function electionDone(state: GameState, id: string, done = true): void {
-  const election = state.politics?.election;
+export function electionDone(state: GameState, playerId: string, done = true): void {
+  const election = currentElection(state);
   if (state.phase !== 'planning' || !election || (election.stage !== 'nominate' && election.stage !== 'ballot')) return;
-  if (election.done.includes(id) === done) return;
+  if (election.done.includes(playerId) === done) return;
   const e = edit(state).election!;
-  e.done = done ? [...e.done, id] : e.done.filter((d) => d !== id);
+  e.done = done ? [...e.done, playerId] : e.done.filter((d) => d !== playerId);
 }
 
-/** Advances the election by dt ms of game time. Returns the result in the step the ballot closes. */
+/** Advances the election by dt ms of game time. Returns the result in the step the ballot closes. See WS7 spec RULE-1. */
 export function stepElection(state: GameState, dt: number): ElectionResult | null {
-  if (state.phase !== 'planning' || !state.politics?.election || state.politics.election.stage === 'over') return null;
+  const live = currentElection(state);
+  if (state.phase !== 'planning' || !live || live.stage === 'over') return null;
   const politics = edit(state);
   const election = politics.election!;
   election.clockMs -= dt;
@@ -146,9 +165,14 @@ export function stepElection(state: GameState, dt: number): ElectionResult | nul
   return closeBallot(state, election);
 }
 
-/** AM-1: planning is ending: an election still open closes now, from the ballots cast so far, and its winners take office. */
+/**
+ * Planning is ending: an election still open closes now, from the ballots cast
+ * so far, and its winners take office. Returns the result it fixed, or null if
+ * there was nothing open or the result was already fixed. See WS7 spec RULE-1.
+ */
 export function closeElection(state: GameState): ElectionResult | null {
-  if (!state.politics?.election || state.politics.election.stage === 'over') return null;
+  const live = currentElection(state);
+  if (!live || live.stage === 'over') return null;
   const politics = edit(state);
   const result = politics.election!.stage === 'reveal' ? null : closeBallot(state, politics.election!);
   takeOffice(state, politics);
@@ -175,8 +199,8 @@ function takeOffice(state: GameState, politics: Politics): void {
   politics.governorRun = { id: governor.winner, terms: run?.id === governor.winner ? run.terms + 1 : 1 };
 }
 
-/** RULE-3 for one office. Weights are taken now, as the ballot closes. */
-function decide(state: GameState, election: Election, office: Office, governor: string | null): OfficeResult {
+/** The winner of one office, with weights taken now, as the ballot closes. See WS7 spec RULE-3. */
+function decide(state: GameState, election: Shared<Election>, office: Office, governor: string | null): OfficeResult {
   const seat = (id: string) => state.players.findIndex((p) => p.id === id);
   const candidates = election.candidates[office].filter((c) => c !== governor);
   if (candidates.length === 0) return { winner: appointee(state, election, office, governor), how: 'appointed', tallies: [] };
@@ -197,11 +221,11 @@ function decide(state: GameState, election: Election, office: Office, governor: 
 }
 
 /**
- * RULE-3 rows 1-2: the richest eligible player, the lower seat on a tie. The
- * Governor comes from the players not running for Sheriff, or from everyone
- * if all of them are (AM-2); the Sheriff is never the new Governor.
+ * The richest eligible player, the lower seat on a tie. The Governor comes from
+ * the players not running for Sheriff, or from everyone if all of them are; the
+ * Sheriff is never the new Governor. See WS7 spec RULE-3.
  */
-function appointee(state: GameState, election: Election, office: Office, governor: string | null): string {
+function appointee(state: GameState, election: Shared<Election>, office: Office, governor: string | null): string {
   const pool =
     office === 'governor'
       ? state.players.filter((p) => !election.candidates.sheriff.includes(p.id))
@@ -210,9 +234,16 @@ function appointee(state: GameState, election: Election, office: Office, governo
   return eligible.reduce((best, p) => (p.money > best.money ? p : best)).id;
 }
 
-/** RULE-6: the Governor sets the sales tax in whole percent, within maxStep of the month's starting rate. */
-export function setSalesTax(state: GameState, id: string, percent: number): void {
-  player(state, id);
+/** The whole-percent range the Governor may set this month, around the month's starting rate. See WS7 spec RULE-6. */
+export function taxBounds(state: GameState): { low: number; high: number } {
+  const { min, max, maxStep } = POLITICS.tax;
+  const start = Math.round((state.politics?.taxAtStart ?? state.treasury.salesTax) * 100);
+  return { low: Math.max(min, start - maxStep), high: Math.min(max, start + maxStep) };
+}
+
+/** The Governor sets the sales tax in whole percent, within taxBounds. See WS7 spec RULE-6. */
+export function setSalesTax(state: GameState, playerId: string, percent: number): void {
+  const { id } = player(state, playerId);
   const politics = state.politics;
   if (!politics) throw new RuleError('This game plays without a Governor');
   if (state.phase !== 'planning') throw new RuleError('The tax is set in planning');
@@ -223,7 +254,7 @@ export function setSalesTax(state: GameState, id: string, percent: number): void
   state.treasury.salesTax = percent / 100;
 }
 
-/** RULE-7, at upkeep: the Governor's pay, then the Sheriff's, each only as far as the colony fund reaches. */
+/** At upkeep: the Governor's pay, then the Sheriff's, each only as far as the colony fund reaches. See WS7 spec RULE-7. */
 export function payOffices(state: GameState): void {
   if (!state.politics) return;
   const { governor, sheriff } = state.politics;
@@ -235,24 +266,7 @@ export function payOffices(state: GameState): void {
   }
 }
 
-/** RULE-7: the final score's office line, POLITICS.termScore per term served. */
-export function officeScore(state: GameState, id: string): number {
-  return POLITICS.termScore * (state.politics?.terms[id] ?? 0);
-}
-
-/** The whole-percent range the Governor may set this month. */
-export function taxBounds(state: GameState): { low: number; high: number } {
-  const { min, max, maxStep } = POLITICS.tax;
-  const start = Math.round((state.politics?.taxAtStart ?? state.treasury.salesTax) * 100);
-  return { low: Math.max(min, start - maxStep), high: Math.min(max, start + maxStep) };
-}
-
-/** The next election month after this one, or null if the game ends first. */
-export function nextElectionMonth(state: GameState): number | null {
-  return POLITICS.electionMonths.find((m) => m > state.month && m <= state.maxMonths) ?? null;
-}
-
-/** How long a stage's clock runs. */
-export function electionStageMs(stage: Election['stage']): number {
-  return { nominate: POLITICS.nominateMs, ballot: POLITICS.ballotMs, reveal: POLITICS.revealMs, over: 0 }[stage];
+/** The final score's office line: POLITICS.termScore per term served. See WS7 spec RULE-7. */
+export function officeScore(state: GameState, playerId: string): number {
+  return POLITICS.termScore * (state.politics?.terms[playerId] ?? 0);
 }

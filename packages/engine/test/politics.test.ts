@@ -328,7 +328,7 @@ describe('RULE-2: who may run', () => {
 
     expect(canRun(state, 'lena')).toEqual({ governor: 'termLimit', sheriff: true });
     expect(canRun(state, 'brix')).toEqual({ governor: true, sheriff: true });
-    expect(() => runFor(state, 'lena', 'governor')).toThrow(new RuleError('Two Governor terms in a row'));
+    expect(() => runFor(state, 'lena', 'governor')).toThrow(new RuleError(`${POLITICS.maxGovernorTermsInRow} Governor terms in a row`));
     expect(electionOf(state).candidates.governor).toEqual([]);
     runFor(state, 'brix', 'governor');
     runFor(state, 'lena', 'sheriff');

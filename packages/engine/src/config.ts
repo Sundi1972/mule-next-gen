@@ -351,7 +351,7 @@ export const POLITICS = {
   /** Months whose planning phase opens with an election; a term runs until the next one. */
   electionMonths: [1, 4, 7, 10],
   /** A Governor who has served this many terms in a row may not run for Governor again until someone else has held it. */
-  governorTermsInRow: 2,
+  maxGovernorTermsInRow: 2,
   /** Players declare for Governor or Sheriff. */
   nominateMs: 20_000,
   /** Players cast their secret ballots. */

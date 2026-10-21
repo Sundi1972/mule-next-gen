@@ -412,7 +412,7 @@ export interface ScoreParts {
   land: number;
   mules: number;
   muleValue: number;
-  /** Terms served as Governor or Sheriff; Collapse doesn't cut it. 0 with politics off. */
+  /** Points for terms served (POLITICS.termScore each); Collapse doesn't cut it. 0 with politics off. */
   office: number;
   /** What Collapse took off: 0 unless the colony failed. */
   cut: number;
@@ -438,9 +438,10 @@ export function scoreParts(state: GameState, playerId: string): ScoreParts {
   const before = Math.round(raw);
   // The office line joins after the rounding, so it moves no existing total.
   const office = officeScore(state, playerId);
-  const total = (colonyFailed(state) ? Math.round(raw * POLLUTION.collapseScore) : before) + office;
+  const kept = colonyFailed(state) ? Math.round(raw * POLLUTION.collapseScore) : before;
+  const total = kept + office;
   const money = Math.round(p.money);
-  return { money, goods: before - money - land - muleValue, plots, land, mules, muleValue, office, cut: before - (total - office), total };
+  return { money, goods: before - money - land - muleValue, plots, land, mules, muleValue, office, cut: before - kept, total };
 }
 
 /** Final score: scoreParts().total. */
