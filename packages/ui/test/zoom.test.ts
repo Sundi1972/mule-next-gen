@@ -27,7 +27,7 @@ function expectInsideMap(box: { scale: number; x: number; y: number }) {
 }
 
 describe("T-AC-8: zoomBox for RULE-4's examples", () => {
-  it('frames a 4×2 block as a 6×4 box grown to the map shape, at scale 2.75', () => {
+  it('T-AC-8: frames a 4×2 block as a 6×4 box grown to the map shape, at scale 2.75', () => {
     const box = zoomBox(map(mine([5, 3], [6, 3], [7, 3], [8, 3], [5, 4], [6, 4], [7, 4], [8, 4])), W, H, ME);
 
     expect(box).not.toBeNull();
@@ -38,7 +38,7 @@ describe("T-AC-8: zoomBox for RULE-4's examples", () => {
     expectInsideMap(box!);
   });
 
-  it('clips the box at the top-left corner and keeps the view inside the map', () => {
+  it('T-AC-8: clips the box at the top-left corner and keeps the view inside the map', () => {
     const box = zoomBox(map(mine([0, 0], [1, 0])), W, H, ME);
 
     expect(box).not.toBeNull();
@@ -48,7 +48,7 @@ describe("T-AC-8: zoomBox for RULE-4's examples", () => {
     expectInsideMap(box!);
   });
 
-  it('clips the box at the bottom-right corner and keeps the view inside the map', () => {
+  it('T-AC-8: clips the box at the bottom-right corner and keeps the view inside the map', () => {
     const box = zoomBox(map(mine([18, 10])), W, H, ME);
 
     expect(box).not.toBeNull();
@@ -58,7 +58,7 @@ describe("T-AC-8: zoomBox for RULE-4's examples", () => {
     expectInsideMap(box!);
   });
 
-  it('frames a single plot as a 3×3 box grown to the map shape', () => {
+  it('T-AC-8: frames a single plot as a 3×3 box grown to the map shape', () => {
     const box = zoomBox(map(mine([9, 5])), W, H, ME);
 
     expect(box).not.toBeNull();
@@ -68,13 +68,13 @@ describe("T-AC-8: zoomBox for RULE-4's examples", () => {
     expectInsideMap(box!);
   });
 
-  it('ignores plots owned by other players', () => {
+  it('T-AC-8: ignores plots owned by other players', () => {
     const owners: Record<string, Slot> = { ...mine([9, 5]), '0,0': 0, '18,10': 5, '3,8': 1 };
 
     expect(zoomBox(map(owners), W, H, ME)).toEqual(zoomBox(map(mine([9, 5])), W, H, ME));
   });
 
-  it('returns null when you own no plots', () => {
+  it('T-AC-8: returns null when you own no plots', () => {
     expect(zoomBox(map({}), W, H, ME)).toBeNull();
     expect(zoomBox(map({ '4,4': 0, '5,5': 3 }), W, H, ME)).toBeNull();
   });
