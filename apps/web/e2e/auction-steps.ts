@@ -354,17 +354,21 @@ async function pickSide(page: Page, side: 'Buyer' | 'Seller' | 'Pass', timeout: 
   await auction.getByRole('radio', { name: side, checked: true, exact: true }).waitFor({ timeout: PRESS_MS });
 }
 
-/** Passes once the page shows units changing hands with neither moving line nor the gap drawn: they became the trade bar. */
+/** Passes once the page shows two players trading with neither moving line nor the gap drawn: they became the trade bar. */
 async function linesGiveWayToTheTrade(s: Screen, timeout: number): Promise<void> {
   try {
     await s.page.waitForFunction(
-      () => document.querySelector('[data-testid=deal]') && !document.querySelector('[data-testid=line-ask], [data-testid=line-bid], [data-testid=gap-label]'),
+      () => {
+        // A house's trade bar is labelled "×2 @ 66 · STORE"; one between two players carries only units and price.
+        const players = [...document.querySelectorAll('[data-testid=deal]')].some((d) => /^×\d+ @ \d+$/.test(d.textContent?.trim() ?? ''));
+        return players && !document.querySelector('[data-testid=line-ask], [data-testid=line-bid], [data-testid=gap-label]');
+      },
       undefined,
       { timeout, polling: 'raf' },
     );
   } catch (err) {
     if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
-    check(false, `B-AC-1: on ${s.name} the two lines give way to the trade bar while units change hands`);
+    check(false, `B-AC-1: on ${s.name} the two lines give way to the players' trade bar while units change hands`);
   }
 }
 
@@ -407,7 +411,7 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
   await Promise.all(screens.map((s) => untilShows(s, readLines, walking, 'B-AC-1: the lowest-ask and highest-bid lines and the gap during the walk', within(SCALE, WALK.declareMs))));
   // Both sellers start level at the top. The stayer steps above it, so the lowest ask is the seller's alone and the buyer never meets the stayer.
   const at = (a: AuctionView, id: string) => a.walkers.find((w) => w.id === id)?.at ?? NaN;
-  await walkUntil(truth, stayer, 'up', (a) => Math.round(at(a, stayerId)) >= Math.round(at(a, sellerId)) + 2, `${stayer.name} walks up over ${seller.name}`);
+  await walkUntil(truth, stayer, 'up', (a) => Math.round(at(a, stayerId)) >= Math.round(at(a, sellerId)) + 2, `B-AC-1: ${stayer.name} walks up over ${seller.name}`);
   const view = truth.board();
   const a = view.auction;
   check(a?.stage === 'walk', `the server is walking, got ${a?.stage}`);
@@ -441,21 +445,21 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
 
   const before = unitsFromTheServer(truth, phones);
   await Promise.all(screens.map((s) => untilShows(s, readUnits, before, 'B-AC-2: units and surplus under the creatures before the trade')));
-  console.log(`✓ HC-2 (WS6): the TV shows only the ${a.good} units under the creatures, ${JSON.stringify(before)}, and no other good's stock`);
+  console.log(`✓ HC-2 (WS6): the TV draws one units label per walker, each equal to their ${a.good} stock, ${JSON.stringify(before)}`);
 
   // The buyer stops at the store's selling line, under every ask, and buys the store out from there.
   const tradeBudget = within(SCALE, WALK.goodMs);
-  await walkUntil(truth, buyer, 'up', (x) => x.deals.some((d) => d.seller === 'store' && d.buyer === buyerId), `${buyer.name} walks up to the store's line and buys`);
-  await untilServer(truth, buyer.page, (x) => x.storeForSale === 0 && x.deals.length === 0, `${buyer.name} buys the store out`, tradeBudget);
+  await walkUntil(truth, buyer, 'up', (x) => x.deals.some((d) => d.seller === 'store' && d.buyer === buyerId), `B-AC-3: ${buyer.name} walks up to the store's line and buys`);
+  await untilServer(truth, buyer.page, (x) => x.storeForSale === 0 && x.deals.length === 0, `B-AC-3: ${buyer.name} buys the store out`, tradeBudget);
   await storeShows(0, null);
 
   const giveWay = Promise.all(screens.map((s) => linesGiveWayToTheTrade(s, tradeBudget)));
   giveWay.catch(() => undefined);
-  await walkUntil(truth, seller, 'down', (x) => x.deals.some((d) => d.seller === sellerId && d.buyer === buyerId), `${seller.name} walks down to ${buyer.name}'s bid and they trade`);
+  await walkUntil(truth, seller, 'down', (x) => x.deals.some((d) => d.seller === sellerId && d.buyer === buyerId), `B-AC-1: ${seller.name} walks down to ${buyer.name}'s bid and they trade`);
   await giveWay;
   console.log(`✓ B-AC-1 (WS6): while ${seller.name} and ${buyer.name} trade, neither line nor the gap is drawn on any phone or the TV`);
 
-  const traded = await untilServer(truth, tv, (x) => x.deals.length === 0, `${seller.name} and ${buyer.name}'s trade ends`, tradeBudget);
+  const traded = await untilServer(truth, tv, (x) => x.deals.length === 0, `B-AC-2: ${seller.name} and ${buyer.name}'s trade ends`, tradeBudget);
   check(traded.good === a.good && traded.stage === 'walk', `the ${a.good} walk goes on after the trade, got ${traded.good} ${traded.stage}`);
   const after = unitsFromTheServer(truth, phones);
   for (const id of [sellerId, buyerId]) check(after[id] !== before[id], `${name(id)}'s label changed in the trades: ${before[id]} → ${after[id]}`);
