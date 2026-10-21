@@ -82,9 +82,15 @@ export function LandAuction() {
           </>
         }
         footer={
-          <Button size="md" variant="outline" className="h-10 w-full" data-testid="ready" onClick={ready}>
-            {seller ? 'Start the bidding' : 'Ready to bid'}
-          </Button>
+          seller ? (
+            <p className="flex h-10 w-full items-center justify-center text-sm text-ink-3" data-testid="seller-wait">
+              Bidding starts soon
+            </p>
+          ) : (
+            <Button size="md" variant="outline" className="h-10 w-full" data-testid="ready" onClick={ready}>
+              Ready to bid
+            </Button>
+          )
         }
       >
         <TimeBar seconds={lot.seconds} total={lot.total} className="mb-1.5" />
