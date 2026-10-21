@@ -408,6 +408,7 @@ describe('the politics view', () => {
       expect(view.politics!.sheriff).toBe('ossa');
       expect(view.politics!.term).toEqual([1, 3]);
       expect(view.politics!.next).toBe(4);
+      expect(view.news[0]).toBe('Brix is Governor (appointed) · Ossa is Sheriff (appointed).');
     }
   });
 
