@@ -1,13 +1,19 @@
-import { HoloMap, PlayerMark, type MapAvatar } from '@mule/ui';
-import { DEV_AVATARS, MAP_H, MAP_W, MULE_PRICE, SEATS, TILES } from '../../data';
+import { cx, HoloMap, PlayerMark, type MapAvatar } from '@mule/ui';
+import { bookFor, DEV_AVATARS, MAP_H, MAP_W, MONTH, MULE_PRICE, seat, TILES } from '../../data';
+import { StoreInterior } from '../Store';
 import { useCountdown, useNow } from '../../proto';
 import { TvHeader } from './TvHeader';
 
+const TOTAL = 50;
+/** Each colonist's time this month: full when fed, shorter the hungrier they are. */
+const TIMES = bookFor('food').map((r) => ({ slot: r.slot, food: r.has, need: r.needs, time: r.has >= r.needs ? TOTAL : Math.round(15 + (35 * r.has) / r.needs) }));
+
 export function TvDevelop() {
-  const seconds = useCountdown(45);
+  const seconds = useCountdown(TOTAL);
+  const elapsed = TOTAL - seconds;
   const t = useNow(700) / 1000;
   // Everyone walks the map at once; small drifts stand in for real movement.
-  const avatars: MapAvatar[] = DEV_AVATARS.map((a, i) => ({
+  const avatars: MapAvatar[] = DEV_AVATARS.filter((a) => a.slot !== 5).map((a, i) => ({
     ...a,
     x: a.x + 0.6 * Math.sin(t * 0.7 + i * 1.7),
     y: a.y + 0.4 * Math.cos(t * 0.5 + i * 2.3),
@@ -18,34 +24,23 @@ export function TvDevelop() {
       <div className="flex min-h-0 flex-1 gap-6">
         <HoloMap width={MAP_W} height={MAP_H} tiles={TILES} avatars={avatars} showOutput density="tv" hideGround className="w-[860px] shrink-0 self-start" />
         <div className="flex min-w-0 flex-1 flex-col gap-4">
-          <div className="flex flex-col gap-3 rounded-panel border border-holo-line bg-panel p-5">
-            <span className="label-caps">Colony store</span>
-            <div className="flex items-end justify-between">
-              <div className="flex flex-col">
-                <span className="font-mono text-sm text-ink-3">MULE</span>
-                <span data-num className="font-mono text-4xl font-bold">{MULE_PRICE}</span>
-              </div>
-              <div className="flex flex-col items-end">
-                <span className="font-mono text-sm text-ink-3">IN STOCK</span>
-                <span data-num className="font-mono text-4xl font-bold text-warn">4</span>
-              </div>
-            </div>
-            <span className="text-base text-ink-2">Alloy is short, so MULEs are dear.</span>
+          <StoreInterior mules={4} mulePrice={MULE_PRICE} pubPayout={Math.round(20 + (60 + MONTH * 20) * (seconds / TOTAL))} visitors={{ corral: [5] }} />
+          <div className="mt-auto flex flex-col gap-1.5">
+            <span className="label-caps">Time left · set by Food</span>
+            {TIMES.map((t) => {
+              const left = Math.max(0, t.time - elapsed);
+              return (
+                <div key={t.slot} className="flex items-center gap-2">
+                  <PlayerMark slot={t.slot} size={20} glow={false} />
+                  <span className="w-14 truncate text-sm font-semibold">{seat(t.slot).name}</span>
+                  <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-raised">
+                    <div className={cx('absolute inset-y-0 left-0 rounded-full', left === 0 ? 'bg-ink-3' : t.food < t.need ? 'bg-warn' : 'bg-holo')} style={{ width: `${(left / TOTAL) * 100}%` }} />
+                  </div>
+                  <span data-num className={cx('w-10 text-right font-mono text-sm', left === 0 ? 'text-ink-3' : 'text-ink')}>{left === 0 ? 'done' : `${Math.ceil(left)}s`}</span>
+                </div>
+              );
+            })}
           </div>
-          <ul className="flex flex-col gap-2 font-mono text-base">
-            <li className="text-ink"><span className="text-holo">MIA</span> installed a Food MULE</li>
-            <li className="text-ink"><span className="text-holo">OSSA</span> bought a MULE</li>
-            <li className="text-ink-2"><span className="text-holo">JONAS</span> is running a geo analysis</li>
-          </ul>
-          <ul className="mt-auto flex flex-col gap-2">
-            {SEATS.map((s) => (
-              <li key={s.slot} className="flex items-center gap-3">
-                <PlayerMark slot={s.slot} size={20} />
-                <span className="flex-1 font-display text-lg font-semibold">{s.name}</span>
-                <span data-num className="font-mono text-lg">{s.money.toLocaleString('en-US')}</span>
-              </li>
-            ))}
-          </ul>
         </div>
       </div>
     </div>

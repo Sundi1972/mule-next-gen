@@ -1,17 +1,9 @@
-import { Button, cx, GOOD_NAME, GoodIcon, GoodTag, HoloMap, Panel, TERRAIN_NAME, type Good, type MapTile, type Terrain } from '@mule/ui';
+import { Button, cx, GOOD_NAME, GoodIcon, HoloMap, MuleIcon, Panel, TERRAIN_NAME, type Good, type MapTile, type Terrain } from '@mule/ui';
 import { useState } from 'react';
-import { MAP_H, MAP_W, ME, MULE_PRICE, TILES } from '../../data';
+import { bookFor, MAP_H, MAP_W, ME, MONTH, MULE_PRICE, TILES } from '../../data';
 import { useCountdown } from '../../proto';
+import { FoodTime, OUTFITS, StoreInterior, type Shop } from '../Store';
 import { PhoneShell } from './Shell';
-
-const OUTFITS: { good: Good; cost: number }[] = [
-  { good: 'food', cost: 25 },
-  { good: 'water', cost: 25 },
-  { good: 'energy', cost: 50 },
-  { good: 'smithore', cost: 75 },
-  { good: 'crystite', cost: 100 },
-  { good: 'rareEarth', cost: 100 },
-];
 
 type Carry = null | 'empty' | Good;
 
@@ -39,8 +31,14 @@ function analyse(t: MapTile): Partial<Record<Good, number>> {
   return { food: r(1), water: r(2), energy: r(3), smithore: r(4) % 4, crystite: r(5) % 3, rareEarth: r(6) % 4 };
 }
 
+const TOTAL = 50;
+const FOOD = bookFor('food').find((r) => r.slot === ME)!;
+
 export function PhoneDevelop() {
-  const seconds = useCountdown(45);
+  const seconds = useCountdown(TOTAL);
+  const [place, setPlace] = useState<'map' | 'store'>('store');
+  const [mules, setMules] = useState(4);
+  const [pub, setPub] = useState<number | null>(null);
   const [tiles, setTiles] = useState(TILES);
   const [selected, setSelected] = useState<MapTile | null>(TILES.find((t) => t.x === 9 && t.y === 5) ?? null);
   const [carry, setCarry] = useState<Carry>(null);
@@ -62,6 +60,21 @@ export function PhoneDevelop() {
     }, 2400);
   };
 
+  const pubPayout = Math.round(20 + (60 + MONTH * 20) * (seconds / TOTAL));
+  const open: Shop[] = carry === null ? ['corral', 'pub'] : carry === 'empty' ? [...OUTFITS.map((o) => o.good), 'pub'] : ['pub'];
+  const onShop = (shop: Shop) => {
+    if (shop === 'pub') return setPub(pubPayout);
+    if (shop === 'corral') {
+      setCarry('empty');
+      setMoney((m) => m - MULE_PRICE);
+      setMules((n) => n - 1);
+      return;
+    }
+    const outfit = OUTFITS.find((o) => o.good === shop)!;
+    setCarry(shop);
+    setMoney((m) => m - outfit.cost);
+  };
+
   const install = () => {
     if (!selected || !carry || carry === 'empty') return;
     setTiles((ts) => ts.map((t) => (t.x === selected.x && t.y === selected.y ? { ...t, owner: ME, good: carry, output: 3 } : t)));
@@ -69,37 +82,66 @@ export function PhoneDevelop() {
     setCarry(null);
   };
 
+  if (pub !== null) {
+    return (
+      <PhoneShell phase="Development" seconds={seconds}>
+        <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+          <span className="label-caps">The pub</span>
+          <span data-num className="font-mono text-5xl font-bold text-ok">+{pub} cr</span>
+          <p className="max-w-[260px] text-ink-2">You cashed out at the pub. Your turn is over; the others keep building until their time runs out.</p>
+          <Button variant="outline" onClick={() => setPub(null)}>Back (prototype only)</Button>
+        </div>
+      </PhoneShell>
+    );
+  }
+
+  const step = carry === null ? 1 : carry === 'empty' ? 2 : 3;
+
   return (
     <PhoneShell phase="Development" seconds={seconds}>
-      <div className="flex flex-col gap-4">
-        <HoloMap width={MAP_W} height={MAP_H} tiles={tiles} focusSlot={ME} selected={selected} onTile={setSelected} showOutput />
-        <div className="flex items-center gap-3 rounded-panel border border-holo-line bg-panel px-4 py-3">
-          <span className="label-caps">Carrying</span>
-          <span className="flex-1 font-display text-lg font-semibold">
-            {carry === null ? 'Nothing' : carry === 'empty' ? 'An empty MULE' : `A MULE for ${GOOD_NAME[carry]}`}
+      <div className="flex flex-col gap-3">
+        <FoodTime seconds={seconds} total={TOTAL} food={FOOD.has} need={FOOD.needs} />
+        <ol className="grid grid-cols-3 gap-1.5 text-xs">
+          {['Buy a MULE', 'Outfit it', 'Install on your plot'].map((label, i) => (
+            <li
+              key={label}
+              className={cx(
+                'flex items-center gap-1.5 rounded-control border px-2 py-1.5',
+                i + 1 === step ? 'border-holo bg-holo-soft font-semibold text-ink' : i + 1 < step ? 'border-ok/40 text-ok' : 'border-holo-faint text-ink-3',
+              )}
+            >
+              <span data-num className="font-mono">{i + 1 < step ? '✓' : i + 1}</span>
+              {label}
+            </li>
+          ))}
+        </ol>
+
+        <div className="flex items-center gap-3 rounded-panel border border-holo-line bg-panel px-3 py-2.5">
+          <span className={cx(carry === null ? 'text-ink-3' : 'text-ink')}><MuleIcon size={26} /></span>
+          <span className="flex-1 font-display text-base font-semibold">
+            {carry === null ? 'No MULE' : carry === 'empty' ? 'Empty MULE in tow' : `${GOOD_NAME[carry]} MULE in tow`}
           </span>
           <span data-num className="font-mono text-sm font-bold">{money} cr</span>
         </div>
 
-        {carry === null && (
-          <Button size="lg" className="w-full" onClick={() => { setCarry('empty'); setMoney((m) => m - MULE_PRICE); }}>
-            Buy a MULE · <span data-num className="font-mono">{MULE_PRICE} cr</span>
-          </Button>
-        )}
-
-        {carry === 'empty' && (
-          <Panel title="Outfit your MULE at the store">
-            <div className="grid grid-cols-3 gap-2">
-              {OUTFITS.map((o) => (
-                <button key={o.good} type="button" onClick={() => { setCarry(o.good); setMoney((m) => m - o.cost); }} className="flex h-16 flex-col items-center justify-center gap-1 rounded-control border border-holo-line bg-void hover:border-holo">
-                  <GoodTag good={o.good} name />
-                  <span data-num className="font-mono text-xs text-ink-3">{o.cost} cr</span>
-                </button>
-              ))}
-            </div>
-          </Panel>
-        )}
-
+        {place === 'store' ? (
+          <>
+            <StoreInterior mules={mules} mulePrice={MULE_PRICE} pubPayout={pubPayout} open={open} onShop={onShop} visitors={{ corral: [5] }} />
+            <p className="text-sm text-ink-2">
+              {carry === null && 'Tap the corral to buy an empty MULE, or the pub to cash out and end your turn.'}
+              {carry === 'empty' && 'Lead your MULE to an outfitter. It can make only that good.'}
+              {carry && carry !== 'empty' && 'Your MULE is ready. Walk out and install it on one of your plots.'}
+            </p>
+            <Button size="lg" variant={carry && carry !== 'empty' ? 'holo' : 'outline'} className="w-full" onClick={() => setPlace('map')}>
+              Walk out to the map
+            </Button>
+          </>
+        ) : (
+          <>
+            <HoloMap width={MAP_W} height={MAP_H} tiles={tiles} focusSlot={ME} selected={selected} avatars={[{ slot: ME, x: 7.3, y: 4.3, carrying: carry ?? undefined, name: 'Heiko' }]} onTile={(t) => (t.terrain === 'store' ? setPlace('store') : setSelected(t))} showOutput />
+            <Button size="md" variant="outline" className="w-full" onClick={() => setPlace('store')}>
+              Walk into the store
+            </Button>
         {selected && (
           <Panel title={`Plot ${selected.x + 1}·${selected.y + 1}`} aside={mine ? 'YOURS' : free ? 'FREE' : selected.terrain === 'store' ? 'STORE' : 'OWNED'}>
             <span className="font-display text-xl font-semibold">{TERRAIN_NAME[selected.terrain]}</span>
@@ -122,8 +164,10 @@ export function PhoneDevelop() {
                 {selected.ground ? 'Analysed' : scanning ? 'Analysing…' : 'Geo analysis · 8 s'}
               </Button>
             </div>
-            {!mine && <span className="text-xs text-ink-3">You can analyse any plot. To install, tap one of your own.</span>}
+            {!mine && <span className="text-xs text-ink-3">You can analyse any plot. A MULE led onto a plot that isn't yours runs off.</span>}
           </Panel>
+        )}
+          </>
         )}
       </div>
     </PhoneShell>
