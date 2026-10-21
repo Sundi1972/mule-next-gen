@@ -78,7 +78,6 @@ export function createHaikuComplete(
           thinking: { type: 'disabled' },
           system: [{ type: 'text', text: prompt.system, cache_control: { type: 'ephemeral' } }],
           messages: [{ role: 'user', content: prompt.user }],
-          // The prompt's schema is shared and frozen; the SDK gets its own mutable copy.
           output_config: { format: { type: 'json_schema', schema: copyOf(prompt.schema) } },
         },
         { timeout: Math.ceil(waitMs), maxRetries: 0, signal: controller.signal },
