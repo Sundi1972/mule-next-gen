@@ -286,17 +286,23 @@ export function applyScarcity(dealt: Dealt, scarce: FloorGood | null): Dealt & {
   const lifts: SeamLift[] = [];
   if (scarce !== 'smithore') return { ...dealt, ground, lifts };
   const lowered = new Set(cut);
+  // Lifted plots and the plots they join are never lowered again: that would undo the seam it paid for.
+  const kept = new Set<number>();
   const raised = new Raised(board, ground, 'smithore', field);
   // Each round adds one seam lift and one lowering, or undoes its lift and stops; at most one round per good plot.
   for (let round = 0; round < goods.length && !seamsHold(board, ground); round++) {
     const lift = seamLift(board, ground, raised, lowered);
     if (!lift) break;
-    const extra = leastIsolating(board, ground, cover, lowered, lift);
+    // The lift reaches plots too: coverage must count it, or a later lowering could strand what it covers.
+    cover.move([], [lift.plot]);
+    const extra = leastIsolating(board, ground, cover, new Set([...lowered, ...kept, lift.plot, lift.joins]));
     if (extra === undefined) {
+      cover.move([lift.plot]);
       raised.undo(lift.plot, lift.from);
       break;
     }
     lifts.push(lift);
+    kept.add(lift.plot).add(lift.joins);
     lower(extra);
     lowered.add(extra);
   }
@@ -343,12 +349,9 @@ class CutSearch {
   }
 }
 
-/**
- * A good Smithore plot to lower after a seam lift, keeping reach: the one leaving the fewest
- * isolated plots, never the lift or the plot it joins.
- */
-function leastIsolating(board: Board, ground: Ground[], cover: Coverage, lowered: Set<number>, lift: SeamLift): number | undefined {
-  const options = board.land.filter((i) => isGood(ground, i, 'smithore') && i !== lift.plot && i !== lift.joins && !lowered.has(i) && cover.keeps([i]));
+/** A good Smithore plot outside `barred` to lower after a seam lift, keeping reach: the one leaving the fewest isolated plots. */
+function leastIsolating(board: Board, ground: Ground[], cover: Coverage, barred: Set<number>): number | undefined {
+  const options = board.land.filter((i) => isGood(ground, i, 'smithore') && !barred.has(i) && cover.keeps([i]));
   const after = (i: number) => {
     ground[i]!.smithore -= MAP.goodAt.smithore;
     const count = isolatedCount(board, ground);
@@ -384,50 +387,22 @@ function seamTrades(board: Board, ground: Ground[], field: number[], cover: Cove
     for (const lone of board.land) {
       if (!isLoneGood(board, ground, lone, good)) continue;
       const terrain = board.terrain[lone];
-      let trade: [number, number][] | undefined;
+      let trade: [number, number] | undefined;
       const spot = best(board.land.filter((i) => board.terrain[i] === terrain && !isGood(ground, i, good) && helps(lone, i)));
-      if (spot !== undefined) trade = [[lone, spot]];
+      if (spot !== undefined) trade = [lone, spot];
       for (const beside of board.neighbours[lone]!) {
         if (trade || isGood(ground, beside, good)) continue;
         const partner = board.terrain[beside];
         const donor = best(board.land.filter((i) => i !== lone && board.terrain[i] === partner && isGood(ground, i, good) && helps(i, beside)));
-        if (donor !== undefined) trade = [[donor, beside]];
+        if (donor !== undefined) trade = [donor, beside];
       }
-      if (!trade && !seamsHold(board, ground)) trade = coveredMove(board, ground, field, cover, lone);
       if (!trade) continue;
-      for (const [from, to] of trade) swapRatings(ground, good, from, to);
-      cover.move(trade.map(([from]) => from), trade.map(([, to]) => to));
+      swapRatings(ground, good, trade[0], trade[1]);
+      cover.move([trade[0]], [trade[1]]);
       moved = true;
     }
     if (!moved) break;
   }
-}
-
-/**
- * A lone plot that reach pins in place: it moves beside another good plot while a second
- * same-terrain trade takes over the reach it gave, when together they leave fewer lone plots.
- */
-function coveredMove(board: Board, ground: Ground[], field: number[], cover: Coverage, lone: number): [number, number][] | undefined {
-  const good = 'smithore';
-  const spots = board.land
-    .filter((i) => board.terrain[i] === board.terrain[lone] && !isGood(ground, i, good) && board.neighbours[i]!.some((n) => n !== lone && isGood(ground, n, good)))
-    .sort(highestField(field));
-  for (const spot of spots) {
-    const first = loneChange(board, ground, good, lone, spot);
-    swapRatings(ground, good, lone, spot);
-    let found: [number, number] | undefined;
-    for (const from of board.land) {
-      if (found || from === spot || !isGood(ground, from, good)) continue;
-      const to = board.land
-        .filter((c) => c !== lone && board.terrain[c] === board.terrain[from] && !isGood(ground, c, good))
-        .sort(highestField(field))
-        .find((c) => first + loneChange(board, ground, good, from, c) < 0 && cover.keeps([lone, from], [spot, c]));
-      if (to !== undefined) found = [from, to];
-    }
-    swapRatings(ground, good, lone, spot);
-    if (found) return [[lone, spot], found];
-  }
-  return undefined;
 }
 
 /**
