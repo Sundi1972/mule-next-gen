@@ -296,7 +296,7 @@ function Dialog({
           <Button size="md" variant="outline" onClick={onClose}>
             Keep it open
           </Button>
-          <Button size="md" className="bg-alert! text-white!" onClick={onClose} data-testid="close-confirm">
+          <Button size="md" variant="danger" onClick={onClose} data-testid="close-confirm">
             Close the room
           </Button>
         </div>
@@ -312,7 +312,7 @@ function Dialog({
           <Button size="md" variant="outline" onClick={onClose}>
             Keep {s.ai ? 'it' : s.name}
           </Button>
-          <Button size="md" className="bg-alert! text-white!" onClick={() => onKick(s.id)} data-testid="kick-confirm">
+          <Button size="md" variant="danger" onClick={() => onKick(s.id)} data-testid="kick-confirm">
             Remove
           </Button>
         </div>

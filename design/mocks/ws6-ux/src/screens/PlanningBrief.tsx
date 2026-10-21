@@ -138,7 +138,7 @@ export function PlanningBrief({ mode: start = 'look' }: { mode?: Mode }) {
 }
 
 /** Each good you need this month against what you hold: SHORT or OK, with the reason. */
-function ThisMonth() {
+export function ThisMonth() {
   return (
     <section className="flex flex-col gap-1.5 @min-[1100px]:gap-2.5" data-testid="this-month">
       <span className="label-caps @min-[1100px]:text-xs!">This month you need</span>
@@ -168,7 +168,7 @@ function ThisMonth() {
 }
 
 /** The store's prices and stock in one row of goods: what buying or selling would cost. */
-function MarketStrip() {
+export function MarketStrip() {
   return (
     <section className="flex flex-col gap-1" data-testid="market-strip">
       <span className="label-caps flex justify-between @min-[1100px]:text-xs!">
@@ -213,7 +213,7 @@ function Chat() {
   );
 }
 
-function News() {
+export function News() {
   return (
     <section className="flex flex-col gap-1" data-testid="news">
       <span className="label-caps @min-[1100px]:text-xs!">News</span>

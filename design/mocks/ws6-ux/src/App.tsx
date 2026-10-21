@@ -5,6 +5,7 @@ import { DevelopTurn, type Start } from './screens/DevelopTurn';
 import { LobbyColonist, type LobbyState } from './screens/LobbyColonist';
 import { PlanningBrief } from './screens/PlanningBrief';
 import { MuleSheet } from './screens/MuleSheet';
+import { PlanningHub, type Desk, type Office } from './screens/PlanningHub';
 import { EVENTS, type EventKind } from './production';
 import { PhoneGoodsWalk, TvGoodsWalk, useWalkSim } from './screens/GoodsAuction';
 import { PhoneLandLine, TvLandLine } from './screens/LandLine';
@@ -144,8 +145,39 @@ const PLAN_STATES = [
   { id: 'plan-drone', title: 'Geo drone mode on the map', mode: 'drone' as const },
 ];
 
+const HUB_STATES: { id: string; title: string; desk: Desk; office: Office }[] = [
+  { id: 'hub', title: 'This month, the colony desk (Lena, running for Sheriff)', desk: 'colony', office: 'none' },
+  { id: 'hub-council', title: 'Council: election and law vote', desk: 'council', office: 'none' },
+  { id: 'hub-talk', title: 'Talk: a whisper with a deal card', desk: 'talk', office: 'none' },
+  { id: 'hub-market', title: 'Market: sell a plot or MULE', desk: 'market', office: 'none' },
+  { id: 'hub-secret', title: 'Secret: a sabotage order', desk: 'secret', office: 'none' },
+  { id: 'hub-governor', title: "As Governor: the Governor's desk", desk: 'governor', office: 'governor' },
+  { id: 'hub-sheriff', title: "As Sheriff: the Sheriff's desk", desk: 'sheriff', office: 'sheriff' },
+];
+
 export default function App() {
   const hash = useHash();
+
+  const hub = HUB_STATES.find((s) => s.id === hash);
+  if (hub)
+    return (
+      <Page title={`Planning, the hub · ${hub.title}`}>
+        <Links states={HUB_STATES} current={hash} />
+        <p className="max-w-[900px] text-sm text-ink-2">
+          Month 4, an election month. Everything the month allows sits in “This month” and in the desks; SOON marks what WS7 builds; the lock marks what only you see. Laptop (1440 × 900), then the phone held sideways.
+        </p>
+        <LaptopFrame>
+          <Game>
+            <PlanningHub key={`${hash}-l`} desk={hub.desk} office={hub.office} />
+          </Game>
+        </LaptopFrame>
+        <PhoneFrame>
+          <Game>
+            <PlanningHub key={`${hash}-p`} desk={hub.desk} office={hub.office} />
+          </Game>
+        </PhoneFrame>
+      </Page>
+    );
 
   if (hash === 'mule')
     return (
@@ -320,6 +352,7 @@ export default function App() {
       <h2 className="label-caps mt-8">Redesign 2026-10-22 · phone and laptop (Heiko's points)</h2>
       <div className="mt-2 flex flex-col gap-2">
         <Links states={[{ id: 'mule', title: 'The MULE: model sheet' }]} />
+        <Links states={HUB_STATES} />
         <Links states={LOBBY_STATES} />
         <Links states={PLAN_STATES} />
         <Links states={DEV_STATES} />
