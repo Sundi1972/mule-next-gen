@@ -130,7 +130,7 @@ export function StoreHall({
                 type="button"
                 onClick={tap('works', f.good)}
                 disabled={!onSpot || !can('works')}
-                className="flex flex-col items-center rounded-[6px] border border-holo-faint bg-raised py-0.5 enabled:hover:border-holo"
+                className="flex min-h-11 flex-col items-center justify-center rounded-[6px] border border-holo-faint bg-raised py-0.5 enabled:hover:border-holo"
                 data-testid={`fit-${f.good}`}
               >
                 <GoodIcon good={f.good} size={tv ? 22 : 15} />
