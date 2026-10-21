@@ -11,6 +11,7 @@ export * from './components/PhaseBar';
 export * from './components/PlayerMark';
 export * from './components/ProductionMap';
 export * from './components/Creature';
+export * from './components/Mule';
 export * from './components/MuleIcon';
 export * from './components/species';
 export * from './components/Stat';

@@ -8,9 +8,9 @@ import { WALK } from '@mule/engine';
 import { errors as playwrightErrors, type BrowserContext, type Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
 import { check, claimAPlot, launch, PHONE, startServer, TV, type AuctionSteps } from './harness';
+import { planningIsTheHub } from './hub-steps';
 import { checkTheShow, watchShow } from './production-steps';
-import { shellFillsTheStage } from './shell-steps';
-import { fedPlayerFillsAFullHoloBar, hungryPlayerSeesAShortOrangeBar, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows } from './store-steps';
+import { fedPlayerFillsAFullHoloBar, hungryPlayerSeesAShortOrangeBar, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
 
 /** Loaded by a path held in a variable, so tsc never resolves a file that may not exist yet. */
 async function loadAuctionSteps(): Promise<AuctionSteps> {
@@ -123,8 +123,11 @@ try {
   await steps.landAuction?.({ phone, tv, check }, 1);
   // B-AC-10 and B-AC-9's fed case as development starts; the phone buys a MULE through the start-of-turn card.
   await storeIsOneHallWithTwoRows(phone, within(PHASE_MS.landGrant));
+  // B-AC-15 and B-AC-16: the store says what to do next, and the MULE is a character.
+  await theCorralGlowsWithNoMule(phone, server, code);
   await fedPlayerFillsAFullHoloBar(phone);
   await outfittersOpenWithAnEmptyMule(phone);
+  console.log(`store hall fills the stage: ${await theLedMuleLightsUp(phone, server, code)}`);
   await checkOwnsAPlot(phone);
   await goToThePub(phone);
   // B-AC-6 and B-AC-8, from what both screens drew of month 1's show.
@@ -140,8 +143,8 @@ try {
   await phone.locator('[data-phase=planning]').waitFor({ timeout: within(PHASE_MS.upkeep) });
   await steps.listedSale?.({ phone, tv, check });
   makeHungry(server, code);
-  // B-AC-12: the shell fills the stage at 1440×900 and 844×390.
-  console.log(`shell: ${await shellFillsTheStage(phone, server, code)}`);
+  // B-AC-14: planning is the hub, its needs read from that seed; with B-AC-12's planning part.
+  console.log(`hub: ${await planningIsTheHub(phone, server, code)}`);
   await readyIfStillPlanning(phone);
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 2);
