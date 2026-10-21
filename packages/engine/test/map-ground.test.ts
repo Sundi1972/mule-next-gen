@@ -34,8 +34,9 @@ const PLAYERS = [2, 3, 4, 5, 6];
 const SEEDS = 200;
 /**
  * The seams and scarcity stages fail rarely and only on 2-player maps, so their tests run
- * more seeds there, plus the seeds that once broke them (2p 171: stage 8 left 5 of 8 plots
- * joined; 2p 2469: Smithore scarce, no cut kept S8).
+ * more seeds there, plus two seeds that broke them before the fields reached the map edges
+ * (2p 171: stage 8 left 5 of 8 plots joined; 2p 2469: Smithore scarce, no cut kept S8). Those
+ * maps are gone; the seeds stay as extra cover.
  */
 const SEAM_SEEDS_2P = 1000;
 const REGRESSION_SEEDS_2P = [171, 2469];

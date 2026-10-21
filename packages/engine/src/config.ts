@@ -395,7 +395,7 @@ export const MAP = {
    * Largest gap, on one part of the map (each edge row or column, or the interior), between the mean of
    * rating minus hint and zero. The hint is the same everywhere, so ground that is poorer by place misleads.
    */
-  placeHonesty: 0.15,
+  placeHonesty: 0.1,
   /**
    * Crystite and Rare earth come in rings: a peak plot rated `high`, the plots
    * one step from it `medium`, two steps `low`, and 0 beyond.
@@ -437,7 +437,7 @@ export const MAP = {
   /** Tuning for the ground stages (map-ground.ts): how the generator meets the rules above, not rules themselves. */
   ground: {
     /**
-     * The smooth fields that rank plots: one random blob per `area` plots (at least minBlobs), each a bump of
+     * The smooth fields that rank plots: one random blob per `area` plots of the box padded by blobPad (at least minBlobs), each a bump of
      * this `spread` (variance, in plots squared). Smithore's are narrow, so its rich plots gather into seams.
      */
     blobs: {
