@@ -1,5 +1,5 @@
 import { MAP, sizeBand } from './config.js';
-import { neighbours } from './map.js';
+import { neighbours } from './grid.js';
 import type { GameMap } from './map-rules.js';
 import { createRng, type Rng } from './rng.js';
 import type { GameState, ProductionLine, RawGood, SpecialField, SpecialKind, Terrain, Tile } from './types.js';
