@@ -572,6 +572,20 @@ goal      P-1 — still met (a table plays politics by default; test C1 proves i
 folded    C9 tomorrow; plan Task 3.2 adds `C1: the server a player joins plays politics by default`
 ```
 
+```
+AM-6 · 2026-10-22 · lead · PR-3
+
+target    AM-5 (the server's default); §5 Delivery
+said      createMuleServer passes politics: true
+did       createMuleServer takes politics?: boolean defaulting OFF until PR-4 ships the desks;
+          PR-4 flips the default on together with its election e2e. The engine (sim) stays on.
+because   P-1: without the desks, a real month 1 would run an election no phone can see (20 s
+          of nominate, a reveal, then a second "I'm ready"), and WS4's smoke e2e times out on
+          exactly that. A feature switched on before its screens exist serves no player.
+goal      P-1 — met when PR-4 lands; nothing politics-on reaches trunk before then anyway
+folded    C9 tomorrow; plan Task 3.2's C1 test; PR-4 adds the flip and its test
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: politics state

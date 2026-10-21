@@ -286,6 +286,7 @@ Every handoff carries the standing authority line, verbatim:
 
 ### Task 4.2: UBER-AC-2 end to end
 
+- [ ] **Step 0 (AM-6):** flip `createMuleServer`'s `politics` default to true, with the test `C1: the server a player joins plays politics by default`, and adjust WS4's smoke (named edit) so its month-1 'I'm ready' also clears the election.
 - [ ] **Step 1:** Extend the e2e: the winner sets 8%; the next sale at the auction is taxed at 8% (assert the seller's money in their phone's view). This is UBER-AC-2 verbatim.
 - [ ] **Step 2:** Run — Expected: PASS.
 - [ ] **Step 3:** Commit `test(e2e): UBER-AC-2 election to taxed sale`.
