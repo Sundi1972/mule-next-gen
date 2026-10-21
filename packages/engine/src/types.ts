@@ -143,7 +143,7 @@ export interface ExportShip {
   bought: Partial<Stock>;
 }
 
-/** The land grant: free plots light up one at a time, in a random order each sweep. */
+/** The land grant: free plots light up one at a time, in reading order each sweep. */
 export interface Grant {
   /** Tile indices in the order they light up this sweep. */
   order: number[];

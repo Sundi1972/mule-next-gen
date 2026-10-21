@@ -116,15 +116,14 @@ export function orderGeoDrone(state: GameState, playerId: string, plots: { x: nu
 // --- Land grant -------------------------------------------------------------
 
 /**
- * Free plots light up one at a time in a random order, and the first player
- * to press claims the lit plot. Every free plot lights once per sweep, in a
- * fresh order each sweep, so nobody can count down to the plot they want.
- * The order comes from the game seed, so every screen shows the same plot.
+ * Free plots light up one at a time in reading order (top row first, left to
+ * right), and the first player to press claims the lit plot. Every free plot
+ * lights once per sweep.
  */
 function newSweep(state: GameState, sweep: number): void {
-  const free = freePlots(state).map((t) => tileIndex(state.width, t.x, t.y));
-  const rng = createRng((state.seed * 31 + state.month * 7919 + sweep * 104_729) >>> 0);
-  state.grant = { order: rng.shuffle(free), step: 0, sweep };
+  // freePlots keeps the tiles' row-major order, which is reading order.
+  const order = freePlots(state).map((t) => tileIndex(state.width, t.x, t.y));
+  state.grant = { order, step: 0, sweep };
 }
 
 /** The tile lit right now, or null when the grant is over. */
