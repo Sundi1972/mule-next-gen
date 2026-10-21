@@ -107,5 +107,7 @@ export function cloneForSim(state: GameState): GameState {
     grant: state.grant ? { ...state.grant, order: state.grant.order.slice() } : null,
     history: state.history.slice(-2),
     auction: state.auction ? structuredClone(state.auction) : null,
+    listings: structuredClone(state.listings),
+    landAuction: state.landAuction ? structuredClone(state.landAuction) : null,
   };
 }
