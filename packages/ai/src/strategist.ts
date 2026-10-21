@@ -10,6 +10,7 @@ import {
   PROCESSED_GOODS,
   RAW_GOODS,
   STRATEGIST,
+  UPKEEP,
   shipInPort,
   shipPrice,
   tileIndex,
@@ -337,6 +338,13 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
   const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
   const values = unitValues(obs, o, good, mind);
   const p = me(obs, mind);
+  // Colonists buy only from the store. When its shelf can't feed them, Food or Water held past next
+  // month's own needs is worth no more than the store pays now: a hungry colony shrinks, and a unit
+  // held for next month's price stays out of reach of the people who need it.
+  if ((good === 'food' || good === 'water') && obs.store.stock[good] < obs.colonists / UPKEEP.colonistsPerUnit) {
+    const now = expectedPrices(obs, good).sell;
+    for (let k = values.block; k < values.keep.length; k++) values.keep[k] = Math.min(values.keep[k]!, now - 1);
+  }
   const reserve = cashReserve(obs, mind);
   const budget = Math.max(0, Math.min(p.money * STRATEGIST.budgetShare, p.money - reserve));
   const a = obs.auction;
