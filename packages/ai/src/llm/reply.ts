@@ -6,6 +6,8 @@ export type ParsedReply = { ok: true; optionId: string; line: string | null } | 
 
 const QUOTE_MARKS = '"\'“”‘’';
 
+const NOTE_NAME_CHARS = 8;
+
 function isQuote(char: string | undefined): boolean {
   return char !== undefined && QUOTE_MARKS.includes(char);
 }
@@ -26,7 +28,12 @@ function clean(line: unknown): string | null {
   const stripped = stripQuotePairs(line.replace(/\s+/g, ' ').trim());
   // Cut by code points: slicing UTF-16 units could leave half an emoji.
   const capped = [...stripped].slice(0, BRAIN.maxLineChars).join('').trim();
-  return capped === '' ? null : capped;
+  return capped === '' || [...capped].every(isQuote) ? null : capped;
+}
+
+/** The model's raw option text as one short line, safe to put in a note. */
+function nameForNote(option: string): string {
+  return [...option.replace(/\s+/g, ' ').trim()].slice(0, NOTE_NAME_CHARS).join('').trim();
 }
 
 /** Reads a model's JSON reply against the shortlist. Never throws. */
@@ -41,6 +48,6 @@ export function parseReply(text: string, shortlist: ShortOption[]): ParsedReply 
   if (typeof reply !== 'object' || reply === null) return unreadable;
   const { option, line } = reply as { option?: unknown; line?: unknown };
   if (typeof option !== 'string') return unreadable;
-  if (!shortlist.some((o) => o.id === option)) return { ok: false, reason: `named ${option}, not on the list` };
+  if (!shortlist.some((o) => o.id === option)) return { ok: false, reason: `named ${nameForNote(option)}, not on the list` };
   return { ok: true, optionId: option, line: clean(line) };
 }
