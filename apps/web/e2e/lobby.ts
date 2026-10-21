@@ -21,6 +21,8 @@ const WIDE_RAIL_PX = 400;
 const NARROWED_SHELL_PX = 1000;
 const PHASE_SCALE = 0.1;
 const within = (ms: number) => ms * PHASE_SCALE + 3_000;
+/** A land auction, when the month has one, runs on its own clock: PHASE_MS has no entry for it. */
+const LAND_AUCTION_ALLOWANCE_MS = 20_000;
 
 const EVERYONE_IDS = [
   'lobby', 'hero', 'hero-name', 'hero-perk', 'species-pick', 'colour-pick', 'seats', 'guide', 'room-card', 'room-code', 'room-qr', 'now', 'now-title', 'now-steps',
@@ -232,27 +234,31 @@ async function colourIntoTheGame(): Promise<void> {
   check((await mia.getByTestId('colour-1').getAttribute('aria-pressed')) === 'true', 'B-AC-8: phone 2 is refused: it keeps its own colour');
   colourRoom((await heikos.count()) === 1, `B-AC-8: phone 2 is refused: ${COLOUR_NAME[rose]} stays Heiko's`);
 
-  const p6 = `var(--color-p${rose + 1})`;
+  const inRose = `[data-slot="${rose}"]`;
+  colourRoom(await shows(heikoOn(tv.locator('li')).locator(inRose)), `B-AC-8: the TV lobby draws Heiko's mark in ${COLOUR_NAME[rose]}`);
+
   await heiko.getByTestId('start-game').click();
+  const roster = heikoOn(tv.locator('[data-phase=planning] li, [data-phase=landGrant] li'));
+  colourRoom(await shows(roster.locator(inRose)), `B-AC-8: the TV's game roster draws Heiko in ${COLOUR_NAME[rose]}`);
   const grant = heiko.locator('[data-phase=landGrant]');
   await grant.waitFor({ timeout: within(PHASE_MS.planning) });
-  const tvHeiko = tv.locator('[data-phase] li').filter({ hasText: 'Heiko' }).first();
-  colourRoom((await tvHeiko.innerHTML({ timeout: SHOWN_MS })).includes(p6), `B-AC-8: the TV roster draws Heiko in ${COLOUR_NAME[rose]}`);
   try {
     await grant.getByRole('button', { name: /CLAIM/ }).click({ timeout: within(PHASE_MS.landGrant) });
   } catch {
     check(false, 'B-AC-8: phone 1 claims a plot in the land grant');
   }
-  const drawn = await tv
-    .waitForFunction((colour) => [...document.querySelectorAll('[data-phase] [aria-label*="owned by"]')].some((el) => el.outerHTML.includes(colour)), p6, { timeout: SHOWN_MS })
-    .then(
-      () => true,
-      () => false,
-    );
-  colourRoom(drawn, `B-AC-8: the TV map draws Heiko's plot in ${COLOUR_NAME[rose]}`);
+  const development = tv.locator('[data-phase=development]');
+  await development.waitFor({ timeout: within(PHASE_MS.landGrant + PHASE_MS.development) + LAND_AUCTION_ALLOWANCE_MS });
+  colourRoom(await shows(heikoOn(development.locator('li')).locator(inRose)), `B-AC-8: the TV's development roster draws Heiko in ${COLOUR_NAME[rose]}`);
+  colourRoom(await shows(development.locator(`[aria-label*="owned by"] ${inRose}`).first()), `B-AC-8: the TV map draws Heiko's plot in ${COLOUR_NAME[rose]}`);
   await heiko.context().close();
   await mia.context().close();
   await tv.context().close();
+}
+
+/** Heiko's row among these: the colour is read from `data-slot` on his PlayerMark. */
+function heikoOn(rows: Locator): Locator {
+  return rows.filter({ hasText: 'Heiko' }).first();
 }
 
 function colourRoom(cond: boolean, message: string): void {
