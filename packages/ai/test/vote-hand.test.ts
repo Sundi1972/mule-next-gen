@@ -8,7 +8,6 @@ import {
   createGame,
   createRng,
   electionDone,
-  observe,
   POLITICS,
   RuleError,
   runFor,
@@ -385,10 +384,10 @@ function electionWithHumans(hand: Pick<VoteHand, 'tick'>, pick: string): { sent:
   return { sent, governor: state.politics!.governor };
 }
 
-/** A stand-in that cheats: it votes with the majority of the ballots it can see. */
+/** A stand-in that cheats: it reads every ballot from the raw game, past observe(), and votes with the majority. */
 const bandwagon: Pick<VoteHand, 'tick'> = {
   tick(state, _dt, act) {
-    const election = observe(state, 'ai0').politics?.election;
+    const election = state.politics?.election;
     if (election?.stage !== 'ballot' || election.done.includes('ai0')) return;
     const votes = Object.values(election.ballots).map((b) => b.governor);
     const leader = election.candidates.governor.reduce((a, b) => (votes.filter((v) => v === b).length > votes.filter((v) => v === a).length ? b : a));
