@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BRAIN } from '@mule/engine';
+import type { Prompt } from '@mule/ai';
 import { createBudget } from '../src/brain/budget.js';
 import { usd } from '../src/brain/ledger.js';
 
@@ -10,6 +11,20 @@ function setup() {
   const budget = createBudget({ seatSpent: (game, seat) => spent.get(key(game, seat)) ?? 0 });
   return { budget, setSpent: (game: string, seat: string, v: number) => spent.set(key(game, seat), v) };
 }
+
+const SCHEMA: Prompt['schema'] = {
+  type: 'object',
+  properties: { option: { type: 'string', enum: ['a', 'b'] }, line: { type: 'string' } },
+  required: ['option'],
+  additionalProperties: false,
+};
+const SCHEMA_CHARS = JSON.stringify(SCHEMA).length;
+/** A prompt whose system + user + schema JSON total exactly `total` characters. */
+const promptOf = (total: number, schema = SCHEMA): Prompt => ({
+  system: 'x'.repeat(1000),
+  user: 'y'.repeat(total - 1000 - JSON.stringify(schema).length),
+  schema,
+});
 
 describe('RULE-3 budget table', () => {
   it('B-AC-4 (RULE-3): spent 0, next 0.0005 → call', () => {
@@ -23,10 +38,17 @@ describe('RULE-3 budget table', () => {
     expect(budget.allow('g', 's', 0.0005)).toBe(true);
   });
 
-  it('B-AC-4 (RULE-3): spent 0.0596, next 0.0005 → over budget', () => {
+  it('B-AC-4 (RULE-3): spent 0.0596, next 0.0005 → over budget; a NaN spent or next fails closed', () => {
     const { budget, setSpent } = setup();
     setSpent('g', 's', 0.0596);
     expect(budget.allow('g', 's', 0.0005)).toBe(false);
+    setSpent('g', 'nan-spent', NaN);
+    expect(budget.allow('g', 'nan-spent', 0.0005)).toBe(false);
+    expect(budget.allow('g', 'nan-next', NaN)).toBe(false);
+    // and each is locked afterwards, even once the numbers are sane
+    setSpent('g', 'nan-spent', 0);
+    expect(budget.allow('g', 'nan-spent', 0)).toBe(false);
+    expect(budget.allow('g', 'nan-next', 0)).toBe(false);
   });
 
   it('B-AC-4 (RULE-3): exactly at the boundary (spent + next = 0.06) → call', () => {
@@ -57,21 +79,32 @@ describe('RULE-3 budget table', () => {
     expect(budget.allow('g2', 's', 0.0005)).toBe(true);
   });
 
-  it("B-AC-4 (RULE-3): release(game) forgets that game's locks", () => {
+  it("B-AC-4 (RULE-3): release(game) forgets that game's locks and only that game's", () => {
     const { budget, setSpent } = setup();
-    setSpent('g', 's', 0.0596);
-    expect(budget.allow('g', 's', 0.0005)).toBe(false);
-    budget.release('g');
-    setSpent('g', 's', 0);
-    expect(budget.allow('g', 's', 0.0005)).toBe(true);
+    setSpent('g1', 's', 0.0596);
+    setSpent('g2', 's', 0.0596);
+    expect(budget.allow('g1', 's', 0.0005)).toBe(false);
+    expect(budget.allow('g2', 's', 0.0005)).toBe(false);
+    budget.release('g1');
+    setSpent('g1', 's', 0);
+    setSpent('g2', 's', 0);
+    expect(budget.allow('g1', 's', 0.0005)).toBe(true);
+    expect(budget.allow('g2', 's', 0.0005)).toBe(false);
   });
 
-  it('B-AC-4 (RULE-3): worstCase prices a 4,000-character prompt at 1000 input and 200 output tokens', () => {
+  it('B-AC-4 (RULE-3): worstCase counts system, user and schema, rounds tokens up, prices input at the cache-write rate', () => {
     const { budget } = setup();
-    const expected = usd({ input: 1000, cached_read: 0, cache_write: 0, output: 200 });
-    expect(budget.worstCase('x'.repeat(4000))).toBe(expected);
-    expect(budget.worstCase(['x'.repeat(1500), 'y'.repeat(2500)])).toBe(expected);
-    // 1000 × 0.10 + 200 × 0.50 per MTok, written out by hand
-    expect(budget.worstCase('x'.repeat(4000))).toBeCloseTo(0.0002, 10);
+    // 3,000 chars at 3 per token = 1,000 tokens × 0.125 + 200 × 0.50 per MTok, by hand
+    expect(budget.worstCase(promptOf(3000))).toBeCloseTo(0.000225, 12);
+    // 3,001 chars = 1,001 tokens: pins ceil
+    expect(budget.worstCase(promptOf(3001))).toBeCloseTo(0.000225125, 12);
+    // the schema's JSON is what carries a prompt over a token boundary: without it these chars price one token less
+    const sys = 'x'.repeat(1000);
+    const user = 'y'.repeat(3000 - 1000 - SCHEMA_CHARS + 1 - 0);
+    const chars = 1000 + user.length; // system + user alone
+    expect(chars + SCHEMA_CHARS).toBe(3001);
+    const tokensWithout = Math.ceil(chars / 3);
+    expect(tokensWithout).toBeLessThan(1001);
+    expect(budget.worstCase({ system: sys, user, schema: SCHEMA })).toBeCloseTo(1001 * 0.125e-6 + 200 * 0.5e-6, 12);
   });
 });
