@@ -1,4 +1,5 @@
 import {
+  advancePhase,
   cloneForSim,
   endAuction,
   exportDemand,
@@ -10,6 +11,7 @@ import {
   runUpkeep,
   emptyStock,
   GOODS,
+  STRATEGIST,
   type GameState,
   type Good,
   type Stock,
@@ -34,14 +36,21 @@ export interface Outlook {
   made: Stock;
   /** The posted price of a good at that auction, with `extra` more units in the colony (negative for fewer). */
   price(good: Good, extra?: number): number;
+  /**
+   * The posted price a few months later (STRATEGIST.outlookMonths), if
+   * nobody builds or trades: a shortage building up shows here first. Scaled
+   * by the same proportion as `price` for `extra` units.
+   */
+  later(good: Good, extra?: number): number;
 }
 
 const BEFORE_PRODUCTION = new Set(['planning', 'landGrant', 'development']);
 
-export function outlook(obs: GameState, me: string, options: { lookAhead: boolean; apply?: (sim: GameState) => void }): Outlook {
+export function outlook(obs: GameState, me: string, options: { lookAhead: boolean; apply?: (sim: GameState) => void; months?: number }): Outlook {
+  const months = options.months ?? STRATEGIST.outlookMonths;
   const sim = cloneForSim(obs);
   options.apply?.(sim);
-  const flat = (): Outlook => ({ stage: sim, final: obs.month >= endMonth(obs), made: emptyStock(), price: (good) => obs.store.posted[good] });
+  const flat = (): Outlook => ({ stage: sim, final: obs.month >= endMonth(obs), made: emptyStock(), price: (good) => obs.store.posted[good], later: (good) => obs.store.posted[good] });
   if (!options.lookAhead) return flat();
 
   let made = emptyStock();
@@ -69,7 +78,8 @@ export function outlook(obs: GameState, me: string, options: { lookAhead: boolea
   const off = exportDemand(sim);
   const seat = sim.players.find((p) => p.id === me)!;
   const cache = new Map<string, number>();
-  return {
+  let future: Stock | null = null;
+  const o: Outlook = {
     stage: sim,
     final: false,
     made,
@@ -83,7 +93,32 @@ export function outlook(obs: GameState, me: string, options: { lookAhead: boolea
       cache.set(key, p);
       return p;
     },
+    later(good, extra = 0) {
+      future ??= rollForward(sim, months);
+      const base = Math.max(1, o.price(good));
+      return future[good] * (extra === 0 ? 1 : o.price(good, extra) / base);
+    },
   };
+  return o;
+}
+
+/**
+ * Plays the status quo forward on a copy: nobody claims, builds or trades;
+ * plots produce, everyone eats, the store builds MULEs and posts prices.
+ * Returns the prices it posts at the last auction reached.
+ */
+function rollForward(stage: GameState, months: number): Stock {
+  const sim = cloneForSim(stage);
+  const target = Math.min(sim.month + months, endMonth(sim));
+  let prices: Stock = { ...sim.store.posted };
+  for (let guard = 0; guard < months * 8 && sim.phase !== 'gameOver'; guard++) {
+    advancePhase(sim);
+    if (sim.phase === 'auction') {
+      prices = { ...sim.store.posted };
+      if (sim.month >= target) break;
+    }
+  }
+  return prices;
 }
 
 function produce(sim: GameState, me: string): Stock {

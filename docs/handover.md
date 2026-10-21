@@ -54,36 +54,81 @@ the next work:
 
 ## Where the code is
 
-| Branch | State | PR |
-| --- | --- | --- |
-| `main` | Engine, server, design system and stage-2 rules (PRs #1 to #4 merged) | |
-| `feat/play-screens` | Phone and TV screens wired to the server | #5 into `main`, green, waiting for Heiko's OK to merge |
-| `feat/phone-landscape` | Landscape-only phone with a side rail | #6, stacked on #5, green |
-| `feat/walk-auction` | Classic walk auction | #7, stacked on #6, green |
-| `feat/strategist` | **Unfinished.** New `packages/ai` (strategist, utility scoring, hands, decider, personas), `packages/engine/src/observe.ts` (what a seat may see), sim moved into `packages/ai`, old simple bot deleted | No PR. **Does not build yet** |
+PRs #1 to #8 are merged into `main` (21 Oct 2026): engine, server, design
+system, stage-2 rules, the playable phone and TV screens, landscape phones,
+the classic walk auction and these docs.
 
-Merge #5, then #6, then #7, in that order. Each one needs Heiko's OK first.
+`feat/strategist` (draft PR #10) builds and passes its tests:
 
-The git stash "abandoned sim bot tuning" lives only in the old cloud container
-and will be lost with it. That is fine, because Heiko called that work throwaway.
+- **`packages/ai`**: the strategist (utility-scored land, development and
+  auction decisions), the default dual-utility decider, personas, the
+  development and auction hands, the decision log and the simulator.
+- **`packages/engine/src/observe.ts`**: what one seat may see. The AI reads the game only through it.
+- **Server**: AI seats are driven by `AiSeat` in planning, the land grant
+  (they press Claim after a human reaction time), development (their own
+  clock, real elapsed time; the phase now waits for AI players too) and the
+  auction. Every AI move goes through the same rule checks as a phone.
+
+## How the strategist values things
+
+- A MULE's worth is its monthly net over `STRATEGIST.horizon` months: next
+  month at the outlook's forecast price, later months at the price the
+  outlook sees after playing the status quo forward
+  `STRATEGIST.outlookMonths` (2) months. This is what lets it see a Smithore,
+  Food or Water shortage coming before the price shows it.
+- Food, Water or Energy that covers the seat's own shortfall is worth at
+  least `STRATEGIST.selfSupply` times the reference price, because going
+  short costs development time, half of every farm or half of every plot.
+- The cash reserve prices a short unit at most `reservePriceCap` times the
+  reference price, and a farm for a good the seat is short of doesn't need to
+  keep cash back for that good. "Cash left" is only a mild preference
+  (`cashLeftFloor`); the reserve itself is a hard rule.
+
+## Latest simulator run
+
+20 games, seeds 101 to 120, 4 strategist seats at Trader, after the fixes above:
+
+| Check | Start of 21 Oct | Now | Target |
+| --- | --- | --- | --- |
+| Plots developed at the end | 28% | 49% | 70% or more |
+| Colonists short of Food or Water | 88% of months | 52% | under 15% |
+| Food above 3x reference | 100% of games | 55% | 33% to 50% |
+| Corral sold out | 0% | 30% of months | under 10% |
+| MULE price, 90th percentile | 389 | 1,466 | under 500 |
+| Units traded between players a month | 0.4 | 3.0 | |
+
+All four personas now win games. The corral running dry is the main open
+problem: the store runs out of Smithore around month 7, and too few AI
+players mine it, so development stalls while they still have cash.
 
 ## Known gaps
 
-- **Sim numbers are rough.** The simple bot plays badly, with AI players going broke, food spikes and hunger. The numbers only become meaningful once the strategist replaces it.
+- **Smithore and the corral** (above). Next lever: let the strategist value
+  Smithore by what the corral needs, or have the store keep more Smithore back.
+- **Early factories.** In month 1 the AIs still build Medicine and
+  Electronics works on starting stock and then can't feed them.
+- **Language-model decider** not built yet (`Decider` interface is ready in `packages/ai/src/decider.ts`).
+- **Tournament runner** not built; the `pnpm tournament` script was removed until it exists.
 - **Land and asset auctions** do not use the walk auction yet.
-- **Politics** (stage 3) is designed but not built: Governor, Sheriff, Land Baron, laws, budget and projects.
+- **Politics** (stage 3) is designed but not built.
 - **Events, traits and super tiles** exist in the engine. Their numbers are placeholders.
 
 ## Next steps
 
-1. Finish `feat/strategist` and get it building and passing tests:
-   - scoring and shortlist;
-   - the hands, with A* paths on the map and the auction walk;
-   - the language model decider, with a fallback to the top option.
-   Then check balance with `pnpm sim`.
-2. Use the walk auction for the land auction and for listed plots and MULEs.
-3. Build politics (stage 3).
-4. Merge #5 to #7 when Heiko says so.
+1. Fix the Smithore and corral shortage, then re-check `pnpm sim -- --games 40`.
+2. Plug in the language-model decider (Claude Haiku 5.5, `ANTHROPIC_API_KEY`
+   from the server environment only), with the top option as fallback and the
+   cost of every call logged.
+3. Use the walk auction for the land auction and for listed plots and MULEs.
+4. Build politics (stage 3).
+
+## Working environment
+
+The 21 Oct session in the Claude app could not reach the npm registry, so it
+could not run `pnpm install`. It typechecked with a global `tsc`, ran the
+simulator with a global `tsx`, and ran the tests with a small vitest
+stand-in; GitHub CI runs the real suite. Claude Code sessions on this repo
+have had working npm access.
 
 ## What did not come along
 

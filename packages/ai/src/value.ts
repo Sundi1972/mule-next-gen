@@ -69,12 +69,23 @@ export function airUnitCost(obs: GameState): number {
   return STRATEGIST.airCost * (1 + obs.air / POLLUTION.bands[1].from);
 }
 
-/** Net credits a month from running this outfit here, at the outlook's prices (its own extra supply included). */
-export function monthlyNet(obs: GameState, o: Outlook, y: Yield, outfit: Outfit, mind: Mind): number {
+/** A good's price with `extra` more units in the colony. */
+export type PriceOf = (good: Good, extra?: number) => number;
+
+
+/** Net credits a month from running this outfit here, at the given prices (the outlook's by default, its own extra supply included). */
+export function monthlyNet(obs: GameState, o: Outlook, y: Yield, outfit: Outfit, mind: Mind, price?: PriceOf): number {
   const full = mind.level.fullScoring;
   if (outfit === 'greenBelt') return full ? POLLUTION.greenBeltAir * airUnitCost(obs) - 5 : -5;
-  const P = (g: Good, extra = 0) => o.price(g, extra);
-  const revenue = y.made * P(outfit, y.made);
+  const P: PriceOf = price ?? ((g, extra = 0) => o.price(g, extra));
+  let revenue = y.made * P(outfit, y.made);
+  if (full && (outfit === 'food' || outfit === 'water' || outfit === 'energy')) {
+    // The units that cover its own shortfall are worth what going short would cost it.
+    const short = Math.max(0, monthNeeds(obs, mind.me)[outfit] - o.made[outfit]);
+    const own = Math.min(y.made, short);
+    const floor = obs.store.refPrice[outfit] * STRATEGIST.selfSupply;
+    revenue += own * Math.max(0, floor - P(outfit, y.made));
+  }
   const energy = outfit === 'energy' ? 0 : y.energy * P('energy', -y.energy);
   const inputs = (Object.entries(y.inputs) as [Good, number][]).reduce((n, [g, q]) => n + q * P(g, -q), 0);
   const crew = full ? y.crew * (P('food') / UPKEEP.crewPerFood + P('water') / UPKEEP.crewPerWater) : 0;
@@ -84,19 +95,34 @@ export function monthlyNet(obs: GameState, o: Outlook, y: Yield, outfit: Outfit,
 
 /** Sum of discount^i over the months a MULE installed now will run, up to the horizon. */
 export function annuity(obs: GameState): number {
+  return weights(obs).reduce((n, w) => n + w.now + w.long, 0);
+}
+
+/**
+ * Per month a MULE installed now will run: how much that month counts
+ * (discounted), at next month's forecast price (the first month) or at the
+ * outlook's later price (the months after).
+ */
+function weights(obs: GameState): { now: number; long: number }[] {
   const months = Math.min(productionsLeft(obs), STRATEGIST.horizon);
-  let sum = 0;
-  for (let i = 0; i < months; i++) sum += Math.pow(STRATEGIST.discount, i);
-  return sum;
+  const out: { now: number; long: number }[] = [];
+  for (let i = 0; i < months; i++) {
+    const d = Math.pow(STRATEGIST.discount, i);
+    out.push(i === 0 ? { now: d, long: 0 } : { now: 0, long: d });
+  }
+  return out;
 }
 
 /** Credits gained by buying, outfitting and installing a MULE: its running value, less the price, plus what the developed plot adds to the final score. */
 export function installGain(obs: GameState, o: Outlook, tile: Tile, outfit: Outfit, mind: Mind): { gain: number; cost: number; net: number; y: Yield } {
   const y = yieldOf(obs, tile, outfit, mind.me);
   const net = monthlyNet(obs, o, y, outfit, mind);
+  // With look-ahead the later months use the rolled-forward prices; without, next month's price lasts (Rookie's mistake).
+  const long = mind.level.lookAhead ? monthlyNet(obs, o, y, outfit, mind, (g, extra = 0) => o.later(g, extra)) : net;
+  const running = weights(obs).reduce((n, w) => n + w.now * net + w.long * long, 0);
   const cost = (tile.outfit ? 0 : mulePriceFor(obs, mind.me)) + outfitCostFor(obs, mind.me, outfit);
   const residual = productionsLeft(obs) > 0 && !tile.outfit ? mulePrice(obs) * STRATEGIST.residual : 0;
-  return { gain: net * annuity(obs) - cost + residual, cost, net, y };
+  return { gain: running - cost + residual, cost, net, y };
 }
 
 /** True when the factory could run: every input other than Energy comes from the seat's own plots or sits in its stock for a few runs. */
@@ -120,14 +146,20 @@ export function secondValue(obs: GameState, me: string): number {
   return Math.max(pubRate, idle && p.money > mulePriceFor(obs, me) ? STRATEGIST.secondValue.busy : STRATEGIST.secondValue.idle);
 }
 
-/** Cash the seat keeps back: a floor plus what next month's Food, Water and Energy shortfall would cost, times its reserve weight. */
-export function cashReserve(obs: GameState, mind: Mind, o?: Outlook): number {
+/**
+ * Cash the seat keeps back: a floor plus what next month's Food, Water and
+ * Energy shortfall would cost, times its reserve weight. A short unit counts
+ * at most a few times its reference price, so a price spike doesn't freeze
+ * all its cash. `except` leaves out a good: the one a new farm would make.
+ */
+export function cashReserve(obs: GameState, mind: Mind, o?: Outlook, except?: Good): number {
   const p = obs.players.find((q) => q.id === mind.me)!;
   const need = monthNeeds(obs, mind.me);
   let cost = 0;
   for (const g of ['food', 'water', 'energy'] as const) {
+    if (g === except) continue;
     const short = Math.max(0, need[g] - p.stock[g] - (o?.made[g] ?? 0));
-    cost += short * obs.store.posted[g] * 1.1;
+    cost += short * Math.min(obs.store.posted[g] * 1.1, obs.store.refPrice[g] * STRATEGIST.reservePriceCap);
   }
   return Math.round((STRATEGIST.cashFloor + cost) * mind.persona.reserve);
 }

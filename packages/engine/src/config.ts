@@ -510,6 +510,27 @@ export const STRATEGIST = {
   forecastHaircut: 0.05,
   /** A corner pays this share over next month's price for the units the others are short of. */
   cornerPremium: 0.5,
+  /**
+   * How many months past next the outlook plays the status quo forward
+   * (nobody builds or trades), to see a shortage coming before the price
+   * shows it: the corral's Smithore, Food or Water running out.
+   */
+  outlookMonths: 2,
+  /** When it sizes its cash reserve, a short unit counts at most this many times the reference price. */
+  reservePriceCap: 3,
+  /**
+   * A new farm's Food, Water or Energy that covers the seat's own shortfall is
+   * worth at least this many times the reference price: going short costs
+   * development time (Food), half of every farm (Water) or half of every plot
+   * (Energy), whatever the market price is today.
+   */
+  selfSupply: 3,
+  /**
+   * The "cash left" consideration: spending down to the reserve scores this
+   * much, and keeping twice the reserve scores 1. The reserve itself is a hard
+   * rule, so this is only a mild preference for cash in hand.
+   */
+  cashLeftFloor: 0.75,
 };
 
 /** The AI's hands in the real-time phases. Times are in ms. */

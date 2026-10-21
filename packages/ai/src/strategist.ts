@@ -205,7 +205,7 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number):
   const cands: Candidate<DevAction>[] = [];
   const common = (cashAfter: number, known: boolean, feeds: boolean, gain: number, why: string) => [
     consider('Gain', curve.gain(gain, STRATEGIST.gainScale.develop), mind.persona.greed, why),
-    consider('Cash left', curve.floor(curve.ramp(cashAfter, reserve, reserve * 3), 0.3), mind.persona.reserve, `${cr(cashAfter)} left, ${cr(reserve)} kept back`),
+    consider('Cash left', curve.floor(curve.ramp(cashAfter, reserve, reserve * 2), STRATEGIST.cashLeftFloor), mind.persona.reserve, `${cr(cashAfter)} left, ${cr(reserve)} kept back`),
     consider('Known ground', known ? 1 : 0.75, mind.persona.risk, known ? 'ground analysed' : 'ground not analysed'),
     consider('Feeds me', feeds ? 1 : 0.8, mind.persona.reserve * 0.5, feeds ? 'covers my own Food or Energy' : 'I buy my Food and Energy'),
   ];
@@ -215,10 +215,13 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number):
       const { gain, cost, net } = installGain(obs, o, tile, outfit, mind);
       const cashAfter = p.money - cost;
       const feeds = (outfit === 'food' && needFood) || (outfit === 'energy' && needEnergy);
+      // A farm for a good it is short of is the cure, not a risk: it needn't keep cash back to buy that good.
+      const cures = outfit === 'food' || outfit === 'water' || outfit === 'energy' ? outfit : undefined;
+      const keepBack = cures ? cashReserve(obs, mind, o, cures) : reserve;
       let veto: string | null = null;
       if (obs.store.mules <= 0) veto = 'the corral is empty';
       else if (mulesSoFar >= mind.level.mulesPerMonth) veto = `already led ${mulesSoFar} MULEs out this month`;
-      else if (cashAfter < reserve) veto = `it would leave ${cr(cashAfter)}, under the ${cr(reserve)} kept for upkeep`;
+      else if (cashAfter < keepBack) veto = `it would leave ${cr(cashAfter)}, under the ${cr(keepBack)} kept for upkeep`;
       else if (!canFeed(obs, mind.me, outfit)) veto = `nothing to feed the ${outfitName(outfit)} with`;
       cands.push(
         candidate<DevAction>(
@@ -345,7 +348,7 @@ export function tradeDecision(obs: GameState, mind: Mind, plan: GoodPlan): Short
   const cands: Candidate<TradeAction>[] = [];
   const gainCons = (gain: number, cashAfter: number, sure: number, why: string, sureWhy: string) => [
     consider('Gain', curve.gain(gain, STRATEGIST.gainScale.trade), mind.persona.greed, why),
-    consider('Cash left', curve.floor(curve.ramp(cashAfter, plan.reserve, plan.reserve * 3), 0.3), mind.persona.reserve, `${cr(cashAfter)} left after, ${cr(plan.reserve)} kept back`),
+    consider('Cash left', curve.floor(curve.ramp(cashAfter, plan.reserve, plan.reserve * 2), STRATEGIST.cashLeftFloor), mind.persona.reserve, `${cr(cashAfter)} left after, ${cr(plan.reserve)} kept back`),
     consider('Sure thing', sure, mind.persona.risk, sureWhy),
   ];
 

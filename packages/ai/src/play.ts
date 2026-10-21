@@ -98,7 +98,13 @@ export function applyAction(state: GameState, id: string, action: AiAction, cloc
   }
 }
 
-export function playGame(seed: number, specs: SeatSpec[], options: { onDecision?: (r: DecisionRecord) => void } = {}): PlayedGame {
+export interface PlayOptions {
+  onDecision?: (r: DecisionRecord) => void;
+  /** Called after each phase is played, before the game moves on: for diagnostics. */
+  onPhase?: (state: GameState) => void;
+}
+
+export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions = {}): PlayedGame {
   const state = createGame({ seed, players: specs.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
   let decisions = 0;
   const seats = specs.map(
@@ -171,6 +177,7 @@ export function playGame(seed: number, specs: SeatSpec[], options: { onDecision?
         broke.push(state.players.filter((p) => p.money < 100 && state.tiles.some((t) => t.owner === p.id && !t.outfit)).map((p) => p.id));
         break;
     }
+    options.onPhase?.(state);
     advancePhase(state);
   }
   return { state, seats, broke, auction, decisions };
