@@ -17,7 +17,12 @@ import { stepBoard, takeSide, type WalkMarket } from './walk.js';
 
 /** What the store pays for an unsold lot of this kind, today. A listing fixes it when it is made. */
 export function storePaysFor(state: GameState, kind: LotItem['kind']): number {
-  return kind === 'plot' ? Math.round(LOTS.storePlotShare * GAME.plotScore) : Math.round(LOTS.storeMuleShare * mulePrice(state));
+  return storePaysAt(kind, mulePrice(state));
+}
+
+/** The same figure from a MULE price a screen already has (the view's mulePrice). */
+export function storePaysAt(kind: LotItem['kind'], mulePriceNow: number): number {
+  return kind === 'plot' ? Math.round(LOTS.storePlotShare * GAME.plotScore) : Math.round(LOTS.storeMuleShare * mulePriceNow);
 }
 
 /** True when this plot, or the MULE on it, is up for auction this month. */
@@ -126,7 +131,7 @@ function nextLot(state: GameState): void {
 }
 
 /** Where each player but the seller stands on this lot: a buyer, or aside for too little money or a MULE already in hand. */
-function standing(state: GameState, lot: Listing): { id: string; aside: 'money' | 'mule' | null }[] {
+export function standing(state: GameState, lot: Listing): { id: string; aside: 'money' | 'mule' | null }[] {
   return state.players
     .filter((p) => p.id !== lot.seller)
     .map((p) => ({ id: p.id, aside: p.money < lot.minimum ? 'money' : lot.item.kind === 'mule' && p.carriedMule !== null ? 'mule' : null }));

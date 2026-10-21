@@ -533,8 +533,10 @@ because   Heiko's ruling on the land auction itself: G-1 (a live land auction at
           is met more fully, since a month nobody lists can still have one.
 goal      G-1, G-2: unchanged; served more completely
 folded    §0 non-goal narrowed to "three or four a month" · C5 numbers · C14, C15 · RULE-7 ·
-          B-AC-8, T-AC-6, T-AC-7 · §9 E5 · mocks 3d5f9e3 (colony intro and nobody-bid states,
-          sent to Heiko for approval) · its own PR after the core (plan PR-3)
+          B-AC-8, T-AC-6, T-AC-7 · §9 E5 · mocks: colony intro and nobody-bid states
+          (#colony-intro, #colony-kept, #tv-colony-intro, #tv-colony-kept), approved by Heiko
+          at 3d5f9e3 · cap: a full month means no colony lot (PM ruling (a)) · its own PR
+          after the core (plan PR-3)
 minimum   colonyPlotShare = storePlotShare's 2/3 of GAME.plotScore: the colony asks what the
           store would pay for land, so it never sells for less than land is worth to the store,
           and it moves with the score (WS1's reason for a share, not a number).

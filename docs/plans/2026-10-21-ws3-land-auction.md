@@ -83,7 +83,8 @@ Every handoff carries the standing authority line, verbatim:
 
 ### Waves
 
-- **Wave 1 = PR-1.** Tasks 1.1→1.6 run in order, since the engine is one module chain. After Task 1.6 freezes the protocol, Task 1.7 (server) and Tasks 1.8→1.10 (web) run in parallel. They're safe together because their files are disjoint and both consume the shape Task 1.6 froze. Task 1.11 (e2e) runs last.
+- **Wave 1 = PR-1.** Tasks 1.1→1.6 run in order, since the engine is one module chain. After Task 1.6 freezes the protocol, Tasks 1.9 and 1.10 (phone, TV) can start. **Correction found in execution:** Task 1.7 (server) depends on Task 1.4, not 1.6, because it calls lots.ts's list/unlist and stepLandAuction. Task 1.8 (Sell tab) depends on Task 1.2 (the storePaysFor export). Once 1.4 is done, 1.7 and 1.8 run in parallel. They're safe together because their files are disjoint and both consume the frozen shape. Task 1.11 (e2e) runs last, after every branch is merged into ws3-pr1-slice.
+- **Status (2026-10-21, end of session 1):** 1.1, 1.6, 1.2, 1.3, 1.4, 1.5 DONE (ws3-pr1-slice @ cc86b4a), reviewed: pending. 1.9, 1.10 DONE (ws3-pr1-web), reviewed: fix round 1 in progress. 1.7, 1.8 in progress (ws3-pr1-server, ws3-pr1-sell). 1.11 not started.
 - **Wave 2 = PR-2.** It starts when PR-1 is merged into `ws3-auctions`. **Freeze point:** the stubs for `plotValue`/`muleValue` have WS1's announced signatures `(obs, mind, index)` / `(obs, mind)` returning credits (WS1, 2026-10-21), so WS1's export later swaps in with one line.
 - **Wave 3 = PR-3** (spec §8 AM-1). It starts when PR-2 is merged into `ws3-auctions`, because the sim needs the lot hand to play a colony lot. C14 and C15 ship together, so the sim is never handed a phase it can't play.
 - No migration slot: there are no migrations (spec §5).
