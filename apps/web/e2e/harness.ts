@@ -4,10 +4,13 @@ import { fileURLToPath } from 'node:url';
 import { chromium, type Browser } from 'playwright';
 import { createMuleServer, type MuleServer } from '../../server/src/server.js';
 
-/** The real game server, serving the built client from apps/web/dist on a free port. */
-export async function startServer(): Promise<{ server: MuleServer; base: string }> {
+/**
+ * The real game server, serving the built client from apps/web/dist on a free
+ * port. Options (a short game, faster phases) go straight to the server.
+ */
+export async function startServer(options: Omit<NonNullable<Parameters<typeof createMuleServer>[0]>, 'staticDir'> = {}): Promise<{ server: MuleServer; base: string }> {
   const staticDir = fileURLToPath(new URL('../dist', import.meta.url));
-  const server = createMuleServer({ staticDir });
+  const server = createMuleServer({ ...options, staticDir });
   await new Promise<void>((r) => server.server.listen(0, '127.0.0.1', r));
   const { port } = server.server.address() as AddressInfo;
   return { server, base: `http://127.0.0.1:${port}` };
