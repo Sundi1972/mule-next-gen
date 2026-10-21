@@ -288,7 +288,7 @@ describe('land auction on the server', () => {
     }
   });
 
-  it('B-AC-4: a MULE won at the land auction is in the winner\'s hand when development starts, and the seller\'s plot has none', () => {
+  it('B-AC-4: a MULE won at the land auction is in the winner\'s hand when development starts, the seller\'s plot has none, and it runs off if not installed', () => {
     const { game, advance, plots } = toMonth2Planning({ mule: true });
     const plot = plots.b![0]!;
     game.handle('b', { type: 'list', item: { kind: 'mule', ...plot }, minimum: 100, unsold: 'keep' });
@@ -316,6 +316,15 @@ describe('land auction on the server', () => {
     expect(tile(dev, plot).owner).toBe('b');
     expect(tile(dev, plot).outfit).toBeNull();
     expect(money(dev, 'l')).toBe(money(before, 'l') - bid);
+
+    // Lena goes to the pub without installing it, so the MULE runs off.
+    for (const id of humans) game.handle(id, { type: 'pub' });
+    const ran = game.viewFor('l');
+    expect(ran.phase).not.toBe('development');
+    expect(ran.me!.carriedMule).toBeNull();
+    const lenas = ran.tiles.filter((t) => t.owner === 'l');
+    expect(lenas).toHaveLength(plots.l!.length);
+    expect(lenas.map((t) => t.outfit)).toEqual(lenas.map(() => null));
   });
 
   it('B-AC-6: a fifth listing in a month is refused with "The auction is full this month", and the view shows 4 of 4 slots', () => {

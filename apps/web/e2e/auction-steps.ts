@@ -28,7 +28,8 @@ export const listedSale: NonNullable<AuctionSteps['listedSale']> = async ({ phon
   await planning.getByTestId('tab-sell').click({ timeout: PRESS_MS });
   smokeListing = await listPlot(phone, SMOKE_PHONE_SLOT, 0);
   if (smokeListing === null) {
-    console.log('auction steps: the phone owns no plot to list');
+    // Becomes a check once the smoke claims a plot in month 1 (WS4).
+    console.log("auction steps: SKIPPED listedSale (the smoke's phone owns no plot)");
   } else {
     check(await planning.getByTestId(`listing-${smokeListing}`).isVisible(), `the phone's line-up shows ${smokeListing}`);
     console.log(`auction steps: listed ${smokeListing}`);
@@ -45,9 +46,10 @@ export const landAuction: NonNullable<AuctionSteps['landAuction']> = async ({ ph
   const lots = phone.locator('[data-phase=landAuction]');
   await lots.waitFor({ timeout: within(0.1, LOTS.introMs) });
   await tv.locator('[data-phase=landAuction]').getByTestId('tv-lot').waitFor({ timeout: within(0.1, LOTS.introMs) });
-  // No AI bids in PR-1, so nobody reaches the minimum and the seller keeps the plot.
+  // Whether an AI bids decides sold or kept (the listing keeps it unsold); either way both screens show the bell.
   const [mine, shown] = await Promise.all([resultOn(phone, 'result', 0.1), resultOn(tv, 'tv-result', 0.1)]);
-  check(mine.kind === 'kept' && shown.kind === 'kept', `the unbid lot is kept, phone ${mine.kind}, TV ${shown.kind}`);
+  const rang = (kind: string) => kind === 'kept' || kind === 'sold';
+  check(rang(mine.kind) && rang(shown.kind), `the lot ends sold or kept, phone ${mine.kind}, TV ${shown.kind}`);
   smokeListing = null;
 };
 
@@ -109,12 +111,12 @@ async function playTheLandAuction(browser: Browser, base: string): Promise<void>
   await brix.page.getByRole('button', { name: 'Start game' }).click();
   console.log(`✓ three phones and a TV at table ${code}`);
 
-  // Month 1: everyone claims, so the grant ends early; nothing is listed, so no land auction.
+  // Month 1: everyone claims (Brix and Lena list theirs in month 2), so the grant ends early; nothing is listed, so no land auction.
   await everyone(phones, (p) => readyInPlanning(p.page));
   await everyone(phones, (p) => claimPlots(p.page));
   await everyone(phones, (p) => goToThePub(p.page));
   await everyone(phones, (p) => pressDoneThroughTheAuction(p.page));
-  console.log('✓ month 1: Brix claimed two plots');
+  console.log('✓ month 1: everyone claimed');
 
   // Month 2 planning: Brix lists both plots; the others see them in their line-up (B-AC-1).
   const planning = brix.page.locator('[data-phase=planning]');
@@ -133,6 +135,7 @@ async function playTheLandAuction(browser: Browser, base: string): Promise<void>
     check(slots.includes(`${LOTS.maxLotsPerMonth - 2} OF ${LOTS.maxLotsPerMonth}`), `${p.name}'s line-up counts two slots used: "${slots}"`);
   }
   console.log(`✓ B-AC-1: ${first} and ${second} listed at ${minimum}, on Lena's and Ossa's phones`);
+  await fillTheMonthThenUnlist(lena, ossa);
 
   await everyone(phones, (p) => readyInPlanning(p.page));
   await everyone(phones, (p) => claimPlots(p.page));
@@ -206,6 +209,35 @@ async function playTheLandAuction(browser: Browser, base: string): Promise<void>
   }
   console.log(`✓ ${first} and ${second} are Ossa's on the TV's map in development`);
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
+}
+
+/**
+ * B-AC-6: with two lots already up, Lena lists two more and fills the month;
+ * Ossa's Sell tab then reads full and refuses a fifth. Lena unlists both, so
+ * the auction that follows is the one with Brix's two lots.
+ */
+async function fillTheMonthThenUnlist(lena: Phone, ossa: Phone): Promise<void> {
+  const lenas = [await listPlot(lena.page, lena.slot, 0), await listPlot(lena.page, lena.slot, 1)];
+  check(lenas.every((id) => id !== null), `Lena listed two plots, got ${lenas.join(' and ')}`);
+
+  const sell = ossa.page.locator('[data-phase=planning]');
+  const slots = sell.getByTestId('slots');
+  await slots.filter({ hasText: 'FULL' }).waitFor({ timeout: PRESS_MS });
+  const read = await slots.innerText();
+  check(read === 'FULL', `Ossa's line-up reads full with ${LOTS.maxLotsPerMonth} lots up: "${read}"`);
+  const hers = sell.getByRole('button', { name: new RegExp(`owned by player ${ossa.slot + 1}(,|$)`) });
+  check((await hers.count()) > 0, 'Ossa owns a plot to try listing');
+  await hers.first().click({ timeout: PRESS_MS });
+  const list = sell.getByTestId('list');
+  const footer = await list.innerText({ timeout: PRESS_MS });
+  check(footer === 'The auction is full this month.', `Ossa's footer refuses a fifth lot: "${footer}"`);
+  check(await list.isDisabled(), "Ossa's list button is disabled while the month is full");
+  await sell.getByTestId('sell-cancel').click({ timeout: PRESS_MS });
+  console.log(`✓ B-AC-6: with ${LOTS.maxLotsPerMonth} lots up, Ossa's Sell tab reads FULL and "The auction is full this month." with list disabled`);
+
+  for (const id of lenas) await lena.page.getByTestId(`unlist-${id}`).click({ timeout: PRESS_MS });
+  const twoUsed = `${LOTS.maxLotsPerMonth - 2} OF ${LOTS.maxLotsPerMonth}`;
+  await slots.filter({ hasText: twoUsed }).waitFor({ timeout: PRESS_MS });
 }
 
 // --- Steps on one page -------------------------------------------------------------
