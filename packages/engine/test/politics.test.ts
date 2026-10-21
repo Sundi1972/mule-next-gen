@@ -240,7 +240,7 @@ describe('C3: the election', () => {
     castVote(state, 'ai1', 'governor', 'brix');
     castVote(state, 'ossa', 'governor', 'brix');
     castVote(state, 'ossa', 'governor', null);
-    expect(electionOf(state).ballots).toEqual({ lena: { governor: 'lena' }, ai1: { governor: 'brix' }, ossa: {} });
+    expect(electionOf(state).ballots).toEqual({ lena: { governor: 'lena' }, ai1: { governor: 'brix' } });
   });
 
   it('RULE-1 row 2: no contested office skips the ballot', () => {
