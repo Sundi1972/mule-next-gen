@@ -165,7 +165,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   constructor(
     private readonly ctx: GameContext,
     private readonly seed: number,
-    /** `politics` plays elections, offices and the Governor's tax; off unless the host's server turns it on. */
+    /** `politics` plays elections, offices and the Governor's tax; off unless the server is created with it on. */
     private readonly options: { maxMonths?: number; phaseScale?: number; politics?: boolean } = {},
   ) {
     this.phaseScale = options.phaseScale ?? 1;
@@ -539,7 +539,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           else setWalk(state, seatId, action.dir);
           break;
         case 'done':
-          if (state.phase === 'landAuction') lotDone(state, seatId, action.done);
+          if (this.electionOpen()) electionDone(state, seatId, action.done);
+          else if (state.phase === 'landAuction') lotDone(state, seatId, action.done);
           else auctionDone(state, seatId, action.done);
           break;
         default:
