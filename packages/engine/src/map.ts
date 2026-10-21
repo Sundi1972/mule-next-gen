@@ -1,80 +1,42 @@
-import { GROWN_ODDS, MAP, MINERAL_ODDS, TERRAIN_ODDS, mapSize } from './config.js';
+import { GROWN_ODDS, MAP, MINERAL_ODDS, TERRAIN_ODDS } from './config.js';
+import { dealGround } from './map-ground.js';
+import { layoutMap } from './map-layout.js';
+import type { GameMap } from './map-rules.js';
 import type { Rng } from './rng.js';
 import { GROWN_GOODS, MINED_GOODS, type Ground, type Terrain, type Tile, type TileTrait } from './types.js';
-
-const LAND_TERRAINS: Exclude<Terrain, 'store'>[] = [
-  'plains', 'plains', 'plains', 'hills', 'mountains', 'forest', 'swamp',
-  'desert', 'tundra', 'ice', 'lake', 'volcanic', 'crater',
-];
 
 const TRAITS: TileTrait[] = ['bedrock', 'sheltered', 'hotSpring', 'thinVein', 'toxic', 'unstable', 'infested', 'floodPlain'];
 
 /**
- * Builds the map: a river runs top to bottom through the middle column, the
- * store sits at the centre, and the rest is grown from random terrain seeds
- * so similar terrain forms regions rather than noise. Every plot then rolls
- * its hidden ground rating from its terrain's odds.
+ * Builds a map that meets the map rules by construction (spec RULE-2): the
+ * layout stages, then the ground stages, then traits and peaks, all from the
+ * one `rng` stream in that order, so a seed always gives the same map.
  */
-export function generateMap(players: number, rng: Rng): { width: number; height: number; tiles: Tile[] } {
-  const { width, height } = mapSize(players);
-  const midX = Math.floor(width / 2);
-  const midY = Math.floor(height / 2);
-
-  const seeds = Array.from({ length: Math.round((width * height) / 9) }, () => ({
-    x: rng.int(0, width - 1),
-    y: rng.int(0, height - 1),
-    terrain: rng.pick(LAND_TERRAINS),
-  }));
-
-  const tiles: Tile[] = [];
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      let terrain: Terrain;
-      if (x === midX && y === midY) terrain = 'store';
-      else if (x === midX) terrain = 'river';
-      else {
-        let best = seeds[0]!;
-        let bestDist = Infinity;
-        for (const s of seeds) {
-          const d = Math.abs(s.x - x) + Math.abs(s.y - y) + rng.next() * 1.5;
-          if (d < bestDist) {
-            bestDist = d;
-            best = s;
-          }
-        }
-        terrain = best.terrain;
-      }
-      const traitCount = terrain === 'store' ? 0 : rng.pick([0, 0, 0, 1, 1, 2]);
-      const traits: TileTrait[] = [];
-      for (let i = 0; i < traitCount; i++) {
-        const trait = rng.pick(TRAITS);
-        if (!traits.includes(trait)) traits.push(trait);
-      }
-      tiles.push({
-        x,
-        y,
-        terrain,
-        peaks: terrain === 'mountains' ? rng.int(1, 3) : 0,
-        ground: rollGround(terrain, rng),
-        traits,
-        owner: null,
-        outfit: null,
-        pollution: 0,
-        filter: false,
-        runMonths: 0,
-      });
+export function generateMap(players: number, rng: Rng): GameMap {
+  const layout = layoutMap(players, rng);
+  const { ground } = dealGround(layout, players, rng);
+  const tiles = layout.terrain.map((terrain, i): Tile => {
+    const traitCount = terrain === 'store' ? 0 : rng.pick([0, 0, 0, 1, 1, 2]);
+    const traits: TileTrait[] = [];
+    for (let n = 0; n < traitCount; n++) {
+      const trait = rng.pick(TRAITS);
+      if (!traits.includes(trait)) traits.push(trait);
     }
-  }
-  return { width, height, tiles };
-}
-
-export function rollGround(terrain: Terrain, rng: Rng): Ground {
-  const ground = zeroGround();
-  if (terrain === 'store') return ground;
-  const odds = TERRAIN_ODDS[terrain];
-  for (const g of GROWN_GOODS) ground[g] = rng.weighted(GROWN_ODDS[odds.grown[g] ?? 'neutral']) - 2;
-  ground.smithore = rng.weighted(MINERAL_ODDS[odds.mined.smithore]);
-  return ground;
+    return {
+      x: i % layout.width,
+      y: Math.floor(i / layout.width),
+      terrain,
+      peaks: terrain === 'mountains' ? rng.int(1, 3) : 0,
+      ground: ground[i]!,
+      traits,
+      owner: null,
+      outfit: null,
+      pollution: 0,
+      filter: false,
+      runMonths: 0,
+    };
+  });
+  return { width: layout.width, height: layout.height, tiles };
 }
 
 /** The average rating a plot of this terrain rolls for a good: what a player can expect before analysing it. */
