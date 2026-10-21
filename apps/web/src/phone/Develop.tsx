@@ -94,9 +94,10 @@ export function Develop() {
   });
 
   const tiles = mapTiles(view);
-  const pub = (
+  // The payout shows where the button has the row to itself: in the store. On the map it shares the row with Store.
+  const pub = (payout: boolean) => (
     <Button size="md" variant="ghost" className="flex-1 whitespace-nowrap px-2 @min-[1100px]/shell:h-12" aria-label="Go to the pub and end your turn" onClick={() => client.intent({ type: 'pub' })}>
-      Pub · end turn · ≈{pubPayout} cr
+      {payout ? `Pub · end turn · ≈${pubPayout} cr` : 'Pub · end turn'}
     </Button>
   );
 
@@ -181,7 +182,7 @@ export function Develop() {
             <Button size="md" variant={outfitted ? 'holo' : 'outline'} className="w-full @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" onClick={walkOut}>
               Walk out to the map
             </Button>
-            <div className="flex">{pub}</div>
+            <div className="flex">{pub(true)}</div>
           </>
         ) : (
           <>
@@ -206,7 +207,7 @@ export function Develop() {
               <Button size="md" variant="outline" className="flex-1 whitespace-nowrap px-2" onClick={() => setPlace('store')}>
                 Store
               </Button>
-              {pub}
+              {pub(false)}
             </div>
           </>
         )
