@@ -56,13 +56,8 @@ the next work:
 
 | Branch | State | PR |
 | --- | --- | --- |
-| `main` | Engine, server, design system and stage-2 rules (PRs #1 to #4 merged) | |
-| `feat/play-screens` | Phone and TV screens wired to the server | #5 into `main`, green, waiting for Heiko's OK to merge |
-| `feat/phone-landscape` | Landscape-only phone with a side rail | #6, stacked on #5, green |
-| `feat/walk-auction` | Classic walk auction | #7, stacked on #6, green |
-| `feat/strategist` | **Unfinished.** New `packages/ai` (strategist, utility scoring, hands, decider, personas), `packages/engine/src/observe.ts` (what a seat may see), sim moved into `packages/ai`, old simple bot deleted | No PR. **Does not build yet** |
-
-Merge #5, then #6, then #7, in that order. Each one needs Heiko's OK first.
+| `main` | Engine, server, design system, stage-2 rules, playable phone and TV screens, landscape phone and the classic walk auction (PRs #1 to #8 merged) | |
+| `feat/strategist` | **Unfinished.** New `packages/ai` (strategist, utility scoring, hands, decider, personas), `packages/engine/src/observe.ts` (what a seat may see), sim moved into `packages/ai`, old simple bot deleted | No PR. **Does not build yet.** It was branched before #5 to #7 were merged, so merge `main` into it first |
 
 The git stash "abandoned sim bot tuning" lives only in the old cloud container
 and will be lost with it. That is fine, because Heiko called that work throwaway.
@@ -83,7 +78,6 @@ and will be lost with it. That is fine, because Heiko called that work throwaway
    Then check balance with `pnpm sim`.
 2. Use the walk auction for the land auction and for listed plots and MULEs.
 3. Build politics (stage 3).
-4. Merge #5 to #7 when Heiko says so.
 
 ## What did not come along
 
