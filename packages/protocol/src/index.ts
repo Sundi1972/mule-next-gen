@@ -124,6 +124,8 @@ export interface AuctionView {
   /** What the store pays and charges, or null while it doesn't trade at that line. */
   storeBuys: number | null;
   storeSells: number | null;
+  /** Units the store will sell of this good: its stock less the colonists' Food and Water reserve. */
+  storeForSale: number;
   /** What the export ship pays for the next unit, while it is in port and wants this good. */
   shipPays: number | null;
   /** The board's price range: it grows when a walker goes past it. */

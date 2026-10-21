@@ -1,19 +1,45 @@
 import type { AuctionView, LandAuctionView, ListingView, MuleView } from '@mule/protocol';
-import { Creature, cx, GOOD_NAME, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
+import { bestPrices, Creature, cx, GOOD_NAME, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
 import { plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
 import { GroundCard } from '../phone/ground';
 
-/** The auction's walkers as the board draws them, in seat order. */
+/** The auction's walkers as the board draws them, in seat order, with their units and the surplus over this month's need. */
 export function boardWalkers(view: MuleView, auction: AuctionView): BoardWalker[] {
-  return auction.walkers.map((w) => ({
-    id: w.id,
-    name: view.players.find((p) => p.id === w.id)?.name ?? w.id,
-    slot: slotOf(view, w.id) ?? 0,
-    side: w.side,
-    price: w.price,
-    at: w.at,
-    done: w.done,
-  }));
+  return auction.walkers.map((w) => {
+    const need = auction.status.find((r) => r.id === w.id)?.need;
+    return {
+      id: w.id,
+      name: view.players.find((p) => p.id === w.id)?.name ?? w.id,
+      slot: slotOf(view, w.id) ?? 0,
+      side: w.side,
+      price: w.price,
+      at: w.at,
+      done: w.done,
+      units: w.units,
+      ...(need === undefined ? {} : { surplus: w.units - need }),
+    };
+  });
+}
+
+/** Who holds each moving line, in words beside the board; the TV adds the gap between them. */
+export function LineReadout({ walkers, trading, meId, tv = false }: { walkers: BoardWalker[]; trading: boolean; meId?: string; tv?: boolean }) {
+  const { ask, bid } = bestPrices(walkers);
+  const who = (w: BoardWalker) => (w.id === meId ? 'You' : w.name);
+  const gap = ask && bid ? ask.price - bid.price : null;
+  return (
+    <dl className={cx('grid grid-cols-[auto_1fr] items-baseline gap-x-2 font-mono', tv ? 'gap-y-1 text-lg' : 'gap-y-0.5 text-[11px]')} data-testid="line-readout">
+      <dt className="text-rise">LOWEST ASK</dt>
+      <dd data-num className="font-bold text-rise">{ask ? `${ask.price} · ${who(ask)}` : '—'}</dd>
+      <dt className="text-fall">HIGHEST BID</dt>
+      <dd data-num className="font-bold text-fall">{bid ? `${bid.price} · ${who(bid)}` : '—'}</dd>
+      {tv && (
+        <>
+          <dt className="text-ink-3">GAP</dt>
+          <dd data-num className="font-bold text-ink">{trading ? 'MET: TRADING' : gap === null ? '—' : `${gap} apart`}</dd>
+        </>
+      )}
+    </dl>
+  );
 }
 
 const REASON: Record<AuctionView['skipped'][number]['reason'], string> = {

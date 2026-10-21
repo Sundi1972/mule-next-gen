@@ -106,7 +106,7 @@ describe('the goods auction walkers carry their units', () => {
     expect(passer.units).toBeGreaterThan(0);
   });
 
-  // trace-allow: guards the spec's HC-2 invariant, which has no INV id: the TV holds no player stock but the good up
+  // trace-allow: guards the spec's HC-2 invariant, which has no INV id: the board's auction holds no player stock but the good up's
   it("HC-2: the board's auction carries no stock of any good but the one that's up", () => {
     const { game, advance, good } = toWalk();
     walkTogether(game);
