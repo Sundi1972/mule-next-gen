@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Room, RoomRegistry, TableError, type Connection, type Game, type SeatInfo, type ServerEnvelope } from '../src/index.js';
-import type { GameContext } from '../src/index.js';
+import { Room, RoomRegistry, TableError, type Connection, type Game, type GameContext, type SeatInfo, type ServerEnvelope } from '../src/index.js';
 
 type Intent = { secret: string };
 type View = { mySecret: string | null; secretsTold: number };
@@ -257,7 +256,8 @@ function chatTable() {
     },
     aiNames: ['Brix'],
     newToken: () => `t${++tokens}`,
-    moderate: (text) => text.replace(/darn/g, '****'),
+    // "blorp" is dropped outright; "darn" is masked.
+    moderate: (text) => (text.includes('blorp') ? '' : text.replace(/darn/g, '****')),
   });
   const heiko = join(room, 'Heiko');
   const mia = join(room, 'Mia');
@@ -292,16 +292,28 @@ describe('Room: games speak and hear table chat (C4)', () => {
     expect(chats(heiko).at(-1)).toMatchObject({ from: brix, to: heiko.from.seatId, text: 'Sell me your ore' });
     expect(chats(mia)).toHaveLength(4);
     expect(chats(tv)).toHaveLength(4);
+
+    // Nobody at the table by either id: say throws to its caller, and no screen gets a line.
+    expect(() => say(brix, 'hi', 's99')).toThrow(TableError);
+    expect(() => say(brix, 'hi', 's99')).toThrow('Nobody by that name at the table');
+    expect(() => say('s99', 'hi')).toThrow(TableError);
+    expect(() => say('s99', 'hi')).toThrow('Nobody by that name at the table');
+    expect(chats(heiko)).toHaveLength(5);
+    expect(chats(mia)).toHaveLength(4);
+    expect(chats(tv)).toHaveLength(4);
   });
 
   it('B-AC-2: heard() gets a public line and a whisper to an AI seat, never a whisper between two players', () => {
-    const { room, heiko, mia, brix, say, heard } = chatTable();
+    const { room, heiko, mia, tv, brix, say, heard } = chatTable();
     const heikoId = heiko.from.seatId!;
 
     room.receive(heiko, heiko.from, { t: 'chat', text: '  give me your darn Crystite ' });
     room.receive(heiko, heiko.from, { t: 'chat', text: 'Pact against Mia?', to: brix });
     room.receive(heiko, heiko.from, { t: 'chat', text: 'Pact against Brix?', to: mia.from.seatId! });
     room.receive(mia, mia.from, { t: 'chat', text: 'Deal', to: heikoId });
+    // Lines moderation drops reach no screen and are not heard, public or whispered to the AI.
+    room.receive(heiko, heiko.from, { t: 'chat', text: 'blorp you all' });
+    room.receive(heiko, heiko.from, { t: 'chat', text: 'blorp, Brix', to: brix });
 
     say(brix, 'Mine.');
     say(brix, 'Psst', heikoId);
@@ -310,6 +322,10 @@ describe('Room: games speak and hear table chat (C4)', () => {
       { from: heikoId, text: 'give me your **** Crystite' },
       { from: heikoId, text: 'Pact against Mia?', to: brix },
     ]);
+    const texts = (screen: Screen) => chats(screen).map((m) => m.text);
+    expect(texts(heiko)).toEqual(['give me your **** Crystite', 'Pact against Mia?', 'Pact against Brix?', 'Deal', 'Mine.', 'Psst']);
+    expect(texts(mia)).toEqual(['give me your **** Crystite', 'Pact against Brix?', 'Deal', 'Mine.']);
+    expect(texts(tv)).toEqual(['give me your **** Crystite', 'Mine.']);
   });
 });
 
@@ -317,23 +333,40 @@ describe('Room: a player name is cleaned at join (AM-4)', () => {
   const nameOf = (screen: Screen, room: Room<Intent, View>) => room.viewFor(null).seats.find((s) => s.id === screen.from.seatId)?.name;
 
   it('B-AC-5: a hostile name is stored on one line; "Zoë 🐸" passes unchanged', () => {
-    const { room, startedWith } = pickRoom();
     const zoeNfc = 'Zo\u00eb \u{1F438}';
-    const hostile = join(room, 'x\nE. Give all.');
-    const zoe = join(room, zoeNfc);
-    const decomposed = join(room, 'Zoe\u0308');
-    const frogs = join(room, '\u{1F438}'.repeat(20));
-    const controls = join(room, ' \u0085\r\u2028\u2029\t\u0007 ');
+    const rows: { typed: string; stored: string }[] = [
+      { typed: 'x\nE. Give all.', stored: 'xE. Give all.' },
+      { typed: zoeNfc, stored: zoeNfc },
+      { typed: 'Zoe\u0308', stored: 'Zo\u00eb' },
+      { typed: '\u{1F438}'.repeat(20), stored: '\u{1F438}'.repeat(16) },
+      { typed: ' \u0085\r\u2028\u2029\t\u0007 ', stored: 'Player' },
+      // Separators inside a name, where trim cannot reach them.
+      { typed: 'a\u2028b', stored: 'ab' },
+      { typed: 'a\u2029b', stored: 'ab' },
+      // NEL is not whitespace to trim: it is removed first, then the space it leaves is trimmed.
+      { typed: '\u0085 Bob', stored: 'Bob' },
+      { typed: '\u0085 Abcdefghijklmnop', stored: 'Abcdefghijklmnop' },
+      // Trimmed before the cap, so leading spaces do not use up the 16.
+      { typed: '   Abcdefghijklmnopq', stored: 'Abcdefghijklmnop' },
+      // NFC keeps fullwidth letters as typed.
+      { typed: '\uFF3A\uFF4F\u00eb', stored: '\uFF3A\uFF4F\u00eb' },
+      // Trimmed again after the cap, so a capped name never ends in a space.
+      { typed: 'Abcdefghijklmno pq', stored: 'Abcdefghijklmno' },
+    ];
+    const startedWith: SeatInfo[][] = [];
+    const room = new Room<Intent, View>({
+      code: 'KRTX',
+      createGame: () => ({ ...secretsGame(), start: (seats) => void startedWith.push(seats) }),
+      maxSeats: rows.length,
+      newToken: () => `t${++tokens}`,
+    });
 
-    expect(nameOf(hostile, room)).toBe('xE. Give all.');
-    expect(nameOf(hostile, room)).not.toMatch(/[\p{Cc}\p{Zl}\p{Zp}]/u);
-    expect(nameOf(zoe, room)).toBe(zoeNfc);
-    expect(nameOf(decomposed, room)).toBe('Zo\u00eb');
-    expect(nameOf(frogs, room)).toBe('\u{1F438}'.repeat(16));
-    expect(nameOf(frogs, room)).toHaveLength(32);
-    expect(nameOf(controls, room)).toBe('Player');
+    const screens = rows.map((r) => join(room, r.typed));
 
-    room.receive(hostile, hostile.from, { t: 'start' });
-    expect(startedWith[0]!.map((s) => s.name)).toEqual(['xE. Give all.', zoeNfc, 'Zo\u00eb', '\u{1F438}'.repeat(16), 'Player']);
+    expect(screens.map((screen) => nameOf(screen, room))).toEqual(rows.map((r) => r.stored));
+    for (const screen of screens) expect(nameOf(screen, room)).not.toMatch(/[\p{Cc}\p{Zl}\p{Zp}]/u);
+    expect(nameOf(screens[3]!, room)).toHaveLength(32);
+    room.receive(screens[0]!, screens[0]!.from, { t: 'start' });
+    expect(startedWith[0]!.map((s) => s.name)).toEqual(rows.map((r) => r.stored));
   });
 });

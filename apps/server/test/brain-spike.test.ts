@@ -9,7 +9,7 @@ import { CallFailed, createHaikuComplete, type HaikuReply } from '../src/brain/c
 import { worstCaseUsd } from '../src/brain/budget.js';
 import { createLedger } from '../src/brain/ledger.js';
 import { capFor, collectPrompts, main, renderReport, runSpike, type SpikeItem } from '../src/brain/spike.js';
-import { fakeSdk, KEY, readLedger, sdkMessage, worstUsdOf, type SdkModuleFake } from './brain-fakes.js';
+import { fakeSdk, KEY, promptOf, readLedger, sdkMessage, worstUsdOf, type SdkModuleFake } from './brain-fakes.js';
 
 /** The SDK module's client: records its options and answers through `sdk.create`; it never reaches the network. */
 const sdk = vi.hoisted((): SdkModuleFake => ({ built: [], create: null }));
@@ -189,6 +189,8 @@ describe('brain:spike', () => {
     // A land answer at 4 s is inside land's wait but outside develop's and trade's: each row uses its own kind's wait.
     expect(answerMs.land).toBeLessThanOrEqual(WAIT_MS.land);
     expect(answerMs.land).toBeGreaterThan(Math.max(WAIT_MS.develop, WAIT_MS.trade));
+    expect(answerMs.develop).toBeLessThanOrEqual(WAIT_MS.develop);
+    expect(answerMs.trade).toBeLessThanOrEqual(WAIT_MS.trade);
     const lines = renderReport(report);
     expect(rowOf(lines, 'land')).toMatch(new RegExp(`^land\\s+3\\s+0\\s+0\\s+4000 ms\\s+4000 ms\\s+4000 ms\\s+100% within ${WAIT_MS.land} ms\\s+100% of 3$`));
     expect(rowOf(lines, 'develop')).toMatch(new RegExp(`^develop\\s+3\\s+0\\s+0\\s+1000 ms\\s+1000 ms\\s+1000 ms\\s+100% within ${WAIT_MS.develop} ms\\s+100% of 3$`));
@@ -253,8 +255,8 @@ describe('brain:spike', () => {
     let calls = 0;
     sdk.create = (params) => {
       calls++;
-      const { system, messages } = params as { system: { text: string }[]; messages: { content: string }[] };
-      const chars = system[0]!.text.length + messages[0]!.content.length;
+      const { system, user } = promptOf(params);
+      const chars = system.length + user.length;
       return Promise.resolve(sdkMessage(USABLE, { cache_write: Math.ceil(chars / BRAIN.charsPerToken), output: BRAIN.maxTokens }));
     };
     const out: string[] = [];
@@ -267,6 +269,7 @@ describe('brain:spike', () => {
     const counted = Number(/^counted spend \(cap \$0\.01\)\s+\$([\d.]+)$/m.exec(out.join('\n'))?.[1]);
     expect(counted).toBeGreaterThan(0);
     expect(counted).toBeLessThanOrEqual(0.01);
+    expect(ledgerLines()).toHaveLength(calls);
     expect(ledgerLines().reduce((sum, l) => sum + (l.usd as number), 0)).toBeLessThanOrEqual(0.01);
   }, 30_000); // main plays a strategist game to collect prompts
 

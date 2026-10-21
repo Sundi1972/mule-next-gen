@@ -9,7 +9,7 @@ import { Brain, candidate, consider, PERSONAS, shortlist, TopPickDecider, WAIT_M
 import type { HaikuSdk } from '../src/brain/client.js';
 import { API_KEY_ENV, createBrain, type BrainSeat, type BrainService } from '../src/brain/index.js';
 import { NO_USAGE, type Usage } from '../src/brain/ledger.js';
-import { fakeSdk, KEY, readLedger, sdkMessage, worstUsdOf, type SdkMessage, type SdkModuleFake, type SdkParams } from './brain-fakes.js';
+import { fakeSdk, KEY, promptOf, readLedger, sdkMessage, worstUsdOf, type SdkMessage, type SdkModuleFake, type SdkParams } from './brain-fakes.js';
 
 /** The SDK module's constructor: records its options and builds nothing, so no network and no credential chain. */
 const sdkModule = vi.hoisted((): SdkModuleFake => ({ built: [], create: null }));
@@ -64,6 +64,7 @@ let dir: string;
 let file: string;
 beforeEach(() => {
   sdkModule.built = [];
+  sdkModule.create = null;
   ports.length = 0;
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'brain-service-'));
   file = path.join(dir, 'costs.jsonl');
@@ -73,7 +74,8 @@ afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-const lines = () => readLedger(file);
+/** The ledger's lines; none before the first is written. */
+const lines = () => (fs.existsSync(file) ? readLedger(file) : []);
 /** Plain input tokens that bill `usd`. */
 const inputTokensFor = (usd: number) => Math.round((usd * 1_000_000) / BRAIN.pricesPerMTok.input);
 
@@ -199,7 +201,7 @@ describe('brain service', () => {
   });
 
   it('B-AC-4: a seat at its budget makes no call, plays its top pick and calls no more this game', async () => {
-    // Call 1 bills all but $0.001 of the seat's budget; call 2 bills that $0.001, which spends it exactly.
+    // Call 1 bills all but about $0.001 of the seat's budget and call 2 about $0.001, in whole tokens: no call fits after.
     const billed: Partial<Usage>[] = [{ input: inputTokensFor(BRAIN.seatBudgetUsd - 0.001) }, { input: inputTokensFor(0.001) }];
     const sdk = fakeSdk((n) => sdkMessage('{"option":"B","line":"Mine."}', billed[n - 1] ?? { input: 1 }));
     const { decide } = seatOn(serviceOn(sdk));
@@ -232,8 +234,7 @@ describe('brain service', () => {
       shortlist(['a', 'b', 'c'].map((a, i) => candidate(a, a.repeat(105_000), a, 10, [consider('fit', 0.9 - i * 0.05, 1, 'fits')])), 3, 0.5);
     /** RULE-3's worst case for the request the SDK received. */
     const worstOf = (params: SdkParams): number => {
-      const system = (params.system as { text: string }[])[0]!.text;
-      const user = params.messages[0]!.content as string;
+      const { system, user } = promptOf(params);
       const schema = JSON.stringify(params.output_config!.format!.schema);
       return worstUsdOf(system.length + user.length + schema.length);
     };
@@ -396,8 +397,10 @@ describe('brain service', () => {
   });
 
   it('INV-finish: finish writes the game line once, counting model calls only, and the game makes no further calls', async () => {
-    // One call bills the seat's whole budget.
-    const sdk = fakeSdk(() => sdkMessage('{"option":"B","line":"Mine."}', { input: inputTokensFor(BRAIN.seatBudgetUsd) }));
+    // One call bills the seat's whole budget, in whole input tokens.
+    const tokens = inputTokensFor(BRAIN.seatBudgetUsd);
+    const billed = (tokens * BRAIN.pricesPerMTok.input) / 1_000_000;
+    const sdk = fakeSdk(() => sdkMessage('{"option":"B","line":"Mine."}', { input: tokens }));
     const service = serviceOn(sdk);
     const seat = seatOn(service);
 
@@ -411,8 +414,8 @@ describe('brain service', () => {
     const all = lines();
     expect(all.map((l) => l.type ?? l.outcome)).toEqual(['llm', 'budget', 'game']);
     expect(all[2]).toMatchObject({
-      game: GAME, type: 'game', seats: 1, calls: 1, usd: expect.closeTo(BRAIN.seatBudgetUsd, 10),
-      by_seat: { p0: { calls: 1, usd: expect.closeTo(BRAIN.seatBudgetUsd, 10) } },
+      game: GAME, type: 'game', seats: 1, calls: 1, usd: expect.closeTo(billed, 10),
+      by_seat: { p0: { calls: 1, usd: expect.closeTo(billed, 10) } },
     });
 
     // Terminal: no new deciders, and an existing one makes no call and writes no line.

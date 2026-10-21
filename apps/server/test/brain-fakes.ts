@@ -1,4 +1,4 @@
-/** Fakes the brain tests share: the SDK module and client, SDK messages, the dummy key and the ledger file reader. */
+/** Fakes the brain tests share: the SDK module and client, SDK messages, the dummy key, worstUsdOf and the ledger reader. */
 import fs from 'node:fs';
 import { BRAIN } from '@mule/engine';
 import type { HaikuSdk } from '../src/brain/client.js';
@@ -11,7 +11,7 @@ export const KEY = { ANTHROPIC_API_KEY: 'test-key-not-real' };
 
 type Create = HaikuSdk['messages']['create'];
 export type SdkParams = Parameters<Create>[0];
-export type SdkOptions = Parameters<Create>[1];
+type SdkOptions = Parameters<Create>[1];
 export type SdkMessage = Awaited<ReturnType<Create>>;
 
 /** A reply as the SDK returns it, billed `usage` (in the ledger's terms; unset counts are 0). */
@@ -61,7 +61,15 @@ export function fakeSdk(answer: (n: number, params: SdkParams, options: SdkOptio
 /** What the mocked SDK module's constructor was given, and how its clients answer (null: every call rejects). */
 export interface SdkModuleFake {
   built: unknown[];
-  create: ((params: unknown) => Promise<unknown>) | null;
+  create: ((params: SdkParams) => Promise<SdkMessage>) | null;
+}
+
+/** The system text and the user text of a request, as the client sends them. */
+export function promptOf(params: SdkParams): { system: string; user: string } {
+  const [system] = Array.isArray(params.system) ? params.system : [];
+  const user = params.messages[0]?.content;
+  if (!system || typeof user !== 'string') throw new Error('not a request the brain client sends');
+  return { system: system.text, user };
 }
 
 /**
@@ -74,7 +82,7 @@ export async function fakeSdkModule(importOriginal: () => Promise<unknown>, fake
   const real = (await importOriginal()) as typeof import('@anthropic-ai/sdk');
   class FakeAnthropic {
     readonly messages = {
-      create: (params: unknown) => (fake.create ? fake.create(params) : Promise.reject(new Error('no reply set'))),
+      create: (params: SdkParams) => (fake.create ? fake.create(params) : Promise.reject(new Error('no reply set'))),
     };
     constructor(options: unknown) {
       fake.built.push(options);
@@ -91,12 +99,11 @@ export function worstUsdOf(chars: number): number {
   return (tokens * Math.max(p.input, p.cacheWrite) + BRAIN.maxTokens * p.output) / 1_000_000;
 }
 
-/** The ledger file's lines, parsed; none when the file does not exist. */
+/** Every line of the ledger file, parsed. Throws for a missing file and for any line that is not JSON, a blank one too. */
 export function readLedger(file: string): Record<string, unknown>[] {
-  if (!fs.existsSync(file)) return [];
   return fs
     .readFileSync(file, 'utf8')
+    .replace(/\n$/, '')
     .split('\n')
-    .filter(Boolean)
     .map((l) => JSON.parse(l) as Record<string, unknown>);
 }
