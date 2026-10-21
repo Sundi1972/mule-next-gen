@@ -212,6 +212,54 @@ function onlyLowered(expected: number[], after: number[], good: FloorGood): bool
   return (got.get(under) ?? 0) - (want.get(under) ?? 0) === removed;
 }
 
+/**
+ * A hand-built hills map with the store at its centre, every grown good rated good, and good
+ * Smithore exactly on `smithore` (x,y) plots, run through stage 9 with Smithore scarce. The
+ * field rises with the plot index, so the lowering order is fixed.
+ */
+function scarcityFixture(name: string, players: number, width: number, height: number, smithore: [number, number][], expect: (out: ReturnType<typeof applyScarcity>, report: MapReport) => string[]) {
+  return {
+    check(): string[] {
+      const terrain: Terrain[] = Array.from({ length: width * height }, () => 'hills');
+      terrain[Math.floor(height / 2) * width + Math.floor(width / 2)] = 'store';
+      const layout: Layout = { width, height, terrain };
+      const base = dealOdds(layout, players, createRng(1));
+      const ground = terrain.map((t, i) => {
+        const good = smithore.some(([x, y]) => y * width + x === i);
+        return t === 'store' ? { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0 } : { food: 3, water: 3, energy: 3, smithore: good ? 3 : 0, crystite: 0, rareEarth: 0 };
+      });
+      const rising = terrain.map((_, i) => i);
+      const out = applyScarcity({ ...base, ground, fields: { food: rising, water: rising, energy: rising, smithore: rising } }, 'smithore');
+      const report = checkMap(toMap(layout, out.ground), players);
+      const problems = report.violations.filter((v) => ['F1', 'F2', 'F3', 'S8'].includes(v.rule)).map((v) => `${v.rule}: ${v.detail}`);
+      if (report.metrics.scarce !== 'smithore') problems.push(`scarce on the map ${report.metrics.scarce ?? 'none'}, not smithore`);
+      return [...problems, ...expect(out, report)].map((p) => `fixture ${name}: ${p}`);
+    },
+  };
+}
+
+const smithoreCount = (out: { ground: Ground[] }) => out.ground.filter((g) => g.smithore >= MAP.goodAt.smithore).length;
+
+const SCARCITY_FIXTURES = [
+  // 3 players: band 9-11. 12 good plots, 7 in seams and 5 alone: lowering one lone plot leaves 7 of 11 joined (64%),
+  // two leave 7 of 10 (70%), so only a deeper cut keeps S8.
+  scarcityFixture('deeper cut', 3, 13, 4, [[0, 0], [1, 0], [2, 0], [4, 0], [5, 0], [10, 0], [11, 0], [0, 2], [3, 2], [7, 3], [9, 2], [12, 2]], (out) => {
+    const problems: string[] = [];
+    if (out.lifts.length > 0) problems.push(`${out.lifts.length} seam lifts where a deeper cut was enough`);
+    if (smithoreCount(out) !== 10) problems.push(`${smithoreCount(out)} good Smithore plots, the deeper cut leaves 10`);
+    return problems;
+  }),
+  // 2 players: band 6-7. 8 good plots, two pairs and 4 alone: no 6 or 7 of them keep S8, so one seam lift joins a lone
+  // plot and one more lone plot is lowered, keeping the count in the band.
+  scarcityFixture('seam lift', 2, 9, 3, [[0, 0], [1, 0], [7, 0], [8, 0], [0, 2], [3, 2], [5, 2], [8, 2]], (out) => {
+    const problems: string[] = [];
+    if (out.lifts.length !== 1) problems.push(`${out.lifts.length} seam lifts, one is needed`);
+    for (const lift of out.lifts) if (Math.abs((lift.plot % 9) - (lift.joins % 9)) + Math.abs(Math.floor(lift.plot / 9) - Math.floor(lift.joins / 9)) !== 1) problems.push(`seam lift at ${lift.plot} doesn't touch ${lift.joins}`);
+    if (smithoreCount(out) !== 7) problems.push(`${smithoreCount(out)} good Smithore plots, the band's top is 7`);
+    return problems;
+  }),
+];
+
 /** Non-scarce goods must stay at or above their normal lower edge. */
 function belowNormal(run: Run, report: MapReport): string[] {
   return FLOOR_GOODS.filter((g) => g !== run.scarce && report.metrics.perPlayer[g] < MAP.normalLo[g]).map(
@@ -336,6 +384,7 @@ describe('map ground stages', () => {
       }
       return out;
     });
+    for (const fixture of SCARCITY_FIXTURES) broken.push(...fixture.check());
     // RULE-3: the twist comes at its chance, from any of the four goods, by exactly two draws whatever they give.
     const picked = allRuns().filter((r) => r.scarce !== null);
     const share = picked.length / allRuns().length;
