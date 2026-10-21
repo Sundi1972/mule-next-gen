@@ -41,6 +41,7 @@ export class VoteHand {
     private readonly rng: Rng,
   ) {}
 
+  /** Call before stepElection, with the same (phaseScale-divided) dt. */
   tick(state: GameState, dt: number, act: Act): void {
     if (state.phase !== 'planning' || !state.politics) return;
     const stage: Election['stage'] = state.politics.election?.stage ?? 'over';
@@ -69,8 +70,8 @@ export class VoteHand {
   private nominate(obs: GameState, act: Act): void {
     const may = canRun(obs, this.mind.me);
     const { runGovernor, runSheriff } = POLITICS.ai;
-    if (may.governor === true && this.rng.next() < runGovernor[this.persona]) act({ type: 'run', office: 'governor' });
-    else if (may.sheriff === true && this.rng.next() < runSheriff[this.persona]) act({ type: 'run', office: 'sheriff' });
+    if (may.governor === true && this.rng.chance(runGovernor[this.persona])) act({ type: 'run', office: 'governor' });
+    else if (may.sheriff === true && this.rng.chance(runSheriff[this.persona])) act({ type: 'run', office: 'sheriff' });
   }
 
   private vote(obs: GameState, election: Readonly<Election>, act: Act): void {
