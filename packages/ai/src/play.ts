@@ -54,8 +54,8 @@ export interface PlayedGame {
   broke: string[][];
   /** Units traded at the live auction: between players, with the store (both ways) and to the ship; and its game-time in ms. */
   auction: { between: number; store: number; ship: number; ms: number };
-  /** Lots at the land auction: sold and unsold, and of those the colony's offered and sold. */
-  lots: { sold: number; unsold: number; colonyOffered: number; colonySold: number };
+  /** Lots at the land auction: sold and unsold, and of those the colony's offered and sold; stalled counts land auctions cut off by the tick limit. */
+  lots: { sold: number; unsold: number; colonyOffered: number; colonySold: number; stalled: number };
   decisions: number;
 }
 
@@ -134,7 +134,7 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
   const broke: string[][] = [];
   const auction = { between: 0, store: 0, ship: 0, ms: 0 };
   const lotHands = seats.map((s) => new LotHand(s.mind, createRng((s.options.seed ^ 0xc2b2ae35) >>> 0)));
-  const lots = { sold: 0, unsold: 0, colonyOffered: 0, colonySold: 0 };
+  const lots = { sold: 0, unsold: 0, colonyOffered: 0, colonySold: 0, stalled: 0 };
   let guard = 0;
   while (state.phase !== 'gameOver' && guard++ < 500) {
     switch (state.phase) {
@@ -197,6 +197,7 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
           if (colony) lots.colonyOffered++;
           if (colony && result.kind === 'sold') lots.colonySold++;
         }
+        if (state.landAuction && state.landAuction.stage !== 'over') lots.stalled++;
         break;
       }
       case 'upkeep':

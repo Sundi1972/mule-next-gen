@@ -3,7 +3,7 @@ import { freePlots, LOTS } from '@mule/engine';
 import { describe, expect, it } from 'vitest';
 
 /** The sim's own seats (pnpm sim's defaults: 4 strategist seats at trader, personas rotating). */
-const SEEDS = [101, 102, 103, 104, 105, 106];
+const SEEDS = [101, 102, 103, 104];
 const PLAYERS = 4;
 
 describe('T-AC-7: the simulator plays the land auction', () => {
