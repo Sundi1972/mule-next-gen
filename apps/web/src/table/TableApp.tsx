@@ -437,7 +437,7 @@ function TvGameOver({ game }: { game: MuleView }) {
 function Scores({ game }: { game: MuleView }) {
   return (
     <div className="flex flex-col gap-2 rounded-panel border border-holo-line bg-panel p-4">
-      <span className="label-caps">{game.scores ? 'Final scores' : 'Standings · money'}</span>
+      <span className="label-caps">Standings · money</span>
       <ol className="flex flex-col gap-2">
         {standings(game).map((s, i) => (
           <li key={s.player.id} className="flex items-center gap-3">
