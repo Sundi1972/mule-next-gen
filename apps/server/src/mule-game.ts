@@ -242,6 +242,18 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.checkAllReady();
   }
 
+  /** Stops the seat's auction walk: the old screen can't release it and the new one never pressed it. A move is neither Done nor a drop. */
+  seatMoved(seatId: string): void {
+    const state = this.state;
+    if (!state || this.ai.has(seatId)) return;
+    try {
+      if (state.phase === 'landAuction') setLotWalk(state, seatId, 0);
+      else if (state.phase === 'auction') setWalk(state, seatId, 0);
+    } catch (err) {
+      if (!(err instanceof RuleError)) throw err;
+    }
+  }
+
   private checkAllReady(): void {
     const waiting = this.seats.filter((s) => !s.isAi && !this.away.has(s.id) && !this.ready.has(s.id) && !this.doneDeveloping(s.id));
     // The auctions end on their own, good by good and lot by lot.
