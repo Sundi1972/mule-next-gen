@@ -445,6 +445,8 @@ export const MAP = {
       smithore: { area: 10, spread: 1.3 },
     },
     minBlobs: 3,
+    /** Plots past each edge the blob centres may fall, so the field is as strong at the edges as inside. */
+    blobPad: 3,
     /** Random jitter on every plot's field, so a flat stretch still ranks by rng rather than by index. */
     fieldNoise: 0.15,
     /** Most repairs the reach stage makes for one good. */

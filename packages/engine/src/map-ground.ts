@@ -542,8 +542,13 @@ function boardOf(layout: Layout): Board {
 function smoothField(layout: Layout, good: FloorGood, rng: Rng): number[] {
   const { width, height } = layout;
   const { area, spread } = good === 'smithore' ? MAP.ground.blobs.smithore : MAP.ground.blobs.grown;
-  const count = Math.max(MAP.ground.minBlobs, Math.round((width * height) / area));
-  const blobs = Array.from({ length: count }, () => ({ x: rng.next() * width, y: rng.next() * height, weight: rng.next() }));
+  // Centres fall in the plot box padded on every side, at the same density, so an edge plot has as many bumps
+  // around it as an interior one; otherwise the edges come out poorer than the hint says.
+  const pad = MAP.ground.blobPad;
+  const boxWidth = width - 1 + 2 * pad;
+  const boxHeight = height - 1 + 2 * pad;
+  const count = Math.max(MAP.ground.minBlobs, Math.round((boxWidth * boxHeight) / area));
+  const blobs = Array.from({ length: count }, () => ({ x: rng.next() * boxWidth - pad, y: rng.next() * boxHeight - pad, weight: rng.next() }));
   return layout.terrain.map((_, i) => {
     const x = i % width;
     const y = Math.floor(i / width);
