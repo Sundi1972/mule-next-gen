@@ -649,10 +649,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     if (state.phase !== 'auction' || !a || !a.good || a.stage === 'over') return null;
     const prices = a.walkers.map((w) => w.price);
     const lines = [storeBuyLine(state), storeSellLine(state), shipLine(state)].filter((n): n is number => n !== null);
-    const top = Math.max(a.hi, ...prices, ...lines);
-    const bottom = Math.min(a.lo, ...prices, ...lines);
-    // Grow the board by a margin once someone walks past its edge.
-    const pad = (top - bottom) * 0.08;
     return {
       good: a.good,
       stage: a.stage,
@@ -663,8 +659,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       storeBuys: storeBuyLine(state),
       storeSells: storeSellLine(state),
       shipPays: shipLine(state),
-      lo: Math.max(0, Math.floor(top > a.hi || bottom < a.lo ? bottom - pad : bottom)),
-      hi: Math.ceil(top > a.hi ? top + pad : top),
+      ...boardRange(a.lo, a.hi, [...prices, ...lines]),
       speed: a.speed,
       walkers: a.walkers.map((w) => ({ id: w.id, side: w.side, price: Math.round(w.price), at: w.price, dir: w.dir, done: a.done.includes(w.id) })),
       deals: a.deals.map(({ buyer, seller, price, units }) => ({ buyer, seller, price, units })),
@@ -706,11 +701,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
             const aside = a.aside[w.id];
             return { id: w.id, side: w.side, price: Math.round(w.price), at: w.price, dir: w.dir, done: a.done.includes(w.id), ...(aside ? { aside } : {}) };
           });
+    // Bids are capped by money, not by hi, so a bid can pass the board's top.
     const bids = a.walkers.filter((w) => w.side === 'buyer').map((w) => w.price);
-    const top = Math.max(a.hi, lot.minimum, ...bids);
-    const bottom = Math.min(a.lo, ...bids);
-    // Grow the board by a margin once someone walks past its edge.
-    const pad = (top - bottom) * 0.08;
     return {
       lot: this.listingView(lot),
       stage: a.stage,
@@ -718,8 +710,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       total: (a.stage === 'intro' ? LOTS.introMs : a.stage === 'walk' ? LOTS.walkMs : LOTS.resultMs) / 1_000,
       number: a.number,
       count: a.count,
-      lo: Math.max(0, Math.floor(bottom < a.lo ? bottom - pad : bottom)),
-      hi: Math.ceil(top > a.hi ? top + pad : top),
+      ...boardRange(a.lo, a.hi, [lot.minimum, ...bids]),
       speed: a.speed,
       walkers,
       leader: lotLeader(state),
@@ -732,4 +723,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     for (const cancel of this.cancels) cancel();
     this.cancels = [];
   }
+}
+
+/** A board's price range, lo to hi, grown by a margin at both ends once a value lies past either edge. */
+function boardRange(lo: number, hi: number, values: number[]): { lo: number; hi: number } {
+  const top = Math.max(hi, ...values);
+  const bottom = Math.min(lo, ...values);
+  const pad = (top - bottom) * 0.08;
+  return {
+    lo: Math.max(0, Math.floor(top > hi || bottom < lo ? bottom - pad : bottom)),
+    hi: Math.ceil(top > hi ? top + pad : top),
+  };
 }
