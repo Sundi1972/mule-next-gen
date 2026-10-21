@@ -332,6 +332,8 @@ export class TableClient {
     this.send({ t: 'pick', pick: species });
   }
 
+  color(color: number): void { this.send({ t: 'color', color }); }
+
   start(): void {
     this.send({ t: 'start' });
   }
