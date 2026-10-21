@@ -1,9 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { budgetTerrain, layoutMap, placeRiver, type Sketch } from '../src/map-layout.js';
-import { checkMap, createRng, MAP, zeroGround, type GameMap, type RuleId, type ShareTerrain, type Terrain, type Tile } from '../src/index.js';
+import {
+  checkMap,
+  createRng,
+  MAP,
+  sizeBand,
+  zeroGround,
+  type GameMap,
+  type RuleId,
+  type ShareTerrain,
+  type Terrain,
+  type Tile,
+} from '../src/index.js';
 
-const PLAYERS = [2, 3, 4, 5, 6];
-const SEEDS = 200;
+// One player count per size band: 3 and 6 players get the same map size, so they would repeat 2's and 5's layouts.
+const BANDS = [2, 4, 5];
+const SEEDS = 500;
+/** Seeds whose layout once broke a rule, checked by name on top of the sweep. */
+const REGRESSIONS: Record<number, number[]> = { 2: [28670], 4: [45216], 5: [] };
+const TIMEOUT = 30_000;
 
 /** A map of the given terrain with zero ground everywhere: the ground rules always fire on it, so callers filter to layout rules. */
 function zeroGroundMap(width: number, height: number, terrain: Terrain[]): GameMap {
@@ -23,11 +38,17 @@ function zeroGroundMap(width: number, height: number, terrain: Terrain[]): GameM
   return { width, height, tiles };
 }
 
-/** Every (players, seed, rule, detail) a stage's maps break among `rules`, over SEEDS seeds per player count. */
-function failures(rules: RuleId[], build: (players: number, seed: number) => GameMap | string): string[] {
+type Check = (map: GameMap, players: number) => string[];
+
+/**
+ * Every (players, seed, rule, detail) a stage's maps break among `rules`, plus whatever `extra` finds,
+ * over SEEDS seeds per size band and the named regression seeds.
+ */
+function failures(rules: RuleId[], build: (players: number, seed: number) => GameMap | string, extra: Check = () => []): string[] {
   const out: string[] = [];
-  for (const players of PLAYERS) {
-    for (let seed = 1; seed <= SEEDS; seed++) {
+  for (const players of BANDS) {
+    const seeds = [...Array.from({ length: SEEDS }, (_, i) => i + 1), ...REGRESSIONS[players]!];
+    for (const seed of seeds) {
       const map = build(players, seed);
       if (typeof map === 'string') {
         out.push(`${players}p seed ${seed}: ${map}`);
@@ -36,10 +57,19 @@ function failures(rules: RuleId[], build: (players: number, seed: number) => Gam
       for (const v of checkMap(map, players).violations.filter((v) => rules.includes(v.rule))) {
         out.push(`${players}p seed ${seed} ${v.rule}: ${v.detail}`);
       }
+      for (const problem of extra(map, players)) out.push(`${players}p seed ${seed} ${problem}`);
     }
   }
   return out;
 }
+
+/** AM-4: land plots with no hills or mountains plot within Smithore reach. */
+const miningCoverage: Check = (map, players) => {
+  const reach = MAP.reach[sizeBand(players)].smithore;
+  const mining = map.tiles.filter((t) => t.terrain === 'hills' || t.terrain === 'mountains');
+  const far = map.tiles.filter((t) => t.terrain !== 'store' && !mining.some((m) => Math.abs(m.x - t.x) + Math.abs(m.y - t.y) <= reach));
+  return far.map((t) => `AM-4: plot (${t.x},${t.y}) has no hills or mountains within ${reach} steps`);
+};
 
 /** The river stage's sketch with every free plot set to plains: only the river and store matter to S6 and S7. */
 function riverMap(sketch: Sketch): GameMap {
@@ -56,12 +86,23 @@ function budgetMap(sketch: Sketch, budget: Record<ShareTerrain, number>): GameMa
 }
 
 describe('map layout stages', () => {
-  it('T-AC-5: river stage meets S6 and S7', () => {
-    const broken = failures(['S6', 'S7'], (players, seed) => riverMap(placeRiver(players, createRng(seed))));
+  it('T-AC-5: river stage meets S6 and S7', { timeout: TIMEOUT }, () => {
+    const seen = new Map<number, Set<number>>(BANDS.map((p) => [p, new Set()]));
+    const broken = failures(['S6', 'S7'], (players, seed) => riverMap(placeRiver(players, createRng(seed))), (map, players) => {
+      const bends = checkMap(map, players).metrics.bends;
+      const fewest = MAP.bends[sizeBand(players)];
+      seen.get(players)!.add(bends);
+      return bends > fewest + 1 ? [`${bends} bends, at most ${fewest + 1} wanted`] : [];
+    });
+    for (const players of BANDS) {
+      const fewest = MAP.bends[sizeBand(players)];
+      const values = [...seen.get(players)!].sort((a, b) => a - b);
+      if (values.join() !== `${fewest},${fewest + 1}`) broken.push(`${players}p: bends seen ${values.join(', ')}, want both ${fewest} and ${fewest + 1}`);
+    }
     expect(broken, broken.join('\n')).toEqual([]);
   });
 
-  it('T-AC-5: budget meets S1-S3', () => {
+  it('T-AC-5: budget meets S1-S3', { timeout: TIMEOUT }, () => {
     const broken = failures(['S1', 'S2', 'S3'], (players, seed) => {
       const rng = createRng(seed);
       const sketch = placeRiver(players, rng);
@@ -70,12 +111,17 @@ describe('map layout stages', () => {
     expect(broken, broken.join('\n')).toEqual([]);
   });
 
-  it('T-AC-5: regions meet S4 and S5', () => {
-    // The whole layout, so the regions are checked on the real river and budget, and must keep S1-S3 and the river intact.
-    const broken = failures(['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7'], (players, seed) => {
-      const layout = layoutMap(players, createRng(seed));
-      return zeroGroundMap(layout.width, layout.height, layout.terrain);
-    });
+  it('T-AC-5: regions meet S4 and S5', { timeout: TIMEOUT }, () => {
+    // The whole layout, so the regions are checked on the real river and budget, and must keep S1-S3, the river,
+    // and hills or mountains within Smithore reach of every land plot (AM-4).
+    const broken = failures(
+      ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7'],
+      (players, seed) => {
+        const layout = layoutMap(players, createRng(seed));
+        return zeroGroundMap(layout.width, layout.height, layout.terrain);
+      },
+      miningCoverage,
+    );
     expect(broken, broken.join('\n')).toEqual([]);
   });
 });
