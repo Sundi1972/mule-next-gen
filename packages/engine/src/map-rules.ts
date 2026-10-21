@@ -11,7 +11,7 @@ import { RAW_GOODS, type RawGood, type Terrain, type Tile } from './types.js';
 export type GameMap = { width: number; height: number; tiles: Tile[] };
 type Mineral = 'crystite' | 'rareEarth';
 
-export type RuleId = 'F1' | 'F2' | 'F3' | 'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'S6' | 'S7' | 'S8' | 'S10';
+export type RuleId = 'F1' | 'F2' | 'F3' | 'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'S6' | 'S7' | 'S8' | 'S10' | 'P1';
 
 /** Each rule's short title, for labelling violations. */
 export const RULE_TITLES: Record<RuleId, string> = {
@@ -27,6 +27,7 @@ export const RULE_TITLES: Record<RuleId, string> = {
   S7: 'River bends',
   S8: 'Smithore seams',
   S10: 'Crystite and Rare earth rings',
+  P1: 'Special fields',
 };
 
 export interface Violation {

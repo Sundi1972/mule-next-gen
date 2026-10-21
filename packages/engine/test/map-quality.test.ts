@@ -8,6 +8,8 @@ const MAX_LINES = 30;
 const LAND = Object.keys(TERRAIN_ODDS) as Exclude<Terrain, 'store'>[];
 const HINTED = ['food', 'water', 'energy', 'smithore'] as const;
 const MINERALS = ['crystite', 'rareEarth'] as const;
+/** RULE-5's count by player count: 3 small, 4 mid, 5 large. */
+const SPECIALS: Record<number, number> = { 2: 3, 3: 3, 4: 4, 5: 5, 6: 5 };
 
 interface Built {
   seed: number;
@@ -110,6 +112,15 @@ describe('map quality, every map createGame deals', () => {
           failures.push(`seed ${seed}, ${players} players: creating it twice gave different tiles`);
         }
       }
+    }
+    expect(failures, listed(failures)).toEqual([]);
+  }, TIMEOUT);
+
+  it("B-AC-5: every map's special fields pass RULE-5", () => {
+    const failures = violationsOf(built, ['P1']);
+    for (const { seed, players, map } of built) {
+      const count = map.tiles.filter((t) => t.special).length;
+      if (count !== SPECIALS[players]) failures.push(`seed ${seed}, ${players} players: ${count} special fields on the tiles, ${SPECIALS[players]} expected`);
     }
     expect(failures, listed(failures)).toEqual([]);
   }, TIMEOUT);
