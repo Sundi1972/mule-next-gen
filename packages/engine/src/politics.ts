@@ -19,13 +19,14 @@ function edit(state: GameState): Politics {
   return state.politics;
 }
 
-function plotsOf(state: GameState, id: string): number {
+/** Plots a player owns: the count the Land Baron, vote weight and the tie rule go by. */
+export function plotsOwned(state: GameState, id: string): number {
   return state.tiles.filter((t) => t.owner === id).length;
 }
 
 /** RULE-5: strictly the most plots wins; a tie keeps the current Baron if they are in it, else nobody. */
 function landBaron(state: GameState, current: string | null): string | null {
-  const plots = new Map(state.players.map((p) => [p.id, plotsOf(state, p.id)]));
+  const plots = new Map(state.players.map((p) => [p.id, plotsOwned(state, p.id)]));
   const most = Math.max(...plots.values());
   if (most === 0) return null;
   const top = [...plots].filter(([, n]) => n === most).map(([id]) => id);
@@ -40,7 +41,7 @@ export function openPlanning(state: GameState): void {
   p.baron = landBaron(state, p.baron);
   p.taxAtStart = state.treasury.salesTax;
   p.election = POLITICS.electionMonths.includes(state.month)
-    ? { stage: 'nominate', clockMs: POLITICS.nominateMs, candidates: { governor: [], sheriff: [] }, ballots: {}, done: [], result: null }
+    ? { stage: 'nominate', clockMs: electionStageMs('nominate'), candidates: { governor: [], sheriff: [] }, ballots: {}, done: [], result: null }
     : null;
 }
 
@@ -55,7 +56,7 @@ export function voteWeight(state: GameState, id: string): VoteWeight {
   const { reputation } = player(state, id);
   const parts = {
     base: 1,
-    land: Math.floor(plotsOf(state, id) / plotsPerVote),
+    land: Math.floor(plotsOwned(state, id) / plotsPerVote),
     reputation: reputation >= repHigh ? 1 : reputation < repLow ? -1 : 0,
     baron: state.politics?.baron === id ? 1 : 0,
     taxes: Math.min(taxCap, Math.floor((state.treasury.paid[id] ?? 0) / taxPerVote)),
@@ -139,25 +140,26 @@ export function stepElection(state: GameState, dt: number): ElectionResult | nul
   const allDone = state.players.every((p) => election.done.includes(p.id));
   if (election.clockMs > 0 && !allDone) return null;
   if (election.stage === 'nominate' && OFFICES.some((o) => contested(election, o))) {
-    Object.assign(election, { stage: 'ballot', clockMs: POLITICS.ballotMs, done: [] });
+    Object.assign(election, { stage: 'ballot', clockMs: electionStageMs('ballot'), done: [] });
     return null;
   }
   return closeBallot(state, election);
 }
 
 /** AM-1: planning is ending: an election still open closes now, from the ballots cast so far, and its winners take office. */
-export function closeElection(state: GameState): void {
-  if (!state.politics?.election || state.politics.election.stage === 'over') return;
+export function closeElection(state: GameState): ElectionResult | null {
+  if (!state.politics?.election || state.politics.election.stage === 'over') return null;
   const politics = edit(state);
-  if (politics.election!.stage !== 'reveal') closeBallot(state, politics.election!);
+  const result = politics.election!.stage === 'reveal' ? null : closeBallot(state, politics.election!);
   takeOffice(state, politics);
+  return result;
 }
 
 function closeBallot(state: GameState, election: Election): ElectionResult {
   const governor = decide(state, election, 'governor', null);
   // Decided after the Governor and never the Governor, so one player never holds both offices.
   const sheriff = decide(state, election, 'sheriff', governor.winner);
-  Object.assign(election, { stage: 'reveal', clockMs: POLITICS.revealMs, done: [], result: { governor, sheriff } });
+  Object.assign(election, { stage: 'reveal', clockMs: electionStageMs('reveal'), done: [], result: { governor, sheriff } });
   return election.result!;
 }
 
@@ -190,7 +192,7 @@ function decide(state: GameState, election: Election, office: Office, governor: 
   const baron = state.politics!.baron;
   const baronPick = baron === null ? undefined : election.ballots[baron]?.[office];
   if (baronPick !== undefined && tied.includes(baronPick)) return { winner: baronPick, how: 'baron', tallies };
-  const most = tied.reduce((best, id) => (plotsOf(state, id) > plotsOf(state, best) ? id : best));
+  const most = tied.reduce((best, id) => (plotsOwned(state, id) > plotsOwned(state, best) ? id : best));
   return { winner: most, how: 'tieRule', tallies };
 }
 
@@ -216,10 +218,7 @@ export function setSalesTax(state: GameState, id: string, percent: number): void
   if (state.phase !== 'planning') throw new RuleError('The tax is set in planning');
   if (politics.election && politics.election.stage !== 'over') throw new RuleError('Wait for the election to end');
   if (politics.governor !== id) throw new RuleError('Only the Governor sets the tax');
-  const { min, max, maxStep } = POLITICS.tax;
-  const start = Math.round(politics.taxAtStart * 100);
-  const low = Math.max(min, start - maxStep);
-  const high = Math.min(max, start + maxStep);
+  const { low, high } = taxBounds(state);
   if (!Number.isInteger(percent) || percent < low || percent > high) throw new RuleError(`The tax can be ${low}% to ${high}% this month`);
   state.treasury.salesTax = percent / 100;
 }
@@ -243,15 +242,17 @@ export function officeScore(state: GameState, id: string): number {
 
 /** The whole-percent range the Governor may set this month. */
 export function taxBounds(state: GameState): { low: number; high: number } {
-  throw new Error('NotImplemented: taxBounds');
+  const { min, max, maxStep } = POLITICS.tax;
+  const start = Math.round((state.politics?.taxAtStart ?? state.treasury.salesTax) * 100);
+  return { low: Math.max(min, start - maxStep), high: Math.min(max, start + maxStep) };
 }
 
 /** The next election month after this one, or null if the game ends first. */
 export function nextElectionMonth(state: GameState): number | null {
-  throw new Error('NotImplemented: nextElectionMonth');
+  return POLITICS.electionMonths.find((m) => m > state.month && m <= state.maxMonths) ?? null;
 }
 
 /** How long a stage's clock runs. */
 export function electionStageMs(stage: Election['stage']): number {
-  throw new Error('NotImplemented: electionStageMs');
+  return { nominate: POLITICS.nominateMs, ballot: POLITICS.ballotMs, reveal: POLITICS.revealMs, over: 0 }[stage];
 }
