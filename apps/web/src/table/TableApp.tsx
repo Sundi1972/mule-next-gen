@@ -5,7 +5,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
 import { ThemeToggle } from '../components/ThemeToggle';
-import { fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, player, plotName, seatSpecies, secondsUntil, slotOf, standings, tileAt } from '../game/derive';
+import { colonyVerdict, fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, player, plotName, seatSpecies, secondsUntil, slotOf, standings, tileAt } from '../game/derive';
 import { useAuctionSound } from '../game/sound';
 import { useClient, useClientState, useServerNow } from '../net/react';
 import { TvLandAuction } from './TvLandAuction';
@@ -137,9 +137,16 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   const lit = game.lit ? tileAt(game, game.lit.x, game.lit.y) : undefined;
   const phase = game.phase;
 
+  if (game.finished) {
+    return (
+      <SeatSpeciesProvider value={seatSpecies(game)}>
+        <TvGameOver game={game} />
+      </SeatSpeciesProvider>
+    );
+  }
+
   let side: ReactNode;
-  if (game.finished) side = <Scores game={game} />;
-  else if (phase === 'landGrant')
+  if (phase === 'landGrant')
     side = (
       <>
         <div className="flex flex-col gap-1 rounded-panel border-2 border-holo bg-holo-soft p-5 shadow-glow">
@@ -156,7 +163,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
           )}
         </div>
         <Players game={game} right={(p) => <span className="font-mono text-lg text-ink-2">{p.plots} plots</span>} />
-        <p className="mt-auto font-display text-2xl leading-snug text-ink-2">Free plots light up one by one, in random order. Tap CLAIM on your phone when yours is lit.</p>
+        <p className="mt-auto font-display text-2xl leading-snug text-ink-2">Free plots light up one by one, row by row from the top. Tap CLAIM on your phone when yours is lit.</p>
       </>
     );
   else if (phase === 'development')
@@ -219,7 +226,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   return (
     <SeatSpeciesProvider value={seatSpecies(game)}>
       <div className="flex h-[720px] w-[1280px] flex-col gap-5 bg-table p-10 text-ink" data-phase={phase}>
-        <TvHeader game={game} title={PHASE_NAME[phase]} seconds={game.finished ? undefined : secondsUntil(game.phaseEndsAt, now)} />
+        <TvHeader game={game} title={PHASE_NAME[phase]} seconds={secondsUntil(game.phaseEndsAt, now)} />
         <div className="flex min-h-0 flex-1 gap-6">
           <div className="flex w-[700px] shrink-0 flex-col gap-3">
             <HoloMap width={game.width} height={game.height} tiles={tiles} cursor={game.lit} density="tv" hideGround className="w-full" />
@@ -386,10 +393,53 @@ function MonthEnd({ game }: { game: MuleView }) {
   );
 }
 
+/** The big screen at the end: everyone's total, readable from across the room. Totals only: goods are private. */
+function TvGameOver({ game }: { game: MuleView }) {
+  const ranks = standings(game);
+  const winner = ranks[0];
+  const v = colonyVerdict(game.air);
+  return (
+    <div className="flex h-[720px] w-[1280px] flex-col gap-6 bg-table p-10 text-ink" data-phase={game.phase}>
+      <TvHeader game={game} title={PHASE_NAME.gameOver} />
+
+      <div className="grid min-h-0 flex-1 grid-cols-[2fr_3fr] gap-8">
+        <div className="flex flex-col items-center justify-center gap-3 rounded-panel border-2 border-holo bg-holo-soft p-6 text-center shadow-glow" data-testid="tv-winner">
+          <span className="label-caps text-lg!">The colony goes to</span>
+          {winner && <PlayerMark slot={winner.slot} size={140} />}
+          <span className="font-display text-6xl font-semibold">{winner?.player.name}</span>
+          <span data-num className="font-mono text-3xl text-ink-2">
+            {fmt(winner?.value ?? 0)}
+          </span>
+        </div>
+
+        <ol className="flex flex-col justify-center gap-3" data-testid="tv-scores">
+          {ranks.map((r, i) => (
+            <li key={r.player.id} className={cx('flex items-center gap-5 rounded-panel px-5 py-2', i === 0 ? 'bg-holo-soft' : 'bg-panel')}>
+              <span data-num className="w-8 font-mono text-3xl text-ink-3">
+                {i + 1}
+              </span>
+              <PlayerMark slot={r.slot} size={44} />
+              <span className="flex-1 font-display text-4xl font-semibold">{r.player.name}</span>
+              <span data-num className="font-mono text-4xl font-bold">
+                {fmt(r.value)}
+              </span>
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      <div className={cx('flex items-center gap-4 rounded-panel border-2 px-6 py-4', v.failed ? 'border-alert bg-alert-bg' : 'border-ok/40 bg-ok/5')} data-testid="tv-verdict">
+        <span className={cx('font-display text-3xl font-semibold', v.failed ? 'text-alert-ink' : 'text-ok')}>{v.title}</span>
+        <span className="text-2xl text-ink-2">{v.line}</span>
+      </div>
+    </div>
+  );
+}
+
 function Scores({ game }: { game: MuleView }) {
   return (
     <div className="flex flex-col gap-2 rounded-panel border border-holo-line bg-panel p-4">
-      <span className="label-caps">{game.scores ? 'Final scores' : 'Standings · money'}</span>
+      <span className="label-caps">Standings · money</span>
       <ol className="flex flex-col gap-2">
         {standings(game).map((s, i) => (
           <li key={s.player.id} className="flex items-center gap-3">
