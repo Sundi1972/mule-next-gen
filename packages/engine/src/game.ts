@@ -5,6 +5,7 @@ import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './econo
 import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
 import { generateMap, tileIndex } from './map.js';
 import { airBand } from './pollution.js';
+import { newPolitics, openPlanning } from './politics.js';
 import { needsOf, runProduction } from './production.js';
 import { createRng } from './rng.js';
 import { emptyStock } from './stock.js';
@@ -20,7 +21,8 @@ export interface NewPlayer {
 
 export { RuleError };
 
-export function createGame(options: { seed: number; players: NewPlayer[]; maxMonths?: number }): GameState {
+/** Starts a game in month 1's planning phase. `politics: false` is the host option that plays without offices, elections or a moving tax. */
+export function createGame(options: { seed: number; players: NewPlayer[]; maxMonths?: number; politics?: boolean }): GameState {
   if (options.players.length < 2 || options.players.length > 6) {
     throw new RuleError('A game needs 2 to 6 players');
   }
@@ -74,10 +76,11 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
     auction: null,
     listings: [],
     landAuction: null,
-    politics: null,
+    politics: options.politics === false ? null : newPolitics(),
   };
   // The first month's prices start where supply and demand put them.
   for (const good of GOODS) state.store.posted[good] = Math.round(targetPrice(state, good));
+  openPlanning(state);
   return state;
 }
 
@@ -384,7 +387,10 @@ export function advancePhase(state: GameState): void {
     }
     if (isGameOver(state)) state.phase = 'gameOver';
   }
-  if (next === 'planning') state.month++;
+  if (next === 'planning') {
+    state.month++;
+    openPlanning(state);
+  }
 }
 
 export function isGameOver(state: GameState): boolean {
