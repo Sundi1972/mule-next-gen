@@ -7,6 +7,8 @@ import { PlanningBrief } from './screens/PlanningBrief';
 import { MuleSheet } from './screens/MuleSheet';
 import { PlanningHub, type Desk, type Election, type Office } from './screens/PlanningHub';
 import { PhoneElectionResult, TvElection } from './screens/Election';
+import { ChatProvider, useChatSim } from './proposed/Chat';
+import { TvChat } from './screens/ChatDemo';
 import { EVENTS, type EventKind } from './production';
 import { PhoneGoodsWalk, TvGoodsWalk, useWalkSim } from './screens/GoodsAuction';
 import { PhoneLandLine, TvLandLine } from './screens/LandLine';
@@ -138,6 +140,8 @@ const LOBBY_STATES: { id: string; title: string; state: LobbyState }[] = [
   { id: 'lobby-host', title: 'The host', state: 'host' },
   { id: 'lobby-kick', title: 'Host: remove a player', state: 'kick' },
   { id: 'lobby-handoff', title: 'Host: move the host to my phone', state: 'handoff' },
+  { id: 'lobby-handoff-waiting', title: 'Hand-off: making the code', state: 'handoff-waiting' },
+  { id: 'lobby-handoff-expired', title: 'Hand-off: the code expired', state: 'handoff-expired' },
   { id: 'lobby-close', title: 'Host: close the room', state: 'close' },
 ];
 
@@ -157,10 +161,44 @@ const HUB_STATES: { id: string; title: string; desk: Desk; office: Office; elect
   { id: 'hub-sheriff', title: "As Sheriff: the Sheriff's desk", desk: 'sheriff', office: 'sheriff' },
 ];
 
+/** One table talking, seen from Lena's laptop, Lena's phone and the TV at once. */
+function ChatPage() {
+  const lena = useChatSim(0, 'lena');
+  const tv = useChatSim(0, 'tv');
+  return (
+    <Page title="Live table chat · every screen, every phase">
+      <p className="max-w-[900px] text-sm text-ink-2">
+        Lines arrive in a rhythm with some only a second apart. One bubble at a time per screen, in a queue: each shows at least 2 s, and a line that would wait over 4 s is left to the ticker, so bubbles never cover each other or the ticker. The bubble pops at the speaker's creature where the screen draws one (the store hall, the TV's map), staying inside the stage; otherwise it opens left of the guide and the speaker's seat lights up. The third line is Ossa's whisper to Lena: it shows only on Lena's screens, with a lock, never on the TV.
+      </p>
+      <ChatProvider value={lena}>
+        <LaptopFrame>
+          <Game view={{ ...VIEW, month: 4 }}>
+            <PlanningHub key="chat-l" desk="colony" office="none" election="done" />
+          </Game>
+        </LaptopFrame>
+        <PhoneFrame>
+          <Game>
+            <DevelopTurn key="chat-p" start="outfitted" />
+          </Game>
+        </PhoneFrame>
+      </ChatProvider>
+      <ChatProvider value={tv}>
+        <TvFrame>
+          <Board>
+            <TvChat />
+          </Board>
+        </TvFrame>
+      </ChatProvider>
+    </Page>
+  );
+}
+
 export default function App() {
   const hash = useHash();
 
-  if (hash === 'game-handoff')
+  if (hash === 'chat') return <ChatPage />;
+
+  if (hash === 'game-handoff' || hash === 'game-handoff-expired')
     return (
       <Page title="Mid-game: move to your phone (WS4's hand-off, any game screen)">
         <p className="max-w-[900px] text-sm text-ink-2">
@@ -168,7 +206,7 @@ export default function App() {
         </p>
         <LaptopFrame>
           <Game view={{ ...VIEW, month: 4 }}>
-            <PlanningHub key="gh-l" desk="colony" office="none" election="done" handoff />
+            <PlanningHub key={`${hash}-l`} desk="colony" office="none" election="done" handoff={hash === 'game-handoff-expired' ? 'expired' : true} />
           </Game>
         </LaptopFrame>
         <PhoneFrame>
@@ -389,7 +427,7 @@ export default function App() {
       </ul>
       <h2 className="label-caps mt-8">Redesign 2026-10-22 · phone and laptop (Heiko's points)</h2>
       <div className="mt-2 flex flex-col gap-2">
-        <Links states={[{ id: 'mule', title: 'The MULE: model sheet' }, { id: 'game-handoff', title: 'Mid-game: move to your phone' }]} />
+        <Links states={[{ id: 'mule', title: 'The MULE: model sheet' }, { id: 'game-handoff', title: 'Mid-game: move to your phone' }, { id: 'game-handoff-expired', title: 'Mid-game hand-off: the code expired' }, { id: 'chat', title: 'Live table chat (phones and TV)' }]} />
         <Links states={HUB_STATES} />
         <Links states={[{ id: 'tv-election', title: 'Election: the ballot reveal (TV and phone)' }]} />
         <Links states={LOBBY_STATES} />
