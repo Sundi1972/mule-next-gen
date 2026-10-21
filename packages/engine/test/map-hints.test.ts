@@ -17,8 +17,8 @@ describe('map hints', () => {
     // What the AI seat receives: every unanalysed plot, crater and plains included.
     const seen = new Set<Terrain>();
     for (let seed = 1; seed <= 20; seed++) {
-      const seen_ = observe(createGame({ seed, players }), 'p0');
-      for (const tile of seen_.tiles) {
+      const view = observe(createGame({ seed, players }), 'p0');
+      for (const tile of view.tiles) {
         if (tile.terrain === 'store') continue;
         seen.add(tile.terrain);
         expect(tile.ground.crystite).toBe(MAP.unknownMineral);

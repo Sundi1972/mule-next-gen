@@ -85,7 +85,7 @@ export function expectedGround(terrain: Terrain): Ground {
   const odds = TERRAIN_ODDS[terrain];
   for (const g of GROWN_GOODS) ground[g] = mean(GROWN_ODDS[odds.grown[g] ?? 'neutral'], -2);
   ground.smithore = mean(MINERAL_ODDS[odds.mined.smithore], 0);
-  // Rings hold the rest, so no terrain hints at them.
+  // Crystite and Rare earth sit in random rings, not by terrain, so every terrain hints the same map-wide average.
   ground.crystite = MAP.unknownMineral;
   ground.rareEarth = MAP.unknownMineral;
   return ground;
