@@ -2,6 +2,7 @@ import { BRAIN, GAME, PROCESSED_GOODS, RAW_GOODS, UPKEEP, type Good } from '@mul
 import { OPTION_IDS, type DecisionContext, type ShortOption, type TableTalk } from '../decider.js';
 import type { Persona } from '../personas.js';
 import { GOOD_NAME } from '../strategist.js';
+import { capCodePoints, toOneLine } from './text.js';
 
 export interface Prompt {
   /** Stable per persona, so the API can cache it. */
@@ -32,7 +33,7 @@ What the three kinds of decision mean:
 - develop: what to do with a plot in development, for example which MULE to buy and install, or to hold your money.
 - trade: how to act in the auction, for example whether to buy, sell or wait, and at what price.
 
-How you decide. A strategist has already looked at the numbers and ranked up to 5 options for this decision, best first, each marked with a letter, a short reason and a score. You do not do the arithmetic again. You pick exactly one option, the one this character would choose, and the ranking is a guide you may depart from when the character would. The best score is often right; a close second can be the better story for this character. Never name an option that is not in the list.
+How you decide. A strategist has already looked at the numbers and ranked up to ${OPTION_IDS.length} options for this decision, best first, each marked with a letter, a short reason and a score. You do not do the arithmetic again. You pick exactly one option, the one this character would choose, and the ranking is a guide you may depart from when the character would. The best score is often right; a close second can be the better story for this character. Never name an option that is not in the list.
 
 How you reply. Answer with JSON and nothing else, in exactly this shape:
 {"option": "<letter>", "line": "<one short sentence you say at the table, or empty to stay quiet>"}
@@ -45,10 +46,7 @@ Who you are:
 
 /** Text as one line; NFKC runs first so fullwidth brackets and quotes fold before they are mapped. */
 function oneLine(s: string): string {
-  return s
-    .normalize('NFKC')
-    .replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, ' ')
-    .replace(/\s+/g, ' ')
+  return toOneLine(s.normalize('NFKC'))
     .replace(/"/g, "'")
     .replace(/</g, '‹')
     .replace(/>/g, '›')
@@ -56,7 +54,7 @@ function oneLine(s: string): string {
 }
 
 function quoteTalk(talk: TableTalk): string {
-  const text = [...oneLine(talk.text)].slice(0, BRAIN.maxTalkChars).join('').trim();
+  const text = capCodePoints(oneLine(talk.text), BRAIN.maxTalkChars).trim();
   return `${oneLine(talk.from) || 'Someone'}: "${text}"`;
 }
 
@@ -69,7 +67,13 @@ function tableTalkBlock(talk: TableTalk[]): string {
   return [TALK_OPEN, ...talk.map(quoteTalk), TALK_CLOSE].join('\n');
 }
 
-const SCHEMA = {
+function deepFreeze<T extends object>(o: T): T {
+  for (const v of Object.values(o)) if (typeof v === 'object' && v !== null) deepFreeze(v);
+  return Object.freeze(o);
+}
+
+// A fixed A-E enum on purpose: one schema per persona keeps the request byte-stable and cacheable; parseReply rejects an off-list letter.
+const SCHEMA = deepFreeze({
   type: 'object',
   properties: {
     option: { type: 'string', enum: [...OPTION_IDS] },
@@ -77,8 +81,9 @@ const SCHEMA = {
   },
   required: ['option', 'line'],
   additionalProperties: false,
-};
+});
 
+/** The persona's system text and this decision's user text, with the reply schema. */
 export function buildPrompt(shortlist: ShortOption[], persona: Persona, context: DecisionContext): Prompt {
   const user = [
     `Decision: ${context.kind}`,

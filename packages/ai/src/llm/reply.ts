@@ -1,8 +1,12 @@
 import { BRAIN } from '@mule/engine';
 import type { ShortOption } from '../decider.js';
+import { capCodePoints, toOneLine } from './text.js';
+
+/** Why a reply cannot be used: not readable at all, or naming an option off the list. */
+export type RejectOutcome = 'unreadable' | 'off_list';
 
 /** What a model's reply came to: the option and line it chose, or why it cannot be used. */
-export type ParsedReply = { ok: true; optionId: string; line: string | null } | { ok: false; outcome: 'unreadable' | 'off_list'; reason: string };
+export type ParsedReply = { ok: true; optionId: string; line: string | null } | { ok: false; outcome: RejectOutcome; reason: string };
 
 const QUOTE_MARKS = '"\'“”‘’';
 
@@ -25,15 +29,14 @@ function stripQuotePairs(text: string): string {
 
 function clean(line: unknown): string | null {
   if (typeof line !== 'string') return null;
-  const stripped = stripQuotePairs(line.replace(/\s+/g, ' ').trim());
-  // Cut by code points: slicing UTF-16 units could leave half an emoji.
-  const capped = [...stripped].slice(0, BRAIN.maxLineChars).join('').trim();
+  const stripped = stripQuotePairs(toOneLine(line));
+  const capped = capCodePoints(stripped, BRAIN.maxLineChars).trim();
   return capped === '' || [...capped].every(isQuote) ? null : capped;
 }
 
 /** The model's raw option text as one short line, safe to put in a note. */
 function nameForNote(option: string): string {
-  return [...option.replace(/\s+/g, ' ').trim()].slice(0, NOTE_NAME_CHARS).join('').trim();
+  return capCodePoints(toOneLine(option), NOTE_NAME_CHARS).trim();
 }
 
 /** Reads a model's JSON reply against the shortlist. Never throws. */

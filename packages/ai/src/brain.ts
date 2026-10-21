@@ -1,5 +1,6 @@
 import type { GameState } from '@mule/engine';
 import { TopPickDecider, toOptions, type Choice, type DecisionContext, type Decider, type ShortOption, type TableTalk } from './decider.js';
+import { capCodePoints, toOneLine } from './llm/text.js';
 import type { DecisionKind, Persona } from './personas.js';
 import type { Consideration, Shortlist } from './utility.js';
 import type { Mind } from './value.js';
@@ -38,6 +39,13 @@ export interface Pending<A> {
 }
 
 const MAX_TALK = 6;
+const NOTE_MESSAGE_CHARS = 80;
+
+/** The note for a decider that failed: its message as one short line, or 'unknown error' when there is none. */
+function failedNote(err: unknown): string {
+  const message = err instanceof Error ? capCodePoints(toOneLine(err.message), NOTE_MESSAGE_CHARS).trim() : '';
+  return `decider failed: ${message || 'unknown error'}`;
+}
 
 /**
  * Asks the decider and keeps the log. The default pick is always worked out
@@ -93,14 +101,12 @@ export class Brain {
             if (!pending.settled) pending.answer = c;
           },
           (err: unknown) => {
-            const message = err instanceof Error ? [...err.message].slice(0, 80).join('') : 'unknown error';
-            if (!pending.settled) pending.answer = { ...fallback, by: 'fallback', note: `decider failed: ${message}` };
+            if (!pending.settled) pending.answer = { ...fallback, by: 'fallback', note: failedNote(err) };
           },
         );
       } else pending.answer = r;
     } catch (err) {
-      const message = err instanceof Error ? [...err.message].slice(0, 80).join('') : 'unknown error';
-      pending.answer = { ...fallback, by: 'fallback', note: `decider failed: ${message}` };
+      pending.answer = { ...fallback, by: 'fallback', note: failedNote(err) };
     }
     return pending;
   }

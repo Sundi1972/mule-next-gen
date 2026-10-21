@@ -2,7 +2,7 @@ import { AI_HANDS, BRAIN } from '@mule/engine';
 import type { Choice, Decider, DecisionContext, ShortOption } from '../decider.js';
 import type { DecisionKind, Persona } from '../personas.js';
 import { buildPrompt, type Prompt } from './prompt.js';
-import { parseReply } from './reply.js';
+import { parseReply, type RejectOutcome } from './reply.js';
 
 /** The port to a language model: the prompt and the longest the seat will wait, back comes the model's text. */
 export type Complete = (prompt: Prompt, waitMs: number) => Promise<{ text: string }>;
@@ -11,7 +11,7 @@ export type Complete = (prompt: Prompt, waitMs: number) => Promise<{ text: strin
 export class ReplyRejected extends Error {
   constructor(
     message: string,
-    readonly outcome: 'unreadable' | 'off_list',
+    readonly outcome: RejectOutcome,
   ) {
     super(message);
     this.name = 'ReplyRejected';
