@@ -140,9 +140,14 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   const screens = [...phones.map((p) => ({ name: `${p.name}'s phone`, page: p.page })), { name: 'the TV', page: tv }];
   await Promise.all(screens.map((s) => recordStages(s.page)));
   const serverStages = recordServerStages(truth);
-  await readTheGoodsWalk({ seller: brix, buyer: lena, stayer: ossa }, tv, truth);
-  await everyone(phones, (p) => pressDoneThroughTheAuction(p.page));
-  const onServer = serverStages();
+  let onServer: string[] = [];
+  try {
+    await readTheGoodsWalk({ seller: brix, buyer: lena, stayer: ossa }, tv, truth);
+    await everyone(phones, (p) => pressDoneThroughTheAuction(p.page));
+  } finally {
+    // Stopped on a failure too: left running, it would throw once the room closes and bury the real error.
+    onServer = serverStages();
+  }
   checkStages('the server', onServer);
   for (const s of screens) {
     const seen = await s.page.evaluate(() => (window as unknown as { stagesSeen: string[] }).stagesSeen);
@@ -383,7 +388,6 @@ const readStoreLine = () => {
 };
 const readTvStock = () => document.querySelector('[data-testid=tv-store] > div:nth-child(3) dd')?.textContent ?? null;
 
-/** Picks a side on the goods auction's declare, or on the walk's row of sides if the walk has begun. */
 /** The status screen's side picker on a phone: the side it shows as held, and whether Sell can be tapped. */
 const readPicker = () => {
   const buy = document.querySelector('[data-testid=side-buyer]');
@@ -397,13 +401,25 @@ const sideOf = (a: AuctionView, id: string) => a.walkers.find((w) => w.id === id
 
 /**
  * Taps Buy or Sell on a phone's status screen and waits until the server holds `lands` for that seat,
- * still on the status screen, and the phone shows it.
+ * still on the status screen, and the phone shows it. A status screen that closes first fails as timing.
  */
 async function tapSide(truth: Truth, p: Phone, tap: 'buyer' | 'seller', lands: 'buyer' | 'seller' | 'pass', what: string): Promise<void> {
   const id = truth.idOf(p);
+  const good = truth.board().auction?.good;
   await p.page.getByTestId(`side-${tap}`).click({ timeout: PRESS_MS });
-  await untilServer(truth, p.page, (a) => a.stage === 'status' && sideOf(a, id) === lands, `${what}: the server holds ${lands} for ${p.name}`);
-  await untilShows({ name: `${p.name}'s phone`, page: p.page }, readPicker, { side: lands, sellOff: truth.stockOf(p, truth.board().auction!.good) === 0 }, what);
+  const deadline = Date.now() + PRESS_MS;
+  for (;;) {
+    const a = truth.board().auction;
+    const open = a?.good === good && a?.stage === 'status';
+    check(open, `${what}: the ${good} status screen closed before the tap landed (timing, not B-AC-4)`);
+    if (sideOf(a, id) === lands) {
+      console.log(`  ${p.name}'s tap landed with ${a.seconds.toFixed(1)} s of the status clock left (${(a.seconds * SCALE).toFixed(2)} s real)`);
+      break;
+    }
+    check(Date.now() < deadline, `${what}: the server holds ${lands} for ${p.name}, got ${sideOf(a, id)}`);
+    await p.page.evaluate(() => new Promise((r) => requestAnimationFrame(r)));
+  }
+  await untilShows({ name: `${p.name}'s phone`, page: p.page }, readPicker, { side: lands, sellOff: truth.stockOf(p, good!) === 0 }, what);
 }
 
 /** What a screen draws of the goods auction, as "<good>:<stage>"; null off the auction. Any sign of a declare screen counts as one. */
