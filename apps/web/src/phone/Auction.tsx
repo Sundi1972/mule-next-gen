@@ -133,7 +133,6 @@ export function Auction() {
       )}
       {stage === 'walk' && (
         <>
-          {sides(true)}
           <div className={cx('rounded-control border px-2.5 py-1.5 text-xs leading-snug', myDeal ? 'border-holo bg-holo-soft text-ink' : 'border-holo-faint text-ink-2')} data-testid="my-deal">
             {myDeal
               ? dealLine(view, myDeal, me.id)
@@ -144,6 +143,7 @@ export function Auction() {
                   : 'Walk up to meet the lowest ask.'}
           </div>
           <LineReadout walkers={walkers} trading={auction.deals.length > 0} meId={me.id} />
+          {sides(true)}
         </>
       )}
     </>
