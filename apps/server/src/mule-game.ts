@@ -21,7 +21,6 @@ import {
   list as listLot,
   litPlot,
   lotDone,
-  lotLeader,
   LOTS,
   monthlyDemand,
   mulePrice,
@@ -40,7 +39,6 @@ import {
   shipPrice,
   SPECIES,
   type Species,
-  standing,
   stepAuction,
   stepLandAuction,
   storeBuyLine,
@@ -51,15 +49,14 @@ import {
   WALK,
   type GameState,
   type Good,
-  type Listing,
-  type LotResult,
   type Outfit,
   type Phase,
   type Trade,
 } from '@mule/engine';
 import { AiSeat, personaFor, type AiAction } from '@mule/ai';
-import { PLAYER_COLORS, type ListingView, type LotWalkerView, type MuleIntent, type MuleView } from '@mule/protocol';
+import { PLAYER_COLORS, type MuleIntent, type MuleView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
+import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
 
 /**
  * The longest each phase lasts, in milliseconds. Phases also end early when
@@ -190,7 +187,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         return;
       case 'pub': {
         const payout = visitPub(state, seatId, this.requireTime(seatId));
-        this.news = [`${this.nameOf(seatId)} went to the pub and won ${payout}.`, ...this.news].slice(0, 3);
+        this.addNews(`${this.nameOf(seatId)} went to the pub and won ${payout}.`);
         this.checkDevelopmentOver();
         return;
       }
@@ -227,6 +224,11 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   private nameOf(seatId: string): string {
     return this.seats.find((s) => s.id === seatId)?.name ?? seatId;
+  }
+
+  /** Puts a line at the top of the news, which keeps the latest three. */
+  private addNews(line: string): void {
+    this.news = [line, ...this.news].slice(0, 3);
   }
 
   connectionChanged(seatId: string, connected: boolean): void {
@@ -457,7 +459,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         if (state.auction.good !== good) {
           this.reportGood(good);
           const skipped = state.auction.skipped;
-          if (skipped.length > 0) this.news = [`Skipped: ${skipped.map((x) => x.good).join(', ')}.`, ...this.news].slice(0, 3);
+          if (skipped.length > 0) this.addNews(`Skipped: ${skipped.map((x) => x.good).join(', ')}.`);
         }
         if (state.auction.stage === 'over') this.nextPhase();
         else this.scheduleAuctionTick(now);
@@ -488,26 +490,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         }
         const lot = a.lot;
         const result = stepLandAuction(state, dt);
-        if (lot && result) this.reportLot(lot, result);
+        if (lot && result) this.addNews(lotNews(lot, result, (id) => this.nameOf(id)));
         if (a.stage === 'over') this.nextPhase();
         else this.scheduleLandAuctionTick(now);
         this.ctx.changed();
       }),
     );
-  }
-
-  /** At a lot's bell: who bought it, or what happened to it unsold. */
-  private reportLot(lot: Listing, result: LotResult): void {
-    const { x, y } = lot.item;
-    const what = lot.item.kind === 'plot' ? `plot ${x}·${y}` : `the MULE on plot ${x}·${y}`;
-    const seller = lot.seller === 'colony' ? 'the colony' : this.nameOf(lot.seller);
-    const line =
-      result.kind === 'sold'
-        ? `${this.nameOf(result.buyer)} bought ${what} from ${seller} for ${result.price}.`
-        : result.kind === 'store'
-          ? `The store bought ${what} from ${seller} for ${result.price}.`
-          : `Nobody bid ${lot.minimum} on ${what}: ${seller} keeps it.`;
-    this.news = [line, ...this.news].slice(0, 3);
   }
 
   /** When a good closes: the biggest deals between players make the news. */
@@ -524,8 +512,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.dealsInGood = [];
     const best = [...lots.values()].sort((x, y) => y.value - x.value)[0];
     if (!best) return;
-    const line = `${this.nameOf(best.seller)} sold ${best.n} ${good} to ${this.nameOf(best.buyer)} at ${Math.round(best.value / best.n)}.`;
-    this.news = [line, ...this.news].slice(0, 3);
+    this.addNews(`${this.nameOf(best.seller)} sold ${best.n} ${good} to ${this.nameOf(best.buyer)} at ${Math.round(best.value / best.n)}.`);
   }
 
   private reportProduction(): void {
@@ -645,9 +632,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       news: this.news,
       scores: state.phase === 'gameOver' ? this.seats.map((s) => ({ id: s.id, score: score(state, s.id) })) : null,
       auction: this.auctionView(),
-      listings: state.listings.map((l) => this.listingView(l)),
+      listings: state.listings.map(listingView),
       lotSlots: { used: state.listings.length, max: LOTS.maxLotsPerMonth },
-      landAuction: this.landAuctionView(),
+      landAuction: landAuctionView(state),
     };
   }
 
@@ -678,69 +665,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     };
   }
 
-  /** A listing as every screen sees it. A MULE lot names its outfit as listed, so it still shows once the bell takes the MULE off the plot. */
-  private listingView(l: Listing): ListingView {
-    const { id, seller, item, minimum, unsold, storePays } = l;
-    return { id, seller, item: { ...item }, minimum, unsold, storePays };
-  }
-
-  /**
-   * The land auction as every screen draws it: the lot that is up, its
-   * clock, the board and the bidders. During the intro nobody stands on the
-   * board yet, so the walkers are who will bid and who sits it out, by the
-   * engine's own rule.
-   */
-  private landAuctionView(): MuleView['landAuction'] {
-    const state = this.requireState();
-    const a = state.landAuction;
-    if (state.phase !== 'landAuction' || !a?.lot || a.stage === 'over') return null;
-    const lot = a.lot;
-    const walkers: LotWalkerView[] =
-      a.stage === 'intro'
-        ? standing(state, lot).map(({ id, aside }) => ({
-            id,
-            side: aside ? 'pass' : 'buyer',
-            price: aside ? 0 : a.lo,
-            at: aside ? 0 : a.lo,
-            dir: 0,
-            done: a.done.includes(id),
-            ...(aside ? { aside } : {}),
-          }))
-        : a.walkers.map((w) => {
-            const aside = a.aside[w.id];
-            return { id: w.id, side: w.side, price: Math.round(w.price), at: w.price, dir: w.dir, done: a.done.includes(w.id), ...(aside ? { aside } : {}) };
-          });
-    // Bids are capped by money, not by hi, so a bid can pass the board's top.
-    const bids = a.walkers.filter((w) => w.side === 'buyer').map((w) => w.price);
-    return {
-      lot: this.listingView(lot),
-      stage: a.stage,
-      seconds: Math.max(0, a.clockMs / 1_000),
-      total: (a.stage === 'intro' ? LOTS.introMs : a.stage === 'walk' ? LOTS.walkMs : LOTS.resultMs) / 1_000,
-      number: a.number,
-      count: a.count,
-      ...boardRange(a.lo, a.hi, [lot.minimum, ...bids]),
-      speed: a.speed,
-      walkers,
-      leader: lotLeader(state),
-      result: a.result,
-      next: a.queue.map((l) => this.listingView(l)),
-    };
-  }
-
   dispose(): void {
     for (const cancel of this.cancels) cancel();
     this.cancels = [];
   }
-}
-
-/** A board's price range, lo to hi, grown by a margin at both ends once a value lies past either edge. */
-function boardRange(lo: number, hi: number, values: number[]): { lo: number; hi: number } {
-  const top = Math.max(hi, ...values);
-  const bottom = Math.min(lo, ...values);
-  const pad = (top - bottom) * 0.08;
-  return {
-    lo: Math.max(0, Math.floor(top > hi || bottom < lo ? bottom - pad : bottom)),
-    hi: Math.ceil(top > hi ? top + pad : top),
-  };
 }

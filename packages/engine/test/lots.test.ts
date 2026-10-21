@@ -203,7 +203,8 @@ describe('the land auction phase (RULE-2)', () => {
 
     endLandAuction(state);
 
-    expect(state.landAuction?.stage).toBe('over');
+    expect(state.landAuction).toBeNull();
+    expect(state.listings).toEqual([]);
     expect(state.players.map((p) => p.money)).toEqual(money);
     expect(state.store.capital).toBe(capital);
     expect(state.store.mules).toBe(corral);

@@ -331,8 +331,6 @@ export function advancePhase(state: GameState): void {
   if (next === 'development') {
     // Lots the land auction didn't reach are kept.
     endLandAuction(state);
-    state.landAuction = null;
-    state.listings = [];
     state.grant = null;
     state.store.mulesAtStart = state.store.mules;
     startDevelopment(state);

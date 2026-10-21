@@ -84,21 +84,20 @@ export function unlist(state: GameState, playerId: string, id: string): void {
 /** No lot up and nobody on the board. */
 const idleBoard = () => ({ lot: null, stage: 'over', clockMs: 0, walkers: [], done: [], aside: {} }) satisfies Partial<LandAuction>;
 
+/** What every new lot starts from: nobody on the board, no deals, no result yet. */
+const freshBoard = () =>
+  ({ elapsed: 0, walkers: [], deals: [], turns: {}, units: 0, between: { units: 0, value: 0 }, done: [], aside: {}, result: null }) satisfies Partial<LandAuction>;
+
 /** Opens the land auction: the month's first lot comes up in its intro. */
 export function startLandAuction(state: GameState): void {
   state.landAuction = {
     ...idleBoard(),
+    ...freshBoard(),
     queue: [...state.listings],
-    elapsed: 0,
     ticks: 0,
     lo: 0,
     hi: 0,
     speed: WALK.minSpeed,
-    deals: [],
-    turns: {},
-    units: 0,
-    between: { units: 0, value: 0 },
-    result: null,
     number: 0,
     count: state.listings.length,
   };
@@ -115,21 +114,13 @@ function nextLot(state: GameState): void {
   const lo = Math.floor(lot.minimum * LOTS.boardLow);
   const hi = Math.ceil(lot.minimum * LOTS.boardHigh);
   Object.assign(a, {
+    ...freshBoard(),
     lot,
     stage: 'intro',
     clockMs: LOTS.introMs,
-    elapsed: 0,
     lo,
     hi,
     speed: Math.max(WALK.minSpeed, (hi - lo) / WALK.crossSeconds),
-    walkers: [],
-    deals: [],
-    turns: {},
-    units: 0,
-    between: { units: 0, value: 0 },
-    done: [],
-    aside: {},
-    result: null,
     number: a.number + 1,
   } satisfies Partial<LandAuction>);
 }
@@ -280,9 +271,8 @@ export function stepLandAuction(state: GameState, dt: number): LotResult | null 
   return null;
 }
 
-/** Ends the land auction at once: every lot not yet at its bell is kept, so nothing moves without a bell. */
+/** Ends the land auction at once: every lot not yet at its bell is kept, so nothing moves without a bell, and the month's listings are gone. */
 export function endLandAuction(state: GameState): void {
-  const a = state.landAuction;
-  if (!a) return;
-  Object.assign(a, { ...idleBoard(), queue: [] });
+  state.landAuction = null;
+  state.listings = [];
 }
