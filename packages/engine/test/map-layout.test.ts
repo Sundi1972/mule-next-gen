@@ -16,8 +16,11 @@ import {
 // One player count per size band: 3 and 6 players get the same map size, so they would repeat 2's and 5's layouts.
 const BANDS = [2, 4, 5];
 const SEEDS = 500;
-/** Seeds whose layout once broke a rule, checked by name on top of the sweep. */
-const REGRESSIONS: Record<number, number[]> = { 2: [28670], 4: [45216], 5: [] };
+/**
+ * Seeds whose layout once broke a rule, checked by name on top of the sweep: 28670 (S5) and 45216 (S4) from review,
+ * 3475 and 9530 (AM-4) that only the repair's lookahead fixes.
+ */
+const REGRESSIONS: Record<number, number[]> = { 2: [28670, 3475, 9530], 4: [45216], 5: [] };
 const TIMEOUT = 30_000;
 
 /** A map of the given terrain with zero ground everywhere: the ground rules always fire on it, so callers filter to layout rules. */

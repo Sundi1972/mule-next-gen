@@ -411,7 +411,16 @@ export const MAP = {
     repairMoves: 120,
     /** Of those, how many may leave the layout no better, to step off a dead end. */
     sidewaysMoves: 30,
-    /** Edge plots of each big patch tried as the start of a carved region, when a speck is stuck. */
+    /** Of those, how many may leave it worse, when nothing better or level is left; the best layout seen is kept. */
+    worseMoves: 10,
+    /** Those level and worse moves skip plots the last this-many changed plots include, so they can't undo themselves. */
+    tabu: 6,
+    /** When no single move helps, runs of up to this many moves are searched, keeping the beamWidth least-bad at each step. */
+    lookahead: 3,
+    beamWidth: 12,
+    /** Moves that search may measure on one layout, in all, before it gives up. */
+    lookaheadEvaluations: 20000,
+    /** Edge plots of each big patch tried as the start of a carved region. */
     carveStarts: 3,
   },
 };
