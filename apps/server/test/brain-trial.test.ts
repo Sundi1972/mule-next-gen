@@ -13,7 +13,7 @@ const sdk = vi.hoisted((): SdkModuleFake => ({ built: [], create: null }));
 vi.mock('@anthropic-ai/sdk', async (original) => (await import('./brain-fakes.js')).fakeSdkModule(original, sdk));
 
 /** When armed, the engine's observe throws once, for seat ai2 in month 2's planning: after the Smart seats ai0 and ai1 have asked for land. */
-const crash = vi.hoisted(() => ({ armed: false, thrown: false, open: () => 0, openAtThrow: 0 }));
+const crash = vi.hoisted(() => ({ armed: false, thrown: false, open: (): number => 0, openAtThrow: 0 }));
 vi.mock('@mule/engine', async (importOriginal) => {
   const real = await importOriginal<typeof import('@mule/engine')>();
   return {
@@ -309,7 +309,7 @@ describe('brain:trial', () => {
       const gameAt = ledger.findIndex((l) => l.type === 'game' && l.game === crashed);
       const itsCalls = ledger.filter((l) => l.type !== 'game' && l.game === crashed);
       expect(itsCalls.length).toBeGreaterThan(0);
-      expect(ledger.findLastIndex((l) => l.type !== 'game' && l.game === crashed)).toBeLessThan(gameAt);
+      expect(ledger.map((l) => l.type !== 'game' && l.game === crashed).lastIndexOf(true)).toBeLessThan(gameAt);
       expect(ledger[gameAt]).toMatchObject({ calls: itsCalls.length });
       expect(ledger[gameAt]!.usd as number).toBeCloseTo(sum(itsCalls.map((l) => l.usd as number)), 12);
     },

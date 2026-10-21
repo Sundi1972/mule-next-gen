@@ -22,6 +22,12 @@ export interface BrainService {
   finish(): void;
 }
 
+/** The brain as its owner holds it: the game's contract, plus the spend a run caps on. */
+export interface MeteredBrain extends BrainService {
+  /** The game's counted spend, as its seat budgets check it; after finish, the figure at finish. Classic: 0. */
+  countedUsd(): number;
+}
+
 export interface BrainOptions {
   gameId: string;
   /** Only API_KEY_ENV is read from it. */
@@ -56,10 +62,11 @@ export function outcomeOf(reply: Pick<HaikuReply, 'stopReason'> | null, failure:
 }
 
 /** Without the key there is no client and no decider, so nothing can make a paid call. See RULE-3. */
-const CLASSIC: BrainService = {
+const CLASSIC: MeteredBrain = {
   deciderFor: () => null,
   chatter: (seat, say) => chatter(seat.id, say),
   finish: () => {},
+  countedUsd: () => 0,
 };
 
 /** The key's environment variable: the only place in production source its name is written. */
@@ -71,7 +78,7 @@ export function apiKeyFrom(env: Readonly<Record<string, string | undefined>>): s
 }
 
 /** The brain for one game. A missing or blank key plays Classic. */
-export function createBrain(options: BrainOptions): BrainService {
+export function createBrain(options: BrainOptions): MeteredBrain {
   const apiKey = apiKeyFrom(options.env ?? process.env);
   if (!apiKey) return CLASSIC;
 
@@ -84,10 +91,15 @@ export function createBrain(options: BrainOptions): BrainService {
   let finished = false;
   // A game that never asked for a decider (a lobby abandoned before Start) leaves no game line.
   let asked = false;
+  const seats = new Set<string>();
+  // finish releases the budget's figures, so the counted spend is kept from that moment.
+  let countedAtFinish: number | null = null;
+  const counted = () => [...seats].reduce((sum, seat) => sum + budget.spent(gameId, seat), 0);
 
   function deciderFor(seat: BrainSeat): Decider | null {
     if (finished) return null;
     asked = true;
+    seats.add(seat.id);
 
     const write = (kind: DecisionRecord['kind'], outcome: Outcome, usage: Usage, ms: number) =>
       ledger.record({ game: gameId, seat: seat.id, persona: seat.persona, level: seat.level, model: BRAIN.model, kind, ms, outcome, ...usage });
@@ -135,9 +147,11 @@ export function createBrain(options: BrainOptions): BrainService {
     deciderFor,
     chatter: (seat, say) => chatter(seat.id, say),
     finish() {
+      countedAtFinish ??= counted();
       finished = true;
       if (asked) ledger.finish(gameId);
       budget.release(gameId);
     },
+    countedUsd: () => countedAtFinish ?? counted(),
   };
 }

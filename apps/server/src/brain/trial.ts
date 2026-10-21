@@ -7,9 +7,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { BRAIN, grantDone, type GameState } from '@mule/engine';
-import { buildPrompt, playGameAsync, simSeats, type Choice, type Decider, type DecisionKind, type DecisionRecord, type SeatSpec } from '@mule/ai';
-import { worstCaseUsd } from './budget.js';
-import { billUnknown, CallFailed } from './client.js';
+import { playGameAsync, ReplyRejected, simSeats, type Choice, type Decider, type DecisionKind, type DecisionRecord, type SeatSpec } from '@mule/ai';
+import { CallFailed } from './client.js';
 import { API_KEY_ENV, apiKeyFrom, createBrain, type BrainSeat } from './index.js';
 import type { CallLine } from './ledger.js';
 
@@ -38,13 +37,17 @@ export interface TrialGame {
   decisions: TrialDecision[];
   /** Per Smart seat, lines that reached the chat, indexed by month - 1. */
   lines: Record<string, number[]>;
+  /** The same, counting only lines the model wrote (from decisions by 'llm'). */
+  modelLines: Record<string, number[]>;
   /** Phases left open by their tick limit, e.g. "month 3 auction". */
   cutOff: string[];
-  /** Calls whose bill is unknown, each at its RULE-3 worst case. */
-  unknownUsd: number;
+  /** The game's counted spend at finish, as its seat budgets counted it. */
+  countedUsd: number;
+  /** Model calls that settled, as the trial saw them: each should have its ledger line. */
+  settledCalls: number;
 }
 
-export type StopReason = 'done' | 'cap' | 'auth';
+export type StopReason = 'done' | 'cap' | 'auth' | 'ledger';
 
 export interface TrialInput {
   keyed: boolean;
@@ -67,6 +70,13 @@ export interface Share {
   of: number;
 }
 
+/** Per seat-month counts: lowest, nearest-rank median, and how many are 0. */
+export interface MonthCounts {
+  min: number;
+  median: number;
+  silent: number;
+}
+
 export interface TrialReport {
   keyed: boolean;
   planned: number;
@@ -79,18 +89,23 @@ export interface TrialReport {
   smartAll: Share;
   /** Smart decisions that fell back, by the reason in their note. */
   fallbacks: Record<FallbackReason, number>;
+  fallbacksByKind: Record<DecisionKind, Record<FallbackReason, number>>;
   /** Calls the ledger records as refused; the note reads such a reply as unreadable, or as the model's if it parsed. */
   refusedCalls: number;
-  /** Lines per Smart seat-month, over finished games. */
-  lines: { seatMonths: number; min: number; median: number; silent: number };
+  /** Lines per Smart seat-month, over finished games: every line RULE-2 lets through, templates included. */
+  lines: MonthCounts & { seatMonths: number };
+  /** Lines per Smart seat-month that the model wrote. */
+  modelLines: MonthCounts;
   seatGameUsd: { seatGames: number; max: number; mean: number; atOrOverBudget: number };
   ledgerUsd: number;
-  /** Ledger dollars plus each unknown-bill call at its worst case: what the cap is checked against. */
+  /** Ledger dollars plus each unknown-bill call at its worst case, as the seat budgets count: what the cap is checked against. */
   countedUsd: number;
   cap: number | null;
   stalls: { unfinished: string[]; cutOff: string[] };
   /** Every AI seat's decisions, Smart and strategist. */
   allDecisions: Share;
+  /** Of those, the strategist's top pick. */
+  topPicks: number;
   ac1: Verdict;
   ac2: Verdict;
 }
@@ -122,34 +137,41 @@ const sum = (xs: readonly number[]) => xs.reduce((a, b) => a + b, 0);
 /** Nearest-rank median of a non-empty list. */
 const median = (xs: readonly number[]) => [...xs].sort((a, b) => a - b)[Math.ceil(xs.length / 2) - 1]!;
 
+function reasonsOf(ds: readonly TrialDecision[]): Record<FallbackReason, number> {
+  const counts: Record<FallbackReason, number> = { 'too slow': 0, busy: 0, budget: 0, 'off-list': 0, unreadable: 0, error: 0 };
+  for (const d of ds) if (d.by === 'fallback') counts[fallbackReason(d.note)] += 1;
+  return counts;
+}
+
+function monthCounts(perMonth: readonly number[]): MonthCounts {
+  if (perMonth.length === 0) return { min: 0, median: 0, silent: 0 };
+  return { min: Math.min(...perMonth), median: median(perMonth), silent: perMonth.filter((n) => n === 0).length };
+}
+
 /** The figures and verdicts of a run. */
 export function trialReport(input: TrialInput): TrialReport {
   const { games, calls } = input;
   const smartDecisions = games.flatMap((g) => g.decisions.filter((d) => g.smart.includes(d.seat)));
   const asked = smartDecisions.filter((d) => d.options >= 2);
-  const fallbacks: Record<FallbackReason, number> = { 'too slow': 0, busy: 0, budget: 0, 'off-list': 0, unreadable: 0, error: 0 };
-  for (const d of smartDecisions) if (d.by === 'fallback') fallbacks[fallbackReason(d.note)] += 1;
 
   // A game cut short has a partial last month, so only finished games count seat-months.
-  const perMonth = games
-    .filter((g) => g.end === 'over')
-    .flatMap((g) => g.smart.flatMap((seat) => Array.from({ length: g.months }, (_, m) => g.lines[seat]?.[m] ?? 0)));
+  const finished = games.filter((g) => g.end === 'over');
+  const perMonth = (of: (g: TrialGame) => Record<string, number[]>) =>
+    finished.flatMap((g) => g.smart.flatMap((seat) => Array.from({ length: g.months }, (_, m) => of(g)[seat]?.[m] ?? 0)));
+  const allLines = perMonth((g) => g.lines);
   const seatUsd = games.flatMap((g) => g.smart.map((seat) => sum(calls.filter((c) => c.game === g.id && c.seat === seat).map((c) => c.usd))));
-  const ledgerUsd = sum(calls.map((c) => c.usd));
 
   const stalls = {
     unfinished: games.filter((g) => g.end === 'unfinished' || g.end === 'crashed').map((g) => g.id),
     cutOff: games.flatMap((g) => g.cutOff.map((c) => `${g.id} ${c}`)),
   };
   const stalled = stalls.unfinished.length + stalls.cutOff.length > 0;
-  const allDecisions = shareOf(games.flatMap((g) => g.decisions));
-  const complete = input.stopped === 'done' && games.length === input.planned;
-  const lines = {
-    seatMonths: perMonth.length,
-    min: perMonth.length === 0 ? 0 : Math.min(...perMonth),
-    median: perMonth.length === 0 ? 0 : median(perMonth),
-    silent: perMonth.filter((n) => n === 0).length,
-  };
+  const everyDecision = games.flatMap((g) => g.decisions);
+  const allDecisions = shareOf(everyDecision);
+  const topPicks = everyDecision.filter((d) => d.by === 'top').length;
+  // A run proves an AC only when every planned game was played to its end.
+  const complete = input.stopped === 'done' && games.length === input.planned && finished.length === games.length;
+  const lines = { seatMonths: allLines.length, ...monthCounts(allLines) };
   const seatGameUsd = {
     seatGames: seatUsd.length,
     max: seatUsd.length === 0 ? 0 : Math.max(...seatUsd),
@@ -158,15 +180,15 @@ export function trialReport(input: TrialInput): TrialReport {
   };
   const all = shareOf(asked);
 
-  // A silent seat-month, a stall or a seat-game at the budget fails outright; a share is judged on the full run only.
+  // A silent seat-month, a stall or a seat-game at the budget fails outright; the rest is judged on a complete run only.
   let ac1: Verdict = 'n/a';
   let ac2: Verdict;
   if (input.keyed) {
     const shareHolds = all.of > 0 && 5 * all.model >= 4 * all.of && lines.seatMonths > 0;
     ac1 = lines.silent > 0 ? 'fail' : !complete ? 'not proven' : shareHolds ? 'pass' : 'fail';
-    ac2 = stalled || seatGameUsd.atOrOverBudget > 0 ? 'fail' : !complete ? 'not proven' : 'pass';
+    ac2 = stalled || seatGameUsd.atOrOverBudget > 0 ? 'fail' : !complete || seatGameUsd.seatGames === 0 ? 'not proven' : 'pass';
   } else {
-    ac2 = stalled || allDecisions.model > 0 ? 'fail' : !complete ? 'not proven' : 'pass';
+    ac2 = stalled || topPicks !== allDecisions.of ? 'fail' : !complete ? 'not proven' : 'pass';
   }
 
   return {
@@ -177,15 +199,18 @@ export function trialReport(input: TrialInput): TrialReport {
     smartPerGame: input.smartPerGame,
     asked: { all, ...(Object.fromEntries(KINDS.map((k) => [k, shareOf(asked.filter((d) => d.kind === k))])) as Record<DecisionKind, Share>) },
     smartAll: shareOf(smartDecisions),
-    fallbacks,
+    fallbacks: reasonsOf(smartDecisions),
+    fallbacksByKind: Object.fromEntries(KINDS.map((k) => [k, reasonsOf(smartDecisions.filter((d) => d.kind === k))])) as TrialReport['fallbacksByKind'],
     refusedCalls: calls.filter((c) => c.outcome === 'refused').length,
     lines,
+    modelLines: monthCounts(perMonth((g) => g.modelLines)),
     seatGameUsd,
-    ledgerUsd,
-    countedUsd: ledgerUsd + sum(games.map((g) => g.unknownUsd)),
+    ledgerUsd: sum(calls.map((c) => c.usd)),
+    countedUsd: sum(games.map((g) => g.countedUsd)),
     cap: input.cap,
     stalls,
     allDecisions,
+    topPicks,
     ac1,
     ac2,
   };
@@ -203,6 +228,9 @@ const usdText = (x: number) => `$${x.toFixed(5)}`;
 /** Two decimals when that is exact, so a cap of 0.059 is not printed as $0.06. */
 const capText = (x: number) => `$${Number(x.toFixed(2)) === x ? x.toFixed(2) : String(x)}`;
 const verdictText = (v: Verdict) => v.toUpperCase();
+const reasonsText = (f: Record<FallbackReason, number>) =>
+  `too slow ${f['too slow']}, busy ${f.busy}, budget ${f.budget}, off-list ${f['off-list']}, unreadable ${f.unreadable}, error ${f.error}`;
+const monthText = (c: MonthCounts, of: number) => `min ${c.min}, median ${c.median}, months with none ${c.silent} of ${of}`;
 
 /** The report as printed: the run, UBER-AC-1, UBER-AC-2, then one verdict line per AC. */
 export function renderTrialReport(r: TrialReport): string[] {
@@ -214,13 +242,17 @@ export function renderTrialReport(r: TrialReport): string[] {
   ];
   if (!r.keyed) {
     return [
-      ...table([...run, ['decisions by the model', `${r.allDecisions.model} of ${r.allDecisions.of} (every seat Classic)`], ['stalls', stallText]]),
+      ...table([
+        ...run,
+        ['decisions by the model', `${r.allDecisions.model} of ${r.allDecisions.of} (every seat Classic)`],
+        ["decisions by the strategist's top pick", `${r.topPicks} of ${r.allDecisions.of}`],
+        ['stalls', stallText],
+      ]),
       ...stallDetail,
       '',
-      `UBER-AC-2 (key unset) ${verdictText(r.ac2)}: ${r.stalls.unfinished.length + r.stalls.cutOff.length} stalls, ${r.allDecisions.model} of ${r.allDecisions.of} decisions by the model`,
+      `UBER-AC-2 (key unset) ${verdictText(r.ac2)}: ${r.stalls.unfinished.length + r.stalls.cutOff.length} stalls, ${r.topPicks} of ${r.allDecisions.of} decisions the strategist's top pick`,
     ];
   }
-  const f = r.fallbacks;
   return [
     ...table([
       ...run,
@@ -229,9 +261,11 @@ export function renderTrialReport(r: TrialReport): string[] {
       ['model share of asked decisions', pct(r.asked.all)],
       ...KINDS.map((k) => [`  ${k}`, pct(r.asked[k])]),
       ['model share of all Smart decisions', pct(r.smartAll)],
-      ['fallbacks by reason', `too slow ${f['too slow']}, busy ${f.busy}, budget ${f.budget}, off-list ${f['off-list']}, unreadable ${f.unreadable}, error ${f.error}`],
+      ['fallbacks by reason', reasonsText(r.fallbacks)],
+      ...KINDS.map((k) => [`  ${k}`, reasonsText(r.fallbacksByKind[k])]),
       ['refused calls (ledger)', String(r.refusedCalls)],
-      ['lines per Smart seat-month', `min ${r.lines.min}, median ${r.lines.median}, months with none ${r.lines.silent} of ${r.lines.seatMonths}`],
+      ['lines per Smart seat-month', monthText(r.lines, r.lines.seatMonths)],
+      ['model-written lines per Smart seat-month', monthText(r.modelLines, r.lines.seatMonths)],
       ['UBER-AC-2', ''],
       [
         'ledger $ per Smart seat-game',
@@ -265,16 +299,21 @@ interface GameSetup {
   out: (line: string) => void;
 }
 
+/** Adds one to `counts[month - 1]`. */
+const bump = (counts: number[], month: number) => {
+  counts[month - 1] = (counts[month - 1] ?? 0) + 1;
+};
+
 /** Plays one game with its own brain; pauses simulated time while a model call is open, and always closes the brain. */
 async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
   const { id } = setup;
   const brain = createBrain({ gameId: id, env: setup.env, ...(setup.logPath === null ? {} : { logPath: setup.logPath }) });
-  const game: TrialGame = { id, end: 'unfinished', months: 0, smart: [], decisions: [], lines: {}, cutOff: [], unknownUsd: 0 };
+  const game: TrialGame = { id, end: 'unfinished', months: 0, smart: [], decisions: [], lines: {}, modelLines: {}, cutOff: [], countedUsd: 0, settledCalls: 0 };
   const inflight = new Set<Promise<Choice>>();
   const chat = new Map<string, (record: DecisionRecord) => void>();
   let authRefused = false;
-  // The month of the record being routed to a seat's chatter, read by its say.
-  let routing = 0;
+  // The record being routed to a seat's chatter, read by its say.
+  let routing: DecisionRecord | null = null;
 
   const tracked = (decider: Decider): Decider => ({
     name: decider.name,
@@ -283,13 +322,15 @@ async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
       if (!(answer instanceof Promise)) return answer;
       inflight.add(answer);
       answer.then(
-        () => inflight.delete(answer),
+        () => {
+          inflight.delete(answer);
+          game.settledCalls += 1;
+        },
         (err: unknown) => {
           inflight.delete(answer);
-          // Every failure of the call itself reaches here as a CallFailed; busy, budget and game-over refusals made no call.
-          if (!(err instanceof CallFailed)) return;
-          if (err.auth) authRefused = true;
-          if (billUnknown(null, err)) game.unknownUsd += worstCaseUsd(buildPrompt(shortlist, persona, context));
+          // A call was made only if it failed in the client or its reply was rejected; busy, budget and game over made none.
+          if (err instanceof CallFailed || err instanceof ReplyRejected) game.settledCalls += 1;
+          if (err instanceof CallFailed && err.auth) authRefused = true;
         },
       );
       return answer;
@@ -303,11 +344,15 @@ async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
     if (!decider) return null;
     game.smart.push(seatId);
     const said: number[] = [];
+    const modelSaid: number[] = [];
     game.lines[seatId] = said;
+    game.modelLines[seatId] = modelSaid;
     chat.set(
       seatId,
       brain.chatter(seat, () => {
-        said[routing - 1] = (said[routing - 1] ?? 0) + 1;
+        if (!routing) return;
+        bump(said, routing.month);
+        if (routing.by === 'llm') bump(modelSaid, routing.month);
       }),
     );
     return tracked(decider);
@@ -320,8 +365,9 @@ async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
         game.decisions.push({ seat: r.seat, kind: r.kind, by: r.by, options: r.shortlist.length, ...(r.note === undefined ? {} : { note: r.note }) });
         const say = chat.get(r.seat);
         if (!say) return;
-        routing = r.month;
+        routing = r;
         say(r);
+        routing = null;
       },
       onPhase: (state) => {
         const cut = cutOffPhase(state);
@@ -344,6 +390,7 @@ async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
     await Promise.allSettled([...inflight]);
     brain.finish();
   }
+  game.countedUsd = brain.countedUsd();
   return game;
 }
 
@@ -401,8 +448,9 @@ const DATA_DIR = path.join(path.resolve(path.dirname(fileURLToPath(import.meta.u
 const day = (d: Date) => d.toISOString().slice(0, 10);
 
 /**
- * Runs the trial and prints its report. Exit code with the key: 0 done or capped, 1 bad flags or today's run already
- * made, 2 stopped on an auth failure. Without it: 0 when every game finished unstalled and all-Classic, otherwise 1.
+ * Runs the trial and prints its report. Exit code with the key: 0 done or capped, 1 bad flags, today's run already
+ * made or a ledger write lost, 2 stopped on an auth failure. Without it: 0 when every game finished unstalled and
+ * all-Classic, otherwise 1.
  */
 export async function trial(
   argv: readonly string[],
@@ -434,9 +482,10 @@ export async function trial(
 
   const games: TrialGame[] = [];
   let stopped: StopReason = 'done';
+  let lostLines = '';
   for (let i = 0; i < flags.games; i++) {
     if (logPath !== null && cap !== null) {
-      const counted = sum(readCalls(logPath).map((c) => c.usd)) + sum(games.map((g) => g.unknownUsd));
+      const counted = sum(games.map((g) => g.countedUsd));
       // Each Smart seat's budget holds its game to BRAIN.seatBudgetUsd, unknown bills included. !(<=) refuses a NaN.
       if (!(counted + flags.smart * BRAIN.seatBudgetUsd <= cap)) {
         stopped = 'cap';
@@ -451,11 +500,18 @@ export async function trial(
     const seed = flags.seed + i;
     const game = await playTrialGame({ seed, id: `trial-${today}-${flags.seed}-${i}`, env, logPath, smart: flags.smart, out });
     games.push(game);
-    const calls = logPath === null ? 0 : readCalls(logPath).filter((c) => c.game === game.id).length;
-    out(`game ${i + 1}/${flags.games} seed ${seed}: ${game.end}, ${game.cutOff.length} phases cut off, ${calls} model calls`);
+    out(`game ${i + 1}/${flags.games} seed ${seed}: ${game.end}, ${game.cutOff.length} phases cut off, ${game.settledCalls} model calls`);
     if (game.end === 'auth') {
       stopped = 'auth';
       break;
+    }
+    if (logPath !== null) {
+      const written = readCalls(logPath).filter((c) => c.game === game.id && c.outcome !== 'budget').length;
+      if (written < game.settledCalls) {
+        lostLines = `Stopped: the ledger ${logPath} has ${written} of ${game.settledCalls} call lines for game ${game.id}; a write failed, so spend cannot be checked.`;
+        stopped = 'ledger';
+        break;
+      }
     }
   }
 
@@ -475,6 +531,10 @@ export async function trial(
   if (stopped === 'auth') {
     out('Stopped: the API refused the credentials (401/403). Nothing more was called.');
     return { code: 2, report };
+  }
+  if (stopped === 'ledger') {
+    out(lostLines);
+    return { code: 1, report };
   }
   return { code: keyed || report.ac2 === 'pass' ? 0 : 1, report };
 }
