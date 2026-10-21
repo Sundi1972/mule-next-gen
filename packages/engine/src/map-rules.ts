@@ -233,10 +233,9 @@ function shares(f: Facts): Violation[] {
   return SHARE_TERRAINS.flatMap((t) => {
     const count = terrainCount(f, t);
     if (count === 0) return [];
-    const target = MAP.shares[t];
-    const tolerance = target * MAP.jitter + 1 / n;
-    if (Math.abs(count / n - target) <= tolerance + EPS) return [];
-    return [{ rule: 'S2', detail: `${t} ${count} plots, ${pct(count / n)} of non-river land; target ${pct(target)} ± ${pct(tolerance)}` }];
+    const band = shareBand(t, n);
+    if (count >= band.min && count <= band.max) return [];
+    return [{ rule: 'S2', detail: `${t} ${count} plots, ${pct(count / n)} of non-river land; target ${pct(MAP.shares[t])} ± ${pct(band.tolerance)}` }];
   });
 }
 
@@ -258,13 +257,25 @@ function noSpecks(f: Facts): Violation[] {
   }));
 }
 
-function regionCap(f: Facts): number {
-  return Math.ceil(MAP.maxRegionShare * f.nonRiver.length - EPS);
+/** S2's allowed plot counts for a terrain on `nonRiver` plots of non-river land: its target share ± a third of it, ± 1 plot. */
+export function shareBand(terrain: ShareTerrain, nonRiver: number): { min: number; max: number; tolerance: number } {
+  const target = MAP.shares[terrain];
+  const tolerance = target * MAP.jitter + 1 / nonRiver;
+  return {
+    min: Math.ceil((target - tolerance - EPS) * nonRiver),
+    max: Math.floor((target + tolerance + EPS) * nonRiver),
+    tolerance,
+  };
+}
+
+/** S5's cap: the most plots one region may hold on `nonRiver` plots of non-river land. */
+export function regionCap(nonRiver: number): number {
+  return Math.ceil(MAP.maxRegionShare * nonRiver - EPS);
 }
 
 /** S5 no blob: no region over its share of non-river land. */
 function noBlob(f: Facts): Violation[] {
-  const cap = regionCap(f);
+  const cap = regionCap(f.nonRiver.length);
   return f.regions.filter((r) => r.length > cap).map((r) => ({
     rule: 'S5',
     detail: `${r[0]!.terrain} region of ${r.length} plots at ${at(r[0]!)}, over the cap of ${cap}`,
