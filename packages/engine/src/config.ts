@@ -308,20 +308,33 @@ export const POLLUTION = {
   collapseScore: 0.8,
 };
 
-/** Map size by player count, from the design doc. */
-export function mapSize(players: number): { width: number; height: number } {
-  if (players <= 3) return { width: 13, height: 7 };
-  if (players === 4) return { width: 15, height: 9 };
-  return { width: 19, height: 11 };
+export type SizeBand = 'small' | 'mid' | 'large';
+
+/** Map size band by player count: small is 2-3 players, mid 4, large 5-6. */
+export function sizeBand(players: number): SizeBand {
+  if (players <= 3) return 'small';
+  if (players === 4) return 'mid';
+  return 'large';
 }
 
-type SizeBand = 'small' | 'mid' | 'large';
-type FloorGood = 'food' | 'water' | 'energy' | 'smithore';
+const MAP_SIZE: Record<SizeBand, { width: number; height: number }> = {
+  small: { width: 13, height: 7 },
+  mid: { width: 15, height: 9 },
+  large: { width: 19, height: 11 },
+};
+
+/** Map size by player count, from the design doc. */
+export function mapSize(players: number): { width: number; height: number } {
+  return { ...MAP_SIZE[sizeBand(players)] };
+}
+
+/** The goods every map guarantees a floor, reach and normal range for. */
+export type FloorGood = 'food' | 'water' | 'energy' | 'smithore';
 
 /**
  * What every map must meet (the map rules), read by the checker, the
- * generator and the map gallery. Size bands follow mapSize: small is 2-3
- * players, mid 4, large 5-6. Counts are good plots per player.
+ * generator and the map gallery. Size bands are sizeBand's. Counts are good
+ * plots per player.
  */
 export const MAP = {
   /** A plot is good for a raw good at this rating or more. */

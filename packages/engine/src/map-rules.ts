@@ -1,14 +1,12 @@
-import { MAP } from './config.js';
+import { MAP, sizeBand, type FloorGood, type SizeBand } from './config.js';
 import { neighbours, tileIndex } from './map.js';
 import { RAW_GOODS, type RawGood, type Terrain, type Tile } from './types.js';
 
 /** The map rules as a checker: every rule a map breaks, and the numbers the map gallery prints. */
 
 type GameMap = { width: number; height: number; tiles: Tile[] };
-type FloorGood = keyof typeof MAP.floor;
 type ShareTerrain = keyof typeof MAP.shares;
 type Mineral = 'crystite' | 'rareEarth';
-export type SizeBand = keyof typeof MAP.bends;
 
 export interface MapReport {
   /** One entry per broken rule instance; `rule` is the row id ('F1', 'S7', ...). */
@@ -56,13 +54,6 @@ interface Facts {
 
 type Violation = MapReport['violations'][number];
 type Steps = (tile: Tile) => number;
-
-/** Map size band by player count, as mapSize sizes the map. */
-export function sizeBand(players: number): SizeBand {
-  if (players <= 3) return 'small';
-  if (players === 4) return 'mid';
-  return 'large';
-}
 
 /** Checks a map against every map rule (spec RULE-1). Pure. */
 export function checkMap(map: GameMap, players: number): MapReport {
@@ -198,8 +189,7 @@ function reach(f: Facts): Violation[] {
 }
 
 function allTerrains(f: Facts): Violation[] {
-  const missing: string[] = SHARE_TERRAINS.filter((t) => terrainCount(f, t) === 0);
-  if (!f.hasRiver) missing.push('river');
+  const missing = SHARE_TERRAINS.filter((t) => terrainCount(f, t) === 0);
   return missing.map((t) => ({ rule: 'S1', detail: `no ${t} on the map` }));
 }
 
@@ -244,9 +234,15 @@ function noBlob(f: Facts): Violation[] {
 function riverShape(f: Facts): Violation[] {
   if (!f.hasRiver) return [{ rule: 'S6', detail: 'no river on the map' }];
   return f.riverRows.flatMap((cols, y) => {
-    if (cols.length === 1 || (cols.length === 2 && cols[1]! - cols[0]! === 1)) return [];
-    const where = cols.length === 0 ? 'no river' : `river at columns ${cols.join(', ')}`;
-    return [{ rule: 'S6', detail: `row ${y} holds ${where}; a row holds 1 river plot or 2 touching` }];
+    if (cols.length === 0) return [{ rule: 'S6', detail: `row ${y} holds no river` }];
+    if (cols[cols.length - 1]! - cols[0]! > 1) {
+      return [{ rule: 'S6', detail: `row ${y} holds river at columns ${cols.join(', ')}; a row holds 1 river plot or 2 touching` }];
+    }
+    const above = f.riverRows[y - 1];
+    if (above && above.length > 0 && !cols.some((x) => above.includes(x))) {
+      return [{ rule: 'S6', detail: `row ${y}'s river (column ${cols.join(', ')}) does not touch row ${y - 1}'s (column ${above.join(', ')})` }];
+    }
+    return [];
   });
 }
 
@@ -256,7 +252,7 @@ function riverBends(f: Facts): Violation[] {
   const out: Violation[] = [];
   const bends = riverBendCount(f);
   const needed = MAP.bends[f.band];
-  if (bends < needed) out.push({ rule: 'S7', detail: `${bends} bends, ${needed} needed` });
+  if (bends < needed) out.push({ rule: 'S7', detail: `${bends} ${bends === 1 ? 'bend' : 'bends'}, ${needed} needed` });
   const { width } = f.map;
   for (const [y, cols] of f.riverRows.entries()) {
     for (const x of cols.filter((c) => c < 2 || c > width - 3)) {
@@ -315,7 +311,7 @@ function metrics(f: Facts): MapReport['metrics'] {
   const below = belowNormal(f);
   return {
     perPlayer: Object.fromEntries(RAW_GOODS.map((g) => [g, perPlayer(f, g)])) as Record<RawGood, number>,
-    shares: Object.fromEntries(SHARE_TERRAINS.map((t) => [t, n === 0 ? 0 : terrainCount(f, t) / n])) as MapReport['metrics']['shares'],
+    shares: Object.fromEntries(SHARE_TERRAINS.filter((t) => terrainCount(f, t) > 0).map((t) => [t, terrainCount(f, t) / n])),
     biggestRegion: Math.max(0, ...f.regions.map((r) => r.length)),
     bends: riverBendCount(f),
     seamShare: seamShareOf(f),
