@@ -1,6 +1,6 @@
 import type { GameContext } from '@tabletop/core';
 import { describe, expect, it } from 'vitest';
-import { GAME, LOTS, RuleError, WALK } from '@mule/engine';
+import { GAME, LOTS, RuleError, TAX, WALK } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
 
@@ -168,7 +168,7 @@ describe('land auction on the server', () => {
     expect(tile(after, plot).owner).toBe('o');
     expect(tile(after, plot).outfit).toBe('food');
     expect(money(after, 'o')).toBe(money(before, 'o') - ossa);
-    expect(money(after, 'b')).toBe(money(before, 'b') + ossa - Math.round(ossa * 0.05));
+    expect(money(after, 'b')).toBe(money(before, 'b') + ossa - Math.round(ossa * TAX.salesTax));
     expect(money(after, 'l')).toBe(money(before, 'l'));
     expect(after.news[0]).toBe(`Ossa bought plot ${at(plot)} from Brix for ${ossa}.`);
 

@@ -452,12 +452,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     );
   }
 
-  /**
-   * The land auction runs on the same fixed tick as the goods auction.
-   * Players who dropped count as done, the engine moves the lot on by the
-   * time that really passed, and each lot's result goes into the news at
-   * its bell. When the last lot's result has been shown, development starts.
-   */
+  /** Steps the land auction every WALK.tickMs until its last lot is over. */
   private scheduleLandAuctionTick(last: number): void {
     const state = this.requireState();
     this.cancels.push(
