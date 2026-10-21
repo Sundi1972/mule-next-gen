@@ -153,6 +153,7 @@ describe('Room: a seat picks one of the game\'s choices in the lobby (RULE-1)', 
     const { room } = pickRoom();
     const heiko = join(room, 'Heiko');
     const mia = join(room, 'Mia');
+    await flush();
 
     pick(room, heiko, 'fox');
     await flush();
@@ -177,7 +178,7 @@ describe('Room: a seat picks one of the game\'s choices in the lobby (RULE-1)', 
     expect(pickOf(room, heiko)).toBe('owl');
   });
 
-  it('T-AC-4: any human seat picks for itself only — the host has no say over it, and duplicates are allowed', () => {
+  it("T-AC-4: any human seat's pick lands on the sender's seat, not the host's; duplicates are allowed", () => {
     const { room } = pickRoom();
     const heiko = join(room, 'Heiko');
     const mia = join(room, 'Mia');

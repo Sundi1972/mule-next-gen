@@ -221,7 +221,7 @@ export class Room<Intent, View> {
     return this.opts.aiNames.find((n) => !used.has(n)) ?? `AI ${this.seats.length + 1}`;
   }
 
-  /** RULE-1: a human seat makes its own choice from the game's list, before Start. */
+  /** A human seat makes its own choice from the game's list, before Start. See RULE-1. */
   private pick(seatId: string, pick: string): void {
     if (!this.picks) throw new TableError('This game has no choices to make');
     if (this.started) throw new TableError('The game has already started');
