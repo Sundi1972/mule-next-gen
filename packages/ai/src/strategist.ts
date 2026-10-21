@@ -10,6 +10,7 @@ import {
   PROCESSED_GOODS,
   RAW_GOODS,
   STRATEGIST,
+  UPKEEP,
   shipInPort,
   shipPrice,
   tileIndex,
@@ -189,6 +190,38 @@ export function wantsPlot(plan: LandPlan, obs: GameState, index: number, sweep: 
   return lit.utility >= (open[0]?.utility ?? 0) * share;
 }
 
+// --- Values for lot bids ----------------------------------------------------
+
+/**
+ * What a plot is worth to the seat, in credits: the best gain it sees from
+ * developing it (never below nothing) plus what the plot adds to the score.
+ * The most the seat bids for it at a lot.
+ */
+export function plotValue(obs: GameState, mind: Mind, index: number): number {
+  const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
+  const best = Math.max(0, ...plotGains(obs, o, obs.tiles[index]!, mind).values());
+  return Math.round(best + GAME.plotScore);
+}
+
+/**
+ * What one more MULE is worth to the seat, in credits: its best use on an
+ * idle plot of its own, before paying the store's price for it. Nothing
+ * without idle land. The most the seat bids for a MULE at a lot.
+ */
+export function muleValue(obs: GameState, mind: Mind): number {
+  const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
+  const price = mulePriceFor(obs, mind.me);
+  let best = 0;
+  for (const tile of obs.tiles) {
+    if (tile.owner !== mind.me || tile.outfit) continue;
+    for (const outfit of OUTFITS) {
+      if (isFactoryGood(outfit) && !canFeed(obs, mind.me, outfit)) continue;
+      best = Math.max(best, installGain(obs, o, tile, outfit, mind).gain + price);
+    }
+  }
+  return Math.round(best);
+}
+
 // --- Development -------------------------------------------------------------
 
 export type DevAction = { kind: 'install'; index: number; outfit: Outfit } | { kind: 'stop' };
@@ -305,6 +338,13 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
   const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
   const values = unitValues(obs, o, good, mind);
   const p = me(obs, mind);
+  // Colonists buy only from the store. When its shelf can't feed them, Food or Water held past next
+  // month's own needs is worth no more than the store pays now: a hungry colony shrinks, and a unit
+  // held for next month's price stays out of reach of the people who need it.
+  if ((good === 'food' || good === 'water') && obs.store.stock[good] < obs.colonists / UPKEEP.colonistsPerUnit) {
+    const now = expectedPrices(obs, good).sell;
+    for (let k = values.block; k < values.keep.length; k++) values.keep[k] = Math.min(values.keep[k]!, now - 1);
+  }
   const reserve = cashReserve(obs, mind);
   const budget = Math.max(0, Math.min(p.money * STRATEGIST.budgetShare, p.money - reserve));
   const a = obs.auction;
