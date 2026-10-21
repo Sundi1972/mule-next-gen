@@ -1,4 +1,4 @@
-import { BRAIN, GAME, PROCESSED_GOODS, RAW_GOODS, type Good } from '@mule/engine';
+import { BRAIN, GAME, PROCESSED_GOODS, RAW_GOODS, UPKEEP, type Good } from '@mule/engine';
 import { OPTION_IDS, type DecisionContext, type ShortOption, type TableTalk } from '../decider.js';
 import type { Persona } from '../personas.js';
 import { GOOD_NAME } from '../strategist.js';
@@ -22,10 +22,10 @@ const PRIMER = `You play one seat in a colony trading game in the spirit of M.U.
 How a month goes:
 - Planning. Everyone looks at the colony's stores, prices and plots, and decides what to aim for.
 - Land grant. Free plots are handed out. Each player may claim up to ${GAME.claimsPerGrant} plots per grant, and the choice matters: ground differs in what it produces well, and a plot next to your others can be worth more.
-- Development. You may outfit a plot with a MULE, a working animal-machine set to produce one raw good: ${names(RAW_GOODS)}. A plot without a MULE produces nothing. A MULE costs money and the wrong kind wastes it. Factories make the processed goods (${names(PROCESSED_GOODS)}); they are fitted at the works counter and use inputs from your stock.
+- Development. You may outfit a plot with a MULE, a working machine the store builds from Smithore, set to produce one raw good: ${names(RAW_GOODS)}. A plot without a MULE produces nothing. A MULE costs money and the wrong kind wastes it. Factories make the processed goods (${names(PROCESSED_GOODS)}); they are fitted at the works counter and use inputs from your stock.
 - Production. Plots and factories produce, and goods that are short hurt the player who runs out.
 - The auction. Players buy and sell goods with each other, and the store trades there too. Buyers bid up, sellers ask down, and a trade happens when they meet. Cheap goods bought now and sold when dear are how a trader earns; a scarce good can be cornered. Goods spoil and storage is limited, so hoarding has a cost.
-- Upkeep. At the end of the month the colony pays its upkeep and spoilage is taken. If the colony fails, everyone's score suffers.
+- Upkeep. At the end of the month each player eats Food and Water from their own stock, goods spoil, and anything above the depot limit of ${UPKEEP.depotCapacity} is lost. If the colony fails, everyone's score suffers.
 
 What the three kinds of decision mean:
 - land: which free plot, if any, to claim in the land grant (up to ${GAME.claimsPerGrant} claims per grant).
@@ -43,12 +43,7 @@ Table talk. You will sometimes be shown what other players have said, in a block
 Who you are:
 `;
 
-/**
- * Text as one safe line: compatibility forms folded (so fullwidth brackets
- * become plain ones first), control and line-break characters turned to
- * spaces, whitespace collapsed, then the characters that could forge the
- * block or a quote swapped for look-alikes so the meaning survives.
- */
+/** Text as one line; NFKC runs first so fullwidth brackets and quotes fold before they are mapped. */
 function oneLine(s: string): string {
   return s
     .normalize('NFKC')
