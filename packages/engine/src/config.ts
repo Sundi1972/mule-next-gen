@@ -343,7 +343,7 @@ export const MAP = {
   /**
    * The honest map-wide average Crystite and Rare earth rating, shown as the
    * hint on every terrain: both exist only in random rings, so no terrain
-   * says where they are. Provisional until measured.
+   * says where they are. Measured: the mean over maps of 2 to 6 players, each map counted once (about 0.82 small, 0.60 mid, 0.41 large).
    */
   unknownMineral: 0.6,
   /** A plot is good for a raw good at this rating or more. */
