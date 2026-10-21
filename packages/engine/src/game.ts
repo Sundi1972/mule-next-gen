@@ -74,6 +74,7 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
     auction: null,
     listings: [],
     landAuction: null,
+    politics: null,
   };
   // The first month's prices start where supply and demand put them.
   for (const good of GOODS) state.store.posted[good] = Math.round(targetPrice(state, good));
