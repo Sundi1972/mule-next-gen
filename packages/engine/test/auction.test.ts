@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   advancePhase,
-  aiAuction,
   auctionDone,
   createGame,
   declareRole,
@@ -412,26 +411,5 @@ describe('changing sides and ending early', () => {
     walker(state, 'p1').price = 50;
     expect(run(state, 5_000)).toHaveLength(2);
     expect(a(state).stage).toBe('over');
-  });
-});
-
-describe('AI players at the auction', () => {
-  it('walk to their price, trade, and replay exactly from the seed', () => {
-    const play = () => {
-      const state = createGame({ seed: 5, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI${i}`, isAi: true })) });
-      while (state.phase !== 'auction') advancePhase(state);
-      state.players[0]!.stock.food = 12;
-      state.players[1]!.stock.food = 0;
-      const trades: Trade[] = [];
-      for (let i = 0; i < 20_000 && state.auction!.stage !== 'over'; i++) {
-        for (const p of state.players) aiAuction(state, p.id, TICK);
-        trades.push(...stepAuction(state, TICK));
-      }
-      return trades;
-    };
-    const trades = play();
-    expect(trades.some((t) => t.good === 'food' && t.seller === 'ai0')).toBe(true);
-    expect(trades.some((t) => t.good === 'food' && t.buyer === 'ai1')).toBe(true);
-    expect(play()).toEqual(trades);
   });
 });

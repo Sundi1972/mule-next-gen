@@ -285,6 +285,4 @@ export interface LiveAuction extends WalkBoard {
   status: StatusRow[];
   /** Goods skipped since the last one that came up, shown as one line. */
   skipped: { good: Good; reason: SkipReason }[];
-  /** Per AI player, what it plans for this good. */
-  ai: Record<string, { keep: number; worth: number; budget: number; waitMs: number }>;
 }

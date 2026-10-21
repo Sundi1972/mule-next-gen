@@ -21,7 +21,6 @@ import {
   type Good,
   type Tile,
 } from '../src/index.js';
-import { playAiGame } from '../src/sim.js';
 
 const players = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${i}`, name: `P${i}`, isAi: false }));
 
@@ -200,19 +199,5 @@ describe('month flow', () => {
     expect(isGameOver(state)).toBe(false);
     state.month = 7;
     expect(isGameOver(state)).toBe(true);
-  });
-});
-
-describe('simulator', () => {
-  it('plays a full AI game without the colony going broke', () => {
-    const state = playAiGame(7, 4);
-    expect(state.phase).toBe('gameOver');
-    expect(state.store.capital).toBeGreaterThan(0);
-    for (const report of state.history) {
-      for (const price of Object.values(report.prices)) {
-        expect(price).toBeGreaterThan(0);
-        expect(Number.isFinite(price)).toBe(true);
-      }
-    }
   });
 });

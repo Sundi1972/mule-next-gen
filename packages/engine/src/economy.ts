@@ -145,18 +145,30 @@ export function postPrices(state: GameState): void {
   // This month's report is already open; last month's says what colonists lacked.
   const lastShortages = state.history.at(-2)?.shortages ?? [];
   const off = exportDemand(state);
-  for (const good of GOODS) {
-    const prev = state.store.posted[good];
-    // Below the lowest cover, or after colonists went short of it last month,
-    // the price has no target at all: it climbs the full step every month
-    // until supply comes back.
-    const short = cover(state, good, demand) < PRICE.minCover || lastShortages.includes(good);
-    let target = short ? Infinity : targetPrice(state, good, demand);
-    // A good only off-world buyers want is worth no more than they pay.
-    if (demand[good] - off[good] <= 0) target = Math.min(target, state.store.offWorld[good]);
-    const next = Math.min(riseCap(state, good, prev), Math.max(prev * (1 - PRICE.maxFall), target));
-    state.store.posted[good] = Math.max(1, Math.round(next));
-  }
+  const next = GOODS.map((good) => nextPostedPrice(state, good, demand, lastShortages, off));
+  GOODS.forEach((good, i) => (state.store.posted[good] = next[i]!));
+}
+
+/**
+ * The price the store would post for a good now, from the posted price it
+ * moves from. Below the lowest cover, or after colonists went short of it last
+ * month, the price has no target at all: it climbs the full step every month
+ * until supply comes back. A good only off-world buyers want is worth no more
+ * than they pay. AI players use this to price what an extra unit would do.
+ */
+export function nextPostedPrice(
+  state: GameState,
+  good: Good,
+  demand = monthlyDemand(state),
+  lastShortages: readonly Good[] = state.history.at(-2)?.shortages ?? [],
+  off = exportDemand(state),
+): number {
+  const prev = state.store.posted[good];
+  const short = cover(state, good, demand) < PRICE.minCover || lastShortages.includes(good);
+  let target = short ? Infinity : targetPrice(state, good, demand);
+  if (demand[good] - off[good] <= 0) target = Math.min(target, state.store.offWorld[good]);
+  const next = Math.min(riseCap(state, good, prev), Math.max(prev * (1 - PRICE.maxFall), target));
+  return Math.max(1, Math.round(next));
 }
 
 /**

@@ -1,82 +1,30 @@
 /**
- * Headless simulator: plays AI-only games and checks them against the
+ * Headless simulator: plays AI-only games with strategist seats (the
+ * default TopPickDecider, no language model) and checks them against the
  * balance targets in the design doc's Economy model tab. Used to tune the
- * numbers in config.ts.
+ * numbers in the engine's config.ts.
  *
- *   pnpm sim -- --games 200 --players 4
+ *   pnpm sim -- --games 100 --players 4 --level trader
+ *   pnpm sim -- --persona cautious     (every seat the same persona; default: they rotate)
  */
-import { aiAuction, aiClaim, aiDevelop } from './ai/simple.js';
-import { SHIP_ID, stepAuction, STORE_ID } from './auction.js';
-import { GAME, GOOD_CONFIG, WALK } from './config.js';
-import { advanceGrant, advancePhase, colonyFailed, createGame, grantDone, score } from './game.js';
-import { GOODS, type GameState } from './types.js';
+import { AI_LEVELS, AI_PERSONAS, colonyFailed, GOOD_CONFIG, GOODS, score, type AiLevelId, type AiPersonaId } from '@mule/engine';
+import { playGame, type SeatSpec } from './play.js';
 
 function arg(name: string, fallback: number): number {
   const i = process.argv.indexOf(`--${name}`);
   return i >= 0 ? Number(process.argv[i + 1]) : fallback;
 }
 
-export interface SimGame {
-  state: GameState;
-  /** Per month, the ids of players who were broke (under 100 credits) with idle land. */
-  broke: string[][];
-  /** Units traded at the live auction: between players, with the store (both ways) and to the ship; and its game-time in ms. */
-  auction: { between: number; store: number; ship: number; ms: number };
+function argText(name: string): string | null {
+  const i = process.argv.indexOf(`--${name}`);
+  return i >= 0 ? (process.argv[i + 1] ?? null) : null;
 }
 
-export function playAiGame(seed: number, players: number): GameState {
-  return simulate(seed, players).state;
-}
+export const ROTATION: AiPersonaId[] = ['trader', 'aggressive', 'cautious', 'saboteur'];
 
-export function simulate(seed: number, players: number): SimGame {
-  const state = createGame({
-    seed,
-    players: Array.from({ length: players }, (_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })),
-  });
-  const broke: string[][] = [];
-  const auction = { between: 0, store: 0, ship: 0, ms: 0 };
-  let guard = 0;
-  while (state.phase !== 'gameOver' && guard++ < 500) {
-    switch (state.phase) {
-      case 'landGrant': {
-        // Walk the light across the free plots; the first AI that wants the lit plot takes it.
-        let steps = 0;
-        while (!grantDone(state) && steps++ < 2_000) {
-          const order = state.players.filter((p) => p.claimsThisGrant < GAME.claimsPerGrant);
-          const start = steps % order.length;
-          for (let i = 0; i < order.length; i++) if (aiClaim(state, order[(start + i) % order.length]!.id)) break;
-          advanceGrant(state);
-        }
-        break;
-      }
-      case 'development':
-        // Everyone develops at once in the real game; rotate who reaches the corral first.
-        state.players.forEach((_, i) => aiDevelop(state, state.players[(i + state.month) % state.players.length]!.id));
-        break;
-      case 'auction': {
-        // The live auction, tick by tick, exactly as the server runs it.
-        for (let ticks = 0; state.auction && state.auction.stage !== 'over' && ticks < 100_000; ticks++) {
-          for (const p of state.players) aiAuction(state, p.id, WALK.tickMs);
-          for (const t of stepAuction(state, WALK.tickMs)) {
-            if (t.buyer === SHIP_ID) auction.ship++;
-            else if (t.buyer === STORE_ID || t.seller === STORE_ID) auction.store++;
-            else auction.between++;
-          }
-          auction.ms += WALK.tickMs;
-        }
-        break;
-      }
-      case 'upkeep':
-        broke.push(
-          state.players
-            .filter((p) => p.money < 100 && state.tiles.some((t) => t.owner === p.id && !t.outfit))
-            .map((p) => p.id),
-        );
-        break;
-    }
-    advancePhase(state);
-  }
-  return { state, broke, auction };
+/** Seats for a simulator game: one level, personas rotating by seat (and by seed, so no persona always sits first). */
+export function simSeats(players: number, level: AiLevelId, seed: number, persona: AiPersonaId | null = null): SeatSpec[] {
+  return Array.from({ length: players }, (_, i) => ({ level, persona: persona ?? ROTATION[(i + seed) % ROTATION.length]! }));
 }
 
 const pct = (n: number, of: number) => `${((n / Math.max(1, of)) * 100).toFixed(0)}%`;
@@ -88,6 +36,12 @@ const quantile = (values: number[], q: number) => {
 function main() {
   const games = arg('games', 100);
   const players = arg('players', 4);
+  const first = arg('seed', 1);
+  const level = (argText('level') ?? 'trader') as AiLevelId;
+  const persona = argText('persona') as AiPersonaId | null;
+  if (!(level in AI_LEVELS)) throw new Error(`Unknown level ${level}; use ${Object.keys(AI_LEVELS).join(', ')}`);
+  if (persona && !(persona in AI_PERSONAS)) throw new Error(`Unknown persona ${persona}; use ${Object.keys(AI_PERSONAS).join(', ')}`);
+  const byPersona: Record<string, number> = {};
   const prices = Object.fromEntries(GOODS.map((g) => [g, [] as number[]]));
   const mulePrices: number[] = [];
   let months = 0;
@@ -103,8 +57,9 @@ function main() {
   const wins: Record<string, number> = {};
   const auction = { between: 0, store: 0, ship: 0, ms: 0 };
 
-  for (let seed = 1; seed <= games; seed++) {
-    const { state, broke, auction: a } = simulate(seed, players);
+  for (let seed = first; seed < first + games; seed++) {
+    const specs = simSeats(players, level, seed, persona);
+    const { state, broke, auction: a } = playGame(seed, specs);
     for (const k of ['between', 'store', 'ship', 'ms'] as const) auction[k] += a[k];
     months += state.history.length;
     soldOut += state.history.filter((h) => h.corralSoldOut).length;
@@ -121,14 +76,17 @@ function main() {
     developed += mine.filter((t) => t.outfit).length;
     if (state.players.some((p) => broke.some((_, m) => [0, 1, 2].every((k) => broke[m + k]?.includes(p.id))))) longBroke++;
     if (colonyFailed(state)) collapsed++;
-    const winner = [...state.players].sort((a, b) => score(state, b.id) - score(state, a.id))[0]!;
-    wins[winner.species] = (wins[winner.species] ?? 0) + 1;
+    const ranked = state.players.map((p, i) => ({ p, i })).sort((a, b) => score(state, b.p.id) - score(state, a.p.id));
+    const winner = ranked[0]!;
+    wins[winner.p.species] = (wins[winner.p.species] ?? 0) + 1;
+    const wp = specs[winner.i]!.persona;
+    byPersona[wp] = (byPersona[wp] ?? 0) + 1;
   }
 
   const check = (ok: boolean) => (ok ? 'ok  ' : 'MISS');
   const muleMedian = quantile(mulePrices, 0.5);
   const mule90 = quantile(mulePrices, 0.9);
-  console.log(`${games} games, ${players} AI players, ${(months / games).toFixed(1)} months on average\n`);
+  console.log(`${games} games (seeds ${first} to ${first + games - 1}), ${players} strategist seats at ${level}, ${(months / games).toFixed(1)} months on average\n`);
   console.log(`${check(muleMedian >= 150 && muleMedian <= 300)} MULE price median ${muleMedian} (target 150 to 300)`);
   console.log(`${check(mule90 < 500)} MULE price 90th percentile ${mule90} (target under 500)`);
   console.log(`${check(soldOut / months < 0.1)} Corral sold out in ${pct(soldOut, months)} of months (target under 10%)`);
@@ -140,6 +98,7 @@ function main() {
   console.log(`${check(minFund >= 0)} Lowest colony fund ${minFund} (target 0 or more)`);
   console.log(`${check(collapsed / games <= 0.1)} Ended in Collapse: ${pct(collapsed, games)} (target 10% or less)`);
   console.log(`     Wins by species: ${Object.entries(wins).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
+  console.log(`     Wins by persona: ${Object.entries(byPersona).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
   console.log(
     `     Live auction a month: ${(auction.between / months).toFixed(1)} units between players, ${(auction.store / months).toFixed(1)} with the store, ${(auction.ship / months).toFixed(1)} to the ship; ${(auction.ms / months / 1000).toFixed(0)} s of auction time`,
   );

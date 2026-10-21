@@ -119,7 +119,6 @@ export function startAuction(state: GameState, goods: readonly Good[] = WALK.ord
     status: [],
     skipped: [],
     between: { units: 0, value: 0 },
-    ai: {},
   };
   nextGood(state, []);
 }
@@ -203,8 +202,7 @@ function nextGood(state: GameState, skipped: LiveAuction['skipped']): void {
       status: statusRows(state, good),
       skipped,
       between: { units: 0, value: 0 },
-      ai: {},
-    } satisfies Partial<LiveAuction>);
+      } satisfies Partial<LiveAuction>);
     return;
   }
   Object.assign(a, { good: null, stage: 'over', clockMs: 0, walkers: [], deals: [], status: [], skipped } satisfies Partial<LiveAuction>);

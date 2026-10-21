@@ -322,6 +322,8 @@ export const GAME = {
   claimsPerGrant: 2,
   /** The export ship calls every this many months. */
   exportShipEvery: 3,
+  /** How long each free plot stays lit in the land grant. */
+  grantTickMs: 650,
 };
 
 export const EXPORT_SHIP = {
@@ -372,8 +374,169 @@ export const WALK = {
   boardMargin: 0.3,
   /** How often the server steps the auction. */
   tickMs: 100,
-  /** AI walkers: a reaction delay when the walk starts, and short seeded pauses while they walk. */
-  aiReactMs: [300, 1_200] as [number, number],
-  aiPausePerSecond: 0.35,
-  aiPauseMs: [250, 900] as [number, number],
+};
+
+/**
+ * AI players. The strategist scores options with named considerations; a
+ * persona is a set of weights on them, and a level sets how complete the
+ * scoring is, how many near-best options reach the decider and how fast the
+ * hands react. No level sees more than a human in that seat would.
+ */
+export interface AiPersonaWeights {
+  /** Dislike of uncertain bets (unanalysed ground, thin markets). 1 is neutral; higher avoids risk. */
+  risk: number;
+  /** Weight on money made. Higher chases bigger but less certain gains. */
+  greed: number;
+  /** Multiplies the cash and the Food and Energy it keeps back for next month. */
+  reserve: number;
+  /** Weight on hurting the leader: blocking their land, outbidding them for what they need. 0 never. */
+  spite: number;
+  /** Willingness to buy now to sell next month. 0 never. */
+  speculate: number;
+  /** Willingness to buy up a scarce good the others are short of, to sell it to them dear. 0 never. */
+  corner: number;
+  /** Auction patience: higher waits longer for the other side to come to it. */
+  patience: number;
+}
+
+export const AI_PERSONAS = {
+  cautious: { risk: 1.6, greed: 0.8, reserve: 1.6, spite: 0, speculate: 0.3, corner: 0, patience: 1.4 },
+  aggressive: { risk: 0.6, greed: 1.4, reserve: 0.7, spite: 0.3, speculate: 1.0, corner: 1.0, patience: 0.6 },
+  trader: { risk: 1.0, greed: 1.1, reserve: 1.0, spite: 0, speculate: 1.4, corner: 0.4, patience: 1.0 },
+  saboteur: { risk: 0.9, greed: 0.9, reserve: 1.0, spite: 1.5, speculate: 0.6, corner: 0.6, patience: 0.9 },
+} satisfies Record<string, AiPersonaWeights>;
+
+export type AiPersonaId = keyof typeof AI_PERSONAS;
+
+export interface AiLevelConfig {
+  /** Prices from the engine's own look-ahead (next month's production, upkeep and spoilage); without it, today's posted prices. */
+  lookAhead: boolean;
+  /** Counts spoilage, the depot limit and the air in its values. */
+  fullScoring: boolean;
+  /** Options handed to the decider, at most. */
+  shortlist: number;
+  /** An option reaches the shortlist only within this share of the best utility. */
+  shortlistTolerance: number;
+  /** The default decider picks among options within this share of the best, in proportion to utility. */
+  pickTolerance: number;
+  /** Reaction time in ms, drawn per reaction. */
+  reactMs: [number, number];
+  /** Multiplies the hands' development step times. 1 is a quick human. */
+  devPace: number;
+  /** MULEs it leads out of the store in one month, at most. */
+  mulesPerMonth: number;
+  /** Chance it misses a plot it wanted in the land grant. */
+  missChance: number;
+  /** Allowed to corner goods and to act on spite. Rookie never does. */
+  corners: boolean;
+  sabotage: boolean;
+}
+
+export const AI_LEVELS = {
+  rookie: {
+    lookAhead: false,
+    fullScoring: false,
+    shortlist: 3,
+    shortlistTolerance: 0.35,
+    pickTolerance: 0.25,
+    reactMs: [320, 550],
+    devPace: 1.4,
+    mulesPerMonth: 1,
+    missChance: 0.25,
+    corners: false,
+    sabotage: false,
+  },
+  trader: {
+    lookAhead: true,
+    fullScoring: true,
+    shortlist: 4,
+    shortlistTolerance: 0.2,
+    pickTolerance: 0.1,
+    reactMs: [250, 400],
+    devPace: 1.1,
+    mulesPerMonth: 2,
+    missChance: 0.05,
+    corners: true,
+    sabotage: true,
+  },
+  tycoon: {
+    lookAhead: true,
+    fullScoring: true,
+    shortlist: 5,
+    shortlistTolerance: 0.12,
+    pickTolerance: 0.04,
+    reactMs: [200, 320],
+    devPace: 1,
+    mulesPerMonth: 3,
+    missChance: 0,
+    corners: true,
+    sabotage: true,
+  },
+} satisfies Record<string, AiLevelConfig>;
+
+export type AiLevelId = keyof typeof AI_LEVELS;
+
+/** Numbers the strategist's considerations use. */
+export const STRATEGIST = {
+  /** Months of output it counts a MULE as earning, at most. */
+  horizon: 6,
+  /** Each later month counts this share of the one before. */
+  discount: 0.9,
+  /** Credits of gain that score 0.75 on the gain curve (0 scores 0.5). */
+  gainScale: { plot: 400, develop: 300, trade: 80 },
+  /** Cash it always keeps back, before the persona's reserve multiplier, plus the cost of next month's Food, Water and Energy shortfall. */
+  cashFloor: 60,
+  /** What one colony air point costs it, in credits, rising as the air gets dirtier (doubles by Smoggy). */
+  airCost: 10,
+  /** Below this utility share of the best, a free plot is not worth pressing for in the first sweep; later sweeps take anything above laterShare. */
+  grantShare: 0.75,
+  grantLaterShare: 0.5,
+  /** A factory needs this many months of its inputs on hand or from its own plots. */
+  factoryInputMonths: 2,
+  /** Spare Food, Water, Energy and Medicine it keeps over next month's need, before the reserve multiplier. */
+  keepSpare: { food: 1, water: 1, energy: 1, medicine: 0 } as Partial<Record<Good, number>>,
+  /** It analyses an unknown plot of its own when the plot's best and second-best uses are this close, as a share. */
+  analyseWhenClose: 0.25,
+  /** Analyses per month, at most, and never with less than this many seconds left. */
+  analysesPerMonth: 2,
+  analyseMinSeconds: 20,
+  /** Share of its money it spends on one good at the auction, at most. */
+  budgetShare: 0.5,
+  /** A developed plot counts in the final score at the MULE price; it counts this share of that as won back. */
+  residual: 0.8,
+  /** What a second of development time is worth, with idle land to work and without. */
+  secondValue: { busy: 10, idle: 3 },
+  /** Share it takes off next month's price for a good it would hold, per point of risk weight, because the forecast may be wrong. */
+  forecastHaircut: 0.05,
+  /** A corner pays this share over next month's price for the units the others are short of. */
+  cornerPremium: 0.5,
+};
+
+/** The AI's hands in the real-time phases. Times are in ms. */
+export const AI_HANDS = {
+  /** Development steps, as a quick human taps them: to the corral and buy, to an outfitter, out to the plot and install, analyse, the pub. */
+  develop: {
+    buyMs: [1_400, 2_400] as [number, number],
+    outfitMs: [1_000, 1_900] as [number, number],
+    installMs: [1_800, 3_200] as [number, number],
+    analyseTapMs: [1_200, 2_000] as [number, number],
+    filterMs: [1_200, 2_000] as [number, number],
+    pubMs: [800, 1_500] as [number, number],
+    /** The most it waits for its decider before it plays its own top option. */
+    decideWaitMs: 1_500,
+  },
+  auction: {
+    /** Delay after the walk starts before it first moves, scaled by patience. */
+    startMs: [300, 1_500] as [number, number],
+    /** A gap to the other side's best price this small (share of the board) is left for them to close. */
+    waitGap: [0.03, 0.08] as [number, number],
+    /** It wanders its target up to this share of the board inside its limit, so its stops are hard to read. */
+    targetJitter: 0.03,
+    /** How long it waits for the decider at the status screen before it plays its own top option. */
+    decideWaitMs: 2_500,
+  },
+  grant: {
+    /** A go/no-go choice takes this much longer than a bare reaction. */
+    choiceMs: [150, 300] as [number, number],
+  },
 };
