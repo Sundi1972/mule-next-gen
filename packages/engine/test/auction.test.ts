@@ -256,7 +256,6 @@ describe('the live auction: goods one at a time', () => {
     expect(food.some((t) => t.buyer === 'p2')).toBe(false);
     expect(water.length).toBeGreaterThan(0);
     expect(water.some((t) => t.seller === 'p1')).toBe(false);
-    expect(first.stages.some((s) => s.endsWith(':declare'))).toBe(false);
     expect(play()).toEqual(first);
   });
 

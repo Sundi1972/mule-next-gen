@@ -493,7 +493,7 @@ export const TAX = {
 export const WALK = {
   /** The order goods come up in: raw goods first, then processed ones. */
   order: ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine'] as Good[],
-  /** The status screen before each good: what everyone had, used, made and is short of, and now also where each player picks a side for the walk. */
+  /** The status screen before each good: what everyone had, used, made and is short of, and where each player picks a side for the walk. */
   statusMs: 8_000,
   /** The walk's clock for one good. */
   goodMs: 20_000,

@@ -338,7 +338,8 @@ export type SkipReason = 'nobody has any' | 'nobody buys' | 'nobody trading';
 
 /** The live goods auction: goods one at a time, each with a status screen and then a walk. */
 export interface LiveAuction extends WalkBoard {
-  /** clockMs is the status screen's or the walk's clock, by stage. */
+  /** The status screen's or the walk's clock, by stage. */
+  clockMs: number;
   /** Goods still to come after the current one. */
   queue: Good[];
   good: Good | null;

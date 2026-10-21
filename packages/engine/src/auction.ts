@@ -237,7 +237,6 @@ export function endAuction(state: GameState): void {
  */
 export function declareRole(state: GameState, playerId: string, side: AuctionSide): void {
   const a = live(state);
-  if (a.stage !== 'status' && a.stage !== 'walk') throw new RuleError('Wait for the next good');
   const p = state.players.find((q) => q.id === playerId);
   if (!p) throw new RuleError(`Unknown player ${playerId}`);
   if (side === 'seller' && p.stock[a.good!] <= 0) throw new RuleError('You have none to sell');
