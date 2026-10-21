@@ -224,7 +224,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   return (
     <SeatSpeciesProvider value={seatSpecies(game)}>
       <div className="flex h-[720px] w-[1280px] flex-col gap-5 bg-table p-10 text-ink" data-phase={phase}>
-        <TvHeader game={game} title={PHASE_NAME[phase]} seconds={game.finished ? undefined : secondsUntil(game.phaseEndsAt, now)} />
+        <TvHeader game={game} title={PHASE_NAME[phase]} seconds={secondsUntil(game.phaseEndsAt, now)} />
         <div className="flex min-h-0 flex-1 gap-6">
           <div className="flex w-[700px] shrink-0 flex-col gap-3">
             <HoloMap width={game.width} height={game.height} tiles={tiles} cursor={game.lit} density="tv" hideGround className="w-full" />
