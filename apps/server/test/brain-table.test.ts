@@ -36,6 +36,8 @@ interface TableOptions {
   /** Default 0.1. At 1 the AI hands have the phase's full time, as in a real game. */
   phaseScale?: number;
   sayThrows?: boolean;
+  /** Default true. False leaves the room in the lobby. */
+  start?: boolean;
 }
 
 let dir: string;
@@ -104,7 +106,7 @@ function table(options: TableOptions) {
   const host = phones[0]!;
   for (let i = 0; i < options.ais; i++) send(host, { t: 'addAi' });
   const seats = room.viewFor(null).seats;
-  send(host, { t: 'start' });
+  if (options.start ?? true) send(host, { t: 'start' });
 
   const finished = () => room.viewFor(null).game?.finished ?? false;
   /** Runs the fake clock until `done`, or the game's end; false if `done` never held. */
@@ -150,6 +152,12 @@ function watched(inner: BrainService) {
 
 /** A Smart brain on the key, whose client is `sdk`, logging to the test's temp dir. */
 const smart = (sdk: FakeSdk) => createBrain({ gameId: 'g-table', env: KEY, logPath: path.join(dir, 'costs.jsonl'), sdkFactory: () => sdk });
+
+/** The game lines `game` wrote to the test's ledger; none when there is no ledger file. */
+const gameLines = (game = 'g-table') => {
+  const file = path.join(dir, 'costs.jsonl');
+  return fs.existsSync(file) ? readLedger(file).filter((l) => l.type === 'game' && l.game === game) : [];
+};
 
 /** How often each key occurs. */
 function tally(keys: string[]): Map<string, number> {
@@ -288,7 +296,7 @@ describe('the brain at the table', () => {
   it.each([
     { name: 'env {}', env: {} as Record<string, string> },
     { name: 'only the auth token', env: { ANTHROPIC_AUTH_TOKEN: 'test-token-not-real' } },
-  ])('B-AC-3, T-AC-5: with the key unset ($name) a full game reaches gameOver on top picks with no client, and each AI says at most its lines a month, one a phase', async ({ env }) => {
+  ])('B-AC-3, T-AC-5: with the key unset ($name) a full game reaches gameOver on top picks with no client, and each AI says at most its lines a month, one a phase, and speaks in an auction', async ({ env }) => {
     const { brain, records, finishes } = watched(createBrain({ gameId: 'g-classic', env, logPath: path.join(dir, 'costs.jsonl') }));
     const t = table({ humans: ['Heiko'], ais: 3, brain, maxMonths: 2 });
     expect(await t.toGameOver()).toBe(true);
@@ -312,6 +320,7 @@ describe('the brain at the table', () => {
     expect([...spokenInPhase.values()].some((n) => n > 1), 'some seat had two lines to say in one phase').toBe(true);
     for (const [key, n] of said) expect(n, key).toBeLessThanOrEqual(BRAIN.linesPerMonth);
     for (const [key, n] of saidInPhase) expect(n, key).toBe(1);
+    for (const ai of t.ais) expect(t.tv.chat.some((m) => m.from === ai.id && m.phase === 'auction'), `${ai.name} spoke in an auction`).toBe(true);
   });
 
   it('B-AC-3: MuleGame\'s default brain, with only the auth token in the environment, plays a full game and builds no client', async () => {
@@ -340,19 +349,20 @@ describe('the brain at the table', () => {
   });
 
   it.each([
-    { when: 'mid-game', toGameOver: false },
-    { when: 'after gameOver', toGameOver: true },
-  ])('INV-finish: a room disposed $when writes exactly one game line', async ({ toGameOver }) => {
+    { when: 'before Start', start: false, toGameOver: false, lines: 0 },
+    { when: 'mid-game', start: true, toGameOver: false, lines: 1 },
+    { when: 'after gameOver', start: true, toGameOver: true, lines: 1 },
+  ])('INV-finish: a Smart room disposed $when writes $lines game line(s)', async ({ start, toGameOver, lines }) => {
     const sdk = fakeSdk(() => reply('A', ''));
-    const t = table({ humans: ['Heiko'], ais: 2, brain: smart(sdk) });
-    expect(await t.runUntil(() => sdk.calls > 0)).toBe(true);
+    const t = table({ humans: ['Heiko'], ais: 2, brain: smart(sdk), start });
+    if (start) expect(await t.runUntil(() => sdk.calls > 0)).toBe(true);
     if (toGameOver) expect(await t.toGameOver()).toBe(true);
     else expect(t.finished()).toBe(false);
 
     t.room.dispose();
     await vi.advanceTimersByTimeAsync(10_000);
 
-    expect(readLedger(path.join(dir, 'costs.jsonl')).filter((l) => l.type === 'game' && l.game === 'g-table')).toHaveLength(1);
+    expect(gameLines()).toHaveLength(lines);
   });
 
   it('FM-api-error: with every model call failing and every say throwing, the game still reaches gameOver on top picks', async () => {

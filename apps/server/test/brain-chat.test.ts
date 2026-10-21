@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BRAIN } from '@mule/engine';
 import type { DecisionRecord } from '@mule/ai';
 import { createBrain, type BrainSeat, type BrainService } from '../src/brain/index.js';
@@ -19,8 +19,8 @@ interface Step {
 interface Row {
   name: string;
   steps: Step[];
-  /** say throws when handed this line. */
-  sayThrowsOn?: string;
+  /** say throws when handed one of these lines. */
+  sayThrowsOn?: string[];
   /** Every say call, in order, as [seat, line]. */
   said: Array<[string, string]>;
 }
@@ -92,16 +92,21 @@ const rows: Row[] = [
     return { name: 'a blank line says nothing, uses no slot and leaves its phase open', steps: [...blanks, ...kept], said: said(kept) };
   })(),
   (() => {
-    const failing = { seat: 'p0', month: 1, phase: 'phase 1', line: 'p0 boom' };
+    const failing = [
+      { seat: 'p0', month: 1, phase: 'phase 1', line: 'p0 boom' },
+      { seat: 'p0', month: 1, phase: 'phase 2', line: 'p0 bang' },
+    ];
     const rest = linesOf('p0', 1, CAP);
     return {
       name: 'a throwing say does not escape, uses its slot and marks its phase said',
-      steps: [failing, ...rest],
-      sayThrowsOn: failing.line,
-      said: said([failing, ...rest.slice(1)]),
+      steps: [...failing, ...rest],
+      sayThrowsOn: failing.map((s) => s.line),
+      said: said([...failing, ...rest.slice(failing.length)]),
     };
   })(),
 ];
+
+const SAY_ERROR = 'Nobody by that name at the table';
 
 /** Plays each row through fresh onDecision callbacks from `service`, one per seat, and returns the say calls. */
 function play(service: BrainService, row: Row): Array<[string, string]> {
@@ -113,7 +118,7 @@ function play(service: BrainService, row: Row): Array<[string, string]> {
       const seat: BrainSeat = { id, persona: 'trader', level: 'rookie' };
       cb = service.chatter(seat, (line) => {
         calls.push([id, line]);
-        if (line === row.sayThrowsOn) throw new Error('unknown seat');
+        if (row.sayThrowsOn?.includes(line)) throw new Error(SAY_ERROR);
       });
       callbacks.set(id, cb);
     }
@@ -123,11 +128,27 @@ function play(service: BrainService, row: Row): Array<[string, string]> {
   return calls;
 }
 
+/** A row's say failures are reported once per seat, naming the seat and the error, never the line. */
+function expectReported(errors: ReturnType<typeof vi.spyOn>, row: Row): void {
+  if (!row.sayThrowsOn) {
+    expect(errors, row.name).not.toHaveBeenCalled();
+    return;
+  }
+  expect(errors, row.name).toHaveBeenCalledTimes(1);
+  const report = errors.mock.calls[0]!.join(' ');
+  expect(report).toContain('p0');
+  expect(report).toContain(SAY_ERROR);
+  for (const line of row.sayThrowsOn) expect(report).not.toContain(line);
+}
+
 let dir: string;
+let errors: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'brain-chat-'));
+  errors = vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => {
+  errors.mockRestore();
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -141,7 +162,9 @@ describe('table chat throttle', () => {
         logPath: path.join(dir, 'costs.jsonl'),
         sdkFactory: () => fakeSdk(() => Promise.reject(new Error('no call expected'))),
       });
+      errors.mockClear();
       expect(play(service, row), row.name).toEqual(row.said);
+      expectReported(errors, row);
       service.finish();
     }
   });
@@ -150,7 +173,9 @@ describe('table chat throttle', () => {
     for (const row of rows) {
       const service = createBrain({ gameId: 'g-chat', env: {}, logPath: path.join(dir, 'costs.jsonl') });
       expect(service.deciderFor({ id: 'p0', persona: 'trader', level: 'rookie' }), 'Classic').toBeNull();
+      errors.mockClear();
       expect(play(service, row), row.name).toEqual(row.said);
+      expectReported(errors, row);
     }
   });
 });

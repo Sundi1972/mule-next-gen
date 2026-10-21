@@ -298,6 +298,10 @@ describe('Room: games speak and hear table chat (C4)', () => {
     expect(() => say(brix, 'hi', 's99')).toThrow('Nobody by that name at the table');
     expect(() => say('s99', 'hi')).toThrow(TableError);
     expect(() => say('s99', 'hi')).toThrow('Nobody by that name at the table');
+    // Whatever the text: an empty line, or one moderation drops, still throws for an unknown id.
+    expect(() => say('s99', '')).toThrow('Nobody by that name at the table');
+    expect(() => say('s99', 'blorp')).toThrow('Nobody by that name at the table');
+    expect(() => say(brix, '', 's99')).toThrow('Nobody by that name at the table');
     expect(chats(heiko)).toHaveLength(5);
     expect(chats(mia)).toHaveLength(4);
     expect(chats(tv)).toHaveLength(4);
@@ -352,6 +356,11 @@ describe('Room: a player name is cleaned at join (AM-4)', () => {
       { typed: '\uFF3A\uFF4F\u00eb', stored: '\uFF3A\uFF4F\u00eb' },
       // Trimmed again after the cap, so a capped name never ends in a space.
       { typed: 'Abcdefghijklmno pq', stored: 'Abcdefghijklmno' },
+      // A bidi override or isolate inside a name would make it read differently from how it is stored.
+      { typed: 'Bob\u202Eevil', stored: 'Bobevil' },
+      { typed: '\u2066Ann\u2069', stored: 'Ann' },
+      // Other format characters stay: a ZWJ family is one emoji of five code points.
+      { typed: 'Ann \u{1F468}\u200D\u{1F469}\u200D\u{1F467}', stored: 'Ann \u{1F468}\u200D\u{1F469}\u200D\u{1F467}' },
     ];
     const startedWith: SeatInfo[][] = [];
     const room = new Room<Intent, View>({
@@ -364,7 +373,7 @@ describe('Room: a player name is cleaned at join (AM-4)', () => {
     const screens = rows.map((r) => join(room, r.typed));
 
     expect(screens.map((screen) => nameOf(screen, room))).toEqual(rows.map((r) => r.stored));
-    for (const screen of screens) expect(nameOf(screen, room)).not.toMatch(/[\p{Cc}\p{Zl}\p{Zp}]/u);
+    for (const screen of screens) expect(nameOf(screen, room)).not.toMatch(/[\p{Cc}\p{Zl}\p{Zp}\u202A-\u202E\u2066-\u2069]/u);
     expect(nameOf(screens[3]!, room)).toHaveLength(32);
     room.receive(screens[0]!, screens[0]!.from, { t: 'start' });
     expect(startedWith[0]!.map((s) => s.name)).toEqual(rows.map((r) => r.stored));
