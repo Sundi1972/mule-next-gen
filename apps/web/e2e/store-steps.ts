@@ -143,11 +143,13 @@ export async function outfittersOpenWithAnEmptyMule(phone: Page): Promise<void> 
   for (const fit of FITS) check(await hall.getByTestId(`fit-${fit}`).isEnabled(), `B-AC-10: the ${fit} fit opens once she leads an empty MULE`);
 }
 
-/** The game behind a room on the in-process server: its state and the development clocks. */
-function gameOf(server: MuleServer, code: string): { state: GameState; devEndsAt: Map<string, number> } {
+type Game = { state: GameState; devEndsAt: Map<string, number>; ctx: { now(): number; changed(): void } };
+
+/** The game behind a room on the in-process server: its state, the development clocks and the room's context. */
+function gameOf(server: MuleServer, code: string): Game {
   const room = server.registry.get(code);
   check(room, `a room ${code} on the server`);
-  return (room as unknown as { game: { state: GameState; devEndsAt: Map<string, number> } }).game;
+  return (room as unknown as { game: Game }).game;
 }
 
 /**
@@ -157,7 +159,9 @@ function gameOf(server: MuleServer, code: string): { state: GameState; devEndsAt
 function giveStoreTime(server: MuleServer, code: string, seat: string): void {
   const game = gameOf(server, code);
   check(game.state.phase === 'development', `the store walk-through starts in development, not ${game.state.phase}`);
-  game.devEndsAt.set(seat, Date.now() + STORE_WALK_SECONDS * 1_000);
+  game.devEndsAt.set(seat, game.ctx.now() + STORE_WALK_SECONDS * 1_000);
+  // Send every phone the new clock now, rather than at the next AI tick.
+  game.ctx.changed();
 }
 
 /** One read of what the hall shows, in one pass. */
@@ -241,21 +245,29 @@ function largestRawShortfall(server: MuleServer, code: string, seat: string): st
 }
 
 /** How far the hall is from filling the stage's content box, in px, at the current viewport. */
-async function hallGap(phone: Page): Promise<{ w: number; h: number; wide: string | null }> {
+async function hallGap(phone: Page): Promise<{ w: number; h: number; wide: string | null; nowFirst: boolean }> {
   return phone.evaluate(`(() => {
     const stage = document.querySelector('[data-testid=stage]');
     const hall = document.querySelector('[data-testid=store-hall]').getBoundingClientRect();
     const cs = getComputedStyle(stage);
     const w = stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
     const h = stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-    return { w: Math.abs(w - hall.width), h: Math.abs(h - hall.height), wide: document.querySelector('[data-testid=game-shell]').getAttribute('data-wide') };
+    const guide = document.querySelector('[data-testid=guide]');
+    const now = guide.querySelector('[data-testid=now]');
+    return {
+      w: Math.abs(w - hall.width),
+      h: Math.abs(h - hall.height),
+      wide: document.querySelector('[data-testid=game-shell]').getAttribute('data-wide'),
+      // The rail's body, right after its header, opens with Now (shell-steps' probe).
+      nowFirst: !!now && guide.querySelector('header')?.nextElementSibling?.firstElementChild === now,
+    };
   })()`);
 }
 
 /**
  * B-AC-15 and B-AC-16 from an empty MULE to an outfitted one: the led MULE is empty (step 2), RULE-7 row 3 glows
  * at most the engine's largest raw shortfall; outfitted for Energy it is lit with Energy and saddled, both doors
- * glow (step 3); the hall fills the stage at 1440×900 and 844×390; walking out lands on the map with a plot of
+ * glow (step 3); the hall fills the stage at 1440×900 and 844×390, and the rail opens with Now (B-AC-12); walking out lands on the map with a plot of
  * yours selected. Ends back in the store, at 844×390. Call right after buying the MULE.
  */
 export async function theLedMuleLightsUp(phone: Page, server: MuleServer, code: string, seat = 's1'): Promise<string> {
@@ -284,6 +296,7 @@ export async function theLedMuleLightsUp(phone: Page, server: MuleServer, code: 
     await phone.waitForFunction((w) => document.querySelector('[data-testid=game-shell]')?.getAttribute('data-wide') === w, wide, { timeout: 2_000 });
     const gap = await hallGap(phone);
     check(gap.w <= 1 && gap.h <= 1, `B-AC-15: at ${name} the hall fills the stage, off by ${gap.w} × ${gap.h} px`);
+    check(gap.nowFirst, `B-AC-12: at ${name} the development rail opens with Now`);
     sizes.push(`${name} ±${Math.max(gap.w, gap.h).toFixed(1)} px`);
   }
 
