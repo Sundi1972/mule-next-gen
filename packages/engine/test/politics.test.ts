@@ -4,6 +4,7 @@ import {
   castVote,
   cloneForSim,
   createGame,
+  createRng,
   electionDone,
   player,
   POLITICS,
@@ -17,6 +18,7 @@ import {
   voteWeight,
   type Election,
   type GameState,
+  type Office,
   type Politics,
 } from '../src/index.js';
 
@@ -142,11 +144,12 @@ describe('C4: vote weight', () => {
     give(state, 'brix', 9);
     toNextPlanning(state);
     expect(politicsOf(state).baron).toBe('lena');
-    state.treasury.paid = { lena: 650, ossa: 900 };
+    state.treasury.paid = { lena: 650, ossa: 900, ai1: 299 };
 
     expect(voteWeight(state, 'lena')).toEqual({ total: 6, parts: { base: 1, land: 2, reputation: 0, baron: 1, taxes: 2 } });
     expect(voteWeight(state, 'brix')).toEqual({ total: 1, parts: { base: 1, land: 0, reputation: 0, baron: 0, taxes: 0 } });
     expect(voteWeight(state, 'ossa').parts.taxes).toBe(2);
+    expect(voteWeight(state, 'ai1').parts.taxes).toBe(0);
 
     for (const [reputation, part] of [[70, 1], [69, 0], [30, 0], [29, -1]] as const) {
       player(state, 'brix').reputation = reputation;
@@ -262,6 +265,18 @@ describe('C3: the election', () => {
     toNextPlanning(state);
     expect(politicsOf(state).election).toBeNull();
     expect(politicsOf(state).governor).toBe('brix');
+
+    // Closed during the reveal, the result already fixed stands, whatever changed since.
+    const revealing = governorBallot();
+    castVote(revealing, 'lena', 'governor', 'lena');
+    castVote(revealing, 'brix', 'governor', 'brix');
+    castVote(revealing, 'ossa', 'governor', 'brix');
+    const result = runOutClock(revealing);
+    expect(result?.governor).toMatchObject({ winner: 'brix', how: 'votes' });
+    give(revealing, 'lena', 30);
+    advancePhase(revealing);
+    expect(electionOf(revealing)).toMatchObject({ stage: 'over', result });
+    expect(politicsOf(revealing).governor).toBe('brix');
   });
 });
 
@@ -279,15 +294,16 @@ describe('RULE-2: who may run', () => {
       while (state.month < month) toNextPlanning(state);
       runFor(state, 'lena', 'governor');
       advancePhase(state);
-      expect(politicsOf(state).governor).toBe('lena');
+      expect(politicsOf(state)).toMatchObject({ governor: 'lena', termStart: month });
     }
     while (state.month < 7) toNextPlanning(state);
     expect(politicsOf(state).governorRun).toEqual({ id: 'lena', terms: 2 });
 
     expect(() => runFor(state, 'lena', 'governor')).toThrow(new RuleError('Two Governor terms in a row'));
     expect(electionOf(state).candidates.governor).toEqual([]);
+    runFor(state, 'brix', 'governor');
     runFor(state, 'lena', 'sheriff');
-    expect(electionOf(state).candidates.sheriff).toEqual(['lena']);
+    expect(electionOf(state).candidates).toEqual({ governor: ['brix'], sheriff: ['lena'] });
     expect(politicsOf(state).terms.lena).toBe(2);
   });
 
@@ -358,7 +374,7 @@ describe('RULE-3: tally and winner', () => {
   it.each([
     { plots: { lena: 1, brix: 2 }, winner: 'brix' },
     { plots: { lena: 2, brix: 2 }, winner: 'lena' },
-  ])('B-AC-4: a tie the Baron did not vote in goes to the most plots, then the lower seat: $winner', ({ plots, winner }) => {
+  ])('B-AC-4: a tie the Baron\'s ballot does not break goes to the most plots, then the lower seat: $winner', ({ plots, winner }) => {
     const state = newGame();
     give(state, 'ossa', 3);
     give(state, 'lena', plots.lena);
@@ -366,24 +382,71 @@ describe('RULE-3: tally and winner', () => {
     toNextPlanning(state);
     while (state.month < 4) toNextPlanning(state);
     expect(politicsOf(state).baron).toBe('ossa');
+    state.treasury.paid = { lena: 600, brix: 600 };
     runFor(state, 'brix', 'governor');
     runFor(state, 'lena', 'governor');
+    runFor(state, 'ai1', 'governor');
     runOutClock(state);
     castVote(state, 'lena', 'governor', 'lena');
     castVote(state, 'brix', 'governor', 'brix');
+    // The Baron votes for the trailing candidate: their ballot names none of the tied pair.
+    castVote(state, 'ossa', 'governor', 'ai1');
 
     const result = runOutClock(state);
+    expect(result?.governor.tallies).toEqual([
+      { id: 'lena', votes: 3 },
+      { id: 'brix', votes: 3 },
+      { id: 'ai1', votes: 2 },
+    ]);
     expect(result?.governor).toMatchObject({ winner, how: 'tieRule' });
   });
 
-  it('T-AC-2 invariant: one player never holds both offices when the richest runs alone for Sheriff', () => {
-    const state = newGame();
-    for (const [id, money] of [['lena', 2000], ['brix', 900], ['ossa', 1000], ['ai1', 800]] as const) player(state, id).money = money;
-    runFor(state, 'lena', 'sheriff');
-    runOutClock(state);
-    runOutClock(state);
-    expect(politicsOf(state).governor).not.toBeNull();
-    expect(politicsOf(state).governor).not.toBe(politicsOf(state).sheriff);
+  it('T-AC-2 invariant: one player never holds both offices and the fund never goes below 0, over 150 seeded games of random candidacies, ballots, Done presses and AM-1 closes', () => {
+    const choices: (Office | null)[] = ['governor', 'sheriff', null, null];
+    const offices: Office[] = ['governor', 'sheriff'];
+    const broken: string[] = [];
+    const hows = new Set<string>();
+    for (let seed = 1; seed <= 150; seed++) {
+      const rng = createRng(seed);
+      const seats = Array.from({ length: rng.int(2, 6) }, (_, i) => `p${i}`);
+      const state = newGame({ seats });
+      for (const p of state.players) p.money = rng.int(0, 3) * 500 + rng.int(0, 1);
+      for (const t of state.tiles) if (t.terrain !== 'store' && rng.chance(0.05)) t.owner = rng.pick(seats);
+      const check = (when: string) => {
+        const { governor, sheriff } = politicsOf(state);
+        if (governor !== null && governor === sheriff) broken.push(`seed ${seed} ${when}: ${governor} holds both offices`);
+        if (state.treasury.money < 0) broken.push(`seed ${seed} ${when}: fund ${state.treasury.money}`);
+      };
+      while (state.phase !== 'gameOver') {
+        const election = politicsOf(state).election;
+        if (state.phase === 'planning' && election) {
+          state.treasury.money += rng.int(0, 100);
+          for (const id of seats) {
+            try {
+              runFor(state, id, rng.pick(choices));
+            } catch (e) {
+              if (!(e instanceof RuleError)) throw e;
+            }
+          }
+          // Each round may be the last: the rest is closed by AM-1 when planning ends.
+          for (let round = 0; round < 50 && electionOf(state).stage !== 'over' && !rng.chance(0.1); round++) {
+            const e = electionOf(state);
+            if (e.stage === 'ballot') {
+              for (const id of seats) for (const o of offices) if (e.candidates[o].length > 1 && rng.chance(0.7)) castVote(state, id, o, rng.pick(e.candidates[o]));
+            }
+            for (const id of seats) if (rng.chance(0.5)) electionDone(state, id);
+            stepElection(state, rng.int(1, 25_000));
+            check(`month ${state.month} ${electionOf(state).stage}`);
+          }
+        }
+        advancePhase(state);
+        check(`month ${state.month} ${state.phase}`);
+        const result = politicsOf(state).election?.result;
+        if (result) for (const o of offices) hows.add(result[o].how);
+      }
+    }
+    expect(broken).toEqual([]);
+    expect([...hows].sort()).toEqual(['appointed', 'baron', 'tieRule', 'unopposed', 'votes']);
   });
 
   it('AM-2: nobody runs for Governor and the richest runs alone for Sheriff → they are Sheriff (\'unopposed\') and the richest other player is appointed Governor', () => {
@@ -453,6 +516,18 @@ describe('C5: the Governor sets the sales tax', () => {
     expect(state.treasury.salesTax).toBe(0.1);
     setSalesTax(state, 'lena', 15);
     expect(state.treasury.salesTax).toBe(0.15);
+
+    // Near the bottom the bounds stop at POLITICS.tax.min.
+    const low = newGame();
+    seatGovernor(low, 'lena');
+    setSalesTax(low, 'lena', 3);
+    toNextPlanning(low);
+    for (const refused of [-1, 9]) expect(() => setSalesTax(low, 'lena', refused)).toThrow(RuleError);
+    expect(low.treasury.salesTax).toBe(0.03);
+    setSalesTax(low, 'lena', 0);
+    expect(low.treasury.salesTax).toBe(0);
+    setSalesTax(low, 'lena', 8);
+    expect(low.treasury.salesTax).toBe(0.08);
   });
 
   it('T-AC-3: only the Governor, only in planning, not during the election', () => {
