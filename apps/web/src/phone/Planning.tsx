@@ -108,12 +108,12 @@ function useSellForm() {
   const atLimit = mine.length >= LOTS.perPlayer;
   const tile = picked ? tileAt(view, picked.x, picked.y) : undefined;
   const listedHere = !!picked && isListed(view, picked.x, picked.y);
-  const blocked = full
-    ? 'The auction is full this month.'
+  const blocked = listedHere
+    ? 'This plot is already up for auction.'
     : atLimit
       ? `You have listed ${LOTS.perPlayer} lots, the most a month.`
-      : listedHere
-        ? 'This plot is already up for auction.'
+      : full
+        ? 'The auction is full this month.'
         : null;
 
   const pick = (t: MapTile) => {
