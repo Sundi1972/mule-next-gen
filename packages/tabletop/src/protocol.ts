@@ -12,6 +12,8 @@ export type ClientEnvelope<Intent> =
   | { t: 'board'; code: string }
   | { t: 'addAi' }
   | { t: 'start' }
+  /** Make this seat's one choice from the game's list, in the lobby. */
+  | { t: 'pick'; pick: string }
   | { t: 'intent'; intent: Intent }
   | { t: 'chat'; text: string; to?: string }
   | { t: 'emote'; emote: string }
@@ -40,6 +42,8 @@ export interface SeatView {
   name: string;
   isAi: boolean;
   connected: boolean;
+  /** The seat's choice from the game's list; absent until it has chosen. */
+  pick?: string;
 }
 
 export interface TableView<GameView> {

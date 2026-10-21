@@ -52,6 +52,10 @@ try {
   await phone.getByText("You're at the table").waitFor();
   const code = (await phone.getByTestId('room-code').textContent())?.trim() ?? '';
   check(/^[A-Z]{4}$/.test(code), `room code, got "${code}"`);
+  // B-AC-4: with no big screen, the phone lobby's QR is big enough to scan across the table.
+  const qrWidth = async () => (await phone.getByTestId('room-qr').boundingBox())?.width ?? 0;
+  const bigQr = await qrWidth();
+  check(bigQr >= 100, `B-AC-4: with no big screen the lobby QR is at least 100 px wide, got ${bigQr}`);
 
   const tv = await (await browser.newContext(TV)).newPage();
   tv.on('pageerror', (e) => errors.push(`tv: ${e.message}`));
@@ -62,7 +66,29 @@ try {
   await phone.getByRole('button', { name: 'Add AI player' }).click();
   await phone.locator('[data-testid=seats] li').nth(2).waitFor();
   await phone.getByText('Big screen connected').waitFor();
+  const compactQr = await qrWidth();
+  check(compactQr > 0 && compactQr < 60, `B-AC-4: with a big screen the lobby shows the compact room card, QR ${compactQr} px`);
+
+  // B-AC-1: the host picks Mollox; the lobby rail and the TV lobby show it, the AI seats keep their defaults.
+  const lobbySeats = phone.getByTestId('seats').locator('li');
+  const hostMark = lobbySeats.nth(0).getByRole('img', { name: 'Mollox' });
+  await phone.getByTestId('species-mollox').click({ timeout: 3_000 });
+  await hostMark.waitFor({ timeout: 3_000 });
+  check((await phone.getByTestId('species-mollox').getAttribute('aria-pressed')) === 'true', 'B-AC-1: the Mollox chip shows as chosen');
+  check((await lobbySeats.nth(1).getByRole('img', { name: 'Bramblet' }).count()) === 1, 'B-AC-1: the first AI (seat 2) keeps its default, Bramblet');
+  const tvLobbySeats = tv.locator('li');
+  await tvLobbySeats.nth(0).getByRole('img', { name: 'Mollox' }).waitFor({ timeout: 3_000 });
+  check((await tvLobbySeats.nth(1).getByRole('img', { name: 'Bramblet' }).count()) === 1, 'B-AC-1: the TV lobby shows the first AI as a Bramblet');
+
   await phone.getByRole('button', { name: 'Start game' }).click();
+
+  // B-AC-1: after Start the host plays a Mollox, on the phone and on the TV's game screen (not its lobby).
+  await phone.locator('[data-phase]').getByRole('img', { name: 'You, Mollox', exact: true }).waitFor({ timeout: 5_000 });
+  const tvGame = tv.locator('[data-phase]');
+  await tvGame.waitFor({ timeout: 5_000 });
+  await tvGame.locator('li').filter({ hasText: 'Heiko' }).getByRole('img', { name: 'Mollox' }).first().waitFor({ timeout: 3_000 });
+  check((await tvGame.getByRole('img', { name: 'Zipwing' }).count()) === 0, 'B-AC-1: nobody in the TV game plays the seat-1 default, Zipwing');
+  check((await tvGame.getByRole('img', { name: 'Bramblet' }).count()) >= 1, 'B-AC-1: the TV game still shows the first AI as a Bramblet');
 
   // Month 1.
   await phone.getByRole('button', { name: "I'm ready" }).click();
