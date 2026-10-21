@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, createGame, observe, type GameState } from '@mule/engine';
+import { advancePhase, AI_LEVELS, AI_PERSONAS, createGame, observe, type GameState } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
 import { AiSeat } from '../src/seat.js';
+import { developDecision } from '../src/strategist.js';
+import { cashReserve, installGain, type Mind } from '../src/value.js';
 
 const fourSeats = (seed: number) => createGame({ seed, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI${i}`, isAi: true })) });
 
@@ -37,6 +39,37 @@ function developmentWithWater(water: number): GameState {
   for (const p of state.players) p.stock.water = 0;
   return state;
 }
+
+const traderMind: Mind = { me: 'ai0', personaId: 'trader', persona: AI_PERSONAS.trader, levelId: 'trader', level: AI_LEVELS.trader };
+
+describe('cash reserve', () => {
+  it('T-AC-3: a Water farm whose own first output covers the gap is not vetoed by the reserve', () => {
+    // ai0 holds one idle river plot, and neither Food nor Water: the reserve holds back cash for next month's Food.
+    const arrange = () => {
+      const state = developmentWithWater(0);
+      const tile = state.tiles.find((t) => t.terrain === 'river' && !t.owner)!;
+      tile.owner = 'ai0';
+      state.players[0]!.stock.food = 0;
+      const obs = observe(state, 'ai0');
+      const o = outlook(obs, 'ai0', { lookAhead: true });
+      const { cost, net } = installGain(obs, o, obs.tiles[state.tiles.indexOf(tile)]!, 'water', traderMind);
+      return { state, keepBack: cashReserve(obs, traderMind, o, 'water'), cost, net };
+    };
+    const waterVeto = (money: (a: ReturnType<typeof arrange>) => number) => {
+      const a = arrange();
+      a.state.players[0]!.money = money(a);
+      const c = developDecision(observe(a.state, 'ai0'), traderMind, 0).all.find((x) => x.key.startsWith('install:water'))!;
+      return c.veto;
+    };
+    const { net } = arrange();
+    expect(net).toBeGreaterThan(0);
+    // One credit under today's reserve, but the farm's own output closes the gap: live.
+    expect(waterVeto((a) => a.cost + a.keepBack - 1)).toBeNull();
+    // Negative cases: even with its output it falls short, or it can't pay at all.
+    expect(waterVeto((a) => a.cost + a.keepBack - Math.ceil(a.net) - 1)).toMatch(/kept for upkeep/);
+    expect(waterVeto((a) => a.cost - 1)).not.toBeNull();
+  });
+});
 
 describe('shortage foresight', () => {
   it('T-AC-5: a seat prices Water at what colonists would pay once its outlook shows Water running short', () => {
