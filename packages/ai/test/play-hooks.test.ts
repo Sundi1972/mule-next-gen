@@ -6,6 +6,8 @@ import { simSeats } from '../src/lineup.js';
 import { playGame, playGameAsync, type PlayedGame, type PlayOptions } from '../src/play.js';
 
 const SPECS = (seed: number) => simSeats(4, 'trader', seed);
+// A full game takes 1-2 s alone and several times that while the whole workspace tests in parallel.
+const GAMES = { timeout: 60_000 };
 const PICK_B: Choice = { optionId: 'B', line: null, by: 'llm' };
 
 /** Everything a played game reports, as one string to compare. */
@@ -37,7 +39,7 @@ function lateB(): { decider: Decider; release: () => void } {
 const seatRecords = (records: DecisionRecord[], seat: string) => records.filter((r) => r.seat === seat);
 const withChoice = (records: DecisionRecord[]) => records.filter((r) => r.shortlist.length > 1);
 
-describe('playGameAsync', () => {
+describe('playGameAsync', GAMES, () => {
   it.each([1, 7, 101])('T-AC-6: playGame and playGameAsync play the same game (seed %i, no hooks)', async (seed) => {
     const sync = recording();
     const played = playGame(seed, SPECS(seed), sync.options);
@@ -91,7 +93,7 @@ describe('playGameAsync', () => {
   });
 });
 
-describe('deciderFor', () => {
+describe('deciderFor', GAMES, () => {
   it('UBER-AC-1: a seat given a decider plays its pick; the other seats keep the default pick', () => {
     const run = recording({ deciderFor: (seatId) => (seatId === 'ai0' ? { name: 'always-b', decide: () => PICK_B } : null) });
     playGame(101, SPECS(101), run.options);
