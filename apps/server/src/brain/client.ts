@@ -18,10 +18,11 @@ const API_HOST = 'https://api.anthropic.com';
 
 /**
  * The real SDK, with the key passed in (HC-2). `authToken: null` stops the SDK reading ANTHROPIC_AUTH_TOKEN, and an
- * explicit credential stops it falling back to an `ant auth` profile.
+ * explicit credential stops it falling back to an `ant auth` profile. `logLevel: 'off'` overrides ANTHROPIC_LOG, whose
+ * debug level would log requests, prompts included.
  */
 export function createAnthropicSdk(apiKey: string): HaikuSdk {
-  return new Anthropic({ apiKey, authToken: null, baseURL: API_HOST });
+  return new Anthropic({ apiKey, authToken: null, baseURL: API_HOST, logLevel: 'off' });
 }
 
 export interface HaikuReply {
@@ -35,7 +36,7 @@ export interface HaikuReply {
 const NO_USAGE: Usage = { input: 0, cached_read: 0, cache_write: 0, output: 0 };
 const MAX_MESSAGE = 80;
 
-/** A call that produced nothing billable. The message is ours and short; the SDK's text never leaves this file. */
+/** A call that returned no reply. The message is ours and short; the SDK's text never leaves this file. */
 export class CallFailed extends Error {
   readonly usage: Usage = { ...NO_USAGE };
   constructor(
@@ -43,6 +44,8 @@ export class CallFailed extends Error {
     readonly outcome: 'timeout' | 'error',
     readonly auth: boolean,
     readonly ms: number,
+    /** The HTTP status the API answered with; null when no answer came (timeout, lost connection), so the bill is unknown. */
+    readonly status: number | null = null,
   ) {
     super(message.slice(0, MAX_MESSAGE));
     this.name = 'CallFailed';
@@ -57,7 +60,7 @@ function fail(e: unknown, ms: number, waitMs: number, aborted: boolean): CallFai
   if (e instanceof Anthropic.APIError) {
     const auth = e.status === 401 || e.status === 403;
     const what = e.status === undefined ? 'connection failed' : `api status ${e.status}`;
-    return new CallFailed(`model call failed: ${what}`, 'error', auth, ms);
+    return new CallFailed(`model call failed: ${what}`, 'error', auth, ms, e.status ?? null);
   }
   return new CallFailed('model call failed', 'error', false, ms);
 }

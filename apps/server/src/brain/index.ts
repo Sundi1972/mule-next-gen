@@ -56,9 +56,12 @@ const CLASSIC: BrainService = {
   finish: () => {},
 };
 
-/** The one place the key is read (HC-2): only ANTHROPIC_API_KEY, trimmed; a blank key is null. */
+/** The key's environment variable: the only place its name is written (INV-key-read). */
+export const API_KEY_ENV = 'ANTHROPIC_API_KEY';
+
+/** The one place the key is read (HC-2): only API_KEY_ENV, trimmed; a blank key is null. */
 export function apiKeyFrom(env: Readonly<Record<string, string | undefined>>): string | null {
-  return env.ANTHROPIC_API_KEY?.trim() || null;
+  return env[API_KEY_ENV]?.trim() || null;
 }
 
 /** The brain for one game. A missing or blank key plays Classic. */
