@@ -197,7 +197,7 @@ describe('TableClient', () => {
     expect(client.getState().status).toBe('idle');
   });
 
-  it('sends a colour pick to the room', () => {
+  it("T-AC-12: a colour pick leaves the phone as the room's color message", () => {
     const { client, last } = setup();
     client.join('KRTX', 'Heiko');
     last().open();
