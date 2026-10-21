@@ -1,12 +1,13 @@
 import type { TableView } from '@mule/protocol';
 import { Button, COLOUR_NAME, Creature, cx, SLOT_COLOR, SPECIES, SPECIES_NAME, SPECIES_PERK, type Slot, type Species } from '@mule/ui';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { joinUrl, Qr } from '../components/Qr';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { lobbySeatSpecies } from '../game/derive';
 import { createRoom } from '../net/client';
 import { useClient, useClientState } from '../net/react';
-import { NowCard, type Now } from './Shell';
+import { NowCard, WIDE_PX, type Now } from './Shell';
 
 function Header() {
   return (
@@ -112,6 +113,29 @@ type HostDialog = { kick: string } | 'close';
 
 const COLOURS: Slot[] = [0, 1, 2, 3, 4, 5];
 
+/** A seat's colour as a slot. RULE-7 keeps it in the palette; anything else is a broken contract, not a colour. */
+function slotOf(color: number): Slot {
+  if (!COLOURS.includes(color as Slot)) throw new Error(`Seat colour ${color} is outside the palette`);
+  return color as Slot;
+}
+
+/**
+ * Whether the shell is at least WIDE_PX wide (HC-8), measured before paint and on every resize. CSS sizes everything
+ * else; this decides only where the join card sits in the markup, so screen readers meet it where it is shown.
+ */
+function useShellWide() {
+  const [shell, setShell] = useState<HTMLElement | null>(null);
+  const [wide, setWide] = useState(false);
+  useLayoutEffect(() => {
+    if (!shell) return;
+    setWide(shell.getBoundingClientRect().width >= WIDE_PX);
+    const ro = new ResizeObserver(([e]) => flushSync(() => setWide((e?.contentRect.width ?? 0) >= WIDE_PX)));
+    ro.observe(shell);
+    return () => ro.disconnect();
+  }, [shell]);
+  return [setShell, wide] as const;
+}
+
 /**
  * At the table before the game: make your colonist (species and colour) on the stage; the rail is the table, with
  * who is here and, for the host, add AI, remove a seat, close the room and start. Wide from a shell of 1100 px (HC-8).
@@ -120,28 +144,54 @@ export function Lobby() {
   const client = useClient();
   const { view, seatId } = useClientState();
   const [asked, setAsked] = useState<HostDialog | null>(null);
+  // The room keeps no record of a colour being chosen, only the colour itself.
+  const [pickedColour, setPickedColour] = useState(false);
+  const opener = useRef<HTMLElement | null>(null);
+  const [shellRef, wide] = useShellWide();
   const me = view?.seats.find((s) => s.id === seatId);
   if (!view || !me) return null;
-  const seats: Colonist[] = view.seats.map((s, i) => ({ ...s, species: lobbySeatSpecies(s, i), slot: (s.color % 6) as Slot }));
+  const seats: Colonist[] = view.seats.map((s, i) => ({ ...s, species: lobbySeatSpecies(s, i), slot: slotOf(s.color) }));
   const mine = seats.find((s) => s.id === me.id)!;
   const host = view.hostId === me.id;
   const hostName = seats.find((s) => s.id === view.hostId)?.name ?? 'The host';
+  const tv = view.boards > 0;
   // A seat that left while the host was deciding has nothing left to remove.
   const dialog = !host || (asked !== null && asked !== 'close' && !seats.some((s) => s.id === asked.kick)) ? null : asked;
+  const ask = (d: HostDialog, from: HTMLElement) => {
+    opener.current = from;
+    setAsked(d);
+  };
+  const closeDialog = () => {
+    setAsked(null);
+    opener.current?.focus();
+  };
   const humans = seats.filter((s) => !s.isAi).length;
+  const waiting = !host && (me.pick !== undefined || pickedColour);
   const now: Now = host
     ? {
         step: 2,
         of: 2,
         title: seats.length < 2 ? 'Wait for players, or add an AI' : 'Start when everyone is here',
-        detail: `${seats.length} at the table, ${humans} on phones. Others join with the code ${view.code} or the QR. Everyone can change their colonist until you start.`,
+        detail: (
+          <>
+            <span className="@min-[1100px]/shell:hidden">
+              {seats.length} at the table. Others join with the code {view.code} or the QR below.
+            </span>
+            <span className="hidden @min-[1100px]/shell:inline">
+              {seats.length} at the table, {humans} on phones. Others join with the code {view.code} or the QR. Everyone can change their colonist until you start.
+            </span>
+          </>
+        ),
       }
-    : me.pick === undefined
-      ? { step: 1, of: 2, title: 'Make your colonist', detail: `Pick a species and a colour. ${hostName}, the host, starts the game when everyone is here.` }
-      : { step: 2, of: 2, title: `Wait for ${hostName} to start`, detail: `You can change your colonist until ${hostName} starts the game.` };
+    : waiting
+      ? { step: 2, of: 2, title: `Wait for ${hostName} to start`, detail: `You can change your colonist until ${hostName} starts the game.` }
+      : { step: 1, of: 2, title: 'Make your colonist', detail: `Pick a species and a colour. ${hostName}, the host, starts the game when everyone is here.` };
+  const joinCard = <JoinCard code={view.code} compact={tv} />;
+  // With no big screen the card is the only way in, so on a phone it comes first, under Now.
+  const joinFirst = !tv && !wide;
 
   return (
-    <div className="h-full @container/shell">
+    <div ref={shellRef} className="h-full @container/shell">
       <div className="relative flex h-full bg-table pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] text-ink" data-testid="lobby">
         <h1 className="sr-only">You're at the table</h1>
         <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-y-auto p-2.5 @min-[1100px]/shell:gap-6 @min-[1100px]/shell:p-8">
@@ -159,7 +209,14 @@ export function Lobby() {
                 <SpeciesPick me={mine} onPick={(sp) => client.pick(sp)} />
               </Picker>
               <Picker label="Colour">
-                <ColourPick seats={seats} me={mine} onPick={(c) => client.color(c)} />
+                <ColourPick
+                  seats={seats}
+                  me={mine}
+                  onPick={(c) => {
+                    setPickedColour(true);
+                    client.color(c);
+                  }}
+                />
               </Picker>
             </div>
           </div>
@@ -167,19 +224,20 @@ export function Lobby() {
         <aside className="flex w-(--rail) shrink-0 flex-col border-l border-holo-faint bg-void/40 @min-[1100px]/shell:w-[400px]" data-testid="guide">
           <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-5">
             <NowCard now={now} />
+            {joinFirst && joinCard}
             <section className="flex flex-col gap-1.5">
               <h2 className="label-caps @min-[1100px]/shell:text-xs!">At the table · {seats.length} of 6</h2>
               <ul className="flex flex-col overflow-hidden rounded-panel border border-holo-line" data-testid="seats">
                 {seats.map((s) => (
-                  <SeatRow key={s.id} seat={s} me={s.id === me.id} host={s.id === view.hostId} onKick={host && s.id !== me.id ? () => setAsked({ kick: s.id }) : undefined} />
+                  <SeatRow key={s.id} seat={s} me={s.id === me.id} host={s.id === view.hostId} onKick={host && s.id !== me.id ? (e) => ask({ kick: s.id }, e.currentTarget) : undefined} />
                 ))}
               </ul>
             </section>
-            <JoinCard code={view.code} compact={view.boards > 0} />
+            {!joinFirst && joinCard}
             {host && (
               <section className="flex flex-col gap-1 border-t border-holo-faint pt-2 @min-[1100px]/shell:pt-3" data-testid="host-tools">
                 <span className="label-caps @min-[1100px]/shell:text-xs!">You host this table</span>
-                <button type="button" className="text-left text-sm text-alert underline-offset-2 hover:underline" onClick={() => setAsked('close')} data-testid="close-room">
+                <button type="button" className="text-left text-sm text-alert underline-offset-2 hover:underline" onClick={(e) => ask('close', e.currentTarget)} data-testid="close-room">
                   Close the room…
                 </button>
               </section>
@@ -197,7 +255,7 @@ export function Lobby() {
               </>
             ) : (
               <>
-                <span className="text-center text-sm text-ink-2">Waiting for {hostName} to start…</span>
+                {!waiting && <span className="text-center text-sm text-ink-2">Waiting for {hostName} to start…</span>}
                 <Button size="md" variant="ghost" onClick={() => client.leave()}>
                   Leave table
                 </Button>
@@ -210,9 +268,9 @@ export function Lobby() {
             dialog={dialog}
             seats={seats}
             code={view.code}
-            onCancel={() => setAsked(null)}
+            onCancel={closeDialog}
             onConfirm={() => {
-              setAsked(null);
+              closeDialog();
               if (dialog === 'close') client.closeTable();
               else client.kick(dialog.kick);
             }}
@@ -316,8 +374,11 @@ function ColourPick({ seats, me, onPick }: { seats: Colonist[]; me: Colonist; on
   );
 }
 
-/** One seat in the rail: its creature in its colour, its name, what it is, and the host's ✕. */
-function SeatRow({ seat, me, host, onKick }: { seat: Colonist; me: boolean; host: boolean; onKick: (() => void) | undefined }) {
+const CHIP_CLASS = { AI: 'bg-holo-soft text-holo', HOST: 'bg-warn/15 text-warn', PHONE: 'bg-ok/10 text-ok', AWAY: 'bg-warn/15 text-warn' } as const;
+
+/** One seat in the rail: its creature in its colour, its name, what it is (AWAY when its phone has gone), and the host's ✕. */
+function SeatRow({ seat, me, host, onKick }: { seat: Colonist; me: boolean; host: boolean; onKick: ((e: MouseEvent<HTMLButtonElement>) => void) | undefined }) {
+  const kind = seat.isAi ? 'AI' : host ? 'HOST' : seat.connected ? 'PHONE' : 'AWAY';
   return (
     <li className="flex items-center gap-2 border-t border-holo-faint bg-panel px-2 py-1 first:border-t-0 @min-[1100px]/shell:gap-3 @min-[1100px]/shell:px-3 @min-[1100px]/shell:py-2">
       <span role="img" aria-label={SPECIES_NAME[seat.species]} className="shrink-0">
@@ -327,9 +388,7 @@ function SeatRow({ seat, me, host, onKick }: { seat: Colonist; me: boolean; host
         {seat.name}
         {me && ' (you)'}
       </span>
-      <span className={cx('rounded-chip px-1.5 font-mono text-[10px] font-bold', seat.isAi ? 'bg-holo-soft text-holo' : host ? 'bg-warn/15 text-warn' : 'bg-ok/10 text-ok')}>
-        {seat.isAi ? 'AI' : host ? 'HOST' : 'PHONE'}
-      </span>
+      <span className={cx('rounded-chip px-1.5 font-mono text-[10px] font-bold', CHIP_CLASS[kind])}>{kind}</span>
       {onKick && (
         <button
           type="button"
@@ -373,11 +432,21 @@ function JoinCard({ code, compact }: { code: string; compact: boolean }) {
 
 /** The host's confirmations, over the whole screen; nothing is sent until they confirm. */
 function HostConfirm({ dialog, seats, code, onConfirm, onCancel }: { dialog: HostDialog; seats: Colonist[]; code: string; onConfirm: () => void; onCancel: () => void }) {
+  const titleId = useId();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onCancel]);
   let body: ReactNode;
   if (dialog === 'close')
     body = (
       <>
-        <h2 className="font-display text-xl font-semibold @min-[1100px]/shell:text-3xl">Close the room?</h2>
+        <h2 id={titleId} className="font-display text-xl font-semibold @min-[1100px]/shell:text-3xl">
+          Close the room?
+        </h2>
         <p className="text-sm text-ink-2 @min-[1100px]/shell:text-lg">Everyone at the table goes back to the start screen. The code {code} stops working.</p>
         <div className="grid grid-cols-2 gap-2">
           <Button size="md" variant="outline" autoFocus onClick={onCancel} data-testid="host-dialog-cancel">
@@ -393,7 +462,9 @@ function HostConfirm({ dialog, seats, code, onConfirm, onCancel }: { dialog: Hos
     const s = seats.find((x) => x.id === dialog.kick)!;
     body = (
       <>
-        <h2 className="font-display text-xl font-semibold @min-[1100px]/shell:text-3xl">Remove {s.name}?</h2>
+        <h2 id={titleId} className="font-display text-xl font-semibold @min-[1100px]/shell:text-3xl">
+          Remove {s.name}?
+        </h2>
         <p className="text-sm text-ink-2 @min-[1100px]/shell:text-lg">{s.isAi ? 'The AI leaves the table.' : `${s.name}'s phone goes back to the start screen. They can join again with the code.`}</p>
         <div className="grid grid-cols-2 gap-2">
           <Button size="md" variant="outline" autoFocus onClick={onCancel} data-testid="host-dialog-cancel">
@@ -407,7 +478,7 @@ function HostConfirm({ dialog, seats, code, onConfirm, onCancel }: { dialog: Hos
     );
   }
   return (
-    <div className="absolute inset-0 z-10 grid place-items-center bg-void/70 p-4" role="dialog" aria-modal data-testid="host-dialog">
+    <div className="absolute inset-0 z-10 grid place-items-center bg-void/70 p-4" role="dialog" aria-modal aria-labelledby={titleId} data-testid="host-dialog">
       <div className="flex max-w-[560px] flex-col gap-3 rounded-sheet border-2 border-holo bg-panel p-4 shadow-glow @min-[1100px]/shell:max-w-[720px] @min-[1100px]/shell:gap-5 @min-[1100px]/shell:p-8">{body}</div>
     </div>
   );
