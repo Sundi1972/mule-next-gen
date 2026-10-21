@@ -580,6 +580,35 @@ describe('Room: a game error ends only its own table', () => {
     expect(errors).toEqual([]);
   });
 
+  it('a game error ends only its own table: a game whose dispose throws still ends cleanly: fail throws nothing, every screen hears "error", onError hears the dispose error, onClose runs once', async () => {
+    const errors: unknown[] = [];
+    let closes = 0;
+    const room = new Room<Intent, View>({
+      code: 'KRTX',
+      createGame: () => ({
+        ...secretsGame(),
+        dispose() {
+          throw new Error('dispose boom');
+        },
+      }),
+      newToken: () => `t${++tokens}`,
+      onError: (err) => void errors.push(err),
+      onClose: () => void closes++,
+    });
+    const heiko = join(room, 'Heiko');
+    const mia = join(room, 'Mia');
+    const tv = watch(room);
+    room.receive(heiko, heiko.from, { t: 'start' });
+
+    expect(() => room.fail()).not.toThrow();
+    await flush();
+
+    for (const screen of [heiko, mia, tv]) expect(screen.inbox.at(-1)).toStrictEqual({ t: 'removed', reason: 'error' });
+    expect(errors).toHaveLength(1);
+    expect((errors[0] as Error).message).toBe('dispose boom');
+    expect(closes).toBe(1);
+  });
+
   it('a game error ends only its own table: fail after the host closed the room sends nothing more and does not close it twice', async () => {
     const { room, heiko, mia, tv, errors, closes } = buggyRoom();
 
