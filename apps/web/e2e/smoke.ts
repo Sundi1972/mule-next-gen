@@ -1,11 +1,12 @@
 /**
  * T-AC-1: a phone plays a whole two-month game, lobby to final scores, against the real server.
+ * On the way it proves B-AC-1 (the species you pick is the one you play) and B-AC-4 (the room card with no TV).
  * Run with `pnpm --filter @mule/web e2e`; replay a red run's map with `MULE_E2E_SEED=<seed>`.
  */
 import { existsSync } from 'node:fs';
-import { WALK } from '@mule/engine';
+import { GAME, WALK } from '@mule/engine';
 import { errors as playwrightErrors, type BrowserContext, type Page } from 'playwright';
-import { PHASE_MS } from '../../server/src/mule-game.js';
+import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import { check, launch, PHONE, startServer, TV, type AuctionSteps } from './harness';
 
 /** Loaded by a path held in a variable, so tsc never resolves a file that may not exist yet. */
@@ -33,6 +34,8 @@ const AUCTION_STAGE_MS = within(WALK.goodMs / WALK.tradeClockRate);
 const PRESS_MS = 2_000;
 /** The auction offers at most 9 goods of 3 stages each; more Done presses than that means it is not moving on. */
 const MAX_AUCTION_PRESSES = 40;
+/** The host sits in seat 1. */
+const HOST_WALKER = 'walker-s1';
 
 const SEED = seedFrom(process.env.MULE_E2E_SEED);
 const steps = await loadAuctionSteps();
@@ -96,6 +99,7 @@ try {
   await claim.waitFor({ timeout: 5_000 });
   check(await claim.isVisible(), 'CLAIM button visible');
   await tv.getByTestId('tv-phase').filter({ hasText: 'Land grant' }).waitFor({ timeout: 3_000 });
+  await claimAPlot(phone);
 
   // Reload: the phone takes its seat back by itself.
   await phone.reload();
@@ -105,8 +109,13 @@ try {
 
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 1);
+  await checkOwnsAPlot(phone);
   await goToThePub(phone);
-  await pressDoneThroughTheAuction(phone);
+  let measured = false;
+  await pressDoneThroughTheAuction(phone, async (button) => {
+    if (!measured && button.startsWith('Done with')) measured = await checkTheFloorClearsTheNames(phone, tv);
+  });
+  check(measured, 'FM-2: the month-1 auction reached a walk to measure');
 
   // Month 2.
   await phone.locator('[data-phase=planning]').waitFor({ timeout: within(PHASE_MS.upkeep) });
@@ -160,6 +169,42 @@ async function readyIfStillPlanning(phone: Page): Promise<void> {
   }
 }
 
+/**
+ * Presses CLAIM until the claims counter drops. The lit plot moves on every
+ * tick and an AI can take it first, so a press may be refused; press again.
+ */
+async function claimAPlot(phone: Page): Promise<void> {
+  const grant = phone.locator('[data-phase=landGrant]');
+  const claim = grant.getByRole('button', { name: /CLAIM/ });
+  const unclaimed = grant.getByText(`${GAME.claimsPerGrant} OF ${GAME.claimsPerGrant} CLAIMS LEFT`, { exact: true });
+  const deadline = Date.now() + within(PHASE_MS.landGrant);
+  for (;;) {
+    check((await grant.count()) > 0 && Date.now() < deadline, 'AM-7: the phone claims a plot in the month-1 land grant');
+    if ((await unclaimed.count()) === 0) return;
+    try {
+      // Waits until a free plot is lit, which enables the button.
+      await claim.click({ timeout: deadline - Date.now() });
+      await unclaimed.waitFor({ state: 'hidden', timeout: 2 * GRANT_TICK_MS });
+    } catch (err) {
+      if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
+    }
+  }
+}
+
+/** Development: walk out to the map and tap a plot in your colour; the phone calls it yours. */
+async function checkOwnsAPlot(phone: Page): Promise<void> {
+  const dev = phone.locator('[data-phase=development]');
+  await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: within(PHASE_MS.landGrant + PHASE_MS.development) });
+  await dev.getByRole('button', { name: /, free\b/ }).first().waitFor({ timeout: 3_000 });
+  // The host sits in seat 1, and the map names each plot's owner by seat.
+  const mine = dev.getByRole('button', { name: /owned by player 1\b/ });
+  const plots = await mine.count();
+  check(plots >= 1, `T-AC-1: the phone owns a plot before month 2; its map shows ${plots} plots in its colour`);
+  await mine.first().click({ timeout: PRESS_MS });
+  const yours = await dev.getByText('YOURS', { exact: true }).waitFor({ timeout: PRESS_MS }).then(() => true, () => false);
+  check(yours, 'T-AC-1: the phone calls the plot in its colour YOURS');
+}
+
 /** Waits until the phone has moved past planning and the land grant. */
 async function pastTheLandGrant(phone: Page): Promise<void> {
   await phone.locator('[data-phase]:not([data-phase=planning]):not([data-phase=landGrant])').waitFor({ timeout: within(PHASE_MS.planning + PHASE_MS.landGrant) });
@@ -176,8 +221,9 @@ async function goToThePub(phone: Page): Promise<void> {
 /**
  * The goods auction: press its Done button at every stage it shows ('Ready',
  * 'Done choosing', 'Done with <Good>') until the phone leaves the auction.
+ * `beforePress` gets the button's label first.
  */
-async function pressDoneThroughTheAuction(phone: Page): Promise<void> {
+async function pressDoneThroughTheAuction(phone: Page, beforePress?: (button: string) => Promise<void>): Promise<void> {
   await phone.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
   const done = phone.locator('[data-phase=auction]').getByRole('button', { name: /^(Ready|Done choosing|Done with .+)$/ });
   const over = phone.locator('[data-phase]:not([data-phase=auction])');
@@ -185,6 +231,8 @@ async function pressDoneThroughTheAuction(phone: Page): Promise<void> {
     check(pressed < MAX_AUCTION_PRESSES, `auction still running after ${MAX_AUCTION_PRESSES} Done presses`);
     await done.or(over).first().waitFor({ timeout: AUCTION_STAGE_MS });
     if (await over.count()) return;
+    const [showing] = await done.allInnerTexts();
+    if (showing !== undefined) await beforePress?.(showing);
     let label: string;
     try {
       // The button was on screen a moment ago, so pressing it is quick or the stage has moved on.
@@ -197,6 +245,47 @@ async function pressDoneThroughTheAuction(phone: Page): Promise<void> {
     }
     // Pressed, it turns to 'Done · waiting'; 'Ready' on the status screen stays until the next stage.
     await phone.locator('[data-phase=auction]').getByRole('button', { name: label, exact: true }).waitFor({ state: 'hidden', timeout: AUCTION_STAGE_MS });
+  }
+}
+
+/**
+ * FM-2 during a walk: declares Buyer, which puts the host's walker on the board's floor, then checks that
+ * every walker on the phone and the TV clears the names strip. False when the walk closed first.
+ */
+async function checkTheFloorClearsTheNames(phone: Page, tv: Page): Promise<boolean> {
+  try {
+    await phone.locator('[data-phase=auction]').getByRole('radio', { name: 'Buyer' }).click({ timeout: PRESS_MS });
+    for (const page of [phone, tv]) {
+      const host = page.locator(`[data-phase=auction] [data-testid=walk-board] [data-testid=${HOST_WALKER}][data-side=buyer]`);
+      await host.waitFor({ timeout: PRESS_MS });
+      // A walker that switched sides slides to its new edge; measure where it stops.
+      await host.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)), undefined, { timeout: PRESS_MS });
+    }
+  } catch (err) {
+    if (err instanceof playwrightErrors.TimeoutError) return false;
+    throw err;
+  }
+  await checkWalkersClearTheNames(phone, 'phone');
+  await checkWalkersClearTheNames(tv, 'TV');
+  return true;
+}
+
+/** FM-2: every walker on the auction board is drawn above the names strip. Read in one pass, since walkers move. */
+async function checkWalkersClearTheNames(page: Page, screen: string): Promise<void> {
+  const board = page.locator('[data-phase=auction]').getByTestId('walk-board');
+  const { namesTop, walkers } = await board.evaluate(
+    (el) => ({
+      namesTop: el.querySelector('[data-testid=walk-names]')?.getBoundingClientRect().top ?? null,
+      walkers: [...el.querySelectorAll('[data-testid^="walker-"]')].map((w) => ({ id: w.getAttribute('data-testid'), bottom: w.getBoundingClientRect().bottom })),
+    }),
+    undefined,
+    { timeout: PRESS_MS },
+  );
+  check(namesTop !== null, `FM-2: the ${screen} board has a names strip`);
+  check(walkers.length > 0, `FM-2: the ${screen} board draws a walker`);
+  for (const w of walkers) {
+    const overlap = w.bottom - namesTop;
+    check(overlap <= 1, `FM-2: on the ${screen}, ${w.id} is drawn ${overlap.toFixed(1)} px into the names strip`);
   }
 }
 
