@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createGame,
+  EVENTS,
   factoryFit,
   PROCESSED_GOODS,
   RAW_GOODS,
@@ -97,19 +98,31 @@ describe('RULE-6: what special fields do', () => {
 
   it('B-AC-6: each alien relic touching a working plot adds 1, whoever owns it, and the phone lists it for a factory', () => {
     const state = colony();
-    // A farm of 2 between two relics, neither owned by the farmer.
+    // A farm of 2 between two relics, neither owned by the farmer, and a third relic only diagonal to it.
     const farm = worked(plot(state, 1, 0, 'plains'), 'food', 'p0');
-    worked(plot(state, 0, 0, 'plains'), null, 'p1', { kind: 'relic' });
+    // The relic on the left is itself a farm of 2: it touches no relic, and its own does not count.
+    const relicFarm = worked(plot(state, 0, 0, 'plains'), 'food', 'p1', { kind: 'relic' });
     plot(state, 2, 0, 'plains').special = { kind: 'relic' };
-    // An Alloy factory on plains (2 a run) with a relic below it.
+    plot(state, 2, 1, 'plains').special = { kind: 'relic' };
+    // An Alloy factory on plains (2 a run) with one relic below it, and one with two.
     const factory = worked(plot(state, 6, 0, 'plains'), 'alloy', 'p2');
     plot(state, 6, 1, 'plains').special = { kind: 'relic' };
-    const lines = factoryFit(state, factory, 'alloy', 'p2').lines;
+    const twoRelics = worked(plot(state, 10, 4, 'plains'), 'alloy', 'p3');
+    plot(state, 10, 3, 'plains').special = { kind: 'relic' };
+    plot(state, 11, 4, 'plains').special = { kind: 'relic' };
+    const relicLines = (tile: Tile, owner: string) =>
+      factoryFit(state, tile, 'alloy', owner).lines.filter((l) => /relic/i.test(l.text));
+    const lines = relicLines(factory, 'p2');
+    const lines2 = relicLines(twoRelics, 'p3');
     const run = runProduction(state);
     expect(madeOn(run, state, farm)).toBe(4);
     expect(run.produced.p0!.food).toBe(4);
+    expect(madeOn(run, state, relicFarm)).toBe(2);
+    expect(run.produced.p1!.food).toBe(2);
     expect(run.produced.p2!.alloy).toBe(3);
-    expect(lines.filter((l) => l.tone === 'good' && /relic/i.test(l.text))).toHaveLength(1);
+    expect(run.produced.p3!.alloy).toBe(4);
+    expect(lines).toEqual([{ tone: 'good', text: 'Next to an alien relic: +1' }]);
+    expect(lines2).toEqual([{ tone: 'good', text: 'Next to 2 alien relics: +2' }]);
   });
 
   it('B-AC-6: ruins pay their salvage once, on the first production with an owner, and a later owner gets nothing', () => {
@@ -154,48 +167,83 @@ describe('RULE-6: what special fields do', () => {
 });
 
 describe('RULE-6: cavern collapse', () => {
-  /** A game with one mined cavern; varying the seed and month changes only the draw. */
-  function cavernGame(): { base: GameState; at: number } {
+  /** A game with two mined caverns, owned apart so neither earns a neighbour bonus; varying the seed and month changes only the draws. */
+  function cavernGame(): { base: GameState; caverns: number[] } {
     const base = colony();
-    const cavern = worked(plot(base, 0, 0, 'hills', { crystite: 3 }), 'crystite', 'p0', { kind: 'crystalCavern' });
-    return { base, at: indexOf(base, cavern) };
+    const one = worked(plot(base, 0, 0, 'hills', { crystite: 3 }), 'crystite', 'p0', { kind: 'crystalCavern' });
+    const two = worked(plot(base, 6, 0, 'hills', { crystite: 3 }), 'crystite', 'p1', { kind: 'crystalCavern' });
+    return { base, caverns: [indexOf(base, one), indexOf(base, two)] };
   }
 
-  function produceAt(base: GameState, at: number, seed: number, month: number, whatIf = false) {
+  function produceAt(base: GameState, caverns: number[], seed: number, month: number, whatIf = false) {
     const state = structuredClone(base);
     Object.assign(state, { seed, month }, whatIf ? { whatIf: true } : {});
     const run = runProduction(state);
-    return { produced: (madeOn(run, state, state.tiles[at]!) ?? 0) > 0, collapsed: state.tiles[at]!.special === undefined };
+    return {
+      event: run.events.length > 0,
+      caverns: caverns.map((at) => {
+        const made = madeOn(run, state, state.tiles[at]!);
+        return { made, produced: (made ?? 0) > 0, collapsed: state.tiles[at]!.special === undefined };
+      }),
+    };
   }
 
   it('T-AC-6: a cavern’s collapse is the same on replay, and comes about 6 times in 100', () => {
-    const { base, at } = cavernGame();
+    const { base, caverns } = cavernGame();
     let produced = 0;
     let collapsed = 0;
+    // From the first month that can have an event: mined caverns and their collapses, in months with an event and without.
+    const byEvent = { with: { produced: 0, collapsed: 0 }, without: { produced: 0, collapsed: 0 } };
+    // Months where both caverns produced and only one collapsed.
+    let apart = 0;
     for (let seed = 1; seed <= 400; seed++) {
       for (let month = 1; month <= 10; month++) {
-        const first = produceAt(base, at, seed, month);
-        expect(produceAt(base, at, seed, month), `seed ${seed}, month ${month}`).toEqual(first);
-        if (!first.produced) {
-          // A cavern that made no Crystite this month never collapses.
-          expect(first.collapsed, `seed ${seed}, month ${month}`).toBe(false);
-          continue;
+        const first = produceAt(base, caverns, seed, month);
+        expect(produceAt(base, caverns, seed, month), `seed ${seed}, month ${month}`).toEqual(first);
+        const bucket = month >= EVENTS.firstMonth ? byEvent[first.event ? 'with' : 'without'] : undefined;
+        for (const cavern of first.caverns) {
+          if (!cavern.produced) {
+            // A cavern that made no Crystite this month never collapses.
+            expect(cavern.collapsed, `seed ${seed}, month ${month}`).toBe(false);
+            continue;
+          }
+          produced++;
+          if (bucket) bucket.produced++;
+          if (!cavern.collapsed) continue;
+          collapsed++;
+          if (bucket) bucket.collapsed++;
         }
-        produced++;
-        if (!first.collapsed) continue;
-        collapsed++;
-        // An AI's what-if copy can't know the real draw, so it imagines no collapse (as with events and colony lots).
-        expect(produceAt(base, at, seed, month, true).collapsed, `what-if, seed ${seed}, month ${month}`).toBe(false);
+        const [one, two] = first.caverns as [(typeof first.caverns)[number], (typeof first.caverns)[number]];
+        if (one.produced && two.produced && one.collapsed !== two.collapsed) apart++;
+        if (one.collapsed || two.collapsed) {
+          // An AI's what-if copy can't know the real draw, so it imagines no collapse (as with events and colony lots).
+          const whatIf = produceAt(base, caverns, seed, month, true);
+          expect(whatIf.caverns.map((c) => c.collapsed), `what-if, seed ${seed}, month ${month}`).toEqual([false, false]);
+        }
       }
     }
-    expect(produced).toBeGreaterThan(3_000);
+    expect(produced).toBeGreaterThan(6_000);
     const rate = collapsed / produced;
     expect(rate).toBeGreaterThan(0.06 * 0.7);
     expect(rate).toBeLessThan(0.06 * 1.3);
+    // The collapse draw is apart from the event draw, so it comes as often in a month with an event as in one without.
+    for (const [when, { produced: n, collapsed: c }] of Object.entries(byEvent)) {
+      expect(n, `months ${when} an event`).toBeGreaterThan(2_000);
+      expect(c / n, `months ${when} an event`).toBeGreaterThan(0.06 * 0.7);
+      expect(c / n, `months ${when} an event`).toBeLessThan(0.06 * 1.3);
+    }
+    // Each plot draws its own collapse: two caverns mined the same month don't always share their fate.
+    expect(apart).toBeGreaterThan(0);
 
-    // A cavern farmed for Food is not mined, so it never collapses.
-    base.tiles[at]!.outfit = 'food';
-    for (let seed = 1; seed <= 200; seed++) expect(produceAt(base, at, seed, 1).collapsed, `farmed, seed ${seed}`).toBe(false);
+    // A cavern farmed for Food is not mined, and one mined on Crystite 0 makes nothing: neither ever collapses.
+    const [farmed, empty] = caverns as [number, number];
+    base.tiles[farmed]!.outfit = 'food';
+    base.tiles[empty]!.ground.crystite = 0;
+    for (let seed = 1; seed <= 200; seed++) {
+      const month = produceAt(base, caverns, seed, 1);
+      expect(month.caverns[1]!.made, `mined on 0, seed ${seed}`).toBe(0);
+      expect(month.caverns.map((c) => c.collapsed), `farmed and mined on 0, seed ${seed}`).toEqual([false, false]);
+    }
   });
 });
 
