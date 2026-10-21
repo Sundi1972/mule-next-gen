@@ -419,8 +419,6 @@ export const MAP = {
     minKinds: 3,
     /** Fewest steps between two special fields. */
     spacing: 4,
-    /** Fewest steps from a relic to the store. */
-    relicFromStore: 2,
     /** Fewest of an oasis's 4 neighbours that are desert. */
     oasisDeserts: 2,
     /** Least Crystite rating under a crystal cavern. */

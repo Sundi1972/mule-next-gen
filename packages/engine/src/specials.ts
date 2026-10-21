@@ -56,7 +56,7 @@ export function placeSpecials(map: GameMap, players: number, rng: Rng): SpecialP
     );
     const kinds = KINDS.filter((k) => placed.filter((p) => p.kind === k).length < MAP.special.maxPerKind && (!mustNewKind || !used.has(k)));
     for (const kind of drawn(kinds, rng)) {
-      for (const tile of drawn(spaced.filter((t) => fitsKind(map, t, kind, store)), rng)) {
+      for (const tile of drawn(spaced.filter((t) => fitsKind(map, t, kind)), rng)) {
         // At the bound the map is not placed short: the generator stops loudly.
         if (++tries > MAP.special.placementTries) throw new Error(`special fields: no placement within ${MAP.special.placementTries} tries`);
         placed.push({ tile, kind });
@@ -92,11 +92,10 @@ function isOpen(map: GameMap, tile: Tile, store: Tile | undefined): boolean {
   return !store || !neighbours(map.tiles, map.width, store).includes(tile);
 }
 
-function fitsKind(map: GameMap, tile: Tile, kind: SpecialKind, store: Tile | undefined): boolean {
+function fitsKind(map: GameMap, tile: Tile, kind: SpecialKind): boolean {
   if (!(MAP.special.on[kind] as readonly Terrain[]).includes(tile.terrain)) return false;
   if (kind === 'crystalCavern') return tile.ground.crystite >= MAP.special.cavernCrystite;
   if (kind === 'oasis') return neighbours(map.tiles, map.width, tile).filter((n) => n.terrain === 'desert').length >= MAP.special.oasisDeserts;
-  if (kind === 'relic') return !store || steps(tile, store) >= MAP.special.relicFromStore;
   return true;
 }
 

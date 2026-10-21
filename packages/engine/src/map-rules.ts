@@ -424,10 +424,6 @@ function misplaced(f: Facts, t: Tile): string | undefined {
     const deserts = neighbours(f.map.tiles, f.map.width, t).filter((n) => n.terrain === 'desert').length;
     if (deserts < special.oasisDeserts) return `has ${deserts} desert neighbours, ${special.oasisDeserts} needed`;
   }
-  if (kind === 'relic' && f.store) {
-    const away = distances(f.map, [f.store])(t);
-    if (away < special.relicFromStore) return `is ${away} steps from the store, ${special.relicFromStore} needed`;
-  }
   if (kind === 'ruins' && !salvage) return 'has no salvage';
   if (kind !== 'ruins' && salvage) return 'has salvage, which only ruins carry';
   return undefined;
