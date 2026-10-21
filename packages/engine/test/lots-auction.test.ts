@@ -168,7 +168,7 @@ describe('T-AC-2: resolution at the bell (RULE-5), money and MULEs conserved', (
     const state = newGame();
     own(state, 5, 3, 'brix', 'food');
     auction(state, [['brix', plot(5, 3, 250, 'store')]]);
-    const capital = state.store.capital;
+    state.store.capital = 200;
     const corral = state.store.mules;
     const before = totals(state);
 
@@ -178,7 +178,7 @@ describe('T-AC-2: resolution at the bell (RULE-5), money and MULEs conserved', (
     expect(live(state).result).toEqual({ kind: 'store', price: 200 });
     expect(money(state, 'brix')).toBe(1200);
     expect(money(state, 'ossa')).toBe(1000);
-    expect(state.store.capital).toBe(capital - 200);
+    expect(state.store.capital).toBe(0);
     expect(state.store.mules).toBe(corral + 1);
     expect(tileOf(state, 5, 3)).toMatchObject({ owner: null, outfit: null, runMonths: 0 });
     expect(totals(state)).toEqual(before);
@@ -254,9 +254,10 @@ describe('who is a buyer on a lot (RULE-3)', () => {
     expect(() => setLotWalk(state, 'brix', 1)).toThrow(RuleError);
   });
 
-  it('RULE-3 row 2 (serves B-AC-2): with less money than the minimum a player stands aside for money, and cannot walk', () => {
+  it('RULE-3 row 2 (serves B-AC-2): with less money than the minimum a player stands aside for money, and cannot walk; exactly the minimum bids', () => {
     const state = newGame();
     own(state, 5, 3, 'brix');
+    state.players[2]!.money = 250;
     state.players[3]!.money = 249;
     auction(state, [['brix', plot(5, 3, 250)]]);
     expect(buyers(state)).toEqual(['ossa', 'lena']);
@@ -333,7 +334,12 @@ describe('when a lot’s walk ends (RULE-4)', () => {
     for (const p of state.players) if (p.id !== 'brix') p.money = 100;
     list(state, 'brix', plot(5, 3, 250, 'store'));
     while (state.phase !== 'landAuction') advancePhase(state);
-    untilStage(state, 'result');
+    for (let t = DT; t < LOTS.introMs; t += DT) step(state);
+    expect(live(state).stage).toBe('intro');
+
+    step(state);
+
+    expect(live(state).stage).toBe('result');
 
     expect(live(state).walkers.filter((w) => w.side === 'buyer')).toEqual([]);
     expect(live(state).result).toEqual({ kind: 'store', price: 200 });
