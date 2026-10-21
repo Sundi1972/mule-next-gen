@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "e2e": "vite build && tsx e2e/smoke.ts && tsx e2e/shell.ts && tsx e2e/zoom.ts && tsx e2e/lobby.ts",
+    "e2e": "vite build && tsx e2e/smoke.ts && tsx e2e/shell.ts && tsx e2e/chat.ts && tsx e2e/zoom.ts && tsx e2e/lobby.ts",
     "screens": "vite build && tsx e2e/screens.ts"
   },
   "dependencies": {
