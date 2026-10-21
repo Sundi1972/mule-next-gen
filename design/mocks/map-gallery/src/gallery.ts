@@ -1,11 +1,12 @@
 import { checkMap, createRng, generateMap, MAP, RAW_GOODS, regionCap, type GameMap, type MapReport, type RawGood, type RuleId } from '@mule/engine';
 import type { MapTile } from '@mule/ui';
+// The frozen pre-WS5 generator lives only as a test fixture; this breaks if that fixture moves.
 import { legacyGenerateMap } from '../../../../packages/engine/test/fixtures/legacy-map';
 
 /**
  * The gallery's data: for each seed, today's map and the new map, each with
- * the checker's report. Every number shown comes from checkMap or MAP; the
- * gallery never measures a map itself.
+ * the checker's report. Pass and fail come from checkMap's report; the few
+ * marks a card draws itself use the same MAP numbers and engine helpers.
  */
 
 export type Players = 2 | 4 | 6;

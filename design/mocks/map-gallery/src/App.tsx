@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { RAW_GOODS, type RawGood } from '@mule/engine';
 import { GOOD_NAME, setTheme, useTheme } from '@mule/ui';
 import { AggregatePanel } from './AggregatePanel';
@@ -95,6 +95,7 @@ function groundNote(ground: GroundView): string {
 
 function SeedPager({ seed, onSeed }: { seed: number; onSeed(seed: number): void }) {
   const [draft, setDraft] = useState('');
+  const inputId = useId();
   const last = seed + PAGE_SIZE - 1;
   return (
     <div className="flex items-center gap-2 text-sm">
@@ -121,11 +122,11 @@ function SeedPager({ seed, onSeed }: { seed: number; onSeed(seed: number): void 
           setDraft('');
         }}
       >
-        <label className="sr-only" htmlFor={`seed-${seed}`}>
+        <label className="sr-only" htmlFor={inputId}>
           Go to seed
         </label>
         <input
-          id={`seed-${seed}`}
+          id={inputId}
           inputMode="numeric"
           placeholder="Seed"
           value={draft}
