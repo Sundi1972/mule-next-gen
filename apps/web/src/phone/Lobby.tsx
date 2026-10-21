@@ -1,6 +1,6 @@
 import type { TableView } from '@mule/protocol';
 import { Button, Creature, cx, PlayerMark, SLOT_COLOR, SPECIES, SPECIES_NAME, SPECIES_PERK, type Slot, type Species } from '@mule/ui';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { joinUrl, Qr } from '../components/Qr';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { lobbySeatSpecies } from '../game/derive';
@@ -178,6 +178,8 @@ export function Lobby() {
 // With padding the QR's footprint is 56 px (the mock's compact card) or 104 px (B-AC-4 asks for at least 100).
 const COMPACT_QR = 44;
 const BIG_QR = 88;
+/** The handoff link is longer, so its QR is denser; WS6's scaffold draws it at 120 on a phone. */
+const HANDOFF_QR = 120;
 
 /**
  * The way in for the others: QR and room code. With no big screen it is the only
@@ -239,10 +241,7 @@ function SeatRail({ table, mine, species }: { table: TableView<unknown>; mine: n
   // A seat that left while the host was deciding has nothing left to remove.
   const dialog = asked?.kind === 'kick' && !table.seats.some((s) => s.id === asked.seatId) ? null : asked;
   const confirm = dialog?.kind === 'kick' || dialog?.kind === 'close' ? dialog : null;
-  const moveToPhone = () => {
-    setAsked({ kind: 'handoff' });
-    client.handoff();
-  };
+  const moveToPhone = () => setAsked({ kind: 'handoff' });
   return (
     <div className="flex w-(--rail) shrink-0 flex-col border-l border-holo-faint bg-void/40">
       {dialog?.kind === 'handoff' && (
@@ -250,10 +249,7 @@ function SeatRail({ table, mine, species }: { table: TableView<unknown>; mine: n
           name={table.seats[mine]?.name ?? ''}
           host={isHost}
           link={handoffCode ? joinUrl(table.code, handoffCode.code) : null}
-          onClose={() => {
-            setAsked(null);
-            client.closeHandoff();
-          }}
+          onClose={() => setAsked(null)}
         />
       )}
       <section className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-3 py-3">
@@ -342,8 +338,16 @@ function SeatRail({ table, mine, species }: { table: TableView<unknown>; mine: n
   );
 }
 
-/** The one-time link that moves this seat to another device, as a QR over the whole screen. Done sends nothing. */
+/**
+ * The one-time link that moves this seat to another device, as a QR over the whole screen. The code lives as long
+ * as the dialog: asked for when it opens, forgotten when it goes, by Done or by the lobby leaving. Done sends nothing.
+ */
 function HandoffDialog({ name, host, link, onClose }: { name: string; host: boolean; link: string | null; onClose: () => void }) {
+  const client = useClient();
+  useEffect(() => {
+    client.handoff();
+    return () => client.closeHandoff();
+  }, [client]);
   const title = host ? 'Move the host to your phone' : 'Move to your phone';
   return (
     <div className="absolute inset-0 z-10 grid place-items-center bg-void/70 p-4" role="dialog" aria-modal aria-label={title} data-testid="host-dialog">
@@ -351,9 +355,9 @@ function HandoffDialog({ name, host, link, onClose }: { name: string; host: bool
         <h2 className="font-display text-xl font-semibold">{title}</h2>
         <div className="flex items-center gap-4">
           {link ? (
-            <Qr text={link} size={BIG_QR} className="p-2! shrink-0" label="QR code to move to your phone" />
+            <Qr text={link} size={HANDOFF_QR} className="p-2! shrink-0" label="QR code to move to your phone" />
           ) : (
-            <div aria-hidden className="shrink-0 rounded-panel bg-white" style={{ width: BIG_QR + 16, height: BIG_QR + 16 }} />
+            <div aria-hidden className="shrink-0 rounded-panel bg-white" style={{ width: HANDOFF_QR + 16, height: HANDOFF_QR + 16 }} />
           )}
           <p className="text-sm text-ink-2">
             Scan this with your phone. It becomes{' '}
