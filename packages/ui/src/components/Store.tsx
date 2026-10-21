@@ -130,7 +130,7 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, visitors = 
                 onClick={tap(g)}
                 disabled={!onShop || !usable(g)}
                 aria-label={`${FACTORY_NAME[g]} fit`}
-                className="flex flex-col items-center rounded-[6px] border border-holo-faint bg-raised py-0.5 enabled:hover:border-holo"
+                className="flex min-h-11 flex-col items-center justify-center rounded-[6px] border border-holo-faint bg-raised py-0.5 enabled:hover:border-holo"
                 data-testid={`fit-${g}`}
                 {...(onShop ? { 'data-shop': g } : {})}
               >
