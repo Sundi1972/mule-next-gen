@@ -14,9 +14,10 @@ import {
   type AiPersonaId,
   type GameState,
   type Listing,
+  type LotResult,
   type Tile,
 } from '@mule/engine';
-import { AiSeat, Brain, cashReserve, LotHand, muleValue, plotValue, type Act, type Mind } from '@mule/ai';
+import { AiSeat, Brain, cashReserve, LotHand, muleValue, overtakeTarget, plotValue, type Act, type Mind } from '@mule/ai';
 import type { MuleView } from '@mule/protocol';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
 import { fakeContext } from './fake-context.js';
@@ -31,17 +32,17 @@ const AIS: { id: string; name: string; persona: AiPersonaId }[] = [
 const DTS = [WALK.tickMs, WALK.tickMs * 3, 37];
 const PLOT_MIN = 200;
 const MULE_MIN = 400;
-const MULE_LOT_MIN = 100;
+const MULE_LOT_MIN = 150;
 const SEEDS = [3, 7, 11, 19, 23, 42];
-/** Within one long tick's step of the limit: the hand won't take a step that would round past it. */
-const NEAR = 30;
+const FLUSH = 3_000;
+const SHORT = { a1: 300, a2: 340, a3: 380 };
 
-/** The limit RULE-6 sets, worked out here from the seat's own observation. */
-function limitOf(state: GameState, mind: Mind, lot: Listing): number {
+/** What the lot is worth to the seat and the limit RULE-6 sets, worked out here from the seat's own observation. */
+function worthOf(state: GameState, mind: Mind, lot: Listing): { value: number; limit: number } {
   const obs = observe(state, mind.me);
   const money = obs.players.find((p) => p.id === mind.me)!.money;
   const value = lot.item.kind === 'plot' ? plotValue(obs, mind, lot.item.y * obs.width + lot.item.x) : muleValue(obs, mind);
-  return Math.max(0, Math.min(money - cashReserve(obs, mind), value));
+  return { value, limit: Math.max(0, Math.min(money - cashReserve(obs, mind), value)) };
 }
 
 /**
@@ -49,16 +50,16 @@ function limitOf(state: GameState, mind: Mind, lot: Listing): number {
  * Food MULE on another; each AI owns one idle plot, so a MULE is worth
  * something to it. Brix lists both, and the land auction opens.
  */
-function landAuction(seed: number, money: Record<string, number> = {}) {
+function landAuction(seed: number, opts: { money?: Record<string, number>; muleMin?: number } = {}) {
   const state = createGame({ seed, players: [{ id: SELLER, name: 'Brix', isAi: false }, ...AIS.map(({ id, name }) => ({ id, name, isAi: true }))] });
   const free = state.tiles.filter((t) => t.terrain !== 'store' && t.owner === null);
   const own = (tile: Tile, owner: string, outfit: Tile['outfit'] = null) => Object.assign(tile, { terrain: 'plains', owner, outfit, runMonths: outfit ? 2 : 0 });
   const plot = own(free[0]!, SELLER);
   const mule = own(free[1]!, SELLER, 'food');
   AIS.forEach(({ id }, i) => own(free[2 + i]!, id));
-  for (const p of state.players) p.money = money[p.id] ?? p.money;
+  for (const p of state.players) p.money = opts.money?.[p.id] ?? p.money;
   list(state, SELLER, { item: { kind: 'plot', x: plot.x, y: plot.y }, minimum: PLOT_MIN, unsold: 'keep' });
-  list(state, SELLER, { item: { kind: 'mule', x: mule.x, y: mule.y }, minimum: MULE_MIN, unsold: 'keep' });
+  list(state, SELLER, { item: { kind: 'mule', x: mule.x, y: mule.y }, minimum: opts.muleMin ?? MULE_MIN, unsold: 'keep' });
   while (state.phase !== 'landAuction') advancePhase(state);
   const seats = AIS.map((a, i) => new AiSeat({ id: a.id, name: a.name, persona: a.persona, level: 'trader', seed: seed * 31 + i }));
   const hands = seats.map((s, i) => new LotHand(s.mind, createRng(seed * 131 + i)));
@@ -82,49 +83,84 @@ function actFor(state: GameState, id: string): Act {
 interface Sample {
   lot: Listing;
   id: string;
+  value: number;
   limit: number;
   lo: number;
   price: number;
   dir: -1 | 0 | 1;
   done: boolean;
+  /** The longest step one tick can take on this board: the hand stops short of a step that would round past its limit. */
+  longestStep: number;
 }
 
-/** Runs the land auction to its end, the hands ticking before each step with the same dt. Every AI walker on every walk tick. */
-function play(state: GameState, hands: LotHand[]): Sample[] {
+/** A lot's walk at its bell: how long it ran and what came of it. */
+interface Bell {
+  lot: Listing;
+  walkMs: number;
+  result: LotResult;
+}
+
+/** Runs the land auction to its end, the hands ticking before each step with the same dt. Every AI walker on every walk tick, and every bell. */
+function play(state: GameState, hands: LotHand[], dts = DTS): { samples: Sample[]; bells: Bell[] } {
   const samples: Sample[] = [];
-  const limits = new Map<string, number>();
+  const bells: Bell[] = [];
+  const worth = new Map<string, { value: number; limit: number }>();
   for (let t = 0; state.phase === 'landAuction' && t < 5_000; t++) {
     const a = state.landAuction!;
     if (a.stage === 'over') break;
-    if (a.lot) for (const h of hands) if (!limits.has(`${a.lot.id}:${h.mind.me}`)) limits.set(`${a.lot.id}:${h.mind.me}`, limitOf(state, h.mind, a.lot));
-    const dt = DTS[t % DTS.length]!;
+    if (a.lot) for (const h of hands) if (!worth.has(`${a.lot.id}:${h.mind.me}`)) worth.set(`${a.lot.id}:${h.mind.me}`, worthOf(state, h.mind, a.lot));
+    const dt = dts[t % dts.length]!;
     for (const h of hands) h.tick(state, dt, actFor(state, h.mind.me));
     const lot = a.lot!;
-    stepLandAuction(state, dt);
+    const result = stepLandAuction(state, dt);
+    if (result) bells.push({ lot, walkMs: a.elapsed, result });
     if (a.stage !== 'walk' && a.stage !== 'result') continue;
     for (const w of a.walkers) {
       if (w.id === SELLER || w.side !== 'buyer') continue;
-      samples.push({ lot, id: w.id, limit: limits.get(`${lot.id}:${w.id}`)!, lo: a.lo, price: Math.round(w.price), dir: w.dir, done: a.done.includes(w.id) });
+      samples.push({ lot, id: w.id, ...worth.get(`${lot.id}:${w.id}`)!, lo: a.lo, price: Math.round(w.price), dir: w.dir, done: a.done.includes(w.id), longestStep: (a.speed * Math.max(...dts)) / 1000 });
     }
   }
-  return samples;
+  return { samples, bells };
+}
+
+/** Each AI's highest bid on each lot. */
+function bestBids(samples: Sample[]): Sample[] {
+  const best = new Map<string, Sample>();
+  for (const s of samples) if (s.price > (best.get(`${s.lot.id}:${s.id}`)?.price ?? -1)) best.set(`${s.lot.id}:${s.id}`, s);
+  return [...best.values()];
+}
+
+const flushMoney = () => Object.fromEntries(AIS.map((a) => [a.id, FLUSH]));
+
+/** A MULE minimum just under the lowest MULE value at a flush table, so every AI bids and its value is the cap. */
+function flushMuleMin(seed: number): number {
+  const { state, seats } = landAuction(seed, { money: flushMoney() });
+  const mule = state.listings.find((l) => l.item.kind === 'mule')!;
+  return Math.min(...seats.map((s) => worthOf(state, s.mind, mule).value)) - 20;
 }
 
 describe('AI seats at the land auction', () => {
   it('B-AC-7: an AI never bids above min(money − cashReserve, value)', () => {
-    // Short of money, the plot's bidding stops at money − reserve; flush, the MULE's stops at its value.
-    const tables: Record<string, number>[] = [{ a1: 300, a2: 340, a3: 380 }, {}];
-    let capped = 0;
-    for (const seed of SEEDS)
-      for (const money of tables) {
-        const { state, hands } = landAuction(seed, money);
-        const samples = play(state, hands);
+    let moneyCapped = 0;
+    let valueCapped = 0;
+    for (const seed of SEEDS) {
+      // Short of money, the plot's bidding stops at money − reserve.
+      const short = landAuction(seed, { money: SHORT });
+      // Flush, with a MULE minimum just under every AI's MULE value, the MULE's bidding stops at its value.
+      const flush = landAuction(seed, { money: flushMoney(), muleMin: flushMuleMin(seed) });
+      for (const [table, kind] of [
+        [short, 'plot'],
+        [flush, 'mule'],
+      ] as const) {
+        const { samples } = play(table.state, table.hands);
         for (const s of samples) expect(s.price, `seed ${seed}, ${s.id} on ${s.lot.id}`).toBeLessThanOrEqual(Math.max(s.limit, s.lo));
-        const best = new Map<string, Sample>();
-        for (const s of samples) if (s.price > (best.get(`${s.lot.id}:${s.id}`)?.price ?? -1)) best.set(`${s.lot.id}:${s.id}`, s);
-        if ([...best.values()].some((s) => s.price >= s.lot.minimum && s.limit - s.price <= NEAR)) capped++;
+        const pressed = bestBids(samples).filter((s) => s.lot.item.kind === kind && s.price >= s.lot.minimum && s.limit - s.price <= s.longestStep);
+        if (kind === 'plot' && pressed.some((s) => s.limit < s.value)) moneyCapped++;
+        if (kind === 'mule' && pressed.some((s) => s.limit === s.value)) valueCapped++;
       }
-    expect(capped, 'in every run some AI bid up to its limit').toBe(SEEDS.length * tables.length);
+    }
+    expect(moneyCapped, 'in every short run some AI bid a plot up to money − reserve').toBe(SEEDS.length);
+    expect(valueCapped, 'in every flush run some AI bid a MULE up to its value').toBe(SEEDS.length);
   });
 
   it('B-AC-7: an AI whose money − reserve is under the minimum never moves, and presses Done', () => {
@@ -134,8 +170,8 @@ describe('AI seats at the land auction', () => {
       const reserve = cashReserve(observe(probe.state, mind.me), mind);
       // A buyer by the engine's rule (money ≥ minimum), but short once it keeps its reserve.
       const money = PLOT_MIN + Math.floor(reserve / 2);
-      const { state, hands } = landAuction(seed, { a2: money });
-      const mine = play(state, hands).filter((s) => s.id === 'a2' && s.lot.item.kind === 'plot');
+      const { state, hands } = landAuction(seed, { money: { a2: money } });
+      const mine = play(state, hands).samples.filter((s) => s.id === 'a2' && s.lot.item.kind === 'plot');
       expect(mine.length).toBeGreaterThan(0);
       for (const s of mine) {
         expect(s.limit).toBeLessThan(PLOT_MIN);
@@ -143,6 +179,80 @@ describe('AI seats at the land auction', () => {
         expect(s.dir).toBe(0);
       }
       expect(mine.some((s) => s.done)).toBe(true);
+    }
+  });
+
+  it('B-AC-7: a lone AI buyer opens at the minimum and, leading, stands still: it wins within one step of it', () => {
+    for (const seed of SEEDS) {
+      // The others can't pay the minimum, so they sit both lots out.
+      const { state, hands, plot } = landAuction(seed, { money: { a1: 100, a3: 100 } });
+      const longestStep = (state.landAuction!.speed * Math.max(...DTS)) / 1000;
+      const { bells } = play(state, hands);
+      const sale = bells.find((b) => b.lot.item.kind === 'plot')!.result;
+      expect(sale).toMatchObject({ kind: 'sold', buyer: 'a2' });
+      expect(plot.owner).toBe('a2');
+      if (sale.kind === 'sold') expect(sale.price - PLOT_MIN, `seed ${seed}`).toBeLessThanOrEqual(longestStep);
+    }
+  });
+
+  it('B-AC-7: with only AI buyers, an AI-led lot rings its bell well before LOTS.walkMs once the others are done (AM-4)', () => {
+    let sold = 0;
+    for (const seed of SEEDS) {
+      // Limits in reach of the clock, so the bidding can settle and the others give up.
+      const { state, hands } = landAuction(seed, { money: SHORT });
+      for (const bell of play(state, hands).bells) {
+        if (bell.result.kind !== 'sold') continue;
+        sold++;
+        expect(bell.walkMs, `seed ${seed}, ${bell.lot.id}`).toBeLessThan(LOTS.walkMs * 0.75);
+      }
+    }
+    expect(sold, "the plot sold in every seed").toBe(SEEDS.length);
+  });
+
+  it('B-AC-7: an overtake aims at min(limit, leaderBid + 1 + overshoot), never past the limit (AM-4): 504/370/0.1 → 384, 372/370/0.5 → 371', () => {
+    expect(overtakeTarget(504, 370, 0.1)).toBe(384);
+    expect(overtakeTarget(372, 370, 0.5)).toBe(371);
+    for (const limit of [250, 371, 372, 400, 504, 999])
+      for (const leaderBid of [200, 250, 369, 370, 371])
+        for (const share of [0, LOTS.aiOvershoot[0], 0.5, LOTS.aiOvershoot[1], 1]) {
+          if (leaderBid + 1 > limit) continue;
+          const target = overtakeTarget(limit, leaderBid, share);
+          expect(target, `${limit}/${leaderBid}/${share}`).toBeLessThanOrEqual(limit);
+          expect(target).toBeGreaterThan(leaderBid);
+          expect(Number.isInteger(target)).toBe(true);
+        }
+  });
+
+  it('B-AC-7: against a bid one under its limit an AI ends at exactly its limit; against a bid at its limit it presses Done and never moves', () => {
+    const SMALL = 5;
+    for (const gap of [1, 0]) {
+      // a1 bids by hand; a3 can't pay the minimum; a2 is the AI, short enough that its limit is in reach.
+      const { state, hands, seats } = landAuction(7, { money: { a1: FLUSH, a2: 360, a3: 100 } });
+      const ai = hands[1]!;
+      const { limit } = worthOf(state, seats[1]!.mind, state.listings[0]!);
+      const a = state.landAuction!;
+      const price = (id: string) => Math.round(a.walkers.find((w) => w.id === id)!.price);
+      lotDone(state, 'a1');
+      while (a.stage === 'intro') {
+        ai.tick(state, SMALL, actFor(state, 'a2'));
+        stepLandAuction(state, SMALL);
+      }
+      setLotWalk(state, 'a1', 1);
+      while (price('a1') < limit - gap) stepLandAuction(state, SMALL);
+      setLotWalk(state, 'a1', 0);
+      lotDone(state, 'a1');
+      expect(price('a1')).toBe(limit - gap);
+      const start = price('a2');
+      let result: LotResult | null = null;
+      for (let t = 0; !result && t < 20_000; t++) {
+        ai.tick(state, SMALL, actFor(state, 'a2'));
+        result = stepLandAuction(state, SMALL);
+      }
+      if (gap === 1) expect(result).toEqual({ kind: 'sold', buyer: 'a2', price: limit });
+      else {
+        expect(price('a2')).toBe(start);
+        expect(result).toEqual({ kind: 'sold', buyer: 'a1', price: limit });
+      }
     }
   });
 });
@@ -203,12 +313,7 @@ describe('AI seats at the land auction, on the server', () => {
     const tick = LotHand.prototype.tick;
     vi.spyOn(LotHand.prototype, 'tick').mockImplementation(function (this: LotHand, state, dt, act) {
       const lot = state.landAuction?.lot;
-      const key = lot && `${lot.id}:${this.mind.me}`;
-      if (lot && key && !worth.has(key)) {
-        const obs = observe(state, this.mind.me);
-        const value = lot.item.kind === 'plot' ? plotValue(obs, this.mind, lot.item.y * obs.width + lot.item.x) : muleValue(obs, this.mind);
-        worth.set(key, { value, limit: limitOf(state, this.mind, lot) });
-      }
+      if (lot && !worth.has(`${lot.id}:${this.mind.me}`)) worth.set(`${lot.id}:${this.mind.me}`, worthOf(state, this.mind, lot));
       tick.call(this, state, dt, act);
     });
     // The brain's ask is the only way to a decider, and so to a language model.
@@ -230,21 +335,37 @@ describe('AI seats at the land auction, on the server', () => {
     expect(game.viewFor(null).phase).toBe('landAuction');
     const askedBefore = asked.length;
 
-    // Nobody touches a phone from here on.
+    // Nobody touches a phone from here on. Uneven waits, so the hands only stay under their limits if they see the dt the step uses.
+    const waits = [100, 300, 120, 300, 100];
     const before = game.viewFor(null);
     const results = new Map<string, NonNullable<MuleView['landAuction']>>();
+    // Seconds left on each lot's intro and walk clock when last seen: every buyer is an AI, so each ends early (AM-4).
+    const left = new Map<string, number>();
     const longest = 2 * (LOTS.introMs + LOTS.walkMs + LOTS.resultMs);
     let elapsed = 0;
-    for (; elapsed <= longest && game.viewFor(null).phase === 'landAuction'; elapsed += WALK.tickMs) {
-      advance(WALK.tickMs);
+    for (let i = 0; elapsed <= longest && game.viewFor(null).phase === 'landAuction'; i++) {
+      const wait = waits[i % waits.length]!;
+      advance(wait);
+      elapsed += wait;
       const la = game.viewFor(null).landAuction;
-      if (la?.stage === 'result') results.set(la.lot.id, la);
+      if (!la) continue;
+      if (la.stage === 'result') results.set(la.lot.id, la);
+      else left.set(`${la.lot.id}:${la.stage}`, la.seconds);
+      for (const w of la.walkers) {
+        if (w.side !== 'buyer' || w.price < la.lot.minimum) continue;
+        expect(w.price, `${w.id} on ${la.lot.id}`).toBeLessThanOrEqual(worth.get(`${la.lot.id}:${w.id}`)!.limit);
+      }
     }
 
     const after = game.viewFor(null);
     expect(after.phase).toBe('development');
     expect(elapsed).toBeLessThanOrEqual(longest);
     expect(asked.slice(askedBefore).filter((phase) => phase === 'landAuction')).toEqual([]);
+    const longestWait = Math.max(...waits) / 1_000;
+    for (const lot of before.listings) {
+      expect(left.get(`${lot.id}:intro`), `${lot.id}'s intro ends before LOTS.introMs`).toBeGreaterThan(longestWait);
+      expect(left.get(`${lot.id}:walk`), `${lot.id}'s walk ends before LOTS.walkMs`).toBeGreaterThan(longestWait);
+    }
     const sold = [...results.values()].flatMap((la) => (la.result?.kind === 'sold' ? [{ lot: la.lot.id, ...la.result }] : []));
     expect(sold.length, 'an AI bought a lot').toBeGreaterThan(0);
     const paid = (v: MuleView, id: string) => v.players.find((p) => p.id === id)!.money;
