@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   advancePhase,
   createGame,
   createRng,
   list,
+  LOTS,
   lotDone,
   observe,
   RuleError,
@@ -15,7 +16,10 @@ import {
   type Listing,
   type Tile,
 } from '@mule/engine';
-import { AiSeat, cashReserve, LotHand, muleValue, plotValue, type Act, type Mind } from '@mule/ai';
+import { AiSeat, Brain, cashReserve, LotHand, muleValue, plotValue, type Act, type Mind } from '@mule/ai';
+import type { MuleView } from '@mule/protocol';
+import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
+import { fakeContext } from './fake-context.js';
 
 const SELLER = 'h';
 const AIS: { id: string; name: string; persona: AiPersonaId }[] = [
@@ -27,6 +31,7 @@ const AIS: { id: string; name: string; persona: AiPersonaId }[] = [
 const DTS = [WALK.tickMs, WALK.tickMs * 3, 37];
 const PLOT_MIN = 200;
 const MULE_MIN = 400;
+const MULE_LOT_MIN = 100;
 const SEEDS = [3, 7, 11, 19, 23, 42];
 /** Within one long tick's step of the limit: the hand won't take a step that would round past it. */
 const NEAR = 30;
@@ -139,5 +144,116 @@ describe('AI seats at the land auction', () => {
       }
       expect(mine.some((s) => s.done)).toBe(true);
     }
+  });
+});
+
+// Brix at the table with three AI seats, in seat order.
+const TABLE = [{ id: SELLER, name: 'Brix', isAi: false }, ...AIS.map(({ id, name }) => ({ id, name, isAi: true }))];
+type Plot = { x: number; y: number };
+
+/**
+ * Plays month 1 through the moves Brix's phone sends, the AI seats playing
+ * themselves: Brix claims the first two plots that light up and fits a Food
+ * MULE to the first, then goes to the pub and stays Done in the auction.
+ * The game stops in month 2's planning.
+ */
+function toMonth2Planning(game: MuleGame, advance: (ms: number) => void): Plot[] {
+  const phase = () => game.viewFor(null).phase;
+  game.handle(SELLER, { type: 'ready' });
+  const plots: Plot[] = [];
+  while (phase() === 'landGrant') {
+    const lit = game.viewFor(SELLER).lit;
+    if (lit && plots.length < 2) {
+      game.handle(SELLER, { type: 'claim', x: lit.x, y: lit.y });
+      plots.push(lit);
+    }
+    if (phase() === 'landGrant') advance(GRANT_TICK_MS);
+  }
+  expect(plots).toHaveLength(2);
+  expect(phase()).toBe('development');
+  game.handle(SELLER, { type: 'buyMule' });
+  game.handle(SELLER, { type: 'outfit', outfit: 'food' });
+  game.handle(SELLER, { type: 'install', ...plots[0]! });
+  game.handle(SELLER, { type: 'pub' });
+  for (let i = 0; i < 1_000 && phase() !== 'auction'; i++) advance(1_000);
+  for (let i = 0; i < 10_000 && phase() === 'auction'; i++) {
+    game.handle(SELLER, { type: 'ready' });
+    advance(WALK.tickMs);
+  }
+  advance(PHASE_MS.upkeep);
+  expect(phase()).toBe('planning');
+  expect(game.viewFor(null).month).toBe(2);
+  return plots;
+}
+
+describe('AI seats at the land auction, on the server', () => {
+  let savedKey: string | undefined;
+  beforeEach(() => {
+    savedKey = process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+  });
+  afterEach(() => {
+    if (savedKey !== undefined) process.env.ANTHROPIC_API_KEY = savedKey;
+    vi.restoreAllMocks();
+  });
+
+  it('UBER-AC-2 / T-AC-4: 3 AI seats, a listed plot and a listed MULE, ANTHROPIC_API_KEY unset: winners paid ≤ their value, the phase reached development on its own clocks, no LLM call', () => {
+    // Each AI's value and limit for each lot, from the state its hand sees on the lot's first tick.
+    const worth = new Map<string, { value: number; limit: number }>();
+    const tick = LotHand.prototype.tick;
+    vi.spyOn(LotHand.prototype, 'tick').mockImplementation(function (this: LotHand, state, dt, act) {
+      const lot = state.landAuction?.lot;
+      const key = lot && `${lot.id}:${this.mind.me}`;
+      if (lot && key && !worth.has(key)) {
+        const obs = observe(state, this.mind.me);
+        const value = lot.item.kind === 'plot' ? plotValue(obs, this.mind, lot.item.y * obs.width + lot.item.x) : muleValue(obs, this.mind);
+        worth.set(key, { value, limit: limitOf(state, this.mind, lot) });
+      }
+      tick.call(this, state, dt, act);
+    });
+    // The brain's ask is the only way to a decider, and so to a language model.
+    const asked: string[] = [];
+    const ask = Brain.prototype.ask;
+    vi.spyOn(Brain.prototype, 'ask').mockImplementation(function (this: Brain, ...args) {
+      asked.push(args[2].phase);
+      return ask.apply(this, args) as never;
+    });
+
+    const { ctx, advance } = fakeContext();
+    const game = new MuleGame(ctx, 5);
+    game.start(TABLE);
+    const plots = toMonth2Planning(game, advance);
+    game.handle(SELLER, { type: 'list', item: { kind: 'plot', ...plots[1]! }, minimum: PLOT_MIN, unsold: 'keep' });
+    game.handle(SELLER, { type: 'list', item: { kind: 'mule', ...plots[0]! }, minimum: MULE_LOT_MIN, unsold: 'keep' });
+    game.handle(SELLER, { type: 'ready' });
+    while (game.viewFor(null).phase === 'landGrant') advance(GRANT_TICK_MS);
+    expect(game.viewFor(null).phase).toBe('landAuction');
+    const askedBefore = asked.length;
+
+    // Nobody touches a phone from here on.
+    const before = game.viewFor(null);
+    const results = new Map<string, NonNullable<MuleView['landAuction']>>();
+    const longest = 2 * (LOTS.introMs + LOTS.walkMs + LOTS.resultMs);
+    let elapsed = 0;
+    for (; elapsed <= longest && game.viewFor(null).phase === 'landAuction'; elapsed += WALK.tickMs) {
+      advance(WALK.tickMs);
+      const la = game.viewFor(null).landAuction;
+      if (la?.stage === 'result') results.set(la.lot.id, la);
+    }
+
+    const after = game.viewFor(null);
+    expect(after.phase).toBe('development');
+    expect(elapsed).toBeLessThanOrEqual(longest);
+    expect(asked.slice(askedBefore).filter((phase) => phase === 'landAuction')).toEqual([]);
+    const sold = [...results.values()].flatMap((la) => (la.result?.kind === 'sold' ? [{ lot: la.lot.id, ...la.result }] : []));
+    expect(sold.length, 'an AI bought a lot').toBeGreaterThan(0);
+    const paid = (v: MuleView, id: string) => v.players.find((p) => p.id === id)!.money;
+    for (const s of sold) {
+      expect(AIS.map((a) => a.id)).toContain(s.buyer);
+      const w = worth.get(`${s.lot}:${s.buyer}`)!;
+      expect(s.price).toBeLessThanOrEqual(w.value);
+      expect(s.price).toBeLessThanOrEqual(w.limit);
+    }
+    for (const id of new Set(sold.map((s) => s.buyer))) expect(paid(before, id) - paid(after, id)).toBe(sold.filter((s) => s.buyer === id).reduce((n, s) => n + s.price, 0));
   });
 });
