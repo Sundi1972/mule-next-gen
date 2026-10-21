@@ -2,7 +2,7 @@ import { GAME, LOTS, WALK } from './config.js';
 import { mulePrice } from './economy.js';
 import { RuleError } from './errors.js';
 import { tileAt } from './map.js';
-import type { GameState, LandAuction, Listing, LotItem, Tile } from './types.js';
+import type { GameState, LandAuction, Listing, LotItem, LotResult, Tile } from './types.js';
 
 /**
  * The land auction's lots. In planning a player lists a plot they own, or
@@ -87,6 +87,18 @@ export function startLandAuction(state: GameState): void {
     number: lot ? 1 : 0,
     count: state.listings.length,
   };
+}
+
+export function setLotWalk(state: GameState, playerId: string, dir: -1 | 0 | 1): void {
+  throw new Error('NotImplemented: setLotWalk');
+}
+
+export function lotDone(state: GameState, playerId: string, done = true): void {
+  throw new Error('NotImplemented: lotDone');
+}
+
+export function stepLandAuction(state: GameState, dt: number): LotResult | null {
+  throw new Error('NotImplemented: stepLandAuction');
 }
 
 /** Ends the land auction at once: every lot not yet at its bell is kept, so nothing moves without a bell. */
