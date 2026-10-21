@@ -278,7 +278,7 @@ describe('brain service', () => {
     });
   });
 
-  it('B-AC-4: a seat whose calls all time out or lose the connection locks before its counted spend passes the budget; a 500 counts $0', async () => {
+  it('B-AC-4: a seat whose calls all time out or lose the connection locks before its counted spend passes the budget; a 500 or a reply, even an unusable one, counts only its bill', async () => {
     // Labels this long make each call's worst case about $0.0134, so only a handful fit in the seat's budget.
     const long = () =>
       shortlist(['a', 'b', 'c'].map((a, i) => candidate(a, a.repeat(105_000), a, 10, [consider('fit', 0.9 - i * 0.05, 1, 'fits')])), 3, 0.5);
@@ -291,22 +291,41 @@ describe('brain service', () => {
       const p = BRAIN.pricesPerMTok;
       return (tokens * Math.max(p.input, p.cacheWrite) + BRAIN.maxTokens * p.output) / 1_000_000;
     };
-    const cases = [
-      { name: 'timeout', error: () => new Anthropic.APIConnectionTimeoutError(), outcome: 'timeout', locks: true },
-      { name: 'lost connection', error: () => new Anthropic.APIConnectionError({ message: 'socket hang up' }), outcome: 'error', locks: true },
+    // Replies here bill nothing, so a seat that locks could only have been charged a worst case.
+    const cases: { name: string; answer: () => Message; outcome: string; locks: boolean }[] = [
+      {
+        name: 'timeout',
+        answer: () => {
+          throw new Anthropic.APIConnectionTimeoutError();
+        },
+        outcome: 'timeout',
+        locks: true,
+      },
+      {
+        name: 'lost connection',
+        answer: () => {
+          throw new Anthropic.APIConnectionError({ message: 'socket hang up' });
+        },
+        outcome: 'error',
+        locks: true,
+      },
       {
         name: '500',
-        error: () => Anthropic.APIError.generate(500, { type: 'error', error: { type: 'api_error', message: 'x' } }, 'x', new Headers()),
+        answer: () => {
+          throw Anthropic.APIError.generate(500, { type: 'error', error: { type: 'api_error', message: 'x' } }, 'x', new Headers());
+        },
         outcome: 'error',
         locks: false,
       },
+      { name: 'unreadable reply', answer: () => message('not json at all'), outcome: 'unreadable', locks: false },
+      { name: 'off-list reply', answer: () => message('{"option":"F","line":"x"}'), outcome: 'off_list', locks: false },
     ];
     for (const c of cases) {
       fs.rmSync(file, { force: true });
       const worst: number[] = [];
       const sdk = fakeSdk((_n, params) => {
         worst.push(worstOf(params));
-        throw c.error();
+        return c.answer();
       });
       const service = serviceOn(sdk);
       const { decide } = seatOn(service, long);
@@ -315,9 +334,10 @@ describe('brain service', () => {
       for (let i = 0; i < 8; i++) notes.push((await decide()).record.note);
 
       if (!c.locks) {
-        // An error the API answered with a status was not billed: the seat keeps calling.
+        // An answer with a status, or any reply, has a known bill (here $0): the seat keeps calling.
         expect(sdk.calls, c.name).toBe(8);
         expect(notes, c.name).not.toContain('decider failed: budget spent');
+        expect(lines().map((l) => l.outcome), c.name).toEqual(Array(8).fill(c.outcome));
         continue;
       }
       const calls = sdk.calls;

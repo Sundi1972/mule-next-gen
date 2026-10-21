@@ -3,8 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BRAIN } from '@mule/engine';
-import { buildPrompt, PERSONAS, WAIT_MS, type Prompt, type ShortOption } from '@mule/ai';
+import { BRAIN, observe, type GameState } from '@mule/engine';
+import { PERSONAS, playGame, simSeats, situation, WAIT_MS, type DecisionRecord, type Prompt, type ShortOption } from '@mule/ai';
 import { CallFailed, createHaikuComplete, type HaikuReply, type HaikuSdk } from '../src/brain/client.js';
 import { worstCaseUsd } from '../src/brain/budget.js';
 import { createLedger } from '../src/brain/ledger.js';
@@ -359,18 +359,39 @@ describe('brain:spike', () => {
     expect(calls).toBe(2);
   });
 
-  it('INV-spike-report: decisions mix kinds round-robin and build real prompts from one strategist game, only ones the model would be asked', () => {
+  it('INV-spike-report: decisions mix kinds round-robin and build real prompts from one strategist game, only ones the model would be asked, each attributed as the game recorded it', () => {
+    // The oracle: the same game played here, with each decision's seat view taken when the phase it was made in ends.
+    const asked: { record: DecisionRecord; view: GameState | null }[] = [];
+    const played = playGame(101, simSeats(4, 'trader', 101), {
+      onDecision: (record) => asked.push({ record, view: null }),
+      onPhase: (state) => {
+        for (const a of asked) a.view ??= observe(state, a.record.seat);
+      },
+    });
+    const seatOf = (id: string) => played.seats.find((s) => s.id === id)!;
+    const playerOf = (id: string) => played.state.players.find((p) => p.id === id)!;
+    const summariesFor = (it: SpikeItem): string[] =>
+      asked
+        .filter((a) => a.record.seat === it.seat && a.record.kind === it.kind && a.record.month === it.context.month)
+        .filter((a) => JSON.stringify(a.record.shortlist) === JSON.stringify(it.shortlist))
+        .map((a) => situation(a.view ?? observe(played.state, a.record.seat), seatOf(a.record.seat).mind));
+
     const list = collectPrompts(101, 50);
     expect(list).toHaveLength(50);
     // Round-robin: the first three are three different kinds.
     expect(new Set(list.slice(0, 3).map((i) => i.kind)).size).toBe(3);
+    expect(new Set(list.map((i) => i.seat)).size).toBeGreaterThan(1);
     for (const it of list) {
       // Brain.ask never asks the model with fewer than two options.
       expect(it.shortlist.length).toBeGreaterThanOrEqual(2);
-      expect(it.prompt).toEqual(buildPrompt(it.shortlist, PERSONAS[it.persona], it.context));
-      expect(it.prompt.system.length).toBeGreaterThan(0);
-      expect(it.context).toMatchObject({ kind: it.kind, seat: it.seat, tableTalk: [] });
-      expect(it.context.summary.length).toBeGreaterThan(0);
+      const seat = seatOf(it.seat);
+      expect({ persona: it.persona, level: it.level }).toEqual({ persona: seat.mind.personaId, level: seat.mind.levelId });
+      expect(it.prompt.system.endsWith(PERSONAS[seat.mind.personaId as SpikeItem['persona']].card)).toBe(true);
+      expect(it.prompt.user).toContain(`Decision: ${it.kind}\nYou are ${playerOf(it.seat).name}. Month ${it.context.month} of 12.`);
+      const summaries = summariesFor(it);
+      expect(summaries.length).toBeGreaterThan(0);
+      expect(summaries.some((s) => it.prompt.user.includes(`\n\n${s}\n\n`))).toBe(true);
+      for (const option of it.shortlist) expect(it.prompt.user).toContain(`${option.id}. ${option.label} — `);
     }
-  });
+  }, 30_000); // two strategist games
 });

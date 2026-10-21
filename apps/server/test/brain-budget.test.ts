@@ -95,17 +95,22 @@ describe('RULE-3 budget table', () => {
     expect(budget.allow('g2', 's', 0.0005)).toEqual(CALL);
   });
 
-  it("B-AC-4 (RULE-3): release(game) forgets that game's locks and only that game's", () => {
+  it("B-AC-4 (RULE-3): release(game) forgets that game's locks and unknown bills, and only that game's", () => {
     const { budget, setSpent } = setup();
     setSpent('g1', 's', 0.0596);
     setSpent('g2', 's', 0.0596);
     expect(budget.allow('g1', 's', 0.0005)).toEqual(LOCKS);
     expect(budget.allow('g2', 's', 0.0005)).toEqual(LOCKS);
+    // Seat u has no ledger spend; only its unknown bills bring it near the budget.
+    budget.countUnknownBill('g1', 'u', 0.0596);
+    budget.countUnknownBill('g2', 'u', 0.0596);
     budget.release('g1');
     setSpent('g1', 's', 0);
     setSpent('g2', 's', 0);
     expect(budget.allow('g1', 's', 0.0005)).toEqual(CALL);
     expect(budget.allow('g2', 's', 0.0005)).toEqual(LOCKED);
+    expect(budget.allow('g1', 'u', 0.0005)).toEqual(CALL);
+    expect(budget.allow('g2', 'u', 0.0005)).toEqual(LOCKS);
   });
 
   it('B-AC-4 (RULE-3): worstCase counts system, user and schema, rounds tokens up, prices input at the cache-write rate', () => {
