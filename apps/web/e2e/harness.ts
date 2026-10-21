@@ -1,8 +1,23 @@
 import { existsSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
-import { chromium, type Browser } from 'playwright';
+import { chromium, type Browser, type Page } from 'playwright';
 import { createMuleServer, type MuleServer } from '../../server/src/server.js';
+
+/** CT-3: what smoke.ts hands each auction step. */
+export type AuctionStepContext = { phone: Page; tv: Page; check: (cond: unknown, message: string) => void };
+
+/**
+ * CT-3: `e2e/auction-steps.ts` (WS3's file) may export these; smoke.ts calls each at its hook.
+ * - `landAuction(ctx, month)`: once per month, months 1 and 2, right after that month's land grant ends.
+ * - `listedSale(ctx)`: once, in month 2's planning, before the test presses "I'm ready".
+ * Each must return while the phase it was called in can still end on its own clock (planning is about
+ * 4.5 s here), and must never press what the test presses itself: "I'm ready", the pub, the auction's Done.
+ */
+export type AuctionSteps = {
+  landAuction?: (ctx: AuctionStepContext, month: number) => Promise<void>;
+  listedSale?: (ctx: AuctionStepContext) => Promise<void>;
+};
 
 /**
  * The real game server, serving the built client from apps/web/dist on a free

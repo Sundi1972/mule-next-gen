@@ -1,24 +1,12 @@
 /**
- * T-AC-1: lobby to game over in a two-month game, against the real server.
- * A phone creates a room, adds two AI players and plays: it presses "I'm
- * ready" in planning, goes to the pub in development and presses Done in the
- * goods auction; everything else runs out on its own clock. A big screen
- * watches along. Run with `pnpm --filter @mule/web e2e`.
+ * T-AC-1: a phone plays a whole two-month game, lobby to final scores, against the real server.
+ * Run with `pnpm --filter @mule/web e2e`; replay a red run's map with `MULE_E2E_SEED=<seed>`.
  */
 import { existsSync } from 'node:fs';
-import type { BrowserContext, Page } from 'playwright';
-import { check, launch, PHONE, startServer, TV } from './harness';
-
-/**
- * CT-3: `auction-steps.ts` (WS3's file) may export these. Each is called at
- * its hook: `landAuction` once month 1's land grant is over, `listedSale` in
- * month 2's planning.
- */
-export type AuctionSteps = {
-  landAuction?: (ctx: AuctionStepContext) => Promise<void>;
-  listedSale?: (ctx: AuctionStepContext) => Promise<void>;
-};
-export type AuctionStepContext = { phone: Page; tv: Page; check: typeof check };
+import { WALK } from '@mule/engine';
+import { errors as playwrightErrors, type BrowserContext, type Page } from 'playwright';
+import { PHASE_MS } from '../../server/src/mule-game.js';
+import { check, launch, PHONE, startServer, TV, type AuctionSteps } from './harness';
 
 /** Loaded by a path held in a variable, so tsc never resolves a file that may not exist yet. */
 async function loadAuctionSteps(): Promise<AuctionSteps> {
@@ -37,17 +25,18 @@ async function loadAuctionSteps(): Promise<AuctionSteps> {
 const MONTH = ['planning', 'landGrant', 'development', 'production', 'auction', 'upkeep'];
 const EXPECTED_PHASES = [...MONTH, ...MONTH.slice(0, -1), 'gameOver'];
 
-/** Phase clocks at phaseScale 0.1: planning 4.5 s, land grant 6 s, development 5.5 s, a walk 2 s (slowed while trading). */
-const PLANNING_MS = 6_000;
-const GRANT_MS = 9_000;
-const DEVELOPMENT_MS = 9_000;
-const AUCTION_STAGE_MS = 15_000;
+const PHASE_SCALE = 0.1;
+/** A phase's longest run at this scale, plus room for the browser and the network. */
+const within = (ms: number) => ms * PHASE_SCALE + 3_000;
+/** A good's walk, its clock slowed the whole time by trading. */
+const AUCTION_STAGE_MS = within(WALK.goodMs / WALK.tradeClockRate);
 const PRESS_MS = 2_000;
 /** The auction offers at most 9 goods of 3 stages each; more Done presses than that means it is not moving on. */
 const MAX_AUCTION_PRESSES = 40;
 
+const SEED = Number(process.env.MULE_E2E_SEED ?? Math.floor(Math.random() * 2 ** 31));
 const steps = await loadAuctionSteps();
-const { server, base } = await startServer({ maxMonths: 2, phaseScale: 0.1 });
+const { server, base } = await startServer({ maxMonths: 2, phaseScale: PHASE_SCALE, seed: () => SEED });
 const browser = await launch();
 let seen: Shown[] = [];
 const errors: string[] = [];
@@ -88,15 +77,17 @@ try {
   await phone.locator('[data-phase]').waitFor({ timeout: 5_000 });
   check((await phone.getByText("You're at the table").count()) === 0, 'back in the game, not the lobby');
 
-  await phone.locator('[data-phase]:not([data-phase=landGrant])').waitFor({ timeout: GRANT_MS });
-  await steps.landAuction?.({ phone, tv, check });
+  await pastTheLandGrant(phone);
+  await steps.landAuction?.({ phone, tv, check }, 1);
   await goToThePub(phone);
   await pressDoneThroughTheAuction(phone);
 
   // Month 2.
-  await phone.locator('[data-phase=planning]').waitFor({ timeout: PLANNING_MS });
+  await phone.locator('[data-phase=planning]').waitFor({ timeout: within(PHASE_MS.upkeep) });
   await steps.listedSale?.({ phone, tv, check });
-  await phone.locator('[data-phase=planning]').getByRole('button', { name: "I'm ready" }).click({ timeout: PLANNING_MS });
+  await phone.locator('[data-phase=planning]').getByRole('button', { name: "I'm ready" }).click({ timeout: within(PHASE_MS.planning) });
+  await pastTheLandGrant(phone);
+  await steps.landAuction?.({ phone, tv, check }, 2);
   await goToThePub(phone);
   await pressDoneThroughTheAuction(phone);
 
@@ -112,8 +103,9 @@ try {
   check(isSubsequence(EXPECTED_PHASES, phases), `phone showed every phase of months 1 and 2 in order: ${phases.join(' > ')}`);
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
   console.log(`phases: ${timeline(seen)}`);
-  console.log(`e2e smoke: ok (room ${code})`);
+  console.log(`e2e smoke: ok (room ${code}, seed ${SEED})`);
 } catch (err) {
+  console.error(`e2e smoke: FAILED (seed ${SEED})`);
   console.error(`phases so far: ${timeline(seen)}`);
   if (errors.length > 0) console.error(`page errors: ${errors.join('; ')}`);
   throw err;
@@ -124,12 +116,17 @@ try {
 // Rooms keep their phase timers running; the test is over, so stop here.
 process.exit(0);
 
+/** Waits until the phone has moved past planning and the land grant. */
+async function pastTheLandGrant(phone: Page): Promise<void> {
+  await phone.locator('[data-phase]:not([data-phase=planning]):not([data-phase=landGrant])').waitFor({ timeout: within(PHASE_MS.planning + PHASE_MS.landGrant) });
+}
+
 /** Development: walk into the pub, which ends the human's turn. */
 async function goToThePub(phone: Page): Promise<void> {
   await phone
     .locator('[data-phase=development]')
     .getByRole('button', { name: 'Go to the pub and end your turn' })
-    .click({ timeout: GRANT_MS + DEVELOPMENT_MS });
+    .click({ timeout: within(PHASE_MS.landGrant + PHASE_MS.development) });
 }
 
 /**
@@ -137,7 +134,7 @@ async function goToThePub(phone: Page): Promise<void> {
  * 'Done choosing', 'Done with <Good>') until the phone leaves the auction.
  */
 async function pressDoneThroughTheAuction(phone: Page): Promise<void> {
-  await phone.locator('[data-phase=auction]').waitFor({ timeout: DEVELOPMENT_MS });
+  await phone.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
   const done = phone.locator('[data-phase=auction]').getByRole('button', { name: /^(Ready|Done choosing|Done with .+)$/ });
   const over = phone.locator('[data-phase]:not([data-phase=auction])');
   for (let pressed = 0; ; pressed++) {
@@ -151,8 +148,8 @@ async function pressDoneThroughTheAuction(phone: Page): Promise<void> {
       // Pressed, it turns to 'Done · waiting'; 'Ready' on the status screen stays until the next stage.
       await phone.locator('[data-phase=auction]').getByRole('button', { name: label, exact: true }).waitFor({ state: 'hidden', timeout: AUCTION_STAGE_MS });
     } catch (err) {
-      // The last stage can close on its own clock between seeing the button and pressing it.
-      if (await over.count()) return;
+      // The stage closed on its own clock under the press; the bounded wait above decides what comes next.
+      if (err instanceof playwrightErrors.TimeoutError) continue;
       throw err;
     }
   }
@@ -169,7 +166,7 @@ async function recordPhases(context: BrowserContext): Promise<Shown[]> {
   await context.exposeBinding('__phaseShown', (_source, phase: string) => {
     if (seen.at(-1)?.phase !== phase) seen.push({ phase, at: Date.now() });
   });
-  // A string, not a function: tsx would add its `__name` helper to a function, which the page doesn't have.
+  // Kept a string: tsx's keepNames wraps any named function inside with `__name`, which the page lacks.
   await context.addInitScript(`{
     let last = null;
     new MutationObserver(() => {
