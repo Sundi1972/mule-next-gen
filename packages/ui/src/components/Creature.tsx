@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import type { Species } from './species';
 
-const PUPIL = '#0f1d2b';
+/** The creatures' pupil and line ink, shared with the MULE. */
+export const PUPIL = '#0f1d2b';
 
 function Eye({ x, y, r }: { x: number; y: number; r: number }) {
   return (

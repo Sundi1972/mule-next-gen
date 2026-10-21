@@ -176,14 +176,14 @@ export function SellRail({ sell }: { sell: SellForm }) {
 }
 
 /** Your plots to tap, with every listed plot marked for sale. */
-export function SellMap({ sell }: { sell: SellForm }) {
+export function SellMap({ sell, density = 'phone' }: { sell: SellForm; density?: 'phone' | 'tv' }) {
   const { view, slot } = usePhoneGame();
   const tiles: MapTile[] = mapTiles(view).map((t) => (isListed(view, t.x, t.y) ? { ...t, flag: 'sale' } : t));
   return (
     <>
       <p className="pb-1.5 font-mono text-[11px] text-ink-3">TAP ONE OF YOUR PLOTS · LISTED PLOTS ARE MARKED FOR SALE</p>
       <MapFit width={view.width} height={view.height}>
-        <HoloMap width={view.width} height={view.height} tiles={tiles} onTile={sell.pick} selected={sell.picked} focusSlot={slot} />
+        <HoloMap width={view.width} height={view.height} tiles={tiles} onTile={sell.pick} selected={sell.picked} focusSlot={slot} density={density} />
       </MapFit>
     </>
   );

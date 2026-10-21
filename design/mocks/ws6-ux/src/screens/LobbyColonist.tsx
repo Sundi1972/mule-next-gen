@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { Qr } from '../../../../../apps/web/src/components/Qr';
 import { ThemeToggle } from '../../../../../apps/web/src/components/ThemeToggle';
 import { NowCard, type Now } from '../proposed/GameShell';
+import { HandoffCode, useHandoffCode, type CodeState } from '../proposed/HandoffCode';
 
 /**
  * Responsive redesign: the lobby as "make your colonist" (Heiko 2026-10-22:
@@ -38,25 +39,42 @@ const CODE = 'MTWR';
 /** Names for the six player colours (theme --color-p1..p6). DS-GAP: the names belong beside SLOT_COLOR in @mule/ui. */
 const COLOUR_NAME: Record<Slot, string> = { 0: 'Ember', 1: 'Cobalt', 2: 'Jade', 3: 'Sun', 4: 'Violet', 5: 'Rose' };
 
-export type LobbyState = 'guest' | 'host' | 'handoff' | 'kick' | 'close';
+export type LobbyState = 'guest' | 'host' | 'away' | 'handoff' | 'handoff-waiting' | 'handoff-expired' | 'kick' | 'close';
 
 export function LobbyColonist({ state }: { state: LobbyState }) {
   const host = state !== 'guest';
   const meId = host ? 'heiko' : 'lena';
-  const [seats, setSeats] = useState(SEATS);
-  const [dialog, setDialog] = useState<null | 'handoff' | 'close' | { kick: string }>(state === 'handoff' ? 'handoff' : state === 'close' ? 'close' : state === 'kick' ? { kick: 'lena' } : null);
+  const [seats, setSeats] = useState(state === 'away' ? SEATS.map((s) => (s.id === 'lena' ? { ...s, away: true } : s)) : SEATS);
+  /** A guest who has picked waits for the host (WS4's third Now). */
+  const [picked, setPicked] = useState(false);
+  const [dialog, setDialog] = useState<null | 'handoff' | 'close' | { kick: string }>(state.startsWith('handoff') ? 'handoff' : state === 'close' ? 'close' : state === 'kick' ? { kick: 'lena' } : null);
   const me = seats.find((s) => s.id === meId)!;
-  const set = (patch: Partial<Seat>) => setSeats((all) => all.map((s) => (s.id === meId ? { ...s, ...patch } : s)));
+  const set = (patch: Partial<Seat>) => (setPicked(true), setSeats((all) => all.map((s) => (s.id === meId ? { ...s, ...patch } : s))));
   const takenBy = (c: Slot) => seats.find((s) => s.colour === c && s.id !== meId);
+  /** Taking an AI's colour (WS4 RULE-7 row 4): it is yours, and the AI moves to the lowest free colour. */
+  const take = (c: Slot) =>
+    setSeats((all) => {
+      const was = all.find((s) => s.id === meId)!.colour;
+      const free = ([0, 1, 2, 3, 4, 5] as Slot[]).find((x) => x === was || !all.some((s) => s.colour === x && s.id !== meId))!;
+      return all.map((s) => (s.id === meId ? { ...s, colour: c } : s.colour === c ? { ...s, colour: free } : s));
+    });
   const humans = seats.filter((s) => !s.ai).length;
   const now: Now = host
     ? {
         step: 2,
         of: 2,
         title: seats.length < 2 ? 'Wait for players, or add an AI' : 'Start when everyone is here',
-        detail: `${seats.length} at the table, ${humans} on phones. Others join with the code ${CODE} or the QR. Everyone can change their colonist until you start.`,
+        // On a phone with no TV the join card sits right under this card, so the detail stays short.
+        detail: (
+          <>
+            <span className="@min-[1100px]/shell:hidden">{`${seats.length} at the table. Others join with the code ${CODE} or the QR below.`}</span>
+            <span className="hidden @min-[1100px]/shell:inline">{`${seats.length} at the table, ${humans} on phones. Others join with the code ${CODE} or the QR. Everyone can change their colonist until you start.`}</span>
+          </>
+        ),
       }
-    : { step: 1, of: 2, title: 'Make your colonist', detail: 'Pick a species and a colour. Heiko, the host, starts the game when everyone is here.' };
+    : picked
+      ? { step: 2, of: 2, title: 'Wait for Heiko to start', detail: 'You can change your colonist until Heiko starts the game.' }
+      : { step: 1, of: 2, title: 'Make your colonist', detail: 'Pick a species and a colour. Heiko, the host, starts the game when everyone is here.' };
 
   return (
     <div className="h-full @container/shell">
@@ -101,17 +119,19 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
                   {([0, 1, 2, 3, 4, 5] as Slot[]).map((c) => {
                     const owner = takenBy(c);
                     const mine = c === me.colour;
+                    // A human's colour is theirs; an AI's you can take, and the AI picks another.
+                    const locked = !!owner && !owner.ai;
                     return (
                       <button
                         key={c}
                         type="button"
                         aria-pressed={mine}
-                        aria-label={owner ? `${COLOUR_NAME[c]}, taken by ${owner.name}` : COLOUR_NAME[c]}
-                        disabled={!!owner}
-                        onClick={() => set({ colour: c })}
+                        aria-label={!owner ? COLOUR_NAME[c] : locked ? `${COLOUR_NAME[c]}, taken by ${owner.name}` : `${COLOUR_NAME[c]}, ${owner.name}'s: tap to take it`}
+                        disabled={locked}
+                        onClick={() => (owner ? take(c) : set({ colour: c }))}
                         className={cx(
                           'flex items-center gap-1.5 rounded-full border py-0.5 pl-0.5 pr-2 @min-[1100px]/shell:gap-2 @min-[1100px]/shell:py-1 @min-[1100px]/shell:pl-1 @min-[1100px]/shell:pr-3',
-                          mine ? 'border-2 border-holo bg-holo-soft' : owner ? 'border-holo-faint opacity-60' : 'border-holo-line hover:border-holo',
+                          mine ? 'border-2 border-holo bg-holo-soft' : locked ? 'border-holo-faint opacity-60' : 'border-holo-line hover:border-holo',
                         )}
                         data-testid={`colour-${c}`}
                       >
@@ -130,7 +150,8 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
           </div>
         </main>
         <aside className="flex w-(--rail) shrink-0 flex-col border-l border-holo-faint bg-void/40 @min-[1100px]/shell:w-[400px]" data-testid="guide">
-          <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-5">
+          {/* No TV here: on a phone the join card goes right under Now, above the seats, so the QR is in view (WS4's B-AC-4). */}
+          <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 *:order-3 [&>[data-testid=now]]:order-1! @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-5">
             <NowCard now={now} />
             <section className="flex flex-col gap-1.5">
               <h2 className="label-caps @min-[1100px]/shell:text-xs!">At the table · {seats.length} of 6</h2>
@@ -142,8 +163,8 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
                       {s.name}
                       {s.id === meId && ' (you)'}
                     </span>
-                    <span className={cx('rounded-chip px-1.5 font-mono text-[10px] font-bold', s.ai ? 'bg-holo-soft text-holo' : s.id === 'heiko' ? 'bg-warn/15 text-warn' : 'bg-ok/10 text-ok')}>
-                      {s.ai ? 'AI' : s.id === 'heiko' ? 'HOST' : 'PHONE'}
+                    <span className={cx('rounded-chip px-1.5 font-mono text-[10px] font-bold', s.ai ? 'bg-holo-soft text-holo' : s.id === 'heiko' ? 'bg-warn/15 text-warn' : s.away ? 'bg-warn/15 text-warn' : 'bg-ok/10 text-ok')}>
+                      {s.ai ? 'AI' : s.id === 'heiko' ? 'HOST' : s.away ? 'AWAY' : 'PHONE'}
                     </span>
                     {host && s.id !== meId && (
                       <button
@@ -160,7 +181,7 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
                 ))}
               </ul>
             </section>
-            <JoinCard />
+            <JoinCard className="order-2! @min-[1100px]/shell:order-3!" />
             {!host && (
               <button type="button" className="text-left text-sm text-holo underline-offset-2 hover:underline" onClick={() => setDialog('handoff')} data-testid="move-to-phone">
                 Playing on a laptop? Move to my phone…
@@ -190,7 +211,8 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
               </>
             ) : (
               <>
-                <span className="text-center text-sm text-ink-2">Waiting for Heiko to start…</span>
+                {/* Once Now says "Wait for Heiko to start", the footer doesn't repeat it. */}
+                {!picked && <span className="text-center text-sm text-ink-2">Waiting for Heiko to start…</span>}
                 <Button size="md" variant="ghost">
                   Leave table
                 </Button>
@@ -198,7 +220,7 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
             )}
           </div>
         </aside>
-        {dialog && <Dialog dialog={dialog} seats={seats} me={me} host={host} onClose={() => setDialog(null)} onKick={(id) => (setSeats((all) => all.filter((s) => s.id !== id)), setDialog(null))} />}
+        {dialog && <Dialog dialog={dialog} seats={seats} me={me} host={host} onClose={() => setDialog(null)} onKick={(id) => (setSeats((all) => all.filter((s) => s.id !== id)), setDialog(null))} code={state === 'handoff-expired' ? 'expired' : state === 'handoff-waiting' ? 'waiting' : 'ready'} />}
       </div>
     </div>
   );
@@ -235,9 +257,9 @@ function Picker({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /** How the others join: the room's QR and code. */
-function JoinCard() {
+function JoinCard({ className }: { className?: string }) {
   return (
-    <section className="flex items-center gap-2 rounded-panel border border-holo-line bg-panel p-1.5 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:p-3" data-testid="room-card">
+    <section className={cx('flex items-center gap-2 rounded-panel border border-holo-line bg-panel p-1.5 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:p-3', className)} data-testid="room-card">
       <Qr text={`https://mule.example/join/${CODE}`} size={44} className="p-1! @min-[1100px]/shell:hidden" />
       <span className="hidden @min-[1100px]/shell:block">
         <Qr text={`https://mule.example/join/${CODE}`} size={96} className="p-2!" />
@@ -260,6 +282,7 @@ function Dialog({
   host,
   onClose,
   onKick,
+  code,
 }: {
   dialog: 'handoff' | 'close' | { kick: string };
   seats: Seat[];
@@ -267,17 +290,16 @@ function Dialog({
   host: boolean;
   onClose: () => void;
   onKick: (id: string) => void;
+  code: CodeState;
 }) {
+  const handoff = useHandoffCode(code);
   let body: ReactNode;
   if (dialog === 'handoff')
     body = (
       <>
         <h2 className="font-display text-xl font-semibold @min-[1100px]/shell:text-3xl">{host ? 'Move the host to your phone' : 'Move to your phone'}</h2>
         <div className="flex items-center gap-4">
-          <Qr text={`https://mule.example/host/${CODE}/heiko-7f3a`} size={120} className="p-2! @min-[1100px]/shell:hidden" />
-          <span className="hidden @min-[1100px]/shell:block">
-            <Qr text={`https://mule.example/host/${CODE}/heiko-7f3a`} size={220} className="p-3!" />
-          </span>
+          <HandoffCode url={`https://mule.example/host/${CODE}/heiko-7f3a`} state={handoff.state} onRenew={handoff.renew} />
           <p className="text-sm text-ink-2 @min-[1100px]/shell:text-lg">
             Scan this with your phone. It becomes <strong className="text-ink">you, {me.name}{host ? ', the host' : ''}</strong>, with your colonist. This screen then steps aside. The code works once, for 2 minutes.
           </p>
