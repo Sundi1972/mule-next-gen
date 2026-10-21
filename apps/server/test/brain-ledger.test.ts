@@ -59,6 +59,8 @@ describe('T-AC-4: every call appends one RULE-4 line; finish appends a game line
     l.record(call({ seat: 's2', output: 138 }));
     l.record(call({ seat: 's3', outcome: 'timeout', input: 0, cached_read: 0, cache_write: 0, output: 0 }));
     l.record(call({ seat: 's1' }));
+    // A budget refusal is a line, not a model call: it adds nothing to calls.
+    l.record(call({ seat: 's2', outcome: 'budget', input: 0, cached_read: 0, cache_write: 0, output: 0, ms: 0 }));
     l.record(call({ game: 'other', seat: 's1', output: 1038 }));
     const one = (410 * 0.1 + 620 * 0.01 + 50 * 0.125 + 38 * 0.5) / 1_000_000;
     expect(l.seatSpent('g1', 's1')).toBeCloseTo(2 * one, 12);
@@ -79,6 +81,17 @@ describe('T-AC-4: every call appends one RULE-4 line; finish appends a game line
     expect(bySeat.s2!.calls).toBe(1);
     expect(bySeat.s2!.usd).toBeCloseTo(one + 100 * 0.5e-6, 12);
     expect(bySeat.s3).toEqual({ calls: 1, usd: 0 });
+  });
+
+  it('T-AC-4: a call that settles after finish writes its line but never re-opens the game', () => {
+    const l = ledger();
+    l.record(call());
+    l.finish('g1');
+    l.record(call({ outcome: 'timeout' }));
+    expect(lines().map((x) => x.type ?? x.outcome)).toEqual(['llm', 'game', 'timeout']);
+    expect(l.seatSpent('g1', 's1')).toBe(0);
+    l.finish('g1');
+    expect(lines().filter((x) => x.type === 'game')).toHaveLength(1);
   });
 
   it('T-AC-4: finish for a game with no calls writes calls 0 and usd 0', () => {

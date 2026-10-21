@@ -26,70 +26,75 @@ const promptOf = (total: number, schema = SCHEMA): Prompt => ({
   schema,
 });
 
+/** allow's answers: call; refused by this check, which locks the seat; refused because it was already locked. */
+const CALL = { allowed: true, lockedNow: false };
+const LOCKS = { allowed: false, lockedNow: true };
+const LOCKED = { allowed: false, lockedNow: false };
+
 describe('RULE-3 budget table', () => {
   it('B-AC-4 (RULE-3): spent 0, next 0.0005 → call', () => {
     const { budget } = setup();
-    expect(budget.allow('g', 's', 0.0005)).toBe(true);
+    expect(budget.allow('g', 's', 0.0005)).toEqual(CALL);
   });
 
   it('B-AC-4 (RULE-3): spent 0.059, next 0.0005 → call (0.0595 is within 0.06)', () => {
     const { budget, setSpent } = setup();
     setSpent('g', 's', 0.059);
-    expect(budget.allow('g', 's', 0.0005)).toBe(true);
+    expect(budget.allow('g', 's', 0.0005)).toEqual(CALL);
   });
 
   it('B-AC-4 (RULE-3): spent 0.0596, next 0.0005 → over budget; a NaN spent or next fails closed', () => {
     const { budget, setSpent } = setup();
     setSpent('g', 's', 0.0596);
-    expect(budget.allow('g', 's', 0.0005)).toBe(false);
+    expect(budget.allow('g', 's', 0.0005)).toEqual(LOCKS);
     setSpent('g', 'nan-spent', NaN);
-    expect(budget.allow('g', 'nan-spent', 0.0005)).toBe(false);
-    expect(budget.allow('g', 'nan-next', NaN)).toBe(false);
+    expect(budget.allow('g', 'nan-spent', 0.0005)).toEqual(LOCKS);
+    expect(budget.allow('g', 'nan-next', NaN)).toEqual(LOCKS);
     // and each is locked afterwards, even once the numbers are sane
     setSpent('g', 'nan-spent', 0);
-    expect(budget.allow('g', 'nan-spent', 0)).toBe(false);
-    expect(budget.allow('g', 'nan-next', 0)).toBe(false);
+    expect(budget.allow('g', 'nan-spent', 0)).toEqual(LOCKED);
+    expect(budget.allow('g', 'nan-next', 0)).toEqual(LOCKED);
   });
 
   it('B-AC-4 (RULE-3): exactly at the boundary (spent + next = 0.06) → call', () => {
     const { budget, setSpent } = setup();
     setSpent('g', 's', 0.05);
-    expect(budget.allow('g', 's', BRAIN.seatBudgetUsd - 0.05)).toBe(true);
+    expect(budget.allow('g', 's', BRAIN.seatBudgetUsd - 0.05)).toEqual(CALL);
   });
 
-  it('B-AC-4 (RULE-3): after a refusal the same seat stays refused even when a call would fit', () => {
+  it('B-AC-4 (RULE-3): after a refusal the same seat stays refused even when a call would fit; only the first refusal reports the lock', () => {
     const { budget, setSpent } = setup();
     setSpent('g', 's', 0.0596);
-    expect(budget.allow('g', 's', 0.0005)).toBe(false);
+    expect(budget.allow('g', 's', 0.0005)).toEqual(LOCKS);
     setSpent('g', 's', 0);
-    expect(budget.allow('g', 's', 0)).toBe(false);
+    expect(budget.allow('g', 's', 0)).toEqual(LOCKED);
   });
 
   it('B-AC-4 (RULE-3): a refusal on one seat leaves a different seat in the same game alone', () => {
     const { budget, setSpent } = setup();
     setSpent('g', 'a', 0.0596);
-    expect(budget.allow('g', 'a', 0.0005)).toBe(false);
-    expect(budget.allow('g', 'b', 0.0005)).toBe(true);
+    expect(budget.allow('g', 'a', 0.0005)).toEqual(LOCKS);
+    expect(budget.allow('g', 'b', 0.0005)).toEqual(CALL);
   });
 
   it('B-AC-4 (RULE-3): a refusal leaves the same seat id in another game alone', () => {
     const { budget, setSpent } = setup();
     setSpent('g1', 's', 0.0596);
-    expect(budget.allow('g1', 's', 0.0005)).toBe(false);
-    expect(budget.allow('g2', 's', 0.0005)).toBe(true);
+    expect(budget.allow('g1', 's', 0.0005)).toEqual(LOCKS);
+    expect(budget.allow('g2', 's', 0.0005)).toEqual(CALL);
   });
 
   it("B-AC-4 (RULE-3): release(game) forgets that game's locks and only that game's", () => {
     const { budget, setSpent } = setup();
     setSpent('g1', 's', 0.0596);
     setSpent('g2', 's', 0.0596);
-    expect(budget.allow('g1', 's', 0.0005)).toBe(false);
-    expect(budget.allow('g2', 's', 0.0005)).toBe(false);
+    expect(budget.allow('g1', 's', 0.0005)).toEqual(LOCKS);
+    expect(budget.allow('g2', 's', 0.0005)).toEqual(LOCKS);
     budget.release('g1');
     setSpent('g1', 's', 0);
     setSpent('g2', 's', 0);
-    expect(budget.allow('g1', 's', 0.0005)).toBe(true);
-    expect(budget.allow('g2', 's', 0.0005)).toBe(false);
+    expect(budget.allow('g1', 's', 0.0005)).toEqual(CALL);
+    expect(budget.allow('g2', 's', 0.0005)).toEqual(LOCKED);
   });
 
   it('B-AC-4 (RULE-3): worstCase counts system, user and schema, rounds tokens up, prices input at the cache-write rate', () => {

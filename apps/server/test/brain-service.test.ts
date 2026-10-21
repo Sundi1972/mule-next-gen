@@ -5,14 +5,44 @@ import { fileURLToPath } from 'node:url';
 import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AI_LEVELS, AI_PERSONAS, BRAIN, createGame, observe } from '@mule/engine';
-import { Brain, candidate, consider, PERSONAS, shortlist, type DecisionRecord, type Mind } from '@mule/ai';
+import { Brain, candidate, consider, PERSONAS, shortlist, TopPickDecider, type Decider, type DecisionRecord, type Mind } from '@mule/ai';
 import type { HaikuSdk } from '../src/brain/client.js';
-import { createBrain, type BrainSeat } from '../src/brain/index.js';
+import { createBrain, type BrainSeat, type BrainService } from '../src/brain/index.js';
+
+/** What the SDK constructor was given, once per construction. */
+const built = vi.hoisted(() => ({ options: [] as unknown[] }));
+
+// The SDK module with a counting constructor that builds nothing: no network, no credential chain. Statics such as
+// the error classes resolve to the real ones through the prototype chain, so the client's instanceof checks still hold.
+vi.mock('@anthropic-ai/sdk', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@anthropic-ai/sdk')>();
+  class CountingAnthropic {
+    readonly messages = { create: () => Promise.reject(new Error('no network in tests')) };
+    constructor(options: unknown) {
+      built.options.push(options);
+    }
+  }
+  Object.setPrototypeOf(CountingAnthropic, real.Anthropic);
+  return { ...real, default: CountingAnthropic, Anthropic: CountingAnthropic };
+});
 
 // Dummy values only: no test reads, prints or sends a real credential, and no test builds a real client.
 const KEY = { ANTHROPIC_API_KEY: 'test-key-not-real' };
 const SEAT: BrainSeat = { id: 'p0', persona: 'trader', level: 'rookie' };
 const GAME = 'g-test';
+/** The SDK's other credential sources (auth token, profile, workload federation), read from its source. */
+const OTHER_CREDENTIALS = [
+  'ANTHROPIC_AUTH_TOKEN',
+  'ANTHROPIC_PROFILE',
+  'ANTHROPIC_CONFIG_DIR',
+  'ANTHROPIC_FEDERATION_RULE_ID',
+  'ANTHROPIC_IDENTITY_TOKEN',
+  'ANTHROPIC_IDENTITY_TOKEN_FILE',
+  'ANTHROPIC_ORGANIZATION_ID',
+  'ANTHROPIC_SERVICE_ACCOUNT_ID',
+  'ANTHROPIC_WORKSPACE_ID',
+  'ANTHROPIC_SCOPE',
+];
 const WAIT = 1_500; // the develop hand's wait, which LlmDecider uses for kind 'develop'
 
 const mind: Mind = { me: 'p0', personaId: 'trader', persona: AI_PERSONAS.trader, levelId: 'rookie', level: AI_LEVELS.rookie };
@@ -70,6 +100,7 @@ const flush = async () => {
 let dir: string;
 let file: string;
 beforeEach(() => {
+  built.options.length = 0;
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'brain-service-'));
   file = path.join(dir, 'costs.jsonl');
 });
@@ -81,18 +112,30 @@ afterEach(() => {
 const lines = (): Record<string, unknown>[] =>
   fs.existsSync(file) ? fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>) : [];
 
-/** A real Brain on the service's decider: asks one develop decision and settles it as the hand would. */
-function seatOn(sdk: HaikuSdk) {
-  const service = createBrain({ gameId: GAME, env: KEY, logPath: file, sdkFactory: () => sdk, now: ticking() });
+const serviceOn = (sdk: HaikuSdk) => createBrain({ gameId: GAME, env: KEY, logPath: file, sdkFactory: () => sdk, now: ticking() });
+
+/**
+ * A real Brain on a decider from the service for seat p0. `ask` starts one develop decision, `settle` ends it as the
+ * hand would after its wait; `decide` does both. `topPick` is what TopPickDecider picks given the same arguments.
+ */
+function seatOn(service: BrainService) {
+  const inner = service.deciderFor(SEAT)!;
+  let seen: Parameters<Decider['decide']> | null = null;
+  const watched: Decider = { name: inner.name, decide: (...args) => ((seen = args), inner.decide(...args)) };
   const records: DecisionRecord[] = [];
-  const brain = new Brain(mind, PERSONAS.trader, 'The Gambler', 11, service.deciderFor(SEAT), (r) => records.push(r));
-  const decide = async () => {
+  const brain = new Brain(mind, PERSONAS.trader, 'The Gambler', 11, watched, (r) => records.push(r));
+  const ask = () => {
     const pending = brain.ask('develop', list(), obs, WAIT, null, 'summary');
-    await flush();
-    const settled = brain.resolve(pending, WAIT, obs)!;
-    return { pending, settled, record: records[records.length - 1]! };
+    const topPick = new TopPickDecider().decide(...seen!).optionId;
+    const settle = () => ({ settled: brain.resolve(pending, WAIT, obs)!, record: records[records.length - 1]! });
+    return { pending, topPick, settle };
   };
-  return { service, brain, decide };
+  const decide = async () => {
+    const asked = ask();
+    await flush();
+    return { ...asked, ...asked.settle() };
+  };
+  return { decider: inner, ask, decide };
 }
 
 describe('brain service', () => {
@@ -103,26 +146,44 @@ describe('brain service', () => {
       return fakeSdk(() => message('{}'));
     };
 
-    const unset = [{}, { ANTHROPIC_API_KEY: '' }, { ANTHROPIC_AUTH_TOKEN: 'test-token-not-real' }, { ANTHROPIC_API_KEY: '', ANTHROPIC_AUTH_TOKEN: 'test-token-not-real' }];
+    const unset = [
+      {},
+      { ANTHROPIC_API_KEY: '' },
+      { ANTHROPIC_API_KEY: ' \t\n ' },
+      { ANTHROPIC_AUTH_TOKEN: 'test-token-not-real' },
+      { ANTHROPIC_API_KEY: '', ANTHROPIC_AUTH_TOKEN: 'test-token-not-real' },
+    ];
     for (const env of unset) {
       const service = createBrain({ gameId: GAME, env, logPath: file, sdkFactory });
       expect(service.deciderFor(SEAT)).toBeNull();
       expect(service.deciderFor({ id: 'p1', persona: 'aggressive', level: 'tycoon' })).toBeNull();
     }
 
-    // The default env is process.env: unset key, dummy auth token.
+    // The default env is process.env and the default factory is the real SDK's constructor (mocked to count).
+    // Every other credential source the SDK knows is set to a dummy value; none of them may build a client.
     vi.stubEnv('ANTHROPIC_API_KEY', undefined);
-    vi.stubEnv('ANTHROPIC_AUTH_TOKEN', 'test-token-not-real');
-    const fromProcess = createBrain({ gameId: GAME, logPath: file, sdkFactory });
-    expect(fromProcess.deciderFor(SEAT)).toBeNull();
+    for (const name of OTHER_CREDENTIALS) vi.stubEnv(name, `test-${name.toLowerCase()}-not-real`);
+    expect(createBrain({ gameId: GAME, logPath: file, sdkFactory }).deciderFor(SEAT)).toBeNull();
+    vi.stubEnv('ANTHROPIC_API_KEY', '   ');
+    expect(createBrain({ gameId: GAME, logPath: file }).deciderFor(SEAT)).toBeNull();
+    vi.stubEnv('ANTHROPIC_API_KEY', undefined);
+    expect(createBrain({ gameId: GAME, logPath: file }).deciderFor(SEAT)).toBeNull();
 
     expect(keys).toEqual([]);
+    expect(built.options).toEqual([]);
 
     // Negative: a (dummy) key builds exactly one client, with that key, and seats get deciders.
     const keyed = createBrain({ gameId: GAME, env: KEY, logPath: file, sdkFactory });
     expect(keyed.deciderFor(SEAT)).not.toBeNull();
     expect(keyed.deciderFor({ id: 'p1', persona: 'aggressive', level: 'tycoon' })).not.toBeNull();
     expect(keys).toEqual(['test-key-not-real']);
+
+    // The default factory passes the key and nothing else the SDK could fall back on: no auth token, and the
+    // public API host even with a gateway URL left in the environment (HC-2).
+    vi.stubEnv('ANTHROPIC_BASE_URL', 'https://gateway.test-not-real');
+    const viaSdk = createBrain({ gameId: GAME, env: KEY, logPath: file });
+    expect(viaSdk.deciderFor(SEAT)).not.toBeNull();
+    expect(built.options).toEqual([{ apiKey: 'test-key-not-real', authToken: null, baseURL: 'https://api.anthropic.com' }]);
   });
 
   // trace-allow: spec §9 names this import check as the ownership boundary's enforcement; it has no AC or INV id.
@@ -148,7 +209,7 @@ describe('brain service', () => {
     // Call 1 bills $0.059; call 2 bills $0.001, which brings the seat to $0.06.
     const billed: Billed[] = [{ input: 590_000 }, { input: 10_000 }];
     const sdk = fakeSdk((n) => message('{"option":"B","line":"Mine."}', billed[n - 1] ?? { input: 1 }));
-    const { decide } = seatOn(sdk);
+    const { decide } = seatOn(serviceOn(sdk));
 
     // Negative: below the budget the call is made, even at $0.059 spent.
     for (let i = 0; i < 2; i++) {
@@ -158,9 +219,9 @@ describe('brain service', () => {
     expect(sdk.calls).toBe(2);
 
     for (let i = 0; i < 3; i++) {
-      const { pending, settled, record } = await decide();
+      const { topPick, settled, record } = await decide();
       expect(settled.choice.by).toBe('fallback');
-      expect(settled.choice.optionId).toBe(pending.fallback.optionId);
+      expect(settled.choice.optionId).toBe(topPick);
       expect(record.note).toBe('decider failed: budget spent');
     }
     expect(sdk.calls).toBe(2);
@@ -212,7 +273,7 @@ describe('brain service', () => {
   for (const row of rows) {
     it(`INV-RULE4: one ledger line per call with its outcome — ${row.name} → ${row.outcome}`, async () => {
       const sdk = fakeSdk(row.answer);
-      const { decide } = seatOn(sdk);
+      const { decide } = seatOn(serviceOn(sdk));
 
       const { record } = await decide();
 
@@ -229,52 +290,67 @@ describe('brain service', () => {
     });
   }
 
-  it('INV-one-in-flight: a second decision for a busy seat makes no call and writes no line', async () => {
+  it('INV-one-in-flight: a second decision for a busy seat makes no call and writes no line, from any decider for that seat', async () => {
     let answer!: (m: Message) => void;
     const sdk = fakeSdk((n) => (n === 1 ? new Promise<Message>((r) => (answer = r)) : message('{"option":"C","line":""}', USED)));
-    const { decide } = seatOn(sdk);
+    const service = serviceOn(sdk);
+    const a = seatOn(service);
+    const b = seatOn(service); // a second decider for the same seat id
 
-    const first = await decide(); // the hand stops waiting; the call is still open
-    expect(first.settled.choice.note).toBe('decider too slow');
+    // Both deciders for p0 decide at once: exactly one call.
+    const fromA = a.ask();
+    const fromB = b.ask();
+    await flush();
+    const settledA = fromA.settle(); // the hand stops waiting; the call is still open
+    const settledB = fromB.settle();
+    expect(sdk.calls).toBe(1);
+    expect(settledA.record.note).toBe('decider too slow');
+    expect(settledB.record.note).toBe('decider failed: busy');
+    expect(settledB.settled.choice).toMatchObject({ by: 'fallback', optionId: fromB.topPick });
 
-    const second = await decide();
-    expect(second.settled.choice).toMatchObject({ by: 'fallback', optionId: second.pending.fallback.optionId });
-    expect(second.record.note).toBe('decider failed: busy');
+    // The same decider again while its call is open: busy too.
+    const again = await a.decide();
+    expect(again.record.note).toBe('decider failed: busy');
     expect(sdk.calls).toBe(1);
     expect(lines()).toEqual([]);
 
-    // The first call settles late: it was billed, so it gets its line, and the seat may call again.
+    // The call settles late: it was billed, so it gets its line, and the seat may call again.
     answer(message('{"option":"B","line":"Mine."}', USED));
     await flush();
     expect(lines().map((l) => l.outcome)).toEqual(['llm']);
 
-    const third = await decide();
-    expect(third.settled.choice).toMatchObject({ by: 'llm', optionId: 'C' });
+    const next = await b.decide();
+    expect(next.settled.choice).toMatchObject({ by: 'llm', optionId: 'C' });
     expect(sdk.calls).toBe(2);
     expect(lines()).toHaveLength(2);
   });
 
-  it("INV-finish: finish writes the game line and releases the budget's locks", async () => {
+  it('INV-finish: finish writes the game line once, counting model calls only, and the game makes no further calls', async () => {
     const sdk = fakeSdk(() => message('{"option":"B","line":"Mine."}', { input: 600_000 })); // $0.06 a call
-    const { service, decide } = seatOn(sdk);
+    const service = serviceOn(sdk);
+    const seat = seatOn(service);
 
-    await decide();
-    const locked = await decide();
+    await seat.decide();
+    const locked = await seat.decide();
     expect(locked.record.note).toBe('decider failed: budget spent');
     expect(sdk.calls).toBe(1);
 
     service.finish();
 
     const all = lines();
-    expect(all).toHaveLength(3);
+    expect(all.map((l) => l.type ?? l.outcome)).toEqual(['llm', 'budget', 'game']);
     expect(all[2]).toMatchObject({
-      game: GAME, type: 'game', seats: 1, calls: 2, usd: expect.closeTo(0.06, 10),
-      by_seat: { p0: { calls: 2, usd: expect.closeTo(0.06, 10) } },
+      game: GAME, type: 'game', seats: 1, calls: 1, usd: expect.closeTo(0.06, 10),
+      by_seat: { p0: { calls: 1, usd: expect.closeTo(0.06, 10) } },
     });
 
-    // The game's locks are gone: the seat is no longer refused.
-    const after = await decide();
-    expect(after.settled.choice.by).toBe('llm');
-    expect(sdk.calls).toBe(2);
+    // Terminal: no new deciders, and an existing one makes no call and writes no line.
+    expect(service.deciderFor(SEAT)).toBeNull();
+    const after = await seat.decide();
+    expect(after.settled.choice).toMatchObject({ by: 'fallback', optionId: after.topPick });
+    expect(after.record.note).toBe('decider failed: game over');
+    expect(sdk.calls).toBe(1);
+    service.finish();
+    expect(lines()).toHaveLength(3);
   });
 });
