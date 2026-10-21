@@ -21,7 +21,7 @@ export function storePaysAt(kind: LotItem['kind'], mulePriceNow: number): number
 }
 
 /** True when this plot, or the MULE on it, is up for auction this month. */
-export function isListed(state: GameState, x: number, y: number): boolean {
+export function isListed(state: { listings: readonly { item: { x: number; y: number } }[] }, x: number, y: number): boolean {
   return state.listings.some((l) => l.item.x === x && l.item.y === y);
 }
 
