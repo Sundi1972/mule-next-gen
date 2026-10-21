@@ -255,8 +255,13 @@ depends_on   C1 (data, not stubbable), C3 (contract), C8 (contract)
 C11 · ADDED · the desks on phone and TV
 tomorrow     MUST build the offices strip, the election desk with its reveal, the Governor's
              tax desk, the vote weight panel and the Land Baron badge into WS6's planning hub.
-ux           WS6's hub mock (design/mocks/ws6-ux, slots for politics), NOT YET MOCKED: the desk
-             needs went to WS6 on 2026-10-22. GRAFT TARGET: the hub's politics slots.
+ux           WS6's hub mock at ws6-ux b28ee91 (awaiting Heiko's approval):
+             design/mocks/ws6-ux/src/screens/PlanningHub.tsx and Election.tsx · routes #hub,
+             #hub-nominate, #hub-council, #hub-governor, #tv-election · testids offices,
+             election-stage, run-governor, run-sheriff, withdraw, candidates, voted, vote-weight,
+             ballot-countdown, ballot-reveal, result-<office>-<id>, tie-break, gov-tax, tax-down,
+             tax-value, tax-up, tax-confirm, tax-readonly, vote-weights, land-baron.
+             GRAFT TARGET: the hub's politics slots (WS6's PR-9 frame).
 depends_on   C9 (contract), WS6 mock approval (not stubbable: an implementer never designs a screen)
 ```
 
@@ -427,6 +432,8 @@ interface Election {
                            tallies: { id: string; votes: number }[] }> | null;
 }
 ```
+
+Reason and outcome enums the screens show: `canRun[office]: true | 'closed' | 'termLimit'` (running for the other office is not a refusal: it switches the candidacy, RULE-2 row 3); `result[office].how: 'votes' | 'unopposed' | 'appointed' | 'baron' | 'tieRule'`.
 
 Worked example (view, Brix's phone, ballot stage, month 4): `politics: { governor: 'lena', sheriff: 'ai1', term: [1,3], next: 7, baron: 'lena', tax: { percent: 8, start: 5, setBy: 'lena' }, fund: 412, weights: [{ id: 'lena', votes: 3, parts: { base: 1, land: 1, reputation: 0, baron: 1, taxes: 0 } }, …], election: { stage: 'ballot', seconds: 14, total: 20, candidates: { governor: ['lena','brix'], sheriff: ['ai1'] }, voted: ['lena'], result: null } }`, `me.politics: { running: 'governor', ballot: { governor: 'brix' }, canRun: { governor: true, sheriff: true } }`. Lena's ballot is not in Brix's view.
 
