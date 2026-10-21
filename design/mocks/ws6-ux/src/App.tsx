@@ -2,6 +2,8 @@ import { useState, type ReactNode } from 'react';
 import { LAND_LEAD, LAND_UNDER, LAND_WALK, SMITHORE_MID, SMITHORE_SOLD_OUT, SMITHORE_START, SMITHORE_STATUS, SMITHORE_TRADE, TRADE_MOVED, VIEW } from './fixture';
 import { Board, Game, LaptopFrame, PhoneFrame, TvFrame, useHash } from './harness';
 import { DevelopTurn, type Start } from './screens/DevelopTurn';
+import { LobbyColonist, type LobbyState } from './screens/LobbyColonist';
+import { PlanningBrief } from './screens/PlanningBrief';
 import { EVENTS, type EventKind } from './production';
 import { PhoneGoodsWalk, TvGoodsWalk, useWalkSim } from './screens/GoodsAuction';
 import { PhoneLandLine, TvLandLine } from './screens/LandLine';
@@ -129,8 +131,54 @@ const DEV_STATES: { id: string; title: string; variant: 'A' | 'B'; start: Start 
   { id: 'dev-b-map', title: 'B · on the map: to your plot', variant: 'B', start: 'map' },
 ];
 
+const LOBBY_STATES: { id: string; title: string; state: LobbyState }[] = [
+  { id: 'lobby', title: 'A player: make your colonist', state: 'guest' },
+  { id: 'lobby-host', title: 'The host', state: 'host' },
+  { id: 'lobby-kick', title: 'Host: remove a player', state: 'kick' },
+  { id: 'lobby-handoff', title: 'Host: move the host to my phone', state: 'handoff' },
+  { id: 'lobby-close', title: 'Host: close the room', state: 'close' },
+];
+
+const PLAN_STATES = [
+  { id: 'plan', title: 'The briefing: map, needs, prices', mode: 'look' as const },
+  { id: 'plan-drone', title: 'Geo drone mode on the map', mode: 'drone' as const },
+];
+
 export default function App() {
   const hash = useHash();
+
+  const plan = PLAN_STATES.find((s) => s.id === hash);
+  if (plan)
+    return (
+      <Page title={`Planning, redesigned · ${plan.title}`}>
+        <Links states={PLAN_STATES} current={hash} />
+        <LaptopFrame>
+          <Game>
+            <PlanningBrief key={`${hash}-l`} mode={plan.mode} />
+          </Game>
+        </LaptopFrame>
+        <PhoneFrame>
+          <Game>
+            <PlanningBrief key={`${hash}-p`} mode={plan.mode} />
+          </Game>
+        </PhoneFrame>
+      </Page>
+    );
+
+  const lobby = LOBBY_STATES.find((s) => s.id === hash);
+  if (lobby)
+    return (
+      <Page title={`Lobby, redesigned · ${lobby.title}`}>
+        <Links states={LOBBY_STATES} current={hash} />
+        <p className="max-w-[900px] text-sm text-ink-2">Playable: pick a species and a colour; a colour someone has is marked with their creature. Laptop window (1440 × 900) first, then the phone held sideways.</p>
+        <LaptopFrame>
+          <LobbyColonist key={`${hash}-l`} state={lobby.state} />
+        </LaptopFrame>
+        <PhoneFrame>
+          <LobbyColonist key={`${hash}-p`} state={lobby.state} />
+        </PhoneFrame>
+      </Page>
+    );
 
   const dev = DEV_STATES.find((s) => s.id === hash);
   if (dev)
@@ -263,7 +311,9 @@ export default function App() {
         </li>
       </ul>
       <h2 className="label-caps mt-8">Redesign 2026-10-22 · phone and laptop (Heiko's points)</h2>
-      <div className="mt-2">
+      <div className="mt-2 flex flex-col gap-2">
+        <Links states={LOBBY_STATES} />
+        <Links states={PLAN_STATES} />
         <Links states={DEV_STATES} />
       </div>
       <h2 className="label-caps mt-8">Goods auction · every state</h2>
