@@ -448,6 +448,8 @@ RULE-7 · Does the colony put a plot up this month? (AM-1)        shape: decisio
 inputs  roll ∈ [0,1) from createRng(seed, month) · free = freePlots(state) · total listings
 first match wins
   #  when                                   then
+  0  state.whatIf is set (an AI's look-     no colony lot, and nothing is rolled (AM-5)
+     ahead copy, set by cloneForSim)
   1  roll ≥ LOTS.colonyPlotChance           no colony lot
   2  free is empty                          no colony lot
   3  total ≥ LOTS.maxLotsPerMonth           no colony lot (players' listings came first, in
@@ -598,6 +600,23 @@ because   built literally, every AI-contested lot ran its full 12 s walk, and la
 goal      G-2 served more fully: AIs bid quickly and sensibly; the cap (HC-3) is unchanged
 folded    RULE-6 rows and examples · PR-2 fix round (tests: the early bell, the overshoot under
           the cap)
+
+AM-5 · 2026-10-22 · WS3, on WS1's lead · during PR-3, before its review closed
+
+target    §2 RULE-7 · §1 C14
+said      colonyLot rolls from (seed, month) whenever the game leaves landGrant
+did       on a what-if copy (GameState.whatIf, set by cloneForSim; WS1's #33) colonyLot rolls
+          nothing, as WS1's production events do. Built in PR-3's fix round once #33 merges.
+because   observe() runs the AI's look-ahead with seed 0, whose colony months are 4 and 9, so
+          every look-ahead would roll seed 0's colony lots, ones the real game may never have. With
+          the guard the AI neither sees the real colony lot ahead of time nor imagines a false one.
+measured  the guard moves no sim result today: seed 110's report is identical before and after
+          it, and the look-ahead's prices were identical with colonyPlotChance at 0.1 and at 0
+          (PR-3 review probe). Seed 110 differs from trunk because it has a real colony lot, now
+          played and sold. So the guard is a no-foresight rule, not a fix for a measured drift.
+goal      G-2 unchanged (the AI plans from the board it can see); HC-1 unchanged
+folded    RULE-7 row 0 · PR-3 fix round (test: a whatIf copy leaving landGrant lists nothing;
+          check: sim seed 110 back to its base result)
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
