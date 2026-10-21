@@ -42,6 +42,7 @@ export interface RoomOptions<Intent, GameView> {
   code: string;
   createGame(ctx: GameContext): Game<Intent, GameView>;
   minSeats?: number;
+  /** Also the number of colours (0..maxSeats−1), so a game with a fixed palette keeps it within the palette (6 for M.U.L.E.). */
   maxSeats?: number;
   aiNames?: string[];
   emotes?: readonly string[];
