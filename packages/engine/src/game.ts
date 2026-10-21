@@ -2,7 +2,7 @@ import { endAuction, startAuction } from './auction.js';
 import { RuleError } from './errors.js';
 import { DEFAULT_SPECIES, DEVELOPMENT, GAME, GOOD_CONFIG, MULE, POLLUTION, SPECIES_PERK, START, TAX, UPKEEP } from './config.js';
 import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './economy.js';
-import { endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
+import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
 import { generateMap, tileIndex } from './map.js';
 import { airBand } from './pollution.js';
 import { needsOf, runProduction } from './production.js';
@@ -309,11 +309,13 @@ const ORDER: Phase[] = ['planning', 'landGrant', 'landAuction', 'development', '
  * Moves to the next phase. Production and upkeep resolve on their own when
  * entered; the land auction and the goods auction run live through
  * stepLandAuction() and stepAuction(), and leaving one early ends what is
- * still to come. With nothing listed the land auction is skipped.
+ * still to come. Leaving the land grant, the colony may put a free plot up;
+ * with nothing listed the land auction is skipped.
  */
 export function advancePhase(state: GameState): void {
   if (state.phase === 'gameOver') return;
   let next = ORDER[(ORDER.indexOf(state.phase) + 1) % ORDER.length]!;
+  if (next === 'landAuction') colonyLot(state);
   if (next === 'landAuction' && state.listings.length === 0) next = 'development';
   state.phase = next;
 
