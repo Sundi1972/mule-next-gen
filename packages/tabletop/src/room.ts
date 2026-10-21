@@ -3,6 +3,9 @@ import type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from './p
 /** A rule a player broke: shown to them, never a crash. */
 export class TableError extends Error {}
 
+/** How long a handoff code can move its seat to another device. See RULE-6. */
+const HANDOFF_TTL_MS = 2 * 60_000;
+
 export interface Connection<GameView> {
   send(msg: ServerEnvelope<GameView>): void;
 }
@@ -58,14 +61,16 @@ export interface RoomOptions<Intent, GameView> {
 interface Seat<View> extends SeatInfo {
   token: string | null;
   conn: Connection<View> | null;
+  /** The seat's one live handoff code; a newer one replaces it, and it goes with the seat. */
+  handoff: { code: string; expiresAt: number } | null;
 }
 
 /**
  * One table: seats for players (human or AI), any number of boards, and the
  * game they play. Human seats have a secret token, so a phone that drops can
- * take its seat back. The host is the first connected human, and hosting
- * moves on when the host leaves. Before Start the host may kick a seat or close the room,
- * and a player may give up their seat.
+ * take its seat back, and a one-time handoff code moves a seat to another device.
+ * The host is the first connected human, and hosting moves on when the host leaves.
+ * Before Start the host may kick a seat or close the room, and a player may give up their seat.
  */
 export class Room<Intent, View> {
   readonly code: string;
@@ -137,7 +142,7 @@ export class Room<Intent, View> {
       return;
     }
     if (msg.t === 'join') {
-      from.seatId = this.join(conn, msg.name, msg.seatToken);
+      from.seatId = this.join(conn, msg.name, msg.seatToken, msg.handoff);
       return;
     }
     if (msg.t === 'board') {
@@ -146,12 +151,15 @@ export class Room<Intent, View> {
       this.broadcast();
       return;
     }
-    const seatId = from.seatId;
-    if (!seatId || !this.seats.some((s) => s.id === seatId)) {
-      // A kicked or closed-out screen still carries its old seat id. Ids are never reused, so it can't land on another seat.
+    const seat = this.seats.find((s) => s.id === from.seatId);
+    if (!seat || seat.conn !== conn) {
+      // A kicked, closed-out or superseded screen still carries its old seat id. Ids are never reused, so it can't land on another seat.
       from.seatId = null;
+      // A screen another device took the seat from lets go of itself only. See AM-18.
+      if (seat && msg.t === 'leave') return;
       throw new TableError('Join the game first');
     }
+    const seatId = seat.id;
     switch (msg.t) {
       case 'addAi':
         this.requireHost(seatId);
@@ -176,7 +184,11 @@ export class Room<Intent, View> {
         this.close(seatId);
         return;
       case 'leave':
-        this.leave(conn, from, seatId);
+        this.leave(conn, from, seat);
+        return;
+      case 'handoff':
+        seat.handoff = { code: this.opts.newToken(), expiresAt: this.opts.now() + HANDOFF_TTL_MS };
+        conn.send({ t: 'handoffCode', ...seat.handoff });
         return;
       case 'pick':
         this.pick(seatId, msg.pick);
@@ -197,7 +209,14 @@ export class Room<Intent, View> {
     }
   }
 
-  private join(conn: Connection<View>, name: string, token?: string): string {
+  private join(conn: Connection<View>, name: string, token?: string, handoff?: string): string {
+    const seat = handoff !== undefined ? this.moveHere(conn, handoff) : this.seatFor(conn, name, token);
+    conn.send({ t: 'welcome', code: this.code, role: 'player', seatId: seat.id, seatToken: seat.token });
+    this.broadcast();
+    return seat.id;
+  }
+
+  private seatFor(conn: Connection<View>, name: string, token?: string): Seat<View> {
     const back = token ? this.seats.find((s) => s.token === token) : undefined;
     let seat: Seat<View>;
     if (back) {
@@ -210,9 +229,21 @@ export class Room<Intent, View> {
       seat = this.addSeat(name.trim().slice(0, 16) || 'Player', false);
       seat.conn = conn;
     }
-    conn.send({ t: 'welcome', code: this.code, role: 'player', seatId: seat.id, seatToken: seat.token });
-    this.broadcast();
-    return seat.id;
+    return seat;
+  }
+
+  /** A live handoff code moves its seat here, once: the old screen is told and let go, and the seat gets a new token. See RULE-6. */
+  private moveHere(conn: Connection<View>, code: string): Seat<View> {
+    const now = this.opts.now();
+    const seat = this.seats.find((s) => s.handoff?.code === code && now < s.handoff.expiresAt);
+    if (!seat) throw new TableError('That link has expired');
+    seat.handoff = null;
+    const old = seat.conn;
+    seat.conn = conn;
+    seat.token = this.opts.newToken();
+    if (!old) this.game.connectionChanged?.(seat.id, true);
+    else if (old !== conn) old.send({ t: 'removed', reason: 'moved' });
+    return seat;
   }
 
   /** A screen's connection closed. */
@@ -229,7 +260,7 @@ export class Room<Intent, View> {
   }
 
   private addSeat(name: string, isAi: boolean): Seat<View> {
-    const seat: Seat<View> = { id: `s${this.nextSeat++}`, name, isAi, token: isAi ? null : this.opts.newToken(), conn: null };
+    const seat: Seat<View> = { id: `s${this.nextSeat++}`, name, isAi, token: isAi ? null : this.opts.newToken(), conn: null, handoff: null };
     this.seats.push(seat);
     return seat;
   }
@@ -264,14 +295,8 @@ export class Room<Intent, View> {
   }
 
   /** In the lobby the sender's seat goes, token and all; after Start only this screen lets go and the seat waits, away. See RULE-5. */
-  private leave(conn: Connection<View>, from: { seatId: string | null }, seatId: string): void {
-    const seat = this.seats.find((s) => s.id === seatId);
-    // A screen another device took the seat from lets go of itself only.
-    if (seat?.conn !== conn) {
-      from.seatId = null;
-      return;
-    }
-    if (!this.started && seatId === this.hostId) throw new TableError('Close the table instead');
+  private leave(conn: Connection<View>, from: { seatId: string | null }, seat: Seat<View>): void {
+    if (!this.started && seat.id === this.hostId) throw new TableError('Close the table instead');
     from.seatId = null;
     if (this.started) {
       this.disconnect(conn);
