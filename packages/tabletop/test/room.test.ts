@@ -162,8 +162,8 @@ describe('Room: a seat picks one of the game\'s choices in the lobby (RULE-1)', 
 
     expect(heiko.last('error')).toBeUndefined();
     expect(mia.last('view')!.view.seats).toStrictEqual([
-      { id: 's1', name: 'Heiko', isAi: false, connected: true, pick: 'fox' },
-      { id: 's2', name: 'Mia', isAi: false, connected: true },
+      { id: 's1', name: 'Heiko', isAi: false, connected: true, color: 0, pick: 'fox' },
+      { id: 's2', name: 'Mia', isAi: false, connected: true, color: 1 },
     ]);
   });
 
@@ -205,9 +205,9 @@ describe('Room: a seat picks one of the game\'s choices in the lobby (RULE-1)', 
 
     expect(startedWith).toStrictEqual([
       [
-        { id: 's1', name: 'Heiko', isAi: false, pick: 'owl' },
-        { id: 's2', name: 'Mia', isAi: false },
-        { id: 's3', name: 'Brix', isAi: true },
+        { id: 's1', name: 'Heiko', isAi: false, color: 0, pick: 'owl' },
+        { id: 's2', name: 'Mia', isAi: false, color: 1 },
+        { id: 's3', name: 'Brix', isAi: true, color: 2 },
       ],
     ]);
   });
@@ -224,7 +224,7 @@ describe('Room: a seat picks one of the game\'s choices in the lobby (RULE-1)', 
     await flush();
 
     expect(again.last('welcome')!.seatId).toBe('s1');
-    expect(again.last('view')!.view.seats[0]).toStrictEqual({ id: 's1', name: 'Heiko', isAi: false, connected: true, pick: 'cat' });
+    expect(again.last('view')!.view.seats[0]).toStrictEqual({ id: 's1', name: 'Heiko', isAi: false, connected: true, color: 0, pick: 'cat' });
   });
 });
 
@@ -323,9 +323,9 @@ describe('Room: the host kicks a seat or closes the table, in the lobby (RULE-5)
     expect(welcome.seatId).toBe('s4');
     expect(welcome.seatToken).not.toBe(oldToken);
     expect(room.viewFor(null).seats).toStrictEqual([
-      { id: 's1', name: 'Heiko', isAi: false, connected: true },
-      { id: 's4', name: 'Mia', isAi: false, connected: true },
-      { id: 's5', name: 'Brix', isAi: true, connected: true },
+      { id: 's1', name: 'Heiko', isAi: false, connected: true, color: 0 },
+      { id: 's4', name: 'Mia', isAi: false, connected: true, color: 1 },
+      { id: 's5', name: 'Brix', isAi: true, connected: true, color: 2 },
     ]);
   });
 

@@ -11,6 +11,8 @@ export interface SeatInfo {
   id: string;
   name: string;
   isAi: boolean;
+  /** The seat's colour index, unique at the table. */
+  color: number;
   /** Absent means not chosen: the game applies its own default. */
   pick?: string;
 }
@@ -165,7 +167,7 @@ export class Room<Intent, View> {
         if (this.started) throw new TableError('The game has already started');
         if (this.seats.length < this.opts.minSeats) throw new TableError(`At least ${this.opts.minSeats} players are needed`);
         this.started = true;
-        this.game.start(this.seats.map(({ id, name, isAi, pick }) => ({ id, name, isAi, ...(pick !== undefined ? { pick } : {}) })));
+        this.game.start(this.seats.map(({ id, name, isAi, color, pick }) => ({ id, name, isAi, color, ...(pick !== undefined ? { pick } : {}) })));
         this.broadcast();
         return;
       case 'kick':
@@ -229,9 +231,17 @@ export class Room<Intent, View> {
   }
 
   private addSeat(name: string, isAi: boolean): Seat<View> {
-    const seat: Seat<View> = { id: `s${this.nextSeat++}`, name, isAi, token: isAi ? null : this.opts.newToken(), conn: null };
+    const seat: Seat<View> = { id: `s${this.nextSeat++}`, name, isAi, color: this.lowestFreeColour(), token: isAi ? null : this.opts.newToken(), conn: null };
     this.seats.push(seat);
     return seat;
+  }
+
+  /** See RULE-7. Defined while a seat is free, since the palette has one colour per seat. */
+  private lowestFreeColour(): number {
+    const held = new Set(this.seats.map((s) => s.color));
+    let colour = 0;
+    while (held.has(colour)) colour++;
+    return colour;
   }
 
   private nextAiName(): string {
@@ -336,6 +346,7 @@ export class Room<Intent, View> {
         name: s.name,
         isAi: s.isAi,
         connected: s.isAi || s.conn !== null,
+        color: s.color,
         ...(s.pick !== undefined ? { pick: s.pick } : {}),
       })),
       boards: this.boards.size,
