@@ -136,9 +136,9 @@ describe('Room: a seat picks one of the game\'s choices in the lobby (RULE-1)', 
   it.each([
     { row: '1: picks absent', picks: null, started: false, value: 'fox', error: 'This game has no choices to make' },
     { row: '1: picks absent, first match over row 2', picks: null, started: true, value: 'fox', error: 'This game has no choices to make' },
-    { row: '2: a pick after Start', picks: ['fox', 'owl', 'cat'], started: true, value: 'owl', error: 'The game has already started' },
-    { row: '2: first match over row 3', picks: ['fox', 'owl', 'cat'], started: true, value: 'dragon', error: 'The game has already started' },
-    { row: '3: "dragon" is not a choice', picks: ['fox', 'owl', 'cat'], started: false, value: 'dragon', error: 'Unknown choice' },
+    { row: '2: a pick after Start', picks: CHOICES, started: true, value: 'owl', error: 'The game has already started' },
+    { row: '2: first match over row 3', picks: CHOICES, started: true, value: 'dragon', error: 'The game has already started' },
+    { row: '3: "dragon" is not a choice', picks: CHOICES, started: false, value: 'dragon', error: 'Unknown choice' },
   ])('T-AC-4: RULE-1 row $row → refused, and the seat keeps no pick', ({ picks, started, value, error }) => {
     const { room } = pickRoom(picks);
     const heiko = join(room, 'Heiko');
