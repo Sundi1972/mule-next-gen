@@ -10,7 +10,7 @@ import { check, PHONE } from './harness';
 export const LAPTOP = { width: 1440, height: 900 };
 /** The rail from WIDE_PX up, as the scaffold draws it. */
 const WIDE_RAIL_PX = 400;
-/** How long the shell may take to settle after the window changes size. */
+/** How long the shell may take to settle after the window changes size: CSS at once, useWide after a ResizeObserver and a render. */
 const SETTLE_MS = 3_000;
 
 /** One pass over the screen showing: the frame's parts, measured together. */
@@ -29,20 +29,22 @@ const narrowRail = (vw: number) => Math.min(300, Math.max(232, 0.31 * vw));
 
 /**
  * B-AC-12: the shell fills the stage and opens its rail with Now, at 1440×900 and 844×390.
- * Leaves the phone at its own size, 844×390, as the rest of smoke.ts expects.
+ * Leaves the phone at its own size, 844×390, as the rest of smoke.ts expects. Returns what it measured, to log.
  */
-export async function shellFillsTheStage(phone: Page, timeout = 5_000): Promise<void> {
+export async function shellFillsTheStage(phone: Page, timeout = 5_000): Promise<string> {
   await phone.locator('[data-phase] [data-testid=game-shell]').waitFor({ timeout });
+  let wide: Frame;
   try {
     await phone.setViewportSize(LAPTOP);
-    const wide = await settle(phone, (f) => Math.abs(f.guide - WIDE_RAIL_PX) < 1);
-    checkFrame(wide, LAPTOP.width, WIDE_RAIL_PX, 'true');
+    wide = await settle(phone, (f) => Math.abs(f.guide - WIDE_RAIL_PX) < 1 && f.wide === 'true');
   } finally {
     await phone.setViewportSize(PHONE.viewport);
   }
+  checkFrame(wide, LAPTOP.width, WIDE_RAIL_PX, 'true');
   const rail = narrowRail(PHONE.viewport.width);
-  const narrow = await settle(phone, (f) => Math.abs(f.guide - rail) < 1);
+  const narrow = await settle(phone, (f) => Math.abs(f.guide - rail) < 1 && f.wide === 'false');
   checkFrame(narrow, PHONE.viewport.width, rail, 'false');
+  return [wide, narrow].map((f) => `${f.shell.toFixed(0)} px: stage ${f.stage.toFixed(1)} + rail ${f.guide.toFixed(1)} on ${f.phase}`).join(', ');
 }
 
 function checkFrame(f: Frame, vw: number, rail: number, wide: 'true' | 'false'): void {

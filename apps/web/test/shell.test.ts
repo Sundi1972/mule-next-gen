@@ -21,9 +21,8 @@ const NOW: Now = { step: 2, of: 3, title: 'Claim a plot', detail: 'The lit plot 
 /** PhoneShell as a screen draws it, inside the phone's game. */
 function shell(now?: Now): string {
   const rail: ReactNode = createElement('p', { 'data-testid': 'rail-content' }, 'the screen controls');
-  return renderToStaticMarkup(
-    createElement(PhoneGameProvider, { value: game }, createElement(PhoneShell, { phase: 'Land grant', seconds: 30, rail, ...(now ? { now } : {}) }, createElement('div', { 'data-testid': 'map' }))),
-  );
+  const screen = createElement(PhoneShell, { phase: 'Land grant', seconds: 30, now, rail, children: createElement('div', { 'data-testid': 'map' }) });
+  return renderToStaticMarkup(createElement(PhoneGameProvider, { value: game, children: screen }));
 }
 
 /** The markup inside the element carrying this data-testid, to the end of the document. */
@@ -40,7 +39,7 @@ describe('the player shell (C15)', () => {
     expect(guide).toContain('data-testid="now"');
     expect(guide.indexOf('data-testid="now"')).toBeLessThan(guide.indexOf(RAIL));
     expect(after(html, 'now-title')).toMatch(/^data-testid="now-title">Claim a plot</);
-    expect(after(html, 'now-steps')).toContain('aria-label="Step 2 of 3"');
+    expect(html).toContain('aria-label="Step 2 of 3" data-testid="now-steps"');
     // The stage holds the screen's content; Now is in the rail, not on the stage.
     expect(after(html, 'stage').indexOf('data-testid="map"')).toBeLessThan(after(html, 'stage').indexOf('data-testid="guide"'));
   });

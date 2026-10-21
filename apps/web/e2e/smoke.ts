@@ -138,7 +138,7 @@ try {
   await steps.listedSale?.({ phone, tv, check });
   makeHungry(server, code);
   // B-AC-12: the shell fills the stage and opens its rail with Now, at 1440×900 and 844×390.
-  await shellFillsTheStage(phone);
+  console.log(`shell: ${await shellFillsTheStage(phone)}`);
   await readyIfStillPlanning(phone);
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 2);
