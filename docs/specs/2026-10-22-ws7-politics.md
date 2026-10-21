@@ -116,7 +116,7 @@ today        advancePhase only bumps the month when planning starts.
              anchors: packages/engine/src/game.ts::advancePhase
              verified_by: read
 tomorrow     MUST, when planning opens (createGame for month 1, advancePhase into planning
-             after), call politics.ts::openPlanning: re-check the Land Baron (RULE-5), record the
+             after), call politics.ts (new): openPlanning: re-check the Land Baron (RULE-5), record the
              month's starting tax, and open an election in POLITICS.electionMonths (RULE-1).
 logic        → §2 RULE-1, RULE-5
 seam         game.ts::advancePhase `if (next === 'planning')` and the end of createGame — one call
@@ -136,7 +136,7 @@ tomorrow     MUST let a player run for one office or withdraw during nominate, c
              office, and seat the winners for their term. MUST throw RuleError for anything the
              rules refuse.
 logic        → §2 RULE-1 (stages), RULE-2 (who may run), RULE-3 (tally and winner)
-seam         politics.ts::runFor / castVote / electionDone / stepElection — the same shape as
+seam         politics.ts (new): runFor / castVote / electionDone / stepElection — the same shape as
              lots.ts::lotDone / stepLandAuction, which the server and sim already drive
 senior       junior would: count at the end of planning (approach 1). · senior does: a clocked
              stage machine with a reveal, ending early when all are done, and no RNG (ties
@@ -152,7 +152,7 @@ today        none. treasury.paid already sums each player's tax.
              verified_by: read
 tomorrow     MUST compute every player's votes with their parts (RULE-4), public to every seat.
 logic        → §2 RULE-4
-seam         politics.ts::voteWeight(state, id) — reads tiles, reputation, the Baron, treasury.paid
+seam         politics.ts (new): voteWeight(state, id) — reads tiles, reputation, the Baron, treasury.paid
 senior       junior would: store weights on Player and update them. · senior does: derive them
              from the state each time, so nothing can drift.
 mechanism    sprout
@@ -168,7 +168,7 @@ tomorrow     MUST let the Governor set the sales tax in planning, outside the el
              whole percent within RULE-6's bounds; the new rate applies to every sale from then
              on (taxSale unchanged). With politics off the tax stays TAX.salesTax.
 logic        → §2 RULE-6
-seam         politics.ts::setSalesTax writes treasury.salesTax; taxSale stays the one reader
+seam         politics.ts (new): setSalesTax writes treasury.salesTax; taxSale stays the one reader
 senior       junior would: add a second tax field. · senior does: keep treasury.salesTax as the
              one rate, so the auctions, the land auction and every screen's after-tax line
              (apps/web/src/phone/LandAuction.tsx) follow without change.
@@ -183,7 +183,7 @@ today        the fund only fills.
 tomorrow     MUST pay POLITICS.pay.governor then POLITICS.pay.sheriff at upkeep, each only up to
              what the fund holds (never below 0).
 logic        → §2 RULE-7
-seam         politics.ts::payOffices, called once from advancePhase's upkeep branch before the
+seam         politics.ts (new): payOffices, called once from advancePhase's upkeep branch before the
              report's colonyFund is read (named edit, WS3 reviews)
 mechanism    sprout
 call sites   game.ts::advancePhase
@@ -213,7 +213,7 @@ tomorrow     MUST, for Classic seats with no API key: decide whether to run and 
              vote, press Done after a short seeded human delay, and as Governor set the tax.
              MUST read only what its seat may see (observe()).
 logic        → §2 RULE-8
-seam         packages/ai/src/hands/vote.ts::VoteHand(mind, rng) with tick(state, dt, act) — the
+seam         packages/ai/src/hands/vote.ts (new): VoteHand(mind, rng) with tick(state, dt, act) — the
              LotHand shape the server and play.ts already construct and tick
 senior       junior would: call the engine directly from the seat. · senior does: act only
              through AiAction and the same checks a phone gets, so a refused move is a refused
@@ -485,5 +485,5 @@ Invariant for every test: one player never holds both offices; the fund is never
 
 ### Ownership: the sales tax rate (a second writer)
 - Owner today:     createGame writes treasury.salesTax once; taxSale reads it.
-- Change:          politics.ts::setSalesTax becomes the only writer after createGame.
+- Change:          politics.ts (new): setSalesTax becomes the only writer after createGame.
 - Enforcement:     T-AC-3, and the off row T-AC-4 proves nothing else writes it.
