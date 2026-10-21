@@ -57,6 +57,8 @@ export interface ZoomMapProps {
 export function ZoomMap({ width, height, tiles, slot, children, zoomed: held, onZoomedChange }: ZoomMapProps) {
   const box = zoomBox(tiles, width, height, slot);
   const [kept, setKept] = useState(false);
+  // The flag outlives a drop to no plots, but within one grant or development your plots only grow;
+  // the land auction, where you can lose them, mounts its own screen.
   const zoomed = (held ?? kept) && box !== null;
   const toggle = () => {
     setKept(!zoomed);

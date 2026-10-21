@@ -70,7 +70,7 @@ describe("T-AC-8: zoomBox for RULE-4's examples", () => {
     expectInsideMap(box!);
   });
 
-  it('T-AC-8: frames a single plot as a 3×3 box grown to the map shape', () => {
+  it('T-AC-8: frames a single plot in the middle of the map as a 3×3 box, capped at 3×', () => {
     const box = zoomBox(map(mine([9, 5])), W, H, ME);
 
     expect(box).not.toBeNull();
