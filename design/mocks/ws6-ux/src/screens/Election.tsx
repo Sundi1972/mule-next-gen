@@ -20,11 +20,21 @@ import { VIEW } from '../fixture';
  * reveal time (server clock); a tie flag and who broke it.
  */
 
-type Race = { office: 'Governor' | 'Sheriff'; cands: { id: string; promise: string; votes: number }[]; winner: string; tie?: string };
+type How = 'votes' | 'unopposed' | 'appointed' | 'baron' | 'tieRule';
+type Race = { office: 'Governor' | 'Sheriff'; cands: { id: string; promise: string; votes: number }[]; winner: string; how: How; baron?: string };
+
+/** How a race was won, in WS7's words (result[office].how). */
+const HOW: Record<How, (r: Race) => string> = {
+  votes: () => 'Won on votes.',
+  unopposed: () => 'Elected unopposed: no ballot for this office.',
+  appointed: (r) => (r.office === 'Sheriff' ? 'Nobody ran: the richest player who isn’t Governor is appointed.' : 'Nobody ran: the richest player is appointed.'),
+  baron: (r) => `A tie: ${P[r.baron ?? '']?.name ?? 'the Land Baron'}, the Land Baron, broke it.`,
+  tieRule: () => 'Tied: most plots wins, then seat order.',
+};
 
 const RACES: Race[] = [
-  { office: 'Governor', cands: [{ id: 'ossa', promise: 'No land tax', votes: 4 }, { id: 'kai', promise: 'Cleanup squad from month 5', votes: 5 }], winner: 'kai' },
-  { office: 'Sheriff', cands: [{ id: 'brix', promise: 'Guards on every factory', votes: 4 }, { id: 'lena', promise: 'I will catch the saboteur', votes: 4 }], winner: 'lena', tie: 'ossa' },
+  { office: 'Governor', cands: [{ id: 'ossa', promise: 'No land tax', votes: 4 }, { id: 'kai', promise: 'Cleanup squad from month 5', votes: 5 }], winner: 'kai', how: 'votes' },
+  { office: 'Sheriff', cands: [{ id: 'brix', promise: 'Guards on every factory', votes: 4 }, { id: 'lena', promise: 'I will catch the saboteur', votes: 4 }], winner: 'lena', how: 'baron', baron: 'ossa' },
 ];
 
 const P = Object.fromEntries(VIEW.players.map((p, i) => [p.id, { ...p, slot: i as Slot }]));
@@ -89,11 +99,9 @@ export function TvElection({ revealed = false }: { revealed?: boolean }) {
                   </div>
                 );
               })}
-              {r.tie && (
-                <span className="text-lg text-warn" data-testid="tie-break">
-                  A tie: {P[r.tie]!.name}, the Land Baron, broke it.
-                </span>
-              )}
+              <span className={cx('text-lg', r.how === 'votes' ? 'text-ink-2' : 'text-warn')} data-testid={`how-${r.office.toLowerCase()}`}>
+                {HOW[r.how](r)}
+              </span>
             </section>
           ))}
           <p className="col-span-2 text-center text-xl text-ink-2">Each block is one vote. Who voted for whom stays secret. The new Governor sets the tax from next month.</p>
@@ -117,7 +125,9 @@ export function PhoneElectionResult() {
               <span className="w-20 text-sm text-ink-2">{r.office}</span>
               <Creature species={p.species} color={SLOT_COLOR[p.slot]} size={32} />
               <span className="font-display text-xl font-semibold">{p.id === 'lena' ? 'You' : p.name}</span>
-              <span className="font-mono text-sm text-ink-3">{v} votes{r.tie ? ' · tie broken by the Land Baron' : ''}</span>
+              <span className="font-mono text-sm text-ink-3">
+                {v} votes · {HOW[r.how](r)}
+              </span>
             </span>
           );
         })}

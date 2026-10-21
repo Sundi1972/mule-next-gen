@@ -350,13 +350,17 @@ function CouncilDesk({ election }: { election: Election }) {
         {election === 'nominate' ? (
           <>
             <div className="grid grid-cols-2 gap-1.5" data-testid="run">
-              <Button size="md" variant={running === 'governor' ? 'holo' : 'outline'} disabled={running === 'sheriff'} onClick={() => setRunning('governor')} data-testid="run-governor">
-                Run for Governor
+              {/* Running for the other office switches your candidacy (WS7: one office per election). */}
+              <Button size="md" variant={running === 'governor' ? 'holo' : 'outline'} onClick={() => setRunning('governor')} data-testid="run-governor">
+                {running === 'sheriff' ? 'Run for Governor instead' : 'Run for Governor'}
               </Button>
-              <Button size="md" variant={running === 'sheriff' ? 'holo' : 'outline'} disabled={running === 'governor'} onClick={() => setRunning('sheriff')} data-testid="run-sheriff">
-                Run for Sheriff
+              <Button size="md" variant={running === 'sheriff' ? 'holo' : 'outline'} onClick={() => setRunning('sheriff')} data-testid="run-sheriff">
+                {running === 'governor' ? 'Run for Sheriff instead' : 'Run for Sheriff'}
               </Button>
             </div>
+            <span className="text-xs text-ink-3" data-testid="cannot-run">
+              When you can't run, the button says why: “Candidates are closed” or “Two Governor terms in a row”.
+            </span>
             {running && (
               <span className="flex items-center justify-between gap-2 text-xs text-ink-2 @min-[1100px]:text-sm">
                 You run for {running === 'sheriff' ? 'Sheriff' : 'Governor'}; one office at a time.
