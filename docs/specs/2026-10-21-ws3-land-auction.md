@@ -608,9 +608,12 @@ said      colonyLot rolls from (seed, month) whenever the game leaves landGrant
 did       on a what-if copy (GameState.whatIf, set by cloneForSim; WS1's #33) colonyLot rolls
           nothing, as WS1's production events do. Built in PR-3's fix round once #33 merges.
 because   observe() runs the AI's look-ahead with seed 0, whose colony months are 4 and 9, so
-          from month 8 every look-ahead played a colony lot the real game never had (the likely
-          cause of sim seed 110 diverging at month 9). With the guard the AI neither sees the
-          real colony lot ahead of time nor imagines a false one.
+          every look-ahead would roll seed 0's colony lots, ones the real game may never have. With
+          the guard the AI neither sees the real colony lot ahead of time nor imagines a false one.
+measured  the guard moves no sim result today: seed 110's report is identical before and after
+          it, and the look-ahead's prices were identical with colonyPlotChance at 0.1 and at 0
+          (PR-3 review probe). Seed 110 differs from trunk because it has a real colony lot, now
+          played and sold. So the guard is a no-foresight rule, not a fix for a measured drift.
 goal      G-2 unchanged (the AI plans from the board it can see); HC-1 unchanged
 folded    RULE-7 row 0 · PR-3 fix round (test: a whatIf copy leaving landGrant lists nothing;
           check: sim seed 110 back to its base result)
