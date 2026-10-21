@@ -3,16 +3,16 @@ import { BRAIN } from '@mule/engine';
 import type { DecisionRecord } from '@mule/ai';
 
 /** One seat's lines said in `month`. */
-export interface ChatCount {
+interface ChatCount {
   month: number;
   said: number;
 }
 
 /** Matches no month, so the first record starts a count. */
-export const NO_LINES: ChatCount = { month: Number.NaN, said: 0 };
+const NO_LINES: ChatCount = { month: Number.NaN, said: 0 };
 
 /** RULE-2: the line to say (null for none) and the seat's count after it. A blank line counts as null. */
-export function throttle(count: ChatCount, record: Pick<DecisionRecord, 'line' | 'month'>): { say: string | null; count: ChatCount } {
+function throttle(count: ChatCount, record: Pick<DecisionRecord, 'line' | 'month'>): { say: string | null; count: ChatCount } {
   const now = count.month === record.month ? count : { month: record.month, said: 0 };
   if (!record.line?.trim()) return { say: null, count: now };
   if (now.said >= BRAIN.linesPerMonth) return { say: null, count: now };

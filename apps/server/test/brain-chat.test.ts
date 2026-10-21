@@ -79,7 +79,6 @@ const rows: Row[] = [
   (() => {
     const failing = { seat: 'p0', month: 1, line: 'p0 boom' };
     const rest = linesOf('p0', 1, CAP);
-    // A failed say still used its slot, so the cap bounds say calls, delivered or not.
     return { name: 'a throwing say does not escape and uses its slot', steps: [failing, ...rest], sayThrowsOn: failing.line, said: said([failing, ...rest.slice(0, CAP - 1)]) };
   })(),
 ];

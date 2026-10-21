@@ -58,6 +58,7 @@ import {
 import { AiSeat, LotHand, personaFor, type AiAction } from '@mule/ai';
 import { PLAYER_COLORS, type MuleIntent, type MuleView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
+import { createBrain, type BrainService } from './brain/index.js';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
 
 /**
@@ -112,14 +113,18 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   /** Real time per unit of game time: 1 is real time, 0.1 ten times faster. Test-only. */
   private readonly phaseScale: number;
+  /** Deciders and table chat for the AI seats; Classic when the server has no key. */
+  private readonly brain: BrainService;
 
   constructor(
     private readonly ctx: GameContext,
     private readonly seed: number,
-    private readonly options: { maxMonths?: number; phaseScale?: number } = {},
+    private readonly options: { maxMonths?: number; phaseScale?: number; brain?: BrainService } = {},
   ) {
     this.phaseScale = options.phaseScale ?? 1;
     if (!(this.phaseScale > 0 && this.phaseScale <= 1)) throw new RangeError(`phaseScale must be in (0, 1], got ${this.phaseScale}`);
+    // One ledger file holds every game, so the id must not repeat: the seed and the room's clock at creation.
+    this.brain = options.brain ?? createBrain({ gameId: `g-${seed}-${ctx.now()}` });
   }
 
   start(seats: SeatInfo[]): void {
@@ -129,13 +134,14 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.lotHands.clear();
     seats.forEach((s, i) => {
       if (!s.isAi) return;
+      const brainSeat = { id: s.id, persona: personaFor(s.name, i), level: DEFAULT_AI_LEVEL };
       const seat = new AiSeat({
-        id: s.id,
+        ...brainSeat,
         name: s.name,
-        persona: personaFor(s.name, i),
-        level: DEFAULT_AI_LEVEL,
         // From the game seed and the seat, so a replay plays the same AI.
         seed: (this.seed * 7_919 + i * 104_729 + 17) >>> 0,
+        decider: this.brain.deciderFor(brainSeat),
+        onDecision: this.brain.chatter(brainSeat, (line) => this.ctx.say?.(s.id, line)),
       });
       this.ai.set(s.id, seat);
       this.lotHands.set(s.id, new LotHand(seat.mind, createRng((seat.options.seed ^ 0xc2b2ae35) >>> 0)));
@@ -235,6 +241,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.news = [line, ...this.news].slice(0, 3);
   }
 
+  /** A player's line reaches the AI seats it was for: a public line every one, a whisper only its addressee. Never throws. */
+  heard(from: string, text: string, to?: string): void {
+    const line = { from: this.nameOf(from), text };
+    for (const seat of this.ai.values()) if (to === undefined ? seat.id !== from : seat.id === to) seat.hear(line);
+  }
+
   connectionChanged(seatId: string, connected: boolean): void {
     if (connected) this.away.delete(seatId);
     else this.away.add(seatId);
@@ -286,6 +298,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       this.phaseEndsAt = null;
       const ranking = [...this.seats].sort((a, b) => score(state, b.id) - score(state, a.id));
       this.news = [`Game over. ${ranking[0]?.name} wins the colony!`];
+      this.brain.finish();
       return;
     }
 
