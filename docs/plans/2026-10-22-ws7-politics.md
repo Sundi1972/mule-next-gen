@@ -146,6 +146,7 @@ Every handoff carries the standing authority line, verbatim:
 - [ ] **Step 1: Write failing tests T-AC-1, T-AC-2, B-AC-3, B-AC-4 and RULE-1/RULE-2**, named after the ACs:
   - `T-AC-1: the election steps nominate → ballot → reveal → over on its clocks`, and `T-AC-1: a stage ends early when every player is Done`, and `T-AC-1: a vote after the ballot closed throws RuleError`.
   - `RULE-1 row 2: no contested office skips the ballot`.
+  - `AM-1: leaving planning closes an open election and seats the winners`.
   - `RULE-2` one test per row (closed, two terms in a row, switching office, withdraw).
   - `T-AC-2` / `B-AC-3` / `B-AC-4`: one test per RULE-3 row (appointed governor, appointed sheriff excludes the new Governor, unopposed, votes, baron tie-break, tie rule by plots then seat).
   - Invariant in each: nobody holds both offices.

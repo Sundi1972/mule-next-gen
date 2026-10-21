@@ -285,6 +285,8 @@ stages     nominate (POLITICS.nominateMs) → ballot (POLITICS.ballotMs) → rev
 outcome   the result is computed once, entering reveal, and never changes. Screens show a
           countdown for POLITICS.revealCountdownMs of the reveal, then the result.
 unknown   a player who is away is marked Done by the server; one who never votes abstains.
+closing   leaving planning with the election not over closes it at once (AM-1): the stages
+          left are skipped, the result is tallied from the ballots cast, and winners take office.
 examples  all Done in nominate after 4 s → ballot opens at once · nobody runs → no ballot,
           reveal shows "appointed" · month 2 → no election, planning as today
 ```
@@ -480,7 +482,21 @@ Invariant for every test: one player never holds both offices; the fund is never
 
 ## §8 · Amendments `[review-only]`
 
-*(None yet.)*
+```
+AM-1 · 2026-10-22 · lead · before PR-1
+
+target    §1 C3 tomorrow, §2 RULE-1
+said      the election ends on its clocks or when everyone is Done
+did       also: when the game leaves planning while an election is still open (the server's
+          planning timer, a sim that doesn't step it, a client that never sends Done), the
+          election closes at once: the ballots cast so far are tallied (RULE-3) and winners
+          take office. One call in advancePhase when planning ends (game.ts named edit).
+because   P-1: the table must always end up with a Governor and a Sheriff; without it a stuck
+          election leaves the colony with no offices for three months, and PR-1 alone (no
+          VoteHand, no server tick) would never fill an office in the sim (UBER-AC-1).
+goal      P-1, more robustly than as specified
+folded    C3 tomorrow + RULE-1 note below; plan Task 1.4 step 1 adds the test
+```
 
 ## §9 · Ownership Boundaries `[handoff]`
 
