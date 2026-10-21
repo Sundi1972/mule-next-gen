@@ -1,9 +1,6 @@
 import {
   advanceGrant,
   advancePhase,
-  aiClaim,
-  aiAuction,
-  aiDevelop,
   airBand,
   allPrices,
   analysePlot,
@@ -17,6 +14,7 @@ import {
   fitFilter,
   GAME,
   GOODS,
+  type AiLevelId,
   grantDone,
   hasAnalysed,
   installMule,
@@ -47,6 +45,7 @@ import {
   type Phase,
   type Trade,
 } from '@mule/engine';
+import { AiSeat, personaFor, type AiAction } from '@mule/ai';
 import { PLAYER_COLORS, type MuleIntent, type MuleView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 
@@ -70,6 +69,12 @@ export const GRANT_TICK_MS = 650;
 
 export const AI_NAMES = ['The Accountant', 'The Baron', 'The Grudge', 'The Gambler', 'The Good Neighbour'];
 
+/** How often AI hands act during development. */
+export const AI_DEV_TICK_MS = 100;
+
+/** The level AI seats play at until the lobby lets the host choose. */
+export const DEFAULT_AI_LEVEL: AiLevelId = 'trader';
+
 /** M.U.L.E. as a game hosted by a @tabletop/core room. */
 export class MuleGame implements Game<MuleIntent, MuleView> {
   private state: GameState | null = null;
@@ -83,6 +88,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private cancels: (() => void)[] = [];
   private news: string[] = [];
   private phaseEndsAt: number | null = null;
+  /** The AI players: strategist, decider and hands, keyed by seat id. */
+  private readonly ai = new Map<string, AiSeat>();
 
   constructor(
     private readonly ctx: GameContext,
@@ -92,6 +99,21 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   start(seats: SeatInfo[]): void {
     this.seats = seats.map((s, i) => ({ ...s, color: PLAYER_COLORS[i % PLAYER_COLORS.length]! }));
     this.state = createGame({ seed: this.seed, players: seats.map(({ id, name, isAi }) => ({ id, name, isAi })) });
+    this.ai.clear();
+    seats.forEach((s, i) => {
+      if (!s.isAi) return;
+      this.ai.set(
+        s.id,
+        new AiSeat({
+          id: s.id,
+          name: s.name,
+          persona: personaFor(s.name, i),
+          level: DEFAULT_AI_LEVEL,
+          // From the game seed and the seat, so a replay plays the same AI.
+          seed: (this.seed * 7_919 + i * 104_729 + 17) >>> 0,
+        }),
+      );
+    });
     this.news = ['Welcome to the colony. Talk tactics, then grab land.'];
     this.enterPhase();
   }
@@ -191,7 +213,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private checkDevelopmentOver(): void {
     const state = this.requireState();
     if (state.phase !== 'development') return;
-    if (this.seats.every((s) => s.isAi || this.away.has(s.id) || this.doneDeveloping(s.id))) this.nextPhase();
+    if (this.seats.every((s) => this.away.has(s.id) || this.doneDeveloping(s.id))) this.nextPhase();
   }
 
   private requireState(): GameState {
@@ -236,39 +258,56 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       }),
     );
 
-    if (state.phase === 'landGrant') this.scheduleGrantTick();
+    if (state.phase === 'planning') for (const seat of this.ai.values()) seat.planMonth(state);
+    if (state.phase === 'landGrant') {
+      this.aiGrantBids();
+      this.scheduleGrantTick();
+    }
     if (state.phase === 'development') this.startDevelopment();
     if (state.phase === 'production') this.reportProduction();
     if (state.phase === 'upkeep') this.reportUpkeep();
   }
 
-  /**
-   * The land grant's light moves on every tick. Before it moves, AI players
-   * get their chance at the plot that was lit, after humans had the whole
-   * tick to press. One AI at most takes it, in a rotating order.
-   */
+  /** The land grant's light moves on every tick; each new plot gets the AI players' bids. */
   private scheduleGrantTick(): void {
     const state = this.requireState();
     this.cancels.push(
       this.ctx.schedule(GRANT_TICK_MS, () => {
         if (state.phase !== 'landGrant') return;
-        const ais = this.seats.filter((s) => s.isAi);
-        const start = (state.grant?.step ?? 0) % Math.max(1, ais.length);
-        for (let i = 0; i < ais.length; i++) {
-          try {
-            if (aiClaim(state, ais[(start + i) % ais.length]!.id)) break;
-          } catch (err) {
-            if (!(err instanceof RuleError)) throw err;
-          }
-        }
         if (grantDone(state)) this.nextPhase();
         else {
           advanceGrant(state);
+          this.aiGrantBids();
           this.scheduleGrantTick();
         }
         this.ctx.changed();
       }),
     );
+  }
+
+  /**
+   * A plot just lit up. Each AI player that wants it presses Claim after its
+   * own human reaction time, like a thumb on a phone, so a quick human can
+   * beat it. A press that comes after the light moved on is refused by the
+   * rules, exactly as a late human press is.
+   */
+  private aiGrantBids(): void {
+    const state = this.requireState();
+    const lit = litPlot(state);
+    if (!lit) return;
+    const step = state.grant?.step;
+    for (const seat of this.ai.values()) {
+      const ms = seat.onLit(state);
+      if (ms === null || ms >= GRANT_TICK_MS) continue;
+      this.cancels.push(
+        this.ctx.schedule(ms, () => {
+          if (state.phase !== 'landGrant' || state.grant?.step !== step) return;
+          if (!this.aiAct(seat.id, { type: 'claim', x: lit.x, y: lit.y })) return;
+          if (grantDone(state)) this.nextPhase();
+          this.ctx.changed();
+        }),
+      );
+    }
   }
 
   /** Each player gets their own clock: Food, sickness and analyses set how long they have. */
@@ -284,29 +323,62 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         this.ctx.changed();
       }));
     }
-    this.scheduleAi((id) => aiDevelop(state, id));
+    if (this.ai.size > 0) this.scheduleAiDevelop(state.month, now);
   }
 
-  /** AI players act after a short, varied delay, so real-time phases feel like a race. */
-  private scheduleAi(act: (id: string) => void): void {
+  /**
+   * AI hands in development: every tick each AI player works through its
+   * to-do list (buy, outfit, install, pub) at a quick human's pace, on its
+   * own clock, through the same moves a phone sends.
+   */
+  private scheduleAiDevelop(month: number, last: number): void {
     const state = this.requireState();
-    const phase = state.phase;
-    this.seats
-      .filter((s) => s.isAi)
-      .forEach((seat, i) => {
-        const delay = 2_000 + ((this.seed + i * 1_777 + state.month * 313) % 5_000);
-        this.cancels.push(
-          this.ctx.schedule(delay, () => {
-            if (state.phase !== phase) return;
-            try {
-              act(seat.id);
-            } catch (err) {
-              if (!(err instanceof RuleError)) throw err;
-            }
-            this.ctx.changed();
-          }),
-        );
-      });
+    this.cancels.push(
+      this.ctx.schedule(AI_DEV_TICK_MS, () => {
+        if (state.phase !== 'development' || state.month !== month) return;
+        const now = this.ctx.now();
+        // The time that really passed, capped so a stalled loop doesn't make the hands skip ahead.
+        const dt = Math.min(Math.max(0, now - last), AI_DEV_TICK_MS * 10);
+        for (const seat of this.ai.values()) {
+          const p = state.players.find((q) => q.id === seat.id)!;
+          const left = ((this.devEndsAt.get(seat.id) ?? now) - now) / 1_000;
+          if (p.doneDeveloping || left <= 0) continue;
+          seat.developTick(state, dt, left, (a) => this.aiAct(seat.id, a));
+          if (state.phase !== 'development') return;
+        }
+        this.checkDevelopmentOver();
+        if (state.phase === 'development') this.scheduleAiDevelop(month, now);
+        this.ctx.changed();
+      }),
+    );
+  }
+
+  /**
+   * Plays one AI move through the same checks a phone's intent gets.
+   * Returns false when the rules refused it, so the hands move on.
+   */
+  private aiAct(seatId: string, action: AiAction): boolean {
+    const state = this.requireState();
+    try {
+      switch (action.type) {
+        case 'claim':
+          claimPlot(state, seatId, action.x, action.y);
+          break;
+        case 'walk':
+          // The hands set Done themselves, so walking doesn't take it back here.
+          setWalk(state, seatId, action.dir);
+          break;
+        case 'done':
+          auctionDone(state, seatId, action.done);
+          break;
+        default:
+          this.handle(seatId, action);
+      }
+      return true;
+    } catch (err) {
+      if (err instanceof RuleError) return false;
+      throw err;
+    }
   }
 
   /**
@@ -326,7 +398,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         const good = state.auction.good;
         for (const seat of this.seats) {
           try {
-            if (seat.isAi) aiAuction(state, seat.id, dt);
+            const ai = this.ai.get(seat.id);
+            if (ai) ai.auctionTick(state, dt, (a) => this.aiAct(seat.id, a));
             else if (this.away.has(seat.id)) auctionDone(state, seat.id);
           } catch (err) {
             if (!(err instanceof RuleError)) throw err;

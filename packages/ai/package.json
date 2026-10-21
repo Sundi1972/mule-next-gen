@@ -9,8 +9,7 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "sim": "tsx src/sim.ts",
-    "tournament": "tsx src/tournament.ts"
+    "sim": "tsx src/sim.ts"
   },
   "dependencies": {
     "@mule/engine": "workspace:*"

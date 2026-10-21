@@ -115,7 +115,26 @@ describe('MuleGame', () => {
     expect(() => {
       for (let i = 0; i < 20; i++) game.handle('s1', { type: 'analyse', x: plot.x, y: plot.y });
     }).toThrow('time is up');
+    // The AI player finishes its own turn at a human's pace, then the phase ends.
+    for (let i = 0; i < 120 && game.viewFor('s1').phase === 'development'; i++) advance(1_000);
     expect(game.viewFor('s1').phase).toBe('production');
+  });
+
+  it('lets the AI player claim land, then buy, outfit and install a MULE through the same moves as a phone', () => {
+    const { ctx, advance } = fakeContext();
+    const game = new MuleGame(ctx, 7);
+    game.start(seats);
+    advance(PHASE_MS.planning);
+    while (game.viewFor('s1').phase === 'landGrant') advance(GRANT_TICK_MS);
+    const owned = () => game.viewFor(null).tiles.filter((t) => t.owner === 's3');
+    expect(owned().length).toBeGreaterThan(0);
+    // The humans go straight to the pub; the AI keeps its own clock.
+    game.handle('s1', { type: 'pub' });
+    game.handle('s2', { type: 'pub' });
+    expect(game.viewFor('s1').phase).toBe('development');
+    for (let i = 0; i < 120 && game.viewFor('s1').phase === 'development'; i++) advance(1_000);
+    expect(game.viewFor('s1').phase).toBe('production');
+    expect(owned().some((t) => t.outfit !== null)).toBe(true);
   });
 
   it('tells each player their development time and what their plots made', () => {

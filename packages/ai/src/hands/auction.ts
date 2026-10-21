@@ -149,7 +149,8 @@ export class AuctionHand {
     if (this.startMoney === 0) this.startMoney = me.money;
 
     if (w.side === 'seller') {
-      const floor = Math.ceil(plan.values.keep[h - 1] ?? Infinity);
+      // Units past the table are beyond what the depot keeps: they spoil, so they are worth nothing.
+      const floor = Math.ceil(plan.values.keep[h - 1] ?? 0);
       this.limit = floor;
       const finished = trade.side !== 'seller' || h <= trade.keep || !Number.isFinite(floor);
       const houses = Math.max(storeBuyLine(state) ?? 0, shipLine(state) ?? 0);
