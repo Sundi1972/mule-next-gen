@@ -1,6 +1,6 @@
 import type { LandAuctionView, MuleView } from '@mule/protocol';
 import { Button, cx, HoloMap, TimeBar, WalkBoard } from '@mule/ui';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { LeaderBox, LotCard, lotWalkers, sellerName } from '../components/AuctionParts';
 import { mapTiles, PHASE_NAME, plotName } from '../game/derive';
 import { useClient } from '../net/react';
@@ -9,7 +9,7 @@ import { usePhoneGame } from './game';
 import { MapFit, PhoneShell } from './Shell';
 
 /**
- * The land auction on the phone, layout A (board first; Heiko, 21 Oct).
+ * The land auction on the phone, board first.
  * One lot at a time: the intro lights the plot on the map, the walk fills
  * the main area with the board, and the result says who got it. The seller
  * sees the same screens without Up and Down.
@@ -21,9 +21,17 @@ export function LandAuction() {
   const mine = lot?.walkers.find((w) => w.id === self.id);
   const onBoard = lot?.stage === 'walk' && mine?.side === 'buyer';
   const dir = useRef<'up' | 'down' | 'stop'>('stop');
+  const live = useRef(false);
+  // Off the board (the bell, the next lot's intro) the engine has already stopped this walker:
+  // forget the held direction without telling it, so the next lot's first press always goes out,
+  // and send nothing at all until this phone is walking again.
+  useLayoutEffect(() => {
+    live.current = onBoard;
+    if (!onBoard) dir.current = 'stop';
+  }, [onBoard]);
   const send = useCallback(
     (next: 'up' | 'down' | 'stop') => {
-      if (dir.current === next) return;
+      if (!live.current || dir.current === next) return;
       dir.current = next;
       client.intent({ type: 'walk', dir: next });
     },

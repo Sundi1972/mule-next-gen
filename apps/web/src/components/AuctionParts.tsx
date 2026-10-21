@@ -95,9 +95,7 @@ export function StatusTable({ view, auction, meId, tv = false }: { view: MuleVie
   );
 }
 
-/*
- * Lot pieces shared by the phone and the big screen.
- */
+/* The land auction's lot pieces: the phone uses all of them, the big screen only sellerName, lotWhat and lotWalkers. */
 
 export function sellerName(view: MuleView, id: string): string {
   return id === 'colony' ? 'The colony' : (view.players.find((p) => p.id === id)?.name ?? id);
