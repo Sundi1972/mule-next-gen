@@ -8,6 +8,7 @@ import { GAME, WALK } from '@mule/engine';
 import { errors as playwrightErrors, type BrowserContext, type Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import { check, launch, PHONE, startServer, TV, type AuctionSteps } from './harness';
+import { checkTheShow, watchShow } from './production-steps';
 import { fedPlayerFillsAFullHoloBar, hungryPlayerSeesAShortOrangeBar, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows } from './store-steps';
 
 /** Loaded by a path held in a variable, so tsc never resolves a file that may not exist yet. */
@@ -40,7 +41,9 @@ const HOST_WALKER = 'walker-s1';
 /** The phone's score lines at game over that add up; a Collapse line, when there is one, is taken off them. */
 const PART_LINES = ['money', 'goods', 'land', 'mules'] as const;
 
-const SEED = seedFrom(process.env.MULE_E2E_SEED);
+/** Month 2 of this seed rolls a production event, so every run checks the event's show (B-AC-7). */
+const SHOW_SEED = 1;
+const SEED = seedFrom(process.env.MULE_E2E_SEED ?? String(SHOW_SEED));
 const steps = await loadAuctionSteps();
 const { server, base } = await startServer({ maxMonths: 2, phaseScale: PHASE_SCALE, seed: () => SEED });
 const browser = await launch();
@@ -51,6 +54,7 @@ try {
   seen = await recordPhases(phoneContext);
   const phone = await phoneContext.newPage();
   phone.on('pageerror', (e) => errors.push(`phone: ${e.message}`));
+  const phoneShow = await watchShow(phone);
 
   await phone.goto(base);
   await phone.getByPlaceholder('Heiko').fill('Heiko');
@@ -65,6 +69,7 @@ try {
 
   const tv = await (await browser.newContext(TV)).newPage();
   tv.on('pageerror', (e) => errors.push(`tv: ${e.message}`));
+  const tvShow = await watchShow(tv);
   await tv.goto(`${base}/table?room=${code}`);
   await tv.getByTestId('room-code').waitFor();
 
@@ -118,6 +123,9 @@ try {
   await outfittersOpenWithAnEmptyMule(phone);
   await checkOwnsAPlot(phone);
   await goToThePub(phone);
+  // B-AC-6 and B-AC-8, from what both screens drew of month 1's show.
+  await phone.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
+  console.log(`production show, month 1: ${await checkTheShow({ tv: tvShow, phone: phoneShow })}`);
   let measured = false;
   await pressDoneThroughTheAuction(phone, async (button) => {
     if (!measured && button.startsWith('Done with')) measured = await checkTheFloorClearsTheNames(phone, tv);
@@ -133,6 +141,9 @@ try {
   await steps.landAuction?.({ phone, tv, check }, 2);
   await hungryPlayerSeesAShortOrangeBar(phone, within(PHASE_MS.landGrant));
   await goToThePub(phone);
+  // B-AC-6, B-AC-7 and B-AC-8: month 2's show, with the seed's event.
+  await phone.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
+  console.log(`production show, month 2: ${await checkTheShow({ tv: tvShow, phone: phoneShow, event: true })}`);
   await pressDoneThroughTheAuction(phone);
 
   // Game over.

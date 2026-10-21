@@ -8,8 +8,9 @@
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { Page } from 'playwright';
-import { launch, PHONE, PHONE_WIDE, startServer, TV } from './harness';
-import { checkTheShow, watchViews } from './production-steps';
+import { check, launch, PHONE, PHONE_WIDE, startServer, TV } from './harness';
+import { SHOW } from '@mule/ui';
+import { checkTheShow, watchShow } from './production-steps';
 import { fedPlayerFillsAFullHoloBar, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows } from './store-steps';
 
 const out = resolve(process.argv[2] ?? 'screens');
@@ -34,7 +35,7 @@ const phase = (page: Page, p: string, timeout = 70_000) => page.locator(`[data-p
 try {
   const phone = await (await browser.newContext(PHONE)).newPage();
   phone.on('pageerror', (e) => console.error('phone error:', e.message));
-  const phoneView = watchViews(phone);
+  const phoneShow = await watchShow(phone);
   await phone.goto(base);
   await phoneShot(phone, '0-entry');
   await phone.setViewportSize({ width: PHONE.viewport.height, height: PHONE.viewport.width });
@@ -48,7 +49,7 @@ try {
 
   const tv = await (await browser.newContext(TV)).newPage();
   tv.on('pageerror', (e) => console.error('tv error:', e.message));
-  const tvView = watchViews(tv);
+  const tvShow = await watchShow(tv);
   await tv.goto(`${base}/table?room=${code}`);
   await tv.getByTestId('room-code').waitFor();
 
@@ -115,10 +116,23 @@ try {
   await phase(phone, 'production');
   await phoneShot(phone, '5-production');
   await shot(tv, 'tv-5-production');
-  await checkTheShow({ phone, tv, phoneView, tvView, shot });
-  // The show may have run to its end on its own clock by now.
-  const onward = phone.getByRole('button', { name: 'On to the auction' });
-  if (await phone.locator('[data-phase=production]').count()) await onward.click({ timeout: 2_000 }).catch(() => {});
+  const shown = phoneShow.view();
+  check(shown?.production && shown.phaseEndsAt, 'the phone received the production view');
+  const { lengthMs, lines } = shown.production;
+  const endsAt = shown.phaseEndsAt;
+  /** When the show reaches `s` seconds, on this machine's clock (the server's). */
+  const at = (s: number) => endsAt - lengthMs + (s / SHOW.end) * lengthMs;
+  // R-1: the phone mid-show, its bars and badges up.
+  await phone.waitForTimeout(Math.max(0, at(SHOW.cardAt + 1) - Date.now()));
+  await Promise.all([phone.screenshot({ path: join(out, 'phone-land-5-production-show.png') }), tv.screenshot({ path: join(out, 'tv-5-production-show.png') })]);
+  // M4: once every plot's goods are home, the phone's button ends production before its clock does.
+  await phone.waitForTimeout(Math.max(0, at(SHOW.flyStart + lines.length * SHOW.flyStep + SHOW.flight + 0.3) - Date.now()));
+  const onward = phone.locator('[data-phase=production]').getByRole('button', { name: 'On to the auction' });
+  check(Date.now() < endsAt - 1_000 && (await onward.isEnabled()), 'HC-6: "On to the auction" is there while production still runs');
+  await onward.click();
+  await phase(phone, 'auction', Math.max(1, endsAt - Date.now()));
+  check(Date.now() < endsAt, 'HC-6: "On to the auction" ended production before its clock');
+  console.log(`production show: ${await checkTheShow({ tv: tvShow, phone: phoneShow })}`);
 
   // The walk auction: the status screen, the declare, walking, and a trade in progress.
   await phase(phone, 'auction');
