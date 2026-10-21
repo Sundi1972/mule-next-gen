@@ -5,7 +5,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { advancePhase, BRAIN, createGame, GAME, type GameState } from '@mule/engine';
 import type { DecisionKind } from '@mule/ai';
-import { cutOffPhase, renderTrialReport, trial, trialReport, type TrialGame, type TrialInput } from '../src/brain/trial.js';
+import { cutOffPhase, renderTrialReport, trialReport, type TrialGame, type TrialInput } from '../src/brain/trial-report.js';
+import { trial } from '../src/brain/trial.js';
 import { KEY, promptOf, readLedger, sdkMessage, worstUsdOf, type SdkModuleFake, type SdkParams } from './brain-fakes.js';
 
 /** The SDK module's client: records its options and answers through `sdk.create`; it never reaches the network. */
