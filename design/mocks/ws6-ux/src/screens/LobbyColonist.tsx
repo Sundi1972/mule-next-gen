@@ -161,6 +161,11 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
               </ul>
             </section>
             <JoinCard />
+            {!host && (
+              <button type="button" className="text-left text-sm text-holo underline-offset-2 hover:underline" onClick={() => setDialog('handoff')} data-testid="move-to-phone">
+                Playing on a laptop? Move to my phone…
+              </button>
+            )}
             {host && (
               <section className="flex flex-col gap-1 border-t border-holo-faint pt-2 @min-[1100px]:pt-3" data-testid="host-tools">
                 <span className="label-caps @min-[1100px]:text-xs!">You host this table</span>
@@ -193,7 +198,7 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
             )}
           </div>
         </aside>
-        {dialog && <Dialog dialog={dialog} seats={seats} onClose={() => setDialog(null)} onKick={(id) => (setSeats((all) => all.filter((s) => s.id !== id)), setDialog(null))} />}
+        {dialog && <Dialog dialog={dialog} seats={seats} me={me} host={host} onClose={() => setDialog(null)} onKick={(id) => (setSeats((all) => all.filter((s) => s.id !== id)), setDialog(null))} />}
       </div>
     </div>
   );
@@ -248,19 +253,33 @@ function JoinCard() {
 }
 
 /** The host's three confirmations, over the whole screen. */
-function Dialog({ dialog, seats, onClose, onKick }: { dialog: 'handoff' | 'close' | { kick: string }; seats: Seat[]; onClose: () => void; onKick: (id: string) => void }) {
+function Dialog({
+  dialog,
+  seats,
+  me,
+  host,
+  onClose,
+  onKick,
+}: {
+  dialog: 'handoff' | 'close' | { kick: string };
+  seats: Seat[];
+  me: Seat;
+  host: boolean;
+  onClose: () => void;
+  onKick: (id: string) => void;
+}) {
   let body: ReactNode;
   if (dialog === 'handoff')
     body = (
       <>
-        <h2 className="font-display text-xl font-semibold @min-[1100px]:text-3xl">Move the host to your phone</h2>
+        <h2 className="font-display text-xl font-semibold @min-[1100px]:text-3xl">{host ? 'Move the host to your phone' : 'Move to your phone'}</h2>
         <div className="flex items-center gap-4">
           <Qr text={`https://mule.example/host/${CODE}/heiko-7f3a`} size={120} className="p-2! @min-[1100px]:hidden" />
           <span className="hidden @min-[1100px]:block">
             <Qr text={`https://mule.example/host/${CODE}/heiko-7f3a`} size={220} className="p-3!" />
           </span>
           <p className="text-sm text-ink-2 @min-[1100px]:text-lg">
-            Scan this with your phone. It becomes <strong className="text-ink">you, Heiko, the host</strong>, with your colonist. This screen then shows the table to everyone. The code works once, for 2 minutes.
+            Scan this with your phone. It becomes <strong className="text-ink">you, {me.name}{host ? ', the host' : ''}</strong>, with your colonist. This screen then steps aside. The code works once, for 2 minutes.
           </p>
         </div>
         <Button size="md" variant="outline" onClick={onClose}>
