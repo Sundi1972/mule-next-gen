@@ -474,7 +474,16 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         const now = this.ctx.now();
         // A stalled server loop must not teleport walkers across the board.
         const dt = Math.min(Math.max(0, now - last), WALK.tickMs * 3);
-        for (const seat of this.seats) if (this.away.has(seat.id)) lotDone(state, seat.id);
+        for (const seat of this.seats) {
+          if (!this.away.has(seat.id)) continue;
+          // A dropped phone has finished bidding: its walker stops where it is.
+          try {
+            setLotWalk(state, seat.id, 0);
+          } catch (err) {
+            if (!(err instanceof RuleError)) throw err;
+          }
+          lotDone(state, seat.id);
+        }
         const lot = a.lot;
         const result = stepLandAuction(state, dt);
         if (lot && result) this.reportLot(lot, result);
