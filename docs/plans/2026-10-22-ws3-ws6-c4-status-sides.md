@@ -45,6 +45,30 @@
 
 **Reading of RULE-2 row 4, recorded:** "during the walk switching side works as today". So the walk keeps today's Buy/Seller/Pass picker on the phone. The goods mock's walk has no picker; the mock shows layout, and the rule governs. Wave A placed the picker after `line-readout` (1216dd5), and that stays. WS4's FM-2 smoke, which clicks "Buyer" during the walk, is unaffected. This corrects a note in the wave A plan. **CLOSED (2026-10-22): WS6 confirms this reading. The walk keeps the picker, the mock simply doesn't draw it, and there is no spec change.**
 
+## Status (2026-10-22)
+
+- **C4.1 DONE** at dc08646 (RED 2ccd227), on `ws3-c4`. Review: READY WITH FIXES. The fix round is on `ws3-c4-engine-fix` from `ws3-c4`, followed by a scoped re-review.
+  - **Important:** mutant M8 (a status-time side change takes back Done) survives. Strengthen `T-AC-3: declareRole works during status…` so a Done pressed earlier stays after a side change.
+  - **Minors:**
+    - the unreachable stage guard in declareRole (M14, equivalent) is deleted;
+    - config.ts's history phrase reads "…and where each player picks a side for the walk";
+    - types.ts's clockMs doc comment moves onto its field;
+    - the redundant `:declare` assertion is deleted;
+    - M9, which predates C4, is killed: `lets a player switch sides mid-walk…` asserts that a walk-time switch takes back Done;
+    - `docs/technical-plan.md:54` is reworded to status → walk.
+  - "Sell needs units" was already in the base; it is not new behaviour.
+- **C4.2 DONE by WS1** at 3bcc3e3 on `ws3-c4`. WS1 reports the sim byte-identical to trunk 6df42d2 on seeds 1–40 and 101–140, and has signed off. **WS3 has not measured this:** C4.4 re-runs the sim on the merged branch.
+- **C4.3 DONE** at 7181806 on `ws3-c4-screens`, based on dc08646 and not yet merged into `ws3-c4`. Review: READY. Fix round owed:
+  - WS4's sound ruling (b) is folded in;
+  - a `toggleSide` table test is added, titled `B-AC-4 (RULE-2 row 1): …`, which kills mutants M1 and M2 at pure-core altitude;
+  - `toggleSide`'s docstring is trimmed to a pointer to RULE-2 row 1.
+
+  Mutant M4 (the side read from local state, not the view) survives every test, so C4.4 Step 1 gains a surplus-player case.
+- **WS4's rulings for this PR** (named edits; WS4 reviews them):
+  - (a) C4.4 fixes `apps/web/e2e/screens.ts:127–134` ('Seller' plus 'Done choosing') and drops the dead 'Done choosing' match at `smoke.ts:256`;
+  - (b) C4.3's fix round makes `sound.ts` tick during the status countdown as well as the walk. Status is 8 s, under WS4's 10 s threshold, so the tick covers the whole countdown. The comment at :141 becomes "the status countdown's last seconds and the walk".
+- **CLOSED:** WS6 confirms the walk-picker reading (above).
+
 ---
 
 ## The PR
@@ -70,14 +94,16 @@
 > Naming, internal structure, helper decomposition and test fixtures are yours. Everything else in your payload is specified. If you need to change anything outside it — including because it appears impossible — stop and report to the lead with the element id and the goal it fails. Do not deviate: you can see one task, and the lead can see the whole graph.
 
 - `may_edit`:
-  - C4.1: `packages/engine/src/auction.ts`, `packages/engine/src/types.ts` (LiveAuction's stage union and its doc lines only; added in execution, since the union lives there and not in auction.ts), `packages/engine/src/config.ts` (the WALK block, its doc included), `packages/engine/test/auction.test.ts`, `packages/protocol/src/index.ts` (the `AuctionView.stage` type), `apps/server/src/mule-game.ts`, and the `apps/server/test/` files that assert the stage: `mule-game.test.ts`, `auction-units.test.ts`, `phase-scale.test.ts`.
+  - C4.1: `packages/engine/src/auction.ts`, `packages/engine/src/types.ts` (LiveAuction's stage union and its doc lines only; added in execution, since the union lives there and not in auction.ts), `packages/engine/src/config.ts` (the WALK block, its doc included), `packages/engine/test/auction.test.ts`, `packages/protocol/src/index.ts` (the `AuctionView.stage` type), `apps/server/src/mule-game.ts`, and the `apps/server/test/` files that assert the stage: `mule-game.test.ts`, `auction-units.test.ts`, `phase-scale.test.ts`. Its fix round also rewords one sentence of `docs/technical-plan.md` (:54, the declare stage).
+  - C4.3: `apps/web/src/components/AuctionParts.tsx` and a test file for `toggleSide`.
   - C4.4: `apps/web/e2e/auction-steps.ts`.
 - `may_edit_content`: `apps/web/src/phone/Auction.tsx` (the status branch, grafted from `PhoneStatusDeclare`).
 - **Named edits in other lanes' files:**
   - `apps/web/src/table/TableApp.tsx::TvAuction`, its status branch from `TvStatusDeclare` (WS4 reviews);
-  - `apps/web/src/game/sound.ts:146`, where the stage check drops `'declare'` (WS4 reviews);
+  - `apps/web/src/game/sound.ts:141–146`, where the stage check drops `'declare'` and ticks during status as well as the walk, per WS4's ruling (b) (WS4 reviews);
+  - `apps/web/e2e/screens.ts:127–134` and `apps/web/e2e/smoke.ts:256`, in C4.4, per WS4's ruling (a) (WS4 reviews);
   - `packages/ai/src/hands/auction.ts` and `packages/ai/src/play.ts`, **written by WS1** (C4.2).
-- `must_not_edit`: `packages/ui/**` (WalkBoard's own `'declare'` stage prop stays; after C4 no caller passes it, which is harmless), `apps/web/e2e/{smoke,harness,screens}.ts` (WS4's), `design/mocks/**`, `packages/engine/src/{walk,economy,lots}.ts` (the walk itself is the pin), `packages/ai/**` except WS1's C4.2.
+- `must_not_edit`: `packages/ui/**` (WalkBoard's own `'declare'` stage prop stays; after C4 no caller passes it, which is harmless), `apps/web/e2e/{smoke,harness,screens}.ts` (WS4's, except the two named lines above), `design/mocks/**`, `packages/engine/src/{walk,economy,lots}.ts` (the walk itself is the pin), `packages/ai/**` except WS1's C4.2.
 
 ### Contention
 
@@ -92,7 +118,7 @@
 
 **Depends on:** — · **ACs verified:** T-AC-3 (engine half) · **Spec:** WS6 §1 C4, §2 RULE-2, §3 stage row · **Tier:** logic/contract
 
-- [ ] **Step 1: Write the failing tests** in `packages/engine/test/auction.test.ts`, named `T-AC-3: …`, at engine altitude. Each asserts at the auction state after `stepAuction`:
+- [x] **Step 1: Write the failing tests** in `packages/engine/test/auction.test.ts`, named `T-AC-3: …`, at engine altitude. Each asserts at the auction state after `stepAuction`:
   - (a) when a good's status opens, every walker already holds `defaultSide`: surplus → seller, short → buyer, even → pass;
   - (b) `declareRole` works during status. Tapping the chosen side again is the client's job (RULE-2 row 1), so the engine just takes the side sent;
   - (c) the status clock's end, or all players done, goes straight to `walk`, and `stage` is never `'declare'` at any step;
@@ -100,8 +126,8 @@
   - negative: `declareRole` before the good is up still throws.
 
   Strengthen existing tests that assert the declare stage rather than adding beside them, and delete any that only test the stage being removed.
-- [ ] **Step 2: Run** `pnpm --filter @mule/engine exec vitest run test/auction.test.ts`. Expected: the new T-AC-3 cases FAIL (stage 'declare' seen, or RuleError "Wait for the declare").
-- [ ] **Step 3: Implement C4 per WS6 §1 C4 and §2 RULE-2** in `auction.ts`:
+- [x] **Step 2: Run** `pnpm --filter @mule/engine exec vitest run test/auction.test.ts`. Expected: the new T-AC-3 cases FAIL (stage 'declare' seen, or RuleError "Wait for the declare").
+- [x] **Step 3: Implement C4 per WS6 §1 C4 and §2 RULE-2** in `auction.ts`:
   - seed sides when the status opens, reusing `defaultSide` and `takeSide` from `startDeclare`;
   - remove `startDeclare` and the `'declare'` stage;
   - widen `declareRole`'s guard to status and walk.
@@ -112,23 +138,23 @@
   - Server: mule-game.ts:715's clock total drops its `declareMs` branch.
 
   `server.ts`'s `'declare'` intent parse stays: the intent is unchanged and now accepted in status. Mechanism: in_place.
-- [ ] **Step 4: Run** the engine tests, then `pnpm --filter @mule/server test`, and fix the server tests that assert the stage. Then run the walk's own tests unchanged; they are the pin. `pnpm typecheck` is expected RED only in `packages/ai` (C4.2) and `apps/web` (C4.3). Record that it's red in exactly those places.
-- [ ] **Step 5: Commit** the RED commit first (`test(engine): T-AC-3 sides are picked during status, no declare stage (RED)`), then `feat(engine): sides are picked on the status screen; the declare stage goes (verifies T-AC-3)`.
+- [x] **Step 4: Run** the engine tests, then `pnpm --filter @mule/server test`, and fix the server tests that assert the stage. Then run the walk's own tests unchanged; they are the pin. `pnpm typecheck` is expected RED only in `packages/ai` (C4.2) and `apps/web` (C4.3). Record that it's red in exactly those places.
+- [x] **Step 5: Commit** the RED commit first (`test(engine): T-AC-3 sides are picked during status, no declare stage (RED)`), then `feat(engine): sides are picked on the status screen; the declare stage goes (verifies T-AC-3)`.
 
 ### Task C4.2: the AI hand declares during status (WS1)
 
 **Depends on:** C4.1 · **ACs verified:** T-AC-3 (sim rows) · **Owner:** WS1, in its own files, on `ws3-c4`
 
-- [ ] **Step 1:** WS1 moves `hands/auction.ts`'s `'declare'` branch (lines 89–92) into its status handling, so the AI picks its side during status. It must not wait for a stage that no longer exists.
-- [ ] **Step 2:** `play.ts`'s `case 'declare'` still calls `declareRole`. WS1 confirms it needs no change, or changes it.
-- [ ] **Step 3:** `pnpm typecheck` for packages/ai is 0; `pnpm --filter @mule/ai test` is green.
+- [x] **Step 1:** WS1 moves `hands/auction.ts`'s `'declare'` branch (lines 89–92) into its status handling, so the AI picks its side during status. It must not wait for a stage that no longer exists.
+- [x] **Step 2:** `play.ts`'s `case 'declare'` still calls `declareRole`. WS1 confirms it needs no change, or changes it.
+- [x] **Step 3:** `pnpm typecheck` for packages/ai is 0; `pnpm --filter @mule/ai test` is green.
 - [ ] **Step 4: T-AC-3's sim rows.** Run `pnpm sim -- --games 40 --seed 101` on `ws3-c4` and on the base. Any change in the 10 checks goes to WS1 (WS6 §7 R-2), and WS1 signs it off before merge.
 
 ### Task C4.3: C4, the status screens get Buy and Sell
 
 **Depends on:** C4.1 · **ACs verified:** B-AC-4 (UI half, via C4.4), T-AC-8 (via C4.4) · **Spec:** WS6 §1 C4 ux, §2 RULE-2 · **Tier:** user-visible
 
-- [ ] **Step 1: Implement C4's screens by grafting** `PhoneStatusDeclare` and `TvStatusDeclare` (`git show 25a2512:design/mocks/ws6-ux/src/screens/StatusDeclare.tsx`) into `Auction.tsx`'s status branch and `TvAuction`'s status branch. Replace the mock's fixtures with the live view. Mechanism: fill_scaffold.
+- [x] **Step 1: Implement C4's screens by grafting** `PhoneStatusDeclare` and `TvStatusDeclare` (`git show 25a2512:design/mocks/ws6-ux/src/screens/StatusDeclare.tsx`) into `Auction.tsx`'s status branch and `TvAuction`'s status branch. Replace the mock's fixtures with the live view. Mechanism: fill_scaffold.
   - Buy and Sell come from `view.auction`'s own walker side, not local state: the engine seeded it.
   - A tap sends `{type: 'declare', side}`; tapping the chosen side again sends `pass` (RULE-2 row 1).
   - Sell is disabled at 0 units (row 2).
@@ -136,8 +162,8 @@
   - Delete the phone's and TV's `stage === 'declare'` branches.
   - `sound.ts:146` drops `'declare'`.
   - The walk keeps today's picker after `line-readout`, per this plan's RULE-2 row 4 reading.
-- [ ] **Step 2: Run** `pnpm typecheck` (0 everywhere once C4.2 is in; until then, apps/web only), `pnpm --filter @mule/web test` and `build`. Expected: green.
-- [ ] **Step 3: Commit** `feat(web): Buy and Sell on the status screen; no declare screen`.
+- [x] **Step 2: Run** `pnpm typecheck` (0 everywhere once C4.2 is in; until then, apps/web only), `pnpm --filter @mule/web test` and `build`. Expected: green.
+- [x] **Step 3: Commit** `feat(web): Buy and Sell on the status screen; no declare screen`.
 
 ### Task C4.4: browser proof, render gate, sim
 
@@ -145,6 +171,9 @@
 
 - [ ] **Step 1:** In `auction-steps.ts`'s direct run, against the server's view:
   - **B-AC-4:** a player with 0 units of the good starts the walk as a buyer if they do nothing; Sell is disabled for them; tapping Buy passes instead. Assert their walker's `side` in `viewFor` and on the phone.
+  - **B-AC-4, the surplus side (from the C4.3 review, mutant M4):** a player with surplus opens status with `side-seller` checked. Tapping Buy from Sell lands on `buyer` in `viewFor`.
+  - Replace `pickSide`'s Seller-after-Ready step at :408, and fix `screens.ts:127–134` and `smoke.ts:256` per WS4's ruling (a).
+  - Re-run `pnpm sim -- --games 40 --seed 101` and `--seed 1` on the merged `ws3-c4` against trunk 6df42d2, and compare with WS1's claim.
   - **UBER-AC-1's last clause:** record every stage the phones and the TV render across month 1's goods; `declare` is never among them.
   - Replace the `WALK.declareMs` budget at :411 with `WALK.statusMs`.
 
