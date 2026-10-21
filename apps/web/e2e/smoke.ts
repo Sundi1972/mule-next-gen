@@ -36,6 +36,8 @@ const PRESS_MS = 2_000;
 const MAX_AUCTION_PRESSES = 40;
 /** The host sits in seat 1. */
 const HOST_WALKER = 'walker-s1';
+/** The phone's score lines at game over that add up; a Collapse line, when there is one, is taken off them. */
+const PART_LINES = ['money', 'goods', 'land', 'mules'] as const;
 
 const SEED = seedFrom(process.env.MULE_E2E_SEED);
 const steps = await loadAuctionSteps();
@@ -133,6 +135,7 @@ try {
   check(rows.length === 3, `final scores for all three seats, got ${rows.length}`);
   check(rows.some((r) => r.includes('Heiko (you)')), `the human is on the final scores: ${rows.join(' | ')}`);
   await tv.getByTestId('tv-phase').filter({ hasText: 'Game over' }).waitFor({ timeout: 5_000 });
+  await checkTheScoresAddUp(phone, tv);
 
   const phases = seen.map((s) => s.phase);
   check(isSubsequence(EXPECTED_PHASES, phases), `phone showed every phase of months 1 and 2 in order: ${phases.join(' > ')}`);
@@ -296,6 +299,57 @@ async function checkWalkersClearTheNames(page: Page, screen: string): Promise<bo
     check(overlap <= 1, `FM-2: on the ${screen}, ${w.id} is drawn ${overlap.toFixed(1)} px into the names strip`);
   }
   return true;
+}
+
+/**
+ * B-AC-3 at game over: the phone's score lines add up to its final score, which is the host's score on the
+ * TV, and both screens give the colony verdict the TV's air gauge shows. The TV shows no score parts at all.
+ */
+async function checkTheScoresAddUp(phone: Page, tv: Page): Promise<void> {
+  const end = phone.locator('[data-phase=gameOver]');
+  const tvEnd = tv.locator('[data-phase=gameOver]');
+  const line = async (part: string) => {
+    const row = end.getByTestId(`part-${part}`);
+    const rows = await row.count();
+    if (part === 'collapse' && rows === 0) return 0;
+    check(rows === 1, `B-AC-3: the phone shows one part-${part} line, got ${rows}`);
+    return readNumber(await row.locator('td').last().textContent(), `the phone's part-${part}`);
+  };
+  const parts = Object.fromEntries(await Promise.all(PART_LINES.map(async (p) => [p, await line(p)] as const)));
+  const cut = Math.abs(await line('collapse'));
+  const total = await line('total');
+  const sum = PART_LINES.reduce((s, p) => s + parts[p]!, 0) - cut;
+  check(sum === total, `B-AC-3: the phone's lines ${PART_LINES.map((p) => `${p} ${parts[p]}`).join(' + ')} − collapse ${cut} = ${sum}, but its final score reads ${total}`);
+
+  await tvEnd.getByTestId('tv-scores').waitFor({ timeout: 5_000 });
+  const hostRow = tvEnd.getByTestId('tv-scores').locator('li').filter({ hasText: 'Heiko' });
+  check((await hostRow.count()) === 1, 'B-AC-3: the TV lists the host once in its final scores');
+  const onTv = readNumber(await hostRow.locator('[data-num]').last().textContent(), "the host's TV score");
+  check(onTv === total, `B-AC-3: the phone's final score ${total} is the host's score on the TV, ${onTv}`);
+
+  // The band as the TV's air gauge names it, which everyone in the room reads.
+  const gauge = (await tvEnd.getByText(/^\d+ · (CLEAN|SMOGGY|TOXIC|COLLAPSE)$/).textContent()) ?? '';
+  const expected = gauge.endsWith('COLLAPSE') ? 'failed' : 'passed';
+  for (const [screen, verdict] of [
+    ['phone', end.getByTestId('verdict')],
+    ['TV', tvEnd.getByTestId('tv-verdict')],
+  ] as const) {
+    const text = (await verdict.textContent()) ?? '';
+    const says = /\bfailed\b/.test(text) ? 'failed' : /\bpassed\b/.test(text) ? 'passed' : 'neither';
+    check(says === expected, `B-AC-3: the ${screen} verdict reads "${says}", but the TV's air gauge shows ${gauge}: "${text}"`);
+  }
+  check(expected === 'failed' || cut === 0, `B-AC-3: the colony passed, yet the phone shows a Collapse line of ${cut}`);
+
+  const tvParts = await tv.locator('[data-testid^="part-"]').count();
+  check(tvParts === 0, `B-AC-3: the TV shows no score parts (HC-4), found ${tvParts} part- elements`);
+}
+
+/** A number as the screens print it: thousands separators, and a minus sign when negative. */
+function readNumber(text: string | null, what: string): number {
+  const shown = (text ?? '').trim();
+  check(/^[−-]?[\d,]+$/.test(shown), `B-AC-3: ${what} is a number, got "${shown}"`);
+  const n = Number(shown.replace(/[^\d]/g, ''));
+  return /^[−-]/.test(shown) ? -n : n;
 }
 
 type Shown = { phase: string; at: number };
