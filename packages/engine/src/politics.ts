@@ -4,6 +4,7 @@
  * GameState.politics. No randomness: ties break by rule, so a replay needs no extra seed.
  */
 import { POLITICS } from './config.js';
+import { RuleError } from './errors.js';
 import { player } from './game.js';
 import type { Election, GameState, Office, OfficeResult, Politics } from './types.js';
 
@@ -74,22 +75,124 @@ export function voteWeight(state: GameState, id: string): VoteWeight {
   return { total: parts.base + parts.land + parts.reputation + parts.baron + parts.taxes, parts };
 }
 
+const OFFICES: readonly Office[] = ['governor', 'sheriff'];
+
+type ElectionResult = Record<Office, OfficeResult>;
+
+/** This month's election while planning runs; a RuleError when there is none. */
+function liveElection(state: GameState, id: string): Election {
+  player(state, id);
+  const election = state.politics?.election;
+  if (state.phase !== 'planning' || !election) throw new RuleError('No election this month');
+  return election;
+}
+
+function contested(election: Election, office: Office): boolean {
+  return election.candidates[office].length >= 2;
+}
+
 /** RULE-2: runs for an office, moving any candidacy for the other one; null withdraws. Only in nominate. */
 export function runFor(state: GameState, id: string, office: Office | null): void {
-  throw new Error('NotImplemented: runFor');
+  const election = liveElection(state, id);
+  if (election.stage !== 'nominate') throw new RuleError('Candidates are closed');
+  const run = state.politics!.governorRun;
+  if (office === 'governor' && run?.id === id && run.terms >= 2) throw new RuleError('Two Governor terms in a row');
+  if (office && election.candidates[office].includes(id)) return;
+  const { candidates } = edit(state).election!;
+  for (const o of OFFICES) candidates[o] = candidates[o].filter((c) => c !== id);
+  if (office) candidates[office].push(id);
 }
 
 /** Casts, changes or (with null) clears a secret ballot for a contested office. Only in the ballot stage. */
 export function castVote(state: GameState, id: string, office: Office, candidate: string | null): void {
-  throw new Error('NotImplemented: castVote');
+  const election = liveElection(state, id);
+  if (election.stage === 'nominate') throw new RuleError('The ballot is not open yet');
+  if (election.stage !== 'ballot') throw new RuleError('The ballot is closed');
+  if (!contested(election, office)) throw new RuleError('There is no vote for this office');
+  if (candidate !== null && !election.candidates[office].includes(candidate)) throw new RuleError('Not a candidate');
+  const { ballots } = edit(state).election!;
+  const ballot = (ballots[id] ??= {});
+  if (candidate === null) delete ballot[office];
+  else ballot[office] = candidate;
 }
 
 /** Done for the current stage (or undone); every player Done ends the stage at the next step. */
 export function electionDone(state: GameState, id: string, done = true): void {
-  throw new Error('NotImplemented: electionDone');
+  const election = state.politics?.election;
+  if (state.phase !== 'planning' || !election || (election.stage !== 'nominate' && election.stage !== 'ballot')) return;
+  if (election.done.includes(id) === done) return;
+  const e = edit(state).election!;
+  e.done = done ? [...e.done, id] : e.done.filter((d) => d !== id);
 }
 
 /** Advances the election by dt ms of game time. Returns the result in the step the ballot closes. */
-export function stepElection(state: GameState, dt: number): Record<Office, OfficeResult> | null {
-  throw new Error('NotImplemented: stepElection');
+export function stepElection(state: GameState, dt: number): ElectionResult | null {
+  if (state.phase !== 'planning' || !state.politics?.election || state.politics.election.stage === 'over') return null;
+  const politics = edit(state);
+  const election = politics.election!;
+  election.clockMs -= dt;
+  if (election.stage === 'reveal') {
+    if (election.clockMs <= 0) takeOffice(state, politics);
+    return null;
+  }
+  const allDone = state.players.every((p) => election.done.includes(p.id));
+  if (election.clockMs > 0 && !allDone) return null;
+  if (election.stage === 'nominate' && OFFICES.some((o) => contested(election, o))) {
+    Object.assign(election, { stage: 'ballot', clockMs: POLITICS.ballotMs, done: [] });
+    return null;
+  }
+  return closeBallot(state, election);
+}
+
+/** AM-1: planning is ending: an election still open closes now, from the ballots cast so far, and its winners take office. */
+export function closeElection(state: GameState): void {
+  if (!state.politics?.election || state.politics.election.stage === 'over') return;
+  const politics = edit(state);
+  if (politics.election!.stage !== 'reveal') closeBallot(state, politics.election!);
+  takeOffice(state, politics);
+}
+
+function closeBallot(state: GameState, election: Election): ElectionResult {
+  const governor = decide(state, election, 'governor', null);
+  // Decided after the Governor and never the Governor, so one player never holds both offices.
+  const sheriff = decide(state, election, 'sheriff', governor.winner);
+  Object.assign(election, { stage: 'reveal', clockMs: POLITICS.revealMs, done: [], result: { governor, sheriff } });
+  return election.result!;
+}
+
+function takeOffice(state: GameState, politics: Politics): void {
+  const election = politics.election!;
+  const { governor, sheriff } = election.result!;
+  election.stage = 'over';
+  politics.governor = governor.winner;
+  politics.sheriff = sheriff.winner;
+  politics.termStart = state.month;
+  for (const id of [governor.winner, sheriff.winner]) politics.terms[id] = (politics.terms[id] ?? 0) + 1;
+  const run = politics.governorRun;
+  politics.governorRun = { id: governor.winner, terms: run?.id === governor.winner ? run.terms + 1 : 1 };
+}
+
+/** RULE-3 for one office. Weights are taken now, as the ballot closes. */
+function decide(state: GameState, election: Election, office: Office, governor: string | null): OfficeResult {
+  const seat = (id: string) => state.players.findIndex((p) => p.id === id);
+  const candidates = election.candidates[office].filter((c) => c !== governor);
+  if (candidates.length === 0) {
+    const others = state.players.filter((p) => p.id !== governor);
+    const richest = others.reduce((best, p) => (p.money > best.money ? p : best));
+    return { winner: richest.id, how: 'appointed', tallies: [] };
+  }
+  const tallies = candidates.map((id) => ({ id, votes: 0 }));
+  for (const [voter, ballot] of Object.entries(election.ballots)) {
+    const line = tallies.find((t) => t.id === ballot[office]);
+    if (line) line.votes += voteWeight(state, voter).total;
+  }
+  tallies.sort((a, b) => b.votes - a.votes || seat(a.id) - seat(b.id));
+  if (tallies.length === 1) return { winner: tallies[0]!.id, how: 'unopposed', tallies };
+  const tied = tallies.filter((t) => t.votes === tallies[0]!.votes).map((t) => t.id);
+  if (tied.length === 1) return { winner: tied[0]!, how: 'votes', tallies };
+  const baron = state.politics!.baron;
+  const baronPick = baron === null ? undefined : election.ballots[baron]?.[office];
+  if (baronPick !== undefined && tied.includes(baronPick)) return { winner: baronPick, how: 'baron', tallies };
+  const most = tied.reduce((best, id) => (plotsOf(state, id) > plotsOf(state, best) ? id : best));
+  return { winner: most, how: 'tieRule', tallies };
 }
