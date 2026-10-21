@@ -661,6 +661,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const state = this.requireState();
     const a = state.auction;
     if (state.phase !== 'auction' || !a || !a.good || a.stage === 'over') return null;
+    const good = a.good;
     const prices = a.walkers.map((w) => w.price);
     const lines = [storeBuyLine(state), storeSellLine(state), shipLine(state)].filter((n): n is number => n !== null);
     return {
@@ -675,7 +676,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       shipPays: shipLine(state),
       ...boardRange(a.lo, a.hi, [...prices, ...lines]),
       speed: a.speed,
-      walkers: a.walkers.map((w) => ({ id: w.id, side: w.side, price: Math.round(w.price), at: w.price, dir: w.dir, done: a.done.includes(w.id) })),
+      walkers: a.walkers.map((w) => ({
+        id: w.id,
+        side: w.side,
+        price: Math.round(w.price),
+        at: w.price,
+        dir: w.dir,
+        done: a.done.includes(w.id),
+        units: state.players.find((p) => p.id === w.id)?.stock[good] ?? 0,
+      })),
       deals: a.deals.map(({ buyer, seller, price, units }) => ({ buyer, seller, price, units })),
       units: a.units,
       status: a.status,

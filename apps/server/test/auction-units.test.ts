@@ -47,18 +47,20 @@ describe('the goods auction walkers carry their units', () => {
     const start = { s1: stockOf('s1'), s2: stockOf('s2') };
     let traded = state.auction!.units;
     let checks = 0;
+    let betweenPlayers = 0;
     for (let i = 0; i < 2_000 && game.viewFor(null).auction?.good === good && game.viewFor(null).auction?.stage === 'walk'; i++) {
       advance(WALK.tickMs);
       if (state.auction?.units === traded) continue;
-      traded = state.auction!.units;
       if (game.viewFor(null).auction?.good !== good) break;
+      traded = state.auction!.units;
+      betweenPlayers = state.auction!.between.units;
       expectUnitsMatchEngine(game.viewFor('s1'), state);
       expectUnitsMatchEngine(game.viewFor('s2'), state);
       expectUnitsMatchEngine(game.viewFor(null), state);
       checks++;
     }
     expect(checks, 'units traded during the walk').toBeGreaterThan(0);
-    expect(state.auction!.between.units, 'units traded between the two players').toBeGreaterThan(0);
+    expect(betweenPlayers, 'units traded between the two players').toBeGreaterThan(0);
     expect(stockOf('s1')).toBeLessThan(start.s1);
     expect(stockOf('s2')).toBeGreaterThan(start.s2);
   });

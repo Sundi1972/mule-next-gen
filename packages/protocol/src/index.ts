@@ -97,6 +97,8 @@ export interface WalkerView {
   at: number;
   dir: -1 | 0 | 1;
   done: boolean;
+  /** Their stock of the good up now, live as units trade; public like the status table. The server always fills it. */
+  units?: number;
 }
 
 /** Units changing hands right now: between two players, or with the store or the ship ('store', 'ship'). */
