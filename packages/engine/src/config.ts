@@ -398,6 +398,28 @@ export const MAP = {
   peak: { high: 4, medium: 3, low: { min: 1, max: 2 }, count: { min: 3, max: 4 } },
   /** Chance a map has one scarce good. Read by the generator and the map-quality test, not the checker. */
   scarceChance: 0.25,
+  /** Tuning for the layout stages (map-layout.ts): how the generator meets the rules above, not rules themselves. */
+  layout: {
+    /** The budget never gives a terrain more than this share, so jitter can't take plains near maxTerrainShare. */
+    shareCap: 0.3,
+    /** Plots a region aims for: each terrain's count is split into regions about this size. */
+    avgRegion: 6,
+    /** A region's seed scores its distance to seeds of its own terrain up to this many steps, and to any seed up to seedSpacing. */
+    twinSpacing: 8,
+    seedSpacing: 4,
+    /** Growth steps, per free plot, before the regions stop growing. */
+    growPasses: 4,
+    /** Rounds of planting new regions in pockets the first growth left. */
+    refillRounds: 3,
+    /** Sweeps over the plots no region reached. */
+    leftoverPasses: 10,
+    /** Most fixes the repair makes to one layout. */
+    repairMoves: 120,
+    /** Of those, how many may leave the layout no better, to step off a dead end. */
+    sidewaysMoves: 30,
+    /** Edge plots of each big patch tried as the start of a carved region, when a speck is stuck. */
+    carveStarts: 3,
+  },
 };
 
 export const GAME = {
