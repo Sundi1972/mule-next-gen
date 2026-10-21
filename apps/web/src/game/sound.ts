@@ -143,7 +143,7 @@ export function useAuctionSound(auction: AuctionView | null) {
     let next = 0;
     const timer = window.setInterval(() => {
       const a = live.current;
-      if (!a || (a.stage !== 'walk' && a.stage !== 'declare') || a.seconds <= 0) {
+      if (!a || a.stage !== 'walk' || a.seconds <= 0) {
         next = 0;
         return;
       }

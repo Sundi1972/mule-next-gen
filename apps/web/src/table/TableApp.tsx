@@ -1,6 +1,6 @@
 import type { DealView, MuleView, TableView } from '@mule/protocol';
 import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PlayerMark, SeatSpeciesProvider, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard, type Slot } from '@mule/ui';
-import { boardWalkers, dealLine, LineReadout, newestFirst, skippedLine, StatusTable, type DealRow } from '../components/AuctionParts';
+import { boardWalkers, dealLine, LineReadout, newestFirst, SIDE_WORD, skippedLine, StatusTable, StoreBox, type DealRow } from '../components/AuctionParts';
 import { useEffect, useState, type ReactNode } from 'react';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
@@ -311,29 +311,36 @@ function useNewestFirst(deals: DealView[]): DealRow[] {
   return rows;
 }
 
-/** The auction on the big screen: the whole board, large, with every creature walking live. */
+/**
+ * The auction on the big screen: before each good, the status table and everyone's side, which is public;
+ * then the whole board, large, with every creature walking live.
+ */
 function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game: MuleView; auction: NonNullable<MuleView['auction']> }) {
   useAuctionSound(auction);
   const skipped = skippedLine(auction);
   const walkers = boardWalkers(game, auction);
   const stock = auction.storeForSale;
   const deals = useNewestFirst(auction.deals);
-  const stageName = auction.stage === 'status' ? 'Status' : auction.stage === 'declare' ? 'Buy, sell or pass?' : auction.slowed ? 'Trading · clock slowed' : 'Walk';
+  const status = auction.stage === 'status';
+  const stageName = status ? 'Buy or sell?' : auction.slowed ? 'Trading · clock slowed' : 'Walk';
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-8 text-ink" data-phase="auction">
       <TvHeader game={game} title={`Auction · ${GOOD_NAME[auction.good]}`} />
       <div className="flex min-h-0 flex-1 gap-6">
-        <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <div className={cx('flex min-w-0 flex-1 flex-col', status ? 'gap-3' : 'gap-2')}>
           <TimeBar size="tv" seconds={auction.seconds} total={auction.total} slowed={auction.slowed} />
           {skipped && (
             <p className="font-mono text-base text-ink-3" data-testid="skipped">
               {skipped}
             </p>
           )}
-          {auction.stage === 'status' ? (
-            <div className="min-h-0 flex-1 rounded-panel border border-holo-line bg-panel px-5 py-4">
-              <StatusTable view={game} auction={auction} tv />
-            </div>
+          {status ? (
+            <>
+              <div className="rounded-panel border border-holo-line bg-panel px-5 py-4">
+                <StatusTable view={game} auction={auction} tv />
+              </div>
+              <StoreBox auction={auction} tv />
+            </>
           ) : (
             <WalkBoard
               size="tv"
@@ -346,7 +353,7 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
               shipPays={auction.shipPays}
               storeStock={stock}
               marks={{ ask: true, bid: true }}
-              stage={auction.stage === 'walk' ? 'walk' : 'declare'}
+              stage="walk"
               className="min-h-0 flex-1"
             />
           )}
@@ -355,29 +362,48 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
           <div className="flex flex-col gap-1 rounded-panel border-2 border-holo bg-holo-soft p-4 shadow-glow">
             <GoodTag good={auction.good} name className="text-2xl" />
             <span className={cx('font-display text-xl font-semibold', auction.slowed && 'text-warn')}>{stageName}</span>
-            <span data-num className="font-mono text-lg text-ink-2" data-testid="tv-units">
-              {auction.units} unit{auction.units === 1 ? '' : 's'} traded
-            </span>
+            {!status && (
+              <span data-num className="font-mono text-lg text-ink-2" data-testid="tv-units">
+                {auction.units} unit{auction.units === 1 ? '' : 's'} traded
+              </span>
+            )}
           </div>
-          {auction.stage === 'walk' && (
+          {status ? (
+            <ul className="flex flex-col gap-2" data-testid="tv-picked">
+              {game.players.map((p) => {
+                const s = auction.walkers.find((w) => w.id === p.id)?.side;
+                return (
+                  <li key={p.id} className="flex items-center gap-3">
+                    <PlayerMark slot={slotOf(game, p.id) ?? 0} size={22} />
+                    <span className="flex-1 truncate font-display text-xl font-semibold">{p.name}</span>
+                    <span className={cx('font-mono text-lg font-bold', s === 'seller' ? 'text-rise' : s === 'buyer' ? 'text-fall' : 'text-ink-3')}>
+                      {s === undefined ? '…' : SIDE_WORD[s].toUpperCase()}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
             <div className="shrink-0 rounded-panel border border-holo-line bg-panel p-3">
               <LineReadout walkers={walkers} trading={auction.deals.length > 0} tv />
             </div>
           )}
-          <dl className="grid shrink-0 grid-cols-3 gap-px overflow-hidden rounded-panel border border-holo-line bg-holo-line font-mono" data-testid="tv-store">
-            <div className="flex flex-col bg-panel p-3">
-              <dt className="label-caps">Sells</dt>
-              <dd data-num className="text-2xl font-bold text-rise">{auction.storeSells ?? 'out'}</dd>
-            </div>
-            <div className="flex flex-col bg-panel p-3">
-              <dt className="label-caps">Buys</dt>
-              <dd data-num className="text-2xl font-bold text-fall">{auction.storeBuys ?? '—'}</dd>
-            </div>
-            <div className="flex flex-col bg-panel p-3">
-              <dt className="label-caps">Stock</dt>
-              <dd data-num className={cx('text-2xl font-bold', stock === 0 ? 'text-alert' : 'text-ink')}>{stock}</dd>
-            </div>
-          </dl>
+          {!status && (
+            <dl className="grid shrink-0 grid-cols-3 gap-px overflow-hidden rounded-panel border border-holo-line bg-holo-line font-mono" data-testid="tv-store">
+              <div className="flex flex-col bg-panel p-3">
+                <dt className="label-caps">Sells</dt>
+                <dd data-num className="text-2xl font-bold text-rise">{auction.storeSells ?? 'out'}</dd>
+              </div>
+              <div className="flex flex-col bg-panel p-3">
+                <dt className="label-caps">Buys</dt>
+                <dd data-num className="text-2xl font-bold text-fall">{auction.storeBuys ?? '—'}</dd>
+              </div>
+              <div className="flex flex-col bg-panel p-3">
+                <dt className="label-caps">Stock</dt>
+                <dd data-num className={cx('text-2xl font-bold', stock === 0 ? 'text-alert' : 'text-ink')}>{stock}</dd>
+              </div>
+            </dl>
+          )}
           {auction.shipPays !== null && (
             <p className="rounded-control border border-warn/60 px-3 py-2 font-mono text-lg text-warn">Export ship pays {auction.shipPays}</p>
           )}
@@ -390,11 +416,9 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
             ))}
           </ul>
           <p className={cx('mt-auto text-base leading-snug text-ink-2', auction.deals.length > 0 && 'hidden')}>
-            {auction.stage === 'walk'
-              ? 'Sellers push the red line down, buyers push the green line up. When the two lines meet, the goods change hands.'
-              : auction.stage === 'declare'
-                ? 'Sellers start at the top and walk down. Buyers start at the bottom and walk up.'
-                : 'What everyone has before this good goes on sale.'}
+            {status
+              ? 'Your side is picked for you from what you have and need. Change it on your phone before the bell.'
+              : 'Sellers push the red line down, buyers push the green line up. When the two lines meet, the goods change hands.'}
           </p>
           <span className="truncate font-mono text-sm text-ink-3">
             ROOM {table.code}
