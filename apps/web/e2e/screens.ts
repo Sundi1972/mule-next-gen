@@ -9,6 +9,7 @@ import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { Page } from 'playwright';
 import { launch, PHONE, PHONE_WIDE, startServer, TV } from './harness';
+import { checkTheShow, watchViews } from './production-steps';
 
 const out = resolve(process.argv[2] ?? 'screens');
 mkdirSync(out, { recursive: true });
@@ -32,6 +33,7 @@ const phase = (page: Page, p: string, timeout = 70_000) => page.locator(`[data-p
 try {
   const phone = await (await browser.newContext(PHONE)).newPage();
   phone.on('pageerror', (e) => console.error('phone error:', e.message));
+  const phoneView = watchViews(phone);
   await phone.goto(base);
   await phoneShot(phone, '0-entry');
   await phone.setViewportSize({ width: PHONE.viewport.height, height: PHONE.viewport.width });
@@ -45,6 +47,7 @@ try {
 
   const tv = await (await browser.newContext(TV)).newPage();
   tv.on('pageerror', (e) => console.error('tv error:', e.message));
+  const tvView = watchViews(tv);
   await tv.goto(`${base}/table?room=${code}`);
   await tv.getByTestId('room-code').waitFor();
 
@@ -95,7 +98,9 @@ try {
   await phoneShot(phone, '4-map');
   await phone.getByRole('button', { name: /Install here|Replace MULE/ }).click();
   await phone.getByText('No MULE').first().waitFor();
-  await phone.getByRole('button', { name: /Geo analysis/ }).click();
+  // The drone may have analysed this plot already in planning.
+  const analyse = phone.getByRole('button', { name: /Geo analysis/ });
+  if (await analyse.count()) await analyse.click();
   await phone.getByTestId('ground').waitFor();
   await phoneShot(phone, '4-analysed');
   await phone.getByRole('button', { name: 'Go to the pub and end your turn' }).click();
@@ -106,7 +111,10 @@ try {
   await phase(phone, 'production');
   await phoneShot(phone, '5-production');
   await shot(tv, 'tv-5-production');
-  await phone.getByRole('button', { name: 'On to the auction' }).click();
+  await checkTheShow({ phone, tv, phoneView, tvView, shot });
+  // The show may have run to its end on its own clock by now.
+  const onward = phone.getByRole('button', { name: 'On to the auction' });
+  if (await phone.locator('[data-phase=production]').count()) await onward.click({ timeout: 2_000 }).catch(() => {});
 
   // The walk auction: the status screen, the declare, walking, and a trade in progress.
   await phase(phone, 'auction');
