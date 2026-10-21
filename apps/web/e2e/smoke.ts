@@ -4,13 +4,13 @@
  * Run with `pnpm --filter @mule/web e2e`; replay a red run's map with `MULE_E2E_SEED=<seed>`.
  */
 import { existsSync } from 'node:fs';
-import { GAME, WALK } from '@mule/engine';
+import { WALK } from '@mule/engine';
 import { errors as playwrightErrors, type BrowserContext, type Page } from 'playwright';
-import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
-import { check, launch, PHONE, startServer, TV, type AuctionSteps } from './harness';
+import { PHASE_MS } from '../../server/src/mule-game.js';
+import { check, claimAPlot, launch, PHONE, startServer, TV, type AuctionSteps } from './harness';
+import { planningIsTheHub } from './hub-steps';
 import { checkTheShow, watchShow } from './production-steps';
-import { shellFillsTheStage } from './shell-steps';
-import { fedPlayerFillsAFullHoloBar, hungryPlayerSeesAShortOrangeBar, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows } from './store-steps';
+import { fedPlayerFillsAFullHoloBar, hungryPlayerSeesAShortOrangeBar, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
 
 /** Loaded by a path held in a variable, so tsc never resolves a file that may not exist yet. */
 async function loadAuctionSteps(): Promise<AuctionSteps> {
@@ -77,7 +77,10 @@ try {
   await phone.getByRole('button', { name: 'Add AI player' }).click();
   await phone.getByRole('button', { name: 'Add AI player' }).click();
   await phone.locator('[data-testid=seats] li').nth(2).waitFor();
-  await phone.getByText('Big screen connected').waitFor();
+  // Once the TV has joined, the card shrinks; the check below fails if it never does.
+  await phone
+    .waitForFunction(() => (document.querySelector('[data-testid=room-qr]')?.getBoundingClientRect().width ?? Infinity) < 60, null, { timeout: 5_000 })
+    .catch(() => undefined);
   const compactQr = await qrWidth();
   check(compactQr > 0 && compactQr < 60, `B-AC-4: with a big screen the lobby shows the compact room card, QR ${compactQr} px`);
 
@@ -108,7 +111,7 @@ try {
   await claim.waitFor({ timeout: 5_000 });
   check(await claim.isVisible(), 'CLAIM button visible');
   await tv.getByTestId('tv-phase').filter({ hasText: 'Land grant' }).waitFor({ timeout: 3_000 });
-  await claimAPlot(phone);
+  await claimAPlot(phone, within(PHASE_MS.landGrant), 'AM-7: the phone claims a plot in the month-1 land grant');
 
   // Reload: the phone takes its seat back by itself.
   await phone.reload();
@@ -120,8 +123,11 @@ try {
   await steps.landAuction?.({ phone, tv, check }, 1);
   // B-AC-10 and B-AC-9's fed case as development starts; the phone buys a MULE through the start-of-turn card.
   await storeIsOneHallWithTwoRows(phone, within(PHASE_MS.landGrant));
+  // B-AC-15 and B-AC-16: the store says what to do next, and the MULE is a character.
+  await theCorralGlowsWithNoMule(phone, server, code);
   await fedPlayerFillsAFullHoloBar(phone);
   await outfittersOpenWithAnEmptyMule(phone);
+  console.log(`store hall fills the stage: ${await theLedMuleLightsUp(phone, server, code)}`);
   await checkOwnsAPlot(phone);
   await goToThePub(phone);
   // B-AC-6 and B-AC-8, from what both screens drew of month 1's show.
@@ -137,8 +143,8 @@ try {
   await phone.locator('[data-phase=planning]').waitFor({ timeout: within(PHASE_MS.upkeep) });
   await steps.listedSale?.({ phone, tv, check });
   makeHungry(server, code);
-  // B-AC-12: the shell fills the stage at 1440×900 and 844×390.
-  console.log(`shell: ${await shellFillsTheStage(phone, server, code)}`);
+  // B-AC-14: planning is the hub, its needs read from that seed; with B-AC-12's planning part.
+  console.log(`hub: ${await planningIsTheHub(phone, server, code)}`);
   await readyIfStillPlanning(phone);
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 2);
@@ -190,28 +196,6 @@ async function readyIfStillPlanning(phone: Page): Promise<void> {
   } catch (err) {
     if (err instanceof playwrightErrors.TimeoutError && (await over.count())) return;
     throw err;
-  }
-}
-
-/**
- * Presses CLAIM until the claims counter drops. The lit plot moves on every
- * tick and an AI can take it first, so a press may be refused; press again.
- */
-async function claimAPlot(phone: Page): Promise<void> {
-  const grant = phone.locator('[data-phase=landGrant]');
-  const claim = grant.getByRole('button', { name: /CLAIM/ });
-  const unclaimed = grant.getByText(`${GAME.claimsPerGrant} OF ${GAME.claimsPerGrant} CLAIMS LEFT`, { exact: true });
-  const deadline = Date.now() + within(PHASE_MS.landGrant);
-  for (;;) {
-    check((await grant.count()) > 0 && Date.now() < deadline, 'AM-7: the phone claims a plot in the month-1 land grant');
-    if ((await unclaimed.count()) === 0) return;
-    try {
-      // Waits until a free plot is lit, which enables the button.
-      await claim.click({ timeout: Math.max(1, deadline - Date.now()) });
-      await unclaimed.waitFor({ state: 'hidden', timeout: 2 * GRANT_TICK_MS });
-    } catch (err) {
-      if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
-    }
   }
 }
 

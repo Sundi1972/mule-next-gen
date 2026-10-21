@@ -22,6 +22,8 @@ export type ClientEnvelope<Intent> =
   | { t: 'handoff' }
   /** Make this seat's one choice from the game's list, in the lobby. */
   | { t: 'pick'; pick: string }
+  /** Take this colour index for the seat, in the lobby. */
+  | { t: 'color'; color: number }
   | { t: 'intent'; intent: Intent }
   | { t: 'chat'; text: string; to?: string }
   | { t: 'emote'; emote: string }
@@ -54,6 +56,8 @@ export interface SeatView {
   name: string;
   isAi: boolean;
   connected: boolean;
+  /** The seat's colour index, unique at the table. */
+  color: number;
   /** The seat's choice from the game's list; absent until it has chosen. */
   pick?: string;
 }

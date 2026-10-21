@@ -55,6 +55,8 @@ export interface PlayerView {
   name: string;
   isAi: boolean;
   color: string;
+  /** The player's colour index, the one their seat chose in the lobby. */
+  slot: number;
   species: Species;
   money: number;
   plots: number;
@@ -73,6 +75,8 @@ export interface MyView {
   sick: boolean;
   /** Food and Water this player's household and crew need each month. */
   needs: { food: number; water: number };
+  /** What this player needs of each good this month: the engine's monthNeeds. */
+  monthNeeds: Stock;
   /** Epoch ms when this player's development time runs out, during development. */
   devEndsAt: number | null;
   /** Seconds of development time this player got this month, before analyses. */

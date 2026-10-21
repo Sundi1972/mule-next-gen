@@ -4,6 +4,7 @@ import { mapTiles, plotName } from '../../../../../apps/web/src/game/derive';
 import { MapFit } from '../../../../../apps/web/src/phone/Shell';
 import { H, VIEW, W } from '../fixture';
 import { GameShell, useWide, type Now } from '../proposed/GameShell';
+import type { CodeState } from '../proposed/HandoffCode';
 import { MarketStrip, News, ThisMonth } from './PlanningBrief';
 
 /**
@@ -622,8 +623,8 @@ export function PlanningHub({
   office?: Office;
   tool?: Tool;
   election?: Election | 'done';
-  /** Mock only: open with the in-game hand-off dialog (#game-handoff). */
-  handoff?: boolean;
+  /** Mock only: open with the in-game hand-off dialog (#game-handoff), its code in that state. */
+  handoff?: boolean | CodeState;
 }) {
   const [desk, setDesk] = useState<Desk>(start);
   const [tool, setTool] = useState<Tool>(startTool);

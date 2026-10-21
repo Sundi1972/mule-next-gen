@@ -162,8 +162,8 @@ describe('Room: a seat picks one of the game\'s choices in the lobby (RULE-1)', 
 
     expect(heiko.last('error')).toBeUndefined();
     expect(mia.last('view')!.view.seats).toStrictEqual([
-      { id: 's1', name: 'Heiko', isAi: false, connected: true, pick: 'fox' },
-      { id: 's2', name: 'Mia', isAi: false, connected: true },
+      { id: 's1', name: 'Heiko', isAi: false, connected: true, color: 0, pick: 'fox' },
+      { id: 's2', name: 'Mia', isAi: false, connected: true, color: 1 },
     ]);
   });
 
@@ -205,9 +205,9 @@ describe('Room: a seat picks one of the game\'s choices in the lobby (RULE-1)', 
 
     expect(startedWith).toStrictEqual([
       [
-        { id: 's1', name: 'Heiko', isAi: false, pick: 'owl' },
-        { id: 's2', name: 'Mia', isAi: false },
-        { id: 's3', name: 'Brix', isAi: true },
+        { id: 's1', name: 'Heiko', isAi: false, color: 0, pick: 'owl' },
+        { id: 's2', name: 'Mia', isAi: false, color: 1 },
+        { id: 's3', name: 'Brix', isAi: true, color: 2 },
       ],
     ]);
   });
@@ -225,7 +225,7 @@ describe('Room: a seat picks one of the game\'s choices in the lobby (RULE-1)', 
 
     expect(again.last('welcome')!.seatId).toBe('s1');
     expect(again.last('welcome')!.seatToken).toBe(token);
-    expect(again.last('view')!.view.seats[0]).toStrictEqual({ id: 's1', name: 'Heiko', isAi: false, connected: true, pick: 'cat' });
+    expect(again.last('view')!.view.seats[0]).toStrictEqual({ id: 's1', name: 'Heiko', isAi: false, connected: true, color: 0, pick: 'cat' });
   });
 });
 
@@ -324,9 +324,9 @@ describe('Room: the host kicks a seat or closes the table, in the lobby (RULE-5)
     expect(welcome.seatId).toBe('s4');
     expect(welcome.seatToken).not.toBe(oldToken);
     expect(room.viewFor(null).seats).toStrictEqual([
-      { id: 's1', name: 'Heiko', isAi: false, connected: true },
-      { id: 's4', name: 'Mia', isAi: false, connected: true },
-      { id: 's5', name: 'Brix', isAi: true, connected: true },
+      { id: 's1', name: 'Heiko', isAi: false, connected: true, color: 0 },
+      { id: 's4', name: 'Mia', isAi: false, connected: true, color: 1 },
+      { id: 's5', name: 'Brix', isAi: true, connected: true, color: 2 },
     ]);
   });
 
@@ -563,9 +563,9 @@ describe('Room: a one-time code moves a seat to another device (RULE-6, AM-16)',
     expect(welcome.seatToken).not.toBe(oldToken);
     expect(welcome.seatToken).not.toBe(code);
     expect(heiko.last('view')!.view.seats).toStrictEqual([
-      { id: 's1', name: 'Heiko', isAi: false, connected: true },
-      { id: 's2', name: 'Mia', isAi: false, connected: true, pick: 'fox' },
-      { id: 's3', name: 'Brix', isAi: true, connected: true },
+      { id: 's1', name: 'Heiko', isAi: false, connected: true, color: 0 },
+      { id: 's2', name: 'Mia', isAi: false, connected: true, color: 1, pick: 'fox' },
+      { id: 's3', name: 'Brix', isAi: true, connected: true, color: 2 },
     ]);
 
     pick(room, mia, 'owl');
@@ -760,3 +760,141 @@ describe('Room: a one-time code moves a seat to another device (RULE-6, AM-16)',
     },
   );
 });
+const colours = (room: Room<Intent, View>) => room.viewFor(null).seats.map((s) => s.color);
+
+describe('Room: every seat holds its own colour (RULE-7)', () => {
+  it('T-AC-12: RULE-7 on a new seat — humans and AI take the lowest free colour, and a kick frees one', () => {
+    const { room, heiko } = lobby();
+    room.receive(heiko, heiko.from, { t: 'addAi' });
+    expect(colours(room)).toEqual([0, 1, 2, 3]);
+
+    kick(room, heiko, 's2');
+    expect(colours(room)).toEqual([0, 2, 3]);
+
+    join(room, 'Jonas');
+    room.receive(heiko, heiko.from, { t: 'addAi' });
+    expect(colours(room)).toEqual([0, 2, 3, 1, 4]);
+  });
+
+  it.each([
+    { row: '1: the game has started', started: true, colour: 4, error: 'The game has already started' },
+    { row: '1: first match over row 2', started: true, colour: 9, error: 'The game has already started' },
+    { row: '2: 6 is past the palette', started: false, colour: 6, error: 'Unknown colour' },
+    { row: '2: -1 is before the palette', started: false, colour: -1, error: 'Unknown colour' },
+    { row: '2: 1.5 is no colour index', started: false, colour: 1.5, error: 'Unknown colour' },
+    { row: "3: Mia, a human, holds 1", started: false, colour: 1, error: 'That colour is taken' },
+  ])('T-AC-12: RULE-7 row $row → refused, and every colour stays', ({ started, colour, error }) => {
+    const { room, heiko } = lobby();
+    if (started) room.receive(heiko, heiko.from, { t: 'start' });
+
+    paint(room, heiko, colour);
+
+    expect(heiko.last('error')?.message).toBe(error);
+    expect(colours(room)).toEqual([0, 1, 2]);
+  });
+
+  it('T-AC-12: RULE-7 row 4 — Mia takes Brix\'s colour: Brix (AI) moves to the lowest free colour, not to Mia\'s old one, and every screen sees it', async () => {
+    const { room, heiko, mia } = lobby();
+    room.receive(heiko, heiko.from, { t: 'addAi' });
+    paint(room, heiko, 4);
+    await flush();
+
+    paint(room, mia, 2);
+    await flush();
+
+    expect(mia.last('error')).toBeUndefined();
+    expect(heiko.last('view')!.view.seats.map((s) => [s.name, s.color])).toEqual([
+      ['Heiko', 4],
+      ['Mia', 2],
+      ['Brix', 0],
+      ['AI 4', 3],
+    ]);
+  });
+
+  it('T-AC-12: RULE-7 row 4 at a full table — the AI takes the colour the human let go of', () => {
+    const { room, heiko } = lobby();
+    for (let i = 0; i < 3; i++) room.receive(heiko, heiko.from, { t: 'addAi' });
+
+    paint(room, heiko, 5);
+
+    expect(heiko.last('error')).toBeUndefined();
+    expect(colours(room)).toEqual([5, 1, 2, 3, 4, 0]);
+  });
+
+  it('T-AC-12: RULE-7 row 5 — Mia takes a free colour, and her own again changes nothing', async () => {
+    const { room, heiko, mia } = lobby();
+
+    paint(room, mia, 4);
+    paint(room, mia, 4);
+    await flush();
+
+    expect(mia.last('error')).toBeUndefined();
+    expect(heiko.last('view')!.view.seats.map((s) => s.color)).toEqual([0, 4, 2]);
+  });
+
+  it('T-AC-12: Game.start receives the colour each seat chose', () => {
+    const { room, startedWith } = pickRoom();
+    const { heiko, mia } = lobby(room);
+    paint(room, mia, 5);
+    paint(room, heiko, 2);
+
+    room.receive(heiko, heiko.from, { t: 'start' });
+
+    expect(startedWith[0]!.map((s) => [s.name, s.color])).toEqual([
+      ['Heiko', 2],
+      ['Mia', 5],
+      ['Brix', 0],
+    ]);
+  });
+
+  it.each(Array.from({ length: 40 }, (_, i) => i + 1))(
+    'T-AC-12: RULE-7 invariant — over random joins, colour picks, AI adds, kicks and leaves (seed %i), no two seats share a colour and a refused pick changes nothing',
+    (seed) => {
+      const random = mulberry32(seed);
+      const any = <T,>(list: readonly T[]): T => list[Math.floor(random() * list.length)]!;
+      const room = newRoom();
+      const screens = [join(room, 'Host')];
+      const byId = () => new Map(room.viewFor(null).seats.map((s) => [s.id, s.color]));
+
+      for (let step = 0; step < 80; step++) {
+        const screen = any(screens);
+        const op = any(['join', 'color', 'color', 'color', 'addAi', 'kick', 'leave'] as const);
+        const intended = Math.floor(random() * 8) - 1;
+        const before = byId();
+        const displaced = room.viewFor(null).seats.find((s) => s.isAi && s.color === intended && s.id !== screen.from.seatId);
+        const errors = screen.inbox.filter((m) => m.t === 'error').length;
+        if (op === 'join') screens.push(join(room, `P${step}`));
+        if (op === 'color') paint(room, screen, intended);
+        if (op === 'addAi') room.receive(screen, screen.from, { t: 'addAi' });
+        if (op === 'kick') kick(room, screen, any([...before.keys(), 's99']));
+        if (op === 'leave') leave(room, screen);
+
+        const now = colours(room);
+        expect(new Set(now).size, `seed ${seed} step ${step} ${op}`).toBe(now.length);
+        expect(now.every((c) => Number.isInteger(c) && c >= 0 && c < 6)).toBe(true);
+        const refused = screen.inbox.filter((m) => m.t === 'error').length > errors;
+        if (op === 'color' && refused) expect(byId()).toEqual(before);
+        if (op === 'color' && !refused && displaced) {
+          const others = new Set(room.viewFor(null).seats.filter((s) => s.id !== displaced.id).map((s) => s.color));
+          let lowest = 0;
+          while (others.has(lowest)) lowest++;
+          expect(byId().get(displaced.id), `seed ${seed} step ${step}: the displaced AI`).toBe(lowest);
+        }
+      }
+    },
+  );
+});
+
+const paint = (room: Room<Intent, View>, screen: Screen, color: number) => room.receive(screen, screen.from, { t: 'color', color });
+
+/** A small seeded PRNG, so a failing sequence replays from its seed. */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}

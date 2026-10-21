@@ -197,6 +197,16 @@ describe('TableClient', () => {
     expect(client.getState().status).toBe('idle');
   });
 
+  it("T-AC-12: a colour pick leaves the phone as the room's color message", () => {
+    const { client, last } = setup();
+    client.join('KRTX', 'Heiko');
+    last().open();
+
+    client.color(3);
+
+    expect(last().sent.at(-1)).toEqual({ t: 'color', color: 3 });
+  });
+
   it('B-AC-6: leaving before the socket opens sends nothing, and still forgets the seat', () => {
     const storage = memoryStore();
     saveSeat(storage, { code: 'KRTX', token: 'secret', name: 'Heiko' });
@@ -315,7 +325,7 @@ describe('TableClient', () => {
     expect(last().sent[0]).toEqual({ t: 'join', code: 'KRTX', name: '', handoff: 'code-1' });
 
     last().deliver({ t: 'welcome', code: 'KRTX', role: 'player', seatId: 's2', seatToken: 'fresh' });
-    last().deliver({ t: 'view', view: { ...lobbyView('KRTX'), seats: [{ id: 's2', name: 'Mia', isAi: false, connected: true }] } });
+    last().deliver({ t: 'view', view: { ...lobbyView('KRTX'), seats: [{ id: 's2', name: 'Mia', isAi: false, connected: true, color: 1 }] } });
     expect(loadSeat(storage)).toEqual({ code: 'KRTX', token: 'fresh', name: 'Mia' });
 
     // A dropped connection comes back with the new token; the used code would be refused.

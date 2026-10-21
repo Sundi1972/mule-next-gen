@@ -25,6 +25,7 @@ import {
   lotDone,
   LOTS,
   monthlyDemand,
+  monthNeeds,
   mulePrice,
   mulePriceFor,
   needsOf,
@@ -138,7 +139,7 @@ function productionView(state: GameState, lengthMs: number): ProductionView | nu
 /** M.U.L.E. as a game hosted by a @tabletop/core room. */
 export class MuleGame implements Game<MuleIntent, MuleView> {
   private state: GameState | null = null;
-  private seats: (SeatInfo & { color: string })[] = [];
+  private seats: SeatInfo[] = [];
   private readonly ready = new Set<string>();
   private readonly away = new Set<string>();
   /** Trades between players in the good that is up, for the news when it closes. */
@@ -166,7 +167,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   }
 
   start(seats: SeatInfo[]): void {
-    this.seats = seats.map((s, i) => ({ ...s, color: PLAYER_COLORS[i % PLAYER_COLORS.length]! }));
+    this.seats = seats.map((s) => ({ ...s }));
     this.state = createGame({ seed: this.seed, players: seats.map(({ id, name, isAi, pick }) => ({ id, name, isAi, ...(isSpecies(pick) ? { species: pick } : {}) })), maxMonths: this.options.maxMonths });
     this.ai.clear();
     this.lotHands.clear();
@@ -645,7 +646,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           id: s.id,
           name: s.name,
           isAi: s.isAi,
-          color: s.color,
+          color: PLAYER_COLORS[s.color % PLAYER_COLORS.length]!,
+          slot: s.color,
           species: p.species,
           money: p.money,
           plots: state.tiles.filter((t) => t.owner === s.id).length,
@@ -663,6 +665,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
             hungry: me.hungry,
             sick: me.sick,
             needs: needsOf(state, me.id),
+            monthNeeds: monthNeeds(state, me.id),
             devEndsAt: state.phase === 'development' ? (this.devEndsAt.get(me.id) ?? null) : null,
             devSeconds: me.devSeconds,
             produced: state.history.at(-1)?.produced[me.id] ?? null,

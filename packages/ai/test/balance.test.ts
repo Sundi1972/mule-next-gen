@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, AI_LEVELS, AI_PERSONAS, createGame, EVENTS, GAME, GOODS, mulePriceFor, observe, type GameState } from '@mule/engine';
+import { advancePhase, AI_LEVELS, AI_PERSONAS, createGame, EVENTS, GAME, GOODS, mulePriceFor, observe, STRATEGIST, type GameState } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
 import { AiSeat } from '../src/seat.js';
-import { developDecision, goodPlan, muleValue, plotValue, tradeDecision } from '../src/strategist.js';
+import { developDecision, goodPlan, landDecision, muleValue, plotValue, tradeDecision, wantsPlot } from '../src/strategist.js';
 import { cashReserve, installGain, type Mind } from '../src/value.js';
 
 const fourSeats = (seed: number) => createGame({ seed, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI${i}`, isAi: true })) });
@@ -41,6 +41,26 @@ function developmentWithWater(water: number): GameState {
 }
 
 const traderMind: Mind = { me: 'ai0', personaId: 'trader', persona: AI_PERSONAS.trader, levelId: 'trader', level: AI_LEVELS.trader };
+
+describe('land claims off reading order', () => {
+  it('T-AC-10: in the first sweep a seat lets go of a plot outside its top open plots, and seats break ties differently', () => {
+    const state = fourSeats(3);
+    while (state.phase !== 'landGrant') advancePhase(state);
+    const obs = observe(state, 'ai0');
+    const mind = (salt: number): Mind => ({ ...traderMind, salt });
+    const ranking = landDecision(obs, mind(1)).all[0]!.action.ranking;
+    const top = GAME.claimsPerGrant + STRATEGIST.grantSpare;
+    // A plot that clears grantShare of the best, but ranks below the seat's top open plots.
+    const outside = ranking.slice(top).find((s) => s.utility >= ranking[0]!.utility * STRATEGIST.grantShare);
+    expect(outside).toBeDefined();
+    const plan = landDecision(obs, mind(1)).all[0]!.action;
+    expect(wantsPlot(plan, obs, outside!.index, 0, mind(1))).toBe(false);
+    expect(wantsPlot(plan, obs, ranking[0]!.index, 0, mind(1))).toBe(true);
+    // Tied plots: two salts order them differently, so seats don't all reach for the same first rows.
+    const order = (salt: number) => landDecision(obs, mind(salt)).all[0]!.action.ranking.map((s) => s.index);
+    expect(order(1)).not.toEqual(order(2));
+  });
+});
 
 describe('cash reserve', () => {
   it('T-AC-3: a Water farm whose own first output covers the gap is not vetoed by the reserve', () => {
@@ -158,6 +178,37 @@ describe('surplus to a short store', () => {
     const full = observe(auctionWithShelf(40), 'ai0');
     const before = tradeDecision(full, traderMind, goodPlan(full, traderMind, 'water')).all.find((c) => c.key === 'sell');
     expect(before === undefined || (before.action as { keep: number }).keep > plan.values.block).toBe(true);
+  });
+});
+
+/** The month-1 auction with the store's shelves full, ai0 holding `stock` of `good`, and the sales tax at `tax`. */
+function auctionAtTax(tax: number, good: 'food' | 'water', stock: number): GameState {
+  const state = auctionWithShelf(40);
+  state.store.stock.food = 40;
+  state.players[0]!.stock[good] = stock;
+  state.treasury.salesTax = tax;
+  return state;
+}
+
+describe('the sales tax', () => {
+  it('T-AC-9: at a 15% tax a seat sells the same resale stock for 85% of the gain, and values its own use the same', () => {
+    const sell = (tax: number) => {
+      const obs = observe(auctionAtTax(tax, 'water', 30), 'ai0');
+      return tradeDecision(obs, traderMind, goodPlan(obs, traderMind, 'water')).all.find((c) => c.key === 'sell')!;
+    };
+    const [free, taxed] = [sell(0), sell(0.15)];
+    expect(free).toBeDefined();
+    expect((taxed.action as { keep: number }).keep).toBe((free.action as { keep: number }).keep);
+    expect(taxed.value).toBeCloseTo(free.value * 0.85, 0);
+
+    const food = (tax: number) => goodPlan(observe(auctionAtTax(tax, 'food', 20), 'ai0'), traderMind, 'food').values;
+    const [v0, v15] = [food(0), food(0.15)];
+    const resale0 = v0.keep[v0.block]!;
+    const own = [...Array(v0.block).keys()].filter((k) => k >= v0.floorUnits && v0.keep[k]! > resale0);
+    expect(own.length).toBeGreaterThan(0);
+    for (const k of own) expect(v15.keep[k]).toBe(v0.keep[k]);
+    // Negative case: a unit held for resale next month is taxed when it sells, so it is worth 85%.
+    expect(v15.keep[v15.block]).toBeCloseTo(resale0 * 0.85, 6);
   });
 });
 
