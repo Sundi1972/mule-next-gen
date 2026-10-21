@@ -34,6 +34,8 @@ const AUCTION_STAGE_MS = within(WALK.goodMs / WALK.tradeClockRate);
 const PRESS_MS = 2_000;
 /** The auction offers at most 9 goods of 3 stages each; more Done presses than that means it is not moving on. */
 const MAX_AUCTION_PRESSES = 40;
+/** The host sits in seat 1. */
+const HOST_WALKER = 'walker-s1';
 
 const SEED = seedFrom(process.env.MULE_E2E_SEED);
 const steps = await loadAuctionSteps();
@@ -109,7 +111,11 @@ try {
   await steps.landAuction?.({ phone, tv, check }, 1);
   await checkOwnsAPlot(phone);
   await goToThePub(phone);
-  await pressDoneThroughTheAuction(phone);
+  let measured = false;
+  await pressDoneThroughTheAuction(phone, async (button) => {
+    if (!measured && button.startsWith('Done with')) measured = await checkTheFloorClearsTheNames(phone, tv);
+  });
+  check(measured, 'FM-2: the month-1 auction reached a walk to measure');
 
   // Month 2.
   await phone.locator('[data-phase=planning]').waitFor({ timeout: within(PHASE_MS.upkeep) });
@@ -215,8 +221,9 @@ async function goToThePub(phone: Page): Promise<void> {
 /**
  * The goods auction: press its Done button at every stage it shows ('Ready',
  * 'Done choosing', 'Done with <Good>') until the phone leaves the auction.
+ * `beforePress` gets the button's label first.
  */
-async function pressDoneThroughTheAuction(phone: Page): Promise<void> {
+async function pressDoneThroughTheAuction(phone: Page, beforePress?: (button: string) => Promise<void>): Promise<void> {
   await phone.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
   const done = phone.locator('[data-phase=auction]').getByRole('button', { name: /^(Ready|Done choosing|Done with .+)$/ });
   const over = phone.locator('[data-phase]:not([data-phase=auction])');
@@ -224,6 +231,8 @@ async function pressDoneThroughTheAuction(phone: Page): Promise<void> {
     check(pressed < MAX_AUCTION_PRESSES, `auction still running after ${MAX_AUCTION_PRESSES} Done presses`);
     await done.or(over).first().waitFor({ timeout: AUCTION_STAGE_MS });
     if (await over.count()) return;
+    const [showing] = await done.allInnerTexts();
+    if (showing !== undefined) await beforePress?.(showing);
     let label: string;
     try {
       // The button was on screen a moment ago, so pressing it is quick or the stage has moved on.
@@ -236,6 +245,47 @@ async function pressDoneThroughTheAuction(phone: Page): Promise<void> {
     }
     // Pressed, it turns to 'Done · waiting'; 'Ready' on the status screen stays until the next stage.
     await phone.locator('[data-phase=auction]').getByRole('button', { name: label, exact: true }).waitFor({ state: 'hidden', timeout: AUCTION_STAGE_MS });
+  }
+}
+
+/**
+ * FM-2 during a walk: declares Buyer, which puts the host's walker on the board's floor, then checks that
+ * every walker on the phone and the TV clears the names strip. False when the walk closed first.
+ */
+async function checkTheFloorClearsTheNames(phone: Page, tv: Page): Promise<boolean> {
+  try {
+    await phone.locator('[data-phase=auction]').getByRole('radio', { name: 'Buyer' }).click({ timeout: PRESS_MS });
+    for (const page of [phone, tv]) {
+      const host = page.locator(`[data-phase=auction] [data-testid=walk-board] [data-testid=${HOST_WALKER}][data-side=buyer]`);
+      await host.waitFor({ timeout: PRESS_MS });
+      // A walker that switched sides slides to its new edge; measure where it stops.
+      await host.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)), undefined, { timeout: PRESS_MS });
+    }
+  } catch (err) {
+    if (err instanceof playwrightErrors.TimeoutError) return false;
+    throw err;
+  }
+  await checkWalkersClearTheNames(phone, 'phone');
+  await checkWalkersClearTheNames(tv, 'TV');
+  return true;
+}
+
+/** FM-2: every walker on the auction board is drawn above the names strip. Read in one pass, since walkers move. */
+async function checkWalkersClearTheNames(page: Page, screen: string): Promise<void> {
+  const board = page.locator('[data-phase=auction]').getByTestId('walk-board');
+  const { namesTop, walkers } = await board.evaluate(
+    (el) => ({
+      namesTop: el.querySelector('[data-testid=walk-names]')?.getBoundingClientRect().top ?? null,
+      walkers: [...el.querySelectorAll('[data-testid^="walker-"]')].map((w) => ({ id: w.getAttribute('data-testid'), bottom: w.getBoundingClientRect().bottom })),
+    }),
+    undefined,
+    { timeout: PRESS_MS },
+  );
+  check(namesTop !== null, `FM-2: the ${screen} board has a names strip`);
+  check(walkers.length > 0, `FM-2: the ${screen} board draws a walker`);
+  for (const w of walkers) {
+    const overlap = w.bottom - namesTop;
+    check(overlap <= 1, `FM-2: on the ${screen}, ${w.id} is drawn ${overlap.toFixed(1)} px into the names strip`);
   }
 }
 
