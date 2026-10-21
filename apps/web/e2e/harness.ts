@@ -10,7 +10,8 @@ export type AuctionStepContext = { phone: Page; tv: Page; check: (cond: unknown,
 /**
  * CT-3: `e2e/auction-steps.ts` (WS3's file) may export these; smoke.ts calls each at its hook.
  * - `landAuction(ctx, month)`: once per month, months 1 and 2, right after that month's land grant ends.
- * - `listedSale(ctx)`: once, in month 2's planning, before the test presses "I'm ready".
+ * - `listedSale(ctx)`: once, in month 2's planning, before the test presses "I'm ready". It must return
+ *   within about 2 s, leaving the phone on the planning screen.
  * Each must return while the phase it was called in can still end on its own clock (planning is about
  * 4.5 s here), and must never press what the test presses itself: "I'm ready", the pub, the auction's Done.
  */

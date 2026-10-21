@@ -85,7 +85,7 @@ try {
   // Month 2.
   await phone.locator('[data-phase=planning]').waitFor({ timeout: within(PHASE_MS.upkeep) });
   await steps.listedSale?.({ phone, tv, check });
-  await phone.locator('[data-phase=planning]').getByRole('button', { name: "I'm ready" }).click({ timeout: within(PHASE_MS.planning) });
+  await readyIfStillPlanning(phone);
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 2);
   await goToThePub(phone);
@@ -115,6 +115,24 @@ try {
 }
 // Rooms keep their phase timers running; the test is over, so stop here.
 process.exit(0);
+
+/**
+ * Presses "I'm ready" while planning still shows. A hook may use most of
+ * planning, which can then end on its own clock first; that skips the press,
+ * and the phase-order check still sees planning.
+ */
+async function readyIfStillPlanning(phone: Page): Promise<void> {
+  const ready = phone.locator('[data-phase=planning]').getByRole('button', { name: "I'm ready" });
+  const over = phone.locator('[data-phase]:not([data-phase=planning])');
+  await ready.or(over).first().waitFor({ timeout: within(PHASE_MS.planning) });
+  if (await over.count()) return;
+  try {
+    await ready.click({ timeout: PRESS_MS });
+  } catch (err) {
+    if (err instanceof playwrightErrors.TimeoutError && (await over.count())) return;
+    throw err;
+  }
+}
 
 /** Waits until the phone has moved past planning and the land grant. */
 async function pastTheLandGrant(phone: Page): Promise<void> {
