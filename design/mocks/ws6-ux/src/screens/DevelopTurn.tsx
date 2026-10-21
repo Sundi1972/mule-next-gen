@@ -293,7 +293,7 @@ function YourPlots() {
           </li>
         ))}
       </ul>
-      <span className="text-sm text-ink-2">Every working MULE needs 1 Energy a month, except on Energy plots.</span>
+      <span className="text-sm text-ink-2">Each month a farm or a well burns 1 Energy, a mine 2, an Energy plot none.</span>
     </section>
   );
 }

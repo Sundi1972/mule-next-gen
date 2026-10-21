@@ -26,11 +26,11 @@ import { GameShell, type Now } from '../proposed/GameShell';
 type Mode = 'look' | 'drone';
 type PhoneTab = 'map' | 'market' | 'talk';
 
-/** This month's needs (fixture): upkeep for Food and Water, 1 Energy per working MULE not on an Energy plot. */
+/** This month's needs (fixture), as the engine's monthNeeds counts them: upkeep for Food and Water; Energy 1 per farm or well, 2 per mine. */
 const NEEDS: { good: Good; have: number; need: number; why: string }[] = [
   { good: 'food', have: ME.stock.food, need: ME.needs.food, why: 'upkeep' },
   { good: 'water', have: ME.stock.water, need: ME.needs.water, why: 'upkeep' },
-  { good: 'energy', have: ME.stock.energy, need: 4, why: '4 working MULEs' },
+  { good: 'energy', have: ME.stock.energy, need: 4, why: '3 farms and a well' },
 ];
 
 export function PlanningBrief({ mode: start = 'look' }: { mode?: Mode }) {
