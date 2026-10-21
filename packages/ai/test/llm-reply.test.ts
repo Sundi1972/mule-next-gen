@@ -6,7 +6,7 @@ import { parseReply, type ParsedReply } from '../src/llm/reply.js';
 const option = (id: string): ShortOption => ({ id, key: id.toLowerCase(), label: id, utility: 0.5, value: 0, rationale: '' });
 const three = [option('A'), option('B'), option('C')];
 
-const unreadable: ParsedReply = { ok: false, reason: 'unreadable reply' };
+const unreadable: ParsedReply = { ok: false, outcome: 'unreadable', reason: 'unreadable reply' };
 const picked = (optionId: string, line: string | null): ParsedReply => ({ ok: true, optionId, line });
 const reply = (line: unknown, optionId = 'A') => JSON.stringify({ option: optionId, line });
 const x = (n: number) => 'x'.repeat(n);
@@ -17,7 +17,7 @@ describe('reply parsing', () => {
     { name: 'row 2: JSON without an option is unreadable', text: '{"line":"hi"}', expected: unreadable },
     { name: 'row 2: a non-string option is unreadable', text: '{"option":2,"line":"hi"}', expected: unreadable },
     { name: 'row 2: JSON that is not an object is unreadable', text: 'null', expected: unreadable },
-    { name: 'row 3: an option off the list is refused and named', text: '{"option":"F"}', expected: { ok: false, reason: 'named F, not on the list' } },
+    { name: 'row 3: an option off the list is refused and named', text: '{"option":"F"}', expected: { ok: false, outcome: 'off_list', reason: 'named F, not on the list' } },
     { name: 'row 4: quotes and a trailing newline are stripped', text: '{"option":"B","line":"\\"Mine.\\"\\n"}', expected: picked('B', 'Mine.') },
     { name: 'row 4: curly quotes are stripped', text: reply('“Mine.”'), expected: picked('A', 'Mine.') },
     { name: 'row 4: a single-quoted pair is stripped', text: reply("'Mine.'"), expected: picked('A', 'Mine.') },
@@ -34,7 +34,7 @@ describe('reply parsing', () => {
     {
       name: 'row 3: the named option is one line and at most 8 code points',
       text: JSON.stringify({ option: 'F\nlong long long text' }),
-      expected: { ok: false, reason: 'named F long l, not on the list' },
+      expected: { ok: false, outcome: 'off_list', reason: 'named F long l, not on the list' },
     },
     { name: 'row 4: a missing line is null', text: '{"option":"A"}', expected: picked('A', null) },
     { name: 'row 4: a non-string line is null', text: reply(7), expected: picked('A', null) },
