@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   advancePhase,
+  cloneForSim,
   COLONY_SELLER,
   createGame,
   freePlots,
@@ -144,6 +145,15 @@ describe('T-AC-6: the colony sometimes puts a free plot up (RULE-7)', () => {
     leaveGrant(first);
     leaveGrant(again);
     expect(again.listings).toEqual(first.listings);
+  });
+
+  it("T-AC-6: a look-ahead clone that rolls a colony lot leaves the real game's listings alone", () => {
+    const state = newGame(COLONY_SEED);
+    toPhase(state, 'landGrant');
+    const sim = cloneForSim(state);
+    advancePhase(sim);
+    expect(sim.listings.map((l) => l.seller)).toEqual([COLONY_SELLER]);
+    expect(state.listings).toEqual([]);
   });
 
   it('T-AC-6: a colony month keeps the land grant in reading order', () => {
