@@ -53,6 +53,7 @@ export function WalkBoard({
   storeBuys,
   storeSells,
   shipPays,
+  lines: extra = [],
   stage,
   meId,
   onDir,
@@ -66,6 +67,8 @@ export function WalkBoard({
   storeBuys: number | null;
   storeSells: number | null;
   shipPays: number | null;
+  /** More price lines, drawn like the store's: a seller's minimum at the land auction. */
+  lines?: { id: string; label: string; price: number }[];
   stage: 'declare' | 'walk';
   meId?: string;
   onDir?: (dir: -1 | 0 | 1) => void;
@@ -100,6 +103,7 @@ export function WalkBoard({
     { key: 'sells', price: storeSells, who: 'STORE', what: 'SELLS', tone: 'border-rise text-rise' },
     { key: 'buys', price: storeBuys, who: 'STORE', what: 'BUYS', tone: 'border-fall text-fall' },
     { key: 'ship', price: shipPays, who: 'SHIP', what: 'PAYS', tone: 'border-warn text-warn' },
+    ...extra.map((l) => ({ key: `line-${l.id}`, price: l.price, who: l.label, what: '', tone: 'border-holo text-holo' })),
   ].filter((l): l is typeof l & { price: number } => l.price !== null);
   // The lines' labels sit in a gutter on the right, clear of the creatures.
   const gutter = tv ? 104 : 56;
@@ -168,9 +172,7 @@ export function WalkBoard({
                 style={{ width: gutter }}
               >
                 <span className="font-normal opacity-80">{l.who}</span>
-                <span>
-                  {l.what} {l.price}
-                </span>
+                <span>{l.what ? `${l.what} ${l.price}` : l.price}</span>
               </span>
             </div>
           ))}
