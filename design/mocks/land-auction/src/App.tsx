@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { WALK } from './fixture';
+import { LISTINGS, VIEW, WALK } from './fixture';
 import { Game, PhoneFrame, useLotWalk } from './harness';
+import { PhoneSell } from './screens/PhoneSell';
 import { PhoneWalkA } from './screens/PhoneWalkA';
 import { PhoneWalkB } from './screens/PhoneWalkB';
 
@@ -21,6 +22,13 @@ const DECISIONS = [
   'Everyone but the seller is a buyer, if they can pay the minimum. No Buyer/Seller/Pass choice.',
   'Buyers start under the MIN line and hold Up. The highest bid at or over the minimum wins at the bell; a tie goes to whoever got there first.',
   'Your bid stops at your money. The seller watches; their plot is never on their own board.',
+];
+
+/** The Sell tab's states: an empty line-up, the usual one, and a month whose slots are all taken. */
+const SELL_STATES = [
+  { id: 'sell-empty', title: 'Nothing listed yet', listings: [] },
+  { id: 'sell', title: 'Two lots listed', listings: LISTINGS.slice(0, 2) },
+  { id: 'sell-full', title: 'Auction full', listings: [...LISTINGS, { ...LISTINGS[0]!, id: 'l4', seller: 'kai', item: { kind: 'plot' as const, x: 13, y: 1 }, minimum: 140 }] },
 ];
 
 /** One walk, playable: hold Up or Down (or drag on the board). */
@@ -72,6 +80,24 @@ export default function App() {
         <Walk variant="b" />
       </Page>
     );
+  if (hash.startsWith('sell'))
+    return (
+      <Page title={SELL_STATES.find((s) => s.id === hash)?.title ?? 'Planning · Sell'}>
+        <div className="flex gap-3 pb-3 font-mono text-xs">
+          {SELL_STATES.map((s) => (
+            <a key={s.id} href={`#${s.id}`} className={hash === s.id ? 'text-ink' : 'text-holo underline'} data-testid={`state-${s.id}`}>
+              {s.title}
+            </a>
+          ))}
+        </div>
+        <PhoneFrame>
+          <Game>
+            <PhoneSell key={hash} startListings={SELL_STATES.find((s) => s.id === hash)?.listings ?? VIEW.listings} />
+          </Game>
+        </PhoneFrame>
+        <p className="mt-2 max-w-[844px] text-sm text-ink-2">Tap one of your (orange) plots, then try Plot or MULE, − / +, and the unsold choice. "Put it up for auction" adds it to the line-up; UNLIST takes yours back.</p>
+      </Page>
+    );
   return (
     <div className="min-h-full bg-table p-8 text-ink" data-testid="index">
       <h1 className="font-display text-3xl font-semibold">Land auction · mocks</h1>
@@ -102,8 +128,18 @@ export default function App() {
           <Walk variant="b" />
         </section>
       </div>
-      <h2 className="label-caps mt-8">Next, built to the chosen direction</h2>
-      <p className="mt-1 text-sm text-ink-3">Planning · Sell tab · lot intro · sold / unsold · seller's own view · big screen (/table) for intro, walk and result.</p>
+      <h2 className="label-caps mt-8">Step 2 · Planning · Sell tab</h2>
+      <ul className="mt-2 flex gap-4 text-sm">
+        {SELL_STATES.map((s) => (
+          <li key={s.id}>
+            <a href={`#${s.id}`} className="text-holo underline" data-testid={`link-${s.id}`}>
+              {s.title}
+            </a>
+          </li>
+        ))}
+      </ul>
+      <h2 className="label-caps mt-8">Next, built to the chosen walk layout</h2>
+      <p className="mt-1 text-sm text-ink-3">Lot intro · sold / unsold · the seller's own view · big screen (/table) for intro, walk and result.</p>
     </div>
   );
 }
