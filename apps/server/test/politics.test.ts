@@ -192,6 +192,12 @@ describe('the election runs first in planning', () => {
     const view = g.game.viewFor(null);
     expect(view.phase).toBe('planning');
     expect(view.phaseEndsAt).toBeNull();
+
+    untilStage(g, 'over');
+    expect(g.game.viewFor(null).players.map((p) => p.ready), "an election Done is not planning's ready").toEqual([false, false, false, false]);
+    g.game.handle('lena', { type: 'ready' });
+    g.game.handle('brix', { type: 'ready' });
+    expect(g.game.viewFor(null).phase, 'planning waits for Ossa').toBe('planning');
   });
 
   it("C9: an AI seat's Done during the election is Done for the stage", () => {
@@ -227,12 +233,15 @@ describe('the election runs first in planning', () => {
 
   it('C9: a phone that reconnects during the election is no longer Done', () => {
     const g = started();
+    g.game.handle('lena', { type: 'ready' });
+    g.game.connectionChanged('lena', false);
     g.game.connectionChanged('brix', false);
     g.advance(WALK.tickMs);
-    expect(election(g.game).done).toContain('brix');
+    expect(election(g.game).done).toEqual(expect.arrayContaining(['lena', 'brix']));
+    g.game.connectionChanged('lena', true);
     g.game.connectionChanged('brix', true);
     expect(election(g.game).done, 'back at the table, Brix decides for himself').not.toContain('brix');
-    g.game.handle('lena', { type: 'ready' });
+    expect(election(g.game).done, 'Lena pressed Done herself, so a flicker keeps it').toContain('lena');
     g.game.handle('ossa', { type: 'ready' });
     g.advance(WALK.tickMs);
     expect(election(g.game).stage, 'nominate waits for Brix').toBe('nominate');
