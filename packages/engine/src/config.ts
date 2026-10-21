@@ -89,8 +89,8 @@ export const MINERAL_ODDS = {
   none: [1, 0, 0, 0, 0],
   low: [0.7, 0.2, 0.1, 0, 0],
   medium: [0.4, 0.3, 0.2, 0.1, 0],
-  high: [0.1, 0.2, 0.35, 0.25, 0.1],
-  veryHigh: [0.05, 0.1, 0.25, 0.35, 0.25],
+  high: [0.05, 0.15, 0.3, 0.3, 0.2],
+  veryHigh: [0.02, 0.08, 0.15, 0.4, 0.35],
 } as const;
 
 type LandTerrain = Exclude<Terrain, 'store'>;
@@ -102,20 +102,20 @@ type LandTerrain = Exclude<Terrain, 'store'>;
  */
 export const TERRAIN_ODDS: Record<
   LandTerrain,
-  { grown: Partial<Record<GrownGood, 'good' | 'poor'>>; mined: Record<MinedGood, keyof typeof MINERAL_ODDS> }
+  { grown: Partial<Record<GrownGood, 'good' | 'poor'>>; mined: { smithore: keyof typeof MINERAL_ODDS } }
 > = {
-  river: { grown: { food: 'good', water: 'good' }, mined: { smithore: 'low', crystite: 'none', rareEarth: 'low' } },
-  lake: { grown: { water: 'good', food: 'good' }, mined: { smithore: 'none', crystite: 'none', rareEarth: 'none' } },
-  plains: { grown: { food: 'good', energy: 'good' }, mined: { smithore: 'low', crystite: 'low', rareEarth: 'low' } },
-  forest: { grown: { food: 'good', energy: 'poor' }, mined: { smithore: 'low', crystite: 'none', rareEarth: 'low' } },
-  swamp: { grown: { water: 'good', food: 'poor' }, mined: { smithore: 'low', crystite: 'low', rareEarth: 'medium' } },
-  hills: { grown: { food: 'poor' }, mined: { smithore: 'high', crystite: 'medium', rareEarth: 'medium' } },
-  mountains: { grown: { food: 'poor', energy: 'poor' }, mined: { smithore: 'veryHigh', crystite: 'medium', rareEarth: 'high' } },
-  desert: { grown: { energy: 'good', water: 'poor', food: 'poor' }, mined: { smithore: 'low', crystite: 'medium', rareEarth: 'medium' } },
-  tundra: { grown: { energy: 'good', water: 'good', food: 'poor' }, mined: { smithore: 'medium', crystite: 'low', rareEarth: 'medium' } },
-  ice: { grown: { water: 'good', food: 'poor', energy: 'poor' }, mined: { smithore: 'none', crystite: 'low', rareEarth: 'low' } },
-  volcanic: { grown: { energy: 'good', food: 'poor' }, mined: { smithore: 'medium', crystite: 'low', rareEarth: 'high' } },
-  crater: { grown: { food: 'poor' }, mined: { smithore: 'low', crystite: 'veryHigh', rareEarth: 'medium' } },
+  river: { grown: { food: 'good', water: 'good' }, mined: { smithore: 'low' } },
+  lake: { grown: { water: 'good', food: 'good' }, mined: { smithore: 'none' } },
+  plains: { grown: { food: 'good', energy: 'good' }, mined: { smithore: 'low' } },
+  forest: { grown: { food: 'good', energy: 'poor' }, mined: { smithore: 'low' } },
+  swamp: { grown: { water: 'good', food: 'poor' }, mined: { smithore: 'low' } },
+  hills: { grown: { food: 'poor' }, mined: { smithore: 'high' } },
+  mountains: { grown: { food: 'poor', energy: 'poor' }, mined: { smithore: 'veryHigh' } },
+  desert: { grown: { energy: 'good', water: 'poor', food: 'poor' }, mined: { smithore: 'low' } },
+  tundra: { grown: { energy: 'good', water: 'good', food: 'poor' }, mined: { smithore: 'medium' } },
+  ice: { grown: { water: 'good', food: 'poor', energy: 'poor' }, mined: { smithore: 'none' } },
+  volcanic: { grown: { energy: 'good', food: 'poor' }, mined: { smithore: 'medium' } },
+  crater: { grown: { food: 'poor' }, mined: { smithore: 'low' } },
 };
 
 /** How hazard traits change output. Traits not listed only change event risks. */
@@ -340,6 +340,12 @@ export type ShareTerrain = Exclude<LandTerrain, 'river'>;
  * plots per player.
  */
 export const MAP = {
+  /**
+   * The honest map-wide average Crystite and Rare earth rating, shown as the
+   * hint on every terrain: both exist only in random rings, so no terrain
+   * says where they are. Provisional until measured.
+   */
+  unknownMineral: 0.6,
   /** A plot is good for a raw good at this rating or more. */
   goodAt: { food: 1, water: 1, energy: 1, smithore: 3, crystite: 3, rareEarth: 3 } satisfies Record<RawGood, number>,
   /** Every map has at least this many good plots per player. */
