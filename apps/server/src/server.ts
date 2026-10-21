@@ -181,8 +181,10 @@ function isIntent(v: unknown): v is MuleIntent {
       return Array.isArray(i.plots) && i.plots.length <= 4 && i.plots.every((p: unknown) => typeof p === 'object' && p !== null && int((p as Record<string, unknown>).x) && int((p as Record<string, unknown>).y));
     case 'outfit':
       return typeof i.outfit === 'string';
-    case 'setOrder':
-      return typeof i.good === 'string' && ['buy', 'sell', 'none'].includes(i.side as string) && Number.isFinite(i.quantity) && Number.isFinite(i.limit);
+    case 'declare':
+      return i.side === 'buyer' || i.side === 'seller' || i.side === 'pass';
+    case 'walk':
+      return i.dir === 'up' || i.dir === 'down' || i.dir === 'stop';
     default:
       return false;
   }

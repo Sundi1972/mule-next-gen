@@ -5,6 +5,7 @@ export * from './stock.js';
 export * from './map.js';
 export * from './production.js';
 export * from './economy.js';
+export * from './walk.js';
 export * from './auction.js';
 export * from './upkeep.js';
 export * from './pollution.js';

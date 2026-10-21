@@ -239,3 +239,24 @@ export function rankGround(tile: Tile): { good: RawGood; rating: number }[] {
     .map((good) => ({ good, rating: tile.ground[good] }))
     .sort((a, b) => b.rating - a.rating);
 }
+
+/**
+ * What a player needs of each good for next month: Food and Water for the
+ * household and crew, Energy for their plots and factories, the inputs their
+ * factories turn, and a Medicine against sickness when the air is bad. The
+ * auction's status screen measures surplus and shortage against this.
+ */
+export function monthNeeds(state: GameState, playerId: string): Stock {
+  const need = emptyStock();
+  const { food, water } = needsOf(state, playerId);
+  need.food = food;
+  need.water = water;
+  for (const t of state.tiles) {
+    if (t.owner !== playerId || !t.outfit || t.outfit === 'greenBelt') continue;
+    need.energy += energyUseOf(state, t);
+    if (!isFactory(t.outfit)) continue;
+    for (const [g, q] of Object.entries(RECIPES[t.outfit].inputs) as [Good, number][]) if (g !== 'energy') need[g] += q;
+  }
+  if (airBand(state.air).devPenalty > 0) need.medicine = 1;
+  return need;
+}

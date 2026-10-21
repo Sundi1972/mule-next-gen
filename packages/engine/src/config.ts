@@ -335,3 +335,45 @@ export const TAX = {
   /** Sales tax on every sale a player makes, into the colony fund. The Governor sets it later; this is the start. */
   salesTax: 0.05,
 };
+
+/**
+ * The goods auction, played live as in the original: goods come up one at a
+ * time, each with a status screen, a declare and a walk. Times are in
+ * milliseconds of game time; the server steps the auction on a fixed tick.
+ */
+export const WALK = {
+  /** The order goods come up in: raw goods first, then processed ones. */
+  order: ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine'] as Good[],
+  /** The status screen before each good: what everyone had, used, made, and their surplus or shortage. */
+  statusMs: 6_000,
+  /** Picking Buyer or Seller before the walk. */
+  declareMs: 5_000,
+  /** The walk's clock for one good. */
+  goodMs: 20_000,
+  /** While any unit is changing hands the clock runs at this share of its speed, as in the original. */
+  tradeClockRate: 0.25,
+  /**
+   * While a buyer and a seller (or a player and the store or the ship) stay
+   * matched, the first unit takes tradeStartMs, each further one tradeSpeedUp
+   * times as long as the one before, down to tradeFloorMs, so big lots don't
+   * take ages. The speed-up starts again when the pair separates.
+   */
+  tradeStartMs: 400,
+  tradeSpeedUp: 0.8,
+  tradeFloorMs: 60,
+  /**
+   * Walking speed in price units per second, set when a good comes up: its
+   * board's starting height divided by this, so crossing the board takes
+   * this many seconds whatever the good costs. Never under minSpeed.
+   */
+  crossSeconds: 6,
+  minSpeed: 2,
+  /** The board reaches this share beyond the outermost price line; sellers start at its top, buyers at its bottom. */
+  boardMargin: 0.3,
+  /** How often the server steps the auction. */
+  tickMs: 100,
+  /** AI walkers: a reaction delay when the walk starts, and short seeded pauses while they walk. */
+  aiReactMs: [300, 1_200] as [number, number],
+  aiPausePerSecond: 0.35,
+  aiPauseMs: [250, 900] as [number, number],
+};

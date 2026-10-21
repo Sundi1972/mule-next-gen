@@ -94,6 +94,8 @@
 
   --animate-scan: scan 2.4s linear infinite;
   --animate-pulse-glow: pulse-glow 1.6s ease-in-out infinite;
+  --animate-stripes: stripes 0.5s linear infinite;
+  --animate-hurry: hurry 0.45s ease-in-out infinite alternate;
 
   @keyframes fade-in {
     from { opacity: 0; }
@@ -102,6 +104,14 @@
   @keyframes scan {
     from { transform: translateY(-100%); }
     to { transform: translateY(100%); }
+  }
+  /* The time bar: stripes run while a trade slows the clock; it shakes and glows when time is short. */
+  @keyframes stripes {
+    to { background-position: 17px 0; }
+  }
+  @keyframes hurry {
+    from { box-shadow: 0 0 0 0 transparent; transform: translateX(0); }
+    to { box-shadow: 0 0 14px 2px color-mix(in srgb, var(--color-rise) 55%, transparent); transform: translateX(1px); }
   }
   @keyframes pulse-glow {
     0%, 100% { box-shadow: 0 0 0 rgb(56 225 255 / 0); }

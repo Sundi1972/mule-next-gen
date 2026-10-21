@@ -1,4 +1,4 @@
-import type { Good, Ground, Outfit, Phase, Species, Stock, Terrain, TileTrait } from '@mule/engine';
+import type { AuctionSide, Good, Ground, Outfit, Phase, SkipReason, Species, StatusRow, Stock, Terrain, TileTrait } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -7,6 +7,7 @@ export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@ta
  * the game view each screen receives.
  */
 export type MuleIntent =
+  /** Ready to move on; at the auction, done with this stage of the current good. */
   | { type: 'ready' }
   /** Planning: send the geo drone over one or two free plots. */
   | { type: 'drone'; plots: { x: number; y: number }[] }
@@ -21,7 +22,10 @@ export type MuleIntent =
   | { type: 'filter'; x: number; y: number }
   /** Development: end your turn at the pub for cash. */
   | { type: 'pub' }
-  | { type: 'setOrder'; good: Good; side: 'buy' | 'sell' | 'none'; quantity: number; limit: number };
+  /** Auction: buy, sell or pass on the good that is up. During the walk a switch jumps you to the new side's start edge. */
+  | { type: 'declare'; side: AuctionSide }
+  /** Auction, during the walk: hold up, hold down, or let go. */
+  | { type: 'walk'; dir: 'up' | 'down' | 'stop' };
 
 export const EMOTES = ['Deal?', 'Nice!', 'Traitor!', 'Ha!', 'Help!'] as const;
 export type Emote = (typeof EMOTES)[number];
@@ -76,7 +80,59 @@ export interface MyView {
   outfitCosts: Record<Outfit, number>;
   /** Free plots chosen for the geo drone this month. */
   droneOrder: { x: number; y: number }[];
-  orders: Partial<Record<Good, { side: 'buy' | 'sell'; quantity: number; limit: number }>>;
+}
+
+/** A player on the auction board. */
+export interface WalkerView {
+  id: string;
+  /** Pass means off the board for this good. */
+  side: AuctionSide;
+  /** Their bid or ask, rounded. */
+  price: number;
+  /** Unrounded, for smooth drawing. */
+  at: number;
+  dir: -1 | 0 | 1;
+  done: boolean;
+}
+
+/** Units changing hands right now: between two players, or with the store or the ship ('store', 'ship'). */
+export interface DealView {
+  buyer: string;
+  seller: string;
+  price: number;
+  units: number;
+}
+
+/** The live goods auction, on every screen. */
+export interface AuctionView {
+  good: Good;
+  stage: 'status' | 'declare' | 'walk';
+  /** Seconds left on the stage's clock. It runs slower while units change hands. */
+  seconds: number;
+  /** The stage's full time in seconds, for the draining time bar. */
+  total: number;
+  /** True while the clock is slowed by a trade. */
+  slowed: boolean;
+  /** Goods still to come after this one. */
+  next: Good[];
+  /** What the store pays and charges, or null while it doesn't trade at that line. */
+  storeBuys: number | null;
+  storeSells: number | null;
+  /** What the export ship pays for the next unit, while it is in port and wants this good. */
+  shipPays: number | null;
+  /** The board's price range: it grows when a walker goes past it. */
+  lo: number;
+  hi: number;
+  /** Walking speed in price units per second. */
+  speed: number;
+  walkers: WalkerView[];
+  deals: DealView[];
+  /** Units traded in this good so far. */
+  units: number;
+  /** The status screen: every player's had, used, made, now, need and spoilage of this good, as in the original. */
+  status: StatusRow[];
+  /** Goods skipped since the last one that came up, and why, for one line on screen. */
+  skipped: { good: Good; reason: SkipReason }[];
 }
 
 export interface MarketRow {
@@ -130,6 +186,8 @@ export interface MuleView {
   treasury: { money: number; salesTax: number };
   news: string[];
   scores: { id: string; score: number }[] | null;
+  /** The live goods auction while it runs. */
+  auction: AuctionView | null;
 }
 
 export const PLAYER_COLORS = ['#e4572e', '#3a86ff', '#2bb673', '#f2a541', '#9b5de5', '#00b4d8'];

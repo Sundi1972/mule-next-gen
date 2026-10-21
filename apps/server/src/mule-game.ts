@@ -2,15 +2,17 @@ import {
   advanceGrant,
   advancePhase,
   aiClaim,
+  aiAuction,
   aiDevelop,
-  aiOrders,
   airBand,
   allPrices,
   analysePlot,
+  auctionDone,
   buyMule,
   claimPlot,
   cover,
   createGame,
+  declareRole,
   DEVELOPMENT,
   fitFilter,
   GAME,
@@ -28,17 +30,22 @@ import {
   outfitMule,
   RuleError,
   score,
-  settleAuction,
+  setWalk,
   shipAnnounced,
   shipInPort,
+  shipLine,
   shipPrice,
+  stepAuction,
+  storeBuyLine,
   storeQuotes,
+  storeSellLine,
   visitPub,
+  WALK,
   type GameState,
   type Good,
-  type Order,
   type Outfit,
   type Phase,
+  type Trade,
 } from '@mule/engine';
 import { PLAYER_COLORS, type MuleIntent, type MuleView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
@@ -46,14 +53,15 @@ import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 /**
  * The longest each phase lasts, in milliseconds. Phases also end early when
  * every connected player is ready; the land grant ends when the claims are
- * used, development when everyone is out of time or at the pub.
+ * used, development when everyone is out of time or at the pub. The auction
+ * has no fixed length: it runs good by good on its own clocks (WALK in the
+ * engine's config), stepped by the server every WALK.tickMs.
  */
-export const PHASE_MS: Record<Exclude<Phase, 'gameOver'>, number> = {
+export const PHASE_MS: Record<Exclude<Phase, 'gameOver' | 'auction'>, number> = {
   planning: 45_000,
   landGrant: 60_000,
   development: (DEVELOPMENT.fullSeconds + 5) * 1_000,
   production: 5_000,
-  auction: 30_000,
   upkeep: 8_000,
 };
 
@@ -62,15 +70,14 @@ export const GRANT_TICK_MS = 650;
 
 export const AI_NAMES = ['The Accountant', 'The Baron', 'The Grudge', 'The Gambler', 'The Good Neighbour'];
 
-type StandingOrder = { side: 'buy' | 'sell'; quantity: number; limit: number };
-
 /** M.U.L.E. as a game hosted by a @tabletop/core room. */
 export class MuleGame implements Game<MuleIntent, MuleView> {
   private state: GameState | null = null;
   private seats: (SeatInfo & { color: string })[] = [];
   private readonly ready = new Set<string>();
   private readonly away = new Set<string>();
-  private readonly orders = new Map<string, Partial<Record<Good, StandingOrder>>>();
+  /** Trades between players in the good that is up, for the news when it closes. */
+  private dealsInGood: Trade[] = [];
   /** When each player's development time runs out, epoch ms. */
   private readonly devEndsAt = new Map<string, number>();
   private cancels: (() => void)[] = [];
@@ -93,6 +100,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const state = this.requireState();
     switch (intent.type) {
       case 'ready':
+        if (state.phase === 'auction') {
+          auctionDone(state, seatId);
+          return;
+        }
         this.ready.add(seatId);
         this.checkAllReady();
         return;
@@ -132,14 +143,14 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         this.checkDevelopmentOver();
         return;
       }
-      case 'setOrder': {
-        if (state.phase !== 'auction') throw new RuleError('The auction is not running');
-        const mine = this.orders.get(seatId) ?? {};
-        if (intent.side === 'none' || intent.quantity <= 0) delete mine[intent.good];
-        else mine[intent.good] = { side: intent.side, quantity: Math.floor(intent.quantity), limit: Math.max(1, Math.round(intent.limit)) };
-        this.orders.set(seatId, mine);
+      case 'declare':
+        declareRole(state, seatId, intent.side);
         return;
-      }
+      case 'walk':
+        setWalk(state, seatId, intent.dir === 'up' ? 1 : intent.dir === 'down' ? -1 : 0);
+        // Walking again takes back a Done.
+        if (intent.dir !== 'stop') auctionDone(state, seatId, false);
+        return;
     }
   }
 
@@ -164,7 +175,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   private checkAllReady(): void {
     const waiting = this.seats.filter((s) => !s.isAi && !this.away.has(s.id) && !this.ready.has(s.id) && !this.doneDeveloping(s.id));
-    if (this.state && this.state.phase !== 'gameOver' && waiting.length === 0) this.nextPhase();
+    // The auction ends on its own, good by good.
+    if (this.state && this.state.phase !== 'gameOver' && this.state.phase !== 'auction' && waiting.length === 0) this.nextPhase();
   }
 
   /** During development: true once a player went to the pub or ran out of time. */
@@ -190,7 +202,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private nextPhase(): void {
     const state = this.requireState();
     if (state.phase === 'gameOver') return;
-    if (state.phase === 'auction') this.settle();
     advancePhase(state);
     this.enterPhase();
   }
@@ -208,6 +219,14 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       return;
     }
 
+    if (state.phase === 'auction') {
+      this.phaseEndsAt = null;
+      this.dealsInGood = [];
+      this.news = ['The auction opens. Walk up to buy, down to sell.'];
+      this.scheduleAuctionTick(this.ctx.now());
+      return;
+    }
+
     const ms = PHASE_MS[state.phase];
     this.phaseEndsAt = this.ctx.now() + ms;
     this.cancels.push(
@@ -219,7 +238,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
     if (state.phase === 'landGrant') this.scheduleGrantTick();
     if (state.phase === 'development') this.startDevelopment();
-    if (state.phase === 'auction') this.orders.clear();
     if (state.phase === 'production') this.reportProduction();
     if (state.phase === 'upkeep') this.reportUpkeep();
   }
@@ -291,25 +309,58 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       });
   }
 
-  private settle(): void {
+  /**
+   * The live auction runs on a fixed tick. Each tick the AI players choose
+   * their step, players who dropped count as done, and the engine moves
+   * everyone by the time that really passed on the server's clock. Every
+   * screen gets the new board.
+   */
+  private scheduleAuctionTick(last: number): void {
     const state = this.requireState();
-    const all: Partial<Record<Good, Order[]>> = {};
-    for (const seat of this.seats) {
-      const source = seat.isAi
-        ? Object.fromEntries(Object.entries(aiOrders(state, seat.id)).map(([g, list]) => [g, list?.[0]]))
-        : this.orders.get(seat.id) ?? {};
-      for (const [good, order] of Object.entries(source) as [Good, StandingOrder | undefined][]) {
-        if (order) (all[good] ??= []).push({ playerId: seat.id, ...order });
-      }
+    this.cancels.push(
+      this.ctx.schedule(WALK.tickMs, () => {
+        if (state.phase !== 'auction' || !state.auction) return;
+        const now = this.ctx.now();
+        // A stalled server loop must not teleport walkers across the board.
+        const dt = Math.min(Math.max(0, now - last), WALK.tickMs * 3);
+        const good = state.auction.good;
+        for (const seat of this.seats) {
+          try {
+            if (seat.isAi) aiAuction(state, seat.id, dt);
+            else if (this.away.has(seat.id)) auctionDone(state, seat.id);
+          } catch (err) {
+            if (!(err instanceof RuleError)) throw err;
+          }
+        }
+        this.dealsInGood.push(...stepAuction(state, dt).filter((t) => t.buyer !== 'store' && t.buyer !== 'ship' && t.seller !== 'store'));
+        if (state.auction.good !== good) {
+          this.reportGood(good);
+          const skipped = state.auction.skipped;
+          if (skipped.length > 0) this.news = [`Skipped: ${skipped.map((x) => x.good).join(', ')}.`, ...this.news].slice(0, 3);
+        }
+        if (state.auction.stage === 'over') this.nextPhase();
+        else this.scheduleAuctionTick(now);
+        this.ctx.changed();
+      }),
+    );
+  }
+
+  /** When a good closes: the biggest deals between players make the news. */
+  private reportGood(good: Good | null): void {
+    if (!good) return;
+    const lots = new Map<string, { seller: string; buyer: string; n: number; value: number }>();
+    for (const t of this.dealsInGood) {
+      const k = `${t.seller}>${t.buyer}`;
+      const lot = lots.get(k) ?? { seller: t.seller, buyer: t.buyer, n: 0, value: 0 };
+      lot.n++;
+      lot.value += t.price;
+      lots.set(k, lot);
     }
-    const trades = settleAuction(state, all);
-    const name = (id: string) => (id === 'store' ? 'the store' : this.seats.find((s) => s.id === id)?.name ?? id);
-    const notable = trades
-      .filter((t) => t.buyer !== 'store' && t.seller !== 'store')
-      .sort((a, b) => b.quantity * b.price - a.quantity * a.price)
-      .slice(0, 3)
-      .map((t) => `${name(t.seller)} sold ${t.quantity} ${t.good} to ${name(t.buyer)} at ${t.price}.`);
-    this.news = notable.length > 0 ? notable : ['A quiet market: everyone traded with the store.'];
+    this.dealsInGood = [];
+    const best = [...lots.values()].sort((x, y) => y.value - x.value)[0];
+    if (!best) return;
+    const line = `${this.nameOf(best.seller)} sold ${best.n} ${good} to ${this.nameOf(best.buyer)} at ${Math.round(best.value / best.n)}.`;
+    this.news = [line, ...this.news].slice(0, 3);
   }
 
   private reportProduction(): void {
@@ -400,7 +451,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
             mulePrice: mulePriceFor(state, me.id),
             outfitCosts: Object.fromEntries(outfits.map((o) => [o, outfitCostFor(state, me.id, o)])) as Record<Outfit, number>,
             droneOrder: me.droneOrder.map((i) => ({ x: i % state.width, y: Math.floor(i / state.width) })),
-            orders: this.orders.get(me.id) ?? {},
           }
         : null,
       market: GOODS.map((good) => {
@@ -429,6 +479,39 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       treasury: { money: state.treasury.money, salesTax: state.treasury.salesTax },
       news: this.news,
       scores: state.phase === 'gameOver' ? this.seats.map((s) => ({ id: s.id, score: score(state, s.id) })) : null,
+      auction: this.auctionView(),
+    };
+  }
+
+  /** The auction board as every screen draws it. Public, as in the original: everyone sees everyone walk. */
+  private auctionView(): MuleView['auction'] {
+    const state = this.requireState();
+    const a = state.auction;
+    if (state.phase !== 'auction' || !a || !a.good || a.stage === 'over') return null;
+    const prices = a.walkers.map((w) => w.price);
+    const lines = [storeBuyLine(state), storeSellLine(state), shipLine(state)].filter((n): n is number => n !== null);
+    const top = Math.max(a.hi, ...prices, ...lines);
+    const bottom = Math.min(a.lo, ...prices, ...lines);
+    // Grow the board by a margin once someone walks past its edge.
+    const pad = (top - bottom) * 0.08;
+    return {
+      good: a.good,
+      stage: a.stage,
+      seconds: Math.max(0, a.clockMs / 1_000),
+      total: (a.stage === 'status' ? WALK.statusMs : a.stage === 'declare' ? WALK.declareMs : WALK.goodMs) / 1_000,
+      slowed: a.stage === 'walk' && a.deals.length > 0,
+      next: [...a.queue],
+      storeBuys: storeBuyLine(state),
+      storeSells: storeSellLine(state),
+      shipPays: shipLine(state),
+      lo: Math.max(0, Math.floor(top > a.hi || bottom < a.lo ? bottom - pad : bottom)),
+      hi: Math.ceil(top > a.hi ? top + pad : top),
+      speed: a.speed,
+      walkers: a.walkers.map((w) => ({ id: w.id, side: w.side, price: Math.round(w.price), at: w.price, dir: w.dir, done: a.done.includes(w.id) })),
+      deals: a.deals.map(({ buyer, seller, price, units }) => ({ buyer, seller, price, units })),
+      units: a.units,
+      status: a.status,
+      skipped: a.skipped,
     };
   }
 

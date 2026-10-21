@@ -108,16 +108,39 @@ try {
   await shot(tv, 'tv-5-production');
   await phone.getByRole('button', { name: 'On to the auction' }).click();
 
-  // Auction: sell some Food, see it placed.
+  // The walk auction: the status screen, the declare, walking, and a trade in progress.
   await phase(phone, 'auction');
-  await phoneShot(phone, '6-auction');
-  await shot(tv, 'tv-6-auction');
-  await phone.getByRole('button', { name: /^(Sell|Buy) \d+ / }).click();
-  await phone.getByRole('button', { name: /Order placed/ }).waitFor();
+  await phone.getByTestId('status-table').waitFor();
+  await phoneShot(phone, '6-auction-status');
+  await tv.getByTestId('status-table').waitFor();
+  await shot(tv, 'tv-6-auction-status');
+  await phone.getByRole('button', { name: 'Ready' }).click();
+  await phone.getByRole('radiogroup', { name: 'Your side' }).waitFor();
+  await phoneShot(phone, '6-auction-declare');
+  await shot(tv, 'tv-6-auction-declare');
+  // Sell what this good leaves spare: walk down from the top toward the store's buying line.
+  const seller = phone.getByRole('radio', { name: 'Seller' });
+  if (await seller.isEnabled()) await seller.click();
+  await phone.getByRole('button', { name: 'Done choosing' }).click();
+  await phone.getByRole('button', { name: 'Hold to walk down' }).waitFor();
+  await phone.keyboard.down('ArrowDown');
+  await phone.waitForTimeout(1_200);
+  await phoneShot(phone, '6-auction-walking');
+  await shot(tv, 'tv-6-auction-walking');
+  // Keep walking until units change hands, then picture the trade.
+  // A trade is quick, so both screens are taken the moment units start changing hands.
+  await phone.getByTestId('my-deal').filter({ hasText: /[2-9] units/ }).waitFor({ timeout: 20_000 });
+  await Promise.all([phone.screenshot({ path: join(out, 'phone-land-6-auction-trade.png') }), tv.screenshot({ path: join(out, 'tv-6-auction-trade.png') })]);
+  await phone.keyboard.up('ArrowDown');
   await phone.getByRole('button', { name: 'Night' }).click();
   await phoneShot(phone, '6-auction-night');
   await phone.getByRole('button', { name: 'Day' }).click();
-  await phone.getByRole('button', { name: 'Done trading' }).click();
+  // Done with every good that comes up, until the auction closes.
+  for (let i = 0; i < 60 && (await phone.locator('[data-phase=auction]').count()) > 0; i++) {
+    const done = phone.getByRole('button', { name: /^(Ready|Done choosing|Done with )/ });
+    if ((await done.count()) > 0 && (await done.isEnabled())) await done.click().catch(() => {});
+    await phone.waitForTimeout(500);
+  }
 
   // Upkeep and the next month.
   await phase(phone, 'upkeep');

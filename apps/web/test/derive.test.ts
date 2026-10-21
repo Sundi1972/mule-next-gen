@@ -27,6 +27,7 @@ function view(extra: Partial<MuleView> = {}): MuleView {
     treasury: { money: 0, salesTax: 0 },
     news: [],
     scores: null,
+    auction: null,
     ...extra,
   };
 }
