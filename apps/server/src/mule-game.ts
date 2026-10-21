@@ -15,6 +15,7 @@ import {
   fitFilter,
   GAME,
   GOODS,
+  goodsMarket,
   type AiLevelId,
   grantDone,
   hasAnalysed,
@@ -661,7 +662,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const state = this.requireState();
     const a = state.auction;
     if (state.phase !== 'auction' || !a || !a.good || a.stage === 'over') return null;
-    const good = a.good;
+    const market = goodsMarket(state);
     const prices = a.walkers.map((w) => w.price);
     const lines = [storeBuyLine(state), storeSellLine(state), shipLine(state)].filter((n): n is number => n !== null);
     return {
@@ -683,7 +684,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         at: w.price,
         dir: w.dir,
         done: a.done.includes(w.id),
-        units: state.players.find((p) => p.id === w.id)?.stock[good] ?? 0,
+        units: market.units(w.id),
       })),
       deals: a.deals.map(({ buyer, seller, price, units }) => ({ buyer, seller, price, units })),
       units: a.units,
