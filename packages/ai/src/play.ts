@@ -5,18 +5,23 @@ import {
   auctionDone,
   buyMule,
   claimPlot,
+  COLONY_SELLER,
   createGame,
+  createRng,
   declareRole,
   fitFilter,
   GAME,
   grantDone,
   installMule,
   litPlot,
+  lotDone,
   outfitMule,
   RuleError,
+  setLotWalk,
   setWalk,
   SHIP_ID,
   stepAuction,
+  stepLandAuction,
   STORE_ID,
   visitPub,
   WALK,
@@ -26,6 +31,7 @@ import {
 } from '@mule/engine';
 import type { Act, AiAction } from './actions.js';
 import type { DecisionRecord } from './brain.js';
+import { LotHand } from './hands/lot.js';
 import { AiSeat } from './seat.js';
 
 /**
@@ -33,7 +39,7 @@ import { AiSeat } from './seat.js';
  * server uses: the land grant's light moves every GAME.grantTickMs and the
  * quickest seat that wants the lit plot inside that time claims it;
  * development runs every seat's own clock in 100 ms ticks, all at once, so
- * they race for the corral; the auction runs tick by tick exactly as live.
+ * they race for the corral; both auctions run tick by tick exactly as live.
  */
 
 export interface SeatSpec {
@@ -48,6 +54,8 @@ export interface PlayedGame {
   broke: string[][];
   /** Units traded at the live auction: between players, with the store (both ways) and to the ship; and its game-time in ms. */
   auction: { between: number; store: number; ship: number; ms: number };
+  /** Lots at the land auction: sold and unsold, and of those the colony's offered and sold. */
+  lots: { sold: number; unsold: number; colonyOffered: number; colonySold: number };
   decisions: number;
 }
 
@@ -85,10 +93,12 @@ export function applyAction(state: GameState, id: string, action: AiAction, cloc
         declareRole(state, id, action.side);
         break;
       case 'walk':
-        setWalk(state, id, action.dir);
+        if (state.phase === 'landAuction') setLotWalk(state, id, action.dir);
+        else setWalk(state, id, action.dir);
         break;
       case 'done':
-        auctionDone(state, id, action.done);
+        if (state.phase === 'landAuction') lotDone(state, id, action.done);
+        else auctionDone(state, id, action.done);
         break;
     }
     return true;
@@ -123,6 +133,8 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
   );
   const broke: string[][] = [];
   const auction = { between: 0, store: 0, ship: 0, ms: 0 };
+  const lotHands = seats.map((s) => new LotHand(s.mind, createRng((s.options.seed ^ 0xc2b2ae35) >>> 0)));
+  const lots = { sold: 0, unsold: 0, colonyOffered: 0, colonySold: 0 };
   let guard = 0;
   while (state.phase !== 'gameOver' && guard++ < 500) {
     switch (state.phase) {
@@ -173,6 +185,20 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
         }
         break;
       }
+      case 'landAuction': {
+        for (let ticks = 0; state.landAuction && state.landAuction.stage !== 'over' && ticks < 100_000; ticks++) {
+          seats.forEach((s, i) => lotHands[i]!.tick(state, WALK.tickMs, (a) => applyAction(state, s.id, a)));
+          const lot = state.landAuction.lot;
+          const result = stepLandAuction(state, WALK.tickMs);
+          if (!lot || !result) continue;
+          const colony = lot.seller === COLONY_SELLER;
+          if (result.kind === 'sold') lots.sold++;
+          else lots.unsold++;
+          if (colony) lots.colonyOffered++;
+          if (colony && result.kind === 'sold') lots.colonySold++;
+        }
+        break;
+      }
       case 'upkeep':
         broke.push(state.players.filter((p) => p.money < 100 && state.tiles.some((t) => t.owner === p.id && !t.outfit)).map((p) => p.id));
         break;
@@ -180,5 +206,5 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
     options.onPhase?.(state);
     advancePhase(state);
   }
-  return { state, seats, broke, auction, decisions };
+  return { state, seats, broke, auction, lots, decisions };
 }
