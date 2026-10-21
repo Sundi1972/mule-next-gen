@@ -95,7 +95,8 @@ export function colonyLot(state: GameState): Listing | null {
     // Unsold, it stays free land: the store never pays for it.
     storePays: 0,
   };
-  state.listings.unshift(listing);
+  // A new array, not unshift: cloneForSim shares this one with the real game.
+  state.listings = [listing, ...state.listings];
   return listing;
 }
 
