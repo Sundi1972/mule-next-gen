@@ -212,3 +212,20 @@ export function setSalesTax(state: GameState, id: string, percent: number): void
   if (!Number.isInteger(percent) || percent < low || percent > high) throw new RuleError(`The tax can be ${low}% to ${high}% this month`);
   state.treasury.salesTax = percent / 100;
 }
+
+/** RULE-7, at upkeep: the Governor's pay, then the Sheriff's, each only as far as the colony fund reaches. */
+export function payOffices(state: GameState): void {
+  if (!state.politics) return;
+  const { governor, sheriff } = state.politics;
+  for (const [id, pay] of [[governor, POLITICS.pay.governor], [sheriff, POLITICS.pay.sheriff]] as const) {
+    if (id === null) continue;
+    const paid = Math.max(0, Math.min(state.treasury.money, pay));
+    state.treasury.money -= paid;
+    player(state, id).money += paid;
+  }
+}
+
+/** RULE-7: the final score's office line, POLITICS.termScore per term served. */
+export function officeScore(state: GameState, id: string): number {
+  return POLITICS.termScore * (state.politics?.terms[id] ?? 0);
+}

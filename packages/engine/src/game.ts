@@ -5,7 +5,7 @@ import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './econo
 import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
 import { generateMap, tileIndex } from './map.js';
 import { airBand } from './pollution.js';
-import { closeElection, newPolitics, openPlanning } from './politics.js';
+import { closeElection, newPolitics, officeScore, openPlanning, payOffices } from './politics.js';
 import { needsOf, runProduction } from './production.js';
 import { createRng } from './rng.js';
 import { emptyStock } from './stock.js';
@@ -379,6 +379,7 @@ export function advancePhase(state: GameState): void {
     endAuction(state);
     state.auction = null;
     const { shortages, hungry } = runUpkeep(state);
+    payOffices(state);
     const report = state.history.at(-1);
     if (report) {
       report.shortages = shortages;
@@ -411,6 +412,8 @@ export interface ScoreParts {
   land: number;
   mules: number;
   muleValue: number;
+  /** Terms served as Governor or Sheriff; Collapse doesn't cut it. 0 with politics off. */
+  office: number;
   /** What Collapse took off: 0 unless the colony failed. */
   cut: number;
   total: number;
@@ -418,8 +421,8 @@ export interface ScoreParts {
 
 /**
  * A final score line by line: money, goods at today's colony prices, land,
- * installed MULEs at the store price, and the Collapse cut. The lines add up
- * to total + cut exactly; goods absorbs the rounding. See spec RULE-3.
+ * installed MULEs at the store price, terms in office, and the Collapse cut.
+ * The lines add up to total + cut exactly; goods absorbs the rounding. See spec RULE-3.
  */
 export function scoreParts(state: GameState, playerId: string): ScoreParts {
   const p = player(state, playerId);
@@ -433,9 +436,11 @@ export function scoreParts(state: GameState, playerId: string): ScoreParts {
   // Keep this exact order of addition: regrouping it moves Math.round at .5 edges and changes scores.
   const raw = p.money + stockValue + (land + muleValue);
   const before = Math.round(raw);
-  const total = colonyFailed(state) ? Math.round(raw * POLLUTION.collapseScore) : before;
+  // The office line joins after the rounding, so it moves no existing total.
+  const office = officeScore(state, playerId);
+  const total = (colonyFailed(state) ? Math.round(raw * POLLUTION.collapseScore) : before) + office;
   const money = Math.round(p.money);
-  return { money, goods: before - money - land - muleValue, plots, land, mules, muleValue, cut: before - total, total };
+  return { money, goods: before - money - land - muleValue, plots, land, mules, muleValue, office, cut: before - (total - office), total };
 }
 
 /** Final score: scoreParts().total. */
