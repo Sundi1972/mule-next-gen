@@ -161,9 +161,9 @@ describe('RULE-6: cavern collapse', () => {
     return { base, at: indexOf(base, cavern) };
   }
 
-  function produceAt(base: GameState, at: number, seed: number, month: number) {
+  function produceAt(base: GameState, at: number, seed: number, month: number, whatIf = false) {
     const state = structuredClone(base);
-    Object.assign(state, { seed, month });
+    Object.assign(state, { seed, month }, whatIf ? { whatIf: true } : {});
     const run = runProduction(state);
     return { produced: (madeOn(run, state, state.tiles[at]!) ?? 0) > 0, collapsed: state.tiles[at]!.special === undefined };
   }
@@ -182,7 +182,10 @@ describe('RULE-6: cavern collapse', () => {
           continue;
         }
         produced++;
-        if (first.collapsed) collapsed++;
+        if (!first.collapsed) continue;
+        collapsed++;
+        // An AI's what-if copy can't know the real draw, so it imagines no collapse (as with events and colony lots).
+        expect(produceAt(base, at, seed, month, true).collapsed, `what-if, seed ${seed}, month ${month}`).toBe(false);
       }
     }
     expect(produced).toBeGreaterThan(3_000);
