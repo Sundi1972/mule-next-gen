@@ -304,7 +304,7 @@ describe('AI seats at the land auction', () => {
 });
 
 // Brix at the table with three AI seats, in seat order.
-const TABLE = [{ id: SELLER, name: 'Brix', isAi: false }, ...AIS.map(({ id, name }) => ({ id, name, isAi: true }))];
+const TABLE = [{ id: SELLER, name: 'Brix', isAi: false, color: 0 }, ...AIS.map(({ id, name }, i) => ({ id, name, isAi: true, color: i + 1 }))];
 type Plot = { x: number; y: number };
 
 /**

@@ -1,11 +1,11 @@
 import type { DealView, MuleView, TableView } from '@mule/protocol';
-import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PlayerMark, SeatSpeciesProvider, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard, type Slot } from '@mule/ui';
+import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PlayerMark, SeatSpeciesProvider, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard } from '@mule/ui';
 import { boardWalkers, dealLine, LineReadout, newestFirst, SIDE_WORD, skippedLine, StatusTable, StoreBox, type DealRow } from '../components/AuctionParts';
 import { useEffect, useState, type ReactNode } from 'react';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
 import { ThemeToggle } from '../components/ThemeToggle';
-import { colonyVerdict, fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, player, plotName, seatSpecies, secondsUntil, slotOf, standings, tileAt } from '../game/derive';
+import { colonyVerdict, fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, player, plotName, seatSpecies, secondsUntil, slotOf, standings, tileAt, toSlot } from '../game/derive';
 import { useAuctionSound } from '../game/sound';
 import { useClient, useClientState, useServerNow } from '../net/react';
 import { TvLandAuction } from './TvLandAuction';
@@ -102,7 +102,7 @@ function TvLobby({ table }: { table: TableView<MuleView> }) {
         <ul className="grid grid-cols-2 gap-3">
           {table.seats.map((s, i) => (
             <li key={s.id} className="flex items-center gap-4 rounded-panel border border-holo-line bg-panel px-5 py-4">
-              <PlayerMark slot={(i % 6) as Slot} species={lobbySeatSpecies(s, i)} size={34} />
+              <PlayerMark slot={toSlot(s.color)} species={lobbySeatSpecies(s, i)} size={34} />
               <div className="flex min-w-0 flex-col">
                 <span className="truncate font-display text-2xl font-semibold">{s.name}</span>
                 <span className="truncate font-mono text-sm text-ink-3">{s.isAi ? 'AI player' : s.id === table.hostId ? 'Host' : s.connected ? 'Ready' : 'Away'}</span>
@@ -182,9 +182,9 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
           <StoreInterior mules={game.storeMules} mulePrice={game.mulePrice} prices={{}} tv />
         </div>
         <ul className="mt-auto grid grid-cols-2 gap-x-4 gap-y-2">
-          {game.players.map((p, i) => (
+          {game.players.map((p) => (
             <li key={p.id} className={cx('flex items-center gap-2', p.doneDeveloping && 'opacity-50')}>
-              <PlayerMark slot={(i % 6) as Slot} size={20} glow={!p.doneDeveloping} />
+              <PlayerMark slot={toSlot(p.slot)} size={20} glow={!p.doneDeveloping} />
               <span className="flex-1 truncate font-display text-base font-semibold">{p.name}</span>
               <span className="font-mono text-xs text-ink-3">{p.doneDeveloping ? 'PUB' : 'BUILDING'}</span>
             </li>
@@ -256,9 +256,9 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
 function Players({ game, right, className }: { game: MuleView; right: (p: MuleView['players'][number]) => ReactNode; className?: string }) {
   return (
     <ul className={cx('flex flex-col gap-2', className)}>
-      {game.players.map((p, i) => (
+      {game.players.map((p) => (
         <li key={p.id} className="flex items-center gap-3">
-          <PlayerMark slot={(i % 6) as Slot} size={22} />
+          <PlayerMark slot={toSlot(p.slot)} size={22} />
           <span className="flex-1 truncate font-display text-xl font-semibold">{p.name}</span>
           {right(p)}
         </li>

@@ -11,6 +11,8 @@ export interface SeatInfo {
   id: string;
   name: string;
   isAi: boolean;
+  /** The seat's colour index, unique at the table. */
+  color: number;
   /** Absent means not chosen: the game applies its own default. */
   pick?: string;
 }
@@ -40,6 +42,7 @@ export interface RoomOptions<Intent, GameView> {
   code: string;
   createGame(ctx: GameContext): Game<Intent, GameView>;
   minSeats?: number;
+  /** Also the number of colours (0..maxSeats−1), so a game with a fixed palette keeps it within the palette (6 for M.U.L.E.). */
   maxSeats?: number;
   aiNames?: string[];
   emotes?: readonly string[];
@@ -183,7 +186,7 @@ export class Room<Intent, View> {
         if (this.started) throw new TableError('The game has already started');
         if (this.seats.length < this.opts.minSeats) throw new TableError(`At least ${this.opts.minSeats} players are needed`);
         this.started = true;
-        this.game.start(this.seats.map(({ id, name, isAi, pick }) => ({ id, name, isAi, ...(pick !== undefined ? { pick } : {}) })));
+        this.game.start(this.seats.map(({ id, name, isAi, color, pick }) => ({ id, name, isAi, color, ...(pick !== undefined ? { pick } : {}) })));
         this.broadcast();
         return;
       case 'kick':
@@ -198,6 +201,10 @@ export class Room<Intent, View> {
         return;
       case 'pick':
         this.pick(seatId, msg.pick);
+        this.broadcast();
+        return;
+      case 'color':
+        this.paint(seatId, msg.color);
         this.broadcast();
         return;
       case 'intent':
@@ -247,9 +254,17 @@ export class Room<Intent, View> {
   }
 
   private addSeat(name: string, isAi: boolean): Seat<View> {
-    const seat: Seat<View> = { id: `s${this.nextSeat++}`, name, isAi, token: isAi ? null : this.opts.newToken(), conn: null };
+    const seat: Seat<View> = { id: `s${this.nextSeat++}`, name, isAi, color: this.lowestFreeColour(), token: isAi ? null : this.opts.newToken(), conn: null };
     this.seats.push(seat);
     return seat;
+  }
+
+  /** See RULE-7. Defined while a seat is free, since the palette has one colour per seat. */
+  private lowestFreeColour(): number {
+    const held = new Set(this.seats.map((s) => s.color));
+    let colour = 0;
+    while (held.has(colour)) colour++;
+    return colour;
   }
 
   private nextAiName(): string {
@@ -268,6 +283,18 @@ export class Room<Intent, View> {
     if (!this.picks.includes(pick)) throw new TableError('Unknown choice');
     const seat = this.seats.find((s) => s.id === seatId);
     if (seat) seat.pick = pick;
+  }
+
+  /** A human seat takes a colour before Start; an AI holding it moves to the lowest free one. See RULE-7. */
+  private paint(seatId: string, colour: number): void {
+    if (this.started) throw new TableError('The game has already started');
+    if (!Number.isInteger(colour) || colour < 0 || colour >= this.opts.maxSeats) throw new TableError('Unknown colour');
+    const seat = this.seats.find((s) => s.id === seatId)!;
+    const holder = this.seats.find((s) => s.color === colour && s !== seat);
+    if (holder && !holder.isAi) throw new TableError('That colour is taken');
+    seat.color = colour;
+    // Chosen once the sender let go of its own, so a full table still has one free.
+    if (holder) holder.color = this.lowestFreeColour();
   }
 
   /** The host removes a seat, and its token with it, before Start. See RULE-5. */
@@ -370,6 +397,7 @@ export class Room<Intent, View> {
         name: s.name,
         isAi: s.isAi,
         connected: s.isAi || s.conn !== null,
+        color: s.color,
         ...(s.pick !== undefined ? { pick: s.pick } : {}),
       })),
       boards: this.boards.size,

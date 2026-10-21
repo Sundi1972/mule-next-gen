@@ -165,6 +165,8 @@ function parse(text: string): ClientEnvelope<MuleIntent> | null {
       return str(m.emote) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'pick':
       return str(m.pick) ? (m as ClientEnvelope<MuleIntent>) : null;
+    case 'color':
+      return num(m.color) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'ping':
       return num(m.clientTime) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'intent':
