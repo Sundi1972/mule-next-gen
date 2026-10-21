@@ -105,10 +105,12 @@ try {
   check((await seat(host, 'Mia').count()) === 1 && (await rail(host).count()) === seatsBefore, "B-AC-7 (lobby): the host's rail shows Mia exactly once, and no new seat");
   check(await onStartScreen(mia), 'B-AC-7 (lobby): the first device stays out: it does not rejoin by itself');
 
-  const again = await phone('again');
+  // A tab beside Mia's phone: it holds her saved seat for this room, and the link must still win over it.
+  const again = await miaPhone.context().newPage();
+  again.on('pageerror', (e) => errors.push(`again: ${e.message}`));
   await again.goto(miaLink);
   check(await shows(again.getByTestId('removed-notice').getByText(EXPIRED)), `B-AC-7 (lobby): the same link opened again shows "${EXPIRED}" on the start screen`);
-  check(await onStartScreen(again), 'B-AC-7 (lobby): the used link leaves the third device on the start screen');
+  check(await onStartScreen(again), 'B-AC-7 (lobby): the used link wins over the seat saved for this room: the tab stays on the start screen');
   await host.waitForTimeout(CANCEL_SETTLE_MS);
   check(
     (await seat(host, 'Mia').count()) === 1 && (await rail(host).count()) === seatsBefore && (await miaPhone.getByText("You're at the table").count()) === 1,

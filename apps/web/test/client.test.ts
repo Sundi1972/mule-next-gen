@@ -247,24 +247,35 @@ describe('TableClient', () => {
     return t;
   }
 
-  it('B-AC-7: asking to move sends handoff; the code shows until it expires, and a newer code replaces it and its expiry', () => {
+  it('B-AC-7: asking to move sends handoff; the code shows until it expires by the server clock, and a newer code replaces it and its expiry', () => {
     const { client, last, advance, setNow } = seated();
     setNow(10_000);
+    // The server's clock runs 50 s ahead of this screen's.
+    last().deliver({ t: 'pong', clientTime: 10_000, serverTime: 60_000 });
+    expect(client.getState().clockOffset).toBe(50_000);
 
     client.handoff();
     expect(last().sent.at(-1)).toEqual({ t: 'handoff' });
-    last().deliver({ t: 'handoffCode', code: 'one', expiresAt: 130_000 });
-    expect(client.getState().handoffCode).toEqual({ code: 'one', expiresAt: 130_000 });
+    last().deliver({ t: 'handoffCode', code: 'one', expiresAt: 180_000 });
+    expect(client.getState().handoffCode).toEqual({ code: 'one', expiresAt: 180_000 });
+    advance(119_999);
+    expect(client.getState().handoffCode?.code).toBe('one');
+    advance(1);
+    expect(client.getState().handoffCode).toBeNull();
 
+    client.handoff();
+    last().deliver({ t: 'handoffCode', code: 'two', expiresAt: 300_000 });
     advance(60_000);
     client.handoff();
-    last().deliver({ t: 'handoffCode', code: 'two', expiresAt: 190_000 });
-    expect(client.getState().handoffCode).toEqual({ code: 'two', expiresAt: 190_000 });
+    // The room has killed 'two' by now; it must not show while 'three' is on its way.
+    expect(client.getState().handoffCode).toBeNull();
+    last().deliver({ t: 'handoffCode', code: 'three', expiresAt: 360_000 });
+    expect(client.getState().handoffCode).toEqual({ code: 'three', expiresAt: 360_000 });
 
     advance(60_000);
-    expect(client.getState().handoffCode?.code).toBe('two');
+    expect(client.getState().handoffCode?.code).toBe('three');
     advance(59_999);
-    expect(client.getState().handoffCode?.code).toBe('two');
+    expect(client.getState().handoffCode?.code).toBe('three');
     advance(1);
     expect(client.getState().handoffCode).toBeNull();
   });
@@ -314,10 +325,12 @@ describe('TableClient', () => {
     expect(last().sent[0]).toEqual({ t: 'join', code: 'KRTX', name: 'Mia', seatToken: 'fresh' });
   });
 
-  it('B-AC-7: a used or expired link shows "That link has expired" on the start screen and keeps a seat saved for another room', () => {
+  it.each([
+    { saved: { code: 'KRTX', token: 'mine', name: 'Mia' }, kept: 'this room' },
+    { saved: { code: 'BBBB', token: 'other', name: 'Heiko' }, kept: 'another room' },
+  ])('B-AC-7: a used or expired link shows "That link has expired" on the start screen and keeps the seat saved for $kept', ({ saved }) => {
     const storage = memoryStore();
-    const other = { code: 'BBBB', token: 'other', name: 'Heiko' };
-    saveSeat(storage, other);
+    saveSeat(storage, saved);
     const { client, sockets, last, advance } = setup(storage);
 
     client.join('KRTX', '', 'used');
@@ -326,7 +339,7 @@ describe('TableClient', () => {
     advance(10_000);
 
     expect(client.getState()).toMatchObject({ status: 'idle', role: null, seatId: null, notice: 'That link has expired' });
-    expect(loadSeat(storage)).toEqual(other);
+    expect(loadSeat(storage)).toEqual(saved);
     expect(sockets).toHaveLength(1);
   });
 });
