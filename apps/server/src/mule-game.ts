@@ -19,6 +19,7 @@ import {
   hasAnalysed,
   installMule,
   litPlot,
+  LOTS,
   monthlyDemand,
   mulePrice,
   mulePriceFor,
@@ -555,6 +556,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       news: this.news,
       scores: state.phase === 'gameOver' ? this.seats.map((s) => ({ id: s.id, score: score(state, s.id) })) : null,
       auction: this.auctionView(),
+      listings: [],
+      lotSlots: { used: 0, max: LOTS.maxLotsPerMonth },
+      landAuction: null,
     };
   }
 
