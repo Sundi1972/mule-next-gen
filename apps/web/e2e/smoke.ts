@@ -183,7 +183,7 @@ async function claimAPlot(phone: Page): Promise<void> {
     if ((await unclaimed.count()) === 0) return;
     try {
       // Waits until a free plot is lit, which enables the button.
-      await claim.click({ timeout: deadline - Date.now() });
+      await claim.click({ timeout: Math.max(1, deadline - Date.now()) });
       await unclaimed.waitFor({ state: 'hidden', timeout: 2 * GRANT_TICK_MS });
     } catch (err) {
       if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
@@ -201,8 +201,12 @@ async function checkOwnsAPlot(phone: Page): Promise<void> {
   const plots = await mine.count();
   check(plots >= 1, `T-AC-1: the phone owns a plot before month 2; its map shows ${plots} plots in its colour`);
   await mine.first().click({ timeout: PRESS_MS });
-  const yours = await dev.getByText('YOURS', { exact: true }).waitFor({ timeout: PRESS_MS }).then(() => true, () => false);
-  check(yours, 'T-AC-1: the phone calls the plot in its colour YOURS');
+  try {
+    await dev.getByText('YOURS', { exact: true }).waitFor({ timeout: PRESS_MS });
+  } catch (err) {
+    if (err instanceof playwrightErrors.TimeoutError) check(false, 'T-AC-1: the phone calls the plot in its colour YOURS');
+    throw err;
+  }
 }
 
 /** Waits until the phone has moved past planning and the land grant. */
@@ -250,7 +254,8 @@ async function pressDoneThroughTheAuction(phone: Page, beforePress?: (button: st
 
 /**
  * FM-2 during a walk: declares Buyer, which puts the host's walker on the board's floor, then checks that
- * every walker on the phone and the TV clears the names strip. False when the walk closed first.
+ * every walker on the phone and the TV clears the names strip. False when the walk closed first, since the
+ * host's walker then stands on the next good's board instead.
  */
 async function checkTheFloorClearsTheNames(phone: Page, tv: Page): Promise<boolean> {
   try {
@@ -258,35 +263,39 @@ async function checkTheFloorClearsTheNames(phone: Page, tv: Page): Promise<boole
     for (const page of [phone, tv]) {
       const host = page.locator(`[data-phase=auction] [data-testid=walk-board] [data-testid=${HOST_WALKER}][data-side=buyer]`);
       await host.waitFor({ timeout: PRESS_MS });
-      // A walker that switched sides slides to its new edge; measure where it stops.
-      await host.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)), undefined, { timeout: PRESS_MS });
+      // A walker that switched sides slides to its new edge; measure where it stops. A slide cut short still stops.
+      await host.evaluate((el) => Promise.allSettled(el.getAnimations().map((a) => a.finished)), undefined, { timeout: PRESS_MS });
     }
+    return (await checkWalkersClearTheNames(phone, 'phone')) && (await checkWalkersClearTheNames(tv, 'TV'));
   } catch (err) {
     if (err instanceof playwrightErrors.TimeoutError) return false;
     throw err;
   }
-  await checkWalkersClearTheNames(phone, 'phone');
-  await checkWalkersClearTheNames(tv, 'TV');
-  return true;
 }
 
-/** FM-2: every walker on the auction board is drawn above the names strip. Read in one pass, since walkers move. */
-async function checkWalkersClearTheNames(page: Page, screen: string): Promise<void> {
+/**
+ * FM-2: every walker on the auction board is drawn above the names strip. Read in one pass, since walkers move.
+ * False, measuring nothing, unless the host's walker is still a buyer on that board.
+ */
+async function checkWalkersClearTheNames(page: Page, screen: string): Promise<boolean> {
   const board = page.locator('[data-phase=auction]').getByTestId('walk-board');
-  const { namesTop, walkers } = await board.evaluate(
-    (el) => ({
+  const { hostSide, namesTop, walkers } = await board.evaluate(
+    (el, host) => ({
+      hostSide: el.querySelector(`[data-testid=${host}]`)?.getAttribute('data-side') ?? null,
       namesTop: el.querySelector('[data-testid=walk-names]')?.getBoundingClientRect().top ?? null,
       walkers: [...el.querySelectorAll('[data-testid^="walker-"]')].map((w) => ({ id: w.getAttribute('data-testid'), bottom: w.getBoundingClientRect().bottom })),
     }),
-    undefined,
+    HOST_WALKER,
     { timeout: PRESS_MS },
   );
+  if (hostSide !== 'buyer') return false;
   check(namesTop !== null, `FM-2: the ${screen} board has a names strip`);
   check(walkers.length > 0, `FM-2: the ${screen} board draws a walker`);
   for (const w of walkers) {
     const overlap = w.bottom - namesTop;
     check(overlap <= 1, `FM-2: on the ${screen}, ${w.id} is drawn ${overlap.toFixed(1)} px into the names strip`);
   }
+  return true;
 }
 
 type Shown = { phase: string; at: number };
