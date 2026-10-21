@@ -3,10 +3,13 @@ import {
   advancePhase,
   canRun,
   castVote,
+  closeElection,
   cloneForSim,
   createGame,
   createRng,
   electionDone,
+  electionStageMs,
+  nextElectionMonth,
   player,
   POLITICS,
   RuleError,
@@ -15,6 +18,7 @@ import {
   setSalesTax,
   stepElection,
   TAX,
+  taxBounds,
   taxSale,
   voteWeight,
   type Election,
@@ -164,6 +168,8 @@ describe('C3: the election', () => {
   it('T-AC-1: the election steps nominate → ballot → reveal → over on its clocks', () => {
     const state = newGame();
     expect(electionOf(state)).toMatchObject({ stage: 'nominate', clockMs: POLITICS.nominateMs, result: null });
+    expect(electionStageMs('nominate')).toBe(POLITICS.nominateMs);
+    expect(nextElectionMonth(state)).toBe(4);
     runFor(state, 'lena', 'governor');
     runFor(state, 'brix', 'governor');
     electionDone(state, 'lena');
@@ -172,12 +178,14 @@ describe('C3: the election', () => {
     expect(electionOf(state).stage).toBe('nominate');
     expect(stepElection(state, 1)).toBeNull();
     expect(electionOf(state)).toMatchObject({ stage: 'ballot', clockMs: POLITICS.ballotMs, done: [] });
+    expect(electionStageMs('ballot')).toBe(POLITICS.ballotMs);
 
     castVote(state, 'ossa', 'governor', 'brix');
     expect(stepElection(state, POLITICS.ballotMs - 1)).toBeNull();
     const result = stepElection(state, 1);
     expect(result?.governor).toMatchObject({ winner: 'brix', how: 'votes' });
     expect(electionOf(state)).toMatchObject({ stage: 'reveal', clockMs: POLITICS.revealMs, result });
+    expect(electionStageMs('reveal')).toBe(POLITICS.revealMs);
     expect(politicsOf(state).governor).toBeNull();
 
     // The result is fixed when the ballot closes: weight gained later changes nothing.
@@ -186,6 +194,7 @@ describe('C3: the election', () => {
     expect(electionOf(state).stage).toBe('reveal');
     expect(stepElection(state, 1)).toBeNull();
     expect(electionOf(state)).toMatchObject({ stage: 'over', result });
+    expect(electionStageMs('over')).toBe(0);
     expect(politicsOf(state)).toMatchObject({ governor: 'brix', termStart: 1, governorRun: { id: 'brix', terms: 1 } });
     expect(politicsOf(state).terms.brix).toBe(1);
     expect(stepElection(state, POLITICS.revealMs)).toBeNull();
@@ -266,6 +275,18 @@ describe('C3: the election', () => {
     toNextPlanning(state);
     expect(politicsOf(state).election).toBeNull();
     expect(politicsOf(state).governor).toBe('brix');
+    expect(nextElectionMonth(state)).toBe(4);
+    const short = createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: false })), maxMonths: 3 });
+    expect(nextElectionMonth(short)).toBeNull();
+
+    // Closed directly, it returns the result it fixed; a second close has nothing to close.
+    const closing = governorBallot();
+    castVote(closing, 'ossa', 'governor', 'brix');
+    const closed = closeElection(closing);
+    expect(closed?.governor).toMatchObject({ winner: 'brix', how: 'votes' });
+    expect(closed).toEqual(electionOf(closing).result);
+    expect(electionOf(closing).stage).toBe('over');
+    expect(closeElection(closing)).toBeNull();
 
     // Closed during the reveal, the result already fixed stands, whatever changed since.
     const revealing = governorBallot();
@@ -275,7 +296,7 @@ describe('C3: the election', () => {
     const result = runOutClock(revealing);
     expect(result?.governor).toMatchObject({ winner: 'brix', how: 'votes' });
     give(revealing, 'lena', 30);
-    advancePhase(revealing);
+    expect(closeElection(revealing)).toBeNull();
     expect(electionOf(revealing)).toMatchObject({ stage: 'over', result });
     expect(politicsOf(revealing).governor).toBe('brix');
   });
@@ -519,6 +540,7 @@ describe('C5: the Governor sets the sales tax', () => {
   it('T-AC-3: tax bounds from the month\'s starting rate', () => {
     const state = newGame();
     seatGovernor(state, 'lena');
+    expect(taxBounds(state)).toEqual({ low: 0, high: 10 });
     expect(() => setSalesTax(state, 'lena', 11)).toThrow(RuleError);
     expect(() => setSalesTax(state, 'lena', 7.5)).toThrow(RuleError);
     expect(state.treasury.salesTax).toBe(0.05);
@@ -531,6 +553,7 @@ describe('C5: the Governor sets the sales tax', () => {
     setSalesTax(state, 'lena', 15);
     toNextPlanning(state);
     expect(politicsOf(state).taxAtStart).toBe(0.15);
+    expect(taxBounds(state)).toEqual({ low: 10, high: 15 });
     for (const refused of [9, 16]) expect(() => setSalesTax(state, 'lena', refused)).toThrow(RuleError);
     setSalesTax(state, 'lena', 10);
     expect(state.treasury.salesTax).toBe(0.1);
@@ -542,6 +565,7 @@ describe('C5: the Governor sets the sales tax', () => {
     seatGovernor(low, 'lena');
     setSalesTax(low, 'lena', 3);
     toNextPlanning(low);
+    expect(taxBounds(low)).toEqual({ low: 0, high: 8 });
     for (const refused of [-1, 9]) expect(() => setSalesTax(low, 'lena', refused)).toThrow(RuleError);
     expect(low.treasury.salesTax).toBe(0.03);
     setSalesTax(low, 'lena', 0);

@@ -240,3 +240,18 @@ export function payOffices(state: GameState): void {
 export function officeScore(state: GameState, id: string): number {
   return POLITICS.termScore * (state.politics?.terms[id] ?? 0);
 }
+
+/** The whole-percent range the Governor may set this month. */
+export function taxBounds(state: GameState): { low: number; high: number } {
+  throw new Error('NotImplemented: taxBounds');
+}
+
+/** The next election month after this one, or null if the game ends first. */
+export function nextElectionMonth(state: GameState): number | null {
+  throw new Error('NotImplemented: nextElectionMonth');
+}
+
+/** How long a stage's clock runs. */
+export function electionStageMs(stage: Election['stage']): number {
+  throw new Error('NotImplemented: electionStageMs');
+}
