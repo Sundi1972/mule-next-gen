@@ -1,0 +1,52 @@
+/** Names shared by components. Colours themselves live in theme.css. */
+
+export type Slot = 0 | 1 | 2 | 3 | 4 | 5;
+
+export const SLOT_COLOR: Record<Slot, string> = {
+  0: 'var(--color-p1)',
+  1: 'var(--color-p2)',
+  2: 'var(--color-p3)',
+  3: 'var(--color-p4)',
+  4: 'var(--color-p5)',
+  5: 'var(--color-p6)',
+};
+
+export type Good = 'food' | 'water' | 'energy' | 'smithore' | 'crystite' | 'rareEarth' | 'alloy' | 'electronics' | 'medicine';
+
+export const GOOD_CODE: Record<Good, string> = {
+  food: 'FOOD',
+  water: 'H2O',
+  energy: 'NRG',
+  smithore: 'ORE',
+  crystite: 'CRY',
+  rareEarth: 'REE',
+  alloy: 'ALY',
+  electronics: 'ELC',
+  medicine: 'MED',
+};
+
+export const GOOD_NAME: Record<Good, string> = {
+  food: 'Food',
+  water: 'Water',
+  energy: 'Energy',
+  smithore: 'Smithore',
+  crystite: 'Crystite',
+  rareEarth: 'Rare earth',
+  alloy: 'Alloy',
+  electronics: 'Electronics',
+  medicine: 'Medicine',
+};
+
+export type Terrain =
+  | 'river' | 'lake' | 'plains' | 'forest' | 'swamp' | 'hills' | 'mountains'
+  | 'desert' | 'tundra' | 'ice' | 'volcanic' | 'crater' | 'wasteland' | 'store';
+
+export const TERRAIN_NAME: Record<Terrain, string> = {
+  river: 'River', lake: 'Lake', plains: 'Plains', forest: 'Forest', swamp: 'Swamp', hills: 'Hills',
+  mountains: 'Mountains', desert: 'Desert', tundra: 'Tundra', ice: 'Ice field', volcanic: 'Volcanic', crater: 'Crater',
+  wasteland: 'Wasteland', store: 'Colony store',
+};
+
+export function cx(...parts: (string | false | null | undefined)[]): string {
+  return parts.filter(Boolean).join(' ');
+}
