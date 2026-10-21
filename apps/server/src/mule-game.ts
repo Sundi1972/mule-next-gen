@@ -351,7 +351,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           const left = ((this.devEndsAt.get(seat.id) ?? now) - now) / 1_000;
           if (p.doneDeveloping || left <= 0) continue;
           seat.developTick(state, dt, left, (a) => this.aiAct(seat.id, a));
-          if (state.phase !== 'development') return;
+          if (state.phase !== 'development') break;
         }
         this.checkDevelopmentOver();
         if (state.phase === 'development') this.scheduleAiDevelop(month, now);
