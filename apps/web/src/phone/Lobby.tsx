@@ -1,9 +1,9 @@
-import { DEFAULT_SPECIES } from '@mule/engine';
 import type { TableView } from '@mule/protocol';
 import { Button, Creature, cx, PlayerMark, SLOT_COLOR, SPECIES, SPECIES_NAME, SPECIES_PERK, type Slot, type Species } from '@mule/ui';
 import { useState, type ReactNode } from 'react';
 import { joinUrl, Qr } from '../components/Qr';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { lobbySeatSpecies } from '../game/derive';
 import { createRoom } from '../net/client';
 import { useClient, useClientState } from '../net/react';
 
@@ -99,13 +99,6 @@ function Frame({ children }: { children: ReactNode }) {
   return <div className="flex h-full flex-col bg-table pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] text-ink">{children}</div>;
 }
 
-type SeatView = TableView<unknown>['seats'][number];
-
-/** What a seat plays as: its pick, or until it picks, its seat's default. */
-export function seatSpeciesOf(seat: SeatView, index: number): Species {
-  return SPECIES.find((sp) => sp === seat.pick) ?? DEFAULT_SPECIES[index % DEFAULT_SPECIES.length]!;
-}
-
 /** One species: the creature in your colour, its name. Pressed shows the choice. */
 function SpeciesChip({ sp, slot, chosen, onPick }: { sp: Species; slot: Slot; chosen: boolean; onPick: (s: Species) => void }) {
   return (
@@ -142,7 +135,7 @@ export function Lobby() {
   if (!view) return null;
   const url = joinUrl(view.code);
   const mine = view.seats.findIndex((s) => s.id === seatId);
-  const species = view.seats.map(seatSpeciesOf);
+  const species = view.seats.map(lobbySeatSpecies);
   const mySpecies = species[mine];
   const twin = view.seats.find((_, i) => i !== mine && species[i] === mySpecies)?.name;
 

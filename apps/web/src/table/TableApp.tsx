@@ -5,10 +5,9 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
 import { ThemeToggle } from '../components/ThemeToggle';
-import { fmt, mapTiles, PHASE_NAME, player, plotName, seatSpecies, secondsUntil, slotOf, standings, tileAt } from '../game/derive';
+import { fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, player, plotName, seatSpecies, secondsUntil, slotOf, standings, tileAt } from '../game/derive';
 import { useAuctionSound } from '../game/sound';
 import { useClient, useClientState, useServerNow } from '../net/react';
-import { seatSpeciesOf } from '../phone/Lobby';
 
 /** The big screen: the public view everyone at the table shares. It has no controls. */
 export function TableApp({ room }: { room: string }) {
@@ -95,7 +94,7 @@ function TvLobby({ table }: { table: TableView<MuleView> }) {
         <ul className="grid grid-cols-2 gap-3">
           {table.seats.map((s, i) => (
             <li key={s.id} className="flex items-center gap-4 rounded-panel border border-holo-line bg-panel px-5 py-4">
-              <PlayerMark slot={(i % 6) as Slot} species={seatSpeciesOf(s, i)} size={34} />
+              <PlayerMark slot={(i % 6) as Slot} species={lobbySeatSpecies(s, i)} size={34} />
               <div className="flex min-w-0 flex-col">
                 <span className="truncate font-display text-2xl font-semibold">{s.name}</span>
                 <span className="truncate font-mono text-sm text-ink-3">{s.isAi ? 'AI player' : s.id === table.hostId ? 'Host' : s.connected ? 'Ready' : 'Away'}</span>
