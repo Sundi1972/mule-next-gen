@@ -119,8 +119,8 @@ export interface FactoryFit {
 
 /**
  * How well a factory works on a plot for its owner: terrain, a neighbouring
- * plot that makes one of its inputs, an industrial park, experience and
- * pollution (for Medicine). The same numbers drive production and the fit
+ * plot that makes one of its inputs, an industrial park, experience, a
+ * touching alien relic and pollution (for Medicine). The same numbers drive production and the fit
  * the phone shows before you install.
  */
 export function factoryFit(state: GameState, tile: Tile, good: ProcessedGood, owner: string): FactoryFit {
