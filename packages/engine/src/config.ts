@@ -754,6 +754,8 @@ export const STRATEGIST = {
   /** Below this utility share of the best, a free plot is not worth pressing for in the first sweep; later sweeps take anything above laterShare. */
   grantShare: 0.75,
   grantLaterShare: 0.5,
+  /** In the first two sweeps it presses only for its top claimsPerGrant + grantSpare open plots (twice that in the second), so it waits for the land it wants instead of the first that will do. */
+  grantSpare: 2,
   /** A factory needs this many months of its inputs on hand or from its own plots. */
   factoryInputMonths: 2,
   /** Spare Food, Water, Energy and Medicine it keeps over next month's need, before the reserve multiplier. */

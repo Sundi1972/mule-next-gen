@@ -3,6 +3,7 @@ import type { Act } from '../actions.js';
 import type { Brain, Pending } from '../brain.js';
 import { goodPlan, tradeDecision, type GoodPlan, type TradeAction } from '../strategist.js';
 import { situation } from '../summary.js';
+import { beforeTax } from '../value.js';
 
 /**
  * Auction hands, after the design doc's auction example. At the status
@@ -150,7 +151,8 @@ export class AuctionHand {
 
     if (w.side === 'seller') {
       // Units past the table are beyond what the depot keeps: they spoil, so they are worth nothing.
-      const floor = Math.ceil(plan.values.keep[h - 1] ?? 0);
+      // Unit values are what the seat keeps after the sales tax; the board shows the price before it.
+      const floor = Math.ceil(beforeTax(state, plan.values.keep[h - 1] ?? 0));
       this.limit = floor;
       const finished = trade.side !== 'seller' || h <= trade.keep || !Number.isFinite(floor);
       const houses = Math.max(storeBuyLine(state) ?? 0, shipLine(state) ?? 0);
