@@ -197,6 +197,16 @@ describe('TableClient', () => {
     expect(client.getState().status).toBe('idle');
   });
 
+  it("T-AC-12: a colour pick leaves the phone as the room's color message", () => {
+    const { client, last } = setup();
+    client.join('KRTX', 'Heiko');
+    last().open();
+
+    client.color(3);
+
+    expect(last().sent.at(-1)).toEqual({ t: 'color', color: 3 });
+  });
+
   it('B-AC-6: leaving before the socket opens sends nothing, and still forgets the seat', () => {
     const storage = memoryStore();
     saveSeat(storage, { code: 'KRTX', token: 'secret', name: 'Heiko' });

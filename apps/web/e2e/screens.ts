@@ -54,7 +54,8 @@ try {
 
   for (let i = 0; i < 2; i++) await phone.getByRole('button', { name: 'Add AI player' }).click();
   await phone.locator('[data-testid=seats] li').nth(2).waitFor();
-  await phone.getByText('Big screen connected').waitFor();
+  // The room card shrinks to its compact QR once the TV has joined.
+  await phone.waitForFunction(() => (document.querySelector('[data-testid=room-qr]')?.getBoundingClientRect().width ?? Infinity) < 60);
   await phoneShot(phone, '1-lobby');
   await shot(tv, 'tv-1-lobby');
 

@@ -1,7 +1,9 @@
 import { existsSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
-import { chromium, type Browser, type Page } from 'playwright';
+import { GAME } from '@mule/engine';
+import { chromium, errors as playwrightErrors, type Browser, type Page } from 'playwright';
+import { GRANT_TICK_MS } from '../../server/src/mule-game.js';
 import { createMuleServer, type MuleServer } from '../../server/src/server.js';
 
 /** CT-3: what smoke.ts hands each auction step. */
@@ -55,4 +57,27 @@ export const TV = { viewport: { width: 1920, height: 1080 } };
 
 export function check(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(`E2E check failed: ${message}`);
+}
+
+/**
+ * Presses CLAIM until the claims counter drops, within `timeoutMs`. The lit plot moves on every
+ * tick and an AI can take it first, so a press may be refused; press again. `promise` names the
+ * check that fails when no claim lands in time.
+ */
+export async function claimAPlot(phone: Page, timeoutMs: number, promise: string): Promise<void> {
+  const grant = phone.locator('[data-phase=landGrant]');
+  const claim = grant.getByRole('button', { name: /CLAIM/ });
+  const unclaimed = grant.getByText(`${GAME.claimsPerGrant} OF ${GAME.claimsPerGrant} CLAIMS LEFT`, { exact: true });
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    check((await grant.count()) > 0 && Date.now() < deadline, promise);
+    if ((await unclaimed.count()) === 0) return;
+    try {
+      // Waits until a free plot is lit, which enables the button.
+      await claim.click({ timeout: Math.max(1, deadline - Date.now()) });
+      await unclaimed.waitFor({ state: 'hidden', timeout: 2 * GRANT_TICK_MS });
+    } catch (err) {
+      if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
+    }
+  }
 }

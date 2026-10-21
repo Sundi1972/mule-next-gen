@@ -126,7 +126,8 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   tv.on('pageerror', (e) => errors.push(`tv: ${e.message}`));
   await tv.goto(`${base}/table?room=${code}`);
   await brix.page.locator('[data-testid=seats] li').nth(2).waitFor();
-  await brix.page.getByText('Big screen connected').waitFor();
+  // The room card shrinks to its compact QR once the TV has joined.
+  await brix.page.waitForFunction(() => (document.querySelector('[data-testid=room-qr]')?.getBoundingClientRect().width ?? Infinity) < 60);
   await brix.page.getByRole('button', { name: 'Start game' }).click();
   console.log(`✓ three phones and a TV at table ${code}`);
   const truth = serverTruth(server, code);
