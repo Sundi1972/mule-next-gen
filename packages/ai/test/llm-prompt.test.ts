@@ -122,6 +122,11 @@ describe('prompt building', () => {
     expect(p.user).toContain('B. Claim hill plot — because Claim hill plot (score 0.50)');
     expect(p.user).toContain('C. Skip — because Skip (score 0.50)');
     expect(p.user).toContain('The table has been quiet.');
+    // The schema is read-only to a client: this line must not typecheck.
+    void (() => {
+      // @ts-expect-error assignment to a read-only property
+      p.schema.type = 'array';
+    });
     const s = p.schema as { properties: { option: { enum: string[] } }; required: string[]; additionalProperties: boolean };
     for (const o of three) expect(s.properties.option.enum).toContain(o.id);
     expect([...s.required].sort()).toEqual(['line', 'option']);

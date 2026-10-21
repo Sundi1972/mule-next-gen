@@ -1,11 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AI_HANDS, AI_LEVELS, AI_PERSONAS, BRAIN, createGame, observe } from '@mule/engine';
 import { Brain, type DecisionRecord } from '../src/brain.js';
 import { PERSONAS, type DecisionKind } from '../src/personas.js';
 import { candidate, consider, shortlist } from '../src/utility.js';
 import type { Mind } from '../src/value.js';
 import type { Choice, Decider } from '../src/decider.js';
-import { LlmDecider, ReplyRejected, type Complete } from '../src/llm/decider.js';
+import { LlmDecider, ReplyRejected, WAIT_MS, type Complete } from '../src/llm/decider.js';
+import { playGame } from '../src/play.js';
+import { simSeats } from '../src/sim.js';
 import type { Prompt } from '../src/llm/prompt.js';
 import type { RejectOutcome } from '../src/llm/reply.js';
 
@@ -110,6 +112,21 @@ describe('LlmDecider behind Brain', () => {
     expect(records).toHaveLength(1);
     expect(brain.log).toHaveLength(1);
     expect(settled!.choice.optionId).toBe(pending.fallback.optionId);
+  });
+
+  it("INV-HC3: the decider's timeout per kind equals the wait the hands pass", () => {
+    const spy = vi.spyOn(Brain.prototype, 'ask');
+    try {
+      playGame(7, simSeats(4, 'trader', 7));
+      const waits = spy.mock.calls.map(([kind, , , waitMs]) => ({ kind, waitMs }));
+      for (const kind of ['develop', 'trade'] as const) {
+        const ofKind = waits.filter((w) => w.kind === kind);
+        expect(ofKind.length).toBeGreaterThan(0);
+        for (const w of ofKind) expect(w.waitMs).toBe(WAIT_MS[kind]);
+      }
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('T-AC-3 (AM-2): the port gets this decision\'s prompt and the hands wait for the kind: develop, trade, land', async () => {

@@ -40,9 +40,9 @@ describe('reply parsing', () => {
     { name: 'row 4: a missing line is null', text: '{"option":"A"}', expected: picked('A', null) },
     { name: 'row 4: a non-string line is null', text: reply(7), expected: picked('A', null) },
     { name: 'row 4: a 300-char line is capped at the line limit', text: reply(x(300)), expected: picked('A', x(BRAIN.maxLineChars)) },
-    { name: 'row 4: the cap is trimmed after cutting', text: reply(x(139) + ' ' + 'y'.repeat(100)), expected: picked('A', x(139)) },
+    { name: 'row 4: the cap is trimmed after cutting', text: reply(x(BRAIN.maxLineChars - 1) + ' ' + 'y'.repeat(100)), expected: picked('A', x(BRAIN.maxLineChars - 1)) },
     { name: 'row 4: the cap applies after collapsing and stripping', text: reply('  "' + x(300) + '"'), expected: picked('A', x(BRAIN.maxLineChars)) },
-    { name: 'row 4: the cap counts code points and keeps an emoji whole', text: reply(x(139) + '\u{1F600}' + x(10)), expected: picked('A', x(139) + '\u{1F600}') },
+    { name: 'row 4: the cap counts code points and keeps an emoji whole', text: reply(x(BRAIN.maxLineChars - 1) + '\u{1F600}' + x(10)), expected: picked('A', x(BRAIN.maxLineChars - 1) + '\u{1F600}') },
   ];
 
   it.each(cases)('T-AC-1: parseReply follows RULE-1 and clean() - $name', ({ text, expected }) => {
