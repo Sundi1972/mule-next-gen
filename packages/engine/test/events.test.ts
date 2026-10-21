@@ -136,3 +136,64 @@ describe('the event planner', () => {
     expect(run(0, 'pestSwarm').some((p) => p !== 'p2')).toBe(true);
   });
 });
+
+/** RULE-3: what a hit plot makes after the event, from what it made before; `first` is the event's first plot. */
+const RULE_3: Record<EventKey, (before: number, first: boolean) => number> = {
+  dustStorm: (b) => Math.floor(b * 0.5),
+  drought: (b) => b - 1,
+  acidRain: (b) => b - 1,
+  solarFlare: (b) => b + 2,
+  cometPass: (b) => b + 2,
+  flood: () => 0,
+  volcanicAsh: (b) => b - 1,
+  pestSwarm: (b) => Math.floor(b * 0.5),
+  wildfire: (b, first) => (first ? 0 : b - 1),
+  bumperHarvest: (b) => b * 2,
+};
+
+/** A developed colony that also has Food on a river and a working plot next to a volcano or mountain. */
+function colonyForEvents(seed: number): GameState {
+  const state = developedColony(seed);
+  const river = state.tiles.find((t) => t.terrain === 'river' && !t.owner);
+  if (river) Object.assign(river, { owner: 'p1', outfit: 'food' });
+  const peak = state.tiles.find((t) => t.terrain === 'volcanic' || t.terrain === 'mountains');
+  const nearPeak = peak && neighbours(state.tiles, state.width, peak).find((t) => t.terrain !== 'store' && !t.owner);
+  if (nearPeak) Object.assign(nearPeak, { owner: 'p2', outfit: 'energy' });
+  return state;
+}
+
+describe('events in production', () => {
+  it('T-AC-3: each event changes exactly the plots it hits, by RULE-3, and the report says so', () => {
+    for (const key of Object.keys(EVENTS.weights) as EventKey[]) {
+      const weights = Object.fromEntries(Object.keys(EVENTS.weights).map((k) => [k, k === key ? 1 : 0])) as typeof EVENTS.weights;
+      withEvents({ chance: 1, weights }, () => {
+        let seen = 0;
+        for (let seed = 1; seed <= 5 && seen === 0; seed++) {
+          playProductions(colonyForEvents(seed), 3, (s) => {
+            const report = s.history.at(-1)!;
+            const event = report.events?.[0];
+            if (s.month < 2) return expect(event).toBeUndefined();
+            if (!event) return;
+            expect(event.key).toBe(key);
+            seen++;
+            const hit = new Map(event.plots.map((p) => [p.index, p]));
+            for (const line of report.lines ?? []) {
+              const part = line.parts.find((p) => p.why === 'event');
+              const plot = hit.get(line.tile);
+              if (!plot) {
+                expect(part).toBeUndefined(); // negative case: an untargeted plot is untouched
+                continue;
+              }
+              const before = line.made - (part?.delta ?? 0);
+              const after = Math.max(0, RULE_3[key](before, plot.order === 0));
+              expect([key, line.tile, line.made]).toEqual([key, line.tile, after]);
+              expect(plot.delta).toBe(after - before);
+              expect(part?.event).toBe(key);
+            }
+          });
+        }
+        expect([key, seen > 0]).toEqual([key, true]);
+      });
+    }
+  });
+});
