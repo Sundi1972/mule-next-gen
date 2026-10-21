@@ -88,7 +88,7 @@ function liveElection(state: GameState, id: string): Election {
 }
 
 function contested(election: Election, office: Office): boolean {
-  return election.candidates[office].length >= 2;
+  return election.candidates[office].length > 1;
 }
 
 /** RULE-2: runs for an office, moving any candidacy for the other one; null withdraws. Only in nominate. */
@@ -96,7 +96,7 @@ export function runFor(state: GameState, id: string, office: Office | null): voi
   const election = liveElection(state, id);
   if (election.stage !== 'nominate') throw new RuleError('Candidates are closed');
   const run = state.politics!.governorRun;
-  if (office === 'governor' && run?.id === id && run.terms >= 2) throw new RuleError('Two Governor terms in a row');
+  if (office === 'governor' && run?.id === id && run.terms >= POLITICS.governorTermsInRow) throw new RuleError('Two Governor terms in a row');
   if (office && election.candidates[office].includes(id)) return;
   const { candidates } = edit(state).election!;
   for (const o of OFFICES) candidates[o] = candidates[o].filter((c) => c !== id);
