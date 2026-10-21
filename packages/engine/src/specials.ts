@@ -1,8 +1,8 @@
 import { MAP, sizeBand } from './config.js';
 import { neighbours } from './map.js';
 import type { GameMap } from './map-rules.js';
-import type { Rng } from './rng.js';
-import type { SpecialField, SpecialKind, Terrain, Tile } from './types.js';
+import { createRng, type Rng } from './rng.js';
+import type { GameState, ProductionLine, RawGood, SpecialField, SpecialKind, Terrain, Tile } from './types.js';
 
 /**
  * Stage 11 of the map generator (spec RULE-5): special fields placed on a
@@ -101,4 +101,52 @@ function riverSides(map: GameMap): (tile: Tile) => Side | undefined {
 /** Steps between two plots, as the checker counts them: across the grid, never diagonally. */
 function steps(a: Tile, b: Tile): number {
   return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+}
+
+// --- Effects (spec RULE-6) ---------------------------------------------------
+
+const EFFECT = MAP.specialEffect;
+
+/**
+ * What special fields add to a raw plot making `good`: its own field's bonus,
+ * plus one per relic beside it. Production counts it before adjacency.
+ */
+export function specialBonus(state: GameState, tile: Tile, good: RawGood): number {
+  return ownBonus(tile.special?.kind, good) + relicBonus(state, tile);
+}
+
+function ownBonus(kind: SpecialKind | undefined, good: RawGood): number {
+  if (kind === 'crystalCavern' && good === 'crystite') return EFFECT.crystalCavern;
+  if (kind === 'geyser' && (good === 'water' || good === 'energy')) return EFFECT.geyser;
+  if (kind === 'oasis' && good === 'food') return EFFECT.oasis;
+  return 0;
+}
+
+/** What the relics among a plot's 4 neighbours add to any working plot there, whoever owns them. */
+export function relicBonus(state: GameState, tile: Tile): number {
+  return neighbours(state.tiles, state.width, tile).filter((n) => n.special?.kind === 'relic').length * EFFECT.relic;
+}
+
+/**
+ * The month's change to special fields, once production has run: ruins with
+ * an owner pay their salvage into the owner's stock and become a plain plot;
+ * a cavern that produced Crystite this month may collapse into one.
+ */
+export function settleSpecials(state: GameState, lines: readonly ProductionLine[]): void {
+  const mined = new Set(lines.filter((l) => l.good === 'crystite' && l.made > 0).map((l) => l.tile));
+  state.tiles.forEach((tile, index) => {
+    const special = tile.special;
+    if (special?.kind === 'ruins' && special.salvage && tile.owner) {
+      state.players.find((p) => p.id === tile.owner)!.stock[special.salvage] += EFFECT.salvage[special.salvage];
+      delete tile.special;
+    } else if (special?.kind === 'crystalCavern' && mined.has(index) && collapses(state, index)) {
+      delete tile.special;
+    }
+  });
+}
+
+function collapses(state: GameState, index: number): boolean {
+  // Its own RNG from (seed, month, plot): no other draw in the game shifts it.
+  const rng = createRng((Math.imul(state.seed, 0x9e3779b1) + Math.imul(state.month, 0x85ebca77) + Math.imul(index, 0xc2b2ae3d)) >>> 0);
+  return rng.chance(EFFECT.collapseChance);
 }

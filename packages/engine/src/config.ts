@@ -428,6 +428,21 @@ export const MAP = {
     /** Kinds the generator draws for one map, in all, before it stops short. Read by the generator, not the checker. */
     kindDraws: 30,
   },
+  /** What special fields do (spec RULE-6). Output bonuses count before adjacency. */
+  specialEffect: {
+    /** Extra Crystite from a crystal cavern mined for Crystite. */
+    crystalCavern: 4,
+    /** Chance a cavern that produced Crystite this month collapses into a plain plot. */
+    collapseChance: 0.06,
+    /** Extra Water or Energy from a geyser outfitted for either. */
+    geyser: 2,
+    /** Extra Food from an oasis farm. */
+    oasis: 3,
+    /** Extra output for every working plot, raw or factory, per relic among its 4 neighbours. */
+    relic: 1,
+    /** What ruins pay their first owner, once, by the salvage drawn with the map. */
+    salvage: { alloy: 2, electronics: 1 },
+  },
   /** Tuning for the layout stages (map-layout.ts): how the generator meets the rules above, not rules themselves. */
   layout: {
     /** The budget never gives a terrain more than this share, so jitter can't take plains near maxTerrainShare. */
