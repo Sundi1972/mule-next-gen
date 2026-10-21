@@ -3,7 +3,7 @@
  * its OWN width at WIDE_PX = 1100 (HC-8). Run by smoke.ts on whatever phone screen is showing; every game screen
  * uses PhoneShell, so the step holds if the phase moves on under it.
  */
-import type { Page } from 'playwright';
+import { errors as playwrightErrors, type Page } from 'playwright';
 import { check, PHONE } from './harness';
 
 /** Heiko's laptop. */
@@ -73,8 +73,9 @@ const RECORD_PAINTS = `{
 /**
  * B-AC-12: the shell fills the stage at 1440×900 and 844×390, switching on its own width at exactly 1100 px, with
  * useWide equal to the container query in every painted frame and the emotes clear of the rail at every size.
- * Reloads the phone once, at 1440×900, so a shell mounts wide. Leaves the phone at 844×390 with no notch, as the
- * rest of smoke.ts expects. Returns what it measured, to log.
+ * Reloads the phone once, at 1440×900, so a shell mounts wide, and does that last: a reload by the only human ends the
+ * phase, and the steps after this one wait on the phases that follow. Leaves the phone at 844×390 with no notch, as
+ * the rest of smoke.ts expects. Returns what it measured, to log.
  */
 export async function shellFillsTheStage(phone: Page, timeout = 5_000): Promise<string> {
   const log: string[] = [];
@@ -103,13 +104,6 @@ export async function shellFillsTheStage(phone: Page, timeout = 5_000): Promise<
       log.push(`shell ${box}: rail ${f.guide.toFixed(1)} wide=${f.wide}`);
     }
     await read(phone, null);
-
-    // I-1: a shell that mounts on a laptop is wide from its first frame.
-    paints.push(...((await phone.evaluate('window.__shellPaints')) as Painted[]));
-    await phone.reload();
-    await phone.locator('[data-phase] [data-testid=game-shell]').waitFor({ timeout });
-    const mounted = await read(phone);
-    checkFrame(mounted, `a ${LAPTOP.width} px window, after a reload`, LAPTOP.width, WIDE_RAIL_PX, 'true');
   } finally {
     await phone.setViewportSize(PHONE.viewport);
   }
@@ -134,6 +128,19 @@ export async function shellFillsTheStage(phone: Page, timeout = 5_000): Promise<
     await cdp.detach();
   }
 
+  // I-1: a shell that mounts on a laptop is wide from its first frame.
+  try {
+    await phone.setViewportSize(LAPTOP);
+    paints.push(...((await phone.evaluate('window.__shellPaints')) as Painted[]));
+    await phone.reload();
+    await phone.locator('[data-phase] [data-testid=game-shell]').waitFor({ timeout });
+    const mounted = await read(phone);
+    checkFrame(mounted, `a ${LAPTOP.width} px window, after a reload`, LAPTOP.width, WIDE_RAIL_PX, 'true');
+  } finally {
+    await phone.setViewportSize(PHONE.viewport);
+  }
+  await read(phone);
+
   // I-1: every frame the page painted agrees with the switch, at each mount and each resize.
   paints.push(...((await phone.evaluate('window.__shellPaints')) as Painted[]));
   for (const p of paints) {
@@ -144,7 +151,7 @@ export async function shellFillsTheStage(phone: Page, timeout = 5_000): Promise<
   const wideMounts = paints.filter((p) => p.at === 'mount' && p.box >= WIDE_PX).length;
   const resizes = paints.filter((p) => p.at === 'resize').length;
   check(wideMounts >= 1, `B-AC-12 (I-1): a shell mounted at ${LAPTOP.width} px was recorded, got ${wideMounts}`);
-  // To 1440, to 1099, to 1100, back to 1440, and to 844 after the reload.
+  // To 1440, to 1099, to 1100, back to 1440, to 844, then to 844 again after the reload.
   check(resizes >= 5, `B-AC-12 (I-1): every resize of the shell was recorded before paint, got ${resizes}`);
   log.push(`painted frames checked ${paints.length} (${wideMounts} wide mounts, ${resizes} resizes)`);
 
@@ -230,7 +237,11 @@ async function read(phone: Page, box?: number | null): Promise<Frame> {
       },
       box,
       { timeout: 2_000 },
-    );
+    ).catch((err: unknown) => {
+      // A phase change can replace the screen mid-read and leave the read waiting: read the screen that replaced it.
+      if (err instanceof playwrightErrors.TimeoutError) return null;
+      throw err;
+    });
     if (f) return f;
     check(attempt < 2, 'B-AC-12: a game screen with the shell to measure');
   }
