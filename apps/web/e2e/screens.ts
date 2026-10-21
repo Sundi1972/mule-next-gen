@@ -9,6 +9,7 @@ import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { Page } from 'playwright';
 import { launch, PHONE, PHONE_WIDE, startServer, TV } from './harness';
+import { fedPlayerFillsAFullHoloBar, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows } from './store-steps';
 
 const out = resolve(process.argv[2] ?? 'screens');
 mkdirSync(out, { recursive: true });
@@ -87,9 +88,12 @@ try {
 
   // Development: buy a MULE, outfit it for Food, install it, analyse, then the pub.
   await phase(phone, 'development');
+  await fedPlayerFillsAFullHoloBar(phone);
+  await storeIsOneHallWithTwoRows(phone);
   await phoneShot(phone, '4-store');
   await shot(tv, 'tv-4-develop');
   await phone.locator('[data-shop=corral]').click();
+  await outfittersOpenWithAnEmptyMule(phone);
   await phone.locator('[data-shop=food]:not([disabled])').click();
   await phone.getByRole('button', { name: /Install here|Replace MULE/ }).waitFor();
   await phoneShot(phone, '4-map');
