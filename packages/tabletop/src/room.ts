@@ -11,6 +11,8 @@ export interface SeatInfo {
   id: string;
   name: string;
   isAi: boolean;
+  /** Absent means not chosen: the game applies its own default. */
+  pick?: string;
 }
 
 /** What a room offers the game it hosts. */
@@ -41,6 +43,8 @@ export interface RoomOptions<Intent, GameView> {
   maxSeats?: number;
   aiNames?: string[];
   emotes?: readonly string[];
+  /** The values a seat may pick in the lobby. Absent: the game has no choices to make. */
+  picks?: readonly string[];
   /** Cleans chat text, for example with a family-friendly filter. Return '' to drop the message. */
   moderate?(text: string): string;
   /** Errors whose message is shown to the player instead of thrown. */
@@ -65,7 +69,7 @@ export class Room<Intent, View> {
   private readonly seats: Seat<View>[] = [];
   private readonly boards = new Set<Connection<View>>();
   private readonly game: Game<Intent, View>;
-  private readonly opts: Required<Omit<RoomOptions<Intent, View>, 'createGame' | 'code'>>;
+  private readonly opts: Required<Omit<RoomOptions<Intent, View>, 'createGame' | 'code' | 'picks'>>;
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private started = false;
   private nextSeat = 1;
