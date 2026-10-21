@@ -44,12 +44,29 @@ export function planEvent(state: GameState): MonthEvent | null {
   const rng = createRng(base);
   if (!rng.chance(EVENTS.chance)) return null;
   const last = state.history.at(-1)?.events?.[0]?.key;
-  const keys = (Object.keys(EVENTS.weights) as EventKey[]).filter((k) => k !== last);
+  const keys = (Object.keys(EVENTS.weights) as EventKey[]).filter((k) => k !== last && EVENTS.weights[k] > 0);
   const options = keys
     .map((key, i) => buildEvent(state, key, createRng((base + (i + 1) * 0x9e3779b9) >>> 0)))
     .filter((e): e is MonthEvent => e !== null);
   if (options.length === 0) return null;
   return options[rng.weighted(options.map((e) => EVENTS.weights[e.key]))]!;
+}
+
+/** What a hit plot makes after the event (never below 0), from what it made before; `first` marks the event's first plot. */
+export function eventOutput(key: EventKey, before: number, first: boolean): number {
+  const after = {
+    dustStorm: () => Math.floor(before * (1 - EVENTS.dustStorm.cut)),
+    drought: () => before - EVENTS.drought.loss,
+    acidRain: () => before - EVENTS.acidRain.loss,
+    solarFlare: () => before + EVENTS.solarFlare.gain,
+    cometPass: () => before + EVENTS.cometPass.gain,
+    flood: () => 0,
+    volcanicAsh: () => before - EVENTS.volcanicAsh.loss,
+    pestSwarm: () => Math.floor(before * (1 - EVENTS.pestSwarm.cut)),
+    wildfire: () => (first ? 0 : before - EVENTS.wildfire.loss),
+    bumperHarvest: () => before * EVENTS.bumperHarvest.factor,
+  }[key]();
+  return Math.max(0, after);
 }
 
 /** What one event would hit this month, in the order it reaches the plots; null when it would hit nothing. */

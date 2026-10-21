@@ -1,4 +1,5 @@
 import { ADJACENCY, FACTORY, FACTORY_FIT, GROWN_BASE, GROWN_MIN, POLLUTION, RECIPES, SPECIES_PERK, THIN_VEIN_MONTHS, TRAIT_EFFECT, UPKEEP } from './config.js';
+import { eventOutput, planEvent } from './events.js';
 import { neighbours } from './map.js';
 import { airBand, runPollution } from './pollution.js';
 import { addStock, emptyStock, hasStock } from './stock.js';
@@ -10,6 +11,7 @@ import {
   type GameState,
   type Good,
   type MinedGood,
+  type MonthEvent,
   type Outfit,
   type ProcessedGood,
   type ProductionLine,
@@ -195,6 +197,7 @@ export function runProduction(state: GameState): {
   produced: Record<string, Stock>;
   pollutionBy: Record<string, number>;
   lines: ProductionLine[];
+  events: MonthEvent[];
 } {
   const produced: Record<string, Stock> = {};
   for (const player of state.players) produced[player.id] = emptyStock();
@@ -204,7 +207,16 @@ export function runProduction(state: GameState): {
   const indexOf = new Map(state.tiles.map((t, i) => [t, i]));
   const ran = new Set<Tile>();
   const lines: ProductionLine[] = [];
+  const event = planEvent(state);
+  const hit = new Map(event?.plots.map((p) => [p.index, p]));
   const credit = (tile: Tile, good: Good, parts: Part[]) => {
+    const plot = hit.get(indexOf.get(tile)!);
+    if (event && plot) {
+      // The event comes last, on top of everything else that made this month's output.
+      const before = parts.reduce((n, p) => n + p.delta, 0);
+      plot.delta = eventOutput(event.key, before, plot.order === 0) - before;
+      parts.push({ why: 'event', delta: plot.delta, event: event.key });
+    }
     const made = parts.reduce((n, p) => n + p.delta, 0);
     playerById.get(tile.owner!)!.stock[good] += made;
     produced[tile.owner!]![good] += made;
@@ -252,7 +264,7 @@ export function runProduction(state: GameState): {
   }
 
   const pollutionBy = runPollution(state);
-  return { produced, pollutionBy, lines };
+  return { produced, pollutionBy, lines, events: event ? [event] : [] };
 }
 
 /** Raw goods a plot is rated for, best first, from the ground card. */
