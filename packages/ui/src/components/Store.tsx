@@ -21,13 +21,13 @@ export const FACTORY_NAME: Record<FactoryGood, string> = {
 /** A place inside the store: the corral, the pub, an outfitter, a factory fit or the green belt. */
 export type Shop = 'corral' | 'pub' | 'greenBelt' | Good;
 
-/** A spot on the store floor: in front of a room, or at a door. */
-export type StoreSpot = 'doorL' | 'doorR' | 'works' | 'greenBelt' | 'corral' | 'pub' | Exclude<Good, FactoryGood>;
+/** Where your colonist can stand: the left door, or in front of the room your MULE was last at. */
+type StoreSpot = 'doorL' | 'works' | 'greenBelt' | 'corral' | Exclude<Good, FactoryGood>;
 
 const TOP_Y = 47;
 const BOTTOM_Y = 55;
-/** Where a colonist stands in front of each room, in % of the hall: six outfitters on top, the rest on a twelve-column row. */
-export const STORE_SPOT: Record<StoreSpot, { x: number; y: number }> = {
+/** Each spot in % of the hall: six outfitters on top, the rest on the bottom row's twelve columns. */
+const STORE_SPOT: Record<StoreSpot, { x: number; y: number }> = {
   food: { x: 100 / 12, y: TOP_Y },
   water: { x: 300 / 12, y: TOP_Y },
   energy: { x: 500 / 12, y: TOP_Y },
@@ -38,34 +38,18 @@ export const STORE_SPOT: Record<StoreSpot, { x: number; y: number }> = {
   works: { x: 300 / 12, y: BOTTOM_Y },
   greenBelt: { x: 550 / 12, y: BOTTOM_Y },
   corral: { x: 750 / 12, y: BOTTOM_Y },
-  pub: { x: 1000 / 12, y: BOTTOM_Y },
-  doorR: { x: 2300 / 24, y: 51 },
 };
 
 /** The MULE a colonist leads: none, an empty one, or one fitted for a good or a green belt. */
-export type Leading = Good | 'greenBelt' | 'empty' | null;
+type Leading = Good | 'greenBelt' | 'empty' | null;
 
-const isFactory = (s: Shop): s is FactoryGood => (FACTORY_GOODS as readonly Shop[]).includes(s);
+const isFactory = (g: Good | 'greenBelt'): g is FactoryGood => (FACTORY_GOODS as readonly string[]).includes(g);
 
-/** Where a colonist stands to use a shop: a factory fit is at the works. */
-export function spotOfShop(shop: Shop): StoreSpot {
-  return isFactory(shop) ? 'works' : shop;
-}
-
-/** The room a colonist leading this MULE was last at: in the door with none, the corral for an empty one, its outfitter once fitted. */
-export function spotFor(leading: Leading): StoreSpot {
+/** In the left door with no MULE, at the corral with an empty one, at its outfitter (or the works) once fitted. */
+function spotFor(leading: Leading): StoreSpot {
   if (leading === null) return 'doorL';
   if (leading === 'empty') return 'corral';
-  return spotOfShop(leading);
-}
-
-/** A colonist on the store floor. */
-export interface StoreColonist {
-  id: string;
-  slot: Slot;
-  leading: Leading;
-  /** Share of their development time left, for the bar over their head. */
-  time: number;
+  return isFactory(leading) ? 'works' : leading;
 }
 
 export interface StoreInteriorProps {
@@ -75,20 +59,22 @@ export interface StoreInteriorProps {
   pubPayout?: number | null;
   /** What each outfit costs here; a room without a price shows none. */
   prices: Partial<Record<Shop, number>>;
-  /** Who else stands in front of which room. */
-  visitors?: Partial<Record<Shop, Slot[]>>;
   /** Shops the player can use right now; the rest are dimmed. Omit on the big screen. */
   open?: Shop[];
   onShop?(shop: Shop): void;
   /** Either door: walk out to the map. Without it the doors are only drawn. */
   onDoor?(): void;
   /** The player whose screen this is, standing at the room their MULE says they used last. */
-  me?: StoreColonist;
+  me?: {
+    id: string;
+    slot: Slot;
+    leading: Leading;
+    /** Share of their development time left, for the bar over their head. */
+    time: number;
+  };
   /** Drawn over the floor, such as the start-of-turn card. */
   overlay?: ReactNode;
   tv?: boolean;
-  /** Kept for callers; the hall has one layout for every screen. */
-  wide?: boolean;
 }
 
 /**
@@ -96,14 +82,13 @@ export interface StoreInteriorProps {
  * along the bottom the works, the green belt, the MULE corral and the pub
  * between a door to the map at each end.
  */
-export function StoreInterior({ mules, mulePrice, pubPayout, prices, visitors = {}, open, onShop, onDoor, me, overlay, tv = false }: StoreInteriorProps) {
+export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onShop, onDoor, me, overlay, tv = false }: StoreInteriorProps) {
   const usable = (s: Shop) => !open || open.includes(s);
   const tap = (s: Shop) => (onShop ? () => onShop(s) : undefined);
   const cost = (s: Shop) => (prices[s] === undefined ? '' : `${prices[s]} cr`);
   const icon = tv ? 30 : 22;
   const label = tv ? 'text-sm' : 'text-[10px]';
   const price = cx('font-mono font-bold text-ink-2', tv ? 'text-sm' : 'text-[10px]');
-  const others = (Object.entries(visitors) as [Shop, Slot[]][]).flatMap(([shop, slots]) => slots.map((slot) => ({ shop, slot })));
   return (
     <div className="relative h-full w-full select-none overflow-hidden rounded-panel border border-holo-line bg-table" data-testid="store-hall">
       <div aria-hidden className="absolute inset-x-0 top-[38%] h-[24%] bg-raised/60" />
@@ -169,10 +154,7 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, visitors = 
         </Booth>
         <Door side="R" onTap={onDoor} tv={tv} />
       </div>
-      {others.map(({ shop, slot }) => (
-        <Colonist key={`${shop}-${slot}`} at={STORE_SPOT[spotOfShop(shop)]} slot={slot} tv={tv} />
-      ))}
-      {me && <Colonist at={STORE_SPOT[spotFor(me.leading)]} slot={me.slot} leading={me.leading} time={me.time} me testid={`visitor-${me.id}`} tv={tv} />}
+      {me && <Colonist at={STORE_SPOT[spotFor(me.leading)]} slot={me.slot} leading={me.leading} time={me.time} testid={`visitor-${me.id}`} tv={tv} />}
       {overlay}
     </div>
   );
@@ -228,18 +210,16 @@ function Door({ side, onTap, tv }: { side: 'L' | 'R'; onTap: (() => void) | unde
   );
 }
 
-/** A colonist standing on the store floor, with the MULE they lead and, for the player, their time over their head. */
-function Colonist({ at, slot, leading = null, time, me = false, testid, tv }: { at: { x: number; y: number }; slot: Slot; leading?: Leading; time?: number; me?: boolean; testid?: string; tv: boolean }) {
+/** Your colonist on the store floor, with the MULE you lead and your time over your head. */
+function Colonist({ at, slot, leading, time, testid, tv }: { at: { x: number; y: number }; slot: Slot; leading: Leading; time: number; testid: string; tv: boolean }) {
   const species = useSeatSpecies(slot);
   return (
     <div className="pointer-events-none absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center" style={{ left: `${at.x}%`, top: `${at.y}%` }} data-testid={testid}>
-      {time !== undefined && (
-        <span className={cx('mb-0.5 overflow-hidden rounded-full bg-void/70', tv ? 'h-1.5 w-10' : 'h-1 w-7')}>
-          <span className="block h-full rounded-full" style={{ width: `${Math.max(0, Math.min(1, time)) * 100}%`, background: SLOT_COLOR[slot] }} />
-        </span>
-      )}
+      <span className={cx('mb-0.5 overflow-hidden rounded-full bg-void/70', tv ? 'h-1.5 w-10' : 'h-1 w-7')}>
+        <span className="block h-full rounded-full" style={{ width: `${Math.max(0, Math.min(1, time)) * 100}%`, background: SLOT_COLOR[slot] }} />
+      </span>
       <span className="flex items-end">
-        <span className={cx('rounded-full', me && 'ring-2 ring-holo ring-offset-1 ring-offset-table')}>
+        <span className="rounded-full ring-2 ring-holo ring-offset-1 ring-offset-table">
           <Creature species={species} color={SLOT_COLOR[slot]} size={tv ? 40 : 26} />
         </span>
         {leading && (
