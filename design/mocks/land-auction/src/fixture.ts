@@ -77,6 +77,30 @@ export const WALK: LandAuctionView = {
   leader: { id: 'ossa', bid: 310 }, result: null, next: [LISTINGS[2]!],
 };
 
+/** The same lot in its intro: the plot lit on the map, bidding about to start. */
+export const INTRO: LandAuctionView = {
+  ...WALK, stage: 'intro', seconds: 3, total: 3, leader: null,
+  walkers: WALK.walkers.map((w) => (w.side === 'buyer' ? { ...w, price: 200, at: 200 } : w)),
+};
+
+/** The bell has rung: three ways a lot ends. */
+export const SOLD: LandAuctionView = { ...WALK, stage: 'result', seconds: 2.5, total: 2.5, result: { kind: 'sold', buyer: 'ossa', price: 310 } };
+export const WON: LandAuctionView = {
+  ...WALK, stage: 'result', seconds: 2.5, total: 2.5, leader: { id: 'lena', bid: 335 },
+  walkers: WALK.walkers.map((w) => (w.id === 'lena' ? { ...w, price: 335, at: 335 } : w)),
+  result: { kind: 'sold', buyer: 'lena', price: 335 },
+};
+export const STORE: LandAuctionView = {
+  ...WALK, lot: LISTINGS[2]!, number: 3, count: 3, next: [], stage: 'result', seconds: 2.5, total: 2.5, lo: 60, hi: 200, leader: null,
+  walkers: WALK.walkers.map((w) => (w.side === 'buyer' ? { ...w, price: 84, at: 84 } : { ...w, side: 'buyer' as const, aside: undefined, price: 70, at: 70 })),
+  result: { kind: 'store', price: 74 },
+};
+export const KEPT: LandAuctionView = {
+  ...WALK, stage: 'result', seconds: 2.5, total: 2.5, leader: null,
+  walkers: WALK.walkers.map((w) => (w.side === 'buyer' ? { ...w, price: 238, at: 238 } : w)),
+  result: { kind: 'kept' },
+};
+
 export const VIEW: LotsView = {
   finished: false, month: 4, maxMonths: 12, phase: 'development', phaseEndsAt: null, width: W, height: H, tiles: TILES, lit: null,
   players: PLAYERS, me: ME, market: [], storeMules: 6, mulePrice: 148, colonists: 1240, air: { level: 18, band: 'clean' },

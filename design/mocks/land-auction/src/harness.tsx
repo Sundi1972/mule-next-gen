@@ -15,14 +15,15 @@ const client = {
   intent: (i: unknown) => console.info('intent', i),
 } as unknown as TableClient;
 
-/** The real app's providers around a fixture view, as Lena's phone sees it. */
-export function Game({ view = VIEW, children }: { view?: LotsView; children: ReactNode }) {
-  const self = view.players.find((p) => p.id === 'lena')!;
+/** The real app's providers around a fixture view, as one seat's phone sees it (Lena's by default). */
+export function Game({ view = VIEW, seat = 'lena', children }: { view?: LotsView; seat?: string; children: ReactNode }) {
+  const self = view.players.find((p) => p.id === seat)!;
+  const slot = view.players.findIndex((p) => p.id === seat) as Slot;
   const table = { code: 'MULE', status: 'playing' as const, hostId: 'lena', seats: [], boards: 1, game: view };
   return (
     <ClientProvider client={client}>
       <SeatSpeciesProvider value={seatSpecies(view)}>
-        <PhoneGameProvider value={{ table, view, me: view.me!, self, slot: 0 as Slot }}>{children}</PhoneGameProvider>
+        <PhoneGameProvider value={{ table, view, me: { ...view.me!, id: seat }, self, slot }}>{children}</PhoneGameProvider>
       </SeatSpeciesProvider>
     </ClientProvider>
   );
@@ -40,8 +41,11 @@ export function PhoneFrame({ children }: { children: ReactNode }) {
 /** The big screen at its design size (1280 × 720), scaled down to fit the page. */
 export function TvFrame({ children }: { children: ReactNode }) {
   return (
-    <div className="origin-top-left scale-[0.75] overflow-hidden rounded-panel border border-holo-line" style={{ width: 1280, height: 720 }} data-testid="tv-frame">
-      {children}
+    // The outer box takes the scaled size, so the page doesn't scroll sideways.
+    <div className="overflow-hidden rounded-panel border border-holo-line" style={{ width: 960, height: 540 }} data-testid="tv-frame">
+      <div className="origin-top-left scale-[0.75]" style={{ width: 1280, height: 720 }}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -74,11 +78,32 @@ export function useLotWalk(start: LandAuctionView, money: number) {
         const bids = walkers.filter((w) => w.side === 'buyer' && w.price >= l.lot.minimum).sort((a, b) => b.price - a.price);
         const top = bids[0];
         const seconds = Math.max(0, l.seconds - 0.1);
-        if (seconds === 0) return { ...l, walkers, seconds, stage: 'result', result: top ? { kind: 'sold', buyer: top.id, price: top.price } : { kind: 'kept' } };
+        if (seconds === 0) return { ...l, walkers, seconds: 2.5, total: 2.5, stage: 'result', result: top ? { kind: 'sold', buyer: top.id, price: top.price } : { kind: 'kept' } };
         return { ...l, walkers, seconds, leader: top ? { id: top.id, bid: top.price } : null };
       });
     }, 100);
     return () => clearInterval(id);
   }, [money]);
   return { lot, walk: (d: -1 | 0 | 1) => (dir.current = d), restart: () => setLot(start) };
+}
+
+/**
+ * The whole lot, playable from its intro: 3 s with the plot lit, then the
+ * walk (useLotWalk's rules), then the result. Restart goes back to the intro.
+ */
+export function useLotFlow(intro: LandAuctionView, walk: LandAuctionView, money: number) {
+  const run = useLotWalk(walk, money);
+  const [inIntro, setInIntro] = useState(intro.seconds);
+  useEffect(() => {
+    if (inIntro <= 0) return;
+    const id = setTimeout(() => setInIntro((s) => Math.max(0, s - 0.1)), 100);
+    return () => clearTimeout(id);
+  }, [inIntro]);
+  // The walk starts fresh the moment the intro ends.
+  const introOver = inIntro <= 0;
+  useEffect(() => {
+    if (introOver) run.restart();
+  }, [introOver]);
+  const lot = inIntro > 0 ? { ...intro, seconds: inIntro } : run.lot;
+  return { lot, walk: run.walk, restart: () => setInIntro(intro.seconds) };
 }
