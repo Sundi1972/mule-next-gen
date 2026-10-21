@@ -402,7 +402,8 @@ Smart seats  the same code in slice 1 (no model call); WS2's brain takes these d
 ```
 RULE-9 · Who sees what                                               shape: decision table
   item                                         owner's phone   other phones   TV
-  candidates, stage, clock, who has voted      yes             yes            yes
+  candidates, stage, clock, who has voted,     yes             yes            yes
+  who pressed Done
   a ballot (who someone voted for)             yes             no             no
   the result (totals per candidate, how)       yes             yes            yes
   offices, terms, Baron, tax, fund, weights    yes             yes            yes
@@ -444,6 +445,8 @@ interface Election {
                            tallies: { id: string; votes: number }[] }> | null;
 }
 ```
+
+As built in PR-3 (AM-8): `tax` is `{ percent, start, low, high }`, `pay` is `{ governor, sheriff }`, `election` carries `done`, there is no `tax.setBy`, and `election.result` is null until the reveal's countdown ends.
 
 Reason and outcome enums the screens show: `canRun[office]: true | 'closed' | 'termLimit'` (running for the other office is not a refusal: it switches the candidacy, RULE-2 row 3); `result[office].how: 'votes' | 'unopposed' | 'appointed' | 'baron' | 'tieRule'`.
 
@@ -598,6 +601,27 @@ because   P-1: the review found RULE-8 ambiguous on both points; the chosen read
           candidate's own vote certain at every level
 goal      P-1 — still met
 folded    RULE-8 text; PR-2 test row for the Rookie candidate
+```
+
+```
+AM-8 · 2026-10-22 · lead · PR-3 review
+
+target    §2 RULE-9, §3 PoliticsView, §1 C9 scope
+did       (a) Accepted: weighted totals per candidate, public vote weights and the public
+          "who has voted" list can, on a small table, let players work out a ballot by
+          arithmetic (e.g. two voters, one votes for themself). No screen ever shows a ballot;
+          the totals are what Heiko approved for the reveal ("TV reveal with totals only",
+          WS6 hub mocks, 2026-10-22). Any published count has this property.
+          (b) §3's view as built: tax { percent, start, low, high }, pay { governor, sheriff },
+          election.done (public, like the auction's Done) added; tax.setBy dropped (the
+          Governor is in the view). The result stays null until the reveal's countdown ends.
+          (c) apps/server/src/politics-view.ts is a WS7 file (beside land-auction.ts); WS3
+          reviews it with mule-game.ts; SEAMS row to be updated by the PM.
+          (d) A phone that reconnects during an election gets its Done for the stage back.
+because   P-1 / HC-4: the review named the arithmetic inference and the view drift; recording
+          them keeps the contract WS6 builds against and the privacy promise exact.
+goal      P-1 — still met
+folded    RULE-9 row; §3 note below; plan PR-3 authority
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`

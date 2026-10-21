@@ -85,7 +85,7 @@ Every handoff carries the standing authority line, verbatim:
 
 **PR-3**
 - named edits (WS3 reviews): `packages/protocol/src/index.ts` (three MuleIntent members; `MuleView.politics`, `MyView.politics`) · `apps/server/src/server.ts` (`isIntent` cases run/vote/setTax) · `apps/server/src/mule-game.ts` (election tick, intents, VoteHand construction, politics view)
-- `may_edit`: `apps/server/test/politics.test.ts` (new)
+- `may_edit`: `apps/server/test/politics.test.ts` (new) · `apps/server/src/politics-view.ts` (new, AM-8 c; WS3 reviews)
 - `must_not_edit`: `packages/engine/**`, `packages/ai/**`, `apps/web/**`
 
 **PR-4**
