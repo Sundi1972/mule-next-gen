@@ -263,7 +263,10 @@ export interface GameState {
   listings: Listing[];
   /** The live land auction, while the landAuction phase runs. */
   landAuction: LandAuction | null;
-  /** Offices, elections and the Governor's tax; null when the host switched politics off. Written only by politics.ts. */
+  /**
+   * Offices, elections and the Governor's tax; null when the host switched politics off.
+   * Written only by politics.ts, which replaces the object on every write: re-read it, don't hold a reference.
+   */
   politics: Politics | null;
 }
 

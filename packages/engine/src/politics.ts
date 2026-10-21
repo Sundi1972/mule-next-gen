@@ -13,21 +13,9 @@ export function newPolitics(): Politics {
   return { governor: null, sheriff: null, termStart: 1, terms: {}, governorRun: null, baron: null, taxAtStart: 0, election: null };
 }
 
-/**
- * The politics object of this state, made its own before a write. A what-if
- * copy of the game (cloneForSim) shares the object with the real game, and
- * advancing phases on the copy must never change the real one.
- */
+/** The politics object, copied before a write: a what-if copy of the game may share this object. */
 function edit(state: GameState): Politics {
-  const p = state.politics!;
-  const e = p.election;
-  const election: Election | null = e && {
-    ...e,
-    candidates: { governor: e.candidates.governor.slice(), sheriff: e.candidates.sheriff.slice() },
-    ballots: Object.fromEntries(Object.entries(e.ballots).map(([id, ballot]) => [id, { ...ballot }])),
-    done: e.done.slice(),
-  };
-  state.politics = { ...p, terms: { ...p.terms }, governorRun: p.governorRun && { ...p.governorRun }, election };
+  state.politics = structuredClone(state.politics!);
   return state.politics;
 }
 
