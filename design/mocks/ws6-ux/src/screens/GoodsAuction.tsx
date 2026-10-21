@@ -7,10 +7,8 @@ import { Hold } from '../../../../../apps/web/src/phone/Auction';
 import { PhoneShell } from '../../../../../apps/web/src/phone/Shell';
 import { TvHeader } from '../../../../../apps/web/src/table/TableApp';
 import { MARKET, SMITHORE_HOLD } from '../fixture';
-import { bestPrices, WalkBoard, type BoardMarks, type BoardWalker } from '../proposed/WalkBoard';
+import { bestPrices, WalkBoard, type BoardWalker } from '../proposed/WalkBoard';
 import { TABLE } from '../harness';
-
-export type LineStyle = BoardMarks['style'];
 
 /** The board's walkers with their units and surplus, as the proposed board draws them. */
 export function walkersWithUnits(view: MuleView, auction: AuctionView, moved: Record<string, number> = {}): BoardWalker[] {
@@ -61,14 +59,12 @@ const storeStock = (good: AuctionView['good']) => MARKET.find((r) => r.good === 
 export function PhoneGoodsWalk({
   view,
   auction,
-  style,
   moved,
   meId = 'lena',
   onWalk,
 }: {
   view: MuleView;
   auction: AuctionView;
-  style: LineStyle;
   moved?: Record<string, number>;
   meId?: string;
   onWalk?: (dir: -1 | 0 | 1) => void;
@@ -138,7 +134,7 @@ export function PhoneGoodsWalk({
         storeSells={auction.storeSells}
         shipPays={auction.shipPays}
         storeStock={stock}
-        marks={{ ask: true, bid: true, style }}
+        marks={{ ask: true, bid: true }}
         stage="walk"
         meId={meId}
         {...(onWalk ? { onDir: walk } : {})}
@@ -149,7 +145,7 @@ export function PhoneGoodsWalk({
 }
 
 /** The same walk on the big screen: today's TvAuction layout, the proposed board, and the store's stock in its panel. */
-export function TvGoodsWalk({ view, auction, style, moved }: { view: MuleView; auction: AuctionView; style: LineStyle; moved?: Record<string, number> }) {
+export function TvGoodsWalk({ view, auction, moved }: { view: MuleView; auction: AuctionView; moved?: Record<string, number> }) {
   const skipped = skippedLine(auction);
   const stock = auction.storeSells === null ? 0 : storeStock(auction.good);
   return (
@@ -169,7 +165,7 @@ export function TvGoodsWalk({ view, auction, style, moved }: { view: MuleView; a
             storeSells={auction.storeSells}
             shipPays={auction.shipPays}
             storeStock={stock}
-            marks={{ ask: true, bid: true, style }}
+            marks={{ ask: true, bid: true }}
             stage="walk"
             className="min-h-0 flex-1"
           />

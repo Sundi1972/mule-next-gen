@@ -5,8 +5,8 @@
  * WS6 adds, all optional so today's callers draw exactly what they draw now:
  * - `marks`: the original's two moving lines. The lowest ask among sellers who still have units, pushed down as
  *   sellers walk; the highest bid among buyers, pushed up as buyers walk. Drawn across the players' columns, their
- *   prices tagged on the axis in the line's colour, the gap between them labelled ("6 APART"). In 'band' style the
- *   gap is also shaded. They disappear into the glowing trade bar while units change hands. The land auction asks
+ *   prices tagged on the axis in the line's colour, the gap between them labelled ("6 APART"). Plain lines, no
+ *   shading (Heiko, 21 Oct: variant A). They disappear into the glowing trade bar while units change hands. The land auction asks
  *   for the bid line alone. Who holds each line is said in words beside the board (LineReadout in the mock).
  * - `units` and `surplus` per walker: drawn under the creature, "12 (+4)", as in the original.
  * - `storeStock`: the store's selling line says how many it has left, and "SOLD OUT" sits at the top when it has none.
@@ -39,11 +39,10 @@ export interface BoardDeal {
   units: number;
 }
 
-/** WS6: which of the original's two moving lines to draw, and how. */
+/** WS6: which of the original's two moving lines to draw. */
 export interface BoardMarks {
   ask: boolean;
   bid: boolean;
-  style: 'lines' | 'band';
 }
 
 const HOUSES: Record<string, string> = { store: 'STORE', ship: 'SHIP' };
@@ -239,15 +238,6 @@ export function WalkBoard({
             </div>
           ))}
 
-          {/* WS6: the gap between the two moving lines, shaded in 'band' style. */}
-          {marks?.style === 'band' && gap !== null && gap > 0 && (
-            <div
-              aria-hidden
-              className="absolute left-0 bg-holo-soft"
-              style={{ top: `${pct(best.ask!.at)}%`, height: `${pct(best.bid!.at) - pct(best.ask!.at)}%`, width: x(1) }}
-              data-testid="gap-band"
-            />
-          )}
           {showAsk && (
             <MovingLine
               testid="line-ask"

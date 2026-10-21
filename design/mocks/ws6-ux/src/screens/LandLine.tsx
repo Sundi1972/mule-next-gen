@@ -25,7 +25,7 @@ function Board({ view, lot, tv = false }: { view: MuleView; lot: LandAuctionView
       storeSells={null}
       shipPays={null}
       lines={[{ id: 'min', label: 'MIN', price: lot.lot.minimum }]}
-      marks={{ ask: false, bid: true, style: 'lines' }}
+      marks={{ ask: false, bid: true }}
       stage="walk"
       {...(tv ? {} : { meId: 'lena' })}
       className="min-h-0 flex-1"

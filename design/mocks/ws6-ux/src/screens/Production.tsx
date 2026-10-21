@@ -85,7 +85,7 @@ export function ShowControls({ show, kind, onKind }: { show: Show; kind: EventKi
         {show.t.toFixed(1)} s
       </span>
       <span className="text-ink-3">event:</span>
-      {(['storm', 'quake', 'blight', 'none'] as const).map((k) => (
+      {(['storm', 'drought', 'flare', 'comet', 'flood', 'quake', 'blight', 'fire', 'bounty', 'none'] as const).map((k) => (
         <button
           key={k}
           type="button"
@@ -220,10 +220,14 @@ function PlotBars({ line, index, t, ev, tv, target, size }: { line: PlotLine; in
           })}
           {struck && (
             <span
-              className={cx('rounded-chip bg-alert font-mono font-bold leading-none text-white shadow-chip animate-[badge-in_0.3s_ease-out]', tv ? 'px-1 py-0.5 text-[11px]' : 'px-0.5 text-[7px]')}
+              className={cx(
+                'rounded-chip font-mono font-bold leading-none shadow-chip animate-[badge-in_0.3s_ease-out]',
+                typeof hit!.delta === 'number' && hit!.delta > 0 ? 'bg-ok text-on-holo' : 'bg-alert text-white',
+                tv ? 'px-1 py-0.5 text-[11px]' : 'px-0.5 text-[7px]',
+              )}
               data-testid={`hit-${line.x}-${line.y}`}
             >
-              {hit!.muleLost ? (tv ? 'MULE LOST' : '✕') : '½'}
+              {hit!.muleLost ? (tv ? 'MULE LOST' : '✕') : hit!.delta === 'half' ? '½' : hit!.delta > 0 ? `+${hit!.delta}` : `−${-hit!.delta}`}
             </span>
           )}
         </span>
@@ -327,6 +331,112 @@ function EventLayer({ ev, t, tv }: { ev: ShowEvent; t: number; tv: boolean }) {
     );
   }
 
+  if (ev.kind === 'drought') {
+    // Heat: the land bleaches and shimmers from the centre out; each farm and well it reaches cracks.
+    return (
+      <>
+        <div className="absolute inset-0 animate-[shimmer_0.8s_ease-in-out_infinite_alternate]" style={{ background: 'radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--color-warn) 55%, transparent), color-mix(in srgb, var(--color-warn) 30%, transparent) 75%)', opacity: Math.min(1, since * 1.5) }} />
+        {ev.hits.map((h) => t >= hitAt(ev, h) && <Cracks key={`${h.x},${h.y}`} style={cell(h.x, h.y)} />)}
+      </>
+    );
+  }
+
+  if (ev.kind === 'flare') {
+    // A white flash from the sky, then every Energy plant glows hot as it surges.
+    return (
+      <>
+        <div className="absolute inset-0 bg-white" style={{ opacity: Math.max(0, 0.7 - since * 1.2) }} />
+        {ev.hits.map(
+          (h) =>
+            t >= hitAt(ev, h) && (
+              <div key={`${h.x},${h.y}`} className="absolute animate-[pulse-glow_1s_ease-in-out_infinite] rounded-[14%]" style={{ ...cell(h.x, h.y), background: 'radial-gradient(circle, color-mix(in srgb, var(--color-g-energy) 70%, white) 0 25%, transparent 70%)' }} />
+            ),
+        )}
+      </>
+    );
+  }
+
+  if (ev.kind === 'comet') {
+    // A comet crosses the sky corner to corner; ice from its tail sparkles down on the Water plots.
+    const p = Math.min(1, since / 1.6);
+    return (
+      <>
+        {p < 1 && (
+          <div
+            className="absolute h-[3%] w-[45%] rounded-full"
+            style={{ left: `${-40 + p * 140}%`, top: `${-10 + p * 70}%`, transform: 'rotate(25deg)', background: 'linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-holo) 60%, white) 80%, white)', filter: 'blur(1px)' }}
+            data-testid="comet"
+          />
+        )}
+        {ev.hits.map((h) => t >= hitAt(ev, h) - 0.3 && <Sparkles key={`${h.x},${h.y}`} style={cell(h.x, h.y)} colour="var(--color-g-water)" />)}
+      </>
+    );
+  }
+
+  if (ev.kind === 'flood') {
+    // Water rises out of the river over each farm on its banks, top of the river first.
+    return (
+      <>
+        {ev.hits.map((h) => {
+          const s = t - hitAt(ev, h) + 0.5;
+          if (s < 0) return null;
+          return (
+            <div key={`${h.x},${h.y}`} className="absolute overflow-hidden" style={cell(h.x, h.y)} data-testid={`flood-${h.x}-${h.y}`}>
+              <div
+                className="absolute inset-x-0 bottom-0 animate-[dust-drift_1.2s_linear_infinite]"
+                style={{
+                  height: `${Math.min(85, s * 90)}%`,
+                  background: 'repeating-linear-gradient(170deg, color-mix(in srgb, var(--color-g-water) 70%, transparent) 0 6px, color-mix(in srgb, var(--color-g-water) 50%, transparent) 6px 10px)',
+                }}
+              />
+            </div>
+          );
+        })}
+      </>
+    );
+  }
+
+  if (ev.kind === 'fire') {
+    // Flames take one farm, then jump to the next in the cluster; burnt plots stay dark.
+    return (
+      <>
+        {ev.hits.map((h) => {
+          const s = t - hitAt(ev, h) + 0.4;
+          if (s < 0) return null;
+          const burning = s < 1.6;
+          return (
+            <div key={`${h.x},${h.y}`} className="absolute" style={cell(h.x, h.y)} data-testid={`fire-${h.x}-${h.y}`}>
+              <div className="absolute inset-0 rounded-[14%] bg-void" style={{ opacity: Math.min(0.55, s * 0.4) }} />
+              {burning && (
+                <div
+                  className="absolute inset-[8%] animate-[flicker_0.18s_ease-in-out_infinite_alternate] rounded-[40%_40%_20%_20%]"
+                  style={{ background: 'radial-gradient(circle at 50% 80%, color-mix(in srgb, var(--color-warn) 90%, white) 0 20%, var(--color-alert) 45%, transparent 75%)' }}
+                />
+              )}
+            </div>
+          );
+        })}
+      </>
+    );
+  }
+
+  if (ev.kind === 'bounty') {
+    // A golden glow wells up on each lucky plot, with a few sparkles.
+    return (
+      <>
+        {ev.hits.map(
+          (h) =>
+            t >= hitAt(ev, h) - 0.3 && (
+              <div key={`${h.x},${h.y}`} className="absolute" style={cell(h.x, h.y)}>
+                <div className="absolute inset-0 animate-[pulse-glow_1.2s_ease-in-out_infinite] rounded-[14%]" style={{ background: 'radial-gradient(circle, color-mix(in srgb, var(--color-warn) 55%, transparent), transparent 70%)' }} />
+                <Sparkles style={{ inset: 0 }} colour="var(--color-warn)" />
+              </div>
+            ),
+        )}
+      </>
+    );
+  }
+
   // Blight: brown spots grow on each farm in the order the pests reach it, with a trail between them.
   const hits = [...ev.hits].sort((a, b) => a.order - b.order);
   return (
@@ -377,17 +487,47 @@ function EventLayer({ ev, t, tv }: { ev: ShowEvent; t: number; tv: boolean }) {
   );
 }
 
+/** Hairline cracks in dry ground. */
+function Cracks({ style }: { style: CSSProperties }) {
+  return (
+    <svg className="absolute animate-[badge-in_0.4s_ease-out]" style={style} viewBox="0 0 10 10" aria-hidden>
+      <path d="M1 3 L3 4 L4 2 L6 4 L9 3 M3 4 L3 7 L5 8 L7 6 L9 8 M6 4 L7 6" fill="none" stroke="color-mix(in srgb, var(--color-warn) 60%, var(--color-void))" strokeWidth="0.45" />
+    </svg>
+  );
+}
+
+/** A few twinkling points over a plot. */
+function Sparkles({ style, colour }: { style: CSSProperties; colour: string }) {
+  return (
+    <div className="absolute" style={style} aria-hidden>
+      {[
+        [22, 28],
+        [64, 20],
+        [44, 56],
+        [76, 62],
+        [30, 74],
+      ].map(([l, tp], k) => (
+        <span key={k} className="absolute size-[9%] rotate-45 animate-[twinkle_0.7s_ease-in-out_infinite_alternate]" style={{ left: `${l}%`, top: `${tp}%`, background: colour, animationDelay: `${k * 0.13}s` }} />
+      ))}
+    </div>
+  );
+}
+
 // --- Event card ---------------------------------------------------------------
 
 export function EventCard({ ev, t, tv = false }: { ev: ShowEvent | null; t: number; tv?: boolean }) {
   if (!ev || t < SHOW.cardAt) return null;
   return (
     <div
-      className={cx('flex flex-col gap-1 rounded-panel border-2 border-alert bg-alert-bg shadow-glow-alert animate-[card-in_0.4s_ease-out]', tv ? 'p-5' : 'px-2.5 py-2')}
+      className={cx(
+        'flex flex-col gap-1 rounded-panel border-2 animate-[card-in_0.4s_ease-out]',
+        ev.sign === 'good' ? 'border-ok bg-holo-soft shadow-glow' : 'border-alert bg-alert-bg shadow-glow-alert',
+        tv ? 'p-5' : 'px-2.5 py-2',
+      )}
       data-testid="event-card"
     >
-      <span className={cx('label-caps text-alert-ink!', tv ? 'text-base!' : '')}>Event</span>
-      <span className={cx('font-display font-bold leading-none text-alert-ink', tv ? 'text-5xl' : 'text-xl')}>{ev.title}!</span>
+      <span className={cx('label-caps', ev.sign === 'good' ? 'text-ok!' : 'text-alert-ink!', tv ? 'text-base!' : '')}>{ev.sign === 'good' ? 'Good news' : 'Event'}</span>
+      <span className={cx('font-display font-bold leading-none', ev.sign === 'good' ? 'text-ok' : 'text-alert-ink', tv ? 'text-5xl' : 'text-xl')}>{ev.title}!</span>
       <span className={cx('leading-snug', tv ? 'text-2xl' : 'text-xs')}>{ev.line}</span>
     </div>
   );

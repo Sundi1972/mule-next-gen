@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { LAND_LEAD, LAND_UNDER, LAND_WALK, SMITHORE_MID, SMITHORE_SOLD_OUT, SMITHORE_START, SMITHORE_STATUS, SMITHORE_TRADE, TRADE_MOVED, VIEW } from './fixture';
 import { Board, Game, PhoneFrame, TvFrame, useHash } from './harness';
 import { EVENTS, type EventKind } from './production';
-import { PhoneGoodsWalk, TvGoodsWalk, useWalkSim, type LineStyle } from './screens/GoodsAuction';
+import { PhoneGoodsWalk, TvGoodsWalk, useWalkSim } from './screens/GoodsAuction';
 import { PhoneLandLine, TvLandLine } from './screens/LandLine';
 import { PhoneProduction, ShowControls, TvProduction, useShow } from './screens/Production';
 import { PhoneStatusDeclare, TvStatusDeclare } from './screens/StatusDeclare';
@@ -10,10 +10,10 @@ import { PhoneStore, TvDevelop } from './screens/Store';
 
 const DECISIONS = [
   'Concepts from the original, never its art or layout: every screen here is our holo-table style on @mule/ui.',
-  'Goods auction: two moving lines, the lowest ask (red, pushed down by sellers) and the highest bid (green, pushed up by buyers), the gap labelled. When they meet they become the glowing trade bar.',
+  'Goods auction (Heiko chose variant A, plain lines): two moving lines, the lowest ask (red, pushed down by sellers) and the highest bid (green, pushed up by buyers), the gap labelled. When they meet they become the glowing trade bar.',
   'Units and surplus under every creature ("12 (+8)"); the store’s stock on its selling line, or SOLD OUT with no ceiling.',
   'The store and ship lines stay but go thinner: they are limits, not moves.',
-  'Buy or Sell is picked on the status screen (R2): one stage per good fewer. Nothing picked by the bell means Pass.',
+  'Buy or Sell is picked on the status screen (R2): one stage per good fewer. Nothing picked by the bell means Pass. The status table shows on the TV (Heiko’s exemption from “the TV never shows stock”).',
   'Land auction: buyers only, so one line: the highest bid, naming who wins at the bell.',
   'Production (R3, ~15 s): plots fill with one bar per unit in the owner’s colour, badges say why (+1 cluster, ½ no Water…), the event plays over the map in its own way, then the goods fly home: TV into the public colony bar, phone into your private 9-goods strip.',
   'What each plot made is public (as in the original and our status screen); what you hold stays on your phone.',
@@ -68,40 +68,25 @@ function Links({ states, current }: { states: { id: string; title: string }[]; c
   );
 }
 
-function StylePick({ style, onStyle }: { style: LineStyle; onStyle: (s: LineStyle) => void }) {
-  return (
-    <div className="flex items-center gap-2 font-mono text-xs" data-testid="variant-pick">
-      <span className="text-ink-3">variant:</span>
-      {(['lines', 'band'] as const).map((s) => (
-        <button key={s} type="button" onClick={() => onStyle(s)} className={s === style ? 'rounded-chip border border-holo bg-holo-soft px-2 py-0.5' : 'rounded-chip border border-holo-faint px-2 py-0.5 text-ink-2'} data-testid={`variant-${s}`}>
-          {s === 'lines' ? 'A · two lines' : 'B · lines with the gap shaded'}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 /** The walk, playable: hold Up or Down (or drag on the board) as Lena, a buyer. */
 function PlayableWalk() {
-  const [style, setStyle] = useState<LineStyle>('lines');
   const sim = useWalkSim(SMITHORE_START);
   return (
     <>
       <div className="flex flex-wrap items-center gap-4">
-        <StylePick style={style} onStyle={setStyle} />
         <button type="button" className="font-mono text-xs text-holo underline" onClick={sim.restart} data-testid="restart-walk">
           play the walk again
         </button>
       </div>
       <PhoneFrame>
         <Game>
-          <PhoneGoodsWalk view={VIEW} auction={sim.auction} style={style} moved={sim.moved} onWalk={sim.walk} />
+          <PhoneGoodsWalk view={VIEW} auction={sim.auction} moved={sim.moved} onWalk={sim.walk} />
         </Game>
       </PhoneFrame>
       <p className="max-w-[844px] text-sm text-ink-2">You are Lena, short 2 Smithore. Hold Up (or drag on the board): Brix and Ossa walk their asks down, Kai bids up. Watch the two lines close; when they meet the units move one at a time.</p>
       <TvFrame>
         <Board>
-          <TvGoodsWalk view={VIEW} auction={sim.auction} style={style} moved={sim.moved} />
+          <TvGoodsWalk view={VIEW} auction={sim.auction} moved={sim.moved} />
         </Board>
       </TvFrame>
     </>
@@ -135,7 +120,6 @@ function PlayableShow() {
 
 export default function App() {
   const hash = useHash();
-  const [style, setStyle] = useState<LineStyle>('lines');
 
   if (hash === 'walk') return <Page title="Goods auction · the walk, playable · phone and TV"><PlayableWalk /></Page>;
   if (hash === 'production') return <Page title="Production show · TV and phone"><PlayableShow /></Page>;
@@ -145,15 +129,14 @@ export default function App() {
     return (
       <Page title={`Goods auction · ${a.title}`}>
         <Links states={AUCTION_STATES} current={hash} />
-        <StylePick style={style} onStyle={setStyle} />
         <PhoneFrame>
           <Game>
-            <PhoneGoodsWalk view={VIEW} auction={a.a} style={style} {...(a.moved ? { moved: a.moved } : {})} />
+            <PhoneGoodsWalk view={VIEW} auction={a.a} {...(a.moved ? { moved: a.moved } : {})} />
           </Game>
         </PhoneFrame>
         <TvFrame>
           <Board>
-            <TvGoodsWalk view={VIEW} auction={a.a} style={style} {...(a.moved ? { moved: a.moved } : {})} />
+            <TvGoodsWalk view={VIEW} auction={a.a} {...(a.moved ? { moved: a.moved } : {})} />
           </Board>
         </TvFrame>
       </Page>
@@ -243,7 +226,7 @@ export default function App() {
         </li>
         <li>
           <a href="#walk" className="font-display text-lg font-semibold text-holo underline" data-testid="link-walk">
-            The goods auction walk, playable, variants A and B (phone and TV)
+            The goods auction walk, playable (phone and TV)
           </a>
         </li>
       </ul>
