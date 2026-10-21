@@ -62,13 +62,13 @@ try {
   await phone.getByRole('button', { name: 'Start game' }).click();
   await phase(phone, 'planning');
   await phoneShot(phone, '2-planning');
-  await phone.getByRole('tab', { name: 'Geo drone' }).click();
+  await phone.getByTestId('tool-drone').click();
   const free = phone.getByRole('button', { name: /, free/ });
   await free.nth(3).click();
   await free.nth(9).click();
   await phoneShot(phone, '2-drone');
   await phone.getByRole('button', { name: /Send the drone/ }).click();
-  await phone.getByRole('tab', { name: 'Chat' }).click();
+  await phone.getByTestId('desk-talk').click();
   await phone.getByPlaceholder('Say something to everyone').fill('Anyone need Water? Cheap today.');
   await phone.getByRole('button', { name: 'Send' }).click();
   await phone.getByText('Anyone need Water?').first().waitFor();

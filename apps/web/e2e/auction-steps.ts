@@ -22,10 +22,10 @@ const SMOKE_PHONE_SLOT = 0;
 /** What listedSale put up, for month 2's landAuction to follow. */
 let smokeListing: string | null = null;
 
-/** Month 2 planning: list one of the phone's plots from the Sell tab, unsold kept. Returns within ~2 s. */
+/** Month 2 planning: list one of the phone's plots with the hub's Sell a plot tool, unsold kept. Returns within ~2 s. */
 export const listedSale: NonNullable<AuctionSteps['listedSale']> = async ({ phone, check }) => {
   const planning = phone.locator('[data-phase=planning]');
-  await planning.getByTestId('tab-sell').click({ timeout: PRESS_MS });
+  await planning.getByTestId('tool-list').click({ timeout: PRESS_MS });
   smokeListing = await listPlot(phone, SMOKE_PHONE_SLOT, 0);
   if (smokeListing === null) {
     check(false, "the smoke's phone owns a plot to list");
@@ -33,7 +33,7 @@ export const listedSale: NonNullable<AuctionSteps['listedSale']> = async ({ phon
     check(await planning.getByTestId(`listing-${smokeListing}`).isVisible(), `the phone's line-up shows ${smokeListing}`);
     console.log(`auction steps: listed ${smokeListing}`);
   }
-  await planning.getByTestId('tab-colony').click({ timeout: PRESS_MS });
+  await planning.getByTestId('tool-look').click({ timeout: PRESS_MS });
 };
 
 /**
@@ -139,14 +139,14 @@ async function playTheLandAuction(browser: Browser, base: string): Promise<void>
   // Month 2 planning: Brix lists both plots; the others see them in their line-up (B-AC-1).
   const planning = brix.page.locator('[data-phase=planning]');
   await planning.waitFor({ timeout: within(SCALE, PHASE_MS.upkeep) });
-  await planning.getByTestId('tab-sell').click();
+  await planning.getByTestId('tool-list').click();
   const first = await listPlot(brix.page, brix.slot, 0);
   const second = await listPlot(brix.page, brix.slot, 1);
   check(first !== null && second !== null, `Brix listed two plots, got ${first} and ${second}`);
   const minimum = LOTS_MINIMUM;
   for (const p of [lena, ossa]) {
     const lineup = p.page.locator('[data-phase=planning]');
-    await lineup.getByTestId('tab-sell').click();
+    await lineup.getByTestId('tool-list').click();
     await lineup.getByTestId(`listing-${first}`).waitFor({ timeout: PRESS_MS });
     await lineup.getByTestId(`listing-${second}`).waitFor({ timeout: PRESS_MS });
     const slots = await lineup.getByTestId('slots').innerText();

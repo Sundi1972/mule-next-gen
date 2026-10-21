@@ -19,6 +19,7 @@ const governor = desk('governor', { show: (s) => s.self.id === 's9' });
 const slots: HubSlots = {
   nows: [],
   banners: [{ id: 'offices', show: () => false, Body: Nothing }],
+  beneath: [{ id: 'prices', Body: Nothing }],
   desks: [desk('colony'), governor, desk('market')],
   tools: [tool('look'), tool('guard', { show: () => false })],
   agenda: [agenda('drone', { tool: 'look' }), agenda('governor', { desk: 'governor' }), agenda('council', { desk: 'council' }), agenda('guard', { tool: 'guard' })],
@@ -30,6 +31,7 @@ describe('the hub slots (C17)', () => {
     expect(drawn.desks.map((d) => d.id)).toEqual(['colony', 'market']);
     expect(drawn.tools.map((t) => t.id)).toEqual(['look']);
     expect(drawn.banners).toEqual([]);
+    expect(drawn.beneath.map((b) => b.id)).toEqual(['prices']);
     // A door into a desk or tool that isn't drawn is not drawn either.
     expect(drawn.agenda.map((a) => a.key)).toEqual(['drone']);
 
@@ -37,7 +39,7 @@ describe('the hub slots (C17)', () => {
     expect(tabs).toContain('data-testid="desk-colony"');
     expect(tabs).toContain('data-testid="desk-market"');
     expect(tabs).not.toContain('desk-governor');
-    const row = renderToStaticMarkup(createElement(AgendaRow, { items: drawn.agenda, seat: seat(), onOpen: () => {}, ship: '' }));
+    const row = renderToStaticMarkup(createElement(AgendaRow, { items: drawn.agenda, seat: seat(), onOpen: () => {}, note: '' }));
     expect(row).toContain('data-testid="agenda-drone"');
     expect(row).not.toContain('agenda-governor');
     expect(row).not.toContain('agenda-council');
@@ -57,6 +59,7 @@ describe('the hub slots (C17)', () => {
     expect(HUB_SLOTS.tools.map((t) => t.id)).toEqual(['look', 'drone', 'list']);
     expect(HUB_SLOTS.agenda.map((a) => a.key)).toEqual(['drone', 'list']);
     expect(HUB_SLOTS.banners).toEqual([]);
+    expect(HUB_SLOTS.beneath.map((b) => b.id)).toEqual(['market-strip']);
     expect(HUB_SLOTS.nows).toEqual([]);
   });
 });
