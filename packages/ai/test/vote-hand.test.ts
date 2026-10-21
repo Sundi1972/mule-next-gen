@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   AI_LEVELS,
   AI_PERSONAS,
+  advancePhase,
+  canRun,
   castVote,
   createGame,
   createRng,
@@ -18,6 +20,7 @@ import {
   type Election,
   type GameState,
   type Office,
+  type Rng,
 } from '@mule/engine';
 import type { Act, AiAction } from '../src/actions.js';
 import { nextTax, VoteHand } from '../src/hands/vote.js';
@@ -89,12 +92,12 @@ interface StageEnd {
   candidates: Election['candidates'];
 }
 
-/** Ticks the hands and the election on the server's tick until the election is over. `view` is what a hand is handed. */
-function playElection(state: GameState, hands: VoteHand[], view: (state: GameState, me: string) => GameState = (s) => s) {
+/** Ticks the hands and the election on the server's tick until the election is over. */
+function playElection(state: GameState, hands: VoteHand[]) {
   const refused: AiAction[] = [];
   const ends: StageEnd[] = [];
   for (let t = 0; t < 120_000 && electionOf(state).stage !== 'over'; t += WALK.tickMs) {
-    for (const h of hands) h.tick(view(state, h.mind.me), WALK.tickMs, engineAct(state, h.mind.me, refused));
+    for (const h of hands) h.tick(state, WALK.tickMs, engineAct(state, h.mind.me, refused));
     const before = electionOf(state);
     const end: StageEnd = {
       stage: before.stage,
@@ -166,28 +169,110 @@ describe('VoteHand on a Classic table', () => {
   });
 
   it.each([
-    { persona: 'aggressive' as const, percent: 8 },
-    { persona: 'cautious' as const, percent: 4 },
-    { persona: 'trader' as const, percent: 5 },
-  ])('T-AC-6: an AI Governor sets a tax inside RULE-6 ($persona → $percent%)', ({ persona, percent }) => {
+    { persona: 'aggressive' as const, fund: 1_000, month1: 8, month2: 5 },
+    { persona: 'cautious' as const, fund: 1_000, month1: 4, month2: 4 },
+    { persona: 'trader' as const, fund: 1_000, month1: null, month2: 5 },
+    { persona: 'trader' as const, fund: 0, month1: 7, month2: 5 },
+    { persona: 'saboteur' as const, fund: 0, month1: 10, month2: 5 },
+  ])('T-AC-6: an AI Governor sets a tax inside RULE-6 ($persona, fund $fund → $month1, then $month2)', ({ persona, fund, month1, month2 }) => {
     const state = newGame();
     runFor(state, 'ai2', 'governor');
     while (electionOf(state).stage !== 'over') stepElection(state, electionOf(state).clockMs);
     expect(state.politics!.governor).toBe('ai2');
-    state.treasury.money = 1_000;
     const hands = SEATS.map((id, i) => handOf(mindOf(id, id === 'ai2' ? persona : PERSONAS[i]!), i));
     const refused: AiAction[] = [];
     const sent = new Map(SEATS.map((id) => [id, [] as AiAction[]]));
+    const plan = () => {
+      state.treasury.money = fund;
+      for (let t = 0; t < PAUSE_MS; t += WALK.tickMs)
+        for (const h of hands) h.tick(state, WALK.tickMs, engineAct(state, h.mind.me, refused, sent.get(h.mind.me)));
+    };
+    const rate = () => Math.round(state.treasury.salesTax * 100);
 
-    for (let t = 0; t < PAUSE_MS; t += WALK.tickMs)
-      for (const h of hands) h.tick(state, WALK.tickMs, engineAct(state, h.mind.me, refused, sent.get(h.mind.me)));
+    // Month 1 opened at 5%: RULE-6 allows 0..10.
+    plan();
+    expect(rate()).toBe(month1 ?? 5);
+    // Month 2 has no election and opens at 0%: RULE-6 allows 0..5.
+    state.treasury.salesTax = 0;
+    while (state.phase !== 'planning' || state.month !== 2) advancePhase(state);
+    plan();
+    expect(rate()).toBe(month2);
 
-    // The month opened at 5%: RULE-6 allows 0..10.
-    expect(Math.round(state.treasury.salesTax * 100)).toBe(percent);
     expect(refused).toEqual([]);
-    // Once per planning, and only to change the rate; nobody else touches it.
-    expect(sent.get('ai2')).toEqual(percent === 5 ? [] : [{ type: 'setTax', percent }]);
+    // Once per planning, only to change the rate, and nobody else touches it.
+    const percents = month1 === null ? [month2] : [month1, month2];
+    expect(sent.get('ai2')).toEqual(percents.map((percent) => ({ type: 'setTax', percent })));
     for (const id of ['ai0', 'ai1', 'ai3']) expect(sent.get(id)).toEqual([]);
+  });
+});
+
+/** An Rng that hands out the given draws to next() and chance(), and always the shortest pause. */
+function drawsOf(draws: number[]): Rng {
+  const next = () => {
+    const draw = draws.shift();
+    if (draw === undefined) throw new Error('VoteHand drew more than the test arranged');
+    return draw;
+  };
+  return { ...createRng(1), next, chance: (p: number) => next() < p, int: (min: number) => min };
+}
+
+/** One nominate tick that covers the longest pause: the moves the seat sends. */
+function nominate(state: GameState, mind: Mind, rng: Rng): AiAction[] {
+  const sent: AiAction[] = [];
+  const refused: AiAction[] = [];
+  new VoteHand(mind, rng).tick(state, POLITICS.ai.actMs[1], engineAct(state, mind.me, refused, sent));
+  expect(refused).toEqual([]);
+  return sent;
+}
+
+describe('RULE-8: who runs', () => {
+  const { runGovernor, runSheriff } = POLITICS.ai;
+  const g = runGovernor.aggressive;
+  const sh = runSheriff.aggressive;
+  it.each([
+    { name: 'draw under the Governor chance', draws: [g - 0.01], want: [{ type: 'run', office: 'governor' }] },
+    { name: 'draw at the Governor chance, under the Sheriff one', draws: [g, sh - 0.01], want: [{ type: 'run', office: 'sheriff' }] },
+    { name: 'draws at both chances', draws: [g, sh], want: [] },
+    { name: 'draws over both chances', draws: [g + 0.01, sh + 0.01], want: [] },
+  ])("RULE-8: a seat runs for Governor, else Sheriff, by its persona's seeded chances ($name)", ({ draws, want }) => {
+    const sent = nominate(newGame(), mindOf('ai2', 'aggressive'), drawsOf([...draws]));
+
+    expect(sent).toEqual([...want, { type: 'done', done: true }]);
+  });
+
+  it('RULE-8: a term-limited seat never runs for Governor', () => {
+    const state = newGame();
+    for (let term = 0; term < POLITICS.maxGovernorTermsInRow; term++) {
+      runFor(state, 'ai2', 'governor');
+      while (electionOf(state).stage !== 'over') stepElection(state, electionOf(state).clockMs);
+      const next = POLITICS.electionMonths.find((m) => m > state.month)!;
+      while (state.phase !== 'planning' || state.month !== next) advancePhase(state);
+    }
+    expect(canRun(state, 'ai2').governor).toBe('termLimit');
+
+    const sent = nominate(state, mindOf('ai2', 'aggressive'), drawsOf([0, 0]));
+
+    expect(sent).toEqual([
+      { type: 'run', office: 'sheriff' },
+      { type: 'done', done: true },
+    ]);
+  });
+
+  it('RULE-8: after planning ends (AM-1) the hand sends nothing in any later phase', () => {
+    const state = newGame();
+    const hands = classicHands(1);
+    const sent: AiAction[] = [];
+    const refused: AiAction[] = [];
+    for (const h of hands) h.tick(state, WALK.tickMs, engineAct(state, h.mind.me, refused, sent));
+    // Planning ends inside every seat's pause: the election closes at once.
+    advancePhase(state);
+    expect(electionOf(state).stage).toBe('over');
+    while (state.phase !== 'planning') {
+      for (const h of hands) h.tick(state, 60_000, engineAct(state, h.mind.me, refused, sent));
+      advancePhase(state);
+    }
+
+    expect(sent).toEqual([]);
   });
 });
 
@@ -198,8 +283,14 @@ describe('RULE-8: how a seat votes', () => {
   ])('RULE-8: a non-candidate votes for the candidate with the fewest plots ($name)', ({ candidates, plots, want }) => {
     const state = ballotWith(candidates, plots);
     const hand = handOf(mindOf('ai0', 'trader'), 11);
+    const refused: AiAction[] = [];
+    const sent: AiAction[] = [];
+    const act = engineAct(state, 'ai0', refused, sent);
 
-    const { refused, sent } = tickAlone(state, hand);
+    let t = 0;
+    for (; t + WALK.tickMs < POLITICS.ai.actMs[0]; t += WALK.tickMs) hand.tick(state, WALK.tickMs, act);
+    expect(sent).toEqual([]);
+    for (; t < PAUSE_MS; t += WALK.tickMs) hand.tick(state, WALK.tickMs, act);
 
     expect(refused).toEqual([]);
     expect(sent).toEqual([
@@ -210,14 +301,24 @@ describe('RULE-8: how a seat votes', () => {
     expect(electionOf(state).done).toContain('ai0');
   });
 
-  it('RULE-8: a candidate votes for itself', () => {
-    const state = ballotWith({ governor: ['ai1', 'ai2'], sheriff: ['ai0', 'ai3'] }, { ai0: 6, ai1: 5, ai2: 0, ai3: 1 });
-    const hand = handOf(mindOf('ai1', 'cautious'), 12);
+  it.each([
+    { level: 'trader' as const, candidates: { governor: ['ai1', 'ai2'], sheriff: ['ai0', 'ai3'] }, want: { governor: 'ai1', sheriff: 'ai3' } },
+    // AM-7: a Rookie candidate votes for itself too; only a Rookie that does not run guesses.
+    { level: 'rookie' as const, candidates: { governor: ['ai1', 'ai2'] }, want: { governor: 'ai1' } },
+  ])('RULE-8: a candidate votes for itself ($level)', ({ level, candidates, want }) => {
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const state = ballotWith(candidates, { ai0: 6, ai1: 5, ai2: 0, ai3: 1 });
+      const hand = handOf(mindOf('ai1', 'cautious', level), seed);
+      const refused: AiAction[] = [];
+      const sent: AiAction[] = [];
 
-    const { refused } = tickAlone(state, hand);
+      // One late tick that covers the longest pause acts at once.
+      hand.tick(state, POLITICS.ai.actMs[1], engineAct(state, 'ai1', refused, sent));
 
-    expect(refused).toEqual([]);
-    expect(electionOf(state).ballots.ai1).toEqual({ governor: 'ai1', sheriff: 'ai3' });
+      expect(refused).toEqual([]);
+      expect(electionOf(state).ballots.ai1).toEqual(want);
+      expect(sent.at(-1)).toEqual({ type: 'done', done: true });
+    }
   });
 
   it('RULE-8: Rookie votes for some candidate and is never refused', () => {
@@ -258,36 +359,62 @@ describe('RULE-8: the Governor steps the tax', () => {
   );
 });
 
-/** The game as `me` is handed it, with every other seat's ballot booby-trapped. */
-function guarded(state: GameState, me: string): GameState {
-  const politics = state.politics;
-  const election = politics?.election;
-  if (!politics || !election) return state;
-  const trap = (key: string | symbol) => {
-    if (typeof key === 'string' && key !== me) throw new Error(`HC-4: ${me} read ${key}'s ballot`);
-  };
-  const ballots = new Proxy(election.ballots, {
-    get: (target, key, receiver) => (trap(key), Reflect.get(target, key, receiver)),
-    getOwnPropertyDescriptor: (target, key) => (trap(key), Reflect.getOwnPropertyDescriptor(target, key)),
-  });
-  return { ...state, politics: { ...politics, election: { ...election, ballots } } };
+const HUMANS = ['h1', 'h2', 'h3'];
+
+/**
+ * One election with ai0 and three humans: h1 and h2 run for Governor, h3 for
+ * Sheriff, and at the ballot's opening the humans vote for `pick`. Returns
+ * the moves ai0's hand sent and who became Governor.
+ */
+function electionWithHumans(hand: Pick<VoteHand, 'tick'>, pick: string): { sent: AiAction[]; governor: string | null } {
+  const state = createGame({ seed: 7, players: ['ai0', ...HUMANS].map((id) => ({ id, name: id, isAi: id === 'ai0' })) });
+  runFor(state, 'h1', 'governor');
+  runFor(state, 'h2', 'governor');
+  runFor(state, 'h3', 'sheriff');
+  const sent: AiAction[] = [];
+  const act = engineAct(state, 'ai0', [], sent);
+  for (let t = 0; t < 120_000 && electionOf(state).stage !== 'over'; t += WALK.tickMs) {
+    const stage = electionOf(state).stage;
+    if ((stage === 'nominate' || stage === 'ballot') && !electionOf(state).done.includes('h1')) {
+      if (stage === 'ballot') for (const h of HUMANS) castVote(state, h, 'governor', pick);
+      for (const h of HUMANS) electionDone(state, h);
+    }
+    hand.tick(state, WALK.tickMs, act);
+    stepElection(state, WALK.tickMs);
+  }
+  return { sent, governor: state.politics!.governor };
 }
+
+/** A stand-in that cheats: it votes with the majority of the ballots it can see. */
+const bandwagon: Pick<VoteHand, 'tick'> = {
+  tick(state, _dt, act) {
+    const election = observe(state, 'ai0').politics?.election;
+    if (election?.stage !== 'ballot' || election.done.includes('ai0')) return;
+    const votes = Object.values(election.ballots).map((b) => b.governor);
+    const leader = election.candidates.governor.reduce((a, b) => (votes.filter((v) => v === b).length > votes.filter((v) => v === a).length ? b : a));
+    act({ type: 'vote', office: 'governor', candidate: leader });
+    act({ type: 'done', done: true });
+  },
+};
 
 describe('HC-4: secret ballots', () => {
   it("HC-4: the hand never reads another seat's ballot", () => {
-    let ballotStages = 0;
-    for (const seed of [1, 2, 3, 4, 5, 6]) {
-      const state = newGame(seed);
-      const { refused, ends } = playElection(state, classicHands(seed), guarded);
+    // Positive control: the humans' ballots decide the race, and a hand that reads them moves with them.
+    expect(electionWithHumans(bandwagon, 'h1')).toMatchObject({ governor: 'h1' });
+    expect(electionWithHumans(bandwagon, 'h2')).toMatchObject({ governor: 'h2' });
+    expect(electionWithHumans(bandwagon, 'h1').sent).not.toEqual(electionWithHumans(bandwagon, 'h2').sent);
 
-      expect(refused).toEqual([]);
-      expect(electionOf(state).stage).toBe('over');
-      if (!ends.some((e) => e.stage === 'ballot')) continue;
-      ballotStages++;
-      // Positive control: the trap is live through observe(), on ballots that exist.
-      expect(Object.keys(electionOf(state).ballots)).toContain('ai1');
-      expect(() => observe(guarded(state, 'ai0'), 'ai0').politics!.election!.ballots.ai1).toThrow(/HC-4/);
-    }
-    expect(ballotStages).toBeGreaterThan(0);
+    let votedForAnother = 0;
+    for (const persona of PERSONAS)
+      for (const seed of [1, 2, 3, 4]) {
+        const mind = mindOf('ai0', persona);
+        const one = electionWithHumans(handOf(mind, seed), 'h1').sent;
+        const other = electionWithHumans(handOf(mind, seed), 'h2').sent;
+
+        expect(other).toEqual(one);
+        if (one.some((a) => a.type === 'vote' && a.candidate !== 'ai0')) votedForAnother++;
+      }
+    // The comparison bites only where the hand votes for someone else.
+    expect(votedForAnother).toBeGreaterThan(0);
   });
 });
