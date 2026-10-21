@@ -664,8 +664,8 @@ export const BRAIN = {
   charsPerToken: 2.5,
   /** Longest chat line an AI says, in characters. */
   maxLineChars: 140,
-  /** Most chat lines per AI seat per game month. */
-  linesPerMonth: 2,
+  /** Most chat lines per AI seat per game month: one each for land, development and the auction, since a seat says at most one a phase. */
+  linesPerMonth: 3,
   /** Longest quoted table-talk line put in a prompt, in characters. */
   maxTalkChars: 200,
   /** How long a land decision may wait for the model, in ms; planning lasts up to 45 s. */

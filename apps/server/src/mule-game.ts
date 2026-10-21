@@ -123,8 +123,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   ) {
     this.phaseScale = options.phaseScale ?? 1;
     if (!(this.phaseScale > 0 && this.phaseScale <= 1)) throw new RangeError(`phaseScale must be in (0, 1], got ${this.phaseScale}`);
-    // One ledger file holds every game, so the id must not repeat: the seed and the room's clock at creation.
-    this.brain = options.brain ?? createBrain({ gameId: `g-${seed}-${ctx.now()}` });
+    // One ledger file holds every game, so the id must not repeat: the seed, the room's clock at creation, and a
+    // random suffix for two games made in the same tick.
+    this.brain = options.brain ?? createBrain({ gameId: `g-${seed}-${ctx.now()}-${crypto.randomUUID().slice(0, 8)}` });
   }
 
   start(seats: SeatInfo[]): void {
