@@ -48,8 +48,8 @@ describe('score parts in the game-over view', () => {
       const own = withParts[0]!;
       const parts = own.parts!;
       expect(own.score).toBe(score(state, id));
-      expect(Object.keys(parts).sort()).toEqual(['cut', 'goods', 'land', 'money', 'muleValue', 'mules', 'plots']);
-      expect(parts.money + parts.goods + parts.land + parts.muleValue - parts.cut).toBe(own.score);
+      expect(Object.keys(parts).sort()).toEqual(['cut', 'goods', 'land', 'money', 'muleValue', 'mules', 'office', 'plots']);
+      expect(parts.money + parts.goods + parts.land + parts.muleValue + parts.office - parts.cut).toBe(own.score);
       expect(Math.sign(parts.cut)).toBe(cutSign);
 
       // The lines a public view can check on its own.
