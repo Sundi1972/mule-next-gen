@@ -2,3 +2,11 @@
 @import "../../../../apps/web/src/index.css";
 /* The mock composes the app's real phone and table components, so their classes are scanned too. */
 @source "../../../../apps/web/src";
+
+/* DS-GAP (WS6): the production show's motion, to move into packages/ui/src/theme.css beside the other keyframes once approved. */
+@keyframes bar-in { from { transform: scaleY(0); transform-origin: bottom; opacity: 0; } to { transform: scaleY(1); transform-origin: bottom; opacity: 1; } }
+@keyframes badge-in { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes card-in { from { transform: translateY(-12px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes dust-drift { from { background-position: 0 0; } to { background-position: 40px 0; } }
+@keyframes crack-flash { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+@keyframes crawl { from { transform: translate(0, 0); } to { transform: translate(3px, -2px); } }
