@@ -28,8 +28,7 @@ export const listedSale: NonNullable<AuctionSteps['listedSale']> = async ({ phon
   await planning.getByTestId('tab-sell').click({ timeout: PRESS_MS });
   smokeListing = await listPlot(phone, SMOKE_PHONE_SLOT, 0);
   if (smokeListing === null) {
-    // Becomes a check once the smoke claims a plot in month 1 (WS4).
-    console.log("auction steps: SKIPPED listedSale (the smoke's phone owns no plot)");
+    check(false, "the smoke's phone owns a plot to list");
   } else {
     check(await planning.getByTestId(`listing-${smokeListing}`).isVisible(), `the phone's line-up shows ${smokeListing}`);
     console.log(`auction steps: listed ${smokeListing}`);

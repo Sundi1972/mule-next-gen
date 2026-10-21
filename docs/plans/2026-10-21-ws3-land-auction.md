@@ -90,7 +90,8 @@ Every handoff carries the standing authority line, verbatim:
   - **Server:** 1.7 COMPLETE. Review: with fixes (a dropped phone holding Up kept bidding; six surviving mutants) → fix round 1 at 6fb845a; re-review: READY. `listedOutfits` is gone (AM-2), `list()` takes the intent, and the land auction's clock honours `phaseScale` (c8294f1).
   - **Sell tab:** 1.8 COMPLETE (review fixes at f282496; the tab lives in `phone/Sell.tsx`).
   - **e2e:** 1.11 COMPLETE (f6e4172). It found a wire bug: `isIntent` refused `list`/`unlist`, fixed test-first (5f2ea12 → 9097208).
-  - **PR-1 boundary:** every branch merged into ws3-pr1-slice and synced with feat/strategist a6c18ac (c87fab7). Goal check G-1 DELIVERED in a browser. Sub-PR #21 open into ws3-auctions. Code review: with fixes (two proof gaps); boundary fix round, maintainability review and render gate in progress.
+  - **PR-1: COMPLETE, merged into ws3-auctions** (#21 at 1520ce0, CI green). Goal check G-1 DELIVERED in a browser. Code review, maintainability review and render gate all closed. The lane is synced with feat/strategist c58bea1, which has the reading-order land grant (#23, Heiko's ruling).
+  - **PR-2: in progress** on ws3-pr2-ai. WS1's real `plotValue`/`muleValue` are on feat/strategist (#17), so Task 2.1 imports them directly and **Task 2.3 is not needed**. WS1's E4 is merged, so PR-2's gate is met.
   - **Merge rule (PM, session 2):** sub-PR merges into ws3-auctions go to the PM, because Heiko hasn't typed that rule into this session.
   - **Standing ruling (Heiko via the PM):** no handovers; this session carries PR-1, PR-2 and PR-3.
 - **Wave 2 = PR-2.** It starts when PR-1 is merged into `ws3-auctions`. **Freeze point:** the stubs for `plotValue`/`muleValue` have WS1's announced signatures `(obs, mind, index)` / `(obs, mind)` returning credits (WS1, 2026-10-21), so WS1's export later swaps in with one line.
