@@ -320,6 +320,8 @@ export const GAME = {
   /** Months the game continues after the last free plot is claimed. */
   landRushMonths: 3,
   claimsPerGrant: 2,
+  /** What each plot a player owns adds to their score, before any MULE on it. */
+  plotScore: 300,
   /** The export ship calls every this many months. */
   exportShipEvery: 3,
   /** How long each free plot stays lit in the land grant. */

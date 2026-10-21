@@ -56,7 +56,7 @@ export function leaderOf(obs: GameState, self: string): string | null {
   const worth = (id: string) => {
     const p = obs.players.find((q) => q.id === id)!;
     const plots = obs.tiles.filter((t) => t.owner === id);
-    return p.money + plots.length * 300 + plots.filter((t) => t.outfit).length * price;
+    return p.money + plots.length * GAME.plotScore + plots.filter((t) => t.outfit).length * price;
   };
   const rivals = obs.players.filter((p) => p.id !== self).sort((a, b) => worth(b.id) - worth(a.id));
   return rivals[0]?.id ?? null;
@@ -129,7 +129,7 @@ function scorePlot(obs: GameState, gains: Map<Outfit, number>, tile: Tile, focus
   ];
   if (focus === 'block') cons.push(consider('Blocks the leader', curve.floor(leaderAround / 2, 0.4), Math.max(0.5, spite), `${leaderAround} of the leader's plots beside it`));
   const index = tileIndex(obs.width, tile.x, tile.y);
-  return candidate(`plot:${index}`, plotName(tile), { index, outfit: best.outfit }, best.gain + 300, cons);
+  return candidate(`plot:${index}`, plotName(tile), { index, outfit: best.outfit }, best.gain + GAME.plotScore, cons);
 }
 
 /** The land plans for this month, each with its full ranking of free plots. */
