@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AI_LEVELS, AI_PERSONAS, BRAIN, createGame, observe } from '@mule/engine';
 import { Brain, candidate, consider, PERSONAS, shortlist, TopPickDecider, type Decider, type DecisionRecord, type Mind } from '@mule/ai';
 import type { HaikuSdk } from '../src/brain/client.js';
-import { createBrain, type BrainSeat, type BrainService } from '../src/brain/index.js';
+import { API_KEY_ENV, createBrain, type BrainSeat, type BrainService } from '../src/brain/index.js';
 
 /** What the SDK constructor was given, once per construction. */
 const built = vi.hoisted(() => ({ options: [] as unknown[] }));
@@ -180,10 +180,38 @@ describe('brain service', () => {
 
     // The default factory passes the key and nothing else the SDK could fall back on: no auth token, and the
     // public API host even with a gateway URL left in the environment (HC-2).
+    // Its log level is pinned off, so ANTHROPIC_LOG=debug cannot print requests (prompts).
     vi.stubEnv('ANTHROPIC_BASE_URL', 'https://gateway.test-not-real');
+    vi.stubEnv('ANTHROPIC_LOG', 'debug');
     const viaSdk = createBrain({ gameId: GAME, env: KEY, logPath: file });
     expect(viaSdk.deciderFor(SEAT)).not.toBeNull();
-    expect(built.options).toEqual([{ apiKey: 'test-key-not-real', authToken: null, baseURL: 'https://api.anthropic.com' }]);
+    expect(built.options).toEqual([{ apiKey: 'test-key-not-real', authToken: null, baseURL: 'https://api.anthropic.com', logLevel: 'off' }]);
+  });
+
+  it("INV-key-read: the key's env name appears in production source only in brain/index.ts", () => {
+    expect(API_KEY_ENV).toBe('ANTHROPIC_API_KEY');
+    const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+    const files: string[] = [];
+    const walk = (d: string) => {
+      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        const p = path.join(d, e.name);
+        if (e.isDirectory()) walk(p);
+        else if (/\.tsx?$/.test(e.name)) files.push(p);
+      }
+    };
+    for (const group of ['apps', 'packages']) {
+      for (const pkg of fs.readdirSync(path.join(root, group))) {
+        const src = path.join(root, group, pkg, 'src');
+        if (fs.existsSync(src)) walk(src);
+      }
+    }
+    expect(files.map((f) => path.relative(root, f).split(path.sep).join('/'))).toEqual(
+      expect.arrayContaining(['apps/server/src/brain/spike.ts', 'apps/server/src/brain/index.ts', 'packages/ai/src/index.ts']),
+    );
+    const naming = files
+      .filter((f) => fs.readFileSync(f, 'utf8').includes('ANTHROPIC_API_KEY'))
+      .map((f) => path.relative(root, f).split(path.sep).join('/'));
+    expect(naming).toEqual(['apps/server/src/brain/index.ts']);
   });
 
   // trace-allow: spec §9 names this import check as the ownership boundary's enforcement; it has no AC or INV id.
