@@ -252,13 +252,10 @@
 @keyframes mule-blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(0.1); } }
 @keyframes mule-work { 0%, 100% { opacity: 0.75; } 50% { opacity: 1; filter: brightness(1.25); } }
 
-/* Without motion, the store and the MULE hold still, and a colonist changes place without gliding. */
+/* Without motion, the store and the MULE hold still. */
 @media (prefers-reduced-motion: reduce) {
   [class*='animate-[store-'],
   [class*='animate-[mule-'] {
     animation: none !important;
-  }
-  [data-testid^='visitor-'] {
-    transition: none !important;
   }
 }
