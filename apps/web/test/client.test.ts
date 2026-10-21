@@ -279,6 +279,12 @@ describe('TableClient', () => {
     expect(client.getState().handoffCode).toBeNull();
     expect(last().sent).toHaveLength(sent);
 
+    // A code that arrives after the dialog closed is not shown later.
+    client.handoff();
+    client.closeHandoff();
+    last().deliver({ t: 'handoffCode', code: 'late', expiresAt: 999_999 });
+    expect(client.getState().handoffCode).toBeNull();
+
     client.handoff();
     last().deliver({ t: 'handoffCode', code: 'two', expiresAt: 999_999 });
     last().deliver({ t: 'removed', reason: 'moved' });

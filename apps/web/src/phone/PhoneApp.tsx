@@ -18,11 +18,11 @@ import { TurnSideways } from './Shell';
  * The phone: your private controller, played sideways. Held upright it asks to be
  * turned; the game stays mounted underneath so nothing is lost while turning.
  */
-export function PhoneApp({ room }: { room: string }) {
+export function PhoneApp({ room, moving = false }: { room: string; moving?: boolean }) {
   return (
     <>
       <div className="h-full portrait:hidden">
-        <PhoneScreens room={room} />
+        <PhoneScreens room={room} moving={moving} />
       </div>
       <div className="h-full landscape:hidden">
         <TurnSideways />
@@ -32,15 +32,15 @@ export function PhoneApp({ room }: { room: string }) {
 }
 
 /** Which screen shows follows the game's phase. */
-function PhoneScreens({ room }: { room: string }) {
+function PhoneScreens({ room, moving }: { room: string; moving: boolean }) {
   const client = useClient();
   const state = useClientState();
 
-  // After a reload, take the saved seat back by itself, unless the link is for another table.
+  // After a reload, take the saved seat back by itself, unless the link is for another table or moves a seat here.
   useEffect(() => {
     const saved = client.savedSeat();
-    if (saved && (!room || room === saved.code)) client.join(saved.code, saved.name);
-  }, [client, room]);
+    if (!moving && saved && (!room || room === saved.code)) client.join(saved.code, saved.name);
+  }, [client, room, moving]);
 
   const table = state.view;
   if (!table || state.role !== 'player' || !state.seatId) return <Entry initialCode={room} />;

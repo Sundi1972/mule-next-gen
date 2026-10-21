@@ -101,7 +101,7 @@ export function Entry({ initialCode }: { initialCode: string }) {
 
 /** Sideways, clear of the notch and the home bar. */
 function Frame({ children }: { children: ReactNode }) {
-  return <div className="flex h-full flex-col bg-table pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] text-ink">{children}</div>;
+  return <div className="relative flex h-full flex-col bg-table pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] text-ink">{children}</div>;
 }
 
 /** One species: the creature in your colour, its name. Pressed shows the choice. */
@@ -223,17 +223,39 @@ function BoardStatus({ code, boards }: { code: string; boards: number }) {
 }
 
 type HostDialog = { kind: 'kick'; seatId: string; name: string } | { kind: 'close' };
+type Dialog = HostDialog | { kind: 'handoff' };
 
-/** The seat rail: everyone at the table as the creature they play, yours among them. The host adds AI players, removes seats, starts or closes the room. */
+const textButton = 'text-left text-sm text-holo underline-offset-2 hover:underline';
+
+/**
+ * The seat rail: everyone at the table as the creature they play, yours among them. The host adds AI players,
+ * removes seats, starts or closes the room. Anyone can move their seat to their phone.
+ */
 function SeatRail({ table, mine, species }: { table: TableView<unknown>; mine: number; species: Species[] }) {
   const client = useClient();
-  const { seatId } = useClientState();
+  const { seatId, handoffCode } = useClientState();
   const isHost = table.hostId === seatId;
-  const [asked, setAsked] = useState<HostDialog | null>(null);
+  const [asked, setAsked] = useState<Dialog | null>(null);
   // A seat that left while the host was deciding has nothing left to remove.
   const dialog = asked?.kind === 'kick' && !table.seats.some((s) => s.id === asked.seatId) ? null : asked;
+  const confirm = dialog?.kind === 'kick' || dialog?.kind === 'close' ? dialog : null;
+  const moveToPhone = () => {
+    setAsked({ kind: 'handoff' });
+    client.handoff();
+  };
   return (
     <div className="flex w-(--rail) shrink-0 flex-col border-l border-holo-faint bg-void/40">
+      {dialog?.kind === 'handoff' && (
+        <HandoffDialog
+          name={table.seats[mine]?.name ?? ''}
+          host={isHost}
+          link={handoffCode ? joinUrl(table.code, handoffCode.code) : null}
+          onClose={() => {
+            setAsked(null);
+            client.closeHandoff();
+          }}
+        />
+      )}
       <section className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-3 py-3">
         <h2 className="label-caps">At the table · {table.seats.length} of 6</h2>
         <ul className="flex flex-col overflow-hidden rounded-panel border border-holo-line" data-testid="seats">
@@ -272,21 +294,29 @@ function SeatRail({ table, mine, species }: { table: TableView<unknown>; mine: n
             );
           })}
         </ul>
+        {!isHost && (
+          <button type="button" className={textButton} onClick={moveToPhone} data-testid="move-to-phone">
+            Playing on a laptop? Move to my phone…
+          </button>
+        )}
       </section>
       {isHost ? (
         <div className="flex flex-col gap-2 border-t border-holo-faint bg-void/60 px-3 py-2.5" data-testid="host-tools">
-          {dialog ? (
+          {confirm ? (
             <HostConfirm
-              dialog={dialog}
+              dialog={confirm}
               onCancel={() => setAsked(null)}
               onConfirm={() => {
                 setAsked(null);
-                if (dialog.kind === 'kick') client.kick(dialog.seatId);
+                if (confirm.kind === 'kick') client.kick(confirm.seatId);
                 else client.closeTable();
               }}
             />
           ) : (
             <>
+              <button type="button" className={textButton} onClick={moveToPhone} data-testid="host-to-phone">
+                Move the host to my phone…
+              </button>
               <div className="grid grid-cols-2 gap-2">
                 <Button size="md" variant="outline" className="whitespace-nowrap px-1!" disabled={table.seats.length >= 6} onClick={() => client.addAi()} data-testid="add-ai">
                   Add AI player
@@ -308,6 +338,36 @@ function SeatRail({ table, mine, species }: { table: TableView<unknown>; mine: n
           </Button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** The one-time link that moves this seat to another device, as a QR over the whole screen. Done sends nothing. */
+function HandoffDialog({ name, host, link, onClose }: { name: string; host: boolean; link: string | null; onClose: () => void }) {
+  const title = host ? 'Move the host to your phone' : 'Move to your phone';
+  return (
+    <div className="absolute inset-0 z-10 grid place-items-center bg-void/70 p-4" role="dialog" aria-modal aria-label={title} data-testid="host-dialog">
+      <div className="flex max-w-[560px] flex-col gap-3 rounded-sheet border-2 border-holo bg-panel p-4 shadow-glow">
+        <h2 className="font-display text-xl font-semibold">{title}</h2>
+        <div className="flex items-center gap-4">
+          {link ? (
+            <Qr text={link} size={BIG_QR} className="p-2! shrink-0" label="QR code to move to your phone" />
+          ) : (
+            <div aria-hidden className="shrink-0 rounded-panel bg-white" style={{ width: BIG_QR + 16, height: BIG_QR + 16 }} />
+          )}
+          <p className="text-sm text-ink-2">
+            Scan this with your phone. It becomes{' '}
+            <strong className="text-ink">
+              you, {name}
+              {host ? ', the host' : ''}
+            </strong>
+            , with your colonist. This screen then steps aside. The code works once, for 2 minutes.
+          </p>
+        </div>
+        <Button size="md" variant="outline" autoFocus onClick={onClose}>
+          Done
+        </Button>
+      </div>
     </div>
   );
 }
