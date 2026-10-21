@@ -92,13 +92,15 @@ export class Brain {
           (c) => {
             if (!pending.settled) pending.answer = c;
           },
-          () => {
-            if (!pending.settled) pending.answer = { ...fallback, by: 'fallback', note: 'decider failed' };
+          (err: unknown) => {
+            const message = err instanceof Error ? err.message : String(err);
+            if (!pending.settled) pending.answer = { ...fallback, by: 'fallback', note: `decider failed: ${message}` };
           },
         );
       } else pending.answer = r;
-    } catch {
-      pending.answer = { ...fallback, by: 'fallback', note: 'decider failed' };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      pending.answer = { ...fallback, by: 'fallback', note: `decider failed: ${message}` };
     }
     return pending;
   }
