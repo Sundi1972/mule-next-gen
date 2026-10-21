@@ -61,7 +61,7 @@ export function fakeSdk(answer: (n: number, params: SdkParams, options: SdkOptio
 /** What the mocked SDK module's constructor was given, and how its clients answer (null: every call rejects). */
 export interface SdkModuleFake {
   built: unknown[];
-  create: ((params: SdkParams) => Promise<SdkMessage>) | null;
+  create: ((params: SdkParams, options: SdkOptions) => Promise<SdkMessage>) | null;
 }
 
 /** The system text and the user text of a request, as the client sends them. */
@@ -82,7 +82,7 @@ export async function fakeSdkModule(importOriginal: () => Promise<unknown>, fake
   const real = (await importOriginal()) as typeof import('@anthropic-ai/sdk');
   class FakeAnthropic {
     readonly messages = {
-      create: (params: SdkParams) => (fake.create ? fake.create(params) : Promise.reject(new Error('no reply set'))),
+      create: (params: SdkParams, options: SdkOptions) => (fake.create ? fake.create(params, options) : Promise.reject(new Error('no reply set'))),
     };
     constructor(options: unknown) {
       fake.built.push(options);
