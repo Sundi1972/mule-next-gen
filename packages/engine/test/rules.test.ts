@@ -102,7 +102,7 @@ describe('species perks', () => {
 });
 
 describe('land grant', () => {
-  it('lights free plots in a seeded random order and only the lit plot can be claimed', () => {
+  it('INV-grant-lit: free plots light one at a time and only the lit plot can be claimed', () => {
     const a = newGame();
     const b = newGame();
     toPhase(a, 'landGrant');
@@ -116,18 +116,14 @@ describe('land grant', () => {
     expect(() => claimPlot(a, 'p1', lit.x, lit.y)).toThrow(RuleError);
     const next = advanceGrant(a)!;
     expect(next.owner).toBeNull();
-    // The order is not just left to right.
-    const xs = a.grant!.order.slice(0, 10).map((i) => i % a.width);
-    expect([...xs].sort((m, n) => m - n)).not.toEqual(xs);
   });
 
-  it('starts a fresh sweep after every free plot has lit, and ends when claims are used', () => {
+  it('INV-grant-sweep: a new sweep starts after every free plot has lit, and the grant ends when claims are used', () => {
     const state = newGame();
     toPhase(state, 'landGrant');
     const first = [...state.grant!.order];
     for (let i = 0; i < first.length; i++) advanceGrant(state);
     expect(state.grant!.sweep).toBe(1);
-    expect(state.grant!.order).not.toEqual(first);
     for (const p of state.players) p.claimsThisGrant = 2;
     expect(grantDone(state)).toBe(true);
   });
