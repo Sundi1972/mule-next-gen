@@ -591,6 +591,50 @@ export const AI_LEVELS = {
 export type AiLevelId = keyof typeof AI_LEVELS;
 
 /** Numbers the strategist's considerations use. */
+/**
+ * Production events: at most one a month, rolled at production from the seed.
+ * Each event's numbers sit under its key; the weights decide which event fires
+ * among those that would hit at least one plot.
+ */
+export const EVENTS = {
+  /** Chance that a month has an event at all. */
+  chance: 0.5,
+  /** No event before this month: there is nothing developed to hit. */
+  firstMonth: 2,
+  /** Chance a bad personal event starts on the leader's land, a good one on the trailing player's; otherwise anyone's. */
+  targetBias: 0.5,
+  weights: {
+    dustStorm: 1,
+    drought: 1,
+    acidRain: 1,
+    solarFlare: 1,
+    cometPass: 1,
+    flood: 1,
+    volcanicAsh: 1,
+    pestSwarm: 1,
+    wildfire: 1,
+    bumperHarvest: 1,
+  },
+  /** Share of an Energy plot's output a dust storm takes. */
+  dustStorm: { cut: 0.5 },
+  /** Food and Water each Food and Water plot loses in a drought. */
+  drought: { loss: 1 },
+  /** Energy and Food each such plot loses to acid rain. */
+  acidRain: { loss: 1 },
+  /** Energy each Energy plot gains from a solar flare. */
+  solarFlare: { gain: 2 },
+  /** Water each Water plot gains from a comet pass. */
+  cometPass: { gain: 2 },
+  /** Plots within this many steps of the origin lose this much of their good to ash. */
+  volcanicAsh: { radius: 2, loss: 1 },
+  /** Share of a Food plot's output pests eat, and the most plots a swarm reaches. */
+  pestSwarm: { cut: 0.5, maxPlots: 4 },
+  /** The burnt plot makes nothing; the rest of its owner's Food cluster loses this much. */
+  wildfire: { loss: 1 },
+  /** How many times its usual output the bumper plot makes. */
+  bumperHarvest: { factor: 2 },
+};
+
 export const STRATEGIST = {
   /** Months of output it counts a MULE as earning, at most. */
   horizon: 6,
@@ -658,7 +702,7 @@ export const AI_HANDS = {
     filterMs: [1_200, 2_000] as [number, number],
     pubMs: [800, 1_500] as [number, number],
     /** The most it waits for its decider before it plays its own top option. */
-    decideWaitMs: 1_500,
+    decideWaitMs: 2_500,
   },
   auction: {
     /** Delay after the walk starts before it first moves, scaled by patience. */

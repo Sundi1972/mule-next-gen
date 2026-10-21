@@ -343,8 +343,11 @@ export function advancePhase(state: GameState): void {
     if (soldOut) state.store.muleFactor *= 1 + MULE.scarcityUp;
     else if (state.store.mules * 2 >= state.store.mulesAtStart) state.store.muleFactor = Math.max(MULE.minFactor, state.store.muleFactor * (1 - MULE.surplusDown));
     const before = Object.fromEntries(state.players.map((p) => [p.id, { ...p.stock }]));
-    const { produced, pollutionBy } = runProduction(state);
+    const { produced, pollutionBy, lines, events } = runProduction(state);
     state.history.push({
+      events,
+      warnings: [],
+      lines,
       month: state.month,
       before,
       produced,
