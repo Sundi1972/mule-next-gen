@@ -159,7 +159,9 @@ export async function checkTheShow({ tv, phone, event = false }: { tv: ShowWatch
     // A plot the event reached before it filled shows its bars only after the event.
     if (!struck || seen.pre > 0) check(seen.pre === Math.min(l.made, 8), `B-AC-6: plot ${id} filled ${seen.pre} bars for ${l.made} units`);
     const colour = seenTv.slotColours[l.owner];
-    check(seen.colours.length > 0 && seen.colours.every((c) => c === colour), `B-AC-6: plot ${id} bars ${seen.colours.join()} are not ${l.owner}'s ${colour}`);
+    // A plot that made nothing has no bars, so nothing to colour.
+    const drawn = seen.pre > 0 || seen.struck.some((n) => n > 0);
+    check((seen.colours.length > 0) === drawn && seen.colours.every((c) => c === colour), `B-AC-6: plot ${id} bars ${seen.colours.join()} are not ${l.owner}'s ${colour}`);
     check(seen.mostReasons <= 2, `B-AC-6: plot ${id} shows ${seen.mostReasons} reasons on the TV`);
     if (l.parts[0]) check(seen.reasons.includes(badgeText(l.parts[0])), `B-AC-6: plot ${id} never showed "${badgeText(l.parts[0])}", saw ${seen.reasons.join()}`);
     // B-AC-7: the event's badge is its delta, on the plots it hit and nowhere else, and the bars change by it.

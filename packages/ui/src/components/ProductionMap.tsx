@@ -293,7 +293,7 @@ function PlotBars({
           {reasons.map((p) => {
             const b = REASON_BADGE[p.why];
             return (
-              <span key={p.why} data-badge="reason" className={cx('flex items-center rounded-chip font-mono font-bold leading-none shadow-chip animate-[badge-in_0.3s_ease-out]', b.tone(p.delta), tv ? 'gap-0.5' : '', chip)}>
+              <span key={p.why} data-badge="reason" className={cx('flex items-center rounded-chip font-mono font-bold leading-none shadow-chip animate-[show-badge-in_0.3s_ease-out]', b.tone(p.delta), tv ? 'gap-0.5' : '', chip)}>
                 {b.icon && <GoodIcon good={b.icon} size={tv ? 10 : 6} />}
                 {b.text(p.delta)}
               </span>
@@ -302,7 +302,7 @@ function PlotBars({
           {eventBadge && (
             <span
               data-badge="event"
-              className={cx('rounded-chip font-mono font-bold leading-none shadow-chip animate-[badge-in_0.3s_ease-out]', hit!.delta > 0 ? 'bg-ok text-on-holo' : 'bg-alert text-white', chip)}
+              className={cx('rounded-chip font-mono font-bold leading-none shadow-chip animate-[show-badge-in_0.3s_ease-out]', hit!.delta > 0 ? 'bg-ok text-on-holo' : 'bg-alert text-white', chip)}
               data-testid={`hit-${line.x}-${line.y}`}
             >
               {signed(hit!.delta)}
@@ -317,7 +317,7 @@ function PlotBars({
       >
         {filled &&
           Array.from({ length: Math.min(units, 8) }, (_, k) => (
-            <span key={k} data-bar="unit" className={cx('rounded-[2px] shadow-chip animate-[bar-in_0.25s_ease-out_both]', bar)} style={{ background: colour, animationDelay: `${k * 0.04}s` }} />
+            <span key={k} data-bar="unit" className={cx('rounded-[2px] shadow-chip animate-[show-bar-in_0.25s_ease-out_both]', bar)} style={{ background: colour, animationDelay: `${k * 0.04}s` }} />
           ))}
         {/* What the event took, falling away in grey. */}
         {filled &&
@@ -385,7 +385,7 @@ function StormLayer({ ev, t, since, at, cell }: LayerProps) {
       />
       {/* Streaks of blown sand, racing ahead of the front. */}
       <div
-        className="absolute animate-[dust-drift_0.5s_linear_infinite]"
+        className="absolute animate-[show-dust-drift_0.5s_linear_infinite]"
         style={{
           ...band(front - 5, '55%'),
           background: `repeating-linear-gradient(${edge.angle + 10}deg, transparent 0 14px, color-mix(in srgb, var(--color-warn) 55%, white) 14px 16px, transparent 16px 30px)`,
@@ -420,7 +420,7 @@ function QuakeLayer({ ev, since, tv, grid, cell }: LayerProps) {
         />
       ))}
       {since > 0.9 && (
-        <div className="absolute animate-[crack-flash_0.5s_ease-out_3] bg-alert/45" style={cell(o.x, o.y)} data-testid="quake-hit">
+        <div className="absolute animate-[show-crack-flash_0.5s_ease-out_3] bg-alert/45" style={cell(o.x, o.y)} data-testid="quake-hit">
           <svg viewBox="0 0 10 10" className="h-full w-full" aria-hidden>
             <path d="M1 2 L4 4 L3 6 L6 7 L5 9 M4 4 L7 3 L9 1" fill="none" stroke="var(--color-void)" strokeWidth="0.6" />
           </svg>
@@ -435,7 +435,7 @@ function DroughtLayer({ ev, t, since, at, cell }: LayerProps) {
   return (
     <>
       <div
-        className="absolute inset-0 animate-[shimmer_0.8s_ease-in-out_infinite_alternate]"
+        className="absolute inset-0 animate-[show-shimmer_0.8s_ease-in-out_infinite_alternate]"
         style={{ background: 'radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--color-warn) 55%, transparent), color-mix(in srgb, var(--color-warn) 30%, transparent) 75%)', opacity: Math.min(1, since * 1.5) }}
       />
       {ev.hits.map((h) => t >= at(h) && <Cracks key={`${h.x},${h.y}`} style={cell(h.x, h.y)} />)}
@@ -489,7 +489,7 @@ function FloodLayer({ ev, t, at, cell }: LayerProps) {
         return (
           <div key={`${h.x},${h.y}`} className="absolute overflow-hidden" style={cell(h.x, h.y)} data-testid={`flood-${h.x}-${h.y}`}>
             <div
-              className="absolute inset-x-0 bottom-0 animate-[dust-drift_1.2s_linear_infinite]"
+              className="absolute inset-x-0 bottom-0 animate-[show-dust-drift_1.2s_linear_infinite]"
               style={{
                 height: `${Math.min(85, s * 90)}%`,
                 background: 'repeating-linear-gradient(170deg, color-mix(in srgb, var(--color-g-water) 70%, transparent) 0 6px, color-mix(in srgb, var(--color-g-water) 50%, transparent) 6px 10px)',
@@ -514,7 +514,7 @@ function FireLayer({ ev, t, at, cell }: LayerProps) {
             <div className="absolute inset-0 rounded-[14%] bg-void" style={{ opacity: Math.min(0.55, s * 0.4) }} />
             {s < 1.6 && (
               <div
-                className="absolute inset-[8%] animate-[flicker_0.18s_ease-in-out_infinite_alternate] rounded-[40%_40%_20%_20%]"
+                className="absolute inset-[8%] animate-[show-flicker_0.18s_ease-in-out_infinite_alternate] rounded-[40%_40%_20%_20%]"
                 style={{ background: 'radial-gradient(circle at 50% 80%, color-mix(in srgb, var(--color-warn) 90%, white) 0 20%, var(--color-alert) 45%, transparent 75%)' }}
               />
             )}
@@ -580,7 +580,7 @@ function BlightLayer({ ev, t, tv, grid, at, cell }: LayerProps) {
                   <span
                     key={k}
                     aria-hidden
-                    className="absolute size-[7%] rounded-full bg-void animate-[crawl_0.5s_ease-in-out_infinite_alternate]"
+                    className="absolute size-[7%] rounded-full bg-void animate-[show-crawl_0.5s_ease-in-out_infinite_alternate]"
                     style={{ left: `${left}%`, top: `${30 + ((k * 23) % 45)}%`, animationDelay: `${k * 0.1}s` }}
                   />
                 ))}
@@ -594,7 +594,7 @@ function BlightLayer({ ev, t, tv, grid, at, cell }: LayerProps) {
 
 function Cracks({ style }: { style: CSSProperties }) {
   return (
-    <svg className="absolute animate-[badge-in_0.4s_ease-out]" style={style} viewBox="0 0 10 10" aria-hidden>
+    <svg className="absolute animate-[show-badge-in_0.4s_ease-out]" style={style} viewBox="0 0 10 10" aria-hidden>
       <path d="M1 3 L3 4 L4 2 L6 4 L9 3 M3 4 L3 7 L5 8 L7 6 L9 8 M6 4 L7 6" fill="none" stroke="color-mix(in srgb, var(--color-warn) 60%, var(--color-void))" strokeWidth="0.45" />
     </svg>
   );
@@ -612,7 +612,7 @@ function Sparkles({ style, colour }: { style: CSSProperties; colour: string }) {
   return (
     <div className="absolute" style={style} aria-hidden>
       {SPARKS.map(([l, tp], k) => (
-        <span key={k} className="absolute size-[9%] rotate-45 animate-[twinkle_0.7s_ease-in-out_infinite_alternate]" style={{ left: `${l}%`, top: `${tp}%`, background: colour, animationDelay: `${k * 0.13}s` }} />
+        <span key={k} className="absolute size-[9%] rotate-45 animate-[show-twinkle_0.7s_ease-in-out_infinite_alternate]" style={{ left: `${l}%`, top: `${tp}%`, background: colour, animationDelay: `${k * 0.13}s` }} />
       ))}
     </div>
   );
@@ -626,7 +626,7 @@ export function EventCard({ ev, t, tv = false }: { ev: ShowEvent | null; t: numb
   const good = ev.sign === 'good';
   return (
     <div
-      className={cx('flex flex-col gap-1 rounded-panel border-2 animate-[card-in_0.4s_ease-out]', good ? 'border-ok bg-holo-soft shadow-glow' : 'border-alert bg-alert-bg shadow-glow-alert', tv ? 'p-5' : 'px-2.5 py-2')}
+      className={cx('flex flex-col gap-1 rounded-panel border-2 animate-[show-card-in_0.4s_ease-out]', good ? 'border-ok bg-holo-soft shadow-glow' : 'border-alert bg-alert-bg shadow-glow-alert', tv ? 'p-5' : 'px-2.5 py-2')}
       data-testid="event-card"
     >
       <span className={cx('label-caps', good ? 'text-ok!' : 'text-alert-ink!', tv ? 'text-base!' : '')}>{good ? 'Good news' : 'Event'}</span>

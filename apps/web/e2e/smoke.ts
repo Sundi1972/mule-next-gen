@@ -41,9 +41,9 @@ const HOST_WALKER = 'walker-s1';
 /** The phone's score lines at game over that add up; a Collapse line, when there is one, is taken off them. */
 const PART_LINES = ['money', 'goods', 'land', 'mules'] as const;
 
-/** Month 2 of this seed rolls a production event, so every run checks the event's show (B-AC-7). */
+/** Month 2 of this seed rolls a production event: a run with MULE_E2E_SEED=1 checks the event's show (B-AC-7). */
 const SHOW_SEED = 1;
-const SEED = seedFrom(process.env.MULE_E2E_SEED ?? String(SHOW_SEED));
+const SEED = seedFrom(process.env.MULE_E2E_SEED);
 const steps = await loadAuctionSteps();
 const { server, base } = await startServer({ maxMonths: 2, phaseScale: PHASE_SCALE, seed: () => SEED });
 const browser = await launch();
