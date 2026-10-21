@@ -36,6 +36,8 @@ export interface Game<Intent, GameView> {
   viewFor(seatId: string | null): GameView;
   /** A player's phone dropped or came back. The game may let AI play their routine moves meanwhile. */
   connectionChanged?(seatId: string, connected: boolean): void;
+  /** The seat's screen was replaced by another device; drop any input the old screen was holding. Not a disconnect. */
+  seatMoved?(seatId: string): void;
   dispose?(): void;
 }
 
@@ -242,7 +244,10 @@ export class Room<Intent, View> {
     seat.conn = conn;
     seat.token = this.opts.newToken();
     if (!old) this.game.connectionChanged?.(seat.id, true);
-    else if (old !== conn) old.send({ t: 'removed', reason: 'moved' });
+    else if (old !== conn) {
+      old.send({ t: 'removed', reason: 'moved' });
+      this.game.seatMoved?.(seat.id);
+    }
     return seat;
   }
 
