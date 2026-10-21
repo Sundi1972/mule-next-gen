@@ -1,4 +1,4 @@
-import { emptyStock, type GameState, type MonthEvent, type ProductionLine } from '@mule/engine';
+import { emptyStock, RuleError, type GameState, type MonthEvent, type ProductionLine } from '@mule/engine';
 import { describe, expect, it } from 'vitest';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
 import { fakeContext, seats } from './fake-context.js';
@@ -156,8 +156,9 @@ describe('the production view', () => {
         for (const s of ['s1', 's2']) {
           try {
             game.handle(s, { type: 'ready' });
-          } catch {
+          } catch (err) {
             // Already done with this good.
+            if (!(err instanceof RuleError)) throw err;
           }
         }
       }

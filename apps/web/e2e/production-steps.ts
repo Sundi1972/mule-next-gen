@@ -5,6 +5,7 @@
  */
 import { GOODS, type Good } from '@mule/engine';
 import type { MuleView, ProductionView, ServerEnvelope, TableView } from '@mule/protocol';
+import { SHOW } from '@mule/ui';
 import type { Page } from 'playwright';
 import { check } from './harness';
 
@@ -43,7 +44,13 @@ const RECORDER = `{
   };
   const frame = () => {
     const map = document.querySelector('[data-phase=production] [data-testid=map-show]');
-    if (!map) { rec = null; requestAnimationFrame(frame); return; }
+    if (!map) {
+      rec = null;
+      // A new month: what was recorded belongs to the last one, so nobody may read it as this one's.
+      if (document.querySelector('[data-phase=planning]')) window.__show = null;
+      requestAnimationFrame(frame);
+      return;
+    }
     if (!rec) { rec = { frames: 0, plots: {}, layers: [], slots: {}, slotColours: {}, strip: null }; window.__show = rec; }
     rec.frames++;
     for (const plot of map.querySelectorAll('[data-testid^=plot-]')) {
@@ -193,6 +200,30 @@ export async function checkTheShow({ tv, phone, event = false }: { tv: ShowWatch
     check(seenPhone.strip.first[g] === start, `B-AC-8: the strip started ${g} at ${seenPhone.strip.first[g]}, not ${start}`);
   }
   return `${lines.length} working plots, ${ev ? `a ${ev.kind} event hitting ${ev.hits.length}` : 'no event'}, ${seenTv.frames} TV frames, ${me.id} harvested ${JSON.stringify(harvest[me.id] ?? {})}`;
+}
+
+/**
+ * During a full-speed show: calls `midShow` once the event card is up, then,
+ * once every plot's goods are home, presses the phone's "On to the auction"
+ * and checks that it ends production before the phase's clock (HC-6). Returns
+ * checkTheShow's summary of what both screens drew.
+ */
+export async function pressOnwardBeforeTheClock(phone: Page, watch: { tv: ShowWatch; phone: ShowWatch }, midShow: () => Promise<unknown>): Promise<string> {
+  const shown = watch.phone.view();
+  check(shown?.production && shown.phaseEndsAt, 'the phone received the production view');
+  const { lengthMs, lines } = shown.production;
+  const endsAt = shown.phaseEndsAt;
+  // The server runs on this machine, so its clock is this one.
+  const at = (s: number) => endsAt - lengthMs + (s / SHOW.end) * lengthMs;
+  await phone.waitForTimeout(Math.max(0, at(SHOW.cardAt + 1) - Date.now()));
+  await midShow();
+  await phone.waitForTimeout(Math.max(0, at(SHOW.flyStart + lines.length * SHOW.flyStep + SHOW.flight + 0.3) - Date.now()));
+  const onward = phone.locator('[data-phase=production]').getByRole('button', { name: 'On to the auction' });
+  check(Date.now() < endsAt - 1_000 && (await onward.isEnabled()), 'HC-6: "On to the auction" is there while production still runs');
+  await onward.click();
+  await phone.locator('[data-phase=auction]').waitFor({ timeout: Math.max(1, endsAt - Date.now()) });
+  check(Date.now() < endsAt, 'HC-6: "On to the auction" ended production before its clock');
+  return checkTheShow(watch);
 }
 
 function sorted(o: Record<string, string>): [string, string][] {

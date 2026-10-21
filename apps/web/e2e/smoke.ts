@@ -143,7 +143,7 @@ try {
   await goToThePub(phone);
   // B-AC-6, B-AC-7 and B-AC-8: month 2's show, with the seed's event.
   await phone.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
-  console.log(`production show, month 2: ${await checkTheShow({ tv: tvShow, phone: phoneShow, event: true })}`);
+  console.log(`production show, month 2: ${await checkTheShow({ tv: tvShow, phone: phoneShow, event: SEED === SHOW_SEED })}`);
   await pressDoneThroughTheAuction(phone);
 
   // Game over.
