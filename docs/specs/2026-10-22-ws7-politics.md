@@ -538,12 +538,30 @@ goal      P-1 — still met
 folded    C3 seam, C7 tomorrow, RULE-9 note; plan Task 1.4 adds canRun
 ```
 
+```
+AM-4 · 2026-10-22 · lead · PR-1 maintainability review
+
+target    §1 C1 senior, §9 politics ownership; PR-1 exports
+did       (a) Every politics write first replaces state.politics with a structuredClone (edit()),
+          so a what-if copy that shares the object can never leak into the real game. WS1's C10
+          deep copy in cloneForSim is kept as well: copy-on-write protects any copy of the game,
+          the deep copy keeps observe()'s hiding simple. Reads of a possibly shared election are
+          Readonly in the type system. (b) politics.ts exports what PR-2 and PR-3 need so neither
+          restates a rule (both may not edit the engine): canRun (AM-3), taxBounds (RULE-6),
+          nextElectionMonth and the stage lengths (RULE-1), plotsOwned (RULE-3/RULE-8's plot
+          count), the ElectionResult type; closeElection returns its result like stepElection.
+because   P-1: one source for each rule. The reviewer found RULE-6 and RULE-1 would otherwise be
+          copied into the AI hand and the server, and the copy-on-write choice was unrecorded.
+goal      P-1 — still met
+folded    §9 write contract lists closeElection; C1 senior notes copy-on-write
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: politics state
 - Sole owner:      packages/engine/src/politics.ts
 - Read contract:   GameState.politics, read by observe(), the server's view and VoteHand
-- Write contract:  only politics.ts's functions (openPlanning, runFor, castVote, electionDone, stepElection, setSalesTax, payOffices)
+- Write contract:  only politics.ts's functions (openPlanning, runFor, castVote, electionDone, stepElection, closeElection, setSalesTax, payOffices), each through copy-on-write edit() (AM-4)
 - Enforcement:     engine tests; review rule "no other file writes state.politics" (grep in the PR checklist)
 
 ### Ownership: the sales tax rate (a second writer)
