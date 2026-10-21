@@ -363,7 +363,7 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
               </li>
             ))}
           </ul>
-          <p className="mt-auto text-base leading-snug text-ink-2">
+          <p className={cx('mt-auto text-base leading-snug text-ink-2', auction.deals.length > 0 && 'hidden')}>
             {auction.stage === 'walk'
               ? 'Sellers push the red line down, buyers push the green line up. When the two lines meet, the goods change hands.'
               : auction.stage === 'declare'
