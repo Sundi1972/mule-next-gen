@@ -1,6 +1,6 @@
-import type { MuleView, TableView } from '@mule/protocol';
+import type { DealView, MuleView, TableView } from '@mule/protocol';
 import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PlayerMark, SeatSpeciesProvider, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard, type Slot } from '@mule/ui';
-import { boardWalkers, dealLine, skippedLine, StatusTable } from '../components/AuctionParts';
+import { boardWalkers, dealLine, LineReadout, newestFirst, skippedLine, StatusTable, type DealRow } from '../components/AuctionParts';
 import { useEffect, useState, type ReactNode } from 'react';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
@@ -298,10 +298,26 @@ function MarketTiles({ game }: { game: MuleView }) {
   );
 }
 
+/**
+ * The running deals, newest first, each keeping its place for as long as it runs. The rows live in state and
+ * follow each new deals list during render (React's "adjust state when a prop changes"), so a discarded render
+ * leaves nothing behind.
+ */
+function useNewestFirst(deals: DealView[]): DealRow[] {
+  const [held, setHeld] = useState(() => ({ from: deals, rows: newestFirst([], deals) }));
+  if (held.from === deals) return held.rows;
+  const rows = newestFirst(held.rows, deals);
+  setHeld({ from: deals, rows });
+  return rows;
+}
+
 /** The auction on the big screen: the whole board, large, with every creature walking live. */
 function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game: MuleView; auction: NonNullable<MuleView['auction']> }) {
   useAuctionSound(auction);
   const skipped = skippedLine(auction);
+  const walkers = boardWalkers(game, auction);
+  const stock = auction.storeForSale;
+  const deals = useNewestFirst(auction.deals);
   const stageName = auction.stage === 'status' ? 'Status' : auction.stage === 'declare' ? 'Buy, sell or pass?' : auction.slowed ? 'Trading · clock slowed' : 'Walk';
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-8 text-ink" data-phase="auction">
@@ -323,11 +339,13 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
               size="tv"
               lo={auction.lo}
               hi={auction.hi}
-              walkers={boardWalkers(game, auction)}
+              walkers={walkers}
               deals={auction.deals}
               storeBuys={auction.storeBuys}
               storeSells={auction.storeSells}
               shipPays={auction.shipPays}
+              storeStock={stock}
+              marks={{ ask: true, bid: true }}
               stage={auction.stage === 'walk' ? 'walk' : 'declare'}
               className="min-h-0 flex-1"
             />
@@ -341,34 +359,44 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
               {auction.units} unit{auction.units === 1 ? '' : 's'} traded
             </span>
           </div>
-          <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-panel border border-holo-line bg-holo-line font-mono">
+          {auction.stage === 'walk' && (
+            <div className="shrink-0 rounded-panel border border-holo-line bg-panel p-3">
+              <LineReadout walkers={walkers} trading={auction.deals.length > 0} tv />
+            </div>
+          )}
+          <dl className="grid shrink-0 grid-cols-3 gap-px overflow-hidden rounded-panel border border-holo-line bg-holo-line font-mono" data-testid="tv-store">
             <div className="flex flex-col bg-panel p-3">
-              <dt className="label-caps">Store sells</dt>
+              <dt className="label-caps">Sells</dt>
               <dd data-num className="text-2xl font-bold text-rise">{auction.storeSells ?? 'out'}</dd>
             </div>
             <div className="flex flex-col bg-panel p-3">
-              <dt className="label-caps">Store buys</dt>
+              <dt className="label-caps">Buys</dt>
               <dd data-num className="text-2xl font-bold text-fall">{auction.storeBuys ?? '—'}</dd>
+            </div>
+            <div className="flex flex-col bg-panel p-3">
+              <dt className="label-caps">Stock</dt>
+              <dd data-num className={cx('text-2xl font-bold', stock === 0 ? 'text-alert' : 'text-ink')}>{stock}</dd>
             </div>
           </dl>
           {auction.shipPays !== null && (
             <p className="rounded-control border border-warn/60 px-3 py-2 font-mono text-lg text-warn">Export ship pays {auction.shipPays}</p>
           )}
-          <ul className="flex flex-col gap-2">
-            {auction.deals.map((d) => (
-              <li key={`${d.buyer}-${d.seller}`} className="rounded-control border border-holo bg-holo-soft px-3 py-2 font-mono text-lg font-bold text-holo">
-                {dealLine(game, d)}
+          {/* Each row is one line. A row that doesn't fit below the others wraps into a second column, which the clip hides. */}
+          <ul className="flex min-h-0 flex-1 flex-col flex-wrap gap-2 overflow-hidden">
+            {deals.map(({ key, deal }) => (
+              <li key={key} className="w-full truncate rounded-control border border-holo bg-holo-soft px-3 py-2 font-mono text-lg font-bold text-holo">
+                {dealLine(game, deal)}
               </li>
             ))}
           </ul>
-          <p className="mt-auto text-base leading-snug text-ink-2">
+          <p className={cx('mt-auto text-base leading-snug text-ink-2', auction.deals.length > 0 && 'hidden')}>
             {auction.stage === 'walk'
-              ? 'Hold Up or Down on your phone. Meet another player and you trade at the seller’s price.'
+              ? 'Sellers push the red line down, buyers push the green line up. When the two lines meet, the goods change hands.'
               : auction.stage === 'declare'
                 ? 'Sellers start at the top and walk down. Buyers start at the bottom and walk up.'
                 : 'What everyone has before this good goes on sale.'}
           </p>
-          <span className="font-mono text-sm text-ink-3">
+          <span className="truncate font-mono text-sm text-ink-3">
             ROOM {table.code}
             {auction.next.length > 0 ? ` · NEXT ${auction.next.map((g) => GOOD_NAME[g].toUpperCase()).join(', ')}` : ''}
           </span>
