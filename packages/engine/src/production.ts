@@ -142,6 +142,32 @@ export function factoryFit(state: GameState, tile: Tile, good: ProcessedGood, ow
   return { output: Math.max(0, output), energy, lines };
 }
 
+/** Crew working a player's land: 1 per raw plot, 2 per factory, none on a green belt. */
+export function crewOf(state: GameState, playerId: string): number {
+  let crew = 0;
+  for (const t of state.tiles) {
+    if (t.owner !== playerId || !t.outfit) continue;
+    crew += t.outfit === 'greenBelt' ? UPKEEP.crew.greenBelt : isFactory(t.outfit) ? UPKEEP.crew.factory : UPKEEP.crew.raw;
+  }
+  return crew;
+}
+
+/** Food and Water a player's household and crew need this month. */
+export function needsOf(state: GameState, playerId: string): { food: number; water: number } {
+  const crew = crewOf(state, playerId);
+  return {
+    food: UPKEEP.baseFood + Math.ceil(crew / UPKEEP.crewPerFood),
+    water: UPKEEP.baseWater + Math.ceil(crew / UPKEEP.crewPerWater),
+  };
+}
+
+/** Energy a working plot burns a month: by good for raw plots, by recipe for factories. */
+export function energyUseOf(state: GameState, tile: Tile): number {
+  if (!tile.owner || !tile.outfit || tile.outfit === 'greenBelt') return 0;
+  if (isFactory(tile.outfit)) return factoryFit(state, tile, tile.outfit, tile.owner).energy;
+  return UPKEEP.energyUse[tile.outfit as RawGood];
+}
+
 /**
  * Runs one production phase. Order matters and mirrors the design:
  * 1. Energy plots produce first, so their output can power the rest;
@@ -170,7 +196,8 @@ export function runProduction(state: GameState): { produced: Record<string, Stoc
     const owner = playerById.get(tile.owner!)!;
     const good = tile.outfit as RawGood;
     let amount = rawOutput(state, tile);
-    if (owner.stock.energy >= UPKEEP.energyPerPlot) owner.stock.energy -= UPKEEP.energyPerPlot;
+    const energy = energyUseOf(state, tile);
+    if (owner.stock.energy >= energy) owner.stock.energy -= energy;
     else amount = Math.floor(amount / 2);
     owner.stock[good] += amount;
     produced[tile.owner!]![good] += amount;

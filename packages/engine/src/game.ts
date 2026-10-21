@@ -1,9 +1,9 @@
 import { runAuction, type Order, type Trade } from './auction.js';
-import { DEFAULT_SPECIES, DEVELOPMENT, GAME, GOOD_CONFIG, MULE, POLLUTION, SPECIES_PERK, START, UPKEEP } from './config.js';
-import { allPrices, mulePrice } from './economy.js';
+import { DEFAULT_SPECIES, DEVELOPMENT, GAME, GOOD_CONFIG, MULE, POLLUTION, SPECIES_PERK, START, TAX, UPKEEP } from './config.js';
+import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './economy.js';
 import { generateMap, tileAt, tileIndex } from './map.js';
 import { airBand } from './pollution.js';
-import { runProduction } from './production.js';
+import { needsOf, runProduction } from './production.js';
 import { createRng } from './rng.js';
 import { emptyStock } from './stock.js';
 import { GOODS, type GameState, type Good, type Outfit, type Phase, type Player, type Species, type Tile } from './types.js';
@@ -27,7 +27,7 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
   const refPrice = emptyStock();
   for (const good of GOODS) refPrice[good] = GOOD_CONFIG[good].refPrice;
 
-  return {
+  const state: GameState = {
     seed: options.seed,
     month: 1,
     maxMonths: options.maxMonths ?? GAME.maxMonths,
@@ -40,7 +40,7 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
         isAi: p.isAi,
         species: p.species ?? DEFAULT_SPECIES[i % DEFAULT_SPECIES.length]!,
         money: START.money,
-        stock: { ...emptyStock(), food: 6, water: 4, energy: 4 },
+        stock: { ...emptyStock(), food: 6, water: 6, energy: 4 },
         carriedMule: null,
         reputation: 50,
         claimsThisGrant: 0,
@@ -55,17 +55,24 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
     store: {
       stock: { ...START.storeStock },
       mules: START.storeMules,
-      fund: START.storeFund,
+      mulesAtStart: START.storeMules,
+      muleFactor: 1,
+      capital: START.storeCapital,
+      posted: { ...refPrice },
       refPrice,
       offWorld: { ...refPrice },
-      pendingImports: emptyStock(),
     },
+    treasury: { money: 0, salesTax: TAX.salesTax, paid: {} },
+    ship: planShip(options.seed, GAME.exportShipEvery, options.players.length),
     colonists: START.colonists,
     air: 0,
     grant: null,
     landRanOutMonth: null,
     history: [],
   };
+  // The first month's prices start where supply and demand put them.
+  for (const good of GOODS) state.store.posted[good] = Math.round(targetPrice(state, good));
+  return state;
 }
 
 export function player(state: GameState, id: string): Player {
@@ -103,7 +110,7 @@ export function orderGeoDrone(state: GameState, playerId: string, plots: { x: nu
   });
   if (p.money < DEVELOPMENT.droneFee) throw new RuleError('Not enough money');
   p.money -= DEVELOPMENT.droneFee;
-  state.store.fund += DEVELOPMENT.droneFee;
+  state.store.capital += DEVELOPMENT.droneFee;
   p.droneOrder = [...new Set(indices)];
 }
 
@@ -179,7 +186,7 @@ function developer(state: GameState, playerId: string): Player {
 function startDevelopment(state: GameState): void {
   const penalty = airBand(state.air).devPenalty;
   for (const p of state.players) {
-    const share = Math.min(1, p.stock.food / UPKEEP.food);
+    const share = Math.min(1, p.stock.food / Math.max(1, needsOf(state, p.id).food));
     p.hungry = share < 1;
     let seconds = DEVELOPMENT.minSeconds + (DEVELOPMENT.fullSeconds - DEVELOPMENT.minSeconds) * share;
     p.sick = false;
@@ -214,7 +221,7 @@ export function buyMule(state: GameState, playerId: string): void {
   const price = mulePriceFor(state, playerId);
   if (p.money < price) throw new RuleError('Not enough money');
   p.money -= price;
-  state.store.fund += price;
+  state.store.capital += price;
   state.store.mules--;
   p.carriedMule = 'empty';
 }
@@ -226,7 +233,7 @@ export function outfitMule(state: GameState, playerId: string, outfit: Outfit): 
   const cost = outfitCostFor(state, playerId, outfit);
   if (p.money < cost) throw new RuleError('Not enough money');
   p.money -= cost;
-  state.store.fund += cost;
+  state.store.capital += cost;
   p.carriedMule = outfit;
 }
 
@@ -316,11 +323,17 @@ export function advancePhase(state: GameState): void {
   }
   if (next === 'development') {
     state.grant = null;
+    state.store.mulesAtStart = state.store.mules;
     startDevelopment(state);
   }
   if (next === 'production') {
     // A MULE nobody installed runs away at the end of development.
     for (const p of state.players) p.carriedMule = null;
+    const price = mulePrice(state);
+    const soldOut = state.store.mules === 0;
+    // MULEs get dearer each month the corral sells out, and cheaper when they are left over.
+    if (soldOut) state.store.muleFactor *= 1 + MULE.scarcityUp;
+    else if (state.store.mules * 2 >= state.store.mulesAtStart) state.store.muleFactor = Math.max(MULE.minFactor, state.store.muleFactor * (1 - MULE.surplusDown));
     const { produced, pollutionBy } = runProduction(state);
     state.history.push({
       month: state.month,
@@ -330,12 +343,23 @@ export function advancePhase(state: GameState): void {
       storeMules: state.store.mules,
       pollutionBy,
       air: state.air,
+      mulePrice: price,
+      corralSoldOut: soldOut,
+      storeCapital: state.store.capital,
+      colonyFund: state.treasury.money,
+      colonistsHungry: false,
     });
   }
+  if (next === 'auction') postPrices(state);
   if (next === 'upkeep') {
-    const shortages = runUpkeep(state);
+    const { shortages, hungry } = runUpkeep(state);
     const report = state.history.at(-1);
-    if (report) report.shortages = shortages;
+    if (report) {
+      report.shortages = shortages;
+      report.colonistsHungry = hungry;
+      report.storeCapital = state.store.capital;
+      report.colonyFund = state.treasury.money;
+    }
     if (isGameOver(state)) state.phase = 'gameOver';
   }
   if (next === 'planning') state.month++;

@@ -212,7 +212,8 @@ describe('factories', () => {
     const feeder = plot(state, 6, 1, 'hills', { smithore: 3 });
     feeder.owner = 'p0';
     feeder.outfit = 'smithore';
-    expect(factoryFit(state, smelter, 'alloy', 'p0').energy).toBe(0);
+    // A smelter burns 2 Energy; a Smithore mine beside it saves one.
+    expect(factoryFit(state, smelter, 'alloy', 'p0').energy).toBe(1);
     const park = plot(state, 5, 2, 'plains');
     park.owner = 'p0';
     park.outfit = 'alloy';
@@ -232,11 +233,13 @@ describe('pollution', () => {
     farm.owner = 'p1';
     farm.outfit = 'food';
     const clean = rawOutput(state, farm);
+    state.air = 20;
     const by = runPollution(state);
     expect(by.p0).toBe(4);
     expect(farm.pollution).toBe(1);
     expect(rawOutput(state, farm)).toBe(clean - 1);
-    expect(state.air).toBe(1);
+    // 4 points in, and nature cleans 2 per player.
+    expect(state.air).toBe(20 + 4 - 2 * 4);
   });
 
   it('stops spreading behind a filter and recovers on its own', () => {

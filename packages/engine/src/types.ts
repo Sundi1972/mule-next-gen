@@ -110,14 +110,36 @@ export type Phase =
 export interface Store {
   stock: Stock;
   mules: number;
-  /** Money the colony store (the colony fund) can spend. */
-  fund: number;
-  /** Colony reference price for each good, drifting toward recent trade. */
+  /** MULEs in the corral when development started, to see whether it sold out. */
+  mulesAtStart: number;
+  /** Multiplies the MULE price: up after a sell-out, down after a surplus. */
+  muleFactor: number;
+  /** The store's own working money. Never the colony fund. */
+  capital: number;
+  /** The price the store posts this month for each good; its quotes are this plus and minus the spread. */
+  posted: Stock;
+  /** Reference price for each good: the price at normal supply, learning from trades between players. */
   refPrice: Stock;
-  /** Off-world price for each good; sets the export floor and import cap. */
+  /** Off-world price for each good: what the export ship pays for its first unit. */
   offWorld: Stock;
-  /** Imports ordered this month, delivered at the start of next month. */
-  pendingImports: Stock;
+}
+
+/** The colony government's money, filled only by taxes, fines and donations. */
+export interface Treasury {
+  money: number;
+  salesTax: number;
+  /** Taxes each player has paid in during the game. */
+  paid: Record<string, number>;
+}
+
+/** The export ship: its wishlist is announced the month before it calls, and its hold fills as it buys. */
+export interface ExportShip {
+  arrives: number;
+  goods: Good[];
+  /** Units of each wishlist good it still wants. */
+  hold: Partial<Stock>;
+  /** Units of each good it has already bought on this call. */
+  bought: Partial<Stock>;
 }
 
 /** The land grant: free plots light up one at a time, in a random order each sweep. */
@@ -133,6 +155,7 @@ export interface MonthReport {
   month: number;
   produced: Record<string, Stock>;
   prices: Stock;
+  /** Goods the store ran out of before its colonists had enough. */
   shortages: Good[];
   /** MULEs left in the store after development. */
   storeMules: number;
@@ -140,6 +163,13 @@ export interface MonthReport {
   pollutionBy: Record<string, number>;
   /** The colony air gauge after production. */
   air: number;
+  /** What a MULE cost this month, and whether the corral sold out. */
+  mulePrice: number;
+  corralSoldOut: boolean;
+  storeCapital: number;
+  colonyFund: number;
+  /** Colonists short of Food or Water this month. */
+  colonistsHungry: boolean;
 }
 
 export interface GameState {
@@ -152,6 +182,8 @@ export interface GameState {
   tiles: Tile[];
   players: Player[];
   store: Store;
+  treasury: Treasury;
+  ship: ExportShip;
   colonists: number;
   /** The colony's air pollution gauge, 0 to 100. */
   air: number;

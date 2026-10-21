@@ -16,9 +16,9 @@ export interface GoodConfig {
 
 export const GOOD_CONFIG: Record<Good, GoodConfig> = {
   food: { refPrice: 30, sensitivity: 1.5, spoilage: 0.5 },
-  water: { refPrice: 20, sensitivity: 1.5, spoilage: 0.05 },
+  water: { refPrice: 25, sensitivity: 1.5, spoilage: 0.05 },
   energy: { refPrice: 25, sensitivity: 1.2, spoilage: 0.25 },
-  smithore: { refPrice: 50, sensitivity: 0.8, spoilage: 0 },
+  smithore: { refPrice: 50, sensitivity: 1.2, spoilage: 0 },
   crystite: { refPrice: 100, sensitivity: 0.5, spoilage: 0 },
   rareEarth: { refPrice: 60, sensitivity: 0.8, spoilage: 0 },
   alloy: { refPrice: 90, sensitivity: 0.8, spoilage: 0 },
@@ -29,20 +29,20 @@ export const GOOD_CONFIG: Record<Good, GoodConfig> = {
 export const PRICE = {
   /** Months of demand the store aims to hold. */
   targetCover: 2,
-  minCover: 0.1,
-  /** Export parity: what the export ship pays, as a share of off-world price. */
-  exportFactor: 0.7,
-  /** Import parity: what an import costs, as a multiple of off-world price. */
-  importFactor: 1.6,
-  /** The store sells this much above and buys this much below the colony price. */
+  /** Cover below this counts as this, so an empty shelf still gives a finite target. */
+  minCover: 0.25,
+  /** Momentum: the posted price moves toward its target by at most this share up or down a month. */
+  maxRise: 0.5,
+  maxFall: 0.4,
+  /** The store sells this much above and buys this much below its posted price. */
   storeSpread: 0.1,
   /** The store fills its shelves up to this many months of demand. */
   storeMaxCover: 3,
-  /** The most of its fund the store spends on one good in one month. */
+  /** The most of its capital the store spends on one good in one month. */
   storeBudgetShare: 0.5,
   /** Share of normal spoilage the store suffers, thanks to its cold store and silos. */
   storeSpoilage: 0.25,
-  /** How fast the reference price follows the last clearing price (0..1). */
+  /** How fast the reference price follows what players pay each other (0..1). */
   refDrift: 0.25,
   /** How fast the reference price drifts back toward the off-world price (0..1). */
   worldPull: 0.1,
@@ -51,6 +51,7 @@ export const PRICE = {
 /**
  * Off-world demand per player per month: what the export ship's buyers take.
  * Food, Water and Energy don't travel well, so only the colony wants them.
+ * The colony is self-contained: nothing is imported.
  */
 export const EXPORT_DEMAND: Partial<Record<Good, number>> = {
   smithore: 1,
@@ -63,7 +64,7 @@ export const EXPORT_DEMAND: Partial<Record<Good, number>> = {
 
 /** Factory recipes: inputs consumed per unit of output. */
 export const RECIPES: Record<ProcessedGood, { inputs: Partial<Stock>; output: number }> = {
-  alloy: { inputs: { smithore: 2, energy: 1 }, output: 2 },
+  alloy: { inputs: { smithore: 2, energy: 2 }, output: 2 },
   electronics: { inputs: { rareEarth: 1, alloy: 1, energy: 1 }, output: 1 },
   medicine: { inputs: { food: 1, water: 1, energy: 1 }, output: 2 },
 };
@@ -192,15 +193,28 @@ export const ADJACENCY = {
 };
 
 export const UPKEEP = {
-  /** Per player per month. */
-  food: 3,
-  water: 2,
-  /** Per working plot per month (factories and MULEs). */
-  energyPerPlot: 1,
-  /** Colonists need 1 Food and 1 Water per this many colonists. */
-  colonistsPerUnit: 10,
-  /** What colonists can pay per unit of Food and Water they need, from their off-world wages. */
-  colonistBudget: { food: 300, water: 200 },
+  /**
+   * A player's crew eats and drinks: the player alone needs baseFood and
+   * baseWater, and every few crew add one more. A raw plot has a crew of 1, a
+   * factory a crew of 2, so a bigger estate costs more to feed.
+   */
+  baseFood: 2,
+  baseWater: 1,
+  crewPerFood: 4,
+  crewPerWater: 6,
+  crew: { raw: 1, factory: 2, greenBelt: 0 },
+  /**
+   * Energy a raw plot burns a month, by what it makes. Factories burn what
+   * their recipe says. Without it a raw plot makes half, a factory nothing.
+   */
+  energyUse: { food: 1, water: 1, energy: 0, smithore: 2, crystite: 2, rareEarth: 2 } satisfies Record<RawGood, number>,
+  /** Colonists need 1 Food and 1 Water a month per this many colonists. */
+  colonistsPerUnit: 20,
+  /**
+   * The most colonists pay per unit, from their off-world wages. Above it they
+   * buy less, so their demand falls as the price rises: this is the demand curve.
+   */
+  colonistBudget: { food: 150, water: 120, energy: 100, medicine: 400 } as Partial<Record<Good, number>>,
   /** Units of each good a player's home depot holds. */
   depotCapacity: 10,
 };
@@ -208,18 +222,23 @@ export const UPKEEP = {
 export const START = {
   money: 1000,
   colonists: 100,
-  storeMules: 6,
-  storeFund: 3000,
-  storeStock: { food: 16, water: 12, energy: 16, smithore: 8, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 4 } satisfies Stock,
+  storeMules: 10,
+  storeCapital: 4000,
+  storeStock: { food: 30, water: 36, energy: 16, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 4 } satisfies Stock,
 };
 
 export const MULE = {
-  /** Labour in an empty MULE. Its price is this plus the colony price of the Alloy it is built from. */
-  labour: 40,
-  /** Alloy the store needs to build one MULE. */
-  alloyPerMule: 1,
-  /** The store's own small smelter: Smithore per unit of Alloy (factories are more efficient). */
-  storeSmithorePerAlloy: 2,
+  /** Labour in an empty MULE. Its price is this plus the Smithore it is built from. */
+  labour: 120,
+  /** Smithore the store needs to build one MULE, as in the original. */
+  smithorePerMule: 1,
+  /** The store builds MULEs for every plot claimed in a month, plus this many. */
+  spareInCorral: 2,
+  /** If the corral sold out, MULEs cost this much more next month; with half or more left over, surplusDown less. */
+  scarcityUp: 0.15,
+  surplusDown: 0.1,
+  /** The scarcity factor never falls below this. */
+  minFactor: 0.6,
   outfitCost: {
     food: 25, water: 25, energy: 50, smithore: 75, crystite: 100, rareEarth: 100,
     alloy: 150, electronics: 200, medicine: 150, greenBelt: 20,
@@ -254,8 +273,8 @@ export const POLLUTION = {
   } as Partial<Record<Outfit, { air: number; spreads: boolean }>>,
   /** The highest plot level (toxic). */
   maxPlot: 3,
-  /** Nature cleans this many air points a month. */
-  natureCleans: 3,
+  /** Nature cleans this many air points a month per player (a bigger colony has a bigger map). */
+  natureCleansPerPlayer: 2,
   /** Plot levels a plot with no polluter beside it recovers each month; untouched forest and swamp recover faster. */
   recovery: 1,
   wildRecovery: 2,
@@ -298,4 +317,16 @@ export const GAME = {
   claimsPerGrant: 2,
   /** The export ship calls every this many months. */
   exportShipEvery: 3,
+};
+
+export const EXPORT_SHIP = {
+  /** Goods on the ship's wishlist, announced one month before it calls. */
+  wishlist: 3,
+  /** The ship pays the off-world price for its first unit of a good and this share less for each further unit. */
+  stepDown: 0.02,
+};
+
+export const TAX = {
+  /** Sales tax on every sale a player makes, into the colony fund. The Governor sets it later; this is the start. */
+  salesTax: 0.05,
 };

@@ -1,4 +1,4 @@
-import { driftReference, storeQuotes, storeWants } from './economy.js';
+import { driftReference, shipInPort, shipPrice, storeForSale, storeQuotes, storeWants, taxSale } from './economy.js';
 import type { GameState, Good } from './types.js';
 
 /**
@@ -43,19 +43,22 @@ export interface Trade {
 }
 
 export const STORE_ID = 'store';
+export const SHIP_ID = 'ship';
 
 /**
  * Settles one good's auction. Players are matched with each other first (best
  * buyer with best seller, at the midpoint of their limits), as in the
- * original's walk-to-the-price auction. Whatever is left trades with the
- * colony store, if its quote is good enough and it has stock or money.
+ * original's walk-to-the-price auction. Then the export ship, when it is in
+ * port and wants the good, buys from the sellers left, and the colony store
+ * trades the rest at its posted prices, if it has stock or money. Every sale
+ * a player makes pays the sales tax into the colony fund.
  */
 export function runAuction(state: GameState, good: Good, orders: Order[]): Trade[] {
   const players = new Map(state.players.map((p) => [p.id, p]));
   const quotes = storeQuotes(state, good);
   const trades: Trade[] = [];
 
-  // Clamp orders to what each player can actually deliver or afford.
+  // Clamp orders to what each player can actually deliver.
   const buys = orders
     .filter((o) => o.side === 'buy' && o.quantity > 0)
     .map((o) => ({ ...o }))
@@ -66,16 +69,20 @@ export function runAuction(state: GameState, good: Good, orders: Order[]): Trade
     .sort((a, b) => a.limit - b.limit);
 
   const settle = (buyer: string, seller: string, quantity: number, price: number) => {
-    const b = buyer === STORE_ID ? null : players.get(buyer)!;
-    const s = seller === STORE_ID ? null : players.get(seller)!;
-    const affordable = b ? Math.min(quantity, Math.floor(b.money / price)) : Math.min(quantity, Math.floor(state.store.fund / price));
-    const available = s ? Math.min(affordable, s.stock[good]) : Math.min(affordable, state.store.stock[good]);
-    if (available <= 0) return 0;
-    const total = available * price;
-    if (b) { b.money -= total; b.stock[good] += available; } else { state.store.fund -= total; state.store.stock[good] += available; }
-    if (s) { s.money += total; s.stock[good] -= available; } else { state.store.fund += total; state.store.stock[good] -= available; }
-    trades.push({ good, buyer, seller, quantity: available, price });
-    return available;
+    const b = players.get(buyer) ?? null;
+    const s = players.get(seller) ?? null;
+    let n = quantity;
+    if (b) n = Math.min(n, Math.floor(b.money / price));
+    else if (buyer === STORE_ID) n = Math.min(n, Math.floor(state.store.capital / price));
+    n = Math.min(n, s ? s.stock[good] : state.store.stock[good]);
+    if (n <= 0) return 0;
+    const total = n * price;
+    if (b) { b.money -= total; b.stock[good] += n; }
+    else if (buyer === STORE_ID) { state.store.capital -= total; state.store.stock[good] += n; }
+    if (s) { s.money += taxSale(state, s.id, total); s.stock[good] -= n; }
+    else { state.store.capital += total; state.store.stock[good] -= n; }
+    trades.push({ good, buyer, seller, quantity: n, price });
+    return n;
   };
 
   // Player to player.
@@ -100,8 +107,8 @@ export function runAuction(state: GameState, good: Good, orders: Order[]): Trade
     if (sell.quantity === 0) si++;
   }
 
-  // Leftovers against the store, in turns. A Quibbit is always first in
-  // line; otherwise whoever reached the price first goes first.
+  // Leftovers against the store and the ship, in turns. A Quibbit is always
+  // first in line; otherwise whoever reached the price first goes first.
   const turnOrder = <T extends Order>(list: T[]) =>
     list
       .map((o, i) => ({ o, i }))
@@ -111,21 +118,56 @@ export function runAuction(state: GameState, good: Good, orders: Order[]): Trade
       })
       .map(({ o }) => o);
 
-  const storeBuyers = turnOrder(buys.filter((b) => b.quantity > 0 && b.limit >= quotes.sell));
-  const buyerWants = storeBuyers.map((b) => Math.min(b.quantity, Math.floor((players.get(b.playerId)?.money ?? 0) / quotes.sell)));
-  takeTurns(state.store.stock[good], buyerWants).forEach((n, i) => {
-    if (n > 0) settle(storeBuyers[i]!.playerId, STORE_ID, n, quotes.sell);
-  });
+  if (quotes.sell !== null) {
+    const sellPrice = quotes.sell;
+    const storeBuyers = turnOrder(buys.filter((b) => b.quantity > 0 && b.limit >= sellPrice));
+    const wants = storeBuyers.map((b) => Math.min(b.quantity, Math.floor((players.get(b.playerId)?.money ?? 0) / sellPrice)));
+    takeTurns(storeForSale(state, good), wants).forEach((n, i) => {
+      if (n > 0) settle(storeBuyers[i]!.playerId, STORE_ID, n, sellPrice);
+    });
+  }
 
-  const storeSellers = turnOrder(sells.filter((o) => o.quantity > 0 && o.limit <= quotes.buy));
-  const room = Math.min(storeWants(state, good, quotes.buy), Math.floor(Math.max(0, state.store.fund) / quotes.buy));
-  takeTurns(room, storeSellers.map((o) => o.quantity)).forEach((n, i) => {
-    if (n > 0) settle(STORE_ID, storeSellers[i]!.playerId, n, quotes.buy);
-  });
+  // The export ship buys one unit per seller per round, paying a little less
+  // for every unit as its hold fills, while its price is above their limit.
+  if (shipInPort(state)) {
+    const shipSellers = turnOrder(sells.filter((o) => o.quantity > 0));
+    const sold = new Map<string, { n: number; total: number }>();
+    for (let round = true; round; ) {
+      round = false;
+      for (const o of shipSellers) {
+        const price = shipPrice(state, good);
+        if (price === null || o.quantity <= 0 || o.limit > price) continue;
+        const seller = players.get(o.playerId)!;
+        if (seller.stock[good] <= 0) continue;
+        seller.stock[good]--;
+        o.quantity--;
+        state.ship.hold[good] = (state.ship.hold[good] ?? 0) - 1;
+        state.ship.bought[good] = (state.ship.bought[good] ?? 0) + 1;
+        const entry = sold.get(o.playerId) ?? { n: 0, total: 0 };
+        entry.n++;
+        entry.total += price;
+        sold.set(o.playerId, entry);
+        round = true;
+      }
+    }
+    for (const [id, { n, total }] of sold) {
+      players.get(id)!.money += taxSale(state, id, total);
+      trades.push({ good, buyer: SHIP_ID, seller: id, quantity: n, price: Math.round(total / n) });
+    }
+  }
 
-  // Only trades between players teach the market something: store trades are
-  // at the store's own quote.
-  const between = trades.filter((t) => t.buyer !== STORE_ID && t.seller !== STORE_ID);
+  if (quotes.buy !== null) {
+    const buyPrice = quotes.buy;
+    const storeSellers = turnOrder(sells.filter((o) => o.quantity > 0 && o.limit <= buyPrice));
+    const room = Math.min(storeWants(state, good, buyPrice), Math.floor(Math.max(0, state.store.capital) / buyPrice));
+    takeTurns(room, storeSellers.map((o) => o.quantity)).forEach((n, i) => {
+      if (n > 0) settle(STORE_ID, storeSellers[i]!.playerId, n, buyPrice);
+    });
+  }
+
+  // Only trades between players teach the market something: the store and
+  // the ship trade at their own prices.
+  const between = trades.filter((t) => players.has(t.buyer) && players.has(t.seller));
   const volume = between.reduce((n, t) => n + t.quantity, 0);
   driftReference(state, good, volume > 0 ? between.reduce((n, t) => n + t.price * t.quantity, 0) / volume : null);
   return trades;
