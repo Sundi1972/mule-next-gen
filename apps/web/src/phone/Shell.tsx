@@ -1,4 +1,4 @@
-import { cx, PlayerMark, Timer } from '@mule/ui';
+import { cx, PlayerMark, SPECIES_NAME, Timer } from '@mule/ui';
 import type { ReactNode } from 'react';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { fmt } from '../game/derive';
@@ -43,7 +43,7 @@ export function PhoneShell({
             {seconds !== undefined && <Timer seconds={seconds} />}
           </div>
           <div className="flex items-center gap-2">
-            <PlayerMark slot={slot} size={12} label="You" />
+            <PlayerMark slot={slot} size={12} label={`You, ${SPECIES_NAME[self.species]}`} />
             <span className="min-w-0 truncate text-sm font-semibold">{self.name}</span>
             <ThemeToggle className="ml-1 shrink-0" />
             <span data-num className="ml-auto shrink-0 font-mono text-sm font-bold text-ink" data-testid="money">
