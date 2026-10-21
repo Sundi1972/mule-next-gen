@@ -1,5 +1,6 @@
 import type { GameContext } from '@tabletop/core';
 import { describe, expect, it } from 'vitest';
+import { WALK } from '@mule/engine';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
 
 /** A context with a manual clock, so phase timers run instantly. */
@@ -11,7 +12,10 @@ function fakeContext() {
     schedule: (ms, fn) => {
       const t = { at: now + ms, fn };
       timers.push(t);
-      return () => timers.splice(timers.indexOf(t), 1);
+      return () => {
+        const i = timers.indexOf(t);
+        if (i >= 0) timers.splice(i, 1);
+      };
     },
     changed: () => {},
   };
@@ -19,7 +23,10 @@ function fakeContext() {
     now += ms;
     for (let due = timers.filter((t) => t.at <= now); due.length > 0; due = timers.filter((t) => t.at <= now)) {
       for (const t of due) {
-        timers.splice(timers.indexOf(t), 1);
+        // A timer an earlier one cancelled doesn't run.
+        const i = timers.indexOf(t);
+        if (i < 0) continue;
+        timers.splice(i, 1);
         t.fn();
       }
     }
@@ -127,4 +134,59 @@ describe('MuleGame', () => {
     expect(produced).not.toBeNull();
     expect(produced!.food).toBeGreaterThanOrEqual(0);
   });
+
+  /** Plays through to the auction with the fake clock. */
+  function toAuction() {
+    const { ctx, advance } = fakeContext();
+    const game = new MuleGame(ctx, 7);
+    game.start(seats);
+    advance(PHASE_MS.planning);
+    while (game.viewFor('s1').phase === 'landGrant') advance(GRANT_TICK_MS);
+    while (game.viewFor('s1').phase === 'development') advance(1_000);
+    while (game.viewFor('s1').phase === 'production') advance(1_000);
+    expect(game.viewFor('s1').phase).toBe('auction');
+    return { game, advance, ctx };
+  }
+
+  it('runs the auction live on the server clock: status, declare, walk, good by good', () => {
+    const { game, advance } = toAuction();
+    const view = game.viewFor(null);
+    expect(view.phaseEndsAt).toBeNull();
+    const first = view.auction!;
+    expect(first.stage).toBe('status');
+    expect(first.total).toBe(WALK.statusMs / 1_000);
+    expect(first.status.map((r) => r.id)).toEqual(['s1', 's2', 's3']);
+    // Both humans are done with the status screen; the AI is done by itself.
+    game.handle('s1', { type: 'ready' });
+    game.handle('s2', { type: 'ready' });
+    advance(WALK.tickMs * 2);
+    expect(game.viewFor(null).auction!.stage).toBe('declare');
+    expect(() => game.handle('s1', { type: 'walk', dir: 'up' })).toThrow('Not walking');
+    game.handle('s1', { type: 'declare', side: 'buyer' });
+    game.handle('s1', { type: 'ready' });
+    game.handle('s2', { type: 'ready' });
+    advance(WALK.tickMs * 2);
+    const walk = game.viewFor('s1').auction!;
+    expect(walk.stage).toBe('walk');
+    expect(walk.total).toBe(WALK.goodMs / 1_000);
+    const before = walk.walkers.find((w) => w.id === 's1')!;
+    expect(before.side).toBe('buyer');
+    game.handle('s1', { type: 'walk', dir: 'up' });
+    advance(1_000);
+    const after = game.viewFor('s2').auction!.walkers.find((w) => w.id === 's1')!;
+    expect(after.at).toBeGreaterThan(before.at);
+    expect(after.dir).toBe(1);
+  });
+
+  it('moves on to upkeep once the last good is done, and counts a dropped phone as done', () => {
+    const { game, advance } = toAuction();
+    game.connectionChanged('s2', false);
+    for (let i = 0; i < 2_000 && game.viewFor('s1').phase === 'auction'; i++) {
+      game.handle('s1', { type: 'ready' });
+      advance(WALK.tickMs);
+    }
+    expect(game.viewFor('s1').phase).toBe('upkeep');
+    expect(game.viewFor('s1').auction).toBeNull();
+  });
 });
+
