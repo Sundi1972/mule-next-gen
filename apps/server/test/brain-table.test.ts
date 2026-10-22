@@ -402,7 +402,7 @@ describe('the brain at the table', () => {
     expect(() => lobby.heard?.('s9', 'hello')).not.toThrow();
 
     const sdk = fakeSdk(() => reply('A', ''));
-    const t = table({ humans: ['Heiko'], ais: 2, brain: smart(sdk) });
+    const t = table({ humans: ['Heiko'], ais: 2, brain: smart(sdk), phaseScale: 1 });
     const game = t.game();
     expect(typeof game.heard).toBe('function');
     expect(() => game.heard?.('s9', 'hello')).not.toThrow();
