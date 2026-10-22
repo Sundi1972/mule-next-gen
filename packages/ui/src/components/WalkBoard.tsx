@@ -1,10 +1,7 @@
-import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { Creature } from './Creature';
-import { useSeatSpecies } from './species';
+import { useSeatSpecies, type CreatureWrap } from './species';
 import { cx, SLOT_COLOR, type Slot } from './tokens';
-
-/** Wraps a seat's drawn creature: the screen's hook to anchor something at it. */
-export type CreatureWrap = (seatId: string, creature: ReactNode) => ReactNode;
 
 export interface BoardWalker {
   id: string;

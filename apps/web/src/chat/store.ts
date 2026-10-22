@@ -65,6 +65,8 @@ class ChatStore {
     const game = view?.game;
     const phase = game ? `${game.month}-${game.phase}` : null;
     // The client hands over one frame at a time, so a line before this view was counted in the phase before.
+    // A game going to null (the lobby, leaving) bumps the sequence too; the e2e's inOrder counts only in-game views,
+    // and the two agree because nothing chats outside a game.
     if (phase !== this.phase) {
       this.phase = phase;
       this.phaseSeq++;

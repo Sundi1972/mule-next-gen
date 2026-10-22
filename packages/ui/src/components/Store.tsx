@@ -2,8 +2,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { Creature } from './Creature';
 import { GoodIcon } from './GoodIcon';
 import { Mule } from './Mule';
-import { useSeatSpecies } from './species';
-import type { CreatureWrap } from './WalkBoard';
+import { useSeatSpecies, type CreatureWrap } from './species';
 import { cx, GOOD_NAME, SLOT_COLOR, type Good, type Slot } from './tokens';
 
 /** Outfitters for farms and mines, in the order the store shows them. */
