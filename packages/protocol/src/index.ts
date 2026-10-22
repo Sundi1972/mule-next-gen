@@ -1,4 +1,4 @@
-import type { AuctionSide, CanRun, Election, ElectionResult, EventKey, EventKind, Good, Ground, MonthEvent, Office, Outfit, Phase, ScoreParts, SkipReason, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
+import type { AuctionSide, CanRun, Election, ElectionResult, EventKey, EventKind, Good, Ground, MonthEvent, Office, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -54,6 +54,8 @@ export interface TileView {
   ground?: Ground;
   /** Only for the plot's owner or a player who analysed it: its hazard traits. */
   traits?: TileTrait[];
+  /** The plot's special field, while it lasts. Public: every viewer, phone and TV, sees it; only the ground is private. */
+  special?: SpecialField;
 }
 
 export interface PlayerView {

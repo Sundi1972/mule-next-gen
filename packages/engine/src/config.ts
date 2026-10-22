@@ -1,4 +1,4 @@
-import type { Outfit, GrownGood, Good, MinedGood, ProcessedGood, RawGood, Species, Stock, Terrain, TileTrait } from './types.js';
+import type { Outfit, GrownGood, Good, MinedGood, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
 
 /**
  * Every balancing number lives here, so playtests and the simulator can tune
@@ -215,8 +215,16 @@ export const UPKEEP = {
    * household and crew need, they make half (on top of any Energy shortfall).
    */
   irrigated: ['food'] as RawGood[],
+  /** Share of its output a plot makes without the Energy (or, for an irrigated plot, the Water) it needs. */
+  shortOutputShare: 0.5,
   /** Colonists need 1 Food and 1 Water a month per this many colonists. */
   colonistsPerUnit: 20,
+  /** Colonists' Energy demand, as a share of their Food and Water units. */
+  colonistEnergyShare: 0.5,
+  /** Colonists need 1 Medicine a month per this many colonists (more when the air makes them sick). */
+  colonistsPerMedicine: 50,
+  /** The colony grows by this factor in a month its colonists were fed, and shrinks by this one when they went hungry. */
+  colonistGrowth: { fed: 1.04, hungry: 0.95 },
   /**
    * The most colonists pay per unit, from their off-world wages. Above it they
    * buy less, so their demand falls as the price rises: this is the demand curve.
@@ -228,6 +236,10 @@ export const UPKEEP = {
 
 export const START = {
   money: 1000,
+  /** Each player's depot at the start. */
+  playerStock: { food: 6, water: 6, energy: 4 } as Partial<Stock>,
+  /** Each player's reputation at the start, out of 100. */
+  reputation: 50,
   colonists: 100,
   storeMules: 10,
   storeCapital: 4000,
@@ -241,9 +253,10 @@ export const MULE = {
   smithorePerMule: 1,
   /** The store builds MULEs for every plot claimed in a month, plus this many. */
   spareInCorral: 2,
-  /** If the corral sold out, MULEs cost this much more next month; with half or more left over, surplusDown less. */
+  /** If the corral sold out, MULEs cost this much more next month; with surplusShare of the month's MULEs or more left over, surplusDown less. */
   scarcityUp: 0.15,
   surplusDown: 0.1,
+  surplusShare: 0.5,
   /** The scarcity factor never falls below this. */
   minFactor: 0.6,
   outfitCost: {
@@ -257,6 +270,8 @@ export const DEVELOPMENT = {
   fullSeconds: 50,
   /** Seconds with no Food at all; the time shrinks linearly with the shortfall. */
   minSeconds: 15,
+  /** Development never lasts less than this, whatever sickness and penalties take off. */
+  floorSeconds: 5,
   /** Seconds a colonist stands on a plot for a geo analysis. */
   analysisSeconds: 8,
   /** The pub pays base + (start + month * perMonth) * share of time left. */
@@ -270,6 +285,8 @@ export const DEVELOPMENT = {
 
 /** What pollutes, and by how much. From the design doc's Pollution tab. */
 export const POLLUTION = {
+  /** The air gauge runs from 0 (clean) to this. */
+  airMax: 100,
   /** Colony air points a month, and whether the source also fouls the plots around it. */
   sources: {
     rareEarth: { air: 4, spreads: true },
@@ -405,6 +422,47 @@ export const MAP = {
   peak: { high: 4, medium: 3, low: { min: 1, max: 2 }, count: { min: 3, max: 4 } },
   /** Chance a map has one scarce good. Read by the generator and the map-quality test, not the checker. */
   scarceChance: 0.25,
+  /** Special fields on each map. */
+  specials: { small: 3, mid: 4, large: 5 } satisfies Record<SizeBand, number>,
+  /** Where special fields may go (spec RULE-5), read by the generator and the checker. */
+  special: {
+    /** Terrains each kind may sit on. Ruins and relics take any dry land: every land terrain but the river and lakes. */
+    on: {
+      ruins: ['plains', 'forest', 'hills', 'desert', 'tundra', 'mountains', 'swamp', 'volcanic', 'crater', 'ice'],
+      crystalCavern: ['crater', 'mountains', 'hills'],
+      geyser: ['volcanic', 'tundra', 'ice'],
+      oasis: ['desert'],
+      relic: ['plains', 'forest', 'hills', 'desert', 'tundra', 'mountains', 'swamp', 'volcanic', 'crater', 'ice'],
+    } satisfies Record<SpecialKind, ShareTerrain[]>,
+    maxPerKind: 2,
+    minKinds: 3,
+    /** Fewest steps between two special fields. */
+    spacing: 4,
+    /** Fewest of an oasis's 4 neighbours that are desert. */
+    oasisDeserts: 2,
+    /** Least Crystite rating under a crystal cavern. */
+    cavernCrystite: 1,
+    /**
+     * Plots the generator's placement search tries for one map, backtracking included; real maps need
+     * 3 to 10. At the bound it throws rather than place the map short. Read by the generator, not the checker.
+     */
+    placementTries: 10_000,
+  },
+  /** What special fields do (spec RULE-6). Output bonuses count before adjacency. */
+  specialEffect: {
+    /** Extra Crystite from a crystal cavern mined for Crystite. */
+    crystalCavern: 4,
+    /** Chance a cavern that produced Crystite this month collapses into a plain plot. */
+    collapseChance: 0.06,
+    /** Extra Water or Energy from a geyser outfitted for either. */
+    geyser: 2,
+    /** Extra Food from an oasis farm. */
+    oasis: 3,
+    /** Extra output for every working plot, raw or factory, per relic among its 4 neighbours. */
+    relic: 1,
+    /** What ruins pay their first owner, once, by the salvage drawn with the map. */
+    salvage: { alloy: 2, electronics: 1 },
+  },
   /** Tuning for the layout stages (map-layout.ts): how the generator meets the rules above, not rules themselves. */
   layout: {
     /** The budget never gives a terrain more than this share, so jitter can't take plains near maxTerrainShare. */
@@ -461,6 +519,9 @@ export const MAP = {
 };
 
 export const GAME = {
+  /** A game seats this many players, from the fewest to the most. */
+  minPlayers: 2,
+  maxPlayers: 6,
   maxMonths: 12,
   /** Months the game continues after the last free plot is claimed. */
   landRushMonths: 3,
@@ -571,6 +632,8 @@ export const WALK = {
   minSpeed: 2,
   /** The board reaches this share beyond the outermost price line; sellers start at its top, buyers at its bottom. */
   boardMargin: 0.3,
+  /** And this share of the posted price more, so a board whose price lines sit close together still has room to walk. */
+  boardPostedMargin: 0.1,
   /** How often the server steps the auction. */
   tickMs: 100,
 };
@@ -825,6 +888,8 @@ export const STRATEGIST = {
 
 /** The AI's hands in the real-time phases. Times are in ms. */
 export const AI_HANDS = {
+  /** How often AI hands act during development, in the server and the simulator alike. */
+  devTickMs: 100,
   /** Development steps, as a quick human taps them: to the corral and buy, to an outfitter, out to the plot and install, analyse, the pub. */
   develop: {
     buyMs: [1_400, 2_400] as [number, number],
