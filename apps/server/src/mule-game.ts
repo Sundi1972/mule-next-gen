@@ -139,7 +139,7 @@ function productionView(state: GameState, lengthMs: number): ProductionView | nu
 /** M.U.L.E. as a game hosted by a @tabletop/core room. */
 export class MuleGame implements Game<MuleIntent, MuleView> {
   private state: GameState | null = null;
-  private seats: (SeatInfo & { color: string })[] = [];
+  private seats: SeatInfo[] = [];
   private readonly ready = new Set<string>();
   private readonly away = new Set<string>();
   /** Trades between players in the good that is up, for the news when it closes. */
@@ -167,7 +167,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   }
 
   start(seats: SeatInfo[]): void {
-    this.seats = seats.map((s, i) => ({ ...s, color: PLAYER_COLORS[i % PLAYER_COLORS.length]! }));
+    this.seats = seats.map((s) => ({ ...s }));
     this.state = createGame({ seed: this.seed, players: seats.map(({ id, name, isAi, pick }) => ({ id, name, isAi, ...(isSpecies(pick) ? { species: pick } : {}) })), maxMonths: this.options.maxMonths });
     this.ai.clear();
     this.lotHands.clear();
@@ -634,7 +634,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           id: s.id,
           name: s.name,
           isAi: s.isAi,
-          color: s.color,
+          color: PLAYER_COLORS[s.color % PLAYER_COLORS.length]!,
+          slot: s.color,
           species: p.species,
           money: p.money,
           plots: state.tiles.filter((t) => t.owner === s.id).length,
@@ -714,7 +715,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       good: a.good,
       stage: a.stage,
       seconds: Math.max(0, a.clockMs / 1_000),
-      total: (a.stage === 'status' ? WALK.statusMs : a.stage === 'declare' ? WALK.declareMs : WALK.goodMs) / 1_000,
+      total: (a.stage === 'status' ? WALK.statusMs : WALK.goodMs) / 1_000,
       slowed: a.stage === 'walk' && a.deals.length > 0,
       next: [...a.queue],
       storeBuys: storeBuyLine(state),

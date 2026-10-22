@@ -10,6 +10,7 @@ export function PlayerMark({ slot, species, size = 16, glow = true, label, class
   return (
     <span
       role="img"
+      data-slot={slot}
       aria-label={label ?? SPECIES_NAME[kind]}
       className={cx('inline-block shrink-0', className)}
       style={{ width: size, height: size, filter: glow ? `drop-shadow(0 0 1px var(--color-mark-edge)) drop-shadow(0 0 ${Math.round(size / 3)}px color-mix(in srgb, ${color} var(--mark-glow), transparent))` : 'drop-shadow(0 0 1px var(--color-mark-edge))' }}

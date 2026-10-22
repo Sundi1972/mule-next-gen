@@ -55,6 +55,8 @@ export interface PlayerView {
   name: string;
   isAi: boolean;
   color: string;
+  /** The player's colour index, the one their seat chose in the lobby. */
+  slot: number;
   species: Species;
   money: number;
   plots: number;
@@ -114,7 +116,7 @@ export interface DealView {
 /** The live goods auction, on every screen. */
 export interface AuctionView {
   good: Good;
-  stage: 'status' | 'declare' | 'walk';
+  stage: 'status' | 'walk';
   /** Seconds left on the stage's clock. It runs slower while units change hands. */
   seconds: number;
   /** The stage's full time in seconds, for the draining time bar. */

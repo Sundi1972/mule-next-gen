@@ -162,8 +162,8 @@ describe('Room: a seat picks one of the game\'s choices in the lobby (RULE-1)', 
 
     expect(heiko.last('error')).toBeUndefined();
     expect(mia.last('view')!.view.seats).toStrictEqual([
-      { id: 's1', name: 'Heiko', isAi: false, connected: true, pick: 'fox' },
-      { id: 's2', name: 'Mia', isAi: false, connected: true },
+      { id: 's1', name: 'Heiko', isAi: false, connected: true, color: 0, pick: 'fox' },
+      { id: 's2', name: 'Mia', isAi: false, connected: true, color: 1 },
     ]);
   });
 
@@ -205,9 +205,9 @@ describe('Room: a seat picks one of the game\'s choices in the lobby (RULE-1)', 
 
     expect(startedWith).toStrictEqual([
       [
-        { id: 's1', name: 'Heiko', isAi: false, pick: 'owl' },
-        { id: 's2', name: 'Mia', isAi: false },
-        { id: 's3', name: 'Brix', isAi: true },
+        { id: 's1', name: 'Heiko', isAi: false, color: 0, pick: 'owl' },
+        { id: 's2', name: 'Mia', isAi: false, color: 1 },
+        { id: 's3', name: 'Brix', isAi: true, color: 2 },
       ],
     ]);
   });
@@ -224,7 +224,7 @@ describe('Room: a seat picks one of the game\'s choices in the lobby (RULE-1)', 
     await flush();
 
     expect(again.last('welcome')!.seatId).toBe('s1');
-    expect(again.last('view')!.view.seats[0]).toStrictEqual({ id: 's1', name: 'Heiko', isAi: false, connected: true, pick: 'cat' });
+    expect(again.last('view')!.view.seats[0]).toStrictEqual({ id: 's1', name: 'Heiko', isAi: false, connected: true, color: 0, pick: 'cat' });
   });
 });
 
@@ -323,9 +323,9 @@ describe('Room: the host kicks a seat or closes the table, in the lobby (RULE-5)
     expect(welcome.seatId).toBe('s4');
     expect(welcome.seatToken).not.toBe(oldToken);
     expect(room.viewFor(null).seats).toStrictEqual([
-      { id: 's1', name: 'Heiko', isAi: false, connected: true },
-      { id: 's4', name: 'Mia', isAi: false, connected: true },
-      { id: 's5', name: 'Brix', isAi: true, connected: true },
+      { id: 's1', name: 'Heiko', isAi: false, connected: true, color: 0 },
+      { id: 's4', name: 'Mia', isAi: false, connected: true, color: 1 },
+      { id: 's5', name: 'Brix', isAi: true, connected: true, color: 2 },
     ]);
   });
 
@@ -465,3 +465,300 @@ describe('Room: a player leaves the table (RULE-5, AM-15)', () => {
     expect(back.last('welcome')!.seatId).toBe('s4');
   });
 });
+
+/** The secrets game with a bug: the secret 'boom' throws a plain Error, as an engine bug would, and so can a tick it schedules. */
+function buggyRoom(tick?: 'throws') {
+  const errors: unknown[] = [];
+  let closed = 0;
+  const room = new Room<Intent, View>({
+    code: 'KRTX',
+    createGame: (ctx) => {
+      const game = secretsGame();
+      return {
+        ...game,
+        start() {
+          if (tick)
+            ctx.schedule(0, () => {
+              throw new Error('tick boom');
+            });
+        },
+        handle(seatId, intent) {
+          if (intent.secret === 'boom') throw new Error('boom');
+          game.handle(seatId, intent);
+        },
+      };
+    },
+    newToken: () => `t${++tokens}`,
+    onError: (err) => void errors.push(err),
+    onClose: () => void closed++,
+  });
+  const heiko = join(room, 'Heiko');
+  const mia = join(room, 'Mia');
+  const tv = watch(room);
+  return { room, heiko, mia, tv, errors, closes: () => closed };
+}
+
+const tick = () => new Promise((r) => setTimeout(r, 5));
+
+describe('Room: a game error ends only its own table', () => {
+  it('a game error ends only its own table: a move that throws a plain Error tells every seat and board "error", closes the room once, and later messages do nothing', async () => {
+    const { room, heiko, mia, tv, errors, closes } = buggyRoom();
+    room.receive(heiko, heiko.from, { t: 'start' });
+
+    expect(() => room.receive(heiko, heiko.from, { t: 'intent', intent: { secret: 'boom' } })).not.toThrow();
+    await flush();
+
+    for (const screen of [heiko, mia, tv]) expect(screen.inbox.at(-1)).toStrictEqual({ t: 'removed', reason: 'error' });
+    expect(closes()).toBe(1);
+    expect(errors).toHaveLength(1);
+    expect((errors[0] as Error).message).toBe('boom');
+
+    const before = [heiko, mia, tv].map((s) => s.inbox.length);
+    const stranger = new Screen();
+    expect(() => {
+      room.receive(mia, mia.from, { t: 'intent', intent: { secret: 'boom' } });
+      room.receive(mia, mia.from, { t: 'chat', text: 'still here?' });
+      room.receive(stranger, stranger.from, { t: 'join', code: room.code, name: 'Stranger' });
+    }).not.toThrow();
+    await flush();
+    expect([heiko, mia, tv].map((s) => s.inbox.length)).toEqual(before);
+    expect(stranger.inbox).toEqual([]);
+    expect(closes()).toBe(1);
+    expect(errors).toHaveLength(1);
+  });
+
+  it('a game error ends only its own table: a scheduled tick that throws ends the room the same way, and the process stays up', async () => {
+    const { room, heiko, mia, tv, errors, closes } = buggyRoom('throws');
+    room.receive(heiko, heiko.from, { t: 'start' });
+
+    await tick();
+
+    for (const screen of [heiko, mia, tv]) expect(screen.inbox.at(-1)).toStrictEqual({ t: 'removed', reason: 'error' });
+    expect(closes()).toBe(1);
+    expect(errors).toHaveLength(1);
+    expect((errors[0] as Error).message).toBe('tick boom');
+    const before = mia.inbox.length;
+    room.receive(mia, mia.from, { t: 'chat', text: 'still here?' });
+    expect(mia.inbox).toHaveLength(before);
+  });
+
+  it('a game error ends only its own table: a TableError still goes to the sender only, and the room plays on', async () => {
+    const { room, heiko, mia, tv, errors, closes } = buggyRoom();
+    room.receive(heiko, heiko.from, { t: 'start' });
+
+    room.receive(heiko, heiko.from, { t: 'intent', intent: { secret: '' } });
+
+    expect(heiko.last('error')?.message).toBe('Say something');
+    expect(mia.last('error')).toBeUndefined();
+    expect(tv.last('error')).toBeUndefined();
+    expect([...heiko.inbox, ...mia.inbox, ...tv.inbox].some((m) => m.t === 'removed')).toBe(false);
+    expect(errors).toEqual([]);
+    expect(closes()).toBe(0);
+
+    room.receive(mia, mia.from, { t: 'intent', intent: { secret: 'fine' } });
+    await flush();
+    expect(tv.last('view')!.view.game).toEqual({ mySecret: null, secretsTold: 1 });
+  });
+
+  it('a game error ends only its own table: after fail, a message gets nothing back and throws nothing', async () => {
+    const { room, heiko, mia, tv, errors, closes } = buggyRoom();
+    room.receive(heiko, heiko.from, { t: 'start' });
+
+    room.fail();
+    await flush();
+    for (const screen of [heiko, mia, tv]) expect(screen.inbox.at(-1)).toStrictEqual({ t: 'removed', reason: 'error' });
+    const before = [heiko, mia, tv].map((s) => s.inbox.length);
+
+    expect(() => {
+      room.receive(mia, mia.from, { t: 'intent', intent: { secret: 'fine' } });
+      room.receive(tv, tv.from, { t: 'ping', clientTime: 1 });
+    }).not.toThrow();
+    await flush();
+
+    expect([heiko, mia, tv].map((s) => s.inbox.length)).toEqual(before);
+    expect(closes()).toBe(1);
+    expect(errors).toEqual([]);
+  });
+
+  it('a game error ends only its own table: a game whose dispose throws still ends cleanly: fail throws nothing, every screen hears "error", onError hears the dispose error, onClose runs once', async () => {
+    const errors: unknown[] = [];
+    let closes = 0;
+    const room = new Room<Intent, View>({
+      code: 'KRTX',
+      createGame: () => ({
+        ...secretsGame(),
+        dispose() {
+          throw new Error('dispose boom');
+        },
+      }),
+      newToken: () => `t${++tokens}`,
+      onError: (err) => void errors.push(err),
+      onClose: () => void closes++,
+    });
+    const heiko = join(room, 'Heiko');
+    const mia = join(room, 'Mia');
+    const tv = watch(room);
+    room.receive(heiko, heiko.from, { t: 'start' });
+
+    expect(() => room.fail()).not.toThrow();
+    await flush();
+
+    for (const screen of [heiko, mia, tv]) expect(screen.inbox.at(-1)).toStrictEqual({ t: 'removed', reason: 'error' });
+    expect(errors).toHaveLength(1);
+    expect((errors[0] as Error).message).toBe('dispose boom');
+    expect(closes).toBe(1);
+  });
+
+  it('a game error ends only its own table: fail after the host closed the room sends nothing more and does not close it twice', async () => {
+    const { room, heiko, mia, tv, errors, closes } = buggyRoom();
+
+    close(room, heiko);
+    for (const screen of [heiko, mia, tv]) expect(screen.inbox.at(-1)).toStrictEqual({ t: 'removed', reason: 'closed' });
+    const before = [heiko, mia, tv].map((s) => s.inbox.length);
+
+    room.fail();
+    await flush();
+
+    expect([heiko, mia, tv].map((s) => s.inbox.length)).toEqual(before);
+    expect(closes()).toBe(1);
+    expect(errors).toEqual([]);
+  });
+});
+const colours = (room: Room<Intent, View>) => room.viewFor(null).seats.map((s) => s.color);
+
+describe('Room: every seat holds its own colour (RULE-7)', () => {
+  it('T-AC-12: RULE-7 on a new seat — humans and AI take the lowest free colour, and a kick frees one', () => {
+    const { room, heiko } = lobby();
+    room.receive(heiko, heiko.from, { t: 'addAi' });
+    expect(colours(room)).toEqual([0, 1, 2, 3]);
+
+    kick(room, heiko, 's2');
+    expect(colours(room)).toEqual([0, 2, 3]);
+
+    join(room, 'Jonas');
+    room.receive(heiko, heiko.from, { t: 'addAi' });
+    expect(colours(room)).toEqual([0, 2, 3, 1, 4]);
+  });
+
+  it.each([
+    { row: '1: the game has started', started: true, colour: 4, error: 'The game has already started' },
+    { row: '1: first match over row 2', started: true, colour: 9, error: 'The game has already started' },
+    { row: '2: 6 is past the palette', started: false, colour: 6, error: 'Unknown colour' },
+    { row: '2: -1 is before the palette', started: false, colour: -1, error: 'Unknown colour' },
+    { row: '2: 1.5 is no colour index', started: false, colour: 1.5, error: 'Unknown colour' },
+    { row: "3: Mia, a human, holds 1", started: false, colour: 1, error: 'That colour is taken' },
+  ])('T-AC-12: RULE-7 row $row → refused, and every colour stays', ({ started, colour, error }) => {
+    const { room, heiko } = lobby();
+    if (started) room.receive(heiko, heiko.from, { t: 'start' });
+
+    paint(room, heiko, colour);
+
+    expect(heiko.last('error')?.message).toBe(error);
+    expect(colours(room)).toEqual([0, 1, 2]);
+  });
+
+  it('T-AC-12: RULE-7 row 4 — Mia takes Brix\'s colour: Brix (AI) moves to the lowest free colour, not to Mia\'s old one, and every screen sees it', async () => {
+    const { room, heiko, mia } = lobby();
+    room.receive(heiko, heiko.from, { t: 'addAi' });
+    paint(room, heiko, 4);
+    await flush();
+
+    paint(room, mia, 2);
+    await flush();
+
+    expect(mia.last('error')).toBeUndefined();
+    expect(heiko.last('view')!.view.seats.map((s) => [s.name, s.color])).toEqual([
+      ['Heiko', 4],
+      ['Mia', 2],
+      ['Brix', 0],
+      ['AI 4', 3],
+    ]);
+  });
+
+  it('T-AC-12: RULE-7 row 4 at a full table — the AI takes the colour the human let go of', () => {
+    const { room, heiko } = lobby();
+    for (let i = 0; i < 3; i++) room.receive(heiko, heiko.from, { t: 'addAi' });
+
+    paint(room, heiko, 5);
+
+    expect(heiko.last('error')).toBeUndefined();
+    expect(colours(room)).toEqual([5, 1, 2, 3, 4, 0]);
+  });
+
+  it('T-AC-12: RULE-7 row 5 — Mia takes a free colour, and her own again changes nothing', async () => {
+    const { room, heiko, mia } = lobby();
+
+    paint(room, mia, 4);
+    paint(room, mia, 4);
+    await flush();
+
+    expect(mia.last('error')).toBeUndefined();
+    expect(heiko.last('view')!.view.seats.map((s) => s.color)).toEqual([0, 4, 2]);
+  });
+
+  it('T-AC-12: Game.start receives the colour each seat chose', () => {
+    const { room, startedWith } = pickRoom();
+    const { heiko, mia } = lobby(room);
+    paint(room, mia, 5);
+    paint(room, heiko, 2);
+
+    room.receive(heiko, heiko.from, { t: 'start' });
+
+    expect(startedWith[0]!.map((s) => [s.name, s.color])).toEqual([
+      ['Heiko', 2],
+      ['Mia', 5],
+      ['Brix', 0],
+    ]);
+  });
+
+  it.each(Array.from({ length: 40 }, (_, i) => i + 1))(
+    'T-AC-12: RULE-7 invariant — over random joins, colour picks, AI adds, kicks and leaves (seed %i), no two seats share a colour and a refused pick changes nothing',
+    (seed) => {
+      const random = mulberry32(seed);
+      const any = <T,>(list: readonly T[]): T => list[Math.floor(random() * list.length)]!;
+      const room = newRoom();
+      const screens = [join(room, 'Host')];
+      const byId = () => new Map(room.viewFor(null).seats.map((s) => [s.id, s.color]));
+
+      for (let step = 0; step < 80; step++) {
+        const screen = any(screens);
+        const op = any(['join', 'color', 'color', 'color', 'addAi', 'kick', 'leave'] as const);
+        const intended = Math.floor(random() * 8) - 1;
+        const before = byId();
+        const displaced = room.viewFor(null).seats.find((s) => s.isAi && s.color === intended && s.id !== screen.from.seatId);
+        const errors = screen.inbox.filter((m) => m.t === 'error').length;
+        if (op === 'join') screens.push(join(room, `P${step}`));
+        if (op === 'color') paint(room, screen, intended);
+        if (op === 'addAi') room.receive(screen, screen.from, { t: 'addAi' });
+        if (op === 'kick') kick(room, screen, any([...before.keys(), 's99']));
+        if (op === 'leave') leave(room, screen);
+
+        const now = colours(room);
+        expect(new Set(now).size, `seed ${seed} step ${step} ${op}`).toBe(now.length);
+        expect(now.every((c) => Number.isInteger(c) && c >= 0 && c < 6)).toBe(true);
+        const refused = screen.inbox.filter((m) => m.t === 'error').length > errors;
+        if (op === 'color' && refused) expect(byId()).toEqual(before);
+        if (op === 'color' && !refused && displaced) {
+          const others = new Set(room.viewFor(null).seats.filter((s) => s.id !== displaced.id).map((s) => s.color));
+          let lowest = 0;
+          while (others.has(lowest)) lowest++;
+          expect(byId().get(displaced.id), `seed ${seed} step ${step}: the displaced AI`).toBe(lowest);
+        }
+      }
+    },
+  );
+});
+
+const paint = (room: Room<Intent, View>, screen: Screen, color: number) => room.receive(screen, screen.from, { t: 'color', color });
+
+/** A small seeded PRNG, so a failing sequence replays from its seed. */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}

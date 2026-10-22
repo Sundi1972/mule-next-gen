@@ -2,9 +2,9 @@ import type { GameContext } from '@tabletop/core';
 
 /** The three seats these server tests play with. */
 export const seats = [
-  { id: 's1', name: 'Heiko', isAi: false },
-  { id: 's2', name: 'Mia', isAi: false },
-  { id: 's3', name: 'The Baron', isAi: true },
+  { id: 's1', name: 'Heiko', isAi: false, color: 0 },
+  { id: 's2', name: 'Mia', isAi: false, color: 1 },
+  { id: 's3', name: 'The Baron', isAi: true, color: 2 },
 ];
 
 /**

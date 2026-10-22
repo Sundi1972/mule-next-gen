@@ -1,6 +1,7 @@
 import type { ChatMessage, PlayerView } from '@mule/protocol';
 import { Creature, cx, SLOT_COLOR, type CreatureWrap, type Slot } from '@mule/ui';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { toSlot } from '../game/derive';
 import { useClientState } from '../net/react';
 import { useAnchor, useTableChat } from './store';
 
@@ -16,7 +17,7 @@ type Seat = { player: PlayerView; slot: Slot };
 function useSeats(): { seats: Map<string, Seat>; me: string | null } {
   const { view, seatId } = useClientState();
   const players = view?.game?.players ?? [];
-  return { seats: new Map(players.map((player, i) => [player.id, { player, slot: (i % 6) as Slot }])), me: seatId };
+  return { seats: new Map(players.map((player) => [player.id, { player, slot: toSlot(player.slot) }])), me: seatId };
 }
 
 /** What a creature's bubble must stay inside: the nearest of these around it. */

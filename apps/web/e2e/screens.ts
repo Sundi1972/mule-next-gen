@@ -54,7 +54,8 @@ try {
 
   for (let i = 0; i < 2; i++) await phone.getByRole('button', { name: 'Add AI player' }).click();
   await phone.locator('[data-testid=seats] li').nth(2).waitFor();
-  await phone.getByText('Big screen connected').waitFor();
+  // The room card shrinks to its compact QR once the TV has joined.
+  await phone.waitForFunction(() => (document.querySelector('[data-testid=room-qr]')?.getBoundingClientRect().width ?? Infinity) < 60);
   await phoneShot(phone, '1-lobby');
   await shot(tv, 'tv-1-lobby');
 
@@ -119,20 +120,16 @@ try {
   const midShow = () => Promise.all([phone.screenshot({ path: join(out, 'phone-land-5-production-show.png') }), tv.screenshot({ path: join(out, 'tv-5-production-show.png') })]);
   console.log(`production show: ${await pressOnwardBeforeTheClock(phone, { tv: tvShow, phone: phoneShow }, midShow)}`);
 
-  // The walk auction: the status screen, the declare, walking, and a trade in progress.
+  // The walk auction: the status screen with its side picker, walking, and a trade in progress.
   await phase(phone, 'auction');
   await phone.getByTestId('status-table').waitFor();
   await phoneShot(phone, '6-auction-status');
   await tv.getByTestId('status-table').waitFor();
   await shot(tv, 'tv-6-auction-status');
+  // Sell what this good leaves spare, picked on the status screen (a second tap would pass): walk down from the top toward the store's buying line.
+  const seller = phone.getByTestId('side-seller');
+  if ((await seller.isEnabled()) && (await seller.getAttribute('aria-checked')) !== 'true') await seller.click();
   await phone.getByRole('button', { name: 'Ready' }).click();
-  await phone.getByRole('radiogroup', { name: 'Your side' }).waitFor();
-  await phoneShot(phone, '6-auction-declare');
-  await shot(tv, 'tv-6-auction-declare');
-  // Sell what this good leaves spare: walk down from the top toward the store's buying line.
-  const seller = phone.getByRole('radio', { name: 'Seller' });
-  if (await seller.isEnabled()) await seller.click();
-  await phone.getByRole('button', { name: 'Done choosing' }).click();
   await phone.getByRole('button', { name: 'Hold to walk down' }).waitFor();
   await phone.keyboard.down('ArrowDown');
   await phone.waitForTimeout(1_200);
