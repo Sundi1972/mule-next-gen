@@ -1,6 +1,6 @@
-import { DEFAULT_SPECIES } from '@mule/engine';
+import { DEFAULT_SPECIES, MAP, type SpecialKind as EngineSpecialKind } from '@mule/engine';
 import type { MuleView, PlayerView, TableView, TileView } from '@mule/protocol';
-import { SPECIES, type Good, type MapTile, type Slot, type Species } from '@mule/ui';
+import { GOOD_NAME, SPECIES, type Good, type MapSpecial, type MapTile, type Slot, type SpecialKind, type Species } from '@mule/ui';
 
 /**
  * Small, pure readings of the view for the screens. No rules live here: the
@@ -66,6 +66,7 @@ export function mapTiles(view: MuleView): MapTile[] {
       ...(t.peaks ? { peaks: t.peaks } : {}),
       ...(ground ? { ground } : {}),
       ...(t.pollution ? { pollution: t.pollution } : {}),
+      ...(t.special ? { special: t.special } : {}),
     };
   });
 }
@@ -118,3 +119,25 @@ export const TERRAIN_ODDS: Partial<Record<TileView['terrain'], string>> = {
   volcanic: 'Often good for Energy. Some Smithore.',
   crater: 'Poor for Food. Little Smithore.',
 };
+
+/** Fails to compile if the engine's special kinds and the design system's drift apart. */
+type SameKinds = [SpecialKind] extends [EngineSpecialKind] ? ([EngineSpecialKind] extends [SpecialKind] ? true : never) : never;
+export const SPECIAL_KINDS_MATCH: SameKinds = true;
+
+const FX = MAP.specialEffect;
+const pct = (n: number) => `${Math.round(n * 100)}%`;
+
+/** What a kind does, in general. The numbers are the engine's, MAP.specialEffect. */
+export const SPECIAL_EFFECT: Record<SpecialKind, string> = {
+  ruins: `pays its first owner ${FX.salvage.alloy} Alloy or ${FX.salvage.electronics} Electronics, once, then is gone.`,
+  crystalCavern: `+${FX.crystalCavern} Crystite when mined. Each month it's mined, a ${pct(FX.collapseChance)} chance it caves in.`,
+  geyser: `+${FX.geyser} Water or Energy.`,
+  oasis: `+${FX.oasis} Food.`,
+  relic: `+${FX.relic} to every working plot touching it, anyone's.`,
+};
+
+/** What this plot's special field does, without its name. A ruin says which salvage it holds, since the map drew it. */
+export function specialEffect(s: MapSpecial): string {
+  if (s.kind === 'ruins' && s.salvage) return `the first owner salvages ${FX.salvage[s.salvage]} ${GOOD_NAME[s.salvage]}, once.`;
+  return SPECIAL_EFFECT[s.kind];
+}

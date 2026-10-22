@@ -70,6 +70,16 @@ export interface Tile {
   filter: boolean;
   /** Months in a row this plot's current outfit has run. Factories gain from experience. */
   runMonths: number;
+  /** A special field on this plot, placed with the map; absent on most plots. */
+  special?: SpecialField;
+}
+
+export type SpecialKind = 'ruins' | 'crystalCavern' | 'geyser' | 'oasis' | 'relic';
+
+export interface SpecialField {
+  kind: SpecialKind;
+  /** Ruins only: the good its salvage pays, drawn when the map is made. */
+  salvage?: 'alloy' | 'electronics';
 }
 
 export interface Player {
@@ -232,7 +242,7 @@ export interface ProductionLine {
   made: number;
   /** What made up the output, in order; the deltas sum to `made`. */
   parts: {
-    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'noEnergy' | 'noWater' | 'event' | 'factory';
+    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'noEnergy' | 'noWater' | 'event' | 'factory' | 'special';
     delta: number;
     event?: EventKey;
   }[];
