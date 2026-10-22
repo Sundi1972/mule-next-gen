@@ -72,16 +72,16 @@ async function latestGame(inbox: ServerEnvelope<MuleView>[], pred: (g: MuleView)
 }
 
 describe('politics over the wire', () => {
-  it('C1: a server created with politics on plays the election; the default server plays none until the screens ship (AM-6)', async () => {
-    const on = await seatedPhone({ politics: true });
-    expect(on.first.month).toBe(1);
-    expect(on.first.politics, 'the board-wide politics view').toBeTruthy();
-    expect(on.first.politics!.election?.stage).toBe('nominate');
-    expect(on.first.phaseEndsAt, 'planning waits for the election').toBeNull();
-    expect(on.first.me!.politics, "the phone's own politics").toBeTruthy();
+  it('C1: the server a player joins plays politics by default', async () => {
+    const table = await seatedPhone();
+    expect(table.first.month).toBe(1);
+    expect(table.first.politics, 'the board-wide politics view').toBeTruthy();
+    expect(table.first.politics!.election?.stage).toBe('nominate');
+    expect(table.first.phaseEndsAt, 'planning waits for the election').toBeNull();
+    expect(table.first.me!.politics, "the phone's own politics").toBeTruthy();
     await running!.close();
 
-    const dark = await seatedPhone();
+    const dark = await seatedPhone({ politics: false });
     expect(dark.first.politics).toBeNull();
     expect(dark.first.me!.politics).toBeNull();
     expect(dark.first.phaseEndsAt, "planning's timer runs at once").not.toBeNull();

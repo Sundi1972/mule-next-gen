@@ -7,6 +7,7 @@ import { GAME, mapSize } from '@mule/engine';
 import type { Locator, Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import { check, launch, PHONE, startServer } from './harness';
+import { readyThroughTheElection } from './politics-steps';
 
 const PHASE_SCALE = 0.5;
 const within = (ms: number) => ms * PHASE_SCALE + 3_000;
@@ -46,7 +47,7 @@ try {
   for (let i = 1; i < SEATS; i++) await phone.getByRole('button', { name: 'Add AI player' }).click();
   await phone.locator('[data-testid=seats] li').nth(SEATS - 1).waitFor();
   await phone.getByRole('button', { name: 'Start game' }).click();
-  await phone.getByRole('button', { name: "I'm ready" }).click({ timeout: 5_000 });
+  await readyThroughTheElection(phone, 10_000);
 
   const grant = phone.locator('[data-phase=landGrant]');
   await grant.getByRole('button', { name: /CLAIM/ }).waitFor({ timeout: 5_000 });

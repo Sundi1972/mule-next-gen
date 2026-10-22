@@ -31,14 +31,14 @@ export interface MuleServer {
 /**
  * The game server: an HTTP server for the web client and `POST /rooms`, and a
  * WebSocket endpoint at `/ws` where phones and boards talk to their room.
- * Games play without politics unless `politics` is set: it stays dark until its screens ship.
+ * Games play politics unless `politics` is false.
  */
 export function createMuleServer(
   options: { staticDir?: string; seed?: () => number; maxMonths?: number; phaseScale?: number; politics?: boolean } = {},
 ): MuleServer {
   const seed = options.seed ?? (() => Math.floor(Math.random() * 2 ** 31));
   const registry = new RoomRegistry<MuleIntent, MuleView>({
-    createGame: (ctx) => new MuleGame(ctx, seed(), { maxMonths: options.maxMonths, phaseScale: options.phaseScale, politics: options.politics ?? false }),
+    createGame: (ctx) => new MuleGame(ctx, seed(), { maxMonths: options.maxMonths, phaseScale: options.phaseScale, politics: options.politics ?? true }),
     aiNames: AI_NAMES,
     emotes: EMOTES,
     picks: SPECIES,
