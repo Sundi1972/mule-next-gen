@@ -1,13 +1,14 @@
 import type { TableView } from '@mule/protocol';
 import { Button, COLOUR_NAME, Creature, cx, SLOT_COLOR, SPECIES, SPECIES_NAME, SPECIES_PERK, type Slot, type Species } from '@mule/ui';
-import { useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { joinUrl, Qr } from '../components/Qr';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { lobbySeatSpecies } from '../game/derive';
 import { createRoom } from '../net/client';
 import { useClient, useClientState } from '../net/react';
-import { codeState, HandoffCode } from './HandoffCode';
+import { useEscape } from './dialog';
+import { MoveToPhone } from './MoveToPhone';
 import { NowCard, WIDE_PX, type Now } from './Shell';
 
 function Header() {
@@ -461,15 +462,19 @@ function Dialog({
   onCancel: () => void;
 }) {
   const titleId = useId();
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onCancel]);
+  useEscape(onCancel);
   let body: ReactNode;
-  if (dialog === 'handoff') body = <Handoff titleId={titleId} name={me.name} host={host} code={code} onDone={onCancel} />;
+  if (dialog === 'handoff')
+    body = (
+      <MoveToPhone
+        titleId={titleId}
+        title={host ? 'Move the host to your phone' : 'Move to your phone'}
+        room={code}
+        who={host ? `${me.name}, the host` : me.name}
+        what=", with your colonist. This screen then steps aside. The code works once, for 2 minutes."
+        onDone={onCancel}
+      />
+    );
   else if (dialog === 'close')
     body = (
       <>
@@ -510,39 +515,5 @@ function Dialog({
     <div className="absolute inset-0 z-10 grid place-items-center bg-void/70 p-4" role="dialog" aria-modal aria-labelledby={titleId} data-testid="host-dialog">
       <div className="flex max-w-[560px] flex-col gap-3 rounded-sheet border-2 border-holo bg-panel p-4 shadow-glow @min-[1100px]/shell:max-w-[720px] @min-[1100px]/shell:gap-5 @min-[1100px]/shell:p-8">{body}</div>
     </div>
-  );
-}
-
-/**
- * The one-time link that moves this seat to another device. The code lives as long as this body: asked for when it
- * opens, forgotten however it goes (Done, Escape, or the lobby leaving).
- */
-function Handoff({ titleId, name, host, code, onDone }: { titleId: string; name: string; host: boolean; code: string; onDone: () => void }) {
-  const client = useClient();
-  const { handoffCode } = useClientState();
-  useEffect(() => {
-    client.handoff();
-    return () => client.closeHandoff();
-  }, [client]);
-  return (
-    <>
-      <h2 id={titleId} className="font-display text-xl font-semibold @min-[1100px]/shell:text-3xl">
-        {host ? 'Move the host to your phone' : 'Move to your phone'}
-      </h2>
-      <div className="flex items-center gap-4">
-        <HandoffCode url={handoffCode ? joinUrl(code, handoffCode.code) : ''} state={codeState(handoffCode)} onRenew={() => client.handoff()} />
-        <p className="text-sm text-ink-2 @min-[1100px]/shell:text-lg">
-          Scan this with your phone. It becomes{' '}
-          <strong className="text-ink">
-            you, {name}
-            {host ? ', the host' : ''}
-          </strong>
-          , with your colonist. This screen then steps aside. The code works once, for 2 minutes.
-        </p>
-      </div>
-      <Button size="md" variant="outline" autoFocus onClick={onDone}>
-        Done
-      </Button>
-    </>
   );
 }
