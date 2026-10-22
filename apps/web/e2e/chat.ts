@@ -4,7 +4,9 @@
  * page received is read off its wire and must show in that page's ticker, and as a bubble at its speaker when RULE-9
  * gives it one. Run with `pnpm --filter @mule/web e2e`.
  */
+import { LOTS, WALK } from '@mule/engine';
 import type { Page } from 'playwright';
+import { PHASE_MS } from '../../server/src/mule-game.js';
 import { check, launch, PHONE, startServer, TV } from './harness';
 
 const LAPTOP = { width: 1440, height: 900 };
@@ -24,7 +26,18 @@ const BURST_SETTLES_MS = 7_000;
 const BETWEEN_LINES_MS = 2_600;
 /** How long a bubble shows before the phase that ends it changes: long enough to be sampled showing, then gone. */
 const BUBBLE_SEEN_MS = 1_500;
-const PHASE_TIMEOUT_MS = 90_000;
+/** A wait of this long, plus room for the browser and the network. */
+const within = (ms: number) => ms + 5_000;
+/** The land auction, when the colony lists lots: each lot's intro, walk with its late resets, and result. */
+const LAND_AUCTION_MS = LOTS.maxLotsPerMonth * (LOTS.introMs + LOTS.walkMs + LOTS.lateCapMs + LOTS.resultMs);
+/** How long each phase this test waits for can take to come, from the server's phase lengths. */
+const REACH = {
+  planning: within(0),
+  landGrant: within(PHASE_MS.planning),
+  development: within(PHASE_MS.landGrant + LAND_AUCTION_MS),
+  auction: within(PHASE_MS.development + PHASE_MS.production),
+  walk: within(WALK.statusMs),
+};
 
 type Wire = { lines: { id: number; from: string; to?: string; text: string; at: number }[]; phases: { key: string; phase: string; at: number }[]; seatId: string | null };
 type Rect = { l: number; t: number; r: number; b: number };
@@ -87,7 +100,7 @@ try {
   await lena.getByRole('button', { name: 'Start game' }).click();
 
   const kaiId = wires.get(kai)!.seatId!;
-  const phase = (p: Page, name: string) => p.locator(`[data-phase=${name}]`).first().waitFor({ timeout: PHASE_TIMEOUT_MS });
+  const phase = (p: Page, name: keyof typeof REACH) => p.locator(`[data-phase=${name}]`).first().waitFor({ timeout: REACH[name] });
 
   // Planning: Kai says a line and, once every screen shows it, both press Ready, so the phase ends while its bubble
   // shows.
@@ -114,7 +127,7 @@ try {
 
   // The auction: two lines within a second while the TV draws the walk.
   await Promise.all([phase(lena, 'auction'), phase(kai, 'auction')]);
-  await tv.locator('[data-phase=auction] [data-testid=walk-board]').waitFor({ timeout: PHASE_TIMEOUT_MS });
+  await tv.locator('[data-phase=auction] [data-testid=walk-board]').waitFor({ timeout: REACH.walk });
   await burst(lena, kai, 'auction');
 
   const screens = [
@@ -195,7 +208,7 @@ async function burst(a: Page, b: Page, tag: string): Promise<void> {
 async function claimOne(p: Page): Promise<void> {
   const grant = p.locator('[data-phase=landGrant]');
   const claim = grant.getByRole('button', { name: /CLAIM/ });
-  const deadline = Date.now() + PHASE_TIMEOUT_MS;
+  const deadline = Date.now() + within(PHASE_MS.landGrant);
   while ((await grant.count()) > 0 && Date.now() < deadline) {
     try {
       await claim.click({ timeout: 1_000 });
