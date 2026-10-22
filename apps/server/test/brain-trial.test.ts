@@ -202,16 +202,17 @@ describe('brain:trial', () => {
   );
 
   it(
-    'UBER-AC-2, INV-spike-cap: a game starts only while counted spend plus its Smart seats\' budgets fits the cap; the default cap and one below a game play none and write no ledger, a cap of exactly one game plays one',
+    'UBER-AC-2, INV-trial-cap: a keyed run without --max-usd is refused before any claim or call; a game starts only while counted spend plus its Smart seats\' budgets fits the cap, so a cap below one game plays none and writes no ledger, and a cap of exactly one game plays one',
     async () => {
       let calls = 0;
       sdk.create = () => (calls++, Promise.resolve(sdkMessage(USABLE, BILLED)));
 
-      const byDefault = run(['--games', '2']);
-      const none = await byDefault.result;
-      expect(none.code).toBe(0);
-      expect(byDefault.out[0]).toMatch(new RegExp(`cap \\$${BRAIN.spikeCapUsd.toFixed(2)}, planned 2 games`));
-      expect(none.report).toMatchObject({ played: 0, stopped: 'cap' });
+      const uncapped = run(['--games', '2']);
+      const refused = await uncapped.result;
+      expect(refused).toEqual({ code: 1, report: null });
+      expect(uncapped.out).toEqual(['brain:trial spends real money with ANTHROPIC_API_KEY set: give --max-usd, the cap that was cleared; nothing called.']);
+      expect(fs.readdirSync(dir)).toEqual([]);
+      expect(sdk.built).toEqual([]);
 
       const justBelowTwoSeats = await run(['--games', '2', '--smart', '2', '--max-usd', String(2 * BRAIN.seatBudgetUsd - 0.001)]).result;
       expect(justBelowTwoSeats.report).toMatchObject({ played: 0, stopped: 'cap' });
@@ -240,7 +241,7 @@ describe('brain:trial', () => {
     GAMES_MS,
   );
 
-  it("INV-spike-cap: a second paid run on the same UTC day is refused with exit 1 and one line naming today's ledger, before any client is built", async () => {
+  it("INV-trial-cap: a second paid run on the same UTC day is refused with exit 1 and one line naming today's ledger, before any client is built", async () => {
     fs.writeFileSync(file, '');
     let calls = 0;
     sdk.create = () => (calls++, Promise.resolve(sdkMessage(USABLE, BILLED)));
@@ -376,11 +377,13 @@ describe('brain:trial', () => {
         calls++;
         return new Promise((resolve) => setImmediate(() => resolve(sdkMessage(USABLE, BILLED))));
       };
-      const { result } = run(['--games', '1', '--max-usd', '1']);
+      const { out, result } = run(['--games', '1', '--max-usd', '1']);
       const { report } = await result;
       expect(calls).toBeGreaterThan(20);
       expect(report!.asked.all).toEqual({ model: calls, of: calls });
       expect(sum(Object.values(report!.fallbacks))).toBe(0);
+      expect(out).toContainEqual(expect.stringMatching(/^UBER-AC-1 PASS\b/));
+      expect(out).toContainEqual(expect.stringMatching(/^UBER-AC-2 PASS\b/));
     },
     GAMES_MS,
   );
@@ -483,6 +486,10 @@ describe('brain:trial', () => {
     for (const end of ['crashed', 'unfinished'] as const) {
       expect(verdicts(input({ planned: 2, games: [game(), game({ id: 'b', end, lines: { ai0: [0] } })] })), end).toEqual(['not proven', 'fail']);
     }
+    // The model share is measured over games played to their end only.
+    const partial = trialReport(input({ planned: 2, games: [game(), game({ id: 'b', end: 'crashed', decisions: decisions(0, 5) })] }));
+    expect(partial.asked.all).toEqual({ model: 4, of: 5 });
+    expect(partial.fallbacks['too slow']).toBe(1);
     // No Smart seat-game played, nothing measured.
     expect(verdicts(input({ games: [game({ smart: [] })] }))[1]).toBe('not proven');
     // RULE-2 counts template lines too, so a seat-month with only template lines is not silent.
