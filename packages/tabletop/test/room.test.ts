@@ -697,6 +697,25 @@ describe('Room: a one-time code moves a seat to another device (RULE-6, AM-16)',
         return code;
       },
     },
+    {
+      row: 'a code for a seat that left in the lobby',
+      holder: null,
+      setup: (ctx: Ctx) => {
+        const code = handoff(ctx.room, ctx.mia);
+        leave(ctx.room, ctx.mia);
+        return code;
+      },
+    },
+    {
+      // Mia here holds a live code of her own, so the row fails if a room takes any live code rather than its own.
+      row: 'a code from another room',
+      holder: 'mia',
+      setup: (ctx: Ctx) => {
+        handoff(ctx.room, ctx.mia);
+        const other = clockLobby();
+        return handoff(other.room, other.mia);
+      },
+    },
   ] as const)('T-AC-11: RULE-6 join row 1 — $row is refused "That link has expired" and changes nothing', async ({ setup, holder }) => {
     const ctx: Ctx = { ...clockLobby(), phone: null };
     const code = setup(ctx);
