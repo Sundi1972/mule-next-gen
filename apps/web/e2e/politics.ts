@@ -1,10 +1,10 @@
 /**
- * B-AC-1 and UBER-AC-2: two phones and an AI seat play month 1's election on the default server, with the TV,
- * the AI seat running and voting through its own hand,
+ * B-AC-1, B-AC-6 and UBER-AC-2: two phones and an AI seat play month 1's election on the default server, with the TV,
+ * the AI seat running and voting through its own hand, each human Governor candidate on a tax promise,
  * through to the first sale at the auction. Run with `pnpm --filter @mule/web e2e`; replay with `MULE_E2E_SEED=<seed>`.
  */
-import { GAME, POLITICS, storeQuotes, WALK, type GameState, type Good } from '@mule/engine';
-import type { MuleView } from '@mule/protocol';
+import { GAME, POLITICS, storeQuotes, WALK, type GameState, type Good, type TaxPromise } from '@mule/engine';
+import type { MuleIntent, MuleView } from '@mule/protocol';
 import { errors as playwrightErrors, type Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
@@ -16,8 +16,10 @@ const SCALE = 0.25;
 const NEW_TAX = 8;
 /** How often the reveal is read on all three screens at once. */
 const TICK_MS = 50;
+/** B-AC-6: Lena's promise, stepped up from today's tax. */
+const LENA_CAP = 8;
 
-type Phone = { page: Page; name: string };
+type Phone = { page: Page; name: string; runs: MuleIntent[] };
 
 const within = (ms: number) => ms * SCALE + 3_000;
 
@@ -33,13 +35,25 @@ async function main(): Promise<void> {
       await page.goto(base);
       return page;
     };
-    const lena: Phone = { page: await open('Lena'), name: 'Lena' };
+    /** A phone, and every run intent it sends, read off its socket. */
+    const phone = async (name: string): Promise<Phone> => {
+      const page = await open(name);
+      const runs: MuleIntent[] = [];
+      page.on('websocket', (ws) =>
+        ws.on('framesent', ({ payload }) => {
+          const msg = typeof payload === 'string' ? (JSON.parse(payload) as { t?: string; intent?: MuleIntent }) : null;
+          if (msg?.t === 'intent' && msg.intent?.type === 'run') runs.push(msg.intent);
+        }),
+      );
+      return { page, name, runs };
+    };
+    const lena = await phone('Lena');
     await lena.page.getByPlaceholder('Heiko').fill(lena.name);
     await lena.page.getByRole('button', { name: 'Start a new game' }).click();
     await lena.page.getByText("You're at the table").waitFor();
     const code = (await lena.page.getByTestId('room-code').textContent())?.trim() ?? '';
     check(/^[A-Z]{4}$/.test(code), `room code, got "${code}"`);
-    const ossa: Phone = { page: await open('Ossa'), name: 'Ossa' };
+    const ossa = await phone('Ossa');
     await ossa.page.goto(`${base}/?room=${code}`);
     await ossa.page.getByPlaceholder('Heiko').fill(ossa.name);
     await ossa.page.getByRole('button', { name: `Join game ${code}` }).click();
@@ -54,24 +68,68 @@ async function main(): Promise<void> {
     const truth = serverTruth(server, code);
     const phones = [lena, ossa];
 
-    // B-AC-1: in month 1 both humans run for Governor through the Election day door.
-    await everyone(phones, async (p) => {
-      const planning = p.page.locator('[data-phase=planning]');
-      await planning.getByTestId('agenda-election').click({ timeout: 5_000 });
-      await planning.getByTestId('run-governor').click({ timeout: PRESS_MS });
-    });
+    // B-AC-1, B-AC-6: in month 1 both humans run for Governor through the Election day door, each on a promise.
     const [lenaId, ossaId] = [truth.idOf(lena), truth.idOf(ossa)];
+    const taxNow = truth.board().politics!.tax.percent;
+    check(taxNow < LENA_CAP, `B-AC-6: today's tax ${taxNow}% is under Lena's ${LENA_CAP}%, so she steps the cap up`);
+    await everyone(phones, (p) => p.page.locator('[data-phase=planning]').getByTestId('agenda-election').click({ timeout: 5_000 }));
+    await Promise.all([
+      (async () => {
+        // The cap starts at today's tax; plus steps it to her cap, and Run's label waits for it.
+        await lena.page.getByTestId('run-governor').click({ timeout: PRESS_MS });
+        check((await lena.page.getByTestId('promise-cap-value').innerText({ timeout: PRESS_MS })).trim() === `${taxNow}%`, `B-AC-6: the cap starts at today's ${taxNow}%`);
+        for (let n = taxNow; n < LENA_CAP; n++) await lena.page.getByTestId('promise-cap-plus').click({ timeout: PRESS_MS });
+        await lena.page.getByTestId('promise-run').filter({ hasText: `Run, promising “Tax no higher than ${LENA_CAP}%”` }).click({ timeout: PRESS_MS });
+      })(),
+      (async () => {
+        // A Sheriff run is one tap and carries no promise.
+        await ossa.page.getByTestId('run-sheriff').click({ timeout: PRESS_MS });
+        await ossa.page.getByTestId('running').filter({ hasText: 'You run for Sheriff;' }).waitFor({ timeout: PRESS_MS });
+        check(JSON.stringify(ossa.runs) === JSON.stringify([{ type: 'run', office: 'sheriff' }]), `B-AC-6 (negative): a Sheriff run sends no promise, got ${JSON.stringify(ossa.runs)}`);
+        // A first look at the picker, then Cancel: nothing is sent.
+        await ossa.page.getByTestId('run-governor').click({ timeout: PRESS_MS });
+        const pick = ossa.page.getByTestId('promise-pick');
+        await pick.waitFor({ timeout: PRESS_MS });
+        check(await ossa.page.getByTestId('promise-run').isDisabled(), 'B-AC-6: "Run" waits until a promise is chosen');
+        await ossa.page.getByTestId('promise-cancel').click({ timeout: PRESS_MS });
+        await pick.waitFor({ state: 'hidden', timeout: PRESS_MS });
+        check(ossa.runs.length === 1, `B-AC-6: Cancel sends nothing, got ${JSON.stringify(ossa.runs)}`);
+        // Then she runs for Governor instead, holding the tax.
+        await ossa.page.getByTestId('run-governor').click({ timeout: PRESS_MS });
+        await ossa.page.getByTestId('promise-hold').click({ timeout: PRESS_MS });
+        await ossa.page.getByTestId('promise-run').filter({ hasText: 'Run, promising “Hold the tax”' }).click({ timeout: PRESS_MS });
+      })(),
+    ]);
+    const LENA_PROMISE: TaxPromise = { kind: 'cap', percent: LENA_CAP };
+    const OSSA_PROMISE: TaxPromise = { kind: 'hold' };
+    check(JSON.stringify(lena.runs) === JSON.stringify([{ type: 'run', office: 'governor', promise: LENA_PROMISE }]), `B-AC-6: Lena's phone sends exactly one Governor run with her promise, got ${JSON.stringify(lena.runs)}`);
+    check(JSON.stringify(ossa.runs.slice(1)) === JSON.stringify([{ type: 'run', office: 'governor', promise: OSSA_PROMISE }]), `B-AC-6: Ossa's phone then sends one Governor run with her promise, got ${JSON.stringify(ossa.runs)}`);
+    await lena.page.getByTestId('running').filter({ hasText: `You run for Governor, promising “Tax no higher than ${LENA_CAP}%”` }).waitFor({ timeout: PRESS_MS });
+    await ossa.page.getByTestId('running').filter({ hasText: 'You run for Governor, promising “Hold the tax”' }).waitFor({ timeout: PRESS_MS });
     await everyone(phones, (p) => p.page.getByTestId('candidates').filter({ hasText: lena.name }).filter({ hasText: ossa.name }).waitFor({ timeout: PRESS_MS }));
     const running = truth.board().politics!.election!.candidates.governor;
     const aiIds = truth.board().players.filter((p) => p.isAi).map((p) => p.id);
     check(running.includes(lenaId) && running.includes(ossaId) && running.every((id) => id === lenaId || id === ossaId || aiIds.includes(id)), `B-AC-1: the server has both humans running for Governor, and nobody else but the AI seat, got ${running.join(', ')}`);
+    const promises = () => truth.state().politics!.election!.promises;
+    check(JSON.stringify(promises()[lenaId]) === JSON.stringify(LENA_PROMISE) && JSON.stringify(promises()[ossaId]) === JSON.stringify(OSSA_PROMISE), `B-AC-6: the server holds Lena's and Ossa's promises, got ${JSON.stringify(promises())}`);
 
     // Done with nominate on both phones; the AI seat runs and votes through its own hand. Both humans vote for Lena.
     await everyone(phones, (p) => p.page.getByTestId('ready').click({ timeout: PRESS_MS }));
     await everyone(phones, async (p) => {
       const ballot = p.page.locator('[data-phase=planning]').getByTestId('election');
-      await ballot.getByRole('radio', { name: lena.name, exact: true }).check({ timeout: within(POLITICS.nominateMs) });
+      // Her row is named for her, then her promise.
+      await ballot.getByRole('radio', { name: new RegExp(`^${lena.name}\\b`) }).check({ timeout: within(POLITICS.nominateMs) });
     });
+    // B-AC-6: every phone's ballot quotes each Governor candidate's promise, the AI seat's too if it runs; no Sheriff candidate has one.
+    const { governor: govs, sheriff: sheriffs } = truth.state().politics!.election!.candidates;
+    await everyone(phones, async (p) => {
+      for (const id of govs) {
+        const line = (await p.page.getByTestId(`promise-${id}`).innerText({ timeout: PRESS_MS })).trim();
+        check(line === `“${said(promises()[id]!)}”`, `B-AC-6: ${p.name}'s ballot quotes ${id}'s promise "${said(promises()[id]!)}", got "${line}"`);
+      }
+      for (const id of sheriffs) check((await p.page.getByTestId(`promise-${id}`).count()) === 0, `B-AC-6 (negative): ${p.name}'s ballot has no promise line for Sheriff candidate ${id}`);
+    });
+    console.log(`✓ B-AC-6: both phones' ballots quote ${govs.map((id) => `"${said(promises()[id]!)}"`).join(', ')} under the Governor candidates; ${sheriffs.length} Sheriff candidate(s), no promise line`);
     const ballots = () => truth.state().politics!.election!.ballots;
     await untilServer(lena.page, () => (ballots()[lenaId]?.governor === lenaId && ballots()[ossaId]?.governor === lenaId) || null, 'B-AC-1: the server holds both humans\' ballots for Lena');
     // The AI seat may vote before or after the humans, so a phone shows 2 or 3 of 3.
@@ -98,6 +156,11 @@ async function main(): Promise<void> {
       const name = p === lena ? 'You' : lena.name;
       check(row && row[1] === name && Number(row[2]) === elected[0]!.votes, `B-AC-1: ${p.name}'s phone names ${name} Governor with ${elected[0]!.votes} votes, as the TV does, in the same tick: "${text}"`);
     }
+    // B-AC-6: the TV's result quotes Lena's promise under her name; a Sheriff row quotes nothing.
+    const lenaRow = reveal.tv.find((r) => r.id === lenaId)!;
+    check(lenaRow.text.includes(`${lena.name}“Tax no higher than ${LENA_CAP}%”`), `B-AC-6: the TV's result row for Lena quotes her promise, got "${lenaRow.text}"`);
+    check(reveal.sheriff.length > 0 && reveal.sheriff.every((t) => !/[“”]/.test(t)), `B-AC-6 (negative): no Sheriff result row on the TV quotes a promise, got ${JSON.stringify(reveal.sheriff)}`);
+    console.log(`✓ B-AC-6: the TV's result shows "${lenaRow.text}"; the Sheriff row(s) carry no promise`);
     console.log(`✓ B-AC-1: both humans run, vote, and see the same result at the same moment: countdown, then Lena Governor with ${expectedVotes} votes on the TV and both phones, first seen at ticks ${reveal.firstTicks.join(', ')}`);
 
     // The winner's phone opens the tax desk; the other phone has no Governor's desk.
@@ -174,20 +237,27 @@ main().then(
   },
 );
 
-type TvRow = { id: string; votes: number; elected: boolean };
+type TvRow = { id: string; votes: number; elected: boolean; text: string };
+
+/** RULE-10's words for a promise, as every screen quotes it. */
+function said(p: TaxPromise): string {
+  return p.kind === 'cap' ? `Tax no higher than ${p.percent}%` : p.kind === 'lower' ? 'Lower the tax' : 'Hold the tax';
+}
 
 /**
  * Reads the TV's reveal and both phones' result card in one tick, every TICK_MS, until all three show it.
  * Returns the tick each was first seen at, how far apart those are, and what each showed in the last tick.
  */
-async function readTheReveal(tv: Page, a: Page, b: Page, timeout: number): Promise<{ firstTicks: number[]; spread: number; tv: TvRow[]; lena: string; ossa: string }> {
+async function readTheReveal(tv: Page, a: Page, b: Page, timeout: number): Promise<{ firstTicks: number[]; spread: number; tv: TvRow[]; sheriff: string[]; lena: string; ossa: string }> {
   const readTv = () => ({
     shown: !!document.querySelector('[data-testid=ballot-reveal]'),
     rows: [...document.querySelectorAll<HTMLElement>('[data-testid^="result-governor-"]')].map((el) => ({
       id: el.dataset.testid!.slice('result-governor-'.length),
       votes: Number(el.querySelector('[data-num]')?.textContent),
       elected: (el.textContent ?? '').includes('ELECTED'),
+      text: el.textContent ?? '',
     })),
+    sheriff: [...document.querySelectorAll<HTMLElement>('[data-testid^="result-sheriff-"]')].map((el) => el.textContent ?? ''),
   });
   const readPhone = () => {
     const card = document.querySelector<HTMLElement>('[data-testid=phone-election-result]');
@@ -202,7 +272,7 @@ async function readTheReveal(tv: Page, a: Page, b: Page, timeout: number): Promi
     });
     if (t.shown && x.shown && y.shown) {
       const ticks = first as number[];
-      return { firstTicks: ticks, spread: Math.max(...ticks) - Math.min(...ticks), tv: t.rows, lena: x.text, ossa: y.text };
+      return { firstTicks: ticks, spread: Math.max(...ticks) - Math.min(...ticks), tv: t.rows, sheriff: t.sheriff, lena: x.text, ossa: y.text };
     }
     check(Date.now() < deadline, `B-AC-1: the result shows on every screen; seen on TV ${t.shown}, Lena ${x.shown}, Ossa ${y.shown}`);
     await new Promise((r) => setTimeout(r, TICK_MS));

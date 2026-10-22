@@ -1,12 +1,12 @@
-import { POLITICS, type Office } from '@mule/engine';
+import { POLITICS, type Office, type TaxPromise } from '@mule/engine';
 import type { ElectionView, MyPoliticsView } from '@mule/protocol';
 import { Button, Creature, cx, SLOT_COLOR } from '@mule/ui';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { slotOf } from '../../../game/derive';
 import { useClient } from '../../../net/react';
 import { usePhoneGame } from '../../game';
 import { Section, Who } from './parts';
-import { clock, howWon, OFFICE_NAME, OFFICES, revealCountdown, termEnd, whyNot } from './words';
+import { clock, howWon, OFFICE_NAME, OFFICES, promiseText, revealCountdown, termEnd, whyNot } from './words';
 
 /** Council: this month's election, then everyone's votes. */
 export function CouncilDesk() {
@@ -31,7 +31,9 @@ const STAGES: Record<ElectionView['stage'], string> = {
 function Election({ election, mine }: { election: ElectionView; mine: MyPoliticsView }) {
   const { view, me } = usePhoneGame();
   const client = useClient();
+  const [picking, setPicking] = useState(false);
   const nominate = election.stage === 'nominate';
+  const promise = election.promises[me.id];
   const votes = view.politics!.weights.find((w) => w.id === me.id)?.votes ?? 0;
   return (
     <Section title={nominate ? 'Election · who runs' : 'Election · secret ballot'} testid="election">
@@ -42,19 +44,38 @@ function Election({ election, mine }: { election: ElectionView; mine: MyPolitics
       {nominate ? (
         <>
           <div className="grid grid-cols-2 gap-1.5" data-testid="run">
+            {/* Governor asks for a promise first; Sheriff stays one tap. */}
             {OFFICES.map((office) => {
               const can = mine.canRun[office];
               const label = mine.running && mine.running !== office ? `Run for ${OFFICE_NAME[office]} instead` : `Run for ${OFFICE_NAME[office]}`;
               return (
-                <Button key={office} size="md" variant={mine.running === office ? 'holo' : 'outline'} disabled={can !== true} onClick={() => client.intent({ type: 'run', office })} data-testid={`run-${office}`}>
+                <Button
+                  key={office}
+                  size="md"
+                  variant={mine.running === office ? 'holo' : 'outline'}
+                  disabled={can !== true}
+                  onClick={() => (office === 'governor' ? setPicking(true) : (client.intent({ type: 'run', office }), setPicking(false)))}
+                  data-testid={`run-${office}`}
+                >
                   {can === true ? label : <span data-testid="cannot-run">{whyNot(can)}</span>}
                 </Button>
               );
             })}
           </div>
-          {mine.running && (
-            <span className="flex items-center justify-between gap-2 text-xs text-ink-2 @min-[1100px]/shell:text-sm">
-              You run for {OFFICE_NAME[mine.running]}; one office at a time.
+          {picking && (
+            <PromisePicker
+              onRun={(p) => {
+                client.intent({ type: 'run', office: 'governor', promise: p });
+                setPicking(false);
+              }}
+              onCancel={() => setPicking(false)}
+            />
+          )}
+          {mine.running && !picking && (
+            <span className="flex items-center justify-between gap-2 text-xs text-ink-2 @min-[1100px]/shell:text-sm" data-testid="running">
+              {mine.running === 'governor' && promise
+                ? `You run for Governor, promising “${promiseText(promise)}”; one office at a time.`
+                : `You run for ${OFFICE_NAME[mine.running]}; one office at a time.`}
               <button type="button" className="text-holo underline" onClick={() => client.intent({ type: 'run', office: null })} data-testid="withdraw">
                 Withdraw
               </button>
@@ -81,7 +102,14 @@ function Election({ election, mine }: { election: ElectionView; mine: MyPolitics
         <>
           {election.stage === 'ballot' &&
             OFFICES.filter((office) => election.candidates[office].length >= 2).map((office) => (
-              <Ballot key={office} office={office} cands={election.candidates[office]} pick={mine.ballot[office] ?? null} onPick={(candidate) => client.intent({ type: 'vote', office, candidate })} />
+              <Ballot
+                key={office}
+                office={office}
+                cands={election.candidates[office]}
+                promises={office === 'governor' ? election.promises : {}}
+                pick={mine.ballot[office] ?? null}
+                onPick={(candidate) => client.intent({ type: 'vote', office, candidate })}
+              />
             ))}
           <span className="flex flex-wrap items-center gap-1.5 text-xs text-ink-2 @min-[1100px]/shell:text-sm" data-testid="voted">
             Voted: {election.voted.map((id) => <Who key={id} view={view} id={id} size={14} />)} · {election.voted.length} of {view.players.length}. Never shown: for whom.
@@ -98,7 +126,7 @@ function Election({ election, mine }: { election: ElectionView; mine: MyPolitics
 }
 
 /** One office's secret ballot: a candidate, or abstain. Shows the pick at once; the server keeps the ballot. */
-function Ballot({ office, cands, pick: sent, onPick }: { office: Office; cands: string[]; pick: string | null; onPick: (id: string | null) => void }) {
+function Ballot({ office, cands, promises, pick: sent, onPick }: { office: Office; cands: string[]; promises: Record<string, TaxPromise>; pick: string | null; onPick: (id: string | null) => void }) {
   const { view } = usePhoneGame();
   const [pick, setPick] = useState(sent ?? '');
   const title = OFFICE_NAME[office];
@@ -120,6 +148,12 @@ function Ballot({ office, cands, pick: sent, onPick }: { office: Office; cands: 
           {id ? (
             <span className="flex flex-col">
               <Who view={view} id={id} />
+              {/* A Sheriff makes no promise yet (slice 4): no line, not an empty quote. */}
+              {promises[id] && (
+                <span className="text-xs text-ink-2" data-testid={`promise-${id}`}>
+                  “{promiseText(promises[id])}”
+                </span>
+              )}
             </span>
           ) : (
             <span className="text-ink-2">Abstain</span>
@@ -127,6 +161,70 @@ function Ballot({ office, cands, pick: sent, onPick }: { office: Office; cands: 
         </label>
       ))}
     </fieldset>
+  );
+}
+
+const TAX = POLITICS.tax;
+
+/**
+ * Running for Governor asks for a promise first: one of three, no free text. The cap starts at today's tax; "Lower"
+ * can't be promised at the lowest tax. Nothing is sent until "Run, promising …".
+ */
+export function PromisePicker({ onRun, onCancel }: { onRun: (p: TaxPromise) => void; onCancel: () => void }) {
+  const { view } = usePhoneGame();
+  const taxNow = view.politics!.tax.percent;
+  const [kind, setKind] = useState<TaxPromise['kind'] | null>(null);
+  const [n, setN] = useState(taxNow);
+  const chosen: TaxPromise | null = kind === 'cap' ? { kind, percent: n } : kind ? { kind } : null;
+  const chip = (k: TaxPromise['kind'], label: ReactNode, testid: string, disabled?: string) => (
+    <label
+      className={cx(
+        'flex min-h-11 cursor-pointer items-center gap-2 rounded-control border px-2 py-1 text-sm',
+        kind === k ? 'border-holo bg-holo-soft' : 'border-holo-line',
+        disabled && 'cursor-not-allowed opacity-50',
+      )}
+      data-testid={testid}
+    >
+      <input type="radio" name="promise" checked={kind === k} disabled={!!disabled} onChange={() => setKind(k)} className="accent-[var(--color-holo)]" />
+      <span className="flex min-w-0 flex-1 flex-col">
+        {label}
+        {disabled && <span className="text-[11px] text-ink-3">{disabled}</span>}
+      </span>
+    </label>
+  );
+  return (
+    <div className="flex flex-col gap-1.5 rounded-panel border border-holo bg-panel p-2" role="radiogroup" aria-label="Your promise as Governor" data-testid="promise-pick">
+      <span className="text-sm font-semibold">Your promise as Governor</span>
+      <span className="text-xs text-ink-2">Everyone sees it on the ballot and the TV. Tax today: {taxNow}%.</span>
+      {chip(
+        'cap',
+        <span className="flex flex-wrap items-center gap-1.5">
+          Tax no higher than
+          <span className="inline-flex items-center rounded-control border border-holo-line" onClick={() => setKind('cap')}>
+            <button type="button" aria-label="Lower the cap" disabled={n <= TAX.min} onClick={() => setN((x) => Math.max(TAX.min, x - 1))} className="grid size-9 place-items-center text-holo disabled:opacity-40" data-testid="promise-cap-minus">
+              −
+            </button>
+            <span data-num className="w-9 text-center font-mono font-bold" data-testid="promise-cap-value">
+              {n}%
+            </span>
+            <button type="button" aria-label="Raise the cap" disabled={n >= TAX.max} onClick={() => setN((x) => Math.min(TAX.max, x + 1))} className="grid size-9 place-items-center text-holo disabled:opacity-40" data-testid="promise-cap-plus">
+              +
+            </button>
+          </span>
+        </span>,
+        'promise-cap',
+      )}
+      {chip('lower', 'Lower the tax', 'promise-lower', taxNow <= TAX.min ? `The tax is already ${TAX.min} %.` : undefined)}
+      {chip('hold', 'Hold the tax', 'promise-hold')}
+      <div className="grid grid-cols-[1fr_auto] gap-1.5">
+        <Button size="md" disabled={!chosen} onClick={() => chosen && onRun(chosen)} data-testid="promise-run">
+          {chosen ? `Run, promising “${promiseText(chosen)}”` : 'Pick a promise to run'}
+        </Button>
+        <Button size="md" variant="ghost" onClick={onCancel} data-testid="promise-cancel">
+          Cancel
+        </Button>
+      </div>
+    </div>
   );
 }
 
