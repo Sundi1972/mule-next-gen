@@ -3,11 +3,12 @@ import os from 'node:os';
 import path from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { advancePhase, BRAIN, createGame, GAME, type GameState } from '@mule/engine';
-import type { DecisionKind } from '@mule/ai';
-import { cutOffPhase, renderTrialReport, trialReport, type TrialGame, type TrialInput } from '../src/brain/trial-report.js';
+import { advancePhase, AI_LEVELS, AI_PERSONAS, BRAIN, createGame, GAME, observe, type GameState } from '@mule/engine';
+import { Brain, candidate, consider, parseReply, PERSONAS, ReplyRejected, shortlist, toOptions, WAIT_MS, type Choice, type DecisionKind, type Mind } from '@mule/ai';
+import { createHaikuComplete } from '../src/brain/client.js';
+import { cutOffPhase, fallbackReason, renderTrialReport, trialReport, type TrialGame, type TrialInput } from '../src/brain/trial-report.js';
 import { trial } from '../src/brain/trial.js';
-import { KEY, promptOf, readLedger, sdkMessage, worstUsdOf, type SdkModuleFake, type SdkParams } from './brain-fakes.js';
+import { fakeSdk, KEY, promptOf, readLedger, sdkMessage, worstUsdOf, type SdkModuleFake, type SdkParams } from './brain-fakes.js';
 
 /** The SDK module's client: records its options and answers through `sdk.create`; it never reaches the network. */
 const sdk = vi.hoisted((): SdkModuleFake => ({ built: [], create: null }));
@@ -318,13 +319,18 @@ describe('brain:trial', () => {
   );
 
   it(
-    'FM-ledger-write: when the ledger file has fewer call lines than the calls that settled, the run stops after that game with exit 1 and says so',
+    'FM-ledger-write: when the ledger file is missing even one call line, here a rejected reply\'s, the run stops after that game with exit 1 and says so',
     async () => {
       const error = vi.spyOn(console, 'error').mockImplementation(() => {});
       let calls = 0;
       sdk.create = () => {
-        // The trial claimed the file before this first call; from here on every append fails.
-        if (calls++ === 0) fs.chmodSync(file, 0o444);
+        calls++;
+        // Only the first call's line is lost: the file is read-only while that unreadable reply settles.
+        if (calls === 1) {
+          fs.chmodSync(file, 0o444);
+          return Promise.resolve(sdkMessage('not json at all', BILLED));
+        }
+        if (calls === 2) fs.chmodSync(file, 0o644);
         return Promise.resolve(sdkMessage(USABLE, BILLED));
       };
       const { out, result } = run(['--games', '2', '--smart', '1', '--max-usd', '1']);
@@ -332,7 +338,32 @@ describe('brain:trial', () => {
       expect(code).toBe(1);
       expect(report).toMatchObject({ played: 1, stopped: 'ledger' });
       expect(error).toHaveBeenCalled();
-      expect(out.at(-1)).toMatch(new RegExp(`^Stopped: the ledger .*trial-2026-10-22\\.jsonl has 0 of ${calls} call lines for game trial-2026-10-22-101-0; a write failed, so spend cannot be checked\\.$`));
+      expect(calls).toBeGreaterThan(2);
+      const written = callLines();
+      expect(written).toHaveLength(calls - 1);
+      expect(written.map((l) => l.outcome)).not.toContain('unreadable');
+      expect(out.at(-1)).toMatch(
+        new RegExp(`^Stopped: the ledger .*trial-2026-10-22\\.jsonl has ${calls - 1} of ${calls} call lines for game trial-2026-10-22-101-0; a write failed, so spend cannot be checked\\.$`),
+      );
+    },
+    GAMES_MS,
+  );
+
+  it(
+    'FM-ledger-write: a seat locked by its budget writes one budget line and then decides without calling, and the run is not stopped by the ledger check',
+    async () => {
+      // One reply bills the seat's whole budget, so its next decision is refused before calling.
+      const wholeBudget = Math.round((BRAIN.seatBudgetUsd * 1_000_000) / BRAIN.pricesPerMTok.input);
+      let calls = 0;
+      sdk.create = () => (calls++, Promise.resolve(sdkMessage(USABLE, { input: wholeBudget })));
+      const { out, result } = run(['--games', '1', '--smart', '1', '--max-usd', '1']);
+      const { code, report } = await result;
+      expect(calls).toBe(1);
+      expect(callLines().map((l) => l.outcome)).toEqual(['llm', 'budget']);
+      expect(report!.fallbacks.budget).toBeGreaterThan(1); // refused again after the lock, still with no call
+      expect(report).toMatchObject({ played: 1, stopped: 'done' });
+      expect(code).toBe(0);
+      expect(out.join('\n')).not.toMatch(/^Stopped:/m);
     },
     GAMES_MS,
   );
@@ -353,6 +384,51 @@ describe('brain:trial', () => {
     },
     GAMES_MS,
   );
+
+  it('UBER-AC-1: every note Brain writes for a fallback is counted under its own reason', async () => {
+    const mind: Mind = { me: 'ai0', personaId: 'trader', persona: AI_PERSONAS.trader, levelId: 'rookie', level: AI_LEVELS.rookie };
+    const obs = observe(createGame({ seed: 7, players: [0, 1].map((i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) }), 'ai0');
+    const list = () => shortlist(['a', 'b', 'c'].map((a, i) => candidate(a, `Option ${a}`, a, 10, [consider('fit', 0.9 - i * 0.05, 1, 'fits')])), 3, 0.5);
+    /** The note a real Brain writes when its decider answers with `decide`, settled after `waitedMs`. */
+    const noteOf = async (decide: () => Choice | Promise<Choice>, waitedMs = 0) => {
+      let note: string | undefined;
+      const brain = new Brain(mind, PERSONAS.trader, 'AI 1', 11, { name: 'llm', decide }, (r) => (note = r.note));
+      const pending = brain.ask('develop', list(), obs, WAIT_MS.develop, null, 'summary');
+      for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+      brain.resolve(pending, waitedMs, obs);
+      return note;
+    };
+    const rejecting = (err: unknown) => () => Promise.reject(err);
+    const rejectedReply = (text: string) => {
+      const parsed = parseReply(text, toOptions(list()));
+      if (parsed.ok) throw new Error('expected a rejected reply');
+      return new ReplyRejected(parsed.reason, parsed.outcome);
+    };
+    // The client's own failures, from a fake SDK under the real client.
+    const clientFailure = (answer: (signal?: AbortSignal) => Promise<never>, waitMs: number) =>
+      createHaikuComplete(fakeSdk((_n, _params, options) => answer(options.signal)))({ system: 's', user: 'u', schema: { type: 'object' } as never }, waitMs).catch((e: unknown) => e);
+    const timedOut = await clientFailure((signal) => new Promise((_, reject) => signal?.addEventListener('abort', () => reject(new Anthropic.APIUserAbortError()))), 5);
+    const status500 = await clientFailure(
+      () => Promise.reject(Anthropic.APIError.generate(500, { type: 'error', error: { type: 'api_error', message: 'x' } }, 'x', new Headers())),
+      1_000,
+    );
+
+    const cases: Array<[string | undefined, string]> = [
+      [await noteOf(() => new Promise(() => {}), WAIT_MS.develop), 'too slow'],
+      [await noteOf(rejecting(timedOut)), 'too slow'],
+      [await noteOf(rejecting(new Error('busy'))), 'busy'],
+      [await noteOf(rejecting(new Error('budget spent'))), 'budget'],
+      [await noteOf(rejecting(rejectedReply('{"option":"F","line":"x"}'))), 'off-list'],
+      [await noteOf(() => ({ optionId: 'F', line: null, by: 'llm' })), 'off-list'],
+      [await noteOf(rejecting(rejectedReply('not json at all'))), 'unreadable'],
+      [await noteOf(rejecting(status500)), 'error'],
+      [await noteOf(rejecting(new Error('game over'))), 'error'],
+    ];
+    for (const [note, reason] of cases) {
+      expect(note, reason).toBeDefined();
+      expect(fallbackReason(note), note).toBe(reason);
+    }
+  });
 
   it('UBER-AC-2: a land grant, auction or land auction still open when its phase ends was cut off by its tick limit', () => {
     const grant = createGame({ seed: 7, players: [0, 1].map((i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
