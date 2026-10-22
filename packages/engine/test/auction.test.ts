@@ -5,6 +5,8 @@ import {
   createGame,
   declareRole,
   endAuction,
+  monthlyDemand,
+  PRICE,
   RuleError,
   setWalk,
   startAuction,
@@ -74,7 +76,8 @@ describe('the live auction: goods one at a time', () => {
   it('skips a good nobody could buy: no player needs it and neither the store nor the ship will take it', () => {
     const state = newGame();
     state.players[0]!.stock.crystite = 4;
-    state.store.capital = 0;
+    // The store never runs out of money: it buys nothing only when its shelf is full.
+    state.store.stock.crystite = 999;
     state.players[0]!.stock.food = 3;
     startAuction(state, ['crystite', 'food']);
     expect(a(state).skipped).toEqual([{ good: 'crystite', reason: 'nobody buys' }]);
@@ -505,8 +508,8 @@ describe('changing sides and ending early', () => {
   it('ends a good at once when every buyer is out of money and nobody else buys', () => {
     const state = newGame();
     state.players[0]!.stock.food = 9;
-    state.store.stock.food = state.colonists / 20;
-    state.store.capital = 0;
+    // The store never runs out of money: a full shelf is what keeps it from buying.
+    state.store.stock.food = Math.ceil(monthlyDemand(state).food * PRICE.storeMaxCover);
     state.players[2]!.money = 0;
     state.players[3]!.money = 0;
     startAuction(state, ['food']);
