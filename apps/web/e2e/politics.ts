@@ -113,8 +113,8 @@ try {
   await everyone(phones, (p) => goToThePub(p.page));
   await lena.page.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.landGrant + PHASE_MS.development + PHASE_MS.production) });
 
-  // Lena holds exactly one unit of the first good, so her next sale is one sale at one price.
-  const good = await untilServer(lena.page, () => truth.board().auction?.good ?? null, 'the goods auction has a good up');
+  // Lena holds exactly one unit of the first good the store buys at a price where the old and the new rate round apart.
+  const good = await aTellingGood(lena.page, truth, start / 100);
   holdOneUnit(server, code, lenaId, good);
   await pickSide(lena.page, 'Seller', within(WALK.statusMs + WALK.declareMs));
   const before = money(await lena.page.getByTestId('money').innerText());
@@ -127,6 +127,7 @@ try {
   const tax = truth.taxPaid(lenaId) - paidBefore;
   const price = after - before + tax;
   check(price > 0 && tax === Math.round(price * (NEW_TAX / 100)), `UBER-AC-2: Lena's sale at ${price} is taxed at ${NEW_TAX}%: her phone went ${before} → ${after}, the fund took ${tax}`);
+  check(tax !== Math.round(price * (start / 100)), `UBER-AC-2: at ${price} the old ${start}% would have taken a different tax than ${tax}`);
   console.log(`✓ UBER-AC-2: the winner sets 8% and the next auction sale is taxed at 8%: one ${good} sold at ${price}; Lena's phone ${before} → ${after}, ${tax} tax at ${NEW_TAX}%`);
 
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
@@ -201,6 +202,25 @@ function serverTruth(server: MuleServer, code: string): Truth {
     stockOf: (id, good) => state().players.find((p) => p.id === id)!.stock[good],
     taxPaid: (id) => state().treasury.paid[id] ?? 0,
   };
+}
+
+/**
+ * Waits through the goods as they come up until the store buys one at a price where `oldRate` and NEW_TAX round
+ * to different taxes, so the sale tells the two apart. Returns it while its status or declare is still on.
+ */
+async function aTellingGood(page: Page, truth: Truth, oldRate: number): Promise<Good> {
+  const telling = (price: number) => Math.round(price * oldRate) !== Math.round(price * (NEW_TAX / 100));
+  const seen = new Map<string, number | null>();
+  const deadline = Date.now() + within(WALK.order.length * (WALK.statusMs + WALK.declareMs + WALK.goodMs / WALK.tradeClockRate));
+  for (;;) {
+    const a = truth.board().auction;
+    if (a && (a.stage === 'status' || a.stage === 'declare')) {
+      if (a.storeBuys !== null && telling(a.storeBuys)) return a.good;
+      seen.set(a.good, a.storeBuys);
+    }
+    check(truth.board().phase === 'auction' && Date.now() < deadline, `UBER-AC-2: a good the store buys at a price that tells ${oldRate * 100}% from ${NEW_TAX}%; saw ${[...seen].map(([g, p]) => `${g} at ${p}`).join(', ')}`);
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(r)));
+  }
 }
 
 /** Arranges the sale: the seat holds exactly one unit of the good, shown to its phone at once. */
