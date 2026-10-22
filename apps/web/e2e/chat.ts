@@ -19,6 +19,10 @@ const RULE = { minMs: 2_000, maxMs: 4_500, maxWaitMs: 4_000 };
 const SHOWS_WITHIN_MS = 1_000;
 /** A bubble's end, as a page's timer sees it: its clock and its frames run a little behind the wire's. */
 const END_LAG_MS = 150;
+/** The latest a line's ~1 s may start counting: a phase's screen can stall a page about 1.2 s as it mounts. */
+const PHASE_SHOWN_CAP_MS = 1_500;
+/** How often the page samples itself; a gap of over twice this is the sampler stalling, not the page showing. */
+const SAMPLE_EVERY_MS = 50;
 /** A scheduled bubble shorter than this is not looked for: the sampler might fall between its frames. */
 const SHORTEST_LOOKED_FOR_MS = 300;
 /** Long enough for every bubble of a burst to have shown and gone. */
@@ -78,7 +82,7 @@ const SAMPLE = `{
         speaking: [...document.querySelectorAll('[data-testid=seat-row] [data-speaking]')].map((s) => s.getAttribute('data-testid').slice(5)),
         bounds: rect(bounds),
       });
-    }, 50);
+    }, ${SAMPLE_EVERY_MS});
   }
 }`;
 
@@ -290,12 +294,13 @@ function firstIn(samples: Sample[], phase: string, t: number): Sample | undefine
 }
 
 /**
- * By when something due at `t` in this phase must show: SHOWS_WITHIN_MS after `t`, or after the page first shows the
- * phase. When the page never shows that phase again, the first frame it paints after `t` must.
+ * By when something due at `t` in this phase must show (spec AM-11): SHOWS_WITHIN_MS after the page first shows the
+ * phase, counted from no later than PHASE_SHOWN_CAP_MS after `t`. When the page never shows that phase again, the
+ * first frame it paints after `t` must.
  */
 function deadline(samples: Sample[], phase: string, t: number): number {
   const shown = firstIn(samples, phase, t);
-  if (shown) return Math.max(t, shown.t) + SHOWS_WITHIN_MS;
+  if (shown) return Math.min(Math.max(t, shown.t), t + PHASE_SHOWN_CAP_MS) + SHOWS_WITHIN_MS;
   return samples.find((s) => s.t >= t)?.t ?? t + SHOWS_WITHIN_MS;
 }
 
@@ -336,10 +341,17 @@ function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
     check(bubble.anchor === at, `B-AC-17: on ${who} line ${b.id}'s bubble sits at ${at === 'seat-row' ? 'the seat row' : 'its speaker'}, got ${bubble.anchor}`);
     if (at === 'seat-row' && line.from !== wire.seatId) check(shown.speaking.includes(line.from), `B-AC-17: on ${who} the seat row lights ${line.from}'s seat while its bubble shows`);
     anchors[at === 'seat-row' ? 'seatRow' : 'creature']++;
-    // It ends: on time, once the page has had a frame past its end without stalling; or with its phase.
+    // It ends on time, or with its phase. A sample right after the sampler itself stalled may still show it.
     if (!b.endsPhase) {
-      const late = samples.find((s, i) => i > 0 && samples[i - 1]!.t > b.to + END_LAG_MS && s.bubbles.some((x) => x.line === b.id));
-      check(!late, `B-AC-17: on ${who} line ${b.id}'s bubble still shows ${late ? late.t - b.to : 0} ms after its end`);
+      for (const [i, s] of samples.entries()) {
+        if (s.t <= b.to + END_LAG_MS || !s.bubbles.some((x) => x.line === b.id)) continue;
+        const gap = i > 0 ? s.t - samples[i - 1]!.t : 0;
+        if (gap > 2 * SAMPLE_EVERY_MS && samples[i - 1]!.t <= b.to + END_LAG_MS) {
+          console.log(`chat ${who}: line ${b.id}'s bubble seen ${s.t - b.to} ms after its end, after the sampler stalled ${gap} ms`);
+          continue;
+        }
+        check(false, `B-AC-17: on ${who} line ${b.id}'s bubble still shows ${s.t - b.to} ms after its end`);
+      }
     }
   }
   const bubbles = anchors.creature + anchors.seatRow;
