@@ -247,7 +247,7 @@ export function joinSeams(dealt: Dealt): Dealt & { lifts: SeamLift[] } {
   const lifts: SeamLift[] = [];
   // Each lift joins at least one isolated plot, so no more lifts than isolated plots are ever needed.
   for (let budget = isolatedCount(board, ground); budget > 0 && !seamsHold(board, ground); budget--) {
-    const lift = seamLift(board, ground, raised, new Set());
+    const lift = seamLift(board, ground, raised, cover, new Set());
     if (!lift) break;
     lifts.push(lift);
   }
@@ -291,10 +291,8 @@ export function applyScarcity(dealt: Dealt, scarce: FloorGood | null): Dealt & {
   const raised = new Raised(board, ground, 'smithore', field);
   // Each round adds one seam lift and one lowering, or undoes its lift and stops; at most one round per good plot.
   for (let round = 0; round < goods.length && !seamsHold(board, ground); round++) {
-    const lift = seamLift(board, ground, raised, lowered);
+    const lift = seamLift(board, ground, raised, cover, lowered);
     if (!lift) break;
-    // The lift reaches plots too: coverage must count it, or a later lowering could strand what it covers.
-    cover.move([], [lift.plot]);
     const extra = leastIsolating(board, ground, cover, new Set([...lowered, ...kept, lift.plot, lift.joins]));
     if (extra === undefined) {
       cover.move([lift.plot]);
@@ -363,9 +361,10 @@ function leastIsolating(board: Board, ground: Ground[], cover: Coverage, barred:
 
 /**
  * One seam lift: a non-good plot of a capable terrain beside an isolated good Smithore plot,
- * joining the most isolated plots, then on the terrain whose mean it raises least.
+ * joining the most isolated plots, then on the terrain whose mean it raises least. The lift
+ * reaches plots too, so it enters `cover`, as every lift does, or a later change could strand what it covers.
  */
-function seamLift(board: Board, ground: Ground[], raised: Raised, barred: Set<number>): SeamLift | undefined {
+function seamLift(board: Board, ground: Ground[], raised: Raised, cover: Coverage, barred: Set<number>): SeamLift | undefined {
   const good = 'smithore';
   const lonely = (i: number) => board.neighbours[i]!.filter((n) => isLoneGood(board, ground, n, good));
   const options = board.land.filter((i) => !barred.has(i) && !isGood(ground, i, good) && pGood(board.terrain[i]!, good) > 0 && lonely(i).length > 0);
@@ -374,6 +373,7 @@ function seamLift(board: Board, ground: Ground[], raised: Raised, barred: Set<nu
   if (plot === undefined) return undefined;
   const lift: SeamLift = { kind: 'seam', good, plot, from: ground[plot]!.smithore, joins: lonely(plot)[0]! };
   raised.lift(plot);
+  cover.move([], [plot]);
   return lift;
 }
 
