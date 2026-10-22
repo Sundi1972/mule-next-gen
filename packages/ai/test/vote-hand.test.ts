@@ -352,7 +352,7 @@ describe('RULE-8: the Governor steps the tax', () => {
     { month: 2, current: 10, target: 10, fund: 0, low: 5, high: 10, want: 10 },
     { month: 2, current: 8, target: 2, fund: 1_000, low: 5, high: 13, want: 5 },
     { month: 1, current: 5, target: 5, fund: 0, low: 0, high: 10, want: 5 },
-    { month: 1, current: 5, target: 8, fund: 0, low: 0, high: 10, want: 8 },
+    { month: 1, current: 5, target: 8, fund: 239, low: 0, high: 10, want: 8 },
   ])(
     'RULE-8 (AM-9): the tax steps toward the persona target by at most maxStep, +taxFundBump when the fund is low after the first payday, clamped to the bounds (month $month, $current → $target, fund $fund, bounds $low to $high)',
     ({ month, current, target, fund, low, high, want }) => {
