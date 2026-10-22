@@ -350,7 +350,7 @@ first match wins
   #   when                                       then                          how
   1   0 candidates, office governor              the richest player who does   appointed
                                                  not run for Sheriff (money;
-                                                 tie → lower seat); if every
+                                                 tie → round the table, AM-12); if every
                                                  player runs for Sheriff, the
                                                  richest player (AM-2)
   2   0 candidates, office sheriff               the richest player who is     appointed
@@ -360,7 +360,12 @@ first match wins
   5   tie, and the Land Baron's ballot names     that candidate                baron
       one of the tied candidates
   6   tie otherwise                              the tied candidate with the   tieRule
-                                                 most plots, then lower seat
+                                                 most plots, then round the
+                                                 table (AM-12)
+round the table (AM-12)  among players still tied, the first in seat order starting from
+           seat (k mod n), where k is this election's index in POLITICS.electionMonths
+           (0 for month 1) and n the number of players. No RNG: the same game gives the
+           same offices, and every seat starts once per n elections.
 visibility  the result shows each candidate's weighted total, never who voted for whom.
 examples   3 vs 2 votes → the 3; 2 vs 2, Baron voted the second → the second; nobody runs
            for Sheriff → the richest non-Governor
@@ -721,6 +726,21 @@ did       The approved mock shows a promise under each candidate; slice 1 had no
 because   P-1: the approved election screen, honoured where slice 1 can back it up
 goal      P-1 — still met
 folded    C12, RULE-10, ACs; plan task PR-6
+```
+
+```
+AM-12 · 2026-10-22 · lead (PM fairness ruling, AM-10's follow-up) · WS1 terms by seat
+
+target    §2 RULE-3 rows 1, 2 and 6
+did       After AM-10, WS1 measured ai0 still at 27.7% of terms (960 terms, three seed sets,
+          about 1.9 standard errors over 25%). The residual came from the engine's own seat
+          order: Governor by tieRule 55 offices, ai0 28 / ai1 19 / ai2 7 / ai3 1; Sheriff
+          appointed 188, ai0 61 / ai3 31 (equal money in month 1). Both last resorts now go
+          round the table from a seat that moves each election.
+because   fairness: a seat number must not decide offices; no RNG, so the rule stays
+          explainable and replays from seed + actions
+goal      P-1 — still met
+folded    RULE-3 text; T-AC-2's row-6 and appointment tests; WS1 re-measures terms by seat
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
