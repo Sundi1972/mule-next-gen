@@ -33,7 +33,9 @@ export class WalkIntent {
   }
 
   /** An arrow key pressed, on a laptop. */
-  keyDown(key: string, _doc: { querySelector(selectors: string): unknown }): void {
+  keyDown(key: string, doc: { querySelector(selectors: string): unknown }): void {
+    // The arrows belong to an open dialog; a key let go still stops, so nothing walks on unseen.
+    if (doc.querySelector('[aria-modal="true"]')) return;
     if (key === 'ArrowUp') this.walk('up');
     if (key === 'ArrowDown') this.walk('down');
   }
