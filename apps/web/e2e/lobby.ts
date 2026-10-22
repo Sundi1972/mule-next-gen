@@ -36,7 +36,7 @@ const EVERYONE_IDS = [
   ...SPECIES.map((sp) => `species-${sp}`),
   ...[0, 1, 2, 3, 4, 5].map((c) => `colour-${c}`),
 ];
-const HOST_IDS = ['host-tools', 'close-room', 'add-ai', 'start-game'];
+const HOST_IDS = ['host-tools', 'host-to-phone', 'close-room', 'add-ai', 'start-game'];
 
 const started = Date.now();
 const { server, base } = await startServer();
@@ -125,13 +125,14 @@ async function kickLeaveAndClose(): Promise<void> {
   await mia.getByText("You're at the table").waitFor();
   await mia.getByTestId('species-glimmer').click();
   check(await shows(mia.locator('[data-testid=species-glimmer][aria-pressed=true]')), 'B-AC-7 (lobby): Mia picks the Glimmer on her first device');
-  check((await mia.getByTestId('host-to-phone').count()) === 0, 'B-AC-7 (lobby): a non-host has no host-to-phone');
-  check((await host.getByTestId('move-to-phone').count()) === 0, 'B-AC-7 (lobby): the host has no move-to-phone');
+  const miaColour = await pressedColour(mia);
+  check((await mia.getByTestId('host-to-phone').count()) === 0, 'B-AC-13 (handoff): a non-host has no host-to-phone');
+  check((await host.getByTestId('move-to-phone').count()) === 0, 'B-AC-13 (handoff): the host has no move-to-phone');
   const seatsBefore = await rail(host).count();
 
   await mia.getByTestId('move-to-phone').click();
-  const miaDialog = mia.getByTestId('host-dialog');
-  check(await shows(miaDialog.getByText('Move to your phone', { exact: true })), 'B-AC-7 (lobby): move-to-phone opens "Move to your phone"');
+  const miaDialog = mia.getByRole('dialog', { name: 'Move to your phone' });
+  check(await shows(miaDialog.locator('[data-testid=handoff-qr][data-state=ready]')), 'B-AC-7 (lobby): move-to-phone opens "Move to your phone" with a ready code');
   check(await shows(miaDialog.getByText('you, Mia', { exact: true })), 'B-AC-7 (lobby): the dialog says the phone becomes "you, Mia"');
   const miaLink = await qrLink(miaDialog);
   checkLink(miaLink, code, await seatToken(mia), 'Mia');
@@ -141,8 +142,10 @@ async function kickLeaveAndClose(): Promise<void> {
   const miaPhone = await phone('mia-phone');
   await miaPhone.goto(miaLink);
   check(await shows(miaPhone.getByText("You're at the table")), 'B-AC-7 (lobby): the second device opens the link and lands in the lobby');
-  check(await shows(miaPhone.getByTestId('seat-mine').getByText('Mia (you)')), 'B-AC-7 (lobby): the second device is Mia');
+  check(await shows(seat(miaPhone, 'Mia (you)')), 'B-AC-7 (lobby): the second device is Mia');
+  check((await miaPhone.getByTestId('hero-name').textContent())?.trim() === 'Mia', "B-AC-7 (lobby): the second device's colonist is Mia");
   check(await shows(miaPhone.locator('[data-testid=species-glimmer][aria-pressed=true]')), "B-AC-7 (lobby): the second device keeps Mia's Glimmer");
+  check(miaColour !== null && (await pressedColour(miaPhone)) === miaColour, `B-AC-7 (lobby): the second device keeps Mia's colour ${miaColour}`);
   check(!miaPhone.url().includes('handoff='), `B-AC-7 (lobby): the address bar drops handoff=, got ${miaPhone.url()}`);
   check(await shows(mia.getByText(MOVED)), `B-AC-7 (lobby): the first device shows "${MOVED}"`);
   check(await onStartScreen(mia), 'B-AC-7 (lobby): the first device steps aside to the start screen');
@@ -169,14 +172,14 @@ async function kickLeaveAndClose(): Promise<void> {
 
   // B-AC-7 (lobby): the host moves too, and keeps the host's tools.
   await host.getByTestId('host-tools').getByTestId('host-to-phone').click();
-  const hostDialog = host.getByTestId('host-dialog');
-  check(await shows(hostDialog.getByText('Move the host to your phone', { exact: true })), 'B-AC-7 (lobby): host-to-phone opens "Move the host to your phone"');
+  const hostDialog = host.getByRole('dialog', { name: 'Move the host to your phone' });
+  check(await shows(hostDialog.locator('[data-testid=handoff-qr][data-state=ready]')), 'B-AC-7 (lobby): host-to-phone opens "Move the host to your phone" with a ready code');
   check(await shows(hostDialog.getByText('you, Heiko, the host', { exact: true })), 'B-AC-7 (lobby): the dialog says the phone becomes "you, Heiko, the host"');
   const hostLink = await qrLink(hostDialog);
   checkLink(hostLink, code, await seatToken(host), 'the host');
   const hostPhone = await phone('host-phone');
   await hostPhone.goto(hostLink);
-  check(await shows(hostPhone.getByTestId('seat-mine').getByText('Heiko (you)')), "B-AC-7 (lobby): the host's new device is Heiko");
+  check(await shows(seat(hostPhone, 'Heiko (you)')), "B-AC-7 (lobby): the host's new device is Heiko");
   check(await shows(hostPhone.getByTestId('host-tools')), "B-AC-7 (lobby): the host's new device has the host tools");
   check(await shows(host.getByText(MOVED)), `B-AC-7 (lobby): the host's first device shows "${MOVED}"`);
   check(await onStartScreen(host), "B-AC-7 (lobby): the host's first device steps aside to the start screen");
@@ -224,6 +227,9 @@ async function colonistLobby(size: BrowserContextOptions, label: string, wide: b
   for (const id of [...HOST_IDS, 'host-dialog', 'kick-confirm', 'close-confirm']) if ((await lena.getByTestId(id).count()) > 0) lenaHas.push(id);
   if ((await lena.locator('[data-testid^=kick-]').count()) > 0) lenaHas.push('kick-<seat>');
   check(lenaHas.length === 0, `${tag}: a player who is not the host has none of the host's controls, has ${lenaHas.join(', ')}`);
+  check(await heiko.getByTestId('host-tools').getByTestId('host-to-phone').isVisible(), `B-AC-13 (handoff, ${label}): the host's move to the phone is among the host tools`);
+  check((await heiko.getByTestId('move-to-phone').count()) === 0, `B-AC-13 (handoff, ${label}): the host has no move-to-phone`);
+  check(await lena.getByTestId('move-to-phone').isVisible(), `B-AC-13 (handoff, ${label}): a player who is not the host can move to her phone`);
   check((await lena.getByTestId('hero-name').textContent())?.trim() === 'Lena', `${tag}: Lena's hero is Lena`);
   check((await nowTitle(heiko)) === 'Start when everyone is here', `${tag}: the host's Now, got "${await nowTitle(heiko)}"`);
   check((await nowTitle(lena)) === 'Make your colonist', `${tag}: Lena's Now before she picks, got "${await nowTitle(lena)}"`);
@@ -280,6 +286,13 @@ async function colonistLobby(size: BrowserContextOptions, label: string, wide: b
   check(await closeRoom.evaluate((el) => el === document.activeElement), `${tag}: focus goes back to Close the room`);
   await heiko.waitForTimeout(CANCEL_SETTLE_MS);
   check((await seat(heiko, 'Lena').count()) === 1 && (await lena.getByTestId('lobby').count()) === 1, `${tag}: Escape and Cancel send nothing`);
+
+  const moveLena = lena.getByTestId('move-to-phone');
+  await moveLena.click();
+  check(await shows(lena.getByRole('dialog', { name: 'Move to your phone' }).getByTestId('handoff-qr')), `B-AC-13 (handoff, ${label}): moving to the phone opens a dialog named by its title`);
+  await lena.keyboard.press('Escape');
+  check(await gone(lena.getByTestId('host-dialog')), `B-AC-13 (handoff, ${label}): Escape closes the move dialog`);
+  check(await moveLena.evaluate((el) => el === document.activeElement), `B-AC-13 (handoff, ${label}): focus goes back to move-to-phone`);
 
   const railPx = await railWidth(heiko);
   check(wide ? railPx === WIDE_RAIL_PX : railPx < WIDE_RAIL_PX, `${tag}: the ${wide ? 'wide' : 'phone'} layout, rail ${railPx} px`);
@@ -455,9 +468,14 @@ async function onStartScreen(page: Page): Promise<boolean> {
   return (await shows(page.getByPlaceholder('Heiko'))) && (await page.getByText("You're at the table").count()) === 0;
 }
 
+/** The colour this page has picked for its seat, by the pressed colour chip. */
+function pressedColour(page: Page): Promise<string | null> {
+  return page.getByTestId('colour-pick').locator('[aria-pressed=true]').getAttribute('data-testid');
+}
+
 /** The link a dialog's QR carries. The drawn cells must encode exactly that text, so a scan opens it. */
 async function qrLink(dialog: Locator): Promise<string> {
-  const qr = dialog.locator('svg[data-text]');
+  const qr = dialog.locator('svg[data-text]').filter({ visible: true });
   check(await shows(qr), 'B-AC-7 (lobby): the dialog shows a QR');
   const text = (await qr.getAttribute('data-text')) ?? '';
   const drawn = await qr.evaluate((svg) => Array.from(svg.querySelectorAll('rect'), (r) => `${r.getAttribute('x')},${r.getAttribute('y')}`).join(' '));

@@ -257,7 +257,7 @@ describe('TableClient', () => {
     return t;
   }
 
-  it('B-AC-7: asking to move sends handoff; the code shows until it expires by the server clock, and a newer code replaces it and its expiry', () => {
+  it('B-AC-7: asking to move sends handoff; the code is live until it expires by the server clock, then shows as expired until a new one is asked for, and a newer code replaces it and its expiry', () => {
     const { client, last, advance, setNow } = seated();
     setNow(10_000);
     // The server's clock runs 50 s ahead of this screen's.
@@ -267,26 +267,34 @@ describe('TableClient', () => {
     client.handoff();
     expect(last().sent.at(-1)).toEqual({ t: 'handoff' });
     last().deliver({ t: 'handoffCode', code: 'one', expiresAt: 180_000 });
-    expect(client.getState().handoffCode).toEqual({ code: 'one', expiresAt: 180_000 });
+    expect(client.getState().handoffCode).toEqual({ code: 'one', expiresAt: 180_000, expired: false });
     advance(119_999);
-    expect(client.getState().handoffCode?.code).toBe('one');
+    expect(client.getState().handoffCode).toEqual({ code: 'one', expiresAt: 180_000, expired: false });
     advance(1);
-    expect(client.getState().handoffCode).toBeNull();
+    expect(client.getState().handoffCode).toEqual({ code: 'one', expiresAt: 180_000, expired: true });
+    advance(600_000);
+    expect(client.getState().handoffCode).toEqual({ code: 'one', expiresAt: 180_000, expired: true });
 
+    const sent = last().sent.length;
     client.handoff();
-    last().deliver({ t: 'handoffCode', code: 'two', expiresAt: 300_000 });
+    expect(last().sent.slice(sent)).toEqual([{ t: 'handoff' }]);
+    expect(client.getState().handoffCode).toBeNull();
+    last().deliver({ t: 'handoffCode', code: 'two', expiresAt: 900_000 });
     advance(60_000);
     client.handoff();
     // The room has killed 'two' by now; it must not show while 'three' is on its way.
     expect(client.getState().handoffCode).toBeNull();
-    last().deliver({ t: 'handoffCode', code: 'three', expiresAt: 360_000 });
-    expect(client.getState().handoffCode).toEqual({ code: 'three', expiresAt: 360_000 });
+    last().deliver({ t: 'handoffCode', code: 'three', expiresAt: 960_000 });
+    expect(client.getState().handoffCode).toEqual({ code: 'three', expiresAt: 960_000, expired: false });
 
     advance(60_000);
-    expect(client.getState().handoffCode?.code).toBe('three');
+    expect(client.getState().handoffCode).toEqual({ code: 'three', expiresAt: 960_000, expired: false });
     advance(59_999);
-    expect(client.getState().handoffCode?.code).toBe('three');
+    expect(client.getState().handoffCode).toEqual({ code: 'three', expiresAt: 960_000, expired: false });
     advance(1);
+    expect(client.getState().handoffCode).toEqual({ code: 'three', expiresAt: 960_000, expired: true });
+
+    client.closeHandoff();
     expect(client.getState().handoffCode).toBeNull();
   });
 
