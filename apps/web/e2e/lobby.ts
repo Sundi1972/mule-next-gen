@@ -412,6 +412,15 @@ async function colourIntoTheGame(): Promise<void> {
   check(await shows(tv.locator(`[aria-label*="owned by"] ${inRose}`).first()), `B-AC-7 (in game): the TV still draws Heiko's plot in ${COLOUR_NAME[rose]}`);
   check(await shows(heiko.getByText(MOVED)), `B-AC-7 (in game): the first device shows "${MOVED}"`);
   check(await onStartScreen(heiko), 'B-AC-7 (in game): the first device steps aside to the start screen');
+  const reused = await phone('heiko B-AC-7 reused link');
+  await reused.goto(link);
+  check(await shows(reused.getByTestId('removed-notice').getByText(EXPIRED)), `B-AC-7 (in game): the same link opened again shows "${EXPIRED}"`);
+  check(await onStartScreen(reused), 'B-AC-7 (in game): the used link stays on the start screen');
+  check(
+    (await shows(second.getByTestId('game-shell'))) && (await playingAs(second)).name === 'Heiko',
+    'B-AC-7 (in game): the used link does not move the seat: the second device is still Heiko in the game',
+  );
+  await reused.context().close();
 
   // B-AC-13 (handoff, in game): the dialog and its code outlive a phase change, since the game doesn't pause.
   const moveAgain = second.getByTestId('move-to-phone');
