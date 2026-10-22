@@ -1,6 +1,7 @@
 import { DEVELOPMENT } from '@mule/engine';
 import { Button, GOOD_NAME, HoloMap, TERRAIN_NAME, type MapTile } from '@mule/ui';
 import { mapTiles, player, plotName, TERRAIN_ODDS, tileAt } from '../../game/derive';
+import { SpecialLine } from '../../components/SpecialLine';
 import { useClient } from '../../net/react';
 import { usePhoneGame } from '../game';
 import { GroundCard } from '../ground';
@@ -46,8 +47,15 @@ export function LookPanel() {
       <span className="font-display text-lg font-semibold leading-tight">
         {TERRAIN_NAME[tile.terrain]} <span className="font-mono text-xs text-holo">{tile.owner === me.id ? 'YOURS' : owner ? owner.name.toUpperCase() : 'FREE'}</span>
       </span>
+      <SpecialLine special={tile.special} />
       {tile.outfit && <span className="text-xs text-ink-2">A MULE here makes {tile.outfit === 'greenBelt' ? 'a green belt' : GOOD_NAME[tile.outfit]}.</span>}
-      {tile.ground ? <GroundCard ground={tile.ground} /> : <span className="text-xs text-ink-2">{TERRAIN_ODDS[tile.terrain]}</span>}
+      {tile.ground ? (
+        <GroundCard ground={tile.ground} />
+      ) : (
+        <span className="text-xs text-ink-2" data-testid="terrain-hint">
+          {TERRAIN_ODDS[tile.terrain]}
+        </span>
+      )}
     </section>
   );
 }
@@ -95,7 +103,10 @@ export function DroneRail() {
             Plot {plotName(lastTile.x, lastTile.y)} <span className="text-holo">{ordered ? 'ON ITS WAY' : 'PICKED'}</span>
           </span>
           <span className="font-display text-lg font-semibold">{TERRAIN_NAME[lastTile.terrain]}</span>
-          <span className="text-xs text-ink-2">{TERRAIN_ODDS[lastTile.terrain]}</span>
+          <SpecialLine special={lastTile.special} />
+          <span className="text-xs text-ink-2" data-testid="terrain-hint">
+            {TERRAIN_ODDS[lastTile.terrain]}
+          </span>
         </div>
       )}
     </section>
