@@ -487,16 +487,14 @@ export const TAX = {
 
 /**
  * The goods auction, played live as in the original: goods come up one at a
- * time, each with a status screen, a declare and a walk. Times are in
+ * time, each with a status screen and then a walk. Times are in
  * milliseconds of game time; the server steps the auction on a fixed tick.
  */
 export const WALK = {
   /** The order goods come up in: raw goods first, then processed ones. */
   order: ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine'] as Good[],
-  /** The status screen before each good: what everyone had, used, made, and their surplus or shortage. */
-  statusMs: 6_000,
-  /** Picking Buyer or Seller before the walk. */
-  declareMs: 5_000,
+  /** The status screen before each good: what everyone had, used, made and is short of, and where each player picks a side for the walk. */
+  statusMs: 8_000,
   /** The walk's clock for one good. */
   goodMs: 20_000,
   /** While any unit is changing hands the clock runs at this share of its speed, as in the original. */
@@ -717,6 +715,8 @@ export const STRATEGIST = {
   /** Below this utility share of the best, a free plot is not worth pressing for in the first sweep; later sweeps take anything above laterShare. */
   grantShare: 0.75,
   grantLaterShare: 0.5,
+  /** In the first two sweeps it presses only for its top claimsPerGrant + grantSpare open plots (twice that in the second), so it waits for the land it wants instead of the first that will do. */
+  grantSpare: 2,
   /** A factory needs this many months of its inputs on hand or from its own plots. */
   factoryInputMonths: 2,
   /** Spare Food, Water, Energy and Medicine it keeps over next month's need, before the reserve multiplier. */
