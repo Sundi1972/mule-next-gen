@@ -27,5 +27,5 @@ describe('the sim plays politics', () => {
     expect(how).toHaveLength(4 * 4 * 2);
     expect(how.some((h) => h !== 'appointed')).toBe(true);
     expect(taxes.some((t) => t !== Math.round(TAX.salesTax * 100))).toBe(true);
-  });
+  }, 30_000); // plays four full games: about 5 s locally, so vitest's 5 s default times out
 });
