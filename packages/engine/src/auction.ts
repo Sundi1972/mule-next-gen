@@ -171,7 +171,8 @@ function nextGood(state: GameState, skipped: LiveAuction['skipped']): void {
     // A shelf that can't feed the colonists for a month: the store bids up to restock, still under what they can pay.
     const ceiling = Math.floor((UPKEEP.colonistBudget[good] ?? 0) / (1 + PRICE.storeSpread) ** 2);
     const storeBuy = shelfShort(state, good, 1) ? Math.max(usualBuy, Math.min(ceiling, Math.ceil(posted * PRICE.restockPremium))) : usualBuy;
-    const storeSell = Math.ceil(posted * (1 + PRICE.storeSpread));
+    // A store restocking a short shelf sells dearer too: it never buys above its own selling price, or a player could sell straight back.
+    const storeSell = Math.max(Math.ceil(posted * (1 + PRICE.storeSpread)), storeBuy + 1);
     const budget = storeWants(state, good, demand);
     const reason = skipBefore(state, good, storeBuy, budget);
     if (reason) {
