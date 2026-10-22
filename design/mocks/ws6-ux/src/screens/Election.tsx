@@ -104,7 +104,7 @@ export function TvElection({ revealed = false }: { revealed?: boolean }) {
               </span>
             </section>
           ))}
-          <p className="col-span-2 text-center text-xl text-ink-2">Each block is one vote. Who voted for whom stays secret. The new Governor sets the tax from next month.</p>
+          <p className="col-span-2 text-center text-xl text-ink-2">Each block is one vote. Who voted for whom stays secret.</p>
         </div>
       )}
     </div>
@@ -131,7 +131,7 @@ export function PhoneElectionResult() {
             </span>
           );
         })}
-        <span className="rounded-control bg-holo-soft px-3 py-2 text-sm">You are the Sheriff until month 7. Your desk opens in the next planning phase.</span>
+        <span className="rounded-control bg-holo-soft px-3 py-2 text-sm">You are the Sheriff until month 7.</span>
       </div>
     </div>
   );

@@ -631,7 +631,7 @@ export function PlanningHub({
   const desks = DESKS.filter((d) => !d.office || d.office === office);
   const now: Now =
     election === 'nominate'
-      ? { step: 1, of: 3, title: 'Run for an office, or press Done', detail: 'Election month: Governor and Sheriff. Then the secret ballot, then the result on every screen at once.' }
+      ? { step: 1, of: 3, title: "Run for an office, or press I'm ready", detail: 'Election month: Governor and Sheriff. Then the secret ballot, then the result on every screen at once.' }
       : election === 'ballot'
         ? { step: 2, of: 3, title: 'Cast your secret vote', detail: 'One vote per office, or abstain; your vote weighs 2. Then everything below is yours until you press Ready.' }
         : office === 'governor'
