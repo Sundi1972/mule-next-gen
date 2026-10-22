@@ -95,7 +95,8 @@ class ChatStore {
 
 const stores = new WeakMap<TableClient, ChatStore>();
 
-function storeFor(client: TableClient): ChatStore {
+/** The one chat store for this client (one per screen). */
+export function chatStoreFor(client: TableClient): ChatStore {
   let store = stores.get(client);
   if (!store) {
     store = new ChatStore(client);
@@ -106,7 +107,7 @@ function storeFor(client: TableClient): ChatStore {
 
 /** This screen's table chat. */
 export function useTableChat(): ChatView {
-  const store = storeFor(useClient());
+  const store = chatStoreFor(useClient());
   return useSyncExternalStore(store.subscribe, store.get, store.get);
 }
 
@@ -114,7 +115,7 @@ const useBeforePaint = typeof document === 'undefined' ? useEffect : useLayoutEf
 
 /** Registers a drawn creature as its seat's anchor while it is mounted; true when it holds the seat's bubble. */
 export function useAnchor(seatId: string): boolean {
-  const store = storeFor(useClient());
+  const store = chatStoreFor(useClient());
   const [token] = useState(() => Symbol(seatId));
   useBeforePaint(() => store.anchor(seatId, token), [store, seatId, token]);
   return useSyncExternalStore(store.subscribe, store.get, store.get).anchors.get(seatId) === token;

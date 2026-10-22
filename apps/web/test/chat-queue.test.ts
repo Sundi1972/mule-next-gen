@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { bubbleSchedule } from '../src/chat/queue';
+import { bubbleAt, bubbleSchedule } from '../src/chat/queue';
 
-const line = (id: number, at: number) => ({ id, at });
-const shown = (lines: { id: number; at: number }[], phaseFrom?: number) =>
-  bubbleSchedule(lines, phaseFrom).map((b) => [b.line.id, b.from, b.to]);
+type Line = { id: number; at: number; phase?: number };
+const line = (id: number, at: number, phase?: number): Line => ({ id, at, ...(phase === undefined ? {} : { phase }) });
+const shown = (lines: Line[], phase?: number) => bubbleSchedule(lines, phase).map((b) => [b.line.id, b.from, b.to]);
 
 describe('the bubble queue (RULE-9)', () => {
   it.each([
@@ -21,7 +21,22 @@ describe('the bubble queue (RULE-9)', () => {
   });
 
   it('T-AC-11: a phase change ends every bubble and drops the queue: a line after it shows at once', () => {
-    const lines = [line(1, 0), line(2, 800), line(3, 1_500)];
-    expect(shown(lines, 1_000)).toEqual([[3, 1_500, 6_000]]);
+    const lines = [line(1, 0, 1), line(2, 800, 1), line(3, 1_500, 2)];
+    expect(shown(lines, 2)).toEqual([[3, 1_500, 6_000]]);
+  });
+
+  it('T-AC-11: a line belongs to the phase it was received in, whatever its time: two lines in one millisecond, either side of a phase change', () => {
+    expect(shown([line(1, 1_000, 1), line(2, 1_000, 2)], 2)).toEqual([[2, 1_000, 5_500]]);
+  });
+
+  it.each([
+    ['at its start the bubble shows', 0, 1],
+    ['just before the cut the first still shows', 1_999, 1],
+    ['at the cut the second takes over', 2_000, 2],
+    ['just before its end the second still shows', 6_499, 2],
+    ['at its end nothing shows', 6_500, null],
+  ])('T-AC-11: the bubble showing at a moment, for two lines 0.8 s apart — %s', (_, now, expected) => {
+    const schedule = bubbleSchedule([line(1, 0), line(2, 800)]);
+    expect(bubbleAt(schedule, now)?.line.id ?? null).toBe(expected);
   });
 });
