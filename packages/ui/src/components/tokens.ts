@@ -11,6 +11,9 @@ export const SLOT_COLOR: Record<Slot, string> = {
   5: 'var(--color-p6)',
 };
 
+/** What players call each slot's colour. */
+export const COLOUR_NAME: Record<Slot, string> = { 0: 'Ember', 1: 'Cobalt', 2: 'Jade', 3: 'Sun', 4: 'Violet', 5: 'Rose' };
+
 export type Good = 'food' | 'water' | 'energy' | 'smithore' | 'crystite' | 'rareEarth' | 'alloy' | 'electronics' | 'medicine';
 
 export const GOOD_CODE: Record<Good, string> = {
@@ -46,6 +49,41 @@ export const TERRAIN_NAME: Record<Terrain, string> = {
   mountains: 'Mountains', desert: 'Desert', tundra: 'Tundra', ice: 'Ice field', volcanic: 'Volcanic', crater: 'Crater',
   wasteland: 'Wasteland', store: 'Colony store',
 };
+
+/**
+ * The five special fields. The UI keeps its own copy of the kind union, as it does for Good and
+ * Terrain; apps/web checks at compile time that it equals the engine's.
+ */
+export type SpecialKind = 'ruins' | 'crystalCavern' | 'geyser' | 'oasis' | 'relic';
+
+/** A plot's special field as the map draws it. */
+export interface MapSpecial {
+  kind: SpecialKind;
+  /** Ruins only: the good its salvage pays. */
+  salvage?: 'alloy' | 'electronics';
+}
+
+export const SPECIAL_NAME: Record<SpecialKind, string> = {
+  ruins: 'Ruins',
+  crystalCavern: 'Crystal cavern',
+  geyser: 'Geyser',
+  oasis: 'Oasis',
+  relic: 'Alien relic',
+};
+
+/** Each kind's colour token, `--color-s-<kind>`; theme.css says which good's colour each one borrows, and why. */
+export const SPECIAL_COLOR: Record<SpecialKind, string> = {
+  ruins: 'var(--color-s-ruins)',
+  crystalCavern: 'var(--color-s-crystalCavern)',
+  geyser: 'var(--color-s-geyser)',
+  oasis: 'var(--color-s-oasis)',
+  relic: 'var(--color-s-relic)',
+};
+
+/** A special field's accessible name: its kind, and a ruin's salvage. HoloMap adds it to the plot's label. */
+export function specialLabel(s: MapSpecial): string {
+  return s.kind === 'ruins' && s.salvage ? `${SPECIAL_NAME.ruins}, ${GOOD_NAME[s.salvage]} salvage` : SPECIAL_NAME[s.kind];
+}
 
 export function cx(...parts: (string | false | null | undefined)[]): string {
   return parts.filter(Boolean).join(' ');

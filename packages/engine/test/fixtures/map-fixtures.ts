@@ -1,11 +1,15 @@
-import { RAW_GOODS, zeroGround, type GameMap, type RawGood, type Terrain, type Tile } from '../../src/index.js';
+import { RAW_GOODS, zeroGround, type GameMap, type RawGood, type SpecialField, type SpecialKind, type Terrain, type Tile } from '../../src/index.js';
 
 /** Hand-built maps for the map-rule tests: terrain and ground drawn as ASCII, one character per plot. */
 
-/** Terrain rows, and for each raw good either rating rows (digits; `.` on the store) or one rating for every plot. */
+/**
+ * Terrain rows, for each raw good either rating rows (digits; `.` on the store) or one rating for every plot,
+ * and the special fields as [x, y, kind]; ruins salvage alloy.
+ */
 export interface MapSpec {
   terrain: string[];
   ground: Record<RawGood, string[] | number>;
+  specials: [number, number, SpecialKind][];
 }
 
 const TERRAIN_BY_LETTER: Record<string, Terrain> = {
@@ -39,7 +43,23 @@ export function buildMap(spec: MapSpec): GameMap {
       tiles.push({ x, y, terrain, peaks: 0, ground, traits: [], owner: null, outfit: null, pollution: 0, filter: false, runMonths: 0 });
     }
   }
-  return { width, height, tiles };
+  return withSpecials({ width, height, tiles }, spec.specials.map(([x, y, kind]) => [x, y, field(kind)]));
+}
+
+/** A special field of this kind as the generator would place it; ruins salvage alloy. */
+export function field(kind: SpecialKind): SpecialField {
+  return kind === 'ruins' ? { kind, salvage: 'alloy' } : { kind };
+}
+
+/** A copy of the map with some plots' special field set, or removed with null: [x, y, field]. */
+export function withSpecials(map: GameMap, edits: [number, number, SpecialField | null][]): GameMap {
+  const tiles = map.tiles.map((t) => ({ ...t, ground: { ...t.ground } }));
+  for (const [x, y, special] of edits) {
+    const tile = tiles[y * map.width + x]!;
+    if (special) tile.special = special;
+    else delete tile.special;
+  }
+  return { ...map, tiles };
 }
 
 function rating(layer: string[] | number, x: number, y: number): number {
@@ -78,7 +98,8 @@ export function mirrored(map: GameMap): GameMap {
  * plots. Grown goods lie in diagonal stripes (good = 1), so every plot is at
  * most 2 steps from each: food 53, water 54, energy 54 good plots. Smithore
  * is four 2×2 seams rated 3 (16 plots), so the corners are exactly 5 steps from
- * one. Crystite and Rare earth are three rings each.
+ * one. Crystite and Rare earth are three rings each. Four special fields of
+ * four kinds, two each side of the river, the nearest two 8 steps apart.
  */
 export const MID_SPEC: MapSpec = {
   terrain: [
@@ -160,6 +181,7 @@ export const MID_SPEC: MapSpec = {
       '000000001310000',
     ],
   },
+  specials: [[3, 1, 'ruins'], [13, 0, 'geyser'], [10, 6, 'oasis'], [1, 7, 'relic']],
 };
 
 export const MID_MAP = buildMap(MID_SPEC);
@@ -188,7 +210,8 @@ export const MID_CRYSTITE_5_PEAKS = withGround(MID_CRYSTITE_4_PEAKS, 'crystite',
  * 75 plots can plains pass its share yet exceed a third (16 of 47), so the
  * no-dominant-terrain rule is tested here rather than on a real map size.
  * Its river has the small band's 2 bends and touches column 8, the right
- * edge it may use.
+ * edge it may use. Three special fields of three kinds; the oasis has
+ * exactly 2 desert neighbours.
  */
 export const SMALL_SPEC: MapSpec = {
   terrain: [
@@ -224,6 +247,7 @@ export const SMALL_SPEC: MapSpec = {
       '13431000134',
     ],
   },
+  specials: [[0, 3, 'geyser'], [6, 1, 'oasis'], [10, 4, 'relic']],
 };
 
 export const SMALL_MAP = buildMap(SMALL_SPEC);
@@ -232,7 +256,8 @@ export const SMALL_MAP = buildMap(SMALL_SPEC);
  * A 19×11 map for 5 players that meets every map rule, built like MID_SPEC:
  * 193 plots of non-river land, a river with the large band's 4 bends, the
  * same diagonal stripes, and five Smithore seams (20 plots) leaving the
- * corner (0,0) exactly 6 steps from one.
+ * corner (0,0) exactly 6 steps from one. Five special fields, ruins twice;
+ * the crystal cavern sits on a hill rated Crystite 3.
  */
 export const LARGE_SPEC: MapSpec = {
   terrain: [
@@ -328,6 +353,7 @@ export const LARGE_SPEC: MapSpec = {
       '0000000000010000000',
     ],
   },
+  specials: [[1, 1, 'ruins'], [5, 4, 'ruins'], [16, 0, 'geyser'], [13, 8, 'oasis'], [2, 8, 'crystalCavern']],
 };
 
 export const LARGE_MAP = buildMap(LARGE_SPEC);

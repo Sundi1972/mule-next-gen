@@ -2,10 +2,12 @@ import type { MuleView, MyView, PlayerView, TableView } from '@mule/protocol';
 import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import type { TableClient } from '../src/net/client';
+import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider, type PhoneGame } from '../src/phone/game';
 import { PhoneShell, type Now } from '../src/phone/Shell';
 
-const self: PlayerView = { id: 's1', name: 'Heiko', isAi: false, color: '', species: 'mollox', money: 1200, plots: 2, ready: false, doneDeveloping: false };
+const self: PlayerView = { id: 's1', name: 'Heiko', isAi: false, color: '', slot: 0, species: 'mollox', money: 1200, plots: 2, ready: false, doneDeveloping: false };
 const game: PhoneGame = {
   table: {} as TableView<MuleView>,
   view: { month: 3, maxMonths: 12 } as MuleView,
@@ -14,6 +16,9 @@ const game: PhoneGame = {
   slot: 0,
 };
 
+/** A client with nothing said yet: the shell's chat block reads it. */
+const client = { subscribe: () => () => {}, getState: () => ({ chat: [], view: null, seatId: 's1' }) } as unknown as TableClient;
+
 const RAIL_CONTENT: ReactNode = createElement('p', { 'data-testid': 'rail-content' }, 'the screen controls');
 const RAIL = renderToStaticMarkup(RAIL_CONTENT);
 const NOW: Now = { step: 2, of: 3, title: 'Claim a plot', detail: 'The lit plot is free.' };
@@ -21,7 +26,7 @@ const NOW: Now = { step: 2, of: 3, title: 'Claim a plot', detail: 'The lit plot 
 /** PhoneShell as a screen draws it, inside the phone's game. */
 function shell(now?: Now): string {
   const screen = createElement(PhoneShell, { phase: 'Land grant', seconds: 30, now, rail: RAIL_CONTENT, children: createElement('div', { 'data-testid': 'map' }) });
-  return renderToStaticMarkup(createElement(PhoneGameProvider, { value: game, children: screen }));
+  return renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value: game, children: screen }) }));
 }
 
 /** The markup inside the element carrying this data-testid, to the end of the document. */

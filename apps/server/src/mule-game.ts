@@ -1,6 +1,7 @@
 import {
   advanceGrant,
   advancePhase,
+  AI_HANDS,
   airBand,
   allPrices,
   analysePlot,
@@ -80,12 +81,12 @@ export const PHASE_MS: Record<Exclude<Phase, 'gameOver' | 'auction' | 'landAucti
 };
 
 /** How long each free plot stays lit in the land grant. */
-export const GRANT_TICK_MS = 650;
+export const GRANT_TICK_MS = GAME.grantTickMs;
 
 export const AI_NAMES = ['The Accountant', 'The Baron', 'The Grudge', 'The Gambler', 'The Good Neighbour'];
 
 /** How often AI hands act during development. */
-export const AI_DEV_TICK_MS = 100;
+export const AI_DEV_TICK_MS = AI_HANDS.devTickMs;
 
 /** The level AI seats play at until the lobby lets the host choose. */
 export const DEFAULT_AI_LEVEL: AiLevelId = 'trader';
@@ -139,7 +140,7 @@ function productionView(state: GameState, lengthMs: number): ProductionView | nu
 /** M.U.L.E. as a game hosted by a @tabletop/core room. */
 export class MuleGame implements Game<MuleIntent, MuleView> {
   private state: GameState | null = null;
-  private seats: (SeatInfo & { color: string })[] = [];
+  private seats: SeatInfo[] = [];
   private readonly ready = new Set<string>();
   private readonly away = new Set<string>();
   /** Trades between players in the good that is up, for the news when it closes. */
@@ -167,7 +168,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   }
 
   start(seats: SeatInfo[]): void {
-    this.seats = seats.map((s, i) => ({ ...s, color: PLAYER_COLORS[i % PLAYER_COLORS.length]! }));
+    this.seats = seats.map((s) => ({ ...s }));
     this.state = createGame({ seed: this.seed, players: seats.map(({ id, name, isAi, pick }) => ({ id, name, isAi, ...(isSpecies(pick) ? { species: pick } : {}) })), maxMonths: this.options.maxMonths });
     this.ai.clear();
     this.lotHands.clear();
@@ -623,6 +624,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           outfit: t.outfit,
           pollution: t.pollution,
           filter: t.filter,
+          // A special field is public: every viewer sees it, the TV too. Only the ground stays private.
+          ...(t.special ? { special: { kind: t.special.kind, ...(t.special.salvage ? { salvage: t.special.salvage } : {}) } } : {}),
           ...(analysed ? { ground: t.ground } : {}),
           ...(analysed || (me && t.owner === me.id) ? { traits: t.traits } : {}),
         };
@@ -634,7 +637,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           id: s.id,
           name: s.name,
           isAi: s.isAi,
-          color: s.color,
+          color: PLAYER_COLORS[s.color % PLAYER_COLORS.length]!,
+          slot: s.color,
           species: p.species,
           money: p.money,
           plots: state.tiles.filter((t) => t.owner === s.id).length,
@@ -714,7 +718,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       good: a.good,
       stage: a.stage,
       seconds: Math.max(0, a.clockMs / 1_000),
-      total: (a.stage === 'status' ? WALK.statusMs : a.stage === 'declare' ? WALK.declareMs : WALK.goodMs) / 1_000,
+      total: (a.stage === 'status' ? WALK.statusMs : WALK.goodMs) / 1_000,
       slowed: a.stage === 'walk' && a.deals.length > 0,
       next: [...a.queue],
       storeBuys: storeBuyLine(state),

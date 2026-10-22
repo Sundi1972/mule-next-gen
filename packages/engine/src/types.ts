@@ -70,6 +70,16 @@ export interface Tile {
   filter: boolean;
   /** Months in a row this plot's current outfit has run. Factories gain from experience. */
   runMonths: number;
+  /** A special field on this plot, placed with the map; absent on most plots. */
+  special?: SpecialField;
+}
+
+export type SpecialKind = 'ruins' | 'crystalCavern' | 'geyser' | 'oasis' | 'relic';
+
+export interface SpecialField {
+  kind: SpecialKind;
+  /** Ruins only: the good its salvage pays, drawn when the map is made. */
+  salvage?: 'alloy' | 'electronics';
 }
 
 export interface Player {
@@ -230,7 +240,7 @@ export interface ProductionLine {
   made: number;
   /** What made up the output, in order; the deltas sum to `made`. */
   parts: {
-    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'noEnergy' | 'noWater' | 'event' | 'factory';
+    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'noEnergy' | 'noWater' | 'event' | 'factory' | 'special';
     delta: number;
     event?: EventKey;
   }[];
@@ -336,13 +346,14 @@ export interface StatusRow {
 /** Why a good was skipped without a screen of its own. */
 export type SkipReason = 'nobody has any' | 'nobody buys' | 'nobody trading';
 
-/** The live goods auction: goods one at a time, each with a status screen, a declare and a walk. */
+/** The live goods auction: goods one at a time, each with a status screen and then a walk. */
 export interface LiveAuction extends WalkBoard {
-  /** clockMs is the status screen's, the declare's or the walk's clock, by stage. */
+  /** The status screen's or the walk's clock, by stage. */
+  clockMs: number;
   /** Goods still to come after the current one. */
   queue: Good[];
   good: Good | null;
-  stage: 'status' | 'declare' | 'walk' | 'over';
+  stage: 'status' | 'walk' | 'over';
   /** Store prices for this good, fixed when it comes up. Whether the store trades at them depends on its stock and budget. */
   storeBuy: number;
   storeSell: number;
@@ -392,4 +403,10 @@ export interface LandAuction extends WalkBoard {
   /** This lot's place in the month's line-up, from 1, and the line-up's length. */
   number: number;
   count: number;
+  /** True once this lot's leading bid has passed hi and the walk sped up. */
+  fast: boolean;
+  /** Ms the soft close has put back on this lot's walk clock. */
+  addedMs: number;
+  /** The last buyer to lead this lot, kept while nobody reaches the minimum, so only a change of hands counts as an overtake. */
+  leaderId: string | null;
 }

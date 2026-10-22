@@ -1,8 +1,9 @@
-import { COLONY_SELLER, SHIP_ID, STORE_ID } from '@mule/engine';
+import { COLONY_SELLER, SHIP_ID, STORE_ID, type AuctionRole, type AuctionSide } from '@mule/engine';
 import type { AuctionView, DealView, LandAuctionView, ListingView, MuleView } from '@mule/protocol';
 import { bestPrices, Creature, cx, GOOD_NAME, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
 import { plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
 import { GroundCard } from '../phone/ground';
+import { SpecialLine } from './SpecialLine';
 
 /** The auction's walkers as the board draws them, in seat order, with their units and the surplus over this month's need. */
 export function boardWalkers(view: MuleView, auction: AuctionView): BoardWalker[] {
@@ -85,6 +86,37 @@ export function dealLine(view: MuleView, d: AuctionView['deals'][number], meId?:
   const name = (id: string) => (id === meId ? 'You' : id === 'store' ? 'the store' : id === 'ship' ? 'the ship' : (view.players.find((p) => p.id === id)?.name ?? id));
   const seller = name(d.seller);
   return `${seller[0]!.toUpperCase()}${seller.slice(1)} → ${name(d.buyer)} · ${d.units} unit${d.units === 1 ? '' : 's'} @ ${d.price}`;
+}
+
+/** A side as the status screen names it, on the phone and the TV. */
+export const SIDE_WORD: Record<AuctionSide, string> = { buyer: 'Buy', seller: 'Sell', pass: 'Pass' };
+
+/** Two buttons and no Pass: a second tap on your side is how you sit a good out. */
+export function toggleSide(current: AuctionSide | undefined, tapped: AuctionRole): AuctionSide {
+  return current === tapped ? 'pass' : tapped;
+}
+
+/** What the store charges and pays for the good up now, and how many it will sell, beside the status table. */
+export function StoreBox({ auction, tv = false }: { auction: AuctionView; tv?: boolean }) {
+  const stock = auction.storeForSale;
+  return (
+    <dl className={cx('grid grid-cols-3 gap-px overflow-hidden rounded-panel border border-holo-line bg-holo-line font-mono', tv ? 'text-2xl' : 'text-sm')} data-testid="status-store">
+      {(
+        [
+          ['STORE SELLS', auction.storeSells ?? 'out', 'text-rise'],
+          ['STORE BUYS', auction.storeBuys ?? '—', 'text-fall'],
+          ['IN STOCK', stock, stock === 0 ? 'text-alert' : 'text-ink'],
+        ] as const
+      ).map(([label, value, tone]) => (
+        <div key={label} className={cx('flex flex-col bg-panel', tv ? 'p-3' : 'px-2 py-1')}>
+          <dt className={cx('label-caps', tv ? 'text-sm!' : 'text-[9px]!')}>{label}</dt>
+          <dd data-num className={cx('font-bold', tone)}>
+            {value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
 }
 
 function Who({ slot, name, size }: { slot: Slot; name: string; size: number }) {
@@ -196,8 +228,18 @@ export function LotCard({ view, lot, compact = false }: { view: MuleView; lot: L
         {lot.item.kind === 'mule' ? lotWhat(view, lot) : t ? TERRAIN_NAME[t.terrain] : ''}
         <span className="font-mono text-sm text-ink-3">{plotName(lot.item.x, lot.item.y)}</span>
       </span>
+      {!compact && lot.item.kind === 'plot' && <SpecialLine special={t?.special} />}
       {lot.item.kind === 'plot' && <span className="text-xs text-ink-2" data-testid="lot-what">{lotWhat(view, lot)}</span>}
-      {!compact && lot.item.kind === 'plot' && t && (t.ground ? <GroundCard ground={t.ground} /> : <span className="text-xs text-ink-3">{TERRAIN_ODDS[t.terrain]}</span>)}
+      {!compact &&
+        lot.item.kind === 'plot' &&
+        t &&
+        (t.ground ? (
+          <GroundCard ground={t.ground} />
+        ) : (
+          <span className="text-xs text-ink-3" data-testid="terrain-hint">
+            {TERRAIN_ODDS[t.terrain]}
+          </span>
+        ))}
       <div className="grid grid-cols-2 gap-2 border-t border-holo-faint pt-1 font-mono text-[10px] text-ink-3">
         <span className="flex flex-col" data-testid="lot-minimum">
           MINIMUM<strong data-num className="text-sm text-ink">{lot.minimum} cr</strong>

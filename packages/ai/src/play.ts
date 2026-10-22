@@ -1,6 +1,7 @@
 import {
   advanceGrant,
   advancePhase,
+  AI_HANDS,
   analysePlot,
   auctionDone,
   buyMule,
@@ -59,7 +60,7 @@ export interface PlayedGame {
   decisions: number;
 }
 
-const DEV_TICK_MS = 100;
+const DEV_TICK_MS = AI_HANDS.devTickMs;
 const rot = (i: number, k: number, n = 6) => (((i - k) % n) + n) % n;
 
 /** Applies a seat's action with the engine's own checks; a RuleError means the rules refused it. */

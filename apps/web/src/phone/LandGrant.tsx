@@ -1,6 +1,7 @@
 import { GAME } from '@mule/engine';
 import { cx, HoloMap, TERRAIN_NAME, ZoomMap } from '@mule/ui';
 import { mapTiles, PHASE_NAME, plotName, secondsUntil, TERRAIN_ODDS, tileAt } from '../game/derive';
+import { SpecialLine } from '../components/SpecialLine';
 import { useClient, useServerNow } from '../net/react';
 import { GroundCard } from './ground';
 import { usePhoneGame } from './game';
@@ -31,7 +32,14 @@ export function LandGrant() {
                 <span className="font-display text-xl font-semibold leading-tight">
                   {TERRAIN_NAME[litTile.terrain]} <span className="font-mono text-base text-ink-3">{plotName(litTile.x, litTile.y)}</span>
                 </span>
-                {ground ? <GroundCard ground={ground} /> : <span className="text-sm text-ink-2">{TERRAIN_ODDS[litTile.terrain]}</span>}
+                <SpecialLine special={litTile.special} />
+                {ground ? (
+                  <GroundCard ground={ground} />
+                ) : (
+                  <span className="text-sm text-ink-2" data-testid="terrain-hint">
+                    {TERRAIN_ODDS[litTile.terrain]}
+                  </span>
+                )}
               </>
             ) : (
               <span className="font-display text-xl font-semibold text-ink-3">No free land left</span>

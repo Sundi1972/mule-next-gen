@@ -1,6 +1,6 @@
-import { DEFAULT_SPECIES } from '@mule/engine';
+import { DEFAULT_SPECIES, MAP, type SpecialKind as EngineSpecialKind } from '@mule/engine';
 import type { MuleView, PlayerView, TableView, TileView } from '@mule/protocol';
-import { SPECIES, type Good, type MapTile, type Slot, type Species } from '@mule/ui';
+import { GOOD_NAME, SPECIES, type Good, type MapSpecial, type MapTile, type Slot, type SpecialKind, type Species } from '@mule/ui';
 
 /**
  * Small, pure readings of the view for the screens. No rules live here: the
@@ -19,18 +19,22 @@ export const PHASE_NAME: Record<MuleView['phase'], string> = {
   gameOver: 'Game over',
 };
 
-/** A seat's colour slot is its place at the table, so phones and the big screen agree. */
-export function slotOf(view: Pick<MuleView, 'players'>, seatId: string | null | undefined): Slot | null {
-  if (!seatId) return null;
-  const i = view.players.findIndex((p) => p.id === seatId);
-  return i < 0 ? null : ((i % 6) as Slot);
+/** A colour index from the room as the design system's slot. */
+export function toSlot(colour: number): Slot {
+  return (colour % 6) as Slot;
 }
 
+/** A seat's colour slot is the colour it chose in the lobby, so phones and the big screen agree. */
+export function slotOf(view: Pick<MuleView, 'players'>, seatId: string | null | undefined): Slot | null {
+  if (!seatId) return null;
+  const p = view.players.find((q) => q.id === seatId);
+  return p ? toSlot(p.slot) : null;
+}
+
+/** Each slot's species, for marks drawn by slot alone. */
 export function seatSpecies(view: Pick<MuleView, 'players'>): Record<Slot, Species> {
   const out = Object.fromEntries(DEFAULT_SPECIES.map((sp, i) => [i, sp])) as Record<Slot, Species>;
-  view.players.forEach((p, i) => {
-    if (i < 6) out[i as Slot] = p.species;
-  });
+  for (const p of view.players) out[toSlot(p.slot)] = p.species;
   return out;
 }
 
@@ -62,6 +66,7 @@ export function mapTiles(view: MuleView): MapTile[] {
       ...(t.peaks ? { peaks: t.peaks } : {}),
       ...(ground ? { ground } : {}),
       ...(t.pollution ? { pollution: t.pollution } : {}),
+      ...(t.special ? { special: t.special } : {}),
     };
   });
 }
@@ -77,7 +82,7 @@ export function player(view: MuleView, id: string | null | undefined): PlayerVie
 /** Public standings by money, best first. Scores replace money once the game is over. */
 export function standings(view: MuleView): { player: PlayerView; slot: Slot; value: number }[] {
   return view.players
-    .map((p, i) => ({ player: p, slot: (i % 6) as Slot, value: view.scores?.find((s) => s.id === p.id)?.score ?? p.money }))
+    .map((p) => ({ player: p, slot: toSlot(p.slot), value: view.scores?.find((s) => s.id === p.id)?.score ?? p.money }))
     .sort((a, b) => b.value - a.value);
 }
 
@@ -114,3 +119,25 @@ export const TERRAIN_ODDS: Partial<Record<TileView['terrain'], string>> = {
   volcanic: 'Often good for Energy. Some Smithore.',
   crater: 'Poor for Food. Little Smithore.',
 };
+
+/** Fails to compile if the engine's special kinds and the design system's drift apart. */
+type SameKinds = [SpecialKind] extends [EngineSpecialKind] ? ([EngineSpecialKind] extends [SpecialKind] ? true : never) : never;
+export const SPECIAL_KINDS_MATCH: SameKinds = true;
+
+const FX = MAP.specialEffect;
+const pct = (n: number) => `${Math.round(n * 100)}%`;
+
+/** What a kind does, in general. The numbers are the engine's, MAP.specialEffect. */
+export const SPECIAL_EFFECT: Record<SpecialKind, string> = {
+  ruins: `pays its first owner ${FX.salvage.alloy} Alloy or ${FX.salvage.electronics} Electronics, once, then is gone.`,
+  crystalCavern: `+${FX.crystalCavern} Crystite when mined. Each month it's mined, a ${pct(FX.collapseChance)} chance it caves in.`,
+  geyser: `+${FX.geyser} Water or Energy.`,
+  oasis: `+${FX.oasis} Food.`,
+  relic: `+${FX.relic} to every working plot touching it, anyone's.`,
+};
+
+/** What this plot's special field does, without its name. A ruin says which salvage it holds, since the map drew it. */
+export function specialEffect(s: MapSpecial): string {
+  if (s.kind === 'ruins' && s.salvage) return `the first owner salvages ${FX.salvage[s.salvage]} ${GOOD_NAME[s.salvage]}, once.`;
+  return SPECIAL_EFFECT[s.kind];
+}

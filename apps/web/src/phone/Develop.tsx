@@ -3,6 +3,8 @@ import type { TileView } from '@mule/protocol';
 import { AirGauge, Button, cx, FoodTime, GOOD_NAME, GoodIcon, HoloMap, MuleIcon, PlayerMark, StoreInterior, TERRAIN_NAME, ZoomMap, type Shop } from '@mule/ui';
 import { useEffect, useState } from 'react';
 import { mapTiles, PHASE_NAME, plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
+import { speakerAt } from '../chat/Chat';
+import { SpecialLine } from '../components/SpecialLine';
 import { useClient, useServerNow } from '../net/react';
 import { usePhoneGame } from './game';
 import { GroundCard, Traits } from './ground';
@@ -143,6 +145,7 @@ export function Develop() {
                 </h2>
                 <span className="font-mono text-xs text-holo">{mine ? 'YOURS' : free ? 'FREE' : 'OWNED'}</span>
               </header>
+              <SpecialLine special={tile.special} />
               <span className="flex flex-wrap items-center gap-x-2 empty:hidden">
                 {owner && !mine && (
                   <span className="flex items-center gap-1.5 text-sm font-normal text-ink-2">
@@ -161,7 +164,13 @@ export function Develop() {
                   <strong>{['', 'Dusty', 'Polluted', 'Toxic'][tile.pollution]} land.</strong> Food, Water and Medicine here make {tile.pollution} less.
                 </span>
               )}
-              {tile.ground ? <GroundCard ground={tile.ground} /> : <span className="text-sm text-ink-2">{TERRAIN_ODDS[tile.terrain]}</span>}
+              {tile.ground ? (
+                <GroundCard ground={tile.ground} />
+              ) : (
+                <span className="text-sm text-ink-2" data-testid="terrain-hint">
+                  {TERRAIN_ODDS[tile.terrain]}
+                </span>
+              )}
               <Traits traits={tile.traits} />
               {mine && (
                 <Button size="md" variant="outline" className="px-2 text-xs" disabled={tile.filter || me.stock.alloy < DEVELOPMENT.filterAlloy} onClick={() => client.intent({ type: 'filter', x: tile.x, y: tile.y })}>
@@ -226,6 +235,7 @@ export function Develop() {
               next={guide.next}
               locks={guide.locks}
               me={{ id: me.id, slot, leading: carry, time: seconds / DEVELOPMENT.fullSeconds }}
+              wrapCreature={speakerAt}
               overlay={filling && <FillCard seconds={me.devSeconds} hungry={me.hungry} sick={me.sick} ate={Math.min(me.stock.food, me.needs.food)} need={me.needs.food} />}
             />
           </div>
