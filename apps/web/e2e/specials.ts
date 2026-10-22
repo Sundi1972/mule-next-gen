@@ -131,7 +131,7 @@ try {
   await checkGlyphs(devMap, 'phone, development', 'phone');
   await tapPlot(phone, devMap, looked);
   await dev.getByTestId('plot-title').filter({ hasText: plotName(looked) }).waitFor({ timeout: SHOWN_MS });
-  await checkSpecialLine(dev.locator('section').filter({ has: dev.getByTestId('plot-title') }), looked.special.kind, `B-AC-9: Develop's plot card of ${plotName(looked)}`);
+  await checkSpecialLine(dev.getByTestId('plot-title').locator('xpath=ancestor::section[1]'), looked.special.kind, `B-AC-9: Develop's plot card of ${plotName(looked)}`);
 
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
   console.log(`e2e specials: ok (seed ${SEED}, ${specials.map((t) => `${t.special.kind} ${plotName(t)}`).join(', ')}; ${marks.join('; ')})`);

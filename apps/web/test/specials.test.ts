@@ -88,7 +88,7 @@ describe("B-AC-9: the phone's plot card says what a special field does", () => {
   });
 
   it("says what each kind does, in the rendered line, with the engine's numbers", () => {
-    const text = (special: MapSpecial) => renderToStaticMarkup(createElement(SpecialLine, { special })).replace(/<[^>]+>/g, '');
+    const text = (special: MapSpecial) => renderToStaticMarkup(createElement(SpecialLine, { special })).replace(/<[^>]+>/g, '').replace(/&#x27;/g, "'");
     expect(text({ kind: 'geyser' })).toBe(`Geyser: +${FX.geyser} Water or Energy.`);
     expect(text({ kind: 'oasis' })).toBe(`Oasis: +${FX.oasis} Food.`);
     expect(text({ kind: 'crystalCavern' })).toBe(`Crystal cavern: +${FX.crystalCavern} Crystite when mined. Each month it's mined, a ${Math.round(FX.collapseChance * 100)}% chance it caves in.`);
