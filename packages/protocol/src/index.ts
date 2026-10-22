@@ -48,7 +48,7 @@ export interface TileView {
   ground?: Ground;
   /** Only for the plot's owner or a player who analysed it: its hazard traits. */
   traits?: TileTrait[];
-  /** The plot's special field, while it lasts (spec RULE-5, RULE-6). Public: every viewer, phone and TV, sees it; only the ground is private. */
+  /** The plot's special field, while it lasts. Public: every viewer, phone and TV, sees it; only the ground is private. */
   special?: { kind: SpecialKind; salvage?: 'alloy' | 'electronics' };
 }
 

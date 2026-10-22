@@ -51,7 +51,7 @@ export const TERRAIN_NAME: Record<Terrain, string> = {
 };
 
 /**
- * The five special fields (spec RULE-5). The UI keeps its own copy of the kind union, as it does for Good and
+ * The five special fields. The UI keeps its own copy of the kind union, as it does for Good and
  * Terrain; apps/web checks at compile time that it equals the engine's.
  */
 export type SpecialKind = 'ruins' | 'crystalCavern' | 'geyser' | 'oasis' | 'relic';
