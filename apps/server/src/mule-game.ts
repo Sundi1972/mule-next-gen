@@ -411,6 +411,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   private startPlanning(): void {
     const state = this.requireState();
+    // At once, so an AI Governor's tax lands before a quick table can press ready.
+    this.tickVoteHands(0);
     for (const seat of this.ai.values()) seat.planMonth(state);
   }
 
@@ -429,8 +431,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /**
    * Every WALK.tickMs in planning with politics on: the AI vote hands act first,
    * then dropped phones count as Done and the election steps, all with the same dt.
-   * When the election ends, planning's timer and the AI land plans start; the
-   * hands keep ticking so an AI Governor sets the tax, until planning ends.
+   * When the election ends, planning proper starts; the hands keep ticking until
+   * planning ends, and screens are sent a view only when something changed.
    */
   private schedulePoliticsTick(last: number): void {
     const state = this.requireState();
@@ -440,18 +442,26 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         const now = this.ctx.now();
         // A stalled server loop must not skip a stage.
         const dt = Math.min(Math.max(0, now - last), WALK.tickMs * 3) / this.phaseScale;
-        let acted = false;
-        for (const [id, hand] of this.voteHands) {
-          hand.tick(state, dt, (action) => {
-            acted = true;
-            return this.aiAct(id, action);
-          });
-        }
+        const acted = this.tickVoteHands(dt);
         const changed = this.stepOpenElection(dt) || acted;
         if (this.electionOpen() || this.politicsHandsPlay()) this.schedulePoliticsTick(now);
         if (changed) this.ctx.changed();
       }),
     );
+  }
+
+  /** Ticks every AI vote hand by dt; true when the rules accepted any of their moves. */
+  private tickVoteHands(dt: number): boolean {
+    const state = this.requireState();
+    let acted = false;
+    for (const [id, hand] of this.voteHands) {
+      hand.tick(state, dt, (action) => {
+        const ok = this.aiAct(id, action);
+        acted ||= ok;
+        return ok;
+      });
+    }
+    return acted;
   }
 
   /** Steps an open election by dt, dropped phones counting as Done; starts planning proper when it ends. Returns whether it was open. */
