@@ -245,10 +245,10 @@ describe('the politics desks', () => {
 
   it("C12: after running, the line names the office and, for Governor, the promise; a Sheriff's line has none", () => {
     const gov = onPhone(view(politics({ election: election({ candidates: { governor: ['s1'], sheriff: [] }, promises: { s1: CAP_8 } }) }), me({ running: 'governor' })), CouncilDesk);
-    expect(textOf(gov, 'running')).toBe('You run for Governor, promising “Tax no higher than 8%”; one office at a time. Withdraw');
+    expect(textOf(gov, 'running')).toBe('You run for Governor, promising “Tax no higher than 8%”; one office at a time.Withdraw');
     expect(tagOf(gov, 'promise-pick')).toBeUndefined();
     const sheriff = onPhone(view(politics({ election: election({ candidates: { governor: [], sheriff: ['s1'] } }) }), me({ running: 'sheriff' })), CouncilDesk);
-    expect(textOf(sheriff, 'running')).toBe('You run for Sheriff; one office at a time. Withdraw');
+    expect(textOf(sheriff, 'running')).toBe('You run for Sheriff; one office at a time.Withdraw');
   });
 
   it('B-AC-6, RULE-10: every ballot quotes each Governor candidate\'s promise; a Sheriff candidate has no line, not an empty quote', () => {

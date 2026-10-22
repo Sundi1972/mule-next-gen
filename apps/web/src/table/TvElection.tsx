@@ -1,7 +1,7 @@
 import type { MuleView } from '@mule/protocol';
 import { Creature, cx, SLOT_COLOR } from '@mule/ui';
 import { slotOf } from '../game/derive';
-import { howWon, OFFICE_NAME, OFFICES, revealCountdown } from '../phone/hub/politics/words';
+import { howWon, OFFICE_NAME, OFFICES, promiseText, revealCountdown } from '../phone/hub/politics/words';
 import { TvHeader } from './TableApp';
 
 /**
@@ -38,12 +38,15 @@ export function TvElection({ game }: { game: MuleView }) {
                   const p = game.players.find((q) => q.id === c.id);
                   const color = SLOT_COLOR[slotOf(game, c.id) ?? 0];
                   const win = c.id === r.winner;
+                  // Only a Governor candidate stands on a promise.
+                  const promise = office === 'governor' ? election.promises[c.id] : undefined;
                   return (
                     <div key={c.id} className={cx('flex items-center gap-4 rounded-panel p-3', win && 'bg-holo-soft ring-2 ring-holo')} data-testid={`result-${office}-${c.id}`}>
                       {p && <Creature species={p.species} color={color} size={64} />}
                       <div className="flex min-w-0 flex-1 flex-col gap-1">
                         <span className="flex items-baseline gap-3">
                           <span className="font-display text-2xl font-semibold">{p?.name}</span>
+                          {promise && <span className="truncate text-lg text-ink-2">“{promiseText(promise)}”</span>}
                         </span>
                         <span className="flex gap-1.5" aria-label={`${c.votes} votes`}>
                           {Array.from({ length: c.votes }, (_, i) => (

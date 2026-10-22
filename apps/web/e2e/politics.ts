@@ -118,7 +118,8 @@ async function main(): Promise<void> {
     await everyone(phones, (p) => p.page.getByTestId('ready').click({ timeout: PRESS_MS }));
     await everyone(phones, async (p) => {
       const ballot = p.page.locator('[data-phase=planning]').getByTestId('election');
-      await ballot.getByRole('radio', { name: lena.name, exact: true }).check({ timeout: within(POLITICS.nominateMs) });
+      // Her row is named for her, then her promise.
+      await ballot.getByRole('radio', { name: new RegExp(`^${lena.name}\\b`) }).check({ timeout: within(POLITICS.nominateMs) });
     });
     // B-AC-6: every phone's ballot quotes each Governor candidate's promise, the AI seat's too if it runs; no Sheriff candidate has one.
     const { governor: govs, sheriff: sheriffs } = truth.state().politics!.election!.candidates;
