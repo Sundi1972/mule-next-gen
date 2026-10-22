@@ -2,7 +2,8 @@
  * The phone lobby against the real server. B-AC-6: the host kicks a phone and an AI, a player leaves, and the host
  * closes the table. B-AC-7 (lobby): a player and the host each move their seat to another device with a one-time
  * link. Every removed phone lands on the start screen with the reason. B-AC-13: the "make your colonist" lobby at a
- * phone's and a laptop's size. B-AC-8: a picked colour follows the player into the game. Run with
+ * phone's and a laptop's size. B-AC-8: a picked colour follows the player into the game. B-AC-7 (in game): that
+ * player then moves to another device mid-game. Run with
  * `pnpm --filter @mule/web e2e`.
  */
 import { COLOUR_NAME, SPECIES, type Slot } from '@mule/ui';
@@ -381,9 +382,51 @@ async function colourIntoTheGame(): Promise<void> {
   await development.waitFor({ timeout: within(PHASE_MS.landGrant + PHASE_MS.development) + LAND_AUCTION_ALLOWANCE_MS });
   colourRoom(await shows(heikoOn(development.locator('li')).locator(inRose)), `B-AC-8: the TV's development roster draws Heiko in ${COLOUR_NAME[rose]}`);
   colourRoom(await shows(development.locator(`[aria-label*="owned by"] ${inRose}`).first()), `B-AC-8: the TV map draws Heiko's plot in ${COLOUR_NAME[rose]}`);
+
+  // B-AC-13 (handoff, in game): the game shell's move dialog behaves like the lobby's. Opened once and cancelled.
+  const moveHeiko = heiko.getByTestId('move-to-phone');
+  check(await shows(moveHeiko), 'B-AC-13 (handoff, in game): the game shell has move-to-phone');
+  await moveHeiko.click();
+  const gameDialog = heiko.getByRole('dialog', { name: 'Move to your phone' });
+  check(await shows(gameDialog.locator('[data-testid=handoff-qr][data-state=ready]')), 'B-AC-13 (handoff, in game): move-to-phone opens "Move to your phone" with a ready code');
+  await heiko.keyboard.press('Escape');
+  check(await gone(heiko.getByTestId('host-dialog')), 'B-AC-13 (handoff, in game): Escape closes the move dialog');
+  check(await moveHeiko.evaluate((el) => el === document.activeElement), 'B-AC-13 (handoff, in game): focus goes back to move-to-phone');
+
+  // B-AC-7 (in game): Heiko moves to another device while the game runs on.
+  const was = await playingAs(heiko);
+  await moveHeiko.click();
+  check(await shows(gameDialog.getByText('you, Heiko', { exact: true })), 'B-AC-7 (in game): the dialog says the phone becomes "you, Heiko"');
+  const link = await qrLink(gameDialog, 'B-AC-7 (in game)');
+  checkLink(link, code, await seatToken(heiko), 'Heiko', 'B-AC-7 (in game)');
+  const second = await phone('heiko B-AC-7 second device');
+  await second.goto(link);
+  check(await shows(second.getByTestId('game-shell')), 'B-AC-7 (in game): the second device opens the link into the game');
+  check((await second.getByTestId('lobby').count()) === 0, 'B-AC-7 (in game): the second device is not in the lobby');
+  const is = await playingAs(second);
+  check(is.name === 'Heiko', `B-AC-7 (in game): the second device is Heiko, got "${is.name}"`);
+  check(is.mark === was.mark, `B-AC-7 (in game): the second device keeps Heiko's species, "${was.mark}", got "${is.mark}"`);
+  check(is.slot === String(rose), `B-AC-7 (in game): the second device keeps Heiko's ${COLOUR_NAME[rose]}, got slot ${is.slot}`);
+  check(is.money === was.money, `B-AC-7 (in game): the second device has Heiko's money, ${was.money}, got ${is.money}`);
+  check(await shows(tv.locator(`[aria-label*="owned by"] ${inRose}`).first()), `B-AC-7 (in game): the TV still draws Heiko's plot in ${COLOUR_NAME[rose]}`);
+  check(await shows(heiko.getByText(MOVED)), `B-AC-7 (in game): the first device shows "${MOVED}"`);
+  check(await onStartScreen(heiko), 'B-AC-7 (in game): the first device steps aside to the start screen');
+  await second.context().close();
   await heiko.context().close();
   await mia.context().close();
   await tv.context().close();
+}
+
+/** Who this page plays as, from its game shell's header: name, species (the mark's label), colour (its slot) and money. */
+async function playingAs(page: Page): Promise<{ name: string; mark: string; slot: string; money: string }> {
+  const header = page.getByTestId('guide').locator('header');
+  const mark = header.locator('[role=img][data-slot]').first();
+  return {
+    name: ((await mark.locator('xpath=following-sibling::span[1]').textContent()) ?? '').trim(),
+    mark: (await mark.getAttribute('aria-label')) ?? '',
+    slot: (await mark.getAttribute('data-slot')) ?? '',
+    money: ((await page.getByTestId('money').textContent()) ?? '').trim(),
+  };
 }
 
 /** Heiko's row among these: the colour is read from `data-slot` on his PlayerMark. */
@@ -492,16 +535,16 @@ function pressedColour(page: Page): Promise<string | null> {
 }
 
 /** The link a dialog's QR carries. The drawn cells must encode exactly that text, so a scan opens it. */
-async function qrLink(dialog: Locator): Promise<string> {
+async function qrLink(dialog: Locator, tag = 'B-AC-7 (lobby)'): Promise<string> {
   const qr = dialog.locator('svg[data-text]').filter({ visible: true });
-  check(await shows(qr), 'B-AC-7 (lobby): the dialog shows a QR');
+  check(await shows(qr), `${tag}: the dialog shows a QR`);
   const text = (await qr.getAttribute('data-text')) ?? '';
   const drawn = await qr.evaluate((svg) => Array.from(svg.querySelectorAll('rect'), (r) => `${r.getAttribute('x')},${r.getAttribute('y')}`).join(' '));
   const { modules } = QRCode.create(text, { errorCorrectionLevel: 'M' });
   const encoded = Array.from(modules.data, (on, i) => (on ? `${i % modules.size},${Math.floor(i / modules.size)}` : ''))
     .filter(Boolean)
     .join(' ');
-  check(text !== '' && drawn === encoded, `B-AC-7 (lobby): the QR draws its link "${text}"`);
+  check(text !== '' && drawn === encoded, `${tag}: the QR draws its link "${text}"`);
   return text;
 }
 
@@ -511,12 +554,12 @@ function seatToken(page: Page): Promise<string> {
 }
 
 /** The move link names the room and a one-time code, never the device's own seat token. */
-function checkLink(link: string, code: string, token: string, who: string): void {
+function checkLink(link: string, code: string, token: string, who: string, tag = 'B-AC-7 (lobby)'): void {
   const url = new URL(link);
-  check([...url.searchParams.keys()].sort().join(',') === 'handoff,room', `B-AC-7 (lobby): ${who}'s link carries only room and handoff, got ${url.search}`);
-  check(url.searchParams.get('room') === code, `B-AC-7 (lobby): ${who}'s link names room ${code}, got ${url.search}`);
+  check([...url.searchParams.keys()].sort().join(',') === 'handoff,room', `${tag}: ${who}'s link carries only room and handoff, got ${url.search}`);
+  check(url.searchParams.get('room') === code, `${tag}: ${who}'s link names room ${code}, got ${url.search}`);
   const handoff = url.searchParams.get('handoff') ?? '';
-  check(token !== '' && handoff !== '' && handoff !== token && !link.includes(token), `B-AC-7 (lobby): ${who}'s link carries a handoff code, not the seat token`);
+  check(token !== '' && handoff !== '' && handoff !== token && !link.includes(token), `${tag}: ${who}'s link carries a handoff code, not the seat token`);
 }
 
 function shows(locator: Locator): Promise<boolean> {
