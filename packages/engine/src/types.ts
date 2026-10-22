@@ -393,4 +393,10 @@ export interface LandAuction extends WalkBoard {
   /** This lot's place in the month's line-up, from 1, and the line-up's length. */
   number: number;
   count: number;
+  /** True once this lot's leading bid has passed hi and the walk sped up. */
+  fast: boolean;
+  /** Ms the soft close has put back on this lot's walk clock. */
+  addedMs: number;
+  /** The last buyer to lead this lot, kept while nobody reaches the minimum, so only a change of hands counts as an overtake. */
+  leaderId: string | null;
 }

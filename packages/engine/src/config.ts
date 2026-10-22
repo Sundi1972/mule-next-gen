@@ -542,6 +542,12 @@ export const LOTS = {
   /** The board runs from this share of the minimum (where buyers start) to boardHigh's. */
   boardLow: 0.7,
   boardHigh: 2,
+  /** Past the board's top the walk speeds up by this much for the rest of the lot, so a contested lot can reach its runner-up's price before the bell. */
+  fastClimb: 2,
+  /** A change of leader with less than this left on the walk clock sets it back to this, so the bell doesn't decide who wins. */
+  lateMs: 2_000,
+  /** The most those resets may add to one lot's walk. */
+  lateCapMs: 6_000,
   /** What the store pays for an unsold plot, as a share of GAME.plotScore, so it can't drift past the score. */
   storePlotShare: 2 / 3,
   /** What the store pays for an unsold MULE, as a share of this month's MULE price. */
