@@ -40,7 +40,7 @@ const seatRecords = (records: DecisionRecord[], seat: string) => records.filter(
 const withChoice = (records: DecisionRecord[]) => records.filter((r) => r.shortlist.length > 1);
 
 describe('playGameAsync', GAMES, () => {
-  it.each([1, 7, 101])('T-AC-6: playGame and playGameAsync play the same game (seed %i, no hooks)', async (seed) => {
+  it.each([1, 7, 101])('INV-between: sync and async play the same game (seed %i, no hooks)', async (seed) => {
     const sync = recording();
     const played = playGame(seed, SPECS(seed), sync.options);
     const async_ = recording();
@@ -50,7 +50,7 @@ describe('playGameAsync', GAMES, () => {
     expect(fingerprint(awaited, async_.records)).toBe(fingerprint(played, sync.records));
   });
 
-  it('T-AC-6: playGame and playGameAsync play the same game when between awaits a real timer (seed 101)', async () => {
+  it('INV-between: sync and async play the same game when between awaits a real timer (seed 101)', async () => {
     const sync = recording();
     const played = playGame(101, SPECS(101), sync.options);
     const async_ = recording({ between: nextTimer });

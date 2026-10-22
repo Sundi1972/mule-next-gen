@@ -16,11 +16,12 @@ vi.mock('@anthropic-ai/sdk', async (original) => (await import('./brain-fakes.js
 
 const CODE = 'TABLE';
 /**
- * The game seed every table here plays. The tests rely on what happens at it:
+ * The game seed every table here plays, at full phase length (table()'s default). The tests rely on what happens at it:
  * - The Baron (`ais[1]`) is asked for land in month 1, and The Accountant is not.
- * - Both AIs' next decision after start is a develop whose option B installs a MULE.
+ * - After that, each AI's next model call is a develop decision whose option B installs a MULE.
  * - A 2-month Classic game gives some seat more lines than the cap, and two lines in one phase.
- * If a strategist change moves these, pick a seed where they hold.
+ * A shorter phase scale breaks them: the land grant's tick does not scale with it, so the AIs end up with no land and
+ * every develop or trade decision has one option. If a strategist change moves them, pick a seed where they hold.
  */
 const SEED = 7;
 /** Game time per step of the fake clock; every timer due in a step runs, with promises settled between them. */
@@ -43,7 +44,7 @@ interface TableOptions {
   /** Absent: MuleGame's default brain, from the environment. */
   brain?: BrainService;
   maxMonths?: number;
-  /** Default 0.1. At 1 the AI hands have the phase's full time, as in a real game. */
+  /** Default 1: the AI hands have the phase's full time, as in a real game. */
   phaseScale?: number;
   sayThrows?: boolean;
   /** Default true. False leaves the room in the lobby. */
@@ -82,7 +83,7 @@ function table(options: TableOptions) {
             },
           }
         : ctx;
-      game = new MuleGame(context, SEED, { maxMonths: options.maxMonths ?? 1, phaseScale: options.phaseScale ?? 0.1, ...(options.brain ? { brain: options.brain } : {}) });
+      game = new MuleGame(context, SEED, { maxMonths: options.maxMonths ?? 1, phaseScale: options.phaseScale ?? 1, ...(options.brain ? { brain: options.brain } : {}) });
       return game;
     },
     aiNames: AI_NAMES,
@@ -259,7 +260,7 @@ describe('the brain at the table', () => {
   it('B-AC-2: a player\'s line is quoted in the AI\'s next prompt, and the option it names there is the move applied on the board', async () => {
     const sdk = fakeSdk(() => reply('B', ''));
     const { brain, records } = watched(smart(sdk));
-    const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain, phaseScale: 1 });
+    const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain });
     const [heiko, mia] = t.phones;
     const [accountant, baron] = t.ais;
 
@@ -402,7 +403,7 @@ describe('the brain at the table', () => {
     expect(() => lobby.heard?.('s9', 'hello')).not.toThrow();
 
     const sdk = fakeSdk(() => reply('A', ''));
-    const t = table({ humans: ['Heiko'], ais: 2, brain: smart(sdk), phaseScale: 1 });
+    const t = table({ humans: ['Heiko'], ais: 2, brain: smart(sdk) });
     const game = t.game();
     expect(typeof game.heard).toBe('function');
     expect(() => game.heard?.('s9', 'hello')).not.toThrow();
