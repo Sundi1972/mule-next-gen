@@ -60,6 +60,11 @@ describe('pricing B', () => {
     const short2 = auctionWithFood(0);
     startAuction(short2, ['food']);
     expect(short2.auction!.storeSell).toBeGreaterThan(short2.auction!.storeBuy);
+    // The round trip: sell a unit to the store, keep what the sales tax leaves, buy it back. Both lines are fixed
+    // for the whole good, so once the store's buying lifts its stock past its reserve this is all a player could do.
+    const { storeBuy, storeSell } = short2.auction!;
+    const kept = storeBuy - Math.round(storeBuy * short2.treasury.salesTax);
+    expect(kept - storeSell).toBeLessThan(0);
     // Negative case: with more than a month of need on the shelf the store bids its usual price.
     const full = bid(Math.ceil(monthOfNeed(auctionWithFood(0))) + 2);
     expect(full.buy).toBeGreaterThan(0);
