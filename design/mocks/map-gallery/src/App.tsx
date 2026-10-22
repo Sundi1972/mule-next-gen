@@ -1,11 +1,12 @@
 import { useEffect, useId, useState } from 'react';
 import { RAW_GOODS, type RawGood } from '@mule/engine';
-import { GOOD_NAME, setTheme, useTheme } from '@mule/ui';
+import { GOOD_NAME } from '@mule/ui';
 import { AggregatePanel } from './AggregatePanel';
 import { PAGE_SIZE, type GroundView, type Players } from './gallery';
 import { MapCard } from './MapCard';
 import { RulesPanel } from './RulesPanel';
-import { Choice } from './ui';
+import { SpecialFields } from './special/SpecialFields';
+import { Choice, GalleryNav, ThemeToggle, usePage } from './ui';
 
 interface View {
   players: Players;
@@ -49,6 +50,28 @@ function useView(): [View, (change: Partial<View>) => void] {
 }
 
 export function App() {
+  const page = usePage();
+  if (page === 'special')
+    return (
+      <SpecialFields
+        header={
+          <header className="sticky top-0 z-10 border-b border-holo-line bg-panel/95 px-6 py-3 backdrop-blur">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+              <div className="mr-auto">
+                <h1 className="font-display text-xl font-bold">Special fields</h1>
+                <p className="text-xs text-ink-2">How a player sees a special field: on the map at phone and TV density, and on the phone's plot card.</p>
+              </div>
+              <GalleryNav page={page} />
+              <ThemeToggle />
+            </div>
+          </header>
+        }
+      />
+    );
+  return <Maps />;
+}
+
+function Maps() {
   const [view, change] = useView();
   const seeds = Array.from({ length: PAGE_SIZE }, (_, i) => view.seed + i);
   return (
@@ -61,6 +84,7 @@ export function App() {
           </div>
           <Choice label="Players" value={view.players} options={SIZES.map((p) => ({ value: p, label: `${p} players` }))} onChange={(players) => change({ players })} />
           <SeedPager seed={view.seed} onSeed={(seed) => change({ seed })} />
+          <GalleryNav page="maps" />
           <ThemeToggle />
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -138,27 +162,5 @@ function SeedPager({ seed, onSeed }: { seed: number; onSeed(seed: number): void 
         </button>
       </form>
     </div>
-  );
-}
-
-/** Switches between day and night. The choice is remembered on this device. */
-function ThemeToggle() {
-  const theme = useTheme();
-  const next = theme === 'light' ? 'dark' : 'light';
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        setTheme(next);
-        try {
-          localStorage.setItem('mule-theme', next);
-        } catch {
-          // Not remembered; the gallery still switches.
-        }
-      }}
-      className="rounded-control border border-holo-line px-2.5 py-1 text-sm hover:border-holo"
-    >
-      {theme === 'light' ? 'Night' : 'Day'}
-    </button>
   );
 }

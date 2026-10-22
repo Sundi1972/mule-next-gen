@@ -3,14 +3,17 @@ import { dealGround } from './map-ground.js';
 import { layoutMap } from './map-layout.js';
 import type { GameMap } from './map-rules.js';
 import type { Rng } from './rng.js';
+import { placeSpecials } from './specials.js';
 import { GROWN_GOODS, MINED_GOODS, type Ground, type Terrain, type Tile, type TileTrait } from './types.js';
 
 const TRAITS: TileTrait[] = ['bedrock', 'sheltered', 'hotSpring', 'thinVein', 'toxic', 'unstable', 'infested', 'floodPlain'];
 
 /**
  * Builds a map that meets the map rules by construction (spec RULE-2): the
- * layout stages, then the ground stages, then traits and peaks, all from the
- * one `rng` stream in that order, so a seed always gives the same map.
+ * layout stages, then the ground stages, then traits and peaks, then special
+ * fields, all from the one `rng` stream in that order, so a seed always gives
+ * the same map. Special fields draw last, so they leave every earlier stage's
+ * draws, and so the terrain and ground, as they were before special fields existed.
  */
 export function generateMap(players: number, rng: Rng): GameMap {
   const layout = layoutMap(players, rng);
@@ -36,7 +39,7 @@ export function generateMap(players: number, rng: Rng): GameMap {
       runMonths: 0,
     };
   });
-  return { width: layout.width, height: layout.height, tiles };
+  return placeSpecials({ width: layout.width, height: layout.height, tiles }, players, rng).map;
 }
 
 /** The average rating a plot of this terrain rolls for a good: what a player can expect before analysing it. */
@@ -61,16 +64,4 @@ export function tileIndex(width: number, x: number, y: number): number {
   return y * width + x;
 }
 
-export function tileAt(tiles: Tile[], width: number, x: number, y: number): Tile | undefined {
-  if (x < 0 || y < 0 || x >= width) return undefined;
-  return tiles[y * width + x];
-}
-
-export function neighbours(tiles: Tile[], width: number, tile: Tile): Tile[] {
-  return [
-    tileAt(tiles, width, tile.x + 1, tile.y),
-    tileAt(tiles, width, tile.x - 1, tile.y),
-    tileAt(tiles, width, tile.x, tile.y + 1),
-    tileAt(tiles, width, tile.x, tile.y - 1),
-  ].filter((t): t is Tile => t !== undefined);
-}
+export { neighbours, tileAt } from './grid.js';

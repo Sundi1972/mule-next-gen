@@ -10,7 +10,8 @@ describe('map determinism', () => {
         const first = generateMap(players, createRng(seed));
         const second = generateMap(players, createRng(seed));
         expect(second, `seed ${seed}, ${players} players`).toEqual(first);
-        for (const tile of first.tiles) expect(Object.keys(tile), `seed ${seed}, ${players} players`).toEqual(TILE_KEYS);
+        // A plot without a special field carries no `special` key at all.
+        for (const tile of first.tiles) expect(Object.keys(tile), `seed ${seed}, ${players} players`).toEqual(tile.special ? [...TILE_KEYS, 'special'] : TILE_KEYS);
       }
     }
   }, 120_000);
