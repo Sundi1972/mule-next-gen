@@ -1,5 +1,5 @@
 import { GOOD_CONFIG, PRICE, UPKEEP, WALK } from './config.js';
-import { colonyPrice, driftReference, monthlyDemand, shipInPort, shipPrice, storeForSale, storeWants, taxSale } from './economy.js';
+import { colonyPrice, driftReference, monthlyDemand, shelfShort, shipInPort, shipPrice, storeForSale, storeWants, taxSale } from './economy.js';
 import { RuleError } from './errors.js';
 import { monthNeeds } from './production.js';
 import type { AuctionSide, GameState, Good, LiveAuction, SkipReason, StatusRow } from './types.js';
@@ -43,10 +43,10 @@ export function storeSellLine(state: GameState): number | null {
   return a?.good && storeForSale(state, a.good) > 0 ? a.storeSell : null;
 }
 
-/** The store's buying line, while it still wants the good and can pay. */
+/** The store's buying line, while it still wants the good. The store never runs out of money. */
 export function storeBuyLine(state: GameState): number | null {
   const a = state.auction;
-  return a?.good && a.storeBudget > 0 && state.store.capital >= a.storeBuy ? a.storeBuy : null;
+  return a?.good && a.storeBudget > 0 ? a.storeBuy : null;
 }
 
 /** What the export ship pays for the next unit, while it is in port and wants this good. */
@@ -167,9 +167,12 @@ function nextGood(state: GameState, skipped: LiveAuction['skipped']): void {
   const demand = monthlyDemand(state);
   for (let good = a.queue.shift(); good !== undefined; good = a.queue.shift()) {
     const posted = colonyPrice(state, good);
-    const storeBuy = Math.max(1, Math.floor(posted * (1 - PRICE.storeSpread)));
+    const usualBuy = Math.max(1, Math.floor(posted * (1 - PRICE.storeSpread)));
+    // A shelf that can't feed the colonists for a month: the store bids up to restock, still under what they can pay.
+    const ceiling = Math.floor((UPKEEP.colonistBudget[good] ?? 0) / (1 + PRICE.storeSpread) ** 2);
+    const storeBuy = shelfShort(state, good, 1) ? Math.max(usualBuy, Math.min(ceiling, Math.ceil(posted * PRICE.restockPremium))) : usualBuy;
     const storeSell = Math.ceil(posted * (1 + PRICE.storeSpread));
-    const budget = Math.max(0, Math.min(storeWants(state, good, storeBuy, demand), Math.floor(Math.max(0, state.store.capital) / storeBuy)));
+    const budget = storeWants(state, good, demand);
     const reason = skipBefore(state, good, storeBuy, budget);
     if (reason) {
       // Nothing traded: the reference price still drifts toward the off-world price.

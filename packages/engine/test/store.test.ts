@@ -3,11 +3,12 @@ import { advancePhase, createGame, nextPostedPrice, PRICE, startAuction, storeBu
 
 const SEATS = ['brix', 'ossa', 'lena', 'tam'];
 
-/** Month 1's auction phase, with the store's Food shelf at `food` units. */
+/** Month 1's auction phase, with the store's Food shelf at `food` units and every player holding 40, so the colony as a whole isn't short. */
 function auctionWithFood(food: number): GameState {
   const state = createGame({ seed: 11, players: SEATS.map((id) => ({ id, name: id, isAi: false })) });
   while (state.phase !== 'auction') advancePhase(state);
   state.store.stock.food = food;
+  for (const p of state.players) p.stock.food = 40;
   return state;
 }
 
@@ -20,7 +21,7 @@ describe('the store never runs out of money', () => {
     startAuction(state, ['food']);
     const a = state.auction!;
     expect(a.good).toBe('food');
-    const wants = storeWants(state, 'food', a.storeBuy);
+    const wants = storeWants(state, 'food');
     expect(wants).toBeGreaterThan(0);
     expect(a.storeBudget).toBe(wants);
     expect(storeBuyLine(state)).toBe(a.storeBuy);
@@ -41,7 +42,7 @@ describe('pricing B', () => {
     const short = Math.floor(monthOfNeed(auctionWithFood(0))) - 1;
     expect(price(short, 1)).toBeGreaterThan(price(short, 0));
     // Negative case: a shelf holding more than a month of need posts the same price either way.
-    const full = Math.ceil(monthOfNeed(auctionWithFood(0))) + 20;
+    const full = Math.ceil(monthOfNeed(auctionWithFood(0))) + 2;
     expect(price(full, 1)).toBe(price(full, 0));
   });
 
@@ -55,8 +56,9 @@ describe('pricing B', () => {
     const ceiling = Math.floor((UPKEEP.colonistBudget.food ?? 0) / (1 + PRICE.storeSpread) ** 2);
     expect(short.buy).toBe(Math.max(Math.floor(short.posted * (1 - PRICE.storeSpread)), Math.min(ceiling, Math.ceil(short.posted * PRICE.restockPremium))));
     expect(short.buy).toBeGreaterThan(Math.floor(short.posted * (1 - PRICE.storeSpread)));
-    // Negative case: with the shelf full the store bids its usual price.
-    const full = bid(500);
+    // Negative case: with more than a month of need on the shelf the store bids its usual price.
+    const full = bid(Math.ceil(monthOfNeed(auctionWithFood(0))) + 2);
+    expect(full.buy).toBeGreaterThan(0);
     expect(full.buy).toBe(Math.max(1, Math.floor(full.posted * (1 - PRICE.storeSpread))));
   });
 });

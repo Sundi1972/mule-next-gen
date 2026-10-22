@@ -42,8 +42,6 @@ export const PRICE = {
   shelfCover: 1,
   /** With that shelf short, the store bids up to this times the posted price for Food and Water, capped so it can still sell to colonists within their budget. */
   restockPremium: 1.5,
-  /** The most of its capital the store spends on one good in one month. */
-  storeBudgetShare: 0.5,
   /** Share of normal spoilage the store suffers, thanks to its cold store and silos. */
   storeSpoilage: 0.25,
   /** How fast the reference price follows what players pay each other (0..1). */
