@@ -1,11 +1,9 @@
 import type { ReactNode } from 'react';
-import { MAP, mapSize, sizeBand, type FloorGood, type ShareTerrain } from '@mule/engine';
+import { MAP, mapSize, sizeBand } from '@mule/engine';
 import { GOOD_NAME, GoodIcon, TERRAIN_NAME } from '@mule/ui';
-import type { Players } from './gallery';
+import { FLOOR_GOODS, SHARE_TERRAINS, type Players } from './gallery';
 import { pct, Section } from './ui';
 
-const FLOOR_GOODS = Object.keys(MAP.floor) as FloorGood[];
-const SHARE_TERRAINS = Object.keys(MAP.shares) as ShareTerrain[];
 
 /** The rule numbers every map must meet, read from MAP: the numbers Heiko approved. */
 export function RulesPanel({ players }: { players: Players }) {
