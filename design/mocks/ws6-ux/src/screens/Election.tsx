@@ -33,8 +33,8 @@ const HOW: Record<How, (r: Race) => string> = {
 };
 
 const RACES: Race[] = [
-  { office: 'Governor', cands: [{ id: 'ossa', promise: 'No land tax', votes: 4 }, { id: 'kai', promise: 'Cleanup squad from month 5', votes: 5 }], winner: 'kai', how: 'votes' },
-  { office: 'Sheriff', cands: [{ id: 'brix', promise: 'Guards on every factory', votes: 4 }, { id: 'lena', promise: 'I will catch the saboteur', votes: 4 }], winner: 'lena', how: 'baron', baron: 'ossa' },
+  { office: 'Governor', cands: [{ id: 'ossa', promise: 'Tax no higher than 3%', votes: 4 }, { id: 'kai', promise: 'Lower the tax', votes: 5 }], winner: 'kai', how: 'votes' },
+  { office: 'Sheriff', cands: [{ id: 'brix', promise: '', votes: 4 }, { id: 'lena', promise: '', votes: 4 }], winner: 'lena', how: 'baron', baron: 'ossa' },
 ];
 
 const P = Object.fromEntries(VIEW.players.map((p, i) => [p.id, { ...p, slot: i as Slot }]));
@@ -80,7 +80,7 @@ export function TvElection({ revealed = false }: { revealed?: boolean }) {
                     <div className="flex min-w-0 flex-1 flex-col gap-1">
                       <span className="flex items-baseline gap-3">
                         <span className="font-display text-2xl font-semibold">{p.name}</span>
-                        <span className="truncate text-lg text-ink-2">“{c.promise}”</span>
+                        {c.promise && <span className="truncate text-lg text-ink-2">“{c.promise}”</span>}
                       </span>
                       <span className="flex gap-1.5" aria-label={`${c.votes} votes`}>
                         {Array.from({ length: c.votes }, (_, i) => (
