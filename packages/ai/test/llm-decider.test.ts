@@ -127,7 +127,7 @@ describe('LlmDecider behind Brain', () => {
     } finally {
       spy.mockRestore();
     }
-  });
+  }, 30_000); // plays a full strategist game: about 1-2 s locally, over vitest's 5 s default on a loaded runner
 
   it('T-AC-3 (AM-2): the port gets this decision\'s prompt and the hands wait for the kind: develop, trade, land', async () => {
     const seen: Record<string, { waitMs: number; prompt: Prompt }> = {};
