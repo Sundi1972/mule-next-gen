@@ -6,7 +6,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
 import { ThemeToggle } from '../components/ThemeToggle';
-import { colonyVerdict, fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, player, plotName, seatSpecies, secondsUntil, slotOf, standings, tileAt, toSlot } from '../game/derive';
+import { colonyVerdict, fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, plotName, seatSpecies, secondsUntil, slotOf, standings, tileAt, toSlot } from '../game/derive';
 import { useAuctionSound } from '../game/sound';
 import { useClient, useClientState, useServerNow } from '../net/react';
 import { TvLandAuction } from './TvLandAuction';
@@ -143,7 +143,6 @@ export function TvHeader({ game, title, seconds }: { game: MuleView; title: stri
 
 function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView }) {
   const now = useServerNow(200);
-  const { chat } = useClientState();
   const tiles = mapTiles(game);
   const lit = game.lit ? tileAt(game, game.lit.x, game.lit.y) : undefined;
   const phase = game.phase;
@@ -204,20 +203,6 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
       <>
         <MarketTiles game={game} />
         <News news={game.news} />
-        <ul className="flex flex-col gap-3">
-          {chat
-            .filter((c) => !c.to)
-            .slice(-4)
-            .map((c) => (
-              <li key={c.id} className="flex items-start gap-3">
-                <PlayerMark slot={slotOf(game, c.from) ?? 0} size={22} />
-                <p className="text-lg leading-snug">
-                  <span className="font-display font-semibold">{player(game, c.from)?.name}</span>
-                  <span className="text-ink-2"> {c.text}</span>
-                </p>
-              </li>
-            ))}
-        </ul>
         <Players game={game} className="mt-auto" right={(p) => <span className="font-mono text-sm text-ink-3">{p.isAi ? 'AI' : p.ready ? 'READY' : '…'}</span>} />
       </>
     );

@@ -1,6 +1,6 @@
 import type { ChatMessage, PlayerView } from '@mule/protocol';
 import { Creature, cx, SLOT_COLOR, type CreatureWrap, type Slot } from '@mule/ui';
-import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { toSlot } from '../game/derive';
 import { useClient } from '../net/react';
 import { useAnchor, useTableChat } from './store';
@@ -17,8 +17,9 @@ type Seat = { player: PlayerView; slot: Slot };
 function useSeats(): { seats: Map<string, Seat>; me: string | null } {
   const client = useClient();
   const { view, seatId } = useSyncExternalStore(client.subscribe, client.getState, client.getState);
-  const players = view?.game?.players ?? [];
-  return { seats: new Map(players.map((player) => [player.id, { player, slot: toSlot(player.slot) }])), me: seatId };
+  const players = view?.game?.players;
+  const seats = useMemo(() => new Map((players ?? []).map((player) => [player.id, { player, slot: toSlot(player.slot) }])), [players]);
+  return { seats, me: seatId };
 }
 
 /** What a creature's bubble must stay inside: the nearest of these around it. */
@@ -33,10 +34,12 @@ function useFit(on: boolean) {
   const ref = useRef<HTMLSpanElement>(null);
   const [fit, setFit] = useState({ dx: 0, below: false });
   useLayoutEffect(() => {
+    if (!on) return;
     let raf = 0;
     const measure = () => {
+      raf = requestAnimationFrame(measure);
       const el = ref.current;
-      const box = on ? el?.closest(BOUNDS) : null;
+      const box = el?.closest(BOUNDS);
       if (!el?.parentElement || !box) return;
       const b = el.getBoundingClientRect();
       const at = el.parentElement.getBoundingClientRect();
@@ -47,7 +50,6 @@ function useFit(on: boolean) {
       dx = Math.max(dx, s.left + EDGE - left);
       const next = { dx: Math.round(dx / k), below: at.top - b.height - 8 * k < s.top + EDGE };
       setFit((f) => (f.dx === next.dx && f.below === next.below ? f : next));
-      raf = requestAnimationFrame(measure);
     };
     measure();
     return () => cancelAnimationFrame(raf);
