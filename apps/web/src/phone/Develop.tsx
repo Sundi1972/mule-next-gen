@@ -4,6 +4,7 @@ import { AirGauge, Button, cx, FoodTime, GOOD_NAME, GoodIcon, HoloMap, MuleIcon,
 import { useEffect, useState } from 'react';
 import { mapTiles, PHASE_NAME, plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
 import { speakerAt } from '../chat/Chat';
+import { SpecialLine } from '../components/SpecialLine';
 import { useClient, useServerNow } from '../net/react';
 import { usePhoneGame } from './game';
 import { GroundCard, Traits } from './ground';
@@ -144,6 +145,7 @@ export function Develop() {
                 </h2>
                 <span className="font-mono text-xs text-holo">{mine ? 'YOURS' : free ? 'FREE' : 'OWNED'}</span>
               </header>
+              <SpecialLine special={tile.special} />
               <span className="flex flex-wrap items-center gap-x-2 empty:hidden">
                 {owner && !mine && (
                   <span className="flex items-center gap-1.5 text-sm font-normal text-ink-2">
@@ -162,7 +164,13 @@ export function Develop() {
                   <strong>{['', 'Dusty', 'Polluted', 'Toxic'][tile.pollution]} land.</strong> Food, Water and Medicine here make {tile.pollution} less.
                 </span>
               )}
-              {tile.ground ? <GroundCard ground={tile.ground} /> : <span className="text-sm text-ink-2">{TERRAIN_ODDS[tile.terrain]}</span>}
+              {tile.ground ? (
+                <GroundCard ground={tile.ground} />
+              ) : (
+                <span className="text-sm text-ink-2" data-testid="terrain-hint">
+                  {TERRAIN_ODDS[tile.terrain]}
+                </span>
+              )}
               <Traits traits={tile.traits} />
               {mine && (
                 <Button size="md" variant="outline" className="px-2 text-xs" disabled={tile.filter || me.stock.alloy < DEVELOPMENT.filterAlloy} onClick={() => client.intent({ type: 'filter', x: tile.x, y: tile.y })}>

@@ -145,6 +145,17 @@ describe('values for lot bids (WS3 caps AI bids at these)', () => {
     }
   });
 
+  it('INV-WS5-1: the AI values a geyser plot above the same plot without it', () => {
+    // The colony is out of Water, so a Water plot pays; a geyser adds to it (spec RULE-6).
+    const state = developmentWithWater(0);
+    const index = state.tiles.findIndex((t) => !t.owner && !t.special && ['tundra', 'volcanic', 'ice'].includes(t.terrain));
+    expect(index).toBeGreaterThanOrEqual(0);
+    const plain = plotValue(observe(state, 'ai0'), traderMind, index);
+    state.tiles[index]!.special = { kind: 'geyser' };
+    const geyser = plotValue(observe(state, 'ai0'), traderMind, index);
+    expect(geyser).toBeGreaterThan(plain);
+  });
+
   it('INV-WS3-2: a MULE is worth nothing without idle land, and at least the store price with a profitable use', () => {
     const state = developmentWithWater(0);
     state.players[0]!.money = 5_000;
