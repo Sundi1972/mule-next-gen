@@ -15,10 +15,10 @@ const SEAT = 's1';
 const HUNGRY_FOOD = 2;
 /** RULE-8: these first, in this order; then the rest by need. */
 const FIRST: Good[] = ['food', 'water', 'energy'];
-/** Desks only an office holder has (WS7); nobody holds an office before politics exists. */
-const OFFICE_DESKS = ['governor', 'sheriff'];
+/** Desks of an office the smoke's phone does not hold: nobody runs in month 1, so it is appointed Governor (lowest seat, equal money). */
+const OFFICE_DESKS = ['sheriff'];
 /** C17: what exists today, and nothing else, is drawn. */
-const TODAYS_DESKS = ['colony', 'talk', 'market'];
+const TODAYS_DESKS = ['colony', 'talk', 'council', 'market', 'governor'];
 const TODAYS_TOOLS = ['look', 'drone', 'list'];
 /** B-AC-12: the stage's content fills at least this share of the stage's height. */
 const FILL = 0.8;
