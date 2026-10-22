@@ -598,6 +598,26 @@ describe('AI seats in the election', () => {
     }
     expect(governors.size, 'the seeds put more than one persona in office').toBeGreaterThan(1);
   });
+
+  it("T-AC-6 (server) · C8: an AI Governor's tax lands that month even when every human presses ready the moment planning proper starts", () => {
+    const g = started({ seed: 1, seats: aiTable, phaseScale: 0.1 });
+    setMoney(g.game, { lena: 0, acc: 1_000, baron: 1_000, grudge: 1_000 });
+    engineOf(g.game).treasury.money = 10_000;
+    untilStage(g, 'over');
+    expect(g.game.viewFor(null).politics!.governor, 'seed precondition').toBe('baron');
+    g.game.handle('lena', { type: 'ready' });
+    expect(g.game.viewFor(null).phase, 'planning ended at once').toBe('landGrant');
+    expect(g.game.viewFor(null).politics!.tax.percent, "month 1: The Baron's 8% landed first").toBe(8);
+
+    // Month 2 has no election; the fund ran dry, so The Baron steers to 8 + 2.
+    for (let ms = 0; ms < 600_000 && g.game.viewFor(null).phase !== 'upkeep'; ms += WALK.tickMs) g.advance(WALK.tickMs);
+    engineOf(g.game).treasury.money = 0;
+    for (let ms = 0; ms < 600_000 && g.game.viewFor(null).month === 1; ms += WALK.tickMs) g.advance(WALK.tickMs);
+    expect(g.game.viewFor(null).phase).toBe('planning');
+    g.game.handle('lena', { type: 'ready' });
+    expect(g.game.viewFor(null).phase, 'planning ended at once').toBe('landGrant');
+    expect(g.game.viewFor(null).politics!.tax.percent, 'month 2: the tax landed first').toBe(10);
+  });
 });
 
 const keysOf = (o: object) => Object.keys(o).sort();
