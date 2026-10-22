@@ -7,7 +7,7 @@ const TILE_KEYS = ['x', 'y', 'terrain', 'peaks', 'ground', 'traits', 'owner', 'o
 // A change that alters any generated map updates this in the same commit and says why in its message.
 const FINGERPRINT = 'fb80007841308441955903f9d8d4425332ff7ca72aa4e699e854c33bb361d907';
 
-/** Every map seeds 1-200 give at each player count 2-6, in that order: each plot's terrain, ground, traits, peaks and special field. */
+/** The maps seeds 1-200 give at each player count 2-6, in that order: each plot's terrain, ground, traits, peaks and special field. */
 function fingerprint(): string {
   const hash = createHash('sha256');
   for (let seed = 1; seed <= 200; seed++) {
