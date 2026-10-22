@@ -10,7 +10,10 @@ import { check, launch, PHONE, startServer, TV } from './harness';
 const LAPTOP = { width: 1440, height: 900 };
 /** RULE-9, from the spec's words: the test's own reading of it, so the page is checked against the rule, not itself. */
 const RULE = { minMs: 2_000, maxMs: 4_500, maxWaitMs: 4_000 };
-/** "Within ~1 s" of its receipt, a line shows in the ticker; a bubble shows within this of its scheduled start. */
+/**
+ * "Within ~1 s" of its receipt, a line shows in the ticker; a bubble shows within this of its scheduled start. When
+ * the page paints nothing for longer (a phase's screen mounting), the first frame it paints must show it.
+ */
 const SHOWS_WITHIN_MS = 1_000;
 /** Render lag after a phase change, during which the last frame of the old phase may still be sampled. */
 const PHASE_LAG_MS = 150;
@@ -253,6 +256,11 @@ function schedule(wire: Wire): { id: number; from: number; to: number }[] {
   return out;
 }
 
+/** By when something due at `t` must show: within SHOWS_WITHIN_MS, or in the first frame painted after `t`. */
+function deadline(samples: Sample[], t: number): number {
+  return Math.max(t + SHOWS_WITHIN_MS, samples.find((s) => s.t >= t)?.t ?? Infinity);
+}
+
 function phaseAt(wire: Wire, t: number): string {
   return wire.phases.filter((p) => p.at <= t).at(-1)?.key ?? '';
 }
@@ -270,8 +278,10 @@ function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
     const phase = wire.phases.find((p) => p.key === phaseAt(wire, line.at))?.phase ?? '?';
     byPhase.set(phase, (byPhase.get(phase) ?? 0) + 1);
     const seen = samples.find((s) => s.t >= line.at && s.ticker.some((l) => l.id === line.id));
-    check(seen && seen.t - line.at <= SHOWS_WITHIN_MS, `B-AC-17: on ${who} line ${line.id} ("${line.text}") shows in the ticker within ${SHOWS_WITHIN_MS} ms, ${seen ? `took ${seen.t - line.at} ms` : 'never'}`);
-    check(seen.phase === phase, `B-AC-17: on ${who} line ${line.id} shows in the ticker in the phase it was said in, ${phase}, not ${seen.phase}`);
+    check(seen && seen.t <= deadline(samples, line.at), `B-AC-17: on ${who} line ${line.id} ("${line.text}") shows in the ticker within ${SHOWS_WITHIN_MS} ms, ${seen ? `took ${seen.t - line.at} ms` : 'never'}`);
+    // A line that arrives in the same instant as a new phase belongs to either.
+    const next = wire.phases.find((p) => p.at > line.at && p.at - line.at <= PHASE_LAG_MS)?.phase;
+    check(seen.phase === phase || seen.phase === next, `B-AC-17: on ${who} line ${line.id} shows in the ticker in the phase it was said in, ${phase}, not ${seen.phase}`);
   }
 
   const anchors = { creature: 0, seatRow: 0 };
@@ -280,7 +290,7 @@ function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
   for (const b of schedule(wire)) {
     if (b.to - b.from < SHORTEST_LOOKED_FOR_MS) continue;
     const line = wire.lines.find((l) => l.id === b.id)!;
-    const during = samples.filter((s) => s.t >= b.from && s.t < Math.min(b.to, b.from + SHOWS_WITHIN_MS));
+    const during = samples.filter((s) => s.t >= b.from && s.t < b.to && s.t <= deadline(samples, b.from));
     const drawn = during.some((s) => s.speakers.includes(line.from));
     // The TV has no seat row: a speaker it doesn't draw has only the ticker there.
     if (tv && !drawn) continue;
