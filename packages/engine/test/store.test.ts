@@ -56,6 +56,10 @@ describe('pricing B', () => {
     const ceiling = Math.floor((UPKEEP.colonistBudget.food ?? 0) / (1 + PRICE.storeSpread) ** 2);
     expect(short.buy).toBe(Math.max(Math.floor(short.posted * (1 - PRICE.storeSpread)), Math.min(ceiling, Math.ceil(short.posted * PRICE.restockPremium))));
     expect(short.buy).toBeGreaterThan(Math.floor(short.posted * (1 - PRICE.storeSpread)));
+    // The store never buys above its own selling price for the same good (WS3's review of #66): no buy-back loop.
+    const short2 = auctionWithFood(0);
+    startAuction(short2, ['food']);
+    expect(short2.auction!.storeSell).toBeGreaterThan(short2.auction!.storeBuy);
     // Negative case: with more than a month of need on the shelf the store bids its usual price.
     const full = bid(Math.ceil(monthOfNeed(auctionWithFood(0))) + 2);
     expect(full.buy).toBeGreaterThan(0);
