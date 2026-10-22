@@ -289,9 +289,14 @@ function firstIn(samples: Sample[], phase: string, t: number): Sample | undefine
   return samples.find((s) => s.t >= t && s.phase === phase);
 }
 
-/** By when something due at `t` in this phase must show: SHOWS_WITHIN_MS after `t`, or after the phase first shows. */
+/**
+ * By when something due at `t` in this phase must show: SHOWS_WITHIN_MS after `t`, or after the page first shows the
+ * phase. When the page never shows that phase again, the first frame it paints after `t` must.
+ */
 function deadline(samples: Sample[], phase: string, t: number): number {
-  return Math.max(t, firstIn(samples, phase, t)?.t ?? t) + SHOWS_WITHIN_MS;
+  const shown = firstIn(samples, phase, t);
+  if (shown) return Math.max(t, shown.t) + SHOWS_WITHIN_MS;
+  return samples.find((s) => s.t >= t)?.t ?? t + SHOWS_WITHIN_MS;
 }
 
 /**
