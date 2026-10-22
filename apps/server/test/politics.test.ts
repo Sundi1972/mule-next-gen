@@ -116,10 +116,11 @@ const humans = ['lena', 'brix', 'ossa'];
 /** The engine's state behind the game: where a test arranges ground truth. */
 const engineOf = (game: MuleGame) => (game as unknown as { state: GameState }).state;
 
-function started(options: { phaseScale?: number } = {}) {
+function started(options: { phaseScale?: number; seed?: number; seats?: typeof people } = {}) {
+  const { seed = 7, seats = people, ...rest } = options;
   const fake = fakeContext();
-  const game = new MuleGame(fake.ctx, 7, { politics: true, ...options });
-  game.start(people);
+  const game = new MuleGame(fake.ctx, seed, { politics: true, ...rest });
+  game.start(seats);
   return { game, ...fake };
 }
 type Started = ReturnType<typeof started>;
@@ -462,6 +463,90 @@ describe('the politics view', () => {
     const board = g.game.viewFor(null);
     expect(board.politics!.election!.result).not.toBeNull();
     expectBoardKeys(board);
+  });
+});
+
+/* AI seats in the election: their VoteHand runs, votes, presses Done and governs. */
+
+/** One human and three Classic AI seats whose names give three personas. */
+const aiTable = [
+  { id: 'lena', name: 'Lena', isAi: false, color: 0 },
+  { id: 'acc', name: 'The Accountant', isAi: true, color: 1 },
+  { id: 'baron', name: 'The Baron', isAi: true, color: 2 },
+  { id: 'grudge', name: 'The Grudge', isAi: true, color: 3 },
+];
+const aiIds = ['acc', 'baron', 'grudge'];
+
+describe('AI seats in the election', () => {
+  it('C8: AI seats run and vote in the server\'s election, and every one presses Done within each stage\'s clock', () => {
+    let aiRan = 0;
+    let ballots = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const g = started({ seed, seats: aiTable });
+      g.game.handle('lena', { type: 'run', office: 'governor' });
+      g.game.handle('lena', { type: 'ready' });
+      let stage = election(g.game).stage;
+      let enteredAt = 0;
+      let lastView = election(g.game);
+      while (stage !== 'over') {
+        g.advance(WALK.tickMs);
+        const now = election(g.game);
+        if (now.stage === stage) {
+          lastView = now;
+          continue;
+        }
+        const lasted = g.ctx.now() - enteredAt;
+        if (stage === 'nominate') {
+          expect(lasted, `seed ${seed}: nominate ended because every seat was Done, not by its clock`).toBeLessThan(POLITICS.nominateMs);
+          aiRan += [...lastView.candidates.governor, ...lastView.candidates.sheriff].filter((id) => aiIds.includes(id)).length;
+        }
+        if (stage === 'ballot') {
+          ballots++;
+          expect(lasted, `seed ${seed}: the ballot ended because every seat was Done, not by its clock`).toBeLessThan(POLITICS.ballotMs);
+          expect(lastView.voted, `seed ${seed}: every AI seat voted`).toEqual(expect.arrayContaining(aiIds));
+        }
+        if (now.stage === 'ballot') {
+          g.game.handle('lena', { type: 'vote', office: 'governor', candidate: 'lena' });
+          g.game.handle('lena', { type: 'ready' });
+        }
+        stage = now.stage;
+        enteredAt = g.ctx.now();
+        lastView = now;
+      }
+    }
+    expect(aiRan, 'some AI seat ran for office across the seeds').toBeGreaterThan(0);
+    expect(ballots, 'some seed had a contested office').toBeGreaterThan(0);
+  });
+
+  it('C8: an AI Governor sets the tax in planning', () => {
+    // RULE-8 from a 5% start: a step of at most 5 toward the persona's target (cautious 4, aggressive 8, saboteur 10), +2 when the fund is low, inside the month's bounds.
+    const month1 = { acc: 4, baron: 8, grudge: 10 } as Record<string, number>;
+    const month2LowFund = { acc: 6, baron: 10, grudge: 12 } as Record<string, number>;
+    const governors = new Set<string>();
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const g = started({ seed, seats: aiTable, phaseScale: 0.1 });
+      // Lena is too poor to be appointed and never runs, so an AI seat governs; the fund is full.
+      setMoney(g.game, { lena: 0, acc: 1_000, baron: 1_000, grudge: 1_000 });
+      engineOf(g.game).treasury.money = 10_000;
+      untilStage(g, 'over');
+      const governor = g.game.viewFor(null).politics!.governor!;
+      expect(aiIds, `seed ${seed}`).toContain(governor);
+      governors.add(governor);
+      tickFor(g, WALK.tickMs * 3);
+      const after = g.game.viewFor('lena').politics!.tax;
+      expect(after, `seed ${seed}: month 1, ${governor} sets the tax in planning`).toEqual({ percent: month1[governor], start: 5, low: 0, high: 10 });
+
+      // The fund runs dry before month 2, which has no election: the Governor steers again, with the bump.
+      for (let ms = 0; ms < 600_000 && g.game.viewFor(null).phase !== 'upkeep'; ms += WALK.tickMs) g.advance(WALK.tickMs);
+      engineOf(g.game).treasury.money = 0;
+      for (let ms = 0; ms < 600_000 && g.game.viewFor(null).month === 1; ms += WALK.tickMs) g.advance(WALK.tickMs);
+      expect(g.game.viewFor(null).phase).toBe('planning');
+      expect(g.game.viewFor(null).politics!.election, 'month 2 has no election').toBeNull();
+      tickFor(g, WALK.tickMs * 3);
+      const start = month1[governor]!;
+      expect(g.game.viewFor('lena').politics!.tax, `seed ${seed}: month 2, ${governor}`).toEqual({ percent: month2LowFund[governor], start, low: Math.max(0, start - 5), high: Math.min(15, start + 5) });
+    }
+    expect(governors.size, 'the seeds put more than one persona in office').toBeGreaterThan(1);
   });
 });
 
