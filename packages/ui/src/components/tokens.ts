@@ -11,6 +11,9 @@ export const SLOT_COLOR: Record<Slot, string> = {
   5: 'var(--color-p6)',
 };
 
+/** What players call each slot's colour. */
+export const COLOUR_NAME: Record<Slot, string> = { 0: 'Ember', 1: 'Cobalt', 2: 'Jade', 3: 'Sun', 4: 'Violet', 5: 'Rose' };
+
 export type Good = 'food' | 'water' | 'energy' | 'smithore' | 'crystite' | 'rareEarth' | 'alloy' | 'electronics' | 'medicine';
 
 export const GOOD_CODE: Record<Good, string> = {

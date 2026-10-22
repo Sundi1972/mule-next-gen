@@ -36,9 +36,9 @@ function fakeContext() {
 
 // Three humans at the kitchen table, in seat order.
 const seats = [
-  { id: 'b', name: 'Brix', isAi: false },
-  { id: 'o', name: 'Ossa', isAi: false },
-  { id: 'l', name: 'Lena', isAi: false },
+  { id: 'b', name: 'Brix', isAi: false, color: 0 },
+  { id: 'o', name: 'Ossa', isAi: false, color: 1 },
+  { id: 'l', name: 'Lena', isAi: false, color: 2 },
 ];
 const humans = seats.map((s) => s.id);
 
