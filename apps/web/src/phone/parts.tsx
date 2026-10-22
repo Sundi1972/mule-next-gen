@@ -1,4 +1,4 @@
-import type { ChatMessage, MarketRow, MuleView } from '@mule/protocol';
+import type { ChatMessage, MuleView } from '@mule/protocol';
 import { EMOTES } from '@mule/protocol';
 import { Button, cx, GoodTag, Panel, PlayerMark, type Good } from '@mule/ui';
 import { useEffect, useRef, useState } from 'react';
@@ -38,29 +38,6 @@ export function StockPanel({ title = 'Your stock' }: { title?: string }) {
         <p className="text-sm text-alert">{[me.hungry && 'Your colonist is hungry: less development time.', me.sick && 'Sickness cost you time; Medicine cures it.'].filter(Boolean).join(' ')}</p>
       )}
     </Panel>
-  );
-}
-
-function coverTone(cover: number) {
-  return cover < 0.5 ? 'text-alert' : cover < 1 ? 'text-warn' : 'text-ink-3';
-}
-
-/** The colony market as a row of trading-screen cells: posted price and months of cover. */
-export function MarketCells({ rows, className }: { rows: MarketRow[]; className?: string }) {
-  return (
-    <div className={cx('grid grid-cols-3 gap-px overflow-hidden rounded-panel border border-holo-line bg-holo-line', className)}>
-      {rows.map((r) => (
-        <div key={r.good} className="flex flex-col bg-panel px-2 py-1.5">
-          <GoodTag good={r.good} className="text-[11px]" />
-          <span data-num className="font-mono text-base font-bold leading-tight">
-            {r.price}
-          </span>
-          <span data-num className={cx('font-mono text-[11px]', coverTone(r.cover))}>
-            {r.cover >= 99 ? 'no demand' : `${r.cover} mo`}
-          </span>
-        </div>
-      ))}
-    </div>
   );
 }
 
