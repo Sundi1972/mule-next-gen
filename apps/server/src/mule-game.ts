@@ -502,15 +502,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           try {
             const ai = this.ai.get(seat.id);
             if (ai) ai.auctionTick(state, dt, (a) => this.aiAct(seat.id, a));
-            else if (this.away.has(seat.id)) {
-              // A dropped phone has finished trading: its walker stops where it is.
-              try {
-                setWalk(state, seat.id, 0);
-              } catch (err) {
-                if (!(err instanceof RuleError)) throw err;
-              }
-              auctionDone(state, seat.id);
-            }
+            else if (this.away.has(seat.id)) this.sitOut(seat.id);
           } catch (err) {
             if (!(err instanceof RuleError)) throw err;
           }
@@ -526,6 +518,24 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         this.ctx.changed();
       }),
     );
+  }
+
+  /**
+   * A dropped phone sits the rest of the good out, on the status screen and
+   * in the walk: off the board, it can't walk on its own or stand on a line
+   * for the store or a player to trade with. Back online during the walk, the
+   * side picker lets it rejoin.
+   */
+  private sitOut(seatId: string): void {
+    const state = this.requireState();
+    // Passing also stops the walker: it leaves the board.
+    try {
+      declareRole(state, seatId, 'pass');
+    } catch (err) {
+      if (!(err instanceof RuleError)) throw err;
+    }
+    // Last, because passing during the walk takes a Done back.
+    auctionDone(state, seatId);
   }
 
   /** Steps the land auction every WALK.tickMs until its last lot is over; the AI hands move first, with the same dt. */
