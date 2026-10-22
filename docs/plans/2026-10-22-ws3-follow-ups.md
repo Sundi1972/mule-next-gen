@@ -86,7 +86,8 @@
   - `apps/web/src/phone/LandAuction.tsx`;
   - a new `apps/web/src/phone/useWalkIntent.ts`;
   - `apps/web/src/components/AuctionParts.tsx` (only if useNewestFirst is touched);
-  - `apps/web/test/**`.
+  - `apps/web/test/**`;
+  - `apps/web/e2e/auction-steps.ts` (B.4; WS3's file).
 - `must_not_edit`: `apps/server/**`, `packages/**` (PR-A's), and `apps/web/e2e/{smoke,harness,screens}.ts` (WS4's).
 
 ### Task B.1: one walk-intent hook for both auctions, with the held-Up reset
@@ -98,6 +99,17 @@
 
 - [ ] **Step 1: Test it.** Press Ready during a good's status, and the button reads "Done · waiting", driven from the view. If it already passes on trunk, keep it as a pin and skip Step 2.
 - [ ] **Step 2: Implement** the view or phone fix the test points to (FU-1's original finding: the walker's `done` was undefined at status). Green, then commit.
+
+### Task B.3: arrow keys don't walk the player while a dialog is open (added: WS4's review)
+
+WS4's PR-6 adds a "move to your phone" dialog (`role="dialog"`, `aria-modal`, testid `host-dialog`) that can stay open during either auction.
+
+- [ ] **Step 1: Write the failing unit rows.** While `[aria-modal="true"]` or `dialog[open]` is present, an arrow keydown sends no walk intent. Releasing a key that was already held still sends its stop.
+- [ ] **Step 2: Implement** the guard in the shared hook's core, then commit.
+
+### Task B.4: the goods auction's held Up, front to back (added: the goal-check line)
+
+- [ ] **Step 1:** in `apps/web/e2e/auction-steps.ts` (WS3's), a phone holds Up through the end of one good's walk into the next good's walk. Its first press there moves its walker, asserted at viewFor. Positive control: the old Auction.tsx logic, or no reset in the hook, makes it red.
 
 ### PR-B merge gate
 
