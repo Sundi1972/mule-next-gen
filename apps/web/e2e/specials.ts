@@ -2,19 +2,25 @@
  * B-AC-9 (MG-2): given a special field on the map, when a player looks at the phone or the TV, the approved glyph
  * (the badge, variant A) shows on that plot; a plain plot shows none. On the phone, tapping a special plot selects
  * it and its plot card says what it does, first under the plot's name; when the land grant lights it, so does the
- * lit card. The badge never takes a plot's taps: a tap on the part that hangs over a neighbour selects the neighbour.
+ * lit card; so do the geo drone's rail and Develop's plot card. The badge never takes a plot's taps: a tap on the part
+ * that hangs over a neighbour selects the neighbour. Each badge is drawn at its density's size, and never over the
+ * owner's mark of the plot it hangs into.
  * Run with `pnpm --filter @mule/web e2e`; another map with `MULE_E2E_SEED=<seed>`.
  */
 import { createGame, type GameState, type Tile } from '@mule/engine';
 import type { Locator, Page } from 'playwright';
-import { GRANT_TICK_MS } from '../../server/src/mule-game.js';
-import { check, launch, PHONE, startServer, TV } from './harness';
+import { SPECIAL_BADGE } from '@mule/ui';
+import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
+import { check, claimAPlot, launch, PHONE, startServer, TV } from './harness';
 
 /** Seed 93 with two seats: a 13×7 map with ruins on the top row (7,0), a crystal cavern inside (10,3) and an oasis on the bottom edge (9,6). */
 const DEFAULT_SEED = 93;
 const SEATS = 2;
 const SEED = seedFrom(process.env.MULE_E2E_SEED);
 const SHOWN_MS = 5_000;
+/** The land grant, a land auction if the colony lists plots, and the walk out to development. */
+const REACH_DEVELOPMENT_MS = 120_000;
+type Density = keyof typeof SPECIAL_BADGE;
 /** The light sweeps row by row; a plot on row r is lit within about r + 1 rows of ticks, plus the AI's claims skipped. */
 const litWithin = (t: Tile, width: number) => (t.y + 1) * width * GRANT_TICK_MS + 3_000;
 
@@ -27,6 +33,10 @@ check(plain, `seed ${SEED}: the map has a plain plot away from every special fie
 /** A special plot off the right and bottom edges, so its badge hangs over the plot diagonally below-right. */
 const inner = specials.find((t) => t.x < dealt.width - 1 && t.y < dealt.height - 1);
 check(inner, `seed ${SEED}: a special field off the map's right and bottom edges`);
+/** The plot the inner badge hangs into; the test gives it to the phone's player, so its owner's mark sits under the overhang. */
+const diagonal = { x: inner.x + 1, y: inner.y + 1 };
+/** A free special for the drone and Develop to look at; not the one whose diagonal the phone's player is given. */
+const looked = specials.find((t) => t !== inner) ?? inner;
 /** The special the land grant lights first: the light sweeps row by row. */
 const firstLit = [...specials].sort((a, b) => a.y * dealt.width + a.x - (b.y * dealt.width + b.x))[0]!;
 
@@ -63,8 +73,14 @@ try {
   const planning = phone.locator('[data-phase=planning]');
   await planning.waitFor({ timeout: SHOWN_MS });
   const hubMap = planning.getByTestId('hub-map');
-  await checkGlyphs(tvMap, 'TV, planning');
-  await checkGlyphs(hubMap, 'phone, planning');
+  await checkGlyphs(tvMap, 'TV, planning', 'tv');
+  await checkGlyphs(hubMap, 'phone, planning', 'phone');
+
+  // The phone's player owns the plot the inner badge hangs into (seeded, as store-steps seeds hunger): its mark stays on top.
+  Object.assign(state.tiles[diagonal.y * dealt.width + diagonal.x]!, { owner: 's1' });
+  const room = server.registry.get(code) as unknown as { broadcast(): void };
+  room.broadcast();
+  const marks = [await checkMarkOnTop(hubMap, 'phone, planning', true), await checkMarkOnTop(tvMap, 'TV, planning', false)];
 
   // Tap the special plot: it selects, and the plot card says what it is first under its name.
   const look = planning.getByTestId('look-plot');
@@ -90,6 +106,13 @@ try {
   check((await look.getByTestId('special-line').count()) === 0, `B-AC-9 (negative): the plain plot ${plotName(plain)} has no special line`);
   check((await look.getByTestId('terrain-hint').count()) === 1, `B-AC-9: the plain plot ${plotName(plain)} shows its terrain hint`);
 
+  // The geo drone: a picked special plot's rail says what it is.
+  await planning.getByTestId('tool-drone').click({ timeout: SHOWN_MS });
+  await tapPlot(phone, hubMap, looked);
+  const drone = planning.getByTestId('drone');
+  await drone.filter({ hasText: `Plot ${plotName(looked)}` }).waitFor({ timeout: SHOWN_MS });
+  await checkSpecialLine(drone, looked.special.kind, `B-AC-9: the drone rail of ${plotName(looked)}`);
+
   // Land grant: when the light reaches the special plot, the lit card says what it is, and both maps still draw it.
   await planning.getByRole('button', { name: "I'm ready" }).click();
   const grant = phone.locator('[data-phase=landGrant]');
@@ -97,11 +120,21 @@ try {
   const lit = grant.getByTestId('lit').filter({ hasText: plotName(firstLit) });
   await lit.waitFor({ timeout: litWithin(firstLit, dealt.width) });
   await checkSpecialLine(lit, firstLit.special.kind, `B-AC-9: the lit card of ${plotName(firstLit)}`);
-  await checkGlyphs(grant, 'phone, land grant');
-  await checkGlyphs(tv.locator('[data-phase=landGrant]'), 'TV, land grant');
+  await checkGlyphs(grant, 'phone, land grant', 'phone');
+  await checkGlyphs(tv.locator('[data-phase=landGrant]'), 'TV, land grant', 'tv');
+
+  // Development: the plot card of a tapped special plot says what it is.
+  await claimAPlot(phone, PHASE_MS.landGrant + 3_000, 'the phone claims a plot, so the land grant can end');
+  const dev = phone.locator('[data-phase=development]');
+  await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: REACH_DEVELOPMENT_MS });
+  const devMap = dev.getByTestId('dev-map');
+  await checkGlyphs(devMap, 'phone, development', 'phone');
+  await tapPlot(phone, devMap, looked);
+  await dev.getByTestId('plot-title').filter({ hasText: plotName(looked) }).waitFor({ timeout: SHOWN_MS });
+  await checkSpecialLine(dev.locator('section').filter({ has: dev.getByTestId('plot-title') }), looked.special.kind, `B-AC-9: Develop's plot card of ${plotName(looked)}`);
 
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
-  console.log(`e2e specials: ok (seed ${SEED}, ${specials.map((t) => `${t.special.kind} ${plotName(t)}`).join(', ')})`);
+  console.log(`e2e specials: ok (seed ${SEED}, ${specials.map((t) => `${t.special.kind} ${plotName(t)}`).join(', ')}; ${marks.join('; ')})`);
 } catch (err) {
   console.error(`e2e specials: FAILED (seed ${SEED})`);
   if (errors.length > 0) console.error(`page errors: ${errors.join('; ')}`);
@@ -122,13 +155,31 @@ function glyph(map: Locator, p: Plot): Locator {
   return map.locator(`[data-testid="special-glyph-${p.x}-${p.y}"]`);
 }
 
-/** B-AC-9: every special plot carries its glyph with its kind; nothing else on the map does. */
-async function checkGlyphs(map: Locator, where: string): Promise<void> {
+/**
+ * B-AC-9: every special plot carries its glyph with its kind, and inside it a visible badge of its density's size
+ * (scaled with the map, as the TV's stage is); nothing else on the map does.
+ */
+async function checkGlyphs(map: Locator, where: string, density: Density): Promise<void> {
+  const box = SPECIAL_BADGE[density].box;
   for (const t of specials) {
     const g = glyph(map, t);
     const seen = await g.waitFor({ state: 'visible', timeout: SHOWN_MS }).then(() => true, () => false);
     check(seen, `B-AC-9 (${where}): the ${t.special.kind} on ${plotName(t)} shows its glyph`);
     check((await g.getAttribute('data-kind')) === t.special.kind, `B-AC-9 (${where}): the glyph on ${plotName(t)} says ${t.special.kind}, got ${await g.getAttribute('data-kind')}`);
+    const badge = await g.evaluate((el) => {
+      const b = el.firstElementChild as HTMLElement | null;
+      const root = el.closest('.shadow-map') as HTMLElement | null;
+      if (!b || !root) return null;
+      const r = b.getBoundingClientRect();
+      return { w: b.offsetWidth, h: b.offsetHeight, rw: r.width, rh: r.height, scale: root.getBoundingClientRect().width / root.offsetWidth, visible: b.checkVisibility({ opacityProperty: true, visibilityProperty: true }), hexagon: !!b.querySelector('svg path') };
+    });
+    check(badge, `B-AC-9 (${where}): the glyph on ${plotName(t)} holds a badge`);
+    check(badge.visible && badge.hexagon, `B-AC-9 (${where}): the badge on ${plotName(t)} is visible and drawn`);
+    const want = box * badge.scale;
+    check(
+      badge.w === box && badge.h === box && Math.abs(badge.rw - want) < 0.5 && Math.abs(badge.rh - want) < 0.5,
+      `B-AC-9 (${where}): the badge on ${plotName(t)} is ${box} px (${want.toFixed(1)} on screen), got ${badge.w}×${badge.h} (${badge.rw.toFixed(1)}×${badge.rh.toFixed(1)})`,
+    );
   }
   check((await glyph(map, plain!).count()) === 0, `B-AC-9 (${where}, negative): the plain plot ${plotName(plain!)} shows no glyph`);
   const all = await map.locator('[data-testid^="special-glyph-"]').count();
@@ -149,7 +200,47 @@ async function checkSpecialLine(card: Locator, kind: string, what: string): Prom
   check(before, `${what}: the special line comes before the terrain hint or the ground card`);
 }
 
-/** Taps the middle of a plot on the map. */
+/**
+ * The owner's mark of the plot diagonally below-right of the inner special paints above the badge hung into it: a hit
+ * test, with the badge made hittable for that one probe, at the middle of where their boxes meet. On the phone the
+ * boxes meet (the badge hangs 3.75 px, the mark starts 3 px in); `mustMeet` makes the check fail if they don't.
+ */
+async function checkMarkOnTop(map: Locator, where: string, mustMeet: boolean): Promise<string> {
+  const mark = map.locator('[role=img][data-slot]').filter({ visible: true });
+  await mark.first().waitFor({ timeout: SHOWN_MS });
+  const r = await map.evaluate(
+    (el, { sx, sy, dx, dy, width }) => {
+      const g = el.querySelector(`[data-testid="special-glyph-${sx}-${sy}"]`);
+      const badge = g?.firstElementChild;
+      const cell = g?.parentElement?.parentElement?.children[dy * width + dx];
+      const m = cell?.querySelector('[role=img][data-slot]');
+      if (!badge || !m) return null;
+      const b = badge.getBoundingClientRect();
+      const k = m.getBoundingClientRect();
+      const x0 = Math.max(b.left, k.left);
+      const x1 = Math.min(b.right, k.right);
+      const y0 = Math.max(b.top, k.top);
+      const y1 = Math.min(b.bottom, k.bottom);
+      const boxes = { badge: [b.left, b.top, b.width, b.height], mark: [k.left, k.top, k.width, k.height], meet: [x1 - x0, y1 - y0] };
+      if (x0 >= x1 || y0 >= y1) return { ...boxes, top: 'apart' };
+      const probe = document.createElement('style');
+      probe.textContent = '[data-testid^="special-glyph-"], [data-testid^="special-glyph-"] * { pointer-events: auto !important; }';
+      document.head.append(probe);
+      const hits = document.elementsFromPoint((x0 + x1) / 2, (y0 + y1) / 2);
+      probe.remove();
+      const first = hits.find((h) => m.contains(h) || badge.contains(h));
+      return { ...boxes, top: first && m.contains(first) ? 'mark' : first ? 'badge' : 'neither' };
+    },
+    { sx: inner!.x, sy: inner!.y, dx: diagonal.x, dy: diagonal.y, width: dealt.width },
+  );
+  check(r, `W-I1 (${where}): the special at ${plotName(inner!)} has a badge and ${plotName(diagonal)} an owner's mark`);
+  const nums = `badge ${r.badge.map((n) => n.toFixed(2)).join(',')} mark ${r.mark.map((n) => n.toFixed(2)).join(',')} meet ${r.meet.map((n) => n.toFixed(2)).join('×')}`;
+  check(r.top !== 'badge' && r.top !== 'neither', `W-I1 (${where}): the owner's mark on ${plotName(diagonal)} paints above the badge hung into it, got ${r.top} on top (${nums})`);
+  check(!mustMeet || r.top === 'mark', `W-I1 (${where}): the badge and the mark meet, so the probe tests something (${nums})`);
+  return `${where}: ${r.top} (${nums})`;
+}
+
+/** Taps the middle of a plot on the map. Player marks are labelled images inside the plots, so they don't count as plots. */
 async function tapPlot(page: Page, map: Locator, p: Plot): Promise<void> {
   const box = await map.locator('[aria-label]:not([role=img])').nth(p.y * dealt.width + p.x).boundingBox({ timeout: SHOWN_MS });
   check(box, `plot ${plotName(p)} is on screen`);

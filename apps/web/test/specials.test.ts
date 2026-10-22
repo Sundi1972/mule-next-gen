@@ -1,11 +1,12 @@
-import { MAP } from '@mule/engine';
-import type { MuleView, TileView } from '@mule/protocol';
-import { HoloMap, type MapTile } from '@mule/ui';
+import { COLONY_SELLER, MAP } from '@mule/engine';
+import type { ListingView, MuleView, TileView } from '@mule/protocol';
+import { HoloMap, type MapSpecial, type MapTile } from '@mule/ui';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { SpecialLine } from '../src/components/SpecialLine';
-import { mapTiles, specialLine } from '../src/game/derive';
+import { LotCard } from '../src/components/AuctionParts';
+import { mapTiles } from '../src/game/derive';
 
 const FX = MAP.specialEffect;
 const tile = (x: number, y: number, extra: Partial<TileView> = {}): TileView => ({ x, y, terrain: 'mountains', peaks: 0, owner: null, outfit: null, pollution: 0, filter: false, ...extra });
@@ -45,6 +46,18 @@ describe('B-AC-9: the special-field badge on the map (variant A)', () => {
     expect(html).toContain('aria-label="Plains, free"');
   });
 
+  it("draws the owner's mark above every badge, so a neighbour's overhang never covers it", () => {
+    const html = map();
+    const mark = html.match(/<span role="img" data-slot="0"[^>]*>/)?.[0];
+    expect(mark).toBeDefined();
+    const z = (tagHtml: string) => Number(tagHtml.match(/z-\[(\d+)\]/)?.[1] ?? 0);
+    expect(z(mark!)).toBeGreaterThan(z(tag(html, 'special-glyph-0-0')!));
+  });
+
+  it('keeps its layers inside the map: the root isolates, so a badge never paints over what sits on top of the map', () => {
+    expect(map()).toMatch(/^<div class="[^"]*\bisolate\b/);
+  });
+
   it('shows on the TV with hideGround: a special field is public', () => {
     const html = map({ density: 'tv', hideGround: true });
     expect(html.match(/data-testid="special-glyph-/g)).toHaveLength(3);
@@ -74,13 +87,29 @@ describe("B-AC-9: the phone's plot card says what a special field does", () => {
     expect(plain).not.toHaveProperty('special');
   });
 
-  it("says each kind's effect with the engine's numbers", () => {
-    expect(specialLine({ kind: 'geyser' })).toBe(`Geyser: +${FX.geyser} Water or Energy.`);
-    expect(specialLine({ kind: 'oasis' })).toBe(`Oasis: +${FX.oasis} Food.`);
-    expect(specialLine({ kind: 'crystalCavern' })).toBe(`Crystal cavern: +${FX.crystalCavern} Crystite when mined. ${Math.round(FX.collapseChance * 100)}% a month it caves in.`);
-    expect(specialLine({ kind: 'relic' })).toBe(`Alien relic: +${FX.relic} to every working plot touching it, anyone's.`);
-    expect(specialLine({ kind: 'ruins', salvage: 'electronics' })).toBe(`Ruins: the first owner salvages ${FX.salvage.electronics} Electronics, once.`);
-    expect(specialLine({ kind: 'ruins' })).toBe(`Ruins: pays its first owner ${FX.salvage.alloy} Alloy or ${FX.salvage.electronics} Electronics, once, then is gone.`);
+  it("says what each kind does, in the rendered line, with the engine's numbers", () => {
+    const text = (special: MapSpecial) => renderToStaticMarkup(createElement(SpecialLine, { special })).replace(/<[^>]+>/g, '');
+    expect(text({ kind: 'geyser' })).toBe(`Geyser: +${FX.geyser} Water or Energy.`);
+    expect(text({ kind: 'oasis' })).toBe(`Oasis: +${FX.oasis} Food.`);
+    expect(text({ kind: 'crystalCavern' })).toBe(`Crystal cavern: +${FX.crystalCavern} Crystite when mined. Each month it's mined, a ${Math.round(FX.collapseChance * 100)}% chance it caves in.`);
+    expect(text({ kind: 'relic' })).toBe(`Alien relic: +${FX.relic} to every working plot touching it, anyone's.`);
+    expect(text({ kind: 'ruins', salvage: 'alloy' })).toBe(`Ruins: the first owner salvages ${FX.salvage.alloy} Alloy, once.`);
+    expect(text({ kind: 'ruins', salvage: 'electronics' })).toBe(`Ruins: the first owner salvages ${FX.salvage.electronics} Electronics, once.`);
+    expect(text({ kind: 'ruins' })).toBe(`Ruins: pays its first owner ${FX.salvage.alloy} Alloy or ${FX.salvage.electronics} Electronics, once, then is gone.`);
+  });
+
+  it("the land auction's lot card says what a plot lot's special field does, first under its name", () => {
+    const view = { width: 2, height: 1, tiles: [tile(0, 0, { special: { kind: 'oasis' } }), tile(1, 0)], players: [] } as unknown as MuleView;
+    const lot = (x: number, kind: 'plot' | 'mule' = 'plot'): ListingView =>
+      ({ id: 'l1', seller: COLONY_SELLER, item: kind === 'plot' ? { kind, x, y: 0 } : { kind, x, y: 0, outfit: 'food' }, minimum: 100, unsold: 'keep', storePays: 0 }) as ListingView;
+    const card = (l: ListingView, compact = false) => renderToStaticMarkup(createElement(LotCard, { view, lot: l, compact }));
+    const oasis = card(lot(0));
+    expect(oasis).toMatch(/data-testid="special-line" data-kind="oasis"/);
+    expect(oasis.indexOf('data-testid="special-line"')).toBeGreaterThan(oasis.indexOf('data-testid="lot-name"'));
+    expect(oasis.indexOf('data-testid="special-line"')).toBeLessThan(oasis.indexOf('data-testid="terrain-hint"'));
+    expect(card(lot(1))).not.toContain('special-line');
+    expect(card(lot(1))).toContain('data-testid="terrain-hint"');
+    expect(card(lot(0), true)).not.toContain('special-line');
   });
 
   it('draws the line with its kind and the badge, and nothing for a plain plot', () => {
