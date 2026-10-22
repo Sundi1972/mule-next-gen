@@ -2,7 +2,8 @@ import { endAuction, startAuction } from './auction.js';
 import { RuleError } from './errors.js';
 import { DEFAULT_SPECIES, DEVELOPMENT, GAME, GOOD_CONFIG, MULE, POLLUTION, SPECIES_PERK, START, TAX, UPKEEP } from './config.js';
 import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './economy.js';
-import { generateMap, tileAt, tileIndex } from './map.js';
+import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
+import { generateMap, tileIndex } from './map.js';
 import { airBand } from './pollution.js';
 import { needsOf, runProduction } from './production.js';
 import { createRng } from './rng.js';
@@ -20,8 +21,8 @@ export interface NewPlayer {
 export { RuleError };
 
 export function createGame(options: { seed: number; players: NewPlayer[]; maxMonths?: number }): GameState {
-  if (options.players.length < 2 || options.players.length > 6) {
-    throw new RuleError('A game needs 2 to 6 players');
+  if (options.players.length < GAME.minPlayers || options.players.length > GAME.maxPlayers) {
+    throw new RuleError(`A game needs ${GAME.minPlayers} to ${GAME.maxPlayers} players`);
   }
   const rng = createRng(options.seed);
   const map = generateMap(options.players.length, rng);
@@ -41,9 +42,9 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
         isAi: p.isAi,
         species: p.species ?? DEFAULT_SPECIES[i % DEFAULT_SPECIES.length]!,
         money: START.money,
-        stock: { ...emptyStock(), food: 6, water: 6, energy: 4 },
+        stock: { ...emptyStock(), ...START.playerStock },
         carriedMule: null,
-        reputation: 50,
+        reputation: START.reputation,
         claimsThisGrant: 0,
         hungry: false,
         devSeconds: DEVELOPMENT.fullSeconds,
@@ -71,6 +72,8 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
     landRanOutMonth: null,
     history: [],
     auction: null,
+    listings: [],
+    landAuction: null,
   };
   // The first month's prices start where supply and demand put them.
   for (const good of GOODS) state.store.posted[good] = Math.round(targetPrice(state, good));
@@ -87,19 +90,13 @@ function requirePhase(state: GameState, phase: Phase): void {
   if (state.phase !== phase) throw new RuleError(`Not allowed during ${state.phase}`);
 }
 
-function plotAt(state: GameState, x: number, y: number): Tile {
-  const tile = tileAt(state.tiles, state.width, x, y);
-  if (!tile || tile.terrain === 'store') throw new RuleError('Not a plot');
-  return tile;
-}
-
 export function freePlots(state: GameState) {
   return state.tiles.filter((t) => t.owner === null && t.terrain !== 'store');
 }
 
 // --- Planning: geo drone ----------------------------------------------------
 
-/** Orders a geo drone to analyse up to two free plots from orbit. The results arrive when the land grant starts. */
+/** Orders a geo drone to analyse up to two free or listed plots from orbit. The results arrive when the land grant starts. */
 export function orderGeoDrone(state: GameState, playerId: string, plots: { x: number; y: number }[]): void {
   requirePhase(state, 'planning');
   const p = player(state, playerId);
@@ -107,7 +104,7 @@ export function orderGeoDrone(state: GameState, playerId: string, plots: { x: nu
   if (plots.length === 0 || plots.length > DEVELOPMENT.dronePlots) throw new RuleError(`Pick 1 to ${DEVELOPMENT.dronePlots} plots`);
   const indices = plots.map(({ x, y }) => {
     const tile = plotAt(state, x, y);
-    if (tile.owner) throw new RuleError('The drone only flies over free plots');
+    if (tile.owner && !isListed(state, x, y)) throw new RuleError('The drone only flies over free or listed plots');
     return tileIndex(state.width, x, y);
   });
   if (p.money < DEVELOPMENT.droneFee) throw new RuleError('Not enough money');
@@ -119,15 +116,14 @@ export function orderGeoDrone(state: GameState, playerId: string, plots: { x: nu
 // --- Land grant -------------------------------------------------------------
 
 /**
- * Free plots light up one at a time in a random order, and the first player
- * to press claims the lit plot. Every free plot lights once per sweep, in a
- * fresh order each sweep, so nobody can count down to the plot they want.
- * The order comes from the game seed, so every screen shows the same plot.
+ * Free plots light up one at a time in reading order (top row first, left to
+ * right), and the first player to press claims the lit plot. Every free plot
+ * lights once per sweep.
  */
 function newSweep(state: GameState, sweep: number): void {
-  const free = freePlots(state).map((t) => tileIndex(state.width, t.x, t.y));
-  const rng = createRng((state.seed * 31 + state.month * 7919 + sweep * 104_729) >>> 0);
-  state.grant = { order: rng.shuffle(free), step: 0, sweep };
+  // freePlots keeps the tiles' row-major order, which is reading order.
+  const order = freePlots(state).map((t) => tileIndex(state.width, t.x, t.y));
+  state.grant = { order, step: 0, sweep };
 }
 
 /** The tile lit right now, or null when the grant is over. */
@@ -153,9 +149,14 @@ export function advanceGrant(state: GameState): Tile | null {
   }
 }
 
-/** The grant ends when every player has used their claims or no free land is left. */
+/**
+ * The grant ends when every player has used their claims, no free land is
+ * left, or the light has swept the free plots GAME.grantSweeps times: a
+ * player who doesn't want land must not hold the table up.
+ */
 export function grantDone(state: GameState): boolean {
-  return freePlots(state).length === 0 || state.players.every((p) => p.claimsThisGrant >= GAME.claimsPerGrant);
+  if (freePlots(state).length === 0 || (state.grant?.sweep ?? 0) >= GAME.grantSweeps) return true;
+  return state.players.every((p) => p.claimsThisGrant >= GAME.claimsPerGrant);
 }
 
 /** Claims the lit plot. The coordinates say which plot the player saw lit, so a late press can't grab the next one. */
@@ -199,7 +200,7 @@ function startDevelopment(state: GameState): void {
         seconds -= penalty;
       }
     }
-    p.devSeconds = Math.max(5, Math.round(seconds));
+    p.devSeconds = Math.max(DEVELOPMENT.floorSeconds, Math.round(seconds));
     p.doneDeveloping = false;
   }
 }
@@ -302,16 +303,20 @@ export function visitPub(state: GameState, playerId: string, secondsLeft: number
 
 // --- Phase flow -------------------------------------------------------------
 
-const ORDER: Phase[] = ['planning', 'landGrant', 'development', 'production', 'auction', 'upkeep'];
+const ORDER: Phase[] = ['planning', 'landGrant', 'landAuction', 'development', 'production', 'auction', 'upkeep'];
 
 /**
  * Moves to the next phase. Production and upkeep resolve on their own when
- * entered; the auction runs live through stepAuction() until its last good
- * is done, and leaving it early ends the goods still to come.
+ * entered; the land auction and the goods auction run live through
+ * stepLandAuction() and stepAuction(), and leaving one early ends what is
+ * still to come. Leaving the land grant, the colony may put a free plot up;
+ * with nothing listed the land auction is skipped.
  */
 export function advancePhase(state: GameState): void {
   if (state.phase === 'gameOver') return;
-  const next = ORDER[(ORDER.indexOf(state.phase) + 1) % ORDER.length]!;
+  let next = ORDER[(ORDER.indexOf(state.phase) + 1) % ORDER.length]!;
+  if (next === 'landAuction') colonyLot(state);
+  if (next === 'landAuction' && state.listings.length === 0) next = 'development';
   state.phase = next;
 
   if (next === 'landGrant') {
@@ -323,7 +328,10 @@ export function advancePhase(state: GameState): void {
     }
     newSweep(state, 0);
   }
+  if (next === 'landAuction') startLandAuction(state);
   if (next === 'development') {
+    // Lots the land auction didn't reach are kept.
+    endLandAuction(state);
     state.grant = null;
     state.store.mulesAtStart = state.store.mules;
     startDevelopment(state);
@@ -335,10 +343,13 @@ export function advancePhase(state: GameState): void {
     const soldOut = state.store.mules === 0;
     // MULEs get dearer each month the corral sells out, and cheaper when they are left over.
     if (soldOut) state.store.muleFactor *= 1 + MULE.scarcityUp;
-    else if (state.store.mules * 2 >= state.store.mulesAtStart) state.store.muleFactor = Math.max(MULE.minFactor, state.store.muleFactor * (1 - MULE.surplusDown));
+    else if (state.store.mules >= state.store.mulesAtStart * MULE.surplusShare) state.store.muleFactor = Math.max(MULE.minFactor, state.store.muleFactor * (1 - MULE.surplusDown));
     const before = Object.fromEntries(state.players.map((p) => [p.id, { ...p.stock }]));
-    const { produced, pollutionBy } = runProduction(state);
+    const { produced, pollutionBy, lines, events } = runProduction(state);
     state.history.push({
+      events,
+      warnings: [],
+      lines,
       month: state.month,
       before,
       produced,
@@ -385,16 +396,41 @@ export function colonyFailed(state: GameState): boolean {
   return airBand(state.air).name === 'collapse';
 }
 
+export interface ScoreParts {
+  money: number;
+  goods: number;
+  plots: number;
+  land: number;
+  mules: number;
+  muleValue: number;
+  /** What Collapse took off: 0 unless the colony failed. */
+  cut: number;
+  total: number;
+}
+
 /**
- * Final score: money, plus goods and land at today's colony prices. A
- * colony that ends in Collapse cuts everyone's score by a fifth.
+ * A final score line by line: money, goods at today's colony prices, land,
+ * installed MULEs at the store price, and the Collapse cut. The lines add up
+ * to total + cut exactly; goods absorbs the rounding. See spec RULE-3.
  */
-export function score(state: GameState, playerId: string): number {
+export function scoreParts(state: GameState, playerId: string): ScoreParts {
   const p = player(state, playerId);
   const prices = allPrices(state);
-  const goods = GOODS.reduce((sum, g) => sum + p.stock[g] * prices[g], 0);
-  const plots = state.tiles.filter((t) => t.owner === playerId);
-  const land = plots.length * 300 + plots.filter((t) => t.outfit).length * mulePrice(state);
-  const total = p.money + goods + land;
-  return Math.round(colonyFailed(state) ? total * POLLUTION.collapseScore : total);
+  const stockValue = GOODS.reduce((sum, g) => sum + p.stock[g] * prices[g], 0);
+  const owned = state.tiles.filter((t) => t.owner === playerId);
+  const plots = owned.length;
+  const mules = owned.filter((t) => t.outfit).length;
+  const land = plots * GAME.plotScore;
+  const muleValue = mules * mulePrice(state);
+  // Keep this exact order of addition: regrouping it moves Math.round at .5 edges and changes scores.
+  const raw = p.money + stockValue + (land + muleValue);
+  const before = Math.round(raw);
+  const total = colonyFailed(state) ? Math.round(raw * POLLUTION.collapseScore) : before;
+  const money = Math.round(p.money);
+  return { money, goods: before - money - land - muleValue, plots, land, mules, muleValue, cut: before - total, total };
+}
+
+/** Final score: scoreParts().total. */
+export function score(state: GameState, playerId: string): number {
+  return scoreParts(state, playerId).total;
 }

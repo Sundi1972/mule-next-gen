@@ -6,12 +6,14 @@ import { Auction } from './Auction';
 import { Develop } from './Develop';
 import { GameOver } from './GameOver';
 import { PhoneGameProvider } from './game';
+import { LandAuction } from './LandAuction';
 import { LandGrant } from './LandGrant';
 import { Entry, Lobby } from './Lobby';
 import { EmoteBubbles } from './parts';
 import { Planning } from './Planning';
+import { Production } from './Production';
 import { Results } from './Results';
-import { TurnSideways } from './Shell';
+import { ShellLayer, TurnSideways } from './Shell';
 
 /**
  * The phone: your private controller, played sideways. Held upright it asks to be
@@ -61,6 +63,10 @@ function PhoneScreens({ room }: { room: string }) {
     <Develop />
   ) : view.phase === 'auction' ? (
     <Auction />
+  ) : view.phase === 'landAuction' ? (
+    <LandAuction />
+  ) : view.phase === 'production' && view.production ? (
+    <Production production={view.production} />
   ) : (
     <Results />
   );
@@ -68,11 +74,13 @@ function PhoneScreens({ room }: { room: string }) {
   return (
     <SeatSpeciesProvider value={seatSpecies(view)}>
       <PhoneGameProvider value={{ table, view, me, self, slot }}>
-        {/* Keyed by phase so each phase starts with fresh screen state. */}
-        <div key={`${view.month}-${view.phase}`} className="h-full" data-phase={view.phase}>
-          {screen}
-        </div>
-        <EmoteBubbles view={view} />
+        {/* Emotes float inside each screen's shell, clear of its rail. */}
+        <ShellLayer.Provider value={<EmoteBubbles view={view} />}>
+          {/* Keyed by phase so each phase starts with fresh screen state. */}
+          <div key={`${view.month}-${view.phase}`} className="h-full" data-phase={view.phase}>
+            {screen}
+          </div>
+        </ShellLayer.Provider>
       </PhoneGameProvider>
     </SeatSpeciesProvider>
   );

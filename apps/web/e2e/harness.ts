@@ -1,24 +1,52 @@
+import { existsSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
-import { chromium, type Browser } from 'playwright';
+import { GAME } from '@mule/engine';
+import { chromium, errors as playwrightErrors, type Browser, type Page } from 'playwright';
+import { GRANT_TICK_MS } from '../../server/src/mule-game.js';
 import { createMuleServer, type MuleServer } from '../../server/src/server.js';
 
-/** The real game server, serving the built client from apps/web/dist on a free port. */
-export async function startServer(): Promise<{ server: MuleServer; base: string }> {
+/** CT-3: what smoke.ts hands each auction step. */
+export type AuctionStepContext = { phone: Page; tv: Page; check: (cond: unknown, message: string) => void };
+
+/**
+ * CT-3: `e2e/auction-steps.ts` (WS3's file) may export these; smoke.ts calls each at its hook.
+ * - `landAuction(ctx, month)`: once per month, months 1 and 2, right after that month's land grant ends.
+ * - `listedSale(ctx)`: once, in month 2's planning, before the test presses "I'm ready". It must return
+ *   within about 2 s, leaving the phone on the planning screen.
+ * Each must return while the phase it was called in can still end on its own clock (planning is about
+ * 4.5 s here), and must never press what the test presses itself: "I'm ready", the pub, the auction's Done.
+ */
+export type AuctionSteps = {
+  landAuction?: (ctx: AuctionStepContext, month: number) => Promise<void>;
+  listedSale?: (ctx: AuctionStepContext) => Promise<void>;
+};
+
+/**
+ * The real game server, serving the built client from apps/web/dist on a free
+ * port. Options (a short game, faster phases) go straight to the server.
+ */
+export async function startServer(options: Omit<NonNullable<Parameters<typeof createMuleServer>[0]>, 'staticDir'> = {}): Promise<{ server: MuleServer; base: string }> {
   const staticDir = fileURLToPath(new URL('../dist', import.meta.url));
-  const server = createMuleServer({ staticDir });
+  const server = createMuleServer({ ...options, staticDir });
   await new Promise<void>((r) => server.server.listen(0, '127.0.0.1', r));
   const { port } = server.server.address() as AddressInfo;
   return { server, base: `http://127.0.0.1:${port}` };
 }
 
-/** Chromium from the preinstalled browsers; falls back to the plain binary if the versions don't match. */
+const PREINSTALLED_CHROMIUM = '/opt/pw-browsers/chromium';
+
+/**
+ * Chromium from Playwright's own cache (`playwright install chromium`), or from
+ * PLAYWRIGHT_BROWSERS_PATH when set. Sandboxes without that cache ship a plain
+ * binary at /opt/pw-browsers instead.
+ */
 export async function launch(): Promise<Browser> {
-  process.env.PLAYWRIGHT_BROWSERS_PATH ??= '/opt/pw-browsers';
   try {
     return await chromium.launch();
-  } catch {
-    return chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+  } catch (err) {
+    if (!existsSync(PREINSTALLED_CHROMIUM)) throw err;
+    return chromium.launch({ executablePath: PREINSTALLED_CHROMIUM });
   }
 }
 
@@ -29,4 +57,27 @@ export const TV = { viewport: { width: 1920, height: 1080 } };
 
 export function check(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(`E2E check failed: ${message}`);
+}
+
+/**
+ * Presses CLAIM until the claims counter drops, within `timeoutMs`. The lit plot moves on every
+ * tick and an AI can take it first, so a press may be refused; press again. `promise` names the
+ * check that fails when no claim lands in time.
+ */
+export async function claimAPlot(phone: Page, timeoutMs: number, promise: string): Promise<void> {
+  const grant = phone.locator('[data-phase=landGrant]');
+  const claim = grant.getByRole('button', { name: /CLAIM/ });
+  const unclaimed = grant.getByText(`${GAME.claimsPerGrant} OF ${GAME.claimsPerGrant} CLAIMS LEFT`, { exact: true });
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    check((await grant.count()) > 0 && Date.now() < deadline, promise);
+    if ((await unclaimed.count()) === 0) return;
+    try {
+      // Waits until a free plot is lit, which enables the button.
+      await claim.click({ timeout: Math.max(1, deadline - Date.now()) });
+      await unclaimed.waitFor({ state: 'hidden', timeout: 2 * GRANT_TICK_MS });
+    } catch (err) {
+      if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
+    }
+  }
 }

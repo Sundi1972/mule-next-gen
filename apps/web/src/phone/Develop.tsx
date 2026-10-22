@@ -1,14 +1,22 @@
-import { DEVELOPMENT } from '@mule/engine';
+import { DEVELOPMENT, UPKEEP, type Good } from '@mule/engine';
 import type { TileView } from '@mule/protocol';
-import { AirGauge, Button, cx, FACTORY_GOODS, FoodTime, GOOD_NAME, HoloMap, MuleIcon, OUTFIT_GOODS, PlayerMark, StoreInterior, TERRAIN_NAME, type Shop } from '@mule/ui';
+import { AirGauge, Button, cx, FoodTime, GOOD_NAME, GoodIcon, HoloMap, MuleIcon, PlayerMark, StoreInterior, TERRAIN_NAME, ZoomMap, type Shop } from '@mule/ui';
 import { useEffect, useState } from 'react';
 import { mapTiles, PHASE_NAME, plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
+import { SpecialLine } from '../components/SpecialLine';
 import { useClient, useServerNow } from '../net/react';
 import { usePhoneGame } from './game';
 import { GroundCard, Traits } from './ground';
-import { MapFit, PhoneShell } from './Shell';
+import { nearest, nextStep, openShops } from './next-step';
+import { MapFit, PhoneShell, useWide } from './Shell';
 
 const OUTFIT_NAME = (o: TileView['outfit']) => (o === null ? '' : o === 'greenBelt' ? 'Green belt' : GOOD_NAME[o]);
+
+/** How long the start-of-turn card stays on the store floor, and how long its bar takes to fill. */
+const FILL_CARD_SECONDS = 2.2;
+
+/** The rail and the start-of-turn card say this when air sickness cost the player time. */
+const SICK_NOTE = 'Sickness cost you time.';
 
 /**
  * Development: your own clock runs. Buy a MULE in the store, outfit it, walk
@@ -22,38 +30,73 @@ export function Develop() {
   const seconds = me.devEndsAt === null ? 0 : Math.max(0, (me.devEndsAt - now) / 1000);
   const carry = me.carriedMule;
   const [place, setPlace] = useState<'store' | 'map'>('store');
+  const [cardDismissed, setCardDismissed] = useState(false);
+  // Develop mounts as development starts; the card runs on wall time, whatever the server's phase scale.
+  const [devStartedAt] = useState(now);
   const [selected, setSelected] = useState<{ x: number; y: number } | null>(null);
+  // Kept here, not in the map, so the zoom survives a trip into the store.
+  const [zoomed, setZoomed] = useState(false);
   const tile = selected ? tileAt(view, selected.x, selected.y) : undefined;
   const outfitted = carry !== null && carry !== 'empty';
-
-  // Once the MULE is outfitted, walk out and point at a plot of yours that has no MULE yet.
-  useEffect(() => {
-    if (!outfitted) return;
-    setPlace('map');
-    setSelected((s) => {
-      if (s && tileAt(view, s.x, s.y)?.owner === me.id) return s;
-      const free = view.tiles.find((t) => t.owner === me.id && !t.outfit) ?? view.tiles.find((t) => t.owner === me.id);
-      return free ? { x: free.x, y: free.y } : s;
-    });
-    // Only when the MULE changes, not on every view.
-  }, [outfitted]);
+  // RULE-7's "installed this turn": an outfitted MULE in tow becomes none only by installing it. Worked out while
+  // rendering, so the frame that loses the MULE already shows row 7, never row 2.
+  const [installed, setInstalled] = useState(false);
+  const [carried, setCarried] = useState(carry);
+  if (carried !== carry) {
+    setCarried(carry);
+    if (carried !== null && carried !== 'empty' && carry === null) setInstalled(true);
+  }
 
   if (self.doneDeveloping || seconds <= 0) return <Done pub={self.doneDeveloping} />;
 
-  const step = carry === null ? 1 : carry === 'empty' ? 2 : 3;
-  const open: Shop[] = carry === null ? ['corral', 'pub'] : carry === 'empty' ? [...OUTFIT_GOODS, ...FACTORY_GOODS, 'greenBelt', 'pub'] : ['pub'];
+  const filling = (now - devStartedAt) / 1000 < FILL_CARD_SECONDS && !cardDismissed;
+  const freePlots = view.tiles.filter((t) => t.owner === me.id && !t.outfit);
+  const storeTile = view.tiles.find((t) => t.terrain === 'store') ?? { x: Math.floor(view.width / 2), y: Math.floor(view.height / 2) };
+  // You walk out through a door yourself (RULE-7 row 4); with an outfitted MULE, a plot of yours is picked for you.
+  const walkOut = () => {
+    setCardDismissed(true);
+    setPlace('map');
+    if (!outfitted) return;
+    setSelected((s) => {
+      if (s && tileAt(view, s.x, s.y)?.owner === me.id) return s;
+      const pick = nearest(freePlots, storeTile) ?? view.tiles.find((t) => t.owner === me.id);
+      return pick ? { x: pick.x, y: pick.y } : s;
+    });
+  };
   const onShop = (shop: Shop) => {
+    setCardDismissed(true);
     if (shop === 'pub') client.intent({ type: 'pub' });
     else if (shop === 'corral') client.intent({ type: 'buyMule' });
     else client.intent({ type: 'outfit', outfit: shop });
   };
+  // The pub's own sum, from the time left now: see visitPub in the engine.
+  const pubPayout = Math.round(DEVELOPMENT.pub.base + (DEVELOPMENT.pub.start + view.month * DEVELOPMENT.pub.perMonth) * Math.min(1, seconds / Math.max(me.devSeconds, 1)));
   const mine = tile?.owner === me.id;
   const free = tile && tile.owner === null && tile.terrain !== 'store';
   const owner = tile?.owner ? view.players.find((p) => p.id === tile.owner) : undefined;
 
-  const pub = (
-    <Button size="md" variant="ghost" className="flex-1 whitespace-nowrap px-2" aria-label="Go to the pub and end your turn" onClick={() => client.intent({ type: 'pub' })}>
-      Pub · end turn
+  const guide = nextStep({
+    filling,
+    carry,
+    place,
+    atOwnPlot: place === 'map' && mine,
+    installed,
+    seconds,
+    freePlots,
+    from: storeTile,
+    month: { needs: me.monthNeeds, have: me.stock },
+    ate: Math.min(me.stock.food, me.needs.food),
+    devSeconds: me.devSeconds,
+    mulePrice: me.mulePrice,
+    mulesLeft: view.storeMules,
+    pubPayout,
+  });
+
+  const tiles = mapTiles(view);
+  // The payout shows where the button has the row to itself: in the store. On the map it shares the row with Store.
+  const pub = (payout: boolean) => (
+    <Button size="md" variant="ghost" className="flex-1 whitespace-nowrap px-2 @min-[1100px]/shell:h-12" aria-label="Go to the pub and end your turn" onClick={() => client.intent({ type: 'pub' })}>
+      {payout ? `Pub · end turn · ≈${pubPayout} cr` : 'Pub · end turn'}
     </Button>
   );
 
@@ -61,35 +104,21 @@ export function Develop() {
     <PhoneShell
       phase={PHASE_NAME.development}
       seconds={seconds}
-      fill={place === 'map'}
+      now={guide.now}
+      fill
       rail={
         <>
-          <div className="flex items-center gap-2.5" data-testid="mule">
-            <span className={cx(carry === null ? 'text-ink-3' : 'text-ink')}>
-              <MuleIcon size={20} />
+          <div className="flex items-center gap-2.5 @min-[1100px]/shell:text-lg" data-testid="mule">
+            <span className={cx('flex items-center', carry === null ? 'text-ink-3' : 'text-ink')}>
+              <MuleIcon size={22} />
+              {outfitted && carry !== 'greenBelt' && <GoodIcon good={carry} size={14} />}
             </span>
-            <span className="flex-1 font-display text-sm font-semibold leading-tight">
-              {carry === null ? 'No MULE' : carry === 'empty' ? 'Empty MULE in tow' : `${OUTFIT_NAME(carry)} MULE in tow`}
+            <span className="flex-1 font-display text-sm font-semibold leading-tight @min-[1100px]/shell:text-lg">
+              {carry === null ? (installed ? 'No MULE in tow' : 'No MULE yet') : carry === 'empty' ? 'Empty MULE in tow' : `${OUTFIT_NAME(carry)} MULE in tow`}
             </span>
           </div>
           {place === 'store' && (
             <>
-              <ol className="grid grid-cols-3 gap-1 text-[11px]">
-                {['Buy', 'Outfit', 'Install'].map((label, i) => (
-                  <li
-                    key={label}
-                    className={cx(
-                      'flex items-center gap-1 rounded-control border px-1.5 py-1',
-                      i + 1 === step ? 'border-holo bg-holo-soft font-semibold text-ink' : i + 1 < step ? 'border-ok/40 text-ok' : 'border-holo-faint text-ink-3',
-                    )}
-                  >
-                    <span data-num className="font-mono">
-                      {i + 1 < step ? '✓' : i + 1}
-                    </span>
-                    {label}
-                  </li>
-                ))}
-              </ol>
               <FoodTime
                 seconds={seconds}
                 total={Math.max(me.devSeconds, 1)}
@@ -97,28 +126,25 @@ export function Develop() {
                 need={1}
                 note={[
                   me.hungry ? 'Short of Food this month, so less time.' : `Full time: ${me.devSeconds} s.`,
-                  me.sick ? 'Sickness cost you time.' : '',
+                  me.sick ? SICK_NOTE : '',
                   `Geo analysis takes ${DEVELOPMENT.analysisSeconds} s.`,
                 ]
                   .filter(Boolean)
                   .join(' ')}
               />
-              <p className="text-sm text-ink-2">
-                {carry === null && 'Tap the corral to buy an empty MULE, or the pub to cash out and end your turn.'}
-                {carry === 'empty' && 'Lead your MULE to an outfitter for a farm or mine, or to the works for a factory. It can make only that good.'}
-                {outfitted && 'Your MULE is ready. Walk out and install it on one of your plots.'}
-              </p>
+              <YourPlots tiles={view.tiles} me={me.id} />
             </>
           )}
           {place === 'map' && !tile && <p className="text-sm text-ink-2">Tap a plot to look at it. Tap the store to go back in.</p>}
           {place === 'map' && tile && (
             <section className="flex flex-col gap-2 border-t border-holo-faint pt-2.5">
               <header className="flex items-baseline justify-between gap-2">
-                <h2 className="font-display text-lg font-semibold leading-tight">
+                <h2 className="font-display text-lg font-semibold leading-tight" data-testid="plot-title">
                   {TERRAIN_NAME[tile.terrain]} <span className="font-mono text-sm font-normal text-ink-3">{plotName(tile.x, tile.y)}</span>
                 </h2>
                 <span className="font-mono text-xs text-holo">{mine ? 'YOURS' : free ? 'FREE' : 'OWNED'}</span>
               </header>
+              <SpecialLine special={tile.special} />
               <span className="flex flex-wrap items-center gap-x-2 empty:hidden">
                 {owner && !mine && (
                   <span className="flex items-center gap-1.5 text-sm font-normal text-ink-2">
@@ -137,7 +163,13 @@ export function Develop() {
                   <strong>{['', 'Dusty', 'Polluted', 'Toxic'][tile.pollution]} land.</strong> Food, Water and Medicine here make {tile.pollution} less.
                 </span>
               )}
-              {tile.ground ? <GroundCard ground={tile.ground} /> : <span className="text-sm text-ink-2">{TERRAIN_ODDS[tile.terrain]}</span>}
+              {tile.ground ? (
+                <GroundCard ground={tile.ground} />
+              ) : (
+                <span className="text-sm text-ink-2" data-testid="terrain-hint">
+                  {TERRAIN_ODDS[tile.terrain]}
+                </span>
+              )}
               <Traits traits={tile.traits} />
               {mine && (
                 <Button size="md" variant="outline" className="px-2 text-xs" disabled={tile.filter || me.stock.alloy < DEVELOPMENT.filterAlloy} onClick={() => client.intent({ type: 'filter', x: tile.x, y: tile.y })}>
@@ -153,10 +185,10 @@ export function Develop() {
       footer={
         place === 'store' ? (
           <>
-            <Button size="md" variant={outfitted ? 'holo' : 'outline'} className="w-full" onClick={() => setPlace('map')}>
+            <Button size="md" variant={outfitted ? 'holo' : 'outline'} className="w-full @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" onClick={walkOut}>
               Walk out to the map
             </Button>
-            <div className="flex">{pub}</div>
+            <div className="flex">{pub(true)}</div>
           </>
         ) : (
           <>
@@ -181,27 +213,126 @@ export function Develop() {
               <Button size="md" variant="outline" className="flex-1 whitespace-nowrap px-2" onClick={() => setPlace('store')}>
                 Store
               </Button>
-              {pub}
+              {pub(false)}
             </div>
           </>
         )
       }
     >
-      {place === 'store' ? (
-        <StoreInterior mules={view.storeMules} mulePrice={me.mulePrice} prices={me.outfitCosts} open={open} onShop={onShop} visitors={{}} wide />
-      ) : (
-        <MapFit width={view.width} height={view.height}>
-          <HoloMap
-            width={view.width}
-            height={view.height}
-            tiles={mapTiles(view)}
-            focusSlot={slot}
-            selected={selected}
-            onTile={(t) => (t.terrain === 'store' ? setPlace('store') : setSelected({ x: t.x, y: t.y }))}
-          />
-        </MapFit>
-      )}
+      {/* One place at a time, at every size (AM-8): in the store the hall fills the stage; out of the door, the colony. */}
+      <div className="flex min-h-0 flex-1 flex-col" data-testid="dev-stage">
+        {place === 'store' ? (
+          <div className="min-h-[300px] flex-1">
+            <WideHall
+              mules={view.storeMules}
+              mulePrice={me.mulePrice}
+              prices={me.outfitCosts}
+              pubPayout={pubPayout}
+              open={openShops(guide.locks)}
+              onShop={onShop}
+              onDoor={walkOut}
+              next={guide.next}
+              locks={guide.locks}
+              me={{ id: me.id, slot, leading: carry, time: seconds / DEVELOPMENT.fullSeconds }}
+              overlay={filling && <FillCard seconds={me.devSeconds} hungry={me.hungry} sick={me.sick} ate={Math.min(me.stock.food, me.needs.food)} need={me.needs.food} />}
+            />
+          </div>
+        ) : (
+          <MapFit width={view.width} height={view.height}>
+            <ZoomMap width={view.width} height={view.height} tiles={tiles} slot={slot} zoomed={zoomed} onZoomedChange={setZoomed}>
+              <div className="relative" data-testid="dev-map">
+                <HoloMap
+                  width={view.width}
+                  height={view.height}
+                  tiles={tiles}
+                  focusSlot={slot}
+                  selected={selected}
+                  onTile={(t) => (t.terrain === 'store' ? setPlace('store') : setSelected({ x: t.x, y: t.y }))}
+                />
+                {guide.plot && (
+                  <span
+                    className="pointer-events-none absolute -translate-x-1/2 -translate-y-[170%] rounded-full bg-holo px-1.5 font-mono text-[10px] font-bold leading-4 text-on-holo shadow-glow"
+                    style={{ left: `${((guide.plot.x + 0.5) / view.width) * 100}%`, top: `${((guide.plot.y + 0.5) / view.height) * 100}%` }}
+                    data-testid="plot-tap-here"
+                  >
+                    TAP
+                  </span>
+                )}
+              </div>
+            </ZoomMap>
+          </MapFit>
+        )}
+      </div>
     </PhoneShell>
+  );
+}
+
+/** The hall at the shell's size: the laptop's type and creatures when wide, the phone's otherwise. */
+function WideHall(props: Omit<Parameters<typeof StoreInterior>[0], 'wide' | 'tv'>) {
+  return <StoreInterior {...props} wide={useWide()} />;
+}
+
+/** Your plots and what they make: why the guide suggests a good. Wide screens only. */
+function YourPlots({ tiles, me }: { tiles: TileView[]; me: string }) {
+  const mine = tiles.filter((t) => t.owner === me);
+  const by = new Map<TileView['outfit'], number>();
+  for (const t of mine) by.set(t.outfit, (by.get(t.outfit) ?? 0) + 1);
+  const burn = UPKEEP.energyUse;
+  return (
+    <section className="hidden flex-col gap-2 border-t border-holo-faint pt-4 @min-[1100px]/shell:flex" data-testid="your-plots">
+      <span className="label-caps text-xs!">Your {mine.length} plots</span>
+      <ul className="flex flex-col gap-1.5 text-base">
+        {[...by].map(([outfit, n]) => (
+          <li key={outfit ?? 'none'} className="flex items-center gap-2">
+            {outfit === null || outfit === 'greenBelt' ? <span className={cx('h-4 w-4 rounded-[4px] border border-dashed', outfit ? 'border-ok' : 'border-holo')} /> : <GoodIcon good={outfit as Good} size={16} />}
+            <span className="flex-1">{outfit === null ? 'No MULE yet' : OUTFIT_NAME(outfit)}</span>
+            <span data-num className="font-mono font-bold">
+              {n}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <span className="text-sm text-ink-2">
+        Each month a farm or a well burns {burn.food} Energy, a mine {burn.smithore}, an Energy plot {burn.energy === 0 ? 'none' : burn.energy}.
+      </span>
+    </section>
+  );
+}
+
+/**
+ * The start of the turn: you eat, and your time bar fills to what the Food bought. It states the time from its
+ * first frame; the bar is shorter and orange when hunger or sickness cost time.
+ */
+export function FillCard({ seconds, hungry, sick, ate, need }: { seconds: number; hungry: boolean; sick: boolean; ate: number; need: number }) {
+  const full = DEVELOPMENT.fullSeconds;
+  const short = seconds < full;
+  const why = [hungry ? 'short of Food, so less time' : '', sick ? SICK_NOTE : ''].filter(Boolean).join('. ');
+  const [grown, setGrown] = useState(false);
+  useEffect(() => {
+    // One frame at zero first, so the bar visibly fills.
+    const id = requestAnimationFrame(() => setGrown(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+  return (
+    // Taps go through to the rooms underneath: the clock is already running.
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-void/55" data-testid="fill-card">
+      <div className="flex w-[64%] flex-col gap-1.5 rounded-panel border-2 border-holo bg-panel p-3 shadow-glow">
+        <span className="label-caps">Start of your turn</span>
+        <span className="font-display text-lg font-semibold leading-tight">
+          You eat {ate} Food{hungry ? ` of the ${need} you need` : ''} and fill up your time bar.
+        </span>
+        <div className="relative h-3 overflow-hidden rounded-full bg-raised">
+          <div
+            className={cx('absolute inset-y-0 left-0 rounded-full transition-[width] duration-[2000ms] ease-linear', short ? 'bg-warn' : 'bg-holo')}
+            style={{ width: `${grown ? Math.min(1, seconds / full) * 100 : 0}%` }}
+          />
+          {short && <div className="absolute inset-y-0 border-l-2 border-dashed border-ink-3" style={{ left: '100%', transform: 'translateX(-2px)' }} />}
+        </div>
+        <span data-num className={cx('font-mono text-sm font-bold', short ? 'text-warn' : 'text-holo')}>
+          {short ? `${seconds} s of ${full}${why ? `: ${why}` : ''}` : `${seconds} s: full time`}
+        </span>
+      </div>
+    </div>
   );
 }
 

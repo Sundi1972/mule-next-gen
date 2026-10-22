@@ -102,7 +102,7 @@ describe('species perks', () => {
 });
 
 describe('land grant', () => {
-  it('lights free plots in a seeded random order and only the lit plot can be claimed', () => {
+  it('INV-grant-lit: free plots light one at a time and only the lit plot can be claimed', () => {
     const a = newGame();
     const b = newGame();
     toPhase(a, 'landGrant');
@@ -116,20 +116,46 @@ describe('land grant', () => {
     expect(() => claimPlot(a, 'p1', lit.x, lit.y)).toThrow(RuleError);
     const next = advanceGrant(a)!;
     expect(next.owner).toBeNull();
-    // The order is not just left to right.
-    const xs = a.grant!.order.slice(0, 10).map((i) => i % a.width);
-    expect([...xs].sort((m, n) => m - n)).not.toEqual(xs);
   });
 
-  it('starts a fresh sweep after every free plot has lit, and ends when claims are used', () => {
+  it('INV-grant-sweep: a new sweep starts after every free plot has lit, and the grant ends when claims are used', () => {
     const state = newGame();
     toPhase(state, 'landGrant');
     const first = [...state.grant!.order];
     for (let i = 0; i < first.length; i++) advanceGrant(state);
     expect(state.grant!.sweep).toBe(1);
-    expect(state.grant!.order).not.toEqual(first);
     for (const p of state.players) p.claimsThisGrant = 2;
     expect(grantDone(state)).toBe(true);
+  });
+
+  it('INV-grant-order: the light steps through free plots in reading order, the same order every sweep, skipping owned plots', () => {
+    const state = newGame();
+    const owned = [state.tiles[1]!, state.tiles[state.width + 3]!];
+    for (const t of owned) t.owner = 'p3';
+    const store = state.tiles.find((t) => t.terrain === 'store')!;
+    toPhase(state, 'landGrant');
+    const inReadingOrder = (tiles: Tile[]) => [...tiles].sort((a, b) => a.y - b.y || a.x - b.x);
+    const free = inReadingOrder(state.tiles.filter((t) => t.owner === null && t.terrain !== 'store'));
+
+    const firstSweep: Tile[] = [];
+    let claimed: Tile | null = null;
+    for (let tile = litPlot(state); tile && state.grant!.sweep === 0; tile = advanceGrant(state)) {
+      firstSweep.push(tile);
+      if (firstSweep.length === 3) {
+        claimPlot(state, 'p0', tile.x, tile.y);
+        claimed = tile;
+      }
+    }
+    expect(firstSweep).toEqual(free);
+
+    const secondSweep: Tile[] = [];
+    for (let tile = litPlot(state); tile && state.grant!.sweep === 1; tile = advanceGrant(state)) secondSweep.push(tile);
+    expect(secondSweep).toEqual(free.filter((t) => t !== claimed));
+
+    for (const lit of [...firstSweep, ...secondSweep]) {
+      expect(lit).not.toBe(store);
+      expect(owned).not.toContain(lit);
+    }
   });
 });
 

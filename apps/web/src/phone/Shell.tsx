@@ -1,17 +1,99 @@
-import { cx, PlayerMark, Timer } from '@mule/ui';
-import type { ReactNode } from 'react';
+import { cx, PlayerMark, SPECIES_NAME, Timer } from '@mule/ui';
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { fmt } from '../game/derive';
 import { usePhoneGame } from './game';
 
 /**
- * Every phone screen, held sideways: the content fills the left, a narrow rail on
- * the right holds the phase, the clock, your money, the screen's controls and,
- * at the bottom within thumb reach, the main action.
+ * From this width of the shell the layout is "wide" (laptop and up). One number, shared by the container query
+ * (`@min-[1100px]/shell:` below, on the container named `shell`, so a nested container such as MapFit never
+ * captures it) and by code that sizes itself (useWide). HC-8: never the window's width, never a
+ * second breakpoint per screen.
+ */
+export const WIDE_PX = 1100;
+const Wide = createContext(false);
+/** True when the shell is wide: for components that size in code rather than in CSS. */
+export const useWide = () => useContext(Wide);
+
+/**
+ * What floats over every game screen, such as emotes. The shell draws it inside its own container, so it can sit
+ * clear of the rail at the rail's real width: `--rail` there is the rail's width at both sizes.
+ */
+export const ShellLayer = createContext<ReactNode>(null);
+
+/** What the player does next, at the top of the rail. */
+export interface Now {
+  /** Step n of m, when the turn is a sequence. */
+  step?: number;
+  of?: number;
+  /** One action, named. */
+  title: string;
+  /** One line of why. */
+  detail?: ReactNode;
+  /** Something the player must notice, such as time running short: shown amber. */
+  warn?: boolean;
+}
+
+/** "Now": the one next step and why. It opens the rail of every screen that gives one. */
+export function NowCard({ now }: { now: Now }) {
+  return (
+    <section
+      className={cx('flex flex-col gap-1 rounded-panel border-2 p-2.5 @min-[1100px]/shell:gap-1.5 @min-[1100px]/shell:p-4', now.warn ? 'border-warn bg-warn/10' : 'border-holo bg-holo-soft')}
+      data-testid="now"
+      aria-live="polite"
+    >
+      <span className="flex items-center gap-2">
+        <span className="label-caps text-[10px]! @min-[1100px]/shell:text-xs!">Now</span>
+        {now.step !== undefined && now.of !== undefined && (
+          <span className="flex items-center gap-1" aria-label={`Step ${now.step} of ${now.of}`} data-testid="now-steps">
+            {Array.from({ length: now.of }, (_, i) => (
+              <span key={i} className={cx('h-1.5 rounded-full @min-[1100px]/shell:h-2', i + 1 === now.step ? 'w-4 bg-holo @min-[1100px]/shell:w-6' : i + 1 < (now.step ?? 0) ? 'w-1.5 bg-ok @min-[1100px]/shell:w-2' : 'w-1.5 bg-holo-line @min-[1100px]/shell:w-2')} />
+            ))}
+          </span>
+        )}
+      </span>
+      <h2 className="font-display text-base font-semibold leading-tight @min-[1100px]/shell:text-2xl" data-testid="now-title">
+        {now.title}
+      </h2>
+      {now.detail && <p className="text-xs leading-snug text-ink-2 @min-[1100px]/shell:text-base">{now.detail}</p>}
+    </section>
+  );
+}
+
+/** Before paint in the browser; the server renderer (and the node tests) has nothing to measure and no paint. */
+const useBeforePaint = typeof document === 'undefined' ? useEffect : useLayoutEffect;
+
+/**
+ * Whether the element is at least WIDE_PX wide, the same answer as the container query in every painted frame:
+ * measured before the first paint (the shell remounts with each phase), then on every resize, which
+ * ResizeObserver reports before paint and flushSync commits there too.
+ */
+function useWideRef<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [wide, setWide] = useState(false);
+  useBeforePaint(() => {
+    const el = ref.current;
+    if (!el) return;
+    setWide(el.getBoundingClientRect().width >= WIDE_PX);
+    const ro = new ResizeObserver(([e]) => flushSync(() => setWide((e?.contentRect.width ?? 0) >= WIDE_PX)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, wide] as const;
+}
+
+/**
+ * Every player screen, from a phone held sideways to a laptop: the stage on the left holds the screen's content;
+ * the guide rail on the right holds the phase, the clock, your money, then "Now" when the screen gives one, the
+ * screen's controls and, at the bottom within thumb reach, the main action. It sizes from its own width (HC-8):
+ * under WIDE_PX it is the phone layout; from WIDE_PX the rail is 400 px, the type and the clock grow, and the
+ * stage gets room around it.
  */
 export function PhoneShell({
   phase,
   seconds,
+  now,
   rail,
   footer,
   fill = false,
@@ -19,6 +101,8 @@ export function PhoneShell({
 }: {
   phase: string;
   seconds?: number | undefined;
+  /** The one next step, first in the rail. Screens without it draw no Now card. */
+  now?: Now | undefined;
   /** Controls and details for the side rail; scrolls if it runs long. */
   rail?: ReactNode;
   /** The main action, pinned to the bottom of the rail. */
@@ -28,33 +112,58 @@ export function PhoneShell({
   children: ReactNode;
 }) {
   const { view, self, slot } = usePhoneGame();
+  const [root, wide] = useWideRef<HTMLDivElement>();
+  const layer = useContext(ShellLayer);
   return (
-    <div className="flex h-full bg-table pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] text-ink">
-      <main className={cx('min-w-0 flex-1 p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]', fill ? 'flex min-h-0 flex-col' : 'overflow-y-auto')}>{children}</main>
-      <aside className="flex w-(--rail) shrink-0 flex-col border-l border-holo-faint bg-void/40">
-        <header className="flex flex-col gap-1 border-b border-holo-faint px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex min-w-0 flex-col">
-              <span className="label-caps text-[10px]!">
-                Month {view.month} / {view.maxMonths}
-              </span>
-              <span className="truncate font-display text-lg font-semibold leading-tight">{phase}</span>
+    <Wide.Provider value={wide}>
+      <div ref={root} className="h-full @container/shell">
+        <div className="relative flex h-full bg-table @min-[1100px]/shell:[--rail:400px] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] text-ink" data-testid="game-shell" data-wide={wide}>
+          <main
+            className={cx(
+              'min-w-0 flex-1 p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] @min-[1100px]/shell:p-6 @min-[1100px]/shell:pb-[max(1.5rem,env(safe-area-inset-bottom))]',
+              fill ? 'flex min-h-0 flex-col' : 'overflow-y-auto',
+            )}
+            data-testid="stage"
+          >
+            {children}
+          </main>
+          <aside className="flex w-(--rail) shrink-0 flex-col border-l border-holo-faint bg-void/40" data-testid="guide">
+            <header className="flex flex-col gap-1 border-b border-holo-faint px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] @min-[1100px]/shell:gap-2 @min-[1100px]/shell:px-5 @min-[1100px]/shell:pb-4 @min-[1100px]/shell:pt-[max(1rem,env(safe-area-inset-top))]">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-col">
+                  <span className="label-caps text-[10px]! @min-[1100px]/shell:text-xs!">
+                    Month {view.month} / {view.maxMonths}
+                  </span>
+                  <span className="truncate font-display text-lg font-semibold leading-tight @min-[1100px]/shell:text-2xl">{phase}</span>
+                </div>
+                {seconds !== undefined && <Timer seconds={seconds} className="@min-[1100px]/shell:h-11 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-2xl" />}
+              </div>
+              <div className="flex items-center gap-2">
+                <PlayerMark slot={slot} species={self.species} size={12} label={`You, ${SPECIES_NAME[self.species]}`} />
+                <span className="min-w-0 truncate text-sm font-semibold @min-[1100px]/shell:text-base">{self.name}</span>
+                <ThemeToggle className="ml-1 shrink-0" />
+                <span data-num className="ml-auto shrink-0 font-mono text-sm font-bold text-ink @min-[1100px]/shell:text-lg" data-testid="money">
+                  {fmt(self.money)} cr
+                </span>
+              </div>
+            </header>
+            <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 *:shrink-0 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4">
+              {now && <NowCard now={now} />}
+              {rail}
             </div>
-            {seconds !== undefined && <Timer seconds={seconds} />}
-          </div>
-          <div className="flex items-center gap-2">
-            <PlayerMark slot={slot} size={12} label="You" />
-            <span className="min-w-0 truncate text-sm font-semibold">{self.name}</span>
-            <ThemeToggle className="ml-1 shrink-0" />
-            <span data-num className="ml-auto shrink-0 font-mono text-sm font-bold text-ink" data-testid="money">
-              {fmt(self.money)} cr
-            </span>
-          </div>
-        </header>
-        <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 *:shrink-0">{rail}</div>
-        {footer && <div className="flex flex-col gap-2 border-t border-holo-faint bg-void/60 px-3 pb-[max(0.625rem,env(safe-area-inset-bottom))] pt-2.5">{footer}</div>}
-      </aside>
-    </div>
+            {footer && (
+              <div
+                className="flex flex-col gap-2 border-t border-holo-faint bg-void/60 px-3 pb-[max(0.625rem,env(safe-area-inset-bottom))] pt-2.5 @min-[1100px]/shell:gap-3 @min-[1100px]/shell:px-5 @min-[1100px]/shell:pb-[max(1rem,env(safe-area-inset-bottom))] @min-[1100px]/shell:pt-4"
+                data-testid="actions"
+              >
+                {footer}
+              </div>
+            )}
+          </aside>
+          {layer}
+        </div>
+      </div>
+    </Wide.Provider>
   );
 }
 

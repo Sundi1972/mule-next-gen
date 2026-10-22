@@ -1,7 +1,7 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
-import { RuleError } from '@mule/engine';
+import { RuleError, SPECIES } from '@mule/engine';
 import { EMOTES, type MuleIntent, type MuleView } from '@mule/protocol';
 import { RoomRegistry, TableError, type ClientEnvelope, type Connection, type Room } from '@tabletop/core';
 import { WebSocketServer, type WebSocket } from 'ws';
@@ -32,13 +32,18 @@ export interface MuleServer {
  * The game server: an HTTP server for the web client and `POST /rooms`, and a
  * WebSocket endpoint at `/ws` where phones and boards talk to their room.
  */
-export function createMuleServer(options: { staticDir?: string; seed?: () => number } = {}): MuleServer {
+export function createMuleServer(
+  options: { staticDir?: string; seed?: () => number; maxMonths?: number; phaseScale?: number } = {},
+): MuleServer {
   const seed = options.seed ?? (() => Math.floor(Math.random() * 2 ** 31));
   const registry = new RoomRegistry<MuleIntent, MuleView>({
-    createGame: (ctx) => new MuleGame(ctx, seed()),
+    createGame: (ctx) => new MuleGame(ctx, seed(), { maxMonths: options.maxMonths, phaseScale: options.phaseScale }),
     aiNames: AI_NAMES,
     emotes: EMOTES,
+    picks: SPECIES,
     isUserError: (err) => err instanceof RuleError || err instanceof TableError,
+    // The room has already ended itself; only the stack is logged, never what the players sent.
+    onError: (err) => console.error(`game error: ${err instanceof Error ? err.stack : String(err)}`),
   });
   const staticDir = options.staticDir && existsSync(options.staticDir) ? resolve(options.staticDir) : null;
 
@@ -149,11 +154,19 @@ function parse(text: string): ClientEnvelope<MuleIntent> | null {
       return str(m.code) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'addAi':
     case 'start':
+    case 'close':
+    case 'leave':
       return m as ClientEnvelope<MuleIntent>;
+    case 'kick':
+      return str(m.seatId) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'chat':
       return str(m.text) && (m.to === undefined || str(m.to)) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'emote':
       return str(m.emote) ? (m as ClientEnvelope<MuleIntent>) : null;
+    case 'pick':
+      return str(m.pick) ? (m as ClientEnvelope<MuleIntent>) : null;
+    case 'color':
+      return num(m.color) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'ping':
       return num(m.clientTime) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'intent':
@@ -185,6 +198,12 @@ function isIntent(v: unknown): v is MuleIntent {
       return i.side === 'buyer' || i.side === 'seller' || i.side === 'pass';
     case 'walk':
       return i.dir === 'up' || i.dir === 'down' || i.dir === 'stop';
+    case 'list': {
+      const item = i.item as Record<string, unknown> | null;
+      return typeof item === 'object' && item !== null && typeof item.kind === 'string' && int(item.x) && int(item.y) && typeof i.minimum === 'number' && typeof i.unsold === 'string';
+    }
+    case 'unlist':
+      return typeof i.id === 'string';
     default:
       return false;
   }

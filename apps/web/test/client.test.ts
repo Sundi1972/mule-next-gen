@@ -171,8 +171,9 @@ describe('TableClient', () => {
     expect(client.serverNow()).toBe((ping.clientTime as number) + 40 + 5_000);
   });
 
-  it('keeps chat without duplicates, and leaving forgets the seat', () => {
-    const { client, last, storage } = setup();
+  // trace-allow: chat de-duplication predates the spec's ids; split out of the leave test unchanged
+  it('keeps chat without duplicates', () => {
+    const { client, last } = setup();
     client.join('KRTX', 'Heiko');
     last().open();
     last().deliver({ t: 'welcome', code: 'KRTX', role: 'player', seatId: 's1', seatToken: 'secret' });
@@ -180,9 +181,71 @@ describe('TableClient', () => {
     last().deliver({ t: 'chat', message });
     last().deliver({ t: 'chat', message });
     expect(client.getState().chat).toHaveLength(1);
+  });
+
+  it('B-AC-6: leaving tells the room, then forgets the seat and disconnects', () => {
+    const { client, last, storage } = setup();
+    client.join('KRTX', 'Heiko');
+    last().open();
+    last().deliver({ t: 'welcome', code: 'KRTX', role: 'player', seatId: 's1', seatToken: 'secret' });
+
     client.leave();
+
+    expect(last().sent.at(-1)).toEqual({ t: 'leave' });
+    expect(last().readyState).toBe(3);
     expect(loadSeat(storage)).toBeNull();
     expect(client.getState().status).toBe('idle');
+  });
+
+  it("T-AC-12: a colour pick leaves the phone as the room's color message", () => {
+    const { client, last } = setup();
+    client.join('KRTX', 'Heiko');
+    last().open();
+
+    client.color(3);
+
+    expect(last().sent.at(-1)).toEqual({ t: 'color', color: 3 });
+  });
+
+  it('B-AC-6: leaving before the socket opens sends nothing, and still forgets the seat', () => {
+    const storage = memoryStore();
+    saveSeat(storage, { code: 'KRTX', token: 'secret', name: 'Heiko' });
+    const { client, last } = setup(storage);
+    client.join('KRTX', 'Heiko');
+
+    client.leave();
+
+    expect(last().sent).toEqual([]);
+    expect(loadSeat(storage)).toBeNull();
+    expect(client.getState().status).toBe('idle');
+  });
+
+  it.each([
+    { reason: 'kicked', role: 'player', message: 'The host removed you from the table' },
+    { reason: 'closed', role: 'player', message: 'The host closed the table' },
+    { reason: 'moved', role: 'player', message: "You're playing on another device now" },
+    { reason: 'closed', role: 'board', message: 'The host closed the table' },
+  ] as const)('B-AC-6: removed $reason on a $role → a phone forgets its seat (a board keeps the one saved beside it), the start screen gives the reason, and nothing reconnects', ({ reason, role, message }) => {
+    const storage = memoryStore();
+    const seat = { code: 'KRTX', token: 'secret', name: 'Heiko' };
+    saveSeat(storage, seat);
+    const { client, sockets, last, advance } = setup(storage);
+    if (role === 'player') client.join('KRTX', 'Heiko');
+    else client.watch('KRTX');
+    last().open();
+    last().deliver({ t: 'welcome', code: 'KRTX', role, seatId: role === 'player' ? 's2' : null, seatToken: role === 'player' ? 'secret' : null });
+    last().deliver({ t: 'view', view: lobbyView('KRTX') });
+
+    last().deliver({ t: 'removed', reason });
+    last().drop();
+    advance(10_000);
+
+    expect(loadSeat(storage)).toEqual(role === 'player' ? null : seat);
+    expect(client.getState()).toMatchObject({ status: 'idle', role: null, seatId: null, view: null, notice: message });
+    expect(sockets).toHaveLength(1);
+
+    client.join('KRTX', 'Heiko');
+    expect(client.getState().notice).toBeNull();
   });
 });
 

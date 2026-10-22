@@ -1,4 +1,4 @@
-import { EXPORT_DEMAND, EXPORT_SHIP, GAME, GOOD_CONFIG, MULE, POLLUTION, PRICE, UPKEEP } from './config.js';
+import { EXPORT_DEMAND, EXPORT_SHIP, GAME, GOOD_CONFIG, MULE, POLLUTION, PRICE, RECIPES, UPKEEP } from './config.js';
 import { airBand } from './pollution.js';
 import { energyUseOf, needsOf } from './production.js';
 import { createRng } from './rng.js';
@@ -38,13 +38,13 @@ export function monthlyDemand(state: GameState): Stock {
   const own = playersUse(state);
   demand.food = own.food + colonistDemand(state, 'food', colonistUnits);
   demand.water = own.water + colonistDemand(state, 'water', colonistUnits);
-  demand.energy = own.energy + colonistDemand(state, 'energy', colonistUnits / 2);
+  demand.energy = own.energy + colonistDemand(state, 'energy', colonistUnits * UPKEEP.colonistEnergyShare);
   // Sick colonists in dirty air need more Medicine.
-  demand.medicine = colonistDemand(state, 'medicine', (state.colonists / 50) * (sick ? POLLUTION.sickMedicineDemand : 1));
+  demand.medicine = colonistDemand(state, 'medicine', (state.colonists / UPKEEP.colonistsPerMedicine) * (sick ? POLLUTION.sickMedicineDemand : 1));
   const factories = (good: Good) => state.tiles.filter((t) => t.outfit === good).length;
   // The store builds a MULE from Smithore for every plot that will want one;
   // smelters need Smithore too, and Electronics works need Alloy.
-  demand.smithore = factories('alloy') * 2 + mulesWanted(state) * MULE.smithorePerMule;
+  demand.smithore = factories('alloy') * (RECIPES.alloy.inputs.smithore ?? 0) + mulesWanted(state) * MULE.smithorePerMule;
   demand.alloy = factories('electronics');
   demand.rareEarth = factories('electronics');
   // Crystite is a pure off-world luxury: only the export ship wants it.
@@ -145,18 +145,30 @@ export function postPrices(state: GameState): void {
   // This month's report is already open; last month's says what colonists lacked.
   const lastShortages = state.history.at(-2)?.shortages ?? [];
   const off = exportDemand(state);
-  for (const good of GOODS) {
-    const prev = state.store.posted[good];
-    // Below the lowest cover, or after colonists went short of it last month,
-    // the price has no target at all: it climbs the full step every month
-    // until supply comes back.
-    const short = cover(state, good, demand) < PRICE.minCover || lastShortages.includes(good);
-    let target = short ? Infinity : targetPrice(state, good, demand);
-    // A good only off-world buyers want is worth no more than they pay.
-    if (demand[good] - off[good] <= 0) target = Math.min(target, state.store.offWorld[good]);
-    const next = Math.min(riseCap(state, good, prev), Math.max(prev * (1 - PRICE.maxFall), target));
-    state.store.posted[good] = Math.max(1, Math.round(next));
-  }
+  const next = GOODS.map((good) => nextPostedPrice(state, good, demand, lastShortages, off));
+  GOODS.forEach((good, i) => (state.store.posted[good] = next[i]!));
+}
+
+/**
+ * The price the store would post for a good now, from the posted price it
+ * moves from. Below the lowest cover, or after colonists went short of it last
+ * month, the price has no target at all: it climbs the full step every month
+ * until supply comes back. A good only off-world buyers want is worth no more
+ * than they pay. AI players use this to price what an extra unit would do.
+ */
+export function nextPostedPrice(
+  state: GameState,
+  good: Good,
+  demand = monthlyDemand(state),
+  lastShortages: readonly Good[] = state.history.at(-2)?.shortages ?? [],
+  off = exportDemand(state),
+): number {
+  const prev = state.store.posted[good];
+  const short = cover(state, good, demand) < PRICE.minCover || lastShortages.includes(good) || shelfShort(state, good, PRICE.shelfCover);
+  let target = short ? Infinity : targetPrice(state, good, demand);
+  if (demand[good] - off[good] <= 0) target = Math.min(target, state.store.offWorld[good]);
+  const next = Math.min(riseCap(state, good, prev), Math.max(prev * (1 - PRICE.maxFall), target));
+  return Math.max(1, Math.round(next));
 }
 
 /**
@@ -195,7 +207,7 @@ export function storeQuotes(state: GameState, good: Good): { buy: number | null;
   const price = colonyPrice(state, good);
   const buy = Math.max(1, Math.floor(price * (1 - PRICE.storeSpread)));
   return {
-    buy: storeWants(state, good, buy) > 0 ? buy : null,
+    buy: storeWants(state, good) > 0 ? buy : null,
     sell: storeForSale(state, good) > 0 ? Math.ceil(price * (1 + PRICE.storeSpread)) : null,
   };
 }
@@ -210,18 +222,21 @@ export function storeForSale(state: GameState, good: Good): number {
   return Math.max(0, state.store.stock[good] - reserve);
 }
 
+/** Whether the store's shelf of Food or Water holds under `months` of the colonists' need. Other goods never are. */
+export function shelfShort(state: GameState, good: Good, months: number): boolean {
+  return (good === 'food' || good === 'water') && state.store.stock[good] < (state.colonists / UPKEEP.colonistsPerUnit) * months;
+}
+
 /**
- * How many units the store is willing to buy this month. The store is a
- * merchant, not a bottomless buyer: it fills its shelves up to a few months of
- * demand, plus a ship's load of goods off-world buyers take, and never bets
- * more than a share of its capital on one good.
+ * How many units the store is willing to buy this month: it fills its shelves
+ * up to a few months of demand, plus a ship's load of goods off-world buyers
+ * take. The store never runs out of money, so only shelf room limits it.
  */
-export function storeWants(state: GameState, good: Good, price: number, demand = monthlyDemand(state)): number {
+export function storeWants(state: GameState, good: Good, demand = monthlyDemand(state)): number {
   // For off-world goods it also stocks up a full ship's load, to sell when the ship calls.
   const shipLoad = exportDemand(state)[good] * GAME.exportShipEvery;
   const room = Math.ceil(demand[good] * PRICE.storeMaxCover + shipLoad) - state.store.stock[good];
-  const budget = Math.floor((Math.max(0, state.store.capital) * PRICE.storeBudgetShare) / Math.max(1, price));
-  return Math.max(0, Math.min(room, budget));
+  return Math.max(0, room);
 }
 
 /**

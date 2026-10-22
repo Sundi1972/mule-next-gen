@@ -78,6 +78,27 @@
   --color-g-electronics: #22d3ee;
   --color-g-medicine: #fb7185;
 
+  /*
+   * Special fields: each wears the colour of the good it pays, so the colour teaches the effect. Aliases, so there is
+   * one palette and both themes follow. The relic pays no good of its own and borrows Energy's gold, the hue furthest
+   * from the other four. Shape, not colour, tells the kinds apart; the colour only helps.
+   */
+  --color-s-ruins: var(--color-g-alloy);
+  --color-s-crystalCavern: var(--color-g-crystite);
+  --color-s-geyser: var(--color-g-water);
+  --color-s-oasis: var(--color-g-food);
+  --color-s-relic: var(--color-g-energy);
+
+  /* The MULE character's metal: its body, its outline and joints, its belly plate; its empty pod, dark in both themes. */
+  --color-mule-metal: #c9d3df;
+  --color-mule-shade: #2c3a49;
+  --color-mule-belly: #e9eef4;
+  --color-mule-pod: #102031;
+  /* The creatures' eye-whites and blush, and the shade between an awning's stripes: the same in both themes. */
+  --color-eye-white: #ffffff;
+  --color-blush: #ff8fa3;
+  --color-awning-stripe: #000000;
+
   --font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
@@ -165,6 +186,11 @@
   --color-g-electronics: #0b8fb0;
   --color-g-medicine: #d93a5c;
 
+  --color-mule-metal: #dfe6ee;
+  --color-mule-shade: #4b5b6d;
+  --color-mule-belly: #f4f7fa;
+  --color-mule-pod: #2c3a49;
+
   --color-map-base: #cfdccb;
   --color-map-edge: rgb(16 36 54 / 0.12);
   --color-map-grid: rgb(255 255 255 / 0.42);
@@ -208,4 +234,44 @@
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--color-ink-3);
+}
+
+/* The production show: bars rising, badges and the event card arriving, and each event's motion over the map. */
+@keyframes show-bar-in { from { transform: scaleY(0); transform-origin: bottom; opacity: 0; } to { transform: scaleY(1); transform-origin: bottom; opacity: 1; } }
+@keyframes show-badge-in { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes show-card-in { from { transform: translateY(-12px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes show-dust-drift { from { background-position: 0 0; } to { background-position: 40px 0; } }
+@keyframes show-crack-flash { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+@keyframes show-crawl { from { transform: translate(0, 0); } to { transform: translate(3px, -2px); } }
+@keyframes show-shimmer { from { opacity: 0.75; } to { opacity: 1; } }
+@keyframes show-flicker { from { transform: scaleY(0.9) translateY(4%); opacity: 0.85; } to { transform: scaleY(1.08); opacity: 1; } }
+@keyframes show-twinkle { from { transform: rotate(45deg) scale(0.4); opacity: 0.3; } to { transform: rotate(45deg) scale(1.1); opacity: 1; } }
+
+/* Without motion, the show's looping effects hold still; the one-off entrances still play. */
+@media (prefers-reduced-motion: reduce) {
+  [class*='animate-[show-crawl'],
+  [class*='animate-[show-shimmer'],
+  [class*='animate-[show-flicker'],
+  [class*='animate-[show-twinkle'],
+  [class*='animate-[show-dust-drift'] {
+    animation: none !important;
+  }
+}
+
+/* The store: the room the guide points at breathes. */
+@keyframes store-beckon { 0%, 100% { box-shadow: 0 0 0 0 var(--color-holo-line); } 50% { box-shadow: 0 0 0 6px var(--color-holo-faint), var(--shadow-glow); } }
+
+/* The MULE character: it breathes and blinks standing, bobs and swings its legs walking, its pod pulses at work. */
+@keyframes mule-breathe { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-0.6px) scaleY(1.01); } }
+@keyframes mule-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.2px); } }
+@keyframes mule-step { 0%, 100% { transform: rotate(-16deg); } 50% { transform: rotate(16deg); } }
+@keyframes mule-blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(0.1); } }
+@keyframes mule-work { 0%, 100% { opacity: 0.75; } 50% { opacity: 1; filter: brightness(1.25); } }
+
+/* Without motion, the store and the MULE hold still. */
+@media (prefers-reduced-motion: reduce) {
+  [class*='animate-[store-'],
+  [class*='animate-[mule-'] {
+    animation: none !important;
+  }
 }

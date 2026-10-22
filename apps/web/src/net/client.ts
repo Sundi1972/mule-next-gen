@@ -1,4 +1,5 @@
 import type { ChatMessage, ClientEnvelope, MuleIntent, MuleView, ServerEnvelope, TableView } from '@mule/protocol';
+import type { Species } from '@mule/ui';
 import { ClockSync } from './clock';
 import { clearSeat, loadSeat, saveSeat, type KeyValueStore } from './seat';
 
@@ -25,6 +26,15 @@ const TOAST_MS = 3_500;
 
 export type Status = 'idle' | 'connecting' | 'open' | 'reconnecting';
 
+type RemovedReason = Extract<ServerEnvelope<MuleView>, { t: 'removed' }>['reason'];
+
+const REMOVED: Record<RemovedReason, string> = {
+  kicked: 'The host removed you from the table',
+  closed: 'The host closed the table',
+  moved: "You're playing on another device now",
+  error: 'Something went wrong and the table had to stop. Start a new game to play again.',
+};
+
 export interface Toast {
   id: number;
   message: string;
@@ -45,6 +55,8 @@ export interface ClientState {
   chat: ChatMessage[];
   emotes: Emote[];
   toasts: Toast[];
+  /** Why the room sent this screen back to the start; shown there until it joins again. */
+  notice: string | null;
   /** Milliseconds to add to Date.now() for the server's clock. */
   clockOffset: number;
 }
@@ -67,7 +79,7 @@ export interface ClientOptions {
  * reload or a dropped connection, and reconnects with a growing pause.
  */
 export class TableClient {
-  private state: ClientState = { status: 'idle', role: null, code: null, seatId: null, view: null, chat: [], emotes: [], toasts: [], clockOffset: 0 };
+  private state: ClientState = { status: 'idle', role: null, code: null, seatId: null, view: null, chat: [], emotes: [], toasts: [], notice: null, clockOffset: 0 };
   private readonly listeners = new Set<() => void>();
   private readonly clock = new ClockSync();
   private socket: SocketLike | null = null;
@@ -126,20 +138,27 @@ export class TableClient {
     this.goTo({ kind: 'board', code: code.trim().toUpperCase() });
   }
 
-  /** Give up the seat on this phone and disconnect. */
+  /** Give up the seat on this phone: tell the room, forget the seat and disconnect. */
   leave(): void {
+    if (this.socket?.readyState === OPEN) this.raw({ t: 'leave' });
     clearSeat(this.storage);
+    this.letGo(null);
+  }
+
+  /** Drops the target and the socket, so its close starts no reconnect. */
+  private letGo(notice: string | null): void {
     this.target = null;
     this.stopTimers();
     const s = this.socket;
     this.socket = null;
     s?.close();
-    this.set({ status: 'idle', role: null, code: null, seatId: null, view: null, chat: [], emotes: [] });
+    this.set({ status: 'idle', role: null, code: null, seatId: null, view: null, chat: [], emotes: [], notice });
   }
 
   private goTo(target: Target): void {
     this.target = target;
     this.attempts = 0;
+    if (this.state.notice !== null) this.set({ notice: null });
     if (this.socket && this.socket.readyState === OPEN) this.hello();
     else if (!this.socket) this.connect();
   }
@@ -259,6 +278,11 @@ export class TableClient {
         if (this.joining) this.joinFailed();
         this.toast(msg.message);
         return;
+      case 'removed':
+        // A board never holds a seat; the one saved here belongs to a phone tab in the same browser.
+        if (this.state.role === 'player') clearSeat(this.storage);
+        this.letGo(REMOVED[msg.reason]);
+        return;
     }
   }
 
@@ -304,8 +328,28 @@ export class TableClient {
     this.send({ t: 'addAi' });
   }
 
+  /** Chooses what this seat plays as, in the lobby. */
+  pick(species: Species): void {
+    this.send({ t: 'pick', pick: species });
+  }
+
+  /** Takes a colour for this seat, in the lobby. */
+  color(colour: number): void {
+    this.send({ t: 'color', color: colour });
+  }
+
   start(): void {
     this.send({ t: 'start' });
+  }
+
+  /** The host removes a seat, in the lobby. */
+  kick(seatId: string): void {
+    this.send({ t: 'kick', seatId });
+  }
+
+  /** The host ends the table for everyone, in the lobby. */
+  closeTable(): void {
+    this.send({ t: 'close' });
   }
 
   private send(msg: ClientEnvelope<MuleIntent>): void {

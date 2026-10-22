@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@mule/ai": "workspace:*",
     "@mule/engine": "workspace:*",
     "@mule/protocol": "workspace:*",
     "@tabletop/core": "workspace:*",

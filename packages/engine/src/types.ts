@@ -70,6 +70,16 @@ export interface Tile {
   filter: boolean;
   /** Months in a row this plot's current outfit has run. Factories gain from experience. */
   runMonths: number;
+  /** A special field on this plot, placed with the map; absent on most plots. */
+  special?: SpecialField;
+}
+
+export type SpecialKind = 'ruins' | 'crystalCavern' | 'geyser' | 'oasis' | 'relic';
+
+export interface SpecialField {
+  kind: SpecialKind;
+  /** Ruins only: the good its salvage pays, drawn when the map is made. */
+  salvage?: 'alloy' | 'electronics';
 }
 
 export interface Player {
@@ -101,6 +111,7 @@ export interface Player {
 export type Phase =
   | 'planning'
   | 'landGrant'
+  | 'landAuction'
   | 'development'
   | 'production'
   | 'auction'
@@ -142,7 +153,7 @@ export interface ExportShip {
   bought: Partial<Stock>;
 }
 
-/** The land grant: free plots light up one at a time, in a random order each sweep. */
+/** The land grant: free plots light up one at a time, in reading order each sweep. */
 export interface Grant {
   /** Tile indices in the order they light up this sweep. */
   order: number[];
@@ -172,9 +183,72 @@ export interface MonthReport {
   colonyFund: number;
   /** Colonists short of Food or Water this month. */
   colonistsHungry: boolean;
+  /** The production events that fired this month (none in most months). Absent in older reports. */
+  events?: MonthEvent[];
+  /** Events announced ahead of time. Absent in older reports. */
+  warnings?: EventWarning[];
+  /** Every working plot's output, part by part. Absent in older reports. */
+  lines?: ProductionLine[];
+}
+
+export type EventKey =
+  | 'dustStorm'
+  | 'drought'
+  | 'acidRain'
+  | 'solarFlare'
+  | 'cometPass'
+  | 'flood'
+  | 'volcanicAsh'
+  | 'pestSwarm'
+  | 'wildfire'
+  | 'bumperHarvest';
+
+/** How the screens animate an event; several events share a kind. */
+export type EventKind = 'storm' | 'drought' | 'flare' | 'comet' | 'flood' | 'quake' | 'blight' | 'fire' | 'bounty';
+
+export interface MonthEvent {
+  key: EventKey;
+  kind: EventKind;
+  /** Two to four words, e.g. "Dust storm". */
+  title: string;
+  /** One plain sentence of the effect. */
+  line: string;
+  scope: 'colony' | 'local' | 'personal';
+  /** Where the animation starts: an edge point for a colony sweep, the first plot otherwise. */
+  origin: { x: number; y: number };
+  /** For a colony sweep, the map edge it comes in from. */
+  direction?: 'n' | 'e' | 's' | 'w';
+  /** Each plot hit, in the order the event reached it, and how much its output changed. */
+  plots: { index: number; order: number; good: Good; delta: number }[];
+  /** For a personal event, the player whose land it started on. */
+  player?: string;
+  sign: 'good' | 'bad' | 'mixed';
+  when: 'afterProduction';
+}
+
+export interface EventWarning {
+  key: EventKey;
+  title: string;
+  line: string;
+  arrivesMonth: number;
+  visibility: 'public' | 'observatory';
+}
+
+export interface ProductionLine {
+  tile: number;
+  good: Good;
+  made: number;
+  /** What made up the output, in order; the deltas sum to `made`. */
+  parts: {
+    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'noEnergy' | 'noWater' | 'event' | 'factory' | 'special';
+    delta: number;
+    event?: EventKey;
+  }[];
 }
 
 export interface GameState {
+  /** Set on a what-if copy (an AI's look-ahead): no production event and no colony lot is ever rolled on it. */
+  whatIf?: true;
   seed: number;
   month: number;
   maxMonths: number;
@@ -195,6 +269,10 @@ export interface GameState {
   history: MonthReport[];
   /** The live goods auction, while the auction phase runs. */
   auction: LiveAuction | null;
+  /** This month's lots, in listing order. Made in planning, cleared when the land auction ends. */
+  listings: Listing[];
+  /** The live land auction, while the landAuction phase runs. */
+  landAuction: LandAuction | null;
 }
 
 export type AuctionRole = 'buyer' | 'seller';
@@ -268,13 +346,14 @@ export interface StatusRow {
 /** Why a good was skipped without a screen of its own. */
 export type SkipReason = 'nobody has any' | 'nobody buys' | 'nobody trading';
 
-/** The live goods auction: goods one at a time, each with a status screen, a declare and a walk. */
+/** The live goods auction: goods one at a time, each with a status screen and then a walk. */
 export interface LiveAuction extends WalkBoard {
-  /** clockMs is the status screen's, the declare's or the walk's clock, by stage. */
+  /** The status screen's or the walk's clock, by stage. */
+  clockMs: number;
   /** Goods still to come after the current one. */
   queue: Good[];
   good: Good | null;
-  stage: 'status' | 'declare' | 'walk' | 'over';
+  stage: 'status' | 'walk' | 'over';
   /** Store prices for this good, fixed when it comes up. Whether the store trades at them depends on its stock and budget. */
   storeBuy: number;
   storeSell: number;
@@ -285,6 +364,49 @@ export interface LiveAuction extends WalkBoard {
   status: StatusRow[];
   /** Goods skipped since the last one that came up, shown as one line. */
   skipped: { good: Good; reason: SkipReason }[];
-  /** Per AI player, what it plans for this good. */
-  ai: Record<string, { keep: number; worth: number; budget: number; waitMs: number }>;
+}
+
+/** What is for sale: a plot with whatever stands on it, or the MULE off one of the seller's plots. */
+export type LotItem = { kind: 'plot'; x: number; y: number } | { kind: 'mule'; x: number; y: number; outfit: Outfit };
+
+/** One lot for the land auction, public from the moment it is listed in planning. */
+export interface Listing {
+  id: string;
+  /** A player's id, or 'colony' for a plot the colony puts up: its proceeds go to store capital. */
+  seller: string;
+  item: LotItem;
+  minimum: number;
+  /** If no bid reaches the minimum: the store buys it at storePays, or the seller keeps it. */
+  unsold: 'store' | 'keep';
+  /** Fixed when the lot is listed. */
+  storePays: number;
+}
+
+export type LotResult = { kind: 'sold'; buyer: string; price: number } | { kind: 'store'; price: number } | { kind: 'kept' };
+
+/**
+ * The live land auction: one lot at a time, each with an intro, a walk and
+ * a result. Only buyers walk; the highest bid at or over the minimum wins at
+ * the bell. clockMs is the intro's, the walk's or the result's clock, by stage.
+ */
+export interface LandAuction extends WalkBoard {
+  /** Lots still to come after the current one. */
+  queue: Listing[];
+  lot: Listing | null;
+  stage: 'intro' | 'walk' | 'result' | 'over';
+  /** Players who pressed Done in this stage. */
+  done: string[];
+  /** Players who can't bid on this lot, and why: too little money, or already leading a MULE. */
+  aside: Record<string, 'money' | 'mule'>;
+  /** The lot's outcome, from the bell until the next lot comes up. */
+  result: LotResult | null;
+  /** This lot's place in the month's line-up, from 1, and the line-up's length. */
+  number: number;
+  count: number;
+  /** True once this lot's leading bid has passed hi and the walk sped up. */
+  fast: boolean;
+  /** Ms the soft close has put back on this lot's walk clock. */
+  addedMs: number;
+  /** The last buyer to lead this lot, kept while nobody reaches the minimum, so only a change of hands counts as an overtake. */
+  leaderId: string | null;
 }

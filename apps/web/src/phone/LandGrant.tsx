@@ -1,6 +1,7 @@
 import { GAME } from '@mule/engine';
-import { cx, HoloMap, TERRAIN_NAME } from '@mule/ui';
+import { cx, HoloMap, TERRAIN_NAME, ZoomMap } from '@mule/ui';
 import { mapTiles, PHASE_NAME, plotName, secondsUntil, TERRAIN_ODDS, tileAt } from '../game/derive';
+import { SpecialLine } from '../components/SpecialLine';
 import { useClient, useServerNow } from '../net/react';
 import { GroundCard } from './ground';
 import { usePhoneGame } from './game';
@@ -31,7 +32,14 @@ export function LandGrant() {
                 <span className="font-display text-xl font-semibold leading-tight">
                   {TERRAIN_NAME[litTile.terrain]} <span className="font-mono text-base text-ink-3">{plotName(litTile.x, litTile.y)}</span>
                 </span>
-                {ground ? <GroundCard ground={ground} /> : <span className="text-sm text-ink-2">{TERRAIN_ODDS[litTile.terrain]}</span>}
+                <SpecialLine special={litTile.special} />
+                {ground ? (
+                  <GroundCard ground={ground} />
+                ) : (
+                  <span className="text-sm text-ink-2" data-testid="terrain-hint">
+                    {TERRAIN_ODDS[litTile.terrain]}
+                  </span>
+                )}
               </>
             ) : (
               <span className="font-display text-xl font-semibold text-ink-3">No free land left</span>
@@ -57,9 +65,11 @@ export function LandGrant() {
         </button>
       }
     >
-      <p className="pb-1.5 font-mono text-[11px] text-ink-3">PLOTS LIGHT UP AT RANDOM · TAP CLAIM WHEN YOURS IS LIT</p>
+      <p className="pb-1.5 font-mono text-[11px] text-ink-3">PLOTS LIGHT UP ROW BY ROW · TAP CLAIM WHEN YOURS IS LIT</p>
       <MapFit width={view.width} height={view.height}>
-        <HoloMap width={view.width} height={view.height} tiles={mapTiles(view)} cursor={lit} focusSlot={slot} />
+        <ZoomMap width={view.width} height={view.height} tiles={mapTiles(view)} slot={slot}>
+          <HoloMap width={view.width} height={view.height} tiles={mapTiles(view)} cursor={lit} focusSlot={slot} />
+        </ZoomMap>
       </MapFit>
     </PhoneShell>
   );
