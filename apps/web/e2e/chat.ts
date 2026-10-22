@@ -13,12 +13,12 @@ const LAPTOP = { width: 1440, height: 900 };
 /** RULE-9, from the spec's words: the test's own reading of it, so the page is checked against the rule, not itself. */
 const RULE = { minMs: 2_000, maxMs: 4_500, maxWaitMs: 4_000 };
 /**
- * "Within ~1 s" of its receipt, a line shows in the ticker; a bubble shows within this of its scheduled start. When
- * the page paints nothing for longer (a phase's screen mounting), the first frame it paints must show it.
+ * "Within ~1 s": a line shows in the ticker, and a bubble at its scheduled start, within this of the later of that
+ * moment and the page first showing the line's phase (a phase's screen can take over a second to mount).
  */
 const SHOWS_WITHIN_MS = 1_000;
-/** Render lag after a phase change, during which the last frame of the old phase may still be sampled. */
-const PHASE_LAG_MS = 150;
+/** A bubble's end, as a page's timer sees it: its clock and its frames run a little behind the wire's. */
+const END_LAG_MS = 150;
 /** A scheduled bubble shorter than this is not looked for: the sampler might fall between its frames. */
 const SHORTEST_LOOKED_FOR_MS = 300;
 /** Long enough for every bubble of a burst to have shown and gone. */
@@ -39,7 +39,14 @@ const REACH = {
   walk: within(WALK.statusMs),
 };
 
-type Wire = { lines: { id: number; from: string; to?: string; text: string; at: number }[]; phases: { key: string; phase: string; at: number }[]; seatId: string | null };
+type Said = { id: number; from: string; to?: string; text: string };
+/** What one page's socket received, in frame order, each with the time it arrived. */
+type Frame = { kind: 'line'; line: Said; at: number } | { kind: 'phase'; key: string; phase: string; at: number };
+type Raw = { frames: Frame[]; seatId: string | null };
+/** A line, in the phase of the last view its page received before it: the order, not the clock, decides. */
+type Line = Said & { at: number; phase: number };
+type Phase = { key: string; name: string; at: number };
+type Wire = { lines: Line[]; phases: Phase[]; seatId: string | null };
 type Rect = { l: number; t: number; r: number; b: number };
 type Bubble = { seat: string; line: number; text: string; anchor: string | null; rect: Rect };
 type Sample = { t: number; phase: string | null; ticker: { id: number; text: string }[]; tickerRect: Rect | null; bubbles: Bubble[]; speakers: string[]; speaking: string[]; bounds: Rect | null };
@@ -83,7 +90,7 @@ try {
   const lena = await page('lena', { ...PHONE, viewport: LAPTOP });
   const kai = await page('kai', PHONE);
   const tv = await page('tv', TV);
-  const wires = new Map<Page, Wire>([lena, kai, tv].map((p) => [p, listen(p)]));
+  const wires = new Map<Page, Raw>([lena, kai, tv].map((p) => [p, listen(p)]));
 
   await lena.goto(base);
   await lena.getByPlaceholder('Heiko').fill('Lena');
@@ -135,7 +142,7 @@ try {
     { who: 'kai', p: kai },
     { who: 'tv', p: tv },
   ];
-  const seen = await Promise.all(screens.map(async ({ who, p }) => ({ who, wire: wires.get(p)!, samples: (await p.evaluate('window.__chatSamples')) as Sample[] })));
+  const seen = await Promise.all(screens.map(async ({ who, p }) => ({ who, wire: inOrder(wires.get(p)!), samples: (await p.evaluate('window.__chatSamples')) as Sample[] })));
   const report = seen.map(({ who, samples }) => `${who}: ${noOverlaps(who, samples)}`);
   seen.forEach(({ who, wire, samples }, i) => (report[i] += `; ${everyLineShows(who, wire, samples)}`));
   whispers(seen[0]!, seen[1]!, seen[2]!);
@@ -159,22 +166,30 @@ async function page(who: string, options: Parameters<typeof browser.newContext>[
   return p;
 }
 
-/** What this page's socket received: every chat line and every change of phase, each with the time it arrived. */
-function listen(p: Page): Wire {
-  const wire: Wire = { lines: [], phases: [], seatId: null };
+/** What this page's socket received, in one stream: every chat line and every view, in the order they came. */
+function listen(p: Page): Raw {
+  const raw: Raw = { frames: [], seatId: null };
   p.on('websocket', (ws) =>
     ws.on('framereceived', ({ payload }) => {
       if (typeof payload !== 'string') return;
-      const msg = JSON.parse(payload) as { t: string; message?: Wire['lines'][number]; seatId?: string | null; view?: { game?: { month: number; phase: string } | null } };
+      const msg = JSON.parse(payload) as { t: string; message?: Said; seatId?: string | null; view?: { game?: { month: number; phase: string } | null } };
       const at = Date.now();
-      if (msg.t === 'welcome') wire.seatId = msg.seatId ?? null;
-      if (msg.t === 'chat' && msg.message) wire.lines.push({ ...msg.message, at });
+      if (msg.t === 'welcome') raw.seatId = msg.seatId ?? null;
+      if (msg.t === 'chat' && msg.message) raw.frames.push({ kind: 'line', line: msg.message, at });
       const game = msg.t === 'view' ? msg.view?.game : null;
-      if (!game) return;
-      const key = `${game.month}-${game.phase}`;
-      if (wire.phases.at(-1)?.key !== key) wire.phases.push({ key, phase: game.phase, at });
+      if (game) raw.frames.push({ kind: 'phase', key: `${game.month}-${game.phase}`, phase: game.phase, at });
     }),
   );
+  return raw;
+}
+
+/** Each line in the phase of the last view before it in the stream; the phases where they changed. */
+function inOrder(raw: Raw): Wire {
+  const wire: Wire = { lines: [], phases: [], seatId: raw.seatId };
+  for (const f of raw.frames) {
+    if (f.kind === 'line') wire.lines.push({ ...f.line, at: f.at, phase: wire.phases.length - 1 });
+    else if (wire.phases.at(-1)?.key !== f.key) wire.phases.push({ key: f.key, name: f.phase, at: f.at });
+  }
   return wire;
 }
 
@@ -244,53 +259,39 @@ function noOverlaps(who: string, samples: Sample[]): string {
   return `${withBubble} samples with a bubble, none overlapping`;
 }
 
-/** RULE-9 over what this page received, in the spec's words: one bubble at a time, cut at the next, ended by a phase change. */
-function schedule(wire: Wire): { id: number; from: number; to: number }[] {
-  const out: { id: number; from: number; to: number }[] = [];
+/**
+ * RULE-9 over what this page received, in the spec's words: one bubble at a time, cut at the next; a phase change
+ * ends the bubble and drops the queue. `endsPhase` marks a bubble that its phase's end cut short.
+ */
+function schedule(wire: Wire): { id: number; from: number; to: number; endsPhase: boolean }[] {
+  const out: { id: number; from: number; to: number; endsPhase: boolean }[] = [];
   let free = -Infinity;
-  let phase: string | null = null;
+  let phase = -2;
   for (const line of wire.lines) {
-    const key = phaseAt(wire, line.at);
-    if (key !== phase) {
-      phase = key;
+    if (line.phase !== phase) {
+      phase = line.phase;
       free = -Infinity;
     }
+    const end = wire.phases[line.phase + 1]?.at ?? Infinity;
     const from = Math.max(line.at, free);
-    if (from - line.at > RULE.maxWaitMs) continue;
-    // Queued past a phase change: a phase change drops the queue.
-    if (phaseAt(wire, from) !== key) continue;
+    if (from - line.at > RULE.maxWaitMs || from >= end) continue;
     const prev = out.at(-1);
     if (prev && prev.to > from) prev.to = from;
-    out.push({ id: line.id, from, to: from + RULE.maxMs });
+    const to = Math.min(from + RULE.maxMs, end);
+    out.push({ id: line.id, from, to, endsPhase: to === end });
     free = from + RULE.minMs;
-  }
-  for (const b of out) {
-    const change = wire.phases.find((p) => p.at > b.from);
-    if (change && change.at < b.to) b.to = change.at;
   }
   return out;
 }
 
-/**
- * The wire as this page's queue saw it. A line heard within PHASE_LAG_MS before a phase change belongs to either
- * phase: to the new one when the page gave it a bubble there, so it counts as heard when that phase began.
- */
-function asQueued(wire: Wire, samples: Sample[]): Wire {
-  const lines = wire.lines.map((line) => {
-    const next = wire.phases.find((p) => p.at >= line.at && p.at - line.at <= PHASE_LAG_MS);
-    const there = next && samples.some((s) => s.t > next.at + PHASE_LAG_MS && s.bubbles.some((b) => b.line === line.id));
-    return there ? { ...line, at: next.at } : line;
-  });
-  return { ...wire, lines };
+/** The first sample at or after `t` in which the page shows this phase, if it showed it at all after `t`. */
+function firstIn(samples: Sample[], phase: string, t: number): Sample | undefined {
+  return samples.find((s) => s.t >= t && s.phase === phase);
 }
 
-/** By when something due at `t` must show: within SHOWS_WITHIN_MS, or in the first frame painted after `t`. */
-function deadline(samples: Sample[], t: number): number {
-  return Math.max(t + SHOWS_WITHIN_MS, samples.find((s) => s.t >= t)?.t ?? Infinity);
-}
-
-function phaseAt(wire: Wire, t: number): string {
-  return wire.phases.filter((p) => p.at <= t).at(-1)?.key ?? '';
+/** By when something due at `t` in this phase must show: SHOWS_WITHIN_MS after `t`, or after the phase first shows. */
+function deadline(samples: Sample[], phase: string, t: number): number {
+  return Math.max(t, firstIn(samples, phase, t)?.t ?? t) + SHOWS_WITHIN_MS;
 }
 
 /**
@@ -300,26 +301,25 @@ function phaseAt(wire: Wire, t: number): string {
  */
 function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
   const tv = who === 'tv';
+  const name = (line: Line) => wire.phases[line.phase]?.name ?? '?';
   check(wire.lines.length >= 7, `B-AC-17: ${who} received the phones' lines, got ${wire.lines.length}`);
   const byPhase = new Map<string, number>();
   for (const line of wire.lines) {
-    const phase = wire.phases.find((p) => p.key === phaseAt(wire, line.at))?.phase ?? '?';
+    const phase = name(line);
     byPhase.set(phase, (byPhase.get(phase) ?? 0) + 1);
     const seen = samples.find((s) => s.t >= line.at && s.ticker.some((l) => l.id === line.id));
-    check(seen && seen.t <= deadline(samples, line.at), `B-AC-17: on ${who} line ${line.id} ("${line.text}") shows in the ticker within ${SHOWS_WITHIN_MS} ms, ${seen ? `took ${seen.t - line.at} ms` : 'never'}`);
-    // A line that arrives in the same instant as a new phase belongs to either.
-    const next = wire.phases.find((p) => p.at > line.at && p.at - line.at <= PHASE_LAG_MS)?.phase;
-    check(seen.phase === phase || seen.phase === next, `B-AC-17: on ${who} line ${line.id} shows in the ticker in the phase it was said in, ${phase}, not ${seen.phase}`);
+    check(seen && seen.t <= deadline(samples, phase, line.at), `B-AC-17: on ${who} line ${line.id} ("${line.text}") shows in the ticker within ${SHOWS_WITHIN_MS} ms, ${seen ? `took ${seen.t - line.at} ms` : 'never'}`);
+    // Its phase may end before the page paints it again; then it shows in the next.
+    if (firstIn(samples, phase, line.at)) check(seen.phase === phase, `B-AC-17: on ${who} line ${line.id} shows in the ticker in the phase it was said in, ${phase}, not ${seen.phase}`);
   }
 
   const anchors = { creature: 0, seatRow: 0 };
-  const queued = asQueued(wire, samples);
-  const ended = schedule(queued).filter((b) => b.to - b.from >= SHORTEST_LOOKED_FOR_MS && wire.phases.some((p) => p.at >= b.to && p.at - b.to <= PHASE_LAG_MS));
-  check(ended.length > 0, `B-AC-17: on ${who} a phase change came while a bubble showed, so its end is tested`);
-  for (const b of schedule(queued)) {
+  const due = schedule(wire);
+  check(due.some((b) => b.endsPhase && b.to - b.from >= SHORTEST_LOOKED_FOR_MS), `B-AC-17: on ${who} a phase change came while a bubble showed, so its end is tested`);
+  for (const b of due) {
     if (b.to - b.from < SHORTEST_LOOKED_FOR_MS) continue;
     const line = wire.lines.find((l) => l.id === b.id)!;
-    const during = samples.filter((s) => s.t >= b.from && s.t < b.to && s.t <= deadline(samples, b.from));
+    const during = samples.filter((s) => s.t >= b.from && s.t < b.to && s.t <= deadline(samples, name(line), b.from));
     const drawn = during.some((s) => s.speakers.includes(line.from));
     // The TV has no seat row: a speaker it doesn't draw has only the ticker there.
     if (tv && !drawn) continue;
@@ -331,6 +331,11 @@ function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
     check(bubble.anchor === at, `B-AC-17: on ${who} line ${b.id}'s bubble sits at ${at === 'seat-row' ? 'the seat row' : 'its speaker'}, got ${bubble.anchor}`);
     if (at === 'seat-row' && line.from !== wire.seatId) check(shown.speaking.includes(line.from), `B-AC-17: on ${who} the seat row lights ${line.from}'s seat while its bubble shows`);
     anchors[at === 'seat-row' ? 'seatRow' : 'creature']++;
+    // It ends: on time, once the page has had a frame past its end without stalling; or with its phase.
+    if (!b.endsPhase) {
+      const late = samples.find((s, i) => i > 0 && samples[i - 1]!.t > b.to + END_LAG_MS && s.bubbles.some((x) => x.line === b.id));
+      check(!late, `B-AC-17: on ${who} line ${b.id}'s bubble still shows ${late ? late.t - b.to : 0} ms after its end`);
+    }
   }
   const bubbles = anchors.creature + anchors.seatRow;
   check(bubbles >= 4, `B-AC-17: on ${who} bubbles showed in each phase, got ${bubbles}`);
@@ -339,8 +344,7 @@ function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
     for (const x of s.bubbles) {
       const line = wire.lines.find((l) => l.id === x.line);
       check(line, `B-AC-17: on ${who} a bubble shows line ${x.line}, which this page never received`);
-      const at = queued.lines.find((l) => l.id === x.line)!.at;
-      check(!wire.phases.some((p) => p.at > at && p.at < s.t - PHASE_LAG_MS), `B-AC-17: on ${who} after the phase changed, line ${x.line}'s bubble from the phase before still shows`);
+      check(s.phase === name(line), `B-AC-17: on ${who} after the phase changed, line ${x.line}'s bubble from ${name(line)} still shows in ${s.phase}`);
     }
   return `${wire.lines.length} lines (${[...byPhase].map(([p, n]) => `${p} ${n}`).join(', ')}), ${bubbles} bubbles at their speakers (${anchors.creature} at a creature, ${anchors.seatRow} at the seat row)`;
 }
@@ -355,11 +359,14 @@ function whispers(lena: Seen, kai: Seen, tv: Seen): void {
   const whisper = lena.wire.lines.find((l) => l.to);
   check(whisper, 'B-AC-17: Lena received her own whisper');
   check(kai.wire.lines.some((l) => l.id === whisper.id), 'B-AC-17: Kai received the whisper');
-  for (const phone of [lena, kai]) {
+  for (const [phone, label] of [
+    [lena, '🔒 TO KAI'],
+    [kai, '🔒 TO YOU'],
+  ] as const) {
     const line = phone.samples.flatMap((s) => s.ticker).find((l) => l.id === whisper.id);
     check(line?.text.includes('🔒'), `B-AC-17: on ${phone.who} the whisper shows in the ticker with its lock, got "${line?.text}"`);
     const bubble = phone.samples.flatMap((s) => s.bubbles).find((b) => b.line === whisper.id);
-    check(bubble?.text.includes('🔒'), `B-AC-17: on ${phone.who} the whisper's bubble carries its lock, got "${bubble?.text}"`);
+    check(bubble?.text.startsWith(label), `B-AC-17: on ${phone.who} the whisper's bubble reads "${label}", got "${bubble?.text}"`);
   }
   check(!tv.wire.lines.some((l) => l.id === whisper.id || l.text === whisper.text), 'B-AC-17: the TV never received the whisper');
   const shown = tv.samples.some((s) => s.ticker.some((l) => l.text.includes(whisper.text)) || s.bubbles.some((b) => b.text.includes(whisper.text)));
