@@ -216,7 +216,7 @@ describe('T-AC-6: score parts add up and score() is unchanged', () => {
     const before = scoreParts(state, 'a');
     expect(before).toMatchObject({ office: 0, total, cut });
 
-    runFor(state, 'a', 'governor');
+    runFor(state, 'a', 'governor', { kind: 'hold' });
     for (const id of ['a', 'b']) electionDone(state, id);
     stepElection(state, 1);
     stepElection(state, POLITICS.revealMs);

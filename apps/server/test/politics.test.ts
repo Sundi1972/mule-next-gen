@@ -3,10 +3,14 @@ import { Brain } from '@mule/ai';
 import type { MuleView, ServerEnvelope } from '@mule/protocol';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
-import { openPlanning, POLITICS, WALK, type GameState } from '@mule/engine';
+import { openPlanning, POLITICS, WALK, type GameState, type TaxPromise } from '@mule/engine';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
 import { createMuleServer, type MuleServer } from '../src/server.js';
 import { fakeContext } from './fake-context.js';
+
+/** RULE-10: a Governor run carries a promise; tests about something else hold the tax. */
+const HOLD: TaxPromise = { kind: 'hold' };
+const CAP_8: TaxPromise = { kind: 'cap', percent: 8 };
 
 let running: MuleServer | null = null;
 afterEach(async () => {
@@ -26,16 +30,7 @@ async function seatedPhone(options: { politics?: boolean } = {}) {
   socket.on('message', (d) => inbox.push(JSON.parse(d.toString())));
   await new Promise((r) => socket.once('open', r));
   const send = (msg: object) => socket.send(JSON.stringify(msg));
-  const games = () => inbox.flatMap((m) => (m.t === 'view' && m.view.game ? [m.view.game] : []));
-  /** The latest game view that matches. */
-  const waitForGame = async (pred: (g: MuleView) => boolean) => {
-    for (let i = 0; i < 200; i++) {
-      const hit = games().reverse().find(pred);
-      if (hit) return hit;
-      await new Promise((r) => setTimeout(r, 10));
-    }
-    throw new Error('no such view');
-  };
+  const waitForGame = (pred: (g: MuleView) => boolean) => latestGame(inbox, pred);
   /** The next error after the ones already seen. */
   const nextError = async () => {
     const seen = inbox.filter((m) => m.t === 'error').length;
@@ -51,7 +46,29 @@ async function seatedPhone(options: { politics?: boolean } = {}) {
   send({ t: 'start' });
   const first = await waitForGame((g) => g.phase === 'planning');
   const intent = (i: object) => send({ t: 'intent', intent: i });
-  return { first, intent, nextError, waitForGame };
+  /** The board (TV) of the same room, over its own socket: its latest game view that matches. */
+  const board = async () => {
+    const tv = new WebSocket(`ws://localhost:${port}/ws`);
+    const tvInbox: ServerEnvelope<MuleView>[] = [];
+    tv.on('message', (d) => tvInbox.push(JSON.parse(d.toString())));
+    await new Promise((r) => tv.once('open', r));
+    tv.send(JSON.stringify({ t: 'board', code }));
+    return (pred: (g: MuleView) => boolean) => latestGame(tvInbox, pred);
+  };
+  return { first, intent, nextError, waitForGame, board };
+}
+
+/** The latest game view in the inbox that matches, waiting for one to arrive. */
+async function latestGame(inbox: ServerEnvelope<MuleView>[], pred: (g: MuleView) => boolean) {
+  for (let i = 0; i < 200; i++) {
+    const hit = inbox
+      .flatMap((m) => (m.t === 'view' && m.view.game ? [m.view.game] : []))
+      .reverse()
+      .find(pred);
+    if (hit) return hit;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  throw new Error('no such view');
 }
 
 describe('politics over the wire', () => {
@@ -72,7 +89,7 @@ describe('politics over the wire', () => {
 
   it('C9: the wire accepts run, vote and setTax and refuses malformed ones', async () => {
     const phone = await seatedPhone({ politics: true });
-    phone.intent({ type: 'run', office: 'governor' });
+    phone.intent({ type: 'run', office: 'governor', promise: HOLD });
     const candidate = await phone.waitForGame((g) => g.me?.politics?.running === 'governor');
     expect(candidate.politics!.election!.candidates.governor).toEqual([candidate.me!.id]);
 
@@ -100,6 +117,46 @@ describe('politics over the wire', () => {
     }
     phone.intent({ type: 'run', office: null });
     await phone.waitForGame((g) => g.me?.politics?.running === null);
+  });
+
+  it("B-AC-6 (server) · C12: a Governor run's tax promise crosses the wire to the phone and the board; a malformed or refused promise changes nothing", async () => {
+    const phone = await seatedPhone({ politics: true });
+    const board = await phone.board();
+    phone.intent({ type: 'run', office: 'governor', promise: CAP_8 });
+    const mine = await phone.waitForGame((g) => g.me?.politics?.running === 'governor');
+    const me = mine.me!.id;
+    expect(mine.politics!.election!.promises).toEqual({ [me]: CAP_8 });
+    const tv = await board((g) => g.politics?.election?.candidates.governor.includes(me) ?? false);
+    expect(tv.me).toBeNull();
+    expect(tv.politics!.election!.promises).toEqual({ [me]: CAP_8 });
+
+    const malformed = [
+      { type: 'run', office: 'governor', promise: { kind: 'cap', percent: 8.5 } },
+      { type: 'run', office: 'governor', promise: { kind: 'cap', percent: '8' } },
+      { type: 'run', office: 'governor', promise: { kind: 'cap' } },
+      { type: 'run', office: 'governor', promise: { kind: 'free' } },
+      { type: 'run', office: 'governor', promise: 'Tax no higher than 8%' },
+      { type: 'run', office: 'governor', promise: null },
+    ];
+    for (const bad of malformed) {
+      const error = phone.nextError();
+      phone.intent(bad);
+      expect(await error, JSON.stringify(bad)).toBe('Bad message');
+    }
+    // Well-formed, so they reach RULE-10, which refuses them.
+    const refused: [object, string][] = [
+      [{ type: 'run', office: 'sheriff', promise: HOLD }, 'Sheriff candidates make no promise yet'],
+      [{ type: 'run', office: 'governor' }, 'Pick a promise to run for Governor'],
+      [{ type: 'run', office: 'governor', promise: { kind: 'cap', percent: 16 } }, 'A tax promise is 0% to 15%'],
+    ];
+    for (const [intent, message] of refused) {
+      const error = phone.nextError();
+      phone.intent(intent);
+      expect(await error, JSON.stringify(intent)).toBe(message);
+    }
+    const after = await phone.waitForGame(() => true);
+    expect(after.me!.politics!.running).toBe('governor');
+    expect(after.politics!.election!.promises).toEqual({ [me]: CAP_8 });
   });
 });
 
@@ -189,8 +246,8 @@ describe('the election runs first in planning', () => {
 
   it('C9: ready during an election marks Done for the stage and never ends planning', () => {
     const g = started();
-    g.game.handle('lena', { type: 'run', office: 'governor' });
-    g.game.handle('brix', { type: 'run', office: 'governor' });
+    g.game.handle('lena', { type: 'run', office: 'governor', promise: HOLD });
+    g.game.handle('brix', { type: 'run', office: 'governor', promise: HOLD });
     allReady(g.game);
     expect(g.game.viewFor(null).phase).toBe('planning');
     expect(election(g.game).done).toEqual(expect.arrayContaining(humans));
@@ -219,8 +276,8 @@ describe('the election runs first in planning', () => {
   it("C9: during the election a player's ready in the views shows their Done for the stage, and planning's ready starts false after it", () => {
     const g = started();
     const readyOf = (id: string) => readyOn(g.game, id);
-    g.game.handle('lena', { type: 'run', office: 'governor' });
-    g.game.handle('brix', { type: 'run', office: 'governor' });
+    g.game.handle('lena', { type: 'run', office: 'governor', promise: HOLD });
+    g.game.handle('brix', { type: 'run', office: 'governor', promise: HOLD });
     g.game.handle('lena', { type: 'ready' });
     expect(readyOf('lena'), "Lena's button looks pressed on every screen").toEqual([true, true, true, true]);
     expect(readyOf('brix')).toEqual([false, false, false, false]);
@@ -243,8 +300,8 @@ describe('the election runs first in planning', () => {
 
   it('C9: an away seat is marked Done', () => {
     const g = started();
-    g.game.handle('lena', { type: 'run', office: 'governor' });
-    g.game.handle('brix', { type: 'run', office: 'governor' });
+    g.game.handle('lena', { type: 'run', office: 'governor', promise: HOLD });
+    g.game.handle('brix', { type: 'run', office: 'governor', promise: HOLD });
     g.game.handle('lena', { type: 'ready' });
     g.game.handle('brix', { type: 'ready' });
     g.game.connectionChanged('ossa', false);
@@ -338,8 +395,8 @@ describe('the politics view', () => {
     const g = started();
     // The Baron runs for Governor too and votes for himself. Nobody runs for Sheriff: the richest player who is not the new Governor is appointed.
     setMoney(g.game, { lena: 900, brix: 1_000, ossa: 1_300, ai1: 1_100 });
-    g.game.handle('lena', { type: 'run', office: 'governor' });
-    g.game.handle('brix', { type: 'run', office: 'governor' });
+    g.game.handle('lena', { type: 'run', office: 'governor', promise: HOLD });
+    g.game.handle('brix', { type: 'run', office: 'governor', promise: HOLD });
     allReady(g.game);
     untilStage(g, 'ballot');
     expect(election(g.game).candidates, 'seed precondition').toEqual({ governor: ['lena', 'brix', 'ai1'], sheriff: [] });
@@ -387,7 +444,7 @@ describe('the politics view', () => {
   it('B-AC-2: after the Governor sets 8%, the next auction sale is taxed at 8%', () => {
     const g = started();
     // The Baron runs against Lena; the three humans vote her in.
-    g.game.handle('lena', { type: 'run', office: 'governor' });
+    g.game.handle('lena', { type: 'run', office: 'governor', promise: HOLD });
     allReady(g.game);
     untilStage(g, 'ballot');
     expect(election(g.game).candidates, 'seed precondition').toEqual({ governor: ['lena', 'ai1'], sheriff: [] });
@@ -472,8 +529,8 @@ describe('the politics view', () => {
 
   it("B-AC-5: another phone and the board never receive Brix's ballot", () => {
     const g = started();
-    g.game.handle('lena', { type: 'run', office: 'governor' });
-    g.game.handle('ossa', { type: 'run', office: 'governor' });
+    g.game.handle('lena', { type: 'run', office: 'governor', promise: HOLD });
+    g.game.handle('ossa', { type: 'run', office: 'governor', promise: HOLD });
     allReady(g.game);
     untilStage(g, 'ballot');
     const others = () => JSON.stringify([g.game.viewFor('ossa'), g.game.viewFor('lena'), g.game.viewFor(null)]);
@@ -489,10 +546,42 @@ describe('the politics view', () => {
     expect(g.game.viewFor('ossa').me!.politics!.ballot).toEqual({});
   });
 
+  it('B-AC-6 (server) · C12: every phone and the board show each Governor candidate\'s promise under their id from nominate to the result; a Sheriff candidate has none', () => {
+    const g = started();
+    g.game.handle('lena', { type: 'run', office: 'governor', promise: CAP_8 });
+    g.game.handle('brix', { type: 'run', office: 'governor', promise: { kind: 'lower' } });
+    g.game.handle('ossa', { type: 'run', office: 'sheriff' });
+    const shown = { lena: CAP_8, brix: { kind: 'lower' } };
+    const refused = JSON.stringify(screens(g.game));
+    expect(() => g.game.handle('ossa', { type: 'run', office: 'sheriff', promise: HOLD })).toThrow('Sheriff candidates make no promise yet');
+    expect(JSON.stringify(screens(g.game)), 'a refused promise changes no screen').toBe(refused);
+
+    const promisesOn = () => screens(g.game).map((v) => v.politics!.election!.promises);
+    // The AI seat runs too, after its seeded pause, with a promise of its own.
+    aiPause(g);
+    expect(election(g.game).candidates, 'seed precondition').toEqual({ governor: ['lena', 'brix', 'ai1'], sheriff: ['ossa'] });
+    const nominated = promisesOn();
+    for (const promises of nominated) {
+      expect(promises).toEqual(nominated[0]);
+      expect(promises).toMatchObject(shown);
+      expect(Object.keys(promises).sort(), 'Governor candidates only').toEqual(['ai1', 'brix', 'lena']);
+    }
+    allReady(g.game);
+    untilStage(g, 'ballot');
+    for (const promises of promisesOn()) expect(promises).toEqual(nominated[0]);
+    for (const id of humans) g.game.handle(id, { type: 'vote', office: 'governor', candidate: 'lena' });
+    allReady(g.game);
+    untilStage(g, 'over');
+    for (const view of screens(g.game)) {
+      expect(view.politics!.election!.result!.governor.winner).toBe('lena');
+      expect(view.politics!.election!.promises).toEqual(nominated[0]);
+    }
+  });
+
   it("HC-2: the board's politics view carries exactly these keys", () => {
     const g = started();
-    g.game.handle('lena', { type: 'run', office: 'governor' });
-    g.game.handle('brix', { type: 'run', office: 'governor' });
+    g.game.handle('lena', { type: 'run', office: 'governor', promise: HOLD });
+    g.game.handle('brix', { type: 'run', office: 'governor', promise: HOLD });
     allReady(g.game);
     untilStage(g, 'ballot');
     g.game.handle('brix', { type: 'vote', office: 'governor', candidate: 'lena' });
@@ -524,7 +613,7 @@ describe('AI seats in the election', () => {
     let ballots = 0;
     for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
       const g = started({ seed, seats: aiTable, phaseScale });
-      g.game.handle('lena', { type: 'run', office: 'governor' });
+      g.game.handle('lena', { type: 'run', office: 'governor', promise: HOLD });
       g.game.handle('lena', { type: 'ready' });
       let stage = election(g.game).stage;
       let enteredAt = 0;
@@ -635,9 +724,12 @@ function expectBoardKeys(board: MuleView) {
     expect(keysOf(w.parts), NEW_FIELD).toEqual(['baron', 'base', 'land', 'reputation', 'taxes']);
   }
   const e = politics.election!;
-  expect(keysOf(e), NEW_FIELD).toEqual(['candidates', 'done', 'result', 'seconds', 'stage', 'total', 'voted']);
+  expect(keysOf(e), NEW_FIELD).toEqual(['candidates', 'done', 'promises', 'result', 'seconds', 'stage', 'total', 'voted']);
   expect(keysOf(e.candidates), NEW_FIELD).toEqual(['governor', 'sheriff']);
   const seatIds = people.map((p) => p.id);
+  // C12: public like the candidacy (RULE-10); a promise is only its closed shape, keyed by a Governor candidate.
+  expect(keysOf(e.promises).every((id) => e.candidates.governor.includes(id)), 'promises name Governor candidates').toBe(true);
+  for (const promise of Object.values(e.promises)) expect(keysOf(promise), NEW_FIELD).toEqual(promise.kind === 'cap' ? ['kind', 'percent'] : ['kind']);
   if (e.result) expect(keysOf(e.result), NEW_FIELD).toEqual(['governor', 'sheriff']);
   for (const office of Object.values(e.result ?? {})) {
     expect(keysOf(office), NEW_FIELD).toEqual(['how', 'tallies', 'winner']);

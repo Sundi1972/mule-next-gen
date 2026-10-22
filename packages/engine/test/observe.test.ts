@@ -44,8 +44,8 @@ describe('what-if copies', () => {
 /** Month 1's election in its ballot stage: Brix and Ossa run for Governor, Lena votes Brix and Tam votes Ossa. */
 function votedElection(): GameState {
   const state = createGame({ seed: 11, players: SEATS.map((id) => ({ id, name: id, isAi: false })) });
-  runFor(state, 'brix', 'governor');
-  runFor(state, 'ossa', 'governor');
+  runFor(state, 'brix', 'governor', { kind: 'hold' });
+  runFor(state, 'ossa', 'governor', { kind: 'hold' });
   for (const id of SEATS) electionDone(state, id);
   for (let t = 0; state.politics!.election!.stage === 'nominate' && t < 120_000; t += 10) stepElection(state, 10);
   expect(state.politics!.election!.stage).toBe('ballot');
