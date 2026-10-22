@@ -180,7 +180,8 @@ describe('AI seats at the land auction', () => {
       }
     expect(moneyCapped, 'in every short run some AI bid a plot up to money − reserve').toBe(SEEDS.length);
     expect(valueCapped, 'in every flush run some AI bid a MULE up to its value').toBe(SEEDS.length);
-  });
+    // It replays thirty auctions tick by tick: half a second here, but over the 5 s default on CI's shared runner while every package's suite runs at once.
+  }, 30_000);
 
   it('B-AC-7: an AI whose money − reserve is under the minimum never moves, and presses Done', () => {
     for (const seed of [3, 7, 11]) {
@@ -275,7 +276,7 @@ describe('AI seats at the land auction', () => {
     }
   });
 
-  it('B-AC-7: on long ticks, against a bid one under its limit, an AI never steps past its limit', () => {
+  it('UBER-AC-2 / B-AC-7: on long ticks an AI never steps past its limit: against a bid one under it, and when a rival climbing past the board\'s top doubles the speed with its limit just past that top', () => {
     const LONG = WALK.tickMs * 3;
     for (const seed of SEEDS) {
       const { state, hands, seats } = landAuction(seed, { money: { a1: FLUSH, a2: 360, a3: 100 } });
@@ -299,6 +300,34 @@ describe('AI seats at the land auction', () => {
         expect(price('a2'), `seed ${seed}`).toBeLessThanOrEqual(limit);
       }
       expect(result?.kind).toBe('sold');
+    }
+    // The plot's board runs from 140 to 400 and crosses it in 6 s. The AI's limit is 405; a1 climbs alongside from the
+    // start and through it, so the step that carries a1 past 400 is the one that doubles the speed under the AI.
+    const BASE = (400 - 140) / 6;
+    for (const seed of [7, 12]) {
+      const probe = landAuction(seed);
+      const reserve = cashReserve(observe(probe.state, probe.seats[1]!.mind.me), probe.seats[1]!.mind);
+      const { state, hands, seats } = landAuction(seed, { money: { a1: FLUSH, a2: 405 + reserve, a3: 100 } });
+      const ai = hands[1]!;
+      const { limit } = worthOf(state, seats[1]!.mind, state.listings[0]!);
+      expect(limit).toBe(405);
+      const a = state.landAuction!;
+      const price = (id: string) => Math.round(a.walkers.find((w) => w.id === id)!.price);
+      lotDone(state, 'a1');
+      while (a.stage === 'intro') {
+        ai.tick(state, LONG, actFor(state, 'a2'));
+        stepLandAuction(state, LONG);
+      }
+      setLotWalk(state, 'a1', 1);
+      let result: LotResult | null = null;
+      for (let t = 0; !result && t < 20_000; t++) {
+        if (price('a1') >= limit - 1) setLotWalk(state, 'a1', 0);
+        ai.tick(state, LONG, actFor(state, 'a2'));
+        result = stepLandAuction(state, LONG);
+        expect(price('a2'), `seed ${seed}`).toBeLessThanOrEqual(limit);
+      }
+      expect(a.speed, `seed ${seed}`).toBeCloseTo(2 * BASE);
+      expect(result).toMatchObject({ kind: 'sold', buyer: 'a1' });
     }
   });
 });

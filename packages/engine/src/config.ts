@@ -38,8 +38,10 @@ export const PRICE = {
   storeSpread: 0.1,
   /** The store fills its shelves up to this many months of demand. */
   storeMaxCover: 3,
-  /** The most of its capital the store spends on one good in one month. */
-  storeBudgetShare: 0.5,
+  /** Food and Water count as short when the store's shelf holds under this many months of the colonists' need, so the price climbs before they go hungry. */
+  shelfCover: 1,
+  /** With that shelf short, the store bids up to this times the posted price for Food and Water, capped so it can still sell to colonists within their budget. */
+  restockPremium: 1.5,
   /** Share of normal spoilage the store suffers, thanks to its cold store and silos. */
   storeSpoilage: 0.25,
   /** How fast the reference price follows what players pay each other (0..1). */
@@ -540,6 +542,12 @@ export const LOTS = {
   /** The board runs from this share of the minimum (where buyers start) to boardHigh's. */
   boardLow: 0.7,
   boardHigh: 2,
+  /** Past the board's top the walk speeds up by this much for the rest of the lot, so a contested lot can reach its runner-up's price before the bell. */
+  fastClimb: 2,
+  /** A change of leader with less than this left on the walk clock sets it back to this, so the bell doesn't decide who wins. */
+  lateMs: 2_000,
+  /** The most those resets may add to one lot's walk. */
+  lateCapMs: 6_000,
   /** What the store pays for an unsold plot, as a share of GAME.plotScore, so it can't drift past the score. */
   storePlotShare: 2 / 3,
   /** What the store pays for an unsold MULE, as a share of this month's MULE price. */
@@ -715,8 +723,12 @@ export const STRATEGIST = {
   /** Below this utility share of the best, a free plot is not worth pressing for in the first sweep; later sweeps take anything above laterShare. */
   grantShare: 0.75,
   grantLaterShare: 0.5,
-  /** In the first two sweeps it presses only for its top claimsPerGrant + grantSpare open plots (twice that in the second), so it waits for the land it wants instead of the first that will do. */
-  grantSpare: 2,
+  /**
+   * In the first two sweeps it presses only for its top claimsPerGrant + grantSpare open plots (twice that in the
+   * second), so it waits for the land it wants instead of the first that will do. 0: any spare lets the grant's
+   * reading order pick among them, which piles AI land at the top of the map.
+   */
+  grantSpare: 0,
   /** A factory needs this many months of its inputs on hand or from its own plots. */
   factoryInputMonths: 2,
   /** Spare Food, Water, Energy and Medicine it keeps over next month's need, before the reserve multiplier. */
