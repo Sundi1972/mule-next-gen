@@ -411,6 +411,22 @@ async function colourIntoTheGame(): Promise<void> {
   check(await shows(tv.locator(`[aria-label*="owned by"] ${inRose}`).first()), `B-AC-7 (in game): the TV still draws Heiko's plot in ${COLOUR_NAME[rose]}`);
   check(await shows(heiko.getByText(MOVED)), `B-AC-7 (in game): the first device shows "${MOVED}"`);
   check(await onStartScreen(heiko), 'B-AC-7 (in game): the first device steps aside to the start screen');
+
+  // B-AC-13 (handoff, in game): the dialog and its code outlive a phase change, since the game doesn't pause.
+  const moveAgain = second.getByTestId('move-to-phone');
+  await moveAgain.click();
+  const lasting = second.getByRole('dialog', { name: 'Move to your phone' });
+  check(await shows(lasting.locator('[data-testid=handoff-qr][data-state=ready]')), 'B-AC-13 (handoff, in game): the moved device opens the move dialog with a ready code');
+  const before = await qrLink(lasting, 'B-AC-13 (handoff, in game)');
+  const phase = (await second.locator('[data-phase]').getAttribute('data-phase')) ?? '';
+  await second.locator(`[data-phase="${phase}"]`).waitFor({ state: 'detached', timeout: within(PHASE_MS.development) });
+  check(
+    (await shows(lasting.locator('[data-testid=handoff-qr][data-state=ready]'))) && (await qrLink(lasting, 'B-AC-13 (handoff, in game)')) === before,
+    `B-AC-13 (handoff, in game): after ${phase} gives way to ${await second.locator('[data-phase]').getAttribute('data-phase')}, the dialog is still open with the same ready code`,
+  );
+  await second.keyboard.press('Escape');
+  check(await gone(second.getByTestId('host-dialog')), 'B-AC-13 (handoff, in game): Escape closes the move dialog after the phase change');
+  check(await moveAgain.evaluate((el) => el === document.activeElement), "B-AC-13 (handoff, in game): focus goes back to the new phase's move-to-phone");
   await second.context().close();
   await heiko.context().close();
   await mia.context().close();
