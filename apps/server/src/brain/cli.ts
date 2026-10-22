@@ -1,7 +1,8 @@
-/** What the paid brain commands share: their flags, the day's ledger claim, the report table and the script runner. */
+/** What the paid brain commands share: their flags, the day's ledger and its claim, the report helpers and the script runner. */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import type { DecisionKind } from '@mule/ai';
 
 /** Seams for tests: where the ledger goes, the clock and where lines go. Defaults are the real ones. */
 export interface MainDeps {
@@ -10,13 +11,39 @@ export interface MainDeps {
   now?: () => Date;
 }
 
-export type StopReason = 'done' | 'cap' | 'auth';
-
 /** apps/server/data: where each command's day ledger goes. */
 export const DATA_DIR = path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..'), 'data');
 
+/** The seams with their real defaults filled in. */
+export function resolveDeps(deps: MainDeps): Required<MainDeps> {
+  return {
+    dataDir: deps.dataDir ?? DATA_DIR,
+    out: deps.out ?? ((line: string) => console.log(line)),
+    now: deps.now ?? (() => new Date()),
+  };
+}
+
+export type StopReason = 'done' | 'cap' | 'auth';
+
+/** The decision kinds, in the order reports list them. */
+export const KINDS: readonly DecisionKind[] = ['land', 'develop', 'trade'];
+
+/** Printed last when a run stopped on a 401 or 403. */
+export const AUTH_STOPPED = 'Stopped: the API refused the credentials (401/403). Nothing more was called.';
+
 /** The UTC day of a date, YYYY-MM-DD. */
 export const day = (d: Date): string => d.toISOString().slice(0, 10);
+
+/** The command's ledger for the day of `now`, e.g. data/trial-2026-10-22.jsonl. */
+export const dayLedgerPath = (dir: string, command: string, now: Date): string => path.join(dir, `${command}-${day(now)}.jsonl`);
+
+/** The refusal to print when today's ledger already exists, or null when the day's run is still free. */
+export function alreadyRanToday(file: string, command: string): string | null {
+  return fs.existsSync(file) ? `${file} exists: ${command} already ran today, and each run needs its own clearance; nothing called.` : null;
+}
+
+/** Nearest-rank quantile of a non-empty ascending list. */
+export const nearest = <T>(sorted: readonly T[], q: number): T => sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(q * sorted.length) - 1))]!;
 
 const NUMBER = /^\d+(\.\d+)?$/;
 

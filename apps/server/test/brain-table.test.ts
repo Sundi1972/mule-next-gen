@@ -8,7 +8,7 @@ import type { MuleIntent, MuleView } from '@mule/protocol';
 import { Room, TableError, type ChatMessage, type ClientEnvelope, type Connection, type GameContext, type ServerEnvelope } from '@tabletop/core';
 import { createBrain, type BrainService } from '../src/brain/index.js';
 import { AI_NAMES, MuleGame } from '../src/mule-game.js';
-import { fakeSdk, KEY, promptOf, readLedger, sdkMessage, type FakeSdk, type SdkModuleFake, type SdkParams } from './brain-fakes.js';
+import { fakeSdk, KEY, promptOf, readLedger, requestOf, sdkMessage, type FakeSdk, type SdkModuleFake } from './brain-fakes.js';
 
 /** The SDK module's constructor: records its options and builds nothing, so no network and no credential chain. */
 const sdkModule = vi.hoisted((): SdkModuleFake => ({ built: [], create: null }));
@@ -181,21 +181,6 @@ function tally(keys: string[]): Map<string, number> {
 /** The model's reply, as the structured output the client asks for. */
 const reply = (option: string, line: string) => sdkMessage(JSON.stringify({ option, line }));
 
-/** What the prompt asks: its decision kind, the seat's name, every line, and the lines inside the table-talk block. */
-function asked(params: SdkParams) {
-  const { user } = promptOf(params);
-  const lines = user.split('\n');
-  const open = lines.indexOf('<table_talk>');
-  const close = lines.indexOf('</table_talk>');
-  return {
-    user,
-    lines,
-    kind: /^Decision: (\w+)$/m.exec(user)?.[1],
-    seat: /^You are (.+)\. Month \d+ of \d+\.$/m.exec(user)?.[1],
-    talk: open < 0 ? [] : lines.slice(open + 1, close),
-  };
-}
-
 describe('the server test setup', () => {
   it('INV-test-key: the shell\'s key and auth token are cleared and the ledger logs to a temp file; only a key a test stubs builds a client', () => {
     expect(process.env.ANTHROPIC_API_KEY).toBeUndefined();
@@ -216,7 +201,7 @@ describe('the server test setup', () => {
 // At SEED only The Baron is asked for land in month 1.
 describe('the brain at the table', () => {
   it('B-AC-1: a fake model\'s "Mine." shows in every screen\'s chat and the seat plays option B', async () => {
-    const sdk = fakeSdk((_n, params) => (asked(params).kind === 'land' ? reply('B', 'Mine.') : reply('A', '')));
+    const sdk = fakeSdk((_n, params) => (requestOf(params).kind === 'land' ? reply('B', 'Mine.') : reply('A', '')));
     const { brain, records } = watched(smart(sdk));
     const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain });
     const baron = t.ais[1]!;
@@ -224,7 +209,7 @@ describe('the brain at the table', () => {
     expect(await t.runUntil(() => !!landOf())).toBe(true);
 
     const land = landOf()!;
-    const prompt = asked(sdk.requests.find((r) => asked(r.params).kind === 'land')!.params);
+    const prompt = requestOf(sdk.requests.find((r) => requestOf(r.params).kind === 'land')!.params);
     expect(prompt.seat).toBe(baron.name);
     const optionB = land.shortlist.find((o) => o.id === 'B')!;
     expect(prompt.lines.some((l) => l.startsWith(`B. ${optionB.label} — `))).toBe(true);
@@ -245,14 +230,14 @@ describe('the brain at the table', () => {
     expect(top.line).toBeTruthy();
     c.room.dispose();
 
-    const sdk = fakeSdk((_n, params) => (asked(params).kind === 'land' ? reply('F', 'Mine.') : reply('A', '')));
+    const sdk = fakeSdk((_n, params) => (requestOf(params).kind === 'land' ? reply('F', 'Mine.') : reply('A', '')));
     const { brain, records } = watched(smart(sdk));
     const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain });
     const baron = t.ais[1]!;
     const landOf = () => records.find((r) => r.seat === baron.id && r.kind === 'land');
     expect(await t.runUntil(() => !!landOf())).toBe(true);
 
-    expect(sdk.requests.map((r) => asked(r.params)).filter((p) => p.kind === 'land').map((p) => p.seat)).toEqual([baron.name]);
+    expect(sdk.requests.map((r) => requestOf(r.params)).filter((p) => p.kind === 'land').map((p) => p.seat)).toEqual([baron.name]);
     expect(landOf()).toMatchObject({ by: 'fallback', note: 'decider failed: named F, not on the list', pick: top.pick, line: top.line });
     for (const s of t.screens) expect(s.chat.filter((m) => m.from === baron.id).map((m) => m.text)).toEqual([top.line]);
   });
@@ -269,15 +254,15 @@ describe('the brain at the table', () => {
     t.say(heiko!, 'Mia, sell them nothing', t.humans[1]!.id);
     t.say(mia!, 'psst, Accountant only', accountant!.id);
 
-    const nextFor = (name: string) => sdk.requests.slice(before).find((r) => asked(r.params).seat === name);
+    const nextFor = (name: string) => sdk.requests.slice(before).find((r) => requestOf(r.params).seat === name);
     expect(await t.runUntil(() => !!nextFor(accountant!.name) && !!nextFor(baron!.name))).toBe(true);
 
     for (const ai of [accountant!, baron!]) {
-      const prompt = asked(nextFor(ai.name)!.params);
+      const prompt = requestOf(nextFor(ai.name)!.params);
       expect(prompt.talk, ai.name).toContain('Heiko: "give me your Crystite"');
     }
-    expect(asked(nextFor(accountant!.name)!.params).talk).toContain('Mia: "psst, Accountant only"');
-    expect(asked(nextFor(baron!.name)!.params).user).not.toContain('psst');
+    expect(requestOf(nextFor(accountant!.name)!.params).talk).toContain('Mia: "psst, Accountant only"');
+    expect(requestOf(nextFor(baron!.name)!.params).user).not.toContain('psst');
 
     // The move each AI made on that prompt: option B as the prompt listed it, and that MULE the first it puts on the board.
     const board = t.game().viewFor(null).tiles;
@@ -293,7 +278,7 @@ describe('the brain at the table', () => {
     expect(await t.runUntil(bothInstalled)).toBe(true);
 
     for (const ai of [accountant!, baron!]) {
-      const prompt = asked(nextFor(ai.name)!.params);
+      const prompt = requestOf(nextFor(ai.name)!.params);
       expect(prompt.kind, ai.name).toBe('develop');
       const move = records.find((r) => r.seat === ai.id && r.kind === prompt.kind)!;
       expect(move, ai.name).toMatchObject({ by: 'llm', pick: { id: 'B' } });
@@ -355,7 +340,7 @@ describe('the brain at the table', () => {
     expect(t.humans.map((h) => h.name)).toEqual([first, other].map((n) => n.replace('\n', '')));
     expect(await t.runUntil(() => sdk.requests.length > 0)).toBe(true);
 
-    const land = sdk.requests.map((r) => asked(r.params)).find((p) => p.kind === 'land')!;
+    const land = sdk.requests.map((r) => requestOf(r.params)).find((p) => p.kind === 'land')!;
     expect(land.seat).toBe(t.ais[1]!.name);
     expect(land.lines).toContain(`The richest rival looks like ${shown}.`);
     expect(land.lines.filter((l) => l.startsWith('E. Give all.'))).toEqual([]);
@@ -413,10 +398,10 @@ describe('the brain at the table', () => {
     const [accountant, baron] = t.ais;
     const before = sdk.requests.length;
     game.heard?.(accountant!.id, 'my own words');
-    const nextFor = (name: string) => sdk.requests.slice(before).find((r) => asked(r.params).seat === name);
+    const nextFor = (name: string) => sdk.requests.slice(before).find((r) => requestOf(r.params).seat === name);
     expect(await t.runUntil(() => !!nextFor(accountant!.name) && !!nextFor(baron!.name))).toBe(true);
-    expect(asked(nextFor(baron!.name)!.params).talk).toContain(`${accountant!.name}: "my own words"`);
-    expect(asked(nextFor(accountant!.name)!.params).user).not.toContain('my own words');
+    expect(requestOf(nextFor(baron!.name)!.params).talk).toContain(`${accountant!.name}: "my own words"`);
+    expect(requestOf(nextFor(accountant!.name)!.params).user).not.toContain('my own words');
   });
 
   it('T-AC-4: two games made in the same clock tick from the same seed write their game lines to the ledger under different ids', async () => {

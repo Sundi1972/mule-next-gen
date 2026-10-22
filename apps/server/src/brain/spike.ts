@@ -3,8 +3,6 @@
  * Usage: pnpm --filter @mule/server brain:spike -- --calls 50 --max-usd 0.05 --seed 101
  * Spends real money; cap = min(flag, BRAIN.spikeCapUsd); one run per day.
  */
-import fs from 'node:fs';
-import path from 'node:path';
 import { AI_LEVELS, AI_PERSONAS, BRAIN, observe, type AiLevelId, type AiPersonaId, type GameState } from '@mule/engine';
 import {
   buildPrompt,
@@ -21,7 +19,7 @@ import {
   type Prompt,
   type ShortOption,
 } from '@mule/ai';
-import { claimLedger, DATA_DIR, day, numberFlags, runAsScript, table, type MainDeps, type StopReason } from './cli.js';
+import { alreadyRanToday, AUTH_STOPPED, claimLedger, day, dayLedgerPath, KINDS, nearest, numberFlags, resolveDeps, runAsScript, table, type MainDeps, type StopReason } from './cli.js';
 import { billUnknown, CallFailed, createAnthropicSdk, createHaikuComplete, type HaikuReply } from './client.js';
 import { API_KEY_ENV, apiKeyFrom, outcomeOf } from './index.js';
 import { promptChars, worstCaseUsd } from './budget.js';
@@ -37,8 +35,6 @@ export interface SpikeItem {
   shortlist: ShortOption[];
   context: DecisionContext;
 }
-
-export type { MainDeps, StopReason };
 
 /** A percentile: an answered latency, or a rank among timed-out calls, known only to exceed a wait. */
 export type Latency = { ms: number } | { overMs: number };
@@ -93,8 +89,6 @@ export interface SpikeReport {
 export function capFor(flagMaxUsd: number): number {
   return Number.isFinite(flagMaxUsd) && flagMaxUsd > 0 ? Math.min(flagMaxUsd, BRAIN.spikeCapUsd) : 0;
 }
-
-const KINDS: DecisionKind[] = ['land', 'develop', 'trade'];
 
 interface Collected {
   record: { id: number; seat: string; kind: DecisionKind; month: number; shortlist: ShortOption[] };
@@ -194,8 +188,6 @@ interface Settled {
 
 const ascending = (a: number, b: number) => a - b;
 
-/** Nearest-rank quantile of a non-empty ascending list. */
-const nearest = <T>(sorted: readonly T[], q: number): T => sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(q * sorted.length) - 1))]!;
 
 const isAnswered = (s: Settled) => s.outcome !== 'timeout' && s.outcome !== 'error';
 
@@ -346,7 +338,7 @@ function parseFlags(argv: readonly string[]): { calls: number; maxUsd: number; s
 
 /** Exit code: 0 done or capped, 1 nothing called (bad flags, no key, or today's run already made), 2 stopped on an auth failure. */
 export async function main(argv: readonly string[], env: Readonly<Record<string, string | undefined>>, deps: MainDeps = {}): Promise<number> {
-  const out = deps.out ?? ((line: string) => console.log(line));
+  const { dataDir, out, now } = resolveDeps(deps);
   const flags = parseFlags(argv);
   if (!flags) {
     out(USAGE);
@@ -357,10 +349,10 @@ export async function main(argv: readonly string[], env: Readonly<Record<string,
     out(`${API_KEY_ENV} is not set; nothing called.`);
     return 1;
   }
-  const now = deps.now ?? (() => new Date());
-  const ledgerPath = path.join(deps.dataDir ?? DATA_DIR, `spike-${day(now())}.jsonl`);
-  if (fs.existsSync(ledgerPath)) {
-    out(`${ledgerPath} exists: brain:spike already ran today, and each run needs its own clearance; nothing called.`);
+  const ledgerPath = dayLedgerPath(dataDir, 'spike', now());
+  const ranToday = alreadyRanToday(ledgerPath, 'brain:spike');
+  if (ranToday) {
+    out(ranToday);
     return 1;
   }
 
@@ -382,7 +374,7 @@ export async function main(argv: readonly string[], env: Readonly<Record<string,
     log: out,
   });
   for (const line of renderReport(report)) out(line);
-  if (report.stopped === 'auth') out('Stopped: the API refused the credentials (401/403). Nothing more was called.');
+  if (report.stopped === 'auth') out(AUTH_STOPPED);
   return report.stopped === 'auth' ? 2 : 0;
 }
 

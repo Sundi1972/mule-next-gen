@@ -1,8 +1,8 @@
 /** Fakes the brain tests share: the SDK module and client, SDK messages, the dummy key, worstUsdOf and the ledger reader. */
-import fs from 'node:fs';
 import { BRAIN } from '@mule/engine';
+import type { DecisionKind } from '@mule/ai';
 import type { HaikuSdk } from '../src/brain/client.js';
-import { NO_USAGE, type Usage } from '../src/brain/ledger.js';
+import { NO_USAGE, readLedgerLines, type Usage } from '../src/brain/ledger.js';
 
 // Nothing here may import the SDK at runtime: the mocked module's factory loads this file.
 
@@ -99,11 +99,29 @@ export function worstUsdOf(chars: number): number {
   return (tokens * Math.max(p.input, p.cacheWrite) + BRAIN.maxTokens * p.output) / 1_000_000;
 }
 
-/** Every line of the ledger file, parsed. Throws for a missing file and for any line that is not JSON, a blank one too. */
+/** Every line of the ledger file, as plain records: readLedgerLines, for tests that read fields by name. */
 export function readLedger(file: string): Record<string, unknown>[] {
-  return fs
-    .readFileSync(file, 'utf8')
-    .replace(/\n$/, '')
-    .split('\n')
-    .map((l) => JSON.parse(l) as Record<string, unknown>);
+  return readLedgerLines(file).map((l) => ({ ...l }));
 }
+
+/** What a request asks: its decision kind, the seat's name, the user text and its lines, and the lines inside the table-talk block. */
+export function requestOf(params: SdkParams): { kind: DecisionKind; seat: string; user: string; lines: string[]; talk: string[] } {
+  const { user } = promptOf(params);
+  const lines = user.split('\n');
+  const kind = /^Decision: (\w+)$/m.exec(user)?.[1];
+  const seat = /^You are (.+)\. Month \d+ of \d+\.$/m.exec(user)?.[1];
+  if (kind === undefined || seat === undefined) throw new Error('not a decision prompt');
+  const open = lines.indexOf('<table_talk>');
+  const close = lines.indexOf('</table_talk>');
+  return { kind: kind as DecisionKind, seat, user, lines, talk: open < 0 ? [] : lines.slice(open + 1, close) };
+}
+
+/** RULE-3's worst case for the request the SDK received: its system text, user text and schema. */
+export function worstUsdOfRequest(params: SdkParams): number {
+  const { system, user } = promptOf(params);
+  return worstUsdOf(system.length + user.length + JSON.stringify(params.output_config?.format?.schema).length);
+}
+
+/** A call that never answers: it rejects only when the client aborts it at its wait. */
+export const neverAnswers = (options: { signal?: AbortSignal }): Promise<never> =>
+  new Promise((_, reject) => options.signal?.addEventListener('abort', () => reject(options.signal?.reason)));

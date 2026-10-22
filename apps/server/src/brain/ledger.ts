@@ -52,6 +52,20 @@ export interface GameLine {
   by_seat: Record<string, { calls: number; usd: number }>;
 }
 
+export type LedgerLine = CallLine | GameLine;
+
+export const isCallLine = (line: LedgerLine): line is CallLine => !('type' in line);
+
+/**
+ * Every line of a ledger file, parsed; an empty file (claimed, nothing written yet) has none. Throws for a missing
+ * file and for any line that is not JSON: the writer ends each line with a newline and writes no blank ones, so a
+ * blank line is damage, not padding.
+ */
+export function readLedgerLines(file: string): LedgerLine[] {
+  const text = fs.readFileSync(file, 'utf8').replace(/\n$/, '');
+  return text === '' ? [] : text.split('\n').map((l) => JSON.parse(l) as LedgerLine);
+}
+
 export interface Ledger {
   /** Appends the call's line and charges its seat; a call in a finished game gets its line but no charge. See RULE-4. */
   record(call: CallRecord): void;
