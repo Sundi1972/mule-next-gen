@@ -383,18 +383,27 @@ evaluated_at  the lot's intro → walk switch; not re-evaluated mid-walk (money 
 ```
 RULE-4 · When a lot's walk ends                                 shape: decision table
   #  when                                                     then
+  0  the leader passes from one buyer to another while        clock = LOTS.lateMs, adding no more than
+     clock < LOTS.lateMs                                      is left of LOTS.lateCapMs this lot  AM-6
   1  clock ≤ 0                                                bell → RULE-5
   2  every buyer pressed Done (or is away)                    bell → RULE-5
   3  no buyers at all (everyone aside)                        bell at once → RULE-5 (no leader)
   4  otherwise                                                keep walking
 Movement: lots.ts calls stepBoard with the lot market (no sellers, no houses), then caps each
 buyer's price at their money. Walking again takes back a Done (as at the goods auction).
+Speed: (hi − lo) / WALK.crossSeconds, at least WALK.minSpeed. Once the leading rounded bid
+passes hi (LOTS.boardHigh × minimum), speed × LOTS.fastClimb for the rest of the lot.   AM-6
+Order within a step: move and cap → row 0 → rows 1–3, so an overtake on the last tick still
+extends the clock. A lot's first leader is not an overtake; only a change of leader is. AM-6
+examples  min 200, hi 400: a bid passing 400 climbs at 2× from then on · leader changes at
+          1.2 s left → clock 2.0 s (0.8 s added) · after 6 s added, an overtake at 0.5 s adds
+          nothing · one buyer climbing alone never adds time
 ```
 
 ```
 RULE-5 · Resolution at the bell                                 shape: decision table
 inputs  leader = highest rounded bid ≥ minimum (tie: earliest `since`, then seat order) | none
-        unsold ∈ {store, keep} · store.capital ≥ storePays?
+        unsold ∈ {store, keep}
   #  when                              then
   1  leader                            winner.money −= bid; seller.money += taxSale(bid)
                                        (colony seller: store.capital += bid).
@@ -403,12 +412,12 @@ inputs  leader = highest rounded bid ≥ minimum (tie: earliest `since`, then se
                                              winner.carriedMule = outfit (runs off if not
                                              installed in development — existing rule).
   2  none, unsold = keep               nothing moves
-  3  none, unsold = store, store pays  plot: seller.money += storePays; owner = null, outfit = null,
+  3  none, unsold = store              plot: seller.money += storePays; owner = null, outfit = null,
                                              store.mules++ (its MULE back to the corral).
                                        MULE: seller.money += storePays; tile.outfit = null,
                                              runMonths = 0; store.mules++.
-                                       store.capital −= storePays.
-  4  none, unsold = store, store can't pay   as row 2 (kept)
+                                       store.capital −= storePays (it may go negative: the store
+                                       always pays, AM-7).
 storePays: plot = round(LOTS.storePlotShare × GAME.plotScore); MULE = round(LOTS.storeMuleShare
            × mulePrice), both fixed at listing time.
 unknown   leader none means "no bid reached the minimum", NOT "no buyers". Both resolve the same.
@@ -417,7 +426,8 @@ invariant  money is conserved: winner's loss = seller's gain + tax (+ store side
 examples  bids 310 (Ossa) and 290 (Lena), min 250 → Ossa pays 310, Brix gets 294 (5% tax,
           round(15.5) = 16)
           · 250 = 250 → sold at 250 · both 300, Lena first → Lena · 240 < 250, keep → nothing
-          · unsold store, capital 100 < 200 → kept · MULE to a bidder who leads one → never a buyer
+          · unsold store, capital 100 < 200 → the store pays 200, capital −100 (AM-7)
+          · MULE to a bidder who leads one → never a buyer
 ```
 
 ```
@@ -508,7 +518,7 @@ Observed at the server's `viewFor` (MuleView) and the engine's GameState after a
 |---|---|---|---|
 | B-AC-1 | Given planning and Lena owns plot 6·4 · When she lists it at 250, keep · Then every seat's view shows it in `listings`, and lotSlots.used rises by 1 | C1 C6 C9 | Ossa can't list Lena's plot |
 | B-AC-2 | Given a listed plot (min 250) and buyers Ossa and Lena · When the bell rings with Ossa at 310 and Lena at 290 · Then Ossa owns the plot with its MULE, Ossa −310, Brix +294, and the news names the sale | C3 C7 C10 C11 | a 240 bid never wins a 250 lot |
-| B-AC-3 | Given a lot nobody bid the minimum on · When the bell rings · Then with 'keep' nothing moves, and with 'store' the seller gets storePays, the plot is free and the corral has one more MULE | C3 | store short of capital → kept |
+| B-AC-3 | Given a lot nobody bid the minimum on · When the bell rings · Then with 'keep' nothing moves, and with 'store' the seller gets storePays, the plot is free and the corral has one more MULE | C3 | a store short of capital still pays, and its capital goes negative (AM-7) |
 | B-AC-4 | Given a listed MULE · When Lena wins it · Then the seller's plot has no outfit and Lena leads that MULE into development, where it runs off if not installed | C3 | a bidder already leading a MULE is never a buyer |
 | B-AC-5 | Given nobody listed anything · When the land grant ends · Then the game goes straight to development | C2 | — |
 | B-AC-6 | Given 4 lots are listed this month · When a fifth is listed · Then the player sees "The auction is full this month", and the view shows no slots left | C1 C9 | a 2nd lot from one player is fine while slots remain |
@@ -520,6 +530,9 @@ Observed at the server's `viewFor` (MuleView) and the engine's GameState after a
 | T-AC-5 (serves B-AC-5) | The existing server phase-walk test is green unchanged | C2 C7 | — |
 | B-AC-8 (AM-1) | Given a month whose seeded roll is under LOTS.colonyPlotChance and free land is left · When the land grant ends · Then the colony's plot is lot 1 at the colony minimum, every seat can bid, and a sale pays the bid into store capital; unsold, it stays free land | C14 C3 C7 C10 C11 | a roll at or over the chance, no free land, or a full month → no colony lot |
 | T-AC-6 (serves B-AC-8) | RULE-7's examples as engine tests, and the same seed replays the same colony lot in the same month | C14 | — |
+| B-AC-9 (AM-6) | Given Ossa and Lena both wanting a lot (min 200) far past the board's top · When they walk · Then past 400 the price climbs twice as fast, and when the lead changes with under 2 s left the clock goes back to 2 s, at most 6 s added in the lot | C3 C7 | one buyer climbing alone never adds time; a lot with one bidder runs as before |
+| T-AC-8 (serves B-AC-9) | RULE-4 row 0 and the speed line, each example as an engine test after stepLandAuction: the switch at hi, the reset, the cap, the first leader not counting, an overtake on the last tick | C3 | — |
+| T-AC-9 (serves B-AC-9, G-2 measured) | `pnpm sim -- --games 40 --seed 101` before and after, sent to WS1; and WS3's contested-lot probe on trunk: the highest-limit AI wins ≥ 97%, price p10 within 25 of the runner-up's limit, the clock decides ≤ 10%, and uncontested lots unchanged | C3 C8 | — |
 | T-AC-7 (serves B-AC-8, G-1 measured) | `pnpm sim -- --games 40 --seed 101` plays land auctions: the report counts colony lots offered and sold, their rate is near LOTS.colonyPlotChance over the months with free land, and every game still ends | C15 | — |
 
 Invariants, asserted by every engine test: money is conserved across a lot; a plot never has two owners; a MULE is never both on a plot and in a hand.
@@ -617,6 +630,35 @@ measured  the guard moves no sim result today: seed 110's report is identical be
 goal      G-2 unchanged (the AI plans from the board it can see); HC-1 unchanged
 folded    RULE-7 row 0 · PR-3 fix round (test: a whatIf copy leaving landGrant lists nothing;
           check: sim seed 110 back to its base result)
+
+AM-6 · 2026-10-22 · Heiko (decision card via the PM: "Both fixes (Recommended)") · after PR-3
+
+target    §2 RULE-4 (row 0, the speed line, the order within a step) · §6 B-AC-9, T-AC-8, T-AC-9
+said      the board walks at one speed, and the bell rings when the 12 s clock runs out
+did       past the board's top (LOTS.boardHigh × minimum) the price climbs LOTS.fastClimb (2)
+          times as fast for the rest of the lot; a change of leader with under LOTS.lateMs (2 s)
+          left sets the clock back to 2 s, adding at most LOTS.lateCapMs (6 s) in a lot
+because   the fixed speed capped any lot near 3.3× its minimum in 12 s, so contested AI lots
+          ran to the clock and went to whoever led at the bell. Measured on 250 contested lots,
+          trunk 62f7397 (WS3 probe, rounds 1–3): today the highest-limit AI wins 86%, 1 lot in
+          10 goes 234+ under the runner-up's limit, the clock decides 44%. With both fixes:
+          99%, 4 under, 5%; median length 9.6 s (today 10.6 s), longest 18 s (today 12 s);
+          winner pays its own limit on 2%. Uncontested lots unchanged (2.3 s). Either fix alone
+          fixed only one failure: the faster climb the price, the soft close the winner.
+goal      G-2 served more fully: land goes to who wants it most, at about the runner-up's price;
+          a human's reach rises from 3.3× to 4.6× the minimum climbing alone
+folded    RULE-4 rows and examples · the LOTS block · the AM-6 PR (tests T-AC-8; measured T-AC-9)
+
+AM-7 · 2026-10-22 · Heiko (via the PM: the store has unlimited money; WS1 builds the goods side)
+
+target    §2 RULE-5 (rows 3–4, inputs, examples) · §6 B-AC-3's negative case
+said      an unsold lot goes to the store only if store.capital ≥ storePays; otherwise kept
+did       the store always pays; row 4 is gone. store.capital stays a running total that may go
+          negative; colony-lot proceeds still go into it (RULE-5 row 1)
+because   Heiko's ruling. WS1 drops the goods auction's capital gates (auction.ts, WS1's named
+          edits); this is the land auction's matching gate, in WS3's lots.ts
+goal      G-1 unchanged: listing "store" is now a guaranteed exit
+folded    RULE-5 · the AM-6 PR (test: a store with capital below storePays still buys the lot)
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
