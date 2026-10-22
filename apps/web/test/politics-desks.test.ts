@@ -1,4 +1,4 @@
-import type { CanRun, ElectionHow, Office } from '@mule/engine';
+import { POLITICS, type CanRun, type ElectionHow, type Office, type TaxPromise } from '@mule/engine';
 import type { ElectionView, MuleView, MyView, PlayerView, PoliticsView } from '@mule/protocol';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -8,12 +8,13 @@ import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
 import { ColonyDesk } from '../src/phone/hub/desks';
 import { ColonyWithFacts } from '../src/phone/hub/politics/Colony';
-import { CouncilDesk } from '../src/phone/hub/politics/Council';
+import { CouncilDesk, PromisePicker } from '../src/phone/hub/politics/Council';
 import { GovernorDesk } from '../src/phone/hub/politics/Governor';
+import { electionNow } from '../src/phone/hub/politics/slots';
 import { TvElection } from '../src/table/TvElection';
 
 const player = (id: string, name: string, slot: number): PlayerView => ({ id, name, isAi: false, color: '', species: 'zipwing', money: 1000, plots: 0, ready: false, doneDeveloping: false, slot });
-const PLAYERS = [player('s1', 'Lena', 0), player('s2', 'Ossa', 1), player('s3', 'Kai', 2)];
+const PLAYERS = [player('s1', 'Lena', 0), player('s2', 'Ossa', 1), player('s3', 'Kai', 2), player('s4', 'Brix', 3)];
 const stock = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0, alloy: 0, electronics: 0, medicine: 0 };
 
 const election = (extra: Partial<ElectionView> = {}): ElectionView => ({
@@ -130,6 +131,24 @@ function textOf(html: string, testid: string): string {
 
 const disabled = (html: string, testid: string) => /\sdisabled=""/.test(tagOf(html, testid) ?? '');
 
+/** The markup from the element carrying this data-testid up to the next element whose testid starts with `next`. */
+function chunkOf(html: string, testid: string, next: string): string {
+  const open = tagOf(html, testid);
+  expect(open, `an element with data-testid="${testid}"`).toBeDefined();
+  const from = html.indexOf(open!) + open!.length;
+  const end = html.indexOf(`data-testid="${next}`, from);
+  return html.slice(from, end < 0 ? undefined : end);
+}
+
+/** The promise picker as Lena's phone draws it when she taps "Run for Governor", at this tax. */
+function picker(percent: number): string {
+  const Picker = () => createElement(PromisePicker, { onRun: () => {}, onCancel: () => {} });
+  return onPhone(view(politics({ tax: { percent, start: percent, low: 0, high: 15 } })), Picker);
+}
+
+const CAP_8: TaxPromise = { kind: 'cap', percent: 8 };
+const HOLD: TaxPromise = { kind: 'hold' };
+
 describe('the politics desks', () => {
   it.each<[string, Record<Office, CanRun>, Record<Office, string | null>]>([
     ['both open', { governor: true, sheriff: true }, { governor: null, sheriff: null }],
@@ -196,5 +215,72 @@ describe('the politics desks', () => {
     expect(html.startsWith(onPhone(on, ColonyDesk))).toBe(true);
     expect(textOf(html, 'tax-readonly')).toBe('Sales tax 8% (set by Ossa, +3) · colony fund 840 cr');
     expect(textOf(html, 'land-baron')).toContain('Land Baron Ossa');
+  });
+
+  it('RULE-10, C12: the promise picker opens with nothing chosen, so "Run" waits for a promise', () => {
+    const html = picker(5);
+    expect(tagOf(html, 'promise-pick')).toMatch(/role="radiogroup"/);
+    expect(textOf(html, 'promise-pick')).toContain('Tax today: 5%.');
+    expect(html.match(/<input[^>]*type="radio"[^>]*>/g)!.some((r) => /checked/.test(r))).toBe(false);
+    expect(disabled(html, 'promise-run'), 'promise-run disabled').toBe(true);
+    expect(textOf(html, 'promise-run')).toBe('Pick a promise to run');
+    expect(textOf(html, 'promise-hold')).toBe('Hold the tax');
+    expect(disabled(html, 'promise-cancel'), 'promise-cancel disabled').toBe(false);
+  });
+
+  it.each<[number, { minus: boolean; plus: boolean; lower: boolean }]>([
+    [5, { minus: false, plus: false, lower: false }],
+    [POLITICS.tax.min, { minus: true, plus: false, lower: true }],
+    [POLITICS.tax.max, { minus: false, plus: true, lower: false }],
+  ])("RULE-10, C12: the cap starts at today's tax (%s%%) and stops at the tax's bounds; Lower is refused at 0%%", (percent, stopped) => {
+    const html = picker(percent);
+    expect(textOf(html, 'promise-cap-value')).toBe(`${percent}%`);
+    expect(disabled(html, 'promise-cap-minus'), 'promise-cap-minus disabled').toBe(stopped.minus);
+    expect(disabled(html, 'promise-cap-plus'), 'promise-cap-plus disabled').toBe(stopped.plus);
+    const lower = chunkOf(html, 'promise-lower', 'promise-');
+    expect(/\sdisabled=""/.test(lower.match(/<input[^>]*>/)![0]), 'the Lower radio disabled').toBe(stopped.lower);
+    if (stopped.lower) expect(textOf(html, 'promise-lower')).toBe(`Lower the taxThe tax is already ${POLITICS.tax.min} %.`);
+    else expect(textOf(html, 'promise-lower')).toBe('Lower the tax');
+  });
+
+  it("C12: after running, the line names the office and, for Governor, the promise; a Sheriff's line has none", () => {
+    const gov = onPhone(view(politics({ election: election({ candidates: { governor: ['s1'], sheriff: [] }, promises: { s1: CAP_8 } }) }), me({ running: 'governor' })), CouncilDesk);
+    expect(textOf(gov, 'running')).toBe('You run for Governor, promising “Tax no higher than 8%”; one office at a time. Withdraw');
+    expect(tagOf(gov, 'promise-pick')).toBeUndefined();
+    const sheriff = onPhone(view(politics({ election: election({ candidates: { governor: [], sheriff: ['s1'] } }) }), me({ running: 'sheriff' })), CouncilDesk);
+    expect(textOf(sheriff, 'running')).toBe('You run for Sheriff; one office at a time. Withdraw');
+  });
+
+  it('B-AC-6, RULE-10: every ballot quotes each Governor candidate\'s promise; a Sheriff candidate has no line, not an empty quote', () => {
+    // s3's stray promise would be a server bug; the Sheriff ballot never draws one.
+    const promises = { s1: CAP_8, s2: HOLD, s3: { kind: 'lower' } as TaxPromise };
+    const game = view(politics({ election: election({ stage: 'ballot', candidates: { governor: ['s1', 's2'], sheriff: ['s3', 's4'] }, promises }) }));
+    const html = onPhone(game, CouncilDesk);
+    expect(textOf(html, 'promise-s1')).toBe('“Tax no higher than 8%”');
+    expect(textOf(html, 'promise-s2')).toBe('“Hold the tax”');
+    expect(tagOf(html, 'promise-s3')).toBeUndefined();
+    expect(tagOf(html, 'promise-s4')).toBeUndefined();
+    expect(html).not.toContain('“”');
+  });
+
+  it("B-AC-6, RULE-10: the TV's result quotes each Governor candidate's promise under the name; Sheriff rows have none", () => {
+    const result = {
+      governor: { winner: 's1', how: 'votes' as const, tallies: [{ id: 's1', votes: 3 }, { id: 's2', votes: 1 }] },
+      sheriff: { winner: 's3', how: 'votes' as const, tallies: [{ id: 's3', votes: 2 }, { id: 's4', votes: 2 }] },
+    };
+    const promises = { s1: CAP_8, s2: HOLD, s3: { kind: 'lower' } as TaxPromise };
+    const html = onTv(view(politics({ election: election({ stage: 'reveal', seconds: 2, total: 6, result, promises }) })));
+    const row = (office: Office, id: string) => chunkOf(html, `result-${office}-${id}`, 'result-').replace(/<[^>]+>/g, '');
+    expect(row('governor', 's1')).toContain('Lena“Tax no higher than 8%”');
+    expect(row('governor', 's2')).toContain('Ossa“Hold the tax”');
+    expect(row('sheriff', 's3')).not.toMatch(/[“”]/);
+    expect(chunkOf(html, 'result-sheriff-s4', 'how-').replace(/<[^>]+>/g, '')).not.toMatch(/[“”]/);
+  });
+
+  it("C12: Now at nominate says a Governor candidate promises something about the tax", () => {
+    const game = view(politics());
+    expect(electionNow({ view: game, me: game.me!, self: PLAYERS[0]! })?.detail).toBe(
+      'Election month: Governor and Sheriff. A Governor candidate promises something about the tax. Then the secret ballot, then the result on every screen at once.',
+    );
   });
 });
