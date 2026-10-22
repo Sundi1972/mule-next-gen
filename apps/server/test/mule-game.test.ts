@@ -91,8 +91,6 @@ describe('MuleGame', () => {
       for (const t of state.tiles) expect(tiles[t.y * state.width + t.x]!.special).toEqual(t.special);
       expect(tiles.filter((t) => t.special)).toHaveLength(specials.length);
     }
-    const ruin = specials.find((t) => t.special!.kind === 'ruins');
-    if (ruin) expect(game.viewFor(null).tiles[ruin.y * state.width + ruin.x]!.special!.salvage).toBe(ruin.special!.salvage);
   });
 
   it('moves the land grant light on a tick and only lets the lit plot be claimed', () => {

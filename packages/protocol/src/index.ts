@@ -1,4 +1,4 @@
-import type { AuctionSide, EventKey, EventKind, Good, Ground, MonthEvent, Outfit, Phase, ScoreParts, SkipReason, SpecialKind, Species, StatusRow, Stock, Terrain, TileTrait } from '@mule/engine';
+import type { AuctionSide, EventKey, EventKind, Good, Ground, MonthEvent, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, Terrain, TileTrait } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -49,7 +49,7 @@ export interface TileView {
   /** Only for the plot's owner or a player who analysed it: its hazard traits. */
   traits?: TileTrait[];
   /** The plot's special field, while it lasts. Public: every viewer, phone and TV, sees it; only the ground is private. */
-  special?: { kind: SpecialKind; salvage?: 'alloy' | 'electronics' };
+  special?: SpecialField;
 }
 
 export interface PlayerView {
