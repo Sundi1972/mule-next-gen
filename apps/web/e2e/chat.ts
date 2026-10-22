@@ -244,6 +244,8 @@ function schedule(wire: Wire): { id: number; from: number; to: number }[] {
     }
     const from = Math.max(line.at, free);
     if (from - line.at > RULE.maxWaitMs) continue;
+    // Queued past a phase change: a phase change drops the queue.
+    if (phaseAt(wire, from) !== key) continue;
     const prev = out.at(-1);
     if (prev && prev.to > from) prev.to = from;
     out.push({ id: line.id, from, to: from + RULE.maxMs });
@@ -254,6 +256,19 @@ function schedule(wire: Wire): { id: number; from: number; to: number }[] {
     if (change && change.at < b.to) b.to = change.at;
   }
   return out;
+}
+
+/**
+ * The wire as this page's queue saw it. A line heard within PHASE_LAG_MS before a phase change belongs to either
+ * phase: to the new one when the page gave it a bubble there, so it counts as heard when that phase began.
+ */
+function asQueued(wire: Wire, samples: Sample[]): Wire {
+  const lines = wire.lines.map((line) => {
+    const next = wire.phases.find((p) => p.at >= line.at && p.at - line.at <= PHASE_LAG_MS);
+    const there = next && samples.some((s) => s.t > next.at + PHASE_LAG_MS && s.bubbles.some((b) => b.line === line.id));
+    return there ? { ...line, at: next.at } : line;
+  });
+  return { ...wire, lines };
 }
 
 /** By when something due at `t` must show: within SHOWS_WITHIN_MS, or in the first frame painted after `t`. */
@@ -285,9 +300,10 @@ function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
   }
 
   const anchors = { creature: 0, seatRow: 0 };
-  const ended = schedule(wire).filter((b) => b.to - b.from >= SHORTEST_LOOKED_FOR_MS && wire.phases.some((p) => p.at === b.to));
+  const queued = asQueued(wire, samples);
+  const ended = schedule(queued).filter((b) => b.to - b.from >= SHORTEST_LOOKED_FOR_MS && wire.phases.some((p) => p.at >= b.to && p.at - b.to <= PHASE_LAG_MS));
   check(ended.length > 0, `B-AC-17: on ${who} a phase change came while a bubble showed, so its end is tested`);
-  for (const b of schedule(wire)) {
+  for (const b of schedule(queued)) {
     if (b.to - b.from < SHORTEST_LOOKED_FOR_MS) continue;
     const line = wire.lines.find((l) => l.id === b.id)!;
     const during = samples.filter((s) => s.t >= b.from && s.t < b.to && s.t <= deadline(samples, b.from));
@@ -310,7 +326,8 @@ function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
     for (const x of s.bubbles) {
       const line = wire.lines.find((l) => l.id === x.line);
       check(line, `B-AC-17: on ${who} a bubble shows line ${x.line}, which this page never received`);
-      check(phaseAt(wire, line.at) === phaseAt(wire, s.t - PHASE_LAG_MS), `B-AC-17: on ${who} after the phase changed, line ${x.line}'s bubble from the phase before still shows`);
+      const at = queued.lines.find((l) => l.id === x.line)!.at;
+      check(!wire.phases.some((p) => p.at > at && p.at < s.t - PHASE_LAG_MS), `B-AC-17: on ${who} after the phase changed, line ${x.line}'s bubble from the phase before still shows`);
     }
   return `${wire.lines.length} lines (${[...byPhase].map(([p, n]) => `${p} ${n}`).join(', ')}), ${bubbles} bubbles at their speakers (${anchors.creature} at a creature, ${anchors.seatRow} at the seat row)`;
 }
