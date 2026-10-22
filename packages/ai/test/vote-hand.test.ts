@@ -279,7 +279,6 @@ describe('RULE-8: who runs', () => {
 describe('RULE-8: how a seat votes', () => {
   it.each([
     { name: 'fewest plots', candidates: { governor: ['ai1', 'ai2', 'ai3'] }, plots: { ai1: 3, ai2: 1, ai3: 2 }, want: 'ai2' },
-    { name: 'tie → lower seat', candidates: { governor: ['ai3', 'ai2', 'ai1'] }, plots: { ai1: 3, ai2: 1, ai3: 1 }, want: 'ai2' },
   ])('RULE-8: a non-candidate votes for the candidate with the fewest plots ($name)', ({ candidates, plots, want }) => {
     const state = ballotWith(candidates, plots);
     const hand = handOf(mindOf('ai0', 'trader'), 11);
@@ -299,6 +298,24 @@ describe('RULE-8: how a seat votes', () => {
     ]);
     expect(electionOf(state).ballots.ai0).toEqual({ governor: want });
     expect(electionOf(state).done).toContain('ai0');
+  });
+
+  // AM-10: was "tie → lower seat", which in month 1 (nobody owns land) handed every vote to the lowest seat.
+  it.each([
+    { name: 'two tied, one with more', candidates: { governor: ['ai3', 'ai2', 'ai1'] }, plots: { ai1: 3, ai2: 1, ai3: 1 }, tied: ['ai2', 'ai3'] },
+    { name: 'month 1, nobody owns land', candidates: { governor: ['ai1', 'ai2', 'ai3'] }, plots: {}, tied: ['ai1', 'ai2', 'ai3'] },
+  ])('RULE-8 (AM-10): a tie on fewest plots is broken by a seeded draw among the tied, not by seat ($name)', ({ candidates, plots, tied }) => {
+    const picks = new Set<string>();
+    for (let seed = 1; seed <= 24; seed++) {
+      const state = ballotWith(candidates, plots);
+      const { refused } = tickAlone(state, handOf(mindOf('ai0', 'trader'), seed));
+
+      expect(refused).toEqual([]);
+      const pick = electionOf(state).ballots.ai0?.governor;
+      expect(tied).toContain(pick);
+      picks.add(pick!);
+    }
+    expect([...picks].sort()).toEqual(tied);
   });
 
   it.each([
