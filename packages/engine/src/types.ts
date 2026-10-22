@@ -102,6 +102,8 @@ export interface Player {
   sick: boolean;
   /** True once the player has gone to the pub: their development turn is over. */
   doneDeveloping: boolean;
+  /** True once the player has installed a MULE in this development turn, so a reloaded phone still knows. */
+  installedThisTurn: boolean;
   /** Indices of tiles whose ground this player has analysed. Private to them. */
   analysed: number[];
   /** Free plots chosen for a geo drone this planning phase, analysed when the land grant starts. */

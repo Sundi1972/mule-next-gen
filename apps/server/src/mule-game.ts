@@ -287,9 +287,11 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   }
 
   private checkAllReady(): void {
-    const waiting = this.seats.filter((s) => !s.isAi && !this.away.has(s.id) && !this.ready.has(s.id) && !this.doneDeveloping(s.id));
-    // The auctions end on their own, good by good and lot by lot.
     const phase = this.state?.phase;
+    // A phone that drops in the land grant just doesn't claim; a reload must not end the grant for everyone.
+    const excused = (id: string) => this.away.has(id) && phase !== 'landGrant';
+    const waiting = this.seats.filter((s) => !s.isAi && !excused(s.id) && !this.ready.has(s.id) && !this.doneDeveloping(s.id));
+    // The auctions end on their own, good by good and lot by lot.
     if (phase && phase !== 'gameOver' && phase !== 'auction' && phase !== 'landAuction' && waiting.length === 0) this.nextPhase();
   }
 
@@ -500,7 +502,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           try {
             const ai = this.ai.get(seat.id);
             if (ai) ai.auctionTick(state, dt, (a) => this.aiAct(seat.id, a));
-            else if (this.away.has(seat.id)) auctionDone(state, seat.id);
+            else if (this.away.has(seat.id)) this.sitOut(seat.id);
           } catch (err) {
             if (!(err instanceof RuleError)) throw err;
           }
@@ -516,6 +518,24 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         this.ctx.changed();
       }),
     );
+  }
+
+  /**
+   * A dropped phone sits the rest of the good out, on the status screen and
+   * in the walk: off the board, it can't walk on its own or stand on a line
+   * for the store or a player to trade with. Back online during the walk, the
+   * side picker lets it rejoin.
+   */
+  private sitOut(seatId: string): void {
+    const state = this.requireState();
+    // Passing also stops the walker: it leaves the board.
+    try {
+      declareRole(state, seatId, 'pass');
+    } catch (err) {
+      if (!(err instanceof RuleError)) throw err;
+    }
+    // Last, because passing during the walk takes a Done back.
+    auctionDone(state, seatId);
   }
 
   /** Steps the land auction every WALK.tickMs until its last lot is over; the AI hands move first, with the same dt. */
@@ -662,6 +682,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
             mulePrice: mulePriceFor(state, me.id),
             outfitCosts: Object.fromEntries(outfits.map((o) => [o, outfitCostFor(state, me.id, o)])) as Record<Outfit, number>,
             droneOrder: me.droneOrder.map((i) => ({ x: i % state.width, y: Math.floor(i / state.width) })),
+            installedThisTurn: me.installedThisTurn,
           }
         : null,
       market: GOODS.map((good) => {
