@@ -385,7 +385,8 @@ async function colourIntoTheGame(): Promise<void> {
 
   // B-AC-13 (handoff, in game): the game shell's move dialog behaves like the lobby's. Opened once and cancelled.
   const moveHeiko = heiko.getByTestId('move-to-phone');
-  check(await shows(moveHeiko), 'B-AC-13 (handoff, in game): the game shell has move-to-phone');
+  check(await shows(moveHeiko), 'B-AC-13 (handoff, in game): the host\'s game shell has move-to-phone');
+  check(await shows(mia.getByTestId('move-to-phone')), 'B-AC-13 (handoff, in game): a player who is not the host has move-to-phone in her game shell too');
   await moveHeiko.click();
   const gameDialog = heiko.getByRole('dialog', { name: 'Move to your phone' });
   check(await shows(gameDialog.locator('[data-testid=handoff-qr][data-state=ready]')), 'B-AC-13 (handoff, in game): move-to-phone opens "Move to your phone" with a ready code');
