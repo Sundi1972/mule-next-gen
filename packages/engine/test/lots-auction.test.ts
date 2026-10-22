@@ -6,6 +6,7 @@ import {
   list,
   LOTS,
   lotDone,
+  lotLeader,
   mulePrice,
   RuleError,
   setLotWalk,
@@ -149,19 +150,21 @@ describe('T-AC-2: resolution at the bell (RULE-5), money and MULEs conserved', (
     expect(totals(state)).toEqual(before);
   });
 
-  it('T-AC-2: RULE-5 example unsold to the store, capital 100 < 200 — kept', () => {
+  it('T-AC-2: RULE-5 example unsold to the store, capital 100 < 200 (serves B-AC-3) — the store still pays 200, and its capital goes to −100', () => {
     const state = newGame();
     own(state, 5, 3, 'brix', 'food');
     auction(state, [['brix', plot(5, 3, 250, 'store')]]);
     state.store.capital = 100;
+    const corral = state.store.mules;
     const before = totals(state);
 
     bell(state);
 
-    expect(live(state).result).toEqual({ kind: 'kept' });
-    expect(money(state, 'brix')).toBe(1000);
-    expect(state.store.capital).toBe(100);
-    expect(tileOf(state, 5, 3)).toMatchObject({ owner: 'brix', outfit: 'food' });
+    expect(live(state).result).toEqual({ kind: 'store', price: 200 });
+    expect(money(state, 'brix')).toBe(1200);
+    expect(state.store.capital).toBe(-100);
+    expect(state.store.mules).toBe(corral + 1);
+    expect(tileOf(state, 5, 3)).toMatchObject({ owner: null, outfit: null });
     expect(totals(state)).toEqual(before);
   });
 
@@ -355,6 +358,159 @@ describe('when a lot’s walk ends (RULE-4)', () => {
     untilStage(state, 'over');
     advancePhase(state);
     expect(state.phase).toBe('development');
+  });
+});
+
+describe('T-AC-8: the faster climb past the top and the soft close (RULE-4 row 0, the speed line)', () => {
+  // Every lot here has minimum 200, so the board runs from 140 to 400 and crosses it in 6 s.
+  const BASE = (400 - 140) / 6;
+  // A step this long moves a bid at least 8 past where it stood, so a buyer level with the leader passes them in it.
+  const JUMP = 200;
+
+  /** Runs the walk clock down to `left` + JUMP, then `id` holds Up for one JUMP-long step, so their move lands with `left` ms showing. */
+  function jumpAt(state: GameState, id: string, left: number) {
+    while (live(state).clockMs > left + JUMP) step(state);
+    expect(live(state).clockMs).toBe(left + JUMP);
+    setLotWalk(state, id, 1);
+    const result = stepLandAuction(state, JUMP);
+    if (live(state).stage === 'walk') setLotWalk(state, id, 0);
+    return result;
+  }
+
+  /** `id` walks level with the leader's bid, which keeps the leader first there, then passes them at `left` ms. */
+  function overtakeAt(state: GameState, id: string, left: number) {
+    const leader = lotLeader(state)!;
+    expect(leader.id).not.toBe(id);
+    walkTo(state, id, leader.bid);
+    expect(lotLeader(state)!.id).toBe(leader.id);
+    const result = jumpAt(state, id, left);
+    expect(lotLeader(state)!.id).toBe(id);
+    return result;
+  }
+
+  /** Two buyers level at 250, Ossa first there: she leads. */
+  function level(state: GameState) {
+    walkTo(state, 'ossa', 250);
+    walkTo(state, 'lena', 250);
+    expect(lotLeader(state)).toEqual({ id: 'ossa', bid: 250 });
+  }
+
+  function newLots(n: 1 | 2): GameState {
+    const state = newGame();
+    own(state, 5, 3, 'brix');
+    own(state, 6, 3, 'brix');
+    auction(state, [['brix', plot(5, 3, 200)], ...(n === 2 ? [['brix', plot(6, 3, 200)] as [string, ReturnType<typeof plot>]] : [])]);
+    return state;
+  }
+
+  it('T-AC-8: RULE-4 speed line — min 200, hi 400: a bid level with 400 climbs at 1×, one passing it at 2× from then on, even back under it; the next lot starts at 1× again', () => {
+    const state = newLots(2);
+    expect(live(state).speed).toBeCloseTo(BASE);
+
+    walkTo(state, 'ossa', 400);
+    step(state);
+    expect(live(state).speed).toBeCloseTo(BASE);
+
+    walkTo(state, 'ossa', 401);
+    expect(live(state).speed).toBeCloseTo(2 * BASE);
+    const from = walker(state, 'ossa').price;
+    setLotWalk(state, 'ossa', 1);
+    step(state);
+    expect(walker(state, 'ossa').price - from).toBeCloseTo((2 * BASE * DT) / 1_000);
+
+    setLotWalk(state, 'ossa', -1);
+    for (let i = 0; Math.round(walker(state, 'ossa').price) > 380 && i < 1_000; i++) step(state);
+    expect(live(state).speed).toBeCloseTo(2 * BASE);
+    walkTo(state, 'ossa', 420);
+    expect(live(state).speed).toBeCloseTo(2 * BASE);
+
+    untilStage(state, 'result');
+    untilStage(state, 'walk');
+    expect(live(state).number).toBe(2);
+    expect(live(state).speed).toBeCloseTo(BASE);
+    walkTo(state, 'lena', 401);
+    expect(live(state).speed).toBeCloseTo(2 * BASE);
+  });
+
+  it('T-AC-8: RULE-4 row 0 — a lead change with 5 s left leaves the clock alone; Ossa taking the lead back at 1.2 s left sets it to 2.0 s, and she wins 0.8 s late', () => {
+    const state = newLots(1);
+    level(state);
+
+    overtakeAt(state, 'lena', 5_000);
+    expect(live(state).clockMs).toBe(5_000);
+
+    expect(overtakeAt(state, 'ossa', 1_200)).toBeNull();
+    expect(live(state).clockMs).toBe(2_000);
+
+    untilStage(state, 'result');
+    expect(live(state).result).toMatchObject({ kind: 'sold', buyer: 'ossa' });
+    expect(live(state).elapsed).toBe(LOTS.walkMs + 800);
+  });
+
+  it('T-AC-8: RULE-4 row 0 cap — overtakes add 0.8 + 2 + 2 + 1.2 s and stop at 6 s, so one at 0.5 s left adds nothing; the next lot may add again', () => {
+    const state = newLots(2);
+    level(state);
+
+    overtakeAt(state, 'lena', 1_200);
+    expect(live(state).clockMs).toBe(2_000);
+    overtakeAt(state, 'ossa', 0);
+    expect(live(state).clockMs).toBe(2_000);
+    overtakeAt(state, 'lena', 0);
+    expect(live(state).clockMs).toBe(2_000);
+    overtakeAt(state, 'ossa', 0);
+    expect(live(state).clockMs).toBe(1_200);
+    overtakeAt(state, 'lena', 500);
+    expect(live(state).clockMs).toBe(500);
+
+    untilStage(state, 'result');
+    expect(live(state).result).toMatchObject({ kind: 'sold', buyer: 'lena' });
+    expect(live(state).elapsed).toBe(LOTS.walkMs + 6_000);
+
+    untilStage(state, 'walk');
+    expect(live(state).number).toBe(2);
+    level(state);
+    overtakeAt(state, 'lena', 1_200);
+    expect(live(state).clockMs).toBe(2_000);
+  });
+
+  it("T-AC-8: RULE-4 row 0 — a lot's first leader is not an overtake: Ossa reaching the minimum at 1.2 s left adds nothing", () => {
+    const state = newLots(1);
+    walkTo(state, 'ossa', 199);
+    expect(lotLeader(state)).toBeNull();
+
+    jumpAt(state, 'ossa', 1_200);
+
+    expect(lotLeader(state)!.id).toBe('ossa');
+    expect(live(state).clockMs).toBe(1_200);
+    untilStage(state, 'result');
+    expect(live(state).result).toMatchObject({ kind: 'sold', buyer: 'ossa' });
+    expect(live(state).elapsed).toBe(LOTS.walkMs);
+  });
+
+  it('T-AC-8: RULE-4 row 0 — one buyer climbing alone, past the minimum and the top and on to the bell, never adds time', () => {
+    const state = newLots(1);
+    setLotWalk(state, 'ossa', 1);
+
+    untilStage(state, 'result');
+
+    expect(live(state).elapsed).toBe(LOTS.walkMs);
+    expect(live(state).result).toMatchObject({ kind: 'sold', buyer: 'ossa' });
+    expect((live(state).result as { price: number }).price).toBeGreaterThan(400);
+  });
+
+  it('T-AC-8: RULE-4 order within a step — an overtake in the step that empties the clock sets it to 2.0 s, and the bell does not ring', () => {
+    const state = newLots(1);
+    level(state);
+
+    const result = jumpAt(state, 'lena', 0);
+
+    expect(result).toBeNull();
+    expect(live(state).stage).toBe('walk');
+    expect(live(state).clockMs).toBe(2_000);
+    expect(lotLeader(state)!.id).toBe('lena');
+    untilStage(state, 'result');
+    expect(live(state).result).toMatchObject({ kind: 'sold', buyer: 'lena' });
+    expect(live(state).elapsed).toBe(LOTS.walkMs + 2_000);
   });
 });
 
