@@ -63,7 +63,7 @@ import {
   type Phase,
   type Trade,
 } from '@mule/engine';
-import { AiSeat, LotHand, personaFor, type AiAction } from '@mule/ai';
+import { AiSeat, LotHand, personaFor, VoteHand, type AiAction } from '@mule/ai';
 import { PLAYER_COLORS, type MuleIntent, type MuleView, type ProductionReason, type ProductionView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
@@ -161,6 +161,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private readonly ai = new Map<string, AiSeat>();
   /** Each AI player's hand at the land auction, keyed by seat id. */
   private readonly lotHands = new Map<string, LotHand>();
+  /** Each AI player's hand in politics: runs, votes and governs, keyed by seat id. */
+  private readonly voteHands = new Map<string, VoteHand>();
 
   /** Real time per unit of game time: 1 is real time, 0.1 ten times faster. Test-only. */
   private readonly phaseScale: number;
@@ -180,6 +182,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.state = createGame({ seed: this.seed, players: seats.map(({ id, name, isAi, pick }) => ({ id, name, isAi, ...(isSpecies(pick) ? { species: pick } : {}) })), maxMonths: this.options.maxMonths, politics: this.options.politics ?? false });
     this.ai.clear();
     this.lotHands.clear();
+    this.voteHands.clear();
     seats.forEach((s, i) => {
       if (!s.isAi) return;
       const seat = new AiSeat({
@@ -192,6 +195,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       });
       this.ai.set(s.id, seat);
       this.lotHands.set(s.id, new LotHand(seat.mind, createRng((seat.options.seed ^ 0xc2b2ae35) >>> 0)));
+      this.voteHands.set(s.id, new VoteHand(seat.mind, createRng((seat.options.seed ^ 0x165667b1) >>> 0)));
     });
     this.news = ['Welcome to the colony. Talk tactics, then grab land.'];
     this.enterPhase();
@@ -376,12 +380,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     // In an election month the election runs first, on its own clocks; planning's timer starts once it is over.
     if (this.electionOpen()) {
       this.phaseEndsAt = null;
-      this.scheduleElectionTick(this.ctx.now());
+      this.schedulePoliticsTick(this.ctx.now());
       return;
     }
     this.startPhaseTimer(state.phase);
 
-    if (state.phase === 'planning') this.startPlanning();
+    if (state.phase === 'planning') {
+      this.startPlanning();
+      if (this.politicsHandsPlay()) this.schedulePoliticsTick(this.ctx.now());
+    }
     if (state.phase === 'landGrant') {
       this.aiGrantBids();
       this.scheduleGrantTick();
@@ -414,36 +421,56 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     return state?.phase === 'planning' && !!election && election.stage !== 'over';
   }
 
+  /** True in planning with politics on and AI vote hands to tick. */
+  private politicsHandsPlay(): boolean {
+    return this.state?.phase === 'planning' && !!this.state.politics && this.voteHands.size > 0;
+  }
+
   /**
-   * Steps the election every WALK.tickMs until it is over, then starts planning's
-   * timer and the AI land plans. AI seats and dropped phones count as Done.
+   * Every WALK.tickMs in planning with politics on: the AI vote hands act first,
+   * then dropped phones count as Done and the election steps, all with the same dt.
+   * When the election ends, planning's timer and the AI land plans start; the
+   * hands keep ticking so an AI Governor sets the tax, until planning ends.
    */
-  private scheduleElectionTick(last: number): void {
+  private schedulePoliticsTick(last: number): void {
     const state = this.requireState();
     this.cancels.push(
       this.ctx.schedule(WALK.tickMs, () => {
-        if (!this.electionOpen()) return;
+        if (state.phase !== 'planning') return;
         const now = this.ctx.now();
         // A stalled server loop must not skip a stage.
         const dt = Math.min(Math.max(0, now - last), WALK.tickMs * 3) / this.phaseScale;
-        // Until the AI seats have a vote hand of their own, they sit the election out.
-        const done = state.politics!.election!.done;
-        for (const id of this.away) if (!done.includes(id)) this.doneForAway.add(id);
-        for (const seat of this.seats) if (seat.isAi || this.away.has(seat.id)) electionDone(state, seat.id);
-        const shown = resultShown(state);
-        const stage = state.politics!.election!.stage;
-        stepElection(state, dt);
-        if (state.politics!.election!.stage !== stage) this.doneForAway.clear();
-        const result = state.politics!.election!.result;
-        if (!shown && result && resultShown(state)) this.addNews(electionNews(result, (id) => this.nameOf(id)));
-        if (this.electionOpen()) this.scheduleElectionTick(now);
-        else {
-          this.startPhaseTimer('planning');
-          this.startPlanning();
+        let acted = false;
+        for (const [id, hand] of this.voteHands) {
+          hand.tick(state, dt, (action) => {
+            acted = true;
+            return this.aiAct(id, action);
+          });
         }
-        this.ctx.changed();
+        const changed = this.stepOpenElection(dt) || acted;
+        if (this.electionOpen() || this.politicsHandsPlay()) this.schedulePoliticsTick(now);
+        if (changed) this.ctx.changed();
       }),
     );
+  }
+
+  /** Steps an open election by dt, dropped phones counting as Done; starts planning proper when it ends. Returns whether it was open. */
+  private stepOpenElection(dt: number): boolean {
+    if (!this.electionOpen()) return false;
+    const state = this.requireState();
+    const { done, stage } = state.politics!.election!;
+    for (const id of this.away) if (!done.includes(id)) this.doneForAway.add(id);
+    for (const seat of this.seats) if (this.away.has(seat.id)) electionDone(state, seat.id);
+    const shown = resultShown(state);
+    stepElection(state, dt);
+    if (state.politics!.election!.stage !== stage) this.doneForAway.clear();
+    const result = state.politics!.election!.result;
+    if (!shown && result && resultShown(state)) this.addNews(electionNews(result, (id) => this.nameOf(id)));
+    if (!this.electionOpen()) {
+      this.startPhaseTimer('planning');
+      this.startPlanning();
+    }
+    return true;
   }
 
   /** The land grant's light moves on every tick; each new plot gets the AI players' bids. */
