@@ -1,6 +1,6 @@
 import { lotLeader, LOTS, observe, WALK, type GameState, type LandAuction, type Listing, type Rng, type Walker } from '@mule/engine';
 import type { Act } from '../actions.js';
-import { muleValue, plotValue } from '../strategist.js';
+import { muleValue, plotRoom, plotValue } from '../strategist.js';
 import { cashReserve, type Mind } from '../value.js';
 
 /** Where an overtake aims: past the leader by a share of the gap to the limit, rounded down, so never past the limit (RULE-6). */
@@ -16,7 +16,7 @@ export function overtakeTarget(limit: number, leaderBid: number, share: number):
  */
 export class LotHand {
   private key = '';
-  /** The most it bids on the lot that is up: max(0, min(money − cashReserve, value)). */
+  /** The most it bids on the lot that is up: max(0, min(money − cashReserve, value)), and for a plot within plotRoom. */
   private limit = 0;
   private introDelay = 0;
   private startDelay = 0;
@@ -68,7 +68,8 @@ export class LotHand {
     const money = obs.players.find((p) => p.id === this.mind.me)!.money;
     const value = lot.item.kind === 'plot' ? plotValue(obs, this.mind, lot.item.y * obs.width + lot.item.x) : muleValue(obs, this.mind);
     this.key = key;
-    this.limit = Math.max(0, Math.min(money - cashReserve(obs, this.mind), value));
+    const room = lot.item.kind === 'plot' ? plotRoom(obs, this.mind) : Infinity;
+    this.limit = Math.max(0, Math.min(money - cashReserve(obs, this.mind), value, room));
     this.introDelay = this.rng.int(...LOTS.aiIntroMs);
     this.startDelay = this.rng.int(...LOTS.aiStartMs) * this.mind.persona.patience;
     this.reactIn = 0;
