@@ -34,7 +34,7 @@
 
 ## Status (2026-10-22)
 
-**PR-A** (`ws3-fu-a` @ c715585, base a745807; the implementer reports its gates green). **Review: READY WITH FIXES; fix round 1 is out.**
+**PR-A: MERGED into the lane as #82 (`ws3-fu-a` @ 4486dbf).** The review was READY WITH FIXES, then fix round 1, a scoped re-review with no code findings, and fix round 2 (tests only). WS3 measured 4486dbf: typecheck, every test, and auction-steps green; removing the pass from `sitOut` turns 3 rows red. History:
 - A.1: RED 718f2ab, fix a293055.
 - A.2 (FU-2): RED 2a0fbf8, fix f9506ce. WS4 OK'd it.
 - A.3: RED 14afadf, feat 942cb91. WS6 was told.
@@ -47,12 +47,14 @@
   - **Minor:** `engine/observe.ts` copies the field. That's outside PR-A and harmless, so it's left alone.
   - **WS4's ask:** a reconnect-mid-grant row, with claims intact and the player still able to claim.
 
-**PR-B:** sub-PR #78 (`ws3-fu1` @ 9e98957). **Review APPROVED, waiting for the PM's merge on green CI.**
+**PR-B: MERGED into the lane as #78 (`ws3-fu1` @ 1075f37).** Review APPROVED. History:
 - B.1: RED f007f97, then cc4fa74.
 - B.2: ab21b21, a pin. It already passed on trunk, so Step 2 was skipped.
 - B.3: RED 389639d, then 6e23345. WS4 OK'd the guard against both of its `host-dialog`s.
 - B.4: 71b347f, the e2e.
 - Fix round: RED d4a1133, then b919659. 9e98957 holds WS3's M16 test fix and a comment fix.
+
+**Lane:** `ws3-auctions` synced with feat/strategist 2c00817 (#75). WS3 measured it: typecheck 0; tabletop 96, ui 15, engine 205, ai 15, web 96, server 77; `tsx e2e/auction-steps.ts` green; the sim is byte-identical to trunk on seeds 101 and 1. Next: the lane PR to feat/strategist, for Heiko's OK through the PM. Still open: A.4 Step 2 (waits for ws2-brain's setup.ts) and PR-B's hands-on goal check.
 
 ## PR-A: engine and server (`ws3-fu-a` from `ws3-auctions`)
 
@@ -69,36 +71,36 @@
 
 ### Task A.1: a dropped phone's walker stops in the goods auction
 
-- [ ] **Step 1: Write the failing server test** in `apps/server/test/auction-units.test.ts` or a new goods-auction server test. During a good's walk, a human holds Up, then the phone drops. At viewFor: the walker's price no longer moves on later ticks, the seat counts as Done, and it makes no trade. This mirrors the land auction's rule (mule-game.ts about :537). Commit it as RED.
-- [ ] **Step 2: Implement.** In the goods tick's away branch (about :503), stop the walker (`setWalk(state, seat.id, 0)`, with a RuleError caught as the land branch does) before `auctionDone`. Green, then commit.
+- [x] **Step 1: Write the failing server test** in `apps/server/test/auction-units.test.ts` or a new goods-auction server test. During a good's walk, a human holds Up, then the phone drops. At viewFor: the walker's price no longer moves on later ticks, the seat counts as Done, and it makes no trade. This mirrors the land auction's rule (mule-game.ts about :537). Commit it as RED.
+- [x] (superseded by fix round 1: the seat passes, which also stops it) **Step 2: Implement.** In the goods tick's away branch (about :503), stop the walker (`setWalk(state, seat.id, 0)`, with a RuleError caught as the land branch does) before `auctionDone`. Green, then commit.
 
 ### Task A.2: FU-2, a reload no longer ends the land grant for everyone
 
-- [ ] **Step 1: Write the failing server test.** The only human drops during the land grant. The grant goes on until its own end (the light's sweeps, `GAME.grantSweeps`, or its clock); it doesn't jump to the next phase at once. A dropped human just doesn't claim. Negative: once every seat has claimed or passed, the grant still ends as before. Commit it as RED.
-- [ ] **Step 2: Implement.** `checkAllReady` stops fast-forwarding `landGrant` on an away seat. Keep the fast-forward for planning, and for development's pub rule. Green, then commit.
-- [ ] **Step 3: Tell WS4** the SHA before the PR merges, and run `pnpm --filter @mule/web e2e`. If WS4's smoke reload check depended on the fast-forward, report it to WS4 and the PM; don't edit smoke.ts.
+- [x] **Step 1: Write the failing server test.** The only human drops during the land grant. The grant goes on until its own end (the light's sweeps, `GAME.grantSweeps`, or its clock); it doesn't jump to the next phase at once. A dropped human just doesn't claim. Negative: once every seat has claimed or passed, the grant still ends as before. Commit it as RED.
+- [x] **Step 2: Implement.** `checkAllReady` stops fast-forwarding `landGrant` on an away seat. Keep the fast-forward for planning, and for development's pub rule. Green, then commit.
+- [x] **Step 3: Tell WS4** the SHA before the PR merges, and run `pnpm --filter @mule/web e2e`. If WS4's smoke reload check depended on the fast-forward, report it to WS4 and the PM; don't edit smoke.ts.
 
 ### Task A.3: `MyView.installedThisTurn` (WS6's ask)
 
-- [ ] **Step 1: Write the failing test at viewFor** (apps/server/test). After `installMule`, the seat's own `MyView.installedThisTurn` is true, and it stays true across a reload (a fresh view for the same seat). Other seats' views don't carry it. It resets to false when that seat's next development turn starts. Commit it as RED.
-- [ ] **Step 2: Implement.** Set a per-player flag in `game.ts::installMule`, reset it at the start of the seat's development turn, add the field to the protocol's MyView, and copy it in viewFor. Green, then commit. Tell WS6 the SHA.
+- [x] **Step 1: Write the failing test at viewFor** (apps/server/test). After `installMule`, the seat's own `MyView.installedThisTurn` is true, and it stays true across a reload (a fresh view for the same seat). Other seats' views don't carry it. It resets to false when that seat's next development turn starts. Commit it as RED.
+- [x] **Step 2: Implement.** Set a per-player flag in `game.ts::installMule`, reset it at the start of the seat's development turn, add the field to the protocol's MyView, and copy it in viewFor. Green, then commit. Tell WS6 the SHA.
 
 ### Task A.4: test cleanups owed from earlier reviews
 
-- [ ] **Step 1:** add a `server.test.ts` row: `{"t":"kick"}` with no seatId → "Bad message". This kills WS4's surviving parse mutant on `str(m.seatId)`.
-- [ ] **Step 2:** drop the redundant key save/restore in `apps/server/test/land-auction-ai.test.ts` (about :346). `test/setup.ts` already deletes the key.
-- [ ] **Step 3:** speed up the RULE-7 row-1 test in `lots-colony.test.ts`: one game per seed plus `structuredClone` per month, keeping the 30 s timeout as headroom. Report the time before and after.
-- [ ] **Step 4:** export a `colonySeed` test helper from a shared server test module, so WS4's `handoff.test.ts` can import it.
-- [ ] **Step 5:** move the bestPrices tests from `apps/web/test` to `packages/ui/test`, beside the code. That's the named edit above.
-- [ ] **Step 6:** run trace-check, expecting tests moved, not lost, and commit.
+- [x] **Step 1:** add a `server.test.ts` row: `{"t":"kick"}` with no seatId → "Bad message". This kills WS4's surviving parse mutant on `str(m.seatId)`.
+- [ ] (SKIPPED: setup.ts is only on ws2-brain; carried) **Step 2:** drop the redundant key save/restore in `apps/server/test/land-auction-ai.test.ts` (about :346). `test/setup.ts` already deletes the key.
+- [x] **Step 3:** speed up the RULE-7 row-1 test in `lots-colony.test.ts`: one game per seed plus `structuredClone` per month, keeping the 30 s timeout as headroom. Report the time before and after.
+- [x] **Step 4:** export a `colonySeed` test helper from a shared server test module, so WS4's `handoff.test.ts` can import it.
+- [x] **Step 5:** move the bestPrices tests from `apps/web/test` to `packages/ui/test`, beside the code. That's the named edit above.
+- [x] **Step 6:** run trace-check, expecting tests moved, not lost, and commit.
 
 ### PR-A merge gate
 
-- [ ] A.1–A.3's tests are failure-mode or AC named, and each RED commit comes first
-- [ ] WS4 has seen FU-2's SHA, and the e2e (smoke, zoom, lobby) is green
-- [ ] WS6 has the `installedThisTurn` SHA
-- [ ] `pnpm typecheck` · `pnpm test` · `tsx e2e/auction-steps.ts` are green, and the sim is byte-identical to the base on seeds 101 and 1. These are fixes to dropped-phone paths the sim never takes; any difference is a finding.
-- [ ] A code review has come back clean
+- [x] A.1–A.3's tests are failure-mode or AC named, and each RED commit comes first
+- [x] WS4 has seen FU-2's SHA, and the e2e (smoke, zoom, lobby) is green
+- [x] WS6 has the `installedThisTurn` SHA
+- [x] `pnpm typecheck` · `pnpm test` · `tsx e2e/auction-steps.ts` are green, and the sim is byte-identical to the base on seeds 101 and 1. These are fixes to dropped-phone paths the sim never takes; any difference is a finding.
+- [x] A code review has come back clean
 
 ## PR-B: the phone, FU-1 (`ws3-fu1` from `ws3-auctions`)
 
@@ -135,7 +137,7 @@ WS4's PR-6 adds a "move to your phone" dialog (`role="dialog"`, `aria-modal`, te
 
 ### PR-B merge gate
 
-- [ ] B.1 and B.2 tested, each RED commit first, or B.2 recorded as a pin
-- [ ] `pnpm typecheck` · `pnpm --filter @mule/web test` · build, then `tsx e2e/auction-steps.ts` · `pnpm --filter @mule/web e2e` are green
-- [ ] A goal check in the browser: hold Up across a good's switch, and the next good's first press moves the walker
-- [ ] A code review has come back clean
+- [x] B.1 and B.2 tested, each RED commit first, or B.2 recorded as a pin
+- [x] `pnpm typecheck` · `pnpm --filter @mule/web test` · build, then `tsx e2e/auction-steps.ts` · `pnpm --filter @mule/web e2e` are green
+- [ ] (automated only: B.4 drives this in a real browser and asserts it at the server; no hands-on check yet, owed at UAT) A goal check in the browser: hold Up across a good's switch, and the next good's first press moves the walker
+- [x] A code review has come back clean
