@@ -9,6 +9,7 @@ import {
   type GameState,
   type Office,
   type Rng,
+  type TaxPromise,
 } from '@mule/engine';
 import type { Act } from '../actions.js';
 import type { Mind } from '../value.js';
@@ -73,8 +74,16 @@ export class VoteHand {
   private nominate(obs: GameState, act: Act): void {
     const may = canRun(obs, this.mind.me);
     const { runGovernor, runSheriff } = POLITICS.ai;
-    if (may.governor === true && this.rng.chance(runGovernor[this.persona])) act({ type: 'run', office: 'governor' });
+    if (may.governor === true && this.rng.chance(runGovernor[this.persona])) act({ type: 'run', office: 'governor', promise: this.promise(obs) });
     else if (may.sheriff === true && this.rng.chance(runSheriff[this.persona])) act({ type: 'run', office: 'sheriff' });
+  }
+
+  /** RULE-10's AI row: the persona's target against the tax now, with no draw, so the seeded stream is unchanged. */
+  private promise(obs: GameState): TaxPromise {
+    const target = POLITICS.ai.taxTarget[this.persona];
+    const current = Math.round(obs.treasury.salesTax * 100);
+    if (target > current) return { kind: 'cap', percent: target };
+    return target < current ? { kind: 'lower' } : { kind: 'hold' };
   }
 
   private vote(obs: GameState, election: Readonly<Election>, act: Act): void {

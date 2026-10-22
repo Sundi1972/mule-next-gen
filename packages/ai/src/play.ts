@@ -103,7 +103,7 @@ export function applyAction(state: GameState, id: string, action: AiAction, cloc
         else setWalk(state, id, action.dir);
         break;
       case 'run':
-        runFor(state, id, action.office);
+        runFor(state, id, action.office, action.promise);
         break;
       case 'vote':
         castVote(state, id, action.office, action.candidate);

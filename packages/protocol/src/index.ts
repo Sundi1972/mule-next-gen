@@ -1,4 +1,4 @@
-import type { AuctionSide, CanRun, Election, ElectionResult, EventKey, EventKind, Good, Ground, MonthEvent, Office, Outfit, Phase, ScoreParts, SkipReason, Species, StatusRow, Stock, Terrain, TileTrait, VoteWeight } from '@mule/engine';
+import type { AuctionSide, CanRun, Election, ElectionResult, EventKey, EventKind, Good, Ground, MonthEvent, Office, Outfit, Phase, ScoreParts, SkipReason, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -30,8 +30,8 @@ export type MuleIntent =
   | { type: 'list'; item: { kind: 'plot' | 'mule'; x: number; y: number }; minimum: number; unsold: 'store' | 'keep' }
   /** Planning: take one of your listings back. */
   | { type: 'unlist'; id: string }
-  /** Election, nominate: run for an office (moving any candidacy for the other one); null withdraws. */
-  | { type: 'run'; office: Office | null }
+  /** Election, nominate: run for an office (moving any candidacy for the other one); null withdraws. A Governor run needs a promise (RULE-10). */
+  | { type: 'run'; office: Office | null; promise?: TaxPromise }
   /** Election, ballot: cast or change your secret vote for a contested office; null clears it. */
   | { type: 'vote'; office: Office; candidate: string | null }
   /** Planning, after the election: the Governor sets the sales tax in whole percent. */
@@ -113,6 +113,8 @@ export interface ElectionView {
   /** The stage's full time in seconds. */
   total: number;
   candidates: Record<Office, string[]>;
+  /** Each Governor candidate's tax promise, public like the candidacy. */
+  promises: Record<string, TaxPromise>;
   /** Players with a ballot in, never for whom. */
   voted: string[];
   /** Players who pressed Done in this stage. */

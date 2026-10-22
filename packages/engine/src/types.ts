@@ -278,6 +278,9 @@ export type ElectionHow = 'votes' | 'unopposed' | 'appointed' | 'baron' | 'tieRu
 /** Whether a player may run for an office now, or why not. Running for the other office is no refusal: it moves the candidacy. */
 export type CanRun = true | 'closed' | 'termLimit';
 
+/** A Governor candidate's tax promise, in whole percent for a cap. See WS7 spec RULE-10. */
+export type TaxPromise = { kind: 'cap'; percent: number } | { kind: 'lower' } | { kind: 'hold' };
+
 export interface OfficeResult {
   winner: string;
   how: ElectionHow;
@@ -293,6 +296,8 @@ export interface Election {
   /** Ms left in the current stage. */
   clockMs: number;
   candidates: Record<Office, string[]>;
+  /** Each Governor candidate's promise, public like the candidacy and dropped with it. */
+  promises: Record<string, TaxPromise>;
   /** Secret: each voter's choice per office. Only the voter may see their own. */
   ballots: Record<string, Partial<Record<Office, string>>>;
   /** Players who pressed Done in this stage. */
