@@ -32,6 +32,28 @@
 - WS4 must hear about FU-2 before PR-A merges: WS4's smoke reload check relied on the land-grant fast-forward.
 - WS1 is sending named edits in game.ts and mule-game.ts (stray numbers into config). Whichever PR merges second rebases.
 
+## Status (2026-10-22)
+
+**PR-A** (`ws3-fu-a` @ c715585, base a745807; the implementer reports its gates green). **Review: READY WITH FIXES; fix round 1 is out.**
+- A.1: RED 718f2ab, fix a293055.
+- A.2 (FU-2): RED 2a0fbf8, fix f9506ce. WS4 OK'd it.
+- A.3: RED 14afadf, feat 942cb91. WS6 was told.
+- A.4: 4d901fd the kick row · 10b89f6 RULE-7 speed-up, 2.1 s → 0.6 s, byte-identical · 394817f the `colonySeed` helper · c715585 bestPrices tests moved to `packages/ui/test`.
+- **A.4 Step 2 was SKIPPED: the plan's premise is false.** `apps/server/test/setup.ts` exists only on ws2-brain (53045a3), not in this lane. The save/restore stays until that file reaches the lane; carried as a follow-up.
+- **Fix round 1, from the review:**
+  - **Important:** a dropped walker standing on a trade line keeps trading (it predates the PR; A.1's "makes no trade" doesn't hold). **WS3 ruling:** a phone that drops during a good sits the rest of it out: `declareRole(pass)` in status and walk, then `auctionDone`. A reconnect during the walk can rejoin through the walk picker. Test: a drop exactly on the store's sell line, and no trade from then on.
+  - **Important:** a phone dropped on the status screen counts as Done (mutant M4 survives). A row where the walk starts next tick, plus a seat that dropped after passing.
+  - **Minor:** `installedThisTurn` survives a second MULE (M10), and still holds at production and the next planning (M10b).
+  - **Minor:** `engine/observe.ts` copies the field. That's outside PR-A and harmless, so it's left alone.
+  - **WS4's ask:** a reconnect-mid-grant row, with claims intact and the player still able to claim.
+
+**PR-B:** sub-PR #78 (`ws3-fu1` @ 9e98957). **Review APPROVED, waiting for the PM's merge on green CI.**
+- B.1: RED f007f97, then cc4fa74.
+- B.2: ab21b21, a pin. It already passed on trunk, so Step 2 was skipped.
+- B.3: RED 389639d, then 6e23345. WS4 OK'd the guard against both of its `host-dialog`s.
+- B.4: 71b347f, the e2e.
+- Fix round: RED d4a1133, then b919659. 9e98957 holds WS3's M16 test fix and a comment fix.
+
 ## PR-A: engine and server (`ws3-fu-a` from `ws3-auctions`)
 
 **Authority:**
@@ -86,18 +108,30 @@
   - `apps/web/src/phone/LandAuction.tsx`;
   - a new `apps/web/src/phone/useWalkIntent.ts`;
   - `apps/web/src/components/AuctionParts.tsx` (only if useNewestFirst is touched);
-  - `apps/web/test/**`.
+  - `apps/web/test/**`;
+  - `apps/web/e2e/auction-steps.ts` (B.4; WS3's file).
 - `must_not_edit`: `apps/server/**`, `packages/**` (PR-A's), and `apps/web/e2e/{smoke,harness,screens}.ts` (WS4's).
 
 ### Task B.1: one walk-intent hook for both auctions, with the held-Up reset
 
-- [ ] **Step 1: Write the failing test** in apps/web/test. With Up held across the goods auction's switch to the next good, the next good's first press still moves the walker, as the land auction already guarantees at its bell. Commit it as RED.
-- [ ] **Step 2: Implement** a `useWalkIntent` hook in `phone/`, taken from LandAuction.tsx's controls, which have the reset. Use it in both screens and delete the copy in Auction.tsx. Green, then commit.
+- [x] **Step 1: Write the failing test** in apps/web/test. With Up held across the goods auction's switch to the next good, the next good's first press still moves the walker, as the land auction already guarantees at its bell. Commit it as RED.
+- [x] **Step 2: Implement** a `useWalkIntent` hook in `phone/`, taken from LandAuction.tsx's controls, which have the reset. Use it in both screens and delete the copy in Auction.tsx. Green, then commit.
 
 ### Task B.2: Ready shows "Done · waiting" on the status screen
 
-- [ ] **Step 1: Test it.** Press Ready during a good's status, and the button reads "Done · waiting", driven from the view. If it already passes on trunk, keep it as a pin and skip Step 2.
-- [ ] **Step 2: Implement** the view or phone fix the test points to (FU-1's original finding: the walker's `done` was undefined at status). Green, then commit.
+- [x] **Step 1: Test it.** Press Ready during a good's status, and the button reads "Done · waiting", driven from the view. If it already passes on trunk, keep it as a pin and skip Step 2.
+- [x] (skipped: B.2 is a pin) **Step 2: Implement** the view or phone fix the test points to (FU-1's original finding: the walker's `done` was undefined at status). Green, then commit.
+
+### Task B.3: arrow keys don't walk the player while a dialog is open (added: WS4's review)
+
+WS4's PR-6 adds a "move to your phone" dialog (`role="dialog"`, `aria-modal`, testid `host-dialog`) that can stay open during either auction.
+
+- [x] **Step 1: Write the failing unit rows.** While `[aria-modal="true"]` or `dialog[open]` is present, an arrow keydown sends no walk intent. Releasing a key that was already held still sends its stop.
+- [x] **Step 2: Implement** the guard in the shared hook's core, then commit.
+
+### Task B.4: the goods auction's held Up, front to back (added: the goal-check line)
+
+- [x] **Step 1:** in `apps/web/e2e/auction-steps.ts` (WS3's), a phone holds Up through the end of one good's walk into the next good's walk. Its first press there moves its walker, asserted at viewFor. Positive control: the old Auction.tsx logic, or no reset in the hook, makes it red.
 
 ### PR-B merge gate
 
