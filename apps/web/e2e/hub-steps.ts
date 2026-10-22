@@ -16,6 +16,7 @@ const HUNGRY_FOOD = 2;
 /** RULE-8: these first, in this order; then the rest by need. */
 const FIRST: Good[] = ['food', 'water', 'energy'];
 /** Desks of an office the smoke's phone does not hold: nobody runs in month 1, so it is appointed Governor (lowest seat, equal money). */
+// Vacuous in slice 1 (no Sheriff desk yet); the real browser negative is politics.ts's "Ossa, not Governor, has no Governor desk".
 const OFFICE_DESKS = ['sheriff'];
 /** C17: what exists today, and nothing else, is drawn. */
 const TODAYS_DESKS = ['colony', 'talk', 'council', 'market', 'governor'];

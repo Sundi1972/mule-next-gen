@@ -42,7 +42,7 @@ export function electionNow({ view, self }: HubSeat): Now | null {
   if (!politics || !election) return null;
   switch (election.stage) {
     case 'nominate':
-      return { step: 1, of: 3, title: 'Run for an office, or press Done', detail: 'Election month: Governor and Sheriff. Then the secret ballot, then the result on every screen at once.' };
+      return { step: 1, of: 3, title: "Run for an office, or press I'm ready", detail: 'Election month: Governor and Sheriff. Then the secret ballot, then the result on every screen at once.' };
     case 'ballot': {
       const votes = politics.weights.find((w) => w.id === self.id)?.votes ?? 0;
       return { step: 2, of: 3, title: 'Cast your secret vote', detail: `One vote per office, or abstain; your vote weighs ${votes}. Then everything below is yours until you press Ready.` };
