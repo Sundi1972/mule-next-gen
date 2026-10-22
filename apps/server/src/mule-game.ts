@@ -63,7 +63,7 @@ import {
   type Phase,
   type Trade,
 } from '@mule/engine';
-import { AiSeat, LotHand, personaFor, type AiAction } from '@mule/ai';
+import { AiSeat, LotHand, personaFor, VoteHand, type AiAction } from '@mule/ai';
 import { PLAYER_COLORS, type MuleIntent, type MuleView, type ProductionReason, type ProductionView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
@@ -161,6 +161,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private readonly ai = new Map<string, AiSeat>();
   /** Each AI player's hand at the land auction, keyed by seat id. */
   private readonly lotHands = new Map<string, LotHand>();
+  /** Each AI player's hand in politics: runs, votes and governs, keyed by seat id. */
+  private readonly voteHands = new Map<string, VoteHand>();
 
   /** Real time per unit of game time: 1 is real time, 0.1 ten times faster. Test-only. */
   private readonly phaseScale: number;
@@ -180,6 +182,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.state = createGame({ seed: this.seed, players: seats.map(({ id, name, isAi, pick }) => ({ id, name, isAi, ...(isSpecies(pick) ? { species: pick } : {}) })), maxMonths: this.options.maxMonths, politics: this.options.politics ?? false });
     this.ai.clear();
     this.lotHands.clear();
+    this.voteHands.clear();
     seats.forEach((s, i) => {
       if (!s.isAi) return;
       const seat = new AiSeat({
@@ -192,6 +195,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       });
       this.ai.set(s.id, seat);
       this.lotHands.set(s.id, new LotHand(seat.mind, createRng((seat.options.seed ^ 0xc2b2ae35) >>> 0)));
+      this.voteHands.set(s.id, new VoteHand(seat.mind, createRng((seat.options.seed ^ 0x165667b1) >>> 0)));
     });
     this.news = ['Welcome to the colony. Talk tactics, then grab land.'];
     this.enterPhase();
@@ -404,6 +408,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   private startPlanning(): void {
     const state = this.requireState();
+    // At once, so an AI Governor's tax lands before a quick table can press ready.
+    this.tickVoteHands(0);
     for (const seat of this.ai.values()) seat.planMonth(state);
   }
 
@@ -415,8 +421,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   }
 
   /**
-   * Steps the election every WALK.tickMs until it is over, then starts planning's
-   * timer and the AI land plans. AI seats and dropped phones count as Done.
+   * Steps the election every WALK.tickMs until it is over: the AI vote hands act
+   * first, then dropped phones count as Done and the election steps, all with the
+   * same dt. When it ends, planning's timer and planning proper start.
    */
   private scheduleElectionTick(last: number): void {
     const state = this.requireState();
@@ -426,12 +433,11 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         const now = this.ctx.now();
         // A stalled server loop must not skip a stage.
         const dt = Math.min(Math.max(0, now - last), WALK.tickMs * 3) / this.phaseScale;
-        // Until the AI seats have a vote hand of their own, they sit the election out.
-        const done = state.politics!.election!.done;
+        this.tickVoteHands(dt);
+        const { done, stage } = state.politics!.election!;
         for (const id of this.away) if (!done.includes(id)) this.doneForAway.add(id);
-        for (const seat of this.seats) if (seat.isAi || this.away.has(seat.id)) electionDone(state, seat.id);
+        for (const seat of this.seats) if (this.away.has(seat.id)) electionDone(state, seat.id);
         const shown = resultShown(state);
-        const stage = state.politics!.election!.stage;
         stepElection(state, dt);
         if (state.politics!.election!.stage !== stage) this.doneForAway.clear();
         const result = state.politics!.election!.result;
@@ -444,6 +450,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         this.ctx.changed();
       }),
     );
+  }
+
+  /** Ticks every AI vote hand by dt through the same checks a phone gets. */
+  private tickVoteHands(dt: number): void {
+    const state = this.requireState();
+    for (const [id, hand] of this.voteHands) hand.tick(state, dt, (action) => this.aiAct(id, action));
   }
 
   /** The land grant's light moves on every tick; each new plot gets the AI players' bids. */
@@ -685,6 +697,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const lit = litPlot(state);
     const band = airBand(state.air).name;
     const outfits: Outfit[] = [...GOODS, 'greenBelt'];
+    // While the election runs, the one "I'm ready" button stands for Done in the stage; planning's own ready set is untouched.
+    const isReady = (id: string) => (this.electionOpen() ? state.politics!.election!.done.includes(id) : this.ready.has(id));
     return {
       finished: state.phase === 'gameOver',
       month: state.month,
@@ -720,7 +734,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           species: p.species,
           money: p.money,
           plots: state.tiles.filter((t) => t.owner === s.id).length,
-          ready: this.ready.has(s.id),
+          ready: isReady(s.id),
           doneDeveloping: p.doneDeveloping,
         };
       }),
