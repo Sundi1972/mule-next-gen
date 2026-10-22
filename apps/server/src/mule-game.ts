@@ -712,6 +712,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const lit = litPlot(state);
     const band = airBand(state.air).name;
     const outfits: Outfit[] = [...GOODS, 'greenBelt'];
+    // While the election runs, the one "I'm ready" button stands for Done in the stage; planning's own ready set is untouched.
+    const isReady = (id: string) => (this.electionOpen() ? state.politics!.election!.done.includes(id) : this.ready.has(id));
     return {
       finished: state.phase === 'gameOver',
       month: state.month,
@@ -747,7 +749,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           species: p.species,
           money: p.money,
           plots: state.tiles.filter((t) => t.owner === s.id).length,
-          ready: this.ready.has(s.id),
+          ready: isReady(s.id),
           doneDeveloping: p.doneDeveloping,
         };
       }),
