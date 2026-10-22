@@ -50,6 +50,7 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
         devSeconds: DEVELOPMENT.fullSeconds,
         sick: false,
         doneDeveloping: false,
+        installedThisTurn: false,
         analysed: [],
         droneOrder: [],
       }),
@@ -202,6 +203,7 @@ function startDevelopment(state: GameState): void {
     }
     p.devSeconds = Math.max(5, Math.round(seconds));
     p.doneDeveloping = false;
+    p.installedThisTurn = false;
   }
 }
 
@@ -249,6 +251,7 @@ export function installMule(state: GameState, playerId: string, x: number, y: nu
   if (tile.outfit !== p.carriedMule) tile.runMonths = 0;
   tile.outfit = p.carriedMule;
   p.carriedMule = null;
+  p.installedThisTurn = true;
 }
 
 /** Seconds a geo analysis takes this player. Mollox dig faster. */
