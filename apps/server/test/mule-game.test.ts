@@ -167,7 +167,7 @@ describe('MuleGame', () => {
     return { game, advance, ctx };
   }
 
-  it('runs the auction live on the server clock: status, declare, walk, good by good', () => {
+  it('T-AC-3: runs the auction live on the server clock: status then walk, good by good, on the side picked during status', () => {
     const { game, advance } = toAuction();
     const view = game.viewFor(null);
     expect(view.phaseEndsAt).toBeNull();
@@ -175,13 +175,10 @@ describe('MuleGame', () => {
     expect(first.stage).toBe('status');
     expect(first.total).toBe(WALK.statusMs / 1_000);
     expect(first.status.map((r) => r.id)).toEqual(['s1', 's2', 's3']);
-    // Both humans are done with the status screen; the AI is done by itself.
-    game.handle('s1', { type: 'ready' });
-    game.handle('s2', { type: 'ready' });
-    advance(WALK.tickMs * 2);
-    expect(game.viewFor(null).auction!.stage).toBe('declare');
     expect(() => game.handle('s1', { type: 'walk', dir: 'up' })).toThrow('Not walking');
     game.handle('s1', { type: 'declare', side: 'buyer' });
+    expect(game.viewFor(null).auction!.walkers.find((w) => w.id === 's1')!.side).toBe('buyer');
+    // Both humans are done with the status screen; the AI is done by itself.
     game.handle('s1', { type: 'ready' });
     game.handle('s2', { type: 'ready' });
     advance(WALK.tickMs * 2);

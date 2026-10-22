@@ -760,6 +760,165 @@ describe('Room: a one-time code moves a seat to another device (RULE-6, AM-16)',
     },
   );
 });
+
+/** The secrets game with a bug: the secret 'boom' throws a plain Error, as an engine bug would, and so can a tick it schedules. */
+function buggyRoom(tick?: 'throws') {
+  const errors: unknown[] = [];
+  let closed = 0;
+  const room = new Room<Intent, View>({
+    code: 'KRTX',
+    createGame: (ctx) => {
+      const game = secretsGame();
+      return {
+        ...game,
+        start() {
+          if (tick)
+            ctx.schedule(0, () => {
+              throw new Error('tick boom');
+            });
+        },
+        handle(seatId, intent) {
+          if (intent.secret === 'boom') throw new Error('boom');
+          game.handle(seatId, intent);
+        },
+      };
+    },
+    newToken: () => `t${++tokens}`,
+    onError: (err) => void errors.push(err),
+    onClose: () => void closed++,
+  });
+  const heiko = join(room, 'Heiko');
+  const mia = join(room, 'Mia');
+  const tv = watch(room);
+  return { room, heiko, mia, tv, errors, closes: () => closed };
+}
+
+const tick = () => new Promise((r) => setTimeout(r, 5));
+
+describe('Room: a game error ends only its own table', () => {
+  it('a game error ends only its own table: a move that throws a plain Error tells every seat and board "error", closes the room once, and later messages do nothing', async () => {
+    const { room, heiko, mia, tv, errors, closes } = buggyRoom();
+    room.receive(heiko, heiko.from, { t: 'start' });
+
+    expect(() => room.receive(heiko, heiko.from, { t: 'intent', intent: { secret: 'boom' } })).not.toThrow();
+    await flush();
+
+    for (const screen of [heiko, mia, tv]) expect(screen.inbox.at(-1)).toStrictEqual({ t: 'removed', reason: 'error' });
+    expect(closes()).toBe(1);
+    expect(errors).toHaveLength(1);
+    expect((errors[0] as Error).message).toBe('boom');
+
+    const before = [heiko, mia, tv].map((s) => s.inbox.length);
+    const stranger = new Screen();
+    expect(() => {
+      room.receive(mia, mia.from, { t: 'intent', intent: { secret: 'boom' } });
+      room.receive(mia, mia.from, { t: 'chat', text: 'still here?' });
+      room.receive(stranger, stranger.from, { t: 'join', code: room.code, name: 'Stranger' });
+    }).not.toThrow();
+    await flush();
+    expect([heiko, mia, tv].map((s) => s.inbox.length)).toEqual(before);
+    expect(stranger.inbox).toEqual([]);
+    expect(closes()).toBe(1);
+    expect(errors).toHaveLength(1);
+  });
+
+  it('a game error ends only its own table: a scheduled tick that throws ends the room the same way, and the process stays up', async () => {
+    const { room, heiko, mia, tv, errors, closes } = buggyRoom('throws');
+    room.receive(heiko, heiko.from, { t: 'start' });
+
+    await tick();
+
+    for (const screen of [heiko, mia, tv]) expect(screen.inbox.at(-1)).toStrictEqual({ t: 'removed', reason: 'error' });
+    expect(closes()).toBe(1);
+    expect(errors).toHaveLength(1);
+    expect((errors[0] as Error).message).toBe('tick boom');
+    const before = mia.inbox.length;
+    room.receive(mia, mia.from, { t: 'chat', text: 'still here?' });
+    expect(mia.inbox).toHaveLength(before);
+  });
+
+  it('a game error ends only its own table: a TableError still goes to the sender only, and the room plays on', async () => {
+    const { room, heiko, mia, tv, errors, closes } = buggyRoom();
+    room.receive(heiko, heiko.from, { t: 'start' });
+
+    room.receive(heiko, heiko.from, { t: 'intent', intent: { secret: '' } });
+
+    expect(heiko.last('error')?.message).toBe('Say something');
+    expect(mia.last('error')).toBeUndefined();
+    expect(tv.last('error')).toBeUndefined();
+    expect([...heiko.inbox, ...mia.inbox, ...tv.inbox].some((m) => m.t === 'removed')).toBe(false);
+    expect(errors).toEqual([]);
+    expect(closes()).toBe(0);
+
+    room.receive(mia, mia.from, { t: 'intent', intent: { secret: 'fine' } });
+    await flush();
+    expect(tv.last('view')!.view.game).toEqual({ mySecret: null, secretsTold: 1 });
+  });
+
+  it('a game error ends only its own table: after fail, a message gets nothing back and throws nothing', async () => {
+    const { room, heiko, mia, tv, errors, closes } = buggyRoom();
+    room.receive(heiko, heiko.from, { t: 'start' });
+
+    room.fail();
+    await flush();
+    for (const screen of [heiko, mia, tv]) expect(screen.inbox.at(-1)).toStrictEqual({ t: 'removed', reason: 'error' });
+    const before = [heiko, mia, tv].map((s) => s.inbox.length);
+
+    expect(() => {
+      room.receive(mia, mia.from, { t: 'intent', intent: { secret: 'fine' } });
+      room.receive(tv, tv.from, { t: 'ping', clientTime: 1 });
+    }).not.toThrow();
+    await flush();
+
+    expect([heiko, mia, tv].map((s) => s.inbox.length)).toEqual(before);
+    expect(closes()).toBe(1);
+    expect(errors).toEqual([]);
+  });
+
+  it('a game error ends only its own table: a game whose dispose throws still ends cleanly: fail throws nothing, every screen hears "error", onError hears the dispose error, onClose runs once', async () => {
+    const errors: unknown[] = [];
+    let closes = 0;
+    const room = new Room<Intent, View>({
+      code: 'KRTX',
+      createGame: () => ({
+        ...secretsGame(),
+        dispose() {
+          throw new Error('dispose boom');
+        },
+      }),
+      newToken: () => `t${++tokens}`,
+      onError: (err) => void errors.push(err),
+      onClose: () => void closes++,
+    });
+    const heiko = join(room, 'Heiko');
+    const mia = join(room, 'Mia');
+    const tv = watch(room);
+    room.receive(heiko, heiko.from, { t: 'start' });
+
+    expect(() => room.fail()).not.toThrow();
+    await flush();
+
+    for (const screen of [heiko, mia, tv]) expect(screen.inbox.at(-1)).toStrictEqual({ t: 'removed', reason: 'error' });
+    expect(errors).toHaveLength(1);
+    expect((errors[0] as Error).message).toBe('dispose boom');
+    expect(closes).toBe(1);
+  });
+
+  it('a game error ends only its own table: fail after the host closed the room sends nothing more and does not close it twice', async () => {
+    const { room, heiko, mia, tv, errors, closes } = buggyRoom();
+
+    close(room, heiko);
+    for (const screen of [heiko, mia, tv]) expect(screen.inbox.at(-1)).toStrictEqual({ t: 'removed', reason: 'closed' });
+    const before = [heiko, mia, tv].map((s) => s.inbox.length);
+
+    room.fail();
+    await flush();
+
+    expect([heiko, mia, tv].map((s) => s.inbox.length)).toEqual(before);
+    expect(closes()).toBe(1);
+    expect(errors).toEqual([]);
+  });
+});
 const colours = (room: Room<Intent, View>) => room.viewFor(null).seats.map((s) => s.color);
 
 describe('Room: every seat holds its own colour (RULE-7)', () => {

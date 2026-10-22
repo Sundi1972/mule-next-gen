@@ -40,7 +40,7 @@ export type ServerEnvelope<GameView> =
   /** For this screen only: joining with `code` before `expiresAt` moves this seat to that device, once. */
   | { t: 'handoffCode'; code: string; expiresAt: number }
   /** This screen no longer holds a seat or watches the room; the room refuses what it sends next. */
-  | { t: 'removed'; reason: 'kicked' | 'closed' | 'moved' };
+  | { t: 'removed'; reason: 'kicked' | 'closed' | 'moved' | 'error' };
 
 export interface ChatMessage {
   id: number;

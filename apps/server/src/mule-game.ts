@@ -727,7 +727,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       good: a.good,
       stage: a.stage,
       seconds: Math.max(0, a.clockMs / 1_000),
-      total: (a.stage === 'status' ? WALK.statusMs : a.stage === 'declare' ? WALK.declareMs : WALK.goodMs) / 1_000,
+      total: (a.stage === 'status' ? WALK.statusMs : WALK.goodMs) / 1_000,
       slowed: a.stage === 'walk' && a.deals.length > 0,
       next: [...a.queue],
       storeBuys: storeBuyLine(state),

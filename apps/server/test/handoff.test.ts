@@ -8,8 +8,8 @@ const humans = ['s1', 's2'];
 const goodsWalker = (v: MuleView, id: string) => v.auction!.walkers.find((w) => w.id === id)!;
 const lotWalker = (v: MuleView, id: string) => v.landAuction!.walkers.find((w) => w.id === id)!;
 
-/** Plays month 1 to the goods auction's declare stage for its first good. */
-function toGoodsDeclare() {
+/** Plays month 1 to the goods auction's status stage for its first good, where each seat picks its side (WS3 C4). */
+function toGoodsStatus() {
   const { ctx, advance } = fakeContext();
   const game = new MuleGame(ctx, 7);
   game.start(seats);
@@ -17,9 +17,7 @@ function toGoodsDeclare() {
   while (game.viewFor(null).phase === 'landGrant') advance(GRANT_TICK_MS);
   while (game.viewFor(null).phase === 'development') advance(1_000);
   while (game.viewFor(null).phase === 'production') advance(1_000);
-  for (const id of humans) game.handle(id, { type: 'ready' });
-  advance(WALK.tickMs * 2);
-  expect(game.viewFor(null).auction!.stage).toBe('declare');
+  expect(game.viewFor(null).auction!.stage).toBe('status');
   return { game, advance };
 }
 
@@ -47,7 +45,7 @@ function toLotIntro() {
 
 describe('MuleGame: a seat moved to another device (AM-19)', () => {
   it('T-AC-11: a held walk stops when the seat moves — goods auction: s1 stays where it was, and is not Done', () => {
-    const { game, advance } = toGoodsDeclare();
+    const { game, advance } = toGoodsStatus();
     game.handle('s1', { type: 'declare', side: 'buyer' });
     for (const id of humans) game.handle(id, { type: 'ready' });
     advance(WALK.tickMs * 2);
@@ -85,7 +83,7 @@ describe('MuleGame: a seat moved to another device (AM-19)', () => {
   });
 
   it.each([
-    { stage: "the goods auction's declare stage", reach: toGoodsDeclare },
+    { stage: "the goods auction's status stage", reach: toGoodsStatus },
     { stage: "the land auction's intro", reach: toLotIntro },
   ])('T-AC-11: a seat moving during $stage throws nothing and changes nothing', ({ reach }) => {
     const { game } = reach();
