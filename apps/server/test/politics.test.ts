@@ -566,6 +566,9 @@ describe('the politics view', () => {
       expect(promises).toMatchObject(shown);
       expect(Object.keys(promises).sort(), 'Governor candidates only').toEqual(['ai1', 'brix', 'lena']);
     }
+    // Each view is a copy: a screen's object written to never reaches the game or the next view.
+    (g.game.viewFor('brix').politics!.election!.promises.lena as { percent: number }).percent = 3;
+    expect(g.game.viewFor('brix').politics!.election!.promises.lena).toEqual(CAP_8);
     allReady(g.game);
     untilStage(g, 'ballot');
     for (const promises of promisesOn()) expect(promises).toEqual(nominated[0]);

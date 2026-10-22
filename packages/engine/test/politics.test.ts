@@ -348,6 +348,10 @@ describe('RULE-2: who may run', () => {
     const state = governorBallot();
     expect(canRun(state, 'ossa')).toEqual({ governor: 'closed', sheriff: 'closed' });
     expect(() => runFor(state, 'ossa', 'sheriff')).toThrow(new RuleError('Candidates are closed'));
+    // RULE-2 before RULE-10: a closed stage outranks a bad promise.
+    expect(() => runFor(state, 'ossa', 'governor')).toThrow(new RuleError('Candidates are closed'));
+    expect(() => runFor(state, 'ossa', 'governor', { kind: 'cap', percent: 16 })).toThrow(new RuleError('Candidates are closed'));
+    expect(() => runFor(state, 'ossa', 'sheriff', HOLD)).toThrow(new RuleError('Candidates are closed'));
     expect(() => runFor(state, 'lena', null)).toThrow(RuleError);
     expect(electionOf(state).candidates).toEqual({ governor: ['lena', 'brix'], sheriff: [] });
 
@@ -369,7 +373,11 @@ describe('RULE-2: who may run', () => {
 
     expect(canRun(state, 'lena')).toEqual({ governor: 'termLimit', sheriff: true });
     expect(canRun(state, 'brix')).toEqual({ governor: true, sheriff: true });
-    expect(() => runFor(state, 'lena', 'governor', HOLD)).toThrow(new RuleError(`${POLITICS.maxGovernorTermsInRow} Governor terms in a row`));
+    const termLimit = new RuleError(`${POLITICS.maxGovernorTermsInRow} Governor terms in a row`);
+    expect(() => runFor(state, 'lena', 'governor', HOLD)).toThrow(termLimit);
+    // RULE-2 before RULE-10: the term limit outranks a missing or bad promise.
+    expect(() => runFor(state, 'lena', 'governor')).toThrow(termLimit);
+    expect(() => runFor(state, 'lena', 'governor', { kind: 'cap', percent: 16 })).toThrow(termLimit);
     expect(electionOf(state).candidates.governor).toEqual([]);
     runFor(state, 'brix', 'governor', HOLD);
     runFor(state, 'lena', 'sheriff');
@@ -417,6 +425,11 @@ describe("RULE-10: a Governor candidate's tax promise (C12, AM-11)", () => {
     runFor(state, 'lena', 'sheriff');
     expect(() => runFor(state, 'lena', 'governor')).toThrow(new RuleError('Pick a promise to run for Governor'));
     expect(electionOf(state)).toMatchObject({ candidates: { governor: [], sheriff: ['lena'] }, promises: {} });
+
+    // A kind not on RULE-10's list is no promise, whoever calls: the server's shape check is not the only guard.
+    const before = structuredClone(state.politics);
+    expect(() => runFor(state, 'lena', 'governor', { kind: 'free' } as never)).toThrow(new RuleError('Pick a promise to run for Governor'));
+    expect(state.politics).toEqual(before);
   });
 
   it.each([-1, 16, 8.5])('T-AC-8: RULE-10 row 3: a cap of %s%% is refused', (percent) => {
@@ -443,9 +456,10 @@ describe("RULE-10: a Governor candidate's tax promise (C12, AM-11)", () => {
     const state = newGame();
     const mine = { kind: 'cap', percent: 8 } as TaxPromise;
     runFor(state, 'lena', 'governor', mine);
-    runFor(state, 'brix', 'governor', HOLD);
+    // Before any other write: the next one copies politics, which would hide a shared object.
     (mine as { percent: number }).percent = 3;
     expect(electionOf(state).promises.lena).toEqual({ kind: 'cap', percent: 8 });
+    runFor(state, 'brix', 'governor', HOLD);
 
     runFor(state, 'lena', 'governor', { kind: 'lower', percent: 3 } as TaxPromise);
     expect(electionOf(state).candidates.governor).toEqual(['lena', 'brix']);
@@ -465,7 +479,8 @@ describe("RULE-10: a Governor candidate's tax promise (C12, AM-11)", () => {
     const state = newGame();
     runFor(state, 'lena', 'governor', { kind: 'cap', percent: 8 });
     runFor(state, 'brix', 'governor', HOLD);
-    runFor(state, 'lena', null);
+    // A promise sent with a withdrawal is ignored: nothing stays behind without a candidacy.
+    runFor(state, 'lena', null, HOLD);
     expect(electionOf(state)).toMatchObject({ candidates: { governor: ['brix'], sheriff: [] }, promises: { brix: HOLD } });
     expect(electionOf(state).promises).not.toHaveProperty('lena');
   });

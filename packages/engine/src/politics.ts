@@ -115,10 +115,17 @@ function checkPromise(office: Office, promise: TaxPromise | undefined): TaxPromi
     if (promise) throw new RuleError('Sheriff candidates make no promise yet');
     return null;
   }
-  if (!promise) throw new RuleError('Pick a promise to run for Governor');
-  if (promise.kind !== 'cap') return { kind: promise.kind };
-  if (!Number.isInteger(promise.percent) || promise.percent < min || promise.percent > max) throw new RuleError(`A tax promise is ${min}% to ${max}%`);
-  return { kind: 'cap', percent: promise.percent };
+  switch (promise?.kind) {
+    case 'lower':
+    case 'hold':
+      return { kind: promise.kind };
+    case 'cap':
+      if (!Number.isInteger(promise.percent) || promise.percent < min || promise.percent > max) throw new RuleError(`A tax promise is ${min}% to ${max}%`);
+      return { kind: 'cap', percent: promise.percent };
+    default:
+      // None, or a kind not on RULE-10's list: callers other than the server skip its shape check.
+      throw new RuleError('Pick a promise to run for Governor');
+  }
 }
 
 /**
