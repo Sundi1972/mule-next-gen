@@ -89,6 +89,7 @@ describe("the phone's walk intents", () => {
     up(key('ArrowUp'));
     down(key('ArrowDown'));
     up(key('a'));
+    expect(dirs(), 'letting go of another key leaves the held arrow walking').toEqual(['up', 'stop', 'down']);
     up(key('ArrowDown'));
     expect(dirs()).toEqual(['up', 'stop', 'down', 'stop']);
   });

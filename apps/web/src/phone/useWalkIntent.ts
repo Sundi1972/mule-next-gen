@@ -7,7 +7,7 @@ export type WalkDir = 'up' | 'down' | 'stop';
 /** The board's -1 / 0 / 1 as a walk direction. */
 export const stepDir = (d: -1 | 0 | 1): WalkDir => (d > 0 ? 'up' : d < 0 ? 'down' : 'stop');
 
-/** An open modal dialog: an ARIA one, or a native dialog opened with showModal(). */
+/** An open dialog: an ARIA modal one, or any open native dialog, modal or not. */
 const MODAL = '[aria-modal="true"], dialog[open]';
 
 const ARROW: Partial<Record<string, WalkDir>> = { ArrowUp: 'up', ArrowDown: 'down' };
