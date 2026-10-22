@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import type { AddressInfo } from 'node:net';
+import { afterEach, describe, expect, it } from 'vitest';
+import WebSocket from 'ws';
 import { advancePhase, COLONY_SELLER, createGame, WALK } from '@mule/engine';
-import type { MuleView } from '@mule/protocol';
+import type { MuleView, ServerEnvelope } from '@mule/protocol';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
+import { createMuleServer, type MuleServer } from '../src/server.js';
 import { fakeContext, seats } from './fake-context.js';
 
 const humans = ['s1', 's2'];
@@ -92,5 +95,43 @@ describe('MuleGame: a seat moved to another device (AM-19)', () => {
     expect(() => game.seatMoved('s1')).not.toThrow();
 
     expect(game.viewFor(null)).toStrictEqual(before);
+  });
+});
+
+let running: MuleServer | null = null;
+afterEach(async () => {
+  await running?.close();
+  running = null;
+});
+
+/** A screen on a fresh room's socket that records what the server sends it. */
+async function screenOnNewRoom() {
+  running = createMuleServer({ seed: () => 42 });
+  await new Promise<void>((r) => running!.server.listen(0, r));
+  const { port } = running.server.address() as AddressInfo;
+  const { code } = (await (await fetch(`http://localhost:${port}/rooms`, { method: 'POST' })).json()) as { code: string };
+  const socket = new WebSocket(`ws://localhost:${port}/ws`);
+  const inbox: ServerEnvelope<MuleView>[] = [];
+  socket.on('message', (d) => inbox.push(JSON.parse(d.toString())));
+  await new Promise((r) => socket.once('open', r));
+  const firstError = async () => {
+    for (let i = 0; i < 200; i++) {
+      const hit = inbox.find((m) => m.t === 'error');
+      if (hit?.t === 'error') return hit.message;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    throw new Error('no error message');
+  };
+  return { code, inbox, send: (msg: object) => socket.send(JSON.stringify(msg)), firstError };
+}
+
+describe('the wire: join with a handoff code (AM-19)', () => {
+  it('T-AC-11: a non-string handoff is "Bad message"', async () => {
+    const phone = await screenOnNewRoom();
+
+    phone.send({ t: 'join', code: phone.code, name: 'Mia', handoff: 123 });
+
+    expect(await phone.firstError()).toBe('Bad message');
+    expect(phone.inbox.some((m) => m.t === 'welcome')).toBe(false);
   });
 });
