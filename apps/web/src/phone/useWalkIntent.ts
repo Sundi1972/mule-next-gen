@@ -31,6 +31,17 @@ export class WalkIntent {
     this.dir = next;
     this.client.intent({ type: 'walk', dir: next });
   }
+
+  /** An arrow key pressed, on a laptop. */
+  keyDown(key: string, _doc: { querySelector(selectors: string): unknown }): void {
+    if (key === 'ArrowUp') this.walk('up');
+    if (key === 'ArrowDown') this.walk('down');
+  }
+
+  /** An arrow key let go. */
+  keyUp(key: string): void {
+    if (key === 'ArrowUp' || key === 'ArrowDown') this.walk('stop');
+  }
 }
 
 /**
@@ -47,18 +58,15 @@ export function useWalkIntent(onBoard: boolean, round: string): (next: WalkDir) 
 
   useEffect(() => {
     if (!onBoard) return;
-    const down = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowUp') walk('up');
-      if (e.key === 'ArrowDown') walk('down');
-    };
-    const up = (e: KeyboardEvent) => (e.key === 'ArrowUp' || e.key === 'ArrowDown') && walk('stop');
+    const down = (e: KeyboardEvent) => intent.keyDown(e.key, document);
+    const up = (e: KeyboardEvent) => intent.keyUp(e.key);
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
     return () => {
       window.removeEventListener('keydown', down);
       window.removeEventListener('keyup', up);
     };
-  }, [onBoard, walk]);
+  }, [onBoard, intent]);
 
   return walk;
 }

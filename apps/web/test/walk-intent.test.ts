@@ -9,6 +9,9 @@ function phone() {
   return { intent, sent };
 }
 
+/** The page the key handler looks at: a modal dialog in it or not, as `[aria-modal="true"]` finds it. */
+const page = ({ modal }: { modal: boolean }) => ({ querySelector: (selectors: string) => (modal && selectors === '[aria-modal="true"]' ? {} : null) });
+
 describe("the phone's walk intents", () => {
   it("FM-FU1: Up held across the goods auction's switch to the next good, the next good's first press still walks", () => {
     const { intent, sent } = phone();
@@ -50,5 +53,36 @@ describe("the phone's walk intents", () => {
     intent.board('food');
     intent.walk('stop');
     expect(sent.map((i) => i.type === 'walk' && i.dir)).toEqual(['up', 'stop', 'down', 'stop']);
+  });
+
+  it('FM-modal-keys: with a dialog open, ArrowUp sends no walk intent', () => {
+    const { intent, sent } = phone();
+    intent.board('food');
+    intent.keyDown('ArrowUp', page({ modal: true }));
+    expect(sent).toEqual([]);
+  });
+
+  it('FM-modal-keys (negative): with no dialog open, ArrowUp walks and letting go stops', () => {
+    const { intent, sent } = phone();
+    intent.board('food');
+    intent.keyDown('ArrowUp', page({ modal: false }));
+    intent.keyUp('ArrowUp');
+    expect(sent).toEqual([
+      { type: 'walk', dir: 'up' },
+      { type: 'walk', dir: 'stop' },
+    ]);
+  });
+
+  it('FM-modal-keys (negative): Up held as a dialog opens still stops when it is let go', () => {
+    const { intent, sent } = phone();
+    intent.board('food');
+    intent.keyDown('ArrowUp', page({ modal: false }));
+    // The dialog is open now; the key's own repeat must not walk, and letting go must not leave the walker walking.
+    intent.keyDown('ArrowUp', page({ modal: true }));
+    intent.keyUp('ArrowUp');
+    expect(sent).toEqual([
+      { type: 'walk', dir: 'up' },
+      { type: 'walk', dir: 'stop' },
+    ]);
   });
 });
