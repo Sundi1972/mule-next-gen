@@ -38,8 +38,10 @@ export const PRICE = {
   storeSpread: 0.1,
   /** The store fills its shelves up to this many months of demand. */
   storeMaxCover: 3,
-  /** The most of its capital the store spends on one good in one month. */
-  storeBudgetShare: 0.5,
+  /** Food and Water count as short when the store's shelf holds under this many months of the colonists' need, so the price climbs before they go hungry. */
+  shelfCover: 1,
+  /** With that shelf short, the store bids up to this times the posted price for Food and Water, capped so it can still sell to colonists within their budget. */
+  restockPremium: 1.5,
   /** Share of normal spoilage the store suffers, thanks to its cold store and silos. */
   storeSpoilage: 0.25,
   /** How fast the reference price follows what players pay each other (0..1). */
@@ -767,8 +769,12 @@ export const STRATEGIST = {
   /** Below this utility share of the best, a free plot is not worth pressing for in the first sweep; later sweeps take anything above laterShare. */
   grantShare: 0.75,
   grantLaterShare: 0.5,
-  /** In the first two sweeps it presses only for its top claimsPerGrant + grantSpare open plots (twice that in the second), so it waits for the land it wants instead of the first that will do. */
-  grantSpare: 2,
+  /**
+   * In the first two sweeps it presses only for its top claimsPerGrant + grantSpare open plots (twice that in the
+   * second), so it waits for the land it wants instead of the first that will do. 0: any spare lets the grant's
+   * reading order pick among them, which piles AI land at the top of the map.
+   */
+  grantSpare: 0,
   /** A factory needs this many months of its inputs on hand or from its own plots. */
   factoryInputMonths: 2,
   /** Spare Food, Water, Energy and Medicine it keeps over next month's need, before the reserve multiplier. */
