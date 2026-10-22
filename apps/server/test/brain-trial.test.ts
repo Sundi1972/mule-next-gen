@@ -4,11 +4,12 @@ import path from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { advancePhase, AI_LEVELS, AI_PERSONAS, BRAIN, createGame, GAME, observe, type GameState } from '@mule/engine';
-import { Brain, candidate, consider, parseReply, PERSONAS, ReplyRejected, shortlist, toOptions, WAIT_MS, type Choice, type DecisionKind, type Mind } from '@mule/ai';
+import { Brain, candidate, consider, parseReply, PERSONAS, ReplyRejected, shortlist, toOptions, WAIT_MS, type Choice, type Mind } from '@mule/ai';
 import { createHaikuComplete } from '../src/brain/client.js';
+import { isCallLine, readLedgerLines } from '../src/brain/ledger.js';
 import { cutOffPhase, fallbackReason, renderTrialReport, trialReport, type TrialGame, type TrialInput } from '../src/brain/trial-report.js';
 import { trial } from '../src/brain/trial.js';
-import { fakeSdk, KEY, promptOf, readLedger, sdkMessage, worstUsdOf, type SdkModuleFake, type SdkParams } from './brain-fakes.js';
+import { fakeSdk, KEY, neverAnswers, requestOf, sdkMessage, worstUsdOfRequest, type SdkModuleFake, type SdkParams } from './brain-fakes.js';
 
 /** The SDK module's client: records its options and answers through `sdk.create`; it never reaches the network. */
 const sdk = vi.hoisted((): SdkModuleFake => ({ built: [], create: null }));
@@ -62,18 +63,8 @@ const p = BRAIN.pricesPerMTok;
 /** One usable reply's bill, from BRAIN's prices (not from the ledger under test). */
 const BILLED_USD = (BILLED.input * p.input + BILLED.output * p.output) / 1_000_000;
 
-/** What one request asked: the seat's name and the decision's kind, as the prompt carries them. */
-function asked(params: SdkParams): { name: string; kind: DecisionKind; chars: number } {
-  const { system, user } = promptOf(params);
-  const kind = /^Decision: (\w+)$/.exec(user.split('\n')[0]!)![1] as DecisionKind;
-  const name = /^You are (AI \d)\./.exec(user.split('\n')[1]!)![1]!;
-  const schema = (params.output_config as { format: { schema: unknown } }).format.schema;
-  return { name, kind, chars: system.length + user.length + JSON.stringify(schema).length };
-}
-
-/** A call that answers only when the client aborts it at its wait, as the real SDK does. */
-const neverAnswers = (options: { signal?: AbortSignal }) =>
-  new Promise<never>((_, reject) => options.signal?.addEventListener('abort', () => reject(new Anthropic.APIUserAbortError())));
+/** What one request asked, and its RULE-3 worst case. */
+const asked = (params: SdkParams) => ({ ...requestOf(params), worst: worstUsdOfRequest(params) });
 
 /** Starts a run; it calls the SDK before it first yields, so set `sdk.create` before this. */
 const run = (argv: string[], env: Record<string, string | undefined> = KEY, out: string[] = []) => {
@@ -91,8 +82,8 @@ async function drive<T>(promise: Promise<T>): Promise<T> {
   return settled;
 }
 
-const callLines = (at = file) => readLedger(at).filter((l) => l.type !== 'game');
-const gameLines = (at = file) => readLedger(at).filter((l) => l.type === 'game');
+const callLines = (at = file) => readLedgerLines(at).filter(isCallLine);
+const gameLines = (at = file) => readLedgerLines(at).filter((l) => !isCallLine(l));
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
 describe('brain:trial', () => {
@@ -109,7 +100,7 @@ describe('brain:trial', () => {
         claimedAtFirstCall ??= fs.existsSync(file);
         const request = asked(params);
         requests.push(request);
-        return request.name === 'AI 1' ? Promise.resolve(sdkMessage(USABLE, BILLED)) : neverAnswers(options);
+        return request.seat === 'AI 1' ? Promise.resolve(sdkMessage(USABLE, BILLED)) : neverAnswers(options);
       };
       const { code, report } = await drive(run(['--games', '2', '--seed', '101', '--max-usd', '1'], KEY, out).result);
 
@@ -119,11 +110,11 @@ describe('brain:trial', () => {
       expect(printedAtFirstCall![0]).toMatch(/model claude-haiku-5-5, cap \$1\.00, planned 2 games/);
       expect(claimedAtFirstCall).toBe(true); // today's ledger is claimed before the first call
 
-      const fast = requests.filter((r) => r.name === 'AI 1');
-      const slow = requests.filter((r) => r.name === 'AI 2');
+      const fast = requests.filter((r) => r.seat === 'AI 1');
+      const slow = requests.filter((r) => r.seat === 'AI 2');
       expect(fast.length).toBeGreaterThan(10);
       expect(slow.length).toBeGreaterThan(10);
-      expect(requests.every((r) => r.name === 'AI 1' || r.name === 'AI 2')).toBe(true); // the strategist seats never call
+      expect(requests.every((r) => r.seat === 'AI 1' || r.seat === 'AI 2')).toBe(true); // the strategist seats never call
 
       // Every asked Smart decision made a call: the fast seat's are the model's, the slow seat's fell back as too slow.
       expect(report!.asked.all).toEqual({ model: fast.length, of: fast.length + slow.length });
@@ -142,19 +133,20 @@ describe('brain:trial', () => {
       expect(report!.refusedCalls).toBe(0);
 
       // Both Smart seats spoke in every month of both games.
-      expect(report!.lines.seatMonths).toBe(2 * 2 * GAME.maxMonths);
+      const seatMonths = 2 * 2 * GAME.maxMonths;
+      expect(report!.lines.seatMonths).toBe(seatMonths);
       expect(report!.lines.silent).toBe(0);
       expect(report!.lines.min).toBeGreaterThanOrEqual(1);
       expect(report!.lines.median).toBeLessThanOrEqual(BRAIN.linesPerMonth);
       // The slow seat's lines are all templates; the fast seat's model wrote some of its own.
       expect(report!.modelLines.silent).toBeGreaterThanOrEqual(2 * GAME.maxMonths);
-      expect(report!.modelLines.silent).toBeLessThan(2 * 2 * GAME.maxMonths);
+      expect(report!.modelLines.silent).toBeLessThan(seatMonths);
 
       // Per Smart seat-game, from the ledger file; only the fast seat was billed.
       const lines = callLines();
       expect(lines).toHaveLength(requests.length);
       const perSeatGame = new Map<string, number>();
-      for (const l of lines) perSeatGame.set(`${String(l.game)}/${String(l.seat)}`, (perSeatGame.get(`${String(l.game)}/${String(l.seat)}`) ?? 0) + (l.usd as number));
+      for (const l of lines) perSeatGame.set(`${l.game}/${l.seat}`, (perSeatGame.get(`${l.game}/${l.seat}`) ?? 0) + l.usd);
       expect(perSeatGame.size).toBe(4);
       const usds = [...perSeatGame.values()];
       expect(report!.seatGameUsd.seatGames).toBe(4);
@@ -163,7 +155,7 @@ describe('brain:trial', () => {
       expect(report!.seatGameUsd.atOrOverBudget).toBe(0);
       expect(report!.ledgerUsd).toBeCloseTo(fast.length * BILLED_USD, 12);
       // A timed-out call's bill is unknown: it counts at its RULE-3 worst case.
-      expect(report!.countedUsd).toBeCloseTo(fast.length * BILLED_USD + sum(slow.map((r) => worstUsdOf(r.chars))), 12);
+      expect(report!.countedUsd).toBeCloseTo(fast.length * BILLED_USD + sum(slow.map((r) => r.worst)), 12);
       expect(report!.cap).toBe(1);
 
       expect(report!.stalls).toEqual({ unfinished: [], cutOff: [] });
@@ -175,7 +167,7 @@ describe('brain:trial', () => {
       expect(text).toMatch(new RegExp(`^fallbacks by reason\\s+too slow ${slow.length}, busy 0, budget 0, off-list 0, unreadable 0, error 0$`, 'm'));
       const tradeSlow = slow.filter((r) => r.kind === 'trade').length;
       expect(text).toMatch(new RegExp(`^  trade\\s+too slow ${tradeSlow}, busy 0, budget 0, off-list 0, unreadable 0, error 0$`, 'm'));
-      expect(text).toMatch(/^model-written lines per Smart seat-month\s+min 0, median \d, months with none \d+ of 48$/m);
+      expect(text).toMatch(new RegExp(`^model-written lines per Smart seat-month\\s+min 0, median \\d, months with none \\d+ of ${seatMonths}$`, 'm'));
       expect(text).toMatch(/^stalls\s+games not finished 0, phases cut off 0$/m);
       expect(text).not.toContain(KEY.ANTHROPIC_API_KEY);
     },
@@ -228,7 +220,7 @@ describe('brain:trial', () => {
       expect(one.report).toMatchObject({ played: 1, stopped: 'cap' });
       expect(calls).toBeGreaterThan(0);
       expect(gameLines()).toHaveLength(1);
-      expect(sum(callLines().map((l) => l.usd as number))).toBeLessThanOrEqual(BRAIN.seatBudgetUsd);
+      expect(sum(callLines().map((l) => l.usd))).toBeLessThanOrEqual(BRAIN.seatBudgetUsd);
 
       // A seat whose calls all time out is billed $0 in the ledger; its unknown bills alone leave no room for a second game.
       fs.rmSync(file);
@@ -308,13 +300,13 @@ describe('brain:trial', () => {
       expect(out).toContainEqual(`game ${crashed} threw: engine fault for the test`);
 
       // Every call of the crashed game, the ones open at the throw too, is written before its game line and totalled in it.
-      const ledger = readLedger(file);
-      const gameAt = ledger.findIndex((l) => l.type === 'game' && l.game === crashed);
-      const itsCalls = ledger.filter((l) => l.type !== 'game' && l.game === crashed);
+      const ledger = readLedgerLines(file);
+      const gameAt = ledger.findIndex((l) => !isCallLine(l) && l.game === crashed);
+      const itsCalls = ledger.filter(isCallLine).filter((l) => l.game === crashed);
       expect(itsCalls.length).toBeGreaterThan(0);
-      expect(ledger.map((l) => l.type !== 'game' && l.game === crashed).lastIndexOf(true)).toBeLessThan(gameAt);
+      expect(ledger.map((l) => isCallLine(l) && l.game === crashed).lastIndexOf(true)).toBeLessThan(gameAt);
       expect(ledger[gameAt]).toMatchObject({ calls: itsCalls.length });
-      expect(ledger[gameAt]!.usd as number).toBeCloseTo(sum(itsCalls.map((l) => l.usd as number)), 12);
+      expect(ledger[gameAt]!.usd).toBeCloseTo(sum(itsCalls.map((l) => l.usd)), 12);
     },
     GAMES_MS,
   );
@@ -408,9 +400,9 @@ describe('brain:trial', () => {
       return new ReplyRejected(parsed.reason, parsed.outcome);
     };
     // The client's own failures, from a fake SDK under the real client.
-    const clientFailure = (answer: (signal?: AbortSignal) => Promise<never>, waitMs: number) =>
-      createHaikuComplete(fakeSdk((_n, _params, options) => answer(options.signal)))({ system: 's', user: 'u', schema: { type: 'object' } as never }, waitMs).catch((e: unknown) => e);
-    const timedOut = await clientFailure((signal) => new Promise((_, reject) => signal?.addEventListener('abort', () => reject(new Anthropic.APIUserAbortError()))), 5);
+    const clientFailure = (answer: (options: { signal?: AbortSignal }) => Promise<never>, waitMs: number) =>
+      createHaikuComplete(fakeSdk((_n, _params, options) => answer(options)))({ system: 's', user: 'u', schema: { type: 'object' } as never }, waitMs).catch((e: unknown) => e);
+    const timedOut = await clientFailure(neverAnswers, 5);
     const status500 = await clientFailure(
       () => Promise.reject(Anthropic.APIError.generate(500, { type: 'error', error: { type: 'api_error', message: 'x' } }, 'x', new Headers())),
       1_000,
@@ -467,7 +459,7 @@ describe('brain:trial', () => {
       ...over,
     });
     const call = (usd: number) => ({ game: 'g', seat: 'ai0', usd, outcome: 'llm' }) as TrialInput['calls'][number];
-    const input = (over: Partial<TrialInput> = {}): TrialInput => ({ keyed: true, planned: 1, stopped: 'done', smartPerGame: 1, cap: 1, games: [game()], calls: [call(0.059)], ...over });
+    const input = (over: Partial<TrialInput> = {}): TrialInput => ({ keyed: true, planned: 1, stopped: 'done', smartPerGame: 1, seatsPerGame: 4, cap: 1, games: [game()], calls: [call(0.059)], ...over });
     const verdicts = (i: TrialInput) => {
       const r = trialReport(i);
       return [r.ac1, r.ac2];

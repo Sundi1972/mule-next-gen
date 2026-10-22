@@ -1,12 +1,8 @@
 /** The trial's figures and verdicts from what its games left behind: pure, so the tests read the report itself. */
 import { BRAIN, grantDone, type GameState } from '@mule/engine';
 import type { Choice, DecisionKind } from '@mule/ai';
-import { table, type StopReason } from './cli.js';
+import { KINDS, nearest, table, type StopReason } from './cli.js';
 import type { CallLine } from './ledger.js';
-
-/** AI seats per trial game. */
-export const SEATS = 4;
-const KINDS: DecisionKind[] = ['land', 'develop', 'trade'];
 
 /** One AI decision, as the report needs it. */
 export interface TrialDecision {
@@ -48,6 +44,7 @@ export interface TrialInput {
   planned: number;
   stopped: TrialStop;
   smartPerGame: number;
+  seatsPerGame: number;
   /** Null without the key: nothing can be spent. */
   cap: number | null;
   games: TrialGame[];
@@ -77,6 +74,7 @@ export interface TrialReport {
   played: number;
   stopped: TrialStop;
   smartPerGame: number;
+  seatsPerGame: number;
   /** Smart decisions in finished games the model was asked (two or more options), overall and per kind. */
   asked: Record<'all' | DecisionKind, Share>;
   /** Every Smart decision, single-option ones included. */
@@ -86,7 +84,7 @@ export interface TrialReport {
   fallbacksByKind: Record<DecisionKind, Record<FallbackReason, number>>;
   /** Calls the ledger records as refused; the note reads such a reply as unreadable, or as the model's if it parsed. */
   refusedCalls: number;
-  /** Lines per Smart seat-month, over finished games: every line RULE-2 lets through, templates included. */
+  /** Lines per Smart seat-month, over finished games: every line that reaches the chat, persona template lines included. */
   lines: MonthCounts & { seatMonths: number };
   /** Lines per Smart seat-month that the model wrote. */
   modelLines: MonthCounts;
@@ -129,8 +127,6 @@ export function fallbackReason(note: string | undefined): FallbackReason {
 
 const shareOf = (ds: readonly TrialDecision[]): Share => ({ model: ds.filter((d) => d.by === 'llm').length, of: ds.length });
 export const sum = (xs: readonly number[]) => xs.reduce((a, b) => a + b, 0);
-/** Nearest-rank median of a non-empty list. */
-const median = (xs: readonly number[]) => [...xs].sort((a, b) => a - b)[Math.ceil(xs.length / 2) - 1]!;
 
 function reasonsOf(ds: readonly TrialDecision[]): Record<FallbackReason, number> {
   const counts: Record<FallbackReason, number> = { 'too slow': 0, busy: 0, budget: 0, 'off-list': 0, unreadable: 0, error: 0 };
@@ -140,13 +136,20 @@ function reasonsOf(ds: readonly TrialDecision[]): Record<FallbackReason, number>
 
 function monthCounts(perMonth: readonly number[]): MonthCounts {
   if (perMonth.length === 0) return { min: 0, median: 0, silent: 0 };
-  return { min: Math.min(...perMonth), median: median(perMonth), silent: perMonth.filter((n) => n === 0).length };
+  return { min: Math.min(...perMonth), median: nearest([...perMonth].sort((a, b) => a - b), 0.5), silent: perMonth.filter((n) => n === 0).length };
+}
+
+/** An outright failure fails; otherwise a run that cannot prove the AC proves nothing; otherwise the AC holds or not. */
+function verdict({ fails, proven, holds }: { fails: boolean; proven: boolean; holds: boolean }): Verdict {
+  if (fails) return 'fail';
+  if (!proven) return 'not proven';
+  return holds ? 'pass' : 'fail';
 }
 
 /** The figures and verdicts of a run. */
 export function trialReport(input: TrialInput): TrialReport {
   const { games, calls } = input;
-  // A game cut short has a partial last month and a partial record, so UBER-AC-1 is measured over finished games only.
+  // A game cut short has a partial last month and a partial record, so the decision and line figures cover finished games only.
   const finished = games.filter((g) => g.end === 'over');
   const smartDecisions = finished.flatMap((g) => g.decisions.filter((d) => g.smart.includes(d.seat)));
   const asked = smartDecisions.filter((d) => d.options >= 2);
@@ -175,15 +178,12 @@ export function trialReport(input: TrialInput): TrialReport {
   const all = shareOf(asked);
 
   // A silent seat-month, a stall or a seat-game at the budget fails outright; the rest is judged on a complete run only.
-  let ac1: Verdict = 'n/a';
-  let ac2: Verdict;
-  if (input.keyed) {
-    const shareHolds = all.of > 0 && 5 * all.model >= 4 * all.of && lines.seatMonths > 0;
-    ac1 = lines.silent > 0 ? 'fail' : !complete ? 'not proven' : shareHolds ? 'pass' : 'fail';
-    ac2 = stalled || seatGameUsd.atOrOverBudget > 0 ? 'fail' : !complete || seatGameUsd.seatGames === 0 ? 'not proven' : 'pass';
-  } else {
-    ac2 = stalled || topPicks !== allDecisions.of ? 'fail' : !complete ? 'not proven' : 'pass';
-  }
+  const ac1 = input.keyed
+    ? verdict({ fails: lines.silent > 0, proven: complete, holds: all.of > 0 && 5 * all.model >= 4 * all.of && lines.seatMonths > 0 })
+    : 'n/a';
+  const ac2 = input.keyed
+    ? verdict({ fails: stalled || seatGameUsd.atOrOverBudget > 0, proven: complete && seatGameUsd.seatGames > 0, holds: true })
+    : verdict({ fails: stalled || topPicks !== allDecisions.of, proven: complete, holds: true });
 
   return {
     keyed: input.keyed,
@@ -191,6 +191,7 @@ export function trialReport(input: TrialInput): TrialReport {
     played: games.length,
     stopped: input.stopped,
     smartPerGame: input.smartPerGame,
+    seatsPerGame: input.seatsPerGame,
     asked: { all, ...(Object.fromEntries(KINDS.map((k) => [k, shareOf(asked.filter((d) => d.kind === k))])) as Record<DecisionKind, Share>) },
     smartAll: shareOf(smartDecisions),
     fallbacks: reasonsOf(smartDecisions),
@@ -220,7 +221,7 @@ const reasonsText = (f: Record<FallbackReason, number>) =>
   `too slow ${f['too slow']}, busy ${f.busy}, budget ${f.budget}, off-list ${f['off-list']}, unreadable ${f.unreadable}, error ${f.error}`;
 const monthText = (c: MonthCounts, of: number) => `min ${c.min}, median ${c.median}, months with none ${c.silent} of ${of}`;
 
-/** The report as printed: the run, UBER-AC-1, UBER-AC-2, then one verdict line per AC. */
+/** The report as printed: the run, the figures for each acceptance criterion, then one verdict line for each. */
 export function renderTrialReport(r: TrialReport): string[] {
   const stallText = `games not finished ${r.stalls.unfinished.length}, phases cut off ${r.stalls.cutOff.length}`;
   const stallDetail = [...r.stalls.unfinished.map((id) => `  not finished: ${id}`), ...r.stalls.cutOff.map((c) => `  cut off: ${c}`)];
@@ -244,7 +245,7 @@ export function renderTrialReport(r: TrialReport): string[] {
   return [
     ...table([
       ...run,
-      ['Smart seats per game', `${r.smartPerGame} of ${SEATS}; the rest are strategist seats`],
+      ['Smart seats per game', `${r.smartPerGame} of ${r.seatsPerGame}; the rest are strategist seats`],
       ['UBER-AC-1, Smart seats', ''],
       ['model share of asked decisions', pct(r.asked.all)],
       ...KINDS.map((k) => [`  ${k}`, pct(r.asked[k])]),
