@@ -9,7 +9,7 @@ import { errors as playwrightErrors, type BrowserContext, type Page } from 'play
 import { PHASE_MS } from '../../server/src/mule-game.js';
 import { check, claimAPlot, launch, PHONE, startServer, TV, type AuctionSteps } from './harness';
 import { planningIsTheHub } from './hub-steps';
-import { readyThroughTheElection } from './politics';
+import { readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow } from './production-steps';
 import { fedPlayerFillsAFullHoloBar, hungryPlayerSeesAShortOrangeBar, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
 

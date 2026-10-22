@@ -9,9 +9,9 @@ import { errors as playwrightErrors, type Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, launch, PHONE, startServer, TV } from './harness';
+import { PRESS_MS } from './politics-steps';
 
 const SCALE = 0.25;
-const PRESS_MS = 2_000;
 /** The rate the new Governor sets: UBER-AC-2's 8%. */
 const NEW_TAX = 8;
 /** How often the reveal is read on all three screens at once. */
@@ -20,27 +20,6 @@ const TICK_MS = 50;
 type Phone = { page: Page; name: string };
 
 const within = (ms: number) => ms * SCALE + 3_000;
-
-/**
- * Month 1's "I'm ready" on a table that plays politics: presses ready, which is Done for each election stage,
- * until the phone leaves planning. Used by smoke.ts and zoom.ts, whose phones only want to get to the land grant.
- */
-export async function readyThroughTheElection(phone: Page, timeout: number): Promise<void> {
-  const ready = phone.locator('[data-phase=planning] [data-testid=ready]:not([disabled])');
-  const over = phone.locator('[data-phase]:not([data-phase=planning])');
-  const deadline = Date.now() + timeout;
-  for (;;) {
-    await ready.or(over).first().waitFor({ timeout: Math.max(1, deadline - Date.now()) });
-    if (await over.count()) return;
-    try {
-      await ready.click({ timeout: PRESS_MS });
-      // Done keeps the button enabled for the next stage; Ready after the election disables it.
-      await ready.waitFor({ state: 'hidden', timeout: PRESS_MS / 4 });
-    } catch (err) {
-      if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
-    }
-  }
-}
 
 async function main(): Promise<void> {
   const SEED = seedFrom(process.env.MULE_E2E_SEED);
@@ -187,15 +166,13 @@ async function main(): Promise<void> {
 }
 
 // Rooms keep their phase timers running after the test, so the process ends here.
-if (process.argv[1]?.endsWith('politics.ts')) {
-  main().then(
-    () => process.exit(0),
-    (err: unknown) => {
-      console.error(err);
-      process.exit(1);
-    },
-  );
-}
+main().then(
+  () => process.exit(0),
+  (err: unknown) => {
+    console.error(err);
+    process.exit(1);
+  },
+);
 
 type TvRow = { id: string; votes: number; elected: boolean };
 

@@ -7,7 +7,7 @@ import { GAME, mapSize } from '@mule/engine';
 import type { Locator, Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import { check, launch, PHONE, startServer } from './harness';
-import { readyThroughTheElection } from './politics';
+import { readyThroughTheElection } from './politics-steps';
 
 const PHASE_SCALE = 0.5;
 const within = (ms: number) => ms * PHASE_SCALE + 3_000;
