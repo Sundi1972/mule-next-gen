@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WALK, type Good } from '@mule/engine';
+import { GAME, WALK, type Good } from '@mule/engine';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
 import { fakeContext, seats } from './fake-context.js';
 
@@ -96,6 +96,38 @@ describe('a dropped phone in the land grant', () => {
     expect(dropped).toEqual(idle);
     expect(dropped.plots.s1).toBe(0);
     expect(dropped.lasted).toBeLessThanOrEqual(PHASE_MS.landGrant + GRANT_TICK_MS);
+  });
+
+  it('FM-grant-reload: the only human claims, drops and reconnects while the grant runs: their phone is back on the grant with the claim intact, and they claim the next lit plot', () => {
+    const { ctx, advance } = fakeContext();
+    const game = new MuleGame(ctx, 7);
+    game.start(alone);
+    game.handle('s1', { type: 'ready' });
+    /** Moves the light on until it rests on a plot nobody owns yet, and returns it. */
+    const nextFreeLit = () => {
+      for (let i = 0; i < 100; i++) {
+        const { lit, tiles } = game.viewFor('s1');
+        if (lit && tiles.find((t) => t.x === lit.x && t.y === lit.y)!.owner === null) return lit;
+        advance(GRANT_TICK_MS);
+      }
+      throw new Error('no free plot lit');
+    };
+    const first = nextFreeLit();
+    game.handle('s1', { type: 'claim', ...first });
+
+    game.connectionChanged('s1', false);
+    advance(GRANT_TICK_MS * 2);
+    game.connectionChanged('s1', true);
+    const back = game.viewFor('s1');
+    expect(back.phase).toBe('landGrant');
+    expect(back.me!.claimsLeft).toBe(GAME.claimsPerGrant - 1);
+    expect(back.tiles.filter((t) => t.owner === 's1').map(({ x, y }) => ({ x, y }))).toEqual([first]);
+
+    const second = nextFreeLit();
+    game.handle('s1', { type: 'claim', ...second });
+    const after = game.viewFor('s1');
+    expect(after.tiles.filter((t) => t.owner === 's1')).toHaveLength(2);
+    expect(after.me!.claimsLeft).toBe(GAME.claimsPerGrant - 2);
   });
 
   it('FM-grant-reload negative: the only human presses Ready in the land grant: it still ends at once', () => {
