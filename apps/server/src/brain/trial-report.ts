@@ -77,7 +77,7 @@ export interface TrialReport {
   played: number;
   stopped: TrialStop;
   smartPerGame: number;
-  /** Smart decisions the model was asked (two or more options), overall and per kind. */
+  /** Smart decisions in finished games the model was asked (two or more options), overall and per kind. */
   asked: Record<'all' | DecisionKind, Share>;
   /** Every Smart decision, single-option ones included. */
   smartAll: Share;
@@ -146,11 +146,10 @@ function monthCounts(perMonth: readonly number[]): MonthCounts {
 /** The figures and verdicts of a run. */
 export function trialReport(input: TrialInput): TrialReport {
   const { games, calls } = input;
-  const smartDecisions = games.flatMap((g) => g.decisions.filter((d) => g.smart.includes(d.seat)));
-  const asked = smartDecisions.filter((d) => d.options >= 2);
-
-  // A game cut short has a partial last month, so only finished games count seat-months.
+  // A game cut short has a partial last month and a partial record, so UBER-AC-1 is measured over finished games only.
   const finished = games.filter((g) => g.end === 'over');
+  const smartDecisions = finished.flatMap((g) => g.decisions.filter((d) => g.smart.includes(d.seat)));
+  const asked = smartDecisions.filter((d) => d.options >= 2);
   const perMonth = (of: (g: TrialGame) => Record<string, number[]>) =>
     finished.flatMap((g) => g.smart.flatMap((seat) => Array.from({ length: g.months }, (_, m) => of(g)[seat]?.[m] ?? 0)));
   const allLines = perMonth((g) => g.lines);

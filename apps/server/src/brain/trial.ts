@@ -140,7 +140,8 @@ export interface TrialFlags {
   games: number;
   seed: number;
   smart: number;
-  maxUsd: number;
+  /** Null when not given: a paid run needs it. */
+  maxUsd: number | null;
 }
 
 const USAGE = 'Usage: brain:trial [--games N] [--seed S] [--smart K] [--max-usd X]; nothing played.';
@@ -153,10 +154,10 @@ function parseFlags(argv: readonly string[]): TrialFlags | null {
     games: given.get('--games') ?? 20,
     seed: given.get('--seed') ?? 101,
     smart: given.get('--smart') ?? 2,
-    maxUsd: given.get('--max-usd') ?? BRAIN.spikeCapUsd,
+    maxUsd: given.get('--max-usd') ?? null,
   };
   const ok = Number.isInteger(flags.games) && flags.games >= 1 && Number.isInteger(flags.seed) && Number.isInteger(flags.smart);
-  return ok && flags.smart >= 1 && flags.smart <= SEATS && flags.maxUsd > 0 ? flags : null;
+  return ok && flags.smart >= 1 && flags.smart <= SEATS && (flags.maxUsd === null || flags.maxUsd > 0) ? flags : null;
 }
 
 /**
@@ -176,9 +177,14 @@ export async function trial(
     return { code: 1, report: null };
   }
   const keyed = apiKeyFrom(env) !== null;
+  if (keyed && flags.maxUsd === null) {
+    out(`brain:trial spends real money with ${API_KEY_ENV} set: give --max-usd, the cap that was cleared; nothing called.`);
+    return { code: 1, report: null };
+  }
   const today = day((deps.now ?? (() => new Date()))());
   const logPath = keyed ? path.join(deps.dataDir ?? DATA_DIR, `trial-${today}.jsonl`) : null;
   const cap = keyed ? flags.maxUsd : null;
+  const capUsd = cap ?? 0;
 
   if (logPath === null) {
     out(`${API_KEY_ENV} is not set: every seat plays Classic and nothing is called.`);
@@ -187,7 +193,7 @@ export async function trial(
     return { code: 1, report: null };
   } else {
     out(
-      `brain:trial model ${BRAIN.model}, cap ${capText(flags.maxUsd)}, planned ${flags.games} games with ${flags.smart} Smart seats ` +
+      `brain:trial model ${BRAIN.model}, cap ${capText(capUsd)}, planned ${flags.games} games with ${flags.smart} Smart seats ` +
         `(each held to $${BRAIN.seatBudgetUsd.toFixed(2)} a game), ledger ${logPath}`,
     );
   }
@@ -235,7 +241,7 @@ export async function trial(
   });
   for (const line of renderTrialReport(report)) out(line);
   if (stopped === 'cap' && games.length === 0) {
-    out(`No game started: cap ${capText(flags.maxUsd)} is below one game's Smart budgets ($${(flags.smart * BRAIN.seatBudgetUsd).toFixed(2)}).`);
+    out(`No game started: cap ${capText(capUsd)} is below one game's Smart budgets ($${(flags.smart * BRAIN.seatBudgetUsd).toFixed(2)}).`);
   }
   if (stopped === 'auth') {
     out('Stopped: the API refused the credentials (401/403). Nothing more was called.');
