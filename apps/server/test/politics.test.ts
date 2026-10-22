@@ -204,6 +204,31 @@ describe('the election runs first in planning', () => {
     expect(g.game.viewFor(null).phase, 'planning waits for Ossa').toBe('planning');
   });
 
+  it("C9: during the election a player's ready in the views shows their Done for the stage, and planning's ready starts false after it", () => {
+    const g = started();
+    const readyOf = (id: string) => screens(g.game).map((v) => v.players.find((p) => p.id === id)!.ready);
+    g.game.handle('lena', { type: 'run', office: 'governor' });
+    g.game.handle('brix', { type: 'run', office: 'governor' });
+    g.game.handle('lena', { type: 'ready' });
+    expect(readyOf('lena'), "Lena's button looks pressed on every screen").toEqual([true, true, true, true]);
+    expect(readyOf('brix')).toEqual([false, false, false, false]);
+
+    g.game.handle('brix', { type: 'ready' });
+    g.game.handle('ossa', { type: 'ready' });
+    untilStage(g, 'ballot');
+    for (const id of humans) expect(readyOf(id), `${id}: a new stage needs a new Done`).toEqual([false, false, false, false]);
+    g.game.handle('brix', { type: 'ready' });
+    expect(readyOf('brix')).toEqual([true, true, true, true]);
+
+    allReady(g.game);
+    untilStage(g, 'over');
+    expect(g.game.viewFor(null).phaseEndsAt, 'planning proper').not.toBeNull();
+    for (const id of humans) expect(readyOf(id), `${id}: planning's ready starts false`).toEqual([false, false, false, false]);
+    g.game.handle('ossa', { type: 'ready' });
+    expect(readyOf('ossa')).toEqual([true, true, true, true]);
+    expect(readyOf('lena')).toEqual([false, false, false, false]);
+  });
+
   it('C9: an away seat is marked Done', () => {
     const g = started();
     g.game.handle('lena', { type: 'run', office: 'governor' });
