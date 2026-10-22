@@ -216,12 +216,24 @@ function decide(state: GameState, election: Shared<Election>, office: Office, go
   const baron = state.politics!.baron;
   const baronPick = baron === null ? undefined : election.ballots[baron]?.[office];
   if (baronPick !== undefined && tied.includes(baronPick)) return { winner: baronPick, how: 'baron', tallies };
-  const most = tied.reduce((best, id) => (plotsOwned(state, id) > plotsOwned(state, best) ? id : best));
-  return { winner: most, how: 'tieRule', tallies };
+  const most = Math.max(...tied.map((id) => plotsOwned(state, id)));
+  return { winner: roundTheTable(state, tied.filter((id) => plotsOwned(state, id) === most)), how: 'tieRule', tallies };
 }
 
 /**
- * The richest eligible player, the lower seat on a tie. The Governor comes from
+ * The last resort among players still tied: the first in seat order from seat
+ * k mod n, k this election's index in POLITICS.electionMonths, so no seat number
+ * decides offices. Outside an election month (never, as decide runs) k is 0. See WS7 spec RULE-3, AM-12.
+ */
+function roundTheTable(state: GameState, tied: readonly string[]): string {
+  const n = state.players.length;
+  const start = Math.max(0, POLITICS.electionMonths.indexOf(state.month)) % n;
+  const place = (id: string) => (state.players.findIndex((p) => p.id === id) - start + n) % n;
+  return tied.reduce((first, id) => (place(id) < place(first) ? id : first));
+}
+
+/**
+ * The richest eligible player, round the table on a tie. The Governor comes from
  * the players not running for Sheriff, or from everyone if all of them are; the
  * Sheriff is never the new Governor. See WS7 spec RULE-3.
  */
@@ -231,7 +243,8 @@ function appointee(state: GameState, election: Shared<Election>, office: Office,
       ? state.players.filter((p) => !election.candidates.sheriff.includes(p.id))
       : state.players.filter((p) => p.id !== governor);
   const eligible = pool.length > 0 ? pool : state.players;
-  return eligible.reduce((best, p) => (p.money > best.money ? p : best)).id;
+  const richest = Math.max(...eligible.map((p) => p.money));
+  return roundTheTable(state, eligible.filter((p) => p.money === richest).map((p) => p.id));
 }
 
 /** The whole-percent range the Governor may set this month, around the month's starting rate. See WS7 spec RULE-6. */
