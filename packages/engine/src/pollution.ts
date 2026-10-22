@@ -64,6 +64,6 @@ export function runPollution(state: GameState): Record<string, number> {
     tile.pollution = Math.max(0, tile.pollution - (cleaned.get(tile) ?? 0));
   }
 
-  state.air = Math.min(100, Math.max(0, air - POLLUTION.natureCleansPerPlayer * state.players.length));
+  state.air = Math.min(POLLUTION.airMax, Math.max(0, air - POLLUTION.natureCleansPerPlayer * state.players.length));
   return by;
 }
