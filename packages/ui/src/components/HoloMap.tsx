@@ -2,8 +2,9 @@ import { useMemo } from 'react';
 import { GoodIcon } from './GoodIcon';
 import { Landscape } from './Landscape';
 import { PlayerMark } from './PlayerMark';
+import { SPECIAL_BADGE, SPECIAL_HANG, SpecialBadge } from './SpecialIcon';
 import { useTheme } from './theme';
-import { cx, GOOD_NAME, SLOT_COLOR, TERRAIN_NAME, type Good, type Slot, type Terrain } from './tokens';
+import { cx, GOOD_NAME, SLOT_COLOR, specialLabel, TERRAIN_NAME, type Good, type MapSpecial, type Slot, type Terrain } from './tokens';
 
 export interface MapTile {
   x: number;
@@ -20,6 +21,8 @@ export interface MapTile {
   ground?: Partial<Record<Good, number>>;
   /** Local pollution, 0 clean to 3 toxic. Drawn as a brown haze over the land. */
   pollution?: number;
+  /** The plot's special field, public on every map: drawn as a badge on the plot's lower-right corner. */
+  special?: MapSpecial;
 }
 
 export interface MapAvatar {
@@ -86,6 +89,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
           const ground = !hideGround && t.ground ? (Object.entries(t.ground) as [Good, number][]).sort((a, b) => b[1] - a[1]).slice(0, tv ? 2 : 1) : [];
           const label = [
             TERRAIN_NAME[t.terrain],
+            t.special ? specialLabel(t.special) : '',
             t.owner !== null ? `owned by player ${t.owner + 1}` : t.terrain === 'store' ? '' : 'free',
             t.good ? `${GOOD_NAME[t.good]}${t.output ? ` +${t.output}` : ''}` : '',
             ...ground.map(([g, n]) => `${GOOD_NAME[g]} ${n} of 4`),
@@ -152,6 +156,20 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   )}
                 >
                   {t.flag === 'sabotage' ? 'OFF' : t.flag === 'sale' ? 'SALE' : 'SCAN'}
+                </span>
+              )}
+              {t.special && (
+                // Above every plot's chips, its neighbours' too, and never in the way of a tap: the tap goes to the plot beneath.
+                <span aria-hidden className="pointer-events-none absolute inset-0 z-[3]" data-testid={`special-glyph-${t.x}-${t.y}`} data-kind={t.special.kind}>
+                  <SpecialBadge
+                    special={t.special}
+                    density={density}
+                    className="absolute"
+                    style={{
+                      right: t.x === width - 1 ? 2 : -SPECIAL_BADGE[density].box * SPECIAL_HANG,
+                      bottom: t.y === height - 1 ? 2 : -SPECIAL_BADGE[density].box * SPECIAL_HANG,
+                    }}
+                  />
                 </span>
               )}
               {isSelected && <span aria-hidden className="pointer-events-none absolute inset-[3%] rounded-[14%] border-2 border-holo-strong shadow-glow" />}

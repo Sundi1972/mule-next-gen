@@ -50,6 +50,47 @@ export const TERRAIN_NAME: Record<Terrain, string> = {
   wasteland: 'Wasteland', store: 'Colony store',
 };
 
+/**
+ * The five special fields (spec RULE-5). The UI keeps its own copy of the kind union, as it does for Good and
+ * Terrain; apps/web checks at compile time that it equals the engine's.
+ */
+export type SpecialKind = 'ruins' | 'crystalCavern' | 'geyser' | 'oasis' | 'relic';
+
+/** A plot's special field as the map draws it. */
+export interface MapSpecial {
+  kind: SpecialKind;
+  /** Ruins only: the good its salvage pays. */
+  salvage?: 'alloy' | 'electronics';
+}
+
+export const SPECIAL_KINDS: SpecialKind[] = ['ruins', 'crystalCavern', 'geyser', 'oasis', 'relic'];
+
+export const SPECIAL_NAME: Record<SpecialKind, string> = {
+  ruins: 'Ruins',
+  crystalCavern: 'Crystal cavern',
+  geyser: 'Geyser',
+  oasis: 'Oasis',
+  relic: 'Alien relic',
+};
+
+/**
+ * Each kind's colour token, `--color-s-<kind>` in theme.css. Each borrows the colour of the good it pays, so the
+ * colour teaches the effect; the relic, which pays no good of its own, borrows Energy's gold. Shape, not colour,
+ * tells the kinds apart.
+ */
+export const SPECIAL_COLOR: Record<SpecialKind, string> = {
+  ruins: 'var(--color-s-ruins)',
+  crystalCavern: 'var(--color-s-crystalCavern)',
+  geyser: 'var(--color-s-geyser)',
+  oasis: 'var(--color-s-oasis)',
+  relic: 'var(--color-s-relic)',
+};
+
+/** A special field's accessible name: its kind, and a ruin's salvage. HoloMap adds it to the plot's label. */
+export function specialLabel(s: MapSpecial): string {
+  return s.kind === 'ruins' && s.salvage ? `${SPECIAL_NAME.ruins}, ${GOOD_NAME[s.salvage]} salvage` : SPECIAL_NAME[s.kind];
+}
+
 export function cx(...parts: (string | false | null | undefined)[]): string {
   return parts.filter(Boolean).join(' ');
 }
