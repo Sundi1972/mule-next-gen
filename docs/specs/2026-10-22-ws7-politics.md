@@ -285,10 +285,13 @@ senior       junior would: a free-text field, or a promise list in the web only 
 mechanism    in_place
 call sites   runFor: MuleGame.handle('run'), VoteHand run step, engine tests
 pin          RULE-2's rows hold; T-AC-1's stage machine unchanged
-ux           WS6's promise-picker mock at nominate (to be mocked and approved), plus the
-             approved ballot rows (PlanningHub.tsx Ballot) and TV result rows (Election.tsx)
-             at ws6-ux 5f3b298 · GRAFT TARGET: apps/web/src/phone/hub/politics/Council.tsx,
-             apps/web/src/table/TvElection.tsx
+ux           WS6's mock at ws6-ux bd899fd, approved by Heiko ("Approve as shown"):
+             design/mocks/ws6-ux/src/screens/PlanningHub.tsx (picker, Ballot, Now copy) and
+             Election.tsx (TV result rows) · route #hub-promise · testids promise-pick,
+             promise-cap, promise-cap-minus, promise-cap-plus, promise-cap-value, promise-lower
+             (disabled at 0% with its reason), promise-hold, promise-run, promise-cancel,
+             running, promise-<seatId> · GRAFT TARGET: apps/web/src/phone/hub/politics/
+             Council.tsx (and words.ts for the wording), apps/web/src/table/TvElection.tsx
 depends_on   C3 (engine), C9 (contract), WS6 picker mock (not stubbable)
 atomicity    the engine field, the intent and the view ship together (one contract)
 ```
