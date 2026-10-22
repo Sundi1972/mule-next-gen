@@ -15,12 +15,15 @@ import type { Mind } from '../value.js';
 
 const OFFICES: readonly Office[] = ['governor', 'sheriff'];
 
-/** The Governor's next rate: a step toward the target of at most maxStep, a bump when the fund is low, inside the bounds. See WS7 spec RULE-8. */
-export function nextTax(current: number, target: number, fund: number, bounds: { low: number; high: number }): number {
+/**
+ * The Governor's next rate: a step toward the target of at most maxStep, a bump when the fund is low, inside the bounds.
+ * The fund starts empty, so it counts as low only from month 2, after the offices' first payday. See WS7 spec RULE-8, AM-9.
+ */
+export function nextTax(current: number, target: number, fund: number, bounds: { low: number; high: number }, month: number): number {
   const { maxStep } = POLITICS.tax;
   const { taxFundBump, fundMonths } = POLITICS.ai;
   const step = Math.max(-maxStep, Math.min(maxStep, target - current));
-  const fundLow = fund < fundMonths * (POLITICS.pay.governor + POLITICS.pay.sheriff);
+  const fundLow = month > 1 && fund < fundMonths * (POLITICS.pay.governor + POLITICS.pay.sheriff);
   return Math.max(bounds.low, Math.min(bounds.high, current + step + (fundLow ? taxFundBump : 0)));
 }
 
@@ -93,7 +96,7 @@ export class VoteHand {
   private govern(obs: GameState, act: Act): void {
     if (obs.politics!.governor !== this.mind.me) return;
     const current = Math.round(obs.treasury.salesTax * 100);
-    const next = nextTax(current, POLITICS.ai.taxTarget[this.persona], obs.treasury.money, taxBounds(obs));
+    const next = nextTax(current, POLITICS.ai.taxTarget[this.persona], obs.treasury.money, taxBounds(obs), obs.month);
     if (next !== current) act({ type: 'setTax', percent: next });
   }
 }

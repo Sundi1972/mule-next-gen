@@ -312,6 +312,25 @@ Every handoff carries the standing authority line, verbatim:
 - [ ] WS6's render gate passes (every mock `data-testid` present)
 - [ ] CI green; WS4/WS6 reviewed
 
+### PR-7 (AM-10): the seeded vote tie-break · sub-branch `ws7-pr7-tie` · may_edit `packages/ai/src/hands/vote.ts`, `packages/ai/test/vote-hand.test.ts` and the seed constants in `apps/server/test/politics.test.ts` only if a pinned seed moves
+
+- [ ] **Step 1:** failing test: with candidates tied on fewest plots, VoteHand's vote is a seeded draw among them; across seeds every tied candidate gets a vote (not always the lower seat). Name: `RULE-8 (AM-10): …`.
+- [ ] **Step 2:** implement in `VoteHand.choose` per spec RULE-8 (AM-10); RULE-3 row 6 in the engine untouched.
+- [ ] **Step 3:** gates: typecheck · ai and server tests · `pnpm sim -- --games 20 --players 4 --politics on`. WS1 re-measures terms by seat.
+
+### PR-6a (C12): the promise in the engine, AI, contract and server · sub-branch `ws7-pr6a-promise` · after PR-7 (both touch vote.ts) · named edits in `packages/protocol/src/index.ts` and `apps/server/src/mule-game.ts` recorded in SEAMS first
+
+- [ ] **Step 1:** T-AC-8 failing: RULE-10's four rows and the drop on switch/withdraw, at `runFor` (engine test).
+- [ ] **Step 2:** `TaxPromise`, `Election.promises`, `runFor(state, id, office, promise?)` per spec §3 C12 and RULE-10.
+- [ ] **Step 3:** T-AC-9 failing then green: VoteHand promises by RULE-10's AI row.
+- [ ] **Step 4:** contract: `run` intent's `promise`, the view's `election.promises`, the board allow-list; a consumer-side server test that a promise reaches every view and malformed promises are refused.
+
+### PR-6b (C12): the promise on the phones and the TV · sub-branch `ws7-pr6b-promise-ui` · after PR-6a and WS6's approved picker mock (RULE 0: no screen without it)
+
+- [ ] **Step 1:** B-AC-6 failing in `apps/web/e2e/politics.ts`: Lena runs promising "Tax no higher than 8%"; every ballot and the TV result show it; a Sheriff candidate shows none.
+- [ ] **Step 2:** graft the picker into `Council.tsx` and the promise rows into `Council.tsx` and `TvElection.tsx` from the mock.
+- [ ] **Step 3:** WS6's render gate on the picker, ballot and TV result states.
+
 ### Gate: end of slice 1 (before the lane PR)
 
 - [ ] WS1's sim rows on all three seed sets WS1 balances against (PM 2026-10-22), before and after politics (nothing politics-on reaches trunk before Heiko's OK): row 0 equals trunk byte for byte (T-AC-4); row 1 checks identical to row 0; rows 2 and 3 checks reported. UBER-AC-1 line by line: elections in months 1/4/7/10 fill both offices in every game; the Governor sets a tax every month; the law line reads "slice 2" (UBER-AC-1's law clause is proven in slice 2).
