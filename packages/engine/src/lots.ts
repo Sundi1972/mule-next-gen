@@ -116,6 +116,9 @@ export function unlist(state: GameState, playerId: string, id: string): void {
 /** No lot up and nobody on the board. */
 const idleBoard = () => ({ lot: null, stage: 'over', clockMs: 0, walkers: [], done: [], aside: {} }) satisfies Partial<LandAuction>;
 
+/** A walk not yet sped up, with no time put back and nobody who has led. */
+const calmWalk = () => ({ fast: false, addedMs: 0, leaderId: null }) satisfies Partial<LandAuction>;
+
 /** What every new lot starts from: nobody on the board, no deals, no result yet. */
 const freshBoard = () =>
   ({ elapsed: 0, walkers: [], deals: [], turns: {}, units: 0, between: { units: 0, value: 0 }, done: [], aside: {}, result: null }) satisfies Partial<LandAuction>;
@@ -132,6 +135,7 @@ export function startLandAuction(state: GameState): void {
     speed: WALK.minSpeed,
     number: 0,
     count: state.listings.length,
+    ...calmWalk(),
   };
   nextLot(state);
 }
@@ -195,6 +199,7 @@ function startWalk(state: GameState): void {
   const a = state.landAuction!;
   const players = standing(state, a.lot!);
   Object.assign(a, {
+    ...calmWalk(),
     stage: 'walk',
     clockMs: LOTS.walkMs,
     elapsed: 0,
@@ -227,7 +232,8 @@ function resolve(state: GameState, lot: Listing, leader: { id: string; bid: numb
     }
     return { kind: 'sold', buyer: winner.id, price: leader.bid };
   }
-  if (lot.unsold === 'store' && seller && state.store.capital >= lot.storePays) {
+  // The store always pays, so listing to it is a sure exit; its capital may go negative.
+  if (lot.unsold === 'store' && seller) {
     seller.money += lot.storePays;
     state.store.capital -= lot.storePays;
     if (tile.outfit) state.store.mules++;
@@ -299,8 +305,29 @@ export function stepLandAuction(state: GameState, dt: number): LotResult | null 
     const was = before.get(w.id)!;
     if (Math.round(w.price) === was.bid) w.since = was.since;
   }
+  lateRules(state, a);
   if (a.clockMs <= 0 || buyerIds(a).every((id) => a.done.includes(id))) return ringBell(state);
   return null;
+}
+
+/**
+ * After the walk has moved, and before the bell: the faster climb once the
+ * lead passes the board's top, and the soft close. Running before the bell
+ * lets an overtake in the step that empties the clock still win time.
+ */
+function lateRules(state: GameState, a: LandAuction): void {
+  const leader = lotLeader(state);
+  if (!a.fast && leader && leader.bid > a.hi) {
+    a.fast = true;
+    a.speed *= LOTS.fastClimb;
+  }
+  if (!leader) return;
+  const overtake = a.leaderId !== null && a.leaderId !== leader.id;
+  a.leaderId = leader.id;
+  if (!overtake || a.clockMs >= LOTS.lateMs) return;
+  const added = Math.min(LOTS.lateMs - a.clockMs, LOTS.lateCapMs - a.addedMs);
+  a.clockMs += added;
+  a.addedMs += added;
 }
 
 /** Ends the land auction at once: every lot not yet at its bell is kept, so nothing moves without a bell, and the month's listings are gone. */
