@@ -63,8 +63,6 @@ export interface MapSpecial {
   salvage?: 'alloy' | 'electronics';
 }
 
-export const SPECIAL_KINDS: SpecialKind[] = ['ruins', 'crystalCavern', 'geyser', 'oasis', 'relic'];
-
 export const SPECIAL_NAME: Record<SpecialKind, string> = {
   ruins: 'Ruins',
   crystalCavern: 'Crystal cavern',
@@ -73,11 +71,7 @@ export const SPECIAL_NAME: Record<SpecialKind, string> = {
   relic: 'Alien relic',
 };
 
-/**
- * Each kind's colour token, `--color-s-<kind>` in theme.css. Each borrows the colour of the good it pays, so the
- * colour teaches the effect; the relic, which pays no good of its own, borrows Energy's gold. Shape, not colour,
- * tells the kinds apart.
- */
+/** Each kind's colour token, `--color-s-<kind>`; theme.css says which good's colour each one borrows, and why. */
 export const SPECIAL_COLOR: Record<SpecialKind, string> = {
   ruins: 'var(--color-s-ruins)',
   crystalCavern: 'var(--color-s-crystalCavern)',

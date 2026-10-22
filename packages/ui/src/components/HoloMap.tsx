@@ -68,7 +68,8 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
 
   return (
     <div
-      className={cx('relative overflow-hidden rounded-panel border border-map-edge bg-map-base shadow-map', className)}
+      // isolate: the map is one layer to whatever sits over it (a zoom button, a production show), whatever z its marks take inside.
+      className={cx('relative isolate overflow-hidden rounded-panel border border-map-edge bg-map-base shadow-map', className)}
       style={{ aspectRatio: `${width} / ${height}` }}
     >
       <Landscape width={width} height={height} terrain={terrain} theme={theme} className="absolute inset-0" />
@@ -122,7 +123,8 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                 />
               )}
               {owner && t.owner !== null && (
-                <PlayerMark slot={t.owner} size={tv ? 12 : 7} className={cx('absolute', tv ? 'left-1.5 top-1.5' : 'left-[3px] top-[3px]')} />
+                // z-[4]: above the badge layer, so a special's badge hung in from the plot up-left never covers the owner's mark.
+                <PlayerMark slot={t.owner} size={tv ? 12 : 7} className={cx('absolute z-[4]', tv ? 'left-1.5 top-1.5' : 'left-[3px] top-[3px]')} />
               )}
               {t.terrain === 'store' && (
                 <span className={cx('relative rounded-chip bg-map-chip font-mono font-bold text-holo shadow-chip', tv ? 'px-2 py-0.5 text-xs' : 'px-1 text-[7px]')}>STORE</span>
@@ -159,7 +161,9 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                 </span>
               )}
               {t.special && (
-                // Above every plot's chips, its neighbours' too, and never in the way of a tap: the tap goes to the plot beneath.
+                // Above the plot's chips and its right and lower neighbours', under the owners' marks (z-[4]), and never in the way of a
+                // tap: the tap goes to the plot beneath. A faded plot's opacity makes it its own layer, so there the overhang goes
+                // under the right and lower neighbours.
                 <span aria-hidden className="pointer-events-none absolute inset-0 z-[3]" data-testid={`special-glyph-${t.x}-${t.y}`} data-kind={t.special.kind}>
                   <SpecialBadge
                     special={t.special}

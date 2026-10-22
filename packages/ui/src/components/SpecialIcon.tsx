@@ -19,17 +19,12 @@ export interface SpecialIconProps {
   kind: SpecialKind;
   size?: number;
   className?: string;
-  /** Defaults to the kind's own colour. */
-  color?: string;
-  /** A mark-edge halo under the strokes, for drawing straight on the land. */
-  halo?: boolean;
 }
 
 /** A special field's symbol: a sibling of GoodIcon. Decorative; the plot or the line it sits in carries the name. */
-export function SpecialIcon({ kind, size = 16, className, color, halo = false }: SpecialIconProps) {
+export function SpecialIcon({ kind, size = 16, className }: SpecialIconProps) {
   return (
-    <svg aria-hidden viewBox="0 0 24 24" width={size} height={size} className={className} style={{ color: color ?? SPECIAL_COLOR[kind] }} fill="none" strokeLinecap="round" strokeLinejoin="round">
-      {halo && <path d={PATHS[kind]} stroke="var(--color-mark-edge)" strokeWidth={4.2} />}
+    <svg aria-hidden viewBox="0 0 24 24" width={size} height={size} className={className} style={{ color: SPECIAL_COLOR[kind] }} fill="none" strokeLinecap="round" strokeLinejoin="round">
       <path d={PATHS[kind]} stroke="currentColor" strokeWidth={2} fill="currentColor" fillOpacity={0.22} />
     </svg>
   );
