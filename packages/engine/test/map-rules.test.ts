@@ -3,6 +3,7 @@ import { checkMap, createRng, type GameMap, type MapReport, type RuleId, type Vi
 import { legacyGenerateMap } from './fixtures/legacy-map.js';
 import {
   buildMap,
+  field,
   LARGE_MAP,
   MID_CRYSTITE_4_PEAKS,
   MID_CRYSTITE_5_PEAKS,
@@ -11,6 +12,7 @@ import {
   mirrored,
   SMALL_MAP,
   withGround,
+  withSpecials,
   withTerrain,
 } from './fixtures/map-fixtures.js';
 
@@ -147,6 +149,40 @@ const cases: Case[] = [
   row('S10', 'crystite 3 two steps from a peak', MID, (m) => withGround(m, 'crystite', [[8, 3, 3]]), 'crystite'),
   row('S10', 'crystite 1 outside every ring', MID, (m) => withGround(m, 'crystite', [[0, 0, 1]]), 'crystite'),
   row('S10', 'five crystite peaks, 4 allowed', CRYSTITE_4, () => MID_CRYSTITE_5_PEAKS, { mentions: '5 peaks', metrics: { peaks: { crystite: 5, rareEarth: 3 } } }),
+  row('P1', 'a geyser on plains', MID, (m) => withSpecials(m, [[3, 1, field('geyser')]]), { mentions: 'geyser', at: [{ x: 3, y: 1 }] }),
+  row('P1', 'a relic 3 steps from the ruins', MID, (m) => withSpecials(m, [[1, 7, null], [3, 4, field('relic')]]), {
+    mentions: '3 steps',
+    at: [{ x: 3, y: 1 }, { x: 3, y: 4 }],
+  }),
+  row('P1', 'ruins touching the store', MID, (m) => withSpecials(m, [[3, 1, null], [7, 3, field('ruins')]]), { mentions: 'store', at: [{ x: 7, y: 3 }] }),
+  row('P1', 'ruins with no salvage', MID, (m) => withSpecials(m, [[3, 1, { kind: 'ruins' }]]), { mentions: 'salvage', at: [{ x: 3, y: 1 }] }),
+  row('P1', 'large: the crystal cavern moved to a crater rated Crystite 0', LARGE, (m) => withSpecials(m, [[2, 8, null], [6, 10, field('crystalCavern')]]), {
+    detail: 'crystalCavern at (6,10) has crystite 0, at least 1 needed',
+    mentions: 'crystite 0',
+    at: [{ x: 6, y: 10 }],
+  }),
+  row('P1', 'small: an oasis left 1 desert neighbour, 2 needed', SMALL, (m) => withTerrain(m, [[5, 1, 'H']]), {
+    detail: 'oasis at (6,1) has 1 desert neighbours, 2 needed',
+    mentions: '1 desert',
+    at: [{ x: 6, y: 1 }],
+  }),
+  row('P1', 'mid: 3 special fields, 4 needed', MID, (m) => withSpecials(m, [[13, 0, null]]), { mentions: '3 special fields', metrics: { specials: 3 } }),
+  row('P1', 'large: ruins three times, twice allowed', LARGE, (m) => withSpecials(m, [[2, 8, field('ruins')]]), 'ruins 3 times'),
+  row('P1', 'small: 2 kinds, 3 needed', SMALL, (m) => withSpecials(m, [[6, 1, field('relic')]]), '2 kinds'),
+  row(
+    'P1',
+    'every special field right of the river',
+    MID,
+    (m) => withSpecials(m, [[3, 1, null], [1, 7, null], [9, 1, field('ruins')], [14, 5, field('relic')]]),
+    'left of the river',
+  ),
+  row(
+    'P1',
+    'every special field left of the river',
+    MID,
+    (m) => withSpecials(m, [[13, 0, null], [10, 6, null], [5, 5, field('geyser')], [0, 3, field('relic')]]),
+    { mentions: 'right of the river', detail: 'no special field right of the river' },
+  ),
 ];
 
 const arranged: { twin: Twin; metrics: MapReport['metrics'] }[] = [
@@ -173,7 +209,7 @@ const arranged: { twin: Twin; metrics: MapReport['metrics'] }[] = [
       peaks: { crystite: 3, rareEarth: 3 },
       worstReach: { food: 2, water: 2, energy: 3, smithore: 5 },
       scarce: null,
-      specials: 0,
+      specials: 4,
     },
   },
   {
@@ -199,7 +235,7 @@ const arranged: { twin: Twin; metrics: MapReport['metrics'] }[] = [
       peaks: { crystite: 3, rareEarth: 3 },
       worstReach: { food: 0, water: 0, energy: 0, smithore: 4 },
       scarce: null,
-      specials: 0,
+      specials: 3,
     },
   },
   {
@@ -225,7 +261,7 @@ const arranged: { twin: Twin; metrics: MapReport['metrics'] }[] = [
       peaks: { crystite: 3, rareEarth: 3 },
       worstReach: { food: 2, water: 2, energy: 2, smithore: 6 },
       scarce: null,
-      specials: 0,
+      specials: 5,
     },
   },
 ];
