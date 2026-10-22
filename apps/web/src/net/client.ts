@@ -59,12 +59,12 @@ export interface ClientState {
   notice: string | null;
   /** Milliseconds to add to Date.now() for the server's clock. */
   clockOffset: number;
-  /** The one-time code that moves this seat to another device, while it is live. */
+  /** The one-time code that moves this seat to another device: null while none has arrived since it was asked for. */
   handoffCode: HandoffCode | null;
 }
 
-/** `expiresAt` is server time. */
-export type HandoffCode = Omit<Extract<ServerEnvelope<MuleView>, { t: 'handoffCode' }>, 't'>;
+/** `expiresAt` is server time. An expired code stays until a new one is asked for or the dialog closes. */
+export type HandoffCode = Omit<Extract<ServerEnvelope<MuleView>, { t: 'handoffCode' }>, 't'> & { expired: boolean };
 
 /** Where the client wants to be: at a seat (moved here by a handoff code, or not), or watching as a board. */
 type Target = { kind: 'player'; code: string; name: string; handoff?: string } | { kind: 'board'; code: string };
@@ -279,7 +279,7 @@ export class TableClient {
         this.set({ view: msg.view });
         return;
       case 'handoffCode':
-        if (this.handoffWanted) this.setHandoff({ code: msg.code, expiresAt: msg.expiresAt });
+        if (this.handoffWanted) this.setHandoff({ code: msg.code, expiresAt: msg.expiresAt, expired: false });
         return;
       case 'chat': {
         if (this.state.chat.some((c) => c.id === msg.message.id)) return;
@@ -338,14 +338,14 @@ export class TableClient {
     if (saved && saved.code === target.code) saveSeat(this.storage, { ...saved, name });
   }
 
-  /** Shows a live handoff code until it expires; null drops it. Only the newest code has a pending expiry. */
+  /** Shows a handoff code, marked expired when its time is up; null drops it. Only the newest code has a pending expiry. */
   private setHandoff(code: HandoffCode | null): void {
     if (this.handoffExpiry !== null) this.cancel(this.handoffExpiry);
     this.handoffExpiry = null;
-    if (code) {
+    if (code && !code.expired) {
       this.handoffExpiry = this.later(() => {
         this.handoffExpiry = null;
-        this.set({ handoffCode: null });
+        this.set({ handoffCode: { ...code, expired: true } });
       }, Math.max(0, code.expiresAt - this.serverNow()));
     }
     if (code !== this.state.handoffCode) this.set({ handoffCode: code });

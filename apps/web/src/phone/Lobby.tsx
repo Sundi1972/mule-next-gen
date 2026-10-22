@@ -7,6 +7,7 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { lobbySeatSpecies } from '../game/derive';
 import { createRoom } from '../net/client';
 import { useClient, useClientState } from '../net/react';
+import { codeState, HandoffCode } from './HandoffCode';
 import { NowCard, WIDE_PX, type Now } from './Shell';
 
 function Header() {
@@ -109,7 +110,8 @@ function Frame({ children }: { children: ReactNode }) {
 /** A seat as the lobby draws it: its species (picked or the default) and its colour. */
 type Colonist = TableView<unknown>['seats'][number] & { species: Species; slot: Slot };
 
-type HostDialog = { kick: string } | 'close';
+/** The host's two confirmations, and anyone's move to their phone. */
+type LobbyDialog = { kick: string } | 'close' | 'handoff';
 
 const COLOURS: Slot[] = [0, 1, 2, 3, 4, 5];
 
@@ -143,7 +145,7 @@ function useShellWide() {
 export function Lobby() {
   const client = useClient();
   const { view, seatId } = useClientState();
-  const [asked, setAsked] = useState<HostDialog | null>(null);
+  const [asked, setAsked] = useState<LobbyDialog | null>(null);
   // The room keeps no record of a colour being chosen, only the colour itself.
   const [pickedColour, setPickedColour] = useState(false);
   const opener = useRef<HTMLElement | null>(null);
@@ -155,9 +157,9 @@ export function Lobby() {
   const host = view.hostId === me.id;
   const hostName = seats.find((s) => s.id === view.hostId)?.name ?? 'The host';
   const tv = view.boards > 0;
-  // A seat that left while the host was deciding has nothing left to remove.
-  const dialog = !host || (asked !== null && asked !== 'close' && !seats.some((s) => s.id === asked.kick)) ? null : asked;
-  const ask = (d: HostDialog, from: HTMLElement) => {
+  // Only the host confirms a removal; a seat that left while the host was deciding has nothing left to remove.
+  const dialog = asked === null || asked === 'handoff' || (host && (asked === 'close' || seats.some((s) => s.id === asked.kick))) ? asked : null;
+  const ask = (d: LobbyDialog, from: HTMLElement) => {
     opener.current = from;
     setAsked(d);
   };
@@ -234,9 +236,17 @@ export function Lobby() {
               </ul>
             </section>
             {!joinFirst && joinCard}
+            {!host && (
+              <button type="button" className="text-left text-sm text-holo underline-offset-2 hover:underline" onClick={(e) => ask('handoff', e.currentTarget)} data-testid="move-to-phone">
+                Playing on a laptop? Move to my phone…
+              </button>
+            )}
             {host && (
               <section className="flex flex-col gap-1 border-t border-holo-faint pt-2 @min-[1100px]/shell:pt-3" data-testid="host-tools">
                 <span className="label-caps @min-[1100px]/shell:text-xs!">You host this table</span>
+                <button type="button" className="text-left text-sm text-holo underline-offset-2 hover:underline" onClick={(e) => ask('handoff', e.currentTarget)} data-testid="host-to-phone">
+                  Move the host to my phone…
+                </button>
                 <button type="button" className="text-left text-sm text-alert underline-offset-2 hover:underline" onClick={(e) => ask('close', e.currentTarget)} data-testid="close-room">
                   Close the room…
                 </button>
@@ -264,15 +274,17 @@ export function Lobby() {
           </div>
         </aside>
         {dialog && (
-          <HostConfirm
+          <Dialog
             dialog={dialog}
             seats={seats}
+            me={mine}
+            host={host}
             code={view.code}
             onCancel={closeDialog}
             onConfirm={() => {
               closeDialog();
               if (dialog === 'close') client.closeTable();
-              else client.kick(dialog.kick);
+              else if (dialog !== 'handoff') client.kick(dialog.kick);
             }}
           />
         )}
@@ -430,8 +442,24 @@ function JoinCard({ code, compact }: { code: string; compact: boolean }) {
   );
 }
 
-/** The host's confirmations, over the whole screen; nothing is sent until they confirm. */
-function HostConfirm({ dialog, seats, code, onConfirm, onCancel }: { dialog: HostDialog; seats: Colonist[]; code: string; onConfirm: () => void; onCancel: () => void }) {
+/** The lobby's dialog, over the whole screen: the host's confirmations, which send nothing until confirmed, or the move to a phone. */
+function Dialog({
+  dialog,
+  seats,
+  me,
+  host,
+  code,
+  onConfirm,
+  onCancel,
+}: {
+  dialog: LobbyDialog;
+  seats: Colonist[];
+  me: Colonist;
+  host: boolean;
+  code: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
   const titleId = useId();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -441,7 +469,8 @@ function HostConfirm({ dialog, seats, code, onConfirm, onCancel }: { dialog: Hos
     return () => document.removeEventListener('keydown', onKey);
   }, [onCancel]);
   let body: ReactNode;
-  if (dialog === 'close')
+  if (dialog === 'handoff') body = <Handoff titleId={titleId} name={me.name} host={host} code={code} onDone={onCancel} />;
+  else if (dialog === 'close')
     body = (
       <>
         <h2 id={titleId} className="font-display text-xl font-semibold @min-[1100px]/shell:text-3xl">
@@ -481,5 +510,39 @@ function HostConfirm({ dialog, seats, code, onConfirm, onCancel }: { dialog: Hos
     <div className="absolute inset-0 z-10 grid place-items-center bg-void/70 p-4" role="dialog" aria-modal aria-labelledby={titleId} data-testid="host-dialog">
       <div className="flex max-w-[560px] flex-col gap-3 rounded-sheet border-2 border-holo bg-panel p-4 shadow-glow @min-[1100px]/shell:max-w-[720px] @min-[1100px]/shell:gap-5 @min-[1100px]/shell:p-8">{body}</div>
     </div>
+  );
+}
+
+/**
+ * The one-time link that moves this seat to another device. The code lives as long as this body: asked for when it
+ * opens, forgotten however it goes (Done, Escape, or the lobby leaving).
+ */
+function Handoff({ titleId, name, host, code, onDone }: { titleId: string; name: string; host: boolean; code: string; onDone: () => void }) {
+  const client = useClient();
+  const { handoffCode } = useClientState();
+  useEffect(() => {
+    client.handoff();
+    return () => client.closeHandoff();
+  }, [client]);
+  return (
+    <>
+      <h2 id={titleId} className="font-display text-xl font-semibold @min-[1100px]/shell:text-3xl">
+        {host ? 'Move the host to your phone' : 'Move to your phone'}
+      </h2>
+      <div className="flex items-center gap-4">
+        <HandoffCode url={handoffCode ? joinUrl(code, handoffCode.code) : ''} state={codeState(handoffCode)} onRenew={() => client.handoff()} />
+        <p className="text-sm text-ink-2 @min-[1100px]/shell:text-lg">
+          Scan this with your phone. It becomes{' '}
+          <strong className="text-ink">
+            you, {name}
+            {host ? ', the host' : ''}
+          </strong>
+          , with your colonist. This screen then steps aside. The code works once, for 2 minutes.
+        </p>
+      </div>
+      <Button size="md" variant="outline" autoFocus onClick={onDone}>
+        Done
+      </Button>
+    </>
   );
 }
