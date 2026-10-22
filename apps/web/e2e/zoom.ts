@@ -169,7 +169,7 @@ async function checkASingleTapSelectsAtOnce(phone: Page, dev: Locator, whole: nu
         document.addEventListener('pointerup', () => (up = performance.now()), { capture: true, once: true });
         // No named functions in here: tsx wraps them with a `__name` helper the page lacks.
         const watch = new MutationObserver(() => {
-          if (up && el.querySelector('aside h2')?.textContent?.includes(name)) {
+          if (up && el.querySelector('[data-testid=plot-title]')?.textContent?.includes(name)) {
             watch.disconnect();
             resolve(performance.now() - up);
           }
@@ -189,7 +189,7 @@ async function checkASingleTapSelectsAtOnce(phone: Page, dev: Locator, whole: nu
 }
 
 async function checkReadout(dev: Locator, plot: Plot, message: string): Promise<void> {
-  const heading = (await dev.locator('aside h2').textContent()) ?? '';
+  const heading = (await dev.locator('[data-testid=plot-title]').textContent()) ?? '';
   check(heading.includes(plotName(plot)), `${message}: the rail shows "${heading}", not plot ${plotName(plot)}`);
 }
 

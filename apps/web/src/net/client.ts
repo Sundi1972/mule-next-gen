@@ -32,6 +32,7 @@ const REMOVED: Record<RemovedReason, string> = {
   kicked: 'The host removed you from the table',
   closed: 'The host closed the table',
   moved: "You're playing on another device now",
+  error: 'Something went wrong and the table had to stop. Start a new game to play again.',
 };
 
 export interface Toast {
@@ -330,6 +331,11 @@ export class TableClient {
   /** Chooses what this seat plays as, in the lobby. */
   pick(species: Species): void {
     this.send({ t: 'pick', pick: species });
+  }
+
+  /** Takes a colour for this seat, in the lobby. */
+  color(colour: number): void {
+    this.send({ t: 'color', color: colour });
   }
 
   start(): void {

@@ -3,6 +3,7 @@ import type { Act } from '../actions.js';
 import type { Brain, Pending } from '../brain.js';
 import { goodPlan, tradeDecision, type GoodPlan, type TradeAction } from '../strategist.js';
 import { situation } from '../summary.js';
+import { beforeTax } from '../value.js';
 
 /**
  * Auction hands, after the design doc's auction example. At the status
@@ -81,20 +82,17 @@ export class AuctionHand {
       if (settled) this.trade = settled.action;
     }
 
+    // Sides are picked on the status screen; a decision that only settles once the walk has begun is declared there.
+    if (this.trade && !this.declared) {
+      const side = this.trade.side === 'seller' && me.stock[a.good] <= 0 ? 'pass' : this.trade.side;
+      act({ type: 'declare', side });
+      this.declared = true;
+    }
     if (a.stage === 'status') {
-      if (this.trade && !this.statusDone) this.statusDone = act({ type: 'done', done: true });
+      if (this.declared && !this.statusDone) this.statusDone = act({ type: 'done', done: true });
       return;
     }
     if (!this.trade) return;
-    if (a.stage === 'declare') {
-      if (!this.declared) {
-        const side = this.trade.side === 'seller' && me.stock[a.good] <= 0 ? 'pass' : this.trade.side;
-        act({ type: 'declare', side });
-        act({ type: 'done', done: true });
-        this.declared = true;
-      }
-      return;
-    }
 
     // The walk.
     const w = a.walkers.find((x) => x.id === mind.me);
@@ -150,7 +148,8 @@ export class AuctionHand {
 
     if (w.side === 'seller') {
       // Units past the table are beyond what the depot keeps: they spoil, so they are worth nothing.
-      const floor = Math.ceil(plan.values.keep[h - 1] ?? 0);
+      // Unit values are what the seat keeps after the sales tax; the board shows the price before it.
+      const floor = Math.ceil(beforeTax(state, plan.values.keep[h - 1] ?? 0));
       this.limit = floor;
       const finished = trade.side !== 'seller' || h <= trade.keep || !Number.isFinite(floor);
       const houses = Math.max(storeBuyLine(state) ?? 0, shipLine(state) ?? 0);

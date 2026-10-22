@@ -31,6 +31,7 @@ import {
 } from '@mule/engine';
 import type { Act, AiAction } from './actions.js';
 import type { DecisionRecord } from './brain.js';
+import type { Decider } from './decider.js';
 import { LotHand } from './hands/lot.js';
 import { AiSeat } from './seat.js';
 
@@ -112,9 +113,36 @@ export interface PlayOptions {
   onDecision?: (r: DecisionRecord) => void;
   /** Called after each phase is played, before the game moves on: for diagnostics. */
   onPhase?: (state: GameState) => void;
+  /**
+   * The decider for a seat; null or absent plays the default pick.
+   * playGame never waits, so an async decider's answers arrive too late; use playGameAsync.
+   */
+  deciderFor?: (seatId: string, spec: SeatSpec, index: number) => Decider | null;
+  /** Awaited by playGameAsync at every tick step and at least once at the end of every phase; playGame ignores it. */
+  between?: () => Promise<void> | void;
 }
 
+/** Plays one game to the end; the same game, step for step, as playGameAsync without hooks. */
 export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions = {}): PlayedGame {
+  const game = playSteps(seed, specs, options);
+  for (;;) {
+    const step = game.next();
+    if (step.done) return step.value;
+  }
+}
+
+/** Plays one game, awaiting `options.between` at every step so a decider's answer can arrive before simulated time moves on. */
+export async function playGameAsync(seed: number, specs: SeatSpec[], options: PlayOptions = {}): Promise<PlayedGame> {
+  const game = playSteps(seed, specs, options);
+  for (;;) {
+    const step = game.next();
+    if (step.done) return step.value;
+    await options.between?.();
+  }
+}
+
+/** The game loop, yielding after every tick of every phase and once at the end of each phase. */
+function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Generator<void, PlayedGame, void> {
   const state = createGame({ seed, players: specs.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
   let decisions = 0;
   const seats = specs.map(
@@ -125,6 +153,7 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
         persona: s.persona,
         level: s.level,
         seed: (seed * 7_919 + i * 104_729 + 17) >>> 0,
+        decider: options.deciderFor?.(`ai${i}`, s, i) ?? null,
         onDecision: (r) => {
           decisions++;
           options.onDecision?.(r);
@@ -152,6 +181,7 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
             for (const b of bids) if (applyAction(state, b.s.id, { type: 'claim', x: lit.x, y: lit.y })) break;
           }
           if (!grantDone(state)) advanceGrant(state);
+          yield;
         }
         break;
       }
@@ -170,6 +200,7 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
             s.developTick(state, DEV_TICK_MS, clock.left, act);
             clock.left -= DEV_TICK_MS / 1_000;
           }
+          yield;
         }
         break;
       }
@@ -182,6 +213,7 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
             else auction.between++;
           }
           auction.ms += WALK.tickMs;
+          yield;
         }
         break;
       }
@@ -190,12 +222,14 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
           seats.forEach((s, i) => lotHands[i]!.tick(state, WALK.tickMs, (a) => applyAction(state, s.id, a)));
           const lot = state.landAuction.lot;
           const result = stepLandAuction(state, WALK.tickMs);
-          if (!lot || !result) continue;
-          const colony = lot.seller === COLONY_SELLER;
-          if (result.kind === 'sold') lots.sold++;
-          else lots.unsold++;
-          if (colony) lots.colonyOffered++;
-          if (colony && result.kind === 'sold') lots.colonySold++;
+          if (lot && result) {
+            const colony = lot.seller === COLONY_SELLER;
+            if (result.kind === 'sold') lots.sold++;
+            else lots.unsold++;
+            if (colony) lots.colonyOffered++;
+            if (colony && result.kind === 'sold') lots.colonySold++;
+          }
+          yield;
         }
         if (state.landAuction && state.landAuction.stage !== 'over') lots.stalled++;
         break;
@@ -204,6 +238,7 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
         broke.push(state.players.filter((p) => p.money < 100 && state.tiles.some((t) => t.owner === p.id && !t.outfit)).map((p) => p.id));
         break;
     }
+    yield;
     options.onPhase?.(state);
     advancePhase(state);
   }

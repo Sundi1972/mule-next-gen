@@ -19,18 +19,22 @@ export const PHASE_NAME: Record<MuleView['phase'], string> = {
   gameOver: 'Game over',
 };
 
-/** A seat's colour slot is its place at the table, so phones and the big screen agree. */
-export function slotOf(view: Pick<MuleView, 'players'>, seatId: string | null | undefined): Slot | null {
-  if (!seatId) return null;
-  const i = view.players.findIndex((p) => p.id === seatId);
-  return i < 0 ? null : ((i % 6) as Slot);
+/** A colour index from the room as the design system's slot. */
+export function toSlot(colour: number): Slot {
+  return (colour % 6) as Slot;
 }
 
+/** A seat's colour slot is the colour it chose in the lobby, so phones and the big screen agree. */
+export function slotOf(view: Pick<MuleView, 'players'>, seatId: string | null | undefined): Slot | null {
+  if (!seatId) return null;
+  const p = view.players.find((q) => q.id === seatId);
+  return p ? toSlot(p.slot) : null;
+}
+
+/** Each slot's species, for marks drawn by slot alone. */
 export function seatSpecies(view: Pick<MuleView, 'players'>): Record<Slot, Species> {
   const out = Object.fromEntries(DEFAULT_SPECIES.map((sp, i) => [i, sp])) as Record<Slot, Species>;
-  view.players.forEach((p, i) => {
-    if (i < 6) out[i as Slot] = p.species;
-  });
+  for (const p of view.players) out[toSlot(p.slot)] = p.species;
   return out;
 }
 
@@ -77,7 +81,7 @@ export function player(view: MuleView, id: string | null | undefined): PlayerVie
 /** Public standings by money, best first. Scores replace money once the game is over. */
 export function standings(view: MuleView): { player: PlayerView; slot: Slot; value: number }[] {
   return view.players
-    .map((p, i) => ({ player: p, slot: (i % 6) as Slot, value: view.scores?.find((s) => s.id === p.id)?.score ?? p.money }))
+    .map((p) => ({ player: p, slot: toSlot(p.slot), value: view.scores?.find((s) => s.id === p.id)?.score ?? p.money }))
     .sort((a, b) => b.value - a.value);
 }
 
@@ -99,18 +103,18 @@ export function plotName(x: number, y: number): string {
   return `${x + 1}·${y + 1}`;
 }
 
-/** What a plot is good for, in one line. From the design doc's terrain odds. */
+/** What a plot is good for, in one line. From the design doc's terrain odds; Crystite and Rare earth turn up anywhere, so no line names them. */
 export const TERRAIN_ODDS: Partial<Record<TileView['terrain'], string>> = {
-  river: 'Often good for Food and Water. Poor for mining.',
-  lake: 'Often good for Water and Food. Nothing to mine.',
-  plains: 'Often good for Food and Energy. Few minerals.',
+  river: 'Often good for Food and Water. Poor for Smithore.',
+  lake: 'Often good for Water and Food. No Smithore.',
+  plains: 'Often good for Food and Energy. Little Smithore.',
   forest: 'Often good for Food. Poor for Energy.',
-  swamp: 'Often good for Water. Some Rare earth.',
-  hills: 'Good odds of Smithore. Some Crystite and Rare earth.',
-  mountains: 'Very good odds of Smithore and Rare earth.',
-  desert: 'Often good for Energy. Some Crystite and Rare earth.',
-  tundra: 'Often good for Energy and Water. Some minerals.',
+  swamp: 'Often good for Water. Poor for Food.',
+  hills: 'Good odds of Smithore. Poor for Food.',
+  mountains: 'Very good odds of Smithore. Poor for Food and Energy.',
+  desert: 'Often good for Energy. Poor for Water and Food.',
+  tundra: 'Often good for Energy and Water. Some Smithore.',
   ice: 'Often good for Water. Little else.',
-  volcanic: 'Good odds of Rare earth and Energy.',
-  crater: 'Very good odds of Crystite.',
+  volcanic: 'Often good for Energy. Some Smithore.',
+  crater: 'Poor for Food. Little Smithore.',
 };

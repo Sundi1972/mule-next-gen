@@ -27,6 +27,8 @@ export interface Budget {
    * `lockedNow` is true only for the refusal that locked it. See RULE-3.
    */
   allow(game: string, seat: string, nextUsd: number): { allowed: boolean; lockedNow: boolean };
+  /** The seat's spend this game as allow() checks it: ledger dollars plus its unknown bills at their worst case. */
+  spent(game: string, seat: string): number;
   /** Counts a call whose bill is unknown toward the seat's spend at its worst case; its ledger line is left as it is. */
   countUnknownBill(game: string, seat: string, worstUsd: number): void;
   /** Forgets a finished game's locks and unknown bills. */
@@ -55,6 +57,8 @@ export function createBudget(ledger: Pick<Ledger, 'seatSpent'>): Budget {
       }
       return { allowed: true, lockedNow: false };
     },
+
+    spent: spentBy,
 
     countUnknownBill(game, seat, worstUsd) {
       const seats = unknown.get(game) ?? new Map<string, number>();

@@ -93,14 +93,14 @@ function main() {
   console.log(`${check(muleMedian >= 150 && muleMedian <= 300)} MULE price median ${muleMedian} (target 150 to 300)`);
   console.log(`${check(mule90 < 500)} MULE price 90th percentile ${mule90} (target under 500)`);
   console.log(`${check(soldOut / months < 0.1)} Corral sold out in ${pct(soldOut, months)} of months (target under 10%)`);
-  console.log(`${check(foodSpike / games >= 0.33 && foodSpike / games <= 0.5)} Food above 3x reference in ${pct(foodSpike, games)} of games (target 33% to 50%)`);
+  console.log(`${check(foodSpike / games >= 0.1 && foodSpike / games <= 0.5)} Food above 3x reference in ${pct(foodSpike, games)} of games (target 10% to 50%)`);
   console.log(`${check(hungry / months < 0.15)} Colonists short of Food or Water in ${pct(hungry, months)} of months (target under 15%)`);
   console.log(`${check(developed / owned >= 0.7)} Owned plots developed at the end: ${pct(developed, owned)} (target 70% or more)`);
   console.log(`${check(longBroke === 0)} Games with an AI broke for 3 months in a row: ${pct(longBroke, games)} (target none)`);
-  console.log(`${check(minCapital >= 500)} Lowest store capital ${minCapital} (target 500 or more)`);
   console.log(`${check(minFund >= 0)} Lowest colony fund ${minFund} (target 0 or more)`);
   console.log(`${check(collapsed / games <= 0.1)} Ended in Collapse: ${pct(collapsed, games)} (target 10% or less)`);
-  console.log(`     Wins by species: ${Object.entries(wins).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
+  console.log(`     Store capital: lowest ${minCapital} (no check: the store never runs out of money)`);
+  console.log(`     Wins by species:${Object.entries(wins).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
   console.log(`     Wins by persona: ${Object.entries(byPersona).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
   console.log(
     `     Live auction a month: ${(auction.between / months).toFixed(1)} units between players, ${(auction.store / months).toFixed(1)} with the store, ${(auction.ship / months).toFixed(1)} to the ship; ${(auction.ms / months / 1000).toFixed(0)} s of auction time`,

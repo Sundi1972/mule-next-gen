@@ -3,9 +3,6 @@
  * Usage: pnpm --filter @mule/server brain:spike -- --calls 50 --max-usd 0.05 --seed 101
  * Spends real money; cap = min(flag, BRAIN.spikeCapUsd); one run per day.
  */
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
 import { AI_LEVELS, AI_PERSONAS, BRAIN, observe, type AiLevelId, type AiPersonaId, type GameState } from '@mule/engine';
 import {
   buildPrompt,
@@ -22,6 +19,7 @@ import {
   type Prompt,
   type ShortOption,
 } from '@mule/ai';
+import { alreadyRanToday, AUTH_STOPPED, claimLedger, day, dayLedgerPath, KINDS, nearest, numberFlags, resolveDeps, runAsScript, table, type MainDeps, type StopReason } from './cli.js';
 import { billUnknown, CallFailed, createAnthropicSdk, createHaikuComplete, type HaikuReply } from './client.js';
 import { API_KEY_ENV, apiKeyFrom, outcomeOf } from './index.js';
 import { promptChars, worstCaseUsd } from './budget.js';
@@ -37,8 +35,6 @@ export interface SpikeItem {
   shortlist: ShortOption[];
   context: DecisionContext;
 }
-
-export type StopReason = 'done' | 'cap' | 'auth';
 
 /** A percentile: an answered latency, or a rank among timed-out calls, known only to exceed a wait. */
 export type Latency = { ms: number } | { overMs: number };
@@ -93,8 +89,6 @@ export interface SpikeReport {
 export function capFor(flagMaxUsd: number): number {
   return Number.isFinite(flagMaxUsd) && flagMaxUsd > 0 ? Math.min(flagMaxUsd, BRAIN.spikeCapUsd) : 0;
 }
-
-const KINDS: DecisionKind[] = ['land', 'develop', 'trade'];
 
 interface Collected {
   record: { id: number; seat: string; kind: DecisionKind; month: number; shortlist: ShortOption[] };
@@ -193,10 +187,6 @@ interface Settled {
 }
 
 const ascending = (a: number, b: number) => a - b;
-const day = (d: Date) => d.toISOString().slice(0, 10);
-
-/** Nearest-rank quantile of a non-empty ascending list. */
-const nearest = <T>(sorted: readonly T[], q: number): T => sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(q * sorted.length) - 1))]!;
 
 const isAnswered = (s: Settled) => s.outcome !== 'timeout' && s.outcome !== 'error';
 
@@ -303,12 +293,6 @@ export async function runSpike(options: SpikeOptions): Promise<SpikeReport> {
 const pct = (x: number) => `${(x * 100).toFixed(0)}%`;
 const latencyText = (l: Latency | null) => (l === null ? '—' : 'ms' in l ? `${Math.round(l.ms)} ms` : `> ${l.overMs} ms`);
 
-/** Rows as columns two spaces apart; the last column is not padded. */
-function table(rows: string[][]): string[] {
-  const widths = rows[0]!.map((_, c) => Math.max(...rows.map((r) => r[c]!.length)));
-  return rows.map((r) => r.map((cell, c) => (c === r.length - 1 ? cell : cell.padEnd(widths[c]!))).join('  '));
-}
-
 /** A small human-readable report: totals, then one row per kind and the pooled row. */
 export function renderReport(r: SpikeReport): string[] {
   const totals = table([
@@ -339,29 +323,12 @@ export function renderReport(r: SpikeReport): string[] {
   return [...totals, '', ...kinds];
 }
 
-/** Seams for tests: where the ledger goes, the clock and where lines go. Defaults are the real ones. */
-export interface MainDeps {
-  dataDir?: string;
-  out?: (line: string) => void;
-  now?: () => Date;
-}
-
-const DATA_DIR = path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..'), 'data');
 const USAGE = 'Usage: brain:spike [--calls N] [--max-usd X] [--seed S]; nothing called.';
-const FLAG_NAMES = ['--calls', '--max-usd', '--seed'];
-const NUMBER = /^\d+(\.\d+)?$/;
 
-/** The flags, or null for anything else: an unknown, repeated or `--name=value` flag, a missing or non-numeric value, a stray word. */
+/** The flags, or null for anything numberFlags refuses or a value out of range. */
 function parseFlags(argv: readonly string[]): { calls: number; maxUsd: number; seed: number } | null {
-  // pnpm hands its `--` separator through to the script.
-  const args = argv[0] === '--' ? argv.slice(1) : argv;
-  const given = new Map<string, number>();
-  for (let i = 0; i < args.length; i += 2) {
-    const name = args[i]!;
-    const value = args[i + 1];
-    if (!FLAG_NAMES.includes(name) || given.has(name) || value === undefined || !NUMBER.test(value)) return null;
-    given.set(name, Number(value));
-  }
+  const given = numberFlags(argv, ['--calls', '--max-usd', '--seed']);
+  if (!given) return null;
   const calls = given.get('--calls') ?? 50;
   const maxUsd = given.get('--max-usd') ?? BRAIN.spikeCapUsd;
   const seed = given.get('--seed') ?? 101;
@@ -370,7 +337,7 @@ function parseFlags(argv: readonly string[]): { calls: number; maxUsd: number; s
 
 /** Exit code: 0 done or capped, 1 nothing called (bad flags, no key, or today's run already made), 2 stopped on an auth failure. */
 export async function main(argv: readonly string[], env: Readonly<Record<string, string | undefined>>, deps: MainDeps = {}): Promise<number> {
-  const out = deps.out ?? ((line: string) => console.log(line));
+  const { dataDir, out, now } = resolveDeps(deps);
   const flags = parseFlags(argv);
   if (!flags) {
     out(USAGE);
@@ -381,10 +348,10 @@ export async function main(argv: readonly string[], env: Readonly<Record<string,
     out(`${API_KEY_ENV} is not set; nothing called.`);
     return 1;
   }
-  const now = deps.now ?? (() => new Date());
-  const ledgerPath = path.join(deps.dataDir ?? DATA_DIR, `spike-${day(now())}.jsonl`);
-  if (fs.existsSync(ledgerPath)) {
-    out(`${ledgerPath} exists: brain:spike already ran today, and each run needs its own clearance; nothing called.`);
+  const ledgerPath = dayLedgerPath(dataDir, 'spike', now());
+  const ranToday = alreadyRanToday(ledgerPath, 'brain:spike');
+  if (ranToday) {
+    out(ranToday);
     return 1;
   }
 
@@ -393,11 +360,8 @@ export async function main(argv: readonly string[], env: Readonly<Record<string,
   const ledger = createLedger({ path: ledgerPath });
   out(`brain:spike model ${BRAIN.model}, cap $${cap.toFixed(2)}, planned ${prompts.length} calls, ledger ${ledgerPath}`);
 
-  // 'wx' creates the file or fails: the day's clearance is used once, by the run that starts the first call.
-  const claim = () => {
-    fs.mkdirSync(path.dirname(ledgerPath), { recursive: true });
-    fs.closeSync(fs.openSync(ledgerPath, 'wx'));
-  };
+  // The day's clearance is used once, by the run that starts the first call.
+  const claim = () => claimLedger(ledgerPath);
   const report = await runSpike({
     prompts,
     complete: createHaikuComplete(createAnthropicSdk(key)),
@@ -409,28 +373,8 @@ export async function main(argv: readonly string[], env: Readonly<Record<string,
     log: out,
   });
   for (const line of renderReport(report)) out(line);
-  if (report.stopped === 'auth') out('Stopped: the API refused the credentials (401/403). Nothing more was called.');
+  if (report.stopped === 'auth') out(AUTH_STOPPED);
   return report.stopped === 'auth' ? 2 : 0;
 }
 
-/** Whether this module is the script Node was started with; never throws, so importing it is always safe. */
-function isMainModule(): boolean {
-  const invokedAs = process.argv[1];
-  if (invokedAs === undefined) return false;
-  try {
-    // realpath: Node resolves the main module through links.
-    return import.meta.url === pathToFileURL(fs.realpathSync(invokedAs)).href;
-  } catch {
-    return false;
-  }
-}
-
-if (isMainModule()) {
-  main(process.argv.slice(2), process.env).then(
-    (code) => process.exit(code),
-    () => {
-      console.error('brain:spike failed before finishing.');
-      process.exit(1);
-    },
-  );
-}
+runAsScript(import.meta.url, 'brain:spike', main);

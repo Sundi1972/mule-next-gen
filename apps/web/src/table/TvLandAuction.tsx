@@ -48,6 +48,7 @@ export function TvLandAuction({ table, game, lot }: { table: TableView<MuleView>
               storeSells={null}
               shipPays={null}
               lines={[{ id: 'min', label: 'MIN', price: lot.lot.minimum }]}
+              marks={{ ask: false, bid: true }}
               stage="walk"
               className="min-h-0 flex-1"
             />

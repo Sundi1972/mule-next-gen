@@ -89,7 +89,7 @@ describe('phaseScale and maxMonths', () => {
     for (let i = 0; i < (WALK.statusMs * 0.1) / WALK.tickMs - 1; i++) advance(WALK.tickMs);
     expect(game.viewFor(null).auction!.stage).toBe('status');
     advance(WALK.tickMs);
-    expect(game.viewFor(null).auction!.stage).toBe('declare');
+    expect(game.viewFor(null).auction!.stage).toBe('walk');
   });
 
   it('T-AC-6: production lasts 15 s (scaled by phaseScale, and the view says so) and ends early when all are ready', () => {
