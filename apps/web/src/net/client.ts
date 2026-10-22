@@ -279,7 +279,7 @@ export class TableClient {
         this.set({ view: msg.view });
         return;
       case 'handoffCode':
-        if (this.handoffWanted) this.setHandoff({ code: msg.code, expiresAt: msg.expiresAt, expired: false });
+        if (this.handoffWanted) this.setHandoff({ code: msg.code, expiresAt: msg.expiresAt });
         return;
       case 'chat': {
         if (this.state.chat.some((c) => c.id === msg.message.id)) return;
@@ -339,16 +339,19 @@ export class TableClient {
   }
 
   /** Shows a handoff code, marked expired when its time is up; null drops it. Only the newest code has a pending expiry. */
-  private setHandoff(code: HandoffCode | null): void {
+  private setHandoff(issued: Omit<HandoffCode, 'expired'> | null): void {
     if (this.handoffExpiry !== null) this.cancel(this.handoffExpiry);
     this.handoffExpiry = null;
-    if (code && !code.expired) {
-      this.handoffExpiry = this.later(() => {
-        this.handoffExpiry = null;
-        this.set({ handoffCode: { ...code, expired: true } });
-      }, Math.max(0, code.expiresAt - this.serverNow()));
+    if (!issued) {
+      if (this.state.handoffCode !== null) this.set({ handoffCode: null });
+      return;
     }
-    if (code !== this.state.handoffCode) this.set({ handoffCode: code });
+    const code = { ...issued, expired: false };
+    this.handoffExpiry = this.later(() => {
+      this.handoffExpiry = null;
+      this.set({ handoffCode: { ...code, expired: true } });
+    }, Math.max(0, code.expiresAt - this.serverNow()));
+    this.set({ handoffCode: code });
   }
 
   toast(message: string): void {
