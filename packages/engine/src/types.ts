@@ -346,13 +346,14 @@ export interface StatusRow {
 /** Why a good was skipped without a screen of its own. */
 export type SkipReason = 'nobody has any' | 'nobody buys' | 'nobody trading';
 
-/** The live goods auction: goods one at a time, each with a status screen, a declare and a walk. */
+/** The live goods auction: goods one at a time, each with a status screen and then a walk. */
 export interface LiveAuction extends WalkBoard {
-  /** clockMs is the status screen's, the declare's or the walk's clock, by stage. */
+  /** The status screen's or the walk's clock, by stage. */
+  clockMs: number;
   /** Goods still to come after the current one. */
   queue: Good[];
   good: Good | null;
-  stage: 'status' | 'declare' | 'walk' | 'over';
+  stage: 'status' | 'walk' | 'over';
   /** Store prices for this good, fixed when it comes up. Whether the store trades at them depends on its stock and budget. */
   storeBuy: number;
   storeSell: number;

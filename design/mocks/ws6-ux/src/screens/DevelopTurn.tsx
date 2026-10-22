@@ -211,6 +211,7 @@ export function DevelopTurn({ start = 'start' }: { start?: Start }) {
 
   return (
     <GameShell
+      anchored={place === 'store' ? turn.others.map((o) => o.id) : []}
       phase="Development"
       seconds={turn.filling ? undefined : turn.left}
       now={now}
