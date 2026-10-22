@@ -51,6 +51,18 @@ describe('a dropped phone in the goods auction', () => {
     expect(ticks, 'the good was still walking after the drop').toBeGreaterThan(10);
     expect(holdings(game, good)).toEqual(before);
   });
+
+  it.each([
+    ['on a side', () => {}],
+    ['after passing', (game: MuleGame) => game.handle('s2', { type: 'declare', side: 'pass' })],
+  ])('FM-dropped-status: a phone dropped on the status screen %s counts as Done: once s1 presses Ready the walk starts on the next tick', (_, before) => {
+    const { game, advance, good } = toStatus();
+    before(game);
+    game.connectionChanged('s2', false);
+    game.handle('s1', { type: 'ready' });
+    advance(WALK.tickMs);
+    expect(game.viewFor(null).auction).toMatchObject({ good, stage: 'walk' });
+  });
 });
 
 // One human at the table with an AI seat, so nobody else is left to wait for.
