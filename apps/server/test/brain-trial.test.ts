@@ -473,6 +473,7 @@ describe('brain:trial', () => {
     expect(verdicts(input({ games: [game({ end: 'unfinished' })] }))[1]).toBe('fail');
     expect(verdicts(input({ planned: 2, stopped: 'cap' }))).toEqual(['not proven', 'not proven']);
     expect(verdicts(input({ planned: 2, stopped: 'done' }))).toEqual(['not proven', 'not proven']);
+    expect(verdicts(input({ planned: 2, stopped: 'cap', games: [game({ decisions: decisions(79, 100) })] }))[0]).toBe('not proven');
     expect(verdicts(input({ games: [game({ end: 'crashed' })] }))[1]).toBe('fail');
     // A game cut short leaves its seat-months out, so a silent month in it must not let the share pass.
     for (const end of ['crashed', 'unfinished'] as const) {

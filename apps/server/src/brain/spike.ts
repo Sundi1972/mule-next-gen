@@ -188,7 +188,6 @@ interface Settled {
 
 const ascending = (a: number, b: number) => a - b;
 
-
 const isAnswered = (s: Settled) => s.outcome !== 'timeout' && s.outcome !== 'error';
 
 function kindRow(kind: KindRow['kind'], waitMs: number | null, settled: Settled[]): KindRow {
