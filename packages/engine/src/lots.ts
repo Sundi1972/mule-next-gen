@@ -325,8 +325,10 @@ function lateRules(state: GameState, a: LandAuction): void {
   const overtake = a.leaderId !== null && a.leaderId !== leader.id;
   a.leaderId = leader.id;
   if (!overtake || a.clockMs >= LOTS.lateMs) return;
-  const added = Math.min(LOTS.lateMs - a.clockMs, LOTS.lateCapMs - a.addedMs);
-  a.clockMs += added;
+  // A long step can run the clock past zero; players only ever get back time counted from zero, so that is all the cap pays for.
+  const left = Math.max(0, a.clockMs);
+  const added = Math.min(LOTS.lateMs - left, LOTS.lateCapMs - a.addedMs);
+  a.clockMs = left + added;
   a.addedMs += added;
 }
 
