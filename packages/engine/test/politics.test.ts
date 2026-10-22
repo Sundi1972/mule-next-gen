@@ -588,7 +588,7 @@ describe('RULE-3: tally and winner', () => {
       // No plots, no ballots, equal money: every seat ties at every step down to the last resort.
       setMoney(state, { lena: 1000, brix: 1000, ossa: 1000, ai1: 1000 });
       // A seat at the term limit sits out, so a rule that keeps one seat winning shows in the winners, not as a refusal.
-      for (const id of SEATS) if (canRun(state, id).governor === true) runFor(state, id, 'governor');
+      for (const id of SEATS) if (canRun(state, id).governor === true) runFor(state, id, 'governor', HOLD);
       runOutClock(state);
       const result = runOutClock(state)!;
       expect(result.governor.how).toBe('tieRule');
