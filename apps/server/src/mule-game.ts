@@ -287,9 +287,11 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   }
 
   private checkAllReady(): void {
-    const waiting = this.seats.filter((s) => !s.isAi && !this.away.has(s.id) && !this.ready.has(s.id) && !this.doneDeveloping(s.id));
-    // The auctions end on their own, good by good and lot by lot.
     const phase = this.state?.phase;
+    // A phone that drops in the land grant just doesn't claim; a reload must not end the grant for everyone.
+    const excused = (id: string) => this.away.has(id) && phase !== 'landGrant';
+    const waiting = this.seats.filter((s) => !s.isAi && !excused(s.id) && !this.ready.has(s.id) && !this.doneDeveloping(s.id));
+    // The auctions end on their own, good by good and lot by lot.
     if (phase && phase !== 'gameOver' && phase !== 'auction' && phase !== 'landAuction' && waiting.length === 0) this.nextPhase();
   }
 
