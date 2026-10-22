@@ -1,6 +1,6 @@
 import type { GameContext } from '@tabletop/core';
 import { describe, expect, it } from 'vitest';
-import { WALK } from '@mule/engine';
+import { WALK, type GameState } from '@mule/engine';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
 
 /** A context with a manual clock, so phase timers run instantly. */
@@ -77,6 +77,22 @@ describe('MuleGame', () => {
     expect(game.viewFor('s2').me?.id).toBe('s2');
     expect(board.me).toBeNull();
     expect(board.tiles.every((t) => t.traits === undefined && t.ground === undefined)).toBe(true);
+  });
+
+  it('B-AC-9: every view, phone and TV, carries each plot\'s special field; plain plots carry none', () => {
+    const { ctx } = fakeContext();
+    const game = new MuleGame(ctx, 93);
+    game.start(seats);
+    const state = (game as unknown as { state: GameState }).state;
+    const specials = state.tiles.filter((t) => t.special);
+    expect(specials.length).toBeGreaterThan(0);
+    for (const viewer of ['s1', 's2', null]) {
+      const tiles = game.viewFor(viewer).tiles;
+      for (const t of state.tiles) expect(tiles[t.y * state.width + t.x]!.special).toEqual(t.special);
+      expect(tiles.filter((t) => t.special)).toHaveLength(specials.length);
+    }
+    const ruin = specials.find((t) => t.special!.kind === 'ruins');
+    if (ruin) expect(game.viewFor(null).tiles[ruin.y * state.width + ruin.x]!.special!.salvage).toBe(ruin.special!.salvage);
   });
 
   it('moves the land grant light on a tick and only lets the lit plot be claimed', () => {
