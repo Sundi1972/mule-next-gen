@@ -1,8 +1,9 @@
 import { cx, PlayerMark, SPECIES_NAME, Timer } from '@mule/ui';
-import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { flushSync } from 'react-dom';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { fmt } from '../game/derive';
+import { useEscape } from './dialog';
 import { usePhoneGame } from './game';
 import { MoveToPhone } from './MoveToPhone';
 
@@ -22,6 +23,12 @@ export const useWide = () => useContext(Wide);
  * clear of the rail at the rail's real width: `--rail` there is the rail's width at both sizes.
  */
 export const ShellLayer = createContext<ReactNode>(null);
+
+/**
+ * Opens the move-to-phone dialog, which is held above the per-phase screens so it stays open, with its code, as the
+ * phase moves on. `button` is the current shell's move-to-phone, for focus to return to.
+ */
+export const MoveToPhoneOpener = createContext<{ open: () => void; button: RefObject<HTMLButtonElement> } | null>(null);
 
 /** What the player does next, at the top of the rail. */
 export interface Now {
@@ -112,15 +119,10 @@ export function PhoneShell({
   fill?: boolean;
   children: ReactNode;
 }) {
-  const { table, view, self, slot } = usePhoneGame();
+  const { view, self, slot } = usePhoneGame();
   const [root, wide] = useWideRef<HTMLDivElement>();
   const layer = useContext(ShellLayer);
-  const [moving, setMoving] = useState(false);
-  const moveButton = useRef<HTMLButtonElement>(null);
-  const closeMove = () => {
-    setMoving(false);
-    moveButton.current?.focus();
-  };
+  const move = useContext(MoveToPhoneOpener);
   return (
     <Wide.Provider value={wide}>
       <div ref={root} className="h-full @container/shell">
@@ -150,9 +152,9 @@ export function PhoneShell({
                 <span className="min-w-0 truncate text-sm font-semibold @min-[1100px]/shell:text-base">{self.name}</span>
                 <ThemeToggle className="ml-1 shrink-0" />
                 <button
-                  ref={moveButton}
+                  ref={move?.button}
                   type="button"
-                  onClick={() => setMoving(true)}
+                  onClick={move?.open}
                   className="flex h-7 shrink-0 items-center gap-1 rounded-chip border border-holo-line px-1.5 text-xs text-holo hover:border-holo @min-[1100px]/shell:h-8 @min-[1100px]/shell:px-2.5 @min-[1100px]/shell:text-sm"
                   aria-label="Move to my phone"
                   data-testid="move-to-phone"
@@ -182,25 +184,21 @@ export function PhoneShell({
             )}
           </aside>
           {layer}
-          {moving && <MoveDialog room={table.code} name={self.name} onClose={closeMove} />}
         </div>
       </div>
     </Wide.Provider>
   );
 }
 
-/** Mid-game, the move of this seat to another device, over the whole shell. Escape closes it, as Done does. */
-function MoveDialog({ room, name, onClose }: { room: string; name: string; onClose: () => void }) {
+/**
+ * Mid-game, the move of this seat to another device, over the whole game screen. Escape closes it, as Done does.
+ * It sits outside the screen's shell, so it is a `shell` container itself.
+ */
+export function MoveDialog({ room, name, onClose }: { room: string; name: string; onClose: () => void }) {
   const titleId = useId();
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useEscape(onClose);
   return (
-    <div className="absolute inset-0 z-40 grid place-items-center bg-void/70 p-4" role="dialog" aria-modal aria-labelledby={titleId} data-testid="host-dialog">
+    <div className="absolute inset-0 z-40 grid place-items-center bg-void/70 p-4 @container/shell" role="dialog" aria-modal aria-labelledby={titleId} data-testid="host-dialog">
       <div className="flex max-w-[560px] flex-col gap-3 rounded-sheet border-2 border-holo bg-panel p-4 shadow-glow @min-[1100px]/shell:max-w-[720px] @min-[1100px]/shell:gap-5 @min-[1100px]/shell:p-8">
         <MoveToPhone
           titleId={titleId}

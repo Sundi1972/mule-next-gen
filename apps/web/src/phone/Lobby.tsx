@@ -1,12 +1,13 @@
 import type { TableView } from '@mule/protocol';
 import { Button, COLOUR_NAME, Creature, cx, SLOT_COLOR, SPECIES, SPECIES_NAME, SPECIES_PERK, type Slot, type Species } from '@mule/ui';
-import { useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { joinUrl, Qr } from '../components/Qr';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { lobbySeatSpecies } from '../game/derive';
 import { createRoom } from '../net/client';
 import { useClient, useClientState } from '../net/react';
+import { useEscape } from './dialog';
 import { MoveToPhone } from './MoveToPhone';
 import { NowCard, WIDE_PX, type Now } from './Shell';
 
@@ -461,13 +462,7 @@ function Dialog({
   onCancel: () => void;
 }) {
   const titleId = useId();
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onCancel]);
+  useEscape(onCancel);
   let body: ReactNode;
   if (dialog === 'handoff')
     body = (
