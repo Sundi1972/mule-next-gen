@@ -500,7 +500,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           try {
             const ai = this.ai.get(seat.id);
             if (ai) ai.auctionTick(state, dt, (a) => this.aiAct(seat.id, a));
-            else if (this.away.has(seat.id)) auctionDone(state, seat.id);
+            else if (this.away.has(seat.id)) {
+              // A dropped phone has finished trading: its walker stops where it is.
+              try {
+                setWalk(state, seat.id, 0);
+              } catch (err) {
+                if (!(err instanceof RuleError)) throw err;
+              }
+              auctionDone(state, seat.id);
+            }
           } catch (err) {
             if (!(err instanceof RuleError)) throw err;
           }
