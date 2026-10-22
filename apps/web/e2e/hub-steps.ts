@@ -17,8 +17,10 @@ const HUNGRY_FOOD = 2;
 const FIRST: Good[] = ['food', 'water', 'energy'];
 /** C17: what exists today, and nothing else, is drawn; the Governor's desk only for the Governor. */
 const TODAYS_DESKS = ['colony', 'talk', 'council', 'market'];
-/** The office desks today: AI seats run in month 1, so whether the smoke's seat holds one is read from the game. */
+/** Every office's desk. AI seats run in month 1, so whether the smoke's seat holds an office is read from the game. */
 const OFFICE_DESKS = ['governor', 'sheriff'] as const;
+/** C17: the office desks built today; the Sheriff's is not, so a Sheriff sees no desk for it. */
+const BUILT_OFFICE_DESKS: readonly string[] = ['governor'];
 const TODAYS_TOOLS = ['look', 'drone', 'list'];
 /** B-AC-12: the stage's content fills at least this share of the stage's height. */
 const FILL = 0.8;
@@ -59,7 +61,7 @@ export async function planningIsTheHub(phone: Page, server: MuleServer, code: st
   const verdict = (g: Good) => (have[g] >= need[g] ? 'OK' : `SHORT ${need[g] - have[g]}`);
   await planning.getByTestId('need-food').filter({ hasText: verdict('food') }).waitFor({ timeout });
 
-  const held = OFFICE_DESKS.filter((o) => state.politics?.[o] === SEAT);
+  const held = OFFICE_DESKS.filter((o) => state.politics?.[o] === SEAT && BUILT_OFFICE_DESKS.includes(o));
   const narrow = await read(phone);
   checkHub(narrow, `${PHONE.viewport.width}×${PHONE.viewport.height}`, held);
   const expected = GOODS.filter((g) => need[g] > 0);
@@ -86,7 +88,7 @@ export async function planningIsTheHub(phone: Page, server: MuleServer, code: st
   }
   checkHub(wide, `${LAPTOP.width}×${LAPTOP.height}`, held);
   check(wide.onStage.marketStrip, `B-AC-14: at ${LAPTOP.width} px the store's prices sit under the map, on the stage`);
-  return `desks ${narrow.desks.join(', ')} (offices held: ${held.join(', ') || 'none'}); needs ${narrow.needs.map((n) => `${n.good} ${verdict(n.good as Good)}`).join(', ')}; now first at 844 and 1440; stage filled ${(narrow.fill * 100).toFixed(0)}% / ${(wide.fill * 100).toFixed(0)}%`;
+  return `desks ${narrow.desks.join(', ')} (office desks held: ${held.join(', ') || 'none'}); needs ${narrow.needs.map((n) => `${n.good} ${verdict(n.good as Good)}`).join(', ')}; now first at 844 and 1440; stage filled ${(narrow.fill * 100).toFixed(0)}% / ${(wide.fill * 100).toFixed(0)}%`;
 }
 
 function checkHub(f: Shown, at: string, held: readonly string[]): void {
