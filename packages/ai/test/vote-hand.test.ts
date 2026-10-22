@@ -171,7 +171,8 @@ describe('VoteHand on a Classic table', () => {
     { persona: 'aggressive' as const, fund: 1_000, month1: 8, month2: 5 },
     { persona: 'cautious' as const, fund: 1_000, month1: 4, month2: 4 },
     { persona: 'trader' as const, fund: 1_000, month1: null, month2: 5 },
-    { persona: 'trader' as const, fund: 0, month1: 7, month2: 5 },
+    // AM-9: in month 1 the fund is empty because nothing is collected yet, not low, so no bump: the trader holds 5%.
+    { persona: 'trader' as const, fund: 0, month1: null, month2: 5 },
     { persona: 'saboteur' as const, fund: 0, month1: 10, month2: 5 },
   ])('T-AC-6: an AI Governor sets a tax inside RULE-6 ($persona, fund $fund → $month1, then $month2)', ({ persona, fund, month1, month2 }) => {
     const state = newGame();
