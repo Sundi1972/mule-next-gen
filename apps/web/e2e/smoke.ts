@@ -9,6 +9,7 @@ import { errors as playwrightErrors, type BrowserContext, type Page } from 'play
 import { PHASE_MS } from '../../server/src/mule-game.js';
 import { check, claimAPlot, launch, PHONE, startServer, TV, type AuctionSteps } from './harness';
 import { planningIsTheHub } from './hub-steps';
+import { readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow } from './production-steps';
 import { fedPlayerFillsAFullHoloBar, hungryPlayerSeesAShortOrangeBar, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
 
@@ -106,7 +107,7 @@ try {
   check((await tvGame.getByRole('img', { name: 'Bramblet' }).count()) >= 1, 'B-AC-1: the TV game still shows the first AI as a Bramblet');
 
   // Month 1.
-  await phone.getByRole('button', { name: "I'm ready" }).click();
+  await readyThroughTheElection(phone, within(PHASE_MS.planning));
   const claim = phone.getByRole('button', { name: /CLAIM/ });
   await claim.waitFor({ timeout: 5_000 });
   check(await claim.isVisible(), 'CLAIM button visible');
