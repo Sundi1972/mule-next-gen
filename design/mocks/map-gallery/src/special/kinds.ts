@@ -56,7 +56,7 @@ const SALVAGE_NAME = { alloy: 'Alloy', electronics: 'Electronics' } as const;
 /** What a kind does, in general: the legend's line. Numbers from MAP.specialEffect. */
 export const SPECIAL_EFFECT: Record<SpecialKind, string> = {
   ruins: `pays its first owner ${FX.salvage.alloy} Alloy or ${FX.salvage.electronics} Electronics, once, then is gone.`,
-  crystalCavern: `+${FX.crystalCavern} Crystite when mined. ${pct(FX.collapseChance)} a month it caves in.`,
+  crystalCavern: `+${FX.crystalCavern} Crystite when mined. Each month it's mined, a ${pct(FX.collapseChance)} chance it caves in.`,
   geyser: `+${FX.geyser} Water or Energy.`,
   oasis: `+${FX.oasis} Food.`,
   relic: `+${FX.relic} to every working plot touching it, anyone's.`,

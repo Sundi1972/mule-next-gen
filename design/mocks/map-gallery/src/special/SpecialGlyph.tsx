@@ -199,7 +199,8 @@ export function SpecialMap({ variant, tiles, ...map }: Omit<HoloMapProps, 'tiles
   const density = map.density ?? 'phone';
   return (
     <div className="relative isolate" data-testid={`special-map-${variant}-${density}`}>
-      <HoloMap {...map} tiles={tiles} className={cx(map.className, variant === 'landmark' && '[&>.grid]:z-[2] [&>svg]:z-[2]')} />
+      {/* HoloMap now draws its own badge (PR-4); the mock keeps drawing its variant over a map without one. */}
+      <HoloMap {...map} tiles={tiles.map(({ special: _special, ...tile }) => tile)} className={cx(map.className, variant === 'landmark' && '[&>.grid]:z-[2] [&>svg]:z-[2]')} />
       {variant === 'badge' ? (
         <BadgeLayer width={map.width} height={map.height} tiles={tiles} density={density} />
       ) : (
