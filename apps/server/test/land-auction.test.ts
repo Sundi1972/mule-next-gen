@@ -1,8 +1,9 @@
 import type { GameContext } from '@tabletop/core';
 import { describe, expect, it } from 'vitest';
-import { advancePhase, COLONY_SELLER, createGame, GAME, LOTS, RuleError, TAX, WALK, type GameState } from '@mule/engine';
+import { COLONY_SELLER, GAME, LOTS, RuleError, TAX, WALK, type GameState } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
+import { colonySeed } from './fake-context.js';
 
 /** A context with a manual clock, so phase timers and the auction tick run instantly. */
 function fakeContext() {
@@ -407,7 +408,7 @@ describe('land auction on the server', () => {
   });
 
   it('B-AC-8: a colony lot comes up first, every seat can bid, sale → store capital', () => {
-    const seed = colonySeed();
+    const seed = colonySeed(seats);
     const { ctx, advance } = fakeContext();
     const game = new MuleGame(ctx, seed);
     game.start(seats);
@@ -438,17 +439,6 @@ describe('land auction on the server', () => {
     expect(after.news[0]).toBe(`Ossa bought plot ${at(lot.item)} from the colony for ${bid}.`);
   });
 });
-
-/** The first seed whose month-1 roll brings a colony lot, found by playing the engine, never by mocking its RNG. */
-function colonySeed(): number {
-  for (let seed = 1; seed < 1_000; seed++) {
-    const state = createGame({ seed, players: seats });
-    while (state.phase !== 'landGrant') advancePhase(state);
-    advancePhase(state);
-    if (state.landAuction?.lot?.seller === COLONY_SELLER) return seed;
-  }
-  throw new Error('no colony seed under 1000');
-}
 
 // The view carries no store capital, so it is read from the game's own state.
 const storeCapital = (game: MuleGame) => (game as unknown as { state: GameState }).state.store.capital;
