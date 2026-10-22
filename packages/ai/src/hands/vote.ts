@@ -85,12 +85,16 @@ export class VoteHand {
     }
   }
 
-  /** Itself if it runs; a Rookie's seeded guess; else the smallest landowner, so the table leans against the leader. */
+  /**
+   * Itself if it runs; a Rookie's seeded guess; else the smallest landowner, so the table leans against the leader.
+   * A tie is a seeded draw, not the lower seat: in month 1 nobody owns land (AM-10). A lone minimum draws nothing.
+   */
   private choose(obs: GameState, candidates: readonly string[]): string {
     if (candidates.includes(this.mind.me)) return this.mind.me;
     if (this.mind.levelId === 'rookie') return this.rng.pick(candidates);
-    const seat = (id: string) => obs.players.findIndex((p) => p.id === id);
-    return [...candidates].sort((a, b) => plotsOwned(obs, a) - plotsOwned(obs, b) || seat(a) - seat(b))[0]!;
+    const fewest = Math.min(...candidates.map((id) => plotsOwned(obs, id)));
+    const tied = candidates.filter((id) => plotsOwned(obs, id) === fewest);
+    return tied.length === 1 ? tied[0]! : this.rng.pick(tied);
   }
 
   private govern(obs: GameState, act: Act): void {
