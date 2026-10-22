@@ -340,20 +340,22 @@ describe('RULE-8: how a seat votes', () => {
 });
 
 describe('RULE-8: the Governor steps the tax', () => {
-  // Fund is low under 3 months of both offices' pay: 3 × (50 + 30) = 240.
+  // Fund is low under 3 months of both offices' pay: 3 × (50 + 30) = 240, from month 2 (AM-9: the fund starts empty, before any payday).
   it.each([
-    { current: 5, target: 8, fund: 1_000, low: 0, high: 10, want: 8 },
-    { current: 5, target: 4, fund: 1_000, low: 0, high: 10, want: 4 },
-    { current: 0, target: 10, fund: 1_000, low: 0, high: 15, want: 5 },
-    { current: 12, target: 4, fund: 1_000, low: 0, high: 15, want: 7 },
-    { current: 5, target: 5, fund: 239, low: 0, high: 10, want: 7 },
-    { current: 5, target: 5, fund: 240, low: 0, high: 10, want: 5 },
-    { current: 10, target: 10, fund: 0, low: 5, high: 10, want: 10 },
-    { current: 8, target: 2, fund: 1_000, low: 5, high: 13, want: 5 },
+    { month: 2, current: 5, target: 8, fund: 1_000, low: 0, high: 10, want: 8 },
+    { month: 2, current: 5, target: 4, fund: 1_000, low: 0, high: 10, want: 4 },
+    { month: 2, current: 0, target: 10, fund: 1_000, low: 0, high: 15, want: 5 },
+    { month: 2, current: 12, target: 4, fund: 1_000, low: 0, high: 15, want: 7 },
+    { month: 2, current: 5, target: 5, fund: 239, low: 0, high: 10, want: 7 },
+    { month: 2, current: 5, target: 5, fund: 240, low: 0, high: 10, want: 5 },
+    { month: 2, current: 10, target: 10, fund: 0, low: 5, high: 10, want: 10 },
+    { month: 2, current: 8, target: 2, fund: 1_000, low: 5, high: 13, want: 5 },
+    { month: 1, current: 5, target: 5, fund: 0, low: 0, high: 10, want: 5 },
+    { month: 1, current: 5, target: 8, fund: 0, low: 0, high: 10, want: 8 },
   ])(
-    'RULE-8: the tax steps toward the persona target by at most maxStep, +taxFundBump when the fund is low, clamped to the bounds ($current → $target, fund $fund, bounds $low to $high)',
-    ({ current, target, fund, low, high, want }) => {
-      expect(nextTax(current, target, fund, { low, high })).toBe(want);
+    'RULE-8 (AM-9): the tax steps toward the persona target by at most maxStep, +taxFundBump when the fund is low after the first payday, clamped to the bounds (month $month, $current → $target, fund $fund, bounds $low to $high)',
+    ({ month, current, target, fund, low, high, want }) => {
+      expect(nextTax(current, target, fund, { low, high }, month)).toBe(want);
     },
   );
 });
