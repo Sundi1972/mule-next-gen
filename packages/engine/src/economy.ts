@@ -164,7 +164,7 @@ export function nextPostedPrice(
   off = exportDemand(state),
 ): number {
   const prev = state.store.posted[good];
-  const short = cover(state, good, demand) < PRICE.minCover || lastShortages.includes(good);
+  const short = cover(state, good, demand) < PRICE.minCover || lastShortages.includes(good) || shelfShort(state, good, PRICE.shelfCover);
   let target = short ? Infinity : targetPrice(state, good, demand);
   if (demand[good] - off[good] <= 0) target = Math.min(target, state.store.offWorld[good]);
   const next = Math.min(riseCap(state, good, prev), Math.max(prev * (1 - PRICE.maxFall), target));
@@ -207,7 +207,7 @@ export function storeQuotes(state: GameState, good: Good): { buy: number | null;
   const price = colonyPrice(state, good);
   const buy = Math.max(1, Math.floor(price * (1 - PRICE.storeSpread)));
   return {
-    buy: storeWants(state, good, buy) > 0 ? buy : null,
+    buy: storeWants(state, good) > 0 ? buy : null,
     sell: storeForSale(state, good) > 0 ? Math.ceil(price * (1 + PRICE.storeSpread)) : null,
   };
 }
@@ -222,18 +222,21 @@ export function storeForSale(state: GameState, good: Good): number {
   return Math.max(0, state.store.stock[good] - reserve);
 }
 
+/** Whether the store's shelf of Food or Water holds under `months` of the colonists' need. Other goods never are. */
+export function shelfShort(state: GameState, good: Good, months: number): boolean {
+  return (good === 'food' || good === 'water') && state.store.stock[good] < (state.colonists / UPKEEP.colonistsPerUnit) * months;
+}
+
 /**
- * How many units the store is willing to buy this month. The store is a
- * merchant, not a bottomless buyer: it fills its shelves up to a few months of
- * demand, plus a ship's load of goods off-world buyers take, and never bets
- * more than a share of its capital on one good.
+ * How many units the store is willing to buy this month: it fills its shelves
+ * up to a few months of demand, plus a ship's load of goods off-world buyers
+ * take. The store never runs out of money, so only shelf room limits it.
  */
-export function storeWants(state: GameState, good: Good, price: number, demand = monthlyDemand(state)): number {
+export function storeWants(state: GameState, good: Good, demand = monthlyDemand(state)): number {
   // For off-world goods it also stocks up a full ship's load, to sell when the ship calls.
   const shipLoad = exportDemand(state)[good] * GAME.exportShipEvery;
   const room = Math.ceil(demand[good] * PRICE.storeMaxCover + shipLoad) - state.store.stock[good];
-  const budget = Math.floor((Math.max(0, state.store.capital) * PRICE.storeBudgetShare) / Math.max(1, price));
-  return Math.max(0, Math.min(room, budget));
+  return Math.max(0, room);
 }
 
 /**
