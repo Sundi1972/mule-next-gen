@@ -267,6 +267,32 @@ ux           WS6's hub mock at ws6-ux b28ee91 (awaiting Heiko's approval):
 depends_on   C9 (contract), WS6 mock approval (not stubbable: an implementer never designs a screen)
 ```
 
+```
+C12 · ADDED · a Governor candidate's tax promise (AM-11)
+today        a candidate is a name; the approved mock shows a quoted promise under each one on
+             the ballot and the TV, and nothing in engine, protocol or web carries it.
+             verified_by: read (Council.tsx, TvElection.tsx, politics.ts at 7fb9063)
+tomorrow     MUST let a Governor candidate pick one promise from RULE-10's list when running;
+             MUST show it under the candidate on every phone's ballot and the TV's result;
+             MUST let an AI Governor candidate pick by RULE-10's AI row. No Sheriff promise
+             until slice 4, no law promise until slice 2, no free text.
+logic        → §2 RULE-10
+seam         packages/engine/src/politics.ts::runFor (the candidacy) — the promise lives with
+             the candidacy, so switching office or withdrawing drops it with no second store
+senior       junior would: a free-text field, or a promise list in the web only · senior does:
+             a closed union validated by the engine, public in the view like the candidates,
+             so slice 3 can check a kept promise against the tax actually set
+mechanism    in_place
+call sites   runFor: MuleGame.handle('run'), VoteHand run step, engine tests
+pin          RULE-2's rows hold; T-AC-1's stage machine unchanged
+ux           WS6's promise-picker mock at nominate (to be mocked and approved), plus the
+             approved ballot rows (PlanningHub.tsx Ballot) and TV result rows (Election.tsx)
+             at ws6-ux 5f3b298 · GRAFT TARGET: apps/web/src/phone/hub/politics/Council.tsx,
+             apps/web/src/table/TvElection.tsx
+depends_on   C3 (engine), C9 (contract), WS6 picker mock (not stubbable)
+atomicity    the engine field, the intent and the view ship together (one contract)
+```
+
 ## §2 · The Logic `[handoff]`
 
 ```
@@ -306,6 +332,8 @@ first match wins
   3   the player already runs for the other office            switch: their candidacy moves
   4   otherwise                                               they run for that office
 withdraw  run(null) during nominate removes the candidacy.
+promise   running for Governor carries a tax promise, checked by RULE-10; running for Sheriff
+          carries none (C12, AM-11). Switching office or withdrawing drops the promise.
 note      A sitting Sheriff may run for Governor and vice versa: one person never holds both
           because a player runs for one office per election.
 ```
@@ -386,9 +414,11 @@ RULE-8 · VoteHand (Classic AI seats)                                 shape: dec
 run       in nominate, once, after a seeded delay in POLITICS.ai.actMs:
           governor if a seeded draw < POLITICS.ai.runGovernor[persona], else sheriff if a
           seeded draw < POLITICS.ai.runSheriff[persona], else none; never against RULE-2.
+          Running for Governor, it promises by RULE-10's AI row (C12).
 vote      in ballot, per contested office: itself if it runs; otherwise the candidate with
           the fewest plots, so the table leans against the biggest landowner (the design's
-          "council reins in the runaway leader"); ties → lower seat. A Rookie that does not
+          "council reins in the runaway leader"); ties → a seeded draw among the tied (AM-10).
+          A Rookie that does not
           run votes for a seeded random candidate instead of the fewest-plots rule; a Rookie
           candidate votes for itself like any candidate (AM-7).
 done      Done right after acting in each stage.
@@ -397,6 +427,25 @@ tax       as Governor, once per planning after the election: step toward the per
           maxStep; plus POLITICS.ai.taxFundBump (2) when the fund is under 3 months of office
           pay, from month 2 on (AM-9: the fund starts empty); clamped to RULE-6.
 Smart seats  the same code in slice 1 (no model call); WS2's brain takes these decisions later.
+```
+
+```
+RULE-10 · A Governor candidate's tax promise (C12, AM-11)            shape: decision table
+
+inputs    office; promise ∈ { cap N (whole percent) | lower | hold } | none
+first match wins
+  #   when                                             then
+  1   office = sheriff and a promise is given          refuse "Sheriff candidates make no promise yet"
+  2   office = governor and no promise                 refuse "Pick a promise to run for Governor"
+  3   cap N with N outside 0..15                       refuse "A tax promise is 0% to 15%"
+  4   otherwise                                        the candidacy carries the promise
+words     cap N → "Tax no higher than N%" · lower → "Lower the tax" · hold → "Hold the tax"
+public    a candidate's promise is public like the candidacy (phones and TV)
+AI row    persona target T against the tax at nominate C: T > C → cap T; T < C → lower;
+          T = C → hold
+kept      not checked in slice 1; slice 3's reputation may read it against the tax set
+examples  Lena runs promising cap 8 → every ballot and the TV show "Tax no higher than 8%" ·
+          cap 16 refused · a trader AI at 5% with target 5 promises "Hold the tax"
 ```
 
 ```
@@ -448,6 +497,8 @@ interface Election {
 
 As built in PR-3 (AM-8): `tax` is `{ percent, start, low, high }`, `pay` is `{ governor, sheriff }`, `election` carries `done`, there is no `tax.setBy`, and `election.result` is null until the reveal's countdown ends.
 
+C12 (AM-11), ADDED, not breaking: `type TaxPromise = { kind: 'cap'; percent: number } | { kind: 'lower' } | { kind: 'hold' }`; the engine's `Election` gains `promises: Record<string, TaxPromise>` (Governor candidates only); the `run` intent gains an optional `promise` (required for Governor by RULE-10); the view's `election` gains `promises`, public on every screen and added to the board's key allow-list.
+
 Reason and outcome enums the screens show: `canRun[office]: true | 'closed' | 'termLimit'` (running for the other office is not a refusal: it switches the candidacy, RULE-2 row 3); `result[office].how: 'votes' | 'unopposed' | 'appointed' | 'baron' | 'tieRule'`.
 
 Worked example (view, Brix's phone, ballot stage, month 4): `politics: { governor: 'lena', sheriff: 'ai1', term: [1,3], next: 7, baron: 'lena', tax: { percent: 8, start: 5, setBy: 'lena' }, fund: 412, weights: [{ id: 'lena', votes: 3, parts: { base: 1, land: 1, reputation: 0, baron: 1, taxes: 0 } }, …], election: { stage: 'ballot', seconds: 14, total: 20, candidates: { governor: ['lena','brix'], sheriff: ['ai1'] }, voted: ['lena'], result: null } }`, `me.politics: { running: 'governor', ballot: { governor: 'brix' }, canRun: { governor: true, sheriff: true } }`. Lena's ballot is not in Brix's view.
@@ -482,6 +533,9 @@ Code-only; no existing state to reach: games live in the server's memory and a r
 | T-AC-4 (serves UBER-AC-1) | With politics off, the sim's output equals trunk's, byte for byte, apart from the new report line | C1 C10 | WS1's sim row 0 | — |
 | T-AC-5 (serves UBER-AC-1) | Pay never takes the fund below 0; the office score line is 0 with politics off | C6 C7 | engine test, sim's "lowest colony fund" check | fund 20 → Governor gets 20, Sheriff 0 |
 | T-AC-6 (serves B-AC-1) | VoteHand: each Classic seat runs (or not), votes and presses Done within the stage's clock with no API key; a Governor seat sets a tax inside RULE-6 | C8 | ai test on a seeded game | Rookie votes, never refused |
+| B-AC-6 | Given Lena runs for Governor promising "Tax no higher than 8%" · When the ballot opens and later the result shows · Then every phone's ballot and the TV's result show that promise under her name (C12, AM-11) | C12 | the phone and TV DOM in an e2e | a Sheriff candidate shows no promise |
+| T-AC-8 (serves B-AC-6) | RULE-10's four rows, one test each; switching office or withdrawing drops the promise | C12 | engine test | — |
+| T-AC-9 (serves B-AC-6) | VoteHand running for Governor promises by RULE-10's AI row; never refused | C12 | ai test on a seeded game | — |
 | T-AC-7 (serves B-AC-5) | observe() for seat B and cloneForSim never expose or share seat A's ballot | C10 | ai/engine test | — |
 
 Invariant for every test: one player never holds both offices; the fund is never negative.
@@ -638,6 +692,32 @@ because   P-1: the Governor's tax should follow the persona's aim and the fund's
 goal      P-1 — still met
 folded    RULE-8 text; nextTax takes the month; PR-2's T-AC-6 trader row (fund 0 holds 5%
           in month 1); WS1 re-measures rows 2 and 3
+```
+
+```
+AM-10 · 2026-10-22 · PM ruling · WS1 money rows
+
+target    §2 RULE-8 (vote)
+did       An AI that does not run votes for the fewest-plots candidate, ties broken by a
+          seeded draw instead of the lower seat. In month 1 nobody owns land, so every such
+          AI voted for the lowest seat: terms by seat ran ai0 30-33% to ai3 18-21% (WS1).
+          RULE-3 row 6 (the engine's last tie rule) stays deterministic: no RNG in elections.
+because   fairness: a seat number must not decide offices
+goal      P-1 — still met
+folded    RULE-8 text; WS1 re-measures terms by seat
+```
+
+```
+AM-11 · 2026-10-22 · Heiko (card: "Tax promises now (Recommended)") · WS6 render gate
+
+target    §1 C12 (new), §2 RULE-2, RULE-8, RULE-10 (new), §3, §6 B-AC-6, T-AC-8, T-AC-9
+did       The approved mock shows a promise under each candidate; slice 1 had none. Heiko
+          chose: Governor candidates pick from a short tax list (no higher than N%, lower,
+          hold); no Sheriff promise until slice 4; law promises with slice 2; no free text.
+          A follow-up PR before the lane milestone.
+because   P-1: the approved election screen, honoured where slice 1 can back it up
+goal      P-1 — still met
+folded    C12, RULE-10, ACs; plan task PR-6
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
