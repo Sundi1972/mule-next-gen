@@ -232,12 +232,12 @@ async function goToThePub(phone: Page): Promise<void> {
 
 /**
  * The goods auction: press its Done button at every stage it shows ('Ready',
- * 'Done choosing', 'Done with <Good>') until the phone leaves the auction.
+ * 'Done with <Good>') until the phone leaves the auction.
  * `beforePress` gets the button's label first.
  */
 async function pressDoneThroughTheAuction(phone: Page, beforePress?: (button: string) => Promise<void>): Promise<void> {
   await phone.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
-  const done = phone.locator('[data-phase=auction]').getByRole('button', { name: /^(Ready|Done choosing|Done with .+)$/ });
+  const done = phone.locator('[data-phase=auction]').getByRole('button', { name: /^(Ready|Done with .+)$/ });
   const over = phone.locator('[data-phase]:not([data-phase=auction])');
   for (let pressed = 0; ; pressed++) {
     check(pressed < MAX_AUCTION_PRESSES, `auction still running after ${MAX_AUCTION_PRESSES} Done presses`);

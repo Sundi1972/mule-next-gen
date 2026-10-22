@@ -32,6 +32,7 @@ const REMOVED: Record<RemovedReason, string> = {
   kicked: 'The host removed you from the table',
   closed: 'The host closed the table',
   moved: "You're playing on another device now",
+  error: 'Something went wrong and the table had to stop. Start a new game to play again.',
 };
 
 export interface Toast {
