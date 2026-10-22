@@ -62,6 +62,30 @@ describe('land claims off reading order', () => {
   });
 });
 
+/** Month 1's land grant on seed 3, ai0 already fed by its own Food and Energy plots, Smithore posted at `smithore`. */
+function grantWithFarms(smithore: number): GameState {
+  const state = fourSeats(3);
+  while (state.phase !== 'landGrant') advancePhase(state);
+  state.store.posted.smithore = smithore;
+  const [food, energy] = state.tiles.filter((t) => !t.owner && t.terrain === 'plains');
+  Object.assign(food!, { owner: 'ai0', outfit: 'food' });
+  Object.assign(energy!, { owner: 'ai0', outfit: 'energy' });
+  return state;
+}
+
+describe('land plans by worth', () => {
+  it('T-AC-14: a land plan worth a quarter of the best is not offered to the decider; plans close in worth still are', () => {
+    // Smithore at 400: two mountain mines are worth about 6,400, the best two farms about 1,700.
+    const rich = landDecision(observe(grantWithFarms(400), 'ai0'), traderMind);
+    const best = Math.max(...rich.all.map((c) => c.value));
+    expect(best).toBeGreaterThan(3 * Math.min(...rich.all.filter((c) => c.action.focus === 'grown').map((c) => c.value)));
+    for (const option of rich.options) expect(option.value).toBeGreaterThan(best / 2);
+    // Negative case: at month 1's own Smithore price the plans are close in worth, and the farm plan stays on offer.
+    const even = landDecision(observe(grantWithFarms(31), 'ai0'), traderMind);
+    expect(even.options.map((c) => c.action.focus)).toContain('grown');
+  });
+});
+
 describe('cash reserve', () => {
   it('T-AC-3: a Water farm whose own first output covers the gap is not vetoed by the reserve', () => {
     // ai0 holds one idle river plot, and neither Food nor Water: the reserve holds back cash for next month's Food.
@@ -129,7 +153,7 @@ describe('shortage foresight', () => {
 });
 
 describe('values for lot bids (WS3 caps AI bids at these)', () => {
-  it('INV-WS3-1: every free plot is worth at least its score, and a finite number of credits', () => {
+  it('INV-WS3-1: to a seat with the cash to develop it, every free plot is worth at least its score, and a finite number of credits', () => {
     // A river plot with the colony out of Water has a Water farm to give: worth more than the plot alone.
     const dry = developmentWithWater(0);
     const river = dry.tiles.findIndex((t) => t.terrain === 'river' && !t.owner);
@@ -143,6 +167,25 @@ describe('values for lot bids (WS3 caps AI bids at these)', () => {
       expect(Number.isFinite(v)).toBe(true);
       expect(v).toBeGreaterThanOrEqual(GAME.plotScore);
     }
+  });
+
+  it('T-AC-15: a seat bids for a lot plot only what leaves the cash to develop it and its idle plots', () => {
+    const state = developmentWithWater(36);
+    const index = state.tiles.findIndex((t) => !t.owner && t.terrain === 'river');
+    const [a, b] = state.tiles.filter((t, i) => !t.owner && t.terrain !== 'store' && i !== index);
+    a!.owner = 'ai0';
+    b!.owner = 'ai0';
+    const mule = mulePriceFor(state, 'ai0');
+    const valueWith = (money: number) => {
+      state.players[0]!.money = money;
+      return plotValue(observe(state, 'ai0'), traderMind, index);
+    };
+    // Rich, it bids the plot's worth; with 1,000 cr and 2 idle plots, no more than 1,000 less 3 MULEs.
+    const worth = valueWith(100_000);
+    expect(worth).toBeGreaterThan(1000 - 3 * mule);
+    expect(valueWith(1000)).toBe(1000 - 3 * mule);
+    // With less than 3 MULEs' price on hand it bids nothing.
+    expect(valueWith(3 * mule - 1)).toBe(0);
   });
 
   it('INV-WS5-1: the AI values a geyser plot above the same plot without it', () => {
