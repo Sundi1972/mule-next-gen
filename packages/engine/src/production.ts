@@ -231,10 +231,10 @@ export function runProduction(state: GameState): {
     lines.push({ tile: indexOf.get(tile)!, good, made, parts });
     ran.add(tile);
   };
-  /** Halves what the parts add up to, rounding down, as a part of its own. */
+  /** Cuts what the parts add up to to UPKEEP.shortOutputShare, rounding down, as a part of its own. */
   const halve = (parts: Part[], why: Part['why']) => {
     const made = parts.reduce((n, p) => n + p.delta, 0);
-    if (made > 0) parts.push({ why, delta: Math.floor(made / 2) - made });
+    if (made > 0) parts.push({ why, delta: Math.floor(made * UPKEEP.shortOutputShare) - made });
   };
 
   for (const tile of working.filter((t) => t.outfit === 'energy')) credit(tile, 'energy', rawOutputParts(state, tile));
