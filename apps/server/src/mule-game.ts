@@ -279,7 +279,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         unlistLot(state, seatId, intent.id);
         return;
       case 'run':
-        runFor(state, seatId, intent.office);
+        runFor(state, seatId, intent.office, intent.promise);
         return;
       case 'vote':
         castVote(state, seatId, intent.office, intent.candidate);

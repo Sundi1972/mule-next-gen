@@ -50,6 +50,7 @@ function electionView(state: GameState): ElectionView | null {
     seconds: Math.max(0, e.clockMs / 1_000),
     total: electionStageMs(e.stage) / 1_000,
     candidates: { governor: [...e.candidates.governor], sheriff: [...e.candidates.sheriff] },
+    promises: structuredClone(e.promises),
     voted: Object.keys(e.ballots),
     done: [...e.done],
     result: resultShown(state) ? structuredClone(e.result) : null,

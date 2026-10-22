@@ -1,4 +1,4 @@
-import type { AuctionSide, Office, Outfit } from '@mule/engine';
+import type { AuctionSide, Office, Outfit, TaxPromise } from '@mule/engine';
 
 /**
  * The moves an AI seat makes: exactly the ones a human's phone can send. The
@@ -15,8 +15,8 @@ export type AiAction =
   | { type: 'pub' }
   | { type: 'declare'; side: AuctionSide }
   | { type: 'walk'; dir: -1 | 0 | 1 }
-  /** Run for an office; null withdraws. */
-  | { type: 'run'; office: Office | null }
+  /** Run for an office; null withdraws. A Governor run carries a promise (RULE-10). */
+  | { type: 'run'; office: Office | null; promise?: TaxPromise }
   /** A secret ballot for a contested office; null clears it. */
   | { type: 'vote'; office: Office; candidate: string | null }
   /** The Governor's sales tax, in whole percent. */
