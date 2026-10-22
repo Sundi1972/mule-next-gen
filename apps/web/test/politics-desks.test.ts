@@ -21,6 +21,7 @@ const election = (extra: Partial<ElectionView> = {}): ElectionView => ({
   seconds: 14,
   total: 20,
   candidates: { governor: [], sheriff: [] },
+  promises: {},
   voted: [],
   done: [],
   result: null,
