@@ -106,7 +106,7 @@ try {
   // shows.
   await Promise.all([phase(lena, 'planning'), phase(kai, 'planning'), phase(tv, 'planning')]);
   await say(kai, 'Ready when you are.');
-  for (const p of [lena, kai, tv]) await p.getByTestId('chat-ticker').getByText('Ready when you are.').waitFor({ timeout: SHOWS_WITHIN_MS });
+  for (const p of [lena, kai, tv]) await p.getByTestId('chat-ticker').getByText('Ready when you are.').waitFor({ timeout: within(SHOWS_WITHIN_MS) });
   await lena.waitForTimeout(BUBBLE_SEEN_MS);
   for (const p of [lena, kai]) await p.getByRole('button', { name: "I'm ready" }).click({ timeout: 5_000 });
 
