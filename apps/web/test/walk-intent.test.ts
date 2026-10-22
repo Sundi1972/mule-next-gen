@@ -1,88 +1,106 @@
 import type { MuleIntent } from '@mule/protocol';
 import { describe, expect, it } from 'vitest';
-import { WalkIntent } from '../src/phone/useWalkIntent';
+import { stepDir, WalkIntent } from '../src/phone/useWalkIntent';
 
 /** A walk intent over a client that records what the phone sends. */
 function phone() {
   const sent: MuleIntent[] = [];
   const intent = new WalkIntent({ intent: (i) => void sent.push(i) });
-  return { intent, sent };
+  return { intent, sent, dirs: () => sent.map((i) => i.type === 'walk' && i.dir) };
 }
 
-/** The page the key handler looks at: a modal dialog in it or not, as `[aria-modal="true"]` finds it. */
-const page = ({ modal }: { modal: boolean }) => ({ querySelector: (selectors: string) => (modal && selectors === '[aria-modal="true"]' ? {} : null) });
+const MODAL = { aria: '[aria-modal="true"]', native: 'dialog[open]' } as const;
+
+/** The page the key handlers look at, with this kind of modal open in it (or none), matched the way a selector list is. */
+const page = (open: keyof typeof MODAL | null) => ({
+  querySelector: (selectors: string) => (open && selectors.split(',').map((s) => s.trim()).includes(MODAL[open]) ? {} : null),
+});
+
+const key = (k: string) => ({ key: k });
 
 describe("the phone's walk intents", () => {
   it("FM-FU1: Up held across the goods auction's switch to the next good, the next good's first press still walks", () => {
-    const { intent, sent } = phone();
-    intent.board('food');
+    const { intent, dirs } = phone();
+    intent.board(true, 'food');
     intent.walk('up');
-    // The bell: Food's board goes, Energy's status screen comes up while Up is still held.
-    intent.board(null);
-    intent.board('energy');
-    sent.length = 0;
+    // The bell: Energy's status screen comes up, off the board, while Up is still held.
+    intent.board(false, 'energy');
+    intent.board(true, 'energy');
     intent.walk('up');
-    expect(sent).toEqual([{ type: 'walk', dir: 'up' }]);
+    expect(dirs()).toEqual(['up', 'up']);
   });
 
-  it('FM-FU1: the next board coming up with no screen in between still lets the first press walk', () => {
-    const { intent, sent } = phone();
-    intent.board('food');
+  it('FM-FU1: the next round coming up with no screen in between still lets the first press walk', () => {
+    const { intent, dirs } = phone();
+    intent.board(true, 'food');
     intent.walk('up');
-    intent.board('energy');
-    sent.length = 0;
+    intent.board(true, 'energy');
     intent.walk('up');
-    expect(sent).toEqual([{ type: 'walk', dir: 'up' }]);
+    expect(dirs()).toEqual(['up', 'up']);
   });
 
-  it('FM-FU1 (negative): off the board a press sends nothing, and letting go at the bell is not sent to the next board', () => {
-    const { intent, sent } = phone();
+  it('FM-FU1 (negative): off the board nothing is sent, and the held direction is dropped', () => {
+    const { intent, dirs } = phone();
     intent.walk('up');
-    intent.board('food');
+    intent.board(true, 'food');
     intent.walk('up');
-    intent.board(null);
+    // A Hold let go after the bell must not reach the server as a stop.
+    intent.board(false, 'food');
     intent.walk('stop');
     intent.walk('down');
-    expect(sent).toEqual([{ type: 'walk', dir: 'up' }]);
+    intent.board(true, 'food');
+    intent.walk('up');
+    expect(dirs()).toEqual(['up', 'up']);
   });
 
-  it('FM-FU1 (negative): on one board, only a change of direction is sent', () => {
-    const { intent, sent } = phone();
-    intent.board('food');
-    for (const dir of ['up', 'up', 'stop', 'stop', 'down', 'down', 'stop'] as const) intent.walk(dir);
-    intent.board('food');
-    intent.walk('stop');
-    expect(sent.map((i) => i.type === 'walk' && i.dir)).toEqual(['up', 'stop', 'down', 'stop']);
+  it('FM-FU1 (negative): on one round, only a change of direction is sent, and a re-render keeps the held one', () => {
+    const { intent, dirs } = phone();
+    intent.board(true, 'food');
+    for (const dir of ['up', 'up', 'stop', 'stop', 'down', 'down', 'stop', 'up'] as const) intent.walk(dir);
+    intent.board(true, 'food');
+    intent.walk('up');
+    expect(dirs()).toEqual(['up', 'stop', 'down', 'stop', 'up']);
   });
 
-  it('FM-modal-keys: with a dialog open, ArrowUp sends no walk intent', () => {
-    const { intent, sent } = phone();
-    intent.board('food');
-    intent.keyDown('ArrowUp', page({ modal: true }));
-    expect(sent).toEqual([]);
+  it("FM-FU1: the board's steps map to their directions", () => {
+    expect([stepDir(1), stepDir(-1), stepDir(0)]).toEqual(['up', 'down', 'stop']);
   });
 
-  it('FM-modal-keys (negative): with no dialog open, ArrowUp walks and letting go stops', () => {
-    const { intent, sent } = phone();
-    intent.board('food');
-    intent.keyDown('ArrowUp', page({ modal: false }));
-    intent.keyUp('ArrowUp');
-    expect(sent).toEqual([
-      { type: 'walk', dir: 'up' },
-      { type: 'walk', dir: 'stop' },
-    ]);
+  it('FM-modal-keys: with an aria-modal dialog open, ArrowUp sends no walk intent', () => {
+    const { intent, dirs } = phone();
+    intent.board(true, 'food');
+    intent.keys(page('aria')).down(key('ArrowUp'));
+    expect(dirs()).toEqual([]);
+  });
+
+  it('FM-modal-keys: with a native dialog open by showModal, ArrowDown sends no walk intent', () => {
+    const { intent, dirs } = phone();
+    intent.board(true, 'food');
+    intent.keys(page('native')).down(key('ArrowDown'));
+    expect(dirs()).toEqual([]);
+  });
+
+  it('FM-modal-keys (negative): with no dialog open, the arrows walk and letting go stops; other keys do nothing', () => {
+    const { intent, dirs } = phone();
+    intent.board(true, 'food');
+    const { down, up } = intent.keys(page(null));
+    down(key('a'));
+    down(key('ArrowUp'));
+    up(key('ArrowUp'));
+    down(key('ArrowDown'));
+    up(key('a'));
+    up(key('ArrowDown'));
+    expect(dirs()).toEqual(['up', 'stop', 'down', 'stop']);
   });
 
   it('FM-modal-keys (negative): Up held as a dialog opens still stops when it is let go', () => {
-    const { intent, sent } = phone();
-    intent.board('food');
-    intent.keyDown('ArrowUp', page({ modal: false }));
+    const { intent, dirs } = phone();
+    intent.board(true, 'food');
+    intent.keys(page(null)).down(key('ArrowUp'));
     // The dialog is open now; the key's own repeat must not walk, and letting go must not leave the walker walking.
-    intent.keyDown('ArrowUp', page({ modal: true }));
-    intent.keyUp('ArrowUp');
-    expect(sent).toEqual([
-      { type: 'walk', dir: 'up' },
-      { type: 'walk', dir: 'stop' },
-    ]);
+    const inDialog = intent.keys(page('aria'));
+    inDialog.down(key('ArrowUp'));
+    inDialog.up(key('ArrowUp'));
+    expect(dirs()).toEqual(['up', 'stop']);
   });
 });
