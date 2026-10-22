@@ -2,6 +2,7 @@ import { ADJACENCY, FACTORY, FACTORY_FIT, GROWN_BASE, GROWN_MIN, POLLUTION, RECI
 import { eventOutput, planEvent } from './events.js';
 import { neighbours } from './map.js';
 import { airBand, runPollution } from './pollution.js';
+import { relicFit, settleSpecials, specialBonus } from './specials.js';
 import { addStock, emptyStock, hasStock } from './stock.js';
 import {
   GROWN_GOODS,
@@ -58,7 +59,7 @@ export function adjacencyBonus(state: GameState, tile: Tile): number {
 
 /**
  * Output of a raw-goods plot before the Energy check: the ground rating,
- * then traits, the owner's species, adjacency and pollution.
+ * then traits, the owner's species, a special field, adjacency and pollution.
  */
 export function rawOutput(state: GameState, tile: Tile): number {
   return rawOutputParts(state, tile).reduce((n, p) => n + p.delta, 0);
@@ -86,6 +87,7 @@ export function rawOutputParts(state: GameState, tile: Tile): Part[] {
     if (good === 'food' && species === 'bramblet') add('species', SPECIES_PERK.brambletFood);
   }
   for (const trait of tile.traits) add('trait', TRAIT_EFFECT[trait]?.[good] ?? 0);
+  add('special', specialBonus(state, tile, good));
   const sum = () => parts.reduce((n, p) => n + p.delta, 0);
   if (sum() > 0) add('cluster', adjacencyBonus(state, tile));
   add('pollution', -pollutionLoss(state, tile, good));
@@ -117,8 +119,8 @@ export interface FactoryFit {
 
 /**
  * How well a factory works on a plot for its owner: terrain, a neighbouring
- * plot that makes one of its inputs, an industrial park, experience and
- * pollution (for Medicine). The same numbers drive production and the fit
+ * plot that makes one of its inputs, an industrial park, experience, a
+ * touching alien relic and pollution (for Medicine). The same numbers drive production and the fit
  * the phone shows before you install.
  */
 export function factoryFit(state: GameState, tile: Tile, good: ProcessedGood, owner: string): FactoryFit {
@@ -148,6 +150,11 @@ export function factoryFit(state: GameState, tile: Tile, good: ProcessedGood, ow
   if (tile.outfit === good && tile.runMonths >= FACTORY.experienceMonths) {
     output += FACTORY.experienceBonus;
     lines.push({ tone: 'good', text: `Running for ${tile.runMonths} months: experience, +1` });
+  }
+  const relic = relicFit(state, tile);
+  if (relic) {
+    output += relic.bonus;
+    lines.push(relic.line);
   }
   const loss = pollutionLoss(state, tile, good);
   if (loss > 0) {
@@ -190,7 +197,8 @@ export function energyUseOf(state: GameState, tile: Tile): number {
  *    farm whose owner is short of Water produces half again;
  * 3. factories convert inputs from the owner's stock, Alloy first because
  *    Electronics needs it; in an Energy shortage they are served last;
- * 4. pollution spreads and the air gauge moves.
+ * 4. special fields settle (ruins pay, a mined cavern may collapse), then
+ *    pollution spreads and the air gauge moves.
  * Returns what each player produced and the air points each caused.
  */
 export function runProduction(state: GameState): {
@@ -263,6 +271,7 @@ export function runProduction(state: GameState): {
     tile.runMonths = ran.has(tile) ? tile.runMonths + 1 : 0;
   }
 
+  settleSpecials(state, lines);
   const pollutionBy = runPollution(state);
   return { produced, pollutionBy, lines, events: event ? [event] : [] };
 }
