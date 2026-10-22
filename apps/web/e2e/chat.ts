@@ -19,6 +19,8 @@ const SHORTEST_LOOKED_FOR_MS = 300;
 /** Long enough for every bubble of a burst to have shown and gone. */
 const BURST_SETTLES_MS = 7_000;
 const BETWEEN_LINES_MS = 2_600;
+/** How long a bubble shows before the phase that ends it changes: long enough to be sampled showing, then gone. */
+const BUBBLE_SEEN_MS = 1_500;
 const PHASE_TIMEOUT_MS = 90_000;
 
 type Wire = { lines: { id: number; from: string; to?: string; text: string; at: number }[]; phases: { key: string; phase: string; at: number }[]; seatId: string | null };
@@ -80,10 +82,17 @@ try {
   await lena.getByRole('button', { name: 'Add AI player' }).click();
   await lena.locator('[data-testid=seats] li').nth(2).waitFor();
   await lena.getByRole('button', { name: 'Start game' }).click();
-  for (const p of [lena, kai]) await p.getByRole('button', { name: "I'm ready" }).click({ timeout: 5_000 });
 
   const kaiId = wires.get(kai)!.seatId!;
   const phase = (p: Page, name: string) => p.locator(`[data-phase=${name}]`).first().waitFor({ timeout: PHASE_TIMEOUT_MS });
+
+  // Planning: Kai says a line and, once every screen shows it, both press Ready, so the phase ends while its bubble
+  // shows.
+  await Promise.all([phase(lena, 'planning'), phase(kai, 'planning'), phase(tv, 'planning')]);
+  await say(kai, 'Ready when you are.');
+  for (const p of [lena, kai, tv]) await p.getByTestId('chat-ticker').getByText('Ready when you are.').waitFor({ timeout: SHOWS_WITHIN_MS });
+  await lena.waitForTimeout(BUBBLE_SEEN_MS);
+  for (const p of [lena, kai]) await p.getByRole('button', { name: "I'm ready" }).click({ timeout: 5_000 });
 
   // The land grant: a line, a whisper from Lena to Kai, then two lines within a second.
   await Promise.all([phase(lena, 'landGrant'), phase(kai, 'landGrant'), phase(tv, 'landGrant')]);
@@ -95,12 +104,9 @@ try {
   // Both claim, which ends the grant while the last bubble may still show.
   await Promise.all([claimOne(lena), claimOne(kai)]);
 
-  // Development: two lines within a second, then a line said just before both go to the pub, so the phase change
-  // ends its bubble.
+  // Development: two lines within a second.
   await Promise.all([phase(lena, 'development'), phase(kai, 'development'), phase(tv, 'development')]);
   await burst(lena, kai, 'dev');
-  await say(kai, 'Off to the pub, see you at the auction.');
-  await lena.getByTestId('chat-ticker').getByText('Off to the pub').waitFor({ timeout: SHOWS_WITHIN_MS }).catch(() => undefined);
   for (const p of [lena, kai]) await p.locator('[data-phase=development]').getByRole('button', { name: 'Go to the pub and end your turn' }).click({ timeout: 5_000 });
 
   // The auction: two lines within a second while the TV draws the walk.
@@ -269,6 +275,8 @@ function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
   }
 
   const anchors = { creature: 0, seatRow: 0 };
+  const ended = schedule(wire).filter((b) => b.to - b.from >= SHORTEST_LOOKED_FOR_MS && wire.phases.some((p) => p.at === b.to));
+  check(ended.length > 0, `B-AC-17: on ${who} a phase change came while a bubble showed, so its end is tested`);
   for (const b of schedule(wire)) {
     if (b.to - b.from < SHORTEST_LOOKED_FOR_MS) continue;
     const line = wire.lines.find((l) => l.id === b.id)!;
