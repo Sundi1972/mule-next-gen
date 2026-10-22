@@ -1,6 +1,6 @@
 import { GROWN_ODDS, MAP, MINERAL_ODDS, TERRAIN_ODDS, sizeBand, type FloorGood } from './config.js';
 import type { Layout } from './map-layout.js';
-import { zeroGround } from './map.js';
+import { zeroGround } from './grid.js';
 import type { Rng } from './rng.js';
 import type { Ground, Terrain } from './types.js';
 
