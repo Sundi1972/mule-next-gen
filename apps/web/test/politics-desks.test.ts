@@ -14,7 +14,7 @@ import { electionNow } from '../src/phone/hub/politics/slots';
 import { TvElection } from '../src/table/TvElection';
 
 const player = (id: string, name: string, slot: number): PlayerView => ({ id, name, isAi: false, color: '', species: 'zipwing', money: 1000, plots: 0, ready: false, doneDeveloping: false, slot });
-const PLAYERS = [player('s1', 'Lena', 0), player('s2', 'Ossa', 1), player('s3', 'Kai', 2), player('s4', 'Brix', 3)];
+const PLAYERS = [player('s1', 'Lena', 0), player('s2', 'Ossa', 1), player('s3', 'Kai', 2), player('s4', 'Brix', 3), player('s5', 'Pip', 4)];
 const stock = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0, alloy: 0, electronics: 0, medicine: 0 };
 
 const election = (extra: Partial<ElectionView> = {}): ElectionView => ({
@@ -275,6 +275,22 @@ describe('the politics desks', () => {
     expect(row('governor', 's2')).toContain('Ossa“Hold the tax”');
     expect(row('sheriff', 's3')).not.toMatch(/[“”]/);
     expect(chunkOf(html, 'result-sheriff-s4', 'how-').replace(/<[^>]+>/g, '')).not.toMatch(/[“”]/);
+  });
+
+  it('C12: a view missing a Governor candidate\'s promise (malformed or older view) draws no empty quote on the ballot or the TV', () => {
+    // Defensive render only: the engine refuses every Governor run without a promise.
+    const candidates = { governor: ['s1', 's5'], sheriff: [] };
+    const ballot = onPhone(view(politics({ election: election({ stage: 'ballot', candidates, promises: { s1: CAP_8 } }) })), CouncilDesk);
+    expect(textOf(ballot, 'promise-s1')).toBe('“Tax no higher than 8%”');
+    expect(tagOf(ballot, 'promise-s5')).toBeUndefined();
+    expect(ballot).not.toContain('“”');
+    const result = {
+      governor: { winner: 's1', how: 'votes' as const, tallies: [{ id: 's1', votes: 2 }, { id: 's5', votes: 1 }] },
+      sheriff: { winner: 's3', how: 'appointed' as const, tallies: [] },
+    };
+    const tv = onTv(view(politics({ election: election({ stage: 'reveal', seconds: 2, total: 6, candidates, result, promises: { s1: CAP_8 } }) })));
+    expect(chunkOf(tv, 'result-governor-s5', 'how-').replace(/<[^>]+>/g, '')).not.toMatch(/[“”]/);
+    expect(tv).not.toContain('“”');
   });
 
   it("C12: Now at nominate says a Governor candidate promises something about the tax", () => {

@@ -75,27 +75,26 @@ async function main(): Promise<void> {
     await everyone(phones, (p) => p.page.locator('[data-phase=planning]').getByTestId('agenda-election').click({ timeout: 5_000 }));
     await Promise.all([
       (async () => {
-        // A first look at the picker, then Cancel: nothing is sent.
+        // The cap starts at today's tax; plus steps it to her cap, and Run's label waits for it.
         await lena.page.getByTestId('run-governor').click({ timeout: PRESS_MS });
-        const pick = lena.page.getByTestId('promise-pick');
-        await pick.waitFor({ timeout: PRESS_MS });
-        check(await lena.page.getByTestId('promise-run').isDisabled(), 'B-AC-6: "Run" waits until a promise is chosen');
-        check((await lena.page.getByTestId('promise-cap-value').innerText()).trim() === `${taxNow}%`, `B-AC-6: the cap starts at today's ${taxNow}%`);
-        await lena.page.getByTestId('promise-cancel').click({ timeout: PRESS_MS });
-        await pick.waitFor({ state: 'hidden', timeout: PRESS_MS });
-        check(lena.runs.length === 0, `B-AC-6: Cancel sends nothing, got ${JSON.stringify(lena.runs)}`);
-        await lena.page.getByTestId('run-governor').click({ timeout: PRESS_MS });
-        for (let n = taxNow; n < LENA_CAP; n++) {
-          await lena.page.getByTestId('promise-cap-plus').click({ timeout: PRESS_MS });
-          await lena.page.getByTestId('promise-cap-value').filter({ hasText: `${n + 1}%` }).waitFor({ timeout: PRESS_MS });
-        }
+        check((await lena.page.getByTestId('promise-cap-value').innerText({ timeout: PRESS_MS })).trim() === `${taxNow}%`, `B-AC-6: the cap starts at today's ${taxNow}%`);
+        for (let n = taxNow; n < LENA_CAP; n++) await lena.page.getByTestId('promise-cap-plus').click({ timeout: PRESS_MS });
         await lena.page.getByTestId('promise-run').filter({ hasText: `Run, promising “Tax no higher than ${LENA_CAP}%”` }).click({ timeout: PRESS_MS });
       })(),
       (async () => {
-        // A Sheriff run is one tap and carries no promise; then she runs for Governor instead, holding the tax.
+        // A Sheriff run is one tap and carries no promise.
         await ossa.page.getByTestId('run-sheriff').click({ timeout: PRESS_MS });
         await ossa.page.getByTestId('running').filter({ hasText: 'You run for Sheriff;' }).waitFor({ timeout: PRESS_MS });
         check(JSON.stringify(ossa.runs) === JSON.stringify([{ type: 'run', office: 'sheriff' }]), `B-AC-6 (negative): a Sheriff run sends no promise, got ${JSON.stringify(ossa.runs)}`);
+        // A first look at the picker, then Cancel: nothing is sent.
+        await ossa.page.getByTestId('run-governor').click({ timeout: PRESS_MS });
+        const pick = ossa.page.getByTestId('promise-pick');
+        await pick.waitFor({ timeout: PRESS_MS });
+        check(await ossa.page.getByTestId('promise-run').isDisabled(), 'B-AC-6: "Run" waits until a promise is chosen');
+        await ossa.page.getByTestId('promise-cancel').click({ timeout: PRESS_MS });
+        await pick.waitFor({ state: 'hidden', timeout: PRESS_MS });
+        check(ossa.runs.length === 1, `B-AC-6: Cancel sends nothing, got ${JSON.stringify(ossa.runs)}`);
+        // Then she runs for Governor instead, holding the tax.
         await ossa.page.getByTestId('run-governor').click({ timeout: PRESS_MS });
         await ossa.page.getByTestId('promise-hold').click({ timeout: PRESS_MS });
         await ossa.page.getByTestId('promise-run').filter({ hasText: 'Run, promising “Hold the tax”' }).click({ timeout: PRESS_MS });
