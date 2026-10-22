@@ -52,16 +52,72 @@ describe('a dropped phone in the goods auction', () => {
     expect(holdings(game, good)).toEqual(before);
   });
 
+  it('FM-dropped-walker: a dropped phone that reconnects mid-walk stays out and Done until it declares; declaring Buy brings it back at the start edge, not Done, and it buys', () => {
+    const { game, advance, good } = toStatus();
+    game.handle('s1', { type: 'declare', side: 'seller' });
+    game.handle('s2', { type: 'declare', side: 'buyer' });
+    game.handle('s1', { type: 'ready' });
+    game.handle('s2', { type: 'ready' });
+    advance(WALK.tickMs * 2);
+    expect(game.viewFor(null).auction).toMatchObject({ good, stage: 'walk' });
+    const walker = () => game.viewFor(null).auction!.walkers.find((w) => w.id === 's2')!;
+
+    game.connectionChanged('s2', false);
+    advance(WALK.tickMs);
+    game.connectionChanged('s2', true);
+    for (let i = 0; i < 5; i++) {
+      advance(WALK.tickMs);
+      expect(walker(), `tick ${i} after the reconnect`).toMatchObject({ side: 'pass', done: true });
+    }
+
+    const before = holdings(game, good);
+    game.handle('s2', { type: 'declare', side: 'buyer' });
+    expect(walker()).toMatchObject({ side: 'buyer', done: false, dir: 0 });
+    expect(walker().at, 'back at the bottom edge').toBeLessThanOrEqual(game.viewFor(null).auction!.lo);
+    game.handle('s2', { type: 'walk', dir: 'up' });
+    for (let i = 0; i < 2_000 && game.viewFor(null).auction?.good === good && holdings(game, good).stock === before.stock; i++) {
+      advance(WALK.tickMs);
+      expect(walker(), `tick ${i} after rejoining`).toMatchObject({ side: 'buyer', done: false });
+    }
+    expect(holdings(game, good).stock, 's2 bought after rejoining').toBeGreaterThan(before.stock);
+  });
+
   it.each([
     ['on a side', () => {}],
     ['after passing', (game: MuleGame) => game.handle('s2', { type: 'declare', side: 'pass' })],
-  ])('FM-dropped-status: a phone dropped on the status screen %s counts as Done: once s1 presses Ready the walk starts on the next tick', (_, before) => {
+  ])('FM-dropped-status: a phone dropped on the status screen %s passes and counts as Done there and again in the walk; once s1 presses Ready the walk starts on the next tick', (_, before) => {
     const { game, advance, good } = toStatus();
+    const s2 = () => game.viewFor(null).auction!.walkers.find((w) => w.id === 's2')!;
     before(game);
     game.connectionChanged('s2', false);
+    advance(WALK.tickMs);
+    expect(game.viewFor(null).auction).toMatchObject({ good, stage: 'status' });
+    expect(s2()).toMatchObject({ side: 'pass', done: true });
+
     game.handle('s1', { type: 'ready' });
     advance(WALK.tickMs);
     expect(game.viewFor(null).auction).toMatchObject({ good, stage: 'walk' });
+    // The walk starts with nobody Done, so the next tick marks the dropped phone again.
+    advance(WALK.tickMs);
+    expect(game.viewFor(null).auction).toMatchObject({ good, stage: 'walk' });
+    expect(s2()).toMatchObject({ side: 'pass', done: true });
+  });
+
+  it('FM-dropped-status: a phone dropped in the first good sits out every later good too: each status screen ends on the tick after s1 presses Ready', () => {
+    const { game, advance, good: first } = toStatus();
+    game.connectionChanged('s2', false);
+    // Ticks each good spent on its status screen, s1 pressing Ready on every one of them.
+    const statusTicks = new Map<Good, number>();
+    for (let i = 0; i < 5_000 && game.viewFor(null).phase === 'auction'; i++) {
+      const a = game.viewFor(null).auction;
+      if (a?.stage === 'status') statusTicks.set(a.good, (statusTicks.get(a.good) ?? 0) + 1);
+      game.handle('s1', { type: 'ready' });
+      advance(WALK.tickMs);
+    }
+    const later = [...statusTicks].filter(([g]) => g !== first);
+    expect(later.length, 'goods after the first reached their status screen').toBeGreaterThanOrEqual(3);
+    // Each new good gives every seat a fresh side; that tick's sitOut passes it again, so the status ends at once.
+    for (const [g, ticks] of later) expect(ticks, g).toBe(1);
   });
 });
 
