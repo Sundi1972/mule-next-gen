@@ -1,4 +1,4 @@
-import { POLITICS, type CanRun, type ElectionHow, type Office } from '@mule/engine';
+import { POLITICS, type CanRun, type ElectionHow, type Office, type TaxPromise } from '@mule/engine';
 import type { ElectionView } from '@mule/protocol';
 
 /** The offices in the order every screen lists them. */
@@ -9,6 +9,11 @@ export const OFFICE_NAME: Record<Office, string> = { governor: 'Governor', sheri
 /** Why the run button for an office is refused, from the view's canRun. */
 export function whyNot(reason: Exclude<CanRun, true>): string {
   return reason === 'closed' ? 'Candidates are closed' : `${POLITICS.maxGovernorTermsInRow} Governor terms in a row`;
+}
+
+/** A Governor candidate's tax promise, as the ballot and the TV quote it. */
+export function promiseText(p: TaxPromise): string {
+  return p.kind === 'cap' ? `Tax no higher than ${p.percent}%` : p.kind === 'lower' ? 'Lower the tax' : 'Hold the tax';
 }
 
 /** How an office was won, as the reveal says it. `baron` is the Land Baron's name. */

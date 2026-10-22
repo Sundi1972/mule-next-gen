@@ -178,6 +178,12 @@ function parse(text: string): ClientEnvelope<MuleIntent> | null {
 }
 
 const isOffice = (x: unknown) => x === 'governor' || x === 'sheriff';
+/** The shape of a tax promise; RULE-10 in the engine checks the rest. */
+const isPromise = (x: unknown) => {
+  if (typeof x !== 'object' || x === null) return false;
+  const p = x as Record<string, unknown>;
+  return p.kind === 'cap' ? Number.isInteger(p.percent) : p.kind === 'lower' || p.kind === 'hold';
+};
 
 function isIntent(v: unknown): v is MuleIntent {
   if (typeof v !== 'object' || v === null) return false;
@@ -208,7 +214,7 @@ function isIntent(v: unknown): v is MuleIntent {
     case 'unlist':
       return typeof i.id === 'string';
     case 'run':
-      return i.office === null || isOffice(i.office);
+      return (i.office === null || isOffice(i.office)) && (i.promise === undefined || isPromise(i.promise));
     case 'vote':
       return isOffice(i.office) && (i.candidate === null || typeof i.candidate === 'string');
     case 'setTax':

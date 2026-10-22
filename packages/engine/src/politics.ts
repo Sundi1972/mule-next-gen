@@ -6,7 +6,7 @@
 import { POLITICS } from './config.js';
 import { RuleError } from './errors.js';
 import { player } from './game.js';
-import type { CanRun, Election, ElectionResult, GameState, Office, OfficeResult, Politics } from './types.js';
+import type { CanRun, Election, ElectionResult, GameState, Office, OfficeResult, Politics, TaxPromise } from './types.js';
 
 /** Read-only all the way down: an election read before edit() may be shared with a what-if copy. */
 type Shared<T> = { readonly [K in keyof T]: T[K] extends object ? Shared<T[K]> : T[K] };
@@ -50,7 +50,7 @@ export function openPlanning(state: GameState): void {
   p.baron = landBaron(state, p.baron);
   p.taxAtStart = state.treasury.salesTax;
   p.election = POLITICS.electionMonths.includes(state.month)
-    ? { stage: 'nominate', clockMs: electionStageMs('nominate'), candidates: { governor: [], sheriff: [] }, ballots: {}, done: [], result: null }
+    ? { stage: 'nominate', clockMs: electionStageMs('nominate'), candidates: { governor: [], sheriff: [] }, promises: {}, ballots: {}, done: [], result: null }
     : null;
 }
 
@@ -108,16 +108,44 @@ const REFUSAL = {
   termLimit: `${POLITICS.maxGovernorTermsInRow} Governor terms in a row`,
 } as const;
 
-/** Runs for an office, moving any candidacy for the other one; null withdraws. Only in nominate. See WS7 spec RULE-2. */
-export function runFor(state: GameState, playerId: string, office: Office | null): void {
+/** The promise a run carries (null for Sheriff), rebuilt in its closed shape so nothing else rides along. See WS7 spec RULE-10. */
+function checkPromise(office: Office, promise: TaxPromise | undefined): TaxPromise | null {
+  const { min, max } = POLITICS.tax;
+  if (office === 'sheriff') {
+    if (promise) throw new RuleError('Sheriff candidates make no promise yet');
+    return null;
+  }
+  switch (promise?.kind) {
+    case 'lower':
+    case 'hold':
+      return { kind: promise.kind };
+    case 'cap':
+      if (!Number.isInteger(promise.percent) || promise.percent < min || promise.percent > max) throw new RuleError(`A tax promise is ${min}% to ${max}%`);
+      return { kind: 'cap', percent: promise.percent };
+    default:
+      // None, or a kind not on RULE-10's list: callers other than the server skip its shape check.
+      throw new RuleError('Pick a promise to run for Governor');
+  }
+}
+
+/**
+ * Runs for an office, moving any candidacy for the other one; null withdraws. Only in nominate.
+ * A Governor run carries a promise, which goes wherever the candidacy goes. See WS7 spec RULE-2, RULE-10.
+ */
+export function runFor(state: GameState, playerId: string, office: Office | null, promise?: TaxPromise): void {
   const allowed = canRun(state, playerId);
   const election = liveElection(state);
   const why = office === null ? (election.stage === 'nominate' ? true : 'closed') : allowed[office];
   if (why !== true) throw new RuleError(REFUSAL[why]);
-  if (office && election.candidates[office].includes(playerId)) return;
-  const { candidates } = edit(state).election!;
-  for (const o of OFFICES) candidates[o] = candidates[o].filter((c) => c !== playerId);
-  if (office) candidates[office].push(playerId);
+  const carried = office ? checkPromise(office, promise) : null;
+  const e = edit(state).election!;
+  // Running again for the same office keeps the place in the list.
+  if (!office || !e.candidates[office].includes(playerId)) {
+    for (const o of OFFICES) e.candidates[o] = e.candidates[o].filter((c) => c !== playerId);
+    if (office) e.candidates[office].push(playerId);
+  }
+  delete e.promises[playerId];
+  if (carried) e.promises[playerId] = carried;
 }
 
 /** Casts, changes or (with null) clears a secret ballot for a contested office. Only in the ballot stage. */
