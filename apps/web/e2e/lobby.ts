@@ -30,6 +30,8 @@ const PHASE_SCALE = 0.1;
 const within = (ms: number) => ms * PHASE_SCALE + 3_000;
 /** A land auction, when the month has one, runs on its own clock: PHASE_MS has no entry for it. */
 const LAND_AUCTION_ALLOWANCE_MS = 20_000;
+/** Just past a move code's 2 minutes (RULE-6). */
+const PAST_HANDOFF_EXPIRY = '02:01';
 
 const EVERYONE_IDS = [
   'lobby', 'hero', 'hero-name', 'hero-perk', 'species-pick', 'colour-pick', 'seats', 'guide', 'room-card', 'room-code', 'room-qr', 'now', 'now-title', 'now-steps',
@@ -212,7 +214,10 @@ async function colonistLobby(size: BrowserContextOptions, label: string, wide: b
   const tag = `B-AC-13 (${label})`;
   const heiko = await phone(`heiko ${label}`, size);
   const code = await hostRoom(heiko, base);
-  const lena = await joinRoom(await phone(`lena ${label}`, size), base, code, 'Lena');
+  const lenaPage = await phone(`lena ${label}`, size);
+  // Lena's clock runs in real time until her move code is fast-forwarded past its 2 minutes.
+  await lenaPage.clock.install();
+  const lena = await joinRoom(lenaPage, base, code, 'Lena');
   await heiko.getByTestId('add-ai').click();
   await heiko.getByTestId('add-ai').click();
   await rail(lena).nth(3).waitFor({ timeout: SHOWN_MS });
@@ -289,7 +294,20 @@ async function colonistLobby(size: BrowserContextOptions, label: string, wide: b
 
   const moveLena = lena.getByTestId('move-to-phone');
   await moveLena.click();
-  check(await shows(lena.getByRole('dialog', { name: 'Move to your phone' }).getByTestId('handoff-qr')), `B-AC-13 (handoff, ${label}): moving to the phone opens a dialog named by its title`);
+  const moveDialog = lena.getByRole('dialog', { name: 'Move to your phone' });
+  check(await shows(moveDialog.locator('[data-testid=handoff-qr][data-state=ready]')), `B-AC-13 (handoff, ${label}): moving to the phone opens a dialog named by its title, with a ready code`);
+  const firstLink = await qrLink(moveDialog);
+  await lena.clock.fastForward(PAST_HANDOFF_EXPIRY);
+  check(
+    (await shows(moveDialog.locator('[data-testid=handoff-qr][data-state=expired]'))) && (await shows(moveDialog.getByText('This code has expired.'))),
+    `B-AC-13 (handoff, ${label}): after 2 minutes the dialog says "This code has expired."`,
+  );
+  // Back to real time, so the next code's 2 minutes are counted against the room's clock and not 2 minutes ahead of it.
+  await lena.clock.setSystemTime(Date.now());
+  await moveDialog.getByTestId('handoff-renew').click();
+  check(await shows(moveDialog.locator('[data-testid=handoff-qr][data-state=ready]')), `B-AC-13 (handoff, ${label}): "New code" makes the code ready again`);
+  const renewed = await qrLink(moveDialog);
+  check(renewed !== firstLink, `B-AC-13 (handoff, ${label}): "New code" draws a different link, got ${renewed}`);
   await lena.keyboard.press('Escape');
   check(await gone(lena.getByTestId('host-dialog')), `B-AC-13 (handoff, ${label}): Escape closes the move dialog`);
   check(await moveLena.evaluate((el) => el === document.activeElement), `B-AC-13 (handoff, ${label}): focus goes back to move-to-phone`);
