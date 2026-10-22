@@ -180,7 +180,8 @@ describe('AI seats at the land auction', () => {
       }
     expect(moneyCapped, 'in every short run some AI bid a plot up to money − reserve').toBe(SEEDS.length);
     expect(valueCapped, 'in every flush run some AI bid a MULE up to its value').toBe(SEEDS.length);
-  });
+    // It replays thirty auctions tick by tick: half a second here, but over the 5 s default on CI's shared runner while every package's suite runs at once.
+  }, 30_000);
 
   it('B-AC-7: an AI whose money − reserve is under the minimum never moves, and presses Done', () => {
     for (const seed of [3, 7, 11]) {
