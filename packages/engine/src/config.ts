@@ -215,8 +215,16 @@ export const UPKEEP = {
    * household and crew need, they make half (on top of any Energy shortfall).
    */
   irrigated: ['food'] as RawGood[],
+  /** Share of its output a plot makes without the Energy (or, for an irrigated plot, the Water) it needs. */
+  shortOutputShare: 0.5,
   /** Colonists need 1 Food and 1 Water a month per this many colonists. */
   colonistsPerUnit: 20,
+  /** Colonists' Energy demand, as a share of their Food and Water units. */
+  colonistEnergyShare: 0.5,
+  /** Colonists need 1 Medicine a month per this many colonists (more when the air makes them sick). */
+  colonistsPerMedicine: 50,
+  /** The colony grows by this factor in a month its colonists were fed, and shrinks by this one when they went hungry. */
+  colonistGrowth: { fed: 1.04, hungry: 0.95 },
   /**
    * The most colonists pay per unit, from their off-world wages. Above it they
    * buy less, so their demand falls as the price rises: this is the demand curve.
@@ -228,6 +236,10 @@ export const UPKEEP = {
 
 export const START = {
   money: 1000,
+  /** Each player's depot at the start. */
+  playerStock: { food: 6, water: 6, energy: 4 } as Partial<Stock>,
+  /** Each player's reputation at the start, out of 100. */
+  reputation: 50,
   colonists: 100,
   storeMules: 10,
   storeCapital: 4000,
@@ -241,9 +253,10 @@ export const MULE = {
   smithorePerMule: 1,
   /** The store builds MULEs for every plot claimed in a month, plus this many. */
   spareInCorral: 2,
-  /** If the corral sold out, MULEs cost this much more next month; with half or more left over, surplusDown less. */
+  /** If the corral sold out, MULEs cost this much more next month; with surplusShare of the month's MULEs or more left over, surplusDown less. */
   scarcityUp: 0.15,
   surplusDown: 0.1,
+  surplusShare: 0.5,
   /** The scarcity factor never falls below this. */
   minFactor: 0.6,
   outfitCost: {
@@ -257,6 +270,8 @@ export const DEVELOPMENT = {
   fullSeconds: 50,
   /** Seconds with no Food at all; the time shrinks linearly with the shortfall. */
   minSeconds: 15,
+  /** Development never lasts less than this, whatever sickness and penalties take off. */
+  floorSeconds: 5,
   /** Seconds a colonist stands on a plot for a geo analysis. */
   analysisSeconds: 8,
   /** The pub pays base + (start + month * perMonth) * share of time left. */
@@ -270,6 +285,8 @@ export const DEVELOPMENT = {
 
 /** What pollutes, and by how much. From the design doc's Pollution tab. */
 export const POLLUTION = {
+  /** The air gauge runs from 0 (clean) to this. */
+  airMax: 100,
   /** Colony air points a month, and whether the source also fouls the plots around it. */
   sources: {
     rareEarth: { air: 4, spreads: true },
@@ -502,6 +519,9 @@ export const MAP = {
 };
 
 export const GAME = {
+  /** A game seats this many players, from the fewest to the most. */
+  minPlayers: 2,
+  maxPlayers: 6,
   maxMonths: 12,
   /** Months the game continues after the last free plot is claimed. */
   landRushMonths: 3,
@@ -612,6 +632,8 @@ export const WALK = {
   minSpeed: 2,
   /** The board reaches this share beyond the outermost price line; sellers start at its top, buyers at its bottom. */
   boardMargin: 0.3,
+  /** And this share of the posted price more, so a board whose price lines sit close together still has room to walk. */
+  boardPostedMargin: 0.1,
   /** How often the server steps the auction. */
   tickMs: 100,
 };
@@ -866,6 +888,8 @@ export const STRATEGIST = {
 
 /** The AI's hands in the real-time phases. Times are in ms. */
 export const AI_HANDS = {
+  /** How often AI hands act during development, in the server and the simulator alike. */
+  devTickMs: 100,
   /** Development steps, as a quick human taps them: to the corral and buy, to an outfitter, out to the plot and install, analyse, the pub. */
   develop: {
     buyMs: [1_400, 2_400] as [number, number],

@@ -185,7 +185,7 @@ function nextGood(state: GameState, skipped: LiveAuction['skipped']): void {
     const prices = [storeBuy, storeSell, posted, ...(ship !== null ? [ship] : [])];
     const low = Math.min(...prices);
     const high = Math.max(...prices);
-    const margin = (high - low) * WALK.boardMargin + posted * 0.1;
+    const margin = (high - low) * WALK.boardMargin + posted * WALK.boardPostedMargin;
     const lo = Math.max(0, Math.floor(low - margin));
     const hi = Math.ceil(high + margin);
     Object.assign(a, {

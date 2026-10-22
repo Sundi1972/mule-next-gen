@@ -1,6 +1,7 @@
 import {
   advanceGrant,
   advancePhase,
+  AI_HANDS,
   airBand,
   allPrices,
   analysePlot,
@@ -86,12 +87,12 @@ export const PHASE_MS: Record<Exclude<Phase, 'gameOver' | 'auction' | 'landAucti
 };
 
 /** How long each free plot stays lit in the land grant. */
-export const GRANT_TICK_MS = 650;
+export const GRANT_TICK_MS = GAME.grantTickMs;
 
 export const AI_NAMES = ['The Accountant', 'The Baron', 'The Grudge', 'The Gambler', 'The Good Neighbour'];
 
 /** How often AI hands act during development. */
-export const AI_DEV_TICK_MS = 100;
+export const AI_DEV_TICK_MS = AI_HANDS.devTickMs;
 
 /** The level AI seats play at until the lobby lets the host choose. */
 export const DEFAULT_AI_LEVEL: AiLevelId = 'trader';
