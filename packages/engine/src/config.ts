@@ -520,20 +520,33 @@ export const POLITICS = {
   pay: { governor: 50, sheriff: 30 },
   /** Score per term served in either office. A placeholder until the sim balances it. */
   termScore: 100,
+  /** How Classic AI seats run, vote and set the tax (VoteHand). Placeholders until the sim balances them. */
+  ai: {
+    /** Ms a seat waits before acting in a nominate or ballot stage, drawn per stage: a human's pause, well inside the stage's clock. */
+    actMs: [800, 2_500] as [number, number],
+    /** Chance per election that a persona runs for Governor. */
+    runGovernor: { trader: 0.5, cautious: 0.3, aggressive: 0.8, saboteur: 0.6 } satisfies Record<AiPersonaId, number>,
+    /** Chance it runs for Sheriff when it does not run for Governor. */
+    runSheriff: { trader: 0.3, cautious: 0.4, aggressive: 0.3, saboteur: 0.7 } satisfies Record<AiPersonaId, number>,
+    /** The sales tax in whole percent a persona steers toward as Governor. */
+    taxTarget: { trader: 5, cautious: 4, aggressive: 8, saboteur: 10 } satisfies Record<AiPersonaId, number>,
+    /** Whole percent a Governor adds when the colony fund is low. */
+    taxFundBump: 2,
+    /** The fund is low under this many months of both offices' pay. */
+    fundMonths: 3,
+  },
 };
 
 /**
  * The goods auction, played live as in the original: goods come up one at a
- * time, each with a status screen, a declare and a walk. Times are in
+ * time, each with a status screen and then a walk. Times are in
  * milliseconds of game time; the server steps the auction on a fixed tick.
  */
 export const WALK = {
   /** The order goods come up in: raw goods first, then processed ones. */
   order: ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine'] as Good[],
-  /** The status screen before each good: what everyone had, used, made, and their surplus or shortage. */
-  statusMs: 6_000,
-  /** Picking Buyer or Seller before the walk. */
-  declareMs: 5_000,
+  /** The status screen before each good: what everyone had, used, made and is short of, and where each player picks a side for the walk. */
+  statusMs: 8_000,
   /** The walk's clock for one good. */
   goodMs: 20_000,
   /** While any unit is changing hands the clock runs at this share of its speed, as in the original. */

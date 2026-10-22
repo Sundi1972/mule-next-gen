@@ -106,10 +106,10 @@ describe('politics over the wire', () => {
 /* The election and the politics view at MuleGame, on a manual clock. */
 
 const people = [
-  { id: 'lena', name: 'Lena', isAi: false },
-  { id: 'brix', name: 'Brix', isAi: false },
-  { id: 'ossa', name: 'Ossa', isAi: false },
-  { id: 'ai1', name: 'The Baron', isAi: true },
+  { id: 'lena', name: 'Lena', isAi: false, color: 0 },
+  { id: 'brix', name: 'Brix', isAi: false, color: 1 },
+  { id: 'ossa', name: 'Ossa', isAi: false, color: 2 },
+  { id: 'ai1', name: 'The Baron', isAi: true, color: 3 },
 ];
 const humans = ['lena', 'brix', 'ossa'];
 
@@ -366,8 +366,6 @@ describe('the politics view', () => {
     while (g.game.viewFor('lena').phase === 'landGrant') g.advance(GRANT_TICK_MS);
     while (g.game.viewFor('lena').phase === 'development' || g.game.viewFor('lena').phase === 'production') g.advance(1_000);
     expect(g.game.viewFor('lena').phase).toBe('auction');
-    allReady(g.game);
-    g.advance(WALK.tickMs * 2);
     g.game.handle('lena', { type: 'declare', side: 'seller' });
     g.game.handle('brix', { type: 'declare', side: 'buyer' });
     g.game.handle('ossa', { type: 'declare', side: 'pass' });
