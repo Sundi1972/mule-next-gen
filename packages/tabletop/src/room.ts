@@ -11,6 +11,8 @@ export interface SeatInfo {
   id: string;
   name: string;
   isAi: boolean;
+  /** The seat's colour index, unique at the table. */
+  color: number;
   /** Absent means not chosen: the game applies its own default. */
   pick?: string;
 }
@@ -40,6 +42,7 @@ export interface RoomOptions<Intent, GameView> {
   code: string;
   createGame(ctx: GameContext): Game<Intent, GameView>;
   minSeats?: number;
+  /** Also the number of colours (0..maxSeats−1), so a game with a fixed palette keeps it within the palette (6 for M.U.L.E.). */
   maxSeats?: number;
   aiNames?: string[];
   emotes?: readonly string[];
@@ -51,8 +54,10 @@ export interface RoomOptions<Intent, GameView> {
   isUserError?(err: unknown): boolean;
   now?(): number;
   newToken?(): string;
-  /** Called once the host has closed the room and it is disposed. */
+  /** Called once the room has ended, closed by the host or stopped by a game error, and is disposed. */
   onClose?(): void;
+  /** Hears a game error that ended the room, for logging. The players are only told the table stopped. */
+  onError?(err: unknown): void;
 }
 
 interface Seat<View> extends SeatInfo {
@@ -76,6 +81,7 @@ export class Room<Intent, View> {
   private readonly picks: readonly string[] | undefined;
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private started = false;
+  private endedBy: 'closed' | 'error' | null = null;
   private nextSeat = 1;
   private chatId = 0;
   private broadcastQueued = false;
@@ -93,13 +99,21 @@ export class Room<Intent, View> {
       now: options.now ?? Date.now,
       newToken: options.newToken ?? (() => crypto.randomUUID()),
       onClose: options.onClose ?? (() => {}),
+      onError: options.onError ?? (() => {}),
     };
     this.game = options.createGame({
       now: this.opts.now,
       schedule: (ms, fn) => {
         const timer = setTimeout(() => {
           this.timers.delete(timer);
-          fn();
+          if (this.endedBy) return;
+          // A throw here would be uncaught and take the whole server down with this one table.
+          try {
+            fn();
+          } catch (err) {
+            this.opts.onError(err);
+            this.fail();
+          }
         }, ms);
         this.timers.add(timer);
         return () => {
@@ -123,10 +137,17 @@ export class Room<Intent, View> {
 
   /** Handles one message from a screen. `from` is null until the screen has joined. */
   receive(conn: Connection<View>, from: { seatId: string | null }, msg: ClientEnvelope<Intent>): void {
+    // A failed game must never see another message. A closed room has no game running and still refuses screens out loud.
+    if (this.endedBy === 'error') return;
     try {
       this.apply(conn, from, msg);
     } catch (err) {
-      if (!this.opts.isUserError(err)) throw err;
+      if (!this.opts.isUserError(err)) {
+        // A bug ends this table only; its state can no longer be trusted, and every other table plays on.
+        this.opts.onError(err);
+        this.fail();
+        return;
+      }
       conn.send({ t: 'error', message: (err as Error).message });
     }
   }
@@ -165,7 +186,7 @@ export class Room<Intent, View> {
         if (this.started) throw new TableError('The game has already started');
         if (this.seats.length < this.opts.minSeats) throw new TableError(`At least ${this.opts.minSeats} players are needed`);
         this.started = true;
-        this.game.start(this.seats.map(({ id, name, isAi, pick }) => ({ id, name, isAi, ...(pick !== undefined ? { pick } : {}) })));
+        this.game.start(this.seats.map(({ id, name, isAi, color, pick }) => ({ id, name, isAi, color, ...(pick !== undefined ? { pick } : {}) })));
         this.broadcast();
         return;
       case 'kick':
@@ -180,6 +201,10 @@ export class Room<Intent, View> {
         return;
       case 'pick':
         this.pick(seatId, msg.pick);
+        this.broadcast();
+        return;
+      case 'color':
+        this.paint(seatId, msg.color);
         this.broadcast();
         return;
       case 'intent':
@@ -229,9 +254,17 @@ export class Room<Intent, View> {
   }
 
   private addSeat(name: string, isAi: boolean): Seat<View> {
-    const seat: Seat<View> = { id: `s${this.nextSeat++}`, name, isAi, token: isAi ? null : this.opts.newToken(), conn: null };
+    const seat: Seat<View> = { id: `s${this.nextSeat++}`, name, isAi, color: this.lowestFreeColour(), token: isAi ? null : this.opts.newToken(), conn: null };
     this.seats.push(seat);
     return seat;
+  }
+
+  /** See RULE-7. Defined while a seat is free, since the palette has one colour per seat. */
+  private lowestFreeColour(): number {
+    const held = new Set(this.seats.map((s) => s.color));
+    let colour = 0;
+    while (held.has(colour)) colour++;
+    return colour;
   }
 
   private nextAiName(): string {
@@ -250,6 +283,18 @@ export class Room<Intent, View> {
     if (!this.picks.includes(pick)) throw new TableError('Unknown choice');
     const seat = this.seats.find((s) => s.id === seatId);
     if (seat) seat.pick = pick;
+  }
+
+  /** A human seat takes a colour before Start; an AI holding it moves to the lowest free one. See RULE-7. */
+  private paint(seatId: string, colour: number): void {
+    if (this.started) throw new TableError('The game has already started');
+    if (!Number.isInteger(colour) || colour < 0 || colour >= this.opts.maxSeats) throw new TableError('Unknown colour');
+    const seat = this.seats.find((s) => s.id === seatId)!;
+    const holder = this.seats.find((s) => s.color === colour && s !== seat);
+    if (holder && !holder.isAi) throw new TableError('That colour is taken');
+    seat.color = colour;
+    // Chosen once the sender let go of its own, so a full table still has one free.
+    if (holder) holder.color = this.lowestFreeColour();
   }
 
   /** The host removes a seat, and its token with it, before Start. See RULE-5. */
@@ -285,10 +330,26 @@ export class Room<Intent, View> {
   private close(by: string): void {
     this.requireHost(by);
     if (this.started) throw new TableError('The game has already started');
-    this.everyone((c) => c.send({ t: 'removed', reason: 'closed' }));
+    this.end('closed');
+  }
+
+  /** Stops the room after a game error: every screen is told and let go, then the room is disposed. */
+  fail(): void {
+    this.end('error');
+  }
+
+  private end(reason: 'closed' | 'error'): void {
+    if (this.endedBy) return;
+    this.endedBy = reason;
+    this.everyone((c) => c.send({ t: 'removed', reason }));
     this.seats.length = 0;
     this.boards.clear();
-    this.dispose();
+    // The timers are already cleared when the game's own dispose runs; a throw there must still let the registry drop the room.
+    try {
+      this.dispose();
+    } catch (err) {
+      this.opts.onError(err);
+    }
     this.opts.onClose();
   }
 
@@ -336,6 +397,7 @@ export class Room<Intent, View> {
         name: s.name,
         isAi: s.isAi,
         connected: s.isAi || s.conn !== null,
+        color: s.color,
         ...(s.pick !== undefined ? { pick: s.pick } : {}),
       })),
       boards: this.boards.size,

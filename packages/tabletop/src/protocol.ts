@@ -20,6 +20,8 @@ export type ClientEnvelope<Intent> =
   | { t: 'leave' }
   /** Make this seat's one choice from the game's list, in the lobby. */
   | { t: 'pick'; pick: string }
+  /** Take this colour index for the seat, in the lobby. */
+  | { t: 'color'; color: number }
   | { t: 'intent'; intent: Intent }
   | { t: 'chat'; text: string; to?: string }
   | { t: 'emote'; emote: string }
@@ -34,7 +36,7 @@ export type ServerEnvelope<GameView> =
   | { t: 'pong'; clientTime: number; serverTime: number }
   | { t: 'error'; message: string }
   /** This screen no longer holds a seat or watches the room; the room refuses what it sends next. */
-  | { t: 'removed'; reason: 'kicked' | 'closed' | 'moved' };
+  | { t: 'removed'; reason: 'kicked' | 'closed' | 'moved' | 'error' };
 
 export interface ChatMessage {
   id: number;
@@ -50,6 +52,8 @@ export interface SeatView {
   name: string;
   isAi: boolean;
   connected: boolean;
+  /** The seat's colour index, unique at the table. */
+  color: number;
   /** The seat's choice from the game's list; absent until it has chosen. */
   pick?: string;
 }

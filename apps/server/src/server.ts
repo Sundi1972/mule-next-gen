@@ -43,6 +43,8 @@ export function createMuleServer(
     emotes: EMOTES,
     picks: SPECIES,
     isUserError: (err) => err instanceof RuleError || err instanceof TableError,
+    // The room has already ended itself; only the stack is logged, never what the players sent.
+    onError: (err) => console.error(`game error: ${err instanceof Error ? err.stack : String(err)}`),
   });
   const staticDir = options.staticDir && existsSync(options.staticDir) ? resolve(options.staticDir) : null;
 
@@ -164,6 +166,8 @@ function parse(text: string): ClientEnvelope<MuleIntent> | null {
       return str(m.emote) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'pick':
       return str(m.pick) ? (m as ClientEnvelope<MuleIntent>) : null;
+    case 'color':
+      return num(m.color) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'ping':
       return num(m.clientTime) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'intent':
