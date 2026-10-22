@@ -19,10 +19,11 @@ export interface ChatView {
  * screen and a bubble's time must survive that.
  */
 class ChatStore {
-  private readonly heard = new Map<number, number>();
+  /** When each line arrived, and in which phase: the count of phase changes this screen had seen by then. */
+  private readonly heard = new Map<number, { at: number; phase: number }>();
   private chat: readonly ChatMessage[] = [];
   private phase: string | null = null;
-  private phaseFrom = -Infinity;
+  private phaseSeq = 0;
   private anchorQueue = new Map<string, symbol[]>();
   private view: ChatView = { lines: [], showing: null, anchors: new Map() };
   private readonly listeners = new Set<() => void>();
@@ -30,7 +31,7 @@ class ChatStore {
 
   constructor(private readonly client: TableClient) {
     // Lines already here when the screen first shows chat are history: they join the ticker without a bubble.
-    for (const m of client.getState().chat) this.heard.set(m.id, -Infinity);
+    for (const m of client.getState().chat) this.heard.set(m.id, { at: -Infinity, phase: -1 });
     client.subscribe(() => this.update());
     this.update();
   }
@@ -63,13 +64,17 @@ class ChatStore {
     const now = Date.now();
     const game = view?.game;
     const phase = game ? `${game.month}-${game.phase}` : null;
+    // The client hands over one frame at a time, so a line before this view was counted in the phase before.
     if (phase !== this.phase) {
       this.phase = phase;
-      this.phaseFrom = now;
+      this.phaseSeq++;
     }
     if (chat !== this.chat) {
       this.chat = chat;
-      for (const m of chat) if (!this.heard.has(m.id)) this.heard.set(m.id, now);
+      // Ids start again at 1 in every room, so a line no longer kept must not leave its stamp behind.
+      const kept = new Set(chat.map((m) => m.id));
+      for (const id of this.heard.keys()) if (!kept.has(id)) this.heard.delete(id);
+      for (const m of chat) if (!this.heard.has(m.id)) this.heard.set(m.id, { at: now, phase: this.phaseSeq });
     }
     this.reschedule(now);
   }
@@ -78,8 +83,8 @@ class ChatStore {
     if (this.timer !== null) clearTimeout(this.timer);
     this.timer = null;
     const schedule = bubbleSchedule(
-      this.chat.map((message) => ({ message, at: this.heard.get(message.id) ?? now })),
-      this.phaseFrom,
+      this.chat.map((message) => ({ message, ...(this.heard.get(message.id) ?? { at: now, phase: this.phaseSeq }) })),
+      this.phaseSeq,
     );
     const showing = bubbleAt(schedule, now)?.line.message ?? null;
     const next = Math.min(...schedule.flatMap((b) => [b.from, b.to]).filter((t) => t > now));

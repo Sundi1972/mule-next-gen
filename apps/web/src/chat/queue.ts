@@ -12,14 +12,14 @@ export interface Scheduled<T> {
 }
 
 /**
- * When each line's bubble shows on one screen (spec RULE-9): one at a time, in order of receipt. Lines received
- * before `phaseFrom`, the start of the current phase, get none.
+ * When each line's bubble shows on one screen (spec RULE-9): one at a time, in order of receipt. With `phase`, only
+ * lines received in that phase get one: a phase change ends every bubble and drops the queue.
  */
-export function bubbleSchedule<T extends { at: number }>(lines: readonly T[], phaseFrom = -Infinity): Scheduled<T>[] {
+export function bubbleSchedule<T extends { at: number; phase?: number }>(lines: readonly T[], phase?: number): Scheduled<T>[] {
   const out: Scheduled<T>[] = [];
   let free = -Infinity;
   for (const line of lines) {
-    if (line.at < phaseFrom) continue;
+    if (phase !== undefined && line.phase !== phase) continue;
     const from = Math.max(line.at, free);
     if (from - line.at > BUBBLE_MAX_WAIT_MS) continue;
     const prev = out.at(-1);
