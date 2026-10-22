@@ -38,7 +38,7 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
     state.store.capital += Math.round(bought * price);
   }
   // In Collapse colonists leave whatever they eat.
-  const growth = airBand(state.air).name === 'collapse' ? 1 - POLLUTION.collapseLeave : fed ? 1.04 : 0.95;
+  const growth = airBand(state.air).name === 'collapse' ? 1 - POLLUTION.collapseLeave : fed ? UPKEEP.colonistGrowth.fed : UPKEEP.colonistGrowth.hungry;
   state.colonists = Math.round(state.colonists * growth);
 
   // Spoilage, then anything above the home depot is lost. Selling it in time

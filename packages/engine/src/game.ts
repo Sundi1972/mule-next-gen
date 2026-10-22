@@ -21,8 +21,8 @@ export interface NewPlayer {
 export { RuleError };
 
 export function createGame(options: { seed: number; players: NewPlayer[]; maxMonths?: number }): GameState {
-  if (options.players.length < 2 || options.players.length > 6) {
-    throw new RuleError('A game needs 2 to 6 players');
+  if (options.players.length < GAME.minPlayers || options.players.length > GAME.maxPlayers) {
+    throw new RuleError(`A game needs ${GAME.minPlayers} to ${GAME.maxPlayers} players`);
   }
   const rng = createRng(options.seed);
   const map = generateMap(options.players.length, rng);
@@ -42,9 +42,9 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
         isAi: p.isAi,
         species: p.species ?? DEFAULT_SPECIES[i % DEFAULT_SPECIES.length]!,
         money: START.money,
-        stock: { ...emptyStock(), food: 6, water: 6, energy: 4 },
+        stock: { ...emptyStock(), ...START.playerStock },
         carriedMule: null,
-        reputation: 50,
+        reputation: START.reputation,
         claimsThisGrant: 0,
         hungry: false,
         devSeconds: DEVELOPMENT.fullSeconds,
@@ -201,7 +201,7 @@ function startDevelopment(state: GameState): void {
         seconds -= penalty;
       }
     }
-    p.devSeconds = Math.max(5, Math.round(seconds));
+    p.devSeconds = Math.max(DEVELOPMENT.floorSeconds, Math.round(seconds));
     p.doneDeveloping = false;
     p.installedThisTurn = false;
   }
@@ -346,7 +346,7 @@ export function advancePhase(state: GameState): void {
     const soldOut = state.store.mules === 0;
     // MULEs get dearer each month the corral sells out, and cheaper when they are left over.
     if (soldOut) state.store.muleFactor *= 1 + MULE.scarcityUp;
-    else if (state.store.mules * 2 >= state.store.mulesAtStart) state.store.muleFactor = Math.max(MULE.minFactor, state.store.muleFactor * (1 - MULE.surplusDown));
+    else if (state.store.mules >= state.store.mulesAtStart * MULE.surplusShare) state.store.muleFactor = Math.max(MULE.minFactor, state.store.muleFactor * (1 - MULE.surplusDown));
     const before = Object.fromEntries(state.players.map((p) => [p.id, { ...p.stock }]));
     const { produced, pollutionBy, lines, events } = runProduction(state);
     state.history.push({
