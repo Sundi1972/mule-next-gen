@@ -15,11 +15,10 @@ const SEAT = 's1';
 const HUNGRY_FOOD = 2;
 /** RULE-8: these first, in this order; then the rest by need. */
 const FIRST: Good[] = ['food', 'water', 'energy'];
-/** Desks of an office the smoke's phone does not hold: nobody runs in month 1, so it is appointed Governor (lowest seat, equal money). */
-// Vacuous in slice 1 (no Sheriff desk yet); the real browser negative is politics.ts's "Ossa, not Governor, has no Governor desk".
-const OFFICE_DESKS = ['sheriff'];
-/** C17: what exists today, and nothing else, is drawn. */
-const TODAYS_DESKS = ['colony', 'talk', 'council', 'market', 'governor'];
+/** C17: what exists today, and nothing else, is drawn; the Governor's desk only for the Governor. */
+const TODAYS_DESKS = ['colony', 'talk', 'council', 'market'];
+/** The office desks today: AI seats run in month 1, so whether the smoke's seat holds one is read from the game. */
+const OFFICE_DESKS = ['governor', 'sheriff'] as const;
 const TODAYS_TOOLS = ['look', 'drone', 'list'];
 /** B-AC-12: the stage's content fills at least this share of the stage's height. */
 const FILL = 0.8;
@@ -60,8 +59,9 @@ export async function planningIsTheHub(phone: Page, server: MuleServer, code: st
   const verdict = (g: Good) => (have[g] >= need[g] ? 'OK' : `SHORT ${need[g] - have[g]}`);
   await planning.getByTestId('need-food').filter({ hasText: verdict('food') }).waitFor({ timeout });
 
+  const held = OFFICE_DESKS.filter((o) => state.politics?.[o] === SEAT);
   const narrow = await read(phone);
-  checkHub(narrow, `${PHONE.viewport.width}×${PHONE.viewport.height}`);
+  checkHub(narrow, `${PHONE.viewport.width}×${PHONE.viewport.height}`, held);
   const expected = GOODS.filter((g) => need[g] > 0);
   const rows = narrow.needs.map((n) => n.good);
   check(JSON.stringify([...rows].sort()) === JSON.stringify([...expected].sort()), `B-AC-14: a row for each good she needs this month (${expected.join(', ')}), got ${rows.join(', ')}`);
@@ -84,19 +84,20 @@ export async function planningIsTheHub(phone: Page, server: MuleServer, code: st
   } finally {
     await phone.setViewportSize(PHONE.viewport);
   }
-  checkHub(wide, `${LAPTOP.width}×${LAPTOP.height}`);
+  checkHub(wide, `${LAPTOP.width}×${LAPTOP.height}`, held);
   check(wide.onStage.marketStrip, `B-AC-14: at ${LAPTOP.width} px the store's prices sit under the map, on the stage`);
-  return `desks ${narrow.desks.join(', ')}; needs ${narrow.needs.map((n) => `${n.good} ${verdict(n.good as Good)}`).join(', ')}; now first at 844 and 1440; stage filled ${(narrow.fill * 100).toFixed(0)}% / ${(wide.fill * 100).toFixed(0)}%`;
+  return `desks ${narrow.desks.join(', ')} (offices held: ${held.join(', ') || 'none'}); needs ${narrow.needs.map((n) => `${n.good} ${verdict(n.good as Good)}`).join(', ')}; now first at 844 and 1440; stage filled ${(narrow.fill * 100).toFixed(0)}% / ${(wide.fill * 100).toFixed(0)}%`;
 }
 
-function checkHub(f: Shown, at: string): void {
+function checkHub(f: Shown, at: string, held: readonly string[]): void {
   check(f.phase === 'planning', `B-AC-14: planning still shows at ${at}, got ${f.phase}`);
   check(f.onStage.agenda, `B-AC-14: at ${at} "This month" (agenda) is on the stage`);
   check(f.onStage.map, `B-AC-14: at ${at} the colony map (hub-map) is on the stage`);
   check(f.thisMonthInColony, `B-AC-14: at ${at} the Colony desk holds "This month you need"`);
-  const offices = f.desks.filter((d) => OFFICE_DESKS.includes(d));
-  check(offices.length === 0, `B-AC-14 (negative): a player without an office sees no office desk, got ${offices.join(', ')}`);
-  check(JSON.stringify(f.desks) === JSON.stringify(TODAYS_DESKS), `B-AC-14: at ${at} the desks drawn are exactly ${TODAYS_DESKS.join(', ')}, got ${f.desks.join(', ')}`);
+  const foreign = f.desks.filter((d) => (OFFICE_DESKS as readonly string[]).includes(d) && !held.includes(d));
+  check(foreign.length === 0, `B-AC-14 (negative): a player sees no desk of an office they do not hold, got ${foreign.join(', ')}`);
+  const expected = [...TODAYS_DESKS, ...held];
+  check(JSON.stringify(f.desks) === JSON.stringify(expected), `B-AC-14: at ${at} the desks drawn are exactly ${expected.join(', ')}, got ${f.desks.join(', ')}`);
   check(JSON.stringify(f.tools) === JSON.stringify(TODAYS_TOOLS), `B-AC-14: at ${at} the map tools drawn are exactly ${TODAYS_TOOLS.join(', ')}, got ${f.tools.join(', ')}`);
   check(f.reviewLabels.length === 0, `C17: unbuilt slots are not drawn, and no SOON or slice label shows; got ${f.reviewLabels.join(' | ')}`);
   check(f.nowFirst, `B-AC-12: at ${at} planning's rail opens with Now`);

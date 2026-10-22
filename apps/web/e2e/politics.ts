@@ -1,5 +1,6 @@
 /**
  * B-AC-1 and UBER-AC-2: two phones and an AI seat play month 1's election on the default server, with the TV,
+ * the AI seat running and voting through its own hand,
  * through to the first sale at the auction. Run with `pnpm --filter @mule/web e2e`; replay with `MULE_E2E_SEED=<seed>`.
  */
 import { GAME, POLITICS, storeQuotes, WALK, type GameState, type Good } from '@mule/engine';
@@ -82,26 +83,34 @@ async function main(): Promise<void> {
     });
     const [lenaId, ossaId] = [truth.idOf(lena), truth.idOf(ossa)];
     await everyone(phones, (p) => p.page.getByTestId('candidates').filter({ hasText: lena.name }).filter({ hasText: ossa.name }).waitFor({ timeout: PRESS_MS }));
-    check(JSON.stringify([...truth.board().politics!.election!.candidates.governor].sort()) === JSON.stringify([lenaId, ossaId].sort()), 'B-AC-1: the server has both humans running for Governor');
+    const running = truth.board().politics!.election!.candidates.governor;
+    const aiIds = truth.board().players.filter((p) => p.isAi).map((p) => p.id);
+    check(running.includes(lenaId) && running.includes(ossaId) && running.every((id) => id === lenaId || id === ossaId || aiIds.includes(id)), `B-AC-1: the server has both humans running for Governor, and nobody else but the AI seat, got ${running.join(', ')}`);
 
-    // Done with nominate on both phones; the AI seat is Done for the server. Then both vote for Lena.
+    // Done with nominate on both phones; the AI seat runs and votes through its own hand. Both humans vote for Lena.
     await everyone(phones, (p) => p.page.getByTestId('ready').click({ timeout: PRESS_MS }));
     await everyone(phones, async (p) => {
       const ballot = p.page.locator('[data-phase=planning]').getByTestId('election');
       await ballot.getByRole('radio', { name: lena.name, exact: true }).check({ timeout: within(POLITICS.nominateMs) });
     });
-    await everyone(phones, (p) => p.page.getByTestId('voted').filter({ hasText: `2 of 3` }).waitFor({ timeout: PRESS_MS }));
-    const weights = truth.board().politics!.weights;
-    const expectedVotes = [lenaId, ossaId].reduce((sum, id) => sum + weights.find((w) => w.id === id)!.votes, 0);
+    const ballots = () => truth.state().politics!.election!.ballots;
+    await untilServer(lena.page, () => (ballots()[lenaId]?.governor === lenaId && ballots()[ossaId]?.governor === lenaId) || null, 'B-AC-1: the server holds both humans\' ballots for Lena');
+    // The AI seat may vote before or after the humans, so a phone shows 2 or 3 of 3.
+    await everyone(phones, (p) => p.page.getByTestId('voted').filter({ hasText: /\b[23] of 3\b/ }).waitFor({ timeout: PRESS_MS }));
     await everyone(phones, (p) => p.page.getByTestId('ready').click({ timeout: PRESS_MS }));
 
     // The TV counts down, then every screen shows the same result at the same moment.
     await tv.getByTestId('ballot-countdown').waitFor({ timeout: within(POLITICS.ballotMs) });
     const reveal = await readTheReveal(tv, lena.page, ossa.page, within(POLITICS.revealMs));
     check(reveal.spread <= 1, `B-AC-1: the result appears on the TV and both phones within one tick of each other, first seen at ticks ${reveal.firstTicks.join(', ')}`);
+    // Every ballot cast for Lena, weighted: both humans' and, if it chose her, the AI seat's.
+    const weights = truth.board().politics!.weights;
+    const forLena = Object.entries(ballots()).filter(([, b]) => b.governor === lenaId).map(([id]) => id);
+    check(forLena.includes(lenaId) && forLena.includes(ossaId), `B-AC-1: both humans' ballots count for Lena, got ${forLena.join(', ')}`);
+    const expectedVotes = forLena.reduce((sum, id) => sum + weights.find((w) => w.id === id)!.votes, 0);
     const elected = reveal.tv.filter((r) => r.elected);
     check(elected.length === 1 && elected[0]!.id === lenaId, `B-AC-1: the TV names Lena Governor, got ${JSON.stringify(reveal.tv)}`);
-    check(elected[0]!.votes === expectedVotes, `B-AC-1: the TV shows Lena's ${expectedVotes} votes (both ballots, weighted), got ${elected[0]!.votes}`);
+    check(elected[0]!.votes === expectedVotes, `B-AC-1: the TV shows Lena's ${expectedVotes} votes (the ${forLena.length} ballots for her, weighted), got ${elected[0]!.votes}`);
     for (const [p, text] of [
       [lena, reveal.lena],
       [ossa, reveal.ossa],
