@@ -107,7 +107,7 @@ function storeFor(client: TableClient): ChatStore {
 /** This screen's table chat. */
 export function useTableChat(): ChatView {
   const store = storeFor(useClient());
-  return useSyncExternalStore(store.subscribe, store.get);
+  return useSyncExternalStore(store.subscribe, store.get, store.get);
 }
 
 const useBeforePaint = typeof document === 'undefined' ? useEffect : useLayoutEffect;
@@ -117,5 +117,5 @@ export function useAnchor(seatId: string): boolean {
   const store = storeFor(useClient());
   const [token] = useState(() => Symbol(seatId));
   useBeforePaint(() => store.anchor(seatId, token), [store, seatId, token]);
-  return useSyncExternalStore(store.subscribe, store.get).anchors.get(seatId) === token;
+  return useSyncExternalStore(store.subscribe, store.get, store.get).anchors.get(seatId) === token;
 }

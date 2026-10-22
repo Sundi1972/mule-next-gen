@@ -1,8 +1,8 @@
 import type { ChatMessage, PlayerView } from '@mule/protocol';
 import { Creature, cx, SLOT_COLOR, type CreatureWrap, type Slot } from '@mule/ui';
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { toSlot } from '../game/derive';
-import { useClientState } from '../net/react';
+import { useClient } from '../net/react';
 import { useAnchor, useTableChat } from './store';
 
 /**
@@ -15,7 +15,8 @@ type Seat = { player: PlayerView; slot: Slot };
 
 /** The players at this screen's table, by seat, and the seat this screen is (null on the TV). */
 function useSeats(): { seats: Map<string, Seat>; me: string | null } {
-  const { view, seatId } = useClientState();
+  const client = useClient();
+  const { view, seatId } = useSyncExternalStore(client.subscribe, client.getState, client.getState);
   const players = view?.game?.players ?? [];
   return { seats: new Map(players.map((player) => [player.id, { player, slot: toSlot(player.slot) }])), me: seatId };
 }
