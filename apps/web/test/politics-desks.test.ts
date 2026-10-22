@@ -12,8 +12,8 @@ import { CouncilDesk } from '../src/phone/hub/politics/Council';
 import { GovernorDesk } from '../src/phone/hub/politics/Governor';
 import { TvElection } from '../src/table/TvElection';
 
-const player = (id: string, name: string): PlayerView => ({ id, name, isAi: false, color: '', species: 'zipwing', money: 1000, plots: 0, ready: false, doneDeveloping: false });
-const PLAYERS = [player('s1', 'Lena'), player('s2', 'Ossa'), player('s3', 'Kai')];
+const player = (id: string, name: string, slot: number): PlayerView => ({ id, name, isAi: false, color: '', species: 'zipwing', money: 1000, plots: 0, ready: false, doneDeveloping: false, slot });
+const PLAYERS = [player('s1', 'Lena', 0), player('s2', 'Ossa', 1), player('s3', 'Kai', 2)];
 const stock = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0, alloy: 0, electronics: 0, medicine: 0 };
 
 const election = (extra: Partial<ElectionView> = {}): ElectionView => ({

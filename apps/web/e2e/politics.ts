@@ -2,7 +2,7 @@
  * B-AC-1 and UBER-AC-2: two phones and an AI seat play month 1's election on the default server, with the TV,
  * through to the first sale at the auction. Run with `pnpm --filter @mule/web e2e`; replay with `MULE_E2E_SEED=<seed>`.
  */
-import { GAME, POLITICS, WALK, type GameState, type Good } from '@mule/engine';
+import { GAME, POLITICS, storeQuotes, WALK, type GameState, type Good } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { errors as playwrightErrors, type Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
@@ -69,7 +69,7 @@ async function main(): Promise<void> {
     const tv = await (await browser.newContext(TV)).newPage();
     tv.on('pageerror', (e) => errors.push(`tv: ${e.message}`));
     await tv.goto(`${base}/table?room=${code}`);
-    await lena.page.getByText('Big screen connected').waitFor();
+    await tv.getByTestId('room-code').waitFor();
     await lena.page.getByRole('button', { name: 'Start game' }).click();
     const truth = serverTruth(server, code);
     const phones = [lena, ossa];
@@ -136,22 +136,34 @@ async function main(): Promise<void> {
     await everyone(phones, (p) => goToThePub(p.page));
     await lena.page.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.landGrant + PHASE_MS.development + PHASE_MS.production) });
 
-    // Lena holds exactly one unit of the first good the store buys at a price where the old and the new rate round apart.
-    const good = await aTellingGood(lena.page, truth, start / 100);
+    // Lena holds one unit of a good the store buys for 100 cr or more, seeded as the auction opens and before that good
+    // comes up, so 7%, 8% and 9% (and the old rate) each take a different tax from the sale.
+    const toAuction = within(WALK.statusMs);
+    await untilServer(lena.page, () => truth.board().auction?.stage === 'status' || null, 'the goods auction opens on a status screen', toAuction);
+    const good = aPinningGood(truth, [start, NEW_TAX - 1, NEW_TAX + 1]);
     holdOneUnit(server, code, lenaId, good);
-    await pickSide(lena.page, 'Seller', within(WALK.statusMs + WALK.declareMs));
+    const upNext = within(WALK.order.length * (WALK.statusMs + WALK.goodMs / WALK.tradeClockRate));
+    await untilServer(lena.page, () => { const a = truth.board().auction; return (a?.good === good && a.stage === 'status') || null; }, `UBER-AC-2: ${good} comes up at the auction`, upNext);
+    // With one to spare she opens on Sell; a second tap on Sell would pass.
+    const sideOf = () => truth.board().auction?.walkers.find((w) => w.id === lenaId)?.side;
+    if (sideOf() !== 'seller') await lena.page.getByTestId('side-seller').click({ timeout: PRESS_MS });
+    await untilServer(lena.page, () => sideOf() === 'seller' || null, `UBER-AC-2: Lena sells ${good}`);
     const before = money(await lena.page.getByTestId('money').innerText());
     const paidBefore = truth.taxPaid(lenaId);
-    await hold(lena.page, 'down', within(WALK.declareMs));
-    await untilServer(lena.page, () => truth.stockOf(lenaId, good) === 0, `UBER-AC-2: Lena sells her one ${good}`, within(WALK.goodMs / WALK.tradeClockRate));
+    await hold(lena.page, 'down', within(WALK.statusMs));
+    await untilServer(lena.page, () => truth.stockOf(lenaId, good) === 0 || null, `UBER-AC-2: Lena sells her one ${good}`, within(WALK.goodMs / WALK.tradeClockRate));
     await lena.page.mouse.up();
     await lena.page.waitForFunction((b) => Number((document.querySelector('[data-testid=money]')?.textContent ?? '').replace(/[^\d-]/g, '')) !== b, before, { timeout: PRESS_MS });
     const after = money(await lena.page.getByTestId('money').innerText());
+    // The sale's gross: what reached Lena's phone plus what the fund took from her, measured apart.
     const tax = truth.taxPaid(lenaId) - paidBefore;
-    const price = after - before + tax;
-    check(price > 0 && tax === Math.round(price * (NEW_TAX / 100)), `UBER-AC-2: Lena's sale at ${price} is taxed at ${NEW_TAX}%: her phone went ${before} → ${after}, the fund took ${tax}`);
-    check(tax !== Math.round(price * (start / 100)), `UBER-AC-2: at ${price} the old ${start}% would have taken a different tax than ${tax}`);
-    console.log(`✓ UBER-AC-2: the winner sets 8% and the next auction sale is taxed at 8%: one ${good} sold at ${price}; Lena's phone ${before} → ${after}, ${tax} tax at ${NEW_TAX}%`);
+    const total = after - before + tax;
+    check(total >= 100, `UBER-AC-2: the sale is worth 100 cr or more, so a point of tax shows; got ${total}`);
+    check(after - before === total - Math.round(total * (NEW_TAX / 100)), `UBER-AC-2: Lena's phone rose by ${total} − round(${total} × ${NEW_TAX}%) = ${total - Math.round((total * NEW_TAX) / 100)}: ${before} → ${after}`);
+    for (const other of [start, NEW_TAX - 1, NEW_TAX + 1]) {
+      check(Math.round(total * (other / 100)) !== tax, `UBER-AC-2: at ${total} cr, ${other}% would take a tax other than ${tax}`);
+    }
+    console.log(`✓ UBER-AC-2: the winner sets 8% and the next auction sale is taxed at 8%: one ${good} sold for ${total}; Lena's phone ${before} → ${after}, ${tax} tax (${start}%, ${NEW_TAX - 1}% and ${NEW_TAX + 1}% would take ${[start, NEW_TAX - 1, NEW_TAX + 1].map((r) => Math.round((total * r) / 100)).join(', ')})`);
 
     check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
     console.log(`e2e politics: ok (room ${code}, seed ${SEED})`);
@@ -211,7 +223,7 @@ async function readTheReveal(tv: Page, a: Page, b: Page, timeout: number): Promi
   }
 }
 
-type Truth = { board: () => MuleView; idOf: (p: Phone) => string; stockOf: (id: string, good: Good) => number; taxPaid: (id: string) => number };
+type Truth = { board: () => MuleView; state: () => GameState; idOf: (p: Phone) => string; stockOf: (id: string, good: Good) => number; taxPaid: (id: string) => number };
 
 /** The server's own views and state: the ground truth the screens are checked against. */
 function serverTruth(server: MuleServer, code: string): Truth {
@@ -232,28 +244,26 @@ function serverTruth(server: MuleServer, code: string): Truth {
       check(id, `${p.name} has a seat`);
       return id;
     },
+    state,
     stockOf: (id, good) => state().players.find((p) => p.id === id)!.stock[good],
     taxPaid: (id) => state().treasury.paid[id] ?? 0,
   };
 }
 
 /**
- * Waits through the goods as they come up until the store buys one at a price where `oldRate` and NEW_TAX round
- * to different taxes, so the sale tells the two apart. Returns it while its status or declare is still on.
+ * A good still to come at this auction that the store buys at a price where each of `rates` (whole percent)
+ * takes a different tax than NEW_TAX does, from the engine's own quote.
  */
-async function aTellingGood(page: Page, truth: Truth, oldRate: number): Promise<Good> {
-  const telling = (price: number) => Math.round(price * oldRate) !== Math.round(price * (NEW_TAX / 100));
-  const seen = new Map<string, number | null>();
-  const deadline = Date.now() + within(WALK.order.length * (WALK.statusMs + WALK.declareMs + WALK.goodMs / WALK.tradeClockRate));
-  for (;;) {
-    const a = truth.board().auction;
-    if (a && (a.stage === 'status' || a.stage === 'declare')) {
-      if (a.storeBuys !== null && telling(a.storeBuys)) return a.good;
-      seen.set(a.good, a.storeBuys);
-    }
-    check(truth.board().phase === 'auction' && Date.now() < deadline, `UBER-AC-2: a good the store buys at a price that tells ${oldRate * 100}% from ${NEW_TAX}%; saw ${[...seen].map(([g, p]) => `${g} at ${p}`).join(', ')}`);
-    await page.evaluate(() => new Promise((r) => requestAnimationFrame(r)));
-  }
+function aPinningGood(truth: Truth, rates: number[]): Good {
+  const state = truth.state();
+  const a = state.auction;
+  check(a?.good, 'the goods auction has a good up');
+  const later = WALK.order.slice(WALK.order.indexOf(a.good) + 1);
+  const pins = (price: number) => price >= 100 && rates.every((r) => Math.round((price * r) / 100) !== Math.round((price * NEW_TAX) / 100));
+  const quotes = later.map((g) => [g, storeQuotes(state, g).buy] as const);
+  const hit = quotes.find(([, buy]) => buy !== null && pins(buy));
+  check(hit, `UBER-AC-2: a good still to come that the store buys for 100 cr or more; quotes ${quotes.map(([g, b]) => `${g} ${b}`).join(', ')}`);
+  return hit[0];
 }
 
 /** Arranges the sale: the seat holds exactly one unit of the good, shown to its phone at once. */
@@ -301,13 +311,6 @@ async function claimPlots(page: Page): Promise<void> {
 
 async function goToThePub(page: Page): Promise<void> {
   await page.locator('[data-phase=development]').getByRole('button', { name: 'Go to the pub and end your turn' }).click({ timeout: within(PHASE_MS.landGrant + PHASE_MS.development) });
-}
-
-/** Picks a side on the goods auction's declare. */
-async function pickSide(page: Page, side: 'Buyer' | 'Seller' | 'Pass', timeout: number): Promise<void> {
-  const auction = page.locator('[data-phase=auction]');
-  await auction.locator('[role=radio]:not([disabled])', { hasText: side }).click({ timeout });
-  await auction.getByRole('radio', { name: side, checked: true, exact: true }).waitFor({ timeout: PRESS_MS });
 }
 
 /** Presses and holds Up or Down once the button is enabled. */
