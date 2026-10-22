@@ -73,7 +73,8 @@ try {
   await checkSpecialLine(look, inner.special.kind, `B-AC-9: the Look card of ${plotName(inner)}`);
 
   // A tap on the badge's corner, where it hangs over the neighbour below-right, selects the neighbour.
-  const badge = await glyph(hubMap, inner).boundingBox({ timeout: SHOWN_MS });
+  // The glyph spans its plot, as in the mock; the badge is its child, hung over the plot's lower-right corner.
+  const badge = await glyph(hubMap, inner).locator(':scope > span').boundingBox({ timeout: SHOWN_MS });
   check(badge, `B-AC-9: the badge on ${plotName(inner)} has a box`);
   await phone.touchscreen.tap(badge.x + badge.width - 1.5, badge.y + badge.height - 1.5);
   const neighbour = { x: inner.x + 1, y: inner.y + 1 };
@@ -81,7 +82,7 @@ try {
     .filter({ hasText: `Plot ${plotName(neighbour)}` })
     .waitFor({ timeout: 2_000 })
     .then(() => true, () => false);
-  check(shown, `B-AC-9: a tap on the badge's hanging corner selects the neighbour ${plotName(neighbour)}, the card shows "${await look.textContent()}"`);
+  check(shown, `B-AC-9: a tap on the badge's hanging corner selects the neighbour ${plotName(neighbour)}, the card shows "${(await look.count()) > 0 ? await look.textContent() : 'nothing: the tap went to the special plot and closed it'}"`);
 
   // Negative: a plain plot's card has no special line, only its terrain hint.
   await tapPlot(phone, hubMap, plain);
