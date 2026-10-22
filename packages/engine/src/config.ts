@@ -38,6 +38,10 @@ export const PRICE = {
   storeSpread: 0.1,
   /** The store fills its shelves up to this many months of demand. */
   storeMaxCover: 3,
+  /** Food and Water count as short when the store's shelf holds under this many months of the colonists' need, so the price climbs before they go hungry. */
+  shelfCover: 1,
+  /** With that shelf short, the store bids up to this times the posted price for Food and Water, capped so it can still sell to colonists within their budget. */
+  restockPremium: 1.5,
   /** The most of its capital the store spends on one good in one month. */
   storeBudgetShare: 0.5,
   /** Share of normal spoilage the store suffers, thanks to its cold store and silos. */
