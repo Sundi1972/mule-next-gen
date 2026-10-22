@@ -303,7 +303,7 @@ describe('RULE-8: how a seat votes', () => {
   // AM-10: was "tie → lower seat", which in month 1 (nobody owns land) handed every vote to the lowest seat.
   it.each([
     { name: 'two tied, one with more', candidates: { governor: ['ai3', 'ai2', 'ai1'] }, plots: { ai1: 3, ai2: 1, ai3: 1 }, tied: ['ai2', 'ai3'] },
-    { name: 'month 1, nobody owns land', candidates: { governor: ['ai1', 'ai2', 'ai3'] }, plots: {}, tied: ['ai1', 'ai2', 'ai3'] },
+    { name: 'month 1, nobody owns land', candidates: { governor: ['ai1', 'ai2', 'ai3'] }, plots: {} as Record<string, number>, tied: ['ai1', 'ai2', 'ai3'] },
   ])('RULE-8 (AM-10): a tie on fewest plots is broken by a seeded draw among the tied, not by seat ($name)', ({ candidates, plots, tied }) => {
     const picks = new Set<string>();
     for (let seed = 1; seed <= 24; seed++) {
