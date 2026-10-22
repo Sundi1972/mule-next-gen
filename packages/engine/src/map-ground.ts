@@ -286,7 +286,9 @@ export function applyScarcity(dealt: Dealt, scarce: FloorGood | null): Dealt & {
   const lifts: SeamLift[] = [];
   if (scarce !== 'smithore') return { ...dealt, ground, lifts };
   const lowered = new Set(cut);
-  // Lifted plots and the plots they join are never lowered again: that would undo the seam it paid for.
+  // Lifted plots and the plots they join are never lowered again: that would undo the seam it paid for. Only the
+  // recorded joined plot is kept; that alone keeps the lift in a seam, and a second lone plot it touches may still
+  // be the cheapest to lower (keeping it too can leave the stage short of seams).
   const kept = new Set<number>();
   const raised = new Raised(board, ground, 'smithore', field);
   // Each round adds one seam lift and one lowering, or undoes its lift and stops; at most one round per good plot.
