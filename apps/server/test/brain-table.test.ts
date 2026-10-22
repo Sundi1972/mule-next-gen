@@ -34,7 +34,7 @@ const SETTLE_MS = 2 * BRAIN.landTimeoutMs;
 interface Screen {
   conn: Connection<MuleView>;
   from: { seatId: string | null };
-  chat: Array<ChatMessage & { month: number; phase: string }>;
+  chat: Array<ChatMessage & { month: number; phase: string; showing: string }>;
 }
 
 interface TableOptions {
@@ -94,12 +94,15 @@ function table(options: TableOptions) {
     return { month: view?.month ?? 0, phase: view?.phase ?? 'lobby' };
   };
   const screen = (): Screen => {
+    // The phase of the last view this screen received: what it is showing when a chat frame arrives.
+    let showing = 'lobby';
     const s: Screen = {
       from: { seatId: null },
       chat: [],
       conn: {
         send: (msg: ServerEnvelope<MuleView>) => {
-          if (msg.t === 'chat') s.chat.push({ ...msg.message, ...when() });
+          if (msg.t === 'view') showing = msg.view.game?.phase ?? showing;
+          if (msg.t === 'chat') s.chat.push({ ...msg.message, ...when(), showing });
         },
       },
     };
@@ -231,6 +234,18 @@ describe('the brain at the table', () => {
     expect(land).toMatchObject({ by: 'llm', line: 'Mine.', pick: { id: 'B', key: optionB.key, label: optionB.label } });
 
     for (const s of t.screens) expect(s.chat.filter((m) => m.from === baron.id).map((m) => m.text)).toEqual(['Mine.']);
+  });
+
+  it('B-AC-1 (AM-14): every screen receives an AI\'s line after the view of the phase it was said in, the land grant\'s first plot included', async () => {
+    const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain: createBrain({ gameId: 'g-order', env: {} }), phaseScale: 1 });
+    expect(await t.toGameOver()).toBe(true);
+
+    const aiIds = new Set(t.ais.map((s) => s.id));
+    for (const s of t.screens) {
+      const ai = s.chat.filter((m) => aiIds.has(m.from));
+      expect(ai.some((m) => m.phase === 'landGrant')).toBe(true);
+      expect(ai.map((m) => [m.phase, m.showing])).toEqual(ai.map((m) => [m.phase, m.phase]));
+    }
   });
 
   it('B-AC-1: a fake model naming "F" plays the top pick and shows a template line, not its own', async () => {
