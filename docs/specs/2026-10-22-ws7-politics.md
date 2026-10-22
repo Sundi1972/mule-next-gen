@@ -395,7 +395,7 @@ done      Done right after acting in each stage.
 tax       as Governor, once per planning after the election: step toward the persona's target
           (POLITICS.ai.taxTarget: trader 5, cautious 4, aggressive 8, saboteur 10) by at most
           maxStep; plus POLITICS.ai.taxFundBump (2) when the fund is under 3 months of office
-          pay; clamped to RULE-6.
+          pay, from month 2 on (AM-9: the fund starts empty); clamped to RULE-6.
 Smart seats  the same code in slice 1 (no model call); WS2's brain takes these decisions later.
 ```
 
@@ -622,6 +622,22 @@ because   P-1 / HC-4: the review named the arithmetic inference and the view dri
           them keeps the contract WS6 builds against and the privacy promise exact.
 goal      P-1 — still met
 folded    RULE-9 row; §3 note below; plan PR-3 authority
+```
+
+```
+AM-9 · 2026-10-22 · lead · WS1 money rows
+
+target    §2 RULE-8 (tax)
+did       The low-fund bump applies from month 2 on. The colony fund starts at 0, so in
+          month 1 every AI Governor saw a "low" fund and added the bump on top of its step:
+          the tax opened at a median 10% on all three seed sets (WS1, ws7-politics 1b800a3).
+          An empty fund before any tax is collected or any pay is due is not a fund drained
+          by pay, which is what the bump answers.
+because   P-1: the Governor's tax should follow the persona's aim and the fund's real state;
+          a bump every first month is an artefact of the starting balance.
+goal      P-1 — still met
+folded    RULE-8 text; nextTax takes the month; PR-2's T-AC-6 trader row (fund 0 holds 5%
+          in month 1); WS1 re-measures rows 2 and 3
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
