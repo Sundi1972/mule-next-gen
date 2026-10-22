@@ -26,6 +26,19 @@
 
 **Inputs:** spec `docs/specs/2026-10-21-ws3-land-auction.md` §2 RULE-4 (row 0, the speed line, the order within a step) and RULE-5 (AM-7), §6 B-AC-3, B-AC-9, T-AC-8 and T-AC-9, §8 AM-6 and AM-7. The measurements behind them are WS3's contested-lot probe, rounds 1–3. Its harness is `scratchpad/ws3-lots/measure2.template.ts` (scratch, not in the repo).
 
+## Status (2026-10-22)
+
+- **Task 1 DONE.** RED commit 4ce5eb2, then abee9d1. The review came back READY WITH FIXES: four rule edges had no pin (mutants E, F, I, K), and the cap counted time from below zero. Fix round 1 is c33da88 (RED), b52f7e7 and 3243366. Every named mutant now fails, and H is equivalent.
+- **T-AC-9 measured on the real code (abee9d1), all four bars met:**
+  - the highest-limit AI wins 99%;
+  - price p10 is 4 under the runner-up's limit;
+  - the clock decides 5%;
+  - uncontested lots are identical to the rules-off run.
+
+  The real code matches the emulation behind Heiko's decision on all 419 lots.
+- **WS1 signed off the sim before/after.** Seed 101's store-capital MISS is retired by the unlimited-store ruling, and every other change is noise or an improvement.
+- **Gates on 3243366, measured by WS3:** typecheck 0; tabletop 96, ui 8, engine 181, ai 14, web 81, server 65.
+
 ## The PR
 
 **Branch:** `ws3-am6` from `ws3-auctions`. The sub-PR goes into `ws3-auctions`, then the lane PR into `feat/strategist` with Heiko's OK through the PM.
@@ -52,7 +65,7 @@
 
 **ACs verified:** T-AC-8, B-AC-3 (its new negative case), B-AC-9 · **Tier:** logic/contract
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - **Engine, `lots-auction.test.ts`, T-AC-8.** One `T-AC-8: …` test per RULE-4 example, asserting on `state.landAuction` after `stepLandAuction`:
     - the speed doubles once the leading rounded bid passes `hi`, and stays doubled;
     - a change of leader at 1.2 s left sets the clock to 2.0 s;
@@ -67,33 +80,33 @@
     - Assert `view.landAuction.speed` doubles in every seat's view.
     - Then make the lead change with under 2 s left, and assert `view.landAuction.clockMs` is back near 2000.
     - Negative: a lot with one bidder ends on the same clock as before.
-- [ ] **Step 2: Run** `pnpm --filter @mule/engine exec vitest run test/lots-auction.test.ts test/lots.test.ts` and the new server test. Expected: the new rows FAIL. Commit as `test(engine): AM-6 the land auction climbs faster past its top and closes softly; AM-7 the store always pays (RED)`.
-- [ ] **Step 3: Implement C3 per spec RULE-4 (AM-6) and RULE-5 (AM-7)** in `lots.ts`, with `LOTS.fastClimb` 2, `LOTS.lateMs` 2000 and `LOTS.lateCapMs` 6000.
+- [x] **Step 2: Run** `pnpm --filter @mule/engine exec vitest run test/lots-auction.test.ts test/lots.test.ts` and the new server test. Expected: the new rows FAIL. Commit as `test(engine): AM-6 the land auction climbs faster past its top and closes softly; AM-7 the store always pays (RED)`.
+- [x] **Step 3: Implement C3 per spec RULE-4 (AM-6) and RULE-5 (AM-7)** in `lots.ts`, with `LOTS.fastClimb` 2, `LOTS.lateMs` 2000 and `LOTS.lateCapMs` 6000.
   - Add the LandAuction field(s) the soft close and the switch need, such as added time and whether the switch has fired. Reset them per lot in `startWalk`.
   - An overtake is a change of the rounded leader per `lotLeader`, from one buyer to another. Check it after the walk moves and caps, and before the bell rows.
   - AM-7: drop the capital gate at `lots.ts:230`.
   - Comments say why, not what, and never cite spec ids or dates.
-- [ ] **Step 4: Run** the engine, server and AI tests, then `pnpm typecheck`. Expected: green, with every pin unchanged (`walk.ts`'s and the goods auction's tests). Commit as `feat(engine): the land auction climbs faster past its top and closes softly; the store always pays (verifies T-AC-8, B-AC-9)`.
+- [x] **Step 4: Run** the engine, server and AI tests, then `pnpm typecheck`. Expected: green, with every pin unchanged (`walk.ts`'s and the goods auction's tests). Commit as `feat(engine): the land auction climbs faster past its top and closes softly; the store always pays (verifies T-AC-8, B-AC-9)`.
 
 ### Task 2: measure it (T-AC-9)
 
 **ACs verified:** T-AC-9 · **Tier:** promise (measured)
 
-- [ ] **Step 1: Sim before and after.** Run `pnpm sim -- --games 40 --seed 101` and `--seed 1` on the branch and on its base, each tree with its own `pnpm install` and a resolve check. Send the diff to WS1 for sign-off.
-- [ ] **Step 2: The contested-lot probe on the real code.** Point the probe harness at the branch, with no overrides: the real rules now carry both fixes. Expected, against round 3's combo row:
+- [x] **Step 1: Sim before and after.** Run `pnpm sim -- --games 40 --seed 101` and `--seed 1` on the branch and on its base, each tree with its own `pnpm install` and a resolve check. Send the diff to WS1 for sign-off.
+- [x] **Step 2: The contested-lot probe on the real code.** Point the probe harness at the branch, with no overrides: the real rules now carry both fixes. Expected, against round 3's combo row:
   - the highest-limit AI wins at least 97%;
   - the price p10 is within 25 of the runner-up's limit;
   - the clock decides 10% or less;
   - uncontested lots are unchanged (median about 2.3 s).
 
   A miss is a finding to report, not a reason to retune.
-- [ ] **Step 3:** run `pnpm --filter @mule/web build`, then `tsx e2e/auction-steps.ts` (land lots with humans). Expected: green.
+- [x] **Step 3:** run `pnpm --filter @mule/web build`, then `tsx e2e/auction-steps.ts` (land lots with humans). Expected: green.
 
 ### Merge gate
 
-- [ ] T-AC-8, B-AC-9 and B-AC-3's strengthened case are green and AC-named, and the RED commit comes first
-- [ ] T-AC-9 measured: the probe meets its four bars, and WS1 has the sim before/after and has signed it off
-- [ ] `walk.ts` and the goods auction are untouched, and their tests are green unchanged
+- [x] T-AC-8, B-AC-9 and B-AC-3's strengthened case are green and AC-named, and the RED commit comes first
+- [x] T-AC-9 measured: the probe meets its four bars, and WS1 has the sim before/after and has signed it off
+- [x] `walk.ts` and the goods auction are untouched, and their tests are green unchanged
 - [ ] `pnpm typecheck` · `pnpm test` · `pnpm --filter @mule/web e2e` · `tsx e2e/auction-steps.ts` are green (CI runs all of them)
-- [ ] A code review with a mutation sweep on lots.ts's new branches has come back clean
+- [x] A code review with a mutation sweep on lots.ts's new branches has come back clean
 - [ ] The PM has the sub-PR link and the measurements; the lane PR waits for Heiko's OK
