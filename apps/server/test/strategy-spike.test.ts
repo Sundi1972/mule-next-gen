@@ -18,6 +18,7 @@ import {
   runStrategySpike,
   STRATEGY_SCHEMA,
   type Brief,
+  type Cause,
   type ModelRole,
   type StrategyLine,
   type StrategyReply,
@@ -418,6 +419,73 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:strategy-spike', () => {
     expect(again).toHaveLength(1);
     expect(again[0]).toContain(ledger);
   }, 60_000);
+
+  /** A marker inside every reply below: no ledger line may carry it, nor any other reply text. */
+  const MARK = 'MARK-7f3q';
+  const CAUSES: { code: Cause; answer: StrategyReply }[] = [
+    { code: 'not_json', answer: reply({}, `${MARK} {"strategy":`) },
+    { code: 'bad_shape', answer: reply({}, answer({ strategy: { extra: MARK } })) },
+    { code: 'bad_kind', answer: reply({}, answer({ strategy: { kind: MARK } })) },
+    { code: 'bad_good', answer: reply({}, answer({ strategy: { moneyMaker: MARK } })) },
+    { code: 'bad_cash_floor', answer: reply({}, answer({ strategy: { cashFloor: 12.5, reason: MARK } })) },
+    { code: 'reason_too_long', answer: reply({}, answer({ strategy: { reason: MARK + 'x'.repeat(S.reasonChars) } })) },
+    { code: 'plan_not_offered', answer: reply({}, answer({ planPick: 'C', line: MARK })) },
+    { code: 'bad_line', answer: reply({}, JSON.stringify({ ...JSON.parse(answer({ strategy: { reason: MARK } })), line: 7 })) },
+    { code: 'refused', answer: { ...reply({}, answer({ line: MARK })), stopReason: 'refusal' } },
+    { code: 'cut_off', answer: { ...reply({}, `{"strategy":{"kind":"builder","reason":"${MARK}`), stopReason: 'max_tokens' } },
+  ];
+
+  it.each(CAUSES)('S-A1: an invalid reply with cause $code writes cause $code to its ledger line, which holds no reply text, and the report counts it', async ({ code, answer: given }) => {
+    const { report, lines } = run([brief(0)], 1, async (role) => (role === 'haiku' ? given : reply()));
+    const r = await report;
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatchObject({ model: S.models.haiku, cause: code, bound: null, outcome: code === 'refused' ? 'refused' : 'invalid' });
+    expect(lines[1]).toMatchObject({ model: S.models.sonnet, cause: null, bound: null, outcome: 'valid' });
+    expect(JSON.stringify(lines)).not.toContain(MARK);
+    const haiku = r.models.find((m) => m.role === 'haiku')!;
+    expect(Object.entries(haiku.causes).filter(([, n]) => n > 0)).toEqual([[code, 1]]);
+    expect(renderReport(r)).toContainEqual(expect.stringMatching(new RegExp(`^${code}\\s+1\\s+0$`)));
+  });
+
+  it('S-A1: a valid reply out of bounds writes bound cash_floor or corners to its ledger line, with cause null; one in bounds writes bound null', async () => {
+    const list = [
+      brief(0, 10_000, { level: 'rookie', corners: false }),
+      brief(1, 10_000, { money: 500 }),
+      brief(2, 10_000, { level: 'rookie', corners: false, money: 500 }),
+      brief(3),
+    ];
+    const texts = [
+      answer({ strategy: { kind: 'monopolist', monopolyTarget: 'food', reason: MARK } }),
+      answer({ strategy: { cashFloor: 501, reason: MARK } }),
+      // Both bounds broken: the cash floor is named.
+      answer({ strategy: { kind: 'monopolist', monopolyTarget: 'food', cashFloor: 501 } }),
+      answer({ line: MARK }),
+    ];
+    const { report, lines } = run(list, 0, async (_role, b) => reply({}, texts[b.index]));
+    const r = await report;
+    expect(lines.map((l) => [l.outcome, l.cause, l.bound])).toEqual([
+      ['valid', null, 'corners'],
+      ['valid', null, 'cash_floor'],
+      ['valid', null, 'cash_floor'],
+      ['valid', null, null],
+    ]);
+    expect(JSON.stringify(lines)).not.toContain(MARK);
+    expect(r.models.find((m) => m.role === 'haiku')!.bounds).toEqual({ cash_floor: 2, corners: 1 });
+    const printed = renderReport(r);
+    expect(printed).toContainEqual(expect.stringMatching(/^out of bounds: cash_floor\s+2\s+0$/));
+    expect(printed).toContainEqual(expect.stringMatching(/^out of bounds: corners\s+1\s+0$/));
+  });
+
+  it('S-A1: a timeout or an error has no reply to judge: cause and bound are null', async () => {
+    const { report, lines } = run(briefs(2), 0, async (_role, b) => {
+      throw b.index === 0 ? new CallFailed('model call timed out', 'timeout', false, S.timeoutMs) : new CallFailed('model call failed: api status 500', 'error', false, 5, 500);
+    });
+    await report;
+    expect(lines.map((l) => [l.outcome, l.cause, l.bound])).toEqual([
+      ['timeout', null, null],
+      ['error', null, null],
+    ]);
+  });
 
   it('S-A1: no run in this file wrote to apps/server/data', () => {
     expect(listData()).toEqual(dataBefore);
