@@ -1,15 +1,37 @@
-import type { MuleIntent, MuleView, PlayerView, TableView } from '@mule/protocol';
+import type { ElectionView, MuleIntent, MuleView, PlayerView, TableView } from '@mule/protocol';
 
 /** Planning has no clock: who it still waits for, and what the planning footer shows and sends. */
 
 export type Seat = Pick<PlayerView, 'id' | 'name' | 'isAi' | 'ready' | 'slot'> & { away: boolean };
+
+function seatOf(p: PlayerView, connected: (id: string) => boolean): Seat {
+  return { id: p.id, name: p.name, isAi: p.isAi, ready: p.ready, slot: p.slot, away: !connected(p.id) };
+}
 
 /**
  * Every person not yet Ready, in seat order. An AI is always ready. A dropped phone is still waited for, marked
  * away: a locked phone drops its socket, and its player must not be skipped.
  */
 export function stillPlanning(players: readonly PlayerView[], connected: (id: string) => boolean): Seat[] {
-  return players.filter((p) => !p.isAi && !p.ready).map((p) => ({ id: p.id, name: p.name, isAi: p.isAi, ready: p.ready, slot: p.slot, away: !connected(p.id) }));
+  return players.filter((p) => !p.isAi && !p.ready).map((p) => seatOf(p, connected));
+}
+
+/** One line of the TV's ready list: a seat, or the table's AIs folded into one. */
+export type ReadyRow = { kind: 'seat'; seat: Seat } | { kind: 'ais'; seats: Seat[] };
+
+/** From this many seats the TV folds its AIs into one row, so the news beside the list keeps its room. */
+export const FOLD_AIS_FROM = 5;
+
+/**
+ * The TV's ready list, in seat order. Every person keeps a row, so the TV names whoever the table waits for; from
+ * FOLD_AIS_FROM seats the AIs, always ready, share one row at the end. The seat count decides, not the space left,
+ * so the list doesn't jump as news arrives.
+ */
+export function readyRows(players: readonly PlayerView[], connected: (id: string) => boolean): ReadyRow[] {
+  const seats = players.map((p) => seatOf(p, connected));
+  const ais = seats.filter((s) => s.isAi);
+  if (seats.length < FOLD_AIS_FROM || ais.length === 0) return seats.map((seat) => ({ kind: 'seat', seat }));
+  return [...seats.filter((s) => !s.isAi).map((seat): ReadyRow => ({ kind: 'seat', seat })), { kind: 'ais', seats: ais }];
 }
 
 /** Whether a seat's screen is connected, as the room has it; a seat the room doesn't list counts as connected. */
@@ -47,10 +69,25 @@ export function readyNowIn(view: Pick<MuleView, 'phase' | 'politics'>, ready: bo
   return ready && planningProper(view) ? readyNow(others, isHost) : null;
 }
 
-/** Planning with no election running: the only time the server accepts the host's Continue. */
+/** Planning with no election running: the time Ready ends planning. */
 export function planningProper(view: Pick<MuleView, 'phase' | 'politics'>): boolean {
   const election = view.politics?.election;
   return view.phase === 'planning' && !(election && election.stage !== 'over');
+}
+
+/** When the server takes the host's Continue: planning proper, or the election's announce or ballot; never its ceremony. */
+export function hostMayContinue(view: Pick<MuleView, 'phase' | 'politics'>): boolean {
+  const stage = view.politics?.election?.stage;
+  return planningProper(view) || (view.phase === 'planning' && (stage === 'announce' || stage === 'ballot'));
+}
+
+/** The host's confirm before Continue is sent: what it does to the players not yet Ready, at this election stage. */
+export function continueQuestion(stage: ElectionView['stage'] | null | undefined, others: readonly Seat[]): string {
+  const names = namesOf(others, null);
+  const one = others.length === 1;
+  if (stage === 'announce') return `Go on without ${names}? The candidates close as they are.`;
+  if (stage === 'ballot') return `Go on without ${names}? ${names} ${one ? "doesn't" : "don't"} vote this time.`;
+  return `End planning for everyone now? ${names} stop${one ? 's' : ''} where they are, and the land grant starts.`;
 }
 
 export interface FooterIn {
@@ -58,7 +95,8 @@ export interface FooterIn {
   players: readonly PlayerView[];
   hostId: string | null;
   connected: (id: string) => boolean;
-  planningProper: boolean;
+  /** hostMayContinue for the view. */
+  mayContinue: boolean;
   /** The host has tapped Continue once and is asked to confirm. */
   confirm: boolean;
 }
@@ -73,12 +111,12 @@ export interface Footer {
 }
 
 /** What the planning footer shows to `me`. */
-export function readyFooter({ me, players, hostId, connected, planningProper, confirm }: FooterIn): Footer {
+export function readyFooter({ me, players, hostId, connected, mayContinue, confirm }: FooterIn): Footer {
   const all = stillPlanning(players, connected);
   const ready = !!players.find((p) => p.id === me)?.ready;
   if (!ready) return { ready, waiting: all, host: 'none' };
   const others = all.filter((s) => s.id !== me);
-  const canContinue = me === hostId && planningProper && others.length > 0;
+  const canContinue = me === hostId && mayContinue && others.length > 0;
   return { ready, waiting: others, host: !canContinue ? 'none' : confirm ? 'confirm' : 'continue' };
 }
 

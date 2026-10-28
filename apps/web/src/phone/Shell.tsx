@@ -1,6 +1,7 @@
 import { cx, PlayerMark, SPECIES_NAME, Timer } from '@mule/ui';
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { flushSync } from 'react-dom';
+import { TableChat } from '../chat/Chat';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { fmt } from '../game/derive';
 import { useEscape } from './dialog';
@@ -174,6 +175,7 @@ export function PhoneShell({
                   {fmt(self.money)} cr
                 </span>
               </div>
+              <TableChat />
             </header>
             <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 *:shrink-0 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4">
               {now && <NowCard now={now} />}

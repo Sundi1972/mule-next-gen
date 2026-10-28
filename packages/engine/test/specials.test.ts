@@ -3,9 +3,15 @@ import {
   createGame,
   EVENTS,
   factoryFit,
+  formMeteorCrater,
+  MAP,
+  MINERAL_ODDS,
+  MINERAL_ODDS_MIN,
   PROCESSED_GOODS,
   RAW_GOODS,
+  ratingsOf,
   rawOutputParts,
+  RuleError,
   runProduction,
   type EventRow,
   type GameState,
@@ -13,6 +19,7 @@ import {
   type Species,
   type Tile,
 } from '../src/index.js';
+import { specialBonus } from '../src/specials.js';
 
 /**
  * RULE-6, observed where the owner receives it: the month's `produced`
@@ -286,5 +293,100 @@ describe('RULE-6: a plot without a special field', () => {
         }
       }
     }
+  });
+});
+
+describe('a meteor crater, formed in play', () => {
+  /** Heiko's "Crystite at the top of the scale", read from the mined scale itself. */
+  const TOP_MINED = Math.max(...ratingsOf(MINERAL_ODDS.none, MINERAL_ODDS_MIN));
+  const at = (state: GameState, x: number, y: number) => state.tiles[y * state.width + x]!;
+  /** What a destroyed MULE could have gone back to: every player's holdings and the store's corral. */
+  const holdings = (state: GameState) => structuredClone({ players: state.players, corral: state.store.mules });
+
+  it('B-AC-10: an owned, worked plot becomes a meteor crater: the owner keeps it, the MULE and its filter are gone, Crystite is rated at the top', () => {
+    const state = colony();
+    const tile = worked(plot(state, 3, 2, 'mountains', { food: -1, energy: 2, smithore: 3, crystite: 1, rareEarth: 2 }), 'smithore', 'p0');
+    Object.assign(tile, { peaks: 2, traits: ['toxic'], pollution: 2, filter: true, runMonths: 5 });
+    const before = structuredClone(tile);
+    const held = holdings(state);
+
+    formMeteorCrater(state, 3, 2);
+
+    expect(tile).toEqual({
+      ...before,
+      outfit: null,
+      runMonths: 0,
+      filter: false,
+      ground: { ...before.ground, crystite: TOP_MINED },
+      special: { kind: 'meteorCrater' },
+    });
+    // Destroyed: no player or corral gets the MULE back.
+    expect(holdings(state)).toEqual(held);
+    expect(madeOn(runProduction(state), state, tile)).toBeUndefined();
+  });
+
+  it('B-AC-10: an unowned, empty plot still becomes a meteor crater, and stays unowned', () => {
+    const state = colony();
+    const tile = plot(state, 12, 7, 'plains', { food: 2, smithore: 1 });
+    const before = structuredClone(tile);
+
+    formMeteorCrater(state, 12, 7);
+
+    expect(tile).toEqual({ ...before, ground: { ...before.ground, crystite: TOP_MINED }, special: { kind: 'meteorCrater' } });
+  });
+
+  it('B-AC-10: a meteor crater replaces any earlier special field, and struck ruins never pay their salvage', () => {
+    const earlier = {
+      ruins: { kind: 'ruins', salvage: 'electronics' },
+      crystalCavern: { kind: 'crystalCavern' },
+      geyser: { kind: 'geyser' },
+      oasis: { kind: 'oasis' },
+      relic: { kind: 'relic' },
+    } satisfies Record<Exclude<SpecialField['kind'], 'meteorCrater'>, SpecialField>;
+    for (const special of Object.values(earlier)) {
+      const state = colony();
+      const tile = worked(plot(state, 3, 2, 'hills', { crystite: 2 }), null, 'p0', { ...special });
+      const electronics = state.players[0]!.stock.electronics;
+
+      formMeteorCrater(state, 3, 2);
+      runProduction(state);
+
+      expect(tile.special, special.kind).toEqual({ kind: 'meteorCrater' });
+      expect(state.players[0]!.stock.electronics, special.kind).toBe(electronics);
+    }
+  });
+
+  it('B-AC-10: a relic struck by a meteor stops adding to its working neighbour', () => {
+    const state = colony();
+    plot(state, 3, 2, 'plains').special = { kind: 'relic' };
+    const farm = worked(plot(state, 4, 2, 'plains', { food: 1 }), 'food', 'p1');
+    const bonus = specialBonus(state, farm, 'food');
+    const made = madeOn(runProduction(structuredClone(state)), state, farm)!;
+
+    formMeteorCrater(state, 3, 2);
+
+    expect(specialBonus(state, farm, 'food')).toBe(bonus - MAP.specialEffect.relic);
+    expect(madeOn(runProduction(state), state, farm)).toBe(made - MAP.specialEffect.relic);
+  });
+
+  it('B-AC-10: the store and a plot off the map are refused with a RuleError, and nothing changes', () => {
+    const state = colony();
+    const store = state.tiles.find((t) => t.terrain === 'store')!;
+    const before = structuredClone(state);
+    const refused = [[store.x, store.y], [-1, 0], [state.width, 0], [0, -1], [0, state.height], [0.5, 0.5]] as const;
+    for (const [x, y] of refused) expect(() => formMeteorCrater(state, x, y), `${x},${y}`).toThrow(RuleError);
+    expect(state).toEqual(before);
+  });
+
+  it('B-AC-10: a meteor crater adds nothing to production: a Crystite mine on it makes its rating and no more', () => {
+    const state = colony();
+    plot(state, 3, 2, 'crater');
+    formMeteorCrater(state, 3, 2);
+    const mine = worked(at(state, 3, 2), 'crystite', 'p0');
+
+    for (const good of RAW_GOODS) expect(specialBonus(state, mine, good), good).toBe(0);
+    const run = runProduction(state);
+    expect(madeOn(run, state, mine)).toBe(TOP_MINED);
+    expect(run.lines.find((l) => l.tile === indexOf(state, mine))!.parts.map((p) => p.why)).not.toContain('special');
   });
 });

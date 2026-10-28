@@ -1,22 +1,23 @@
 import type { Good } from '@mule/engine';
-import { Button, Creature, cx, FoodTime, GOOD_NAME, GoodIcon, HoloMap, MuleIcon, PlayerMark, SLOT_COLOR, useSeatSpecies, type Slot } from '@mule/ui';
+import { Button, Creature, cx, GOOD_NAME, GoodIcon, HoloMap, MuleIcon, SLOT_COLOR, useSeatSpecies, type Slot } from '@mule/ui';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { fmt, mapTiles, slotOf } from '../../../../../apps/web/src/game/derive';
 import { PhoneShell } from '../../../../../apps/web/src/phone/Shell';
 import { TvHeader } from '../../../../../apps/web/src/table/TableApp';
 import { H, ME, VIEW, W } from '../fixture';
+import { ConditionTag, DEV_WALK_STAND_IN, hungerLevel, PaceList, paceLine, paceOf, SharedClock, sickReason, ThoughtBubble, useCondition, YourPace } from '../proposed/Condition';
 
 /**
  * Mock 5: the store interior (D1: one hall, two rows), tap to walk (R1), the
  * start-of-turn time fill, and the TV map with everyone's creature walking.
  *
- * R1's numbers are placeholders until WS1's sim rows: the hall crossed in about
- * 2 s, 0.6 s per tile on the map. Time runs all the time, as in the original;
- * walking costs time simply because it takes time.
+ * R1's numbers are Heiko's (2026-10-28): 0.4 s a step on the map, 1 s across the
+ * store, a Zipwing at pace 1.5. One clock for everyone runs all the time; walking
+ * costs time simply because it takes time, and hunger or sickness slow the walk.
  *
- * DS-GAP: StoreHall replaces @mule/ui StoreInterior (a grid of buttons) and the
- * creature avatars with time bars over their heads are new; both go to
- * packages/ui (WS4) once approved.
+ * DS-GAP: StoreHall replaces @mule/ui StoreInterior (a grid of buttons); the
+ * creature avatars carry their condition tag (proposed/Condition.tsx) instead of
+ * a time bar; both go to packages/ui (WS4) once approved.
  */
 
 export type Spot = 'doorL' | 'doorR' | 'works' | 'greenBelt' | 'corral' | 'pub' | 'food' | 'water' | 'energy' | 'smithore' | 'crystite' | 'rareEarth';
@@ -38,11 +39,9 @@ export const SPOT: Record<Spot, { x: number; y: number }> = {
   corral: { x: 750 / 12, y: BOTTOM_Y }, pub: { x: 1000 / 12, y: BOTTOM_Y }, doorR: { x: 2300 / 24, y: 51 },
 };
 
-/** Seconds to walk between two spots: the hall's width in about 2 s (R1 placeholder). */
-export function walkSeconds(a: { x: number; y: number }, b: { x: number; y: number }, zipwing = false): number {
-  const dx = (a.x - b.x) / 100;
-  const dy = ((a.y - b.y) / 100) * 0.5;
-  return Math.max(0.3, Math.hypot(dx, dy) * 2) / (zipwing ? 2 : 1);
+/** Seconds one walk across the store floor takes: DEV_WALK's hall time at full pace, divided by the walker's pace. */
+export function walkSeconds(_a: { x: number; y: number }, _b: { x: number; y: number }, pace = 1): number {
+  return DEV_WALK_STAND_IN.hallSeconds / pace;
 }
 
 export interface Visitor {
@@ -50,8 +49,6 @@ export interface Visitor {
   at: { x: number; y: number };
   /** Seconds the current walk takes, for the move's transition. */
   walk: number;
-  /** Share of their time left, for the bar over their head. */
-  time: number;
   leading: 'empty' | Good | null;
   me?: boolean;
   /** Walking right now: the creature waddles until it arrives. */
@@ -233,18 +230,22 @@ function Door({ side, onTap, tv, next = false }: { side: 'L' | 'R'; onTap: (() =
   );
 }
 
-/** A creature on the store floor (or the map), with its time bar over its head and the MULE it leads. */
+/** A creature on the store floor (or the map), with its condition at its shoulder and the MULE it leads. */
 export function Walker({ v, tv }: { v: Visitor; tv: boolean }) {
   const slot = (slotOf(VIEW, v.id) ?? 0) as Slot;
+  const pace = paceOf(useCondition(v.id));
   return (
     <div
       className="pointer-events-none absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
       style={{ left: `${v.at.x}%`, top: `${v.at.y}%`, transition: `left ${v.walk}s linear, top ${v.walk}s linear` }}
       data-testid={`visitor-${v.id}`}
     >
-      <TimeOverHead share={v.time} slot={slot} tv={tv} />
-      <span className={cx('flex items-end', v.moving && 'animate-[waddle_0.36s_ease-in-out_infinite]')}>
-        <CreatureOf slot={slot} size={tv ? 40 : 26} me={!!v.me} />
+      <span className={cx('flex items-end', v.moving && 'animate-[waddle_0.36s_ease-in-out_infinite]')} style={v.moving ? { animationDuration: `${0.36 / pace}s` } : undefined}>
+        <span className="relative">
+          <CreatureOf slot={slot} size={tv ? 40 : 26} me={!!v.me} />
+          <ConditionTag id={v.id} size={tv ? 'tv' : 'phone'} />
+          <ThoughtBubble id={v.id} moving={!!v.moving} size={tv ? 'tv' : 'phone'} clockFromMs={tv ? 0 : 2200} edge={v.at.x < 15 ? 'left' : v.at.x > 85 ? 'right' : undefined} />
+        </span>
         {v.leading && (
           <span className="flex items-center rounded-full bg-map-chip px-0.5 shadow-chip text-ink">
             <MuleIcon size={tv ? 22 : 14} />
@@ -265,14 +266,6 @@ function CreatureOf({ slot, size, me }: { slot: Slot; size: number; me: boolean 
   );
 }
 
-function TimeOverHead({ share, slot, tv }: { share: number; slot: Slot; tv: boolean }) {
-  return (
-    <span className={cx('mb-0.5 overflow-hidden rounded-full bg-void/70', tv ? 'h-1.5 w-10' : 'h-1 w-7')}>
-      <span className="block h-full rounded-full" style={{ width: `${Math.max(0, Math.min(1, share)) * 100}%`, background: SLOT_COLOR[slot] }} />
-    </span>
-  );
-}
-
 // --- The phone: tap to walk ----------------------------------------------------------------
 
 /** The others in the store, on a loop: Ossa buys a MULE and outfits it for Energy, Brix browses, Kai leaves. */
@@ -284,10 +277,11 @@ export const OTHERS: { id: string; path: Spot[]; leading: (Visitor['leading'])[]
 
 const FULL = 50;
 
-export function useStoreSim({ hungry = false, mules = 5 }: { hungry?: boolean; mules?: number } = {}) {
-  const total = hungry ? 33 : FULL;
+export function useStoreSim({ mules = 5 }: { mules?: number } = {}) {
+  const total = FULL;
+  const pace = DEV_WALK_STAND_IN.zipwingPace * paceOf(useCondition('lena'));
   const [t, setT] = useState(0);
-  const [me, setMe] = useState<Visitor>({ id: 'lena', at: SPOT.doorL, walk: 0, time: 1, leading: null, me: true });
+  const [me, setMe] = useState<Visitor>({ id: 'lena', at: SPOT.doorL, walk: 0, leading: null, me: true });
   const [corral, setCorral] = useState(mules);
   const [last, setLast] = useState<string | null>(null);
   const busy = useRef(false);
@@ -302,10 +296,10 @@ export function useStoreSim({ hungry = false, mules = 5 }: { hungry?: boolean; m
   const go = (spot: Spot, fit?: Good) => {
     if (busy.current || filling) return;
     const to = SPOT[spot];
-    const secs = walkSeconds(me.at, to, true);
+    const secs = walkSeconds(me.at, to, pace);
     busy.current = true;
     setMe((m) => ({ ...m, at: to, walk: secs }));
-    setLast(`${secs.toFixed(1)} s to the ${spot === 'doorL' || spot === 'doorR' ? 'door' : spot === 'works' ? 'works' : spot === 'greenBelt' ? 'green belt' : spot === 'corral' ? 'corral' : spot === 'pub' ? 'pub' : `${GOOD_NAME[spot as Good]} outfitter`} (a Zipwing walks twice as fast)`);
+    setLast(`${secs.toFixed(1)} s to the ${spot === 'doorL' || spot === 'doorR' ? 'door' : spot === 'works' ? 'works' : spot === 'greenBelt' ? 'green belt' : spot === 'corral' ? 'corral' : spot === 'pub' ? 'pub' : `${GOOD_NAME[spot as Good]} outfitter`} (at your pace, ${Math.round(pace * 100)}%)`);
     setTimeout(() => {
       busy.current = false;
       // Decide from the MULE in tow at arrival, outside any state updater: React runs updaters twice in development.
@@ -323,38 +317,42 @@ export function useStoreSim({ hungry = false, mules = 5 }: { hungry?: boolean; m
 
   const others: Visitor[] = OTHERS.map((o, k) => {
     const step = Math.floor((t + k * 1.3) / 3) % o.path.length;
-    return { id: o.id, at: SPOT[o.path[step]!], walk: 1.4, time: (total - t * 0.8 - k * 6) / FULL, leading: o.leading[step]! };
+    return { id: o.id, at: SPOT[o.path[step]!], walk: 1.4, leading: o.leading[step]! };
   });
-  return { t, filling, left, total, me: { ...me, time: filling ? Math.min(1, t / 2) * (total / FULL) : left / FULL }, others, corral, last, go, restart: () => window.location.reload() };
+  return { t, filling, left, total, me, others, corral, last, go, restart: () => window.location.reload() };
 }
 
-/** The start of the turn: you eat, and your bar fills while the room watches. */
-function FillCard({ t, hungry }: { t: number; hungry: boolean }) {
-  const need = ME.needs.food;
-  const ate = hungry ? 2 : need;
-  const secs = hungry ? 33 : FULL;
-  const share = Math.min(1, t / 2) * (secs / FULL);
+/** The start of development: you eat, and the card says the pace that leaves you; everyone's clock is the same. */
+function FillCard({ t }: { t: number }) {
+  const cond = useCondition('lena');
+  const short = hungerLevel(cond) > 0 || cond.sick;
+  const share = Math.min(1, t / 2) * paceOf(cond);
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-void/55 animate-[card-in_0.3s_ease-out]" data-testid="fill-card">
-      <div className="flex w-[64%] flex-col gap-1.5 rounded-panel border-2 border-holo bg-panel p-3 shadow-glow">
-        <span className="label-caps">Start of your turn</span>
+      <div className={cx('flex w-[64%] flex-col gap-1.5 rounded-panel border-2 bg-panel p-3 shadow-glow', short ? 'border-warn' : 'border-holo')}>
+        <span className="label-caps">Development · one clock for everyone · {FULL} s</span>
         <span className="font-display text-lg font-semibold leading-tight">
-          You eat {ate} Food{hungry ? ` of the ${need} you need` : ''} and fill up your time bar.
+          {hungerLevel(cond) > 0 ? `You eat ${cond.ate} of the ${cond.need} Food you need.` : `You eat the ${cond.need} Food you need.`}
         </span>
+        {/* Sickness is rolled as development starts (Heiko 2026-10-28) and slows this same turn: the card announces it. */}
+        {cond.sick && (
+          <span className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: 'var(--color-g-medicine)' }} data-testid="sick-strikes">
+            ✚ {sickReason(cond)} It strikes now and slows you this turn.
+          </span>
+        )}
         <div className="relative h-3 overflow-hidden rounded-full bg-raised">
-          <div className={cx('absolute inset-y-0 left-0 rounded-full', hungry ? 'bg-warn' : 'bg-holo')} style={{ width: `${share * 100}%` }} />
-          {hungry && <div className="absolute inset-y-0 border-l-2 border-dashed border-ink-3" style={{ left: '100%', transform: 'translateX(-2px)' }} />}
+          <div className={cx('absolute inset-y-0 left-0 rounded-full', short ? 'bg-warn' : 'bg-holo')} style={{ width: `${share * 100}%` }} />
         </div>
-        <span data-num className={cx('font-mono text-sm font-bold', hungry ? 'text-warn' : 'text-holo')}>
-          {Math.round(share * FULL)} s{hungry ? ` of ${FULL}: short of Food, so less time` : ': full time'}
+        <span data-num className={cx('font-mono text-sm font-bold', short ? 'text-warn' : 'text-holo')}>
+          {paceLine(cond).title}
         </span>
       </div>
     </div>
   );
 }
 
-export function PhoneStore({ hungry = false, mules = 5 }: { hungry?: boolean; mules?: number }) {
-  const sim = useStoreSim({ hungry, mules });
+export function PhoneStore({ mules = 5 }: { mules?: number }) {
+  const sim = useStoreSim({ mules });
   const carry = sim.me.leading;
   const step = carry === null ? 1 : carry === 'empty' ? 2 : 3;
   const open: Spot[] =
@@ -390,7 +388,8 @@ export function PhoneStore({ hungry = false, mules = 5 }: { hungry?: boolean; mu
               </li>
             ))}
           </ol>
-          <FoodTime seconds={sim.left} total={FULL} food={hungry ? 2 : ME.needs.food} need={ME.needs.food} />
+          <SharedClock seconds={sim.filling ? FULL : sim.left} total={FULL} />
+          <YourPace id="lena" />
           <p className="text-xs leading-snug text-ink-2" data-testid="store-hint">
             {carry === null && 'Tap the corral: your Zipwing walks there and buys an empty MULE.'}
             {carry === 'empty' && 'Tap an outfitter for a farm or mine, or a fit at the works for a factory.'}
@@ -420,7 +419,7 @@ export function PhoneStore({ hungry = false, mules = 5 }: { hungry?: boolean; mu
           pubPayout={pub}
           open={sim.filling ? [] : open}
           onSpot={sim.go}
-          overlay={sim.filling && <FillCard t={sim.t} hungry={hungry} />}
+          overlay={sim.filling && <FillCard t={sim.t} />}
         />
       </div>
     </PhoneShell>
@@ -429,79 +428,77 @@ export function PhoneStore({ hungry = false, mules = 5 }: { hungry?: boolean; mu
 
 // --- The TV: everyone walking on the map ----------------------------------------------------
 
-/** Paths on the map in tile coordinates (the store is at 6,4), each leg at 0.6 s a tile (R1 placeholder). */
+/** Paths on the map in tile coordinates (the store is at 6,4), each leg at 0.4 s a step along rows and columns, at the walker's pace. */
 const MAP_PATHS: { id: string; points: { x: number; y: number; leading: Visitor['leading'] }[] }[] = [
   { id: 'ossa', points: [{ x: 6, y: 4, leading: 'energy' }, { x: 9, y: 2, leading: 'energy' }, { x: 11, y: 1, leading: 'energy' }, { x: 11, y: 1, leading: null }, { x: 6, y: 4, leading: null }] },
   { id: 'kai', points: [{ x: 6, y: 4, leading: 'water' }, { x: 8, y: 6, leading: 'water' }, { x: 13, y: 1, leading: 'water' }, { x: 13, y: 1, leading: null }] },
   { id: 'brix', points: [{ x: 10, y: 3, leading: null }, { x: 6, y: 4, leading: null }, { x: 6, y: 4, leading: 'empty' }] },
 ];
 
-function pathAt(points: { x: number; y: number; leading: Visitor['leading'] }[], t: number) {
-  // Each leg takes its length × 0.6 s; a leg of length 0 is a 1.5 s stop (installing, or buying inside).
-  const legs = points.slice(1).map((p, i) => ({ from: points[i]!, to: p, secs: Math.max(1.5, Math.hypot(p.x - points[i]!.x, p.y - points[i]!.y) * 0.6) }));
+function pathAt(points: { x: number; y: number; leading: Visitor['leading'] }[], t: number, pace: number) {
+  // Each leg takes its steps × 0.4 s ÷ pace, along the row first and then the column (no diagonals); a leg of length 0
+  // is a 1.5 s stop (installing, or buying inside).
+  const steps = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
+  const legs = points.slice(1).map((p, i) => ({ from: points[i]!, to: p, n: steps(points[i]!, p), secs: Math.max(1.5, (steps(points[i]!, p) * DEV_WALK_STAND_IN.tileSeconds) / pace) }));
   const cycle = legs.reduce((s, l) => s + l.secs, 0);
   let u = t % cycle;
   for (const l of legs) {
     if (u <= l.secs) {
       const k = u / l.secs;
-      return { x: l.from.x + (l.to.x - l.from.x) * k, y: l.from.y + (l.to.y - l.from.y) * k, leading: l.from.leading };
+      const along = l.n === 0 ? 0 : Math.abs(l.to.x - l.from.x) / l.n;
+      const x = l.from.x + (l.to.x - l.from.x) * Math.min(1, k / (along || 1));
+      const y = l.from.y + (l.to.y - l.from.y) * (along === 1 ? 0 : Math.max(0, (k - along) / (1 - along)));
+      return { x: along === 0 ? l.from.x : x, y, leading: l.from.leading, moving: l.n > 0 };
     }
     u -= l.secs;
   }
-  return points[0]!;
+  return { ...points[0]!, moving: false };
 }
 
+/** A walker on the TV's map, at its own pace. */
+function MapWalker({ id, t }: { id: string; t: number }) {
+  const pace = paceOf(useCondition(id));
+  const v = pathAt(MAP_PATHS.find((p) => p.id === id)!.points, t, pace);
+  return <Walker v={{ id, at: { x: ((v.x + 0.5) / W) * 100, y: ((v.y + 0.5) / H) * 100 }, walk: 0.1, leading: v.leading, moving: v.moving }} tv />;
+}
+
+/** The TV in development: everyone walking at their pace, one clock, and who walks slower and why. */
 export function TvDevelop() {
   const [t, setT] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setT((x) => x + 0.1), 100);
     return () => clearInterval(id);
   }, []);
-  const left = (k: number) => Math.max(0, FULL - t - k * 7);
-  const onMap = MAP_PATHS.map((p) => ({ id: p.id, ...pathAt(p.points, t) }));
-  const inStore = onMap.filter((v) => Math.abs(v.x - 6) < 0.3 && Math.abs(v.y - 4) < 0.3).map((v) => v.id);
+  const left = Math.max(0, FULL - t);
+  // Where each walker is, for who is inside the store now: the full-pace path is close enough for that.
+  const inStore = MAP_PATHS.map((p) => ({ id: p.id, ...pathAt(p.points, t, 1) }))
+    .filter((v) => Math.abs(v.x - 6) < 0.3 && Math.abs(v.y - 4) < 0.3)
+    .map((v) => v.id);
   const storeVisitors: Visitor[] = [
-    { id: 'lena', at: SPOT.corral, walk: 0, time: left(0) / FULL, leading: null },
-    ...inStore.map((id, k): Visitor => ({ id, at: SPOT[(['energy', 'works', 'water'] as Spot[])[k] ?? 'pub'], walk: 0, time: left(k + 1) / FULL, leading: null })),
+    { id: 'lena', at: SPOT.corral, walk: 0, leading: null },
+    ...inStore.map((id, k): Visitor => ({ id, at: SPOT[(['energy', 'works', 'water'] as Spot[])[k] ?? 'pub'], walk: 0, leading: null })),
   ];
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-6 text-ink">
-      <TvHeader game={{ ...VIEW, phase: 'development' }} title="Development" seconds={left(0)} />
+      <TvHeader game={{ ...VIEW, phase: 'development' }} title="Development" seconds={left} />
+      <SharedClock seconds={left} total={FULL} size="tv" />
       <div className="flex min-h-0 flex-1 gap-6">
         <div className="relative w-[760px] shrink-0 self-start" data-testid="tv-map">
           <HoloMap width={W} height={H} tiles={mapTiles(VIEW)} density="tv" hideGround className="w-full" />
-          {onMap
-            .filter((v) => !inStore.includes(v.id))
-            .map((v, k) => (
-              <Walker
-                key={v.id}
-                v={{ id: v.id, at: { x: ((v.x + 0.5) / W) * 100, y: ((v.y + 0.5) / H) * 100 }, walk: 0.1, time: left(k + 1) / FULL, leading: v.leading }}
-                tv
-              />
-            ))}
+          {MAP_PATHS.filter((p) => !inStore.includes(p.id)).map((p) => (
+            <MapWalker key={p.id} id={p.id} t={t} />
+          ))}
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           <span className="label-caps text-base!">In the store now</span>
-          <div className="h-[240px]">
-            <StoreHall visitors={storeVisitors} mules={4} mulePrice={ME.mulePrice} prices={ME.outfitCosts} pubPayout={Math.round(20 + (60 + VIEW.month * 20) * (left(0) / FULL))} tv />
+          <div className="h-[220px]">
+            <StoreHall visitors={storeVisitors} mules={4} mulePrice={ME.mulePrice} prices={ME.outfitCosts} pubPayout={Math.round(20 + (60 + VIEW.month * 20) * (left / FULL))} tv />
           </div>
-          <div className="mt-auto grid grid-cols-2 gap-x-4 gap-y-1.5">
-            <span className="label-caps col-span-2">Time left · set by Food</span>
-            {VIEW.players.map((p, k) => (
-              <div key={p.id} className="flex items-center gap-2">
-                <PlayerMark slot={(slotOf(VIEW, p.id) ?? 0) as Slot} size={18} glow={false} />
-                <span className="w-12 truncate text-sm font-semibold">{p.name}</span>
-                <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-raised">
-                  <div className="absolute inset-y-0 left-0 rounded-full bg-holo" style={{ width: `${(left(k) / FULL) * 100}%` }} />
-                </div>
-                <span data-num className="w-9 text-right font-mono text-sm">
-                  {Math.ceil(left(k))}s
-                </span>
-              </div>
-            ))}
+          <div className="mt-auto">
+            <PaceList />
           </div>
           <span className="font-mono text-xs text-ink-3">
-            {VIEW.storeMules} MULES IN THE CORRAL · {fmt(VIEW.mulePrice)} CR · WALKING 0.6 S A TILE (PLACEHOLDER)
+            {VIEW.storeMules} MULES IN THE CORRAL · {fmt(VIEW.mulePrice)} CR · 0.4 S A STEP AT FULL PACE
           </span>
         </div>
       </div>

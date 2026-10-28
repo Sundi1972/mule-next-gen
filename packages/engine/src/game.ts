@@ -1,6 +1,6 @@
 import { endAuction, startAuction } from './auction.js';
 import { RuleError } from './errors.js';
-import { DEFAULT_SPECIES, DEVELOPMENT, GAME, GOOD_CONFIG, MULE, POLLUTION, SPECIES_PERK, START, TAX, UPKEEP } from './config.js';
+import { DEFAULT_SPECIES, DEVELOPMENT, GAME, GOOD_CONFIG, mapSize, MULE, POLLUTION, SPECIES_PERK, START, TAX, UPKEEP } from './config.js';
 import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './economy.js';
 import { rollPlayerEvent } from './events.js';
 import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
@@ -49,6 +49,7 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
         carriedMule: null,
         reputation: START.reputation,
         claimsThisGrant: 0,
+        doneWithLand: false,
         hungry: false,
         devSeconds: DEVELOPMENT.fullSeconds,
         sick: false,
@@ -156,20 +157,35 @@ export function advanceGrant(state: GameState): Tile | null {
 }
 
 /**
- * The grant ends when every player has used their claims, no free land is
- * left, or the light has swept the free plots GAME.grantSweeps times: a
- * player who doesn't want land must not hold the table up.
+ * The grant ends when every player has used their claims or pressed Done, no
+ * free land is left, or the light has passed every free plot (GAME.grantSweeps
+ * passes): a player who doesn't want land must not hold the table up.
  */
 export function grantDone(state: GameState): boolean {
   if (freePlots(state).length === 0 || (state.grant?.sweep ?? 0) >= GAME.grantSweeps) return true;
-  return state.players.every((p) => p.claimsThisGrant >= GAME.claimsPerGrant);
+  return state.players.every((p) => p.claimsThisGrant >= GAME.claimsPerGrant || p.doneWithLand);
 }
+
+/** Done with land: the player claims no more in this grant. Pressing it again changes nothing. */
+export function grantPass(state: GameState, playerId: string): void {
+  requirePhase(state, 'landGrant');
+  player(state, playerId).doneWithLand = true;
+}
+
+const LARGEST_MAP = mapSize(GAME.maxPlayers);
+
+/**
+ * The longest a land grant can run: one pass of the light over every plot of the largest map. An upper bound; the
+ * grant has no phase clock, and phaseScale never shortens its tick.
+ */
+export const GRANT_PASS_MAX_MS = LARGEST_MAP.width * LARGEST_MAP.height * GAME.grantTickMs;
 
 /** Claims the lit plot. The coordinates say which plot the player saw lit, so a late press can't grab the next one. */
 export function claimPlot(state: GameState, playerId: string, x: number, y: number): void {
   requirePhase(state, 'landGrant');
   const p = player(state, playerId);
   if (p.claimsThisGrant >= GAME.claimsPerGrant) throw new RuleError('No claims left this month');
+  if (p.doneWithLand) throw new RuleError('You are done with land this month');
   const tile = plotAt(state, x, y);
   if (tile.owner) throw new RuleError('Plot already taken');
   if (litPlot(state) !== tile) throw new RuleError('That plot is not lit');
@@ -327,6 +343,7 @@ export function advancePhase(state: GameState): void {
   if (next === 'landGrant') {
     for (const p of state.players) {
       p.claimsThisGrant = 0;
+      p.doneWithLand = false;
       // Drone results arrive in time to pick.
       for (const i of p.droneOrder) if (!p.analysed.includes(i)) p.analysed.push(i);
       p.droneOrder = [];
@@ -412,16 +429,16 @@ export interface ScoreParts {
   land: number;
   mules: number;
   muleValue: number;
-  /** Points for terms served (POLITICS.termScore each); Collapse doesn't cut it. 0 with politics off. */
+  /** Points for terms served (POLITICS.termScore each), before any Collapse cut. 0 with politics off. */
   office: number;
-  /** What Collapse took off: 0 unless the colony failed. */
+  /** What Collapse took off every line, office included: 0 unless the colony failed. */
   cut: number;
   total: number;
 }
 
 /**
  * A final score line by line: money, goods at today's colony prices, land,
- * installed MULEs at the store price, terms in office, and the Collapse cut.
+ * installed MULEs at the store price, terms in office, and the Collapse cut on all of them.
  * The lines add up to total + cut exactly; goods absorbs the rounding. See spec RULE-3.
  */
 export function scoreParts(state: GameState, playerId: string): ScoreParts {
@@ -436,12 +453,11 @@ export function scoreParts(state: GameState, playerId: string): ScoreParts {
   // Keep this exact order of addition: regrouping it moves Math.round at .5 edges and changes scores.
   const raw = p.money + stockValue + (land + muleValue);
   const before = Math.round(raw);
-  // The office line joins after the rounding, so it moves no existing total.
+  // Outside Collapse the office line joins after the rounding, so it moves no existing total.
   const office = officeScore(state, playerId);
-  const kept = colonyFailed(state) ? Math.round(raw * POLLUTION.collapseScore) : before;
-  const total = kept + office;
+  const total = colonyFailed(state) ? Math.round((raw + office) * POLLUTION.collapseScore) : before + office;
   const money = Math.round(p.money);
-  return { money, goods: before - money - land - muleValue, plots, land, mules, muleValue, office, cut: before - kept, total };
+  return { money, goods: before - money - land - muleValue, plots, land, mules, muleValue, office, cut: before + office - total, total };
 }
 
 /** Final score: scoreParts().total. */

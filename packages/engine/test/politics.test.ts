@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   advancePhase,
   canRun,
@@ -8,7 +8,6 @@ import {
   createGame,
   createRng,
   electionDone,
-  electionStageMs,
   nextElectionMonth,
   player,
   POLITICS,
@@ -33,13 +32,14 @@ const SEATS = ['lena', 'brix', 'ossa', 'ai1'];
 const OFFICES: Office[] = ['governor', 'sheriff'];
 /** RULE-10: a Governor run carries a promise; tests about something else hold the tax. */
 const HOLD: TaxPromise = { kind: 'hold' };
+const CAP_8: TaxPromise = { kind: 'cap', percent: 8 };
 
 function newGame(options: { politics?: boolean; seats?: string[]; seed?: number } = {}): GameState {
   const seats = options.seats ?? SEATS;
   return createGame({ seed: options.seed ?? 7, players: seats.map((id) => ({ id, name: id, isAi: false })), politics: options.politics });
 }
 
-/** AM-12's round starts at seat (seed + k) mod n: with 4 seats, seed 8 starts month 1 at the first seat. */
+/** One fixed game for the rows that play several months. */
 const ROUND_SEED = 8;
 
 function politicsOf(state: GameState): Politics {
@@ -61,9 +61,16 @@ function electionOf(state: GameState): Election {
   return election!;
 }
 
-/** Ends the stage on its clock. Returns what stepElection returned. */
-function runOutClock(state: GameState) {
-  return stepElection(state, electionOf(state).clockMs);
+/** Every player presses Done and the election steps: announce opens the ballot, or the ballot closes. Returns what stepElection returned. */
+function everyoneDone(state: GameState) {
+  for (const p of state.players) electionDone(state, p.id);
+  return stepElection(state, 0);
+}
+
+/** Steps the ceremony to its end, one step's clock at a time. */
+function throughCeremony(state: GameState): void {
+  for (let i = 0; i < 20 && electionOf(state).stage === 'ceremony'; i++) stepElection(state, electionOf(state).ceremony!.clockMs);
+  expect(electionOf(state).stage).toBe('over');
 }
 
 /** Month 1 with lena and brix running for Governor, in the ballot stage. */
@@ -71,17 +78,43 @@ function governorBallot(): GameState {
   const state = newGame();
   runFor(state, 'lena', 'governor', HOLD);
   runFor(state, 'brix', 'governor', HOLD);
-  runOutClock(state);
+  everyoneDone(state);
   expect(electionOf(state).stage).toBe('ballot');
   return state;
 }
 
-/** Month 1: `id` runs alone for Governor and takes office when the reveal ends. */
+/** Month 1: `id` runs alone for Governor and takes office when the ceremony ends. */
 function seatGovernor(state: GameState, id: string): void {
   runFor(state, id, 'governor', HOLD);
-  runOutClock(state);
-  runOutClock(state);
+  everyoneDone(state);
+  throughCeremony(state);
   expect(politicsOf(state).governor).toBe(id);
+}
+
+/** An hour of game time: far longer than any clock the election ever had. */
+const HOUR_MS = 3_600_000;
+
+/** The Sheriff path: each test of the calling block runs with both offices elected, and the config's list comes back after it. */
+function bothOffices(): void {
+  let saved: Office[];
+  beforeEach(() => {
+    saved = POLITICS.offices;
+    POLITICS.offices = ['governor', 'sheriff'];
+  });
+  afterEach(() => {
+    POLITICS.offices = saved;
+  });
+}
+
+/** Runs `body` with POLITICS.offices set to `offices`, restoring the list after. */
+function withOffices(offices: Office[], body: () => void): void {
+  const saved = POLITICS.offices;
+  POLITICS.offices = offices;
+  try {
+    body();
+  } finally {
+    POLITICS.offices = saved;
+  }
 }
 
 /** Plays on, nobody acting, up to the planning phase of month `month`. */
@@ -95,8 +128,9 @@ function setMoney(state: GameState, money: Record<string, number>): void {
 
 /**
  * One election month played at random: candidacies, ballots, Done presses
- * and clock steps. Yields after every step. It may stop before the election
- * is over, so the rest is closed by AM-1 when planning ends.
+ * and steps of random length. Yields after every step, naming a stage that
+ * moved while someone was not Done. It may stop before the election is over,
+ * so the rest is closed by AM-1 when planning ends.
  */
 function* playRandomElection(state: GameState, rng: Rng, seats: string[]): Generator<string> {
   const choices: (Office | null)[] = ['governor', 'sheriff', null, null];
@@ -115,9 +149,18 @@ function* playRandomElection(state: GameState, rng: Rng, seats: string[]): Gener
       for (const id of seats) for (const o of OFFICES) if (e.candidates[o].length > 1 && rng.chance(0.7)) castVote(state, id, o, rng.pick(e.candidates[o]));
     }
     for (const id of seats) if (rng.chance(0.5)) electionDone(state, id);
+    const before = electionOf(state);
+    const waiting = seats.filter((id) => !before.done.includes(id) && !coversContested(before, id));
     stepElection(state, rng.int(1, 25_000));
-    yield `month ${state.month} ${electionOf(state).stage}`;
+    const moved = electionOf(state).stage !== before.stage && (before.stage === 'announce' || before.stage === 'ballot');
+    yield `month ${state.month} ${electionOf(state).stage}${moved && waiting.length > 0 ? `: ${before.stage} ended waiting for ${waiting.join(', ')}` : ''}`;
   }
+}
+
+/** In the ballot, whether the player's ballot names a candidate for every contested office. */
+function coversContested(e: Election, id: string): boolean {
+  const contested = OFFICES.filter((o) => e.candidates[o].length > 1);
+  return e.stage === 'ballot' && contested.length > 0 && contested.every((o) => e.ballots[id]?.[o] !== undefined);
 }
 
 /** Hands `count` more free plots to a player. */
@@ -127,6 +170,8 @@ function give(state: GameState, id: string, count: number): void {
 }
 
 describe('C1, C2: the host option and the month opening', () => {
+  bothOffices();
+
   it('C1: politics off leaves the game as before', () => {
     expect(newGame().politics).not.toBeNull();
 
@@ -208,69 +253,77 @@ describe('C4: vote weight', () => {
   });
 });
 
-describe('C3: the election', () => {
-  it('T-AC-1: the election steps nominate → ballot → reveal → over on its clocks', () => {
+describe('C61, C62: the election', () => {
+  bothOffices();
+
+  it('T-AC-61: an election month opens in announce, moves to the ballot once every player is Done and closes it once every player is Done; an hour of game time ends neither', () => {
     const state = newGame();
-    expect(electionOf(state)).toMatchObject({ stage: 'nominate', clockMs: POLITICS.nominateMs, result: null });
-    expect(electionStageMs('nominate')).toBe(POLITICS.nominateMs);
+    expect(electionOf(state)).toMatchObject({ stage: 'announce', ceremony: null, done: [], result: null });
     expect(nextElectionMonth(state)).toBe(4);
     runFor(state, 'lena', 'governor', HOLD);
     runFor(state, 'brix', 'governor', HOLD);
-    electionDone(state, 'lena');
+    for (const id of ['lena', 'brix', 'ossa']) electionDone(state, id);
 
-    expect(stepElection(state, POLITICS.nominateMs - 1)).toBeNull();
-    expect(electionOf(state).stage).toBe('nominate');
-    expect(stepElection(state, 1)).toBeNull();
-    expect(electionOf(state)).toMatchObject({ stage: 'ballot', clockMs: POLITICS.ballotMs, done: [] });
-    expect(electionStageMs('ballot')).toBe(POLITICS.ballotMs);
+    expect(stepElection(state, HOUR_MS)).toBeNull();
+    expect(electionOf(state).stage, 'announce waits for ai1').toBe('announce');
+    electionDone(state, 'ai1');
+    expect(stepElection(state, 0)).toBeNull();
+    expect(electionOf(state)).toMatchObject({ stage: 'ballot', ceremony: null, done: [], candidates: { governor: ['lena', 'brix'], sheriff: [] } });
 
     castVote(state, 'ossa', 'governor', 'brix');
-    expect(stepElection(state, POLITICS.ballotMs - 1)).toBeNull();
-    const result = stepElection(state, 1);
+    for (const id of ['lena', 'brix']) electionDone(state, id);
+    expect(stepElection(state, HOUR_MS)).toBeNull();
+    expect(electionOf(state).stage, 'the ballot waits for ai1').toBe('ballot');
+    electionDone(state, 'ai1');
+    const result = stepElection(state, 0);
     expect(result?.governor).toMatchObject({ winner: 'brix', how: 'votes' });
-    expect(electionOf(state)).toMatchObject({ stage: 'reveal', clockMs: POLITICS.revealMs, result });
-    expect(electionStageMs('reveal')).toBe(POLITICS.revealMs);
-    expect(politicsOf(state).governor).toBeNull();
+    expect(electionOf(state)).toMatchObject({ stage: 'ceremony', done: [], result });
+    expect(politicsOf(state).governor, 'the winner takes office when the ceremony ends').toBeNull();
 
     // The result is fixed when the ballot closes: weight gained later changes nothing.
     give(state, 'lena', 30);
-    expect(stepElection(state, POLITICS.revealMs - 1)).toBeNull();
-    expect(electionOf(state).stage).toBe('reveal');
-    expect(stepElection(state, 1)).toBeNull();
-    expect(electionOf(state)).toMatchObject({ stage: 'over', result });
-    expect(electionStageMs('over')).toBe(0);
+    throughCeremony(state);
+    expect(electionOf(state)).toMatchObject({ stage: 'over', ceremony: null, result });
     expect(politicsOf(state)).toMatchObject({ governor: 'brix', termStart: 1, governorRun: { id: 'brix', terms: 1 } });
     expect(politicsOf(state).terms.brix).toBe(1);
-    expect(stepElection(state, POLITICS.revealMs)).toBeNull();
+    expect(stepElection(state, HOUR_MS)).toBeNull();
     expect(electionOf(state).stage).toBe('over');
   });
 
-  it('T-AC-1: a stage ends early when every player is Done', () => {
+  it('T-AC-61: Done is per player and may be taken back; in the ballot a ballot naming a candidate for every contested office counts as Done, and clearing it undoes that', () => {
     const state = newGame();
-    runFor(state, 'lena', 'governor', HOLD);
-    runFor(state, 'brix', 'governor', HOLD);
-    for (const id of ['lena', 'brix', 'ossa']) electionDone(state, id);
-    electionDone(state, 'ai1');
-    electionDone(state, 'ai1', false);
-    stepElection(state, 100);
-    expect(electionOf(state).stage).toBe('nominate');
-
-    electionDone(state, 'ai1');
-    stepElection(state, 100);
-    expect(electionOf(state)).toMatchObject({ stage: 'ballot', clockMs: POLITICS.ballotMs, done: [] });
-
+    for (const [id, office] of [['lena', 'governor'], ['brix', 'governor'], ['ossa', 'sheriff'], ['ai1', 'sheriff']] as const) runFor(state, id, office, office === 'governor' ? HOLD : undefined);
     for (const id of SEATS) electionDone(state, id);
-    expect(stepElection(state, 100)).not.toBeNull();
-    expect(electionOf(state).stage).toBe('reveal');
+    electionDone(state, 'ai1', false);
+    stepElection(state, HOUR_MS);
+    expect(electionOf(state).stage).toBe('announce');
+    electionDone(state, 'ai1');
+    stepElection(state, 0);
+    expect(electionOf(state)).toMatchObject({ stage: 'ballot', done: [] });
+
+    for (const id of ['lena', 'brix', 'ossa']) {
+      castVote(state, id, 'governor', 'lena');
+      castVote(state, id, 'sheriff', 'ossa');
+    }
+    castVote(state, 'ai1', 'governor', 'brix');
+    stepElection(state, HOUR_MS);
+    expect(electionOf(state).stage, "ai1's ballot covers one of two contested offices").toBe('ballot');
+    castVote(state, 'brix', 'sheriff', null);
+    castVote(state, 'ai1', 'sheriff', 'ai1');
+    stepElection(state, HOUR_MS);
+    expect(electionOf(state).stage, 'Brix cleared his Sheriff vote, so he is not Done').toBe('ballot');
+    castVote(state, 'brix', 'sheriff', 'ai1');
+    expect(stepElection(state, 0)?.governor).toMatchObject({ winner: 'lena', how: 'votes' });
+    expect(electionOf(state).stage).toBe('ceremony');
   });
 
-  it('T-AC-1: a vote after the ballot closed throws RuleError', () => {
+  it('T-AC-61: a vote after the ballot closed throws RuleError', () => {
     const state = governorBallot();
     castVote(state, 'ossa', 'governor', 'lena');
-    runOutClock(state);
-    expect(electionOf(state).stage).toBe('reveal');
+    everyoneDone(state);
+    expect(electionOf(state).stage).toBe('ceremony');
 
-    expect(() => castVote(state, 'ai1', 'governor', 'brix')).toThrow(RuleError);
+    expect(() => castVote(state, 'ai1', 'governor', 'brix')).toThrow(new RuleError('The ballot is closed'));
     expect(() => castVote(state, 'ossa', 'governor', 'brix')).toThrow(RuleError);
     expect(electionOf(state).ballots).toEqual({ ossa: { governor: 'lena' } });
     expect(electionOf(state).result?.governor).toMatchObject({ winner: 'lena', how: 'votes' });
@@ -281,8 +334,8 @@ describe('C3: the election', () => {
     runFor(state, 'lena', 'governor', HOLD);
     runFor(state, 'brix', 'governor', HOLD);
     runFor(state, 'ossa', 'sheriff');
-    expect(() => castVote(state, 'ai1', 'governor', 'lena')).toThrow(RuleError);
-    runOutClock(state);
+    expect(() => castVote(state, 'ai1', 'governor', 'lena')).toThrow(new RuleError('The ballot is not open yet'));
+    everyoneDone(state);
 
     expect(() => castVote(state, 'ai1', 'sheriff', 'ossa')).toThrow(RuleError);
     expect(() => castVote(state, 'ai1', 'governor', 'ossa')).toThrow(RuleError);
@@ -296,22 +349,22 @@ describe('C3: the election', () => {
     expect(electionOf(state).ballots).toEqual({ lena: { governor: 'lena' }, ai1: { governor: 'brix' } });
   });
 
-  it('RULE-1 row 2: no contested office skips the ballot', () => {
+  it('T-AC-61: no contested office skips the ballot: once every player is Done in announce, the ceremony starts', () => {
     const state = newGame();
     runFor(state, 'lena', 'governor', HOLD);
-    const result = runOutClock(state);
-    expect(electionOf(state).stage).toBe('reveal');
+    const result = everyoneDone(state);
+    expect(electionOf(state).stage).toBe('ceremony');
     expect(result?.governor).toEqual({ winner: 'lena', how: 'unopposed', tallies: [{ id: 'lena', votes: 0 }] });
-    expect(result?.sheriff.how).toBe('appointed');
+    expect(result?.sheriff?.how).toBe('appointed');
   });
 
-  it('AM-1: leaving planning closes an open election and seats the winners', () => {
+  it('T-AC-61 (AM-1): leaving planning closes an open election in announce, the ballot or the ceremony, and seats the winners', () => {
     const state = governorBallot();
     castVote(state, 'ossa', 'governor', 'brix');
 
     advancePhase(state);
     expect(state.phase).toBe('landGrant');
-    expect(electionOf(state).stage).toBe('over');
+    expect(electionOf(state)).toMatchObject({ stage: 'over', ceremony: null });
     expect(electionOf(state).result?.governor).toMatchObject({ winner: 'brix', how: 'votes' });
     expect(politicsOf(state)).toMatchObject({ governor: 'brix', termStart: 1 });
     expect(politicsOf(state).sheriff).not.toBeNull();
@@ -323,6 +376,14 @@ describe('C3: the election', () => {
     const short = createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: false })), maxMonths: 3 });
     expect(nextElectionMonth(short)).toBeNull();
 
+    // Closed in announce, the candidacy so far is the election's and is decided.
+    const announcing = newGame();
+    runFor(announcing, 'ossa', 'governor', CAP_8);
+    const announced = closeElection(announcing);
+    expect(announced?.governor).toMatchObject({ winner: 'ossa', how: 'unopposed' });
+    expect(electionOf(announcing)).toMatchObject({ stage: 'over', candidates: { governor: ['ossa'], sheriff: [] }, promises: { ossa: CAP_8 } });
+    expect(politicsOf(announcing)).toMatchObject({ governor: 'ossa', candidates: { governor: [], sheriff: [] }, promises: {} });
+
     // Closed directly, it returns the result it fixed; a second close has nothing to close.
     const closing = governorBallot();
     castVote(closing, 'ossa', 'governor', 'brix');
@@ -332,38 +393,132 @@ describe('C3: the election', () => {
     expect(electionOf(closing).stage).toBe('over');
     expect(closeElection(closing)).toBeNull();
 
-    // Closed during the reveal, the result already fixed stands, whatever changed since.
+    // Closed during the ceremony, the result already fixed stands, whatever changed since.
     const revealing = governorBallot();
     castVote(revealing, 'lena', 'governor', 'lena');
     castVote(revealing, 'brix', 'governor', 'brix');
     castVote(revealing, 'ossa', 'governor', 'brix');
-    const result = runOutClock(revealing);
+    const result = everyoneDone(revealing);
     expect(result?.governor).toMatchObject({ winner: 'brix', how: 'votes' });
     give(revealing, 'lena', 30);
     expect(closeElection(revealing)).toBeNull();
-    expect(electionOf(revealing)).toMatchObject({ stage: 'over', result });
+    expect(electionOf(revealing)).toMatchObject({ stage: 'over', ceremony: null, result });
     expect(politicsOf(revealing).governor).toBe('brix');
+  });
+
+  it("T-AC-62: the ceremony shows each office of POLITICS.offices in turn, intro, bars and winner, each on its POLITICS.ceremony clock; the winners take office when the last winner step ends", () => {
+    const state = newGame();
+    for (const [id, office] of [['lena', 'governor'], ['brix', 'governor'], ['ossa', 'sheriff'], ['ai1', 'sheriff']] as const) runFor(state, id, office, office === 'governor' ? HOLD : undefined);
+    everyoneDone(state);
+    castVote(state, 'lena', 'governor', 'lena');
+    castVote(state, 'ossa', 'sheriff', 'ossa');
+    const result = everyoneDone(state);
+    expect(result).toMatchObject({ governor: { winner: 'lena' }, sheriff: { winner: 'ossa' } });
+
+    const { introMs, barsMs, winnerMs } = POLITICS.ceremony;
+    const seen: string[] = [];
+    for (const [office, step, ms] of [
+      ['governor', 'intro', introMs],
+      ['governor', 'bars', barsMs],
+      ['governor', 'winner', winnerMs],
+      ['sheriff', 'intro', introMs],
+      ['sheriff', 'bars', barsMs],
+      ['sheriff', 'winner', winnerMs],
+    ] as const) {
+      expect(electionOf(state)).toMatchObject({ stage: 'ceremony', ceremony: { office, step, clockMs: ms } });
+      stepElection(state, ms - 1);
+      expect(electionOf(state).ceremony, `${office} ${step} runs its whole clock`).toMatchObject({ office, step, clockMs: 1 });
+      expect(politicsOf(state).governor, `${office} ${step}: nobody is seated before the end`).toBeNull();
+      stepElection(state, 1);
+      seen.push(`${office} ${step}`);
+    }
+    expect(electionOf(state)).toMatchObject({ stage: 'over', ceremony: null, result });
+    expect(politicsOf(state)).toMatchObject({ governor: 'lena', sheriff: 'ossa', terms: { lena: 1, ossa: 1 } });
+  });
+
+  it('T-AC-62: an office with fewer than two candidates skips its bars: unopposed and appointed offices go from intro to winner', () => {
+    const state = newGame();
+    runFor(state, 'lena', 'governor', HOLD);
+    expect(everyoneDone(state)).toMatchObject({ governor: { how: 'unopposed' }, sheriff: { how: 'appointed' } });
+    const steps: string[] = [];
+    for (let i = 0; i < 20 && electionOf(state).stage === 'ceremony'; i++) {
+      const { office, step, clockMs } = electionOf(state).ceremony!;
+      steps.push(`${office} ${step}`);
+      stepElection(state, clockMs);
+    }
+    expect(steps).toEqual(['governor intro', 'governor winner', 'sheriff intro', 'sheriff winner']);
+  });
+
+  it('T-AC-62: with a Governor-only POLITICS.offices the ceremony runs one office and the result names no Sheriff', () => {
+    withOffices(['governor'], () => {
+      const state = newGame();
+      runFor(state, 'lena', 'governor', HOLD);
+      runFor(state, 'brix', 'governor', HOLD);
+      everyoneDone(state);
+      castVote(state, 'brix', 'governor', 'brix');
+      const result = everyoneDone(state);
+      expect(Object.keys(result!)).toEqual(['governor']);
+      expect(result!.governor).toMatchObject({ winner: 'brix', how: 'votes' });
+      const steps: string[] = [];
+      for (let i = 0; i < 20 && electionOf(state).stage === 'ceremony'; i++) {
+        const { office, step, clockMs } = electionOf(state).ceremony!;
+        steps.push(`${office} ${step}`);
+        stepElection(state, clockMs);
+      }
+      expect(steps).toEqual(['governor intro', 'governor bars', 'governor winner']);
+      expect(politicsOf(state)).toMatchObject({ governor: 'brix', sheriff: null, terms: { brix: 1 } });
+    });
   });
 });
 
-describe('RULE-2: who may run', () => {
-  it('RULE-2 row 1: candidates are closed once nominate ends', () => {
-    const state = governorBallot();
-    expect(canRun(state, 'ossa')).toEqual({ governor: 'closed', sheriff: 'closed' });
-    expect(() => runFor(state, 'ossa', 'sheriff')).toThrow(new RuleError('Candidates are closed'));
-    // RULE-2 before RULE-10: a closed stage outranks a bad promise.
-    expect(() => runFor(state, 'ossa', 'governor')).toThrow(new RuleError('Candidates are closed'));
-    expect(() => runFor(state, 'ossa', 'governor', { kind: 'cap', percent: 16 })).toThrow(new RuleError('Candidates are closed'));
-    expect(() => runFor(state, 'ossa', 'sheriff', HOLD)).toThrow(new RuleError('Candidates are closed'));
-    expect(() => runFor(state, 'lena', null)).toThrow(RuleError);
-    expect(electionOf(state).candidates).toEqual({ governor: ['lena', 'brix'], sheriff: [] });
+describe('RULE-60: who may run, and when', () => {
+  bothOffices();
 
-    toNextPlanning(state);
-    expect(politicsOf(state).election).toBeNull();
-    expect(canRun(state, 'ossa')).toEqual({ governor: 'closed', sheriff: 'closed' });
+  it('T-AC-60 row 1: outside planning, development among them, a run, a switch or a withdrawal is refused with "You can run for office in planning" and changes nothing', () => {
+    const state = newGame();
+    toMonth(state, 2);
+    runFor(state, 'lena', 'governor', CAP_8);
+    advancePhase(state);
+    const refused = new RuleError('You can run for office in planning');
+    const tried: string[] = [];
+    while (state.phase !== 'planning') {
+      tried.push(state.phase);
+      const before = structuredClone(state.politics);
+      expect(() => runFor(state, 'brix', 'governor', HOLD), state.phase).toThrow(refused);
+      expect(() => runFor(state, 'lena', 'sheriff'), state.phase).toThrow(refused);
+      expect(() => runFor(state, 'lena', null), state.phase).toThrow(refused);
+      expect(canRun(state, 'brix'), state.phase).toEqual({ governor: 'closed', sheriff: 'closed' });
+      expect(state.politics, state.phase).toEqual(before);
+      advancePhase(state);
+    }
+    expect(tried).toEqual(expect.arrayContaining(['development', 'auction']));
+    expect(politicsOf(state)).toMatchObject({ candidates: { governor: ['lena'], sheriff: [] }, promises: { lena: CAP_8 } });
   });
 
-  it('RULE-2 row 2: two Governor terms in a row refuse a third Governor run', () => {
+  it('T-AC-60 row 2: from the ballot until the result, a run, a switch or a withdrawal is refused with "Candidates are closed until the result", ahead of any promise check; once it is over, running is open for the next election', () => {
+    const state = governorBallot();
+    const closed = new RuleError('Candidates are closed until the result');
+    for (const stage of ['ballot', 'ceremony']) {
+      expect(electionOf(state).stage).toBe(stage);
+      const before = structuredClone(state.politics);
+      expect(canRun(state, 'ossa'), stage).toEqual({ governor: 'closed', sheriff: 'closed' });
+      expect(() => runFor(state, 'ossa', 'sheriff'), stage).toThrow(closed);
+      expect(() => runFor(state, 'ossa', 'governor'), stage).toThrow(closed);
+      expect(() => runFor(state, 'ossa', 'governor', { kind: 'cap', percent: 16 }), stage).toThrow(closed);
+      expect(() => runFor(state, 'ossa', 'sheriff', HOLD), stage).toThrow(closed);
+      expect(() => runFor(state, 'lena', null), stage).toThrow(closed);
+      expect(state.politics, stage).toEqual(before);
+      everyoneDone(state);
+    }
+
+    throughCeremony(state);
+    expect(canRun(state, 'ossa')).toEqual({ governor: true, sheriff: true });
+    runFor(state, 'ossa', 'sheriff');
+    expect(politicsOf(state).candidates).toEqual({ governor: [], sheriff: ['ossa'] });
+    expect(electionOf(state).candidates, "month 1's election keeps its own").toEqual({ governor: ['lena', 'brix'], sheriff: [] });
+  });
+
+  it('T-AC-60 row 3: two Governor terms in a row refuse a third Governor run at declaration, in any month, ahead of any promise check', () => {
     const state = newGame();
     for (const month of [1, 4]) {
       toMonth(state, month);
@@ -371,63 +526,81 @@ describe('RULE-2: who may run', () => {
       advancePhase(state);
       expect(politicsOf(state)).toMatchObject({ governor: 'lena', termStart: month });
     }
-    toMonth(state, 7);
-    expect(politicsOf(state).governorRun).toEqual({ id: 'lena', terms: 2 });
-
-    expect(canRun(state, 'lena')).toEqual({ governor: 'termLimit', sheriff: true });
-    expect(canRun(state, 'brix')).toEqual({ governor: true, sheriff: true });
     const termLimit = new RuleError(`${POLITICS.maxGovernorTermsInRow} Governor terms in a row`);
-    expect(() => runFor(state, 'lena', 'governor', HOLD)).toThrow(termLimit);
-    // RULE-2 before RULE-10: the term limit outranks a missing or bad promise.
-    expect(() => runFor(state, 'lena', 'governor')).toThrow(termLimit);
-    expect(() => runFor(state, 'lena', 'governor', { kind: 'cap', percent: 16 })).toThrow(termLimit);
-    expect(electionOf(state).candidates.governor).toEqual([]);
+    for (const month of [5, 7]) {
+      toMonth(state, month);
+      expect(politicsOf(state).governorRun).toEqual({ id: 'lena', terms: 2 });
+      expect(canRun(state, 'lena'), `month ${month}`).toEqual({ governor: 'termLimit', sheriff: true });
+      expect(canRun(state, 'brix'), `month ${month}`).toEqual({ governor: true, sheriff: true });
+      expect(() => runFor(state, 'lena', 'governor', HOLD), `month ${month}`).toThrow(termLimit);
+      expect(() => runFor(state, 'lena', 'governor'), `month ${month}`).toThrow(termLimit);
+      expect(() => runFor(state, 'lena', 'governor', { kind: 'cap', percent: 16 }), `month ${month}`).toThrow(termLimit);
+      expect(politicsOf(state).candidates.governor, `month ${month}`).toEqual([]);
+    }
     runFor(state, 'brix', 'governor', HOLD);
     runFor(state, 'lena', 'sheriff');
-    expect(electionOf(state).candidates).toEqual({ governor: ['brix'], sheriff: ['lena'] });
+    expect(politicsOf(state).candidates).toEqual({ governor: ['brix'], sheriff: ['lena'] });
     expect(politicsOf(state).terms.lena).toBe(2);
   });
 
-  it('RULE-2 row 3: running for the other office moves the candidacy', () => {
+  it('T-AC-60 row 4: running for the other office moves the candidacy; running again for the same keeps it', () => {
     const state = newGame();
     expect(canRun(state, 'lena')).toEqual({ governor: true, sheriff: true });
-    runFor(state, 'lena', 'governor', HOLD);
-    expect(canRun(state, 'lena')).toEqual({ governor: true, sheriff: true });
-    runFor(state, 'lena', 'sheriff');
-    expect(electionOf(state).candidates).toEqual({ governor: [], sheriff: ['lena'] });
-    runFor(state, 'lena', 'sheriff');
-    expect(electionOf(state).candidates).toEqual({ governor: [], sheriff: ['lena'] });
-  });
-
-  it('RULE-2 withdraw: run(null) in nominate removes the candidacy', () => {
-    const state = newGame();
     runFor(state, 'lena', 'governor', HOLD);
     runFor(state, 'brix', 'governor', HOLD);
+    expect(canRun(state, 'lena')).toEqual({ governor: true, sheriff: true });
+    runFor(state, 'lena', 'sheriff');
+    expect(politicsOf(state).candidates).toEqual({ governor: ['brix'], sheriff: ['lena'] });
+    runFor(state, 'lena', 'sheriff');
+    expect(politicsOf(state).candidates).toEqual({ governor: ['brix'], sheriff: ['lena'] });
     runFor(state, 'lena', null);
-    expect(electionOf(state).candidates).toEqual({ governor: ['brix'], sheriff: [] });
+    expect(politicsOf(state).candidates).toEqual({ governor: ['brix'], sheriff: [] });
+  });
+
+  it('T-AC-60 row 5: Ossa runs in month 2, changes her promise in month 3 and the month 4 announcement shows it; when the ballot opens the candidacy is the election\'s and Politics starts empty', () => {
+    const state = newGame({ seed: ROUND_SEED });
+    toMonth(state, 2);
+    expect(politicsOf(state).election).toBeNull();
+    runFor(state, 'ossa', 'governor', CAP_8);
+    expect(politicsOf(state)).toMatchObject({ candidates: { governor: ['ossa'], sheriff: [] }, promises: { ossa: CAP_8 } });
+    toMonth(state, 3);
+    runFor(state, 'ossa', 'governor', { kind: 'cap', percent: 7 });
+    runFor(state, 'ai1', 'sheriff');
+    runFor(state, 'ai1', null);
+
+    toMonth(state, 4);
+    expect(electionOf(state)).toMatchObject({ stage: 'announce', candidates: { governor: [], sheriff: [] }, promises: {} });
+    expect(politicsOf(state)).toMatchObject({ candidates: { governor: ['ossa'], sheriff: [] }, promises: { ossa: { kind: 'cap', percent: 7 } } });
+    // The last call: Lena runs too.
+    runFor(state, 'lena', 'governor', HOLD);
+    everyoneDone(state);
+    expect(electionOf(state)).toMatchObject({ stage: 'ballot', candidates: { governor: ['ossa', 'lena'], sheriff: [] }, promises: { ossa: { kind: 'cap', percent: 7 }, lena: HOLD } });
+    expect(politicsOf(state)).toMatchObject({ candidates: { governor: [], sheriff: [] }, promises: {} });
   });
 });
 
 describe("RULE-10: a Governor candidate's tax promise (C12, AM-11)", () => {
+  bothOffices();
+
   it('T-AC-8: RULE-10 row 1: a Sheriff run with a promise is refused and changes nothing', () => {
     const state = newGame();
-    expect(electionOf(state).promises).toEqual({});
+    expect(politicsOf(state).promises).toEqual({});
     const before = structuredClone(state.politics);
     expect(() => runFor(state, 'lena', 'sheriff', HOLD)).toThrow(new RuleError('Sheriff candidates make no promise yet'));
     expect(state.politics).toEqual(before);
 
     runFor(state, 'lena', 'sheriff');
-    expect(electionOf(state)).toMatchObject({ candidates: { governor: [], sheriff: ['lena'] }, promises: {} });
+    expect(politicsOf(state)).toMatchObject({ candidates: { governor: [], sheriff: ['lena'] }, promises: {} });
   });
 
   it('T-AC-8: RULE-10 row 2: a Governor run without a promise is refused and leaves any candidacy as it was', () => {
     const state = newGame();
     expect(() => runFor(state, 'lena', 'governor')).toThrow(new RuleError('Pick a promise to run for Governor'));
-    expect(electionOf(state)).toMatchObject({ candidates: { governor: [], sheriff: [] }, promises: {} });
+    expect(politicsOf(state)).toMatchObject({ candidates: { governor: [], sheriff: [] }, promises: {} });
 
     runFor(state, 'lena', 'sheriff');
     expect(() => runFor(state, 'lena', 'governor')).toThrow(new RuleError('Pick a promise to run for Governor'));
-    expect(electionOf(state)).toMatchObject({ candidates: { governor: [], sheriff: ['lena'] }, promises: {} });
+    expect(politicsOf(state)).toMatchObject({ candidates: { governor: [], sheriff: ['lena'] }, promises: {} });
 
     // A kind not on RULE-10's list is no promise, whoever calls: the server's shape check is not the only guard.
     const before = structuredClone(state.politics);
@@ -450,8 +623,8 @@ describe("RULE-10: a Governor candidate's tax promise (C12, AM-11)", () => {
       const state = newGame();
       runFor(state, 'brix', 'governor', { kind: 'lower' });
       runFor(state, 'lena', 'governor', promise);
-      expect(electionOf(state).candidates.governor).toEqual(['brix', 'lena']);
-      expect(electionOf(state).promises).toEqual({ brix: { kind: 'lower' }, lena: promise });
+      expect(politicsOf(state).candidates.governor).toEqual(['brix', 'lena']);
+      expect(politicsOf(state).promises).toEqual({ brix: { kind: 'lower' }, lena: promise });
     },
   );
 
@@ -461,12 +634,12 @@ describe("RULE-10: a Governor candidate's tax promise (C12, AM-11)", () => {
     runFor(state, 'lena', 'governor', mine);
     // Before any other write: the next one copies politics, which would hide a shared object.
     (mine as { percent: number }).percent = 3;
-    expect(electionOf(state).promises.lena).toEqual({ kind: 'cap', percent: 8 });
+    expect(politicsOf(state).promises.lena).toEqual({ kind: 'cap', percent: 8 });
     runFor(state, 'brix', 'governor', HOLD);
 
     runFor(state, 'lena', 'governor', { kind: 'lower', percent: 3 } as TaxPromise);
-    expect(electionOf(state).candidates.governor).toEqual(['lena', 'brix']);
-    expect(electionOf(state).promises.lena).toStrictEqual({ kind: 'lower' });
+    expect(politicsOf(state).candidates.governor).toEqual(['lena', 'brix']);
+    expect(politicsOf(state).promises.lena).toStrictEqual({ kind: 'lower' });
   });
 
   it('T-AC-8: switching to Sheriff drops the promise', () => {
@@ -474,8 +647,8 @@ describe("RULE-10: a Governor candidate's tax promise (C12, AM-11)", () => {
     runFor(state, 'lena', 'governor', { kind: 'cap', percent: 8 });
     runFor(state, 'brix', 'governor', HOLD);
     runFor(state, 'lena', 'sheriff');
-    expect(electionOf(state)).toMatchObject({ candidates: { governor: ['brix'], sheriff: ['lena'] }, promises: { brix: HOLD } });
-    expect(electionOf(state).promises).not.toHaveProperty('lena');
+    expect(politicsOf(state)).toMatchObject({ candidates: { governor: ['brix'], sheriff: ['lena'] }, promises: { brix: HOLD } });
+    expect(politicsOf(state).promises).not.toHaveProperty('lena');
   });
 
   it('T-AC-8: withdrawing drops the promise', () => {
@@ -484,22 +657,24 @@ describe("RULE-10: a Governor candidate's tax promise (C12, AM-11)", () => {
     runFor(state, 'brix', 'governor', HOLD);
     // A promise sent with a withdrawal is ignored: nothing stays behind without a candidacy.
     runFor(state, 'lena', null, HOLD);
-    expect(electionOf(state)).toMatchObject({ candidates: { governor: ['brix'], sheriff: [] }, promises: { brix: HOLD } });
-    expect(electionOf(state).promises).not.toHaveProperty('lena');
+    expect(politicsOf(state)).toMatchObject({ candidates: { governor: ['brix'], sheriff: [] }, promises: { brix: HOLD } });
+    expect(politicsOf(state).promises).not.toHaveProperty('lena');
   });
 });
 
 describe('RULE-3: tally and winner', () => {
+  bothOffices();
+
   it('B-AC-3: nobody runs → the richest player is Governor and the richest other player Sheriff, both appointed', () => {
     const state = newGame();
-    // Strictly richest each time, so no tie (AM-12's round) decides this one.
+    // Strictly richest each time, so no draw decides this one.
     setMoney(state, { lena: 900, brix: 1200, ossa: 1000, ai1: 950 });
-    const result = runOutClock(state);
+    const result = everyoneDone(state);
     expect(result).toEqual({
       governor: { winner: 'brix', how: 'appointed', tallies: [] },
       sheriff: { winner: 'ossa', how: 'appointed', tallies: [] },
     });
-    runOutClock(state);
+    throughCeremony(state);
     expect(politicsOf(state)).toMatchObject({ governor: 'brix', sheriff: 'ossa', terms: { brix: 1, ossa: 1 } });
   });
 
@@ -510,11 +685,11 @@ describe('RULE-3: tally and winner', () => {
     expect(voteWeight(state, 'lena').total).toBe(4);
     runFor(state, 'lena', 'governor', HOLD);
     runFor(state, 'brix', 'governor', HOLD);
-    runOutClock(state);
+    everyoneDone(state);
     castVote(state, 'lena', 'governor', 'lena');
     for (const id of ['brix', 'ossa', 'ai1']) castVote(state, id, 'governor', 'brix');
 
-    const result = runOutClock(state);
+    const result = everyoneDone(state);
     expect(result?.governor).toEqual({ winner: 'lena', how: 'votes', tallies: [{ id: 'lena', votes: 4 }, { id: 'brix', votes: 3 }] });
   });
 
@@ -525,22 +700,22 @@ describe('RULE-3: tally and winner', () => {
     expect(politicsOf(state).baron).toBe('ossa');
     runFor(state, 'lena', 'governor', HOLD);
     runFor(state, 'brix', 'governor', HOLD);
-    runOutClock(state);
+    everyoneDone(state);
     castVote(state, 'lena', 'governor', 'lena');
     castVote(state, 'ai1', 'governor', 'lena');
     castVote(state, 'ossa', 'governor', 'brix');
 
-    const result = runOutClock(state);
+    const result = everyoneDone(state);
     expect(result?.governor).toEqual({ winner: 'brix', how: 'baron', tallies: [{ id: 'lena', votes: 2 }, { id: 'brix', votes: 2 }] });
   });
 
-  // Months 1 and 4 are elections 0 and 1: the round starts at lena, then at brix. The plots cases go against the round.
+  // The plots cases name both orders, so neither seat wins by its place at the table.
   it.each([
-    { month: 1, plots: { lena: 1, brix: 2 }, winner: 'brix' },
-    { month: 4, plots: { lena: 2, brix: 1 }, winner: 'lena' },
-    { month: 1, plots: { lena: 2, brix: 2 }, winner: 'lena' },
-    { month: 4, plots: { lena: 2, brix: 2 }, winner: 'brix' },
-  ])('B-AC-4, T-AC-2 RULE-3 row 6 (AM-12): a tie the Baron\'s ballot does not break goes to the most plots, then round the table from seat (seed + k) mod n: month $month → $winner', ({ month, plots, winner }) => {
+    { month: 1, plots: { lena: 1, brix: 2 }, how: 'land', winner: 'brix' },
+    { month: 4, plots: { lena: 2, brix: 1 }, how: 'land', winner: 'lena' },
+    { month: 1, plots: { lena: 2, brix: 2 }, how: 'lot', winner: undefined },
+    { month: 4, plots: { lena: 2, brix: 2 }, how: 'lot', winner: undefined },
+  ])('B-AC-4, T-AC-2 RULE-3 rows 6, 7 (AM-17): a tie the Baron\'s ballot does not break goes to the most plots, else by lot: month $month, plots $plots → $how', ({ month, plots, how, winner }) => {
     const state = newGame({ seed: ROUND_SEED });
     give(state, 'ossa', 3);
     give(state, 'lena', plots.lena);
@@ -553,80 +728,74 @@ describe('RULE-3: tally and winner', () => {
     runFor(state, 'brix', 'governor', HOLD);
     runFor(state, 'lena', 'governor', HOLD);
     runFor(state, 'ai1', 'governor', HOLD);
-    runOutClock(state);
+    everyoneDone(state);
     castVote(state, 'lena', 'governor', 'lena');
     castVote(state, 'brix', 'governor', 'brix');
     // The Baron votes for the trailing candidate: their ballot names none of the tied pair.
     castVote(state, 'ossa', 'governor', 'ai1');
 
-    const result = runOutClock(state);
-    expect(result?.governor.tallies).toEqual([
+    const result = everyoneDone(state);
+    expect(result?.governor?.tallies).toEqual([
       { id: 'lena', votes: 3 },
       { id: 'brix', votes: 3 },
       { id: 'ai1', votes: 2 },
     ]);
-    expect(result?.governor).toMatchObject({ winner, how: 'tieRule' });
+    expect(result?.governor?.how).toBe(how);
+    if (winner) expect(result?.governor?.winner).toBe(winner);
+    else expect(['lena', 'brix']).toContain(result?.governor?.winner);
   });
 
-  it.each([
-    { month: 1, governor: 'lena', sheriff: 'brix' },
-    { month: 4, governor: 'brix', sheriff: 'ossa' },
-    { month: 10, governor: 'ai1', sheriff: 'lena' },
-  ])('T-AC-2 RULE-3 row 1/2 (AM-12): nobody runs and money is equal → the appointed Governor and Sheriff go round the table: month $month → $governor, $sheriff', ({ month, governor, sheriff }) => {
+  it.each([1, 4, 10])('T-AC-2 RULE-3 rows 1/2 (AM-17): nobody runs and money is equal: month %i appoints a Governor and a different Sheriff, both by lot', (month) => {
     const state = newGame({ seed: ROUND_SEED });
     toMonth(state, month);
     setMoney(state, { lena: 1000, brix: 1000, ossa: 1000, ai1: 1000 });
 
-    const result = runOutClock(state);
-    expect(result).toEqual({
-      governor: { winner: governor, how: 'appointed', tallies: [] },
-      sheriff: { winner: sheriff, how: 'appointed', tallies: [] },
-    });
+    const result = everyoneDone(state)!;
+    expect(result.governor).toMatchObject({ how: 'appointed', tallies: [] });
+    expect(result.sheriff).toMatchObject({ how: 'appointed', tallies: [] });
+    expect(result.sheriff!.winner).not.toBe(result.governor!.winner);
   });
 
-  it('T-AC-2 RULE-3 rows 2, 6 (AM-12) property: over the 4 elections of a 4-seat game where every tie is total, each seat wins the tieRule Governor once and the appointed Sheriff once', () => {
-    const state = newGame({ seed: ROUND_SEED });
-    const won = { governor: [] as string[], sheriff: [] as string[] };
-    for (const month of POLITICS.electionMonths) {
-      toMonth(state, month);
-      // No plots, no ballots, equal money: every seat ties at every step down to the last resort.
-      setMoney(state, { lena: 1000, brix: 1000, ossa: 1000, ai1: 1000 });
-      // A seat at the term limit sits out, so a rule that keeps one seat winning shows in the winners, not as a refusal.
-      for (const id of SEATS) if (canRun(state, id).governor === true) runFor(state, id, 'governor', HOLD);
-      runOutClock(state);
-      const result = runOutClock(state)!;
-      expect(result.governor.how).toBe('tieRule');
-      expect(result.sheriff.how).toBe('appointed');
-      won.governor.push(result.governor.winner);
-      won.sheriff.push(result.sheriff.winner);
-    }
+  // A round from a seeded start is fair only when every seat ties: two seats side by side, the first wins unless the
+  // start falls on the second, 3 games in 4 at a 4-seat table. Seat 0 is the host.
+  const FAIR_GAMES = 200;
+  const fairShare = (wins: number, of: number) => wins >= of * 0.4 && wins <= of * 0.6;
 
-    expect(won.governor).toEqual(['lena', 'brix', 'ossa', 'ai1']);
-    expect(won.sheriff).toEqual(['brix', 'ossa', 'ai1', 'lena']);
-  });
-
-  // Most ties come in month 1, when nobody owns land and money is equal: the round must move between games, not only between elections.
-  it('T-AC-2 RULE-3 rows 2, 6 (AM-12) property: over 4 games in a row, month 1\'s total ties give each seat the tieRule Governor once and the appointed Sheriff once', () => {
-    const won = { governor: [] as string[], sheriff: [] as string[] };
-    for (let seed = ROUND_SEED; seed < ROUND_SEED + SEATS.length; seed++) {
+  it(`T-AC-2 RULE-3 row 7 (AM-17): a tie the Baron and land leave is a fair draw: lena and brix, seats 0 and 1, tie in month 1 of ${FAIR_GAMES} games and each wins about half`, () => {
+    const wins: Record<string, number> = { lena: 0, brix: 0 };
+    const hows = new Set<string>();
+    for (let seed = 0; seed < FAIR_GAMES; seed++) {
       const state = newGame({ seed });
-      setMoney(state, { lena: 1000, brix: 1000, ossa: 1000, ai1: 1000 });
-      for (const id of SEATS) runFor(state, id, 'governor', HOLD);
-      runOutClock(state);
-      const result = runOutClock(state)!;
-      expect(result.governor.how).toBe('tieRule');
-      expect(result.sheriff.how).toBe('appointed');
-      won.governor.push(result.governor.winner);
-      won.sheriff.push(result.sheriff.winner);
+      runFor(state, 'lena', 'governor', HOLD);
+      runFor(state, 'brix', 'governor', HOLD);
+      everyoneDone(state);
+      castVote(state, 'lena', 'governor', 'lena');
+      castVote(state, 'brix', 'governor', 'brix');
+      const result = everyoneDone(state)!;
+      hows.add(result.governor!.how);
+      wins[result.governor!.winner]!++;
     }
 
-    expect([...won.governor].sort()).toEqual([...SEATS].sort());
-    expect([...won.sheriff].sort()).toEqual([...SEATS].sort());
+    expect(fairShare(wins.lena!, FAIR_GAMES), `lena won ${wins.lena} of ${FAIR_GAMES}`).toBe(true);
+    expect([...hows], 'nobody owns land, so the result says it was a draw').toEqual(['lot']);
+  });
+
+  it(`T-AC-2 RULE-3 row 1 (AM-17): nobody runs and lena and brix are richest: the appointment is the same fair draw, each appointed Governor in about half of ${FAIR_GAMES} games`, () => {
+    const wins: Record<string, number> = { lena: 0, brix: 0 };
+    for (let seed = 0; seed < FAIR_GAMES; seed++) {
+      const state = newGame({ seed });
+      setMoney(state, { lena: 1000, brix: 1000, ossa: 900, ai1: 900 });
+      const result = everyoneDone(state)!;
+      expect(result.governor!.how, `seed ${seed}`).toBe('appointed');
+      wins[result.governor!.winner]!++;
+    }
+
+    expect(fairShare(wins.lena!, FAIR_GAMES), `lena was appointed ${wins.lena} of ${FAIR_GAMES}`).toBe(true);
   });
 
   // Lean CI: 25 games on every PR, the full 150 with MULE_FULL=1 (pnpm test:full).
   const INVARIANT_GAMES = process.env.MULE_FULL === '1' ? 150 : 25;
-  it(`T-AC-2 invariant: one player never holds both offices and the fund never goes below 0, over ${INVARIANT_GAMES} seeded games of random candidacies, ballots, Done presses and AM-1 closes`, () => {
+  it(`T-AC-2, T-AC-61 invariant: one player never holds both offices, the fund never goes below 0 and announce or the ballot never ends with a player not Done, over ${INVARIANT_GAMES} seeded games of random candidacies, ballots, Done presses, long steps and AM-1 closes`, () => {
     const broken: string[] = [];
     const hows = new Set<string>();
     for (let seed = 1; seed <= INVARIANT_GAMES; seed++) {
@@ -642,16 +811,20 @@ describe('RULE-3: tally and winner', () => {
       };
 
       while (state.phase !== 'gameOver') {
-        if (state.phase === 'planning' && politicsOf(state).election) for (const when of playRandomElection(state, rng, seats)) check(when);
+        if (state.phase === 'planning' && politicsOf(state).election)
+          for (const when of playRandomElection(state, rng, seats)) {
+            if (when.includes('ended waiting')) broken.push(`seed ${seed} ${when}`);
+            check(when);
+          }
         advancePhase(state);
         check(`month ${state.month} ${state.phase}`);
         const result = politicsOf(state).election?.result;
-        if (result) for (const o of OFFICES) hows.add(result[o].how);
+        if (result) for (const o of OFFICES) hows.add(result[o]!.how);
       }
     }
 
     expect(broken).toEqual([]);
-    expect([...hows].sort()).toEqual(['appointed', 'baron', 'tieRule', 'unopposed', 'votes']);
+    expect([...hows].sort()).toEqual(['appointed', 'baron', 'land', 'lot', 'unopposed', 'votes']);
   });
 
   it('AM-2: nobody runs for Governor and the richest runs alone for Sheriff → they are Sheriff (\'unopposed\') and the richest other player is appointed Governor', () => {
@@ -659,12 +832,12 @@ describe('RULE-3: tally and winner', () => {
     setMoney(state, { lena: 2000, brix: 900, ossa: 1000, ai1: 800 });
     runFor(state, 'lena', 'sheriff');
 
-    const result = runOutClock(state);
+    const result = everyoneDone(state);
     expect(result).toEqual({
       governor: { winner: 'ossa', how: 'appointed', tallies: [] },
       sheriff: { winner: 'lena', how: 'unopposed', tallies: [{ id: 'lena', votes: 0 }] },
     });
-    runOutClock(state);
+    throughCeremony(state);
     expect(politicsOf(state)).toMatchObject({ governor: 'ossa', sheriff: 'lena' });
   });
 
@@ -672,12 +845,12 @@ describe('RULE-3: tally and winner', () => {
     const state = newGame();
     setMoney(state, { lena: 2000, brix: 900, ossa: 1000, ai1: 800 });
     for (const id of SEATS) runFor(state, id, 'sheriff');
-    runOutClock(state);
+    everyoneDone(state);
     castVote(state, 'lena', 'sheriff', 'lena');
     castVote(state, 'brix', 'sheriff', 'ossa');
     castVote(state, 'ossa', 'sheriff', 'ossa');
 
-    const result = runOutClock(state);
+    const result = everyoneDone(state);
     expect(result).toEqual({
       governor: { winner: 'lena', how: 'appointed', tallies: [] },
       sheriff: { winner: 'ossa', how: 'votes', tallies: [{ id: 'ossa', votes: 2 }, { id: 'brix', votes: 0 }, { id: 'ai1', votes: 0 }] },
@@ -686,6 +859,8 @@ describe('RULE-3: tally and winner', () => {
 });
 
 describe('FM-WS3-4: what-if copies', () => {
+  bothOffices();
+
   it('FM-WS3-4: playing a month forward on a cloneForSim copy leaves the real game\'s election and offices untouched', () => {
     const state = newGame();
     runFor(state, 'lena', 'governor', HOLD);
@@ -696,7 +871,7 @@ describe('FM-WS3-4: what-if copies', () => {
     runFor(nominating, 'lena', 'sheriff');
     expect(state.politics).toEqual(nominated);
 
-    runOutClock(state);
+    everyoneDone(state);
     castVote(state, 'ossa', 'governor', 'brix');
     const before = structuredClone(state.politics);
 
@@ -756,7 +931,7 @@ describe('C5: the Governor sets the sales tax', () => {
     advancePhase(state);
     expect(() => setSalesTax(state, 'lena', 6)).toThrow(RuleError);
     toMonth(state, 4);
-    expect(electionOf(state).stage).toBe('nominate');
+    expect(electionOf(state).stage).toBe('announce');
     expect(() => setSalesTax(state, 'lena', 6)).toThrow(RuleError);
     expect(state.treasury.salesTax).toBe(TAX.salesTax);
 
@@ -778,6 +953,8 @@ describe('C5: the Governor sets the sales tax', () => {
 });
 
 describe('C6, C7: office pay and the term score', () => {
+  bothOffices();
+
   it.each([
     { fund: 20, governor: 20, sheriff: 0, left: 0 },
     { fund: 100, governor: 50, sheriff: 30, left: 20 },
@@ -803,5 +980,42 @@ describe('C6, C7: office pay and the term score', () => {
     const state = newGame({ politics: false });
     toNextPlanning(state);
     for (const id of SEATS) expect(scoreParts(state, id).office).toBe(0);
+  });
+});
+
+describe('T-AC-62: Governor only, the default POLITICS.offices', () => {
+  it("T-AC-62: by default only the Governor is elected: a Sheriff run is refused with 'The Sheriff is not elected yet' and changes nothing, the ceremony runs one office and nobody is seated as Sheriff", () => {
+    expect(POLITICS.offices).toEqual(['governor']);
+    const state = newGame();
+    expect(canRun(state, 'ossa')).toEqual({ governor: true, sheriff: 'notElected' });
+    const before = structuredClone(state.politics);
+    expect(() => runFor(state, 'ossa', 'sheriff')).toThrow(new RuleError('The Sheriff is not elected yet'));
+    expect(state.politics).toEqual(before);
+
+    runFor(state, 'lena', 'governor', HOLD);
+    expect(everyoneDone(state)).toEqual({ governor: { winner: 'lena', how: 'unopposed', tallies: [{ id: 'lena', votes: 0 }] } });
+    const steps: string[] = [];
+    for (let i = 0; i < 20 && electionOf(state).stage === 'ceremony'; i++) {
+      const { office, step, clockMs } = electionOf(state).ceremony!;
+      steps.push(`${office} ${step}`);
+      stepElection(state, clockMs);
+    }
+    expect(steps).toEqual(['governor intro', 'governor winner']);
+    expect(politicsOf(state)).toMatchObject({ governor: 'lena', sheriff: null, terms: { lena: 1 } });
+    expect(Object.keys(politicsOf(state).terms)).toEqual(['lena']);
+  });
+
+  it("T-AC-62: by default upkeep pays the Governor 50 from the fund and keeps the Sheriff's 30; the office line counts the Governor's term only", () => {
+    const state = newGame();
+    seatGovernor(state, 'lena');
+    while (state.phase !== 'auction') advancePhase(state);
+    state.treasury.money = 1_000;
+    const money = Object.fromEntries(SEATS.map((id) => [id, player(state, id).money]));
+
+    advancePhase(state);
+    expect(state.phase).toBe('upkeep');
+    expect(state.treasury.money, 'the fund pays 50 a month, not 80').toBe(1_000 - POLITICS.pay.governor);
+    for (const id of SEATS) expect(player(state, id).money - money[id]!, id).toBe(id === 'lena' ? POLITICS.pay.governor : 0);
+    for (const id of SEATS) expect(scoreParts(state, id).office, id).toBe(id === 'lena' ? POLITICS.termScore : 0);
   });
 });
