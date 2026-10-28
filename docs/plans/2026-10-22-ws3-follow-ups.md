@@ -76,6 +76,7 @@
 - **Extract the walking state machine's pure parts** into `apps/server/src/dev-walking.ts`, as land-auction.ts and politics-view.ts are: `DevIntent`, `Colonist`, `walkTarget`, `placeName`, the order of due arrivals, `colonistView`. The timer wiring stays in `MuleGame`. mule-game.ts went from 881 to 1036 lines.
 - **`GRANT_TICK_MS` isn't scaled by `phaseScale`.** At phaseScale 0.1 on seed 7, the AI wins no land in month 1. This predates C13.
 - **RULE-7 row 1's 30 s timeout** (WS5's 5b3f3c8): re-time it under load once WS5's #112 (maps 2.7× faster) is on trunk, and drop it if the row stays well inside vitest's 5 s default.
+- **The AI's rule when humans finish development early** (parked by the PM): the pub path waits for AI seats, the Ready/drop path doesn't. Unify only on a PM ruling.
 
 ## PR-A: engine and server (`ws3-fu-a` from `ws3-auctions`)
 

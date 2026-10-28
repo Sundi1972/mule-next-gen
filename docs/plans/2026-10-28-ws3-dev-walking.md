@@ -15,7 +15,7 @@
 - **Reviews:** four review rounds with mutation sweeps, plus three fix rounds. The findings were an off-map crash, walks dropped by an early end, a stale latch after a blip, planning's number path, and the Continue survivors. All are closed.
 - **#118 (WS6's `condition`) merged ahead:** 8bccef9, then ws1-balance be349e5 at 4e7c067.
 - **Gates at a46c9e6:** all green, e2e:core included.
-- **Named-edit OKs in:** WS1, WS4, WS6 and WS7 for everything before Continue. Still owed: WS4's OK on 35e2512 (room.ts `GameContext.hostId()`) and b256089 (fake-context).
+- **Named-edit OKs: all in** (WS1, WS4, WS6, WS7). WS4 OK'd Continue's two, 35e2512 (room.ts `GameContext.hostId()`) and b256089 (fake-context), at a46c9e6 with its own mutants red. #122 is clear to merge; WS1 merges it under the lane rule.
 - **Follow-ups**, in the WS3 follow-ups plan:
   - extract the walking logic into its own server file;
   - `GRANT_TICK_MS` scaling;
