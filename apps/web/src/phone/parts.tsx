@@ -1,6 +1,7 @@
+import { DEV_WALK } from '@mule/engine';
 import type { ChatMessage, MuleView } from '@mule/protocol';
 import { EMOTES } from '@mule/protocol';
-import { Button, cx, GoodTag, Panel, PlayerMark, type Good } from '@mule/ui';
+import { Button, cx, GoodTag, hungerRule, Panel, PlayerMark, sickRule, type Good } from '@mule/ui';
 import { useEffect, useRef, useState } from 'react';
 import { player, slotOf } from '../game/derive';
 import { useClient, useClientState } from '../net/react';
@@ -35,7 +36,7 @@ export function StockPanel({ title = 'Your stock' }: { title?: string }) {
         </p>
       )}
       {(me.hungry || me.sick) && (
-        <p className="text-sm text-alert">{[me.hungry && 'Your colonist is hungry: less development time.', me.sick && 'Sickness cost you time; Medicine cures it.'].filter(Boolean).join(' ')}</p>
+        <p className="text-sm text-alert">{[me.hungry && `Hungry this month. ${hungerRule(DEV_WALK)}`, me.sick && `Sick this month. ${sickRule(DEV_WALK)} Medicine cures it.`].filter(Boolean).join(' ')}</p>
       )}
     </Panel>
   );
@@ -89,7 +90,9 @@ export function Chat() {
   const others = view.players.filter((p) => p.id !== seatId);
   const lines = chat.filter((m) => (to === null ? !m.to : (m.to === to && m.from === seatId) || (m.from === to && m.to === seatId)));
   const end = useRef<HTMLLIElement>(null);
-  useEffect(() => end.current?.scrollIntoView({ block: 'nearest' }), [lines.length]);
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: 'nearest' });
+  }, [lines.length]);
   const target = player(view, to);
 
   const send = () => {

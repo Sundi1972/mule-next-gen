@@ -1,7 +1,7 @@
 import {
-  airBand,
   airPoints,
   crewOf,
+  DEV_WALK,
   DEVELOPMENT,
   factoryFit,
   GOOD_CONFIG,
@@ -12,11 +12,16 @@ import {
   mulePriceFor,
   needsOf,
   outfitCostFor,
+  pace,
+  playerEventChance,
   POLLUTION,
   rawOutput,
   RECIPES,
+  SPECIES_PERK,
   STRATEGIST,
+  tileIndex,
   UPKEEP,
+  walkSeconds,
   energyUseOf,
   type AiLevelConfig,
   type AiPersonaWeights,
@@ -159,6 +164,24 @@ export function canFeed(obs: GameState, me: string, outfit: Outfit): boolean {
   });
 }
 
+/**
+ * The seconds the seat's month of walking takes, fed and well: a round trip from the corral for each MULE it leads a
+ * month, to its own plots on average (to any plot while it holds none). Hunger and sickness stretch these seconds.
+ */
+export function monthWalkSeconds(obs: GameState, mind: Mind): number {
+  const me = mind.me;
+  const p = obs.players.find((q) => q.id === me)!;
+  const own = obs.tiles.filter((t) => t.owner === me);
+  const plots = own.length > 0 ? own : obs.tiles.filter((t) => t.terrain !== 'store');
+  const trips = plots.reduce((n, t) => {
+    const i = tileIndex(obs.width, t.x, t.y);
+    return n + walkSeconds(obs, me, 'corral', i) + walkSeconds(obs, me, i, 'corral');
+  }, 0);
+  // walkSeconds is at today's pace; undo hunger and sickness, keep a Zipwing's speed.
+  const healthy = pace(obs, me) / (p.species === 'zipwing' ? SPECIES_PERK.zipwingSpeed : 1);
+  return (mind.level.mulesPerMonth * trips * healthy) / plots.length;
+}
+
 /** What a second of development time is worth to the seat: the pub's rate at least, more while it has land to develop. */
 export function secondValue(obs: GameState, me: string): number {
   const p = obs.players.find((q) => q.id === me)!;
@@ -221,10 +244,10 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
   let block = 0;
   let use = 0;
   if (good === 'food' && need > 0) {
-    // Eaten at upkeep, then what is left (after spoilage) buys next month's development time.
+    // Eaten at upkeep, then what is left (after spoilage) keeps next month's walking at full pace.
     const eat = needsOf(obs, me).food;
     block = eat + Math.ceil(eat / keepRate);
-    use = ((DEVELOPMENT.fullSeconds - DEVELOPMENT.minSeconds) * sec) / block;
+    use = (monthWalkSeconds(obs, mind) * (1 / DEV_WALK.hungerPaceMin - 1) * sec) / block;
   } else if (good === 'water' && need > 0) {
     const farms = mine.filter((t) => UPKEEP.irrigated.includes(t.outfit as never));
     const drink = needsOf(obs, me).water;
@@ -244,7 +267,9 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
     }
   } else if (good === 'medicine' && need > 0) {
     block = Math.ceil(need / keepRate);
-    use = Math.max(airBand(obs.air).devPenalty, POLLUTION.bands[1].devPenalty) * sec;
+    // A Medicine cures the sickness it may roll at development start, keeping the month's walking at full pace.
+    const sick = playerEventChance(obs, 'sickness', 'development', me);
+    use = sick * monthWalkSeconds(obs, mind) * (1 / DEV_WALK.sickPace - 1) * sec;
   }
   // Factory inputs: a factory's run is worth its output, shared over its inputs.
   for (const t of mine) {

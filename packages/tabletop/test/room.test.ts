@@ -92,6 +92,35 @@ describe('Room', () => {
     expect(room.hostId).toBe(mia.from.seatId);
   });
 
+  it('FM-planning-host-continue: the game reads the host through ctx.hostId(): null with no human seated, the first connected human, the next one while the host is disconnected, the host again on return, the first human seat when none is connected', () => {
+    let ctx!: GameContext;
+    const room = new Room<Intent, View>({
+      code: 'KRTX',
+      createGame: (c) => {
+        ctx = c;
+        return secretsGame();
+      },
+      aiNames: ['Brix'],
+      newToken: () => `t${++tokens}`,
+    });
+    expect(ctx.hostId(), 'before anyone joins').toBeNull();
+    watch(room);
+    expect(ctx.hostId(), 'a board seats no one').toBeNull();
+    const heiko = join(room, 'Heiko');
+    const mia = join(room, 'Mia');
+    room.receive(heiko, heiko.from, { t: 'addAi' });
+    room.receive(heiko, heiko.from, { t: 'start' });
+    expect(ctx.hostId(), 'the first connected human').toBe(heiko.from.seatId);
+    room.disconnect(heiko);
+    expect(ctx.hostId(), 'the next connected human while the host is disconnected').toBe(mia.from.seatId);
+    const back = join(room, 'Heiko', heiko.last('welcome')!.seatToken!);
+    expect(back.from.seatId).toBe(heiko.from.seatId);
+    expect(ctx.hostId(), 'the host again on return').toBe(heiko.from.seatId);
+    room.disconnect(back);
+    room.disconnect(mia);
+    expect(ctx.hostId(), 'the first human seat when none is connected, never the AI').toBe(heiko.from.seatId);
+  });
+
   it('keeps whispers between the two players and off the board', () => {
     const room = newRoom();
     const heiko = join(room, 'Heiko');

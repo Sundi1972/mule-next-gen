@@ -47,7 +47,7 @@ type DrawnPlot = {
 type DrawnMap = { clip: Box; scale: number; colours: string[]; ringColour: string; plots: DrawnPlot[] };
 type Rgba = { r: number; g: number; b: number; a: number };
 type Shadow = { colour: Rgba | null; spread: number; inset: boolean };
-type Game = { state: GameState; devEndsAt: Map<string, number>; phaseEndsAt: number | null; ctx: { now(): number } };
+type Game = { state: GameState; devEndsAt: number | null; phaseEndsAt: number | null; ctx: { now(): number } };
 
 /** T-AC-9: counts the intents a page sends on its game sockets. Attach before the page loads, as watchShow. */
 export function watchIntents(page: Page): () => number {
@@ -369,8 +369,8 @@ export async function thePhoneShowsItsSelectedPlot(ctx: GameStepContext): Promis
       return { reads, ms: Date.now() - started };
     } finally {
       for (const t of given) t.owner = null;
-      // The phone's turn runs on wall time, held or not: give back what these reads took.
-      game.devEndsAt.set('s1', (game.devEndsAt.get('s1') ?? game.ctx.now()) + Date.now() - started);
+      // The table's one development clock runs on wall time, held or not: give back what these reads took.
+      game.devEndsAt = (game.devEndsAt ?? game.ctx.now()) + Date.now() - started;
       room.broadcast();
     }
   });
@@ -643,11 +643,11 @@ function mapOf(ctx: GameStepContext): { width: number; height: number } {
   return { width, height };
 }
 
-/** Seconds left of the phone's development turn: its own clock or the phase's, whichever ends first. */
+/** Seconds left of the phone's development turn: the one development clock. */
 function turnLeft(ctx: GameStepContext): string {
   const game = gameOf(ctx);
   const now = game.ctx.now();
-  const ends = Math.min(game.devEndsAt.get('s1') ?? now, game.phaseEndsAt ?? now);
+  const ends = game.devEndsAt ?? now;
   return `${((ends - now) / 1_000).toFixed(2)} s of the development turn left`;
 }
 
