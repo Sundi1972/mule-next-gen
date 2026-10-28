@@ -5,7 +5,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { API_KEY_ENV } from './brain/index.js';
-import { RecordMismatch, replay, ReplayDiverged, type MuleRecord } from './record.js';
+import type { MuleRecord } from './record.js';
+import { RecordMismatch, replay, ReplayDiverged } from './replay.js';
 
 // The replay never builds a brain; without the key, nothing it runs could make a paid call either.
 delete process.env[API_KEY_ENV];

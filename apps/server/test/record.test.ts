@@ -13,7 +13,8 @@ import type { HaikuSdk } from '../src/brain/client.js';
 import { AI_NAMES, MuleGame } from '../src/mule-game.js';
 import { createMuleServer, type MuleServer } from '../src/server.js';
 import { fakeSdk, KEY, sdkMessage } from './brain-fakes.js';
-import { createRecordedGame, RecordMismatch, replay, ReplayDiverged, stateHash, type Recorder } from '../src/record.js';
+import { createRecordedGame, stateHash, type Recorder } from '../src/record.js';
+import { RecordMismatch, replay, ReplayDiverged } from '../src/replay.js';
 
 /** How many MuleGames this file built and SDKs it asked for; the SDK factory throws unless a test gives it a fake. */
 const spies = vi.hoisted(() => ({ games: 0, sdk: 0, client: null as HaikuSdk | null }));
