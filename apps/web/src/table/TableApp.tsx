@@ -9,7 +9,7 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { colonyVerdict, fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, player, plotName, seatSpecies, secondsUntil, slotOf, standings, tileAt, toSlot } from '../game/derive';
 import { useAuctionSound } from '../game/sound';
 import { useClient, useClientState, useServerNow } from '../net/react';
-import { connectedIn, planningProper, stillPlanning } from '../phone/hub/ready';
+import { connectedIn, hostMayContinue, stillPlanning } from '../phone/hub/ready';
 import { ReadyCount, WaitingFor } from '../phone/hub/ReadyBar';
 import { TvElection } from './TvElection';
 import { TvLandAuction } from './TvLandAuction';
@@ -157,7 +157,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   }
 
   if (phase === 'production' && game.production) return <TvProduction game={game} production={game.production} />;
-  if (phase === 'planning' && game.politics?.election?.stage === 'reveal') return <TvElection game={game} />;
+  if (phase === 'planning' && game.politics?.election?.stage === 'ceremony') return <TvElection game={game} />;
 
   let side: ReactNode;
   if (phase === 'landGrant')
@@ -201,8 +201,8 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
     const connected = connectedIn(table.seats);
     const waiting = stillPlanning(game.players, connected);
     const host = game.players.find((p) => p.id === table.hostId);
-    // The host's Continue is refused while the election runs, so the TV offers it only after.
-    const hostCanContinue = !!host && (host.ready || host.isAi) && planningProper(game);
+    // The host's Continue goes on without the others in planning proper and the election's announce and ballot; never in its ceremony.
+    const hostCanContinue = !!host && (host.ready || host.isAi) && hostMayContinue(game);
     side = (
       <>
         {/* This branch also draws an auction or land auction for the moment before its data arrives; Ready means Done there. */}
