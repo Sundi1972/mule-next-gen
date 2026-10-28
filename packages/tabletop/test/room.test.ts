@@ -811,7 +811,7 @@ function clockRoom() {
 
 const seen = (screen: Screen<ClockView>) => screen.last('view')?.view.game;
 
-describe('Room: a held room runs no game callback until release (FM-3)', () => {
+describe('Room: a held room runs no game callback until release (FM-11)', () => {
   let clock = 0;
   /** Moves the fake clock to `ms` after the test began, running every timer due on the way. */
   const until = async (ms: number) => {
@@ -826,7 +826,7 @@ describe('Room: a held room runs no game callback until release (FM-3)', () => {
     vi.useRealTimers();
   });
 
-  it('FM-3: planning that comes due while the room is held ends only at release, and every screen hears it then', async () => {
+  it('FM-11: planning that comes due while the room is held ends only at release, and every screen hears it then', async () => {
     const { room, phone, tv } = clockRoom();
     await until(1_000);
     room.hold();
@@ -839,7 +839,7 @@ describe('Room: a held room runs no game callback until release (FM-3)', () => {
     for (const screen of [phone, tv]) expect(seen(screen)?.phase).toBe('development');
   });
 
-  it('FM-3: callbacks that come due while held run once at release, in the order they came due; one scheduled while held and due after release runs at its own time', async () => {
+  it('FM-11: callbacks that come due while held run once at release, in the order they came due; one scheduled while held and due after release runs at its own time', async () => {
     const { room, tv, at } = clockRoom();
     at(2_500, 'due 2500');
     at(2_000, 'due 2000');
@@ -867,7 +867,7 @@ describe('Room: a held room runs no game callback until release (FM-3)', () => {
     { row: 'by its cancel function', by: 'cancel', ran: ['due 2000'] },
     { row: 'by a callback released before it', by: 'earlier callback', ran: ['due 2000'] },
     { row: 'by the room being disposed, as the registry sweep does', by: 'dispose', ran: [] },
-  ])('FM-3: a queued callback dropped $row never runs', async ({ by, ran }) => {
+  ])('FM-11: a queued callback dropped $row never runs', async ({ by, ran }) => {
     const { room, at, fired } = clockRoom();
     let cancelLater = () => {};
     at(2_000, 'due 2000', () => {
@@ -885,7 +885,7 @@ describe('Room: a held room runs no game callback until release (FM-3)', () => {
     expect(fired).toEqual(ran);
   });
 
-  it('FM-3: while held, a move and a chat line are handled and every screen hears them', async () => {
+  it('FM-11: while held, a move and a chat line are handled and every screen hears them', async () => {
     const { room, phone, tv } = clockRoom();
     room.hold();
 
@@ -899,7 +899,7 @@ describe('Room: a held room runs no game callback until release (FM-3)', () => {
     }
   });
 
-  it('FM-3: a released callback that throws ends the room through fail, as an unheld one does, and nothing queued after it runs', async () => {
+  it('FM-11: a released callback that throws ends the room through fail, as an unheld one does, and nothing queued after it runs', async () => {
     const { room, phone, tv, at, fired, errors, closes } = clockRoom();
     room.hold();
     at(1_000, 'throws');
