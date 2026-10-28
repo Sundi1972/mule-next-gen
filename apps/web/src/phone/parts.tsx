@@ -113,7 +113,9 @@ export function Chat() {
   const others = view.players.filter((p) => p.id !== seatId);
   const lines = chat.filter((m) => (to === null ? !m.to : (m.to === to && m.from === seatId) || (m.from === to && m.to === seatId)));
   const end = useRef<HTMLLIElement>(null);
-  useEffect(() => end.current?.scrollIntoView({ block: 'nearest' }), [lines.length]);
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: 'nearest' });
+  }, [lines.length]);
   const target = player(view, to);
 
   const send = () => {
