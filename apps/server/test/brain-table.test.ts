@@ -23,7 +23,7 @@ const CODE = 'TABLE';
  * A shorter phase scale breaks them: the land grant's tick does not scale with it, so the AIs end up with no land and
  * every develop or trade decision has one option. If a strategist change moves them, pick a seed where they hold.
  */
-const SEED = 6;
+const SEED = 9;
 /** Game time per step of the fake clock; every timer due in a step runs, with promises settled between them. */
 const STEP_MS = 500;
 /** Longer than any game these tests play (≤ 2 months, phaseScale ≤ 1). */
