@@ -420,7 +420,7 @@ Code-only; games live in server memory.
 | T-AC-67 (serves B-AC-60) | from month 4, announce refuses a run and shows no Run button | C60, C66 | engine; render |
 | T-AC-68 (serves B-AC-61) | picking alone is not Done; Cast my vote is; an AI-only ballot closes by itself | C61, C63 | engine; ai |
 | T-AC-69 (serves B-AC-62) | each office's beats follow RULE-62's formula from the tally; totals and winner reach the view only at their beats | C62, C64 | engine; server views |
-| T-AC-70 (serves B-AC-63) | the Governor's promise holds for the term on every screen, with kept or broken | C68 | engine; server view; render |
+| T-AC-70 (serves B-AC-63) | the Governor's promise holds for the term on every phone and the Governor's desk, with kept or broken (the TV: follow-up, AM-21 note) | C68 | engine; server view; render |
 | T-AC-71 (serves B-AC-61) | the host's Continue news names the stage it moved past | C69 | server |
 
 negative cases: a run in development (RULE-60 row 1); a run while the ballot is open (row 2);
@@ -464,6 +464,9 @@ because   P-1: Heiko approved the mock: "Yes, all as recommended"; "all ux audit
 goal      P-1 — still met; UBER-AC-2 keeps month 1's run (B-AC-63)
 folded    RULE-60, RULE-61, RULE-62, RULE-63, RULE-64, C63, C66, C68, C69, §3, T-AC-66..71; `pnpm sim` before and
           after (E-7 and (b) change the AI's field), WS1 reviews
+note      PM 2026-10-29: T-AC-70 is proven on the phones and the Governor's desk only. No mock draws
+          the promise on the TV's planning screen (WS4's TableApp); WS6 designs a TV state, and it lands
+          as its own small PR with a one-line WS4 named edit. PR-3 does not wait for it.
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
