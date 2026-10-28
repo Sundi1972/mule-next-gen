@@ -1,4 +1,4 @@
-import { DEFAULT_SPECIES, MAP, TERRAIN_ODDS as ENGINE_TERRAIN_ODDS, type MINERAL_ODDS, type SpecialKind as EngineSpecialKind } from '@mule/engine';
+import { DEFAULT_SPECIES, EVENTS, MAP, TERRAIN_ODDS as ENGINE_TERRAIN_ODDS, type MINERAL_ODDS, type SpecialKind as EngineSpecialKind } from '@mule/engine';
 import type { MuleView, PlayerView, TableView, TileView } from '@mule/protocol';
 import { GOOD_NAME, SPECIES, type Good, type MapSpecial, type MapTile, type Slot, type SpecialKind, type Species } from '@mule/ui';
 
@@ -148,10 +148,10 @@ export const SPECIAL_KINDS_MATCH: SameKinds = true;
 const FX = MAP.specialEffect;
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
-/** What a kind does, in general. The numbers are the engine's, MAP.specialEffect. */
+/** What a kind does, in general. The numbers are the engine's, MAP.specialEffect and the cavern's EVENTS row. */
 export const SPECIAL_EFFECT: Record<SpecialKind, string> = {
   ruins: `pays its first owner ${FX.salvage.alloy} Alloy or ${FX.salvage.electronics} Electronics, once, then is gone.`,
-  crystalCavern: `+${FX.crystalCavern} Crystite when mined. Each month it's mined, a ${pct(FX.collapseChance)} chance it caves in.`,
+  crystalCavern: `+${FX.crystalCavern} Crystite when mined. Each month it's mined, a ${pct(EVENTS.colony.cavernCollapse.phases.production)} chance it caves in.`,
   geyser: `+${FX.geyser} Water or Energy.`,
   oasis: `+${FX.oasis} Food.`,
   relic: `+${FX.relic} to every working plot touching it, anyone's.`,

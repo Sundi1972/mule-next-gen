@@ -1,4 +1,4 @@
-import { COLONY_SELLER, MAP } from '@mule/engine';
+import { COLONY_SELLER, EVENTS, MAP } from '@mule/engine';
 import type { ListingView, MuleView, TileView } from '@mule/protocol';
 import { HoloMap, type MapSpecial, type MapTile } from '@mule/ui';
 import { createElement } from 'react';
@@ -92,7 +92,7 @@ describe("B-AC-9: the phone's plot card says what a special field does", () => {
     const text = (special: MapSpecial) => renderToStaticMarkup(createElement(SpecialLine, { special })).replace(/<[^>]+>/g, '').replace(/&#x27;/g, "'");
     expect(text({ kind: 'geyser' })).toBe(`Geyser: +${FX.geyser} Water or Energy.`);
     expect(text({ kind: 'oasis' })).toBe(`Oasis: +${FX.oasis} Food.`);
-    expect(text({ kind: 'crystalCavern' })).toBe(`Crystal cavern: +${FX.crystalCavern} Crystite when mined. Each month it's mined, a ${Math.round(FX.collapseChance * 100)}% chance it caves in.`);
+    expect(text({ kind: 'crystalCavern' })).toBe(`Crystal cavern: +${FX.crystalCavern} Crystite when mined. Each month it's mined, a ${Math.round(EVENTS.colony.cavernCollapse.phases.production * 100)}% chance it caves in.`);
     expect(text({ kind: 'relic' })).toBe(`Alien relic: +${FX.relic} to every working plot touching it, anyone's.`);
     expect(text({ kind: 'ruins', salvage: 'alloy' })).toBe(`Ruins: the first owner salvages ${FX.salvage.alloy} Alloy, once.`);
     expect(text({ kind: 'ruins', salvage: 'electronics' })).toBe(`Ruins: the first owner salvages ${FX.salvage.electronics} Electronics, once.`);

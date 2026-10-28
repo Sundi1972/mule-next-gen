@@ -1,5 +1,5 @@
 import { EVENTS, GAME } from './config.js';
-import { neighbours } from './map.js';
+import { neighbours } from './grid.js';
 import { airBand, type AirBand } from './pollution.js';
 import { createRng } from './rng.js';
 import { RAW_GOODS, type EventKey, type EventKind, type GameState, type Good, type MonthEvent, type Phase, type Player, type Tile } from './types.js';
@@ -19,6 +19,7 @@ const SHAPE: Record<EventKey, { kind: EventKind; title: string; scope: MonthEven
   pestSwarm: { kind: 'blight', title: 'Pest swarm', scope: 'personal', sign: 'bad', line: () => `Pests eat ${pct(EVENTS.pestSwarm.cut)} of the Food on the plots they reach.` },
   wildfire: { kind: 'fire', title: 'Wildfire', scope: 'personal', sign: 'bad', line: () => 'A fire burns one Food plot and scorches the farms joined to it.' },
   bumperHarvest: { kind: 'bounty', title: 'Bumper harvest', scope: 'personal', sign: 'good', line: () => `One plot makes ${EVENTS.bumperHarvest.factor} times its usual output.` },
+  cavernCollapse: { kind: 'quake', title: 'Cavern collapse', scope: 'personal', sign: 'bad', line: () => 'A crystal cavern caves in and becomes a plain plot.' },
 };
 
 /** The goods a colony-wide event touches. */
@@ -46,6 +47,7 @@ export function eventOutput(key: EventKey, before: number, first: boolean): numb
     pestSwarm: () => Math.floor(before * (1 - EVENTS.pestSwarm.cut)),
     wildfire: () => (first ? 0 : before - EVENTS.wildfire.loss),
     bumperHarvest: () => before * EVENTS.bumperHarvest.factor,
+    cavernCollapse: () => before,
   }[key]();
   return Math.max(0, after);
 }
@@ -53,15 +55,14 @@ export function eventOutput(key: EventKey, before: number, first: boolean): numb
 /**
  * What one event would hit this month, in the order it reaches the plots, each plot's delta 0 until production fills
  * it in; null when it would hit nothing. A personal event starts on `player`'s plots (null when they have none).
+ * Throws for a key it draws no plots for; a per-plot row's event is plotEvent's.
  */
 export function buildEvent(state: GameState, key: EventKey, rng: Rng, player?: string): MonthEvent | null {
-  const shape = SHAPE[key];
   const working = state.tiles.filter((t) => t.owner && t.outfit && (RAW_GOODS as readonly string[]).includes(t.outfit));
   const food = working.filter((t) => t.outfit === 'food');
-  let hit: Tile[] = [];
+  let hit: Tile[];
   let origin: { x: number; y: number };
   let direction: Direction | undefined;
-  let owner: string | undefined;
 
   const goods = COLONY_GOODS[key];
   if (goods) {
@@ -83,20 +84,31 @@ export function buildEvent(state: GameState, key: EventKey, rng: Rng, player?: s
     const source = rng.pick(live);
     origin = { x: source.x, y: source.y };
     hit = reach(source).sort((a, b) => steps(a, source) - steps(b, source));
-  } else {
+  } else if (key === 'pestSwarm' || key === 'wildfire' || key === 'bumperHarvest') {
     const candidates = (key === 'bumperHarvest' ? working : food).filter((t) => t.owner === player);
     if (candidates.length === 0) return null;
     const start = rng.pick(candidates);
     origin = { x: start.x, y: start.y };
-    owner = start.owner!;
     hit =
       key === 'pestSwarm'
         ? spread(state, start, (t) => t.outfit === 'food' && t.owner !== null, EVENTS.pestSwarm.maxPlots)
         : key === 'wildfire'
           ? spread(state, start, (t) => t.outfit === 'food' && t.owner === start.owner, Infinity)
           : [start];
+  } else {
+    throw new Error(`buildEvent draws no plots for ${key}; a per-plot row's event is plotEvent's`);
   }
+  return toEvent(state, key, origin, hit, direction, player);
+}
 
+/** A per-plot row's event on the plot it fired for: that plot alone, for its owner, its output already made (delta 0). */
+export function plotEvent(state: GameState, key: EventKey, index: number): MonthEvent {
+  const tile = state.tiles[index]!;
+  return toEvent(state, key, { x: tile.x, y: tile.y }, [tile], undefined, tile.owner ?? undefined);
+}
+
+function toEvent(state: GameState, key: EventKey, origin: MonthEvent['origin'], hit: Tile[], direction?: Direction, player?: string): MonthEvent {
+  const shape = SHAPE[key];
   const index = new Map(state.tiles.map((t, i) => [t, i]));
   return {
     key,
@@ -107,7 +119,7 @@ export function buildEvent(state: GameState, key: EventKey, rng: Rng, player?: s
     origin,
     ...(direction ? { direction } : {}),
     plots: hit.map((t, order) => ({ index: index.get(t)!, order, good: t.outfit as Good, delta: 0 })),
-    ...(owner ? { player: owner } : {}),
+    ...(player === undefined ? {} : { player }),
     sign: shape.sign,
     phase: 'production',
   };
@@ -139,6 +151,8 @@ export interface EventRow {
   wealth?: { richest?: number; poorest?: number };
   /** By event key: points when that event fired in a window the row names; once, if it fired in both. */
   follows?: Record<string, { points: number; thisPhase?: boolean; lastMonth?: boolean }>;
+  /** Rolls once per plot its caller names, after production's output; rollPhase never rolls it. */
+  perPlot?: true;
   cap: number;
 }
 
@@ -187,7 +201,10 @@ function wealthShare(state: GameState, wealth: NonNullable<EventRow['wealth']>, 
 /** A player event's key: a row of EVENTS.player. */
 export type PlayerEventKey = keyof typeof EVENTS.player;
 
-/** The chance a player event fires for this player at the start of this phase: its row's eventChance. */
+/**
+ * The chance a player row rolls for this player at the start of this phase: its row's eventChance, reading no
+ * firedThisPhase (a follows-this-phase raise counts 0) and not the row's only-if (buildEvent finding a plot to hit).
+ */
 export function playerEventChance(state: GameState, key: PlayerEventKey, phase: Phase, id: string): number {
   return eventChance(state, EVENTS.player[key], phase, { player: id });
 }
@@ -203,21 +220,30 @@ export function playerEventReason(state: GameState, key: PlayerEventKey, phase: 
 }
 
 /**
- * Whether a player event fires for this player at the start of this phase: a roll seeded from the game, the month,
- * the event, the phase and the player, so a game replays exactly; never on a what-if copy.
+ * Whether a player row's roll hits for this player at the start of this phase, on the row dice rollPhase uses for that
+ * row and seat; never on a what-if copy. It reads no firedThisPhase and skips the row's only-if (buildEvent finding a
+ * plot to hit), so for a production row a hit is not yet an event that fired.
  */
 export function rollPlayerEvent(state: GameState, key: PlayerEventKey, phase: Phase, id: string): boolean {
   if (state.whatIf) return false;
   const chance = playerEventChance(state, key, phase, id);
   if (chance <= 0) return false;
-  return createRng(seedOf(state.seed, state.month, key, phase, id)).chance(chance);
+  return rowDice(state, key, phase, id).chance(chance);
+}
+
+/**
+ * A row's dice for one roll, seeded from the game, the month, the row, the phase and whose roll it is (a player's id
+ * or a plot's index), so a game replays exactly and no other roll moves it.
+ */
+export function rowDice(state: GameState, key: keyof typeof EVENTS.colony | PlayerEventKey, phase: Phase, who?: string): Rng {
+  return createRng(seedOf(state.seed, state.month, key, phase, ...(who === undefined ? [] : [who])));
 }
 
 /**
  * The events that fire at the start of a phase, in order: each colony row once in table order, then each player's
- * rows in seat order. A row fires when its seeded roll hits and its event finds a plot to hit, a player row on that
- * player's own plots; of a pair in EVENTS.excludes that both fire, the pair's seeded dice keep one. Never on a
- * what-if copy or before EVENTS.firstMonth.
+ * rows in seat order; a per-plot row is not rolled here. A row fires when its seeded roll hits and its event finds a
+ * plot to hit, a player row on that player's own plots; of a pair in EVENTS.excludes that both fire, the pair's seeded
+ * dice keep one. Never on a what-if copy or before EVENTS.firstMonth.
  */
 export function rollPhase(state: GameState, phase: Phase): MonthEvent[] {
   if (state.whatIf || state.month < EVENTS.firstMonth) return [];
@@ -236,7 +262,7 @@ function roll(state: GameState, phase: Phase, rolls: ReturnType<typeof rowsOf>, 
     const chance = eventChance(state, row, phase, { player, firedThisPhase: out.map((e) => e.key) });
     if (chance <= 0) continue;
     // Its own dice for the roll and the event's shape: a shared rng would let retuning one row move every later one.
-    const rng = createRng(seedOf(state.seed, state.month, key, phase, ...(player === undefined ? [] : [player])));
+    const rng = rowDice(state, key, phase, player);
     const event = rng.chance(chance) ? buildEvent(state, key, rng, player) : null;
     if (event) out.push(event);
   }
@@ -254,10 +280,13 @@ function keepOneOfEachPair(state: GameState, phase: Phase, fired: MonthEvent[]):
   return kept;
 }
 
-/** A table's rows that make a MonthEvent, tagged with whose roll it is; sickness doesn't, and keeps its own roll. */
+/**
+ * A table's rows the phase start rolls, tagged with whose roll it is: sickness makes no MonthEvent and keeps its own
+ * roll, and a per-plot row rolls after output.
+ */
 function rowsOf(table: Record<string, EventRow>, player?: string) {
   return Object.entries(table)
-    .filter((entry): entry is [EventKey, EventRow] => Object.hasOwn(SHAPE, entry[0]))
+    .filter((entry): entry is [EventKey, EventRow] => Object.hasOwn(SHAPE, entry[0]) && !entry[1].perPlot)
     .map(([key, row]) => ({ key, row, player }));
 }
 

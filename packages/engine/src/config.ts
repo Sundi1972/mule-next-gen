@@ -485,8 +485,6 @@ export const MAP = {
   specialEffect: {
     /** Extra Crystite from a crystal cavern mined for Crystite. */
     crystalCavern: 4,
-    /** Chance a cavern that produced Crystite this month collapses into a plain plot. */
-    collapseChance: 0.06,
     /** Extra Water or Energy from a geyser outfitted for either. */
     geyser: 2,
     /** Extra Food from an oasis farm. */
@@ -879,8 +877,9 @@ export const EVENTS = {
   bumperHarvest: { factor: 2 },
   /**
    * The event table (Heiko's event model): one row per event, its fields an EventRow (events.ts), every number a
-   * share. A row rolls at the start of each phase it lists: that phase's chance plus its raises, minus its lowers,
-   * never below 0 or above its cap. Colony rows roll once for the colony, first; player rows once a player.
+   * share. A row rolls at the start of each phase it lists, or, with perPlot, once per plot its caller names after
+   * production's output: that phase's chance plus its raises, minus its lowers, never below 0 or above its cap. Colony
+   * rows roll once for the colony, first; player rows once a player.
    */
   colony: {
     dustStorm: { phases: { production: 0.08 }, cap: 0.9 },
@@ -890,6 +889,11 @@ export const EVENTS = {
     cometPass: { phases: { production: 0.08 }, cap: 0.9 },
     flood: { phases: { production: 0.08 }, follows: { drought: { points: 0.1, lastMonth: true } }, cap: 0.9 },
     volcanicAsh: { phases: { production: 0.064 }, cap: 0.9 },
+    /**
+     * Rolls once for each crystal cavern plot that produced Crystite this month, after production's output, never at
+     * the phase start; a collapse leaves a plain plot.
+     */
+    cavernCollapse: { phases: { production: 0.06 }, perPlot: true, cap: 0.9 },
   } satisfies Record<string, import('./events.js').EventRow>,
   player: {
     /**

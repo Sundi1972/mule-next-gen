@@ -1,5 +1,5 @@
 import { ADJACENCY, FACTORY, FACTORY_FIT, GROWN_BASE, GROWN_MIN, POLLUTION, RECIPES, SPECIES_PERK, THIN_VEIN_MONTHS, TRAIT_EFFECT, UPKEEP } from './config.js';
-import { eventOutput, rollPhase } from './events.js';
+import { eventOutput, plotEvent, rollPhase } from './events.js';
 import { neighbours } from './map.js';
 import { airBand, runPollution } from './pollution.js';
 import { relicFit, settleSpecials, specialBonus } from './specials.js';
@@ -202,7 +202,8 @@ export function energyUseOf(state: GameState, tile: Tile): number {
  *    pollution spreads and the air gauge moves.
  * Every event the phase fires (rollPhase) works on the plots it reaches, on
  * top of what made each plot's output. Returns what each player produced, the
- * air points each caused, each plot's line and the events.
+ * air points each caused, each plot's line and the events: those the phase
+ * fired, then each cavern collapse, which changes no output.
  */
 export function runProduction(state: GameState): {
   produced: Record<string, Stock>;
@@ -280,7 +281,7 @@ export function runProduction(state: GameState): {
     tile.runMonths = ran.has(tile) ? tile.runMonths + 1 : 0;
   }
 
-  settleSpecials(state, lines);
+  for (const index of settleSpecials(state, lines)) events.push(plotEvent(state, 'cavernCollapse', index));
   const pollutionBy = runPollution(state);
   return { produced, pollutionBy, lines, events };
 }

@@ -79,8 +79,6 @@ interface PhaseEvents {
 /** Months with this many events or more share the report's last column. */
 const EVENT_COLUMNS = 4; // literal-ok: the report's last column, 4 or more events a month; presentation only
 
-const cavernsOf = (s: GameState) => s.tiles.flatMap((t, i) => (t.special?.kind === 'crystalCavern' ? [i] : []));
-
 /** The band `--air` names, or null without the flag; an unknown name is refused. */
 function forcedBand(name: string | null): AirBand | null {
   if (name === null) return null;
@@ -201,19 +199,20 @@ function main() {
     const specs = simSeats(players, level, seed, persona);
     // Who starts each development hungry, for the spiral: a player hungry SPIRAL_MONTHS months running.
     const hungryRun = new Map<string, { run: number; spiral: boolean }>();
-    // This month's sickness, caverns and forced counts, read once development is played; production completes them.
-    let pending: { sickness: number; caverns: number[]; forced: PhaseEvents | null } | null = null;
+    // This month's sickness and forced counts, read once development is played; production completes them.
+    let pending: { sickness: number; forced: PhaseEvents | null } | null = null;
     const onEachPhase = (s: GameState) => {
       onPhase(s);
       if (s.phase === 'production' && pending) {
-        const caveIns = pending.caverns.filter((i) => s.tiles[i]!.special?.kind !== 'crystalCavern').length;
-        monthEvents.push({ development: pending.sickness, production: (s.history.at(-1)!.events?.length ?? 0) + caveIns });
-        if (pending.forced) forcedMonthEvents.push({ development: pending.forced.development, production: pending.forced.production + caveIns });
+        const events = s.history.at(-1)!.events ?? [];
+        monthEvents.push({ development: pending.sickness, production: events.length });
+        const collapses = events.filter((e) => e.key === 'cavernCollapse').length;
+        if (pending.forced) forcedMonthEvents.push({ development: pending.forced.development, production: pending.forced.production + collapses });
         pending = null;
       }
       if (s.phase !== 'development') return;
       // Every sickness roll that hits counts: a Medicine cure is the event's effect, and Player.sick shows only the uncured.
-      pending = { sickness: sicknessRolls(rollingCopy(s, null)), caverns: cavernsOf(s), forced: band && forcedEvents(s, band) };
+      pending = { sickness: sicknessRolls(rollingCopy(s, null)), forced: band && forcedEvents(s, band) };
       for (const p of s.players) {
         const h = hungryRun.get(p.id) ?? { run: 0, spiral: false };
         h.run = p.hungry ? h.run + 1 : 0;
@@ -284,7 +283,7 @@ function main() {
   );
   console.log(`     Land auction: ${lots.sold} lots sold, ${lots.unsold} unsold; colony lots ${lots.colonyOffered} offered, ${lots.colonySold} sold, in ${months} months, stalled ${lots.stalled}`);
   console.log(
-    `     Events in ${pct(eventMonths, months)} of months, ${(distinctEvents / games).toFixed(1)} different a game: ${
+    `     Production events in ${pct(eventMonths, months)} of months, ${(distinctEvents / games).toFixed(1)} different a game: ${
       Object.entries(byEvent)
         .sort((a, b) => b[1] - a[1])
         .map(([k, n]) => `${k} ${n}`)
