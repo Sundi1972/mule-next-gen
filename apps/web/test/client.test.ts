@@ -532,98 +532,55 @@ describe('TableClient', () => {
     expect(loadSeat(storage)).toEqual(kept);
   });
 
-  const welcomeBack = (t: ReturnType<typeof seated>) => t.last().deliver({ t: 'welcome', code: 'KRTX', role: 'player', seatId: 's2', seatToken: 'secret' });
+  type Seated = ReturnType<typeof seated>;
+  const welcomeBack = (t: Seated) => t.last().deliver({ t: 'welcome', code: 'KRTX', role: 'player', seatId: 's2', seatToken: 'secret' });
+  const reply = (t: Seated, code: string) => t.last().deliver({ t: 'handoffCode', code, expiresAt: 999_999 });
 
   it.each([
     {
       row: 'is never answered counts as lost after HANDOFF_LOST_MS, and the dialog, still open, asks again by itself',
-      act: (t: ReturnType<typeof seated>) => (t.client.handoff(), t.advance(HANDOFF_LOST_MS)),
-      requests: 2,
-      replies: ['live'],
-      shows: 'live',
+      act: (t: Seated) => (t.client.handoff(), t.advance(HANDOFF_LOST_MS)),
+      requests: 2, replies: ['live'], shows: 'live',
     },
     {
       row: 'is never answered still holds a later code back 1 ms before that, and nothing asks again',
-      act: (t: ReturnType<typeof seated>) => (t.client.handoff(), t.advance(HANDOFF_LOST_MS - 1), t.client.handoff()),
-      requests: 2,
-      replies: ['live'],
-      shows: null,
+      act: (t: Seated) => (t.client.handoff(), t.advance(HANDOFF_LOST_MS - 1), t.client.handoff()),
+      requests: 2, replies: ['live'], shows: null,
     },
     {
       row: 'is answered in time is never counted lost later, so of two asked within one round trip only the newest shows',
-      act: (t: ReturnType<typeof seated>) => {
-        t.client.handoff();
-        t.last().deliver({ t: 'handoffCode', code: 'first', expiresAt: 999_999 });
-        t.advance(HANDOFF_LOST_MS - 1);
-        t.client.handoff();
-        t.client.handoff();
-        t.advance(1);
-      },
-      requests: 3,
-      replies: ['dead', 'live'],
-      shows: 'live',
+      act: (t: Seated) => (t.client.handoff(), reply(t, 'first'), t.advance(HANDOFF_LOST_MS - 1), t.client.handoff(), t.client.handoff(), t.advance(1)),
+      requests: 3, replies: ['dead', 'live'], shows: 'live',
     },
     {
       row: 'is lost after the dialog closed asks nothing again',
-      act: (t: ReturnType<typeof seated>) => (t.client.handoff(), t.client.closeHandoff(), t.advance(HANDOFF_LOST_MS)),
-      requests: 1,
-      replies: ['late'],
-      shows: null,
+      act: (t: Seated) => (t.client.handoff(), t.client.closeHandoff(), t.advance(HANDOFF_LOST_MS)),
+      requests: 1, replies: ['late'], shows: null,
     },
     {
       row: 'is lost, with the dialog reopened within HANDOFF_LOST_MS, has the newer reply counted against it, and the dialog asks again once the newer request counts as lost too',
-      act: (t: ReturnType<typeof seated>) => {
-        t.client.handoff();
-        t.advance(2_000);
-        t.client.closeHandoff();
-        t.client.handoff();
-        t.last().deliver({ t: 'handoffCode', code: 'counted-against-the-lost-one', expiresAt: 999_999 });
-        t.advance(HANDOFF_LOST_MS);
-      },
-      requests: 3,
-      replies: ['live'],
-      shows: 'live',
+      act: (t: Seated) => (t.client.handoff(), t.advance(2_000), t.client.closeHandoff(), t.client.handoff(), reply(t, 'counted-against-the-lost-one'), t.advance(HANDOFF_LOST_MS)),
+      requests: 3, replies: ['live'], shows: 'live',
     },
     {
       row: 'is lost after the screen moved to another room on the same connection, and the dialog asks the new room',
-      act: (t: ReturnType<typeof seated>) => {
-        t.client.handoff();
-        t.client.join('BBBB', 'Mia');
-        t.last().deliver({ t: 'welcome', code: 'BBBB', role: 'player', seatId: 's1', seatToken: 'b-token' });
-        t.advance(HANDOFF_LOST_MS);
-      },
-      requests: 1,
-      replies: ['live'],
-      shows: 'live',
+      act: (t: Seated) => (
+        t.client.handoff(),
+        t.client.join('BBBB', 'Mia'),
+        t.last().deliver({ t: 'welcome', code: 'BBBB', role: 'player', seatId: 's1', seatToken: 'b-token' }),
+        t.advance(HANDOFF_LOST_MS)
+      ),
+      requests: 1, replies: ['live'], shows: 'live',
     },
     {
       row: "was asked on a new connection is never counted lost by the old connection's timer",
-      act: (t: ReturnType<typeof seated>) => {
-        t.client.handoff();
-        t.last().drop();
-        t.advance(500);
-        t.last().open();
-        welcomeBack(t);
-        t.advance(HANDOFF_LOST_MS - 500);
-        t.client.handoff();
-      },
-      requests: 2,
-      replies: ['dead', 'live'],
-      shows: 'live',
+      act: (t: Seated) => (t.client.handoff(), t.last().drop(), t.advance(500), t.last().open(), welcomeBack(t), t.advance(HANDOFF_LOST_MS - 500), t.client.handoff()),
+      requests: 2, replies: ['dead', 'live'], shows: 'live',
     },
     {
       row: 'is lost while the connection is down asks nothing until the seat is back, then the welcome asks once',
-      act: (t: ReturnType<typeof seated>) => {
-        t.client.handoff();
-        t.advance(HANDOFF_LOST_MS - 100);
-        t.last().drop();
-        t.advance(500);
-        t.last().open();
-        welcomeBack(t);
-      },
-      requests: 1,
-      replies: ['live'],
-      shows: 'live',
+      act: (t: Seated) => (t.client.handoff(), t.advance(HANDOFF_LOST_MS - 100), t.last().drop(), t.advance(500), t.last().open(), welcomeBack(t)),
+      requests: 1, replies: ['live'], shows: 'live',
     },
   ])('FM-19: a move-code request that $row', ({ act, requests, replies, shows }) => {
     const t = seated();
@@ -633,10 +590,10 @@ describe('TableClient', () => {
     expect(sinceJoin.filter((m) => m.t === 'handoff')).toHaveLength(requests);
     expect(t.client.getState().toasts).toEqual([]);
     for (const code of replies.slice(0, -1)) {
-      t.last().deliver({ t: 'handoffCode', code, expiresAt: 999_999 });
+      reply(t, code);
       expect(t.client.getState().handoffCode).toBeNull();
     }
-    t.last().deliver({ t: 'handoffCode', code: replies.at(-1)!, expiresAt: 999_999 });
+    reply(t, replies.at(-1)!);
     expect(t.client.getState().handoffCode?.code ?? null).toBe(shows);
   });
 
