@@ -43,16 +43,18 @@ export const segTitle = (seg: EventSegment) => seg.events[0]!.title;
  * "−2 Food, −2 Water on 4 plots".
  */
 export function eventSummary(ev: ShowEventView, cast: ShowCast): string {
-  if (ev.hits.length === 0) return '';
+  // A hit that changed nothing is no loss: it is in no figure and no plot count.
+  const hits = ev.hits.filter((h) => h.delta !== 0);
+  if (hits.length === 0) return '';
   const change = new Map<Good | undefined, number>();
-  for (const h of ev.hits) {
+  for (const h of hits) {
     const good = cast.goodAt(h.x, h.y);
     change.set(good, (change.get(good) ?? 0) + h.delta);
   }
   const figures = [...change].map(([good, n]) => (good ? `${signed(n)} ${GOOD_NAME[good]}` : signed(n))).join(', ');
   const [only] = change.keys();
   const player = cast.playerOf(ev);
-  return `${player ? `${cast.name(player)}: ` : ''}${figures} on ${plots(change.size === 1 ? only : undefined, ev.hits.length)}`;
+  return `${player ? `${cast.name(player)}: ` : ''}${figures} on ${plots(change.size === 1 ? only : undefined, hits.length)}`;
 }
 
 /** The whole segment's effect, for the TV's log. */
