@@ -21,3 +21,5 @@ export * from './map-rules.js';
 export { layoutMap, type Layout } from './map-layout.js';
 export { dealGround, type GroundDeal, type Lift } from './map-ground.js';
 export { formMeteorCrater, placeSpecials, type SpecialPlacement } from './specials.js';
+export type * from './record.js';
+export { configSnapshot, stableJson } from './record.js';
