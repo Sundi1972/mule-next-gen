@@ -97,6 +97,8 @@ export class TableClient {
   private handoffExpiry: unknown = null;
   /** True while the move dialog is open. */
   private handoffWanted = false;
+  /** `handoff` requests sent and not answered yet; only the reply to the newest carries a live code. */
+  private handoffsPending = 0;
   private nextId = 1;
   private readonly now: () => number;
   private readonly later: (fn: () => void, ms: number) => unknown;
@@ -272,6 +274,9 @@ export class TableClient {
           if (this.target.handoff !== undefined) this.target = { kind: 'player', code: this.target.code, name: this.target.name };
         }
         this.set({ role: msg.role, code: msg.code, seatId: msg.seatId });
+        // Requests sent before a drop are never answered, and one asked for while away was never sent.
+        this.handoffsPending = 0;
+        if (this.handoffWanted && this.state.handoffCode === null) this.askForHandoff();
         return;
       }
       case 'view':
@@ -279,7 +284,8 @@ export class TableClient {
         this.set({ view: msg.view });
         return;
       case 'handoffCode':
-        if (this.handoffWanted) this.setHandoff({ code: msg.code, expiresAt: msg.expiresAt });
+        if (this.handoffsPending > 0) this.handoffsPending--;
+        if (this.handoffWanted && this.handoffsPending === 0) this.setHandoff({ code: msg.code, expiresAt: msg.expiresAt });
         return;
       case 'chat': {
         if (this.state.chat.some((c) => c.id === msg.message.id)) return;
@@ -411,7 +417,11 @@ export class TableClient {
     // The room kills the previous code when it issues the next one, so it must not show meanwhile.
     this.setHandoff(null);
     this.handoffWanted = true;
-    this.send({ t: 'handoff' });
+    this.askForHandoff();
+  }
+
+  private askForHandoff(): void {
+    if (this.send({ t: 'handoff' })) this.handoffsPending++;
   }
 
   /** The move dialog closed: forget the code, and one still on its way. Nothing is sent; the room lets an unused code expire. */
@@ -420,12 +430,14 @@ export class TableClient {
     this.setHandoff(null);
   }
 
-  private send(msg: ClientEnvelope<MuleIntent>): void {
+  /** Sends `msg`, or tells the player the screen is not connected. Returns whether it went out. */
+  private send(msg: ClientEnvelope<MuleIntent>): boolean {
     if (this.socket?.readyState !== OPEN) {
       this.toast('Not connected. Trying again…');
-      return;
+      return false;
     }
     this.raw(msg);
+    return true;
   }
 
   private raw(msg: ClientEnvelope<MuleIntent>): void {
