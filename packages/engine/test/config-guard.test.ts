@@ -12,22 +12,9 @@ const SCANNED = ['packages/engine/src', 'packages/ai/src'];
  * clean, and a clean file left here fails, so the list only shrinks.
  */
 const PENDING = new Set<string>([
-  // WS1: cleaned once #109 has merged, which rewrites most of them.
-  'packages/ai/src/hands/auction.ts',
-  'packages/ai/src/outlook.ts',
-  'packages/ai/src/play.ts',
-  'packages/ai/src/seat.ts',
-  'packages/ai/src/sim.ts',
-  'packages/ai/src/strategist.ts',
-  'packages/ai/src/utility.ts',
-  'packages/ai/src/value.ts',
-  'packages/engine/src/economy.ts',
+  // WS1: the event-model build (ws1-events) rewrites both and takes them off.
   'packages/engine/src/events.ts',
-  'packages/engine/src/observe.ts',
   'packages/engine/src/production.ts',
-  // WS2.
-  'packages/ai/src/brain.ts',
-  'packages/ai/src/decider.ts',
 ]);
 /** A literal that is not balance says why, on its line or the line above. */
 const MARKER = /\/\/ literal-ok: (.{10,})/;

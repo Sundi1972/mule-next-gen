@@ -1,4 +1,4 @@
-import { AI_HANDS, observe, shipLine, storeBuyLine, storeSellLine, type GameState, type Good, type Rng, type Walker } from '@mule/engine';
+import { AI_HANDS, MS_PER_SECOND, observe, shipLine, storeBuyLine, storeSellLine, type GameState, type Good, type Rng, type Walker } from '@mule/engine';
 import type { Act } from '../actions.js';
 import type { Brain, Pending } from '../brain.js';
 import { goodPlan, tradeDecision, type GoodPlan, type TradeAction } from '../strategist.js';
@@ -138,7 +138,7 @@ export class AuctionHand {
     const me = state.players.find((p) => p.id === this.brain.mind.me)!;
     const range = Math.max(1, a.hi - a.lo);
     const gap = this.gap * range;
-    this.jitter = (this.rng.next() * 2 - 1) * AI_HANDS.auction.targetJitter * range;
+    this.jitter = (this.rng.next() * 2 - 1) * AI_HANDS.auction.targetJitter * range; // literal-ok: maps the rng's [0, 1) onto [-1, 1)
     const h = me.stock[good];
     const mine = Math.round(w.price);
     const others = a.walkers.filter((x) => x.id !== me.id);
@@ -197,7 +197,7 @@ export class AuctionHand {
   private steer(state: GameState, w: Walker, dt: number, act: Act): void {
     const a = state.auction!;
     const target = this.target!;
-    const step = (a.speed * dt) / 1000;
+    const step = (a.speed * dt) / MS_PER_SECOND;
     const p = Math.round(w.price);
     const dir: -1 | 0 | 1 =
       w.side === 'seller' ? (p > target ? -1 : w.price < target - step ? 1 : 0) : p < target ? 1 : w.price > target + step ? -1 : 0;

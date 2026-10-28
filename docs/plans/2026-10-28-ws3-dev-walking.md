@@ -8,6 +8,19 @@
 <!-- plan-check: no-task B-AC-1 B-AC-2 B-AC-3 B-AC-4 B-AC-5 B-AC-6 B-AC-7 B-AC-8 B-AC-10 B-AC-12 B-AC-13 B-AC-14 B-AC-15 B-AC-16 B-AC-17 B-AC-18 T-AC-1 T-AC-3 T-AC-4 T-AC-5 T-AC-6 T-AC-8 T-AC-9 T-AC-10 T-AC-11 T-AC-12 — WS6's ACs for its other changes; this plan's two are tasked below -->
 <!-- plan-check: no-task B-AC-9 T-AC-2 — named in Task 5 only as existing tests whose timing moves (WS6's B-AC-9 store-view pin; WS4's T-AC-2 in phase-scale.test.ts); their promises are other plans' -->
 
+## Status (2026-10-28)
+
+**MERGED: PR [Sundi1972/mule-next-gen#122](https://github.com/Sundi1972/mule-next-gen/pull/122) went into ws1-balance at de018c9 (WS1, pinned to head a46c9e6), and goes to trunk with #109.**
+- **Done:** Tasks 0–5 (C13) and Task 6 (untimed planning, with the host's Continue under option A: Heiko via the PM).
+- **Reviews:** four review rounds with mutation sweeps, plus three fix rounds. The findings were an off-map crash, walks dropped by an early end, a stale latch after a blip, planning's number path, and the Continue survivors. All are closed.
+- **#118 (WS6's `condition`) merged ahead:** 8bccef9, then ws1-balance be349e5 at 4e7c067.
+- **Gates at a46c9e6:** all green, e2e:core included.
+- **Named-edit OKs: all in** (WS1, WS4, WS6, WS7). WS4 OK'd Continue's two, 35e2512 (room.ts `GameContext.hostId()`) and b256089 (fake-context), at a46c9e6 with its own mutants red. WS4 also confirmed directly to WS1 before the merge.
+- **Follow-ups**, in the WS3 follow-ups plan:
+  - extract the walking logic into its own server file;
+  - `GRANT_TICK_MS` scaling;
+  - the AI rule when humans finish development early (parked by the PM).
+
 ## Goals: lifted from WS6's spec §0. Reference, do not restate.
 
 | Goal | Who benefits | Value delivered | Proof | First delivered in |
@@ -48,10 +61,12 @@
 - **T-AC-7 "half a Mollox's time":** read `1 / SPECIES_PERK.zipwingSpeed` of it. RULE-5 at AM-13 set the Zipwing's pace to 1.5, and Heiko's later ruling on ws1-balance (ba1091c) sets it to 1.25. Assert against `walkSeconds`, never a literal.
 - **B-AC-11 "a tap while walking is ignored":** the server refuses it with `RuleError('Still walking')` and changes nothing. That is "ignored" at the server's state, where the AC observes it. Whether the phone shows the message is WS6-C14's call.
 - **`PHASES.developmentGraceMs` goes** (PM OK, 2026-10-28): the phase ends with the one visible bar.
-- **Development ends early only when no colonist is busy** (the lead's ruling, review round 1 at 1a945b1).
-  - The rule: every human seat is away, Ready or done, **and** no colonist is walking (the pub walk included) or assaying.
-  - Each arrival re-runs the check.
-  - Why: without it, a phone that drops, or a player who presses Ready mid-walk, ended development and dropped their tapped install in flight (measured).
+- **Development ends early only when no colonist is walking** (the lead's ruling, review round 1 at 1a945b1; narrowed in round 2).
+  - The rule: every human seat is away, Ready or done, **and** no colonist is walking, the pub walk included.
+  - Each arrival re-runs the check, and a held end is cleared as soon as someone is found waiting again.
+  - An assay doesn't hold the end: its analysis applied on arrival, so ending mid-assay loses nothing.
+  - **The AI seats keep today's two rules:** the pub path waits for them, and the Ready/drop path doesn't. Making those one rule is a separate design question.
+  - Why: without the rule, a phone that drops, or a player who presses Ready mid-walk, ended development and dropped their tapped install in flight (measured).
   - At the clock's end, walks in flight are still dropped (FM-pub-late).
 
 ## Contract (locked before Task 4 consumes it; WS6-C14 is its consumer)
@@ -220,7 +235,7 @@ The PM put it in this PR because it changes the same `PHASE_MS` table. WS6 build
 **No spec ID exists yet.** Tests are named with plan-level IDs: FM-planning-untimed, FM-planning-all-ready and FM-planning-host-continue. They are renamed if WS6 mints spec IDs.
 
 **Facts this task rests on** (read at 1a945b1):
-- **Dropped phones are already excused.** `checkAllReady` excuses away seats in every phase but the land grant, so "a player is absent" only needs Continue for a player who is connected but idle.
+- **Today, `checkAllReady` excuses away seats** in every phase but the land grant. **Planning must stop excusing them** (the lead's correction, after Steps 6.0–6.3 were built). Under Heiko's rule only Ready or the host's Continue ends planning. A player who locks their phone to think drops the connection, and must not be skipped. Continue is the way past an absent player.
 - **The election keeps its own stage clocks** (`scheduleElectionTick`). Planning proper starts when it ends; that start then waits for Ready instead of starting a timer.
 - **The game can't tell who the host is.** `GameContext` offers only `now`, `schedule` and `changed`.
 - **A board (the TV) can't send intents:** `room.ts::apply` refuses it with "Join the game first". Either way of placing Continue needs a named edit in WS4's `packages/tabletop`, which is why Step 6.4 waits for the PM.
@@ -232,8 +247,9 @@ The PM put it in this PR because it changes the same `PHASE_MS` table. WS6 build
   - **FM-planning-untimed:** after the clock runs far past the old 45 s (and at phaseScale 0.1), the phase is still `planning`, and the public `phaseEndsAt` is null. In an election month the election still steps on its own clocks, and planning proper then waits.
   - **FM-planning-all-ready:**
     - one human Ready → still planning;
-    - the last connected human Ready → the land grant starts;
-    - a dropped phone doesn't hold it;
+    - the last human Ready → the land grant starts;
+    - a dropped human who isn't Ready holds planning, even when every human has dropped;
+    - once they're back and Ready, it ends;
     - AI seats never hold it.
 - [ ] **Step 6.2: implement.**
   - `PHASES.planningMs: number | null = null`, documented as "null: planning waits for every player's Ready or the host's Continue; a number restores a timer".
@@ -243,11 +259,17 @@ The PM put it in this PR because it changes the same `PHASE_MS` table. WS6 build
   - Add `fake-context.ts::readyAll(game)`, and replace each wait with it, or with the phone pressing Ready in the e2e.
   - Each other lane's file gets its own commit, as a named edit: broadcast, handoff and dropped-phone (WS4); politics.test.ts (WS7); store-view.test.ts (WS6); smoke.ts and specials.ts (WS4); politics.ts (WS7).
   - WS3's own: mule-game.test.ts, auction-units.test.ts and auction-steps.ts.
-- [ ] **Step 6.4 (waits for the PM's ruling on where Continue lives): FM-planning-host-continue.**
-  - RED first: the host's Continue ends planning with players not yet Ready; a non-host's Continue is refused with a `RuleError`, and nothing changes.
-  - Then the intent and the `packages/tabletop` named edit the ruling picks:
-    - **(A)** the host's phone sends a game intent, and `GameContext.hostId()` lets the game check it;
-    - **(B)** the TV sends it, through a board message that the room passes to the game.
+- [ ] **Step 6.4a (now, PM 2026-10-28; both options need it): the game side of Continue, FM-planning-host-continue.**
+  - RED first, at server altitude. The shared core is `MuleGame.continuePlanning()`:
+    - in planning proper (after the election, or with no election that month), it ends planning with humans not yet Ready, and the land grant starts;
+    - during the election, or in any other phase, it's refused with a `RuleError`, and nothing changes.
+  - The protocol's `MuleIntent` gains `{ type: 'continue' }`.
+  - **Until the source is wired, `handle(seat, continue)` is refused from every seat** ("Only the host can continue"): the game can't yet tell who the host is.
+  - Also fix the `PHASES` block's comment: planning waits for every human, dropped phones included.
+- [ ] **Step 6.4b (after Heiko rules, via the PM): wire Continue's source.** Each option needs a `packages/tabletop` named edit (WS4's):
+  - **(A)** `GameContext.hostId()`, so `handle` accepts `continue` from the host only;
+  - **(B)** a board message the room passes to `continuePlanning()`.
+  - The refuse-every-seat row changes to "a non-host is refused, the host is accepted" under (A), or stays under (B).
 
 ### PR merge gate
 
