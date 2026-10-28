@@ -541,6 +541,25 @@ folded    plan Task 3b (after Task 3: it shares ProductionMap's timeline); T-AC-
           T-AC-4 gains "first and later events of equal weight play at equal motion speed (pace)"
 ```
 
+```
+AM-6 · 2026-10-28 · PM ruling (A), at PR-1 Task 3 (a false pin, found by the implementer)
+
+target    §1 C5 pin · §6 T-AC-4 · WS6's B-AC-7 (apps/web/test/production-show.test.ts)
+said      C5's pin: "a quiet month's frames: apps/web/test/production-show.test.ts … stay green unchanged"
+did       that file holds no quiet-month test; it holds WS6's B-AC-7 ("each of the nine event kinds plays its own
+          animation") on the old per-kind layer, and frames that assume the fixed 4.8 s window. C5 replaces that layer
+          with the gallery's, keyed by event (Heiko's approved design). Ruled: a named edit of that file, WS6
+          reviewing: the per-kind assertions retire; B-AC-7's promise is restated as "each wave-1 event key plays its
+          own story" and proven by T-AC-4 asserting each key's own story element, positive-controlled by swapping one
+          key's story for another's (red shown before anything retires) and by the render gate in Task 6; the "every
+          hit has landed before the goods fly" frames stay, moved to the end of the event window and computed from
+          playMs; every other assertion stays unedited. WS6 gives its OK on the SHA and marks its B-AC-7 superseded by
+          this spec's T-AC-4.
+because   G-1: each event plays its own story; the old per-kind look is what the gallery replaces
+goal      G-1 (unchanged)
+folded    C5 pin: production-show.test.ts stays green with only this named edit; T-AC-4 strengthened as above
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: the event show
