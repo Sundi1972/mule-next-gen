@@ -1,5 +1,4 @@
-import type { Office } from '@mule/engine';
-import type { PoliticsView } from '@mule/protocol';
+import { POLITICS, type Office } from '@mule/engine';
 import { Fragment, useEffect } from 'react';
 import { usePhoneGame } from '../../game';
 import { useHub } from '../Hub';
@@ -18,21 +17,27 @@ export function Offices() {
 export function OfficesLine() {
   const { view } = usePhoneGame();
   const politics = view.politics!;
-  const held = (['governor', 'sheriff'] as const).flatMap((office) => (politics[office] ? [{ office, id: politics[office] }] : []));
-  const next = nextElection(view.month, politics);
-  if (held.length === 0 && next === null) return null;
+  const held = POLITICS.offices.flatMap((office) => {
+    const id = politics[office];
+    return id ? [{ office, id }] : [];
+  });
+  // Until the result is out the server still sends the old term, which ended last month.
+  const open = politics.election !== null && politics.election.stage !== 'over';
+  const until = open ? null : (politics.term?.[1] ?? null);
+  const election = open ? 'Election: this month' : politics.next !== null ? `Next election: month ${politics.next}` : null;
+  if (held.length === 0 && election === null) return null;
   return (
     <p className="flex flex-wrap items-center gap-x-1 text-[11px] text-ink-2 @min-[1100px]/shell:gap-x-1.5 @min-[1100px]/shell:text-sm" data-testid="roadmap-offices">
       {held.map(({ office, id }, i) => (
         <Fragment key={office}>
-          {i > 0 && '·'}
-          <OfficeHolder office={office} id={id} until={politics.term?.[1] ?? null} />
+          {i > 0 && ' · '}
+          <OfficeHolder office={office} id={id} until={until} />
         </Fragment>
       ))}
-      {next !== null && (
+      {election !== null && (
         <>
-          {held.length > 0 && '·'}
-          <span data-testid="next-election">Next election: month {next}</span>
+          {held.length > 0 && ' · '}
+          <span data-testid="next-election">{election}</span>
         </>
       )}
     </p>
@@ -47,11 +52,6 @@ function OfficeHolder({ office, id, until }: { office: Office; id: string; until
       {until !== null && `, until month ${until}`}
     </span>
   );
-}
-
-/** This month's election until its result is out; then the next one, or null when the game ends first. */
-function nextElection(month: number, { election, next }: PoliticsView): number | null {
-  return election !== null && election.stage !== 'over' ? month : next;
 }
 
 /** Each election stage opens the Council desk; once it is over, the new Governor's phone opens the tax desk. */

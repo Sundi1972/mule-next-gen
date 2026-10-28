@@ -36,7 +36,7 @@ function SalesTax({ tax: { percent, start, low, high } }: { tax: PoliticsView['t
         Set the tax at {tax}%
       </Button>
       <span className="text-xs text-ink-3">
-        Everyone sees “Sales tax {tax}% (set by you, {change(tax - start)})”. You can change it until planning ends.
+        Everyone sees it in the colony fund: the {tax}% sales tax on every sale. You can change it until planning ends.
       </span>
     </Section>
   );
