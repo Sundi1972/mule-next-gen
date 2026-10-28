@@ -7,6 +7,10 @@ contract with WS1 and WS2: `PlaybookEntry` and the `notice` events, per playbook
 small and others depend on it"). This document is §0 verbatim plus the design. It is for Heiko's review of the
 written spec.
 
+**§3 FROZEN at 04406300 (2026-10-29):** WS1, WS2 and WS3 OK'd it, through AM-1 and AM-2. A change after the freeze
+needs all three OKs. WS1 adds a constraint to its step-2 spec: the validator and the engine draft are deterministic
+functions of the recorded reply and the game state, with no clock reads and no unseeded draws. T-AC-11 is the guard.
+
 Ids: changes C1–C7, rules RULE-1..RULE-6, ACs B-AC-1 and T-AC-1..T-AC-11.
 
 ---
