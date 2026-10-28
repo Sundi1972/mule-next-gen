@@ -7,7 +7,7 @@ import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider, type PhoneGame } from '../src/phone/game';
 import { MoveToPhoneOpener, PhoneShell, type Now } from '../src/phone/Shell';
 
-const self: PlayerView = { id: 's1', name: 'Heiko', isAi: false, color: '', slot: 0, species: 'mollox', money: 1200, worth: 0, lastWorth: null, plots: 2, ready: false, doneDeveloping: false, condition: null, colonist: null };
+const self: PlayerView = { id: 's1', name: 'Heiko', isAi: false, color: '', slot: 0, species: 'mollox', money: 1200, worth: 0, lastWorth: null, worthBeforeCut: null, plots: 2, ready: false, doneDeveloping: false, condition: null, colonist: null };
 const game: PhoneGame = {
   table: {} as TableView<MuleView>,
   view: { month: 3, maxMonths: 12 } as MuleView,
