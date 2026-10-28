@@ -111,6 +111,13 @@ export function Develop() {
       fill
       rail={
         <>
+          {/* The time first, then what your condition does to it: both above the fold on a small phone. */}
+          {place === 'store' && (
+            <>
+              <SharedClock seconds={seconds} total={Math.max(me.devSeconds, 1)} />
+              <YourPace condition={condition} rule={DEV_WALK} food={food} />
+            </>
+          )}
           <div className="flex items-center gap-2.5 @min-[1100px]/shell:text-lg" data-testid="mule">
             <span className={cx('flex items-center', carry === null ? 'text-ink-3' : 'text-ink')}>
               <MuleIcon size={22} />
@@ -120,13 +127,7 @@ export function Develop() {
               {carry === null ? (installed ? 'No MULE in tow' : 'No MULE yet') : carry === 'empty' ? 'Empty MULE in tow' : `${OUTFIT_NAME(carry)} MULE in tow`}
             </span>
           </div>
-          {place === 'store' && (
-            <>
-              <YourPace condition={condition} rule={DEV_WALK} food={food} />
-              <SharedClock seconds={seconds} total={Math.max(me.devSeconds, 1)} />
-              <YourPlots tiles={view.tiles} me={me.id} />
-            </>
-          )}
+          {place === 'store' && <YourPlots tiles={view.tiles} me={me.id} />}
           {place === 'map' && !tile && <p className="text-sm text-ink-2">Tap a plot to look at it. Tap the store to go back in.</p>}
           {place === 'map' && tile && (
             <section className="flex flex-col gap-2 border-t border-holo-faint pt-2.5">
@@ -309,7 +310,7 @@ export function FillCard({ condition, rule, food }: { condition: Condition; rule
     // Taps go through to the rooms underneath: the clock is already running.
     <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-void/55 animate-[show-card-in_0.3s_ease-out]" data-testid="fill-card">
       <div className={cx('flex w-[64%] max-w-[560px] flex-col gap-1.5 rounded-panel border-2 bg-panel p-3 shadow-glow @min-[1100px]/shell:gap-3 @min-[1100px]/shell:p-6', short ? 'border-warn' : 'border-holo')}>
-        <span className="label-caps">Development · one clock for everyone · {DEVELOPMENT.fullSeconds} s</span>
+        <span className="label-caps">One clock for everyone · {DEVELOPMENT.fullSeconds} s</span>
         <span className="font-display text-lg font-semibold leading-tight @min-[1100px]/shell:text-3xl">
           {hungry ? `You eat ${food.ate} of the ${food.need} Food you need.` : `You eat the ${food.need} Food you need.`}
         </span>

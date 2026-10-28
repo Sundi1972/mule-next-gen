@@ -45,6 +45,8 @@ type TagSize = 'phone' | 'tv' | 'wide';
 /** How long a thought bubble shows, in ms (display timing, not balance). */
 export const THOUGHT_MS = { atClockStart: 3000, onSetOff: 2000, quiet: 8000 };
 
+/** The one clock's last seconds, which turn it alert red and pulsing. */
+const URGENT_SECONDS = 10;
 /** One waddle at full pace, in seconds. */
 const WADDLE_SECONDS = 0.36;
 /** How long a press on your own tag must last before the rule shows, in ms. */
@@ -321,12 +323,13 @@ export function ThoughtBubble({
   );
 }
 
-/** The one development clock, the same on every screen: the auction's TimeBar, labelled as everyone's. */
+/** The one development clock, the same on every screen: big, labelled as everyone's, red in its last seconds. */
 export function SharedClock({ seconds, total, size = 'phone' }: { seconds: number; total: number; size?: 'phone' | 'tv' }) {
+  const tv = size === 'tv';
   return (
     <div className="flex flex-col gap-1" data-testid="shared-clock">
-      <span className={cx('label-caps', size === 'tv' ? 'text-base!' : 'text-[10px]!')}>Everyone's time · one clock</span>
-      <TimeBar seconds={seconds} total={total} size={size} />
+      <span className={cx('label-caps', tv ? 'text-base!' : 'text-[10px]!')}>{tv ? "Everyone's time" : "Everyone's time · one clock"}</span>
+      <TimeBar seconds={seconds} total={total} size={tv ? 'tv-clock' : 'phone-clock'} urgentSeconds={URGENT_SECONDS} />
     </div>
   );
 }
@@ -351,32 +354,43 @@ export interface PaceRow {
   name: string;
   slot: Slot;
   condition: Condition | null;
+  /** What the colonist is doing, such as BUILDING or PUB, at the row's end. */
+  note?: string;
+  /** Done for this turn: the row fades. */
+  done?: boolean;
 }
 
-/** The TV's list: how fast each colonist walks this month, and why. */
-export function PaceList({ rows, rule }: { rows: PaceRow[]; rule: PaceRule }) {
+/**
+ * The TV's list: how fast each colonist walks this month, and why. In one column each row has room for the full name,
+ * and can stand as the development roster.
+ */
+export function PaceList({ rows, rule, columns = 2 }: { rows: PaceRow[]; rule: PaceRule; columns?: 1 | 2 }) {
+  const wide = columns === 1;
   return (
-    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5" data-testid="pace-list">
-      <span className="label-caps col-span-2">Pace this month · set by Food and health</span>
-      {rows.map((r) => {
-        const pace = r.condition?.conditionPace ?? 1;
-        const alarm = r.condition && (hungerLevel(r.condition, rule) === 3 || r.condition.sick);
-        return (
-          <div key={r.id} className="flex items-center gap-2" data-testid={`pace-${r.id}`}>
-            <PlayerMark slot={r.slot} size={18} glow={false} />
-            <span className="min-w-0 flex-1 truncate text-sm font-semibold">{r.name}</span>
-            <div className="relative h-2 w-12 shrink-0 overflow-hidden rounded-full bg-raised">
-              <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: pct(pace), background: SLOT_COLOR[r.slot] }} />
-            </div>
-            <span data-num className={cx('w-10 text-right font-mono text-sm', pace < 1 ? (alarm ? 'text-alert' : 'text-warn') : 'text-ink-2')}>
-              {pct(pace)}
-            </span>
-            <span className="flex w-9 justify-start">
-              <ConditionTag id={r.id} condition={r.condition} rule={rule} inline />
-            </span>
-          </div>
-        );
-      })}
+    <div className="flex flex-col gap-1.5">
+      <span className="label-caps">Pace this month · set by Food and health</span>
+      <ul className={cx('grid gap-x-4 gap-y-1.5', wide ? 'grid-cols-1' : 'grid-cols-2')} data-testid="pace-list">
+        {rows.map((r) => {
+          const pace = r.condition?.conditionPace ?? 1;
+          const alarm = r.condition && (hungerLevel(r.condition, rule) === 3 || r.condition.sick);
+          return (
+            <li key={r.id} className={cx('flex items-center gap-2', r.done && 'opacity-50')} data-testid={`pace-${r.id}`}>
+              <PlayerMark slot={r.slot} size={wide ? 20 : 18} glow={false} />
+              <span className={cx('min-w-0 flex-1 truncate font-semibold', wide ? 'font-display text-base' : 'text-sm')}>{r.name}</span>
+              <div className={cx('relative h-2 shrink-0 overflow-hidden rounded-full bg-raised', wide ? 'w-28' : 'w-12')}>
+                <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: pct(pace), background: SLOT_COLOR[r.slot] }} />
+              </div>
+              <span data-num className={cx('w-10 text-right font-mono text-sm', pace < 1 ? (alarm ? 'text-alert' : 'text-warn') : 'text-ink-2')}>
+                {pct(pace)}
+              </span>
+              <span className="flex w-9 justify-start">
+                <ConditionTag id={r.id} condition={r.condition} rule={rule} inline />
+              </span>
+              {r.note && <span className="w-20 shrink-0 text-right font-mono text-xs text-ink-3">{r.note}</span>}
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

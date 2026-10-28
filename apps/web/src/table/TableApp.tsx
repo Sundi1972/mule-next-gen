@@ -184,16 +184,14 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         <div className="h-[240px]">
           <StoreInterior mules={game.storeMules} mulePrice={game.mulePrice} prices={{}} tv />
         </div>
-        <ul className="mt-auto grid grid-cols-2 gap-x-4 gap-y-2">
-          {game.players.map((p) => (
-            <li key={p.id} className={cx('flex items-center gap-2', p.doneDeveloping && 'opacity-50')}>
-              <PlayerMark slot={toSlot(p.slot)} size={20} glow={!p.doneDeveloping} />
-              <span className="flex-1 truncate font-display text-base font-semibold">{p.name}</span>
-              <span className="font-mono text-xs text-ink-3">{p.doneDeveloping ? 'PUB' : 'BUILDING'}</span>
-            </li>
-          ))}
-        </ul>
-        <PaceList rule={DEV_WALK} rows={game.players.map((p) => ({ id: p.id, name: p.name, slot: toSlot(p.slot), condition: p.condition }))} />
+        {/* The roster's rows carry each colonist's pace: one column, so every name shows in full. */}
+        <div className="mt-auto">
+          <PaceList
+            rule={DEV_WALK}
+            columns={1}
+            rows={game.players.map((p) => ({ id: p.id, name: p.name, slot: toSlot(p.slot), condition: p.condition, note: p.doneDeveloping ? 'PUB' : 'BUILDING', done: p.doneDeveloping }))}
+          />
+        </div>
       </>
     );
   else if (phase === 'production' || phase === 'upkeep') side = <MonthEnd game={game} />;
