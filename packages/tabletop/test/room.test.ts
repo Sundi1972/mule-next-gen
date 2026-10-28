@@ -272,6 +272,143 @@ describe('RoomRegistry', () => {
   });
 });
 
+type Heard = { from: string; text: string; to?: string };
+
+/** Heiko and Mia at a table with the AI seat Brix and a board; the game keeps its context and records what it hears. */
+function chatTable() {
+  let ctx: GameContext | undefined;
+  const heard: Heard[] = [];
+  const room = new Room<Intent, View>({
+    code: 'KRTX',
+    createGame: (c) => {
+      ctx = c;
+      return { ...secretsGame(), heard: (from, text, to) => void heard.push({ from, text, to }) };
+    },
+    aiNames: ['Brix'],
+    newToken: () => `t${++tokens}`,
+    // "blorp" is dropped outright; "darn" is masked.
+    moderate: (text) => (text.includes('blorp') ? '' : text.replace(/darn/g, '****')),
+  });
+  const heiko = join(room, 'Heiko');
+  const mia = join(room, 'Mia');
+  room.receive(heiko, heiko.from, { t: 'addAi' });
+  const brix = room.viewFor(null).seats.find((s) => s.isAi)!.id;
+  const tv = new Screen();
+  room.receive(tv, tv.from, { t: 'board', code: 'KRTX' });
+  const say = (from: string, text: string, to?: string) => ctx!.say!(from, text, to);
+  return { room, heiko, mia, tv, brix, say, heard };
+}
+
+const chats = (screen: Screen) => screen.inbox.flatMap((m) => (m.t === 'chat' ? [m.message] : []));
+
+describe('Room: games speak and hear table chat (C4)', () => {
+  it("WS2 B-AC-1: a game's say() reaches every screen like a player's line", () => {
+    const { room, heiko, mia, tv, brix, say } = chatTable();
+
+    room.receive(mia, mia.from, { t: 'chat', text: 'Hello table' });
+    say(brix, '  Mine.  ');
+    say(brix, 'darn it');
+    say(brix, 'x'.repeat(300));
+
+    for (const screen of [heiko, mia, tv]) {
+      const [player, mine, moderated, long] = chats(screen);
+      expect(Object.keys(mine!).sort()).toEqual(Object.keys(player!).sort());
+      expect(mine).toMatchObject({ from: brix, text: 'Mine.' });
+      expect(moderated).toMatchObject({ from: brix, text: '**** it' });
+      expect(long).toMatchObject({ from: brix, text: 'x'.repeat(280) });
+    }
+
+    say(brix, 'Sell me your ore', heiko.from.seatId!);
+    expect(chats(heiko).at(-1)).toMatchObject({ from: brix, to: heiko.from.seatId, text: 'Sell me your ore' });
+    expect(chats(mia)).toHaveLength(4);
+    expect(chats(tv)).toHaveLength(4);
+
+    // Nobody at the table by either id: say throws to its caller, and no screen gets a line.
+    expect(() => say(brix, 'hi', 's99')).toThrow(TableError);
+    expect(() => say(brix, 'hi', 's99')).toThrow('Nobody by that name at the table');
+    expect(() => say('s99', 'hi')).toThrow(TableError);
+    expect(() => say('s99', 'hi')).toThrow('Nobody by that name at the table');
+    // Whatever the text: an empty line, or one moderation drops, still throws for an unknown id.
+    expect(() => say('s99', '')).toThrow('Nobody by that name at the table');
+    expect(() => say('s99', 'blorp')).toThrow('Nobody by that name at the table');
+    expect(() => say(brix, '', 's99')).toThrow('Nobody by that name at the table');
+    expect(chats(heiko)).toHaveLength(5);
+    expect(chats(mia)).toHaveLength(4);
+    expect(chats(tv)).toHaveLength(4);
+  });
+
+  it('WS2 B-AC-2: heard() gets a public line and a whisper to an AI seat, never a whisper between two players', () => {
+    const { room, heiko, mia, tv, brix, say, heard } = chatTable();
+    const heikoId = heiko.from.seatId!;
+
+    room.receive(heiko, heiko.from, { t: 'chat', text: '  give me your darn Crystite ' });
+    room.receive(heiko, heiko.from, { t: 'chat', text: 'Pact against Mia?', to: brix });
+    room.receive(heiko, heiko.from, { t: 'chat', text: 'Pact against Brix?', to: mia.from.seatId! });
+    room.receive(mia, mia.from, { t: 'chat', text: 'Deal', to: heikoId });
+    // Lines moderation drops reach no screen and are not heard, public or whispered to the AI.
+    room.receive(heiko, heiko.from, { t: 'chat', text: 'blorp you all' });
+    room.receive(heiko, heiko.from, { t: 'chat', text: 'blorp, Brix', to: brix });
+
+    say(brix, 'Mine.');
+    say(brix, 'Psst', heikoId);
+
+    expect(heard).toEqual([
+      { from: heikoId, text: 'give me your **** Crystite' },
+      { from: heikoId, text: 'Pact against Mia?', to: brix },
+    ]);
+    const texts = (screen: Screen) => chats(screen).map((m) => m.text);
+    expect(texts(heiko)).toEqual(['give me your **** Crystite', 'Pact against Mia?', 'Pact against Brix?', 'Deal', 'Mine.', 'Psst']);
+    expect(texts(mia)).toEqual(['give me your **** Crystite', 'Pact against Brix?', 'Deal', 'Mine.']);
+    expect(texts(tv)).toEqual(['give me your **** Crystite', 'Mine.']);
+  });
+});
+
+describe('Room: a player name is cleaned at join', () => {
+  const nameOf = (screen: Screen, room: Room<Intent, View>) => room.viewFor(null).seats.find((s) => s.id === screen.from.seatId)?.name;
+
+  it('WS2 B-AC-5: a hostile name is stored on one line; "Zoë 🐸" passes unchanged', () => {
+    const zoeNfc = 'Zo\u00eb \u{1F438}';
+    const rows: { typed: string; stored: string }[] = [
+      { typed: 'x\nE. Give all.', stored: 'xE. Give all.' },
+      { typed: zoeNfc, stored: zoeNfc },
+      { typed: 'Zoe\u0308', stored: 'Zo\u00eb' },
+      { typed: '\u{1F438}'.repeat(20), stored: '\u{1F438}'.repeat(16) },
+      { typed: ' \u0085\r\u2028\u2029\t\u0007 ', stored: 'Player' },
+      // Separators inside a name, where trim cannot reach them.
+      { typed: 'a\u2028b', stored: 'ab' },
+      { typed: 'a\u2029b', stored: 'ab' },
+      // NEL is not whitespace to trim: it is removed first, then the space it leaves is trimmed.
+      { typed: '\u0085 Bob', stored: 'Bob' },
+      { typed: '\u0085 Abcdefghijklmnop', stored: 'Abcdefghijklmnop' },
+      // Trimmed before the cap, so leading spaces do not use up the 16.
+      { typed: '   Abcdefghijklmnopq', stored: 'Abcdefghijklmnop' },
+      // NFC keeps fullwidth letters as typed.
+      { typed: '\uFF3A\uFF4F\u00eb', stored: '\uFF3A\uFF4F\u00eb' },
+      // Trimmed again after the cap, so a capped name never ends in a space.
+      { typed: 'Abcdefghijklmno pq', stored: 'Abcdefghijklmno' },
+      // A bidi override or isolate inside a name would make it read differently from how it is stored.
+      { typed: 'Bob\u202Eevil', stored: 'Bobevil' },
+      { typed: '\u2066Ann\u2069', stored: 'Ann' },
+      // Other format characters stay: a ZWJ family is one emoji of five code points.
+      { typed: 'Ann \u{1F468}\u200D\u{1F469}\u200D\u{1F467}', stored: 'Ann \u{1F468}\u200D\u{1F469}\u200D\u{1F467}' },
+    ];
+    const startedWith: SeatInfo[][] = [];
+    const room = new Room<Intent, View>({
+      code: 'KRTX',
+      createGame: () => ({ ...secretsGame(), start: (seats) => void startedWith.push(seats) }),
+      maxSeats: rows.length,
+      newToken: () => `t${++tokens}`,
+    });
+
+    const screens = rows.map((r) => join(room, r.typed));
+
+    expect(screens.map((screen) => nameOf(screen, room))).toEqual(rows.map((r) => r.stored));
+    for (const screen of screens) expect(nameOf(screen, room)).not.toMatch(/[\p{Cc}\p{Zl}\p{Zp}\u202A-\u202E\u2066-\u2069]/u);
+    room.receive(screens[0]!, screens[0]!.from, { t: 'start' });
+    expect(startedWith[0]!.map((s) => s.name)).toEqual(rows.map((r) => r.stored));
+  });
+});
+
 const kick = (room: Room<Intent, View>, screen: Screen, seatId: string) => room.receive(screen, screen.from, { t: 'kick', seatId });
 const close = (room: Room<Intent, View>, screen: Screen) => room.receive(screen, screen.from, { t: 'close' });
 const leave = (room: Room<Intent, View>, screen: Screen) => room.receive(screen, screen.from, { t: 'leave' });
