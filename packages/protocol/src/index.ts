@@ -106,7 +106,10 @@ export interface ColonistView {
   walk: { from: DevPlace; startedAt: number; arrivesAt: number } | null;
   /** While it stands on a plot for a geo analysis: when the analysis is done. */
   assayUntil: number | null;
-  /** Steered development: where it stands, in tiles; absent until the server steers. */
+  /**
+   * Steered development: where it stands, absent until the server steers. In map tiles when `space` is 'map', in the
+   * hall plan's units (`HALL.w` × `HALL.h`) when it is 'hall'.
+   */
   x?: number;
   y?: number;
   space?: ColonistSpace;
@@ -125,6 +128,7 @@ export interface ColonistView {
 /** Out on the map, or inside the store's hall. */
 export type ColonistSpace = 'map' | 'hall';
 
+/** The MULE on its lead. `x` and `y` are in the same units as its colonist's: map tiles, or hall-plan units in the hall. */
 export interface ColonistLead {
   good: Outfit | null;
   x: number;
@@ -143,6 +147,7 @@ export interface DevFrame {
   tick: number;
   /** ms since development started, at this tick. */
   at: number;
+  /** Each colonist's position: map tiles when `space` is 'map', the hall plan's units (`HALL.w` × `HALL.h`) when 'hall'. */
   colonists: {
     id: string;
     x: number;
