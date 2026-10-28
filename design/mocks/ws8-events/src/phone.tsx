@@ -205,8 +205,7 @@ export function PhoneSolo({ me }: { me: string }) {
           </div>
           <Overlays size="phone" />
           {seg && seek && (
-            <button type="button" onClick={skip} className="absolute inset-0 z-30 flex items-start justify-end p-1.5" aria-label={playing ? 'Tap to skip to what it did to you' : 'Tap for the next event'} data-testid="skip">
-              <span className="rounded-chip bg-void/75 px-1.5 py-0.5 font-mono text-[10px] text-ink-2">{playing ? 'tap to skip ›' : 'tap: next ›'}</span>
+            <button type="button" onClick={skip} className="absolute inset-0 z-30" aria-label={playing ? 'Tap to skip to what it did to you' : 'Tap for the next event'} data-testid="skip">
             </button>
           )}
         </div>
@@ -219,6 +218,11 @@ export function PhoneSolo({ me }: { me: string }) {
             <NowPlaying seg={shown} buzz={t - shown.announceAt < 1.2} />
           ) : (
             <EventPhoneCard seg={shown} me={me} at="you" />
+          )}
+          {seg && seek && (
+            <span className="mt-auto self-end rounded-chip bg-void/75 px-1.5 py-0.5 font-mono text-[10px] text-ink-2" data-testid="skip-hint">
+              {playing ? 'tap the map to skip ›' : 'tap the map: next ›'}
+            </span>
           )}
           <RailTail me={me} current={shown} />
         </>

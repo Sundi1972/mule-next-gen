@@ -8,6 +8,7 @@ import { clamp, ramp } from './fx';
 import { STORE, type Size } from './living';
 import { At, Colonist, Crate, ease, Flame, lerp, mix, px, Smoke, TOWN, useStoryClock, type P, Prop } from './scene';
 import { PLOT_SCENES } from './stories-plots';
+import { STORY } from './story';
 import { useShow } from './stage';
 
 /**
@@ -102,7 +103,7 @@ function PirateRaid({ ev, seg, size }: { ev: ShowEvent; seg: Segment; size: Size
         </At>
       )}
       {/* All the colony's Crystite, the store's and each player's, counted down as its crates go aboard. */}
-      {u > 1.2 && u < 6.3 && (
+      {u > 1.2 && u < STORY.pirateRaid!.reveal! && (
         <At p={{ x: STORE.x + 1.2, y: STORE.y - 1.15 }} w={1.95}>
           <div className="flex flex-col gap-[3px] rounded-control border border-g-crystite bg-panel/95 p-[4px] shadow-chip" style={{ fontSize: px(size, 11) }}>
             <span className="flex items-center gap-1 font-mono font-bold uppercase leading-none text-g-crystite">
@@ -175,48 +176,50 @@ function StoreFire({ ev, seg, size }: { ev: ShowEvent; seg: Segment; size: Size 
       )}
       {!reduced && <Smoke from={{ x: STORE.x, y: STORE.y - 1.3 }} u={u - 0.5} every={0.28} until={5.2} size={size} dark />}
       {/* Everything the store holds, shelf by shelf: three crates catch and char, the count runs down to 0. */}
-      <At p={{ x: STORE.x + 1.75, y: STORE.y + 0.15 }} w={1.9}>
-        <div className="flex flex-col gap-[3px] rounded-control border border-alert bg-panel/95 p-[4px] shadow-chip" style={{ fontSize: px(size, 10) }} data-testid="store-storage">
-          <span className="font-mono font-bold uppercase leading-none text-alert-ink">Store storage</span>
-          {shelves.map((f, r) => {
-            const b = burnt(r);
-            const left = Math.round(-f.delta * (1 - b));
-            const mules = f.what === 'mules';
-            return (
-              <span key={f.what} className="flex items-center gap-1 leading-none">
-                <span className="flex w-[14%]">{mules ? <MuleIcon size={px(size, 11)} className="h-auto w-full text-mule-metal" /> : <GoodIcon good={f.what as Good} size={px(size, 11)} className="h-auto w-full" />}</span>
-                <span className="grid flex-1 grid-cols-3 gap-[2px]">
-                  {[0, 1, 2].map((j) => {
-                    const c = burnt(r, j);
-                    return (
-                      <span key={j} className="relative">
-                        {mules ? (
-                          <span className="flex aspect-square items-center justify-center rounded-[18%] bg-raised" style={{ filter: `brightness(${1 - c * 0.75})` }}>
-                            <MuleIcon size={px(size, 10)} className="h-auto w-[80%] text-mule-metal" />
-                          </span>
-                        ) : (
-                          <Crate good={f.what as Good} burnt={c} />
-                        )}
-                        {c > 0 && c < 1 && !reduced && (
-                          <span className="absolute -top-[60%] left-[10%] w-[80%]">
-                            <Flame flicker />
-                          </span>
-                        )}
-                      </span>
-                    );
-                  })}
+      {u < STORY.storeFire!.reveal! && (
+        <At p={{ x: STORE.x + 1.75, y: STORE.y + 0.15 }} w={1.9}>
+          <div className="flex flex-col gap-[3px] rounded-control border border-alert bg-panel/95 p-[4px] shadow-chip" style={{ fontSize: px(size, 10) }} data-testid="store-storage">
+            <span className="font-mono font-bold uppercase leading-none text-alert-ink">Store storage</span>
+            {shelves.map((f, r) => {
+              const b = burnt(r);
+              const left = Math.round(-f.delta * (1 - b));
+              const mules = f.what === 'mules';
+              return (
+                <span key={f.what} className="flex items-center gap-1 leading-none">
+                  <span className="flex w-[14%]">{mules ? <MuleIcon size={px(size, 11)} className="h-auto w-full text-mule-metal" /> : <GoodIcon good={f.what as Good} size={px(size, 11)} className="h-auto w-full" />}</span>
+                  <span className="grid flex-1 grid-cols-3 gap-[2px]">
+                    {[0, 1, 2].map((j) => {
+                      const c = burnt(r, j);
+                      return (
+                        <span key={j} className="relative">
+                          {mules ? (
+                            <span className="flex aspect-square items-center justify-center rounded-[18%] bg-raised" style={{ filter: `brightness(${1 - c * 0.75})` }}>
+                              <MuleIcon size={px(size, 10)} className="h-auto w-[80%] text-mule-metal" />
+                            </span>
+                          ) : (
+                            <Crate good={f.what as Good} burnt={c} />
+                          )}
+                          {c > 0 && c < 1 && !reduced && (
+                            <span className="absolute -top-[60%] left-[10%] w-[80%]">
+                              <Flame flicker />
+                            </span>
+                          )}
+                        </span>
+                      );
+                    })}
+                  </span>
+                  <span className={cx('w-[16%] text-right font-mono font-bold', left === 0 ? 'text-alert' : 'text-ink')}>{left}</span>
                 </span>
-                <span className={cx('w-[16%] text-right font-mono font-bold', left === 0 ? 'text-alert' : 'text-ink')}>{left}</span>
+              );
+            })}
+            {(u > 4.1 || reduced) && (
+              <span className="flex items-center justify-center gap-0.5 rounded-chip bg-alert px-0.5 font-mono font-bold leading-none text-white animate-[ev-pop_0.3s_ease-out]">
+                ▲ prices +{price}%
               </span>
-            );
-          })}
-          {(u > 4.1 || reduced) && (
-            <span className="flex items-center justify-center gap-0.5 rounded-chip bg-alert px-0.5 font-mono font-bold leading-none text-white animate-[ev-pop_0.3s_ease-out]">
-              ▲ prices +{price}%
-            </span>
-          )}
-        </div>
-      </At>
+            )}
+          </div>
+        </At>
+      )}
     </>
   );
 }
