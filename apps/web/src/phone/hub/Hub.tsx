@@ -155,7 +155,7 @@ function FoldingNowCard({ now }: { now: Now }) {
     return (
       <div className="relative">
         <NowCard now={now} />
-        <button type="button" onClick={() => setOpen(false)} aria-expanded aria-label="Fold the Now card" className="absolute right-1.5 top-1.5 grid size-7 place-items-center rounded-chip text-holo hover:bg-holo-soft" data-testid="now-fold">
+        <button type="button" onClick={() => setOpen(false)} aria-expanded aria-label="Fold the Now card" className="absolute right-1.5 top-1.5 grid size-8 place-items-center rounded-chip text-holo hover:bg-holo-soft" data-testid="now-fold">
           <Glyph d="M6 15l6-6 6 6" size={14} />
         </button>
       </div>
