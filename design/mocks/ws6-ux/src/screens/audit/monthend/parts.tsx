@@ -39,7 +39,7 @@ export function leaderWords(view: MuleView, lg: League, selfId?: string): { lead
   return { lead, you };
 }
 
-/** At the game's end: "Ossa wins with a Worth of 4,543 cr", or a shared win. */
+/** At the game's end: "Ossa wins with a Worth of 5,643 cr", or a shared win. */
 export function winnerWords(view: MuleView, lg: League): string {
   if (!lg.leader || !lg.rows[0]) return '';
   const worth = `${fmt(lg.rows[0].total)} cr`;
@@ -183,8 +183,8 @@ export function LeagueTable({ view, facts, density, selfId, final = false }: { v
 // --- The game's end ------------------------------------------------------------------------------------
 
 /**
- * The winner card. On the TV: the winner called out, "Ossa wins with a Worth of 4,543 cr". On your phone: your final
- * place and your Worth as the card's number ("Worth 4,333 cr"), the winner's line under it. Today's card said points.
+ * The winner card. On the TV: the winner called out, "Ossa wins with a Worth of 5,643 cr". On your phone: your final
+ * place and your Worth as the card's number ("Worth 5,433 cr"), the winner's line under it. Today's card said points.
  */
 export function WinnerCard({ view, facts, density, selfId }: { view: MuleView; facts: MonthFacts; density: Density; selfId?: string }) {
   const lg = league(view, facts.lastWorth);
@@ -251,7 +251,7 @@ export function CollapseBanner({ density }: { density: Density }) {
     <div role="status" className={cx('relative flex shrink-0 flex-wrap items-baseline rounded-panel border-2 border-alert bg-alert-bg', tv ? 'gap-x-3 px-5 py-2' : 'gap-x-1.5 px-2.5 py-0.5')} data-testid="collapse-banner">
       <span className={cx('font-display font-semibold text-alert-ink', tv ? 'text-xl' : 'text-xs')}>The air is in Collapse.</span>
       <span className={cx('text-ink', tv ? 'text-lg' : 'text-[11px]')}>
-        Every Worth is cut by {collapseCutWords()}, offices aside: the scores if the game ended now.
+        Every Worth is cut by {collapseCutWords()}, offices too: the scores if the game ended now.
       </span>
       <IntentMarker note={N.M10} at="tl" />
     </div>
@@ -427,7 +427,7 @@ export function YourWorth({ view, density }: { view: MuleView; density: Exclude<
     { key: 'land', label: `Land · ${p.plots} × ${GAME.plotScore}`, cr: p.land },
     { key: 'mules', label: `MULEs · ${p.mules} × ${view.mulePrice}`, cr: p.muleValue },
     ...(collapse ? [{ key: 'cut', label: `Collapse cut · ${collapseCutWords()}`, cr: -p.cut, tone: 'text-alert' }] : []),
-    { key: 'offices', label: `Offices · ${p.terms} ${p.terms === 1 ? 'term' : 'terms'} × ${POLITICS.termScore}${collapse ? ', not cut' : ''}`, cr: p.office },
+    { key: 'offices', label: `Offices · ${p.terms} ${p.terms === 1 ? 'term' : 'terms'} × ${POLITICS.termScore}${collapse ? ', cut too' : ''}`, cr: p.office },
     { key: 'donations', label: 'Donations', cr: null, grey: true },
   ];
   const tight = density === 'compact' || collapse;
