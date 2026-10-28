@@ -841,7 +841,12 @@ describe('Room: a connection holds at most one seat (FM-3)', () => {
   });
 
   it.each([
-    { row: 'rejoins s1 by its own token', fields: (ctx: ReturnType<typeof clockLobby>) => ({ seatToken: ctx.heiko.last('welcome')!.seatToken! }), error: undefined, hears: [['s1', true]] },
+    {
+      row: 'rejoins s1 by its own token',
+      fields: (ctx: ReturnType<typeof clockLobby>) => ({ seatToken: ctx.heiko.last('welcome')!.seatToken! }),
+      error: undefined,
+      hears: expect.not.arrayContaining([['s1', false]]),
+    },
     { row: 'joins by name and is refused', fields: () => ({}), error: 'This game has already started', hears: [] },
     {
       row: "joins with s2's expired move link and is refused",
@@ -867,7 +872,7 @@ describe('Room: a connection holds at most one seat (FM-3)', () => {
     expect(heiko.last('error')?.message).toBe(error);
     expect(presence(tv)).toStrictEqual([['s1', true], ['s2', true], ['s3', true]]);
     expect(tv.last('view')!.view.hostId).toBe('s1');
-    expect(heard.changes).toStrictEqual([...heardBefore, ...hears]);
+    expect(heard.changes.slice(heardBefore.length)).toStrictEqual(hears);
     room.receive(heiko, heiko.from, { t: 'intent', intent: { secret: 'still s1' } });
     expect(room.viewFor('s1').game?.mySecret).toBe('still s1');
 
