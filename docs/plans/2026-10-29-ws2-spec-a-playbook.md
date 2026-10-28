@@ -76,7 +76,7 @@ to `feat/strategist` (or `main`) needs Heiko's OK through the PM.
 
 | PR | Sub-branch | Scope (tasks / changes) | ACs verified | Contracts produced | Contracts consumed | Frontend touched? |
 |----|------------|-------------------------|--------------|--------------------|--------------------|-------------------|
-| PR-1 | `ws2-a-pr1-land` | Tasks 1.1-1.6 (C3, C1 land part, C2, C4 upkeep + game start, C5, C6 ledger part) | B-AC-A1, T-AC-A1, T-AC-A2, T-AC-A3, T-AC-A5, T-AC-A6, T-AC-A4 (ledger part) | writer reply schema; strategy call kinds in the ledger | playbook v1, validatePlan, engine draft, WS3 grant execution, WS3 record append | No |
+| PR-1 | `ws2-a-pr1-land` | Tasks 1.1-1.6, 1.4 split into 1.4a/1.4b (C3, C1 land part, C2, C4 upkeep + game start, C5, C6 ledger part) | B-AC-A1, T-AC-A1, T-AC-A2, T-AC-A3, T-AC-A5, T-AC-A6, T-AC-A4 (ledger part) | writer reply schema; strategy call kinds in the ledger | playbook v1, validatePlan, engine draft, WS3 grant execution, WS3 record append | No |
 | PR-2 | `ws2-a-pr2-manual` | Tasks 2.1-2.4 (C8) | T-AC-A7 | the manual (system block) | move descriptors, config | No |
 | PR-3 | `ws2-a-pr3-tools` | Tasks 3.1-3.5 (C9, RULE-A4, C6 round lines) | T-AC-A8, T-AC-A9 | MCP-shaped tool definitions | descriptors, scoreParts, engine month sim | No |
 | PR-4 | `ws2-a-pr4-adjust` | Tasks 4.1-4.3 (C1 outcomes/trend/wishlist, C4 slack + re-plan triggers) | T-AC-A10, T-AC-A1 and T-AC-A3 for the development and auction deadlines | — | PhaseOutcome, WS1 re-plan triggers | No |
@@ -90,7 +90,7 @@ Every handoff carries this line verbatim:
 
 | PR | may_edit | may_edit_content | must_not_edit |
 |---|---|---|---|
-| PR-1 | `apps/server/src/brain/client.ts`, `apps/server/src/brain/strategy-spike.ts` (import the moved port back), `apps/server/src/brain/playbooks.ts` (new), `apps/server/src/brain/ledger.ts`, `apps/server/src/brain/index.ts`, `packages/ai/src/llm/brief.ts` (new), `packages/ai/src/llm/writer.ts` (new), `packages/ai/src/llm/index.ts`, their tests | `packages/engine/src/config.ts` BRAIN block only (named edit, WS1 OKs); `apps/server/src/mule-game.ts` one touch point (named edit, WS3 OKs) | `packages/ai/src/llm/manual.ts` (PR-2), `packages/ai/src/llm/tools.ts` (PR-3), `packages/ai/src/actions.ts` (WS1), `packages/engine/src/playbook.ts` and `record.ts` (WS1, WS3), every hand in `packages/ai/src/hands/` (WS1, until C7) |
+| PR-1 | `apps/server/src/brain/client.ts`, `apps/server/src/brain/strategy-spike.ts` (import the moved port back), `apps/server/src/brain/playbooks.ts` (new), `apps/server/src/brain/ledger.ts`, `apps/server/src/brain/index.ts`, `packages/ai/src/llm/brief.ts` (new), `packages/ai/src/llm/writer.ts` (new), `packages/ai/src/llm/index.ts`, their tests | `packages/engine/src/config.ts` BRAIN block only (named edit, WS1 OKs); `apps/server/src/mule-game.ts` one touch point (named edit, WS3 OKs); `apps/server/src/record.ts` and `replay.ts` (Task 1.4a's writerFor wrap, named edits WS3 writes or reviews) | `packages/ai/src/llm/manual.ts` (PR-2), `packages/ai/src/llm/tools.ts` (PR-3), `packages/ai/src/actions.ts` (WS1), `packages/engine/src/playbook.ts` and `record.ts` (WS1, WS3), every hand in `packages/ai/src/hands/` (WS1, until C7) |
 | PR-2 | `packages/ai/src/llm/manual.ts` (new), its test; after PR-1 merges, the one line in `writer.ts` that takes the system text | `packages/engine/src/config.ts` BRAIN block (section caps, named edit) | `client.ts`, `playbooks.ts`, `brief.ts` (PR-1/PR-4), `tools.ts` (PR-3), `actions.ts` (WS1) |
 | PR-3 | `packages/ai/src/llm/tools.ts` (new), `apps/server/src/brain/client.ts` (the loop), `apps/server/src/brain/ledger.ts` (round lines), their tests | `packages/engine/src/config.ts` BRAIN block (`toolRounds`, whatIf tick limit, named edit) | `manual.ts` (PR-2), `brief.ts` (PR-4), `actions.ts` (WS1), `packages/ai/src/play.ts` (WS1; whatIf calls it, never edits it) |
 | PR-4 | `packages/ai/src/llm/brief.ts`, `apps/server/src/brain/playbooks.ts`, their tests | `packages/engine/src/config.ts` BRAIN block (trend months, section caps) | `client.ts`, `tools.ts` (PR-3), `manual.ts` (PR-2), WS3's `mule-game.ts` (PR-1's touch point already carries every phase change) |
@@ -177,9 +177,28 @@ Every handoff carries this line verbatim:
 - [x] **Step 4: Implement C2 per spec §1 C2** — mechanism sprout; the system text is a parameter (PR-2 supplies the manual; until then the S-A1 primer from strategy-spike.ts, moved into packages/ai). Plan-drift: none.
 - [x] **Step 5: Run and commit** — PASS; `feat(ai): the playbook writer, edits validated, Rookie never corners (C2, T-AC-A5)`
 
-### Task 1.4: when the brain asks — C4 (upkeep and game start)
+### Task 1.4a: the brain's writer port, recorded — C4 (writerFor), C5 (writer answers)
 
-**Phase:** P1 · **Depends on:** 1.1, 1.3 · **ACs verified:** T-AC-A1, T-AC-A3, T-AC-A11
+Split from Task 1.4 on 29 Oct (lead): WS3's record reached feat/strategist (#178, 5eb6b27), WS1's step 2 has not,
+so the port that needs only the record builds first and unblocks WS3's recording wrap.
+
+**Phase:** P1 · **Depends on:** 1.3; ws2-brain synced to 5eb6b27 and merged into this branch · **Parallelizable with:** none
+**ACs verified:** none on its own (the invariants below; B-AC-A1 proves it in 1.5)
+**Spec sections consumed:** §1 C4 (writerFor), C5, §3 game record entry, §8 AM-A12, AM-A13
+
+**Files:**
+- Modify: `apps/server/src/brain/index.ts` (`BrainService.writerFor`; Classic returns null), `packages/ai/src/llm/writer.ts` (split: `write` returns the checked reply and `refused`; validatePlan runs in the caller)
+- Modify (named edits, WS3 writes or reviews on the SHA): `apps/server/src/record.ts` (`wrapBrain` records each `write` through its `call`, kind 'strategy' | 'playbook', outcome `{ write: reply }`), `apps/server/src/replay.ts` (answers `write` from the record)
+- Test: `packages/ai/test/llm-writer.test.ts` (extend), `apps/server/test/brain-service.test.ts` (extend), WS3's record and replay tests (pin)
+
+- [ ] **Step 1: Write the failing tests** `INV-writer-never-throws` (a fake SDK that throws, refuses, cuts off or times out → `reply.cause` set, no throw), `INV-refused-not-recorded` (`refused` is never in `reply`), and `INV-writer-recorded` (through WS3's recorder, a write call leaves one `answer` with kind and `write` equal to the reply; the replay returns it as recorded). Altitude: contract (the port is what playbooks.ts and WS3 consume). Trap: positive-control INV-writer-recorded by dropping the wrap's outcome.
+- [ ] **Step 2: Run them** → FAIL
+- [ ] **Step 3: Implement** per spec §3 and AM-A13. Plan-drift: `writer.ts` imports `RecordedWrite` from `packages/engine/src/record.ts` (the frozen type) instead of declaring its own; a Classic seat and an unset key get `writerFor` null. No production caller yet: playbooks.ts is Task 1.4b.
+- [ ] **Step 4: Run `pnpm --filter @mule/ai test` and `pnpm --filter @mule/server test`** → PASS; commit `feat(server): the brain's playbook writer port, each reply recorded as an answer (C4, C5)`; WS3 reviews the record.ts and replay.ts hunks on the SHA
+
+### Task 1.4b: when the brain asks — C4 (upkeep and game start)
+
+**Phase:** P1 · **Depends on:** 1.1, 1.3, 1.4a; WS1 step 2 (validatePlan, engine draft) · **ACs verified:** T-AC-A1, T-AC-A3, T-AC-A11
 **Spec sections consumed:** §1 C4, §2 RULE-A1, RULE-A2 rows 1-2, RULE-A5, HC-1, HC-5, §4 races
 
 **Files:**
@@ -211,7 +230,7 @@ Every handoff carries this line verbatim:
 
 ### Task 1.5: the record and the slice's promise — C5, B-AC-A1
 
-**Phase:** P1 · **Depends on:** 1.4; WS3 record append API; WS3 grant execution; WS1 validatePlan + draft (all real)
+**Phase:** P1 · **Depends on:** 1.4b; WS3 record append API (on feat/strategist, #178); WS3 grant execution; WS1 validatePlan + draft (all real)
 **ACs verified:** B-AC-A1
 **Spec sections consumed:** §1 C5, §3 game record entry, HC-4
 
@@ -240,7 +259,7 @@ Every handoff carries this line verbatim:
 
 ### PR-1 progress
 
-Head of `ws2-a-pr1-land`: **883ede9d**. Tasks 1.1, 1.2, 1.3 and 1.6 are done; 1.4 (C4) and 1.5 (C5) wait for WS1's
+Head of `ws2-a-pr1-land`: **883ede9d**. Tasks 1.1, 1.2, 1.3 and 1.6 are done; 1.4a (writerFor) builds now; 1.4b (C4 playbooks.ts) and 1.5 (C5) wait for WS1's
 step 2 (validatePlan and the engine draft); WS3's recorder is already on feat/strategist (#178, 5eb6b27).
 Follow-ups on the branch:
 - d3c1dd2a: merge of ws2-brain c307d48 (sync #165, feat/strategist 296eee2: the frozen v1 playbook types)
