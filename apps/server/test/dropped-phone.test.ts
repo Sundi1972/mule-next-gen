@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GAME, WALK, type Good } from '@mule/engine';
-import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
+import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
 import { fakeContext, readyAll, seats } from './fake-context.js';
 
 /** Month 1 to the first good's status screen, nobody pressing anything before it. */
@@ -151,7 +151,7 @@ describe('a dropped phone in the land grant', () => {
     expect(dropped.lit.length, 'the light kept moving after the drop').toBeGreaterThan(1);
     expect(dropped).toEqual(idle);
     expect(dropped.plots.s1).toBe(0);
-    expect(dropped.lasted).toBeLessThanOrEqual(PHASE_MS.landGrant + GRANT_TICK_MS);
+    expect(dropped.lasted, 'one pass of the light, one tick a plot').toBe(dropped.lit.length * GRANT_TICK_MS);
   });
 
   it('FM-grant-reload: the only human claims, drops and reconnects while the grant runs: their phone is back on the grant with the claim intact, and they claim the next lit plot', () => {
