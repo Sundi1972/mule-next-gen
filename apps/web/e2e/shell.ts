@@ -2,9 +2,11 @@
  * B-AC-12: the shell fills the stage at 1440×900 and 844×390 (shell-steps.ts), in a game of its own at full-length
  * phases. In smoke's month-2 planning the step had about two seconds left after the other planning steps, ran on
  * through the land grant and the land auction, and the steps waiting on those missed them.
+ * B-AC-19's six-seat TV case runs here too, in a room of its own (hub-steps.ts).
  * Run with `pnpm --filter @mule/web e2e`.
  */
 import { check, launch, PHONE, startServer } from './harness';
+import { sixSeatsOnTheTv } from './hub-steps';
 import { shellFillsTheStage } from './shell-steps';
 
 const started = Date.now();
@@ -23,6 +25,7 @@ try {
   await phone.locator('[data-phase=planning]').waitFor({ timeout: 5_000 });
 
   console.log(`shell: ${await shellFillsTheStage(phone)}`);
+  console.log(`✓ B-AC-19: ${await sixSeatsOnTheTv({ browser, base, server })}`);
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
   console.log(`e2e shell: ok (${((Date.now() - started) / 1000).toFixed(1)} s)`);
 } catch (err) {
