@@ -327,8 +327,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         setSalesTax(state, seatId, intent.percent);
         return;
       case 'continue':
-        // The game cannot tell the host yet, so no seat may continue.
-        throw new RuleError('Only the host can continue');
+        if (seatId !== this.ctx.hostId()) throw new RuleError('Only the host can continue');
+        this.continuePlanning();
+        return;
     }
   }
 
