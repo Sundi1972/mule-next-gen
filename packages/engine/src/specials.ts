@@ -1,5 +1,6 @@
-import { MAP, sizeBand } from './config.js';
-import { neighbours } from './grid.js';
+import { MAP, sizeBand, type PlacedSpecialKind } from './config.js';
+import { RuleError } from './errors.js';
+import { neighbours, tileAt } from './grid.js';
 import type { GameMap } from './map-rules.js';
 import type { FitLine } from './production.js';
 import { createRng, type Rng } from './rng.js';
@@ -14,7 +15,7 @@ import type { GameState, ProductionLine, RawGood, SpecialField, SpecialKind, Ter
  * most MAP.special.placementTries plots per map.
  */
 
-const KINDS = Object.keys(MAP.special.on) as SpecialKind[];
+const KINDS = Object.keys(MAP.special.on) as PlacedSpecialKind[];
 /** The goods ruins may pay, read from what each pays. */
 const SALVAGE = Object.keys(MAP.specialEffect.salvage) as NonNullable<SpecialField['salvage']>[];
 
@@ -22,7 +23,7 @@ type Side = 'left' | 'right';
 
 interface Slot {
   tile: Tile;
-  kind: SpecialKind;
+  kind: PlacedSpecialKind;
 }
 
 export interface SpecialPlacement {
@@ -85,7 +86,7 @@ function* drawn<T>(items: readonly T[], rng: Rng): Generator<T> {
   while (rest.length > 0) yield rest.splice(Math.floor(rng.next() * rest.length), 1)[0]!;
 }
 
-function specialField(kind: SpecialKind, rng: Rng): SpecialField {
+function specialField(kind: PlacedSpecialKind, rng: Rng): SpecialField {
   return kind === 'ruins' ? { kind, salvage: rng.pick(SALVAGE) } : { kind };
 }
 
@@ -95,7 +96,7 @@ function isOpen(map: GameMap, tile: Tile, store: Tile | undefined): boolean {
   return !store || !neighbours(map.tiles, map.width, store).includes(tile);
 }
 
-function fitsKind(map: GameMap, tile: Tile, kind: SpecialKind): boolean {
+function fitsKind(map: GameMap, tile: Tile, kind: PlacedSpecialKind): boolean {
   if (!(MAP.special.on[kind] as readonly Terrain[]).includes(tile.terrain)) return false;
   if (kind === 'crystalCavern') return tile.ground.crystite >= MAP.special.cavernCrystite;
   if (kind === 'oasis') return neighbours(map.tiles, map.width, tile).filter((n) => n.terrain === 'desert').length >= MAP.special.oasisDeserts;
@@ -181,4 +182,21 @@ function collapses(state: GameState, index: number): boolean {
   // literal-ok: hash-mixing multipliers that spread (seed, month, plot) over the seed space
   const rng = createRng((Math.imul(state.seed, 0x9e3779b1) + Math.imul(state.month, 0x85ebca77) + Math.imul(index, 0xc2b2ae3d)) >>> 0);
   return rng.chance(EFFECT.collapseChance);
+}
+
+/**
+ * A meteor strikes plot (x, y), in place: the owner keeps it, its MULE (outfit,
+ * run count and filter) is destroyed, any earlier special field gives way to a
+ * meteor crater, and its Crystite is rated MAP.meteorCrater.crystite.
+ * Throws a RuleError for the store or a plot off the map.
+ */
+export function formMeteorCrater(state: GameState, x: number, y: number): void {
+  const tile = Number.isInteger(x) && Number.isInteger(y) ? tileAt(state.tiles, state.width, x, y) : undefined;
+  if (!tile) throw new RuleError(`There is no plot at (${x}, ${y})`);
+  if (tile.terrain === 'store') throw new RuleError('A meteor cannot strike the store');
+  tile.outfit = null;
+  tile.runMonths = 0;
+  tile.filter = false;
+  tile.special = { kind: 'meteorCrater' };
+  tile.ground = { ...tile.ground, crystite: MAP.meteorCrater.crystite };
 }
