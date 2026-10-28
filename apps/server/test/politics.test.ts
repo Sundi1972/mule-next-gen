@@ -617,7 +617,7 @@ describe('the politics view', () => {
     for (const view of screens(g.game)) expect(view.politics!.tax.percent).toBe(8);
   });
 
-  it.each(['land', 'lot'] as const)("T-AC-69 (server): a tie broken by %s reaches the views at its tie beat; the winner and how only at the winner beat", (how) => {
+  it.each(['land', 'lot'] as const)("T-AC-69 (server): a tie broken by %s reaches the views at its tie beat, the rule and the winner with it, as the mock stamps them; one tick before, neither", (how) => {
     const g = started();
     g.game.handle('lena', { type: 'run', office: 'governor', promise: HOLD });
     g.game.handle('brix', { type: 'run', office: 'governor', promise: HOLD });
@@ -636,17 +636,24 @@ describe('the politics view', () => {
     if (result.how !== how) expect.fail(`seed precondition: the tie went by ${result.how}`);
     const { at } = beatsOf(g.game).offices.find((o) => o.office === 'governor')!;
     expect(at.tie).not.toBeNull();
+    const seen = { before: 0, at: 0 };
     while (election(g.game).stage === 'ceremony') {
       const ms = state.politics!.election!.ceremony!.elapsedMs;
       const view = election(g.game);
-      const governor = view.ceremony!.reached.governor;
-      if (ms >= at.tie! && ms < at.winner) {
-        expect(governor, `${ms} ms`).toEqual({ beat: 'tie', at: at.tie! / 1_000 });
-        expect(view.result.governor, `${ms} ms: totals, no winner yet`).not.toHaveProperty('winner');
-        expect(view.result.governor, `${ms} ms: how only with the winner`).not.toHaveProperty('how');
+      const shown = view.result.governor;
+      if (ms < at.tie!) {
+        for (const v of screens(g.game)) expect(v.politics!.election!.result.governor?.winner, `${ms} ms: no winner before the tie beat`).toBeUndefined();
+        expect(shown?.how, `${ms} ms: no rule before the tie beat`).toBeUndefined();
+        if (ms + WALK.tickMs >= at.tie!) seen.before++;
+      } else if (ms < at.winner) {
+        expect(view.ceremony!.reached.governor, `${ms} ms`).toEqual({ beat: 'tie', at: at.tie! / 1_000 });
+        for (const v of screens(g.game)) expect(v.politics!.election!.result.governor, `${ms} ms: the tie's rule and winner`).toEqual(result);
+        seen.at++;
       }
       g.advance(WALK.tickMs);
     }
+    expect(seen.before, 'the tick before the tie beat was read').toBe(1);
+    expect(seen.at, 'the tie beat was read').toBeGreaterThan(0);
     expect(election(g.game).result.governor).toMatchObject({ how });
   });
   it('B-AC-2: after the Governor sets 8%, the next auction sale is taxed at 8%', () => {

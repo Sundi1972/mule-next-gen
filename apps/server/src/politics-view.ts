@@ -40,7 +40,8 @@ function showMs(state: GameState): number {
 
 /**
  * Each office's result as far as the ceremony has shown it, the same on every screen: its totals from its bars beat,
- * its winner and how from its winner beat; every office once the election is over. See WS7 spec RULE-64.
+ * its winner and how from its winner beat, or from its tie beat when a tie was broken, whose stamp names the rule and
+ * the winner; every office once the election is over. See WS7 spec RULE-64, AM-21.
  */
 function revealed(state: GameState): Partial<Record<Office, OfficeReveal>> {
   const shown: Partial<Record<Office, OfficeReveal>> = {};
@@ -50,7 +51,7 @@ function revealed(state: GameState): Partial<Record<Office, OfficeReveal>> {
   const ms = showMs(state);
   for (const { office, at } of beats.offices) {
     const race = result[office]!;
-    if (ms >= at.winner) shown[office] = structuredClone(race);
+    if (ms >= (at.tie ?? at.winner)) shown[office] = structuredClone(race);
     else if (ms >= at.bars) shown[office] = { tallies: structuredClone(race.tallies) };
   }
   return shown;
