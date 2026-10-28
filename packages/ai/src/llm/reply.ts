@@ -30,7 +30,8 @@ function stripQuotePairs(text: string): string {
   return text;
 }
 
-function clean(line: unknown): string | null {
+/** A model's table-talk line as one line within BRAIN.maxLineChars, its wrapping quotes stripped; null when empty or not text. */
+export function cleanLine(line: unknown): string | null {
   if (typeof line !== 'string') return null;
   const stripped = stripQuotePairs(toOneLine(line));
   const capped = capCodePoints(stripped, BRAIN.maxLineChars).trim();
@@ -55,5 +56,5 @@ export function parseReply(text: string, shortlist: ShortOption[]): ParsedReply 
   const { option, line } = reply as { option?: unknown; line?: unknown };
   if (typeof option !== 'string') return unreadable;
   if (!shortlist.some((o) => o.id === option)) return { ok: false, outcome: 'off_list', reason: `named ${nameForNote(option)}, not on the list` };
-  return { ok: true, optionId: option, line: clean(line) };
+  return { ok: true, optionId: option, line: cleanLine(line) };
 }

@@ -24,7 +24,7 @@ import {
   type Good,
   type GameState,
 } from '@mule/engine';
-import { GOOD_NAME, landDecision, OPTION_IDS, PERSONAS, playGame, simSeats, situation, toOptions, type ShortOption } from '@mule/ai';
+import { CAUSES, GOOD_NAME, landDecision, OPTION_IDS, PERSONAS, playGame, simSeats, situation, toOptions, type Cause, type ShortOption } from '@mule/ai';
 import { alreadyRanToday, AUTH_STOPPED, claimLedger, day, dayLedgerPath, nearest, numberFlags, resolveDeps, runAsScript, table, type MainDeps, type StopReason } from './cli.js';
 import { billUnknown, CallFailed, createAnthropicSdk, createThinkingComplete, type HaikuSdk, type ThinkingReply } from './client.js';
 import { API_KEY_ENV, apiKeyFrom } from './index.js';
@@ -269,23 +269,8 @@ export interface Verdict {
   bound: Bound | null;
 }
 
-/**
- * Why a reply is invalid, checked in this order. refused and cut_off come from the stop reason; bad_shape is keys
- * missing or extra, or a strategy or reason that is not of its JSON type.
- */
-export const CAUSES = [
-  'refused',
-  'cut_off',
-  'not_json',
-  'bad_shape',
-  'bad_kind',
-  'bad_good',
-  'bad_cash_floor',
-  'reason_too_long',
-  'plan_not_offered',
-  'bad_line',
-] as const;
-export type Cause = (typeof CAUSES)[number];
+/** Why a reply is invalid: the writer's cause codes, one list, so the spike and the writer count the same things. */
+export type { Cause };
 
 export const BOUNDS = ['cash_floor', 'corners'] as const;
 export type Bound = (typeof BOUNDS)[number];
