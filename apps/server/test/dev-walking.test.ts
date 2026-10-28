@@ -2,7 +2,7 @@ import { AI_HANDS, AI_LEVELS, analysisSeconds, DEVELOPMENT, RuleError, SPECIES_P
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_AI_LEVEL, PHASE_MS, type MuleGame } from '../src/mule-game.js';
-import { readyAll, seats, toDevelopment, walkers } from './fake-context.js';
+import { readyAll, seats, tapThere, toDevelopment, walkers } from './fake-context.js';
 
 const LENA = 's1';
 const OSSA = 's2';
@@ -375,6 +375,18 @@ describe('FM-one-clock: one development clock for every seat', () => {
     expect(game.viewFor(null).phase, 'the AI is still at work').toBe('development');
     for (let i = 0; i < 10_000 && game.viewFor(null).phase === 'development'; i++) g.advance(100);
     expect(game.viewFor(null).players.find((p) => p.id === 's3')!.doneDeveloping, 'the Baron finished his own turn at the pub').toBe(true);
+  });
+
+  it("FM-one-clock: an assay holds no early end, since it applied on arrival: with Ossa at the pub, Lena's phone dropping mid-assay ends development at once", () => {
+    const g = walking();
+    const { game, advanceTo, far } = g;
+    tapThere(game, g, OSSA, { type: 'pub' });
+    game.handle(LENA, { type: 'analyse', ...xy(far) });
+    advanceTo(walkOf(game.viewFor(null), LENA).arrivesAt);
+    expect(colonistOf(game.viewFor(null), LENA)!.assayUntil, 'Lena is assaying').not.toBeNull();
+    expect(game.viewFor(LENA).tiles.find((t) => t.x === far.x && t.y === far.y)!.ground, 'the assay applied on arrival').toBeDefined();
+    game.connectionChanged(LENA, false);
+    expect(game.viewFor(null).phase).toBe('production');
   });
 
   it('FM-one-clock: when the last seat walks to the pub from her plot, development ends at her arrival ms', () => {
