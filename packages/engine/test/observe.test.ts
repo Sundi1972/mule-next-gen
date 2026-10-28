@@ -72,3 +72,22 @@ describe('secret ballots', () => {
     }
   });
 });
+
+describe('what a seat sees of the others', () => {
+  it("T-AC-25: another player's hunger and sickness are public; their analyses, drone orders, MULE in tow and stock stay hidden", () => {
+    const state = createGame({ seed: 11, players: SEATS.map((id) => ({ id, name: id, isAi: false })) });
+    while (state.phase !== 'development') advancePhase(state);
+    const ossa = state.players.find((p) => p.id === 'ossa')!;
+    Object.assign(ossa, { hungry: true, sick: true, analysed: [4], droneOrder: [7], carriedMule: 'empty' });
+    for (const p of state.players) p.stock.crystite = 0;
+    ossa.stock.crystite = 9;
+    const seen = observe(state, 'brix').players.find((p) => p.id === 'ossa')!;
+    expect([seen.hungry, seen.sick]).toEqual([true, true]);
+    expect([seen.analysed, seen.droneOrder, seen.carriedMule]).toEqual([[], [], null]);
+    expect(seen.stock.crystite).not.toBe(9);
+    // Negative case: a well, fed player reads as one.
+    Object.assign(ossa, { hungry: false, sick: false });
+    const well = observe(state, 'brix').players.find((p) => p.id === 'ossa')!;
+    expect([well.hungry, well.sick]).toEqual([false, false]);
+  });
+});
