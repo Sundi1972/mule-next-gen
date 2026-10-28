@@ -142,7 +142,7 @@ tomorrow     a row in EVENTS.colony (cavernCollapse), rolled once per cavern plo
              events (AM-3): key cavernCollapse, kind quake, scope personal, player = the cavern's owner,
              plots [{index, order 0, good 'crystite', delta 0}], phase 'production'. EventKey gains
              'cavernCollapse' (a named edit in WS3's types.ts, WS3 reviews); eventOutput gets a no-op entry.
-pin          specials.test.ts T-AC-6 (WS5's) keeps passing unchanged: the same (seed, month, plot) collapses the
+pin          specials.test.ts T-AC-6 (WS5's) keeps passing, its assertions unchanged (AM-8): the same (seed, month, plot) collapses the
              same; never on a what-if copy; only in a month the cavern is mined; independent of the month's other
              events (a month with a production event collapses at the same rate); about 6% a mined cavern-month,
              within ±30%. The roller's seed for a cavern is its own (seed, month, plot), never shared with another row.
@@ -422,6 +422,22 @@ did       both bind the phase roller: rollPhase rolls nothing in month 1 or on a
 because   the boundary review found the spec and the code disagreeing on month-1 sickness; it predates the event model
           and shipped with Heiko's sickness ruling, so the spec follows the code. Gating sickness to month 2 would be a
           balance change of its own, measured first.
+goal      G-1 unchanged
+```
+
+```
+AM-8 · 2026-10-29 · Task 9's implementer, measured (a spec claim found false)
+
+target    §1 C4 pin · §6 T-AC-5's cavern clause
+said      "specials.test.ts T-AC-6 (WS5's) keeps passing unchanged".
+did       T-AC-6 keeps every assertion and number; two reads in its fixture change, a named edit WS5 reviews:
+          its setup sets "every production row" to 0 except volcanic ash, which now takes the cavern row with them
+          (measured: collapse rate 0, "expected 0 to be greater than 0.0419"); and it sorts months by "any event
+          fired", which a collapse now is (AM-3; measured: event months 0.1097 against "less than 0.078"). The setup
+          skips rows rolled per plot after output, and a month has an event when an output event fired.
+          The cavern's own dice, rate and guards are C4's as written.
+because   the pin predates AM-3, which made a collapse a MonthEvent; keeping the test unedited would take the row out
+          of EVENTS.colony (C4) and the event out of runProduction's events (AM-3) instead.
 goal      G-1 unchanged
 ```
 

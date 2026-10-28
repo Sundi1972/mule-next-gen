@@ -375,7 +375,8 @@ At dispatch (29 Oct, codebase drift since plan time):
       `rollPhase` must not roll `cavernCollapse` at the phase start: its rows are picked by "key is in SHAPE", which
       the cavern row joins here, but C4 rolls it once per mined cavern plot after output. EM-T-AC-2's key literal goes
       red if it slips (Task 4's review).
-- [ ] **Step 4: Run `specials.test.ts` unedited; expect WS5's T-AC-6 green** (replay; about 6% within ±30%; the same
+- [ ] **Step 4: Run `specials.test.ts`, its assertions unedited (AM-8: two fixture reads change, a named edit WS5
+      reviews); expect WS5's T-AC-6 green at 200 seeds and with MULE_FULL=1** (replay; about 6% within ±30%; the same
       rate with or without a production event; each plot its own fate; unmined never). Then run events.test.ts and
       `pnpm typecheck && pnpm test`.
 - [ ] **Step 5: Commit** red then green; send WS5 the specials.ts and EFFECT hunks, WS3 the EventKey hunk and WS4 the
@@ -384,7 +385,8 @@ At dispatch (29 Oct, codebase drift since plan time):
 
 ### PR-2 merge gate
 
-- [ ] EM-T-AC-5 green; WS5's T-AC-6 green and unedited; WS5 OK on the specials.ts and EFFECT hunks; WS3 OK on the
+- [ ] EM-T-AC-5 green; WS5's T-AC-6 green, its assertions unedited (AM-8); WS5 OK on the specials.ts, EFFECT and
+      T-AC-6 fixture hunks; WS3 OK on the
       EventKey hunk (AM-3); WS4 OK on the derive.ts and web specials.test.ts hunks
 - [ ] Each failing-test commit precedes its passing commit; trace-check clean; `pnpm typecheck && pnpm test` exit 0; CI green
 - [ ] The rows of Task 8 re-run on one set (seeds 1-40, politics on): the cavern line moves only by its new dice
