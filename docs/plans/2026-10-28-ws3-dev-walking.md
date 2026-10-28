@@ -5,7 +5,7 @@
 **Spec class:** WS6's spec is Programme. This plan covers **one change of it, C13, which WS3 owns** (server and protocol), so it carries Sketch weight: one PR, a task list and one merge gate. The PR is stacked on WS1's R1 PR #109 (PM ruling (a), SEAMS 2026-10-28). The PM merges #109 and then this PR in consecutive merges, both with Heiko's OK, and rebuilds the rig only after both.
 
 <!-- plan-check: no-task C1 C2 C3 C4 C5 C6 C7 C8 C9 C10 C11 C12 C14 C15 C16 C17 C18 C19 C20 — WS6's other changes: built by WS6, WS4 or WS1 in their own plans; this plan's change alone is WS3's -->
-<!-- plan-check: no-task B-AC-1 B-AC-2 B-AC-3 B-AC-4 B-AC-5 B-AC-6 B-AC-7 B-AC-8 B-AC-10 B-AC-12 B-AC-13 B-AC-14 B-AC-15 B-AC-16 B-AC-17 B-AC-18 T-AC-1 T-AC-3 T-AC-4 T-AC-5 T-AC-6 T-AC-8 T-AC-9 T-AC-10 T-AC-11 — WS6's ACs for its other changes; this plan's two are tasked below -->
+<!-- plan-check: no-task B-AC-1 B-AC-2 B-AC-3 B-AC-4 B-AC-5 B-AC-6 B-AC-7 B-AC-8 B-AC-10 B-AC-12 B-AC-13 B-AC-14 B-AC-15 B-AC-16 B-AC-17 B-AC-18 T-AC-1 T-AC-3 T-AC-4 T-AC-5 T-AC-6 T-AC-8 T-AC-9 T-AC-10 T-AC-11 T-AC-12 — WS6's ACs for its other changes; this plan's two are tasked below -->
 <!-- plan-check: no-task B-AC-9 T-AC-2 — named in Task 5 only as existing tests whose timing moves (WS6's B-AC-9 store-view pin; WS4's T-AC-2 in phase-scale.test.ts); their promises are other plans' -->
 
 ## Goals: lifted from WS6's spec §0. Reference, do not restate.
@@ -45,7 +45,7 @@
 
 **Plan-drift corrections**, from rulings made after the spec's text:
 - **B-AC-11 "the walk's time gone from her clock" and UBER-AC-3's "gone from your clock":** read "the clock ran on while she walked". There is one clock (AM-14).
-- **T-AC-7 "half a Mollox's time":** read `1 / SPECIES_PERK.zipwingSpeed` (1.5) of it. RULE-5 at AM-13 sets the Zipwing's pace to 1.5. Assert against `walkSeconds`, never a literal.
+- **T-AC-7 "half a Mollox's time":** read `1 / SPECIES_PERK.zipwingSpeed` of it. RULE-5 at AM-13 set the Zipwing's pace to 1.5, and Heiko's later ruling on ws1-balance (ba1091c) sets it to 1.25. Assert against `walkSeconds`, never a literal.
 - **B-AC-11 "a tap while walking is ignored":** the server refuses it with `RuleError('Still walking')` and changes nothing. That is "ignored" at the server's state, where the AC observes it. Whether the phone shows the message is WS6-C14's call.
 - **`PHASES.developmentGraceMs` goes** (PM OK, 2026-10-28): the phase ends with the one visible bar.
 
