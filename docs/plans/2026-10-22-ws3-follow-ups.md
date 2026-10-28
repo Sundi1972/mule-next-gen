@@ -74,8 +74,11 @@
 
 **Found in WS6-C13's review (round 1, 2026-10-28), not in that PR:**
 - **Extract the walking state machine's pure parts** into `apps/server/src/dev-walking.ts`, as land-auction.ts and politics-view.ts are: `DevIntent`, `Colonist`, `walkTarget`, `placeName`, the order of due arrivals, `colonistView`. The timer wiring stays in `MuleGame`. mule-game.ts went from 881 to 1036 lines.
-- **`GRANT_TICK_MS` isn't scaled by `phaseScale`.** At phaseScale 0.1 on seed 7, the AI wins no land in month 1. This predates C13.
-- **RULE-7 row 1's 30 s timeout** (WS5's 5b3f3c8): re-time it under load once WS5's #112 (maps 2.7× faster) is on trunk, and drop it if the row stays well inside vitest's 5 s default.
+- **Extracting the walking parts is PR-C, below** (the PM's order, 2026-10-28).
+- **`GRANT_TICK_MS` isn't scaled by `phaseScale`.** At phaseScale 0.1 on seed 7, the AI wins no land in month 1. This predates C13. **CLOSED, won't fix (PM ruling A, 2026-10-28):** WS4's T-AC-2 (phase-scale.test.ts) pins the tick at its real pace on purpose, so AI thumbs can still beat it, and that rule stands. Compressed-time games give AI seats little land; that is e2e runs and demos only, never a scale-1 game.
+- **RULE-7 row 1's 30 s timeout** (WS5's 5b3f3c8): re-time it under load once WS5's #112 (maps 2.7× faster) is on trunk, and drop it if the row stays well inside vitest's 5 s default. **Done: PR-E, below.**
+- **The FU-17 trim** (auction-steps.ts's three declare-text alternatives in `stageShown`). **Done: PR-D, below.**
+- **The AI's rule when humans finish development early** (parked by the PM): the pub path waits for AI seats, the Ready/drop path doesn't. Unify only on a PM ruling.
 
 ## PR-A: engine and server (`ws3-fu-a` from `ws3-auctions`)
 
@@ -162,3 +165,44 @@ WS4's PR-6 adds a "move to your phone" dialog (`role="dialog"`, `aria-modal`, te
 - [x] `pnpm typecheck` · `pnpm --filter @mule/web test` · build, then `tsx e2e/auction-steps.ts` · `pnpm --filter @mule/web e2e` are green
 - [ ] (automated only: B.4 drives this in a real browser and asserts it at the server; no hands-on check yet, owed at UAT) A goal check in the browser: hold Up across a good's switch, and the next good's first press moves the walker
 - [x] A code review has come back clean
+
+## PR-C: the walking parts in their own file (`ws3-fu-walk` from `ws3-auctions`)
+
+No behaviour change: a pure move, as land-auction.ts and politics-view.ts already sit beside `MuleGame`. The C13 suite (`apps/server/test/dev-walking.test.ts`, WS3's) is the pin, and it stays unedited.
+
+**Authority:**
+- `may_edit`: `apps/server/src/mule-game.ts`, and the new `apps/server/src/dev-walking.ts` (a split from WS3's mule-game.ts, so WS3's).
+- `must_not_edit`: every test file, every other lane's file, `packages/**` (no engine, protocol or AI change), and the 25 importers of mule-game.js. Its exports (`MuleGame`, `GRANT_TICK_MS`, `PHASE_MS`, `DEFAULT_AI_LEVEL`, `AI_NAMES`, `AI_DEV_TICK_MS`) stay where they are.
+
+### Task C.1: move the pure walking parts
+
+**MERGED into the lane as #134 (1ec8d5b, head 9db7c57).** mule-game.ts went from 1118 to 1066 lines, and dev-walking.ts is 58. The colonist view takes the phase, not the clock, because its body never read the clock. The control turned 12 of 26 C13 rows red. CI check and e2e were green, and the lead reviewed it from the diff.
+
+- [x] **Step 1:** move into `dev-walking.ts`: `DevIntent`, `Colonist`, `walkTarget`, `placeName`, the order of due arrivals (the sort inside `settleArrivals`), and the colonist view (the body of `colonistView`, as a function of the colonist and the clock). The timer wiring (scheduling, `settleArrivals`/`arrive`/`act` as methods, `devEndsAt`, the early end) stays in `MuleGame`.
+- [x] **Step 2:** the pin. `dev-walking.test.ts`, `planning.test.ts` and the whole server suite pass unedited. **Positive control:** break `walkTarget` in its new home (one place returns the wrong target), watch dev-walking.test.ts go red, then restore.
+
+### PR-C merge gate
+
+- [x] `git diff --stat` shows only the two server source files; no test is edited
+- [x] `pnpm typecheck` · `pnpm test` are green, and the server count is unchanged (153 +1 skipped)
+- [x] The positive control went red, and the tree is clean after the restore
+- [x] `pnpm --filter @mule/web build` and `pnpm --filter @mule/web e2e:core` are green (the walk is driven in the smoke)
+- [x] A code review has come back clean
+
+## PR-D: the FU-17 trim (`ws3-fu17-trim` from `ws3-auctions`)
+
+WS4's FU-17 (#96, on trunk via #132) removed WalkBoard's dead declare block and narrowed its stage to `'walk'`. The three declare texts that `stageShown` in `apps/web/e2e/auction-steps.ts` (WS3's) looks for (`SELLERS START AT THE TOP`, `Done choosing`, `Buy, sell or pass?`) now exist nowhere in `apps/web/src` or `packages/ui/src`, so that check can't fire.
+
+**MERGED into the lane as #138 (d1025ea, head dfa47f8):** +1 −3. auction-steps.ts exits 0 in 44 s, with both UBER-AC-1 ✓ lines. CI check and e2e are green, and the lead reviewed it from the diff.
+
+- [x] **Step 1:** remove that check, the `text` it alone used, and the doc comment's "Any sign of a declare screen counts as one". Keep the `· buy or sell?` heading alternative, which names the good on the status screen (Auction.tsx:60). The server-side UBER-AC-1 check (no declare stage) stays.
+- [x] **Merge gate:** the grep is still empty at the head; `tsx e2e/auction-steps.ts` exits 0 with UBER-AC-1's ✓ (Tier 2, so run locally); typecheck 0; only auction-steps.ts changes; review clean.
+
+## PR-E: RULE-7 row 1's timeout (`ws3-rule7-timeout` from `ws3-auctions`)
+
+WS5's #112 (maps 2.7× faster) is on trunk via #133. Row 1 in `packages/engine/test/lots-colony.test.ts` (:110–128) still carries a `30_000` timeout as headroom (5b3f3c8).
+
+**MERGED into the lane as #140 (ce70203, head 49795ee):** row 1 took 170, 178, 237, 265 and 237 ms at a load average of about 13, so the `30_000` and its comment clause are gone. Engine is 266 +1 skipped. CI check and e2e are green, and the lead reviewed it from the diff.
+
+- [x] **Step 1:** time the row 5 times under the machine's normal load, recording each time and the load average. If every run is under 2.5 s, drop the timeout and the comment's headroom clause. Otherwise set it to about 2× the slowest run, in whole seconds, and say so in the comment.
+- [x] **Merge gate:** no assertion edited; `pnpm --filter @mule/engine test` green; typecheck 0; only lots-colony.test.ts changes; review clean.

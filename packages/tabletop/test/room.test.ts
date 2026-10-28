@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Room, RoomRegistry, TableError, type Connection, type Game, type GameContext, type SeatInfo, type ServerEnvelope } from '../src/index.js';
+import { Room, RoomRegistry, TableError, type ClientEnvelope, type Connection, type Game, type GameContext, type SeatInfo, type ServerEnvelope } from '../src/index.js';
 
 type Intent = { secret: string };
 type View = { mySecret: string | null; secretsTold: number };
@@ -269,6 +269,143 @@ describe('RoomRegistry', () => {
     now = 60_000;
     registry.sweep(60_000);
     expect(registry.size).toBe(0);
+  });
+});
+
+type Heard = { from: string; text: string; to?: string };
+
+/** Heiko and Mia at a table with the AI seat Brix and a board; the game keeps its context and records what it hears. */
+function chatTable() {
+  let ctx: GameContext | undefined;
+  const heard: Heard[] = [];
+  const room = new Room<Intent, View>({
+    code: 'KRTX',
+    createGame: (c) => {
+      ctx = c;
+      return { ...secretsGame(), heard: (from, text, to) => void heard.push({ from, text, to }) };
+    },
+    aiNames: ['Brix'],
+    newToken: () => `t${++tokens}`,
+    // "blorp" is dropped outright; "darn" is masked.
+    moderate: (text) => (text.includes('blorp') ? '' : text.replace(/darn/g, '****')),
+  });
+  const heiko = join(room, 'Heiko');
+  const mia = join(room, 'Mia');
+  room.receive(heiko, heiko.from, { t: 'addAi' });
+  const brix = room.viewFor(null).seats.find((s) => s.isAi)!.id;
+  const tv = new Screen();
+  room.receive(tv, tv.from, { t: 'board', code: 'KRTX' });
+  const say = (from: string, text: string, to?: string) => ctx!.say!(from, text, to);
+  return { room, heiko, mia, tv, brix, say, heard };
+}
+
+const chats = (screen: Screen) => screen.inbox.flatMap((m) => (m.t === 'chat' ? [m.message] : []));
+
+describe('Room: games speak and hear table chat (C4)', () => {
+  it("WS2 B-AC-1: a game's say() reaches every screen like a player's line", () => {
+    const { room, heiko, mia, tv, brix, say } = chatTable();
+
+    room.receive(mia, mia.from, { t: 'chat', text: 'Hello table' });
+    say(brix, '  Mine.  ');
+    say(brix, 'darn it');
+    say(brix, 'x'.repeat(300));
+
+    for (const screen of [heiko, mia, tv]) {
+      const [player, mine, moderated, long] = chats(screen);
+      expect(Object.keys(mine!).sort()).toEqual(Object.keys(player!).sort());
+      expect(mine).toMatchObject({ from: brix, text: 'Mine.' });
+      expect(moderated).toMatchObject({ from: brix, text: '**** it' });
+      expect(long).toMatchObject({ from: brix, text: 'x'.repeat(280) });
+    }
+
+    say(brix, 'Sell me your ore', heiko.from.seatId!);
+    expect(chats(heiko).at(-1)).toMatchObject({ from: brix, to: heiko.from.seatId, text: 'Sell me your ore' });
+    expect(chats(mia)).toHaveLength(4);
+    expect(chats(tv)).toHaveLength(4);
+
+    // Nobody at the table by either id: say throws to its caller, and no screen gets a line.
+    expect(() => say(brix, 'hi', 's99')).toThrow(TableError);
+    expect(() => say(brix, 'hi', 's99')).toThrow('Nobody by that name at the table');
+    expect(() => say('s99', 'hi')).toThrow(TableError);
+    expect(() => say('s99', 'hi')).toThrow('Nobody by that name at the table');
+    // Whatever the text: an empty line, or one moderation drops, still throws for an unknown id.
+    expect(() => say('s99', '')).toThrow('Nobody by that name at the table');
+    expect(() => say('s99', 'blorp')).toThrow('Nobody by that name at the table');
+    expect(() => say(brix, '', 's99')).toThrow('Nobody by that name at the table');
+    expect(chats(heiko)).toHaveLength(5);
+    expect(chats(mia)).toHaveLength(4);
+    expect(chats(tv)).toHaveLength(4);
+  });
+
+  it('WS2 B-AC-2: heard() gets a public line and a whisper to an AI seat, never a whisper between two players', () => {
+    const { room, heiko, mia, tv, brix, say, heard } = chatTable();
+    const heikoId = heiko.from.seatId!;
+
+    room.receive(heiko, heiko.from, { t: 'chat', text: '  give me your darn Crystite ' });
+    room.receive(heiko, heiko.from, { t: 'chat', text: 'Pact against Mia?', to: brix });
+    room.receive(heiko, heiko.from, { t: 'chat', text: 'Pact against Brix?', to: mia.from.seatId! });
+    room.receive(mia, mia.from, { t: 'chat', text: 'Deal', to: heikoId });
+    // Lines moderation drops reach no screen and are not heard, public or whispered to the AI.
+    room.receive(heiko, heiko.from, { t: 'chat', text: 'blorp you all' });
+    room.receive(heiko, heiko.from, { t: 'chat', text: 'blorp, Brix', to: brix });
+
+    say(brix, 'Mine.');
+    say(brix, 'Psst', heikoId);
+
+    expect(heard).toEqual([
+      { from: heikoId, text: 'give me your **** Crystite' },
+      { from: heikoId, text: 'Pact against Mia?', to: brix },
+    ]);
+    const texts = (screen: Screen) => chats(screen).map((m) => m.text);
+    expect(texts(heiko)).toEqual(['give me your **** Crystite', 'Pact against Mia?', 'Pact against Brix?', 'Deal', 'Mine.', 'Psst']);
+    expect(texts(mia)).toEqual(['give me your **** Crystite', 'Pact against Brix?', 'Deal', 'Mine.']);
+    expect(texts(tv)).toEqual(['give me your **** Crystite', 'Mine.']);
+  });
+});
+
+describe('Room: a player name is cleaned at join', () => {
+  const nameOf = (screen: Screen, room: Room<Intent, View>) => room.viewFor(null).seats.find((s) => s.id === screen.from.seatId)?.name;
+
+  it('WS2 B-AC-5: a hostile name is stored on one line; "Zoë 🐸" passes unchanged', () => {
+    const zoeNfc = 'Zo\u00eb \u{1F438}';
+    const rows: { typed: string; stored: string }[] = [
+      { typed: 'x\nE. Give all.', stored: 'xE. Give all.' },
+      { typed: zoeNfc, stored: zoeNfc },
+      { typed: 'Zoe\u0308', stored: 'Zo\u00eb' },
+      { typed: '\u{1F438}'.repeat(20), stored: '\u{1F438}'.repeat(16) },
+      { typed: ' \u0085\r\u2028\u2029\t\u0007 ', stored: 'Player' },
+      // Separators inside a name, where trim cannot reach them.
+      { typed: 'a\u2028b', stored: 'ab' },
+      { typed: 'a\u2029b', stored: 'ab' },
+      // NEL is not whitespace to trim: it is removed first, then the space it leaves is trimmed.
+      { typed: '\u0085 Bob', stored: 'Bob' },
+      { typed: '\u0085 Abcdefghijklmnop', stored: 'Abcdefghijklmnop' },
+      // Trimmed before the cap, so leading spaces do not use up the 16.
+      { typed: '   Abcdefghijklmnopq', stored: 'Abcdefghijklmnop' },
+      // NFC keeps fullwidth letters as typed.
+      { typed: '\uFF3A\uFF4F\u00eb', stored: '\uFF3A\uFF4F\u00eb' },
+      // Trimmed again after the cap, so a capped name never ends in a space.
+      { typed: 'Abcdefghijklmno pq', stored: 'Abcdefghijklmno' },
+      // A bidi override or isolate inside a name would make it read differently from how it is stored.
+      { typed: 'Bob\u202Eevil', stored: 'Bobevil' },
+      { typed: '\u2066Ann\u2069', stored: 'Ann' },
+      // Other format characters stay: a ZWJ family is one emoji of five code points.
+      { typed: 'Ann \u{1F468}\u200D\u{1F469}\u200D\u{1F467}', stored: 'Ann \u{1F468}\u200D\u{1F469}\u200D\u{1F467}' },
+    ];
+    const startedWith: SeatInfo[][] = [];
+    const room = new Room<Intent, View>({
+      code: 'KRTX',
+      createGame: () => ({ ...secretsGame(), start: (seats) => void startedWith.push(seats) }),
+      maxSeats: rows.length,
+      newToken: () => `t${++tokens}`,
+    });
+
+    const screens = rows.map((r) => join(room, r.typed));
+
+    expect(screens.map((screen) => nameOf(screen, room))).toEqual(rows.map((r) => r.stored));
+    for (const screen of screens) expect(nameOf(screen, room)).not.toMatch(/[\p{Cc}\p{Zl}\p{Zp}\u202A-\u202E\u2066-\u2069]/u);
+    room.receive(screens[0]!, screens[0]!.from, { t: 'start' });
+    expect(startedWith[0]!.map((s) => s.name)).toEqual(rows.map((r) => r.stored));
   });
 });
 
@@ -807,6 +944,201 @@ describe('Room: a one-time code moves a seat to another device (RULE-6, AM-16)',
       expect(live.last('error')).toBeUndefined();
     },
   );
+});
+
+/** Each seat's id and whether it shows connected, in the last view this screen received. */
+const presence = (screen: Screen) => screen.last('view')!.view.seats.map((s) => [s.id, s.connected]);
+
+describe('Room: a connection holds at most one seat (FM-3)', () => {
+  it('FM-3: in the lobby, the host\'s connection joining again by name lets go of its seat: it shows away, hosting moves on, its token still takes it back, and a later disconnect frees only the new seat', async () => {
+    const { room, heiko, mia } = clockLobby();
+    const heikoToken = heiko.last('welcome')!.seatToken!;
+
+    room.receive(heiko, heiko.from, { t: 'join', code: room.code, name: 'Jonas' });
+    await flush();
+
+    expect(heiko.last('welcome')!.seatId).toBe('s4');
+    expect(presence(mia)).toStrictEqual([['s1', false], ['s2', true], ['s3', true], ['s4', true]]);
+    expect(mia.last('view')!.view.hostId).toBe('s2');
+
+    room.disconnect(heiko);
+    await flush();
+
+    expect(presence(mia)).toStrictEqual([['s1', false], ['s2', true], ['s3', true], ['s4', false]]);
+    expect(join(room, 'Heiko', heikoToken).last('welcome')!.seatId).toBe('s1');
+  });
+
+  it.each([
+    {
+      how: "s2's move code",
+      fields: (ctx: ReturnType<typeof clockLobby>) => ({ handoff: handoff(ctx.room, ctx.mia) }),
+      miaHears: { t: 'removed', reason: 'moved' },
+      moved: ['s2'],
+    },
+    {
+      how: "s2's seat token",
+      fields: (ctx: ReturnType<typeof clockLobby>) => ({ seatToken: ctx.mia.last('welcome')!.seatToken! }),
+      miaHears: undefined,
+      moved: [],
+    },
+  ])('FM-3: after Start, a connection on s1 that joins with $how lets go of s1: s1 shows away, the game hears s1 disconnected, and a later disconnect frees s2 only', async ({ fields, miaHears, moved }) => {
+    const ctx = clockLobby();
+    const { room, heiko, mia, heard } = ctx;
+    room.receive(heiko, heiko.from, { t: 'start' });
+    const tv = watch(room);
+    const via = fields(ctx);
+    const heardOfS1 = () => heard.changes.filter(([seatId]) => seatId === 's1');
+
+    room.receive(heiko, heiko.from, { t: 'join', code: room.code, name: 'Heiko', ...via });
+    await flush();
+
+    expect(heiko.last('welcome')!.seatId).toBe('s2');
+    expect(mia.last('removed')).toStrictEqual(miaHears);
+    expect(presence(tv)).toStrictEqual([['s1', false], ['s2', true], ['s3', true]]);
+    expect(heardOfS1()).toStrictEqual([['s1', false]]);
+    expect(heard.moved).toStrictEqual(moved);
+
+    room.disconnect(heiko);
+    await flush();
+
+    expect(presence(tv)).toStrictEqual([['s1', false], ['s2', false], ['s3', true]]);
+    expect(heard.changes.at(-1)).toStrictEqual(['s2', false]);
+    expect(heardOfS1()).toStrictEqual([['s1', false]]);
+  });
+
+  it.each([
+    {
+      row: 'rejoins s1 by its own token',
+      fields: (ctx: ReturnType<typeof clockLobby>) => ({ seatToken: ctx.heiko.last('welcome')!.seatToken! }),
+      error: undefined,
+      hears: expect.not.arrayContaining([['s1', false]]),
+    },
+    { row: 'joins by name and is refused', fields: () => ({}), error: 'This game has already started', hears: [] },
+    {
+      row: "joins with s2's expired move link and is refused",
+      fields: (ctx: ReturnType<typeof clockLobby>) => {
+        const code = handoff(ctx.room, ctx.mia);
+        ctx.clock.now += TWO_MINUTES;
+        return { handoff: code };
+      },
+      error: 'That link has expired',
+      hears: [],
+    },
+  ])('FM-3: after Start, a connection on s1 that $row keeps s1: still connected and host, the game hears no disconnect, its moves land on s1, and a later disconnect frees s1', async ({ fields, error, hears }) => {
+    const ctx = clockLobby();
+    const { room, heiko, heard } = ctx;
+    room.receive(heiko, heiko.from, { t: 'start' });
+    const tv = watch(room);
+    const via = fields(ctx);
+    const heardBefore = [...heard.changes];
+
+    room.receive(heiko, heiko.from, { t: 'join', code: room.code, name: 'Heiko', ...via });
+    await flush();
+
+    expect(heiko.last('error')?.message).toBe(error);
+    expect(presence(tv)).toStrictEqual([['s1', true], ['s2', true], ['s3', true]]);
+    expect(tv.last('view')!.view.hostId).toBe('s1');
+    expect(heard.changes.slice(heardBefore.length)).toStrictEqual(hears);
+    room.receive(heiko, heiko.from, { t: 'intent', intent: { secret: 'still s1' } });
+    expect(room.viewFor('s1').game?.mySecret).toBe('still s1');
+
+    room.disconnect(heiko);
+    await flush();
+
+    expect(presence(tv)).toStrictEqual([['s1', false], ['s2', true], ['s3', true]]);
+    expect(heard.changes.at(-1)).toStrictEqual(['s1', false]);
+  });
+});
+
+/** Each seat's id and presence, the host and the board count, in the last view this screen received. */
+const table = (screen: Screen) => {
+  const { seats, hostId, boards } = screen.last('view')!.view;
+  return { seats: seats.map((s) => [s.id, s.connected]), hostId, boards };
+};
+
+const welcomedAs = (screen: Screen) => screen.inbox.flatMap((m) => (m.t === 'welcome' ? [m.role] : []));
+
+describe('Room: a connection is a board or a seat, never both (FM-12)', () => {
+  type Hello = (ctx: ReturnType<typeof clockLobby>) => ClientEnvelope<Intent>;
+
+  /** A lobby with a TV watching (started first if asked); the TV then says `hello`. `before` is the room's own state, not a broadcast. */
+  async function tvSays(started: boolean, hello: Hello) {
+    const ctx = clockLobby();
+    const { room, heiko, heard } = ctx;
+    if (started) room.receive(heiko, heiko.from, { t: 'start' });
+    const tv = watch(room);
+    const msg = hello(ctx);
+    await flush();
+    const before = { view: room.viewFor(null), heard: structuredClone(heard) };
+
+    room.receive(tv, tv.from, msg);
+    await flush();
+    return { ...ctx, tv, msg, before };
+  }
+
+  const boardJoins: { row: string; started: boolean; hello: Hello; landsOn: string }[] = [
+    { row: 'joins by name in the lobby', started: false, hello: () => ({ t: 'join', code: 'KRTX', name: 'TV' }), landsOn: 's4' },
+    { row: "joins by s2's token after Start", started: true, hello: (ctx) => ({ t: 'join', code: 'KRTX', name: 'TV', seatToken: ctx.mia.last('welcome')!.seatToken! }), landsOn: 's2' },
+    { row: "joins by s2's move code after Start", started: true, hello: (ctx) => ({ t: 'join', code: 'KRTX', name: 'TV', handoff: handoff(ctx.room, ctx.mia) }), landsOn: 's2' },
+  ];
+
+  it.each(boardJoins)('FM-12: a board that $row is refused with "This screen is already the table", and nothing changes: no seat is taken or added, s2 keeps its screen, the host and board count stay, the game hears nothing, and the same join from a phone still lands on $landsOn', async ({ started, hello, landsOn }) => {
+    const { room, mia, heard, tv, msg, before } = await tvSays(started, hello);
+
+    expect(tv.last('error')?.message).toBe('This screen is already the table');
+    expect(welcomedAs(tv)).toStrictEqual(['board']);
+    expect({ view: room.viewFor(null), heard }).toStrictEqual(before);
+    expect(mia.last('removed')).toBeUndefined();
+    room.receive(mia, mia.from, { t: 'chat', text: 'still s2' });
+    expect(mia.inbox.at(-1)).toMatchObject({ t: 'chat', message: { from: 's2' } });
+
+    const phone = new Screen();
+    room.receive(phone, phone.from, msg);
+    expect(phone.last('welcome')?.seatId).toBe(landsOn);
+  });
+
+  it('FM-12: a board that sends `board` again is welcomed again, still counts once, and nothing else changes', async () => {
+    const { room, heard, tv, before } = await tvSays(true, () => ({ t: 'board', code: 'KRTX' }));
+
+    expect(tv.last('error')).toBeUndefined();
+    expect(welcomedAs(tv)).toStrictEqual(['board', 'board']);
+    expect({ view: room.viewFor(null), heard }).toStrictEqual(before);
+  });
+
+  it.each([
+    { row: 'the host, in the lobby', started: false, who: 'heiko' as const },
+    { row: 's2, after Start', started: true, who: 'mia' as const },
+  ])('FM-12: a seated screen ($row) that sends `board` is refused with "This screen already has a seat", and nothing changes: it keeps its seat, the host and board count stay, and the game hears nothing', async ({ started, who }) => {
+    const ctx = clockLobby();
+    const { room, heiko, heard } = ctx;
+    if (started) room.receive(heiko, heiko.from, { t: 'start' });
+    watch(room);
+    const screen = ctx[who];
+    await flush();
+    const before = { view: room.viewFor(null), heard: structuredClone(heard) };
+
+    room.receive(screen, screen.from, { t: 'board', code: room.code });
+    await flush();
+
+    expect(screen.last('error')?.message).toBe('This screen already has a seat');
+    expect(welcomedAs(screen)).toStrictEqual(['player']);
+    expect({ view: room.viewFor(null), heard }).toStrictEqual(before);
+    room.receive(screen, screen.from, { t: 'handoff' });
+    expect(screen.inbox.at(-1)?.t).toBe('handoffCode');
+  });
+
+  it('FM-12: after Start, a seated screen that sent `board` and then drops lets go of its seat: it shows away, hosting moves on, and the game hears it disconnected', async () => {
+    const { room, heiko, heard } = clockLobby();
+    room.receive(heiko, heiko.from, { t: 'start' });
+    const tv = watch(room);
+    room.receive(heiko, heiko.from, { t: 'board', code: room.code });
+
+    room.disconnect(heiko);
+    await flush();
+
+    expect(table(tv)).toStrictEqual({ seats: [['s1', false], ['s2', true], ['s3', true]], hostId: 's2', boards: 1 });
+    expect(heard.changes).toStrictEqual([['s1', false]]);
+  });
 });
 
 /** The secrets game with a bug: the secret 'boom' throws a plain Error, as an engine bug would, and so can a tick it schedules. */

@@ -1,7 +1,7 @@
 /**
  * Headless simulator: plays AI-only games with strategist seats (the
  * default TopPickDecider, no language model) and checks them against the
- * balance targets in the design doc's Economy model tab. Used to tune the
+ * balance targets in the design doc's Economy model tab (SIM_TARGETS in config.ts). Used to tune the
  * numbers in the engine's config.ts.
  *
  *   pnpm sim -- --games 100 --players 4 --level trader
@@ -10,7 +10,7 @@
  *   pnpm sim -- --set SPECIES_PERK.zipwingSpeed=1.5   (a config number for this run; repeatable; the header lists them)
  */
 import * as engine from '@mule/engine';
-import { AI_LEVELS, AI_PERSONAS, colonyFailed, GOOD_CONFIG, GOODS, score, type AiLevelId, type AiPersonaId, type GameState } from '@mule/engine';
+import { AI_LEVELS, AI_PERSONAS, colonyFailed, GOOD_CONFIG, GOODS, MS_PER_SECOND, score, SIM_TARGETS, type AiLevelId, type AiPersonaId, type GameState } from '@mule/engine';
 import { simSeats } from './lineup.js';
 import { playGame } from './play.js';
 
@@ -43,7 +43,7 @@ export function applySets(sets: readonly string[]): string[] {
   return [...sets];
 }
 
-const pct = (n: number, of: number) => `${((n / Math.max(1, of)) * 100).toFixed(0)}%`;
+const pct = (n: number, of: number) => `${((n / Math.max(1, of)) * 100).toFixed(0)}%`; // literal-ok: a share shown in percent, display only
 /** A player hungry this many months in a row is in the hunger spiral the report counts (Heiko's question). */
 const SPIRAL_MONTHS = 3; // literal-ok: the report's definition of the spiral, not a game rule
 const quantile = (values: number[], q: number) => {
@@ -53,8 +53,8 @@ const quantile = (values: number[], q: number) => {
 
 function main() {
   const overrides = applySets(process.argv.flatMap((a, i) => (a === '--set' ? [process.argv[i + 1] ?? ''] : [])));
-  const games = arg('games', 100);
-  const players = arg('players', 4);
+  const games = arg('games', 100); // literal-ok: the sim's default run length, a command-line default
+  const players = arg('players', 4); // literal-ok: the sim's default table size, a command-line default
   const first = arg('seed', 1);
   const level = (argText('level') ?? 'trader') as AiLevelId;
   const persona = argText('persona') as AiPersonaId | null;
@@ -89,13 +89,15 @@ function main() {
   // Read once the land grant opens: by then the month's election is closed and the Governor has set the tax.
   const onPhase = (s: Parameters<NonNullable<Parameters<typeof playGame>[2]>['onPhase'] & {}>[0]) => {
     if (s.phase !== 'landGrant' || !s.politics) return;
-    pol.taxes.push(Math.round(s.treasury.salesTax * 100));
+    pol.taxes.push(Math.round(s.treasury.salesTax * 100)); // literal-ok: the tax in whole percent for the report, display only
     if (s.politics.election) {
       pol.elections++;
       pol.filled += (s.politics.governor ? 1 : 0) + (s.politics.sheriff ? 1 : 0);
     }
   };
 
+  // Month offsets of a broke run: the check looks for SIM_TARGETS.broke.months in a row.
+  const brokeRun = Array.from({ length: SIM_TARGETS.broke.months }, (_, k) => k);
   for (let seed = first; seed < first + games; seed++) {
     const specs = simSeats(players, level, seed, persona);
     // Who starts each development hungry, for the spiral: a player hungry SPIRAL_MONTHS months running.
@@ -120,7 +122,7 @@ function main() {
     for (const k of Object.keys(lots) as (keyof typeof lots)[]) lots[k] += l[k];
     months += state.history.length;
     soldOut += state.history.filter((h) => h.corralSoldOut).length;
-    if (state.history.some((h) => h.prices.food > 3 * GOOD_CONFIG.food.refPrice)) foodSpike++;
+    if (state.history.some((h) => h.prices.food > SIM_TARGETS.foodSpike.factor * GOOD_CONFIG.food.refPrice)) foodSpike++;
     hungry += state.history.filter((h) => h.colonistsHungry).length;
     for (const h of state.history) {
       mulePrices.push(h.mulePrice);
@@ -131,7 +133,7 @@ function main() {
     const mine = state.tiles.filter((t) => t.owner);
     owned += mine.length;
     developed += mine.filter((t) => t.outfit).length;
-    if (state.players.some((p) => broke.some((_, m) => [0, 1, 2].every((k) => broke[m + k]?.includes(p.id))))) longBroke++;
+    if (state.players.some((p) => broke.some((_, m) => brokeRun.every((k) => broke[m + k]?.includes(p.id))))) longBroke++;
     if (colonyFailed(state)) collapsed++;
     const keys = state.history.flatMap((h) => h.events ?? []).map((e) => e.key);
     eventMonths += state.history.filter((h) => (h.events ?? []).length > 0).length;
@@ -145,26 +147,31 @@ function main() {
   }
 
   const check = (ok: boolean) => (ok ? 'ok  ' : 'MISS');
+  const share = (target: number) => pct(target, 1);
+  // literal-ok: the median, the statistic its check is named for
   const muleMedian = quantile(mulePrices, 0.5);
+  // literal-ok: the 90th percentile, the statistic its check is named for
   const mule90 = quantile(mulePrices, 0.9);
   if (overrides.length > 0) console.log(`config: ${overrides.join(' ')}`);
   console.log(`${games} games (seeds ${first} to ${first + games - 1}), ${players} strategist seats at ${level}, ${(months / games).toFixed(1)} months on average\n`);
-  console.log(`${check(muleMedian >= 150 && muleMedian <= 300)} MULE price median ${muleMedian} (target 150 to 300)`);
-  console.log(`${check(mule90 < 500)} MULE price 90th percentile ${mule90} (target under 500)`);
-  console.log(`${check(soldOut / months < 0.1)} Corral sold out in ${pct(soldOut, months)} of months (target under 10%)`);
-  console.log(`${check(foodSpike / games >= 0.1 && foodSpike / games <= 0.5)} Food above 3x reference in ${pct(foodSpike, games)} of games (target 10% to 50%)`);
-  console.log(`${check(hungry / months < 0.15)} Colonists short of Food or Water in ${pct(hungry, months)} of months (target under 15%)`);
-  console.log(`${check(developed / owned >= 0.7)} Owned plots developed at the end: ${pct(developed, owned)} (target 70% or more)`);
-  console.log(`${check(longBroke === 0)} Games with an AI broke for 3 months in a row: ${pct(longBroke, games)} (target none)`);
+  console.log(`${check(muleMedian >= SIM_TARGETS.muleMedian.min && muleMedian <= SIM_TARGETS.muleMedian.max)} MULE price median ${muleMedian} (target ${SIM_TARGETS.muleMedian.min} to ${SIM_TARGETS.muleMedian.max})`);
+  console.log(`${check(mule90 < SIM_TARGETS.mule90th)} MULE price 90th percentile ${mule90} (target under ${SIM_TARGETS.mule90th})`);
+  console.log(`${check(soldOut / months < SIM_TARGETS.corralSoldOut)} Corral sold out in ${pct(soldOut, months)} of months (target under ${share(SIM_TARGETS.corralSoldOut)})`);
+  console.log(
+    `${check(foodSpike / games >= SIM_TARGETS.foodSpike.min && foodSpike / games <= SIM_TARGETS.foodSpike.max)} Food above ${SIM_TARGETS.foodSpike.factor}x reference in ${pct(foodSpike, games)} of games (target ${share(SIM_TARGETS.foodSpike.min)} to ${share(SIM_TARGETS.foodSpike.max)})`,
+  );
+  console.log(`${check(hungry / months < SIM_TARGETS.colonistsShort)} Colonists short of Food or Water in ${pct(hungry, months)} of months (target under ${share(SIM_TARGETS.colonistsShort)})`);
+  console.log(`${check(developed / owned >= SIM_TARGETS.developed)} Owned plots developed at the end: ${pct(developed, owned)} (target ${share(SIM_TARGETS.developed)} or more)`);
+  console.log(`${check(longBroke === 0)} Games with an AI broke for ${SIM_TARGETS.broke.months} months in a row: ${pct(longBroke, games)} (target none)`);
   console.log(`${check(minFund >= 0)} Lowest colony fund ${minFund} (target 0 or more)`);
-  console.log(`${check(collapsed / games <= 0.1)} Ended in Collapse: ${pct(collapsed, games)} (target 10% or less)`);
+  console.log(`${check(collapsed / games <= SIM_TARGETS.collapsed)} Ended in Collapse: ${pct(collapsed, games)} (target ${share(SIM_TARGETS.collapsed)} or less)`);
   console.log(`     Store capital: lowest ${minCapital} (no check: the store never runs out of money)`);
   console.log(`     MULEs lost to the clock: ${(mulesLost / games).toFixed(1)} a game (walking ${walking ? 'on' : 'off'}; no check)`);
   console.log(`     Players hungry ${SPIRAL_MONTHS} or more months running: ${pct(spirals, playerGames)} (no check)`);
   console.log(`     Wins by species:${Object.entries(wins).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
   console.log(`     Wins by persona: ${Object.entries(byPersona).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
   console.log(
-    `     Live auction a month: ${(auction.between / months).toFixed(1)} units between players, ${(auction.store / months).toFixed(1)} with the store, ${(auction.ship / months).toFixed(1)} to the ship; ${(auction.ms / months / 1000).toFixed(0)} s of auction time`,
+    `     Live auction a month: ${(auction.between / months).toFixed(1)} units between players, ${(auction.store / months).toFixed(1)} with the store, ${(auction.ship / months).toFixed(1)} to the ship; ${(auction.ms / months / MS_PER_SECOND).toFixed(0)} s of auction time`,
   );
   console.log(`     Land auction: ${lots.sold} lots sold, ${lots.unsold} unsold; colony lots ${lots.colonyOffered} offered, ${lots.colonySold} sold, in ${months} months, stalled ${lots.stalled}`);
   console.log(
@@ -177,12 +184,13 @@ function main() {
   );
   console.log(
     politics
-      ? `     Politics: ${pol.elections} elections, ${pct(pol.filled, pol.elections * 2)} of offices filled; Governor's tax ${quantile(pol.taxes, 0)} / ${quantile(pol.taxes, 0.5)} / ${quantile(pol.taxes, 1)}% (min / median / max); ${(pol.taxPaid / games).toFixed(0)} cr sales tax and ${(pol.terms / games).toFixed(1)} terms a game`
+      ? `     Politics: ${pol.elections} elections, ${pct(pol.filled, pol.elections * 2)} of offices filled; Governor's tax ${quantile(pol.taxes, 0)} / ${quantile(pol.taxes, 0.5)} / ${quantile(pol.taxes, 1)}% (min / median / max); ${(pol.taxPaid / games).toFixed(0)} cr sales tax and ${(pol.terms / games).toFixed(1)} terms a game` // literal-ok: an election fills two offices (Governor, Sheriff); 0.5 is the median tax
       : '     Politics: off',
   );
   console.log('\nPosted prices (min / median / 90th percentile / max):');
   for (const good of GOODS) {
     const all = prices[good]!;
+    // literal-ok: the column width, and the median and 90th percentile the heading names
     console.log(`  ${good.padEnd(12)} ${Math.min(...all)} / ${quantile(all, 0.5)} / ${quantile(all, 0.9)} / ${Math.max(...all)}`);
   }
 }
