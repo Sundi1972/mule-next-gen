@@ -48,7 +48,8 @@ export function Production({ production }: { production: ProductionView }) {
   const serverT = showTime(view.phaseEndsAt, useServerNow(frameMs(production.lengthMs)), production.lengthMs, production);
   const solo = table.boards === 0;
   // A skip is this phone's alone: it moves the phone's show ahead of the server's clock, never the clock itself. With
-  // a TV in the room the phone is back on the TV's clock, whatever it skipped while alone.
+  // a TV in the room the phone is back on the TV's clock, whatever it skipped while alone. The offset is kept, so a
+  // TV that leaves again brings the skip back: RULE-3's "skipped" lasts the phase.
   const [ahead, setAhead] = useState(0);
   const t = solo ? Math.min(showEnd(production), serverT + ahead) : serverT;
   const mode: ShowMode = solo ? 'solo' : 'tv';

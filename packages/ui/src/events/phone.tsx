@@ -2,7 +2,7 @@ import { cx } from '../components/tokens';
 import { eventMissLine, eventSegLabel, segTitle, eventWhoLine, eventYouSummary } from './copy';
 import { signLook, useShow } from './frame';
 import { EventBuzz, EventSignBadge } from './glyphs';
-import { eventSkipTo, eventStageAt, type EventSegment } from './timing';
+import { eventStageAt, type EventSegment } from './timing';
 
 /**
  * The phone's rail through a phase, inside <EventShow>; the screen's shell places it. One small card at a time
@@ -131,17 +131,16 @@ export function EventSkipHint({ playing, className }: { playing: boolean; classN
 }
 
 /**
- * With no TV in the room, the rail beside the phone's own show: what is playing, then what it did to you, the skip
- * hint at its foot when `canSkip` (the gallery's place for it), and the phase's earlier events.
+ * With no TV in the room, the rail beside the phone's own show: what is playing, then what it did to you, and the
+ * phase's earlier events. The skip hint is the screen's to place (EventSkipHint).
  */
-export function EventSoloRail({ me, canSkip = false }: { me: string; canSkip?: boolean }) {
+export function EventSoloRail({ me }: { me: string }) {
   const { s, t } = useShow();
   const { seg, stage } = eventStageAt(s, t);
   const shown = seg ?? (stage === 'outro' ? (s.segments.at(-1) ?? null) : null);
   return (
     <>
       {!shown ? <EventWaiting /> : t < shown.settleAt - 0.2 ? <EventNowPlaying seg={shown} buzz={t - shown.announceAt < 1.2} /> : <EventPhoneCard seg={shown} me={me} at="you" />}
-      {seg && canSkip && <EventSkipHint playing={eventSkipTo(s, t) === seg.settleAt} className="mt-auto self-end" />}
       <EventRailTail me={me} current={shown} />
     </>
   );
