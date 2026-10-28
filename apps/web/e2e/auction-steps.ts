@@ -422,11 +422,10 @@ async function tapSide(truth: Truth, p: Phone, tap: 'buyer' | 'seller', lands: '
   await untilShows({ name: `${p.name}'s phone`, page: p.page }, readPicker, { side: lands, sellOff: truth.stockOf(p, good!) === 0 }, what);
 }
 
-/** What a screen draws of the goods auction, as "<good>:<stage>"; null off the auction. Any sign of a declare screen counts as one. */
+/** What a screen draws of the goods auction, as "<good>:<stage>"; null off the auction. */
 const stageShown = () => {
   const root = document.querySelector('[data-phase=auction]');
   if (!root) return null;
-  const text = root.textContent ?? '';
   let good = '?';
   for (const el of root.querySelectorAll('h1, span')) {
     const m = /^Auction · (.+)$/.exec(el.textContent ?? '') ?? /^(.+) · buy or sell\?$/.exec(el.textContent ?? '') ?? /^(.+) auction$/.exec(el.textContent ?? '');
@@ -435,7 +434,6 @@ const stageShown = () => {
       break;
     }
   }
-  if (/SELLERS START AT THE TOP|Done choosing|Buy, sell or pass\?/.test(text)) return `${good}:declare`;
   if (root.querySelector('[data-testid=status-table]')) return `${good}:status`;
   if (root.querySelector('[data-testid=walk-board]')) return `${good}:walk`;
   return null;
