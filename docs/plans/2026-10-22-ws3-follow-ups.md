@@ -68,6 +68,15 @@
   - trim auction-steps.ts:439's three declare-text alternatives once WS4's FU-17 (#96) is on trunk;
   - #107 (the `PHASES` block and the `literal-ok` markers) is in the lane at fd9a556 and goes to trunk with the WS6-C13 batch.
 
+**The settings guard (#117, trunk da4a56f), 2026-10-28:**
+- The lane merged it; WS3's four marked files left its PENDING list in cabd80f, WS1's named-edit file.
+- walk.ts and hands/lot.ts divide by WS1's `MS_PER_SECOND` (93ce2b4).
+
+**Found in WS6-C13's review (round 1, 2026-10-28), not in that PR:**
+- **Extract the walking state machine's pure parts** into `apps/server/src/dev-walking.ts`, as land-auction.ts and politics-view.ts are: `DevIntent`, `Colonist`, `walkTarget`, `placeName`, the order of due arrivals, `colonistView`. The timer wiring stays in `MuleGame`. mule-game.ts went from 881 to 1036 lines.
+- **`GRANT_TICK_MS` isn't scaled by `phaseScale`.** At phaseScale 0.1 on seed 7, the AI wins no land in month 1. This predates C13.
+- **RULE-7 row 1's 30 s timeout** (WS5's 5b3f3c8): re-time it under load once WS5's #112 (maps 2.7× faster) is on trunk, and drop it if the row stays well inside vitest's 5 s default.
+
 ## PR-A: engine and server (`ws3-fu-a` from `ws3-auctions`)
 
 **Authority:**
