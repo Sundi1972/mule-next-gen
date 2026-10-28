@@ -159,4 +159,20 @@ describe('LlmDecider behind Brain', () => {
       expect(talk).toContain('sell me your smithore');
     }
   });
+
+  it('T-AC-2: the prompt quotes only the latest BRAIN.talkLines lines of table talk', async () => {
+    let user = '';
+    const port: Complete = async (prompt) => {
+      user = prompt.user;
+      return { text: '{"option":"A","line":null}' };
+    };
+    const brain = new Brain(mind, PERSONAS.trader, 'The Gambler', 11, new LlmDecider(port), () => {});
+    const lines = Array.from({ length: BRAIN.talkLines + 2 }, (_, i) => `talk line ${i}`);
+    for (const text of lines) brain.hear({ from: 'Ann', text });
+    brain.ask('develop', list(), obs, 1_500, null, 'summary');
+    await flush();
+
+    const talk = user.slice(user.indexOf('<table_talk>'), user.indexOf('</table_talk>'));
+    for (const [i, text] of lines.entries()) expect(talk.includes(`"${text}"`), text).toBe(i >= 2);
+  });
 });

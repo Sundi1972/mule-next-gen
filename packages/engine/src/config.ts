@@ -891,6 +891,8 @@ export const BRAIN = {
   linesPerMonth: 3,
   /** Longest quoted table-talk line put in a prompt, in characters. */
   maxTalkChars: 200,
+  /** How many of the latest table-talk lines an AI keeps for its next prompt; each one costs prompt tokens. */
+  talkLines: 6,
   /** How long a land decision may wait for the model, in ms; planning lasts up to 45 s. */
   landTimeoutMs: 5_000,
 } as const;
