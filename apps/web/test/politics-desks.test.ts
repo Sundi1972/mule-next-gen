@@ -333,7 +333,7 @@ describe('the politics desks', () => {
     expect(tv).not.toContain('“”');
   });
 
-  it("C12: Now at announce says a Governor candidate promises something about the tax", () => {
+  it("B-AC-6, C12: Now at announce says a Governor candidate promises something about the tax", () => {
     const game = view(politics());
     expect(electionNow({ view: game, me: game.me!, self: PLAYERS[0]! })?.detail).toBe(
       'Election month: Governor and Sheriff. A Governor candidate promises something about the tax. Then the secret ballot, then the result on every screen at once.',
