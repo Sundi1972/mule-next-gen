@@ -180,7 +180,7 @@ Every handoff carries this line verbatim:
 - Create: `apps/server/src/brain/playbooks.ts`; Modify: `apps/server/src/mule-game.ts` (one named touch point, WS3 OKs)
 - Test: `apps/server/test/brain-playbooks.test.ts`
 
-- [ ] **Step 1: Write the failing test `T-AC-A1: RULE-A1 rows 1-4`** — examples from §2: no key → engine; reply 1 s before the land grant → llm; reply 0.2 s after → engine, late, ledgered. Altitude: contract at playbooks.ts on a manual clock. Trap: drive time with the game's clock, never real timers.
+- [ ] **Step 1: Write the failing test `T-AC-A1: RULE-A1 rows 1-4`** — examples from §2: no key → engine; reply 1 s before the land grant → llm; reply 0.2 s after → engine, late, ledgered; a call made 5 s before its phase waits at most 5 s (AM-A11). Altitude: contract at playbooks.ts on a manual clock. Trap: drive time with the game's clock, never real timers.
 - [ ] **Step 2: Write the failing test `T-AC-A3: phases start on time with a fake model that never answers`** — Altitude: promise (the phase start players see). Observed at: phase start times in the view.
 - [ ] **Step 3: Write the failing test `T-AC-A11: RULE-A5 rows 1-3; a Sonnet call is counted at Sonnet's prices`** — examples: fresh seat → Sonnet; share left below Sonnet's worst case but above Haiku's → Haiku, ledgered 'fallback'; below both → no call, engine playbook. Altitude: contract (the model each fake request names; ledger usd). Negative case: a Sonnet call priced at Haiku rates → red.
 - [ ] **Step 4: Run all three** → FAIL

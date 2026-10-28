@@ -131,6 +131,10 @@ tomorrow     MUST ask for the next month's strategy + land-grant edits as upkeep
              the development and auction edits in the slack before each (production show, waiting for others); and at
              once on a WS1 re-plan trigger. A reply that lands before its phase starts takes effect; a later one is
              recorded as late and dropped. The engine playbook takes effect otherwise, by 'engine'.
+             MUST bound each call's wait by its deadline: the client's wait is the smaller of the kind's
+             BRAIN.writeCalls timeoutMs and the wall-clock time left before the phase it serves starts (game ms over
+             the table's phaseScale), so a call never runs on past the moment its reply would be dropped. Untimed
+             planning has no deadline, so the strategy call keeps its full timeoutMs there (WS1, 29 Oct).
 seam         apps/server/src/brain/playbooks.ts (new; not "strategist", which names packages/ai/src/strategist.ts)
              driven from MuleGame's phase changes (a named edit in WS3's mule-game.ts, one touch point) and from
              playGameAsync's hooks (packages/ai/src/play.ts::playGameAsync) in the trial
@@ -228,7 +232,8 @@ first match wins
   3  reply = rejected-all                          engine playbook; rejections logged for the next brief
   4  otherwise                                     engine draft + accepted edits (by 'llm')
 unknown  a reply whose phase has already started counts as late, whatever its content.
-examples → §6: no key → engine (B-AC-3) · reply 1 s before the land grant → llm · reply 0.2 s after → engine, late
+examples → §6: no key → engine (B-AC-3) · reply 1 s before the land grant → llm · reply 0.2 s after → engine, late ·
+         a playbook call made 5 s before development starts waits at most 5 s, not 30
 ```
 
 ```
@@ -391,6 +396,8 @@ Code-only; no existing state to reach. The record starts with WS3's build.
   BRAIN; the capability-first re-run rule → C3, §7. The spike's cause codes → C2.
 - **AM-A6 · 29 Oct · lead:** C4's seam renamed playbooks.ts (no clash with packages/ai's strategist.ts); C3 promotes
   the S-A1 port instead of a second client. Cost note for §0: C8 and C9 add about 2 PRs, so about 5 in all (in §0 since the goal gate).
+- **AM-A11 · 29 Oct · WS1's review:** a call's wait is bounded by its deadline (C4, RULE-A1 example), so a playbook
+  call in a gap of seconds never waits 30 s for a reply that would be dropped and still billed.
 - **AM-A10 · 29 Oct · Heiko via PM:** Sonnet 5.5 is the default for strategy and playbook calls; Haiku 5.5 the
   fallback, then the engine's playbook, by the seat's remaining share → C3, RULE-A5, T-AC-A11, §7. The cap and
   shares are unchanged. Social table talk (jokes, game comments, seeking allies) goes to spec B, not here.
