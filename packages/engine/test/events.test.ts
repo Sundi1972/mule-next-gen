@@ -369,14 +369,20 @@ describe('the event table', () => {
 
 describe('the roller', () => {
   const rows = (): EventRow[] => [...Object.values(EVENTS.colony), ...Object.values(EVENTS.player)];
-  /** Runs `body` with every event row rolling in production at `chance`, capped at 1, then puts the rows back. */
+  const PERSONAL = ['pestSwarm', 'wildfire', 'bumperHarvest'] as const;
+  /** Gives a row exactly these fields, dropping any others it had. */
+  const reset = (row: EventRow, fields: EventRow) => {
+    for (const key of Object.keys(row) as (keyof EventRow)[]) delete (row as Partial<EventRow>)[key];
+    Object.assign(row, fields);
+  };
+  /** Runs `body` with every event row at `chance` in production, capped at 1, with no raises or lowers; then puts the rows back. */
   const withEveryRowAt = (chance: number, body: () => void) => {
     const saved = rows().map((row) => ({ ...row }));
-    for (const row of rows()) Object.assign(row, { phases: { production: chance }, cap: 1 });
+    for (const row of rows()) reset(row, { phases: { production: chance }, cap: 1 });
     try {
       body();
     } finally {
-      rows().forEach((row, i) => Object.assign(row, saved[i]));
+      rows().forEach((row, i) => reset(row, saved[i]!));
     }
   };
   /** colonyForEvents(seed) at the first month events may roll. */
@@ -411,23 +417,51 @@ describe('the roller', () => {
       ]);
       expect(rollPhase(state, 'production')).toEqual(fired);
       expect(rollPhase(ready(3), 'production')).toEqual(fired);
-      // Negative case: another seed fires the same rows, shaped by other dice.
+      // Negative cases: another seed fires the same rows, shaped by other dice; each seat's swarm has its own.
       const reseeded = ready(3);
       reseeded.seed += 1;
       const other = rollPhase(reseeded, 'production');
       expect(other.map((e) => e.key)).toEqual(fired.map((e) => e.key));
       expect(other).not.toEqual(fired);
+      const swarms = fired.filter((e) => e.key === 'pestSwarm');
+      expect(new Set(swarms.map((e) => JSON.stringify(e))).size).toBeGreaterThan(1);
+      // Sickness is no MonthEvent and keeps its own roll: even a certain one fires nothing here.
+      EVENTS.player.sickness.phases = { development: 1 };
+      expect(rollPhase(state, 'development')).toEqual([]);
     });
 
     withEveryRowAt(0.5, () => {
+      // Player rows lean on wealth here, so a seat rolling at another seat's chance, or at the bare base, shows.
+      for (const key of PERSONAL) Object.assign(EVENTS.player[key], { wealth: { richest: 0.3, poorest: -0.3 } });
       const months = fortyMonths(11);
       expect(fortyMonths(11)).toEqual(months);
       // Negative cases: another seed, or another month, rolls other dice.
       expect(keys(fortyMonths(12))).not.toEqual(keys(months));
       expect(new Set(keys(months).map((k) => k.join())).size).toBeGreaterThan(1);
+      // The shape is drawn after the roll: at 0.5 a sweep reusing the roll's draw would only come from the north or east.
+      const sides = new Set(months.flat().flatMap((e) => (e.direction ? [e.direction] : [])));
+      expect([...sides].sort()).toEqual(['e', 'n', 's', 'w']);
+      // Each seat rolls each of its rows, in seat order, on the dice rollPlayerEvent uses for that row and seat.
+      const state = ready(3);
+      state.seed = 11;
+      for (let i = 0; i < 40; i++) {
+        state.month = EVENTS.firstMonth + i;
+        const personal = rollPhase(state, 'production').filter((e) => e.scope === 'personal').map((e) => e.key);
+        const own = state.players.flatMap((p) => PERSONAL.filter((key) => rollPlayerEvent(state, key, 'production', p.id)));
+        expect([state.month, personal]).toEqual([state.month, own]);
+      }
       // Each row on its own dice: no dust storms moves no other row's fate or shape.
       EVENTS.colony.dustStorm.phases = { production: 0 };
       expect(fortyMonths(11)).toEqual(months.map((events) => events.filter((e) => e.key !== 'dustStorm')));
+    });
+
+    withEveryRowAt(0, () => {
+      // During a drought: colony rows roll first, and each seat's later roll reads what fired this phase.
+      Object.assign(EVENTS.player.wildfire, { follows: { drought: { points: 1, thisPhase: true } } });
+      EVENTS.colony.drought.phases = { production: 1 };
+      expect(rollPhase(ready(3), 'production').map((e) => e.key)).toEqual(['drought', 'wildfire', 'wildfire', 'wildfire', 'wildfire']);
+      EVENTS.colony.drought.phases = { production: 0 };
+      expect(rollPhase(ready(3), 'production')).toEqual([]);
     });
   });
 });
