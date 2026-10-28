@@ -30,15 +30,20 @@ import {
 } from '../src/index.js';
 
 const PLAYERS = [2, 3, 4, 5, 6];
-/** Seeds every stage test runs. */
-const SEEDS = 200;
+/**
+ * The seed sweeps run only with MULE_FULL=1. CI runs every stage test on the two regression seeds' maps, the hand-built
+ * fixtures too; every map CI deals is checked against F1-F3, S8 and S10 by B-AC-1 to B-AC-3 in map-quality.test.ts.
+ */
+const FULL = process.env.MULE_FULL === '1';
+/** Seeds every stage test runs (MULE_FULL), on top of the regression seeds. */
+const SEEDS = FULL ? 200 : 0;
 /**
  * The seams and scarcity stages fail rarely and only on 2-player maps, so their tests run
- * more seeds there, plus two seeds that broke them before the fields reached the map edges
+ * more seeds there (MULE_FULL), plus two seeds that broke them before the fields reached the map edges
  * (2p 171: stage 8 left 5 of 8 plots joined; 2p 2469: Smithore scarce, no cut kept S8). Those
- * maps are gone; the seeds stay as extra cover.
+ * maps are gone; the seeds stay as extra cover, in every stage test and in CI.
  */
-const SEAM_SEEDS_2P = 1000;
+const SEAM_SEEDS_2P = FULL ? 1000 : 0;
 const REGRESSION_SEEDS_2P = [171, 2469];
 const FLOOR_GOODS: FloorGood[] = ['food', 'water', 'energy', 'smithore'];
 
@@ -48,7 +53,7 @@ type LandTerrain = Exclude<Terrain, 'store'>;
 interface Run {
   players: number;
   seed: number;
-  /** In the stage tests' window (seed <= SEEDS); the rest only feed the seams and scarcity tests. */
+  /** In the stage tests' window (seed <= SEEDS, or a regression seed); the rest only feed the seams and scarcity tests. */
   wide: boolean;
   layout: Layout;
   odds: Dealt;
@@ -99,7 +104,7 @@ function allRuns(): Run[] {
       const scarced = applyScarcity(seams, scarce);
       const scarcityLifts = copyLifts(scarced.lifts);
       const scarcity = keep(scarced);
-      const wide = seed <= SEEDS;
+      const wide = seed <= SEEDS || (players === 2 && REGRESSION_SEEDS_2P.includes(seed));
       built.push({ players, seed, wide, layout, odds, peaks, scarce, floors, reach, reachLifts, seams, seamLifts, scarcity, scarcityLifts });
     }
   }
@@ -372,6 +377,13 @@ const SCARCITY_FIXTURES = [
     [],
     (out) => (out.lifts.length === 0 ? ['no seam lift; the fixture needs one'] : []),
   ),
+  // Found by a random search: three seam lifts (11, 29, 23), each paid for by an extra lowering that keeps reach only
+  // because the lift's own reach is counted, and that must skip the plot each lift joins (10, 30, 22), in its round and
+  // later ones. Without either, the stage stops short at 4 of 7 joined.
+  scarcityFixture('lift counted and its joined plot kept', { players: 2, width: 31, height: 1, smithore: goodAt(0, 7, 10, 12, 16, 17, 22, 30) }, ['S8'], (out) => [
+    ...(out.lifts.length !== 3 ? [`${out.lifts.length} seam lifts, three are needed`] : []),
+    ...(smithoreCount(out.ground) !== 7 ? [`${smithoreCount(out.ground)} good Smithore plots, the band's top is 7`] : []),
+  ]),
   // The cut lowers plot 0 (rated 2 after), the cheapest plot to lift next to the lone plot 1; it must not be lifted again.
   scarcityFixture(
     'lowered plot not lifted',
@@ -468,7 +480,8 @@ describe('map ground stages', () => {
       return out;
     });
     // S9's margin: what the floor lifts add to each terrain's mean, per player count, stays inside the honesty bound.
-    for (const players of PLAYERS) {
+    // A total over the sweep (MULE_FULL).
+    for (const players of FULL ? PLAYERS : []) {
       const drift = new Map<string, { sum: number; plots: number }>();
       for (const run of stageRuns().filter((r) => r.players === players)) {
         for (const [terrain, plots] of plotsByTerrain(run.layout)) {
@@ -538,11 +551,14 @@ describe('map ground stages', () => {
       return out;
     });
     for (const fixture of SCARCITY_FIXTURES) broken.push(...fixture.check());
-    // RULE-3: the twist comes at its chance, from any of the four goods, by exactly two draws whatever they give.
-    const picked = allRuns().filter((r) => r.scarce !== null);
-    const share = picked.length / allRuns().length;
-    if (share < 0.2 || share > 0.3) broken.push(`scarce share ${share.toFixed(3)} over ${allRuns().length} maps, outside 0.2-0.3`);
-    for (const g of FLOOR_GOODS) if (!picked.some((r) => r.scarce === g)) broken.push(`${g} never picked as the scarce good`);
+    // RULE-3: the twist comes at its chance, from any of the four goods (over the sweep, MULE_FULL), by exactly two
+    // draws whatever they give.
+    if (FULL) {
+      const picked = allRuns().filter((r) => r.scarce !== null);
+      const share = picked.length / allRuns().length;
+      if (share < 0.2 || share > 0.3) broken.push(`scarce share ${share.toFixed(3)} over ${allRuns().length} maps, outside 0.2-0.3`);
+      for (const g of FLOOR_GOODS) if (!picked.some((r) => r.scarce === g)) broken.push(`${g} never picked as the scarce good`);
+    }
     for (let seed = 1; seed <= 20; seed++) {
       const rng = createRng(seed);
       pickScarce(rng);
@@ -602,8 +618,9 @@ describe('map ground stages', () => {
       for (const v of report.violations.filter((v) => v.rule !== 'P1')) broken.push(`${where} ${v.rule}: ${v.detail}`);
       const store = run.layout.terrain.indexOf('store');
       if (Object.values(run.scarcity.ground[store]!).some((r) => r !== 0)) broken.push(`${where}: the store has ground`);
-      // dealGround is the stages in order: on a sample, the same rng stream through it gives the same ground, scarce good and lifts.
-      if (run.seed % 20 !== 0) continue;
+      // dealGround is the stages in order: on the regression seeds and a sample of the sweep, the same rng stream through
+      // it gives the same ground, scarce good and lifts.
+      if (run.seed % 20 !== 0 && !REGRESSION_SEEDS_2P.includes(run.seed)) continue;
       const rng = createRng(run.seed);
       const layout = layoutMap(run.players, rng);
       const dealt = dealGround(layout, run.players, rng);
