@@ -392,7 +392,7 @@ export function PaceList({ rows, rule, columns = 2 }: { rows: PaceRow[]; rule: P
             <li key={r.id} className={cx('flex items-center gap-2', r.done && 'opacity-50')} data-testid={`pace-${r.id}`}>
               <PlayerMark slot={r.slot} size={wide ? 20 : 18} glow={false} />
               <span className={cx('min-w-0 flex-1 truncate font-semibold', wide ? 'font-display text-base' : 'text-sm')}>{r.name}</span>
-              <div className={cx('relative h-2 shrink-0 overflow-hidden rounded-full bg-raised', wide ? 'w-28' : 'w-12')}>
+              <div className={cx('relative h-2 shrink-0 overflow-hidden rounded-full bg-raised', wide ? 'w-20' : 'w-12')}>
                 <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: pct(pace), background: SLOT_COLOR[r.slot] }} />
               </div>
               <span data-num className={cx('w-10 text-right font-mono text-sm', pace < 1 ? (alarm ? 'text-alert' : 'text-warn') : 'text-ink-2')}>
@@ -401,7 +401,7 @@ export function PaceList({ rows, rule, columns = 2 }: { rows: PaceRow[]; rule: P
               <span className="flex w-9 justify-start">
                 <ConditionTag id={r.id} condition={r.condition} rule={rule} inline />
               </span>
-              {r.note && <span className="w-20 shrink-0 text-right font-mono text-xs text-ink-3">{r.note}</span>}
+              {r.note && <span className="w-16 shrink-0 text-right font-mono text-xs text-ink-3">{r.note}</span>}
             </li>
           );
         })}
