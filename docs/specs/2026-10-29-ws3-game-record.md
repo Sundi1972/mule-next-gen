@@ -319,6 +319,8 @@ inputs  what the inner decider's decide() did: returned a Choice, threw, or retu
 
 recorded choice  { optionId, line, by, note? }. `line` is Claude's own table talk, not a player's chat (§0
                  non-goal untouched); it only feeds `say`.
+writer calls     (AM-1) the same three rows apply to a writer call, with `kind` 'strategy' or 'playbook' and
+                 `write` (RecordedWrite) in place of `choice`. Call numbers count per seat across all kinds.
 unknown          a promise still open at game over leaves no answer step. That's correct: the game never read it.
 ```
 
@@ -345,9 +347,9 @@ RULE-6 · Replay, step by step                                     shape: sequen
      intent     game.handle(); throw vs record.refused must agree (message equal) → else ReplayDiverged
      connection game.connectionChanged()
      moved      game.seatMoved()
-     answer     settle that call's promise with the recorded choice or error
+     answer     settle that call's promise with the recorded choice, write reply or error (by seat, call and kind)
      notice, playbook  skipped
-   after each step: flush microtasks, check the tape was consumed, and check the step's decide calls match
+   after each step: flush microtasks, check the tape was consumed, and check the step's brain calls (move and writer) match
    `decides` in seat, call, kind and order
 4  at the end: onGameOver must have fired iff the record has an outcome; scores equal per seat; stateHash equal.
    Result { identical: boolean, scores: { seat, recorded, replayed }[], stateHash: { recorded, replayed } }
@@ -360,10 +362,25 @@ and by WS1/WS2 (`PlaybookEntry`, `NoticeEntry`). It is the freeze candidate for 
 
 ```ts
 import type { Good, Phase } from './types.js';
-import type { Playbook, PlayerId, PlotIndex } from './playbook.js';
+import type { Playbook, PlayerId, PlotIndex, Strategy } from './playbook.js';
 
 /** Claude's answer as play used it: the structural subset of @mule/ai's Choice. */
 export interface RecordedChoice { optionId: string; line: string | null; by: 'top' | 'llm' | 'fallback'; note?: string }
+
+/** A brain call: a move pick (an option letter) or a playbook writer call (spec A). Numbered per seat across kinds. */
+export type CallKind = 'move' | 'strategy' | 'playbook';
+
+/**
+ * A writer call's reply as the writer received it, before validatePlan; never raw model text. `cause` is the writer's
+ * code when the reply was unusable. The replay feeds it back, and validatePlan and the engine draft re-derive the
+ * playbook (AM-1).
+ */
+export interface RecordedWrite {
+  strategy?: Strategy;
+  edits: { path: string; to: unknown; reason: string }[];
+  line: string | null;
+  cause?: string;
+}
 
 /** What every step carries: when, its place in order, and what the game read during it. */
 export interface RecordStep {
@@ -371,7 +388,7 @@ export interface RecordStep {
   seq: number;                      // index of this step among the record's steps
   reads?: number[];                 // ctx.now() values the game read, ms since t0, in order
   hosts?: (PlayerId | null)[];      // ctx.hostId() values, in order
-  decides?: { seat: PlayerId; call: number; choice?: RecordedChoice; error?: string; pending?: true }[];
+  decides?: { seat: PlayerId; call: number; kind: CallKind; choice?: RecordedChoice; write?: RecordedWrite; error?: string; pending?: true }[];
 }
 
 export type RecordEvent<Intent> =
@@ -380,7 +397,7 @@ export type RecordEvent<Intent> =
   | (RecordStep & { type: 'intent'; seat: PlayerId; intent: Intent; refused?: string })
   | (RecordStep & { type: 'connection'; seat: PlayerId; connected: boolean })
   | (RecordStep & { type: 'moved'; seat: PlayerId })
-  | (RecordStep & { type: 'answer'; seat: PlayerId; call: number; choice?: RecordedChoice; error?: string })
+  | (RecordStep & { type: 'answer'; seat: PlayerId; call: number; kind: CallKind; choice?: RecordedChoice; write?: RecordedWrite; error?: string })
   | NoticeEntry
   | PlaybookEntry;
 
@@ -411,7 +428,7 @@ export interface GameRecord<Intent> {
 ```json
 { "v": 1, "seed": 93, "configFingerprint": "9f2c…", "options": { "politics": true }, "t0": 1761720000000,
   "seats": [{ "id": "p1", "name": "Lena", "isAi": false, "color": 0, "smart": false },
-            { "id": "p2", "name": "The Baron", "isAi": true, "color": 1, "smart": true }],
+            { "id": "p2", "name": "The Big Spender", "isAi": true, "color": 1, "smart": true }],
   "events": [
     { "type": "start", "at": 0, "seq": 0, "reads": [0, 0] },
     { "type": "intent", "at": 4120, "seq": 1, "seat": "p1", "intent": { "type": "ready" }, "reads": [4120] },
@@ -462,7 +479,7 @@ already git-ignored.
 | **T-AC-8** | RULE-2 row 3: an unwritable recordDir at game over → one console.error, and the room still shows game over and stays reachable | room view, log spy | C4 |
 | **T-AC-9** | A refused intent is recorded with its message, and the replay refuses it with the same message | record + replay | C2, C3 |
 | **T-AC-10** | Claims, trades and lot sales appear as `notice` events with month and phase. A replay of the record with every notice removed is still identical | record + `replay()` | C6 |
-| **T-AC-11** | `recordPlaybook` entries come out in call order with their step's at and seq, and the replay ignores them | record | C7 |
+| **T-AC-11** | `recordPlaybook` entries come out in call order with their step's at and seq. The replay skips them as inputs, but each replayed playbook must equal its recorded entry, or ReplayDiverged (AM-1) | record + `replay()` | C7 |
 
 All T-ACs are server tests (`apps/server/test/record.test.ts`). Only T-AC-1 belongs in Tier 1 CI (lean CI); the rest
 stay local.
@@ -482,7 +499,21 @@ stay local.
 
 ## §8 · Amendments `[review-only]`
 
-(none yet)
+- **AM-1 (2026-10-29, WS2's review of §3, adopted by WS3):** writer calls are recorded inputs.
+  - **The finding:** spec A's strategy and playbook writer calls are model calls through the brain, like move calls,
+    but their reply is `{ strategy?, edits, line }`, not an option letter. Without recording them, a keyless replay of
+    a game with a Claude seat plays the engine's draft playbook and diverges. That breaks G-1 and spec A's B-AC-A2.
+  - **The change:**
+    - §3 gains `CallKind` and `RecordedWrite`; `decides` and `answer` carry `kind`, and `write` where it applies.
+    - RULE-4 applies to writer calls exactly as to move calls. The recorder wraps whatever writer method WS2 adds to
+      `BrainService`, from outside (HC-5). Until that method exists, only `kind: 'move'` occurs.
+    - A reply that arrives after its phase started is still recorded at its own `at`, so the replay drops it the same
+      way (spec A RULE-A1 row 2).
+    - RULE-6 keeps skipping `playbook` entries as inputs, because validatePlan and the draft are deterministic.
+      T-AC-11 adds a guard: each replayed playbook must equal its recorded entry.
+  - **Rejected alternative:** treat `by: 'llm'` playbook entries as replay inputs. That breaks "inputs only" and skips
+    re-validation on replay.
+  - **Also:** the §3 example seat is renamed "The Big Spender" (AM-18).
 
 ## §9 · Ownership Boundaries `[handoff]`
 
