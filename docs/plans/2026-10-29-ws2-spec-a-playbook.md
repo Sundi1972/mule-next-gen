@@ -234,12 +234,12 @@ Every handoff carries this line verbatim:
 
 **Files:** Test: `packages/ai/test/llm-manual.test.ts`
 
-- [ ] **Step 1: Write the failing test `T-AC-A7: the manual is rendered from the descriptors and config only`** — three cases: changing `GAME.plotScore` changes the text; the default config's manual is byte-identical run to run; every AiAction appears. Altitude: unit (pure renderer). Trap: read Worth's parts by calling `scoreParts` on a fixture state, never by restating the rule in the test.
+- [ ] **Step 1: Write the failing test `T-AC-A7: the manual is rendered from the descriptors and config only`** — four cases: changing `GAME.plotScore` changes the text; the default config's manual is byte-identical run to run; every AiAction appears; an advice line naming a move or playbook field that does not exist fails (AM-A9). Altitude: unit (pure renderer). Trap: read Worth's parts by calling `scoreParts` on a fixture state, never by restating the rule in the test.
 - [ ] **Step 2: Run** — `pnpm --filter @mule/ai exec vitest run test/llm-manual.test.ts` → FAIL
 
 ### Task 2.2: render the manual — C8
 
-- [ ] **Step 1: Implement C8 per spec §1 C8** — path `packages/ai/src/llm/manual.ts`, mechanism sprout; phases and rules, how the game is won as `scoreParts` computes it, every move from its descriptor; a corners=false level is told it never aims for a monopoly (HC-8).
+- [ ] **Step 1: Implement C8 per spec §1 C8** — path `packages/ai/src/llm/manual.ts`, mechanism sprout; phases and rules, how the game is won as `scoreParts` computes it, every move from its `MOVES` descriptor (WS1's shape, field by field in spec §3; stub on it in the test until WS1's lands), and the manual's own advice table for when a move is smart, each line tied to a move and a playbook field; a corners=false level is told it never aims for a monopoly (HC-8).
 - [ ] **Step 2: Run T-AC-A7** → PASS
 - [ ] **Step 3: Commit** — `feat(ai): the manual, generated from the moves and config (C8, T-AC-A7)`
 

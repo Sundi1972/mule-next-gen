@@ -172,8 +172,12 @@ today        PRIMER in llm/prompt.ts is hand-written: phases in prose, three dec
 tomorrow     MUST render, from WS1's move descriptors plus config only: each phase and its rules; how the game is won
              (Worth exactly as engine/src/game.ts::scoreParts computes it, its lines and the Collapse cut read from
              the code, never restated here: when WS4's #143 moves office under the cut, the manual follows; the
-             colony score joins when the code has it, G-5); and every move: what it does, when it is legal, what it
-             costs, when it is smart. Byte-stable for a given config, so it sits in the cached system block.
+             colony score joins when the code has it, G-5); and every move: what it does, when it is legal and what it
+             costs, from WS1's descriptors (`MOVES` in actions.ts), and when it is smart, from the manual's own advice
+             table (WS2): each advice line names a move in MOVES and the playbook field that acts on it (e.g. short of
+             cash in planning → `list`, PlanningPlay.list), with numbers read from config at render time, so a renamed
+             move or field fails a test instead of going stale. Byte-stable for a given config, so it sits in the
+             cached system block.
              The level's bounds are stated in the seat's part: a seat whose level has `corners` false is told it
              never aims for a monopoly (HC-8), so it never proposes monopolyTarget or 'monopolist'.
 seam         packages/ai/src/llm/manual.ts (new) — pure; prompt.ts and the writer's system block both read it
@@ -282,9 +286,13 @@ examples → §6: round cap 3 → at most 4 round trips · share runs out in rou
 - **Game record entry** (ADDED, WS3): `PlaybookEntry { type: 'playbook', at, seq, seat, month, phase, playbook }` (v1;
   `at` game ms, `seq` the order among timer firings); the record holds every applied action with its game-time stamp,
   one list per game, saved at game end (PM, 28 Oct).
-- **Move descriptors** (ADDED, WS1, consumed by C8 and C9): each AiAction in `packages/ai/src/actions.ts` gains
-  {what it does, when it is legal, what it costs, when it is smart}, the rule text written by its rule owner. WS2
-  stubs on a descriptor type until WS1's lands; the shape is WS1's to propose.
+- **Move descriptors** (ADDED, WS1, consumed by C8 and C9): `MOVES` in `packages/ai/src/actions.ts`, one
+  `MoveDescriptor` per AiAction: `type`, the protocol `command` it is, `phases`, `does()`, `legalWhen()` (one line per
+  rule check, each the refusal the server sends), `cost(state, me)` or null, `args`. Proposed by WS1 29 Oct; the rule
+  text is written by each rule owner as a named edit. "When it is smart" is deliberately not in it (the strategist's
+  valuation and the playbook own that); the manual's advice table carries it (C8). Legality text describes the
+  rules; the engine's RuleErrors still decide, so a tool shows a refusal and never pre-judges it. WS2 stubs on this
+  shape until it lands.
 - **Tool definitions** (ADDED, WS2, C9): MCP-shaped `{ name, description, input_schema }` for legalMoves, worth,
   standings, whatIf, in `packages/ai/src/llm/tools.ts`; results are JSON from the seat's observation only. A later MCP
   server wraps these definitions unchanged.
@@ -316,7 +324,7 @@ Code-only; no existing state to reach. The record starts with WS3's build.
 | T-AC-A5 (HC-8) | RULE-A3 rows 1-3: a Rookie seat's edits that would corner are rejected or clamped; the same edits on a Trader seat pass. | validated playbook, `rejected` | Trader → accepted | C2 |
 | T-AC-A4 | Ledger and trial rows for strategy and playbook calls; cost per game within gameBudgetUsd. | ledger file, trial report | — | C6 |
 | T-AC-A6 | Strategy and playbook calls send adaptive thinking with BRAIN's model and effort for their kind; move calls keep thinking off and Haiku. | the SDK request a fake records | a move call with thinking → red | C3 |
-| T-AC-A7 | The manual is rendered from the descriptors and config only: changing one config number (GAME.plotScore) changes the manual's text; the default config's manual is byte-identical run to run; every AiAction appears in it. | manual text | a move missing from the descriptors → WS1's coverage test red | C8 |
+| T-AC-A7 | The manual is rendered from the descriptors and config only: changing one config number (GAME.plotScore) changes the manual's text; the default config's manual is byte-identical run to run; every AiAction appears in it; an advice line naming a move or playbook field that does not exist fails. | manual text | a move missing from the descriptors → WS1's coverage test red | C8 |
 | T-AC-A8 | RULE-A4 rows 1-5: at most BRAIN.toolRounds + 1 round trips; a share that runs out mid-loop stops it; a throwing handler answers is_error and the loop goes on; every round trip has its ledger line. | the fake SDK's requests, ledger lines | a handler's error text in a request → red | C9 C6 |
 | T-AC-A10 (G-A "check it against what happened") | The brief for the next phase carries this seat's last PhaseOutcome items (path, expected, actual) and the rivals' public trades and claims from it; a seat with no outcome yet gets none. | brief text | another seat's outcome items in this seat's brief → red | C1 |
 | T-AC-A9 (HC-3) | No tool result carries another seat's goods or unanalysed ground; whatIf leaves the live game state unchanged. | tool results; state before and after | a rival's stock in worth's answer → red | C9 |
@@ -366,6 +374,11 @@ Code-only; no existing state to reach. The record starts with WS3's build.
   BRAIN; the capability-first re-run rule → C3, §7. The spike's cause codes → C2.
 - **AM-A6 · 29 Oct · lead:** C4's seam renamed playbooks.ts (no clash with packages/ai's strategist.ts); C3 promotes
   the S-A1 port instead of a second client. Cost note for §0: C8 and C9 add about 2 PRs, so about 5 in all (in §0 since the goal gate).
+- **AM-A9 · 29 Oct · WS1's descriptor shape:** `MoveDescriptor` / `MOVES` as WS1 proposed (§3); "when it is smart"
+  moves from the descriptors to the manual's own advice table, each line tied to a move in MOVES and a playbook field
+  so it cannot go stale silently (C8). What the manual tells Claude is unchanged from option B. T-AC-A7 gains the
+  case: an advice line naming a move or field that does not exist fails. WS1's `playbook.ts` lands early as a
+  types-only PR; WS2 keeps a copy marked for deletion until it resolves.
 - **AM-A8 · 29 Oct · Heiko via PM:** DESIGN GATE PASSED, "Yes to the design" on the one-screen summary. Build may
   start: unit work on the frozen v1 types now; PR-1 when WS1 step 2 and WS3's record append + grant execution land.
   PR-5's paid runs still need the PM's clearance with the cost stated.
@@ -376,7 +389,8 @@ Code-only; no existing state to reach. The record starts with WS3's build.
 - Sole owner of Claude's brief, writer and their prompts: `packages/ai/src/llm/` (WS2). The playbook schema and its
   validator: WS1. The game record: WS3. Enforcement: the settings guard and SEAMS named edits; packages/ai purity
   test (no I/O imports) as today.
-- The move list: WS1's `packages/ai/src/actions.ts`, which grows descriptors (what, when legal, cost, when smart).
+- The move list: WS1's `packages/ai/src/actions.ts`, which grows descriptors (`MOVES`: what, when legal, cost; not
+  when smart, which is the manual's advice table, WS2).
   Each move's rule text is written by its rule owner as a named edit: WS3 land grant, lots and auction; WS7 politics.
   WS1 owns the coverage test: every MuleIntent in packages/protocol has an AI move or sits on a short reviewed
   exclusion list. WS2 owns the manual's rendering (C8) and the tools (C9), and reads the descriptors only.
