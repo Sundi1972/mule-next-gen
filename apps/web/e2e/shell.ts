@@ -20,7 +20,8 @@ try {
   await phone.getByPlaceholder('Heiko').fill('Heiko');
   await phone.getByRole('button', { name: 'Start a new game' }).click();
   await phone.getByText("You're at the table").waitFor();
-  await phone.getByRole('button', { name: 'Add AI player' }).click();
+  // A full table: the rail's seat row holds five others, the longest it gets, so the small phone's checks see its worst.
+  for (let ai = 0; ai < 5; ai++) await phone.getByRole('button', { name: 'Add AI player' }).click();
   await phone.getByRole('button', { name: 'Start game' }).click();
   await phone.locator('[data-phase=planning]').waitFor({ timeout: 5_000 });
 

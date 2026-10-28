@@ -112,20 +112,21 @@ export async function shellFillsTheStage(phone: Page, timeout = 5_000): Promise<
   const vw = PHONE.viewport.width;
   const narrow = await read(phone);
   checkFrame(narrow, `a ${vw} px window`, vw, narrowRail(vw), 'false');
+  await noPageScroll(phone, PHONE.viewport);
   log.push(`${vw}: stage ${narrow.stage.toFixed(1)} + rail ${narrow.guide.toFixed(1)}`);
   await emote(phone);
   log.push(`emotes ${await emotesClear(phone, vw)}`);
 
   // The small phone: the rail at its floor, the stage the rest, the emotes clear of the rail, nothing past the window.
+  const sw = PHONE_SMALL.viewport.width;
   try {
     await phone.setViewportSize(PHONE_SMALL.viewport);
     const small = await read(phone);
-    checkFrame(small, `a ${PHONE_SMALL.viewport.width} px window`, PHONE_SMALL.viewport.width, narrowRail(PHONE_SMALL.viewport.width), 'false');
-    const scroll = await phone.evaluate(() => ({ x: document.documentElement.scrollWidth, y: document.documentElement.scrollHeight }));
-    check(scroll.x <= PHONE_SMALL.viewport.width && scroll.y <= PHONE_SMALL.viewport.height, `B-AC-12: at ${PHONE_SMALL.viewport.width}×${PHONE_SMALL.viewport.height} the page does not scroll, got ${scroll.x}×${scroll.y}`);
-    log.push(`${PHONE_SMALL.viewport.width}: stage ${small.stage.toFixed(1)} + rail ${small.guide.toFixed(1)}`);
+    checkFrame(small, `a ${sw} px window`, sw, narrowRail(sw), 'false');
+    await noPageScroll(phone, PHONE_SMALL.viewport);
+    log.push(`${sw}: stage ${small.stage.toFixed(1)} + rail ${small.guide.toFixed(1)}`);
     await emote(phone);
-    log.push(`emotes ${await emotesClear(phone, PHONE_SMALL.viewport.width)}`);
+    log.push(`emotes ${await emotesClear(phone, sw)}`);
   } finally {
     await phone.setViewportSize(PHONE.viewport);
   }
@@ -165,7 +166,8 @@ export async function shellFillsTheStage(phone: Page, timeout = 5_000): Promise<
   const wideMounts = paints.filter((p) => p.at === 'mount' && p.box >= WIDE_PX).length;
   const resizes = paints.filter((p) => p.at === 'resize').length;
   check(wideMounts >= 1, `B-AC-12 (I-1): a shell mounted at ${LAPTOP.width} px was recorded, got ${wideMounts}`);
-  // To 1440, to 1099, to 1100, back to 1440, to 844, to 667, back to 844, then to 844 again after the reload.
+  // At least the seven size changes (to 1440, 1099, 1100, back to 1440, to 844, to 667, back to 844); each observer's
+  // first read and the move to 1440 before the reload come on top. The frames themselves are checked one by one above.
   check(resizes >= 7, `B-AC-12 (I-1): every resize of the shell was recorded before paint, got ${resizes}`);
   log.push(`painted frames checked ${paints.length} (${wideMounts} wide mounts, ${resizes} resizes)`);
 
@@ -206,6 +208,12 @@ async function emotesClear(phone: Page, vw: number, label = String(vw)): Promise
   const gap = f.guideLeft - f.emotesRight;
   check(gap > 0, `B-AC-12 (I-4): at ${label} the emotes end ${gap.toFixed(1)} px left of the rail (inside it when negative)`);
   return `${label}: right edge ${f.emotesRight.toFixed(1)}, rail left ${f.guideLeft.toFixed(1)}, gap ${gap.toFixed(1)} px`;
+}
+
+/** The page never scrolls, either way: the shell fits the window whatever the rail holds. */
+async function noPageScroll(phone: Page, size: { width: number; height: number }): Promise<void> {
+  const scroll = await phone.evaluate(() => ({ x: document.documentElement.scrollWidth, y: document.documentElement.scrollHeight }));
+  check(scroll.x <= size.width && scroll.y <= size.height, `B-AC-12: at ${size.width}×${size.height} the page does not scroll, got ${scroll.x}×${scroll.y}`);
 }
 
 function checkFrame(f: Frame, at: string, box: number, rail: number, wide: 'true' | 'false'): void {
