@@ -1,4 +1,4 @@
-import { airBand, needsOf, POLLUTION, POLITICS, type GameState } from '@mule/engine';
+import { airBand, POLLUTION, POLITICS } from '@mule/engine';
 import type { MuleView, PlayerView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
 import { fmt, standings } from './derive';
@@ -99,19 +99,13 @@ export interface Hungry {
 }
 
 /**
- * A household's monthly Food need: your own from the view, anyone else's from the engine's needsOf over the plots
- * every view carries (it reads only their owners and outfits).
+ * Who went hungry this month, from each player's condition, which the view keeps through the month end (Q6): the
+ * share of the month's Food they held, of the need the condition carries.
  */
-function foodNeed(view: MuleView, id: string): number {
-  if (view.me?.id === id) return view.me.needs.food;
-  return needsOf({ tiles: view.tiles } as unknown as GameState, id).food;
-}
-
-/** Who went hungry this month, from each player's condition, which the view keeps through the month end (Q6). */
 export function hungerOf(view: MuleView): Hungry[] {
   return view.players.flatMap((p) => {
     if (!p.condition || p.condition.foodShare >= 1) return [];
-    const need = foodNeed(view, p.id);
+    const need = p.condition.foodNeed;
     return [{ id: p.id, ate: Math.round(p.condition.foodShare * need), need }];
   });
 }
