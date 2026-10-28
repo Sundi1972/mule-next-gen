@@ -2,7 +2,7 @@ import { DEV_WALK, DEVELOPMENT } from '@mule/engine';
 import type { DealView, MuleView, TableView } from '@mule/protocol';
 import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PaceList, PlayerMark, SeatSpeciesProvider, SharedClock, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard } from '@mule/ui';
 import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
-import { boardWalkers, dealLine, LineReadout, newestFirst, SIDE_WORD, skippedLine, StatusTable, StoreBox, type DealRow } from '../components/AuctionParts';
+import { boardWalkers, dealLine, newestFirst, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, StoreBox, TvReadout, type DealRow } from '../components/AuctionParts';
 import { useEffect, useState, type ReactNode } from 'react';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
@@ -395,6 +395,9 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
                 <StatusTable view={game} auction={auction} tv />
               </div>
               <StoreBox auction={auction} tv />
+              {shipWants(game, auction).map((w) => (
+                <ShipWants key={w.good} want={w} tv />
+              ))}
             </>
           ) : (
             <WalkBoard
@@ -406,6 +409,7 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
               storeBuys={auction.storeBuys}
               storeSells={auction.storeSells}
               shipPays={auction.shipPays}
+              {...(auction.shipPays !== null ? { shipCaption: `The ship buys ${GOOD_NAME[auction.good]} at ${auction.shipPays}` } : {})}
               storeStock={stock}
               marks={{ ask: true, bid: true }}
               wrapCreature={tvSpeakerAt}
@@ -440,7 +444,7 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
             </ul>
           ) : (
             <div className="shrink-0 rounded-panel border border-holo-line bg-panel p-3">
-              <LineReadout walkers={walkers} trading={auction.deals.length > 0} tv />
+              <TvReadout view={game} auction={auction} />
             </div>
           )}
           {!status && (
@@ -460,7 +464,11 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
             </dl>
           )}
           {auction.shipPays !== null && (
-            <p className="rounded-control border border-warn/60 px-3 py-2 font-mono text-lg text-warn">Export ship pays {auction.shipPays}</p>
+            <p className="rounded-control border border-warn/60 px-3 py-2 text-lg leading-snug text-warn" data-testid="tv-ship">
+              <strong className="font-semibold">
+                The ship buys {GOOD_NAME[auction.good]} at {auction.shipPays}
+              </strong>
+            </p>
           )}
           {/* Each row is one line. A row that doesn't fit below the others wraps into a second column, which the clip hides. */}
           <ul className="flex min-h-0 flex-1 flex-col flex-wrap gap-2 overflow-hidden">
