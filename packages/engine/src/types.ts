@@ -287,8 +287,8 @@ export type Office = 'governor' | 'sheriff';
 /** Why an office went to its winner, as the ceremony shows it. */
 export type ElectionHow = 'votes' | 'unopposed' | 'appointed' | 'baron' | 'land' | 'lot';
 
-/** Whether a player may run for an office now, or why not. Running for the other office is no refusal: it moves the candidacy. */
-export type CanRun = true | 'closed' | 'termLimit';
+/** Whether a player may run for an office now, or why not. Running for the other office is no refusal: it moves the candidacy. 'notElected': the office is not in POLITICS.offices. */
+export type CanRun = true | 'closed' | 'termLimit' | 'notElected';
 
 /** A Governor candidate's tax promise, in whole percent for a cap. See WS7 spec RULE-10. */
 export type TaxPromise = { kind: 'cap'; percent: number } | { kind: 'lower' } | { kind: 'hold' };
