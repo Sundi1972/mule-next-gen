@@ -886,9 +886,22 @@ export const EVENTS = {
   /** How many times its usual output the bumper plot makes. */
   bumperHarvest: { factor: 2 },
   /**
-   * Player events (Heiko's event model): each rolls per player at the start of each phase it lists, with that
-   * phase's chance plus its modifiers, never above cap. Several can fire in a month.
+   * The event table (Heiko's event model; each row an EventRow, events.ts). A row rolls at the start of each phase
+   * it lists, with that phase's chance plus its raises and minus its lowers, never below 0 or above its cap. The
+   * influences, each optional, in shares like the chances: air by band; pollution, perPoint for each air point the
+   * player's plots caused last month, at most max; wealth, signed, for the richest and the poorest player (cash plus
+   * land at GAME.plotScore a plot); follows, points when an event fired this phase or last month (once, if both).
+   * Colony rows roll once for the colony, first; player rows once a player. Several can fire in a month.
    */
+  colony: {
+    dustStorm: { phases: { production: 0.05 }, cap: 0.9 },
+    drought: { phases: { production: 0.05 }, air: { toxic: 0.02, collapse: 0.04 }, cap: 0.9 },
+    acidRain: { phases: { production: 0.01 }, air: { smoggy: 0.04, toxic: 0.08, collapse: 0.12 }, cap: 0.9 },
+    solarFlare: { phases: { production: 0.05 }, cap: 0.9 },
+    cometPass: { phases: { production: 0.05 }, cap: 0.9 },
+    flood: { phases: { production: 0.05 }, follows: { drought: { points: 0.1, lastMonth: true } }, cap: 0.9 },
+    volcanicAsh: { phases: { production: 0.04 }, cap: 0.9 },
+  },
   player: {
     /**
      * Sickness, at development start: the colonist walks at DEV_WALK.sickPace this turn unless it holds a Medicine,
@@ -901,7 +914,20 @@ export const EVENTS = {
       pollution: { perPoint: 0.03, max: 0.4 },
       cap: 0.9,
     },
+    pestSwarm: { phases: { production: 0.015 }, wealth: { richest: 0.01, poorest: -0.01 }, cap: 0.9 },
+    wildfire: {
+      phases: { production: 0.015 },
+      wealth: { richest: 0.01 },
+      follows: { drought: { points: 0.03, thisPhase: true, lastMonth: true } },
+      cap: 0.9,
+    },
+    bumperHarvest: { phases: { production: 0.015 }, wealth: { poorest: 0.015, richest: -0.01 }, cap: 0.9 },
   },
+  /** Pairs that never fire together in one phase: if both roll, the seeded dice keep one. */
+  excludes: [
+    ['drought', 'flood'],
+    ['dustStorm', 'solarFlare'],
+  ] satisfies [string, string][],
 };
 
 export const STRATEGIST = {

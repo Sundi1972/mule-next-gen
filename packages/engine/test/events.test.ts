@@ -5,7 +5,9 @@ import {
   cloneForSim,
   createGame,
   createRng,
+  eventChance,
   EVENTS,
+  GAME,
   GOODS,
   neighbours,
   planEvent,
@@ -13,10 +15,12 @@ import {
   playerEventReason,
   rollPlayerEvent,
   type EventKey,
+  type EventRow,
   type GameState,
   type MonthEvent,
   type MonthReport,
   type Outfit,
+  type Phase,
   type Tile,
 } from '../src/index.js';
 
@@ -291,6 +295,55 @@ describe('player events', () => {
     withSickness({ phases: { development: 0 }, pollution: { perPoint: 1, max: 1 }, cap: 1 }, () =>
       start((state) => expect(state.players.map((p) => p.sick)).toEqual([false, true, false, false]), [0, 5, 0, 0]),
     );
+  });
+});
+
+describe('the event table', () => {
+  /** p1's wealth: four plots and no cash. */
+  const land = 4 * GAME.plotScore;
+  interface World {
+    air?: number;
+    /** Air points p0's plots caused last month. */
+    points?: number;
+    lastMonth?: EventKey[];
+    p0Money?: number;
+    /** Whose roll it is; none for a colony row. */
+    player?: string;
+    fired?: EventKey[];
+  }
+  /** Four players at month 3: p0 has the most cash, but p1 is the richest by its land; p3 is the poorest. */
+  const chanceIn = (row: EventRow, phase: Phase, { air = 0, points = 0, lastMonth = [], p0Money = land - 100, player, fired }: World) => {
+    const state = createGame({ seed: 5, players: [0, 1, 2, 3].map((i) => ({ id: `p${i}`, name: `P${i}`, isAi: false })) });
+    state.month = 3;
+    state.air = air;
+    [p0Money, 0, 100, 50].forEach((money, i) => (state.players[i]!.money = money));
+    for (const t of state.tiles.filter((t) => t.terrain !== 'store').slice(0, 4)) t.owner = 'p1';
+    const report: Partial<MonthReport> = { month: 2, pollutionBy: { p0: points }, events: lastMonth.map((key) => ({ key }) as MonthEvent) };
+    state.history.push(report as MonthReport);
+    return eventChance(state, row, phase, { player, firedThisPhase: fired });
+  };
+  const below0: EventRow = { phases: { production: 0.01 }, wealth: { richest: -0.05 }, cap: 0.9 };
+  const { colony: C, player: P } = EVENTS;
+  const cases: [string, EventRow, Phase, World, number][] = [
+    ['dust storm in Collapse air: 5', C.dustStorm, 'production', { air: 80 }, 0.05],
+    ['drought in Toxic air: 5 + 2', C.drought, 'production', { air: 60 }, 0.07],
+    ['acid rain in Collapse air: 1 + 12', C.acidRain, 'production', { air: 80 }, 0.13],
+    ['flood the month after a drought: 5 + 10', C.flood, 'production', { lastMonth: ['drought'] }, 0.15],
+    ['pest swarm, the richest by land: 1.5 + 1', P.pestSwarm, 'production', { player: 'p1' }, 0.025],
+    ['pest swarm, the poorest: 1.5 - 1', P.pestSwarm, 'production', { player: 'p3' }, 0.005],
+    ['pest swarm, a wealth tie goes to the first seat: 1.5', P.pestSwarm, 'production', { p0Money: land, player: 'p1' }, 0.015],
+    ['bumper harvest, the poorest: 1.5 + 1.5', P.bumperHarvest, 'production', { player: 'p3' }, 0.03],
+    ['bumper harvest, the richest: 1.5 - 1', P.bumperHarvest, 'production', { player: 'p1' }, 0.005],
+    ['wildfire, the richest during a drought: 1.5 + 1 + 3', P.wildfire, 'production', { player: 'p1', fired: ['drought'] }, 0.055],
+    ['wildfire during and after a drought: 1.5 + 3 once', P.wildfire, 'production', { lastMonth: ['drought'], player: 'p2', fired: ['drought'] }, 0.045],
+    ['sickness, clean air, 5 points of its own: 3 + 15', P.sickness, 'development', { points: 5, player: 'p0' }, 0.18],
+    ['sickness, Collapse, 20 points: 3 + 50 + 40 = 93, capped', P.sickness, 'development', { air: 80, points: 20, player: 'p0' }, 0.9],
+    ['a row summing below 0: 1 - 5', below0, 'production', { player: 'p1' }, 0],
+    ["a phase the row doesn't list, whatever its raises", C.drought, 'development', { air: 80 }, 0],
+  ];
+
+  it.each(cases)("EM-T-AC-1: an event's chance is its phase's base plus its raises minus its lowers, between 0 and its cap: %s", (_, row, phase, world, expected) => {
+    expect(chanceIn(row, phase, world)).toBeCloseTo(expected, 9);
   });
 });
 

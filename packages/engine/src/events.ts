@@ -1,6 +1,6 @@
 import { EVENTS, GAME } from './config.js';
 import { neighbours } from './map.js';
-import { airBand } from './pollution.js';
+import { airBand, type AirBand } from './pollution.js';
 import { createRng } from './rng.js';
 import { RAW_GOODS, type EventKey, type EventKind, type GameState, type Good, type MonthEvent, type Phase, type Tile } from './types.js';
 
@@ -156,6 +156,37 @@ function spread(state: GameState, start: Tile, joins: (t: Tile) => boolean, max:
   return out;
 }
 
+/**
+ * A row of EVENTS.colony or EVENTS.player: its chance in each phase it rolls in, what raises or lowers it, and its
+ * cap, all in shares. Every influence is optional and reads 0 when absent.
+ */
+export interface EventRow {
+  phases: Partial<Record<Phase, number>>;
+  /** By the colony air's band. */
+  air?: Partial<Record<AirBand['name'], number>>;
+  /** perPoint for each air point the player's plots caused last month, at most max. */
+  pollution?: { perPoint: number; max: number };
+  /** Signed, for the richest and the poorest player by cash plus land at GAME.plotScore a plot; a tie goes to the first seat. */
+  wealth?: { richest?: number; poorest?: number };
+  /** By event key: points when that event fired in a window the row names; once, if it fired in both. */
+  follows?: Record<string, { points: number; thisPhase?: boolean; lastMonth?: boolean }>;
+  cap: number;
+}
+
+/** What a chance reads beside the state: whose roll it is (none for a colony row), and the keys already fired this phase. */
+export interface ChanceInput {
+  player?: string;
+  firedThisPhase?: readonly string[];
+}
+
+/**
+ * A row's chance in this phase (RULE-1): the phase's base plus the row's raises and minus its lowers, never below 0
+ * or above its cap; 0 in a phase the row doesn't list.
+ */
+export function eventChance(state: GameState, row: EventRow, phase: Phase, input: ChanceInput = {}): number {
+  throw new Error('NotImplemented: eventChance');
+}
+
 /** A player event's key: a row of EVENTS.player. */
 export type PlayerEventKey = keyof typeof EVENTS.player;
 
@@ -165,8 +196,8 @@ export type PlayerEventKey = keyof typeof EVENTS.player;
  * in a phase the event doesn't list.
  */
 export function playerEventChance(state: GameState, key: PlayerEventKey, phase: Phase, id: string): number {
-  const row = EVENTS.player[key];
-  const inPhase = (row.phases as Partial<Record<Phase, number>>)[phase];
+  const row: EventRow = EVENTS.player[key];
+  const inPhase = row.phases[phase];
   if (inPhase === undefined) return 0;
   const { air, pollution } = raises(state, key, id);
   return Math.min(row.cap, inPhase + air + pollution);
@@ -184,9 +215,12 @@ export function playerEventReason(state: GameState, key: PlayerEventKey, phase: 
 
 /** What raises a player event's chance for this player: the air band's bonus, and its own pollution last month. */
 function raises(state: GameState, key: PlayerEventKey, id: string): { air: number; pollution: number } {
-  const row = EVENTS.player[key];
+  const row: EventRow = EVENTS.player[key];
   const caused = state.history.at(-1)?.pollutionBy?.[id] ?? 0;
-  return { air: row.air[airBand(state.air).name], pollution: Math.min(row.pollution.max, row.pollution.perPoint * caused) };
+  return {
+    air: row.air?.[airBand(state.air).name] ?? 0,
+    pollution: row.pollution ? Math.min(row.pollution.max, row.pollution.perPoint * caused) : 0,
+  };
 }
 
 /**
