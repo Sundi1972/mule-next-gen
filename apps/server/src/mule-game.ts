@@ -131,6 +131,11 @@ const MAX_BADGES = 2;
  * Built field by field from the report, so the stock players held never
  * reaches a screen through it.
  */
+/** Names in reading order: "A", "A and B", "A, B and C". */
+function andList(names: string[]): string {
+  return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
+
 function productionView(state: GameState, lengthMs: number): ProductionView | null {
   const report = state.history.at(-1);
   if (!report) return null;
@@ -326,10 +331,13 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       case 'setTax':
         setSalesTax(state, seatId, intent.percent);
         return;
-      case 'continue':
+      case 'continue': {
         if (seatId !== this.ctx.hostId()) throw new RuleError('Only the host can continue');
+        const left = this.seats.filter((s) => !s.isAi && s.id !== seatId && !this.ready.has(s.id)).map((s) => s.name);
         this.continuePlanning();
+        if (left.length > 0) this.addNews(`${this.nameOf(seatId)} continued without ${andList(left)}`);
         return;
+      }
     }
   }
 
