@@ -154,7 +154,7 @@ export function Bubble({ line, size = 'phone', left = false, className }: { line
       data-testid={`chat-bubble-${line.from}`}
       role="status"
     >
-      {whisper && <span className="mr-1 font-mono text-[9px] font-bold text-holo">🔒 TO YOU</span>}
+      {whisper && <span className="mr-1 font-mono text-[10px] font-bold text-holo">🔒 TO YOU</span>}
       {line.text}
       {/* The tail still points at the speaker when the bubble has slid. */}
       <span
@@ -207,7 +207,7 @@ export function SeatRow({ anchored = [] }: { anchored?: string[] }) {
               data-speaking={fallback?.from === p.id || undefined}
             >
               <Creature species={p.species} color={SLOT_COLOR[P[p.id]!.slot]} size={20} />
-              <span className="font-mono text-[9px] text-ink-3 @min-[1100px]/shell:text-[10px]">{p.name}</span>
+              <span className="font-mono text-[10px] text-ink-3">{p.name}</span>
             </span>
           ))}
       </div>
