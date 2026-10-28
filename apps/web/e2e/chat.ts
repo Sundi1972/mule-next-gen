@@ -35,6 +35,11 @@ const SHORTEST_LOOKED_FOR_MS = 300;
 /** Long enough for every bubble of a burst to have shown and gone. */
 const BURST_SETTLES_MS = 7_000;
 const BETWEEN_LINES_MS = 2_600;
+/**
+ * A pause before the phones speak in a new phase: its screen can stall a page ~1.2 s as it mounts, and lines said
+ * inside that stall would push the phase's first lines (an AI's opener) out of the 2-line ticker before it paints.
+ */
+const PHASE_SETTLES_MS = 1_500;
 /** A wait of this long, plus room for the browser and the network. */
 const within = (ms: number) => ms + 5_000;
 /** The land auction, when the colony lists lots: each lot's intro, walk with its late resets, and result. */
@@ -159,6 +164,7 @@ try {
 
   // The land grant: a line, a whisper from Lena to Kai, then two lines within a second.
   await Promise.all([phase(lena, 'landGrant'), phase(kai, 'landGrant'), phase(tv, 'landGrant')]);
+  await lena.waitForTimeout(PHASE_SETTLES_MS);
   await say(lena, 'Anyone need Water? Cheap today.');
   await lena.waitForTimeout(BETWEEN_LINES_MS);
   await say(lena, 'Psst: vote with me on the land tax?', kaiId);
@@ -169,12 +175,14 @@ try {
 
   // Development: two lines within a second.
   await Promise.all([phase(lena, 'development'), phase(kai, 'development'), phase(tv, 'development')]);
+  await lena.waitForTimeout(PHASE_SETTLES_MS);
   await burst(lena, kai, 'dev');
   for (const p of [lena, kai]) await p.locator('[data-phase=development]').getByRole('button', { name: 'Go to the pub and end your turn' }).click({ timeout: 5_000 });
 
   // The auction: two lines within a second while the TV draws the walk.
   await Promise.all([phase(lena, 'auction'), phase(kai, 'auction')]);
   await tv.locator('[data-phase=auction] [data-testid=walk-board]').waitFor({ timeout: REACH.walk });
+  await lena.waitForTimeout(PHASE_SETTLES_MS);
   await burst(lena, kai, 'auction');
 
   const screens = [
