@@ -4,7 +4,7 @@ import { GOOD_NAME, type Good } from '@mule/ui';
 import { describe, expect, it } from 'vitest';
 import { colonyVerdict, groundPips, mapTiles, seatSpecies, secondsUntil, slotOf, standings, TERRAIN_ODDS } from '../src/game/derive';
 
-const p = (id: string, money: number, slot: number): PlayerView => ({ id, name: id, isAi: false, color: '', slot, species: 'zipwing', money, plots: 0, ready: false, doneDeveloping: false, condition: null, colonist: null });
+const p = (id: string, money: number, slot: number, worth = money): PlayerView => ({ id, name: id, isAi: false, color: '', slot, species: 'zipwing', money, worth, plots: 0, ready: false, doneDeveloping: false, condition: null, colonist: null });
 const tile = (x: number, y: number, extra: Partial<TileView> = {}): TileView => ({ x, y, terrain: 'plains', peaks: 0, owner: null, outfit: null, pollution: 0, filter: false, ...extra });
 
 function view(extra: Partial<MuleView> = {}): MuleView {
@@ -71,10 +71,11 @@ describe('reading the view', () => {
     expect(groundPips('smithore', 9)).toBe(4);
   });
 
-  it('ranks by money, and by score once the game is over', () => {
-    expect(standings(view()).map((s) => s.player.id)).toEqual(['s2', 's1']);
-    const over = view({ scores: [{ id: 's1', score: 3000 }, { id: 's2', score: 1200 }] });
-    expect(standings(over).map((s) => [s.player.id, s.value])).toEqual([['s1', 3000], ['s2', 1200]]);
+  it('B-AC-10 (WS4, Worth): standings rank by worth, not cash, and the value is worth, which at game over is the final score', () => {
+    const midGame = view({ players: [p('s1', 500, 0, 2_400), p('s2', 900, 1, 1_300)] });
+    expect(standings(midGame).map((s) => [s.player.id, s.value])).toEqual([['s1', 2_400], ['s2', 1_300]]);
+    const over = view({ finished: true, phase: 'gameOver', players: midGame.players, scores: [{ id: 's1', score: 2_400 }, { id: 's2', score: 1_300 }] });
+    expect(standings(over).map((s) => [s.player.id, s.value])).toEqual(over.scores!.map((s) => [s.id, s.score]));
   });
 
   it('counts down to a deadline on the server clock', () => {
