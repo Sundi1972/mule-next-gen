@@ -170,15 +170,15 @@ const people = [
 ];
 const humans = ['lena', 'brix', 'ossa'];
 /** Seeds whose AI draws (RULE-8) give a test its arrangement; each test asserts its candidacies once nominate ends. */
-const BARON_RUNS_SEED = 7;
+const SPENDER_RUNS_SEED = 7;
 const NOBODY_RUNS_SEED = 3;
-const BARON_ALONE = { governor: ['ai1'], sheriff: [] };
+const SPENDER_ALONE = { governor: ['ai1'], sheriff: [] };
 
 /** The engine's state behind the game: where a test arranges ground truth. */
 const engineOf = (game: MuleGame) => (game as unknown as { state: GameState }).state;
 
 function started(options: { phaseScale?: number; seed?: number; seats?: typeof people; onChanged?: (at: number) => void } = {}) {
-  const { seed = BARON_RUNS_SEED, seats = people, onChanged, ...rest } = options;
+  const { seed = SPENDER_RUNS_SEED, seats = people, onChanged, ...rest } = options;
   const fake = fakeContext({ onChanged });
   const game = new MuleGame(fake.ctx, seed, { politics: true, ...rest });
   game.start(seats);
@@ -245,7 +245,7 @@ describe('the election runs first in planning', () => {
       g.advance(WALK.tickMs);
       if (election(g.game).stage === 'over') overAt = g.ctx.now();
     }
-    expect(election(g.game).candidates, 'seed precondition').toEqual(BARON_ALONE);
+    expect(election(g.game).candidates, 'seed precondition').toEqual(SPENDER_ALONE);
     expect(overAt, 'The Big Spender runs alone: nominate, no ballot, then the reveal').toBe(POLITICS.nominateMs + POLITICS.revealMs);
     expect(landAsks, 'one land plan per AI seat, as the election ends').toEqual([{ seat: 'ai1', at: overAt }]);
     expect(g.game.viewFor(null).phase).toBe('planning');
@@ -392,7 +392,7 @@ describe('the election runs first in planning', () => {
     expect(election(g.game).stage).toBe('nominate');
     expect(election(g.game).seconds).toBeCloseTo(WALK.tickMs / phaseScale / 1_000);
     g.advance(WALK.tickMs);
-    expect(election(g.game).candidates, 'seed precondition: no contested office, so no ballot').toEqual(BARON_ALONE);
+    expect(election(g.game).candidates, 'seed precondition: no contested office, so no ballot').toEqual(SPENDER_ALONE);
     expect(election(g.game).stage).toBe('reveal');
     expect(election(g.game).total).toBe(POLITICS.revealMs / 1_000);
     tickFor(g, POLITICS.revealMs * phaseScale - WALK.tickMs);
@@ -617,10 +617,10 @@ describe('the politics view', () => {
 const aiTable = [
   { id: 'lena', name: 'Lena', isAi: false, color: 0 },
   { id: 'acc', name: 'The Accountant', isAi: true, color: 1 },
-  { id: 'baron', name: 'The Big Spender', isAi: true, color: 2 },
+  { id: 'spender', name: 'The Big Spender', isAi: true, color: 2 },
   { id: 'grudge', name: 'The Grudge', isAi: true, color: 3 },
 ];
-const aiIds = ['acc', 'baron', 'grudge'];
+const aiIds = ['acc', 'spender', 'grudge'];
 
 describe('AI seats in the election', () => {
   it.each([1, 0.1])("T-AC-6 (server) · C8: AI seats run and vote in the server's election, and every one presses Done within each stage's clock (phaseScale %s)", (phaseScale) => {
@@ -662,12 +662,12 @@ describe('AI seats in the election', () => {
 
   it('T-AC-6 (server) · C8: an AI Governor sets the tax in planning, and the screens get it', () => {
     // RULE-8 from a 5% start: a step of at most 5 toward the persona's target (cautious 4, aggressive 8, saboteur 10), +2 when the fund is low, inside the month's bounds.
-    const month1: Record<string, number> = { acc: 4, nbr: 4, baron: 8, grudge: 10 };
-    const month2LowFund: Record<string, number> = { acc: 6, nbr: 6, baron: 10, grudge: 12 };
-    // Without the Baron at the table, another persona takes office.
-    const noBaron = [...aiTable.filter((s) => s.id !== 'baron'), { id: 'nbr', name: 'The Good Neighbour', isAi: true, color: 2 }];
+    const month1: Record<string, number> = { acc: 4, nbr: 4, spender: 8, grudge: 10 };
+    const month2LowFund: Record<string, number> = { acc: 6, nbr: 6, spender: 10, grudge: 12 };
+    // Without the Big Spender at the table, another persona takes office.
+    const noSpender = [...aiTable.filter((s) => s.id !== 'spender'), { id: 'nbr', name: 'The Good Neighbour', isAi: true, color: 2 }];
     const governors = new Set<string>();
-    for (const [seats, seed] of [aiTable, noBaron].flatMap((t) => [1, 2, 3].map((seed) => [t, seed] as const))) {
+    for (const [seats, seed] of [aiTable, noSpender].flatMap((t) => [1, 2, 3].map((seed) => [t, seed] as const))) {
       // What each broadcast carried: when, and the tax a screen would draw.
       const sent: { at: number; tax: number }[] = [];
       const g: Started = started({ seed, seats, phaseScale: 0.1, onChanged: (at) => sent.push({ at, tax: g.game.viewFor(null).politics!.tax.percent }) });
@@ -708,10 +708,10 @@ describe('AI seats in the election', () => {
 
   it("T-AC-6 (server) · C8: an AI Governor's tax lands that month even when every human presses ready the moment planning proper starts", () => {
     const g = started({ seed: 1, seats: aiTable, phaseScale: 0.1 });
-    setMoney(g.game, { lena: 0, acc: 1_000, baron: 1_000, grudge: 1_000 });
+    setMoney(g.game, { lena: 0, acc: 1_000, spender: 1_000, grudge: 1_000 });
     engineOf(g.game).treasury.money = 10_000;
     untilStage(g, 'over');
-    expect(g.game.viewFor(null).politics!.governor, 'seed precondition').toBe('baron');
+    expect(g.game.viewFor(null).politics!.governor, 'seed precondition').toBe('spender');
     g.game.handle('lena', { type: 'ready' });
     expect(g.game.viewFor(null).phase, 'planning ended at once').toBe('landGrant');
     expect(g.game.viewFor(null).politics!.tax.percent, "month 1: The Big Spender's 8% landed first").toBe(8);
