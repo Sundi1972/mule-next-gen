@@ -938,6 +938,8 @@ export const STRATEGIST = {
   /** Analyses per month, at most, and never with less than this many seconds left. */
   analysesPerMonth: 2,
   analyseMinSeconds: 20,
+  /** It fits filters once the air is within this many points of Smoggy. */
+  filterAirMargin: 10,
   /** Share of its money it spends on one good at the auction, at most. */
   budgetShare: 0.5,
   /**
@@ -954,6 +956,12 @@ export const STRATEGIST = {
   resaleRisk: 0.1,
   /** A corner pays this share over next month's price for the units the others are short of. */
   cornerPremium: 0.5,
+  /** It corners only a good that spoils less than this share a month, and at most this many units. */
+  cornerMaxSpoilage: 0.5,
+  cornerMaxUnits: 6,
+  /** Spite: while the leader is short of the good, it bids this share of next month's price, times its spite, over its own value for the next spiteUnits units. */
+  spiteShare: 0.1,
+  spiteUnits: 2,
   /**
    * How many months past next the outlook plays the status quo forward
    * (nobody builds or trades), to see a shortage coming before the price
@@ -971,10 +979,42 @@ export const STRATEGIST = {
   selfSupply: 3,
   /**
    * The "cash left" consideration: spending down to the reserve scores this
-   * much, and keeping twice the reserve scores 1. The reserve itself is a hard
+   * much, and keeping cashLeftFull times the reserve scores 1. The reserve itself is a hard
    * rule, so this is only a mild preference for cash in hand.
    */
   cashLeftFloor: 0.75,
+  cashLeftFull: 2,
+  /** The land plan's considerations (landDecision), besides gainScale.plot. */
+  land: {
+    /** "Known ground": what a plot it hasn't analysed scores; an analysed one scores 1. */
+    unknownGround: 0.8,
+    /** "Next to my land": `full` of its own plots beside a plot score 1, never under `floor`; weighted clusterWeight in the cluster plan, else `weight`. */
+    nextToMine: { full: 2, floor: 0.6, clusterWeight: 2, weight: 0.5 },
+    /** "Blocks the leader": `full` of the leader's plots beside a plot score 1, never under `floor`; weighted by spite, at least minWeight. */
+    blocksLeader: { full: 2, floor: 0.4, minWeight: 0.5 },
+    /** "Feeds me": what a plan scores while its Food and Energy are covered, and, while they are short, any plan but farms first (which scores 1). */
+    feedsMe: { covered: 0.75, short: 0.6 },
+    /** "Can develop it": cash over the reserve scores 1 at this many MULE prices; weighted 1 in the factory plan, else `weight`. */
+    canDevelop: { mules: 2, weight: 0.3 },
+    /** "Hurts the leader": what the plan that fences in the leader scores. */
+    hurtsLeader: 0.7,
+  },
+  /** The development decision's considerations (developDecision), besides gainScale.develop and the cash left. */
+  develop: {
+    /** "Known ground": what an idle plot it hasn't analysed scores; an analysed one scores 1. Not land.unknownGround's value, as found. */
+    unknownGround: 0.75,
+    /** "Feeds me": what a MULE that doesn't cover its own Food or Energy scores (one that does scores 1); weighted this share of the persona's reserve. */
+    feedsMe: { other: 0.8, reserveShare: 0.5 },
+  },
+  /** The auction's trade decision (tradeDecision, expectedPrices), besides gainScale.trade and the cash left. */
+  trade: {
+    /** "Sure thing": what a sale scores, a buy of what it needs, and a buy partly to resell (a forecast); a pass scores 1. */
+    sure: { sell: 0.9, need: 0.9, resale: 0.6 },
+    /** Selling, it also offers to keep a buffer: this share of next month's need, at least 1 unit, over what it would keep. */
+    bufferShare: 0.5,
+    /** It expects a sale to fetch at least this share of the posted price, whoever buys. */
+    sellFloor: 0.85,
+  },
 };
 
 /** The AI's hands in the real-time phases. Times are in ms. */

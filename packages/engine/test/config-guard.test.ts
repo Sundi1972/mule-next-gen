@@ -15,7 +15,6 @@ const PENDING = new Set<string>([
   // WS1: cleaned once #109 has merged, which rewrites most of them.
   'packages/ai/src/play.ts',
   'packages/ai/src/sim.ts',
-  'packages/ai/src/strategist.ts',
   'packages/engine/src/events.ts',
   'packages/engine/src/production.ts',
   // WS2.
