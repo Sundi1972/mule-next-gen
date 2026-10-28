@@ -1,6 +1,7 @@
 import { analysisSeconds, DEVELOPMENT, RuleError, SPECIES_PERK, tileIndex, walkSeconds, type GameState, type Outfit } from '@mule/engine';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { describe, expect, it } from 'vitest';
+import type { MuleGame } from '../src/mule-game.js';
 import { seats, toDevelopment, walkers } from './fake-context.js';
 
 const LENA = 's1';
@@ -32,10 +33,11 @@ function walkOf(view: MuleView, id: string) {
 
 /**
  * Development with Lena (Zipwing) and Ossa (Mollox), both fed and holding Medicine, so neither walks slower for hunger
- * or sickness. Lena owns `home`, 3 steps from the store; `far`, 4 steps out, is free.
+ * or sickness. Lena owns `home`, 3 steps from the store, and Ossa `ossaHome`, 2 steps out; `far`, 4 steps out, is free.
  */
 function walking(phaseScale?: number) {
   let home: Plot | null = null;
+  let ossaHome: Plot | null = null;
   let far: Plot | null = null;
   const g = toDevelopment({
     players: walkers,
@@ -44,12 +46,14 @@ function walking(phaseScale?: number) {
       for (const p of state.players) Object.assign(p.stock, { food: 20, medicine: 2 });
       home = plotAway(state, 3);
       state.tiles[home.index]!.owner = LENA;
+      ossaHome = plotAway(state, 2);
+      state.tiles[ossaHome.index]!.owner = OSSA;
       far = plotAway(state, 4);
     },
   });
   const start = g.ctx.now();
   const advanceTo = (at: number) => g.advance(at - g.ctx.now());
-  return { ...g, start, home: home!, far: far!, advanceTo };
+  return { ...g, start, home: home!, ossaHome: ossaHome!, far: far!, advanceTo };
 }
 
 /** At phaseScale 1, Lena buys a MULE at the corral and outfits it, waiting out her walk there. */
@@ -229,8 +233,11 @@ describe('FM-one-clock: one development clock for every seat', () => {
     expect(game.viewFor(null).phase).toBe('production');
   });
 
-  it("FM-one-clock: the pub ends only its own seat's turn; the phase ends early once every seat is at the pub or away", () => {
-    const { game, start } = walking();
+  it.each([
+    ['her phone drops', (game: MuleGame) => game.connectionChanged(OSSA, false)],
+    ['she presses Ready', (game: MuleGame) => game.handle(OSSA, { type: 'ready' })],
+  ] as const)("FM-one-clock: the pub ends only its own seat's turn; when Ossa is the last and %s mid-walk, her install lands on arrival and only then does development end", (_, leave) => {
+    const { game, ctx, start, ossaHome, advanceTo } = walking();
     const end = start + DEVELOPMENT.fullSeconds * 1_000;
     game.handle(LENA, { type: 'pub' });
     expect(game.viewFor(null).phase).toBe('development');
@@ -239,7 +246,36 @@ describe('FM-one-clock: one development clock for every seat', () => {
     expect(game.viewFor(OSSA).me!.devEndsAt).toBe(end);
     expect(game.viewFor(LENA).me!.devEndsAt).toBe(end);
     expect(() => game.handle(OSSA, { type: 'buyMule' })).not.toThrow();
-    game.connectionChanged(OSSA, false);
+    advanceTo(walkOf(game.viewFor(null), OSSA).arrivesAt);
+    game.handle(OSSA, { type: 'outfit', outfit: 'food' });
+    game.handle(OSSA, { type: 'install', ...xy(ossaHome) });
+    const arrivesAt = walkOf(game.viewFor(null), OSSA).arrivesAt;
+
+    leave(game);
+    expect(game.viewFor(null).phase, 'her install is still walking').toBe('development');
+    advanceTo(arrivesAt - 1);
+    expect(game.viewFor(null).phase).toBe('development');
+    advanceTo(arrivesAt);
+    expect(ctx.now()).toBe(arrivesAt);
+    const after = game.viewFor(null);
+    expect(after.phase).toBe('production');
+    expect(after.tiles[ossaHome.index]).toMatchObject({ owner: OSSA, outfit: 'food' });
+  });
+
+  it('FM-one-clock: when the last seat walks to the pub from her plot, development ends at her arrival ms', () => {
+    const { game, state, advanceTo, ossaHome } = walking();
+    game.handle(LENA, { type: 'pub' });
+    game.handle(OSSA, { type: 'buyMule' });
+    advanceTo(walkOf(game.viewFor(null), OSSA).arrivesAt);
+    game.handle(OSSA, { type: 'outfit', outfit: 'food' });
+    game.handle(OSSA, { type: 'install', ...xy(ossaHome) });
+    advanceTo(walkOf(game.viewFor(null), OSSA).arrivesAt);
+    game.handle(OSSA, { type: 'pub' });
+    const pub = walkOf(game.viewFor(null), OSSA);
+    expect(pub.arrivesAt - pub.startedAt).toBe(msOf(walkSeconds(state, OSSA, ossaHome.index, 'store')));
+    advanceTo(pub.arrivesAt - 1);
+    expect(game.viewFor(null).phase).toBe('development');
+    advanceTo(pub.arrivesAt);
     expect(game.viewFor(null).phase).toBe('production');
   });
 });
