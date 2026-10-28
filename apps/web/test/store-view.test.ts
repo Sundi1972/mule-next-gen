@@ -68,6 +68,10 @@ describe('the store at a glance', () => {
   it('T-AC-12: the clock is one for everyone, and the TV lists each pace and why on the roster rows', () => {
     expect(textFrom(renderToStaticMarkup(createElement(SharedClock, { seconds: 31, total: 50 })), 'shared-clock')).toMatch(/^ Everyone(&#x27;|')s time · one clock 31s/);
     expect(textFrom(renderToStaticMarkup(createElement(SharedClock, { seconds: 31, total: 50, size: 'tv' })), 'shared-clock')).toMatch(/^ Everyone(&#x27;|')s time 31s/);
+    // A small phone's rail has room for one line above the bar: your pace rides on the clock's label there.
+    const rail = renderToStaticMarkup(createElement(SharedClock, { seconds: 31, total: 50, pace: { title: 'Hungry: 52% pace', tone: 'warn' } }));
+    expect(rail).toMatch(/<span class="[^"]*@min-\[1100px\]\/shell:hidden[^"]*">Everyone(&#x27;|')s time · <span class="text-warn">Hungry: 52% pace<\/span><\/span>/);
+    expect(rail).toMatch(/<span class="hidden[^"]*@min-\[1100px\]\/shell:inline[^"]*">Everyone(&#x27;|')s time · one clock<\/span>/);
     const list = renderToStaticMarkup(
       createElement(PaceList, {
         rule: DEV_WALK,
