@@ -322,6 +322,20 @@ joins `RULE_3` without becoming a row `rollPhase` rolls at the phase start (the 
 check runs one way round only (a pair seeded from the second member's row seed would survive): run it both ways. WS5
 asked for the specials.ts/EFFECT hunk on its SHA to check T-AC-6's five rules (T-AC-6 as WS5 OK'd it at b6c94d7).
 
+From PR-1's boundary review (29 Oct), for this task:
+- `packages/ai/src/sim.ts` joins the files: once a collapse is a MonthEvent, drop the tile diff (`caveIns`,
+  `cavernsOf`) or each collapse counts twice; relabel "Events in N% of months" to say it counts production events.
+- `types.ts`: with the EventKey hunk, `MonthReport.events`' doc becomes "The production events that fired this month,
+  in the order they fired" ("none in most months" stopped being true at AM-6's rows); WS3 reviews both.
+- EM-T-AC-3's config facts gain "every row lists exactly one phase" (RULE-2 step 5 holds by construction only while
+  that does); `e.phase` joins the map EM-T-AC-3 reads, so one consumer test reads the whole contract; the config-fact
+  checks move to their own `it` under EM-T-AC-3's id.
+- The row dice are seeded in two places and this task adds a third: extract one helper. `PlayerEventKey` now covers
+  production rows: narrow it, or make `rollPlayerEvent`'s and `playerEventChance`'s docs say they skip the only-if
+  and `firedThisPhase`. `buildEvent`'s `owner` is always `player` now: use `player`.
+- For routing the table gate: the screens' `events[0]` readers include ProductionMap.tsx (two) and the web e2e's
+  production-steps.ts (two), besides those AM-1 names.
+
 - [ ] **Step 1: Write `EM-T-AC-5: cavern collapse rolls on its row, with today's effect`** at the tiles after
       production.
       - With the row forced to 1, every cavern that produced Crystite becomes a plain plot, and one mined on Crystite 0 or farmed for Food stays.

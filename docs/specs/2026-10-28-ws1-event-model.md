@@ -409,6 +409,22 @@ because   Heiko, via the PM: "b". The liveliness he asked for, with his catalogu
 goal      G-1 (unchanged); UBER-AC-1 met
 ```
 
+```
+AM-7 · 2026-10-29 · PR-1's boundary review: HC-2 and sickness
+
+target    §0.2 HC-2 · §2 RULE-2 step 1
+said      HC-2 "A what-if copy never rolls, and no event rolls in month 1"; RULE-2 step 1 "month 1 or a what-if copy →
+          nothing".
+did       both bind the phase roller: rollPhase rolls nothing in month 1 or on a what-if copy, for every row it rolls.
+          Sickness is outside rollPhase (AM-1 keeps it on Player.sick) and keeps the roll it has had every month since
+          the balance spec's Task 13, month 1 included: the balance spec's T-AC-24 fixture relies on it and the sim
+          counts it. No behaviour changes; the text now says what the code has done since before this spec.
+because   the boundary review found the spec and the code disagreeing on month-1 sickness; it predates the event model
+          and shipped with Heiko's sickness ruling, so the spec follows the code. Gating sickness to month 2 would be a
+          balance change of its own, measured first.
+goal      G-1 unchanged
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 No ownership change: events.ts and EVENTS remain WS1's. Named edits: `specials.ts` (WS5, C4), any phase hook in
