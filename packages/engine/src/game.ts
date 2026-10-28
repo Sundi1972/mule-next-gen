@@ -5,6 +5,7 @@ import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './econo
 import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
 import { generateMap, tileIndex } from './map.js';
 import { airBand } from './pollution.js';
+import { closeElection, newPolitics, officeScore, openPlanning, payOffices } from './politics.js';
 import { needsOf, runProduction } from './production.js';
 import { createRng } from './rng.js';
 import { emptyStock } from './stock.js';
@@ -20,7 +21,8 @@ export interface NewPlayer {
 
 export { RuleError };
 
-export function createGame(options: { seed: number; players: NewPlayer[]; maxMonths?: number }): GameState {
+/** Starts a game in month 1's planning phase. `politics: false` is the host option that plays without offices, elections or a moving tax. */
+export function createGame(options: { seed: number; players: NewPlayer[]; maxMonths?: number; politics?: boolean }): GameState {
   if (options.players.length < GAME.minPlayers || options.players.length > GAME.maxPlayers) {
     throw new RuleError(`A game needs ${GAME.minPlayers} to ${GAME.maxPlayers} players`);
   }
@@ -75,9 +77,11 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
     auction: null,
     listings: [],
     landAuction: null,
+    politics: options.politics === false ? null : newPolitics(),
   };
   // The first month's prices start where supply and demand put them.
   for (const good of GOODS) state.store.posted[good] = Math.round(targetPrice(state, good));
+  openPlanning(state);
   return state;
 }
 
@@ -317,6 +321,7 @@ const ORDER: Phase[] = ['planning', 'landGrant', 'landAuction', 'development', '
  */
 export function advancePhase(state: GameState): void {
   if (state.phase === 'gameOver') return;
+  if (state.phase === 'planning') closeElection(state);
   let next = ORDER[(ORDER.indexOf(state.phase) + 1) % ORDER.length]!;
   if (next === 'landAuction') colonyLot(state);
   if (next === 'landAuction' && state.listings.length === 0) next = 'development';
@@ -377,6 +382,7 @@ export function advancePhase(state: GameState): void {
     endAuction(state);
     state.auction = null;
     const { shortages, hungry } = runUpkeep(state);
+    payOffices(state);
     const report = state.history.at(-1);
     if (report) {
       report.shortages = shortages;
@@ -386,7 +392,10 @@ export function advancePhase(state: GameState): void {
     }
     if (isGameOver(state)) state.phase = 'gameOver';
   }
-  if (next === 'planning') state.month++;
+  if (next === 'planning') {
+    state.month++;
+    openPlanning(state);
+  }
 }
 
 export function isGameOver(state: GameState): boolean {
@@ -406,6 +415,8 @@ export interface ScoreParts {
   land: number;
   mules: number;
   muleValue: number;
+  /** Points for terms served (POLITICS.termScore each); Collapse doesn't cut it. 0 with politics off. */
+  office: number;
   /** What Collapse took off: 0 unless the colony failed. */
   cut: number;
   total: number;
@@ -413,8 +424,8 @@ export interface ScoreParts {
 
 /**
  * A final score line by line: money, goods at today's colony prices, land,
- * installed MULEs at the store price, and the Collapse cut. The lines add up
- * to total + cut exactly; goods absorbs the rounding. See spec RULE-3.
+ * installed MULEs at the store price, terms in office, and the Collapse cut.
+ * The lines add up to total + cut exactly; goods absorbs the rounding. See spec RULE-3.
  */
 export function scoreParts(state: GameState, playerId: string): ScoreParts {
   const p = player(state, playerId);
@@ -428,9 +439,12 @@ export function scoreParts(state: GameState, playerId: string): ScoreParts {
   // Keep this exact order of addition: regrouping it moves Math.round at .5 edges and changes scores.
   const raw = p.money + stockValue + (land + muleValue);
   const before = Math.round(raw);
-  const total = colonyFailed(state) ? Math.round(raw * POLLUTION.collapseScore) : before;
+  // The office line joins after the rounding, so it moves no existing total.
+  const office = officeScore(state, playerId);
+  const kept = colonyFailed(state) ? Math.round(raw * POLLUTION.collapseScore) : before;
+  const total = kept + office;
   const money = Math.round(p.money);
-  return { money, goods: before - money - land - muleValue, plots, land, mules, muleValue, cut: before - total, total };
+  return { money, goods: before - money - land - muleValue, plots, land, mules, muleValue, office, cut: before - kept, total };
 }
 
 /** Final score: scoreParts().total. */

@@ -6,6 +6,7 @@
  *
  *   pnpm sim -- --games 100 --players 4 --level trader
  *   pnpm sim -- --persona cautious     (every seat the same persona; default: they rotate)
+ *   pnpm sim -- --politics off         (no offices, elections or Governor's tax; default: on, as at real tables)
  */
 import { AI_LEVELS, AI_PERSONAS, colonyFailed, GOOD_CONFIG, GOODS, score, type AiLevelId, type AiPersonaId } from '@mule/engine';
 import { simSeats } from './lineup.js';
@@ -54,10 +55,23 @@ function main() {
   const wins: Record<string, number> = {};
   const auction = { between: 0, store: 0, ship: 0, ms: 0 };
   const lots = { sold: 0, unsold: 0, colonyOffered: 0, colonySold: 0, stalled: 0 };
+  const politics = argText('politics') !== 'off';
+  const pol = { elections: 0, filled: 0, taxes: [] as number[], taxPaid: 0, terms: 0 };
+  // Read once the land grant opens: by then the month's election is closed and the Governor has set the tax.
+  const onPhase = (s: Parameters<NonNullable<Parameters<typeof playGame>[2]>['onPhase'] & {}>[0]) => {
+    if (s.phase !== 'landGrant' || !s.politics) return;
+    pol.taxes.push(Math.round(s.treasury.salesTax * 100));
+    if (s.politics.election) {
+      pol.elections++;
+      pol.filled += (s.politics.governor ? 1 : 0) + (s.politics.sheriff ? 1 : 0);
+    }
+  };
 
   for (let seed = first; seed < first + games; seed++) {
     const specs = simSeats(players, level, seed, persona);
-    const { state, broke, auction: a, lots: l } = playGame(seed, specs);
+    const { state, broke, auction: a, lots: l } = playGame(seed, specs, { politics, onPhase });
+    pol.taxPaid += Object.values(state.treasury.paid).reduce((n, x) => n + x, 0);
+    pol.terms += Object.values(state.politics?.terms ?? {}).reduce((n, x) => n + x, 0);
     for (const k of ['between', 'store', 'ship', 'ms'] as const) auction[k] += a[k];
     for (const k of Object.keys(lots) as (keyof typeof lots)[]) lots[k] += l[k];
     months += state.history.length;
@@ -113,6 +127,11 @@ function main() {
         .map(([k, n]) => `${k} ${n}`)
         .join(', ') || 'none'
     }`,
+  );
+  console.log(
+    politics
+      ? `     Politics: ${pol.elections} elections, ${pct(pol.filled, pol.elections * 2)} of offices filled; Governor's tax ${quantile(pol.taxes, 0)} / ${quantile(pol.taxes, 0.5)} / ${quantile(pol.taxes, 1)}% (min / median / max); ${(pol.taxPaid / games).toFixed(0)} cr sales tax and ${(pol.terms / games).toFixed(1)} terms a game`
+      : '     Politics: off',
   );
   console.log('\nPosted prices (min / median / 90th percentile / max):');
   for (const good of GOODS) {
