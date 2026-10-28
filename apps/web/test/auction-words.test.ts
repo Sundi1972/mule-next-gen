@@ -1,6 +1,8 @@
 import type { AuctionView, MuleView, WalkerView } from '@mule/protocol';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { shipWants, storeWords, walkHint } from '../src/components/AuctionParts';
+import { shipWants, storeWords, TvReadout, walkHint } from '../src/components/AuctionParts';
 
 const view = { players: [{ id: 'lena', name: 'Lena' }, { id: 'acc', name: 'The Accountant' }, { id: 'kai', name: 'Kai' }] } as unknown as MuleView;
 
@@ -99,7 +101,7 @@ describe('G-6: what the ship in port wants, for the goods still to come', () => 
       ],
     }) as unknown as MuleView;
   it('lists each wanted good still to come, in auction order, with the good before it and its first price', () => {
-    const a = auction({ next: ['water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy'] });
+    const a = auction({ good: 'food', next: ['water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy'] });
     expect(shipWants(game(true), a)).toEqual([
       { good: 'crystite', wants: 24, pays: 120, after: 'smithore' },
       { good: 'alloy', wants: 12, pays: 90, after: 'rareEarth' },
@@ -110,5 +112,36 @@ describe('G-6: what the ship in port wants, for the goods still to come', () => 
   });
   it('leaves out a wanted good that has already come up', () => {
     expect(shipWants(game(true), auction({ good: 'rareEarth', next: ['alloy'] })).map((w) => w.good)).toEqual(['alloy']);
+  });
+  it('names the good that really comes up before it: a skipped good is not "before" anything', () => {
+    // Smithore was skipped, so Crystite comes up after Energy.
+    const a = auction({ good: 'food', next: ['water', 'energy', 'crystite', 'rareEarth', 'alloy'] });
+    expect(shipWants(game(true), a).map((w) => [w.good, w.after])).toEqual([
+      ['crystite', 'energy'],
+      ['alloy', 'rareEarth'],
+    ]);
+  });
+  it('the first good still to come is after the good up now', () => {
+    expect(shipWants(game(true), auction({ good: 'energy', next: ['crystite'] }))[0]?.after).toBe('energy');
+  });
+  it("on the wanted good's own status screen, it is the good up now, at the auction's ship price", () => {
+    const a = auction({ good: 'crystite', stage: 'status', shipPays: 118, next: ['rareEarth', 'alloy'] });
+    expect(shipWants(game(true), a)).toEqual([
+      { good: 'crystite', wants: 24, pays: 118, after: null },
+      { good: 'alloy', wants: 12, pays: 90, after: 'rareEarth' },
+    ]);
+  });
+});
+
+describe('a tie between the ship and the store goes to the ship, as the engine sells', () => {
+  it('a seller is sent to the ship when it pays what the store pays', () => {
+    const a = auction({ good: 'crystite', storeBuys: 100, shipPays: 100, walkers: [walker('lena', 'seller', 150)] });
+    expect(walkHint(view, a, 'lena', 4).line).toBe('Walk down to the ship’s line at 100: it pays the most. The store pays 100.');
+  });
+  it("the TV's readout names the ship as the highest bid", () => {
+    const a = auction({ good: 'crystite', storeBuys: 100, shipPays: 100, walkers: [walker('lena', 'seller', 150)] });
+    const html = renderToStaticMarkup(createElement(TvReadout, { view, auction: a }));
+    expect(html).toContain('100 · the ship');
+    expect(html).not.toContain('100 · the store');
   });
 });

@@ -167,6 +167,14 @@ describe("the goods auction's status screen, in plain words", () => {
     expect(textOf(phoneScreen(view, 's1'), 'ship-wants')).toBe('The ship wants 24 Crystite this month. Crystite comes up after Smithore: the ship pays 120 cr for the first. You have 4.');
   });
 
+  it("G-6: on the wanted good's own status screen, it says the ship wants it now, at its price, and what you have", () => {
+    const view = toFirstStatus().viewFor('s1');
+    view.ship = { arrives: view.month, inPort: true, wants: { crystite: 24 } };
+    view.me = { ...view.me!, stock: { ...view.me!.stock, crystite: 4 } };
+    view.auction = { ...view.auction!, good: 'crystite', shipPays: 120, next: ['rareEarth'] };
+    expect(textOf(phoneScreen(view, 's1'), 'ship-wants')).toBe('The ship wants 24 Crystite this month: it pays 120 cr for the first. You have 4.');
+  });
+
   it('G-6 (negative): with the ship not in port, no word about it', () => {
     const view = toFirstStatus().viewFor('s1');
     view.ship = { ...view.ship, inPort: false };

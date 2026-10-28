@@ -6,7 +6,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { GAME, LOTS, TAX, WALK, type Good } from '@mule/engine';
+import { EXPORT_DEMAND, GAME, goodsMarket, LOTS, TAX, WALK, type Good } from '@mule/engine';
 import type { AuctionView, MuleView } from '@mule/protocol';
 import { GOOD_NAME } from '@mule/ui';
 import { errors as playwrightErrors, type Browser, type Page } from 'playwright';
@@ -146,7 +146,10 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   let onServer: string[] = [];
   try {
     await readTheGoodsWalk({ seller: brix, buyer: lena, stayer: ossa }, tv, truth);
+    const shipGood = readTheShipGoodsOwnStatus(phones, tv, truth);
+    shipGood.catch(() => undefined);
     await holdUpIntoTheNextGood(truth, ossa, [brix, lena]);
+    await shipGood;
   } finally {
     // Stopped on a failure too: left running, it would throw once the room closes and bury the real error.
     onServer = serverStages();
@@ -304,7 +307,14 @@ async function followTheColonyLot(phones: Phone[], tv: Page, month: number, trut
 type Screen = { name: string; page: Page; seat?: Phone };
 
 /** The server's own views: the public one every TV gets, and each seat's private one, whose stock is the engine's. */
-type Truth = { board: () => MuleView; idOf: (p: Phone) => string; stockOf: (p: Phone, good: Good) => number; held: <T>(step: () => Promise<T>) => Promise<T> };
+type Truth = {
+  board: () => MuleView;
+  idOf: (p: Phone) => string;
+  stockOf: (p: Phone, good: Good) => number;
+  held: <T>(step: () => Promise<T>) => Promise<T>;
+  /** The houses that buy the good up now, in the order the engine sells to them when they pay the same. */
+  houseOrder: () => string[];
+};
 
 function serverTruth(server: MuleServer, code: string): Truth {
   const room = () => {
@@ -325,6 +335,10 @@ function serverTruth(server: MuleServer, code: string): Truth {
   return {
     board: () => game(null),
     held: (step) => held(server, code, step),
+    houseOrder: () => {
+      const state = (room() as unknown as { game: { state: Parameters<typeof goodsMarket>[0] } }).game.state;
+      return goodsMarket(state).houseBuys.map((h) => h.id);
+    },
     idOf,
     stockOf: (p, good) => {
       const me = game(idOf(p)).me;
@@ -564,8 +578,8 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
   const ask = a.walkers.filter((w) => w.side === 'seller' && (w.units ?? 1) > 0).sort((x, y) => x.at - y.at)[0];
   const bid = a.walkers.filter((w) => w.side === 'buyer').sort((x, y) => y.at - x.at)[0];
   check(ask && bid && ask.id === sellerId && bid.id === buyerId, `${seller.name} holds the lowest ask and ${buyer.name} the highest bid, got ${ask?.id} and ${bid?.id}`);
-  const tvAsk = bestOffer(a, 'seller', name);
-  const tvBid = bestOffer(a, 'buyer', name);
+  const tvAsk = bestOffer(a, 'seller', name, truth.houseOrder());
+  const tvBid = bestOffer(a, 'buyer', name, truth.houseOrder());
   await untilShows(theTv, readReadout, [`${tvAsk.price} · ${tvAsk.who}`, `${tvBid.price} · ${tvBid.who}`], "B-AC-1, G-4: the TV's readout names who holds each line, the store and the ship counted");
   await truth.held(async () => {
     await readTheWalkWords(phones, truth, name);
@@ -616,8 +630,9 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
 }
 
 /** The best price a walker on `side` can meet, the store and the ship counted, and who holds it, as the TV names them. */
-function bestOffer(a: AuctionView, side: 'seller' | 'buyer', name: (id: string) => string, without?: string): { price: number; who: string; id: string } {
+function bestOffer(a: AuctionView, side: 'seller' | 'buyer', name: (id: string) => string, houses: string[], without?: string): { price: number; who: string; id: string } {
   const named = (id: string) => (id === 'store' ? 'the store' : id === 'ship' ? 'the ship' : name(id));
+  const housePays: Record<string, number | null> = { store: a.storeBuys, ship: a.shipPays };
   const list =
     side === 'seller'
       ? [
@@ -626,8 +641,8 @@ function bestOffer(a: AuctionView, side: 'seller' | 'buyer', name: (id: string) 
         ].sort((x, y) => x.price - y.price)
       : [
           ...a.walkers.filter((w) => w.side === 'buyer' && w.id !== without).map((w) => ({ id: w.id, price: w.price })),
-          ...(a.storeBuys !== null ? [{ id: 'store', price: a.storeBuys }] : []),
-          ...(a.shipPays !== null ? [{ id: 'ship', price: a.shipPays }] : []),
+          // In the engine's order, so a stable sort leaves a tie with the house it sells to.
+          ...houses.flatMap((id) => (housePays[id] == null ? [] : [{ id, price: housePays[id]! }])),
         ].sort((x, y) => y.price - x.price);
   const best = list[0];
   check(best, `someone stands on the ${side} side of ${a.good}`);
@@ -655,8 +670,8 @@ async function readTheStatusWords(phones: Phone[], tv: Page, truth: Truth): Prom
   const store = `${storeFromYourSide(a)}${a.storeForSale > 0 ? ` · it has ${a.storeForSale} for sale` : ''}`;
   const wants = view.ship.wants;
   check(view.ship.inPort && wants, 'G-6 needs the ship in port this month (the fixture brings it in)');
-  const order = WALK.order;
-  const wanted = order.filter((g) => a.next.includes(g) && (wants[g] ?? 0) > 0);
+  const order = [a.good, ...a.next];
+  const wanted = a.next.filter((g) => (wants[g] ?? 0) > 0);
   check(wanted.length > 0, `G-6 needs a wanted good still to come after ${a.good}, wants ${JSON.stringify(wants)}`);
   const shipLine = (g: Good) => {
     const pays = view.market.find((r) => r.good === g)?.shipPays;
@@ -680,6 +695,38 @@ async function readTheStatusWords(phones: Phone[], tv: Page, truth: Truth): Prom
 }
 
 /**
+ * G-6 on the wanted good's own status screen: watches month 1's goods after the first; the first wanted good to open
+ * its status screen is held still and read on every phone and the TV. Fails if the auction ends without one.
+ */
+async function readTheShipGoodsOwnStatus(phones: Phone[], tv: Page, truth: Truth): Promise<void> {
+  const from = truth.board().auction?.good;
+  for (;;) {
+    const view = truth.board();
+    const a = view.auction;
+    check(a, `G-6: a good the ship wants opens its status screen in month 1 (the wishlist is ${JSON.stringify(view.ship.wants)})`);
+    const wants = view.ship.inPort ? (view.ship.wants?.[a.good] ?? 0) : 0;
+    if (a.good !== from && a.stage === 'status' && wants > 0) {
+      await truth.held(async () => {
+        const held = truth.board().auction!;
+        const pays = held.shipPays ?? view.market.find((r) => r.good === held.good)?.shipPays;
+        const line = `The ship wants ${wants} ${GOOD_NAME[held.good]} this month: it pays ${pays} cr for the first.`;
+        const own = (page: Page) => page.getByTestId('ship-wants').filter({ hasText: `${GOOD_NAME[held.good]} this month:` });
+        for (const p of phones) {
+          const got = (await own(p.page).innerText({ timeout: PRESS_MS })).replace(/\s+/g, ' ').trim();
+          const want = `${line} You have ${truth.stockOf(p, held.good)}.`;
+          check(got === want, `G-6: on ${GOOD_NAME[held.good]}'s own status screen ${p.name}'s phone says "${want}", got "${got}"`);
+        }
+        const onTv = (await own(tv).innerText({ timeout: PRESS_MS })).replace(/\s+/g, ' ').trim();
+        check(onTv === line, `G-6: on ${GOOD_NAME[held.good]}'s own status screen the TV says "${line}", got "${onTv}"`);
+        console.log(`✓ G-6: on ${GOOD_NAME[held.good]}'s own status screen, "${line}" on three phones (with what each has) and the TV`);
+      });
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 5));
+  }
+}
+
+/**
  * G-2, G-3 and G-4 on the walk, held still: the walk buttons say Hold, the hint names the price to walk to and who
  * stands there, and over the board the store's prices from your side.
  */
@@ -698,7 +745,7 @@ async function readTheWalkWords(phones: Phone[], truth: Truth, name: (id: string
     const wantHow = side === 'buyer' ? 'Hold ▲ to walk up.' : 'Hold ▼ to walk down.';
     check(how === wantHow, `G-2: ${p.name}'s hint says "${wantHow}", got "${how}"`);
     // A buyer meets the cheapest seller, a seller the best payer: from where this player stands, never themselves.
-    const best = bestOffer(a, side === 'buyer' ? 'seller' : 'buyer', name, id);
+    const best = bestOffer(a, side === 'buyer' ? 'seller' : 'buyer', name, truth.houseOrder(), id);
     const line = await readText(page, 'hint-line');
     const where = best.id === 'store' ? 'the store' : best.id === 'ship' ? 'the ship' : `${best.who}’s ${side === 'buyer' ? 'ask' : 'bid'}`;
     const names = line.startsWith(side === 'buyer' ? 'Walk up' : 'Walk down') && line.includes(where) && new RegExp(`\\b${best.price}\\b`).test(line);
@@ -725,11 +772,11 @@ async function smallPhoneReads(p: Phone, stage: 'status' | 'walk'): Promise<void
     try {
       const read = (await p.page.evaluate(`(${AUDIT_JS})(${JSON.stringify(scope)})`)) as AuditRead;
       const small = read.fails.filter((f) => /: text [\d.]+ px /.test(f));
-      const cut = read.fails.filter((f) => /(status-table|walk-names|limit-|units-|walker-)/.test(f));
+      const cut = read.fails.filter((f) => /(walk-names|limit-|units-|walker-)/.test(f));
       const at = `${size.width}×${size.height}`;
       console.log(`  ${stage} at ${at}: ${read.fails.length ? read.fails.join('; ') : 'nothing broken'}`);
       check(small.length === 0, `the goods auction's ${stage} at ${at} has text under ${MIN_TEXT} px: ${small.join('; ')}`);
-      check(cut.length === 0, `the goods auction's ${stage} at ${at}: the table and the board show every label whole: ${cut.join('; ')}`);
+      check(cut.length === 0, `the goods auction's ${stage} at ${at}: the board shows every label whole: ${cut.join('; ')}`);
       if (stage === 'status') {
         const fit = await p.page.getByTestId('status-table').evaluate((t) => {
           const box = t.parentElement!;
@@ -1140,15 +1187,22 @@ async function keepEvidence(browser: Browser, seed: number): Promise<void> {
   console.error(`screenshots: ${dir}`);
 }
 
-/** The game's seed: MULE_E2E_SEED when set, a fresh random one otherwise. */
-/** Test fixture: the export ship calls this month, so month 1's status screens have it in port. */
+/**
+ * Test fixture: the export ship calls this month, so month 1's status screens have it in port. Its wishlist takes
+ * Smithore too, the raw good most likely to come up in month 1, so a wanted good's own status screen is reached.
+ */
 function shipInPortThisMonth(server: MuleServer, code: string): void {
-  const room = server.registry.get(code) as unknown as { game: { state: { month: number; ship: { arrives: number } }; ctx: { changed(): void } } } | undefined;
+  type Ship = { arrives: number; goods: Good[]; hold: Partial<Record<Good, number>> };
+  const room = server.registry.get(code) as unknown as { game: { state: { month: number; players: unknown[]; ship: Ship }; ctx: { changed(): void } } } | undefined;
   check(room, `room ${code} is on the server`);
-  room.game.state.ship.arrives = room.game.state.month;
+  const { state } = room.game;
+  state.ship.arrives = state.month;
+  if (!state.ship.goods.includes('smithore')) state.ship.goods.push('smithore');
+  state.ship.hold.smithore ??= Math.ceil((EXPORT_DEMAND.smithore ?? 0) * state.players.length * GAME.exportShipEvery);
   room.game.ctx.changed();
 }
 
+/** The game's seed: MULE_E2E_SEED when set, a fresh random one otherwise. */
 function seedFrom(value: string | undefined): number {
   if (value === undefined) return Math.floor(Math.random() * 2 ** 31);
   const n = /^\d+$/.test(value) ? Number(value) : NaN;
