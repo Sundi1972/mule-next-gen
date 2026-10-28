@@ -1,5 +1,5 @@
 /** Replays a game record through a fresh MuleGame and names the first step that doesn't play as recorded. */
-import { stableJson, type CallKind, type PlaybookEntry } from '@mule/engine';
+import { stableJson, type CallKind, type PlaybookEntry, type RecordedWrite } from '@mule/engine';
 import type { Choice } from '@mule/ai';
 import type { GameContext, SeatInfo } from '@tabletop/core';
 import type { BrainService } from './brain/index.js';
@@ -67,9 +67,8 @@ class Script {
     this.brain = {
       deciderFor: (seat) =>
         smart.has(seat.id) ? { name: 'recorded', decide: () => this.call(seat.id, 'move') as Choice | Promise<Choice> } : null,
-      writerFor: () => {
-        throw new Error('NotImplemented: replay-writer-for');
-      },
+      writerFor: (seat) =>
+        smart.has(seat.id) ? { write: async (kind) => ({ reply: (await this.call(seat.id, kind)) as RecordedWrite, refused: [] }) } : null,
       chatter: () => () => {},
       finish: () => {},
     };

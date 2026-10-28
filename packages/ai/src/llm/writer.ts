@@ -1,4 +1,4 @@
-import { BRAIN, GAME, GOODS, type GameState, type Playbook, type PlayerId, type Strategy } from '@mule/engine';
+import { BRAIN, GAME, GOODS, type GameState, type Playbook, type PlayerId, type RecordedWrite, type Strategy } from '@mule/engine';
 import { OPTION_IDS } from '../decider.js';
 import { LAND_PATHS, type LandBrief, type LandPath } from './brief.js';
 import { cleanLine } from './reply.js';
@@ -25,13 +25,7 @@ export const CAUSES = [
 ] as const;
 export type Cause = (typeof CAUSES)[number];
 
-/** A writer call's reply as the writer received it, before validatePlan. Replaced by the import from engine/src/record.ts when it lands. */
-export interface RecordedWrite {
-  strategy?: Strategy;
-  edits: { path: string; to: unknown; reason: string }[];
-  line: string | null;
-  cause?: string;
-}
+export type { RecordedWrite };
 
 export type PlanEdit = RecordedWrite['edits'][number];
 
@@ -137,13 +131,17 @@ export interface WriterPrompt {
 /** The port to a language model for writer calls: the prompt and the longest to wait; back come the text and the stop reason. */
 export type WriteComplete = (prompt: WriterPrompt, waitMs: number) => Promise<{ text: string; stopReason?: string | null }>;
 
-export interface WriteRequest {
-  /** The live state, for the validator only: the brief has already taken what the model may see. */
-  state: GameState;
-  draft: Playbook;
+/** What a writer call needs: the brief, whose strategy the accepted strategy fields are set on, the system text and the wait. */
+export interface WriteAsk {
   brief: LandBrief;
   system: string;
   waitMs: number;
+}
+
+export interface WriteRequest extends WriteAsk {
+  /** The live state, for the validator only: the brief has already taken what the model may see. */
+  state: GameState;
+  draft: Playbook;
 }
 
 /** An edit the writer refused before validation, by path when the brief offered it, else null. */
@@ -229,28 +227,27 @@ function judgeEdit(e: Proposed, brief: LandBrief, seen: Set<string>): { edit: Pl
   }
 }
 
-/**
- * Asks the model for the seat's strategy and land-grant edits, checks what the schema cannot carry, and hands the
- * edits it accepts to the validator, whose result is what plays. Never throws for the model: a failed call or an
- * unusable reply comes back as the reply's cause, with the draft validated alone.
- */
-export async function writePlaybook(complete: WriteComplete, validate: ValidatePlan, request: WriteRequest): Promise<Written> {
-  const { state, draft, brief } = request;
-  const settle = (reply: RecordedWrite, refused: Written['refused']): Written => ({ reply, refused, result: validate(state, draft.seat, draft, reply.edits) });
-  const unusable = (cause: Cause) => settle({ edits: [], line: null, cause }, []);
+/** A reply nothing in it can be used from: the cause, no edits, no line. */
+export const unusableReply = (cause: Cause): WriterReply => ({ reply: { edits: [], line: null, cause }, refused: [] });
 
+/**
+ * Asks the model for the seat's strategy and land-grant edits and checks what the schema cannot carry. Never throws
+ * for the model: a failed call or an unusable reply comes back as the reply's cause. The validator is the caller's.
+ */
+export async function writeReply(complete: WriteComplete, ask: WriteAsk): Promise<WriterReply> {
+  const { brief } = ask;
   let answer: Awaited<ReturnType<WriteComplete>>;
   try {
-    answer = await complete({ system: request.system, user: brief.text, schema: replySchema(brief.corners) }, request.waitMs);
+    answer = await complete({ system: ask.system, user: brief.text, schema: replySchema(brief.corners) }, ask.waitMs);
   } catch {
-    return unusable('no_reply');
+    return unusableReply('no_reply');
   }
   const read = readReply(answer.text, answer.stopReason ?? null);
-  if ('cause' in read) return unusable(read.cause);
+  if ('cause' in read) return unusableReply(read.cause);
 
   const seen = new Set<string>();
   const accepted: PlanEdit[] = [];
-  const refused: Written['refused'] = [];
+  const refused: Refusal[] = [];
   for (const e of read.edits) {
     const judged = judgeEdit(e, brief, seen);
     if ('cause' in judged) refused.push({ path: KNOWN_PATHS.includes(e.path) ? e.path : null, cause: judged.cause });
@@ -262,6 +259,12 @@ export async function writePlaybook(complete: WriteComplete, validate: ValidateP
     const f = FIELD_OF.get(e.path);
     if (f) set[f] = e.to;
   }
-  const strategy = Object.keys(set).length === 0 ? undefined : ({ ...structuredClone(draft.strategy), ...set } as Strategy);
-  return settle({ ...(strategy ? { strategy } : {}), edits: accepted, line: cleanLine(read.line) }, refused);
+  const strategy = Object.keys(set).length === 0 ? undefined : ({ ...structuredClone(brief.strategy), ...set } as Strategy);
+  return { reply: { ...(strategy ? { strategy } : {}), edits: accepted, line: cleanLine(read.line) }, refused };
+}
+
+/** writeReply, then the validator on the draft and the accepted edits: its result is what plays. */
+export async function writePlaybook(complete: WriteComplete, validate: ValidatePlan, request: WriteRequest): Promise<Written> {
+  const { reply, refused } = await writeReply(complete, request);
+  return { reply, refused, result: validate(request.state, request.draft.seat, request.draft, reply.edits) };
 }

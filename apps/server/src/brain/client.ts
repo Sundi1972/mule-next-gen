@@ -196,12 +196,16 @@ export const WRITE_FALLBACK_MODEL: ModelId = BRAIN.writeFallbackModel;
 
 /**
  * The port for strategy and playbook calls: the kind's BRAIN settings, sent to the model the caller names (the kind's
- * own by default). It only talks to the API; the caller checks the budget before and ledgers after.
+ * own by default), waiting at most `waitMs` when it is below the kind's timeoutMs. It only talks to the API; the
+ * caller checks the budget before and ledgers after.
  */
 export function createWriteComplete(
   sdk: HaikuSdk,
   now?: () => number,
 ): (kind: WriteKind, prompt: WritePrompt, model?: ModelId, waitMs?: number) => Promise<ThinkingReply> {
   const think = createThinkingComplete(sdk, now);
-  return (kind, prompt, model = WRITE_CALLS[kind].model, _waitMs) => think({ ...WRITE_CALLS[kind], model }, prompt);
+  return (kind, prompt, model = WRITE_CALLS[kind].model, waitMs = Infinity) => {
+    const call = WRITE_CALLS[kind];
+    return think({ ...call, model, timeoutMs: Math.min(waitMs, call.timeoutMs) }, prompt);
+  };
 }

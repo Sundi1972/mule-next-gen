@@ -1,4 +1,4 @@
-/** A writer call through WS3's recorder and replay: what the record holds of it, and what the replay answers. */
+/** A writer call through the game recorder and the replay: what the record holds of it, and what the replay answers. */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

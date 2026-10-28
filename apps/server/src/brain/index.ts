@@ -1,9 +1,9 @@
 import { BRAIN, type AiLevelId, type AiPersonaId } from '@mule/engine';
-import { LlmDecider, ReplyRejected, type Complete, type Decider, type DecisionRecord, type LandBrief, type WriterReply } from '@mule/ai';
+import { LlmDecider, ReplyRejected, unusableReply, writeReply, type Complete, type Decider, type DecisionRecord, type WriteAsk, type WriteComplete, type WriterReply } from '@mule/ai';
 import { createBudget, MOVE_CALL, worstCaseUsd } from './budget.js';
 import { chatter } from './chat.js';
-import { billUnknown, CallFailed, createAnthropicSdk, createHaikuComplete, type HaikuReply, type HaikuSdk, type WriteKind } from './client.js';
-import { createLedger, NO_USAGE, type Outcome, type Usage } from './ledger.js';
+import { billUnknown, CallFailed, createAnthropicSdk, createHaikuComplete, createWriteComplete, WRITE_CALLS, type HaikuReply, type HaikuSdk, type WriteKind } from './client.js';
+import { createLedger, NO_USAGE, type LedgerKind, type ModelId, type Outcome, type Usage } from './ledger.js';
 
 /** The seat a decider is built for: its id, persona and level. */
 export interface BrainSeat {
@@ -24,12 +24,7 @@ export interface BrainService {
   finish(): void;
 }
 
-/** What a writer call is given: the seat's brief, the system text and the longest it may wait in ms. */
-export interface WriteAsk {
-  brief: LandBrief;
-  system: string;
-  waitMs: number;
-}
+export type { WriteAsk };
 
 /** A seat's strategy and playbook writer. `write` never throws: every failure is the reply's cause. */
 export interface PlaybookWriter {
@@ -67,6 +62,12 @@ interface CallSlot {
   called: boolean;
   worstUsd: number;
   reply: HaikuReply | null;
+}
+
+/** A settled write call's ledger outcome: a reply none of which could be read is 'unreadable', as for a move. */
+function writeOutcomeOf(reply: Pick<HaikuReply, 'stopReason'> | null, failure: unknown, written: WriterReply): Exclude<Outcome, 'budget'> {
+  const outcome = outcomeOf(reply, failure);
+  return outcome === 'llm' && written.reply.cause !== undefined ? 'unreadable' : outcome;
 }
 
 /** A settled call's ledger outcome: from the reply's stop reason or the failure's type, never from message text. See RULE-4. */
@@ -107,27 +108,35 @@ export function createBrain(options: BrainOptions): MeteredBrain {
   if (!apiKey) return CLASSIC;
 
   const { gameId } = options;
-  const haiku = createHaikuComplete((options.sdkFactory ?? createAnthropicSdk)(apiKey), options.now);
+  const sdk = (options.sdkFactory ?? createAnthropicSdk)(apiKey);
+  const haiku = createHaikuComplete(sdk, options.now);
+  const writeComplete = createWriteComplete(sdk, options.now);
   const ledger = createLedger(options.logPath === undefined ? {} : { path: options.logPath });
   // The game's Smart seats: each one registered here takes an equal share of the game budget.
   const seats = new Set<string>();
   const budget = createBudget(ledger, { budgetUsd: gameBudgetUsd, seats: () => seats });
-  // Seat ids with a model call open, across every decider for that seat.
+  // Seat ids with a model call open, across every decider and writer for that seat.
   const busy = new Set<string>();
   let finished = false;
-  // A game that never asked for a decider (a lobby abandoned before Start) leaves no game line.
+  // A game that never asked for a decider or a writer (a lobby abandoned before Start) leaves no game line.
   let asked = false;
   // finish releases the budget's figures, so the counted spend is kept from that moment.
   let countedAtFinish: number | null = null;
   const counted = () => [...seats].reduce((sum, seat) => sum + budget.spent(gameId, seat), 0);
 
-  function deciderFor(seat: BrainSeat): Decider | null {
+  /** Registers a Smart seat, and returns how its calls are ledgered; null once the game is over. */
+  function enter(seat: BrainSeat) {
     if (finished) return null;
     asked = true;
     seats.add(seat.id);
+    return (kind: LedgerKind, model: ModelId, outcome: Outcome, usage: Usage, ms: number) =>
+      ledger.record({ game: gameId, seat: seat.id, persona: seat.persona, level: seat.level, model, kind, ms, outcome, ...usage });
+  }
 
-    const write = (kind: DecisionRecord['kind'], outcome: Outcome, usage: Usage, ms: number) =>
-      ledger.record({ game: gameId, seat: seat.id, persona: seat.persona, level: seat.level, model: BRAIN.model, kind, ms, outcome, ...usage });
+  function deciderFor(seat: BrainSeat): Decider | null {
+    const line = enter(seat);
+    if (!line) return null;
+    const write = (kind: DecisionRecord['kind'], outcome: Outcome, usage: Usage, ms: number) => line(kind, BRAIN.model, outcome, usage, ms);
 
     const portFor =
       (slot: CallSlot): Complete =>
@@ -168,11 +177,54 @@ export function createBrain(options: BrainOptions): MeteredBrain {
     };
   }
 
+  function writerFor(seat: BrainSeat): PlaybookWriter | null {
+    const line = enter(seat);
+    if (!line) return null;
+    return {
+      async write(kind, ask) {
+        if (finished || busy.has(seat.id)) return unusableReply('no_reply');
+        busy.add(seat.id);
+        const call = WRITE_CALLS[kind];
+        const slot: CallSlot = { called: false, worstUsd: 0, reply: null };
+        let failure: unknown;
+        // The writer turns any throw from here into its 'no_reply' cause, so the port keeps what was thrown.
+        const port: WriteComplete = async (prompt, waitMs) => {
+          try {
+            if (finished) throw new Error('game over');
+            slot.worstUsd = worstCaseUsd(prompt, call);
+            const { allowed, lockedNow } = budget.allow(gameId, seat.id, slot.worstUsd);
+            if (!allowed) throw new BudgetSpent(lockedNow);
+            slot.called = true;
+            slot.reply = await writeComplete(kind, prompt, call.model, waitMs);
+            return { text: slot.reply.text, stopReason: slot.reply.stopReason };
+          } catch (err) {
+            failure = err ?? new Error('unknown error');
+            throw err;
+          }
+        };
+        let written = unusableReply('no_reply');
+        try {
+          written = await writeReply(port, ask);
+        } catch (err) {
+          failure ??= err ?? new Error('unknown error');
+        } finally {
+          busy.delete(seat.id);
+          if (failure instanceof BudgetSpent) {
+            if (failure.lockedNow) line(kind, call.model, 'budget', NO_USAGE, 0);
+          } else if (slot.called) {
+            const ms = slot.reply?.ms ?? (failure instanceof CallFailed ? failure.ms : 0);
+            line(kind, call.model, writeOutcomeOf(slot.reply, failure, written), slot.reply?.usage ?? NO_USAGE, ms);
+            if (billUnknown(slot.reply, failure) && !finished) budget.countUnknownBill(gameId, seat.id, slot.worstUsd);
+          }
+        }
+        return written;
+      },
+    };
+  }
+
   return {
     deciderFor,
-    writerFor: () => {
-      throw new Error('NotImplemented: writer-for');
-    },
+    writerFor,
     chatter: (seat, say) => chatter(seat.id, say),
     finish() {
       countedAtFinish ??= counted();
