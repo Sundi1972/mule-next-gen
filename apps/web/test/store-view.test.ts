@@ -66,7 +66,7 @@ describe('the store at a glance', () => {
     expect(fed.slice(fed.indexOf(tagOf(fed, 'visitor-lena')))).not.toMatch(/style="width:/);
   });
 
-  it('T-AC-25: the clock is one for everyone, and the TV lists each pace and why', () => {
+  it('B-AC-9: the clock is one for everyone, and the TV lists each pace and why', () => {
     expect(textFrom(renderToStaticMarkup(createElement(SharedClock, { seconds: 31, total: 50 })), 'shared-clock')).toMatch(/^ Everyone(&#x27;|')s time · one clock 31s/);
     const list = renderToStaticMarkup(
       createElement(PaceList, {

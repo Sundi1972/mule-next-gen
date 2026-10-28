@@ -15,7 +15,7 @@ const FOOD = { ate: 5, need: 10 };
 const POINTS = Math.round((1 - DEV_WALK.hungerPaceMin) * 10);
 
 describe('a colonist’s condition, in words (AM-14)', () => {
-  it('T-AC-25: the hunger level comes from foodShare and DEV_WALK.hungerLevels: peckish below hungryFrom, starving from starvingFrom', () => {
+  it('T-AC-12: the hunger level comes from foodShare and DEV_WALK.hungerLevels: peckish below hungryFrom, starving from starvingFrom', () => {
     const level = (foodShare: number) => hungerLevel({ foodShare, sick: false, conditionPace: 1 }, DEV_WALK);
     const { hungryFrom, starvingFrom } = DEV_WALK.hungerLevels;
     expect(level(1)).toBe(0);
@@ -29,7 +29,7 @@ describe('a colonist’s condition, in words (AM-14)', () => {
     expect(hungerLevel(SICK, DEV_WALK)).toBe(0);
   });
 
-  it('T-AC-25: every label carries the pace: fed, peckish, hungry, starving, sick, and both', () => {
+  it('T-AC-12: every label carries the pace: fed, peckish, hungry, starving, sick, and both', () => {
     const title = (c: Condition) => paceLine(c, DEV_WALK, FOOD).title;
     expect(title(FED)).toBe('Fed: full pace');
     expect(title(PECKISH)).toBe('Peckish: 84% pace');
@@ -42,7 +42,7 @@ describe('a colonist’s condition, in words (AM-14)', () => {
     expect(feeling(STARVING_AND_SICK, DEV_WALK)).toBe('Starving and sick');
   });
 
-  it("T-AC-25: the long-press rule is Heiko's, in his words, its points from config", () => {
+  it("T-AC-12: the long-press rule is Heiko's, in his words, its points from config", () => {
     expect(paceRule(HUNGRY, DEV_WALK, FOOD)).toEqual([`You ate 5 of the 10 Food you need. You lose ${POINTS} points of walking speed per 10% of Food missing.`]);
     expect(POINTS).toBe(8);
     expect(paceRule(SICK, DEV_WALK, FOOD)).toEqual(['Sick: the air is toxic. Sickness halves your walking speed.']);
@@ -52,12 +52,12 @@ describe('a colonist’s condition, in words (AM-14)', () => {
     expect(paceLine(HUNGRY, DEV_WALK, FOOD).detail).toContain('Everyone has the same time; you just cover less ground.');
   });
 
-  it('T-AC-25: the sick line comes from one reason helper, the air by default', () => {
+  it('T-AC-12: the sick line comes from one reason helper, the air by default', () => {
     expect(sickReason()).toBe('Sick: the air is toxic.');
     expect(sickReason({ kind: 'air' })).toBe('Sick: the air is toxic.');
   });
 
-  it('T-AC-25: a walking colonist waddles at 0.36 s divided by its condition pace', () => {
+  it('T-AC-12: a walking colonist waddles at 0.36 s divided by its condition pace', () => {
     expect(waddleSeconds(1)).toBeCloseTo(0.36);
     expect(waddleSeconds(HUNGRY.conditionPace)).toBeCloseTo(0.6);
     expect(waddleSeconds(STARVING_AND_SICK.conditionPace)).toBeCloseTo(3.6);
