@@ -9,16 +9,19 @@ import { RuleError } from './errors.js';
 import { player } from './game.js';
 import { createRng } from './rng.js';
 import { PERCENT } from './units.js';
-import type { CanRun, Election, ElectionResult, GameState, Office, OfficeResult, Politics, TaxPromise } from './types.js';
+import type { CanRun, CeremonyStep, Election, ElectionResult, GameState, Office, OfficeResult, Politics, TaxPromise } from './types.js';
 
 /** Read-only all the way down: an election read before edit() may be shared with a what-if copy. */
 type Shared<T> = { readonly [K in keyof T]: T[K] extends object ? Shared<T[K]> : T[K] };
 
-const OFFICES: readonly Office[] = ['governor', 'sheriff'];
+/** Nobody running for anything: the record has a list per Office, POLITICS.offices says which are elected. */
+function noCandidates(): Record<Office, string[]> {
+  return { governor: [], sheriff: [] };
+}
 
 /** Politics as it stands before the first planning phase: no offices, no Baron, nobody running. */
 export function newPolitics(): Politics {
-  return { governor: null, sheriff: null, termStart: 1, terms: {}, governorRun: null, baron: null, taxAtStart: 0, candidates: { governor: [], sheriff: [] }, promises: {}, election: null };
+  return { governor: null, sheriff: null, termStart: 1, terms: {}, governorRun: null, baron: null, taxAtStart: 0, candidates: noCandidates(), promises: {}, election: null };
 }
 
 /** A what-if copy may share politics, so every write copies it first. */
@@ -53,7 +56,7 @@ export function openPlanning(state: GameState): void {
   p.baron = landBaron(state, p.baron);
   p.taxAtStart = state.treasury.salesTax;
   p.election = POLITICS.electionMonths.includes(state.month)
-    ? { stage: 'announce', ceremony: null, candidates: { governor: [], sheriff: [] }, promises: {}, ballots: {}, done: [], result: null }
+    ? { stage: 'announce', ceremony: null, candidates: noCandidates(), promises: {}, ballots: {}, done: [], result: null }
     : null;
 }
 
@@ -90,6 +93,10 @@ function liveElection(state: GameState): Shared<Election> {
 
 function contested(election: Shared<Election>, office: Office): boolean {
   return election.candidates[office].length > 1;
+}
+
+function contestedOffices(election: Shared<Election>): Office[] {
+  return POLITICS.offices.filter((o) => contested(election, o));
 }
 
 /** True from the ballot until the result: the candidacy is the election's then. */
@@ -146,7 +153,7 @@ export function runFor(state: GameState, playerId: string, office: Office | null
   const p = edit(state);
   // Running again for the same office keeps the place in the list.
   if (!office || !p.candidates[office].includes(playerId)) {
-    for (const o of OFFICES) p.candidates[o] = p.candidates[o].filter((c) => c !== playerId);
+    for (const o of POLITICS.offices) p.candidates[o] = p.candidates[o].filter((c) => c !== playerId);
     if (office) p.candidates[office].push(playerId);
   }
   delete p.promises[playerId];
@@ -169,7 +176,7 @@ export function castVote(state: GameState, voterId: string, office: Office, cand
   if (Object.keys(ballot).length === 0) delete ballots[voter.id];
 }
 
-/** Done for the current stage (or undone); every player Done ends the stage at the next step. */
+/** Presses (or takes back) Done for announce or the ballot; every player Done ends the stage at the next step. */
 export function electionDone(state: GameState, playerId: string, done = true): void {
   const election = currentElection(state);
   if (state.phase !== 'planning' || !election || (election.stage !== 'announce' && election.stage !== 'ballot')) return;
@@ -178,36 +185,73 @@ export function electionDone(state: GameState, playerId: string, done = true): v
   e.done = done ? [...e.done, playerId] : e.done.filter((d) => d !== playerId);
 }
 
-/** Advances the election by dt ms of game time. Returns the result in the step the ballot closes. See WS7 spec RULE-61. */
+/**
+ * Whether the player is Done in announce or the ballot: they pressed Done, or in the ballot their ballot names a
+ * candidate for every contested office. False in any other stage. See WS7 spec RULE-61.
+ */
+export function isElectionDone(state: GameState, playerId: string): boolean {
+  const election = currentElection(state);
+  if (state.phase !== 'planning' || !election || (election.stage !== 'announce' && election.stage !== 'ballot')) return false;
+  if (election.done.includes(playerId)) return true;
+  const ballot = election.ballots[playerId];
+  return election.stage === 'ballot' && contestedOffices(election).every((o) => ballot?.[o] !== undefined);
+}
+
+/**
+ * Advances the election by dt ms of game time; only the ceremony uses it. Announce and the ballot end at the step
+ * after every player is Done. Returns the result in the step the ballot closes. See WS7 spec RULE-61, RULE-62.
+ */
 export function stepElection(state: GameState, dt: number): ElectionResult | null {
   const live = currentElection(state);
   if (state.phase !== 'planning' || !live || live.stage === 'over') return null;
-  if (live.stage !== 'ceremony' && !state.players.every((p) => live.done.includes(p.id))) return null;
-  const politics = edit(state);
-  const election = politics.election!;
-  if (election.stage === 'ceremony') {
-    election.ceremony!.clockMs -= dt;
-    if (election.ceremony!.clockMs <= 0) takeOffice(state, politics);
+  if (live.stage === 'ceremony') {
+    stepCeremony(state, dt);
     return null;
   }
-  if (election.stage === 'announce') {
+  if (!state.players.every((p) => isElectionDone(state, p.id))) return null;
+  const politics = edit(state);
+  if (politics.election!.stage === 'announce') {
     openBallot(politics);
-    if (OFFICES.some((o) => contested(election, o))) return null;
+    if (contestedOffices(politics.election!).length > 0) return null;
   }
-  return closeBallot(state, election);
+  return closeBallot(state, politics.election!);
 }
 
 /** The candidacy becomes the election's, and Politics' list starts empty for the next one. */
 function openBallot(politics: Politics): void {
   Object.assign(politics.election!, { stage: 'ballot', candidates: politics.candidates, promises: politics.promises, done: [] });
-  politics.candidates = { governor: [], sheriff: [] };
+  politics.candidates = noCandidates();
   politics.promises = {};
 }
 
+/** How long a ceremony step shows. See WS7 spec RULE-62. */
+export function ceremonyStepMs(step: CeremonyStep): number {
+  return POLITICS.ceremony[`${step}Ms`];
+}
+
+/** The step after `at`, or null after the last office's winner. An office with fewer than two candidates has no bars. */
+function nextStep(result: ElectionResult, at: { office: Office; step: CeremonyStep }): { office: Office; step: CeremonyStep } | null {
+  if (at.step === 'intro') return { office: at.office, step: (result[at.office]?.tallies.length ?? 0) > 1 ? 'bars' : 'winner' };
+  if (at.step === 'bars') return { office: at.office, step: 'winner' };
+  const next = POLITICS.offices[POLITICS.offices.indexOf(at.office) + 1];
+  return next ? { office: next, step: 'intro' } : null;
+}
+
+function stepCeremony(state: GameState, dt: number): void {
+  const politics = edit(state);
+  const election = politics.election!;
+  const ceremony = election.ceremony!;
+  ceremony.clockMs -= dt;
+  if (ceremony.clockMs > 0) return;
+  const next = nextStep(election.result!, ceremony);
+  if (next) election.ceremony = { ...next, clockMs: ceremonyStepMs(next.step) };
+  else takeOffice(state, politics);
+}
+
 /**
- * Planning is ending: an election still open closes now, from the ballots cast
- * so far, and its winners take office. Returns the result it fixed, or null if
- * there was nothing open or the result was already fixed. See WS7 spec RULE-1.
+ * Planning is ending: an election still open closes now, from the candidacy and
+ * ballots so far, and its winners take office. Returns the result it fixed, or
+ * null if there was nothing open or the result was already fixed. See WS7 spec RULE-61.
  */
 export function closeElection(state: GameState): ElectionResult | null {
   const live = currentElection(state);
@@ -219,31 +263,43 @@ export function closeElection(state: GameState): ElectionResult | null {
   return result;
 }
 
+/** Fixes every office's result, in POLITICS.offices order, and starts the ceremony with the first office. */
 function closeBallot(state: GameState, election: Election): ElectionResult {
-  const governor = decide(state, election, 'governor', null);
-  // Decided after the Governor and never the Governor, so one player never holds both offices.
-  const sheriff = decide(state, election, 'sheriff', governor.winner);
-  Object.assign(election, { stage: 'ceremony', ceremony: { office: 'governor', step: 'intro', clockMs: POLITICS.ceremony.introMs }, done: [], result: { governor, sheriff } });
-  return election.result!;
+  const result: ElectionResult = {};
+  const seated: string[] = [];
+  for (const office of POLITICS.offices) {
+    // Decided in order and never someone already seated, so one player never holds two offices.
+    const decided = decide(state, election, office, seated);
+    result[office] = decided;
+    seated.push(decided.winner);
+  }
+  const first = POLITICS.offices[0]!;
+  Object.assign(election, { stage: 'ceremony', ceremony: { office: first, step: 'intro', clockMs: ceremonyStepMs('intro') }, done: [], result });
+  return result;
 }
 
 function takeOffice(state: GameState, politics: Politics): void {
   const election = politics.election!;
-  const { governor, sheriff } = election.result! as Required<ElectionResult>;
+  const result = election.result!;
   Object.assign(election, { stage: 'over', ceremony: null });
-  politics.governor = governor.winner;
-  politics.sheriff = sheriff.winner;
   politics.termStart = state.month;
-  for (const id of [governor.winner, sheriff.winner]) politics.terms[id] = (politics.terms[id] ?? 0) + 1;
+  for (const office of POLITICS.offices) {
+    const winner = result[office]?.winner;
+    if (winner === undefined) continue;
+    politics[office] = winner;
+    politics.terms[winner] = (politics.terms[winner] ?? 0) + 1;
+  }
+  const governor = result.governor?.winner;
+  if (governor === undefined) return;
   const run = politics.governorRun;
-  politics.governorRun = { id: governor.winner, terms: run?.id === governor.winner ? run.terms + 1 : 1 };
+  politics.governorRun = { id: governor, terms: run?.id === governor ? run.terms + 1 : 1 };
 }
 
 /** The winner of one office, with weights taken now, as the ballot closes. See WS7 spec RULE-3. */
-function decide(state: GameState, election: Shared<Election>, office: Office, governor: string | null): OfficeResult {
+function decide(state: GameState, election: Shared<Election>, office: Office, seated: readonly string[]): OfficeResult {
   const seat = (id: string) => state.players.findIndex((p) => p.id === id);
-  const candidates = election.candidates[office].filter((c) => c !== governor);
-  if (candidates.length === 0) return { winner: appointee(state, election, office, governor), how: 'appointed', tallies: [] };
+  const candidates = election.candidates[office].filter((c) => !seated.includes(c));
+  if (candidates.length === 0) return { winner: appointee(state, election, office, seated), how: 'appointed', tallies: [] };
   const tallies = candidates.map((id) => ({ id, votes: 0 }));
   for (const [voter, ballot] of Object.entries(election.ballots)) {
     const line = tallies.find((t) => t.id === ballot[office]);
@@ -269,22 +325,21 @@ function decide(state: GameState, election: Shared<Election>, office: Office, go
  */
 function drawLot(state: GameState, office: Office, tied: readonly string[]): string {
   if (tied.length === 1) return tied[0]!;
-  const salt = OFFICES.indexOf(office) + 1;
+  const salt = POLITICS.offices.indexOf(office) + 1;
   // literal-ok: rng salts, reshuffle replays only
   return createRng((state.seed * 7_481 + state.month * 9_337 + salt * 1_013) >>> 0).pick(tied);
 }
 
 /**
- * The richest eligible player, by lot on a tie. The Governor comes from
- * the players not running for Sheriff, or from everyone if all of them are; the
- * Sheriff is never the new Governor. See WS7 spec RULE-3.
+ * The richest eligible player, by lot on a tie: never someone seated in an earlier office, and not someone running
+ * for a later one unless that leaves nobody. With both offices: the Governor from the players not running for
+ * Sheriff, the Sheriff never the new Governor. See WS7 spec RULE-3.
  */
-function appointee(state: GameState, election: Shared<Election>, office: Office, governor: string | null): string {
-  const pool =
-    office === 'governor'
-      ? state.players.filter((p) => !election.candidates.sheriff.includes(p.id))
-      : state.players.filter((p) => p.id !== governor);
-  const eligible = pool.length > 0 ? pool : state.players;
+function appointee(state: GameState, election: Shared<Election>, office: Office, seated: readonly string[]): string {
+  const later = POLITICS.offices.slice(POLITICS.offices.indexOf(office) + 1).flatMap((o) => election.candidates[o]);
+  const free = state.players.filter((p) => !seated.includes(p.id));
+  const pool = free.filter((p) => !later.includes(p.id));
+  const eligible = pool.length > 0 ? pool : free.length > 0 ? free : state.players;
   const richest = Math.max(...eligible.map((p) => p.money));
   return drawLot(state, office, eligible.filter((p) => p.money === richest).map((p) => p.id));
 }
