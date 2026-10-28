@@ -405,6 +405,28 @@ describe('FM-one-clock: one development clock for every seat', () => {
     advanceTo(pub.arrivesAt);
     expect(game.viewFor(null).phase).toBe('production');
   });
+
+  it("FM-one-clock: a walk to the pub holds the early end like any walk: with Ossa at the pub, Lena's phone dropping on her way there from her plot ends development at her arrival ms, and the pub pays her", () => {
+    const g = walking();
+    const { game, advanceTo, home } = g;
+    tapThere(game, g, OSSA, { type: 'pub' });
+    game.handle(LENA, { type: 'buyMule' });
+    advanceTo(walkOf(game.viewFor(null), LENA).arrivesAt);
+    game.handle(LENA, { type: 'outfit', outfit: 'food' });
+    game.handle(LENA, { type: 'install', ...xy(home) });
+    advanceTo(walkOf(game.viewFor(null), LENA).arrivesAt);
+    game.handle(LENA, { type: 'pub' });
+    const pub = walkOf(game.viewFor(null), LENA);
+    expect(pub.arrivesAt, 'a real walk back from her plot').toBeGreaterThan(pub.startedAt);
+    const money = moneyOf(game.viewFor(null), LENA);
+    game.connectionChanged(LENA, false);
+    expect(game.viewFor(null).phase, 'not at the drop').toBe('development');
+    advanceTo(pub.arrivesAt - 1);
+    expect(game.viewFor(null).phase).toBe('development');
+    advanceTo(pub.arrivesAt);
+    expect(game.viewFor(null).phase).toBe('production');
+    expect(moneyOf(game.viewFor(null), LENA), 'the pub paid her on arrival').toBeGreaterThan(money);
+  });
 });
 
 describe('FM-scaled-clock: development time is game seconds at any phaseScale', () => {
