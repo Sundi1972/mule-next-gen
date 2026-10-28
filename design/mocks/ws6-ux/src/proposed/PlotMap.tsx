@@ -154,7 +154,7 @@ export function PlotMap({
               {t.good && (
                 <span
                   className="relative z-[2] flex items-center justify-center rounded-full bg-map-chip shadow-chip"
-                  style={{ width: z.disc, height: z.disc, boxShadow: `0 0 0 ${tv ? 3 : 2}px var(--color-g-${t.good === 'rareEarth' ? 'rare' : t.good})` }}
+                  style={{ width: z.disc, height: z.disc, boxShadow: `0 0 0 ${tv ? 3 : 2}px var(--color-g-${t.good})` }}
                   data-testid={`installed-${t.x}-${t.y}`}
                 >
                   <GoodIcon good={t.good as Good} size={z.icon} />
