@@ -69,6 +69,11 @@ export interface PlayerView {
   slot: number;
   species: Species;
   money: number;
+  /**
+   * Worth: the player's score if the game ended now (engine scoreParts().total), in credits, in any phase.
+   * Public in every view, the TV's too. Only the total: its parts go to the player's own `me.worthParts` and nowhere else.
+   */
+  worth: number;
   plots: number;
   ready: boolean;
   /** True once they went to the pub this development phase. */
@@ -123,6 +128,8 @@ export interface MyView {
   politics: MyPoliticsView | null;
   /** True once this player has installed a MULE in this development turn, and until their next one starts. */
   installedThisTurn: boolean;
+  /** This player's own Worth line by line, the Collapse cut included. Private: no other view carries anyone's parts. */
+  worthParts: ScorePartsView;
 }
 
 /** Only on the owner's phone: their candidacy, their secret ballot, and whether they may run now. */
@@ -296,7 +303,7 @@ export interface ShipView {
   wants: Partial<Record<Good, number>> | null;
 }
 
-/** A player's own score, line by line, as their phone receives it at game over. */
+/** A player's own score, line by line, as only their phone receives it: `me.worthParts`, and their `scores` entry at game over. */
 export type ScorePartsView = Omit<ScoreParts, 'total'>;
 
 /** A reason a plot made more or less than its ground gives, as a badge on the map. */
