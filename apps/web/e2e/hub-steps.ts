@@ -156,7 +156,7 @@ function busyNews(room: unknown): void {
   const game = (room as { game?: { news?: unknown; ctx?: { changed?: unknown } } }).game;
   check(Array.isArray(game?.news) && typeof game?.ctx?.changed === 'function', 'the room game still exposes its news and ctx');
   (game as { news: string[] }).news = [
-    'Brix is Governor (appointed) · Lena is Sheriff (appointed).',
+    'Brix is Governor (appointed) · the colony fund pays the Governor.',
     'Brix listed plot 3·4 for the land auction at 160 cr, and the colony lists plot 9·2.',
     'Welcome to the colony. Talk tactics, then grab land.',
   ];
