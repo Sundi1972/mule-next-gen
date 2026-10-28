@@ -679,13 +679,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.devEndsAt = now + this.realMs(DEVELOPMENT.fullSeconds);
     this.phaseEndsAt = null;
     this.endWhenSettled = false;
-    // Everyone starts the month in the store.
     for (const s of this.seats) this.colonists.set(s.id, { at: 'store', walk: null, assayUntil: null });
     this.scheduleDevelopmentEnd(state.month);
     if (this.ai.size > 0) this.scheduleAiDevelop(state.month, now);
   }
 
-  /** Ends development when the clock runs out; if devEndsAt moved later meanwhile, waits for it. */
+  /**
+   * Ends development when the clock runs out. It re-arms if devEndsAt moved later meanwhile, as the e2e's giveStoreTime
+   * moves it to give the store walk-through time.
+   */
   private scheduleDevelopmentEnd(month: number): void {
     const state = this.requireState();
     this.cancels.push(

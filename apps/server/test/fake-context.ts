@@ -25,6 +25,7 @@ export function toDevelopment(options: { players?: SeatInfo[]; phaseScale?: numb
   const fake = fakeContext();
   const game = new MuleGame(fake.ctx, 7, options.phaseScale === undefined ? undefined : { phaseScale: options.phaseScale });
   game.start(options.players ?? seats);
+  // The game keeps its engine state private; a test reaches it to arrange its ground truth.
   const state = (game as unknown as { state: GameState }).state;
   options.prepare?.(state);
   readyAll(game);

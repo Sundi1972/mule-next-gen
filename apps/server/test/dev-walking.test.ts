@@ -422,8 +422,10 @@ describe('FM-ai-still-walking: AI seats walk too', () => {
     });
     const start = ctx.now();
     const refused: string[] = [];
+    let moves = 0;
     const handle = game.handle.bind(game);
     game.handle = (seatId, intent) => {
+      if (seatId === AI) moves++;
       try {
         handle(seatId, intent);
       } catch (err) {
@@ -447,7 +449,8 @@ describe('FM-ai-still-walking: AI seats walk too', () => {
       }
       advance(100);
     }
-    expect(refused.filter((r) => r.includes('Still'))).toEqual([]);
+    expect(moves, "the spy saw the AI's moves").toBeGreaterThan(0);
+    expect(refused).toEqual([]);
     expect(installs.length).toBeGreaterThan(0);
     for (const i of installs) expect(i).toEqual({ good: i.good, before: null, after: i.good });
 

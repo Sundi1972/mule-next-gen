@@ -96,9 +96,9 @@ export interface MyView {
   needs: { food: number; water: number };
   /** What this player needs of each good this month: the engine's monthNeeds. */
   monthNeeds: Stock;
-  /** Epoch ms when this player's development time runs out, during development. */
+  /** Epoch ms when the one development clock runs out, the same for every seat; null outside development. */
   devEndsAt: number | null;
-  /** Seconds of development time this player got this month, before analyses. */
+  /** Seconds of development time this player got this month. */
   devSeconds: number;
   /** What this player's plots made in the latest production, or null before the first harvest. */
   produced: Stock | null;
