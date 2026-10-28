@@ -6,6 +6,8 @@ import { fakeContext, readyAll, seats } from './fake-context.js';
 
 /** Two phones and the board: every kind of viewer. */
 const VIEWERS = ['s1', 's2', null] as const;
+/** A posted Food price far beyond what the colonists' wages pay (UPKEEP.colonistBudget). */
+const DEAR_FOOD = 10_000;
 /** Ten minutes: far longer than any phase clock, so a phase still up after it has none. */
 const LONG_WAIT_MS = 600_000;
 
@@ -32,7 +34,7 @@ interface MonthEnd {
  * first plot lit in each land grant, so the players' worths differ. In month 2's planning s1 is left one Food, short of
  * what its household eats, so the month's condition says hungry.
  */
-function playThreeMonths(): { ends: MonthEnd[]; over: MuleView } {
+function playThreeMonths(): { ends: MonthEnd[]; over: MuleView; state: GameState } {
   const { ctx, advance } = fakeContext();
   const game = new MuleGame(ctx, 7, { maxMonths: 3, phaseScale: 0.1 });
   game.start(seats);
@@ -59,7 +61,7 @@ function playThreeMonths(): { ends: MonthEnd[]; over: MuleView } {
     advance(100);
   }
   expect(game.viewFor(null).finished, 'the game reached game over').toBe(true);
-  return { ends, over: game.viewFor(null) };
+  return { ends, over: game.viewFor(null), state };
 }
 
 describe('Month end: last month against this one (C20)', () => {
@@ -74,13 +76,13 @@ describe('Month end: last month against this one (C20)', () => {
       expect(Object.values(lastWorthIn(one)), `${who} in month 1: no last month`).toEqual([null, null, null]);
       expect(one.lastAir, `${who} in month 1`).toBeNull();
       expect(lastWorthIn(two), `${who} in month 2: month 1's shown worth`).toEqual(worthIn(first.views.get(null)!));
-      expect(two.lastAir, `${who} in month 2: month 1's air`).toBe(first.views.get(null)!.air.level);
+      expect(two.lastAir, `${who} in month 2: month 1's air, level and band`).toEqual(first.views.get(null)!.air);
     }
     // The change is real, so a lastWorth recomputed from today's state would not match what month 1 showed.
     const two = second.views.get(null)!;
     expect(two.players.some((p) => p.worth !== p.lastWorth), 'some worth moved over month 2').toBe(true);
     expect(lastWorthIn(over), "game over's lastWorth is month 2's end").toEqual(worthIn(two));
-    expect(over.lastAir).toBe(two.air.level);
+    expect(over.lastAir).toEqual(two.air);
   });
 
   it("T-AC-15: at the month end each player's condition is the month's, as development showed it, not re-read after the colonists ate", () => {
@@ -123,7 +125,7 @@ describe('Month end: last month against this one (C20)', () => {
  * Month 1 played to its month end: Heiko (s1) hosts, Mia (s2) is the other phone, The Baron (s3) is an AI. With
  * `emptyStore`, the store's Food and Water are kept at nothing through the auction, so the colonists run short at upkeep.
  */
-function toMonthEnd(options: { emptyStore?: boolean } = {}) {
+function toMonthEnd(options: { emptyStore?: boolean; dearFood?: boolean } = {}) {
   const fake = fakeContext();
   const game = new MuleGame(fake.ctx, 7, { maxMonths: 3, phaseScale: 0.1 });
   game.start(seats);
@@ -134,6 +136,8 @@ function toMonthEnd(options: { emptyStore?: boolean } = {}) {
       state.store.stock.food = 0;
       state.store.stock.water = 0;
     }
+    // Food on the shelf at a price no colonist's wage reaches.
+    if (options.dearFood && state.phase === 'auction') state.store.posted.food = DEAR_FOOD;
     fake.advance(100);
   }
   expect(game.viewFor(null).phase).toBe('upkeep');
@@ -208,6 +212,7 @@ describe('Before the cut, from the view (C20, fix F1)', () => {
 
 describe('Colonists fed or short (C20, fix F3)', () => {
   const shortages = (game: MuleGame) => stateOf(game).history.at(-1)!.shortages;
+  const wentShort = (game: MuleGame) => stateOf(game).history.at(-1)!.colonistsHungry;
 
   it("T-AC-15: at the month end colonistsFed is true when that upkeep's store ran short of nothing, false when it ran short; null before it", () => {
     const fed = toMonthEnd();
@@ -222,8 +227,18 @@ describe('Colonists fed or short (C20, fix F3)', () => {
     for (const viewer of VIEWERS) expect(short.game.viewFor(viewer).colonistsFed, viewer ?? 'the board').toBe(false);
   });
 
+  it('T-AC-15: colonistsFed is false when the store has Food but the colonists cannot afford it', () => {
+    const dear = toMonthEnd({ dearFood: true });
+    expect(shortages(dear.game), 'precondition: the shelf did not run empty').toEqual([]);
+    expect(wentShort(dear.game), 'precondition: the engine says the colonists went short').toBe(true);
+    expect(dear.game.viewFor(null).news.join(' ')).toContain('could not afford');
+    for (const viewer of VIEWERS) expect(dear.game.viewFor(viewer).colonistsFed, viewer ?? 'the board').toBe(false);
+  });
+
   it("T-AC-15: at game over colonistsFed is the last upkeep's", () => {
-    const { over } = playThreeMonths();
-    expect(typeof over.colonistsFed).toBe('boolean');
+    const { over, state } = playThreeMonths();
+    const last = state.history.at(-1)!;
+    expect(last.month, 'the last report is the last month').toBe(over.month);
+    expect(over.colonistsFed).toBe(!last.colonistsHungry);
   });
 });

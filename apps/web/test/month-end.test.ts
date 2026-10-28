@@ -86,7 +86,7 @@ function view(extra: Partial<MuleView> = {}): MuleView {
     mulePrice: 150,
     colonists: 1_240,
     air: { level: 34, band: 'smoggy' },
-    lastAir: 27,
+    lastAir: { level: 27, band: 'clean' },
     colonistsFed: true,
     ship: { arrives: 6, inPort: false, wants: null },
     treasury: { money: 640, salesTax: 0.05 },
@@ -112,7 +112,7 @@ function collapse(): MuleView {
   const parts = { ...me.worthParts, cut: 3_400 - cutOf(3_400) };
   return view({
     air: { level: 84, band: 'collapse' },
-    lastAir: 77,
+    lastAir: { level: 77, band: 'toxic' },
     players: PLAYERS.map((p) => {
       const before = p.id === 's2' ? MIA_BEFORE_CUT : p.worth;
       return { ...p, worth: cutOf(before), worthBeforeCut: before };
@@ -189,9 +189,13 @@ describe('B-AC-12 (WS4, month end): the league table and the colony, on the phon
     }
   });
 
-  it("B-AC-12 (WS4, month end): in month 1 there is no last month, so no change is shown", () => {
+  it('B-AC-12 (WS4, month end): in month 1 there is no last month, so neither screen draws a change column', () => {
     const first = view({ month: 1, lastAir: null, players: PLAYERS.map((p) => ({ ...p, lastWorth: null })) });
-    for (const html of [onPhone(first, Results), onTv(first, TvMonthEnd)]) for (const p of PLAYERS) expect(said(html, `change-${p.id}`)).toBe('—');
+    for (const html of [onPhone(first, Results), onTv(first, TvMonthEnd)]) {
+      expect(text(html)).not.toContain('Since month 0');
+      expect(has(html, 'change-head')).toBe(false);
+      for (const p of PLAYERS) expect(has(html, `change-${p.id}`)).toBe(false);
+    }
   });
 
   it('B-AC-12 (WS4, month end): the TV names who went hungry, from the month’s condition, and the air against last month', () => {
