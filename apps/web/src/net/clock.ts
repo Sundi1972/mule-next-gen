@@ -1,12 +1,14 @@
 /** Milliseconds the device clock may move apart from the monotonic clock between two readings before it counts as a jump. */
 export const CLOCK_JUMP_MS = 1_000;
 
-/** What ClockSync needs to notice the device clock jumping; without it, it never does. */
+/** What ClockSync needs to notice the device clock jumping, and whom it tells when a round trip moves the offset; without it, it does neither. */
 export interface ClockWatch {
   /** A clock the device can't change: performance.now(). */
   monotonic: () => number;
   /** Called once per jump, after the samples moved with the device clock. */
   onJump: () => void;
+  /** Called when a round trip moves `offset`. Not on a jump's shift: that keeps serverNow() continuous. */
+  onOffset: () => void;
 }
 
 /**
@@ -35,6 +37,7 @@ export class ClockSync {
     if (sentAt < this.jumpedAt) return;
     const rtt = receivedAt - sentAt;
     if (rtt < 0) return;
+    const before = this.offset;
     // A sleep that paused the monotonic clock looks like a jump while the device clock was right, so the shift was a guess.
     if (this.shifted) {
       this.samples = [];
@@ -42,6 +45,7 @@ export class ClockSync {
     }
     this.samples.push({ rtt, offset: serverTime - (sentAt + receivedAt) / 2 });
     if (this.samples.length > this.keep) this.samples.shift();
+    if (this.offset !== before) this.watch?.onOffset();
   }
 
   /** Milliseconds to add to this screen's clock to get the server's. Zero until the first pong. */
