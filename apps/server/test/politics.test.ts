@@ -4,9 +4,9 @@ import type { MuleView, ServerEnvelope } from '@mule/protocol';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import { openPlanning, POLITICS, WALK, type GameState, type TaxPromise } from '@mule/engine';
-import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
+import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
 import { createMuleServer, type MuleServer } from '../src/server.js';
-import { fakeContext } from './fake-context.js';
+import { fakeContext, readyAll } from './fake-context.js';
 
 /** RULE-10: a Governor run carries a promise; tests about something else hold the tax. */
 const HOLD: TaxPromise = { kind: 'hold' };
@@ -84,7 +84,7 @@ describe('politics over the wire', () => {
     const dark = await seatedPhone({ politics: false });
     expect(dark.first.politics).toBeNull();
     expect(dark.first.me!.politics).toBeNull();
-    expect(dark.first.phaseEndsAt, "planning's timer runs at once").not.toBeNull();
+    expect(dark.first.phaseEndsAt, 'planning has no clock without an election either').toBeNull();
   });
 
   it('C9: the wire accepts run, vote and setTax and refuses malformed ones', async () => {
@@ -200,6 +200,18 @@ function tickFor(g: Started, ms: number) {
   for (let t = 0; t < Math.round(ms / WALK.tickMs); t++) g.advance(WALK.tickMs);
 }
 
+/** Far longer than any planning clock there ever was. */
+const LONG_WAIT_MS = 600_000;
+
+/** Plays on in 100 ms steps until `done`; planning has no clock, so every human is Ready once planning proper opens. */
+function playUntil(g: Started, done: () => boolean, boundMs: number) {
+  for (let ms = 0; ms < boundMs && !done(); ms += 100) {
+    const view = g.game.viewFor(null);
+    if (view.phase === 'planning' && (view.politics?.election?.stage ?? 'over') === 'over') readyAll(g.game);
+    g.advance(100);
+  }
+}
+
 /** Plays out the longest pause an AI seat takes before it acts and presses Done (RULE-8). */
 const aiPause = (g: Started) => tickFor(g, POLITICS.ai.actMs[1] + WALK.tickMs);
 
@@ -215,7 +227,7 @@ const screens = (game: MuleGame) => [...humans.map((id) => game.viewFor(id)), ga
 const readyOn = (game: MuleGame, id: string) => screens(game).map((v) => v.players.find((p) => p.id === id)!.ready);
 
 describe('the election runs first in planning', () => {
-  it('C9: in month 1 the planning timer starts only after the election is over', () => {
+  it('C9: in month 1 planning proper starts only after the election is over, and then waits for every Ready', () => {
     // Each AI seat's land plan is a 'land' ask of its brain, made when planning proper starts.
     const landAsks: { seat: string; at: number }[] = [];
     const ask = Brain.prototype.ask;
@@ -237,10 +249,10 @@ describe('the election runs first in planning', () => {
     expect(overAt, 'The Baron runs alone: nominate, no ballot, then the reveal').toBe(POLITICS.nominateMs + POLITICS.revealMs);
     expect(landAsks, 'one land plan per AI seat, as the election ends').toEqual([{ seat: 'ai1', at: overAt }]);
     expect(g.game.viewFor(null).phase).toBe('planning');
-    expect(g.game.viewFor(null).phaseEndsAt).toBe(overAt! + PHASE_MS.planning);
-    g.advance(PHASE_MS.planning - 1);
+    expect(g.game.viewFor(null).phaseEndsAt, 'planning proper has no clock').toBeNull();
+    g.advance(LONG_WAIT_MS);
     expect(g.game.viewFor(null).phase).toBe('planning');
-    g.advance(1);
+    readyAll(g.game);
     expect(g.game.viewFor(null).phase).toBe('landGrant');
   });
 
@@ -291,7 +303,7 @@ describe('the election runs first in planning', () => {
 
     allReady(g.game);
     untilStage(g, 'over');
-    expect(g.game.viewFor(null).phaseEndsAt, 'planning proper').not.toBeNull();
+    expect(g.game.viewFor(null).phase, 'planning proper').toBe('planning');
     for (const id of humans) expect(readyOf(id), `${id}: planning's ready starts false`).toEqual([false, false, false, false]);
     g.game.handle('ossa', { type: 'ready' });
     expect(readyOf('ossa')).toEqual([true, true, true, true]);
@@ -341,7 +353,7 @@ describe('the election runs first in planning', () => {
     g.game.connectionChanged('ossa', false);
     untilStage(g, 'over');
     g.game.connectionChanged('ossa', true);
-    for (let ms = 0; ms < 1_200_000 && g.game.viewFor(null).month < 4; ms += 100) g.advance(100);
+    playUntil(g, () => g.game.viewFor(null).month >= 4, 1_200_000);
     expect(election(g.game).stage).toBe('nominate');
     g.game.handle('ossa', { type: 'ready' });
     g.game.connectionChanged('ossa', false);
@@ -351,15 +363,16 @@ describe('the election runs first in planning', () => {
 
   it('C9: month 2 has no election; month 4 opens one, with no stale deadline', () => {
     const g = started({ phaseScale: 0.1 });
-    for (let ms = 0; ms < 600_000 && g.game.viewFor(null).month === 1; ms += 100) g.advance(100);
+    playUntil(g, () => g.game.viewFor(null).month !== 1, 600_000);
     const view = g.game.viewFor(null);
     expect(view.month).toBe(2);
     expect(view.phase).toBe('planning');
     expect(view.politics!.election).toBeNull();
-    expect(view.phaseEndsAt, 'planning runs on its timer at once').not.toBeNull();
-    expect(view.phaseEndsAt! - g.ctx.now()).toBeGreaterThan(PHASE_MS.planning * 0.1 - 100);
+    expect(view.phaseEndsAt, 'planning has no clock').toBeNull();
+    readyAll(g.game);
+    expect(g.game.viewFor(null).phase, 'with no election, planning proper is open at once: Ready ends it').toBe('landGrant');
 
-    for (let ms = 0; ms < 1_200_000 && g.game.viewFor(null).month < 4; ms += 100) g.advance(100);
+    playUntil(g, () => g.game.viewFor(null).month >= 4, 1_200_000);
     const month4 = g.game.viewFor(null);
     expect(month4.month).toBe(4);
     expect(month4.phase).toBe('planning');
@@ -386,7 +399,8 @@ describe('the election runs first in planning', () => {
     expect(election(g.game).stage).toBe('reveal');
     g.advance(WALK.tickMs);
     expect(election(g.game).stage).toBe('over');
-    expect(g.game.viewFor(null).phaseEndsAt).toBe(g.ctx.now() + PHASE_MS.planning * phaseScale);
+    expect(g.game.viewFor(null).phase).toBe('planning');
+    expect(g.game.viewFor(null).phaseEndsAt, 'planning proper has no clock').toBeNull();
   });
 });
 
@@ -435,7 +449,7 @@ describe('the politics view', () => {
     expect(brix.politics!.weights.find((w) => w.id === 'brix'), 'month 1: no land, no taxes paid, no Baron').toEqual({ id: 'brix', votes: 1, parts: { base: 1, land: 0, reputation: 0, baron: 0, taxes: 0 } });
     expect(brix.politics!.tax).toEqual({ percent: 5, start: 5, low: 0, high: 10 });
     expect(brix.me!.politics).toEqual({ running: 'governor', ballot: { governor: 'brix' }, canRun: { governor: 'closed', sheriff: 'closed' } });
-    expect(brix.phaseEndsAt, 'planning has started, so the Governor can set the tax').not.toBeNull();
+    expect(brix.politics!.election!.stage, 'planning proper has started, so the Governor can set the tax').toBe('over');
     expect(() => g.game.handle('lena', { type: 'setTax', percent: 8 })).toThrow('Only the Governor sets the tax');
     g.game.handle('brix', { type: 'setTax', percent: 8 });
     for (const view of screens(g.game)) expect(view.politics!.tax.percent).toBe(8);
@@ -677,6 +691,7 @@ describe('AI seats in the election', () => {
       tickFor(g, WALK.tickMs * 30);
       expect(g.game.viewFor(null).phase, 'still in planning proper').toBe('planning');
       expect(sent.length, `seed ${seed}: nothing new in planning, nothing sent`).toBe(quiet);
+      readyAll(g.game);
 
       // The fund runs dry before month 2, which has no election: the Governor steers again, with the bump.
       for (let ms = 0; ms < 600_000 && g.game.viewFor(null).phase !== 'upkeep'; ms += WALK.tickMs) g.advance(WALK.tickMs);
