@@ -8,6 +8,7 @@ import { band, clamp, Crater, Dim, EDGE, MeteorFall, OnPlot, ramp, Spotlight, Sw
 import { accent, DeltaChip, EffectChip, EventGlyph, SignBadge } from './glyphs';
 import { cell, centre, useShow } from './stage';
 import { STORY } from './story';
+import { Vignette } from './vignettes';
 
 /**
  * B · Living weather, Heiko's pick (28 Oct). One engine for the TV and for a phone with no TV in the room: the map
@@ -600,6 +601,7 @@ export function RollCall({ size }: { size: Size }) {
               <span className="relative">
                 <PlayerMark slot={seat(e.player!).slot} size={tv ? 40 : 18} />
                 <SignBadge ev={e} size={tv ? 24 : 13} className="absolute -bottom-1.5 -right-2" />
+                <Vignette ev={e} seg={seg} />
               </span>
               <span className="flex flex-col leading-tight">
                 <span className={cx('font-display font-semibold', tv ? 'text-xl' : 'text-[11px]')}>{name(e.player!)}</span>

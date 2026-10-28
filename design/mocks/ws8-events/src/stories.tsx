@@ -1,11 +1,13 @@
-import { Creature, cx, GoodIcon, PlayerMark, SLOT_COLOR, type Species } from '@mule/ui';
-import type { CSSProperties, ReactNode } from 'react';
+import { Creature, cx, GoodIcon, MuleIcon, PlayerMark, SLOT_COLOR, type Species } from '@mule/ui';
+import type { ReactNode } from 'react';
 import type { EventKey } from './catalogue';
-import type { Segment, ShowEvent } from './events';
-import { H, seat, W } from './fixture';
+import { effectWords } from './copy';
+import { hitAt, type Segment, type ShowEvent } from './events';
+import { H, SEATS, seat, STAND, TILES, W } from './fixture';
 import { clamp, ramp } from './fx';
-import { EventGlyph } from './glyphs';
 import { STORE, type Size } from './living';
+import { At, Colonist, Crate, ease, Flame, lerp, mix, px, Smoke, TOWN, useStoryClock, type P, Prop } from './scene';
+import { PLOT_SCENES } from './stories-plots';
 import { useShow } from './stage';
 
 /**
@@ -14,75 +16,6 @@ import { useShow } from './stage';
  * scene plays on the TV and, smaller, on a phone alone. Pure functions of the clock; `u` is seconds into the story at
  * the TV's pace. Reduced motion: nothing travels; each scene shows its outcome where it lands.
  */
-
-// --- Placing things on the map, in tiles ---------------------------------------------------------------------------
-
-const ease = (v: number) => v * v * (3 - 2 * v);
-const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
-type P = { x: number; y: number };
-const mix = (a: P, b: P, k: number): P => ({ x: lerp(a.x, b.x, k), y: lerp(a.y, b.y, k) });
-
-/** Something centred on a point in tiles (fractions between tiles), `w` tiles wide. */
-function At({ p, w, children, style, className }: { p: P; w: number; children: ReactNode; style?: CSSProperties; className?: string }) {
-  return (
-    <div className={cx('absolute', className)} style={{ left: `${((p.x + 0.5) / W) * 100}%`, top: `${((p.y + 0.5) / H) * 100}%`, width: `${(w / W) * 100}%`, transform: 'translate(-50%, -50%)', ...style }}>
-      {children}
-    </div>
-  );
-}
-
-/** Small words on the map, sized in the map's own pixels so the camera's zoom makes them readable. */
-const px = (size: Size, n: number) => (size === 'tv' ? n : n * 0.66);
-
-/** Seconds into a segment's story, at the TV's pace. */
-function useStoryClock(seg: Segment) {
-  const { t, reduced } = useShow();
-  return { u: (t - seg.playAt) / seg.pace, reduced, t };
-}
-
-// --- Shared props ----------------------------------------------------------------------------------------------------
-
-/** A flame in three tones, so a fire reads as fire at any size. */
-function Flame({ flicker, className, style }: { flicker: boolean; className?: string; style?: CSSProperties }) {
-  return (
-    <svg viewBox="0 0 24 32" className={cx('h-auto w-full', flicker && 'animate-[show-flicker_0.22s_ease-in-out_infinite_alternate]', className)} style={{ transformOrigin: 'bottom', ...style }} aria-hidden>
-      <path d="M12 1c1 6 9 9 9 19a9 9 0 0 1-18 0c0-5 3-8 4-11 .6 3 1.6 4.6 3 5C10 9 10 5 12 1Z" fill="var(--color-alert)" />
-      <path d="M12 11c.5 3.5 5 5.5 5 11a5 5 0 0 1-10 0c0-3 1.6-4.6 2.4-6.4.4 1.6 1 2.4 1.8 2.6 0-2.6 0-5 .8-7.2Z" fill="var(--color-g-smithore)" />
-      <path d="M12 20c.3 2 2.4 3 2.4 5.6a2.4 2.4 0 0 1-4.8 0c0-1.6.9-2.4 1.4-3.6.2.8.6 1 1 1.2Z" fill="var(--color-warn)" />
-    </svg>
-  );
-}
-
-/** A puff of smoke rising from a point and spreading as it goes. */
-function Smoke({ from, u, every = 0.35, until, size, dark = false }: { from: P; u: number; every?: number; until: number; size: Size; dark?: boolean }) {
-  const puffs = Math.floor(Math.min(u, until) / every) + 1;
-  return (
-    <>
-      {Array.from({ length: Math.min(puffs, 10) }, (_, i) => {
-        const born = (puffs - 1 - i) * every;
-        const v = u - born;
-        if (v < 0 || v > 2.2) return null;
-        return (
-          <At key={born} p={{ x: from.x + (i % 2 ? 0.2 : -0.2) * v, y: from.y - v * 0.9 }} w={0.6 + v * 0.7}>
-            <div className="aspect-square rounded-full" style={{ background: `radial-gradient(circle, color-mix(in srgb, ${dark ? 'var(--color-void)' : 'var(--color-ink-3)'} 85%, transparent), transparent 70%)`, opacity: clamp(1 - v / 2.2) * (size === 'tv' ? 1 : 0.9) }} />
-          </At>
-        );
-      })}
-    </>
-  );
-}
-
-/** A crate of goods, its owner's colour round the edge when it has one. */
-function Crate({ good, ring, burnt = 0 }: { good: 'crystite' | 'food' | 'energy'; ring?: string; burnt?: number }) {
-  return (
-    <div className="relative flex aspect-square items-center justify-center rounded-[18%] shadow-chip" style={{ background: `color-mix(in srgb, var(--color-g-smithore) ${45 - burnt * 40}%, var(--color-void))`, boxShadow: ring ? `0 0 0 2px ${ring}, var(--shadow-chip)` : undefined }}>
-      <span className="absolute inset-[12%] rounded-[10%] border border-void/50" />
-      <span className="relative flex w-[60%]" style={{ opacity: 1 - burnt }}>
-        <GoodIcon good={good} size={24} className="h-auto w-full" />
-      </span>
-    </div>
-  );
-}
 
 // --- Pirate raid -------------------------------------------------------------------------------------------------------
 
@@ -292,37 +225,6 @@ const MOB: { sp: Species; dx: number; dy: number; prop: 'fist' | 'torch' | 'sign
   { sp: 'quibbit', dx: -0.55, dy: -0.2, prop: 'torch' },
   { sp: 'glimmer', dx: 0.35, dy: 0.85, prop: 'fist' },
 ];
-const TOWN = ['var(--color-g-alloy)', 'var(--color-mule-metal)', 'var(--color-ink-2)'];
-
-/** What a rioter holds over their head. */
-function Prop({ kind, flicker }: { kind: 'fist' | 'torch' | 'sign'; flicker: boolean }) {
-  if (kind === 'torch')
-    return (
-      <span className="flex flex-col items-center">
-        <span className="w-[70%]">
-          <Flame flicker={flicker} />
-        </span>
-        <span className="h-[50%] w-[12%] rounded-full bg-g-smithore" />
-      </span>
-    );
-  if (kind === 'sign')
-    return (
-      <span className="flex flex-col items-center">
-        <span className="flex aspect-[1.5/1] w-full items-center justify-center rounded-[2px] bg-ink text-void">
-          <EventGlyph k="riot" size={10} className="h-auto w-[55%]" />
-        </span>
-        <span className="h-[40%] w-[10%] bg-ink-2" />
-      </span>
-    );
-  return (
-    <svg viewBox="0 0 12 14" className="h-auto w-[70%]" aria-hidden>
-      <rect x="1.5" y="1" width="9" height="7" rx="2" fill="var(--color-alert-ink)" />
-      <path d="M4 1v3M6 1v3M8 1v3" stroke="var(--color-void)" strokeWidth={0.8} />
-      <rect x="3.5" y="8" width="5" height="6" fill="var(--color-alert-ink)" />
-    </svg>
-  );
-}
-
 /** The stadium the colony is proud of: the prestige object the riot damages. */
 function Stadium({ cracked }: { cracked: number }) {
   return (
@@ -396,12 +298,565 @@ function Riot({ ev, seg, size }: { ev: ShowEvent; seg: Segment; size: Size }) {
   );
 }
 
+// --- The Federation: tax and grant ------------------------------------------------------------------------------------
+
+/** Where a player's land is, in the middle: what a coin flies from or a pod lands on. */
+function landOf(id: string): P {
+  const mine = TILES.filter((t) => t.owner === seat(id).slot);
+  return { x: mine.reduce((n, t) => n + t.x, 0) / mine.length, y: mine.reduce((n, t) => n + t.y, 0) / mine.length };
+}
+
+/** The Federation's cruiser: long, pale, a gold star on its flank, lights along its belly. */
+function Cruiser({ beam = 0 }: { beam?: number }) {
+  return (
+    <svg viewBox="0 0 80 28" className="h-auto w-full overflow-visible" aria-hidden>
+      <path d="M3 15C14 6 34 5 54 6l20 4c4 2 4 6 0 8l-20 4C34 23 14 22 3 15Z" fill="color-mix(in srgb, var(--color-mule-metal) 85%, var(--color-holo))" stroke="var(--color-holo)" strokeWidth={1.2} />
+      <path d="M10 15h58" stroke="var(--color-holo)" strokeWidth={0.8} opacity={0.6} />
+      <path d="M30 8.5l1.6 3.4 3.7.4-2.8 2.5.8 3.7-3.3-1.9-3.3 1.9.8-3.7-2.8-2.5 3.7-.4Z" fill="var(--color-warn)" />
+      {[44, 50, 56, 62].map((x) => (
+        <circle key={x} cx={x} cy={19} r={1.2} fill="var(--color-holo)" opacity={0.5 + beam * 0.5} />
+      ))}
+      <ellipse cx="62" cy="10.5" rx="6" ry="3" fill="color-mix(in srgb, var(--color-holo) 55%, var(--color-void))" />
+    </svg>
+  );
+}
+
+/** A credit coin. */
+function Coin() {
+  return (
+    <svg viewBox="0 0 12 12" className="h-auto w-full" aria-hidden>
+      <circle cx="6" cy="6" r="5.5" fill="var(--color-warn)" stroke="color-mix(in srgb, var(--color-warn) 50%, var(--color-void))" strokeWidth={1} />
+      <circle cx="6" cy="6" r="3.2" fill="none" stroke="color-mix(in srgb, var(--color-warn) 50%, var(--color-void))" strokeWidth={0.8} />
+    </svg>
+  );
+}
+
+/** The cruiser's path: in from the east, over the middle of the colony, out to the west. */
+function cruiserAt(u: number, leave: number): P {
+  const over: P = { x: 7, y: 0.4 };
+  if (u < 1) return mix({ x: 17, y: -0.6 }, over, ease(clamp(u)));
+  if (u < leave) return { x: over.x, y: over.y + Math.sin(u * 2) * 0.06 };
+  return mix(over, { x: -3, y: -0.8 }, ease(clamp(u - leave)));
+}
+
+/** A coin flying in an arc from one place to another. */
+function FlyingCoin({ from, to, k, w = 0.32 }: { from: P; to: P; k: number; w?: number }) {
+  if (k <= 0 || k >= 1) return null;
+  const p = mix(from, to, ease(k));
+  return (
+    <At p={{ x: p.x, y: p.y - Math.sin(k * Math.PI) * 0.8 }} w={w}>
+      <Coin />
+    </At>
+  );
+}
+
+/** The tax: the cruiser stops over the colony, a tenth of each player's credits flies up from their land, then down into the colony fund at the store. */
+function FederationTax({ ev, seg, size }: { ev: ShowEvent; seg: Segment; size: Size }) {
+  const { u, reduced } = useStoryClock(seg);
+  if (u < 0 || u > 5) return null;
+  const ship = reduced ? { x: 7, y: 0.4 } : cruiserAt(u, 3.8);
+  const payers = (ev.effects ?? []).filter((f) => f.what === 'cash' && f.on !== 'colony');
+  const fund = ev.effects?.find((f) => f.what === 'fund');
+  return (
+    <>
+      {payers.map((f, i) => {
+        const land = landOf(f.on);
+        const start = 1.2 + i * 0.35;
+        const beam = reduced ? 0 : clamp(ramp(u, start - 0.2, 0.2) - ramp(u, start + 1, 0.3));
+        return (
+          <div key={f.on}>
+            {beam > 0 && (
+              <svg className="absolute inset-0 h-full w-full" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden>
+                <path d={`M${ship.x + 0.5 - 0.15} ${ship.y + 0.8} L${land.x + 0.5 - 0.6} ${land.y + 0.5} L${land.x + 0.5 + 0.6} ${land.y + 0.5} L${ship.x + 0.5 + 0.15} ${ship.y + 0.8}Z`} fill={SLOT_COLOR[seat(f.on).slot]} opacity={0.18 * beam} />
+              </svg>
+            )}
+            {[0, 0.15, 0.3].map((d) => (
+              <FlyingCoin key={d} from={land} to={{ x: ship.x, y: ship.y + 0.4 }} k={reduced ? 0 : (u - start - d) / 0.8} />
+            ))}
+          </div>
+        );
+      })}
+      {/* The cruiser pours it into the colony fund at the store. */}
+      {[0, 0.12, 0.24, 0.36, 0.48].map((d) => (
+        <FlyingCoin key={d} from={{ x: ship.x, y: ship.y + 0.4 }} to={STORE} k={reduced ? 0 : (u - 3 - d) / 0.6} w={0.36} />
+      ))}
+      {fund && (u > 3.6 || reduced) && u < 4.9 && (
+        <At p={{ x: STORE.x, y: STORE.y - 0.85 }} w={1.6}>
+          <span className="flex justify-center">
+            <span className="rounded-chip bg-warn px-1 font-mono font-bold text-on-holo shadow-chip animate-[ev-pop_0.3s_ease-out]" style={{ fontSize: px(size, 11) }}>
+              Colony fund +{fund.delta} cr
+            </span>
+          </span>
+        </At>
+      )}
+      {!reduced && (
+        <At p={ship} w={3.2}>
+          <Cruiser beam={clamp(ramp(u, 1, 0.3) - ramp(u, 3.6, 0.3))} />
+        </At>
+      )}
+      {(u > 1 || reduced) && u < 3.8 && (
+        <At p={{ x: ship.x, y: ship.y + 1.15 }} w={1.4}>
+          <span className="flex justify-center">
+            <span className="rounded-chip border-2 border-warn bg-panel px-1 font-display font-bold text-warn animate-[ev-stamp_0.35s_ease-out]" style={{ fontSize: px(size, 12) }}>
+              TAX 10%
+            </span>
+          </span>
+        </At>
+      )}
+    </>
+  );
+}
+
+/** A supply pod under a parachute. */
+function Pod({ open }: { open: number }) {
+  return (
+    <svg viewBox="0 0 24 34" className="h-auto w-full overflow-visible" aria-hidden>
+      {open < 1 && (
+        <g opacity={1 - open}>
+          <path d="M2 10a10 9 0 0 1 20 0Z" fill="var(--color-ok)" />
+          <path d="M2 10l8 14M22 10l-8 14M12 10v14" stroke="var(--color-ink-2)" strokeWidth={0.7} />
+        </g>
+      )}
+      <rect x="7" y="23" width="10" height="9" rx="2" fill="var(--color-mule-metal)" stroke="var(--color-holo)" strokeWidth={1} />
+      <path d="M12 23v9" stroke="var(--color-holo)" strokeWidth={0.8} />
+    </svg>
+  );
+}
+
+/** The grant: the cruiser drops a pod on each of the two poorest players' land; it lands and bursts into credits. */
+function FederationGrant({ ev, seg, size }: { ev: ShowEvent; seg: Segment; size: Size }) {
+  const { u, reduced } = useStoryClock(seg);
+  if (u < 0 || u > 5) return null;
+  const ship = reduced ? { x: 7, y: 0.4 } : cruiserAt(u, 3.4);
+  const takers = (ev.effects ?? []).filter((f) => f.what === 'cash');
+  return (
+    <>
+      {takers.map((f, i) => {
+        const land = landOf(f.on);
+        const drop = reduced ? 1 : ease(clamp((u - 1.2 - i * 0.3) / 1.4));
+        const burst = reduced ? 1 : clamp((u - 2.7 - i * 0.3) / 0.6);
+        const p = mix({ x: ship.x, y: ship.y + 0.4 }, land, drop);
+        return (
+          <div key={f.on}>
+            {drop > 0 && burst < 1 && (
+              <At p={{ x: p.x + Math.sin(u * 3 + i) * 0.1 * (1 - drop), y: p.y - 0.3 }} w={0.75}>
+                <Pod open={burst} />
+              </At>
+            )}
+            {burst > 0 &&
+              [0, 1, 2, 3, 4, 5].map((k) => {
+                const a = (k / 6) * Math.PI * 2;
+                return (
+                  <At key={k} p={{ x: land.x + Math.cos(a) * burst * 0.6, y: land.y + Math.sin(a) * burst * 0.4 - burst * 0.3 }} w={0.28} style={{ opacity: 1 - burst * 0.6 }}>
+                    <Coin />
+                  </At>
+                );
+              })}
+            {burst > 0.3 && u < 4.9 && (
+              <At p={{ x: land.x, y: land.y - 0.9 }} w={1.3}>
+                <span className="flex justify-center">
+                  <span className="rounded-chip bg-ok px-1 font-mono font-bold text-on-holo shadow-chip animate-[ev-pop_0.3s_ease-out]" style={{ fontSize: px(size, 12) }}>
+                    {seat(f.on).name} +{f.delta} cr
+                  </span>
+                </span>
+              </At>
+            )}
+          </div>
+        );
+      })}
+      {!reduced && (
+        <At p={ship} w={3.2}>
+          <Cruiser beam={clamp(ramp(u, 1, 0.3) - ramp(u, 3.2, 0.3))} />
+        </At>
+      )}
+    </>
+  );
+}
+
+// --- Colonists arriving and leaving ------------------------------------------------------------------------------------
+
+/** The passenger shuttle: round, white, a row of windows, a door that slides open. */
+function Shuttle({ thrust, door }: { thrust: number; door: number }) {
+  return (
+    <svg viewBox="0 0 60 40" className="h-auto w-full overflow-visible" aria-hidden>
+      {[14, 46].map((x) => (
+        <path key={x} d={`M${x - 3} 31 L${x} ${31 + 3 + thrust * 10} L${x + 3} 31Z`} fill="var(--color-holo)" opacity={thrust} />
+      ))}
+      <path d="M4 22C4 12 16 6 30 6s26 6 26 16c0 6-6 9-14 9H18c-8 0-14-3-14-9Z" fill="var(--color-mule-metal)" stroke="var(--color-holo)" strokeWidth={1.4} />
+      <path d="M6 20h48" stroke="var(--color-holo)" strokeWidth={2} />
+      {[14, 22, 38, 46].map((x) => (
+        <rect key={x} x={x - 2.5} y={12} width={5} height={4} rx={1.5} fill="color-mix(in srgb, var(--color-holo) 60%, var(--color-void))" />
+      ))}
+      <rect x="25" y="16" width="10" height="15" rx="1.5" fill="var(--color-void)" />
+      <rect x="25" y="16" width="10" height="15" rx="1.5" fill="var(--color-g-alloy)" transform={`translate(${door * 10} 0)`} />
+      <path d="M12 31l-2 5M48 31l2 5" stroke="var(--color-ink-2)" strokeWidth={1.4} strokeLinecap="round" />
+    </svg>
+  );
+}
+
+const NEWCOMERS: Species[] = ['zipwing', 'bramblet', 'gearling', 'mollox', 'glimmer', 'quibbit', 'zipwing', 'gearling'];
+
+/** Migration: a shuttle at the store, colonists filing out to their new homes (arriving), or in from them (leaving). */
+function Migration({ ev, seg, size }: { ev: ShowEvent; seg: Segment; size: Size }) {
+  const { u, reduced } = useStoryClock(seg);
+  if (u < 0 || u > 6) return null;
+  const arriving = ev.key === 'immigrationWave';
+  const pad: P = { x: STORE.x - 1.35, y: STORE.y - 0.3 };
+  const door: P = { x: pad.x, y: pad.y + 0.45 };
+  const sky: P = arriving ? { x: pad.x + 1.5, y: pad.y - 5 } : pad;
+  const away: P = { x: pad.x - 1, y: pad.y - 5.5 };
+  // Arriving: in 0–1.3, out 4.4–5.4. Leaving: there from the start, off 3.4–4.6.
+  const landK = arriving ? (reduced ? 1 : ease(clamp(u / 1.3))) : 1;
+  const leaveAt = arriving ? 4.4 : 3.4;
+  const offK = reduced ? 0 : ease(clamp((u - leaveAt) / 1.2)) ** 1.5;
+  const ship = u < leaveAt ? mix(sky, pad, landK) : mix(pad, away, offK);
+  const thrust = arriving ? (u < 1.3 ? 1 : u > leaveAt - 0.3 ? ramp(u, leaveAt - 0.3, 0.3) : 0) : u > leaveAt - 0.3 ? ramp(u, leaveAt - 0.3, 0.3) : 0;
+  const doorOpen = arriving ? clamp(ramp(u, 1.4, 0.3) - ramp(u, 3.9, 0.3)) : clamp(1 - ramp(u, 3, 0.3));
+  const count = ev.effects?.find((f) => f.what === 'colonists');
+  const shown = u > (STORY_COUNT_AT[ev.key] ?? 4) || reduced;
+  return (
+    <>
+      {NEWCOMERS.map((sp, i) => {
+        const a = (i / NEWCOMERS.length) * Math.PI * 2 + 0.4;
+        const home: P = { x: door.x + Math.cos(a) * 2.6, y: door.y + Math.sin(a) * 1.7 };
+        const k = reduced ? (arriving ? 1 : 0) : arriving ? clamp((u - 1.6 - i * 0.22) / 1.3) : 1 - clamp((u - 0.4 - i * 0.25) / 1.3);
+        if ((arriving && k <= 0) || (!arriving && k <= 0)) return null;
+        const p = mix(door, home, k);
+        return (
+          <At key={i} p={p} w={0.5} style={{ opacity: arriving ? 1 - clamp((k - 0.8) / 0.2) : clamp(k / 0.15) }}>
+            <Colonist sp={sp} color={TOWN[i % TOWN.length]!} bob={!reduced && k > 0 && k < 1 ? Math.abs(Math.sin(u * 9 + i)) * 0.08 : 0} size={size} />
+          </At>
+        );
+      })}
+      {u < leaveAt + 1.3 && (
+        <At p={ship} w={2.4} style={{ transform: `translate(-50%, -60%) scale(${u < leaveAt ? lerp(arriving ? 0.6 : 1, 1, landK) : lerp(1, 0.5, offK)})` }}>
+          <Shuttle thrust={reduced ? 0 : thrust} door={reduced ? 0 : doorOpen} />
+        </At>
+      )}
+      {count && shown && u < 5.9 && (
+        <At p={{ x: STORE.x + 1.1, y: STORE.y - 1.1 }} w={1.7}>
+          <span className="flex justify-center">
+            <span className={cx('rounded-chip px-1.5 font-mono font-bold shadow-chip animate-[ev-pop_0.3s_ease-out]', count.delta > 0 ? 'bg-ok text-on-holo' : 'bg-alert text-white')} style={{ fontSize: px(size, 12) }}>
+              Colonists {count.delta > 0 ? '+' : '−'}
+              {Math.abs(count.delta)}%
+            </span>
+          </span>
+        </At>
+      )}
+    </>
+  );
+}
+/** When migration's head count changes, in the story's seconds. */
+const STORY_COUNT_AT: Partial<Record<EventKey, number>> = { immigrationWave: 4.2, emigrationWave: 4.6 };
+
+// --- Festival ----------------------------------------------------------------------------------------------------------
+
+const SPARK = ['var(--color-warn)', 'var(--color-rise)', 'var(--color-holo)', 'var(--color-ok)', 'var(--color-g-crystite)'];
+
+/** A firework: a trail up, a burst of sparks out, fading. */
+function Firework({ at, u, colour }: { at: P; u: number; colour: string }) {
+  if (u < 0 || u > 1.4) return null;
+  const up = clamp(u / 0.4);
+  const burst = clamp((u - 0.4) / 0.9);
+  return (
+    <>
+      {up < 1 && (
+        <At p={{ x: at.x, y: at.y + (1 - up) * 2 }} w={0.12}>
+          <div className="aspect-square rounded-full bg-warn" />
+        </At>
+      )}
+      {burst > 0 && (
+        <At p={at} w={1.8 * (0.3 + burst * 0.7)} style={{ opacity: 1 - burst ** 2 }}>
+          <svg viewBox="-10 -10 20 20" className="h-auto w-full" aria-hidden>
+            {Array.from({ length: 12 }, (_, i) => {
+              const a = (i / 12) * Math.PI * 2;
+              return <line key={i} x1={Math.cos(a) * 3} y1={Math.sin(a) * 3} x2={Math.cos(a) * 9} y2={Math.sin(a) * 9} stroke={colour} strokeWidth={1.1} strokeLinecap="round" />;
+            })}
+            <circle r="1.6" fill="white" />
+          </svg>
+        </At>
+      )}
+    </>
+  );
+}
+
+/** The festival: bunting over the store, colonists dancing round it, fireworks, and the mood climbing. */
+function Festival({ ev, seg, size }: { ev: ShowEvent; seg: Segment; size: Size }) {
+  const { u, reduced } = useStoryClock(seg);
+  if (u < 0 || u > 5.6) return null;
+  const flags = reduced ? 1 : clamp(u / 0.6);
+  const lines = (ev.effects ?? []).map((f, i) => ({ f, at: 2.6 + i * 0.5 }));
+  return (
+    <>
+      {/* Bunting strung over the store. */}
+      <At p={{ x: STORE.x, y: STORE.y - 0.75 }} w={3}>
+        <svg viewBox="0 0 60 12" className="h-auto w-full" aria-hidden>
+          <path d="M1 2c19 7 39 7 58 0" fill="none" stroke="var(--color-ink-2)" strokeWidth={0.6} pathLength={1} strokeDasharray="1" strokeDashoffset={1 - flags} />
+          {Array.from({ length: 9 }, (_, i) => {
+            const x = 4 + i * 6.5;
+            const y = 2 + Math.sin((x / 60) * Math.PI) * 4.4;
+            return flags > i / 9 && <path key={i} d={`M${x - 2} ${y} L${x} ${y + 5} L${x + 2} ${y}Z`} fill={SPARK[i % SPARK.length]} />;
+          })}
+        </svg>
+      </At>
+      {/* Colonists dancing round the store. */}
+      {NEWCOMERS.map((sp, i) => {
+        const a = (i / NEWCOMERS.length) * Math.PI * 2 + (reduced ? 0 : u * 0.6);
+        const p = { x: STORE.x + Math.cos(a) * 1.25, y: STORE.y + 0.15 + Math.sin(a) * 0.75 };
+        return (
+          <At key={i} p={p} w={0.46} style={{ opacity: reduced ? 1 : clamp((u - 0.3 - i * 0.05) / 0.3), zIndex: Math.round(p.y * 10) }}>
+            <Colonist sp={sp} color={TOWN[i % TOWN.length]!} bob={reduced ? 0 : Math.abs(Math.sin(u * 7 + i * 0.8)) * 0.18} size={size} />
+          </At>
+        );
+      })}
+      {!reduced &&
+        [0.8, 1.3, 1.9, 2.4, 3, 3.5, 4.1].map((at, i) => (
+          <Firework key={i} at={{ x: STORE.x + [-1.4, 1.2, 0, -0.8, 1.6, -1.6, 0.6][i]!, y: STORE.y - [2, 2.3, 2.7, 2.1, 1.9, 2.5, 2.4][i]! }} u={u - at} colour={SPARK[i % SPARK.length]!} />
+        ))}
+      {/* What the colony gets, line by line. */}
+      <At p={{ x: STORE.x + 2.05, y: STORE.y + 0.6 }} w={1.9}>
+        <span className="flex flex-col items-start gap-[3px]">
+          {lines.map(
+            ({ f, at }) =>
+              (u >= at || reduced) && (
+                <span key={f.what} className="rounded-chip bg-ok px-1 font-mono font-bold text-on-holo shadow-chip animate-[ev-pop_0.3s_ease-out]" style={{ fontSize: px(size, 11) }}>
+                  ▲ {effectWords(f)}
+                </span>
+              ),
+          )}
+        </span>
+      </At>
+    </>
+  );
+}
+
+// --- Strikes -------------------------------------------------------------------------------------------------------------
+
+const PICKET: Species[] = ['gearling', 'mollox', 'bramblet', 'zipwing', 'quibbit', 'glimmer'];
+
+/** The general strike: placards go up on every plot of the good, the strikers march on the store, and the Governor can pay them. */
+function GeneralStrike({ ev, seg, size }: { ev: ShowEvent; seg: Segment; size: Size }) {
+  const { u, reduced, t } = useStoryClock(seg);
+  if (u < 0) return null;
+  const picket = (i: number): P => ({ x: STORE.x + Math.cos((i / ev.plots.length) * Math.PI * 2) * 0.9, y: STORE.y + 0.15 + Math.sin((i / ev.plots.length) * Math.PI * 2) * 0.55 });
+  return (
+    <>
+      {ev.plots.map((h, i) => {
+        const struck = t >= hitAt(seg, ev, h, reduced);
+        const walk = reduced ? 1 : ease(clamp((u - 1.8 - i * 0.15) / 1.6));
+        const p = mix({ x: h.x, y: h.y }, picket(i), walk);
+        return (
+          <div key={`${h.x},${h.y}`}>
+            {struck && <div className="absolute rounded-[10%]" style={{ left: `${(h.x / W) * 100}%`, top: `${(h.y / H) * 100}%`, width: `${100 / W}%`, height: `${100 / H}%`, background: 'repeating-linear-gradient(135deg, color-mix(in srgb, var(--color-alert) 34%, transparent) 0 5px, transparent 5px 11px)' }} />}
+            {struck && u < 5 && (
+              <At p={{ x: p.x, y: p.y + 0.1 }} w={0.5} style={{ zIndex: Math.round(p.y * 10) }}>
+                <Colonist sp={PICKET[i % PICKET.length]!} color={TOWN[i % TOWN.length]!} prop="sign" bob={walk > 0 && walk < 1 ? Math.abs(Math.sin(u * 9 + i)) * 0.08 : 0} sway={walk >= 1 && !reduced ? Math.sin(u * 5 + i) * 10 : 0} size={size} />
+              </At>
+            )}
+          </div>
+        );
+      })}
+      {(u > 3.2 || reduced) && u < 5 && (
+        <At p={{ x: STORE.x, y: STORE.y - 0.95 }} w={2.4}>
+          <span className="flex flex-col items-center gap-[2px] animate-[ev-pop_0.35s_ease-out]">
+            <span className="rounded-[3px] bg-alert px-1.5 font-display font-bold tracking-widest text-white shadow-chip" style={{ fontSize: px(size, 14) }}>
+              STRIKE
+            </span>
+            <span className="rounded-chip bg-panel/95 px-1 text-ink-2 shadow-chip" style={{ fontSize: px(size, 9) }}>
+              The Governor can pay them from the colony fund
+            </span>
+          </span>
+        </At>
+      )}
+    </>
+  );
+}
+
+/** The store strike: the store's staff picket it, and the corral gate slams shut on the MULEs. */
+function StoreStrike({ seg, size }: { ev: ShowEvent; seg: Segment; size: Size }) {
+  const { u, reduced } = useStoryClock(seg);
+  if (u < 0 || u > 4.6) return null;
+  const corral: P = { x: STORE.x + 0.95, y: STORE.y + 0.75 };
+  const shut = reduced ? 1 : ease(clamp((u - 2.2) / 0.4));
+  return (
+    <>
+      {/* The corral by the store, its MULEs behind a gate that swings shut. */}
+      <At p={corral} w={1.2}>
+        <div className="relative aspect-[1.6/1]">
+          <svg viewBox="0 0 32 20" className="absolute inset-0 h-full w-full" aria-hidden>
+            <path d="M1 4h30M1 10h30M1 19h30M1 2v17M31 2v17" stroke="var(--color-g-smithore)" strokeWidth={1.2} />
+            <path d="M1 2v17" stroke="var(--color-alert)" strokeWidth={2} transform={`rotate(${-70 * (1 - shut)} 1 19)`} />
+          </svg>
+          <span className={cx('absolute inset-x-[15%] top-[18%] flex justify-around text-mule-metal', shut > 0.5 && 'opacity-50')}>
+            <MuleIcon size={px(size, 16)} />
+            <MuleIcon size={px(size, 16)} />
+          </span>
+          {shut > 0.9 && (
+            <span className="absolute -top-[35%] left-1/2 -translate-x-1/2 whitespace-nowrap rounded-[3px] bg-alert px-1 font-mono font-bold text-white shadow-chip animate-[ev-stamp_0.3s_ease-out]" style={{ fontSize: px(size, 10) }}>
+              NO MULES
+            </span>
+          )}
+        </div>
+      </At>
+      {/* The staff marching round the store with their placards. */}
+      {[0, 1, 2].map((i) => {
+        const a = (reduced ? 0 : u * 1.4) + (i / 3) * Math.PI * 2;
+        const p = { x: STORE.x + Math.cos(a) * 0.95, y: STORE.y + 0.1 + Math.sin(a) * 0.6 };
+        return (
+          <At key={i} p={p} w={0.46} style={{ opacity: reduced ? 1 : clamp((u - 0.3 - i * 0.15) / 0.3), zIndex: Math.round(p.y * 10) }}>
+            <Colonist sp={PICKET[i]!} color={TOWN[i % TOWN.length]!} prop="sign" bob={reduced ? 0 : Math.abs(Math.sin(u * 8 + i)) * 0.08} size={size} />
+          </At>
+        );
+      })}
+    </>
+  );
+}
+
+// --- Epidemic --------------------------------------------------------------------------------------------------------------
+
+/** The epidemic: a pink haze from the store; everyone without Medicine sneezes and goes pale; Medicine shields the rest. */
+function Epidemic({ ev, seg, size }: { ev: ShowEvent; seg: Segment; size: Size }) {
+  const { u, reduced, t } = useStoryClock(seg);
+  if (u < 0 || u > 4.6) return null;
+  const sick = (ev.effects ?? []).filter((f) => f.what === 'pace');
+  const well = SEATS.filter((p) => !sick.some((f) => f.on === p.id));
+  const haze = reduced ? 1 : ease(clamp((u - 0.2) / 1.6));
+  return (
+    <>
+      <At p={STORE} w={6 * haze}>
+        <div className="aspect-square rounded-full" style={{ background: 'radial-gradient(circle, color-mix(in srgb, var(--color-g-medicine) 40%, transparent), transparent 68%)', opacity: 1 - clamp((u - 3.4) / 1) }} />
+      </At>
+      {sick.map((f, i) => {
+        const at = STAND[f.on]!;
+        const since = t - (seg.playAt + (1.8 + i * 0.45) * seg.pace);
+        if (since < 0) return null;
+        return (
+          <div key={f.on}>
+            {!reduced &&
+              since < 0.9 &&
+              [0, 1, 2, 3, 4].map((k) => (
+                <At key={k} p={{ x: at.x + 0.25 + since * (0.5 + k * 0.08), y: at.y - 0.15 + (k - 2) * since * 0.18 }} w={0.13} style={{ opacity: 1 - since / 0.9 }}>
+                  <div className="aspect-square rounded-full bg-g-medicine" />
+                </At>
+              ))}
+            {!reduced && since < 0.5 && (
+              <At p={{ x: at.x + 0.4, y: at.y - 0.55 }} w={0.9}>
+                <span className="flex justify-center font-display font-bold italic text-g-medicine" style={{ fontSize: px(size, 11) }}>
+                  achoo!
+                </span>
+              </At>
+            )}
+            <At p={{ x: at.x, y: at.y + 0.5 }} w={0.9}>
+              <span className="flex justify-center">
+                <span className="rounded-chip bg-g-medicine px-1 font-mono font-bold text-void shadow-chip animate-[ev-pop_0.3s_ease-out]" style={{ fontSize: px(size, 9) }}>
+                  sick · {f.turns ?? 1} turns
+                </span>
+              </span>
+            </At>
+          </div>
+        );
+      })}
+      {/* Whoever holds Medicine is shielded. */}
+      {well.map((p) => {
+        const at = STAND[p.id]!;
+        const k = reduced ? 1 : clamp((u - 1.4) / 0.4);
+        return (
+          <At key={p.id} p={at} w={0.95 * (0.6 + 0.4 * k)} style={{ opacity: k }}>
+            <div className="relative aspect-square rounded-full border-2 border-g-medicine" style={{ boxShadow: '0 0 12px color-mix(in srgb, var(--color-g-medicine) 60%, transparent)' }}>
+              <span className="absolute -right-[18%] -top-[18%] flex w-[42%]">
+                <GoodIcon good="medicine" size={px(size, 12)} className="h-auto w-full" />
+              </span>
+            </div>
+          </At>
+        );
+      })}
+    </>
+  );
+}
+
+// --- Volunteer clean-up ----------------------------------------------------------------------------------------------------
+
+/** The clean-up: smog over the colony; volunteers with brooms sweep out from the store, clearing it as they go; the air gauge drops. */
+function Cleanup({ ev, seg, size }: { ev: ShowEvent; seg: Segment; size: Size }) {
+  const { u, reduced } = useStoryClock(seg);
+  if (u < 0 || u > 5.2) return null;
+  const reach = reduced ? 1 : ease(clamp((u - 1) / 2.6));
+  const r = reach * 85;
+  const air = ev.effects?.find((f) => f.what === 'air');
+  const sx = ((STORE.x + 0.5) / W) * 100;
+  const sy = ((STORE.y + 0.5) / H) * 100;
+  return (
+    <>
+      {/* The smog, cleared from the store outward. */}
+      <div className="absolute inset-0" style={{ background: `radial-gradient(circle at ${sx}% ${sy}%, transparent 0 ${r}%, color-mix(in srgb, var(--color-g-smithore) 35%, var(--color-void)) ${r + 8}%)`, opacity: 0.72 * (1 - clamp((u - 4.4) / 0.6)) }} />
+      {NEWCOMERS.map((sp, i) => {
+        const a = (i / NEWCOMERS.length) * Math.PI * 2;
+        const p = { x: STORE.x + Math.cos(a) * reach * 6.5, y: STORE.y + Math.sin(a) * reach * 4.2 };
+        return (
+          <At key={i} p={p} w={0.62} style={{ opacity: reduced ? 1 : clamp((u - 0.6) / 0.4) * (1 - clamp((u - 4.2) / 0.5)), filter: 'drop-shadow(0 0 3px var(--color-ok))' }}>
+            <Colonist sp={sp} color={TOWN[i % TOWN.length]!} prop="broom" sway={reduced ? 0 : Math.sin(u * 10 + i) * 25} size={size} />
+          </At>
+        );
+      })}
+      {/* The air gauge in the corner, falling as the smog clears. */}
+      {air && (
+        <At p={{ x: 12.4, y: 0.3 }} w={2.6}>
+          <div className="flex items-center gap-1 rounded-control border border-ok bg-panel/95 px-1 py-[2px] shadow-chip" style={{ fontSize: px(size, 11) }}>
+            <span className="font-mono font-bold uppercase text-ink-2">Air</span>
+            <span className="relative h-[6px] flex-1 overflow-hidden rounded-full bg-raised">
+              <span className="absolute inset-y-0 left-0 rounded-full bg-warn" style={{ width: `${42 - (u >= 3.6 || reduced ? -air.delta : 0)}%`, transition: 'width 0.6s' }} />
+            </span>
+            <span className="font-mono font-bold">{42 + (u >= 3.6 || reduced ? air.delta : 0)}</span>
+          </div>
+        </At>
+      )}
+    </>
+  );
+}
+
+// --- Sickness on the map ---------------------------------------------------------------------------------------------------
+
+/** A bulletin never takes the TV, but on the development map the sick colonist still sneezes as it lands. */
+function Sneeze({ ev, seg, size }: { ev: ShowEvent; seg: Segment; size: Size }) {
+  const { t, reduced } = useShow();
+  const since = t - hitAt(seg, ev, null, reduced);
+  const at = ev.player ? STAND[ev.player] : undefined;
+  if (!at || reduced || since < 0 || since > 1) return null;
+  return (
+    <>
+      {[0, 1, 2, 3].map((k) => (
+        <At key={k} p={{ x: at.x + 0.25 + since * (0.45 + k * 0.08), y: at.y - 0.15 + (k - 1.5) * since * 0.2 }} w={0.12} style={{ opacity: 1 - since }}>
+          <div className="aspect-square rounded-full bg-g-medicine" />
+        </At>
+      ))}
+      {since < 0.5 && (
+        <At p={{ x: at.x + 0.45, y: at.y - 0.55 }} w={0.9}>
+          <span className="flex justify-center font-display font-bold italic text-g-medicine" style={{ fontSize: px(size, 11) }}>
+            achoo!
+          </span>
+        </At>
+      )}
+    </>
+  );
+}
+
 // --- Where the stories play ------------------------------------------------------------------------------------------
 
 const SCENE: Partial<Record<EventKey, (p: { ev: ShowEvent; seg: Segment; size: Size }) => ReactNode>> = {
   pirateRaid: PirateRaid,
   storeFire: StoreFire,
   riot: Riot,
+  federationTax: FederationTax,
+  federationGrant: FederationGrant,
+  immigrationWave: Migration,
+  emigrationWave: Migration,
+  festival: Festival,
+  generalStrike: GeneralStrike,
+  storeStrike: StoreStrike,
+  epidemic: Epidemic,
+  volunteerCleanup: Cleanup,
+  sickness: Sneeze,
+  ...PLOT_SCENES,
 };
 
 /** Every story of the phase, over the map, once its segment starts to play. */
