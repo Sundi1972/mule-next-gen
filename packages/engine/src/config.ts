@@ -176,8 +176,8 @@ export const SPECIES_PERK = {
   zipwingSpeed: 2,
   /** Bramblet: extra Food on every farm. */
   brambletFood: 1,
-  /** Gearling: share of the normal price paid for MULEs and outfits. */
-  gearlingPrice: 0.75,
+  /** Gearling: share of the normal price paid for MULEs and outfits. At 0.75 Gearlings won 44% of games, not 25%. */
+  gearlingPrice: 0.95,
   /** Mollox: extra output on every working mine, and share of the normal geo analysis time. */
   molloxMine: 1,
   molloxAnalysis: 0.5,
@@ -806,8 +806,12 @@ export const STRATEGIST = {
   analyseMinSeconds: 20,
   /** Share of its money it spends on one good at the auction, at most. */
   budgetShare: 0.5,
-  /** A developed plot counts in the final score at the MULE price; it counts this share of that as won back. */
-  residual: 0.8,
+  /**
+   * A developed plot counts in the final score at the MULE price; it counts this share of that as won back. A price
+   * in a sell-out doesn't last to the game's end, so counting most of it made a MULE bought while the corral was
+   * short look cheaper than it is.
+   */
+  residual: 0.6,
   /** What a second of development time is worth, with idle land to work and without. */
   secondValue: { busy: 10, idle: 3 },
   /** Share it takes off next month's price for a good it would hold, per point of risk weight, because the forecast may be wrong. */

@@ -15,8 +15,14 @@ import {
   type Tile,
 } from '../src/index.js';
 
-const SEEDS = 1000;
+// CI runs every map promise on 3,500 maps; MULE_FULL=1 runs 5,000 and T-AC-5's placement sweep.
+const FULL = process.env.MULE_FULL === '1';
 const PLAYER_COUNTS = [2, 3, 4, 5, 6];
+/**
+ * Maps per player count, for every promise: 700 in CI, 1,000 with MULE_FULL. B-AC-2's 20-30% band sets it: at 700 the
+ * band reaches 3.1 standard deviations either side of 25% (1.6 at 200), and B-AC-4's place check has 5.
+ */
+const SEEDS = FULL ? 1000 : 700;
 const TIMEOUT = 120_000;
 const MAX_LINES = 30;
 const LAND = Object.keys(TERRAIN_ODDS) as Exclude<Terrain, 'store'>[];
@@ -25,10 +31,10 @@ const MINERALS = ['crystite', 'rareEarth'] as const;
 /** RULE-5's count by player count: 3 small, 4 mid, 5 large. */
 const SPECIALS: Record<number, number> = { 2: 3, 3: 3, 4: 4, 5: 5, 6: 5 };
 /**
- * Maps outside the 5,000 that once broke RULE-5, as [seed, players]: 1090 at 2 and 3 players
- * got only ruins and a relic, both left of the river, because the last slot had to be a third
- * kind on the right and the right had no plot for one. Placement no longer falls short; the
- * seeds stay as extra cover.
+ * Maps that once broke RULE-5, as [seed, players]: 1090 at 2 and 3 players got only ruins and a
+ * relic, both left of the river, because the last slot had to be a third kind on the right and the
+ * right had no plot for one. Placement no longer falls short; the seeds stay by name, since only
+ * they need placement to backtrack (3 players' sample happens to hold 1090 too).
  */
 const REGRESSION_SEEDS: [number, number][] = [[1090, 2], [1090, 3]];
 /** Placement draws per map beyond the one createGame made, each from its own rng seed. */
@@ -55,6 +61,8 @@ interface Drift {
   label: string;
   mean: number;
   hint: number;
+  /** The mean is already rating minus hint, so its line gives only how far off it is. */
+  gapOnly?: boolean;
 }
 
 function drift(label: string, ratings: number[], hint: number): Drift {
@@ -84,7 +92,7 @@ function placeDrifts(built: Built[]): Drift[] {
       }
     }
   }
-  return [...gaps].map(([label, ratings]) => drift(label, ratings, 0));
+  return [...gaps].map(([label, ratings]) => ({ ...drift(label, ratings, 0), gapOnly: true }));
 }
 
 /** Every failing line, capped, with a count of the rest. */
@@ -104,11 +112,21 @@ function build(seed: number, players: number): Built {
   return { seed, players, map, report: checkMap(map, players) };
 }
 
+/**
+ * Each player count deals its own seeds, from its own thousand: 2 players 1-1,000, 3 players 1,001-2,000, and so on,
+ * the first SEEDS of each. 2 and 3 players (and 5 and 6) share a seed's layout and scarce draw, so the same seed at
+ * both would not be two independent maps.
+ */
+function seedsOf(players: number): number[] {
+  const start = 1000 * PLAYER_COUNTS.indexOf(players);
+  return Array.from({ length: SEEDS }, (_, j) => start + j + 1);
+}
+
 let built: Built[] = [];
 let regressions: Built[] = [];
 
 beforeAll(() => {
-  built = PLAYER_COUNTS.flatMap((players) => Array.from({ length: SEEDS }, (_, i) => build(i + 1, players)));
+  built = PLAYER_COUNTS.flatMap((players) => seedsOf(players).map((seed) => build(seed, players)));
   regressions = REGRESSION_SEEDS.map(([seed, players]) => build(seed, players));
 }, TIMEOUT);
 
@@ -123,12 +141,16 @@ describe('map quality, every map createGame deals', () => {
     expect(failures, listed(failures)).toEqual([]);
   }, TIMEOUT);
 
-  it('B-AC-2: 20-30% of maps have exactly one scarce good, none has two', () => {
+  it('B-AC-2: 20-30% of maps have exactly one scarce good, none has two, and any of the four goods can be it', () => {
     const failures = violationsOf(built, ['F2']);
     for (const players of PLAYER_COUNTS) {
       const maps = built.filter((b) => b.players === players);
       const rate = maps.filter((b) => b.report.metrics.scarce !== null).length / maps.length;
       if (rate < 0.2 || rate > 0.3) failures.push(`${players} players: ${(rate * 100).toFixed(1)}% of maps have one scarce good`);
+      // RULE-3: the twist can fall on any floor good (at 700 maps the rarest is scarce on 26).
+      for (const good of HINTED) {
+        if (!maps.some((b) => b.report.metrics.scarce === good)) failures.push(`${players} players: ${good} is never the scarce good on ${maps.length} maps`);
+      }
     }
     for (const players of PLAYER_COUNTS) {
       for (let seed = 1; seed <= 20; seed++) {
@@ -149,7 +171,7 @@ describe('map quality, every map createGame deals', () => {
     expect(failures, listed(failures)).toEqual([]);
   }, TIMEOUT);
 
-  it('T-AC-5: placement meets P1 on every map it is given', () => {
+  it.runIf(FULL)('T-AC-5: placement meets P1 on every map it is given (MULE_FULL)', () => {
     // Placement is cheap next to building a map, so each built map is placed again from fresh rng seeds.
     const failures: string[] = [];
     for (const { seed, players, map } of [...built, ...regressions]) {
@@ -162,14 +184,15 @@ describe('map quality, every map createGame deals', () => {
       }
     }
     expect(failures, listed(failures)).toEqual([]);
+  }, TIMEOUT);
 
-    // A map with no dry land right of the river can't hold RULE-5: placement says so rather than place it short.
+  it("T-AC-5: a map with no dry land right of the river can't hold RULE-5, and placement says so rather than place it short", () => {
     const rightOfRiver: [number, number, string][] = [[9, 0], [10, 0], [9, 1], [10, 1], [8, 2], [9, 2], [10, 2], [7, 3], [8, 3], [9, 3], [10, 3], [7, 4], [8, 4], [9, 4], [10, 4]].map(
       ([x, y]) => [x!, y!, 'L'],
     );
     const flooded = withTerrain(withSpecials(SMALL_MAP, [[0, 3, null], [6, 1, null], [10, 4, null]]), rightOfRiver);
     expect(() => placeSpecials(flooded, 2, createRng(1))).toThrow(/special fields/);
-  }, TIMEOUT);
+  });
 
   it('B-AC-4: hints are honest', () => {
     const land = built.flatMap((b) => b.map.tiles.filter((t) => t.terrain !== 'store').map((t) => ({ players: b.players, tile: t })));
@@ -187,7 +210,7 @@ describe('map quality, every map createGame deals', () => {
       .concat(placeDrifts(built).filter((d) => Math.abs(d.mean - d.hint) > MAP.placeHonesty));
     const offenders = misleading
       .sort((a, b) => Math.abs(b.mean - b.hint) - Math.abs(a.mean - a.hint))
-      .map((d) => `${d.label}: mean ${d.mean.toFixed(3)}, hint ${d.hint.toFixed(3)}, off by ${(d.mean - d.hint).toFixed(3)}`);
+      .map((d) => `${d.label}: ${d.gapOnly ? '' : `mean ${d.mean.toFixed(3)}, hint ${d.hint.toFixed(3)}, `}off by ${(d.mean - d.hint).toFixed(3)}`);
     expect(offenders, listed(offenders)).toEqual([]);
   }, TIMEOUT);
 });
