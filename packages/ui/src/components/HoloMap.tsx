@@ -141,12 +141,23 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
               data-testid={`map-plot-${t.x}-${t.y}`}
               {...(isSelected ? { 'data-selected': true } : {})}
             >
+              {/* The haze and the ground pips go under the owner's tint: background, showing through it. */}
               {!!t.pollution && (
                 <span
                   aria-hidden
                   className="absolute inset-0"
                   style={{ background: `radial-gradient(circle at 50% 55%, rgb(110 82 40 / ${0.25 + t.pollution * 0.18}), rgb(110 82 40 / ${0.12 + t.pollution * 0.12}) 80%)` }}
                 />
+              )}
+              {!t.good && ground.length > 0 && (
+                <span className={cx('relative flex flex-col items-center rounded-control bg-map-chip/90 shadow-chip', tv ? 'gap-0.5 px-1.5 py-1' : 'px-[3px] py-[2px]')}>
+                  {ground.map(([g, n]) => (
+                    <span key={g} className={cx('flex items-center', tv ? 'gap-0.5' : 'flex-col gap-px')}>
+                      <GoodIcon good={g} size={tv ? 16 : 9} />
+                      <Pips n={n} tv={tv} good={g} />
+                    </span>
+                  ))}
+                </span>
               )}
               {owner && (
                 <span aria-hidden className="absolute inset-[2%] rounded-[10%]" style={{ boxShadow: `inset 0 0 0 ${z.border}px ${owner}`, background: `color-mix(in srgb, ${owner} 30%, transparent)` }} />
@@ -172,26 +183,15 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                 >
                   <GoodIcon good={t.good} size={z.icon} />
                   {showOutput && t.output !== undefined && (
+                    // Centred on the disc's rim at its lower right: 50% + 50%/√2.
                     <span
                       data-num
-                      className={cx(
-                        'absolute left-full top-full -translate-x-1/2 -translate-y-1/2 rounded-chip bg-map-chip px-0.5 font-mono font-bold leading-none text-ink shadow-chip',
-                        tv ? 'text-lg' : 'text-[8px]',
-                      )}
+                      className={cx('absolute left-[85%] top-[85%] -translate-x-1/2 -translate-y-1/2 rounded-chip bg-map-chip px-0.5 font-mono font-bold leading-none text-ink', tv ? 'text-lg' : 'text-[8px]')}
+                      style={{ boxShadow: `0 0 0 ${tv ? 2 : 1}px var(--color-g-${t.good})` }}
                     >
                       +{t.output}
                     </span>
                   )}
-                </span>
-              )}
-              {!t.good && ground.length > 0 && (
-                <span className={cx('relative flex flex-col items-center rounded-control bg-map-chip/90 shadow-chip', tv ? 'gap-0.5 px-1.5 py-1' : 'px-[3px] py-[2px]')}>
-                  {ground.map(([g, n]) => (
-                    <span key={g} className={cx('flex items-center', tv ? 'gap-0.5' : 'flex-col gap-px')}>
-                      <GoodIcon good={g} size={tv ? 16 : 9} />
-                      <Pips n={n} tv={tv} good={g} />
-                    </span>
-                  ))}
                 </span>
               )}
               {t.flag && (
@@ -243,7 +243,8 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                 </>
               )}
               {isCursor && (
-                <span aria-hidden className="pointer-events-none absolute inset-[2%] overflow-hidden rounded-[14%] border-[3px] border-holo bg-holo-soft shadow-glow">
+                // z-[5]: the selection's level, so no tint, tab or badge dims the plot the grant lights.
+                <span aria-hidden className="pointer-events-none absolute inset-[2%] z-[5] overflow-hidden rounded-[14%] border-[3px] border-holo bg-holo-soft shadow-glow">
                   <span className="absolute inset-x-0 h-1/3 animate-scan bg-holo/25" />
                 </span>
               )}
