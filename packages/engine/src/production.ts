@@ -1,5 +1,5 @@
 import { ADJACENCY, FACTORY, FACTORY_FIT, GROWN_BASE, GROWN_MIN, POLLUTION, RECIPES, SPECIES_PERK, THIN_VEIN_MONTHS, TRAIT_EFFECT, UPKEEP } from './config.js';
-import { eventOutput, planEvent } from './events.js';
+import { eventOutput, rollPhase } from './events.js';
 import { neighbours } from './map.js';
 import { airBand, runPollution } from './pollution.js';
 import { relicFit, settleSpecials, specialBonus } from './specials.js';
@@ -9,6 +9,7 @@ import {
   MINED_GOODS,
   PROCESSED_GOODS,
   RAW_GOODS,
+  type EventKey,
   type GameState,
   type Good,
   type MinedGood,
@@ -53,7 +54,7 @@ export function clusterSize(state: GameState, tile: Tile): number {
 export function adjacencyBonus(state: GameState, tile: Tile): number {
   const size = clusterSize(state, tile);
   if (size >= ADJACENCY.clusterSize) return ADJACENCY.cluster;
-  if (size >= 2) return ADJACENCY.neighbour;
+  if (size >= 2) return ADJACENCY.neighbour; // literal-ok: the plot and one own neighbour, what ADJACENCY.neighbour means
   return 0;
 }
 
@@ -199,7 +200,9 @@ export function energyUseOf(state: GameState, tile: Tile): number {
  *    Electronics needs it; in an Energy shortage they are served last;
  * 4. special fields settle (ruins pay, a mined cavern may collapse), then
  *    pollution spreads and the air gauge moves.
- * Returns what each player produced and the air points each caused.
+ * Every event the phase fires (rollPhase) works on the plots it reaches, on
+ * top of what made each plot's output. Returns what each player produced, the
+ * air points each caused, each plot's line and the events.
  */
 export function runProduction(state: GameState): {
   produced: Record<string, Stock>;
@@ -215,15 +218,21 @@ export function runProduction(state: GameState): {
   const indexOf = new Map(state.tiles.map((t, i) => [t, i]));
   const ran = new Set<Tile>();
   const lines: ProductionLine[] = [];
-  const event = planEvent(state);
-  const hit = new Map(event?.plots.map((p) => [p.index, p]));
+  const events = rollPhase(state, 'production');
+  const reaching = new Map<number, { key: EventKey; plot: MonthEvent['plots'][number] }[]>();
+  for (const { key, plots } of events) {
+    for (const plot of plots) {
+      const list = reaching.get(plot.index) ?? [];
+      list.push({ key, plot });
+      reaching.set(plot.index, list);
+    }
+  }
   const credit = (tile: Tile, good: Good, parts: Part[]) => {
-    const plot = hit.get(indexOf.get(tile)!);
-    if (event && plot) {
-      // The event comes last, on top of everything else that made this month's output.
+    // The events come last, in the order they fired, each on the output the ones before it left.
+    for (const { key, plot } of reaching.get(indexOf.get(tile)!) ?? []) {
       const before = parts.reduce((n, p) => n + p.delta, 0);
-      plot.delta = eventOutput(event.key, before, plot.order === 0) - before;
-      parts.push({ why: 'event', delta: plot.delta, event: event.key });
+      plot.delta = eventOutput(key, before, plot.order === 0) - before;
+      parts.push({ why: 'event', delta: plot.delta, event: key });
     }
     const made = parts.reduce((n, p) => n + p.delta, 0);
     playerById.get(tile.owner!)!.stock[good] += made;
@@ -273,7 +282,7 @@ export function runProduction(state: GameState): {
 
   settleSpecials(state, lines);
   const pollutionBy = runPollution(state);
-  return { produced, pollutionBy, lines, events: event ? [event] : [] };
+  return { produced, pollutionBy, lines, events };
 }
 
 /** Raw goods a plot is rated for, best first, from the ground card. */

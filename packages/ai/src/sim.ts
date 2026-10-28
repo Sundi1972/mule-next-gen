@@ -8,9 +8,28 @@
  *   pnpm sim -- --persona cautious     (every seat the same persona; default: they rotate)
  *   pnpm sim -- --politics off         (no offices, elections or Governor's tax; default: on, as at real tables)
  *   pnpm sim -- --set SPECIES_PERK.zipwingSpeed=1.5   (a config number for this run; repeatable; the header lists them)
+ *   pnpm sim -- --air smoggy           (also counts each month's events as if the air were Smoggy; the games play on unforced)
  */
 import * as engine from '@mule/engine';
-import { AI_LEVELS, AI_PERSONAS, colonyFailed, GOOD_CONFIG, GOODS, MS_PER_SECOND, score, SIM_TARGETS, type AiLevelId, type AiPersonaId, type GameState } from '@mule/engine';
+import {
+  AI_LEVELS,
+  AI_PERSONAS,
+  colonyFailed,
+  emptyStock,
+  GOOD_CONFIG,
+  GOODS,
+  MS_PER_SECOND,
+  POLLUTION,
+  rollPhase,
+  rollPlayerEvent,
+  score,
+  SIM_TARGETS,
+  type AiLevelId,
+  type AiPersonaId,
+  type AirBand,
+  type GameState,
+  type MonthReport,
+} from '@mule/engine';
 import { simSeats } from './lineup.js';
 import { playGame } from './play.js';
 
@@ -51,6 +70,83 @@ const quantile = (values: number[], q: number) => {
   return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] ?? 0;
 };
 
+/** A month's events by the phase they fire in: sickness at development's start, the rest in production. */
+interface PhaseEvents {
+  development: number;
+  production: number;
+}
+
+/** Months with this many events or more share the report's last column. */
+const EVENT_COLUMNS = 4; // literal-ok: the report's last column, 4 or more events a month; presentation only
+
+const cavernsOf = (s: GameState) => s.tiles.flatMap((t, i) => (t.special?.kind === 'crystalCavern' ? [i] : []));
+
+/** The band `--air` names, or null without the flag; an unknown name is refused. */
+function forcedBand(name: string | null): AirBand | null {
+  if (name === null) return null;
+  const band = POLLUTION.bands.find((b) => b.name === name);
+  if (!band) throw new Error(`Unknown --air ${name}; use ${POLLUTION.bands.map((b) => b.name).join(', ')}`);
+  return band;
+}
+
+/**
+ * An unflagged copy of the state, to roll this month's events on without touching the game. With a band, its air is
+ * that band's and every player's plots caused SIM_TARGETS.forcedAirPoints last month; without, it rolls as the game
+ * did. Take it once development is played: sickness then reads what it read at development's start, and production's
+ * rolls what they will read.
+ */
+function rollingCopy(state: GameState, band: AirBand | null): GameState {
+  const copy = structuredClone(state);
+  delete copy.whatIf; // a what-if copy rolls nothing
+  if (!band) return copy;
+  copy.air = band.from;
+  const caused = Object.fromEntries(copy.players.map((p) => [p.id, SIM_TARGETS.forcedAirPoints]));
+  const last = copy.history.at(-1);
+  if (last) last.pollutionBy = caused;
+  else copy.history.push(standInReport(copy, caused));
+  return copy;
+}
+
+const sicknessRolls = (copy: GameState) => copy.players.filter((p) => rollPlayerEvent(copy, 'sickness', 'development', p.id)).length;
+
+/** This month's events in `band`'s air, sickness counted as in the plain count; collapses are the caller's (the air doesn't move them). */
+function forcedEvents(state: GameState, band: AirBand): PhaseEvents {
+  const copy = rollingCopy(state, band);
+  return { development: sicknessRolls(copy), production: rollPhase(copy, 'production').length };
+}
+
+/** Month 1 has no last month: a report with nothing in it but the air points each player caused. */
+function standInReport(state: GameState, pollutionBy: Record<string, number>): MonthReport {
+  return {
+    month: state.month - 1,
+    before: {},
+    produced: {},
+    prices: emptyStock(),
+    shortages: [],
+    storeMules: 0,
+    pollutionBy,
+    air: state.air,
+    mulePrice: 0,
+    corralSoldOut: false,
+    storeCapital: 0,
+    colonyFund: 0,
+    colonistsHungry: false,
+  };
+}
+
+/** Events a month by phase and for the month, then the share of months at each count, the last EVENT_COLUMNS or more. */
+function eventLines(months: readonly PhaseEvents[], label: string, note: string): string[] {
+  const total = (m: PhaseEvents) => m.development + m.production;
+  // literal-ok: two decimals, display only
+  const mean = (f: (m: PhaseEvents) => number) => (months.reduce((sum, m) => sum + f(m), 0) / Math.max(1, months.length)).toFixed(2);
+  const columns = Array.from({ length: EVENT_COLUMNS + 1 }, (_, c) => c);
+  const inColumn = (c: number) => (m: PhaseEvents) => (c === EVENT_COLUMNS ? total(m) >= c : total(m) === c);
+  return [
+    `     Events a month${label}: development ${mean((m) => m.development)}, production ${mean((m) => m.production)}, month ${mean(total)} (${note})`,
+    `     Months with ${columns.map((c) => (c === EVENT_COLUMNS ? `${c}+` : `${c}`)).join(' / ')} events${label}: ${columns.map((c) => pct(months.filter(inColumn(c)).length, months.length)).join(' / ')}`,
+  ];
+}
+
 function main() {
   const overrides = applySets(process.argv.flatMap((a, i) => (a === '--set' ? [process.argv[i + 1] ?? ''] : [])));
   const games = arg('games', 100); // literal-ok: the sim's default run length, a command-line default
@@ -84,6 +180,9 @@ function main() {
   const wins: Record<string, number> = {};
   const auction = { between: 0, store: 0, ship: 0, ms: 0 };
   const lots = { sold: 0, unsold: 0, colonyOffered: 0, colonySold: 0, stalled: 0 };
+  const band = forcedBand(argText('air'));
+  const monthEvents: PhaseEvents[] = [];
+  const forcedMonthEvents: PhaseEvents[] = [];
   const politics = argText('politics') !== 'off';
   const pol = { elections: 0, filled: 0, taxes: [] as number[], taxPaid: 0, terms: 0 };
   // Read once the land grant opens: by then the month's election is closed and the Governor has set the tax.
@@ -102,9 +201,19 @@ function main() {
     const specs = simSeats(players, level, seed, persona);
     // Who starts each development hungry, for the spiral: a player hungry SPIRAL_MONTHS months running.
     const hungryRun = new Map<string, { run: number; spiral: boolean }>();
+    // This month's sickness, caverns and forced counts, read once development is played; production completes them.
+    let pending: { sickness: number; caverns: number[]; forced: PhaseEvents | null } | null = null;
     const onEachPhase = (s: GameState) => {
       onPhase(s);
+      if (s.phase === 'production' && pending) {
+        const caveIns = pending.caverns.filter((i) => s.tiles[i]!.special?.kind !== 'crystalCavern').length;
+        monthEvents.push({ development: pending.sickness, production: (s.history.at(-1)!.events?.length ?? 0) + caveIns });
+        if (pending.forced) forcedMonthEvents.push({ development: pending.forced.development, production: pending.forced.production + caveIns });
+        pending = null;
+      }
       if (s.phase !== 'development') return;
+      // Every sickness roll that hits counts: a Medicine cure is the event's effect, and Player.sick shows only the uncured.
+      pending = { sickness: sicknessRolls(rollingCopy(s, null)), caverns: cavernsOf(s), forced: band && forcedEvents(s, band) };
       for (const p of s.players) {
         const h = hungryRun.get(p.id) ?? { run: 0, spiral: false };
         h.run = p.hungry ? h.run + 1 : 0;
@@ -182,6 +291,11 @@ function main() {
         .join(', ') || 'none'
     }`,
   );
+  for (const line of eventLines(monthEvents, '', 'no check')) console.log(line);
+  if (band) {
+    const note = `measure only, as if each player had caused ${SIM_TARGETS.forcedAirPoints} air points last month`;
+    for (const line of eventLines(forcedMonthEvents, ` in forced ${band.name} air`, note)) console.log(line);
+  }
   console.log(
     politics
       ? `     Politics: ${pol.elections} elections, ${pct(pol.filled, pol.elections * 2)} of offices filled; Governor's tax ${quantile(pol.taxes, 0)} / ${quantile(pol.taxes, 0.5)} / ${quantile(pol.taxes, 1)}% (min / median / max); ${(pol.taxPaid / games).toFixed(0)} cr sales tax and ${(pol.terms / games).toFixed(1)} terms a game` // literal-ok: an election fills two offices (Governor, Sheriff); 0.5 is the median tax

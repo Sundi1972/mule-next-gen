@@ -225,7 +225,8 @@ export interface MonthEvent {
   /** For a personal event, the player whose land it started on. */
   player?: string;
   sign: 'good' | 'bad' | 'mixed';
-  when: 'afterProduction';
+  /** The phase whose roll produced this event. */
+  phase: Phase;
 }
 
 export interface EventWarning {

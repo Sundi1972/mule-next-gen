@@ -28,7 +28,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
 
-  # Tier 1: the whole game on a pinned seed whose month 2 has a production event, with WS3's auction hooks inside it.
+  # Tier 1: the whole game on a pinned seed, with WS3's auction hooks inside it; the run makes month 2's event certain.
   e2e:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
