@@ -12,7 +12,7 @@ const GOODS: Good[] = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareE
 export function Production({ production }: { production: ProductionView }) {
   const client = useClient();
   const { view, me, self } = usePhoneGame();
-  const t = showTime(view.phaseEndsAt, useServerNow(frameMs(production.lengthMs)), production.lengthMs, production.events);
+  const t = showTime(view.phaseEndsAt, useServerNow(frameMs(production.lengthMs)), production.lengthMs, production);
   const tiles = useMemo(() => mapTiles(view), [view]);
   const ev = production.events[0] ?? null;
   const slots = Object.fromEntries(view.players.map((p) => [p.id, (slotOf(view, p.id) ?? 0) as Slot]));

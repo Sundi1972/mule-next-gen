@@ -7,7 +7,7 @@ import { TvHeader } from './TableApp';
 
 /** The big screen during production: the map show, the event, and every player's slot where their goods land. */
 export function TvProduction({ game, production }: { game: MuleView; production: ProductionView }) {
-  const t = showTime(game.phaseEndsAt, useServerNow(frameMs(production.lengthMs)), production.lengthMs, production.events);
+  const t = showTime(game.phaseEndsAt, useServerNow(frameMs(production.lengthMs)), production.lengthMs, production);
   const tiles = useMemo(() => mapTiles(game), [game]);
   const ev = production.events[0] ?? null;
   const slots = Object.fromEntries(game.players.map((p) => [p.id, (slotOf(game, p.id) ?? 0) as Slot]));

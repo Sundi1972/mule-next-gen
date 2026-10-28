@@ -139,24 +139,27 @@ function worthPartsOf(state: GameState, playerId: string): ScorePartsView {
 }
 
 /**
- * How long a phase's events play on the TV (RULE-1): the show in all, never past the cap, and each event's weight
- * and share of it in fired order. Bulletins share one roll call. Production's length and the view's playMs both come
- * from here, so they cannot disagree.
+ * How long a phase's events play on the TV (RULE-1): the intro, then each event, never past the cap in all. Returns
+ * the show's length, the intro's, and each event's weight and share in fired order. Bulletins share one roll call.
+ * When the cap bites the intro keeps its length and the events' shares are cut in proportion. Production's length and
+ * the view's lengths all come from here, so they cannot disagree.
  */
 function eventShow(events: readonly MonthEvent[]) {
+  const introMs = events.length > 0 ? EVENT_SHOW.introMs : 0;
   const weights = events.map((e) => EVENT_SHOW.weight[e.key] ?? 'headline');
   const bulletins = weights.filter((w) => w === 'bulletin').length;
   const plays = weights.map((w) => (w === 'bulletin' ? EVENT_SHOW.rollCallMs / bulletins : EVENT_SHOW.playMs[w]));
   const total = plays.reduce((sum, ms) => sum + ms, 0);
-  const showMs = Math.min(EVENT_SHOW.capMs, Math.round(total));
-  // Each share runs from where the last one ended, rounded on the running total, so the shares add up to showMs.
+  const showMs = Math.min(EVENT_SHOW.capMs, introMs + Math.round(total));
+  const sharedMs = showMs - introMs;
+  // Each share runs from where the last one ended, rounded on the running total, so intro and shares add up to showMs.
   let played = 0;
   const shares = weights.map((weight, i) => {
-    const from = Math.round((played * showMs) / total);
+    const from = Math.round((played * sharedMs) / total);
     played += plays[i]!;
-    return { weight, playMs: Math.round((played * showMs) / total) - from };
+    return { weight, playMs: Math.round((played * sharedMs) / total) - from };
   });
-  return { showMs, shares };
+  return { showMs, introMs, shares };
 }
 
 /**
@@ -182,7 +185,7 @@ function productionView(state: GameState, lengthMs: number): ProductionView | nu
         .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
         .slice(0, MAX_BADGES),
     }));
-  const { shares } = eventShow(report.events ?? []);
+  const { shares, introMs } = eventShow(report.events ?? []);
   const events = (report.events ?? []).map((e, i) => ({
     key: e.key,
     kind: e.kind,
@@ -196,7 +199,7 @@ function productionView(state: GameState, lengthMs: number): ProductionView | nu
     phase: 'production' as const,
     ...shares[i]!,
   }));
-  return { lines, events, lengthMs };
+  return { lines, events, lengthMs, introMs };
 }
 
 /** M.U.L.E. as a game hosted by a @tabletop/core room. */

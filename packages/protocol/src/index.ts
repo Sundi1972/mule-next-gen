@@ -358,6 +358,8 @@ export interface ProductionView {
   events: ProductionEventView[];
   /** How long the production phase was scheduled to run, in ms; the show's timeline stretches over it. */
   lengthMs: number;
+  /** How long the phase's intro plays before the first event, in ms: 0 in a quiet month. */
+  introMs: number;
 }
 
 /** One screen's view of the game: a player's private view, or the public one for a board. */

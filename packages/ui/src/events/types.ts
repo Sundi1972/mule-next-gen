@@ -43,6 +43,12 @@ export interface ShowEventView {
 
 export type ShowHit = ShowEventView['hits'][number];
 
+/** A phase's show as the server sends it: its events in fired order, and how long the intro before them plays, in ms. */
+export interface ShowTimeline {
+  events: ShowEventView[];
+  introMs: number;
+}
+
 /** A seat at the table, for the words and the spotlight: who owns which plot comes from the map's tiles. */
 export interface ShowPlayer {
   id: string;

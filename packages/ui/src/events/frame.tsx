@@ -63,6 +63,8 @@ export function useShow(): ShowFrame {
 export interface EventShowProps {
   /** The phase's events, in the order they fired. */
   events: ShowEventView[];
+  /** How long the phase's intro plays before the first event, in ms, as the server sent it. */
+  introMs: number;
   /** The show clock, in seconds: the same clock as `start`. */
   t: number;
   /** When the first segment starts on that clock. */
@@ -77,8 +79,8 @@ export interface EventShowProps {
 }
 
 /** Gives the layers inside it the show at `t`. Draws nothing itself. */
-export function EventShow({ events, t, start = 0, mode = 'tv', reduced = false, width, height, tiles, players, children }: EventShowProps) {
-  const s = useMemo(() => eventScript(events, start, mode), [events, start, mode]);
+export function EventShow({ events, introMs, t, start = 0, mode = 'tv', reduced = false, width, height, tiles, players, children }: EventShowProps) {
+  const s = useMemo(() => eventScript({ events, introMs }, start, mode), [events, introMs, start, mode]);
   const cast = useMemo(() => eventCast(tiles, players), [tiles, players]);
   const frame = useMemo<ShowFrame>(
     () => ({
