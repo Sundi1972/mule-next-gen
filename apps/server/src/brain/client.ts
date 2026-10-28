@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { BRAIN } from '@mule/engine';
 import type { Prompt } from '@mule/ai';
-import type { Usage } from './ledger.js';
+import type { ModelId, Usage } from './ledger.js';
 
 /** The slice of the SDK this file calls. The server passes the real client; tests pass a stub. */
 export interface HaikuSdk {
@@ -124,9 +124,6 @@ export function createHaikuComplete(
     return { text: textOf(res), ms, stopReason: res.stop_reason, usage: usageOf(res.usage) };
   };
 }
-
-/** A model BRAIN has a price table for: the only models a call may name. */
-export type ModelId = keyof typeof BRAIN.priceTable;
 
 /** What a thinking call sends: its model, its effort, a reply cap that includes the thinking, and its wait in ms. */
 export interface ThinkingCall {

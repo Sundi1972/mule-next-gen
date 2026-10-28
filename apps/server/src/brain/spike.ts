@@ -253,7 +253,7 @@ export async function runSpike(options: SpikeOptions): Promise<SpikeReport> {
     const auth = failed?.auth ?? false;
     settled.push({ kind: it.kind, outcome, ms });
     ledger.record({ game, seat: it.seat, persona: it.persona, level: it.level, model: BRAIN.model, kind: it.kind, ms, outcome, ...usage });
-    ledgerUsd += usd(usage);
+    ledgerUsd += usd(usage, BRAIN.model);
     if (billUnknown(reply, failure)) unknownUsd += worst;
     cacheRead += usage.cached_read;
     cacheWrite += usage.cache_write;

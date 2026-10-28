@@ -1,24 +1,39 @@
-import type { Prompt } from '@mule/ai';
 import { BRAIN } from '@mule/engine';
-import { usd, type Ledger } from './ledger.js';
+import { pricesOf, usd, type Ledger, type ModelId } from './ledger.js';
+
+/** What the model reads: system text, user text and the reply's schema. */
+export interface PromptText {
+  system: string;
+  user: string;
+  schema: object;
+}
 
 /** Characters the model reads for a prompt: system, user and the schema's JSON. */
-export function promptChars(prompt: Prompt): number {
+export function promptChars(prompt: PromptText): number {
   return prompt.system.length + prompt.user.length + JSON.stringify(prompt.schema).length;
 }
 
-/** The most a call with this prompt can cost: the whole prompt as input at the dearer rate, and a full reply. See RULE-3. */
-export function worstCaseUsd(prompt: Prompt): number {
+/** A move call: BRAIN.model with BRAIN.maxTokens. */
+const MOVE_CALL: { model: ModelId; maxTokens: number } = { model: BRAIN.model, maxTokens: BRAIN.maxTokens };
+
+/**
+ * The most a call with this prompt can cost at its model's prices: the whole prompt as input at the dearer rate, and a
+ * full reply of its reply cap. A move call unless told otherwise. See RULE-3.
+ */
+export function worstCaseUsd(prompt: PromptText, call: { model: ModelId; maxTokens: number } = MOVE_CALL): number {
   const tokens = Math.ceil(promptChars(prompt) / BRAIN.charsPerToken);
   // A first call writes the cache, which can cost more than plain input: price at the dearer of the two.
-  const p = BRAIN.pricesPerMTok;
+  const p = pricesOf(call.model);
   const asWrite = p.cacheWrite >= p.input;
-  return usd({
-    input: asWrite ? 0 : tokens,
-    cached_read: 0,
-    cache_write: asWrite ? tokens : 0,
-    output: BRAIN.maxTokens,
-  });
+  return usd(
+    {
+      input: asWrite ? 0 : tokens,
+      cached_read: 0,
+      cache_write: asWrite ? tokens : 0,
+      output: call.maxTokens,
+    },
+    call.model,
+  );
 }
 
 export interface Budget {

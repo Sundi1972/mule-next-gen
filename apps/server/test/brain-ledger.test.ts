@@ -194,7 +194,8 @@ describe('INV-price-by-model: each call is billed at its own model\'s prices, so
     const dearest = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 };
     for (const t of tables) for (const k of Object.keys(dearest) as (keyof typeof dearest)[]) dearest[k] = Math.max(dearest[k], t[k]);
     expect(lines()[0]!.usd as number).toBeCloseTo(billedAt(dearest), 12);
-    for (const t of tables) expect(lines()[0]!.usd as number).toBeGreaterThanOrEqual(billedAt(t));
+    // Within float rounding: the ledger and this test sum the same terms in a different order.
+    for (const t of tables) expect(lines()[0]!.usd as number).toBeGreaterThanOrEqual(billedAt(t) - 1e-15);
   });
 });
 

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BRAIN, type AiLevelId, type AiPersonaId } from '@mule/engine';
 import type { DecisionKind, RejectOutcome } from '@mule/ai';
+import type { WriteKind } from './client.js';
 
 export interface Usage {
   input: number;
@@ -15,13 +16,19 @@ export const NO_USAGE: Readonly<Usage> = Object.freeze({ input: 0, cached_read: 
 
 export type Outcome = RejectOutcome | 'llm' | 'refused' | 'timeout' | 'error' | 'budget';
 
+/** What a call was for: a move (land, develop, trade), or writing a seat's strategy or playbook. */
+export type CallKind = DecisionKind | WriteKind;
+
+/** A model BRAIN has a price table for: the only models a call may name. */
+export type ModelId = keyof typeof BRAIN.priceTable;
+
 export interface CallRecord extends Usage {
   game: string;
   seat: string;
   persona: AiPersonaId;
   level: AiLevelId;
-  model: string;
-  kind: DecisionKind;
+  model: ModelId;
+  kind: CallKind;
   ms: number;
   outcome: Outcome;
 }
@@ -34,7 +41,7 @@ export interface CallLine extends Usage {
   persona: AiPersonaId;
   level: AiLevelId;
   model: string;
-  kind: DecisionKind;
+  kind: CallKind;
   usd: number;
   ms: number;
   timed_out: boolean;
@@ -80,9 +87,23 @@ export interface Ledger {
 
 const PER_MILLION = 1_000_000;
 
-/** Dollars for one call's usage, at BRAIN's prices per million tokens. See RULE-4. */
-export function usd(u: Usage): number {
-  const p = BRAIN.pricesPerMTok;
+/** US dollars per million tokens. */
+export type Prices = Readonly<Record<keyof typeof BRAIN.pricesPerMTok, number>>;
+
+const TABLES: readonly Prices[] = Object.values(BRAIN.priceTable).map((t) => BRAIN[t]);
+const RATES = Object.keys(BRAIN.pricesPerMTok) as (keyof Prices)[];
+
+/** The dearest rate of every table: what a model with no table of its own is billed at, so it is never undercounted. */
+const DEAREST: Prices = Object.fromEntries(RATES.map((r) => [r, Math.max(...TABLES.map((t) => t[r]))])) as Prices;
+
+/** A model's prices: its own table in BRAIN.priceTable, or the dearest rates for a model with none. */
+export function pricesOf(model: string): Prices {
+  return Object.hasOwn(BRAIN.priceTable, model) ? BRAIN[BRAIN.priceTable[model as ModelId]] : DEAREST;
+}
+
+/** Dollars for one call's usage, at its model's prices per million tokens. See RULE-4. */
+export function usd(u: Usage, model: string): number {
+  const p = pricesOf(model);
   return (u.input * p.input + u.cached_read * p.cacheRead + u.cache_write * p.cacheWrite + u.output * p.output) / PER_MILLION;
 }
 
@@ -126,7 +147,7 @@ export function createLedger(opts: { path?: string; clock?: () => Date } = {}): 
 
   return {
     record(call) {
-      const cost = usd(call);
+      const cost = usd(call, call.model);
       // A call that settles after finish still gets its line, but the finished game's totals stay closed.
       if (!finished.has(call.game)) {
         const seats = games.get(call.game) ?? new Map<string, Total>();
