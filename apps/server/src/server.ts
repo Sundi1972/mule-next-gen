@@ -3,9 +3,11 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { extname, join, normalize, resolve } from 'node:path';
 import { RuleError, SPECIES } from '@mule/engine';
 import { EMOTES, type MuleIntent, type MuleView } from '@mule/protocol';
-import { RoomRegistry, TableError, type ClientEnvelope, type Connection, type Room } from '@tabletop/core';
+import { RoomRegistry, TableError, type ClientEnvelope, type Connection, type GameContext, type Room } from '@tabletop/core';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { createBrain } from './brain/index.js';
 import { AI_NAMES, MuleGame } from './mule-game.js';
+import { createRecordedGame } from './record.js';
 
 const MAX_MESSAGE_BYTES = 4_096;
 /** Messages per second a screen may send before it is told to slow down. */
@@ -31,14 +33,23 @@ export interface MuleServer {
 /**
  * The game server: an HTTP server for the web client and `POST /rooms`, and a
  * WebSocket endpoint at `/ws` where phones and boards talk to their room.
- * Games play politics unless `politics` is false.
+ * Games play politics unless `politics` is false. With a `recordDir`, each game's record is written there at game over.
  */
 export function createMuleServer(
-  options: { staticDir?: string; seed?: () => number; maxMonths?: number; phaseScale?: number; politics?: boolean } = {},
+  options: { staticDir?: string; seed?: () => number; maxMonths?: number; phaseScale?: number; politics?: boolean; recordDir?: string | null } = {},
 ): MuleServer {
   const seed = options.seed ?? (() => Math.floor(Math.random() * 2 ** 31));
+  const recordDir = options.recordDir ?? null;
+  const createGame = (ctx: GameContext) => {
+    const gameSeed = seed();
+    const gameOptions = { maxMonths: options.maxMonths, phaseScale: options.phaseScale, politics: options.politics ?? true };
+    if (recordDir === null) return new MuleGame(ctx, gameSeed, gameOptions);
+    // The same ledger id MuleGame gives its own brain: one ledger file holds every game.
+    const brain = createBrain({ gameId: `g-${gameSeed}-${ctx.now()}-${crypto.randomUUID().slice(0, 8)}` });
+    return createRecordedGame({ ctx, seed: gameSeed, options: gameOptions, brain, dir: recordDir }).game;
+  };
   const registry = new RoomRegistry<MuleIntent, MuleView>({
-    createGame: (ctx) => new MuleGame(ctx, seed(), { maxMonths: options.maxMonths, phaseScale: options.phaseScale, politics: options.politics ?? true }),
+    createGame,
     aiNames: AI_NAMES,
     emotes: EMOTES,
     picks: SPECIES,
