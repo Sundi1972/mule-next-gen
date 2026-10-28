@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { advancePhase, AI_LEVELS, AI_PERSONAS, createGame, EVENTS, GAME, GOODS, mulePriceFor, observe, STRATEGIST, walkSeconds, type GameState } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
 import { AiSeat } from '../src/seat.js';
-import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, tradeDecision, wantsPlot } from '../src/strategist.js';
+import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, tradeDecision, wantsAnyAhead, wantsPlot } from '../src/strategist.js';
 import { cashReserve, installGain, type Mind } from '../src/value.js';
 
 const fourSeats = (seed: number) => createGame({ seed, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI${i}`, isAi: true })) });
@@ -28,6 +28,35 @@ describe('land claims', () => {
     // Negative cases: no idle land, or the money to develop it, and it bids as before.
     expect(tycoon().onLit(grantWithIdleLand(0, 100))).toBeTypeOf('number');
     expect(tycoon().onLit(grantWithIdleLand(3, 5_000))).toBeTypeOf('number');
+  });
+
+  it('T-AC-32: a seat with claims left and nothing ahead of the light it wants presses Done with land', () => {
+    // Idle land it can't develop: it wants no plot at all.
+    expect(tycoon().passesGrant(grantWithIdleLand(3, 100))).toBe(true);
+    // Negative cases: it still wants the last plot, it wants plots ahead at the start of the pass, or its claims are used.
+    expect(tycoon().passesGrant(grantWithIdleLand(0, 100))).toBe(false);
+    const start = fourSeats(3);
+    while (start.phase !== 'landGrant') advancePhase(start);
+    expect(tycoon().passesGrant(start)).toBe(false);
+    const used = grantWithIdleLand(3, 100);
+    used.players[0]!.claimsThisGrant = GAME.claimsPerGrant;
+    expect(tycoon().passesGrant(used), 'its claims are used: nothing more to press').toBe(false);
+  });
+
+  it('INV-grant-ahead: wantsAnyAhead is true exactly when wantsPlot would take some plot still ahead of the light', () => {
+    for (const seed of [1, 3]) {
+      const state = fourSeats(seed);
+      while (state.phase !== 'landGrant') advancePhase(state);
+      const { mind } = tycoon();
+      const obs = observe(state, 'ai0');
+      const plan = landDecision(obs, mind).all[0]!.action;
+      const order = state.grant!.order;
+      for (let step = 0; step < order.length; step++) {
+        const ahead = order.slice(step);
+        const some = ahead.some((index, k) => wantsPlot(plan, obs, index, ahead.slice(k), mind));
+        expect(wantsAnyAhead(plan, obs, ahead, mind), `seed ${seed}, step ${step}`).toBe(some);
+      }
+    }
   });
 });
 
