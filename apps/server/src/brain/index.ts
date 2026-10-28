@@ -24,7 +24,7 @@ export interface BrainService {
 
 /** The brain as its owner holds it: the game's contract, plus the spend a run caps on. */
 export interface MeteredBrain extends BrainService {
-  /** The game's counted spend, as its seat budgets check it; after finish, the figure at finish. Classic: 0. */
+  /** The game's counted spend, as its budget checks it; after finish, the figure at finish. Classic: 0. */
   countedUsd(): number;
 }
 
@@ -36,6 +36,8 @@ export interface BrainOptions {
   /** Builds the SDK from the key; called once, and never without a key. */
   sdkFactory?: (apiKey: string) => HaikuSdk;
   now?: () => number;
+  /** The most the game's Smart seats together may spend, above 0 and at most BRAIN.gameBudgetUsd (the default). */
+  gameBudgetUsd?: number;
 }
 
 /** The port refused before calling. `lockedNow` is true for the refusal that locked the seat, the only one with a line. */
@@ -77,21 +79,29 @@ export function apiKeyFrom(env: Readonly<Record<string, string | undefined>>): s
   return env[API_KEY_ENV]?.trim() || null;
 }
 
-/** The brain for one game. A missing or blank key plays Classic. */
+/**
+ * The brain for one game. A missing or blank key plays Classic.
+ * Throws a RangeError for a game budget that is not above 0 and at most BRAIN.gameBudgetUsd, with or without the key.
+ */
 export function createBrain(options: BrainOptions): MeteredBrain {
+  const gameBudgetUsd = options.gameBudgetUsd ?? BRAIN.gameBudgetUsd;
+  if (!(gameBudgetUsd > 0 && gameBudgetUsd <= BRAIN.gameBudgetUsd)) {
+    throw new RangeError(`gameBudgetUsd must be above 0 and at most ${BRAIN.gameBudgetUsd}`);
+  }
   const apiKey = apiKeyFrom(options.env ?? process.env);
   if (!apiKey) return CLASSIC;
 
   const { gameId } = options;
   const haiku = createHaikuComplete((options.sdkFactory ?? createAnthropicSdk)(apiKey), options.now);
   const ledger = createLedger(options.logPath === undefined ? {} : { path: options.logPath });
-  const budget = createBudget(ledger);
+  // The game's Smart seats: each one registered here takes an equal share of the game budget.
+  const seats = new Set<string>();
+  const budget = createBudget(ledger, { budgetUsd: gameBudgetUsd, seats: () => seats });
   // Seat ids with a model call open, across every decider for that seat.
   const busy = new Set<string>();
   let finished = false;
   // A game that never asked for a decider (a lobby abandoned before Start) leaves no game line.
   let asked = false;
-  const seats = new Set<string>();
   // finish releases the budget's figures, so the counted spend is kept from that moment.
   let countedAtFinish: number | null = null;
   const counted = () => [...seats].reduce((sum, seat) => sum + budget.spent(gameId, seat), 0);

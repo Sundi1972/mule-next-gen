@@ -92,7 +92,7 @@ const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 // Local only (MULE_FULL=1, `pnpm test:full`): brain:trial is a command run by hand, and only with the PM's clearance.
 describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
   it(
-    'UBER-AC-1, UBER-AC-2: two games with one fast and one never-answering Smart seat report the model share by kind, why the rest fell back, lines per seat-month, ledger $ per Smart seat-game, counted spend and zero stalls',
+    'UBER-AC-1, UBER-AC-2: two games with one fast and one never-answering Smart seat report the model share by kind, why the rest fell back, lines per seat-month, ledger $ per Smart seat-game and per game, counted spend and zero stalls',
     async () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       const requests: Array<ReturnType<typeof asked>> = [];
@@ -106,12 +106,13 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
         requests.push(request);
         return request.seat === 'AI 1' ? Promise.resolve(sdkMessage(USABLE, BILLED)) : neverAnswers(options);
       };
-      const { code, report } = await drive(run(['--games', '2', '--seed', '101', '--max-usd', '1'], KEY, out).result);
+      // The second game starts only while counted spend plus a whole game budget fits the cap.
+      const { code, report } = await drive(run(['--games', '2', '--seed', '101', '--max-usd', '2'], KEY, out).result);
 
       expect(code).toBe(0);
       expect(sdk.built).toHaveLength(2); // one client per game
       expect(printedAtFirstCall).toHaveLength(1);
-      expect(printedAtFirstCall![0]).toMatch(/model claude-haiku-5-5, cap \$1\.00, planned 2 games/);
+      expect(printedAtFirstCall![0]).toMatch(/model claude-haiku-5-5, cap \$2\.00, planned 2 games with 2 Smart seats \(together held to \$1\.00 a game, an equal share each\)/);
       expect(claimedAtFirstCall).toBe(true); // today's ledger is claimed before the first call
 
       const fast = requests.filter((r) => r.seat === 'AI 1');
@@ -146,21 +147,29 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
       expect(report!.modelLines.silent).toBeGreaterThanOrEqual(2 * GAME.maxMonths);
       expect(report!.modelLines.silent).toBeLessThan(seatMonths);
 
-      // Per Smart seat-game, from the ledger file; only the fast seat was billed.
+      // Per Smart seat-game and per game, from the ledger file; only the fast seat was billed.
       const lines = callLines();
       expect(lines).toHaveLength(requests.length);
       const perSeatGame = new Map<string, number>();
-      for (const l of lines) perSeatGame.set(`${l.game}/${l.seat}`, (perSeatGame.get(`${l.game}/${l.seat}`) ?? 0) + l.usd);
+      const perGame = new Map<string, number>();
+      for (const l of lines) {
+        perSeatGame.set(`${l.game}/${l.seat}`, (perSeatGame.get(`${l.game}/${l.seat}`) ?? 0) + l.usd);
+        perGame.set(l.game, (perGame.get(l.game) ?? 0) + l.usd);
+      }
       expect(perSeatGame.size).toBe(4);
       const usds = [...perSeatGame.values()];
       expect(report!.seatGameUsd.seatGames).toBe(4);
       expect(report!.seatGameUsd.max).toBeCloseTo(Math.max(...usds), 12);
       expect(report!.seatGameUsd.mean).toBeCloseTo(sum(usds) / 4, 12);
-      expect(report!.seatGameUsd.atOrOverBudget).toBe(0);
+      expect(perGame.size).toBe(2);
+      expect(report!.gameUsd.games).toBe(2);
+      expect(report!.gameUsd.max).toBeCloseTo(Math.max(...perGame.values()), 12);
+      expect(report!.gameUsd.atOrOverBudget).toBe(0);
+      expect(report!.gameBudgetUsd).toBe(BRAIN.gameBudgetUsd);
       expect(report!.ledgerUsd).toBeCloseTo(fast.length * BILLED_USD, 12);
       // A timed-out call's bill is unknown: it counts at its RULE-3 worst case.
       expect(report!.countedUsd).toBeCloseTo(fast.length * BILLED_USD + sum(slow.map((r) => r.worst)), 12);
-      expect(report!.cap).toBe(1);
+      expect(report!.cap).toBe(2);
 
       expect(report!.stalls).toEqual({ unfinished: [], cutOff: [] });
       expect(gameLines()).toHaveLength(2);
@@ -198,7 +207,7 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
   );
 
   it(
-    'UBER-AC-2, INV-trial-cap: a keyed run without --max-usd is refused before any claim or call; a game starts only while counted spend plus its Smart seats\' budgets fits the cap, so a cap below one game plays none and writes no ledger, and a cap of exactly one game plays one',
+    'UBER-AC-2, INV-trial-cap: a keyed run without --max-usd is refused before any claim or call; a game starts only while counted spend plus the game budget fits the cap, however many Smart seats share it, so a cap below one game plays none and writes no ledger, and a cap of exactly one game plays one',
     async () => {
       let calls = 0;
       sdk.create = () => (calls++, Promise.resolve(sdkMessage(USABLE, BILLED)));
@@ -210,32 +219,50 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
       expect(fs.readdirSync(dir)).toEqual([]);
       expect(sdk.built).toEqual([]);
 
-      const justBelowTwoSeats = await run(['--games', '2', '--smart', '2', '--max-usd', String(2 * BRAIN.seatBudgetUsd - 0.001)]).result;
-      expect(justBelowTwoSeats.report).toMatchObject({ played: 0, stopped: 'cap' });
+      const belowDefault = run(['--games', '2', '--smart', '2', '--max-usd', String(BRAIN.gameBudgetUsd - 0.001)]);
+      expect((await belowDefault.result).report).toMatchObject({ played: 0, stopped: 'cap' });
+      expect(belowDefault.out.at(-1)).toBe(`No game started: cap $${BRAIN.gameBudgetUsd - 0.001} is below one game's budget ($${BRAIN.gameBudgetUsd.toFixed(2)}).`);
 
-      const below = await run(['--games', '2', '--smart', '1', '--max-usd', String(BRAIN.seatBudgetUsd - 0.001)]).result;
+      const below = await run(['--games', '2', '--smart', '1', '--game-budget-usd', '0.06', '--max-usd', '0.059']).result;
       expect(below.report).toMatchObject({ played: 0, stopped: 'cap' });
       expect(calls).toBe(0);
       expect(sdk.built).toEqual([]);
       expect(fs.readdirSync(dir)).toEqual([]);
 
-      const one = await run(['--games', '2', '--smart', '1', '--max-usd', String(BRAIN.seatBudgetUsd)]).result;
+      // Two Smart seats share one game budget, so a cap of exactly that budget plays one game.
+      const one = await run(['--games', '2', '--smart', '2', '--game-budget-usd', '0.06', '--max-usd', '0.06']).result;
       expect(one.code).toBe(0);
       expect(one.report).toMatchObject({ played: 1, stopped: 'cap' });
       expect(calls).toBeGreaterThan(0);
       expect(gameLines()).toHaveLength(1);
-      expect(sum(callLines().map((l) => l.usd))).toBeLessThanOrEqual(BRAIN.seatBudgetUsd);
+      expect(sum(callLines().map((l) => l.usd))).toBeLessThanOrEqual(0.06);
 
       // A seat whose calls all time out is billed $0 in the ledger; its unknown bills alone leave no room for a second game.
       fs.rmSync(file);
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       sdk.create = (_params, options) => (calls++, neverAnswers(options));
-      const unknown = await drive(run(['--games', '2', '--smart', '1', '--max-usd', String(BRAIN.seatBudgetUsd + 0.0001)]).result);
+      const unknown = await drive(run(['--games', '2', '--smart', '1', '--game-budget-usd', '0.06', '--max-usd', '0.0601']).result);
       expect(unknown.report).toMatchObject({ played: 1, stopped: 'cap', ledgerUsd: 0 });
       expect(unknown.report!.countedUsd).toBeGreaterThan(0.0001);
     },
     GAMES_MS,
   );
+
+  it('INV-trial-cap: a --game-budget-usd above BRAIN.gameBudgetUsd, or of 0, prints the usage and exits 1 before any claim, client or call', async () => {
+    let calls = 0;
+    sdk.create = () => (calls++, Promise.resolve(sdkMessage(USABLE, BILLED)));
+    for (const budget of [String(BRAIN.gameBudgetUsd + 0.01), '0', '0.0']) {
+      const { out, result } = run(['--games', '1', '--game-budget-usd', budget, '--max-usd', '5']);
+      expect(await result, budget).toEqual({ code: 1, report: null });
+      expect(out, budget).toEqual([expect.stringMatching(/^Usage: brain:trial .*\[--game-budget-usd Y\].*; nothing played\.$/)]);
+    }
+    // Negative: the ceiling itself is a game budget; this cap is below it, so the run stops before any game.
+    const ceiling = await run(['--games', '1', '--game-budget-usd', String(BRAIN.gameBudgetUsd), '--max-usd', '0.5']).result;
+    expect(ceiling).toMatchObject({ code: 0, report: { played: 0, stopped: 'cap' } });
+    expect(calls).toBe(0);
+    expect(sdk.built).toEqual([]);
+    expect(fs.readdirSync(dir)).toEqual([]);
+  });
 
   it("INV-trial-cap: a second paid run on the same UTC day is refused with exit 1 and one line naming today's ledger, before any client is built", async () => {
     fs.writeFileSync(file, '');
@@ -290,7 +317,7 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
         );
       };
       crash.armed = true;
-      const { out, result } = run(['--games', '2', '--max-usd', '1']);
+      const { out, result } = run(['--games', '2', '--max-usd', '2']);
       const { code, report } = await result;
 
       expect(crash.thrown).toBe(true);
@@ -349,11 +376,11 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
   it(
     'FM-ledger-write: a seat locked by its budget writes one budget line and then decides without calling, and the run is not stopped by the ledger check',
     async () => {
-      // One reply bills the seat's whole budget, so its next decision is refused before calling.
-      const wholeBudget = Math.round((BRAIN.seatBudgetUsd * 1_000_000) / BRAIN.pricesPerMTok.input);
+      // The only Smart seat's share is the whole game budget; one reply bills it, so its next decision is refused before calling.
+      const wholeBudget = Math.round((0.06 * 1_000_000) / BRAIN.pricesPerMTok.input);
       let calls = 0;
       sdk.create = () => (calls++, Promise.resolve(sdkMessage(USABLE, { input: wholeBudget })));
-      const { out, result } = run(['--games', '1', '--smart', '1', '--max-usd', '1']);
+      const { out, result } = run(['--games', '1', '--smart', '1', '--game-budget-usd', '0.06', '--max-usd', '1']);
       const { code, report } = await result;
       expect(calls).toBe(1);
       expect(callLines().map((l) => l.outcome)).toEqual(['llm', 'budget']);
@@ -446,24 +473,35 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
     expect(cutOffPhase(at('development'))).toBeNull();
   });
 
-  it('UBER-AC-1, UBER-AC-2: the verdict holds at 80% model share and under $0.06 a seat-game, fails just past either bound or on a stall, and is not proven unless every planned game was played to its end', () => {
+  it("UBER-AC-1, UBER-AC-2: the verdict holds at 80% model share and with each game's Smart seats together under the run's game budget, fails just past either bound or on a stall, and is not proven unless every planned game was played to its end", () => {
     const decisions = (model: number, of: number) =>
       Array.from({ length: of }, (_, i) => ({ seat: 'ai0', kind: 'develop' as const, by: i < model ? ('llm' as const) : ('fallback' as const), options: 2, ...(i < model ? {} : { note: 'decider too slow' }) }));
     const game = (over: Partial<TrialGame> = {}): TrialGame => ({
       id: 'g',
       end: 'over',
       months: 1,
-      smart: ['ai0'],
+      smart: ['ai0', 'ai1'],
       decisions: decisions(4, 5),
-      lines: { ai0: [1] },
-      modelLines: { ai0: [1] },
+      lines: { ai0: [1], ai1: [1] },
+      modelLines: { ai0: [1], ai1: [1] },
       cutOff: [],
-      countedUsd: 0.059,
-      settledCalls: 1,
+      countedUsd: 0.9999,
+      settledCalls: 2,
       ...over,
     });
-    const call = (usd: number) => ({ game: 'g', seat: 'ai0', usd, outcome: 'llm' }) as TrialInput['calls'][number];
-    const input = (over: Partial<TrialInput> = {}): TrialInput => ({ keyed: true, planned: 1, stopped: 'done', smartPerGame: 1, seatsPerGame: 4, cap: 1, games: [game()], calls: [call(0.059)], ...over });
+    const call = (usd: number, seat = 'ai0', g = 'g') => ({ game: g, seat, usd, outcome: 'llm' }) as TrialInput['calls'][number];
+    const input = (over: Partial<TrialInput> = {}): TrialInput => ({
+      keyed: true,
+      planned: 1,
+      stopped: 'done',
+      smartPerGame: 2,
+      seatsPerGame: 4,
+      cap: 2,
+      gameBudgetUsd: 1,
+      games: [game()],
+      calls: [call(0.5), call(0.4999, 'ai1')],
+      ...over,
+    });
     const verdicts = (i: TrialInput) => {
       const r = trialReport(i);
       return [r.ac1, r.ac2];
@@ -471,8 +509,14 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
 
     expect(verdicts(input())).toEqual(['pass', 'pass']);
     expect(verdicts(input({ games: [game({ decisions: decisions(79, 100) })] }))).toEqual(['fail', 'pass']);
-    expect(verdicts(input({ games: [game({ lines: { ai0: [0] } })] }))).toEqual(['fail', 'pass']);
-    expect(verdicts(input({ calls: [call(0.06)] }))).toEqual(['pass', 'fail']);
+    expect(verdicts(input({ games: [game({ lines: { ai0: [0], ai1: [1] } })] }))).toEqual(['fail', 'pass']);
+    // Each seat at its share puts the game at its budget: that is not under it.
+    expect(verdicts(input({ calls: [call(0.5), call(0.5, 'ai1')] }))).toEqual(['pass', 'fail']);
+    // Judged per game: two games each under the budget pass, though the run spent more than one budget.
+    expect(verdicts(input({ planned: 2, games: [game(), game({ id: 'b' })], calls: [call(0.9), call(0.9, 'ai1', 'b')] }))[1]).toBe('pass');
+    // Judged against the game budget the run used.
+    expect(verdicts(input({ gameBudgetUsd: 0.06, calls: [call(0.03), call(0.0299, 'ai1')] }))[1]).toBe('pass');
+    expect(verdicts(input({ gameBudgetUsd: 0.06, calls: [call(0.03), call(0.03, 'ai1')] }))[1]).toBe('fail');
     expect(verdicts(input({ games: [game({ cutOff: ['month 1 auction'] })] }))).toEqual(['pass', 'fail']);
     expect(verdicts(input({ games: [game({ end: 'unfinished' })] }))[1]).toBe('fail');
     expect(verdicts(input({ planned: 2, stopped: 'cap' }))).toEqual(['not proven', 'not proven']);
@@ -497,6 +541,10 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
     expect(verdicts(classic([top(), top()]))[1]).toBe('pass');
     expect(verdicts(classic([top(), top({ by: 'llm' })]))[1]).toBe('fail');
     expect(verdicts(classic([top(), top({ by: 'fallback', note: 'decider too slow' })]))[1]).toBe('fail');
-    expect(renderTrialReport(trialReport(input()))).toContainEqual(expect.stringMatching(/^UBER-AC-1 PASS\b/));
+    const printed = renderTrialReport(trialReport(input()));
+    expect(printed).toContainEqual(expect.stringMatching(/^UBER-AC-1 PASS\b/));
+    expect(printed).toContainEqual(expect.stringMatching(/^ledger \$ per Smart seat-game\s+max \$0\.50000, mean \$0\.49995$/));
+    expect(printed).toContainEqual(expect.stringMatching(/^ledger \$ per game, Smart seats together\s+max \$0\.99990, at or over the game budget \$1\.00: 0 of 1$/));
+    expect(printed).toContain('UBER-AC-2 PASS: at most $0.99990 per game for all Smart seats together (needs under the game budget $1.00), 0 stalls (needs 0)');
   });
 });

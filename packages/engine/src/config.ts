@@ -1018,8 +1018,11 @@ export const AI_HANDS = {
 export const BRAIN = {
   /** The model that decides and talks. */
   model: 'claude-haiku-5-5',
-  /** A Smart seat's model budget per game, in US dollars; past it the seat plays Classic. */
-  seatBudgetUsd: 0.06,
+  /**
+   * The most all of a game's Smart AI seats together may spend on the model, in US dollars. Each Smart seat holds an
+   * equal share of it; past its share a seat plays Classic.
+   */
+  gameBudgetUsd: 1.0,
   /** Hard ceiling, in US dollars, for the latency spike command. */
   spikeCapUsd: 0.05,
   /** US dollars per million tokens. */
