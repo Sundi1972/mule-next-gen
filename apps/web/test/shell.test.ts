@@ -1,9 +1,9 @@
 import type { MuleView, MyView, PlayerView, TableView } from '@mule/protocol';
-import { createElement, type ReactNode } from 'react';
+import { createElement, createRef, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { PhoneGameProvider, type PhoneGame } from '../src/phone/game';
-import { PhoneShell, type Now } from '../src/phone/Shell';
+import { MoveToPhoneOpener, PhoneShell, type Now } from '../src/phone/Shell';
 
 const self: PlayerView = { id: 's1', name: 'Heiko', isAi: false, color: '', slot: 0, species: 'mollox', money: 1200, plots: 2, ready: false, doneDeveloping: false };
 const game: PhoneGame = {
@@ -57,5 +57,21 @@ describe('the player shell (C15)', () => {
     expect(html).not.toContain('data-testid="now"');
     expect(railBody(html).startsWith(RAIL)).toBe(true);
     expect(html).toContain('data-testid="money"');
+  });
+
+  it('B-AC-13 (handoff, in game): a player who is not the host has move-to-phone in her game shell', () => {
+    const mia: PhoneGame = {
+      ...game,
+      table: { hostId: 's1' } as TableView<MuleView>,
+      view: { ...game.view, phase: 'planning' } as MuleView,
+      self: { ...self, id: 's2', name: 'Mia', slot: 1 },
+      slot: 1,
+    };
+    const screen = createElement(PhoneShell, { phase: 'Planning', children: createElement('div') });
+    const opener = { open: () => undefined, button: createRef<HTMLButtonElement>() };
+    const html = renderToStaticMarkup(
+      createElement(PhoneGameProvider, { value: mia, children: createElement(MoveToPhoneOpener.Provider, { value: opener, children: screen }) }),
+    );
+    expect(after(html, 'guide')).toContain('data-testid="move-to-phone"');
   });
 });
