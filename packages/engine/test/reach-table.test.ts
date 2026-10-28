@@ -20,7 +20,9 @@ describe('reachTable', () => {
     }
   });
 
-  it('hands every caller the same table for the same size, so building it is paid once', () => {
-    expect(reachTable(15, 9, 67, 3)).toBe(reachTable(15, 9, 67, 3));
+  it('cannot be written to, so one game can never change the next game of that size', () => {
+    const table = reachTable(15, 9, 67, 3) as number[][];
+    expect(() => table[0]!.push(1)).toThrow(TypeError);
+    expect(() => table.pop()).toThrow(TypeError);
   });
 });

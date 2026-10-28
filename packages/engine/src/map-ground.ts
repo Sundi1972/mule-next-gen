@@ -580,7 +580,7 @@ function smoothField(layout: Layout, good: FloorGood, rng: Rng): number[] {
     const x = i % width;
     const y = Math.floor(i / width);
     let bumps = 0;
-    // literal-ok: a Gaussian bump, exp(-distance squared / 2 variance), summed in blob order from 0 so the floats match
+    // literal-ok: a Gaussian bump, exp(-distance squared / 2 variance); float addition is order-sensitive, so sum in blob order from 0
     for (const b of blobs) bumps = bumps + b.weight * Math.exp(-((x - b.x) ** 2 + (y - b.y) ** 2) / twiceVariance);
     return bumps + rng.next() * MAP.ground.fieldNoise;
   });

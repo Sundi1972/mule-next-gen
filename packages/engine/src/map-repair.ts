@@ -94,7 +94,6 @@ export function groups(grid: Grid, member: (i: number) => boolean, joins: (a: nu
   return out;
 }
 
-
 export interface RepairState {
   grid: Grid;
   terrain: Cells;
