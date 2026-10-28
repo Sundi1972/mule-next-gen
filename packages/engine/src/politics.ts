@@ -280,6 +280,7 @@ function appointee(state: GameState, election: Shared<Election>, office: Office,
 /** The whole-percent range the Governor may set this month, around the month's starting rate. See WS7 spec RULE-6. */
 export function taxBounds(state: GameState): { low: number; high: number } {
   const { min, max, maxStep } = POLITICS.tax;
+  // literal-ok: a rate to whole percent and back, a unit conversion, not balance
   const start = Math.round((state.politics?.taxAtStart ?? state.treasury.salesTax) * 100);
   return { low: Math.max(min, start - maxStep), high: Math.min(max, start + maxStep) };
 }
@@ -294,6 +295,7 @@ export function setSalesTax(state: GameState, playerId: string, percent: number)
   if (politics.governor !== id) throw new RuleError('Only the Governor sets the tax');
   const { low, high } = taxBounds(state);
   if (!Number.isInteger(percent) || percent < low || percent > high) throw new RuleError(`The tax can be ${low}% to ${high}% this month`);
+  // literal-ok: a rate to whole percent and back, a unit conversion, not balance
   state.treasury.salesTax = percent / 100;
 }
 
