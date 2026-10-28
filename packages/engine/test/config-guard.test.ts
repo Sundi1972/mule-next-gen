@@ -13,13 +13,9 @@ const SCANNED = ['packages/engine/src', 'packages/ai/src'];
  */
 const PENDING = new Set<string>([
   // WS1: cleaned once #109 has merged, which rewrites most of them.
-  'packages/ai/src/hands/auction.ts',
-  'packages/ai/src/outlook.ts',
   'packages/ai/src/play.ts',
-  'packages/ai/src/seat.ts',
   'packages/ai/src/sim.ts',
   'packages/ai/src/strategist.ts',
-  'packages/ai/src/utility.ts',
   'packages/ai/src/value.ts',
   'packages/engine/src/events.ts',
   'packages/engine/src/production.ts',
