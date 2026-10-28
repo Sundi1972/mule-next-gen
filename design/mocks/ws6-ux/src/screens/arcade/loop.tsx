@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from 'react';
-import { GLINT_RACE, ME, newWorld, SCRAMBLE_RACE, TRACK, WOLF_START } from './fixture';
-import { callGlint, callScramble, callWolves, DEFAULT_TUNABLES, setBot, step, teleport, type Input, type P, type Space, type Tunables, type WalkTerrain, type World } from './sim';
+import { ADDENDUM, GLINT_RACE, ME, newWorld, SCRAMBLE_RACE, TRACK, WOLF_START } from './fixture';
+import { callGlint, callScramble, callWolves, DEFAULT_TUNABLES, mulePrice, setBot, step, teleport, type Colonist, type Input, type P, type Space, type Tunables, type WalkTerrain, type World } from './sim';
 
 /** How a page's turn starts: as the table has it, or (#arcade-wolves) Lena on forest with a pack due in about 2 s. */
-export type Scenario = 'table' | 'wolves' | 'glint' | 'scramble';
+export type Scenario = 'table' | 'wolves' | 'glint' | 'scramble' | 'plots' | 'analyse' | 'reoutfit' | 'pace' | 'broke';
 const WOLVES_DUE_MS = 2000;
 
 /**
@@ -24,18 +24,48 @@ interface Controls {
   stick: P | null;
   mouse: (P & { space: Space }) | null;
   action: boolean;
+  /** The second choice (the line above the button, or A): V-3's ANALYSE, V-5's filter. */
+  alt: boolean;
+}
+
+const ADDENDUM_SCENARIOS: Scenario[] = ['plots', 'analyse', 'reoutfit', 'pace', 'broke'];
+
+/**
+ * The addendum's starts (fixture.ts ADDENDUM): Lena placed at the moment each change is about. The seeded moments wait
+ * 20 s, as on the scramble's route, so the first look is the change itself.
+ */
+function addendumStart(w0: World, scenario: Scenario, tun: Tunables): World {
+  const calm = (w: World): World => ({ ...w, glintAfter: 20_000, colonists: w.colonists.map((c) => ({ ...c, wolvesAfter: 20_000 })) });
+  const lena = (w: World, f: (c: Colonist) => Colonist): World => ({ ...w, colonists: w.colonists.map((c) => (c.id === ME ? f(c) : c)) });
+  const inHall = (c: Colonist, at: P): Colonist => ({ ...c, space: 'hall', x: at.x, y: at.y, trail: [], facing: 'right' });
+  const price = mulePrice(tun);
+  if (scenario === 'plots') {
+    const at = ADDENDUM.plots.hall;
+    return calm(lena({ ...w0, storeMules: w0.storeMules - 1 }, (c) => ({ ...inHall(c, at), money: c.money - price, mule: { good: null, x: at.x - 0.7, y: at.y, facing: 'right', paid: price } })));
+  }
+  if (scenario === 'analyse') {
+    const { at, good } = ADDENDUM.analyse;
+    const w = teleport(w0, ME, { x: at.x + 0.5, y: at.y + 0.6 }, tun);
+    const cost = price + tun.outfit[good];
+    return calm(lena({ ...w, storeMules: w.storeMules - 1 }, (c) => ({ ...c, money: c.money - cost, mule: { good, x: at.x - 0.2, y: at.y + 0.6, facing: 'right', paid: cost }, trail: [{ x: at.x - 0.2, y: at.y + 0.6 }, { x: c.x, y: c.y }] })));
+  }
+  if (scenario === 'reoutfit') return calm(teleport(w0, ME, { x: ADDENDUM.reoutfit.at.x + 0.5, y: ADDENDUM.reoutfit.at.y + 0.6 }, tun));
+  if (scenario === 'broke') return calm(lena(w0, (c) => ({ ...inHall(c, ADDENDUM.broke.hall), money: ADDENDUM.broke.money })));
+  return calm(w0);
 }
 
 export class Arcade {
   world: World;
   tunables: Tunables;
-  controls: Controls = { keys: new Set(), stick: null, mouse: null, action: false };
+  controls: Controls = { keys: new Set(), stick: null, mouse: null, action: false, alt: false };
   private worldListeners = new Set<Listener>();
   private tunListeners = new Set<Listener>();
 
   scenario: Scenario;
 
-  constructor(tunables: Tunables = DEFAULT_TUNABLES, scenario: Scenario = 'table') {
+  constructor(tunables0: Tunables = DEFAULT_TUNABLES, scenario: Scenario = 'table') {
+    // V-6's start: Lena ate 1 of the 3 Food she needs, so she walks slower and the side room says why.
+    const tunables = scenario === 'pace' ? { ...tunables0, seats: { ...tunables0.seats, [ME]: { ...tunables0.seats[ME]!, food: ADDENDUM.pace.food } } } : tunables0;
     this.tunables = tunables;
     this.scenario = scenario;
     this.world = this.fresh();
@@ -58,6 +88,7 @@ export class Arcade {
       const placed = teleport(w, ME, { x: r.lena.x + 0.5, y: r.lena.y + 0.5 }, this.tunables);
       return { ...placed, storeMules: r.mules, glintAfter: 20_000, colonists: placed.colonists.map((c) => ({ ...c, wolvesAfter: 20_000 })) };
     }
+    if (ADDENDUM_SCENARIOS.includes(this.scenario)) return addendumStart(w, this.scenario, this.tunables);
     if (this.scenario !== 'wolves') return w;
     const placed = teleport(w, ME, { x: WOLF_START.x + 0.5, y: WOLF_START.y + 0.5 }, this.tunables);
     // No chance pack before the called one, so it is always the 2 s one Heiko meets.
@@ -99,12 +130,14 @@ export class Arcade {
   input(): Input {
     const c = this.controls;
     const action = c.action;
+    const alt = c.alt;
     c.action = false;
-    if (c.stick && Math.hypot(c.stick.x, c.stick.y) > 0.08) return { dir: c.stick, action };
+    c.alt = false;
+    if (c.stick && Math.hypot(c.stick.x, c.stick.y) > 0.08) return { dir: c.stick, action, alt };
     const k = c.keys;
     const dir = { x: (k.has('ArrowRight') ? 1 : 0) - (k.has('ArrowLeft') ? 1 : 0), y: (k.has('ArrowDown') ? 1 : 0) - (k.has('ArrowUp') ? 1 : 0) };
-    if (dir.x || dir.y) return { dir, action };
-    return { dir: { x: 0, y: 0 }, action, toward: c.mouse };
+    if (dir.x || dir.y) return { dir, action, alt };
+    return { dir: { x: 0, y: 0 }, action, alt, toward: c.mouse };
   }
 
   tick(ms: number) {
@@ -124,6 +157,10 @@ export class Arcade {
     this.controls.action = true;
   }
 
+  pressAlt() {
+    this.controls.alt = true;
+  }
+
   setTunables(t: Tunables) {
     this.tunables = t;
     for (const l of this.tunListeners) l();
@@ -133,7 +170,7 @@ export class Arcade {
   restart() {
     const autopilot = this.world.colonists.find((c) => c.id === ME)?.bot ?? false;
     this.world = setBot(this.fresh(), ME, autopilot);
-    this.controls = { keys: new Set(), stick: null, mouse: null, action: false };
+    this.controls = { keys: new Set(), stick: null, mouse: null, action: false, alt: false };
     this.emit();
   }
 
@@ -219,6 +256,9 @@ export function useGameKeys() {
       } else if (e.key === ' ') {
         e.preventDefault();
         if (!e.repeat) arcade.press();
+      } else if (e.key === 'a' || e.key === 'A') {
+        // The second choice on a keyboard (the review loop keeps S, N and Esc).
+        if (!e.repeat) arcade.pressAlt();
       }
     };
     const up = (e: KeyboardEvent) => {

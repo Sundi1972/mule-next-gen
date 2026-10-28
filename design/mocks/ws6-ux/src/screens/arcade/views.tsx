@@ -5,7 +5,7 @@ import { mapTiles } from '../../../../../../apps/web/src/game/derive';
 import { ARCADE_VIEW, ME } from './fixture';
 import { useArcade, useTunables, useWorld } from './loop';
 import { HALL, looseOf, mulePrice, paceOf, pubPayout, reachOf, ROOMS, speedOf, type Colonist, type Reach, type Space, type Tunables, type World } from './sim';
-import { GuideInHall, GuideOnMap, MyPlots } from './GuideLayer';
+import { GuideInHall, GuideOnMap, MyPlots, PlotsByOutfitter } from './GuideLayer';
 import { GlintOnMap, GlintPointer, GlintSightlines, GlintStrip, GlintTurn } from './GlintLayer';
 import { ScrambleBanner, ScrambleCorral, ScrambleLines, ScramblePointer } from './ScrambleLayer';
 import { WolfCallout, WolfMarks, WolvesOnMap } from './WolfLayer';
@@ -233,6 +233,7 @@ export function HallStage({ width, density, store = density, interactive = false
         </span>
       )}
       {guide && interactive && <GuideInHall world={world} me={me} tun={tun} lit={lit} />}
+      {guide && interactive && <PlotsByOutfitter world={world} me={me} />}
       <ScrambleCorral world={world} />
       {names && <ScrambleLines world={world} space="hall" />}
       <Walkers world={world} space="hall" cell={width / HALL.w} density={density} names={names} own={interactive} />
@@ -265,7 +266,7 @@ export function YourStage({ width, height, across, density, ringed, guide = fals
 
 /** The one action button: it always says what it does right now, and is dim when nothing is in reach. */
 /** `wrap`: the landscape phone's narrow button lets its words take two lines rather than cut them. */
-export function ActionButton({ size = 'xl', compact = false, wrap = false, className, hint }: { size?: 'lg' | 'xl'; compact?: boolean; wrap?: boolean; className?: string; hint?: ReactNode }) {
+export function ActionButton({ size = 'xl', compact = false, wrap = false, small = false, className, hint }: { size?: 'lg' | 'xl'; compact?: boolean; wrap?: boolean; small?: boolean; className?: string; hint?: ReactNode }) {
   const arcade = useArcade();
   const world = useWorld();
   const tun = useTunables();
@@ -288,11 +289,11 @@ export function ActionButton({ size = 'xl', compact = false, wrap = false, class
       data-kind={r.kind}
       data-enabled={r.enabled}
     >
-      <span className={cx('block max-w-full font-display font-bold leading-tight', wrap ? 'line-clamp-2 text-balance text-base' : cx('truncate', compact ? 'text-lg' : 'text-xl'))} data-testid="action-verb">
+      <span className={cx('block max-w-full font-display font-bold leading-tight', wrap ? cx('line-clamp-2 text-balance', small ? 'text-sm' : 'text-base') : cx('truncate', compact ? 'text-lg' : 'text-xl'))} data-testid="action-verb">
         {r.verb}
       </span>
       {(r.detail || hint) && (
-        <span className={cx('block max-w-full font-mono font-semibold leading-tight opacity-80', wrap ? 'line-clamp-2 text-balance text-xs' : 'truncate text-sm')} data-testid="action-detail">
+        <span className={cx('block max-w-full font-mono font-semibold leading-tight opacity-80', wrap ? cx('line-clamp-2 text-balance', small ? 'text-[10px]' : 'text-xs') : 'truncate text-sm')} data-testid="action-detail">
           {r.detail ?? hint}
         </span>
       )}
@@ -304,7 +305,8 @@ const STICK = 128;
 const KNOB = 56;
 
 /** A thumb joystick: drag anywhere on the pad; the further from the centre, the faster (up to full speed). */
-export function Joystick({ className }: { className?: string } = {}) {
+export function Joystick({ className, size = STICK }: { className?: string; size?: number } = {}) {
+  const knobSize = Math.round((KNOB * size) / STICK);
   const arcade = useArcade();
   const knob = useRef<HTMLSpanElement>(null);
   const pad = useRef<HTMLDivElement>(null);
@@ -316,7 +318,7 @@ export function Joystick({ className }: { className?: string } = {}) {
     }
     const r = pad.current!.getBoundingClientRect();
     // The knob's centre travels to where its edge meets the pad's rim.
-    const reach = r.width / 2 - KNOB / 2;
+    const reach = r.width / 2 - knobSize / 2;
     let x = (e.clientX - (r.left + r.width / 2)) / reach;
     let y = (e.clientY - (r.top + r.height / 2)) / reach;
     const m = Math.hypot(x, y);
@@ -325,13 +327,13 @@ export function Joystick({ className }: { className?: string } = {}) {
       y /= m;
     }
     arcade.controls.stick = { x, y };
-    if (knob.current) knob.current.style.transform = `translate(calc(-50% + ${(x * reach * STICK) / r.width}px), calc(-50% + ${(y * reach * STICK) / r.width}px))`;
+    if (knob.current) knob.current.style.transform = `translate(calc(-50% + ${(x * reach * size) / r.width}px), calc(-50% + ${(y * reach * size) / r.width}px))`;
   };
   return (
     <div
       ref={pad}
       className={cx('relative shrink-0 touch-none select-none rounded-full border-2 border-holo-line bg-holo-soft shadow-map', className)}
-      style={{ width: STICK, height: STICK }}
+      style={{ width: size, height: size }}
       onPointerDown={(e) => {
         if (e.altKey) return;
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -351,7 +353,7 @@ export function Joystick({ className }: { className?: string } = {}) {
           ▲
         </span>
       ))}
-      <span ref={knob} className="absolute left-1/2 top-1/2 rounded-full border-2 border-holo bg-panel shadow-glow" style={{ width: KNOB, height: KNOB, transform: 'translate(-50%, -50%)' }} data-testid="joystick-knob" />
+      <span ref={knob} className="absolute left-1/2 top-1/2 rounded-full border-2 border-holo bg-panel shadow-glow" style={{ width: knobSize, height: knobSize, transform: 'translate(-50%, -50%)' }} data-testid="joystick-knob" />
     </div>
   );
 }

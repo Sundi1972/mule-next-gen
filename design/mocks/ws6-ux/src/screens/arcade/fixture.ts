@@ -1,6 +1,7 @@
+import type { Ground } from '@mule/engine';
 import type { TileView } from '@mule/protocol';
 import { H, PLAYERS, W } from '../../fixture';
-import { devView } from '../audit/dev/fixture';
+import { CRATER, devView, GROUND, PLAINS, TUNDRA } from '../audit/dev/fixture';
 import { initWorld, type Seat, type Tunables, type WalkTerrain, type World } from './sim';
 
 /**
@@ -33,7 +34,30 @@ export const ME = 'lena';
 export const ARCADE_VIEW = BASE;
 
 export const SEED = 20261029;
-export const newWorld = (tun: Tunables, seed = SEED): World => initWorld(seed, SEATS, ARCADE_TILES, { width: W, height: H, month: MONTH }, tun);
+/**
+ * What is underground on Lena's plots, unseen until she analyses one (V-3): the development audit's GROUND (Plains 4·1
+ * is best for Water, though its land says Food and Energy), and her lake plot 4·4, best for Water too.
+ */
+export const HIDDEN: Record<string, Ground> = { ...GROUND, [LENA_LAKE]: { food: 1, water: 3, energy: -1, smithore: 0, crystite: 0, rareEarth: 1 } };
+
+export const newWorld = (tun: Tunables, seed = SEED): World => ({ ...initWorld(seed, SEATS, ARCADE_TILES, { width: W, height: H, month: MONTH }, tun), hidden: HIDDEN });
+
+/**
+ * The addendum's starts (the audit's V-2, V-3, V-5, V-6, V-7 and Heiko's AM-2), each a moment of the loop:
+ * - plots: in the hall with an empty MULE, in front of the outfitters, choosing (V-2);
+ * - analyse: on Plains 4·1 with an Energy MULE, not yet analysed (V-3);
+ * - reoutfit: on Tundra 3·4, where her Energy MULE stands though the plot is best for Water (AM-2, V-5);
+ * - pace: the table, but Lena ate 1 of the 3 Food she needs (V-6);
+ * - broke: in the corral with 66 cr (V-7).
+ */
+export const ADDENDUM = {
+  plots: { hall: { x: 8, y: 6 } },
+  analyse: { at: PLAINS, good: 'energy' as const },
+  reoutfit: { at: TUNDRA },
+  pace: { food: 1 },
+  broke: { money: 66, hall: { x: 9.6, y: 8.9 } },
+  crater: CRATER,
+};
 
 /** The tunables' test track: one tile of each land with room to walk right across it, for feeling (and measuring) a speed. */
 /** #arcade-wolves: Lena starts here, on forest at 5·2, a plot from the plains and off the map's edge. */

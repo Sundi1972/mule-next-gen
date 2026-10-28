@@ -1,4 +1,4 @@
-import { DEV_WALK, DEVELOPMENT, MULE, SPECIES_PERK, type Species, type Terrain } from '@mule/engine';
+import { DEV_WALK, DEVELOPMENT, MULE, SPECIES_PERK, type Ground, type Species, type Terrain } from '@mule/engine';
 import type { TileView } from '@mule/protocol';
 import { glintReach, racing, spawnGlint, stepGlint, winGlint, type Glint } from './glint';
 import { afterSale, racingScramble, spawnScramble, stepScramble, type Scramble } from './scramble';
@@ -47,6 +47,8 @@ export interface Tunables {
   /** How far behind you the MULE walks, in tiles on the map. */
   leadTiles: number;
   devSeconds: number;
+  /** Seconds you stand on a plot for a geo analysis (V-3): today's DEVELOPMENT.analysisSeconds. */
+  analyseSeconds: number;
   /** The MULE's price is MULE.labour + MULE.smithorePerMule × this (engine mulePrice). */
   smithorePrice: number;
   storeMules: number;
@@ -134,7 +136,8 @@ export interface Tunables {
 export const DEFAULT_TUNABLES: Tunables = {
   // Heiko after playing slice 2 (29 Oct): half of today's 1 / DEV_WALK.tileSeconds. Terrain multipliers unchanged.
   mapTilesPerSecond: 0.5 / DEV_WALK.tileSeconds,
-  floorSeconds: DEV_WALK.floorSeconds,
+  // Heiko, S-2 (29 Oct): "too fast in store" at 1 s; 3 s from the door to the corral is the proposal.
+  floorSeconds: 3,
   // Plains are the yardstick; mountains and swamp are Heiko's two slow ones; the rest are the mock's judgement.
   terrain: {
     plains: 1,
@@ -157,6 +160,7 @@ export const DEFAULT_TUNABLES: Tunables = {
   leadPace: 0.9,
   leadTiles: 0.55,
   devSeconds: DEVELOPMENT.fullSeconds,
+  analyseSeconds: DEVELOPMENT.analysisSeconds,
   // 120 + 19 = 139 cr, the development audit's month-2 MULE.
   smithorePrice: 19,
   storeMules: 6,
@@ -221,6 +225,8 @@ export interface Lead {
   facing: 'left' | 'right';
   /** What it has cost its owner so far, MULE and outfit: what a pub refund is a share of. */
   paid: number;
+  /** Taken off one of your plots (AM-2): still fitted for its old good until an outfitter re-outfits it. */
+  taken?: boolean;
 }
 
 export interface Colonist {
@@ -259,6 +265,8 @@ export interface Colonist {
   encounter: Encounter | null;
   /** Crystite units carried: the glint's prize. */
   crystite: number;
+  /** Standing on a plot of yours for a geo analysis (V-3): no move till `until`, then the plot's ground shows. */
+  analysing: { until: number; x: number; y: number } | null;
   /** The bot's current leg (where it is heading) and whether this leg prefers wolf land, drawn when the leg began. */
   leg: string;
   legWolf: boolean;
@@ -339,6 +347,8 @@ export interface World {
   /** Newest last: what happened, for the TV and the tests. */
   log: string[];
   over: boolean;
+  /** What is underground on each plot, by "x,y": unseen until a geo analysis copies it onto the tile (V-3). */
+  hidden: Record<string, Ground>;
 }
 
 export interface Input {
@@ -346,6 +356,8 @@ export interface Input {
   dir: P;
   /** Pressed this step. */
   action: boolean;
+  /** The second choice pressed this step: the line above the button, or A on a keyboard (V-3, V-5). */
+  alt?: boolean;
   /** Mouse held on a spot of this space: walk toward it. Wins over dir when set. */
   toward?: (P & { space: Space }) | null;
 }
@@ -393,14 +405,14 @@ export function initWorld(seed: number, seats: Seat[], tiles: TileView[], size: 
       space: 'map', x: s.start.x + 0.5, y: s.start.y + 0.5, facing: 'right', moving: false, mule: null,
       money: tun.seats[s.id]?.money ?? 0, done: false, installs: 0,
       plan: ARCADE_OUTFITS[Math.floor(u * ARCADE_OUTFITS.length)]!, botWait: 0, trail: [],
-      pelts: 0, bitten: false, stunnedUntil: 0, wolvesAfter: 0, encounter: null, crystite: 0, leg: '', legWolf: false, legVia: null, waitUntil: 0,
+      pelts: 0, bitten: false, stunnedUntil: 0, wolvesAfter: 0, encounter: null, crystite: 0, analysing: null, leg: '', legWolf: false, legVia: null, waitUntil: 0,
     };
   });
   const store = tiles.find((t) => t.terrain === 'store')!;
 
   return {
     t: 0, seed, rng, month: size.month, width: size.width, height: size.height, store: { x: store.x, y: store.y },
-    tiles, colonists, storeMules: tun.storeMules, queue: [], loose: [], fleeing: [], glint: null, glintAfter: FIRST_GLINT_MS, scramble: null, scrambled: false, beats: [], log: [], over: false,
+    tiles, colonists, storeMules: tun.storeMules, queue: [], loose: [], fleeing: [], glint: null, glintAfter: FIRST_GLINT_MS, scramble: null, scrambled: false, beats: [], log: [], over: false, hidden: {},
   };
 }
 
@@ -651,7 +663,7 @@ const leaveHall = (w: World, c: Colonist, side: 'L' | 'R', tun: Tunables) => arr
 
 // --- What the action button does -----------------------------------------------------------------
 
-export type ReachKind = 'enter' | 'buy' | 'outfit' | 'leave' | 'install' | 'pub' | 'sell' | 'catch' | 'fight' | 'strike' | 'grab' | 'none';
+export type ReachKind = 'enter' | 'buy' | 'outfit' | 'leave' | 'install' | 'pub' | 'sell' | 'catch' | 'fight' | 'strike' | 'grab' | 'analyse' | 'take' | 'filter' | 'none';
 export interface Reach {
   kind: ReachKind;
   /** The button's words, e.g. "BUY MULE"; with `detail`, e.g. "139 cr". */
@@ -662,6 +674,10 @@ export interface Reach {
   /** The thing in reach, for the views to highlight and the mouse to click. */
   target?: { space: 'map'; door: 'L' | 'R' } | { space: 'map'; tile: P } | { space: 'map'; mule: P } | { space: 'hall'; room: HallRoom };
   outfit?: ArcadeOutfit;
+  /** A second choice here, on the line above the button (V-3's ANALYSE beside INSTALL, V-5's FIT FILTER). */
+  alt?: Reach;
+  /** The long why, for a card with room for it (V-5: where the filter's Alloy comes from). */
+  why?: string;
 }
 
 const NAME: Record<ArcadeOutfit, string> = { food: 'FOOD', energy: 'ENERGY', smithore: 'SMITHORE', crystite: 'CRYSTITE' };
@@ -696,6 +712,7 @@ export function reachOf(w: World, c: Colonist, tun: Tunables): Reach {
   if (w.over) return { kind: 'none', verb: 'DEVELOPMENT OVER', enabled: false };
   if (c.done) return { kind: 'none', verb: 'IN THE PUB', detail: 'turn over', enabled: false };
   if (c.stunnedUntil > w.t) return { kind: 'none', verb: 'STUNNED', detail: `${Math.ceil((c.stunnedUntil - w.t) / 1000)} s`, enabled: false };
+  if (c.analysing) return { kind: 'none', verb: 'ANALYSING', detail: `${Math.max(0, Math.ceil((c.analysing.until - w.t) / 1000))} s left`, enabled: false };
   if (c.encounter) return wolfReach(w, c, tun);
   const grab = glintReach(w, c);
   if (grab) return grab;
@@ -714,7 +731,8 @@ export function reachOf(w: World, c: Colonist, tun: Tunables): Reach {
       const target = { space: 'hall' as const, room };
       if (c.mule) return { kind: 'none', verb: c.mule.good ? 'MULE ON LEAD' : 'TO AN OUTFITTER', enabled: false };
       if (w.storeMules <= 0) return { kind: 'none', verb: 'SOLD OUT', enabled: false };
-      if (c.money < price) return { kind: 'buy', verb: 'BUY MULE', detail: `need ${price} cr`, enabled: false, target };
+      // V-7: what it costs and what you have, never a lit button you cannot pay for.
+      if (c.money < price) return { kind: 'buy', verb: 'BUY MULE', detail: `costs ${price} cr · you have ${c.money}`, enabled: false, target };
       return { kind: 'buy', verb: 'BUY MULE', detail: `${price} cr`, enabled: true, target };
     }
     if (room && (ARCADE_OUTFITS as readonly string[]).includes(room)) {
@@ -722,9 +740,10 @@ export function reachOf(w: World, c: Colonist, tun: Tunables): Reach {
       const target = { space: 'hall' as const, room };
       const cost = tun.outfit[g];
       if (!c.mule) return { kind: 'outfit', verb: `OUTFIT · ${NAME[g]}`, detail: 'needs a MULE', enabled: false, target, outfit: g };
-      if (c.mule.good === g) return { kind: 'none', verb: `FITTED · ${NAME[g]}`, detail: 'now to a door', enabled: false };
+      if (c.mule.good === g) return { kind: 'none', verb: `FITTED · ${NAME[g]}`, detail: c.mule.taken ? 'another outfitter re-outfits it' : 'now to a door', enabled: false };
       if (c.money < cost) return { kind: 'outfit', verb: `OUTFIT · ${NAME[g]}`, detail: `need ${cost} cr`, enabled: false, target, outfit: g };
-      return { kind: 'outfit', verb: `${c.mule.good ? 'REFIT' : 'OUTFIT'} · ${NAME[g]}`, detail: `${cost} cr`, enabled: true, target, outfit: g };
+      // AM-2: a MULE fitted for another good (one taken off a plot) is re-outfitted for the outfit's price.
+      return { kind: 'outfit', verb: `${c.mule.good ? 'RE-OUTFIT' : 'OUTFIT'} · ${NAME[g]}`, detail: `${cost} cr`, enabled: true, target, outfit: g };
     }
     if (room) return { kind: 'none', verb: 'CLOSED', detail: 'not in this mock', enabled: false };
     if (!c.mule && w.storeMules <= 0) return { kind: 'none', verb: 'NO MULES LEFT', detail: 'the pub pays now', enabled: false };
@@ -744,17 +763,26 @@ export function reachOf(w: World, c: Colonist, tun: Tunables): Reach {
   const shore = c.mule?.good ? shorePlot(w, c, tun) : null;
   if (shore) return { kind: 'install', verb: `INSTALL · ${NAME[c.mule!.good!]}`, detail: 'from the shore', enabled: true, target: { space: 'map', tile: { x: shore.x, y: shore.y } }, outfit: c.mule!.good! };
   if (mine && t.outfit && c.mule?.good) return { kind: 'none', verb: 'PLOT HAS A MULE', detail: 'try a free plot', enabled: false };
-  if (mine && c.mule?.good) return { kind: 'install', verb: `INSTALL · ${NAME[c.mule.good]}`, enabled: true, target: { space: 'map', tile: { x: t.x, y: t.y } }, outfit: c.mule.good };
+  // RULE-3 row 11, V-3: a plot of yours nobody has analysed can be, in DEVELOPMENT.analysisSeconds.
+  const analyse: Reach | null = mine && !t.ground && !t.outfit ? { kind: 'analyse', verb: 'ANALYSE', detail: `${tun.analyseSeconds} s`, enabled: true, target: { space: 'map', tile: { x: t.x, y: t.y } } } : null;
+  // V-3: INSTALL stays the button; ANALYSE first is the second choice, on the line above it.
+  if (mine && c.mule?.good) return { kind: 'install', verb: `INSTALL · ${NAME[c.mule.good]}`, enabled: true, target: { space: 'map', tile: { x: t.x, y: t.y } }, outfit: c.mule.good, ...(analyse ? { alt: analyse } : {}) };
   if (mine && c.mule) return { kind: 'none', verb: 'OUTFIT IT FIRST', detail: 'in the store', enabled: false };
+  // AM-2 (RULE-3 row 11a): your MULE on its plot comes off on its lead; V-5's filter is the second choice, and says
+  // where its Alloy comes from (none is held in this mock).
+  if (mine && t.outfit && !c.mule && (ARCADE_OUTFITS as readonly string[]).includes(t.outfit)) {
+    const filter: Reach = { kind: 'filter', verb: 'FIT FILTER', detail: 'needs 1 Alloy', why: 'Needs 1 Alloy: buy it at the auction, or make it with a factory MULE at the Works', enabled: false };
+    return { kind: 'take', verb: `TAKE MULE · ${NAME[t.outfit as ArcadeOutfit]}`, detail: 'it follows on its lead', enabled: true, target: { space: 'map', tile: { x: t.x, y: t.y } }, alt: filter };
+  }
+  if (mine && !c.mule && analyse) return analyse;
   if (c.mule?.good) return { kind: 'none', verb: 'TO YOUR PLOT', detail: t?.owner ? 'not yours' : undefined, enabled: false };
   if (!c.mule && w.storeMules <= 0) return { kind: 'none', verb: 'NO MULES LEFT', detail: 'the pub pays now', enabled: false };
   if (c.installs > 0 && !c.mule) return { kind: 'none', verb: 'TO THE STORE', detail: 'MULE or pub', enabled: false };
   return { kind: 'none', verb: 'TO THE STORE', enabled: false };
 }
 
-function act(w: World, c: Colonist, tun: Tunables): { w: World; c: Colonist } {
-  const r = reachOf(w, c, tun);
-  if (!r.enabled) return { w, c };
+function act(w: World, c: Colonist, tun: Tunables, r: Reach | undefined = reachOf(w, c, tun)): { w: World; c: Colonist } {
+  if (!r?.enabled) return { w, c };
   switch (r.kind) {
     case 'enter':
       return { w, c: enterHall(c, r.target && 'door' in r.target ? r.target.door : 'L', tun) };
@@ -769,7 +797,21 @@ function act(w: World, c: Colonist, tun: Tunables): { w: World; c: Colonist } {
     }
     case 'outfit': {
       const g = r.outfit!;
-      return { w: { ...w, log: say(w, c, `outfitted for ${NAME[g]} (${tun.outfit[g]} cr)`) }, c: { ...c, money: c.money - tun.outfit[g], mule: { ...c.mule!, good: g, paid: c.mule!.paid + tun.outfit[g] } } };
+      // A re-outfit (AM-2) is an outfit: the MULE is no longer "taken" once it makes the new good.
+      const { taken: _taken, ...m } = c.mule!;
+      return { w: { ...w, log: say(w, c, `${m.good ? 're-outfitted' : 'outfitted'} for ${NAME[g]} (${tun.outfit[g]} cr)`) }, c: { ...c, money: c.money - tun.outfit[g], mule: { ...m, good: g, paid: m.paid + tun.outfit[g] } } };
+    }
+    case 'analyse': {
+      const at = r.target && 'tile' in r.target ? r.target.tile : { x: Math.floor(c.x), y: Math.floor(c.y) };
+      return { w: { ...w, log: say(w, c, `analyses ${at.x + 1}·${at.y + 1}`) }, c: { ...c, moving: false, analysing: { until: w.t + tun.analyseSeconds * 1000, x: at.x, y: at.y } } };
+    }
+    case 'take': {
+      const at = r.target && 'tile' in r.target ? r.target.tile : { x: Math.floor(c.x), y: Math.floor(c.y) };
+      const tile = tileAt(w, at.x, at.y)!;
+      const good = tile.outfit as ArcadeOutfit;
+      const tiles = w.tiles.map((t) => (t.x === at.x && t.y === at.y ? { ...t, outfit: null } : t));
+      const mule: Lead = { good, x: at.x + 0.5, y: at.y + 0.5, facing: c.facing, paid: 0, taken: true };
+      return { w: { ...w, tiles, log: say(w, c, `took the ${NAME[good]} MULE off ${at.x + 1}·${at.y + 1}`), beats: beat(w, c.id, `${c.name} took a MULE off a plot to re-outfit it`, 'ok') }, c: { ...c, mule, trail: [{ x: mule.x, y: mule.y }, { x: c.x, y: c.y }] } };
     }
     case 'install': {
       const at = r.target && 'tile' in r.target ? r.target.tile : { x: Math.floor(c.x), y: Math.floor(c.y) };
@@ -1006,6 +1048,15 @@ export function moveColonist(w: World, c0: Colonist, dir: P, dtMs: number, tun: 
 function stepColonist(w0: World, c0: Colonist, input0: Input, dtMs: number, tun: Tunables): { w: World; c: Colonist } {
   let w = w0;
   let c = c0;
+  // A geo analysis (V-3): stand still; when it is done, the plot's ground shows on its tile.
+  if (c.analysing) {
+    if (w.t < c.analysing.until) return { w, c: { ...c, moving: false, botWait: 0 } };
+    const a = c.analysing;
+    const ground = w.hidden[`${a.x},${a.y}`] ?? { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0 };
+    const tiles = w.tiles.map((t) => (t.x === a.x && t.y === a.y ? { ...t, ground } : t));
+    w = { ...w, tiles, log: say(w, c, `analysed ${a.x + 1}·${a.y + 1}`), beats: beat(w, c.id, `${c.name} analysed ${a.x + 1}·${a.y + 1}`, 'ok') };
+    c = { ...c, analysing: null };
+  }
   // Stunned: no move, no action.
   const input = c.stunnedUntil > w.t ? IDLE : input0;
   let dir = input.dir;
@@ -1018,6 +1069,10 @@ function stepColonist(w0: World, c0: Colonist, input0: Input, dtMs: number, tun:
     c = moveColonist(w, c, dir, dtMs, tun);
     if (input.action) {
       const r = act(w, c, tun);
+      w = r.w;
+      c = r.c;
+    } else if (input.alt) {
+      const r = act(w, c, tun, reachOf(w, c, tun).alt);
       w = r.w;
       c = r.c;
     }

@@ -2,7 +2,7 @@ import type { IntentNoteData } from '../../proposed/IntentNote';
 
 /**
  * The changes, each with the goal it serves (Heiko's, via the PM) and why it changed. For A-1 to A-6 the "why" is the
- * same finding: today's tap-to-walk, and Heiko's verdict on it. A-7 is slice 2's, A-8 slice 3's, A-9 slice 4's, A-10 the landscape phone (Heiko, 29 Oct).
+ * same finding: today's tap-to-walk, and Heiko's verdict on it. A-7 is slice 2's, A-8 slice 3's, A-9 slice 4's, A-10 the landscape phone (Heiko, 29 Oct); A-11 to A-16 the addendum from the development audit (PM, 29 Oct).
  */
 
 const VERDICT = 'Heiko’s playtest verdict on it: “this is not at all what i wanted… i can really walk my character… like in an arcade game”.';
@@ -93,7 +93,62 @@ export const ARCADE_NOTES: IntentNoteData[] = [
     'The phone is held sideways and shows the whole map, 43 px a plot, so the store and every one of your plots are always in view. The joystick (left thumb) and the button (right thumb) lie over the map’s bottom corners, translucent, the button’s words on a panel; neither ever covers the store or one of your plots, and each fades to near-clear while you are beside it. Your next step is ringed and named: STORE · CORRAL, then the outfitters inside, YOUR PLOT 4·1, then STORE · PUB. Inside the store the hall fills the screen the same way.',
     'You steer your own colonist, on your phone alone: no TV needed to find your plot.',
     'Heiko, playing the portrait follow camera: “if there is no tv i would have no clue where my tile is that i need to walk to.” Then: “so i guess we will need the card in full on the phone. phone is always landscape btw and the steering control should be laying over the card”.',
+  ),  // The addendum (PM ruling 29 Oct): five of the development audit's approved changes (docs/research/2026-10-28-ws6-ux-audit.md
+  // §6, the #audit-dev-* mocks), and Heiko's AM-2, drawn in the arcade's language. "Serves" is the audit's intent number.
+  n(
+    'A11',
+    11,
+    'Your plots, and what each suits, while you choose (V-2)',
+    'In the store with a MULE to outfit, the side room lists your plots, what each suits and what stands on it (“Plains 4·1 · often good for Food and Energy”, “Tundra 3·4 · analysed: best for Water · Energy MULE”), and under each outfitter its chips name your plots that suit its good, dashed where a MULE already stands. Fitted, the ring takes you to the best of your free plots for that good, by its analysis, else its land’s odds, the nearer only on a tie: for Energy, Plains 4·1, though Lake 4·4 is nearer.',
+    'Know which of my plots is best for which good.',
+    'Audit V-2: nothing named your plots or what they suit while you chose, and the guide sent an Energy MULE to the nearest free plot, not the one that suits it (RULE-9 row 3a said “nearest”).',
+    { serves: 'audit 4' },
+  ),
+  n(
+    'A12',
+    12,
+    'Analyse before you install, in words (V-3)',
+    'On your own plot with a fitted MULE the button says INSTALL; the line above it offers ANALYSE · 8 s, a second choice (A on a keyboard). The plot’s card, over the map on the half away from the plot, says what its land is often good for; analysed, it names every good in words and dots, what is best here, and flags a mismatch: “Your MULE makes Energy; this plot is best for Water”. On a plot of yours with nothing on it, ANALYSE is the button itself.',
+    'Know which of my plots is best for which good · Check what’s underground, and what it costs in time.',
+    'Audit V-3: the readout spoke in codes (H2O, NRG, ORE), and the audit put an Energy MULE where the plot reads Water 3 of 4, finding out only afterwards. A second line rather than a hold or the stick pushed down: a hold hides the choice and costs time on everyone’s clock, the stick already walks, and a line you can read says what it does, like the button.',
+    { serves: 'audit 4 and 5' },
+  ),
+  n(
+    'A13',
+    13,
+    'The filter says where Alloy comes from (V-5)',
+    'On your plot with a MULE the line above the button reads FIT FILTER · needs 1 Alloy, dimmed, and the plot’s card says the rest: “Needs 1 Alloy: buy it at the auction, or make it with a factory MULE at the Works”.',
+    'Fit a pollution filter.',
+    'Audit V-5: “Fit a filter · 1 Alloy (have 0)” never said that Alloy is made by a factory MULE, or bought at the auction.',
+    { serves: 'audit 6' },
+  ),
+  n(
+    'A14',
+    14,
+    'Your pace, and why (V-6)',
+    'Everyone’s clock stays one clock; your pace is your own line in the side room: “Your pace 47%: you ate 1 of the 3 Food you need”. A tap opens what to do about it: “Next month: buy 3 Food at the auction, or put a Food MULE on a plot”. On the small phone it is the status bar’s “Pace 47%” and opens the same way.',
+    'See how much time I have left, and why I’m slow · Stop being hungry or sick.',
+    'Audit V-6: “EVERYONE’S TIME · 47% PACE” read as if everyone were slow; the why was a hover a phone never shows, and nothing said how to eat next month.',
+    { serves: 'audit 8 and 9' },
+  ),
+  n(
+    'A15',
+    15,
+    'The button and the ring never send you where you can’t go (V-7)',
+    'With 66 cr in the corral the button reads BUY MULE · costs 139 cr · you have 66, dimmed; the corral is not ringed. The ring goes to what you can do instead: the pub and the door out, and on the map your nearest plot nobody has analysed (ANALYSE · 4·1) beside the store’s pub; the banner box says why in words: “A MULE costs 139 cr; you have 66. Analyse a plot, or end at the pub for ≈109 cr.” (the pub pays less the longer you wait)',
+    'Buy a MULE.',
+    'Audit V-7: in month 2, with 66 cr, the guide still said to tap the glowing corral.',
+    { serves: 'audit 1' },
+  ),
+  n(
+    'A16',
+    16,
+    'Take a MULE off its plot and re-outfit it (AM-2)',
+    'On your own plot with a MULE and none in tow, the button reads TAKE MULE · ENERGY: it follows on its lead, and the plot makes nothing meanwhile. The ring takes you to the store and its other outfitters (its own good’s dimmed: IT MAKES THIS); there RE-OUTFIT · FOOD · 25 cr (Water’s outfitter is closed in this mock); then the ring takes it to the best free plot for its new good, the one it came off if that is best.',
+    'Change what a MULE makes, or move it to another plot.',
+    'Heiko’s Q2 “yes” (AM-2, via the PM): the audit mock only drew “Or re-outfit it at the store” dashed, as a rule that did not exist; now it is RULE-3 rows 8a and 11a.',
+    { serves: 'audit 10' },
   ),
 ];
 
-export const NOTE = Object.fromEntries(ARCADE_NOTES.map((x) => [x.id, x])) as Record<'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'A6' | 'A7' | 'A8' | 'A9' | 'A10', IntentNoteData>;
+export const NOTE = Object.fromEntries(ARCADE_NOTES.map((x) => [x.id, x])) as Record<'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'A6' | 'A7' | 'A8' | 'A9' | 'A10' | 'A11' | 'A12' | 'A13' | 'A14' | 'A15' | 'A16', IntentNoteData>;

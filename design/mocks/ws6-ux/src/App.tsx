@@ -586,7 +586,7 @@ export default function App() {
     <div className="min-h-full bg-table p-8 text-ink" data-testid="index">
       <h2 className="label-caps">To play · arcade walking in development (Heiko, 2026-10-29)</h2>
       <p className="mt-1 max-w-3xl text-sm text-ink-2">
-        Steer your colonist yourself: arrow keys and SPACE, or the mouse; on a phone a joystick and one button. Store, corral, outfitter, out with the MULE on its lead, your plot, install. Slice 1 of 4; every speed is a tunable.
+        Steer your colonist yourself: arrow keys and SPACE, or the mouse; on a phone held sideways a joystick and one button over the whole map. Store, corral, outfitter, out with the MULE on its lead, your plot, install. Slices 1 to 4 (wolves, the glint, the scramble), and the addendum from the development audit (V-2, V-3, V-5, V-6, V-7, AM-2); every phone route also plays at 667 × 375. Every speed is a tunable.
       </p>
       <div className="mt-2 flex flex-col gap-2" data-testid="arcade-links">
         <Links states={[{ id: ARCADE_CONTENTS, title: 'Arcade walking: contents' }, ...ARCADE_ROUTES]} />

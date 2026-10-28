@@ -1,12 +1,13 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ThemeToggle } from '../../../../../../apps/web/src/components/ThemeToggle';
 import { LaptopFrame } from '../../harness';
 import { IntentNotes, IntentNotesProvider } from '../../proposed/IntentNote';
 import { LaptopArcade } from './Laptop';
-import { ArcadeProvider } from './loop';
+import { ArcadeProvider, type Scenario } from './loop';
 import { ARCADE_NOTES } from './notes';
 import { PhoneFrame } from '../../harness';
-import { PhoneArcade, PhoneLandscape, PortraitFrame } from './Phone';
+import { PhoneArcade, PhoneLandscape, PortraitFrame, SmallPhoneFrame } from './Phone';
+import type { PhoneSize } from './layout';
 import { ScaledFrame, TvArcade, TvKeys } from './Tv';
 import { TunablesPanel } from './Tunables';
 
@@ -34,7 +35,7 @@ export const ARCADE_ROUTES: { id: string; title: string; shows: string; controls
   {
     id: 'arcade-phone',
     title: 'The phone alone: landscape, the whole map, controls over it',
-    shows: 'The phone by itself, held sideways (844 × 390), with no TV: the whole map fills the screen, your next step ringed and named, the joystick and the button lying over the map’s bottom corners. Inside the store, the whole hall.',
+    shows: 'The phone by itself, held sideways (844 × 390, or the small phone’s 667 × 375 with the switch above it), with no TV: the whole map fills the screen, your next step ringed and named, the joystick and the button lying over the map’s bottom corners. Inside the store, the whole hall.',
     controls: 'Drag the joystick (left thumb), press the button (right thumb); arrow keys and SPACE work too.',
   },
   {
@@ -62,11 +63,53 @@ export const ARCADE_ROUTES: { id: string; title: string; shows: string; controls
     controls: 'Walk to the store and into the corral with the stick or the arrow keys; the button (or SPACE) reads BUY MULE there.',
   },
   {
+    id: 'arcade-plots',
+    title: 'Addendum · your plots while you choose (V-2)',
+    shows: 'In the store with an empty MULE in front of the outfitters: the side room lists your plots and what each suits; under each outfitter, your plots that suit its good. Outfit it, and the ring takes it to the best free plot for that good: for Energy, Plains 4·1, though Lake 4·4 is nearer.',
+    controls: 'Walk into an outfitter and press the button; then follow the ring.',
+  },
+  {
+    id: 'arcade-analyse',
+    title: 'Addendum · analyse before you install (V-3)',
+    shows: 'On Plains 4·1 with an Energy MULE, not yet analysed. The button says INSTALL; the line above it, ANALYSE · 8 s. Analyse, and the card names every good: best for Water, and your MULE makes Energy.',
+    controls: 'The line above the button (or A) analyses; the button (or SPACE) installs.',
+  },
+  {
+    id: 'arcade-reoutfit',
+    title: 'Addendum · take a MULE off, re-outfit it (AM-2) · the filter (V-5)',
+    shows: 'On Tundra 3·4, where your Energy MULE stands though the plot is best for Water. The button: TAKE MULE; the line above it: FIT FILTER, dimmed, and the card says where its Alloy comes from. Take it, re-outfit it for Food at the store, and the ring takes it to the best free plot for Food.',
+    controls: 'The button (or SPACE) takes the MULE; walk it to the store; the button re-outfits it at another outfitter.',
+  },
+  {
+    id: 'arcade-pace',
+    title: 'Addendum · your pace, and why (V-6)',
+    shows: 'Lena ate 1 of the 3 Food she needs: the side room says “Your pace 47%: you ate 1 of the 3 Food you need”; a tap on it says what to do next month.',
+    controls: 'Tap (or click) your pace line; walk as usual.',
+  },
+  {
+    id: 'arcade-broke',
+    title: 'Addendum · never sent where you cannot go (V-7)',
+    shows: 'In the corral with 66 cr: BUY MULE · costs 139 cr · you have 66, dimmed. The ring goes to the pub and the door out; outside, to a plot you can analyse. The banner box says why.',
+    controls: 'Walk out and analyse a plot, or end at the pub.',
+  },
+  {
     id: 'arcade-tv',
     title: 'The TV alone (1280 × 720)',
     shows: 'The big screen at its design size: every colonist walking live, named, the hall beside it, each one’s pace. Lena is on autopilot here.',
     controls: 'Watch; or untick “Lena on autopilot”, click the TV and steer her with the arrow keys and SPACE.',
   },
+];
+
+const ADDENDUM_ROUTES = ['arcade-plots', 'arcade-analyse', 'arcade-reoutfit', 'arcade-pace', 'arcade-broke'];
+
+/** The addendum: five of the development audit's approved changes, and Heiko's AM-2, in the arcade's language. */
+const ADDENDUM = [
+  { id: 'V-2', route: 'arcade-plots', line: 'your plots, and what each suits, while you choose an outfit; the ring takes the MULE to the best free plot for its good.' },
+  { id: 'V-3', route: 'arcade-analyse', line: 'on your plot with a MULE: INSTALL, or ANALYSE · 8 s on the line above the button; the card names every good, what is best here, and a mismatch.' },
+  { id: 'V-5', route: 'arcade-reoutfit', line: 'FIT FILTER, dimmed, says where its Alloy comes from (on the re-outfit route, the same plot).' },
+  { id: 'V-6', route: 'arcade-pace', line: 'your pace, and why, in the side room; a tap says what to do next month.' },
+  { id: 'V-7', route: 'arcade-broke', line: 'with 66 cr the corral is not ringed; the ring and the banner box say what you can do instead.' },
+  { id: 'AM-2', route: 'arcade-reoutfit', line: 'TAKE MULE off your plot, RE-OUTFIT it at another outfitter, and the ring brings it to the best free plot.' },
 ];
 
 /** The four slices, one line each. */
@@ -112,7 +155,7 @@ function Page({ title, intro, children }: { title: string; intro?: ReactNode; ch
 const Notes = ({ className }: { className?: string }) => (
   <IntentNotes
     title="What changed and why"
-    intro="Ten changes from today’s tap-to-walk development, numbered on the screens (⑦ slice 2’s wolves, ⑧ slice 3’s glint, ⑨ slice 4’s scramble, ⑩ the landscape phone). Hover a note to light its number."
+    intro="Sixteen changes from today’s tap-to-walk development, numbered on the screens (⑦ slice 2’s wolves, ⑧ slice 3’s glint, ⑨ slice 4’s scramble, ⑩ the landscape phone, ⑪ to ⑯ the addendum from the development audit). Hover a note to light its number."
     notes={ARCADE_NOTES}
     {...(className ? { className } : {})}
   />
@@ -142,6 +185,18 @@ function Contents() {
           </li>
         ))}
       </ol>
+      <h2 className="label-caps mt-6">Addendum · from the development audit (PM ruling, 29 Oct)</h2>
+      <ul className="mt-2 flex max-w-4xl flex-col gap-1 text-sm text-ink-2" data-testid="addendum">
+        {ADDENDUM.map((a) => (
+          <li key={a.id}>
+            <a href={`#${a.route}`} className="font-semibold text-holo underline">
+              {a.id} · #{a.route}
+            </a>
+            : {a.line}
+          </li>
+        ))}
+        <li>Every phone route also plays at the small phone’s 667 × 375: the switch above the phone.</li>
+      </ul>
       <h2 className="label-caps mt-6">Key decisions</h2>
       <ul className="mt-2 flex max-w-4xl list-disc flex-col gap-1 pl-5 text-sm text-ink-2">
         {DECISIONS.map((d) => (
@@ -176,6 +231,42 @@ function Contents() {
   );
 }
 
+/** The phone's size, 844 × 390 or the small phone's 667 × 375: a switch on the page, and ?phone=667 in the URL. */
+function initialSize(): PhoneSize {
+  return new URLSearchParams(location.search).get('phone') === '667' ? 667 : 844;
+}
+
+function ThePhone() {
+  const [size, setSize] = useState<PhoneSize>(initialSize);
+  const pick = (s: PhoneSize) => {
+    setSize(s);
+    const u = new URL(location.href);
+    if (s === 667) u.searchParams.set('phone', '667');
+    else u.searchParams.delete('phone');
+    history.replaceState(null, '', u);
+  };
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="flex items-center gap-1 font-mono text-xs" role="radiogroup" aria-label="Phone size" data-testid="phone-size">
+        {([844, 667] as const).map((s) => (
+          <button key={s} type="button" role="radio" aria-checked={size === s} onClick={() => pick(s)} className={size === s ? 'rounded-chip bg-holo px-2 py-0.5 text-on-holo' : 'rounded-chip border border-holo-line px-2 py-0.5 text-ink-2'} data-testid={`phone-size-${s}`}>
+            {s === 844 ? '844 × 390' : '667 × 375 (small phone)'}
+          </button>
+        ))}
+      </span>
+      {size === 844 ? (
+        <PhoneFrame>
+          <PhoneLandscape size={844} />
+        </PhoneFrame>
+      ) : (
+        <SmallPhoneFrame>
+          <PhoneLandscape size={667} />
+        </SmallPhoneFrame>
+      )}
+    </div>
+  );
+}
+
 /** The TV beside the sideways phone: 512 × 288, so both fit a 1440 px laptop window side by side. */
 const TV_BESIDE = 0.4;
 
@@ -184,9 +275,7 @@ function Table() {
   return (
     <Page title="The table: your phone and the TV" intro="One sim drives both frames: steer on the phone (or with the arrow keys once you click it) and the TV follows. The bots walk the same loop by the same rules.">
       <div className="flex flex-wrap items-start gap-4">
-        <PhoneFrame>
-          <PhoneLandscape />
-        </PhoneFrame>
+        <ThePhone />
         <ScaledFrame width={1280} height={720} scale={TV_BESIDE} testid="tv-frame">
           <TvArcade />
         </ScaledFrame>
@@ -207,9 +296,7 @@ function Wolves() {
       intro="Lena starts on forest and a pack comes in about 2 s. Push the stick (or an arrow key) to RUN; press the button (or SPACE) to FIGHT. In the fight, step off the red ring when a wolf crouches, then STRIKE while it stands open. “Play again” meets them again; “Call the wolves now” calls another pack wherever she is."
     >
       <div className="flex flex-wrap items-start gap-4">
-        <PhoneFrame>
-          <PhoneLandscape />
-        </PhoneFrame>
+        <ThePhone />
         <ScaledFrame width={1280} height={720} scale={TV_BESIDE} testid="tv-frame">
           <TvArcade />
         </ScaledFrame>
@@ -230,9 +317,7 @@ function GlintRace() {
       intro="In about 2 s a Crystite glint lights 5 tiles east of Lena, on her phone’s map. Ossa is as far on its other side. Walk onto it first; one step away the button reads GRAB THE GLINT. “Play again” races again; “Call a glint now” lights another anywhere."
     >
       <div className="flex flex-wrap items-start gap-4">
-        <PhoneFrame>
-          <PhoneLandscape />
-        </PhoneFrame>
+        <ThePhone />
         <ScaledFrame width={1280} height={720} scale={TV_BESIDE} testid="tv-frame">
           <TvArcade />
         </ScaledFrame>
@@ -253,9 +338,7 @@ function ScrambleRace() {
       intro="Three MULEs in the corral and four colonists who need one: the first sale starts the race for the last two. Walk to the store and into the corral; BUY MULE is the button there. The store is ringed on your phone’s map. “Play again” races again; “Start a scramble now” starts one whenever the corral has MULEs."
     >
       <div className="flex flex-wrap items-start gap-4">
-        <PhoneFrame>
-          <PhoneLandscape />
-        </PhoneFrame>
+        <ThePhone />
         <ScaledFrame width={1280} height={720} scale={TV_BESIDE} testid="tv-frame">
           <TvArcade />
         </ScaledFrame>
@@ -283,9 +366,7 @@ function PhoneRoute() {
       }
     >
       <div className="flex flex-wrap items-start gap-6">
-        <PhoneFrame>
-          <PhoneLandscape />
-        </PhoneFrame>
+        <ThePhone />
         <TunablesPanel className="w-full max-w-[26rem]" />
       </div>
       <Notes className="max-w-5xl" />
@@ -312,6 +393,33 @@ function PortraitRoute() {
           <PhoneArcade variant="follow" />
         </PortraitFrame>
         <TunablesPanel className="w-full max-w-[26rem]" />
+      </div>
+    </Page>
+  );
+}
+
+/** The addendum's pages: the phone beside the TV, at the moment each change is about. */
+const ADDENDUM_INTRO: Record<string, string> = {
+  'arcade-plots': 'Lena is in the store with an empty MULE, in front of the outfitters. The side room lists her plots and what each suits; under each outfitter, chips name her plots that suit its good (dashed: a MULE stands there). Outfit for Energy and walk out: the ring goes to Plains 4·1, the best of her free plots for Energy, not Lake 4·4, the nearest.',
+  'arcade-analyse': 'Lena stands on Plains 4·1 with an Energy MULE. The button says INSTALL · ENERGY; the line above it says ANALYSE · 8 s (or press A). Analyse: the clock runs while she stands; then the card names every good, says the plot is best for Water, and that her MULE makes Energy.',
+  'arcade-reoutfit': 'Lena stands on Tundra 3·4: her Energy MULE is on it, though the plot reads best for Water. The button says TAKE MULE · ENERGY; the line above it, FIT FILTER · needs 1 Alloy, dimmed, and the card says where Alloy comes from. Take the MULE, lead it to the store: the ring lights the other outfitters (Energy’s dimmed); RE-OUTFIT · FOOD (Water’s outfitter is closed in this mock); then the ring takes it to the best free plot for Food.',
+  'arcade-pace': 'Lena ate 1 of the 3 Food she needs, so she walks at 47%. The side room says so in words; tap the line for what to do next month. Everyone’s clock is still one clock.',
+  'arcade-broke': 'Lena is in the corral with 66 cr. The button says what a MULE costs and what she has, dimmed; the corral is not ringed. The ring goes to the pub and the door out; outside, to a plot she can analyse; the banner box says why.',
+};
+
+function AddendumRoute({ route }: { route: string }) {
+  const title = ARCADE_ROUTES.find((r) => r.id === route)!.title;
+  return (
+    <Page title={title} intro={ADDENDUM_INTRO[route]}>
+      <div className="flex flex-wrap items-start gap-4">
+        <ThePhone />
+        <ScaledFrame width={1280} height={720} scale={TV_BESIDE} testid="tv-frame">
+          <TvArcade />
+        </ScaledFrame>
+      </div>
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
+        <TunablesPanel />
+        <Notes />
       </div>
     </Page>
   );
@@ -349,13 +457,13 @@ function TvRoute() {
 
 export function ArcadePage({ route }: { route: string }) {
   const body =
-    route === 'arcade' ? <Table /> : route === 'arcade-computer' ? <Computer /> : route === 'arcade-phone' ? <PhoneRoute /> : route === 'arcade-phone-portrait' ? <PortraitRoute /> : route === 'arcade-tv' ? <TvRoute /> : route === 'arcade-wolves' ? <Wolves /> : route === 'arcade-glint' ? <GlintRace /> : route === 'arcade-scramble' ? <ScrambleRace /> : <Contents />;
+    route === 'arcade' ? <Table /> : route === 'arcade-computer' ? <Computer /> : route === 'arcade-phone' ? <PhoneRoute /> : route === 'arcade-phone-portrait' ? <PortraitRoute /> : route === 'arcade-tv' ? <TvRoute /> : route === 'arcade-wolves' ? <Wolves /> : route === 'arcade-glint' ? <GlintRace /> : route === 'arcade-scramble' ? <ScrambleRace /> : ADDENDUM_ROUTES.includes(route) ? <AddendumRoute route={route} /> : <Contents />;
   const isGame = ARCADE_ROUTES.some((r) => r.id === route);
   return (
     <IntentNotesProvider>
       {isGame ? (
         // A fresh sim per route: the key restarts it when the hash changes.
-        <ArcadeProvider key={route} autopilot={route === 'arcade-tv'} scenario={route === 'arcade-wolves' ? 'wolves' : route === 'arcade-glint' ? 'glint' : route === 'arcade-scramble' ? 'scramble' : 'table'}>
+        <ArcadeProvider key={route} autopilot={route === 'arcade-tv'} scenario={route === 'arcade-wolves' ? 'wolves' : route === 'arcade-glint' ? 'glint' : route === 'arcade-scramble' ? 'scramble' : ADDENDUM_ROUTES.includes(route) ? (route.replace('arcade-', '') as Scenario) : 'table'}>
           {body}
         </ArcadeProvider>
       ) : (
