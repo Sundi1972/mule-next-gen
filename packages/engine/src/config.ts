@@ -782,7 +782,7 @@ export const EVENT_SHOW = {
   } as Partial<Record<EventKey, EventWeight>>,
   /** How long one headline or spotlight plays, in ms. */
   playMs: { headline: 7_000, spotlight: 5_200 },
-  /** How long the phase's intro (the roll call of what fired) plays before the first event, in ms; none in a quiet month. */
+  /** How long the intro (the phase's opening card of what fired) plays before the first event, in ms; none in a quiet month. */
   introMs: 1_800,
   /** How long the one roll call that every bulletin of a phase shares plays, in ms. */
   rollCallMs: 4_000,
