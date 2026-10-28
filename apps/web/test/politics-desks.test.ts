@@ -215,14 +215,15 @@ describe('the politics desks', () => {
     const tallies = [{ id: 's1', votes: 3 }, { id: 's2', votes: 1 }];
     const bars = view(politics({ election: election({ stage: 'ceremony', ceremony: at('governor', 'bars'), result: { governor: { tallies } } }) }));
     const tv = onTv(bars);
-    expect(tagOf(tv, 'result-governor-s1'), 'the bars step draws the candidates').toBeDefined();
-    expect(textOf(tv, 'result-governor-s1')).toMatch(/3$/);
+    const row = (html: string, id: string) => chunkOf(html, `result-governor-${id}`, 'result-').replace(/<[^>]+>/g, '');
+    expect(row(tv, 's1'), 'the bars step draws the candidates and their totals').toMatch(/^Lena3(?!\d)/);
+    expect(row(tv, 's2')).toMatch(/^Ossa1(?!\d)/);
     expect(tv, 'no winner in the bars step').not.toContain('ELECTED');
     expect(tagOf(tv, 'how-governor')).toBeUndefined();
     expect(textOf(onPhone(bars, CouncilDesk), 'phone-election-result')).not.toContain('Governor');
 
     const winner = view(politics({ election: election({ stage: 'ceremony', ceremony: at('governor', 'winner'), result: { governor: { winner: 's1', how: 'votes', tallies } } }) }));
-    expect(textOf(onTv(winner), 'result-governor-s1')).toContain('ELECTED');
+    expect(row(onTv(winner), 's1')).toMatch(/^Lena3ELECTED/);
     expect(textOf(onTv(winner), 'how-governor')).toBe('Won on votes.');
     expect(tagOf(onTv(winner), 'result-sheriff-s3'), 'the Sheriff comes after').toBeUndefined();
     expect(textOf(onPhone(winner, CouncilDesk), 'phone-election-result')).toMatch(/Governor\s*You\s*3 votes/);
