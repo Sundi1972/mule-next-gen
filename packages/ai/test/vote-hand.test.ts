@@ -506,6 +506,8 @@ describe('RULE-8: how a seat votes', () => {
 });
 
 describe('RULE-8: the Governor steps the tax', () => {
+  bothOffices();
+
   // Fund is low under 3 months of both offices' pay: 3 × (50 + 30) = 240, from month 2 (AM-9: the fund starts empty, before any payday).
   it.each([
     { month: 2, current: 5, target: 8, fund: 1_000, low: 0, high: 10, want: 8 },
@@ -599,5 +601,14 @@ describe('T-AC-62: Governor only, the default POLITICS.offices', () => {
 
     expect(sent).toEqual([{ type: 'done', done: true }]);
     expect(draws, 'the Sheriff draw is left unused').toEqual([0]);
+  });
+
+  // Low under fundMonths × the Governor's pay alone: 3 × 50 = 150, where both offices made it 240.
+  it.each([
+    { fund: 149, want: 7 },
+    { fund: 150, want: 5 },
+    { fund: 239, want: 5 },
+  ])('T-AC-62: by default the fund counts as low under POLITICS.ai.fundMonths of the elected offices\' pay: fund $fund → $want', ({ fund, want }) => {
+    expect(nextTax(5, 5, fund, { low: 0, high: 10 }, 2)).toBe(want);
   });
 });
