@@ -183,8 +183,8 @@ senior       junior would: loop the old EventLayer · senior does: one timeline 
 mechanism    in_place
 call sites   ProductionMap ← TvProduction, phone Production; finalUnits/landed/harvest/landing ← TvProduction,
              phone Production, ProductionMap's PlotBars; showTime ← TvProduction, phone Production
-pin          a quiet month's frames (no events): apps/web/test/production-show.test.ts and the e2e production
-             step stay green unchanged
+pin          apps/web/test/production-show.test.ts stays green with only AM-6's named edit (WS6's per-kind
+             B-AC-7 retired into T-AC-4); the e2e production step stays green
 depends_on   C3 (contract), C4
 atomicity    ships with C6 and C7: they read the same timeline
 ```
