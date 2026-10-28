@@ -320,8 +320,9 @@ function Who({ slot, name, size }: { slot: Slot; name: string; size: number }) {
  * next month, what goes bad, and the spare or shortage that leaves.
  */
 export function StatusTable({ view, auction, meId, tv = false }: { view: MuleView; auction: AuctionView; meId?: string; tv?: boolean }) {
-  const cell = tv ? 'px-3 py-2 text-2xl' : 'px-1.5 py-1 text-sm';
-  const head = cx('label-caps text-right font-medium', tv ? 'px-3 pb-2 text-sm!' : 'px-1.5 pb-1 text-[10px]!');
+  // On a phone the whole table fits the stage of a small landscape phone (667×375), an AI's long name included.
+  const cell = tv ? 'px-3 py-2 text-2xl' : 'px-1 py-1 text-sm';
+  const head = cx('label-caps text-right font-medium', tv ? 'px-3 pb-2 text-sm!' : 'px-1 pb-1 text-[10px]!');
   return (
     <table className="w-full" data-testid="status-table">
       <thead>
@@ -347,7 +348,7 @@ export function StatusTable({ view, auction, meId, tv = false }: { view: MuleVie
           const spare = r.now - r.need;
           return (
             <tr key={r.id} className={cx('border-t border-holo-faint', r.id === meId && 'bg-holo-soft')} data-testid={`status-${r.id}`}>
-              <td className={cx(cell, 'text-left')} style={{ maxWidth: tv ? 300 : 150 }}>
+              <td className={cx(cell, 'text-left')} style={{ maxWidth: tv ? 300 : 110 }}>
                 <Who slot={slot} name={name} size={tv ? 34 : 18} />
               </td>
               <td className={cx(cell, 'text-right text-ink-2')}>{r.had}</td>
