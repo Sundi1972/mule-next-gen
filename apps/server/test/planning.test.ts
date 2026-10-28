@@ -41,7 +41,7 @@ describe('FM-planning-untimed: planning has no clock', () => {
   });
 });
 
-describe('FM-planning-all-ready: planning ends when every connected human is Ready', () => {
+describe('FM-planning-all-ready: planning ends when every human is Ready, connected or not', () => {
   it("FM-planning-all-ready: one human's Ready leaves planning open however long the other takes; the last one's Ready starts the land grant; the AI seat never holds it", () => {
     const { game, advance } = started();
     game.handle('s1', { type: 'ready' });
@@ -56,13 +56,27 @@ describe('FM-planning-all-ready: planning ends when every connected human is Rea
   it.each([
     ['drops before the other is Ready', ['drop', 'ready']],
     ['drops after the other is Ready', ['ready', 'drop']],
-  ] as const)('FM-planning-all-ready: a dropped phone does not hold planning: Mia %s', (_, order) => {
-    const { game } = started();
+  ] as const)('FM-planning-all-ready: a dropped phone that is not Ready holds planning: Mia %s; back and Ready, she starts the land grant', (_, order) => {
+    const { game, advance } = started();
     for (const step of order) {
-      expect(phase(game)).toBe('planning');
       if (step === 'drop') game.connectionChanged('s2', false);
       else game.handle('s1', { type: 'ready' });
+      expect(phase(game)).toBe('planning');
     }
+    advance(TEN_MINUTES);
+    expect(phase(game)).toBe('planning');
+    game.connectionChanged('s2', true);
+    expect(phase(game), 'back, but not Ready yet').toBe('planning');
+    game.handle('s2', { type: 'ready' });
     expect(phase(game)).toBe('landGrant');
+  });
+
+  it('FM-planning-all-ready: with every human dropped, planning stays open', () => {
+    const { game, advance } = started();
+    game.connectionChanged('s1', false);
+    game.connectionChanged('s2', false);
+    expect(phase(game)).toBe('planning');
+    advance(TEN_MINUTES);
+    expect(phase(game)).toBe('planning');
   });
 });
