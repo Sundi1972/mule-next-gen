@@ -1,21 +1,8 @@
 import { tileAt } from '../grid.js';
 import type { GameState, Tile } from '../types.js';
 import { MS_PER_SECOND } from '../units.js';
-import {
-  DOOR_SIDES,
-  doorOutside,
-  IDLE_INPUT,
-  inRect,
-  leadFor,
-  middleOf,
-  storeOf,
-  type DevFloor,
-  type DoorSide,
-  type FloorColonist,
-  type FloorConfig,
-  type FloorInput,
-  type HallPlan,
-} from './floor.js';
+import { doorOutside, IDLE_INPUT, leadFor, middleOf, storeOf, type DevFloor, type FloorColonist, type FloorConfig, type FloorInput } from './floor.js';
+import { HALL_DOORS, isOpenFloor, placeAt, type HallDoor, type HallPlan } from './hall.js';
 import { speedOf, terrainShare } from './speed.js';
 
 /**
@@ -71,11 +58,11 @@ function mapMove(c: FloorColonist, dx: number, dy: number, state: GameState, cfg
   const body = cfg.steer.bodyTiles;
   let { x, y } = c;
   if (inStore(store, body, x + dx, y)) {
-    const side: DoorSide | null = x <= store.x - body && dx > 0 ? 'L' : x >= store.x + 1 + body && dx < 0 ? 'R' : null;
-    const doorY = doorOutside(state, 'L', cfg).y;
-    if (side && Math.abs(y - doorY) <= cfg.steer.doorHalfTiles) return enterHall(c, side, cfg.hall);
+    const door: HallDoor | null = x <= store.x - body && dx > 0 ? 'doorL' : x >= store.x + 1 + body && dx < 0 ? 'doorR' : null;
+    const doorY = doorOutside(state, 'doorL', cfg).y;
+    if (door && Math.abs(y - doorY) <= cfg.steer.doorHalfTiles) return enterHall(c, door, cfg.hall);
     // Pushing straight into the store's side slides you along it onto the door, so the door is easy to find.
-    if (side && dy === 0) {
+    if (door && dy === 0) {
       const slide = Math.max(-Math.abs(dx), Math.min(Math.abs(dx), doorY - y));
       if (passable(state, cfg, x, y + slide)) y += slide;
     }
@@ -84,37 +71,36 @@ function mapMove(c: FloorColonist, dx: number, dy: number, state: GameState, cfg
   return { ...c, x, y };
 }
 
-const onFloor = (hall: HallPlan, x: number, y: number) => hall.floor.some((r) => inRect(r, x, y));
-
 /** In the hall: walls are wherever the plan has no floor; out through a door's outer side, onto the map. */
 function hallMove(c: FloorColonist, dx: number, dy: number, state: GameState, cfg: FloorConfig): FloorColonist {
   const { hall } = cfg;
-  for (const side of DOOR_SIDES) {
-    const door = hall.doors[side];
-    const out = side === 'L' ? c.x + dx < door.x0 : c.x + dx > door.x1;
-    if (out && inRect(door, c.x, c.y)) return leaveHall(c, side, state, cfg);
+  const at = placeAt(c, hall);
+  for (const door of HALL_DOORS) {
+    const frame = hall.doors[door];
+    const out = door === 'doorL' ? c.x + dx < frame.x0 : c.x + dx > frame.x1;
+    if (out && at === door) return leaveHall(c, door, state, cfg);
   }
   let { x, y } = c;
-  if (onFloor(hall, x + dx, y)) x += dx;
-  if (onFloor(hall, x, y + dy)) y += dy;
+  if (isOpenFloor({ x: x + dx, y }, hall)) x += dx;
+  if (isOpenFloor({ x, y: y + dy }, hall)) y += dy;
   return { ...c, x, y };
 }
 
 /** In at a door, facing into the hall; a MULE on the lead comes through with its colonist. */
-function enterHall(c: FloorColonist, side: DoorSide, hall: HallPlan): FloorColonist {
-  const at = middleOf(hall.doors[side]);
-  return { ...c, space: 'hall', ...at, facing: side === 'L' ? 'right' : 'left', lead: c.lead && { ...c.lead, ...at } };
+function enterHall(c: FloorColonist, door: HallDoor, hall: HallPlan): FloorColonist {
+  const at = middleOf(hall.doors[door]);
+  return { ...c, space: 'hall', ...at, facing: door === 'doorL' ? 'right' : 'left', lead: c.lead && { ...c.lead, ...at } };
 }
 
-function leaveHall(c: FloorColonist, side: DoorSide, state: GameState, cfg: FloorConfig): FloorColonist {
-  const at = doorOutside(state, side, cfg);
-  return { ...c, space: 'map', ...at, facing: side === 'L' ? 'left' : 'right', lead: c.lead && { ...c.lead, ...at } };
+function leaveHall(c: FloorColonist, door: HallDoor, state: GameState, cfg: FloorConfig): FloorColonist {
+  const at = doorOutside(state, door, cfg);
+  return { ...c, space: 'map', ...at, facing: door === 'doorL' ? 'left' : 'right', lead: c.lead && { ...c.lead, ...at } };
 }
 
 /** The MULE on its lead, pulled after its colonist to the rope's length. */
 function follow(c: FloorColonist, cfg: FloorConfig): FloorColonist {
   if (!c.lead) return c;
-  const rope = c.space === 'map' ? cfg.steer.leadTiles : cfg.steer.leadHallShare * cfg.hall.width;
+  const rope = c.space === 'map' ? cfg.steer.leadTiles : cfg.steer.leadHallShare * cfg.hall.w;
   const gap = Math.hypot(c.lead.x - c.x, c.lead.y - c.y);
   if (gap <= rope) return c;
   const k = rope / gap;

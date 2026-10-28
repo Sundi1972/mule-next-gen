@@ -4,6 +4,7 @@ import {
   createGame,
   DEV_STEER,
   floorConfig,
+  HALL,
   speedOf,
   stepFloor,
   type DevFloor,
@@ -11,7 +12,6 @@ import {
   type FloorConfig,
   type FloorInput,
   type GameState,
-  type HallPlan,
   type Terrain,
 } from '../src/index.js';
 
@@ -27,17 +27,6 @@ const MAP = [
   '............',
   '............',
 ];
-
-const HALL: HallPlan = {
-  width: 16,
-  height: 12,
-  floor: [
-    { x0: 1, y0: 4, x1: 15, y1: 8 },
-    { x0: 0, y0: 5, x1: 1, y1: 7 },
-    { x0: 15, y0: 5, x1: 16, y1: 7 },
-  ],
-  doors: { L: { x0: 0, y0: 5, x1: 1, y1: 7 }, R: { x0: 15, y0: 5, x1: 16, y1: 7 } },
-};
 
 /** A fed Zipwing ('zip') and an AI Bramblet ('bot') on MAP. */
 function game(): GameState {

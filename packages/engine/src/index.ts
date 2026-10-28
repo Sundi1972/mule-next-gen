@@ -15,15 +15,12 @@ export {
   floorConfig,
   IDLE_INPUT,
   type DevFloor,
-  type DoorSide,
   type FloorColonist,
   type FloorConfig,
   type FloorEncounter,
   type FloorInput,
   type FloorLead,
   type FloorPoint,
-  type FloorRect,
-  type HallPlan,
   type Space,
 } from './floor/floor.js';
 export { pathTo, type MapPath } from './floor/path.js';

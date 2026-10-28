@@ -5,12 +5,12 @@ import {
   createRng,
   DEV_STEER,
   floorConfig,
+  HALL,
   pathTo,
   stepFloor,
   type DevFloor,
   type FloorInput,
   type GameState,
-  type HallPlan,
   type Terrain,
 } from '../src/index.js';
 
@@ -26,17 +26,6 @@ const MAP = [
   '....^^....~..',
   '.............',
 ];
-
-const HALL: HallPlan = {
-  width: 16,
-  height: 12,
-  floor: [
-    { x0: 1, y0: 4, x1: 15, y1: 8 },
-    { x0: 0, y0: 5, x1: 1, y1: 7 },
-    { x0: 15, y0: 5, x1: 16, y1: 7 },
-  ],
-  doors: { L: { x0: 0, y0: 5, x1: 1, y1: 7 }, R: { x0: 15, y0: 5, x1: 16, y1: 7 } },
-};
 
 const SEED = 29;
 /** A development turn's worth of ticks: 50 s at DEV_STEER.tickMs. */
@@ -124,7 +113,7 @@ function misplaced(state: GameState, floor: DevFloor): string[] {
   const store = state.tiles.find((t) => t.terrain === 'store')!;
   return floor.colonists.flatMap((c) => {
     const where = `tick ${floor.tick} ${c.id} at ${c.space} ${c.x.toFixed(3)},${c.y.toFixed(3)}`;
-    const rope = c.space === 'map' ? DEV_STEER.leadTiles : DEV_STEER.leadHallShare * HALL.width;
+    const rope = c.space === 'map' ? DEV_STEER.leadTiles : DEV_STEER.leadHallShare * HALL.w;
     if (c.lead && Math.hypot(c.lead.x - c.x, c.lead.y - c.y) > rope + 1e-9) return [`${where}: its MULE off its lead`];
     if (c.space === 'hall') {
       return HALL.floor.some((r) => c.x >= r.x0 && c.x <= r.x1 && c.y >= r.y0 && c.y <= r.y1) ? [] : [`${where}: off the hall's floor`];
