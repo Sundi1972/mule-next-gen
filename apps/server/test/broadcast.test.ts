@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
-import { fakeContext, seats } from './fake-context.js';
+import { fakeContext, readyAll, seats } from './fake-context.js';
 
 const humans = ['s1', 's2'];
 
@@ -13,7 +13,7 @@ function developmentEnds(seed: number, humansGoToPub: boolean) {
   });
   game = new MuleGame(ctx, seed);
   game.start(seats);
-  advance(PHASE_MS.planning);
+  readyAll(game);
   while (game.viewFor(null).phase === 'landGrant') advance(GRANT_TICK_MS);
   expect(game.viewFor(null).phase).toBe('development');
   const aiEndsAt = game.viewFor('s3').me!.devEndsAt!;

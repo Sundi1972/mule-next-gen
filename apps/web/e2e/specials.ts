@@ -25,6 +25,8 @@ const DEFAULT_SEED = 93;
 const SEATS = 2;
 const SEED = seedFrom(process.env.MULE_E2E_SEED);
 const SHOWN_MS = 5_000;
+/** How long the phone has to find Ready and press its way out of planning, which has no clock and waits for it. */
+const READY_MS = 10_000;
 /** The land grant, a land auction if the colony lists plots, and the walk out to development. */
 const REACH_DEVELOPMENT_MS = 120_000;
 /** The light sweeps row by row; a plot on row r is lit within about r + 1 rows of ticks, plus the AI's claims skipped. */
@@ -108,7 +110,7 @@ try {
 
   // Land grant: when the light reaches the special plot, the lit card says what it is, and both maps still draw it.
   // Through month 1's election first when the table plays politics; with politics off this is one press.
-  await readyThroughTheElection(phone, POLITICS.nominateMs + POLITICS.ballotMs + POLITICS.revealMs + PHASE_MS.planning + SHOWN_MS);
+  await readyThroughTheElection(phone, POLITICS.nominateMs + POLITICS.ballotMs + POLITICS.revealMs + READY_MS + SHOWN_MS);
   const grant = phone.locator('[data-phase=landGrant]');
   await grant.waitFor({ timeout: SHOWN_MS });
   const lit = grant.getByTestId('lit').filter({ hasText: plotName(firstLit) });

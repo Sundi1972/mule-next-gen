@@ -181,8 +181,8 @@ export const FACTORY = {
 
 /** Species perks. Numbers are placeholders until the balance sim has run. */
 export const SPECIES_PERK = {
-  /** Zipwing: walks this many times as fast in development (the client moves the colonist). */
-  zipwingSpeed: 2,
+  /** Zipwing: walks this many times as fast in development (DEV_WALK). At 1.5 Zipwings won 37% of games, not 25%. */
+  zipwingSpeed: 1.25,
   /** Bramblet: extra Food on every farm. */
   brambletFood: 1,
   /** Gearling: share of the normal price paid for MULEs and outfits. At 0.75 Gearlings won 44% of games, not 25%. */
@@ -275,12 +275,8 @@ export const MULE = {
 };
 
 export const DEVELOPMENT = {
-  /** Seconds of development with enough Food for the month. */
+  /** Seconds of development, the same for every player: hunger and sickness slow the walk instead (DEV_WALK). */
   fullSeconds: 50,
-  /** Seconds with no Food at all; the time shrinks linearly with the shortfall. */
-  minSeconds: 15,
-  /** Development never lasts less than this, whatever sickness and penalties take off. */
-  floorSeconds: 5,
   /** Seconds a colonist stands on a plot for a geo analysis. */
   analysisSeconds: 8,
   /** The pub pays base + (start + month * perMonth) * share of time left. */
@@ -290,6 +286,30 @@ export const DEVELOPMENT = {
   dronePlots: 2,
   /** Alloy a filter costs, from the player's own stock. */
   filterAlloy: 1,
+};
+
+/**
+ * Walking in development costs time off the one development clock (Heiko's R1, 0.4 s a tile). A walk goes in grid
+ * steps on the map, never diagonally; the store and its corral are on the store's tile. A hungry or sick colonist
+ * walks slower, and the two multiply: no Food and sick is a tenth of normal pace (Heiko's numbers).
+ * Not WALK, the goods auction's walk.
+ */
+export const DEV_WALK = {
+  /** Seconds for each step from one map tile to the next. */
+  tileSeconds: 0.4,
+  /** Seconds to cross the store floor to the corral, from the door or any other room. */
+  floorSeconds: 1,
+  /** Share of its pace a colonist with no Food walks at; it rises linearly to 1 with the share of the month's Food it holds. */
+  hungerPaceMin: 0.2,
+  /** Share of its pace a sick colonist walks at (EVENTS.player.sickness rolled, and no Medicine held). */
+  sickPace: 0.5,
+  /**
+   * The hunger levels the screens show, as shares of the month's Food missing (0 fed, 1 none): peckish below
+   * hungryFrom, hungry from it, starving from starvingFrom. Display bands only: the pace itself is continuous.
+   * Player.hungry is any shortfall; these levels are only the words on screen.
+   * WS6's thresholds, in the variant-B mock Heiko approved 2026-10-28 (design/mocks/ws6-ux at bb4bc11).
+   */
+  hungerLevels: { hungryFrom: 0.3, starvingFrom: 0.7 },
 };
 
 /** What pollutes, and by how much. From the design doc's Pollution tab. */
@@ -318,12 +338,12 @@ export const POLLUTION = {
   greenBeltAir: 2,
   /** Goods that lose 1 unit per plot pollution level. */
   sensitive: ['food', 'water', 'medicine'] as Good[],
-  /** The colony gauge's bands: from this level, everyone loses devPenalty seconds unless they take Medicine. */
+  /** The colony gauge's bands: from a band that sickens, a colonist who takes no Medicine is sick (DEV_WALK.sickPace). */
   bands: [
-    { name: 'clean', from: 0, devPenalty: 0 },
-    { name: 'smoggy', from: 30, devPenalty: 5 },
-    { name: 'toxic', from: 60, devPenalty: 10 },
-    { name: 'collapse', from: 80, devPenalty: 15 },
+    { name: 'clean', from: 0, sickens: false },
+    { name: 'smoggy', from: 30, sickens: true },
+    { name: 'toxic', from: 60, sickens: true },
+    { name: 'collapse', from: 80, sickens: true },
   ] as const,
   /** Clean colony: off-world buyers pay this much more for exports. */
   cleanExportBonus: 0.1,
@@ -590,12 +610,18 @@ export const POLITICS = {
   /** The countdown part of the reveal, before the result shows. */
   revealCountdownMs: 3_000,
   weight: {
+    /** Votes every player has, before the parts below. */
+    base: 1,
     /** One extra vote per this many plots owned. */
     plotsPerVote: 10,
     /** Reputation at or above this adds a vote. */
     repHigh: 70,
     /** Reputation below this takes a vote away. */
     repLow: 30,
+    /** Votes a high reputation adds, and a low one takes away. */
+    repVotes: 1,
+    /** Extra votes for the month's Land Baron. */
+    baronVotes: 1,
     /** One extra vote per this much sales tax paid over the game, up to taxCap votes. */
     taxPerVote: 300,
     taxCap: 2,
@@ -604,8 +630,12 @@ export const POLITICS = {
   tax: { min: 0, max: 15, maxStep: 5 },
   /** Paid from the colony fund to each officeholder at upkeep, as far as the fund reaches. */
   pay: { governor: 50, sheriff: 30 },
-  /** Score per term served in either office. A placeholder until the sim balances it. */
-  termScore: 100,
+  /**
+   * Worth per term served in either office: about one good month's income, the median monthly Worth gain of a
+   * top-half player with politics on (1,150-1,222 on the sim's three sets, 28 Oct). No AI choice and no sim check
+   * reads it; it moves only who wins.
+   */
+  termScore: 1200,
   /** How Classic AI seats run, vote and set the tax (VoteHand). Placeholders until the sim balances them. */
   ai: {
     /** Ms a seat waits before acting in a nominate or ballot stage, drawn per stage: a human's pause, well inside the stage's clock. */
@@ -700,6 +730,26 @@ export const LOTS = {
   aiStartMs: [300, 1_200] as [number, number],
   /** An AI's overtake goes past the leader by this share of the gap to its limit, drawn per overtake. */
   aiOvershoot: [0.1, 0.35] as [number, number],
+};
+
+/**
+ * The longest each timed phase lasts, in milliseconds at phaseScale 1. Planning waits for every human's Ready,
+ * a dropped phone's too, unless the host continues. Other phases also end early: when every connected player is
+ * ready, the land grant when the claims are used, development when everyone is out of time or at the pub. The
+ * goods auction and the land auction have no fixed length; they run on WALK's and LOTS' clocks.
+ */
+export const PHASES = {
+  /**
+   * Planning: the hub, listings, and in election months the election first. null: planning waits for every player's
+   * Ready or the host's Continue; a number restores a timer.
+   */
+  planningMs: null as number | null,
+  /** The land grant: the light sweeps the free plots. */
+  landGrantMs: 60_000,
+  /** Production: the show of what each plot made. */
+  productionMs: 15_000,
+  /** Upkeep: colonists eat and goods spoil. */
+  upkeepMs: 8_000,
 };
 
 /**
@@ -845,6 +895,23 @@ export const EVENTS = {
   wildfire: { loss: 1 },
   /** How many times its usual output the bumper plot makes. */
   bumperHarvest: { factor: 2 },
+  /**
+   * Player events (Heiko's event model): each rolls per player at the start of each phase it lists, with that
+   * phase's chance plus its modifiers, never above cap. Several can fire in a month.
+   */
+  player: {
+    /**
+     * Sickness, at development start: the colonist walks at DEV_WALK.sickPace this turn unless it holds a Medicine,
+     * which it then takes. Likelier in dirty air (by band) and for a polluter: perPoint for each air point its plots
+     * caused last month (a filter halves them), at most max. Heiko's catalogue numbers.
+     */
+    sickness: {
+      phases: { development: 0.03 },
+      air: { clean: 0, smoggy: 0.15, toxic: 0.3, collapse: 0.5 },
+      pollution: { perPoint: 0.03, max: 0.4 },
+      cap: 0.9,
+    },
+  },
 };
 
 export const STRATEGIST = {
@@ -861,6 +928,8 @@ export const STRATEGIST = {
   cashFloor: 60,
   /** What one colony air point costs it, in credits, rising as the air gets dirtier (doubles by Smoggy). */
   airCost: 10,
+  /** What it counts a green belt as costing a month, in credits (the engine charges none), set against the air it cleans; without full scoring, the cost alone. */
+  greenBeltCost: 5,
   /** Below this utility share of the best, a free plot is not worth pressing for in the first sweep; later sweeps take anything above laterShare. */
   grantShare: 0.75,
   grantLaterShare: 0.5,
@@ -879,6 +948,11 @@ export const STRATEGIST = {
   /** Analyses per month, at most, and never with less than this many seconds left. */
   analysesPerMonth: 2,
   analyseMinSeconds: 20,
+  /** Analyses per month, at most, at a level without full scoring (Rookie), in place of analysesPerMonth. */
+  rookieAnalyses: 1,
+  /** It fits filters once the air is within this many points of Smoggy, and only to polluters of more than filterOverAir air points a month. */
+  filterAirMargin: 10,
+  filterOverAir: 1,
   /** Share of its money it spends on one good at the auction, at most. */
   budgetShare: 0.5,
   /**
@@ -891,8 +965,19 @@ export const STRATEGIST = {
   secondValue: { busy: 10, idle: 3 },
   /** Share it takes off next month's price for a good it would hold, per point of risk weight, because the forecast may be wrong. */
   forecastHaircut: 0.05,
+  /** And this share more off a unit it would buy only to resell, per point of risk weight. */
+  resaleRisk: 0.1,
   /** A corner pays this share over next month's price for the units the others are short of. */
   cornerPremium: 0.5,
+  /** It corners only a good that spoils less than this share a month, and at most this many units. */
+  cornerMaxSpoilage: 0.5,
+  cornerMaxUnits: 6,
+  /**
+   * Spite: while the leader is short of the good, it bids this share of next month's price, times its spite, over its
+   * own value for at least the next spiteUnits units (all the cornered ones while it corners).
+   */
+  spiteShare: 0.1,
+  spiteUnits: 2,
   /**
    * How many months past next the outlook plays the status quo forward
    * (nobody builds or trades), to see a shortage coming before the price
@@ -910,10 +995,42 @@ export const STRATEGIST = {
   selfSupply: 3,
   /**
    * The "cash left" consideration: spending down to the reserve scores this
-   * much, and keeping twice the reserve scores 1. The reserve itself is a hard
+   * much, and keeping cashLeftFull times the reserve scores 1. The reserve itself is a hard
    * rule, so this is only a mild preference for cash in hand.
    */
   cashLeftFloor: 0.75,
+  cashLeftFull: 2,
+  /** The land plan's considerations (landDecision), besides gainScale.plot. */
+  land: {
+    /** "Known ground": what a plot it hasn't analysed scores; an analysed one scores 1. */
+    unknownGround: 0.8,
+    /** "Next to my land": `full` of its own plots beside a plot score 1, never under `floor`; weighted clusterWeight in the cluster plan, else `weight`. */
+    nextToMine: { full: 2, floor: 0.6, clusterWeight: 2, weight: 0.5 },
+    /** "Blocks the leader": `full` of the leader's plots beside a plot score 1, never under `floor`; weighted by spite, at least minWeight. */
+    blocksLeader: { full: 2, floor: 0.4, minWeight: 0.5 },
+    /** "Feeds me": what a plan scores while its Food and Energy are covered, and, while they are short, any plan but farms first (which scores 1). */
+    feedsMe: { covered: 0.75, short: 0.6 },
+    /** "Can develop it": cash over the reserve scores 1 at `mules` MULE prices; weighted factoryWeight in the factory plan, else `weight`. */
+    canDevelop: { mules: 2, factoryWeight: 1, weight: 0.3 },
+    /** "Hurts the leader": what the plan that fences in the leader scores. */
+    hurtsLeader: 0.7,
+  },
+  /** The development decision's considerations (developDecision), besides gainScale.develop and the cash left. */
+  develop: {
+    /** "Known ground": what an idle plot it hasn't analysed scores; an analysed one scores 1. */
+    unknownGround: 0.75,
+    /** "Feeds me": what a MULE that doesn't cover its own Food or Energy scores (one that does scores 1); weighted this share of the persona's reserve. */
+    feedsMe: { other: 0.8, reserveShare: 0.5 },
+  },
+  /** The auction's trade decision (tradeDecision, expectedPrices), besides gainScale.trade and the cash left. */
+  trade: {
+    /** "Sure thing": what a sale scores, a buy of what it needs, and a buy partly to resell (a forecast); a pass scores 1. */
+    sure: { sell: 0.9, need: 0.9, resale: 0.6 },
+    /** Selling, it also offers to keep a buffer: this share of next month's need, at least 1 unit, over what it would keep. */
+    bufferShare: 0.5,
+    /** It expects a sale to fetch at least this share of the posted price, whoever buys. */
+    sellFloor: 0.85,
+  },
 };
 
 /** The AI's hands in the real-time phases. Times are in ms. */
@@ -922,9 +1039,13 @@ export const AI_HANDS = {
   devTickMs: 100,
   /** Development steps, as a quick human taps them: to the corral and buy, to an outfitter, out to the plot and install, analyse, the pub. */
   develop: {
+    /** Buying and installing where the game has no walking: each includes a notional walk. */
     buyMs: [1_400, 2_400] as [number, number],
     outfitMs: [1_000, 1_900] as [number, number],
     installMs: [1_800, 3_200] as [number, number],
+    /** The same two taps where the game walks (DEV_WALK charges the walk): the tap alone. */
+    buyTapMs: [600, 1_000] as [number, number],
+    installTapMs: [600, 1_200] as [number, number],
     analyseTapMs: [1_200, 2_000] as [number, number],
     filterMs: [1_200, 2_000] as [number, number],
     pubMs: [800, 1_500] as [number, number],
@@ -946,3 +1067,55 @@ export const AI_HANDS = {
     choiceMs: [150, 300] as [number, number],
   },
 };
+
+/**
+ * The balance targets `pnpm sim` checks, from the design doc's Economy model tab, each named for its check. Shares are
+ * of months or of games, as the check says; the report prints the targets from here.
+ */
+export const SIM_TARGETS = {
+  /** MULE price median: from min to max credits. */
+  muleMedian: { min: 150, max: 300 },
+  /** MULE price 90th percentile: under this many credits. */
+  mule90th: 500,
+  /** Corral sold out: in under this share of months. */
+  corralSoldOut: 0.1,
+  /** Food above `factor` times its reference price: in this share of games, from min to max. */
+  foodSpike: { factor: 3, min: 0.1, max: 0.5 },
+  /** Colonists short of Food or Water: in under this share of months. */
+  colonistsShort: 0.15,
+  /** Owned plots developed at the end: this share or more. */
+  developed: 0.7,
+  /** No game has an AI broke, under `below` credits with idle land, for `months` months in a row. */
+  broke: { below: 100, months: 3 },
+  /** Ended in Collapse: in this share of games or fewer. */
+  collapsed: 0.1,
+};
+
+/** The language model that decides for Smart AI seats, and its limits. */
+export const BRAIN = {
+  /** The model that decides and talks. */
+  model: 'claude-haiku-5-5',
+  /** A Smart seat's model budget per game, in US dollars; past it the seat plays Classic. */
+  seatBudgetUsd: 0.06,
+  /** Hard ceiling, in US dollars, for the latency spike command. */
+  spikeCapUsd: 0.05,
+  /** US dollars per million tokens. */
+  pricesPerMTok: { input: 0.1, cacheRead: 0.01, cacheWrite: 0.125, output: 0.5 },
+  /** Reply cap, in tokens. */
+  maxTokens: 200,
+  /**
+   * Prompt characters per token, as the budget assumes. Haiku 5.5 measured 2.56 to 2.65 on real prompts; this sits
+   * below the lowest so the worst case never undercounts.
+   */
+  charsPerToken: 2.5,
+  /** Longest chat line an AI says, in characters. */
+  maxLineChars: 140,
+  /** Most chat lines per AI seat per game month: one each for land, development and the auction, since a seat says at most one a phase. */
+  linesPerMonth: 3,
+  /** Longest quoted table-talk line put in a prompt, in characters. */
+  maxTalkChars: 200,
+  /** How many of the latest table-talk lines an AI keeps for its next prompt; each one costs prompt tokens. */
+  talkLines: 6,
+  /** How long a land decision may wait for the model, in ms; planning lasts up to 45 s. */
+  landTimeoutMs: 5_000,
+} as const;

@@ -1,7 +1,7 @@
 import {
-  airBand,
   airPoints,
   crewOf,
+  DEV_WALK,
   DEVELOPMENT,
   factoryFit,
   GOOD_CONFIG,
@@ -12,11 +12,17 @@ import {
   mulePriceFor,
   needsOf,
   outfitCostFor,
+  pace,
+  playerEventChance,
   POLLUTION,
+  PRICE,
   rawOutput,
   RECIPES,
+  SPECIES_PERK,
   STRATEGIST,
+  tileIndex,
   UPKEEP,
+  walkSeconds,
   energyUseOf,
   type AiLevelConfig,
   type AiPersonaWeights,
@@ -79,12 +85,12 @@ export type PriceOf = (good: Good, extra?: number) => number;
 export const afterTax = (obs: GameState, price: number) => price * (1 - obs.treasury.salesTax);
 
 /** The sale price that leaves a seller `kept` after the sales tax. */
-export const beforeTax = (obs: GameState, kept: number) => kept / Math.max(0.01, 1 - obs.treasury.salesTax);
+export const beforeTax = (obs: GameState, kept: number) => kept / Math.max(0.01, 1 - obs.treasury.salesTax); // literal-ok: keeps the division finite at a 100% tax
 
 /** Net credits a month from running this outfit here, at the given prices (the outlook's by default, its own extra supply included). */
 export function monthlyNet(obs: GameState, o: Outlook, y: Yield, outfit: Outfit, mind: Mind, price?: PriceOf): number {
   const full = mind.level.fullScoring;
-  if (outfit === 'greenBelt') return full ? POLLUTION.greenBeltAir * airUnitCost(obs) - 5 : -5;
+  if (outfit === 'greenBelt') return full ? POLLUTION.greenBeltAir * airUnitCost(obs) - STRATEGIST.greenBeltCost : -STRATEGIST.greenBeltCost;
   const P: PriceOf = price ?? ((g, extra = 0) => o.price(g, extra));
   let revenue = afterTax(obs, y.made * P(outfit, y.made));
   if (full && (outfit === 'food' || outfit === 'water' || outfit === 'energy')) {
@@ -159,6 +165,24 @@ export function canFeed(obs: GameState, me: string, outfit: Outfit): boolean {
   });
 }
 
+/**
+ * The seconds the seat's month of walking takes, fed and well: a round trip from the corral for each MULE it leads a
+ * month, to its own plots on average (to any plot while it holds none). Hunger and sickness stretch these seconds.
+ */
+export function monthWalkSeconds(obs: GameState, mind: Mind): number {
+  const me = mind.me;
+  const p = obs.players.find((q) => q.id === me)!;
+  const own = obs.tiles.filter((t) => t.owner === me);
+  const plots = own.length > 0 ? own : obs.tiles.filter((t) => t.terrain !== 'store');
+  const trips = plots.reduce((n, t) => {
+    const i = tileIndex(obs.width, t.x, t.y);
+    return n + walkSeconds(obs, me, 'corral', i) + walkSeconds(obs, me, i, 'corral');
+  }, 0);
+  // walkSeconds is at today's pace; undo hunger and sickness, keep a Zipwing's speed.
+  const healthy = pace(obs, me) / (p.species === 'zipwing' ? SPECIES_PERK.zipwingSpeed : 1);
+  return (mind.level.mulesPerMonth * trips * healthy) / plots.length;
+}
+
 /** What a second of development time is worth to the seat: the pub's rate at least, more while it has land to develop. */
 export function secondValue(obs: GameState, me: string): number {
   const p = obs.players.find((q) => q.id === me)!;
@@ -180,7 +204,7 @@ export function cashReserve(obs: GameState, mind: Mind, o?: Outlook, except?: Go
   for (const g of ['food', 'water', 'energy'] as const) {
     if (g === except) continue;
     const short = Math.max(0, need[g] - p.stock[g] - (o?.made[g] ?? 0));
-    cost += short * Math.min(obs.store.posted[g] * 1.1, obs.store.refPrice[g] * STRATEGIST.reservePriceCap);
+    cost += short * Math.min(obs.store.posted[g] * (1 + PRICE.storeSpread), obs.store.refPrice[g] * STRATEGIST.reservePriceCap);
   }
   return Math.round((STRATEGIST.cashFloor + cost) * mind.persona.reserve);
 }
@@ -221,16 +245,16 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
   let block = 0;
   let use = 0;
   if (good === 'food' && need > 0) {
-    // Eaten at upkeep, then what is left (after spoilage) buys next month's development time.
+    // Eaten at upkeep, then what is left (after spoilage) keeps next month's walking at full pace.
     const eat = needsOf(obs, me).food;
     block = eat + Math.ceil(eat / keepRate);
-    use = ((DEVELOPMENT.fullSeconds - DEVELOPMENT.minSeconds) * sec) / block;
+    use = (monthWalkSeconds(obs, mind) * (1 / DEV_WALK.hungerPaceMin - 1) * sec) / block;
   } else if (good === 'water' && need > 0) {
     const farms = mine.filter((t) => UPKEEP.irrigated.includes(t.outfit as never));
     const drink = needsOf(obs, me).water;
     if (farms.length > 0) {
       block = drink + Math.ceil(drink / keepRate);
-      use = (farms.reduce((n, t) => n + rawOutput(obs, t), 0) * 0.5 * afterTax(obs, P('food'))) / block;
+      use = (farms.reduce((n, t) => n + rawOutput(obs, t), 0) * (1 - UPKEEP.shortOutputShare) * afterTax(obs, P('food'))) / block;
     }
   } else if (good === 'energy') {
     const own = mine.filter((t) => t.outfit === 'energy').reduce((n, t) => n + rawOutput(obs, t), 0);
@@ -239,12 +263,14 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
       block = Math.ceil(short / keepRate);
       const runs = mine
         .filter((t) => t.outfit !== 'energy')
-        .reduce((n, t) => n + (isRaw(t.outfit!) ? 0.5 * rawOutput(obs, t) * P(t.outfit as Good) : factoryFit(obs, t, t.outfit as never, me).output * P(t.outfit as Good)), 0);
+        .reduce((n, t) => n + (isRaw(t.outfit!) ? (1 - UPKEEP.shortOutputShare) * rawOutput(obs, t) * P(t.outfit as Good) : factoryFit(obs, t, t.outfit as never, me).output * P(t.outfit as Good)), 0);
       use = afterTax(obs, runs) / Math.max(1, need);
     }
   } else if (good === 'medicine' && need > 0) {
     block = Math.ceil(need / keepRate);
-    use = Math.max(airBand(obs.air).devPenalty, POLLUTION.bands[1].devPenalty) * sec;
+    // A Medicine cures the sickness it may roll at development start, keeping the month's walking at full pace.
+    const sick = playerEventChance(obs, 'sickness', 'development', me);
+    use = sick * monthWalkSeconds(obs, mind) * (1 / DEV_WALK.sickPace - 1) * sec;
   }
   // Factory inputs: a factory's run is worth its output, shared over its inputs.
   for (const t of mine) {
@@ -261,7 +287,8 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
   // Beyond the block: resale next month, after spoilage, the sales tax and the depot limit.
   const haircut = full ? 1 - STRATEGIST.forecastHaircut * mind.persona.risk : 1;
   const resale = afterTax(obs, P(good)) * keepRate * haircut;
-  const resaleBuy = resale * Math.min(1, mind.persona.speculate) * (1 - 0.1 * mind.persona.risk);
+  const resaleBuy = resale * Math.min(1, mind.persona.speculate) * (1 - STRATEGIST.resaleRisk * mind.persona.risk);
+  // literal-ok: 0.05 keeps the division finite for a good that all spoils; 99 stands for no depot limit (Rookie ignores it)
   const depot = full ? Math.ceil(UPKEEP.depotCapacity / Math.max(0.05, keepRate)) : 99;
   const eaten = good === 'food' || good === 'water' ? needsOf(obs, me)[good] : 0;
   const length = Math.max(block, eaten + depot) + 1;

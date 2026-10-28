@@ -3,7 +3,7 @@ import type { Act } from './actions.js';
 import { Brain, type DecisionRecord, type Pending } from './brain.js';
 import type { Decider, TableTalk } from './decider.js';
 import { AuctionHand, type AuctionDebug } from './hands/auction.js';
-import { DevelopHand } from './hands/develop.js';
+import { DevelopHand, type DevWalking } from './hands/develop.js';
 import { PERSONAS } from './personas.js';
 import { landDecision, wantsPlot, type LandPlan } from './strategist.js';
 import { situation } from './summary.js';
@@ -55,12 +55,12 @@ export class AiSeat {
       persona: AI_PERSONAS[options.persona],
       levelId: options.level,
       level: AI_LEVELS[options.level],
-      salt: (options.seed ^ 0x27d4eb2d) >>> 0,
+      salt: (options.seed ^ 0x27d4eb2d) >>> 0, // literal-ok: a hash salt, so the seat's tie-break stream is its own
     };
     this.rng = createRng(options.seed >>> 0);
     this.brain = new Brain(this.mind, PERSONAS[options.persona], options.name, options.seed, options.decider ?? null, options.onDecision);
-    this.develop = new DevelopHand(this.brain, createRng((options.seed ^ 0x9e3779b9) >>> 0));
-    this.auction = new AuctionHand(this.brain, createRng((options.seed ^ 0x85ebca6b) >>> 0));
+    this.develop = new DevelopHand(this.brain, createRng((options.seed ^ 0x9e3779b9) >>> 0)); // literal-ok: a hash salt for the develop hand's rng stream
+    this.auction = new AuctionHand(this.brain, createRng((options.seed ^ 0x85ebca6b) >>> 0)); // literal-ok: a hash salt for the auction hand's rng stream
   }
 
   get id(): string {
@@ -99,8 +99,13 @@ export class AiSeat {
     return this.rng.int(...this.mind.level.reactMs) + this.rng.int(...AI_HANDS.grant.choiceMs);
   }
 
-  developTick(state: GameState, dt: number, secondsLeft: number, act: Act): void {
-    this.develop.tick(state, dt, secondsLeft, act);
+  /**
+   * One development tick: `dt` in game ms, `secondsLeft` the game seconds left on the one development clock. Where
+   * the game walks, `walk` says where the colonist stands (or is walking to) and whether it is still walking or
+   * assaying; the referee refuses taps meanwhile, so the hands wait. Without it the seat develops as where nobody walks.
+   */
+  developTick(state: GameState, dt: number, secondsLeft: number, act: Act, walk?: DevWalking): void {
+    this.develop.tick(state, dt, secondsLeft, act, walk);
   }
 
   auctionTick(state: GameState, dt: number, act: Act): void {
@@ -117,10 +122,11 @@ export class AiSeat {
     return {
       persona: this.mind.personaId as AiPersonaId,
       level: this.mind.levelId as AiLevelId,
+      // literal-ok: the dev view's top five plots, utility to three decimals: display only
       landPlan: plan ? { focus: plan.focus, top: plan.ranking.slice(0, 5).map((s) => ({ label: s.label, utility: Math.round(s.utility * 1000) / 1000, value: s.value })) } : null,
       developPlan: this.develop.plan(),
       auction: this.auction.debug(),
-      recent: this.brain.log.slice(-5),
+      recent: this.brain.log.slice(-5), // literal-ok: the dev view's last five decisions, display only
     };
   }
 }

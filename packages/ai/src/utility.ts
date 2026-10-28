@@ -37,7 +37,7 @@ export interface Candidate<A> {
 /** Response curves. Each maps a fact to 0..1. */
 export const curve = {
   /** 0.5 at zero, 0.75 at +scale, 0.25 at -scale: a gain in credits. */
-  gain: (credits: number, scale: number) => 0.5 + 0.5 * Math.tanh((0.5493 * credits) / Math.max(1, scale)),
+  gain: (credits: number, scale: number) => 0.5 + 0.5 * Math.tanh((0.5493 * credits) / Math.max(1, scale)), // literal-ok: the curve's shape (0.5493 = atanh 0.5); scale is the knob
   /** 0 below lo, 1 above hi, linear between. */
   ramp: (x: number, lo: number, hi: number) => (hi <= lo ? (x >= hi ? 1 : 0) : Math.min(1, Math.max(0, (x - lo) / (hi - lo)))),
   /** Keeps a score off zero so one weak fact doesn't erase an option. */
@@ -63,6 +63,7 @@ export function utilityOf(considerations: Consideration[]): number {
 
 /** Builds a scored candidate. The rationale lists the considerations furthest from neutral first. */
 export function candidate<A>(key: string, label: string, action: A, value: number, considerations: Consideration[], veto: string | null = null): Candidate<A> {
+  // literal-ok: 0.5 is a score's neutral point: the rationale sorts by distance from it
   const telling = [...considerations].filter((c) => c.weight > 0).sort((x, y) => Math.abs(y.score - 0.5) * y.weight - Math.abs(x.score - 0.5) * x.weight);
   return {
     key,
@@ -72,6 +73,7 @@ export function candidate<A>(key: string, label: string, action: A, value: numbe
     considerations,
     utility: veto ? 0 : utilityOf(considerations),
     veto,
+    // literal-ok: how many reasons the rationale's words name, display only
     rationale: veto ? `Ruled out: ${veto}` : telling.slice(0, 3).map((c) => c.reason).join('; '),
   };
 }
