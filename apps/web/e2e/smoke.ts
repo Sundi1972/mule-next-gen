@@ -7,10 +7,11 @@ import { existsSync } from 'node:fs';
 import { WALK } from '@mule/engine';
 import { errors as playwrightErrors, type BrowserContext, type Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
-import { check, claimAPlot, launch, PHONE, startServer, TV, type AuctionSteps } from './harness';
+import { check, claimAPlot, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
 import { planningIsTheHub } from './hub-steps';
 import { checkTheShow, watchShow } from './production-steps';
 import { fedPlayerFillsAFullHoloBar, hungryPlayerSeesAShortOrangeBar, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
+import { doubleTapZoomsToYourLand, noZoomBeforeYourFirstPlot, watchIntents, zoomButtonOnceYouOwnAPlot } from './table-steps';
 
 /** Loaded by a path held in a variable, so tsc never resolves a file that may not exist yet. */
 async function loadAuctionSteps(): Promise<AuctionSteps> {
@@ -56,6 +57,7 @@ try {
   const phone = await phoneContext.newPage();
   phone.on('pageerror', (e) => errors.push(`phone: ${e.message}`));
   const phoneShow = await watchShow(phone);
+  const phoneIntents = watchIntents(phone);
 
   await phone.goto(base);
   await phone.getByPlaceholder('Heiko').fill('Heiko');
@@ -73,6 +75,7 @@ try {
   const tvShow = await watchShow(tv);
   await tv.goto(`${base}/table?room=${code}`);
   await tv.getByTestId('room-code').waitFor();
+  const ctx: GameStepContext = { phone, tv, check, server, code, held: (step) => held(server, code, step) };
 
   await phone.getByRole('button', { name: 'Add AI player' }).click();
   await phone.getByRole('button', { name: 'Add AI player' }).click();
@@ -111,7 +114,9 @@ try {
   await claim.waitFor({ timeout: 5_000 });
   check(await claim.isVisible(), 'CLAIM button visible');
   await tv.getByTestId('tv-phase').filter({ hasText: 'Land grant' }).waitFor({ timeout: 3_000 });
+  await noZoomBeforeYourFirstPlot(ctx);
   await claimAPlot(phone, within(PHASE_MS.landGrant), 'AM-7: the phone claims a plot in the month-1 land grant');
+  await zoomButtonOnceYouOwnAPlot(ctx, phoneIntents);
 
   // Reload: the phone takes its seat back by itself.
   await phone.reload();
@@ -129,6 +134,7 @@ try {
   await outfittersOpenWithAnEmptyMule(phone);
   console.log(`store hall fills the stage: ${await theLedMuleLightsUp(phone, server, code)}`);
   await checkOwnsAPlot(phone);
+  console.log(`zoom: ${await doubleTapZoomsToYourLand(ctx, phoneIntents)}`);
   await goToThePub(phone);
   // B-AC-6 and B-AC-8, from what both screens drew of month 1's show.
   await phone.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
