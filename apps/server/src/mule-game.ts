@@ -334,8 +334,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         return;
       case 'continue': {
         if (seatId !== this.ctx.hostId()) throw new RuleError('Only the host can continue');
-        const left = this.continuePlanning(seatId);
-        if (left.length > 0) this.addNews(`${this.nameOf(seatId)} continued without ${andList(left)}.`);
+        this.continuePlanning(seatId);
         return;
       }
     }
@@ -343,21 +342,26 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   /**
    * The host's Continue. In the election's announce or ballot every human not Done becomes Done, abstaining; refused in
-   * its ceremony. Otherwise it ends planning proper with players not yet Ready. Returns the names of the others it went
-   * on without. The caller must have checked the seat is the host.
+   * its ceremony. Otherwise it ends planning proper with players not yet Ready. The news names the others it went on
+   * without and the stage it moved past. The caller must have checked the seat is the host.
    */
-  private continuePlanning(hostId: string): string[] {
+  private continuePlanning(hostId: string): void {
     const state = this.requireState();
+    const goneOn = (did: string, left: string[]) => {
+      if (left.length > 0) this.addNews(`${this.nameOf(hostId)} ${did} without ${andList(left)}.`);
+    };
     if (this.electionOpen()) {
-      if (state.politics!.election!.stage === 'ceremony') throw new RuleError('The result is being announced');
+      const { stage } = state.politics!.election!;
+      if (stage === 'ceremony') throw new RuleError('The result is being announced');
       const waiting = this.seats.filter((s) => !s.isAi && !isElectionDone(state, s.id));
       for (const s of waiting) electionDone(state, s.id);
-      return waiting.filter((s) => s.id !== hostId).map((s) => s.name);
+      goneOn(stage === 'announce' ? 'opened the ballot' : 'closed the ballot', waiting.filter((s) => s.id !== hostId).map((s) => s.name));
+      return;
     }
     if (state.phase !== 'planning') throw new RuleError('Continue ends planning only');
     const left = this.seats.filter((s) => !s.isAi && s.id !== hostId && !this.ready.has(s.id)).map((s) => s.name);
     this.nextPhase();
-    return left;
+    goneOn('continued', left);
   }
 
   /**
