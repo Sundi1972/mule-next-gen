@@ -2,8 +2,10 @@
 
 **Status:** goal gate passed (PM, 28 Oct): §0 as written; the measured spread and the air finding go to Heiko as
 information. Next: the plan. Input: Heiko's approved **M.U.L.E. Event Catalogue** (Claude Doc, project
-96559f00-c6d7-41f2-8d1b-bc911b9383fc, rev 16, 28 Oct 2026; the meteor strike added the same day) and his rulings of
-28 Oct. **Owner:** WS1 (`packages/engine/src/events.ts`, the `EVENTS` config block). **Class:** Standard (the PM, 28
+96559f00-c6d7-41f2-8d1b-bc911b9383fc, rev 16, 28 Oct 2026; the meteor strike added the same day) and his four rulings
+of 28 Oct on its decisions: (1) keep the catalogue's amount; (2) own pollution counts per air point; (3) build wave 1,
+then wave 2, then G-5, then Later; (4) the catch-up lean, bad events weighted toward the richest and good ones toward
+the poorest. **Owner:** WS1 (`packages/engine/src/events.ts`, the `EVENTS` config block). **Class:** Standard (the PM, 28
 Oct: two PRs, no new sole owner, MonthEvent gains `phase` without breaking). **Scope of this spec:** wave 1. Waves 2,
 G-5 and Later each get an amendment and their own PR.
 
@@ -116,7 +118,7 @@ today        pest swarm, wildfire and bumper harvest are colony picks; pickStart
              land with chance targetBias, a good one on the trailing player's.
              anchors: events.ts::pickStart, EVENTS.targetBias                               verified_by: read
 tomorrow     each rolls per player and starts on that player's plots; the richest and poorest (cash plus land)
-             read the rows' wealth-rank raises and lowers. targetBias goes.
+             read the rows' wealth-rank raises and lowers (Heiko's ruling (4), the catch-up lean). targetBias goes.
 depends_on   C1
 ```
 

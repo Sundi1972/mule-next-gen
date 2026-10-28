@@ -254,7 +254,10 @@ describe('player events', () => {
     expect(rollPlayerEvent(cloneForSim(colony(80, [12, 0, 0, 0])), 'sickness', 'development', 'p0')).toBe(false);
 
     // Seeded: the same game rolls the same, and over many games about as often as the chance says.
-    const rolls = (seed: number) => [0, 1, 2, 3].map((i) => rollPlayerEvent(colony(30, [0, 0, 0, 0], seed), 'sickness', 'development', `p${i}`));
+    const rolls = (seed: number) => {
+      const state = colony(30, [0, 0, 0, 0], seed);
+      return [0, 1, 2, 3].map((i) => rollPlayerEvent(state, 'sickness', 'development', `p${i}`));
+    };
     expect(rolls(11)).toEqual(rolls(11));
     let sick = 0;
     for (let seed = 1; seed <= 250; seed++) sick += rolls(seed).filter(Boolean).length;
@@ -262,10 +265,11 @@ describe('player events', () => {
     expect(sick / 1_000).toBeLessThan(base + sickness.air.smoggy + 0.05);
 
     // At development start: certain sickness makes a player without Medicine sick; one with a Medicine takes it.
-    const start = (body: (state: GameState) => void) => {
-      const state = colony(0);
+    const start = (body: (state: GameState) => void, pollutionBy?: number[]) => {
+      const state = colony(0, pollutionBy);
       state.players[0]!.stock.medicine = 1;
       state.players[1]!.stock.medicine = 0;
+      state.players[1]!.sick = true;
       while (state.phase !== 'development') advancePhase(state);
       body(state);
     };
@@ -275,12 +279,16 @@ describe('player events', () => {
         expect(state.players[1]!.sick).toBe(true);
       }),
     );
-    // With no chance nobody falls sick, and nobody uses a Medicine.
+    // With no chance nobody falls sick, not even last month's sick player, and nobody uses a Medicine.
     withSickness({ phases: { development: 0 } }, () =>
       start((state) => {
         expect(state.players.map((p) => p.sick)).toEqual([false, false, false, false]);
         expect(state.players[0]!.stock.medicine).toBe(1);
       }),
+    );
+    // Each player rolls on its own risk: only last month's polluter falls sick.
+    withSickness({ phases: { development: 0 }, pollution: { perPoint: 1, max: 1 }, cap: 1 }, () =>
+      start((state) => expect(state.players.map((p) => p.sick)).toEqual([false, true, false, false]), [0, 5, 0, 0]),
     );
   });
 });
