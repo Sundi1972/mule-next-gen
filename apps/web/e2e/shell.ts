@@ -1,5 +1,5 @@
 /**
- * B-AC-12: the shell fills the stage at 1440×900 and 844×390 (shell-steps.ts), in a game of its own at full-length
+ * B-AC-12: the shell fills the stage at 1440×900, 844×390 and 667×375 (shell-steps.ts), in a game of its own at full-length
  * phases. In smoke's month-2 planning the step had about two seconds left after the other planning steps, ran on
  * through the land grant and the land auction, and the steps waiting on those missed them.
  * B-AC-19's six-seat TV case runs here too, in a room of its own (hub-steps.ts).

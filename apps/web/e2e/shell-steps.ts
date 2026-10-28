@@ -12,6 +12,8 @@ export const LAPTOP = { width: 1440, height: 900 };
 const WIDE_RAIL_PX = 400;
 /** The switch: the shell's own width, in px. */
 const WIDE_PX = 1100;
+/** The small phone on its side, an iPhone SE: the rail sits at its 232 px floor. */
+const SMALL_PHONE = { width: 667, height: 375 };
 /** A notched phone on its side: the notch's inset on one side, the home bar's at the bottom. */
 const NOTCH = { top: 0, left: 47, bottom: 21, right: 47 };
 
@@ -71,7 +73,7 @@ const RECORD_PAINTS = `{
 }`;
 
 /**
- * B-AC-12: the shell fills the stage at 1440×900 and 844×390, switching on its own width at exactly 1100 px, with
+ * B-AC-12: the shell fills the stage at 1440×900, 844×390 and 667×375, switching on its own width at exactly 1100 px, with
  * useWide equal to the container query in every painted frame and the emotes clear of the rail at every size.
  * Reloads the phone once, at 1440×900, so a shell mounts wide, and does that last: a reload by the only human ends the
  * phase, and the steps after this one wait on the phases that follow. Leaves the phone at 844×390 with no notch, as
@@ -116,6 +118,20 @@ export async function shellFillsTheStage(phone: Page, timeout = 5_000): Promise<
   await emote(phone);
   log.push(`emotes ${await emotesClear(phone, vw)}`);
 
+  // The small phone: the rail at its floor, the stage the rest, the emotes clear of the rail, nothing past the window.
+  try {
+    await phone.setViewportSize(SMALL_PHONE);
+    const small = await read(phone);
+    checkFrame(small, `a ${SMALL_PHONE.width} px window`, SMALL_PHONE.width, narrowRail(SMALL_PHONE.width), 'false');
+    const scroll = await phone.evaluate(() => ({ x: document.documentElement.scrollWidth, y: document.documentElement.scrollHeight }));
+    check(scroll.x <= SMALL_PHONE.width && scroll.y <= SMALL_PHONE.height, `B-AC-12: at ${SMALL_PHONE.width}×${SMALL_PHONE.height} the page does not scroll, got ${scroll.x}×${scroll.y}`);
+    log.push(`${SMALL_PHONE.width}: stage ${small.stage.toFixed(1)} + rail ${small.guide.toFixed(1)}`);
+    await emote(phone);
+    log.push(`emotes ${await emotesClear(phone, SMALL_PHONE.width)}`);
+  } finally {
+    await phone.setViewportSize(PHONE.viewport);
+  }
+
   // A notch on the right: the rail and the emotes move in by the inset together.
   const cdp = await phone.context().newCDPSession(phone);
   try {
@@ -151,8 +167,8 @@ export async function shellFillsTheStage(phone: Page, timeout = 5_000): Promise<
   const wideMounts = paints.filter((p) => p.at === 'mount' && p.box >= WIDE_PX).length;
   const resizes = paints.filter((p) => p.at === 'resize').length;
   check(wideMounts >= 1, `B-AC-12 (I-1): a shell mounted at ${LAPTOP.width} px was recorded, got ${wideMounts}`);
-  // To 1440, to 1099, to 1100, back to 1440, to 844, then to 844 again after the reload.
-  check(resizes >= 5, `B-AC-12 (I-1): every resize of the shell was recorded before paint, got ${resizes}`);
+  // To 1440, to 1099, to 1100, back to 1440, to 844, to 667, back to 844, then to 844 again after the reload.
+  check(resizes >= 7, `B-AC-12 (I-1): every resize of the shell was recorded before paint, got ${resizes}`);
   log.push(`painted frames checked ${paints.length} (${wideMounts} wide mounts, ${resizes} resizes)`);
 
   // `now`: no screen gives one yet, so this logs that rather than pass on nothing; the render test proves its place.
