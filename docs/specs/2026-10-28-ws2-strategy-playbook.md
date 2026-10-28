@@ -2,9 +2,8 @@
 
 **Status:** DRAFT (§1–§6), 2026-10-28. Goal gate passed (Heiko, "Yes, as recommended"); approach and class ruled by the
 PM the same day (recommended approach widened to Heiko's two layers; class **Programme**). G-A's proof below is
-restated for the two layers and **approved by Heiko** ("Yes, all eight", 29 Oct). **Prompt and tool design on HOLD**
-(PM, 29 Oct): Heiko asked how the AI learns every rule, legal move and the win criteria (an MCP-like game interface);
-not frozen until the PM's ruling lands here. Build waits for WS1's step 2 (playbook
+restated for the two layers and **approved by Heiko** ("Yes, all eight", 29 Oct). Prompt and tool design: HOLD lifted (PM, 29 Oct):
+Heiko chose option B, a generated manual (C8) and live tools (C9); the MCP server is parked. Build waits for WS1's step 2 (playbook
 schema, `validatePlan`, engine plans, triggers) and WS3's game record. Source: Claude Doc "AI Strategy: Playing to
 Win" (https://claude.ai/artifact/LCDgi74rrZ1wzDf4V5xaV3), sections "Two layers", "What Claude decides", "The AI's
 mind". Spec B (diplomacy, and the shared memory module: notebook, stances, promises) is separate and follows.
@@ -13,6 +12,11 @@ mind". Spec B (diplomacy, and the shared memory module: notebook, stances, promi
 
 **G-A · Smart AI players play to a strategy they write in character, check it against what happened, and adjust it;
 and they play better for it.** `[handoff]`
+⚠ Restated for Heiko via the PM (29 Oct, option B), awaiting his OK: **Smart AI players know every rule, every legal
+move and how the game is won; they play to a strategy they write in character, check it against what happened and
+adjust it; and they play better for it.** Proof added to UBER-AC-A: the manual covers every client command in
+packages/protocol except a short reviewed exclusion list (WS1's coverage test green), and changing a rule's number in
+config changes the manual with no hand edit.
 - **Who benefits** `[review-only]`: the players at the table, Heiko's playtest first.
 - **Today** `[review-only]`: Claude decides one move at a time from a five-line brief (month; own money, plots, goods;
   MULE price; the richest rival), inside the hands' 2.5–5 s waits; 95 of 2,529 asked decisions in the paid trial fell
@@ -28,7 +32,8 @@ and they play better for it.** `[handoff]`
 
 **Non-goals** `[review-only]`: the execution layer and the engine's own playbook (WS1); the land-grant execution and the
 game record (WS3); deal cards, trust, votes' rules (WS7); diplomacy, the notebook, stances and promises (spec B,
-WS2); memory across games; bring-your-own-key (parked); any model call inside a real-time phase.
+WS2); memory across games; bring-your-own-key (parked); any model call inside a real-time phase; the MCP server itself (parked by Heiko, 29 Oct, until BYOK, tournaments or
+benchmarks need it; C9's definitions are MCP-shaped so it is a wrapper later).
 
 **Rough cost** `[review-only]`: 3 PRs after WS1's step 2 and WS3's record land. Thin baseline (plan as a fourth
 decision kind on today's prompt): 1 PR, loses (§0.1).
@@ -131,6 +136,44 @@ pin          B-AC-3 (keyless game finishes on top picks) keeps passing throughou
 atomicity    with WS1's execution layer
 ```
 
+```
+C8 · ADDED · the manual: every rule, phase, move and the win criteria, generated, in the cached system prompt
+             (Heiko, 29 Oct: option B, "one list of moves and rules, made from the game itself")
+today        PRIMER in llm/prompt.ts is hand-written: phases in prose, three decision kinds, no win criteria, no
+             costs · anchors: packages/ai/src/llm/prompt.ts::PRIMER, packages/ai/src/actions.ts::AiAction
+             verified_by: read. AiAction lacks protocol's drone, list, unlist, ready and continue
+             (packages/protocol/src/index.ts::MuleIntent), so the AI cannot list a plot or MULE for sale.
+tomorrow     MUST render, from WS1's move descriptors plus config only: each phase and its rules; how the game is won
+             (Worth = cash + goods at the colony price + plots × GAME.plotScore + installed MULEs × mulePrice +
+             office terms; the Collapse cut ×POLLUTION.collapseScore on all but office; the colony score apart, as
+             engine/src/game.ts::scoreParts defines it); and every move: what it does, when it is legal, what it
+             costs, when it is smart. Byte-stable for a given config, so it sits in the cached system block.
+seam         packages/ai/src/llm/manual.ts (new) — pure; prompt.ts and the writer's system block both read it
+senior       junior would: write a longer PRIMER by hand · senior does: render from the descriptors and config, so
+             a rule change cannot leave it stale; the coverage test (WS1) fails before the manual can miss a move
+mechanism    sprout
+pin          the moves' system text stays byte-stable per persona (cache), held by a snapshot of the manual for the
+             default config; a config change moves the snapshot, never a hand edit.
+depends_on   WS1 move descriptors in actions.ts (data, stubbable on a descriptor type); rule text from each rule
+             owner (WS3 grant, lots, auction; WS7 politics) as named edits
+
+C9 · ADDED · live tools: what Claude can ask the game while it writes
+today        no tools: the client sends one message and reads one JSON reply
+             · anchors: apps/server/src/brain/client.ts::createHaikuComplete   verified_by: read
+tomorrow     MUST offer, in-process via Claude API tool use, in strategy and playbook calls only: legalMoves (now, with
+             prices), worth (my scoreParts breakdown), standings (every seat's public Worth), whatIf (a keyless engine
+             sim of a playbook over one month). Each answers from the seat's observation (HC-3) and costs no money.
+             Each tool round trip is ledgered and counted inside the seat's share of the game budget (AM-19); at most
+             BRAIN.toolRounds round trips per call; tools never run inside a real-time phase (HC-1).
+seam         packages/ai/src/llm/tools.ts (new, pure definitions + handlers over the observation); the loop in
+             apps/server/src/brain/client.ts (the one place that talks to the API)
+senior       junior would: hand the model the raw state, or loop on tools without a cap · senior does: MCP-shaped
+             definitions (name, description, JSON schema) so a real MCP server later is a wrapper; a round cap and
+             the budget check before every round; whatIf reuses the engine sim, never a second rules copy
+mechanism    sprout (tools.ts) + in_place (client loop)
+depends_on   C8 (the move descriptors); WS1 descriptors; the engine sim entry for one month (WS1, contract)
+```
+
 ## §2 · The Logic `[handoff]`
 
 ```
@@ -223,3 +266,8 @@ Code-only; no existing state to reach. The record starts with WS3's build.
 - Sole owner of Claude's brief, writer and their prompts: `packages/ai/src/llm/` (WS2). The playbook schema and its
   validator: WS1. The game record: WS3. Enforcement: the settings guard and SEAMS named edits; packages/ai purity
   test (no I/O imports) as today.
+- The move list: WS1's `packages/ai/src/actions.ts`, which grows descriptors (what, when legal, cost, when smart).
+  Each move's rule text is written by its rule owner as a named edit: WS3 land grant, lots and auction; WS7 politics.
+  WS1 owns the coverage test: every MuleIntent in packages/protocol has an AI move or sits on a short reviewed
+  exclusion list. WS2 owns the manual's rendering (C8) and the tools (C9), and reads the descriptors only.
+  Settled at the schema freeze with WS1 and WS3 (PM, 29 Oct).
