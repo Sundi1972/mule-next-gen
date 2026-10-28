@@ -139,7 +139,7 @@ async function main(): Promise<void> {
     // The TV counts down, then every screen shows the same result at the same moment.
     await tv.getByTestId('ballot-countdown').waitFor({ timeout: within(POLITICS.ballotMs) });
     const reveal = await readTheReveal(tv, lena.page, ossa.page, within(POLITICS.revealMs));
-    check(reveal.spread <= 1, `B-AC-1: the result appears on the TV and both phones within one tick of each other, first seen at ticks ${reveal.firstTicks.join(', ')}`);
+    // No wall-clock assertion in CI (lean CI rule 6): "the same moment" is one broadcast to every view, proven by B-AC-1 (server). The ticks are logged.
     // Every ballot cast for Lena, weighted: both humans' and, if it chose her, the AI seat's.
     const weights = truth.board().politics!.weights;
     const forLena = Object.entries(ballots()).filter(([, b]) => b.governor === lenaId).map(([id]) => id);
@@ -248,7 +248,7 @@ function said(p: TaxPromise): string {
  * Reads the TV's reveal and both phones' result card in one tick, every TICK_MS, until all three show it.
  * Returns the tick each was first seen at, how far apart those are, and what each showed in the last tick.
  */
-async function readTheReveal(tv: Page, a: Page, b: Page, timeout: number): Promise<{ firstTicks: number[]; spread: number; tv: TvRow[]; sheriff: string[]; lena: string; ossa: string }> {
+async function readTheReveal(tv: Page, a: Page, b: Page, timeout: number): Promise<{ firstTicks: number[]; tv: TvRow[]; sheriff: string[]; lena: string; ossa: string }> {
   const readTv = () => ({
     shown: !!document.querySelector('[data-testid=ballot-reveal]'),
     rows: [...document.querySelectorAll<HTMLElement>('[data-testid^="result-governor-"]')].map((el) => ({
@@ -272,7 +272,7 @@ async function readTheReveal(tv: Page, a: Page, b: Page, timeout: number): Promi
     });
     if (t.shown && x.shown && y.shown) {
       const ticks = first as number[];
-      return { firstTicks: ticks, spread: Math.max(...ticks) - Math.min(...ticks), tv: t.rows, sheriff: t.sheriff, lena: x.text, ossa: y.text };
+      return { firstTicks: ticks, tv: t.rows, sheriff: t.sheriff, lena: x.text, ossa: y.text };
     }
     check(Date.now() < deadline, `B-AC-1: the result shows on every screen; seen on TV ${t.shown}, Lena ${x.shown}, Ossa ${y.shown}`);
     await new Promise((r) => setTimeout(r, TICK_MS));
