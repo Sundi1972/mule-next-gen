@@ -44,6 +44,9 @@ export interface EventSegment {
   endAt: number;
 }
 
+/** The least a segment's beats are scaled by, so its pace stays above 0. */
+const MIN_SCALE = 1e-3;
+
 export function eventSegments(events: ShowEventView[], start = 0, mode: ShowMode = 'tv'): EventSegment[] {
   const beat = mode === 'tv' ? EVENT_BEAT : EVENT_SOLO_BEAT;
   const modePace = mode === 'tv' ? 1 : EVENT_SOLO_PACE;
@@ -51,14 +54,18 @@ export function eventSegments(events: ShowEventView[], start = 0, mode: ShowMode
   let ms = 0;
   return events.map((ev, i) => {
     const startAt = start + ms / 1000;
-    ms += ev.playMs;
+    // A length below 0 counts as 0: a moment, never time running back.
+    ms += Math.max(0, ev.playMs);
     const endAt = start + ms / 1000;
     const intro = i === 0 ? beat.intro : 0;
     const play = playShare(ev) * modePace;
     const k = (endAt - startAt) / (intro + beat.announce + play + beat.settle);
     const announceAt = startAt + intro * k;
     const playAt = announceAt + beat.announce * k;
-    return { events: [ev], pace: k * modePace, n: i + 1, count: events.length, startAt, announceAt, playAt, settleAt: playAt + play * k, endAt };
+    // The pace divides the clock in the layers (a story's seconds, a front's progress): never 0. A 0 ms segment's
+    // hits still land at once, clamped to its settle.
+    const pace = Math.max(k, MIN_SCALE) * modePace;
+    return { events: [ev], pace, n: i + 1, count: events.length, startAt, announceAt, playAt, settleAt: playAt + play * k, endAt };
   });
 }
 
