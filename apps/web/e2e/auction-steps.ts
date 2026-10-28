@@ -12,6 +12,7 @@ import { errors as playwrightErrors, type Browser, type Page } from 'playwright'
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, headerSlot, launch, PHONE, startServer, TV, type AuctionSteps } from './harness';
+import { hostContinuesWithout } from './hub-steps';
 import { readyThroughTheElection } from './politics-steps';
 
 const PRESS_MS = 2_000;
@@ -176,7 +177,7 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   console.log(`✓ B-AC-1: ${first} and ${second} listed at ${minimum}, on Lena's and Ossa's phones`);
   await fillTheMonthThenUnlist(lena, ossa);
 
-  await everyone(phones, (p) => readyInPlanning(p.page));
+  await hostContinuesWithout({ host: brix, ready: lena, left: ossa, tv, server, code });
   await everyone(phones, (p) => claimPlots(p.page));
 
   // Brix's lot 1: Lena stops low, Ossa holds Up past her and is still holding when the bell rings. The colony's lot may come up before it.
