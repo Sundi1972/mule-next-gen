@@ -360,7 +360,12 @@ RULE-64 · Who sees what of the election          (replaces RULE-9's election ro
   a ballot                                        its voter only; never anyone else
   who is Done in announce / ballot                every screen ("waiting for Leo")
   an office's totals                              every screen, from that office's bars beat (RULE-62)
-  an office's winner and how                      every screen, from that office's winner beat
+  an office's winner and how                      every screen, from that office's winner beat; in a
+                                                  tie (baron | land | lot), from its tie beat, where
+                                                  the mock names the rule that broke it (AM-21)
+  the news line naming the winner                 at the winner beat, tie or not
+  the show's total length                         every screen from the ballot's close; it shows a tie
+                                                  is coming 2.3 s early (accepted, AM-21)
   the Governor's promise for the term (C68)       every screen, while the term lasts
   my tax paid and my reputation (E-5)             my phone only
 ```
@@ -449,7 +454,9 @@ did       Follow the mock: (a) Cast my vote is the ballot's Done, picking alone 
           run (no earlier planning; composed from the approved RunForOffice block, WS6 reviews);
           (c) one show clock, each office's length from its tally (RULE-62's formula, constants
           named in POLITICS.ceremony); E-7 the promise holds for the term; E-10 the Continue's news
-          names its stage; E-5 my tax paid and reputation on my phone. Ties read "decided by lot"
+          names its stage; E-5 my tax paid and reputation on my phone. In a tie the winner and rule
+          reach the views at the tie beat, as the mock stamps them (RULE-64); the news stays at the
+          winner beat. Ties read "decided by lot"
           (AM-17; WS6 fixed the mock in 23697e5b).
 because   P-1: Heiko approved the mock: "Yes, all as recommended"; "all ux audit changes are approved"
 goal      P-1 — still met; UBER-AC-2 keeps month 1's run (B-AC-63)
