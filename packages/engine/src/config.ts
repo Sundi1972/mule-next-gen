@@ -282,15 +282,18 @@ export const DEVELOPMENT = {
 /**
  * Walking in development costs time off the one development clock (Heiko's R1, 0.4 s a tile). A walk goes in grid
  * steps on the map, never diagonally; the store and its corral are on the store's tile. A hungry or sick colonist
- * walks slower (POLLUTION.bands' sickPace); the two multiply. Not WALK, the goods auction's walk.
+ * walks slower, and the two multiply: no Food and sick is a tenth of normal pace (Heiko's numbers).
+ * Not WALK, the goods auction's walk.
  */
 export const DEV_WALK = {
   /** Seconds for each step from one map tile to the next. */
   tileSeconds: 0.4,
   /** Seconds to cross the store floor to the corral, from the door or any other room. */
   floorSeconds: 1,
-  /** Share of its pace a colonist with no Food walks at; it rises linearly to 1 with the Food it holds for the month. */
-  hungerPaceMin: 0.25,
+  /** Share of its pace a colonist with no Food walks at; it rises linearly to 1 with the share of the month's Food it holds. */
+  hungerPaceMin: 0.2,
+  /** Share of its pace a sick colonist walks at (POLLUTION.bands' sickens, and no Medicine taken). */
+  sickPace: 0.5,
 };
 
 /** What pollutes, and by how much. From the design doc's Pollution tab. */
@@ -319,15 +322,12 @@ export const POLLUTION = {
   greenBeltAir: 2,
   /** Goods that lose 1 unit per plot pollution level. */
   sensitive: ['food', 'water', 'medicine'] as Good[],
-  /**
-   * The colony gauge's bands: from this level, a colonist who takes no Medicine is sick and walks at sickPace of its
-   * pace (DEV_WALK). Below 1 the band sickens; no Food and sick in Collapse is about a tenth of normal pace.
-   */
+  /** The colony gauge's bands: from a band that sickens, a colonist who takes no Medicine is sick (DEV_WALK.sickPace). */
   bands: [
-    { name: 'clean', from: 0, sickPace: 1 },
-    { name: 'smoggy', from: 30, sickPace: 0.8 },
-    { name: 'toxic', from: 60, sickPace: 0.5 },
-    { name: 'collapse', from: 80, sickPace: 0.4 },
+    { name: 'clean', from: 0, sickens: false },
+    { name: 'smoggy', from: 30, sickens: true },
+    { name: 'toxic', from: 60, sickens: true },
+    { name: 'collapse', from: 80, sickens: true },
   ] as const,
   /** Clean colony: off-world buyers pay this much more for exports. */
   cleanExportBonus: 0.1,

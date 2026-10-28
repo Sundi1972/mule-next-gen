@@ -1,5 +1,4 @@
 import {
-  airBand,
   airPoints,
   crewOf,
   DEV_WALK,
@@ -267,9 +266,8 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
     }
   } else if (good === 'medicine' && need > 0) {
     block = Math.ceil(need / keepRate);
-    // A Medicine keeps the month's walking at full pace in air that sickens, at least smoggy air's.
-    const sickPace = Math.min(airBand(obs.air).sickPace, POLLUTION.bands[1].sickPace);
-    use = monthWalkSeconds(obs, mind) * (1 / sickPace - 1) * sec;
+    // A Medicine keeps the month's walking at full pace where the air sickens.
+    use = monthWalkSeconds(obs, mind) * (1 / DEV_WALK.sickPace - 1) * sec;
   }
   // Factory inputs: a factory's run is worth its output, shared over its inputs.
   for (const t of mine) {

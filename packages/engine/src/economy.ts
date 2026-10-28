@@ -34,7 +34,7 @@ export function monthlyDemand(state: GameState): Stock {
 
   // Players must eat and power their plots whatever the price. Colonists buy
   // less when the store's price is above what their wages pay.
-  const sick = airBand(state.air).sickPace < 1;
+  const sick = airBand(state.air).sickens;
   const own = playersUse(state);
   demand.food = own.food + colonistDemand(state, 'food', colonistUnits);
   demand.water = own.water + colonistDemand(state, 'water', colonistUnits);

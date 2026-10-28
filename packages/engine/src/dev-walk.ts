@@ -1,21 +1,30 @@
 import { DEV_WALK, SPECIES_PERK } from './config.js';
-import { airBand } from './pollution.js';
 import { needsOf } from './production.js';
 import type { GameState } from './types.js';
 
 /** Where a colonist is in development: on a map tile (its index), in the store, or at the corral across its floor. */
 export type DevPlace = number | 'store' | 'corral';
 
-/**
- * How fast a colonist walks, as a share of a well-fed one's pace: a Zipwing faster; a hungry one slower, the more so
- * the less of the month's Food it holds; a sick one slower again, by its air band. Hunger and sickness multiply.
- */
-export function pace(state: GameState, id: string): number {
+/** The share of the month's Food the player holds, 0 to 1: the less, the hungrier, so the screens can show how hungry. */
+export function foodShare(state: GameState, id: string): number {
   const p = state.players.find((q) => q.id === id)!;
-  const fed = Math.min(1, p.stock.food / Math.max(1, needsOf(state, id).food));
-  const hunger = 1 - (1 - DEV_WALK.hungerPaceMin) * (1 - fed);
-  const sickness = p.sick ? airBand(state.air).sickPace : 1;
-  return (p.species === 'zipwing' ? SPECIES_PERK.zipwingSpeed : 1) * hunger * sickness;
+  return Math.min(1, p.stock.food / Math.max(1, needsOf(state, id).food));
+}
+
+/** The share of its pace a colonist walks at for hunger: 1 fed, falling linearly with the shortfall to hungerPaceMin. */
+export function hungerPace(state: GameState, id: string): number {
+  return 1 - (1 - DEV_WALK.hungerPaceMin) * (1 - foodShare(state, id));
+}
+
+/** The share of its pace a colonist walks at for sickness: DEV_WALK.sickPace while sick, else 1. */
+export function sickPace(state: GameState, id: string): number {
+  return state.players.find((q) => q.id === id)!.sick ? DEV_WALK.sickPace : 1;
+}
+
+/** How fast a colonist walks, as a share of a well-fed, healthy one's pace: a Zipwing faster; hunger and sickness multiply. */
+export function pace(state: GameState, id: string): number {
+  const zipwing = state.players.find((q) => q.id === id)!.species === 'zipwing';
+  return (zipwing ? SPECIES_PERK.zipwingSpeed : 1) * hungerPace(state, id) * sickPace(state, id);
 }
 
 /**

@@ -188,7 +188,7 @@ function developer(state: GameState, playerId: string): Player {
  * colonist who takes no Medicine is sick; both walk slower (dev-walk.ts).
  */
 function startDevelopment(state: GameState): void {
-  const sickens = airBand(state.air).sickPace < 1;
+  const sickens = airBand(state.air).sickens;
   for (const p of state.players) {
     p.hungry = p.stock.food < Math.max(1, needsOf(state, p.id).food);
     p.sick = false;
