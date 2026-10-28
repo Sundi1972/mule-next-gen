@@ -74,7 +74,7 @@ import {
   type Trade,
 } from '@mule/engine';
 import { AiSeat, LotHand, personaFor, VoteHand, type AiAction } from '@mule/ai';
-import { PLAYER_COLORS, type ColonistView, type MuleIntent, type MuleView, type ProductionReason, type ProductionView } from '@mule/protocol';
+import { PLAYER_COLORS, type ColonistView, type MuleIntent, type MuleView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
 import { electionNews, myPoliticsView, politicsView, resultShown } from './politics-view.js';
@@ -128,6 +128,12 @@ const MAX_BADGES = 2;
 /** Names in reading order: "A", "A and B", "A, B and C". */
 function andList(names: string[]): string {
   return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
+
+/** A player's Worth line by line, without the total their public row carries as `worth`. Only for their own `me`. */
+function worthPartsOf(state: GameState, playerId: string): ScorePartsView {
+  const { total: _total, ...parts } = scoreParts(state, playerId);
+  return parts;
 }
 
 /**
@@ -988,6 +994,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           slot: s.color,
           species: p.species,
           money: p.money,
+          worth: score(state, s.id),
           plots: state.tiles.filter((t) => t.owner === s.id).length,
           ready: isReady(s.id),
           doneDeveloping: p.doneDeveloping,
@@ -1022,6 +1029,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
             droneOrder: me.droneOrder.map((i) => ({ x: i % state.width, y: Math.floor(i / state.width) })),
             politics: myPoliticsView(state, me.id),
             installedThisTurn: me.installedThisTurn,
+            worthParts: worthPartsOf(state, me.id),
           }
         : null,
       market: GOODS.map((good) => {
