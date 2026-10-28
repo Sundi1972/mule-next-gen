@@ -75,7 +75,10 @@ describe('the player shell (C15)', () => {
     const screen = createElement(PhoneShell, { phase: 'Planning', children: createElement('div') });
     const opener = { open: () => undefined, button: createRef<HTMLButtonElement>() };
     const html = renderToStaticMarkup(
-      createElement(PhoneGameProvider, { value: mia, children: createElement(MoveToPhoneOpener.Provider, { value: opener, children: screen }) }),
+      createElement(ClientProvider, {
+        client,
+        children: createElement(PhoneGameProvider, { value: mia, children: createElement(MoveToPhoneOpener.Provider, { value: opener, children: screen }) }),
+      }),
     );
     expect(after(html, 'guide')).toContain('data-testid="move-to-phone"');
   });
