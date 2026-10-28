@@ -92,7 +92,9 @@ HC-1  packages/engine stays pure: no Date.now(), no Math.random(); time enters a
 HC-2  Every number is a named value in packages/engine/src/config.ts (DEV_STEER, WOLVES, GLINT, SCRAMBLE), never
       inline; `pnpm sim --set` can move each one.        source: CLAUDE.md, memory "configurable balance"  breach: fatal
 HC-3  Never stall a game: development ends on its one clock whatever a phone does (dropped, silent, flooding);
-      an away seat's colonist stands still and counts as done, as today.
+      an away seat's colonist stands still and counts as done, as today. The one exception (AM-3): in month 1 the
+      clock stands full until every present seat's first MULE is in; the host's Continue starts it past anyone not
+      in, and an away seat counts as in. The clock is the only thing that waits: the tick, the moments and the AI run.
                                                         source: ws2-brain G-2b; mule-game.ts::checkDevelopmentOver  breach: fatal
 HC-4  The server, the sim and the phone's prediction call the SAME engine step with the SAME tick length; a seeded
       AI-only game in the sim and on the server ends in the same state.
@@ -490,10 +492,14 @@ RULE-3 · What a press does (Reach)                               shape: decisio
   6  in the hall, at a door, carrying pelts                   SELL n PELTS · n × WOLVES.peltPrice
   7  in the hall, at the corral, no MULE, MULEs left, money   BUY MULE · mulePrice
   8  in the hall, at an outfitter, an unfitted MULE, money    OUTFIT · good · cost
+  8a in the hall, at an outfitter, leading a MULE fitted for   RE-OUTFIT · good · DEV_STEER.reoutfitCost(good)
+     another good (one taken off a plot, row 11a), money      (AM-2; the outfit price by default)
   9  in the hall, at a door                                   LEAVE
  10  on the map on an own plot, leading a fitted MULE         INSTALL · good (or a lake plot from its shore,
                                                                 per cfg lakeMode)
  11  on the map on an own plot, no MULE, not analysed         ANALYSE
+ 11a on an own plot with a MULE, leading none                 TAKE MULE (it follows on its lead; the plot makes
+                                                              nothing until a MULE is installed again; AM-2)
  12  on an own plot with a MULE, Alloy held                   FIT FILTER
  13  in the hall at the pub                                   PUB · END TURN · +payout (and the lead-refund share)
  14  otherwise                                                none (the button dims and says where to go)
@@ -551,7 +557,8 @@ RULE-7 · Heiko's starting values (config)                         shape: table
     .terrain plains 1, desert 0.9, tundra 0.85, forest 0.75, ice 0.75, crater 0.8, hills 0.7, volcanic 0.6,
     river 0.6, swamp 0.5, mountains 0.4, lake 0 (lakeMode 'shore', wading 0.3) · .tickMs 50 · .catchUpTicks 10 ·
     .steerMaxPerSecond 10 · .botSpeed 1 · .botCounterPauseSeconds 0.5 · .trespass true · .mountainsImpassable false ·
-    .pubLeadRefund 0
+    .pubLeadRefund 0 · .reoutfitCost = the outfitter's price (AM-2) ·
+    .month1WaitsForFirstMule true (AM-3)
   WOLVES.on true · chancePerSecond 0.1 · packSize 3 · cooldownSeconds 20 · chooseSeconds 3 · chaseSpeed 1.1 ·
     giveUpSeconds 5 · giveUpTiles 4 · bittenPace 0.5 · fightSeconds 10 · lungeEverySeconds 1.6 · warnSeconds 0.8 ·
     strikesToWin 3 · bitesToLose 3 · pelts 2 · peltPrice 20 · stunSeconds 4 · boltTiles 4 · boltSpeed 3.5 ·
@@ -578,7 +585,8 @@ RULE-9 · The next-step ring (the guide)                           shape: decisi
 
   1 no MULE, MULEs left, money        → the store, then the corral
   2 an unfitted MULE                  → the outfitters you can pay
-  3 leading a fitted MULE             → the door on your plot's side, then your nearest own plot that takes it
+  3 leading a MULE taken off a plot   → the outfitters you can pay, its own good dimmed (AM-2)
+  3a leading a fitted MULE            → the door on your plot's side, then your nearest own plot that takes it
   4 otherwise                         → the store, then the pub
 open (default as built)  after one install the ring goes to the pub even when a second MULE is affordable —
              "should the ring offer a second MULE?" is Heiko's call; flagged
@@ -689,6 +697,24 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-2 (2026-10-29, Heiko's Q2 "yes", via the PM).** Re-outfitting a MULE is a rule: walk onto your own plot
+  with no MULE in tow and TAKE MULE (RULE-3 row 11a), lead it into another outfitter and RE-OUTFIT for the outfit
+  price (row 8a, `DEV_STEER.reoutfitCost`), then install it on an own plot (row 10, unchanged). The ring follows
+  (RULE-9 row 3). Defaults, as built: a taken MULE still on its lead when the clock ends goes back to its plot with
+  its old outfit, nothing lost; re-outfitting for the same good is dimmed; moving it to another own plot unchanged
+  is allowed, since leading it there is row 10. **WS1's sim checks it first** (the AI hands may re-outfit; money and
+  production per seat over 40 games, `pnpm sim --set DEV_STEER.reoutfitCost=…`), before C3 builds it. Replaces the
+  audit mock's dashed "Or re-outfit it at the store" (#audit-dev-swap, V-4). Serves G-1 (no menus) and lands in C3
+  and C11; T-AC-3 gains rows 8a and 11a; game.ts's outfit rule gains the re-outfit as a named edit (WS3 owns game.ts
+  edits, per the ruling).
+- **AM-3 (2026-10-29, Heiko's Q3 "yes", via the PM).** Month 1's development clock stands full until every present
+  seat's first MULE is installed; the host's Continue (the approved planning pattern: host only, one confirming tap,
+  a news line naming who was passed) starts it past anyone not in, and an away seat counts as in. HC-3 carries the
+  exception; the tick, the moments and the AI run while the clock waits. The TV shows whose first MULE is still to
+  come (the audit mock #audit-dev-first-month, V-8). `DEV_STEER.month1WaitsForFirstMule` (true). It lengthens month
+  1's development, so **WS1's sim measures month 1's time first** (median and max over 40 games, AI-only and with
+  one human left idle and the host's Continue). C6's clock and checkDevelopmentOver carry it (WS3); T-AC-9 gains a
+  month-1 case: one seat away, the clock still starts once the others are in.
 - **AM-1 (2026-10-29, PM's check of 7a0eaf76).** §0 brought back to the gate: "a first-time player" (UBER-AC-1);
   mountains slow the AI too (UBER-AC-2); the TV shows a wolf encounter and a glint race with the AI in both
   (UBER-AC-3); the goal lines restored to the gate's, the 5–15 s detail marked as from the mock design gate. The
