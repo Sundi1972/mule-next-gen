@@ -1,10 +1,11 @@
 import { GROWN_ODDS, MAP, MINERAL_ODDS, TERRAIN_ODDS } from './config.js';
+import { zeroGround } from './grid.js';
 import { dealGround } from './map-ground.js';
 import { layoutMap } from './map-layout.js';
 import type { GameMap } from './map-rules.js';
 import type { Rng } from './rng.js';
 import { placeSpecials } from './specials.js';
-import { GROWN_GOODS, MINED_GOODS, type Ground, type Terrain, type Tile, type TileTrait } from './types.js';
+import { GROWN_GOODS, type Ground, type Terrain, type Tile, type TileTrait } from './types.js';
 
 const TRAITS: TileTrait[] = ['bedrock', 'sheltered', 'hotSpring', 'thinVein', 'toxic', 'unstable', 'infested', 'floodPlain'];
 
@@ -56,12 +57,4 @@ export function expectedGround(terrain: Terrain): Ground {
   return ground;
 }
 
-export function zeroGround(): Ground {
-  return Object.fromEntries([...GROWN_GOODS, ...MINED_GOODS].map((g) => [g, 0])) as Ground;
-}
-
-export function tileIndex(width: number, x: number, y: number): number {
-  return y * width + x;
-}
-
-export { neighbours, tileAt } from './grid.js';
+export { neighbours, tileAt, tileIndex, zeroGround } from './grid.js';

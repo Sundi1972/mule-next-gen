@@ -1,5 +1,5 @@
 import { MAP, sizeBand, type FloorGood, type ShareTerrain, type SizeBand } from './config.js';
-import { neighbours, tileIndex } from './map.js';
+import { neighbours, tileIndex } from './grid.js';
 import { RAW_GOODS, type RawGood, type SpecialKind, type Terrain, type Tile } from './types.js';
 
 /**
@@ -245,7 +245,8 @@ function shares(f: Facts): Violation[] {
 /** S3: no terrain over MAP.maxTerrainShare of non-river land. */
 function noDominant(f: Facts): Violation[] {
   const n = f.nonRiver.length;
-  return SHARE_TERRAINS.filter((t) => terrainCount(f, t) / n > MAP.maxTerrainShare + EPS).map((t) => ({
+  const cap = dominantCap(n);
+  return SHARE_TERRAINS.filter((t) => terrainCount(f, t) > cap).map((t) => ({
     rule: 'S3',
     detail: `${t} ${terrainCount(f, t)} of ${n} plots, over ${pct(MAP.maxTerrainShare)} of non-river land`,
   }));
@@ -269,6 +270,11 @@ export function shareBand(terrain: ShareTerrain, nonRiver: number): { min: numbe
     max: Math.floor((target + tolerance + EPS) * nonRiver),
     tolerance,
   };
+}
+
+/** S3's cap: the most plots one terrain may hold on `nonRiver` plots of non-river land. */
+export function dominantCap(nonRiver: number): number {
+  return Math.floor(MAP.maxTerrainShare * nonRiver + EPS);
 }
 
 /** S5's cap: the most plots one region may hold on `nonRiver` plots of non-river land. */
