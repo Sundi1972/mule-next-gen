@@ -311,7 +311,7 @@ export function Marks({ size }: { size: ShowSize }) {
         const since = t - at;
         const rise = reduced ? 0 : since < 0.45 ? (since / 0.45) * lift : since < 1.3 ? lift * (1 - (since - 0.45) / 0.85) : 0;
         return (
-          <OnPlot key={`${hit.x},${hit.y},${ev.key}`} x={hit.x} y={hit.y} rise={`${rise}cqw`} className={cx(!reduced && 'animate-[ev-pop_0.35s_ease-out]')}>
+          <OnPlot key={`${hit.x},${hit.y},${ev.key}`} x={hit.x} y={hit.y} testId={`mark-${hit.x}-${hit.y}`} rise={`${rise}cqw`} className={cx(!reduced && 'animate-[ev-pop_0.35s_ease-out]')}>
             <span className="flex flex-col items-center gap-0.5">
               <EventDeltaChip delta={hit.delta} good={cast.goodAt(hit.x, hit.y)} size={size === 'tv' ? 'tv' : 'phone'} />
             </span>

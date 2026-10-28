@@ -1,5 +1,6 @@
 import { createContext, useContext, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
-import { eventHitAt, eventSegments, EventLivingMap, EventShow, type EventSegment, type ShowEventView, type ShowPlayer } from '../events';
+import { eventHitAt, EventLivingMap, EventShow, type EventSegment, type ShowEventView, type ShowMode, type ShowPlayer } from '../events';
+import { useShow } from '../events/frame';
 import { GoodIcon } from './GoodIcon';
 import type { MapTile } from './HoloMap';
 import { cx, SLOT_COLOR, type Good, type Slot } from './tokens';
@@ -179,22 +180,21 @@ export interface ProductionMapProps {
   tv?: boolean;
   /** Reduced motion: no camera and no sweeping motion; every result is still shown. */
   reduced?: boolean;
+  /** The events' pace: the TV's, or a phone's with no TV in the room. */
+  mode?: ShowMode;
   className?: string;
 }
 
 /** How long before the goods fly the bars leave the map's camera frame, so they can fly past its edge. */
 const HANDOFF = 0.2;
 
-export function ProductionMap({ width, height, tiles, production, t, slots, players, only, tv = false, reduced = false, className }: ProductionMapProps) {
+export function ProductionMap({ width, height, tiles, production, t, slots, players, only, tv = false, reduced = false, mode = 'tv', className }: ProductionMapProps) {
   const map = useRef<HTMLDivElement>(null);
   const { events } = production;
   const flyStart = flyAt(0, events);
   const geom = useTargets(map, t, flyStart);
   const focus = only !== undefined ? slots[only] : undefined;
-  const grid = { width, height };
   const cast = useMemo(() => players ?? Object.entries(slots).map(([id, slot]) => ({ id, slot, name: id })), [players, slots]);
-  // Each event's segment, as the module plays it: the bars read when each hit lands from the same timeline.
-  const segments = useMemo(() => eventSegments(events, SHOW.eventAt), [events]);
   const bars = production.lines.map(
     (l, i) =>
       (only === undefined || l.owner === only) && (
@@ -204,9 +204,7 @@ export function ProductionMap({ width, height, tiles, production, t, slots, play
           index={i}
           t={t}
           flyAt={flyAt(i, events)}
-          strikes={strikesOn(segments, l, reduced, grid)}
           tv={tv}
-          grid={grid}
           colour={SLOT_COLOR[slots[l.owner] ?? 0]}
           target={geom?.to[l.owner]}
           size={geom?.size}
@@ -219,10 +217,11 @@ export function ProductionMap({ width, height, tiles, production, t, slots, play
 
   return (
     <div ref={map} className={cx('relative', className)} data-testid="map-show">
-      <EventShow events={events} t={t} start={SHOW.eventAt} reduced={reduced} width={width} height={height} tiles={tiles} players={cast}>
+      {/* The bars render inside the show, so they read the very script the module draws the events with. */}
+      <EventShow events={events} t={t} start={SHOW.eventAt} mode={mode} reduced={reduced} width={width} height={height} tiles={tiles} players={cast}>
         <EventLivingMap size={tv ? 'tv' : 'phone'} {...(focus !== undefined ? { focusSlot: focus } : {})} {...(framed ? { bars } : {})} />
+        {!framed && <div className="pointer-events-none absolute inset-0">{bars}</div>}
       </EventShow>
-      {!framed && <div className="pointer-events-none absolute inset-0">{bars}</div>}
     </div>
   );
 }
@@ -232,6 +231,7 @@ type Grid = { width: number; height: number };
 /** One event reaching a plot: when, and its units before and after. */
 interface Strike {
   at: number;
+  delta: number;
   before: number;
   after: number;
 }
@@ -246,7 +246,7 @@ function strikesOn(segments: EventSegment[], line: ShowLine, reduced: boolean, g
         .map((h) => {
           const before = units;
           units = Math.max(0, units + h.delta);
-          return { at: eventHitAt(seg, ev, h, reduced, grid), before, after: units };
+          return { at: eventHitAt(seg, ev, h, reduced, grid), delta: h.delta, before, after: units };
         }),
     ),
   );
@@ -257,9 +257,7 @@ function PlotBars({
   index,
   t,
   flyAt: flyStart,
-  strikes,
   tv,
-  grid,
   colour,
   target,
   size,
@@ -268,13 +266,13 @@ function PlotBars({
   index: number;
   t: number;
   flyAt: number;
-  strikes: Strike[];
   tv: boolean;
-  grid: Grid;
   colour: string;
   target: { x: number; y: number } | undefined;
   size: { w: number; h: number } | undefined;
 }) {
+  const { s, reduced, grid } = useShow();
+  const strikes = strikesOn(s.segments, line, reduced, grid);
   const filled = t >= fillAt(index);
   // Once the bars have grown in, they stop animating: moving them out of the map's frame must not grow them again.
   const grown = t >= fillAt(index) + 0.6;
@@ -283,7 +281,6 @@ function PlotBars({
   const units = last ? last.after : line.made;
   const lost = last ? last.before - last.after : 0;
   const struckAgo = last ? t - last.at : 0;
-  const change = units - line.made;
   const flying = t >= flyStart;
   const gone = t >= flyStart + SHOW.flight;
   const from = size ? { x: ((line.x + 0.5) / grid.width) * size.w, y: ((line.y + 0.5) / grid.height) * size.h } : null;
@@ -291,10 +288,10 @@ function PlotBars({
   // On the phone a bar is outlined so a one-unit plot doesn't blend into its border.
   const bar = tv ? 'h-3.5 w-1.5' : 'h-3 w-1.5 ring-1 ring-void/70';
   const chip = tv ? 'px-1 py-0.5 text-[11px]' : 'px-0.5 text-[9px]';
-  // The events' badge: what they have done to the plot so far.
-  const eventBadge = last !== undefined && change !== 0;
-  // The TV has room for two reasons beside the event's badge; the phone for one badge, and the event's wins.
-  const reasons = line.parts.slice(0, tv ? 2 : eventBadge ? 0 : 1);
+  // An event's chip on the plot (the module's marks): the TV keeps two reasons beside it; the phone has room for one
+  // badge, and the event's wins.
+  const chipped = struck.some((x) => x.delta !== 0);
+  const reasons = line.parts.slice(0, tv ? 2 : chipped ? 0 : 1);
 
   return (
     <div
@@ -313,15 +310,6 @@ function PlotBars({
               </span>
             );
           })}
-          {eventBadge && (
-            <span
-              data-badge="event"
-              className={cx('rounded-chip font-mono font-bold leading-none shadow-chip animate-[show-badge-in_0.3s_ease-out]', change > 0 ? 'bg-ok text-on-holo' : 'bg-alert text-white', chip)}
-              data-testid={`hit-${line.x}-${line.y}`}
-            >
-              {signed(change)}
-            </span>
-          )}
         </span>
       )}
       {/* One bar per unit, at most eight; they fly home together. */}
@@ -333,8 +321,9 @@ function PlotBars({
           Array.from({ length: Math.min(units, 8) }, (_, k) => (
             <span key={k} data-bar="unit" className={cx('rounded-[2px] shadow-chip', !grown && 'animate-[show-bar-in_0.25s_ease-out_both]', bar)} style={{ background: colour, animationDelay: `${k * 0.04}s` }} />
           ))}
-        {/* What the last event took, falling away in grey. */}
+        {/* What the last event took, falling away in grey: never with reduced motion. */}
         {filled &&
+          !reduced &&
           lost > 0 &&
           struckAgo < 0.9 &&
           Array.from({ length: Math.min(lost, 8) }, (_, k) => (
