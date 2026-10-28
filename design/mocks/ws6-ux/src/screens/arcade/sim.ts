@@ -1,6 +1,8 @@
 import { DEV_WALK, DEVELOPMENT, MULE, SPECIES_PERK, type Species, type Terrain } from '@mule/engine';
 import type { TileView } from '@mule/protocol';
 import { glintReach, racing, spawnGlint, stepGlint, winGlint, type Glint } from './glint';
+import { afterSale, racingScramble, spawnScramble, stepScramble, type Scramble } from './scramble';
+import { fitsDetour } from './spare';
 import { botWolfInput, endBolt, rollWolves, spawnPack, stepBolts, stepEncounter, WOLF_LAND, wolfReach, type Encounter } from './wolves';
 
 /**
@@ -51,6 +53,8 @@ export interface Tunables {
   outfit: Record<ArcadeOutfit, number>;
   /** How long a bot stands at a counter before it presses its action. */
   botThinkSeconds: number;
+  /** A bot joins a glint race or the scramble only if its errand still fits in the time left after the detour. */
+  botsSpareTime: boolean;
   seats: Record<string, { food: number; need: number; sick: boolean; money: number }>;
   /** Heiko's answers to slice 1's open questions, each a switch so no answer needs a rebuild. */
   questions: {
@@ -113,9 +117,17 @@ export interface Tunables {
     /** How much a bot cares: it races only for a glint within this many tiles. */
     botCare: number;
   };
-  /** Slice 4, an event on the world: off (0) until built, its numbers already have a home. */
-  events: {
-    scramble: { mulesLeft: number; perMinute: number };
+  /** Slice 4: the corral scramble (Heiko's G-3). The corral's starting stock is storeMules. */
+  scramble: {
+    on: boolean;
+    /** It starts when a sale leaves the corral with this many MULEs or fewer. */
+    mulesLeft: number;
+    /** It ends after this long, if the corral has not emptied first. */
+    maxSeconds: number;
+    /** Share of bots still needing a MULE that drop their errand and race. */
+    botShare: number;
+    /** How much a bot cares: it races only from within this many tiles of the store. */
+    botCare: number;
   };
 }
 
@@ -150,6 +162,8 @@ export const DEFAULT_TUNABLES: Tunables = {
   storeMules: 6,
   outfit: { food: MULE.outfitCost.food, energy: MULE.outfitCost.energy, smithore: MULE.outfitCost.smithore, crystite: MULE.outfitCost.crystite },
   botThinkSeconds: 0.5,
+  // Pending the PM's word: on, so a slow bot (Kai, sick) is not lured past the pub's closing by a glint.
+  botsSpareTime: true,
   seats: {
     lena: { food: 3, need: 3, sick: false, money: 300 },
     ossa: { food: 4, need: 4, sick: false, money: 520 },
@@ -160,7 +174,8 @@ export const DEFAULT_TUNABLES: Tunables = {
   questions: { mountainsImpassable: false, lakeMode: 'shore', trespass: true, pubRefund: 0, botSpeed: 1 },
   wolves: {
     on: true,
-    chancePerSecond: 0.05,
+    // Heiko (29 Oct): 0.1 a second on wolf land.
+    chancePerSecond: 0.1,
     packSize: 3,
     cooldownSeconds: 20,
     chooseSeconds: 3,
@@ -182,7 +197,8 @@ export const DEFAULT_TUNABLES: Tunables = {
     botFightShare: 0.5,
     // A rookie mostly fails to dodge and strikes late in the opening; a veteran rarely does either.
     levels: {
-      rookie: { dodge: 0.25, strikeDelaySeconds: 0.8 },
+      // Heiko (29 Oct): a rookie wins about 1 fight in 4 (17 of 60 headless fights at these values).
+      rookie: { dodge: 0.4, strikeDelaySeconds: 0.5 },
       regular: { dodge: 0.6, strikeDelaySeconds: 0.35 },
       veteran: { dodge: 0.9, strikeDelaySeconds: 0.15 },
     },
@@ -190,9 +206,7 @@ export const DEFAULT_TUNABLES: Tunables = {
     botWolfLandShare: 0.5,
   },
   glint: { on: true, meanGapSeconds: 20, showSeconds: 8, onOwnedPlots: true, prize: 'crystite', crystite: 1, credits: 60, botShare: 0.75, botCare: 8 },
-  events: {
-    scramble: { mulesLeft: 0, perMinute: 0 },
-  },
+  scramble: { on: true, mulesLeft: 2, maxSeconds: 15, botShare: 0.9, botCare: 10 },
 };
 
 export const mulePrice = (t: Tunables) => Math.round(MULE.labour + MULE.smithorePerMule * t.smithorePrice);
@@ -317,6 +331,10 @@ export interface World {
   glint: Glint | null;
   /** No new glint rolls before this: a breather after one ends. */
   glintAfter: number;
+  /** The corral scramble, while it runs and for a few seconds after, so everyone sees how it ended. */
+  scramble: Scramble | null;
+  /** Whether this turn's scramble has fired: it comes once a turn. */
+  scrambled: boolean;
   beats: Beat[];
   /** Newest last: what happened, for the TV and the tests. */
   log: string[];
@@ -349,27 +367,8 @@ export function draw(w: World): [number, World] {
   return [u, { ...w, rng }];
 }
 
-/** Slice 4 at its rate, as a Poisson stream over the turn; a rate of 0 queues none. Wolves and glints roll per step. */
-function schedule(rng: number, tun: Tunables): { queue: WorldEvent[]; rng: number } {
-  const queue: WorldEvent[] = [];
-  const rates: [EventKind, number][] = [['scramble', tun.events.scramble.perMinute]];
-  let r = rng;
-  for (const [kind, perMinute] of rates) {
-    if (perMinute <= 0) continue;
-    let at = 0;
-    for (;;) {
-      const [u, n] = rand(r);
-      r = n;
-      at += (-Math.log(1 - u) / perMinute) * 60_000;
-      if (at >= tun.devSeconds * 1000) break;
-      queue.push({ atMs: at, kind });
-    }
-  }
-  return { queue: queue.sort((a, b) => a.atMs - b.atMs), rng: r };
-}
-
-/** Where each slice plugs in: a handler per kind. Wolves are slice 2's; a kind with none is only logged. */
-export const EVENT_HANDLERS: Partial<Record<EventKind, (w: World, e: WorldEvent, tun: Tunables) => World>> = { wolves: spawnPack, glint: spawnGlint };
+/** Where each slice plugs in: a handler per kind, wolves (2), the glint (3) and the scramble (4). */
+export const EVENT_HANDLERS: Partial<Record<EventKind, (w: World, e: WorldEvent, tun: Tunables) => World>> = { wolves: spawnPack, glint: spawnGlint, scramble: spawnScramble };
 
 export interface Seat {
   id: string;
@@ -398,10 +397,10 @@ export function initWorld(seed: number, seats: Seat[], tiles: TileView[], size: 
     };
   });
   const store = tiles.find((t) => t.terrain === 'store')!;
-  const sched = schedule(rng, tun);
+
   return {
-    t: 0, seed, rng: sched.rng, month: size.month, width: size.width, height: size.height, store: { x: store.x, y: store.y },
-    tiles, colonists, storeMules: tun.storeMules, queue: sched.queue, loose: [], fleeing: [], glint: null, glintAfter: FIRST_GLINT_MS, beats: [], log: [], over: false,
+    t: 0, seed, rng, month: size.month, width: size.width, height: size.height, store: { x: store.x, y: store.y },
+    tiles, colonists, storeMules: tun.storeMules, queue: [], loose: [], fleeing: [], glint: null, glintAfter: FIRST_GLINT_MS, scramble: null, scrambled: false, beats: [], log: [], over: false,
   };
 }
 
@@ -502,6 +501,8 @@ export function roomAt(p: P): HallRoom | null {
 const DOOR_SPOT = { doorL: units(4.5, 50), doorR: units(95.5, 50) };
 const CORRAL_SPOT = units(60, 54);
 const HALL_CROSS = Math.hypot(CORRAL_SPOT.x - DOOR_SPOT.doorL.x, CORRAL_SPOT.y - DOOR_SPOT.doorL.y);
+/** Seconds to cross the store floor once at full pace: the tunable itself, for the reckoning in spare.ts. */
+export const HALL_CROSS_SECONDS = (tun: Tunables) => tun.floorSeconds;
 
 /** Map clearance in tiles, and the band of the store's left and right faces that is its door. */
 export const R = 0.18;
@@ -726,6 +727,7 @@ export function reachOf(w: World, c: Colonist, tun: Tunables): Reach {
       return { kind: 'outfit', verb: `${c.mule.good ? 'REFIT' : 'OUTFIT'} · ${NAME[g]}`, detail: `${cost} cr`, enabled: true, target, outfit: g };
     }
     if (room) return { kind: 'none', verb: 'CLOSED', detail: 'not in this mock', enabled: false };
+    if (!c.mule && w.storeMules <= 0) return { kind: 'none', verb: 'NO MULES LEFT', detail: 'the pub pays now', enabled: false };
     return { kind: 'none', verb: !c.mule ? 'TO THE CORRAL' : !c.mule.good ? 'TO AN OUTFITTER' : 'TO A DOOR', enabled: false };
   }
   const loose = looseOf(w, c.id);
@@ -745,6 +747,7 @@ export function reachOf(w: World, c: Colonist, tun: Tunables): Reach {
   if (mine && c.mule?.good) return { kind: 'install', verb: `INSTALL · ${NAME[c.mule.good]}`, enabled: true, target: { space: 'map', tile: { x: t.x, y: t.y } }, outfit: c.mule.good };
   if (mine && c.mule) return { kind: 'none', verb: 'OUTFIT IT FIRST', detail: 'in the store', enabled: false };
   if (c.mule?.good) return { kind: 'none', verb: 'TO YOUR PLOT', detail: t?.owner ? 'not yours' : undefined, enabled: false };
+  if (!c.mule && w.storeMules <= 0) return { kind: 'none', verb: 'NO MULES LEFT', detail: 'the pub pays now', enabled: false };
   if (c.installs > 0 && !c.mule) return { kind: 'none', verb: 'TO THE STORE', detail: 'MULE or pub', enabled: false };
   return { kind: 'none', verb: 'TO THE STORE', enabled: false };
 }
@@ -760,7 +763,9 @@ function act(w: World, c: Colonist, tun: Tunables): { w: World; c: Colonist } {
     case 'buy': {
       const price = mulePrice(tun);
       const behind = alongTrail(c.trail, c, leadLength('hall', tun));
-      return { w: { ...w, storeMules: w.storeMules - 1, log: say(w, c, `bought a MULE (${price} cr)`) }, c: { ...c, money: c.money - price, mule: { good: null, x: behind.x, y: behind.y, facing: c.facing, paid: price } } };
+      const bought = { ...c, money: c.money - price, mule: { good: null, x: behind.x, y: behind.y, facing: c.facing, paid: price } };
+      // Each sale may start the scramble, or counts down the one running.
+      return { w: afterSale({ ...w, storeMules: w.storeMules - 1, log: say(w, c, `bought a MULE (${price} cr)`) }, bought, tun), c: bought };
     }
     case 'outfit': {
       const g = r.outfit!;
@@ -861,7 +866,8 @@ function shoreStand(w: World, tun: Tunables, plot: P, who: string): P | null {
 
 export function botGoal(w: World, c: Colonist, tun: Tunables): Goal {
   if (c.done) return { kind: 'idle' };
-  // A glint it races for comes before any errand.
+  // The corral scramble, then a glint it races for, come before any errand.
+  if (racingScramble(w, c)) return c.space === 'hall' ? { kind: 'room', room: 'corral' } : { kind: 'store' };
   if (racing(w, c) && w.glint) {
     const g = w.glint;
     return c.space === 'hall' ? { kind: 'door', side: g.x < w.store.x + 0.5 ? 'L' : 'R' } : { kind: 'plot', at: { x: g.x, y: g.y } };
@@ -932,8 +938,9 @@ export function botInput(w: World, c: Colonist, tun: Tunables): Input {
   }
   // A race takes the quickest way, whatever the leg preferred.
   // A wolf-land leg goes by its forest, hills or tundra tile first; a race takes the quickest way.
-  const via = c.legVia && !racing(w, c) ? c.legVia : null;
-  const path = pathTo(w, tun, here, via ?? goalTile, c.id, c.legWolf && !racing(w, c));
+  const hurry = racing(w, c) || racingScramble(w, c);
+  const via = c.legVia && !hurry ? c.legVia : null;
+  const path = pathTo(w, tun, here, via ?? goalTile, c.id, c.legWolf && !hurry);
   if (!path || path.length < 2) return IDLE;
   const next = path[1]!;
   return { dir: toward(c, { x: next.x + 0.5, y: next.y + 0.5 }), action: false };
@@ -1047,7 +1054,10 @@ export function step(w0: World, inputs: Record<string, Input>, dtMs: number, tun
         const [u, w1] = draw(w);
         w = w1;
         const legWolf = c0.space === 'map' && u < tun.wolves.botWolfLandShare;
-        c1 = { ...c0, leg, legWolf, legVia: legWolf ? wolfVia(w, c0, g, tun) : null };
+        // A detour by wolf land only with time to spare, as for the glint and the scramble.
+        const via = legWolf ? wolfVia(w, c0, g, tun) : null;
+        const ok = via && fitsDetour(w, c0, tun, { x: via.x + 0.5, y: via.y + 0.5 });
+        c1 = { ...c0, leg, legWolf: !!ok, legVia: ok ? via : null };
       }
       // Been by it: on to the goal.
       if (c1.legVia && Math.floor(c1.x) === c1.legVia.x && Math.floor(c1.y) === c1.legVia.y) c1 = { ...c1, legVia: null };
@@ -1060,6 +1070,7 @@ export function step(w0: World, inputs: Record<string, Input>, dtMs: number, tun
   w = { ...w, colonists };
   w = stepBolts(w, dtMs, tun);
   w = stepGlint(w, dtMs, tun);
+  w = stepScramble(w, tun);
   w = { ...w, fleeing: w.fleeing.filter((f) => f.until > w.t).map((f) => ({ ...f, x: f.x + (f.vx * dtMs) / 1000, y: f.y + (f.vy * dtMs) / 1000 })) };
   while (w.queue.length > 0 && w.queue[0]!.atMs <= w.t) {
     const [e, ...rest] = w.queue;
@@ -1067,7 +1078,7 @@ export function step(w0: World, inputs: Record<string, Input>, dtMs: number, tun
     const handle = EVENT_HANDLERS[e!.kind];
     w = handle ? handle(w, e!, tun) : { ...w, log: [...w.log, `${(w.t / 1000).toFixed(1)}s ${e!.kind} (a later slice: not built)`].slice(-60) };
   }
-  if (w.t >= tun.devSeconds * 1000 || w.colonists.every((c) => c.done)) w = { ...endBolt(w), glint: null, over: true, colonists: w.colonists.map((c) => ({ ...c, moving: false, encounter: null })) };
+  if (w.t >= tun.devSeconds * 1000 || w.colonists.every((c) => c.done)) w = { ...endBolt(w), glint: null, scramble: null, over: true, colonists: w.colonists.map((c) => ({ ...c, moving: false, encounter: null })) };
   return w;
 }
 
@@ -1089,5 +1100,11 @@ export function callWolves(w: World, id: string, inMs = 0): World {
 /** "Call a glint now", or #arcade-glint's: due in `inMs`, on a chosen tile with chosen racers, or the seed's. */
 export function callGlint(w: World, inMs = 0, at?: P, racers?: string[]): World {
   const e: WorldEvent = { atMs: w.t + inMs, kind: 'glint', forced: true, ...(at ? { at } : {}), ...(racers ? { racers } : {}) };
+  return { ...w, queue: [...w.queue, e].sort((a, b) => a.atMs - b.atMs) };
+}
+
+/** "Start a scramble now": whatever the corral holds, the race to it starts. */
+export function callScramble(w: World, inMs = 0): World {
+  const e: WorldEvent = { atMs: w.t + inMs, kind: 'scramble', forced: true };
   return { ...w, queue: [...w.queue, e].sort((a, b) => a.atMs - b.atMs) };
 }

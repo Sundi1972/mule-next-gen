@@ -1,3 +1,4 @@
+import { fitsDetour } from './spare';
 import { beat, draw, say, terrainMult, tileOpen, type Colonist, type P, type Reach, type Tunables, type World, type WorldEvent } from './sim';
 
 /**
@@ -71,7 +72,7 @@ export function spawnGlint(w0: World, e: WorldEvent, tun: Tunables): World {
       if (!c.bot || c.done) continue;
       const [u, w1] = draw(w);
       w = w1;
-      if (u < tun.glint.botShare && dist(raceFrom(w, c), centre) <= tun.glint.botCare) racers.push(c.id);
+      if (u < tun.glint.botShare && dist(raceFrom(w, c), centre) <= tun.glint.botCare && fitsDetour(w, c, tun, centre)) racers.push(c.id);
     }
   }
   const glint: Glint = { x: at.x, y: at.y, since: w.t, until: w.t + tun.glint.showSeconds * 1000, racers };

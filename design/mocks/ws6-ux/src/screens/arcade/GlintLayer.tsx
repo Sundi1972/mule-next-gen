@@ -1,6 +1,6 @@
 import { cx, GoodIcon } from '@mule/ui';
 import { compass, glintCentre, plotLabel } from './glint';
-import type { Colonist, World } from './sim';
+import type { Colonist, P, World } from './sim';
 
 /**
  * DS-GAP: @mule/ui has no sparkle for a moment on the map (its special-field badges are standing features, not a
@@ -74,47 +74,50 @@ export function GlintTurn({ world, c, size }: { world: World; c: Colonist; size:
 }
 
 /**
- * Variant A's pointer: when the glint is off the camera, an arrow at the stage's edge on the line from you to it, with
- * how far, which way and how long: "GLINT · 5 tiles E · 6 s".
+ * Variant A's edge pointer: when a target is off the camera, an arrow at the stage's edge on the line from you to it,
+ * with a label ("GLINT · 5 tiles E · 6 s"). The glint and the scramble's store both use it.
  */
-export function GlintPointer({ world, me, cell, off, width, height }: { world: World; me: Colonist; cell: number; off: { x: number; y: number }; width: number; height: number }) {
-  const g = world.glint;
-  if (!g || me.space !== 'map') return null;
-  const t = glintCentre(g);
-  const gx = t.x * cell - off.x;
-  const gy = t.y * cell - off.y;
+export function EdgePointer({ target, me, cell, off, width, height, label, color, testid }: { target: P; me: Colonist; cell: number; off: { x: number; y: number }; width: number; height: number; label: string; color: string; testid: string }) {
+  const gx = target.x * cell - off.x;
+  const gy = target.y * cell - off.y;
   const inset = 26;
   if (gx >= 0 && gy >= 0 && gx <= width && gy <= height) return null;
   const mx = me.x * cell - off.x;
   const my = me.y * cell - off.y;
   const dx = gx - mx;
   const dy = gy - my;
-  // Where the line from you to the glint leaves the stage, kept a little inside the edge.
+  // Where the line from you to the target leaves the stage, kept a little inside the edge.
   const k = Math.min(dx > 0 ? (width - inset - mx) / dx : dx < 0 ? (inset - mx) / dx : Infinity, dy > 0 ? (height - inset - my) / dy : dy < 0 ? (inset - my) / dy : Infinity);
   const px = mx + dx * k;
   const py = my + dy * k;
   const deg = (Math.atan2(dy, dx) * 180) / Math.PI;
-  const tiles = Math.round(Math.hypot(t.x - me.x, t.y - me.y));
-  const secs = Math.ceil(Math.max(0, g.until - world.t) / 1000);
+  const tiles = Math.round(Math.hypot(target.x - me.x, target.y - me.y));
   const below = py < height / 2;
   return (
-    <div className="pointer-events-none absolute z-20" style={{ left: px, top: py }} data-testid="glint-pointer" data-angle={deg.toFixed(1)} data-tiles={tiles}>
+    <div className="pointer-events-none absolute z-20" style={{ left: px, top: py }} data-testid={testid} data-angle={deg.toFixed(1)} data-tiles={tiles}>
       <span className="absolute" style={{ transform: `translate(-50%, -50%) rotate(${deg}deg)` }}>
         <svg viewBox="0 0 20 20" width={26} height={26} aria-hidden>
-          <path d="M3 3 L18 10 L3 17 L7 10 Z" fill="var(--color-g-crystite)" stroke="var(--color-void)" strokeWidth={1.2} />
+          <path d="M3 3 L18 10 L3 17 L7 10 Z" fill={color} stroke="var(--color-void)" strokeWidth={1.2} />
         </svg>
       </span>
       <span
-        className={cx(
-          'absolute whitespace-nowrap rounded-chip border border-g-crystite bg-panel/95 px-1.5 font-mono text-[11px] font-bold leading-5 text-ink shadow-chip',
-          below ? 'top-4' : 'bottom-4',
-          px > width / 2 ? 'right-0' : 'left-0',
-        )}
-        data-testid="glint-pointer-label"
+        className={cx('absolute whitespace-nowrap rounded-chip border bg-panel/95 px-1.5 font-mono text-[11px] font-bold leading-5 text-ink shadow-chip', below ? 'top-4' : 'bottom-4', px > width / 2 ? 'right-0' : 'left-0')}
+        style={{ borderColor: color }}
+        data-testid={`${testid}-label`}
       >
-        GLINT · {tiles} tiles {compass(t.x - me.x, t.y - me.y)} · {secs} s
+        {label.replace('{tiles}', String(tiles)).replace('{dir}', compass(target.x - me.x, target.y - me.y))}
       </span>
     </div>
+  );
+}
+
+/** The glint's edge pointer: "GLINT · 5 tiles E · 6 s". */
+export function GlintPointer({ world, me, cell, off, width, height }: { world: World; me: Colonist; cell: number; off: { x: number; y: number }; width: number; height: number }) {
+  const g = world.glint;
+  if (!g || me.space !== 'map') return null;
+  const secs = Math.ceil(Math.max(0, g.until - world.t) / 1000);
+  return (
+    <EdgePointer target={glintCentre(g)} me={me} cell={cell} off={off} width={width} height={height} label={`GLINT · {tiles} tiles {dir} · ${secs} s`} color="var(--color-g-crystite)" testid="glint-pointer" />
   );
 }
 

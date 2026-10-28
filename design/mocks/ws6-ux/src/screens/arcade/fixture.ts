@@ -46,6 +46,13 @@ export const WOLF_START = { x: 4, y: 1 };
  */
 export const GLINT_RACE = { lena: { x: 2, y: 6 }, at: { x: 7, y: 6 }, bot: 'ossa', botAt: { x: 12, y: 5 } };
 
+/**
+ * #arcade-scramble: three MULEs in the corral for four colonists, so the first sale starts the race for the last two.
+ * Lena on the plains at 3·7, about 4 tiles from the store's left door, as Brix is from its right. Measured headless at
+ * the defaults: played at once (by the bot rules) she buys at 4.8 s and the bots at 5.8–7.2 s; idle, she is left out.
+ */
+export const SCRAMBLE_RACE = { mules: 3, lena: { x: 2, y: 6 } };
+
 export const TRACK: Partial<Record<WalkTerrain, { x: number; y: number }>> = {
   plains: { x: 2, y: 7 },
   mountains: { x: 12, y: 5 },

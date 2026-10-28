@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from 'react';
-import { GLINT_RACE, ME, newWorld, TRACK, WOLF_START } from './fixture';
-import { callGlint, callWolves, DEFAULT_TUNABLES, setBot, step, teleport, type Input, type P, type Space, type Tunables, type WalkTerrain, type World } from './sim';
+import { GLINT_RACE, ME, newWorld, SCRAMBLE_RACE, TRACK, WOLF_START } from './fixture';
+import { callGlint, callScramble, callWolves, DEFAULT_TUNABLES, setBot, step, teleport, type Input, type P, type Space, type Tunables, type WalkTerrain, type World } from './sim';
 
 /** How a page's turn starts: as the table has it, or (#arcade-wolves) Lena on forest with a pack due in about 2 s. */
-export type Scenario = 'table' | 'wolves' | 'glint';
+export type Scenario = 'table' | 'wolves' | 'glint' | 'scramble';
 const WOLVES_DUE_MS = 2000;
 
 /**
@@ -51,11 +51,24 @@ export class Arcade {
       const calm = { ...placed, colonists: placed.colonists.map((c) => ({ ...c, wolvesAfter: 15_000, waitUntil: c.id === r.bot ? WOLVES_DUE_MS : 0 })) };
       return callGlint(calm, WOLVES_DUE_MS, r.at, [r.bot]);
     }
+    if (this.scenario === 'scramble') {
+      // Three MULEs for four colonists, so the first sale starts it; Lena about as far from the store as the nearest
+      // bot; no pack and no glint for 20 s to spoil it.
+      const r = SCRAMBLE_RACE;
+      const placed = teleport(w, ME, { x: r.lena.x + 0.5, y: r.lena.y + 0.5 }, this.tunables);
+      return { ...placed, storeMules: r.mules, glintAfter: 20_000, colonists: placed.colonists.map((c) => ({ ...c, wolvesAfter: 20_000 })) };
+    }
     if (this.scenario !== 'wolves') return w;
     const placed = teleport(w, ME, { x: WOLF_START.x + 0.5, y: WOLF_START.y + 0.5 }, this.tunables);
     // No chance pack before the called one, so it is always the 2 s one Heiko meets.
     const held = { ...placed, colonists: placed.colonists.map((c) => (c.id === ME ? { ...c, wolvesAfter: WOLVES_DUE_MS + 1 } : c)) };
     return callWolves(held, ME, WOLVES_DUE_MS);
+  }
+
+  /** The tunables' "Start a scramble now": the race to the corral, with whatever it holds. */
+  callScramble() {
+    this.world = callScramble(this.world, 0);
+    this.emit();
   }
 
   /** The tunables' "Call a glint now": a glint at once, on the seed's tile, with the bots' share racing. */

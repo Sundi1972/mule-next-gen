@@ -8,6 +8,8 @@ import { useGameKeys, useTunables, useWorld } from './loop';
 import { NOTE } from './notes';
 import { conditionOf, HallStage, MapStage, ruleOf, secondsLeft } from './views';
 import { plotLabel } from './glint';
+import { scrambleCall } from './scramble';
+import { stillNeeding } from './ScrambleLayer';
 import type { Colonist, World } from './sim';
 
 /** A frame at a design size, scaled to fit the page; pointer maths reads the drawn box, so a scaled frame still plays. */
@@ -23,7 +25,7 @@ export function ScaledFrame({ width, height, scale, testid, children }: { width:
   );
 }
 
-const doing = (c: Colonist, w: World) => (w.glint?.racers.includes(c.id) && !c.encounter && !c.done ? 'GLINT' : c.encounter ? (c.encounter.kind === 'fight' ? 'FIGHT' : c.encounter.kind === 'chase' ? 'RUN' : 'WOLVES') : c.done ? 'PUB' : c.space === 'hall' ? (c.mule ? 'OUTFIT' : 'STORE') : c.mule?.good ? '→ PLOT' : c.installs > 0 ? '→ PUB' : '→ STORE');
+const doing = (c: Colonist, w: World) => (stillNeeding(w).includes(c.id) && !c.encounter ? 'CORRAL' : w.glint?.racers.includes(c.id) && !c.encounter && !c.done ? 'GLINT' : c.encounter ? (c.encounter.kind === 'fight' ? 'FIGHT' : c.encounter.kind === 'chase' ? 'RUN' : 'WOLVES') : c.done ? 'PUB' : c.space === 'hall' ? (c.mule ? 'OUTFIT' : 'STORE') : c.mule?.good ? '→ PLOT' : c.installs > 0 ? '→ PUB' : '→ STORE');
 
 /**
  * The big screen (1280 × 720): the whole colony with every colonist walking live, named; the store's hall beside it
@@ -82,9 +84,11 @@ function TvBeats() {
   const world = useWorld();
   const tun = useTunables();
   const live = world.colonists.filter((c) => c.encounter);
-  const recent = world.beats.filter((b) => world.t - b.t < BEAT_MS && !live.some((c) => c.id === b.id) && !b.text.startsWith('Wolves!') && !b.text.startsWith('A Crystite glint'));
+  const recent = world.beats.filter((b) => world.t - b.t < BEAT_MS && !live.some((c) => c.id === b.id) && !b.text.startsWith('Wolves!') && !b.text.startsWith('A Crystite glint') && !b.text.endsWith('left! Race to the corral'));
   const g = world.glint;
+  const sc = world.scramble;
   const lines = [
+    ...(sc && !sc.over ? [{ key: 'scramble', text: scrambleCall(world.storeMules), tone: 'alert' }] : []),
     ...(g ? [{ key: 'glint', text: `A Crystite glint at ${plotLabel(g)}! First there wins · ${Math.ceil(Math.max(0, g.until - world.t) / 1000)} s`, tone: 'glint' }] : []),
     ...live.map((c) => {
       const e = c.encounter!;

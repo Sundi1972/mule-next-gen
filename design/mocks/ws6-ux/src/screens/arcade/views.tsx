@@ -5,7 +5,9 @@ import { mapTiles } from '../../../../../../apps/web/src/game/derive';
 import { ARCADE_VIEW, ME } from './fixture';
 import { useArcade, useTunables, useWorld } from './loop';
 import { HALL, looseOf, mulePrice, paceOf, pubPayout, reachOf, ROOMS, speedOf, type Colonist, type Reach, type Space, type Tunables, type World } from './sim';
+import { GuideInHall, GuideOnMap, MyPlots } from './GuideLayer';
 import { GlintOnMap, GlintPointer, GlintSightlines, GlintStrip, GlintTurn } from './GlintLayer';
+import { ScrambleBanner, ScrambleCorral, ScrambleLines, ScramblePointer } from './ScrambleLayer';
 import { WolfCallout, WolfMarks, WolvesOnMap } from './WolfLayer';
 
 /** The DS's condition, from the sim's pace: what the colonist tags and the pace lines read. */
@@ -133,7 +135,7 @@ function reachHits(world: World, reach: Reach, p: { x: number; y: number }, spac
  * The colony map as a stage, drawn by the approved HoloMap. `across` plots fit the width: the camera then follows your
  * colonist (variant A); without it the whole map shows (variant B, the TV and the laptop).
  */
-export function MapStage({ width, height, across, density, interactive = false, names = false, ringed = false, testid = 'map-stage' }: { width: number; height?: number; across?: number; density: Density; interactive?: boolean; names?: boolean; ringed?: boolean; testid?: string }) {
+export function MapStage({ width, height, across, density, interactive = false, names = false, ringed = false, guide = false, testid = 'map-stage' }: { width: number; height?: number; across?: number; density: Density; interactive?: boolean; names?: boolean; ringed?: boolean; guide?: boolean; testid?: string }) {
   const world = useWorld();
   const tun = useTunables();
   const me = meOf(world);
@@ -175,13 +177,17 @@ export function MapStage({ width, height, across, density, interactive = false, 
             data-testid="me-ring"
           />
         )}
+        {guide && interactive && <MyPlots world={world} me={me} />}
+        {guide && interactive && <GuideOnMap world={world} me={me} tun={tun} />}
         <GlintOnMap world={world} cell={cell} />
         {names && <GlintSightlines world={world} />}
+        {names && <ScrambleLines world={world} space="map" />}
         {/* Wolves first: a colonist's callout (run or fight?) draws over its pack. */}
         <WolvesOnMap world={world} cell={cell} />
         <Walkers world={world} space="map" cell={cell} density={density} names={names} own={interactive} />
       </div>
       {follow && interactive && <GlintPointer world={world} me={me} cell={cell} off={off} width={width} height={viewH} />}
+      {follow && interactive && <ScramblePointer world={world} me={me} cell={cell} off={off} width={width} height={viewH} />}
     </div>
   );
 }
@@ -194,7 +200,7 @@ const SHORT: Partial<Record<Reach['kind'], string>> = { buy: 'BUY', outfit: 'OUT
 
 /** The store hall as a stage: the approved StoreInterior at 4:3, everyone inside walking over it. */
 /** `store` sizes the hall's own type apart from the walkers: the TV's narrow side panel needs the phone's to fit. */
-export function HallStage({ width, density, store = density, interactive = false, names = false, testid = 'hall-stage' }: { width: number; density: Density; store?: Density; interactive?: boolean; names?: boolean; testid?: string }) {
+export function HallStage({ width, density, store = density, interactive = false, names = false, guide = false, testid = 'hall-stage' }: { width: number; density: Density; store?: Density; interactive?: boolean; names?: boolean; guide?: boolean; testid?: string }) {
   const world = useWorld();
   const tun = useTunables();
   const me = meOf(world);
@@ -226,26 +232,31 @@ export function HallStage({ width, density, store = density, interactive = false
           <span className="absolute left-1/2 top-1 -translate-x-1/2 whitespace-nowrap rounded-full bg-holo px-1.5 font-mono text-[10px] font-bold leading-4 text-on-holo shadow-glow">{SHORT[reach.kind] ?? 'GO'}</span>
         </span>
       )}
+      {guide && interactive && <GuideInHall world={world} me={me} tun={tun} lit={lit} />}
+      <ScrambleCorral world={world} />
+      {names && <ScrambleLines world={world} space="hall" />}
       <Walkers world={world} space="hall" cell={width / HALL.w} density={density} names={names} own={interactive} />
     </div>
   );
 }
 
 /** Where you are, drawn big: the map (camera or whole) on the map, the hall inside the store. */
-export function YourStage({ width, height, across, density, ringed }: { width: number; height: number; across?: number; density: Density; ringed?: boolean }) {
+export function YourStage({ width, height, across, density, ringed, guide = false, banner = true }: { width: number; height: number; across?: number; density: Density; ringed?: boolean; guide?: boolean; banner?: boolean }) {
   const world = useWorld();
+  const tun = useTunables();
   const me = meOf(world);
   const hallW = Math.min(width, (height * HALL.w) / HALL.h);
   return (
     <div className="relative flex items-center justify-center overflow-hidden rounded-panel" style={{ width, height }} data-testid="your-stage" data-space={me.space} data-sim-ms={world.t.toFixed(0)}>
       {me.space === 'hall' ? (
         <>
-          <HallStage width={hallW} density={density} interactive />
+          <HallStage width={hallW} density={density} interactive guide={guide} />
           <GlintStrip world={world} me={me} />
         </>
       ) : (
-        <MapStage width={width} height={height} {...(across !== undefined ? { across } : {})} density={density} interactive ringed={ringed} />
+        <MapStage width={width} height={height} {...(across !== undefined ? { across } : {})} density={density} interactive ringed={ringed} guide={guide} />
       )}
+      {banner && <ScrambleBanner world={world} me={me} tun={tun} />}
     </div>
   );
 }
@@ -253,7 +264,8 @@ export function YourStage({ width, height, across, density, ringed }: { width: n
 // --- Controls ---------------------------------------------------------------------------------------
 
 /** The one action button: it always says what it does right now, and is dim when nothing is in reach. */
-export function ActionButton({ size = 'xl', compact = false, className, hint }: { size?: 'lg' | 'xl'; compact?: boolean; className?: string; hint?: ReactNode }) {
+/** `wrap`: the landscape phone's narrow button lets its words take two lines rather than cut them. */
+export function ActionButton({ size = 'xl', compact = false, wrap = false, className, hint }: { size?: 'lg' | 'xl'; compact?: boolean; wrap?: boolean; className?: string; hint?: ReactNode }) {
   const arcade = useArcade();
   const world = useWorld();
   const tun = useTunables();
@@ -276,11 +288,11 @@ export function ActionButton({ size = 'xl', compact = false, className, hint }: 
       data-kind={r.kind}
       data-enabled={r.enabled}
     >
-      <span className={cx('block max-w-full truncate font-display font-bold leading-tight', compact ? 'text-lg' : 'text-xl')} data-testid="action-verb">
+      <span className={cx('block max-w-full font-display font-bold leading-tight', wrap ? 'line-clamp-2 text-balance text-base' : cx('truncate', compact ? 'text-lg' : 'text-xl'))} data-testid="action-verb">
         {r.verb}
       </span>
       {(r.detail || hint) && (
-        <span className="block max-w-full truncate font-mono text-sm font-semibold leading-tight opacity-80" data-testid="action-detail">
+        <span className={cx('block max-w-full font-mono font-semibold leading-tight opacity-80', wrap ? 'line-clamp-2 text-balance text-xs' : 'truncate text-sm')} data-testid="action-detail">
           {r.detail ?? hint}
         </span>
       )}
@@ -292,7 +304,7 @@ const STICK = 128;
 const KNOB = 56;
 
 /** A thumb joystick: drag anywhere on the pad; the further from the centre, the faster (up to full speed). */
-export function Joystick() {
+export function Joystick({ className }: { className?: string } = {}) {
   const arcade = useArcade();
   const knob = useRef<HTMLSpanElement>(null);
   const pad = useRef<HTMLDivElement>(null);
@@ -318,7 +330,7 @@ export function Joystick() {
   return (
     <div
       ref={pad}
-      className="relative shrink-0 touch-none select-none rounded-full border-2 border-holo-line bg-holo-soft shadow-map"
+      className={cx('relative shrink-0 touch-none select-none rounded-full border-2 border-holo-line bg-holo-soft shadow-map', className)}
       style={{ width: STICK, height: STICK }}
       onPointerDown={(e) => {
         if (e.altKey) return;

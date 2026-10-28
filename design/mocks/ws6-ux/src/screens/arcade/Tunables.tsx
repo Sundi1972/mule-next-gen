@@ -9,7 +9,7 @@ import { meOf } from './views';
 
 /**
  * The tunables panel (A-6): every speed, price and pace the arcade reads, changed while you play. Speeds and paces act
- * at once; money, the corral's MULEs and the later slices' events act on Play again (they set up a turn).
+ * at once; money and the corral's starting MULEs act on Play again (they set up a turn).
  */
 
 type Value = number | boolean | string;
@@ -31,6 +31,8 @@ interface Row {
   ask?: string;
   /** Heiko's answer, once he has given one: shown beside the question. */
   answer?: string;
+  /** A line under the row: where the rule comes from. */
+  note?: string;
 }
 
 const num = (key: string, label: string, get: (t: Tunables) => number, set: (t: Tunables, v: number) => Tunables, min: number, max: number, step: number, unit?: string, restart?: boolean): Row => ({
@@ -44,11 +46,12 @@ const NAME: Record<string, string> = { food: 'Food', energy: 'Energy', smithore:
 const Q = (t: Tunables, patch: Partial<Tunables['questions']>): Tunables => ({ ...t, questions: { ...t.questions, ...patch } });
 const WV = (t: Tunables, patch: Partial<Tunables['wolves']>): Tunables => ({ ...t, wolves: { ...t.wolves, ...patch } });
 const GL = (t: Tunables, patch: Partial<Tunables['glint']>): Tunables => ({ ...t, glint: { ...t.glint, ...patch } });
+const SC = (t: Tunables, patch: Partial<Tunables['scramble']>): Tunables => ({ ...t, scramble: { ...t.scramble, ...patch } });
 const LEVEL_NAME: Record<BotLevel, string> = { rookie: 'Rookie bot', regular: 'Regular bot', veteran: 'Veteran bot' };
 const wolf = (key: keyof Tunables['wolves'], label: string, min: number, max: number, step: number, unit?: string) =>
   num(`wolves-${key}`, label, (t) => t.wolves[key] as number, (t, v) => WV(t, { [key]: v }), min, max, step, unit);
 
-const GROUPS: { title: string; note?: string; open?: boolean; wolves?: boolean; glint?: boolean; rows: Row[] }[] = [
+const GROUPS: { title: string; note?: string; open?: boolean; wolves?: boolean; glint?: boolean; scramble?: boolean; rows: Row[] }[] = [
   {
     title: 'Heiko’s questions',
     note: 'Your six questions from slice 1, each a switch: flip one and play.',
@@ -130,6 +133,21 @@ const GROUPS: { title: string; note?: string; open?: boolean; wolves?: boolean; 
       num('glint-credits', 'Prize: credits', (t) => t.glint.credits, (t, v) => GL(t, { credits: v }), 0, 300, 5, 'cr'),
       num('glint-botShare', 'Bots that race', (t) => t.glint.botShare, (t, v) => GL(t, { botShare: v }), 0, 1, 0.05, 'share'),
       num('glint-botCare', 'Bots race only within', (t) => t.glint.botCare, (t, v) => GL(t, { botCare: v }), 0, 16, 0.5, 'tiles'),
+      { ...flag('botsSpareTime', 'Bots race only with time to spare', (t) => t.botsSpareTime, (t, v) => ({ ...t, botsSpareTime: v })), note: 'PM ruling 29 Oct; a design note for the real AI hands (WS1’s execution layer owns the rule). The glint, the scramble and wolf-land detours.' },
+    ],
+  },
+  {
+    title: 'Corral scramble (slice 4)',
+    note: 'When a sale leaves the corral with its last few MULEs, everyone races for them. Fewer MULEs at the start (↻) makes it come early.',
+    open: true,
+    scramble: true,
+    rows: [
+      flag('scramble-on', 'Scramble on', (t) => t.scramble.on, (t, v) => SC(t, { on: v })),
+      num('scramble-mulesLeft', 'Starts at MULEs left', (t) => t.scramble.mulesLeft, (t, v) => SC(t, { mulesLeft: v }), 1, 6, 1),
+      num('storeMules', 'MULEs in the corral at the start', (t) => t.storeMules, (t, v) => ({ ...t, storeMules: v }), 0, 12, 1, '', true),
+      num('scramble-maxSeconds', 'Ends after, if not empty', (t) => t.scramble.maxSeconds, (t, v) => SC(t, { maxSeconds: v }), 3, 30, 1, 's'),
+      num('scramble-botShare', 'Bots that race', (t) => t.scramble.botShare, (t, v) => SC(t, { botShare: v }), 0, 1, 0.05, 'share'),
+      num('scramble-botCare', 'Bots race only within', (t) => t.scramble.botCare, (t, v) => SC(t, { botCare: v }), 0, 16, 0.5, 'tiles'),
     ],
   },
   {
@@ -157,7 +175,6 @@ const GROUPS: { title: string; note?: string; open?: boolean; wolves?: boolean; 
     rows: [
       num('devSeconds', 'Development', (t) => t.devSeconds, (t, v) => ({ ...t, devSeconds: v }), 10, 120, 1, 's'),
       num('smithorePrice', `Smithore price (MULE = ${MULE.labour} + it)`, (t) => t.smithorePrice, (t, v) => ({ ...t, smithorePrice: v }), 0, 200, 1, 'cr'),
-      num('storeMules', 'MULEs in the corral', (t) => t.storeMules, (t, v) => ({ ...t, storeMules: v }), 0, 12, 1, '', true),
       ...ARCADE_OUTFITS.map((g) => num(`outfit-${g}`, `Outfit ${NAME[g]}`, (t) => t.outfit[g], (t, v) => ({ ...t, outfit: { ...t.outfit, [g]: v } }), 0, 300, 5, 'cr')),
     ],
   },
@@ -170,14 +187,6 @@ const GROUPS: { title: string; note?: string; open?: boolean; wolves?: boolean; 
       flag(`${s.id}-sick`, `${s.name}: sick`, (t) => t.seats[s.id]!.sick, (t, v) => ({ ...t, seats: { ...t.seats, [s.id]: { ...t.seats[s.id]!, sick: v } } })),
       num(`${s.id}-money`, `${s.name}: money`, (t) => t.seats[s.id]!.money, (t, v) => ({ ...t, seats: { ...t.seats, [s.id]: { ...t.seats[s.id]!, money: v } } }), 0, 2000, 10, 'cr', true),
     ]),
-  },
-  {
-    title: 'Slice 4: the corral scramble (0 = off)',
-    note: 'It will be a seeded event in the world’s queue, as the wolves and the glint are; not built yet, so a queued one is only logged. Acts on Play again.',
-    rows: [
-      num('scramble-perMinute', 'Corral scramble: per minute', (t) => t.events.scramble.perMinute, (t, v) => ({ ...t, events: { ...t.events, scramble: { ...t.events.scramble, perMinute: v } } }), 0, 6, 0.5, '/min', true),
-      num('scramble-mulesLeft', 'Corral scramble: at MULEs left', (t) => t.events.scramble.mulesLeft, (t, v) => ({ ...t, events: { ...t.events, scramble: { ...t.events.scramble, mulesLeft: v } } }), 0, 6, 1, '', true),
-    ],
   },
 ];
 
@@ -224,6 +233,13 @@ function RowInput({ row }: { row: Row }) {
       )}
     </div>
   );
+  if (row.note)
+    return (
+      <div className="flex flex-col" data-testid={`noted-${row.key}`}>
+        {line}
+        <span className="text-xs text-ink-3">{row.note}</span>
+      </div>
+    );
   if (!row.ask) return line;
   return (
     <div className="mt-1 flex flex-col gap-0.5" data-testid={`question-${row.key}`}>
@@ -250,6 +266,21 @@ function CallGlint() {
         {world.glint ? 'A glint is lit' : 'Call a glint now'}
       </Button>
       <IntentMarker note={NOTE.A8} at="tr" />
+    </span>
+  );
+}
+
+/** Starts the scramble at once, with whatever the corral holds. */
+function CallScramble() {
+  const arcade = useArcade();
+  const world = useWorld();
+  const busy = !!world.scramble && !world.scramble.over;
+  return (
+    <span className="relative self-start">
+      <Button size="md" variant="outline" disabled={busy || world.storeMules <= 0 || world.over} onClick={() => arcade.callScramble()} data-testid="call-scramble">
+        {busy ? 'The scramble is on' : world.storeMules <= 0 ? 'The corral is empty' : 'Start a scramble now'}
+      </Button>
+      <IntentMarker note={NOTE.A9} at="tr" />
     </span>
   );
 }
@@ -341,6 +372,7 @@ export function TunablesPanel({ className, autopilot = false }: { className?: st
             {g.note && <p className="text-xs text-ink-3">{g.note}</p>}
             {g.wolves && <CallWolves />}
             {g.glint && <CallGlint />}
+            {g.scramble && <CallScramble />}
             {g.rows.map((r) => (
               <RowInput key={r.key} row={r} />
             ))}
