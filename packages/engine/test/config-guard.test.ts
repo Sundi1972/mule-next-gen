@@ -22,7 +22,6 @@ const PENDING = new Set<string>([
   'packages/ai/src/utility.ts',
   'packages/ai/src/value.ts',
   'packages/engine/src/economy.ts',
-  'packages/engine/src/events.ts',
   'packages/engine/src/observe.ts',
   'packages/engine/src/production.ts',
   // WS2.

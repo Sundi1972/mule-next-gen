@@ -30,7 +30,7 @@ const COLONY_GOODS: Partial<Record<EventKey, readonly Good[]>> = {
   cometPass: ['water'],
 };
 
-const pct = (share: number) => `${Math.round(share * 100)}%`;
+const pct = (share: number) => `${Math.round(share * 100)}%`; // literal-ok: a share shown as a percentage
 const steps = (a: Tile, b: Tile) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
 
 /**
@@ -41,13 +41,13 @@ const steps = (a: Tile, b: Tile) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y -
  */
 export function planEvent(state: GameState): MonthEvent | null {
   if (state.whatIf || state.month < EVENTS.firstMonth) return null;
-  const base = (state.seed * 2_654_435_761 + state.month * 40_503) >>> 0;
+  const base = (state.seed * 2_654_435_761 + state.month * 40_503) >>> 0; // literal-ok: hash multipliers mixing the seed, not balance
   const rng = createRng(base);
   if (!rng.chance(EVENTS.chance)) return null;
   const last = state.history.at(-1)?.events?.[0]?.key;
   const keys = (Object.keys(EVENTS.weights) as EventKey[]).filter((k) => k !== last && EVENTS.weights[k] > 0);
   const options = keys
-    .map((key, i) => buildEvent(state, key, createRng((base + (i + 1) * 0x9e3779b9) >>> 0)))
+    .map((key, i) => buildEvent(state, key, createRng((base + (i + 1) * 0x9e3779b9) >>> 0))) // literal-ok: golden-ratio seed step, not balance
     .filter((e): e is MonthEvent => e !== null);
   if (options.length === 0) return null;
   return options[rng.weighted(options.map((e) => EVENTS.weights[e.key]))]!;
