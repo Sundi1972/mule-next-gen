@@ -294,6 +294,11 @@ export const DEV_WALK = {
   hungerPaceMin: 0.2,
   /** Share of its pace a sick colonist walks at (POLLUTION.bands' sickens, and no Medicine taken). */
   sickPace: 0.5,
+  /**
+   * The hunger levels the screens show, as shares of the month's Food missing (0 fed, 1 none): peckish below
+   * hungryFrom, hungry from it, starving from starvingFrom. Display bands only: the pace itself is continuous.
+   */
+  hungerLevels: { hungryFrom: 0.3, starvingFrom: 0.7 },
 };
 
 /** What pollutes, and by how much. From the design doc's Pollution tab. */
