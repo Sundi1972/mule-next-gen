@@ -1,68 +1,334 @@
-import { cx, GoodIcon, type Good } from '@mule/ui';
-import type { EventKey, ShowEvent } from './events';
+import { cx, GoodIcon, GOOD_NAME, type Good } from '@mule/ui';
+import type { ReactNode } from 'react';
+import type { EventKey, Effect, ShowEvent } from './events';
+import { effectWords } from './copy';
+
+/** An n-pointed star's outline: the solar flare's spiky sun, the Federation's star. */
+const star = (n: number, outer: number, inner: number, cy = 12, cx = 12) =>
+  `M${Array.from({ length: n * 2 }, (_, i) => {
+    const r = i % 2 ? inner : outer;
+    const a = (Math.PI * i) / n - Math.PI / 2;
+    return `${(cx + r * Math.cos(a)).toFixed(2)} ${(cy + r * Math.sin(a)).toFixed(2)}`;
+  }).join('L')}Z`;
+
+const S = { fill: 'none', stroke: 'currentColor', strokeWidth: 2.2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+/** A cut-out in the glyph, in the badge's own background. */
+const V = { fill: 'none', stroke: 'var(--color-void)', strokeWidth: 1.6, strokeLinecap: 'round' as const };
+const F = { fill: 'currentColor' };
 
 /**
  * DS-GAP (WS8): @mule/ui has no event icons. One glyph per event, each with its own silhouette so it reads without
- * colour: wind lines, a beetle, a falling rock, a cross. The sickness cross is WS6's approved sick tag (variant B).
+ * colour: wind lines, a beetle, a falling rock, a cross, a flag, a skull. The sickness cross is WS6's approved sick
+ * tag (variant B); the epidemic is three of them.
  */
+const GLYPH: Record<EventKey, ReactNode> = {
+  // --- Planning ---
+  federationTax: (
+    <>
+      <ellipse cx="9" cy="19" rx="6" ry="2.3" {...F} />
+      <ellipse cx="9" cy="14.8" rx="6" ry="2.3" {...F} />
+      <ellipse cx="9" cy="10.6" rx="6" ry="2.3" {...F} />
+      <path {...S} d="M15 8.5 21 2.5M16 2.5h5v5" />
+    </>
+  ),
+  federationGrant: (
+    <>
+      <path {...F} d={star(5, 6.5, 2.8, 7.5)} />
+      <circle cx="6.5" cy="18" r="3.2" {...F} />
+      <circle cx="17.5" cy="18" r="3.2" {...F} />
+      <path {...S} strokeWidth={1.6} d="M6.5 11.5v2M17.5 11.5v2" />
+    </>
+  ),
+  immigrationWave: (
+    <>
+      <circle cx="8" cy="8" r="3" {...F} />
+      <circle cx="16" cy="8" r="3" {...F} />
+      <path {...F} d="M2.5 19a5.5 5.5 0 0 1 11 0ZM10.5 19a5.5 5.5 0 0 1 11 0Z" />
+      <path {...S} strokeWidth={1.8} d="M12 1.5v2.5" />
+      <path {...S} d="M3 22h18" />
+    </>
+  ),
+  emigrationWave: (
+    <>
+      <path {...F} d="M12 1.5c3.5 3 5 7 5 11v4H7v-4c0-4 1.5-8 5-11Z" />
+      <path {...F} d="M7 12.5 3.5 17v3.5L7 18.5ZM17 12.5l3.5 4.5v3.5L17 18.5Z" />
+      <circle cx="12" cy="9" r="1.8" fill="var(--color-void)" />
+      <path {...S} strokeWidth={1.8} d="M10 19.5l2 3 2-3" />
+    </>
+  ),
+  festival: (
+    <>
+      <path {...S} strokeWidth={1.6} d="M1.5 3.5c6 3.6 15 3.6 21 0" />
+      <path {...F} d="M2.6 4.3 4.6 10.5 6.8 5.6ZM8.4 6.1 10 12.3l2-6.1ZM13.9 6.1l1.9 6.2 1.7-6.6ZM19.4 5.2l1.4 5.6 1.4-6.9Z" />
+      <path {...S} strokeWidth={1.7} d="M12 14.2v1.6M12 20.4V22M8.3 18.1h1.6M14.1 18.1h1.6M9.4 15.5l1.1 1.1M13.5 19.6l1.1 1.1M9.4 20.7l1.1-1.1M13.5 16.6l1.1-1.1" />
+    </>
+  ),
+  generalStrike: (
+    <>
+      <rect x="2.5" y="2.5" width="19" height="11" rx="1.5" {...F} />
+      <path {...V} strokeWidth={2} d="M6.5 6.5h11M6.5 9.8h7" />
+      <path {...S} strokeWidth={2.6} d="M12 13.5V22" />
+    </>
+  ),
+  inheritance: (
+    <>
+      <rect x="2" y="5.5" width="20" height="14" rx="1.6" {...S} />
+      <path {...S} d="M2.5 6.5 12 13.5l9.5-7" />
+      <circle cx="12" cy="15" r="3.3" {...F} />
+    </>
+  ),
+  blamedForUnrest: (
+    <>
+      <path {...F} d="M3 4.5A2 2 0 0 1 5 2.5h14a2 2 0 0 1 2 2v9.5a2 2 0 0 1-2 2h-8l-5 4.5v-4.5H5a2 2 0 0 1-2-2Z" />
+      <path {...V} strokeWidth={2.4} d="M12 5.8v4.6" />
+      <circle cx="12" cy="13.2" r="1.3" fill="var(--color-void)" />
+    </>
+  ),
+  // --- Land grant ---
+  colonyPlot: (
+    <>
+      <path {...S} d="M2 21.5h20" />
+      <path {...S} d="M7 21.5V2.5" />
+      <path {...F} d="M7 3.5h12l-3.2 4 3.2 4H7Z" />
+    </>
+  ),
+  // --- Development ---
+  sickness: <path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6Z" {...F} />,
+  muleTheft: (
+    <>
+      <rect x="2.5" y="10" width="12" height="6.5" rx="1.8" {...F} />
+      <path {...F} d="M14.5 11.5 18 7h3.5v3.6L19 12Z" />
+      <path {...S} d="M4.5 16.5v4.5M8.5 16.5v4.5M12.5 16.5v4.5" />
+      <path {...S} strokeWidth={1.7} strokeDasharray="1.5 2.4" d="M2 6.5c3-3.5 7-4.5 11-3" />
+    </>
+  ),
+  epidemic: (
+    <>
+      <path {...F} d="M10 7h4.5v4.5H19V16h-4.5v4.5H10V16H5.5v-4.5H10Z" />
+      <path {...F} d="M3 2h2.4v2.4h2.4v2.4H5.4v2.4H3V6.8H.6V4.4H3Z" />
+      <path {...F} d="M18.6 1h2.4v2.4h2.4v2.4H21v2.4h-2.4V5.8h-2.4V3.4h2.4Z" />
+    </>
+  ),
+  storeStrike: (
+    <>
+      <path {...F} d="M2.5 9.5 4.5 4h15l2 5.5Z" />
+      <path {...S} d="M4.5 9.5V20h15V9.5M10 20v-5h4v5" />
+      <path {...S} strokeWidth={2.8} stroke="var(--color-alert)" d="M3 21.5 21 3" />
+    </>
+  ),
+  // --- Production ---
+  dustStorm: (
+    <>
+      <path {...S} d="M3 8h10.5a3 3 0 1 0-3-3" />
+      <path {...S} d="M3 12.5h15a3 3 0 1 1-3 3" />
+      <path {...S} d="M3 17h7" />
+      <circle cx="20" cy="7.5" r="1.1" {...F} />
+      <circle cx="7" cy="20.5" r="1.1" {...F} />
+    </>
+  ),
+  drought: (
+    <>
+      <circle cx="12" cy="7" r="3.6" {...F} />
+      <path {...S} strokeWidth={1.8} d="M12 .8v1.4M5.6 3.2l1 1M18.4 3.2l-1 1M4.2 9.2h1.4M18.4 9.2h1.4" />
+      <path {...S} d="M2 15h20" />
+      <path {...S} strokeWidth={1.8} d="M8 15l-1.6 3 2.2 2.2-.8 2M15.5 15l1.2 2.6-2 2.4" />
+    </>
+  ),
+  acidRain: (
+    <>
+      <path {...F} d="M6.5 12.5a4.4 4.4 0 0 1-.4-8.8 6 6 0 0 1 11.3 1.9 3.5 3.5 0 0 1 .1 6.9Z" />
+      <path {...S} d="M7.5 15.5l-1.2 3M12.5 15.5l-1.2 3M17.5 15.5l-1.2 3M10 20l-.8 2.2M15 20l-.8 2.2" />
+    </>
+  ),
+  solarFlare: (
+    <>
+      <path {...F} d={star(8, 11.3, 6.6)} />
+      <circle cx="12" cy="12" r="3.6" fill="var(--color-void)" />
+      <circle cx="12" cy="12" r="2" {...F} />
+    </>
+  ),
+  cometPass: (
+    <>
+      <path {...F} opacity={0.75} d="M14.7 3.7 3 18.6 5.4 21 20.3 9.3Z" />
+      <circle cx="17.5" cy="6.5" r="4" {...F} />
+      <circle cx="5" cy="6" r="1.1" {...F} />
+      <circle cx="20" cy="17" r="1.1" {...F} />
+    </>
+  ),
+  flood: (
+    <>
+      <path {...S} d="M2 6.5c2.5-2 5-2 7.5 0s5 2 7.5 0 3.5-1.5 5 0" />
+      <path {...S} d="M2 12c2.5-2 5-2 7.5 0s5 2 7.5 0 3.5-1.5 5 0" />
+      <path {...S} d="M2 17.5c2.5-2 5-2 7.5 0s5 2 7.5 0 3.5-1.5 5 0" />
+    </>
+  ),
+  volcanicAsh: (
+    <>
+      <path {...F} d="M1.5 22 8.5 11h2l1.5 2 1.5-2h2l7 11Z" />
+      <circle cx="9.5" cy="6.5" r="2.4" {...F} />
+      <circle cx="13.5" cy="4.5" r="2.9" {...F} />
+      <circle cx="17.5" cy="7" r="2.1" {...F} />
+    </>
+  ),
+  coldSnap: (
+    <>
+      <path {...S} d="M12 2v20M3.3 7l17.4 10M3.3 17l17.4-10" />
+      <path {...S} strokeWidth={1.8} d="M9.5 3.2 12 5.7l2.5-2.5M9.5 20.8 12 18.3l2.5 2.5M3.4 10.6l3.4-.9-.9-3.4M20.6 13.4l-3.4.9.9 3.4M5.9 17.7l.9-3.4-3.4-.9M18.1 6.3l-.9 3.4 3.4.9" />
+    </>
+  ),
+  meteorStrike: (
+    <>
+      <path {...S} d="M3 3l8 8M7 2.5l6.5 6.5M2.5 7l6.5 6.5" />
+      <circle cx="16" cy="16" r="5.5" {...F} />
+      <circle cx="14.3" cy="14.8" r="1.3" fill="var(--color-void)" opacity="0.55" />
+      <circle cx="17.8" cy="17.6" r="0.9" fill="var(--color-void)" opacity="0.55" />
+    </>
+  ),
+  pestSwarm: (
+    <>
+      <ellipse cx="12" cy="14" rx="5" ry="6.5" {...F} />
+      <circle cx="12" cy="6.2" r="2.6" {...F} />
+      <path {...S} strokeWidth={1.7} d="M7.5 11 3.5 9M7 14.5H3M7.5 18l-3.5 2.5M16.5 11l4-2M17 14.5h4M16.5 18l3.5 2.5M10.6 4.4 9 2M13.4 4.4 15 2" />
+      <path d="M12 8.5v12" stroke="var(--color-void)" strokeWidth="1.2" />
+    </>
+  ),
+  wildfire: (
+    <>
+      <path {...F} d="M12 1.5c.6 3.6 5.8 6 5.8 11.8a5.8 5.8 0 0 1-11.6 0c0-2.6 1.5-4.2 2.6-5.8.3 1.9 1 2.9 2 3.1 0-3.1-.6-6.6 1.2-9.1Z" />
+      <path fill="var(--color-void)" d="M12 21a2.5 2.5 0 0 1-2.5-2.5c0-1.5 1.5-2.6 2.5-4.6 1 2 2.5 3.1 2.5 4.6A2.5 2.5 0 0 1 12 21Z" />
+    </>
+  ),
+  bumperHarvest: (
+    <>
+      <path {...S} d="M12 22.5V7" />
+      {[8.5, 12.5, 16.5].map((y) => (
+        <g key={y}>
+          <ellipse cx="9" cy={y} rx="2" ry="3.3" transform={`rotate(-38 9 ${y})`} {...F} />
+          <ellipse cx="15" cy={y} rx="2" ry="3.3" transform={`rotate(38 15 ${y})`} {...F} />
+        </g>
+      ))}
+      <ellipse cx="12" cy="3.8" rx="1.9" ry="3" {...F} />
+    </>
+  ),
+  cavernCollapse: (
+    <>
+      <path {...S} strokeWidth={2.6} d="M3 21.5V13a9 9 0 0 1 18 0v8.5" />
+      <path {...S} strokeWidth={1.7} d="M12.5 4.2 11 8l2.4 2-1.4 3" />
+      <path {...F} d="M6.5 21.5 8 18l2.8.6.6 2.9ZM13 21.5l1.2-2.9 2.8 1.1.6 1.8ZM10.4 16.2l1.3-1.6 1.6 1-.7 1.7Z" />
+    </>
+  ),
+  walkout: (
+    <>
+      <path {...S} d="M13 3H4v18h9" />
+      <circle cx="10" cy="12" r="1.2" {...F} />
+      <path {...S} d="M12 12h9.5M17.5 8l4 4-4 4" />
+    </>
+  ),
+  loyalCrew: (
+    <>
+      <path {...F} d="M4 16.5a8 8 0 0 1 16 0Z" />
+      <path {...S} strokeWidth={2.6} d="M2 17.5h20" />
+      <path {...V} strokeWidth={2} d="M12 9.5v5M8.2 11.2l1 3.3M15.8 11.2l-1 3.3" />
+    </>
+  ),
+  // --- Goods auction ---
+  pirateRaid: (
+    <>
+      <path {...F} d="M12 2.5a7 7 0 0 0-7 7c0 2.4 1.2 4.1 3 5V17h8v-2.5c1.8-.9 3-2.6 3-5a7 7 0 0 0-7-7Z" />
+      <circle cx="9.3" cy="9.6" r="1.8" fill="var(--color-void)" />
+      <circle cx="14.7" cy="9.6" r="1.8" fill="var(--color-void)" />
+      <path {...S} d="M3 19 21 22.5M3 22.5 21 19" />
+    </>
+  ),
+  storeFire: (
+    <>
+      <path {...F} d="M4 13h16v9H4Z" />
+      <path {...F} d="M2.5 13l2-4h15l2 4Z" />
+      <path fill="var(--color-void)" d="M10 22v-4.5h4V22Z" />
+      <path {...F} d="M12 .8c.3 2 3 3.3 3 5.9a3 3 0 0 1-6 0c0-1.3.8-2.1 1.3-2.9.2 1 .6 1.5 1 1.6 0-1.6-.2-3.1.7-4.6Z" />
+    </>
+  ),
+  // --- Upkeep ---
+  ratsInSilo: (
+    <>
+      <ellipse cx="11" cy="15" rx="6.2" ry="4.2" {...F} />
+      <path {...F} d="M15.5 12.3 22 15.4l-6.5 3Z" />
+      <circle cx="15.2" cy="11.3" r="1.9" {...F} />
+      <circle cx="18" cy="14.4" r="0.8" fill="var(--color-void)" />
+      <path {...S} strokeWidth={1.8} d="M5.2 16.5C1.5 16.5 1.5 21 4.5 21H9" />
+    </>
+  ),
+  crookedAccountant: (
+    <>
+      <rect x="3" y="2.5" width="13" height="19" rx="1.6" {...F} />
+      <path {...V} strokeWidth={1.8} d="M6.5 7.5h6M6.5 11.5h6M6.5 15.5h3.5" />
+      <path {...S} d="M20 3v10M17.4 10.5 20 13.2l2.6-2.7" />
+    </>
+  ),
+  packageFromHome: (
+    <>
+      <path {...F} d="M4 10h16v11.5H4Z" />
+      <path {...F} d="M2.5 6.5h19V10h-19Z" />
+      <path {...V} strokeWidth={2.2} d="M12 6.5v15" />
+      <path {...S} strokeWidth={1.8} d="M12 6.2C10 2 6 3.5 8.5 6.2M12 6.2C14 2 18 3.5 15.5 6.2" />
+    </>
+  ),
+  riot: (
+    <>
+      <rect x="5.5" y="5" width="13" height="10" rx="2.6" {...F} />
+      <path {...V} strokeWidth={1.6} d="M9 5v4.5M12 5v4.5M15 5v4.5M5.8 11.5h4.4" />
+      <path {...F} d="M8.5 15h7v7h-7Z" />
+      <path {...S} strokeWidth={1.8} d="M2 3.5l2 2M22 3.5l-2 2M12 .8v2" />
+    </>
+  ),
+  volunteerCleanup: (
+    <>
+      <path {...S} strokeWidth={2.6} d="M21 2.5 11 12.5" />
+      <path {...F} d="M8.6 11.2 13 15.6 8.2 21.6c-1.8 1.2-6.6-3.6-5.4-5.4Z" />
+      <path {...V} strokeWidth={1.3} d="M6.6 14.6l-2.4 3M9.2 16.4l-2.6 3.4" />
+      <path {...F} d={star(4, 3.6, 1.2, 18, 18.5)} />
+    </>
+  ),
+};
+
 export function EventGlyph({ k, size = 24, className }: { k: EventKey; size?: number; className?: string }) {
-  const stroke = { fill: 'none', stroke: 'currentColor', strokeWidth: 2.2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} className={cx('shrink-0', className)} aria-hidden data-glyph={k}>
-      {k === 'dustStorm' && (
-        <>
-          <path {...stroke} d="M3 8h10.5a3 3 0 1 0-3-3" />
-          <path {...stroke} d="M3 12.5h15a3 3 0 1 1-3 3" />
-          <path {...stroke} d="M3 17h7" />
-          <circle cx="20" cy="7.5" r="1.1" fill="currentColor" />
-          <circle cx="7" cy="20.5" r="1.1" fill="currentColor" />
-        </>
-      )}
-      {k === 'pestSwarm' && (
-        <>
-          <ellipse cx="12" cy="14" rx="5" ry="6.5" fill="currentColor" />
-          <circle cx="12" cy="6.2" r="2.6" fill="currentColor" />
-          <path {...stroke} strokeWidth={1.7} d="M7.5 11 3.5 9M7 14.5H3M7.5 18l-3.5 2.5M16.5 11l4-2M17 14.5h4M16.5 18l3.5 2.5M10.6 4.4 9 2M13.4 4.4 15 2" />
-          <path d="M12 8.5v12" stroke="var(--color-void)" strokeWidth="1.2" />
-        </>
-      )}
-      {k === 'meteorStrike' && (
-        <>
-          <path {...stroke} d="M3 3l8 8M7 2.5l6.5 6.5M2.5 7l6.5 6.5" />
-          <circle cx="16" cy="16" r="5.5" fill="currentColor" />
-          <circle cx="14.3" cy="14.8" r="1.3" fill="var(--color-void)" opacity="0.55" />
-          <circle cx="17.8" cy="17.6" r="0.9" fill="var(--color-void)" opacity="0.55" />
-        </>
-      )}
-      {k === 'sickness' && <path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6Z" fill="currentColor" />}
+      {GLYPH[k]}
     </svg>
   );
 }
 
 /** Each event's own colour, from the palette the game already speaks: dust is amber, pests eat Food, sickness is Medicine's pink. */
-export const ACCENT: Partial<Record<EventKey, string>> = {
-  dustStorm: 'var(--color-warn)',
-  pestSwarm: 'var(--color-g-food)',
-  meteorStrike: 'var(--color-alert)',
-  sickness: 'var(--color-g-medicine)',
+export const ACCENT: Record<EventKey, string> = {
+  federationTax: 'var(--color-warn)', federationGrant: 'var(--color-warn)', immigrationWave: 'var(--color-holo)', emigrationWave: 'var(--color-holo)',
+  festival: 'var(--color-rise)', generalStrike: 'var(--color-alert)', inheritance: 'var(--color-warn)', blamedForUnrest: 'var(--color-alert-ink)',
+  colonyPlot: 'var(--color-holo)',
+  sickness: 'var(--color-g-medicine)', muleTheft: 'var(--color-mule-metal)', epidemic: 'var(--color-g-medicine)', storeStrike: 'var(--color-alert-ink)',
+  dustStorm: 'var(--color-warn)', drought: 'var(--color-g-smithore)', acidRain: 'var(--color-g-food)', solarFlare: 'var(--color-g-energy)', cometPass: 'var(--color-g-electronics)',
+  flood: 'var(--color-g-water)', volcanicAsh: 'var(--color-g-alloy)', coldSnap: 'var(--color-ink)', meteorStrike: 'var(--color-alert)',
+  pestSwarm: 'var(--color-g-food)', wildfire: 'var(--color-g-smithore)', bumperHarvest: 'var(--color-g-food)', cavernCollapse: 'var(--color-g-crystite)', walkout: 'var(--color-alert-ink)', loyalCrew: 'var(--color-g-energy)',
+  pirateRaid: 'var(--color-g-crystite)', storeFire: 'var(--color-alert)',
+  ratsInSilo: 'var(--color-ink-2)', crookedAccountant: 'var(--color-warn)', packageFromHome: 'var(--color-g-food)', riot: 'var(--color-alert)', volunteerCleanup: 'var(--color-ok)',
 };
-export const accent = (k: EventKey) => ACCENT[k] ?? 'var(--color-holo)';
+export const accent = (k: EventKey) => ACCENT[k];
 
 /**
- * The event's badge: its glyph inside a frame whose SHAPE says good or bad (a diamond warns, a circle welcomes),
- * so the sign reads without colour.
+ * The event's badge: its glyph inside a frame whose SHAPE says the sign, so it reads without colour: a diamond
+ * warns, a circle welcomes, a square is news (the colony plot offered).
  */
 export function SignBadge({ ev, size, className }: { ev: Pick<ShowEvent, 'key' | 'sign'>; size: number; className?: string }) {
-  const bad = ev.sign !== 'good';
+  const shape = ev.sign === 'good' ? 'rounded-full' : ev.sign === 'neutral' ? 'rounded-[22%]' : 'rotate-45 rounded-[18%]';
+  const ring = ev.sign === 'good' ? 'var(--color-ok)' : ev.sign === 'neutral' ? 'var(--color-holo)' : 'var(--color-alert)';
   return (
     <span className={cx('relative inline-flex shrink-0 items-center justify-center', className)} style={{ width: size, height: size }} data-sign={ev.sign}>
       <span
         aria-hidden
-        className={cx('absolute shadow-chip', bad ? 'rotate-45 rounded-[18%]' : 'rounded-full')}
+        className={cx('absolute shadow-chip', shape)}
         style={{
-          inset: bad ? '14%' : 0,
+          inset: ev.sign === 'bad' ? '14%' : ev.sign === 'neutral' ? '7%' : 0,
           background: 'var(--color-map-chip)',
-          boxShadow: `0 0 0 ${Math.max(2, size / 22)}px ${bad ? 'var(--color-alert)' : 'var(--color-ok)'}, var(--shadow-chip)`,
+          boxShadow: `0 0 0 ${Math.max(2, size / 22)}px ${ring}, var(--shadow-chip)`,
         }}
       />
       <span className="relative flex" style={{ color: accent(ev.key) }}>
@@ -72,29 +338,45 @@ export function SignBadge({ ev, size, className }: { ev: Pick<ShowEvent, 'key' |
   );
 }
 
+const CHIP = {
+  hero: { text: 'text-3xl', icon: 26, pad: 'px-2.5 py-1', gap: 'gap-1.5', arrow: 'text-xl' },
+  tv: { text: 'text-base', icon: 13, pad: 'px-1 py-0.5', gap: 'gap-px', arrow: 'text-[10px]' },
+  phone: { text: 'text-[10px]', icon: 9, pad: 'px-0.5 py-px', gap: 'gap-px', arrow: 'text-[7px]' },
+} as const;
+const HAZARD = 'repeating-linear-gradient(135deg, var(--color-alert) 0 6px, color-mix(in srgb, var(--color-alert) 78%, var(--color-void)) 6px 10px)';
+
 /**
  * How much a plot lost or gained. A loss is a downward notch and hazard stripes, a gain an upward notch on a plain
- * chip, so the sign reads without colour; the good's icon says what was lost.
+ * chip, so the sign reads without colour; the good's icon says what was lost. `text` replaces the number (TAKEN,
+ * CAVED IN); with no change it is a note, a square notch on the holo chip.
  */
-export function DeltaChip({ delta, good, size = 'tv', className, lost }: { delta: number; good?: Good | undefined; size?: 'tv' | 'phone' | 'hero'; className?: string; lost?: boolean }) {
-  const down = delta < 0;
+export function DeltaChip({ delta, good, size = 'tv', className, lost, text }: { delta: number; good?: Good | undefined; size?: 'tv' | 'phone' | 'hero'; className?: string; lost?: boolean | undefined; text?: string | undefined }) {
+  const tone = delta < 0 || lost ? 'loss' : delta > 0 ? 'gain' : 'note';
   // A TV chip fits inside one plot (about 55 px), so neighbours' chips never overlap.
-  const px = size === 'hero' ? { text: 'text-3xl', icon: 26, pad: 'px-2.5 py-1', gap: 'gap-1.5', arrow: 'text-xl' } : size === 'tv' ? { text: 'text-base', icon: 13, pad: 'px-1 py-0.5', gap: 'gap-px', arrow: 'text-[10px]' } : { text: 'text-[10px]', icon: 9, pad: 'px-0.5 py-px', gap: 'gap-px', arrow: 'text-[7px]' };
+  const px = CHIP[size];
   return (
     <span
-      className={cx('inline-flex items-center rounded-chip font-mono font-bold leading-none shadow-chip', px.text, px.pad, px.gap, down ? 'text-white' : 'text-on-holo', className)}
-      style={{
-        background: down
-          ? 'repeating-linear-gradient(135deg, var(--color-alert) 0 6px, color-mix(in srgb, var(--color-alert) 78%, var(--color-void)) 6px 10px)'
-          : 'var(--color-ok)',
-      }}
+      className={cx('inline-flex items-center whitespace-nowrap rounded-chip font-mono font-bold leading-none shadow-chip', px.text, px.pad, px.gap, tone === 'loss' ? 'text-white' : 'text-on-holo', className)}
+      style={{ background: tone === 'loss' ? HAZARD : tone === 'gain' ? 'var(--color-ok)' : 'var(--color-holo)' }}
       data-delta={delta}
     >
-      <span aria-hidden className={px.arrow}>{down ? '▼' : '▲'}</span>
-      {lost ? 'LOST' : `${down ? '−' : '+'}${Math.abs(delta)}`}
-      {good && <GoodIcon good={good} size={px.icon} color={down ? 'white' : 'var(--color-on-holo)'} />}
+      <span aria-hidden className={px.arrow}>{tone === 'loss' ? '▼' : tone === 'gain' ? '▲' : '■'}</span>
+      {text ?? (lost ? 'LOST' : `${delta < 0 ? '−' : '+'}${Math.abs(delta)}`)}
+      {good && <GoodIcon good={good} size={px.icon} color={tone === 'loss' ? 'white' : 'var(--color-on-holo)'} />}
     </span>
   );
+}
+
+/** Whether a change off the map is good for the colony: less air pollution is, a higher price or energy need is not. */
+export const effectIsGood = (f: Effect) => (['air', 'price', 'energyNeed'].includes(f.what) ? f.delta < 0 : f.what === 'mules' ? false : f.delta > 0);
+
+/** A change off the map, as a chip: credits, held goods, a gauge. Same notch-and-stripes language as DeltaChip. */
+export function EffectChip({ f, size = 'tv', className }: { f: Effect; size?: 'tv' | 'phone' | 'hero'; className?: string }) {
+  const good = f.what in GOOD_NAME ? (f.what as Good) : f.good;
+  const words = effectWords(f);
+  // A held good shows its icon and number only; everything else says what moved.
+  const text = f.what in GOOD_NAME ? `${f.on === 'store' ? 'Store ' : ''}${f.delta < 0 ? '−' : '+'}${Math.abs(f.delta)}` : words.replace(good ? GOOD_NAME[good] : '', '').trim();
+  return <DeltaChip delta={effectIsGood(f) ? 1 : -1} good={good} size={size} text={text} {...(className ? { className } : {})} />;
 }
 
 /** The phone buzzes: drawn as a small vibrating handset, since a mock can't vibrate. */

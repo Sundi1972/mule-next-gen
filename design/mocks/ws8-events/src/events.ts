@@ -1,13 +1,15 @@
 import type { MonthEvent } from '@mule/engine';
 import type { Good } from '@mule/ui';
+import { ENTRY, TIER, type EventKey, type Phase } from './catalogue';
 import { H, OUTPUT, W } from './fixture';
+
+export { TIER, type EventKey, type Phase, type Tier } from './catalogue';
 
 /**
  * What the screens get for one event: today's engine MonthEvent (packages/engine/src/types.ts), with the fields the
  * visuals need and the engine does not send yet. Every PROPOSED field is listed in GAPS for WS1.
  * The mock keys plots by x and y; the engine sends `index` (x = index % width, y = floor(index / width)).
  */
-export type EventKey = MonthEvent['key'] | 'sickness' | 'meteorStrike';
 
 export interface Hit {
   x: number;
@@ -16,10 +18,26 @@ export interface Hit {
   /** PROPOSED optional: a meteor can hit a plot with nothing on it. MonthEvent requires a good today. */
   good?: Good;
   delta: number;
-  /** PROPOSED: the installation on the plot was destroyed (meteor strike, later the planetquake). */
+  /** PROPOSED: the plot's MULE is gone: destroyed (meteor) or taken (theft). */
   muleLost?: boolean;
-  /** PROPOSED: what the plot becomes for good (the meteor's crater, WS5's special field). */
-  becomes?: 'crater';
+  /** PROPOSED: what the plot becomes: the meteor's crater (WS5's badge), a caved-in cavern's plain plot, an idle plot. */
+  becomes?: 'crater' | 'plain' | 'idle';
+  /** PROPOSED: announced now, lands in a later phase (the general strike's plots, in production). */
+  pending?: boolean;
+}
+
+/** PROPOSED (MonthEvent.effects): what an event changes off the map. Each delta is the change, never the new value. */
+export interface Effect {
+  /** A player's id, 'colony' or 'store'. */
+  on: string;
+  what: Good | 'cash' | 'pace' | 'reputation' | 'mood' | 'prestige' | 'air' | 'colonists' | 'demand' | 'energyNeed' | 'mules' | 'price' | 'fund';
+  delta: number;
+  /** The delta is a percentage (−10% cash, +25% demand), not units. */
+  pct?: boolean;
+  /** The good a demand or price change is for. */
+  good?: Good;
+  /** How many turns it lasts, when more than this one (the epidemic's 2). */
+  turns?: number;
 }
 
 export interface ShowEvent {
@@ -27,9 +45,10 @@ export interface ShowEvent {
   title: string;
   line: string;
   scope: MonthEvent['scope'];
-  sign: MonthEvent['sign'];
+  /** PROPOSED 'neutral' (the colony plot offered). MonthEvent has good, bad and mixed. */
+  sign: 'good' | 'bad' | 'neutral';
   /** PROPOSED by WS1's event-model spec (C2): the phase the event fired in. */
-  phase: 'development' | 'production';
+  phase: Phase;
   origin: { x: number; y: number };
   direction?: MonthEvent['direction'];
   plots: Hit[];
@@ -37,19 +56,14 @@ export interface ShowEvent {
   player?: string;
   /** PROPOSED (sickness): why, in words: WS6's sickBecause. */
   because?: string;
+  /** PROPOSED: what it changes off the map. */
+  effects?: Effect[];
+  /** PROPOSED: announced in this phase, takes effect in that one (the general strike, in production). */
+  landsIn?: Phase;
 }
 
-/** How loud an event is on the TV. Bulletins never interrupt: they gather into one roll call. */
-export type Tier = 'headline' | 'spotlight' | 'bulletin';
-export const TIER: Record<EventKey, Tier> = {
-  dustStorm: 'headline', drought: 'headline', acidRain: 'headline', solarFlare: 'headline', cometPass: 'headline',
-  flood: 'headline', volcanicAsh: 'headline', meteorStrike: 'headline',
-  pestSwarm: 'spotlight', wildfire: 'spotlight', bumperHarvest: 'spotlight',
-  sickness: 'bulletin',
-};
-
-const made = (x: number, y: number) => OUTPUT.find((o) => o.x === x && o.y === y)!;
-const halve = (x: number, y: number) => Math.floor(made(x, y).made / 2) - made(x, y).made;
+export const made = (x: number, y: number) => OUTPUT.find((o) => o.x === x && o.y === y)!.made;
+const halve = (x: number, y: number) => Math.floor(made(x, y) / 2) - made(x, y);
 
 // --- The four representative events, on WS6's fixture colony ---------------------------------------------------
 
@@ -100,7 +114,7 @@ export const METEOR: ShowEvent = {
   phase: 'production',
   origin: { x: 13, y: 4 },
   direction: 'n',
-  plots: [{ x: 13, y: 4, order: 0, good: 'smithore', delta: -made(13, 4).made, muleLost: true, becomes: 'crater' }],
+  plots: [{ x: 13, y: 4, order: 0, good: 'smithore', delta: -made(13, 4), muleLost: true, becomes: 'crater' }],
 };
 
 /** Per player, at the start of development: not on any plot, on the colonist. */
@@ -121,7 +135,7 @@ export const SICK_BRIX: ShowEvent = { ...SICK_LENA, origin: { x: 6, y: 3 }, play
 export interface Scenario {
   id: string;
   title: string;
-  phase: ShowEvent['phase'];
+  phase: Phase;
   events: ShowEvent[];
   /** What this scenario demonstrates. */
   shows: string;
@@ -149,22 +163,30 @@ export const BEAT = {
   outro: 3,
 } as const;
 
+/** How long an event plays, by how it moves. */
 export function playLength(ev: ShowEvent): number {
-  switch (ev.key) {
-    case 'dustStorm':
+  switch (ENTRY[ev.key].motion) {
+    case 'sweep':
       return 3.6;
-    case 'pestSwarm':
+    case 'spread':
       return 0.6 + ev.plots.length * 0.9;
-    case 'meteorStrike':
+    case 'strike':
       return 3;
-    case 'sickness':
+    case 'colonists':
       return 1.6;
+    case 'source':
+      return 0.8 + ev.plots.length * 0.35;
+    case 'plot':
+      return 1.8;
+    case 'plots':
+    case 'ledger':
+      return 2;
     default:
-      return 2.6;
+      return 2.4;
   }
 }
 
-/** One beat of the show: a single event, or a roll call of bulletins that fired together. */
+/** One beat of the show: a single event, or the phase's roll call of bulletins. */
 export interface Segment {
   events: ShowEvent[];
   /** 1-based, of `count`. */
@@ -177,20 +199,17 @@ export interface Segment {
 }
 
 export interface Script {
-  phase: ShowEvent['phase'];
+  phase: Phase;
   events: ShowEvent[];
   segments: Segment[];
   end: number;
 }
 
-export function script(phase: ShowEvent['phase'], events: ShowEvent[]): Script {
-  // Bulletins of the same kind gather into one segment; everything else plays on its own, in the order it fired.
-  const groups: ShowEvent[][] = [];
-  for (const ev of events) {
-    const last = groups.at(-1);
-    if (last && TIER[ev.key] === 'bulletin' && last[0]!.key === ev.key) last.push(ev);
-    else groups.push([ev]);
-  }
+export function script(phase: Phase, events: ShowEvent[]): Script {
+  // Headlines and spotlights play one by one, in the order they fired; every bulletin of the phase gathers into one
+  // roll call that closes it, so the big news comes first and the personal news never interrupts it.
+  const roll = events.filter((ev) => TIER[ev.key] === 'bulletin');
+  const groups = [...events.filter((ev) => TIER[ev.key] !== 'bulletin').map((ev) => [ev]), ...(roll.length ? [roll] : [])];
   let at: number = BEAT.intro;
   const segments = groups.map((g, i) => {
     const play = Math.max(...g.map(playLength)) + (g.length - 1) * 0.5;
@@ -200,6 +219,9 @@ export function script(phase: ShowEvent['phase'], events: ShowEvent[]): Script {
   });
   return { phase, events, segments, end: at + BEAT.outro };
 }
+
+/** A roll call: a segment of bulletins. */
+export const isRollCall = (seg: Segment) => TIER[seg.events[0]!.key] === 'bulletin';
 
 export type Stage = 'intro' | 'announce' | 'play' | 'settle' | 'outro';
 
@@ -228,21 +250,24 @@ export function sweep(ev: ShowEvent, h: { x: number; y: number }): number {
 export const FRONT = { lead: 0.3, cross: 2.8 } as const;
 export const frontAt = (seg: Segment, t: number) => (t - seg.playAt - FRONT.lead) / FRONT.cross;
 
-/** When the event lands on a plot (or, for sickness, on its player). Without motion, everything lands at once. */
+/** When the event lands on a plot (or, with none, on its player). Without motion, everything lands at once. */
 export function hitAt(seg: Segment, ev: ShowEvent, h: Hit | null, reduced: boolean): number {
   const p = seg.playAt;
   if (reduced) return p + 0.2;
-  switch (ev.key) {
-    case 'dustStorm':
-      return p + FRONT.lead + sweep(ev, h!) * FRONT.cross;
-    case 'pestSwarm':
-      return p + 0.4 + h!.order * 0.9;
-    case 'meteorStrike':
+  const nth = seg.events.indexOf(ev);
+  switch (ENTRY[ev.key].motion) {
+    case 'sweep':
+      return h ? p + FRONT.lead + sweep(ev, h) * FRONT.cross : p + FRONT.lead + FRONT.cross / 2;
+    case 'spread':
+      return p + 0.4 + (h?.order ?? 0) * 0.9;
+    case 'strike':
       return p + METEOR_FALL;
-    case 'sickness':
-      return p + 0.3 + seg.events.indexOf(ev) * 0.5;
+    case 'colonists':
+      return p + 0.3 + nth * 0.5;
+    case 'source':
+      return p + 0.5 + (h?.order ?? 0) * 0.35;
     default:
-      return p + 0.5 + (h?.order ?? 0) * 0.3;
+      return p + 0.5 + nth * 0.5 + (h?.order ?? 0) * 0.15;
   }
 }
 /** Seconds from the meteor's first glint to impact. */
@@ -257,18 +282,30 @@ export function landed(s: Script, t: number, reduced: boolean): { ev: ShowEvent;
   );
 }
 
-/** The players whose sickness has landed by `t`. */
-export function sickAt(s: Script, t: number, reduced: boolean): Set<string> {
-  return new Set(s.segments.flatMap((g) => g.events.filter((e) => e.key === 'sickness' && t >= hitAt(g, e, null, reduced)).map((e) => e.player!)));
+/** Every effect off the map that has landed by `t`: with no plots, when the event lands; with plots, after the last. */
+export function effectsAt(s: Script, t: number, reduced: boolean): { ev: ShowEvent; seg: Segment; effect: Effect; at: number }[] {
+  return s.segments.flatMap((seg) =>
+    seg.events.flatMap((ev) => {
+      const at = Math.max(hitAt(seg, ev, null, reduced), ...ev.plots.map((h) => hitAt(seg, ev, h, reduced)));
+      return (ev.effects ?? []).map((effect, i) => ({ ev, seg, effect, at: at + (reduced ? 0 : i * 0.15) })).filter((l) => t >= l.at);
+    }),
+  );
 }
 
-/** What a plot makes by `t`: its output, then every landed hit in turn, never below 0. */
+/** The players whose sickness has landed by `t`: sick players, and everyone an epidemic slows. */
+export function sickAt(s: Script, t: number, reduced: boolean): Set<string> {
+  const sick = s.segments.flatMap((g) => g.events.filter((e) => e.key === 'sickness' && t >= hitAt(g, e, null, reduced)).map((e) => e.player!));
+  const slowed = effectsAt(s, t, reduced).filter((l) => l.effect.what === 'pace').map((l) => l.effect.on);
+  return new Set([...sick, ...slowed]);
+}
+
+/** What a plot makes by `t`: its output, then every landed hit in turn, never below 0. A pending hit lands later. */
 export function unitsAt(s: Script, t: number, reduced: boolean, x: number, y: number): { now: number; before: number; lostAt: number | null } {
   const base = OUTPUT.find((o) => o.x === x && o.y === y)?.made ?? 0;
   let now = base;
   let lostAt: number | null = null;
   for (const l of landed(s, t, reduced)) {
-    if (l.hit.x !== x || l.hit.y !== y) continue;
+    if (l.hit.x !== x || l.hit.y !== y || l.hit.pending) continue;
     now = Math.max(0, now + l.hit.delta);
     lostAt = l.at;
   }
@@ -288,19 +325,41 @@ export function playerChange(s: Script, t: number, reduced: boolean, id: string)
 /** Who an event is about, in words, for its announcement. */
 export function whoLine(ev: ShowEvent, name: (id: string) => string): string {
   if (ev.key === 'meteorStrike') return 'One plot, anywhere';
+  if (ev.key === 'colonyPlot') return 'One free plot';
+  if (ev.player) return name(ev.player);
   if (ev.scope === 'colony') return 'The whole colony';
   if (ev.scope === 'local') return 'One area of the map';
-  return ev.player ? name(ev.player) : 'One player';
+  return 'One player';
 }
 
 // --- What the engine does not send yet (WS8 → WS1, via the PM) ---------------------------------------------------
 
-export const GAPS: { field: string; why: string }[] = [
-  { field: 'MonthEvent.phase', why: 'Which phase an event belongs to, so each phase announces only its own. WS1’s spec C2 adds it.' },
-  { field: 'Sickness as a MonthEvent (phase development, scope personal, player, no plots)', why: 'Today sickness lives on Player.sick only; the roll call needs it in the phase’s event list, in the order it fired, with the others.' },
-  { field: 'MonthEvent.because (sickness)', why: '“Sick: his smelter fouled the air.” WS6’s approved sick tag already carries sickBecause; the event should carry the same reason.' },
-  { field: 'EventKey meteorStrike and EventKind meteor', why: 'Wave 2. The meteor needs its own animation kind; none of today’s nine fits a strike from the sky.' },
-  { field: 'plots[].good optional', why: 'A meteor can hit an empty or unowned plot; MonthEvent requires a good on every plot today.' },
-  { field: 'plots[].muleLost, plots[].becomes', why: 'The meteor destroys the installation and leaves a crater: the screens draw the wreck and hand the plot to WS5’s crater badge.' },
-  { field: 'A phase’s show length that grows with its events', why: 'Production’s event window today is 4.0–9.6 s, room for one event. Three take about 20 s; the phase must wait for the last one before the goods fly (WS6’s R3 timeline).' },
+export const GAPS: { id: string; field: string; why: string }[] = [
+  { id: 'phase', field: 'MonthEvent.phase', why: 'Which phase an event belongs to, so each phase announces only its own. WS1’s spec C2 adds it.' },
+  { id: 'sickEvent', field: 'Sickness as a MonthEvent (phase development, scope personal, player, no plots)', why: 'Today sickness lives on Player.sick only; the roll call needs it in the phase’s event list, in the order it fired, with the others.' },
+  { id: 'because', field: 'MonthEvent.because (sickness)', why: '“Sick: his smelter fouled the air.” WS6’s approved sick tag already carries sickBecause; the event should carry the same reason.' },
+  { id: 'meteor', field: 'EventKey meteorStrike and EventKind meteor', why: 'Wave 2. The meteor needs its own animation kind; none of today’s nine fits a strike from the sky.' },
+  { id: 'goodOptional', field: 'plots[].good optional', why: 'A meteor can hit an empty or unowned plot; MonthEvent requires a good on every plot today.' },
+  { id: 'muleLost', field: 'plots[].muleLost, plots[].becomes', why: 'The meteor destroys the installation and leaves a crater; theft leaves the plot idle; a cavern caves in to a plain plot. The screens draw the change and hand a crater to WS5’s badge.' },
+  { id: 'length', field: 'A phase’s show length that grows with its events', why: 'Production’s event window today is 4.0–9.6 s, room for one event. Three take about 20 s; the phase must wait for the last one before the goods fly (WS6’s R3 timeline).' },
+  { id: 'keys', field: 'EventKey and EventKind for the 25 new events', why: 'Wave 2 and Goal 5 add 25 keys. Each needs a kind (its motion family: sweep, spread, source, strike, plot, plots, colonists, store, ledger, colony) so a screen picks its animation without knowing the key.' },
+  { id: 'effects', field: 'MonthEvent.effects[] (on, what, delta, pct, good, turns)', why: 'Sixteen events change nothing on the map: cash, held goods, the store’s stock and prices, reputation, pace, and the colony’s mood, prestige, air and head count. The screens need the change, per player, to say “−64 cr for you”.' },
+  { id: 'phases', field: 'MonthReport.events for every phase, not only production', why: 'Planning, the land grant, development, the auction and upkeep get events; MonthEvent.when is "afterProduction" only.' },
+  { id: 'neutral', field: 'sign "neutral"', why: 'The colony plot offered is neither good nor bad: its badge has its own shape (a square).' },
+  { id: 'landsIn', field: 'MonthEvent.landsIn (general strike)', why: 'Announced in planning, it hits in production; the production show must replay it as it lands, with whether the Governor paid.' },
+  { id: 'notEvents', field: 'Colony plot offered and cavern collapse as MonthEvents', why: 'Both happen today but outside MonthReport.events (lots.ts, specials.ts), so no screen can announce them as events.' },
+  { id: 'energyShort', field: 'Cold snap: which plots went short, per plot', why: 'ProductionLine already has a noEnergy part; it should name the event (part.event = coldSnap) so the plots it cost are marked.' },
 ];
+
+/** Which gaps each event needs closed before its screens can be built for real. */
+export const EVENT_GAPS: Record<EventKey, string[]> = {
+  federationTax: ['keys', 'effects', 'phases'], federationGrant: ['keys', 'effects', 'phases'], immigrationWave: ['keys', 'effects', 'phases'], emigrationWave: ['keys', 'effects', 'phases'],
+  festival: ['keys', 'effects', 'phases'], generalStrike: ['keys', 'effects', 'phases', 'landsIn'], inheritance: ['keys', 'effects', 'phases'], blamedForUnrest: ['keys', 'effects', 'phases'],
+  colonyPlot: ['notEvents', 'phases', 'neutral'],
+  sickness: ['sickEvent', 'because', 'phases'], muleTheft: ['keys', 'muleLost', 'phases'], epidemic: ['keys', 'effects', 'phases'], storeStrike: ['keys', 'effects', 'phases'],
+  dustStorm: ['phase', 'length'], drought: ['phase', 'length'], acidRain: ['phase', 'length'], solarFlare: ['phase', 'length'], cometPass: ['phase', 'length'], flood: ['phase', 'length'], volcanicAsh: ['phase', 'length'],
+  coldSnap: ['keys', 'energyShort', 'length'], meteorStrike: ['meteor', 'goodOptional', 'muleLost', 'length'],
+  pestSwarm: ['phase', 'length'], wildfire: ['phase', 'length'], bumperHarvest: ['phase', 'length'], cavernCollapse: ['notEvents', 'muleLost'], walkout: ['keys', 'length'], loyalCrew: ['keys', 'length'],
+  pirateRaid: ['keys', 'effects', 'phases'], storeFire: ['keys', 'effects', 'phases'],
+  ratsInSilo: ['keys', 'effects', 'phases'], crookedAccountant: ['keys', 'effects', 'phases'], packageFromHome: ['keys', 'effects', 'phases'], riot: ['keys', 'effects', 'phases'], volunteerCleanup: ['keys', 'effects', 'phases'],
+};

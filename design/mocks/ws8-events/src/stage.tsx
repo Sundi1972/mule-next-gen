@@ -1,6 +1,7 @@
 import { Creature, cx, GoodIcon, PlayerMark, SeatSpeciesProvider, SLOT_COLOR, type Good, type MapTile, type Slot } from '@mule/ui';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { PlotMap } from './borrowed/PlotMap';
+import { PHASE_NAME } from './catalogue';
 import { landed, playerChange, unitsAt, type Script } from './events';
 import { H, ME, OUTPUT, SEATS, seat, SPECIES_BY_SLOT, STAND, TILES, W } from './fixture';
 import { DeltaChip } from './glyphs';
@@ -186,8 +187,6 @@ export function useLanded() {
 }
 
 // --- The TV ---------------------------------------------------------------------------------------------------------
-
-const PHASE_NAME = { development: 'Development', production: 'Production' } as const;
 
 /** The big screen during a phase: the header, the map on the left, a rail on the right, the colony bar under both. */
 export function TvLayout({ map, rail, banner, bar, headerExtra }: { map: ReactNode; rail: ReactNode; banner?: ReactNode; bar?: ReactNode; headerExtra?: ReactNode }) {

@@ -5,6 +5,7 @@ import { PhoneB, TvB } from './directions/B';
 import { PhoneC, TvC } from './directions/C';
 import { BEAT, GAPS, SCENARIOS, script, type Scenario } from './events';
 import { EventGlyph, SignBadge } from './glyphs';
+import { EVENT_COUNT, sharedRoute } from './pages';
 import { Controls, PhoneFrame, ShowProvider, TvFrame, useShowClock } from './stage';
 
 type Dir = 'A' | 'B' | 'C';
@@ -64,6 +65,8 @@ function useHash(): string {
 
 export default function App() {
   const hash = useHash();
+  const shared = sharedRoute(hash);
+  if (shared) return shared;
   const [dir, id] = hash.split('-') as [string, string | undefined];
   const scenario = SCENARIOS.find((s) => s.id === id);
   if (scenario && dir === 'compare') return <Compare key={hash} scenario={scenario} />;
@@ -212,6 +215,18 @@ function Index() {
       <p className="mt-2 max-w-3xl text-base text-ink-2">
         Three directions for the overall look, each shown on four events: a dust storm (the whole colony), a pest swarm (one player’s land), sickness (two players, as development starts) and the new meteor strike. Then all three in one production phase. Every page plays the TV and Lena’s phone on one clock: play, pause, scrub, slow it down, or switch on reduced motion.
       </p>
+
+      <a href="#catalogue" className="mt-5 flex max-w-3xl items-center gap-4 rounded-panel border-2 border-holo-line bg-panel p-4 hover:border-holo" data-testid="link-catalogue">
+        <span className="flex -space-x-2">
+          {(['federationTax', 'colonyPlot', 'epidemic', 'meteorStrike', 'pirateRaid', 'volunteerCleanup'] as const).map((k) => (
+            <SignBadge key={k} ev={{ key: k, sign: k === 'colonyPlot' ? 'neutral' : k === 'volunteerCleanup' ? 'good' : 'bad' }} size={34} />
+          ))}
+        </span>
+        <span className="flex flex-col">
+          <span className="font-display text-xl font-semibold text-holo underline">All {EVENT_COUNT} events, phase by phase ▸</span>
+          <span className="text-sm text-ink-2">The same in every direction: each event’s glyph, weight, motion, where it lands and its phone card, and the sets that fire together.</span>
+        </span>
+      </a>
 
       <h2 className="label-caps mt-8">Pick a direction</h2>
       <div className="mt-3 grid max-w-[1400px] grid-cols-1 gap-4 lg:grid-cols-3" data-testid="directions">
