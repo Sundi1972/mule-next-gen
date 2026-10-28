@@ -411,6 +411,12 @@ describe('the roller', () => {
       ]);
       expect(rollPhase(state, 'production')).toEqual(fired);
       expect(rollPhase(ready(3), 'production')).toEqual(fired);
+      // Negative case: another seed fires the same rows, shaped by other dice.
+      const reseeded = ready(3);
+      reseeded.seed += 1;
+      const other = rollPhase(reseeded, 'production');
+      expect(other.map((e) => e.key)).toEqual(fired.map((e) => e.key));
+      expect(other).not.toEqual(fired);
     });
 
     withEveryRowAt(0.5, () => {
