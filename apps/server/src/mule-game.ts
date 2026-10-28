@@ -27,6 +27,7 @@ import {
   hungerPace,
   installMule,
   isElectionDone,
+  ballotAhead,
   list as listLot,
   litPlot,
   lotDone,
@@ -355,7 +356,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       if (stage === 'ceremony') throw new RuleError('The result is being announced');
       const waiting = this.seats.filter((s) => !s.isAi && !isElectionDone(state, s.id));
       for (const s of waiting) electionDone(state, s.id);
-      goneOn(stage === 'announce' ? 'opened the ballot' : 'closed the ballot', waiting.filter((s) => s.id !== hostId).map((s) => s.name));
+      const did = stage === 'ballot' ? 'closed the ballot' : ballotAhead(state) ? 'opened the ballot' : 'continued';
+      goneOn(did, waiting.filter((s) => s.id !== hostId).map((s) => s.name));
       return;
     }
     if (state.phase !== 'planning') throw new RuleError('Continue ends planning only');
