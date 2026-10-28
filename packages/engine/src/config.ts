@@ -918,6 +918,8 @@ export const STRATEGIST = {
   cashFloor: 60,
   /** What one colony air point costs it, in credits, rising as the air gets dirtier (doubles by Smoggy). */
   airCost: 10,
+  /** A green belt's running cost to it, in credits a month, set against the air it cleans (without full scoring, the cost alone). */
+  greenBeltCost: 5,
   /** Below this utility share of the best, a free plot is not worth pressing for in the first sweep; later sweeps take anything above laterShare. */
   grantShare: 0.75,
   grantLaterShare: 0.5,
@@ -948,6 +950,8 @@ export const STRATEGIST = {
   secondValue: { busy: 10, idle: 3 },
   /** Share it takes off next month's price for a good it would hold, per point of risk weight, because the forecast may be wrong. */
   forecastHaircut: 0.05,
+  /** And this share more off a unit it would buy only to resell, per point of risk weight. */
+  resaleRisk: 0.1,
   /** A corner pays this share over next month's price for the units the others are short of. */
   cornerPremium: 0.5,
   /**
