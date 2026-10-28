@@ -282,6 +282,24 @@ describe('FM-one-clock: one development clock for every seat', () => {
     expect(after.tiles[ossaHome.index]).toMatchObject({ owner: OSSA, outfit: 'food' });
   });
 
+  it("FM-one-clock: when Ossa's phone drops mid-walk and Lena then goes to the pub, development waits for Ossa's install to land", () => {
+    const { game, advanceTo, ossaHome } = walking();
+    game.handle(OSSA, { type: 'buyMule' });
+    advanceTo(walkOf(game.viewFor(null), OSSA).arrivesAt);
+    game.handle(OSSA, { type: 'outfit', outfit: 'food' });
+    game.handle(OSSA, { type: 'install', ...xy(ossaHome) });
+    const arrivesAt = walkOf(game.viewFor(null), OSSA).arrivesAt;
+    game.connectionChanged(OSSA, false);
+    game.handle(LENA, { type: 'pub' });
+    expect(game.viewFor(null).phase, 'her install is still walking').toBe('development');
+    advanceTo(arrivesAt - 1);
+    expect(game.viewFor(null).phase).toBe('development');
+    advanceTo(arrivesAt);
+    const after = game.viewFor(null);
+    expect(after.phase).toBe('production');
+    expect(after.tiles[ossaHome.index]).toMatchObject({ owner: OSSA, outfit: 'food' });
+  });
+
   it('FM-one-clock: when the last seat walks to the pub from her plot, development ends at her arrival ms', () => {
     const { game, state, advanceTo, ossaHome } = walking();
     game.handle(LENA, { type: 'pub' });
