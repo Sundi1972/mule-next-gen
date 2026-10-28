@@ -26,6 +26,7 @@ import { ELECTION_LINKS, ElectionAuditPage, electionRoute } from './screens/audi
 import { MONTHEND_STATES, MonthEndAuditPage } from './screens/audit/MonthEndAudit';
 import { AUCTION_STATES as AUCTION_AUDIT_STATES, AuctionAuditBody } from './screens/audit/AuctionAudit';
 import { AUDIT_DEV_ROUTES, AuditDevPage, DEV_PREFIX, DevAuditContents } from './screens/audit/DevAuditPage';
+import { ARCADE_CONTENTS, ARCADE_ROUTES, ArcadePage } from './screens/arcade/ArcadeApp';
 
 /** The development audit: its contents, then each state, prefixed (#walk is the goods auction's own route). */
 const AUDIT_DEV_LINKS = [
@@ -325,6 +326,7 @@ export default function App() {
       </Page>
     );
 
+  if (hash === ARCADE_CONTENTS || ARCADE_ROUTES.some((r) => r.id === hash)) return <ArcadePage route={hash} />;
   if (hash === 'audit-dev') return <DevAuditContents />;
   const devAudit = AUDIT_DEV_ROUTES.find((r) => `${DEV_PREFIX}${r.id}` === hash);
   if (devAudit) return <AuditDevPage key={hash} state={devAudit} />;
@@ -582,7 +584,14 @@ export default function App() {
 
   return (
     <div className="min-h-full bg-table p-8 text-ink" data-testid="index">
-      <h2 className="label-caps">For approval · UX audit</h2>
+      <h2 className="label-caps">To play · arcade walking in development (Heiko, 2026-10-29)</h2>
+      <p className="mt-1 max-w-3xl text-sm text-ink-2">
+        Steer your colonist yourself: arrow keys and SPACE, or the mouse; on a phone a joystick and one button. Store, corral, outfitter, out with the MULE on its lead, your plot, install. Slice 1 of 4; every speed is a tunable.
+      </p>
+      <div className="mt-2 flex flex-col gap-2" data-testid="arcade-links">
+        <Links states={[{ id: ARCADE_CONTENTS, title: 'Arcade walking: contents' }, ...ARCADE_ROUTES]} />
+      </div>
+      <h2 className="label-caps mt-6">For approval · UX audit</h2>
       <p className="mt-1 max-w-3xl text-sm text-ink-2">
         The priority-1 screens, redesigned from the UX audit (docs/research/2026-10-28-ws6-ux-audit.md): every change numbered on the screen, with the player intent it serves and why. The planning hub first, then the election, the new month-end league table, the goods auction and development.
       </p>

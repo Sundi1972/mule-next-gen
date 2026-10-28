@@ -1,0 +1,207 @@
+import { createContext, useContext, useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from 'react';
+import { ME, newWorld, TRACK } from './fixture';
+import { DEFAULT_TUNABLES, setBot, step, teleport, type Input, type P, type Space, type Tunables, type WalkTerrain, type World } from './sim';
+
+/**
+ * The imperative shell: one requestAnimationFrame loop per page, stepping the pure sim at a fixed 60 Hz and feeding
+ * every view on the page (phone, laptop, TV, the tunables' readout) the same world. Inputs from keys, the joystick
+ * and the mouse land in one mutable box; the loop turns them into this step's Input for Lena.
+ */
+
+const STEP_MS = 1000 / 60;
+/** After a stall (a hidden tab), catch up at most this many steps rather than fast-forwarding the turn. */
+const MAX_STEPS = 6;
+
+type Listener = () => void;
+
+/** What the controls write and the loop reads: never React state, so a key press costs no render. */
+interface Controls {
+  keys: Set<string>;
+  stick: P | null;
+  mouse: (P & { space: Space }) | null;
+  action: boolean;
+}
+
+export class Arcade {
+  world: World;
+  tunables: Tunables;
+  controls: Controls = { keys: new Set(), stick: null, mouse: null, action: false };
+  private worldListeners = new Set<Listener>();
+  private tunListeners = new Set<Listener>();
+
+  constructor(tunables: Tunables = DEFAULT_TUNABLES) {
+    this.tunables = tunables;
+    this.world = newWorld(tunables);
+  }
+
+  subscribe = (l: Listener) => {
+    this.worldListeners.add(l);
+    return () => this.worldListeners.delete(l);
+  };
+  subscribeTunables = (l: Listener) => {
+    this.tunListeners.add(l);
+    return () => this.tunListeners.delete(l);
+  };
+  private emit() {
+    for (const l of this.worldListeners) l();
+  }
+
+  /** This step's input for the human: the stick wins over the keys, the keys over a held mouse. */
+  input(): Input {
+    const c = this.controls;
+    const action = c.action;
+    c.action = false;
+    if (c.stick && Math.hypot(c.stick.x, c.stick.y) > 0.08) return { dir: c.stick, action };
+    const k = c.keys;
+    const dir = { x: (k.has('ArrowRight') ? 1 : 0) - (k.has('ArrowLeft') ? 1 : 0), y: (k.has('ArrowDown') ? 1 : 0) - (k.has('ArrowUp') ? 1 : 0) };
+    if (dir.x || dir.y) return { dir, action };
+    return { dir: { x: 0, y: 0 }, action, toward: c.mouse };
+  }
+
+  tick(ms: number) {
+    let n = Math.min(MAX_STEPS, Math.floor(ms / STEP_MS));
+    if (n <= 0) return 0;
+    const used = n * STEP_MS;
+    let w = this.world;
+    while (n-- > 0) w = step(w, { [ME]: this.input() }, STEP_MS, this.tunables);
+    if (w !== this.world) {
+      this.world = w;
+      this.emit();
+    }
+    return used;
+  }
+
+  press() {
+    this.controls.action = true;
+  }
+
+  setTunables(t: Tunables) {
+    this.tunables = t;
+    for (const l of this.tunListeners) l();
+    this.emit();
+  }
+
+  restart() {
+    const autopilot = this.world.colonists.find((c) => c.id === ME)?.bot ?? false;
+    this.world = setBot(newWorld(this.tunables), ME, autopilot);
+    this.controls = { keys: new Set(), stick: null, mouse: null, action: false };
+    this.emit();
+  }
+
+  dropOn(terrain: WalkTerrain) {
+    const at = TRACK[terrain];
+    if (!at) return;
+    this.world = teleport(this.world, ME, { x: at.x + 0.2, y: at.y + 0.5 }, this.tunables);
+    this.emit();
+  }
+
+  setAutopilot(on: boolean) {
+    this.world = setBot(this.world, ME, on);
+    this.emit();
+  }
+}
+
+const Ctx = createContext<Arcade | null>(null);
+
+/** One arcade per page: every view under it draws the same world. */
+export function ArcadeProvider({ children, autopilot = false }: { children: ReactNode; autopilot?: boolean }) {
+  const arcade = useMemo(() => {
+    const a = new Arcade();
+    if (autopilot) a.setAutopilot(true);
+    return a;
+  }, [autopilot]);
+  useEffect(() => {
+    let raf = 0;
+    let last = performance.now();
+    let carry = 0;
+    const frame = (now: number) => {
+      carry += now - last;
+      last = now;
+      carry -= arcade.tick(carry);
+      // A stall longer than the catch-up is dropped, never replayed.
+      if (carry > STEP_MS * MAX_STEPS) carry = 0;
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, [arcade]);
+  return <Ctx.Provider value={arcade}>{children}</Ctx.Provider>;
+}
+
+export function useArcade(): Arcade {
+  const a = useContext(Ctx);
+  if (!a) throw new Error('useArcade outside ArcadeProvider');
+  return a;
+}
+
+export function useWorld(): World {
+  const a = useArcade();
+  return useSyncExternalStore(a.subscribe, () => a.world);
+}
+
+export function useTunables(): Tunables {
+  const a = useArcade();
+  return useSyncExternalStore(a.subscribeTunables, () => a.tunables);
+}
+
+const STEER_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+
+/**
+ * Makes an element the game's keyboard: arrows steer, SPACE presses the action button. preventDefault only for those,
+ * so the review loop's S, N and Esc (and ⌥-click) still reach select-client. Focused on load; `focused` drives the
+ * "click the game to steer" hint. Pressing an arrow takes Lena back from the autopilot.
+ */
+export function useGameKeys() {
+  const arcade = useArcade();
+  const ref = useRef<HTMLDivElement>(null);
+  const focusedRef = useRef(false);
+  const listeners = useRef(new Set<Listener>());
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const emit = () => listeners.current.forEach((l) => l());
+    const down = (e: KeyboardEvent) => {
+      if (e.altKey || e.metaKey || e.ctrlKey) return;
+      if (STEER_KEYS.has(e.key)) {
+        e.preventDefault();
+        arcade.controls.keys.add(e.key);
+        // Steering takes Lena back from the autopilot.
+        if (arcade.world.colonists.find((c) => c.id === ME)?.bot) arcade.setAutopilot(false);
+      } else if (e.key === ' ') {
+        e.preventDefault();
+        if (!e.repeat) arcade.press();
+      }
+    };
+    const up = (e: KeyboardEvent) => {
+      if (STEER_KEYS.has(e.key)) arcade.controls.keys.delete(e.key);
+    };
+    const focus = () => {
+      focusedRef.current = true;
+      emit();
+    };
+    const blur = () => {
+      focusedRef.current = false;
+      arcade.controls.keys.clear();
+      emit();
+    };
+    el.addEventListener('keydown', down);
+    el.addEventListener('keyup', up);
+    el.addEventListener('focus', focus);
+    el.addEventListener('blur', blur);
+    el.focus({ preventScroll: true });
+    return () => {
+      el.removeEventListener('keydown', down);
+      el.removeEventListener('keyup', up);
+      el.removeEventListener('focus', focus);
+      el.removeEventListener('blur', blur);
+    };
+  }, [arcade]);
+  const focused = useSyncExternalStore(
+    (l) => {
+      listeners.current.add(l);
+      return () => listeners.current.delete(l);
+    },
+    () => focusedRef.current,
+  );
+  return { ref, focused, focus: () => ref.current?.focus({ preventScroll: true }) };
+}
