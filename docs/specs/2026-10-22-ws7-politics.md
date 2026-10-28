@@ -261,7 +261,7 @@ ux           WS6's hub mock at ws6-ux b28ee91 (awaiting Heiko's approval):
              design/mocks/ws6-ux/src/screens/PlanningHub.tsx and Election.tsx · routes #hub,
              #hub-nominate, #hub-council, #hub-governor, #tv-election · testids offices,
              election-stage, run-governor, run-sheriff, withdraw, candidates, voted, vote-weight,
-             ballot-countdown, ballot-reveal, result-<office>-<id>, tie-break, gov-tax, tax-down,
+             ballot-countdown, ballot-reveal, result-<office>-<id>, how-<office>, gov-tax, tax-down,
              tax-value, tax-up, tax-confirm, tax-readonly, vote-weights, land-baron.
              GRAFT TARGET: the hub's politics slots (WS6's PR-9 frame).
 depends_on   C9 (contract), WS6 mock approval (not stubbable: an implementer never designs a screen)
@@ -772,6 +772,18 @@ did       Heiko: the colony budget is a separate pot filled from taxes, fines an
 because   G-4: the colony, not only each player, has something to win or lose
 goal      P-1 — still met; slice 5's scope grows by projects, the colony score is WS6's
 folded    D1 note below; slice 2+ planning
+```
+
+```
+AM-14 · 2026-10-28 · lead · follow-up e2e (Baron tie-break)
+
+target    §1 C11 ux testids
+did       C11 listed a `tie-break` testid; the approved mock (Election.tsx) and the built
+          TvElection.tsx name how an office was decided with `how-<office>` ("A tie: Ossa, the
+          Land Baron, broke it."). The mock is binding, so the list now says how-<office>.
+because   P-1: the spec must match the approved screen it points at
+goal      P-1 — still met
+folded    C11 testid list; e2e/politics-tie.ts asserts on how-governor
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
