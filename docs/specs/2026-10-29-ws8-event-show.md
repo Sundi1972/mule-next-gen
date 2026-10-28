@@ -522,6 +522,25 @@ goal      G-1 (unchanged)
 folded    RULE-1 example, C2 tomorrow and T-AC-1 now say 17 200 for one dust storm
 ```
 
+```
+AM-5 · 2026-10-28 · PM ruling (the intro), at PR-1's first review gate
+
+target    §1 C1, C3, C4, C5 · §2 RULE-1 · §3 EVENT_SHOW and ProductionView · §6 T-AC-1, T-AC-4
+said      the intro (the phase's roll call of what fired) had no length of its own; the module folded it into the
+          first event's segment, so the first story's motion played about 20% faster than a later one of the same
+          weight
+did       the server sends the intro too: EVENT_SHOW.introMs = 1 800 (the gallery's BEAT.intro); ProductionView gains
+          `introMs` (1 800 when any event fired, 0 in a quiet month), a named edit in WS3's protocol. RULE-1:
+          showMs = min(capMs, (introMs if any event) + Σ play(e) + (rollCallMs if any bulletin)); production and
+          the client's event window use that showMs. The module plays the intro in its own slot before the first
+          segment and no longer counts it in k, so equal weights play at equal motion speed. New example: one dust
+          storm → 15 000 + (1 800 + 7 000 − 4 800) = 19 000 ms.
+because   Heiko approved the gallery's pacing; a first event 20% fast drifts from it (PM: restores what he approved)
+goal      G-1 (unchanged)
+folded    plan Task 3b (after Task 3: it shares ProductionMap's timeline); T-AC-1's values gain the intro;
+          T-AC-4 gains "first and later events of equal weight play at equal motion speed (pace)"
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: the event show

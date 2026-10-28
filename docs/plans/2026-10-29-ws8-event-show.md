@@ -48,7 +48,7 @@ one overlay on the TV and one on the phone.
 
 | PR | Sub-branch | Scope (tasks / changes) | ACs verified | Contracts produced | Contracts consumed | Frontend touched? |
 |----|------------|-------------------------|--------------|--------------------|--------------------|-------------------|
-| PR-1 | `ws8-show-pr1` | Tasks 0-6 (C1-C7) | B-AC-1, B-AC-2, T-AC-1..6, T-AC-9 | EVENT_SHOW; ProductionEventView + phase, weight, playMs | MonthEvent.phase (WS1 0582373) | Yes |
+| PR-1 | `ws8-show-pr1` | Tasks 0-6 and 3b (C1-C7, AM-5) | B-AC-1, B-AC-2, T-AC-1..6, T-AC-9 | EVENT_SHOW; ProductionEventView + phase, weight, playMs | MonthEvent.phase (WS1 0582373) | Yes |
 | PR-2 | `ws8-show-pr2` | Tasks 9-13 (C8-C12) | B-AC-3, B-AC-4, T-AC-7, T-AC-8, T-AC-10 | EventView, MuleView.events | WS1 wave-2 rows, MonthEvent.effects / becomes / muleLost / pending | Yes |
 
 PR-1 is one wave: its tasks run in order (C2/C3 atomic; C5-C7 share the timeline). PR-2 starts only after WS1's
@@ -161,6 +161,19 @@ Standing authority line, in every handoff:
 - [ ] **Step 3: Implement C5 per spec §1 C5 and §2 RULE-1, RULE-2.** Mechanism: in_place.
 - [ ] **Step 4: Run** `pnpm --filter @mule/web exec vitest run` → PASS (production-show.test.ts unchanged)
 - [ ] **Step 5: Commit** red then green; send WS6 the ProductionMap.tsx hunk for review
+
+### Task 3b: The intro has its own length — C1, C3, C4, C5 (spec AM-5)
+
+**Depends on:** Task 3 (shares ProductionMap's timeline) · **ACs verified:** T-AC-1, T-AC-4 · **Spec sections consumed:** §8 AM-5, §2 RULE-1
+
+**Files:**
+- Modify: `packages/engine/src/config.ts` (EVENT_SHOW.introMs), `apps/server/src/mule-game.ts::eventShow`, `::productionView`, `packages/protocol/src/index.ts::ProductionView` (introMs), `packages/ui/src/events/timing.ts`, `packages/ui/src/components/ProductionMap.tsx` (the window includes the intro)
+- Test: `apps/server/test/events-view.test.ts`, `packages/ui/test/events-segments.test.ts`
+
+- [ ] **Step 1: Strengthen `T-AC-1` (one dust storm → 19 000 ms; the cap includes the intro; a quiet month still 15 000) and `T-AC-4` (first and later events of equal weight play at equal pace; the intro occupies [start, start + introMs/1000) before the first segment)** → run → FAIL
+- [ ] **Step 2: Implement AM-5 per spec §8 AM-5 and §2 RULE-1.** Mechanism: in_place.
+- [ ] **Step 3: Run** server events-view + production-view + phase-scale, ui vitest, web events-production + production-show → PASS
+- [ ] **Step 4: Commit** red then green; send WS3 the protocol and mule-game hunks, WS6 the ProductionMap hunk
 
 ### Task 4: The TV's production screen — C6
 
