@@ -42,16 +42,6 @@ const seats = [
 ];
 
 describe('MuleGame', () => {
-  it('moves on early when every connected player is ready, without waiting for a dropped phone', () => {
-    const { ctx } = fakeContext();
-    const game = new MuleGame(ctx, 7);
-    game.start(seats);
-    game.handle('s1', { type: 'ready' });
-    expect(game.viewFor('s1').phase).toBe('planning');
-    game.connectionChanged('s2', false);
-    expect(game.viewFor('s1').phase).toBe('landGrant');
-  });
-
   it('shows each player only their own stock and land secrets', () => {
     const { ctx, advance } = fakeContext();
     const game = new MuleGame(ctx, 7);

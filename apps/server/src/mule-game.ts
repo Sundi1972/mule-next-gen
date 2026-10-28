@@ -475,8 +475,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     // The election ends on its own clocks.
     if (this.electionOpen()) return;
     const phase = this.state?.phase;
-    // A phone that drops in the land grant just doesn't claim; a reload must not end the grant for everyone.
-    const excused = (id: string) => this.away.has(id) && phase !== 'landGrant';
+    // A phone that drops in the land grant just doesn't claim; a reload must not end the grant for everyone. In planning a
+    // dropped phone may be a player who locked it to think: planning waits for their Ready.
+    const excused = (id: string) => this.away.has(id) && phase !== 'landGrant' && phase !== 'planning';
     const waiting = this.seats.filter((s) => !s.isAi && !excused(s.id) && !this.ready.has(s.id) && !this.doneDeveloping(s.id));
     // The auctions end on their own, good by good and lot by lot.
     if (!phase || phase === 'gameOver' || phase === 'auction' || phase === 'landAuction' || waiting.length > 0) return;
