@@ -1,4 +1,4 @@
-import { DEFAULT_SPECIES, MAP, type SpecialKind as EngineSpecialKind } from '@mule/engine';
+import { DEFAULT_SPECIES, MAP, TERRAIN_ODDS as ENGINE_TERRAIN_ODDS, type MINERAL_ODDS, type SpecialKind as EngineSpecialKind } from '@mule/engine';
 import type { MuleView, PlayerView, TableView, TileView } from '@mule/protocol';
 import { GOOD_NAME, SPECIES, type Good, type MapSpecial, type MapTile, type Slot, type SpecialKind, type Species } from '@mule/ui';
 
@@ -104,21 +104,42 @@ export function plotName(x: number, y: number): string {
   return `${x + 1}·${y + 1}`;
 }
 
-/** What a plot is good for, in one line. From the design doc's terrain odds; Crystite and Rare earth turn up anywhere, so no line names them. */
-export const TERRAIN_ODDS: Partial<Record<TileView['terrain'], string>> = {
-  river: 'Often good for Food and Water. Poor for Smithore.',
-  lake: 'Often good for Water and Food. No Smithore.',
-  plains: 'Often good for Food and Energy. Little Smithore.',
-  forest: 'Often good for Food. Poor for Energy.',
-  swamp: 'Often good for Water. Poor for Food.',
-  hills: 'Good odds of Smithore. Poor for Food.',
-  mountains: 'Very good odds of Smithore. Poor for Food and Energy.',
-  desert: 'Often good for Energy. Poor for Water and Food.',
-  tundra: 'Often good for Energy and Water. Some Smithore.',
-  ice: 'Often good for Water. Little else.',
-  volcanic: 'Often good for Energy. Some Smithore.',
-  crater: 'Poor for Food. Little Smithore.',
+type TerrainOdds = (typeof ENGINE_TERRAIN_ODDS)[keyof typeof ENGINE_TERRAIN_ODDS];
+type SmithoreOdds = keyof typeof MINERAL_ODDS;
+
+const SMITHORE_HINT: Record<SmithoreOdds, string> = {
+  none: 'No Smithore.',
+  low: 'Little Smithore.',
+  medium: 'Some Smithore.',
+  high: 'Good odds of Smithore.',
+  veryHigh: 'Very good odds of Smithore.',
 };
+
+/** Smithore odds this good are the plot's point, so its hint leads with them. */
+const SMITHORE_LEADS: readonly SmithoreOdds[] = ['high', 'veryHigh'];
+
+/** "Food", "Food and Water", "Food, Water and Energy". */
+function listGoods(names: string[]): string {
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0]!;
+}
+
+function terrainHint({ grown, mined }: TerrainOdds): string {
+  const rated = (level: 'good' | 'poor') =>
+    Object.entries(grown)
+      .filter(([, l]) => l === level)
+      .map(([g]) => GOOD_NAME[g as Good]);
+  const good = rated('good');
+  const poor = rated('poor');
+  const grownSentences = [good.length ? `Often good for ${listGoods(good)}.` : '', poor.length ? `Poor for ${listGoods(poor)}.` : ''];
+  const smithore = SMITHORE_HINT[mined.smithore];
+  const sentences = SMITHORE_LEADS.includes(mined.smithore) ? [smithore, ...grownSentences] : [...grownSentences, smithore];
+  return sentences.filter(Boolean).join(' ');
+}
+
+/** What a plot is good for, in one line, from the engine's terrain odds. Crystite and Rare earth turn up anywhere, so no line names them. */
+export const TERRAIN_ODDS: Partial<Record<TileView['terrain'], string>> = Object.fromEntries(
+  Object.entries(ENGINE_TERRAIN_ODDS).map(([terrain, odds]) => [terrain, terrainHint(odds)]),
+);
 
 /** Fails to compile if the engine's special kinds and the design system's drift apart. */
 type SameKinds = [SpecialKind] extends [EngineSpecialKind] ? ([EngineSpecialKind] extends [SpecialKind] ? true : never) : never;
