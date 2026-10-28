@@ -47,7 +47,7 @@ function votedElection(): GameState {
   runFor(state, 'brix', 'governor', { kind: 'hold' });
   runFor(state, 'ossa', 'governor', { kind: 'hold' });
   for (const id of SEATS) electionDone(state, id);
-  for (let t = 0; state.politics!.election!.stage === 'nominate' && t < 120_000; t += 10) stepElection(state, 10);
+  for (let t = 0; state.politics!.election!.stage === 'announce' && t < 120_000; t += 10) stepElection(state, 10);
   expect(state.politics!.election!.stage).toBe('ballot');
   castVote(state, 'lena', 'governor', 'brix');
   castVote(state, 'tam', 'governor', 'ossa');
@@ -57,7 +57,8 @@ function votedElection(): GameState {
 describe('secret ballots', () => {
   it('T-AC-7: observe() for one seat and cloneForSim never expose or share another seat’s ballot, in any stage', () => {
     const state = votedElection();
-    for (const stage of ['ballot', 'reveal', 'over'] as const) {
+    for (const stage of ['ballot', 'ceremony', 'over'] as const) {
+      for (const id of SEATS) electionDone(state, id);
       for (let t = 0; state.politics!.election!.stage !== stage && t < 120_000; t += 10) stepElection(state, 10);
       expect(state.politics!.election!.stage).toBe(stage);
       // Each voter sees its own ballot and nobody else's; a seat that didn't vote sees none.
