@@ -2,7 +2,9 @@
 
 **Status:** DRAFT (§1–§6), 2026-10-28. Goal gate passed (Heiko, "Yes, as recommended"); approach and class ruled by the
 PM the same day (recommended approach widened to Heiko's two layers; class **Programme**). G-A's proof below is
-**restated for the two layers and awaits Heiko's confirmation** (marked ⚠). Build waits for WS1's step 2 (playbook
+restated for the two layers and **approved by Heiko** ("Yes, all eight", 29 Oct). **Prompt and tool design on HOLD**
+(PM, 29 Oct): Heiko asked how the AI learns every rule, legal move and the win criteria (an MCP-like game interface);
+not frozen until the PM's ruling lands here. Build waits for WS1's step 2 (playbook
 schema, `validatePlan`, engine plans, triggers) and WS3's game record. Source: Claude Doc "AI Strategy: Playing to
 Win" (https://claude.ai/artifact/LCDgi74rrZ1wzDf4V5xaV3), sections "Two layers", "What Claude decides", "The AI's
 mind". Spec B (diplomacy, and the shared memory module: notebook, stances, promises) is separate and follows.
@@ -19,7 +21,7 @@ and they play better for it.** `[handoff]`
   packages/ai/src/brain.ts::Brain.ask) + `executed` (trial 2026-10-28).
 - **Value** `[review-only]`: an opponent whose play coheres across months, reads the table and learns within the game,
   at a few cents a game; the real-time phases never wait for a model.
-- **UBER-AC-A** ⚠ restated: in a paid 20-game run on the same seeds, Claude-playbook seats beat engine-playbook seats
+- **UBER-AC-A** (approved 29 Oct): in a paid 20-game run on the same seeds, Claude-playbook seats beat engine-playbook seats
   (bar set with WS1's tournament numbers); ≥80% of the playbooks that take effect carry Claude's accepted edits; no
   phase waits for Claude; replaying any game from its record with the key unset gives the same final scores; all AI
   seats together stay within the $1 table budget (AM-19).
@@ -55,6 +57,8 @@ HC-5  All AI seats of a game together stay within BRAIN.gameBudgetUsd; a seat pa
       playbook quietly.                                                                source: AM-19 · fatal
 HC-6  packages/ai stays pure (no I/O, no Date.now, no Math.random); the model sits behind a port.
                                                                                        source: CLAUDE.md · fatal
+HC-8  A Rookie seat never attempts a monopoly: the validator clamps its monopolyTarget to null and any edit that
+      would corner a good.                                                            source: Heiko, 29 Oct · fatal
 HC-7  Table talk follows the strategy and never lies about game facts or rules.        source: Heiko, 28 Oct · fatal
 ```
 
@@ -183,7 +187,7 @@ Code-only; no existing state to reach. The record starts with WS3's build.
 | T-AC-A4 | Ledger and trial rows for strategy and playbook calls; cost per game within gameBudgetUsd. | ledger file, trial report | — | C6 |
 
 ## §7 · Risks & Spikes `[review-only]`
-- **S-A1 (spike, needs Heiko's OK, ~$0.10):** Haiku 5.5 + adaptive thinking vs Sonnet 5.5 on the same 20 briefs:
+- **S-A1 (spike, APPROVED by Heiko 29 Oct, ~$0.10, cost from the ledger):** Haiku 5.5 + adaptive thinking vs Sonnet 5.5 on the same 20 briefs:
   latency p90 against the slack windows, accepted-edit share, cost. Blocks C3's model choice for the strategy call.
 - **R-A1:** slack windows shorter than the model at fast tables. Mitigation: RULE-A1 row 2; the trial measures the
   late share.
