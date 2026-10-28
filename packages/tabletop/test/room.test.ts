@@ -910,11 +910,13 @@ describe('Room: a connection is a board or a seat, never both (FM-12)', () => {
     return { ...ctx, tv, before };
   }
 
-  it.each<{ row: string; started: boolean; hello: Hello }>([
+  const boardJoins: { row: string; started: boolean; hello: Hello }[] = [
     { row: 'joins by name in the lobby', started: false, hello: () => ({ t: 'join', code: 'KRTX', name: 'TV' }) },
     { row: "joins by s2's token after Start", started: true, hello: (ctx) => ({ t: 'join', code: 'KRTX', name: 'TV', seatToken: ctx.mia.last('welcome')!.seatToken! }) },
     { row: "joins by s2's move code after Start", started: true, hello: (ctx) => ({ t: 'join', code: 'KRTX', name: 'TV', handoff: handoff(ctx.room, ctx.mia) }) },
-  ])('FM-12: a board that $row is refused with "This screen is already the table", and nothing changes: no seat is taken or added, s2 keeps its screen, the host and board count stay, and the game hears nothing', async ({ started, hello }) => {
+  ];
+
+  it.each(boardJoins)('FM-12: a board that $row is refused with "This screen is already the table", and nothing changes: no seat is taken or added, s2 keeps its screen, the host and board count stay, and the game hears nothing', async ({ started, hello }) => {
     const { room, heiko, mia, heard, tv, before } = await tvSays(started, hello);
 
     expect(tv.last('error')?.message).toBe('This screen is already the table');
