@@ -185,6 +185,16 @@ Every handoff carries this line verbatim:
 - [ ] **Step 3: Write the failing test `T-AC-A11: RULE-A5 rows 1-3; a Sonnet call is counted at Sonnet's prices`** — examples: fresh seat → Sonnet; share left below Sonnet's worst case but above Haiku's → Haiku, ledgered 'fallback'; below both → no call, engine playbook. Altitude: contract (the model each fake request names; ledger usd). Negative case: a Sonnet call priced at Haiku rates → red.
 - [ ] **Step 4: Run all three** → FAIL
 - [ ] **Step 5: Implement C4 per spec §1 C4 and §2 RULE-A1, RULE-A2 rows 1-2, RULE-A5** — fire-and-forget with a deadline at the land grant; asks through createBrain so `busy` (INV-one-in-flight) and the budget hold; the model per call from RULE-A5. Mechanism: sprout + one named edit.
+  Plan-drift corrections from Tasks 1.1-1.3 (ws2-a-pr1-land @ ff8dbdb), to fold in:
+  - `BrainService.writerFor(seat)` returns the writer's checked reply and its refusals (`{ reply, refused }`), and
+    validate runs OUTSIDE it, so WS3's recorder captures the reply before validatePlan and a replay returns it as
+    recorded, never re-checking it. Send WS3 `writerFor`'s exact signature before the PR opens.
+  - The adapter over `client.ts::createWriteComplete` passes `stopReason` through (the writer's `refused` and
+    `cut_off` causes need it).
+  - If validatePlan throws, catch it here: log it, and the engine's playbook plays (the game never stalls on it).
+  - Refuse before calling a model with no price table (RULE-A5 unknown); the ledger's dearest-rate billing is the
+    backstop, not the rule.
+  - `worstCaseUsd(prompt, call)` takes the write call's `{model, maxTokens}` (required since 92c38ec).
 - [ ] **Step 6: Run, then the existing brain-table tests** (`pnpm --filter @mule/server test`) → PASS; commit `feat(server): the brain asks for the land-grant playbook as upkeep opens, Sonnet then Haiku by share (C4, T-AC-A1, T-AC-A3, T-AC-A11)`
 
 ### Task 1.5: the record and the slice's promise — C5, B-AC-A1
@@ -322,7 +332,7 @@ Every handoff carries this line verbatim:
 
 ### Task 4.2: the rest of the brief — C1
 
-- [ ] **Step 1: Implement C1's remaining sections per spec §1 C1** — the seat's strategy and last outcomes, prices with a 3-month trend (trend length a BRAIN value), the export wishlist; caps per section in BRAIN.
+- [ ] **Step 1: Implement C1's remaining sections per spec §1 C1** (plan-drift: merge the writer's `refused` into the next brief's rejections; unify plot naming, grid position vs PlotIndex, with C8's manual) — the seat's strategy and last outcomes, prices with a 3-month trend (trend length a BRAIN value), the export wishlist; caps per section in BRAIN.
 - [ ] **Step 2: Run T-AC-A10 and T-AC-A2** (still deterministic, still public only) → PASS; commit `feat(ai): the brief carries what happened and the trends (C1, T-AC-A10)`
 
 ### Task 4.3: slack-time asks — C4
