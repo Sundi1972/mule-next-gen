@@ -1075,8 +1075,9 @@ export const AI_HANDS = {
 };
 
 /**
- * The balance targets `pnpm sim` checks, from the design doc's Economy model tab, each named for its check. Shares are
- * of months or of games, as the check says; the report prints the targets from here.
+ * The balance targets `pnpm sim` checks, from the design doc's Economy model tab, each named for its check, and the
+ * assumptions it measures under, which no check reads. Shares are of months or of games, as the check says; the report
+ * prints the targets from here.
  */
 export const SIM_TARGETS = {
   /** MULE price median: from min to max credits. */

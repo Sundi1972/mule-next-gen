@@ -90,24 +90,29 @@ function forcedBand(name: string | null): AirBand | null {
 }
 
 /**
- * What this month's rolls fire if the air were in `band` and every player's plots had caused
- * SIM_TARGETS.forcedAirPoints last month, rolled on a copy so the game itself plays on unforced. Call it once
- * development is played: its sickness rolls read what they read at its start, and production's what they will read.
- * Every sickness roll that hits counts, Medicine or not; cavern collapses are left to the caller, since the air
- * doesn't move them.
+ * An unflagged copy of the state, to roll this month's events on without touching the game. With a band, its air is
+ * that band's and every player's plots caused SIM_TARGETS.forcedAirPoints last month; without, it rolls as the game
+ * did. Take it once development is played: sickness then reads what it read at development's start, and production's
+ * rolls what they will read.
  */
-function forcedEvents(state: GameState, band: AirBand): PhaseEvents {
+function rollingCopy(state: GameState, band: AirBand | null): GameState {
   const copy = structuredClone(state);
   delete copy.whatIf; // a what-if copy rolls nothing
+  if (!band) return copy;
   copy.air = band.from;
   const caused = Object.fromEntries(copy.players.map((p) => [p.id, SIM_TARGETS.forcedAirPoints]));
   const last = copy.history.at(-1);
   if (last) last.pollutionBy = caused;
   else copy.history.push(standInReport(copy, caused));
-  return {
-    development: copy.players.filter((p) => rollPlayerEvent(copy, 'sickness', 'development', p.id)).length,
-    production: rollPhase(copy, 'production').length,
-  };
+  return copy;
+}
+
+const sicknessRolls = (copy: GameState) => copy.players.filter((p) => rollPlayerEvent(copy, 'sickness', 'development', p.id)).length;
+
+/** This month's events in `band`'s air, sickness counted as in the plain count; collapses are the caller's (the air doesn't move them). */
+function forcedEvents(state: GameState, band: AirBand): PhaseEvents {
+  const copy = rollingCopy(state, band);
+  return { development: sicknessRolls(copy), production: rollPhase(copy, 'production').length };
 }
 
 /** Month 1 has no last month: a report with nothing in it but the air points each player caused. */
@@ -197,17 +202,18 @@ function main() {
     // Who starts each development hungry, for the spiral: a player hungry SPIRAL_MONTHS months running.
     const hungryRun = new Map<string, { run: number; spiral: boolean }>();
     // This month's sickness, caverns and forced counts, read once development is played; production completes them.
-    let pending: { sick: number; caverns: number[]; forced: PhaseEvents | null } | null = null;
+    let pending: { sickness: number; caverns: number[]; forced: PhaseEvents | null } | null = null;
     const onEachPhase = (s: GameState) => {
       onPhase(s);
       if (s.phase === 'production' && pending) {
         const caveIns = pending.caverns.filter((i) => s.tiles[i]!.special?.kind !== 'crystalCavern').length;
-        monthEvents.push({ development: pending.sick, production: (s.history.at(-1)!.events?.length ?? 0) + caveIns });
+        monthEvents.push({ development: pending.sickness, production: (s.history.at(-1)!.events?.length ?? 0) + caveIns });
         if (pending.forced) forcedMonthEvents.push({ development: pending.forced.development, production: pending.forced.production + caveIns });
         pending = null;
       }
       if (s.phase !== 'development') return;
-      pending = { sick: s.players.filter((p) => p.sick).length, caverns: cavernsOf(s), forced: band && forcedEvents(s, band) };
+      // Every sickness roll that hits counts: a Medicine cure is the event's effect, and Player.sick shows only the uncured.
+      pending = { sickness: sicknessRolls(rollingCopy(s, null)), caverns: cavernsOf(s), forced: band && forcedEvents(s, band) };
       for (const p of s.players) {
         const h = hungryRun.get(p.id) ?? { run: 0, spiral: false };
         h.run = p.hungry ? h.run + 1 : 0;
