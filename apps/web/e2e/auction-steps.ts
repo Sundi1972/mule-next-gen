@@ -144,7 +144,7 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   let onServer: string[] = [];
   try {
     await readTheGoodsWalk({ seller: brix, buyer: lena, stayer: ossa }, tv, truth);
-    await everyone(phones, (p) => pressDoneThroughTheAuction(p.page));
+    await holdUpIntoTheNextGood(truth, ossa, [brix, lena]);
   } finally {
     // Stopped on a failure too: left running, it would throw once the room closes and bury the real error.
     onServer = serverStages();
@@ -607,6 +607,51 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
   const zero = Object.values(after).some((l) => l.endsWith(' (0)'));
   const moved = (id: string) => `${name(id)} ${before[id]} → ${after[id]}`;
   console.log(`✓ B-AC-2 (WS6): after ${traded.units} units traded, ${moved(sellerId)} and ${moved(buyerId)} on three phones and the TV${zero ? ', a surplus of 0 drawn "(0)"' : ''}`);
+}
+
+/**
+ * FU-1, front to back: with the walk of the good up now running, `holder` holds ArrowUp, presses Done with
+ * the key still down and keeps it down through the bell into the next good. On the first later good it can
+ * walk (it taps Buy there), its first ArrowUp must move its walker on the server. Everyone then presses
+ * Done through the rest of the auction.
+ */
+async function holdUpIntoTheNextGood(truth: Truth, holder: Phone, others: Phone[]): Promise<void> {
+  const id = truth.idOf(holder);
+  const mine = (a: AuctionView) => a.walkers.find((w) => w.id === id);
+  const held = truth.board().auction;
+  check(held?.stage === 'walk' && mine(held)?.side !== 'pass', `FU-1 needs ${holder.name} on the walking board, got ${held?.good} ${held?.stage} as ${held && mine(held)?.side}`);
+  const from = held.good;
+  await holder.page.keyboard.down('ArrowUp');
+  await untilServer(truth, holder.page, (a) => a.good === from && mine(a)?.dir === 1, `FU-1: ${holder.name}'s ArrowUp walks her up on ${from}`);
+  const rest = Promise.all(others.map((p) => pressDoneThroughTheAuction(p.page)));
+  rest.catch(() => undefined);
+  await holder.page.getByTestId('done').click({ timeout: PRESS_MS });
+
+  const toNext = within(SCALE, WALK.goodMs + WALK.statusMs);
+  for (let n = 0; ; n++) {
+    check(n < 10, `FU-1: a good after ${from} has a walk ${holder.name} can join`);
+    const status = await untilServer(truth, holder.page, (a) => a.good !== from && a.stage === 'status', `FU-1: a good after ${from} opens its status screen`, toNext);
+    const good = status.good;
+    if (mine(status)?.side !== 'buyer') await holder.page.getByTestId('side-buyer').click({ timeout: PRESS_MS });
+    await untilServer(truth, holder.page, (a) => a.good !== good || mine(a)?.side === 'buyer', `FU-1: ${holder.name} buys on ${good}`);
+    try {
+      await holder.page.locator('[data-phase=auction]').getByRole('button', { name: 'Ready' }).click({ timeout: PRESS_MS });
+    } catch (err) {
+      // The status clock closed it under the press; the wait below sees where it went.
+      if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
+    }
+    const next = await untilServer(truth, holder.page, (a) => a.good !== good || a.stage === 'walk', `FU-1: ${good}'s status screen closes`, toNext);
+    if (next.good !== good || mine(next)?.side !== 'buyer') continue;
+    await holder.page.locator('[data-testid=hold-up]:not([disabled])').waitFor({ timeout: PRESS_MS });
+    const start = mine(truth.board().auction!)!.at;
+    // The same key, never let go since `from`: this keydown is the next good's first press.
+    await holder.page.keyboard.down('ArrowUp');
+    const moved = await untilServer(truth, holder.page, (a) => a.good === good && (mine(a)?.at ?? start) > start, `FU-1: ${holder.name}'s first ArrowUp on ${good}, after holding it through ${from}'s bell, moves her walker from ${start.toFixed(1)}`);
+    await holder.page.keyboard.up('ArrowUp');
+    console.log(`✓ FU-1: ${holder.name} held Up through ${from}'s bell; her first press on ${good}'s walk moved her walker ${start.toFixed(1)} → ${mine(moved)!.at.toFixed(1)}`);
+    break;
+  }
+  await Promise.all([rest, pressDoneThroughTheAuction(holder.page)]);
 }
 
 /** WS6 B-AC-5: once a land lot's walk is drawn, each screen shows one highest-bid line and no ask line. */

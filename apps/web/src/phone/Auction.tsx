@@ -1,12 +1,12 @@
 import type { AuctionView } from '@mule/protocol';
 import { Button, cx, GOOD_NAME, GoodTag, TimeBar, WalkBoard } from '@mule/ui';
-import { useCallback, useEffect, useRef } from 'react';
 import { boardWalkers, dealLine, LineReadout, SIDE_WORD, skippedLine, StatusTable, StoreBox, toggleSide } from '../components/AuctionParts';
 import { PHASE_NAME } from '../game/derive';
 import { useAuctionSound } from '../game/sound';
 import { useClient } from '../net/react';
 import { usePhoneGame } from './game';
 import { PhoneShell } from './Shell';
+import { stepDir, useWalkIntent } from './useWalkIntent';
 
 type Side = AuctionView['walkers'][number]['side'];
 const SIDE_NAME: Record<Side, string> = { buyer: 'Buyer', seller: 'Seller', pass: 'Pass' };
@@ -23,34 +23,10 @@ export function Auction() {
   const { view, me, self } = usePhoneGame();
   const auction = view.auction;
   useAuctionSound(auction);
-  const dir = useRef<'up' | 'down' | 'stop'>('stop');
-  const walk = useCallback(
-    (next: 'up' | 'down' | 'stop') => {
-      if (dir.current === next) return;
-      dir.current = next;
-      client.intent({ type: 'walk', dir: next });
-    },
-    [client],
-  );
   const stage = auction?.stage;
   const mine = auction?.walkers.find((w) => w.id === me.id);
   const onBoard = stage === 'walk' && mine !== undefined && mine.side !== 'pass';
-
-  // The arrow keys walk too, on a laptop.
-  useEffect(() => {
-    if (!onBoard) return;
-    const down = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowUp') walk('up');
-      if (e.key === 'ArrowDown') walk('down');
-    };
-    const up = (e: KeyboardEvent) => (e.key === 'ArrowUp' || e.key === 'ArrowDown') && walk('stop');
-    window.addEventListener('keydown', down);
-    window.addEventListener('keyup', up);
-    return () => {
-      window.removeEventListener('keydown', down);
-      window.removeEventListener('keyup', up);
-    };
-  }, [onBoard, walk]);
+  const walk = useWalkIntent(onBoard, auction?.good ?? '');
 
   if (!auction) {
     return (
@@ -236,7 +212,7 @@ export function Auction() {
           marks={{ ask: true, bid: true }}
           stage="walk"
           meId={me.id}
-          {...(onBoard ? { onDir: (d: -1 | 0 | 1) => walk(d > 0 ? 'up' : d < 0 ? 'down' : 'stop') } : {})}
+          {...(onBoard ? { onDir: (d: -1 | 0 | 1) => walk(stepDir(d)) } : {})}
           className="min-h-0 flex-1"
         />
       </div>
