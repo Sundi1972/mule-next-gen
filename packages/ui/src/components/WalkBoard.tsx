@@ -96,7 +96,6 @@ export function WalkBoard({
   marks?: BoardMarks;
   /** The store's stock of this good: shown on its selling line, or as SOLD OUT when 0 and it sells none. */
   storeStock?: number;
-  stage: 'walk';
   meId?: string;
   onDir?: (dir: -1 | 0 | 1) => void;
   size?: 'phone' | 'tv';
