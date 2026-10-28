@@ -1,3 +1,11 @@
 @import "tailwindcss";
 @import "@mule/ui/theme.css";
 @source "../../../../packages/ui/src";
+
+/*
+ * DS-GAP, proposed for packages/ui's theme.css with the meteor crater's badge: like the cavern it pays Crystite, so it
+ * borrows Crystite's colour, as an alias both themes follow. Its shape, not its colour, tells it from the cavern.
+ */
+:root {
+  --color-s-meteorCrater: var(--color-g-crystite);
+}

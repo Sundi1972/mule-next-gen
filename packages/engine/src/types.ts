@@ -70,11 +70,11 @@ export interface Tile {
   filter: boolean;
   /** Months in a row this plot's current outfit has run. Factories gain from experience. */
   runMonths: number;
-  /** A special field on this plot, placed with the map; absent on most plots. */
+  /** A special field on this plot, placed with the map or, for a meteor crater, formed in play; absent on most plots. */
   special?: SpecialField;
 }
 
-export type SpecialKind = 'ruins' | 'crystalCavern' | 'geyser' | 'oasis' | 'relic';
+export type SpecialKind = 'ruins' | 'crystalCavern' | 'geyser' | 'oasis' | 'relic' | 'meteorCrater';
 
 export interface SpecialField {
   kind: SpecialKind;

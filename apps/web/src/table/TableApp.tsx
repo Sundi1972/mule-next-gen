@@ -9,7 +9,7 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { colonyVerdict, fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, player, plotName, seatSpecies, secondsUntil, slotOf, standings, tileAt, toSlot } from '../game/derive';
 import { useAuctionSound } from '../game/sound';
 import { useClient, useClientState, useServerNow } from '../net/react';
-import { connectedIn, hostMayContinue, stillPlanning } from '../phone/hub/ready';
+import { connectedIn, hostMayContinue, readyRows, stillPlanning } from '../phone/hub/ready';
 import { ReadyCount, WaitingFor } from '../phone/hub/ReadyBar';
 import { TvElection } from './TvElection';
 import { TvLandAuction } from './TvLandAuction';
@@ -239,14 +239,27 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
           <Players game={game} className="mt-auto" right={(p) => <span className="font-mono text-sm text-ink-3">{p.isAi ? 'AI' : p.ready ? 'READY' : '…'}</span>} />
         ) : (
           <ul className="mt-auto flex shrink-0 flex-col gap-2" data-testid="tv-ready-list">
-            {game.players.map((p) => {
-              const isAway = !p.isAi && !connected(p.id);
-              const state = p.isAi ? 'AI · READY' : p.ready ? 'READY' : isAway ? 'AWAY · PLANNING' : 'PLANNING';
+            {readyRows(game.players, connected).map((row) => {
+              if (row.kind === 'ais')
+                return (
+                  <li key="ais" className="flex items-center gap-3 opacity-60" data-testid="tv-ready-ais" data-count={row.seats.length}>
+                    <span className="flex shrink-0 -space-x-1.5">
+                      {row.seats.map((s) => (
+                        <PlayerMark key={s.id} slot={toSlot(s.slot)} size={22} />
+                      ))}
+                    </span>
+                    <span className="flex-1 truncate font-display text-xl font-semibold">{row.seats.map((s) => s.name).join(', ')}</span>
+                    <span className="font-mono text-sm text-ink-3">{row.seats.length} AI · READY</span>
+                  </li>
+                );
+              const s = row.seat;
+              const isAway = !s.isAi && s.away;
+              const state = s.isAi ? 'AI · READY' : s.ready ? 'READY' : isAway ? 'AWAY · PLANNING' : 'PLANNING';
               return (
-                <li key={p.id} className={cx('flex items-center gap-3', (p.isAi || p.ready) && 'opacity-60')}>
-                  <PlayerMark slot={toSlot(p.slot)} size={22} glow={!(p.isAi || p.ready)} />
-                  <span className="flex-1 truncate font-display text-xl font-semibold">{p.name}</span>
-                  <span className={cx('font-mono text-sm', isAway ? 'text-warn' : p.ready || p.isAi ? 'text-ink-3' : 'text-holo')}>{state}</span>
+                <li key={s.id} className={cx('flex items-center gap-3', (s.isAi || s.ready) && 'opacity-60')}>
+                  <PlayerMark slot={toSlot(s.slot)} size={22} glow={!(s.isAi || s.ready)} />
+                  <span className="flex-1 truncate font-display text-xl font-semibold">{s.name}</span>
+                  <span className={cx('font-mono text-sm', isAway ? 'text-warn' : s.ready || s.isAi ? 'text-ink-3' : 'text-holo')}>{state}</span>
                 </li>
               );
             })}
@@ -498,13 +511,13 @@ function MonthEnd({ game }: { game: MuleView }) {
           </span>
         </div>
       </div>
-      <Scores game={game} />
+      <TvStandings game={game} />
     </>
   );
 }
 
 /** The big screen at the end: everyone's total, readable from across the room. Totals only: goods are private. */
-function TvGameOver({ game }: { game: MuleView }) {
+export function TvGameOver({ game }: { game: MuleView }) {
   const ranks = standings(game);
   const winner = ranks[0];
   const v = colonyVerdict(game.air);
@@ -546,10 +559,11 @@ function TvGameOver({ game }: { game: MuleView }) {
   );
 }
 
-function Scores({ game }: { game: MuleView }) {
+/** The month-end standings beside the map, best first. */
+export function TvStandings({ game }: { game: MuleView }) {
   return (
-    <div className="flex flex-col gap-2 rounded-panel border border-holo-line bg-panel p-4">
-      <span className="label-caps">Standings · money</span>
+    <div className="flex flex-col gap-2 rounded-panel border border-holo-line bg-panel p-4" data-testid="tv-standings">
+      <span className="label-caps">Standings · worth</span>
       <ol className="flex flex-col gap-2">
         {standings(game).map((s, i) => (
           <li key={s.player.id} className="flex items-center gap-3">

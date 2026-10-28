@@ -13,7 +13,7 @@ import { GovernorDesk } from '../src/phone/hub/politics/Governor';
 import { electionNow } from '../src/phone/hub/politics/slots';
 import { TvElection } from '../src/table/TvElection';
 
-const player = (id: string, name: string, slot: number): PlayerView => ({ id, name, isAi: false, color: '', species: 'zipwing', money: 1000, plots: 0, ready: false, doneDeveloping: false, condition: null, colonist: null, slot });
+const player = (id: string, name: string, slot: number): PlayerView => ({ id, name, isAi: false, color: '', species: 'zipwing', money: 1000, worth: 0, plots: 0, ready: false, doneDeveloping: false, condition: null, colonist: null, slot });
 const PLAYERS = [player('s1', 'Lena', 0), player('s2', 'Ossa', 1), player('s3', 'Kai', 2), player('s4', 'Brix', 3), player('s5', 'Pip', 4)];
 const stock = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0, alloy: 0, electronics: 0, medicine: 0 };
 
@@ -54,6 +54,7 @@ const me = (extra: Partial<NonNullable<MyView['politics']>> = {}): MyView => ({
   stock: { ...stock, food: 9 },
   carriedMule: null,
   installedThisTurn: false,
+  worthParts: { money: 0, goods: 0, plots: 0, land: 0, mules: 0, muleValue: 0, office: 0, cut: 0 },
   claimsLeft: 0,
   hungry: false,
   sick: false,

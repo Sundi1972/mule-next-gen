@@ -121,3 +121,31 @@ describe("B-AC-9: the phone's plot card says what a special field does", () => {
     expect(renderToStaticMarkup(createElement(SpecialLine, { special: undefined }))).toBe('');
   });
 });
+
+describe('B-AC-11: a meteor crater shows its approved badge and says what it is', () => {
+  /** The crater's icon as Heiko approved it in the map gallery. */
+  const APPROVED_PATH = 'M4 14a6 6 0 1 0 12 0a6 6 0 1 0-12 0z M9 14a1 1 0 1 0 2 0a1 1 0 1 0-2 0z M13.5 10.5 21 3 M16.5 11.5 20.5 7.5 M12.5 7.5 16.5 3.5';
+  const crater = (owner: MapTile['owner']): MapTile[] => [
+    { x: 0, y: 0, terrain: 'mountains', owner, special: { kind: 'meteorCrater' } },
+    { x: 1, y: 0, terrain: 'mountains', owner: null, special: { kind: 'crystalCavern' } },
+  ];
+
+  it('B-AC-11: the map draws the crater badge, with its kind, its icon and its colour, at phone and TV density', () => {
+    for (const density of ['phone', 'tv'] as const) {
+      const html = renderToStaticMarkup(createElement(HoloMap, { width: 2, height: 1, tiles: crater(2), density }));
+      expect(tag(html, 'special-glyph-0-0'), density).toContain('data-kind="meteorCrater"');
+      const glyph = html.slice(html.indexOf('data-testid="special-glyph-0-0"'), html.indexOf('data-testid="special-glyph-1-0"'));
+      expect(glyph, density).toContain(`d="${APPROVED_PATH}"`);
+      expect(glyph, density).toContain('stroke="var(--color-s-meteorCrater)"');
+      expect(html, density).toContain('aria-label="Mountains, Meteor crater, ');
+    }
+  });
+
+  it("B-AC-11: the plot card's line names the crater and gives the engine's rating", () => {
+    const html = renderToStaticMarkup(createElement(SpecialLine, { special: { kind: 'meteorCrater' } }));
+    expect(html).toMatch(/^<p[^>]*data-testid="special-line"[^>]*data-kind="meteorCrater"/);
+    expect(html.replace(/<[^>]+>/g, '')).toBe(
+      `Meteor crater: Crystite rated ${MAP.meteorCrater.crystite}, the top of the scale. Left by a meteor; what stood here was destroyed.`,
+    );
+  });
+});
