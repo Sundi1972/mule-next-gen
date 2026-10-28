@@ -23,7 +23,7 @@ export interface SeatInfo {
 /** What a room offers the game it hosts. */
 export interface GameContext {
   now(): number;
-  /** Runs `fn` after `ms` unless the room is disposed first. Returns a cancel function. */
+  /** Runs `fn` after `ms` (or, if the room is held then, at its release) unless the room is disposed first. Returns a cancel function. */
   schedule(ms: number, fn: () => void): () => void;
   /** Tell every screen that the game's view changed. */
   changed(): void;
@@ -87,6 +87,8 @@ export class Room<Intent, View> {
   private readonly opts: Required<Omit<RoomOptions<Intent, View>, 'createGame' | 'code' | 'picks'>>;
   private readonly picks: readonly string[] | undefined;
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
+  /** While held: the game callbacks that came due, by timer, in the order they came due. Null when not held. */
+  private queued: Map<ReturnType<typeof setTimeout>, () => void> | null = null;
   private started = false;
   private endedBy: 'closed' | 'error' | null = null;
   private nextSeat = 1;
@@ -114,18 +116,14 @@ export class Room<Intent, View> {
         const timer = setTimeout(() => {
           this.timers.delete(timer);
           if (this.endedBy) return;
-          // A throw here would be uncaught and take the whole server down with this one table.
-          try {
-            fn();
-          } catch (err) {
-            this.opts.onError(err);
-            this.fail();
-          }
+          if (this.queued) this.queued.set(timer, fn);
+          else this.runScheduled(fn);
         }, ms);
         this.timers.add(timer);
         return () => {
           clearTimeout(timer);
           this.timers.delete(timer);
+          this.queued?.delete(timer);
         };
       },
       changed: () => this.broadcast(),
@@ -435,9 +433,41 @@ export class Room<Intent, View> {
     };
   }
 
+  /**
+   * For tests that look around a screen without the game's own clock moving under them: until `release`, a game
+   * callback that comes due waits. Real time, `now()` and every message carry on as usual.
+   */
+  hold(): void {
+    this.queued ??= new Map();
+  }
+
+  /** Ends a hold: runs the callbacks that came due meanwhile, in the order they came due, then lets the clock run. */
+  release(): void {
+    const queued = this.queued;
+    if (!queued) return;
+    // Walks the live map: a released callback may cancel one still queued, and a game error clears it.
+    for (const [timer, fn] of queued) {
+      queued.delete(timer);
+      this.runScheduled(fn);
+    }
+    this.queued = null;
+  }
+
+  private runScheduled(fn: () => void): void {
+    // A throw here would be uncaught and take the whole server down with this one table.
+    try {
+      fn();
+    } catch (err) {
+      this.opts.onError(err);
+      this.fail();
+    }
+  }
+
   dispose(): void {
     for (const t of this.timers) clearTimeout(t);
     this.timers.clear();
+    this.queued?.clear();
+    this.queued = null;
     this.game.dispose?.();
   }
 }
