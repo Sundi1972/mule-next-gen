@@ -672,6 +672,171 @@ describe('TableClient', () => {
       expect(t.client.getState().clockOffset).toBe(offset);
     },
   );
+
+  const mine = { code: 'KRTX', token: 'mine', name: 'Mia' };
+  const theirs = { code: 'KRTX', token: 'theirs', name: 'Lena' };
+
+  it.each([
+    {
+      row: 'seated',
+      saved: null,
+      act: (t: ReturnType<typeof setup>) => (t.last().open(), t.last().deliver({ t: 'welcome', code: 'KRTX', role: 'player', seatId: 's2', seatToken: 'mine' })),
+    },
+    { row: 'whose join sent the saved token and is not answered yet', saved: mine, act: (t: ReturnType<typeof setup>) => t.last().open() },
+    { row: 'whose join by name is not answered yet', saved: null, act: (t: ReturnType<typeof setup>) => t.last().open() },
+    { row: 'whose connection has not opened yet', saved: mine, act: () => undefined },
+  ])("FM-21: a phone $row that leaves after another tab saved its own seat for the room leaves that tab's seat saved", ({ saved, act }) => {
+    const storage = memoryStore();
+    if (saved) saveSeat(storage, saved);
+    const t = setup(storage);
+    t.client.join('KRTX', 'Mia');
+    act(t);
+    saveSeat(storage, theirs);
+
+    t.client.leave();
+
+    expect(loadSeat(storage)).toEqual(theirs);
+    expect(t.client.getState().status).toBe('idle');
+  });
+
+  it.each([
+    {
+      row: 'its own token for that room, not the one another tab saved for it since',
+      before: (t: Seated) => saveSeat(t.storage, theirs),
+      join: { t: 'join', code: 'KRTX', name: 'Mia', seatToken: 'secret' },
+    },
+    {
+      row: 'no token in the room it moved to on the same connection, not even its own for the room it left',
+      before: (t: Seated) => t.client.join('BBBB', 'Mia'),
+      join: { t: 'join', code: 'BBBB', name: 'Mia' },
+    },
+  ])('FM-21: a seated phone whose connection drops rejoins with $row', ({ before, join }) => {
+    const t = seated();
+    before(t);
+
+    t.last().drop();
+    t.advance(500);
+    t.last().open();
+
+    expect(t.last().sent[0]).toEqual(join);
+  });
+
+  /**
+   * A seated phone whose clock is synced 50 s behind the server's. The server keeps time with the monotonic clock, and
+   * with the device's through a sleep, which pauses the monotonic clock and every timer on it.
+   */
+  function synced() {
+    const t = seated();
+    t.setNow(1_761_600_000_000);
+    let slept = 0;
+    let stepped = 0;
+    const server = () => 1_761_600_050_000 + t.mono() + slept + stepped;
+    const pings = () => t.last().sent.filter((m) => m.t === 'ping');
+    /** The room answers a ping that left `rtt` ms ago, halfway through the round trip. */
+    const pong = (rtt: number, clientTime = t.now() - rtt) => t.last().deliver({ t: 'pong', clientTime, serverTime: server() - rtt / 2 });
+    /** The room answers the phone's latest ping 20 ms after it left. */
+    const answerLatest = () => {
+      const clientTime = pings().at(-1)!.clientTime as number;
+      t.advance(20);
+      pong(20, clientTime);
+    };
+    /** The phone's next ping straddles the jump: its pong notices it and shifts the clock. */
+    const notice = () => {
+      const sent = pings().length;
+      while (pings().length === sent) t.advance(1);
+      answerLatest();
+    };
+    t.advance(450);
+    pong(20);
+    t.advance(450);
+    return {
+      ...t,
+      server,
+      pong,
+      notice,
+      /** The round trip of the burst a noticed jump sends: it measures the clock again. */
+      measure: answerLatest,
+      sleep: (ms: number) => {
+        t.setNow(t.now() + ms);
+        slept += ms;
+      },
+      jump: (ms: number) => t.setNow(t.now() + ms),
+      /** The server's clock is set by `ms`; the next round trip measures it. */
+      stepServer: (ms: number) => (stepped += ms),
+    };
+  }
+  type Synced = ReturnType<typeof synced>;
+
+  it.each([
+    { row: 'shown across a 90 s sleep that paused the monotonic clock', inFlight: () => undefined, shown: (t: Synced) => (t.advance(10_000), t.sleep(90_000), t.notice(), t.measure()) },
+    { row: 'shown across a sleep that outlasted it', inFlight: () => undefined, shown: (t: Synced) => (t.advance(10_000), t.sleep(130_000), t.notice(), t.measure()) },
+    { row: 'shown while the device clock jumps 2 minutes ahead', inFlight: () => undefined, shown: (t: Synced) => (t.advance(10_000), t.jump(120_000), t.notice(), t.measure()) },
+    { row: 'shown while the device clock jumps 2 minutes back', inFlight: () => undefined, shown: (t: Synced) => (t.advance(10_000), t.jump(-120_000), t.notice(), t.measure()) },
+    { row: 'requested before a 60 s sleep and arriving right after it, which notices the sleep', inFlight: (t: Synced) => t.sleep(60_000), shown: (t: Synced) => t.measure() },
+  ])(
+    'FM-22: a move code $row turns expired when the server clock reaches expiresAt (at once if it has), sends nothing, and a pong that leaves the offset unchanged re-times nothing',
+    ({ inFlight, shown }) => {
+      const t = synced();
+      t.client.handoff();
+      const asked = t.last().sent.length;
+      t.advance(20);
+      // The room issues the code as the request reaches it.
+      const expiresAt = t.server() + 120_000;
+      inFlight(t);
+      t.advance(20);
+      t.last().deliver({ t: 'handoffCode', code: 'fresh', expiresAt });
+      shown(t);
+
+      t.advance(100);
+      let heard = 0;
+      const stopListening = t.client.subscribe(() => heard++);
+      t.pong(40);
+      t.pong(40);
+      stopListening();
+      expect(heard).toBe(0);
+
+      const left = expiresAt - t.server();
+      if (left > 0) {
+        t.advance(left - 1);
+        expect(t.client.getState().handoffCode).toEqual({ code: 'fresh', expiresAt, expired: false });
+        t.advance(1);
+      }
+      expect(t.client.getState().handoffCode).toEqual({ code: 'fresh', expiresAt, expired: true });
+      expect(t.last().sent.slice(asked).filter((m) => m.t !== 'ping')).toEqual([]);
+    },
+  );
+
+  it.each([
+    { row: 'no code shows, the dialog having closed', after: (t: Synced) => t.client.closeHandoff() },
+    { row: 'the code shown has expired', after: (t: Synced) => t.advance(120_000) },
+  ])('FM-22: when the clock offset changes while $row, the screen keeps showing what it showed and nothing is sent but pings', ({ after }) => {
+    const t = synced();
+    t.client.handoff();
+    t.advance(20);
+    t.last().deliver({ t: 'handoffCode', code: 'old', expiresAt: t.server() + 120_000 });
+    after(t);
+    const shows = t.client.getState().handoffCode;
+    const asked = t.last().sent.length;
+
+    // The server's clock is set a minute back, which a fast round trip measures.
+    t.stepServer(-60_000);
+    t.advance(100);
+    t.pong(10);
+    expect(t.client.getState().clockOffset).toBe(-10_000);
+    expect(t.client.getState().handoffCode).toEqual(shows);
+
+    t.sleep(90_000);
+    t.notice();
+    expect(t.client.getState().clockOffset).toBe(-100_000);
+    expect(t.client.getState().handoffCode).toEqual(shows);
+    t.measure();
+    expect(t.client.getState().clockOffset).toBe(-10_000);
+    expect(t.client.getState().handoffCode).toEqual(shows);
+
+    t.advance(200_000);
+    expect(t.client.getState().handoffCode).toEqual(shows);
+    expect(t.last().sent.slice(asked).filter((m) => m.t !== 'ping')).toEqual([]);
+  });
 });
 
 describe('ClockSync', () => {
