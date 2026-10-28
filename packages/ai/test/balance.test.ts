@@ -7,6 +7,16 @@ import { cashReserve, installGain, type Mind } from '../src/value.js';
 
 const fourSeats = (seed: number) => createGame({ seed, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI${i}`, isAi: true })) });
 
+/** A store whose Water lasts the colonists past the outlook, so Water is priced at the market, not at what colonists pay. */
+const WATER_TO_SPARE = 36;
+
+/** fourSeats, with the store's Water at `water` from the start. */
+function fourSeatsWithWater(seed: number, water: number): GameState {
+  const state = fourSeats(seed);
+  state.store.stock.water = water;
+  return state;
+}
+
 /** A land grant at the last plot of its one pass, where any free plot is otherwise wanted, with `idle` undeveloped plots given to ai0. */
 function grantWithIdleLand(idle: number, money: number): GameState {
   const state = fourSeats(3);
@@ -126,7 +136,7 @@ describe('land claims on a single pass', () => {
   });
 
   it('T-AC-31: the lit plot is weighed by the utility it is ranked by: within its claims and clearing grantShare of the best utility ahead, it is wanted', () => {
-    const state = fourSeats(1);
+    const state = fourSeatsWithWater(1, WATER_TO_SPARE);
     while (state.phase !== 'landGrant') advancePhase(state);
     const mind: Mind = { ...traderMind, levelId: 'tycoon', level: AI_LEVELS.tycoon, salt: 1 };
     const obs = observe(state, 'ai0');
@@ -148,7 +158,7 @@ describe('land claims on a single pass', () => {
 
 /** Month 1's land grant on seed 3, ai0 already fed by its own Food and Energy plots, Smithore posted at `smithore`. */
 function grantWithFarms(smithore: number): GameState {
-  const state = fourSeats(3);
+  const state = fourSeatsWithWater(3, WATER_TO_SPARE);
   while (state.phase !== 'landGrant') advancePhase(state);
   state.store.posted.smithore = smithore;
   const [food, energy] = state.tiles.filter((t) => !t.owner && t.terrain === 'plains');
@@ -326,7 +336,7 @@ describe('values for lot bids (WS3 caps AI bids at these)', () => {
 
 /** The auction of month 1, with the store's Water shelf at `shelf` and ai0 holding 8 Water and no Water farm. */
 function auctionWithShelf(shelf: number): GameState {
-  const state = fourSeats(3);
+  const state = fourSeatsWithWater(3, WATER_TO_SPARE);
   while (state.phase !== 'auction') advancePhase(state);
   state.store.stock.water = shelf;
   state.players[0]!.stock.water = 8;

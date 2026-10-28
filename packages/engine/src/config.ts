@@ -252,7 +252,12 @@ export const START = {
   colonists: 100,
   storeMules: 10,
   storeCapital: 4000,
-  storeStock: { food: 30, water: 36, energy: 16, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 4 } satisfies Stock,
+  /**
+   * Water lasts the colonists about four months, so the AI's outlook sees the shelf run dry and wells go in from month
+   * 1. From 28 up the dry month falls past the outlook and colonists go short in months 5-9: re-run the six-cell sim
+   * whenever this, colonist growth or the outlook changes.
+   */
+  storeStock: { food: 30, water: 20, energy: 16, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 4 } satisfies Stock,
 };
 
 export const MULE = {
