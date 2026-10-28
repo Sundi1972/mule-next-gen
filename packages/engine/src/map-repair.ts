@@ -33,8 +33,6 @@ export class Grid {
   readonly reach: ReachTable;
   /** As `reach`, for a free plot; empty for other plots. */
   readonly within: ReachTable;
-  private readonly mark: number[];
-  private stamp = 0;
 
   constructor(width: number, terrain: Cells, reach: number) {
     const height = terrain.length / width;
@@ -52,21 +50,10 @@ export class Grid {
     this.reach = reachTable(width, height, terrain.indexOf('store'), reach);
     const none: readonly number[] = [];
     this.within = terrain.map((_, i) => (isFree[i] ? this.reach[i]! : none));
-    this.mark = Array(terrain.length).fill(0);
   }
 
   steps(a: number, b: number): number {
     return Math.abs((a % this.width) - (b % this.width)) + Math.abs(Math.floor(a / this.width) - Math.floor(b / this.width));
-  }
-
-  /** Land plots with no mining plot within Smithore reach. */
-  uncovered(terrain: Cells): number[] {
-    this.stamp++;
-    for (const i of this.free) {
-      if (!isMining(terrain[i])) continue;
-      for (const l of this.within[i]!) this.mark[l] = this.stamp;
-    }
-    return this.land.filter((l) => this.mark[l] !== this.stamp);
   }
 }
 
@@ -103,10 +90,6 @@ export function groups(grid: Grid, member: (i: number) => boolean, joins: (a: nu
   return out;
 }
 
-/** Connected same-terrain patches: what S4 and S5 measure, whichever regions they grew from. */
-function patchesOf(grid: Grid, terrain: Cells): number[][] {
-  return groups(grid, () => true, (a, b) => terrain[a] === terrain[b]);
-}
 
 export interface RepairState {
   grid: Grid;
@@ -147,6 +130,8 @@ class Tally {
   /** Plots set since the layout settled; some may be back at their settled terrain. */
   private readonly changed: number[] = [];
   private readonly listed: Uint8Array;
+  private version = 0;
+  private patchList: { version: number; patches: number[][] } = { version: -1, patches: [] };
 
   constructor(private readonly s: RepairState) {
     const size = s.terrain.length;
@@ -176,6 +161,7 @@ class Tally {
     this.s.terrain[i] = t;
     if (from === to) return;
     this.code[i] = to;
+    this.version++;
     if (!this.listed[i]) {
       this.listed[i] = 1;
       this.changed.push(i);
@@ -188,6 +174,27 @@ class Tally {
     } else {
       for (const l of this.s.grid.within[i]!) if (--this.reached[l]! === 0) this.uncovered++;
     }
+  }
+
+  /** Whether no mining plot has land plot `l` within Smithore reach. */
+  isUncovered(l: number): boolean {
+    return this.reached[l] === 0;
+  }
+
+  /**
+   * Connected same-terrain patches: what S4 and S5 measure, whichever regions they grew from.
+   * In the free plots' order, each filled breadth-first. Shared until the layout changes, so read-only.
+   */
+  patches(): readonly number[][] {
+    if (this.patchList.version !== this.version) {
+      const stamp = ++this.stamp;
+      const patches: number[][] = [];
+      for (const start of this.s.grid.free) {
+        if (this.seen[start] !== stamp) patches.push(Array.from(this.queue.subarray(0, this.flood(start, stamp))));
+      }
+      this.patchList = { version: this.version, patches };
+    }
+    return this.patchList.patches;
   }
 
   /** Takes the current layout as the settled one that later penalties are worked out from. */
@@ -388,26 +395,26 @@ function bestRun(s: Repairing, current: number, rng: Rng, work: { evaluations: n
 }
 
 /** Terrains that need plots somewhere new: each speck's terrain and each terrain under its band. */
-function specksAndShortfalls(s: RepairState): Set<ShareTerrain> {
-  const have = countTerrains(s.grid, s.terrain);
-  const wanted = new Set<ShareTerrain>(SHARE_TERRAINS.filter((t) => have[t] < s.bands[t].lo));
-  for (const p of patchesOf(s.grid, s.terrain)) if (p.length < MAP.minRegion) wanted.add(s.terrain[p[0]!] as ShareTerrain);
+function specksAndShortfalls(s: Repairing): Set<ShareTerrain> {
+  const { have } = s.tally;
+  const wanted = new Set<ShareTerrain>(SHARE_TERRAINS.filter((t, k) => have[k]! < s.bands[t].lo));
+  for (const p of s.tally.patches()) if (p.length < MAP.minRegion) wanted.add(s.terrain[p[0]!] as ShareTerrain);
   return wanted;
 }
 
 /**
  * minRegion plots carved off the edge of each patch big enough to spare them,
  * recoloured to each wanted terrain. With `near`, only edges within Smithore
- * reach of one of those land plots are tried.
+ * reach of a land plot it accepts are tried.
  */
-function carveMoves(s: RepairState, rng: Rng, wanted: Set<ShareTerrain>, near?: Set<number>): Move[] {
+function carveMoves(s: Repairing, rng: Rng, wanted: Set<ShareTerrain>, near?: (l: number) => boolean): Move[] {
   const { grid, terrain } = s;
   const moves: Move[] = [];
   if (wanted.size === 0) return moves;
-  for (const p of patchesOf(grid, terrain)) {
+  for (const p of s.tally.patches()) {
     if (p.length < MAP.layout.carveFrom * MAP.minRegion) continue;
     const inPatch = new Set(p);
-    const edge = p.filter((i) => grid.next[i]!.some((j) => !inPatch.has(j)) && (!near || grid.within[i]!.some((l) => near.has(l))));
+    const edge = p.filter((i) => grid.next[i]!.some((j) => !inPatch.has(j)) && (!near || grid.within[i]!.some(near)));
     for (const start of rng.shuffle(edge).slice(0, MAP.layout.carveStarts)) {
       const cells = [start];
       for (let k = 0; k < cells.length && cells.length < MAP.minRegion; k++) {
@@ -426,33 +433,40 @@ function carveMoves(s: RepairState, rng: Rng, wanted: Set<ShareTerrain>, near?: 
  * terrain outside its band, and, while a land plot lacks mining terrain in
  * reach, mining patches' neighbours near it and mining patches carved near it.
  */
-function candidateMoves(s: RepairState, rng: Rng): Move[] {
-  const { grid, terrain, bands, cap } = s;
-  const have = countTerrains(grid, terrain);
+function candidateMoves(s: Repairing, rng: Rng): Move[] {
+  const { grid, terrain, bands, cap, tally } = s;
   const hot = new Set<number>();
   const specks: number[][] = [];
-  for (const p of patchesOf(grid, terrain)) {
+  for (const p of tally.patches()) {
     if (p.length < MAP.minRegion) specks.push(p);
     if (p.length < MAP.minRegion || p.length > cap) for (const i of p) hot.add(i);
   }
-  const offBand = new Set(SHARE_TERRAINS.filter((t) => have[t] < bands[t].lo || have[t] > bands[t].hi));
+  const offBand = new Set(SHARE_TERRAINS.filter((t, k) => tally.have[k]! < bands[t].lo || tally.have[k]! > bands[t].hi));
   for (const i of grid.free) {
     if (offBand.has(terrain[i] as ShareTerrain) && grid.next[i]!.some((j) => terrain[j] !== terrain[i])) hot.add(i);
   }
   for (const i of [...hot]) for (const j of grid.next[i]!) hot.add(j);
 
-  const toward = (cells: number[]) => {
+  // The terrains around the cells other than their own, each once, in the order the neighbours name them.
+  const toward = (cells: readonly number[]) => {
     const from = terrain[cells[0]!];
-    return [...new Set(cells.flatMap((i) => grid.next[i]!.map((j) => terrain[j] as ShareTerrain)))].filter((t) => t !== from);
+    const out: ShareTerrain[] = [];
+    for (const i of cells) {
+      for (const j of grid.next[i]!) {
+        const t = terrain[j] as ShareTerrain;
+        if (t !== from && !out.includes(t)) out.push(t);
+      }
+    }
+    return out;
   };
   const moves: Move[] = [];
   for (const i of hot) for (const to of toward([i])) moves.push({ cells: [i], to });
   for (const speck of specks) if (speck.length > 1) for (const to of toward(speck)) moves.push({ cells: speck, to });
 
-  const uncovered = new Set(grid.uncovered(terrain));
-  if (uncovered.size > 0) {
+  if (tally.uncovered > 0) {
+    const uncovered = (l: number) => tally.isUncovered(l);
     for (const i of grid.free) {
-      if (isMining(terrain[i]) || !grid.within[i]!.some((l) => uncovered.has(l))) continue;
+      if (isMining(terrain[i]) || !grid.within[i]!.some(uncovered)) continue;
       for (const to of toward([i]).filter(isMining)) moves.push({ cells: [i], to });
     }
     moves.push(...carveMoves(s, rng, new Set(MINING), uncovered).filter((m) => !isMining(terrain[m.cells[0]!])));
