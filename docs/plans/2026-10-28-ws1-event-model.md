@@ -262,14 +262,19 @@ named edit its owner OKs)
 before this task, so the two never edit sim.ts at once) · **ACs verified:** UBER-AC-1 (the report) · **Spec sections consumed:** §1 C5, §0 UBER-AC-1
 **Files:** Modify: `packages/ai/src/sim.ts` (report lines and its `onEachPhase` hook; not the checks)
 
-- [ ] **Step 1: Implement C5's report lines.** Events a month by phase (development: players sick at its start;
+- [x] **Step 1: Implement C5's report lines.** Events a month by phase (development: players sick at its start;
       production: `MonthReport.events`, and caverns that collapsed) and for the month, with months at 0 / 1 / 2 / 3 / 4+.
       `--air smoggy|toxic` counts each month as if the air were that band and every player had caused 5 points, on an
       unflagged copy of the state. It is measure only: the game plays on unforced.
-- [ ] **Step 2: Positive control:** with every row at 0, the report prints 0.00 in every phase and 100% of months at 0.
+- [x] **Step 2: Positive control:** with every row at 0, the report prints 0.00 in every phase and 100% of months at 0.
       With rows at 1, it prints the row count. Then restore.
-- [ ] **Step 3: Run `pnpm sim -- --games 40 --seed 1` and `-- --air smoggy`; expect the new lines; the checks print as before.**
-- [ ] **Step 4: Commit** `feat(ai): the sim counts events a month by phase, and in forced air (UBER-AC-1)`
+- [x] **Step 3: Run `pnpm sim -- --games 40 --seed 1` and `-- --air smoggy`; expect the new lines; the checks print as before.**
+- [x] **Step 4: Commit** `feat(ai): the sim counts events a month by phase, and in forced air (UBER-AC-1)`
+      Done 29 Oct: 33fc412, review fix 4ecd78e (both counts count sickness rolls that hit: a Medicine cure is the event's
+      effect). Roller at 4ecd78e. Seed 1, 40 games: 0.67 a month clean (development 0.24, production 0.43), 1.84 in
+      forced Smoggy, 2.54 in forced Toxic (almost all sickness) — Task 8's starting point against ~1.0 / ~2.0.
+      Controls: rows at 0 → 0.00 and 100% at 0; rows at 1 → development 4.00 (one row × 4 players), production 15.43
+      (17 firable after the excludes × 11 of 12 months, less rolls that found no plot). Existing lines byte-identical.
 
 ### Task 8: Rows — UBER-AC-1 and R-2
 
