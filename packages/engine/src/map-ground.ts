@@ -180,7 +180,7 @@ export function repairReach(dealt: Dealt): Dealt & { lifts: ReachLift[] } {
           mean: meanRating(board.terrain[i]!, good),
           rating: ground[i]![good],
           touches: board.neighbours[i]!.some((n) => isGood(ground, n, good)) ? 1 : 0,
-          reaches: far.filter((f) => board.steps(f, i) <= limit).length,
+          reaches: countWhere(far, (f) => board.steps(f, i) <= limit),
           away: board.steps(i, stranded),
           field: field[i]!,
         }));
@@ -427,8 +427,9 @@ function findSwap(board: Board, ground: Ground[], field: number[], good: FloorGo
     const terrain = board.terrain[plot];
     let donors = donorLists.get(terrain);
     if (!donors) {
-      donors = board.land
-        .filter((d) => board.terrain[d] === terrain && isGood(ground, d, good))
+      donors = board.byTerrain
+        .get(terrain!)!
+        .filter((d) => isGood(ground, d, good))
         .map((d) => ({ d, breaks: seamBreaks(board, ground, d, good) }))
         .sort((a, b) => a.breaks - b.breaks || field[a.d]! - field[b.d]! || a.d - b.d)
         .map(({ d }) => d);
@@ -614,25 +615,28 @@ function oddsOf(terrain: LandTerrain, good: FloorGood): Odds {
   return { values: ratingsOf(weights, GROWN_ODDS_MIN), weights };
 }
 
-const ODDS_FACTS = new Map(
-  (Object.keys(TERRAIN_ODDS) as LandTerrain[]).flatMap((terrain) =>
-    FLOOR_GOODS.map((good) => {
-      const { values, weights } = oddsOf(terrain, good);
-      const mean = values.reduce((sum, v, k) => sum + v * weights[k]!, 0);
-      const chance = values.reduce((sum, v, k) => sum + (v >= MAP.goodAt[good] ? weights[k]! : 0), 0);
-      return [`${terrain} ${good}`, { mean, chance }] as const;
-    }),
-  ),
-);
+const ODDS_FACTS = Object.fromEntries(
+  (Object.keys(TERRAIN_ODDS) as LandTerrain[]).map((terrain) => [
+    terrain,
+    Object.fromEntries(
+      FLOOR_GOODS.map((good) => {
+        const { values, weights } = oddsOf(terrain, good);
+        const mean = values.reduce((sum, v, k) => sum + v * weights[k]!, 0);
+        const chance = values.reduce((sum, v, k) => sum + (v >= MAP.goodAt[good] ? weights[k]! : 0), 0);
+        return [good, { mean, chance }];
+      }),
+    ),
+  ]),
+) as Record<LandTerrain, Record<FloorGood, { mean: number; chance: number }>>;
 
 /** The average rating a plot of this terrain is dealt for the good: what its hint promises. */
 function meanRating(terrain: LandTerrain, good: FloorGood): number {
-  return ODDS_FACTS.get(`${terrain} ${good}`)!.mean;
+  return ODDS_FACTS[terrain][good].mean;
 }
 
 /** Chance a plot of this terrain is dealt a good rating for the good; 0 means its odds never allow one. */
 function pGood(terrain: LandTerrain, good: FloorGood): number {
-  return ODDS_FACTS.get(`${terrain} ${good}`)!.chance;
+  return ODDS_FACTS[terrain][good].chance;
 }
 
 function ringRating(stepsToCentre: number, rng: Rng): number {
@@ -641,6 +645,12 @@ function ringRating(stepsToCentre: number, rng: Rng): number {
   if (stepsToCentre === steps.medium) return medium;
   if (stepsToCentre === steps.low) return rng.int(low.min, low.max);
   return 0;
+}
+
+function countWhere<T>(items: readonly T[], test: (item: T) => boolean): number {
+  let count = 0;
+  for (const item of items) if (test(item)) count++;
+  return count;
 }
 
 /** What sorting by `compare` would put first (the earliest of equals), without sorting. */
