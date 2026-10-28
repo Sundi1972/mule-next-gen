@@ -1,4 +1,4 @@
-import { airBand, POLLUTION, POLITICS } from '@mule/engine';
+import { POLLUTION, POLITICS } from '@mule/engine';
 import type { MuleView, PlayerView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
 import { fmt, standings } from './derive';
@@ -36,6 +36,8 @@ export interface LeagueRow {
 
 export interface League {
   rows: LeagueRow[];
+  /** False in month 1, when nobody has a Worth from last month's end to change from. */
+  hasLastMonth: boolean;
   /** The leader, the lead over second place (0 when two or more share first), and who shares first. */
   leader: { id: string; by: number; level: string[] } | null;
 }
@@ -58,7 +60,7 @@ export function league(view: MuleView): League {
   const top = rows[0];
   const level = rows.filter((r) => r.rank === 1).map((r) => r.player.id);
   const second = rows.find((r) => r.rank > 1);
-  return { rows, leader: top ? { id: top.player.id, by: level.length > 1 || !second ? 0 : top.total - second.total, level } : null };
+  return { rows, hasLastMonth: view.players.some((p) => p.lastWorth !== null), leader: top ? { id: top.player.id, by: level.length > 1 || !second ? 0 : top.total - second.total, level } : null };
 }
 
 const nameOf = (view: Pick<MuleView, 'players'>, id: string) => view.players.find((p) => p.id === id)?.name ?? id;
@@ -126,13 +128,13 @@ export interface ColonyReport {
 /** How the colony is doing, apart from the players: the air against last month, the fund, who went hungry. */
 export function colonyReport(view: MuleView): ColonyReport {
   const last = view.lastAir;
-  const delta = last === null ? null : view.air.level - last;
+  const delta = last === null ? null : view.air.level - last.level;
   return {
     air: {
       level: view.air.level,
       band: view.air.band,
-      last,
-      lastBand: last === null ? null : airBand(last).name,
+      last: last?.level ?? null,
+      lastBand: last?.band ?? null,
       trend: delta === null ? null : delta > 0 ? 'worse' : delta < 0 ? 'better' : 'same',
     },
     fund: { balance: view.treasury.money },

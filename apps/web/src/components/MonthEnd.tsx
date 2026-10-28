@@ -51,6 +51,8 @@ const SIZE: Record<Density, { pad: string; head: string; rank: string; mark: num
 export function LeagueTable({ view, density, selfId, final = false }: { view: MuleView; density: Density; selfId?: string; final?: boolean }) {
   const lg = league(view);
   const collapse = inCollapse(view);
+  // The change since last month, when there was a last month: none in month 1, none at game over.
+  const changes = !final && lg.hasLastMonth;
   const tv = density === 'tv';
   const s = final && tv ? { ...SIZE.tv, mark: 36, cell: 'px-3 py-1.5' } : SIZE[density];
   const words = leaderWords(view, lg, selfId);
@@ -91,7 +93,7 @@ export function LeagueTable({ view, density, selfId, final = false }: { view: Mu
                 Before the cut
               </th>
             )}
-            {!final && (
+            {changes && (
               <th className={cx(th, s.cell, 'text-right')} data-testid="change-head">
                 Since month {view.month - 1}
               </th>
@@ -127,7 +129,7 @@ export function LeagueTable({ view, density, selfId, final = false }: { view: Mu
                     </span>
                   </td>
                 )}
-                {!final && (
+                {changes && (
                   <td className={cx(s.cell, 'text-right')}>
                     <ChangeTag change={r.change} className={s.side} testid={`change-${r.player.id}`} />
                   </td>

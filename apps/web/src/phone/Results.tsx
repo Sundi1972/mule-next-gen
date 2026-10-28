@@ -1,7 +1,7 @@
 import { AirGauge, Button, cx, GoodTag, Panel, PlayerMark, type Good } from '@mule/ui';
 import { useState } from 'react';
 import { CollapseBanner, ColonyPanel, LeagueTable, YourWorth } from '../components/MonthEnd';
-import { fmt, PHASE_NAME, secondsUntil, standings } from '../game/derive';
+import { fmt, secondsUntil, standings } from '../game/derive';
 import { inCollapse, league, leaderWords, ordinal } from '../game/month-end';
 import { useClient, useServerNow } from '../net/react';
 import { usePhoneGame } from './game';
@@ -97,19 +97,18 @@ function MonthEndFooter() {
   );
 }
 
-/** After production: what you made, how the colony is doing, and the standings. */
+/** After production, in the moment before its show arrives: what you made, how the colony is doing, and the standings. */
 function Harvest() {
   const client = useClient();
   const { view, me, self } = usePhoneGame();
   const now = useServerNow();
-  const harvest = view.phase === 'production';
   const ranking = standings(view);
   const rank = ranking.findIndex((r) => r.player.id === self.id) + 1;
   const made = me.produced ? (Object.entries(me.produced) as [Good, number][]).filter(([, n]) => n !== 0) : [];
 
   return (
     <PhoneShell
-      phase={harvest ? 'Harvest' : PHASE_NAME.upkeep}
+      phase="Harvest"
       seconds={secondsUntil(view.phaseEndsAt, now)}
       rail={
         <>
@@ -147,13 +146,13 @@ function Harvest() {
       }
       footer={
         <Button size="lg" variant={self.ready ? 'outline' : 'holo'} className="w-full px-2" disabled={self.ready} onClick={() => client.intent({ type: 'ready' })}>
-          {self.ready ? 'Waiting for the others' : harvest ? 'On to the auction' : `On to month ${Math.min(view.month + 1, view.maxMonths)}`}
+          {self.ready ? 'Waiting for the others' : 'On to the auction'}
         </Button>
       }
     >
       <div className="grid grid-cols-2 items-start gap-2.5">
         <div className="flex flex-col gap-2.5">
-          <Panel title={harvest ? 'Your harvest' : 'Made this month'} aside="PRIVATE" className="gap-2 p-3">
+          <Panel title="Your harvest" aside="PRIVATE" className="gap-2 p-3">
             {made.length === 0 ? (
               <p className="text-sm text-ink-2">Your plots made nothing this month. Install MULEs during development to start producing.</p>
             ) : (
@@ -169,7 +168,7 @@ function Harvest() {
               </ul>
             )}
           </Panel>
-          <StockPanel title={harvest ? 'Your stock now' : 'Your stock after upkeep'} />
+          <StockPanel title="Your stock now" />
         </div>
         <div className="flex flex-col gap-2.5">
           <div className="grid grid-cols-2 gap-px overflow-hidden rounded-panel border border-holo-line bg-holo-line">
