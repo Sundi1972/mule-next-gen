@@ -1,11 +1,13 @@
 /**
  * Colony politics: the Land Baron, elections for Governor and Sheriff, vote
  * weight, the Governor's sales tax and the offices' pay. The only writer of
- * GameState.politics. No randomness: ties break by rule, so a replay needs no extra seed.
+ * GameState.politics. A tie nothing else breaks is drawn by lot on its own seeded
+ * stream, so a replay from the seed draws the same and no other draw moves.
  */
 import { POLITICS } from './config.js';
 import { RuleError } from './errors.js';
 import { player } from './game.js';
+import { createRng } from './rng.js';
 import { PERCENT } from './units.js';
 import type { CanRun, Election, ElectionResult, GameState, Office, OfficeResult, Politics, TaxPromise } from './types.js';
 
@@ -246,25 +248,25 @@ function decide(state: GameState, election: Shared<Election>, office: Office, go
   const baronPick = baron === null ? undefined : election.ballots[baron]?.[office];
   if (baronPick !== undefined && tied.includes(baronPick)) return { winner: baronPick, how: 'baron', tallies };
   const most = Math.max(...tied.map((id) => plotsOwned(state, id)));
-  return { winner: roundTheTable(state, tied.filter((id) => plotsOwned(state, id) === most)), how: 'tieRule', tallies };
+  const landed = tied.filter((id) => plotsOwned(state, id) === most);
+  if (landed.length === 1) return { winner: landed[0]!, how: 'land', tallies };
+  return { winner: drawLot(state, office, landed), how: 'lot', tallies };
 }
 
 /**
- * The last resort among players still tied: the first in seat order from seat
- * (seed + k) mod n, k this election's index in POLITICS.electionMonths. The seed
- * moves the start between games, since most ties come in month 1; k moves it
- * between elections. Outside an election month (never, as decide runs) k is 0. See WS7 spec RULE-3, AM-12.
+ * The last resort among players still tied: a draw in which each has the same
+ * chance. Its stream is seeded from the game, the month and the office, so no
+ * other draw moves. See WS7 spec RULE-3, AM-17.
  */
-function roundTheTable(state: GameState, tied: readonly string[]): string {
-  const n = state.players.length;
-  const k = Math.max(0, POLITICS.electionMonths.indexOf(state.month));
-  const start = (((state.seed + k) % n) + n) % n;
-  const place = (id: string) => (state.players.findIndex((p) => p.id === id) - start + n) % n;
-  return tied.reduce((first, id) => (place(id) < place(first) ? id : first));
+function drawLot(state: GameState, office: Office, tied: readonly string[]): string {
+  if (tied.length === 1) return tied[0]!;
+  const salt = OFFICES.indexOf(office) + 1;
+  // literal-ok: rng salts, reshuffle replays only
+  return createRng((state.seed * 7_481 + state.month * 9_337 + salt * 1_013) >>> 0).pick(tied);
 }
 
 /**
- * The richest eligible player, round the table on a tie. The Governor comes from
+ * The richest eligible player, by lot on a tie. The Governor comes from
  * the players not running for Sheriff, or from everyone if all of them are; the
  * Sheriff is never the new Governor. See WS7 spec RULE-3.
  */
@@ -275,7 +277,7 @@ function appointee(state: GameState, election: Shared<Election>, office: Office,
       : state.players.filter((p) => p.id !== governor);
   const eligible = pool.length > 0 ? pool : state.players;
   const richest = Math.max(...eligible.map((p) => p.money));
-  return roundTheTable(state, eligible.filter((p) => p.money === richest).map((p) => p.id));
+  return drawLot(state, office, eligible.filter((p) => p.money === richest).map((p) => p.id));
 }
 
 /** The whole-percent range the Governor may set this month, around the month's starting rate. See WS7 spec RULE-6. */

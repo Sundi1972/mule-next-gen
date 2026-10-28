@@ -350,7 +350,7 @@ first match wins
   #   when                                       then                          how
   1   0 candidates, office governor              the richest player who does   appointed
                                                  not run for Sheriff (money;
-                                                 tie → round the table, AM-12); if every
+                                                 tie → by lot, AM-17); if every
                                                  player runs for Sheriff, the
                                                  richest player (AM-2)
   2   0 candidates, office sheriff               the richest player who is     appointed
@@ -359,14 +359,13 @@ first match wins
   4   one candidate has the most weighted votes  that candidate                votes
   5   tie, and the Land Baron's ballot names     that candidate                baron
       one of the tied candidates
-  6   tie otherwise                              the tied candidate with the   tieRule
-                                                 most plots, then round the
-                                                 table (AM-12)
-round the table (AM-12)  among players still tied, the first in seat order starting from
-           seat (seed + k) mod n, where seed is the game's seed, k this election's index in
-           POLITICS.electionMonths (0 for month 1) and n the number of players. No RNG draw:
-           the same game gives the same offices; the start moves between elections (k) and
-           between games (seed), since most ties come in month 1.
+  6   tie, one tied candidate has the most plots  that candidate                land
+  7   tie otherwise                              a draw among the tied with    lot
+                                                 the most plots (AM-17)
+by lot (AM-17)  each player still tied has the same chance; the draw's stream is seeded from
+           (seed, month, office), so the same game draws the same offices and no other draw
+           moves. Replaces AM-12's round from seat (seed + k) mod n, which favoured the earlier
+           seat of a partial tie (the host won 3 of 4 two-way month-1 ties).
 visibility  the result shows each candidate's weighted total, never who voted for whom.
 examples   3 vs 2 votes → the 3; 2 vs 2, Baron voted the second → the second; nobody runs
            for Sheriff → the richest non-Governor
@@ -499,7 +498,7 @@ interface Election {
   candidates: Record<Office, string[]>;
   ballots: Record<string, Partial<Record<Office, string>>>;  // secret: hidden by observe() and the view
   done: string[];
-  result: Record<Office, { winner: string; how: 'votes' | 'unopposed' | 'appointed' | 'baron' | 'tieRule';
+  result: Record<Office, { winner: string; how: 'votes' | 'unopposed' | 'appointed' | 'baron' | 'land' | 'lot';
                            tallies: { id: string; votes: number }[] }> | null;
 }
 ```
@@ -822,6 +821,26 @@ because   P-1: "the colony votes laws" (UBER-AC-1's law clause) is the unmet hal
           taxes are the fund's main income
 goal      P-1 — still met; G-5's income
 folded    D2 count note below; slice 2a spec
+```
+
+```
+AM-17 · 2026-10-28 · PM ruling (WS6 UX audit §3) · fair tie-break
+
+target    §2 RULE-3 rows 1 and 6 (AM-12's round); §3 the result's how
+said      a tie nothing else breaks goes round the table from seat (seed + k) mod n
+did       WS6's audit found the host winning month-1 ties. A round from a seeded start is fair
+          only when every seat ties: in a partial tie the earlier seat wins unless the start
+          falls inside the run (4 seats, seats 0 and 1 tied: seat 0 wins 3 starts of 4;
+          measured 150 of 200 seeds, red-first test). The order stays design 05's (the Baron's
+          ballot, then most plots); the last step is now a seeded draw among the tied, on its own
+          stream from (seed, month, office), and appointments break a money tie the same way.
+          `how` 'tieRule' becomes 'land' (most plots decided) or 'lot' (drawn), so the reveal and
+          the news name the real reason ("a tie: most plots", "a tie: decided by lot").
+because   P-1: the council reins in a leader only if the table trusts its rules; a tie the host
+          wins three times in four is not fair
+goal      P-1 — still met, more fairly
+folded    RULE-3 rows 1, 6, 7; §3 how; ElectionHow in types.ts (WS3 named edit); words.ts and
+          politics-view.ts; WS1 re-measures its politics rows (only tie winners move)
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
