@@ -351,6 +351,15 @@ From PR-1's boundary review (29 Oct), for this task:
 - For routing the table gate: the screens' `events[0]` readers include ProductionMap.tsx (two) and the web e2e's
   production-steps.ts (two), besides those AM-1 names.
 
+At dispatch (29 Oct, codebase drift since plan time):
+- `EFFECT.collapseChance` has two more readers, both WS4's: `apps/web/src/game/derive.ts` (the cavern's plot-card line)
+  and `apps/web/test/specials.test.ts` (B-AC-9). They join the files as named edits WS4 reviews; they read the row's
+  production base, and the line the phone shows doesn't change.
+- The cavern row's base is 0.06, `EFFECT.collapseChance` moved: AM-6's ×1.6 covered the rows that existed, and C4 pins
+  today's 6% (WS5's T-AC-6).
+- `settleSpecials` returns the caverns that collapsed (WS5's file, with `collapses`), so production announces them
+  without diffing tiles.
+
 - [ ] **Step 1: Write `EM-T-AC-5: cavern collapse rolls on its row, with today's effect`** at the tiles after
       production.
       - With the row forced to 1, every cavern that produced Crystite becomes a plain plot, and one mined on Crystite 0 or farmed for Food stays.
@@ -369,13 +378,14 @@ From PR-1's boundary review (29 Oct), for this task:
 - [ ] **Step 4: Run `specials.test.ts` unedited; expect WS5's T-AC-6 green** (replay; about 6% within ±30%; the same
       rate with or without a production event; each plot its own fate; unmined never). Then run events.test.ts and
       `pnpm typecheck && pnpm test`.
-- [ ] **Step 5: Commit** red then green; send WS5 the specials.ts and EFFECT hunks and WS3 the EventKey hunk; tell WS8
+- [ ] **Step 5: Commit** red then green; send WS5 the specials.ts and EFFECT hunks, WS3 the EventKey hunk and WS4 the
+      derive.ts and web specials.test.ts hunks; tell WS8
       the ruling with the hunk (PM, 28 Oct).
 
 ### PR-2 merge gate
 
 - [ ] EM-T-AC-5 green; WS5's T-AC-6 green and unedited; WS5 OK on the specials.ts and EFFECT hunks; WS3 OK on the
-      EventKey hunk (AM-3)
+      EventKey hunk (AM-3); WS4 OK on the derive.ts and web specials.test.ts hunks
 - [ ] Each failing-test commit precedes its passing commit; trace-check clean; `pnpm typecheck && pnpm test` exit 0; CI green
 - [ ] The rows of Task 8 re-run on one set (seeds 1-40, politics on): the cavern line moves only by its new dice
 
