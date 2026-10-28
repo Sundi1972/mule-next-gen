@@ -1,4 +1,4 @@
-import { lotLeader, LOTS, observe, WALK, type GameState, type LandAuction, type Listing, type Rng, type Walker } from '@mule/engine';
+import { lotLeader, LOTS, MS_PER_SECOND, observe, WALK, type GameState, type LandAuction, type Listing, type Rng, type Walker } from '@mule/engine';
 import type { Act } from '../actions.js';
 import { muleValue, plotRoom, plotValue } from '../strategist.js';
 import { cashReserve, type Mind } from '../value.js';
@@ -119,7 +119,7 @@ export class LotHand {
    */
   private steer(w: Walker, speed: number, dt: number, act: Act, isDone: boolean): void {
     const bid = Math.round(w.price);
-    const fits = (ms: number) => Math.round(w.price + (speed * ms) / 1000) <= this.limit; // literal-ok: ms per second
+    const fits = (ms: number) => Math.round(w.price + (speed * ms) / MS_PER_SECOND) <= this.limit;
     let dir: 0 | 1 = 0;
     if (this.target !== null && bid < this.target) {
       if (fits(dt)) dir = 1;
