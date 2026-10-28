@@ -374,6 +374,7 @@ describe('the election runs first in planning', () => {
     expect(election(g.game).stage).toBe('ballot');
 
     g.game.handle('lena', { type: 'vote', office: 'governor', candidate: 'lena' });
+    g.game.handle('lena', { type: 'ready' });
     g.game.connectionChanged('brix', false);
     g.game.connectionChanged('lena', false);
     tickFor(g, LONG_WAIT_MS);
