@@ -22,6 +22,28 @@ export type AuctionSteps = {
   listedSale?: (ctx: AuctionStepContext) => Promise<void>;
 };
 
+/** What the whole game hands each step: the auction step's screens and check, the room, and `held` bound to it. */
+export type GameStepContext = AuctionStepContext & {
+  server: MuleServer;
+  code: string;
+  held: <T>(step: () => Promise<T>) => Promise<T>;
+};
+
+/**
+ * Runs `step` with room `code`'s game clock held, so no phase ends and no AI moves under it; screens still act and
+ * hear views. Released afterwards, also when the step fails. A step that needs game time to pass must run unheld.
+ */
+export async function held<T>(server: MuleServer, code: string, step: () => Promise<T>): Promise<T> {
+  const room = server.registry.get(code);
+  check(room, `a room ${code} on the server`);
+  room.hold();
+  try {
+    return await step();
+  } finally {
+    room.release();
+  }
+}
+
 /**
  * The real game server, serving the built client from apps/web/dist on a free
  * port. Options (a short game, faster phases) go straight to the server.
