@@ -22,6 +22,10 @@ function argText(name: string): string | null {
   return i >= 0 ? (process.argv[i + 1] ?? null) : null;
 }
 
+export function applySets(sets: readonly string[]): string[] {
+  throw new Error('NotImplemented: applySets');
+}
+
 const pct = (n: number, of: number) => `${((n / Math.max(1, of)) * 100).toFixed(0)}%`;
 const quantile = (values: number[], q: number) => {
   const sorted = [...values].sort((a, b) => a - b);
