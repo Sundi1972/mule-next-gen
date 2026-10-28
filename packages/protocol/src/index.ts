@@ -393,6 +393,8 @@ export interface MuleView {
   air: { level: number; band: 'clean' | 'smoggy' | 'toxic' | 'collapse' };
   /** The air level at last month's end (upkeep), as `air.level` showed it then; null in month 1. */
   lastAir: number | null;
+  /** At the month end (upkeep, and game over after the last): true when that upkeep's store ran short of nothing. Null otherwise. */
+  colonistsFed: boolean | null;
   ship: ShipView;
   /** The colony fund and the sales tax rate. */
   treasury: { money: number; salesTax: number };
