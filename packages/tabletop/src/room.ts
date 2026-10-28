@@ -3,8 +3,15 @@ import type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from './p
 /** A rule a player broke: shown to them, never a crash. */
 export class TableError extends Error {}
 
-/** How long a handoff code can move its seat to another device. See RULE-6. */
-const HANDOFF_TTL_MS = 2 * 60_000;
+/** The room's own limits that change play, in one place to tune. */
+const ROOM_LIMITS = {
+  /** How long a move code can move its seat to another device, in ms. See RULE-6. */
+  handoffCodeMs: 2 * 60_000,
+  /** The longest chat line the room passes on, in characters; the rest is cut. */
+  chatChars: 280,
+  /** The longest player name a seat keeps, in characters; the rest is cut. */
+  nameChars: 16,
+} as const;
 
 export interface Connection<GameView> {
   send(msg: ServerEnvelope<GameView>): void;
@@ -208,7 +215,7 @@ export class Room<Intent, View> {
         this.leave(conn, from, seat);
         return;
       case 'handoff':
-        seat.handoff = { code: this.opts.newToken(), expiresAt: this.opts.now() + HANDOFF_TTL_MS };
+        seat.handoff = { code: this.opts.newToken(), expiresAt: this.opts.now() + ROOM_LIMITS.handoffCodeMs };
         conn.send({ t: 'handoffCode', ...seat.handoff });
         return;
       case 'pick':
@@ -247,7 +254,7 @@ export class Room<Intent, View> {
       if (this.started) throw new TableError('This game has already started');
       if (this.seats.length >= this.opts.maxSeats) throw new TableError('The table is full');
     }
-    const seat = back ?? this.addSeat(name.trim().slice(0, 16) || 'Player', false);
+    const seat = back ?? this.addSeat(name.trim().slice(0, ROOM_LIMITS.nameChars) || 'Player', false);
     this.letGoOfOtherSeats(conn, seat);
     seat.conn = conn;
     if (back) this.game.connectionChanged?.(seat.id, true);
@@ -393,7 +400,7 @@ export class Room<Intent, View> {
   }
 
   private chat(from: string, text: string, to?: string): void {
-    const clean = this.opts.moderate(text.trim().slice(0, 280));
+    const clean = this.opts.moderate(text.trim().slice(0, ROOM_LIMITS.chatChars));
     if (!clean) return;
     if (to && !this.seats.some((s) => s.id === to)) throw new TableError('Nobody by that name at the table');
     const message: ChatMessage = { id: ++this.chatId, from, text: clean, at: this.opts.now(), ...(to ? { to } : {}) };
