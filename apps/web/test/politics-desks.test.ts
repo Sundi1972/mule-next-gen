@@ -48,6 +48,7 @@ const me = (extra: Partial<NonNullable<MyView['politics']>> = {}): MyView => ({
   species: 'zipwing',
   stock: { ...stock, food: 9 },
   carriedMule: null,
+  installedThisTurn: false,
   claimsLeft: 0,
   hungry: false,
   sick: false,

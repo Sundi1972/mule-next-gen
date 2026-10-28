@@ -150,13 +150,16 @@ function parse(text: string): ClientEnvelope<MuleIntent> | null {
   const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
   switch (m.t) {
     case 'join':
-      return str(m.code) && str(m.name) && (m.seatToken === undefined || str(m.seatToken)) ? (m as ClientEnvelope<MuleIntent>) : null;
+      return str(m.code) && str(m.name) && (m.seatToken === undefined || str(m.seatToken)) && (m.handoff === undefined || str(m.handoff))
+        ? (m as ClientEnvelope<MuleIntent>)
+        : null;
     case 'board':
       return str(m.code) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'addAi':
     case 'start':
     case 'close':
     case 'leave':
+    case 'handoff':
       return m as ClientEnvelope<MuleIntent>;
     case 'kick':
       return str(m.seatId) ? (m as ClientEnvelope<MuleIntent>) : null;
