@@ -569,8 +569,8 @@ export const GAME = {
   /** Months the game continues after the last free plot is claimed. */
   landRushMonths: 3,
   claimsPerGrant: 2,
-  /** The land grant ends after this many sweeps over the free plots, even if some players never pressed. */
-  grantSweeps: 3,
+  /** The land grant is one pass of the light over the free plots, or ends earlier once every claim is used. */
+  grantSweeps: 1,
   /** What each plot a player owns adds to their score, before any MULE on it. */
   plotScore: 300,
   /** The export ship calls every this many months. */
