@@ -245,10 +245,9 @@ export function rollPlayerEvent(state: GameState, key: PlayerEventKey, phase: Ph
 }
 
 /**
- * The events that fire at the start of a phase, in the order they fired: each colony row once, in table order, then
- * each player's rows in seat order. A row fires when its own roll hits and its event would hit some plot; each roll
- * is seeded from the game, the month, the row, the phase and the player, so retuning one row never moves another.
- * Never on a what-if copy or before EVENTS.firstMonth.
+ * The events that fire at the start of a phase, in order: each colony row once in table order, then each player's
+ * rows in seat order. A row fires when its seeded roll hits and its event finds a plot to hit; never on a what-if
+ * copy or before EVENTS.firstMonth.
  */
 export function rollPhase(state: GameState, phase: Phase): MonthEvent[] {
   if (state.whatIf || state.month < EVENTS.firstMonth) return [];
@@ -258,6 +257,7 @@ export function rollPhase(state: GameState, phase: Phase): MonthEvent[] {
   for (const { key, row, player } of rolls) {
     const chance = eventChance(state, row, phase, { player, firedThisPhase: fired.map((e) => e.key) });
     if (chance <= 0) continue;
+    // Its own dice for the roll and the event's shape: a shared rng would let retuning one row move every later one.
     const rng = createRng(seedOf(state.seed, state.month, key, phase, ...(player === undefined ? [] : [player])));
     const event = rng.chance(chance) ? buildEvent(state, key, rng) : null;
     if (event) fired.push(event);
@@ -265,10 +265,10 @@ export function rollPhase(state: GameState, phase: Phase): MonthEvent[] {
   return fired;
 }
 
-/** A table's rows that make an event, in table order, for this player's roll; sickness keeps its own roll. */
+/** A table's rows that make a MonthEvent, tagged with whose roll it is; sickness doesn't, and keeps its own roll. */
 function rowsOf(table: Record<string, EventRow>, player?: string) {
   return Object.entries(table)
-    .filter((entry): entry is [EventKey, EventRow] => entry[0] in SHAPE)
+    .filter((entry): entry is [EventKey, EventRow] => Object.hasOwn(SHAPE, entry[0]))
     .map(([key, row]) => ({ key, row, player }));
 }
 

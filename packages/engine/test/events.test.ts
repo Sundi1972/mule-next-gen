@@ -379,7 +379,7 @@ describe('the roller', () => {
       rows().forEach((row, i) => Object.assign(row, saved[i]));
     }
   };
-  /** A colony every wave-1 event can hit, at the first month events may roll. */
+  /** colonyForEvents(seed) at the first month events may roll. */
   const ready = (seed: number) => {
     const state = colonyForEvents(seed);
     state.month = EVENTS.firstMonth;
