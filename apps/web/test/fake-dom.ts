@@ -45,8 +45,8 @@ class FakeNode {
     this.childNodes = [];
     if (text && this.ownerDocument) this.appendChild(this.ownerDocument.createTextNode(text));
   }
-  addEventListener() {}
-  removeEventListener() {}
+  addEventListener(_type?: string, _listener?: () => void) {}
+  removeEventListener(_type?: string, _listener?: () => void) {}
 }
 
 class FakeText extends FakeNode {
@@ -124,6 +124,9 @@ class FakeDocument extends FakeNode {
   readonly documentElement: FakeElement;
   readonly body: FakeElement;
   activeElement: FakeElement | null = null;
+  /** Set through `setHidden`, which also tells the page. */
+  hidden = false;
+  private readonly visibilityListeners = new Set<() => void>();
   constructor() {
     super(9, '#document', null);
     this.documentElement = new FakeElement('HTML', this);
@@ -136,6 +139,17 @@ class FakeDocument extends FakeNode {
   }
   createTextNode(text: string) {
     return new FakeText(text, this);
+  }
+  override addEventListener(type: string, listener: () => void) {
+    if (type === 'visibilitychange') this.visibilityListeners.add(listener);
+  }
+  override removeEventListener(type: string, listener: () => void) {
+    if (type === 'visibilitychange') this.visibilityListeners.delete(listener);
+  }
+  /** The page goes to the background (the phone locked, another app in front) or comes back. */
+  setHidden(hidden: boolean) {
+    this.hidden = hidden;
+    for (const listener of [...this.visibilityListeners]) listener();
   }
 }
 
@@ -206,6 +220,8 @@ export const fakeWorker = {
   release() {
     fakeWorker.held.shift()?.();
   },
+  /** The page's worker, once made. */
+  current: null as FakeWorker | null,
 };
 
 type Job = { width: number; height: number; pxPerTile: number };
@@ -214,6 +230,14 @@ class FakeWorker {
   onmessage: ((e: { data: unknown }) => void) | null = null;
   onerror: ((e: { message: string; preventDefault(): void }) => void) | null = null;
   private terminated = false;
+  constructor() {
+    fakeWorker.current = this;
+  }
+  /** Dies on its own, with no job in hand: it raises an error event and never answers again. */
+  crash() {
+    this.terminated = true;
+    this.onerror?.({ message: 'the worker crashed', preventDefault() {} });
+  }
   postMessage({ id, job }: { id: number; job: Job }) {
     fakeWorker.jobs.push({ width: job.width, height: job.height, pxPerTile: job.pxPerTile });
     const answer = fakeWorker.answers.shift() ?? 'blob';
@@ -241,6 +265,7 @@ export function installWorker(answers: WorkerAnswer[] = [], { offscreen = true }
   fakeWorker.answers = [...answers];
   fakeWorker.jobs = [];
   fakeWorker.held = [];
+  fakeWorker.current = null;
   Object.assign(globalThis, { Worker: FakeWorker }, offscreen ? { OffscreenCanvas: class {} } : {});
 }
 

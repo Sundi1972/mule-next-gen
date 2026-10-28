@@ -36,7 +36,12 @@ beforeEach(async () => {
   device.devicePixelRatio = 1;
 });
 
+/** Screens still mounted, unmounted after each test so a failed one can't paint into the next. */
+const mounted = new Set<{ unmount(): void }>();
+
 afterEach(() => {
+  for (const screen of mounted) screen.unmount();
+  if (document.hidden) document.setHidden(false);
   removeWorker();
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -58,15 +63,18 @@ function mount(...maps: Props[]) {
     flushSync(() => root.render(createElement(Fragment, null, ...list.map((m, i) => createElement(Fragment, { key: `${generation}-${i}` }, land(m))))));
   };
   render(maps);
-  return {
+  const screen = {
     host,
     render,
     srcs: () => host.findAll('img').map((img: FakeElement) => img.getAttribute('src')),
     unmount() {
+      mounted.delete(screen);
       root.unmount();
       document.body.removeChild(host);
     },
   };
+  mounted.add(screen);
+  return screen;
 }
 
 /** Waits until `host` shows `n` pictures, and returns their sources. */
@@ -137,7 +145,7 @@ describe('the landscape on a phase change', () => {
     expect(night).not.toBe(a);
   });
 
-  it('FM-FREEZE-2: five maps on a screen that re-renders, or is remounted, keep their pictures, with no repaint', async () => {
+  it('FM-FREEZE-2: five maps on a screen that re-renders, is remounted, or switches theme keep a picture on screen: no repaint, and none revoked while shown', async () => {
     const maps = [1, 2, 3, 4, 5].map((seed) => swatch(seed));
     const screen = mount(...maps);
     const before = await pictures(screen.host, 5);
@@ -151,6 +159,32 @@ describe('the landscape on a phase change', () => {
 
     expect(paintedCanvases).toHaveLength(6);
     expect(screen.srcs()).toEqual(before);
+
+    // Switched to the night theme, each map shows its day picture until its night one arrives, then switches.
+    const revoked: string[] = [];
+    const revokedWhileShown: string[] = [];
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation((url) => {
+      revoked.push(url);
+      if (screen.srcs().includes(url)) revokedWhileShown.push(url);
+    });
+    screen.render(maps.map((m) => ({ ...m, theme: 'dark' })));
+    await Promise.resolve();
+    expect(screen.srcs()).toEqual(before);
+    expect(revoked).toEqual([]);
+
+    const night = await vi.waitFor(
+      () => {
+        const srcs = screen.srcs();
+        if (srcs.some((src) => before.includes(src))) throw new Error('night pictures still painting');
+        return srcs;
+      },
+      { timeout: 10_000, interval: 5 },
+    );
+    expect(night).toHaveLength(5);
+    expect(paintedCanvases).toHaveLength(11);
+    expect(revokedWhileShown).toEqual([]);
+    // With more than 3 pictures cached, every day picture went, once it was off screen.
+    expect([...revoked].sort()).toEqual([...before].sort());
     screen.unmount();
   });
 });
@@ -236,6 +270,43 @@ describe('the landscape painted in a worker', () => {
     await pictures(next.host, 1);
     expect(fakeWorker.jobs).toHaveLength(1);
     expect(paintedCanvases).toHaveLength(2);
+    next.unmount();
+  });
+
+  it("FM-FREEZE-3: a page hidden for 60 s while the worker paints keeps its worker, and the worker's picture shows", async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    installWorker(['held']);
+    const screen = mount({ ...swatch(12), width: 4 });
+    await vi.waitFor(() => expect(fakeWorker.jobs).toHaveLength(1), { interval: 5 });
+
+    // The phone is locked mid-paint for a minute; 10 s after it comes back, the worker answers.
+    document.setHidden(true);
+    await vi.advanceTimersByTimeAsync(60_000);
+    document.setHidden(false);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(paintedCanvases).toHaveLength(0);
+    fakeWorker.release();
+    expect(await pictures(screen.host, 1)).toEqual([expect.stringMatching(/^blob:/)]);
+    screen.unmount();
+
+    const next = mount(swatch(13));
+    await pictures(next.host, 1);
+    expect(fakeWorker.jobs).toHaveLength(2);
+    expect(paintedCanvases).toHaveLength(0);
+    next.unmount();
+  });
+
+  it('FM-FREEZE-3: a worker that crashes between pictures is given up at once: the next picture is painted on this thread, not 30 s later', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    installWorker();
+    await show(swatch(14));
+    fakeWorker.current?.crash();
+
+    const next = mount({ ...swatch(15), width: 4 });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(paintedCanvases).toEqual([{ width: 256, height: 128 }]);
+    expect(fakeWorker.jobs).toHaveLength(1);
+    await pictures(next.host, 1);
     next.unmount();
   });
 });
