@@ -360,6 +360,48 @@ describe('TableClient', () => {
     expect(loadSeat(storage)).toEqual(saved);
     expect(sockets).toHaveLength(1);
   });
+
+  it.each([
+    { between: 'closing the dialog', reopen: (client: TableClient) => (client.closeHandoff(), client.handoff()) },
+    { between: 'nothing', reopen: (client: TableClient) => client.handoff() },
+  ])('FM-4: a code asked for again with $between in between, within one round trip, shows only once the newest request is answered', ({ reopen }) => {
+    const { client, last } = seated();
+    client.handoff();
+    reopen(client);
+    expect(last().sent.filter((m) => m.t === 'handoff')).toHaveLength(2);
+
+    last().deliver({ t: 'handoffCode', code: 'dead', expiresAt: 999_999 });
+    expect(client.getState().handoffCode).toBeNull();
+    last().deliver({ t: 'handoffCode', code: 'live', expiresAt: 999_999 });
+    expect(client.getState().handoffCode).toEqual({ code: 'live', expiresAt: 999_999, expired: false });
+
+    client.handoff();
+    last().deliver({ t: 'handoffCode', code: 'next', expiresAt: 999_999 });
+    expect(client.getState().handoffCode).toEqual({ code: 'next', expiresAt: 999_999, expired: false });
+  });
+
+  it.each([
+    { row: 'opened while reconnecting', before: (t: ReturnType<typeof seated>) => (t.last().drop(), t.client.handoff()), asks: true, shows: 'fresh' },
+    { row: 'whose request was lost with the socket', before: (t: ReturnType<typeof seated>) => (t.client.handoff(), t.last().drop()), asks: true, shows: 'fresh' },
+    {
+      row: 'already showing a code',
+      before: (t: ReturnType<typeof seated>) => (t.client.handoff(), t.last().deliver({ t: 'handoffCode', code: 'kept', expiresAt: 999_999 }), t.last().drop()),
+      asks: false,
+      shows: 'kept',
+    },
+    { row: 'closed before the drop', before: (t: ReturnType<typeof seated>) => (t.client.handoff(), t.client.closeHandoff(), t.last().drop()), asks: false, shows: null },
+  ])('FM-5: when the seat is back after a drop, a move dialog $row asks the room for a code again: $asks', ({ before, asks, shows }) => {
+    const t = seated();
+    before(t);
+
+    t.advance(500);
+    t.last().open();
+    t.last().deliver({ t: 'welcome', code: 'KRTX', role: 'player', seatId: 's2', seatToken: 'secret' });
+
+    expect(t.last().sent.filter((m) => m.t === 'handoff')).toEqual(asks ? [{ t: 'handoff' }] : []);
+    if (asks) t.last().deliver({ t: 'handoffCode', code: 'fresh', expiresAt: 999_999 });
+    expect(t.client.getState().handoffCode?.code ?? null).toBe(shows);
+  });
 });
 
 describe('ClockSync', () => {
