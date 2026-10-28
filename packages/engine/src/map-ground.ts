@@ -1,6 +1,7 @@
 import { GROWN_ODDS, MAP, MINERAL_ODDS, TERRAIN_ODDS, sizeBand, type FloorGood } from './config.js';
 import type { Layout } from './map-layout.js';
 import { zeroGround } from './map.js';
+import { DIAG } from './diag-legacy.js';
 import type { Rng } from './rng.js';
 import type { Ground, Terrain } from './types.js';
 
@@ -542,8 +543,13 @@ function boardOf(layout: Layout): Board {
 function smoothField(layout: Layout, good: FloorGood, rng: Rng): number[] {
   const { width, height } = layout;
   const { area, spread } = good === 'smithore' ? MAP.ground.blobs.smithore : MAP.ground.blobs.grown;
-  const count = Math.max(MAP.ground.minBlobs, Math.round((width * height) / area));
-  const blobs = Array.from({ length: count }, () => ({ x: rng.next() * width, y: rng.next() * height, weight: rng.next() }));
+  // DIAG: field=pad spreads blob centres over the plot box padded by DIAG.pad on every side, at the same density.
+  const pad = DIAG.field === 'pad' ? Number(DIAG.pad ?? 2) : 0;
+  const bw = DIAG.field === 'pad' ? width - 1 + 2 * pad : width;
+  const bh = DIAG.field === 'pad' ? height - 1 + 2 * pad : height;
+  const off = DIAG.field === 'pad' ? -pad : 0;
+  const count = Math.max(MAP.ground.minBlobs, Math.round((bw * bh) / area));
+  const blobs = Array.from({ length: count }, () => ({ x: off + rng.next() * bw, y: off + rng.next() * bh, weight: rng.next() }));
   return layout.terrain.map((_, i) => {
     const x = i % width;
     const y = Math.floor(i / width);

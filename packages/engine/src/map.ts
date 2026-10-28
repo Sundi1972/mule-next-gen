@@ -4,6 +4,7 @@ import { layoutMap } from './map-layout.js';
 import type { GameMap } from './map-rules.js';
 import type { Rng } from './rng.js';
 import { GROWN_GOODS, MINED_GOODS, type Ground, type Terrain, type Tile, type TileTrait } from './types.js';
+import { DIAG, legacyExpectedGround, legacyGenerateMap, legacyRollGround } from './diag-legacy.js';
 
 const TRAITS: TileTrait[] = ['bedrock', 'sheltered', 'hotSpring', 'thinVein', 'toxic', 'unstable', 'infested', 'floodPlain'];
 
@@ -13,8 +14,13 @@ const TRAITS: TileTrait[] = ['bedrock', 'sheltered', 'hotSpring', 'thinVein', 't
  * one `rng` stream in that order, so a seed always gives the same map.
  */
 export function generateMap(players: number, rng: Rng): GameMap {
-  const layout = layoutMap(players, rng);
-  const { ground } = dealGround(layout, players, rng);
+  if (DIAG.layout === 'legacy' && DIAG.ground === 'legacy') return legacyGenerateMap(players, rng);
+  let layout: { width: number; height: number; terrain: Terrain[] };
+  if (DIAG.layout === 'legacy') {
+    const m = legacyGenerateMap(players, rng);
+    layout = { width: m.width, height: m.height, terrain: m.tiles.map((t) => t.terrain) };
+  } else layout = layoutMap(players, rng);
+  const ground = DIAG.ground === 'legacy' ? layout.terrain.map((t) => legacyRollGround(t, rng)) : dealGround(layout as never, players, rng).ground;
   const tiles = layout.terrain.map((terrain, i): Tile => {
     const traitCount = terrain === 'store' ? 0 : rng.pick([0, 0, 0, 1, 1, 2]);
     const traits: TileTrait[] = [];
@@ -41,6 +47,7 @@ export function generateMap(players: number, rng: Rng): GameMap {
 
 /** The average rating a plot of this terrain rolls for a good: what a player can expect before analysing it. */
 export function expectedGround(terrain: Terrain): Ground {
+  if (DIAG.hints === 'old') return legacyExpectedGround(terrain);
   const ground = zeroGround();
   if (terrain === 'store') return ground;
   const mean = (weights: readonly number[], offset: number) => weights.reduce((sum, w, i) => sum + w * (i + offset), 0);
