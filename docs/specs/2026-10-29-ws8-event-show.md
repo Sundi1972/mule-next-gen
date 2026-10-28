@@ -449,10 +449,12 @@ Invariant (every test): a screen never shows a figure the month report does not 
 ## §8 · Amendments `[review-only]`
 
 ```
-AM-1 · 2026-10-28 · lead · before PR-1 (Heiko's ruling via the PM: the phone is landscape for the whole game)
+AM-1 · 2026-10-28 · lead · before PR-1 (the PM's check: the phone is landscape-only, 844×390 and the small 667×375)
 
 target    §1 C7 (tomorrow, ux), §1 C10's phone part, §2 RULE-3, §6 T-AC-5, §7 R-3
-said      phone sizes unstated, except R-3's 844×390
+said      phone sizes unstated, except R-3's 844×390. No phone scene was designed upright: the gallery's phone frame is
+          844×390 landscape, as the product's phone is (PhoneApp is landscape-only, TurnSideways; the e2e harness's
+          PHONE is 844×390). This amendment adds the small size and its two fixes.
 did       the phone parts are landscape: 844×390 (reference) and 667×375 (small). C7 and C10's phone overlay render
           inside WS6's landscape phone shell: the show fills the shell's map box, the light card and the result its
           rail; nothing in the show has a fixed width. Checked the gallery at both sizes (frame pinned to the
@@ -461,7 +463,7 @@ did       the phone parts are landscape: 844×390 (reference) and 667×375 (smal
           stayed under the card of losses (at both sizes). Fixed in the gallery at 522ebac4: the hint moves to the
           rail's foot (the whole map stays the tap target, data-testid="skip"; the hint is "skip-hint"), and story
           panels leave at their story's reveal. 43 phone-only pages, 0 console errors at 667×375.
-because   Heiko's ruling (landscape); G-2: a player alone on a phone sees every event on the phone itself, on the
+because   the small landscape size (667×375) was never checked; G-2: a player alone on a phone sees every event on the phone itself, on the
           phones the game runs on
 goal      G-2 (unchanged)
 folded    C7 tomorrow + ux (scaffold 522ebac4) · R-3 rewritten · T-AC-5 runs at both sizes · the shell's frame is
