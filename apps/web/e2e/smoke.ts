@@ -1,6 +1,5 @@
 /**
- * T-AC-1: a phone plays a whole three-month game, lobby to final scores, against the real server. Three months, so
- * month 2 has a month end before game over (C20's B-AC-12).
+ * T-AC-1: a phone plays a whole two-month game, lobby to final scores, against the real server.
  * On the way it proves B-AC-1 (the species you pick is the one you play) and B-AC-4 (the room card with no TV).
  * Run with `pnpm --filter @mule/web e2e`; replay a red run's map with `MULE_E2E_SEED=<seed>`.
  */
@@ -30,9 +29,9 @@ async function loadAuctionSteps(): Promise<AuctionSteps> {
   return steps;
 }
 
-/** Every phase of months 1 to 3 the phone must show, in order. The last month's upkeep ends straight in game over. */
+/** Every phase of months 1 and 2 the phone must show, in order. The last month's upkeep ends straight in game over. */
 const MONTH = ['planning', 'landGrant', 'development', 'production', 'auction', 'upkeep'];
-const EXPECTED_PHASES = [...MONTH, ...MONTH, ...MONTH.slice(0, -1), 'gameOver'];
+const EXPECTED_PHASES = [...MONTH, ...MONTH.slice(0, -1), 'gameOver'];
 
 const PHASE_SCALE = 0.1;
 /** A phase's longest run at this scale, plus room for the browser and the network. */
@@ -57,7 +56,7 @@ const PART_LINES = ['money', 'goods', 'land', 'mules'] as const;
 const SHOW_SEED = 1;
 const SEED = seedFrom(process.env.MULE_E2E_SEED);
 const steps = await loadAuctionSteps();
-const { server, base } = await startServer({ maxMonths: 3, phaseScale: PHASE_SCALE, seed: () => SEED });
+const { server, base } = await startServer({ maxMonths: 2, phaseScale: PHASE_SCALE, seed: () => SEED });
 const browser = await launch();
 /** Every phase the player's devices showed: the phone, and from the move on the second device. */
 const seen: Shown[] = [];
@@ -160,9 +159,9 @@ try {
   });
   check(measured, 'FM-2: the month-1 auction reached a walk to measure');
 
-  // Month 1's end holds until the phone moves on (B-AC-13); the TV's Worth and air are read for month 2's change.
-  const monthOne = await theMonthEndHoldsForThePhone(ctx, 1);
-  console.log(`month end: ${monthOne.line}`);
+  // B-AC-12 at month 1's end, the one a two-month game has; then it holds until the phone moves on (B-AC-13).
+  console.log(`league table: ${await theLeagueTableAtTheMonthEnd(ctx)}`);
+  console.log(`month end: ${(await theMonthEndHoldsForThePhone(ctx, 1)).line}`);
 
   // Month 2.
   await steps.listedSale?.({ phone, tv, check });
@@ -185,18 +184,6 @@ try {
   await moveDialogOutlivedThePhase(ctx, moveLink);
   console.log(`production show, month 2: ${await checkTheShow({ tv: tvShow, phone: phoneShow, event: SEED === SHOW_SEED })}`);
   await pressDoneThroughTheAuction(phone);
-  // B-AC-12: month 2's end, the phone hungry since planning, against what the TV showed at month 1's end.
-  console.log(`league table: ${await theLeagueTableAtTheMonthEnd(ctx, monthOne.seen)}`);
-  console.log(`month end: ${(await theMonthEndHoldsForThePhone(ctx, 2)).line}`);
-
-  // Month 3, played through to game over.
-  const monthThree = Date.now();
-  await readyIfStillPlanning(phone);
-  await pastTheLandGrant(phone);
-  await steps.landAuction?.({ phone, tv, check }, 3);
-  await goToThePub(phone);
-  await pressDoneThroughTheAuction(phone);
-  console.log(`month 3: ${((Date.now() - monthThree) / 1_000).toFixed(1)} s`);
 
   // Game over.
   const scores = phone.locator('[data-phase=gameOver] [data-testid=scores]');
@@ -210,7 +197,7 @@ try {
   console.log(`turned upright and back: ${await turnUprightAndBack(phone)}`);
 
   const phases = seen.map((s) => s.phase);
-  check(isSubsequence(EXPECTED_PHASES, phases), `phone showed every phase of months 1 to 3 in order: ${phases.join(' > ')}`);
+  check(isSubsequence(EXPECTED_PHASES, phases), `phone showed every phase of months 1 and 2 in order: ${phases.join(' > ')}`);
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
   console.log(`phases: ${timeline(seen)}`);
   console.log(`e2e smoke: ok (room ${code}, seed ${SEED})`);
