@@ -21,22 +21,21 @@ export interface EventEntry {
   look: string;
 }
 
-const E = (e: EventEntry) => e;
+/** Keyed by every ShowEventKey, so an event the show does not know is a compile error, never a missing entry. */
+export const EVENT_ENTRY: Record<ShowEventKey, EventEntry> = {
+  dustStorm: { key: 'dustStorm', motion: 'sweep', look: 'A wall of dust blows in from one edge and takes half of each Energy plot as it passes.' },
+  drought: { key: 'drought', motion: 'sweep', look: 'Heat shimmer crosses the map; the ground cracks under each Food and Water plot.' },
+  acidRain: { key: 'acidRain', motion: 'sweep', look: 'A sickly green rain front crosses the map; Energy and Food plots hiss as it passes.' },
+  solarFlare: { key: 'solarFlare', motion: 'sweep', look: 'A golden wash crosses the map from the sun’s side; each Energy plot flares as it’s reached.' },
+  cometPass: { key: 'cometPass', motion: 'sweep', look: 'A comet streaks across the sky; each Water plot glints as its tail passes.' },
+  flood: { key: 'flood', motion: 'source', look: 'The river swells from its source and spills over the Food plots on its banks.' },
+  volcanicAsh: { key: 'volcanicAsh', motion: 'source', look: 'The volcano puffs a plume; grey ash settles on the plots within 2 steps, nearest first.' },
+  pestSwarm: { key: 'pestSwarm', motion: 'spread', look: 'A swarm crawls from farm to farm across the player’s joined Food plots.' },
+  wildfire: { key: 'wildfire', motion: 'spread', look: 'One farm flares up and burns out; embers drift onto the farms joined to it.' },
+  bumperHarvest: { key: 'bumperHarvest', motion: 'plot', look: 'One plot glows and its bars double.' },
+};
 
-export const EVENT_CATALOGUE: EventEntry[] = [
-  E({ key: 'dustStorm', motion: 'sweep', look: 'A wall of dust blows in from one edge and takes half of each Energy plot as it passes.' }),
-  E({ key: 'drought', motion: 'sweep', look: 'Heat shimmer crosses the map; the ground cracks under each Food and Water plot.' }),
-  E({ key: 'acidRain', motion: 'sweep', look: 'A sickly green rain front crosses the map; Energy and Food plots hiss as it passes.' }),
-  E({ key: 'solarFlare', motion: 'sweep', look: 'A golden wash crosses the map from the sun’s side; each Energy plot flares as it’s reached.' }),
-  E({ key: 'cometPass', motion: 'sweep', look: 'A comet streaks across the sky; each Water plot glints as its tail passes.' }),
-  E({ key: 'flood', motion: 'source', look: 'The river swells from its source and spills over the Food plots on its banks.' }),
-  E({ key: 'volcanicAsh', motion: 'source', look: 'The volcano puffs a plume; grey ash settles on the plots within 2 steps, nearest first.' }),
-  E({ key: 'pestSwarm', motion: 'spread', look: 'A swarm crawls from farm to farm across the player’s joined Food plots.' }),
-  E({ key: 'wildfire', motion: 'spread', look: 'One farm flares up and burns out; embers drift onto the farms joined to it.' }),
-  E({ key: 'bumperHarvest', motion: 'plot', look: 'One plot glows and its bars double.' }),
-];
-
-export const EVENT_ENTRY = Object.fromEntries(EVENT_CATALOGUE.map((e) => [e.key, e])) as Record<ShowEventKey, EventEntry>;
+export const EVENT_CATALOGUE: EventEntry[] = Object.values(EVENT_ENTRY);
 
 /**
  * Each event's own story: where the camera goes and when its change lands. Seconds are proportions of the gallery's
