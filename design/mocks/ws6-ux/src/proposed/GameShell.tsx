@@ -36,6 +36,47 @@ export interface Now {
   warn?: boolean;
 }
 
+/**
+ * The Now card that folds once read (UX audit H-7, #audit-hub): folded it is one line, its title, and a tap opens it.
+ * A new step opens it again (the title changing re-mounts it), so nothing new is missed.
+ */
+function FoldingNowCard({ now, mark }: { now: Now; mark?: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  if (open)
+    return (
+      <div className="relative">
+        <NowCard now={now} />
+        <button type="button" onClick={() => setOpen(false)} aria-expanded aria-label="Fold the Now card" className="absolute right-1.5 top-1.5 grid size-7 place-items-center rounded-chip text-holo hover:bg-holo-soft" data-testid="now-fold">
+          <svg aria-hidden viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M6 15l6-6 6 6" />
+          </svg>
+        </button>
+        {mark}
+      </div>
+    );
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-expanded={false}
+        className={cx('flex w-full items-center gap-2 rounded-panel border-2 px-2.5 py-1.5 text-left @min-[1100px]/shell:px-4 @min-[1100px]/shell:py-2.5', now.warn ? 'border-warn bg-warn/10' : 'border-holo bg-holo-soft')}
+        data-testid="now"
+      >
+        <span className="label-caps shrink-0 text-[10px]! @min-[1100px]/shell:text-xs!">Now</span>
+        <span className="min-w-0 flex-1 font-display text-sm font-semibold leading-tight @min-[1100px]/shell:text-lg" data-testid="now-title">
+          {now.title}
+        </span>
+        <svg aria-hidden viewBox="0 0 24 24" width={14} height={14} className="shrink-0 text-holo" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+        <span className="sr-only">Tap to read it again</span>
+      </button>
+      {mark}
+    </div>
+  );
+}
+
 export function NowCard({ now }: { now: Now }) {
   return (
     <section
@@ -64,15 +105,21 @@ export function NowCard({ now }: { now: Now }) {
 export function GameShell({
   phase,
   seconds,
+  status,
   now,
   rail,
   footer,
   handoff: handoffOpen = false,
   anchored = [],
+  standing,
+  foldNow = false,
+  nowMark,
   children,
 }: {
   phase: string;
   seconds?: number | undefined;
+  /** Shown where the clock goes when the phase has none (planning's ready count, AM-16). */
+  status?: ReactNode;
   now: Now;
   rail?: ReactNode;
   footer?: ReactNode;
@@ -80,6 +127,15 @@ export function GameShell({
   handoff?: boolean | CodeState;
   /** Seats this screen draws as creatures (they wrap them in Speaker): their bubbles pop there, not in the seat row. */
   anchored?: string[];
+  /**
+   * Under the money: where you stand against the others, and the money and rank together open the standings (UX
+   * audit H-4, #audit-hub). Off unless given.
+   */
+  standing?: { label: string; aria: string; onOpen: () => void; mark?: ReactNode };
+  /** The Now card folds to its title once read (UX audit H-7, #audit-hub). Off by default. */
+  foldNow?: boolean;
+  /** Mock only: drawn over the Now card, the audit's numbered marker. */
+  nowMark?: ReactNode;
   children: ReactNode;
 }) {
   const chat = useChat();
@@ -111,7 +167,7 @@ export function GameShell({
                 </span>
                 <span className="truncate font-display text-lg font-semibold leading-tight @min-[1100px]/shell:text-2xl">{phase}</span>
               </div>
-              {seconds !== undefined && <Timer seconds={seconds} className="@min-[1100px]/shell:h-11 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-2xl" />}
+              {seconds !== undefined ? <Timer seconds={seconds} className="@min-[1100px]/shell:h-11 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-2xl" /> : status}
             </div>
             <div className="flex items-center gap-2">
               <PlayerMark slot={slot} species={self.species} size={12} label={`You, ${SPECIES_NAME[self.species]}`} />
@@ -131,9 +187,31 @@ export function GameShell({
                 </svg>
                 <span className="hidden @min-[1100px]/shell:inline">To my phone</span>
               </button>
-              <span data-num className="ml-auto shrink-0 font-mono text-sm font-bold text-ink @min-[1100px]/shell:text-lg" data-testid="money">
-                {fmt(self.money)} cr
-              </span>
+              {standing ? (
+                <button
+                  type="button"
+                  onClick={standing.onOpen}
+                  aria-haspopup="dialog"
+                  aria-label={`${fmt(self.money)} cr. ${standing.aria}`}
+                  className="relative -my-1 ml-auto flex shrink-0 flex-col items-end rounded-chip px-1 py-0.5 hover:bg-holo-soft"
+                  data-testid="standing"
+                >
+                  <span data-num className="font-mono text-sm font-bold leading-tight text-ink @min-[1100px]/shell:text-lg" data-testid="money">
+                    {fmt(self.money)} cr
+                  </span>
+                  <span className="flex items-center gap-0.5 text-[10px] font-semibold leading-tight text-holo @min-[1100px]/shell:text-sm" data-testid="standing-rank">
+                    {standing.label}
+                    <svg aria-hidden viewBox="0 0 24 24" width={10} height={10} fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 6l6 6-6 6" />
+                    </svg>
+                  </span>
+                  {standing.mark}
+                </button>
+              ) : (
+                <span data-num className="ml-auto shrink-0 font-mono text-sm font-bold text-ink @min-[1100px]/shell:text-lg" data-testid="money">
+                  {fmt(self.money)} cr
+                </span>
+              )}
             </div>
             {/* Live table chat (C20): everyone's seat, the bubble's fallback anchor, and the last lines. */}
             {chat && (
@@ -144,7 +222,7 @@ export function GameShell({
             )}
           </header>
           <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 *:shrink-0 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4">
-            <NowCard now={now} />
+            {foldNow ? <FoldingNowCard key={now.title} now={now} mark={nowMark} /> : <NowCard now={now} />}
             {rail}
           </div>
           {footer && (

@@ -84,7 +84,7 @@ export async function doneThroughTheElection(ctx: GameStepContext, timeout: numb
     const stage = election.stage;
     await ctx.held(async () => {
       const now = gameOf(ctx).state.politics?.election;
-      if (now?.stage !== stage || (stage !== 'nominate' && stage !== 'ballot') || now.done.includes(seat.id)) return;
+      if (now?.stage !== stage || (stage !== 'announce' && stage !== 'ballot') || now.done.includes(seat.id)) return;
       await ready.click({ timeout: PRESS_MS });
       await until(() => gameOf(ctx).state.politics?.election?.done.includes(seat.id) === true, `T-AC-1: the server counts ${name} Done in the ${stage} stage`);
     });
