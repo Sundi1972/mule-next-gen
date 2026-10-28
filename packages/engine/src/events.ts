@@ -2,7 +2,7 @@ import { EVENTS, GAME } from './config.js';
 import { neighbours } from './map.js';
 import { airBand, type AirBand } from './pollution.js';
 import { createRng } from './rng.js';
-import { RAW_GOODS, type EventKey, type EventKind, type GameState, type Good, type MonthEvent, type Phase, type Tile } from './types.js';
+import { RAW_GOODS, type EventKey, type EventKind, type GameState, type Good, type MonthEvent, type Phase, type Player, type Tile } from './types.js';
 
 type Rng = ReturnType<typeof createRng>;
 type Direction = NonNullable<MonthEvent['direction']>;
@@ -184,43 +184,53 @@ export interface ChanceInput {
  * or above its cap; 0 in a phase the row doesn't list.
  */
 export function eventChance(state: GameState, row: EventRow, phase: Phase, input: ChanceInput = {}): number {
-  throw new Error('NotImplemented: eventChance');
+  const base = row.phases[phase];
+  if (base === undefined) return 0;
+  const { air, pollution, wealth, follows } = influences(state, row, input);
+  return Math.min(row.cap, Math.max(0, base + air + pollution + wealth + follows));
+}
+
+/** Each influence's share of a row's chance; 0 for one the row doesn't read, or with nothing to read. */
+function influences(state: GameState, row: EventRow, { player, firedThisPhase = [] }: ChanceInput) {
+  // Last month's report only until production files this month's: a row in a later phase would read this month's.
+  const last = state.history.at(-1);
+  const firedLastMonth: readonly string[] = last?.events?.map((e) => e.key) ?? [];
+  const caused = player === undefined ? 0 : (last?.pollutionBy?.[player] ?? 0);
+  const follows = Object.entries(row.follows ?? {})
+    .filter(([key, f]) => (f.thisPhase && firedThisPhase.includes(key)) || (f.lastMonth && firedLastMonth.includes(key)))
+    .reduce((sum, [, f]) => sum + f.points, 0);
+  return {
+    air: row.air?.[airBand(state.air).name] ?? 0,
+    pollution: row.pollution ? Math.min(row.pollution.max, row.pollution.perPoint * caused) : 0,
+    wealth: row.wealth && player !== undefined ? wealthShare(state, row.wealth, player) : 0,
+    follows,
+  };
+}
+
+/** A wealth influence for this player: the richest's and the poorest's points, by cash plus land, a tie to the first seat. */
+function wealthShare(state: GameState, wealth: NonNullable<EventRow['wealth']>, id: string): number {
+  const worth = (p: Player) => p.money + GAME.plotScore * state.tiles.filter((t) => t.owner === p.id).length;
+  const richest = state.players.reduce((a, b) => (worth(b) > worth(a) ? b : a));
+  const poorest = state.players.reduce((a, b) => (worth(b) < worth(a) ? b : a));
+  return (richest.id === id ? (wealth.richest ?? 0) : 0) + (poorest.id === id ? (wealth.poorest ?? 0) : 0);
 }
 
 /** A player event's key: a row of EVENTS.player. */
 export type PlayerEventKey = keyof typeof EVENTS.player;
 
-/**
- * The chance a player event fires for this player at the start of this phase: the phase's chance, plus the air band's
- * bonus, plus perPoint for each air point the player's plots caused last month (at most max), never above the cap; 0
- * in a phase the event doesn't list.
- */
+/** The chance a player event fires for this player at the start of this phase: its row's eventChance. */
 export function playerEventChance(state: GameState, key: PlayerEventKey, phase: Phase, id: string): number {
-  const row: EventRow = EVENTS.player[key];
-  const inPhase = row.phases[phase];
-  if (inPhase === undefined) return 0;
-  const { air, pollution } = raises(state, key, id);
-  return Math.min(row.cap, inPhase + air + pollution);
+  return eventChance(state, EVENTS.player[key], phase, { player: id });
 }
 
 /**
- * Why a player event would fire for this player, so the screens can say it: the influence that raised its chance
- * most (the air on a tie), or plain chance when nothing raised it.
+ * Why a player event would fire for this player, so the screens can say it: the air or its own pollution, whichever
+ * raised its chance more (the air on a tie), or plain chance when neither raised it.
  */
 export function playerEventReason(state: GameState, key: PlayerEventKey, phase: Phase, id: string): 'air' | 'pollution' | 'chance' {
-  const { air, pollution } = raises(state, key, id);
+  const { air, pollution } = influences(state, EVENTS.player[key], { player: id });
   if (air <= 0 && pollution <= 0) return 'chance';
   return pollution > air ? 'pollution' : 'air';
-}
-
-/** What raises a player event's chance for this player: the air band's bonus, and its own pollution last month. */
-function raises(state: GameState, key: PlayerEventKey, id: string): { air: number; pollution: number } {
-  const row: EventRow = EVENTS.player[key];
-  const caused = state.history.at(-1)?.pollutionBy?.[id] ?? 0;
-  return {
-    air: row.air?.[airBand(state.air).name] ?? 0,
-    pollution: row.pollution ? Math.min(row.pollution.max, row.pollution.perPoint * caused) : 0,
-  };
 }
 
 /**

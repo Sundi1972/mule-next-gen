@@ -886,12 +886,9 @@ export const EVENTS = {
   /** How many times its usual output the bumper plot makes. */
   bumperHarvest: { factor: 2 },
   /**
-   * The event table (Heiko's event model; each row an EventRow, events.ts). A row rolls at the start of each phase
-   * it lists, with that phase's chance plus its raises and minus its lowers, never below 0 or above its cap. The
-   * influences, each optional, in shares like the chances: air by band; pollution, perPoint for each air point the
-   * player's plots caused last month, at most max; wealth, signed, for the richest and the poorest player (cash plus
-   * land at GAME.plotScore a plot); follows, points when an event fired this phase or last month (once, if both).
-   * Colony rows roll once for the colony, first; player rows once a player. Several can fire in a month.
+   * The event table (Heiko's event model): one row per event, its fields an EventRow (events.ts), every number a
+   * share. A row rolls at the start of each phase it lists: that phase's chance plus its raises, minus its lowers,
+   * never below 0 or above its cap. Colony rows roll once for the colony, first; player rows once a player.
    */
   colony: {
     dustStorm: { phases: { production: 0.05 }, cap: 0.9 },
