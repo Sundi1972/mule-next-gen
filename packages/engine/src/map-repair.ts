@@ -144,7 +144,9 @@ export function repairLayout(s: RepairState, rng: Rng): void {
       // Off a dead end: allow moves no better, then worse, on plots no recent move touched, so it can't undo itself.
       const fresh = bestMoves(s, candidateMoves(s, rng).filter((m) => m.cells.every((i) => !recent.includes(i))));
       if (fresh.moves.length === 0) break;
-      if (fresh.bad === current ? ++sideways > sidewaysMoves : ++worse > worseMoves) break;
+      // The fresh draw of candidates can hold a move that helps after all; that spends neither budget.
+      if (fresh.bad === current && ++sideways > sidewaysMoves) break;
+      if (fresh.bad > current && ++worse > worseMoves) break;
       chosen = [rng.pick(fresh.moves)];
     }
     for (const m of chosen) {

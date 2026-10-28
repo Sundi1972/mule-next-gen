@@ -1,11 +1,22 @@
 import { useMemo, useState } from 'react';
-import { MAP, mapSize, RAW_GOODS, RULE_TITLES, sizeBand, type FloorGood, type ShareTerrain, type Violation } from '@mule/engine';
+import { MAP, mapSize, RAW_GOODS, RULE_TITLES, sizeBand, type Violation } from '@mule/engine';
 import { cx, GOOD_NAME, GoodIcon, HoloMap, TERRAIN_NAME } from '@mule/ui';
-import { biggestRegionCap, brokenRules, mapsForSeed, toMapTiles, type CheckedMap, type Generator, type GroundView, type Players } from './gallery';
+import {
+  biggestRegionCap,
+  brokenRules,
+  FLOOR_GOODS,
+  floorOf,
+  mapsForSeed,
+  normalOf,
+  SHARE_TERRAINS,
+  toMapTiles,
+  type CheckedMap,
+  type Generator,
+  type GroundView,
+  type Players,
+} from './gallery';
 import { num, pct } from './ui';
 
-const FLOOR_GOODS = Object.keys(MAP.floor) as FloorGood[];
-const SHARE_TERRAINS = Object.keys(MAP.shares) as ShareTerrain[];
 const COLUMN_TITLE: Record<Generator, string> = { current: "Current: today's generator", new: 'New: the map rules generator' };
 // Violations listed before "show all"; specks and river rows can run to dozens on today's maps.
 const LISTED = 6;
@@ -137,8 +148,8 @@ function Metrics({ checked, players }: { checked: CheckedMap; players: Players }
         <div className="grid grid-cols-3 gap-x-3 gap-y-1 sm:grid-cols-6">
           {RAW_GOODS.map((g) => {
             const v = m.perPlayer[g];
-            const floor = g in MAP.floor ? MAP.floor[g as FloorGood] : undefined;
-            const normal = g in MAP.normalLo ? MAP.normalLo[g as FloorGood] : undefined;
+            const floor = floorOf(g);
+            const normal = normalOf(g);
             const tone = floor !== undefined && v < floor ? 'text-alert' : normal !== undefined && v < normal ? 'text-warn' : '';
             return (
               <div key={g} className="flex items-center gap-1.5" title={GOOD_NAME[g]}>

@@ -15,10 +15,13 @@ import {
 
 // One player count per size band: 3 and 6 players get the same map size, so they would repeat 2's and 5's layouts.
 const BANDS = [2, 4, 5];
-const SEEDS = 500;
+// Seeds per band: 50 in CI, 500 with MULE_FULL=1, plus the regression seeds below. Every map CI deals is also checked
+// against S1-S8 by B-AC-3 in map-quality.test.ts.
+const FULL = process.env.MULE_FULL === '1';
+const SEEDS = FULL ? 500 : 50;
 /**
- * Seeds whose layout once broke a rule, checked by name on top of the sweep: 28670 (S5) and 45216 (S4) from review,
- * 3475 and 9530 (AM-4) that only the repair's lookahead fixes.
+ * Seeds whose layout once broke a rule, checked by name on top of the sweep (and in CI): 28670 (S5) and 45216 (S4)
+ * from review, 3475 and 9530 (AM-4) that only the repair's lookahead fixes.
  */
 const REGRESSIONS: Record<number, number[]> = { 2: [28670, 3475, 9530], 4: [45216], 5: [] };
 const TIMEOUT = 30_000;
@@ -88,6 +91,24 @@ function budgetMap(sketch: Sketch, budget: Record<ShareTerrain, number>): GameMa
   return zeroGroundMap(sketch.width, sketch.height, sketch.terrain.map((t) => t ?? fill[next++]!));
 }
 
+/**
+ * Where a bend's two touching river plots may sit: the river joins on the row nearer the store, so a row holds one
+ * river plot or two touching ones, and the top row, the store's row and the bottom row, never nearer than their
+ * neighbour, hold one.
+ */
+function joinRows(map: GameMap): string[] {
+  const storeRow = map.tiles.find((t) => t.terrain === 'store')!.y;
+  const out: string[] = [];
+  for (let y = 0; y < map.height; y++) {
+    const cols = map.tiles.filter((t) => t.y === y && t.terrain === 'river').map((t) => t.x);
+    const single = y === 0 || y === storeRow || y === map.height - 1;
+    if (cols.length === 1) continue;
+    if (cols.length === 2 && Math.abs(cols[0]! - cols[1]!) === 1 && !single) continue;
+    out.push(`row ${y} holds river plots at columns ${cols.join(', ')}; ${single ? 'one' : 'one, or two touching,'} wanted`);
+  }
+  return out;
+}
+
 describe('map layout stages', () => {
   it('T-AC-5: river stage meets S6 and S7', { timeout: TIMEOUT }, () => {
     const seen = new Map<number, Set<number>>(BANDS.map((p) => [p, new Set()]));
@@ -95,9 +116,10 @@ describe('map layout stages', () => {
       const bends = checkMap(map, players).metrics.bends;
       const fewest = MAP.bends[sizeBand(players)];
       seen.get(players)!.add(bends);
-      return bends > fewest + 1 ? [`${bends} bends, at most ${fewest + 1} wanted`] : [];
+      return [...(bends > fewest + 1 ? [`${bends} bends, at most ${fewest + 1} wanted`] : []), ...joinRows(map)];
     });
-    for (const players of BANDS) {
+    // Both bend counts turning up is a property of the sweep (MULE_FULL).
+    for (const players of FULL ? BANDS : []) {
       const fewest = MAP.bends[sizeBand(players)];
       const values = [...seen.get(players)!].sort((a, b) => a - b);
       if (values.join() !== `${fewest},${fewest + 1}`) broken.push(`${players}p: bends seen ${values.join(', ')}, want both ${fewest} and ${fewest + 1}`);
