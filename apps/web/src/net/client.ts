@@ -99,6 +99,8 @@ export class TableClient {
   private handoffWanted = false;
   /** `handoff` requests sent and not answered yet; only the reply to the newest carries a live code. */
   private handoffsPending = 0;
+  /** The seat token this screen last saved. */
+  private seatToken: string | null = null;
   private nextId = 1;
   private readonly now: () => number;
   private readonly later: (fn: () => void, ms: number) => unknown;
@@ -270,6 +272,7 @@ export class TableClient {
         this.attempts = 0;
         if (msg.role === 'player' && msg.seatToken && this.target?.kind === 'player') {
           saveSeat(this.storage, { code: msg.code, token: msg.seatToken, name: this.target.name });
+          this.seatToken = msg.seatToken;
           // A handoff code is spent once it lands; a reconnect comes back with the new token.
           if (this.target.handoff !== undefined) this.target = { kind: 'player', code: this.target.code, name: this.target.name };
         }
@@ -311,7 +314,7 @@ export class TableClient {
       }
       case 'removed':
         // A board never holds a seat; the one saved here belongs to a phone tab in the same browser.
-        if (this.state.role === 'player') clearSeat(this.storage);
+        if (this.state.role === 'player') this.forgetOwnSeat();
         this.letGo(REMOVED[msg.reason]);
         return;
     }
@@ -331,6 +334,11 @@ export class TableClient {
     this.stopTimers();
     s?.close();
     this.set({ status: 'idle', role: null, code: null, seatId: null, view: null, ...(notice !== null ? { notice } : {}) });
+  }
+
+  /** Clears the saved seat while it is still this screen's: another tab of the browser may have saved its own since. */
+  private forgetOwnSeat(): void {
+    if (loadSeat(this.storage)?.token === this.seatToken) clearSeat(this.storage);
   }
 
   /** A seat taken by a handoff code learns its name from the room, so the saved seat carries it. */
