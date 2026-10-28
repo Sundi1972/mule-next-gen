@@ -7,8 +7,9 @@ import { errors as playwrightErrors, type Page } from 'playwright';
 /** How long a press may take to land. */
 export const PRESS_MS = 2_000;
 
-/** Weighted votes no month 1 voter reaches: a bound for the ceremony's vote blocks, not a balance number. */
-const MONTH_1_MAX_WEIGHT = 6;
+/** The most votes a voter can carry in month 1, from POLITICS.weight; its election comes before any land is owned. */
+const { base, repVotes, baronVotes, taxCap } = POLITICS.weight;
+const MONTH_1_MAX_WEIGHT = base + repVotes + baronVotes + taxCap;
 
 /**
  * The longest month 1's election runs, in game ms, when every phone is Ready as each stage opens: an AI seat's
