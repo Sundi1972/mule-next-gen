@@ -239,7 +239,7 @@ describe("FM-planning-host-continue: the host's Continue ends planning proper; n
     { id: 's2', name: 'Mia', isAi: false, color: 1 },
     { id: 's3', name: 'Lena', isAi: false, color: 2 },
     { id: 's4', name: 'Ossa', isAi: false, color: 3 },
-    { id: 's5', name: 'The Baron', isAi: true, color: 4 },
+    { id: 's5', name: 'The Big Spender', isAi: true, color: 4 },
   ];
 
   it.each([
