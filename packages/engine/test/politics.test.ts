@@ -624,6 +624,43 @@ describe('RULE-3: tally and winner', () => {
     expect([...won.sheriff].sort()).toEqual([...SEATS].sort());
   });
 
+  // A round from a seeded start is fair only when every seat ties: two seats side by side, the first wins unless the
+  // start falls on the second, 3 games in 4 at a 4-seat table. Seat 0 is the host.
+  const FAIR_GAMES = 200;
+  const fairShare = (wins: number, of: number) => wins >= of * 0.4 && wins <= of * 0.6;
+
+  it(`T-AC-2 RULE-3 row 6 (AM-17): a tie the Baron and land leave is a fair draw: lena and brix, seats 0 and 1, tie in month 1 of ${FAIR_GAMES} games and each wins about half`, () => {
+    const wins: Record<string, number> = { lena: 0, brix: 0 };
+    const hows = new Set<string>();
+    for (let seed = 0; seed < FAIR_GAMES; seed++) {
+      const state = newGame({ seed });
+      runFor(state, 'lena', 'governor', HOLD);
+      runFor(state, 'brix', 'governor', HOLD);
+      runOutClock(state);
+      castVote(state, 'lena', 'governor', 'lena');
+      castVote(state, 'brix', 'governor', 'brix');
+      const result = runOutClock(state)!;
+      hows.add(result.governor.how);
+      wins[result.governor.winner]!++;
+    }
+
+    expect(fairShare(wins.lena!, FAIR_GAMES), `lena won ${wins.lena} of ${FAIR_GAMES}`).toBe(true);
+    expect([...hows], 'nobody owns land, so the result says it was a draw').toEqual(['lot']);
+  });
+
+  it(`T-AC-2 RULE-3 row 1 (AM-17): nobody runs and lena and brix are richest: the appointment is the same fair draw, each appointed Governor in about half of ${FAIR_GAMES} games`, () => {
+    const wins: Record<string, number> = { lena: 0, brix: 0 };
+    for (let seed = 0; seed < FAIR_GAMES; seed++) {
+      const state = newGame({ seed });
+      setMoney(state, { lena: 1000, brix: 1000, ossa: 900, ai1: 900 });
+      const result = runOutClock(state)!;
+      expect(result.governor.how, `seed ${seed}`).toBe('appointed');
+      wins[result.governor.winner]!++;
+    }
+
+    expect(fairShare(wins.lena!, FAIR_GAMES), `lena was appointed ${wins.lena} of ${FAIR_GAMES}`).toBe(true);
+  });
+
   // Lean CI: 25 games on every PR, the full 150 with MULE_FULL=1 (pnpm test:full).
   const INVARIANT_GAMES = process.env.MULE_FULL === '1' ? 150 : 25;
   it(`T-AC-2 invariant: one player never holds both offices and the fund never goes below 0, over ${INVARIANT_GAMES} seeded games of random candidacies, ballots, Done presses and AM-1 closes`, () => {
