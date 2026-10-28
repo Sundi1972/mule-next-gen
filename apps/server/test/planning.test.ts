@@ -1,4 +1,4 @@
-import { WALK } from '@mule/engine';
+import { PHASES, WALK } from '@mule/engine';
 import { describe, expect, it } from 'vitest';
 import { MuleGame } from '../src/mule-game.js';
 import { fakeContext, seats } from './fake-context.js';
@@ -16,6 +16,30 @@ function started(options: { phaseScale?: number; politics?: boolean } = {}) {
 }
 
 const phase = (game: MuleGame) => game.viewFor(null).phase;
+
+/** A planning length a table might set, in ms. */
+const PLANNING_MS = 45_000;
+
+/** Runs with PHASES.planningMs set to PLANNING_MS, as a host's config might at runtime, and puts the old value back. */
+function withPlanningMs(run: () => void): void {
+  const saved = PHASES.planningMs;
+  PHASES.planningMs = PLANNING_MS;
+  try {
+    run();
+  } finally {
+    PHASES.planningMs = saved;
+  }
+}
+
+/** Planning shows a deadline PLANNING_MS × phaseScale on, is still planning a ms before it, and starts the land grant at it. */
+function plannedFor({ game, ctx, advance }: ReturnType<typeof started>, phaseScale: number): void {
+  const ms = PLANNING_MS * phaseScale;
+  expect(game.viewFor(null).phaseEndsAt, 'planning shows its deadline').toBe(ctx.now() + ms);
+  advance(ms - 1);
+  expect(phase(game)).toBe('planning');
+  advance(1);
+  expect(phase(game)).toBe('landGrant');
+}
 
 describe('FM-planning-untimed: planning has no clock', () => {
   it.each([1, 0.1])('FM-planning-untimed: at phaseScale %s, ten minutes on it is still planning and no screen shows a deadline', (phaseScale) => {
@@ -39,6 +63,29 @@ describe('FM-planning-untimed: planning has no clock', () => {
     for (const id of ['s1', 's2']) game.handle(id, { type: 'ready' });
     expect(phase(game)).toBe('landGrant');
   });
+
+  it.each([1, 0.1])('FM-planning-untimed: a number put in PHASES.planningMs at runtime times planning again: at phaseScale %s it ends that number × phaseScale after it starts', (phaseScale) =>
+    withPlanningMs(() => {
+      const table = started({ phaseScale });
+      expect(phase(table.game)).toBe('planning');
+      plannedFor(table, phaseScale);
+    }),
+  );
+
+  it.each([1, 0.1])("FM-planning-untimed: in an election month at phaseScale %s, a number in PHASES.planningMs times planning proper from the election's end", (phaseScale) =>
+    withPlanningMs(() => {
+      const table = started({ phaseScale, politics: true });
+      const { game, advance } = table;
+      const election = () => game.viewFor(null).politics!.election!;
+      expect(election().stage).toBe('nominate');
+      for (let ms = 0; ms < ELECTION_BOUND_MS && election().stage !== 'over'; ms += WALK.tickMs) {
+        expect(game.viewFor(null).phaseEndsAt, 'no planning deadline while the election runs').toBeNull();
+        advance(WALK.tickMs);
+      }
+      expect(election().stage, 'the election ran on its own clocks').toBe('over');
+      plannedFor(table, phaseScale);
+    }),
+  );
 });
 
 describe('FM-planning-all-ready: planning ends when every human is Ready, connected or not', () => {
