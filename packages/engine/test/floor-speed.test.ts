@@ -102,5 +102,16 @@ describe('the dev floor: speed', () => {
     const shore = second(onTile(3, 1), { x: 0, y: -1, act: false });
     expect(Math.floor(shore.y), 'held up into the lake: stays on its shore').toBe(1);
     expect(shore.y, 'held up into the lake: walked up to it').toBeLessThan(1.3);
+
+    // Leading is the game's carriedMule: a MULE won at the land auction leads from the start, one bought from the next tick.
+    const won = game();
+    won.players[0]!.carriedMule = 'empty';
+    const fromStart = placed(buildFloor(won, cfg), 'zip', onTile(0, 1)).colonists[0]!;
+    expect(speedOf(fromStart, won, cfg), 'a MULE won at the land auction').toBeCloseTo(1.41, 2);
+    const bought = game();
+    let f = placed(buildFloor(bought, cfg), 'zip', onTile(0, 1));
+    bought.players[0]!.carriedMule = 'empty';
+    f = stepFloor(f, bought, {}, DEV_STEER.tickMs, cfg);
+    expect(speedOf(f.colonists[0]!, bought, cfg), 'a MULE bought at the corral').toBeCloseTo(1.41, 2);
   });
 });

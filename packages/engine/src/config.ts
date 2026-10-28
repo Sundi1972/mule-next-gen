@@ -362,8 +362,8 @@ export const DEV_STEER = {
   month1WaitsForFirstMule: true as boolean,
   /** A colonist's clearance from walls, lakes and the map's edge, in tiles. */
   bodyTiles: 0.18,
-  /** The door's height on each side face of the store's tile, centred on the face, in tiles. */
-  doorTiles: 0.5,
+  /** How far the door reaches above and below the middle of each side face of the store's tile, in tiles. */
+  doorHalfTiles: 0.25,
   /** How far behind its colonist a MULE on its lead walks: in tiles on the map, as a share of the hall's width inside. */
   leadTiles: 0.55,
   leadHallShare: 0.075,

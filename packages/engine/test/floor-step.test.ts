@@ -56,6 +56,7 @@ function game(seed: number): GameState {
   state.width = MAP[0]!.length;
   state.height = MAP.length;
   state.tiles = MAP.flatMap((row, y) => [...row].map((ch, x) => ({ ...template, x, y, terrain: LAND[ch]!, owner: null, outfit: null })));
+  state.players[1]!.carriedMule = 'food';
   return state;
 }
 
@@ -63,9 +64,20 @@ type Script = Record<string, FloorInput>[];
 
 const go = (x: number, y: number): FloorInput => ({ x, y, act: false });
 
+/** 'd' from outside the store's right door: under the store and up into its wall, then into its side off the door. */
+const D_LEGS: [number, FloorInput][] = [
+  [20, go(0, 1)],
+  [35, go(-1, 0)],
+  [60, go(0, -1)],
+  [80, go(1, 0)],
+  [100, go(0, -1)],
+  [180, go(-1, 0)],
+];
+
 /**
  * 'a' walks right from outside the store's left door, through the hall and out of its right door to the map's edge,
- * back the same way, then down, then stands; the others wander, from the seed, with sticks past full and in between.
+ * back the same way, then down, then stands. 'd' walks D_LEGS. Then they and the others wander, from the seed, with
+ * sticks past full and in between.
  */
 function script(seed: number): Script {
   const rng = createRng(seed);
@@ -75,7 +87,8 @@ function script(seed: number): Script {
   return Array.from({ length: TICKS }, (_, t) => {
     if (t % 20 === 0) for (const id of Object.keys(held)) held[id] = wander();
     const a = t < 200 ? go(1, 0) : t < 400 ? go(-1, 0) : t < 600 ? go(0, 1) : go(0, 0);
-    return { a, ...held };
+    const d = D_LEGS.find(([until]) => t < until)?.[1] ?? held.d!;
+    return { ...held, a, d };
   });
 }
 
@@ -91,8 +104,7 @@ function deepFreeze<T>(value: T): T {
 function play(seed: number, inputs: Script): { state: GameState; floors: DevFloor[] } {
   const state = game(seed);
   const cfg = floorConfig(HALL);
-  const start = buildFloor(state, cfg);
-  let floor: DevFloor = { ...start, colonists: start.colonists.map((c) => (c.id === 'b' ? { ...c, lead: { good: 'food', x: c.x, y: c.y } } : c)) };
+  let floor = buildFloor(state, cfg);
   deepFreeze(state);
   deepFreeze(inputs);
   const floors = [deepFreeze(floor)];
@@ -103,11 +115,16 @@ function play(seed: number, inputs: Script): { state: GameState; floors: DevFloo
   return { state, floors };
 }
 
-/** Why a colonist stands where it may not: on a lake, in the store's walls, off the map or off the hall's floor. */
+/**
+ * Why a colonist stands where it may not: on a lake, in the store's walls, off the map or off the hall's floor; or
+ * its MULE is further behind than the lead reaches.
+ */
 function misplaced(state: GameState, floor: DevFloor): string[] {
   const store = state.tiles.find((t) => t.terrain === 'store')!;
   return floor.colonists.flatMap((c) => {
     const where = `tick ${floor.tick} ${c.id} at ${c.space} ${c.x.toFixed(3)},${c.y.toFixed(3)}`;
+    const rope = c.space === 'map' ? DEV_STEER.leadTiles : DEV_STEER.leadHallShare * HALL.width;
+    if (c.lead && Math.hypot(c.lead.x - c.x, c.lead.y - c.y) > rope + 1e-9) return [`${where}: its MULE off its lead`];
     if (c.space === 'hall') {
       return HALL.floor.some((r) => c.x >= r.x0 && c.x <= r.x1 && c.y >= r.y0 && c.y <= r.y1) ? [] : [`${where}: off the hall's floor`];
     }
@@ -125,10 +142,14 @@ describe('the dev floor: the step', () => {
     const again = play(SEED, script(SEED));
     expect(again.floors).toEqual(first.floors);
 
-    // The script walks every kind of move: 'a' through both doors and back, so the hall is stepped too.
-    const spaces = first.floors.map((f) => f.colonists[0]!.space).filter((s, i, all) => i === 0 || s !== all[i - 1]);
-    expect(spaces, "'a' in and out of the hall, twice").toEqual(['map', 'hall', 'map', 'hall', 'map']);
     expect(first.floors.flatMap((f) => misplaced(first.state, f))).toEqual([]);
+    // The script walks every kind of move: through both doors and back, and into the store's walls off the door.
+    const spaces = (seat: number, until: number) =>
+      first.floors.slice(0, until + 1).map((f) => f.colonists[seat]!.space).filter((s, i, all) => i === 0 || s !== all[i - 1]);
+    expect(spaces(0, TICKS), "'a' in and out of the hall, twice").toEqual(['map', 'hall', 'map', 'hall', 'map']);
+    expect(spaces(3, D_LEGS.at(-1)![0]), "'d' slid along the store's side onto its door, and through").toEqual(['map', 'hall', 'map']);
+    const facing = (t: number) => first.floors[t]!.colonists[3]!.facing;
+    expect([facing(30), facing(70)], "'d' faces the way it walks: left, then right").toEqual(['left', 'right']);
 
     // One input changed at one tick: 'a', standing still in the corner, steps right once.
     const changed = inputs.map((tick, t) => (t === 700 ? { ...tick, a: go(1, 0) } : tick));

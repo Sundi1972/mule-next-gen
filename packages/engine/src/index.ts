@@ -9,9 +9,25 @@ export * from './events.js';
 export * from './economy.js';
 export * from './walk.js';
 export * from './dev-walk.js';
-export * from './floor/floor.js';
-export * from './floor/speed.js';
-export * from './floor/step.js';
+export {
+  buildFloor,
+  doorOutside,
+  floorConfig,
+  IDLE_INPUT,
+  type DevFloor,
+  type DoorSide,
+  type FloorColonist,
+  type FloorConfig,
+  type FloorEncounter,
+  type FloorInput,
+  type FloorLead,
+  type FloorPoint,
+  type FloorRect,
+  type HallPlan,
+  type Space,
+} from './floor/floor.js';
+export { speedOf, terrainShare } from './floor/speed.js';
+export { stepFloor } from './floor/step.js';
 export * from './auction.js';
 export * from './lots.js';
 export * from './upkeep.js';

@@ -1,10 +1,14 @@
+/**
+ * The dev floor: where every colonist stands in development. Held beside GameState, built when development starts,
+ * and moved only by stepFloor.
+ */
 import { DEV_STEER, WOLVES } from '../config.js';
-import type { GameState, Outfit } from '../types.js';
-
-/** The dev floor: where every colonist stands in development, held beside GameState and moved only by stepFloor. */
+import { pace } from '../dev-walk.js';
+import type { GameState, Outfit, Tile } from '../types.js';
 
 export type Space = 'map' | 'hall';
 export type DoorSide = 'L' | 'R';
+export const DOOR_SIDES: readonly DoorSide[] = ['L', 'R'];
 
 export interface FloorPoint {
   x: number;
@@ -69,6 +73,7 @@ export interface FloorColonist {
   facing: 'left' | 'right';
   /** It moved on the last tick. */
   moving: boolean;
+  /** Whether there is one, and its good, follow the player's carriedMule; the floor keeps where it walks. */
   lead: FloorLead | null;
   /** dev-walk.ts's pace when development started: hunger × sickness × the Zipwing's perk. */
   pace: number;
@@ -86,12 +91,56 @@ export interface DevFloor {
   colonists: readonly FloorColonist[];
 }
 
+const HALF = 0.5; // literal-ok: geometry, the middle of a side, not balance
+
 /** The live config objects, so a sim run's --set reaches the floor, and a hall plan. */
 export function floorConfig(hall: HallPlan): FloorConfig {
-  throw new Error('NotImplemented: floorConfig');
+  return { steer: DEV_STEER, wolves: WOLVES, hall };
 }
 
-/** The floor at development start, from the game's players. */
+export function storeOf(state: GameState): Tile {
+  return state.tiles.find((t) => t.terrain === 'store')!;
+}
+
+/** Where a colonist stands on the map just outside one of the store's doors, at the middle of that side. */
+export function doorOutside(state: GameState, side: DoorSide, cfg: FloorConfig): FloorPoint {
+  const store = storeOf(state);
+  const body = cfg.steer.bodyTiles;
+  return { x: side === 'L' ? store.x - body : store.x + 1 + body, y: store.y + HALF };
+}
+
+export const middleOf = (r: FloorRect): FloorPoint => ({ x: r.x0 + (r.x1 - r.x0) * HALF, y: r.y0 + (r.y1 - r.y0) * HALF });
+
+export const inRect = (r: FloorRect, x: number, y: number): boolean => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1;
+
+/** A MULE for the player's carriedMule, standing where its old one stood or else at its colonist; none without one. */
+export function leadFor(state: GameState, c: Pick<FloorColonist, 'id' | 'x' | 'y' | 'lead'>): FloorLead | null {
+  const carried = state.players.find((p) => p.id === c.id)!.carriedMule;
+  if (!carried) return null;
+  const good = carried === 'empty' ? null : carried;
+  return { good, x: c.lead?.x ?? c.x, y: c.lead?.y ?? c.y };
+}
+
+/** The floor at development start: each colonist outside a store door, the seats taking the two doors in turn. */
 export function buildFloor(state: GameState, cfg: FloorConfig): DevFloor {
-  throw new Error('NotImplemented: buildFloor');
+  return {
+    tick: 0,
+    colonists: state.players.map((p, seat): FloorColonist => {
+      const side = DOOR_SIDES[seat % DOOR_SIDES.length]!;
+      const at = doorOutside(state, side, cfg);
+      return {
+        id: p.id,
+        space: 'map',
+        ...at,
+        facing: side === 'L' ? 'left' : 'right',
+        moving: false,
+        lead: leadFor(state, { id: p.id, ...at, lead: null }),
+        pace: pace(state, p.id),
+        bot: p.isAi,
+        bitten: false,
+        encounter: null,
+        pelts: 0,
+      };
+    }),
+  };
 }
