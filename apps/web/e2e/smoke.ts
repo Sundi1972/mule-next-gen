@@ -4,12 +4,12 @@
  * Run with `pnpm --filter @mule/web e2e`; replay a red run's map with `MULE_E2E_SEED=<seed>`.
  */
 import { existsSync } from 'node:fs';
-import { POLITICS, WALK } from '@mule/engine';
+import { WALK } from '@mule/engine';
 import { errors as playwrightErrors, type BrowserContext, type Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
 import { check, claimAPlot, headerSlot, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
 import { planningIsTheHub } from './hub-steps';
-import { readyThroughTheElection } from './politics-steps';
+import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
 import { fedPlayerSeesNoHunger, hungryPlayerSeesHerPace, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
 import { specialFieldsShowTheirGlyphs } from './special-steps';
@@ -111,7 +111,7 @@ try {
   check((await tvGame.getByRole('img', { name: 'Bramblet' }).count()) >= 1, 'B-AC-1: the TV game still shows the first AI as a Bramblet');
 
   // Month 1: the election, then planning's steps, then Ready.
-  console.log(`election: ${await doneThroughTheElection(ctx, within(POLITICS.nominateMs + POLITICS.ballotMs + POLITICS.revealMs))}`);
+  console.log(`election: ${await doneThroughTheElection(ctx, within(ELECTION_WAIT_MS))}`);
   await theTvDrawsRose(ctx, 'planning');
   await specialFieldsShowTheirGlyphs(ctx);
   await readyThroughTheElection(phone, READY_MS);

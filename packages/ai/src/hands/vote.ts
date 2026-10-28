@@ -1,5 +1,6 @@
 import {
   canRun,
+  nextElectionMonth,
   observe,
   PERCENT,
   plotsOwned,
@@ -15,7 +16,9 @@ import {
 import type { Act } from '../actions.js';
 import type { Mind } from '../value.js';
 
-const OFFICES: readonly Office[] = ['governor', 'sheriff'];
+function samePromise(a: TaxPromise | undefined, b: TaxPromise): boolean {
+  return a?.kind === b.kind && (a.kind !== 'cap' || (b.kind === 'cap' && a.percent === b.percent));
+}
 
 /**
  * The Governor's next rate: a step toward the target of at most maxStep, a bump when the fund is low, inside the bounds.
@@ -25,21 +28,26 @@ export function nextTax(current: number, target: number, fund: number, bounds: {
   const { maxStep } = POLITICS.tax;
   const { taxFundBump, fundMonths } = POLITICS.ai;
   const step = Math.max(-maxStep, Math.min(maxStep, target - current));
-  const fundLow = month > 1 && fund < fundMonths * (POLITICS.pay.governor + POLITICS.pay.sheriff);
+  const officesPay = POLITICS.offices.reduce((sum, office) => sum + POLITICS.pay[office], 0);
+  const fundLow = month > 1 && fund < fundMonths * officesPay;
   return Math.max(bounds.low, Math.min(bounds.high, current + step + (fundLow ? taxFundBump : 0)));
 }
 
 /**
  * The politics hand of a Classic seat: runs for office, votes and, as
- * Governor, sets the tax (WS7 spec RULE-8). It acts once per stage after a
- * seeded pause and presses Done; a refused move is not retried. It times
- * itself on the public phase, month and stage, and decides from observe().
+ * Governor, sets the tax (WS7 spec RULE-8, RULE-63). It decides its candidacy
+ * once per election cycle, ahead of the election or at the last call. In
+ * announce and the ballot it acts once after a seeded pause and presses Done;
+ * elsewhere in planning it acts at once. A refused move is not retried. It
+ * times itself on the public phase, month and stage, and decides from observe().
  */
 export class VoteHand {
   /** month:stage of the stage it last saw. */
   private key = '';
   private waitMs = 0;
   private acted = false;
+  /** The election month it last decided its candidacy for. */
+  private decidedFor: number | null = null;
 
   constructor(
     readonly mind: Mind,
@@ -49,21 +57,25 @@ export class VoteHand {
   /** Call before stepElection, with the same (phaseScale-divided) dt. */
   tick(state: GameState, dt: number, act: Act): void {
     if (state.phase !== 'planning' || !state.politics) return;
-    const stage: Election['stage'] = state.politics.election?.stage ?? 'over';
+    const stage: Election['stage'] | 'none' = state.politics.election?.stage ?? 'none';
     const key = `${state.month}:${stage}`;
     if (key !== this.key) {
       this.key = key;
       this.acted = false;
-      this.waitMs = stage === 'nominate' || stage === 'ballot' ? this.rng.int(...POLITICS.ai.actMs) : 0;
+      this.waitMs = stage === 'announce' || stage === 'ballot' ? this.rng.int(...POLITICS.ai.actMs) : 0;
     }
-    if (this.acted || stage === 'reveal') return;
+    if (this.acted || stage === 'ceremony') return;
     this.waitMs -= dt;
     if (this.waitMs > 0) return;
     this.acted = true;
 
     const obs = observe(state, this.mind.me);
-    if (stage === 'over') return this.govern(obs, act);
-    if (stage === 'nominate') this.nominate(obs, act);
+    if (stage === 'over' || stage === 'none') {
+      this.govern(obs, act);
+      this.declareAhead(obs, act);
+      return;
+    }
+    if (stage === 'announce') this.lastCall(obs, act);
     else this.vote(obs, obs.politics!.election!, act);
     act({ type: 'done', done: true });
   }
@@ -72,7 +84,24 @@ export class VoteHand {
     return this.mind.personaId as AiPersonaId;
   }
 
-  private nominate(obs: GameState, act: Act): void {
+  /** RULE-63 row 1: in the first planning phase within declareLeadMonths of the next election. */
+  private declareAhead(obs: GameState, act: Act): void {
+    const next = nextElectionMonth(obs);
+    if (next === null || next - obs.month > POLITICS.ai.declareLeadMonths || this.decidedFor === next) return;
+    this.decide(obs, next, act);
+  }
+
+  /** RULE-63 rows 2 and 3: decide now if it has not, else refresh a Governor promise against the tax now. */
+  private lastCall(obs: GameState, act: Act): void {
+    if (this.decidedFor !== obs.month) return this.decide(obs, obs.month, act);
+    const politics = obs.politics!;
+    if (!politics.candidates.governor.includes(this.mind.me)) return;
+    const promise = this.promise(obs);
+    if (!samePromise(politics.promises[this.mind.me], promise)) act({ type: 'run', office: 'governor', promise });
+  }
+
+  private decide(obs: GameState, electionMonth: number, act: Act): void {
+    this.decidedFor = electionMonth;
     const may = canRun(obs, this.mind.me);
     const { runGovernor, runSheriff } = POLITICS.ai;
     if (may.governor === true && this.rng.chance(runGovernor[this.persona])) act({ type: 'run', office: 'governor', promise: this.promise(obs) });
@@ -88,7 +117,7 @@ export class VoteHand {
   }
 
   private vote(obs: GameState, election: Readonly<Election>, act: Act): void {
-    for (const office of OFFICES) {
+    for (const office of POLITICS.offices) {
       const candidates = election.candidates[office];
       // literal-ok: an office is contested only with two or more candidates, a definition
       if (candidates.length < 2) continue;
