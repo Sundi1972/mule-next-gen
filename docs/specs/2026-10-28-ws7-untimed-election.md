@@ -37,7 +37,7 @@ see §8 note); smart seats' votes (WS2's brain port, later).
 **Chosen: decisions are untimed and presentation is clocked.** Running is open in every planning
 phase. An election month opens with an announcement, which is also the last call for candidates. The
 ballot closes when everyone is Done. The ceremony runs office by office on short presentation clocks.
-The host's Continue closes a stage for players who are away. About 3 PRs.
+The host's Continue closes a stage for every player not Done, present or away. About 3 PRs.
 
 **Thin baseline: lengthen the 20 s clocks.** One config change. *Loses because* Heiko ruled "not
 time bound" and wants running "anytime, even in no election months"; a longer clock does neither.
@@ -166,7 +166,7 @@ depends_on   C60, C61
 ```
 
 ```
-C64 · MODIFIED · the server: Ready is Done, the host closes a stage for players who are away, and away seats are no longer auto-Done
+C64 · MODIFIED · the server: Ready is Done, the host closes a stage for every player not Done, and away seats are no longer auto-Done
 
 today        the tick marks away seats Done; Continue is refused while the election is open
              (`apps/server/src/mule-game.ts::MuleGame` continuePlanning). The view hides the result
