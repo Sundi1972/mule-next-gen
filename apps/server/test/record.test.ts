@@ -17,13 +17,20 @@ import { createRecordedGame, stateHash, type Recorder } from '../src/record.js';
 import { RecordMismatch, replay, ReplayDiverged } from '../src/replay.js';
 
 /** How many MuleGames this file built and SDKs it asked for; the SDK factory throws unless a test gives it a fake. */
-const spies = vi.hoisted(() => ({ games: 0, sdk: 0, client: null as HaikuSdk | null }));
+const spies = vi.hoisted(() => ({ games: 0, sdk: 0, client: null as HaikuSdk | null, viewReadsClock: false }));
 vi.mock('../src/mule-game.js', async (original) => {
   const real = await original<typeof import('../src/mule-game.js')>();
+  /** Counts constructions; with `viewReadsClock`, its views read the clock, as a view showing time left would. */
   class CountedMuleGame extends real.MuleGame {
+    readonly #clock: GameContext;
     constructor(...args: ConstructorParameters<typeof real.MuleGame>) {
       super(...args);
+      this.#clock = args[0];
       spies.games++;
+    }
+    override viewFor(seatId: string | null): MuleView {
+      if (spies.viewReadsClock) this.#clock.now();
+      return super.viewFor(seatId);
     }
   }
   return { ...real, MuleGame: CountedMuleGame };
@@ -43,24 +50,28 @@ const SEED = 10;
 const STEP_MS = 100;
 const PLANNING_READY_MS = 3_000;
 const GAME_LIMIT_MS = 30 * 60_000;
-/** How long the Claude stand-in takes per call, in turn: some land within a tick, some many ticks later. */
-const ANSWER_DELAYS_MS = [40, 1_300, 260, 3_100, 90, 700];
+/**
+ * How the Claude stand-in answers each call, in turn: after a delay in ms (some land within a tick, some many ticks
+ * later), or by rejecting at once, as the real decider does when the seat is busy.
+ */
+const ANSWERS: readonly (number | 'busy')[] = [40, 'busy', 1_300, 260, 3_100, 90, 700];
 const GAME_OPTIONS = { maxMonths: 1, politics: true };
 /** The rows beyond T-AC-1 run locally only (MULE_FULL=1, `pnpm test:full`); each plays one or two whole games. */
 const FULL = process.env.MULE_FULL === '1';
 
 type MuleRecord = GameRecord<MuleIntent>;
 
-/** A Smart brain for seat `smartId` only, whose answers arrive by timer after ANSWER_DELAYS_MS; the rest play Classic. */
+/** A Smart brain for seat `smartId` only, answering as ANSWERS says; the rest play Classic. */
 function stubBrain(smartId: string): BrainService & { calls: () => number } {
   let calls = 0;
   const decider: Decider = {
     name: 'stub',
     decide: (shortlist) =>
-      new Promise((resolve) => {
-        const delay = ANSWER_DELAYS_MS[calls++ % ANSWER_DELAYS_MS.length]!;
+      new Promise((resolve, reject) => {
+        const answer = ANSWERS[calls++ % ANSWERS.length]!;
+        if (answer === 'busy') return reject(new Error('busy'));
         const option = shortlist[Math.min(1, shortlist.length - 1)]!;
-        setTimeout(() => resolve({ optionId: option.id, line: 'Mine.', by: 'llm' }), delay);
+        setTimeout(() => resolve({ optionId: option.id, line: 'Mine.', by: 'llm' }), answer);
       }),
   };
   return {
@@ -155,6 +166,7 @@ function table(options: TableOptions = {}) {
   let planningFor = 0;
   let claimed = false;
   let refusedSent = false;
+  let hostContinued = false;
   let dropAt: number | null = null;
   let elapsed = 0;
   const script = () => {
@@ -164,9 +176,13 @@ function table(options: TableOptions = {}) {
       planningFor += STEP_MS;
       if (!refusedSent) {
         refusedSent = true;
-        send(mia, { t: 'intent', intent: { type: 'setTax', percent: 5 } });
+        send(mia, { t: 'intent', intent: { type: 'continue' } });
         send(heiko, { t: 'chat', text: 'Leave the river to me.' });
         send(mia, { t: 'chat', text: 'psst, sell me food', to: 's3' });
+      }
+      if (planningFor >= PLANNING_READY_MS && !hostContinued) {
+        hostContinued = true;
+        send(heiko, { t: 'intent', intent: { type: 'continue' } });
       }
       if (planningFor >= PLANNING_READY_MS) for (const phone of phones) if (view().phase === 'planning') send(phone, { t: 'intent', intent: { type: 'ready' } });
     } else planningFor = 0;
@@ -232,11 +248,13 @@ describe('the game record', { timeout: 60_000 }, () => {
     const { record, t } = await recordedGame();
     expect(t.brain.calls(), 'the Smart seat asked the stand-in').toBeGreaterThan(0);
     const steps = record.events.filter(isStep);
-    expect(steps.some((e) => e.type === 'answer'), 'an answer arrived as its own step').toBe(true);
+    expect(steps.some((e) => e.type === 'answer' && e.choice), 'an answer arrived as its own step').toBe(true);
+    expect(steps.some((e) => e.type === 'answer' && e.error === 'busy'), 'a call was rejected busy').toBe(true);
+    expect(steps.some((e) => e.type === 'intent' && e.seat === 's1' && e.intent.type === 'continue' && !e.refused && e.hosts?.length)).toBe(true);
     expect(steps.some((e) => e.type === 'connection' && !e.connected)).toBe(true);
     expect(steps.some((e) => e.type === 'connection' && e.connected)).toBe(true);
     expect(steps.some((e) => e.type === 'intent' && e.intent.type === 'claim' && !e.refused)).toBe(true);
-    expect(steps.some((e) => e.type === 'intent' && e.refused)).toBe(true);
+    expect(steps.some((e) => e.type === 'intent' && e.seat === 's2' && e.refused === 'Only the host can continue' && e.hosts?.length)).toBe(true);
     expect(record.seats.filter((s) => s.smart).map((s) => s.id)).toEqual(['s3']);
 
     const result = await replay(record);
@@ -249,7 +267,7 @@ describe('the game record', { timeout: 60_000 }, () => {
     const { record } = await recordedGame();
     const moved = fileCopy(record);
     const events = moved.events;
-    const i = events.findIndex((e, k) => e.type === 'answer' && events.slice(k + 1).find(isStep)?.type === 'fire');
+    const i = events.findIndex((e, k) => e.type === 'answer' && e.choice && events.slice(k + 1).find(isStep)?.type === 'fire');
     expect(i, 'some answer is followed by a timer firing').toBeGreaterThanOrEqual(0);
     const j = events.findIndex((e, k) => k > i && isStep(e));
     const [answer] = events.splice(i, 1);
@@ -275,9 +293,14 @@ describe.runIf(FULL)('the recorder', { timeout: 60_000 }, () => {
   });
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-  it('T-AC-6: a game whose views and pongs are fetched at extra moments still replays identical', async () => {
-    const { record } = await recordedGame({ extraViews: true });
-    expect((await replay(record)).identical).toBe(true);
+  it('T-AC-6: a game whose views read the clock, fetched at extra moments, still replays identical', async () => {
+    spies.viewReadsClock = true;
+    try {
+      const { record } = await recordedGame({ extraViews: true });
+      expect((await replay(record)).identical).toBe(true);
+    } finally {
+      spies.viewReadsClock = false;
+    }
   });
 
   it('T-AC-7: the same game recorded and unrecorded ends in the same state hash, and nothing is written before game over', async () => {
@@ -303,7 +326,7 @@ describe.runIf(FULL)('the recorder', { timeout: 60_000 }, () => {
   it('T-AC-9: a refused intent is recorded with its message, and the replay refuses it with the same message', async () => {
     const { record } = await recordedGame();
     const refused = record.events.find((e) => e.type === 'intent' && e.refused !== undefined);
-    expect(refused).toMatchObject({ type: 'intent', seat: 's2', intent: { type: 'setTax' } });
+    expect(refused).toMatchObject({ type: 'intent', seat: 's2', intent: { type: 'continue' }, refused: 'Only the host can continue' });
     const message = refused!.type === 'intent' ? refused!.refused! : '';
     expect(message.length).toBeGreaterThan(0);
     expect((await replay(record)).identical).toBe(true);
@@ -359,6 +382,56 @@ describe.runIf(FULL)('the replay', { timeout: 60_000 }, () => {
     const err: unknown = await replay(tampered).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ReplayDiverged);
     expect((err as ReplayDiverged).seq).toBeGreaterThanOrEqual(claim.seq);
+  });
+
+  /** Replays `record` with one step changed by `tamper`, and returns the error, which must name that step. */
+  async function tampered(record: MuleRecord, pick: (e: MuleRecord['events'][number]) => boolean, tamper: (e: MuleRecord['events'][number]) => void) {
+    const copy = fileCopy(record);
+    const step = copy.events.find(pick)!;
+    expect(step, 'the record has a step to tamper with').toBeDefined();
+    tamper(step);
+    const err: unknown = await replay(copy).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ReplayDiverged);
+    expect((err as ReplayDiverged).seq).toBe(step.seq);
+    return err as ReplayDiverged;
+  }
+
+  it('T-AC-2: a step with one clock value too many diverges at that step', async () => {
+    const { record } = await recordedGame();
+    const err = await tampered(record, (e) => e.type === 'fire' && !!e.reads?.length, (e) => {
+      if (e.type === 'fire') e.reads!.push(e.reads!.at(-1)!);
+    });
+    expect(err.reason).toBe('clock tape not consumed');
+  });
+
+  it("T-AC-2: a brain call recorded under another call number diverges at that step", async () => {
+    const { record } = await recordedGame();
+    await tampered(record, (e) => e.type !== 'notice' && e.type !== 'playbook' && !!e.decides?.length, (e) => {
+      if (e.type !== 'notice' && e.type !== 'playbook') e.decides![0]!.call += 100;
+    });
+  });
+
+  it('T-AC-2: a timer firing that names a timer never scheduled diverges at that step', async () => {
+    const { record } = await recordedGame();
+    const err = await tampered(record, (e) => e.type === 'fire', (e) => {
+      if (e.type === 'fire') e.timer = 1_000_000;
+    });
+    expect(err.reason).toBe('timer 1000000 not live');
+  });
+
+  it("T-AC-2: a changed final state hash, or one seat's changed score, comes out not identical, without a throw", async () => {
+    const { record } = await recordedGame();
+    const hash = fileCopy(record);
+    hash.outcome!.stateHash = '0'.repeat(64);
+    const byHash = await replay(hash);
+    expect(byHash.identical).toBe(false);
+    expect(byHash.stateHash.replayed).toBe(record.outcome!.stateHash);
+
+    const scored = fileCopy(record);
+    scored.outcome!.scores.s1! += 1;
+    const byScore = await replay(scored);
+    expect(byScore.identical).toBe(false);
+    expect(byScore.scores.find((s) => s.seat === 's1')).toMatchObject({ recorded: record.outcome!.scores.s1! + 1, replayed: record.outcome!.scores.s1 });
   });
 
   it('T-AC-3: a record made under one changed config value is refused before any game is built', async () => {
@@ -417,6 +490,9 @@ describe.runIf(FULL)('the server writes the record', { timeout: 60_000 }, () => 
     const secrets = [...t.phones.map((p) => p.token), t.phones[0]!.handoff, t.room.code, KEY.ANTHROPIC_API_KEY];
     expect(secrets.every((s) => typeof s === 'string' && s.length > 0)).toBe(true);
     for (const secret of secrets) expect(text).not.toContain(secret);
+
+    vi.useRealTimers();
+    expect((await replay(record)).identical, 'the file replays identical').toBe(true);
   });
 
   it('T-AC-8: an unwritable record folder at game over logs one error naming the path, and the room still shows game over and answers', async () => {
