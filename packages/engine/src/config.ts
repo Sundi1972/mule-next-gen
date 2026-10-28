@@ -877,8 +877,9 @@ export const EVENTS = {
   bumperHarvest: { factor: 2 },
   /**
    * The event table (Heiko's event model): one row per event, its fields an EventRow (events.ts), every number a
-   * share. A row rolls at the start of each phase it lists: that phase's chance plus its raises, minus its lowers,
-   * never below 0 or above its cap. Colony rows roll once for the colony, first; player rows once a player.
+   * share. A row rolls at the start of each phase it lists, or, with perPlot, once per plot its caller names after
+   * production's output: that phase's chance plus its raises, minus its lowers, never below 0 or above its cap. Colony
+   * rows roll once for the colony, first; player rows once a player.
    */
   colony: {
     dustStorm: { phases: { production: 0.08 }, cap: 0.9 },

@@ -55,7 +55,7 @@ export function eventOutput(key: EventKey, before: number, first: boolean): numb
 /**
  * What one event would hit this month, in the order it reaches the plots, each plot's delta 0 until production fills
  * it in; null when it would hit nothing. A personal event starts on `player`'s plots (null when they have none).
- * Throws for a per-plot row's key: its plot is given (plotEvent), never drawn.
+ * Throws for a key it draws no plots for; a per-plot row's event is plotEvent's.
  */
 export function buildEvent(state: GameState, key: EventKey, rng: Rng, player?: string): MonthEvent | null {
   const working = state.tiles.filter((t) => t.owner && t.outfit && (RAW_GOODS as readonly string[]).includes(t.outfit));
@@ -96,7 +96,7 @@ export function buildEvent(state: GameState, key: EventKey, rng: Rng, player?: s
           ? spread(state, start, (t) => t.outfit === 'food' && t.owner === start.owner, Infinity)
           : [start];
   } else {
-    throw new Error(`${key} rolls per plot after production's output, never at a phase start`);
+    throw new Error(`buildEvent draws no plots for ${key}; a per-plot row's event is plotEvent's`);
   }
   return toEvent(state, key, origin, hit, direction, player);
 }
