@@ -185,6 +185,8 @@ describe("FM-planning-host-continue: the host's Continue ends planning proper; n
   it('FM-planning-host-continue: during the election Continue is refused at every stage and nothing changes; once it is over, Continue starts the land grant', () => {
     const { game, advance } = started({ politics: true });
     const election = () => game.viewFor(null).politics!.election!;
+    // Both humans run for Governor, so the office is contested and the election holds a ballot.
+    for (const id of ['s1', 's2']) game.handle(id, { type: 'run', office: 'governor', promise: { kind: 'hold' } });
     const stages = new Set<string>();
     for (let ms = 0; ms < ELECTION_BOUND_MS && election().stage !== 'over'; ms += WALK.tickMs) {
       if (!stages.has(election().stage)) {
