@@ -196,8 +196,8 @@ today        scoreParts = money + goods + land + MULEs, minus the Collapse cut.
              verified_by: read
 tomorrow     MUST add an `office` line: POLITICS.termScore per term served (a term counts when
              it has started). 0 with politics off.
-             The Collapse cut does not reduce the office line: it is a reward for service, not
-             colony wealth (AM-3).
+             In Collapse the cut applies to the office line too: total = round((raw + office) ×
+             collapseScore) (AM-20, Heiko; WS4 AM-31, superseding AM-3 (b)).
 logic        → §2 RULE-7
 seam         scoreParts (named edit, WS3 reviews; WS1 checks the sim's score report)
 pin          scoreParts' addition-order comment: the office line is added after `raw` is
@@ -412,8 +412,9 @@ examples  start 5 → 0..10 allowed, 11 refused · start 15 → 10..15
 RULE-7 · Office pay and the term score                               shape: sequence
 at upkeep, after runUpkeep:  pay = min(fund, POLITICS.pay.governor) to the Governor, then
                              min(fund, POLITICS.pay.sheriff) to the Sheriff        (50, 30)
-score:   office = POLITICS.termScore × terms served (Governor or Sheriff; a term counts once
-         it starts)
+score:   office = POLITICS.termScore × terms served (each office in POLITICS.offices; a term
+         counts once it starts); cut with the rest in Collapse (AM-20)
+offices  Governor only until slice 4 (AM-19): no Sheriff is elected or paid
 invariant  the fund never goes below 0.
 ```
 
@@ -595,7 +596,7 @@ target    §1 C3 seam, §1 C7, §2 RULE-9; plan PR-1 scope
 did       (a) politics.ts exports canRun(state, id) → Record<Office, CanRun>, and runFor uses it,
           so the server's MyView.politics.canRun (§3) reads the engine's RULE-2 instead of
           restating it in PR-3 (which may not edit the engine). (b) Recorded that Collapse does
-          not cut the office line. (c) Accepted that how: 'baron' / 'tieRule' disclose the Baron's
+          not cut the office line [superseded by AM-20: it does]. (c) Accepted that how: 'baron' / 'tieRule' disclose the Baron's
           tie vote. (d) A cleared ballot leaves no entry, so "who has voted" can't show a voter
           who cleared theirs.
 because   P-1: the reviewer found PR-3 had no engine source for canRun (a plan gap) and named
@@ -858,6 +859,34 @@ because   P-1: the table governs itself only if a newcomer can take part; 20 s s
           (WS6 audit §3)
 goal      P-1 — still met
 folded    RULE-1, RULE-2, RULE-8, RULE-9 superseded by RULE-60..64 for the election; UBER-AC-2 restated
+```
+
+```
+AM-19 · 2026-10-28 · Heiko (via PM): "Governor only for now" · the Sheriff waits for slice 4
+
+target    §0 P-1 ("elects a Governor and a Sheriff"), RULE-1/RULE-61 offices, RULE-2, RULE-7 pay
+said      both offices are elected every term; the Sheriff is paid 30 cr a month
+did       Only the Governor is elected until slice 4 gives the Sheriff its powers (guard,
+          investigate, fine). POLITICS.offices = ['governor'] is the switch; the engine, AI and
+          views read it, so the Sheriff's candidacy, appointment, result and pay are gone and its
+          30 cr a month stay in the colony fund. Built in the untimed election's PR-1 (Task 1.8);
+          slice 4 restores the Sheriff by adding it back to the list. WS6 drops it from the mock.
+because   P-1: an office with no job confused newcomers (WS6 audit §3, finding 2); G-5 gains the pay
+goal      P-1 — still met (the table elects its Governor); the Sheriff part waits for slice 4
+folded    RULE-7 offices note; the untimed election's C62 is generic over POLITICS.offices
+```
+
+```
+AM-20 · 2026-10-28 · Heiko (via PM; WS4 AM-31) · Collapse cuts the office line too
+
+target    §1 C7 tomorrow, §2 RULE-7 score; supersedes AM-3 (b)
+said      the Collapse cut does not reduce the office line: it is a reward for service
+did       Heiko: "Yes, cut it too". In Collapse, total = round((raw + office) × collapseScore),
+          one rounding. WS4 builds it in C18 (Worth): the scoreParts named edit 918af8c (WS3 OK'd);
+          WS7's C7 rows in score-parts.test.ts expect the cut, and fa88a2c pins the single rounding.
+because   P-1 / G-5: a Governor of a collapsed colony should not keep a full reward for running it
+goal      P-1 — still met
+folded    C7 tomorrow, RULE-7 score
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
