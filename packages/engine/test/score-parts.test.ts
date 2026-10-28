@@ -31,15 +31,25 @@ import {
 
 const COLLAPSE_AIR = POLLUTION.bands.find((b) => b.name === 'collapse')!.from;
 
-/** score() as it stood before scoreParts existed, frozen as the oracle. */
-function todaysScore(state: GameState, playerId: string): number {
+/** The unrounded sum score() added before scoreParts existed: money, goods, land and MULEs, in that order. */
+function todaysRaw(state: GameState, playerId: string): number {
   const p = player(state, playerId);
   const prices = allPrices(state);
   const goods = GOODS.reduce((sum, g) => sum + p.stock[g] * prices[g], 0);
   const plots = state.tiles.filter((t) => t.owner === playerId);
   const land = plots.length * GAME.plotScore + plots.filter((t) => t.outfit).length * mulePrice(state);
-  const total = p.money + goods + land;
+  return p.money + goods + land;
+}
+
+/** score() as it stood before scoreParts existed, frozen as the oracle. */
+function todaysScore(state: GameState, playerId: string): number {
+  const total = todaysRaw(state, playerId);
   return Math.round(colonyFailed(state) ? total * POLLUTION.collapseScore : total);
+}
+
+/** The total with the office line: added after the rounding, and inside the Collapse cut (AM-31). */
+function withOffice(state: GameState, playerId: string, office: number): number {
+  return colonyFailed(state) ? Math.round((todaysRaw(state, playerId) + office) * POLLUTION.collapseScore) : todaysScore(state, playerId) + office;
 }
 
 function ignoreRuleError(action: () => void): void {
@@ -132,12 +142,12 @@ function workedExample(options: { money: number; air: number; plots: number; mul
 describe('T-AC-6: score parts add up and score() is unchanged', () => {
   const states = Array.from({ length: 200 }, (_, i) => endState(1000 + i * 7919));
 
-  it('T-AC-6: for 200 seeded end states, every player: score() = scoreParts().total = today\'s formula, and the lines add up', () => {
+  it('T-AC-6: for 200 seeded end states, every player: score() = scoreParts().total = today\'s formula with the office line inside the Collapse cut, and the lines add up', () => {
     for (const state of states) {
       for (const p of state.players) {
         const parts = scoreParts(state, p.id);
         expect(score(state, p.id)).toBe(parts.total);
-        expect(parts.total - parts.office).toBe(todaysScore(state, p.id));
+        expect(parts.total).toBe(withOffice(state, p.id, parts.office));
         expect(parts.money).toBe(Math.round(p.money));
         for (const line of Object.values(parts)) expect(Number.isInteger(line)).toBe(true);
         expect(parts.money + parts.goods + parts.land + parts.muleValue + parts.office).toBe(parts.total + parts.cut);
@@ -146,14 +156,16 @@ describe('T-AC-6: score parts add up and score() is unchanged', () => {
     }
   });
 
-  it('T-AC-6 coverage: the 200 states cover Collapse, fractional and .5 money, MULE owners and finished games', () => {
+  it('T-AC-6 coverage: the 200 states cover Collapse, office holders in Collapse, fractional and .5 money, MULE owners and finished games', () => {
     const collapse = states.filter((s) => colonyFailed(s)).length;
+    const collapseOffice = states.filter((s) => colonyFailed(s) && s.players.some((p) => scoreParts(s, p.id).office > 0)).length;
     const passed = states.length - collapse;
     const fractional = states.filter((s) => s.players.some((p) => !Number.isInteger(p.money))).length;
     const halfMoney = states.flatMap((s) => s.players).filter((p) => p.money % 1 === 0.5).length;
     const muleOwners = states.filter((s) => s.tiles.some((t) => t.owner && t.outfit)).length;
     const finished = states.filter((s) => s.phase === 'gameOver').length;
     expect(collapse).toBeGreaterThanOrEqual(40);
+    expect(collapseOffice).toBeGreaterThanOrEqual(20);
     expect(passed).toBeGreaterThanOrEqual(40);
     expect(fractional).toBeGreaterThanOrEqual(40);
     expect(halfMoney).toBeGreaterThanOrEqual(40);
@@ -211,7 +223,7 @@ describe('T-AC-6: score parts add up and score() is unchanged', () => {
   it.each([
     { air: 0, total: 5300, cut: 0 },
     { air: COLLAPSE_AIR, total: 4240, cut: 1060 },
-  ])('C7: office line = termScore × terms served; the other lines unchanged (air $air)', ({ air, total, cut }) => {
+  ])('C7: office line = termScore × terms served, cut with the rest in Collapse (AM-31); the other lines unchanged (air $air)', ({ air, total, cut }) => {
     const state = workedExample({ money: 2140, air, plots: 6, mules: 5 });
     const before = scoreParts(state, 'a');
     expect(before).toMatchObject({ office: 0, total, cut });
@@ -222,6 +234,11 @@ describe('T-AC-6: score parts add up and score() is unchanged', () => {
     stepElection(state, POLITICS.revealMs);
     expect(state.politics?.governor).toBe('a');
 
-    expect(scoreParts(state, 'a')).toEqual({ ...before, office: POLITICS.termScore, total: total + POLITICS.termScore });
+    const office = POLITICS.termScore;
+    // The worked example's lines are whole credits, so their sum is the unrounded raw.
+    const raw = total + cut;
+    const governed = colonyFailed(state) ? Math.round((raw + office) * POLLUTION.collapseScore) : raw + office;
+    expect(scoreParts(state, 'a')).toEqual({ ...before, office, total: governed, cut: raw + office - governed });
+    if (colonyFailed(state)) expect(governed, 'a fifth of the office line goes with the rest').toBeLessThan(total + office);
   });
 });
