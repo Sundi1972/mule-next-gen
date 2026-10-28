@@ -98,9 +98,15 @@ PR-2 is a named edit in WS5's file and block, with WS5 as its reviewer.
 | `config.ts` `EVENTS` block | PR-1, PR-2 | **serialised** — PR-2 adds the cavern row after PR-1's rows |
 | `packages/engine/test/events.test.ts` | PR-1, PR-2 | **serialised** |
 
-**Freeze point:** Task 2 publishes the contract WS6 builds against (`MonthEvent.phase`; several events per phase in
-`MonthReport.events`, in the order fired). The PM routes it to WS6 once it lands, so WS6's screens are built in
-parallel with Tasks 3-9.
+**Freeze point:** Task 2 publishes the contract the screens build against (`MonthEvent.phase`; several events per
+phase in `MonthReport.events`, in the order fired). PM ruling, 28 Oct: WS8 is its primary reviewer. WS8's gallery
+models events per phase and mirrors this contract, so the later build grafts onto it (Heiko picked direction B,
+Living weather, plus phone-only play). WS1 sends the hunk to WS8, with WS6 copied as an FYI only (the production show's
+owner; no action). The screens are built in parallel with Tasks 3-9.
+
+**Named edits beyond the authority lists (PM-approved, 28 Oct):** a required `phase` breaks two `MonthEvent`
+literals in WS3's `apps/server/test/production-view.test.ts`; Task 2 adds `phase: 'production'` to them, and WS3
+reviews them with the types.ts hunk.
 
 ---
 
@@ -128,7 +134,8 @@ parallel with Tasks 3-9.
       Run: `pnpm --filter @mule/engine exec vitest run test/events.test.ts -t "T-AC-3"`
 - [ ] **Step 3: Implement** `phase: Phase` on `MonthEvent` per spec §3; `buildEvent` sets `'production'`.
 - [ ] **Step 4: Run events.test.ts and `pnpm typecheck`; expect PASS / exit 0.**
-- [ ] **Step 5: Commit** (red then green); send WS3 the types.ts hunk, and tell the PM the contract is frozen (route to WS6).
+- [ ] **Step 5: Commit** (red then green); send WS3 the types.ts hunk and the production-view.test.ts fixture lines;
+      send WS8 the contract hunk (primary reviewer) with WS6 copied as an FYI; tell the PM the contract is frozen.
 
 ### Task 3: The rows and the chance — C1 (RULE-1)
 
