@@ -10,7 +10,7 @@ import { GAME, LOTS, TAX, WALK, type Good } from '@mule/engine';
 import type { AuctionView, MuleView } from '@mule/protocol';
 import { GOOD_NAME } from '@mule/ui';
 import { errors as playwrightErrors, type Browser, type Page } from 'playwright';
-import { GRANT_PASS_MAX_MS, GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
+import { AI_NAMES, GRANT_PASS_MAX_MS, GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, headerSlot, held, launch, PHONE, PHONE_SMALL, startServer, TV, type AuctionSteps } from './harness';
 import { hostContinuesWithout } from './hub-steps';
@@ -665,8 +665,9 @@ async function readTheStatusWords(phones: Phone[], tv: Page, truth: Truth): Prom
   const tidy = (all: string[]) => all.map((t) => t.replace(/\s+/g, ' ').trim());
   for (const p of phones) {
     const page = p.page;
-    for (const head of ['Goes bad', 'Spare']) check(await page.getByRole('columnheader', { name: head, exact: true }).isVisible(), `G-8: ${p.name}'s status table has a "${head}" column`);
-    check((await page.getByRole('columnheader', { name: /^(Spoils|Surplus)$/i }).count()) === 0, `G-8: ${p.name}'s status table no longer says Spoils or Surplus`);
+    // The heads are drawn in capitals: read as shown, any case.
+    const heads = (await page.getByTestId('status-table').locator('th').allInnerTexts()).map((t) => t.trim().toLowerCase());
+    check(heads.includes('goes bad') && heads.includes('spare') && !heads.some((t) => /spoils|surplus/.test(t)), `G-8: ${p.name}'s status table says "Goes bad" and "Spare", got ${JSON.stringify(heads)}`);
     const mine = await readText(page, 'my-store');
     check(mine === store, `G-4: ${p.name}'s status screen says the store's prices from your side: want "${store}", got "${mine}"`);
     const ships = tidy(await page.getByTestId('ship-wants').allInnerTexts());
@@ -719,22 +720,61 @@ async function smallPhoneReads(p: Phone, stage: 'status' | 'walk'): Promise<void
   for (const size of [PHONE_SMALL.viewport, PHONE.viewport]) {
     await p.page.setViewportSize(size);
     await p.page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
-    const read = (await p.page.evaluate(`(${AUDIT_JS})(${JSON.stringify(scope)})`)) as AuditRead;
-    const small = read.fails.filter((f) => /: text [\d.]+ px /.test(f));
-    const at = `${size.width}×${size.height}`;
-    console.log(`  ${stage} at ${at}: ${read.fails.length ? read.fails.join('; ') : 'nothing broken'}`);
-    check(small.length === 0, `the goods auction's ${stage} at ${at} has text under ${MIN_TEXT} px: ${small.join('; ')}`);
-    if (stage === 'status') {
-      const fit = await p.page.getByTestId('status-table').evaluate((t) => {
-        const box = t.parentElement!;
-        return { table: Math.round(t.getBoundingClientRect().width), space: box.clientWidth, scrolls: box.scrollWidth > box.clientWidth + 1 };
-      });
-      console.log(`  status table at ${at}: ${fit.table} px wide in ${fit.space} px${fit.scrolls ? ', scrolls sideways' : ''}`);
-      check(!fit.scrolls && fit.table <= fit.space + 1, `the status table fits its space at ${at}: ${fit.table} px in ${fit.space}`);
+    // The cast's names are short; every other player is read under the longest AI name, as a game with AIs shows it.
+    await p.page.evaluate(`(${LONG_NAMES_ON})(${JSON.stringify(LONGEST_AI)})`);
+    try {
+      const read = (await p.page.evaluate(`(${AUDIT_JS})(${JSON.stringify(scope)})`)) as AuditRead;
+      const small = read.fails.filter((f) => /: text [\d.]+ px /.test(f));
+      const cut = read.fails.filter((f) => /(status-table|walk-names|limit-|units-|walker-)/.test(f));
+      const at = `${size.width}×${size.height}`;
+      console.log(`  ${stage} at ${at}: ${read.fails.length ? read.fails.join('; ') : 'nothing broken'}`);
+      check(small.length === 0, `the goods auction's ${stage} at ${at} has text under ${MIN_TEXT} px: ${small.join('; ')}`);
+      check(cut.length === 0, `the goods auction's ${stage} at ${at}: the table and the board show every label whole: ${cut.join('; ')}`);
+      if (stage === 'status') {
+        const fit = await p.page.getByTestId('status-table').evaluate((t) => {
+          const box = t.parentElement!;
+          return { table: Math.round(t.getBoundingClientRect().width), space: box.clientWidth, scrolls: box.scrollWidth > box.clientWidth + 1 };
+        });
+        console.log(`  status table at ${at}: ${fit.table} px wide in ${fit.space} px${fit.scrolls ? ', scrolls sideways' : ''}`);
+        check(!fit.scrolls && fit.table <= fit.space + 1, `the status table fits its space at ${at}: ${fit.table} px in ${fit.space}`);
+      } else {
+        const overlaps = (await p.page.evaluate(BOARD_LABEL_OVERLAPS)) as string[];
+        console.log(`  board labels at ${at}: ${overlaps.length ? overlaps.join('; ') : 'none overlap'}`);
+        check(overlaps.length === 0, `the board's labels at ${at} don't overlap: ${overlaps.join('; ')}`);
+      }
+    } finally {
+      await p.page.evaluate(LONG_NAMES_OFF);
     }
   }
   await p.page.setViewportSize(PHONE.viewport);
 }
+
+const LONGEST_AI = AI_NAMES.reduce((a, b) => (b.length > a.length ? b : a));
+
+/** In the page: writes `name` over every other player's name in the status table and the board's names strip, keeping what was there. */
+const LONG_NAMES_ON = `(name) => {
+  const els = [...document.querySelectorAll('[data-testid=status-table] tbody td:first-child span.truncate, [data-testid=walk-names] > span > span:nth-child(2)')].filter((el) => el.textContent !== 'You');
+  window.namesWere = els.map((el) => [el, el.textContent]);
+  for (const el of els) el.textContent = name;
+}`;
+const LONG_NAMES_OFF = `(() => { for (const [el, text] of window.namesWere || []) el.textContent = text; window.namesWere = []; })()`;
+
+/** In the page: every pair of the board's labels (store lines, units, ASK/BID tags) whose boxes overlap, named. */
+const BOARD_LABEL_OVERLAPS = `(() => {
+  const labels = [
+    ...[...document.querySelectorAll('[data-testid^=limit-] > span')].map((el) => [el.parentElement.dataset.testid, el]),
+    ...[...document.querySelectorAll('[data-testid^=units-]')].map((el) => [el.dataset.testid, el]),
+    ...[...document.querySelectorAll('[data-testid^=walker-] > span:last-child')].map((el) => [el.parentElement.dataset.testid + ' price', el]),
+  ].map(([id, el]) => [id, el.getBoundingClientRect()]);
+  const out = [];
+  for (let i = 0; i < labels.length; i++)
+    for (let j = i + 1; j < labels.length; j++) {
+      const [a, x] = labels[i], [b, y] = labels[j];
+      const w = Math.min(x.right, y.right) - Math.max(x.left, y.left), h = Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top);
+      if (w > 0.5 && h > 0.5) out.push(a + ' over ' + b + ' (' + w.toFixed(1) + '×' + h.toFixed(1) + ' px)');
+    }
+  return out;
+})()`;
 
 /**
  * FU-1, front to back: with the walk of the good up now running, `holder` holds ArrowUp, presses Done with
