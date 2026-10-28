@@ -7,10 +7,16 @@ import { ClientProvider } from '../../../../apps/web/src/net/react';
 import { PhoneGameProvider } from '../../../../apps/web/src/phone/game';
 import { VIEW } from './fixture';
 
+/**
+ * The stand-in client's state. One object, never a fresh one per call: the app's chat reads it through
+ * useSyncExternalStore (apps/web/src/chat/Chat.tsx), which loops forever on a snapshot that changes every render.
+ */
+const STATE = { status: 'open', role: 'player', code: 'MULE', seatId: 'lena', view: null, chat: [], emotes: [], toasts: [], clockOffset: 0 };
+
 /** A stand-in for the network client: the real screens read the view from the providers below, and intents only log. */
 const client = {
   subscribe: () => () => {},
-  getState: () => ({ status: 'open', role: 'player', code: 'MULE', seatId: 'lena', view: null, chat: [], emotes: [], toasts: [], clockOffset: 0 }),
+  getState: () => STATE,
   serverNow: () => Date.now(),
   intent: (i: unknown) => console.info('intent', i),
 } as unknown as TableClient;

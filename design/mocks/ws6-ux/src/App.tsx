@@ -20,6 +20,8 @@ import { HoloMap, type MapTile } from '@mule/ui';
 import { mapTiles } from '../../../../apps/web/src/game/derive';
 import { PlotMap, type PlotLook } from './proposed/PlotMap';
 import { TvPlanning } from './proposed/PlanningReady';
+import { IntentNotes, IntentNotesProvider } from './proposed/IntentNote';
+import { HUB_NOTES, HubAudit } from './screens/audit/HubAudit';
 import { H, W } from './fixture';
 
 const DECISIONS = [
@@ -220,6 +222,47 @@ const HUB_STATES: { id: string; title: string; desk: Desk; office: Office; elect
   { id: 'hub-sheriff', title: "As Sheriff: the Sheriff's desk", desk: 'sheriff', office: 'sheriff' },
 ];
 
+/** For approval (2026-10-28): the UX audit's proposals, one mock per changed screen, each change numbered with its intent and reason. */
+const AUDIT_STATES: { id: string; title: string; tool?: 'drone'; picked?: { x: number; y: number }[]; standings?: boolean }[] = [
+  { id: 'audit-hub', title: 'Planning hub: all seven changes' },
+  { id: 'audit-hub-drone', title: 'Geo drone open, 1 of 2 plots picked', tool: 'drone', picked: [{ x: 9, y: 4 }] },
+  { id: 'audit-hub-standings', title: 'Standings open', standings: true },
+];
+
+function AuditHubPage({ state }: { state: (typeof AUDIT_STATES)[number] }) {
+  const props = { ...(state.tool ? { tool: state.tool } : {}), ...(state.picked ? { picked: state.picked } : {}), ...(state.standings ? { standings: true } : {}) };
+  return (
+    <Page title={`For approval · UX audit · ${state.title}`}>
+      <Links states={AUDIT_STATES} current={state.id} />
+      <p className="max-w-[900px] text-sm text-ink-2">
+        The planning hub redesigned from the UX audit (a newcomer of 14 playing it for real). Month 4, just after the election: Kai is the new Governor, Brix the Sheriff, Lena (you) holds no office. The phone held sideways (844 × 390) first, then the laptop (1440 × 900). Each number on a screen marks one change; the notes beside say which player intent it serves and why it was made. It all works: tap the needs strip, the drone and free plots on the map, “2nd of 4”, the folded Now card.
+      </p>
+      <IntentNotesProvider>
+        <div className="flex flex-wrap items-start gap-6">
+          <div className="flex min-w-0 flex-col gap-4">
+            <PhoneFrame>
+              <Game view={{ ...VIEW, month: 4 }}>
+                <HubAudit key={`${state.id}-p`} {...props} />
+              </Game>
+            </PhoneFrame>
+            <LaptopFrame>
+              <Game view={{ ...VIEW, month: 4 }}>
+                <HubAudit key={`${state.id}-l`} {...props} />
+              </Game>
+            </LaptopFrame>
+          </div>
+          <IntentNotes
+            className="w-[420px] max-w-full"
+            title="Seven changes, and why"
+            intro="One card per change. Hover one and its numbers light up on both screens. “Serves intent” quotes the player intent from the audit; “Why” is what the audit found."
+            notes={Object.values(HUB_NOTES)}
+          />
+        </div>
+      </IntentNotesProvider>
+    </Page>
+  );
+}
+
 /** One table talking, seen from Lena's laptop, Lena's phone and the TV at once. */
 function ChatPage() {
   const lena = useChatSim(0, 'lena');
@@ -256,6 +299,9 @@ export default function App() {
   const hash = useHash();
 
   if (hash === 'chat') return <ChatPage />;
+
+  const audit = AUDIT_STATES.find((s) => s.id === hash);
+  if (audit) return <AuditHubPage state={audit} />;
 
   if (hash === 'game-handoff' || hash === 'game-handoff-expired')
     return (
@@ -498,7 +544,14 @@ export default function App() {
 
   return (
     <div className="min-h-full bg-table p-8 text-ink" data-testid="index">
-      <h2 className="label-caps">For approval 2026-10-28 · planning without a clock (Heiko's playtest)</h2>
+      <h2 className="label-caps">For approval · UX audit</h2>
+      <p className="mt-1 max-w-3xl text-sm text-ink-2">
+        The priority-1 screens, redesigned from the UX audit (docs/research/2026-10-28-ws6-ux-audit.md): every change numbered on the screen, with the player intent it serves and why. The planning hub first; the election, development and the goods auction follow.
+      </p>
+      <div className="mt-2 flex flex-col gap-2" data-testid="audit-links">
+        <Links states={AUDIT_STATES} />
+      </div>
+      <h2 className="label-caps mt-6">For approval 2026-10-28 · planning without a clock (Heiko's playtest)</h2>
       <div className="mt-2 flex flex-col gap-2" data-testid="wait-links">
         <Links states={WAIT_STATES} />
       </div>

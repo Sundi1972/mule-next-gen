@@ -1,5 +1,5 @@
 import { Button, Creature, cx, HoloMap, SLOT_COLOR, type MapTile, type Slot } from '@mule/ui';
-import { useState, type ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 import { mapTiles, plotName } from '../../../../../apps/web/src/game/derive';
 import { MapFit } from '../../../../../apps/web/src/phone/Shell';
 import { H, VIEW, W } from '../fixture';
@@ -34,10 +34,10 @@ import { MarketStrip, News, ThisMonth } from './PlanningBrief';
 
 export type Desk = 'colony' | 'talk' | 'council' | 'market' | 'secret' | 'governor' | 'sheriff';
 export type Office = 'none' | 'governor' | 'sheriff';
-type Status = 'today' | 'part' | 'soon';
-type Tool = 'look' | 'drone' | 'list' | 'factory' | 'guard' | 'target';
+export type Status = 'today' | 'part' | 'soon';
+export type Tool = 'look' | 'drone' | 'list' | 'factory' | 'guard' | 'target';
 
-const ICON: Record<Desk, string> = {
+export const ICON: Record<Desk, string> = {
   colony: 'M3 11l9-7 9 7v9H3z M9 20v-6h6v6',
   talk: 'M4 5h16v10H9l-5 4z',
   council: 'M4 10h16 M6 10v8 M10 10v8 M14 10v8 M18 10v8 M3 20h18 M12 3l9 5H3z',
@@ -47,7 +47,7 @@ const ICON: Record<Desk, string> = {
   sheriff: 'M12 2l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 15.6 6.6 18.5l1.2-6L3.3 8.3l6.1-.7z',
 };
 
-const DESKS: { id: Desk; label: string; status: Status; locked?: boolean; office?: Office }[] = [
+export const DESKS: { id: Desk; label: string; status: Status; locked?: boolean; office?: Office }[] = [
   { id: 'colony', label: 'Colony', status: 'today' },
   { id: 'talk', label: 'Talk', status: 'part' },
   { id: 'council', label: 'Council', status: 'part' },
@@ -57,7 +57,7 @@ const DESKS: { id: Desk; label: string; status: Status; locked?: boolean; office
   { id: 'sheriff', label: 'Sheriff', status: 'soon', office: 'sheriff', locked: true },
 ];
 
-function Glyph({ d, size = 18, className }: { d: string; size?: number; className?: string }) {
+export function Glyph({ d, size = 18, className }: { d: string; size?: number; className?: string }) {
   return (
     <svg aria-hidden viewBox="0 0 24 24" width={size} height={size} className={className} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
       <path d={d} />
@@ -66,7 +66,7 @@ function Glyph({ d, size = 18, className }: { d: string; size?: number; classNam
 }
 
 /** Built by WS7, not yet in the game. */
-function Soon({ part = false, slice }: { part?: boolean; slice?: number }) {
+export function Soon({ part = false, slice }: { part?: boolean; slice?: number }) {
   const next = slice === 1;
   return (
     <span className={cx('rounded-chip border px-1 font-mono text-[9px] font-bold leading-4 @min-[1100px]/shell:text-[10px]', next ? 'border-holo/60 text-holo' : 'border-warn/50 text-warn')}>
@@ -75,20 +75,46 @@ function Soon({ part = false, slice }: { part?: boolean; slice?: number }) {
   );
 }
 
-/** Only you see this. */
-function Private({ text = 'ONLY YOU' }: { text?: string }) {
+/**
+ * How "only you see this" is drawn: today's lock, or the UX audit's eye-slash (H-3, #audit-hub), which a newcomer
+ * does not read as "locked". The audit mock sets it for everything it draws, these desks included.
+ */
+export const OnlyYouLook = createContext<'lock' | 'eye'>('lock');
+
+/** The eye-slash: hidden from everyone else. */
+export function EyeOff({ size = 10, strokeWidth = 2.4 }: { size?: number; strokeWidth?: number }) {
   return (
-    <span className="inline-flex items-center gap-0.5 rounded-chip bg-holo-soft px-1 font-mono text-[9px] font-bold leading-4 text-holo @min-[1100px]/shell:text-[10px]">
-      <svg aria-hidden viewBox="0 0 24 24" width={10} height={10} fill="none" stroke="currentColor" strokeWidth={2.4}>
-        <rect x={5} y={11} width={14} height={10} rx={2} />
-        <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-      </svg>
+    <svg aria-hidden viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.7 5.1A10.7 10.7 0 0 1 21.9 11.7a1 1 0 0 1 0 .7 10.7 10.7 0 0 1-1.4 2.5" />
+      <path d="M14.1 14.2a3 3 0 0 1-4.2-4.2" />
+      <path d="M17.5 17.5A10.7 10.7 0 0 1 2.1 12.3a1 1 0 0 1 0-.7 10.7 10.7 0 0 1 4.4-5.1" />
+      <path d="M2 2l20 20" />
+    </svg>
+  );
+}
+
+/** Only you see this. */
+export function Private({ text = 'ONLY YOU' }: { text?: string }) {
+  const look = useContext(OnlyYouLook);
+  return (
+    <span
+      className={cx('inline-flex items-center gap-0.5 rounded-chip bg-holo-soft px-1 leading-4 text-holo', look === 'eye' ? 'text-[10px] font-semibold @min-[1100px]/shell:text-xs' : 'font-mono text-[9px] font-bold @min-[1100px]/shell:text-[10px]')}
+      {...(look === 'eye' && !text ? { role: 'img', 'aria-label': 'Only you see this' } : {})}
+    >
+      {look === 'eye' ? (
+        <EyeOff />
+      ) : (
+        <svg aria-hidden viewBox="0 0 24 24" width={10} height={10} fill="none" stroke="currentColor" strokeWidth={2.4}>
+          <rect x={5} y={11} width={14} height={10} rx={2} />
+          <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+        </svg>
+      )}
       {text}
     </span>
   );
 }
 
-function Section({ title, badge, children, testid }: { title: ReactNode; badge?: ReactNode; children: ReactNode; testid?: string }) {
+export function Section({ title, badge, children, testid }: { title: ReactNode; badge?: ReactNode; children: ReactNode; testid?: string }) {
   return (
     <section className="flex flex-col gap-1.5 @min-[1100px]/shell:gap-2" data-testid={testid}>
       <h3 className="label-caps flex items-center gap-1.5 @min-[1100px]/shell:text-xs!">
@@ -100,8 +126,8 @@ function Section({ title, badge, children, testid }: { title: ReactNode; badge?:
   );
 }
 
-const PLAYER = Object.fromEntries(VIEW.players.map((p, i) => [p.id, { ...p, slot: i as Slot }]));
-const Who = ({ id, size = 16 }: { id: string; size?: number }) => {
+export const PLAYER = Object.fromEntries(VIEW.players.map((p, i) => [p.id, { ...p, slot: i as Slot }]));
+export const Who = ({ id, size = 16 }: { id: string; size?: number }) => {
   const p = PLAYER[id]!;
   return (
     <span className="inline-flex items-center gap-1 font-semibold">
@@ -198,7 +224,7 @@ function ColonyDesk() {
   );
 }
 
-function TalkDesk() {
+export function TalkDesk() {
   const [channel, setChannel] = useState<'all' | 'ossa' | 'kai' | 'pact'>('ossa');
   const channels: { id: typeof channel; label: ReactNode; private: boolean; status: Status }[] = [
     { id: 'all', label: 'Everyone', private: false, status: 'today' },
@@ -386,7 +412,7 @@ function PromisePicker({ onRun, onCancel }: { onRun: (p: Promise) => void; onCan
   );
 }
 
-function CouncilDesk({ election }: { election: Election }) {
+export function CouncilDesk({ election }: { election: Election }) {
   const [running, setRunning] = useState<'governor' | 'sheriff' | null>(election === 'promise' ? null : 'sheriff');
   const [picking, setPicking] = useState(election === 'promise');
   const [promise, setPromise] = useState<Promise | null>(null);
@@ -511,7 +537,7 @@ function CouncilDesk({ election }: { election: Election }) {
   );
 }
 
-function MarketDesk({ onTool }: { onTool: (t: Tool) => void }) {
+export function MarketDesk({ onTool }: { onTool: (t: Tool) => void }) {
   return (
     <>
       <Section title="Sell at the auction after planning" testid="list-asset">
@@ -549,7 +575,7 @@ const SABOTAGE = [
   { id: 'steal', name: 'Steal a MULE', effect: "takes an empty MULE; low success", cost: 200, ok: 25, caught: 55 },
 ];
 
-function SecretDesk({ onTool }: { onTool: (t: Tool) => void }) {
+export function SecretDesk({ onTool }: { onTool: (t: Tool) => void }) {
   const [pick, setPick] = useState('power');
   return (
     <>
@@ -593,7 +619,7 @@ const BUDGET = [
   { id: 'projects', name: 'Projects', buys: 'saved toward the levee (500)' },
 ];
 
-function GovernorDesk() {
+export function GovernorDesk() {
   const START = 5;
   const [tax, setTax] = useState(8);
   const [lines, setLines] = useState<Record<string, number>>({ reserve: 100, security: 200, environment: 200, welfare: 0, projects: 300 });
@@ -658,7 +684,7 @@ function GovernorDesk() {
   );
 }
 
-function SheriffDesk({ onTool }: { onTool: (t: Tool) => void }) {
+export function SheriffDesk({ onTool }: { onTool: (t: Tool) => void }) {
   return (
     <>
       <div className="flex items-center gap-1.5 text-xs text-ink-2">
