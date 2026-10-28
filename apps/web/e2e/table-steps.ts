@@ -1,19 +1,52 @@
-/** WS4's steps in smoke.ts's whole game: a picked colour (B-AC-8), map zoom (B-AC-2, T-AC-9) and the move to another device (B-AC-7, B-AC-13). */
-import { GOODS, type GameState, type Stock } from '@mule/engine';
+/**
+ * WS4's steps in smoke.ts's whole game: a picked colour (B-AC-8), map zoom (B-AC-2, T-AC-9), the move to another device
+ * (B-AC-7, B-AC-13) and plots you can read from the couch (B-AC-9, look A).
+ */
+import { GOODS, type GameState, type Stock, type Tile } from '@mule/engine';
 import type { MuleView, ServerEnvelope, TableView } from '@mule/protocol';
 import type { Locator, Page } from 'playwright';
-import { COLOUR_NAME, type Slot } from '@mule/ui';
+import { COLOUR_NAME, SLOT_COLOR, type Slot } from '@mule/ui';
 import { check, checkLink, EXPIRED, gone, headerSlot, MOVED, onStartScreen, PHONE, qrLink, seatToken, shows, SHOWN_MS, type GameStepContext } from './harness';
 
 /** B-AC-2: a zoomed plot is at least this wide, a thumb's width. */
 const MIN_PLOT_PX = 44;
+/** B-AC-9 (WS4, plot look A): a mark's width as a share of its plot's, with slack for rounding and the 2 px minimums. */
+const LOOK_A = { tab: 0.46, disc: 0.62 };
+const SHARE_SLACK = 0.06;
+/** B-AC-9 (WS4, plot look A): the least share of the selected ring and pin inside the map's visible box. */
+const SEEN = 0.9;
+/** B-AC-9 (WS4, plot look A): a faded plot's marks, as a phone draws another player's land. */
+const FADED = 0.45;
+/** B-AC-9 (WS4, plot look A): an owned plot's inset border, a share of its width, and its tint's share of the owner's colour. */
+const BORDER = { share: 1 / 12, slack: 0.025, minPx: 2 };
+/** B-AC-9 (WS4, plot look A): the selected ring's band, as the mock paints it. */
+const RING_COLOUR = 'var(--color-holo-strong)';
+const TINT = { alpha: 0.3, slack: 0.05 };
 /** T-AC-9 watches the wire from the first tap to at least this long after the second. */
 const QUIET_MS = 400;
 const PRESS_MS = 2_000;
 const READY = '[data-testid=handoff-qr][data-state=ready]';
 
-type Plot = { x: number; y: number };
+export type Plot = { x: number; y: number };
 type Box = { x: number; y: number; width: number; height: number };
+/**
+ * A plot as drawn: its x-y, its label, its box on screen, what each of its layers paints (computed box-shadow and
+ * background), and every mark inside it with a test id, with its box-shadow and effective opacity.
+ */
+type DrawnPlot = {
+  at: string;
+  label: string;
+  box: Box;
+  paint: { boxShadow: string; background: string }[];
+  marks: { id: string; box: Box; visible: boolean; opacity: number; boxShadow: string }[];
+};
+/**
+ * A map as drawn: its plots; the box it is seen through, the map clipped by a zoom's viewport; how much a zoom or a
+ * scaled screen magnifies it; and each colour slot's colour as computed.
+ */
+type DrawnMap = { clip: Box; scale: number; colours: string[]; ringColour: string; plots: DrawnPlot[] };
+type Rgba = { r: number; g: number; b: number; a: number };
+type Shadow = { colour: Rgba | null; spread: number; inset: boolean };
 type Game = { state: GameState; devEndsAt: Map<string, number>; phaseEndsAt: number | null; ctx: { now(): number } };
 
 /** T-AC-9: counts the intents a page sends on its game sockets. Attach before the page loads, as watchShow. */
@@ -281,6 +314,258 @@ export async function moveDialogOutlivedThePhase(ctx: GameStepContext, link: str
   await phone.keyboard.press('Escape');
   check(await gone(phone.getByTestId('host-dialog')), 'B-AC-13 (handoff, in game): Escape closes the move dialog after the phase change');
   check(await phone.getByTestId('move-to-phone').evaluate((el) => el === document.activeElement), "B-AC-13 (handoff, in game): focus goes back to the new phase's move-to-phone");
+}
+
+/** B-AC-9 (WS4, plot look A), held in development: the TV map shows who owns each plot and what is installed on it. */
+export async function theTvShowsWhoOwnsEachPlot(ctx: GameStepContext): Promise<string> {
+  return ctx.held(() => checkPlotLook(ctx.tv.locator('[data-phase=development]'), 'TV, development', { installed: true }));
+}
+
+/**
+ * B-AC-9 (WS4, plot look A) on the phone's development map, right after the phone has selected a plot of its own and
+ * installed a MULE this turn: its owners, its installed goods, and the plot its rail reads out as selected. Then, held,
+ * plots another player owns: the test gives the first AI a free interior plot and one on each side of the map (none a
+ * corner) for the moment, as store-steps seeds hunger, and the phone selects each in turn. Every failure of every read
+ * is reported at once. Returns a line for the log, with how long the hold took.
+ */
+export async function thePhoneShowsItsSelectedPlot(ctx: GameStepContext): Promise<string> {
+  const dev = ctx.phone.locator('[data-phase=development]');
+  const map = dev.getByTestId('dev-map');
+  const heading = (await dev.getByTestId('plot-title').textContent({ timeout: PRESS_MS })) ?? '';
+  const named = heading.match(/(\d+)·(\d+)/);
+  check(named, `B-AC-9 (WS4, plot look A, phone): the rail names the selected plot, got "${heading}"`);
+  const own = await readPlotLook(map, 'phone, its own plot', { installed: true, selected: { x: Number(named[1]) - 1, y: Number(named[2]) - 1 } });
+  const theirs = await ctx.held(async () => {
+    const room = ctx.server.registry.get(ctx.code) as unknown as { game: Game; broadcast(): void };
+    const { game } = room;
+    const { width, height, tiles } = game.state;
+    const ai = game.state.players.find((p) => p.isAi);
+    const free = (t: Tile) => t.owner === null && t.terrain !== 'store' && !t.special;
+    // The zoom button covers the top right: the last column's plot is its lowest, the top row's its leftmost.
+    const plots = [
+      tiles.find((t) => free(t) && t.x > 0 && t.y > 0 && t.x < width - 1 && t.y < height - 1),
+      [...tiles].reverse().find((t) => free(t) && t.x === width - 1 && t.y > 0 && t.y < height - 1),
+      tiles.find((t) => free(t) && t.y === height - 1 && t.x > 0 && t.x < width - 1),
+      tiles.find((t) => free(t) && t.x === 0 && t.y > 0 && t.y < height - 1),
+      tiles.find((t) => free(t) && t.y === 0 && t.x > 0 && t.x < width - 1),
+    ];
+    check(
+      ai && plots.every(Boolean),
+      `B-AC-9 (WS4, plot look A, phone): an AI seat, and free plots to give it inside the map and on the last column, the bottom row, the first column and the top row, got [${plots.map((t) => (t ? plotName(t) : 'none')).join(', ')}]`,
+    );
+    const given = plots as Tile[];
+    const started = Date.now();
+    for (const t of given) t.owner = ai.id;
+    room.broadcast();
+    try {
+      const reads: { read: string; fails: string[] }[] = [];
+      for (const t of given) {
+        const at = `${t.x}-${t.y}`;
+        await map.getByTestId(`owner-${at}`).waitFor({ timeout: PRESS_MS });
+        await map.getByTestId(`map-plot-${at}`).click({ timeout: PRESS_MS });
+        await dev.getByTestId('plot-title').filter({ hasText: plotName(t) }).waitFor({ timeout: PRESS_MS });
+        reads.push(await readPlotLook(map, `phone, another player's plot ${plotName(t)}`, { installed: true, selected: t, faded: true }));
+      }
+      return { reads, ms: Date.now() - started };
+    } finally {
+      for (const t of given) t.owner = null;
+      // The phone's turn runs on wall time, held or not: give back what these reads took.
+      game.devEndsAt.set('s1', (game.devEndsAt.get('s1') ?? game.ctx.now()) + Date.now() - started);
+      room.broadcast();
+    }
+  });
+  const fails = [own, ...theirs.reads].flatMap((r) => r.fails);
+  check(fails.length === 0, fails.join('\n'));
+  return `${[own, ...theirs.reads].map((r) => r.read).join('. ')}; held ${theirs.ms} ms`;
+}
+
+/** readPlotLook's read, failing with every check that failed. Returns a line for the log. */
+export async function checkPlotLook(map: Locator, where: string, want: LookWanted): Promise<string> {
+  const { read, fails } = await readPlotLook(map, where, want);
+  check(fails.length === 0, fails.join('\n'));
+  return read;
+}
+
+type LookWanted = { installed: boolean; selected?: Plot; faded?: boolean };
+
+/**
+ * B-AC-9 (WS4, plot look A) on one map, measured on screen as drawn, so a zoomed or scaled map shows the same shares:
+ * every owned plot paints an inset border of about a twelfth of its width (at least 2 px) in its owner's colour, a tint
+ * of 30% of that colour, and holds its owner's tab at about 0.46 of its width; every installed good sits on a disc of
+ * about 0.62. `selected` alone shows the ring, and the ring paints a band: inside the plot on the map's edge, outside it
+ * on every side elsewhere; the ring as painted and the pin lie at least SEEN inside the box the map is seen through, and
+ * never fade. With `faded`, the selected plot's tab is at FADED. Returns a line for the log and every check that failed.
+ */
+export async function readPlotLook(map: Locator, where: string, want: LookWanted): Promise<{ read: string; fails: string[] }> {
+  const id = `B-AC-9 (WS4, plot look A, ${where})`;
+  const fails: string[] = [];
+  const fail = (ok: boolean, message: string) => {
+    if (!ok) fails.push(`${id}: ${message}`);
+  };
+  const { clip, scale, colours, ringColour, plots: drawn } = await drawnMap(map, id);
+  check(drawn.length > 0, `${id}: the map draws its plots as map-plot-<x>-<y>, found none`);
+  const owned = drawn.filter((p) => /\bowned by player \d+\b/.test(p.label));
+  check(owned.length > 0, `${id}: the map has owned plots to measure`);
+  const tabs = owned.map((p) => {
+    const tab = p.marks.filter((m) => m.id === `owner-${p.at}`);
+    check(tab.length === 1, `${id}: the owned plot ${p.at} holds one owner's tab, found ${tab.length}`);
+    return tab[0]!.box.width / p.box.width;
+  });
+  fail(tabs.every((s) => Math.abs(s - LOOK_A.tab) <= SHARE_SLACK), `each owner's tab is ${LOOK_A.tab} ± ${SHARE_SLACK} of its plot, got ${shares(tabs)}`);
+  // The border and the tint are painted, not boxes: read them from the layer whose inset shadow is in the owner's colour.
+  const painted = owned.map((p) => {
+    const colour = rgbaOf(colours[Number(p.label.match(/\bowned by player (\d+)\b/)![1]) - 1] ?? '');
+    const layer = p.paint.find((c) => shadowsOf(c.boxShadow).some((s) => s.inset && sameColour(s.colour, colour)));
+    const border = layer && shadowsOf(layer.boxShadow).find((s) => s.inset && sameColour(s.colour, colour));
+    const tint = layer ? rgbaOf(layer.background) : null;
+    return { at: p.at, border: border ? border.spread : null, share: border ? (border.spread * scale) / p.box.width : null, tint, tinted: !!tint && sameColour(tint, colour) && Math.abs(tint.a - TINT.alpha) <= TINT.slack };
+  });
+  const unbordered = painted.filter((p) => p.border === null).map((p) => p.at);
+  fail(unbordered.length === 0, `each owned plot paints an inset border in its owner's colour, none on [${unbordered.join(', ')}]`);
+  const bordered = painted.filter((p) => p.share !== null);
+  fail(
+    bordered.every((p) => p.border! >= BORDER.minPx && Math.abs(p.share! - BORDER.share) <= BORDER.slack),
+    `each owner's border is a twelfth ± ${BORDER.slack} of its plot and at least ${BORDER.minPx} px, got ${bordered.map((p) => `${p.at} ${p.border} px ${p.share!.toFixed(3)}`).join(', ')}`,
+  );
+  const untinted = painted.filter((p) => p.border !== null && !p.tinted);
+  fail(untinted.length === 0, `each owned plot is tinted ${TINT.alpha * 100}% of its owner's colour, got ${untinted.map((p) => `${p.at} ${p.tint ? `rgb ${[p.tint.r, p.tint.g, p.tint.b].map(Math.round).join(' ')} at ${p.tint.a.toFixed(2)}` : 'none'}`).join(', ')}`);
+  const discs = drawn.flatMap((p) => p.marks.filter((m) => m.id === `installed-${p.at}`).map((m) => m.box.width / p.box.width));
+  fail(!want.installed || discs.length > 0, 'the map shows an installed good');
+  fail(discs.every((s) => Math.abs(s - LOOK_A.disc) <= SHARE_SLACK), `each installed good's disc is ${LOOK_A.disc} ± ${SHARE_SLACK} of its plot, got ${shares(discs)}`);
+  const borders = shares(bordered.map((p) => p.share!));
+  const read = `${where}: borders ${borders}, tabs ${shares(tabs)}, discs ${shares(discs) || 'none'} of a ${px(owned[0]!.box.width)} plot`;
+  if (!want.selected) return { read, fails };
+
+  const { x, y } = want.selected;
+  const at = `${x}-${y}`;
+  const rings = drawn.filter((p) => p.marks.some((m) => m.id === 'selected-ring'));
+  check(rings.length === 1 && rings[0]!.at === at, `${id}: the selected plot ${at} alone shows the selected ring, found it on [${rings.map((p) => p.at).join(', ')}]`);
+  const sel = rings[0]!;
+  const ring = sel.marks.find((m) => m.id === 'selected-ring')!;
+  const pin = sel.marks.find((m) => m.id === 'selected-pin');
+  const cells = drawn.map((p) => p.at.split('-').map(Number) as [number, number]);
+  const edge = x === 0 || y === 0 || x === Math.max(...cells.map(([cx]) => cx)) || y === Math.max(...cells.map(([, cy]) => cy));
+  // How far the ring's box reaches outside the plot's: left, top, right, bottom.
+  const out = [sel.box.x - ring.box.x, sel.box.y - ring.box.y, ring.box.x + ring.box.width - (sel.box.x + sel.box.width), ring.box.y + ring.box.height - (sel.box.y + sel.box.height)];
+  if (edge) fail(out.every((d) => d <= 0.5), `on the map's edge the selected ring lies inside plot ${at}, but reaches ${out.map(px).join(', ')} out (left, top, right, bottom)`);
+  else fail(out.every((d) => d > 0), `inside the map the selected ring reaches outside plot ${at} on every side, by ${out.map(px).join(', ')} (left, top, right, bottom)`);
+  const band = shadowsOf(ring.boxShadow).filter((s) => s.spread >= 1 && (s.colour?.a ?? 0) > 0);
+  fail(
+    band.some((s) => sameColour(s.colour, rgbaOf(ringColour))),
+    `the selected ring on ${at} paints a band in the holo colour (${RING_COLOUR}, ${ringColour}), got box-shadow "${ring.boxShadow}"`,
+  );
+  // An outset band paints beyond the ring's box by its spread.
+  const reach = Math.max(0, ...band.filter((s) => !s.inset).map((s) => s.spread)) * scale;
+  const ringSeen = onScreen({ x: ring.box.x - reach, y: ring.box.y - reach, width: ring.box.width + 2 * reach, height: ring.box.height + 2 * reach }, clip);
+  fail(ringSeen >= SEEN, `at least ${SEEN * 100}% of the selected ring on ${at}, as painted, is inside the map's visible box, got ${percent(ringSeen)}`);
+  const pinSeen = pin ? onScreen(pin.box, clip) : 0;
+  fail(!!pin && pin.visible && pinSeen >= SEEN, `the selected plot ${at} shows its pin, at least ${SEEN * 100}% inside the map's visible box, got ${pin ? percent(pinSeen) : 'no pin'}`);
+  fail(ring.opacity > 0.99 && (pin?.opacity ?? 0) > 0.99, `the selection never fades: the ring on ${at} draws at ${ring.opacity.toFixed(2)}, its pin at ${pin?.opacity.toFixed(2) ?? 'none'}`);
+  const tab = sel.marks.find((m) => m.id === `owner-${at}`);
+  if (want.faded) fail(!!tab && Math.abs(tab.opacity - FADED) <= 0.05, `another player's plot ${at} fades its tab to ${FADED}, got ${tab?.opacity.toFixed(2) ?? 'no tab'}`);
+  const faded = want.faded && tab ? `, its tab at ${tab.opacity.toFixed(2)}` : '';
+  return { read: `${read}; ${at} selected${edge ? ' on the edge' : ''}, ring ${percent(ringSeen)} and pin ${percent(pinSeen)} in view at ${ring.opacity.toFixed(2)}${faded}`, fails };
+}
+
+/** Every plot on the map with its marks and paint, in one read once its fades have run. Fails when the map has no root. */
+async function drawnMap(map: Locator, id: string): Promise<DrawnMap> {
+  const slots = ([0, 1, 2, 3, 4, 5] as Slot[]).map((s) => SLOT_COLOR[s]);
+  // Kept free of named functions: tsx's keepNames wraps them with `__name`, which the page lacks.
+  const drawn = await map.evaluate(async (el, { slotColours, ring }) => {
+    // A fade still running reads mid-way; the selection's glow breathes forever, but it is an animation, not a transition.
+    await Promise.all(el.getAnimations({ subtree: true }).filter((a) => a instanceof CSSTransition).map((a) => a.finished.catch(() => undefined)));
+    const root = el.querySelector<HTMLElement>('[data-testid=holo-map]');
+    if (!root) return null;
+    const r = root.getBoundingClientRect();
+    // The map clips at its padding box, inside its border, scaled as the map is.
+    const scale = r.width / root.offsetWidth;
+    const p = { left: r.x + root.clientLeft * scale, top: r.y + root.clientTop * scale, right: r.x + (root.clientLeft + root.clientWidth) * scale, bottom: r.y + (root.clientTop + root.clientHeight) * scale };
+    const v = root.closest('[data-testid=map-viewport]')?.getBoundingClientRect() ?? p;
+    const clip = { x: Math.max(p.left, v.left), y: Math.max(p.top, v.top), width: Math.min(p.right, v.right) - Math.max(p.left, v.left), height: Math.min(p.bottom, v.bottom) - Math.max(p.top, v.top) };
+    // Each slot's colour and the ring's as the page computes them, through the theme's variables.
+    const probe = document.body.appendChild(document.createElement('span'));
+    const [ringColour = '', ...colours] = [ring, ...slotColours].map((c) => {
+      probe.style.color = c;
+      return getComputedStyle(probe).color;
+    });
+    probe.remove();
+    const plots = [...root.querySelectorAll('[data-testid^="map-plot-"]')].map((t) => {
+      const b = t.getBoundingClientRect();
+      return {
+        at: (t.getAttribute('data-testid') ?? '').slice('map-plot-'.length),
+        label: t.getAttribute('aria-label') ?? '',
+        box: { x: b.x, y: b.y, width: b.width, height: b.height },
+        paint: [...t.children].map((c) => ({ boxShadow: getComputedStyle(c).boxShadow, background: getComputedStyle(c).backgroundColor })),
+        marks: [...t.querySelectorAll('[data-testid]')].map((m) => {
+          const k = m.getBoundingClientRect();
+          // What the eye gets: the product of the opacities of the mark and everything it sits in.
+          let opacity = 1;
+          for (let e: Element | null = m; e; e = e.parentElement) opacity *= Number(getComputedStyle(e).opacity);
+          return {
+            id: m.getAttribute('data-testid') ?? '',
+            box: { x: k.x, y: k.y, width: k.width, height: k.height },
+            visible: m.checkVisibility({ opacityProperty: true, visibilityProperty: true }),
+            opacity,
+            boxShadow: getComputedStyle(m).boxShadow,
+          };
+        }),
+      };
+    });
+    return { clip, scale, colours, ringColour, plots };
+  }, { slotColours: slots, ring: RING_COLOUR });
+  check(drawn, `${id}: map root not found (data-testid=holo-map)`);
+  return drawn;
+}
+
+/** A computed colour as Chromium writes it, rgb(), rgba() or color(srgb …), in 0-255 channels; null if it is none of those. */
+function rgbaOf(css: string): Rgba | null {
+  const legacy = css.match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/);
+  if (legacy) return { r: Number(legacy[1]), g: Number(legacy[2]), b: Number(legacy[3]), a: legacy[4] === undefined ? 1 : Number(legacy[4]) };
+  const srgb = css.match(/color\(srgb ([\d.e-]+) ([\d.e-]+) ([\d.e-]+)(?: \/ ([\d.]+))?\)/);
+  if (srgb) return { r: Number(srgb[1]) * 255, g: Number(srgb[2]) * 255, b: Number(srgb[3]) * 255, a: srgb[4] === undefined ? 1 : Number(srgb[4]) };
+  return null;
+}
+
+/** A computed box-shadow's layers: each one's colour, its spread in css px, and whether it is inset. */
+function shadowsOf(css: string): Shadow[] {
+  if (!css || css === 'none') return [];
+  // Layers are split on the commas outside a colour's parentheses.
+  const layers: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < css.length; i++) {
+    if (css[i] === '(') depth++;
+    else if (css[i] === ')') depth--;
+    else if (css[i] === ',' && depth === 0) {
+      layers.push(css.slice(start, i));
+      start = i + 1;
+    }
+  }
+  layers.push(css.slice(start));
+  return layers.map((layer) => {
+    const lengths = layer.replace(/[a-z-]+\([^)]*\)/g, '').match(/-?[\d.]+px/g) ?? [];
+    return { colour: rgbaOf(layer), spread: lengths.length >= 4 ? parseFloat(lengths[3]!) : 0, inset: /\binset\b/.test(layer) };
+  });
+}
+
+/** The same colour, give or take rounding; the alpha is not compared. */
+function sameColour(a: Rgba | null, b: Rgba | null): boolean {
+  return !!a && !!b && Math.abs(a.r - b.r) <= 2 && Math.abs(a.g - b.g) <= 2 && Math.abs(a.b - b.b) <= 2;
+}
+
+function shares(list: number[]): string {
+  return list.map((s) => s.toFixed(2)).join(', ');
+}
+
+function percent(share: number): string {
+  return `${(share * 100).toFixed(1)}%`;
+}
+
+/** The share of `b`'s area inside `clip`. */
+function onScreen(b: Box, clip: Box): number {
+  const w = Math.max(0, Math.min(b.x + b.width, clip.x + clip.width) - Math.max(b.x, clip.x));
+  const h = Math.max(0, Math.min(b.y + b.height, clip.y + clip.height) - Math.max(b.y, clip.y));
+  return (w * h) / (b.width * b.height);
 }
 
 /** A seat's plot count and its goods, written out good by good so two stocks compare as text. */
