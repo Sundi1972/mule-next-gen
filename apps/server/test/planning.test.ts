@@ -167,12 +167,13 @@ describe('FM-planning-all-ready: planning ends when every human is Ready, connec
 });
 
 describe("FM-planning-host-continue: the host's Continue ends planning proper; nothing else ends it early", () => {
-  it('FM-planning-host-continue: with one human Ready and the other not, Continue starts the land grant', () => {
+  it('FM-planning-host-continue: with one human Ready and the other not, Continue starts the land grant, where nobody is Ready yet', () => {
     const { game, ctx } = started();
     game.handle('s1', { type: 'ready' });
-    game.continuePlanning();
+    game.handle('s1', { type: 'continue' });
     expect(phase(game)).toBe('landGrant');
     expect(game.viewFor(null).phaseEndsAt).toBe(ctx.now() + PHASE_MS.landGrant);
+    for (const screen of screens(game)) expect(screen.players.map((p) => p.ready), "planning's Ready is not carried into the land grant").toEqual([false, false, false]);
   });
 
   it('FM-planning-host-continue: with a dropped human not Ready holding planning, Continue starts the land grant', () => {
@@ -181,7 +182,7 @@ describe("FM-planning-host-continue: the host's Continue ends planning proper; n
     game.handle('s1', { type: 'ready' });
     advance(TEN_MINUTES);
     expect(phase(game)).toBe('planning');
-    game.continuePlanning();
+    game.handle('s1', { type: 'continue' });
     expect(phase(game)).toBe('landGrant');
   });
 
@@ -194,7 +195,6 @@ describe("FM-planning-host-continue: the host's Continue ends planning proper; n
     for (let ms = 0; ms < ELECTION_BOUND_MS && election().stage !== 'over'; ms += WALK.tickMs) {
       if (!stages.has(election().stage)) {
         stages.add(election().stage);
-        refusedUnchanged(game, () => game.continuePlanning(), `Continue at the election's ${election().stage} stage`);
         refusedUnchanged(game, () => game.handle('s1', { type: 'continue' }), `the host's Continue at the election's ${election().stage} stage`);
       }
       advance(WALK.tickMs);
@@ -212,7 +212,6 @@ describe("FM-planning-host-continue: the host's Continue ends planning proper; n
     for (let i = 0; i < 30_000 && !(game.viewFor(null).month === 2 && phase(game) === 'planning'); i++) {
       if (phase(game) !== 'planning' && !tried.includes(phase(game))) {
         tried.push(phase(game));
-        refusedUnchanged(game, () => game.continuePlanning(), `Continue in ${phase(game)}`);
         refusedUnchanged(game, () => game.handle('s1', { type: 'continue' }), `the host's Continue in ${phase(game)}`);
       }
       advance(100);
@@ -247,7 +246,8 @@ describe("FM-planning-host-continue: the host's Continue ends planning proper; n
     [[], 'Heiko continued without Mia, Lena and Ossa'],
     [['s3'], 'Heiko continued without Mia and Ossa'],
     [['s2', 's3'], 'Heiko continued without Ossa'],
-  ] as const)("FM-planning-host-continue: with %j Ready, the host's Continue reads \"%s\": the humans not Ready, in seat order", (readies, line) => {
+    [['s2', 's3', 's4'], null],
+  ] as const)("FM-planning-host-continue: with %j Ready, the host's Continue starts the land grant and its news line, naming the humans not Ready in seat order, is %j", (readies, line) => {
     const fake = fakeContext({ table: fourHumans });
     const game = new MuleGame(fake.ctx, 7);
     game.start(fourHumans);
@@ -255,7 +255,8 @@ describe("FM-planning-host-continue: the host's Continue ends planning proper; n
     expect(phase(game)).toBe('planning');
     game.handle('s1', { type: 'continue' });
     expect(phase(game)).toBe('landGrant');
-    expect(news(game)[0]).toBe(line);
+    if (line) expect(news(game)[0]).toBe(line);
+    else expect(news(game).join(' | '), 'nobody was left waiting, so no line').not.toContain('continued');
   });
 
   it("FM-planning-host-continue: while Heiko's phone is locked, hosting passes to Mia: his Continue is refused, hers ends planning", () => {
