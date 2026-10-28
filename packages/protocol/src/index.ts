@@ -74,13 +74,22 @@ export interface PlayerView {
    * Public in every view, the TV's too. Only the total: its parts go to the player's own `me.worthParts` and nowhere else.
    */
   worth: number;
+  /**
+   * The `worth` this player's row showed at last month's end (upkeep), recorded then and never recomputed, so the
+   * change since last month is the number shown now against the number shown then. Null in month 1.
+   */
+  lastWorth: number | null;
   plots: number;
   ready: boolean;
   /** True once they went to the pub this development phase. */
   doneDeveloping: boolean;
   /** Where their colonist is in development, public like every place; null outside development. */
   colonist: ColonistView | null;
-  /** How hunger and sickness slow this colonist, during development; null otherwise. Public: every screen shows it. */
+  /**
+   * How hunger and sickness slow this colonist: live during development, then kept as the month's through its end
+   * (upkeep, and game over after the last month), where the month end names who went hungry. Null otherwise. Public:
+   * every screen shows it.
+   */
   condition: {
     /** 0..1 of the month's Food held (engine foodShare). */
     foodShare: number;
@@ -375,6 +384,8 @@ export interface MuleView {
   colonists: number;
   /** Colony air gauge 0 to 100 and its band. */
   air: { level: number; band: 'clean' | 'smoggy' | 'toxic' | 'collapse' };
+  /** The air level at last month's end (upkeep), as `air.level` showed it then; null in month 1. */
+  lastAir: number | null;
   ship: ShipView;
   /** The colony fund and the sales tax rate. */
   treasury: { money: number; salesTax: number };
