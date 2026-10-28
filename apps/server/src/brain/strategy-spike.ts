@@ -302,40 +302,66 @@ export interface Verdict {
   within: boolean;
   planPick: string | null;
   kind: StrategyKind | null;
+  /** Why an invalid reply is invalid, the first check it fails; null when valid. A code only, never reply text. */
+  cause: Cause | null;
+  /** Which bound a valid reply breaks, cash_floor first when it breaks both; null when within or invalid. */
+  bound: Bound | null;
 }
 
-const INVALID: Verdict = { valid: false, within: false, planPick: null, kind: null };
+/**
+ * Why a reply is invalid, checked in this order. refused and cut_off come from the stop reason; bad_shape is keys
+ * missing or extra, or a strategy or reason that is not of its JSON type.
+ */
+export const CAUSES = [
+  'refused',
+  'cut_off',
+  'not_json',
+  'bad_shape',
+  'bad_kind',
+  'bad_good',
+  'bad_cash_floor',
+  'reason_too_long',
+  'plan_not_offered',
+  'bad_line',
+] as const;
+export type Cause = (typeof CAUSES)[number];
+
+export const BOUNDS = ['cash_floor', 'corners'] as const;
+export type Bound = (typeof BOUNDS)[number];
+
+const invalid = (cause: Cause): Verdict => ({ valid: false, within: false, planPick: null, kind: null, cause, bound: null });
 const isObject = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
 const exactKeys = (o: Record<string, unknown>, keys: readonly string[]) => Object.keys(o).length === keys.length && keys.every((k) => k in o);
 const isGoodOrNull = (x: unknown): x is Good | null => x === null || (GOODS as readonly unknown[]).includes(x);
 
-/** Judges a reply's text against its brief. Quality here is only this, and agreement with Sonnet: no validator exists yet. */
-export function judgeReply(brief: Brief, text: string): Verdict {
+/**
+ * Judges a reply against its brief: valid or the first cause it fails, and for a valid one the bound it breaks.
+ * Quality here is only this, and agreement with Sonnet: no validator exists yet.
+ */
+export function judgeReply(brief: Brief, text: string, stopReason: StrategyReply['stopReason'] = 'end_turn'): Verdict {
+  if (stopReason === 'refusal') return invalid('refused');
+  if (stopReason === 'max_tokens') return invalid('cut_off');
   let reply: unknown;
   try {
     reply = JSON.parse(text);
   } catch {
-    return INVALID;
+    return invalid('not_json');
   }
-  if (!isObject(reply) || !exactKeys(reply, STRATEGY_SCHEMA.required)) return INVALID;
+  if (!isObject(reply) || !exactKeys(reply, STRATEGY_SCHEMA.required)) return invalid('bad_shape');
   const { strategy: st, planPick, line } = reply;
-  if (!isObject(st) || !exactKeys(st, STRATEGY_SCHEMA.properties.strategy.required)) return INVALID;
+  if (!isObject(st) || !exactKeys(st, STRATEGY_SCHEMA.properties.strategy.required)) return invalid('bad_shape');
   const { kind, moneyMaker, monopolyTarget, cashFloor, reason } = st;
-  const valid =
-    (STRATEGY_KINDS as readonly unknown[]).includes(kind) &&
-    isGoodOrNull(moneyMaker) &&
-    isGoodOrNull(monopolyTarget) &&
-    Number.isInteger(cashFloor) &&
-    typeof reason === 'string' &&
-    [...reason].length <= S.reasonChars &&
-    typeof planPick === 'string' &&
-    brief.plans.some((p) => p.id === planPick) &&
-    typeof line === 'string';
-  if (!valid) return INVALID;
+  if (!(STRATEGY_KINDS as readonly unknown[]).includes(kind)) return invalid('bad_kind');
+  if (!isGoodOrNull(moneyMaker) || !isGoodOrNull(monopolyTarget)) return invalid('bad_good');
+  if (!Number.isInteger(cashFloor)) return invalid('bad_cash_floor');
+  if (typeof reason !== 'string') return invalid('bad_shape');
+  if ([...reason].length > S.reasonChars) return invalid('reason_too_long');
+  if (typeof planPick !== 'string' || !brief.plans.some((p) => p.id === planPick)) return invalid('plan_not_offered');
+  if (typeof line !== 'string') return invalid('bad_line');
   const floor = cashFloor as number;
-  const noCorner = brief.corners || (monopolyTarget === null && kind !== 'monopolist');
-  const within = floor >= 0 && floor <= brief.money && noCorner;
-  return { valid, within, planPick: planPick as string, kind: kind as StrategyKind };
+  const cornered = !brief.corners && (monopolyTarget !== null || kind === 'monopolist');
+  const bound: Bound | null = floor < 0 || floor > brief.money ? 'cash_floor' : cornered ? 'corners' : null;
+  return { valid: true, within: bound === null, planPick, kind: kind as StrategyKind, cause: null, bound };
 }
 
 /** The calls in order: each of the first `sonnet` briefs Haiku then Sonnet, so the cap cannot starve the pairs; then Haiku alone. */
@@ -359,6 +385,10 @@ export interface StrategyLine extends Usage {
   usd: number;
   ms: number;
   outcome: StrategyOutcome;
+  /** An answered, invalid reply's cause; null when valid, timed out or failed. */
+  cause: Cause | null;
+  /** A valid reply's broken bound; null otherwise. */
+  bound: Bound | null;
 }
 
 /** One settled call, as the report needs it. */
@@ -370,7 +400,8 @@ export interface SettledCall {
   usd: number;
   output: number;
   thinking: number | null;
-  verdict: Verdict;
+  /** Null when no reply came back (timeout, error). */
+  verdict: Verdict | null;
 }
 
 export interface ModelRow {
@@ -397,6 +428,10 @@ export interface ModelRow {
   usdPerCall: number | null;
   /** usdPerCall × S.callsPerSeatGame. */
   seatGameUsd: number | null;
+  /** Answered calls per invalid cause. */
+  causes: Record<Cause, number>;
+  /** Valid answered calls per broken bound. */
+  bounds: Record<Bound, number>;
 }
 
 export interface StrategyReport {
@@ -449,18 +484,20 @@ function modelRow(role: ModelRole, calls: SettledCall[]): ModelRow {
     p50: ms.length === 0 ? null : nearest(ms, 0.5),
     p90: ms.length === 0 ? null : nearest(ms, 0.9),
     max: ms.length === 0 ? null : ms[ms.length - 1]!,
-    valid: share(answered.filter((c) => c.verdict.valid).length),
-    within: share(answered.filter((c) => c.verdict.within).length),
+    valid: share(answered.filter((c) => c.verdict?.valid).length),
+    within: share(answered.filter((c) => c.verdict?.within).length),
     meanOutput: mean(answered.map((c) => c.output)),
     meanThinking: mean(answered.flatMap((c) => (c.thinking === null ? [] : [c.thinking]))),
     usd,
     usdPerCall: perCall,
     seatGameUsd: perCall === null ? null : perCall * S.callsPerSeatGame,
+    causes: Object.fromEntries(CAUSES.map((k) => [k, calls.filter((c) => c.verdict?.cause === k).length])) as Record<Cause, number>,
+    bounds: Object.fromEntries(BOUNDS.map((k) => [k, calls.filter((c) => c.verdict?.bound === k).length])) as Record<Bound, number>,
   };
 }
 
 function pairsOf(calls: SettledCall[]): StrategyReport['pairs'] {
-  const valid = (role: ModelRole) => new Map(calls.filter((c) => c.role === role && c.verdict.valid).map((c) => [c.brief, c.verdict]));
+  const valid = (role: ModelRole) => new Map(calls.flatMap((c) => (c.role === role && c.verdict?.valid ? [[c.brief, c.verdict] as const] : [])));
   const haiku = valid('haiku');
   const both = [...valid('sonnet')].flatMap(([brief, s]) => (haiku.has(brief) ? [[haiku.get(brief)!, s] as const] : []));
   return { briefs: both.length, planPick: both.filter(([h, s]) => h.planPick === s.planPick).length, kind: both.filter(([h, s]) => h.kind === s.kind).length };
@@ -493,9 +530,9 @@ export async function runStrategySpike(options: RunOptions): Promise<StrategyRep
       failure = e ?? new Error('unknown error');
     }
     const failed = failure instanceof CallFailed ? failure : null;
-    const verdict = reply ? judgeReply(brief, reply.text) : INVALID;
-    const outcome: StrategyOutcome = reply
-      ? reply.stopReason === 'refusal'
+    const verdict = reply ? judgeReply(brief, reply.text, reply.stopReason) : null;
+    const outcome: StrategyOutcome = verdict
+      ? verdict.cause === 'refused'
         ? 'refused'
         : verdict.valid
           ? 'valid'
@@ -519,6 +556,8 @@ export async function runStrategySpike(options: RunOptions): Promise<StrategyRep
       usd,
       ms,
       outcome,
+      cause: verdict?.cause ?? null,
+      bound: verdict?.bound ?? null,
     });
     calls.push({ role, brief: brief.index, outcome, ms, usd, output: usage.output, thinking, verdict });
     ledgerUsd += usd;
@@ -576,6 +615,11 @@ export function renderReport(r: StrategyReport): string[] {
       usdText(m.seatGameUsd),
     ]),
   ]);
+  const causes = table([
+    ['invalid cause', ...r.models.map((m) => m.model)],
+    ...CAUSES.map((k) => [k, ...r.models.map((m) => String(m.causes[k]))]),
+    ...BOUNDS.map((k) => [`out of bounds: ${k}`, ...r.models.map((m) => String(m.bounds[k]))]),
+  ]);
   const pairs = table([
     ['briefs with both models valid', String(r.pairs.briefs)],
     ['plan pick agreement', `${r.pairs.planPick} of ${r.pairs.briefs}`],
@@ -590,6 +634,8 @@ export function renderReport(r: StrategyReport): string[] {
     ...totals,
     '',
     ...rows,
+    '',
+    ...causes,
     '',
     ...pairs,
     '',
