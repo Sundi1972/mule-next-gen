@@ -272,8 +272,10 @@ first match wins
   10 Game.viewFor                                          passed through; reads inside it untaped (RULE-3)
 
 the open step  a step stays open from its call until the next step opens. Microtasks that run after its synchronous
-               part (a promise handler reading the clock) still belong to it. The replay flushes microtasks after
-               each step, so they land in the same place.
+               part (a promise handler reading the clock) still belong to it, until an answer settles in that
+               drain. An answer opens its own step mid-drain, and later microtasks belong to the answer step. The
+               replay settles answers at the same points and flushes after each step, so both land in the same
+               place (AM-3).
 seq            the step's index in `events` among steps (0 = start). Notices and playbooks carry their step's seq.
 at             ms since `t0` (the room clock when the recorder was made), read by the recorder from the
                underlying clock at the step's opening. The game never sees that read.
@@ -312,7 +314,8 @@ RULE-3 · Clock and host reads: which are taped                    shape: decisi
      unread
 
 why  The room calls viewFor on every broadcast, a join and a pong. Those calls depend on the network, not on play,
-     so taping them would misalign the tape. Row 1 relies on viewFor never mutating state; T-AC-1 holds it.
+     so taping them would misalign the tape. Row 1 relies on viewFor never mutating state. Today MuleGame.viewFor reads neither clock nor host, so T-AC-6 forces a
+     view that reads the clock to prove the exclusion (AM-3).
 ```
 
 ```
@@ -322,7 +325,8 @@ inputs  what the inner decider's decide() did: returned a Choice, threw, or retu
 
   #  when                                  record (in the open step's `decides`, per seat, call n)  then
   1  returned a Choice (sync)              { seat, call, choice }                                   return it
-  2  threw (sync: 'busy', 'game over')     { seat, call, error: message ≤120 }                      rethrow
+  2  threw synchronously                   { seat, call, error: message ≤120 }                      rethrow
+     (the real decider is `async`, so 'busy' and 'game over' arrive through row 3 as a rejected promise)
   3  returned a promise                    { seat, call, pending: true }                            return a
                                            and later, when it settles, a new                        promise that
                                            'answer' step { seat, call, choice | error }             settles the same
@@ -464,7 +468,7 @@ JSON, one record per file, versioned by `v`. A replay reads only `v: 1`.
 | Retry, poison, page a human? | None retry. A write failure is a log line. A divergence or mismatch is the replay's answer: it exits 1 or 2 and names the step. Nothing pages. (C3, C5) |
 | Idempotency / delivery? | The file is written once per game, from `onGameOver`, which fires once (enterPhase returns early on gameOver). Its name carries t0 and the seed, so two games never share a file. (C4) |
 | What can race? | A decider promise against timers: ordered by RULE-1's step model, and checked in replay (RULE-6 step 3). Two games write different files. (C2, C3) |
-| What still works when it's broken? | Play. Recording is wrappers and in-memory appends. A recorder bug that throws inside a wrapper would end the room, so every wrapper does its own bookkeeping in try/catch, logs, marks the record `broken` and still calls the game. A broken record is not written. (C2) |
+| What still works when it's broken? | Play. Recording is wrappers and in-memory appends. A recorder bug that throws inside a wrapper would end the room, so every wrapper, and the game-over file write scheduled after it (AM-3), does its own bookkeeping in try/catch, logs, marks the record `broken` and still calls the game. A broken record is not written. (C2) |
 | How does an operator know it works? | A file per finished game in MULE_RECORD_DIR (default apps/server/data/records), and `pnpm --filter @mule/server replay <file>` prints "identical". |
 
 **Size, measured on paper:** the 100 ms ticks dominate (auction, land auction, election, AI development). That's
@@ -507,7 +511,7 @@ stay local.
 - **R-3, Node timer and promise semantics.** RULE-1 assumes a settled decider promise runs its handlers before the
   next timer callback, which holds in Node: microtasks drain between macrotasks. T-AC-1's positive control is the
   check. No spike needed.
-- **R-4, viewFor purity.** RULE-3 relies on views never mutating state. If one ever did, T-AC-6 would catch it.
+- **R-4, viewFor purity.** RULE-3 relies on views never mutating state. T-AC-6 proves the clock exclusion with a view forced to read the clock (AM-3); view purity itself rests on review.
 
 ## §8 · Amendments `[review-only]`
 
@@ -535,6 +539,16 @@ stay local.
   - (4) The notices no longer depend on recording. MuleGame keeps the open phase's notices (`phaseNotices()`) for
     the PhaseOutcome builders in every game; the recorder is only one listener. I chose a kept list over several
     listeners: the builders run inside MuleGame at the phase's end, so a list they read needs no wiring.
+- **AM-3 (2026-10-29, PR-1's code review):** four claims were false as built, and are now corrected. None changes the
+  design.
+  - (1) RULE-4 row 2: the real decider is `async`, so 'busy' and 'game over' arrive as rejections (row 3). The
+    behaviour was already right; T-AC-1 now covers a rejection.
+  - (2) RULE-1, the open step: an answer that settles mid-drain opens its own step, and the drain's later microtasks
+    go to it. The replay matches. T-AC-5 now replays its real-brain file to pin this.
+  - (3) RULE-3 and §7 R-4: no test could go red on the view exclusion, because views read no clock. T-AC-6 now forces
+    a view that reads the clock.
+  - (4) §4: the game-over write ran outside the guard, where a throw would end the whole server process. It now runs
+    inside the guard, and FM-REC-1 covers it.
 
 ## §9 · Ownership Boundaries `[handoff]`
 
