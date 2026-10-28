@@ -13,7 +13,7 @@ import { check, held, launch, PHONE, startServer, TV } from './harness';
 import { PRESS_MS } from './politics-steps';
 
 const SEED = seedFrom(process.env.MULE_E2E_SEED);
-// Full-length clocks: nominate is held and both phones end each stage with Done, so only the reveal's 3 s countdown waits.
+// Full-length clocks: both phones end announce and the ballot themselves, so only the ceremony runs on its clocks.
 const { server, base } = await startServer({ maxMonths: 1, seed: () => SEED });
 const browser = await launch();
 const errors: string[] = [];
@@ -51,7 +51,7 @@ try {
   const idOf = (name: string) => room().viewFor(null).seats.find((s) => s.name === name)!.id;
   const [lenaId, ossaId] = [idOf('Lena'), idOf('Ossa')];
 
-  // Nominate, with the clock held: the tie is set up through the server's state, then both run for Governor.
+  // Announce, with the clock held: the tie is set up through the server's state, then both run for Governor.
   await held(server, code, async () => {
     const s = state();
     // Politics is copied before every write (engine's edit()), so the setup copies it too.
@@ -81,10 +81,10 @@ try {
     check(Date.now() < deadline, `the server holds Lena's ballot for Ossa and Ossa's for Lena, got ${JSON.stringify(ballots())}`);
     await new Promise((r) => setTimeout(r, 20));
   }
-  await Promise.all(phones.map((p) => p.getByTestId('ready').click({ timeout: PRESS_MS })));
+  // Both ballots name a candidate for the one contested office, so both phones are Done and the ballot closes.
 
-  // The reveal, read with the clock held so the result stands while every screen is read.
-  await tv.getByTestId('tv-election').getByTestId('ballot-reveal').waitFor({ timeout: POLITICS.revealMs });
+  // The Governor's winner step, read with the clock held so it stands while every screen is read.
+  await tv.getByTestId('tv-election').getByTestId('how-governor').waitFor({ timeout: POLITICS.ceremony.introMs + POLITICS.ceremony.barsMs + PRESS_MS });
   await held(server, code, async () => {
     // The approved mock's words for a tie the Baron broke.
     const tieBroken = `A tie: Ossa, the Land Baron, broke it.`;
@@ -101,10 +101,10 @@ try {
       [ossa, 'Lena'],
     ] as const) {
       const text = await p.getByTestId('phone-election-result').innerText({ timeout: PRESS_MS });
-      const gov = /Governor\s*(.+?)\s*(\d+) votes · (.+?)\s*Sheriff/s.exec(text);
+      const gov = /Governor\s*(.+?)\s*(\d+) votes · ([^.]+\.)/s.exec(text);
       check(gov && gov[1] === name && gov[2] === '2' && gov[3] === tieBroken, `B-AC-4: ${name === 'You' ? 'Lena' : 'Ossa'}'s phone names ${name} Governor with 2 votes, "${tieBroken}", as the TV does: "${text}"`);
     }
-    const governor = state().politics!.election!.result!.governor;
+    const governor = state().politics!.election!.result!.governor!;
     check(governor.winner === lenaId && governor.how === 'baron', `B-AC-4: the server elects Lena by the Baron's ballot, got ${JSON.stringify(governor)}`);
     console.log(`✓ B-AC-4: 2–2, the Land Baron's ballot breaks the tie: Lena Governor with 2 votes and "${how}" on the TV and both phones; the server's how is "${governor.how}"`);
   });

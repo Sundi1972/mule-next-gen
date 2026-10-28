@@ -3,7 +3,7 @@ import { ConditionTag, ThoughtBubble, waddleSeconds, type Condition, type FoodEa
 import { Creature } from './Creature';
 import { GoodIcon } from './GoodIcon';
 import { Mule } from './Mule';
-import { useSeatSpecies } from './species';
+import { useSeatSpecies, type CreatureWrap } from './species';
 import { cx, GOOD_NAME, SLOT_COLOR, type Good, type Slot } from './tokens';
 
 /** Outfitters for farms and mines, in the order the store shows them. */
@@ -103,6 +103,8 @@ export interface StoreInteriorProps {
   tv?: boolean;
   /** The shell's wide layout (laptop and up): bigger type and creatures. */
   wide?: boolean;
+  /** Wraps the colonist's creature, such as in a chat bubble's anchor. */
+  wrapCreature?: CreatureWrap;
 }
 
 /**
@@ -112,7 +114,7 @@ export interface StoreInteriorProps {
  * airlock door to the colony at each end. It fills whatever stage it is given. The room the guide names glows and
  * says TAP; a closed room stays legible and says why.
  */
-export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onShop, onDoor, next = [], locks, me, paceRule, overlay, tv = false, wide = false }: StoreInteriorProps) {
+export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onShop, onDoor, next = [], locks, me, paceRule, overlay, tv = false, wide = false, wrapCreature }: StoreInteriorProps) {
   const usable = (s: Shop) => !open || open.includes(s);
   const tap = (s: Shop) => (onShop ? () => onShop(s) : undefined);
   const cost = (s: Shop) => (prices[s] === undefined ? null : `${prices[s]} cr`);
@@ -267,7 +269,7 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onSho
         <Door side="R" onTap={onDoor} next={glows('doorR')} z={z} />
       </div>
 
-      {me && <Colonist me={me} at={SPOT[spotFor(me.leading)]} paceRule={paceRule} size={size} z={z} />}
+      {me && <Colonist me={me} at={SPOT[spotFor(me.leading)]} paceRule={paceRule} size={size} z={z} wrap={wrapCreature} />}
       {overlay}
     </div>
   );
@@ -380,7 +382,7 @@ export interface Visitor {
  * Your colonist on the floor, leading your MULE, with its condition at its shoulder (AM-14). Before R1 it stands at the
  * room it used and never walks, so the waddle and the MULE's walk cycle (C14) wait for `moving`.
  */
-function Colonist({ me, at, paceRule, size, z }: { me: Visitor; at: { x: number; y: number }; paceRule: PaceRule | undefined; size: keyof typeof SIZES; z: Sizes }) {
+function Colonist({ me, at, paceRule, size, z, wrap = (_, c) => c }: { me: Visitor; at: { x: number; y: number }; paceRule: PaceRule | undefined; size: keyof typeof SIZES; z: Sizes; wrap?: CreatureWrap | undefined }) {
   const species = useSeatSpecies(me.slot);
   const left = at.x > 50;
   const condition = me.condition ?? null;
@@ -390,7 +392,9 @@ function Colonist({ me, at, paceRule, size, z }: { me: Visitor; at: { x: number;
         className={cx('flex items-end', left && 'flex-row-reverse', me.moving && 'animate-[store-waddle_0.36s_ease-in-out_infinite]')}
         style={me.moving ? { animationDuration: `${waddleSeconds(condition?.conditionPace ?? 1)}s` } : undefined}
       >
-        <span className="relative rounded-full ring-2 ring-holo ring-offset-1 ring-offset-table">
+        {wrap(
+          me.id,
+          <span className="relative rounded-full ring-2 ring-holo ring-offset-1 ring-offset-table">
           <Creature species={species} color={SLOT_COLOR[me.slot]} size={z.creature} />
           {paceRule && (
             <>
@@ -398,7 +402,8 @@ function Colonist({ me, at, paceRule, size, z }: { me: Visitor; at: { x: number;
               <ThoughtBubble id={me.id} condition={condition} rule={paceRule} moving={!!me.moving} clockStartsAt={me.clockStartsAt} size={size} edge={at.x < 15 ? 'left' : at.x > 85 ? 'right' : undefined} />
             </>
           )}
-        </span>
+          </span>,
+        )}
         {me.leading && <Mule size={z.led} state={me.moving ? 'walk' : 'idle'} good={me.leading === 'empty' ? null : me.leading} owner={me.slot} facing={left ? 'left' : 'right'} />}
       </span>
     </div>

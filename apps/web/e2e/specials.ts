@@ -13,11 +13,11 @@
  * that hangs over a neighbour selects the neighbour. Each badge is drawn at its density's size, and never over the
  * owner's mark of the plot it hangs into.
  */
-import { createGame, POLITICS, type GameState, type Tile } from '@mule/engine';
+import { createGame, type GameState, type Tile } from '@mule/engine';
 import type { Locator, Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
-import { check, claimAPlot, launch, PHONE, startServer, TV } from './harness';
-import { readyThroughTheElection } from './politics-steps';
+import { check, CLAIM_MS, claimAPlot, doneWithLand, launch, PHONE, startServer, TV } from './harness';
+import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
 import { checkGlyphs as checkGlyphsOf, checkSpecialLine as checkSpecialLineOf, plotName, specialsOn, tapOnTheOverhang, tapPlot as tapPlotOf, type Density } from './special-steps';
 
 /** Seed 93 with two seats: a 13×7 map with ruins on the top row (7,0), a crystal cavern inside (10,3) and an oasis on the bottom edge (9,6). */
@@ -110,7 +110,7 @@ try {
 
   // Land grant: when the light reaches the special plot, the lit card says what it is, and both maps still draw it.
   // Through month 1's election first when the table plays politics; with politics off this is one press.
-  await readyThroughTheElection(phone, POLITICS.nominateMs + POLITICS.ballotMs + POLITICS.revealMs + READY_MS + SHOWN_MS);
+  await readyThroughTheElection(phone, ELECTION_WAIT_MS + READY_MS + SHOWN_MS);
   const grant = phone.locator('[data-phase=landGrant]');
   await grant.waitFor({ timeout: SHOWN_MS });
   const lit = grant.getByTestId('lit').filter({ hasText: plotName(firstLit) });
@@ -120,7 +120,8 @@ try {
   await checkGlyphs(tv.locator('[data-phase=landGrant]'), 'TV, land grant', 'tv');
 
   // Development: the plot card of a tapped special plot says what it is.
-  await claimAPlot(phone, PHASE_MS.landGrant + 3_000, 'the phone claims a plot, so the land grant can end');
+  await claimAPlot(phone, CLAIM_MS, 'the phone claims a plot');
+  await doneWithLand(phone);
   const dev = phone.locator('[data-phase=development]');
   await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: REACH_DEVELOPMENT_MS });
   const devMap = dev.getByTestId('dev-map');

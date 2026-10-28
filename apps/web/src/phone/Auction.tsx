@@ -1,6 +1,7 @@
 import type { AuctionView } from '@mule/protocol';
 import { Button, cx, GOOD_NAME, GoodTag, TimeBar, WalkBoard } from '@mule/ui';
 import { boardWalkers, dealLine, LineReadout, SIDE_WORD, skippedLine, StatusTable, StoreBox, toggleSide } from '../components/AuctionParts';
+import { speakerAt } from '../chat/Chat';
 import { PHASE_NAME } from '../game/derive';
 import { useAuctionSound } from '../game/sound';
 import { useClient } from '../net/react';
@@ -211,6 +212,7 @@ export function Auction() {
           storeStock={auction.storeForSale}
           marks={{ ask: true, bid: true }}
           meId={me.id}
+          wrapCreature={speakerAt}
           {...(onBoard ? { onDir: (d: -1 | 0 | 1) => walk(stepDir(d)) } : {})}
           className="min-h-0 flex-1"
         />

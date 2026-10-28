@@ -79,11 +79,9 @@ export function player(view: MuleView, id: string | null | undefined): PlayerVie
   return view.players.find((p) => p.id === id);
 }
 
-/** Public standings by money, best first. Scores replace money once the game is over. */
+/** Public standings by Worth, each player's score if the game ended now, best first. At game over Worth is the final score. */
 export function standings(view: MuleView): { player: PlayerView; slot: Slot; value: number }[] {
-  return view.players
-    .map((p) => ({ player: p, slot: toSlot(p.slot), value: view.scores?.find((s) => s.id === p.id)?.score ?? p.money }))
-    .sort((a, b) => b.value - a.value);
+  return view.players.map((p) => ({ player: p, slot: toSlot(p.slot), value: p.worth })).sort((a, b) => b.value - a.value);
 }
 
 /** The colony verdict at game over, in one line everyone can repeat at the table. Air in Collapse fails it. */
@@ -155,6 +153,7 @@ export const SPECIAL_EFFECT: Record<SpecialKind, string> = {
   geyser: `+${FX.geyser} Water or Energy.`,
   oasis: `+${FX.oasis} Food.`,
   relic: `+${FX.relic} to every working plot touching it, anyone's.`,
+  meteorCrater: `Crystite rated ${MAP.meteorCrater.crystite}, the top of the scale. Left by a meteor; what stood here was destroyed.`,
 };
 
 /** What this plot's special field does, without its name. A ruin says which salvage it holds, since the map drew it. */

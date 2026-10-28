@@ -417,6 +417,7 @@ function specialFields(f: Facts): Violation[] {
 function misplaced(f: Facts, t: Tile): string | undefined {
   const { kind, salvage } = t.special!;
   const { special } = MAP;
+  if (kind === 'meteorCrater') return 'forms only in play, never with the map';
   if (t.terrain === 'river' || t.terrain === 'lake' || t.terrain === 'store') return `is on ${t.terrain}`;
   if (f.store && neighbours(f.map.tiles, f.map.width, f.store).includes(t)) return 'touches the store';
   const allowed: readonly Terrain[] = special.on[kind];

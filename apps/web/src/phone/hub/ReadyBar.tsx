@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { toSlot } from '../../game/derive';
 import { useClient } from '../../net/react';
 import { usePhoneGame } from '../game';
-import { connectedIn, namesOf, planningProper, press, readyFooter, viewerFirst, type Press, type Seat } from './ready';
+import { connectedIn, continueQuestion, hostMayContinue, press, readyFooter, viewerFirst, type Press, type Seat } from './ready';
 
 /** The ready count, where the clock used to be: planning has none. */
 export function ReadyCount({ players, tv = false }: { players: readonly PlayerView[]; tv?: boolean }) {
@@ -44,7 +44,7 @@ export function ReadyBar() {
   const client = useClient();
   const { table, view, self } = usePhoneGame();
   const [confirm, setConfirm] = useState(false);
-  const footer = readyFooter({ me: self.id, players: view.players, hostId: table.hostId, connected: connectedIn(table.seats), planningProper: planningProper(view), confirm });
+  const footer = readyFooter({ me: self.id, players: view.players, hostId: table.hostId, connected: connectedIn(table.seats), mayContinue: hostMayContinue(view), confirm });
   const on = (pressed: Press) => () => {
     const next = press(confirm, pressed);
     setConfirm(next.confirm);
@@ -78,9 +78,7 @@ export function ReadyBar() {
       )}
       {footer.host === 'confirm' && (
         <div className="flex flex-col gap-2 rounded-panel border border-warn/60 bg-panel p-2.5 @min-[1100px]/shell:p-4" role="alertdialog" aria-label="Continue without them?" data-testid="continue-confirm">
-          <p className="text-sm @min-[1100px]/shell:text-base">
-            End planning for everyone now? {namesOf(others, null)} stop{others.length === 1 ? 's' : ''} where they are, and the land grant starts.
-          </p>
+          <p className="text-sm @min-[1100px]/shell:text-base">{continueQuestion(view.politics?.election?.stage, others)}</p>
           <div className="flex gap-2">
             <Button size="md" className="flex-1" onClick={on('continue-now')} data-testid="continue-now">
               Continue now

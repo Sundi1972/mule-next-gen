@@ -1,6 +1,7 @@
 import { COLONY_SELLER } from '@mule/engine';
 import type { LandAuctionView, MuleView, TableView } from '@mule/protocol';
 import { cx, GOOD_NAME, HoloMap, MuleIcon, PlayerMark, TERRAIN_NAME, TimeBar, WalkBoard, type Slot } from '@mule/ui';
+import { tvSpeakerAt } from '../chat/Chat';
 import { lotWalkers, lotWhat, sellerName } from '../components/AuctionParts';
 import { mapTiles, plotName, slotOf, tileAt } from '../game/derive';
 import { TvHeader } from './TableApp';
@@ -49,6 +50,7 @@ export function TvLandAuction({ table, game, lot }: { table: TableView<MuleView>
               shipPays={null}
               lines={[{ id: 'min', label: 'MIN', price: lot.lot.minimum }]}
               marks={{ ask: false, bid: true }}
+              wrapCreature={tvSpeakerAt}
               className="min-h-0 flex-1"
             />
           </div>

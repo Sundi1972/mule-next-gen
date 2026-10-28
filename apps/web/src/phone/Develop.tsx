@@ -3,6 +3,7 @@ import type { TileView } from '@mule/protocol';
 import { AirGauge, Button, cx, GOOD_NAME, GoodIcon, hungerLevel, HoloMap, MuleIcon, paceLine, PlayerMark, SharedClock, sickReason, StoreInterior, TERRAIN_NAME, YourPace, ZoomMap, type Condition, type FoodEaten, type PaceRule, type Shop } from '@mule/ui';
 import { useEffect, useState } from 'react';
 import { mapTiles, PHASE_NAME, plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
+import { speakerAt } from '../chat/Chat';
 import { SpecialLine } from '../components/SpecialLine';
 import { useClient, useServerNow } from '../net/react';
 import { usePhoneGame } from './game';
@@ -230,6 +231,7 @@ export function Develop() {
               locks={guide.locks}
               me={{ id: me.id, slot, leading: carry, condition, food, clockStartsAt }}
               paceRule={DEV_WALK}
+              wrapCreature={speakerAt}
               overlay={filling && <FillCard condition={condition} rule={DEV_WALK} food={food} />}
             />
           </div>
