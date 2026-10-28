@@ -498,13 +498,13 @@ function MonthEnd({ game }: { game: MuleView }) {
           </span>
         </div>
       </div>
-      <Scores game={game} />
+      <TvStandings game={game} />
     </>
   );
 }
 
 /** The big screen at the end: everyone's total, readable from across the room. Totals only: goods are private. */
-function TvGameOver({ game }: { game: MuleView }) {
+export function TvGameOver({ game }: { game: MuleView }) {
   const ranks = standings(game);
   const winner = ranks[0];
   const v = colonyVerdict(game.air);
@@ -546,9 +546,10 @@ function TvGameOver({ game }: { game: MuleView }) {
   );
 }
 
-function Scores({ game }: { game: MuleView }) {
+/** The month-end standings beside the map, best first. */
+export function TvStandings({ game }: { game: MuleView }) {
   return (
-    <div className="flex flex-col gap-2 rounded-panel border border-holo-line bg-panel p-4">
+    <div className="flex flex-col gap-2 rounded-panel border border-holo-line bg-panel p-4" data-testid="tv-standings">
       <span className="label-caps">Standings · money</span>
       <ol className="flex flex-col gap-2">
         {standings(game).map((s, i) => (
