@@ -77,8 +77,8 @@ export async function theMonthEndHoldsForThePhone(ctx: GameStepContext, month: n
 
 /**
  * B-AC-12 at a month end, read off the phone and the TV against the server's view: both rank by Worth with the lead
- * line; each change cell is this Worth less the one the TV showed at `last` month's end, or with no `last` (month 1)
- * says there is no last month; the TV names who went hungry, says whether the colonists were fed, and gives the air
+ * line; each change cell is this Worth less the one the TV showed at `last` month's end, and with no `last` (month 1)
+ * there is no change column; the TV names who went hungry, says whether the colonists were fed, and gives the air
  * against last month or says there is none yet; the phone's own lines add up to its Worth, and no other screen
  * carries them. The change formula itself is proven at the server (T-AC-15) and in markup (month-end.test.ts).
  */
@@ -110,12 +110,14 @@ export async function theLeagueTableAtTheMonthEnd(ctx: GameStepContext, last?: M
     const lead = top.worth === second.worth ? null : `${top.id === self && screen === 'phone' ? 'You' : top.name} ${top.id === self && screen === 'phone' ? 'lead' : 'leads'} by ${fmt(top.worth - second.worth)} cr`;
     const said = await text(where.getByTestId('leader-line'));
     check(lead === null ? said.endsWith('are level') : said === lead, `B-AC-12: the ${screen}'s lead line reads "${said}", want "${lead ?? '… are level'}"`);
+    if (!last) {
+      // Month 1 has no last month: no change column at all.
+      const drawn = await where.locator('[data-testid="change-head"], [data-testid^="change-"]').count();
+      check(truth.players.every((p) => p.lastWorth === null) && drawn === 0, `B-AC-12: in month 1 the ${screen} draws no change column, found ${drawn} change elements`);
+    }
     for (const p of truth.players) {
+      if (!last) break;
       const shown = await text(where.getByTestId(`change-${p.id}`));
-      if (!last) {
-        check(p.lastWorth === null && shown === '—', `B-AC-12: in month 1 the ${screen}'s change for ${p.name} says there is no last month, got "${shown}" (lastWorth ${p.lastWorth})`);
-        continue;
-      }
       // Against what the TV showed at last month's end, not the server's record: the number shown then.
       const change = p.worth - last.worth[p.id]!;
       check(shown === changeWords(change), `B-AC-12: the ${screen}'s change for ${p.name} reads "${shown}", want ${changeWords(change)} (${p.worth} now, ${last.worth[p.id]} shown at month ${last.month}'s end)`);
