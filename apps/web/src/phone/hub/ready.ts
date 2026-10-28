@@ -58,7 +58,7 @@ export interface FooterIn {
 export interface Footer {
   /** The viewer is Ready, as the server has it. */
   ready: boolean;
-  /** Before Ready: everyone still planning, the viewer first. Once Ready: everyone else still planning. */
+  /** Before Ready: everyone still planning. Once Ready: everyone else still planning. In seat order. */
   waiting: Seat[];
   /** The host's way to end planning without the rest: none, the Continue button, or its confirmation. */
   host: 'none' | 'continue' | 'confirm';
@@ -68,7 +68,7 @@ export interface Footer {
 export function readyFooter({ me, players, hostId, connected, planningProper, confirm }: FooterIn): Footer {
   const all = stillPlanning(players, connected);
   const ready = !!players.find((p) => p.id === me)?.ready;
-  if (!ready) return { ready, waiting: viewerFirst(all, me), host: 'none' };
+  if (!ready) return { ready, waiting: all, host: 'none' };
   const others = all.filter((s) => s.id !== me);
   const canContinue = me === hostId && planningProper && others.length > 0;
   return { ready, waiting: others, host: !canContinue ? 'none' : confirm ? 'confirm' : 'continue' };
