@@ -198,8 +198,8 @@ describe('RULE-6: cavern collapse', () => {
 
   // Thousands of production runs, to measure the rate; past vitest's 5 s default on a CI runner.
   it('T-AC-6: a cavern’s collapse is the same on replay, and comes about 6 times in 100', () => {
-    // About half the months have an event, one draw a month: volcanic ash at 0.5, every other row production's start
-    // rolls at 0. A per-plot row, the cavern's own, keeps its odds.
+    // About half the months have an event, one draw a month: volcanic ash at 0.5, every other row that production's
+    // start rolls at 0. A per-plot row, the cavern's own, keeps its odds.
     const rows = [...Object.values(EVENTS.colony), ...Object.values(EVENTS.player)].filter((row: EventRow) => 'production' in row.phases && !row.perPlot);
     const saved = rows.map((row) => ({ ...row }));
     const reset = (row: object, fields: object) => {
