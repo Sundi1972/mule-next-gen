@@ -55,7 +55,8 @@ function toFirstStatus() {
 /** The phone's auction screen for this seat, drawn from the server's view of it. */
 function phoneScreen(view: MuleView, seatId: string): string {
   const self = view.players.find((p) => p.id === seatId)!;
-  const client = { intent: () => {} } as unknown as TableClient;
+  // The shell's chat block reads the client too: nothing said yet.
+  const client = { intent: () => {}, subscribe: () => () => {}, getState: () => ({ chat: [], view: null, seatId }) } as unknown as TableClient;
   const screen = createElement(Auction);
   const game = createElement(PhoneGameProvider, { value: { table: {} as TableView<MuleView>, view, me: view.me!, self, slot: self.slot as Slot }, children: screen });
   return renderToStaticMarkup(createElement(ClientProvider, { client, children: game }));

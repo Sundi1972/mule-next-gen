@@ -1,6 +1,7 @@
 import { COLONY_SELLER } from '@mule/engine';
 import type { LandAuctionView, MuleView } from '@mule/protocol';
 import { Button, cx, HoloMap, TimeBar, WalkBoard } from '@mule/ui';
+import { speakerAt } from '../chat/Chat';
 import { LeaderBox, LotCard, lotWalkers, sellerName } from '../components/AuctionParts';
 import { mapTiles, PHASE_NAME, plotName } from '../game/derive';
 import { useClient } from '../net/react';
@@ -87,6 +88,7 @@ export function LandAuction() {
       marks={{ ask: false, bid: true }}
       stage="walk"
       meId={self.id}
+      wrapCreature={speakerAt}
       {...(onBoard ? { onDir: walk } : {})}
       className="min-h-0 flex-1"
     />

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { Creature } from './Creature';
-import { useSeatSpecies } from './species';
+import { useSeatSpecies, type CreatureWrap } from './species';
 import { cx, SLOT_COLOR, type Slot } from './tokens';
 
 export interface BoardWalker {
@@ -82,6 +82,7 @@ export function WalkBoard({
   meId,
   onDir,
   size = 'phone',
+  wrapCreature,
   className,
 }: {
   lo: number;
@@ -101,6 +102,8 @@ export function WalkBoard({
   meId?: string;
   onDir?: (dir: -1 | 0 | 1) => void;
   size?: 'phone' | 'tv';
+  /** Wraps each walker's creature, such as in a chat bubble's anchor. */
+  wrapCreature?: CreatureWrap;
   className?: string;
 }) {
   const tv = size === 'tv';
@@ -268,7 +271,17 @@ export function WalkBoard({
 
           {walkers.map((w) =>
             w.side === 'pass' ? null : (
-              <Walker key={w.id} w={w} left={x(centre(w.id))} top={pct(w.at)} size={creature} tv={tv} me={w.id === meId} trading={deals.some((d) => d.buyer === w.id || d.seller === w.id)} />
+              <Walker
+                key={w.id}
+                w={w}
+                left={x(centre(w.id))}
+                top={pct(w.at)}
+                size={creature}
+                tv={tv}
+                me={w.id === meId}
+                trading={deals.some((d) => d.buyer === w.id || d.seller === w.id)}
+                wrap={wrapCreature}
+              />
             ),
           )}
         </div>
@@ -325,7 +338,7 @@ function AxisTag({ top, price, tone, tv, testid }: { top: number; price: number;
   );
 }
 
-function Walker({ w, left, top, size, tv, me, trading }: { w: BoardWalker; left: string; top: number; size: number; tv: boolean; me: boolean; trading: boolean }) {
+function Walker({ w, left, top, size, tv, me, trading, wrap = (_, c) => c }: { w: BoardWalker; left: string; top: number; size: number; tv: boolean; me: boolean; trading: boolean; wrap?: CreatureWrap | undefined }) {
   const species = useSeatSpecies(w.slot);
   const seller = w.side === 'seller';
   return (
@@ -336,9 +349,12 @@ function Walker({ w, left, top, size, tv, me, trading }: { w: BoardWalker; left:
       data-side={w.side}
     >
       <span className="relative flex flex-col items-center">
-        <span className={cx('relative rounded-full', trading && 'animate-pulse-glow', me && 'ring-2 ring-holo ring-offset-2 ring-offset-void')}>
-          <Creature species={species} color={SLOT_COLOR[w.slot]} size={size} />
-        </span>
+        {wrap(
+          w.id,
+          <span className={cx('relative rounded-full', trading && 'animate-pulse-glow', me && 'ring-2 ring-holo ring-offset-2 ring-offset-void')}>
+            <Creature species={species} color={SLOT_COLOR[w.slot]} size={size} />
+          </span>,
+        )}
         {w.units !== undefined && (
           <span
             data-num
