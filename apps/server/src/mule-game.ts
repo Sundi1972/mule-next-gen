@@ -81,7 +81,7 @@ import { electionNews, myPoliticsView, politicsView, resultShown } from './polit
 export const PHASE_MS: Record<Exclude<Phase, 'gameOver' | 'auction' | 'landAuction'>, number> = {
   planning: 45_000,
   landGrant: 60_000,
-  development: (DEVELOPMENT.fullSeconds + 5) * 1_000,
+  development: DEVELOPMENT.fullSeconds * 1_000,
   production: 15_000,
   upkeep: 8_000,
 };
@@ -153,8 +153,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private readonly doneForAway = new Set<string>();
   /** Trades between players in the good that is up, for the news when it closes. */
   private dealsInGood: Trade[] = [];
-  /** When each player's development time runs out, epoch ms. */
-  private readonly devEndsAt = new Map<string, number>();
+  /** When the one development clock runs out for every seat, epoch ms; null outside development. */
+  private devEndsAt: number | null = null;
+  /** Until when each seat's colonist stands on a plot for a geo analysis, epoch ms. */
+  private readonly assayUntil = new Map<string, number>();
   private cancels: (() => void)[] = [];
   private news: string[] = [];
   private phaseEndsAt: number | null = null;
@@ -230,30 +232,29 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         if (grantDone(state)) this.nextPhase();
         return;
       case 'buyMule':
-        this.requireTime(seatId);
+        this.requireFree(seatId);
         buyMule(state, seatId);
         return;
       case 'outfit':
-        this.requireTime(seatId);
+        this.requireFree(seatId);
         outfitMule(state, seatId, intent.outfit);
         return;
       case 'install':
-        this.requireTime(seatId);
+        this.requireFree(seatId);
         installMule(state, seatId, intent.x, intent.y);
         return;
       case 'analyse': {
-        this.requireTime(seatId);
+        this.requireFree(seatId);
         const seconds = analysePlot(state, seatId, intent.x, intent.y);
-        this.devEndsAt.set(seatId, this.devEndsAt.get(seatId)! - seconds * 1_000);
-        this.checkDevelopmentOver();
+        this.assayUntil.set(seatId, this.ctx.now() + this.realMs(seconds));
         return;
       }
       case 'filter':
-        this.requireTime(seatId);
+        this.requireFree(seatId);
         fitFilter(state, seatId, intent.x, intent.y);
         return;
       case 'pub': {
-        const payout = visitPub(state, seatId, this.requireTime(seatId));
+        const payout = visitPub(state, seatId, this.requireFree(seatId));
         this.addNews(`${this.nameOf(seatId)} went to the pub and won ${payout}.`);
         this.checkDevelopmentOver();
         return;
@@ -290,12 +291,27 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     }
   }
 
-  /** Seconds of development time this player has left; throws when it has run out. */
-  private requireTime(seatId: string): number {
-    const ends = this.devEndsAt.get(seatId);
-    const left = ends === undefined ? 0 : (ends - this.ctx.now()) / 1_000;
+  /** Game seconds left on the development clock for a colonist free to act; throws when time is up or it is busy. */
+  private requireFree(seatId: string): number {
+    const left = this.secondsLeft(this.ctx.now());
     if (left <= 0) throw new RuleError('Your development time is up');
+    if ((this.assayUntil.get(seatId) ?? 0) > this.ctx.now()) throw new RuleError('Still assaying');
     return left;
+  }
+
+  /** Game seconds left on the development clock at `at`, epoch ms; 0 outside development. */
+  private secondsLeft(at: number): number {
+    return this.devEndsAt === null ? 0 : this.gameSeconds(this.devEndsAt - at);
+  }
+
+  /** Real ms that `seconds` of game time last at this table's phaseScale, in whole ms like the server's clock. */
+  private realMs(seconds: number): number {
+    return Math.round(seconds * 1_000 * this.phaseScale);
+  }
+
+  /** Game seconds that `ms` of real time stand for at this table's phaseScale. */
+  private gameSeconds(ms: number): number {
+    return ms / 1_000 / this.phaseScale;
   }
 
   private nameOf(seatId: string): string {
@@ -344,7 +360,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const state = this.requireState();
     if (state.phase !== 'development') return false;
     const p = state.players.find((q) => q.id === seatId);
-    return !!p?.doneDeveloping || (this.devEndsAt.get(seatId) ?? 0) <= this.ctx.now();
+    return !!p?.doneDeveloping || (this.devEndsAt ?? 0) <= this.ctx.now();
   }
 
   /** Development ends once every player, AI included, is at the pub or out of time. */
@@ -399,6 +415,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       this.scheduleElectionTick(this.ctx.now());
       return;
     }
+    if (state.phase === 'development') {
+      this.startDevelopment();
+      return;
+    }
     this.startPhaseTimer(state.phase);
 
     if (state.phase === 'planning') this.startPlanning();
@@ -406,7 +426,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       this.aiGrantBids();
       this.scheduleGrantTick();
     }
-    if (state.phase === 'development') this.startDevelopment();
     if (state.phase === 'production') this.reportProduction();
     if (state.phase === 'upkeep') this.reportUpkeep();
   }
@@ -516,20 +535,31 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     }
   }
 
-  /** Each player gets their own clock: Food, sickness and analyses set how long they have. */
+  /** One clock for every seat, DEVELOPMENT.fullSeconds long: hunger and sickness slow the walk, never the clock. */
   private startDevelopment(): void {
     const state = this.requireState();
     const now = this.ctx.now();
-    this.devEndsAt.clear();
-    for (const p of state.players) {
-      this.devEndsAt.set(p.id, now + p.devSeconds * 1_000 * this.phaseScale);
-      // Check when this player's time runs out, so the phase ends as soon as everyone's has.
-      this.cancels.push(this.ctx.schedule(p.devSeconds * 1_000 * this.phaseScale + 1, () => {
-        this.checkDevelopmentOver();
-        this.ctx.changed();
-      }));
-    }
+    this.devEndsAt = now + this.realMs(DEVELOPMENT.fullSeconds);
+    this.phaseEndsAt = null;
+    this.assayUntil.clear();
+    this.scheduleDevelopmentEnd(state.month);
     if (this.ai.size > 0) this.scheduleAiDevelop(state.month, now);
+  }
+
+  /** Ends development when the clock runs out; if devEndsAt moved later meanwhile, waits for it. */
+  private scheduleDevelopmentEnd(month: number): void {
+    const state = this.requireState();
+    this.cancels.push(
+      this.ctx.schedule(Math.max(0, (this.devEndsAt ?? 0) - this.ctx.now()), () => {
+        if (state.phase !== 'development' || state.month !== month) return;
+        if (this.ctx.now() < (this.devEndsAt ?? 0)) {
+          this.scheduleDevelopmentEnd(month);
+          return;
+        }
+        this.nextPhase();
+        this.ctx.changed();
+      }),
+    );
   }
 
   /**
@@ -547,7 +577,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         const dt = Math.min(Math.max(0, now - last), AI_DEV_TICK_MS * 10);
         for (const seat of this.ai.values()) {
           const p = state.players.find((q) => q.id === seat.id)!;
-          const left = ((this.devEndsAt.get(seat.id) ?? now) - now) / 1_000;
+          const left = this.secondsLeft(now);
           if (p.doneDeveloping || left <= 0) continue;
           seat.developTick(state, dt, left, (a) => this.aiAct(seat.id, a));
           if (state.phase !== 'development') break;
@@ -738,7 +768,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       month: state.month,
       maxMonths: state.maxMonths,
       phase: state.phase,
-      phaseEndsAt: this.phaseEndsAt,
+      phaseEndsAt: state.phase === 'development' ? this.devEndsAt : this.phaseEndsAt,
       width: state.width,
       height: state.height,
       tiles: state.tiles.map((t) => {
@@ -786,7 +816,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
             sick: me.sick,
             needs: needsOf(state, me.id),
             monthNeeds: monthNeeds(state, me.id),
-            devEndsAt: state.phase === 'development' ? (this.devEndsAt.get(me.id) ?? null) : null,
+            devEndsAt: state.phase === 'development' ? this.devEndsAt : null,
             devSeconds: me.devSeconds,
             produced: state.history.at(-1)?.produced[me.id] ?? null,
             mulePrice: mulePriceFor(state, me.id),
