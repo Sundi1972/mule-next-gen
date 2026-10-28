@@ -63,7 +63,7 @@ describe('land claims off reading order', () => {
 });
 
 describe('land claims on a single pass', () => {
-  it('T-AC-20: on the one pass, a seat with claims left presses for a plot it values late in the pass, instead of ending the grant landless', () => {
+  it('T-AC-29: on the one pass, a seat with claims left presses for a plot it values late in the pass, instead of ending the grant landless', () => {
     // The grant is one pass: plots the light has gone by never come back, even those still free.
     const state = fourSeats(3);
     while (state.phase !== 'landGrant') advancePhase(state);
@@ -77,7 +77,7 @@ describe('land claims on a single pass', () => {
     expect(early).toBeNull();
   });
 
-  it('T-AC-21: with plots it ranks higher still ahead of the light, a seat waits on a merely decent lit plot', () => {
+  it('T-AC-30: with plots it ranks higher still ahead of the light, a seat waits on a merely decent lit plot', () => {
     const state = fourSeats(3);
     while (state.phase !== 'landGrant') advancePhase(state);
     const { mind } = tycoon();
@@ -96,7 +96,7 @@ describe('land claims on a single pass', () => {
     expect(wantsPlot(plan, obs, order[step]!, order.slice(step), mind), 'it waits for the better plots still to light').toBe(false);
   });
 
-  it('T-AC-22: the lit plot is weighed by the utility it is ranked by: within its claims and clearing grantShare of the best utility ahead, it is wanted', () => {
+  it('T-AC-31: the lit plot is weighed by the utility it is ranked by: within its claims and clearing grantShare of the best utility ahead, it is wanted', () => {
     const state = fourSeats(1);
     while (state.phase !== 'landGrant') advancePhase(state);
     const mind: Mind = { ...traderMind, levelId: 'tycoon', level: AI_LEVELS.tycoon, salt: 1 };
