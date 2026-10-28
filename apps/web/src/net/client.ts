@@ -184,6 +184,8 @@ export class TableClient {
     this.set({ status: this.attempts > 0 ? 'reconnecting' : 'connecting' });
     const socket = this.opts.socket(this.opts.url);
     this.socket = socket;
+    // A new socket has no request in flight. Not in onclose: it returns early after leave, removed or a refused join.
+    this.handoffsPending = 0;
     socket.onopen = () => {
       if (this.socket !== socket) return;
       this.set({ status: 'open' });
@@ -277,9 +279,8 @@ export class TableClient {
           if (this.target.handoff !== undefined) this.target = { kind: 'player', code: this.target.code, name: this.target.name };
         }
         this.set({ role: msg.role, code: msg.code, seatId: msg.seatId });
-        // Requests sent before a drop are never answered, and one asked for while away was never sent.
-        this.handoffsPending = 0;
-        if (this.handoffWanted && this.state.handoffCode === null) this.askForHandoff();
+        // A code asked for while away was never sent. A welcome on the same socket keeps any request in flight.
+        if (this.handoffWanted && this.handoffsPending === 0 && this.state.handoffCode === null) this.askForHandoff();
         return;
       }
       case 'view':
