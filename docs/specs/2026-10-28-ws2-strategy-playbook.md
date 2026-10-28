@@ -113,7 +113,9 @@ today        thinking: { type: 'disabled' } for every call · anchors: apps/serv
              verified_by: read
 tomorrow     MUST send adaptive thinking with a config effort for 'strategy' and 'playbook' calls; moves keep thinking
              off. The model, effort and wait per kind come from config (BRAIN), never from constants or the hands;
-             default Haiku 5.5, effort medium (S-A1); §7's model rule may move the strategy call to Sonnet.
+             default Sonnet 5.5 for 'strategy' and 'playbook' (Heiko, 29 Oct), effort medium until the paired run
+             sets it; Haiku 5.5 is the named fallback model. Each call is priced at its own model's prices, in the
+             ledger and in the budget's worst case.
 seam         apps/server/src/brain/client.ts — the one file that imports the SDK (§9 guard). The S-A1 port
              strategy-spike.ts::createStrategyComplete already sends thinking {type:'adaptive'}, output_config.effort and
              the json_schema format; C3 moves that port into client.ts, keyed by call kind, and the spike imports it back.
@@ -256,6 +258,20 @@ examples → §6: Rookie + edit monopolyTarget 'smithore' → rejected, null · 
 ```
 
 ```
+RULE-A5 · Which model a strategy or playbook call uses (C3, C4)       shape: decision table, evaluated per call
+inputs   shareLeft: the seat's remaining share of BRAIN.gameBudgetUsd (counted spend, unknown bills at worst case) ·
+         worst(m): that call's worst case at model m's prices (prompt at BRAIN.charsPerToken, max tokens)
+first match wins
+  1  worst(default model, Sonnet) fits shareLeft and the table's remaining budget   Sonnet
+  2  worst(fallback model, Haiku) fits both                                          Haiku; ledgered 'fallback'
+  3  otherwise                                                                       no call; the engine's playbook plays
+                                                                                     (RULE-A1 row 1)
+unknown  a model with no price table refuses (no call): it can never be counted, so it can never be allowed.
+note     a seat can play Sonnet early and Haiku late in one game; the trial reports the fallback share per game.
+examples → §6: fresh seat → Sonnet · share left below Sonnet's worst case but above Haiku's → Haiku · below both → engine
+```
+
+```
 RULE-A4 · The tool loop inside one strategy or playbook call (C9)     shape: decision table, evaluated per round
 inputs   stop: tool_use | end_turn | max_tokens | refusal · round: 1..BRAIN.toolRounds · shareLeft: the next round's
          worst case fits the seat's share (true | false) · deadline: the phase start not yet passed (true | false)
@@ -327,6 +343,7 @@ Code-only; no existing state to reach. The record starts with WS3's build.
 | T-AC-A7 | The manual is rendered from the descriptors and config only: changing one config number (GAME.plotScore) changes the manual's text; the default config's manual is byte-identical run to run; every AiAction appears in it; an advice line naming a move or playbook field that does not exist fails. | manual text | a move missing from the descriptors → WS1's coverage test red | C8 |
 | T-AC-A8 | RULE-A4 rows 1-5: at most BRAIN.toolRounds + 1 round trips; a share that runs out mid-loop stops it; a throwing handler answers is_error and the loop goes on; every round trip has its ledger line. | the fake SDK's requests, ledger lines | a handler's error text in a request → red | C9 C6 |
 | T-AC-A10 (G-A "check it against what happened") | The brief for the next phase carries this seat's last PhaseOutcome items (path, expected, actual) and the rivals' public trades and claims from it; a seat with no outcome yet gets none. | brief text | another seat's outcome items in this seat's brief → red | C1 |
+| T-AC-A11 (HC-5) | RULE-A5 rows 1-3 with its examples; a Sonnet call is counted at Sonnet's prices, never Haiku's, in the ledger and in the worst case. | the model each fake request names; ledger usd | a Sonnet call priced at Haiku rates → red | C3 C4 |
 | T-AC-A9 (HC-3) | No tool result carries another seat's goods or unanalysed ground; whatIf leaves the live game state unchanged. | tool results; state before and after | a rival's stock in worth's answer → red | C9 |
 
 ## §7 · Risks & Spikes `[review-only]`
@@ -340,16 +357,16 @@ Code-only; no existing state to reach. The record starts with WS3's build.
   window. List-price estimate before the run: Haiku $0.001-0.002 and Sonnet $0.02-0.04 a call, so 4-9x too high
   (thinking stayed short or off). Invalid replies are structural (an over-long reason or an off-list plan letter);
   the spike recorded no cause, so the next run must log it. Brief ~2.5k tokens at 2.24 chars a token, below
-  BRAIN.charsPerToken 2.5. **C3 decision: Haiku 5.5, adaptive thinking, effort medium**: the cheapest, under the
-  window, and its validity failures are prompt-side. Sonnet stays affordable at this brief size but is unproven on
-  quality; revisit with the real brief (C1, C8) and validatePlan.
-  **Model rule (PM, 29 Oct, Heiko's steer: capability first, the budget as the safety net).** Haiku 5.5 with adaptive
-  thinking at effort medium is the DEFAULT; the model and effort per call kind stay named BRAIN config values, never
-  constants. When validatePlan (WS1) and the real brief (C1 + C8 manual + C9 tools) exist, re-run S-A1 PAIRED on the
-  same tool (`brain:strategy-spike`, same briefs, both models): the monthly strategy call moves to Sonnet 5.5 if Sonnet
-  is measurably better on accepted edits AND the measured seat share (all calls, tool rounds included, × the calls
-  per seat-game) still fits the game budget ÷ the Smart seats. Otherwise Haiku stays. The playbook edit calls stay
-  on Haiku unless the same test says otherwise for them.
+  BRAIN.charsPerToken 2.5. C3 decision at the time: Haiku 5.5, adaptive thinking, effort medium (superseded below).
+  **Model rule (Heiko, 29 Oct, via the PM: "we can use claude sonnet"; supersedes the Haiku default).** Sonnet 5.5 is
+  the DEFAULT for strategy and playbook calls; the $1 game budget and equal seat shares stay as the safety net, and
+  RULE-A5 falls back to Haiku 5.5, then to the engine's playbook, when a seat's share cannot cover the call. The
+  model, fallback and effort per call kind are named BRAIN values. The paired re-run on the real brief (C1 + C8 + C9,
+  `brain:strategy-spike`) now measures: Sonnet's cost per seat-game against the share, the fallback share it implies,
+  Sonnet's effort (medium never thought in S-A1), and Haiku as the quality floor.
+  **Cost watch:** S-A1 measured Sonnet at $0.00425 a call on a ~2.5k-token brief, about $0.10 a seat-game at 24 calls,
+  within a $0.20-0.25 share. The manual and tool rounds make the brief several times larger (R-A3), so a seat may run
+  out of Sonnet share before month 12 and finish on Haiku; that is the designed degradation, and the trial reports it.
 - **R-A1:** slack windows shorter than the model at fast tables. Mitigation: RULE-A1 row 2; the trial measures the
   late share.
 - **R-A2:** the schema freezes late. Closed 29 Oct: v1 frozen (WS1, WS3, WS2); C1-C2 stub on the v1 types until
@@ -374,6 +391,9 @@ Code-only; no existing state to reach. The record starts with WS3's build.
   BRAIN; the capability-first re-run rule → C3, §7. The spike's cause codes → C2.
 - **AM-A6 · 29 Oct · lead:** C4's seam renamed playbooks.ts (no clash with packages/ai's strategist.ts); C3 promotes
   the S-A1 port instead of a second client. Cost note for §0: C8 and C9 add about 2 PRs, so about 5 in all (in §0 since the goal gate).
+- **AM-A10 · 29 Oct · Heiko via PM:** Sonnet 5.5 is the default for strategy and playbook calls; Haiku 5.5 the
+  fallback, then the engine's playbook, by the seat's remaining share → C3, RULE-A5, T-AC-A11, §7. The cap and
+  shares are unchanged. Social table talk (jokes, game comments, seeking allies) goes to spec B, not here.
 - **AM-A9 · 29 Oct · WS1's descriptor shape:** `MoveDescriptor` / `MOVES` as WS1 proposed (§3); "when it is smart"
   moves from the descriptors to the manual's own advice table, each line tied to a move in MOVES and a playbook field
   so it cannot go stale silently (C8). What the manual tells Claude is unchanged from option B. T-AC-A7 gains the

@@ -40,7 +40,7 @@ validatePlan clamps them; the playbook that takes effect is appended to WS3's ga
 plays it, and the next brief carries what happened (C1, T-AC-A10).
 
 **Tech Stack:** TypeScript (strict), pnpm workspaces, vitest; `@anthropic-ai/sdk` in `apps/server/src/brain/client.ts`
-only; Haiku 5.5 with adaptive thinking (S-A1).
+only; Sonnet 5.5 with adaptive thinking for strategy and playbook calls (Heiko, AM-A10), Haiku 5.5 as the fallback.
 
 **Inputs:**
 - Spec: `docs/specs/2026-10-28-ws2-strategy-playbook.md` (branch ws2-spec-a-playbook)
@@ -136,7 +136,7 @@ Every handoff carries this line verbatim:
   records. Negative case: a move call carrying thinking → red. Trap: read model and effort from BRAIN in the test,
   never literals, or the next model change breaks a test that should not care.
 - [ ] **Step 2: Run it and see it fail** — `pnpm --filter @mule/server exec vitest run test/brain-client.test.ts -t "T-AC-A6"` → FAIL (no strategy kind yet)
-- [ ] **Step 3: Implement C3 per spec §1 C3** — mechanism in_place + extract: move `strategy-spike.ts::createStrategyComplete` into client.ts keyed by call kind; BRAIN gains `strategyModel`/`playbookModel`, efforts and waits (default Haiku 5.5, effort medium, per S-A1). Plan-drift: keep `BRAIN.model` for the move kinds so nothing else moves.
+- [ ] **Step 3: Implement C3 per spec §1 C3** — mechanism in_place + extract: move `strategy-spike.ts::createStrategyComplete` into client.ts keyed by call kind; BRAIN gains the per-kind model, effort and wait (default Sonnet 5.5, effort medium; Haiku 5.5 named as the fallback model, AM-A10), and each call is priced at its own model's prices in the ledger and the worst case. Plan-drift: keep `BRAIN.model` for the move kinds so nothing else moves.
 - [ ] **Step 4: Run T-AC-A6, the existing client tests (INV-HC3) and `MULE_FULL=1 … test/strategy-spike.test.ts`** → all PASS (the pin)
 - [ ] **Step 5: Commit** — `git commit -m "feat(server): one client, per-kind model and adaptive thinking for strategy calls (C3, T-AC-A6)"`
 
@@ -173,8 +173,8 @@ Every handoff carries this line verbatim:
 
 ### Task 1.4: when the brain asks — C4 (upkeep and game start)
 
-**Phase:** P1 · **Depends on:** 1.1, 1.3 · **ACs verified:** T-AC-A1, T-AC-A3
-**Spec sections consumed:** §1 C4, §2 RULE-A1, RULE-A2 rows 1-2, HC-1, HC-5, §4 races
+**Phase:** P1 · **Depends on:** 1.1, 1.3 · **ACs verified:** T-AC-A1, T-AC-A3, T-AC-A11
+**Spec sections consumed:** §1 C4, §2 RULE-A1, RULE-A2 rows 1-2, RULE-A5, HC-1, HC-5, §4 races
 
 **Files:**
 - Create: `apps/server/src/brain/playbooks.ts`; Modify: `apps/server/src/mule-game.ts` (one named touch point, WS3 OKs)
@@ -182,9 +182,10 @@ Every handoff carries this line verbatim:
 
 - [ ] **Step 1: Write the failing test `T-AC-A1: RULE-A1 rows 1-4`** — examples from §2: no key → engine; reply 1 s before the land grant → llm; reply 0.2 s after → engine, late, ledgered. Altitude: contract at playbooks.ts on a manual clock. Trap: drive time with the game's clock, never real timers.
 - [ ] **Step 2: Write the failing test `T-AC-A3: phases start on time with a fake model that never answers`** — Altitude: promise (the phase start players see). Observed at: phase start times in the view.
-- [ ] **Step 3: Run both** → FAIL
-- [ ] **Step 4: Implement C4 per spec §1 C4 and §2 RULE-A1, RULE-A2 rows 1-2** — fire-and-forget with a deadline at the land grant; asks through createBrain so `busy` (INV-one-in-flight) and the budget hold. Mechanism: sprout + one named edit.
-- [ ] **Step 5: Run, then the existing brain-table tests** (`pnpm --filter @mule/server test`) → PASS; commit `feat(server): the brain asks for the land-grant playbook as upkeep opens (C4, T-AC-A1, T-AC-A3)`
+- [ ] **Step 3: Write the failing test `T-AC-A11: RULE-A5 rows 1-3; a Sonnet call is counted at Sonnet's prices`** — examples: fresh seat → Sonnet; share left below Sonnet's worst case but above Haiku's → Haiku, ledgered 'fallback'; below both → no call, engine playbook. Altitude: contract (the model each fake request names; ledger usd). Negative case: a Sonnet call priced at Haiku rates → red.
+- [ ] **Step 4: Run all three** → FAIL
+- [ ] **Step 5: Implement C4 per spec §1 C4 and §2 RULE-A1, RULE-A2 rows 1-2, RULE-A5** — fire-and-forget with a deadline at the land grant; asks through createBrain so `busy` (INV-one-in-flight) and the budget hold; the model per call from RULE-A5. Mechanism: sprout + one named edit.
+- [ ] **Step 6: Run, then the existing brain-table tests** (`pnpm --filter @mule/server test`) → PASS; commit `feat(server): the brain asks for the land-grant playbook as upkeep opens, Sonnet then Haiku by share (C4, T-AC-A1, T-AC-A3, T-AC-A11)`
 
 ### Task 1.5: the record and the slice's promise — C5, B-AC-A1
 
@@ -363,9 +364,10 @@ Every handoff carries this line verbatim:
 
 ### Task 5.4: Spike S-A1 re-run, paired (the model rule)
 
-**Timebox:** one paid run, inside the cap the PM clears. **Stop condition:** confirmed Haiku (it stays) OR confirmed
-Sonnet for the monthly strategy call (measurably better on accepted edits AND the measured seat share fits the game
-budget ÷ Smart seats).
+**Timebox:** one paid run, inside the cap the PM clears. **Stop condition:** measured on the real brief (C1 + C8 + C9):
+Sonnet's cost per seat-game against the share and the fallback share RULE-A5 implies; Sonnet's effort (medium never
+thought in S-A1) set by the result; Haiku's accepted-edit share as the floor. If a seat's Sonnet share runs out
+before month 12 in most games, take the numbers to the PM (Heiko chose Sonnet; the trade is his).
 
 - [ ] **Step 1: Ask the PM for the clearance and cap** for the paired run on the real brief (C1 + C8 + C9)
 - [ ] **Step 2: Run `brain:strategy-spike` paired** with the key loaded only inside that one command (`--env-file`); a 401 or 403 stops it
