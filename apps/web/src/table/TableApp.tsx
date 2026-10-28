@@ -521,8 +521,9 @@ function HarvestSide({ game }: { game: MuleView }) {
 const useBeforePaint = typeof document === 'undefined' ? useEffect : useLayoutEffect;
 
 /**
- * Its content at full size when it fits, scaled down as a whole when it doesn't: the month end's table and colony
- * keep the mock's proportions on the TV when the chat ticker is up or more players sit at the table.
+ * Its content at full size when it fits, scaled down as a whole when it doesn't, and back up when room returns: the
+ * month end's table and colony keep the mock's proportions on the TV when the chat ticker is up or more players sit
+ * at the table. While it fits, the content stretches to fill the box.
  */
 function FitHeight({ className, children }: { className?: string; children: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
@@ -532,8 +533,15 @@ function FitHeight({ className, children }: { className?: string; children: Reac
     const fit = () => {
       const b = box.current;
       const i = inner.current;
-      if (!b || !i || i.offsetHeight === 0) return;
-      const next = Math.min(1, b.clientHeight / i.offsetHeight);
+      if (!b || !i) return;
+      // The content's own height, without the stretch: the stretch follows the scale, so measuring through it would
+      // keep a shrunk scale from ever growing back.
+      const stretch = i.style.minHeight;
+      i.style.minHeight = '0px';
+      const natural = i.offsetHeight;
+      i.style.minHeight = stretch;
+      if (natural === 0) return;
+      const next = Math.min(1, b.clientHeight / natural);
       setScale((s) => (Math.abs(s - next) < 0.005 ? s : next));
     };
     fit();
