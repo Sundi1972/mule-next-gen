@@ -216,8 +216,10 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
   const lots = { sold: 0, unsold: 0, colonyOffered: 0, colonySold: 0, stalled: 0 };
   let mulesLost = 0;
   let guard = 0;
-  // literal-ok: a runaway guard on phase steps, far above a game's twelve months of seven phases
-  while (state.phase !== 'gameOver' && guard++ < 500) {
+  // A runaway guard that can never bind before a game of any length ends: it follows the months this game plays.
+  // literal-ok: a month has seven phases, so eight a month bounds the loop: a guard, not balance
+  const maxSteps = (state.maxMonths + 1) * 8;
+  while (state.phase !== 'gameOver' && guard++ < maxSteps) {
     switch (state.phase) {
       case 'planning': {
         // The election comes first: hands act before each step, with the same dt, until it is over;
