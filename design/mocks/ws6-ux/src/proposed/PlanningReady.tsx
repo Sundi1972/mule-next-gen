@@ -17,9 +17,12 @@ import { H, W } from '../fixture';
  * its socket and its player must not be skipped, so "waiting for" names every human not yet Ready, connected or not,
  * and marks who is away so the host can decide.
  *
- * GRAFT TARGETS: apps/web/src/phone/Planning.tsx's footer and apps/web/src/phone/Shell.tsx's header (the ready count
- * where the clock was); the TV's planning branch in apps/web/src/table/TableApp.tsx::TvGame. The intent is WS3's
- * `{ type: 'continue' }`, accepted only from the host.
+ * GRAFT TARGETS, each a named edit in its owner's file: apps/web/src/phone/Planning.tsx's footer (WS3's),
+ * apps/web/src/phone/Shell.tsx's header, the ready count where the clock was, and the TV's planning branch in
+ * apps/web/src/table/TableApp.tsx::TvGame (both WS4's). The intent is WS3's `{ type: 'continue' }` (a46c9e6),
+ * accepted only from `table.hostId` in planning proper; the server then adds a news line, "Lena continued without
+ * Brix and Kai". While the host's phone is away, hosting passes to the next connected human, so the button follows
+ * whoever `table.hostId` names at that moment.
  */
 
 export type Seat = Pick<PlayerView, 'id' | 'name' | 'isAi' | 'ready' | 'slot'> & { away: boolean };
