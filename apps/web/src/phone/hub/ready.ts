@@ -22,9 +22,16 @@ export type ReadyRow = { kind: 'seat'; seat: Seat } | { kind: 'ais'; seats: Seat
 /** From this many seats the TV folds its AIs into one row, so the news beside the list keeps its room. */
 export const FOLD_AIS_FROM = 5;
 
-/** The TV's ready list, in seat order. */
+/**
+ * The TV's ready list, in seat order. Every person keeps a row, so the TV names whoever the table waits for; from
+ * FOLD_AIS_FROM seats the AIs, always ready, share one row at the end. The seat count decides, not the space left,
+ * so the list doesn't jump as news arrives.
+ */
 export function readyRows(players: readonly PlayerView[], connected: (id: string) => boolean): ReadyRow[] {
-  return players.map((p) => ({ kind: 'seat', seat: seatOf(p, connected) }));
+  const seats = players.map((p) => seatOf(p, connected));
+  const ais = seats.filter((s) => s.isAi);
+  if (seats.length < FOLD_AIS_FROM || ais.length === 0) return seats.map((seat) => ({ kind: 'seat', seat }));
+  return [...seats.filter((s) => !s.isAi).map((seat): ReadyRow => ({ kind: 'seat', seat })), { kind: 'ais', seats: ais }];
 }
 
 /** Whether a seat's screen is connected, as the room has it; a seat the room doesn't list counts as connected. */
