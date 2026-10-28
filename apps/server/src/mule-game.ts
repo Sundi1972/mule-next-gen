@@ -125,17 +125,17 @@ function isSpecies(pick: string | undefined): pick is Species {
 const BADGE_REASONS: readonly ProductionReason[] = ['cluster', 'species', 'trait', 'pollution', 'noEnergy', 'noWater'];
 const MAX_BADGES = 2;
 
+/** Names in reading order: "A", "A and B", "A, B and C". */
+function andList(names: string[]): string {
+  return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
+
 /**
  * The month's production as every screen may see it: each working plot with
  * what it made before the event and its biggest reasons, and the event's hits.
  * Built field by field from the report, so the stock players held never
  * reaches a screen through it.
  */
-/** Names in reading order: "A", "A and B", "A, B and C". */
-function andList(names: string[]): string {
-  return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
-}
-
 function productionView(state: GameState, lengthMs: number): ProductionView | null {
   const report = state.history.at(-1);
   if (!report) return null;
@@ -342,7 +342,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   }
 
   /** The host's Continue: ends planning proper with players not yet Ready. The caller must have checked the seat is the host. */
-  continuePlanning(): void {
+  private continuePlanning(): void {
     if (this.electionOpen()) throw new RuleError('The election is still running');
     if (this.state?.phase !== 'planning') throw new RuleError('Continue ends planning only');
     this.nextPhase();
