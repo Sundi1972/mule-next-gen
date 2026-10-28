@@ -283,6 +283,19 @@ describe('the politics desks', () => {
     else expect(textOf(html, 'promise-lower')).toBe('Lower the tax');
   });
 
+  it('C4, RULE-4: the vote weights are two columns, Player and Votes, with the parts under the name and a zero part left out', () => {
+    const weights = politics().weights.map((w) =>
+      w.id === 's2' ? { id: 's2', votes: 4, parts: { base: 1, land: 1, reputation: -1, baron: 1, taxes: 2 } } : w.id === 's3' ? { id: 's3', votes: 2, parts: { base: 1, land: 0, reputation: 0, baron: 0, taxes: 1 } } : w,
+    );
+    const html = onPhone(view(politics({ weights })), CouncilDesk);
+    const table = html.slice(html.indexOf('data-testid="vote-weights"'));
+    expect(table.match(/<th\b/g)?.length, 'Player and Votes only').toBe(2);
+    // The row, not the parts span: textOf stops at the first closing tag of its kind, and the parts nest spans.
+    expect(textOf(html, 'weight-s2')).toBe('Ossa' + 'base 1 · land +1 · rep. −1 · Baron +1 · taxes +2' + '4');
+    expect(textOf(html, 'weight-votes-s2')).toBe('4');
+    expect(textOf(html, 'weight-s3'), 'zero parts left out').toBe('Kai' + 'base 1 · taxes +1' + '2');
+  });
+
   it("C12, B-AC-60: in announce the desk lists the candidacy Politics holds; after running, the line names the office and, for Governor, the promise; a Sheriff's line has none", () => {
     const gov = onPhone(view(politics({ candidates: { governor: ['s1', 's2'], sheriff: [] }, promises: { s1: CAP_8, s2: HOLD } }), me({ running: 'governor' })), CouncilDesk);
     expect(textOf(gov, 'running')).toBe('You run for Governor, promising “Tax no higher than 8%”; one office at a time.Withdraw');

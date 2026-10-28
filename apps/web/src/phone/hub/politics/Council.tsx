@@ -1,7 +1,7 @@
 import { POLITICS, type Office, type TaxPromise } from '@mule/engine';
 import type { ElectionView, MyPoliticsView } from '@mule/protocol';
 import { Button, Creature, cx, SLOT_COLOR } from '@mule/ui';
-import { useState, type ReactNode } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 import { slotOf } from '../../../game/derive';
 import { useClient } from '../../../net/react';
 import { usePhoneGame } from '../../game';
@@ -44,7 +44,8 @@ function Election({ election, mine }: { election: ElectionView; mine: MyPolitics
       </span>
       {announce ? (
         <>
-          <div className="grid grid-cols-2 gap-1.5" data-testid="run">
+          {/* One per row in the rail; side by side only on a wide shell, and only with more than one office. */}
+          <div className={cx('grid gap-1.5', POLITICS.offices.length > 1 && '@min-[1100px]/shell:grid-cols-2')} data-testid="run">
             {/* Governor asks for a promise first; Sheriff stays one tap. */}
             {POLITICS.offices.map((office) => {
               const can = mine.canRun[office] ?? 'notElected';
@@ -53,6 +54,7 @@ function Election({ election, mine }: { election: ElectionView; mine: MyPolitics
                 <Button
                   key={office}
                   size="md"
+                  className="h-auto! min-h-11 py-2"
                   variant={mine.running === office ? 'holo' : 'outline'}
                   disabled={can !== true}
                   onClick={() => (office === 'governor' ? setPicking(true) : (client.intent({ type: 'run', office }), setPicking(false)))}
@@ -77,7 +79,7 @@ function Election({ election, mine }: { election: ElectionView; mine: MyPolitics
               {mine.running === 'governor' && promise
                 ? `You run for Governor, promising “${promiseText(promise)}”; one office at a time.`
                 : `You run for ${OFFICE_NAME[mine.running]}; one office at a time.`}
-              <button type="button" className="text-holo underline" onClick={() => client.intent({ type: 'run', office: null })} data-testid="withdraw">
+              <button type="button" className="min-h-11 shrink-0 px-2 text-holo underline" onClick={() => client.intent({ type: 'run', office: null })} data-testid="withdraw">
                 Withdraw
               </button>
             </span>
@@ -135,7 +137,7 @@ function Ballot({ office, cands, promises, pick: sent, onPick }: { office: Offic
     <fieldset className="flex flex-col gap-1">
       <legend className="mb-1 text-sm font-semibold @min-[1100px]/shell:text-base">{title}</legend>
       {[...cands, ''].map((id) => (
-        <label key={id || 'abstain'} className={cx('flex cursor-pointer items-start gap-2 rounded-control border p-1.5 text-sm', pick === id ? 'border-holo bg-holo-soft' : 'border-holo-line')}>
+        <label key={id || 'abstain'} className={cx('flex min-h-11 cursor-pointer items-start gap-2 rounded-control border p-2 text-sm', pick === id ? 'border-holo bg-holo-soft' : 'border-holo-line')}>
           <input
             type="radio"
             name={title}
@@ -144,7 +146,7 @@ function Ballot({ office, cands, promises, pick: sent, onPick }: { office: Offic
               setPick(id);
               onPick(id || null);
             }}
-            className="mt-1 accent-[var(--color-holo)]"
+            className="size-5 shrink-0 accent-[var(--color-holo)]"
           />
           {id ? (
             <span className="flex flex-col">
@@ -186,7 +188,7 @@ export function PromisePicker({ onRun, onCancel }: { onRun: (p: TaxPromise) => v
       )}
       data-testid={testid}
     >
-      <input type="radio" name="promise" checked={kind === k} disabled={!!disabled} onChange={() => setKind(k)} className="accent-[var(--color-holo)]" />
+      <input type="radio" name="promise" checked={kind === k} disabled={!!disabled} onChange={() => setKind(k)} className="size-5 shrink-0 accent-[var(--color-holo)]" />
       <span className="flex min-w-0 flex-1 flex-col">
         {label}
         {disabled && <span className="text-[11px] text-ink-3">{disabled}</span>}
@@ -217,8 +219,8 @@ export function PromisePicker({ onRun, onCancel }: { onRun: (p: TaxPromise) => v
       )}
       {chip('lower', 'Lower the tax', 'promise-lower', taxNow <= TAX.min ? `The tax is already ${TAX.min} %.` : undefined)}
       {chip('hold', 'Hold the tax', 'promise-hold')}
-      <div className="grid grid-cols-[1fr_auto] gap-1.5">
-        <Button size="md" disabled={!chosen} onClick={() => chosen && onRun(chosen)} data-testid="promise-run">
+      <div className="flex flex-col gap-1.5">
+        <Button size="md" className="h-auto! min-h-11 py-2" disabled={!chosen} onClick={() => chosen && onRun(chosen)} data-testid="promise-run">
           {chosen ? `Run, promising “${promiseText(chosen)}”` : 'Pick a promise to run'}
         </Button>
         <Button size="md" variant="ghost" onClick={onCancel} data-testid="promise-cancel">
@@ -271,43 +273,50 @@ export function ElectionResult() {
 
 const { plotsPerVote, repHigh, repLow, taxPerVote, taxCap } = POLITICS.weight;
 
-/** Everyone's votes and where they come from; public. */
+/** What each part of a seat's votes is for; a part that adds nothing is left out of the line. */
+const PARTS = [
+  { key: 'land', word: 'land', why: `+1 per ${plotsPerVote} plots` },
+  { key: 'reputation', word: 'rep.', why: `+1 at ${repHigh}, −1 below ${repLow}` },
+  { key: 'baron', word: 'Baron', why: 'the Land Baron' },
+  { key: 'taxes', word: 'taxes', why: `+1 per ${taxPerVote} cr paid, at most +${taxCap}` },
+] as const;
+
+/** Everyone's votes and where they come from; public. Two columns, so Votes stays in sight in the rail. */
 function VoteWeights() {
   const { view, me } = usePhoneGame();
   return (
     <Section title="Votes this month" testid="vote-weights">
-      <table className="w-full text-left text-xs @min-[1100px]/shell:text-sm">
+      <table className="w-full table-fixed text-left text-xs @min-[1100px]/shell:text-sm">
         <thead className="text-ink-3">
           <tr>
             <th className="font-normal">Player</th>
-            <th className="text-right font-normal" title="1 each">
-              Base
-            </th>
-            <th className="text-right font-normal" title={`+1 per ${plotsPerVote} plots`}>
-              Land
-            </th>
-            <th className="text-right font-normal" title={`+1 at ${repHigh}, −1 below ${repLow}`}>
-              Rep.
-            </th>
-            <th className="text-right font-normal">Baron</th>
-            <th className="text-right font-normal" title={`+1 per ${taxPerVote} cr paid, at most +${taxCap}`}>
-              Taxes
-            </th>
-            <th className="text-right font-semibold text-ink">Votes</th>
+            <th className="w-12 text-right font-semibold text-ink">Votes</th>
           </tr>
         </thead>
         <tbody>
           {view.politics!.weights.map((w) => (
-            <tr key={w.id} className={cx('border-t border-holo-faint', w.id === me.id && 'bg-holo-soft')} data-testid={`weight-${w.id}`}>
+            <tr key={w.id} className={cx('border-t border-holo-faint align-top', w.id === me.id && 'bg-holo-soft')} data-testid={`weight-${w.id}`}>
               <td className="py-1">
-                <Who view={view} id={w.id} size={14} />
+                <span className="flex min-w-0 flex-col">
+                  <Who view={view} id={w.id} size={14} />
+                  <span className="text-[11px] text-ink-3" data-testid={`weight-parts-${w.id}`}>
+                    {/* Each part stays on one line; the line breaks only between parts. */}
+                    <span className="whitespace-nowrap" title="1 each">
+                      base {w.parts.base}
+                    </span>
+                    {PARTS.filter((p) => w.parts[p.key] !== 0).map((p) => (
+                      <Fragment key={p.key}>
+                        {' · '}
+                        <span className="whitespace-nowrap" title={p.why}>
+                          {p.word} {w.parts[p.key] > 0 ? '+' : '−'}
+                          {Math.abs(w.parts[p.key])}
+                        </span>
+                      </Fragment>
+                    ))}
+                  </span>
+                </span>
               </td>
-              {[w.parts.base, w.parts.land, w.parts.reputation, w.parts.baron, w.parts.taxes].map((n, i) => (
-                <td key={i} data-num className="text-right font-mono">
-                  {i === 0 ? n : n > 0 ? `+${n}` : n < 0 ? n : '·'}
-                </td>
-              ))}
-              <td data-num className="text-right font-mono font-bold">
+              <td data-num className="py-1 text-right font-mono font-bold" data-testid={`weight-votes-${w.id}`}>
                 {w.votes}
               </td>
             </tr>
