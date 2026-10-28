@@ -1,4 +1,4 @@
-import { AI_HANDS, observe, type GameState, type Outfit, type Rng } from '@mule/engine';
+import { AI_HANDS, observe, type DevPlace, type GameState, type Outfit, type Rng } from '@mule/engine';
 import type { Act, AiAction } from '../actions.js';
 import type { Brain, Pending } from '../brain.js';
 import { analysesWanted, developDecision, filtersWanted, outfitName, plotName, type DevAction } from '../strategist.js';
@@ -14,7 +14,14 @@ import { situation } from '../summary.js';
  * rules refuse (corral sold out, money gone) drops what depended on it and
  * the hands go on with the next item. Nothing is retried and nothing waits
  * without a reason, so there is no dithering.
+ *
+ * Where the game walks (the referee says where the seat stands), the walk
+ * costs clock time on its own, so the taps are taps alone and a MULE the
+ * seat can't walk out before its time runs out is not bought.
  */
+
+/** The middle of a ms range, in seconds. */
+const midSeconds = ([lo, hi]: [number, number]) => (lo + hi) / 2 / 1_000; // literal-ok: midpoint of a range, ms to s
 
 export interface DevStep {
   action: AiAction;
@@ -40,6 +47,8 @@ export class DevelopHand {
   /** Every step taken this month, in order, for tests and the dev view. */
   readonly done: { label: string; ok: boolean; at: number }[] = [];
   private clock = 0;
+  /** Where the seat stands, when the game walks. */
+  private at: DevPlace | undefined;
 
   constructor(
     private readonly brain: Brain,
@@ -51,11 +60,12 @@ export class DevelopHand {
     return this.queue.map((s) => s.label);
   }
 
-  /** Advances by dt ms. `secondsLeft` is the seat's development time left. */
-  tick(state: GameState, dt: number, secondsLeft: number, act: Act): void {
+  /** Advances by dt ms. `secondsLeft` is the seat's development time left; `at` is where it stands, if the game walks. */
+  tick(state: GameState, dt: number, secondsLeft: number, act: Act, at?: DevPlace): void {
     const mind = this.brain.mind;
     if (state.phase !== 'development') return;
     if (state.month !== this.month) this.reset(state.month);
+    this.at = at;
     const me = state.players.find((p) => p.id === mind.me)!;
     if (me.doneDeveloping || this.stage === 'done') return;
     if (secondsLeft <= 0) {
@@ -77,7 +87,10 @@ export class DevelopHand {
     if (this.stage === 'decide') {
       if (!this.pending) {
         const obs = observe(state, mind.me);
-        this.pending = this.brain.ask('develop', developDecision(obs, mind, this.mules), obs, AI_HANDS.develop.decideWaitMs, null, situation(obs, mind));
+        const d = AI_HANDS.develop;
+        const taps = (midSeconds(d.buyTapMs) + midSeconds(d.outfitMs) + midSeconds(d.installTapMs)) * mind.level.devPace;
+        const walk = at === undefined ? undefined : { at, left: secondsLeft, taps };
+        this.pending = this.brain.ask('develop', developDecision(obs, mind, this.mules, walk), obs, d.decideWaitMs, null, situation(obs, mind));
       }
       const settled = this.brain.resolve(this.pending, dt, state);
       if (!settled) return;
@@ -131,9 +144,11 @@ export class DevelopHand {
     const t = state.tiles[index]!;
     const g = ++this.group;
     this.mules++;
-    this.push({ type: 'buyMule' }, AI_HANDS.develop.buyMs, 'Buy a MULE at the corral', g);
-    this.push({ type: 'outfit', outfit }, AI_HANDS.develop.outfitMs, `Outfit it as a ${outfitName(outfit)}`, g);
-    this.push({ type: 'install', x: t.x, y: t.y }, AI_HANDS.develop.installMs, `Install it on ${plotName(t)}`, g);
+    const d = AI_HANDS.develop;
+    const walks = this.at !== undefined;
+    this.push({ type: 'buyMule' }, walks ? d.buyTapMs : d.buyMs, 'Buy a MULE at the corral', g);
+    this.push({ type: 'outfit', outfit }, d.outfitMs, `Outfit it as a ${outfitName(outfit)}`, g);
+    this.push({ type: 'install', x: t.x, y: t.y }, walks ? d.installTapMs : d.installMs, `Install it on ${plotName(t)}`, g);
     this.stage = 'steps';
     this.then = 'decide';
   }

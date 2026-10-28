@@ -858,9 +858,13 @@ export const AI_HANDS = {
   devTickMs: 100,
   /** Development steps, as a quick human taps them: to the corral and buy, to an outfitter, out to the plot and install, analyse, the pub. */
   develop: {
+    /** Buying and installing where the game has no walking: each includes a notional walk. */
     buyMs: [1_400, 2_400] as [number, number],
     outfitMs: [1_000, 1_900] as [number, number],
     installMs: [1_800, 3_200] as [number, number],
+    /** The same two taps where the game walks (DEV_WALK charges the walk): the tap alone. */
+    buyTapMs: [600, 1_000] as [number, number],
+    installTapMs: [600, 1_200] as [number, number],
     analyseTapMs: [1_200, 2_000] as [number, number],
     filterMs: [1_200, 2_000] as [number, number],
     pubMs: [800, 1_500] as [number, number],

@@ -1,4 +1,4 @@
-import { AI_HANDS, AI_LEVELS, AI_PERSONAS, createRng, GAME, observe, type AiLevelId, type AiPersonaId, type GameState } from '@mule/engine';
+import { AI_HANDS, AI_LEVELS, AI_PERSONAS, createRng, GAME, observe, type AiLevelId, type AiPersonaId, type DevPlace, type GameState } from '@mule/engine';
 import type { Act } from './actions.js';
 import { Brain, type DecisionRecord, type Pending } from './brain.js';
 import type { Decider, TableTalk } from './decider.js';
@@ -99,8 +99,9 @@ export class AiSeat {
     return this.rng.int(...this.mind.level.reactMs) + this.rng.int(...AI_HANDS.grant.choiceMs);
   }
 
-  developTick(state: GameState, dt: number, secondsLeft: number, act: Act): void {
-    this.develop.tick(state, dt, secondsLeft, act);
+  /** `at` is where the seat stands, when the game walks; without it the seat develops as it does where nobody walks. */
+  developTick(state: GameState, dt: number, secondsLeft: number, act: Act, at?: DevPlace): void {
+    this.develop.tick(state, dt, secondsLeft, act, at);
   }
 
   auctionTick(state: GameState, dt: number, act: Act): void {
