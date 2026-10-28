@@ -258,7 +258,7 @@ export class TableClient {
       this.raw({ t: 'join', code: target.code, name: target.name, handoff: target.handoff });
       return;
     }
-    const token = this.ownSeat?.token;
+    const token = this.ownSeat?.code === target.code ? this.ownSeat.token : undefined;
     this.joinToken = token ?? null;
     this.raw({ t: 'join', code: target.code, name: target.name || loadSeat(this.storage)?.name || '', ...(token ? { seatToken: token } : {}) });
   }
@@ -300,7 +300,8 @@ export class TableClient {
         this.attempts = 0;
         if (msg.role === 'player' && msg.seatToken && this.target?.kind === 'player') {
           saveSeat(this.storage, { code: msg.code, token: msg.seatToken, name: this.target.name });
-          this.ownSeat = { code: msg.code, token: msg.seatToken };
+          // The welcome to a join this screen has since replaced claims nothing.
+          if (msg.code === this.target.code) this.ownSeat = { code: msg.code, token: msg.seatToken };
           // A handoff code is spent once it lands; a reconnect comes back with the new token.
           if (this.target.handoff !== undefined) this.target = { kind: 'player', code: this.target.code, name: this.target.name };
         }
@@ -393,7 +394,6 @@ export class TableClient {
 
   /** Shows `issued` live until the server clock reaches its `expiresAt`, or expired if it already has. */
   private timeHandoff(issued: Omit<HandoffCode, 'expired'>): void {
-    // Read the clock first: a jump this read notices re-times the code shown now, before this one replaces it and its timer.
     const leftMs = issued.expiresAt - this.serverNow();
     if (this.handoffExpiry !== null) this.cancel(this.handoffExpiry);
     this.handoffExpiry = null;

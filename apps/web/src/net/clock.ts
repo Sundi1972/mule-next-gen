@@ -1,13 +1,13 @@
 /** Milliseconds the device clock may move apart from the monotonic clock between two readings before it counts as a jump. */
 export const CLOCK_JUMP_MS = 1_000;
 
-/** What ClockSync needs to notice the device clock jumping; without it, it never does. */
+/** What ClockSync needs to notice the device clock jumping, and whom it tells when a round trip moves the offset; without it, it does neither. */
 export interface ClockWatch {
   /** A clock the device can't change: performance.now(). */
   monotonic: () => number;
   /** Called once per jump, after the samples moved with the device clock. */
   onJump: () => void;
-  /** Called whenever `offset` changes: a jump's shift, or a round trip that moves it. */
+  /** Called when a round trip moves `offset`. Not on a jump's shift: that keeps serverNow() continuous. */
   onOffset: () => void;
 }
 
@@ -72,11 +72,9 @@ export class ClockSync {
     const jump = this.skew === null ? 0 : skew - this.skew;
     this.skew = skew;
     if (Math.abs(jump) <= CLOCK_JUMP_MS) return;
-    const before = this.offset;
     for (const s of this.samples) s.offset -= jump;
     this.shifted = this.samples.length > 0;
     this.jumpedAt = localNow;
     this.watch.onJump();
-    if (this.offset !== before) this.watch.onOffset();
   }
 }
