@@ -176,13 +176,15 @@ No behaviour change: a pure move, as land-auction.ts and politics-view.ts alread
 
 ### Task C.1: move the pure walking parts
 
-- [ ] **Step 1:** move into `dev-walking.ts`: `DevIntent`, `Colonist`, `walkTarget`, `placeName`, the order of due arrivals (the sort inside `settleArrivals`), and the colonist view (the body of `colonistView`, as a function of the colonist and the clock). The timer wiring (scheduling, `settleArrivals`/`arrive`/`act` as methods, `devEndsAt`, the early end) stays in `MuleGame`.
-- [ ] **Step 2:** the pin. `dev-walking.test.ts`, `planning.test.ts` and the whole server suite pass unedited. **Positive control:** break `walkTarget` in its new home (one place returns the wrong target), watch dev-walking.test.ts go red, then restore.
+**MERGED into the lane as #134 (1ec8d5b, head 9db7c57).** mule-game.ts went from 1118 to 1066 lines, and dev-walking.ts is 58. The colonist view takes the phase, not the clock, because its body never read the clock. The control turned 12 of 26 C13 rows red. CI check and e2e were green, and the lead reviewed it from the diff.
+
+- [x] **Step 1:** move into `dev-walking.ts`: `DevIntent`, `Colonist`, `walkTarget`, `placeName`, the order of due arrivals (the sort inside `settleArrivals`), and the colonist view (the body of `colonistView`, as a function of the colonist and the clock). The timer wiring (scheduling, `settleArrivals`/`arrive`/`act` as methods, `devEndsAt`, the early end) stays in `MuleGame`.
+- [x] **Step 2:** the pin. `dev-walking.test.ts`, `planning.test.ts` and the whole server suite pass unedited. **Positive control:** break `walkTarget` in its new home (one place returns the wrong target), watch dev-walking.test.ts go red, then restore.
 
 ### PR-C merge gate
 
-- [ ] `git diff --stat` shows only the two server source files; no test is edited
-- [ ] `pnpm typecheck` · `pnpm test` are green, and the server count is unchanged (153 +1 skipped)
-- [ ] The positive control went red, and the tree is clean after the restore
-- [ ] `pnpm --filter @mule/web build` and `pnpm --filter @mule/web e2e:core` are green (the walk is driven in the smoke)
-- [ ] A code review has come back clean
+- [x] `git diff --stat` shows only the two server source files; no test is edited
+- [x] `pnpm typecheck` · `pnpm test` are green, and the server count is unchanged (153 +1 skipped)
+- [x] The positive control went red, and the tree is clean after the restore
+- [x] `pnpm --filter @mule/web build` and `pnpm --filter @mule/web e2e:core` are green (the walk is driven in the smoke)
+- [x] A code review has come back clean
