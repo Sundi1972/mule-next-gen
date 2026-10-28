@@ -89,3 +89,15 @@ draws them there.
 | Arcade AM-2 (Q2) | in the arcade plan (PR-8) | — |
 
 Not needed: Q4 (real time only), Q6 (no AI input changes), Q7 (display only).
+
+## Ruled (the PM, 2026-10-29)
+
+- **Owners:** useWalkIntent.ts WS3 (born in f007f975); PHASES WS3 (R599, git); `phone/hub/{desks,tools,today,
+  needs,slots,state}` WS6 (R235; R505 did not narrow it); `e2e/hub-steps.ts` WS6 (R649, git); month end WS4 builds
+  (R557), WS3 reviewing its named edits in protocol and mule-game.ts; fund in and out by source produced once by
+  WS7 (slice 2a, R490), drawn by A-8.
+- **Development:** (A). V-2, V-3, V-5, V-6 and V-7 are drawn in the arcade mock first and PR-6 builds them; nothing
+  new on Develop.tsx.
+- **Q6:** a view change, no sim.
+- **Order:** A-4 and A-3 now; A-1, A-5, A-6, A-7 after WS1's sims (A-1's is done, with WS1's fix: a seat counts as in
+  once it owns no plot or has ended its turn); A-2 after WS7's PR-3; A-8 when WS4 is free. The PM routes each PR.
