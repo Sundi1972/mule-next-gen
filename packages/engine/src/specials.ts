@@ -178,6 +178,7 @@ export function settleSpecials(state: GameState, lines: readonly ProductionLine[
 // A what-if copy has a stand-in seed, so it can't know the real draw and imagines none, like events and colony lots.
 function collapses(state: GameState, index: number): boolean {
   // Its own RNG from (seed, month, plot): no other draw in the game shifts it.
+  // literal-ok: hash-mixing multipliers that spread (seed, month, plot) over the seed space
   const rng = createRng((Math.imul(state.seed, 0x9e3779b1) + Math.imul(state.month, 0x85ebca77) + Math.imul(index, 0xc2b2ae3d)) >>> 0);
   return rng.chance(EFFECT.collapseChance);
 }
