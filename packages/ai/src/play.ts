@@ -24,10 +24,13 @@ import {
   stepAuction,
   stepLandAuction,
   STORE_ID,
+  tileIndex,
   visitPub,
+  walkSeconds,
   WALK,
   type AiLevelId,
   type AiPersonaId,
+  type DevPlace,
   type GameState,
 } from '@mule/engine';
 import type { Act, AiAction } from './actions.js';
@@ -57,15 +60,42 @@ export interface PlayedGame {
   auction: { between: number; store: number; ship: number; ms: number };
   /** Lots at the land auction: sold and unsold, and of those the colony's offered and sold; stalled counts land auctions cut off by the tick limit. */
   lots: { sold: number; unsold: number; colonyOffered: number; colonySold: number; stalled: number };
+  /** MULEs still led when a seat's development time ran out: they ran off. */
+  mulesLost: number;
   decisions: number;
 }
 
 const DEV_TICK_MS = AI_HANDS.devTickMs;
 const rot = (i: number, k: number, n = 6) => (((i - k) % n) + n) % n;
 
-/** Applies a seat's action with the engine's own checks; a RuleError means the rules refused it. */
-export function applyAction(state: GameState, id: string, action: AiAction, clock?: { left: number }): boolean {
+/** A seat's development clock: seconds left, and where it stands when the game walks. */
+export interface DevClock {
+  left: number;
+  at?: DevPlace;
+}
+
+/** Where a development action happens, if it takes a walk: the corral for a MULE, the plot, or the store for the pub. */
+function walkTarget(state: GameState, action: AiAction): DevPlace | null {
+  if (action.type === 'buyMule') return 'corral';
+  if (action.type === 'pub') return 'store';
+  if (action.type === 'install' || action.type === 'analyse' || action.type === 'filter') return tileIndex(state.width, action.x, action.y);
+  return null;
+}
+
+/**
+ * Applies a seat's action with the engine's own checks; a RuleError means the rules refused it. Where the game walks,
+ * the seat first walks to where the action happens, and the walk comes off its clock; a walk longer than the time
+ * left is refused, except to the pub, which pays for what is left when it gets there.
+ */
+export function applyAction(state: GameState, id: string, action: AiAction, clock?: DevClock): boolean {
   try {
+    const to = clock?.at !== undefined && state.phase === 'development' ? walkTarget(state, action) : null;
+    if (clock?.at !== undefined && to !== null) {
+      const walk = walkSeconds(state, id, clock.at, to);
+      if (walk > clock.left && action.type !== 'pub') return false;
+      clock.left = Math.max(0, clock.left - walk);
+      clock.at = to;
+    }
     switch (action.type) {
       case 'claim':
         claimPlot(state, id, action.x, action.y);
@@ -113,6 +143,8 @@ export interface PlayOptions {
   onDecision?: (r: DecisionRecord) => void;
   /** Called after each phase is played, before the game moves on: for diagnostics. */
   onPhase?: (state: GameState) => void;
+  /** Whether walking costs development time (DEV_WALK). On unless set false, to compare with the game before walking. */
+  walking?: boolean;
 }
 
 export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions = {}): PlayedGame {
@@ -136,6 +168,7 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
   const auction = { between: 0, store: 0, ship: 0, ms: 0 };
   const lotHands = seats.map((s) => new LotHand(s.mind, createRng((s.options.seed ^ 0xc2b2ae35) >>> 0)));
   const lots = { sold: 0, unsold: 0, colonyOffered: 0, colonySold: 0, stalled: 0 };
+  let mulesLost = 0;
   let guard = 0;
   while (state.phase !== 'gameOver' && guard++ < 500) {
     switch (state.phase) {
@@ -157,7 +190,9 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
         break;
       }
       case 'development': {
-        const clocks = new Map(state.players.map((p) => [p.id, { left: p.devSeconds }]));
+        // Everyone starts the month in the store.
+        const start: DevPlace | undefined = options.walking === false ? undefined : 'store';
+        const clocks = new Map(state.players.map((p): [string, DevClock] => [p.id, { left: p.devSeconds, at: start }]));
         for (let t = 0; t < 120_000; t += DEV_TICK_MS) {
           const active = seats.filter((s) => !state.players.find((p) => p.id === s.id)!.doneDeveloping && clocks.get(s.id)!.left > 0);
           if (active.length === 0) break;
@@ -168,10 +203,12 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
             const clock = clocks.get(s.id)!;
             if (clock.left <= 0) continue;
             const act: Act = (a) => applyAction(state, s.id, a, clock);
-            s.developTick(state, DEV_TICK_MS, clock.left, act);
+            s.developTick(state, DEV_TICK_MS, clock.left, act, clock.at);
             clock.left -= DEV_TICK_MS / 1_000;
           }
         }
+        // A MULE still led when time runs out runs off.
+        mulesLost += state.players.filter((p) => p.carriedMule !== null).length;
         break;
       }
       case 'auction': {
@@ -208,5 +245,5 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
     options.onPhase?.(state);
     advancePhase(state);
   }
-  return { state, seats, broke, auction, lots, decisions };
+  return { state, seats, broke, auction, lots, mulesLost, decisions };
 }

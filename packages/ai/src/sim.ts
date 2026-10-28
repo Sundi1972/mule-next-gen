@@ -35,6 +35,9 @@ function main() {
   const persona = argText('persona') as AiPersonaId | null;
   if (!(level in AI_LEVELS)) throw new Error(`Unknown level ${level}; use ${Object.keys(AI_LEVELS).join(', ')}`);
   if (persona && !(persona in AI_PERSONAS)) throw new Error(`Unknown persona ${persona}; use ${Object.keys(AI_PERSONAS).join(', ')}`);
+  // `--walking off` plays the game as it was before walking cost development time.
+  const walking = argText('walking') !== 'off';
+  let mulesLost = 0;
   const byPersona: Record<string, number> = {};
   const prices = Object.fromEntries(GOODS.map((g) => [g, [] as number[]]));
   const mulePrices: number[] = [];
@@ -57,7 +60,8 @@ function main() {
 
   for (let seed = first; seed < first + games; seed++) {
     const specs = simSeats(players, level, seed, persona);
-    const { state, broke, auction: a, lots: l } = playGame(seed, specs);
+    const { state, broke, auction: a, lots: l, mulesLost: lost } = playGame(seed, specs, { walking });
+    mulesLost += lost;
     for (const k of ['between', 'store', 'ship', 'ms'] as const) auction[k] += a[k];
     for (const k of Object.keys(lots) as (keyof typeof lots)[]) lots[k] += l[k];
     months += state.history.length;
@@ -100,6 +104,7 @@ function main() {
   console.log(`${check(minFund >= 0)} Lowest colony fund ${minFund} (target 0 or more)`);
   console.log(`${check(collapsed / games <= 0.1)} Ended in Collapse: ${pct(collapsed, games)} (target 10% or less)`);
   console.log(`     Store capital: lowest ${minCapital} (no check: the store never runs out of money)`);
+  console.log(`     MULEs lost to the clock: ${(mulesLost / games).toFixed(1)} a game (walking ${walking ? 'on' : 'off'}; no check)`);
   console.log(`     Wins by species:${Object.entries(wins).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
   console.log(`     Wins by persona: ${Object.entries(byPersona).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
   console.log(
