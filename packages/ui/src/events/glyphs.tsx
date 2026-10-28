@@ -16,8 +16,9 @@ const S = { fill: 'none', stroke: 'currentColor', strokeWidth: 2.2, strokeLineca
 const F = { fill: 'currentColor' };
 
 /** One glyph per event, each with its own silhouette so it reads without colour: wind lines, a beetle, a flame. */
-const GLYPH: Record<ShowEventKey, ReactNode> = {
-  dustStorm: (
+/** Each is a function, so no JSX is evaluated until a glyph renders: importing @mule/ui from Node (e2e scripts) must not need React in scope. */
+const GLYPH: Record<ShowEventKey, () => ReactNode> = {
+  dustStorm: () => (
     <>
       <path {...S} d="M3 8h10.5a3 3 0 1 0-3-3" />
       <path {...S} d="M3 12.5h15a3 3 0 1 1-3 3" />
@@ -26,7 +27,7 @@ const GLYPH: Record<ShowEventKey, ReactNode> = {
       <circle cx="7" cy="20.5" r="1.1" {...F} />
     </>
   ),
-  drought: (
+  drought: () => (
     <>
       <circle cx="12" cy="7" r="3.6" {...F} />
       <path {...S} strokeWidth={1.8} d="M12 .8v1.4M5.6 3.2l1 1M18.4 3.2l-1 1M4.2 9.2h1.4M18.4 9.2h1.4" />
@@ -34,20 +35,20 @@ const GLYPH: Record<ShowEventKey, ReactNode> = {
       <path {...S} strokeWidth={1.8} d="M8 15l-1.6 3 2.2 2.2-.8 2M15.5 15l1.2 2.6-2 2.4" />
     </>
   ),
-  acidRain: (
+  acidRain: () => (
     <>
       <path {...F} d="M6.5 12.5a4.4 4.4 0 0 1-.4-8.8 6 6 0 0 1 11.3 1.9 3.5 3.5 0 0 1 .1 6.9Z" />
       <path {...S} d="M7.5 15.5l-1.2 3M12.5 15.5l-1.2 3M17.5 15.5l-1.2 3M10 20l-.8 2.2M15 20l-.8 2.2" />
     </>
   ),
-  solarFlare: (
+  solarFlare: () => (
     <>
       <path {...F} d={star(8, 11.3, 6.6)} />
       <circle cx="12" cy="12" r="3.6" fill="var(--color-void)" />
       <circle cx="12" cy="12" r="2" {...F} />
     </>
   ),
-  cometPass: (
+  cometPass: () => (
     <>
       <path {...F} opacity={0.75} d="M14.7 3.7 3 18.6 5.4 21 20.3 9.3Z" />
       <circle cx="17.5" cy="6.5" r="4" {...F} />
@@ -55,14 +56,14 @@ const GLYPH: Record<ShowEventKey, ReactNode> = {
       <circle cx="20" cy="17" r="1.1" {...F} />
     </>
   ),
-  flood: (
+  flood: () => (
     <>
       <path {...S} d="M2 6.5c2.5-2 5-2 7.5 0s5 2 7.5 0 3.5-1.5 5 0" />
       <path {...S} d="M2 12c2.5-2 5-2 7.5 0s5 2 7.5 0 3.5-1.5 5 0" />
       <path {...S} d="M2 17.5c2.5-2 5-2 7.5 0s5 2 7.5 0 3.5-1.5 5 0" />
     </>
   ),
-  volcanicAsh: (
+  volcanicAsh: () => (
     <>
       <path {...F} d="M1.5 22 8.5 11h2l1.5 2 1.5-2h2l7 11Z" />
       <circle cx="9.5" cy="6.5" r="2.4" {...F} />
@@ -70,7 +71,7 @@ const GLYPH: Record<ShowEventKey, ReactNode> = {
       <circle cx="17.5" cy="7" r="2.1" {...F} />
     </>
   ),
-  pestSwarm: (
+  pestSwarm: () => (
     <>
       <ellipse cx="12" cy="14" rx="5" ry="6.5" {...F} />
       <circle cx="12" cy="6.2" r="2.6" {...F} />
@@ -78,13 +79,13 @@ const GLYPH: Record<ShowEventKey, ReactNode> = {
       <path d="M12 8.5v12" stroke="var(--color-void)" strokeWidth="1.2" />
     </>
   ),
-  wildfire: (
+  wildfire: () => (
     <>
       <path {...F} d="M12 1.5c.6 3.6 5.8 6 5.8 11.8a5.8 5.8 0 0 1-11.6 0c0-2.6 1.5-4.2 2.6-5.8.3 1.9 1 2.9 2 3.1 0-3.1-.6-6.6 1.2-9.1Z" />
       <path fill="var(--color-void)" d="M12 21a2.5 2.5 0 0 1-2.5-2.5c0-1.5 1.5-2.6 2.5-4.6 1 2 2.5 3.1 2.5 4.6A2.5 2.5 0 0 1 12 21Z" />
     </>
   ),
-  bumperHarvest: (
+  bumperHarvest: () => (
     <>
       <path {...S} d="M12 22.5V7" />
       {[8.5, 12.5, 16.5].map((y) => (
@@ -101,7 +102,7 @@ const GLYPH: Record<ShowEventKey, ReactNode> = {
 export function EventGlyph({ k, size = 24, className }: { k: ShowEventKey; size?: number; className?: string }) {
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} className={cx('shrink-0', className)} aria-hidden data-glyph={k}>
-      {GLYPH[k]}
+      {GLYPH[k]()}
     </svg>
   );
 }
