@@ -1,4 +1,4 @@
-import type { AuctionSide, CanRun, Election, ElectionResult, EventKey, EventKind, Good, Ground, MonthEvent, Office, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
+import type { AuctionSide, CanRun, DevPlace, Election, ElectionResult, EventKey, EventKind, Good, Ground, MonthEvent, Office, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -71,6 +71,17 @@ export interface PlayerView {
   ready: boolean;
   /** True once they went to the pub this development phase. */
   doneDeveloping: boolean;
+  /** Where their colonist is in development, public like every place; null outside development. */
+  colonist: ColonistView | null;
+}
+
+/** A colonist in development. Times are the server's epoch ms, like phaseEndsAt. */
+export interface ColonistView {
+  /** Where it stands, or where it is walking to. */
+  at: DevPlace;
+  walk: { from: DevPlace; startedAt: number; arrivesAt: number } | null;
+  /** While it stands on a plot for a geo analysis: when the analysis is done. */
+  assayUntil: number | null;
 }
 
 export interface MyView {

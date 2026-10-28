@@ -1,24 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
-import { fakeContext, seats } from './fake-context.js';
+import { toDevelopment as reachDevelopment } from './fake-context.js';
 
 /** Month 1 into development with Heiko (s1) owning the first plot that lit up in the grant. */
 function toDevelopment() {
-  const { ctx, advance } = fakeContext();
-  const game = new MuleGame(ctx, 7);
-  game.start(seats);
-  advance(PHASE_MS.planning);
-  let plot: { x: number; y: number } | null = null;
-  while (game.viewFor(null).phase === 'landGrant') {
-    const lit = game.viewFor('s1').lit;
-    if (!plot && lit) {
-      game.handle('s1', { type: 'claim', ...lit });
-      plot = lit;
-    }
-    if (game.viewFor(null).phase === 'landGrant') advance(GRANT_TICK_MS);
-  }
-  for (let i = 0; i < 100 && game.viewFor(null).phase !== 'development'; i++) advance(1_000);
-  expect(game.viewFor(null).phase).toBe('development');
+  const { game, advance, plot } = reachDevelopment({ claimer: 's1' });
   expect(plot).not.toBeNull();
   return { game, advance, plot: plot! };
 }

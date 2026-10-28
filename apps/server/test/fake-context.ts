@@ -1,5 +1,6 @@
-import { advancePhase, COLONY_SELLER, createGame } from '@mule/engine';
-import type { GameContext } from '@tabletop/core';
+import { advancePhase, COLONY_SELLER, createGame, type GameState } from '@mule/engine';
+import type { GameContext, SeatInfo } from '@tabletop/core';
+import { MuleGame } from '../src/mule-game.js';
 
 /** The three seats these server tests play with. */
 export const seats = [
@@ -7,6 +8,35 @@ export const seats = [
   { id: 's2', name: 'Mia', isAi: false, color: 1 },
   { id: 's3', name: 'The Baron', isAi: true, color: 2 },
 ];
+
+/** Two human seats whose species walk at different paces: Lena a Zipwing, Ossa a Mollox. */
+export const walkers: SeatInfo[] = [
+  { id: 's1', name: 'Lena', isAi: false, color: 0, pick: 'zipwing' },
+  { id: 's2', name: 'Ossa', isAi: false, color: 1, pick: 'mollox' },
+];
+
+/**
+ * Plays month 1 into development on the fake clock, seed 7. `prepare` runs once while planning is open, to set the
+ * state up as a test needs it. With `claimer`, that seat claims the first plot lit in the land grant, returned as `plot`.
+ */
+export function toDevelopment(options: { players?: SeatInfo[]; phaseScale?: number; claimer?: string; prepare?: (state: GameState) => void } = {}) {
+  const fake = fakeContext();
+  const game = new MuleGame(fake.ctx, 7, options.phaseScale === undefined ? undefined : { phaseScale: options.phaseScale });
+  game.start(options.players ?? seats);
+  const state = (game as unknown as { state: GameState }).state;
+  options.prepare?.(state);
+  let plot: { x: number; y: number } | null = null;
+  for (let i = 0; i < 10_000 && game.viewFor(null).phase !== 'development'; i++) {
+    const lit: { x: number; y: number } | null = options.claimer && !plot && game.viewFor(null).phase === 'landGrant' ? game.viewFor(options.claimer).lit : null;
+    if (lit) {
+      game.handle(options.claimer!, { type: 'claim', ...lit });
+      plot = lit;
+    }
+    if (game.viewFor(null).phase !== 'development') fake.advance(100);
+  }
+  if (game.viewFor(null).phase !== 'development') throw new Error('month 1 never reached development');
+  return { game, state, plot, ...fake };
+}
 
 /**
  * A game context with a manual clock. `waits` is the wait each scheduled timer
