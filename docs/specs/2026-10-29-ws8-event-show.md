@@ -111,7 +111,7 @@ today        the production phase lasts PHASES.productionMs × phaseScale whatev
              anchors: apps/server/src/mule-game.ts::startPhaseTimer, apps/server/src/mule-game.ts::PHASE_MS,
              packages/engine/src/config.ts::PHASES (productionMs 15 000)    verified_by: read
 tomorrow     MUST: production lasts its base length plus the events' extra time (RULE-1), never more than the cap.
-             MUST: a quiet month, and a month whose events fit the existing 4.8 s window, last exactly as today.
+             MUST: a quiet month lasts exactly as today (AM-4: every wave-1 event plays longer than the 4.8 s window).
 logic        → §2 RULE-1 · evaluated_at: entering production (runProduction has already run in advancePhase, so
              the month report holds the events) · writes: phaseEndsAt, productionMs
 seam         mule-game.ts::startPhaseTimer — the one place production's length is set (productionMs feeds the view)
@@ -329,7 +329,7 @@ unknown
   a key with no weight → a headline: an event must never play shorter than its story because the table forgot it.
 
 examples                                                     → §6
-  no events → 15 000 ms · one dust storm (≤ window) → 15 000 ms
+  no events → 15 000 ms · one dust storm → 15 000 + (7 000 − 4 800) = 17 200 ms (AM-4)
   drought + pest swarm → 15 000 + (their sum − 4 800) · five headlines → capped at cap
 ```
 
@@ -415,7 +415,7 @@ Code-only; no existing state to reach. Games in progress pick up the new lengths
 | B-AC-2 (G-2) | Given no board is connected, when production plays, then each event plays on the phone's own map, a tap skips to the result, and the result says what it did to you | phone Production rendered with boards 0 | with boards 1 the phone shows only the light card | C7 |
 | B-AC-3 (G-1, PR-2) | Given a goods auction month where pirates raid, when the auction opens, then the TV plays the pirate ship before trading opens and nobody can bid until it ends | the TV overlay and the server's refusal of a bid | an auction with no event opens at once | C8, C9, C10, C12 |
 | B-AC-4 (G-2, PR-2) | Given no board, when a store fire fires in the auction, then the phone plays the store fire itself; with a board, the light card | phone overlay | — | C10, C12 |
-| T-AC-1 (serves B-AC-1) | RULE-1's examples: no events and one dust storm → 15 000 ms; drought + pest swarm → 15 000 + (sum − 4 800); five headlines → the cap; × phaseScale | `MuleGame`'s view: `phaseEndsAt − now` and `production.lengthMs` | a phase other than production is not lengthened by this rule | C1, C2 |
+| T-AC-1 (serves B-AC-1) | RULE-1's examples: no events → 15 000 ms; one dust storm → 17 200 ms; drought + pest swarm → 15 000 + (sum − 4 800); five headlines → the cap; × phaseScale | `MuleGame`'s view: `phaseEndsAt − now` and `production.lengthMs` | a phase other than production is not lengthened by this rule | C1, C2 |
 | T-AC-2 (serves B-AC-1) | The production view lists every event of the month in fired order with phase, weight and playMs | `apps/server/test/events-view.test.ts` on `MuleGame`'s view | a month with no events lists none | C3 |
 | T-AC-3 (serves B-AC-1) | RULE-2: a plot's units add every event's delta in order, never below 0; landed/harvest match | ProductionMap's exported `finalUnits`/`landed` and the rendered bars | a plot no event reached keeps `made` | C5 |
 | T-AC-4 (serves B-AC-1) | At a time inside event i's segment the map shows event i (`data-event`), and the goods fly only after the last | rendered ProductionMap | quiet month: timeline as today | C5 |
@@ -506,6 +506,20 @@ because   G-1: the TV must play every event the report holds; PR-1 cannot wait f
           WS1's unmerged branch into ours
 goal      G-1 (unchanged)
 folded    C3 reads as above for PR-1; R-1's graft stays a PR-1 merge-gate line (already in the plan)
+```
+
+```
+AM-4 · 2026-10-28 · lead · PR-1 Task 1 (a false example, found by the implementer)
+
+target    §2 RULE-1 examples, §1 C2 tomorrow, §6 T-AC-1
+said      "one dust storm (≤ window) → 15 000 ms"; "a month whose events fit the 4.8 s window lasts as today"
+did       the formula stands; the example was wrong: a headline plays 7 000 ms (C1's values), longer than the 4 800 ms
+          window, so one dust storm gives 17 200 ms. No wave-1 event fits the window (headline 7 000, spotlight 5 200),
+          so only a quiet month lasts exactly as today. That is what Heiko approved ("production grows only in months
+          with events; quiet months unchanged").
+because   G-1: each event plays its whole story; shrinking stories to fit the old window would cut them
+goal      G-1 (unchanged)
+folded    RULE-1 example, C2 tomorrow and T-AC-1 now say 17 200 for one dust storm
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
