@@ -55,6 +55,7 @@ const ROWS: Row[] = [
   { what: 'a spread whose orders skip: the late hit is clamped to the settle', events: [fired('pestSwarm', 6000, 2, { orders: [0, 7] })], introMs: 0, start: 0, mode: 'tv', grid: G15, bounds: [0, 6], clamped: [[0, 1]] },
   { what: 'a 19 × 11 map: the far plot is timed on its own grid', events: [fired('dustStorm', 9400, 19, { width: 19 })], introMs: 1800, start: 0, mode: 'tv', grid: G19, bounds: [1.8, 11.2], unclamped: true },
   { what: 'a 0 ms event between two: a moment, never a stalled clock', events: [fired('drought', 6000, 3), fired('flood', 0, 3), fired('wildfire', 4000, 2)], introMs: 0, start: 0, mode: 'tv', grid: G15, bounds: [0, 6, 6, 10] },
+  { what: 'a negative intro counts as 0: the first segment starts at the start', events: [fired('drought', 4000, 3)], introMs: -500, start: 2, mode: 'tv', grid: G15, bounds: [2, 6] },
   { what: 'a negative length counts as 0', events: [fired('dustStorm', -500, 3), fired('solarFlare', 5000, 3)], introMs: 1800, start: 2, mode: 'solo', grid: G15, bounds: [3.8, 3.8, 8.8] },
 ];
 

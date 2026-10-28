@@ -169,6 +169,9 @@ describe('the production show plays every event of the month', () => {
     expect(landed(all, end + FLY_STEP + FLIGHT + 0.01, 'lena')).toEqual({ water: 2 });
     expect(landing(all, end + FLY_STEP + FLIGHT + 0.01, 'lena')).toBe(true);
     expect(landing(all, QUIET_FLY + FLIGHT + 0.01, 'lena')).toBe(false);
+    // The rendered bars fly on the same timeline: still at rest as the window closes, gone one step and one flight later.
+    expect(plot(render(all, end - 0.05), 4, 0)).not.toMatch(/opacity-0|transition:transform/);
+    expect(plot(render(all, end + FLY_STEP + FLIGHT + 0.01), 4, 0)).toContain('opacity-0');
 
     // While events play the bars sit in the map's frame (under the stories, with the camera); just before they fly they
     // leave it, already grown, so leaving does not grow them again.
