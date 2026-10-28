@@ -762,6 +762,9 @@ export const PHASES = {
   upkeepMs: 8_000,
 };
 
+/** How big an event's story is on the TV: a headline, a spotlight, or one line of a shared roll call. */
+export type EventWeight = 'headline' | 'spotlight' | 'bulletin';
+
 /** How long the production show plays each month event, and how far production stretches to fit them. */
 export const EVENT_SHOW = {
   /** How big each event's story is on the TV; a key missing here plays as a headline. */
@@ -776,7 +779,7 @@ export const EVENT_SHOW = {
     pestSwarm: 'spotlight',
     wildfire: 'spotlight',
     bumperHarvest: 'spotlight',
-  } as Partial<Record<EventKey, 'headline' | 'spotlight' | 'bulletin'>>,
+  } as Partial<Record<EventKey, EventWeight>>,
   /** How long one headline or spotlight plays, in ms. */
   playMs: { headline: 7_000, spotlight: 5_200 },
   /** How long the one roll call that every bulletin of a phase shares plays, in ms. */

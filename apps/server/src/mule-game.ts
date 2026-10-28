@@ -621,8 +621,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   /** Ends the phase when its PHASE_MS runs out; a phase whose PHASE_MS is null has no clock and waits for Ready. */
   private startPhaseTimer(phase: keyof typeof PHASE_MS): void {
-    // Production stretches past its own event window to play every event of the month.
-    const length = phase === 'production' ? PHASE_MS.production + Math.max(0, eventShow(this.requireState().history.at(-1)?.events ?? []).showMs - EVENT_SHOW.productionWindowMs) : PHASE_MS[phase];
+    // Production stretches past its own event window to play every event of the month (RULE-1).
+    const extraMs = phase === 'production' ? Math.max(0, eventShow(this.requireState().history.at(-1)?.events ?? []).showMs - EVENT_SHOW.productionWindowMs) : 0;
+    const base = PHASE_MS[phase];
+    const length = base === null ? null : base + extraMs;
     this.phaseEndsAt = null;
     if (length === null) return;
     const ms = length * this.phaseScale;

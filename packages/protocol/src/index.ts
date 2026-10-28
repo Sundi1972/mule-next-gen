@@ -1,4 +1,4 @@
-import type { AuctionSide, CanRun, CeremonyStep, DevPlace, Election, EventKey, EventKind, Good, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
+import type { AuctionSide, CanRun, CeremonyStep, DevPlace, Election, EventKey, EventKind, EventWeight, Good, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -346,7 +346,7 @@ export interface ProductionEventView {
   /** The phase whose show plays it. */
   phase: Phase;
   /** How big its story is on the TV. */
-  weight: 'headline' | 'spotlight' | 'bulletin';
+  weight: EventWeight;
   /** How long the show plays it, in ms at full pace; the client never computes this itself. */
   playMs: number;
 }

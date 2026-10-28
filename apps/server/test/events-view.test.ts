@@ -50,8 +50,7 @@ function playMonth(keys: EventKey[], phaseScale = 1) {
 }
 
 describe('the event show: production lasts long enough for every event, and the view says how long each plays', () => {
-  // A lone dust storm is a 7 000 ms headline, longer than the 4 800 ms window, so by RULE-1 it adds 2 200: the spec's
-  // "one dust storm → 15 000" example contradicts its own formula and values (flagged to the lead).
+  // A lone dust storm plays 7 000 ms, past the 4 800 ms window, so it lasts 17 200 (spec AM-4).
   it.each([
     { scale: 1, keys: [] as EventKey[], ms: 15_000 },
     { scale: 1, keys: ['dustStorm'] as EventKey[], ms: 17_200 },
@@ -80,6 +79,10 @@ describe('the event show: production lasts long enough for every event, and the 
       { key: 'pestSwarm', phase: 'production', weight: 'spotlight', playMs: 5_200 },
       { key: 'bumperHarvest', phase: 'production', weight: 'spotlight', playMs: 5_200 },
     ]);
+    // A key the weight table lacks plays as a headline, in the view and in production's length.
+    const unknown = playMonth(['pirateRaid' as EventKey]);
+    expect(unknown.production.events.map(({ weight, playMs }) => ({ weight, playMs }))).toEqual([{ weight: 'headline', playMs: 7_000 }]);
+    expect(unknown.length('production')).toBe(17_200);
   });
 
   it('T-AC-2: when the cap bites, five headlines share it equally, 6 000 each, unscaled at phaseScale 0.1', () => {
@@ -88,6 +91,10 @@ describe('the event show: production lasts long enough for every event, and the 
     expect(production.events.map(({ key, weight, playMs }) => ({ key, weight, playMs }))).toEqual(
       five.map((key) => ({ key, weight: 'headline', playMs: 6_000 })),
     );
+    // An uneven cut: 40 200 ms of stories into 30 000, shares rounded on the running total so they add up exactly.
+    const uneven = playMonth([...five, 'pestSwarm']).production.events.map((e) => e.playMs);
+    expect(uneven).toEqual([5_224, 5_224, 5_224, 5_224, 5_223, 3_881]);
+    expect(uneven.reduce((sum, ms) => sum + ms, 0)).toBe(30_000);
   });
 
   it('T-AC-2: a quiet month lists no events', () => {
