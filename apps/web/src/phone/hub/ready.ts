@@ -39,6 +39,14 @@ export function readyNow(others: readonly Seat[], isHost: boolean): { title: str
     : { title: `You're ready. Waiting for ${who}`, detail: `Planning has no clock: it ends when everyone is ready, or when the host continues.${awayLine}` };
 }
 
+/**
+ * The Now card for a Ready player in planning proper, or null to keep the screen's own: while the month's election
+ * runs, Ready only means done with this stage, and the election's Now still says what comes next.
+ */
+export function readyNowIn(view: Pick<MuleView, 'phase' | 'politics'>, ready: boolean, others: readonly Seat[], isHost: boolean): { title: string; detail: string } | null {
+  return ready && planningProper(view) ? readyNow(others, isHost) : null;
+}
+
 /** Planning with no election running: the only time the server accepts the host's Continue. */
 export function planningProper(view: Pick<MuleView, 'phase' | 'politics'>): boolean {
   const election = view.politics?.election;

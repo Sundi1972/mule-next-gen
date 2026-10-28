@@ -6,7 +6,7 @@ import { useServerNow } from '../../net/react';
 import { usePhoneGame } from '../game';
 import { PhoneShell, useWide, type Now } from '../Shell';
 import { needRows, planNow } from './needs';
-import { connectedIn, planningProper, readyNow, stillPlanning } from './ready';
+import { connectedIn, readyNowIn, stillPlanning } from './ready';
 import { ReadyBar, ReadyCount } from './ReadyBar';
 import { drawnSlots, type AgendaSlot, type DeskSlot, type HubSeat, type HubSlots, type MapToolSlot } from './slots';
 
@@ -60,9 +60,10 @@ export function Hub({ slots }: { slots: HubSlots }) {
     },
   };
   const others = stillPlanning(view.players, connectedIn(table.seats)).filter((s) => s.id !== self.id);
-  const now: Now = self.ready
-    ? readyNow(others, table.hostId === self.id && planningProper(view))
-    : (drawn.nows.reduce<Now | null>((n, give) => n ?? give(seat), null) ?? planNow(needRows(me.monthNeeds, me.stock, view.tiles.filter((t) => t.owner === me.id))));
+  const now: Now =
+    readyNowIn(view, self.ready, others, table.hostId === self.id) ??
+    drawn.nows.reduce<Now | null>((n, give) => n ?? give(seat), null) ??
+    planNow(needRows(me.monthNeeds, me.stock, view.tiles.filter((t) => t.owner === me.id)));
   const Panel = tool?.Panel;
   const Action = tool?.Action;
   const Body = desk?.Body;
