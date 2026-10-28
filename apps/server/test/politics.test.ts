@@ -166,7 +166,7 @@ const people = [
   { id: 'lena', name: 'Lena', isAi: false, color: 0 },
   { id: 'brix', name: 'Brix', isAi: false, color: 1 },
   { id: 'ossa', name: 'Ossa', isAi: false, color: 2 },
-  { id: 'ai1', name: 'The Baron', isAi: true, color: 3 },
+  { id: 'ai1', name: 'The Big Spender', isAi: true, color: 3 },
 ];
 const humans = ['lena', 'brix', 'ossa'];
 /** Seeds whose AI draws (RULE-8) give a test its arrangement; each test asserts its candidacies once nominate ends. */
@@ -246,7 +246,7 @@ describe('the election runs first in planning', () => {
       if (election(g.game).stage === 'over') overAt = g.ctx.now();
     }
     expect(election(g.game).candidates, 'seed precondition').toEqual(BARON_ALONE);
-    expect(overAt, 'The Baron runs alone: nominate, no ballot, then the reveal').toBe(POLITICS.nominateMs + POLITICS.revealMs);
+    expect(overAt, 'The Big Spender runs alone: nominate, no ballot, then the reveal').toBe(POLITICS.nominateMs + POLITICS.revealMs);
     expect(landAsks, 'one land plan per AI seat, as the election ends').toEqual([{ seat: 'ai1', at: overAt }]);
     expect(g.game.viewFor(null).phase).toBe('planning');
     expect(g.game.viewFor(null).phaseEndsAt, 'planning proper has no clock').toBeNull();
@@ -407,7 +407,7 @@ describe('the election runs first in planning', () => {
 describe('the politics view', () => {
   it('B-AC-1 (server): two humans run for Governor and vote; after the reveal every view shows the same result in the same tick, and the winner has the tax desk', () => {
     const g = started();
-    // The Baron runs for Governor too and votes for himself. Nobody runs for Sheriff: the richest player who is not the new Governor is appointed.
+    // The Big Spender runs for Governor too and votes for himself. Nobody runs for Sheriff: the richest player who is not the new Governor is appointed.
     setMoney(g.game, { lena: 900, brix: 1_000, ossa: 1_300, ai1: 1_100 });
     g.game.handle('lena', { type: 'run', office: 'governor', promise: HOLD });
     g.game.handle('brix', { type: 'run', office: 'governor', promise: HOLD });
@@ -457,7 +457,7 @@ describe('the politics view', () => {
 
   it('B-AC-2: after the Governor sets 8%, the next auction sale is taxed at 8%', () => {
     const g = started();
-    // The Baron runs against Lena; the three humans vote her in.
+    // The Big Spender runs against Lena; the three humans vote her in.
     g.game.handle('lena', { type: 'run', office: 'governor', promise: HOLD });
     allReady(g.game);
     untilStage(g, 'ballot');
@@ -617,7 +617,7 @@ describe('the politics view', () => {
 const aiTable = [
   { id: 'lena', name: 'Lena', isAi: false, color: 0 },
   { id: 'acc', name: 'The Accountant', isAi: true, color: 1 },
-  { id: 'baron', name: 'The Baron', isAi: true, color: 2 },
+  { id: 'baron', name: 'The Big Spender', isAi: true, color: 2 },
   { id: 'grudge', name: 'The Grudge', isAi: true, color: 3 },
 ];
 const aiIds = ['acc', 'baron', 'grudge'];
@@ -714,9 +714,9 @@ describe('AI seats in the election', () => {
     expect(g.game.viewFor(null).politics!.governor, 'seed precondition').toBe('baron');
     g.game.handle('lena', { type: 'ready' });
     expect(g.game.viewFor(null).phase, 'planning ended at once').toBe('landGrant');
-    expect(g.game.viewFor(null).politics!.tax.percent, "month 1: The Baron's 8% landed first").toBe(8);
+    expect(g.game.viewFor(null).politics!.tax.percent, "month 1: The Big Spender's 8% landed first").toBe(8);
 
-    // Month 2 has no election; the fund ran dry, so The Baron steers to 8 + 2.
+    // Month 2 has no election; the fund ran dry, so The Big Spender steers to 8 + 2.
     for (let ms = 0; ms < 600_000 && g.game.viewFor(null).phase !== 'upkeep'; ms += WALK.tickMs) g.advance(WALK.tickMs);
     engineOf(g.game).treasury.money = 0;
     for (let ms = 0; ms < 600_000 && g.game.viewFor(null).month === 1; ms += WALK.tickMs) g.advance(WALK.tickMs);
