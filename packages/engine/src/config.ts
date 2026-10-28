@@ -803,8 +803,9 @@ export interface AiLevelConfig {
   mulesPerMonth: number;
   /** Chance it misses a plot it wanted in the land grant. */
   missChance: number;
-  /** Allowed to corner goods and to act on spite. Rookie never does. */
+  /** Allowed to corner a good (a monopoly try). Rookie never does. */
   corners: boolean;
+  /** Allowed to act on spite against the leader. Rookie never does. */
   sabotage: boolean;
 }
 
