@@ -124,7 +124,7 @@ const words = (html: string) =>
     .replace(/&amp;/g, '&')
     .replace(/&quot;/g, '"')
     .replace(/\s+/g, ' ')
-    .replace(/ ([.,:·])/g, '$1')
+    .replace(/ ([.,:])/g, '$1')
     .trim();
 
 /** The phone's seat walks `side` in the view's auction, with the store at these prices. */
