@@ -1,5 +1,6 @@
 /**
- * T-AC-1: a phone plays a whole two-month game, lobby to final scores, against the real server.
+ * T-AC-1: a phone plays a whole three-month game, lobby to final scores, against the real server. Three months, so
+ * month 2 has a month end before game over (C20's B-AC-12).
  * On the way it proves B-AC-1 (the species you pick is the one you play) and B-AC-4 (the room card with no TV).
  * Run with `pnpm --filter @mule/web e2e`; replay a red run's map with `MULE_E2E_SEED=<seed>`.
  */
@@ -9,6 +10,7 @@ import { errors as playwrightErrors, type BrowserContext, type Page } from 'play
 import { PHASE_MS } from '../../server/src/mule-game.js';
 import { check, CLAIM_MS, claimAPlot, doneWithLand, headerSlot, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
 import { planningIsTheHub } from './hub-steps';
+import { gameOverIsInCredits, theLeagueTableAtTheMonthEnd, theMonthEndHoldsForThePhone } from './month-end-steps';
 import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
 import { fedPlayerSeesNoHunger, hungryPlayerSeesHerPace, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
@@ -28,9 +30,9 @@ async function loadAuctionSteps(): Promise<AuctionSteps> {
   return steps;
 }
 
-/** Every phase of months 1 and 2 the phone must show, in order. The last month's upkeep ends straight in game over. */
+/** Every phase of months 1 to 3 the phone must show, in order. The last month's upkeep ends straight in game over. */
 const MONTH = ['planning', 'landGrant', 'development', 'production', 'auction', 'upkeep'];
-const EXPECTED_PHASES = [...MONTH, ...MONTH.slice(0, -1), 'gameOver'];
+const EXPECTED_PHASES = [...MONTH, ...MONTH, ...MONTH.slice(0, -1), 'gameOver'];
 
 const PHASE_SCALE = 0.1;
 /** A phase's longest run at this scale, plus room for the browser and the network. */
@@ -55,7 +57,7 @@ const PART_LINES = ['money', 'goods', 'land', 'mules'] as const;
 const SHOW_SEED = 1;
 const SEED = seedFrom(process.env.MULE_E2E_SEED);
 const steps = await loadAuctionSteps();
-const { server, base } = await startServer({ maxMonths: 2, phaseScale: PHASE_SCALE, seed: () => SEED });
+const { server, base } = await startServer({ maxMonths: 3, phaseScale: PHASE_SCALE, seed: () => SEED });
 const browser = await launch();
 /** Every phase the player's devices showed: the phone, and from the move on the second device. */
 const seen: Shown[] = [];
@@ -158,8 +160,11 @@ try {
   });
   check(measured, 'FM-2: the month-1 auction reached a walk to measure');
 
+  // Month 1's end holds until the phone moves on (B-AC-13); the TV's Worth and air are read for month 2's change.
+  const monthOne = await theMonthEndHoldsForThePhone(ctx, 1);
+  console.log(`month end: ${monthOne.line}`);
+
   // Month 2.
-  await phone.locator('[data-phase=planning]').waitFor({ timeout: within(PHASE_MS.upkeep) });
   await steps.listedSale?.({ phone, tv, check });
   makeHungry(server, code);
   // B-AC-14: planning is the hub, its needs read from that seed; with B-AC-12's planning part.
@@ -180,19 +185,32 @@ try {
   await moveDialogOutlivedThePhase(ctx, moveLink);
   console.log(`production show, month 2: ${await checkTheShow({ tv: tvShow, phone: phoneShow, event: SEED === SHOW_SEED })}`);
   await pressDoneThroughTheAuction(phone);
+  // B-AC-12: month 2's end, the phone hungry since planning, against what the TV showed at month 1's end.
+  console.log(`league table: ${await theLeagueTableAtTheMonthEnd(ctx, monthOne.seen)}`);
+  console.log(`month end: ${(await theMonthEndHoldsForThePhone(ctx, 2)).line}`);
+
+  // Month 3, played through to game over.
+  const monthThree = Date.now();
+  await readyIfStillPlanning(phone);
+  await pastTheLandGrant(phone);
+  await steps.landAuction?.({ phone, tv, check }, 3);
+  await goToThePub(phone);
+  await pressDoneThroughTheAuction(phone);
+  console.log(`month 3: ${((Date.now() - monthThree) / 1_000).toFixed(1)} s`);
 
   // Game over.
   const scores = phone.locator('[data-phase=gameOver] [data-testid=scores]');
   await scores.waitFor({ timeout: 5_000 });
-  const rows = await scores.locator('li').allTextContents();
+  const rows = await scores.locator('tbody tr').allTextContents();
   check(rows.length === 3, `final scores for all three seats, got ${rows.length}`);
-  check(rows.some((r) => r.includes('Heiko (you)')), `the human is on the final scores: ${rows.join(' | ')}`);
+  check(rows.some((r) => r.includes('You (Heiko)')), `the human is on the final scores: ${rows.join(' | ')}`);
   await tv.getByTestId('tv-phase').filter({ hasText: 'Game over' }).waitFor({ timeout: 5_000 });
   await checkTheScoresAddUp(phone, tv);
+  console.log(`game over: ${await gameOverIsInCredits(phone, tv)}`);
   console.log(`turned upright and back: ${await turnUprightAndBack(phone)}`);
 
   const phases = seen.map((s) => s.phase);
-  check(isSubsequence(EXPECTED_PHASES, phases), `phone showed every phase of months 1 and 2 in order: ${phases.join(' > ')}`);
+  check(isSubsequence(EXPECTED_PHASES, phases), `phone showed every phase of months 1 to 3 in order: ${phases.join(' > ')}`);
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
   console.log(`phases: ${timeline(seen)}`);
   console.log(`e2e smoke: ok (room ${code}, seed ${SEED})`);
@@ -361,7 +379,7 @@ async function checkTheScoresAddUp(phone: Page, tv: Page): Promise<void> {
     if ((part === 'collapse' || part === 'office') && rows === 0) return 0;
     check(rows === 1, `B-AC-3: the phone shows one part-${part} line, got ${rows}`);
     // The office line is shown with a plus sign.
-    const shown = (await row.locator('td').last().textContent())?.replace(/^\s*\+/, '') ?? null;
+    const shown = (await row.locator('[data-num]').last().textContent())?.replace(/^\s*\+/, '') ?? null;
     return readNumber(shown, `the phone's part-${part}`);
   };
   const parts = Object.fromEntries(await Promise.all(PART_LINES.map(async (p) => [p, await line(p)] as const)));
@@ -374,9 +392,9 @@ async function checkTheScoresAddUp(phone: Page, tv: Page): Promise<void> {
   check(sum === total, `B-AC-3: the phone's lines ${PART_LINES.map((p) => `${p} ${parts[p]}`).join(' + ')} + office ${office} − collapse ${cut} = ${sum}, but its final score reads ${total}`);
 
   await tvEnd.getByTestId('tv-scores').waitFor({ timeout: 5_000 });
-  const hostRow = tvEnd.getByTestId('tv-scores').locator('li').filter({ has: tv.getByText('Heiko', { exact: true }) });
-  check((await hostRow.count()) === 1, 'B-AC-3: the TV lists the host once in its final scores');
-  const onTv = readNumber(await hostRow.locator('[data-num]').last().textContent(), "the host's TV score");
+  const hostRow = tvEnd.getByTestId('tv-scores').getByTestId('league-row-s1');
+  check((await hostRow.count()) === 1 && (await hostRow.getByText('Heiko', { exact: true }).count()) === 1, 'B-AC-3: the TV lists the host once in its final scores');
+  const onTv = readNumber(await hostRow.getByTestId('worth-s1').textContent(), "the host's TV score");
   check(onTv === total, `B-AC-3: the phone's final score ${total} is the host's score on the TV, ${onTv}`);
 
   // The band as the TV's air gauge names it, which everyone in the room reads.
