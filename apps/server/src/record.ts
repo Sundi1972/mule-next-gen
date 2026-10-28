@@ -134,16 +134,16 @@ export class Recorder {
     this.guard(() => {
       this.record.outcome ??= outcomeOf(state, this.record.seats);
     });
-    setImmediate(() => this.close());
+    setImmediate(() => this.guard(() => this.close()));
   }
 
   private close(): void {
-    if (this.broken || this.finished) return;
+    if (this.finished) return;
+    const stamp = new Date(this.record.t0).toISOString().replaceAll(':', '-');
+    const file = this.dir === null ? null : path.join(this.dir, `game-${stamp}-s${this.record.seed}.json`);
     const text = JSON.stringify(this.record);
     this.finished = JSON.parse(text) as MuleRecord;
-    if (this.dir === null) return;
-    const stamp = new Date(this.record.t0).toISOString().replaceAll(':', '-');
-    const file = path.join(this.dir, `game-${stamp}-s${this.record.seed}.json`);
+    if (this.dir === null || file === null) return;
     fs.promises
       .mkdir(this.dir, { recursive: true })
       .then(() => fs.promises.writeFile(file, text))
