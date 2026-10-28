@@ -76,12 +76,13 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:spike', () => {
   it('INV-spike-cap: a cap above BRAIN.spikeCapUsd is clamped, and the run stops at the first call whose worst case would pass it', async () => {
     expect(capFor(1)).toBe(BRAIN.spikeCapUsd);
     expect(capFor(0.01)).toBe(0.01);
-    // Each prompt's worst case prices about 270,000 chars as a cache write; the fake bills 90,000 plain input tokens.
+    // Each prompt's worst case prices about 108,000 tokens as a cache write; the fake bills 90,000 plain input tokens.
+    const chars = Math.round(108_000 * BRAIN.charsPerToken);
     const p = BRAIN.pricesPerMTok;
     const billed = (90_000 * p.input + 20 * p.output) / 1_000_000;
-    const worst = worstOf(270_000);
+    const worst = worstOf(chars);
     const waits: number[] = [];
-    const report = await run(items(40, 270_000), async (_p, w) => (waits.push(w), reply(100, { input: 90_000, cached_read: 0, cache_write: 0 })), 1);
+    const report = await run(items(40, chars), async (_p, w) => (waits.push(w), reply(100, { input: 90_000, cached_read: 0, cache_write: 0 })), 1);
     expect(report.cap).toBe(BRAIN.spikeCapUsd);
     expect(report.stopped).toBe('cap');
     expect(report.calls).toBe(5);

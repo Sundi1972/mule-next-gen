@@ -1054,10 +1054,11 @@ export const BRAIN = {
   /** Reply cap, in tokens. */
   maxTokens: 200,
   /**
-   * Prompt characters per token, as the budget assumes. Haiku 5.5 measured 2.56 to 2.65 on real prompts; this sits
-   * below the lowest so the worst case never undercounts.
+   * Prompt characters per token, as the budget assumes. Haiku 5.5 measured 2.56 to 2.65 on decision prompts, and about
+   * 2.24 on strategy prompts with adaptive thinking (spike S-A1); this sits below the lowest so the worst case never
+   * undercounts.
    */
-  charsPerToken: 2.5,
+  charsPerToken: 2.2,
   /** Longest chat line an AI says, in characters. */
   maxLineChars: 140,
   /** Most chat lines per AI seat per game month: one each for land, development and the auction, since a seat says at most one a phase. */
