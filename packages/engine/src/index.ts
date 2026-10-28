@@ -9,6 +9,7 @@ export * from './events.js';
 export * from './economy.js';
 export * from './walk.js';
 export * from './dev-walk.js';
+export * from './floor/hall.js';
 export * from './auction.js';
 export * from './lots.js';
 export * from './upkeep.js';
