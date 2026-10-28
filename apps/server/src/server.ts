@@ -5,7 +5,6 @@ import { RuleError, SPECIES } from '@mule/engine';
 import { EMOTES, type MuleIntent, type MuleView } from '@mule/protocol';
 import { RoomRegistry, TableError, type ClientEnvelope, type Connection, type GameContext, type Room } from '@tabletop/core';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { createBrain } from './brain/index.js';
 import { AI_NAMES, MuleGame } from './mule-game.js';
 import { createRecordedGame } from './record.js';
 
@@ -44,9 +43,7 @@ export function createMuleServer(
     const gameSeed = seed();
     const gameOptions = { maxMonths: options.maxMonths, phaseScale: options.phaseScale, politics: options.politics ?? true };
     if (recordDir === null) return new MuleGame(ctx, gameSeed, gameOptions);
-    // The same ledger id MuleGame gives its own brain: one ledger file holds every game.
-    const brain = createBrain({ gameId: `g-${gameSeed}-${ctx.now()}-${crypto.randomUUID().slice(0, 8)}` });
-    return createRecordedGame({ ctx, seed: gameSeed, options: gameOptions, brain, dir: recordDir }).game;
+    return createRecordedGame({ ctx, seed: gameSeed, options: gameOptions, dir: recordDir }).game;
   };
   const registry = new RoomRegistry<MuleIntent, MuleView>({
     createGame,

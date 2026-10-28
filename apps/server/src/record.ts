@@ -17,8 +17,8 @@ import {
 import type { Choice } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
-import type { BrainService } from './brain/index.js';
-import { MuleGame } from './mule-game.js';
+import { createBrain, type BrainService } from './brain/index.js';
+import { ledgerGameId, MuleGame } from './mule-game.js';
 
 // literal-ok: caps a refusal's or a failed call's message in the record; no effect on play
 const MESSAGE_CHARS = 120;
@@ -266,11 +266,13 @@ export function createRecordedGame(args: {
   ctx: GameContext;
   seed: number;
   options: RecordOptions;
-  brain: BrainService;
+  /** Absent: the brain MuleGame would build for itself, from the environment. */
+  brain?: BrainService;
   /** Where the file goes at game over; null keeps the record in memory only. */
   dir?: string | null;
 }): { game: Game<MuleIntent, MuleView>; recorder: Recorder } {
-  const recorder = new Recorder(args.ctx, args.seed, args.options, args.brain, args.dir ?? null);
+  const brain = args.brain ?? createBrain({ gameId: ledgerGameId(args.seed, args.ctx.now()) });
+  const recorder = new Recorder(args.ctx, args.seed, args.options, brain, args.dir ?? null);
   const game = new MuleGame(recorder.ctx, args.seed, { ...args.options, brain: recorder.brain, onGameOver: (state) => recorder.gameOver(state) });
   return { game: recorder.wrap(game), recorder };
 }
