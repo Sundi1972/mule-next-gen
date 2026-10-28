@@ -76,6 +76,8 @@ export interface PlayerView {
     /** 0..1 of the month's Food held (engine foodShare). */
     foodShare: number;
     sick: boolean;
+    /** Why it is sick (engine playerEventReason): the air, its own pollution, or plain chance; null when well. */
+    sickBecause: 'air' | 'pollution' | 'chance' | null;
     /** hunger × sickness, 1 is normal; species is not in it (engine pace() adds it). */
     conditionPace: number;
   } | null;

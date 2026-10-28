@@ -37,6 +37,7 @@ import {
   orderGeoDrone,
   outfitCostFor,
   outfitMule,
+  playerEventReason,
   RuleError,
   runFor,
   score,
@@ -775,7 +776,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           plots: state.tiles.filter((t) => t.owner === s.id).length,
           ready: isReady(s.id),
           doneDeveloping: p.doneDeveloping,
-          condition: state.phase === 'development' ? { foodShare: foodShare(state, s.id), sick: p.sick, conditionPace: hungerPace(state, s.id) * sickPace(state, s.id) } : null,
+          condition:
+            state.phase === 'development'
+              ? {
+                  foodShare: foodShare(state, s.id),
+                  sick: p.sick,
+                  sickBecause: p.sick ? playerEventReason(state, 'sickness', 'development', s.id) : null,
+                  conditionPace: hungerPace(state, s.id) * sickPace(state, s.id),
+                }
+              : null,
         };
       }),
       me: me
