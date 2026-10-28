@@ -260,6 +260,17 @@ Code-only; no existing state to reach. The record starts with WS3's build.
 ## §7 · Risks & Spikes `[review-only]`
 - **S-A1 (spike, APPROVED by Heiko 29 Oct, ~$0.10, cost from the ledger):** Haiku 5.5 + adaptive thinking vs Sonnet 5.5 on the same 20 briefs:
   latency p90 against the slack windows, accepted-edit share, cost. Blocks C3's model choice for the strategy call.
+  **Result (run 2026-10-28 UTC, `brain:strategy-spike` on ws2-brain-spike-a1 @ 5da9778, seed 101, effort medium;
+  ledger `apps/server/data/strategy-spike-2026-10-28.jsonl`):** 24/24 calls, ledger $0.02156 against the $0.10 cap.
+  Haiku 5.5: 20 calls, p50 2.3 s, p90 3.9 s, max 4.2 s, 16/20 valid, all valid ones within bounds; $0.00023 a call,
+  ~$0.0055 a seat-game at 24 calls; thought on 10 of 20 calls (mean 110 thinking tokens). Sonnet 5.5: 4 calls, p90
+  4.0 s, 2/4 valid; $0.00425 a call ($0.10 a seat-game); never used thinking at effort medium. Both under the 8 s upkeep
+  window. List-price estimate before the run: Haiku $0.001-0.002 and Sonnet $0.02-0.04 a call, so 4-9x too high
+  (thinking stayed short or off). Invalid replies are structural (an over-long reason or an off-list plan letter);
+  the spike recorded no cause, so the next run must log it. Brief ~2.5k tokens at 2.24 chars a token, below
+  BRAIN.charsPerToken 2.5. **C3 decision: Haiku 5.5, adaptive thinking, effort medium**: the cheapest, under the
+  window, and its validity failures are prompt-side. Sonnet stays affordable at this brief size but is unproven on
+  quality; revisit with the real brief (C1, C8) and validatePlan.
 - **R-A1:** slack windows shorter than the model at fast tables. Mitigation: RULE-A1 row 2; the trial measures the
   late share.
 - **R-A2:** the schema freezes late. Mitigation: C1-C2 stub on schema v0; C4-C5 wait.
