@@ -155,9 +155,31 @@ RULE-A2 · When the brain asks                                        shape: eve
   at most one open call per seat (INV-one-in-flight stays)
 ```
 
+```
+RULE-A3 · A seat that may not corner never plays a corner (HC-8)      shape: decision table
+inputs   corners: AI_LEVELS[level].corners (true | false; false for rookie) · edit path · edit value
+first match wins
+  1  corners = false, path /strategy/monopolyTarget, to ≠ null   rejected, why 'level never corners'; stays null
+  2  corners = false, path /strategy/kind, to 'monopolist'       rejected, same why; the draft's kind plays
+  3  corners = false, any /auction/<good> edit whose hold exceeds the draft's hold   clamped to the draft's hold
+  4  otherwise                                                    the validator's ordinary bounds
+unknown  a seat whose level is missing reads as corners = false (the safe side).
+reuse    the gate is the one goodPlan already reads (packages/ai/src/strategist.ts::goodPlan, `mind.level.corners`);
+         the validator reads the same flag, no second Rookie check.
+owner    the bound lives in validatePlan (WS1, §3); C2's writer also leaves 'monopolist' and monopolyTarget out of a
+         corners=false seat's reply schema, so the model is never offered the move.
+examples → §6: Rookie + edit monopolyTarget 'smithore' → rejected, null · Trader + same edit → accepted
+```
+
 ## §3 · Contracts & Data Models `[handoff]`
-- **Playbook schema** (ADDED, owned by WS1, frozen with WS3 and WS2): draft v0 at
-  `.handover/ws2-findings/playbook-schema-v0.md`; this spec adopts the frozen version by reference.
+- **Playbook schema** (ADDED, owned by WS1, frozen with WS3 and WS2): v0.2 at
+  `.handover/ws2-findings/playbook-schema-v0.md`, settled by WS3 on 29 Oct: `LandGrantPlay.pressShare: number` (one
+  share, a floor; the grant is one pass, `grantSweeps` 1); types in `packages/engine/src/playbook.ts` (WS1 holds the pen,
+  a change after the freeze needs all three OKs). WS3 OK'd v1 at type level; WS1's type-level OK is the last.
+  This spec adopts the frozen version by reference.
+- **Game record** (ADDED, WS3): types in `packages/engine/src/record.ts` (`GameRecord`, `RecordEvent`,
+  `PlaybookEntry`); recorder and replay in `apps/server/src/record.ts`. Derived `notice` events (trades, claims, sales)
+  feed PhaseOutcome; the replay ignores them. The append and replay API is WS3's, before its freeze.
 - **`validatePlan(state, seat, draft, edits) → { playbook, rejected }`** (ADDED, WS1): bounds per field.
 - **Writer reply** (ADDED, WS2, C2): JSON schema `{ strategy?: Strategy, edits: {path, to, reason}[], line?: string }`.
 - **Game record entry** (ADDED, WS3): `{ type: 'playbook', at, seat, month, phase, playbook }`; the record holds every
@@ -184,6 +206,7 @@ Code-only; no existing state to reach. The record starts with WS3's build.
 | T-AC-A1 (B-AC-A1) | RULE-A1 rows 1-4 with the examples above. | the playbook that takes effect | late by 0.2 s → engine | C4 |
 | T-AC-A2 (B-AC-A1) | The brief holds only public facts, in a deterministic order: two seats' briefs never contain another seat's goods. | brief text | — | C1 |
 | T-AC-A3 | No call is open inside a real-time phase that the phase waits on: phases start on time with a fake model that never answers. | phase start times | — | C4 C7 |
+| T-AC-A5 (HC-8) | RULE-A3 rows 1-3: a Rookie seat's edits that would corner are rejected or clamped; the same edits on a Trader seat pass. | validated playbook, `rejected` | Trader → accepted | C2 |
 | T-AC-A4 | Ledger and trial rows for strategy and playbook calls; cost per game within gameBudgetUsd. | ledger file, trial report | — | C6 |
 
 ## §7 · Risks & Spikes `[review-only]`
