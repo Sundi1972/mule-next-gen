@@ -1,4 +1,4 @@
-import type { AuctionSide, CanRun, Election, ElectionResult, EventKey, EventKind, Good, Ground, MonthEvent, Office, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
+import type { AuctionSide, CanRun, DevPlace, Election, ElectionResult, EventKey, EventKind, Good, Ground, MonthEvent, Office, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -35,7 +35,9 @@ export type MuleIntent =
   /** Election, ballot: cast or change your secret vote for a contested office; null clears it. */
   | { type: 'vote'; office: Office; candidate: string | null }
   /** Planning, after the election: the Governor sets the sales tax in whole percent. */
-  | { type: 'setTax'; percent: number };
+  | { type: 'setTax'; percent: number }
+  /** Planning, after any election: the host ends planning with players not yet Ready. */
+  | { type: 'continue' };
 
 export const EMOTES = ['Deal?', 'Nice!', 'Traitor!', 'Ha!', 'Help!'] as const;
 export type Emote = (typeof EMOTES)[number];
@@ -71,6 +73,8 @@ export interface PlayerView {
   ready: boolean;
   /** True once they went to the pub this development phase. */
   doneDeveloping: boolean;
+  /** Where their colonist is in development, public like every place; null outside development. */
+  colonist: ColonistView | null;
   /** How hunger and sickness slow this colonist, during development; null otherwise. Public: every screen shows it. */
   condition: {
     /** 0..1 of the month's Food held (engine foodShare). */
@@ -81,6 +85,15 @@ export interface PlayerView {
     /** hunger × sickness, 1 is normal; species is not in it (engine pace() adds it). */
     conditionPace: number;
   } | null;
+}
+
+/** A colonist in development. Times are the server's epoch ms, like phaseEndsAt. */
+export interface ColonistView {
+  /** Where it stands, or where it is walking to. */
+  at: DevPlace;
+  walk: { from: DevPlace; startedAt: number; arrivesAt: number } | null;
+  /** While it stands on a plot for a geo analysis: when the analysis is done. */
+  assayUntil: number | null;
 }
 
 export interface MyView {
@@ -95,9 +108,9 @@ export interface MyView {
   needs: { food: number; water: number };
   /** What this player needs of each good this month: the engine's monthNeeds. */
   monthNeeds: Stock;
-  /** Epoch ms when this player's development time runs out, during development. */
+  /** Epoch ms when the one development clock runs out, the same for every seat; null outside development. */
   devEndsAt: number | null;
-  /** Seconds of development time this player got this month, before analyses. */
+  /** Seconds of development time this player got this month. */
   devSeconds: number;
   /** What this player's plots made in the latest production, or null before the first harvest. */
   produced: Stock | null;

@@ -723,6 +723,26 @@ export const LOTS = {
 };
 
 /**
+ * The longest each timed phase lasts, in milliseconds at phaseScale 1. Planning waits for every human's Ready,
+ * a dropped phone's too, unless the host continues. Other phases also end early: when every connected player is
+ * ready, the land grant when the claims are used, development when everyone is out of time or at the pub. The
+ * goods auction and the land auction have no fixed length; they run on WALK's and LOTS' clocks.
+ */
+export const PHASES = {
+  /**
+   * Planning: the hub, listings, and in election months the election first. null: planning waits for every player's
+   * Ready or the host's Continue; a number restores a timer.
+   */
+  planningMs: null as number | null,
+  /** The land grant: the light sweeps the free plots. */
+  landGrantMs: 60_000,
+  /** Production: the show of what each plot made. */
+  productionMs: 15_000,
+  /** Upkeep: colonists eat and goods spoil. */
+  upkeepMs: 8_000,
+};
+
+/**
  * AI players. The strategist scores options with named considerations; a
  * persona is a set of weights on them, and a level sets how complete the
  * scoring is, how many near-best options reach the decider and how fast the

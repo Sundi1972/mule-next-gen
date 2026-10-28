@@ -1,7 +1,7 @@
 import { airBand, DEV_WALK, DEVELOPMENT, foodShare, hungerPace, needsOf, POLLUTION, sickPace, type GameState } from '@mule/engine';
 import { describe, expect, it } from 'vitest';
-import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
-import { fakeContext, seats } from './fake-context.js';
+import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
+import { fakeContext, readyAll, seats } from './fake-context.js';
 
 /** Nine working farms give a crew of nine, so s1 needs 5 Food a month. */
 const FARMS = 9;
@@ -22,10 +22,10 @@ function hungryWithAnEmptyCorral() {
   s1.stock.medicine = 1;
   state.store.mules = 0;
   const planning = game.viewFor(null);
-  advance(PHASE_MS.planning);
+  readyAll(game);
   while (game.viewFor(null).phase === 'landGrant') advance(GRANT_TICK_MS);
   expect(game.viewFor(null).phase).toBe('development');
-  return { game, state, planning, advance };
+  return { game, state, planning, ctx, advance };
 }
 
 describe('the store view at the start of development', () => {
@@ -41,7 +41,7 @@ describe('the store view at the start of development', () => {
   });
 
   it("B-AC-9: every screen sees each seat's condition during development only: its hunger × sickness pace, species aside, and why it is sick", () => {
-    const { game, state, planning, advance } = hungryWithAnEmptyCorral();
+    const { game, state, planning, ctx, advance } = hungryWithAnEmptyCorral();
     const want = { foodShare: foodShare(state, 's1'), sick: false, sickBecause: null, conditionPace: hungerPace(state, 's1') };
     expect(want.conditionPace).toBeCloseTo(0.52);
     for (const viewer of ['s1', 's2', null]) expect(game.viewFor(viewer).players.find((p) => p.id === 's1')!.condition).toEqual(want);
@@ -56,8 +56,8 @@ describe('the store view at the start of development', () => {
     expect(game.viewFor('s2').players.find((p) => p.id === 's1')!.condition).toEqual(sick);
     state.air = POLLUTION.airMax;
     expect(game.viewFor('s2').players.find((p) => p.id === 's1')!.condition).toEqual({ ...sick, sickBecause: 'air' });
-    // Once development ends, nobody has a condition.
-    advance(PHASE_MS.development);
+    // Once development ends, at the one clock's end, nobody has a condition.
+    advance(game.viewFor('s1').me!.devEndsAt! - ctx.now());
     expect(game.viewFor(null).phase).not.toBe('development');
     expect(game.viewFor(null).players.map((p) => p.condition)).toEqual([null, null, null]);
   });

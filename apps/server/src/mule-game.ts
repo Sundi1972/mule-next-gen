@@ -37,7 +37,9 @@ import {
   orderGeoDrone,
   outfitCostFor,
   outfitMule,
+  PHASES,
   playerEventReason,
+  plotAt,
   RuleError,
   runFor,
   score,
@@ -59,9 +61,12 @@ import {
   storeForSale,
   storeQuotes,
   storeSellLine,
+  tileIndex,
   unlist as unlistLot,
   visitPub,
   WALK,
+  walkSeconds,
+  type DevPlace,
   type GameState,
   type Good,
   type Outfit,
@@ -69,25 +74,35 @@ import {
   type Trade,
 } from '@mule/engine';
 import { AiSeat, LotHand, personaFor, VoteHand, type AiAction } from '@mule/ai';
-import { PLAYER_COLORS, type MuleIntent, type MuleView, type ProductionReason, type ProductionView } from '@mule/protocol';
+import { PLAYER_COLORS, type ColonistView, type MuleIntent, type MuleView, type ProductionReason, type ProductionView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
 import { electionNews, myPoliticsView, politicsView, resultShown } from './politics-view.js';
 
 /**
- * The longest each phase lasts, in milliseconds. Phases also end early when
- * every connected player is ready; the land grant ends when the claims are
- * used, development when everyone is out of time or at the pub. The auction
- * has no fixed length: it runs good by good on its own clocks (WALK in the
- * engine's config), stepped by the server every WALK.tickMs. The land
- * auction runs the same way, lot by lot on its own clocks (LOTS).
+ * The longest each phase lasts, in milliseconds, from the engine's PHASES.
+ * Each is read from the config when asked, so a value set at runtime times the
+ * next phase that starts. Planning's is null: it has no clock and waits for
+ * every player's Ready. The auction has no entry: it runs good by good on its
+ * own clocks (WALK), stepped by the server every WALK.tickMs. The land auction
+ * runs the same way, lot by lot on its own clocks (LOTS).
  */
-export const PHASE_MS: Record<Exclude<Phase, 'gameOver' | 'auction' | 'landAuction'>, number> = {
-  planning: 45_000,
-  landGrant: 60_000,
-  development: (DEVELOPMENT.fullSeconds + 5) * 1_000,
-  production: 15_000,
-  upkeep: 8_000,
+export const PHASE_MS: { readonly planning: number | null } & Readonly<Record<Exclude<Phase, 'gameOver' | 'auction' | 'landAuction' | 'planning'>, number>> = {
+  get planning() {
+    return PHASES.planningMs;
+  },
+  get landGrant() {
+    return PHASES.landGrantMs;
+  },
+  get development() {
+    return DEVELOPMENT.fullSeconds * 1_000;
+  },
+  get production() {
+    return PHASES.productionMs;
+  },
+  get upkeep() {
+    return PHASES.upkeepMs;
+  },
 };
 
 /** How long each free plot stays lit in the land grant. */
@@ -109,6 +124,11 @@ function isSpecies(pick: string | undefined): pick is Species {
 /** The reasons a plot's badges may name; its ground, the output floor, a factory's fit and the event never get one. */
 const BADGE_REASONS: readonly ProductionReason[] = ['cluster', 'species', 'trait', 'pollution', 'noEnergy', 'noWater'];
 const MAX_BADGES = 2;
+
+/** Names in reading order: "A", "A and B", "A, B and C". */
+function andList(names: string[]): string {
+  return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
 
 /**
  * The month's production as every screen may see it: each working plot with
@@ -147,6 +167,41 @@ function productionView(state: GameState, lengthMs: number): ProductionView | nu
   return { lines, events, lengthMs };
 }
 
+/** A development move: the colonist walks to where it happens, and it applies on arrival. */
+type DevIntent = Extract<MuleIntent, { type: 'buyMule' | 'outfit' | 'install' | 'analyse' | 'filter' | 'pub' }>;
+
+/** A colonist in development: where it stands or is walking to, the walk with the move at its end, and its assay. */
+interface Colonist {
+  at: DevPlace;
+  walk: { from: DevPlace; startedAt: number; arrivesAt: number; then: DevIntent } | null;
+  assayUntil: number | null;
+}
+
+/**
+ * Where a development move happens: the corral for a MULE, the store for the pub, the plot; null for an outfit, done
+ * where the colonist stands. Throws RuleError for a tap off the map or on the store, which no walk can reach.
+ */
+function walkTarget(state: GameState, intent: DevIntent): DevPlace | null {
+  switch (intent.type) {
+    case 'buyMule':
+      return 'corral';
+    case 'pub':
+      return 'store';
+    case 'install':
+    case 'analyse':
+    case 'filter':
+      plotAt(state, intent.x, intent.y);
+      return tileIndex(state.width, intent.x, intent.y);
+    case 'outfit':
+      return null;
+  }
+}
+
+/** A place as the news names it. */
+function placeName(place: DevPlace): string {
+  return place === 'corral' ? 'the corral' : place === 'store' ? 'the store' : 'the plot';
+}
+
 /** M.U.L.E. as a game hosted by a @tabletop/core room. */
 export class MuleGame implements Game<MuleIntent, MuleView> {
   private state: GameState | null = null;
@@ -157,11 +212,17 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private readonly doneForAway = new Set<string>();
   /** Trades between players in the good that is up, for the news when it closes. */
   private dealsInGood: Trade[] = [];
-  /** When each player's development time runs out, epoch ms. */
-  private readonly devEndsAt = new Map<string, number>();
+  /** When the one development clock runs out for every seat, epoch ms; null outside development. */
+  private devEndsAt: number | null = null;
+  /** Each seat's colonist during development, keyed by seat id. */
+  private readonly colonists = new Map<string, Colonist>();
+  /** Every human was Ready, away or done while a colonist was still out; development ends once all have arrived. */
+  private endWhenSettled = false;
   private cancels: (() => void)[] = [];
   private news: string[] = [];
   private phaseEndsAt: number | null = null;
+  /** This month's production length in real ms, as its timer was given: the show stretches over it through upkeep. */
+  private productionMs = 0;
   /** The AI players: strategist, decider and hands, keyed by seat id. */
   private readonly ai = new Map<string, AiSeat>();
   /** Each AI player's hand at the land auction, keyed by seat id. */
@@ -234,34 +295,13 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         if (grantDone(state)) this.nextPhase();
         return;
       case 'buyMule':
-        this.requireTime(seatId);
-        buyMule(state, seatId);
-        return;
       case 'outfit':
-        this.requireTime(seatId);
-        outfitMule(state, seatId, intent.outfit);
-        return;
       case 'install':
-        this.requireTime(seatId);
-        installMule(state, seatId, intent.x, intent.y);
-        return;
-      case 'analyse': {
-        this.requireTime(seatId);
-        const seconds = analysePlot(state, seatId, intent.x, intent.y);
-        this.devEndsAt.set(seatId, this.devEndsAt.get(seatId)! - seconds * 1_000);
-        this.checkDevelopmentOver();
-        return;
-      }
+      case 'analyse':
       case 'filter':
-        this.requireTime(seatId);
-        fitFilter(state, seatId, intent.x, intent.y);
+      case 'pub':
+        this.develop(seatId, intent);
         return;
-      case 'pub': {
-        const payout = visitPub(state, seatId, this.requireTime(seatId));
-        this.addNews(`${this.nameOf(seatId)} went to the pub and won ${payout}.`);
-        this.checkDevelopmentOver();
-        return;
-      }
       case 'declare':
         declareRole(state, seatId, intent.side);
         return;
@@ -291,15 +331,150 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       case 'setTax':
         setSalesTax(state, seatId, intent.percent);
         return;
+      case 'continue': {
+        if (seatId !== this.ctx.hostId()) throw new RuleError('Only the host can continue');
+        const left = this.seats.filter((s) => !s.isAi && s.id !== seatId && !this.ready.has(s.id)).map((s) => s.name);
+        this.continuePlanning();
+        if (left.length > 0) this.addNews(`${this.nameOf(seatId)} continued without ${andList(left)}.`);
+        return;
+      }
     }
   }
 
-  /** Seconds of development time this player has left; throws when it has run out. */
-  private requireTime(seatId: string): number {
-    const ends = this.devEndsAt.get(seatId);
-    const left = ends === undefined ? 0 : (ends - this.ctx.now()) / 1_000;
-    if (left <= 0) throw new RuleError('Your development time is up');
-    return left;
+  /** The host's Continue: ends planning proper with players not yet Ready. The caller must have checked the seat is the host. */
+  private continuePlanning(): void {
+    if (this.electionOpen()) throw new RuleError('The election is still running');
+    if (this.state?.phase !== 'planning') throw new RuleError('Continue ends planning only');
+    this.nextPhase();
+  }
+
+  /**
+   * A development tap names where to go and what to do there: the colonist walks there (walkSeconds) and the move
+   * applies on arrival; an outfit applies where it stands. Refused while it walks or assays, and when the walk would
+   * end after the clock, except to the pub, which pays for whatever time is left when it gets there.
+   */
+  private develop(seatId: string, intent: DevIntent): void {
+    const state = this.requireState();
+    this.settleArrivals();
+    const now = this.ctx.now();
+    const colonist = this.colonists.get(seatId);
+    if (!colonist || this.secondsLeft(now) <= 0) throw new RuleError('Your development time is up');
+    if (state.players.find((p) => p.id === seatId)?.doneDeveloping) throw new RuleError('Your turn is over: you went to the pub');
+    if (colonist.walk) throw new RuleError('Still walking');
+    if (colonist.assayUntil !== null) throw new RuleError('Still assaying');
+    const to = walkTarget(state, intent);
+    if (to === null) {
+      this.act(seatId, intent, now);
+      return;
+    }
+    const arrivesAt = now + this.realMs(walkSeconds(state, seatId, colonist.at, to));
+    if (arrivesAt > this.devEndsAt! && intent.type !== 'pub') throw new RuleError('Not enough time to walk there');
+    colonist.walk = { from: colonist.at, startedAt: now, arrivesAt, then: intent };
+    colonist.at = to;
+    if (arrivesAt > now) {
+      this.cancels.push(this.ctx.schedule(arrivesAt - now, () => this.settle()));
+      return;
+    }
+    this.settleArrivals();
+    this.checkEarlyEnd();
+  }
+
+  /** A walk or an assay is due: applies what has arrived, ends development if that was the last seat, tells every screen. */
+  private settle(): void {
+    this.settleArrivals();
+    this.checkEarlyEnd();
+    this.ctx.changed();
+  }
+
+  /** Development's two early ends, checked again whenever a colonist arrives or finishes an assay. */
+  private checkEarlyEnd(): void {
+    if (this.endWhenSettled) this.checkAllReady();
+    this.checkDevelopmentOver();
+  }
+
+  /** True when no colonist is walking, so ending development drops no move; an assay applied on arrival, so it holds nothing. */
+  private colonistsSettled(): boolean {
+    return [...this.colonists.values()].every((c) => c.walk === null);
+  }
+
+  /**
+   * Applies every walk that has arrived by now, in order of arrival and then seat order, so the clock and never the
+   * timers' order decides who reaches the corral first; then frees colonists whose assay is done.
+   */
+  private settleArrivals(): void {
+    const now = this.ctx.now();
+    const due = this.seats
+      .map((s, seat) => ({ id: s.id, seat, walk: this.colonists.get(s.id)?.walk }))
+      .filter((d) => d.walk && d.walk.arrivesAt <= now)
+      .sort((a, b) => a.walk!.arrivesAt - b.walk!.arrivesAt || a.seat - b.seat);
+    for (const { id } of due) this.arrive(id);
+    for (const colonist of this.colonists.values()) if (colonist.assayUntil !== null && colonist.assayUntil <= now) colonist.assayUntil = null;
+  }
+
+  /** Ends a colonist's walk: its move applies as of its arrival. Refused then (the MULEs ran out), nothing changes and the news says so. */
+  private arrive(seatId: string): void {
+    const colonist = this.colonists.get(seatId)!;
+    const { then, arrivesAt } = colonist.walk!;
+    colonist.walk = null;
+    try {
+      this.act(seatId, then, arrivesAt);
+    } catch (err) {
+      if (!(err instanceof RuleError)) throw err;
+      this.addNews(`${this.nameOf(seatId)} reached ${placeName(colonist.at)}: ${err.message}.`);
+    }
+  }
+
+  /** One development move through the engine's own checks, as of `at`, epoch ms. */
+  private act(seatId: string, intent: DevIntent, at: number): void {
+    const state = this.requireState();
+    switch (intent.type) {
+      case 'buyMule':
+        buyMule(state, seatId);
+        return;
+      case 'outfit':
+        outfitMule(state, seatId, intent.outfit);
+        return;
+      case 'install':
+        installMule(state, seatId, intent.x, intent.y);
+        return;
+      case 'filter':
+        fitFilter(state, seatId, intent.x, intent.y);
+        return;
+      case 'analyse': {
+        const until = at + this.realMs(analysePlot(state, seatId, intent.x, intent.y));
+        this.colonists.get(seatId)!.assayUntil = until;
+        this.cancels.push(this.ctx.schedule(Math.max(0, until - this.ctx.now()), () => this.settle()));
+        return;
+      }
+      case 'pub': {
+        const payout = visitPub(state, seatId, Math.max(0, this.secondsLeft(at)));
+        this.addNews(`${this.nameOf(seatId)} went to the pub and won ${payout}.`);
+        return;
+      }
+    }
+  }
+
+  /** Development is over: walks that have arrived apply; a colonist on its way to the pub gets there, any other walk comes to nothing. */
+  private finishDevelopment(): void {
+    this.settleArrivals();
+    for (const s of this.seats) if (this.colonists.get(s.id)?.walk?.then.type === 'pub') this.arrive(s.id);
+    this.colonists.clear();
+    this.devEndsAt = null;
+  }
+
+  /** Game seconds left on the development clock at `at`, epoch ms; 0 outside development. */
+  private secondsLeft(at: number): number {
+    return this.devEndsAt === null ? 0 : this.gameSeconds(this.devEndsAt - at);
+  }
+
+  /** Real ms that `seconds` of game time last at this table's phaseScale, in whole ms like the server's clock. */
+  private realMs(seconds: number): number {
+    return Math.round(seconds * 1_000 * this.phaseScale);
+  }
+
+  /** Game seconds that `ms` of real time stand for at this table's phaseScale. */
+  private gameSeconds(ms: number): number {
+    return ms / 1_000 / this.phaseScale;
   }
 
   private nameOf(seatId: string): string {
@@ -336,11 +511,22 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     // The election ends on its own clocks.
     if (this.electionOpen()) return;
     const phase = this.state?.phase;
-    // A phone that drops in the land grant just doesn't claim; a reload must not end the grant for everyone.
-    const excused = (id: string) => this.away.has(id) && phase !== 'landGrant';
+    // A phone that drops in the land grant just doesn't claim; a reload must not end the grant for everyone. In planning a
+    // dropped phone may be a player who locked it to think: planning waits for their Ready.
+    const excused = (id: string) => this.away.has(id) && phase !== 'landGrant' && phase !== 'planning';
     const waiting = this.seats.filter((s) => !s.isAi && !excused(s.id) && !this.ready.has(s.id) && !this.doneDeveloping(s.id));
     // The auctions end on their own, good by good and lot by lot.
-    if (phase && phase !== 'gameOver' && phase !== 'auction' && phase !== 'landAuction' && waiting.length === 0) this.nextPhase();
+    if (!phase || phase === 'gameOver' || phase === 'auction' || phase === 'landAuction') return;
+    if (waiting.length > 0) {
+      // Someone is back and playing: an early end held for a walk no longer stands.
+      if (phase === 'development') this.endWhenSettled = false;
+      return;
+    }
+    if (phase === 'development' && !this.colonistsSettled()) {
+      this.endWhenSettled = true;
+      return;
+    }
+    this.nextPhase();
   }
 
   /** During development: true once a player went to the pub or ran out of time. */
@@ -348,14 +534,14 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const state = this.requireState();
     if (state.phase !== 'development') return false;
     const p = state.players.find((q) => q.id === seatId);
-    return !!p?.doneDeveloping || (this.devEndsAt.get(seatId) ?? 0) <= this.ctx.now();
+    return !!p?.doneDeveloping || (this.devEndsAt ?? 0) <= this.ctx.now();
   }
 
-  /** Development ends once every player, AI included, is at the pub or out of time. */
+  /** Development ends once every player, AI included, is at the pub, out of time or away, and no colonist is still out. */
   private checkDevelopmentOver(): void {
     const state = this.requireState();
     if (state.phase !== 'development') return;
-    if (this.seats.every((s) => this.away.has(s.id) || this.doneDeveloping(s.id))) this.nextPhase();
+    if (this.seats.every((s) => this.away.has(s.id) || this.doneDeveloping(s.id)) && this.colonistsSettled()) this.nextPhase();
   }
 
   private requireState(): GameState {
@@ -366,6 +552,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private nextPhase(): void {
     const state = this.requireState();
     if (state.phase === 'gameOver') return;
+    if (state.phase === 'development') this.finishDevelopment();
     advancePhase(state);
     this.enterPhase();
   }
@@ -397,10 +584,14 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       this.scheduleLandAuctionTick(this.ctx.now());
       return;
     }
-    // In an election month the election runs first, on its own clocks; planning's timer starts once it is over.
+    // In an election month the election runs first, on its own clocks; planning proper opens once it is over.
     if (this.electionOpen()) {
       this.phaseEndsAt = null;
       this.scheduleElectionTick(this.ctx.now());
+      return;
+    }
+    if (state.phase === 'development') {
+      this.startDevelopment();
       return;
     }
     this.startPhaseTimer(state.phase);
@@ -410,14 +601,18 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       this.aiGrantBids();
       this.scheduleGrantTick();
     }
-    if (state.phase === 'development') this.startDevelopment();
     if (state.phase === 'production') this.reportProduction();
     if (state.phase === 'upkeep') this.reportUpkeep();
   }
 
+  /** Ends the phase when its PHASE_MS runs out; a phase whose PHASE_MS is null has no clock and waits for Ready. */
   private startPhaseTimer(phase: keyof typeof PHASE_MS): void {
-    const ms = PHASE_MS[phase] * this.phaseScale;
+    const length = PHASE_MS[phase];
+    this.phaseEndsAt = null;
+    if (length === null) return;
+    const ms = length * this.phaseScale;
     this.phaseEndsAt = this.ctx.now() + ms;
+    if (phase === 'production') this.productionMs = ms;
     this.cancels.push(
       this.ctx.schedule(ms, () => {
         this.nextPhase();
@@ -443,7 +638,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /**
    * Steps the election every WALK.tickMs until it is over: the AI vote hands act
    * first, then dropped phones count as Done and the election steps, all with the
-   * same dt. When it ends, planning's timer and planning proper start.
+   * same dt. When it ends, planning proper opens, timed only when PHASES.planningMs is a number.
    */
   private scheduleElectionTick(last: number): void {
     const state = this.requireState();
@@ -520,26 +715,42 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     }
   }
 
-  /** Each player gets their own clock: Food, sickness and analyses set how long they have. */
+  /** One clock for every seat, DEVELOPMENT.fullSeconds long: hunger and sickness slow the walk, never the clock. */
   private startDevelopment(): void {
     const state = this.requireState();
     const now = this.ctx.now();
-    this.devEndsAt.clear();
-    for (const p of state.players) {
-      this.devEndsAt.set(p.id, now + p.devSeconds * 1_000 * this.phaseScale);
-      // Check when this player's time runs out, so the phase ends as soon as everyone's has.
-      this.cancels.push(this.ctx.schedule(p.devSeconds * 1_000 * this.phaseScale + 1, () => {
-        this.checkDevelopmentOver();
-        this.ctx.changed();
-      }));
-    }
+    this.devEndsAt = now + this.realMs(DEVELOPMENT.fullSeconds);
+    this.phaseEndsAt = null;
+    this.endWhenSettled = false;
+    for (const s of this.seats) this.colonists.set(s.id, { at: 'store', walk: null, assayUntil: null });
+    this.scheduleDevelopmentEnd(state.month);
     if (this.ai.size > 0) this.scheduleAiDevelop(state.month, now);
   }
 
   /**
+   * Ends development when the clock runs out. It re-arms if devEndsAt moved later meanwhile, as the e2e's giveStoreTime
+   * moves it to give the store walk-through time.
+   */
+  private scheduleDevelopmentEnd(month: number): void {
+    const state = this.requireState();
+    this.cancels.push(
+      this.ctx.schedule(Math.max(0, (this.devEndsAt ?? 0) - this.ctx.now()), () => {
+        if (state.phase !== 'development' || state.month !== month) return;
+        if (this.ctx.now() < (this.devEndsAt ?? 0)) {
+          this.scheduleDevelopmentEnd(month);
+          return;
+        }
+        this.nextPhase();
+        this.ctx.changed();
+      }),
+    );
+  }
+
+  /**
    * AI hands in development: every tick each AI player works through its
-   * to-do list (buy, outfit, install, pub) at a quick human's pace, on its
-   * own clock, through the same moves a phone sends.
+   * to-do list (buy, outfit, install, pub) at a quick human's pace, in game
+   * time on the one clock, told where its colonist stands and whether it is
+   * still walking or assaying. Its taps walk through the same moves a phone sends.
    */
   private scheduleAiDevelop(month: number, last: number): void {
     const state = this.requireState();
@@ -549,14 +760,18 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         const now = this.ctx.now();
         // The time that really passed, capped so a stalled loop doesn't make the hands skip ahead.
         const dt = Math.min(Math.max(0, now - last), AI_DEV_TICK_MS * 10);
+        // A walk due this ms lands before the hands look, whichever timer fired first.
+        this.settleArrivals();
         for (const seat of this.ai.values()) {
           const p = state.players.find((q) => q.id === seat.id)!;
-          const left = ((this.devEndsAt.get(seat.id) ?? now) - now) / 1_000;
-          if (p.doneDeveloping || left <= 0) continue;
-          seat.developTick(state, dt, left, (a) => this.aiAct(seat.id, a));
+          const left = this.secondsLeft(now);
+          const colonist = this.colonists.get(seat.id);
+          if (p.doneDeveloping || left <= 0 || !colonist) continue;
+          const walk = { at: colonist.at, busy: colonist.walk !== null || colonist.assayUntil !== null };
+          seat.developTick(state, this.gameSeconds(dt) * 1_000, left, (a) => this.aiAct(seat.id, a), walk);
           if (state.phase !== 'development') break;
         }
-        this.checkDevelopmentOver();
+        this.checkEarlyEnd();
         if (state.phase === 'development') this.scheduleAiDevelop(month, now);
         this.ctx.changed();
       }),
@@ -742,7 +957,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       month: state.month,
       maxMonths: state.maxMonths,
       phase: state.phase,
-      phaseEndsAt: this.phaseEndsAt,
+      phaseEndsAt: state.phase === 'development' ? this.devEndsAt : this.phaseEndsAt,
       width: state.width,
       height: state.height,
       tiles: state.tiles.map((t) => {
@@ -776,6 +991,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           plots: state.tiles.filter((t) => t.owner === s.id).length,
           ready: isReady(s.id),
           doneDeveloping: p.doneDeveloping,
+          colonist: this.colonistView(s.id),
           condition:
             state.phase === 'development'
               ? {
@@ -798,7 +1014,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
             sick: me.sick,
             needs: needsOf(state, me.id),
             monthNeeds: monthNeeds(state, me.id),
-            devEndsAt: state.phase === 'development' ? (this.devEndsAt.get(me.id) ?? null) : null,
+            devEndsAt: state.phase === 'development' ? this.devEndsAt : null,
             devSeconds: me.devSeconds,
             produced: state.history.at(-1)?.produced[me.id] ?? null,
             mulePrice: mulePriceFor(state, me.id),
@@ -845,9 +1061,17 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       listings: state.listings.map(listingView),
       lotSlots: { used: state.listings.length, max: LOTS.maxLotsPerMonth },
       landAuction: landAuctionView(state),
-      production: state.phase === 'production' || state.phase === 'upkeep' ? productionView(state, PHASE_MS.production * this.phaseScale) : null,
+      production: state.phase === 'production' || state.phase === 'upkeep' ? productionView(state, this.productionMs) : null,
       politics: politicsView(state),
     };
+  }
+
+  /** Where a seat's colonist is in development, public like every place; the move it walks to make stays its own. */
+  private colonistView(seatId: string): ColonistView | null {
+    const colonist = this.colonists.get(seatId);
+    if (this.state?.phase !== 'development' || !colonist) return null;
+    const { at, walk, assayUntil } = colonist;
+    return { at, walk: walk && { from: walk.from, startedAt: walk.startedAt, arrivesAt: walk.arrivesAt }, assayUntil };
   }
 
   /** The auction board as every screen draws it. Public, as in the original: everyone sees everyone walk. */

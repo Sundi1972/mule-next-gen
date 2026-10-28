@@ -27,6 +27,11 @@ export interface GameContext {
   schedule(ms: number, fn: () => void): () => void;
   /** Tell every screen that the game's view changed. */
   changed(): void;
+  /**
+   * The seat that hosts the table: the first connected human, passing to the next while the host is disconnected and
+   * back when they return; the first human seat if none is connected; null with no human seated.
+   */
+  hostId(): string | null;
 }
 
 /** The part a game supplies. The room does everything else. */
@@ -127,6 +132,7 @@ export class Room<Intent, View> {
         };
       },
       changed: () => this.broadcast(),
+      hostId: () => this.hostId,
     });
   }
 
