@@ -614,6 +614,24 @@ goal      G-1 (unchanged)
 folded    §9 WS4 named edits gain TableApp.tsx::TvHeader `extra`
 ```
 
+```
+AM-10 · 2026-10-29 · lead rulings, PR-1 Task 5 review (the phone)
+
+target    §1 C7
+said      the phone's map is light with a TV; the skip hint sits at the rail's foot; a tap skips the event
+did       (c) light is an explicit prop: Production decides `light={!solo}` and passes it ProductionMap → EventLivingMap
+              (default false), instead of inferring it from size and mode, so a future caller (C10) cannot blank a
+              map by accident.
+          (d) the skip hint is `EventSkipHint`, rendered in the shell's existing `footer` slot beside the action
+              button (Shell.tsx unedited): at 667×375 the rail's foot lands mid-rail. The render gate reports this
+              placement as an intended difference from the gallery.
+          (e) skipping jumps the whole show, fly-home included; with a TV there is no skip, and a skip offset
+              never outlives a TV joining (the phone returns to the server's clock).
+because   HC-1 (approved layout, readable at 667) · HC-3 (one clock with a TV)
+goal      G-2 (unchanged)
+folded    §1 C7 ux: skip hint in the actions footer
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: the event show
