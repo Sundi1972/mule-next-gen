@@ -1,7 +1,7 @@
 import { DEVELOPMENT, needsOf, type GameState } from '@mule/engine';
 import { describe, expect, it } from 'vitest';
-import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
-import { fakeContext, seats } from './fake-context.js';
+import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
+import { fakeContext, readyAll, seats } from './fake-context.js';
 
 /** Nine working farms give a crew of nine, so s1 needs 5 Food a month. */
 const FARMS = 9;
@@ -16,7 +16,7 @@ function hungryWithAnEmptyCorral() {
   for (const t of free.slice(0, FARMS)) Object.assign(t, { owner: 's1', outfit: 'food' });
   state.players.find((p) => p.id === 's1')!.stock.food = 2;
   state.store.mules = 0;
-  advance(PHASE_MS.planning);
+  readyAll(game);
   while (game.viewFor(null).phase === 'landGrant') advance(GRANT_TICK_MS);
   expect(game.viewFor(null).phase).toBe('development');
   return { game, state };
