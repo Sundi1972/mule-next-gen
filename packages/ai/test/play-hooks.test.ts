@@ -39,7 +39,10 @@ function lateB(): { decider: Decider; release: () => void } {
 const seatRecords = (records: DecisionRecord[], seat: string) => records.filter((r) => r.seat === seat);
 const withChoice = (records: DecisionRecord[]) => records.filter((r) => r.shortlist.length > 1);
 
-describe('playGameAsync', GAMES, () => {
+// Local only (MULE_FULL=1, `pnpm test:full`): the async game exists for brain:trial; pnpm sim and MuleGame never use it.
+const full = process.env.MULE_FULL === '1';
+
+describe.runIf(full)('playGameAsync', GAMES, () => {
   it.each([1, 7, 101])('INV-between: sync and async play the same game (seed %i, no hooks)', async (seed) => {
     const sync = recording();
     const played = playGame(seed, SPECS(seed), sync.options);
@@ -93,7 +96,7 @@ describe('playGameAsync', GAMES, () => {
   });
 });
 
-describe('deciderFor', GAMES, () => {
+describe.runIf(full)('deciderFor', GAMES, () => {
   it('INV-between: a seat given a decider plays its pick; the other seats keep the default pick', () => {
     const specs = SPECS(101);
     const asked: [string, SeatSpec, number][] = [];

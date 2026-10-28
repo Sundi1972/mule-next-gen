@@ -86,7 +86,8 @@ const callLines = (at = file) => readLedgerLines(at).filter(isCallLine);
 const gameLines = (at = file) => readLedgerLines(at).filter((l) => !isCallLine(l));
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
-describe('brain:trial', () => {
+// Local only (MULE_FULL=1, `pnpm test:full`): brain:trial is a command run by hand, and only with the PM's clearance.
+describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
   it(
     'UBER-AC-1, UBER-AC-2: two games with one fast and one never-answering Smart seat report the model share by kind, why the rest fell back, lines per seat-month, ledger $ per Smart seat-game, counted spend and zero stalls',
     async () => {

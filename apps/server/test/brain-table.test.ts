@@ -292,11 +292,9 @@ describe('the brain at the table', () => {
     expect(sdk.requests.filter((r) => promptOf(r.params).user.includes('sell them nothing'))).toEqual([]);
   });
 
-  it.each([
-    { name: 'env {}', env: {} as Record<string, string> },
-    { name: 'only the auth token', env: { ANTHROPIC_AUTH_TOKEN: 'test-token-not-real' } },
-  ])('B-AC-3, T-AC-5: with the key unset ($name) a full game reaches gameOver on top picks with no client, and each AI says at most its lines a month, one a phase, and speaks in an auction', async ({ env }) => {
-    const { brain, records, finishes } = watched(createBrain({ gameId: 'g-classic', env, logPath: ledgerPath() }));
+  // The auth token alone is the default-brain test's case below.
+  it('B-AC-3, T-AC-5: with the key unset a full game reaches gameOver on top picks with no client, and each AI says at most its lines a month, one a phase, and speaks in an auction', async () => {
+    const { brain, records, finishes } = watched(createBrain({ gameId: 'g-classic', env: {}, logPath: ledgerPath() }));
     const t = table({ humans: ['Heiko'], ais: 3, brain, maxMonths: 2 });
     expect(await t.toGameOver()).toBe(true);
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
