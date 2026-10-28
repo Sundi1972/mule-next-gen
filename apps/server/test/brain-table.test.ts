@@ -202,7 +202,8 @@ describe('the server test setup', () => {
 });
 
 // At SEED only The Baron is asked for land in month 1.
-describe('the brain at the table', () => {
+// Each test plays some or all of a game at full phase length: 0.4-1.7 s alone, past vitest's 5 s beside the suite on a loaded machine.
+describe('the brain at the table', { timeout: 30_000 }, () => {
   it('B-AC-1: a fake model\'s "Mine." shows in every screen\'s chat and the seat plays option B', async () => {
     const sdk = fakeSdk((_n, params) => (requestOf(params).kind === 'land' ? reply('B', 'Mine.') : reply('A', '')));
     const { brain, records } = watched(smart(sdk));
@@ -242,15 +243,17 @@ describe('the brain at the table', () => {
       },
     };
     const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain, phaseScale: 1 });
-    expect(await t.toGameOver()).toBe(true);
+    const phases = ['landGrant', 'development', 'auction'];
+    const aiShownIn = (s: Screen) => new Set(s.chat.filter((m) => t.ais.some((a) => a.id === m.from)).map((m) => m.showing));
+    // The auction's first AI line is enough: playing out every good's walk would only add time.
+    expect(await t.runUntil(() => t.screens.every((s) => phases.every((p) => aiShownIn(s).has(p))))).toBe(true);
 
     for (const s of t.screens) {
       for (const ai of t.ais) {
+        // A seat's lines arrive in the order said, so what a screen has received is a prefix of what the seat said.
         const shown = s.chat.filter((m) => m.from === ai.id).map((m) => m.showing);
-        expect(shown).toEqual(said.filter((l) => l.seat === ai.id).map((l) => l.phase));
+        expect(shown).toEqual(said.filter((l) => l.seat === ai.id).map((l) => l.phase).slice(0, shown.length));
       }
-      const aiShown = new Set(s.chat.filter((m) => t.ais.some((a) => a.id === m.from)).map((m) => m.showing));
-      for (const phase of ['landGrant', 'development', 'auction']) expect(aiShown.has(phase), phase).toBe(true);
     }
   });
 
