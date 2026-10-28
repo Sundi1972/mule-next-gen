@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BRAIN, RuleError } from '@mule/engine';
-import type { DecisionRecord } from '@mule/ai';
+import { personaFor, type DecisionRecord } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { Room, TableError, type ChatMessage, type ClientEnvelope, type Connection, type GameContext, type ServerEnvelope } from '@tabletop/core';
 import { createBrain, type BrainService } from '../src/brain/index.js';
@@ -17,7 +17,7 @@ vi.mock('@anthropic-ai/sdk', async (original) => (await import('./brain-fakes.js
 const CODE = 'TABLE';
 /**
  * The game seed every table here plays, at full phase length (table()'s default). The tests rely on what happens at it:
- * - The Baron (`ais[1]`) is asked for land in month 1, and The Accountant is not.
+ * - The Big Spender (`ais[1]`) is asked for land in month 1, and The Accountant is not.
  * - After that, each AI's next model call is a develop decision whose option B installs a MULE.
  * - A 2-month Classic game gives some seat more lines than the cap, and two lines in one phase.
  * A shorter phase scale breaks them: the land grant's tick does not scale with it, so the AIs end up with no land and
@@ -228,26 +228,26 @@ describe('the server test setup', () => {
   });
 });
 
-// At SEED only The Baron is asked for land in month 1.
+// At SEED only The Big Spender is asked for land in month 1.
 // Each test plays some or all of a game at full phase length: 0.4-1.7 s alone, past vitest's 5 s beside the suite on a loaded machine.
 describe('the brain at the table', { timeout: 30_000 }, () => {
   it('B-AC-1: a fake model\'s "Mine." shows in every screen\'s chat and the seat plays option B', async () => {
     const sdk = fakeSdk((_n, params) => (requestOf(params).kind === 'land' ? reply('B', 'Mine.') : reply('A', '')));
     const { brain, records } = watched(smart(sdk));
     const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain });
-    const baron = t.ais[1]!;
-    const landOf = () => records.find((r) => r.seat === baron.id && r.kind === 'land');
+    const spender = t.ais[1]!;
+    const landOf = () => records.find((r) => r.seat === spender.id && r.kind === 'land');
     expect(await t.runUntil(() => !!landOf())).toBe(true);
 
     const land = landOf()!;
     const prompt = requestOf(sdk.requests.find((r) => requestOf(r.params).kind === 'land')!.params);
-    expect(prompt.seat).toBe(baron.name);
+    expect(prompt.seat).toBe(spender.name);
     const optionB = land.shortlist.find((o) => o.id === 'B')!;
     expect(prompt.lines.some((l) => l.startsWith(`B. ${optionB.label} — `))).toBe(true);
     // On the record, not the board: a land plan's board effect is probabilistic (wantsPlot, missChance).
     expect(land).toMatchObject({ by: 'llm', line: 'Mine.', pick: { id: 'B', key: optionB.key, label: optionB.label } });
 
-    for (const s of t.screens) expect(s.chat.filter((m) => m.from === baron.id).map((m) => m.text)).toEqual(['Mine.']);
+    for (const s of t.screens) expect(s.chat.filter((m) => m.from === spender.id).map((m) => m.text)).toEqual(['Mine.']);
   });
 
   it('B-AC-1 (AM-14): every screen receives AI lines in the land grant, development and the auction, each after the view of the phase it was said in', async () => {
@@ -298,13 +298,13 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
     const sdk = fakeSdk((_n, params) => (requestOf(params).kind === 'land' ? reply('F', 'Mine.') : reply('A', '')));
     const { brain, records } = watched(smart(sdk));
     const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain });
-    const baron = t.ais[1]!;
-    const landOf = () => records.find((r) => r.seat === baron.id && r.kind === 'land');
+    const spender = t.ais[1]!;
+    const landOf = () => records.find((r) => r.seat === spender.id && r.kind === 'land');
     expect(await t.runUntil(() => !!landOf())).toBe(true);
 
-    expect(sdk.requests.map((r) => requestOf(r.params)).filter((p) => p.kind === 'land').map((p) => p.seat)).toEqual([baron.name]);
+    expect(sdk.requests.map((r) => requestOf(r.params)).filter((p) => p.kind === 'land').map((p) => p.seat)).toEqual([spender.name]);
     expect(landOf()).toMatchObject({ by: 'fallback', note: 'decider failed: named F, not on the list', pick: top.pick, line: top.line });
-    for (const s of t.screens) expect(s.chat.filter((m) => m.from === baron.id).map((m) => m.text)).toEqual([top.line]);
+    for (const s of t.screens) expect(s.chat.filter((m) => m.from === spender.id).map((m) => m.text)).toEqual([top.line]);
   });
 
   it('B-AC-2: a player\'s line is quoted in the AI\'s next prompt, and the option it names there is the move applied on the board', async () => {
@@ -312,7 +312,7 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
     const { brain, records } = watched(smart(sdk));
     const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain });
     const [heiko, mia] = t.phones;
-    const [accountant, baron] = t.ais;
+    const [accountant, spender] = t.ais;
 
     const before = sdk.requests.length;
     t.say(heiko!, 'give me your Crystite');
@@ -320,14 +320,14 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
     t.say(mia!, 'psst, Accountant only', accountant!.id);
 
     const nextFor = (name: string) => sdk.requests.slice(before).find((r) => requestOf(r.params).seat === name);
-    expect(await t.runUntil(() => !!nextFor(accountant!.name) && !!nextFor(baron!.name))).toBe(true);
+    expect(await t.runUntil(() => !!nextFor(accountant!.name) && !!nextFor(spender!.name))).toBe(true);
 
-    for (const ai of [accountant!, baron!]) {
+    for (const ai of [accountant!, spender!]) {
       const prompt = requestOf(nextFor(ai.name)!.params);
       expect(prompt.talk, ai.name).toContain('Heiko: "give me your Crystite"');
     }
     expect(requestOf(nextFor(accountant!.name)!.params).talk).toContain('Mia: "psst, Accountant only"');
-    expect(requestOf(nextFor(baron!.name)!.params).user).not.toContain('psst');
+    expect(requestOf(nextFor(spender!.name)!.params).user).not.toContain('psst');
 
     // The move each AI made on that prompt: option B as the prompt listed it, and that MULE the first it puts on the board.
     const board = t.game().viewFor(null).tiles;
@@ -338,11 +338,11 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
       });
     const bothInstalled = () => {
       watchBoard();
-      return firstInstall.has(accountant!.id) && firstInstall.has(baron!.id);
+      return firstInstall.has(accountant!.id) && firstInstall.has(spender!.id);
     };
     expect(await t.runUntil(bothInstalled)).toBe(true);
 
-    for (const ai of [accountant!, baron!]) {
+    for (const ai of [accountant!, spender!]) {
       const prompt = requestOf(nextFor(ai.name)!.params);
       expect(prompt.kind, ai.name).toBe('develop');
       const move = records.find((r) => r.seat === ai.id && r.kind === prompt.kind)!;
@@ -458,12 +458,12 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
     expect(() => game.heard?.('s9', 'psst', 's8')).not.toThrow();
     expect(() => game.heard?.(t.humans[0]!.id, 'psst', 's8')).not.toThrow();
 
-    const [accountant, baron] = t.ais;
+    const [accountant, spender] = t.ais;
     const before = sdk.requests.length;
     game.heard?.(accountant!.id, 'my own words');
     const nextFor = (name: string) => sdk.requests.slice(before).find((r) => requestOf(r.params).seat === name);
-    expect(await t.runUntil(() => !!nextFor(accountant!.name) && !!nextFor(baron!.name))).toBe(true);
-    expect(requestOf(nextFor(baron!.name)!.params).talk).toContain(`${accountant!.name}: "my own words"`);
+    expect(await t.runUntil(() => !!nextFor(accountant!.name) && !!nextFor(spender!.name))).toBe(true);
+    expect(requestOf(nextFor(spender!.name)!.params).talk).toContain(`${accountant!.name}: "my own words"`);
     expect(requestOf(nextFor(accountant!.name)!.params).user).not.toContain('my own words');
   });
 
@@ -479,5 +479,15 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
     const games = readLedger(ledger).filter((l) => l.type === 'game');
     expect(games).toHaveLength(2);
     expect(new Set(games.map((l) => l.game)).size).toBe(2);
+  });
+});
+
+describe('AI seat names', () => {
+  it("AM-18: each AI seat's name picks its own persona, and none reads as an office or title", () => {
+    for (const name of AI_NAMES) {
+      // A name the persona map knows gives the same persona from every seat; an unknown one falls back to seat order.
+      expect(new Set([0, 1, 2, 3].map((seat) => personaFor(name, seat))).size, name).toBe(1);
+      expect(name, 'a newcomer would read it as the office').not.toMatch(/\b(governor|sheriff|baron|mayor)\b/i);
+    }
   });
 });

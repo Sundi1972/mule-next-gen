@@ -15,7 +15,7 @@ type GameContext = ConstructorParameters<typeof MuleGame>[0];
 const seats = [
   { id: 's1', name: 'Heiko', isAi: false, color: 0 },
   { id: 's2', name: 'Mia', isAi: false, color: 1 },
-  { id: 's3', name: 'The Baron', isAi: true, color: 2 },
+  { id: 's3', name: 'The Big Spender', isAi: true, color: 2 },
 ];
 
 /** The real game on a manual clock, played to the first good's status screen; nobody presses anything. */
