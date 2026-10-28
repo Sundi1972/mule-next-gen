@@ -22,6 +22,7 @@ import {
   goodsMarket,
   type AiLevelId,
   grantDone,
+  grantPass,
   hasAnalysed,
   hungerPace,
   installMule,
@@ -270,6 +271,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           lotDone(state, seatId);
           return;
         }
+        // In the land grant, Ready is Done with land: the grant ends once every seat has used its claims or is done.
+        if (state.phase === 'landGrant') {
+          grantPass(state, seatId);
+          if (grantDone(state)) this.nextPhase();
+          return;
+        }
         this.ready.add(seatId);
         this.checkAllReady();
         return;
@@ -496,9 +503,11 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     // The election ends on its own clocks.
     if (this.electionOpen()) return;
     const phase = this.state?.phase;
-    // A phone that drops in the land grant just doesn't claim; a reload must not end the grant for everyone. In planning a
-    // dropped phone may be a player who locked it to think: planning waits for their Ready.
-    const excused = (id: string) => this.away.has(id) && phase !== 'landGrant' && phase !== 'planning';
+    // The land grant ends only through grantDone: every seat's claims used or Done with land, or the pass over. A phone
+    // that drops in the grant just doesn't claim and is not Done; a reload must not end the grant for everyone.
+    if (phase === 'landGrant') return;
+    // In planning a dropped phone may be a player who locked it to think: planning waits for their Ready.
+    const excused = (id: string) => this.away.has(id) && phase !== 'planning';
     const waiting = this.seats.filter((s) => !s.isAi && !excused(s.id) && !this.ready.has(s.id) && !this.doneDeveloping(s.id));
     // The auctions end on their own, good by good and lot by lot.
     if (!phase || phase === 'gameOver' || phase === 'auction' || phase === 'landAuction') return;
@@ -783,6 +792,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           break;
         case 'done':
           if (this.electionOpen()) electionDone(state, seatId, action.done);
+          else if (state.phase === 'landGrant') grantPass(state, seatId);
           else if (state.phase === 'landAuction') lotDone(state, seatId, action.done);
           else auctionDone(state, seatId, action.done);
           break;
@@ -938,7 +948,13 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const band = airBand(state.air).name;
     const outfits: Outfit[] = [...GOODS, 'greenBelt'];
     // While the election runs, the one "I'm ready" button stands for Done in the stage; planning's own ready set is untouched.
-    const isReady = (id: string) => (this.electionOpen() ? state.politics!.election!.done.includes(id) : this.ready.has(id));
+    // In the land grant a seat is ready once it has used its claims or pressed Done with land.
+    const doneWithLand = (id: string) => {
+      const p = state.players.find((q) => q.id === id);
+      return !!p && (p.doneWithLand || p.claimsThisGrant >= GAME.claimsPerGrant);
+    };
+    const isReady = (id: string) =>
+      this.electionOpen() ? state.politics!.election!.done.includes(id) : state.phase === 'landGrant' ? doneWithLand(id) : this.ready.has(id);
     return {
       finished: state.phase === 'gameOver',
       month: state.month,
