@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { GAME, POLLUTION, score, type GameState } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { MuleGame } from '../src/mule-game.js';
-import { fakeContext, seats, tapThere } from './fake-context.js';
+import { fakeContext, readyAll, seats, tapThere } from './fake-context.js';
 
 /** A one-month game where s1 claims the first lit plot and installs a food MULE on it, played to game over. */
 function playedOut() {
@@ -14,7 +14,7 @@ function playedOut() {
     before.push(game.viewFor('s1'), game.viewFor(null));
     advance(100);
   };
-  advance(game.viewFor(null).phaseEndsAt! - ctx.now());
+  readyAll(game);
   const lit = game.viewFor('s1').lit!;
   game.handle('s1', { type: 'claim', x: lit.x, y: lit.y });
   while (game.viewFor(null).phase !== 'development') step();
