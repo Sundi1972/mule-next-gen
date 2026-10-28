@@ -107,6 +107,11 @@ against `PlaybookEntry` and `recordPlaybook` from then on, before PR-2 lands.
 
 ## Phase P1: PR-1, the record and its replay (G-1)
 
+**MERGED into ws3-auctions as #172** (f740df32, pinned to ef3d8e57; Tier 1 green). It took a code review with a
+mutation sweep (APPROVE WITH FIXES) and a fix round: the guarded game-over write, a replay.ts split, `ledgerGameId`,
+and tests going from 11 to 16, with every reviewed mutant killed except one equivalent. The spec's AM-3 corrects four
+claims. **B-AC-1 (Heiko's real game, keyless replay) is still open.**
+
 ### Task 1: the types: C1
 
 **Depends on:** the §3 freeze OKs (WS1, WS2).
@@ -118,13 +123,13 @@ against `PlaybookEntry` and `recordPlaybook` from then on, before PR-2 lands.
 - Modify: `packages/engine/src/index.ts` (one `export type * from './record.js'` line, plus a value export for
   `configSnapshot` and `stableJson`)
 
-- [ ] **Step 1: Implement C1 per spec §1 C1 and §3** (sprout).
+- [x] **Step 1: Implement C1 per spec §1 C1 and §3** (sprout).
   - The types are exactly as in §3.
   - `configSnapshot()` returns every export of `./config.js` as plain data: import the namespace and drop functions.
   - `stableJson(value)` serialises with sorted object keys.
   - No I/O and no hashing in the engine: the sha256 is the server's (HC-4).
-- [ ] **Step 2: Typecheck.** Run `pnpm --filter @mule/engine typecheck`. Expected: exit 0.
-- [ ] **Step 3: Commit.** `feat(C1): the game record's types and pure helpers in the engine`
+- [x] **Step 2: Typecheck.** Run `pnpm --filter @mule/engine typecheck`. Expected: exit 0.
+- [x] **Step 3: Commit.** `feat(C1): the game record's types and pure helpers in the engine`
 
 ### Task 2: the failing promise test: T-AC-1 (red first)
 
@@ -132,7 +137,7 @@ against `PlaybookEntry` and `recordPlaybook` from then on, before PR-2 lands.
 
 **Files:** create `apps/server/test/record.test.ts`.
 
-- [ ] **Step 1: Write `T-AC-1: a recorded game with a late Claude answer and a dropped phone replays identical`.**
+- [x] **Step 1: Write `T-AC-1: a recorded game with a late Claude answer and a dropped phone replays identical`.**
   - **Altitude:** promise, at the Room boundary, as a player and Heiko receive it.
   - **The game:** drive a real `Room` from `@tabletop/core` under `vi.useFakeTimers()`.
     - Seats: two humans and one smart AI seat. The smart seat's brain is a stub `BrainService` whose decider
@@ -146,9 +151,9 @@ against `PlaybookEntry` and `recordPlaybook` from then on, before PR-2 lands.
     - Use the real `Room`. A hand-rolled ctx would never call `viewFor` the way the room does, so RULE-3 would go
       unproven.
     - Don't assert any score value: compare recorded against replayed only.
-- [ ] **Step 2: Run it and watch it fail.** Run `pnpm --filter @mule/server exec vitest run test/record.test.ts -t "T-AC-1"`.
+- [x] **Step 2: Run it and watch it fail.** Run `pnpm --filter @mule/server exec vitest run test/record.test.ts -t "T-AC-1"`.
   Expected: FAIL (`Recorder` / `replay` not exported).
-- [ ] **Step 3: Commit.** `test(T-AC-1): a recorded smart-AI game with a phone drop replays identical (red)`
+- [x] **Step 3: Commit.** `test(T-AC-1): a recorded smart-AI game with a phone drop replays identical (red)`
 
 ### Task 3: the recorder: C2
 
@@ -157,7 +162,7 @@ RULE-3, RULE-4, RULE-5, §4 ("what still works when broken").
 
 **Files:** create `apps/server/src/record.ts`; test in `apps/server/test/record.test.ts`.
 
-- [ ] **Step 1: Write the failing rows.**
+- [x] **Step 1: Write the failing rows.**
   - **`T-AC-6:`** extra `viewFor` calls at random moments (a join, a pong) still replay identical.
   - **`T-AC-7:`** the same scripted game, recorded and unrecorded, ends with the same stateHash. A `vi.spyOn` on
     `fs/promises.writeFile` and `fs.writeFileSync` sees no call before game over.
@@ -165,34 +170,34 @@ RULE-3, RULE-4, RULE-5, §4 ("what still works when broken").
   - **`FM-REC-1`** (spec §4, "still works when broken"): a recorder whose bookkeeping throws (forced through a test
     hook) still lets the game reach game over and writes no file.
   - Altitude: promise (T-AC-6, T-AC-7, T-AC-9); failure mode (FM-REC-1).
-- [ ] **Step 2: Run them and watch them fail.** Run `pnpm --filter @mule/server exec vitest run test/record.test.ts`.
+- [x] **Step 2: Run them and watch them fail.** Run `pnpm --filter @mule/server exec vitest run test/record.test.ts`.
   Expected: FAIL.
-- [ ] **Step 3: Implement C2 per spec §1 C2, RULE-1, RULE-3, RULE-4 and RULE-5** (wrap).
+- [x] **Step 3: Implement C2 per spec §1 C2, RULE-1, RULE-3, RULE-4 and RULE-5** (wrap).
   - **Plan-drift corrections:**
     - RULE-1 caps `refused` at 120 characters, and RULE-6 compares messages. The replay compares the capped strings.
     - `t0` and each step's `at` come from the *underlying* ctx's `now()`, read by the recorder itself and never
       taped (HC-3).
-- [ ] **Step 4: Run them; T-AC-6, T-AC-7, T-AC-9 and FM-REC-1 pass.**
-- [ ] **Step 5: Commit.** `feat(C2): the recorder wraps the room's seam (verifies T-AC-6, T-AC-7, T-AC-9)`
+- [x] **Step 4: Run them; T-AC-6, T-AC-7, T-AC-9 and FM-REC-1 pass.**
+- [x] **Step 5: Commit.** `feat(C2): the recorder wraps the room's seam (verifies T-AC-6, T-AC-7, T-AC-9)`
 
 ### Task 4: the replay: C3
 
 **ACs verified:** T-AC-1 (green), T-AC-2, T-AC-3, T-AC-4. **Spec sections consumed:** §1 C3, §2 RULE-6, §0.2 HC-1.
 
-- [ ] **Step 1: Write the failing rows T-AC-2, T-AC-3 and T-AC-4.**
+- [x] **Step 1: Write the failing rows T-AC-2, T-AC-3 and T-AC-4.**
   - **`T-AC-2:`** a tampered intent → `ReplayDiverged`, with `seq` at or after the tampered step.
   - **`T-AC-3:`** a changed fingerprint → `RecordMismatch`. A spy on the MuleGame constructor counts 0.
   - **`T-AC-4:`** with `process.env.ANTHROPIC_API_KEY` set for the test and `createAnthropicSdk` mocked to throw if
     called, the replay completes. The mock counts 0 calls, and no ledger file appears in a temp `MULE_BRAIN_LOG`.
   - Altitude: contract, at `replay()`'s result and errors.
-- [ ] **Step 2: Run them and watch them fail.**
-- [ ] **Step 3: Implement C3 per spec §1 C3 and RULE-6** (sprout, same file). Serve move and writer calls by seat, call and kind
+- [x] **Step 2: Run them and watch them fail.**
+- [x] **Step 3: Implement C3 per spec §1 C3 and RULE-6** (sprout, same file). Serve move and writer calls by seat, call and kind
   (RULE-4 writer calls, AM-1). Writer calls occur only once WS2's writer method exists on `BrainService`; until then
   the code path is typed and covered by T-AC-11 in PR-2. The microtask flush after each step is
   `await new Promise((r) => setImmediate(r))`.
-- [ ] **Step 4: Run the whole file.** T-AC-1..T-AC-4, T-AC-6, T-AC-7 and T-AC-9 pass, including T-AC-1's positive
+- [x] **Step 4: Run the whole file.** T-AC-1..T-AC-4, T-AC-6, T-AC-7 and T-AC-9 pass, including T-AC-1's positive
   control row (it has to go red against an answer moved one step later).
-- [ ] **Step 5: Commit.** `feat(C3): replay by recorded timer order and clock tape (verifies T-AC-1..T-AC-4)`
+- [x] **Step 5: Commit.** `feat(C3): replay by recorded timer order and clock tape (verifies T-AC-1..T-AC-4)`
 
 ### Task 5: the server writes the file at game over: C4
 
@@ -201,45 +206,45 @@ RULE-3, RULE-4, RULE-5, §4 ("what still works when broken").
 **Files:** modify `apps/server/src/server.ts` (`createMuleServer`), `apps/server/src/index.ts` and
 `apps/server/src/mule-game.ts` (the options type, and `enterPhase`'s `gameOver` branch calling `onGameOver`).
 
-- [ ] **Step 1: Write the failing rows.**
+- [x] **Step 1: Write the failing rows.**
   - **`T-AC-5:`** a game through `createMuleServer({ recordDir: tmp })` to game over writes one file. Its text holds
     none of the test's seat tokens, handoff code, room code or API key.
   - **`T-AC-8:`** with `recordDir` pointing at a read-only temp dir, one `console.error` names the path, and the room
     still serves the game-over view.
   - Altitude: promise, at the file on disk and the room's view.
-- [ ] **Step 2: Run them and watch them fail.**
-- [ ] **Step 3: Implement C4 per spec §1 C4 and RULE-2** (in_place). With no `recordDir`, there is no Recorder at all.
-- [ ] **Step 4: Run them; they pass.** Then run the whole server suite, `pnpm --filter @mule/server test`. Expected: green,
+- [x] **Step 2: Run them and watch them fail.**
+- [x] **Step 3: Implement C4 per spec §1 C4 and RULE-2** (in_place). With no `recordDir`, there is no Recorder at all.
+- [x] **Step 4: Run them; they pass.** Then run the whole server suite, `pnpm --filter @mule/server test`. Expected: green,
   with the existing count unchanged plus the new rows, which pins C4 against regression.
-- [ ] **Step 5: Commit.** `feat(C4): the server records each game and writes it at game over (verifies T-AC-5, T-AC-8)`
+- [x] **Step 5: Commit.** `feat(C4): the server records each game and writes it at game over (verifies T-AC-5, T-AC-8)`
 
 ### Task 6: the replay command: C5
 
 **ACs verified:** B-AC-1 (the goal check, run by the lead with Heiko). **Spec sections consumed:** §1 C5.
 
-- [ ] **Step 1: Implement C5 per spec §1 C5.** Create `apps/server/src/replay-cli.ts`, and add
+- [x] **Step 1: Implement C5 per spec §1 C5.** Create `apps/server/src/replay-cli.ts`, and add
   `"replay": "tsx src/replay-cli.ts"` to `apps/server/package.json` scripts.
-- [ ] **Step 2: Smoke it against the file T-AC-5 wrote.** The test writes the file to a temp dir; copy the path from a
+- [x] **Step 2: Smoke it against the file T-AC-5 wrote.** The test writes the file to a temp dir; copy the path from a
   debug run. Run `pnpm --filter @mule/server replay <file>`. Expected: one line per seat, then "identical", exit 0.
-- [ ] **Step 3: Commit.** `feat(C5): pnpm replay <file> prints scores and identical or the divergence`
+- [x] **Step 3: Commit.** `feat(C5): pnpm replay <file> prints scores and identical or the divergence`
 
 ### PR-1 merge gate
 
 Before suggesting a merge of `ws3-record-pr1` into `ws3-auctions`:
 
-- [ ] T-AC-1..T-AC-9 and FM-REC-1 are green and named by their ids.
-- [ ] The red commits come before the implementation commits (Task 2's red; red-first rows in Tasks 3–5).
-- [ ] T-AC-1's positive control went red when tried. The commit message says so.
-- [ ] `pnpm typecheck && pnpm test` is green. Lean CI: only T-AC-1 sits in Tier 1, the rest stay local (spec §6). The
+- [x] T-AC-1..T-AC-9 and FM-REC-1 are green and named by their ids.
+- [x] The red commits come before the implementation commits (Task 2's red; red-first rows in Tasks 3–5).
+- [x] T-AC-1's positive control went red when tried. The commit message says so.
+- [x] `pnpm typecheck && pnpm test` is green. Lean CI: only T-AC-1 sits in Tier 1, the rest stay local (spec §6). The
   implementer tags the others as local the way the server suite already does (check `apps/server/vitest.config.ts`
   before choosing).
-- [ ] The literal guard (`packages/engine/test/config-guard.test.ts`, which scans engine/src and ai/src) stays
+- [x] The literal guard (`packages/engine/test/config-guard.test.ts`, which scans engine/src and ai/src) stays
   green, and `packages/engine/src/record.ts` has no numeric literals. The 120-character message cap is a named
   constant in `apps/server/src/record.ts`, as `brain.ts::NOTE_MESSAGE_CHARS` is: not a balance number, so not
   config (plan-time correction, 2026-10-29).
-- [ ] HC-2 is proven by T-AC-5, and HC-1 by T-AC-4.
-- [ ] No edit outside PR-1's `may_edit`.
-- [ ] Code review is clean, and so is the maintainability review.
+- [x] HC-2 is proven by T-AC-5, and HC-1 by T-AC-4.
+- [x] No edit outside PR-1's `may_edit`.
+- [x] Code review is clean, and so is the maintainability review.
 - [ ] **Goal check, B-AC-1:** with Heiko's (or the PM's) go, Heiko plays one real game at the table with the key set
   and one phone dropped. `pnpm --filter @mule/server replay <file>`, with the key unset, prints "identical". Report
   that output. Never report the goal check from the T-AC-1 test run.
@@ -248,39 +253,43 @@ Before suggesting a merge of `ws3-record-pr1` into `ws3-auctions`:
 
 ## Phase P2: PR-2, notices and playbook entries
 
+**MERGED into ws3-auctions as #175** (79eb63a1, pinned to 1f882089; Tier 1 green). It went to 19 rows; the playbook
+guard and the trade notice were each positive-controlled. T-AC-10 uses seed 4 over 3 months, which includes a
+sale to the ship. AI claims share one `claim()` path. A seat's side is noticed at the good's status close.
+
 ### Task 7: notices: C6
 
 **ACs verified:** T-AC-10. **Spec sections consumed:** §1 C6, §3 `NoticeEntry`, RULE-6 (notices skipped).
 
-- [ ] **Step 1: Write `T-AC-10: claims, declarations, trades (the ship included) and lot sales appear as notices, phaseNotices() holds them with recording off, and a replay without them is identical`** (red, AM-2).
+- [x] **Step 1: Write `T-AC-10: claims, declarations, trades (the ship included) and lot sales appear as notices, phaseNotices() holds them with recording off, and a replay without them is identical`** (red, AM-2).
   - Altitude: contract, at the record. Use T-AC-1's game, which includes a claim, an auction trade and a lot sale.
   - Use a seed whose month 1 lists a lot; pick it in a debug run and fix it in the test.
-- [ ] **Step 2: Implement C6 per spec §1 C6** (in_place). It goes at the three sites in `mule-game.ts` the spec names:
+- [x] **Step 2: Implement C6 per spec §1 C6** (in_place). It goes at the three sites in `mule-game.ts` the spec names:
   handle 'claim' with resolveGrantBids, each good's settled declarations and `dealsInGood` in scheduleAuctionTick
   (a ship sale has buyer `'ship'`), and lot results in scheduleLandAuctionTick. `phaseNotices()` keeps them
   whether or not there's a recorder, and it's cleared in enterPhase (AM-2).
-- [ ] **Step 3: Run it; it passes.** Commit `feat(C6): claims, trades and lot sales as notice events (verifies T-AC-10)`.
+- [x] **Step 3: Run it; it passes.** Commit `feat(C6): claims, trades and lot sales as notice events (verifies T-AC-10)`.
 
 ### Task 8: playbook entries: C7
 
 **ACs verified:** T-AC-11. **Spec sections consumed:** §1 C7, §3 `PlaybookEntry`.
 
-- [ ] **Step 1: Write `T-AC-11: recordPlaybook entries come out in call order with their step's at and seq, and the replay ignores them`** (red).
+- [x] **Step 1: Write `T-AC-11: recordPlaybook entries come out in call order with their step's at and seq, and the replay ignores them`** (red).
   - Altitude: contract.
   - Build the playbook fixture as a minimal valid `Playbook` from `@mule/engine` types, so a change to the frozen
     schema breaks compilation here.
   - **AM-1 guard:** replay a game where a stub writer returns a `RecordedWrite`. The replayed playbook must equal the
     recorded entry. **Positive control:** alter one recorded `write.edits[0].to`, and the replay must diverge.
-- [ ] **Step 2: Implement C7 per spec §1 C7** (sprout).
-- [ ] **Step 3: Run it; it passes.** Commit `feat(C7): recordPlaybook stamps at and seq (verifies T-AC-11)`.
+- [x] **Step 2: Implement C7 per spec §1 C7** (sprout).
+- [x] **Step 3: Run it; it passes.** Commit `feat(C7): recordPlaybook stamps at and seq (verifies T-AC-11)`.
 
 ### PR-2 merge gate
 
-- [ ] T-AC-10 and T-AC-11 are green, named, and red first.
-- [ ] T-AC-1..T-AC-9 are still green.
-- [ ] `pnpm typecheck && pnpm test` is green.
-- [ ] Reviews are clean.
-- [ ] WS1 and WS2 are told that `recordPlaybook` is live, with the SHA.
+- [x] T-AC-10 and T-AC-11 are green, named, and red first.
+- [x] T-AC-1..T-AC-9 are still green.
+- [x] `pnpm typecheck && pnpm test` is green.
+- [x] Reviews are clean.
+- [x] WS1 and WS2 are told that `recordPlaybook` is live, with the SHA.
 
 ---
 
@@ -298,15 +307,15 @@ Before suggesting a merge of `ws3-record-pr1` into `ws3-auctions`:
 
 ## Pre-implementation checklist
 
-- [ ] The spec is approved by Heiko (design review, through the PM). No changes are pending.
-- [ ] WS1 and WS2 have OK'd spec §3 as the freeze, or their amendments are recorded in §8.
-- [ ] Upstream is available: the frozen playbook types `packages/engine/src/playbook.ts`, on trunk at 296eee2
+- [x] The spec is approved by Heiko (design review, through the PM). No changes are pending.
+- [x] WS1 and WS2 have OK'd spec §3 as the freeze, or their amendments are recorded in §8.
+- [x] Upstream is available: the frozen playbook types `packages/engine/src/playbook.ts`, on trunk at 296eee2
   through #164, and in the lane.
-- [ ] Branch policy: sub-branches `ws3-record-pr1` and `ws3-record-pr2`, cut from `ws3-auctions` → lane →
+- [x] Branch policy: sub-branches `ws3-record-pr1` and `ws3-record-pr2`, cut from `ws3-auctions` → lane →
   feat/strategist with Heiko's OK. **No spec or plan commit goes to the lane head while a lane PR is open.**
-- [ ] Base `ws3-auctions` @ `596169f1` green: tsc 0 (`pnpm typecheck`) · tests engine 281 (+1 skipped), ai 125,
+- [x] Base `ws3-auctions` @ `596169f1` green: tsc 0 (`pnpm typecheck`) · tests engine 281 (+1 skipped), ai 125,
   server 233, web 253, ui 46, tabletop 148 (`pnpm test`, local, 2026-10-29) · CI 4/4 (run 40767089177). 446dbcda adds
   only the spec. Re-run before Task 1 (SDD pre-flight).
-- [ ] Repo access confirmed (gh, push to ws3-*).
-- [ ] No spikes in spec §7.
-- [ ] Estimate: PR-1 about 2 days, PR-2 about half a day. The PM has both.
+- [x] Repo access confirmed (gh, push to ws3-*).
+- [x] No spikes in spec §7.
+- [x] Estimate: PR-1 about 2 days, PR-2 about half a day. The PM has both.
