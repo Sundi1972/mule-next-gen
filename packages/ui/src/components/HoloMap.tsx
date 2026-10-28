@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useSyncExternalStore } from 'react';
 import { GoodIcon } from './GoodIcon';
 import { Landscape } from './Landscape';
 import { PlayerMark } from './PlayerMark';
@@ -53,10 +53,7 @@ export interface HoloMapProps {
   className?: string;
 }
 
-/**
- * Every mark is a share of the plot's size, so it reads the same at any width: the installed disc fills most of the
- * plot, the owner's tab nearly half of it, the border a twelfth.
- */
+/** Every mark is a share of the plot's size, so it reads the same at any width. */
 const SHARE = { border: 1 / 12, tab: 0.46, mark: 0.36, disc: 0.62, icon: 0.44, ring: 1 / 9 };
 
 /** Before paint in the browser; the server renderer (and the node tests) has nothing to measure and no paint. */
@@ -65,20 +62,22 @@ const useBeforePaint = typeof document === 'undefined' ? useEffect : useLayoutEf
 /**
  * One plot's width in css px, from the map's layout width. Never from its box on screen: a zoom or a scaled screen
  * transforms the map, and the marks inside with it, so a size taken from the screen would be scaled twice.
+ * Read as an external store that a ResizeObserver reports to: React commits a store's change before the browser
+ * paints, so a resize never shows a frame of stale marks. (@mule/ui has no react-dom, so no flushSync.)
  */
 function usePlotSize(width: number) {
   const ref = useRef<HTMLDivElement>(null);
-  const [plot, setPlot] = useState(30);
-  useBeforePaint(() => {
+  const subscribe = useCallback((changed: () => void) => {
     const el = ref.current;
-    if (!el) return;
-    const measure = () => setPlot(el.clientWidth / width);
-    measure();
-    if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(measure);
+    if (!el || typeof ResizeObserver === 'undefined') return () => {};
+    const ro = new ResizeObserver(changed);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [width]);
+  }, []);
+  const plot = useSyncExternalStore(subscribe, () => (ref.current ? ref.current.clientWidth / width : 30), () => 30);
+  // The first render has no map to read yet: read it again before the first paint.
+  const [, remeasure] = useReducer((n: number) => n + 1, 0);
+  useBeforePaint(remeasure, []);
   return { ref, plot };
 }
 
@@ -92,7 +91,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
   const theme = useTheme();
   const { ref, plot } = usePlotSize(width);
   const px = (share: number, min = 1) => Math.max(min, Math.round(plot * share));
-  const z = { border: px(SHARE.border, 2), tab: px(SHARE.tab), mark: px(SHARE.mark), disc: px(SHARE.disc), icon: px(SHARE.icon), ring: px(SHARE.ring, 2) };
+  const size = { border: px(SHARE.border, 2), tab: px(SHARE.tab), mark: px(SHARE.mark), disc: px(SHARE.disc), icon: px(SHARE.icon), ring: px(SHARE.ring, 2) };
   const terrain = useMemo(() => {
     const grid: (Terrain | undefined)[] = new Array(width * height);
     for (const t of tiles) grid[t.y * width + t.x] = t.terrain;
@@ -105,6 +104,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
       // isolate: the map is one layer to whatever sits over it (a zoom button, a production show), whatever z its marks take inside.
       className={cx('relative isolate overflow-hidden rounded-panel border border-map-edge bg-map-base shadow-map', className)}
       style={{ aspectRatio: `${width} / ${height}` }}
+      data-testid="holo-map"
     >
       <Landscape width={width} height={height} terrain={terrain} theme={theme} className="absolute inset-0" />
       <svg aria-hidden className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
@@ -164,16 +164,16 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                 </span>
               )}
               {owner && (
-                <span aria-hidden className={cx('absolute inset-[2%] rounded-[10%]', fade)} style={{ boxShadow: `inset 0 0 0 ${z.border}px ${owner}`, background: `color-mix(in srgb, ${owner} 30%, transparent)` }} />
+                <span aria-hidden className={cx('absolute inset-[2%] rounded-[10%]', fade)} style={{ boxShadow: `inset 0 0 0 ${size.border}px ${owner}`, background: `color-mix(in srgb, ${owner} 30%, transparent)` }} />
               )}
               {owner && t.owner !== null && (
                 // z-[4]: above the badge layer, so a special's badge hung in from the plot up-left never covers the owner's tab.
                 <span
                   className={cx('absolute left-[4%] top-[4%] z-[4] flex items-center justify-center rounded-[30%] bg-map-chip shadow-chip', fade)}
-                  style={{ width: z.tab, height: z.tab, boxShadow: `0 0 0 ${tv ? 2 : 1}px ${owner}` }}
+                  style={{ width: size.tab, height: size.tab, boxShadow: `0 0 0 ${tv ? 2 : 1}px ${owner}` }}
                   data-testid={`owner-${t.x}-${t.y}`}
                 >
-                  <PlayerMark slot={t.owner} size={z.mark} glow={false} />
+                  <PlayerMark slot={t.owner} size={size.mark} glow={false} />
                 </span>
               )}
               {t.terrain === 'store' && (
@@ -182,10 +182,10 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
               {t.good && (
                 <span
                   className={cx('relative z-[2] flex items-center justify-center rounded-full bg-map-chip shadow-chip', fade)}
-                  style={{ width: z.disc, height: z.disc, boxShadow: `0 0 0 ${tv ? 3 : 2}px var(--color-g-${t.good})` }}
+                  style={{ width: size.disc, height: size.disc, boxShadow: `0 0 0 ${tv ? 3 : 2}px var(--color-g-${t.good})` }}
                   data-testid={`installed-${t.x}-${t.y}`}
                 >
-                  <GoodIcon good={t.good} size={z.icon} />
+                  <GoodIcon good={t.good} size={size.icon} />
                   {showOutput && t.output !== undefined && (
                     // Centred on the disc's rim at its lower left, the corner the plot's badge leaves free: 50% ∓ 50%/√2.
                     <span
@@ -239,12 +239,11 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                     className={cx('pointer-events-none absolute z-[5]', onEdge ? 'inset-0 rounded-[10%]' : '-inset-[6%] rounded-[14%]')}
                     style={{
                       boxShadow: onEdge
-                        ? `inset 0 0 0 ${z.ring}px var(--color-holo-strong), inset 0 0 0 ${z.ring + (tv ? 3 : 2)}px var(--color-void)`
-                        : `0 0 0 ${z.ring}px var(--color-holo-strong), 0 0 0 ${z.ring + (tv ? 3 : 2)}px var(--color-void)`,
+                        ? `inset 0 0 0 ${size.ring}px var(--color-holo-strong), inset 0 0 0 ${size.ring + (tv ? 3 : 2)}px var(--color-void)`
+                        : `0 0 0 ${size.ring}px var(--color-holo-strong), 0 0 0 ${size.ring + (tv ? 3 : 2)}px var(--color-void)`,
                     }}
                     data-testid="selected-ring"
                   />
-                  {/* The arrow alone: the ring and glow carry the selection, and a wide label would cover the neighbours. */}
                   <span
                     className={cx(
                       'pointer-events-none absolute left-1/2 z-[6] -translate-x-1/2 whitespace-nowrap rounded-chip bg-holo font-mono font-bold text-on-holo shadow-glow',
