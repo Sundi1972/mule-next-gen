@@ -13,17 +13,27 @@ const worthIn = (view: MuleView) => Object.fromEntries(view.players.map((p) => [
 const ruleWorth = (state: GameState) => Object.fromEntries(seats.map((s) => [s.id, scoreParts(state, s.id).total]));
 const leaderBy = (view: MuleView, key: 'money' | 'worth') => [...view.players].sort((a, b) => b[key] - a[key])[0]!.id;
 
-/** Plays a two-month game to game over, calling `look` once per step in every phase. The last upkeep turns straight into game over, so month 1 is the one that shows upkeep. */
+/**
+ * Plays a two-month game to game over, calling `look` once per step in every phase. The last upkeep turns straight
+ * into game over, so month 1 is the one that shows upkeep. s1 claims the first plot lit in each land grant, so the
+ * two phones' parts differ.
+ */
 function playTwoMonths(look: (game: MuleGame, state: GameState) => void): Set<Phase> {
   const { ctx, advance } = fakeContext();
   const game = new MuleGame(ctx, 7, { maxMonths: 2, phaseScale: 0.1 });
   game.start(seats);
   const state = stateOf(game);
   const phases = new Set<Phase>();
+  let claimedIn = 0;
   for (let n = 0; n < 100_000 && !game.viewFor(null).finished; n++) {
     phases.add(state.phase);
     look(game, state);
     if (state.phase === 'planning') readyAll(game);
+    const lit = state.phase === 'landGrant' && claimedIn !== state.month ? game.viewFor('s1').lit : null;
+    if (lit) {
+      game.handle('s1', { type: 'claim', ...lit });
+      claimedIn = state.month;
+    }
     advance(100);
   }
   expect(game.viewFor(null).finished).toBe(true);
@@ -61,6 +71,7 @@ describe('Worth in every view (C18)', () => {
       end!.players.some((p) => p.worth !== Math.round(p.money)),
       'worth is more than cash: someone holds goods, land or MULEs',
     ).toBe(true);
+    expect(end!.players.find((p) => p.id === 's1')!.plots, "s1's claims, so the phones' parts differ").toBeGreaterThan(0);
   });
 
   it('T-AC-14: the cash leader is not the Worth leader when another player holds goods, land and MULEs worth more', () => {
@@ -128,7 +139,7 @@ describe('Worth in every view (C18)', () => {
     for (const viewer of ['s1', 's2'] as const) expect(game.viewFor(viewer).me!.worthParts.cut, `${viewer} out of Collapse`).toBe(0);
   });
 
-  it("T-AC-14 (negative, HC-4): the board has no me, and in every phase no player entry in any view carries parts; a phone's parts are its own", () => {
+  it("T-AC-14 (negative, HC-4): the board has no me, and in every phase no player entry in any view carries parts; a phone's parts are only on its own me", () => {
     playTwoMonths((game, state) => {
       const board = game.viewFor(null);
       expect(board.me, `the board in ${state.phase}`).toBeNull();
