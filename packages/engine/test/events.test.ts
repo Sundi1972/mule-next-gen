@@ -13,6 +13,7 @@ import {
   planEvent,
   playerEventChance,
   playerEventReason,
+  rollPhase,
   rollPlayerEvent,
   type EventKey,
   type EventRow,
@@ -363,6 +364,65 @@ describe('the event table', () => {
 
   it.each(cases)("EM-T-AC-1: an event's chance is its phase's base plus its raises minus its lowers, between 0 and its cap: %s", (_, row, phase, world, expected) => {
     expect(chanceIn(row, phase, world)).toBeCloseTo(expected, 9);
+  });
+});
+
+describe('the roller', () => {
+  const rows = (): EventRow[] => [...Object.values(EVENTS.colony), ...Object.values(EVENTS.player)];
+  /** Runs `body` with every event row rolling in production at `chance`, capped at 1, then puts the rows back. */
+  const withEveryRowAt = (chance: number, body: () => void) => {
+    const saved = rows().map((row) => ({ ...row }));
+    for (const row of rows()) Object.assign(row, { phases: { production: chance }, cap: 1 });
+    try {
+      body();
+    } finally {
+      rows().forEach((row, i) => Object.assign(row, saved[i]));
+    }
+  };
+  /** A colony every wave-1 event can hit, at the first month events may roll. */
+  const ready = (seed: number) => {
+    const state = colonyForEvents(seed);
+    state.month = EVENTS.firstMonth;
+    return state;
+  };
+  /** What fires in production over 40 months of one colony, its dice seeded from `seed`. */
+  const fortyMonths = (seed: number) => {
+    const state = ready(3);
+    state.seed = seed;
+    return Array.from({ length: 40 }, (_, i) => {
+      state.month = EVENTS.firstMonth + i;
+      return rollPhase(state, 'production');
+    });
+  };
+  const keys = (months: MonthEvent[][]) => months.map((events) => events.map((e) => e.key));
+
+  it('EM-T-AC-2: no event in month 1 or on a what-if copy, and a seed replays the same events', () => {
+    withEveryRowAt(1, () => {
+      const first = colonyForEvents(3);
+      expect(first.month).toBe(1);
+      expect(rollPhase(first, 'production')).toEqual([]);
+
+      const state = ready(3);
+      expect(rollPhase(cloneForSim(state), 'production')).toEqual([]);
+      const fired = rollPhase(state, 'production');
+      expect(fired.map((e) => e.key)).toEqual([
+        ...['dustStorm', 'drought', 'acidRain', 'solarFlare', 'cometPass', 'flood', 'volcanicAsh'],
+        ...state.players.flatMap(() => ['pestSwarm', 'wildfire', 'bumperHarvest']),
+      ]);
+      expect(rollPhase(state, 'production')).toEqual(fired);
+      expect(rollPhase(ready(3), 'production')).toEqual(fired);
+    });
+
+    withEveryRowAt(0.5, () => {
+      const months = fortyMonths(11);
+      expect(fortyMonths(11)).toEqual(months);
+      // Negative cases: another seed, or another month, rolls other dice.
+      expect(keys(fortyMonths(12))).not.toEqual(keys(months));
+      expect(new Set(keys(months).map((k) => k.join())).size).toBeGreaterThan(1);
+      // Each row on its own dice: no dust storms moves no other row's fate or shape.
+      EVENTS.colony.dustStorm.phases = { production: 0 };
+      expect(fortyMonths(11)).toEqual(months.map((events) => events.filter((e) => e.key !== 'dustStorm')));
+    });
   });
 });
 

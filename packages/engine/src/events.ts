@@ -244,6 +244,10 @@ export function rollPlayerEvent(state: GameState, key: PlayerEventKey, phase: Ph
   return createRng(seedOf(state.seed, state.month, key, phase, id)).chance(chance);
 }
 
+export function rollPhase(state: GameState, phase: Phase): MonthEvent[] {
+  throw new Error('NotImplemented: rollPhase');
+}
+
 /** A seed from a game's seed, its month and some names: FNV-1a over them. */
 function seedOf(seed: number, month: number, ...names: string[]): number {
   let h = 2_166_136_261; // literal-ok: FNV-1a offset basis
