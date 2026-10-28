@@ -1,6 +1,6 @@
 import type { MuleView } from '@mule/protocol';
 import { VIEW } from '../../../fixture';
-import type { MonthFacts } from '../../../proposed/worth';
+import { worthOf, type MonthFacts } from '../../../proposed/worth';
 
 /**
  * The month-end's four states, for Heiko's approval (2026-10-28). The shared fixture's month 5, after the goods
@@ -23,8 +23,13 @@ export interface MonthEndState {
 /** The month just ended: the fixture's month 5, after the auction. */
 const ENDED: MuleView = { ...VIEW, phase: 'upkeep', auction: null };
 
-/** Each player's Worth at month 4's end, as it showed then (the air was not in Collapse). */
-const LAST_WORTH: Record<string, number> = { ossa: 4423, lena: 4373, brix: 4113, kai: 2710 };
+/** How each Worth moved over month 5, outside Collapse: Ossa and Brix gained, Lena and Kai lost a little. */
+const MONTH_5: Record<string, number> = { ossa: 120, lena: -40, brix: 65, kai: -85 };
+/**
+ * Each player's Worth at month 4's end, as it showed then (the air was not in Collapse): this month's Worth less the
+ * month's change, so the numbers stay true whatever config sets a plot, a MULE or a term at.
+ */
+const LAST_WORTH: Record<string, number> = Object.fromEntries(Object.entries(MONTH_5).map(([id, change]) => [id, worthOf(ENDED, id).total - change]));
 
 /** The fund's month: the sales tax on this month's sales in, the Governor's pay (Lena, since month 4) out. */
 const FUND: Pick<MonthFacts, 'fundIn' | 'paid'> = {
@@ -56,7 +61,7 @@ export const MONTHEND_STATES: MonthEndState[] = [
     id: 'monthend-collapse',
     title: 'The air in Collapse',
     intro:
-      'The same month, but the air went from Toxic (77) into Collapse (84). Every Worth shows the Collapse cut, a fifth off everything except offices, as the score if the game ended now; the uncut numbers stay in their own column, and Lena’s phone shows the cut as a line of its own. Last month was not in Collapse, so every change is mostly the cut.',
+      'The same month, but the air went from Toxic (77) into Collapse (84). Every Worth shows the Collapse cut, a fifth off everything, offices too, as the score if the game ended now; the uncut numbers stay in their own column, and Lena’s phone shows the cut as a line of its own. Last month was not in Collapse, so every change is mostly the cut.',
     view: { ...ENDED, air: { level: 84, band: 'collapse' } },
     facts: { ...NORMAL, lastAir: 77 },
     tv: true,

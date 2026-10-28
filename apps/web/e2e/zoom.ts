@@ -4,13 +4,11 @@
  */
 import { mapSize } from '@mule/engine';
 import type { Locator, Page } from 'playwright';
-import { PHASE_MS } from '../../server/src/mule-game.js';
-import { check, claimAPlot, launch, PHONE, startServer } from './harness';
+import { check, CLAIM_MS, claimAPlot, doneWithLand, launch, PHONE, startServer } from './harness';
 import { readyThroughTheElection } from './politics-steps';
 import { checkPlotLook, watchIntents, type Plot } from './table-steps';
 
 const PHASE_SCALE = 0.5;
-const within = (ms: number) => ms * PHASE_SCALE + 3_000;
 /** The land grant, a land auction if the colony lists plots, and the walk out to development. */
 const REACH_DEVELOPMENT_MS = 120_000;
 const SEATS = 6;
@@ -41,8 +39,9 @@ try {
   await phone.getByRole('button', { name: 'Start game' }).click();
   await readyThroughTheElection(phone, 10_000);
   await phone.locator('[data-phase=landGrant]').getByRole('button', { name: /CLAIM/ }).waitFor({ timeout: 5_000 });
-  await claimAPlot(phone, within(PHASE_MS.landGrant), 'T-AC-9: the phone claims a plot in the land grant');
+  await claimAPlot(phone, CLAIM_MS, 'T-AC-9: the phone claims a plot in the land grant');
   check(intents() >= 1, `T-AC-9: the frame watcher saw the claim go out, ${intents()} intents`);
+  await doneWithLand(phone);
 
   const dev = phone.locator('[data-phase=development]');
   await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: REACH_DEVELOPMENT_MS });

@@ -16,7 +16,7 @@
 import { createGame, type GameState, type Tile } from '@mule/engine';
 import type { Locator, Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
-import { check, claimAPlot, launch, PHONE, startServer, TV } from './harness';
+import { check, CLAIM_MS, claimAPlot, doneWithLand, launch, PHONE, startServer, TV } from './harness';
 import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
 import { checkGlyphs as checkGlyphsOf, checkSpecialLine as checkSpecialLineOf, plotName, specialsOn, tapOnTheOverhang, tapPlot as tapPlotOf, type Density } from './special-steps';
 
@@ -120,7 +120,8 @@ try {
   await checkGlyphs(tv.locator('[data-phase=landGrant]'), 'TV, land grant', 'tv');
 
   // Development: the plot card of a tapped special plot says what it is.
-  await claimAPlot(phone, PHASE_MS.landGrant + 3_000, 'the phone claims a plot, so the land grant can end');
+  await claimAPlot(phone, CLAIM_MS, 'the phone claims a plot');
+  await doneWithLand(phone);
   const dev = phone.locator('[data-phase=development]');
   await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: REACH_DEVELOPMENT_MS });
   const devMap = dev.getByTestId('dev-map');

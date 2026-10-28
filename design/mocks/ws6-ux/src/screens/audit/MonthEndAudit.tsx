@@ -189,7 +189,7 @@ function Numbers() {
     ['Land, a plot', `${GAME.plotScore} cr`, 'GAME.plotScore (config)'],
     ['A MULE installed', `${VIEW.mulePrice} cr`, 'the store’s MULE price this month (view.mulePrice), as the final score counts it'],
     ['An office term', `${POLITICS.termScore} cr`, 'POLITICS.termScore (config; a placeholder until the sim balances it)'],
-    ['The Collapse cut', `× ${POLLUTION.collapseScore}`, 'POLLUTION.collapseScore (config): offices are not cut'],
+    ['The Collapse cut', `× ${POLLUTION.collapseScore}`, 'POLLUTION.collapseScore (config): every line, offices too'],
     ['Goods', 'posted price', 'the store’s posted price (MarketRow.price)'],
     ['Office pay', `${POLITICS.pay.governor} cr`, 'POLITICS.pay.governor (config), out of the fund at upkeep'],
     ['A donation', `${DONATION_WORTH} cr a credit`, 'DONATION_WORTH: WS1 sets this (G-5)'],
@@ -296,8 +296,8 @@ export function MonthEndContents() {
       </ul>
       <h2 className="label-caps mt-6">The Worth model, as agreed</h2>
       <p className="mt-1 max-w-3xl text-sm text-ink-2">
-        Worth = cash + goods at the store’s posted price + land ({GAME.plotScore} cr a plot) + installed MULEs (the store’s MULE price) + office terms ({POLITICS.termScore} cr a term) + colony donations 1:1 (with G-5). In Collapse, everything but the
-        offices × {POLLUTION.collapseScore}. Others see totals only; your phone shows your lines.
+        Worth = cash + goods at the store’s posted price + land ({GAME.plotScore} cr a plot) + installed MULEs (the store’s MULE price) + office terms ({POLITICS.termScore} cr a term) + colony donations 1:1 (with G-5). In Collapse, every line, offices
+        too, × {POLLUTION.collapseScore}. Others see totals only; your phone shows your lines.
       </p>
       <div className="mt-4 max-w-3xl">
         <Numbers />
