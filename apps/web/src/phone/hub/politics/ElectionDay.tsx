@@ -105,7 +105,7 @@ function Announce() {
 function Ballot({ election }: { election: ElectionView }) {
   const { view, me } = usePhoneGame();
   const client = useClient();
-  const picks = useAbstained();
+  const picks = usePicks();
   return (
     <DayCard at={2} testid="ballot-card">
       <span className="flex flex-wrap items-center gap-x-1.5 text-xs @min-[1100px]/shell:text-lg" data-testid="voted">
@@ -124,9 +124,9 @@ function Ballot({ election }: { election: ElectionView }) {
             office={o}
             cands={election.candidates[o]!}
             promises={o === 'governor' ? election.promises : {}}
-            pick={me.politics?.ballot[o] ?? (picks.has(ballotKey(view, o)) ? '' : undefined)}
+            pick={picks.get(ballotKey(view, o)) ?? me.politics?.ballot[o]}
             onPick={(id) => {
-              abstain(ballotKey(view, o), id === '');
+              pickOn(ballotKey(view, o), id);
               client.intent({ type: 'vote', office: o, candidate: id || null });
             }}
           />
@@ -198,33 +198,31 @@ const EXTRAS = [
 ] as const;
 
 /*
- * An abstention clears your ballot on the server, so its view can't tell it from no pick at all; this phone remembers
- * it, for the ballot to show it checked and for Cast my vote (electionReadyWords) to count the office as picked. The
- * hub re-renders with the vote's broadcast.
+ * This phone's picks, '' for Abstain, shown at once while the vote travels. An abstention clears the ballot on the
+ * server, so its view can't tell it from no pick at all: only this phone knows, for the ballot to show it checked and
+ * for Cast my vote (electionReadyWords) to count the office as picked. The hub re-renders with the vote's broadcast.
  */
-const abstained = new Set<string>();
+const picked = new Map<string, string>();
 const listeners = new Set<() => void>();
 let version = 0;
 const ballotKey = (view: Pick<MuleView, 'month'>, office: Office) => `${view.month}:${office}`;
 
-function abstain(key: string, on: boolean): void {
-  if (on === abstained.has(key)) return;
-  if (on) abstained.add(key);
-  else abstained.delete(key);
+function pickOn(key: string, id: string): void {
+  picked.set(key, id);
   version++;
   for (const l of listeners) l();
 }
 
-function useAbstained(): ReadonlySet<string> {
+function usePicks(): ReadonlyMap<string, string> {
   useSyncExternalStore(
     (l) => (listeners.add(l), () => listeners.delete(l)),
     () => version,
     () => version,
   );
-  return abstained;
+  return picked;
 }
 
 /** Whether this phone has a pick, a candidate or Abstain, for every contested office on the ballot. */
 export function ballotComplete(view: Pick<MuleView, 'month'>, mine: Partial<Record<Office, string>>, election: ElectionView): boolean {
-  return contested(election.candidates).every((o) => mine[o] !== undefined || abstained.has(ballotKey(view, o)));
+  return contested(election.candidates).every((o) => mine[o] !== undefined || picked.has(ballotKey(view, o)));
 }

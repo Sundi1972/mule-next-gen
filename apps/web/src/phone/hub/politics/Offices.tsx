@@ -74,12 +74,11 @@ function TermPromise({ view }: { view: MuleView }) {
   );
 }
 
-/** Each election stage opens the Council desk; once it is over, the new Governor's phone opens the tax desk. */
+/** Once election day is over (this line returns with the hub's stage), the new Governor's phone opens the tax desk, every other the result (E-6). */
 function useElectionDesks(stage: string | null, governor: boolean): void {
   const { openDesk } = useHub();
   useEffect(() => {
-    if (stage === 'announce' || stage === 'ballot' || stage === 'ceremony') openDesk('council');
-    else if (stage === 'over' && governor) openDesk('governor');
+    if (stage === 'over') openDesk(governor ? 'governor' : 'council');
     // Only a new stage or a new office moves the rail; openDesk is a new function on every render.
   }, [stage, governor]);
 }
