@@ -10,12 +10,12 @@
 
 ## Status (2026-10-28)
 
-**Code-complete on `ws3-dev-walking` at a46c9e6. PR [Sundi1972/mule-next-gen#122](https://github.com/Sundi1972/mule-next-gen/pull/122) into ws1-balance, out of draft.**
+**MERGED: PR [Sundi1972/mule-next-gen#122](https://github.com/Sundi1972/mule-next-gen/pull/122) went into ws1-balance at de018c9 (WS1, pinned to head a46c9e6), and goes to trunk with #109.**
 - **Done:** Tasks 0–5 (C13) and Task 6 (untimed planning, with the host's Continue under option A: Heiko via the PM).
 - **Reviews:** four review rounds with mutation sweeps, plus three fix rounds. The findings were an off-map crash, walks dropped by an early end, a stale latch after a blip, planning's number path, and the Continue survivors. All are closed.
 - **#118 (WS6's `condition`) merged ahead:** 8bccef9, then ws1-balance be349e5 at 4e7c067.
 - **Gates at a46c9e6:** all green, e2e:core included.
-- **Named-edit OKs: all in** (WS1, WS4, WS6, WS7). WS4 OK'd Continue's two, 35e2512 (room.ts `GameContext.hostId()`) and b256089 (fake-context), at a46c9e6 with its own mutants red. #122 is clear to merge; WS1 merges it under the lane rule.
+- **Named-edit OKs: all in** (WS1, WS4, WS6, WS7). WS4 OK'd Continue's two, 35e2512 (room.ts `GameContext.hostId()`) and b256089 (fake-context), at a46c9e6 with its own mutants red. WS4 also confirmed directly to WS1 before the merge.
 - **Follow-ups**, in the WS3 follow-ups plan:
   - extract the walking logic into its own server file;
   - `GRANT_TICK_MS` scaling;
