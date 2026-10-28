@@ -615,12 +615,18 @@ export const POLITICS = {
   /** The countdown part of the reveal, before the result shows. */
   revealCountdownMs: 3_000,
   weight: {
+    /** Votes every player has, before the parts below. */
+    base: 1,
     /** One extra vote per this many plots owned. */
     plotsPerVote: 10,
     /** Reputation at or above this adds a vote. */
     repHigh: 70,
     /** Reputation below this takes a vote away. */
     repLow: 30,
+    /** Votes a high reputation adds, and a low one takes away. */
+    repVotes: 1,
+    /** Extra votes for the month's Land Baron. */
+    baronVotes: 1,
     /** One extra vote per this much sales tax paid over the game, up to taxCap votes. */
     taxPerVote: 300,
     taxCap: 2,

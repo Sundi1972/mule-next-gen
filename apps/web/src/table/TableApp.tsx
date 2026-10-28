@@ -403,7 +403,6 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
               shipPays={auction.shipPays}
               storeStock={stock}
               marks={{ ask: true, bid: true }}
-              stage="walk"
               className="min-h-0 flex-1"
             />
           )}
