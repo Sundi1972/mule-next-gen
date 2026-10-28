@@ -1,9 +1,11 @@
 import { POLITICS, type Office } from '@mule/engine';
+import type { MuleView } from '@mule/protocol';
+import { cx } from '@mule/ui';
 import { Fragment, useEffect } from 'react';
 import { usePhoneGame } from '../../game';
 import { useHub } from '../Hub';
 import { Who } from './parts';
-import { OFFICE_NAME } from './words';
+import { OFFICE_NAME, promiseKept, promiseWords } from './words';
 
 /** Who holds which office until when, and the next election, as one line on the hub; it opens the election's desks. */
 export function Offices() {
@@ -50,7 +52,25 @@ function OfficeHolder({ office, id, until }: { office: Office; id: string; until
     <span data-testid={`office-${office}`}>
       {OFFICE_NAME[office]}: <Who view={view} id={id} size={12} />
       {until !== null && `, until month ${until}`}
+      {office === 'governor' && <TermPromise view={view} />}
     </span>
+  );
+}
+
+/** E-7: the Governor's promise for the term beside the tax, kept or broken; "still" while the new Governor has yet to set it. */
+function TermPromise({ view }: { view: MuleView }) {
+  const { promise, tax, term } = view.politics!;
+  if (!promise) return null;
+  const kept = promiseKept(promise, tax);
+  const fresh = term?.[0] === view.month && tax.percent === tax.start;
+  const status = kept ? { text: `tax ${tax.percent}%, kept`, tone: 'text-ok' } : fresh ? { text: `tax still ${tax.percent}%`, tone: 'text-warn' } : { text: `tax ${tax.percent}%, promise broken`, tone: 'text-alert' };
+  return (
+    <>
+      {' · '}promised {promiseWords(promise, tax.start, false)} ·{' '}
+      <strong className={cx('font-semibold', status.tone)} data-testid="promise-status">
+        {status.text}
+      </strong>
+    </>
   );
 }
 
