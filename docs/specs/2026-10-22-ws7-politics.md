@@ -824,6 +824,23 @@ goal      P-1 — still met; G-5's income
 folded    D2 count note below; slice 2a spec
 ```
 
+```
+AM-18 · 2026-10-28 · Heiko (via PM) · the election is not time-bound
+
+target    §2 RULE-1 stages, RULE-2 row 1, RULE-8 timing, RULE-9 election rows; §3 Election
+said      nominate 20 s → ballot 20 s → reveal 6 s inside planning; run only in nominate
+did       Heiko: "we shouldn't make this time bound": run for office in any month's planning, and in
+          an election month announce, let everybody vote, then reveal office by office with growing
+          bars and a celebration. Designed in docs/specs/2026-10-28-ws7-untimed-election.md (C60-C67,
+          RULE-60..64): candidacy lives on Politics; announce (last call) → ballot (closes when all
+          are Done) → ceremony (presentation clocks only) → over; away seats are not Done; the host's
+          Continue closes a stage for absent players. Replaces E-1.
+because   P-1: the table governs itself only if a newcomer can take part; 20 s stages shut them out
+          (WS6 audit §3)
+goal      P-1 — still met
+folded    RULE-1, RULE-2, RULE-8, RULE-9 superseded by RULE-60..64 for the election; UBER-AC-2 restated
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: politics state
