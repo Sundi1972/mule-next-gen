@@ -933,13 +933,20 @@ export const STRATEGIST = {
   airCost: 10,
   /** What it counts a green belt as costing a month, in credits (the engine charges none), set against the air it cleans; without full scoring, the cost alone. */
   greenBeltCost: 5,
-  /** Below this utility share of the best, a free plot is not worth pressing for in the first sweep; later sweeps take anything above laterShare. */
+  /**
+   * The land grant is one pass. At its start a free plot must clear this utility share of the best open plot to be
+   * pressed for; the share falls in a straight line to 0 at the pass's end, so the seat doesn't end it landless.
+   */
   grantShare: 0.75,
+  /**
+   * While the falling share is at least this, the seat also presses only for its top claimsPerGrant + grantSpare open
+   * plots; below it, any free plot it values will do.
+   */
   grantLaterShare: 0.5,
   /**
-   * In the first two sweeps it presses only for its top claimsPerGrant + grantSpare open plots (twice that in the
-   * second), so it waits for the land it wants instead of the first that will do. 0: any spare lets the grant's
-   * reading order pick among them, which piles AI land at the top of the map.
+   * Its top open plots, beyond claimsPerGrant, that it presses for while the share is at least grantLaterShare, so it
+   * waits for the land it wants instead of the first that will do. 0: any spare lets the grant's reading order pick
+   * among them, which piles AI land at the top of the map.
    */
   grantSpare: 0,
   /** A factory needs this many months of its inputs on hand or from its own plots. */

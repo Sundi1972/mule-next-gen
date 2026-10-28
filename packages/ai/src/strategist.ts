@@ -183,25 +183,25 @@ export function landDecision(obs: GameState, mind: Mind): Shortlist<LandPlan> {
 }
 
 /**
- * Whether the hands should press for the lit plot: it must clear a share of
- * the best plot still free in the plan's ranking (lower after the first
- * sweep, so the seat doesn't end the month empty-handed), and in the first
- * two sweeps be among its top open plots: the grant lights plots in reading
- * order, and the first that will do would always be near the top. Never while the
- * seat already holds a month's worth of idle plots it can't pay to develop:
- * hoarded land earns nothing and every idle plot counts as Smithore demand.
+ * Whether the hands should press for the lit plot. The grant is one pass, so the bar falls as the pass goes on
+ * (`progress`, 0 at its first plot to 1 at its end): the plot must clear a share of the best plot still free in the
+ * plan's ranking, from STRATEGIST.grantShare down to 0, so the seat doesn't end the month empty-handed. While that
+ * share is at least STRATEGIST.grantLaterShare it must also be among the seat's top open plots: the grant lights plots
+ * in reading order, and the first that will do would always be near the top. Below it, any plot the seat values will
+ * do. Never while the seat already holds a month's worth of idle plots it can't pay to develop: hoarded land earns
+ * nothing and every idle plot counts as Smithore demand.
  */
-export function wantsPlot(plan: LandPlan, obs: GameState, index: number, sweep: number, mind: Mind): boolean {
+export function wantsPlot(plan: LandPlan, obs: GameState, index: number, progress: number, mind: Mind): boolean {
   const idle = obs.tiles.filter((t) => t.owner === mind.me && !t.outfit).length;
   if (idle >= mind.level.mulesPerMonth && me(obs, mind).money < (idle + 1) * mulePriceFor(obs, mind.me)) return false;
   const free = new Set(obs.tiles.map((t, i) => (t.owner === null && t.terrain !== 'store' ? i : -1)).filter((i) => i >= 0));
   const open = plan.ranking.filter((s) => free.has(s.index));
   const rank = open.findIndex((s) => s.index === index);
   const lit = open[rank];
-  if (!lit) return sweep > 1;
-  if (sweep > 1) return true;
-  if (rank >= (GAME.claimsPerGrant + STRATEGIST.grantSpare) * (sweep + 1)) return false;
-  const share = sweep === 0 ? STRATEGIST.grantShare : STRATEGIST.grantLaterShare;
+  if (!lit) return false;
+  const share = STRATEGIST.grantShare * (1 - Math.min(1, Math.max(0, progress)));
+  if (share < STRATEGIST.grantLaterShare) return lit.value > 0;
+  if (rank >= GAME.claimsPerGrant + STRATEGIST.grantSpare) return false;
   return lit.utility >= (open[0]?.utility ?? 0) * share;
 }
 

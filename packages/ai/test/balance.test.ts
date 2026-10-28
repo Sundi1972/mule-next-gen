@@ -7,11 +7,11 @@ import { cashReserve, installGain, type Mind } from '../src/value.js';
 
 const fourSeats = (seed: number) => createGame({ seed, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI${i}`, isAi: true })) });
 
-/** A land grant in its third sweep, where any free plot is otherwise wanted, with `idle` undeveloped plots given to ai0. */
+/** A land grant at the last plot of its one pass, where any free plot is otherwise wanted, with `idle` undeveloped plots given to ai0. */
 function grantWithIdleLand(idle: number, money: number): GameState {
   const state = fourSeats(3);
   while (state.phase !== 'landGrant') advancePhase(state);
-  state.grant!.sweep = 2;
+  state.grant!.step = state.grant!.order.length - 1;
   const lit = state.grant!.order[state.grant!.step];
   const spare = state.tiles.map((t, i) => ({ t, i })).filter(({ t, i }) => !t.owner && t.terrain !== 'store' && i !== lit);
   for (const { t } of spare.slice(0, idle)) t.owner = 'ai0';
