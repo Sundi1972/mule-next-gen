@@ -71,13 +71,13 @@ export interface VoteWeight {
 
 /** A player's votes, part by part, derived from the state on every call. See WS7 spec RULE-4. */
 export function voteWeight(state: GameState, playerId: string): VoteWeight {
-  const { plotsPerVote, repHigh, repLow, taxPerVote, taxCap } = POLITICS.weight;
+  const { base, plotsPerVote, repHigh, repLow, repVotes, baronVotes, taxPerVote, taxCap } = POLITICS.weight;
   const { reputation } = player(state, playerId);
   const parts = {
-    base: 1,
+    base,
     land: Math.floor(plotsOwned(state, playerId) / plotsPerVote),
-    reputation: reputation >= repHigh ? 1 : reputation < repLow ? -1 : 0,
-    baron: state.politics?.baron === playerId ? 1 : 0,
+    reputation: reputation >= repHigh ? repVotes : reputation < repLow ? -repVotes : 0,
+    baron: state.politics?.baron === playerId ? baronVotes : 0,
     taxes: Math.min(taxCap, Math.floor((state.treasury.paid[playerId] ?? 0) / taxPerVote)),
   };
   return { total: parts.base + parts.land + parts.reputation + parts.baron + parts.taxes, parts };
