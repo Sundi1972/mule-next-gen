@@ -1,15 +1,16 @@
-import { MAP, type SpecialKind as EngineSpecialKind } from '@mule/engine';
+import { MAP, type PlacedSpecialKind, type SpecialKind as EngineSpecialKind } from '@mule/engine';
 import type { MapTile, Terrain } from '@mule/ui';
 
 /**
- * The five special fields as the design system will name and colour them.
+ * The six special fields as the design system will name and colour them. Five come with the map; the
+ * meteor crater forms in play, where a meteor strikes.
  *
  * GRAFT (PR-4): `SpecialKind`, `MapSpecial`, `SPECIAL_NAME` and `SPECIAL_COLOR` move into
  * packages/ui/src/components/tokens.ts (the UI package does not depend on the engine, so it
  * keeps its own copy of the kind union, as it does for Good and Terrain), and `MapTile` gains
  * `special?: MapSpecial`. `specialLine` moves to apps/web/src/game/derive.ts next to TERRAIN_ODDS.
  */
-export type SpecialKind = 'ruins' | 'crystalCavern' | 'geyser' | 'oasis' | 'relic';
+export type SpecialKind = 'ruins' | 'crystalCavern' | 'geyser' | 'oasis' | 'relic' | 'meteorCrater';
 
 /** Fails to compile if the engine's kinds and these drift apart. */
 export type SameKinds = [SpecialKind] extends [EngineSpecialKind] ? ([EngineSpecialKind] extends [SpecialKind] ? true : never) : never;
@@ -21,10 +22,13 @@ export interface MapSpecial {
   salvage?: 'alloy' | 'electronics';
 }
 
-/** A map plot as PR-4's HoloMap will take it. */
-export type SpecialTile = MapTile & { special?: MapSpecial };
+/** A map plot as HoloMap takes it, with this mock's kinds: the design system's own list lacks the meteor crater until its badge is approved. */
+export type SpecialTile = Omit<MapTile, 'special'> & { special?: MapSpecial };
 
-export const SPECIAL_KINDS: SpecialKind[] = ['ruins', 'crystalCavern', 'geyser', 'oasis', 'relic'];
+export const SPECIAL_KINDS: SpecialKind[] = ['ruins', 'crystalCavern', 'geyser', 'oasis', 'relic', 'meteorCrater'];
+
+/** The kinds a generated map can hold, read from the engine's placement rows. */
+export const PLACED_KINDS = SPECIAL_KINDS.filter((k): k is PlacedSpecialKind => k in MAP.special.on);
 
 export const SPECIAL_NAME: Record<SpecialKind, string> = {
   ruins: 'Ruins',
@@ -32,6 +36,7 @@ export const SPECIAL_NAME: Record<SpecialKind, string> = {
   geyser: 'Geyser',
   oasis: 'Oasis',
   relic: 'Alien relic',
+  meteorCrater: 'Meteor crater',
 };
 
 /**
@@ -40,6 +45,8 @@ export const SPECIAL_NAME: Record<SpecialKind, string> = {
  * Crystite, the geyser Water, the oasis Food. The relic pays no good of its own and borrows
  * Energy's gold, the hue furthest from the other four. Proposed: `--color-s-<kind>` in theme.css,
  * set to these values in both themes. Shape, not colour, tells the kinds apart; the colour only helps.
+ * The meteor crater pays Crystite too, so it wears the cavern's colour through its own proposed token
+ * (index.css), and its shape alone tells the two apart.
  */
 export const SPECIAL_COLOR: Record<SpecialKind, string> = {
   ruins: 'var(--color-g-alloy)',
@@ -47,6 +54,7 @@ export const SPECIAL_COLOR: Record<SpecialKind, string> = {
   geyser: 'var(--color-g-water)',
   oasis: 'var(--color-g-food)',
   relic: 'var(--color-g-energy)',
+  meteorCrater: 'var(--color-s-meteorCrater)',
 };
 
 const FX = MAP.specialEffect;
@@ -60,6 +68,7 @@ export const SPECIAL_EFFECT: Record<SpecialKind, string> = {
   geyser: `+${FX.geyser} Water or Energy.`,
   oasis: `+${FX.oasis} Food.`,
   relic: `+${FX.relic} to every working plot touching it, anyone's.`,
+  meteorCrater: `Crystite rated ${MAP.meteorCrater.crystite}, the top of the scale. Left by a meteor; what stood here was destroyed.`,
 };
 
 /**

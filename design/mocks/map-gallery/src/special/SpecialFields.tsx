@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from 'react';
 import { cx, GOOD_NAME, GoodTag, TERRAIN_NAME, type Good } from '@mule/ui';
-import { SEED, PLAYERS, crop, find, overviewTiles, realMap, stateCards, sweep, SWEEP_TERRAINS, type StateCard } from './fixtures';
-import { SPECIAL_EFFECT, SPECIAL_KINDS, SPECIAL_NAME, specialEffect, TERRAIN_ODDS, type MapSpecial, type SpecialKind, type SpecialTile } from './kinds';
+import { SEED, PLAYERS, crop, craterSweep, craterView, find, overviewTiles, realMap, stateCards, STRUCK, sweep, SWEEP_TERRAINS, type StateCard } from './fixtures';
+import { PLACED_KINDS, SPECIAL_EFFECT, SPECIAL_KINDS, SPECIAL_NAME, specialEffect, TERRAIN_ODDS, type MapSpecial, type SpecialKind, type SpecialTile } from './kinds';
 import { LandmarkSwatch, SpecialBadge, SpecialMap, type Density, type Variant } from './SpecialGlyph';
 
 /**
@@ -20,9 +20,9 @@ const DENSITIES: Density[] = ['phone', 'tv'];
 const DENSITY_TITLE: Record<Density, string> = { phone: 'Phone', tv: 'TV' };
 
 const DECISIONS: [string, string][] = [
-  ['Goal', 'Notice a special field at a glance on both densities, tell the five apart, and learn what one does on the phone before claiming it.'],
+  ['Goal', 'Notice a special field at a glance on both densities, tell the kinds apart, and learn what one does on the phone before claiming it.'],
   ['Colour', 'Each kind wears the colour of the good it pays (ruins Alloy grey, cavern Crystite, geyser Water, oasis Food, relic Energy gold). DS-GAP: no special-field tokens yet.'],
-  ['Shape first', 'Five distinct silhouettes carry the kind; colour only helps, so the legend and the map read without it.'],
+  ['Shape first', 'Each kind has its own silhouette; colour only helps, so the legend and the map read without it.'],
   ['Over anything', "Every mark has a mark-edge halo (PlayerMark's) and A sits on the map-chip fill, so it reads over every land and every player's glow."],
   ['Components', "HoloMap untouched, the glyph as an overlay (MapCard's pattern); SpecialIcon is drawn like GoodIcon; sizes per density inline, as HoloMap does."],
   ['A · placement', 'Lower-right, the corner free of PlayerMark and the flag, hung a quarter over the edge so it clips only the empty corner of a TV good chip.'],
@@ -40,6 +40,7 @@ export function SpecialFields({ header }: { header: ReactNode }) {
     <div className="min-h-screen bg-table text-ink" data-testid="special-view">
       {header}
       <main className="space-y-6 px-6 py-6">
+        <MeteorCrater />
         <Decisions />
         <Block id="on-the-map" title="On the map" aside={`seed ${SEED}, ${PLAYERS} players: all five kinds · true size`}>
           <p className="mb-4 max-w-3xl text-sm text-ink-2">
@@ -101,6 +102,95 @@ export function SpecialFields({ header }: { header: ReactNode }) {
   );
 }
 
+const CRATER_DECISIONS: [string, string][] = [
+  ['What', "A meteor strikes any plot but the store, in play. The owner keeps it; its MULE is destroyed; an earlier special field is gone; Crystite is rated 4. The map generator never places one."],
+  ['Badge', "Variant A's, unchanged: the same hexagon, sizes and corner as the other five, so it reads as a special field before its symbol is read."],
+  ['Shape', "A crater from above, struck in its centre, with the meteor's trail still in the sky. Round and slanted where the cavern is a dome, so the two Crystite kinds part by shape."],
+  ['Colour', 'Crystite, as the cavern: each kind wears the good it pays. Proposed token --color-s-meteorCrater, an alias of --color-g-crystite, so both themes follow.'],
+  ['Phone line', 'Meteor crater: Crystite rated 4, the top of the scale. Left by a meteor; what stood here was destroyed.'],
+  ['Themes', 'Night and Day at the top of the page switch the whole view.'],
+];
+
+/** The meteor crater, for Heiko's approval: variant A's badge beside the crystal cavern, at both densities. */
+function MeteorCrater() {
+  const views = useMemo(() => ({ phone: craterView('phone'), tv: craterView('tv') }), []);
+  const strip = useMemo(craterSweep, []);
+  const { crater, cavern } = views.phone;
+  return (
+    <Block id="meteor-crater" title="Meteor crater · its badge, for approval" aside={`variant A's badge · seed ${SEED}, ${PLAYERS} players · true size`}>
+      <dl className="mb-4 grid gap-x-6 gap-y-1.5 text-sm lg:grid-cols-2" data-testid="crater-decisions">
+        {CRATER_DECISIONS.map(([k, v]) => (
+          <div key={k} className="flex gap-3">
+            <dt className="w-24 shrink-0 font-semibold">{k}</dt>
+            <dd className="text-ink-2">{v}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <h3 className="mb-2 font-display text-base font-semibold">The two Crystite kinds</h3>
+      <ul className="mb-5 grid gap-2 lg:grid-cols-2" data-testid="crater-legend">
+        {(['crystalCavern', 'meteorCrater'] as const).map((kind) => (
+          <li key={kind} className="flex items-center gap-3 rounded-control bg-raised px-3 py-2" data-testid={`crater-legend-${kind}`}>
+            <span className="flex items-center gap-2">
+              <Mark variant="badge" special={{ kind }} size="large" />
+              <Mark variant="badge" special={{ kind }} size="small" />
+            </span>
+            <span className="flex flex-col">
+              <span className="font-display font-semibold">{SPECIAL_NAME[kind]}</span>
+              <span className="text-sm text-ink-2">{SPECIAL_EFFECT[kind][0]!.toUpperCase() + SPECIAL_EFFECT[kind].slice(1)}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      <h3 className="mb-2 font-display text-base font-semibold">A strike on P3's mine, beside P1's cavern</h3>
+      <p className="mb-3 max-w-3xl text-sm text-ink-2">
+        Plots x 13–17, y 3–7 of seed {SEED}. The meteor hits {plotName(STRUCK.x, STRUCK.y)}, the engine's own strike: P3's glow stays, the Smithore chip goes,
+        and the badge sits in the corner beside the cavern's.
+      </p>
+      {DENSITIES.map((density) => (
+        <StateRow key={density} variant="badge" density={density} cards={views[density].cards} prefix="crater" />
+      ))}
+
+      <h3 className="mb-2 mt-5 font-display text-base font-semibold">On every land terrain</h3>
+      <p className="mb-3 max-w-3xl text-sm text-ink-2">A meteor can strike any plot but the store, river and lake included.</p>
+      <div className="mb-5 flex flex-wrap items-start gap-6">
+        {DENSITIES.map((density) => (
+          <figure key={density} style={{ width: (MAP_PX[density] / 19) * strip.width }} data-testid={`crater-sweep-${density}`}>
+            <SpecialMap variant="badge" width={strip.width} height={strip.height} tiles={strip.tiles} density={density} className="w-full" />
+            <figcaption className="mt-1 text-xs text-ink-3">{DENSITY_TITLE[density]}</figcaption>
+          </figure>
+        ))}
+      </div>
+
+      <h3 className="mb-2 font-display text-base font-semibold">On the phone</h3>
+      <div className="flex flex-wrap gap-4">
+        <RailCard testid="crater-card-crater" caption="Develop · the crater, P3's, analysed">
+          <DevelopHeader tile={crater} />
+          <SpecialLine variant="badge" special={{ kind: 'meteorCrater' }} />
+          <GroundCardCopy ground={crater.ground} />
+        </RailCard>
+        <RailCard testid="crater-card-cavern" caption="Develop · the cavern beside it, P1's, analysed">
+          <DevelopHeader tile={cavern} />
+          <SpecialLine variant="badge" special={{ kind: 'crystalCavern' }} />
+          <GroundCardCopy ground={cavern.ground} />
+        </RailCard>
+      </div>
+    </Block>
+  );
+}
+
+function DevelopHeader({ tile }: { tile: { x: number; y: number; terrain: SpecialTile['terrain'] } }) {
+  return (
+    <header className="flex items-baseline justify-between gap-2">
+      <span className="font-display text-lg font-semibold leading-tight">
+        {TERRAIN_NAME[tile.terrain]} <span className="font-mono text-sm font-normal text-ink-3">{plotName(tile.x, tile.y)}</span>
+      </span>
+      <span className="font-mono text-xs text-holo">YOURS</span>
+    </header>
+  );
+}
+
 function Block({ id, title, aside, children }: { id: string; title: string; aside?: string; children: ReactNode }) {
   return (
     <section id={id} className="scroll-mt-28 rounded-panel border border-holo-line bg-panel p-4" data-testid={`special-${id}`}>
@@ -114,6 +204,7 @@ function Block({ id, title, aside, children }: { id: string; title: string; asid
 }
 
 const SECTIONS: [string, string][] = [
+  ['meteor-crater', 'Meteor crater'],
   ['on-the-map', 'On the map'],
   ['legend', 'Legend'],
   ['states', 'States'],
@@ -180,14 +271,14 @@ function Legend({ variant }: { variant: Variant }) {
   );
 }
 
-function StateRow({ variant, density, cards }: { variant: Variant; density: Density; cards: StateCard[] }) {
+function StateRow({ variant, density, cards, prefix = 'state' }: { variant: Variant; density: Density; cards: StateCard[]; prefix?: string }) {
   const plot = MAP_PX[density] / 19;
   return (
     <div className="mb-4 last:mb-0">
       <p className="mb-1.5 text-xs text-ink-3">{DENSITY_TITLE[density]}</p>
       <div className="flex flex-wrap gap-4">
         {cards.map((c) => (
-          <figure key={c.id} style={{ width: plot * c.crop.width }} data-testid={`state-${variant}-${density}-${c.id}`}>
+          <figure key={c.id} style={{ width: plot * c.crop.width }} data-testid={`${prefix}-${variant}-${density}-${c.id}`}>
             <SpecialMap
               variant={variant}
               width={c.crop.width}
@@ -258,7 +349,7 @@ function PhoneCards({ variant }: { variant: Variant }) {
   const cavern = find(map, 'crystalCavern');
   return (
     <div className="flex flex-wrap gap-4">
-      {SPECIAL_KINDS.map((kind) => {
+      {PLACED_KINDS.map((kind) => {
         const t = plot(kind);
         return (
           <RailCard key={kind} testid={`plot-card-${variant}-${kind}`} caption={`Land grant · ${SPECIAL_NAME[kind]}`}>
