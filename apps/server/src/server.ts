@@ -31,13 +31,14 @@ export interface MuleServer {
 /**
  * The game server: an HTTP server for the web client and `POST /rooms`, and a
  * WebSocket endpoint at `/ws` where phones and boards talk to their room.
+ * Games play politics unless `politics` is false.
  */
 export function createMuleServer(
-  options: { staticDir?: string; seed?: () => number; maxMonths?: number; phaseScale?: number } = {},
+  options: { staticDir?: string; seed?: () => number; maxMonths?: number; phaseScale?: number; politics?: boolean } = {},
 ): MuleServer {
   const seed = options.seed ?? (() => Math.floor(Math.random() * 2 ** 31));
   const registry = new RoomRegistry<MuleIntent, MuleView>({
-    createGame: (ctx) => new MuleGame(ctx, seed(), { maxMonths: options.maxMonths, phaseScale: options.phaseScale }),
+    createGame: (ctx) => new MuleGame(ctx, seed(), { maxMonths: options.maxMonths, phaseScale: options.phaseScale, politics: options.politics ?? true }),
     aiNames: AI_NAMES,
     emotes: EMOTES,
     picks: SPECIES,
@@ -179,6 +180,14 @@ function parse(text: string): ClientEnvelope<MuleIntent> | null {
   }
 }
 
+const isOffice = (x: unknown) => x === 'governor' || x === 'sheriff';
+/** The shape of a tax promise; RULE-10 in the engine checks the rest. */
+const isPromise = (x: unknown) => {
+  if (typeof x !== 'object' || x === null) return false;
+  const p = x as Record<string, unknown>;
+  return p.kind === 'cap' ? Number.isInteger(p.percent) : p.kind === 'lower' || p.kind === 'hold';
+};
+
 function isIntent(v: unknown): v is MuleIntent {
   if (typeof v !== 'object' || v === null) return false;
   const i = v as Record<string, unknown>;
@@ -207,6 +216,12 @@ function isIntent(v: unknown): v is MuleIntent {
     }
     case 'unlist':
       return typeof i.id === 'string';
+    case 'run':
+      return (i.office === null || isOffice(i.office)) && (i.promise === undefined || isPromise(i.promise));
+    case 'vote':
+      return isOffice(i.office) && (i.candidate === null || typeof i.candidate === 'string');
+    case 'setTax':
+      return int(i.percent);
     default:
       return false;
   }

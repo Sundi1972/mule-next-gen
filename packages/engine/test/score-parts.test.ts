@@ -8,6 +8,7 @@ import {
   colonyFailed,
   createGame,
   createRng,
+  electionDone,
   GAME,
   GOODS,
   grantDone,
@@ -16,10 +17,13 @@ import {
   mulePrice,
   outfitMule,
   player,
+  POLITICS,
   POLLUTION,
   RuleError,
+  runFor,
   score,
   scoreParts,
+  stepElection,
   visitPub,
   type GameState,
   type Rng,
@@ -133,10 +137,10 @@ describe('T-AC-6: score parts add up and score() is unchanged', () => {
       for (const p of state.players) {
         const parts = scoreParts(state, p.id);
         expect(score(state, p.id)).toBe(parts.total);
-        expect(parts.total).toBe(todaysScore(state, p.id));
+        expect(parts.total - parts.office).toBe(todaysScore(state, p.id));
         expect(parts.money).toBe(Math.round(p.money));
         for (const line of Object.values(parts)) expect(Number.isInteger(line)).toBe(true);
-        expect(parts.money + parts.goods + parts.land + parts.muleValue).toBe(parts.total + parts.cut);
+        expect(parts.money + parts.goods + parts.land + parts.muleValue + parts.office).toBe(parts.total + parts.cut);
         if (!colonyFailed(state)) expect(parts.cut).toBe(0);
       }
     }
@@ -167,6 +171,7 @@ describe('T-AC-6: score parts add up and score() is unchanged', () => {
       land: 1800,
       mules: 5,
       muleValue: 750,
+      office: 0,
       cut: 0,
       total: 5300,
     });
@@ -183,6 +188,7 @@ describe('T-AC-6: score parts add up and score() is unchanged', () => {
       land: 1800,
       mules: 5,
       muleValue: 750,
+      office: 0,
       cut: 1060,
       total: 4240,
     });
@@ -200,5 +206,22 @@ describe('T-AC-6: score parts add up and score() is unchanged', () => {
     const parts = scoreParts(state, 'a');
     expect(parts.total).toBe(today);
     expect(parts.money + parts.goods + parts.land + parts.muleValue).toBe(today);
+  });
+
+  it.each([
+    { air: 0, total: 5300, cut: 0 },
+    { air: COLLAPSE_AIR, total: 4240, cut: 1060 },
+  ])('C7: office line = termScore × terms served; the other lines unchanged (air $air)', ({ air, total, cut }) => {
+    const state = workedExample({ money: 2140, air, plots: 6, mules: 5 });
+    const before = scoreParts(state, 'a');
+    expect(before).toMatchObject({ office: 0, total, cut });
+
+    runFor(state, 'a', 'governor', { kind: 'hold' });
+    for (const id of ['a', 'b']) electionDone(state, id);
+    stepElection(state, 1);
+    stepElection(state, POLITICS.revealMs);
+    expect(state.politics?.governor).toBe('a');
+
+    expect(scoreParts(state, 'a')).toEqual({ ...before, office: POLITICS.termScore, total: total + POLITICS.termScore });
   });
 });
