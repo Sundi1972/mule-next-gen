@@ -85,7 +85,6 @@ export function LandAuction() {
       shipPays={null}
       lines={[{ id: 'min', label: 'MIN', price: lot.lot.minimum }]}
       marks={{ ask: false, bid: true }}
-      stage="walk"
       meId={self.id}
       {...(onBoard ? { onDir: walk } : {})}
       className="min-h-0 flex-1"

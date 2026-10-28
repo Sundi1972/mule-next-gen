@@ -1,11 +1,11 @@
-import { canRun, electionStageMs, nextElectionMonth, POLITICS, taxBounds, voteWeight, type ElectionHow, type ElectionResult, type GameState, type Office } from '@mule/engine';
+import { canRun, electionStageMs, nextElectionMonth, PERCENT, POLITICS, taxBounds, voteWeight, type ElectionHow, type ElectionResult, type GameState, type Office } from '@mule/engine';
 import type { ElectionView, MyPoliticsView, PoliticsView } from '@mule/protocol';
 
 /* Colony politics as the screens and the news see it: pure functions of the game state. A ballot reaches only its owner's view. */
 
 const OFFICES: readonly Office[] = ['governor', 'sheriff'];
 
-const percent = (rate: number) => Math.round(rate * 100);
+const percent = (rate: number) => Math.round(rate * PERCENT);
 
 /** True once the reveal's countdown has run: from then on every screen gets the result, all in the same view. */
 export function resultShown(state: GameState): boolean {
