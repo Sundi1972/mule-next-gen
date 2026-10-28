@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { advancePhase, AI_LEVELS, AI_PERSONAS, createGame, EVENTS, GAME, GOODS, mulePriceFor, observe, STRATEGIST, walkSeconds, type GameState } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
+import type { Pending } from '../src/brain.js';
 import { AiSeat } from '../src/seat.js';
-import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, tradeDecision, wantsPlot } from '../src/strategist.js';
+import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, tradeDecision, wantsPlot, type LandPlan } from '../src/strategist.js';
 import { cashReserve, installGain, type Mind } from '../src/value.js';
 
 const fourSeats = (seed: number) => createGame({ seed, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI${i}`, isAi: true })) });
@@ -75,6 +76,27 @@ describe('land claims on a single pass', () => {
     expect(seat.onLit(state), 'the last plot of the pass is pressed for').toBeTypeOf('number');
     // Negative case: at the start of the pass the seat still waits for its own top plots, as T-AC-10 shows.
     expect(early).toBeNull();
+  });
+
+  it('T-AC-21: with plots it ranks higher still ahead of the light, a seat waits on a merely decent lit plot', () => {
+    const state = fourSeats(3);
+    while (state.phase !== 'landGrant') advancePhase(state);
+    const seat = tycoon();
+    seat.onLit(state);
+    // The seat's own plan for the month, as its hands read it.
+    const plan = seat.brain.resolveNow((seat as unknown as { land: Pending<LandPlan> }).land, state).action;
+    const order = state.grant!.order;
+    const top = GAME.claimsPerGrant + STRATEGIST.grantSpare;
+    // Early-ish in the pass (40% in): the first lit plot the seat values that still has `top` plots it ranks higher ahead.
+    const step = order.findIndex((index, k) => {
+      if (k < Math.ceil(order.length * 0.4)) return false;
+      const ahead = new Set(order.slice(k));
+      const rank = plan.ranking.filter((s) => ahead.has(s.index)).findIndex((s) => s.index === index);
+      return rank >= top && plan.ranking.find((s) => s.index === index)!.value > 0;
+    });
+    expect(step).toBeGreaterThan(0);
+    state.grant!.step = step;
+    expect(seat.onLit(state), 'it waits for the better plots still to light').toBeNull();
   });
 });
 
