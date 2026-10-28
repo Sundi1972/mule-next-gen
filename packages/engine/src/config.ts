@@ -382,6 +382,9 @@ export type FloorGood = 'food' | 'water' | 'energy' | 'smithore';
 /** The 11 land terrains other than the river: the ones with a target share. */
 export type ShareTerrain = Exclude<LandTerrain, 'river'>;
 
+/** The special fields the generator places; a meteor crater only forms in play. */
+export type PlacedSpecialKind = Exclude<SpecialKind, 'meteorCrater'>;
+
 /**
  * What every map must meet (the map rules), read by the checker, the
  * generator and the map gallery. Size bands are sizeBand's. Counts are good
@@ -466,7 +469,7 @@ export const MAP = {
       geyser: ['volcanic', 'tundra', 'ice'],
       oasis: ['desert'],
       relic: ['plains', 'forest', 'hills', 'desert', 'tundra', 'mountains', 'swamp', 'volcanic', 'crater', 'ice'],
-    } satisfies Record<SpecialKind, ShareTerrain[]>,
+    } satisfies Record<PlacedSpecialKind, ShareTerrain[]>,
     maxPerKind: 2,
     minKinds: 3,
     /** Fewest steps between two special fields. */
@@ -496,6 +499,8 @@ export const MAP = {
     /** What ruins pay their first owner, once, by the salvage drawn with the map. */
     salvage: { alloy: 2, electronics: 1 },
   },
+  /** A meteor crater, formed in play: its Crystite rating (the top of the mined scale), and no production bonus. */
+  meteorCrater: { crystite: 4 },
   /** Tuning for the layout stages (map-layout.ts): how the generator meets the rules above, not rules themselves. */
   layout: {
     /** The budget never gives a terrain more than this share, so jitter can't take plains near maxTerrainShare. */
@@ -569,8 +574,8 @@ export const GAME = {
   /** Months the game continues after the last free plot is claimed. */
   landRushMonths: 3,
   claimsPerGrant: 2,
-  /** The land grant ends after this many sweeps over the free plots, even if some players never pressed. */
-  grantSweeps: 3,
+  /** The land grant is one pass of the light over the free plots, or ends earlier once every claim is used. */
+  grantSweeps: 1,
   /** What each plot a player owns adds to their score, before any MULE on it. */
   plotScore: 300,
   /** The export ship calls every this many months. */
@@ -735,7 +740,7 @@ export const LOTS = {
 /**
  * The longest each timed phase lasts, in milliseconds at phaseScale 1. Planning waits for every human's Ready,
  * a dropped phone's too, unless the host continues. Other phases also end early: when every connected player is
- * ready, the land grant when the claims are used, development when everyone is out of time or at the pub. The
+ * ready, the land grant after its one pass or once the claims are used, development when everyone is out of time or at the pub. The
  * goods auction and the land auction have no fixed length; they run on WALK's and LOTS' clocks.
  */
 export const PHASES = {
@@ -744,8 +749,17 @@ export const PHASES = {
    * Ready or the host's Continue; a number restores a timer.
    */
   planningMs: null as number | null,
-  /** The land grant: the light sweeps the free plots. */
-  landGrantMs: 60_000,
+  /**
+   * The land grant: the light passes once over the free plots, GAME.grantTickMs a plot. null: no clock; it ends after
+   * the pass or once every claim is used. A number restores a timer.
+   */
+  landGrantMs: null as number | null,
+  /**
+   * The land grant's fast-forward: once every human has used their claims or is done with land, the AI seats' presses
+   * resolve at once at each lit plot, and the light moves on after this display step, so it races across the TV. Like
+   * the grant's tick, phaseScale never changes it.
+   */
+  grantFastForwardMs: GAME.grantTickMs / 8,
   /** Production: the show of what each plot made. */
   productionMs: 15_000,
   /** Upkeep: colonists eat and goods spoil. */
@@ -930,13 +944,14 @@ export const STRATEGIST = {
   airCost: 10,
   /** What it counts a green belt as costing a month, in credits (the engine charges none), set against the air it cleans; without full scoring, the cost alone. */
   greenBeltCost: 5,
-  /** Below this utility share of the best, a free plot is not worth pressing for in the first sweep; later sweeps take anything above laterShare. */
-  grantShare: 0.75,
-  grantLaterShare: 0.5,
   /**
-   * In the first two sweeps it presses only for its top claimsPerGrant + grantSpare open plots (twice that in the
-   * second), so it waits for the land it wants instead of the first that will do. 0: any spare lets the grant's
-   * reading order pick among them, which piles AI land at the top of the map.
+   * The land grant is one pass, so a lit plot is weighed against the free plots still ahead of the light: its utility
+   * must be at least this share of the best of theirs to be pressed for.
+   */
+  grantShare: 0.75,
+  /**
+   * Beyond the claims it has left, how many more of its top plots still ahead of the light it presses for. 0: it
+   * presses only for plots it would claim with the claims it has left.
    */
   grantSpare: 0,
   /** A factory needs this many months of its inputs on hand or from its own plots. */

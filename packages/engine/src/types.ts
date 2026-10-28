@@ -70,11 +70,11 @@ export interface Tile {
   filter: boolean;
   /** Months in a row this plot's current outfit has run. Factories gain from experience. */
   runMonths: number;
-  /** A special field on this plot, placed with the map; absent on most plots. */
+  /** A special field on this plot, placed with the map or, for a meteor crater, formed in play; absent on most plots. */
   special?: SpecialField;
 }
 
-export type SpecialKind = 'ruins' | 'crystalCavern' | 'geyser' | 'oasis' | 'relic';
+export type SpecialKind = 'ruins' | 'crystalCavern' | 'geyser' | 'oasis' | 'relic' | 'meteorCrater';
 
 export interface SpecialField {
   kind: SpecialKind;
@@ -94,6 +94,8 @@ export interface Player {
   reputation: number;
   /** Plots claimed in the current land grant. */
   claimsThisGrant: number;
+  /** The player pressed Done in the current land grant ("Done with land"): they claim no more this month. */
+  doneWithLand: boolean;
   /** True when the player started development short of Food: less time to build. */
   hungry: boolean;
   /** Seconds of development time this month, set when development starts. */

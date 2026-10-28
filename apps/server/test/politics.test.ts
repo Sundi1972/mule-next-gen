@@ -203,11 +203,22 @@ function tickFor(g: Started, ms: number) {
 /** Far longer than any planning clock there ever was. */
 const LONG_WAIT_MS = 600_000;
 
-/** Plays on in 100 ms steps until `done`; planning has no clock, so every human is Ready once planning proper opens. */
+/** Done with land: every human not yet done presses Ready in the land grant, so it ends once the AI seats are done too. */
+function doneWithLand(game: MuleGame) {
+  // Read from the engine, not viewFor: this runs on every step of the clock.
+  const state = engineOf(game);
+  for (const p of state.players) if (state.phase === 'landGrant' && !p.isAi && !p.doneWithLand) game.handle(p.id, { type: 'ready' });
+}
+
+/**
+ * Plays on in 100 ms steps until `done`; planning has no clock, so every human is Ready once planning proper opens, and
+ * Done with land in the land grant, which has none either.
+ */
 function playUntil(g: Started, done: () => boolean, boundMs: number) {
   for (let ms = 0; ms < boundMs && !done(); ms += 100) {
     const view = g.game.viewFor(null);
     if (view.phase === 'planning' && (view.politics?.election?.stage ?? 'over') === 'over') readyAll(g.game);
+    doneWithLand(g.game);
     g.advance(100);
   }
 }
@@ -694,9 +705,13 @@ describe('AI seats in the election', () => {
       readyAll(g.game);
 
       // The fund runs dry before month 2, which has no election: the Governor steers again, with the bump.
-      for (let ms = 0; ms < 600_000 && g.game.viewFor(null).phase !== 'upkeep'; ms += WALK.tickMs) g.advance(WALK.tickMs);
+      // The engine's phase and month, not viewFor's: these run on every step of the clock.
+      for (let ms = 0; ms < 600_000 && engineOf(g.game).phase !== 'upkeep'; ms += WALK.tickMs) {
+        doneWithLand(g.game);
+        g.advance(WALK.tickMs);
+      }
       engineOf(g.game).treasury.money = 0;
-      for (let ms = 0; ms < 600_000 && g.game.viewFor(null).month === 1; ms += WALK.tickMs) g.advance(WALK.tickMs);
+      for (let ms = 0; ms < 600_000 && engineOf(g.game).month === 1; ms += WALK.tickMs) g.advance(WALK.tickMs);
       expect(g.game.viewFor(null).phase).toBe('planning');
       expect(g.game.viewFor(null).politics!.election, 'month 2 has no election').toBeNull();
       tickFor(g, WALK.tickMs * 3);
@@ -717,9 +732,12 @@ describe('AI seats in the election', () => {
     expect(g.game.viewFor(null).politics!.tax.percent, "month 1: The Baron's 8% landed first").toBe(8);
 
     // Month 2 has no election; the fund ran dry, so The Baron steers to 8 + 2.
-    for (let ms = 0; ms < 600_000 && g.game.viewFor(null).phase !== 'upkeep'; ms += WALK.tickMs) g.advance(WALK.tickMs);
+    for (let ms = 0; ms < 600_000 && engineOf(g.game).phase !== 'upkeep'; ms += WALK.tickMs) {
+      doneWithLand(g.game);
+      g.advance(WALK.tickMs);
+    }
     engineOf(g.game).treasury.money = 0;
-    for (let ms = 0; ms < 600_000 && g.game.viewFor(null).month === 1; ms += WALK.tickMs) g.advance(WALK.tickMs);
+    for (let ms = 0; ms < 600_000 && engineOf(g.game).month === 1; ms += WALK.tickMs) g.advance(WALK.tickMs);
     expect(g.game.viewFor(null).phase).toBe('planning');
     g.game.handle('lena', { type: 'ready' });
     expect(g.game.viewFor(null).phase, 'planning ended at once').toBe('landGrant');

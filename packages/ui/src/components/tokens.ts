@@ -51,10 +51,10 @@ export const TERRAIN_NAME: Record<Terrain, string> = {
 };
 
 /**
- * The five special fields. The UI keeps its own copy of the kind union, as it does for Good and
+ * The six special fields. The UI keeps its own copy of the kind union, as it does for Good and
  * Terrain; apps/web checks at compile time that it equals the engine's.
  */
-export type SpecialKind = 'ruins' | 'crystalCavern' | 'geyser' | 'oasis' | 'relic';
+export type SpecialKind = 'ruins' | 'crystalCavern' | 'geyser' | 'oasis' | 'relic' | 'meteorCrater';
 
 /** A plot's special field as the map draws it. */
 export interface MapSpecial {
@@ -69,6 +69,7 @@ export const SPECIAL_NAME: Record<SpecialKind, string> = {
   geyser: 'Geyser',
   oasis: 'Oasis',
   relic: 'Alien relic',
+  meteorCrater: 'Meteor crater',
 };
 
 /** Each kind's colour token, `--color-s-<kind>`; theme.css says which good's colour each one borrows, and why. */
@@ -78,6 +79,7 @@ export const SPECIAL_COLOR: Record<SpecialKind, string> = {
   geyser: 'var(--color-s-geyser)',
   oasis: 'var(--color-s-oasis)',
   relic: 'var(--color-s-relic)',
+  meteorCrater: 'var(--color-s-meteorCrater)',
 };
 
 /** A special field's accessible name: its kind, and a ruin's salvage. HoloMap adds it to the plot's label. */

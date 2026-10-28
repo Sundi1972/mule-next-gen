@@ -21,6 +21,15 @@ function toDevelopment(options?: Options) {
   return g;
 }
 
+/** Plays on until production opens; the clock stops on the step that opened it, so its timer starts at ctx.now(). */
+function toProduction(options?: Options) {
+  const g = toDevelopment(options);
+  const step = 100;
+  while (g.game.viewFor('s1').phase === 'development') g.advance(step);
+  expect(g.game.viewFor('s1').phase).toBe('production');
+  return g;
+}
+
 /** Plays on until the auction's status screen is up, before its first tick. */
 function toAuction(options?: Options) {
   const g = toDevelopment(options);
@@ -32,30 +41,30 @@ function toAuction(options?: Options) {
 }
 
 describe('phaseScale and maxMonths', () => {
-  it('T-AC-2: with no options, the land grant waits its full PHASES.landGrantMs and the game runs 12 months', () => {
-    const { game, waits, advance } = started();
-    readyAll(game);
-    expect(game.viewFor(null).phase).toBe('landGrant');
-    expect(waits[0]).toBe(PHASES.landGrantMs);
-    expect(game.viewFor(null).phaseEndsAt).toBe(PHASES.landGrantMs);
+  it('T-AC-2: with no options, production waits its full PHASES.productionMs and the game runs 12 months', () => {
+    const { game, waits, advance, ctx } = toProduction();
+    expect(waits).toContain(PHASES.productionMs);
+    expect(game.viewFor(null).phaseEndsAt).toBe(ctx.now() + PHASES.productionMs);
     expect(game.viewFor(null).maxMonths).toBe(12);
-    advance(PHASES.landGrantMs - 1);
-    expect(game.viewFor(null).phase).toBe('landGrant');
+    advance(PHASES.productionMs - 1);
+    expect(game.viewFor(null).phase).toBe('production');
     advance(1);
-    expect(game.viewFor(null).phase).not.toBe('landGrant');
+    expect(game.viewFor(null).phase).not.toBe('production');
   });
 
-  it('T-AC-2: phaseScale 0.1 makes the land grant wait a tenth of PHASES.landGrantMs', () => {
-    const { game, waits, advance } = started({ phaseScale: 0.1 });
-    readyAll(game);
+  it('T-AC-2: phaseScale 0.1 makes production wait a tenth of PHASES.productionMs; the land grant keeps its real tick', () => {
+    const g = started({ phaseScale: 0.1 });
+    readyAll(g.game);
     // The land grant's light keeps its real pace, so AI thumbs can still beat it.
-    expect(waits.at(-1)).toBe(GRANT_TICK_MS);
-    expect(waits[0]).toBe(PHASES.landGrantMs * 0.1);
-    expect(game.viewFor(null).phaseEndsAt).toBe(PHASES.landGrantMs * 0.1);
-    advance(PHASES.landGrantMs * 0.1 - 1);
-    expect(game.viewFor(null).phase).toBe('landGrant');
+    expect(g.game.viewFor(null).phase).toBe('landGrant');
+    expect(g.waits.at(-1)).toBe(GRANT_TICK_MS);
+    const { game, waits, advance, ctx } = toProduction({ phaseScale: 0.1 });
+    expect(waits).toContain(PHASES.productionMs * 0.1);
+    expect(game.viewFor(null).phaseEndsAt).toBe(ctx.now() + PHASES.productionMs * 0.1);
+    advance(PHASES.productionMs * 0.1 - 1);
+    expect(game.viewFor(null).phase).toBe('production');
     advance(1);
-    expect(game.viewFor(null).phase).not.toBe('landGrant');
+    expect(game.viewFor(null).phase).not.toBe('production');
   });
 
   it.each([
