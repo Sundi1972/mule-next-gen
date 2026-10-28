@@ -294,6 +294,7 @@ Before suggesting merge of `ws8-show-pr1` into `ws8-events`:
 - [ ] Owner OKs: WS3 (view, hold), WS4 (two mount lines), WS6 (none expected)
 
 <!-- plan-check: no-task UBER-AC-1 UBER-AC-2 — goal proofs, run after ship by the PM; B-AC-1/B-AC-2 and Task 6 Step 3 carry them in tests -->
+<!-- plan-check: no-task B-AC-7 — WS6's AC (its production show), retired into this spec's T-AC-4 by AM-6; not ours to test -->
 
 ## Pre-implementation checklist
 
