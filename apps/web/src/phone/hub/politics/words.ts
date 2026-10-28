@@ -1,14 +1,10 @@
 import { POLITICS, type CanRun, type ElectionHow, type Office, type TaxPromise } from '@mule/engine';
-import type { ElectionView } from '@mule/protocol';
-
-/** The offices in the order every screen lists them. */
-export const OFFICES: readonly Office[] = ['governor', 'sheriff'];
 
 export const OFFICE_NAME: Record<Office, string> = { governor: 'Governor', sheriff: 'Sheriff' };
 
 /** Why the run button for an office is refused, from the view's canRun. */
 export function whyNot(reason: Exclude<CanRun, true>): string {
-  return reason === 'closed' ? 'Candidates are closed' : `${POLITICS.maxGovernorTermsInRow} Governor terms in a row`;
+  return reason === 'closed' ? 'Candidates are closed until the result' : `${POLITICS.maxGovernorTermsInRow} Governor terms in a row`;
 }
 
 /** A Governor candidate's tax promise, as the ballot and the TV quote it. */
@@ -34,17 +30,6 @@ export function howWon(office: Office, how: ElectionHow, baron: string | null): 
     case 'lot':
       return 'A tie: decided by lot.';
   }
-}
-
-/** Whole seconds left on the reveal's countdown, while the view still withholds the result. */
-export function revealCountdown(election: Pick<ElectionView, 'seconds'>): number {
-  return Math.max(0, Math.ceil(election.seconds - (POLITICS.revealMs - POLITICS.revealCountdownMs) / 1_000));
-}
-
-/** "0:14". */
-export function clock(seconds: number): string {
-  const s = Math.ceil(seconds);
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
 /** A change in percentage points: "+3", "-2", "±0". */

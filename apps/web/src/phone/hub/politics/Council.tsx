@@ -6,7 +6,7 @@ import { slotOf } from '../../../game/derive';
 import { useClient } from '../../../net/react';
 import { usePhoneGame } from '../../game';
 import { Section, Who } from './parts';
-import { clock, howWon, OFFICE_NAME, OFFICES, promiseText, revealCountdown, termEnd, whyNot } from './words';
+import { howWon, OFFICE_NAME, promiseText, termEnd, whyNot } from './words';
 
 /** Council: this month's election, then everyone's votes. */
 export function CouncilDesk() {
@@ -15,37 +15,38 @@ export function CouncilDesk() {
   if (!view.politics || !me.politics) return null;
   return (
     <>
-      {election && (election.result ? <ElectionResult /> : <Election election={election} mine={me.politics} />)}
+      {election && (election.stage === 'ceremony' || election.stage === 'over' ? <ElectionResult /> : <Election election={election} mine={me.politics} />)}
       <VoteWeights />
     </>
   );
 }
 
 const STAGES: Record<ElectionView['stage'], string> = {
-  nominate: '1 NOMINATE · 2 BALLOT · 3 REVEAL',
-  ballot: '1 NOMINATE ✓ · 2 BALLOT · 3 REVEAL',
-  reveal: '1 NOMINATE ✓ · 2 BALLOT ✓ · 3 REVEAL',
-  over: '1 NOMINATE ✓ · 2 BALLOT ✓ · 3 REVEAL ✓',
+  announce: '1 ANNOUNCE · 2 BALLOT · 3 RESULT',
+  ballot: '1 ANNOUNCE ✓ · 2 BALLOT · 3 RESULT',
+  ceremony: '1 ANNOUNCE ✓ · 2 BALLOT ✓ · 3 RESULT',
+  over: '1 ANNOUNCE ✓ · 2 BALLOT ✓ · 3 RESULT ✓',
 };
 
 function Election({ election, mine }: { election: ElectionView; mine: MyPoliticsView }) {
   const { view, me } = usePhoneGame();
   const client = useClient();
   const [picking, setPicking] = useState(false);
-  const nominate = election.stage === 'nominate';
-  const promise = election.promises[me.id];
+  const announce = election.stage === 'announce';
+  // Until the ballot opens the candidacy is Politics'.
+  const candidacy = announce ? view.politics! : election;
+  const promise = candidacy.promises[me.id];
   const votes = view.politics!.weights.find((w) => w.id === me.id)?.votes ?? 0;
   return (
-    <Section title={nominate ? 'Election · who runs' : 'Election · secret ballot'} testid="election">
+    <Section title={announce ? 'Election · who runs' : 'Election · secret ballot'} testid="election">
       <span className="flex items-center justify-between rounded-control bg-holo-soft px-2 py-1 font-mono text-[10px] font-bold text-holo @min-[1100px]/shell:text-xs" data-testid="election-stage">
         {STAGES[election.stage]}
-        <span data-num>{clock(election.stage === 'reveal' ? revealCountdown(election) : election.seconds)}</span>
       </span>
-      {nominate ? (
+      {announce ? (
         <>
           <div className="grid grid-cols-2 gap-1.5" data-testid="run">
             {/* Governor asks for a promise first; Sheriff stays one tap. */}
-            {OFFICES.map((office) => {
+            {POLITICS.offices.map((office) => {
               const can = mine.canRun[office];
               const label = mine.running && mine.running !== office ? `Run for ${OFFICE_NAME[office]} instead` : `Run for ${OFFICE_NAME[office]}`;
               return (
@@ -82,12 +83,12 @@ function Election({ election, mine }: { election: ElectionView; mine: MyPolitics
             </span>
           )}
           <ul className="flex flex-col gap-1 text-sm" data-testid="candidates">
-            {OFFICES.map((office) => (
+            {POLITICS.offices.map((office) => (
               <li key={office}>
                 {OFFICE_NAME[office]}:{' '}
-                {election.candidates[office].length === 0
+                {candidacy.candidates[office].length === 0
                   ? 'nobody yet'
-                  : election.candidates[office].map((id, i) => (
+                  : candidacy.candidates[office].map((id, i) => (
                       <span key={id}>
                         {i > 0 && ', '}
                         <Who view={view} id={id} size={14} />
@@ -101,7 +102,7 @@ function Election({ election, mine }: { election: ElectionView; mine: MyPolitics
       ) : (
         <>
           {election.stage === 'ballot' &&
-            OFFICES.filter((office) => election.candidates[office].length >= 2).map((office) => (
+            POLITICS.offices.filter((office) => election.candidates[office].length >= 2).map((office) => (
               <Ballot
                 key={office}
                 office={office}
@@ -228,19 +229,23 @@ export function PromisePicker({ onRun, onCancel }: { onRun: (p: TaxPromise) => v
   );
 }
 
-/** The result, on this phone at the moment the TV reveals it: who holds each office, and how. */
+/** The result, on this phone office by office as the TV's ceremony names each winner: who holds each office, and how. */
 export function ElectionResult() {
   const { view, me } = usePhoneGame();
   const politics = view.politics!;
-  const result = politics.election!.result!;
+  const result = politics.election!.result;
   const baron = politics.baron ? (view.players.find((p) => p.id === politics.baron)?.name ?? null) : null;
-  const mine = OFFICES.find((office) => result[office].winner === me.id);
+  const won = POLITICS.offices.flatMap((office) => {
+    const { winner, how, tallies } = result[office] ?? {};
+    return winner && how && tallies ? [{ office, winner, how, tallies }] : [];
+  });
+  const mine = won.find((r) => r.winner === me.id)?.office;
   return (
     <div className="flex h-full items-center justify-center bg-table p-4 text-ink" data-testid="phone-election-result">
       <div className="flex w-full max-w-[640px] flex-col gap-3 rounded-sheet border-2 border-holo bg-panel p-4 shadow-glow">
         <span className="label-caps">Election results · month {view.month}</span>
-        {OFFICES.map((office) => {
-          const r = result[office];
+        {won.map((r) => {
+          const { office } = r;
           const p = view.players.find((q) => q.id === r.winner);
           const votes = r.tallies.find((t) => t.id === r.winner)?.votes ?? 0;
           return (
