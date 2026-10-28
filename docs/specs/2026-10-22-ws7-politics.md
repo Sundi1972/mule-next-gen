@@ -232,9 +232,9 @@ today        planning is one 45 s timer; AI seats plan once on entering it.
              apps/server/src/server.ts::isIntent
              verified_by: read
 tomorrow     MUST, in an election month, tick the election (stepElection + VoteHand) with no
-             phase timer, mark away seats done, and start the normal planning timer and the AI
-             land plan only once the election is over. 'ready' during an election means Done for
-             the stage. MUST accept the intents run, vote and setTax, and send each screen a
+             phase timer, mark away seats done, and start planning proper and the AI land plan
+             only once the election is over. 'ready' during an election means Done for the stage.
+             Planning proper has no clock: every human's Ready, or the host's Continue, ends it (AM-15). MUST accept the intents run, vote and setTax, and send each screen a
              politics view (§3) that hides other seats' ballots (RULE-9).
 logic        → §2 RULE-1, RULE-9
 seam         named edits in mule-game.ts, protocol and server.ts (WS3 reviews); the election
@@ -784,6 +784,27 @@ did       C11 listed a `tie-break` testid; the approved mock (Election.tsx) and 
 because   P-1: the spec must match the approved screen it points at
 goal      P-1 — still met
 folded    C11 testid list; e2e/politics-tie.ts asserts on how-governor
+```
+
+```
+AM-15 · 2026-10-28 · Heiko (playtest ruling, via PM) · WS3's #122 named edits
+
+target    §1 C9 tomorrow; AM-1's server case
+said      the normal planning timer starts once the election is over
+did       Heiko: planning has no clock. The election keeps its own stage clocks; planning
+          proper, after it, waits until every human is Ready or the host presses Continue
+          for an absent player (a dropped phone holds planning). WS3 built it in #122
+          (PHASES.planningMs null) and restated C9's rows in politics.test.ts and the claim
+          wait in e2e/politics.ts as named edits; WS7 reviewed them. On the server, planning
+          can no longer end while an election is open: Ready is Done for the stage, and
+          checkAllReady waits while the election runs. AM-1's close-at-once stays as the
+          engine guard for a game or sim that leaves planning another way. The host's
+          Continue exists for planning proper only: while the election is open it is refused
+          (RuleError) and changes nothing, since away seats are already Done on every
+          election tick (WS3's continuePlanning).
+because   G-4 / P-1: Heiko's play-test; the election's timing is unchanged
+goal      P-1 — still met
+folded    C9 tomorrow; politics.test.ts row FM-planning-untimed (WS3's ee5318f)
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
