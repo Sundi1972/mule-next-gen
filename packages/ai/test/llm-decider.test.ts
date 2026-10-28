@@ -115,10 +115,18 @@ describe('LlmDecider behind Brain', () => {
   });
 
   it("INV-HC3: the decider's timeout per kind equals the wait the hands pass", () => {
-    const spy = vi.spyOn(Brain.prototype, 'ask');
+    const ask = Brain.prototype.ask;
+    const waits: { kind: DecisionKind; waitMs: number }[] = [];
+    // Month 1 runs every hand that asks, so the game stops at month 2's first ask instead of playing on.
+    const monthOnePlayed = new Error('month 1 played');
+    const spy = vi.spyOn(Brain.prototype, 'ask').mockImplementation(function (this: Brain, ...args: Parameters<typeof ask>) {
+      const [kind, , obs, waitMs] = args;
+      if (obs.month > 1) throw monthOnePlayed;
+      waits.push({ kind, waitMs });
+      return ask.apply(this, args);
+    } as typeof ask);
     try {
-      playGame(7, simSeats(4, 'trader', 7));
-      const waits = spy.mock.calls.map(([kind, , , waitMs]) => ({ kind, waitMs }));
+      expect(() => playGame(7, simSeats(4, 'trader', 7))).toThrow(monthOnePlayed);
       for (const kind of ['develop', 'trade'] as const) {
         const ofKind = waits.filter((w) => w.kind === kind);
         expect(ofKind.length).toBeGreaterThan(0);
@@ -127,7 +135,7 @@ describe('LlmDecider behind Brain', () => {
     } finally {
       spy.mockRestore();
     }
-  }, 30_000); // plays a full strategist game: about 1-2 s locally, over vitest's 5 s default on a loaded runner
+  });
 
   it('T-AC-3 (AM-2): the port gets this decision\'s prompt and the hands wait for the kind: develop, trade, land', async () => {
     const seen: Record<string, { waitMs: number; prompt: Prompt }> = {};
