@@ -4,6 +4,9 @@ name: CI
 # pinned-seed whole game. Tier 2 adds the rest of the regression e2e and the sim smoke, only where code lands on the
 # trunk: pull requests into feat/strategist or main, and pushes to main. Render gates, mutation sweeps, probes, timing
 # and three-set sims are Tier 3: local, never CI.
+#
+# Every job pins ubuntu-24.04: ubuntu-latest became 26.04, where Playwright 1.56.1 cannot install Chromium. Move to a
+# newer image only together with a Playwright that supports it.
 
 on:
   pull_request:
@@ -13,7 +16,7 @@ on:
 jobs:
   # Tier 1
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -27,7 +30,7 @@ jobs:
 
   # Tier 1: the whole game on a pinned seed whose month 2 has a production event, with WS3's auction hooks inside it.
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -48,7 +51,7 @@ jobs:
   # Tier 2
   sim:
     if: github.event_name == 'push' || github.base_ref == 'feat/strategist' || github.base_ref == 'main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -70,7 +73,7 @@ jobs:
   # Tier 2: the regression e2e beyond the whole game. New checks go in as steps of an existing game, not new files.
   e2e-regression:
     if: github.event_name == 'push' || github.base_ref == 'feat/strategist' || github.base_ref == 'main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
