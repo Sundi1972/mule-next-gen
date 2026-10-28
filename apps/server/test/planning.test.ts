@@ -230,7 +230,7 @@ describe("FM-planning-host-continue: the host's Continue ends planning proper; n
     expect(phase(game)).toBe('planning');
     game.handle('s1', { type: 'continue' });
     expect(phase(game)).toBe('landGrant');
-    expect(news(game)[0]).toBe('Heiko continued without Mia');
+    expect(news(game)[0]).toBe('Heiko continued without Mia.');
   });
 
   /** Four humans and the AI Baron, in seat order Heiko, Mia, Lena, Ossa; Heiko hosts. */
@@ -243,9 +243,9 @@ describe("FM-planning-host-continue: the host's Continue ends planning proper; n
   ];
 
   it.each([
-    [[], 'Heiko continued without Mia, Lena and Ossa'],
-    [['s3'], 'Heiko continued without Mia and Ossa'],
-    [['s2', 's3'], 'Heiko continued without Ossa'],
+    [[], 'Heiko continued without Mia, Lena and Ossa.'],
+    [['s3'], 'Heiko continued without Mia and Ossa.'],
+    [['s2', 's3'], 'Heiko continued without Ossa.'],
     [['s2', 's3', 's4'], null],
   ] as const)("FM-planning-host-continue: with %j Ready, the host's Continue starts the land grant and its news line, naming the humans not Ready in seat order, is %j", (readies, line) => {
     const fake = fakeContext({ table: fourHumans });
@@ -266,7 +266,7 @@ describe("FM-planning-host-continue: the host's Continue ends planning proper; n
     refusedUnchanged(game, () => game.handle('s1', { type: 'continue' }), "Heiko's Continue, no longer the host");
     game.handle('s2', { type: 'continue' });
     expect(phase(game)).toBe('landGrant');
-    expect(news(game)[0], 'a dropped human not Ready is named too').toBe('Mia continued without Heiko');
+    expect(news(game)[0], 'a dropped human not Ready is named too').toBe('Mia continued without Heiko.');
   });
 
   it('FM-planning-host-continue: with no host, no seat can continue', () => {
