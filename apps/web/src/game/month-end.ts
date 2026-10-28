@@ -28,10 +28,7 @@ export interface LeagueRow {
   rank: number;
   /** The Worth everyone is ranked by: in Collapse, the cut one. */
   total: number;
-  /**
-   * Before the Collapse cut; equal to total out of Collapse. Exact on your own row (your parts carry the cut); on
-   * another's, the total over POLLUTION.collapseScore, which can be a credit off the server's rounding.
-   */
+  /** Before the Collapse cut, the server's number (`worthBeforeCut`); equal to total out of Collapse. */
   uncut: number;
   /** This month's Worth against the one shown at last month's end; null with no last month. */
   change: number | null;
@@ -48,8 +45,7 @@ export function league(view: MuleView): League {
   const collapse = inCollapse(view);
   const ranked = standings(view);
   const rows = ranked.map(({ player, slot, value }): LeagueRow => {
-    const own = view.me?.id === player.id ? view.me.worthParts : null;
-    const uncut = !collapse ? value : own ? value + own.cut : Math.round(value / POLLUTION.collapseScore);
+    const uncut = collapse ? (player.worthBeforeCut ?? value) : value;
     return {
       player,
       slot,

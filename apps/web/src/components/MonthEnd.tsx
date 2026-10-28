@@ -435,7 +435,7 @@ export function YourWorth({ view, density }: { view: MuleView; density: Exclude<
         <div className="flex items-baseline justify-between gap-2 text-[11px] text-ink-3" data-testid="worth-uncut">
           <span>Without the cut</span>
           <span data-num className="font-mono font-semibold">
-            {fmt(self.worth + p.cut)}
+            {fmt(self.worthBeforeCut ?? self.worth)}
           </span>
         </div>
       )}
