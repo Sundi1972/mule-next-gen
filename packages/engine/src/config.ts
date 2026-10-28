@@ -301,7 +301,7 @@ export const DEV_WALK = {
   floorSeconds: 1,
   /** Share of its pace a colonist with no Food walks at; it rises linearly to 1 with the share of the month's Food it holds. */
   hungerPaceMin: 0.2,
-  /** Share of its pace a sick colonist walks at (POLLUTION.bands' sickens, and no Medicine taken). */
+  /** Share of its pace a sick colonist walks at (EVENTS.player.sickness rolled, and no Medicine held). */
   sickPace: 0.5,
 };
 
