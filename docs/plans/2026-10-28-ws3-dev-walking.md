@@ -246,11 +246,17 @@ The PM put it in this PR because it changes the same `PHASE_MS` table. WS6 build
   - Add `fake-context.ts::readyAll(game)`, and replace each wait with it, or with the phone pressing Ready in the e2e.
   - Each other lane's file gets its own commit, as a named edit: broadcast, handoff and dropped-phone (WS4); politics.test.ts (WS7); store-view.test.ts (WS6); smoke.ts and specials.ts (WS4); politics.ts (WS7).
   - WS3's own: mule-game.test.ts, auction-units.test.ts and auction-steps.ts.
-- [ ] **Step 6.4 (waits for the PM's ruling on where Continue lives): FM-planning-host-continue.**
-  - RED first: the host's Continue ends planning with players not yet Ready; a non-host's Continue is refused with a `RuleError`, and nothing changes.
-  - Then the intent and the `packages/tabletop` named edit the ruling picks:
-    - **(A)** the host's phone sends a game intent, and `GameContext.hostId()` lets the game check it;
-    - **(B)** the TV sends it, through a board message that the room passes to the game.
+- [ ] **Step 6.4a (now, PM 2026-10-28; both options need it): the game side of Continue, FM-planning-host-continue.**
+  - RED first, at server altitude. The shared core is `MuleGame.continuePlanning()`:
+    - in planning proper (after the election, or with no election that month), it ends planning with humans not yet Ready, and the land grant starts;
+    - during the election, or in any other phase, it's refused with a `RuleError`, and nothing changes.
+  - The protocol's `MuleIntent` gains `{ type: 'continue' }`.
+  - **Until the source is wired, `handle(seat, continue)` is refused from every seat** ("Only the host can continue"): the game can't yet tell who the host is.
+  - Also fix the `PHASES` block's comment: planning waits for every human, dropped phones included.
+- [ ] **Step 6.4b (after Heiko rules, via the PM): wire Continue's source.** Each option needs a `packages/tabletop` named edit (WS4's):
+  - **(A)** `GameContext.hostId()`, so `handle` accepts `continue` from the host only;
+  - **(B)** a board message the room passes to `continuePlanning()`.
+  - The refuse-every-seat row changes to "a non-host is refused, the host is accepted" under (A), or stays under (B).
 
 ### PR merge gate
 
