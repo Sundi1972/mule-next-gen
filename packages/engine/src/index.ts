@@ -13,6 +13,7 @@ export * from './lots.js';
 export * from './upkeep.js';
 export * from './pollution.js';
 export * from './game.js';
+export * from './politics.js';
 export * from './observe.js';
 export * from './map-rules.js';
 export { layoutMap, type Layout } from './map-layout.js';

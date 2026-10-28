@@ -562,6 +562,58 @@ export const TAX = {
 };
 
 /**
+ * Colony politics: the election of a Governor and a Sheriff, the vote weight,
+ * the Governor's sales tax and the offices' pay. Times are in milliseconds of
+ * game time, stepped like the land auction.
+ */
+export const POLITICS = {
+  /** Months whose planning phase opens with an election; a term runs until the next one. */
+  electionMonths: [1, 4, 7, 10],
+  /** A Governor who has served this many terms in a row may not run for Governor again until someone else has held it. */
+  maxGovernorTermsInRow: 2,
+  /** Players declare for Governor or Sheriff. */
+  nominateMs: 20_000,
+  /** Players cast their secret ballots. */
+  ballotMs: 20_000,
+  /** The reveal: a countdown, then the result on every screen. */
+  revealMs: 6_000,
+  /** The countdown part of the reveal, before the result shows. */
+  revealCountdownMs: 3_000,
+  weight: {
+    /** One extra vote per this many plots owned. */
+    plotsPerVote: 10,
+    /** Reputation at or above this adds a vote. */
+    repHigh: 70,
+    /** Reputation below this takes a vote away. */
+    repLow: 30,
+    /** One extra vote per this much sales tax paid over the game, up to taxCap votes. */
+    taxPerVote: 300,
+    taxCap: 2,
+  },
+  /** The sales tax the Governor may set, in whole percent, and how far it may move from the month's starting rate. */
+  tax: { min: 0, max: 15, maxStep: 5 },
+  /** Paid from the colony fund to each officeholder at upkeep, as far as the fund reaches. */
+  pay: { governor: 50, sheriff: 30 },
+  /** Score per term served in either office. A placeholder until the sim balances it. */
+  termScore: 100,
+  /** How Classic AI seats run, vote and set the tax (VoteHand). Placeholders until the sim balances them. */
+  ai: {
+    /** Ms a seat waits before acting in a nominate or ballot stage, drawn per stage: a human's pause, well inside the stage's clock. */
+    actMs: [800, 2_500] as [number, number],
+    /** Chance per election that a persona runs for Governor. */
+    runGovernor: { trader: 0.5, cautious: 0.3, aggressive: 0.8, saboteur: 0.6 } satisfies Record<AiPersonaId, number>,
+    /** Chance it runs for Sheriff when it does not run for Governor. */
+    runSheriff: { trader: 0.3, cautious: 0.4, aggressive: 0.3, saboteur: 0.7 } satisfies Record<AiPersonaId, number>,
+    /** The sales tax in whole percent a persona steers toward as Governor. */
+    taxTarget: { trader: 5, cautious: 4, aggressive: 8, saboteur: 10 } satisfies Record<AiPersonaId, number>,
+    /** Whole percent a Governor adds when the colony fund is low. */
+    taxFundBump: 2,
+    /** The fund is low under this many months of both offices' pay. */
+    fundMonths: 3,
+  },
+};
+
+/**
  * The goods auction, played live as in the original: goods come up one at a
  * time, each with a status screen and then a walk. Times are in
  * milliseconds of game time; the server steps the auction on a fixed tick.
