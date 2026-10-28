@@ -169,7 +169,7 @@ function nextGood(state: GameState, skipped: LiveAuction['skipped']): void {
     const posted = colonyPrice(state, good);
     const usualBuy = Math.max(1, Math.floor(posted * (1 - PRICE.storeSpread)));
     // A shelf that can't feed the colonists for a month: the store bids up to restock, still under what they can pay.
-    const ceiling = Math.floor((UPKEEP.colonistBudget[good] ?? 0) / (1 + PRICE.storeSpread) ** 2);
+    const ceiling = Math.floor((UPKEEP.colonistBudget[good] ?? 0) / (1 + PRICE.storeSpread) ** 2); // literal-ok: the spread applies twice, store buys then sells
     const storeBuy = shelfShort(state, good, 1) ? Math.max(usualBuy, Math.min(ceiling, Math.ceil(posted * PRICE.restockPremium))) : usualBuy;
     // A store restocking a short shelf sells dearer too: it never buys above its own selling price, or a player could sell straight back.
     const storeSell = Math.max(Math.ceil(posted * (1 + PRICE.storeSpread)), storeBuy + 1);
