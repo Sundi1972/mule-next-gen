@@ -44,7 +44,7 @@ describe('the show timing core', () => {
       expect(seg.endAt).toBeCloseTo(bounds[i + 1]!, 9);
       for (const reduced of [false, true]) {
         for (const h of events[i]!.hits) {
-          const at = eventHitAt(seg, events[i]!, h, reduced);
+          const at = eventHitAt(seg, events[i]!, h, reduced, { width: 15, height: 9 });
           expect(at).toBeGreaterThanOrEqual(seg.startAt);
           expect(at).toBeLessThan(seg.endAt);
         }

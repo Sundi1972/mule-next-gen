@@ -18,7 +18,7 @@ export interface ShowCast {
   playerOf(ev: ShowEventView): string | undefined;
 }
 
-export function showCast(tiles: MapTile[], players: ShowPlayer[]): ShowCast {
+export function eventCast(tiles: MapTile[], players: ShowPlayer[]): ShowCast {
   const byXY = new Map(tiles.map((t) => [`${t.x},${t.y}`, t]));
   const bySlot = new Map(players.map((p) => [p.slot, p]));
   const byId = new Map(players.map((p) => [p.id, p]));
@@ -79,7 +79,7 @@ export interface EventShowProps {
 /** Gives the layers inside it the show at `t`. Draws nothing itself. */
 export function EventShow({ events, t, start = 0, mode = 'tv', reduced = false, width, height, tiles, players, children }: EventShowProps) {
   const s = useMemo(() => eventScript(events, start, mode), [events, start, mode]);
-  const cast = useMemo(() => showCast(tiles, players), [tiles, players]);
+  const cast = useMemo(() => eventCast(tiles, players), [tiles, players]);
   const frame = useMemo<ShowFrame>(
     () => ({
       s,

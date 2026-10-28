@@ -1,12 +1,12 @@
 import type { CSSProperties } from 'react';
 import { PlayerMark } from '../components/PlayerMark';
 import { cx } from '../components/tokens';
-import { SHOW_ENTRY, STORY } from './catalogue';
-import { introLine, segLabel, whoLine } from './copy';
+import { EVENT_ENTRY, STORY } from './catalogue';
+import { introLine, eventSegLabel, eventWhoLine } from './copy';
 import { signLook, useShow, type ShowFrame } from './frame';
 import { band, clamp, Dim, EDGE, OnPlot, ramp, Spotlight, Swarm, Trail } from './fx';
-import { accent, DeltaChip, EventGlyph, SignBadge } from './glyphs';
-import { eventHitAt, eventLanded, eventStageAt, frontAt, type EventSegment } from './timing';
+import { accent, EventDeltaChip, EventGlyph, EventSignBadge } from './glyphs';
+import { eventHitAt, eventLanded, eventStageAt, eventFrontAt, type EventSegment } from './timing';
 import type { ShowEventKey, ShowEventView, ShowSize } from './types';
 
 /**
@@ -58,7 +58,7 @@ export function livingAt({ s, t, reduced, grid, cast }: ShowFrame) {
 }
 
 /** The same, for a layer inside <EventShow>; the caller reads it to glow the spotlit player's slot. */
-export function useLivingView() {
+export function useEventLivingView() {
   return livingAt(useShow());
 }
 
@@ -83,7 +83,7 @@ export function Weather({ size }: { size: ShowSize }) {
 
 function EventWeather({ ev, seg, size }: { ev: ShowEventView; seg: EventSegment; size: ShowSize }) {
   if (STORY[ev.key]) return null;
-  switch (SHOW_ENTRY[ev.key].motion) {
+  switch (EVENT_ENTRY[ev.key].motion) {
     case 'sweep':
       return (
         <>
@@ -120,7 +120,7 @@ const TEXTURE: Partial<Record<ShowEventKey, (angle: number, c: string) => string
 /** A front crosses the map from its edge, in the event's colour and texture: the production show's storm, generalised. */
 function Front({ ev, seg, size }: { ev: ShowEventView; seg: EventSegment; size: ShowSize }) {
   const { t, reduced } = useShow();
-  const p = frontAt(seg, t);
+  const p = eventFrontAt(seg, t);
   if (reduced || p < -0.2 || p > 1.3) return null;
   const c = accent(ev.key);
   const dir = ev.from ?? 'w';
@@ -147,7 +147,7 @@ function Front({ ev, seg, size }: { ev: ShowEventView; seg: EventSegment; size: 
 /** The comet: a bright head and a long tail crossing the sky; each Water plot glints as it passes over. */
 function Comet({ ev, seg, size }: { ev: ShowEventView; seg: EventSegment; size: ShowSize }) {
   const { t, reduced } = useShow();
-  const p = frontAt(seg, t);
+  const p = eventFrontAt(seg, t);
   if (reduced || p < -0.1 || p > 1.2) return null;
   const c = accent(ev.key);
   const dir = ev.from ?? 'w';
@@ -313,7 +313,7 @@ export function Marks({ size }: { size: ShowSize }) {
         return (
           <OnPlot key={`${hit.x},${hit.y},${ev.key}`} x={hit.x} y={hit.y} rise={`${rise}cqw`} className={cx(!reduced && 'animate-[ev-pop_0.35s_ease-out]')}>
             <span className="flex flex-col items-center gap-0.5">
-              <DeltaChip delta={hit.delta} good={cast.goodAt(hit.x, hit.y)} size={size === 'tv' ? 'tv' : 'phone'} />
+              <EventDeltaChip delta={hit.delta} good={cast.goodAt(hit.x, hit.y)} size={size === 'tv' ? 'tv' : 'phone'} />
             </span>
           </OnPlot>
         );
@@ -345,7 +345,7 @@ export function IntroCard({ size }: { size: ShowSize }) {
           {s.segments.map((g) => (
             <span key={g.n} className="flex -space-x-3 animate-[ev-pop_0.4s_ease-out_both]" style={{ animationDelay: `${0.25 + g.n * 0.18}s` }}>
               {g.events.map((e, i) => (
-                <SignBadge key={i} ev={e} size={z.introBadge} />
+                <EventSignBadge key={i} ev={e} size={z.introBadge} />
               ))}
             </span>
           ))}
@@ -372,14 +372,14 @@ export function TitleCard({ seg, size }: { seg: EventSegment; size: ShowSize }) 
       <div key={seg.n} className="absolute inset-0 flex items-center justify-center" style={{ transform: fly, opacity: 1 - k }}>
         <div className="flex flex-col items-center text-center" style={{ width: widthOf(size, 'width') }}>
           <div className={cx('flex flex-col items-center rounded-sheet animate-[ev-pop_0.45s_ease-out]', size === 'tv' ? 'gap-3 px-10 py-6' : 'gap-1.5 px-6 py-3')} style={BACKDROP}>
-            <SignBadge ev={ev} size={z.badge} />
-            <span className={cx('label-caps', z.label, sign === 'good' ? 'text-ok!' : sign === 'neutral' ? 'text-holo!' : 'text-alert-ink!')}>{segLabel(seg)}</span>
+            <EventSignBadge ev={ev} size={z.badge} />
+            <span className={cx('label-caps', z.label, sign === 'good' ? 'text-ok!' : sign === 'neutral' ? 'text-holo!' : 'text-alert-ink!')}>{eventSegLabel(seg)}</span>
             <span className={cx('font-display font-bold leading-none', z.title)} style={{ textShadow: '0 4px 24px var(--color-void)' }}>
               {ev.title}
             </span>
             <span className={cx('flex items-center gap-2 font-display font-semibold', z.who)}>
               {slot !== undefined && <PlayerMark slot={slot} size={z.mark} />}
-              {whoLine(ev, cast)}
+              {eventWhoLine(ev, cast)}
             </span>
             <span className={cx('leading-snug text-ink-2', z.line)} style={{ maxWidth: widthOf(size, 'lineWidth'), textShadow: '0 2px 12px var(--color-void)' }}>
               {ev.line}
@@ -393,7 +393,7 @@ export function TitleCard({ seg, size }: { seg: EventSegment; size: ShowSize }) 
 
 /** Everything that goes over the map: the intro and the title card. */
 export function Overlays({ size }: { size: ShowSize }) {
-  const { stage, seg, quiet } = useLivingView();
+  const { stage, seg, quiet } = useEventLivingView();
   return (
     <>
       {!quiet && stage === 'intro' && <IntroCard size={size} />}
@@ -404,7 +404,7 @@ export function Overlays({ size }: { size: ShowSize }) {
 
 /** The player's spotlight and the dim, under the bars. */
 export function Shade() {
-  const { dim, player, spot, place, lens } = useLivingView();
+  const { dim, player, spot, place, lens } = useEventLivingView();
   const { grid } = useShow();
   return (
     <>

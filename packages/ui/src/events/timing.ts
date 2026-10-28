@@ -1,4 +1,4 @@
-import { SHOW_ENTRY, STORY } from './catalogue';
+import { EVENT_ENTRY, STORY } from './catalogue';
 import type { ShowEventView, ShowHit, ShowMode, ShowPhase } from './types';
 
 /**
@@ -17,7 +17,7 @@ export const EVENT_SOLO_PACE = 0.75;
 export function playShare(ev: ShowEventView): number {
   const story = STORY[ev.key];
   if (story) return story.length;
-  switch (SHOW_ENTRY[ev.key].motion) {
+  switch (EVENT_ENTRY[ev.key].motion) {
     case 'sweep':
       return 3.6;
     case 'spread':
@@ -112,31 +112,28 @@ export function sweepShare(ev: ShowEventView, h: { x: number; y: number }, w: nu
 }
 
 /** The storm's front, 0 at its edge to 1 off the far side, over its play. */
-export const FRONT = { lead: 0.3, cross: 2.8 } as const;
-export const frontAt = (seg: EventSegment, t: number) => (t - seg.playAt - FRONT.lead * seg.pace) / (FRONT.cross * seg.pace);
+export const EVENT_FRONT = { lead: 0.3, cross: 2.8 } as const;
+export const eventFrontAt = (seg: EventSegment, t: number) => (t - seg.playAt - EVENT_FRONT.lead * seg.pace) / (EVENT_FRONT.cross * seg.pace);
 
 /** The map's size in plots, which a sweep's hits are timed across. */
 export interface ShowGrid {
   width: number;
   height: number;
 }
-/** The gallery's colony (15 × 9): the default when a caller times a sweep without its map. */
-const GALLERY_GRID: ShowGrid = { width: 15, height: 9 };
-
 /**
  * When the event lands on a plot (or, with none, on its player): never after its segment's settle. Without motion,
  * everything lands at once.
  */
-export function eventHitAt(seg: EventSegment, ev: ShowEventView, h: ShowHit | null, reduced: boolean, grid: ShowGrid = GALLERY_GRID): number {
+export function eventHitAt(seg: EventSegment, ev: ShowEventView, h: ShowHit | null, reduced: boolean, grid: ShowGrid): number {
   const p = seg.playAt;
   if (reduced) return Math.min(seg.settleAt, p + 0.2 * seg.pace);
   const nth = seg.events.indexOf(ev);
   const story = STORY[ev.key];
   const after = (() => {
     if (story) return story.lands + (h?.order ?? 0) * (story.step ?? 0.15);
-    switch (SHOW_ENTRY[ev.key].motion) {
+    switch (EVENT_ENTRY[ev.key].motion) {
       case 'sweep':
-        return h ? FRONT.lead + sweepShare(ev, h, grid.width, grid.height) * FRONT.cross : FRONT.lead + FRONT.cross / 2;
+        return h ? EVENT_FRONT.lead + sweepShare(ev, h, grid.width, grid.height) * EVENT_FRONT.cross : EVENT_FRONT.lead + EVENT_FRONT.cross / 2;
       case 'spread':
         return 0.4 + (h?.order ?? 0) * 0.9;
       case 'source':
@@ -148,7 +145,7 @@ export function eventHitAt(seg: EventSegment, ev: ShowEventView, h: ShowHit | nu
   return Math.min(seg.settleAt, p + after * seg.pace);
 }
 
-export interface LandedHit {
+export interface EventLandedHit {
   ev: ShowEventView;
   seg: EventSegment;
   hit: ShowHit;
@@ -156,7 +153,7 @@ export interface LandedHit {
 }
 
 /** Every hit that has landed by `t`, with its event and segment. */
-export function eventLanded(s: EventScript, t: number, reduced: boolean, grid?: ShowGrid): LandedHit[] {
+export function eventLanded(s: EventScript, t: number, reduced: boolean, grid: ShowGrid): EventLandedHit[] {
   return s.segments.flatMap((seg) =>
     seg.events.flatMap((ev) => ev.hits.map((hit) => ({ ev, seg, hit, at: eventHitAt(seg, ev, hit, reduced, grid) })).filter((l) => t >= l.at)),
   );

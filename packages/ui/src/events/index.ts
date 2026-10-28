@@ -10,16 +10,18 @@ export {
   eventScript,
   eventSegments,
   eventStageAt,
+  eventFrontAt,
+  EVENT_FRONT,
   type EventScript,
   type EventSegment,
   type EventStage,
-  type LandedHit,
+  type EventLandedHit,
   type ShowGrid,
 } from './timing';
-export { SHOW_CATALOGUE, SHOW_ENTRY, type ShowEntry, type ShowMotion } from './catalogue';
-export { EventShow, showCast, type EventShowProps, type ShowCast } from './frame';
-export { LivingMap, type LivingMapProps } from './map';
-export { useLivingView } from './living';
-export { EventGlyph, EVENT_ACCENT, SignBadge, DeltaChip, Buzz } from './glyphs';
-export { EventPhoneCard, EventRailTail, EventWaiting, NowPlaying, PhoneSoloRail } from './phone';
-export { missLine, segLabel, whoLine, youSummary, type YouSummary } from './copy';
+export { EVENT_CATALOGUE, EVENT_ENTRY, type EventEntry, type EventMotion } from './catalogue';
+export { EventShow, eventCast, type EventShowProps, type ShowCast } from './frame';
+export { EventLivingMap, type EventLivingMapProps } from './map';
+export { useEventLivingView } from './living';
+export { EventGlyph, EVENT_ACCENT, EventSignBadge, EventDeltaChip, EventBuzz } from './glyphs';
+export { EventPhoneCard, EventRailTail, EventWaiting, EventNowPlaying, EventSoloRail } from './phone';
+export { eventMissLine, eventSegLabel, eventWhoLine, eventYouSummary, type EventYouSummary } from './copy';

@@ -125,7 +125,7 @@ export const accent = (k: ShowEventKey) => EVENT_ACCENT[k];
  * The event's badge: its glyph inside a frame whose SHAPE says the sign, so it reads without colour: a diamond
  * warns, a circle welcomes, a square is news (a mixed event).
  */
-export function SignBadge({ ev, size, className }: { ev: Pick<ShowEventView, 'key' | 'sign'>; size: number; className?: string }) {
+export function EventSignBadge({ ev, size, className }: { ev: Pick<ShowEventView, 'key' | 'sign'>; size: number; className?: string }) {
   const sign = signLook(ev.sign);
   const shape = sign === 'good' ? 'rounded-full' : sign === 'neutral' ? 'rounded-[22%]' : 'rotate-45 rounded-[18%]';
   const ring = sign === 'good' ? 'var(--color-ok)' : sign === 'neutral' ? 'var(--color-holo)' : 'var(--color-alert)';
@@ -159,7 +159,7 @@ const HAZARD = 'repeating-linear-gradient(135deg, var(--color-alert) 0 6px, colo
  * chip, so the sign reads without colour; the good's icon says what was lost. `text` replaces the number; with no
  * change it is a note, a square notch on the holo chip.
  */
-export function DeltaChip({ delta, good, size = 'tv', className, lost, text }: { delta: number; good?: Good | undefined; size?: 'tv' | 'phone' | 'hero'; className?: string; lost?: boolean | undefined; text?: string | undefined }) {
+export function EventDeltaChip({ delta, good, size = 'tv', className, lost, text }: { delta: number; good?: Good | undefined; size?: 'tv' | 'phone' | 'hero'; className?: string; lost?: boolean | undefined; text?: string | undefined }) {
   const tone = delta < 0 || lost ? 'loss' : delta > 0 ? 'gain' : 'note';
   // A TV chip fits inside one plot, so neighbours' chips never overlap.
   const px = CHIP[size];
@@ -179,7 +179,7 @@ export function DeltaChip({ delta, good, size = 'tv', className, lost, text }: {
 }
 
 /** The phone buzzes: drawn as a small vibrating handset beside the card. */
-export function Buzz({ size = 14, on }: { size?: number; on: boolean }) {
+export function EventBuzz({ size = 14, on }: { size?: number; on: boolean }) {
   return (
     <span className={cx('inline-flex text-ink-2', on && 'animate-[ev-buzz_0.35s_ease-in-out_3]')} aria-label="Your phone vibrates" title="Your phone vibrates">
       <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">

@@ -15,7 +15,7 @@ const signed = (n: number) => `${n < 0 ? '−' : '+'}${Math.abs(n)}`;
 const period = (phase: ShowPhase) => (phase === 'development' ? 'turn' : 'month');
 
 /** Who an event is about, in words, for its announcement. */
-export function whoLine(ev: ShowEventView, cast: ShowCast): string {
+export function eventWhoLine(ev: ShowEventView, cast: ShowCast): string {
   const player = cast.playerOf(ev);
   if (player) return cast.name(player);
   if (ev.scope === 'colony') return 'The whole colony';
@@ -24,7 +24,7 @@ export function whoLine(ev: ShowEventView, cast: ShowCast): string {
 }
 
 /** "Bad news", "Good news" or, for a mixed event, "News"; and the count: "1 of 3". */
-export function segLabel(seg: EventSegment): string {
+export function eventSegLabel(seg: EventSegment): string {
   const signs = new Set(seg.events.map((e) => signLook(e.sign)));
   const word = signs.size > 1 || signs.has('neutral') ? 'News' : signs.has('good') ? 'Good news' : 'Bad news';
   return `${word}${seg.count > 1 ? ` · ${seg.n} of ${seg.count}` : ''}`;
@@ -44,14 +44,14 @@ const YOU: Partial<Record<ShowEventKey, (ev: ShowEventView) => string>> = {
   bumperHarvest: () => 'One plot of yours makes double this month.',
 };
 
-export interface YouSummary {
+export interface EventYouSummary {
   headline: string;
   detail: string;
   change: Partial<Record<Good, number>>;
 }
 
 /** What one event did to one player, or null when it passed them by. */
-function youFor(ev: ShowEventView, id: string, cast: ShowCast): YouSummary | null {
+function youFor(ev: ShowEventView, id: string, cast: ShowCast): EventYouSummary | null {
   const detail = YOU[ev.key]?.(ev);
   const mine = ev.hits.filter((h) => cast.ownerAt(h.x, h.y) === id);
   if (mine.length === 0) return null;
@@ -70,7 +70,7 @@ function youFor(ev: ShowEventView, id: string, cast: ShowCast): YouSummary | nul
 }
 
 /** What the segment did to one player, for their phone; null when it missed them. */
-export function youSummary(seg: EventSegment, id: string, cast: ShowCast): YouSummary | null {
+export function eventYouSummary(seg: EventSegment, id: string, cast: ShowCast): EventYouSummary | null {
   for (const ev of seg.events) {
     const you = youFor(ev, id, cast);
     if (you) return you;
@@ -79,7 +79,7 @@ export function youSummary(seg: EventSegment, id: string, cast: ShowCast): YouSu
 }
 
 /** For the phone when an event missed you: where it went instead. */
-export function missLine(seg: EventSegment, cast: ShowCast): string {
+export function eventMissLine(seg: EventSegment, cast: ShowCast): string {
   const ev = seg.events[0]!;
   const player = cast.playerOf(ev);
   if (player) return ev.hits.length ? `Not your land: it hit ${cast.name(player)}.` : `Not you: it hit ${cast.name(player)}.`;

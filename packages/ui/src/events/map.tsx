@@ -6,7 +6,7 @@ import { livingAt, Marks, Overlays, Shade, Weather } from './living';
 import { Stories } from './stories';
 import type { ShowSize } from './types';
 
-export interface LivingMapProps {
+export interface EventLivingMapProps {
   size: ShowSize;
   /** Fade the plots that aren't this player's: a phone. */
   focusSlot?: Slot;
@@ -26,7 +26,7 @@ export interface LivingMapProps {
  * Living weather over HoloMap, inside <EventShow>. The map box is a container, so every layer sizes against its
  * width; the camera moves the map inside the box, and the cards sit over the box, outside the camera.
  */
-export function LivingMap({ size, focusSlot, bars, over, onSkip, className }: LivingMapProps) {
+export function EventLivingMap({ size, focusSlot, bars, over, onSkip, className }: EventLivingMapProps) {
   const frame = useShow();
   const { tiles, grid, t, reduced } = frame;
   const { seg, view } = livingAt(frame);

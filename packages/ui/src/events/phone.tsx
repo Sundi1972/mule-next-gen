@@ -1,7 +1,7 @@
 import { cx } from '../components/tokens';
-import { missLine, segLabel, segTitle, whoLine, youSummary } from './copy';
+import { eventMissLine, eventSegLabel, segTitle, eventWhoLine, eventYouSummary } from './copy';
 import { signLook, useShow } from './frame';
-import { Buzz, SignBadge } from './glyphs';
+import { EventBuzz, EventSignBadge } from './glyphs';
 import { eventStageAt, type EventSegment } from './timing';
 
 /**
@@ -16,7 +16,7 @@ import { eventStageAt, type EventSegment } from './timing';
 export function EventPhoneCard({ seg, me, at, buzz = false }: { seg: EventSegment; me: string; at: 'news' | 'you'; buzz?: boolean }) {
   const { cast } = useShow();
   const ev = seg.events[0]!;
-  const you = youSummary(seg, me, cast);
+  const you = eventYouSummary(seg, me, cast);
   const sign = signLook(ev.sign);
   const mixed = sign === 'neutral';
   const tone = mixed ? 'border-holo bg-holo-soft' : sign === 'good' ? 'border-ok bg-holo-soft' : 'border-alert bg-alert-bg';
@@ -24,18 +24,18 @@ export function EventPhoneCard({ seg, me, at, buzz = false }: { seg: EventSegmen
   return (
     <div key={`${seg.n}-${at}`} className={cx('flex flex-col gap-1.5 rounded-panel border-2 p-2.5 animate-[ev-drop_0.3s_ease-out]', tone)} data-testid="phone-card" data-at={at} data-event={ev.key}>
       <div className="flex items-center gap-2">
-        <SignBadge ev={ev} size={40} />
+        <EventSignBadge ev={ev} size={40} />
         <span className="flex min-w-0 flex-col">
-          <span className={cx('label-caps text-[10px]!', ink)}>{segLabel(seg)}</span>
+          <span className={cx('label-caps text-[10px]!', ink)}>{eventSegLabel(seg)}</span>
           <span className="font-display text-lg font-bold leading-tight">{segTitle(seg)}</span>
         </span>
         <span className="ml-auto">
-          <Buzz on={buzz} />
+          <EventBuzz on={buzz} />
         </span>
       </div>
       {at === 'news' && (
         <span className="text-xs leading-snug text-ink-2">
-          {whoLine(ev, cast)}. {ev.line}
+          {eventWhoLine(ev, cast)}. {ev.line}
         </span>
       )}
       {at === 'news' && ev.weight === 'headline' && <span className="w-fit rounded-chip bg-holo px-1.5 py-0.5 font-mono text-[10px] font-bold text-on-holo">LOOK AT THE TV ▸</span>}
@@ -47,7 +47,7 @@ export function EventPhoneCard({ seg, me, at, buzz = false }: { seg: EventSegmen
           </div>
         ) : (
           <div className="flex flex-col gap-1" data-testid="phone-miss">
-            <span className="text-xs leading-snug text-ink-2">{missLine(seg, cast)}</span>
+            <span className="text-xs leading-snug text-ink-2">{eventMissLine(seg, cast)}</span>
           </div>
         ))}
     </div>
@@ -62,19 +62,19 @@ export function EventWaiting() {
 }
 
 /** On a phone alone, while the weather plays on the map: a small "now" line, so the rail doesn't repeat the card. */
-export function NowPlaying({ seg, buzz }: { seg: EventSegment; buzz: boolean }) {
+export function EventNowPlaying({ seg, buzz }: { seg: EventSegment; buzz: boolean }) {
   const { cast } = useShow();
   const ev = seg.events[0]!;
   return (
     <div className="flex items-center gap-2 rounded-panel border border-holo-line bg-raised p-2 animate-[ev-drop_0.3s_ease-out]" data-testid="phone-now">
-      <SignBadge ev={ev} size={32} />
+      <EventSignBadge ev={ev} size={32} />
       <span className="flex min-w-0 flex-col">
-        <span className="label-caps text-[10px]!">{segLabel(seg)}</span>
+        <span className="label-caps text-[10px]!">{eventSegLabel(seg)}</span>
         <span className="font-display text-base font-bold leading-tight">{segTitle(seg)}</span>
-        <span className="truncate text-[11px] text-ink-2">{whoLine(ev, cast)}</span>
+        <span className="truncate text-[11px] text-ink-2">{eventWhoLine(ev, cast)}</span>
       </span>
       <span className="ml-auto">
-        <Buzz on={buzz} />
+        <EventBuzz on={buzz} />
       </span>
     </div>
   );
@@ -87,11 +87,11 @@ export function EventRailTail({ me, current }: { me: string; current: EventSegme
   return (
     <>
       {done.map((g) => {
-        const you = youSummary(g, me, cast);
+        const you = eventYouSummary(g, me, cast);
         const good = signLook(g.events[0]!.sign) === 'good';
         return (
           <div key={g.n} className="flex items-center gap-2 rounded-control bg-raised px-2 py-1">
-            <SignBadge ev={g.events[0]!} size={22} />
+            <EventSignBadge ev={g.events[0]!} size={22} />
             <span className="min-w-0 flex-1 truncate text-xs font-semibold">{segTitle(g)}</span>
             <span className={cx('text-xs', you ? (good ? 'font-bold text-ok' : 'font-bold text-alert-ink') : 'text-ink-3')}>{you ? you.headline.replace(' for you', '') : 'not you'}</span>
           </div>
@@ -105,14 +105,14 @@ export function EventRailTail({ me, current }: { me: string; current: EventSegme
  * With no TV in the room, the rail beside the phone's own show: what is playing, then what it did to you, the skip
  * hint (when the map can be tapped), and the phase's earlier events.
  */
-export function PhoneSoloRail({ me, canSkip = false }: { me: string; canSkip?: boolean }) {
+export function EventSoloRail({ me, canSkip = false }: { me: string; canSkip?: boolean }) {
   const { s, t } = useShow();
   const { seg, stage } = eventStageAt(s, t);
   const shown = seg ?? (stage === 'outro' ? (s.segments.at(-1) ?? null) : null);
   const playing = seg !== null && t < seg.settleAt - 0.05;
   return (
     <>
-      {!shown ? <EventWaiting /> : t < shown.settleAt - 0.2 ? <NowPlaying seg={shown} buzz={t - shown.announceAt < 1.2} /> : <EventPhoneCard seg={shown} me={me} at="you" />}
+      {!shown ? <EventWaiting /> : t < shown.settleAt - 0.2 ? <EventNowPlaying seg={shown} buzz={t - shown.announceAt < 1.2} /> : <EventPhoneCard seg={shown} me={me} at="you" />}
       {seg && canSkip && (
         <span className="mt-auto self-end rounded-chip bg-void/75 px-1.5 py-0.5 font-mono text-[10px] text-ink-2" data-testid="skip-hint">
           {playing ? 'tap the map to skip ›' : 'tap the map: next ›'}

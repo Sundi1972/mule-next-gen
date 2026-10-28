@@ -8,22 +8,22 @@ import type { ShowEventKey } from './types';
 /**
  * The motion family a show draws. Several events share one; the event only says which, and where.
  */
-export type ShowMotion =
+export type EventMotion =
   | 'sweep' // a front crosses the map from an edge, plot by plot (dust, drought, acid rain, flare, comet)
   | 'spread' // from one plot to the plots joined to it (pests, fire)
   | 'source' // out from a map feature (the river's flood, the volcano's ash)
   | 'plot'; // on one plot, no travel (bumper harvest)
 
-export interface ShowEntry {
+export interface EventEntry {
   key: ShowEventKey;
-  motion: ShowMotion;
+  motion: EventMotion;
   /** How it moves, in words. */
   look: string;
 }
 
-const E = (e: ShowEntry) => e;
+const E = (e: EventEntry) => e;
 
-export const SHOW_CATALOGUE: ShowEntry[] = [
+export const EVENT_CATALOGUE: EventEntry[] = [
   E({ key: 'dustStorm', motion: 'sweep', look: 'A wall of dust blows in from one edge and takes half of each Energy plot as it passes.' }),
   E({ key: 'drought', motion: 'sweep', look: 'Heat shimmer crosses the map; the ground cracks under each Food and Water plot.' }),
   E({ key: 'acidRain', motion: 'sweep', look: 'A sickly green rain front crosses the map; Energy and Food plots hiss as it passes.' }),
@@ -36,7 +36,7 @@ export const SHOW_CATALOGUE: ShowEntry[] = [
   E({ key: 'bumperHarvest', motion: 'plot', look: 'One plot glows and its bars double.' }),
 ];
 
-export const SHOW_ENTRY = Object.fromEntries(SHOW_CATALOGUE.map((e) => [e.key, e])) as Record<ShowEventKey, ShowEntry>;
+export const EVENT_ENTRY = Object.fromEntries(EVENT_CATALOGUE.map((e) => [e.key, e])) as Record<ShowEventKey, EventEntry>;
 
 /**
  * Each event's own story: where the camera goes and when its change lands. Seconds are proportions of the gallery's
