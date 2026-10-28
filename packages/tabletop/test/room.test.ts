@@ -780,6 +780,73 @@ describe('Room: a one-time code moves a seat to another device (RULE-6, AM-16)',
   );
 });
 
+/** Each seat's id and whether it shows connected, in the last view this screen received. */
+const presence = (screen: Screen) => screen.last('view')!.view.seats.map((s) => [s.id, s.connected]);
+
+describe('Room: a connection holds at most one seat (FM-3)', () => {
+  it('FM-3: in the lobby, the host\'s connection joining again by name lets go of its seat: it shows away, hosting moves on, its token still takes it back, and a later disconnect frees only the new seat', async () => {
+    const { room, heiko, mia } = clockLobby();
+    const heikoToken = heiko.last('welcome')!.seatToken!;
+
+    room.receive(heiko, heiko.from, { t: 'join', code: room.code, name: 'Jonas' });
+    await flush();
+
+    expect(heiko.last('welcome')!.seatId).toBe('s4');
+    expect(presence(mia)).toStrictEqual([['s1', false], ['s2', true], ['s3', true], ['s4', true]]);
+    expect(mia.last('view')!.view.hostId).toBe('s2');
+
+    room.disconnect(heiko);
+    await flush();
+
+    expect(presence(mia)).toStrictEqual([['s1', false], ['s2', true], ['s3', true], ['s4', false]]);
+    expect(join(room, 'Heiko', heikoToken).last('welcome')!.seatId).toBe('s1');
+  });
+
+  it("FM-3: after Start, a connection on s1 that joins with s2's move code lets go of s1: s1 shows away, the game hears s1 disconnected, and a later disconnect frees s2 only", async () => {
+    const { room, heiko, mia, heard } = clockLobby();
+    room.receive(heiko, heiko.from, { t: 'start' });
+    const tv = watch(room);
+    const code = handoff(room, mia);
+
+    room.receive(heiko, heiko.from, { t: 'join', code: room.code, name: 'Heiko', handoff: code });
+    await flush();
+
+    expect(heiko.last('welcome')!.seatId).toBe('s2');
+    expect(mia.inbox.at(-1)).toStrictEqual({ t: 'removed', reason: 'moved' });
+    expect(presence(tv)).toStrictEqual([['s1', false], ['s2', true], ['s3', true]]);
+    expect(heard).toStrictEqual({ starts: 1, changes: [['s1', false]], moved: ['s2'] });
+
+    room.disconnect(heiko);
+    await flush();
+
+    expect(presence(tv)).toStrictEqual([['s1', false], ['s2', false], ['s3', true]]);
+    expect(heard.changes).toStrictEqual([
+      ['s1', false],
+      ['s2', false],
+    ]);
+  });
+
+  it('FM-3: after Start, a connection that rejoins its own seat by token keeps it: still connected and host, never heard as disconnected, and a later disconnect frees it', async () => {
+    const { room, heiko, heard } = clockLobby();
+    room.receive(heiko, heiko.from, { t: 'start' });
+    const tv = watch(room);
+
+    room.receive(heiko, heiko.from, { t: 'join', code: room.code, name: 'Heiko', seatToken: heiko.last('welcome')!.seatToken! });
+    await flush();
+
+    expect(heiko.last('welcome')!.seatId).toBe('s1');
+    expect(presence(tv)).toStrictEqual([['s1', true], ['s2', true], ['s3', true]]);
+    expect(tv.last('view')!.view.hostId).toBe('s1');
+    expect(heard.changes).not.toContainEqual(['s1', false]);
+
+    room.disconnect(heiko);
+    await flush();
+
+    expect(presence(tv)).toStrictEqual([['s1', false], ['s2', true], ['s3', true]]);
+    expect(heard.changes.at(-1)).toStrictEqual(['s1', false]);
+  });
+});
+
 /** The secrets game with a bug: the secret 'boom' throws a plain Error, as an engine bug would, and so can a tick it schedules. */
 function buggyRoom(tick?: 'throws') {
   const errors: unknown[] = [];
