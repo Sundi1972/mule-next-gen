@@ -63,7 +63,7 @@ only; Sonnet 5.5 with adaptive thinking for strategy and playbook calls (Heiko, 
 | `validatePlan(state, seat, draft, edits)` | WS1 | specced, not built | PR-1 C2 | yes for unit tests; PR-1's B-AC-A1 needs the real one |
 | Engine draft playbook + 3-4 engine plans | WS1 step 2 | not built | PR-1 C1 | yes for unit tests; B-AC-A1 needs the real one |
 | Land-grant execution reading `LandGrantPlay.ranked` | WS3 | not built | PR-1 B-AC-A1 | no |
-| Game record: `PlaybookEntry`, append API | WS3 | types agreed, API before its freeze | PR-1 C5 | no (B-AC-A1 observes the record) |
+| Game record: `PlaybookEntry`, `recordPlaybook`, writer answers (`RecordedWrite`) | WS3 | frozen 29 Oct at ws3-auctions 6b541f9 (§3, AM-1); not built | PR-1 C5 | no (B-AC-A1 observes the record) |
 | Move descriptors in `packages/ai/src/actions.ts` | WS1 | shape is WS1's to propose | PR-2 C8, PR-3 C9 | yes, a descriptor type stubbed in WS2 tests; WS1's coverage test gates PR-2's merge |
 | Engine sim entry for one month | WS1 | not built | PR-3 whatIf | yes for the handler's unit test; T-AC-A9's state check needs the real one |
 | PhaseOutcome producers (land: WS3; development, auction: WS1) | WS1, WS3 | specced in schema v1 | PR-4 T-AC-A10 | yes, a fixture PhaseOutcome |
@@ -199,7 +199,7 @@ Every handoff carries this line verbatim:
 
 - [ ] **Step 1: Write the failing test `B-AC-A1: a fake model's edited land ranking is what the seat claims in month 2, and the record holds that playbook by 'llm'`** — Altitude: promise (the board and the record). Negative case: an out-of-bounds edit → the engine ranking plays and the edit is listed in `rejected`. Trap: pick a seed where the edit and the engine ranking differ in the first claim, or the test passes without the edit.
 - [ ] **Step 2: Run it** → FAIL
-- [ ] **Step 3: Implement C5 per spec §1 C5** — append a PlaybookEntry through WS3's API at take-effect. Mechanism: sprout.
+- [ ] **Step 3: Implement C5 per spec §1 C5** — write the entry through MuleGame's `recordPlaybook` option at take-effect; writer calls go through `BrainService.writerFor(seat)` so WS3's recorder captures each reply as an `answer` with `write` (WS3 record §3 at 6b541f9). Send WS3 `writerFor`'s exact signature before this PR opens. Mechanism: sprout.
 - [ ] **Step 4: Run it and the server suite** → PASS. Positive control: drop the append, watch B-AC-A1 go red, restore.
 - [ ] **Step 5: Commit** — `feat(server): the playbook that takes effect is in the game record (C5, B-AC-A1)`
 

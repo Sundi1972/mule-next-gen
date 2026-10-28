@@ -147,9 +147,13 @@ mechanism    sprout + one named edit
 depends_on   C2; WS3 phase hooks; WS1 triggers
 
 C5 · ADDED · the record: each playbook that takes effect is appended to WS3's game record
-tomorrow     MUST append a PlaybookEntry {type:'playbook', at, seq, seat, month, phase, playbook} (playbook v1,
-             packages/engine/src/record.ts, WS3) when it takes effect; replay reads it and makes no call.
-seam         WS3's record API (contract)
+tomorrow     MUST write each playbook that takes effect through MuleGame's `recordPlaybook` option (WS3 C7: the
+             recorder stamps `at` and `seq`), as Omit<PlaybookEntry, 'type' | 'at' | 'seq'>. MUST make every writer
+             call through `BrainService.writerFor(seat)` (C4), which WS3's recorder wraps from outside, so each
+             reply is recorded as an `answer` with kind 'strategy' | 'playbook' and `write: RecordedWrite` (the reply
+             as the writer received it, before validatePlan). The replay feeds those answers back, makes no model
+             call, and re-derives the playbook; WS3's T-AC-11 checks it equals the recorded entry.
+seam         WS3's record contract, frozen 29 Oct at ws3-auctions 6b541f9 (its §3, AM-1)
 mechanism    sprout
 depends_on   C4; WS3 record (data, not stubbable for the replay AC)
 
@@ -299,9 +303,11 @@ examples → §6: round cap 3 → at most 4 round trips · share runs out in rou
   land auction, and a refusal from `lots.ts::list` (full, not owned, no MULE, minimum out of bounds) is skipped and logged,
   never retried.
   This spec adopts the frozen version by reference.
-- **Game record** (ADDED, WS3): types in `packages/engine/src/record.ts` (`GameRecord`, `RecordEvent`,
-  `PlaybookEntry`); recorder and replay in `apps/server/src/record.ts`. Derived `notice` events (trades, claims, sales)
-  feed PhaseOutcome; the replay ignores them. The append and replay API is WS3's, before its freeze.
+- **Game record** (ADDED, WS3; frozen with WS2's OK at ws3-auctions 6b541f9, `docs/specs/2026-10-29-ws3-game-record.md`
+  §3): types in `packages/engine/src/record.ts` (`RecordStep`, `RecordEvent<Intent>`, `NoticeEntry`, `PlaybookEntry`,
+  `CallKind`, `RecordedWrite`, `GameRecord<Intent>`); recorder and replay in `apps/server/src/record.ts`. Writer calls
+  are recorded inputs (`answer` with `kind` and `write`), so a keyless replay reproduces a Claude seat (WS3 AM-1).
+  `notice` events (claims, trades, sales) feed PhaseOutcome; the replay skips notices and playbook entries as inputs.
 - **`validatePlan(state, seat, draft, edits) → { playbook, rejected }`** (ADDED, WS1): bounds per field.
 - **Writer reply** (ADDED, WS2, C2): JSON schema `{ strategy?: Strategy, edits: {path, to, reason}[], line?: string }`.
 - **Game record entry** (ADDED, WS3): `PlaybookEntry { type: 'playbook', at, seq, seat, month, phase, playbook }` (v1;
@@ -396,6 +402,9 @@ Code-only; no existing state to reach. The record starts with WS3's build.
   BRAIN; the capability-first re-run rule → C3, §7. The spike's cause codes → C2.
 - **AM-A6 · 29 Oct · lead:** C4's seam renamed playbooks.ts (no clash with packages/ai's strategist.ts); C3 promotes
   the S-A1 port instead of a second client. Cost note for §0: C8 and C9 add about 2 PRs, so about 5 in all (in §0 since the goal gate).
+- **AM-A12 · 29 Oct · WS3's record frozen (6b541f9):** writer replies are recorded inputs through
+  `BrainService.writerFor` (WS3 AM-1, from WS2's review); playbooks go through `recordPlaybook` → C5, §3. WS2's
+  server-side ledger type `CallKind` is renamed on PR-1's branch, so the engine's `CallKind` keeps the name.
 - **AM-A11 · 29 Oct · WS1's review:** a call's wait is bounded by its deadline (C4, RULE-A1 example), so a playbook
   call in a gap of seconds never waits 30 s for a reply that would be dropped and still billed.
 - **AM-A10 · 29 Oct · Heiko via PM:** Sonnet 5.5 is the default for strategy and playbook calls; Haiku 5.5 the
