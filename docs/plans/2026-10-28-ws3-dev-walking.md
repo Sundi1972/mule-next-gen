@@ -48,10 +48,12 @@
 - **T-AC-7 "half a Mollox's time":** read `1 / SPECIES_PERK.zipwingSpeed` of it. RULE-5 at AM-13 set the Zipwing's pace to 1.5, and Heiko's later ruling on ws1-balance (ba1091c) sets it to 1.25. Assert against `walkSeconds`, never a literal.
 - **B-AC-11 "a tap while walking is ignored":** the server refuses it with `RuleError('Still walking')` and changes nothing. That is "ignored" at the server's state, where the AC observes it. Whether the phone shows the message is WS6-C14's call.
 - **`PHASES.developmentGraceMs` goes** (PM OK, 2026-10-28): the phase ends with the one visible bar.
-- **Development ends early only when no colonist is busy** (the lead's ruling, review round 1 at 1a945b1).
-  - The rule: every human seat is away, Ready or done, **and** no colonist is walking (the pub walk included) or assaying.
-  - Each arrival re-runs the check.
-  - Why: without it, a phone that drops, or a player who presses Ready mid-walk, ended development and dropped their tapped install in flight (measured).
+- **Development ends early only when no colonist is walking** (the lead's ruling, review round 1 at 1a945b1; narrowed in round 2).
+  - The rule: every human seat is away, Ready or done, **and** no colonist is walking, the pub walk included.
+  - Each arrival re-runs the check, and a held end is cleared as soon as someone is found waiting again.
+  - An assay doesn't hold the end: its analysis applied on arrival, so ending mid-assay loses nothing.
+  - **The AI seats keep today's two rules:** the pub path waits for them, and the Ready/drop path doesn't. Making those one rule is a separate design question.
+  - Why: without the rule, a phone that drops, or a player who presses Ready mid-walk, ended development and dropped their tapped install in flight (measured).
   - At the clock's end, walks in flight are still dropped (FM-pub-late).
 
 ## Contract (locked before Task 4 consumes it; WS6-C14 is its consumer)
