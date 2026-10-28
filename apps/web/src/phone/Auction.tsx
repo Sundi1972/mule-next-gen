@@ -1,9 +1,10 @@
 import type { AuctionView } from '@mule/protocol';
 import { Button, cx, GOOD_NAME, GoodTag, TimeBar, WalkBoard } from '@mule/ui';
-import { boardWalkers, dealLine, LineReadout, SIDE_WORD, skippedLine, StatusTable, StoreBox, toggleSide } from '../components/AuctionParts';
+import { BoardKey, boardWalkers, dealLine, Hint, MyStoreLine, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, toggleSide, walkHint } from '../components/AuctionParts';
 import { speakerAt } from '../chat/Chat';
 import { PHASE_NAME } from '../game/derive';
 import { useAuctionSound } from '../game/sound';
+import type { MouseEvent, PointerEvent } from 'react';
 import { useClient } from '../net/react';
 import { usePhoneGame } from './game';
 import { PhoneShell } from './Shell';
@@ -112,7 +113,10 @@ export function Auction() {
           <div className="rounded-panel border border-holo-line bg-panel px-2 py-1.5">
             <StatusTable view={view} auction={auction} meId={self.id} />
           </div>
-          <StoreBox auction={auction} />
+          <MyStoreLine auction={auction} />
+          {shipWants(view, auction).map((w) => (
+            <ShipWants key={w.good} want={w} have={me.stock[w.good]} />
+          ))}
         </div>
       </PhoneShell>
     );
@@ -139,6 +143,7 @@ export function Auction() {
     </div>
   );
 
+  const hint = walkHint(view, auction, me.id, have);
   const rail = (
     <>
       <div className="flex items-center justify-between gap-2 rounded-control border border-holo-faint bg-panel px-2.5 py-1.5" data-testid="good-row">
@@ -159,16 +164,7 @@ export function Auction() {
           </span>
         </div>
       </div>
-      <div className={cx('rounded-control border px-2.5 py-1.5 text-xs leading-snug', myDeal ? 'border-holo bg-holo-soft text-ink' : 'border-holo-faint text-ink-2')} data-testid="my-deal">
-        {myDeal
-          ? dealLine(view, myDeal, me.id)
-          : mine?.side === 'pass'
-            ? 'You passed on this good.'
-            : mine?.side === 'seller'
-              ? 'Walk down to meet the highest bid.'
-              : 'Walk up to meet the lowest ask.'}
-      </div>
-      <LineReadout walkers={walkers} trading={auction.deals.length > 0} meId={me.id} />
+      {myDeal ? <Hint tone="lit" line={dealLine(view, myDeal, me.id)} testid="my-deal" /> : <Hint line={hint.line} how={hint.how} />}
       {sides}
     </>
   );
@@ -176,8 +172,8 @@ export function Auction() {
   const footer = (
     <>
       <div className="grid grid-cols-2 gap-2">
-        <Hold label="Up" glyph="▲" disabled={!onBoard} onHold={(on) => walk(on ? 'up' : 'stop')} />
-        <Hold label="Down" glyph="▼" disabled={!onBoard} onHold={(on) => walk(on ? 'down' : 'stop')} />
+        <WalkHold dir="up" disabled={!onBoard} onHold={(on) => walk(on ? 'up' : 'stop')} />
+        <WalkHold dir="down" disabled={!onBoard} onHold={(on) => walk(on ? 'down' : 'stop')} />
       </div>
       {doneButton}
     </>
@@ -191,6 +187,7 @@ export function Auction() {
           {skipped}
         </p>
       )}
+      {mine && mine.side !== 'pass' && <BoardKey auction={auction} side={mine.side} />}
       <div className="flex min-h-0 flex-1 flex-col gap-1.5">
         {auction.deals.some((d) => d !== myDeal) && (
           <div className="flex shrink-0 gap-2 overflow-hidden" data-testid="deals">
@@ -209,6 +206,7 @@ export function Auction() {
           storeBuys={auction.storeBuys}
           storeSells={auction.storeSells}
           shipPays={auction.shipPays}
+          {...(auction.shipPays !== null ? { shipCaption: `The ship buys ${GOOD_NAME[good]} at ${auction.shipPays}` } : {})}
           storeStock={auction.storeForSale}
           marks={{ ask: true, bid: true }}
           meId={me.id}
@@ -230,19 +228,7 @@ export function Hold({ label, glyph, disabled, onHold }: { label: string; glyph:
       disabled={disabled}
       data-testid={`hold-${label.toLowerCase()}`}
       className="flex h-16 touch-none select-none flex-col items-center justify-center rounded-control border-2 border-holo bg-holo-soft font-display text-sm font-semibold text-holo active:bg-holo active:text-on-holo disabled:opacity-35"
-      onPointerDown={(e) => {
-        e.preventDefault();
-        try {
-          e.currentTarget.setPointerCapture(e.pointerId);
-        } catch {
-          // A synthetic press has no pointer to capture.
-        }
-        onHold(true);
-      }}
-      onPointerUp={() => onHold(false)}
-      onPointerCancel={() => onHold(false)}
-      onLostPointerCapture={() => onHold(false)}
-      onContextMenu={(e) => e.preventDefault()}
+      {...holdHandlers(onHold)}
     >
       <span aria-hidden className="text-2xl leading-none">
         {glyph}
@@ -250,4 +236,45 @@ export function Hold({ label, glyph, disabled, onHold }: { label: string; glyph:
       {label}
     </button>
   );
+}
+
+/** The goods walk's Hold: it says so on the button, "Hold ▲ to walk up". */
+function WalkHold({ dir, disabled, onHold }: { dir: 'up' | 'down'; disabled: boolean; onHold: (on: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={`Hold to walk ${dir}`}
+      disabled={disabled}
+      data-testid={`hold-${dir}`}
+      className="flex h-12 touch-none select-none flex-col items-center justify-center gap-1 rounded-control border-2 border-holo bg-holo-soft font-display text-holo active:bg-holo active:text-on-holo disabled:opacity-35"
+      {...holdHandlers(onHold)}
+    >
+      <span className="flex items-center gap-1 text-sm font-semibold leading-none">
+        Hold{' '}
+        <span aria-hidden className="text-lg leading-none">
+          {dir === 'up' ? '▲' : '▼'}
+        </span>
+      </span>
+      <span className="text-[11px] font-medium leading-none">to walk {dir}</span>
+    </button>
+  );
+}
+
+/** Walking while pressed, standing when let go, however the press ends. */
+function holdHandlers(onHold: (on: boolean) => void) {
+  return {
+    onPointerDown: (e: PointerEvent<HTMLButtonElement>) => {
+      e.preventDefault();
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        // A synthetic press has no pointer to capture.
+      }
+      onHold(true);
+    },
+    onPointerUp: () => onHold(false),
+    onPointerCancel: () => onHold(false),
+    onLostPointerCapture: () => onHold(false),
+    onContextMenu: (e: MouseEvent<HTMLButtonElement>) => e.preventDefault(),
+  };
 }
