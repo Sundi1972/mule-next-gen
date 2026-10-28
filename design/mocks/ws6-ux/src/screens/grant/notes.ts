@@ -23,7 +23,6 @@ export const GRANT_NOTES = {
     serves: '1',
     intent: CLAIM_INTENT,
     why: 'Plots light one by one, so CLAIM is timed: it must stay the easiest thing on the screen to slam. 96 px tall was more than a thumb needs and was paid for with the lit plot itself.',
-    open: 'the brief says “N OF 3”, but the engine’s config gives 2 claims a grant (GAME.claimsPerGrant), so this line says what the product would today. Is 3 a planned change to config.ts?',
   },
   G3: {
     id: 'G3',
