@@ -153,6 +153,7 @@ export const SPECIAL_EFFECT: Record<SpecialKind, string> = {
   geyser: `+${FX.geyser} Water or Energy.`,
   oasis: `+${FX.oasis} Food.`,
   relic: `+${FX.relic} to every working plot touching it, anyone's.`,
+  meteorCrater: `Crystite rated ${MAP.meteorCrater.crystite}, the top of the scale. Left by a meteor; what stood here was destroyed.`,
 };
 
 /** What this plot's special field does, without its name. A ruin says which salvage it holds, since the map drew it. */
