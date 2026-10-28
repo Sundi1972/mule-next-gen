@@ -9,6 +9,7 @@ import {
   buyMule,
   castVote,
   claimPlot,
+  colonyFailed,
   cover,
   createGame,
   createRng,
@@ -142,6 +143,13 @@ function andList(names: string[]): string {
 function worthPartsOf(state: GameState, playerId: string): ScorePartsView {
   const { total: _total, ...parts } = scoreParts(state, playerId);
   return parts;
+}
+
+/** A player's Worth before the Collapse cut while the air is in Collapse (scoreParts' total plus its cut); otherwise null. */
+function worthBeforeCutOf(state: GameState, playerId: string): number | null {
+  if (!colonyFailed(state)) return null;
+  const { total, cut } = scoreParts(state, playerId);
+  return total + cut;
 }
 
 /**
@@ -1118,6 +1126,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           money: p.money,
           worth: score(state, s.id),
           lastWorth: lastEnd?.worth.get(s.id) ?? null,
+          worthBeforeCut: worthBeforeCutOf(state, s.id),
           plots: state.tiles.filter((t) => t.owner === s.id).length,
           ready: isReady(s.id),
           doneDeveloping: p.doneDeveloping,
