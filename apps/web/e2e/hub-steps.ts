@@ -10,6 +10,7 @@ import { GOODS, monthNeeds, type GameState, type Good } from '@mule/engine';
 import type { Browser, Page } from 'playwright';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, PHONE, TV } from './harness';
+import { ELECTION_WAIT_MS } from './politics-steps';
 import { LAPTOP } from './shell-steps';
 
 /** The human sits in seat 1. */
@@ -263,6 +264,15 @@ export async function sixSeatsOnTheTv({ browser, base, server }: { browser: Brow
     await phone.getByRole('button', { name: 'Start game' }).click();
     await tv.goto(`${base}/table?room=${code}`);
     const board = tv.locator('[data-phase=planning]');
+    // Election day holds the TV until it is over: Mia is Ready to vote, then abstains and casts if there is a ballot.
+    const step = phone.locator('[data-testid=ready]:not([disabled])').filter({ hasText: /Ready to vote|Cast my vote/ });
+    const abstain = phone.locator('[data-testid=ballot-card] [data-testid$="-abstain"] input:not(:checked)');
+    for (const deadline = Date.now() + ELECTION_WAIT_MS + timeout; !(await board.getByTestId('tv-ready-list').isVisible()); ) {
+      check(Date.now() < deadline, 'B-AC-19 (six seats): election day ends and the TV shows planning');
+      for (const box of await abstain.all()) await box.check({ timeout });
+      if (await step.isVisible()) await step.click({ timeout }).catch(() => {});
+      await phone.waitForTimeout(100);
+    }
     await board.getByTestId('tv-ready-list').waitFor({ timeout });
     busyNews(server.registry.get(code));
     const newest = board.getByTestId('tv-news').locator('li').first();
