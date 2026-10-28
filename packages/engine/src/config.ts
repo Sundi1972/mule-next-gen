@@ -1095,6 +1095,11 @@ export const SIM_TARGETS = {
   broke: { below: 100, months: 3 },
   /** Ended in Collapse: in this share of games or fewer. */
   collapsed: 0.1,
+  /**
+   * `--air <band>` also counts each month's events as if every player's plots had caused this many air points last
+   * month (spec C5's measuring assumption). Measure only: no check reads it, and the games play on unforced.
+   */
+  forcedAirPoints: 5,
 };
 
 /** The language model that decides for Smart AI seats, and its limits. */
