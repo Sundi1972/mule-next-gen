@@ -92,10 +92,8 @@ async function main(): Promise<void> {
           await lena.page.getByTestId('promise-run').filter({ hasText: `Run, promising “Tax no higher than ${LENA_CAP}%”` }).click({ timeout: PRESS_MS });
         })(),
         (async () => {
-          // A Sheriff run is one tap and carries no promise.
-          await ossa.page.getByTestId('run-sheriff').click({ timeout: PRESS_MS });
-          await ossa.page.getByTestId('running').filter({ hasText: 'You run for Sheriff;' }).waitFor({ timeout: PRESS_MS });
-          check(JSON.stringify(ossa.runs) === JSON.stringify([{ type: 'run', office: 'sheriff' }]), `B-AC-6 (negative): a Sheriff run sends no promise, got ${JSON.stringify(ossa.runs)}`);
+          // Only the Governor is elected (T-AC-62): no Sheriff run to offer.
+          check((await ossa.page.getByTestId('run-sheriff').count()) === 0, 'T-AC-62: the phone offers no Sheriff run');
           // A first look at the picker, then Cancel: nothing is sent.
           await ossa.page.getByTestId('run-governor').click({ timeout: PRESS_MS });
           const pick = ossa.page.getByTestId('promise-pick');
@@ -103,8 +101,8 @@ async function main(): Promise<void> {
           check(await ossa.page.getByTestId('promise-run').isDisabled(), 'B-AC-6: "Run" waits until a promise is chosen');
           await ossa.page.getByTestId('promise-cancel').click({ timeout: PRESS_MS });
           await pick.waitFor({ state: 'hidden', timeout: PRESS_MS });
-          check(ossa.runs.length === 1, `B-AC-6: Cancel sends nothing, got ${JSON.stringify(ossa.runs)}`);
-          // Then she runs for Governor instead, holding the tax.
+          check(ossa.runs.length === 0, `B-AC-6: Cancel sends nothing, got ${JSON.stringify(ossa.runs)}`);
+          // Then she runs for Governor, holding the tax.
           await ossa.page.getByTestId('run-governor').click({ timeout: PRESS_MS });
           await ossa.page.getByTestId('promise-hold').click({ timeout: PRESS_MS });
           await ossa.page.getByTestId('promise-run').filter({ hasText: 'Run, promising “Hold the tax”' }).click({ timeout: PRESS_MS });
@@ -113,11 +111,11 @@ async function main(): Promise<void> {
       const LENA_PROMISE: TaxPromise = { kind: 'cap', percent: LENA_CAP };
       const OSSA_PROMISE: TaxPromise = { kind: 'hold' };
       check(JSON.stringify(lena.runs) === JSON.stringify([{ type: 'run', office: 'governor', promise: LENA_PROMISE }]), `B-AC-6: Lena's phone sends exactly one Governor run with her promise, got ${JSON.stringify(lena.runs)}`);
-      check(JSON.stringify(ossa.runs.slice(1)) === JSON.stringify([{ type: 'run', office: 'governor', promise: OSSA_PROMISE }]), `B-AC-6: Ossa's phone then sends one Governor run with her promise, got ${JSON.stringify(ossa.runs)}`);
+      check(JSON.stringify(ossa.runs) === JSON.stringify([{ type: 'run', office: 'governor', promise: OSSA_PROMISE }]), `B-AC-6: Ossa's phone then sends one Governor run with her promise, got ${JSON.stringify(ossa.runs)}`);
       await lena.page.getByTestId('running').filter({ hasText: `You run for Governor, promising “Tax no higher than ${LENA_CAP}%”` }).waitFor({ timeout: PRESS_MS });
       await ossa.page.getByTestId('running').filter({ hasText: 'You run for Governor, promising “Hold the tax”' }).waitFor({ timeout: PRESS_MS });
       await everyone(phones, (p) => p.page.getByTestId('candidates').filter({ hasText: lena.name }).filter({ hasText: ossa.name }).waitFor({ timeout: PRESS_MS }));
-      const running = truth.board().politics!.candidates.governor;
+      const running = truth.board().politics!.candidates.governor!;
       const aiIds = truth.board().players.filter((p) => p.isAi).map((p) => p.id);
       check(running.includes(lenaId) && running.includes(ossaId) && running.every((id) => id === lenaId || id === ossaId || aiIds.includes(id)), `B-AC-1: the server has both humans running for Governor, and nobody else but the AI seat, got ${running.join(', ')}`);
       check(JSON.stringify(promises()[lenaId]) === JSON.stringify(LENA_PROMISE) && JSON.stringify(promises()[ossaId]) === JSON.stringify(OSSA_PROMISE), `B-AC-6: the server holds Lena's and Ossa's promises, got ${JSON.stringify(promises())}`);
@@ -130,16 +128,15 @@ async function main(): Promise<void> {
       // Her row is named for her, then her promise.
       await ballot.getByRole('radio', { name: new RegExp(`^${lena.name}\\b`) }).check({ timeout: within(POLITICS.ai.actMs[1]) });
     });
-    // B-AC-6: every phone's ballot quotes each Governor candidate's promise, the AI seat's too if it runs; no Sheriff candidate has one.
-    const { governor: govs, sheriff: sheriffs } = truth.state().politics!.election!.candidates;
+    // B-AC-6: every phone's ballot quotes each Governor candidate's promise, the AI seat's too if it runs.
+    const govs = truth.state().politics!.election!.candidates.governor;
     await everyone(phones, async (p) => {
       for (const id of govs) {
         const line = (await p.page.getByTestId(`promise-${id}`).innerText({ timeout: PRESS_MS })).trim();
         check(line === `“${said(promises()[id]!)}”`, `B-AC-6: ${p.name}'s ballot quotes ${id}'s promise "${said(promises()[id]!)}", got "${line}"`);
       }
-      for (const id of sheriffs) check((await p.page.getByTestId(`promise-${id}`).count()) === 0, `B-AC-6 (negative): ${p.name}'s ballot has no promise line for Sheriff candidate ${id}`);
     });
-    console.log(`✓ B-AC-6: both phones' ballots quote ${govs.map((id) => `"${said(promises()[id]!)}"`).join(', ')} under the Governor candidates; ${sheriffs.length} Sheriff candidate(s), no promise line`);
+    console.log(`✓ B-AC-6: both phones' ballots quote ${govs.map((id) => `"${said(promises()[id]!)}"`).join(', ')} under the Governor candidates`);
     const ballots = () => truth.state().politics!.election!.ballots;
     await untilServer(lena.page, () => (ballots()[lenaId]?.governor === lenaId && ballots()[ossaId]?.governor === lenaId) || null, 'B-AC-1: the server holds both humans\' ballots for Lena');
     // The AI seat may vote before or after the humans, so a phone shows 2 or 3 of 3.
@@ -166,13 +163,13 @@ async function main(): Promise<void> {
       const name = p === lena ? 'You' : lena.name;
       check(row && row[1] === name && Number(row[2]) === elected[0]!.votes, `B-AC-1: ${p.name}'s phone names ${name} Governor with ${elected[0]!.votes} votes, as the TV does, in the same tick: "${text}"`);
     }
-    // B-AC-6: the TV's result quotes Lena's promise under her name; a Sheriff row, once the ceremony reaches it, quotes nothing.
+    // B-AC-6: the TV's result quotes Lena's promise under her name.
     const lenaRow = reveal.tv.find((r) => r.id === lenaId)!;
     check(lenaRow.text.includes(`${lena.name}“Tax no higher than ${LENA_CAP}%”`), `B-AC-6: the TV's result row for Lena quotes her promise, got "${lenaRow.text}"`);
-    await tv.locator('[data-testid^="result-sheriff-"]').first().waitFor({ timeout: within(ELECTION_WAIT_MS) });
-    const sheriffRows = await tv.locator('[data-testid^="result-sheriff-"]').allInnerTexts();
-    check(sheriffRows.length > 0 && sheriffRows.every((t) => !/[“”]/.test(t)), `B-AC-6 (negative): no Sheriff result row on the TV quotes a promise, got ${JSON.stringify(sheriffRows)}`);
-    console.log(`✓ B-AC-6: the TV's result shows "${lenaRow.text}"; the Sheriff row(s) carry no promise`);
+    // T-AC-62: only the Governor is elected, so no screen names a Sheriff.
+    check((await tv.locator('[data-testid^="result-sheriff-"]').count()) === 0, 'T-AC-62: the TV shows no Sheriff');
+    check(![reveal.lena, reveal.ossa].some((text) => text.includes('Sheriff')), `T-AC-62: no phone's result names a Sheriff: ${JSON.stringify([reveal.lena, reveal.ossa])}`);
+    console.log(`✓ B-AC-6: the TV's result shows "${lenaRow.text}"; T-AC-62: no Sheriff on any screen`);
     console.log(`✓ B-AC-1: both humans run, vote, and see the same result at the same moment: the intro, then Lena Governor with ${expectedVotes} votes on the TV and both phones, first seen at ticks ${reveal.firstTicks.join(', ')}`);
 
     // The winner's phone opens the tax desk; the other phone has no Governor's desk.

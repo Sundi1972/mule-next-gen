@@ -592,15 +592,15 @@ export const TAX = {
 };
 
 /**
- * Colony politics: the election of a Governor and a Sheriff, the vote weight,
+ * Colony politics: the election of the offices in POLITICS.offices, the vote weight,
  * the Governor's sales tax and the offices' pay. No decision has a clock; only
  * the reveal ceremony does, in milliseconds of game time, stepped like the land auction.
  */
 export const POLITICS = {
   /** Months whose planning phase opens with an election; a term runs until the next one. */
   electionMonths: [1, 4, 7, 10],
-  /** The offices elected, in the order the ceremony reveals them. */
-  offices: ['governor', 'sheriff'] as Office[],
+  /** The offices elected, in the order the ceremony reveals them; the Sheriff returns with slice 4's powers. */
+  offices: ['governor'] as Office[],
   /** A Governor who has served this many terms in a row may not run for Governor again until someone else has held it. */
   maxGovernorTermsInRow: 2,
   /** The reveal ceremony, per office. Placeholders until WS1 and Heiko set them. */
@@ -649,7 +649,7 @@ export const POLITICS = {
     taxTarget: { trader: 5, cautious: 4, aggressive: 8, saboteur: 10 } satisfies Record<AiPersonaId, number>,
     /** Whole percent a Governor adds when the colony fund is low. */
     taxFundBump: 2,
-    /** The fund is low under this many months of both offices' pay. */
+    /** The fund is low under this many months of the elected offices' pay. */
     fundMonths: 3,
   },
 };

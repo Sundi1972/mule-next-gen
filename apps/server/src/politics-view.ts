@@ -19,6 +19,11 @@ import type { ElectionView, MyPoliticsView, OfficeReveal, PoliticsView } from '@
 
 const percent = (rate: number) => Math.round(rate * PERCENT);
 
+/** One entry per elected office, in POLITICS.offices order: a Governor-only table sends no Sheriff entry. */
+function perOffice<T>(value: (office: Office) => T): Partial<Record<Office, T>> {
+  return Object.fromEntries(POLITICS.offices.map((office) => [office, value(office)]));
+}
+
 /**
  * Each office's result as far as the ceremony has shown it, the same on every screen: its totals from its bars
  * step, its winner and how from its winner step; every office once the election is over. See WS7 spec RULE-64.
@@ -55,12 +60,12 @@ export function politicsView(state: GameState): PoliticsView | null {
     baron: p.baron,
     tax: { percent: percent(state.treasury.salesTax), start: percent(p.taxAtStart), low, high },
     fund: state.treasury.money,
-    pay: { governor: POLITICS.pay.governor, sheriff: POLITICS.pay.sheriff },
+    pay: perOffice((office) => POLITICS.pay[office]),
     weights: state.players.map(({ id }) => {
       const { total, parts } = voteWeight(state, id);
       return { id, votes: total, parts: { ...parts } };
     }),
-    candidates: { governor: [...p.candidates.governor], sheriff: [...p.candidates.sheriff] },
+    candidates: perOffice((office) => [...p.candidates[office]]),
     promises: structuredClone(p.promises),
     election: electionView(state),
   };
@@ -75,7 +80,7 @@ function electionView(state: GameState): ElectionView | null {
   return {
     stage: e.stage,
     ceremony: c ? { office: c.office, step: c.step, seconds: Math.max(0, c.clockMs / 1_000), total: ceremonyStepMs(c.step) / 1_000 } : null,
-    candidates: { governor: [...e.candidates.governor], sheriff: [...e.candidates.sheriff] },
+    candidates: perOffice((office) => [...e.candidates[office]]),
     promises: structuredClone(e.promises),
     voted: Object.keys(e.ballots),
     done: state.players.filter((p) => isElectionDone(state, p.id)).map((p) => p.id),
@@ -90,10 +95,11 @@ export function myPoliticsView(state: GameState, playerId: string): MyPoliticsVi
   if (!p) return null;
   const e = p.election;
   const running = e && (e.stage === 'ballot' || e.stage === 'ceremony') ? e.candidates : p.candidates;
+  const may = canRun(state, playerId);
   return {
     running: POLITICS.offices.find((o) => running[o].includes(playerId)) ?? null,
     ballot: { ...e?.ballots[playerId] },
-    canRun: canRun(state, playerId),
+    canRun: perOffice((office) => may[office]),
   };
 }
 

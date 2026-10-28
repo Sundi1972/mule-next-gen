@@ -1,9 +1,10 @@
+import { POLITICS } from '@mule/engine';
 import type { MuleView, PoliticsView } from '@mule/protocol';
 import { fmt } from '../../../game/derive';
 import { usePhoneGame } from '../../game';
 import { ColonyDesk } from '../desks';
 import { Section, Who } from './parts';
-import { change } from './words';
+import { change, OFFICE_NAME } from './words';
 
 /** WS6's Colony desk, unchanged, and under it the colony's offices and tax while the table plays politics. */
 export function ColonyWithFacts() {
@@ -27,7 +28,7 @@ function ColonyFacts({ view, politics }: { view: MuleView; politics: PoliticsVie
           Sales tax {tax.percent}%{governor && ` (set by ${name(governor)}, ${change(tax.percent - tax.start)})`} · colony fund {fmt(politics.fund)} cr
         </li>
         <li>
-          From the fund each month: Governor {politics.pay.governor} cr, Sheriff {politics.pay.sheriff} cr
+          From the fund each month: {POLITICS.offices.map((office) => `${OFFICE_NAME[office]} ${politics.pay[office]} cr`).join(', ')}
         </li>
         {baron && (
           <li data-testid="land-baron">

@@ -28,7 +28,8 @@ export function nextTax(current: number, target: number, fund: number, bounds: {
   const { maxStep } = POLITICS.tax;
   const { taxFundBump, fundMonths } = POLITICS.ai;
   const step = Math.max(-maxStep, Math.min(maxStep, target - current));
-  const fundLow = month > 1 && fund < fundMonths * (POLITICS.pay.governor + POLITICS.pay.sheriff);
+  const officesPay = POLITICS.offices.reduce((sum, office) => sum + POLITICS.pay[office], 0);
+  const fundLow = month > 1 && fund < fundMonths * officesPay;
   return Math.max(bounds.low, Math.min(bounds.high, current + step + (fundLow ? taxFundBump : 0)));
 }
 

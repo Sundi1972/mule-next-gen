@@ -2,7 +2,7 @@ import { POLITICS } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { Creature, cx, SLOT_COLOR } from '@mule/ui';
 import { slotOf } from '../game/derive';
-import { howWon, OFFICE_NAME, promiseText } from '../phone/hub/politics/words';
+import { howWon, OFFICE_NAME, officeNames, promiseText } from '../phone/hub/politics/words';
 import { TvHeader } from './TableApp';
 
 /**
@@ -26,7 +26,7 @@ export function TvElection({ game }: { game: MuleView }) {
           <span data-num className="font-display text-[160px] font-bold leading-none text-holo" style={{ textShadow: '0 0 40px var(--color-holo-line)' }}>
             {Math.ceil(election.ceremony?.seconds ?? 0)}
           </span>
-          <span className="text-2xl text-ink-2">{POLITICS.offices.map((office) => OFFICE_NAME[office]).join(', then ')}, revealed on every screen together</span>
+          <span className="text-2xl text-ink-2">{officeNames().join(', then ')}, revealed on every screen together</span>
         </div>
       ) : (
         <div className="grid flex-1 grid-cols-2 gap-8" data-testid="ballot-reveal">

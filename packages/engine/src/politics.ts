@@ -1,6 +1,6 @@
 /**
- * Colony politics: the Land Baron, elections for Governor and Sheriff, vote
- * weight, the Governor's sales tax and the offices' pay. The only writer of
+ * Colony politics: the Land Baron, elections for the offices in POLITICS.offices,
+ * vote weight, the Governor's sales tax and the offices' pay. The only writer of
  * GameState.politics. A tie nothing else breaks is drawn by lot on its own seeded
  * stream, so a replay from the seed draws the same and no other draw moves.
  */
@@ -13,6 +13,8 @@ import type { CanRun, CeremonyStep, Election, ElectionResult, GameState, Office,
 
 /** Read-only all the way down: an election read before edit() may be shared with a what-if copy. */
 type Shared<T> = { readonly [K in keyof T]: T[K] extends object ? Shared<T[K]> : T[K] };
+
+const TITLE: Record<Office, string> = { governor: 'Governor', sheriff: 'Sheriff' };
 
 /** Nobody running for anything: the record has a list per Office, POLITICS.offices says which are elected. */
 function noCandidates(): Record<Office, string[]> {
@@ -111,13 +113,14 @@ export function canRun(state: GameState, playerId: string): Record<Office, CanRu
   if (state.phase !== 'planning' || !state.politics || candidacyClosed(state)) return { governor: 'closed', sheriff: 'closed' };
   const run = state.politics.governorRun;
   const termLimit = run?.id === id && run.terms >= POLITICS.maxGovernorTermsInRow;
-  return { governor: termLimit ? 'termLimit' : true, sheriff: true };
+  const may = (office: Office): CanRun => (!POLITICS.offices.includes(office) ? 'notElected' : office === 'governor' && termLimit ? 'termLimit' : true);
+  return { governor: may('governor'), sheriff: may('sheriff') };
 }
 
-const REFUSAL = {
-  closed: 'Candidates are closed until the result',
-  termLimit: `${POLITICS.maxGovernorTermsInRow} Governor terms in a row`,
-} as const;
+function refusal(why: Exclude<CanRun, true>, office: Office | null): string {
+  if (why === 'notElected') return `The ${TITLE[office!]} is not elected yet`;
+  return why === 'closed' ? 'Candidates are closed until the result' : `${POLITICS.maxGovernorTermsInRow} Governor terms in a row`;
+}
 
 /** The promise a run carries (null for Sheriff), rebuilt in its closed shape so nothing else rides along. See WS7 spec RULE-10. */
 function checkPromise(office: Office, promise: TaxPromise | undefined): TaxPromise | null {
@@ -148,7 +151,7 @@ export function runFor(state: GameState, playerId: string, office: Office | null
   if (state.phase !== 'planning') throw new RuleError('You can run for office in planning');
   const allowed = canRun(state, playerId);
   const why = office === null ? (candidacyClosed(state) ? 'closed' : true) : allowed[office];
-  if (why !== true) throw new RuleError(REFUSAL[why]);
+  if (why !== true) throw new RuleError(refusal(why, office));
   const carried = office ? checkPromise(office, promise) : null;
   const p = edit(state);
   // Running again for the same office keeps the place in the list.
@@ -364,13 +367,13 @@ export function setSalesTax(state: GameState, playerId: string, percent: number)
   state.treasury.salesTax = percent / PERCENT;
 }
 
-/** At upkeep: the Governor's pay, then the Sheriff's, each only as far as the colony fund reaches. See WS7 spec RULE-7. */
+/** At upkeep: each elected office's pay, in POLITICS.offices order, each only as far as the colony fund reaches. See WS7 spec RULE-7. */
 export function payOffices(state: GameState): void {
   if (!state.politics) return;
-  const { governor, sheriff } = state.politics;
-  for (const [id, pay] of [[governor, POLITICS.pay.governor], [sheriff, POLITICS.pay.sheriff]] as const) {
+  for (const office of POLITICS.offices) {
+    const id = state.politics[office];
     if (id === null) continue;
-    const paid = Math.max(0, Math.min(state.treasury.money, pay));
+    const paid = Math.max(0, Math.min(state.treasury.money, POLITICS.pay[office]));
     state.treasury.money -= paid;
     player(state, id).money += paid;
   }

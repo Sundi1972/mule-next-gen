@@ -47,7 +47,7 @@ function Election({ election, mine }: { election: ElectionView; mine: MyPolitics
           <div className="grid grid-cols-2 gap-1.5" data-testid="run">
             {/* Governor asks for a promise first; Sheriff stays one tap. */}
             {POLITICS.offices.map((office) => {
-              const can = mine.canRun[office];
+              const can = mine.canRun[office] ?? 'notElected';
               const label = mine.running && mine.running !== office ? `Run for ${OFFICE_NAME[office]} instead` : `Run for ${OFFICE_NAME[office]}`;
               return (
                 <Button
@@ -86,9 +86,9 @@ function Election({ election, mine }: { election: ElectionView; mine: MyPolitics
             {POLITICS.offices.map((office) => (
               <li key={office}>
                 {OFFICE_NAME[office]}:{' '}
-                {candidacy.candidates[office].length === 0
+                {(candidacy.candidates[office] ?? []).length === 0
                   ? 'nobody yet'
-                  : candidacy.candidates[office].map((id, i) => (
+                  : candidacy.candidates[office]!.map((id, i) => (
                       <span key={id}>
                         {i > 0 && ', '}
                         <Who view={view} id={id} size={14} />
@@ -102,11 +102,11 @@ function Election({ election, mine }: { election: ElectionView; mine: MyPolitics
       ) : (
         <>
           {election.stage === 'ballot' &&
-            POLITICS.offices.filter((office) => election.candidates[office].length >= 2).map((office) => (
+            POLITICS.offices.filter((office) => (election.candidates[office]?.length ?? 0) >= 2).map((office) => (
               <Ballot
                 key={office}
                 office={office}
-                cands={election.candidates[office]}
+                cands={election.candidates[office]!}
                 promises={office === 'governor' ? election.promises : {}}
                 pick={mine.ballot[office] ?? null}
                 onPick={(candidate) => client.intent({ type: 'vote', office, candidate })}

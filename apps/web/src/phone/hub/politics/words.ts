@@ -2,9 +2,21 @@ import { POLITICS, type CanRun, type ElectionHow, type Office, type TaxPromise }
 
 export const OFFICE_NAME: Record<Office, string> = { governor: 'Governor', sheriff: 'Sheriff' };
 
+/** The elected offices' names, in POLITICS.offices order. */
+export function officeNames(): string[] {
+  return POLITICS.offices.map((office) => OFFICE_NAME[office]);
+}
+
 /** Why the run button for an office is refused, from the view's canRun. */
 export function whyNot(reason: Exclude<CanRun, true>): string {
-  return reason === 'closed' ? 'Candidates are closed until the result' : `${POLITICS.maxGovernorTermsInRow} Governor terms in a row`;
+  switch (reason) {
+    case 'closed':
+      return 'Candidates are closed until the result';
+    case 'termLimit':
+      return `${POLITICS.maxGovernorTermsInRow} Governor terms in a row`;
+    case 'notElected':
+      return 'Not elected yet';
+  }
 }
 
 /** A Governor candidate's tax promise, as the ballot and the TV quote it. */

@@ -140,7 +140,7 @@ describe('politics over the wire', () => {
     const mine = await phone.waitForGame((g) => g.me?.politics?.running === 'governor');
     const me = mine.me!.id;
     expect(mine.politics!.promises).toEqual({ [me]: CAP_8 });
-    const tv = await board((g) => g.politics?.candidates.governor.includes(me) ?? false);
+    const tv = await board((g) => g.politics?.candidates.governor?.includes(me) ?? false);
     expect(tv.me).toBeNull();
     expect(tv.politics!.promises).toEqual({ [me]: CAP_8 });
 
@@ -767,7 +767,7 @@ describe('AI seats in the election', () => {
         const lasted = g.ctx.now() - enteredAt;
         if (stage === 'announce') {
           expect(lasted, `seed ${seed}: announce ended once every seat was Done`).toBeLessThanOrEqual(within);
-          aiRan += [...now.candidates.governor, ...now.candidates.sheriff].filter((id) => aiIds.includes(id)).length;
+          aiRan += POLITICS.offices.flatMap((o) => now.candidates[o] ?? []).filter((id) => aiIds.includes(id)).length;
         }
         if (stage === 'ballot') {
           ballots++;
@@ -915,7 +915,7 @@ function expectBoardKeys(board: MuleView) {
   // C12: public like the candidacy (RULE-10); a promise is only its closed shape, keyed by a Governor candidate.
   for (const running of [politics, e]) {
     expect(keysOf(running.candidates), NEW_FIELD).toEqual(['governor', 'sheriff']);
-    expect(keysOf(running.promises).every((id) => running.candidates.governor.includes(id)), 'promises name Governor candidates').toBe(true);
+    expect(keysOf(running.promises).every((id) => running.candidates.governor?.includes(id)), 'promises name Governor candidates').toBe(true);
     for (const promise of Object.values(running.promises)) expect(keysOf(promise), NEW_FIELD).toEqual(promise.kind === 'cap' ? ['kind', 'percent'] : ['kind']);
   }
   for (const office of keysOf(e.result)) expect(POLITICS.offices, NEW_FIELD).toContain(office);
