@@ -48,6 +48,11 @@
 - **T-AC-7 "half a Mollox's time":** read `1 / SPECIES_PERK.zipwingSpeed` of it. RULE-5 at AM-13 set the Zipwing's pace to 1.5, and Heiko's later ruling on ws1-balance (ba1091c) sets it to 1.25. Assert against `walkSeconds`, never a literal.
 - **B-AC-11 "a tap while walking is ignored":** the server refuses it with `RuleError('Still walking')` and changes nothing. That is "ignored" at the server's state, where the AC observes it. Whether the phone shows the message is WS6-C14's call.
 - **`PHASES.developmentGraceMs` goes** (PM OK, 2026-10-28): the phase ends with the one visible bar.
+- **Development ends early only when no colonist is busy** (the lead's ruling, review round 1 at 1a945b1).
+  - The rule: every human seat is away, Ready or done, **and** no colonist is walking (the pub walk included) or assaying.
+  - Each arrival re-runs the check.
+  - Why: without it, a phone that drops, or a player who presses Ready mid-walk, ended development and dropped their tapped install in flight (measured).
+  - At the clock's end, walks in flight are still dropped (FM-pub-late).
 
 ## Contract (locked before Task 4 consumes it; WS6-C14 is its consumer)
 
@@ -75,6 +80,9 @@ Times are the server's ms, like `phaseEndsAt`. `MyView.devEndsAt` keeps its name
   - `apps/server/test/handoff.test.ts` (WS4), if it breaks;
   - `apps/server/test/store-view.test.ts` (WS6's B-AC-9), timing only, if it breaks;
   - `apps/web/e2e/store-steps.ts::gameOf` and `giveStoreTime` (WS6's hunk in WS4's e2e). The private `devEndsAt` map becomes one number: `game.devEndsAt = game.ctx.now() + STORE_WALK_SECONDS * 1_000`, and the check `instanceof Map` becomes `typeof … === 'number'`.
+  - `apps/web/test/{derive,shell}.test.ts` (WS4) and `politics-desks.test.ts` (WS7): `colonist: null` in each PlayerView fixture (0e9eba8; PM-recorded).
+  - `apps/web/e2e/table-steps.ts` (WS4): the `Game` type's `devEndsAt` and `turnLeft` read the one clock (9110ad6). This file arrived from trunk after the plan was written.
+  - Task 6's named edits are listed in its Step 6.3.
 - **`must_not_edit`:**
   - `packages/engine/src/dev-walk.ts` and `DEV_WALK` (WS1's, §9);
   - `packages/ai/**` (WS1 and WS2; the hands already take `walk?: { at, busy }` in #109);
@@ -248,7 +256,13 @@ The PM put it in this PR because it changes the same `PHASE_MS` table. WS6 build
 - [ ] `pnpm typecheck` · `pnpm test` · `MULE_TIER2=1 pnpm --filter @mule/server exec vitest run test/land-auction-sim.test.ts` are green.
 - [ ] The web build, then `MULE_E2E_SEED=1 pnpm --filter @mule/web e2e:core` and `pnpm --filter @mule/web e2e:regression`, are green. This PR lands on trunk, so Tier 2 runs.
 - [ ] `trace-check` over the branch is PASS.
-- [ ] The named edits' owners have the SHAs (WS4: phase-scale and broadcast; WS6: store-steps, and store-view if touched). WS6 has OK'd the Contract.
+- [ ] The named edits' owners have the SHAs, and their OK where an assertion was restated (Task 6):
+  - WS4: phase-scale, broadcast if touched, the derive and shell fixtures, table-steps;
+  - WS6: store-steps, and store-view if touched;
+  - WS7: the politics-desks fixture.
+
+  WS6 has OK'd the Contract.
+- [ ] Review round 1's findings are closed: the off-map crash, the early end with walks in flight, and the M1, M2, M4, M5, M6, M7/M8 and M18 survivors. Each closes with its strengthened row red under its mutant.
 - [ ] A code review has come back clean, with a mutation sweep on the arrival queue, the busy check and the unit helper.
 - [ ] The PR targets `ws1-balance` while #109 is open. It's retargeted to `feat/strategist` the moment #109 merges, then the PM merges it next, with Heiko's OK.
 
