@@ -20,20 +20,21 @@ export interface EventLivingMapProps {
    * tapped again, the next event.
    */
   onSkip?: (to: number) => void;
+  /**
+   * A phone with a TV in the room (the gallery's PhoneShow): the map never plays the event; it only marks the plots of
+   * `focusSlot`, and the light card in the rail does the rest.
+   */
+  light?: boolean;
   className?: string;
 }
 
 /**
  * Living weather over HoloMap, inside <EventShow>. The map box is a container, so every layer sizes against its
  * width; the camera moves the map inside the box, and the cards sit over the box, outside the camera.
- *
- * A phone at the TV's pace is a phone with a TV in the room (the gallery's PhoneShow): it never plays the event, only
- * marks the player's own hit plots; the light card in its rail does the rest.
  */
-export function EventLivingMap({ size, focusSlot, bars, over, onSkip, className }: EventLivingMapProps) {
+export function EventLivingMap({ size, focusSlot, bars, over, onSkip, light = false, className }: EventLivingMapProps) {
   const frame = useShow();
   const { tiles, grid, t, reduced, s } = frame;
-  const light = size === 'phone' && s.mode === 'tv';
   const living = livingAt(frame);
   const seg = light ? null : living.seg;
   const view = light ? undefined : living.view;

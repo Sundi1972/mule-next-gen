@@ -209,7 +209,11 @@ export function plotStrikes(segments: EventSegment[], plot: ShowPlot, reduced: b
   );
 }
 
-/** What a plot makes at `t`: after the last strike that has landed, or what it made. */
+/**
+ * What a plot makes at `t`: after the last strike that has landed, or what it made. Taking the last landed strike's
+ * `after` relies on strikes landing in fired order: segments run back to back, and every hit is clamped to its
+ * segment's settle, which is never past its end.
+ */
 export function plotUnitsAt(segments: EventSegment[], plot: ShowPlot, t: number, reduced: boolean, grid: ShowGrid): number {
   return plotStrikes(segments, plot, reduced, grid)
     .filter((s) => t >= s.at)
