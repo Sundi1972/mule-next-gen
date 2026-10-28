@@ -16,12 +16,14 @@ import {
   electionDone,
   DEVELOPMENT,
   fitFilter,
+  foodShare,
   GAME,
   GOODS,
   goodsMarket,
   type AiLevelId,
   grantDone,
   hasAnalysed,
+  hungerPace,
   installMule,
   list as listLot,
   litPlot,
@@ -36,6 +38,7 @@ import {
   outfitCostFor,
   outfitMule,
   PHASES,
+  playerEventReason,
   plotAt,
   RuleError,
   runFor,
@@ -48,6 +51,7 @@ import {
   shipInPort,
   shipLine,
   shipPrice,
+  sickPace,
   SPECIES,
   type Species,
   stepAuction,
@@ -969,6 +973,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           ready: isReady(s.id),
           doneDeveloping: p.doneDeveloping,
           colonist: this.colonistView(s.id),
+          condition:
+            state.phase === 'development'
+              ? {
+                  foodShare: foodShare(state, s.id),
+                  sick: p.sick,
+                  sickBecause: p.sick ? playerEventReason(state, 'sickness', 'development', s.id) : null,
+                  conditionPace: hungerPace(state, s.id) * sickPace(state, s.id),
+                }
+              : null,
         };
       }),
       me: me

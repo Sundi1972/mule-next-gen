@@ -73,6 +73,16 @@ export interface PlayerView {
   doneDeveloping: boolean;
   /** Where their colonist is in development, public like every place; null outside development. */
   colonist: ColonistView | null;
+  /** How hunger and sickness slow this colonist, during development; null otherwise. Public: every screen shows it. */
+  condition: {
+    /** 0..1 of the month's Food held (engine foodShare). */
+    foodShare: number;
+    sick: boolean;
+    /** Why it is sick (engine playerEventReason): the air, its own pollution, or plain chance; null when well. */
+    sickBecause: 'air' | 'pollution' | 'chance' | null;
+    /** hunger × sickness, 1 is normal; species is not in it (engine pace() adds it). */
+    conditionPace: number;
+  } | null;
 }
 
 /** A colonist in development. Times are the server's epoch ms, like phaseEndsAt. */

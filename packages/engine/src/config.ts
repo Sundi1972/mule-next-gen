@@ -303,6 +303,13 @@ export const DEV_WALK = {
   hungerPaceMin: 0.2,
   /** Share of its pace a sick colonist walks at (EVENTS.player.sickness rolled, and no Medicine held). */
   sickPace: 0.5,
+  /**
+   * The hunger levels the screens show, as shares of the month's Food missing (0 fed, 1 none): peckish below
+   * hungryFrom, hungry from it, starving from starvingFrom. Display bands only: the pace itself is continuous.
+   * Player.hungry is any shortfall; these levels are only the words on screen.
+   * WS6's thresholds, in the variant-B mock Heiko approved 2026-10-28 (design/mocks/ws6-ux at bb4bc11).
+   */
+  hungerLevels: { hungryFrom: 0.3, starvingFrom: 0.7 },
 };
 
 /** What pollutes, and by how much. From the design doc's Pollution tab. */
