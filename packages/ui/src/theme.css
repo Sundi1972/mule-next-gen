@@ -258,7 +258,8 @@
   }
 }
 
-/* The store: the room the guide points at breathes. */
+/* The store: the room the guide points at breathes; a walking colonist waddles. */
+@keyframes store-waddle { 0%, 100% { transform: translateY(0) rotate(-5deg); } 50% { transform: translateY(-3px) rotate(5deg); } }
 @keyframes store-beckon { 0%, 100% { box-shadow: 0 0 0 0 var(--color-holo-line); } 50% { box-shadow: 0 0 0 6px var(--color-holo-faint), var(--shadow-glow); } }
 
 /* The MULE character: it breathes and blinks standing, bobs and swings its legs walking, its pod pulses at work. */
