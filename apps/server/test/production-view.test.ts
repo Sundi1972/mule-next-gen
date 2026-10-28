@@ -51,6 +51,7 @@ function knownMonth(state: GameState) {
     plots: [{ index: plant, order: 0, good: 'energy', delta: -2 }],
     sign: 'bad',
     when: 'afterProduction',
+    phase: 'production',
   };
   const storm: MonthEvent = {
     key: 'dustStorm',
@@ -63,6 +64,7 @@ function knownMonth(state: GameState) {
     plots: [{ index: farm, order: 0, good: 'food', delta: -1 }],
     sign: 'bad',
     when: 'afterProduction',
+    phase: 'production',
   };
   const report = state.history.at(-1)!;
   report.lines = lines;

@@ -126,6 +126,7 @@ export function buildEvent(state: GameState, key: EventKey, rng: Rng): MonthEven
     ...(player ? { player } : {}),
     sign: shape.sign,
     when: 'afterProduction',
+    phase: 'production',
   };
 }
 

@@ -226,6 +226,8 @@ export interface MonthEvent {
   player?: string;
   sign: 'good' | 'bad' | 'mixed';
   when: 'afterProduction';
+  /** The phase whose roll produced this event. */
+  phase: Phase;
 }
 
 export interface EventWarning {
