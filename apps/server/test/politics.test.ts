@@ -847,6 +847,14 @@ describe('the politics view', () => {
     expect(g.game.viewFor(null).phase).toBe('landGrant');
   });
 
+  it("T-AC-71: with no contested office in announce, there is no ballot to open, so the host's Continue says continued", () => {
+    const g = started();
+    g.game.handle('lena', { type: 'run', office: 'governor', promise: HOLD });
+    g.game.handle('lena', { type: 'ready' });
+    g.game.handle('lena', { type: 'continue' });
+    expect(g.game.viewFor(null).news[0]).toBe('Lena continued without Brix and Ossa.');
+  });
+
   it("HC-2: the board's politics view carries exactly these keys", () => {
     const g = started();
     g.game.handle('lena', { type: 'run', office: 'governor', promise: HOLD });
