@@ -97,12 +97,13 @@ export function paceRule(c: Condition, rule: PaceRule, food?: FoodEaten): string
   return [...(hungerLevel(c, rule) > 0 ? [`${ate}${hungerRule(rule)}`] : []), ...(c.sick ? [`${sickReason(c.sickBecause)} ${sickRule(rule)}`] : [])];
 }
 
-/** The one line that says what your condition does, for the rail and the start card: "Hungry: 60% pace". */
-export function paceLine(c: Condition, rule: PaceRule, food: FoodEaten): { title: string; detail: string; tone: PaceTone } {
+/** The one line that says what your condition does, for the rail and the start card: "Hungry: 60% pace"; short, "60% pace". */
+export function paceLine(c: Condition, rule: PaceRule, food: FoodEaten): { title: string; short: string; detail: string; tone: PaceTone } {
   const level = hungerLevel(c, rule);
-  if (level === 0 && !c.sick) return { title: 'Fed: full pace', detail: `You ate the ${food.need} Food you need.`, tone: 'ok' };
+  if (level === 0 && !c.sick) return { title: 'Fed: full pace', short: 'full pace', detail: `You ate the ${food.need} Food you need.`, tone: 'ok' };
   return {
     title: `${feeling(c, rule)}: ${pct(c.conditionPace)} pace`,
+    short: `${pct(c.conditionPace)} pace`,
     detail: `${paceRule(c, rule, food).join(' ')} Everyone has the same time; you just cover less ground.`,
     tone: level === 3 || c.sick ? 'alert' : 'warn',
   };
@@ -326,9 +327,9 @@ export function ThoughtBubble({
 
 /**
  * The one development clock, the same on every screen: big, labelled as everyone's, red in its last seconds. With
- * `pace`, a small phone's rail shows your pace on the label's line, where YourPace would fall under the fold.
+ * `pace`, a rail under 1100 px shows your pace in short on the label's one line ("Everyone's time · 52% pace").
  */
-export function SharedClock({ seconds, total, size = 'phone', pace }: { seconds: number; total: number; size?: 'phone' | 'tv'; pace?: { title: string; tone: PaceTone } }) {
+export function SharedClock({ seconds, total, size = 'phone', pace }: { seconds: number; total: number; size?: 'phone' | 'tv'; pace?: { short: string; tone: PaceTone } }) {
   const tv = size === 'tv';
   return (
     <div className="flex flex-col gap-1" data-testid="shared-clock">
@@ -336,8 +337,8 @@ export function SharedClock({ seconds, total, size = 'phone', pace }: { seconds:
         <span className="label-caps text-base!">Everyone's time</span>
       ) : pace ? (
         <span className="label-caps text-[10px]!">
-          <span className="@min-[1100px]/shell:hidden">
-            Everyone's time · <span className={TONE_TEXT[pace.tone]}>{pace.title}</span>
+          <span className="block whitespace-nowrap truncate @min-[1100px]/shell:hidden">
+            Everyone's time · <span className={TONE_TEXT[pace.tone]}>{pace.short}</span>
           </span>
           <span className="hidden @min-[1100px]/shell:inline">Everyone's time · one clock</span>
         </span>
@@ -390,7 +391,7 @@ export function PaceList({ rows, rule, columns = 2 }: { rows: PaceRow[]; rule: P
           const alarm = r.condition && (hungerLevel(r.condition, rule) === 3 || r.condition.sick);
           return (
             <li key={r.id} className={cx('flex items-center gap-2', r.done && 'opacity-50')} data-testid={`pace-${r.id}`}>
-              <PlayerMark slot={r.slot} size={wide ? 20 : 18} glow={false} />
+              <PlayerMark slot={r.slot} size={wide ? 20 : 18} glow={wide && !r.done} />
               <span className={cx('min-w-0 flex-1 truncate font-semibold', wide ? 'font-display text-base' : 'text-sm')}>{r.name}</span>
               <div className={cx('relative h-2 shrink-0 overflow-hidden rounded-full bg-raised', wide ? 'w-20' : 'w-12')}>
                 <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: pct(pace), background: SLOT_COLOR[r.slot] }} />

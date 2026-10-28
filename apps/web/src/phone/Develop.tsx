@@ -111,7 +111,7 @@ export function Develop() {
       fill
       rail={
         <>
-          {/* The time first, then what your condition does to it: on a small phone both on the clock, above the fold. */}
+          {/* The clock right after Now, your pace on its label under 1100 px; the header's timer is the one always in view. */}
           {place === 'store' && (
             <>
               <SharedClock seconds={seconds} total={Math.max(me.devSeconds, 1)} pace={paceLine(condition, DEV_WALK, food)} />

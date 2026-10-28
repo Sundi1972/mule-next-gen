@@ -10,7 +10,7 @@ const SIZE = {
   phone: { track: 'h-3.5 rounded-[7px]', fill: 'rounded-[7px]', number: 'w-7 text-xs', label: 'text-[10px]' },
   tv: { track: 'h-5 rounded-[10px]', fill: 'rounded-[10px]', number: 'w-14 text-2xl', label: 'text-lg' },
   'phone-clock': { track: 'h-3.5 rounded-[7px]', fill: 'rounded-[7px]', number: 'w-12 text-lg @min-[1100px]/shell:w-16 @min-[1100px]/shell:text-2xl', label: 'text-[10px]' },
-  'tv-clock': { track: 'h-6 rounded-[12px]', fill: 'rounded-[12px]', number: 'w-28 text-5xl', label: 'text-lg' },
+  'tv-clock': { track: 'h-6 rounded-panel', fill: 'rounded-panel', number: 'w-28 text-5xl', label: 'text-lg' },
 };
 
 /**
