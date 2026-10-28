@@ -172,6 +172,11 @@ export function playerEventChance(state: GameState, key: PlayerEventKey, phase: 
   return Math.min(row.cap, inPhase + row.air[airBand(state.air).name] + polluter);
 }
 
+/** Why a player event would fire for this player: the influence that raised its chance most, or plain chance. */
+export function playerEventReason(state: GameState, key: PlayerEventKey, phase: Phase, id: string): 'air' | 'pollution' | 'chance' {
+  throw new Error('NotImplemented: playerEventReason');
+}
+
 /**
  * Whether a player event fires for this player at the start of this phase: a roll seeded from the game, the month,
  * the event, the phase and the player, so a game replays exactly; never on a what-if copy.

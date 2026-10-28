@@ -10,6 +10,7 @@ import {
   neighbours,
   planEvent,
   playerEventChance,
+  playerEventReason,
   rollPlayerEvent,
   type EventKey,
   type GameState,
@@ -241,6 +242,13 @@ describe('player events', () => {
     // Never above the cap: the biggest polluter in Collapse.
     expect(base + sickness.air.collapse + sickness.pollution.max).toBeGreaterThan(sickness.cap);
     expect(chance(colony(80, [20, 0, 0, 0]), 'p0')).toBeCloseTo(sickness.cap, 9);
+    // Why: the biggest raise in the roll wins, so the screens can say it; with no raise it is plain chance.
+    const why = (air: number, points: number) => playerEventReason(colony(air, [points, 0, 0, 0]), 'sickness', 'development', 'p0');
+    expect(why(0, 5)).toBe('pollution');
+    expect(why(30, 0)).toBe('air');
+    expect(why(30, 20)).toBe('pollution');
+    expect(why(60, 5)).toBe('air');
+    expect(why(0, 0)).toBe('chance');
     // No roll in another phase, and none on a what-if copy.
     expect(playerEventChance(colony(80), 'sickness', 'production', 'p0')).toBe(0);
     expect(rollPlayerEvent(cloneForSim(colony(80, [12, 0, 0, 0])), 'sickness', 'development', 'p0')).toBe(false);
