@@ -98,6 +98,8 @@ export interface PlayerView {
   condition: {
     /** 0..1 of the month's Food held (engine foodShare). */
     foodShare: number;
+    /** The month's Food need of this player's household (engine needsOf), so a screen can say "ate n of m". */
+    foodNeed: number;
     sick: boolean;
     /** Why it is sick (engine playerEventReason): the air, its own pollution, or plain chance; null when well. */
     sickBecause: 'air' | 'pollution' | 'chance' | null;
