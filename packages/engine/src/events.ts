@@ -33,26 +33,6 @@ const COLONY_GOODS: Partial<Record<EventKey, readonly Good[]>> = {
 const pct = (share: number) => `${Math.round(share * 100)}%`; // literal-ok: a share shown as a percentage
 const steps = (a: Tile, b: Tile) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
 
-/**
- * The month's production event, or none: never on a what-if copy, never
- * before EVENTS.firstMonth, otherwise with chance EVENTS.chance one event by
- * weight among those that would hit at least one plot, never last month's.
- * The plots' deltas are 0 here; production fills them in.
- */
-export function planEvent(state: GameState): MonthEvent | null {
-  if (state.whatIf || state.month < EVENTS.firstMonth) return null;
-  const base = (state.seed * 2_654_435_761 + state.month * 40_503) >>> 0; // literal-ok: hash multipliers mixing the seed, not balance
-  const rng = createRng(base);
-  if (!rng.chance(EVENTS.chance)) return null;
-  const last = state.history.at(-1)?.events?.[0]?.key;
-  const keys = (Object.keys(EVENTS.weights) as EventKey[]).filter((k) => k !== last && EVENTS.weights[k] > 0);
-  const options = keys
-    .map((key, i) => buildEvent(state, key, createRng((base + (i + 1) * 0x9e3779b9) >>> 0))) // literal-ok: golden-ratio seed step, not balance
-    .filter((e): e is MonthEvent => e !== null);
-  if (options.length === 0) return null;
-  return options[rng.weighted(options.map((e) => EVENTS.weights[e.key]))]!;
-}
-
 /** What a hit plot makes after the event (never below 0), from what it made before; `first` marks the event's first plot. */
 export function eventOutput(key: EventKey, before: number, first: boolean): number {
   const after = {
@@ -71,8 +51,8 @@ export function eventOutput(key: EventKey, before: number, first: boolean): numb
 }
 
 /**
- * What one event would hit this month, in the order it reaches the plots; null when it would hit nothing. A personal
- * event starts on `player`'s plots when one is given (null when they have none), otherwise on anyone's.
+ * What one event would hit this month, in the order it reaches the plots, each plot's delta 0 until production fills
+ * it in; null when it would hit nothing. A personal event starts on `player`'s plots (null when they have none).
  */
 export function buildEvent(state: GameState, key: EventKey, rng: Rng, player?: string): MonthEvent | null {
   const shape = SHAPE[key];
@@ -104,7 +84,7 @@ export function buildEvent(state: GameState, key: EventKey, rng: Rng, player?: s
     origin = { x: source.x, y: source.y };
     hit = reach(source).sort((a, b) => steps(a, source) - steps(b, source));
   } else {
-    const candidates = (key === 'bumperHarvest' ? working : food).filter((t) => player === undefined || t.owner === player);
+    const candidates = (key === 'bumperHarvest' ? working : food).filter((t) => t.owner === player);
     if (candidates.length === 0) return null;
     const start = rng.pick(candidates);
     origin = { x: start.x, y: start.y };
@@ -237,22 +217,41 @@ export function rollPlayerEvent(state: GameState, key: PlayerEventKey, phase: Ph
 /**
  * The events that fire at the start of a phase, in order: each colony row once in table order, then each player's
  * rows in seat order. A row fires when its seeded roll hits and its event finds a plot to hit, a player row on that
- * player's own plots; never on a what-if copy or before EVENTS.firstMonth.
+ * player's own plots; of a pair in EVENTS.excludes that both fire, the pair's seeded dice keep one. Never on a
+ * what-if copy or before EVENTS.firstMonth.
  */
 export function rollPhase(state: GameState, phase: Phase): MonthEvent[] {
   if (state.whatIf || state.month < EVENTS.firstMonth) return [];
   // Each row lists one phase and rolls once per roller, so none fires twice in a month (RULE-2's onceAMonth).
-  const rolls = [...rowsOf(EVENTS.colony), ...state.players.flatMap((p) => rowsOf(EVENTS.player, p.id))];
-  const fired: MonthEvent[] = [];
+  const colony = roll(state, phase, rowsOf(EVENTS.colony), []);
+  // The excludes pair colony rows, and resolve before any player row reads what fired: a dropped event never fired.
+  const kept = keepOneOfEachPair(state, phase, colony);
+  return roll(state, phase, state.players.flatMap((p) => rowsOf(EVENTS.player, p.id)), kept);
+}
+
+/** `fired`, then each of `rolls` that fires, rolled in order; a later roll reads what fired before it. */
+function roll(state: GameState, phase: Phase, rolls: ReturnType<typeof rowsOf>, fired: readonly MonthEvent[]): MonthEvent[] {
+  const out = [...fired];
   for (const { key, row, player } of rolls) {
-    const chance = eventChance(state, row, phase, { player, firedThisPhase: fired.map((e) => e.key) });
+    const chance = eventChance(state, row, phase, { player, firedThisPhase: out.map((e) => e.key) });
     if (chance <= 0) continue;
     // Its own dice for the roll and the event's shape: a shared rng would let retuning one row move every later one.
     const rng = createRng(seedOf(state.seed, state.month, key, phase, ...(player === undefined ? [] : [player])));
     const event = rng.chance(chance) ? buildEvent(state, key, rng, player) : null;
-    if (event) fired.push(event);
+    if (event) out.push(event);
   }
-  return fired;
+  return out;
+}
+
+/** `fired` without the events EVENTS.excludes drops: of a pair that both fired, its own seeded dice keep one. */
+function keepOneOfEachPair(state: GameState, phase: Phase, fired: MonthEvent[]): MonthEvent[] {
+  let kept = fired;
+  for (const pair of EVENTS.excludes) {
+    if (!pair.every((key) => kept.some((e) => e.key === key))) continue;
+    const keeper = createRng(seedOf(state.seed, state.month, phase, ...pair)).pick(pair);
+    kept = kept.filter((e) => !pair.includes(e.key) || e.key === keeper);
+  }
+  return kept;
 }
 
 /** A table's rows that make a MonthEvent, tagged with whose roll it is; sickness doesn't, and keeps its own roll. */

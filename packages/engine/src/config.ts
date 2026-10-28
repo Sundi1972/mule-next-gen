@@ -854,27 +854,12 @@ export type AiLevelId = keyof typeof AI_LEVELS;
 
 /** Numbers the strategist's considerations use. */
 /**
- * Production events: at most one a month, rolled at production from the seed.
- * Each event's numbers sit under its key; the weights decide which event fires
- * among those that would hit at least one plot.
+ * Events: each row of the table below rolls on its own seeded dice, so several can fire in one phase and their effects
+ * stack on the same plots. Each event's effect numbers sit under its key.
  */
 export const EVENTS = {
-  /** Chance that a month has an event at all. */
-  chance: 0.5,
   /** No event before this month: there is nothing developed to hit. */
   firstMonth: 2,
-  weights: {
-    dustStorm: 1,
-    drought: 1,
-    acidRain: 1,
-    solarFlare: 1,
-    cometPass: 1,
-    flood: 1,
-    volcanicAsh: 1,
-    pestSwarm: 1,
-    wildfire: 1,
-    bumperHarvest: 1,
-  },
   /** Share of an Energy plot's output a dust storm takes. */
   dustStorm: { cut: 0.5 },
   /** Food and Water each Food and Water plot loses in a drought. */

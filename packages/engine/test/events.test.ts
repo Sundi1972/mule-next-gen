@@ -11,7 +11,6 @@ import {
   GOODS,
   GROWN_BASE,
   neighbours,
-  planEvent,
   playerEventChance,
   playerEventReason,
   rollPhase,
@@ -72,39 +71,7 @@ describe('production lines', () => {
   });
 });
 
-/** Runs `body` with some EVENTS numbers changed, and puts them back. */
-function withEvents(change: Partial<typeof EVENTS>, body: () => void) {
-  const saved = { ...EVENTS };
-  Object.assign(EVENTS, change);
-  try {
-    body();
-  } finally {
-    Object.assign(EVENTS, saved);
-  }
-}
-
-/** Pretends last month's report recorded this event. */
-function lastMonthHad(state: GameState, key: EventKey) {
-  state.history.push({ month: state.month - 1, events: [{ key } as MonthEvent] } as MonthReport);
-}
-
-describe('the event planner', () => {
-  it('T-AC-2: no event in month 1, and never the same event two months running', () => {
-    withEvents({ chance: 1 }, () => {
-      for (let seed = 1; seed <= 40; seed++) {
-        const state = developedColony(seed);
-        expect(state.month).toBe(1);
-        expect(planEvent(state)).toBeNull();
-        state.month = 3;
-        const key = (['drought', 'dustStorm', 'pestSwarm', 'bumperHarvest'] as EventKey[])[seed % 4]!;
-        lastMonthHad(state, key);
-        const next = planEvent(state);
-        expect(next).not.toBeNull();
-        expect(next!.key).not.toBe(key);
-      }
-    });
-  });
-
+describe('how an event spreads', () => {
   it('T-AC-4: a pest swarm spreads from its start to adjacent Food plots, in order, up to four plots', () => {
     const state = createGame({ seed: 4, players: [0, 1, 2, 3].map((i) => ({ id: `p${i}`, name: `P${i}`, isAi: false })) });
     state.month = 3;
@@ -156,22 +123,36 @@ const reset = (row: EventRow, fields: EventRow) => {
   for (const key of Object.keys(row) as (keyof EventRow)[]) delete (row as Partial<EventRow>)[key];
   Object.assign(row, fields);
 };
-/** Runs `body` with every event row at `chance` in production, capped at 1, with no raises or lowers; then puts the rows back. */
-const withEveryRowAt = (chance: number, body: () => void) => {
+/**
+ * Runs `body` with every event row at `chance` in production, capped at 1, with no raises or lowers, and no excluded
+ * pairs unless `excludes` keeps EVENTS.excludes; then puts the rows and the pairs back.
+ */
+const withEveryRowAt = (chance: number, body: () => void, { excludes = false } = {}) => {
   const saved = rows().map((row) => ({ ...row }));
+  const pairs = [...EVENTS.excludes];
   for (const row of rows()) reset(row, { phases: { production: chance }, cap: 1 });
+  if (!excludes) EVENTS.excludes.length = 0;
   try {
     body();
   } finally {
     rows().forEach((row, i) => reset(row, saved[i]!));
+    EVENTS.excludes.splice(0, EVENTS.excludes.length, ...pairs);
   }
 };
 
 describe('events in production', () => {
+  /** Makes `key` the one event that fires: its colony row certain, or its player row certain for the richest seat alone. */
+  const forceOnly = (key: EventKey) => {
+    const colony: Record<string, EventRow> = EVENTS.colony;
+    const player: Record<string, EventRow> = EVENTS.player;
+    if (colony[key]) colony[key].phases = { production: 1 };
+    else reset(player[key]!, { phases: { production: 0 }, wealth: { richest: 1 }, cap: 1 });
+  };
+
   it('T-AC-3: each event changes exactly the plots it hits, by RULE-3, and the report says so', () => {
-    for (const key of Object.keys(EVENTS.weights) as EventKey[]) {
-      const weights = Object.fromEntries(Object.keys(EVENTS.weights).map((k) => [k, k === key ? 1 : 0])) as typeof EVENTS.weights;
-      withEvents({ chance: 1, weights }, () => {
+    for (const key of Object.keys(RULE_3) as EventKey[]) {
+      withEveryRowAt(0, () => {
+        forceOnly(key);
         let seen = 0;
         for (let seed = 1; seed <= 5 && seen === 0; seed++) {
           playProductions(colonyForEvents(seed), 3, (s) => {
@@ -182,6 +163,7 @@ describe('events in production', () => {
             expect(event.key).toBe(key);
             for (const e of report.events ?? []) expect([e.key, e.phase]).toEqual([e.key, 'production']);
             seen++;
+            if (key === 'bumperHarvest') expect(event.plots.map((p) => p.order)).toEqual([0]);
             const hit = new Map(event.plots.map((p) => [p.index, p]));
             for (const line of report.lines ?? []) {
               const part = line.parts.find((p) => p.why === 'event');
@@ -250,7 +232,7 @@ describe('several events in one production', () => {
         { why: 'event', delta: 0, event: 'acidRain' },
       ]);
       expect(line.parts.reduce((n, p) => n + p.delta, 0)).toBe(line.made);
-    });
+    }, { excludes: true });
 
     withEveryRowAt(0, () => {
       // A drought and a flood both certain, and a wildfire only during a drought: the pair's dice keep one.
@@ -278,7 +260,7 @@ describe('several events in one production', () => {
       }
       // Kept by the dice, not by the table's order.
       expect([...keepers].sort()).toEqual(['drought', 'flood']);
-    });
+    }, { excludes: true });
   });
 });
 
@@ -576,19 +558,6 @@ describe('the roller', () => {
       for (const t of dry.tiles) if (t.owner === 'p1') t.outfit = 'energy';
       const all = (p: string) => PERSONAL.map((key) => [key, p, p]);
       expect(whose(dry, rollPhase(dry, 'production'))).toEqual([...all('p0'), ['bumperHarvest', 'p1', 'p1'], ...all('p2'), ...all('p3')]);
-    });
-  });
-});
-
-describe('what-if copies', () => {
-  it('T-AC-2: no event is ever rolled on a what-if copy of the game', () => {
-    withEvents({ chance: 1 }, () => {
-      for (let seed = 1; seed <= 10; seed++) {
-        const state = colonyForEvents(seed);
-        state.month = 3;
-        expect(planEvent(state)).not.toBeNull();
-        expect(planEvent(cloneForSim(state))).toBeNull();
-      }
     });
   });
 });

@@ -11,10 +11,7 @@ const SCANNED = ['packages/engine/src', 'packages/ai/src'];
  * Files still being cleaned: their literals are listed but don't fail. A lane takes its file off once the file is
  * clean, and a clean file left here fails, so the list only shrinks.
  */
-const PENDING = new Set<string>([
-  // WS1: the event-model build (ws1-events) rewrites it and takes it off.
-  'packages/engine/src/production.ts',
-]);
+const PENDING = new Set<string>([]);
 /** A literal that is not balance says why, on its line or the line above. */
 const MARKER = /\/\/ literal-ok: (.{10,})/;
 /** Numbers that are arithmetic, not balance. */
