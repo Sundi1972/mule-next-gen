@@ -122,6 +122,8 @@ Every handoff carries this line verbatim:
 
 ### Task 1.1: per-kind client — C3
 
+**Done** (ws2-a-pr1-land): b983d384 (red) → 44f974ff. Fix round 92c38ec3: `worstCaseUsd`'s call argument is required, so a write call is never counted at a move's cap.
+
 **Phase:** P1 · **Depends on:** none · **Parallelizable with:** 1.2 · **ACs verified:** T-AC-A6
 **Spec sections consumed:** §1 C3, §0.2 HC-2, HC-9, §7 model rule
 
@@ -131,16 +133,18 @@ Every handoff carries this line verbatim:
 - Modify: `packages/engine/src/config.ts` (BRAIN: per-kind model, effort, wait; named edit, WS1 OKs)
 - Test: `apps/server/test/brain-client.test.ts`
 
-- [ ] **Step 1: Write the failing test `T-AC-A6: strategy and playbook calls send adaptive thinking with BRAIN's model and effort; move calls keep thinking off`**
+- [x] **Step 1: Write the failing test `T-AC-A6: strategy and playbook calls send adaptive thinking with BRAIN's model and effort; move calls keep thinking off`**
   Altitude: contract (the request the SDK receives is the promise to the API). Observed at: the request a fake SDK
   records. Negative case: a move call carrying thinking → red. Trap: read model and effort from BRAIN in the test,
   never literals, or the next model change breaks a test that should not care.
-- [ ] **Step 2: Run it and see it fail** — `pnpm --filter @mule/server exec vitest run test/brain-client.test.ts -t "T-AC-A6"` → FAIL (no strategy kind yet)
-- [ ] **Step 3: Implement C3 per spec §1 C3** — mechanism in_place + extract: move `strategy-spike.ts::createStrategyComplete` into client.ts keyed by call kind; BRAIN gains the per-kind model, effort and wait (default Sonnet 5.5, effort medium; Haiku 5.5 named as the fallback model, AM-A10), and each call is priced at its own model's prices in the ledger and the worst case. Plan-drift: keep `BRAIN.model` for the move kinds so nothing else moves.
-- [ ] **Step 4: Run T-AC-A6, the existing client tests (INV-HC3) and `MULE_FULL=1 … test/strategy-spike.test.ts`** → all PASS (the pin)
-- [ ] **Step 5: Commit** — `git commit -m "feat(server): one client, per-kind model and adaptive thinking for strategy calls (C3, T-AC-A6)"`
+- [x] **Step 2: Run it and see it fail** — `pnpm --filter @mule/server exec vitest run test/brain-client.test.ts -t "T-AC-A6"` → FAIL (no strategy kind yet)
+- [x] **Step 3: Implement C3 per spec §1 C3** — mechanism in_place + extract: move `strategy-spike.ts::createStrategyComplete` into client.ts keyed by call kind; BRAIN gains the per-kind model, effort and wait (default Sonnet 5.5, effort medium; Haiku 5.5 named as the fallback model, AM-A10), and each call is priced at its own model's prices in the ledger and the worst case. Plan-drift: keep `BRAIN.model` for the move kinds so nothing else moves.
+- [x] **Step 4: Run T-AC-A6, the existing client tests (INV-HC3) and `MULE_FULL=1 … test/strategy-spike.test.ts`** → all PASS (the pin)
+- [x] **Step 5: Commit** — `git commit -m "feat(server): one client, per-kind model and adaptive thinking for strategy calls (C3, T-AC-A6)"`
 
 ### Task 1.2: the land brief — C1 (land part)
+
+**Done** (ws2-a-pr1-land): 6161cc94 (red) → e0889a24.
 
 **Phase:** P1 · **Depends on:** WS1 v1 types (stub) · **Parallelizable with:** 1.1 · **ACs verified:** T-AC-A2
 **Spec sections consumed:** §1 C1, HC-3, HC-6
@@ -149,15 +153,17 @@ Every handoff carries this line verbatim:
 - Create: `packages/ai/src/llm/brief.ts`; Modify: `packages/ai/src/llm/index.ts` (export)
 - Test: `packages/ai/test/llm-brief.test.ts`
 
-- [ ] **Step 1: Write the failing test `T-AC-A2: the brief holds only public facts in a deterministic order; two seats' briefs never contain another seat's goods`**
+- [x] **Step 1: Write the failing test `T-AC-A2: the brief holds only public facts in a deterministic order; two seats' briefs never contain another seat's goods`**
   Altitude: unit (pure core; the leak is easiest to prove here, with a rival whose stock is distinctive). Observed
   at: brief text. Trap: build the brief from `observe(state, seat)`, never the full state, or the test proves nothing.
-- [ ] **Step 2: Run it** — `pnpm --filter @mule/ai exec vitest run test/llm-brief.test.ts` → FAIL (module missing)
-- [ ] **Step 3: Implement C1's land sections per spec §1 C1** — ownership and what each player makes, prices, the engine's land plans with numbers, the draft LandGrantPlay, persona card, quoted table talk; each section capped by a BRAIN value. Mechanism: sprout. Trend, wishlist and outcomes come in Task 4.2.
-- [ ] **Step 4: Run T-AC-A2 and `pnpm --filter @mule/ai test`** → PASS (the purity test still passes: HC-6)
-- [ ] **Step 5: Commit** — `feat(ai): the strategy brief for the land grant (C1, T-AC-A2)`
+- [x] **Step 2: Run it** — `pnpm --filter @mule/ai exec vitest run test/llm-brief.test.ts` → FAIL (module missing)
+- [x] **Step 3: Implement C1's land sections per spec §1 C1** — ownership and what each player makes, prices, the engine's land plans with numbers, the draft LandGrantPlay, persona card, quoted table talk; each section capped by a BRAIN value. Mechanism: sprout. Trend, wishlist and outcomes come in Task 4.2.
+- [x] **Step 4: Run T-AC-A2 and `pnpm --filter @mule/ai test`** → PASS (the purity test still passes: HC-6)
+- [x] **Step 5: Commit** — `feat(ai): the strategy brief for the land grant (C1, T-AC-A2)`
 
 ### Task 1.3: the writer — C2
+
+**Done** (ws2-a-pr1-land): d823ae44 (red) → ff8dbdb4.
 
 **Phase:** P1 · **Depends on:** 1.2; validatePlan (stub until WS1's lands) · **ACs verified:** T-AC-A5
 **Spec sections consumed:** §1 C2, §2 RULE-A3, HC-2, HC-8
@@ -165,11 +171,11 @@ Every handoff carries this line verbatim:
 **Files:**
 - Create: `packages/ai/src/llm/writer.ts`; Test: `packages/ai/test/llm-writer.test.ts`
 
-- [ ] **Step 1: Write the failing test `T-AC-A5: a Rookie seat's edits that would corner are rejected or clamped; the same edits on a Trader seat pass`** — RULE-A3 rows 1-3. Altitude: contract (the writer's result is what C4 plays). Observed at: the validated playbook and `rejected`. Also assert the corners=false seat's reply schema offers neither 'monopolist' nor monopolyTarget.
-- [ ] **Step 2: Add the writer's own checks to the same file** — one case per S-A1 cause code the schema cannot carry (`reason_too_long`, `plan_not_offered`), each a ledgerable code with no reply text (spec §1 C2). These trace to C2's MUST, not to a new AC.
-- [ ] **Step 3: Run them** — `pnpm --filter @mule/ai exec vitest run test/llm-writer.test.ts` → FAIL
-- [ ] **Step 4: Implement C2 per spec §1 C2** — mechanism sprout; the system text is a parameter (PR-2 supplies the manual; until then the S-A1 primer from strategy-spike.ts, moved into packages/ai). Plan-drift: none.
-- [ ] **Step 5: Run and commit** — PASS; `feat(ai): the playbook writer, edits validated, Rookie never corners (C2, T-AC-A5)`
+- [x] **Step 1: Write the failing test `T-AC-A5: a Rookie seat's edits that would corner are rejected or clamped; the same edits on a Trader seat pass`** — RULE-A3 rows 1-3. Altitude: contract (the writer's result is what C4 plays). Observed at: the validated playbook and `rejected`. Also assert the corners=false seat's reply schema offers neither 'monopolist' nor monopolyTarget.
+- [x] **Step 2: Add the writer's own checks to the same file** — one case per S-A1 cause code the schema cannot carry (`reason_too_long`, `plan_not_offered`), each a ledgerable code with no reply text (spec §1 C2). These trace to C2's MUST, not to a new AC.
+- [x] **Step 3: Run them** — `pnpm --filter @mule/ai exec vitest run test/llm-writer.test.ts` → FAIL
+- [x] **Step 4: Implement C2 per spec §1 C2** — mechanism sprout; the system text is a parameter (PR-2 supplies the manual; until then the S-A1 primer from strategy-spike.ts, moved into packages/ai). Plan-drift: none.
+- [x] **Step 5: Run and commit** — PASS; `feat(ai): the playbook writer, edits validated, Rookie never corners (C2, T-AC-A5)`
 
 ### Task 1.4: when the brain asks — C4 (upkeep and game start)
 
@@ -221,14 +227,28 @@ Every handoff carries this line verbatim:
 
 ### Task 1.6: ledger kinds — C6 (ledger part)
 
+**Done** (ws2-a-pr1-land): f0bb0e7b (red) → e6fe7ad9; fix round 92c38ec3 (as Task 1.1).
+
 **Phase:** P1 · **Depends on:** 1.1 · **ACs verified:** T-AC-A4 (ledger part)
 **Spec sections consumed:** §1 C6, HC-5, HC-9
 
 **Files:** Modify: `apps/server/src/brain/ledger.ts`, `apps/server/src/brain/cli.ts` (`KINDS`); Test: `apps/server/test/brain-ledger.test.ts`
 
-- [ ] **Step 1: Write the failing test `T-AC-A4 (ledger): strategy and playbook calls each write a ledger line with their usage and count against the game budget`** — Altitude: contract (the ledger file). Trap: write to a temp path; never `apps/server/data`.
-- [ ] **Step 2: Run** → FAIL · **Step 3: Implement the C6 ledger part per spec §1 C6** · **Step 4: Run** → PASS
-- [ ] **Step 5: Commit** — `feat(server): ledger kinds for strategy and playbook calls (C6, T-AC-A4)`
+- [x] **Step 1: Write the failing test `T-AC-A4 (ledger): strategy and playbook calls each write a ledger line with their usage and count against the game budget`** — Altitude: contract (the ledger file). Trap: write to a temp path; never `apps/server/data`.
+- [x] **Step 2: Run** → FAIL · **Step 3: Implement the C6 ledger part per spec §1 C6** · **Step 4: Run** → PASS
+- [x] **Step 5: Commit** — `feat(server): ledger kinds for strategy and playbook calls (C6, T-AC-A4)`
+
+### PR-1 progress
+
+Head of `ws2-a-pr1-land`: **883ede9d**. Tasks 1.1, 1.2, 1.3 and 1.6 are done; 1.4 (C4) and 1.5 (C5) wait for WS1's
+step 2 (validatePlan and the engine draft); WS3's recorder is already on feat/strategist (#178, 5eb6b27).
+Follow-ups on the branch:
+- d3c1dd2a: merge of ws2-brain c307d48 (sync #165, feat/strategist 296eee2: the frozen v1 playbook types)
+- 148fc4c8: BRAIN.writeCalls' comment keeps the measurement, drops the doc id (WS1's review)
+- ea661526: the ledger's call kind is renamed `LedgerKind`, so the record's `CallKind` keeps its name
+- 883ede9d: the spike reads `BRAIN.writeReasonChars`; the duplicate `strategySpike.reasonChars` is merged into it (WS1's review)
+
+WS1 has OK'd the BRAIN hunks.
 
 ### PR-1 merge gate
 
