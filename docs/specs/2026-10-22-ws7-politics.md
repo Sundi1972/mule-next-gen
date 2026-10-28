@@ -47,7 +47,7 @@ All three goals trace to Mission G-4: "The table plays politics: players make an
 - **D2 · Laws in v1.** Recommended: the six laws that only move money or block an action: export tax, land tax, pollution tax, emission cap, sabotage ban, and (from slice 4) the Sheriff's fines under it. The other six wait for the systems named in the non-goals. Alternative: all twelve, which puts named edits into WS1's store and WS3's auction now and roughly doubles slice 2.
 - **D3 · Balance.** Taxes, fines, pay and Welfare move money, so each slice that touches money ships with sim rows on both seed sets and needs Heiko's OK, with WS1 measuring. Recommended: politics is a host option, on by default (as sabotage is), so the sim and Beginner mode can run with it off.
 
-*Count note (2026-10-22, WS7):* D2's "six" counts five laws (export tax, land tax, pollution tax, emission cap, sabotage ban) plus the Sheriff's fines under the ban as the sixth item. Raised with the PM; windfall tax would be the natural sixth law if Heiko wants six laws.
+*Count note (2026-10-22, WS7; AM-16: designed as option A, D2 still Heiko's on the G-5 card):* D2's "six" counts five laws (export tax, land tax, pollution tax, emission cap, sabotage ban) plus the Sheriff's fines under the ban as the sixth item. Raised with the PM; windfall tax would be the natural sixth law if Heiko wants six laws.
 
 ### §0.1 · Decision Record `[review-only]`
 
@@ -232,9 +232,9 @@ today        planning is one 45 s timer; AI seats plan once on entering it.
              apps/server/src/server.ts::isIntent
              verified_by: read
 tomorrow     MUST, in an election month, tick the election (stepElection + VoteHand) with no
-             phase timer, mark away seats done, and start the normal planning timer and the AI
-             land plan only once the election is over. 'ready' during an election means Done for
-             the stage. MUST accept the intents run, vote and setTax, and send each screen a
+             phase timer, mark away seats done, and start planning proper and the AI land plan
+             only once the election is over. 'ready' during an election means Done for the stage.
+             Planning proper has no clock: every human's Ready, or the host's Continue, ends it (AM-15). MUST accept the intents run, vote and setTax, and send each screen a
              politics view (§3) that hides other seats' ballots (RULE-9).
 logic        → §2 RULE-1, RULE-9
 seam         named edits in mule-game.ts, protocol and server.ts (WS3 reviews); the election
@@ -261,7 +261,7 @@ ux           WS6's hub mock at ws6-ux b28ee91 (awaiting Heiko's approval):
              design/mocks/ws6-ux/src/screens/PlanningHub.tsx and Election.tsx · routes #hub,
              #hub-nominate, #hub-council, #hub-governor, #tv-election · testids offices,
              election-stage, run-governor, run-sheriff, withdraw, candidates, voted, vote-weight,
-             ballot-countdown, ballot-reveal, result-<office>-<id>, tie-break, gov-tax, tax-down,
+             ballot-countdown, ballot-reveal, result-<office>-<id>, how-<office>, gov-tax, tax-down,
              tax-value, tax-up, tax-confirm, tax-readonly, vote-weights, land-baron.
              GRAFT TARGET: the hub's politics slots (WS6's PR-9 frame).
 depends_on   C9 (contract), WS6 mock approval (not stubbable: an implementer never designs a screen)
@@ -772,6 +772,56 @@ did       Heiko: the colony budget is a separate pot filled from taxes, fines an
 because   G-4: the colony, not only each player, has something to win or lose
 goal      P-1 — still met; slice 5's scope grows by projects, the colony score is WS6's
 folded    D1 note below; slice 2+ planning
+```
+
+```
+AM-14 · 2026-10-28 · lead · follow-up e2e (Baron tie-break)
+
+target    §1 C11 ux testids
+did       C11 listed a `tie-break` testid; the approved mock (Election.tsx) and the built
+          TvElection.tsx name how an office was decided with `how-<office>` ("A tie: Ossa, the
+          Land Baron, broke it."). The mock is binding, so the list now says how-<office>.
+because   P-1: the spec must match the approved screen it points at
+goal      P-1 — still met
+folded    C11 testid list; e2e/politics-tie.ts asserts on how-governor
+```
+
+```
+AM-15 · 2026-10-28 · Heiko (playtest ruling, via PM) · WS3's #122 named edits
+
+target    §1 C9 tomorrow; AM-1's server case
+said      the normal planning timer starts once the election is over
+did       Heiko: planning has no clock. The election keeps its own stage clocks; planning
+          proper, after it, waits until every human is Ready or the host presses Continue
+          for an absent player (a dropped phone holds planning). WS3 built it in #122
+          (PHASES.planningMs null) and restated C9's rows in politics.test.ts and the claim
+          wait in e2e/politics.ts as named edits; WS7 reviewed them. On the server, planning
+          can no longer end while an election is open: Ready is Done for the stage, and
+          checkAllReady waits while the election runs. AM-1's close-at-once stays as the
+          engine guard for a game or sim that leaves planning another way. The host's
+          Continue exists for planning proper only: while the election is open it is refused
+          (RuleError) and changes nothing, since away seats are already Done on every
+          election tick (WS3's continuePlanning).
+because   G-4 / P-1: Heiko's play-test; the election's timing is unchanged
+goal      P-1 — still met
+folded    C9 tomorrow; politics.test.ts row FM-planning-untimed (WS3's ee5318f)
+```
+
+```
+AM-16 · 2026-10-28 · PM goal gate · slice 2a designed
+
+target    §0 D2 and its count note; D1 slice 2; non-goals
+did       Slice 2a's §0 passed the PM's goal gate: the council and four laws (export, land and
+          pollution tax, emission cap), designed in docs/specs/2026-10-28-ws7-slice2a-council.md
+          (ids C40+, RULE-40+, UBER-AC-8..10). This is D2's note as option A: the sabotage ban and the
+          Sheriff's fines move to slice 4 with the Sheriff's powers; B (A plus the windfall tax) and C
+          (keep the inert ban in slice 2) stay in that spec's decision record. D2 is Heiko's and goes
+          on the G-5 card; B or C amends slice 2a's non-goals before any build. Law promises in
+          campaigns move from slice 2 (AM-11) to slice 3, with deal cards.
+because   P-1: "the colony votes laws" (UBER-AC-1's law clause) is the unmet half of P-1; G-5: the law
+          taxes are the fund's main income
+goal      P-1 — still met; G-5's income
+folded    D2 count note below; slice 2a spec
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
