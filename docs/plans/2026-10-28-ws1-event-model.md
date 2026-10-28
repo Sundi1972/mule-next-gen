@@ -219,7 +219,9 @@ reviews the types.ts hunk.
       left it to this task; `events.ts` came off in Task 3's fix). Rewrite the top-of-`EVENTS` docstring, which still
       describes planEvent's one event a month. Make `excludes` and every row's `follows` keys name real rows: the
       EM-T-AC-3 test that first reads `excludes` also asserts each excludes member and each follows key is a key of
-      `EVENTS.colony` or `EVENTS.player` (a misspelt key would otherwise never fire).
+      `EVENTS.colony` or `EVENTS.player` (a misspelt key would otherwise never fire). The excludes (RULE-2 step 4)
+      resolve among the colony rows, which both pairs are, before any player row reads `firedThisPhase`: an excluded
+      drought has not fired, so it never raises wildfire (lead's ruling at Task 4's review). EM-T-AC-3 asserts it.
 - [ ] **Step 4: Run `pnpm typecheck && pnpm test`; expect exit 0.** **Step 5: Commit** red then green.
 
 ### Task 7: The month report and the sim count every event — C5
@@ -281,6 +283,9 @@ Before suggesting merge of `ws1-events-roller` into `ws1-events`:
 - [ ] **Step 3: Implement C4.** `collapses` asks the row dice from `(seed, month, 'production', 'cavernCollapse', plot)`.
       Its "produced Crystite this month" check and its what-if guard stay. `EFFECT.collapseChance` goes. Production
       lists each collapse as a MonthEvent after the output events (AM-3); `eventOutput` gets a no-op entry.
+      `rollPhase` must not roll `cavernCollapse` at the phase start: its rows are picked by "key is in SHAPE", which
+      the cavern row joins here, but C4 rolls it once per mined cavern plot after output. EM-T-AC-2's key literal goes
+      red if it slips (Task 4's review).
 - [ ] **Step 4: Run `specials.test.ts` unedited; expect WS5's T-AC-6 green** (replay; about 6% within ±30%; the same
       rate with or without a production event; each plot its own fate; unmined never). Then run events.test.ts and
       `pnpm typecheck && pnpm test`.
