@@ -18,6 +18,7 @@ const person = (id: string, name: string, slot: number, ready = false): PlayerVi
   species: 'mollox',
   money: 1000,
   worth: 0,
+  lastWorth: null,
   plots: 0,
   ready,
   doneDeveloping: false,
