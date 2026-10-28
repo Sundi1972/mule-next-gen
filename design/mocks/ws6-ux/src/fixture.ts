@@ -59,7 +59,7 @@ export const ME: MyView = {
   id: 'lena', species: 'zipwing', stock: { ...emptyStock(), food: 9, water: 4, energy: 3, smithore: 0, alloy: 1 }, carriedMule: null, claimsLeft: 0,
   hungry: false, sick: false, installedThisTurn: false, needs: { food: 5, water: 3 }, monthNeeds: { ...emptyStock(), food: 5, water: 3, energy: 4 }, devEndsAt: null, devSeconds: 50, produced: { ...emptyStock(), food: 11, water: 3, energy: 6 }, mulePrice: 148,
   outfitCosts: { food: 25, water: 25, energy: 50, smithore: 75, crystite: 100, rareEarth: 100, alloy: 150, electronics: 200, medicine: 150, greenBelt: 40 },
-  droneOrder: [],
+  droneOrder: [], politics: null,
 };
 
 const row = (good: Good, price: number, storeStock: number, cover: number): MarketRow => ({
@@ -71,7 +71,7 @@ export const VIEW: MuleView = {
   finished: false, month: 5, maxMonths: 12, phase: 'auction', phaseEndsAt: null, width: W, height: H, tiles: TILES, lit: null,
   players: PLAYERS, me: ME, market: MARKET, storeMules: 5, mulePrice: 148, colonists: 1260, air: { level: 22, band: 'clean' },
   ship: { arrives: 6, inPort: false, wants: null }, treasury: { money: 340, salesTax: 0.05 }, news: ['Ossa bought 2 Food from the store.'],
-  scores: null, auction: null, listings: [], lotSlots: { used: 0, max: 4 }, landAuction: null, production: null,
+  scores: null, auction: null, listings: [], lotSlots: { used: 0, max: 4 }, landAuction: null, production: null, politics: null,
 };
 
 // --- The Smithore auction -----------------------------------------------------

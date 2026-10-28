@@ -9,6 +9,7 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { colonyVerdict, fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, plotName, seatSpecies, secondsUntil, slotOf, standings, tileAt, toSlot } from '../game/derive';
 import { useAuctionSound } from '../game/sound';
 import { useClient, useClientState, useServerNow } from '../net/react';
+import { TvElection } from './TvElection';
 import { TvLandAuction } from './TvLandAuction';
 import { TvProduction } from './TvProduction';
 
@@ -156,6 +157,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   }
 
   if (phase === 'production' && game.production) return <TvProduction game={game} production={game.production} />;
+  if (phase === 'planning' && game.politics?.election?.stage === 'reveal') return <TvElection game={game} />;
 
   let side: ReactNode;
   if (phase === 'landGrant')
