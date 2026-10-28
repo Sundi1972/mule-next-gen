@@ -219,14 +219,14 @@ From Task 5's review: with `planEvent` gone, `buildEvent`'s no-player arm goes t
 and its docstring loses "otherwise on anyone's"; EM-T-AC-3's re-forced T-AC-3 pins that a bumper harvest reaches only
 its start plot (HC-4; that mutant survives today).
 
-- [ ] **Step 1: Write `EM-T-AC-3: two events on one plot both apply in order, never below 0, and an excluded pair keeps one`**
+- [x] **Step 1: Write `EM-T-AC-3: two events on one plot both apply in order, never below 0, and an excluded pair keeps one`**
       at the month report and the plot's line, with rows forced.
       - Drought and acid rain on a Food plot that makes 1: both listed in that order, and the plot makes 0, not −1.
         The plot's deltas are −1 (drought), then 0 (acid rain), and acid rain still lists the plot (spec §8 AM-2).
       - Drought and flood: exactly one listed, the same one on replay.
       - The line's parts still sum to `made`; the events spec's T-AC-5 INV is the pin.
-- [ ] **Step 2: Run; expect FAIL** (production applies at most one event).
-- [ ] **Step 3: Implement C2.** `runProduction` calls `rollPhase(state, 'production')` and chains `eventOutput` per
+- [x] **Step 2: Run; expect FAIL** (production applies at most one event).
+- [x] **Step 3: Implement C2.** `runProduction` calls `rollPhase(state, 'production')` and chains `eventOutput` per
       event, in order. Remove `planEvent`, `EVENTS.chance` and `EVENTS.weights`. Delete the events spec's two `T-AC-2`
       tests: never twice in a row is superseded, and the what-if case is EM-T-AC-2's. Re-force its `T-AC-3` test (each
       key, one at a time) and the `T-AC-7` outlook test in balance.test.ts through the rows (all at 1 against all at
@@ -238,7 +238,13 @@ its start plot (HC-4; that mutant survives today).
       `EVENTS.colony` or `EVENTS.player` (a misspelt key would otherwise never fire). The excludes (RULE-2 step 4)
       resolve among the colony rows, which both pairs are, before any player row reads `firedThisPhase`: an excluded
       drought has not fired, so it never raises wildfire (lead's ruling at Task 4's review). EM-T-AC-3 asserts it.
-- [ ] **Step 4: Run `pnpm typecheck && pnpm test`; expect exit 0.** **Step 5: Commit** red then green.
+- [x] **Step 4: Run `pnpm typecheck && pnpm test`; expect exit 0.** **Step 5: Commit** red then green.
+      Done 29 Oct: red 450d848, green 4fe335e; fix round 1: b6c94d7 (WS5 named edit to specials.test.ts T-AC-6, which
+      leaned on `EVENTS.chance` 0.5 for its event months: it arranges volcanic ash at 0.5; WS5 OK'd it directly),
+      263f595 (`withEveryRowAt` keeps the excludes; EM-T-AC-2 opts out), e9054e3; fix round 2 (review): fe5e500,
+      c5bc06e (EM-T-AC-3 covers every pair, across months, a lone member, the pair's own dice, where the event parts sit,
+      and the two config facts the split needs: excludes members are colony rows, no colony row follows one thisPhase).
+      Roller at c5bc06e. `production.ts` is off PENDING (the list is empty). Tests +1 ~2 −2.
 
 ### Task 6a: `MonthEvent.when` goes — the contract per spec §8 AM-5 (WS8, 29 Oct)
 
@@ -296,6 +302,11 @@ Before suggesting merge of `ws1-events-roller` into `ws1-events`:
 
 **Depends on:** PR-1 merged into `ws1-events` · **ACs verified:** T-AC-5 (cavern collapse) · **Spec sections consumed:** §1 C4, §3, §8 AM-1, AM-3
 **Files:** Modify: `EVENTS` (the `cavernCollapse` row), `events.ts` (`SHAPE`, `eventOutput`'s no-op entry), `production.ts` (the collapse's MonthEvent, after the output events); named edits `packages/engine/src/specials.ts::collapses` and `EFFECT.collapseChance` (WS5 reviews), `packages/engine/src/types.ts::EventKey` gains `'cavernCollapse'` (WS3 reviews, AM-3); Test: `packages/engine/test/events.test.ts` (with `RULE_3`'s cavernCollapse entry)
+
+From Task 6's review: EM-T-AC-3's key check reads `RULE_3`'s keys as "the rows rollPhase rolls", so cavernCollapse
+joins `RULE_3` without becoming a row `rollPhase` rolls at the phase start (the note above); and its pair-independence
+check runs one way round only (a pair seeded from the second member's row seed would survive): run it both ways. WS5
+asked for the specials.ts/EFFECT hunk on its SHA to check T-AC-6's five rules (T-AC-6 as WS5 OK'd it at b6c94d7).
 
 - [ ] **Step 1: Write `EM-T-AC-5: cavern collapse rolls on its row, with today's effect`** at the tiles after
       production.
