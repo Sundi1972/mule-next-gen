@@ -6,6 +6,7 @@
 import { POLITICS } from './config.js';
 import { RuleError } from './errors.js';
 import { player } from './game.js';
+import { PERCENT } from './units.js';
 import type { CanRun, Election, ElectionResult, GameState, Office, OfficeResult, Politics, TaxPromise } from './types.js';
 
 /** Read-only all the way down: an election read before edit() may be shared with a what-if copy. */
@@ -71,13 +72,13 @@ export interface VoteWeight {
 
 /** A player's votes, part by part, derived from the state on every call. See WS7 spec RULE-4. */
 export function voteWeight(state: GameState, playerId: string): VoteWeight {
-  const { plotsPerVote, repHigh, repLow, taxPerVote, taxCap } = POLITICS.weight;
+  const { base, plotsPerVote, repHigh, repLow, repVotes, baronVotes, taxPerVote, taxCap } = POLITICS.weight;
   const { reputation } = player(state, playerId);
   const parts = {
-    base: 1,
+    base,
     land: Math.floor(plotsOwned(state, playerId) / plotsPerVote),
-    reputation: reputation >= repHigh ? 1 : reputation < repLow ? -1 : 0,
-    baron: state.politics?.baron === playerId ? 1 : 0,
+    reputation: reputation >= repHigh ? repVotes : reputation < repLow ? -repVotes : 0,
+    baron: state.politics?.baron === playerId ? baronVotes : 0,
     taxes: Math.min(taxCap, Math.floor((state.treasury.paid[playerId] ?? 0) / taxPerVote)),
   };
   return { total: parts.base + parts.land + parts.reputation + parts.baron + parts.taxes, parts };
@@ -280,7 +281,7 @@ function appointee(state: GameState, election: Shared<Election>, office: Office,
 /** The whole-percent range the Governor may set this month, around the month's starting rate. See WS7 spec RULE-6. */
 export function taxBounds(state: GameState): { low: number; high: number } {
   const { min, max, maxStep } = POLITICS.tax;
-  const start = Math.round((state.politics?.taxAtStart ?? state.treasury.salesTax) * 100);
+  const start = Math.round((state.politics?.taxAtStart ?? state.treasury.salesTax) * PERCENT);
   return { low: Math.max(min, start - maxStep), high: Math.min(max, start + maxStep) };
 }
 
@@ -294,7 +295,7 @@ export function setSalesTax(state: GameState, playerId: string, percent: number)
   if (politics.governor !== id) throw new RuleError('Only the Governor sets the tax');
   const { low, high } = taxBounds(state);
   if (!Number.isInteger(percent) || percent < low || percent > high) throw new RuleError(`The tax can be ${low}% to ${high}% this month`);
-  state.treasury.salesTax = percent / 100;
+  state.treasury.salesTax = percent / PERCENT;
 }
 
 /** At upkeep: the Governor's pay, then the Sheriff's, each only as far as the colony fund reaches. See WS7 spec RULE-7. */

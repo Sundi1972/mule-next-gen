@@ -1,6 +1,6 @@
-import { DEVELOPMENT, UPKEEP, type Good } from '@mule/engine';
+import { DEV_WALK, DEVELOPMENT, UPKEEP, type Good } from '@mule/engine';
 import type { TileView } from '@mule/protocol';
-import { AirGauge, Button, cx, FoodTime, GOOD_NAME, GoodIcon, HoloMap, MuleIcon, PlayerMark, StoreInterior, TERRAIN_NAME, ZoomMap, type Shop } from '@mule/ui';
+import { AirGauge, Button, cx, GOOD_NAME, GoodIcon, hungerLevel, HoloMap, MuleIcon, paceLine, PlayerMark, SharedClock, sickReason, StoreInterior, TERRAIN_NAME, YourPace, ZoomMap, type Condition, type FoodEaten, type PaceRule, type Shop } from '@mule/ui';
 import { useEffect, useState } from 'react';
 import { mapTiles, PHASE_NAME, plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
 import { speakerAt } from '../chat/Chat';
@@ -13,16 +13,15 @@ import { MapFit, PhoneShell, useWide } from './Shell';
 
 const OUTFIT_NAME = (o: TileView['outfit']) => (o === null ? '' : o === 'greenBelt' ? 'Green belt' : GOOD_NAME[o]);
 
-/** How long the start-of-turn card stays on the store floor, and how long its bar takes to fill. */
+/** How long the start-of-turn card stays on the store floor, and how long its gauge takes to fill. */
 const FILL_CARD_SECONDS = 2.2;
 
-/** The rail and the start-of-turn card say this when air sickness cost the player time. */
-const SICK_NOTE = 'Sickness cost you time.';
+/** Fed and well: what the screen shows should the view carry no condition. */
+const WELL: Condition = { foodShare: 1, sick: false, sickBecause: null, conditionPace: 1 };
 
 /**
- * Development: your own clock runs. Buy a MULE in the store, outfit it, walk
- * out and install it on one of your plots. Analyse ground, fit filters, or
- * cash out at the pub.
+ * Development: one clock runs for everyone; hunger and sickness slow your walk. Buy a MULE in the store, outfit it,
+ * walk out and install it on one of your plots. Analyse ground, fit filters, or cash out at the pub.
  */
 export function Develop() {
   const client = useClient();
@@ -34,6 +33,8 @@ export function Develop() {
   const [cardDismissed, setCardDismissed] = useState(false);
   // Develop mounts as development starts; the card runs on wall time, whatever the server's phase scale.
   const [devStartedAt] = useState(now);
+  // The thought bubble shows as the card ends, once a turn: the hall remounts on every trip back into the store.
+  const [clockStartsAt] = useState(() => performance.now() + FILL_CARD_SECONDS * 1000);
   const [selected, setSelected] = useState<{ x: number; y: number } | null>(null);
   // Kept here, not in the map, so the zoom survives a trip into the store.
   const [zoomed, setZoomed] = useState(false);
@@ -51,6 +52,8 @@ export function Develop() {
   if (self.doneDeveloping || seconds <= 0) return <Done pub={self.doneDeveloping} />;
 
   const filling = (now - devStartedAt) / 1000 < FILL_CARD_SECONDS && !cardDismissed;
+  const condition = self.condition ?? WELL;
+  const food: FoodEaten = { ate: Math.min(me.stock.food, me.needs.food), need: me.needs.food };
   const freePlots = view.tiles.filter((t) => t.owner === me.id && !t.outfit);
   const storeTile = view.tiles.find((t) => t.terrain === 'store') ?? { x: Math.floor(view.width / 2), y: Math.floor(view.height / 2) };
   // You walk out through a door yourself (RULE-7 row 4); with an outfitted MULE, a plot of yours is picked for you.
@@ -86,7 +89,7 @@ export function Develop() {
     freePlots,
     from: storeTile,
     month: { needs: me.monthNeeds, have: me.stock },
-    ate: Math.min(me.stock.food, me.needs.food),
+    pace: paceLine(condition, DEV_WALK, food).title,
     devSeconds: me.devSeconds,
     mulePrice: me.mulePrice,
     mulesLeft: view.storeMules,
@@ -109,6 +112,15 @@ export function Develop() {
       fill
       rail={
         <>
+          {/* The clock right after Now, your pace on its label under 1100 px; the header's timer is the one always in view. */}
+          {place === 'store' && (
+            <>
+              <SharedClock seconds={seconds} total={Math.max(me.devSeconds, 1)} pace={paceLine(condition, DEV_WALK, food)} />
+              <div className="hidden @min-[1100px]/shell:block">
+                <YourPace condition={condition} rule={DEV_WALK} food={food} />
+              </div>
+            </>
+          )}
           <div className="flex items-center gap-2.5 @min-[1100px]/shell:text-lg" data-testid="mule">
             <span className={cx('flex items-center', carry === null ? 'text-ink-3' : 'text-ink')}>
               <MuleIcon size={22} />
@@ -118,24 +130,7 @@ export function Develop() {
               {carry === null ? (installed ? 'No MULE in tow' : 'No MULE yet') : carry === 'empty' ? 'Empty MULE in tow' : `${OUTFIT_NAME(carry)} MULE in tow`}
             </span>
           </div>
-          {place === 'store' && (
-            <>
-              <FoodTime
-                seconds={seconds}
-                total={Math.max(me.devSeconds, 1)}
-                food={me.hungry ? 0 : 1}
-                need={1}
-                note={[
-                  me.hungry ? 'Short of Food this month, so less time.' : `Full time: ${me.devSeconds} s.`,
-                  me.sick ? SICK_NOTE : '',
-                  `Geo analysis takes ${DEVELOPMENT.analysisSeconds} s.`,
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-              />
-              <YourPlots tiles={view.tiles} me={me.id} />
-            </>
-          )}
+          {place === 'store' && <YourPlots tiles={view.tiles} me={me.id} />}
           {place === 'map' && !tile && <p className="text-sm text-ink-2">Tap a plot to look at it. Tap the store to go back in.</p>}
           {place === 'map' && tile && (
             <section className="flex flex-col gap-2 border-t border-holo-faint pt-2.5">
@@ -234,9 +229,10 @@ export function Develop() {
               onDoor={walkOut}
               next={guide.next}
               locks={guide.locks}
-              me={{ id: me.id, slot, leading: carry, time: seconds / DEVELOPMENT.fullSeconds }}
+              me={{ id: me.id, slot, leading: carry, condition, food, clockStartsAt }}
+              paceRule={DEV_WALK}
               wrapCreature={speakerAt}
-              overlay={filling && <FillCard seconds={me.devSeconds} hungry={me.hungry} sick={me.sick} ate={Math.min(me.stock.food, me.needs.food)} need={me.needs.food} />}
+              overlay={filling && <FillCard condition={condition} rule={DEV_WALK} food={food} />}
             />
           </div>
         ) : (
@@ -302,36 +298,41 @@ function YourPlots({ tiles, me }: { tiles: TileView[]; me: string }) {
 }
 
 /**
- * The start of the turn: you eat, and your time bar fills to what the Food bought. It states the time from its
- * first frame; the bar is shorter and orange when hunger or sickness cost time.
+ * The start of the turn (it blocks nothing; a tap on a room dismisses it). Everyone gets the same clock, so it says
+ * what you ate and the pace that leaves you, the gauge filling to it: short of Food reads as "slower", never "less time".
  */
-export function FillCard({ seconds, hungry, sick, ate, need }: { seconds: number; hungry: boolean; sick: boolean; ate: number; need: number }) {
-  const full = DEVELOPMENT.fullSeconds;
-  const short = seconds < full;
-  const why = [hungry ? 'short of Food, so less time' : '', sick ? SICK_NOTE : ''].filter(Boolean).join('. ');
+export function FillCard({ condition, rule, food }: { condition: Condition; rule: PaceRule; food: FoodEaten }) {
+  const hungry = hungerLevel(condition, rule) > 0;
+  const short = hungry || condition.sick;
   const [grown, setGrown] = useState(false);
   useEffect(() => {
-    // One frame at zero first, so the bar visibly fills.
+    // One frame at zero first, so the gauge visibly fills.
     const id = requestAnimationFrame(() => setGrown(true));
     return () => cancelAnimationFrame(id);
   }, []);
   return (
     // Taps go through to the rooms underneath: the clock is already running.
-    <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-void/55" data-testid="fill-card">
-      <div className="flex w-[64%] flex-col gap-1.5 rounded-panel border-2 border-holo bg-panel p-3 shadow-glow">
-        <span className="label-caps">Start of your turn</span>
-        <span className="font-display text-lg font-semibold leading-tight">
-          You eat {ate} Food{hungry ? ` of the ${need} you need` : ''} and fill up your time bar.
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-void/55 animate-[show-card-in_0.3s_ease-out]" data-testid="fill-card">
+      <div className={cx('flex w-[64%] max-w-[560px] flex-col gap-1.5 rounded-panel border-2 bg-panel p-3 shadow-glow @min-[1100px]/shell:gap-3 @min-[1100px]/shell:p-6', short ? 'border-warn' : 'border-holo')}>
+        <span className="label-caps">One clock for everyone · {DEVELOPMENT.fullSeconds} s</span>
+        <span className="font-display text-lg font-semibold leading-tight @min-[1100px]/shell:text-3xl">
+          {hungry ? `You eat ${food.ate} of the ${food.need} Food you need.` : `You eat the ${food.need} Food you need.`}
         </span>
-        <div className="relative h-3 overflow-hidden rounded-full bg-raised">
+        {/* Sickness is rolled as development starts and slows this same turn: the card announces it. */}
+        {condition.sick && (
+          <span className="flex items-center gap-1.5 text-sm font-semibold text-g-medicine" data-testid="sick-strikes">
+            ✚ {sickReason(condition.sickBecause)} It strikes now and slows you this turn.
+          </span>
+        )}
+        <div className="relative h-3 overflow-hidden rounded-full bg-raised @min-[1100px]/shell:h-4" data-testid="pace-gauge">
           <div
             className={cx('absolute inset-y-0 left-0 rounded-full transition-[width] duration-[2000ms] ease-linear', short ? 'bg-warn' : 'bg-holo')}
-            style={{ width: `${grown ? Math.min(1, seconds / full) * 100 : 0}%` }}
+            style={{ width: `${grown ? condition.conditionPace * 100 : 0}%` }}
           />
-          {short && <div className="absolute inset-y-0 border-l-2 border-dashed border-ink-3" style={{ left: '100%', transform: 'translateX(-2px)' }} />}
+          {short && <div className="absolute inset-y-0 right-0 border-l-2 border-dashed border-ink-3" />}
         </div>
-        <span data-num className={cx('font-mono text-sm font-bold', short ? 'text-warn' : 'text-holo')}>
-          {short ? `${seconds} s of ${full}${why ? `: ${why}` : ''}` : `${seconds} s: full time`}
+        <span data-num className={cx('font-mono text-sm font-bold @min-[1100px]/shell:text-lg', short ? 'text-warn' : 'text-holo')}>
+          {paceLine(condition, rule, food).title}
         </span>
       </div>
     </div>

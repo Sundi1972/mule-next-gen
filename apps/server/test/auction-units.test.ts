@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { storeForSale, UPKEEP, WALK, type AuctionSide, type GameState, type Good } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
-import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
-import { fakeContext, seats } from './fake-context.js';
+import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
+import { fakeContext, readyAll, seats } from './fake-context.js';
 
 /** The engine's state behind the game: the source of truth the view must match. */
 const engineOf = (game: MuleGame) => (game as unknown as { state: GameState }).state;
@@ -12,7 +12,7 @@ function toWalk(s2Side: AuctionSide = 'buyer') {
   const { ctx, advance } = fakeContext();
   const game = new MuleGame(ctx, 7);
   game.start(seats);
-  advance(PHASE_MS.planning);
+  readyAll(game);
   while (game.viewFor('s1').phase === 'landGrant') advance(GRANT_TICK_MS);
   while (game.viewFor('s1').phase === 'development') advance(1_000);
   while (game.viewFor('s1').phase === 'production') advance(1_000);
@@ -33,11 +33,12 @@ function walkTogether(game: MuleGame) {
   game.handle('s2', { type: 'walk', dir: 'up' });
 }
 
-/** Plays the first month until the good is up in the auction; nobody presses anything. */
+/** Plays the first month until the good is up in the auction; nobody presses anything after planning's Ready. */
 function toGood(good: Good) {
   const { ctx, advance } = fakeContext();
   const game = new MuleGame(ctx, 7);
   game.start(seats);
+  readyAll(game);
   for (let i = 0; i < 20_000 && game.viewFor(null).auction?.good !== good; i++) advance(WALK.tickMs);
   expect(game.viewFor(null).auction?.good, `${good} comes up in the first month's auction`).toBe(good);
   return game;

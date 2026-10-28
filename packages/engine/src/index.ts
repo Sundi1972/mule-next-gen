@@ -1,5 +1,6 @@
 export * from './types.js';
 export * from './config.js';
+export * from './units.js';
 export * from './rng.js';
 export * from './stock.js';
 export * from './map.js';
@@ -7,6 +8,7 @@ export * from './production.js';
 export * from './events.js';
 export * from './economy.js';
 export * from './walk.js';
+export * from './dev-walk.js';
 export * from './auction.js';
 export * from './lots.js';
 export * from './upkeep.js';

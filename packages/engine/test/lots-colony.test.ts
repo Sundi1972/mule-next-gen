@@ -106,7 +106,7 @@ describe('T-AC-6: the colony sometimes puts a free plot up (RULE-7)', () => {
     expect(state.landAuction).toBeNull();
   });
 
-  // Dealing a map is the slow part, so each seed deals once and every month plays a copy; the timeout is headroom for a busy machine.
+  // Dealing a map is the slow part, so each seed deals once and every month plays a copy.
   it('T-AC-6: RULE-7 row 1 — about colonyPlotChance of (seed, month) pairs with free land bring a colony lot, rolled per month and on varied plots', () => {
     const months = [1, 2, 3, 5, 8];
     const lots = Array.from({ length: SCAN / 4 }, (_, i) => newGame(i + 1)).map((fresh) =>
@@ -125,7 +125,7 @@ describe('T-AC-6: the colony sometimes puts a free plot up (RULE-7)', () => {
     // The plot is drawn, not the first free one.
     const picked = new Set(lots.flat().flatMap((item) => (item ? [`${item.x},${item.y}`] : [])));
     expect(picked.size).toBeGreaterThan(1);
-  }, 30_000);
+  });
 
   it('T-AC-6: RULE-7 example roll under the chance, no free land — no colony lot', () => {
     const state = newGame(COLONY_SEED);

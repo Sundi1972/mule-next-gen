@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { GAME, WALK, type Good } from '@mule/engine';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
-import { fakeContext, seats } from './fake-context.js';
+import { fakeContext, readyAll, seats } from './fake-context.js';
 
 /** Month 1 to the first good's status screen, nobody pressing anything before it. */
 function toStatus() {
   const { ctx, advance } = fakeContext();
   const game = new MuleGame(ctx, 7);
   game.start(seats);
-  advance(PHASE_MS.planning);
+  readyAll(game);
   while (game.viewFor(null).phase !== 'auction') advance(1_000);
   const { good, stage } = game.viewFor(null).auction!;
   expect(stage).toBe('status');

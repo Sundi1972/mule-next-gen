@@ -9,6 +9,9 @@ import {
   GOODS,
   neighbours,
   planEvent,
+  playerEventChance,
+  playerEventReason,
+  rollPlayerEvent,
   type EventKey,
   type GameState,
   type MonthEvent,
@@ -196,6 +199,97 @@ describe('events in production', () => {
         expect([key, seen > 0]).toEqual([key, true]);
       });
     }
+  });
+});
+
+describe('player events', () => {
+  const sickness = EVENTS.player.sickness;
+  /** Four players, the air at `air`, and last month's report crediting each with these pollution points. */
+  const colony = (air: number, pollutionBy: number[] = [0, 0, 0, 0], seed = 7) => {
+    const state = createGame({ seed, players: [0, 1, 2, 3].map((i) => ({ id: `p${i}`, name: `P${i}`, isAi: false })) });
+    state.air = air;
+    state.history.push({ month: 1, pollutionBy: Object.fromEntries(pollutionBy.map((n, i) => [`p${i}`, n])) } as MonthReport);
+    return state;
+  };
+  const chance = (state: GameState, id: string) => playerEventChance(state, 'sickness', 'development', id);
+  /** Runs `body` with the sickness row changed, then puts it back. */
+  const withSickness = (change: Partial<typeof sickness>, body: () => void) => {
+    const saved = { ...sickness };
+    Object.assign(sickness, change);
+    try {
+      body();
+    } finally {
+      Object.assign(sickness, saved);
+    }
+  };
+
+  it('T-AC-24: sickness is a seeded roll per player at development start, likelier in bad air and for a big polluter, cured by a Medicine', () => {
+    const base = sickness.phases.development;
+    const bands: [number, number][] = [
+      [0, 0],
+      [30, sickness.air.smoggy],
+      [60, sickness.air.toxic],
+      [80, sickness.air.collapse],
+    ];
+    // By the air band, for a player who caused none of last month's pollution.
+    for (const [air, bonus] of bands) expect(chance(colony(air, [5, 20, 3, 0]), 'p3'), `air ${air}`).toBeCloseTo(base + bonus, 9);
+    // By the air points its own plots caused last month: 5 points add 5 x perPoint; 20 points hit the most it adds.
+    const polluted = colony(0, [5, 20, 3, 0]);
+    expect(5 * sickness.pollution.perPoint).toBeLessThan(sickness.pollution.max);
+    expect(20 * sickness.pollution.perPoint).toBeGreaterThan(sickness.pollution.max);
+    expect(chance(polluted, 'p0')).toBeCloseTo(base + 5 * sickness.pollution.perPoint, 9);
+    expect(chance(polluted, 'p1')).toBeCloseTo(base + sickness.pollution.max, 9);
+    // Never above the cap: the biggest polluter in Collapse.
+    expect(base + sickness.air.collapse + sickness.pollution.max).toBeGreaterThan(sickness.cap);
+    expect(chance(colony(80, [20, 0, 0, 0]), 'p0')).toBeCloseTo(sickness.cap, 9);
+    // Why: the biggest raise in the roll wins, so the screens can say it; with no raise it is plain chance.
+    const why = (air: number, points: number) => playerEventReason(colony(air, [points, 0, 0, 0]), 'sickness', 'development', 'p0');
+    expect(why(0, 5)).toBe('pollution');
+    expect(why(30, 0)).toBe('air');
+    expect(why(30, 20)).toBe('pollution');
+    expect(why(60, 5)).toBe('air');
+    expect(why(0, 0)).toBe('chance');
+    // No roll in another phase, and none on a what-if copy.
+    expect(playerEventChance(colony(80), 'sickness', 'production', 'p0')).toBe(0);
+    expect(rollPlayerEvent(cloneForSim(colony(80, [12, 0, 0, 0])), 'sickness', 'development', 'p0')).toBe(false);
+
+    // Seeded: the same game rolls the same, and over many games about as often as the chance says.
+    const rolls = (seed: number) => {
+      const state = colony(30, [0, 0, 0, 0], seed);
+      return [0, 1, 2, 3].map((i) => rollPlayerEvent(state, 'sickness', 'development', `p${i}`));
+    };
+    expect(rolls(11)).toEqual(rolls(11));
+    let sick = 0;
+    for (let seed = 1; seed <= 250; seed++) sick += rolls(seed).filter(Boolean).length;
+    expect(sick / 1_000).toBeGreaterThan(base + sickness.air.smoggy - 0.05);
+    expect(sick / 1_000).toBeLessThan(base + sickness.air.smoggy + 0.05);
+
+    // At development start: certain sickness makes a player without Medicine sick; one with a Medicine takes it.
+    const start = (body: (state: GameState) => void, pollutionBy?: number[]) => {
+      const state = colony(0, pollutionBy);
+      state.players[0]!.stock.medicine = 1;
+      state.players[1]!.stock.medicine = 0;
+      state.players[1]!.sick = true;
+      while (state.phase !== 'development') advancePhase(state);
+      body(state);
+    };
+    withSickness({ phases: { development: 1 }, cap: 1 }, () =>
+      start((state) => {
+        expect([state.players[0]!.sick, state.players[0]!.stock.medicine]).toEqual([false, 0]);
+        expect(state.players[1]!.sick).toBe(true);
+      }),
+    );
+    // With no chance nobody falls sick, not even last month's sick player, and nobody uses a Medicine.
+    withSickness({ phases: { development: 0 } }, () =>
+      start((state) => {
+        expect(state.players.map((p) => p.sick)).toEqual([false, false, false, false]);
+        expect(state.players[0]!.stock.medicine).toBe(1);
+      }),
+    );
+    // Each player rolls on its own risk: only last month's polluter falls sick.
+    withSickness({ phases: { development: 0 }, pollution: { perPoint: 1, max: 1 }, cap: 1 }, () =>
+      start((state) => expect(state.players.map((p) => p.sick)).toEqual([false, true, false, false]), [0, 5, 0, 0]),
+    );
   });
 });
 

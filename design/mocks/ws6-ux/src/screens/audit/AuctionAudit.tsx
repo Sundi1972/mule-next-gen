@@ -301,7 +301,6 @@ export function WalkAudit({ s, start = 'walk', markTally = false }: { s: Scenari
           shipPays={auction.shipPays}
           storeStock={auction.storeForSale}
           marks={{ ask: true, bid: true }}
-          stage="walk"
           meId="lena"
           {...(closed ? {} : { onDir: drag })}
           className={cx('min-h-0 flex-1', closed && 'opacity-40')}
@@ -566,7 +565,6 @@ export function TvWalkAudit({ s }: { s: Scenario }) {
                 shipPays={auction.shipPays}
                 storeStock={stock}
                 marks={{ ask: true, bid: true }}
-                stage="walk"
                 className="min-h-0 flex-1"
               />
               {s.shipPays !== null && <ShipCaption good={s.good} price={s.shipPays} lo={s.lo} hi={s.hi} tv />}

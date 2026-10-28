@@ -211,7 +211,6 @@ export function Auction() {
           shipPays={auction.shipPays}
           storeStock={auction.storeForSale}
           marks={{ ask: true, bid: true }}
-          stage="walk"
           meId={me.id}
           wrapCreature={speakerAt}
           {...(onBoard ? { onDir: (d: -1 | 0 | 1) => walk(stepDir(d)) } : {})}

@@ -78,7 +78,6 @@ export function WalkBoard({
   lines: extra = [],
   marks,
   storeStock,
-  stage,
   meId,
   onDir,
   size = 'phone',
@@ -98,7 +97,6 @@ export function WalkBoard({
   marks?: BoardMarks;
   /** The store's stock of this good: shown on its selling line, or as SOLD OUT when 0 and it sells none. */
   storeStock?: number;
-  stage: 'declare' | 'walk';
   meId?: string;
   onDir?: (dir: -1 | 0 | 1) => void;
   size?: 'phone' | 'tv';
@@ -148,7 +146,7 @@ export function WalkBoard({
 
   // While units change hands the trade bar is where the two lines met, so they give way to it.
   const best = bestPrices(walkers);
-  const moving = stage === 'walk' && deals.length === 0;
+  const moving = deals.length === 0;
   const askLine = moving && marks?.ask ? best.ask : null;
   const bidLine = moving && marks?.bid ? best.bid : null;
   const gap = askLine && bidLine ? askLine.price - bidLine.price : 0;
@@ -184,18 +182,6 @@ export function WalkBoard({
       </div>
 
       <div className="relative min-w-0 flex-1">
-        {stage === 'declare' && (
-          <>
-            <div className={cx('absolute inset-x-0 top-0 bg-rise/5', tv ? 'h-24' : 'h-12')} />
-            <div className={cx('absolute inset-x-0 bottom-0 bg-fall/5', tv ? 'h-39' : 'h-20')} />
-            <span className={cx('absolute inset-x-0 text-center font-display font-semibold text-rise/80', tv ? 'top-28 text-xl' : 'top-14 text-[11px]')}>
-              ▼ SELLERS START AT THE TOP AND WALK DOWN TO ASK LESS
-            </span>
-            <span className={cx('absolute inset-x-0 text-center font-display font-semibold text-fall/80', tv ? 'bottom-43 text-xl' : 'bottom-22 text-[11px]')}>
-              ▲ BUYERS START AT THE BOTTOM AND WALK UP TO BID MORE
-            </span>
-          </>
-        )}
         {/* Column guides */}
         <div className="absolute inset-y-0 left-0 flex" style={{ right: gutter }}>
           {walkers.map((w) => (

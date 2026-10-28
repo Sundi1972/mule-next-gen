@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
+import { ConditionTag, ThoughtBubble, waddleSeconds, type Condition, type FoodEaten, type PaceRule } from './Condition';
 import { Creature } from './Creature';
 import { GoodIcon } from './GoodIcon';
 import { Mule } from './Mule';
@@ -70,9 +71,9 @@ const band = (b: { y0: number; y1: number }): CSSProperties => ({ top: `${b.y0}%
 
 /** Type and creature sizes: the phone's, the big screen's side panel, and the shell's wide layout. */
 const SIZES = {
-  phone: { lock: 'py-px text-[7px]', name: 'text-[11px]', price: 'text-[10px]', small: 'text-[8px]', icon: 20, fit: 16, mule: 30, creature: 28, led: 32, bar: 'h-1 w-8', sign: 'h-5 w-5', chimney: 'h-3 w-3', caps: 'text-[8px]!', door: 'text-base', doorNote: 'text-[7px]' },
-  tv: { lock: 'py-0.5 text-[10px]', name: 'text-sm', price: 'text-sm', small: 'text-xs', icon: 30, fit: 22, mule: 44, creature: 40, led: 44, bar: 'h-1.5 w-10', sign: 'h-7 w-7', chimney: 'h-4 w-4', caps: 'text-xs!', door: 'text-xl', doorNote: 'text-[10px]' },
-  wide: { lock: 'py-0.5 text-[11px]', name: 'text-lg', price: 'text-base', small: 'text-sm', icon: 40, fit: 30, mule: 84, creature: 52, led: 60, bar: 'h-2 w-14', sign: 'h-10 w-10', chimney: 'h-5 w-5', caps: 'text-xs!', door: 'text-3xl', doorNote: 'text-xs' },
+  phone: { lock: 'py-px text-[7px]', name: 'text-[11px]', price: 'text-[10px]', small: 'text-[8px]', icon: 20, fit: 16, mule: 30, creature: 28, led: 32, sign: 'h-5 w-5', chimney: 'h-3 w-3', caps: 'text-[8px]!', door: 'text-base', doorNote: 'text-[7px]' },
+  tv: { lock: 'py-0.5 text-[10px]', name: 'text-sm', price: 'text-sm', small: 'text-xs', icon: 30, fit: 22, mule: 44, creature: 40, led: 44, sign: 'h-7 w-7', chimney: 'h-4 w-4', caps: 'text-xs!', door: 'text-xl', doorNote: 'text-[10px]' },
+  wide: { lock: 'py-0.5 text-[11px]', name: 'text-lg', price: 'text-base', small: 'text-sm', icon: 40, fit: 30, mule: 84, creature: 52, led: 60, sign: 'h-10 w-10', chimney: 'h-5 w-5', caps: 'text-xs!', door: 'text-3xl', doorNote: 'text-xs' },
 };
 type Sizes = (typeof SIZES)[keyof typeof SIZES];
 
@@ -93,13 +94,9 @@ export interface StoreInteriorProps {
   /** Why a closed room is closed, such as "needs a MULE"; an empty note fades the room without one. */
   locks?: Partial<Record<StoreRoom, string>>;
   /** The player whose screen this is, standing at the room their MULE says they used last. */
-  me?: {
-    id: string;
-    slot: Slot;
-    leading: Leading;
-    /** Share of their development time left, for the bar over their head. */
-    time: number;
-  };
+  me?: Visitor;
+  /** The engine's DEV_WALK: with it, your colonist shows its condition. */
+  paceRule?: PaceRule;
   /** Drawn over the floor, such as the start-of-turn card. */
   overlay?: ReactNode;
   /** The big screen's side panel. */
@@ -117,12 +114,13 @@ export interface StoreInteriorProps {
  * airlock door to the colony at each end. It fills whatever stage it is given. The room the guide names glows and
  * says TAP; a closed room stays legible and says why.
  */
-export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onShop, onDoor, next = [], locks, me, overlay, tv = false, wide = false, wrapCreature }: StoreInteriorProps) {
+export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onShop, onDoor, next = [], locks, me, paceRule, overlay, tv = false, wide = false, wrapCreature }: StoreInteriorProps) {
   const usable = (s: Shop) => !open || open.includes(s);
   const tap = (s: Shop) => (onShop ? () => onShop(s) : undefined);
   const cost = (s: Shop) => (prices[s] === undefined ? null : `${prices[s]} cr`);
   const glows = (r: StoreRoom) => next.includes(r);
-  const z = wide ? SIZES.wide : tv ? SIZES.tv : SIZES.phone;
+  const size = wide ? 'wide' : tv ? 'tv' : 'phone';
+  const z = SIZES[size];
   const price = cx('font-mono font-bold', z.price);
   const worksOpen = FACTORY_GOODS.some(usable);
   return (
@@ -271,7 +269,7 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onSho
         <Door side="R" onTap={onDoor} next={glows('doorR')} z={z} />
       </div>
 
-      {me && <Colonist at={SPOT[spotFor(me.leading)]} id={me.id} slot={me.slot} leading={me.leading} time={me.time} testid={`visitor-${me.id}`} z={z} wrap={wrapCreature} />}
+      {me && <Colonist me={me} at={SPOT[spotFor(me.leading)]} paceRule={paceRule} size={size} z={z} wrap={wrapCreature} />}
       {overlay}
     </div>
   );
@@ -365,32 +363,54 @@ function Door({ side, onTap, next, z }: { side: 'L' | 'R'; onTap: (() => void) |
   );
 }
 
+/** Your colonist in the hall: the room it stands at comes from its MULE. */
+export interface Visitor {
+  id: string;
+  slot: Slot;
+  leading: Leading;
+  /** How hunger and sickness slow it this month (PlayerView.condition). */
+  condition?: Condition | null;
+  /** What you ate and needed, for the rule a long press on your tag shows. */
+  food?: FoodEaten;
+  /** Walking: it waddles at its condition's pace and its MULE walks. */
+  moving?: boolean;
+  /** When the one clock starts, as a performance.now() time: the thought bubble shows then. */
+  clockStartsAt?: number;
+}
+
 /**
- * Your colonist on the floor with your time bar, leading your MULE (the character, not the glyph). Before R1 it
- * stands at the room it used; it never walks, so the waddle and the MULE's walk cycle (C14) do not play yet.
+ * Your colonist on the floor, leading your MULE, with its condition at its shoulder (AM-14). Before R1 it stands at the
+ * room it used and never walks, so the waddle and the MULE's walk cycle (C14) wait for `moving`.
  */
-function Colonist({ at, id, slot, leading, time, testid, z, wrap = (_, c) => c }: { at: { x: number; y: number }; id: string; slot: Slot; leading: Leading; time: number; testid: string; z: Sizes; wrap?: CreatureWrap | undefined }) {
-  const species = useSeatSpecies(slot);
+function Colonist({ me, at, paceRule, size, z, wrap = (_, c) => c }: { me: Visitor; at: { x: number; y: number }; paceRule: PaceRule | undefined; size: keyof typeof SIZES; z: Sizes; wrap?: CreatureWrap | undefined }) {
+  const species = useSeatSpecies(me.slot);
   const left = at.x > 50;
+  const condition = me.condition ?? null;
   return (
-    <div className="pointer-events-none absolute z-[3] flex -translate-x-1/2 -translate-y-[80%] flex-col items-center" style={{ left: `${at.x}%`, top: `${at.y}%` }} data-testid={testid}>
-      <span className={cx('mb-0.5 overflow-hidden rounded-full bg-void/70', z.bar)}>
-        <span className="block h-full rounded-full" style={{ width: `${Math.max(0, Math.min(1, time)) * 100}%`, background: SLOT_COLOR[slot] }} />
-      </span>
-      <span className={cx('flex items-end', left && 'flex-row-reverse')}>
+    <div className="pointer-events-none absolute z-[3] flex -translate-x-1/2 -translate-y-[80%] flex-col items-center" style={{ left: `${at.x}%`, top: `${at.y}%` }} data-testid={`visitor-${me.id}`}>
+      <span
+        className={cx('flex items-end', left && 'flex-row-reverse', me.moving && 'animate-[store-waddle_0.36s_ease-in-out_infinite]')}
+        style={me.moving ? { animationDuration: `${waddleSeconds(condition?.conditionPace ?? 1)}s` } : undefined}
+      >
         {wrap(
-          id,
-          <span className="rounded-full ring-2 ring-holo ring-offset-1 ring-offset-table">
-            <Creature species={species} color={SLOT_COLOR[slot]} size={z.creature} />
+          me.id,
+          <span className="relative rounded-full ring-2 ring-holo ring-offset-1 ring-offset-table">
+          <Creature species={species} color={SLOT_COLOR[me.slot]} size={z.creature} />
+          {paceRule && (
+            <>
+              <ConditionTag id={me.id} condition={condition} rule={paceRule} food={me.food} size={size} explain />
+              <ThoughtBubble id={me.id} condition={condition} rule={paceRule} moving={!!me.moving} clockStartsAt={me.clockStartsAt} size={size} edge={at.x < 15 ? 'left' : at.x > 85 ? 'right' : undefined} />
+            </>
+          )}
           </span>,
         )}
-        {leading && <Mule size={z.led} state="idle" good={leading === 'empty' ? null : leading} owner={slot} facing={left ? 'left' : 'right'} />}
+        {me.leading && <Mule size={z.led} state={me.moving ? 'walk' : 'idle'} good={me.leading === 'empty' ? null : me.leading} owner={me.slot} facing={left ? 'left' : 'right'} />}
       </span>
     </div>
   );
 }
 
-/** Development time left, and why: it comes from how well fed the colonist is. */
+/** Development time left, and how well fed the colonist is: Food sets how fast it walks, never how long it has. */
 export function FoodTime({ seconds, total, food, need, note }: { seconds: number; total: number; food: number; need: number; note?: ReactNode }) {
   const full = food >= need;
   return (
@@ -399,7 +419,7 @@ export function FoodTime({ seconds, total, food, need, note }: { seconds: number
         <div className={cx('absolute inset-y-0 left-0 rounded-full', seconds < 10 ? 'bg-alert' : 'bg-holo')} style={{ width: `${Math.max(0, Math.min(1, seconds / total)) * 100}%` }} />
       </div>
       <span className="text-xs text-ink-2">
-        {note ?? (full ? `Full time: you had ${food} Food and needed ${need}.` : `Short of Food (${food} of ${need}), so less time.`)}
+        {note ?? (full ? `Fed: you had ${food} Food and needed ${need}.` : `Short of Food (${food} of ${need}), so you walk slower.`)}
       </span>
     </div>
   );

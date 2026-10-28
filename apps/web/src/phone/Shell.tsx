@@ -102,6 +102,7 @@ function useWideRef<T extends HTMLElement>() {
 export function PhoneShell({
   phase,
   seconds,
+  status,
   now,
   rail,
   footer,
@@ -110,6 +111,8 @@ export function PhoneShell({
 }: {
   phase: string;
   seconds?: number | undefined;
+  /** Shown where the clock goes when the phase has none, such as planning's ready count. */
+  status?: ReactNode;
   /** The one next step, first in the rail. Screens without it draw no Now card. */
   now?: Now | undefined;
   /** Controls and details for the side rail; scrolls if it runs long. */
@@ -146,7 +149,7 @@ export function PhoneShell({
                   </span>
                   <span className="truncate font-display text-lg font-semibold leading-tight @min-[1100px]/shell:text-2xl">{phase}</span>
                 </div>
-                {seconds !== undefined && <Timer seconds={seconds} className="@min-[1100px]/shell:h-11 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-2xl" />}
+                {seconds !== undefined ? <Timer seconds={seconds} className="@min-[1100px]/shell:h-11 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-2xl" /> : status}
               </div>
               <div className="flex items-center gap-2">
                 <PlayerMark slot={slot} species={self.species} size={12} label={`You, ${SPECIES_NAME[self.species]}`} />

@@ -33,6 +33,7 @@ function toFirstStatus() {
       };
     },
     changed: () => {},
+    hostId: () => 's1',
   };
   const advance = (ms: number) => {
     now += ms;
@@ -47,6 +48,8 @@ function toFirstStatus() {
   };
   const game = new MuleGame(ctx, 7);
   game.start(seats);
+  // Planning has no clock: it ends when both humans are Ready.
+  for (const s of seats) if (!s.isAi) game.handle(s.id, { type: 'ready' });
   for (let i = 0; i < 20_000 && game.viewFor(null).auction?.stage !== 'status'; i++) advance(WALK.tickMs);
   expect(game.viewFor(null).auction?.stage, "the first good's status screen comes up").toBe('status');
   return game;

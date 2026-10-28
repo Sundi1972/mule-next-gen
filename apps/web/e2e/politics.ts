@@ -8,10 +8,12 @@ import type { MuleIntent, MuleView } from '@mule/protocol';
 import { errors as playwrightErrors, type Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
-import { check, launch, PHONE, startServer, TV } from './harness';
+import { check, held, launch, PHONE, startServer, TV } from './harness';
 import { PRESS_MS } from './politics-steps';
 
 const SCALE = 0.25;
+/** How long the last phone's Ready takes to land and the land grant to show; planning has no clock. */
+const READY_LANDS_MS = 3_000;
 /** The rate the new Governor sets: UBER-AC-2's 8%. */
 const NEW_TAX = 8;
 /** How often the reveal is read on all three screens at once. */
@@ -72,46 +74,50 @@ async function main(): Promise<void> {
     const [lenaId, ossaId] = [truth.idOf(lena), truth.idOf(ossa)];
     const taxNow = truth.board().politics!.tax.percent;
     check(taxNow < LENA_CAP, `B-AC-6: today's tax ${taxNow}% is under Lena's ${LENA_CAP}%, so she steps the cap up`);
-    await everyone(phones, (p) => p.page.locator('[data-phase=planning]').getByTestId('agenda-election').click({ timeout: 5_000 }));
-    await Promise.all([
-      (async () => {
-        // The cap starts at today's tax; plus steps it to her cap, and Run's label waits for it.
-        await lena.page.getByTestId('run-governor').click({ timeout: PRESS_MS });
-        check((await lena.page.getByTestId('promise-cap-value').innerText({ timeout: PRESS_MS })).trim() === `${taxNow}%`, `B-AC-6: the cap starts at today's ${taxNow}%`);
-        for (let n = taxNow; n < LENA_CAP; n++) await lena.page.getByTestId('promise-cap-plus').click({ timeout: PRESS_MS });
-        await lena.page.getByTestId('promise-run').filter({ hasText: `Run, promising “Tax no higher than ${LENA_CAP}%”` }).click({ timeout: PRESS_MS });
-      })(),
-      (async () => {
-        // A Sheriff run is one tap and carries no promise.
-        await ossa.page.getByTestId('run-sheriff').click({ timeout: PRESS_MS });
-        await ossa.page.getByTestId('running').filter({ hasText: 'You run for Sheriff;' }).waitFor({ timeout: PRESS_MS });
-        check(JSON.stringify(ossa.runs) === JSON.stringify([{ type: 'run', office: 'sheriff' }]), `B-AC-6 (negative): a Sheriff run sends no promise, got ${JSON.stringify(ossa.runs)}`);
-        // A first look at the picker, then Cancel: nothing is sent.
-        await ossa.page.getByTestId('run-governor').click({ timeout: PRESS_MS });
-        const pick = ossa.page.getByTestId('promise-pick');
-        await pick.waitFor({ timeout: PRESS_MS });
-        check(await ossa.page.getByTestId('promise-run').isDisabled(), 'B-AC-6: "Run" waits until a promise is chosen');
-        await ossa.page.getByTestId('promise-cancel').click({ timeout: PRESS_MS });
-        await pick.waitFor({ state: 'hidden', timeout: PRESS_MS });
-        check(ossa.runs.length === 1, `B-AC-6: Cancel sends nothing, got ${JSON.stringify(ossa.runs)}`);
-        // Then she runs for Governor instead, holding the tax.
-        await ossa.page.getByTestId('run-governor').click({ timeout: PRESS_MS });
-        await ossa.page.getByTestId('promise-hold').click({ timeout: PRESS_MS });
-        await ossa.page.getByTestId('promise-run').filter({ hasText: 'Run, promising “Hold the tax”' }).click({ timeout: PRESS_MS });
-      })(),
-    ]);
-    const LENA_PROMISE: TaxPromise = { kind: 'cap', percent: LENA_CAP };
-    const OSSA_PROMISE: TaxPromise = { kind: 'hold' };
-    check(JSON.stringify(lena.runs) === JSON.stringify([{ type: 'run', office: 'governor', promise: LENA_PROMISE }]), `B-AC-6: Lena's phone sends exactly one Governor run with her promise, got ${JSON.stringify(lena.runs)}`);
-    check(JSON.stringify(ossa.runs.slice(1)) === JSON.stringify([{ type: 'run', office: 'governor', promise: OSSA_PROMISE }]), `B-AC-6: Ossa's phone then sends one Governor run with her promise, got ${JSON.stringify(ossa.runs)}`);
-    await lena.page.getByTestId('running').filter({ hasText: `You run for Governor, promising “Tax no higher than ${LENA_CAP}%”` }).waitFor({ timeout: PRESS_MS });
-    await ossa.page.getByTestId('running').filter({ hasText: 'You run for Governor, promising “Hold the tax”' }).waitFor({ timeout: PRESS_MS });
-    await everyone(phones, (p) => p.page.getByTestId('candidates').filter({ hasText: lena.name }).filter({ hasText: ossa.name }).waitFor({ timeout: PRESS_MS }));
-    const running = truth.board().politics!.election!.candidates.governor;
-    const aiIds = truth.board().players.filter((p) => p.isAi).map((p) => p.id);
-    check(running.includes(lenaId) && running.includes(ossaId) && running.every((id) => id === lenaId || id === ossaId || aiIds.includes(id)), `B-AC-1: the server has both humans running for Governor, and nobody else but the AI seat, got ${running.join(', ')}`);
     const promises = () => truth.state().politics!.election!.promises;
-    check(JSON.stringify(promises()[lenaId]) === JSON.stringify(LENA_PROMISE) && JSON.stringify(promises()[ossaId]) === JSON.stringify(OSSA_PROMISE), `B-AC-6: the server holds Lena's and Ossa's promises, got ${JSON.stringify(promises())}`);
+    // Every tap below lands inside nominate (about 5 s here), so the game clock is held until the look-around is over.
+    // The AI seat acts on that clock too: it runs, if it does, only after the release.
+    await held(server, code, async () => {
+      await everyone(phones, (p) => p.page.locator('[data-phase=planning]').getByTestId('agenda-election').click({ timeout: 5_000 }));
+      await Promise.all([
+        (async () => {
+          // The cap starts at today's tax; plus steps it to her cap, and Run's label waits for it.
+          await lena.page.getByTestId('run-governor').click({ timeout: PRESS_MS });
+          check((await lena.page.getByTestId('promise-cap-value').innerText({ timeout: PRESS_MS })).trim() === `${taxNow}%`, `B-AC-6: the cap starts at today's ${taxNow}%`);
+          for (let n = taxNow; n < LENA_CAP; n++) await lena.page.getByTestId('promise-cap-plus').click({ timeout: PRESS_MS });
+          await lena.page.getByTestId('promise-run').filter({ hasText: `Run, promising “Tax no higher than ${LENA_CAP}%”` }).click({ timeout: PRESS_MS });
+        })(),
+        (async () => {
+          // A Sheriff run is one tap and carries no promise.
+          await ossa.page.getByTestId('run-sheriff').click({ timeout: PRESS_MS });
+          await ossa.page.getByTestId('running').filter({ hasText: 'You run for Sheriff;' }).waitFor({ timeout: PRESS_MS });
+          check(JSON.stringify(ossa.runs) === JSON.stringify([{ type: 'run', office: 'sheriff' }]), `B-AC-6 (negative): a Sheriff run sends no promise, got ${JSON.stringify(ossa.runs)}`);
+          // A first look at the picker, then Cancel: nothing is sent.
+          await ossa.page.getByTestId('run-governor').click({ timeout: PRESS_MS });
+          const pick = ossa.page.getByTestId('promise-pick');
+          await pick.waitFor({ timeout: PRESS_MS });
+          check(await ossa.page.getByTestId('promise-run').isDisabled(), 'B-AC-6: "Run" waits until a promise is chosen');
+          await ossa.page.getByTestId('promise-cancel').click({ timeout: PRESS_MS });
+          await pick.waitFor({ state: 'hidden', timeout: PRESS_MS });
+          check(ossa.runs.length === 1, `B-AC-6: Cancel sends nothing, got ${JSON.stringify(ossa.runs)}`);
+          // Then she runs for Governor instead, holding the tax.
+          await ossa.page.getByTestId('run-governor').click({ timeout: PRESS_MS });
+          await ossa.page.getByTestId('promise-hold').click({ timeout: PRESS_MS });
+          await ossa.page.getByTestId('promise-run').filter({ hasText: 'Run, promising “Hold the tax”' }).click({ timeout: PRESS_MS });
+        })(),
+      ]);
+      const LENA_PROMISE: TaxPromise = { kind: 'cap', percent: LENA_CAP };
+      const OSSA_PROMISE: TaxPromise = { kind: 'hold' };
+      check(JSON.stringify(lena.runs) === JSON.stringify([{ type: 'run', office: 'governor', promise: LENA_PROMISE }]), `B-AC-6: Lena's phone sends exactly one Governor run with her promise, got ${JSON.stringify(lena.runs)}`);
+      check(JSON.stringify(ossa.runs.slice(1)) === JSON.stringify([{ type: 'run', office: 'governor', promise: OSSA_PROMISE }]), `B-AC-6: Ossa's phone then sends one Governor run with her promise, got ${JSON.stringify(ossa.runs)}`);
+      await lena.page.getByTestId('running').filter({ hasText: `You run for Governor, promising “Tax no higher than ${LENA_CAP}%”` }).waitFor({ timeout: PRESS_MS });
+      await ossa.page.getByTestId('running').filter({ hasText: 'You run for Governor, promising “Hold the tax”' }).waitFor({ timeout: PRESS_MS });
+      await everyone(phones, (p) => p.page.getByTestId('candidates').filter({ hasText: lena.name }).filter({ hasText: ossa.name }).waitFor({ timeout: PRESS_MS }));
+      const running = truth.board().politics!.election!.candidates.governor;
+      const aiIds = truth.board().players.filter((p) => p.isAi).map((p) => p.id);
+      check(running.includes(lenaId) && running.includes(ossaId) && running.every((id) => id === lenaId || id === ossaId || aiIds.includes(id)), `B-AC-1: the server has both humans running for Governor, and nobody else but the AI seat, got ${running.join(', ')}`);
+      check(JSON.stringify(promises()[lenaId]) === JSON.stringify(LENA_PROMISE) && JSON.stringify(promises()[ossaId]) === JSON.stringify(OSSA_PROMISE), `B-AC-6: the server holds Lena's and Ossa's promises, got ${JSON.stringify(promises())}`);
+    });
 
     // Done with nominate on both phones; the AI seat runs and votes through its own hand. Both humans vote for Lena.
     await everyone(phones, (p) => p.page.getByTestId('ready').click({ timeout: PRESS_MS }));
@@ -352,7 +358,7 @@ async function claimPlots(page: Page): Promise<void> {
   const over = page.locator('[data-phase]:not([data-phase=planning]):not([data-phase=landGrant])');
   for (let tries = 0; ; tries++) {
     check(tries < 40, 'the land grant let this phone claim its plots');
-    await claim.or(over).first().waitFor({ timeout: within(PHASE_MS.planning + PHASE_MS.landGrant) });
+    await claim.or(over).first().waitFor({ timeout: READY_LANDS_MS + within(PHASE_MS.landGrant) });
     if (await over.count()) return;
     try {
       const left = Number(/(\d+) OF/.exec(await claim.innerText({ timeout: PRESS_MS }))?.[1]);

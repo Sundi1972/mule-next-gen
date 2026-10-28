@@ -54,7 +54,8 @@ const LAND_AUCTION_MS = LOTS.maxLotsPerMonth * (LOTS.introMs + LOTS.walkMs + LOT
 /** How long each phase this test waits for can take to come, from the server's phase lengths. */
 const REACH = {
   planning: within(0),
-  landGrant: within(PHASE_MS.planning),
+  // Planning has no clock: it ends on the presses below, when both phones are Ready.
+  landGrant: within(PHASE_MS.planning ?? 0),
   development: within(PHASE_MS.landGrant + LAND_AUCTION_MS),
   auction: within(PHASE_MS.development + PHASE_MS.production),
   walk: within(WALK.statusMs),
