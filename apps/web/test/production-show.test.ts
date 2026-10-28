@@ -53,23 +53,14 @@ function plot(html: string, x: number, y: number): string {
 const bars = (html: string) => (html.match(/data-bar="unit"/g) ?? []).length;
 const reasons = (html: string) => (html.match(/data-badge="reason"/g) ?? []).length;
 
-/** The layer each kind draws over the map, by the test id the approved mock gives it. */
-const LAYER_ID: Partial<Record<EventKind, string>> = { storm: 'storm-front', quake: 'quake-hit', blight: 'blight-1-0', flood: 'flood-1-0', fire: 'fire-1-0', comet: 'comet' };
+/** When the month's event window ends: it opens at SHOW.eventAt and runs the events' playMs, never under a quiet month's. */
+const windowEnd = (p: ProductionView) => SHOW.eventAt + Math.max(SHOW.flyStart - SHOW.eventAt, p.events.reduce((n, e) => n + e.playMs, 0) / 1000);
 
 describe('the production show on the map', () => {
-  it('B-AC-7: each of the nine event kinds plays its own animation over the plots it hit', () => {
-    const layers = new Map<string, EventKind>();
+  // Each wave-1 key's own story is T-AC-4 in events-production.test.ts; here, every kind reaches its plots in time.
+  it('B-AC-7: whatever its kind, the event has reached every plot it hit by the end of its window, and never a plot it missed', () => {
     for (const kind of KINDS) {
-      // Early in the event the comet still streaks across; a little later every kind has reached its plots.
-      const early = render(month(kind), SHOW.eventAt + 1.2);
-      const late = render(month(kind), SHOW.flyStart - 0.05);
-      const id = LAYER_ID[kind];
-      if (id) expect(early + late, `${kind} draws ${id}`).toContain(`data-testid="${id}"`);
-      const layer = early.slice(early.indexOf(`data-event="${kind}"`), early.indexOf('data-testid="plot-'));
-      expect(layer.length, `${kind} draws a layer`).toBeGreaterThan(40);
-      expect(layers.get(layer), `${kind} draws the same layer as ${layers.get(layer)}`).toBeUndefined();
-      layers.set(layer, kind);
-
+      const late = render(month(kind), windowEnd(month(kind)) - 0.05);
       expect(plot(late, 1, 0), `${kind}: the plot that lost`).toContain('data-testid="hit-1-0"');
       expect(plot(late, 4, 0), `${kind}: the plot that gained`).toContain('data-testid="hit-4-0"');
       expect(plot(late, 2, 2), `${kind}: a plot it missed is never badged`).not.toContain('data-testid="hit-');
@@ -80,7 +71,7 @@ describe('the production show on the map', () => {
     const before = render(month('storm'), SHOW.eventAt - 0.1);
     expect(bars(plot(before, 1, 0))).toBe(4);
     expect(bars(plot(before, 4, 0))).toBe(3);
-    const after = render(month('storm'), SHOW.flyStart - 0.05);
+    const after = render(month('storm'), windowEnd(month('storm')) - 0.05);
     expect(bars(plot(after, 1, 0))).toBe(2);
     expect(plot(after, 1, 0)).toMatch(/data-testid="hit-1-0"[^>]*>−2</);
     expect(bars(plot(after, 4, 0))).toBe(5);
@@ -88,7 +79,7 @@ describe('the production show on the map', () => {
     expect(bars(plot(after, 2, 2))).toBe(2);
     // The TV keeps the plot's reason beside the event's badge; the phone has room for one badge, and the event's wins.
     expect(reasons(plot(after, 4, 0))).toBe(1);
-    const phone = render(month('storm'), SHOW.flyStart - 0.05, false);
+    const phone = render(month('storm'), windowEnd(month('storm')) - 0.05, false);
     expect(plot(phone, 4, 0)).toMatch(/data-testid="hit-4-0"[^>]*>\+2</);
     expect(reasons(plot(phone, 4, 0))).toBe(0);
     expect(reasons(plot(render(month('storm'), SHOW.eventAt - 0.1, false), 4, 0))).toBe(1);
@@ -101,7 +92,7 @@ describe('the production show on the map', () => {
       events: [{ ...month('fire').events[0]!, hits: lines.map((l, order) => ({ x: l.x, y: l.y, order, delta: -1 })) }],
       lengthMs: 15_000,
     };
-    const html = render(fire, SHOW.flyStart - 0.05);
+    const html = render(fire, windowEnd(fire) - 0.05);
     for (const l of lines) expect(html, `hit-${l.x}-${l.y}`).toContain(`data-testid="hit-${l.x}-${l.y}"`);
   });
 
