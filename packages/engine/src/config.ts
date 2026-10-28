@@ -938,8 +938,11 @@ export const AI_HANDS = {
     waitGap: [0.03, 0.08] as [number, number],
     /** It wanders its target up to this share of the board inside its limit, so its stops are hard to read. */
     targetJitter: 0.03,
-    /** How long it waits for the decider at the status screen before it plays its own top option. */
-    decideWaitMs: 2_500,
+    /**
+     * How long it waits for the decider at the status screen before it plays its own top option. It asks as the
+     * screen opens, so this stays well under WALK.statusMs and a late answer is still declared before the walk.
+     */
+    decideWaitMs: 4_000,
   },
   grant: {
     /** A go/no-go choice takes this much longer than a bare reaction. */
