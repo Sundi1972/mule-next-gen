@@ -38,7 +38,7 @@ export function GameOver() {
                   {i + 1}
                 </span>
                 <PlayerMark slot={r.slot} size={16} />
-                <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                <span className="min-w-0 flex-1 text-sm font-semibold break-words">
                   {r.player.name}
                   {r.player.id === self.id && ' (you)'}
                 </span>
