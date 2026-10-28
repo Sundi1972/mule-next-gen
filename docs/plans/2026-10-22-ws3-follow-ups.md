@@ -76,8 +76,8 @@
 - **Extract the walking state machine's pure parts** into `apps/server/src/dev-walking.ts`, as land-auction.ts and politics-view.ts are: `DevIntent`, `Colonist`, `walkTarget`, `placeName`, the order of due arrivals, `colonistView`. The timer wiring stays in `MuleGame`. mule-game.ts went from 881 to 1036 lines.
 - **Extracting the walking parts is PR-C, below** (the PM's order, 2026-10-28).
 - **`GRANT_TICK_MS` isn't scaled by `phaseScale`.** At phaseScale 0.1 on seed 7, the AI wins no land in month 1. This predates C13. **CLOSED, won't fix (PM ruling A, 2026-10-28):** WS4's T-AC-2 (phase-scale.test.ts) pins the tick at its real pace on purpose, so AI thumbs can still beat it, and that rule stands. Compressed-time games give AI seats little land; that is e2e runs and demos only, never a scale-1 game.
-- **RULE-7 row 1's 30 s timeout** (WS5's 5b3f3c8): re-time it under load once WS5's #112 (maps 2.7× faster) is on trunk, and drop it if the row stays well inside vitest's 5 s default. **Blocked:** #112 is merged into ws5-maps only, not into trunk 9e433ca.
-- **The FU-17 trim** (auction-steps.ts's three declare-text alternatives in `stageShown`). **Blocked:** WS4's #96 is merged into ws4-table only, not into trunk 9e433ca.
+- **RULE-7 row 1's 30 s timeout** (WS5's 5b3f3c8): re-time it under load once WS5's #112 (maps 2.7× faster) is on trunk, and drop it if the row stays well inside vitest's 5 s default. **Done: PR-E, below.**
+- **The FU-17 trim** (auction-steps.ts's three declare-text alternatives in `stageShown`). **Done: PR-D, below.**
 - **The AI's rule when humans finish development early** (parked by the PM): the pub path waits for AI seats, the Ready/drop path doesn't. Unify only on a PM ruling.
 
 ## PR-A: engine and server (`ws3-fu-a` from `ws3-auctions`)
@@ -193,12 +193,16 @@ No behaviour change: a pure move, as land-auction.ts and politics-view.ts alread
 
 WS4's FU-17 (#96, on trunk via #132) removed WalkBoard's dead declare block and narrowed its stage to `'walk'`. The three declare texts that `stageShown` in `apps/web/e2e/auction-steps.ts` (WS3's) looks for (`SELLERS START AT THE TOP`, `Done choosing`, `Buy, sell or pass?`) now exist nowhere in `apps/web/src` or `packages/ui/src`, so that check can't fire.
 
-- [ ] **Step 1:** remove that check, the `text` it alone used, and the doc comment's "Any sign of a declare screen counts as one". Keep the `· buy or sell?` heading alternative, which names the good on the status screen (Auction.tsx:60). The server-side UBER-AC-1 check (no declare stage) stays.
-- [ ] **Merge gate:** the grep is still empty at the head; `tsx e2e/auction-steps.ts` exits 0 with UBER-AC-1's ✓ (Tier 2, so run locally); typecheck 0; only auction-steps.ts changes; review clean.
+**MERGED into the lane as #138 (d1025ea, head dfa47f8):** +1 −3. auction-steps.ts exits 0 in 44 s, with both UBER-AC-1 ✓ lines. CI check and e2e are green, and the lead reviewed it from the diff.
+
+- [x] **Step 1:** remove that check, the `text` it alone used, and the doc comment's "Any sign of a declare screen counts as one". Keep the `· buy or sell?` heading alternative, which names the good on the status screen (Auction.tsx:60). The server-side UBER-AC-1 check (no declare stage) stays.
+- [x] **Merge gate:** the grep is still empty at the head; `tsx e2e/auction-steps.ts` exits 0 with UBER-AC-1's ✓ (Tier 2, so run locally); typecheck 0; only auction-steps.ts changes; review clean.
 
 ## PR-E: RULE-7 row 1's timeout (`ws3-rule7-timeout` from `ws3-auctions`)
 
 WS5's #112 (maps 2.7× faster) is on trunk via #133. Row 1 in `packages/engine/test/lots-colony.test.ts` (:110–128) still carries a `30_000` timeout as headroom (5b3f3c8).
 
-- [ ] **Step 1:** time the row 5 times under the machine's normal load, recording each time and the load average. If every run is under 2.5 s, drop the timeout and the comment's headroom clause. Otherwise set it to about 2× the slowest run, in whole seconds, and say so in the comment.
-- [ ] **Merge gate:** no assertion edited; `pnpm --filter @mule/engine test` green; typecheck 0; only lots-colony.test.ts changes; review clean.
+**MERGED into the lane as #140 (ce70203, head 49795ee):** row 1 took 170, 178, 237, 265 and 237 ms at a load average of about 13, so the `30_000` and its comment clause are gone. Engine is 266 +1 skipped. CI check and e2e are green, and the lead reviewed it from the diff.
+
+- [x] **Step 1:** time the row 5 times under the machine's normal load, recording each time and the load average. If every run is under 2.5 s, drop the timeout and the comment's headroom clause. Otherwise set it to about 2× the slowest run, in whole seconds, and say so in the comment.
+- [x] **Merge gate:** no assertion edited; `pnpm --filter @mule/engine test` green; typecheck 0; only lots-colony.test.ts changes; review clean.
