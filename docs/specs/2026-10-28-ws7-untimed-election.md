@@ -374,8 +374,8 @@ No spike needed.
 Note for slice 2a: its council was designed "built like the election", with clocks. To follow this
 ruling, I propose the Governor proposes a law at any time in planning, and the next month's planning
 opens with the law ballot (untimed, closes when everyone has voted, host's Continue for absent players),
-then a short clocked reveal. That spec's §1 C40 and RULE-40 would be amended before its build. For the
-PM to confirm; slice 2a is not built.
+then a short clocked reveal. CONFIRMED by the PM (2026-10-28; Heiko may overrule): folded as slice 2a's AM-1 (C40, RULE-40,
+RULE-41, HC-43, §3, B-AC-43).
 
 ## §9 · Ownership Boundaries `[handoff]`
 
