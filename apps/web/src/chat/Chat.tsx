@@ -136,7 +136,7 @@ function SeatRow() {
           .map(({ player, slot }) => (
             <span
               key={player.id}
-              className={cx('inline-flex min-w-0 flex-col items-center rounded-control px-0.5 transition-shadow', fallback?.from === player.id && 'ring-2')}
+              className={cx('inline-flex min-w-6 flex-col items-center rounded-control px-0.5 transition-shadow', fallback?.from === player.id && 'ring-2')}
               style={fallback?.from === player.id ? { ['--tw-ring-color' as string]: SLOT_COLOR[slot] } : undefined}
               data-testid={`seat-${player.id}`}
               data-speaking={fallback?.from === player.id || undefined}
