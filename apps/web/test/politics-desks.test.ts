@@ -204,18 +204,25 @@ function ceremony(result: ElectionResult, seconds: number): Pick<ElectionView, '
   return { ceremony: { seconds, total: beats.total / 1000, reached }, result: shown };
 }
 
-/** When `beat` of the first office starts, in show seconds, plus `after`. */
-function beatAt(result: ElectionResult, beat: Exclude<CeremonyBeat, 'tie'> | 'tie', after = 0.01): number {
-  const at = ceremonyBeats(SEATS, result).offices[0]!.at[beat];
+/** When `beat` of `office` (the first, unless named) starts, in show seconds, plus `after`. */
+function beatAt(result: ElectionResult, beat: CeremonyBeat, after = 0.01, office?: Office): number {
+  const offices = ceremonyBeats(SEATS, result).offices;
+  const at = (offices.find((o) => o.office === office) ?? offices[0]!).at[beat];
   return at! / 1000 + after;
 }
 
 const WON: ElectionResult = { governor: { winner: 's1', how: 'votes', tallies: [{ id: 's1', votes: 3 }, { id: 's2', votes: 1 }] } };
 const TIED: ElectionResult = { governor: { winner: 's2', how: 'land', tallies: [{ id: 's1', votes: 2 }, { id: 's2', votes: 2 }] } };
+/** Both offices: Ossa wins Governor from Lena, Kai wins Sheriff from Brix. */
+const BOTH: ElectionResult = {
+  governor: { winner: 's2', how: 'votes', tallies: [{ id: 's2', votes: 3 }, { id: 's1', votes: 1 }] },
+  sheriff: { winner: 's3', how: 'votes', tallies: [{ id: 's3', votes: 3 }, { id: 's4', votes: 2 }] },
+};
 
 /** Month 4's ceremony at `seconds`, Lena and Ossa on the stage, Lena running up to 8% and Ossa holding. */
 function inCeremony(result: ElectionResult, seconds: number, extra: Partial<PoliticsView> = {}): MuleView {
-  const e = election({ stage: 'ceremony', candidates: { governor: ['s1', 's2'] }, promises: { s1: CAP_8, s2: HOLD }, ...ceremony(result, seconds) });
+  const candidates = Object.fromEntries(Object.entries(result).map(([office, race]) => [office, race!.tallies.map((t) => t.id).sort()]));
+  const e = election({ stage: 'ceremony', candidates, promises: { s1: CAP_8, s2: HOLD }, ...ceremony(result, seconds) });
   return view(politics({ election: e, pay: { governor: 50 }, next: 7, ...extra }), me(), { month: 4 });
 }
 
@@ -420,6 +427,19 @@ describe('election day on the phone (C66, E-2)', () => {
     });
   });
 
+  describe('with both offices', () => {
+    bothOffices();
+    const both = (mine: Partial<Record<Office, string>>) => ballot(mine, { election: election({ stage: 'ballot', candidates: { governor: ['s1', 's2'], sheriff: ['s3', 's4'] }, promises: { s1: CAP_8, s2: HOLD }, done: [], waitingFor: SEATS }) });
+
+    it('C66, AM-21: two ballot papers, and Cast my vote needs a pick on both', () => {
+      const one = inHub(both({ governor: 's2' }));
+      expect(textOf(one, 'day-title')).toBe('Election day: Governor and Sheriff');
+      expect(textOf(one, 'ballot-sheriff-s3')).toBe('Kai');
+      expect(one).toMatch(/<button[^>]*disabled=""[^>]*data-testid="ready"[^>]*>Cast my vote</);
+      expect(inHub(both({ governor: 's2', sheriff: 's3' }))).toMatch(/<button(?![^>]*disabled="")[^>]*data-testid="ready"[^>]*>Cast my vote</);
+    });
+  });
+
   it('C66, E-5: your votes in words: how many, why, and your own numbers', () => {
     const weights = politics().weights.map((w) => (w.id === 's1' ? { ...w, votes: 1 } : w));
     const html = inHub(ballot({}, { weights }));
@@ -537,6 +557,19 @@ describe('the reveal (C66, RULE-62, B-AC-62)', () => {
     expect(textOf(html, 'companion-wait')).not.toContain('Next office on the TV');
   });
 
+  describe('with both offices', () => {
+    bothOffices();
+
+    it("C66: once the Governor is named the TV hands over to the Sheriff, and the phone beside it says the next office is on", () => {
+      const between = beatAt(BOTH, 'winner', 1, 'governor');
+      expect(textOf(onPhone(inCeremony(BOTH, between), ElectionDay, 1), 'companion-wait')).toContain('Next office on the TV');
+      const sheriff = onTv(inCeremony(BOTH, beatAt(BOTH, 'title', 1, 'sheriff')));
+      expect(textOf(sheriff, 'reveal-title')).toBe('And next, the colony’s newSheriff2 candidates');
+      expect(textOf(sheriff, 'reveal-progress')).toBe('Governor: Ossa ✓Sheriff: now');
+      expect(textOf(onPhone(inCeremony(BOTH, beatAt(BOTH, 'bars', 1, 'sheriff')), ElectionDay, 1), 'companion-wait')).toContain('The votes are being counted on the TV');
+    });
+  });
+
   it("B-AC-62 (phone, no TV): the phone carries the TV's ceremony itself, beat for beat", () => {
     const at = beatAt(WON, 'bars', POLITICS.ceremony.blockMs / 1000 + 0.01);
     const solo = onPhone(inCeremony(WON, at), ElectionDay, 0);
@@ -570,6 +603,18 @@ describe('the TV on election day (C66, E-2, E-5)', () => {
     expect(textOf(html, 'tv-voted-count')).toBe('Voted 2 of 5');
     expect(textOf(html, 'tv-weight-s2')).toBe('Ossa1+1·+1+14');
     expect(textOf(html, 'tv-ballot-governor')).toContain("Ossakeep it at 5%");
+  });
+
+  describe('with both offices', () => {
+    bothOffices();
+
+    it('C66, E-6: the summary holds both races, each with its tallies', () => {
+      const html = onTv(inCeremony(BOTH, beatAt(BOTH, 'end', 0.2, 'sheriff')));
+      expect(textOf(html, 'reveal-summary')).toMatch(/^The colony’s new officers/);
+      expect(textOf(html, 'summary-governor-s2')).toBe('Ossa3');
+      expect(textOf(html, 'summary-sheriff-s3')).toBe('Kai3');
+      expect(textOf(html, 'summary-sheriff-s4')).toBe('Brix2');
+    });
   });
 
   it('T-AC-62: by default the TV names one office: no Sheriff anywhere', () => {
