@@ -26,7 +26,7 @@ export function EventPhoneCard({ seg, me, at, buzz = false }: { seg: EventSegmen
       <div className="flex items-center gap-2">
         <EventSignBadge ev={ev} size={40} />
         <span className="flex min-w-0 flex-col">
-          <span className={cx('label-caps text-[10px]!', ink)}>{eventSegLabel(seg)}</span>
+          <span className={cx('label-caps whitespace-nowrap text-[10px]! max-[700px]:tracking-[0.06em]', ink)}>{eventSegLabel(seg)}</span>
           <span className="font-display text-lg font-bold leading-tight">{segTitle(seg)}</span>
         </span>
         <span className="ml-auto">
@@ -43,7 +43,7 @@ export function EventPhoneCard({ seg, me, at, buzz = false }: { seg: EventSegmen
         (you ? (
           <div className="flex flex-col gap-1 animate-[ev-pop_0.3s_ease-out]" data-testid="phone-you">
             <span className={cx('flex items-center gap-1.5 font-display text-base font-bold', sign === 'good' ? 'text-ok' : 'text-alert-ink')}>{you.headline}</span>
-            <span className="text-xs leading-snug text-ink-2">{you.detail}</span>
+            <span className="text-xs leading-snug text-ink-2 max-[700px]:truncate" title={you.detail}>{you.detail}</span>
           </div>
         ) : (
           <div className="flex flex-col gap-1" data-testid="phone-miss">
@@ -69,7 +69,7 @@ export function EventNowPlaying({ seg, buzz }: { seg: EventSegment; buzz: boolea
     <div className="flex items-center gap-2 rounded-panel border border-holo-line bg-raised p-2 animate-[ev-drop_0.3s_ease-out]" data-testid="phone-now">
       <EventSignBadge ev={ev} size={32} />
       <span className="flex min-w-0 flex-col">
-        <span className="label-caps text-[10px]!">{eventSegLabel(seg)}</span>
+        <span className="label-caps whitespace-nowrap text-[10px]!">{eventSegLabel(seg)}</span>
         <span className="font-display text-base font-bold leading-tight">{segTitle(seg)}</span>
         <span className="truncate text-[11px] text-ink-2">{eventWhoLine(ev, cast)}</span>
       </span>

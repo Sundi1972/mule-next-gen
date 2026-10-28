@@ -63,6 +63,8 @@ export function Production({ production }: { production: ProductionView }) {
   const script = useMemo(() => eventScript(production, SHOW.eventAt, mode), [production, mode]);
   const skipTo = solo ? eventSkipTo(script, t) : null;
   const playingNow = eventStageAt(script, t).seg;
+  // Alone, the rail is the show's while it plays, as the gallery's: the harvest would crowd it out at 667 px.
+  const showingHarvest = !solo || t >= script.end;
   const mine = harvest(production, me.id);
   const arrived = landed(production, t, me.id);
   useBuzz(solo ? null : (playingNow?.n ?? null));
@@ -80,20 +82,22 @@ export function Production({ production }: { production: ProductionView }) {
               {solo ? <EventSoloRail me={me.id} /> : <EventTvPhoneRail me={me.id} />}
             </EventShow>
           )}
-          <ul className="flex flex-col gap-1" data-testid="harvest">
-            {(Object.entries(mine) as [Good, number][]).map(([g, n]) => (
-              <li key={g} className="flex items-center justify-between rounded-control bg-raised px-2 py-1">
-                <span className="flex items-center gap-1.5 text-sm">
-                  <GoodIcon good={g} size={14} />
-                  {GOOD_NAME[g]}
-                </span>
-                <span data-num className="font-mono text-sm font-bold">
-                  +{n}
-                  {t >= flyAt(0, production) && (arrived[g] ?? 0) < n && <span className="font-normal text-ink-3"> · flying home</span>}
-                </span>
-              </li>
-            ))}
-          </ul>
+          {showingHarvest && (
+            <ul className="flex flex-col gap-1" data-testid="harvest">
+              {(Object.entries(mine) as [Good, number][]).map(([g, n]) => (
+                <li key={g} className="flex items-center justify-between rounded-control bg-raised px-2 py-1">
+                  <span className="flex items-center gap-1.5 text-sm">
+                    <GoodIcon good={g} size={14} />
+                    {GOOD_NAME[g]}
+                  </span>
+                  <span data-num className="font-mono text-sm font-bold">
+                    +{n}
+                    {t >= flyAt(0, production) && (arrived[g] ?? 0) < n && <span className="font-normal text-ink-3"> · flying home</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </>
       }
       footer={
