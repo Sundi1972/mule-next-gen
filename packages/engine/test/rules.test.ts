@@ -160,25 +160,19 @@ describe('land grant', () => {
 });
 
 describe('development', () => {
-  it('gives the full time with enough Food and less without', () => {
-    const state = newGame();
-    state.players[0]!.stock.food = 10;
-    state.players[1]!.stock.food = 0;
-    toPhase(state, 'development');
-    expect(state.players[0]!.devSeconds).toBe(DEVELOPMENT.fullSeconds);
-    expect(state.players[1]!.devSeconds).toBe(DEVELOPMENT.minSeconds);
-    expect(state.players[1]!.hungry).toBe(true);
-  });
-
-  it('costs sick colonists time in dirty air unless they take a Medicine', () => {
+  it('T-AC-23: a hungry or sick player gets the full development time, marked hungry or sick', () => {
+    // Hunger: p0 fed, p1 with no Food. Sickness: smoggy air, p0 takes a Medicine, p1 has none.
     const state = newGame();
     state.air = 40;
+    state.players[0]!.stock.food = 10;
     state.players[0]!.stock.medicine = 1;
+    state.players[1]!.stock.food = 0;
+    state.players[1]!.stock.medicine = 0;
     toPhase(state, 'development');
-    expect(state.players[0]!.devSeconds).toBe(DEVELOPMENT.fullSeconds);
+    expect(state.players.map((p) => p.devSeconds)).toEqual(state.players.map(() => DEVELOPMENT.fullSeconds));
+    expect([state.players[0]!.hungry, state.players[0]!.sick]).toEqual([false, false]);
     expect(state.players[0]!.stock.medicine).toBe(0);
-    expect(state.players[1]!.devSeconds).toBe(DEVELOPMENT.fullSeconds - 5);
-    expect(state.players[1]!.sick).toBe(true);
+    expect([state.players[1]!.hungry, state.players[1]!.sick]).toEqual([true, true]);
   });
 
   it('pays more at the pub with more time left, and ends the turn', () => {
