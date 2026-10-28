@@ -196,8 +196,8 @@ today        scoreParts = money + goods + land + MULEs, minus the Collapse cut.
              verified_by: read
 tomorrow     MUST add an `office` line: POLITICS.termScore per term served (a term counts when
              it has started). 0 with politics off.
-             The Collapse cut does not reduce the office line: it is a reward for service, not
-             colony wealth (AM-3).
+             In Collapse the cut applies to the office line too: total = round((raw + office) ×
+             collapseScore) (AM-20, Heiko; WS4 AM-31, superseding AM-3 (b)).
 logic        → §2 RULE-7
 seam         scoreParts (named edit, WS3 reviews; WS1 checks the sim's score report)
 pin          scoreParts' addition-order comment: the office line is added after `raw` is
@@ -350,7 +350,7 @@ first match wins
   #   when                                       then                          how
   1   0 candidates, office governor              the richest player who does   appointed
                                                  not run for Sheriff (money;
-                                                 tie → round the table, AM-12); if every
+                                                 tie → by lot, AM-17); if every
                                                  player runs for Sheriff, the
                                                  richest player (AM-2)
   2   0 candidates, office sheriff               the richest player who is     appointed
@@ -359,14 +359,13 @@ first match wins
   4   one candidate has the most weighted votes  that candidate                votes
   5   tie, and the Land Baron's ballot names     that candidate                baron
       one of the tied candidates
-  6   tie otherwise                              the tied candidate with the   tieRule
-                                                 most plots, then round the
-                                                 table (AM-12)
-round the table (AM-12)  among players still tied, the first in seat order starting from
-           seat (seed + k) mod n, where seed is the game's seed, k this election's index in
-           POLITICS.electionMonths (0 for month 1) and n the number of players. No RNG draw:
-           the same game gives the same offices; the start moves between elections (k) and
-           between games (seed), since most ties come in month 1.
+  6   tie, one tied candidate has the most plots  that candidate                land
+  7   tie otherwise                              a draw among the tied with    lot
+                                                 the most plots (AM-17)
+by lot (AM-17)  each player still tied has the same chance; the draw's stream is seeded from
+           (seed, month, office), so the same game draws the same offices and no other draw
+           moves. Replaces AM-12's round from seat (seed + k) mod n, which favoured the earlier
+           seat of a partial tie (the host won 3 of 4 two-way month-1 ties).
 visibility  the result shows each candidate's weighted total, never who voted for whom.
 examples   3 vs 2 votes → the 3; 2 vs 2, Baron voted the second → the second; nobody runs
            for Sheriff → the richest non-Governor
@@ -413,8 +412,9 @@ examples  start 5 → 0..10 allowed, 11 refused · start 15 → 10..15
 RULE-7 · Office pay and the term score                               shape: sequence
 at upkeep, after runUpkeep:  pay = min(fund, POLITICS.pay.governor) to the Governor, then
                              min(fund, POLITICS.pay.sheriff) to the Sheriff        (50, 30)
-score:   office = POLITICS.termScore × terms served (Governor or Sheriff; a term counts once
-         it starts)
+score:   office = POLITICS.termScore × terms served (each office in POLITICS.offices; a term
+         counts once it starts); cut with the rest in Collapse (AM-20)
+offices  Governor only until slice 4 (AM-19): no Sheriff is elected or paid
 invariant  the fund never goes below 0.
 ```
 
@@ -499,7 +499,7 @@ interface Election {
   candidates: Record<Office, string[]>;
   ballots: Record<string, Partial<Record<Office, string>>>;  // secret: hidden by observe() and the view
   done: string[];
-  result: Record<Office, { winner: string; how: 'votes' | 'unopposed' | 'appointed' | 'baron' | 'tieRule';
+  result: Record<Office, { winner: string; how: 'votes' | 'unopposed' | 'appointed' | 'baron' | 'land' | 'lot';
                            tallies: { id: string; votes: number }[] }> | null;
 }
 ```
@@ -596,7 +596,7 @@ target    §1 C3 seam, §1 C7, §2 RULE-9; plan PR-1 scope
 did       (a) politics.ts exports canRun(state, id) → Record<Office, CanRun>, and runFor uses it,
           so the server's MyView.politics.canRun (§3) reads the engine's RULE-2 instead of
           restating it in PR-3 (which may not edit the engine). (b) Recorded that Collapse does
-          not cut the office line. (c) Accepted that how: 'baron' / 'tieRule' disclose the Baron's
+          not cut the office line [superseded by AM-20: it does]. (c) Accepted that how: 'baron' / 'tieRule' disclose the Baron's
           tie vote. (d) A cleared ballot leaves no entry, so "who has voted" can't show a voter
           who cleared theirs.
 because   P-1: the reviewer found PR-3 had no engine source for canRun (a plan gap) and named
@@ -822,6 +822,72 @@ because   P-1: "the colony votes laws" (UBER-AC-1's law clause) is the unmet hal
           taxes are the fund's main income
 goal      P-1 — still met; G-5's income
 folded    D2 count note below; slice 2a spec
+```
+
+```
+AM-17 · 2026-10-28 · PM ruling (WS6 UX audit §3) · fair tie-break
+
+target    §2 RULE-3 rows 1 and 6 (AM-12's round); §3 the result's how
+said      a tie nothing else breaks goes round the table from seat (seed + k) mod n
+did       WS6's audit found the host winning month-1 ties. A round from a seeded start is fair
+          only when every seat ties: in a partial tie the earlier seat wins unless the start
+          falls inside the run (4 seats, seats 0 and 1 tied: seat 0 wins 3 starts of 4;
+          measured 150 of 200 seeds, red-first test). The order stays design 05's (the Baron's
+          ballot, then most plots); the last step is now a seeded draw among the tied, on its own
+          stream from (seed, month, office), and appointments break a money tie the same way.
+          `how` 'tieRule' becomes 'land' (most plots decided) or 'lot' (drawn), so the reveal and
+          the news name the real reason ("a tie: most plots", "a tie: decided by lot").
+because   P-1: the council reins in a leader only if the table trusts its rules; a tie the host
+          wins three times in four is not fair
+goal      P-1 — still met, more fairly
+folded    RULE-3 rows 1, 6, 7; §3 how; ElectionHow in types.ts (WS3 named edit); words.ts and
+          politics-view.ts; WS1 re-measures its politics rows (only tie winners move)
+```
+
+```
+AM-18 · 2026-10-28 · Heiko (via PM) · the election is not time-bound
+
+target    §2 RULE-1 stages, RULE-2 row 1, RULE-8 timing, RULE-9 election rows; §3 Election
+said      nominate 20 s → ballot 20 s → reveal 6 s inside planning; run only in nominate
+did       Heiko: "we shouldn't make this time bound": run for office in any month's planning, and in
+          an election month announce, let everybody vote, then reveal office by office with growing
+          bars and a celebration. Designed in docs/specs/2026-10-28-ws7-untimed-election.md (C60-C67,
+          RULE-60..64): candidacy lives on Politics; announce (last call) → ballot (closes when all
+          are Done) → ceremony (presentation clocks only) → over; away seats are not Done; the host's
+          Continue closes a stage for every human not Done, present or away (PM ruling
+          2026-10-29: one rule for one button, as in planning proper). Replaces E-1.
+because   P-1: the table governs itself only if a newcomer can take part; 20 s stages shut them out
+          (WS6 audit §3)
+goal      P-1 — still met
+folded    RULE-1, RULE-2, RULE-8, RULE-9 superseded by RULE-60..64 for the election; UBER-AC-2 restated
+```
+
+```
+AM-19 · 2026-10-28 · Heiko (via PM): "Governor only for now" · the Sheriff waits for slice 4
+
+target    §0 P-1 ("elects a Governor and a Sheriff"), RULE-1/RULE-61 offices, RULE-2, RULE-7 pay
+said      both offices are elected every term; the Sheriff is paid 30 cr a month
+did       Only the Governor is elected until slice 4 gives the Sheriff its powers (guard,
+          investigate, fine). POLITICS.offices = ['governor'] is the switch; the engine, AI and
+          views read it, so the Sheriff's candidacy, appointment, result and pay are gone and its
+          30 cr a month stay in the colony fund. Built in the untimed election's PR-1 (Task 1.8);
+          slice 4 restores the Sheriff by adding it back to the list. WS6 drops it from the mock.
+because   P-1: an office with no job confused newcomers (WS6 audit §3, finding 2); G-5 gains the pay
+goal      P-1 — still met (the table elects its Governor); the Sheriff part waits for slice 4
+folded    RULE-7 offices note; the untimed election's C62 is generic over POLITICS.offices
+```
+
+```
+AM-20 · 2026-10-28 · Heiko (via PM; WS4 AM-31) · Collapse cuts the office line too
+
+target    §1 C7 tomorrow, §2 RULE-7 score; supersedes AM-3 (b)
+said      the Collapse cut does not reduce the office line: it is a reward for service
+did       Heiko: "Yes, cut it too". In Collapse, total = round((raw + office) × collapseScore),
+          one rounding. WS4 builds it in C18 (Worth): the scoreParts named edit 918af8c (WS3 OK'd);
+          WS7's C7 rows in score-parts.test.ts expect the cut, and fa88a2c pins the single rounding.
+because   P-1 / G-5: a Governor of a collapsed colony should not keep a full reward for running it
+goal      P-1 — still met
+folded    C7 tomorrow, RULE-7 score
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
