@@ -196,13 +196,13 @@ mechanism    sprout
 depends_on   WS7 slice 3 (data, not stubbable for B-AC-B3); WS6's card screens
 
 C9 · MODIFIED · the recorder and the replay pass the talker through (WS3's files, named edits)
-today        not on ws2-brain: WS3's recorder (#175) adds apps/server/src/record.ts, whose `wrapBrain` wraps deciderFor,
-             and replay.ts (origin/ws3-auctions 2a409d6)   verified_by: read
+today        WS3's recorder is on feat/strategist (#178, 5eb6b27): apps/server/src/record.ts, whose `wrapBrain` wraps
+             deciderFor, and apps/server/src/replay.ts; ws2-brain gets them at its next sync   verified_by: read
 tomorrow     WS3's apps/server/src/record.ts `wrapBrain` passes `talkerFor: (seat) => inner.talkerFor(seat)` through,
              unrecorded and outside its call numbering; WS3's replay.ts returns `talkerFor: () => null`.
 reuse        wrapBrain's existing per-method wrap; talkerFor is a plain passthrough beside it.
 mechanism    in_place (named edits, reviewed by WS3 on the SHA)
-depends_on   WS3's recorder (#175) in feat/strategist (data, not stubbable: the files must exist)
+depends_on   a ws2-brain sync with feat/strategist at or after 5eb6b27, which brings WS3's recorder (#178)
 atomicity    must ship with C4: adding talkerFor to BrainService turns both files red until they implement it
 ```
 
