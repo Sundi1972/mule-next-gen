@@ -666,6 +666,10 @@ describe('TableClient', () => {
       expect(t.client.getState().handoffCode).toMatchObject({ code: 'fresh', expired: false });
       t.advance(1);
       expect(t.client.getState().handoffCode).toMatchObject({ code: 'fresh', expired: true });
+
+      // A slower round trip whose outbound leg took longer reads 150 ms off; the fast one measured after the jump still wins.
+      t.last().deliver({ t: 'pong', clientTime: t.now() - 400, serverTime: server() - 200 + 150 });
+      expect(t.client.getState().clockOffset).toBe(offset);
     },
   );
 });
