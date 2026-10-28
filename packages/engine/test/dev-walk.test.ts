@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createGame, DEV_WALK, needsOf, POLLUTION, walkSeconds, type DevPlace, type GameState } from '../src/index.js';
+import { createGame, foodShare, needsOf, pace, walkSeconds, type DevPlace, type GameState } from '../src/index.js';
 
 /** A game with a Zipwing and a Bramblet, and two plots: one 3 across and 2 down from the store, one a step diagonal from it. */
 function walkers(): { state: GameState; plot: number; diagonal: number } {
@@ -41,34 +41,32 @@ describe('walking in development', () => {
   });
 
   it('T-AC-22: hunger and sickness slow the walk, and multiply', () => {
-    // The corral to the plot is 2 s at full pace for the Bramblet; the Zipwing's is 2 / 1.5.
+    // Heiko's numbers: 5 of 10 Food 0.6, 2 of 10 0.36, none 0.2; sick and fed 0.5; none and sick 0.1. The corral to
+    // the plot is 2 s at full pace for the Bramblet.
     const { state, plot } = walkers();
     const bram = state.players.find((p) => p.id === 'bram')!;
-    const zip = state.players.find((p) => p.id === 'zip')!;
     const need = needsOf(state, 'bram').food;
-    const smoggy = POLLUTION.bands.find((b) => b.name === 'smoggy')!;
-    state.air = smoggy.from;
-    const walk = (id: string) => walkSeconds(state, id, 'corral', plot);
-    const min = DEV_WALK.hungerPaceMin;
-    const rows: [string, () => void, number][] = [
-      ['fed and well', () => ((bram.stock.food = need), (bram.sick = false)), 2],
-      ['half fed', () => (bram.stock.food = need / 2), 2 / (1 - (1 - min) / 2)],
-      ['no Food', () => (bram.stock.food = 0), 2 / min],
-      ['no Food and sick', () => (bram.sick = true), 2 / (min * smoggy.sickPace)],
-      ['fed and sick', () => (bram.stock.food = need), 2 / smoggy.sickPace],
+    const rows: [string, number, boolean, number][] = [
+      ['fed and well', need, false, 1],
+      ['5 of 10 Food', need * 0.5, false, 0.6],
+      ['2 of 10 Food', need * 0.2, false, 0.36],
+      ['no Food', 0, false, 0.2],
+      ['sick and fed', need, true, 0.5],
+      ['no Food and sick', 0, true, 0.1],
     ];
-    for (const [label, arrange, seconds] of rows) {
-      arrange();
-      expect(walk('bram'), label).toBeCloseTo(seconds, 9);
+    for (const [label, food, sick, expected] of rows) {
+      bram.stock.food = food;
+      bram.sick = sick;
+      expect(pace(state, 'bram'), label).toBeCloseTo(expected, 9);
+      expect(walkSeconds(state, 'bram', 'corral', plot), label).toBeCloseTo(2 / expected, 9);
     }
+    // The share of the month's Food it holds, for the screens to show the level of hunger.
+    bram.stock.food = need * 0.2;
+    expect(foodShare(state, 'bram')).toBeCloseTo(0.2, 9);
     // A hungry Zipwing: both paces at once.
+    const zip = state.players.find((p) => p.id === 'zip')!;
     zip.stock.food = 0;
     zip.sick = false;
-    expect(walk('zip')).toBeCloseTo(2 / (1.5 * min), 9);
-    // The slowdown is real, and the worst case is about a tenth of normal pace, as Heiko asked.
-    expect(min).toBeLessThan(1);
-    const collapse = POLLUTION.bands.find((b) => b.name === 'collapse')!;
-    expect(min * collapse.sickPace).toBeGreaterThanOrEqual(0.05);
-    expect(min * collapse.sickPace).toBeLessThanOrEqual(0.15);
+    expect(walkSeconds(state, 'zip', 'corral', plot)).toBeCloseTo(2 / (1.5 * 0.2), 9);
   });
 });

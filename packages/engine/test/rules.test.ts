@@ -161,18 +161,26 @@ describe('land grant', () => {
 
 describe('development', () => {
   it('T-AC-23: a hungry or sick player gets the full development time, marked hungry or sick', () => {
-    // Hunger: p0 fed, p1 with no Food. Sickness: smoggy air, p0 takes a Medicine, p1 has none.
+    // Smoggy air. Each seat [Food, Medicine]: fed and cured; neither; hungry but cured; fed but sick.
     const state = newGame();
     state.air = 40;
-    state.players[0]!.stock.food = 10;
-    state.players[0]!.stock.medicine = 1;
-    state.players[1]!.stock.food = 0;
-    state.players[1]!.stock.medicine = 0;
+    const supplies: [number, number][] = [
+      [10, 1],
+      [0, 0],
+      [0, 1],
+      [10, 0],
+    ];
+    supplies.forEach(([food, medicine], i) => Object.assign(state.players[i]!.stock, { food, medicine }));
     toPhase(state, 'development');
     expect(state.players.map((p) => p.devSeconds)).toEqual(state.players.map(() => DEVELOPMENT.fullSeconds));
-    expect([state.players[0]!.hungry, state.players[0]!.sick]).toEqual([false, false]);
-    expect(state.players[0]!.stock.medicine).toBe(0);
-    expect([state.players[1]!.hungry, state.players[1]!.sick]).toEqual([true, true]);
+    expect(state.players.map((p) => [p.hungry, p.sick])).toEqual([
+      [false, false],
+      [true, true],
+      [true, false],
+      [false, true],
+    ]);
+    // A Medicine is taken where the air sickens.
+    expect(state.players.map((p) => p.stock.medicine)).toEqual([0, 0, 0, 0]);
   });
 
   it('pays more at the pub with more time left, and ends the turn', () => {
