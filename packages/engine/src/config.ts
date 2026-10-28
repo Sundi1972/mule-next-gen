@@ -883,13 +883,13 @@ export const EVENTS = {
    * never below 0 or above its cap. Colony rows roll once for the colony, first; player rows once a player.
    */
   colony: {
-    dustStorm: { phases: { production: 0.05 }, cap: 0.9 },
-    drought: { phases: { production: 0.05 }, air: { toxic: 0.02, collapse: 0.04 }, cap: 0.9 },
-    acidRain: { phases: { production: 0.01 }, air: { smoggy: 0.04, toxic: 0.08, collapse: 0.12 }, cap: 0.9 },
-    solarFlare: { phases: { production: 0.05 }, cap: 0.9 },
-    cometPass: { phases: { production: 0.05 }, cap: 0.9 },
-    flood: { phases: { production: 0.05 }, follows: { drought: { points: 0.1, lastMonth: true } }, cap: 0.9 },
-    volcanicAsh: { phases: { production: 0.04 }, cap: 0.9 },
+    dustStorm: { phases: { production: 0.08 }, cap: 0.9 },
+    drought: { phases: { production: 0.08 }, air: { toxic: 0.02, collapse: 0.04 }, cap: 0.9 },
+    acidRain: { phases: { production: 0.016 }, air: { smoggy: 0.04, toxic: 0.08, collapse: 0.12 }, cap: 0.9 },
+    solarFlare: { phases: { production: 0.08 }, cap: 0.9 },
+    cometPass: { phases: { production: 0.08 }, cap: 0.9 },
+    flood: { phases: { production: 0.08 }, follows: { drought: { points: 0.1, lastMonth: true } }, cap: 0.9 },
+    volcanicAsh: { phases: { production: 0.064 }, cap: 0.9 },
   } satisfies Record<string, import('./events.js').EventRow>,
   player: {
     /**
@@ -903,14 +903,14 @@ export const EVENTS = {
       pollution: { perPoint: 0.03, max: 0.4 },
       cap: 0.9,
     },
-    pestSwarm: { phases: { production: 0.015 }, wealth: { richest: 0.01, poorest: -0.01 }, cap: 0.9 },
+    pestSwarm: { phases: { production: 0.024 }, wealth: { richest: 0.01, poorest: -0.01 }, cap: 0.9 },
     wildfire: {
-      phases: { production: 0.015 },
+      phases: { production: 0.024 },
       wealth: { richest: 0.01 },
       follows: { drought: { points: 0.03, thisPhase: true, lastMonth: true } },
       cap: 0.9,
     },
-    bumperHarvest: { phases: { production: 0.015 }, wealth: { poorest: 0.015, richest: -0.01 }, cap: 0.9 },
+    bumperHarvest: { phases: { production: 0.024 }, wealth: { poorest: 0.015, richest: -0.01 }, cap: 0.9 },
   } satisfies Record<string, import('./events.js').EventRow>,
   /** Pairs that never fire together in one phase: if both roll, the seeded dice keep one. */
   excludes: [
