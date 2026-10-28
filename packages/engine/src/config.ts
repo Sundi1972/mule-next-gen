@@ -849,6 +849,7 @@ export const EVENTS = {
       phases: { development: 0.05 },
       air: { clean: 0, smoggy: 0.15, toxic: 0.3, collapse: 0.5 },
       pollutionShare: 0.4,
+      pollution: { perPoint: 0.03, max: 0.4 },
       cap: 0.9,
     },
   },
