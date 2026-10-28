@@ -185,7 +185,7 @@ export interface MonthReport {
   colonyFund: number;
   /** Colonists short of Food or Water this month. */
   colonistsHungry: boolean;
-  /** The production events that fired this month (none in most months). Absent in older reports. */
+  /** The production events that fired this month, in the order they fired. Absent in older reports. */
   events?: MonthEvent[];
   /** Events announced ahead of time. Absent in older reports. */
   warnings?: EventWarning[];
@@ -203,7 +203,8 @@ export type EventKey =
   | 'volcanicAsh'
   | 'pestSwarm'
   | 'wildfire'
-  | 'bumperHarvest';
+  | 'bumperHarvest'
+  | 'cavernCollapse';
 
 /** How the screens animate an event; several events share a kind. */
 export type EventKind = 'storm' | 'drought' | 'flare' | 'comet' | 'flood' | 'quake' | 'blight' | 'fire' | 'bounty';

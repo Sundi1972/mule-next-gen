@@ -485,8 +485,6 @@ export const MAP = {
   specialEffect: {
     /** Extra Crystite from a crystal cavern mined for Crystite. */
     crystalCavern: 4,
-    /** Chance a cavern that produced Crystite this month collapses into a plain plot. */
-    collapseChance: 0.06,
     /** Extra Water or Energy from a geyser outfitted for either. */
     geyser: 2,
     /** Extra Food from an oasis farm. */
