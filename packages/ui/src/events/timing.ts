@@ -167,3 +167,41 @@ export function eventLanded(s: EventScript, t: number, reduced: boolean, grid: S
     seg.events.flatMap((ev) => ev.hits.map((hit) => ({ ev, seg, hit, at: eventHitAt(seg, ev, hit, reduced, grid) })).filter((l) => t >= l.at)),
   );
 }
+
+/** One event reaching a plot: when it lands, its delta, and the plot's units before and after. */
+export interface PlotStrike {
+  at: number;
+  delta: number;
+  before: number;
+  after: number;
+}
+
+/** A working plot as the show knows it: where, and what it made before any event. */
+export interface ShowPlot {
+  x: number;
+  y: number;
+  made: number;
+}
+
+/** RULE-2: from `made`, each event's delta in fired order as it lands, never below 0 (a delta of 0 still reaches it). */
+export function plotStrikes(segments: EventSegment[], plot: ShowPlot, reduced: boolean, grid: ShowGrid): PlotStrike[] {
+  let units = plot.made;
+  return segments.flatMap((seg) =>
+    seg.events.flatMap((ev) =>
+      ev.hits
+        .filter((h) => h.x === plot.x && h.y === plot.y)
+        .map((h) => {
+          const before = units;
+          units = Math.max(0, units + h.delta);
+          return { at: eventHitAt(seg, ev, h, reduced, grid), delta: h.delta, before, after: units };
+        }),
+    ),
+  );
+}
+
+/** What a plot makes at `t`: after the last strike that has landed, or what it made. */
+export function plotUnitsAt(segments: EventSegment[], plot: ShowPlot, t: number, reduced: boolean, grid: ShowGrid): number {
+  return plotStrikes(segments, plot, reduced, grid)
+    .filter((s) => t >= s.at)
+    .reduce((_, s) => s.after, plot.made);
+}

@@ -3,7 +3,7 @@ import { cx } from '../components/tokens';
 import { eventSegmentSummary, eventWhoLine, segTitle } from './copy';
 import { signLook, useShow } from './frame';
 import { EventDeltaChip, EventSignBadge } from './glyphs';
-import { eventLanded, eventStageAt, type EventScript, type EventSegment, type ShowGrid } from './timing';
+import { eventStageAt, plotUnitsAt, type EventScript, type EventSegment, type ShowGrid, type ShowPlot } from './timing';
 
 /**
  * The TV's rail through a phase, inside <EventShow>: the gallery's TvB (design/mocks/ws8-events directions/B.tsx at
@@ -18,7 +18,7 @@ export function EventPips() {
       {s.segments.map((g) => {
         const state = t >= g.endAt ? 'done' : t >= g.announceAt ? 'now' : 'next';
         return (
-          <span key={g.n} className={cx('relative flex -space-x-3 transition-opacity', state === 'next' && 'opacity-40')}>
+          <span key={g.n} className={cx('relative flex -space-x-3 transition-opacity', state === 'next' && 'opacity-40')} data-pip={g.events[0]!.key} data-state={state}>
             {g.events.map((e, i) => (
               <EventSignBadge key={i} ev={e} size={34} className={state === 'now' ? 'animate-[ev-throb_1s_ease-in-out_infinite]' : ''} />
             ))}
@@ -74,20 +74,16 @@ function NowCard({ seg }: { seg: EventSegment }) {
 }
 
 /** A working plot as the caller knows it: who owns it, its good, and what it made before any event. */
-export interface EventPlotOutput {
-  x: number;
-  y: number;
+export interface EventPlotOutput extends ShowPlot {
   owner: string;
   good: Good;
-  made: number;
 }
 
-/** One player's change from the phase's events by `t`, per good: each landed hit in turn, a plot never below 0. */
+/** One player's change from the phase's events by `t`, per good: RULE-2 on each of their plots, as the map's bars. */
 export function eventPlayerChange(s: EventScript, t: number, reduced: boolean, grid: ShowGrid, plots: readonly EventPlotOutput[], id: string): Partial<Record<Good, number>> {
-  const landed = eventLanded(s, t, reduced, grid);
   const out: Partial<Record<Good, number>> = {};
   for (const o of plots.filter((p) => p.owner === id)) {
-    const now = landed.filter((l) => l.hit.x === o.x && l.hit.y === o.y).reduce((n, l) => Math.max(0, n + l.hit.delta), o.made);
+    const now = plotUnitsAt(s.segments, o, t, reduced, grid);
     if (now !== o.made) out[o.good] = (out[o.good] ?? 0) + now - o.made;
   }
   return out;

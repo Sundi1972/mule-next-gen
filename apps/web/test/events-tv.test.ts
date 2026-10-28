@@ -266,7 +266,7 @@ describe("the TV's production screen follows the event that is playing", () => {
   });
 
   it('B-AC-1: the rail plays the map’s script: one of title card, card or log entry per moment, the log a prefix of fired order', () => {
-    const keys = both.events.map((e) => e.key);
+    const keys: string[] = both.events.map((e) => e.key);
     for (const t of frames(EVENT_AT, windowEnds + 0.5, 0.05)) {
       const html = tvAt(both, t);
       const [on] = playing(html);

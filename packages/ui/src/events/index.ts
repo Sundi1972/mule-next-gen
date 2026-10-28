@@ -7,6 +7,8 @@ export {
   EVENT_SOLO_PACE,
   eventHitAt,
   eventLanded,
+  plotStrikes,
+  plotUnitsAt,
   eventScript,
   eventSegments,
   eventStageAt,
@@ -16,6 +18,8 @@ export {
   type EventSegment,
   type EventStage,
   type EventLandedHit,
+  type PlotStrike,
+  type ShowPlot,
   type ShowGrid,
 } from './timing';
 export { EVENT_CATALOGUE, EVENT_ENTRY, type EventEntry, type EventMotion } from './catalogue';
@@ -24,5 +28,6 @@ export { EventLivingMap, type EventLivingMapProps } from './map';
 export { useEventLivingView } from './living';
 export { EventGlyph, EVENT_ACCENT, EventSignBadge, EventDeltaChip, EventBuzz } from './glyphs';
 export { EventPhoneCard, EventRailTail, EventWaiting, EventNowPlaying, EventSoloRail, EventTvPhoneRail } from './phone';
+export { useEventReducedMotion } from './motion';
 export { EventPips, EventTvLog, EventColonyChips, eventPlayerChange, type EventPlotOutput } from './tv';
 export { eventMissLine, eventSegLabel, eventSegmentSummary, eventSummary, eventWhoLine, eventYouSummary, type EventYouSummary } from './copy';

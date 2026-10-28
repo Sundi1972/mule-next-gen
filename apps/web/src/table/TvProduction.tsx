@@ -1,5 +1,5 @@
 import type { MuleView, ProductionView } from '@mule/protocol';
-import { useMemo, useSyncExternalStore, type ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import {
   Creature,
   cx,
@@ -13,12 +13,14 @@ import {
   landed,
   landing,
   ProductionMap,
+  productionShowProps,
   SeatSpeciesProvider,
   SHOW,
   ShowRoot,
   showTime,
   SLOT_COLOR,
   useEventLivingView,
+  useEventReducedMotion,
   useSeatSpecies,
   type Good,
   type ShowPlayer,
@@ -34,18 +36,17 @@ export function TvProduction({ game, production }: { game: MuleView; production:
   const tiles = useMemo(() => mapTiles(game), [game]);
   const slots = Object.fromEntries(game.players.map((p) => [p.id, (slotOf(game, p.id) ?? 0) as Slot]));
   const players = useMemo<ShowPlayer[]>(() => game.players.map((p) => ({ id: p.id, slot: (slotOf(game, p.id) ?? 0) as Slot, name: p.name })), [game]);
-  const reduced = usePrefersReducedMotion();
+  const reduced = useEventReducedMotion();
   const quiet = production.events.length === 0;
   return (
     <SeatSpeciesProvider value={seatSpecies(game)}>
       <ShowRoot className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-6 text-ink" data-phase="production">
-        <TvHeader game={game} title="Production" />
-        {/* The rail and the colony bar read the very script the map plays: the same events, intro, clock and pace. */}
-        <EventShow events={production.events} introMs={production.introMs} t={t} start={SHOW.eventAt} mode="tv" reduced={reduced} width={game.width} height={game.height} tiles={tiles} players={players}>
+        {/* The header's pips, the rail and the colony bar read the very script the map plays: the same events, intro, clock and pace. */}
+        <EventShow {...productionShowProps(production, t, { reduced, mode: 'tv', players, tiles, width: game.width, height: game.height })}>
+          <TvHeader game={game} title="Production" extra={<EventPips />} />
           <div className="flex min-h-0 flex-1 gap-6">
             <ProductionMap width={game.width} height={game.height} tiles={tiles} production={production} t={t} slots={slots} players={players} reduced={reduced} mode="tv" tv className="w-[820px] shrink-0 self-start" />
-            <div className="flex min-w-0 flex-1 flex-col gap-4">
-              {!quiet && <EventPips />}
+            <div className="flex min-w-0 flex-1 flex-col gap-4" data-testid="rail">
               {t >= SHOW.cardAt && <EventTvLog />}
               {(quiet || t < SHOW.cardAt) && (
                 <>
@@ -62,19 +63,6 @@ export function TvProduction({ game, production }: { game: MuleView; production:
         </EventShow>
       </ShowRoot>
     </SeatSpeciesProvider>
-  );
-}
-
-/** The device's reduced-motion setting, followed live; off where there is no window (a server render). */
-function usePrefersReducedMotion(): boolean {
-  return useSyncExternalStore(
-    (onChange) => {
-      const q = window.matchMedia('(prefers-reduced-motion: reduce)');
-      q.addEventListener('change', onChange);
-      return () => q.removeEventListener('change', onChange);
-    },
-    () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-    () => false,
   );
 }
 
