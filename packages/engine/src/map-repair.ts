@@ -126,7 +126,9 @@ const MINING_CODE = SHARE_TERRAINS.map(isMining);
 
 /**
  * What `measure` reads, kept current as plots are recoloured instead of recounted
- * per candidate move: each terrain's count, and how many mining plots reach each land plot.
+ * per candidate move: each terrain's count, how many mining plots reach each land
+ * plot, and the patches of the settled layout, so a move's patch penalty is worked
+ * out only around the plots that differ from it.
  */
 class Tally {
   readonly have: Int32Array;
@@ -136,6 +138,15 @@ class Tally {
   private readonly seen: Int32Array;
   private readonly queue: Int32Array;
   private stamp = 0;
+  /** The settled layout: each plot's terrain code and patch, each patch's size, and the penalty they come to. */
+  private readonly settledCode: Int8Array;
+  private readonly patchOf: Int32Array;
+  private readonly patchSize: Int32Array;
+  private readonly patchCounted: Int32Array;
+  private settledPenalty = 0;
+  /** Plots set since the layout settled; some may be back at their settled terrain. */
+  private readonly changed: number[] = [];
+  private readonly listed: Uint8Array;
 
   constructor(private readonly s: RepairState) {
     const size = s.terrain.length;
@@ -144,6 +155,11 @@ class Tally {
     this.reached = new Int32Array(size);
     this.seen = new Int32Array(size);
     this.queue = new Int32Array(size);
+    this.settledCode = new Int8Array(size);
+    this.patchOf = new Int32Array(size);
+    this.patchSize = new Int32Array(size);
+    this.patchCounted = new Int32Array(size);
+    this.listed = new Uint8Array(size);
     for (const i of s.grid.free) {
       const k = CODE.get(s.terrain[i]!)!;
       this.code[i] = k;
@@ -151,6 +167,7 @@ class Tally {
       if (MINING_CODE[k]) for (const l of s.grid.within[i]!) this.reached[l]!++;
     }
     for (const l of s.grid.land) if (this.reached[l] === 0) this.uncovered++;
+    this.settle();
   }
 
   set(i: number, t: Terrain | null): void {
@@ -159,6 +176,10 @@ class Tally {
     this.s.terrain[i] = t;
     if (from === to) return;
     this.code[i] = to;
+    if (!this.listed[i]) {
+      this.listed[i] = 1;
+      this.changed.push(i);
+    }
     this.have[from]!--;
     this.have[to]!++;
     if (MINING_CODE[from] === MINING_CODE[to]) return;
@@ -169,28 +190,74 @@ class Tally {
     }
   }
 
-  /** S4 and S5's share of `bad`: each same-terrain patch's plots short of minRegion or over the cap. */
-  patchPenalty(): number {
-    const { free, next } = this.s.grid;
-    const { code, seen, queue } = this;
+  /** Takes the current layout as the settled one that later penalties are worked out from. */
+  settle(): void {
     const stamp = ++this.stamp;
-    let bad = 0;
-    for (const start of free) {
-      if (seen[start] === stamp) continue;
-      const k = code[start];
-      seen[start] = stamp;
-      queue[0] = start;
-      let size = 1;
-      for (let q = 0; q < size; q++) {
-        for (const j of next[queue[q]!]!) {
-          if (seen[j] === stamp || code[j] !== k) continue;
-          seen[j] = stamp;
-          queue[size++] = j;
-        }
-      }
-      bad += Math.max(0, MAP.minRegion - size) + Math.max(0, size - this.s.cap);
+    let patches = 0;
+    this.settledPenalty = 0;
+    for (const start of this.s.grid.free) {
+      if (this.seen[start] === stamp) continue;
+      const size = this.flood(start, stamp);
+      for (let q = 0; q < size; q++) this.patchOf[this.queue[q]!] = patches;
+      this.patchSize[patches++] = size;
+      this.settledPenalty += this.penalty(size);
     }
-    return bad;
+    this.settledCode.set(this.code);
+    for (const i of this.changed) this.listed[i] = 0;
+    this.changed.length = 0;
+  }
+
+  /**
+   * S4 and S5's share of `bad`: each same-terrain patch's plots short of minRegion or over the cap.
+   * Only patches holding or touching a plot that differs from the settled layout can differ from
+   * the settled patches, so those are swapped out of the settled penalty and the rest is left as it was.
+   */
+  patchPenalty(): number {
+    const { code, settledCode, changed, listed } = this;
+    let kept = 0;
+    for (const i of changed) {
+      if (code[i] === settledCode[i]) listed[i] = 0;
+      else changed[kept++] = i;
+    }
+    changed.length = kept;
+    if (kept === 0) return this.settledPenalty;
+    const stamp = ++this.stamp;
+    let penalty = this.settledPenalty;
+    const swap = (a: number) => {
+      const patch = this.patchOf[a]!;
+      if (this.patchCounted[patch] !== stamp) {
+        this.patchCounted[patch] = stamp;
+        penalty -= this.penalty(this.patchSize[patch]!);
+      }
+      if (this.seen[a] !== stamp) penalty += this.penalty(this.flood(a, stamp));
+    };
+    for (const i of changed) {
+      swap(i);
+      for (const j of this.s.grid.next[i]!) swap(j);
+    }
+    return penalty;
+  }
+
+  private penalty(size: number): number {
+    return Math.max(0, MAP.minRegion - size) + Math.max(0, size - this.s.cap);
+  }
+
+  /** Marks the current patch holding `start` with `stamp`, leaving its plots at the head of `queue`; returns its size. */
+  private flood(start: number, stamp: number): number {
+    const { code, seen, queue } = this;
+    const { next } = this.s.grid;
+    const k = code[start];
+    seen[start] = stamp;
+    queue[0] = start;
+    let size = 1;
+    for (let q = 0; q < size; q++) {
+      for (const j of next[queue[q]!]!) {
+        if (seen[j] === stamp || code[j] !== k) continue;
+        seen[j] = stamp;
+        queue[size++] = j;
+      }
+    }
+    return size;
   }
 }
 
@@ -238,6 +305,7 @@ export function repairLayout(state: RepairState, rng: Rng): void {
       apply(s, m);
       recent.push(...m.cells);
     }
+    s.tally.settle();
     recent.splice(0, Math.max(0, recent.length - tabu));
     current = measure(s).bad;
     if (current < best.bad) best = { bad: current, terrain: [...s.terrain] };
