@@ -486,6 +486,20 @@ describe('the reveal (C66, RULE-62, B-AC-62)', () => {
     expect(textOf(html, 'reveal-row-governor-s2')).not.toContain('ELECTED');
   });
 
+  it('B-AC-62: with reduced motion the winner\'s row stays still: no glow pulsing', () => {
+    const moving = onTv(inCeremony(WON, beatAt(WON, 'winner', 1)));
+    expect(tagOf(moving, 'reveal-row-governor-s1')).toMatch(/animate-pulse-glow/);
+    const saved = globalThis.matchMedia;
+    globalThis.matchMedia = ((query: string) => ({ matches: query === '(prefers-reduced-motion: reduce)' })) as typeof matchMedia;
+    try {
+      const still = onTv(inCeremony(WON, beatAt(WON, 'winner', 1)));
+      expect(tagOf(still, 'reveal-row-governor-s1')).toMatch(/ring-holo/);
+      expect(tagOf(still, 'reveal-row-governor-s1')).not.toMatch(/animate-pulse-glow/);
+    } finally {
+      globalThis.matchMedia = saved;
+    }
+  });
+
   it('C66, E-6: a tie is stamped at its beat and said by the rule that broke it, before the winner is congratulated', () => {
     const players = PLAYERS.map((p) => (p.id === 's1' ? { ...p, plots: 5 } : p.id === 's2' ? { ...p, plots: 7 } : p));
     const game = { ...inCeremony(TIED, beatAt(TIED, 'tie', 1.5)), players };

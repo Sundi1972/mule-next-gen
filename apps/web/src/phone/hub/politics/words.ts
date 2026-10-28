@@ -54,7 +54,7 @@ export function namer(view: Pick<MuleView, 'players'>): (id: string) => string {
   return (id) => view.players.find((p) => p.id === id)?.name ?? id;
 }
 
-export const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** "Kai", "Ossa and Kai", "you, Ossa and Kai": the viewer is "you" and comes first. */
 export function listNames(ids: readonly string[], me: string | null, name: (id: string) => string): string {

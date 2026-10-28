@@ -1,8 +1,7 @@
 import { ceremonyBeats, POLITICS, type CeremonyBeat, type Office } from '@mule/engine';
 import type { MuleView, OfficeReveal } from '@mule/protocol';
-import { Button, Creature, cx, SLOT_COLOR } from '@mule/ui';
+import { Button, Creature, cx } from '@mule/ui';
 import { useEffect, useState, type CSSProperties } from 'react';
-import { slotOf } from '../../../game/derive';
 import { usePhoneGame } from '../../game';
 import { useHub } from '../Hub';
 import { colorOf, Steps } from './parts';
@@ -19,7 +18,7 @@ const BLOCK = C.blockMs / 1_000;
 const GLIDE = 'transition-[transform,opacity] duration-100 ease-linear motion-reduce:transition-none';
 
 /** One office on the stage: who stands on it, its vote blocks in order, when each beat starts, and what the clock has revealed. */
-export interface OfficeShow {
+interface OfficeShow {
   office: Office;
   /** In seat order, never ranked. */
   candidates: string[];
@@ -39,7 +38,7 @@ export interface Show {
 }
 
 const BEATS: readonly CeremonyBeat[] = ['title', 'candidates', 'bars', 'tie', 'winner', 'end'];
-export const beatIs = (s: OfficeShow, from: CeremonyBeat) => BEATS.indexOf(s.beat) >= BEATS.indexOf(from);
+const beatIs = (s: OfficeShow, from: CeremonyBeat) => BEATS.indexOf(s.beat) >= BEATS.indexOf(from);
 
 /** The ceremony as this view stands in it, or null outside it. */
 export function showOf(view: Pick<MuleView, 'players' | 'politics'>): Show | null {
@@ -64,11 +63,11 @@ export function showOf(view: Pick<MuleView, 'players' | 'politics'>): Show | nul
 }
 
 /** The office on the stage now, or null once every office has had its turn. */
-export const currentOffice = (show: Show) => (show.offices.length < POLITICS.offices.length ? show.offices.at(-1) : show.offices.find((o) => o.beat !== 'end')) ?? null;
+const currentOffice = (show: Show) => (show.offices.length < POLITICS.offices.length ? show.offices.at(-1) : show.offices.find((o) => o.beat !== 'end')) ?? null;
 
 const raceOf = (s: OfficeShow): Race | null => (s.reveal?.winner && s.reveal.how ? { winner: s.reveal.winner, how: s.reveal.how, tallies: s.reveal.tallies } : null);
 
-export function useReducedMotion(): boolean {
+function useReducedMotion(): boolean {
   const [reduced, setReduced] = useState(() => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
   useEffect(() => {
     if (typeof matchMedia !== 'function') return;
@@ -110,7 +109,7 @@ const BURSTS = [
 ];
 
 /** Confetti from the winner's row and three fireworks above it. `k` scales it: 1 on the TV. */
-export function Celebration({ dt, color, k, n }: { dt: number; color: string; k: number; n: number }) {
+function Celebration({ dt, color, k, n }: { dt: number; color: string; k: number; n: number }) {
   if (dt < 0 || dt > 3.6) return null;
   const colors = [color, 'var(--color-holo)', 'var(--color-ok)', 'var(--color-warn)', 'var(--color-g-crystite)', 'var(--color-g-energy)'];
   const G = 1500 * k;
@@ -206,7 +205,7 @@ function OfficeStage({ game, s: b, t, size, me, reduced, first }: { game: MuleVi
             return (
               <div
                 key={id}
-                className={cx('relative flex items-center rounded-panel border', z.row, GLIDE, win ? 'border-holo bg-holo-soft ring-2 ring-holo animate-pulse-glow' : 'border-holo-line bg-panel')}
+                className={cx('relative flex items-center rounded-panel border', z.row, GLIDE, win ? cx('border-holo bg-holo-soft ring-2 ring-holo', !reduced && 'animate-pulse-glow') : 'border-holo-line bg-panel')}
                 style={{ opacity: Math.min(1, pop) * (lost ? 0.45 : 1), transform: `scale(${(0.6 + 0.4 * pop) * (win && !reduced ? 1 + 0.02 * ease(ramp(t, b.at.winner, 0.4)) : 1)})` }}
                 data-testid={`reveal-row-${b.office}-${id}`}
               >
@@ -391,7 +390,8 @@ export function PhoneRevealWithTv({ show }: { show: Show }) {
   const name = namer(view);
   const known = (s: OfficeShow | undefined) => (s && beatIs(s, 'winner') ? raceOf(s) : null);
   const mineWon = show.offices.find((s) => known(s)?.winner === me.id);
-  const first = show.offices[0];
+  const latest = show.offices.at(-1);
+  const nextOffice = known(latest) !== null && latest!.office !== POLITICS.offices.at(-1);
   const over = show.t >= show.summary && show.offices.length === POLITICS.offices.length;
   const baron = baronWords(view, view.politics!.baron, me.id);
   const promise = view.politics!.election!.promises[me.id];
@@ -442,7 +442,7 @@ export function PhoneRevealWithTv({ show }: { show: Show }) {
         <div className="relative flex min-w-0 flex-col justify-center gap-2">
           {mineWon ? (
             <div className="relative flex flex-col items-center gap-2 overflow-hidden rounded-sheet border-2 border-holo bg-holo-soft p-3 text-center shadow-glow" data-testid="companion-mine">
-              <Creature species={me.species} color={SLOT_COLOR[slotOf(view, me.id) ?? 0]} size={56} />
+              <Creature species={me.species} color={colorOf(view, me.id)} size={56} />
               <span className="font-display text-xl font-bold leading-tight">
                 Congratulations, {OFFICE_NAME[mineWon.office]} {name(me.id)}!
               </span>
@@ -452,7 +452,7 @@ export function PhoneRevealWithTv({ show }: { show: Show }) {
             </div>
           ) : (
             <div className="flex flex-col items-center gap-2 rounded-sheet border border-holo-line bg-panel p-3 text-center" data-testid="companion-wait">
-              <span className="font-display text-base font-semibold">{!first || !known(first) ? 'The votes are being counted on the TV' : 'Next office on the TV'}</span>
+              <span className="font-display text-base font-semibold">{nextOffice ? 'Next office on the TV' : 'The votes are being counted on the TV'}</span>
               <span className="text-xs text-ink-2">Your phone shows each result once the TV has named the winner, so nobody’s screen gives it away.</span>
             </div>
           )}
