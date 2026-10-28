@@ -1,4 +1,4 @@
-import { analysisSeconds, DEVELOPMENT, SPECIES_PERK, tileIndex, walkSeconds, type GameState, type Outfit } from '@mule/engine';
+import { analysisSeconds, DEVELOPMENT, RuleError, SPECIES_PERK, tileIndex, walkSeconds, type GameState, type Outfit } from '@mule/engine';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { describe, expect, it } from 'vitest';
 import { seats, toDevelopment, walkers } from './fake-context.js';
@@ -101,8 +101,22 @@ describe('T-AC-7: colonists walk at their own pace, and the action applies on ar
     expect(game.viewFor(LENA).me!.carriedMule).toBeNull();
   });
 
-  it("T-AC-7 (negative): a walk that would arrive after the clock's end is refused and changes nothing; so is one started after the clock ran out", () => {
+  it("T-AC-7 (negative): a walk off the map, or one that would arrive after the clock's end, is refused and changes nothing; so is one started after the clock ran out", () => {
     const { game, state, advanceTo, far } = walking();
+    const offMap = [
+      { x: -1, y: 0 },
+      { x: state.width, y: 0 },
+      { x: 0, y: state.height },
+    ];
+    for (const type of ['install', 'analyse', 'filter'] as const) {
+      for (const spot of offMap) {
+        const tv = game.viewFor(null);
+        const mine = game.viewFor(LENA);
+        expect(() => game.handle(LENA, { type, ...spot }), `${type} at ${spot.x},${spot.y}`).toThrow(RuleError);
+        expect(game.viewFor(null)).toEqual(tv);
+        expect(game.viewFor(LENA)).toEqual(mine);
+      }
+    }
     const end = game.viewFor(LENA).me!.devEndsAt!;
     advanceTo(end - msOf(walkSeconds(state, LENA, 'store', far.index)) + 1);
     const tv = game.viewFor(null);
