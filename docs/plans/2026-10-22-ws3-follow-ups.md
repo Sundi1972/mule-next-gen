@@ -206,3 +206,41 @@ WS5's #112 (maps 2.7× faster) is on trunk via #133. Row 1 in `packages/engine/t
 
 - [x] **Step 1:** time the row 5 times under the machine's normal load, recording each time and the load average. If every run is under 2.5 s, drop the timeout and the comment's headroom clause. Otherwise set it to about 2× the slowest run, in whole seconds, and say so in the comment.
 - [x] **Merge gate:** no assertion edited; `pnpm --filter @mule/engine test` green; typecheck 0; only lots-colony.test.ts changes; review clean.
+
+## PR-F: the land grant is one pass with no clock (`ws3-grant-pass` from `ws3-auctions`)
+
+Heiko's ruling, option B (2026-10-28, through the PM): the grant always completes one full pass over the free plots, then stops, or stops earlier once every player has used their claims. The fixed 60 s cap is gone. Class: Sketch.
+
+**MERGED into the lane as #158 (49139bc, pinned to head 9337974f)** after CI check and e2e were green (run 40762592038) and every owner had OK'd its named edits.
+
+**The scope grew past the original plan, by Heiko's later rulings (through the PM):**
+- the one pass (option B, above);
+- **Done with land** (option A): `Player.doneWithLand` and `grantPass` in the engine; the `ready` intent in the grant presses it. The grant ends when every player has used their claims or is done, or the pass ends (`grantDone`). A dropped phone is not done;
+- **fast-forward** (option c, with WS3's adjustment): once every human is done, the server resolves each lit plot at once and steps at `PHASES.grantFastForwardMs` = `GAME.grantTickMs / 8`;
+- `GRANT_PASS_MAX_MS`, derived in `game.ts` from the largest map and the tick, which e2e waits on;
+- the `wantsPlot` "plots ahead" rule (WS1's named edits): the lit plot ranks within `claimsLeft + grantSpare` among it and the plots ahead, with utility ≥ `grantShare` × the best ahead. `grantLaterShare` is removed;
+- the broadcast fix: one `changed()` per light move in fast-forward.
+
+**Authority:**
+- `may_edit`: `packages/engine/src/config.ts` (the PHASES block, WS3's); `packages/engine/src/game.ts`, `types.ts`; `apps/server/src/mule-game.ts`; WS3's tests; `apps/web/src/phone/LandGrant.tsx`, `phone/grant-ready.ts`.
+- **Named edits, each in its own commit, each OK'd by its owner on the SHA:**
+  - **WS1** (GAME block, strategist, seat, sim rows): 421da14, d9d3795, 2d76996, 0f4802f, dbdb913, 38708d6, b1247df, 3f71e58, 7305f52. All OK.
+  - **WS4** (phase-scale and its tests): 0af7241, d33f808, 8c01373, 704f3ba, 2ac8075d, 57dbe6f, 153b811. All OK.
+  - **WS2:** e0be093, 7ebe940 (B-AC-2 restated). OK.
+  - **WS5:** 59c3305. OK.
+  - **WS7:** d15ca91, ef97a7a (the humans press Done in politics tests). OK.
+- **WS3's commits:** 7bb3669 red test · cb4cbf5 no clock · 9acef23 `GRANT_PASS_MAX_MS` · e3a9515 rules.test (INV-grant-order on one pass) · 95fefa3 red Done T-AC · 4d55b45 engine · 36b6b93, 466e80d server · 640cf66 LandGrant.tsx · 1bc3630d red fast-forward test · 94e504b6 fast-forward · 9337974f single broadcast (count row; control 154 vs ≤ 81).
+
+- [x] **Step 1 (RED):** at viewFor, a land grant has no clock (`phaseEndsAt` null), and it ends after one pass over the free plots with claims unused, not at 60 s. It still ends early once every claim is used.
+- [x] **Step 2:** `PHASES.landGrantMs` null means no phase timer (as `planningMs`), and `GAME.grantSweeps` is 1. The sim already ends the grant through `grantDone`.
+- [x] **Step 3:** the phone's and TV's grant views draw no countdown while `phaseEndsAt` is null, as in untimed planning.
+- [x] **Step 4 (Done with land):** red T-AC first (95fefa3); engine, server, phone ready button.
+- [x] **Step 5 (fast-forward):** red test first (1bc3630d); equal claims, a wall bound, and the broadcast count.
+- [x] **Merge gate:** typecheck and test green; e2e:core green, with its wall time before and after; the sim's 4-game smoke runs; the named edits are each their own commit; review clean.
+
+**Findings recorded at merge:**
+- The 40-game sim (seed 1) passes all 9 checks; developed land 75 → 73%.
+- The AI's claims by map third went from 39/33/28 to 23/32/45. A stopgap, recorded in WS1's spec AM-19 (b); the AI land step's P(free) is the fix.
+- e2e:core is 39 s (base 34 s; 113 s before fast-forward). e2e:regression is 83 s.
+- **Flake risk, WS7's call:** `politics.test.ts` T-AC-6 · C8 ran 4508 ms in CI against a 5 s limit (about 800 ms locally at every commit, so it is runner variance; its `onChanged` builds a whole view per broadcast). Routed to the PM; reading the tax from the engine instead would weaken "the screens get it".
+- **Unproven:** the TV's racing light in a browser; zoom and specials not re-run after fast-forward; politics.ts e2e (Tier 2) green locally only, until the lane PR runs it.

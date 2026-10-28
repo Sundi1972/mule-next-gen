@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { GAME } from '@mule/engine';
 import { chromium, errors as playwrightErrors, type Browser, type Locator, type Page } from 'playwright';
 import QRCode from 'qrcode';
-import { GRANT_TICK_MS } from '../../server/src/mule-game.js';
+import { GRANT_PASS_MAX_MS, GRANT_TICK_MS } from '../../server/src/mule-game.js';
 import { createMuleServer, type MuleServer } from '../../server/src/server.js';
 
 /** CT-3: what smoke.ts hands each auction step. */
@@ -120,6 +120,30 @@ export async function claimAPlot(phone: Page, timeoutMs: number, promise: string
 
 /** How long a check waits for a screen to show what it looks for. */
 export const SHOWN_MS = 5_000;
+
+/** How long a phone has to claim a plot in the land grant: ten lit plots for the AIs to take first, and the screen. */
+export const CLAIM_MS = 10 * GRANT_TICK_MS + SHOWN_MS;
+
+/**
+ * Done with land: once its claims are in, the phone presses Ready in the land grant, and this waits for the grant to
+ * end. It ends once every seat has used its claims or is done; the AI seats decide on the light's real-time tick,
+ * which phaseScale never shortens, so the wait is up to one pass of the light. A phone already done, or already past
+ * the grant, presses nothing.
+ */
+export async function doneWithLand(phone: Page): Promise<void> {
+  const grant = phone.locator('[data-phase=landGrant]');
+  const ready = grant.getByTestId('ready');
+  const over = phone.locator('[data-phase]:not([data-phase=planning]):not([data-phase=landGrant])');
+  await ready.or(grant.getByTestId('you-are-ready')).or(over).first().waitFor({ timeout: SHOWN_MS });
+  if (await ready.count()) {
+    try {
+      await ready.click({ timeout: SHOWN_MS });
+    } catch (err) {
+      if (!(err instanceof playwrightErrors.TimeoutError) || (await over.count()) === 0) throw err;
+    }
+  }
+  await over.first().waitFor({ timeout: GRANT_PASS_MAX_MS + SHOWN_MS });
+}
 export const MOVED = "You're playing on another device now";
 export const EXPIRED = 'That link has expired';
 
