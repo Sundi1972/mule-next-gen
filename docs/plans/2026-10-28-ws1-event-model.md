@@ -57,16 +57,19 @@ AM-1). The WS1 events spec's pins keep their own titles (`T-AC-3`, `T-AC-4`, `T-
 
 ## PR decomposition
 
-**Feature branch:** `ws1-events`, cut from `feat/strategist` once #109 (R1) has merged: the roller generalises R1's
-`EVENTS.player` row and `rollPlayerEvent`. It merges to `feat/strategist` only through the gate below.
+**Feature branch:** `ws1-events`, cut from `ws1-balance` and stacked on it (PM, 2026-10-28: build now, not after
+#109): the roller generalises R1's `EVENTS.player` row and `rollPlayerEvent`, which are on `ws1-balance`. PR-1 and
+PR-2 merge into `ws1-events`. Its PR into `feat/strategist` opens only after #109 merges, with `ws1-events` rebased
+onto `feat/strategist` then, and goes through the gate below.
 
 | PR | Sub-branch | Scope (tasks / changes) | ACs verified | Contracts produced | Contracts consumed | Frontend touched? |
 |----|------------|-------------------------|--------------|--------------------|--------------------|-------------------|
 | PR-1 | `ws1-events-roller` | Tasks 1-8 (C1, C2, C3, C5) | UBER-AC-1, T-AC-1..4, T-AC-5 (the ten events) | `MonthEvent.phase`; `MonthReport.events` with several events in the order fired | `EVENTS.player`, `rollPlayerEvent` (R1) | No |
 | PR-2 | `ws1-events-cavern` | Task 9 (C4) | T-AC-5 (cavern collapse) | none | PR-1's row dice | No |
 
-Built inline, in order: PR-2 needs PR-1's dice, and PR-1's rows decide whether R-2 sends options to Heiko. Two PRs
-because PR-2 is a named edit in WS5's file and block, with WS5 as its reviewer.
+Built through subagents (PM, 2026-10-28), each task in its own worktree, so WS1's merge duties on #109 are not
+delayed. In order: PR-2 needs PR-1's dice, and PR-1's rows decide whether R-2 sends options to Heiko. Two PRs because
+PR-2 is a named edit in WS5's file and block, with WS5 as its reviewer.
 
 **PR-1 authority**
 - `may_edit`: `packages/engine/src/{events,production}.ts`, the `EVENTS` block of `packages/engine/src/config.ts`,
@@ -260,6 +263,7 @@ Before suggesting merge of `ws1-events-roller` into `ws1-events`:
 
 ## Gate: wave 1 reaches a table (`ws1-events` → `feat/strategist`)
 
+- [ ] #109 merged into `feat/strategist`; `ws1-events` rebased onto it, gates re-run on the rebased head
 - [ ] **WS6's several-events surface** is merged into `feat/strategist`, or merges with this branch: the phone and
       TV show every event of a phase, and the view (WS3's `mule-game.ts`) carries `phase`. It is built against Task 2's
       contract; the PM routes it.
@@ -269,10 +273,13 @@ Before suggesting merge of `ws1-events-roller` into `ws1-events`:
 ## Pre-implementation checklist
 
 - [x] Spec approved: goal gate passed (PM, 28 Oct); class Standard; §8 AM-1 records the plan-time corrections
-- [ ] Upstream merged: #109 (R1) in `feat/strategist` (the roller generalises its `EVENTS.player` and `rollPlayerEvent`)
-- [ ] The PM's go to build: its order puts the literal guard and `sim --set` before this
-- [ ] Branch policy: `ws1-events` from `feat/strategist`; PR-1 and PR-2 into it; to `feat/strategist` through the gate above
-- [ ] Base `ws1-balance` @ `3567408` green (measured 28 Oct; re-run on `feat/strategist` at pre-flight): `pnpm
-      typecheck` 0 · `pnpm test` tabletop 131 · ui 46 · engine 262 (+1 skipped) · ai 57 · web 142 · server 102 (+1 skipped)
+- [ ] Upstream merged: #109 (R1) in `feat/strategist` (the roller generalises its `EVENTS.player` and `rollPlayerEvent`).
+      Open by design: the build is stacked on `ws1-balance`, which carries R1; this box gates only the PR into
+      `feat/strategist`
+- [x] The PM's go to build (2026-10-28): now, stacked on `ws1-balance`, through subagents; #128 and WS4's P0 merge first
+- [x] Branch policy: `ws1-events` from `ws1-balance`; PR-1 and PR-2 into it; to `feat/strategist` only after #109
+      merges, rebased then, through the gate above
+- [x] Base `ws1-balance` @ `149b2eb` green (later commits there are docs only): `pnpm typecheck` 0 · `pnpm test`
+      tabletop 132 · ui 46 · engine 264 (+1 skipped) · ai 59 · web 151 · server 153 (+1 skipped)
 - [x] No spike: R-1 was measured (spec §7)
 - [ ] Effort to the PM: 1-2 days for both PRs, plus WS6's screen change
