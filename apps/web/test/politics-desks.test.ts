@@ -16,6 +16,7 @@ import { GovernorDesk, setState } from '../src/phone/hub/politics/Governor';
 import { OfficesLine } from '../src/phone/hub/politics/Offices';
 import { PromiseSheet } from '../src/phone/hub/politics/Run';
 import { electionNow, electionReadyWords } from '../src/phone/hub/politics/slots';
+import { howWords } from '../src/phone/hub/politics/words';
 import { HUB_SLOTS } from '../src/phone/hub/today';
 import { TvElection } from '../src/table/TvElection';
 import { drawnSlots } from '../src/phone/hub/slots';
@@ -282,6 +283,16 @@ describe('the Council desk (C66, E-1, E-6)', () => {
     expect(textOf(html, 'council-result')).toMatch(/^Election results · month 4/);
     expect(textOf(html, 'result-how-governor')).toBe(line);
     for (const t of race!.tallies) expect(textOf(html, `result-governor-${t.id}`)).toBe(`${t.id === 's1' ? 'You' : 'Ossa'}${t.votes} vote${t.votes === 1 ? '' : 's'}${t.id === race!.winner ? 'ELECTED' : ''}`);
+  });
+
+  it.each<[ElectionHow, string | null]>([
+    ['baron', 's3'],
+    ['land', null],
+    ['land', 's3'],
+    ['lot', null],
+  ])('E-6: a tie of one vote each says "1 vote each" (%s, Land Baron %s)', (how, baron) => {
+    const race = { winner: 's2', how, tallies: [{ id: 's1', votes: 1 }, { id: 's2', votes: 1 }] };
+    expect(howWords(race, 's1', view(politics({ baron })))).toMatch(/^A tie, 1 vote each[.,]/);
   });
 });
 
