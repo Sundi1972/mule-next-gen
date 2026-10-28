@@ -18,7 +18,7 @@ import type { Choice } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import { createBrain, type BrainService } from './brain/index.js';
-import { ledgerGameId, MuleGame } from './mule-game.js';
+import { ledgerGameId, MuleGame, type Notice, type PlaybookNote } from './mule-game.js';
 
 // literal-ok: caps a refusal's or a failed call's message in the record; no effect on play
 const MESSAGE_CHARS = 120;
@@ -135,6 +135,22 @@ export class Recorder {
       this.record.outcome ??= outcomeOf(state, this.record.seats);
     });
     setImmediate(() => this.guard(() => this.close()));
+  }
+
+  /** Appends a public fact as it settled, stamped with the open step's at and seq. */
+  notice(notice: Notice): void {
+    this.guard(() => {
+      const { at, seq } = this.openStep();
+      this.record.events.push({ type: 'notice', at, seq, ...structuredClone(notice) });
+    });
+  }
+
+  /** Appends a seat's playbook, stamped with the open step's at and seq: the last step's, between steps. */
+  playbook(entry: PlaybookNote): void {
+    this.guard(() => {
+      const { at, seq } = this.openStep();
+      this.record.events.push({ type: 'playbook', at, seq, ...structuredClone(entry) });
+    });
   }
 
   private close(): void {
@@ -273,6 +289,12 @@ export function createRecordedGame(args: {
 }): { game: Game<MuleIntent, MuleView>; recorder: Recorder } {
   const brain = args.brain ?? createBrain({ gameId: ledgerGameId(args.seed, args.ctx.now()) });
   const recorder = new Recorder(args.ctx, args.seed, args.options, brain, args.dir ?? null);
-  const game = new MuleGame(recorder.ctx, args.seed, { ...args.options, brain: recorder.brain, onGameOver: (state) => recorder.gameOver(state) });
+  const game = new MuleGame(recorder.ctx, args.seed, {
+    ...args.options,
+    brain: recorder.brain,
+    onGameOver: (state) => recorder.gameOver(state),
+    notice: (notice) => recorder.notice(notice),
+    recordPlaybook: (entry) => recorder.playbook(entry),
+  });
   return { game: recorder.wrap(game), recorder };
 }

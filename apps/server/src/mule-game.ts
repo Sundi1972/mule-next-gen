@@ -62,14 +62,17 @@ import {
   storeForSale,
   storeQuotes,
   storeSellLine,
+  tileIndex,
   unlist as unlistLot,
   visitPub,
   WALK,
   walkSeconds,
   type GameState,
   type Good,
+  type NoticeEntry,
   type Outfit,
   type Phase,
+  type PlaybookEntry,
   type Trade,
 } from '@mule/engine';
 import { AiSeat, LotHand, personaFor, VoteHand, type AiAction } from '@mule/ai';
@@ -188,6 +191,13 @@ export function ledgerGameId(seed: number, now: number): string {
   return `g-${seed}-${now}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
+type Without<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+/** A public fact as it settled in the open phase: a claim, a declared side, a trade or a lot sale. */
+export type Notice = Without<NoticeEntry, 'type' | 'at' | 'seq'>;
+
+/** A seat's playbook as its builder hands it to the record, which stamps the step. */
+export type PlaybookNote = Omit<PlaybookEntry, 'type' | 'at' | 'seq'>;
+
 /** M.U.L.E. as a game hosted by a @tabletop/core room. */
 export class MuleGame implements Game<MuleIntent, MuleView> {
   private state: GameState | null = null;
@@ -225,6 +235,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private readonly phaseScale: number;
   /** Deciders and table chat for the AI seats; Classic when the server has no key. */
   private readonly brain: BrainService;
+  /** The open phase's notices; derived facts that rules code never reads. */
+  private notices: Notice[] = [];
+  /** Where whoever builds a seat's playbook hands the final one; a no-op unless the game is recorded or replayed. */
+  protected readonly recordPlaybook: (entry: PlaybookNote) => void;
 
   constructor(
     private readonly ctx: GameContext,
@@ -237,11 +251,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       brain?: BrainService;
       /** Called once, as the game ends, with its final state. */
       onGameOver?: (state: GameState) => void;
+      /** Hears each notice as it settles. */
+      notice?: (notice: Notice) => void;
+      recordPlaybook?: (entry: PlaybookNote) => void;
     } = {},
   ) {
     this.phaseScale = options.phaseScale ?? 1;
     if (!(this.phaseScale > 0 && this.phaseScale <= 1)) throw new RangeError(`phaseScale must be in (0, 1], got ${this.phaseScale}`);
     this.brain = options.brain ?? createBrain({ gameId: ledgerGameId(seed, ctx.now()) });
+    this.recordPlaybook = options.recordPlaybook ?? (() => {});
   }
 
   start(seats: SeatInfo[]): void {
@@ -304,7 +322,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         orderGeoDrone(state, seatId, intent.plots);
         return;
       case 'claim':
-        claimPlot(state, seatId, intent.x, intent.y);
+        this.claim(seatId, intent.x, intent.y);
         if (grantDone(state)) this.nextPhase();
         else this.maybeFastForward();
         return;
@@ -573,6 +591,29 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     return this.state;
   }
 
+  /** The open phase's notices, until the next phase opens. */
+  phaseNotices(): readonly Notice[] {
+    return this.notices;
+  }
+
+  private claim(seatId: string, x: number, y: number): void {
+    const state = this.requireState();
+    claimPlot(state, seatId, x, y);
+    this.notify({ kind: 'claim', seat: seatId, plot: tileIndex(state.width, x, y) });
+  }
+
+  /** Keeps a fact for the open phase and hands it to the listener; a listener's fault never reaches play. */
+  private notify(fact: Without<Notice, 'month' | 'phase'>): void {
+    const { month, phase } = this.requireState();
+    const notice: Notice = { ...fact, month, phase };
+    this.notices.push(notice);
+    try {
+      this.options.notice?.(notice);
+    } catch (err) {
+      console.error(`notice listener failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   private nextPhase(): void {
     const state = this.requireState();
     if (state.phase === 'gameOver') return;
@@ -586,6 +627,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     for (const cancel of this.cancels) cancel();
     this.cancels = [];
     this.ready.clear();
+    this.notices = [];
 
     if (state.phase === 'gameOver') {
       this.phaseEndsAt = null;
@@ -877,7 +919,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     try {
       switch (action.type) {
         case 'claim':
-          claimPlot(state, seatId, action.x, action.y);
+          this.claim(seatId, action.x, action.y);
           break;
         case 'walk':
           // The goods hands set Done themselves, so walking doesn't take it back here; at the land auction the engine does.
@@ -924,7 +966,14 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
             if (!(err instanceof RuleError)) throw err;
           }
         }
-        this.dealsInGood.push(...stepAuction(state, dt).filter((t) => t.buyer !== 'store' && t.buyer !== 'ship' && t.seller !== 'store'));
+        // Read before the step: a status screen that ends with nobody trading moves straight on to the next good.
+        const sides = state.auction.stage === 'status' ? state.auction.walkers.map(({ id, side }) => ({ id, side })) : [];
+        const trades = stepAuction(state, dt);
+        if (good && sides.length > 0 && (state.auction.stage !== 'status' || state.auction.good !== good)) {
+          for (const { id, side } of sides) this.notify({ kind: 'declare', seat: id, good, side });
+        }
+        for (const t of trades) this.notify({ kind: 'trade', good: t.good, buyer: t.buyer, seller: t.seller, price: t.price, qty: t.quantity });
+        this.dealsInGood.push(...trades.filter((t) => t.buyer !== 'store' && t.buyer !== 'ship' && t.seller !== 'store'));
         if (state.auction.good !== good) {
           this.reportGood(good);
           const skipped = state.auction.skipped;
@@ -982,7 +1031,13 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         }
         const lot = a.lot;
         const result = stepLandAuction(state, dt);
-        if (lot && result) this.addNews(lotNews(lot, result, (id) => this.nameOf(id)));
+        if (lot && result) {
+          this.addNews(lotNews(lot, result, (id) => this.nameOf(id)));
+          if (result.kind !== 'kept') {
+            const buyer = result.kind === 'sold' ? result.buyer : 'store';
+            this.notify({ kind: 'sale', item: lot.item.kind, plot: tileIndex(state.width, lot.item.x, lot.item.y), seller: lot.seller, buyer, price: result.price });
+          }
+        }
         if (a.stage === 'over') this.nextPhase();
         else this.scheduleLandAuctionTick(now);
         this.ctx.changed();
