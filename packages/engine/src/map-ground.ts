@@ -1,6 +1,6 @@
 import { GROWN_ODDS, GROWN_ODDS_MIN, MAP, MINERAL_ODDS, MINERAL_ODDS_MIN, ratingsOf, TERRAIN_ODDS, sizeBand, type FloorGood } from './config.js';
 import type { Layout } from './map-layout.js';
-import { EPS, zeroGround } from './grid.js';
+import { EPS, reachTable, zeroGround, type ReachTable } from './grid.js';
 import type { Rng } from './rng.js';
 import type { Ground, Terrain } from './types.js';
 
@@ -25,7 +25,7 @@ export interface Board {
   byTerrain: Map<LandTerrain, number[]>;
   steps(a: number, b: number): number;
   /** For each plot, the land plots within `limit` steps of it. */
-  ball(limit: number): number[][];
+  ball(limit: number): ReachTable;
 }
 
 /** The ground part-way through the stages, with what later stages read. */
@@ -527,15 +527,9 @@ function boardOf(layout: Layout): Board {
     else byTerrain.set(terrain[i]!, [i]);
   }
   const steps = (a: number, b: number) => Math.abs((a % width) - (b % width)) + Math.abs(Math.floor(a / width) - Math.floor(b / width));
-  const balls = new Map<number, number[][]>();
-  const ball = (limit: number) => {
-    let known = balls.get(limit);
-    if (!known) {
-      known = layout.terrain.map((_, i) => land.filter((j) => steps(i, j) <= limit));
-      balls.set(limit, known);
-    }
-    return known;
-  };
+  // Land is every plot but the one store, so the shared table for this size holds exactly these lists.
+  const store = layout.terrain.indexOf('store');
+  const ball = (limit: number) => reachTable(width, height, store, limit);
   return { layout, land, terrain, neighbours, byTerrain, steps, ball };
 }
 

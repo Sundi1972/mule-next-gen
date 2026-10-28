@@ -1,4 +1,5 @@
 import { MAP, type ShareTerrain } from './config.js';
+import { reachTable, type ReachTable } from './grid.js';
 import type { Rng } from './rng.js';
 import type { Terrain } from './types.js';
 
@@ -29,7 +30,7 @@ export class Grid {
   /** Every plot but the store: what AM-4 covers. */
   readonly land: number[];
   /** For a free plot, the land plots within Smithore reach of it; empty for other plots. */
-  readonly within: number[][];
+  readonly within: ReachTable;
   private readonly mark: number[];
   private stamp = 0;
 
@@ -45,7 +46,10 @@ export class Grid {
       const around = [x > 0 ? i - 1 : -1, x < width - 1 ? i + 1 : -1, y > 0 ? i - width : -1, y < height - 1 ? i + width : -1];
       return around.filter((j) => j >= 0 && isFree[j]);
     });
-    this.within = terrain.map((_, i) => (isFree[i] ? this.land.filter((l) => this.steps(i, l) <= reach) : []));
+    // Land is every plot but the one store, so the shared table for this size holds exactly these lists.
+    const table = reachTable(width, height, terrain.indexOf('store'), reach);
+    const none: readonly number[] = [];
+    this.within = terrain.map((_, i) => (isFree[i] ? table[i]! : none));
     this.mark = Array(terrain.length).fill(0);
   }
 
