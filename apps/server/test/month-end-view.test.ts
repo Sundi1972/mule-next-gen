@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { foodShare, player, RuleError, type GameState } from '@mule/engine';
+import { foodShare, player, POLLUTION, RuleError, scoreParts, type GameState } from '@mule/engine';
 import type { MuleView, PlayerView } from '@mule/protocol';
 import { MuleGame } from '../src/mule-game.js';
 import { fakeContext, readyAll, seats } from './fake-context.js';
@@ -163,5 +163,28 @@ describe('Month end holds until everyone moves on (C20, Q4)', () => {
     game.handle('s2', { type: 'ready' });
     expect(() => game.handle('s2', { type: 'continue' })).toThrow(RuleError);
     expect(game.viewFor(null).phase).toBe('upkeep');
+  });
+});
+
+describe('Before the cut, from the view (C20, fix F1)', () => {
+  it("T-AC-15: in Collapse every player's worthBeforeCut is scoreParts' total before the cut, exactly; outside Collapse it is null", () => {
+    const { game } = toMonthEnd();
+    const state = stateOf(game);
+    const beforeCut = (id: string) => {
+      const p = scoreParts(state, id);
+      return p.total + p.cut;
+    };
+    const divided = (id: string) => Math.round(scoreParts(state, id).total / POLLUTION.collapseScore);
+    for (const viewer of VIEWERS) for (const p of game.viewFor(viewer).players) expect(p.worthBeforeCut, `${p.id} in clean air, ${viewer ?? 'the board'}`).toBeNull();
+
+    state.air = POLLUTION.bands.find((b) => b.name === 'collapse')!.from;
+    // A total over collapseScore is not the number before the cut: one player's rounding is made to show it.
+    for (let n = 0; n < 10 && seats.every((s) => divided(s.id) === beforeCut(s.id)); n++) player(state, 's1').money += 1;
+    expect(seats.some((s) => divided(s.id) !== beforeCut(s.id)), 'precondition: the division misses by a credit for someone').toBe(true);
+    for (const viewer of VIEWERS) {
+      const view = game.viewFor(viewer);
+      expect(view.air.band).toBe('collapse');
+      expect(Object.fromEntries(view.players.map((p) => [p.id, p.worthBeforeCut])), viewer ?? 'the board').toEqual(Object.fromEntries(seats.map((s) => [s.id, beforeCut(s.id)])));
+    }
   });
 });

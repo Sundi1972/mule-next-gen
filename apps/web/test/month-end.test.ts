@@ -32,6 +32,7 @@ const row = (id: string, name: string, slot: number, money: number, worth: numbe
   money,
   worth,
   lastWorth,
+  worthBeforeCut: null,
   plots: 0,
   ready: false,
   doneDeveloping: false,
@@ -100,14 +101,21 @@ function view(extra: Partial<MuleView> = {}): MuleView {
   };
 }
 
-/** The air in Collapse: every worth is cut; Heiko's own lines show the cut. */
+/**
+ * The air in Collapse: every worth is cut, and the view carries each before the cut; Heiko's own lines show the cut.
+ * Mia's 5,202 cuts to 4,162, which over collapseScore reads 5,203: only the view's number is right.
+ */
+const MIA_BEFORE_CUT = 5_202;
 function collapse(): MuleView {
   const cutOf = (n: number) => Math.round(n * POLLUTION.collapseScore);
   const parts = { ...me.worthParts, cut: 3_400 - cutOf(3_400) };
   return view({
     air: { level: 84, band: 'collapse' },
     lastAir: 77,
-    players: PLAYERS.map((p) => ({ ...p, worth: cutOf(p.worth) })),
+    players: PLAYERS.map((p) => {
+      const before = p.id === 's2' ? MIA_BEFORE_CUT : p.worth;
+      return { ...p, worth: cutOf(before), worthBeforeCut: before };
+    }),
     me: { ...me, worthParts: parts },
   });
 }
@@ -243,14 +251,14 @@ describe('B-AC-12 (WS4, month end): Collapse', () => {
     expect(has(tv, 'collapse-banner')).toBe(true);
     for (const html of [phone, tv]) {
       expect(order(html)).toEqual(['s2', 's1', 's3']);
-      expect(said(html, 'worth-s2')).toBe('4,160');
-      expect(said(html, 'uncut-s2')).toBe('5,200');
+      expect(said(html, 'worth-s2')).toBe('4,162');
+      expect(said(html, 'uncut-s2')).toBe('5,202');
       expect(said(html, 'uncut-s1')).toBe('3,400');
     }
   });
 
   it("B-AC-12 (WS4, month end): in Collapse the change is against last month's shown Worth, one rule", () => {
-    for (const html of [phone, tv]) expect(said(html, 'change-s2')).toBe(`↓ −${(4_800 - 4_160).toLocaleString('en')}`);
+    for (const html of [phone, tv]) expect(said(html, 'change-s2')).toBe(`↓ −${(4_800 - 4_162).toLocaleString('en')}`);
   });
 
   it('B-AC-12 (WS4, month end): in Collapse your phone shows the cut as its own line, and the lines still add up', () => {
