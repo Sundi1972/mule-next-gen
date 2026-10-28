@@ -13,28 +13,21 @@ export function Section({ title, children, testid }: { title: ReactNode; childre
   );
 }
 
-/** A player by name, with their creature in their seat's colour. */
-export function Who({ view, id, size = 16 }: { view: Pick<MuleView, 'players'>; id: string; size?: number }) {
+/** A player by name, with their creature in their seat's colour; "You" for `me`. */
+export function Who({ view, id, size = 16, me = null, className, testid }: { view: Pick<MuleView, 'players'>; id: string; size?: number; me?: string | null; className?: string; testid?: string }) {
   const p = view.players.find((q) => q.id === id);
   if (!p) return null;
   return (
-    <span className="inline-flex items-center gap-1 font-semibold">
-      <Creature species={p.species} color={SLOT_COLOR[slotOf(view, id) ?? 0]} size={size} />
-      {p.name}
+    <span className={cx('inline-flex items-center gap-1 font-semibold', className)} data-testid={testid}>
+      <Creature species={p.species} color={colorOf(view, id)} size={size} />
+      {id === me ? 'You' : p.name}
     </span>
   );
 }
 
-/** A player by creature and name; "You" on your own screen. */
+/** A player by creature and name, on one line; "You" on your own screen. */
 export function Person({ view, id, me, size = 16, className }: { view: Pick<MuleView, 'players'>; id: string; me: string | null; size?: number; className?: string }) {
-  const p = view.players.find((q) => q.id === id);
-  if (!p) return null;
-  return (
-    <span className={cx('inline-flex items-center gap-1 whitespace-nowrap font-semibold', className)} data-testid={`person-${id}`}>
-      <Creature species={p.species} color={SLOT_COLOR[slotOf(view, id) ?? 0]} size={size} />
-      {id === me ? 'You' : p.name}
-    </span>
-  );
+  return <Who view={view} id={id} me={me} size={size} className={cx('whitespace-nowrap', className)} testid={`person-${id}`} />;
 }
 
 /** A seat's colour, for vote blocks. */
