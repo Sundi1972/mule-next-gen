@@ -167,14 +167,25 @@ export function playerEventChance(state: GameState, key: PlayerEventKey, phase: 
   const row = EVENTS.player[key];
   const inPhase = (row.phases as Partial<Record<Phase, number>>)[phase];
   if (inPhase === undefined) return 0;
-  const caused = state.history.at(-1)?.pollutionBy?.[id] ?? 0;
-  const polluter = Math.min(row.pollution.max, row.pollution.perPoint * caused);
-  return Math.min(row.cap, inPhase + row.air[airBand(state.air).name] + polluter);
+  const { air, pollution } = raises(state, key, id);
+  return Math.min(row.cap, inPhase + air + pollution);
 }
 
-/** Why a player event would fire for this player: the influence that raised its chance most, or plain chance. */
+/**
+ * Why a player event would fire for this player, so the screens can say it: the influence that raised its chance
+ * most (the air on a tie), or plain chance when nothing raised it.
+ */
 export function playerEventReason(state: GameState, key: PlayerEventKey, phase: Phase, id: string): 'air' | 'pollution' | 'chance' {
-  throw new Error('NotImplemented: playerEventReason');
+  const { air, pollution } = raises(state, key, id);
+  if (air <= 0 && pollution <= 0) return 'chance';
+  return pollution > air ? 'pollution' : 'air';
+}
+
+/** What raises a player event's chance for this player: the air band's bonus, and its own pollution last month. */
+function raises(state: GameState, key: PlayerEventKey, id: string): { air: number; pollution: number } {
+  const row = EVENTS.player[key];
+  const caused = state.history.at(-1)?.pollutionBy?.[id] ?? 0;
+  return { air: row.air[airBand(state.air).name], pollution: Math.min(row.pollution.max, row.pollution.perPoint * caused) };
 }
 
 /**
