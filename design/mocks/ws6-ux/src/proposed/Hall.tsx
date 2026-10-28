@@ -4,6 +4,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { slotOf } from '../../../../../apps/web/src/game/derive';
 import { VIEW } from '../fixture';
 import { Speaker } from './Chat';
+import { ConditionTag, DEV_WALK_STAND_IN, paceOf, ThoughtBubble, useCondition } from './Condition';
 import { Mule } from './Mule';
 
 /**
@@ -49,17 +50,15 @@ export const SPOT: Record<Spot, { x: number; y: number }> = {
   doorR: { x: 95.5, y: 50 },
 };
 
-/** Seconds to walk between two spots: the hall's width in about 2 s (R1 placeholder). */
-export function walkSeconds(a: { x: number; y: number }, b: { x: number; y: number }, zipwing = false): number {
-  const d = Math.hypot((a.x - b.x) / 100, ((a.y - b.y) / 100) * 0.5);
-  return Math.max(0.3, d * 2) / (zipwing ? 2 : 1);
+/** Seconds one walk across the store floor takes: DEV_WALK's hall time at full pace, divided by the walker's pace (Heiko 2026-10-28). */
+export function walkSeconds(_a: { x: number; y: number }, _b: { x: number; y: number }, pace = 1): number {
+  return DEV_WALK_STAND_IN.hallSeconds / pace;
 }
 
 export interface Visitor {
   id: string;
   at: { x: number; y: number };
   walk: number;
-  time: number;
   leading: 'empty' | Good | null;
   me?: boolean;
   moving?: boolean;
@@ -308,10 +307,15 @@ function Door({ side, onTap, next, wide }: { side: 'L' | 'R'; onTap: (() => void
   );
 }
 
-/** A colonist on the floor with its time bar, leading its MULE (the character, not the glyph). */
+/**
+ * A colonist on the floor, leading its MULE (the character, not the glyph). No time bar over its head any more: the
+ * clock is everyone's (Heiko 2026-10-28). Instead its condition: the tag at its shoulder, and in variant B a thought
+ * bubble at the moments it explains the slow walk. It waddles at its pace, so a hungry colonist visibly drags.
+ */
 export function HallWalker({ v, wide }: { v: Visitor; wide: boolean }) {
   const slot = (slotOf(VIEW, v.id) ?? 0) as Slot;
   const species = useSeatSpecies(slot);
+  const pace = paceOf(useCondition(v.id));
   const left = v.at.x > 50;
   return (
     <div
@@ -319,13 +323,15 @@ export function HallWalker({ v, wide }: { v: Visitor; wide: boolean }) {
       style={{ left: `${v.at.x}%`, top: `${v.at.y}%`, transition: `left ${v.walk}s linear, top ${v.walk}s linear` }}
       data-testid={`visitor-${v.id}`}
     >
-      <span className={cx('mb-0.5 overflow-hidden rounded-full bg-void/70', wide ? 'h-2 w-14' : 'h-1 w-8')}>
-        <span className="block h-full rounded-full" style={{ width: `${Math.max(0, Math.min(1, v.time)) * 100}%`, background: SLOT_COLOR[slot] }} />
-      </span>
-      <span className={cx('flex items-end', left ? 'flex-row-reverse' : '', v.moving && 'animate-[waddle_0.36s_ease-in-out_infinite]')}>
+      <span
+        className={cx('flex items-end', left ? 'flex-row-reverse' : '', v.moving && 'animate-[waddle_0.36s_ease-in-out_infinite]')}
+        style={v.moving ? { animationDuration: `${0.36 / pace}s` } : undefined}
+      >
         <Speaker id={v.id}>
-          <span className={cx('rounded-full', v.me && 'ring-2 ring-holo ring-offset-1 ring-offset-table')}>
+          <span className={cx('relative rounded-full', v.me && 'ring-2 ring-holo ring-offset-1 ring-offset-table')}>
             <Creature species={species} color={SLOT_COLOR[slot]} size={wide ? 52 : 28} />
+            <ConditionTag id={v.id} size={wide ? 'wide' : 'phone'} explain={!!v.me} />
+            <ThoughtBubble id={v.id} moving={!!v.moving} size={wide ? 'wide' : 'phone'} edge={v.at.x < 15 ? 'left' : v.at.x > 85 ? 'right' : undefined} />
           </span>
         </Speaker>
         {v.leading && <Mule size={wide ? 60 : 32} state={v.moving ? 'walk' : 'idle'} good={v.leading === 'empty' ? null : v.leading} owner={SLOT_COLOR[slot]} facing={left ? 'left' : 'right'} />}

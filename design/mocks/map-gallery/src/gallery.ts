@@ -1,4 +1,4 @@
-import { checkMap, createRng, generateMap, MAP, RAW_GOODS, regionCap, type GameMap, type MapReport, type RawGood, type RuleId } from '@mule/engine';
+import { checkMap, createRng, generateMap, MAP, RAW_GOODS, regionCap, type FloorGood, type GameMap, type MapReport, type RawGood, type RuleId, type ShareTerrain } from '@mule/engine';
 import type { MapTile } from '@mule/ui';
 // The frozen pre-WS5 generator lives only as a test fixture; this breaks if that fixture moves.
 import { legacyGenerateMap } from '../../../../packages/engine/test/fixtures/legacy-map';
@@ -10,6 +10,19 @@ import { legacyGenerateMap } from '../../../../packages/engine/test/fixtures/leg
  */
 
 export type Players = 2 | 4 | 6;
+
+export const FLOOR_GOODS = Object.keys(MAP.floor) as FloorGood[];
+export const SHARE_TERRAINS = Object.keys(MAP.shares) as ShareTerrain[];
+
+/** A good's floor in good plots per player, or undefined for a good with none. */
+export function floorOf(good: RawGood): number | undefined {
+  return good in MAP.floor ? MAP.floor[good as FloorGood] : undefined;
+}
+
+/** The lower edge of a good's normal range, or undefined for a good with none. */
+export function normalOf(good: RawGood): number | undefined {
+  return good in MAP.normalLo ? MAP.normalLo[good as FloorGood] : undefined;
+}
 export type Generator = 'current' | 'new';
 export const GENERATORS: Generator[] = ['current', 'new'];
 
