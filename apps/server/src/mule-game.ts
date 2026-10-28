@@ -39,7 +39,6 @@ import {
   outfitMule,
   PHASES,
   playerEventReason,
-  plotAt,
   RuleError,
   runFor,
   score,
@@ -61,12 +60,10 @@ import {
   storeForSale,
   storeQuotes,
   storeSellLine,
-  tileIndex,
   unlist as unlistLot,
   visitPub,
   WALK,
   walkSeconds,
-  type DevPlace,
   type GameState,
   type Good,
   type Outfit,
@@ -74,8 +71,9 @@ import {
   type Trade,
 } from '@mule/engine';
 import { AiSeat, LotHand, personaFor, VoteHand, type AiAction } from '@mule/ai';
-import { PLAYER_COLORS, type ColonistView, type MuleIntent, type MuleView, type ProductionReason, type ProductionView } from '@mule/protocol';
+import { PLAYER_COLORS, type MuleIntent, type MuleView, type ProductionReason, type ProductionView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
+import { colonistView, dueArrivals, placeName, walkTarget, type Colonist, type DevIntent } from './dev-walking.js';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
 import { electionNews, myPoliticsView, politicsView, resultShown } from './politics-view.js';
 
@@ -165,41 +163,6 @@ function productionView(state: GameState, lengthMs: number): ProductionView | nu
     hits: e.plots.map((p) => ({ ...at(p.index), order: p.order, delta: p.delta })),
   }));
   return { lines, events, lengthMs };
-}
-
-/** A development move: the colonist walks to where it happens, and it applies on arrival. */
-type DevIntent = Extract<MuleIntent, { type: 'buyMule' | 'outfit' | 'install' | 'analyse' | 'filter' | 'pub' }>;
-
-/** A colonist in development: where it stands or is walking to, the walk with the move at its end, and its assay. */
-interface Colonist {
-  at: DevPlace;
-  walk: { from: DevPlace; startedAt: number; arrivesAt: number; then: DevIntent } | null;
-  assayUntil: number | null;
-}
-
-/**
- * Where a development move happens: the corral for a MULE, the store for the pub, the plot; null for an outfit, done
- * where the colonist stands. Throws RuleError for a tap off the map or on the store, which no walk can reach.
- */
-function walkTarget(state: GameState, intent: DevIntent): DevPlace | null {
-  switch (intent.type) {
-    case 'buyMule':
-      return 'corral';
-    case 'pub':
-      return 'store';
-    case 'install':
-    case 'analyse':
-    case 'filter':
-      plotAt(state, intent.x, intent.y);
-      return tileIndex(state.width, intent.x, intent.y);
-    case 'outfit':
-      return null;
-  }
-}
-
-/** A place as the news names it. */
-function placeName(place: DevPlace): string {
-  return place === 'corral' ? 'the corral' : place === 'store' ? 'the store' : 'the plot';
 }
 
 /** M.U.L.E. as a game hosted by a @tabletop/core room. */
@@ -397,17 +360,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     return [...this.colonists.values()].every((c) => c.walk === null);
   }
 
-  /**
-   * Applies every walk that has arrived by now, in order of arrival and then seat order, so the clock and never the
-   * timers' order decides who reaches the corral first; then frees colonists whose assay is done.
-   */
+  /** Applies every walk that has arrived by now, in arrival order; then frees colonists whose assay is done. */
   private settleArrivals(): void {
     const now = this.ctx.now();
-    const due = this.seats
-      .map((s, seat) => ({ id: s.id, seat, walk: this.colonists.get(s.id)?.walk }))
-      .filter((d) => d.walk && d.walk.arrivesAt <= now)
-      .sort((a, b) => a.walk!.arrivesAt - b.walk!.arrivesAt || a.seat - b.seat);
-    for (const { id } of due) this.arrive(id);
+    for (const id of dueArrivals(this.seats.map((s) => s.id), this.colonists, now)) this.arrive(id);
     for (const colonist of this.colonists.values()) if (colonist.assayUntil !== null && colonist.assayUntil <= now) colonist.assayUntil = null;
   }
 
@@ -991,7 +947,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           plots: state.tiles.filter((t) => t.owner === s.id).length,
           ready: isReady(s.id),
           doneDeveloping: p.doneDeveloping,
-          colonist: this.colonistView(s.id),
+          colonist: colonistView(this.colonists.get(s.id), state.phase),
           condition:
             state.phase === 'development'
               ? {
@@ -1064,14 +1020,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       production: state.phase === 'production' || state.phase === 'upkeep' ? productionView(state, this.productionMs) : null,
       politics: politicsView(state),
     };
-  }
-
-  /** Where a seat's colonist is in development, public like every place; the move it walks to make stays its own. */
-  private colonistView(seatId: string): ColonistView | null {
-    const colonist = this.colonists.get(seatId);
-    if (this.state?.phase !== 'development' || !colonist) return null;
-    const { at, walk, assayUntil } = colonist;
-    return { at, walk: walk && { from: walk.from, startedAt: walk.startedAt, arrivesAt: walk.arrivesAt }, assayUntil };
   }
 
   /** The auction board as every screen draws it. Public, as in the original: everyone sees everyone walk. */
