@@ -96,6 +96,27 @@ describe('phaseScale and maxMonths', () => {
     expect(game.viewFor(null).auction!.stage).toBe('walk');
   });
 
+  it("T-AC-6: a production length set mid-production waits for the next production: this one's view keeps the length its timer was given, through upkeep", () => {
+    const g = toDevelopment();
+    while (g.game.viewFor(null).phase === 'development') g.advance(100);
+    expect(g.game.viewFor(null).phase).toBe('production');
+    const timer = g.game.viewFor(null).phaseEndsAt! - g.ctx.now();
+    const saved = PHASES.productionMs;
+    try {
+      PHASES.productionMs = saved * 3;
+      for (const viewer of ['s1', null]) expect(g.game.viewFor(viewer).production!.lengthMs, `seen by ${viewer ?? 'the TV'}`).toBe(timer);
+      g.advance(timer - 1);
+      expect(g.game.viewFor(null).phase).toBe('production');
+      g.advance(1);
+      expect(g.game.viewFor(null).phase).toBe('auction');
+      while (g.game.viewFor(null).phase === 'auction') g.advance(WALK.tickMs);
+      expect(g.game.viewFor(null).phase).toBe('upkeep');
+      expect(g.game.viewFor(null).production!.lengthMs, "upkeep still shows this month's show at its length").toBe(timer);
+    } finally {
+      PHASES.productionMs = saved;
+    }
+  });
+
   it('T-AC-6: production lasts 15 s (scaled by phaseScale, and the view says so) and ends early when all are ready', () => {
     const toProduction = () => {
       const g = toDevelopment();
