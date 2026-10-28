@@ -183,7 +183,7 @@ Split from Task 1.4 on 29 Oct (lead): WS3's record reached feat/strategist (#178
 so the port that needs only the record builds first and unblocks WS3's recording wrap.
 
 **Phase:** P1 · **Depends on:** 1.3; ws2-brain synced to 5eb6b27 and merged into this branch · **Parallelizable with:** none
-**ACs verified:** none on its own (the invariants below; B-AC-A1 proves it in 1.5)
+**ACs verified:** T-AC-A11 (moved here by AM-A14); the invariants below; B-AC-A1 proves the record in 1.5
 **Spec sections consumed:** §1 C4 (writerFor), C5, §3 game record entry, §8 AM-A12, AM-A13
 
 **Files:**
@@ -194,11 +194,12 @@ so the port that needs only the record builds first and unblocks WS3's recording
 - [ ] **Step 1: Write the failing tests** `INV-writer-never-throws` (a fake SDK that throws, refuses, cuts off or times out → `reply.cause` set, no throw), `INV-refused-not-recorded` (`refused` is never in `reply`), and `INV-writer-recorded` (through WS3's recorder, a write call leaves one `answer` with kind and `write` equal to the reply; the replay returns it as recorded). Altitude: contract (the port is what playbooks.ts and WS3 consume). Trap: positive-control INV-writer-recorded by dropping the wrap's outcome.
 - [ ] **Step 2: Run them** → FAIL
 - [ ] **Step 3: Implement** per spec §3 and AM-A13. Plan-drift: `writer.ts` imports `RecordedWrite` from `packages/engine/src/record.ts` (the frozen type) instead of declaring its own; a Classic seat and an unset key get `writerFor` null. No production caller yet: playbooks.ts is Task 1.4b.
-- [ ] **Step 4: Run `pnpm --filter @mule/ai test` and `pnpm --filter @mule/server test`** → PASS; commit `feat(server): the brain's playbook writer port, each reply recorded as an answer (C4, C5)`; WS3 reviews the record.ts and replay.ts hunks on the SHA
+- [ ] **Step 4: Run `pnpm --filter @mule/ai test` and `pnpm --filter @mule/server test`** → PASS; commit `feat(server): the brain's playbook writer port, each reply recorded as an answer (C4, C5)`
+- [ ] **Step 5 (review fix round, AM-A14): `T-AC-A11: RULE-A5 rows 1-3; a Sonnet call is counted at Sonnet's prices`** inside the port, by a non-locking fit check; a wait of 0 or less makes no call; the recorder copies the reply; the review's surviving mutants (busy release, ledger usage, unknown bill, write-cap pricing) die; WS3 reviews the record.ts and replay.ts hunks on the SHA
 
 ### Task 1.4b: when the brain asks — C4 (upkeep and game start)
 
-**Phase:** P1 · **Depends on:** 1.1, 1.3, 1.4a; WS1 step 2 (validatePlan, engine draft) · **ACs verified:** T-AC-A1, T-AC-A3, T-AC-A11
+**Phase:** P1 · **Depends on:** 1.1, 1.3, 1.4a; WS1 step 2 (validatePlan, engine draft) · **ACs verified:** T-AC-A1, T-AC-A3
 **Spec sections consumed:** §1 C4, §2 RULE-A1, RULE-A2 rows 1-2, RULE-A5, HC-1, HC-5, §4 races
 
 **Files:**
@@ -207,7 +208,7 @@ so the port that needs only the record builds first and unblocks WS3's recording
 
 - [ ] **Step 1: Write the failing test `T-AC-A1: RULE-A1 rows 1-4`** — examples from §2: no key → engine; reply 1 s before the land grant → llm; reply 0.2 s after → engine, late, ledgered; a call made 5 s before its phase waits at most 5 s (AM-A11). Altitude: contract at playbooks.ts on a manual clock. Trap: drive time with the game's clock, never real timers.
 - [ ] **Step 2: Write the failing test `T-AC-A3: phases start on time with a fake model that never answers`** — Altitude: promise (the phase start players see). Observed at: phase start times in the view.
-- [ ] **Step 3: Write the failing test `T-AC-A11: RULE-A5 rows 1-3; a Sonnet call is counted at Sonnet's prices`** — examples: fresh seat → Sonnet; share left below Sonnet's worst case but above Haiku's → Haiku, ledgered 'fallback'; below both → no call, engine playbook. Altitude: contract (the model each fake request names; ledger usd). Negative case: a Sonnet call priced at Haiku rates → red.
+- [ ] **Step 3: (moved to Task 1.4a by AM-A14) `T-AC-A11` is green before this task; keep it green.** Was: `T-AC-A11: RULE-A5 rows 1-3; a Sonnet call is counted at Sonnet's prices` — examples: fresh seat → Sonnet; share left below Sonnet's worst case but above Haiku's → Haiku, ledgered 'fallback'; below both → no call, engine playbook. Altitude: contract (the model each fake request names; ledger usd). Negative case: a Sonnet call priced at Haiku rates → red.
 - [ ] **Step 4: Run all three** → FAIL
 - [ ] **Step 5: Implement C4 per spec §1 C4 and §2 RULE-A1, RULE-A2 rows 1-2, RULE-A5** — fire-and-forget with a deadline at the land grant; asks through createBrain so `busy` (INV-one-in-flight) and the budget hold; the model per call from RULE-A5. Mechanism: sprout + one named edit.
   Plan-drift corrections from Tasks 1.1-1.3 (ws2-a-pr1-land @ ff8dbdb), to fold in:
@@ -226,7 +227,7 @@ so the port that needs only the record builds first and unblocks WS3's recording
   - Refuse before calling a model with no price table (RULE-A5 unknown); the ledger's dearest-rate billing is the
     backstop, not the rule.
   - `worstCaseUsd(prompt, call)` takes the write call's `{model, maxTokens}` (required since 92c38ec).
-- [ ] **Step 6: Run, then the existing brain-table tests** (`pnpm --filter @mule/server test`) → PASS; commit `feat(server): the brain asks for the land-grant playbook as upkeep opens, Sonnet then Haiku by share (C4, T-AC-A1, T-AC-A3, T-AC-A11)`
+- [ ] **Step 6: Run, then the existing brain-table tests** (`pnpm --filter @mule/server test`) → PASS; commit `feat(server): the brain asks for the land-grant playbook as upkeep opens (C4, T-AC-A1, T-AC-A3)`
 
 ### Task 1.5: the record and the slice's promise — C5, B-AC-A1
 

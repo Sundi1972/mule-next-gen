@@ -402,6 +402,7 @@ Code-only; no existing state to reach. The record starts with WS3's build.
   BRAIN; the capability-first re-run rule → C3, §7. The spike's cause codes → C2.
 - **AM-A6 · 29 Oct · lead:** C4's seam renamed playbooks.ts (no clash with packages/ai's strategist.ts); C3 promotes
   the S-A1 port instead of a second client. Cost note for §0: C8 and C9 add about 2 PRs, so about 5 in all (in §0 since the goal gate).
+- **AM-A14 · 29 Oct · lead (Task 1.4a review):** RULE-A5 is evaluated inside the writer port (`BrainService.writerFor`, apps/server/src/brain/index.ts), not in playbooks.ts: only the brain's budget can price a candidate model without locking the seat, and a refused Sonnet check used to lock the seat before Haiku was tried. The port picks Sonnet, then Haiku, then no call by a non-locking fit check; a write never locks the seat. A wait of 0 or less makes no call. `write`'s signature, sent to WS3, is unchanged; the recorder copies each reply. T-AC-A11 moves from Task 1.4b to 1.4a.
 - **AM-A13 · 29 Oct · lead:** `writerFor(seat): PlaybookWriter | null`, `write(kind, {brief, system, waitMs})` never
   throws and returns `{ reply: RecordedWrite, refused }`; validatePlan runs outside it (C4). The writer's `refused`
   feeds only the next brief, never the playbook, so a replayed playbook equals its recorded entry (WS3 T-AC-11).
