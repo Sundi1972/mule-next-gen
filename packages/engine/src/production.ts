@@ -300,6 +300,6 @@ export function monthNeeds(state: GameState, playerId: string): Stock {
     if (!isFactory(t.outfit)) continue;
     for (const [g, q] of Object.entries(RECIPES[t.outfit].inputs) as [Good, number][]) if (g !== 'energy') need[g] += q;
   }
-  if (airBand(state.air).devPenalty > 0) need.medicine = 1;
+  if (airBand(state.air).sickPace < 1) need.medicine = 1;
   return need;
 }

@@ -266,12 +266,8 @@ export const MULE = {
 };
 
 export const DEVELOPMENT = {
-  /** Seconds of development with enough Food for the month. */
+  /** Seconds of development, the same for every player: hunger and sickness slow the walk instead (DEV_WALK). */
   fullSeconds: 50,
-  /** Seconds with no Food at all; the time shrinks linearly with the shortfall. */
-  minSeconds: 15,
-  /** Development never lasts less than this, whatever sickness and penalties take off. */
-  floorSeconds: 5,
   /** Seconds a colonist stands on a plot for a geo analysis. */
   analysisSeconds: 8,
   /** The pub pays base + (start + month * perMonth) * share of time left. */
@@ -284,14 +280,17 @@ export const DEVELOPMENT = {
 };
 
 /**
- * Walking in development costs time off the colonist's clock (Heiko's R1, 0.4 s a tile). A walk goes in grid steps
- * on the map, never diagonally; the store and its corral are on the store's tile. Not WALK, the goods auction's walk.
+ * Walking in development costs time off the one development clock (Heiko's R1, 0.4 s a tile). A walk goes in grid
+ * steps on the map, never diagonally; the store and its corral are on the store's tile. A hungry or sick colonist
+ * walks slower (POLLUTION.bands' sickPace); the two multiply. Not WALK, the goods auction's walk.
  */
 export const DEV_WALK = {
   /** Seconds for each step from one map tile to the next. */
   tileSeconds: 0.4,
   /** Seconds to cross the store floor to the corral, from the door or any other room. */
   floorSeconds: 1,
+  /** Share of its pace a colonist with no Food walks at; it rises linearly to 1 with the Food it holds for the month. */
+  hungerPaceMin: 0.25,
 };
 
 /** What pollutes, and by how much. From the design doc's Pollution tab. */
@@ -320,12 +319,15 @@ export const POLLUTION = {
   greenBeltAir: 2,
   /** Goods that lose 1 unit per plot pollution level. */
   sensitive: ['food', 'water', 'medicine'] as Good[],
-  /** The colony gauge's bands: from this level, everyone loses devPenalty seconds unless they take Medicine. */
+  /**
+   * The colony gauge's bands: from this level, a colonist who takes no Medicine is sick and walks at sickPace of its
+   * pace (DEV_WALK). Below 1 the band sickens; no Food and sick in Collapse is about a tenth of normal pace.
+   */
   bands: [
-    { name: 'clean', from: 0, devPenalty: 0 },
-    { name: 'smoggy', from: 30, devPenalty: 5 },
-    { name: 'toxic', from: 60, devPenalty: 10 },
-    { name: 'collapse', from: 80, devPenalty: 15 },
+    { name: 'clean', from: 0, sickPace: 1 },
+    { name: 'smoggy', from: 30, sickPace: 0.8 },
+    { name: 'toxic', from: 60, sickPace: 0.5 },
+    { name: 'collapse', from: 80, sickPace: 0.4 },
   ] as const,
   /** Clean colony: off-world buyers pay this much more for exports. */
   cleanExportBonus: 0.1,

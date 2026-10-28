@@ -183,25 +183,20 @@ function developer(state: GameState, playerId: string): Player {
 }
 
 /**
- * Sets each player's development time. Food buys time: enough for the month
- * gives the full time, and it shrinks with the shortfall. In dirty air
- * colonists get sick and lose more time, unless they take a Medicine.
+ * Starts development: one clock, the same full time for every player. A
+ * player short of the month's Food is hungry, and in air that sickens a
+ * colonist who takes no Medicine is sick; both walk slower (dev-walk.ts).
  */
 function startDevelopment(state: GameState): void {
-  const penalty = airBand(state.air).devPenalty;
+  const sickens = airBand(state.air).sickPace < 1;
   for (const p of state.players) {
-    const share = Math.min(1, p.stock.food / Math.max(1, needsOf(state, p.id).food));
-    p.hungry = share < 1;
-    let seconds = DEVELOPMENT.minSeconds + (DEVELOPMENT.fullSeconds - DEVELOPMENT.minSeconds) * share;
+    p.hungry = p.stock.food < Math.max(1, needsOf(state, p.id).food);
     p.sick = false;
-    if (penalty > 0) {
+    if (sickens) {
       if (p.stock.medicine >= 1) p.stock.medicine--;
-      else {
-        p.sick = true;
-        seconds -= penalty;
-      }
+      else p.sick = true;
     }
-    p.devSeconds = Math.max(DEVELOPMENT.floorSeconds, Math.round(seconds));
+    p.devSeconds = DEVELOPMENT.fullSeconds;
     p.doneDeveloping = false;
     p.installedThisTurn = false;
   }
