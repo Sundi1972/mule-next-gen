@@ -326,7 +326,17 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       case 'setTax':
         setSalesTax(state, seatId, intent.percent);
         return;
+      case 'continue':
+        // The game cannot tell the host yet, so no seat may continue.
+        throw new RuleError('Only the host can continue');
     }
+  }
+
+  /** The host's Continue: ends planning proper with players not yet Ready. The caller must have checked the seat is the host. */
+  continuePlanning(): void {
+    if (this.electionOpen()) throw new RuleError('The election is still running');
+    if (this.state?.phase !== 'planning') throw new RuleError('Continue ends planning only');
+    this.nextPhase();
   }
 
   /**

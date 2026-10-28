@@ -35,7 +35,9 @@ export type MuleIntent =
   /** Election, ballot: cast or change your secret vote for a contested office; null clears it. */
   | { type: 'vote'; office: Office; candidate: string | null }
   /** Planning, after the election: the Governor sets the sales tax in whole percent. */
-  | { type: 'setTax'; percent: number };
+  | { type: 'setTax'; percent: number }
+  /** Planning, after any election: the host ends planning with players not yet Ready. */
+  | { type: 'continue' };
 
 export const EMOTES = ['Deal?', 'Nice!', 'Traitor!', 'Ha!', 'Help!'] as const;
 export type Emote = (typeof EMOTES)[number];
