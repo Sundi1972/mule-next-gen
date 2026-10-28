@@ -195,19 +195,22 @@ export function SeatRow({ anchored = [] }: { anchored?: string[] }) {
   const fallback = Object.values(chat?.bubbles ?? {}).find((l) => !anchored.includes(l.from));
   return (
     <>
-      <div className="flex items-center gap-2 @min-[1100px]/shell:gap-3" data-testid="seat-row">
+      {/* Five others fit the narrowest rail on one line: a long name gives way (its whole name is its title), the creatures never do. */}
+      <div className="flex min-w-0 items-center gap-1 @min-[1100px]/shell:gap-3" data-testid="seat-row">
         {VIEW.players
           .filter((p) => p.id !== chat?.me)
           .map((p) => (
             <span
               key={p.id}
-              className={cx('inline-flex flex-col items-center rounded-control px-0.5 transition-shadow', fallback?.from === p.id && 'ring-2')}
+              className={cx('inline-flex min-w-0 flex-col items-center rounded-control px-0.5 transition-shadow', fallback?.from === p.id && 'ring-2')}
               style={fallback?.from === p.id ? { ['--tw-ring-color' as string]: SLOT_COLOR[P[p.id]!.slot] } : undefined}
               data-testid={`seat-${p.id}`}
               data-speaking={fallback?.from === p.id || undefined}
             >
               <Creature species={p.species} color={SLOT_COLOR[P[p.id]!.slot]} size={20} />
-              <span className="font-mono text-[10px] text-ink-3">{p.name}</span>
+              <span className="max-w-full truncate font-mono text-[10px] text-ink-3" title={p.name}>
+                {p.name}
+              </span>
             </span>
           ))}
       </div>
