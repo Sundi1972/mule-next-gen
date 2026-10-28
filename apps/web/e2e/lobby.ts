@@ -6,6 +6,7 @@
  * player then moves to another device mid-game. Run with
  * `pnpm --filter @mule/web e2e`.
  */
+import { POLITICS } from '@mule/engine';
 import { COLOUR_NAME, SPECIES, type Slot } from '@mule/ui';
 import QRCode from 'qrcode';
 import type { BrowserContextOptions, Locator, Page } from 'playwright';
@@ -373,10 +374,14 @@ async function colourIntoTheGame(): Promise<void> {
   colourRoom(await shows(heikoOn(tv.locator('li')).locator(inRose)), `B-AC-8: the TV lobby draws Heiko's mark in ${COLOUR_NAME[rose]}`);
 
   await heiko.getByTestId('start-game').click();
+  // Month 1 opens with the election, whose stages the server runs on the same phaseScale, so they belong inside within().
+  const election = POLITICS.nominateMs + POLITICS.ballotMs + POLITICS.revealMs;
+  // The TV is back on planning once the election is over: its news then carries the result, which the reveal screen doesn't draw.
+  await tv.locator('[data-phase=planning] [data-testid=tv-news]', { hasText: 'is Governor' }).waitFor({ timeout: within(election) });
   const roster = heikoOn(tv.locator('[data-phase=planning] li, [data-phase=landGrant] li'));
   colourRoom(await shows(roster.locator(inRose)), `B-AC-8: the TV's game roster draws Heiko in ${COLOUR_NAME[rose]}`);
   const grant = heiko.locator('[data-phase=landGrant]');
-  await grant.waitFor({ timeout: within(PHASE_MS.planning) });
+  await grant.waitFor({ timeout: within(PHASE_MS.planning + election) });
   await claimAPlot(heiko, within(PHASE_MS.landGrant), 'B-AC-8: phone 1 claims a plot in the land grant');
   const development = tv.locator('[data-phase=development]');
   await development.waitFor({ timeout: within(PHASE_MS.landGrant + PHASE_MS.development) + LAND_AUCTION_ALLOWANCE_MS });
