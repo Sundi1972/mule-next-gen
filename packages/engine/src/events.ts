@@ -244,8 +244,32 @@ export function rollPlayerEvent(state: GameState, key: PlayerEventKey, phase: Ph
   return createRng(seedOf(state.seed, state.month, key, phase, id)).chance(chance);
 }
 
+/**
+ * The events that fire at the start of a phase, in the order they fired: each colony row once, in table order, then
+ * each player's rows in seat order. A row fires when its own roll hits and its event would hit some plot; each roll
+ * is seeded from the game, the month, the row, the phase and the player, so retuning one row never moves another.
+ * Never on a what-if copy or before EVENTS.firstMonth.
+ */
 export function rollPhase(state: GameState, phase: Phase): MonthEvent[] {
-  throw new Error('NotImplemented: rollPhase');
+  if (state.whatIf || state.month < EVENTS.firstMonth) return [];
+  // Each row lists one phase and rolls once per roller, so none fires twice in a month (RULE-2's onceAMonth).
+  const rolls = [...rowsOf(EVENTS.colony), ...state.players.flatMap((p) => rowsOf(EVENTS.player, p.id))];
+  const fired: MonthEvent[] = [];
+  for (const { key, row, player } of rolls) {
+    const chance = eventChance(state, row, phase, { player, firedThisPhase: fired.map((e) => e.key) });
+    if (chance <= 0) continue;
+    const rng = createRng(seedOf(state.seed, state.month, key, phase, ...(player === undefined ? [] : [player])));
+    const event = rng.chance(chance) ? buildEvent(state, key, rng) : null;
+    if (event) fired.push(event);
+  }
+  return fired;
+}
+
+/** A table's rows that make an event, in table order, for this player's roll; sickness keeps its own roll. */
+function rowsOf(table: Record<string, EventRow>, player?: string) {
+  return Object.entries(table)
+    .filter((entry): entry is [EventKey, EventRow] => entry[0] in SHAPE)
+    .map(([key, row]) => ({ key, row, player }));
 }
 
 /** A seed from a game's seed, its month and some names: FNV-1a over them. */
