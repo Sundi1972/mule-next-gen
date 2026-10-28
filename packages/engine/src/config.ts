@@ -181,8 +181,8 @@ export const FACTORY = {
 
 /** Species perks. Numbers are placeholders until the balance sim has run. */
 export const SPECIES_PERK = {
-  /** Zipwing: walks this many times as fast in development (DEV_WALK). At 2 Zipwings won 34% of games, not 25%. */
-  zipwingSpeed: 1.5,
+  /** Zipwing: walks this many times as fast in development (DEV_WALK). At 1.5 Zipwings won 37% of games, not 25%. */
+  zipwingSpeed: 1.25,
   /** Bramblet: extra Food on every farm. */
   brambletFood: 1,
   /** Gearling: share of the normal price paid for MULEs and outfits. At 0.75 Gearlings won 44% of games, not 25%. */
