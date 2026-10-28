@@ -322,24 +322,34 @@ describe('the event table', () => {
     state.history.push(report as MonthReport);
     return eventChance(state, row, phase, { player, firedThisPhase: fired });
   };
-  const below0: EventRow = { phases: { production: 0.01 }, wealth: { richest: -0.05 }, cap: 0.9 };
-  const { colony: C, player: P } = EVENTS;
+  /** Rows shaped like the catalogue's wave-1 examples, here rather than read from EVENTS, so a retune is one row edit. */
+  const like = {
+    dustStorm: { phases: { production: 0.05 }, cap: 0.9 },
+    drought: { phases: { production: 0.05 }, air: { toxic: 0.02, collapse: 0.04 }, cap: 0.9 },
+    acidRain: { phases: { production: 0.01 }, air: { smoggy: 0.04, toxic: 0.08, collapse: 0.12 }, cap: 0.9 },
+    flood: { phases: { production: 0.05 }, follows: { drought: { points: 0.1, lastMonth: true } }, cap: 0.9 },
+    pestSwarm: { phases: { production: 0.015 }, wealth: { richest: 0.01, poorest: -0.01 }, cap: 0.9 },
+    wildfire: { phases: { production: 0.015 }, wealth: { richest: 0.01 }, follows: { drought: { points: 0.03, thisPhase: true, lastMonth: true } }, cap: 0.9 },
+    bumperHarvest: { phases: { production: 0.015 }, wealth: { poorest: 0.015, richest: -0.01 }, cap: 0.9 },
+    sickness: { phases: { development: 0.03 }, air: { clean: 0, smoggy: 0.15, toxic: 0.3, collapse: 0.5 }, pollution: { perPoint: 0.03, max: 0.4 }, cap: 0.9 },
+    below0: { phases: { production: 0.01 }, wealth: { richest: -0.05 }, cap: 0.9 },
+  } satisfies Record<string, EventRow>;
   const cases: [string, EventRow, Phase, World, number][] = [
-    ['dust storm in Collapse air: 5', C.dustStorm, 'production', { air: 80 }, 0.05],
-    ['drought in Toxic air: 5 + 2', C.drought, 'production', { air: 60 }, 0.07],
-    ['acid rain in Collapse air: 1 + 12', C.acidRain, 'production', { air: 80 }, 0.13],
-    ['flood the month after a drought: 5 + 10', C.flood, 'production', { lastMonth: ['drought'] }, 0.15],
-    ['pest swarm, the richest by land: 1.5 + 1', P.pestSwarm, 'production', { player: 'p1' }, 0.025],
-    ['pest swarm, the poorest: 1.5 - 1', P.pestSwarm, 'production', { player: 'p3' }, 0.005],
-    ['pest swarm, a wealth tie goes to the first seat: 1.5', P.pestSwarm, 'production', { p0Money: land, player: 'p1' }, 0.015],
-    ['bumper harvest, the poorest: 1.5 + 1.5', P.bumperHarvest, 'production', { player: 'p3' }, 0.03],
-    ['bumper harvest, the richest: 1.5 - 1', P.bumperHarvest, 'production', { player: 'p1' }, 0.005],
-    ['wildfire, the richest during a drought: 1.5 + 1 + 3', P.wildfire, 'production', { player: 'p1', fired: ['drought'] }, 0.055],
-    ['wildfire during and after a drought: 1.5 + 3 once', P.wildfire, 'production', { lastMonth: ['drought'], player: 'p2', fired: ['drought'] }, 0.045],
-    ['sickness, clean air, 5 points of its own: 3 + 15', P.sickness, 'development', { points: 5, player: 'p0' }, 0.18],
-    ['sickness, Collapse, 20 points: 3 + 50 + 40 = 93, capped', P.sickness, 'development', { air: 80, points: 20, player: 'p0' }, 0.9],
-    ['a row summing below 0: 1 - 5', below0, 'production', { player: 'p1' }, 0],
-    ["a phase the row doesn't list, whatever its raises", C.drought, 'development', { air: 80 }, 0],
+    ['a dust-storm-like row in Collapse air: 5', like.dustStorm, 'production', { air: 80 }, 0.05],
+    ['a drought-like row in Toxic air: 5 + 2', like.drought, 'production', { air: 60 }, 0.07],
+    ['an acid-rain-like row in Collapse air: 1 + 12', like.acidRain, 'production', { air: 80 }, 0.13],
+    ['a flood-like row the month after a drought: 5 + 10', like.flood, 'production', { lastMonth: ['drought'] }, 0.15],
+    ['a pest-swarm-like row, the richest by land: 1.5 + 1', like.pestSwarm, 'production', { player: 'p1' }, 0.025],
+    ['a pest-swarm-like row, the poorest: 1.5 - 1', like.pestSwarm, 'production', { player: 'p3' }, 0.005],
+    ['a pest-swarm-like row, a tie for the richest goes to the first seat: 1.5', like.pestSwarm, 'production', { p0Money: land, player: 'p1' }, 0.015],
+    ['a bumper-harvest-like row, the poorest: 1.5 + 1.5', like.bumperHarvest, 'production', { player: 'p3' }, 0.03],
+    ['a bumper-harvest-like row, the richest: 1.5 - 1', like.bumperHarvest, 'production', { player: 'p1' }, 0.005],
+    ['a wildfire-like row, the richest during a drought: 1.5 + 1 + 3', like.wildfire, 'production', { player: 'p1', fired: ['drought'] }, 0.055],
+    ['a wildfire-like row during and after a drought: 1.5 + 3 once', like.wildfire, 'production', { lastMonth: ['drought'], player: 'p2', fired: ['drought'] }, 0.045],
+    ['a sickness-like row, clean air, 5 points of its own: 3 + 15', like.sickness, 'development', { points: 5, player: 'p0' }, 0.18],
+    ['a sickness-like row, Collapse, 20 points: 3 + 50 + 40 = 93, capped', like.sickness, 'development', { air: 80, points: 20, player: 'p0' }, 0.9],
+    ['a row summing below 0: 1 - 5', like.below0, 'production', { player: 'p1' }, 0],
+    ["a phase the row doesn't list, whatever its raises", like.drought, 'development', { air: 80 }, 0],
   ];
 
   it.each(cases)("EM-T-AC-1: an event's chance is its phase's base plus its raises minus its lowers, between 0 and its cap: %s", (_, row, phase, world, expected) => {
