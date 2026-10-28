@@ -312,6 +312,148 @@ export const DEV_WALK = {
   hungerLevels: { hungryFrom: 0.3, starvingFrom: 0.7 },
 };
 
+/** Every land but the store's own tile, which no colonist walks on. */
+export type WalkTerrain = Exclude<Terrain, 'store'>;
+/** 'shore': a lake blocks, and a lake plot is worked from its shore. 'wade': a lake is walked at DEV_STEER.wading. */
+export type LakeMode = 'shore' | 'wade';
+
+/**
+ * Arcade walking in development: every colonist steered live and stepped at one fixed tick, everywhere the game runs.
+ * Heiko's starting values (arcade spec RULE-7); DEV_WALK's hunger, sickness and Zipwing pace still apply.
+ */
+export const DEV_STEER = {
+  /** Steered walking instead of DEV_WALK's tap-to-walk. Off until Heiko's OK on the rig. */
+  on: false as boolean,
+  /** Tiles a second on plains at full pace: half of today's 1 / DEV_WALK.tileSeconds. */
+  mapTilesPerSecond: 1.25,
+  /** Seconds to cross the store's hall from wall to wall at full pace. */
+  floorSeconds: 1,
+  /** Share of its speed a colonist keeps while it leads a MULE. */
+  leadPace: 0.9,
+  /** Share of full speed on each land. 0 blocks it. */
+  terrain: {
+    plains: 1, desert: 0.9, tundra: 0.85, forest: 0.75, ice: 0.75, crater: 0.8, hills: 0.7,
+    volcanic: 0.6, river: 0.6, swamp: 0.5, mountains: 0.4, lake: 0,
+  } satisfies Record<WalkTerrain, number>,
+  lakeMode: 'shore' as LakeMode,
+  /** Share of full speed in a lake when lakeMode is 'wade'. */
+  wading: 0.3,
+  /** Mountains block like a lake instead of slowing. */
+  mountainsImpassable: false as boolean,
+  /** Others' plots may be walked across; false makes them block like a lake. */
+  trespass: true as boolean,
+  /** Ms of game time a tick steps: the server, the sim and the phone's prediction all step at this. */
+  tickMs: 50,
+  /** The most missed ticks a late server timer runs before it resyncs. */
+  catchUpTicks: 10,
+  /** The most steering messages a phone sends a second, under the server's RATE_LIMIT. */
+  steerMaxPerSecond: 10,
+  /** AI colonists walk at this times a person's speed. */
+  botSpeed: 1,
+  /** Seconds an AI colonist stands at a counter before it presses. */
+  botCounterPauseSeconds: 0.5,
+  /** An AI colonist joins a glint race or the scramble only if its errand still fits the time left after the detour. */
+  botsSpareTime: true as boolean,
+  /** Share of what a MULE cost that the pub pays back when its owner walks in leading it. */
+  pubLeadRefund: 0,
+  /** A re-outfit's price, as a share of the outfitter's price for the new good: 1 is the outfit price. */
+  reoutfitCost: 1,
+  /** Month 1's development clock stands full until every present seat's first MULE is installed. */
+  month1WaitsForFirstMule: true as boolean,
+  /** A colonist's clearance from walls, lakes and the map's edge, in tiles. */
+  bodyTiles: 0.18,
+  /** The door's height on each side face of the store's tile, centred on the face, in tiles. */
+  doorTiles: 0.5,
+  /** How far behind its colonist a MULE on its lead walks: in tiles on the map, as a share of the hall's width inside. */
+  leadTiles: 0.55,
+  leadHallShare: 0.075,
+  /** The phone's own colonist: within snapTiles of the server's it eases there over correctMs, beyond it snaps. */
+  snapTiles: 0.25,
+  correctMs: 150,
+  /** Other colonists draw this far behind the newest frame, interpolated between frames. */
+  interpolateMs: 100,
+  /** No frame for this long and the phone shows "reconnecting" and stops predicting. */
+  staleMs: 1_000,
+};
+
+/** The bot skill levels a wolf fight knows. */
+export type WolfFightLevel = 'rookie' | 'regular' | 'veteran';
+
+/** Wolves on forest, hills and tundra: run, or fight for pelts (arcade spec RULE-4). */
+export const WOLVES = {
+  on: true as boolean,
+  /** Chance a second, on wolf land, that a pack comes for a colonist. */
+  chancePerSecond: 0.1,
+  packSize: 3,
+  /** No second pack for the same colonist for this long. */
+  cooldownSeconds: 20,
+  /** Time to choose run or fight before they pounce, which is a fight. */
+  chooseSeconds: 3,
+  /** A chasing wolf's speed, in tiles a second. */
+  chaseSpeed: 1.1,
+  /** A chase ends, got away, after this long or this far from where it started. */
+  giveUpSeconds: 5,
+  giveUpTiles: 4,
+  /** Share of its speed a bitten colonist keeps, till it reaches the store or its own plot. */
+  bittenPace: 0.5,
+  fightSeconds: 10,
+  lungeEverySeconds: 1.6,
+  /** The crouch before a lunge: the time there is to dodge. */
+  warnSeconds: 0.8,
+  strikesToWin: 3,
+  bitesToLose: 3,
+  /** Pelts a won fight gives, and what the store pays for each. */
+  pelts: 2,
+  peltPrice: 20,
+  /** A lost fight with no MULE on the lead freezes its colonist this long. */
+  stunSeconds: 4,
+  /** A lost fight's MULE bolts this many tiles at this many tiles a second. */
+  boltTiles: 4,
+  boltSpeed: 3.5,
+  /** Share of AI colonists that fight rather than run. */
+  botFightShare: 0.5,
+  /** Share of an AI colonist's legs that go by wolf land. */
+  botWolfLandShare: 0.5,
+  /** Each level's chance to dodge a lunge, and its delay before it strikes at a wolf that stands open. */
+  levels: {
+    rookie: { dodge: 0.4, strikeDelaySeconds: 0.5 },
+    regular: { dodge: 0.6, strikeDelaySeconds: 0.35 },
+    veteran: { dodge: 0.9, strikeDelaySeconds: 0.15 },
+  } satisfies Record<WolfFightLevel, { dodge: number; strikeDelaySeconds: number }>,
+};
+
+/** The glint race: a Crystite sparkle on a tile, and the first colonist onto it wins (arcade spec RULE-5). */
+export const GLINT = {
+  on: true as boolean,
+  /** Mean seconds between glints while none is lit. */
+  meanGapSeconds: 20,
+  showSeconds: 8,
+  /** None in a turn's first seconds, nor this soon after one ends. */
+  firstAfterSeconds: 6,
+  pauseSeconds: 5,
+  /** A glint may light someone's plot (never a lake or the store). */
+  onOwnedPlots: true as boolean,
+  prize: 'crystite' as 'crystite' | 'credits',
+  /** The prize: this much Crystite, or these credits when prize is 'credits'. */
+  crystite: 1,
+  credits: 60,
+  /** Share of AI colonists that race, and only for a glint within botCareTiles. */
+  botShare: 0.75,
+  botCareTiles: 8,
+};
+
+/** The corral scramble: the race for the store's last MULEs (arcade spec RULE-6). */
+export const SCRAMBLE = {
+  on: true as boolean,
+  /** It starts when a sale leaves the corral with this many MULEs or fewer. */
+  mulesLeft: 2,
+  /** It ends after this long, if the corral has not emptied first. */
+  maxSeconds: 15,
+  /** Share of AI colonists still needing a MULE that race, and only from within botCareTiles of the store. */
+  botShare: 0.9,
+  botCareTiles: 10,
+};
+
 /** What pollutes, and by how much. From the design doc's Pollution tab. */
 export const POLLUTION = {
   /** The air gauge runs from 0 (clean) to this. */
