@@ -8,6 +8,19 @@
 <!-- plan-check: no-task B-AC-1 B-AC-2 B-AC-3 B-AC-4 B-AC-5 B-AC-6 B-AC-7 B-AC-8 B-AC-10 B-AC-12 B-AC-13 B-AC-14 B-AC-15 B-AC-16 B-AC-17 B-AC-18 T-AC-1 T-AC-3 T-AC-4 T-AC-5 T-AC-6 T-AC-8 T-AC-9 T-AC-10 T-AC-11 T-AC-12 — WS6's ACs for its other changes; this plan's two are tasked below -->
 <!-- plan-check: no-task B-AC-9 T-AC-2 — named in Task 5 only as existing tests whose timing moves (WS6's B-AC-9 store-view pin; WS4's T-AC-2 in phase-scale.test.ts); their promises are other plans' -->
 
+## Status (2026-10-28)
+
+**Code-complete on `ws3-dev-walking` at a46c9e6. PR [Sundi1972/mule-next-gen#122](https://github.com/Sundi1972/mule-next-gen/pull/122) into ws1-balance, out of draft.**
+- **Done:** Tasks 0–5 (C13) and Task 6 (untimed planning, with the host's Continue under option A: Heiko via the PM).
+- **Reviews:** four review rounds with mutation sweeps, plus three fix rounds. The findings were an off-map crash, walks dropped by an early end, a stale latch after a blip, planning's number path, and the Continue survivors. All are closed.
+- **#118 (WS6's `condition`) merged ahead:** 8bccef9, then ws1-balance be349e5 at 4e7c067.
+- **Gates at a46c9e6:** all green, e2e:core included.
+- **Named-edit OKs in:** WS1, WS4, WS6 and WS7 for everything before Continue. Still owed: WS4's OK on 35e2512 (room.ts `GameContext.hostId()`) and b256089 (fake-context).
+- **Follow-ups**, in the WS3 follow-ups plan:
+  - extract the walking logic into its own server file;
+  - `GRANT_TICK_MS` scaling;
+  - the AI rule when humans finish development early (parked by the PM).
+
 ## Goals: lifted from WS6's spec §0. Reference, do not restate.
 
 | Goal | Who benefits | Value delivered | Proof | First delivered in |
