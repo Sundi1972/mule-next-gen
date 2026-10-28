@@ -69,4 +69,13 @@ export const MONTHEND_STATES: MonthEndState[] = [
     facts: { ...NORMAL, lastAir: 27, hungry: [{ id: 'kai', ate: 1, need: 3 }] },
     tv: true,
   },
+  {
+    id: 'monthend-gameover',
+    title: 'The end of the game',
+    intro:
+      'The last month has ended and the game is over. The TV calls the winner out over the final table by Worth, with the colony’s report and its verdict; Lena’s phone keeps today’s game-over layout (her card, the colony’s verdict, her own lines, the final standings in the rail), with Worth in credits where it said points. Same numbers as month 5, so they can be checked against the other states.',
+    view: { ...ENDED, month: VIEW.maxMonths, phase: 'gameOver', finished: true },
+    facts: NORMAL,
+    tv: true,
+  },
 ];

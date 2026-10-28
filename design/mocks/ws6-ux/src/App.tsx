@@ -24,6 +24,17 @@ import { IntentNotes, IntentNotesProvider } from './proposed/IntentNote';
 import { HUB_NOTES, HubAudit } from './screens/audit/HubAudit';
 import { ELECTION_LINKS, ElectionAuditPage, electionRoute } from './screens/audit/ElectionAuditPage';
 import { MONTHEND_STATES, MonthEndAuditPage } from './screens/audit/MonthEndAudit';
+import { AUCTION_STATES as AUCTION_AUDIT_STATES, AuctionAuditBody } from './screens/audit/AuctionAudit';
+import { AUDIT_DEV_ROUTES, AuditDevPage, DEV_PREFIX, DevAuditContents } from './screens/audit/DevAuditPage';
+
+/** The development audit: its contents, then each state, prefixed (#walk is the goods auction's own route). */
+const AUDIT_DEV_LINKS = [
+  { id: 'audit-dev', title: 'Development: the eight changes' },
+  ...AUDIT_DEV_ROUTES.map((r) => ({ id: `${DEV_PREFIX}${r.id}`, title: `Development: ${r.title}` })),
+];
+
+/** The goods auction's audit states, prefixed: #status and #walk are the approved auction screens' own routes. */
+const AUDIT_AUCTION_STATES = AUCTION_AUDIT_STATES.map((s) => ({ id: `audit-auction-${s.id}`, title: `Goods auction: ${s.title}`, state: s.id }));
 import { H, W } from './fixture';
 
 const DECISIONS = [
@@ -314,6 +325,19 @@ export default function App() {
       </Page>
     );
 
+  if (hash === 'audit-dev') return <DevAuditContents />;
+  const devAudit = AUDIT_DEV_ROUTES.find((r) => `${DEV_PREFIX}${r.id}` === hash);
+  if (devAudit) return <AuditDevPage key={hash} state={devAudit} />;
+
+  const auction = AUDIT_AUCTION_STATES.find((s) => s.id === hash);
+  if (auction)
+    return (
+      <Page title={`For approval · UX audit · ${auction.title}`}>
+        <Links states={AUDIT_AUCTION_STATES} current={hash} />
+        <AuctionAuditBody key={hash} state={auction.state} />
+      </Page>
+    );
+
   const monthEnd = MONTHEND_STATES.find((s) => s.id === hash);
   if (monthEnd) return <MonthEndAuditPage key={monthEnd.id} state={monthEnd} />;
 
@@ -560,12 +584,14 @@ export default function App() {
     <div className="min-h-full bg-table p-8 text-ink" data-testid="index">
       <h2 className="label-caps">For approval · UX audit</h2>
       <p className="mt-1 max-w-3xl text-sm text-ink-2">
-        The priority-1 screens, redesigned from the UX audit (docs/research/2026-10-28-ws6-ux-audit.md): every change numbered on the screen, with the player intent it serves and why. The planning hub first, then the election and the new month-end league table; development and the goods auction follow.
+        The priority-1 screens, redesigned from the UX audit (docs/research/2026-10-28-ws6-ux-audit.md): every change numbered on the screen, with the player intent it serves and why. The planning hub first, then the election, the new month-end league table, the goods auction and development.
       </p>
       <div className="mt-2 flex flex-col gap-2" data-testid="audit-links">
         <Links states={AUDIT_STATES} />
         <Links states={ELECTION_LINKS} />
         <Links states={MONTHEND_STATES} />
+        <Links states={AUDIT_AUCTION_STATES} />
+        <Links states={AUDIT_DEV_LINKS} />
       </div>
       <h2 className="label-caps mt-6">For approval 2026-10-28 · planning without a clock (Heiko's playtest)</h2>
       <div className="mt-2 flex flex-col gap-2" data-testid="wait-links">

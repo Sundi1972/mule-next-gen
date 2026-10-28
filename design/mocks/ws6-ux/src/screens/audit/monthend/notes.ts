@@ -101,4 +101,13 @@ export const MONTHEND_NOTES = {
     why: 'The model he agreed: “While the air is in Collapse, Worth shows the fifth cut on everything except offices, labelled ‘your score if the game ended now’”. It is the engine’s own rule at game end (POLLUTION.collapseScore), so the table shows what the air is costing.',
     open: 'The month the air falls into Collapse, every change reads ↓ 600 to 900, mostly the cut. Keep it so (one rule: the number shown against the number shown last month), or measure the change before the cut?',
   },
+  M11: {
+    id: 'M11',
+    n: 11,
+    title: 'Worth in credits at the end too',
+    what: 'At the game’s end the same number, in the same unit: the TV calls the winner out (“Ossa wins with a Worth of 4,543 cr”) over the final table by Worth; your phone’s card gives your final place and “Worth 4,333 cr”, your lines beside it. The layout is today’s game-over; only the unit and the source change.',
+    serves: '1',
+    intent: 'which player is leading',
+    why: 'Heiko ruled 2026-10-28: Worth is one number in credits, mid-game and at the end. Today’s winner card says “{n} points”, and the month-end table would rank by a number the end screen calls something else.',
+  },
 } satisfies Record<string, IntentNoteData>;

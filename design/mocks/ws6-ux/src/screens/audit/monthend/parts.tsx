@@ -1,8 +1,8 @@
 import { GAME, POLITICS } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
-import { airBandStyle, cx, GoodIcon, PlayerMark } from '@mule/ui';
+import { AirGauge, airBandStyle, cx, GoodIcon, PlayerMark } from '@mule/ui';
 import type { ReactNode } from 'react';
-import { fmt, toSlot } from '../../../../../../../apps/web/src/game/derive';
+import { colonyVerdict, fmt, toSlot } from '../../../../../../../apps/web/src/game/derive';
 import { IntentMarker } from '../../../proposed/IntentNote';
 import { collapseCutWords, colonyReport, COLONY_SCORE_PARTS, inCollapse, league, MOOD_SCALE, worthOf, type League, type MonthFacts } from '../../../proposed/worth';
 import { Private } from '../../PlanningHub';
@@ -13,7 +13,9 @@ import { MONTHEND_NOTES as N } from './notes';
  * and the phone with no TV, which must fit the table and the colony panel on one stage ('compact').
  *
  * GRAFT TARGET (WS4): a new apps/web/src/table/TvMonthEnd.tsx replacing TableApp.tsx's MonthEnd and Scores, and a
- * new apps/web/src/phone/MonthEnd.tsx in the phone's upkeep phase. Keep every data-testid; drop every IntentMarker.
+ * new apps/web/src/phone/MonthEnd.tsx in the phone's upkeep phase. At game over (`final`), TableApp.tsx's TvGameOver
+ * and apps/web/src/phone/GameOver.tsx keep their layout and testids (tv-winner, tv-scores, tv-verdict; winner, my-rank,
+ * scores, verdict, leave) and take Worth in credits from here. Keep every data-testid; drop every IntentMarker.
  */
 
 export type Density = 'tv' | 'phone' | 'compact';
@@ -35,6 +37,13 @@ export function leaderWords(view: MuleView, lg: League, selfId?: string): { lead
   const top = lg.rows[0];
   const you = mine && top && mine.rank > 1 ? `You’re ${ordinal(mine.rank)}, ${fmt(top.total - mine.total)} behind` : null;
   return { lead, you };
+}
+
+/** At the game's end: "Ossa wins with a Worth of 4,543 cr", or a shared win. */
+export function winnerWords(view: MuleView, lg: League): string {
+  if (!lg.leader || !lg.rows[0]) return '';
+  const worth = `${fmt(lg.rows[0].total)} cr`;
+  return lg.leader.level.length > 1 ? `${lg.leader.level.map((id) => name(view, id)).join(' and ')} share the colony, each with a Worth of ${worth}` : `${name(view, lg.leader.id)} wins with a Worth of ${worth}`;
 }
 
 /** ↑ +120 green, ↓ −40 red, ± 0 grey: the change since last month, never colour alone. */
@@ -67,12 +76,15 @@ const SIZE: Record<Density, { pad: string; head: string; rank: string; mark: num
   compact: { pad: 'gap-1 px-2.5 py-1.5', head: 'text-[10px]!', rank: 'w-5 text-xs', mark: 16, name: 'text-sm', worth: 'text-base', side: 'text-xs', cell: 'px-1.5 py-0.5', callMark: 18, call: 'text-sm' },
 };
 
-/** The league table: everyone by Worth, the leader called out, the change since last month. Totals only. */
-export function LeagueTable({ view, facts, density, selfId }: { view: MuleView; facts: MonthFacts; density: Density; selfId?: string }) {
+/**
+ * The league table: everyone by Worth, the leader called out, the change since last month. Totals only. `final` (game
+ * over): the final standings, no callout (the winner card calls the winner out) and no change column.
+ */
+export function LeagueTable({ view, facts, density, selfId, final = false }: { view: MuleView; facts: MonthFacts; density: Density; selfId?: string; final?: boolean }) {
   const lg = league(view, facts.lastWorth);
   const collapse = inCollapse(view);
-  const s = SIZE[density];
   const tv = density === 'tv';
+  const s = final && tv ? { ...SIZE.tv, mark: 36, cell: 'px-3 py-1.5' } : SIZE[density];
   const words = leaderWords(view, lg, selfId);
   const top = lg.rows[0];
   // The phone's headers stay on one line (short words); the TV's may wrap, so a Collapse column never squeezes the colony.
@@ -80,11 +92,11 @@ export function LeagueTable({ view, facts, density, selfId }: { view: MuleView; 
   return (
     <section className={cx('relative flex min-h-0 flex-col rounded-panel border border-holo-line bg-panel', s.pad)} aria-label="League table" data-testid="league">
       <header className="flex items-baseline justify-between gap-2">
-        <h2 className={cx('label-caps', s.head)}>League table · month {view.month}</h2>
+        <h2 className={cx('label-caps', s.head)}>{final ? 'Final standings · by Worth' : `League table · month ${view.month}`}</h2>
         {tv && <span className="text-lg text-ink-3">Worth, in credits</span>}
       </header>
 
-      {top && (
+      {top && !final && (
         <div
           className={cx('relative flex items-center', tv ? 'gap-4 rounded-panel border-2 border-holo bg-holo-soft px-5 py-2.5 shadow-glow' : 'gap-2')}
           data-testid="leader"
@@ -116,10 +128,12 @@ export function LeagueTable({ view, facts, density, selfId }: { view: MuleView; 
                 Before the cut
               </th>
             )}
-            <th className={cx(th, s.cell, 'relative text-right')} data-testid="change-head">
-              Since month {view.month - 1}
-              <IntentMarker note={N.M3} at="tr" />
-            </th>
+            {!final && (
+              <th className={cx(th, s.cell, 'relative text-right')} data-testid="change-head">
+                Since month {view.month - 1}
+                <IntentMarker note={N.M3} at="tr" />
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -151,9 +165,11 @@ export function LeagueTable({ view, facts, density, selfId }: { view: MuleView; 
                     </span>
                   </td>
                 )}
-                <td className={cx(s.cell, 'text-right')}>
-                  <ChangeTag change={r.change} className={s.side} testid={`change-${r.player.id}`} />
-                </td>
+                {!final && (
+                  <td className={cx(s.cell, 'text-right')}>
+                    <ChangeTag change={r.change} className={s.side} testid={`change-${r.player.id}`} />
+                  </td>
+                )}
               </tr>
             );
           })}
@@ -161,6 +177,68 @@ export function LeagueTable({ view, facts, density, selfId }: { view: MuleView; 
       </table>
       <IntentMarker note={N.M1} />
     </section>
+  );
+}
+
+// --- The game's end ------------------------------------------------------------------------------------
+
+/**
+ * The winner card. On the TV: the winner called out, "Ossa wins with a Worth of 4,543 cr". On your phone: your final
+ * place and your Worth as the card's number ("Worth 4,333 cr"), the winner's line under it. Today's card said points.
+ */
+export function WinnerCard({ view, facts, density, selfId }: { view: MuleView; facts: MonthFacts; density: Density; selfId?: string }) {
+  const lg = league(view, facts.lastWorth);
+  const top = lg.rows[0];
+  if (!top) return null;
+  const line = winnerWords(view, lg);
+  if (density === 'tv')
+    return (
+      <div className="relative flex flex-col items-center justify-center gap-3 rounded-panel border-2 border-holo bg-holo-soft p-6 text-center shadow-glow animate-pulse-glow" data-testid="tv-winner">
+        <span className="label-caps text-lg!">The colony goes to</span>
+        <PlayerMark slot={top.slot} species={top.player.species} size={112} label={top.player.name} />
+        <span className="font-display text-4xl font-semibold leading-tight" data-testid="winner-line">
+          {line}
+        </span>
+        <IntentMarker note={N.M2} part="winner" />
+        <IntentMarker note={N.M11} at="tr" />
+      </div>
+    );
+  const mine = lg.rows.find((r) => r.player.id === selfId) ?? top;
+  const won = mine.rank === 1;
+  const compact = density === 'compact';
+  return (
+    <div
+      className={cx('relative flex flex-col items-center justify-center gap-1 rounded-panel border-2 p-2.5 text-center', won ? 'border-holo bg-holo-soft shadow-glow' : 'border-holo-line bg-panel', !compact && 'flex-1')}
+      data-testid="winner"
+    >
+      <span className="label-caps text-[10px]!" data-testid="my-place">
+        {won ? 'You win the colony!' : `You finished ${ordinal(mine.rank)} of ${view.players.length}`}
+      </span>
+      <PlayerMark slot={mine.slot} species={mine.player.species} size={compact ? 28 : 40} label={mine.player.name} />
+      <span data-num className={cx('font-mono font-bold', compact ? 'text-lg' : 'text-xl')} data-testid="winner-worth">
+        Worth {fmt(mine.total)} cr
+      </span>
+      {!won && (
+        <span className="flex items-center justify-center gap-1 text-[11px] leading-snug text-ink-2" data-testid="winner-line">
+          <PlayerMark slot={top.slot} species={top.player.species} size={12} label={top.player.name} />
+          {line}
+        </span>
+      )}
+      <IntentMarker note={N.M2} part="winner" />
+      <IntentMarker note={N.M11} at="br" />
+    </div>
+  );
+}
+
+/** The colony's verdict on a phone beside the TV, as today's game-over draws it: passed or failed, the air, the rule. */
+export function PhoneVerdict({ view }: { view: MuleView }) {
+  const v = colonyVerdict(view.air);
+  return (
+    <div className={cx('flex flex-col gap-1.5 rounded-panel border p-2.5', v.failed ? 'border-alert bg-alert-bg' : 'border-holo-line bg-panel')} data-testid="verdict">
+      <span className={cx('font-display text-base font-semibold', v.failed ? 'text-alert-ink' : 'text-ok')}>{v.title}</span>
+      <AirGauge level={view.air.level} band={view.air.band} />
+      <span className="text-xs leading-snug text-ink-2">{v.line} The colony’s report is on the TV.</span>
+    </div>
   );
 }
 
@@ -193,12 +271,16 @@ function Block({ label, children, testid, tv, mark, className }: { label: string
 }
 
 /** A slot G-5 fills: greyed, and saying so. */
-function G5Slot({ id, label, sub, tv }: { id: string; label: string; sub?: string; tv: boolean }) {
+function G5Slot({ id, label, sub, tv, line = false }: { id: string; label: string; sub?: string; tv: boolean; line?: boolean }) {
   const chip = <span className={cx('shrink-0 whitespace-nowrap font-mono font-bold uppercase tracking-wide', tv ? 'text-[10px]' : 'text-[9px]')}>comes with G-5</span>;
-  if (!tv)
+  if (!tv || line)
     return (
-      <div className="flex min-w-0 items-baseline justify-between gap-1 rounded-control border border-dashed border-holo-line px-1.5 py-0.5 text-ink-3" aria-label={`${label}: comes with G-5`} data-testid={`g5-${id}`}>
-        <span className="truncate font-display text-[11px] font-semibold">{label}</span>
+      <div
+        className={cx('flex min-w-0 items-baseline justify-between rounded-control border border-dashed border-holo-line text-ink-3', tv ? 'gap-2 px-3 py-1' : 'gap-1 px-1.5 py-0.5')}
+        aria-label={`${label}: comes with G-5`}
+        data-testid={`g5-${id}`}
+      >
+        <span className={cx('truncate font-display font-semibold', tv ? 'text-base' : 'text-[11px]')}>{label}</span>
         {chip}
       </div>
     );
@@ -216,10 +298,15 @@ function G5Slot({ id, label, sub, tv }: { id: string; label: string; sub?: strin
   );
 }
 
-/** How the colony is doing, apart from the players: the air and its trend, the fund's month, who went hungry, G-5's slots. */
-export function ColonyPanel({ view, facts, density }: { view: MuleView; facts: MonthFacts; density: Exclude<Density, 'phone'> }) {
+/**
+ * How the colony is doing, apart from the players: the air and its trend, the fund's month, who went hungry, G-5's
+ * slots. At game over (`verdict`) it heads with the colony's verdict; `row` lays it out in one band across the TV.
+ */
+export function ColonyPanel({ view, facts, density, layout = 'stack', verdict = false }: { view: MuleView; facts: MonthFacts; density: Exclude<Density, 'phone'>; layout?: 'stack' | 'row'; verdict?: boolean }) {
   const r = colonyReport(view, facts);
   const tv = density === 'tv';
+  const row = tv && layout === 'row';
+  const v = colonyVerdict(view.air);
   const now = airBandStyle(r.air.level, r.air.band);
   const then = airBandStyle(r.air.last, r.air.lastBand);
   const last = view.month - 1;
@@ -227,8 +314,20 @@ export function ColonyPanel({ view, facts, density }: { view: MuleView; facts: M
   const line = tv ? 'text-lg leading-snug' : 'text-[11px] leading-tight';
   return (
     <section className={cx('relative flex min-h-0 flex-col rounded-panel border border-holo-line bg-panel', tv ? 'gap-3 p-5' : 'gap-1 px-2.5 py-1.5')} aria-label="How the colony is doing" data-testid="colony-panel">
-      <h2 className={cx('label-caps', tv ? 'text-base!' : 'text-[10px]!')}>How the colony is doing</h2>
-      <div className={cx('grid', tv ? 'grid-cols-2 gap-x-6 gap-y-3' : 'grid-cols-3 gap-2')}>
+      <header className={cx('flex flex-wrap items-baseline', tv ? 'gap-x-4' : 'gap-x-2')} {...(verdict ? { 'data-testid': 'tv-verdict' } : {})}>
+        <h2 className={cx('label-caps', tv ? 'text-base!' : 'text-[10px]!')}>{verdict ? 'How the colony did' : 'How the colony is doing'}</h2>
+        {verdict && (
+          <>
+            <span className={cx('font-display font-semibold', v.failed ? 'text-alert-ink' : 'text-ok', tv ? 'text-2xl' : 'text-xs')} data-testid="verdict-title">
+              {v.title}
+            </span>
+            <span className={cx('text-ink-2', tv ? 'text-lg' : 'text-[11px]')} data-testid="verdict-line">
+              {v.line}
+            </span>
+          </>
+        )}
+      </header>
+      <div className={cx('grid', row ? 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.1fr)] gap-x-6' : tv ? 'grid-cols-2 gap-x-6 gap-y-3' : 'grid-cols-3 gap-2')}>
         <Block label="Air" testid="colony-air" tv={tv}>
           <span className="flex flex-wrap items-baseline gap-x-2">
             <span data-num className={cx('font-mono font-bold', big)} data-testid="air-level">
@@ -267,8 +366,8 @@ export function ColonyPanel({ view, facts, density }: { view: MuleView; facts: M
             </span>
           ))}
         </Block>
-        <Block label="Hunger" testid="colony-hungry" tv={tv} mark={<IntentMarker note={N.M7} at="tr" />} {...(tv ? { className: 'col-span-2 border-t border-holo-faint pt-3' } : {})}>
-          <span className={cx('flex', tv ? 'flex-wrap items-baseline gap-x-5 gap-y-1' : 'flex-col')}>
+        <Block label="Hunger" testid="colony-hungry" tv={tv} mark={<IntentMarker note={N.M7} at="tr" />} {...(tv && !row ? { className: 'col-span-2 border-t border-holo-faint pt-3' } : {})}>
+          <span className={cx('flex', tv && !row ? 'flex-wrap items-baseline gap-x-5 gap-y-1' : 'flex-col')}>
           {r.hungry.length === 0 ? (
             <span className={cx('font-display font-semibold text-ok', tv ? 'text-2xl' : 'text-xs')} data-testid="nobody-hungry">
               ✓ Nobody went hungry
@@ -293,13 +392,23 @@ export function ColonyPanel({ view, facts, density }: { view: MuleView; facts: M
           </span>
           </span>
         </Block>
+        {row && (
+          <div className="relative flex min-w-0 flex-col gap-1.5" data-testid="g5-slots">
+            <G5Slot id="prestige" label="Prestige" tv line />
+            <G5Slot id="mood" label="Mood" tv line />
+            <G5Slot id="score" label="Colony score" tv line />
+            <IntentMarker note={N.M8} />
+          </div>
+        )}
       </div>
+      {!row && (
       <div className={cx('relative mt-auto grid', tv ? 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.6fr)] gap-3' : 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.25fr)] gap-1.5')} data-testid="g5-slots">
         <G5Slot id="prestige" label="Prestige" tv={tv} />
         <G5Slot id="mood" label="Mood" sub={`${MOOD_SCALE.unrest}× to ${MOOD_SCALE.thriving}×`} tv={tv} />
         <G5Slot id="score" label="Colony score" sub={`(${COLONY_SCORE_PARTS.join(' + ')}) × mood.`} tv={tv} />
         <IntentMarker note={N.M8} />
       </div>
+      )}
       <IntentMarker note={N.M6} />
     </section>
   );
@@ -344,12 +453,12 @@ export function YourWorth({ view, density }: { view: MuleView; density: Exclude<
         ))}
       </dl>
       <div className="flex items-baseline justify-between gap-2 border-t border-holo-faint pt-1" data-testid="worth-total">
-        <span className="min-w-0 text-xs font-semibold leading-tight">{collapse ? 'Your score if the game ended now' : 'Your worth'}</span>
+        <span className="min-w-0 text-xs font-semibold leading-tight">{view.finished ? 'Your final Worth' : collapse ? 'Your score if the game ended now' : 'Your worth'}</span>
         <span data-num className="shrink-0 font-mono text-base font-bold" data-testid="worth-total-cr">
           {fmt(w.total)}
         </span>
       </div>
-      {collapse && (
+      {collapse && !view.finished && (
         <div className="flex items-baseline justify-between gap-2 text-[11px] text-ink-3" data-testid="worth-uncut">
           <span>Without the cut</span>
           <span data-num className="font-mono font-semibold">
