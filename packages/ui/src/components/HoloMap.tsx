@@ -121,6 +121,10 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
           const isSelected = !!selected && selected.x === t.x && selected.y === t.y;
           const owner = t.owner === null ? null : SLOT_COLOR[t.owner];
           const faded = focusSlot !== undefined && t.owner !== null && t.owner !== focusSlot;
+          // A faded plot fades its marks, never its selection.
+          const fade = cx('transition-opacity', faded && 'opacity-45');
+          // The map clips at its edge, so an edge plot's selection is drawn inside it, and on the top row the pin hangs below.
+          const onEdge = t.x === 0 || t.y === 0 || t.x === width - 1 || t.y === height - 1;
           const ground = !hideGround && t.ground ? (Object.entries(t.ground) as [Good, number][]).sort((a, b) => b[1] - a[1]).slice(0, tv ? 2 : 1) : [];
           const label = [
             TERRAIN_NAME[t.terrain],
@@ -137,7 +141,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
             <Tag
               key={`${t.x},${t.y}`}
               {...(onTile ? { type: 'button' as const, onClick: () => onTile(t), 'aria-label': label } : { 'aria-label': label })}
-              className={cx('relative flex items-center justify-center transition-opacity', faded && 'opacity-45', onTile && 'cursor-pointer', isSelected && 'z-[6]')}
+              className={cx('relative flex items-center justify-center', onTile && 'cursor-pointer', isSelected && 'z-[6]')}
               data-testid={`map-plot-${t.x}-${t.y}`}
               {...(isSelected ? { 'data-selected': true } : {})}
             >
@@ -145,12 +149,12 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
               {!!t.pollution && (
                 <span
                   aria-hidden
-                  className="absolute inset-0"
+                  className={cx('absolute inset-0', fade)}
                   style={{ background: `radial-gradient(circle at 50% 55%, rgb(110 82 40 / ${0.25 + t.pollution * 0.18}), rgb(110 82 40 / ${0.12 + t.pollution * 0.12}) 80%)` }}
                 />
               )}
               {!t.good && ground.length > 0 && (
-                <span className={cx('relative flex flex-col items-center rounded-control bg-map-chip/90 shadow-chip', tv ? 'gap-0.5 px-1.5 py-1' : 'px-[3px] py-[2px]')}>
+                <span className={cx('relative flex flex-col items-center rounded-control bg-map-chip/90 shadow-chip', tv ? 'gap-0.5 px-1.5 py-1' : 'px-[3px] py-[2px]', fade)}>
                   {ground.map(([g, n]) => (
                     <span key={g} className={cx('flex items-center', tv ? 'gap-0.5' : 'flex-col gap-px')}>
                       <GoodIcon good={g} size={tv ? 16 : 9} />
@@ -160,12 +164,12 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                 </span>
               )}
               {owner && (
-                <span aria-hidden className="absolute inset-[2%] rounded-[10%]" style={{ boxShadow: `inset 0 0 0 ${z.border}px ${owner}`, background: `color-mix(in srgb, ${owner} 30%, transparent)` }} />
+                <span aria-hidden className={cx('absolute inset-[2%] rounded-[10%]', fade)} style={{ boxShadow: `inset 0 0 0 ${z.border}px ${owner}`, background: `color-mix(in srgb, ${owner} 30%, transparent)` }} />
               )}
               {owner && t.owner !== null && (
                 // z-[4]: above the badge layer, so a special's badge hung in from the plot up-left never covers the owner's tab.
                 <span
-                  className="absolute left-[4%] top-[4%] z-[4] flex items-center justify-center rounded-[30%] bg-map-chip shadow-chip"
+                  className={cx('absolute left-[4%] top-[4%] z-[4] flex items-center justify-center rounded-[30%] bg-map-chip shadow-chip', fade)}
                   style={{ width: z.tab, height: z.tab, boxShadow: `0 0 0 ${tv ? 2 : 1}px ${owner}` }}
                   data-testid={`owner-${t.x}-${t.y}`}
                 >
@@ -177,16 +181,16 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
               )}
               {t.good && (
                 <span
-                  className="relative z-[2] flex items-center justify-center rounded-full bg-map-chip shadow-chip"
+                  className={cx('relative z-[2] flex items-center justify-center rounded-full bg-map-chip shadow-chip', fade)}
                   style={{ width: z.disc, height: z.disc, boxShadow: `0 0 0 ${tv ? 3 : 2}px var(--color-g-${t.good})` }}
                   data-testid={`installed-${t.x}-${t.y}`}
                 >
                   <GoodIcon good={t.good} size={z.icon} />
                   {showOutput && t.output !== undefined && (
-                    // Centred on the disc's rim at its lower right: 50% + 50%/√2.
+                    // Centred on the disc's rim at its lower left, the corner the plot's badge leaves free: 50% ∓ 50%/√2.
                     <span
                       data-num
-                      className={cx('absolute left-[85%] top-[85%] -translate-x-1/2 -translate-y-1/2 rounded-chip bg-map-chip px-0.5 font-mono font-bold leading-none text-ink', tv ? 'text-lg' : 'text-[8px]')}
+                      className={cx('absolute left-[15%] top-[85%] -translate-x-1/2 -translate-y-1/2 rounded-chip bg-map-chip px-0.5 font-mono font-bold leading-none text-ink', tv ? 'text-lg' : 'text-[8px]')}
                       style={{ boxShadow: `0 0 0 ${tv ? 2 : 1}px var(--color-g-${t.good})` }}
                     >
                       +{t.output}
@@ -195,11 +199,13 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                 </span>
               )}
               {t.flag && (
+                // z-[4], after the tab: above the disc and the tab.
                 <span
                   className={cx(
-                    'absolute right-0.5 top-0.5 rounded-chip px-1 font-mono font-bold leading-tight shadow-chip',
+                    'absolute right-0.5 top-0.5 z-[4] rounded-chip px-1 font-mono font-bold leading-tight shadow-chip',
                     tv ? 'text-[11px]' : 'text-[7px]',
                     t.flag === 'sabotage' ? 'bg-alert text-white' : t.flag === 'sale' ? 'bg-warn text-void' : 'bg-holo text-on-holo',
+                    fade,
                   )}
                 >
                   {t.flag === 'sabotage' ? 'OFF' : t.flag === 'sale' ? 'SALE' : 'SCAN'}
@@ -207,9 +213,8 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
               )}
               {t.special && (
                 // Above the plot's chips and its right and lower neighbours', under the owners' marks (z-[4]), and never in the way of a
-                // tap: the tap goes to the plot beneath. A faded plot's opacity makes it its own layer, so there the overhang goes
-                // under the right and lower neighbours.
-                <span aria-hidden className="pointer-events-none absolute inset-0 z-[3]" data-testid={`special-glyph-${t.x}-${t.y}`} data-kind={t.special.kind}>
+                // tap: the tap goes to the plot beneath.
+                <span aria-hidden className={cx('pointer-events-none absolute inset-0 z-[3]', fade)} data-testid={`special-glyph-${t.x}-${t.y}`} data-kind={t.special.kind}>
                   <SpecialBadge
                     special={t.special}
                     density={density}
@@ -224,21 +229,31 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
               {isSelected && (
                 <>
                   {/* The ring stays solid; only its glow breathes, so the selection never dims. */}
-                  <span aria-hidden className="pointer-events-none absolute -inset-[8%] z-[5] rounded-[16%] motion-safe:animate-pulse" style={{ boxShadow: `0 0 ${tv ? 26 : 12}px ${tv ? 8 : 4}px var(--color-holo)` }} />
                   <span
                     aria-hidden
-                    className="pointer-events-none absolute -inset-[6%] z-[5] rounded-[14%]"
-                    style={{ boxShadow: `0 0 0 ${z.ring}px var(--color-holo-strong), 0 0 0 ${z.ring + (tv ? 3 : 2)}px var(--color-void)` }}
-                    data-testid="selected-ring"
+                    className={cx('pointer-events-none absolute z-[5] motion-safe:animate-pulse', onEdge ? 'inset-0 rounded-[10%]' : '-inset-[8%] rounded-[16%]')}
+                    style={{ boxShadow: `${onEdge ? 'inset ' : ''}0 0 ${tv ? 26 : 12}px ${tv ? 8 : 4}px var(--color-holo)` }}
                   />
                   <span
+                    aria-hidden
+                    className={cx('pointer-events-none absolute z-[5]', onEdge ? 'inset-0 rounded-[10%]' : '-inset-[6%] rounded-[14%]')}
+                    style={{
+                      boxShadow: onEdge
+                        ? `inset 0 0 0 ${z.ring}px var(--color-holo-strong), inset 0 0 0 ${z.ring + (tv ? 3 : 2)}px var(--color-void)`
+                        : `0 0 0 ${z.ring}px var(--color-holo-strong), 0 0 0 ${z.ring + (tv ? 3 : 2)}px var(--color-void)`,
+                    }}
+                    data-testid="selected-ring"
+                  />
+                  {/* The arrow alone: the ring and glow carry the selection, and a wide label would cover the neighbours. */}
+                  <span
                     className={cx(
-                      'pointer-events-none absolute bottom-full left-1/2 z-[6] mb-1 -translate-x-1/2 whitespace-nowrap rounded-chip bg-holo font-mono font-bold text-on-holo shadow-glow',
+                      'pointer-events-none absolute left-1/2 z-[6] -translate-x-1/2 whitespace-nowrap rounded-chip bg-holo font-mono font-bold text-on-holo shadow-glow',
+                      t.y === 0 ? 'top-full mt-1' : 'bottom-full mb-1',
                       tv ? 'px-2 py-0.5 text-sm' : 'px-1 text-[8px]',
                     )}
                     data-testid="selected-pin"
                   >
-                    {tv ? 'SELECTED ▾' : '▾'}
+                    {t.y === 0 ? '▴' : '▾'}
                   </span>
                 </>
               )}
@@ -253,9 +268,10 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
         })}
       </div>
       {avatars.map((a) => (
+        // z-[5]: above every plot's marks, under the selected plot (z-[6]), so a walker never hides the selection.
         <div
           key={a.slot}
-          className="pointer-events-none absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 transition-[left,top] duration-700 ease-out"
+          className="pointer-events-none absolute z-[5] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 transition-[left,top] duration-700 ease-out"
           style={{ left: `${((a.x + 0.5) / width) * 100}%`, top: `${((a.y + 0.5) / height) * 100}%` }}
         >
           <PlayerMark slot={a.slot} size={tv ? 38 : 18} label={a.name} className="drop-shadow-md" />
