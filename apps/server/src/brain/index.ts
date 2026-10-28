@@ -1,6 +1,6 @@
 import { BRAIN, type AiLevelId, type AiPersonaId } from '@mule/engine';
 import { LlmDecider, ReplyRejected, type Complete, type Decider, type DecisionRecord } from '@mule/ai';
-import { createBudget, worstCaseUsd } from './budget.js';
+import { createBudget, MOVE_CALL, worstCaseUsd } from './budget.js';
 import { chatter } from './chat.js';
 import { billUnknown, CallFailed, createAnthropicSdk, createHaikuComplete, type HaikuReply, type HaikuSdk } from './client.js';
 import { createLedger, NO_USAGE, type Outcome, type Usage } from './ledger.js';
@@ -118,7 +118,7 @@ export function createBrain(options: BrainOptions): MeteredBrain {
       (slot: CallSlot): Complete =>
       async (prompt, waitMs) => {
         if (finished) throw new Error('game over');
-        slot.worstUsd = worstCaseUsd(prompt);
+        slot.worstUsd = worstCaseUsd(prompt, MOVE_CALL);
         const { allowed, lockedNow } = budget.allow(gameId, seat.id, slot.worstUsd);
         if (!allowed) throw new BudgetSpent(lockedNow);
         slot.called = true;

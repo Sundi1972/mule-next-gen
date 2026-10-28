@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BRAIN, observe, type GameState } from '@mule/engine';
 import { PERSONAS, playGame, simSeats, situation, WAIT_MS, type DecisionRecord, type Prompt, type ShortOption } from '@mule/ai';
 import { CallFailed, createHaikuComplete, type HaikuReply } from '../src/brain/client.js';
-import { worstCaseUsd } from '../src/brain/budget.js';
+import { MOVE_CALL, worstCaseUsd } from '../src/brain/budget.js';
 import { createLedger } from '../src/brain/ledger.js';
 import { capFor, collectPrompts, main, renderReport, runSpike, type SpikeItem } from '../src/brain/spike.js';
 import { fakeSdk, KEY, promptOf, readLedger, sdkMessage, worstUsdOf, type SdkModuleFake } from './brain-fakes.js';
@@ -53,7 +53,7 @@ const timedOut = (kind: SpikeItem['kind'] = 'develop') => new CallFailed('model 
 
 const run = (list: SpikeItem[], complete: (p: Prompt, waitMs: number) => Promise<HaikuReply>, cap: number = BRAIN.spikeCapUsd, at = file) => {
   const ledger = createLedger({ path: at, clock: () => TODAY });
-  return runSpike({ prompts: list, complete, ledger, worstCase: worstCaseUsd, cap, now: () => TODAY, log: () => {} });
+  return runSpike({ prompts: list, complete, ledger, worstCase: (p) => worstCaseUsd(p, MOVE_CALL), cap, now: () => TODAY, log: () => {} });
 };
 const ledgerLines = (at = file) => readLedger(at).filter((l) => l.type !== 'game'); // the closing total line is not a call
 

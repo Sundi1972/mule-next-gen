@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BRAIN } from '@mule/engine';
 import type { Prompt } from '@mule/ai';
-import { createBudget, worstCaseUsd } from '../src/brain/budget.js';
+import { createBudget, MOVE_CALL, worstCaseUsd } from '../src/brain/budget.js';
 import { WRITE_CALLS, WRITE_FALLBACK_MODEL, WRITE_KINDS } from '../src/brain/client.js';
 
 /** The game budget these tests use; two registered seats get a share of 0.5 each. */
@@ -136,9 +136,9 @@ describe('RULE-3 budget table', () => {
     const TOKENS = 1000;
     const whole = TOKENS * BRAIN.charsPerToken; // chars that make exactly TOKENS tokens
     expect(Number.isInteger(whole)).toBe(true);
-    expect(worstCaseUsd(promptOf(whole))).toBeCloseTo(priced(TOKENS), 12);
+    expect(worstCaseUsd(promptOf(whole), MOVE_CALL)).toBeCloseTo(priced(TOKENS), 12);
     // one char more is one token more: pins ceil
-    expect(worstCaseUsd(promptOf(whole + 1))).toBeCloseTo(priced(TOKENS + 1), 12);
+    expect(worstCaseUsd(promptOf(whole + 1), MOVE_CALL)).toBeCloseTo(priced(TOKENS + 1), 12);
     // the schema's JSON is what carries a prompt over a token boundary: without it these chars price one token less
     const sys = 'x'.repeat(1000);
     const user = 'y'.repeat(whole - 1000 - SCHEMA_CHARS + 1);
@@ -146,7 +146,7 @@ describe('RULE-3 budget table', () => {
     expect(chars + SCHEMA_CHARS).toBe(whole + 1);
     const tokensWithout = Math.ceil(chars / BRAIN.charsPerToken);
     expect(tokensWithout).toBeLessThan(TOKENS + 1);
-    expect(worstCaseUsd({ system: sys, user, schema: SCHEMA })).toBeCloseTo(priced(TOKENS + 1), 12);
+    expect(worstCaseUsd({ system: sys, user, schema: SCHEMA }, MOVE_CALL)).toBeCloseTo(priced(TOKENS + 1), 12);
   });
 });
 
@@ -164,18 +164,21 @@ describe("INV-price-by-model: a call's worst case is at its own model's prices a
     expect(sonnet).not.toBeCloseTo(pricedAt(BRAIN.pricesPerMTok, maxTokens), 8);
   });
 
-  it.each(WRITE_KINDS)("INV-price-by-model: a %s call's worst case is at its kind's model and reply cap, and so is the fallback's", (kind) => {
+  it.each(WRITE_KINDS)("INV-price-by-model: a %s call's worst case is at its kind's model and reply cap, and so is the fallback's; both exceed a move's", (kind) => {
     const { model, maxTokens } = WRITE_CALLS[kind];
-    expect(worstCaseUsd(promptOf(whole), WRITE_CALLS[kind])).toBeCloseTo(pricedAt(BRAIN[BRAIN.priceTable[model]], maxTokens), 12);
-    expect(worstCaseUsd(promptOf(whole), { model: WRITE_FALLBACK_MODEL, maxTokens })).toBeCloseTo(
-      pricedAt(BRAIN[BRAIN.priceTable[WRITE_FALLBACK_MODEL]], maxTokens),
-      12,
-    );
+    const own = worstCaseUsd(promptOf(whole), WRITE_CALLS[kind]);
+    const fallback = worstCaseUsd(promptOf(whole), { model: WRITE_FALLBACK_MODEL, maxTokens });
+    expect(own).toBeCloseTo(pricedAt(BRAIN[BRAIN.priceTable[model]], maxTokens), 12);
+    expect(fallback).toBeCloseTo(pricedAt(BRAIN[BRAIN.priceTable[WRITE_FALLBACK_MODEL]], maxTokens), 12);
+    // A write call counted at a move's cap would undercount: neither may ever come out at the move worst case.
+    const move = worstCaseUsd(promptOf(whole), MOVE_CALL);
+    expect(own).toBeGreaterThan(move);
+    expect(fallback).toBeGreaterThan(move);
   });
 
   it('INV-price-by-model: a move call is unchanged: BRAIN.model at its prices, BRAIN.maxTokens', () => {
-    expect(worstCaseUsd(promptOf(whole))).toBeCloseTo(pricedAt(BRAIN[BRAIN.priceTable[BRAIN.model]], BRAIN.maxTokens), 12);
-    expect(worstCaseUsd(promptOf(whole))).toBe(worstCaseUsd(promptOf(whole), { model: BRAIN.model, maxTokens: BRAIN.maxTokens }));
+    expect(MOVE_CALL).toEqual({ model: BRAIN.model, maxTokens: BRAIN.maxTokens });
+    expect(worstCaseUsd(promptOf(whole), MOVE_CALL)).toBeCloseTo(pricedAt(BRAIN[BRAIN.priceTable[BRAIN.model]], BRAIN.maxTokens), 12);
   });
 });
 

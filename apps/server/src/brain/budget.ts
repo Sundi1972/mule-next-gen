@@ -13,14 +13,20 @@ export function promptChars(prompt: PromptText): number {
   return prompt.system.length + prompt.user.length + JSON.stringify(prompt.schema).length;
 }
 
-/** A move call: BRAIN.model with BRAIN.maxTokens. */
-const MOVE_CALL: { model: ModelId; maxTokens: number } = { model: BRAIN.model, maxTokens: BRAIN.maxTokens };
+/** What a call's worst case depends on besides its prompt: the model it is billed at and its reply cap. */
+export interface CallCap {
+  model: ModelId;
+  maxTokens: number;
+}
+
+/** A move call (land, develop, trade): BRAIN.model with BRAIN.maxTokens. */
+export const MOVE_CALL: Readonly<CallCap> = Object.freeze({ model: BRAIN.model, maxTokens: BRAIN.maxTokens });
 
 /**
  * The most a call with this prompt can cost at its model's prices: the whole prompt as input at the dearer rate, and a
- * full reply of its reply cap. A move call unless told otherwise. See RULE-3.
+ * full reply of its reply cap. Every caller names its call, so a write call is never counted at a move's cap. See RULE-3.
  */
-export function worstCaseUsd(prompt: PromptText, call: { model: ModelId; maxTokens: number } = MOVE_CALL): number {
+export function worstCaseUsd(prompt: PromptText, call: CallCap): number {
   const tokens = Math.ceil(promptChars(prompt) / BRAIN.charsPerToken);
   // A first call writes the cache, which can cost more than plain input: price at the dearer of the two.
   const p = pricesOf(call.model);
