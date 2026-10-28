@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Room, RoomRegistry, TableError, type Connection, type Game, type GameContext, type SeatInfo, type ServerEnvelope } from '../src/index.js';
+import { Room, RoomRegistry, TableError, type ClientEnvelope, type Connection, type Game, type GameContext, type SeatInfo, type ServerEnvelope } from '../src/index.js';
 
 type Intent = { secret: string };
 type View = { mySecret: string | null; secretsTold: number };
@@ -873,6 +873,93 @@ describe('Room: a connection holds at most one seat (FM-3)', () => {
 
     expect(presence(tv)).toStrictEqual([['s1', false], ['s2', true], ['s3', true]]);
     expect(heard.changes.at(-1)).toStrictEqual(['s1', false]);
+  });
+});
+
+/** Each seat's id and presence, the host and the board count, in the last view this screen received. */
+const table = (screen: Screen) => {
+  const { seats, hostId, boards } = screen.last('view')!.view;
+  return { seats: seats.map((s) => [s.id, s.connected]), hostId, boards };
+};
+
+const welcomedAs = (screen: Screen) => screen.inbox.flatMap((m) => (m.t === 'welcome' ? [m.role] : []));
+
+describe('Room: a connection is a board or a seat, never both (FM-12)', () => {
+  type Hello = (ctx: ReturnType<typeof clockLobby>) => ClientEnvelope<Intent>;
+
+  /** A lobby with a TV watching (started first if asked); the TV then says `hello`. */
+  async function tvSays(started: boolean, hello: Hello) {
+    const ctx = clockLobby();
+    const { room, heiko, heard } = ctx;
+    if (started) room.receive(heiko, heiko.from, { t: 'start' });
+    const tv = watch(room);
+    const msg = hello(ctx);
+    await flush();
+    const before = { table: table(heiko), heard: structuredClone(heard) };
+
+    room.receive(tv, tv.from, msg);
+    await flush();
+    return { ...ctx, tv, before };
+  }
+
+  it.each<{ row: string; started: boolean; hello: Hello }>([
+    { row: 'joins by name in the lobby', started: false, hello: () => ({ t: 'join', code: 'KRTX', name: 'TV' }) },
+    { row: "joins by s2's token after Start", started: true, hello: (ctx) => ({ t: 'join', code: 'KRTX', name: 'TV', seatToken: ctx.mia.last('welcome')!.seatToken! }) },
+    { row: "joins by s2's move code after Start", started: true, hello: (ctx) => ({ t: 'join', code: 'KRTX', name: 'TV', handoff: handoff(ctx.room, ctx.mia) }) },
+  ])('FM-12: a board that $row is refused with "This screen is already the table", and nothing changes: no seat is taken or added, s2 keeps its screen, the host and board count stay, and the game hears nothing', async ({ started, hello }) => {
+    const { room, heiko, mia, heard, tv, before } = await tvSays(started, hello);
+
+    expect(tv.last('error')?.message).toBe('This screen is already the table');
+    expect(welcomedAs(tv)).toStrictEqual(['board']);
+    expect({ table: table(heiko), heard }).toStrictEqual(before);
+    expect(mia.last('removed')).toBeUndefined();
+    room.receive(mia, mia.from, { t: 'handoff' });
+    expect(mia.inbox.at(-1)?.t).toBe('handoffCode');
+  });
+
+  it('FM-12: a board that sends `board` again is welcomed again, still counts once, and nothing else changes', async () => {
+    const { heiko, heard, tv, before } = await tvSays(true, () => ({ t: 'board', code: 'KRTX' }));
+
+    expect(tv.last('error')).toBeUndefined();
+    expect(welcomedAs(tv)).toStrictEqual(['board', 'board']);
+    expect({ table: table(heiko), heard }).toStrictEqual(before);
+  });
+
+  it.each([
+    { row: 'the host, in the lobby', started: false, who: 'heiko' as const },
+    { row: 's2, after Start', started: true, who: 'mia' as const },
+  ])('FM-12: a seated screen ($row) that sends `board` is refused with "This screen already has a seat", and nothing changes: it keeps its seat, the host and board count stay, and the game hears nothing', async ({ started, who }) => {
+    const ctx = clockLobby();
+    const { room, heiko, heard } = ctx;
+    if (started) room.receive(heiko, heiko.from, { t: 'start' });
+    const tv = watch(room);
+    const screen = ctx[who];
+    await flush();
+    const before = table(tv);
+    const heardBefore = structuredClone(heard);
+
+    room.receive(screen, screen.from, { t: 'board', code: room.code });
+    await flush();
+
+    expect(screen.last('error')?.message).toBe('This screen already has a seat');
+    expect(welcomedAs(screen)).toStrictEqual(['player']);
+    expect(table(tv)).toStrictEqual(before);
+    expect(heard).toStrictEqual(heardBefore);
+    room.receive(screen, screen.from, { t: 'handoff' });
+    expect(screen.inbox.at(-1)?.t).toBe('handoffCode');
+  });
+
+  it('FM-12: after Start, a seated screen that sent `board` and then drops lets go of its seat: it shows away, hosting moves on, and the game hears it disconnected', async () => {
+    const { room, heiko, heard } = clockLobby();
+    room.receive(heiko, heiko.from, { t: 'start' });
+    const tv = watch(room);
+    room.receive(heiko, heiko.from, { t: 'board', code: room.code });
+
+    room.disconnect(heiko);
+    await flush();
+
+    expect(table(tv)).toStrictEqual({ seats: [['s1', false], ['s2', true], ['s3', true]], hostId: 's2', boards: 1 });
+    expect(heard.changes).toStrictEqual([['s1', false]]);
   });
 });
 
