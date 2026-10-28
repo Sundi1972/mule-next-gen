@@ -82,26 +82,37 @@ const RECORDER = `{
   requestAnimationFrame(frame);
 }`;
 
+/** What the phone's "On to the auction" sends, as the client puts it on the wire. */
+const READY = JSON.stringify({ t: 'intent', intent: { type: 'ready' } });
+/** Only stops a hang; nothing is asserted about how long a wait takes. */
+const HANG_MS = 15_000;
+
 export type ShowWatch = {
   /** The view this page received during the latest production phase. */
   view: () => MuleView | null;
   /** What the page's recorder saw of the latest production show. */
   recording: () => Promise<Recording | null>;
+  /** Every message this page has sent over its socket, parsed, oldest first. */
+  sent: () => unknown[];
 };
 
 /** Watches a page's views and records its production shows. Attach before the page loads. */
 export async function watchShow(page: Page): Promise<ShowWatch> {
   let latest: MuleView | null = null;
-  page.on('websocket', (ws) =>
+  const sent: unknown[] = [];
+  page.on('websocket', (ws) => {
     ws.on('framereceived', ({ payload }) => {
       if (typeof payload !== 'string') return;
       const msg = JSON.parse(payload) as ServerEnvelope<MuleView>;
       const game = msg.t === 'view' ? (msg.view as TableView<MuleView>).game : null;
       if (game?.phase === 'production' && game.production) latest = game;
-    }),
-  );
+    });
+    ws.on('framesent', ({ payload }) => {
+      if (typeof payload === 'string') sent.push(JSON.parse(payload));
+    });
+  });
   await page.addInitScript(RECORDER);
-  return { view: () => latest, recording: () => page.evaluate(() => (window as unknown as { __show?: Recording }).__show ?? null) };
+  return { view: () => latest, sent: () => sent, recording: () => page.evaluate(() => (window as unknown as { __show?: Recording }).__show ?? null) };
 }
 
 /** Each player's goods from the show: what each plot made, after the event. */
@@ -207,10 +218,11 @@ export async function checkTheShow({ tv, phone, event = false }: { tv: ShowWatch
 /**
  * During a full-speed show: calls `midShow` once the event card is up, then,
  * once every plot's goods are home, presses the phone's "On to the auction"
- * and checks that it ends production before the phase's clock (HC-6). Returns
- * checkTheShow's summary of what both screens drew.
+ * and checks that the button is there, that the press sends the ready message
+ * and that the game moves on to the auction (HC-6). Returns checkTheShow's
+ * summary of what both screens drew.
  */
-export async function pressOnwardBeforeTheClock(phone: Page, watch: { tv: ShowWatch; phone: ShowWatch }, midShow: () => Promise<unknown>): Promise<string> {
+export async function pressOnward(phone: Page, watch: { tv: ShowWatch; phone: ShowWatch }, midShow: () => Promise<unknown>): Promise<string> {
   const shown = watch.phone.view();
   check(shown?.production && shown.phaseEndsAt, 'the phone received the production view');
   const { lengthMs, lines } = shown.production;
@@ -221,10 +233,14 @@ export async function pressOnwardBeforeTheClock(phone: Page, watch: { tv: ShowWa
   await midShow();
   await phone.waitForTimeout(Math.max(0, at(SHOW.flyStart + lines.length * SHOW.flyStep + SHOW.flight + 0.3) - Date.now()));
   const onward = phone.locator('[data-phase=production]').getByRole('button', { name: 'On to the auction' });
-  check(Date.now() < endsAt - 1_000 && (await onward.isEnabled()), 'HC-6: "On to the auction" is there while production still runs');
+  check(await onward.isEnabled(), 'HC-6: "On to the auction" is there while the phone shows production');
+  const before = watch.phone.sent().length;
   await onward.click();
-  await phone.locator('[data-phase=auction]').waitFor({ timeout: Math.max(1, endsAt - Date.now()) });
-  check(Date.now() < endsAt, 'HC-6: "On to the auction" ended production before its clock');
+  // That it ends production early is proven by the server's T-AC-6, with a fake clock; here the page only has to send the message.
+  const sentReady = () => watch.phone.sent().slice(before).some((m) => JSON.stringify(m) === READY);
+  for (let i = 0; i < HANG_MS / 50 && !sentReady(); i++) await phone.waitForTimeout(50);
+  check(sentReady(), 'HC-6: pressing "On to the auction" sends the ready message');
+  await phone.locator('[data-phase=auction]').waitFor({ timeout: HANG_MS });
   return checkTheShow(watch);
 }
 

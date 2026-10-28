@@ -195,15 +195,15 @@ describe('AI seats at the land auction', () => {
       }
     }
     // Two long ticks, then a short one: a leader that stood through a long tick may finish its walk on the short one.
-    for (const seed of SEEDS)
-      for (const money of [SHORT, {}, flushMoney()]) {
-        const { state, hands } = landAuction(seed, { money, keepBack: money === SHORT });
-        for (const s of play(state, hands, [300, 300, 37]).samples) expect(s.price, `seed ${seed}, ${s.id} on ${s.lot.id}`).toBeLessThanOrEqual(Math.max(s.limit, s.lo));
-      }
+    // The short table only: its limits are the ones in reach, and the long-tick rows below cover the rest.
+    for (const seed of SEEDS) {
+      const { state, hands } = landAuction(seed, { money: SHORT, keepBack: true, bare: ['a3'], glut: true });
+      for (const s of play(state, hands, [300, 300, 37]).samples) expect(s.price, `seed ${seed}, ${s.id} on ${s.lot.id}`).toBeLessThanOrEqual(Math.max(s.limit, s.lo));
+    }
     expect(reserveCapped, 'in some short run an AI bid a plot up to money − reserve').toBeGreaterThan(0);
     expect(roomCapped, 'in some short run an AI bid a plot up to plotRoom').toBeGreaterThan(0);
     expect(valueCapped, 'in every flush run some AI bid a MULE up to its value').toBe(SEEDS.length);
-    // It replays thirty auctions tick by tick: half a second here, but over the 5 s default on CI's shared runner while every package's suite runs at once.
+    // It replays eighteen auctions tick by tick: well under a second here, but over the 5 s default on CI's shared runner while every package's suite runs at once.
   }, 30_000);
 
   it('B-AC-7: an AI whose money − reserve is under the minimum never moves, and presses Done', () => {
