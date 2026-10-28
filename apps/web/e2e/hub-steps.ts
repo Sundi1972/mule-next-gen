@@ -167,7 +167,10 @@ export async function hostContinuesWithout({ host, ready, left, tv, server, code
   const phones = [host, ready, left];
   const shots = process.env.MULE_SHOTS;
   const shot = async (page: Page, name: string) => {
-    if (shots) await page.screenshot({ path: join(shots, `b-ac-19-${name}.png`) });
+    if (!shots) return;
+    const now = page.locator('[data-phase=planning] [data-testid=now]');
+    if (await now.count()) await now.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: join(shots, `b-ac-19-${name}.png`) });
   };
   if (shots) await Promise.all([...phones.map((p) => p.page), tv].map((page) => page.getByRole('button', { name: 'Night', exact: true }).first().click({ timeout })));
 
