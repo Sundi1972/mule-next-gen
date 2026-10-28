@@ -317,6 +317,7 @@ Code-only; no existing state to reach. The record starts with WS3's build.
 | T-AC-A6 | Strategy and playbook calls send adaptive thinking with BRAIN's model and effort for their kind; move calls keep thinking off and Haiku. | the SDK request a fake records | a move call with thinking → red | C3 |
 | T-AC-A7 | The manual is rendered from the descriptors and config only: changing one config number (GAME.plotScore) changes the manual's text; the default config's manual is byte-identical run to run; every AiAction appears in it. | manual text | a move missing from the descriptors → WS1's coverage test red | C8 |
 | T-AC-A8 | RULE-A4 rows 1-5: at most BRAIN.toolRounds + 1 round trips; a share that runs out mid-loop stops it; a throwing handler answers is_error and the loop goes on; every round trip has its ledger line. | the fake SDK's requests, ledger lines | a handler's error text in a request → red | C9 C6 |
+| T-AC-A10 (G-A "check it against what happened") | The brief for the next phase carries this seat's last PhaseOutcome items (path, expected, actual) and the rivals' public trades and claims from it; a seat with no outcome yet gets none. | brief text | another seat's outcome items in this seat's brief → red | C1 |
 | T-AC-A9 (HC-3) | No tool result carries another seat's goods or unanalysed ground; whatIf leaves the live game state unchanged. | tool results; state before and after | a rival's stock in worth's answer → red | C9 |
 
 ## §7 · Risks & Spikes `[review-only]`
@@ -363,6 +364,8 @@ Code-only; no existing state to reach. The record starts with WS3's build.
   BRAIN; the capability-first re-run rule → C3, §7. The spike's cause codes → C2.
 - **AM-A6 · 29 Oct · lead:** C4's seam renamed playbooks.ts (no clash with packages/ai's strategist.ts); C3 promotes
   the S-A1 port instead of a second client. Cost note for §0 (held): C8 and C9 add about 2 PRs, so about 5 in all.
+- **AM-A7 · 29 Oct · lead, at plan time:** G-A's "check it against what happened" had no AC; T-AC-A10 (the last
+  PhaseOutcome reaches the next brief) added → C1.
 
 ## §9 · Ownership Boundaries `[handoff]`
 - Sole owner of Claude's brief, writer and their prompts: `packages/ai/src/llm/` (WS2). The playbook schema and its
