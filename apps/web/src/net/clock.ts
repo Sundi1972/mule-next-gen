@@ -8,8 +8,22 @@ export const CLOCK_JUMP_MS = 1_000;
  */
 export class ClockSync {
   private samples: { rtt: number; offset: number }[] = [];
+  /** The device clock minus the monotonic clock at the last sample. */
+  private skew: number | null = null;
 
   constructor(private readonly keep = 8) {}
+
+  /**
+   * Notes both clocks as a sample arrives, before `add`. If the device clock moved more than CLOCK_JUMP_MS apart from
+   * the monotonic clock since the last sample (sleep, a manual change), drops the samples so far and returns true.
+   */
+  jumped(localNow: number, monotonicNow: number): boolean {
+    const skew = localNow - monotonicNow;
+    const jumped = this.skew !== null && Math.abs(skew - this.skew) > CLOCK_JUMP_MS;
+    if (jumped) this.samples = [];
+    this.skew = skew;
+    return jumped;
+  }
 
   /** Records one round trip: when the ping left, the server's time in the pong, and when the pong arrived. */
   add(sentAt: number, serverTime: number, receivedAt: number): void {
