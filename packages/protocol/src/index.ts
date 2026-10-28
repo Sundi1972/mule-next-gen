@@ -79,6 +79,11 @@ export interface PlayerView {
    * change since last month is the number shown now against the number shown then. Null in month 1.
    */
   lastWorth: number | null;
+  /**
+   * While the air is in Collapse, this player's Worth before the cut (scoreParts' total plus its cut: money + goods +
+   * land + muleValue + office, rounded as scoreParts rounds); null outside Collapse. Public like `worth`, a total only.
+   */
+  worthBeforeCut: number | null;
   plots: number;
   ready: boolean;
   /** True once they went to the pub this development phase. */
