@@ -94,6 +94,8 @@ export interface Player {
   reputation: number;
   /** Plots claimed in the current land grant. */
   claimsThisGrant: number;
+  /** The player pressed Done in the current land grant ("Done with land"): they claim no more this month. */
+  doneWithLand: boolean;
   /** True when the player started development short of Food: less time to build. */
   hungry: boolean;
   /** Seconds of development time this month, set when development starts. */

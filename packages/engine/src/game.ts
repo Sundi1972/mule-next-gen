@@ -49,6 +49,7 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
         carriedMule: null,
         reputation: START.reputation,
         claimsThisGrant: 0,
+        doneWithLand: false,
         hungry: false,
         devSeconds: DEVELOPMENT.fullSeconds,
         sick: false,
@@ -156,13 +157,19 @@ export function advanceGrant(state: GameState): Tile | null {
 }
 
 /**
- * The grant ends when every player has used their claims, no free land is
- * left, or the light has swept the free plots GAME.grantSweeps times: a
- * player who doesn't want land must not hold the table up.
+ * The grant ends when every player has used their claims or pressed Done, no
+ * free land is left, or the light has passed every free plot (GAME.grantSweeps
+ * passes): a player who doesn't want land must not hold the table up.
  */
 export function grantDone(state: GameState): boolean {
   if (freePlots(state).length === 0 || (state.grant?.sweep ?? 0) >= GAME.grantSweeps) return true;
-  return state.players.every((p) => p.claimsThisGrant >= GAME.claimsPerGrant);
+  return state.players.every((p) => p.claimsThisGrant >= GAME.claimsPerGrant || p.doneWithLand);
+}
+
+/** Done with land: the player claims no more in this grant. Pressing it again changes nothing. */
+export function grantPass(state: GameState, playerId: string): void {
+  requirePhase(state, 'landGrant');
+  player(state, playerId).doneWithLand = true;
 }
 
 const LARGEST_MAP = mapSize(GAME.maxPlayers);
@@ -178,6 +185,7 @@ export function claimPlot(state: GameState, playerId: string, x: number, y: numb
   requirePhase(state, 'landGrant');
   const p = player(state, playerId);
   if (p.claimsThisGrant >= GAME.claimsPerGrant) throw new RuleError('No claims left this month');
+  if (p.doneWithLand) throw new RuleError('You are done with land this month');
   const tile = plotAt(state, x, y);
   if (tile.owner) throw new RuleError('Plot already taken');
   if (litPlot(state) !== tile) throw new RuleError('That plot is not lit');
@@ -335,6 +343,7 @@ export function advancePhase(state: GameState): void {
   if (next === 'landGrant') {
     for (const p of state.players) {
       p.claimsThisGrant = 0;
+      p.doneWithLand = false;
       // Drone results arrive in time to pick.
       for (const i of p.droneOrder) if (!p.analysed.includes(i)) p.analysed.push(i);
       p.droneOrder = [];

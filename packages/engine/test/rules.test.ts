@@ -12,6 +12,7 @@ import {
   factoryFit,
   fitFilter,
   grantDone,
+  grantPass,
   litPlot,
   mulePrice,
   mulePriceFor,
@@ -103,6 +104,24 @@ describe('species perks', () => {
 });
 
 describe('land grant', () => {
+  it('Done with land: grantPass marks the player done, twice changes nothing, and is refused outside the grant', () => {
+    const state = newGame();
+    expect(() => grantPass(state, 'p0')).toThrow(RuleError);
+    toPhase(state, 'landGrant');
+    for (const p of state.players.slice(1)) grantPass(state, p.id);
+    expect(grantDone(state), 'p0 has claims left and is not done').toBe(false);
+    grantPass(state, 'p0');
+    grantPass(state, 'p0');
+    expect(state.players.map((p) => p.doneWithLand)).toEqual([true, true, true, true]);
+    expect(grantDone(state)).toBe(true);
+    const lit = litPlot(state)!;
+    expect(() => claimPlot(state, 'p0', lit.x, lit.y), 'done means no more claims this month').toThrow(RuleError);
+    toPhase(state, 'development');
+    expect(() => grantPass(state, 'p0')).toThrow(RuleError);
+    toPhase(state, 'landGrant');
+    expect(state.players.every((p) => !p.doneWithLand), 'the next grant starts with nobody done').toBe(true);
+  });
+
   it('INV-grant-lit: free plots light one at a time and only the lit plot can be claimed', () => {
     const a = newGame();
     const b = newGame();
