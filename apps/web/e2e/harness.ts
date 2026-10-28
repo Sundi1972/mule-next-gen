@@ -2,7 +2,8 @@ import { existsSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { GAME } from '@mule/engine';
-import { chromium, errors as playwrightErrors, type Browser, type Page } from 'playwright';
+import { chromium, errors as playwrightErrors, type Browser, type Locator, type Page } from 'playwright';
+import QRCode from 'qrcode';
 import { GRANT_TICK_MS } from '../../server/src/mule-game.js';
 import { createMuleServer, type MuleServer } from '../../server/src/server.js';
 
@@ -110,4 +111,65 @@ export async function claimAPlot(phone: Page, timeoutMs: number, promise: string
       if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
     }
   }
+}
+
+/** How long a check waits for a screen to show what it looks for. */
+export const SHOWN_MS = 5_000;
+export const MOVED = "You're playing on another device now";
+export const EXPIRED = 'That link has expired';
+
+export function shows(locator: Locator): Promise<boolean> {
+  return locator.waitFor({ timeout: SHOWN_MS }).then(
+    () => true,
+    () => false,
+  );
+}
+
+export function gone(locator: Locator): Promise<boolean> {
+  return locator.waitFor({ state: 'detached', timeout: SHOWN_MS }).then(
+    () => true,
+    () => false,
+  );
+}
+
+/** The colour slot a page plays in, from the mark on its game shell's header; fails under `tag` without one. */
+export async function headerSlot(page: Page, tag: string): Promise<number> {
+  const mark = page.getByTestId('guide').locator('header [role=img][data-slot]').first();
+  const raw = await mark.getAttribute('data-slot', { timeout: SHOWN_MS }).catch(() => null);
+  const slot = Number.parseInt(raw ?? '', 10);
+  check(Number.isInteger(slot), `${tag}: the phone's header names its colour slot, got ${raw}`);
+  return slot;
+}
+
+/** The start screen: the name field, and no table. */
+export async function onStartScreen(page: Page): Promise<boolean> {
+  return (await shows(page.getByPlaceholder('Heiko'))) && (await page.getByText("You're at the table").count()) === 0;
+}
+
+/** The link a move dialog's QR carries. The drawn cells must encode exactly that text, so a scan opens it. */
+export async function qrLink(dialog: Locator, tag: string): Promise<string> {
+  const qr = dialog.locator('svg[data-text]').filter({ visible: true });
+  check(await shows(qr), `${tag}: the dialog shows a QR`);
+  const text = (await qr.getAttribute('data-text')) ?? '';
+  const drawn = await qr.evaluate((svg) => Array.from(svg.querySelectorAll('rect'), (r) => `${r.getAttribute('x')},${r.getAttribute('y')}`).join(' '));
+  const { modules } = QRCode.create(text, { errorCorrectionLevel: 'M' });
+  const encoded = Array.from(modules.data, (on, i) => (on ? `${i % modules.size},${Math.floor(i / modules.size)}` : ''))
+    .filter(Boolean)
+    .join(' ');
+  check(text !== '' && drawn === encoded, `${tag}: the QR draws its link "${text}"`);
+  return text;
+}
+
+/** The seat token this device keeps for itself. */
+export function seatToken(page: Page): Promise<string> {
+  return page.evaluate(() => (JSON.parse(localStorage.getItem('mule-seat') ?? '{}') as { token?: string }).token ?? '');
+}
+
+/** The move link names the room and a one-time code, never the device's own seat token. */
+export function checkLink(link: string, code: string, token: string, who: string, tag: string): void {
+  const url = new URL(link);
+  check([...url.searchParams.keys()].sort().join(',') === 'handoff,room', `${tag}: ${who}'s link carries only room and handoff, got ${url.search}`);
+  check(url.searchParams.get('room') === code, `${tag}: ${who}'s link names room ${code}, got ${url.search}`);
+  const handoff = url.searchParams.get('handoff') ?? '';
+  check(token !== '' && handoff !== '' && handoff !== token && !link.includes(token), `${tag}: ${who}'s link carries a handoff code, not the seat token`);
 }
