@@ -6,8 +6,10 @@ export type DevPlace = number | 'store' | 'corral';
 
 /**
  * Seconds a colonist takes to walk from one place to another in development: a step per map tile, never diagonally,
- * plus the walk across the store floor when it ends at the corral. A Zipwing walks faster. The server and the sim
- * both charge this, so walking is one rule; neither keeps its own.
+ * plus the walk across the store floor when it ends at the corral (once a visit; leaving the corral costs only the
+ * steps). A Zipwing walks faster. The seconds are development seconds, unscaled, like Player.devSeconds: a table that
+ * runs its clock faster scales them as it scales the turn. The server and the sim both charge this, so walking is one
+ * rule; neither keeps its own.
  */
 export function walkSeconds(state: GameState, id: string, from: DevPlace, to: DevPlace): number {
   const store = state.tiles.find((t) => t.terrain === 'store')!;
