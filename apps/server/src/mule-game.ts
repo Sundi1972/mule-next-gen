@@ -575,7 +575,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       this.scheduleLandAuctionTick(this.ctx.now());
       return;
     }
-    // In an election month the election runs first, on its own clocks; planning's timer starts once it is over.
+    // In an election month the election runs first, on its own clocks; planning proper opens once it is over.
     if (this.electionOpen()) {
       this.phaseEndsAt = null;
       this.scheduleElectionTick(this.ctx.now());
@@ -629,7 +629,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /**
    * Steps the election every WALK.tickMs until it is over: the AI vote hands act
    * first, then dropped phones count as Done and the election steps, all with the
-   * same dt. When it ends, planning's timer and planning proper start.
+   * same dt. When it ends, planning proper opens, timed only when PHASES.planningMs is a number.
    */
   private scheduleElectionTick(last: number): void {
     const state = this.requireState();

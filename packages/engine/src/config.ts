@@ -723,10 +723,10 @@ export const LOTS = {
 };
 
 /**
- * The longest each timed phase lasts, in milliseconds at phaseScale 1. Phases also end early: when every
- * connected player is ready, the land grant when the claims are used, development when everyone is out of
- * time or at the pub. The goods auction and the land auction have no fixed length; they run on WALK's and
- * LOTS' clocks.
+ * The longest each timed phase lasts, in milliseconds at phaseScale 1. Planning waits for every human's Ready,
+ * a dropped phone's too, unless the host continues. Other phases also end early: when every connected player is
+ * ready, the land grant when the claims are used, development when everyone is out of time or at the pub. The
+ * goods auction and the land auction have no fixed length; they run on WALK's and LOTS' clocks.
  */
 export const PHASES = {
   /**
