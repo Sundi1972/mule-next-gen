@@ -697,6 +697,12 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-6 (2026-10-29, PM ruling).** AM-3's month-1 clock does not wait for the arcade switch: Heiko approved it for
+  the game now. It is a clock rule in mule-game.ts, not the tick, so it applies with `DEV_STEER.on` false, on
+  today's walk. It is built as its own small WS3 PR in the audit build split, after WS1 measures month 1's
+  development time on today's walk with the existing sim (AI-only, and with one idle human plus the host's
+  Continue). The arcade tick inherits it; T-AC-9's month-1 case pins that. C7 is also frozen first, as a types-only
+  PR (the plan's PR-0), so the screens build in parallel with the engine and the server.
 - **AM-4 (2026-10-29, the PM's owner ruling).** WS1 is the new sole owner of floor/** with the config blocks, the AI
   hands, play/sim, dev-walk.ts's removal and the play-walk/balance tests. WS3: game.ts as its own edit, dev-steer.ts,
   the mule-game.ts tick, dev-walking.ts's removal, the protocol, the server tests with fake-context, goToThePub. WS4:
@@ -726,7 +732,7 @@ inside a wall; money and stock change only through game.ts rules; development en
   seat's first MULE is installed; the host's Continue (the approved planning pattern: host only, one confirming tap,
   a news line naming who was passed) starts it past anyone not in, and an away seat counts as in. HC-3 carries the
   exception; the tick, the moments and the AI run while the clock waits. The TV shows whose first MULE is still to
-  come (the audit mock #audit-dev-first-month, V-8). `DEV_STEER.month1WaitsForFirstMule` (true). It lengthens month
+  come (the audit mock #audit-dev-first-month, V-8). `DEV_STEER.month1WaitsForFirstMule` (true; AM-6 puts it in force now, on today's walk). It lengthens month
   1's development, so **WS1's sim measures month 1's time first** (median and max over 40 games, AI-only and with
   one human left idle and the host's Continue). C6's clock and checkDevelopmentOver carry it (WS3); T-AC-9 gains a
   month-1 case: one seat away, the clock still starts once the others are in.

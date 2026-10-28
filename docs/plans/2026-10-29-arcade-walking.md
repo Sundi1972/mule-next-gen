@@ -17,7 +17,9 @@
 server, protocol and tabletop → AI and sim → screens → moments → switch → removal), and five lanes own the layers
 G-1 crosses. Each of PR-1 to PR-5 unblocks at least two later PRs (the table below), and nobody can play G-1 before
 the screens PR in any order, because the phone is the beneficiary's only window. The moments wait until G-1 and G-2
-are playable, so value is not held back by G-3. G-1's goal check is at PR-6's boundary (Task 6.8).
+are playable, so value is not held back by G-3. G-1's goal check is at PR-6's boundary (Task 6.8). The PM confirmed the
+one-owner PRs (29 Oct) with one change: they **build in parallel** against PR-0's frozen types, so G-1 is built
+alongside PR-1 to PR-5 and only its merge waits for them (the build/merge table below).
 
 **Non-goals (spec §0), lifted verbatim. A task serving one is cut:**
 - the Wampus; a MULE running away on its own (it only bolts after a lost fight); colonists colliding; walking in
@@ -52,8 +54,8 @@ colonist with the same step; the AI and the sim feed it the same inputs. Branch 
 
 - **Frozen in PR-1:** `DevFloor`, `stepFloor`, `reachOf`, `pathTo`, the hall plan, the config blocks (spec §3, C1, C2,
   C3, C5). Every later PR consumes them.
-- **Frozen in PR-3:** `MuleIntent` steer/act, `ColonistView` v2, `MyView.reach`/`banners`, `DevFrame` (spec §3, C7).
-  PR-4, PR-6 and the moments wave consume them.
+- **Frozen in PR-0 (types only, WS3, first):** `MuleIntent` steer/act, `ColonistView` v2, `MyView.reach`/`banners`,
+  `DevFrame` (spec §3, C7), as #164 froze the playbook. PR-3, PR-4, PR-6 and the moments wave build against it.
 - **Frozen in PR-2:** the tabletop frame message and the `ctx` output it rides (C8). Its shape waits on WS3's answer
   on `ctx.frame` and on S-1.
 
@@ -94,12 +96,13 @@ flag keeps trunk releasable after every PR (§5).
 
 | PR | Owner | Sub-branch | Scope (changes) | ACs verified | Contracts produced | Contracts consumed | Frontend? |
 |----|-------|------------|-----------------|--------------|--------------------|--------------------|-----------|
+| PR-0 | WS3 | `ws3-arcade-types` | C7 (types only) | C7's pin (every protocol consumer typechecks) | MuleIntent steer/act, ColonistView v2, MyView.reach, DevFrame | — | No |
 | PR-1 | WS1 | `ws1-arcade-floor` | C5, C1, C2 (engine), C3 (rows 5–14), path.ts, §9 boundary test | T-AC-1 (engine), T-AC-2, T-AC-3 | DevFloor, stepFloor, reachOf, pathTo, hall plan, config | — | No |
 | PR-2 | WS4 | `ws4-arcade-frame` | C8 | T-AC-4 (tabletop part) | the frame message | S-1, WS3's answer | No |
-| PR-3 | WS3 | `ws3-arcade-tick` | C7, C6, AM-3's clock, C15 (fake-context `steerTo`) | T-AC-1 (server), T-AC-4, T-AC-9 | MuleIntent steer/act, ColonistView v2, MyView.reach, DevFrame | PR-1, PR-2 | No |
-| PR-4 | WS1 | `ws1-arcade-ai` | C9, C10, AM-3's sim measurement | T-AC-1 (server = sim), T-AC-5 | — | PR-1, PR-3 | No |
+| PR-3 | WS3 | `ws3-arcade-tick` | C6, C15 (fake-context `steerTo`) | T-AC-1 (server), T-AC-4, T-AC-9 | — | PR-0, PR-1, PR-2 | No |
+| PR-4 | WS1 | `ws1-arcade-ai` | C9, C10 | T-AC-1 (server = sim), T-AC-5 | — | PR-0, PR-1, PR-3 | No |
 | PR-5 | WS4 | `ws4-arcade-hall` | C2 (Store.tsx), C15 (harness.ts steering step) | — (consumed by B-AC-1) | the e2e steering step | PR-1, PR-3; after WS4's small-phone PR | Yes (no behaviour change behind the flag) |
-| PR-6 | WS6 | `ws6-arcade-screens` | C11, C12, C13, the PhoneApp/TableApp route lines | B-AC-1, B-AC-2, B-AC-3, B-AC-4, B-AC-8, T-AC-10 | — | PR-3, PR-5, S-2 | Yes |
+| PR-6 | WS6 | `ws6-arcade-screens` | C11, C12, C13, the PhoneApp/TableApp route lines | B-AC-1, B-AC-2, B-AC-3, B-AC-4, B-AC-8, T-AC-10 | — | PR-0 (builds); PR-3, PR-5 (merges); S-2 | Yes |
 | PR-7 | WS3 | `ws3-arcade-payouts` | C4 (game.ts payouts), AM-2 (take, re-outfit) | — (consumed by PR-8) | the payout and re-outfit rules | PR-1 | No |
 | PR-8 | WS1 | `ws1-arcade-moments` | C4 (floor moments), C3 (rows 1–4, 8a, 11a), C9 (the AI in the moments), AM-2's sweep | T-AC-6, T-AC-7, T-AC-8 | the moments' step outputs (beats, encounters) | PR-4, PR-7 | No |
 | PR-9 | WS6 | `ws6-arcade-moments` | C11 and C12 (the moments' layers), C13 | B-AC-5, B-AC-6, B-AC-7 | — | PR-6, PR-8 | Yes |
@@ -107,15 +110,38 @@ flag keeps trunk releasable after every PR (§5).
 | PR-11 | WS1 | `ws1-arcade-switch` | the switch (§5): `DEV_STEER.on = true` | UBER-AC-1, UBER-AC-2, UBER-AC-3 on the rig | — | PR-1 … PR-10 | Yes |
 | PR-12 | WS6, with WS1, WS3 | `ws6-arcade-removal` | C14 | the C14 pins stay green | ColonistView v2 only (v1 fields removed) | PR-11 | Yes |
 
-Each of PR-1 to PR-5 unblocks two or more later PRs: PR-1 → PR-3, PR-4, PR-7; PR-2 → PR-3, PR-6; PR-3 → PR-4,
-PR-6, PR-10; PR-4 → PR-8, PR-11; PR-5 → PR-6, PR-10.
+PR-0 unblocks every PR that reads the wire. Each of PR-1 to PR-5 unblocks two or more later PRs: PR-1 → PR-3,
+PR-4, PR-7; PR-2 → PR-3, PR-6; PR-3 → PR-4, PR-6, PR-10; PR-4 → PR-8, PR-11; PR-5 → PR-6, PR-10.
 
-**Waves:**
+**Build in parallel, merge in order** (PM ruling, 29 Oct). Building means coding and reviewing on the sub-branch
+against frozen contracts and fixtures; merging is into trunk, in the order of the PR numbers.
+
+| PR | may start building when | may merge after |
+|----|-------------------------|-----------------|
+| PR-0 | now | — (first) |
+| PR-1 | now | PR-0 |
+| PR-2 | S-1 recorded and WS3's ctx.frame answer | PR-1 |
+| PR-3 | PR-0 merged (builds against PR-1's branch) | PR-1, PR-2 |
+| PR-4 | PR-0 merged (builds against PR-1's and PR-3's branches) | PR-3 |
+| PR-5 | WS4's small-phone PR merged | PR-4 |
+| PR-6 | PR-0 merged: against PR-0's types and fixture frames, then S-2's values for the prediction (Task 6.2) | PR-3, PR-5 |
+| PR-7 | now | PR-6 |
+| PR-8 | PR-4's and PR-7's branches | PR-7 |
+| PR-9 | PR-6's and PR-8's branches | PR-8 |
+| PR-10 | PR-5 (WS4 first), then each owner | PR-9 |
+| PR-11 | PR-10 merged | Heiko's OK on the rig |
+| PR-12 | PR-11 merged | PR-11 |
+
+A PR built against another's branch rebases onto trunk when that one merges, and re-runs its gates there; a red run
+after the rebase is that PR's to fix before it merges. G-1 is therefore built in parallel with PR-1 to PR-5, and only
+its merge waits for them.
+
+**Waves (by merge):**
+- **Wave 0: PR-0.** One PR, types only.
 - **Wave 1: PR-1, PR-2, S-1, S-2.** Safe together: disjoint owned files (engine floor/config; tabletop; spikes on
   their own servers).
-- **Wave 2: PR-3, then PR-4.** PR-4 consumes PR-3's contracts (T-AC-1's server = sim), so they are serialised.
-- **Wave 3: PR-5, then PR-6;** PR-7 runs alongside PR-5 and PR-6. Safe: PR-7 touches only game.ts, which no
-  screen PR touches.
+- **Wave 2: PR-3, then PR-4.** PR-4 consumes PR-3's server (T-AC-1's server = sim), so they merge in that order.
+- **Wave 3: PR-5, then PR-6;** PR-7 builds alongside. Safe: PR-7 touches only game.ts, which no screen PR touches.
 - **Wave 4: PR-8, then PR-9.**
 - **Wave 5: PR-10,** WS4's part first (`harness.ts` is shared), then the others at once (disjoint files).
 - **Wave 6: PR-11** on Heiko's OK; **PR-12** after it.
@@ -131,9 +157,10 @@ The standing line, verbatim, in every handoff:
 
 | PR | may_edit | may_edit_content | must_not_edit |
 |----|----------|------------------|---------------|
+| PR-0 | `packages/protocol/src/index.ts` (types only; no runtime code) | — | `apps/server/**`, `apps/web/**` |
 | PR-1 | `packages/engine/src/floor/**` (new), `packages/engine/src/config.ts` (the four blocks), `packages/engine/src/index.ts` (exports), `packages/engine/test/floor*.test.ts` (new) | — | `packages/engine/src/game.ts` (WS3's; PR-7), `dev-walk.ts` (stays until PR-12) |
 | PR-2 | `packages/tabletop/src/room.ts`, `packages/tabletop/src/protocol.ts`, `packages/tabletop/test/**` | — | `apps/server/**` (PR-3) |
-| PR-3 | `packages/protocol/src/index.ts`, `apps/server/src/dev-steer.ts` (new), `apps/server/src/mule-game.ts` (development), `apps/server/test/fake-context.ts`, `apps/server/test/dev-steer*.test.ts` (new) | — | `packages/engine/src/floor/**` (WS1's), `apps/server/src/dev-walking.ts` (stays until PR-12), `apps/web/**` |
+| PR-3 | `apps/server/src/dev-steer.ts` (new), `apps/server/src/mule-game.ts` (development), `apps/server/test/fake-context.ts`, `apps/server/test/dev-steer*.test.ts` (new) | — | `packages/engine/src/floor/**` (WS1's), `apps/server/src/dev-walking.ts` (stays until PR-12), `apps/web/**` |
 | PR-4 | `packages/ai/src/hands/develop.ts`, `packages/ai/src/seat.ts`, `packages/ai/src/strategist.ts`, `packages/ai/src/value.ts`, `packages/ai/src/play.ts`, `packages/ai/src/sim.ts`, `packages/ai/test/**` (new arcade tests) | — | `apps/server/**`, `packages/engine/src/floor/**` except through a WS1 follow-up commit named in the PR |
 | PR-5 | `packages/ui/src/components/Store.tsx` (WS4's own), `apps/web/e2e/harness.ts` | — | `apps/web/src/phone/**`, `apps/web/src/table/**` (PR-6) |
 | PR-6 | `apps/web/src/phone/arcade/**` (new), `apps/web/src/table/TvDevelop.tsx` (new), new `packages/ui` pieces (map overlay, Joystick, ActionButton), `apps/web/e2e/screens.ts`, `apps/web/e2e/shell.ts`, `apps/web/e2e/store-steps.ts` (the B-AC steps), `apps/web/test/arcade*.test.ts` (new); named edits, WS4 reviewing: the development route line in `apps/web/src/phone/PhoneApp.tsx` and in `apps/web/src/table/TableApp.tsx` | `design/mocks/ws6-ux/src/screens/arcade/**` at ceedd23f, grafted: data flow, handlers, state wiring only; not composition, routes or tokens | `apps/web/src/phone/Develop.tsx` and `next-step.ts` (stay until PR-12), `Store.tsx` (WS4's) |
@@ -155,7 +182,7 @@ The standing line, verbatim, in every handoff:
 | `apps/web/e2e/store-steps.ts` | PR-6, PR-9, PR-10 (WS6) | **serialised**, one owner (WS6) |
 | `apps/web/e2e/harness.ts` | PR-5, PR-10 (WS4) | **serialised**, one owner (WS4) |
 | `packages/ui/src/components/Store.tsx` | WS4's small-phone PR, PR-5 | **serialised**: the size table first (PM ruling), then C2 |
-| `packages/protocol/src/index.ts` | PR-3, PR-12 | **serialised** |
+| `packages/protocol/src/index.ts` | PR-0, PR-12 | **serialised** |
 | `apps/server/src/mule-game.ts` | PR-3, PR-12 | **serialised** |
 | `packages/engine/src/game.ts` | PR-7 only | — |
 
@@ -274,16 +301,23 @@ C8, §3 (the frame message), HC-10
 - [ ] T-AC-4 (tabletop part) green and named; the tabletop tests unchanged and green
 - [ ] typecheck, test, CI green; WS3 reviewed; Heiko's OK via the PM
 
-## PR-3 · The server tick and the protocol (WS3)
+## PR-0 · The wire's types, frozen (WS3, first)
 
-### Task 3.1 — C7: the protocol
+### Task 0.1 — C7: the protocol, types only
 
-**Depends on:** PR-1 **Spec sections consumed:** §1 C7, §3 **Files:** Modify `packages/protocol/src/index.ts`.
+**Depends on:** — **Spec sections consumed:** §1 C7, §3 **Files:** Modify `packages/protocol/src/index.ts`.
 
-- [ ] **Step 1: Add steer/act to MuleIntent, ColonistView v2's fields beside v1's, MyView.reach and banners, and
-  DevFrame per spec §3.** v1's fields stay until PR-12.
+- [ ] **Step 1: Add steer/act to MuleIntent, ColonistView v2's fields beside v1's (optional, so today's server
+  sends none), MyView.reach and banners, and DevFrame per spec §3.** Types only; v1's fields stay until PR-12.
 - [ ] **Step 2: `pnpm typecheck`** (C7's pin: every protocol consumer typechecks). Expected: exit 0.
-- [ ] **Step 3: Commit** `feat(protocol): C7 steering in, positions out`.
+- [ ] **Step 3: Commit** `feat(protocol): C7 steering in, positions out (types only)`.
+
+### PR-0 merge gate
+
+- [ ] typecheck, test, CI green; no runtime change (the server suite unchanged); WS6 and WS1 reviewed the shapes
+  (the screens and the AI consume them); Heiko's OK via the PM
+
+## PR-3 · The server tick (WS3)
 
 ### Task 3.2 — C15 (server part): `steerTo` in the fake context
 
@@ -301,8 +335,8 @@ C8, §3 (the frame message), HC-10
 
 - [ ] **Step 1: Write the failing tests:**
   - `T-AC-9: a seat away for the whole turn, development still ends at devEndsAt; a phone flooding steers at 100/s,
-    the tick keeps its rate`, plus AM-3's month-1 case: one seat away, the clock starts once the others' first
-    MULEs are in, and the host's Continue starts it past a present seat not in.
+    the tick keeps its rate`, plus AM-3's month-1 case with the flag on: one seat away, the clock starts once the
+    others' first MULEs are in (the rule itself is the audit build's PR, AM-6; this case pins that the tick keeps it).
   - `T-AC-4: full views only on change` (no full view on a tick where nothing changed).
   - `T-AC-1: the server's floor after a scripted turn equals stepFloor's`.
   Altitude: the server (the promise is the server's state and its sends). Traps: drive time only through the fake
@@ -311,15 +345,15 @@ C8, §3 (the frame message), HC-10
 
 ### Task 3.4 — C6: the fixed tick, behind the flag
 
-**Depends on:** Tasks 3.1–3.3, PR-2 **Spec sections consumed:** §1 C6, §2 RULE-1, §4, HC-3, HC-5, HC-9, HC-10, AM-3
+**Depends on:** PR-0, Tasks 3.2–3.3, PR-2 **Spec sections consumed:** §1 C6, §2 RULE-1, §4, HC-3, HC-5, HC-9, HC-10
 
 **Files:** Create `apps/server/src/dev-steer.ts`; modify `apps/server/src/mule-game.ts` (startDevelopment, handle,
 the tick, checkDevelopmentOver).
 
 - [ ] **Step 1: Implement C6 per spec §1 C6 and RULE-1.** Mechanism: branch_by_abstraction (`DEV_STEER.on`). The
   tick runs only through `ctx.schedule` and reads only `ctx.now()` (HC-9); the frame leaves through PR-2's output
-  (HC-10); month 1's clock waits for the first MULEs when `month1WaitsForFirstMule` (AM-3, HC-3); the per-phase log
-  lines of §4.
+  (HC-10); month 1's clock rule (AM-3, already on trunk from the audit build's own PR, AM-6) holds with the tick
+  too; the per-phase log lines of §4.
 - [ ] **Step 2: Run the Task 3.3 tests.** Expected: PASS. Run the whole server suite at `DEV_STEER.on = false`:
   unchanged.
 - [ ] **Step 3: Commit** `feat(server): C6 development as a fixed tick, behind DEV_STEER.on (verifies T-AC-1, T-AC-4, T-AC-9)`.
@@ -363,14 +397,6 @@ the tick, checkDevelopmentOver).
 - [ ] **Step 2: Implement C10 per spec §1 C10** (the report lines of §4: installs, pub times).
 - [ ] **Step 3: Run T-AC-1 and T-AC-5.** Expected: PASS.
 - [ ] **Step 4: Commit** `feat(ai): C10 the sim plays the same floor (verifies T-AC-1, T-AC-5)`.
-
-### Task 4.4 — AM-3: month 1's development time, measured
-
-**Spec sections consumed:** AM-3, AM-5
-
-- [ ] **Step 1: Run `pnpm sim` with DEV_STEER.on, 40 games**, AI-only and with one human idle plus the host's
-  Continue; report month 1's development time (median, max) with `month1WaitsForFirstMule` on and off.
-- [ ] **Step 2: Send the PM the numbers for Heiko.** The flag stays as Heiko rules it.
 
 ### PR-4 merge gate
 
@@ -669,6 +695,8 @@ Every PR merges into trunk on its own, behind the flag. Heiko plays at PR-6 (G-1
 ## Pre-implementation checklist
 
 - [ ] Spec approved by Heiko ("Yes, build it", via the PM, 29 Oct); the owner ruling in AM-4
+- [ ] AM-3's month-1 clock built on today's walk by its own WS3 PR in the audit build split (AM-6), with WS1's sim
+      numbers first
 - [ ] WS3's answer on `ctx.frame`; S-1 and S-2 recorded
 - [ ] WS4's small-phone PR merged before PR-5 (one writer on Store.tsx)
 - [ ] Branch policy confirmed by the PM: each PR from trunk, into trunk, behind the flag
