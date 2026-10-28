@@ -256,7 +256,7 @@ function carveMoves(s: RepairState, rng: Rng, wanted: Set<ShareTerrain>, near?: 
   const moves: Move[] = [];
   if (wanted.size === 0) return moves;
   for (const p of patchesOf(grid, terrain)) {
-    if (p.length < 2 * MAP.minRegion) continue;
+    if (p.length < MAP.layout.carveFrom * MAP.minRegion) continue;
     const inPatch = new Set(p);
     const edge = p.filter((i) => grid.next[i]!.some((j) => !inPatch.has(j)) && (!near || grid.within[i]!.some((l) => near.has(l))));
     for (const start of rng.shuffle(edge).slice(0, MAP.layout.carveStarts)) {

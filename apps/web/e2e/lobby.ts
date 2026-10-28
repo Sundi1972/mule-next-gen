@@ -2,36 +2,25 @@
  * The phone lobby against the real server. B-AC-6: the host kicks a phone and an AI, a player leaves, and the host
  * closes the table. B-AC-7 (lobby): a player and the host each move their seat to another device with a one-time
  * link. Every removed phone lands on the start screen with the reason. B-AC-13: the "make your colonist" lobby at a
- * phone's and a laptop's size. B-AC-8: a picked colour follows the player into the game. B-AC-7 (in game): that
- * player then moves to another device mid-game. Run with
- * `pnpm --filter @mule/web e2e`.
+ * phone's and a laptop's size. B-AC-8 (lobby): a phone takes an AI's colour and the other phone is refused it; smoke.ts
+ * plays a picked colour into the game. Run with `pnpm --filter @mule/web e2e`.
  */
-import { POLITICS } from '@mule/engine';
 import { COLOUR_NAME, SPECIES, type Slot } from '@mule/ui';
-import QRCode from 'qrcode';
 import type { BrowserContextOptions, Locator, Page } from 'playwright';
-import { PHASE_MS } from '../../server/src/mule-game.js';
-import { check, claimAPlot, launch, PHONE, startServer, TV } from './harness';
+import { check, checkLink, EXPIRED, gone, launch, MOVED, onStartScreen, PHONE, qrLink, seatToken, shows, SHOWN_MS, startServer, TV } from './harness';
 
-const SHOWN_MS = 5_000;
 /** Longer than the client's first reconnect pause, so a phone that tried to come back would be seen. */
 const STAYS_GONE_MS = 1_500;
 /** Time for a message a cancelled confirm wrongly sent to come back as a change. */
 const CANCEL_SETTLE_MS = 500;
 const KICKED = 'The host removed you from the table';
 const CLOSED = 'The host closed the table';
-const MOVED = "You're playing on another device now";
-const EXPIRED = 'That link has expired';
 const LAPTOP: BrowserContextOptions = { viewport: { width: 1440, height: 900 } };
 /** The rail's width in the wide layout, which applies from a shell width of 1100 px (HC-8). */
 const WIDE_RAIL_PX = 400;
 const NARROWED_SHELL_PX = 1000;
 /** The hero's width in the wide layout; the phone layout's is far narrower. */
 const WIDE_HERO_PX = 360;
-const PHASE_SCALE = 0.1;
-const within = (ms: number) => ms * PHASE_SCALE + 3_000;
-/** A land auction, when the month has one, runs on its own clock: PHASE_MS has no entry for it. */
-const LAND_AUCTION_ALLOWANCE_MS = 20_000;
 /** Just past a move code's 2 minutes (RULE-6). */
 const PAST_HANDOFF_EXPIRY = '02:01';
 
@@ -44,8 +33,6 @@ const HOST_IDS = ['host-tools', 'host-to-phone', 'close-room', 'add-ai', 'start-
 
 const started = Date.now();
 const { server, base } = await startServer();
-// B-AC-8 plays on into the land grant, so its table runs a fast clock.
-const fast = await startServer({ phaseScale: PHASE_SCALE });
 const browser = await launch();
 const errors: string[] = [];
 /** Failed checks that need the room to take a colour (RULE-7): collected, so the checks after them still run. */
@@ -54,7 +41,7 @@ try {
   await kickLeaveAndClose();
   await colonistLobby(PHONE, '844x390', false);
   await colonistLobby(LAPTOP, '1440x900', true);
-  await colourIntoTheGame();
+  await colourInTheLobby();
   check(colourRoomReds.length === 0, `the room takes picked colours:\n  ${colourRoomReds.join('\n  ')}`);
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
   console.log(`e2e lobby: ok (${((Date.now() - started) / 1000).toFixed(1)} s)`);
@@ -66,7 +53,6 @@ try {
 } finally {
   await browser.close();
   await server.close();
-  await fast.server.close();
 }
 process.exit(0);
 
@@ -138,8 +124,8 @@ async function kickLeaveAndClose(): Promise<void> {
   const miaDialog = mia.getByRole('dialog', { name: 'Move to your phone' });
   check(await shows(miaDialog.locator('[data-testid=handoff-qr][data-state=ready]')), 'B-AC-7 (lobby): move-to-phone opens "Move to your phone" with a ready code');
   check(await shows(miaDialog.getByText('you, Mia', { exact: true })), 'B-AC-7 (lobby): the dialog says the phone becomes "you, Mia"');
-  const miaLink = await qrLink(miaDialog);
-  checkLink(miaLink, code, await seatToken(mia), 'Mia');
+  const miaLink = await qrLink(miaDialog, 'B-AC-7 (lobby)');
+  checkLink(miaLink, code, await seatToken(mia), 'Mia', 'B-AC-7 (lobby)');
   await miaDialog.getByRole('button', { name: 'Done' }).click();
   check(await gone(miaDialog), 'B-AC-7 (lobby): Done closes the dialog');
 
@@ -179,8 +165,8 @@ async function kickLeaveAndClose(): Promise<void> {
   const hostDialog = host.getByRole('dialog', { name: 'Move the host to your phone' });
   check(await shows(hostDialog.locator('[data-testid=handoff-qr][data-state=ready]')), 'B-AC-7 (lobby): host-to-phone opens "Move the host to your phone" with a ready code');
   check(await shows(hostDialog.getByText('you, Heiko, the host', { exact: true })), 'B-AC-7 (lobby): the dialog says the phone becomes "you, Heiko, the host"');
-  const hostLink = await qrLink(hostDialog);
-  checkLink(hostLink, code, await seatToken(host), 'the host');
+  const hostLink = await qrLink(hostDialog, 'B-AC-7 (lobby)');
+  checkLink(hostLink, code, await seatToken(host), 'the host', 'B-AC-7 (lobby)');
   const hostPhone = await phone('host-phone');
   await hostPhone.goto(hostLink);
   check(await shows(seat(hostPhone, 'Heiko (you)')), "B-AC-7 (lobby): the host's new device is Heiko");
@@ -298,7 +284,7 @@ async function colonistLobby(size: BrowserContextOptions, label: string, wide: b
   await moveLena.click();
   const moveDialog = lena.getByRole('dialog', { name: 'Move to your phone' });
   check(await shows(moveDialog.locator('[data-testid=handoff-qr][data-state=ready]')), `B-AC-13 (handoff, ${label}): moving to the phone opens a dialog named by its title, with a ready code`);
-  const firstLink = await qrLink(moveDialog);
+  const firstLink = await qrLink(moveDialog, `B-AC-13 (handoff, ${label})`);
   await lena.clock.fastForward(PAST_HANDOFF_EXPIRY);
   check(
     (await shows(moveDialog.locator('[data-testid=handoff-qr][data-state=expired]'))) && (await shows(moveDialog.getByText('This code has expired.'))),
@@ -308,7 +294,7 @@ async function colonistLobby(size: BrowserContextOptions, label: string, wide: b
   await lena.clock.setSystemTime(Date.now());
   await moveDialog.getByTestId('handoff-renew').click();
   check(await shows(moveDialog.locator('[data-testid=handoff-qr][data-state=ready]')), `B-AC-13 (handoff, ${label}): "New code" makes the code ready again`);
-  const renewed = await qrLink(moveDialog);
+  const renewed = await qrLink(moveDialog, `B-AC-13 (handoff, ${label})`);
   check(renewed !== firstLink, `B-AC-13 (handoff, ${label}): "New code" draws a different link, got ${renewed}`);
   await lena.keyboard.press('Escape');
   check(await gone(lena.getByTestId('host-dialog')), `B-AC-13 (handoff, ${label}): Escape closes the move dialog`);
@@ -333,14 +319,14 @@ async function colonistLobby(size: BrowserContextOptions, label: string, wide: b
   await heiko.context().close();
 }
 
-/** B-AC-8: two phones and an AI; phone 1 takes the AI's colour, phone 2 cannot, and the game draws phone 1 in it. */
-async function colourIntoTheGame(): Promise<void> {
+/** B-AC-8 (lobby): two phones and an AI; phone 1 takes the AI's colour, phone 2 cannot, and the TV lobby draws phone 1 in it. */
+async function colourInTheLobby(): Promise<void> {
   const heiko = await phone('heiko B-AC-8');
-  const code = await hostRoom(heiko, fast.base);
-  const mia = await joinRoom(await phone('mia B-AC-8'), fast.base, code, 'Mia');
+  const code = await hostRoom(heiko, base);
+  const mia = await joinRoom(await phone('mia B-AC-8'), base, code, 'Mia');
   const tv = await (await browser.newContext(TV)).newPage();
   tv.on('pageerror', (e) => errors.push(`tv B-AC-8: ${e.message}`));
-  await tv.goto(`${fast.base}/table?room=${code}`);
+  await tv.goto(`${base}/table?room=${code}`);
   // AIs fill colours 2..5; removing the first three leaves one AI on Rose, a colour no seat's position would give.
   for (let i = 0; i < 4; i++) await heiko.getByTestId('add-ai').click();
   await rail(heiko).nth(5).waitFor({ timeout: SHOWN_MS });
@@ -372,97 +358,14 @@ async function colourIntoTheGame(): Promise<void> {
 
   const inRose = `[data-slot="${rose}"]`;
   colourRoom(await shows(heikoOn(tv.locator('li')).locator(inRose)), `B-AC-8: the TV lobby draws Heiko's mark in ${COLOUR_NAME[rose]}`);
-
-  await heiko.getByTestId('start-game').click();
-  // Month 1 opens with the election, whose stages the server runs on the same phaseScale, so they belong inside within().
-  const election = POLITICS.nominateMs + POLITICS.ballotMs + POLITICS.revealMs;
-  // The TV is back on planning once the election is over: its news then carries the result, which the reveal screen doesn't draw.
-  await tv.locator('[data-phase=planning] [data-testid=tv-news]', { hasText: 'is Governor' }).waitFor({ timeout: within(election) });
-  const roster = heikoOn(tv.locator('[data-phase=planning] li, [data-phase=landGrant] li'));
-  colourRoom(await shows(roster.locator(inRose)), `B-AC-8: the TV's game roster draws Heiko in ${COLOUR_NAME[rose]}`);
-  const grant = heiko.locator('[data-phase=landGrant]');
-  await grant.waitFor({ timeout: within(PHASE_MS.planning + election) });
-  await claimAPlot(heiko, within(PHASE_MS.landGrant), 'B-AC-8: phone 1 claims a plot in the land grant');
-  const development = tv.locator('[data-phase=development]');
-  await development.waitFor({ timeout: within(PHASE_MS.landGrant + PHASE_MS.development) + LAND_AUCTION_ALLOWANCE_MS });
-  colourRoom(await shows(heikoOn(development.locator('li')).locator(inRose)), `B-AC-8: the TV's development roster draws Heiko in ${COLOUR_NAME[rose]}`);
-  colourRoom(await shows(development.locator(`[aria-label*="owned by"] ${inRose}`).first()), `B-AC-8: the TV map draws Heiko's plot in ${COLOUR_NAME[rose]}`);
-
-  // B-AC-13 (handoff, in game): the game shell's move dialog behaves like the lobby's. Opened once and cancelled.
-  const moveHeiko = heiko.getByTestId('move-to-phone');
-  check(await shows(moveHeiko), 'B-AC-13 (handoff, in game): the host\'s game shell has move-to-phone');
-  check(await shows(mia.getByTestId('move-to-phone')), 'B-AC-13 (handoff, in game): a player who is not the host has move-to-phone in her game shell too');
-  await moveHeiko.click();
-  const gameDialog = heiko.getByRole('dialog', { name: 'Move to your phone' });
-  check(await shows(gameDialog.locator('[data-testid=handoff-qr][data-state=ready]')), 'B-AC-13 (handoff, in game): move-to-phone opens "Move to your phone" with a ready code');
-  await heiko.keyboard.press('Escape');
-  check(await gone(heiko.getByTestId('host-dialog')), 'B-AC-13 (handoff, in game): Escape closes the move dialog');
-  check(await moveHeiko.evaluate((el) => el === document.activeElement), 'B-AC-13 (handoff, in game): focus goes back to move-to-phone');
-
-  // B-AC-7 (in game): Heiko moves to another device while the game runs on.
-  const was = await playingAs(heiko);
-  await moveHeiko.click();
-  check(await shows(gameDialog.getByText('you, Heiko', { exact: true })), 'B-AC-7 (in game): the dialog says the phone becomes "you, Heiko"');
-  const link = await qrLink(gameDialog, 'B-AC-7 (in game)');
-  checkLink(link, code, await seatToken(heiko), 'Heiko', 'B-AC-7 (in game)');
-  const second = await phone('heiko B-AC-7 second device');
-  await second.goto(link);
-  check(await shows(second.getByTestId('game-shell')), 'B-AC-7 (in game): the second device opens the link into the game');
-  check((await second.getByTestId('lobby').count()) === 0, 'B-AC-7 (in game): the second device is not in the lobby');
-  const is = await playingAs(second);
-  check(is.name === 'Heiko', `B-AC-7 (in game): the second device is Heiko, got "${is.name}"`);
-  check(is.mark === was.mark, `B-AC-7 (in game): the second device keeps Heiko's species, "${was.mark}", got "${is.mark}"`);
-  check(is.slot === String(rose), `B-AC-7 (in game): the second device keeps Heiko's ${COLOUR_NAME[rose]}, got slot ${is.slot}`);
-  check(is.money === was.money, `B-AC-7 (in game): the second device has Heiko's money, ${was.money}, got ${is.money}`);
-  check(await shows(tv.locator(`[aria-label*="owned by"] ${inRose}`).first()), `B-AC-7 (in game): the TV still draws Heiko's plot in ${COLOUR_NAME[rose]}`);
-  check(await shows(heiko.getByText(MOVED)), `B-AC-7 (in game): the first device shows "${MOVED}"`);
-  check(await onStartScreen(heiko), 'B-AC-7 (in game): the first device steps aside to the start screen');
-  const reused = await phone('heiko B-AC-7 reused link');
-  await reused.goto(link);
-  check(await shows(reused.getByTestId('removed-notice').getByText(EXPIRED)), `B-AC-7 (in game): the same link opened again shows "${EXPIRED}"`);
-  check(await onStartScreen(reused), 'B-AC-7 (in game): the used link stays on the start screen');
-  check(
-    (await shows(second.getByTestId('game-shell'))) && (await playingAs(second)).name === 'Heiko',
-    'B-AC-7 (in game): the used link does not move the seat: the second device is still Heiko in the game',
-  );
-  await reused.context().close();
-
-  // B-AC-13 (handoff, in game): the dialog and its code outlive a phase change, since the game doesn't pause.
-  const moveAgain = second.getByTestId('move-to-phone');
-  await moveAgain.click();
-  const lasting = second.getByRole('dialog', { name: 'Move to your phone' });
-  check(await shows(lasting.locator('[data-testid=handoff-qr][data-state=ready]')), 'B-AC-13 (handoff, in game): the moved device opens the move dialog with a ready code');
-  const before = await qrLink(lasting, 'B-AC-13 (handoff, in game)');
-  const phase = (await second.locator('[data-phase]').getAttribute('data-phase')) ?? '';
-  await second.locator(`[data-phase="${phase}"]`).waitFor({ state: 'detached', timeout: within(PHASE_MS.development) });
-  check(
-    (await shows(lasting.locator('[data-testid=handoff-qr][data-state=ready]'))) && (await qrLink(lasting, 'B-AC-13 (handoff, in game)')) === before,
-    `B-AC-13 (handoff, in game): after ${phase} gives way to ${await second.locator('[data-phase]').getAttribute('data-phase')}, the dialog is still open with the same ready code`,
-  );
-  await second.keyboard.press('Escape');
-  check(await gone(second.getByTestId('host-dialog')), 'B-AC-13 (handoff, in game): Escape closes the move dialog after the phase change');
-  check(await moveAgain.evaluate((el) => el === document.activeElement), "B-AC-13 (handoff, in game): focus goes back to the new phase's move-to-phone");
-  await second.context().close();
   await heiko.context().close();
   await mia.context().close();
   await tv.context().close();
 }
 
-/** Who this page plays as, from its game shell's header: name, species (the mark's label), colour (its slot) and money. */
-async function playingAs(page: Page): Promise<{ name: string; mark: string; slot: string; money: string }> {
-  const header = page.getByTestId('guide').locator('header');
-  const mark = header.locator('[role=img][data-slot]').first();
-  return {
-    name: ((await mark.locator('xpath=following-sibling::span[1]').textContent()) ?? '').trim(),
-    mark: (await mark.getAttribute('aria-label')) ?? '',
-    slot: (await mark.getAttribute('data-slot')) ?? '',
-    money: ((await page.getByTestId('money').textContent()) ?? '').trim(),
-  };
-}
-
-/** Heiko's row among these: the colour is read from `data-slot` on his PlayerMark. */
+/** Heiko's row among these rows that carry a mark: the colour is read from `data-slot` on his PlayerMark. */
 function heikoOn(rows: Locator): Locator {
-  return rows.filter({ hasText: 'Heiko' }).first();
+  return rows.filter({ has: rows.page().locator('[role=img][data-slot]'), hasText: 'Heiko' }).first();
 }
 
 function colourRoom(cond: boolean, message: string): void {
@@ -555,54 +458,7 @@ async function kick(host: Page, seatId: string): Promise<void> {
   await host.getByTestId('kick-confirm').click();
 }
 
-/** The start screen: the name field, and no table. */
-async function onStartScreen(page: Page): Promise<boolean> {
-  return (await shows(page.getByPlaceholder('Heiko'))) && (await page.getByText("You're at the table").count()) === 0;
-}
-
 /** The colour this page has picked for its seat, by the pressed colour chip. */
 function pressedColour(page: Page): Promise<string | null> {
   return page.getByTestId('colour-pick').locator('[aria-pressed=true]').getAttribute('data-testid');
-}
-
-/** The link a dialog's QR carries. The drawn cells must encode exactly that text, so a scan opens it. */
-async function qrLink(dialog: Locator, tag = 'B-AC-7 (lobby)'): Promise<string> {
-  const qr = dialog.locator('svg[data-text]').filter({ visible: true });
-  check(await shows(qr), `${tag}: the dialog shows a QR`);
-  const text = (await qr.getAttribute('data-text')) ?? '';
-  const drawn = await qr.evaluate((svg) => Array.from(svg.querySelectorAll('rect'), (r) => `${r.getAttribute('x')},${r.getAttribute('y')}`).join(' '));
-  const { modules } = QRCode.create(text, { errorCorrectionLevel: 'M' });
-  const encoded = Array.from(modules.data, (on, i) => (on ? `${i % modules.size},${Math.floor(i / modules.size)}` : ''))
-    .filter(Boolean)
-    .join(' ');
-  check(text !== '' && drawn === encoded, `${tag}: the QR draws its link "${text}"`);
-  return text;
-}
-
-/** The seat token this device keeps for itself. */
-function seatToken(page: Page): Promise<string> {
-  return page.evaluate(() => (JSON.parse(localStorage.getItem('mule-seat') ?? '{}') as { token?: string }).token ?? '');
-}
-
-/** The move link names the room and a one-time code, never the device's own seat token. */
-function checkLink(link: string, code: string, token: string, who: string, tag = 'B-AC-7 (lobby)'): void {
-  const url = new URL(link);
-  check([...url.searchParams.keys()].sort().join(',') === 'handoff,room', `${tag}: ${who}'s link carries only room and handoff, got ${url.search}`);
-  check(url.searchParams.get('room') === code, `${tag}: ${who}'s link names room ${code}, got ${url.search}`);
-  const handoff = url.searchParams.get('handoff') ?? '';
-  check(token !== '' && handoff !== '' && handoff !== token && !link.includes(token), `${tag}: ${who}'s link carries a handoff code, not the seat token`);
-}
-
-function shows(locator: Locator): Promise<boolean> {
-  return locator.waitFor({ timeout: SHOWN_MS }).then(
-    () => true,
-    () => false,
-  );
-}
-
-function gone(locator: Locator): Promise<boolean> {
-  return locator.waitFor({ state: 'detached', timeout: SHOWN_MS }).then(
-    () => true,
-    () => false,
-  );
 }
