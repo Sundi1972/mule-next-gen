@@ -407,17 +407,25 @@ describe('the election runs first in planning', () => {
     expect(election(g.game).candidates, 'seed precondition: no contested office, so no ballot').toEqual(BARON_ALONE);
     const { introMs, winnerMs } = POLITICS.ceremony;
     expect(election(g.game).ceremony).toEqual({ office: 'governor', step: 'intro', seconds: introMs / 1_000, total: introMs / 1_000 });
-    // A stalled server loop: one late tick moves the clock at most three ticks' worth.
-    g.advance(10_000);
-    expect(election(g.game).ceremony).toMatchObject({ office: 'governor', step: 'intro' });
-    expect(election(g.game).ceremony!.seconds).toBeCloseTo(introMs / 1_000 - (3 * WALK.tickMs) / phaseScale / 1_000);
-    tickFor(g, introMs * phaseScale - 3 * WALK.tickMs - WALK.tickMs);
+    tickFor(g, introMs * phaseScale - WALK.tickMs);
     expect(election(g.game).ceremony).toMatchObject({ office: 'governor', step: 'intro' });
     g.advance(WALK.tickMs);
     expect(election(g.game).ceremony, 'the Baron is unopposed: no bars').toEqual({ office: 'governor', step: 'winner', seconds: winnerMs / 1_000, total: winnerMs / 1_000 });
     for (const view of screens(g.game)) expect(view.politics!.election!.ceremony).toEqual(election(g.game).ceremony);
-    tickFor(g, (unbarredCeremonyMs() - introMs) * phaseScale - WALK.tickMs);
-    expect(election(g.game).stage).toBe('ceremony');
+
+    // A stalled server loop: one late tick moves the clock at most three ticks' worth.
+    const stalled = (3 * WALK.tickMs) / phaseScale;
+    expect(stalled, 'precondition: a stall fits inside the winner step').toBeLessThan(winnerMs);
+    g.advance(10_000);
+    expect(election(g.game).ceremony).toMatchObject({ office: 'governor', step: 'winner' });
+    expect(election(g.game).ceremony!.seconds).toBeCloseTo((winnerMs - stalled) / 1_000);
+    tickFor(g, (winnerMs - stalled) * phaseScale - WALK.tickMs);
+    expect(election(g.game).ceremony).toMatchObject({ office: 'governor', step: 'winner' });
+    g.advance(WALK.tickMs);
+    expect(election(g.game).ceremony).toMatchObject({ office: 'sheriff', step: 'intro' });
+    // Nobody runs for Sheriff: appointed, no bars.
+    tickFor(g, (introMs + winnerMs) * phaseScale - WALK.tickMs);
+    expect(election(g.game).ceremony).toMatchObject({ office: 'sheriff', step: 'winner' });
     g.advance(WALK.tickMs);
     expect(election(g.game)).toMatchObject({ stage: 'over', ceremony: null });
     expect(g.game.viewFor(null).phase).toBe('planning');
