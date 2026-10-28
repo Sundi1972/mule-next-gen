@@ -476,10 +476,19 @@ describe('the roller', () => {
         ['wildfire', 'p2', 'p2'],
         ['bumperHarvest', 'p3', 'p3'],
       ]);
-      // The spread is today's: the swarm crosses onto p3's joined Food, the fire stays on its owner's.
+      // The spread: the swarm crosses onto p3's joined Food, the fire stays on its owner's.
       const hit = (key: EventKey) => fired.find((e) => e.key === key)!.plots.map((p) => state.tiles[p.index]!);
       expect(hit('pestSwarm')).toContain(joined);
       expect(hit('wildfire')).toEqual([p2Food]);
+      // The start is drawn among the roller's own plots: over 20 seeds p3's bumper harvest starts on both of p3's.
+      const starts = new Set(
+        Array.from({ length: 20 }, (_, seed) => {
+          const { state: reseeded } = farms();
+          reseeded.seed = seed;
+          return rollPhase(reseeded, 'production').find((e) => e.key === 'bumperHarvest')!.plots[0]!.index;
+        }),
+      );
+      expect(starts.size).toBe(2);
 
       // Negative case: p1 works only Energy, so even certain rows fire it no pest swarm or wildfire, nor one elsewhere.
       for (const key of PERSONAL) reset(EVENTS.player[key], { phases: { production: 1 }, cap: 1 });
