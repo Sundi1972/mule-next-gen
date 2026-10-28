@@ -420,7 +420,7 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
   });
 
   it('INV-heard: heard from an unknown speaker, or to an unknown seat, does not throw, before or after start; an AI\'s own line goes to the other AIs only', async () => {
-    const lobby = new MuleGame({ now: () => 0, schedule: () => () => {}, changed: () => {} }, SEED, { brain: createBrain({ gameId: 'g-lobby', env: {} }) });
+    const lobby = new MuleGame({ now: () => 0, schedule: () => () => {}, changed: () => {}, hostId: () => null }, SEED, { brain: createBrain({ gameId: 'g-lobby', env: {} }) });
     expect(() => lobby.heard?.('s9', 'hello')).not.toThrow();
 
     const sdk = fakeSdk(() => reply('A', ''));
