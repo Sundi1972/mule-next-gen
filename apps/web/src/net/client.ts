@@ -17,7 +17,7 @@ export interface SocketLike {
 export type SocketFactory = (url: string) => SocketLike;
 
 const OPEN = 1;
-/** Pings sent right after connecting or a device clock jump, to sync the clock quickly; otherwise one every PING_EVERY_MS. */
+/** Pings sent right after connecting or a device clock jump, the first at once, to sync the clock quickly; otherwise one every PING_EVERY_MS. */
 const FIRST_PINGS = 4;
 const PING_EVERY_MS = 15_000;
 const MAX_BACKOFF_MS = 5_000;
@@ -59,7 +59,7 @@ export interface ClientState {
   toasts: Toast[];
   /** Why the room sent this screen back to the start; shown there until it joins again. */
   notice: string | null;
-  /** Milliseconds to add to Date.now() for the server's clock. */
+  /** Milliseconds to add to Date.now() for the server's clock, as of the last pong; serverNow() also follows a jump noticed since. */
   clockOffset: number;
   /** The one-time code that moves this seat to another device: null while none has arrived since it was asked for. */
   handoffCode: HandoffCode | null;
@@ -90,7 +90,7 @@ export interface ClientOptions {
 export class TableClient {
   private state: ClientState = { status: 'idle', role: null, code: null, seatId: null, view: null, chat: [], emotes: [], toasts: [], notice: null, clockOffset: 0, handoffCode: null };
   private readonly listeners = new Set<() => void>();
-  private readonly clock = new ClockSync();
+  private readonly clock: ClockSync;
   private socket: SocketLike | null = null;
   private target: Target | null = null;
   /** True between sending a join or board message and its welcome. */
@@ -117,6 +117,7 @@ export class TableClient {
   constructor(private readonly opts: ClientOptions) {
     this.now = opts.now ?? Date.now;
     this.monotonic = opts.monotonic ?? (() => performance.now());
+    this.clock = new ClockSync(undefined, { monotonic: this.monotonic, onJump: () => this.burstOfPings() });
     this.later = opts.setTimeout ?? ((fn, ms) => setTimeout(fn, ms));
     this.cancel = opts.clearTimeout ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
     this.storage = opts.storage ?? null;
@@ -136,7 +137,7 @@ export class TableClient {
     for (const fn of this.listeners) fn();
   }
 
-  /** The server's time now, by the synced clock. */
+  /** The server's time now, by the synced clock. A device clock jump noticed here sends the burst of pings. */
   serverNow(): number {
     return this.clock.serverNow(this.now());
   }
@@ -265,7 +266,8 @@ export class TableClient {
   }
 
   private burstOfPings(): void {
-    for (let i = 0; i < FIRST_PINGS; i++) this.later(() => this.ping(), i * 150);
+    this.ping();
+    for (let i = 1; i < FIRST_PINGS; i++) this.later(() => this.ping(), i * 150);
   }
 
   private ping(): void {
@@ -297,7 +299,7 @@ export class TableClient {
         if (msg.code !== this.state.code || msg.seatId !== this.state.seatId) this.setHandoff(null);
         this.set({ role: msg.role, code: msg.code, seatId: msg.seatId });
         // A code asked for while away was never sent. A welcome on the same socket keeps any request in flight.
-        if (this.handoffWanted && this.handoffsPending.length === 0 && this.state.handoffCode === null) this.askForHandoff();
+        this.askAgainIfWanted();
         return;
       }
       case 'view':
@@ -321,7 +323,6 @@ export class TableClient {
         return;
       }
       case 'pong':
-        if (this.clock.jumped(this.now(), this.monotonic())) this.burstOfPings();
         this.clock.add(msg.clientTime, msg.serverTime, this.now());
         if (this.clock.offset !== this.state.clockOffset) this.set({ clockOffset: this.clock.offset });
         return;
@@ -446,9 +447,21 @@ export class TableClient {
   }
 
   private askForHandoff(): void {
+    // A jump noticed by this read pings ahead of the request, so the code is timed by a fresh round trip.
+    this.serverNow();
     if (!this.send({ t: 'handoff' })) return;
     // Timers fire in the order they were set, so this one finds its own request at the front: older ones were answered or lost.
-    this.handoffsPending.push(this.later(() => this.handoffsPending.shift(), HANDOFF_LOST_MS));
+    this.handoffsPending.push(
+      this.later(() => {
+        this.handoffsPending.shift();
+        this.askAgainIfWanted();
+      }, HANDOFF_LOST_MS),
+    );
+  }
+
+  /** Asks for a code if the open dialog shows none and none is on its way. A closed connection waits for the welcome. */
+  private askAgainIfWanted(): void {
+    if (this.socket?.readyState === OPEN && this.handoffWanted && this.handoffsPending.length === 0 && this.state.handoffCode === null) this.askForHandoff();
   }
 
   /** The move dialog closed: forget the code, and one still on its way. Nothing is sent; the room lets an unused code expire. */
