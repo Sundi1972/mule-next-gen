@@ -9,7 +9,7 @@ import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { Page } from 'playwright';
 import { launch, PHONE, PHONE_WIDE, startServer, TV } from './harness';
-import { pressOnwardBeforeTheClock, watchShow } from './production-steps';
+import { pressOnward, watchShow } from './production-steps';
 import { fedPlayerFillsAFullHoloBar, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows } from './store-steps';
 
 const out = resolve(process.argv[2] ?? 'screens');
@@ -118,7 +118,7 @@ try {
   await phoneShot(phone, '5-production');
   await shot(tv, 'tv-5-production');
   const midShow = () => Promise.all([phone.screenshot({ path: join(out, 'phone-land-5-production-show.png') }), tv.screenshot({ path: join(out, 'tv-5-production-show.png') })]);
-  console.log(`production show: ${await pressOnwardBeforeTheClock(phone, { tv: tvShow, phone: phoneShow }, midShow)}`);
+  console.log(`production show: ${await pressOnward(phone, { tv: tvShow, phone: phoneShow }, midShow)}`);
 
   // The walk auction: the status screen with its side picker, walking, and a trade in progress.
   await phase(phone, 'auction');

@@ -1,6 +1,6 @@
-import { MAP, RAW_GOODS, RULE_TITLES, type FloorGood, type RawGood, type RuleId } from '@mule/engine';
+import { MAP, RAW_GOODS, RULE_TITLES, type RawGood, type RuleId } from '@mule/engine';
 import { cx, GOOD_NAME, GoodIcon } from '@mule/ui';
-import { AGGREGATE_SEEDS, type Players, type Tally } from './gallery';
+import { AGGREGATE_SEEDS, floorOf, type Players, type Tally } from './gallery';
 import { num, pct, Section } from './ui';
 import { useAggregate } from './useAggregate';
 
@@ -85,10 +85,6 @@ export function AggregatePanel({ players }: { players: Players }) {
       </div>
     </Section>
   );
-}
-
-function floorOf(good: RawGood): number | undefined {
-  return good in MAP.floor ? MAP.floor[good as FloorGood] : undefined;
 }
 
 function average(tally: Tally, good: RawGood): string {

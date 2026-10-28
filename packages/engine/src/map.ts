@@ -1,10 +1,11 @@
-import { GROWN_ODDS, MAP, MINERAL_ODDS, TERRAIN_ODDS } from './config.js';
+import { GROWN_ODDS, GROWN_ODDS_MIN, MAP, MINERAL_ODDS, MINERAL_ODDS_MIN, ratingsOf, TERRAIN_ODDS } from './config.js';
+import { zeroGround } from './grid.js';
 import { dealGround } from './map-ground.js';
 import { layoutMap } from './map-layout.js';
 import type { GameMap } from './map-rules.js';
 import type { Rng } from './rng.js';
 import { placeSpecials } from './specials.js';
-import { GROWN_GOODS, MINED_GOODS, type Ground, type Terrain, type Tile, type TileTrait } from './types.js';
+import { GROWN_GOODS, type Ground, type Terrain, type Tile, type TileTrait } from './types.js';
 
 const TRAITS: TileTrait[] = ['bedrock', 'sheltered', 'hotSpring', 'thinVein', 'toxic', 'unstable', 'infested', 'floodPlain'];
 
@@ -19,7 +20,7 @@ export function generateMap(players: number, rng: Rng): GameMap {
   const layout = layoutMap(players, rng);
   const { ground } = dealGround(layout, players, rng);
   const tiles = layout.terrain.map((terrain, i): Tile => {
-    const traitCount = terrain === 'store' ? 0 : rng.pick([0, 0, 0, 1, 1, 2]);
+    const traitCount = terrain === 'store' ? 0 : rng.pick(MAP.traits.counts);
     const traits: TileTrait[] = [];
     for (let n = 0; n < traitCount; n++) {
       const trait = rng.pick(TRAITS);
@@ -29,7 +30,7 @@ export function generateMap(players: number, rng: Rng): GameMap {
       x: i % layout.width,
       y: Math.floor(i / layout.width),
       terrain,
-      peaks: terrain === 'mountains' ? rng.int(1, 3) : 0,
+      peaks: terrain === 'mountains' ? rng.int(MAP.mountainPeaks.min, MAP.mountainPeaks.max) : 0,
       ground: ground[i]!,
       traits,
       owner: null,
@@ -46,22 +47,14 @@ export function generateMap(players: number, rng: Rng): GameMap {
 export function expectedGround(terrain: Terrain): Ground {
   const ground = zeroGround();
   if (terrain === 'store') return ground;
-  const mean = (weights: readonly number[], offset: number) => weights.reduce((sum, w, i) => sum + w * (i + offset), 0);
+  const mean = (weights: readonly number[], lowest: number) => ratingsOf(weights, lowest).reduce((sum, v, i) => sum + weights[i]! * v, 0);
   const odds = TERRAIN_ODDS[terrain];
-  for (const g of GROWN_GOODS) ground[g] = mean(GROWN_ODDS[odds.grown[g] ?? 'neutral'], -2);
-  ground.smithore = mean(MINERAL_ODDS[odds.mined.smithore], 0);
+  for (const g of GROWN_GOODS) ground[g] = mean(GROWN_ODDS[odds.grown[g] ?? 'neutral'], GROWN_ODDS_MIN);
+  ground.smithore = mean(MINERAL_ODDS[odds.mined.smithore], MINERAL_ODDS_MIN);
   // Crystite and Rare earth sit in random rings, not by terrain, so every terrain hints the same map-wide average.
   ground.crystite = MAP.unknownMineral;
   ground.rareEarth = MAP.unknownMineral;
   return ground;
 }
 
-export function zeroGround(): Ground {
-  return Object.fromEntries([...GROWN_GOODS, ...MINED_GOODS].map((g) => [g, 0])) as Ground;
-}
-
-export function tileIndex(width: number, x: number, y: number): number {
-  return y * width + x;
-}
-
-export { neighbours, tileAt } from './grid.js';
+export { neighbours, tileAt, tileIndex, zeroGround } from './grid.js';

@@ -1,5 +1,5 @@
 import { MAP, sizeBand, type FloorGood, type ShareTerrain, type SizeBand } from './config.js';
-import { neighbours, tileIndex } from './map.js';
+import { EPS, neighbours, tileIndex } from './grid.js';
 import { RAW_GOODS, type RawGood, type SpecialKind, type Terrain, type Tile } from './types.js';
 
 /**
@@ -61,9 +61,6 @@ export interface MapReport {
 const FLOOR_GOODS = Object.keys(MAP.floor) as FloorGood[];
 const SHARE_TERRAINS = Object.keys(MAP.shares) as ShareTerrain[];
 const MINERALS: Mineral[] = ['crystite', 'rareEarth'];
-
-// Shares and tolerances are fractions; a value exactly on an edge must not fail on float rounding.
-const EPS = 1e-9;
 
 interface Facts {
   map: GameMap;
@@ -172,7 +169,7 @@ function terrainCount(f: Facts, terrain: Terrain): number {
 }
 
 function riverBendCount(f: Facts): number {
-  return f.riverRows.filter((cols) => cols.length === 2 && cols[1]! - cols[0]! === 1).length;
+  return f.riverRows.filter((cols) => cols.length === 2 && cols[1]! - cols[0]! === 1).length; // literal-ok: a bend is a row of two river plots
 }
 
 function isolatedSmithore(f: Facts): Tile[] {
@@ -191,8 +188,8 @@ function peaksOf(f: Facts, mineral: Mineral): Tile[] {
 
 const at = (t: Tile) => `(${t.x},${t.y})`;
 const plots = (tiles: Tile[]) => tiles.map(({ x, y }) => ({ x, y }));
-const round = (n: number) => Number(n.toFixed(2));
-const pct = (n: number) => `${round(n * 100)}%`;
+const round = (n: number) => Number(n.toFixed(2)); // literal-ok: two decimals for display
+const pct = (n: number) => `${round(n * 100)}%`; // literal-ok: percent for display
 
 /** F1 floors: enough good plots per player of each floor good. */
 function floors(f: Facts): Violation[] {
@@ -245,7 +242,8 @@ function shares(f: Facts): Violation[] {
 /** S3: no terrain over MAP.maxTerrainShare of non-river land. */
 function noDominant(f: Facts): Violation[] {
   const n = f.nonRiver.length;
-  return SHARE_TERRAINS.filter((t) => terrainCount(f, t) / n > MAP.maxTerrainShare + EPS).map((t) => ({
+  const cap = dominantCap(n);
+  return SHARE_TERRAINS.filter((t) => terrainCount(f, t) > cap).map((t) => ({
     rule: 'S3',
     detail: `${t} ${terrainCount(f, t)} of ${n} plots, over ${pct(MAP.maxTerrainShare)} of non-river land`,
   }));
@@ -269,6 +267,11 @@ export function shareBand(terrain: ShareTerrain, nonRiver: number): { min: numbe
     max: Math.floor((target + tolerance + EPS) * nonRiver),
     tolerance,
   };
+}
+
+/** S3's cap: the most plots one terrain may hold on `nonRiver` plots of non-river land. */
+export function dominantCap(nonRiver: number): number {
+  return Math.floor(MAP.maxTerrainShare * nonRiver + EPS);
 }
 
 /** S5's cap: the most plots one region may hold on `nonRiver` plots of non-river land. */
@@ -337,17 +340,18 @@ function seams(f: Facts): Violation[] {
 }
 
 function ringRating(steps: number): (rating: number) => boolean {
-  const { high, medium, low } = MAP.peak;
+  const { high, medium, low, steps: ring } = MAP.peak;
   if (steps === 0) return (r) => r === high;
-  if (steps === 1) return (r) => r === medium;
-  if (steps === 2) return (r) => r >= low.min && r <= low.max;
+  if (steps === ring.medium) return (r) => r === medium;
+  if (steps === ring.low) return (r) => r >= low.min && r <= low.max;
   return (r) => r === 0;
 }
 
 function ringWants(steps: number): string {
-  const { medium, low } = MAP.peak;
-  if (steps === 1) return `1 step from a peak needs ${medium}`;
-  if (steps === 2) return `2 steps from a peak needs ${low.min} to ${low.max}`;
+  const { medium, low, steps: ring } = MAP.peak;
+  const away = `${steps} ${steps === 1 ? 'step' : 'steps'} from a peak`;
+  if (steps === ring.medium) return `${away} needs ${medium}`;
+  if (steps === ring.low) return `${away} needs ${low.min} to ${low.max}`;
   return 'outside every ring needs 0';
 }
 

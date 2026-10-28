@@ -9,6 +9,7 @@ import { errors as playwrightErrors, type BrowserContext, type Page } from 'play
 import { PHASE_MS } from '../../server/src/mule-game.js';
 import { check, claimAPlot, launch, PHONE, startServer, TV, type AuctionSteps } from './harness';
 import { planningIsTheHub } from './hub-steps';
+import { readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow } from './production-steps';
 import { fedPlayerFillsAFullHoloBar, hungryPlayerSeesAShortOrangeBar, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
 
@@ -106,7 +107,7 @@ try {
   check((await tvGame.getByRole('img', { name: 'Bramblet' }).count()) >= 1, 'B-AC-1: the TV game still shows the first AI as a Bramblet');
 
   // Month 1.
-  await phone.getByRole('button', { name: "I'm ready" }).click();
+  await readyThroughTheElection(phone, within(PHASE_MS.planning));
   const claim = phone.getByRole('button', { name: /CLAIM/ });
   await claim.waitFor({ timeout: 5_000 });
   check(await claim.isVisible(), 'CLAIM button visible');
@@ -317,17 +318,20 @@ async function checkTheScoresAddUp(phone: Page, tv: Page): Promise<void> {
   const line = async (part: string) => {
     const row = end.getByTestId(`part-${part}`);
     const rows = await row.count();
-    if (part === 'collapse' && rows === 0) return 0;
+    if ((part === 'collapse' || part === 'office') && rows === 0) return 0;
     check(rows === 1, `B-AC-3: the phone shows one part-${part} line, got ${rows}`);
-    return readNumber(await row.locator('td').last().textContent(), `the phone's part-${part}`);
+    // The office line is shown with a plus sign.
+    const shown = (await row.locator('td').last().textContent())?.replace(/^\s*\+/, '') ?? null;
+    return readNumber(shown, `the phone's part-${part}`);
   };
   const parts = Object.fromEntries(await Promise.all(PART_LINES.map(async (p) => [p, await line(p)] as const)));
   // The Collapse line is shown as a negative number; read it signed so a positive one fails.
   const cut = -(await line('collapse'));
   check(cut >= 0, `B-AC-3: the phone's Collapse line takes points off, but it reads +${-cut}`);
+  const office = await line('office');
   const total = await line('total');
-  const sum = PART_LINES.reduce((s, p) => s + parts[p]!, 0) - cut;
-  check(sum === total, `B-AC-3: the phone's lines ${PART_LINES.map((p) => `${p} ${parts[p]}`).join(' + ')} − collapse ${cut} = ${sum}, but its final score reads ${total}`);
+  const sum = PART_LINES.reduce((s, p) => s + parts[p]!, 0) + office - cut;
+  check(sum === total, `B-AC-3: the phone's lines ${PART_LINES.map((p) => `${p} ${parts[p]}`).join(' + ')} + office ${office} − collapse ${cut} = ${sum}, but its final score reads ${total}`);
 
   await tvEnd.getByTestId('tv-scores').waitFor({ timeout: 5_000 });
   const hostRow = tvEnd.getByTestId('tv-scores').locator('li').filter({ has: tv.getByText('Heiko', { exact: true }) });
