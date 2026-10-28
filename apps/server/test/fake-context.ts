@@ -85,7 +85,11 @@ export function fakeContext(options: { onChanged?: (at: number) => void } = {}) 
       }
     }
   };
-  return { ctx, advance, waits };
+  /** Moves the clock on without firing a timer, as a held room does (Room.hold): the due ones fire at the next advance. */
+  const hold = (ms: number) => {
+    now += ms;
+  };
+  return { ctx, advance, hold, waits };
 }
 
 /**

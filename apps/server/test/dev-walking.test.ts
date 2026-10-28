@@ -1,7 +1,7 @@
-import { analysisSeconds, DEVELOPMENT, RuleError, SPECIES_PERK, tileIndex, walkSeconds, type GameState, type Outfit } from '@mule/engine';
+import { AI_HANDS, AI_LEVELS, analysisSeconds, DEVELOPMENT, RuleError, SPECIES_PERK, tileIndex, walkSeconds, type GameState, type Outfit } from '@mule/engine';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { describe, expect, it } from 'vitest';
-import type { MuleGame } from '../src/mule-game.js';
+import { DEFAULT_AI_LEVEL, type MuleGame } from '../src/mule-game.js';
 import { seats, toDevelopment, walkers } from './fake-context.js';
 
 const LENA = 's1';
@@ -88,7 +88,7 @@ describe('T-AC-7: colonists walk at their own pace, and the action applies on ar
     expect(colonistOf(game.viewFor(OSSA), LENA)).toEqual({ at: far.index, walk: null, assayUntil: lena.arrivesAt + msOf(analysisSeconds(state, LENA)) });
   });
 
-  it('T-AC-7: an install applies only on arrival: a ms before, her plot carries no MULE; on arrival it carries hers', () => {
+  it('T-AC-7: an install and a filter apply only on arrival: a ms before, her plot carries neither; on arrival it does', () => {
     const w = walking();
     const { game, state, ctx, advanceTo, home } = w;
     leadOutfitted(w);
@@ -103,6 +103,18 @@ describe('T-AC-7: colonists walk at their own pace, and the action applies on ar
     advanceTo(walk.arrivesAt);
     expect(game.viewFor(null).tiles[home.index]).toMatchObject({ owner: LENA, outfit: 'food' });
     expect(game.viewFor(LENA).me!.carriedMule).toBeNull();
+
+    // Back from the corral, so the filter is a walk of its own.
+    game.handle(LENA, { type: 'buyMule' });
+    advanceTo(walkOf(game.viewFor(null), LENA).arrivesAt);
+    state.players.find((p) => p.id === LENA)!.stock.alloy = DEVELOPMENT.filterAlloy;
+    game.handle(LENA, { type: 'filter', ...xy(home) });
+    const toFilter = walkOf(game.viewFor(null), LENA);
+    expect(toFilter).toMatchObject({ from: 'corral', arrivesAt: ctx.now() + msOf(walkSeconds(state, LENA, 'corral', home.index)) });
+    advanceTo(toFilter.arrivesAt - 1);
+    expect(game.viewFor(null).tiles[home.index]!.filter).toBe(false);
+    advanceTo(toFilter.arrivesAt);
+    expect(game.viewFor(null).tiles[home.index]!.filter).toBe(true);
   });
 
   it("T-AC-7 (negative): a walk off the map, or one that would arrive after the clock's end, is refused and changes nothing; so is one started after the clock ran out", () => {
@@ -162,6 +174,14 @@ describe('B-AC-11: Lena walks to the corral on the one clock (the server half)',
     expect(game.viewFor(null).storeMules).toBe(mules - 1);
     expect(colonistOf(game.viewFor(OSSA), LENA)).toEqual({ at: 'corral', walk: null, assayUntil: null });
     expect(game.viewFor(LENA).me!.devEndsAt, 'the walk ran on the one clock; it never shortened it').toBe(end);
+  });
+
+  it("FM-held-room: a tap after her arrival finds her arrived, though the held room has not fired the arrival's timer yet", () => {
+    const { game, state, hold } = walking();
+    game.handle(LENA, { type: 'buyMule' });
+    hold(msOf(walkSeconds(state, LENA, 'store', 'corral')) + 1_000);
+    game.handle(LENA, { type: 'outfit', outfit: 'food' });
+    expect(game.viewFor(LENA).me!.carriedMule).toBe('food');
   });
 
   it('B-AC-11 (negative): while Lena walks, every tap is refused "Still walking" and changes nothing', () => {
@@ -282,13 +302,24 @@ describe('FM-one-clock: one development clock for every seat', () => {
 
 describe('FM-scaled-clock: development time is game seconds at any phaseScale', () => {
   it.each([1, 0.1])('FM-scaled-clock: at phaseScale %s an assay keeps the colonist busy analysisSeconds × 1_000 × phaseScale, and never shortens the clock', (scale) => {
-    const { game, state, ctx, advance, far, start } = walking(scale);
+    const { game, ctx, advance, advanceTo, far, home, start } = walking(scale);
     game.handle(LENA, { type: 'analyse', ...xy(far) });
-    advance(msOf(walkSeconds(state, LENA, 'store', far.index) + analysisSeconds(state, LENA), scale));
+    advanceTo(walkOf(game.viewFor(null), LENA).arrivesAt);
+    const assayUntil = colonistOf(game.viewFor(null), LENA)!.assayUntil!;
+    advanceTo(assayUntil);
+    expect(colonistOf(game.viewFor(null), LENA)!.assayUntil, 'the assay ended on its own clock, with no tap').toBeNull();
     // Standing on the plot now, so the next assay starts at the tap.
     game.handle(LENA, { type: 'analyse', ...xy(far) });
     advance(msOf(DEVELOPMENT.analysisSeconds, scale) - 1);
-    expect(() => game.handle(LENA, { type: 'analyse', ...xy(far) })).toThrow('Still assaying');
+    const taps: MuleIntent[] = [
+      { type: 'buyMule' },
+      { type: 'outfit', outfit: 'food' },
+      { type: 'install', ...xy(home) },
+      { type: 'analyse', ...xy(far) },
+      { type: 'filter', ...xy(home) },
+      { type: 'pub' },
+    ];
+    for (const tap of taps) expect(() => game.handle(LENA, tap), tap.type).toThrow('Still assaying');
     advance(1);
     expect(() => game.handle(LENA, { type: 'analyse', ...xy(far) })).not.toThrow();
     expect(ctx.now()).toBeLessThan(game.viewFor(LENA).me!.devEndsAt!);
@@ -337,7 +368,8 @@ describe('FM-pub-late: the pub pays for the time left when the colonist gets the
     expect(walkOf(game.viewFor(null), LENA)).toMatchObject({ from: far.index, arrivesAt: halfway });
     advanceTo(halfway - 1);
     expect(moneyOf(game.viewFor(null), LENA)).toBe(money);
-    advanceTo(halfway);
+    // One jump well past the arrival: the pay is still as of the arrival, not of when its timer fired.
+    advanceTo(halfway + 5_000);
     const { base, start, perMonth } = DEVELOPMENT.pub;
     expect(moneyOf(game.viewFor(null), LENA) - money).toBe(Math.round(base + (start + perMonth) * 0.5));
     expect(game.viewFor(null).players.find((p) => p.id === LENA)!.doneDeveloping).toBe(true);
@@ -360,9 +392,17 @@ describe('FM-pub-late: the pub pays for the time left when the colonist gets the
 });
 
 describe('FM-ai-still-walking: AI seats walk too', () => {
-  it('FM-ai-still-walking: at phaseScale 1 an AI seat buys, outfits and installs a MULE without one "Still walking" or "Still assaying" refusal, and each install lands on its arrival', () => {
+  it.each([1, 0.1])('FM-ai-still-walking: at phaseScale %s an AI seat sets off within its decide wait and longest tap of game time, buys, outfits and installs a MULE without one "Still walking" or "Still assaying" refusal, and each install lands on its arrival', (scale) => {
     const AI = 's3';
-    const { game, ctx, advance } = toDevelopment();
+    // The AI is given land: the land grant's light keeps its real pace, so at 0.1 it wins none of its own.
+    const { game, ctx, advance } = toDevelopment({
+      phaseScale: scale,
+      prepare: (state) => {
+        Object.assign(state.players.find((p) => p.id === AI)!.stock, { food: 20, medicine: 2 });
+        for (const t of state.tiles.filter((t) => t.terrain !== 'store' && t.owner === null).slice(0, 3)) t.owner = AI;
+      },
+    });
+    const start = ctx.now();
     const refused: string[] = [];
     const handle = game.handle.bind(game);
     game.handle = (seatId, intent) => {
@@ -375,9 +415,11 @@ describe('FM-ai-still-walking: AI seats walk too', () => {
     };
     for (const id of ['s1', 's2']) game.handle(id, { type: 'pub' });
 
+    let firstWalk: number | null = null;
     const installs: { good: Outfit; before: Outfit | null; after: Outfit | null }[] = [];
     while (game.viewFor(null).phase === 'development') {
       const colonist = colonistOf(game.viewFor(null), AI);
+      if (firstWalk === null && colonist?.walk) firstWalk = colonist.walk.startedAt;
       const good = game.viewFor(AI).me!.carriedMule;
       if (colonist?.walk && typeof colonist.at === 'number' && good && good !== 'empty') {
         advance(colonist.walk.arrivesAt - 1 - ctx.now());
@@ -390,5 +432,11 @@ describe('FM-ai-still-walking: AI seats walk too', () => {
     expect(refused.filter((r) => r.includes('Still'))).toEqual([]);
     expect(installs.length).toBeGreaterThan(0);
     for (const i of installs) expect(i).toEqual({ good: i.good, before: null, after: i.good });
+
+    const d = AI_HANDS.develop;
+    const longestTap = Math.max(...[d.buyTapMs, d.outfitMs, d.installTapMs, d.analyseTapMs, d.filterMs, d.pubMs].map(([, hi]) => hi)) * AI_LEVELS[DEFAULT_AI_LEVEL].devPace;
+    const bound = (d.decideWaitMs + longestTap + AI_HANDS.devTickMs / scale) / 1_000;
+    expect(firstWalk, 'the AI set off').not.toBeNull();
+    expect((firstWalk! - start) / 1_000 / scale, `game seconds before the AI's first walk, at most ${bound}`).toBeLessThanOrEqual(bound);
   });
 });
