@@ -29,6 +29,7 @@ export {
 export { pathTo, type MapPath } from './floor/path.js';
 export { speedOf, terrainShare } from './floor/speed.js';
 export { stepFloor } from './floor/step.js';
+export * from './floor/hall.js';
 export * from './auction.js';
 export * from './lots.js';
 export * from './upkeep.js';
