@@ -360,7 +360,7 @@ At dispatch (29 Oct, codebase drift since plan time):
 - `settleSpecials` returns the caverns that collapsed (WS5's file, with `collapses`), so production announces them
   without diffing tiles.
 
-- [ ] **Step 1: Write `EM-T-AC-5: cavern collapse rolls on its row, with today's effect`** at the tiles after
+- [x] **Step 1: Write `EM-T-AC-5: cavern collapse rolls on its row, with today's effect`** at the tiles after
       production.
       - With the row forced to 1, every cavern that produced Crystite becomes a plain plot, and one mined on Crystite 0 or farmed for Food stays.
       - With the row at 0, none collapses.
@@ -368,28 +368,49 @@ At dispatch (29 Oct, codebase drift since plan time):
       - Each collapse is in the month report as a MonthEvent after the output events (AM-3): key `cavernCollapse`,
         kind `quake`, scope `personal`, `player` the owner, `plots` [{index, order 0, good 'crystite', delta 0}],
         phase 'production'; with the row at 0, no such event.
-- [ ] **Step 2: Run; expect FAIL** (collapse still reads `EFFECT.collapseChance`).
-- [ ] **Step 3: Implement C4.** `collapses` asks the row dice from `(seed, month, 'production', 'cavernCollapse', plot)`.
+- [x] **Step 2: Run; expect FAIL** (collapse still reads `EFFECT.collapseChance`).
+- [x] **Step 3: Implement C4.** `collapses` asks the row dice from `(seed, month, 'production', 'cavernCollapse', plot)`.
       Its "produced Crystite this month" check and its what-if guard stay. `EFFECT.collapseChance` goes. Production
       lists each collapse as a MonthEvent after the output events (AM-3); `eventOutput` gets a no-op entry.
       `rollPhase` must not roll `cavernCollapse` at the phase start: its rows are picked by "key is in SHAPE", which
       the cavern row joins here, but C4 rolls it once per mined cavern plot after output. EM-T-AC-2's key literal goes
       red if it slips (Task 4's review).
-- [ ] **Step 4: Run `specials.test.ts`, its assertions unedited (AM-8: two fixture reads change, a named edit WS5
+- [x] **Step 4: Run `specials.test.ts`, its assertions unedited (AM-8: two fixture reads change, a named edit WS5
       reviews); expect WS5's T-AC-6 green at 200 seeds and with MULE_FULL=1** (replay; about 6% within ±30%; the same
       rate with or without a production event; each plot its own fate; unmined never). Then run events.test.ts and
       `pnpm typecheck && pnpm test`.
-- [ ] **Step 5: Commit** red then green; send WS5 the specials.ts and EFFECT hunks, WS3 the EventKey hunk and WS4 the
+- [x] **Step 5: Commit** red then green; send WS5 the specials.ts and EFFECT hunks, WS3 the EventKey hunk and WS4 the
       derive.ts and web specials.test.ts hunks; tell WS8
       the ruling with the hunk (PM, 28 Oct).
 
 ### PR-2 merge gate
 
-- [ ] EM-T-AC-5 green; WS5's T-AC-6 green, its assertions unedited (AM-8); WS5 OK on the specials.ts, EFFECT and
+- [x] EM-T-AC-5 green; WS5's T-AC-6 green, its assertions unedited (AM-8); WS5 OK on the specials.ts, EFFECT and
       T-AC-6 fixture hunks; WS3 OK on the
       EventKey hunk (AM-3); WS4 OK on the derive.ts and web specials.test.ts hunks
-- [ ] Each failing-test commit precedes its passing commit; trace-check clean; `pnpm typecheck && pnpm test` exit 0; CI green
-- [ ] The rows of Task 8 re-run on one set (seeds 1-40, politics on): the cavern line moves only by its new dice
+- [x] Each failing-test commit precedes its passing commit; trace-check clean; `pnpm typecheck && pnpm test` exit 0; CI green
+- [x] The rows of Task 8 re-run on one set (seeds 1-40, politics on): the cavern line moves only by its new dice
+
+Done 29 Oct. PR-2 is #168, `ws1-events-cavern` 28e67a1 into `ws1-events`, merged at 607d33d under the lane rule.
+- Commits: red 3772b7d, green abbc4e0, the T-AC-6 fixture d29a8fc (AM-8), the mock 010976f, review round 1 d1e0391..28e67a1.
+  Twice the implementer stopped on a false claim of the brief, and the lead ruled: T-AC-6 can't stay unedited (AM-8), and
+  `collapseChance` had a fourth reader, WS5's map-gallery mock (the lead's grep had covered `packages` and `apps` only).
+- EM-T-AC-5 green; T-AC-6 red unedited ("expected 0 to be greater than 0.0419"), green with the fixture at 200 and 400
+  seeds. Positive controls: `rowsOf` without the perPlot skip turns EM-T-AC-2 red through `buildEvent`'s throw (with
+  `return null` instead, all tests stay green, so the throw is the guard); dropping the "produced Crystite" check turns
+  EM-T-AC-5 and T-AC-6 red.
+- Review (logic/contract, 31 mutants): one Important, EM-T-AC-5 missing the cap and `settleSpecials` returning a ruin,
+  fixed by strengthening it (both mutants red after); Minors fixed: an import cycle (pollution.ts now imports
+  `neighbours` from grid.js), a neutral throw message, T-AC-7's reset keeping perPlot, three comments. Declined: golden
+  dice values (a change detector; EM-T-AC-2's replay holds HC-3). Survivors left: the two seed-order mutants, a gap
+  PR-1 already had.
+- trace-check 3 added, 1 removed, all traced; `pnpm typecheck` and `pnpm test` exit 0; CI on 28e67a1: check and e2e
+  green. Sim, seed 1, 40 games, politics on: production 0.74 → 0.73 events a month, `cavernCollapse 5` in the events
+  line, every check ok; the collapses now count once, from the report.
+- Owner OKs, direct, at 28e67a1: WS5 (specials.ts, `specialEffect`, T-AC-6's fixture, the mock), WS3 (types.ts), WS4
+  (derive.ts, B-AC-9). WS8 told the collapse event's shape.
+- For later (WS4, not a condition): the plot card shows the cavern row's base as its chance; a row that gains an
+  influence needs the card's copy changed with it.
 
 ## Gate: wave 1 reaches a table (`ws1-events` → `feat/strategist`)
 
@@ -400,6 +421,12 @@ At dispatch (29 Oct, codebase drift since plan time):
       every event of a phase, and the view (WS3's `mule-game.ts`) carries `phase`. The event payloads are agreed with
       WS8 against Task 2's contract (`MonthEvent`, several a phase in the order fired; AM-2's delta-0 plots; AM-3's
       collapse); any field the gallery needs beyond it is a named change to that contract. The PM routes it.
+- [ ] `ws1-events` synced with today's trunk (aae54c4 or later: #151's meteor crater, #164's playbook types, #166's
+      one-pass grant). WS5 named the conflicts to expect, all text: specials.ts (imports, `formMeteorCrater`,
+      `PlacedSpecialKind`), config.ts (`MAP.meteorCrater` beside `specialEffect`), the map-gallery mock (a `meteorCrater`
+      line under `crystalCavern`), specials.test.ts (B-AC-10 and its imports). Keep both sides (the crater never goes
+      through `settleSpecials`); send WS5 the merge SHA for those hunks. Re-run the rows after the sync: #166 alone moved
+      the shortage check (balance plan, the AM-19 (b) re-measure)
 - [ ] PR-1's and PR-2's rows in the PR body; R-2's options settled by Heiko if any check moved
 - [ ] Heiko's OK through the PM
 
