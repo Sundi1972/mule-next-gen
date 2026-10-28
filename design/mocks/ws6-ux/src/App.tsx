@@ -46,11 +46,11 @@ const LENA = {
   peckish: { ate: 8, need: 10, sick: false },
   hungry: { ate: 5, need: 10, sick: false },
   starving: { ate: 2, need: 10, sick: false },
-  sick: { ate: 10, need: 10, sick: true },
-  hungrySick: { ate: 5, need: 10, sick: true },
-  worst: { ate: 0, need: 10, sick: true },
+  sick: { ate: 10, need: 10, sick: true, because: { kind: 'air' } },
+  hungrySick: { ate: 5, need: 10, sick: true, because: { kind: 'air' } },
+  worst: { ate: 0, need: 10, sick: true, because: { kind: 'polluter', what: 'smelters' } },
 } satisfies Record<string, Condition>;
-const conditions = (lena: Condition): Record<string, Condition> => ({ lena, ossa: { ate: 10, need: 10, sick: true }, brix: { ate: 8, need: 10, sick: false }, kai: FED });
+const conditions = (lena: Condition): Record<string, Condition> => ({ lena, ossa: { ate: 10, need: 10, sick: true, because: { kind: 'polluter', what: 'smelters' } }, brix: { ate: 8, need: 10, sick: false }, kai: FED });
 
 /** Lena's condition and the marker variant, around a screen. */
 function Feeling({ lena, variant = 'B', children }: { lena: Condition; variant?: 'A' | 'B'; children: ReactNode }) {

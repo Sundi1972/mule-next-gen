@@ -44,7 +44,12 @@ export const DEV_WALK_STAND_IN = {
 /** How long a thought bubble shows (display timing, not balance). */
 export const THOUGHT_MS = { atClockStart: 3000, onSetOff: 2000, quiet: 8000 };
 
-export type Condition = { ate: number; need: number; sick: boolean };
+/**
+ * Why a colonist is sick (Heiko 2026-10-28: sickness is a monthly chance, likelier in dirty air, much likelier for a
+ * big polluter). STAND-IN for the reason field WS1 exposes in R1.
+ */
+export type SickBecause = { kind: 'air' } | { kind: 'polluter'; what: string };
+export type Condition = { ate: number; need: number; sick: boolean; because?: SickBecause };
 export const FED: Condition = { ate: 1, need: 1, sick: false };
 
 /** The share of the month's Food the colonist went without, 0 (fed) to 1 (none): WS1's hungerShare. */
@@ -73,12 +78,17 @@ export function feeling(c: Condition): string {
   return level > 0 && c.sick ? `${HUNGER_WORD[level]} and sick` : level > 0 ? HUNGER_WORD[level] : c.sick ? 'Sick' : 'Fed';
 }
 
+/** The reason line for a sick colonist, from WS1's reason field: the colony's air, or your own pollution. */
+export function sickReason(c: Condition): string {
+  return c.because?.kind === 'polluter' ? `Sick: your ${c.because.what} fouled the air.` : 'Sick: the air is toxic.';
+}
+
 /** Heiko's plain rule, in his words, from config: wherever a screen explains the slowdown. */
 export function paceRule(c: Condition): string[] {
   const points = Math.round((1 - DEV_WALK_STAND_IN.paceAtNoFood) * 10);
   return [
     ...(hungerLevel(c) > 0 ? [`You ate ${c.ate} of the ${c.need} Food you need. You lose ${points} points of walking speed per 10% of Food missing.`] : []),
-    ...(c.sick ? ['The dirty air made you sick. Sickness halves your walking speed.'] : []),
+    ...(c.sick ? [`${sickReason(c)} Sickness halves your walking speed.`] : []),
   ];
 }
 
