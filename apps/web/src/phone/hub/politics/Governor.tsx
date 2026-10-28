@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useClient } from '../../../net/react';
 import { usePhoneGame } from '../../game';
 import { Section } from './parts';
-import { change } from './words';
 
 /** The Governor's desk: the sales tax, within the bounds the server gives for this month. */
 export function GovernorDesk() {
