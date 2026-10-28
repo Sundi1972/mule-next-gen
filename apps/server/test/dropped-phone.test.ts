@@ -151,6 +151,7 @@ describe('a dropped phone in the land grant', () => {
     expect(dropped.lit.length, 'the light kept moving after the drop').toBeGreaterThan(1);
     expect(dropped).toEqual(idle);
     expect(dropped.plots.s1).toBe(0);
+    expect(new Set(dropped.lit).size, 'one pass: no plot lit twice').toBe(dropped.lit.length);
     expect(dropped.lasted, 'one pass of the light, one tick a plot').toBe(dropped.lit.length * GRANT_TICK_MS);
   });
 
