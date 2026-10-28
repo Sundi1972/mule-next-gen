@@ -18,7 +18,6 @@ import {
   fitFilter,
   foodShare,
   GAME,
-  mapSize,
   GOODS,
   goodsMarket,
   type AiLevelId,
@@ -111,8 +110,8 @@ export const PHASE_MS: { readonly planning: number | null; readonly landGrant: n
 /** How long each free plot stays lit in the land grant. */
 export const GRANT_TICK_MS = GAME.grantTickMs;
 
-/** The longest a land grant runs: one pass over every plot of the largest map. phaseScale never shortens it. */
-export const GRANT_PASS_MAX_MS = ((size) => size.width * size.height)(mapSize(GAME.maxPlayers)) * GRANT_TICK_MS;
+/** The longest a land grant can run, from the engine's grant rules: one pass over the largest map. */
+export { GRANT_PASS_MAX_MS } from '@mule/engine';
 
 export const AI_NAMES = ['The Accountant', 'The Baron', 'The Grudge', 'The Gambler', 'The Good Neighbour'];
 
