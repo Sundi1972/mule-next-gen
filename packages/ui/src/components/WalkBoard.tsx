@@ -75,6 +75,7 @@ export function WalkBoard({
   storeBuys,
   storeSells,
   shipPays,
+  shipCaption,
   lines: extra = [],
   marks,
   storeStock,
@@ -91,6 +92,8 @@ export function WalkBoard({
   storeBuys: number | null;
   storeSells: number | null;
   shipPays: number | null;
+  /** Words on the ship's line, just under it: "The ship buys Crystite at 120". */
+  shipCaption?: string;
   /** More price lines, drawn like the store's: a seller's minimum at the land auction. */
   lines?: { id: string; label: string; price: number }[];
   /** The lowest-ask and highest-bid lines, drawn during the walk while no units change hands. */
@@ -212,6 +215,19 @@ export function WalkBoard({
               </span>
             </div>
           ))}
+          {shipCaption && shipPays !== null && (
+            <span
+              className={cx(
+                // Under the line, against the gutter: sellers walk down from above, so the room under it is clear.
+                'pointer-events-none absolute z-20 whitespace-nowrap rounded-chip border border-warn/70 bg-void/90 font-display font-semibold text-warn',
+                tv ? 'right-[calc(104px+0.5rem)] mt-1.5 px-2.5 py-0.5 text-xl' : 'right-[calc(56px+0.25rem)] mt-1 px-1.5 text-[11px] @min-[1100px]/shell:text-base',
+              )}
+              style={{ top: `${pct(shipPays)}%` }}
+              data-testid="ship-caption"
+            >
+              {shipCaption}
+            </span>
+          )}
 
           {askLine && <MovingLine testid="line-ask" top={pct(askLine.at)} width={x(1)} tone="seller" />}
           {bidLine && <MovingLine testid="line-bid" top={pct(bidLine.at)} width={x(1)} tone="buyer" />}
@@ -280,7 +296,8 @@ export function WalkBoard({
               className={cx('flex min-w-0 flex-1 items-center justify-center gap-1 px-0.5 font-display font-semibold', tv ? 'text-lg' : 'text-[10px]', w.side === 'pass' ? 'text-ink-3' : 'text-ink')}
             >
               <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: SLOT_COLOR[w.slot] }} />
-              <span className="truncate">{w.id === meId ? 'You' : w.name}</span>
+              {/* On a phone a long name takes a second line rather than losing its end. */}
+              <span className={tv ? 'truncate' : 'line-clamp-2 text-center leading-[1.1]'}>{w.id === meId ? 'You' : w.name}</span>
               {w.side === 'pass' && <span className="shrink-0 font-mono text-ink-3">· PASS</span>}
               {w.done && w.side !== 'pass' && <span className="shrink-0 font-mono text-ok">✓</span>}
             </span>
