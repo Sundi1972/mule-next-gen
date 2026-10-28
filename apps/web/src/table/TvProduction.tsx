@@ -44,8 +44,11 @@ export function TvProduction({ game, production }: { game: MuleView; production:
         {/* The header's pips, the rail and the colony bar read the very script the map plays: the same events, intro, clock and pace. */}
         <EventShow {...productionShowProps(production, t, { reduced, mode: 'tv', players, tiles, width: game.width, height: game.height })}>
           <TvHeader game={game} title="Production" extra={<EventPips />} />
-          <div className="flex min-h-0 flex-1 gap-6">
-            <ProductionMap width={game.width} height={game.height} tiles={tiles} production={production} t={t} slots={slots} players={players} reduced={reduced} mode="tv" tv className="w-[820px] shrink-0 self-start" />
+          {/* The map takes the height the header's ticker leaves, never more: three chat lines would push it under the colony bar. */}
+          <div className="flex min-h-0 flex-1 gap-6 [container-type:size]">
+            <div className="shrink-0 self-start" style={{ width: `min(820px, calc(100cqh * ${game.width} / ${game.height}))` }}>
+              <ProductionMap width={game.width} height={game.height} tiles={tiles} production={production} t={t} slots={slots} players={players} reduced={reduced} mode="tv" tv className="w-full" />
+            </div>
             <div className="flex min-w-0 flex-1 flex-col gap-4" data-testid="rail">
               {t >= SHOW.cardAt && <EventTvLog />}
               {(quiet || t < SHOW.cardAt) && (
