@@ -25,6 +25,7 @@ import {
   hasAnalysed,
   hungerPace,
   installMule,
+  isElectionDone,
   list as listLot,
   litPlot,
   lotDone,
@@ -75,7 +76,7 @@ import { PLAYER_COLORS, type MuleIntent, type MuleView, type ProductionReason, t
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import { colonistView, dueArrivals, placeName, walkTarget, type Colonist, type DevIntent } from './dev-walking.js';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
-import { electionNews, myPoliticsView, politicsView, resultShown } from './politics-view.js';
+import { myPoliticsView, officeNews, politicsView } from './politics-view.js';
 
 /**
  * The longest each phase lasts, in milliseconds, from the engine's PHASES.
@@ -171,8 +172,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private seats: SeatInfo[] = [];
   private readonly ready = new Set<string>();
   private readonly away = new Set<string>();
-  /** Seats the server pressed Done for in this election stage because their phone dropped. */
-  private readonly doneForAway = new Set<string>();
   /** Trades between players in the good that is up, for the news when it closes. */
   private dealsInGood: Trade[] = [];
   /** When the one development clock runs out for every seat, epoch ms; null outside development. */
@@ -296,19 +295,30 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         return;
       case 'continue': {
         if (seatId !== this.ctx.hostId()) throw new RuleError('Only the host can continue');
-        const left = this.seats.filter((s) => !s.isAi && s.id !== seatId && !this.ready.has(s.id)).map((s) => s.name);
-        this.continuePlanning();
+        const left = this.continuePlanning(seatId);
         if (left.length > 0) this.addNews(`${this.nameOf(seatId)} continued without ${andList(left)}.`);
         return;
       }
     }
   }
 
-  /** The host's Continue: ends planning proper with players not yet Ready. The caller must have checked the seat is the host. */
-  private continuePlanning(): void {
-    if (this.electionOpen()) throw new RuleError('The election is still running');
-    if (this.state?.phase !== 'planning') throw new RuleError('Continue ends planning only');
+  /**
+   * The host's Continue. In the election's announce or ballot every human not Done becomes Done, abstaining; refused in
+   * its ceremony. Otherwise it ends planning proper with players not yet Ready. Returns the names of the others it went
+   * on without. The caller must have checked the seat is the host.
+   */
+  private continuePlanning(hostId: string): string[] {
+    const state = this.requireState();
+    if (this.electionOpen()) {
+      if (state.politics!.election!.stage === 'ceremony') throw new RuleError('The result is being announced');
+      const waiting = this.seats.filter((s) => !s.isAi && !isElectionDone(state, s.id));
+      for (const s of waiting) electionDone(state, s.id);
+      return waiting.filter((s) => s.id !== hostId).map((s) => s.name);
+    }
+    if (state.phase !== 'planning') throw new RuleError('Continue ends planning only');
+    const left = this.seats.filter((s) => !s.isAi && s.id !== hostId && !this.ready.has(s.id)).map((s) => s.name);
     this.nextPhase();
+    return left;
   }
 
   /**
@@ -445,8 +455,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   connectionChanged(seatId: string, connected: boolean): void {
     if (connected) this.away.delete(seatId);
     else this.away.add(seatId);
-    // A Done the server pressed for the dropped phone is taken back; one the player pressed stands.
-    if (connected && this.electionOpen() && this.doneForAway.delete(seatId)) electionDone(this.requireState(), seatId, false);
     // Nobody waits for a phone that dropped.
     this.checkAllReady();
   }
@@ -464,7 +472,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   }
 
   private checkAllReady(): void {
-    // The election ends on its own clocks.
+    // The election waits for every player's Done, or the host's Continue; a dropped phone holds it.
     if (this.electionOpen()) return;
     const phase = this.state?.phase;
     // A phone that drops in the land grant just doesn't claim; a reload must not end the grant for everyone. In planning a
@@ -540,7 +548,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       this.scheduleLandAuctionTick(this.ctx.now());
       return;
     }
-    // In an election month the election runs first, on its own clocks; planning proper opens once it is over.
+    // In an election month the election runs first; planning proper opens once it is over.
     if (this.electionOpen()) {
       this.phaseEndsAt = null;
       this.scheduleElectionTick(this.ctx.now());
@@ -593,8 +601,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   /**
    * Steps the election every WALK.tickMs until it is over: the AI vote hands act
-   * first, then dropped phones count as Done and the election steps, all with the
-   * same dt. When it ends, planning proper opens, timed only when PHASES.planningMs is a number.
+   * first, then the election steps, with the same dt; each office makes the news
+   * at its winner step. When it ends, planning proper opens, timed only when
+   * PHASES.planningMs is a number.
    */
   private scheduleElectionTick(last: number): void {
     const state = this.requireState();
@@ -605,14 +614,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         // A stalled server loop must not skip a stage.
         const dt = Math.min(Math.max(0, now - last), WALK.tickMs * 3) / this.phaseScale;
         this.tickVoteHands(dt);
-        const { done, stage } = state.politics!.election!;
-        for (const id of this.away) if (!done.includes(id)) this.doneForAway.add(id);
-        for (const seat of this.seats) if (this.away.has(seat.id)) electionDone(state, seat.id);
-        const shown = resultShown(state);
+        const before = state.politics!.election!.ceremony;
         stepElection(state, dt);
-        if (state.politics!.election!.stage !== stage) this.doneForAway.clear();
-        const result = state.politics!.election!.result;
-        if (!shown && result && resultShown(state)) this.addNews(electionNews(result, (id) => this.nameOf(id)));
+        const { ceremony, result } = state.politics!.election!;
+        if (ceremony?.step === 'winner' && (before?.step !== 'winner' || before.office !== ceremony.office)) this.addNews(officeNews(ceremony.office, result!, (id) => this.nameOf(id)));
         if (this.electionOpen()) this.scheduleElectionTick(now);
         else {
           this.startPhaseTimer('planning');
@@ -907,7 +912,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const band = airBand(state.air).name;
     const outfits: Outfit[] = [...GOODS, 'greenBelt'];
     // While the election runs, the one "I'm ready" button stands for Done in the stage; planning's own ready set is untouched.
-    const isReady = (id: string) => (this.electionOpen() ? state.politics!.election!.done.includes(id) : this.ready.has(id));
+    const isReady = (id: string) => (this.electionOpen() ? isElectionDone(state, id) : this.ready.has(id));
     return {
       finished: state.phase === 'gameOver',
       month: state.month,
