@@ -173,8 +173,8 @@ examples → §6: Rookie + edit monopolyTarget 'smithore' → rejected, null · 
 
 ## §3 · Contracts & Data Models `[handoff]`
 - **Playbook schema** (ADDED, owned by WS1, frozen with WS3 and WS2): v0.2 at
-  `.handover/ws2-findings/playbook-schema-v0.md`, settled by WS3 on 29 Oct: `LandGrantPlay.pressShare: number` (one
-  share, a floor; the grant is one pass, `grantSweeps` 1); types in `packages/engine/src/playbook.ts` (WS1 holds the pen,
+  `.handover/ws2-findings/playbook-schema-v0.md`, settled by WS3 on 29 Oct: `LandGrantPlay.pressShare: { start; end }` (a
+  floor read against the pass's progress, falling start → end; the grant is one pass, `grantSweeps` 1); types in `packages/engine/src/playbook.ts` (WS1 holds the pen,
   a change after the freeze needs all three OKs). WS3 OK'd v1 at type level; WS1's type-level OK is the last.
   This spec adopts the frozen version by reference.
 - **Game record** (ADDED, WS3): types in `packages/engine/src/record.ts` (`GameRecord`, `RecordEvent`,
