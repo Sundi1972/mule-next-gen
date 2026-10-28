@@ -9,6 +9,8 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { colonyVerdict, fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, player, plotName, seatSpecies, secondsUntil, slotOf, standings, tileAt, toSlot } from '../game/derive';
 import { useAuctionSound } from '../game/sound';
 import { useClient, useClientState, useServerNow } from '../net/react';
+import { connectedIn, planningProper, stillPlanning } from '../phone/hub/ready';
+import { ReadyCount, WaitingFor } from '../phone/hub/ReadyBar';
 import { TvElection } from './TvElection';
 import { TvLandAuction } from './TvLandAuction';
 import { TvProduction } from './TvProduction';
@@ -195,9 +197,22 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
       </>
     );
   else if (phase === 'production' || phase === 'upkeep') side = <MonthEnd game={game} />;
-  else
+  else {
+    const connected = connectedIn(table.seats);
+    const waiting = stillPlanning(game.players, connected);
+    const host = game.players.find((p) => p.id === table.hostId);
+    // The host's Continue is refused while the election runs, so the TV offers it only after.
+    const hostCanContinue = !!host && (host.ready || host.isAi) && planningProper(game);
     side = (
       <>
+        {waiting.length > 0 ? (
+          <div className="flex flex-col gap-3 rounded-panel border-2 border-holo bg-holo-soft p-5 shadow-glow" data-testid="tv-waiting">
+            <WaitingFor seats={waiting} me={null} tv />
+            {hostCanContinue && <span className="text-lg text-ink-2">{host.name}, the host, can continue without them.</span>}
+          </div>
+        ) : (
+          <div className="rounded-panel border-2 border-holo bg-holo-soft p-5 font-display text-3xl font-semibold shadow-glow">Everyone is ready</div>
+        )}
         <MarketTiles game={game} />
         <News news={game.news} />
         <ul className="flex flex-col gap-3">
@@ -214,9 +229,22 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
               </li>
             ))}
         </ul>
-        <Players game={game} className="mt-auto" right={(p) => <span className="font-mono text-sm text-ink-3">{p.isAi ? 'AI' : p.ready ? 'READY' : '…'}</span>} />
+        <ul className="mt-auto flex flex-col gap-2" data-testid="tv-ready-list">
+          {game.players.map((p) => {
+            const isAway = !p.isAi && !connected(p.id);
+            const state = p.isAi ? 'AI · READY' : p.ready ? 'READY' : isAway ? 'AWAY · PLANNING' : 'PLANNING';
+            return (
+              <li key={p.id} className={cx('flex items-center gap-3', (p.isAi || p.ready) && 'opacity-60')}>
+                <PlayerMark slot={toSlot(p.slot)} size={22} glow={!(p.isAi || p.ready)} />
+                <span className="flex-1 truncate font-display text-xl font-semibold">{p.name}</span>
+                <span className={cx('font-mono text-sm', isAway ? 'text-warn' : p.ready || p.isAi ? 'text-ink-3' : 'text-holo')}>{state}</span>
+              </li>
+            );
+          })}
+        </ul>
       </>
     );
+  }
 
   if (phase === 'auction' && game.auction && !game.finished) {
     return (
@@ -236,8 +264,17 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
 
   return (
     <SeatSpeciesProvider value={seatSpecies(game)}>
-      <div className="flex h-[720px] w-[1280px] flex-col gap-5 bg-table p-10 text-ink" data-phase={phase}>
-        <TvHeader game={game} title={PHASE_NAME[phase]} seconds={secondsUntil(game.phaseEndsAt, now)} />
+      <div className="flex h-[720px] w-[1280px] flex-col gap-5 bg-table p-10 text-ink" data-phase={phase} data-testid={phase === 'planning' ? 'tv-planning' : undefined}>
+        {phase === 'planning' ? (
+          <div className="flex items-start gap-4">
+            <div className="min-w-0 flex-1">
+              <TvHeader game={game} title={PHASE_NAME[phase]} seconds={secondsUntil(game.phaseEndsAt, now)} />
+            </div>
+            <ReadyCount players={game.players} tv />
+          </div>
+        ) : (
+          <TvHeader game={game} title={PHASE_NAME[phase]} seconds={secondsUntil(game.phaseEndsAt, now)} />
+        )}
         {phase === 'development' && <SharedClock seconds={secondsUntil(game.phaseEndsAt, now) ?? 0} total={DEVELOPMENT.fullSeconds} size="tv" />}
         <div className="flex min-h-0 flex-1 gap-6">
           <div className="flex w-[700px] shrink-0 flex-col gap-3">
