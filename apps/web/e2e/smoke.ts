@@ -4,15 +4,16 @@
  * Run with `pnpm --filter @mule/web e2e`; replay a red run's map with `MULE_E2E_SEED=<seed>`.
  */
 import { existsSync } from 'node:fs';
-import { WALK } from '@mule/engine';
+import { POLITICS, WALK } from '@mule/engine';
 import { errors as playwrightErrors, type BrowserContext, type Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
 import { check, claimAPlot, headerSlot, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
 import { planningIsTheHub } from './hub-steps';
+import { readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
 import { fedPlayerFillsAFullHoloBar, hungryPlayerSeesAShortOrangeBar, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
 import { specialFieldsShowTheirGlyphs } from './special-steps';
-import { doubleTapZoomsToYourLand, moveDialogOpensInProduction, moveDialogOutlivedThePhase, noZoomBeforeYourFirstPlot, thePhonePicksRose, theSeatMovesToAnotherDevice, theTvDrawsRose, watchIntents, zoomButtonOnceYouOwnAPlot } from './table-steps';
+import { doneThroughTheElection, doubleTapZoomsToYourLand, moveDialogOpensInProduction, moveDialogOutlivedThePhase, noZoomBeforeYourFirstPlot, thePhonePicksRose, theSeatMovesToAnotherDevice, theTvDrawsRose, watchIntents, zoomButtonOnceYouOwnAPlot } from './table-steps';
 
 /** Loaded by a path held in a variable, so tsc never resolves a file that may not exist yet. */
 async function loadAuctionSteps(): Promise<AuctionSteps> {
@@ -106,11 +107,12 @@ try {
   await tvGame.locator('li').filter({ hasText: 'Heiko' }).getByRole('img', { name: 'Mollox' }).first().waitFor({ timeout: 3_000 });
   check((await tvGame.getByRole('img', { name: 'Zipwing' }).count()) === 0, 'B-AC-1: nobody in the TV game plays the seat-1 default, Zipwing');
   check((await tvGame.getByRole('img', { name: 'Bramblet' }).count()) >= 1, 'B-AC-1: the TV game still shows the first AI as a Bramblet');
-  await theTvDrawsRose(ctx, 'planning');
 
-  // Month 1.
+  // Month 1: the election, then planning's steps, then Ready.
+  console.log(`election: ${await doneThroughTheElection(ctx, within(POLITICS.nominateMs + POLITICS.ballotMs + POLITICS.revealMs))}`);
+  await theTvDrawsRose(ctx, 'planning');
   await specialFieldsShowTheirGlyphs(ctx);
-  await phone.getByRole('button', { name: "I'm ready" }).click();
+  await readyThroughTheElection(phone, within(PHASE_MS.planning));
   const claim = phone.getByRole('button', { name: /CLAIM/ });
   await claim.waitFor({ timeout: 5_000 });
   check(await claim.isVisible(), 'CLAIM button visible');
@@ -332,17 +334,20 @@ async function checkTheScoresAddUp(phone: Page, tv: Page): Promise<void> {
   const line = async (part: string) => {
     const row = end.getByTestId(`part-${part}`);
     const rows = await row.count();
-    if (part === 'collapse' && rows === 0) return 0;
+    if ((part === 'collapse' || part === 'office') && rows === 0) return 0;
     check(rows === 1, `B-AC-3: the phone shows one part-${part} line, got ${rows}`);
-    return readNumber(await row.locator('td').last().textContent(), `the phone's part-${part}`);
+    // The office line is shown with a plus sign.
+    const shown = (await row.locator('td').last().textContent())?.replace(/^\s*\+/, '') ?? null;
+    return readNumber(shown, `the phone's part-${part}`);
   };
   const parts = Object.fromEntries(await Promise.all(PART_LINES.map(async (p) => [p, await line(p)] as const)));
   // The Collapse line is shown as a negative number; read it signed so a positive one fails.
   const cut = -(await line('collapse'));
   check(cut >= 0, `B-AC-3: the phone's Collapse line takes points off, but it reads +${-cut}`);
+  const office = await line('office');
   const total = await line('total');
-  const sum = PART_LINES.reduce((s, p) => s + parts[p]!, 0) - cut;
-  check(sum === total, `B-AC-3: the phone's lines ${PART_LINES.map((p) => `${p} ${parts[p]}`).join(' + ')} − collapse ${cut} = ${sum}, but its final score reads ${total}`);
+  const sum = PART_LINES.reduce((s, p) => s + parts[p]!, 0) + office - cut;
+  check(sum === total, `B-AC-3: the phone's lines ${PART_LINES.map((p) => `${p} ${parts[p]}`).join(' + ')} + office ${office} − collapse ${cut} = ${sum}, but its final score reads ${total}`);
 
   await tvEnd.getByTestId('tv-scores').waitFor({ timeout: 5_000 });
   const hostRow = tvEnd.getByTestId('tv-scores').locator('li').filter({ has: tv.getByText('Heiko', { exact: true }) });

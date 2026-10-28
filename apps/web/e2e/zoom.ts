@@ -3,6 +3,7 @@ import { mapSize } from '@mule/engine';
 import type { Locator, Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
 import { check, claimAPlot, launch, PHONE, startServer } from './harness';
+import { readyThroughTheElection } from './politics-steps';
 import { watchIntents } from './table-steps';
 
 const PHASE_SCALE = 0.5;
@@ -35,7 +36,7 @@ try {
   for (let i = 1; i < SEATS; i++) await phone.getByRole('button', { name: 'Add AI player' }).click();
   await phone.locator('[data-testid=seats] li').nth(SEATS - 1).waitFor();
   await phone.getByRole('button', { name: 'Start game' }).click();
-  await phone.getByRole('button', { name: "I'm ready" }).click({ timeout: 5_000 });
+  await readyThroughTheElection(phone, 10_000);
   await phone.locator('[data-phase=landGrant]').getByRole('button', { name: /CLAIM/ }).waitFor({ timeout: 5_000 });
   await claimAPlot(phone, within(PHASE_MS.landGrant), 'T-AC-9: the phone claims a plot in the land grant');
   check(intents() >= 1, `T-AC-9: the frame watcher saw the claim go out, ${intents()} intents`);

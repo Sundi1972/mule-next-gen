@@ -27,6 +27,47 @@ export function watchIntents(page: Page): () => number {
   return () => intents;
 }
 
+/**
+ * T-AC-1, month 1 on a table that plays politics: presses Done through each election stage until the server says the
+ * election is over, leaving planning proper on screen with its Ready unpressed, for the steps that need planning's
+ * screens. Each press is made held: the election steps only on its own clock, so the stage cannot close under the
+ * press and turn it into planning's Ready, which would end planning. Returns a line for the log.
+ */
+export async function doneThroughTheElection(ctx: GameStepContext, timeout: number): Promise<string> {
+  const started = Date.now();
+  const deadline = started + timeout;
+  const ready = ctx.phone.locator('[data-phase=planning] [data-testid=ready]:not([disabled])');
+  const { name } = await playingAs(ctx.phone);
+  const seat = gameOf(ctx).state.players.find((p) => p.name === name);
+  check(seat, `T-AC-1: ${name} plays in the game`);
+  const stages: string[] = [];
+  for (;;) {
+    const { state } = gameOf(ctx);
+    check(state.phase === 'planning', `T-AC-1: the election ends inside planning, but the game is in ${state.phase}`);
+    const election = state.politics?.election;
+    if (!election || election.stage === 'over') return `${stages.join(' > ') || 'no election'}, over in ${((Date.now() - started) / 1_000).toFixed(2)} s`;
+    check(Date.now() < deadline, `T-AC-1: the month-1 election is over within ${timeout} ms, still at ${election.stage}`);
+    if (stages.at(-1) !== election.stage) stages.push(election.stage);
+    const stage = election.stage;
+    await ctx.held(async () => {
+      const now = gameOf(ctx).state.politics?.election;
+      if (now?.stage !== stage || (stage !== 'nominate' && stage !== 'ballot') || now.done.includes(seat.id)) return;
+      await ready.click({ timeout: PRESS_MS });
+      await until(() => gameOf(ctx).state.politics?.election?.done.includes(seat.id) === true, `T-AC-1: the server counts ${name} Done in the ${stage} stage`);
+    });
+    await until(() => gameOf(ctx).state.politics?.election?.stage !== stage || Date.now() >= deadline, `T-AC-1: the election moves on from ${stage}`);
+  }
+}
+
+/** Waits for a condition on the in-process server's state, which no page event announces; fails with `message` after SHOWN_MS. */
+async function until(ok: () => boolean, message: string): Promise<void> {
+  const end = Date.now() + SHOWN_MS;
+  while (!ok()) {
+    check(Date.now() < end, message);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+
 /** B-AC-8: the colour smoke's phone picks. Free at a three-seat table, and no seat's default there. */
 const ROSE = 5 as Slot;
 
