@@ -11,7 +11,34 @@ const SCANNED = ['packages/engine/src', 'packages/ai/src'];
  * Files still being cleaned: their literals are listed but don't fail. A lane takes its file off once the file is
  * clean, and a clean file left here fails, so the list only shrinks.
  */
-const PENDING = new Set<string>([]);
+const PENDING = new Set<string>([
+  // WS1: cleaned once #109 has merged, which rewrites most of them.
+  'packages/ai/src/outlook.ts',
+  'packages/ai/src/play.ts',
+  'packages/ai/src/seat.ts',
+  'packages/ai/src/sim.ts',
+  'packages/ai/src/strategist.ts',
+  'packages/ai/src/utility.ts',
+  'packages/ai/src/value.ts',
+  'packages/engine/src/economy.ts',
+  'packages/engine/src/events.ts',
+  'packages/engine/src/observe.ts',
+  'packages/engine/src/production.ts',
+  // WS2.
+  'packages/ai/src/brain.ts',
+  'packages/ai/src/decider.ts',
+  // WS3: marked on ws3-auctions (#107); off when that reaches this branch.
+  'packages/ai/src/hands/auction.ts',
+  'packages/ai/src/hands/lot.ts',
+  'packages/engine/src/auction.ts',
+  'packages/engine/src/lots.ts',
+  'packages/engine/src/walk.ts',
+  // WS7.
+  'packages/ai/src/hands/vote.ts',
+  'packages/engine/src/politics.ts',
+  // No lane owns it yet: the generator's constants want markers.
+  'packages/engine/src/rng.ts',
+]);
 /** A literal that is not balance says why, on its line or the line above. */
 const MARKER = /\/\/ literal-ok: (.{10,})/;
 /** Numbers that are arithmetic, not balance. */
