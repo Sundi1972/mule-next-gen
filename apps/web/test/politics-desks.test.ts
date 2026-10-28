@@ -388,25 +388,43 @@ describe('T-AC-62: Governor only, the default POLITICS.offices', () => {
 
 describe("the hub's politics parts in plain words (UX audit A-3)", () => {
   /** The view in month `n`, Governor only, with these politics. */
-  const month = (n: number, extra: Partial<PoliticsView>) => ({ ...view(politics({ pay: { governor: 50 }, ...extra })), month: n });
+  const month = (n: number, extra: Partial<PoliticsView>): MuleView => ({ ...view(politics({ pay: { governor: 50 }, ...extra })), month: n });
 
-  it('H-5: the Colony desk opens on the colony fund: how much it holds, what fills it and what it pays out each month', () => {
-    const html = onPhone(month(4, { governor: 's3', term: [4, 6], next: 7, election: election({ stage: 'over' }), tax: { percent: 6, start: 5, low: 0, high: 10 }, fund: 1240 }), ColonyWithFacts);
+  it.each<[string, string | null, string]>([
+    ['with a Governor', 's3', 'the 6% sales tax on every sale; Kai, the Governor, sets it'],
+    ['before anyone governs', null, 'the 6% sales tax on every sale'],
+  ])('H-5: the Colony desk opens on the colony fund: how much it holds, what fills it and what it pays out each month (%s)', (_, governor, fundIn) => {
+    const html = onPhone(month(4, { governor, term: governor ? [4, 6] : null, next: 7, election: election({ stage: 'over' }), tax: { percent: 6, start: 5, low: 0, high: 10 }, fund: 1240 }), ColonyWithFacts);
     expect(html.match(/data-testid="([^"]+)"/)?.[1], 'the first thing in the Colony desk').toBe('fund-card');
     expect(textOf(html, 'fund-total')).toBe('1,240 cr');
-    expect(textOf(html, 'fund-in')).toBe('the 6% sales tax on every sale; Kai, the Governor, sets it');
+    expect(textOf(html, 'fund-in')).toBe(fundIn);
     expect(textOf(html, 'fund-out')).toBe('Governor 50 cr a month');
   });
 
-  it.each<[string, MuleView, string, string | null]>([
-    ["after this month's election", month(4, { governor: 's3', term: [4, 6], next: 7, election: election({ stage: 'over' }) }), 'Governor: Kai, until month 6', 'Next election: month 7'],
-    ['in the election month, before its result', month(4, { governor: 's2', term: [1, 3], next: 7, election: election({ stage: 'ballot' }) }), 'Governor: Ossa, until month 3', 'Next election: month 4'],
-    ['when the game ends before another election', month(10, { governor: 's3', term: [10, 12], next: null, election: null }), 'Governor: Kai, until month 12', null],
-  ])("H-6: the hub's offices line says who governs until when, and when the next election is, in words (%s)", (_, game, governor, next) => {
-    const html = onPhone(game, OfficesLine);
-    expect(textOf(html, 'office-governor')).toBe(governor);
-    if (next === null) expect(tagOf(html, 'next-election')).toBeUndefined();
-    else expect(textOf(html, 'next-election')).toBe(next);
-    expect(textOf(html, 'roadmap-offices'), 'no codes').not.toMatch(/\bM\d|NEXT|ELECTION/);
+  it("H-5: the Governor's desk names the tax as everyone reads it, in the fund card's In line", () => {
+    const game = month(4, { governor: 's1', term: [4, 6], next: 7, election: null, tax: { percent: 7, start: 5, low: 0, high: 10 } });
+    const said = /Everyone sees it in the colony fund: (the \d+% sales tax on every sale)\./.exec(textOf(onPhone(game, GovernorDesk), 'gov-tax'))?.[1];
+    expect(said).toBe('the 7% sales tax on every sale');
+    expect(textOf(onPhone(game, ColonyWithFacts), 'fund-in')).toBe(`${said}; Lena, the Governor, sets it`);
+  });
+
+  it.each<[string, MuleView, string | null, Office[]?]>([
+    ["after this month's election", month(4, { governor: 's3', term: [4, 6], next: 7, election: election({ stage: 'over' }) }), 'Governor: Kai, until month 6 · Next election: month 7'],
+    ['while this month\'s election is open, on the old term', month(4, { governor: 's2', term: [1, 3], next: 7, election: election({ stage: 'ballot' }) }), 'Governor: Ossa · Election: this month'],
+    ['when the game ends before another election', month(10, { governor: 's3', term: [10, 12], next: null, election: null }), 'Governor: Kai, until month 12'],
+    ['before anyone governs, with an election coming', month(2, { next: 4, election: null }), 'Next election: month 4'],
+    ['with nothing to show', month(11, { next: null, election: null }), null],
+    ['with a Sheriff', month(4, { governor: 's3', sheriff: 's4', term: [4, 6], next: 7, election: election({ stage: 'over' }) }), 'Governor: Kai, until month 6 · Sheriff: Brix, until month 6 · Next election: month 7', ['governor', 'sheriff']],
+  ])("H-6: the hub's offices line says who governs until when, and when the next election is, in words (%s)", (_, game, line, offices = ['governor']) => {
+    const saved = POLITICS.offices;
+    POLITICS.offices = offices;
+    try {
+      const html = onPhone(game, OfficesLine);
+      if (line === null) return expect(html).toBe('');
+      expect(textOf(html, 'roadmap-offices')).toBe(line);
+      expect(line, 'no codes').not.toMatch(/\bM\d|NEXT|ELECTION/);
+    } finally {
+      POLITICS.offices = saved;
+    }
   });
 });
