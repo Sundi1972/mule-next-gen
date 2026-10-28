@@ -40,6 +40,8 @@ describe('a colonist’s condition, in words (AM-14)', () => {
     expect(title(STARVING_AND_SICK)).toBe('Starving and sick: 10% pace');
     expect([FED, PECKISH, HUNGRY, STARVING, SICK, STARVING_AND_SICK].map((c) => paceLine(c, DEV_WALK, FOOD).tone)).toEqual(['ok', 'warn', 'warn', 'alert', 'alert', 'alert']);
     expect(feeling(STARVING_AND_SICK, DEV_WALK)).toBe('Starving and sick');
+    // The short form, for a narrow rail's clock label.
+    expect([FED, HUNGRY, STARVING_AND_SICK].map((c) => paceLine(c, DEV_WALK, FOOD).short)).toEqual(['full pace', '60% pace', '10% pace']);
   });
 
   it('T-AC-12: the long-press rule says what hunger and sickness cost, its points from config', () => {

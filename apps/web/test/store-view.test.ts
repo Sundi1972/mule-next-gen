@@ -1,5 +1,5 @@
 import { DEV_WALK } from '@mule/engine';
-import { PaceList, SharedClock, StoreInterior, TimeBar, type Condition } from '@mule/ui';
+import { PaceList, SharedClock, StoreInterior, TimeBar, Timer, type Condition } from '@mule/ui';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -68,9 +68,9 @@ describe('the store at a glance', () => {
   it('T-AC-12: the clock is one for everyone, and the TV lists each pace and why on the roster rows', () => {
     expect(textFrom(renderToStaticMarkup(createElement(SharedClock, { seconds: 31, total: 50 })), 'shared-clock')).toMatch(/^ Everyone(&#x27;|')s time · one clock 31s/);
     expect(textFrom(renderToStaticMarkup(createElement(SharedClock, { seconds: 31, total: 50, size: 'tv' })), 'shared-clock')).toMatch(/^ Everyone(&#x27;|')s time 31s/);
-    // A small phone's rail has room for one line above the bar: your pace rides on the clock's label there.
-    const rail = renderToStaticMarkup(createElement(SharedClock, { seconds: 31, total: 50, pace: { title: 'Hungry: 52% pace', tone: 'warn' } }));
-    expect(rail).toMatch(/<span class="[^"]*@min-\[1100px\]\/shell:hidden[^"]*">Everyone(&#x27;|')s time · <span class="text-warn">Hungry: 52% pace<\/span><\/span>/);
+    // Under 1100 px your pace rides on the clock's label, on one line, the longest case too.
+    const rail = renderToStaticMarkup(createElement(SharedClock, { seconds: 31, total: 50, pace: { short: '10% pace', tone: 'alert' } }));
+    expect(rail).toMatch(/<span class="[^"]*\bwhitespace-nowrap\b[^"]*\btruncate\b[^"]*@min-\[1100px\]\/shell:hidden[^"]*">Everyone(&#x27;|')s time · <span class="text-alert">10% pace<\/span><\/span>/);
     expect(rail).toMatch(/<span class="hidden[^"]*@min-\[1100px\]\/shell:inline[^"]*">Everyone(&#x27;|')s time · one clock<\/span>/);
     const list = renderToStaticMarkup(
       createElement(PaceList, {
@@ -90,6 +90,10 @@ describe('the store at a glance', () => {
     expect(tagOf(list, 'condition-lena')).toContain('data-hunger="2"');
     expect(textFrom(list, 'pace-kai')).toMatch(/^ The Good Neighbour 100% PUB/);
     expect(tagOf(list, 'pace-kai')).toContain('opacity-50');
+    // A colonist still building glows on the roster, as the roster always did; one done does not.
+    const mark = (id: string) => list.slice(list.indexOf(tagOf(list, `pace-${id}`))).match(/<span role="img"[^>]*style="([^"]*)"/)![1]!;
+    expect(mark('lena')).toContain('color-mix');
+    expect(mark('kai')).not.toContain('color-mix');
     expect(list).not.toContain('data-testid="condition-kai"');
   });
 
@@ -109,6 +113,10 @@ describe('the store at a glance', () => {
     expect(clock(30, 'tv')).toMatch(/class="[^"]*\bh-6\b[^"]*"/);
     expect(number(clock(30, 'tv'))).toContain('text-5xl');
     expect(number(clock(30, 'phone'))).toMatch(/\btext-lg\b.*@min-\[1100px\]\/shell:text-2xl/);
+    // On a narrow screen the header's chip is the always-visible clock: it turns the same alert red at 10 s, not at 11.
+    const chip = (seconds: number) => renderToStaticMarkup(createElement(Timer, { seconds }));
+    expect(chip(10)).toMatch(/class="[^"]*\banimate-pulse-glow\b[^"]*\bborder-alert\b[^"]*\btext-alert\b/);
+    expect(chip(11)).not.toMatch(/alert|warn|pulse/);
     // The auction's bar is unchanged: at 10 s of 50 it is red by its share and says Hurry.
     const auction = renderToStaticMarkup(createElement(TimeBar, { seconds: 10, total: 50 }));
     expect(fill(auction)).toContain('bg-rise');
