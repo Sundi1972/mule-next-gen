@@ -1168,4 +1168,17 @@ export const BRAIN = {
   talkLines: 6,
   /** How long a land decision may wait for the model, in ms; planning lasts up to 45 s. */
   landTimeoutMs: 5_000,
+  /** The strategy brief's sections, each capped so the prompt stays bounded; its table talk keeps `talkLines`. */
+  brief: {
+    /** Plots named per player under who owns the land; the rest are counted. */
+    plotsPerPlayer: 12,
+    /** Land plans offered, best first; never more than there are option letters. */
+    plans: 5,
+    /** Plots named under each land plan, with their values. */
+    plotsPerPlan: 3,
+    /** Entries named from each list in the draft land grant; the rest are counted. */
+    draftEntries: 6,
+  },
+  /** Longest reason the playbook writer accepts on a strategy or an edit, in characters. */
+  writeReasonChars: 140,
 } as const;
