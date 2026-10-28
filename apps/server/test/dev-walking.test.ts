@@ -1,8 +1,8 @@
 import { AI_HANDS, AI_LEVELS, analysisSeconds, DEVELOPMENT, RuleError, SPECIES_PERK, tileIndex, walkSeconds, type GameState, type Outfit } from '@mule/engine';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_AI_LEVEL, type MuleGame } from '../src/mule-game.js';
-import { seats, toDevelopment, walkers } from './fake-context.js';
+import { DEFAULT_AI_LEVEL, PHASE_MS, type MuleGame } from '../src/mule-game.js';
+import { readyAll, seats, toDevelopment, walkers } from './fake-context.js';
 
 const LENA = 's1';
 const OSSA = 's2';
@@ -54,6 +54,39 @@ function walking(phaseScale?: number) {
   const start = g.ctx.now();
   const advanceTo = (at: number) => g.advance(at - g.ctx.now());
   return { ...g, start, home: home!, ossaHome: ossaHome!, far: far!, advanceTo };
+}
+
+/**
+ * Heiko and Mia with the AI Baron, month 1: Mia goes to the pub; Heiko buys, outfits and walks to install on his plot,
+ * his phone blipping off and straight back mid-walk if `blip`; once it lands he walks to the pub. Returns when the
+ * humans were done, when development ended, and whether the Baron finished his own turn at the pub.
+ */
+function heikoInstallsThenPubs(blip: boolean) {
+  let plot: Plot | null = null;
+  const g = toDevelopment({
+    prepare: (state) => {
+      Object.assign(state.players.find((p) => p.id === 's1')!.stock, { food: 20, medicine: 2 });
+      plot = plotAway(state, 3);
+      state.tiles[plot.index]!.owner = 's1';
+    },
+  });
+  const { game, ctx } = g;
+  const advanceTo = (at: number) => g.advance(at - ctx.now());
+  game.handle('s2', { type: 'pub' });
+  game.handle('s1', { type: 'buyMule' });
+  advanceTo(walkOf(game.viewFor(null), 's1').arrivesAt);
+  game.handle('s1', { type: 'outfit', outfit: 'food' });
+  game.handle('s1', { type: 'install', ...xy(plot!) });
+  if (blip) {
+    game.connectionChanged('s1', false);
+    game.connectionChanged('s1', true);
+  }
+  advanceTo(walkOf(game.viewFor(null), 's1').arrivesAt);
+  game.handle('s1', { type: 'pub' });
+  const humansDoneAt = walkOf(game.viewFor(null), 's1').arrivesAt;
+  for (let i = 0; i < 10_000 && game.viewFor(null).phase === 'development'; i++) g.advance(100);
+  const after = game.viewFor(null);
+  return { humansDoneAt, endedAt: after.phaseEndsAt! - PHASE_MS.production, baronAtPub: after.players.find((p) => p.id === 's3')!.doneDeveloping };
 }
 
 /** At phaseScale 1, Lena buys a MULE at the corral and outfits it, waiting out her walk there. */
@@ -298,6 +331,50 @@ describe('FM-one-clock: one development clock for every seat', () => {
     const after = game.viewFor(null);
     expect(after.phase).toBe('production');
     expect(after.tiles[ossaHome.index]).toMatchObject({ owner: OSSA, outfit: 'food' });
+  });
+
+  it('FM-one-clock: a phone that blips mid-walk changes nothing: Heiko drops and is straight back, his install lands, he walks to the pub, and the AI plays its turn out exactly as with no blip', () => {
+    const plain = heikoInstallsThenPubs(false);
+    const blip = heikoInstallsThenPubs(true);
+    expect(plain.baronAtPub, 'with no blip the Baron finishes his own turn at the pub').toBe(true);
+    expect(plain.endedAt).toBeGreaterThan(plain.humansDoneAt);
+    expect(blip).toEqual(plain);
+  });
+
+  it("FM-one-clock: an early end held for a walk is forgotten with the month: in month 2 Heiko's pub leaves the AI to play its turn out", () => {
+    const solo = [seats[0]!, seats[2]!];
+    let plot: Plot | null = null;
+    const g = toDevelopment({
+      players: solo,
+      prepare: (state) => {
+        Object.assign(state.players.find((p) => p.id === 's1')!.stock, { food: 20, medicine: 2 });
+        plot = plotAway(state, 3);
+        state.tiles[plot.index]!.owner = 's1';
+      },
+    });
+    const { game, ctx } = g;
+    const advanceTo = (at: number) => g.advance(at - ctx.now());
+    game.handle('s1', { type: 'buyMule' });
+    advanceTo(walkOf(game.viewFor(null), 's1').arrivesAt);
+    game.handle('s1', { type: 'outfit', outfit: 'food' });
+    game.handle('s1', { type: 'install', ...xy(plot!) });
+    // The only human drops mid-walk: the early end waits for the walk, then month 1 ends there.
+    game.connectionChanged('s1', false);
+    for (let i = 0; i < 10_000 && game.viewFor(null).phase === 'development'; i++) g.advance(100);
+    expect(game.viewFor(null).phase).toBe('production');
+
+    for (let i = 0; i < 20_000 && !(game.viewFor(null).month === 2 && game.viewFor(null).phase === 'development'); i++) {
+      if (game.viewFor(null).phase === 'planning') {
+        game.connectionChanged('s1', true);
+        readyAll(game);
+      }
+      g.advance(100);
+    }
+    expect(game.viewFor(null)).toMatchObject({ month: 2, phase: 'development' });
+    game.handle('s1', { type: 'pub' });
+    expect(game.viewFor(null).phase, 'the AI is still at work').toBe('development');
+    for (let i = 0; i < 10_000 && game.viewFor(null).phase === 'development'; i++) g.advance(100);
+    expect(game.viewFor(null).players.find((p) => p.id === 's3')!.doneDeveloping, 'the Baron finished his own turn at the pub').toBe(true);
   });
 
   it('FM-one-clock: when the last seat walks to the pub from her plot, development ends at her arrival ms', () => {
