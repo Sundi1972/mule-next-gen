@@ -1,6 +1,6 @@
 import { COLONY_SELLER, SHIP_ID, STORE_ID, WALK, type AuctionRole, type AuctionSide, type Good } from '@mule/engine';
 import type { AuctionView, DealView, LandAuctionView, ListingView, MuleView } from '@mule/protocol';
-import { bestPrices, Creature, cx, GOOD_NAME, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
+import { Creature, cx, GOOD_NAME, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
 import type { ReactNode } from 'react';
 import { plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
 import { GroundCard } from '../phone/ground';
@@ -22,27 +22,6 @@ export function boardWalkers(view: MuleView, auction: AuctionView): BoardWalker[
       ...(need === undefined ? {} : { surplus: w.units - need }),
     };
   });
-}
-
-/** Who holds each moving line, in words beside the board; the TV adds the gap between them. */
-export function LineReadout({ walkers, trading, meId, tv = false }: { walkers: BoardWalker[]; trading: boolean; meId?: string; tv?: boolean }) {
-  const { ask, bid } = bestPrices(walkers);
-  const who = (w: BoardWalker) => (w.id === meId ? 'You' : w.name);
-  const gap = ask && bid ? ask.price - bid.price : null;
-  return (
-    <dl className={cx('grid grid-cols-[auto_1fr] items-baseline gap-x-2 font-mono', tv ? 'gap-y-1 text-lg' : 'gap-y-0.5 text-[11px]')} data-testid="line-readout">
-      <dt className="text-rise">LOWEST ASK</dt>
-      <dd data-num className="font-bold text-rise">{ask ? `${ask.price} · ${who(ask)}` : '—'}</dd>
-      <dt className="text-fall">HIGHEST BID</dt>
-      <dd data-num className="font-bold text-fall">{bid ? `${bid.price} · ${who(bid)}` : '—'}</dd>
-      {tv && (
-        <>
-          <dt className="text-ink-3">GAP</dt>
-          <dd data-num className="font-bold text-ink">{trading ? 'MET: TRADING' : gap === null ? '—' : `${gap} apart`}</dd>
-        </>
-      )}
-    </dl>
-  );
 }
 
 /** Who an id is, in a sentence: "you", "the store", "the ship", or the player's name. */
