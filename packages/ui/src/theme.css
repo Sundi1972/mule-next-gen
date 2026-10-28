@@ -88,6 +88,8 @@
   --color-s-geyser: var(--color-g-water);
   --color-s-oasis: var(--color-g-food);
   --color-s-relic: var(--color-g-energy);
+  /* The meteor crater pays Crystite too, so it wears the cavern's colour; its shape tells the two apart. */
+  --color-s-meteorCrater: var(--color-g-crystite);
 
   /* The MULE character's metal: its body, its outline and joints, its belly plate; its empty pod, dark in both themes. */
   --color-mule-metal: #c9d3df;

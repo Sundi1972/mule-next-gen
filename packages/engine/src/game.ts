@@ -412,16 +412,16 @@ export interface ScoreParts {
   land: number;
   mules: number;
   muleValue: number;
-  /** Points for terms served (POLITICS.termScore each); Collapse doesn't cut it. 0 with politics off. */
+  /** Points for terms served (POLITICS.termScore each), before any Collapse cut. 0 with politics off. */
   office: number;
-  /** What Collapse took off: 0 unless the colony failed. */
+  /** What Collapse took off every line, office included: 0 unless the colony failed. */
   cut: number;
   total: number;
 }
 
 /**
  * A final score line by line: money, goods at today's colony prices, land,
- * installed MULEs at the store price, terms in office, and the Collapse cut.
+ * installed MULEs at the store price, terms in office, and the Collapse cut on all of them.
  * The lines add up to total + cut exactly; goods absorbs the rounding. See spec RULE-3.
  */
 export function scoreParts(state: GameState, playerId: string): ScoreParts {
@@ -436,12 +436,11 @@ export function scoreParts(state: GameState, playerId: string): ScoreParts {
   // Keep this exact order of addition: regrouping it moves Math.round at .5 edges and changes scores.
   const raw = p.money + stockValue + (land + muleValue);
   const before = Math.round(raw);
-  // The office line joins after the rounding, so it moves no existing total.
+  // Outside Collapse the office line joins after the rounding, so it moves no existing total.
   const office = officeScore(state, playerId);
-  const kept = colonyFailed(state) ? Math.round(raw * POLLUTION.collapseScore) : before;
-  const total = kept + office;
+  const total = colonyFailed(state) ? Math.round((raw + office) * POLLUTION.collapseScore) : before + office;
   const money = Math.round(p.money);
-  return { money, goods: before - money - land - muleValue, plots, land, mules, muleValue, office, cut: before - kept, total };
+  return { money, goods: before - money - land - muleValue, plots, land, mules, muleValue, office, cut: before + office - total, total };
 }
 
 /** Final score: scoreParts().total. */
