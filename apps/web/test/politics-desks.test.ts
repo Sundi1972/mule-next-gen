@@ -11,7 +11,7 @@ import { ColonyDesk } from '../src/phone/hub/desks';
 import { AgendaRow, Hub } from '../src/phone/hub/Hub';
 import { ColonyWithFacts } from '../src/phone/hub/politics/Colony';
 import { CouncilBody } from '../src/phone/hub/politics/Council';
-import { ElectionDay } from '../src/phone/hub/politics/ElectionDay';
+import { ElectionDay, forgetPicks, pickOn } from '../src/phone/hub/politics/ElectionDay';
 import { GovernorDesk } from '../src/phone/hub/politics/Governor';
 import { OfficesLine } from '../src/phone/hub/politics/Offices';
 import { PromiseSheet } from '../src/phone/hub/politics/Run';
@@ -115,8 +115,8 @@ const client = {
 } as unknown as TableClient;
 
 /** The room around a game: Lena hosts; `boards` big screens; `away` seats dropped. */
-const tableOf = (game: MuleView, boards = 1, away: string[] = []): TableView<MuleView> => ({
-  code: 'MULE',
+const tableOf = (game: MuleView, boards = 1, away: string[] = [], code = 'MULE'): TableView<MuleView> => ({
+  code,
   status: 'playing',
   hostId: 's1',
   seats: PLAYERS.map((p) => ({ id: p.id, name: p.name, isAi: p.isAi, connected: !away.includes(p.id), color: p.slot })),
@@ -124,16 +124,16 @@ const tableOf = (game: MuleView, boards = 1, away: string[] = []): TableView<Mul
   game,
 });
 
-/** A component as Lena's phone draws it, from this view. */
-function onPhone(game: MuleView, desk: () => ReactElement | null, boards = 1): string {
-  const value = { table: tableOf(game, boards), view: game, me: game.me!, self: game.players[0]!, slot: 0 as Slot };
+/** A component as Lena's phone draws it, from this view, in room `code`. */
+function onPhone(game: MuleView, desk: () => ReactElement | null, boards = 1, code = 'MULE'): string {
+  const value = { table: tableOf(game, boards, [], code), view: game, me: game.me!, self: game.players[0]!, slot: 0 as Slot };
   return renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value, children: createElement(desk) }) })).replaceAll('<!-- -->', '');
 }
 
 /** Lena's whole planning hub, as the game draws it. */
-function inHub(game: MuleView, boards = 1): string {
+function inHub(game: MuleView, boards = 1, code = 'MULE'): string {
   const hub = () => createElement(Hub, { slots: HUB_SLOTS });
-  return onPhone(game, hub, boards);
+  return onPhone(game, hub, boards, code);
 }
 
 function onTv(game: MuleView, away: string[] = []): string {
@@ -375,6 +375,46 @@ describe('election day on the phone (C66, E-2)', () => {
     const picked = inHub(ballot({ governor: 's2' }));
     expect(picked).toMatch(/<button(?![^>]*disabled="")[^>]*data-testid="ready"[^>]*>Cast my vote</);
     expect(picked.slice(picked.indexOf('data-testid="ballot-governor-s2"')).match(/<input[^>]*>/)![0]).toMatch(/checked/);
+  });
+
+  describe("this phone's picks, shown before the server's view comes back", () => {
+    afterEach(() => forgetPicks());
+
+    /** The input of this ballot option, as the hub draws it. */
+    const radio = (html: string, option: string) => html.slice(html.indexOf(`data-testid="ballot-governor-${option}"`)).match(/<input[^>]*>/)![0];
+    const cast = /<button(?![^>]*disabled="")[^>]*data-testid="ready"[^>]*>Cast my vote</;
+    const LENA_4 = { room: 'MULE', seat: 's1', month: 4 };
+
+    it('C66, AM-21: Abstain shows checked at once, and counts as a pick for Cast my vote', () => {
+      pickOn(LENA_4, 'governor', '');
+      const html = inHub(ballot());
+      expect(radio(html, 'abstain')).toMatch(/checked/);
+      expect(html).toMatch(cast);
+    });
+
+    it.each<[string, { room: string; seat: string; month: number }]>([
+      ["the next election's", { ...LENA_4, month: 7 }],
+      ["another room's", { ...LENA_4, room: 'ZORP' }],
+    ])("C66, AM-21: %s ballot opens with nothing chosen and Cast my vote off", (_, other) => {
+      pickOn(LENA_4, 'governor', '');
+      const html = inHub({ ...ballot(), month: other.month }, 1, other.room);
+      for (const option of ['s1', 's2', 'abstain']) expect(radio(html, option), option).not.toMatch(/checked/);
+      expect(html).not.toMatch(cast);
+    });
+
+    it("C66, AM-21: another seat's abstention on this phone is not Lena's", () => {
+      pickOn({ ...LENA_4, seat: 's2' }, 'governor', '');
+      const html = inHub(ballot());
+      expect(radio(html, 'abstain')).not.toMatch(/checked/);
+      expect(html).not.toMatch(cast);
+    });
+
+    it("C66, AM-21: the server's ballot wins over this phone's pick for that office", () => {
+      pickOn(LENA_4, 'governor', 's1');
+      const html = inHub(ballot({ governor: 's2' }));
+      expect(radio(html, 's2')).toMatch(/checked/);
+      expect(radio(html, 's1')).not.toMatch(/checked/);
+    });
   });
 
   it('C66, E-5: your votes in words: how many, why, and your own numbers', () => {
