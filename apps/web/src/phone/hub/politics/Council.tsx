@@ -1,7 +1,7 @@
 import { POLITICS, type Office, type TaxPromise } from '@mule/engine';
 import type { ElectionView, MyPoliticsView } from '@mule/protocol';
 import { Button, Creature, cx, SLOT_COLOR } from '@mule/ui';
-import { useState, type ReactNode } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 import { slotOf } from '../../../game/derive';
 import { useClient } from '../../../net/react';
 import { usePhoneGame } from '../../game';
@@ -146,7 +146,7 @@ function Ballot({ office, cands, promises, pick: sent, onPick }: { office: Offic
               setPick(id);
               onPick(id || null);
             }}
-            className="mt-0.5 size-5 shrink-0 accent-[var(--color-holo)]"
+            className="size-5 shrink-0 accent-[var(--color-holo)]"
           />
           {id ? (
             <span className="flex flex-col">
@@ -300,18 +300,23 @@ function VoteWeights() {
                 <span className="flex min-w-0 flex-col">
                   <Who view={view} id={w.id} size={14} />
                   <span className="text-[11px] text-ink-3" data-testid={`weight-parts-${w.id}`}>
-                    <span title="1 each">base {w.parts.base}</span>
+                    {/* Each part stays on one line; the line breaks only between parts. */}
+                    <span className="whitespace-nowrap" title="1 each">
+                      base {w.parts.base}
+                    </span>
                     {PARTS.filter((p) => w.parts[p.key] !== 0).map((p) => (
-                      <span key={p.key} title={p.why}>
+                      <Fragment key={p.key}>
                         {' · '}
-                        {p.word} {w.parts[p.key] > 0 ? '+' : '−'}
-                        {Math.abs(w.parts[p.key])}
-                      </span>
+                        <span className="whitespace-nowrap" title={p.why}>
+                          {p.word} {w.parts[p.key] > 0 ? '+' : '−'}
+                          {Math.abs(w.parts[p.key])}
+                        </span>
+                      </Fragment>
                     ))}
                   </span>
                 </span>
               </td>
-              <td data-num className="py-1 text-right font-mono font-bold">
+              <td data-num className="py-1 text-right font-mono font-bold" data-testid={`weight-votes-${w.id}`}>
                 {w.votes}
               </td>
             </tr>
