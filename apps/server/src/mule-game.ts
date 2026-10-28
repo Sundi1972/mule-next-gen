@@ -480,7 +480,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const excused = (id: string) => this.away.has(id) && phase !== 'landGrant' && phase !== 'planning';
     const waiting = this.seats.filter((s) => !s.isAi && !excused(s.id) && !this.ready.has(s.id) && !this.doneDeveloping(s.id));
     // The auctions end on their own, good by good and lot by lot.
-    if (!phase || phase === 'gameOver' || phase === 'auction' || phase === 'landAuction' || waiting.length > 0) return;
+    if (!phase || phase === 'gameOver' || phase === 'auction' || phase === 'landAuction') return;
+    if (waiting.length > 0) {
+      // Someone is back and playing: an early end held for a walk no longer stands.
+      if (phase === 'development') this.endWhenSettled = false;
+      return;
+    }
     if (phase === 'development' && !this.colonistsSettled()) {
       this.endWhenSettled = true;
       return;
