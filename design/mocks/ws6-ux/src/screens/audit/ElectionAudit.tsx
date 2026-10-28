@@ -247,10 +247,10 @@ export function howWords(r: Race, me: string | null): string {
   const loser = r.tallies.find((t) => t.id !== r.winner)!;
   const w = seat(r.winner);
   const l = seat(loser.id);
-  if (r.how === 'baron') return `A tie, ${a.votes} votes each, broken by the Land Baron's vote.`;
+  if (r.how === 'baron') return `A tie, ${a.votes} ${a.votes === 1 ? 'vote' : 'votes'} each, broken by the Land Baron's vote.`;
   return r.how === 'lot'
-    ? `A tie, ${a.votes} votes each, and the same plots, so it was decided by lot: ${nameOf(r.winner, me)} ${r.winner === me ? 'win' : 'wins'}.`
-    : `A tie, ${a.votes} votes each. Nobody is Land Baron to break it, so the most plots wins: ${nameOf(r.winner, me)} ${r.winner === me ? 'have' : 'has'} ${w.plots}, ${nameOf(loser.id, me)} ${l.plots}.`;
+    ? `A tie, ${a.votes} ${a.votes === 1 ? 'vote' : 'votes'} each, and the same plots, so it was decided by lot: ${nameOf(r.winner, me)} ${r.winner === me ? 'win' : 'wins'}.`
+    : `A tie, ${a.votes} ${a.votes === 1 ? 'vote' : 'votes'} each. Nobody is Land Baron to break it, so the most plots wins: ${nameOf(r.winner, me)} ${r.winner === me ? 'have' : 'has'} ${w.plots}, ${nameOf(loser.id, me)} ${l.plots}.`;
 }
 
 /** E-8: who shares the most plots, when nobody holds them alone. */
