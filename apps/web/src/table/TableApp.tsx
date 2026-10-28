@@ -1,12 +1,13 @@
 import { DEV_WALK, DEVELOPMENT } from '@mule/engine';
 import type { DealView, MuleView, TableView } from '@mule/protocol';
 import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PaceList, PlayerMark, SeatSpeciesProvider, SharedClock, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard } from '@mule/ui';
+import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
 import { boardWalkers, dealLine, LineReadout, newestFirst, SIDE_WORD, skippedLine, StatusTable, StoreBox, type DealRow } from '../components/AuctionParts';
 import { useEffect, useState, type ReactNode } from 'react';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
 import { ThemeToggle } from '../components/ThemeToggle';
-import { colonyVerdict, fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, player, plotName, seatSpecies, secondsUntil, slotOf, standings, tileAt, toSlot } from '../game/derive';
+import { colonyVerdict, fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, plotName, seatSpecies, secondsUntil, slotOf, standings, tileAt, toSlot } from '../game/derive';
 import { useAuctionSound } from '../game/sound';
 import { useClient, useClientState, useServerNow } from '../net/react';
 import { connectedIn, planningProper, readyRows, stillPlanning } from '../phone/hub/ready';
@@ -123,27 +124,29 @@ function TvLobby({ table }: { table: TableView<MuleView> }) {
 
 export function TvHeader({ game, title, seconds }: { game: MuleView; title: string; seconds?: number | undefined }) {
   return (
-    <header className="flex items-end justify-between gap-6">
-      <div className="flex flex-col gap-1">
-        <span className="label-caps text-base!">
-          Month {game.month} / {game.maxMonths}
-        </span>
-        <h1 className="font-display text-5xl font-semibold leading-none" data-testid="tv-phase">
-          {title}
-        </h1>
-      </div>
-      <div className="flex items-center gap-4">
-        <ThemeToggle />
-        <AirGauge level={game.air.level} band={game.air.band} tv />
-        {seconds !== undefined && <Timer seconds={seconds} className="h-14! px-5! text-3xl!" />}
-      </div>
-    </header>
+    <>
+      <header className="flex items-end justify-between gap-6">
+        <div className="flex flex-col gap-1">
+          <span className="label-caps text-base!">
+            Month {game.month} / {game.maxMonths}
+          </span>
+          <h1 className="font-display text-5xl font-semibold leading-none" data-testid="tv-phase">
+            {title}
+          </h1>
+        </div>
+        <div className="flex items-center gap-4">
+          <ThemeToggle />
+          <AirGauge level={game.air.level} band={game.air.band} tv />
+          {seconds !== undefined && <Timer seconds={seconds} className="h-14! px-5! text-3xl!" />}
+        </div>
+      </header>
+      <TvTicker />
+    </>
   );
 }
 
 function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView }) {
   const now = useServerNow(200);
-  const { chat } = useClientState();
   const tiles = mapTiles(game);
   const lit = game.lit ? tileAt(game, game.lit.x, game.lit.y) : undefined;
   const phase = game.phase;
@@ -191,6 +194,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
           <PaceList
             rule={DEV_WALK}
             columns={1}
+            wrapMark={tvSpeakerAt}
             rows={game.players.map((p) => ({ id: p.id, name: p.name, slot: toSlot(p.slot), condition: p.condition, note: p.doneDeveloping ? 'PUB' : 'BUILDING', done: p.doneDeveloping }))}
           />
         </div>
@@ -217,23 +221,9 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         <div className="shrink-0">
           <MarketTiles game={game} />
         </div>
-        {/* News and chat give way when the column is full, so the prices and who we wait for always show; chat is cut first. */}
+        {/* News gives way when the column is full, so the prices and who we wait for always show; chat is the ticker's. */}
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
           <News news={game.news} />
-          <ul className="flex flex-col gap-3">
-            {chat
-              .filter((c) => !c.to)
-              .slice(-4)
-              .map((c) => (
-                <li key={c.id} className="flex items-start gap-3">
-                  <PlayerMark slot={slotOf(game, c.from) ?? 0} size={22} />
-                  <p className="text-lg leading-snug">
-                    <span className="font-display font-semibold">{player(game, c.from)?.name}</span>
-                    <span className="text-ink-2"> {c.text}</span>
-                  </p>
-                </li>
-              ))}
-          </ul>
         </div>
         {phase !== 'planning' ? (
           <Players game={game} className="mt-auto" right={(p) => <span className="font-mono text-sm text-ink-3">{p.isAi ? 'AI' : p.ready ? 'READY' : '…'}</span>} />
@@ -321,7 +311,9 @@ function Players({ game, right, className }: { game: MuleView; right: (p: MuleVi
     <ul className={cx('flex flex-col gap-2', className)}>
       {game.players.map((p) => (
         <li key={p.id} className="flex items-center gap-3">
-          <PlayerMark slot={toSlot(p.slot)} size={22} />
+          <Speaker id={p.id} size="tv">
+            <PlayerMark slot={toSlot(p.slot)} size={22} />
+          </Speaker>
           <span className="flex-1 truncate font-display text-xl font-semibold">{p.name}</span>
           {right(p)}
         </li>
@@ -416,6 +408,7 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
               shipPays={auction.shipPays}
               storeStock={stock}
               marks={{ ask: true, bid: true }}
+              wrapCreature={tvSpeakerAt}
               className="min-h-0 flex-1"
             />
           )}

@@ -268,20 +268,29 @@ export async function sixSeatsOnTheTv({ browser, base, server }: { browser: Brow
     const newest = board.getByTestId('tv-news').locator('li').first();
     await newest.filter({ hasText: 'is Governor' }).waitFor({ state: 'attached', timeout });
 
-    const canvas = await board.evaluate((e) => e.getBoundingClientRect().bottom);
-    const list = await board.getByTestId('tv-ready-list').evaluate((e) => e.getBoundingClientRect().bottom);
-    check(list <= canvas + 1, `B-AC-19 (six seats): the TV's ready list stays on the canvas, got its bottom at ${list.toFixed(0)} of ${canvas.toFixed(0)} px`);
-    const market = await board.getByTestId('tv-market').evaluate((e) => [e.scrollHeight, e.clientHeight]);
-    check(market[0]! <= market[1]! + 1, `B-AC-19 (six seats): the market tiles are whole, got ${market[1]} of ${market[0]} px`);
-    // Whole means both edges of the line can be hit: clipped by its column or covered by the list, they can't.
-    const shown = await newest.evaluate((li) => {
-      const r = li.getBoundingClientRect();
-      // No named function in here: tsx would wrap it in a helper the page doesn't have.
-      const [top, bottom] = [r.top + 2, r.bottom - 2].map((y) => li.contains(document.elementFromPoint(r.left + 8, y)));
-      return { top, bottom, height: r.height };
-    });
-    check(shown.height > 0 && shown.top && shown.bottom, `B-AC-19 (six seats): the election result shows whole in the TV's news, got ${JSON.stringify(shown)}`);
-    return `six seats: the ready list ends at ${list.toFixed(0)} of ${canvas.toFixed(0)} px, the market whole, the election result whole in the news`;
+    // The column is checked twice: as it stands, then with the TV's chat ticker showing a line above it (C20).
+    const fits = async (when: string) => {
+      const canvas = await board.evaluate((e) => e.getBoundingClientRect().bottom);
+      const list = await board.getByTestId('tv-ready-list').evaluate((e) => e.getBoundingClientRect().bottom);
+      check(list <= canvas + 1, `B-AC-19 (six seats${when}): the TV's ready list stays on the canvas, got its bottom at ${list.toFixed(0)} of ${canvas.toFixed(0)} px`);
+      const market = await board.getByTestId('tv-market').evaluate((e) => [e.scrollHeight, e.clientHeight]);
+      check(market[0]! <= market[1]! + 1, `B-AC-19 (six seats${when}): the market tiles are whole, got ${market[1]} of ${market[0]} px`);
+      // Whole means both edges of the line can be hit: clipped by its column or covered by the list, they can't.
+      const shown = await newest.evaluate((li) => {
+        const r = li.getBoundingClientRect();
+        // No named function in here: tsx would wrap it in a helper the page doesn't have.
+        const [top, bottom] = [r.top + 2, r.bottom - 2].map((y) => li.contains(document.elementFromPoint(r.left + 8, y)));
+        return { top, bottom, height: r.height };
+      });
+      check(shown.height > 0 && shown.top && shown.bottom, `B-AC-19 (six seats${when}): the election result shows whole in the TV's news, got ${JSON.stringify(shown)}`);
+      return `the ready list ends at ${list.toFixed(0)} of ${canvas.toFixed(0)} px`;
+    };
+    const quiet = await fits('');
+    const room = server.registry.get(code) as unknown as { seats: { id: string }[]; chat: (from: string, text: string) => void };
+    room.chat(room.seats[0]!.id, 'Six of us at one table, then.');
+    await tv.getByText('Six of us at one table, then.').first().waitFor({ timeout });
+    const talking = await fits(', with a chat line');
+    return `six seats: ${quiet}, ${talking} with a chat line showing; the market whole, the election result whole in the news`;
   } finally {
     await phone.context().close();
     await tv.context().close();
