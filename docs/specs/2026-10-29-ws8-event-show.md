@@ -564,7 +564,7 @@ folded    C5 pin: production-show.test.ts stays green with only this named edit;
 
 ### Ownership: the event show
 - Sole owner: WS8 — `packages/ui/src/events/**` (+ `events.css`), `apps/web/src/events/**`, the `EVENT_SHOW` block in
-  `packages/engine/src/config.ts`, `apps/server/test/events-view.test.ts` (WS3 reviews), `apps/web/test/events-*.test.tsx`,
+  `packages/engine/src/config.ts`, `apps/server/test/events-view.test.ts` (WS3 reviews), `apps/web/test/events-*.test.ts`,
   `packages/ui/test/events*.test.ts`, `apps/web/e2e/events.ts` (the browser step; local tier), this spec and its plan (PM
   rulings).
 - Read contract: the view (`ProductionEventView` → `EventView`, `MuleView.events`); `EVENT_SHOW` read by the server only.

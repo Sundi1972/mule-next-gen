@@ -57,7 +57,7 @@ wave-2 rows land (freeze point: the payload agreed with WS1 on 29 Oct).
 ### PR-1 authority
 
 - `may_edit`: `packages/ui/src/events/**`, `packages/engine/src/config.ts` (the EVENT_SHOW block only),
-  `apps/server/test/events-view.test.ts`, `apps/web/test/events-*.test.tsx`, `packages/ui/test/events*.test.ts`, `apps/web/e2e/events.ts`
+  `apps/server/test/events-view.test.ts`, `apps/web/test/events-*.test.ts`, `packages/ui/test/events*.test.ts`, `apps/web/e2e/events.ts`
 - `may_edit` (named edits, owner reviews): `apps/server/src/mule-game.ts::startPhaseTimer`, `::productionView` (WS3);
   `packages/protocol/src/index.ts::ProductionEventView` (WS3); `packages/ui/src/components/ProductionMap.tsx` (WS6);
   `apps/server/test/production-view.test.ts` fixtures (WS6); `packages/ui/src/index.ts` export line,
@@ -152,7 +152,7 @@ Standing authority line, in every handoff:
 
 **Files:**
 - Modify: `packages/ui/src/components/ProductionMap.tsx` (`::ProductionMap`, `::finalUnits`, `::landed`, `::SHOW` use, `::showTime`)
-- Test: `apps/web/test/events-production.test.tsx` (new)
+- Test: `apps/web/test/events-production.test.ts` (new)
 
 - [ ] **Step 1: Write the failing tests `T-AC-3: a plot adds every event's delta in order, never below 0` and `T-AC-4: the map shows the event that is playing; the goods fly after the last`**
   Altitude: promise for T-AC-4 (rendered `data-event`, bar counts); unit for T-AC-3's RULE-2 example (1 → 0 → 0).
@@ -181,7 +181,7 @@ Standing authority line, in every handoff:
 
 **Files:**
 - Modify: `apps/web/src/table/TvProduction.tsx` (`may_edit_content`)
-- Test: `apps/web/test/events-tv.test.tsx` (new)
+- Test: `apps/web/test/events-tv.test.ts` (new)
 
 - [ ] **Step 1: Write the failing test `B-AC-1: the TV plays a drought then a pest swarm in order, each card listing the report's figures`**
   Altitude: promise — rendered TvProduction from a fixture view, read through the gallery's data-testids. Negative: a
@@ -197,7 +197,7 @@ Standing authority line, in every handoff:
 
 **Files:**
 - Modify: `apps/web/src/phone/Production.tsx` (`may_edit_content`)
-- Test: `apps/web/test/events-phone.test.tsx` (new)
+- Test: `apps/web/test/events-phone.test.ts` (new)
 
 - [ ] **Step 1: Write the failing tests `B-AC-2: alone, the phone plays each event and a tap skips to the result` and `T-AC-5: RULE-3's four rows`**
   Altitude: promise — rendered phone Production under `PhoneGameProvider` with `table.boards` 0 and 1, reduced motion
