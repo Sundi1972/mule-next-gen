@@ -1,7 +1,11 @@
-import { PHASES, WALK } from '@mule/engine';
-import { describe, expect, it } from 'vitest';
-import { MuleGame } from '../src/mule-game.js';
-import { fakeContext, seats } from './fake-context.js';
+import type { AddressInfo } from 'node:net';
+import { PHASES, RuleError, WALK } from '@mule/engine';
+import type { MuleView, ServerEnvelope } from '@mule/protocol';
+import { afterEach, describe, expect, it } from 'vitest';
+import WebSocket from 'ws';
+import { MuleGame, PHASE_MS } from '../src/mule-game.js';
+import { createMuleServer, type MuleServer } from '../src/server.js';
+import { fakeContext, readyAll, seats } from './fake-context.js';
 
 /** Far past any planning clock there ever was: no table plans this long by accident. */
 const TEN_MINUTES = 600_000;
@@ -16,6 +20,16 @@ function started(options: { phaseScale?: number; politics?: boolean } = {}) {
 }
 
 const phase = (game: MuleGame) => game.viewFor(null).phase;
+
+/** Everything every screen sees: the TV's view and each human's. A refused move leaves all of it as it was. */
+const screens = (game: MuleGame) => [null, 's1', 's2'].map((viewer) => game.viewFor(viewer));
+
+/** Expects `move` to be refused with a RuleError, every screen unchanged. */
+function refusedUnchanged(game: MuleGame, move: () => void, why: string): void {
+  const before = screens(game);
+  expect(move, why).toThrow(RuleError);
+  expect(screens(game), `${why}: nothing changes`).toEqual(before);
+}
 
 /** A planning length a table might set, in ms. */
 const PLANNING_MS = 45_000;
@@ -146,5 +160,99 @@ describe('FM-planning-all-ready: planning ends when every human is Ready, connec
     expect(phase(game)).toBe('planning');
     advance(TEN_MINUTES);
     expect(phase(game)).toBe('planning');
+  });
+});
+
+describe("FM-planning-host-continue: the host's Continue ends planning proper; nothing else ends it early", () => {
+  it('FM-planning-host-continue: with one human Ready and the other not, Continue starts the land grant', () => {
+    const { game, ctx } = started();
+    game.handle('s1', { type: 'ready' });
+    game.continuePlanning();
+    expect(phase(game)).toBe('landGrant');
+    expect(game.viewFor(null).phaseEndsAt).toBe(ctx.now() + PHASE_MS.landGrant);
+  });
+
+  it('FM-planning-host-continue: with a dropped human not Ready holding planning, Continue starts the land grant', () => {
+    const { game, advance } = started();
+    game.connectionChanged('s2', false);
+    game.handle('s1', { type: 'ready' });
+    advance(TEN_MINUTES);
+    expect(phase(game)).toBe('planning');
+    game.continuePlanning();
+    expect(phase(game)).toBe('landGrant');
+  });
+
+  it('FM-planning-host-continue: during the election Continue is refused at every stage and nothing changes; once it is over, Continue starts the land grant', () => {
+    const { game, advance } = started({ politics: true });
+    const election = () => game.viewFor(null).politics!.election!;
+    const stages = new Set<string>();
+    for (let ms = 0; ms < ELECTION_BOUND_MS && election().stage !== 'over'; ms += WALK.tickMs) {
+      if (!stages.has(election().stage)) {
+        stages.add(election().stage);
+        refusedUnchanged(game, () => game.continuePlanning(), `Continue at the election's ${election().stage} stage`);
+      }
+      advance(WALK.tickMs);
+    }
+    expect([...stages], 'every stage was tried').toEqual(['nominate', 'ballot', 'reveal']);
+    expect(election().stage).toBe('over');
+    game.continuePlanning();
+    expect(phase(game)).toBe('landGrant');
+  });
+
+  it('FM-planning-host-continue: in every phase after planning, the land grant and development among them, Continue is refused and nothing changes', () => {
+    const { game, advance } = started();
+    readyAll(game);
+    const tried: string[] = [];
+    for (let i = 0; i < 30_000 && !(game.viewFor(null).month === 2 && phase(game) === 'planning'); i++) {
+      if (phase(game) !== 'planning' && !tried.includes(phase(game))) {
+        tried.push(phase(game));
+        refusedUnchanged(game, () => game.continuePlanning(), `Continue in ${phase(game)}`);
+      }
+      advance(100);
+    }
+    expect(tried).toEqual(expect.arrayContaining(['landGrant', 'development', 'production', 'auction', 'upkeep']));
+  });
+
+  it("FM-planning-host-continue: until Continue's source is wired, a continue from any seat is refused and nothing changes", () => {
+    const { game } = started();
+    game.handle('s1', { type: 'ready' });
+    for (const seat of seats) {
+      const before = screens(game);
+      expect(() => game.handle(seat.id, { type: 'continue' }), seat.name).toThrow(new RuleError('Only the host can continue'));
+      expect(screens(game), `${seat.name}: nothing changes`).toEqual(before);
+    }
+    expect(phase(game)).toBe('planning');
+  });
+});
+
+describe('FM-planning-host-continue over the wire', () => {
+  let running: MuleServer | null = null;
+  afterEach(async () => {
+    await running?.close();
+    running = null;
+  });
+
+  it("FM-planning-host-continue: a phone's continue passes the wire and reaches the game, which refuses it", async () => {
+    running = createMuleServer({ seed: () => 42 });
+    await new Promise<void>((r) => running!.server.listen(0, r));
+    const { port } = running.server.address() as AddressInfo;
+    const { code } = (await (await fetch(`http://localhost:${port}/rooms`, { method: 'POST' })).json()) as { code: string };
+    const socket = new WebSocket(`ws://localhost:${port}/ws`);
+    const inbox: ServerEnvelope<MuleView>[] = [];
+    socket.on('message', (d) => inbox.push(JSON.parse(d.toString())));
+    await new Promise((r) => socket.once('open', r));
+    const send = (msg: object) => socket.send(JSON.stringify(msg));
+    send({ t: 'join', code, name: 'Heiko' });
+    send({ t: 'addAi' });
+    send({ t: 'start' });
+    for (let i = 0; i < 200 && !inbox.some((m) => m.t === 'view' && m.view.game?.phase === 'planning'); i++) await new Promise((r) => setTimeout(r, 10));
+    send({ t: 'intent', intent: { type: 'continue' } });
+    let error: string | null = null;
+    for (let i = 0; i < 200 && !error; i++) {
+      const e = inbox.find((m) => m.t === 'error') as Extract<ServerEnvelope<MuleView>, { t: 'error' }> | undefined;
+      error = e?.message ?? null;
+      if (!error) await new Promise((r) => setTimeout(r, 10));
+    }
+    expect(error).toBe('Only the host can continue');
   });
 });
