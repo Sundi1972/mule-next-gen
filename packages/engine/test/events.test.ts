@@ -124,10 +124,10 @@ const reset = (row: EventRow, fields: EventRow) => {
   Object.assign(row, fields);
 };
 /**
- * Runs `body` with every event row at `chance` in production, capped at 1, with no raises or lowers, and no excluded
- * pairs unless `excludes` keeps EVENTS.excludes; then puts the rows and the pairs back.
+ * Runs `body` with every event row at `chance` in production, capped at 1, with no raises or lowers, and the excluded
+ * pairs as configured unless `excludes` is false; then puts the rows and the pairs back.
  */
-const withEveryRowAt = (chance: number, body: () => void, { excludes = false } = {}) => {
+const withEveryRowAt = (chance: number, body: () => void, { excludes = true } = {}) => {
   const saved = rows().map((row) => ({ ...row }));
   const pairs = [...EVENTS.excludes];
   for (const row of rows()) reset(row, { phases: { production: chance }, cap: 1 });
@@ -232,7 +232,7 @@ describe('several events in one production', () => {
         { why: 'event', delta: 0, event: 'acidRain' },
       ]);
       expect(line.parts.reduce((n, p) => n + p.delta, 0)).toBe(line.made);
-    }, { excludes: true });
+    });
 
     withEveryRowAt(0, () => {
       // A drought and a flood both certain, and a wildfire only during a drought: the pair's dice keep one.
@@ -260,7 +260,7 @@ describe('several events in one production', () => {
       }
       // Kept by the dice, not by the table's order.
       expect([...keepers].sort()).toEqual(['drought', 'flood']);
-    }, { excludes: true });
+    });
   });
 });
 
@@ -443,6 +443,8 @@ describe('the roller', () => {
   const keys = (months: MonthEvent[][]) => months.map((events) => events.map((e) => e.key));
 
   it('EM-T-AC-2: no event in month 1 or on a what-if copy, and a seed replays the same events', () => {
+    // Its property is each row's own dice, not RULE-2 step 4: with every pair able to fire, the excludes would drop one.
+    const ownDice = { excludes: false };
     withEveryRowAt(1, () => {
       const first = colonyForEvents(3);
       expect(first.month).toBe(1);
@@ -468,7 +470,7 @@ describe('the roller', () => {
       // Sickness is no MonthEvent and keeps its own roll: even a certain one fires nothing here.
       EVENTS.player.sickness.phases = { development: 1 };
       expect(rollPhase(state, 'development')).toEqual([]);
-    });
+    }, ownDice);
 
     withEveryRowAt(0.5, () => {
       // Player rows lean on wealth here, so a seat rolling at another seat's chance, or at the bare base, shows.
@@ -493,7 +495,7 @@ describe('the roller', () => {
       // Each row on its own dice: no dust storms moves no other row's fate or shape.
       EVENTS.colony.dustStorm.phases = { production: 0 };
       expect(fortyMonths(11)).toEqual(months.map((events) => events.filter((e) => e.key !== 'dustStorm')));
-    });
+    }, ownDice);
 
     withEveryRowAt(0, () => {
       // During a drought: colony rows roll first, and each seat's later roll reads what fired this phase.
@@ -502,7 +504,7 @@ describe('the roller', () => {
       expect(rollPhase(ready(3), 'production').map((e) => e.key)).toEqual(['drought', 'wildfire', 'wildfire', 'wildfire', 'wildfire']);
       EVENTS.colony.drought.phases = { production: 0 };
       expect(rollPhase(ready(3), 'production')).toEqual([]);
-    });
+    }, ownDice);
   });
 
   /**
