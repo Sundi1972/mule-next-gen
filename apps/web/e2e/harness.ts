@@ -22,6 +22,36 @@ export type AuctionSteps = {
   listedSale?: (ctx: AuctionStepContext) => Promise<void>;
 };
 
+/** What the whole game hands each step: the auction step's screens and check, the room, and `held` bound to it. */
+export type GameStepContext = AuctionStepContext & {
+  server: MuleServer;
+  code: string;
+  held: <T>(step: () => Promise<T>) => Promise<T>;
+};
+
+/** Rooms inside a `held` step. Room.hold is not counted, so a nested release would end the outer hold early. */
+const heldRooms = new WeakSet<object>();
+
+/**
+ * Runs `step` with room `code`'s game clock held: nothing the game scheduled (a phase's end, an AI turn, a tick) runs
+ * until the step returns or fails. Screens still act and hear views, so a message can still end a phase: the last
+ * Ready, the last claim, a phone dropping. Real time is not held: a development turn still runs out, refusing moves
+ * once "Time is up", and the production show still plays. Throws when nested.
+ */
+export async function held<T>(server: MuleServer, code: string, step: () => Promise<T>): Promise<T> {
+  const room = server.registry.get(code);
+  check(room, `a room ${code} on the server`);
+  check(!heldRooms.has(room), `held is not nested: ${code}`);
+  heldRooms.add(room);
+  room.hold();
+  try {
+    return await step();
+  } finally {
+    heldRooms.delete(room);
+    room.release();
+  }
+}
+
 /**
  * The real game server, serving the built client from apps/web/dist on a free
  * port. Options (a short game, faster phases) go straight to the server.
