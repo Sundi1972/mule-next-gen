@@ -12,12 +12,14 @@ export interface MapPath {
 const STEPS = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
 
 /**
- * The quickest walk between two tiles at RULE-2's terrain speeds, for the AI's legs and the guide ring; null when
- * none is open. A goal nobody may stand on (a lake plot, worked from its shore) is reached at its edge, at no cost.
+ * The quickest walk between the tiles under two points, a colonist's position or a plot, at RULE-2's terrain speeds,
+ * for the AI's legs and the guide ring; null when none is open. A goal nobody may stand on (a lake plot, worked from
+ * its shore) is reached at its edge, at no cost.
  */
 export function pathTo(state: GameState, from: FloorPoint, to: FloorPoint, cfg: FloorConfig): MapPath | null {
   const { width, height, tiles } = state;
-  const goal = tileIndex(width, to.x, to.y);
+  const tileUnder = (p: FloorPoint) => tileIndex(width, Math.floor(p.x), Math.floor(p.y));
+  const goal = tileUnder(to);
   const enter = (i: number) => {
     const share = terrainShare(tiles[i]!.terrain, cfg);
     if (share > 0) return 1 / (cfg.steer.mapTilesPerSecond * share);
@@ -26,7 +28,7 @@ export function pathTo(state: GameState, from: FloorPoint, to: FloorPoint, cfg: 
   const seconds = new Array<number>(tiles.length).fill(Infinity);
   const prev = new Array<number>(tiles.length).fill(-1);
   const done = new Array<boolean>(tiles.length).fill(false);
-  seconds[tileIndex(width, from.x, from.y)] = 0;
+  seconds[tileUnder(from)] = 0;
   for (;;) {
     // The nearest open tile not yet settled; on a tie the lowest index, so the same map always gives the same path.
     let u = -1;

@@ -225,6 +225,10 @@ describe('the dev floor: the step', () => {
       expect(path.seconds, label).toBeCloseTo(7.2, 9);
     }
 
+    // From a colonist's position, part way across a tile, to a plot's: the walk is from the tile under it.
+    const state0 = game(SEED, across('....^....', '.........'));
+    expect(pathTo(state0, { x: 2.7, y: 3.4 }, { x: 7.5, y: 3.5 }, cfg), 'from a colonist').toEqual(pathTo(state0, from, plot, cfg));
+
     // A lake plot is worked from its shore: the path ends on it, and the step into it costs nothing.
     const state = game(SEED, across('.........', '.........'));
     const shore = pathTo(state, from, { x: 4, y: 3 }, cfg)!;
