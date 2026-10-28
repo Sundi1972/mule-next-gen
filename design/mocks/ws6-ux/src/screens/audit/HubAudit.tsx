@@ -83,7 +83,7 @@ export const HUB_NOTES = {
     id: 'H6',
     n: 6,
     title: 'Plain words',
-    what: '“Governor: Kai, until month 6”, “Next election: month 7”, “The export ship calls in month 6: it buys what the colony has left over”. No codes left on this screen.',
+    what: '“Governor: Kai, until month 6”, “Next election: month 7”, “Export ship in month 6: it buys the colony’s leftovers”. No codes left on this screen.',
     serves: '1 (cross-cutting)',
     intent: 'Find out what I should do this month',
     why: '“M1–3”, “NEXT ELECTION M4” and “EXPORT SHIP IN MONTH 3” are codes: which ship, and why should I care?',
@@ -253,7 +253,7 @@ function Agenda({ sent, onDesk, onTool }: { sent: boolean; onDesk: (d: Desk) => 
         <span className="label-caps shrink-0 text-[10px]! @min-[1100px]/shell:text-sm!">This month</span>
         <span className="relative min-w-0">
           <span className="block truncate text-[10px] text-ink-2 @min-[1100px]/shell:text-sm" data-testid="ship-line">
-            The export ship calls in month {view.ship.arrives}: it buys what the colony has left over
+            Export ship in month {view.ship.arrives}: it buys the colony’s leftovers
           </span>
           <IntentMarker note={N.H6} part="ship" at="left" />
         </span>
