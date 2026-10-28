@@ -4,7 +4,7 @@
  * uses PhoneShell, so the step holds if the phase moves on under it.
  */
 import { errors as playwrightErrors, type Page } from 'playwright';
-import { check, PHONE } from './harness';
+import { check, PHONE, PHONE_SMALL } from './harness';
 
 /** Heiko's laptop. */
 export const LAPTOP = { width: 1440, height: 900 };
@@ -12,8 +12,6 @@ export const LAPTOP = { width: 1440, height: 900 };
 const WIDE_RAIL_PX = 400;
 /** The switch: the shell's own width, in px. */
 const WIDE_PX = 1100;
-/** The small phone on its side, an iPhone SE: the rail sits at its 232 px floor. */
-const SMALL_PHONE = { width: 667, height: 375 };
 /** A notched phone on its side: the notch's inset on one side, the home bar's at the bottom. */
 const NOTCH = { top: 0, left: 47, bottom: 21, right: 47 };
 
@@ -120,14 +118,14 @@ export async function shellFillsTheStage(phone: Page, timeout = 5_000): Promise<
 
   // The small phone: the rail at its floor, the stage the rest, the emotes clear of the rail, nothing past the window.
   try {
-    await phone.setViewportSize(SMALL_PHONE);
+    await phone.setViewportSize(PHONE_SMALL.viewport);
     const small = await read(phone);
-    checkFrame(small, `a ${SMALL_PHONE.width} px window`, SMALL_PHONE.width, narrowRail(SMALL_PHONE.width), 'false');
+    checkFrame(small, `a ${PHONE_SMALL.viewport.width} px window`, PHONE_SMALL.viewport.width, narrowRail(PHONE_SMALL.viewport.width), 'false');
     const scroll = await phone.evaluate(() => ({ x: document.documentElement.scrollWidth, y: document.documentElement.scrollHeight }));
-    check(scroll.x <= SMALL_PHONE.width && scroll.y <= SMALL_PHONE.height, `B-AC-12: at ${SMALL_PHONE.width}×${SMALL_PHONE.height} the page does not scroll, got ${scroll.x}×${scroll.y}`);
-    log.push(`${SMALL_PHONE.width}: stage ${small.stage.toFixed(1)} + rail ${small.guide.toFixed(1)}`);
+    check(scroll.x <= PHONE_SMALL.viewport.width && scroll.y <= PHONE_SMALL.viewport.height, `B-AC-12: at ${PHONE_SMALL.viewport.width}×${PHONE_SMALL.viewport.height} the page does not scroll, got ${scroll.x}×${scroll.y}`);
+    log.push(`${PHONE_SMALL.viewport.width}: stage ${small.stage.toFixed(1)} + rail ${small.guide.toFixed(1)}`);
     await emote(phone);
-    log.push(`emotes ${await emotesClear(phone, SMALL_PHONE.width)}`);
+    log.push(`emotes ${await emotesClear(phone, PHONE_SMALL.viewport.width)}`);
   } finally {
     await phone.setViewportSize(PHONE.viewport);
   }
