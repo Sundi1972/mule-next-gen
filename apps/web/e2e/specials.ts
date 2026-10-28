@@ -1,17 +1,24 @@
 /**
+ * LOCAL ONLY (lean CI tier 3, 2026-10-28): CI checks B-AC-9 as a step of the whole game, special-steps.ts in smoke.ts.
+ * This script plays its own game to check what the step doesn't: the badge never over the owner's mark of the plot it
+ * hangs into (W-I1, the geometry), a plain plot's card, and the special line in the drone's rail, the land grant's lit
+ * card and Develop's plot card.
+ * Run it after a build: `pnpm --filter @mule/web build && pnpm --filter @mule/web exec tsx e2e/specials.ts`; another
+ * map with `MULE_E2E_SEED=<seed>`.
+ *
  * B-AC-9 (MG-2): given a special field on the map, when a player looks at the phone or the TV, the approved glyph
  * (the badge, variant A) shows on that plot; a plain plot shows none. On the phone, tapping a special plot selects
  * it and its plot card says what it does, first under the plot's name; when the land grant lights it, so does the
  * lit card; so do the geo drone's rail and Develop's plot card. The badge never takes a plot's taps: a tap on the part
  * that hangs over a neighbour selects the neighbour. Each badge is drawn at its density's size, and never over the
  * owner's mark of the plot it hangs into.
- * Run with `pnpm --filter @mule/web e2e`; another map with `MULE_E2E_SEED=<seed>`.
  */
-import { createGame, type GameState, type Tile } from '@mule/engine';
+import { createGame, POLITICS, type GameState, type Tile } from '@mule/engine';
 import type { Locator, Page } from 'playwright';
-import { SPECIAL_BADGE } from '@mule/ui';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import { check, claimAPlot, launch, PHONE, startServer, TV } from './harness';
+import { readyThroughTheElection } from './politics-steps';
+import { checkGlyphs as checkGlyphsOf, checkSpecialLine as checkSpecialLineOf, plotName, specialsOn, tapOnTheOverhang, tapPlot as tapPlotOf, type Density } from './special-steps';
 
 /** Seed 93 with two seats: a 13×7 map with ruins on the top row (7,0), a crystal cavern inside (10,3) and an oasis on the bottom edge (9,6). */
 const DEFAULT_SEED = 93;
@@ -20,19 +27,14 @@ const SEED = seedFrom(process.env.MULE_E2E_SEED);
 const SHOWN_MS = 5_000;
 /** The land grant, a land auction if the colony lists plots, and the walk out to development. */
 const REACH_DEVELOPMENT_MS = 120_000;
-type Density = keyof typeof SPECIAL_BADGE;
 /** The light sweeps row by row; a plot on row r is lit within about r + 1 rows of ticks, plus the AI's claims skipped. */
 const litWithin = (t: Tile, width: number) => (t.y + 1) * width * GRANT_TICK_MS + 3_000;
 
 // The map the server will deal, read from the engine with the same seed and seat count.
 const dealt = createGame({ seed: SEED, players: Array.from({ length: SEATS }, (_, i) => ({ id: `s${i + 1}`, name: `P${i + 1}`, isAi: i > 0 })) });
-const specials = dealt.tiles.filter((t): t is Tile & { special: NonNullable<Tile['special']> } => !!t.special);
-check(specials.length > 0, `seed ${SEED}: the map has special fields`);
-const plain = dealt.tiles.find((t) => !t.special && t.terrain !== 'store' && !specials.some((s) => Math.abs(s.x - t.x) <= 1 && Math.abs(s.y - t.y) <= 1));
-check(plain, `seed ${SEED}: the map has a plain plot away from every special field`);
-/** A special plot off the right and bottom edges, so its badge hangs over the plot diagonally below-right. */
-const inner = specials.find((t) => t.x < dealt.width - 1 && t.y < dealt.height - 1);
-check(inner, `seed ${SEED}: a special field off the map's right and bottom edges`);
+const { specials, plain, inner } = specialsOn(dealt, `seed ${SEED}`);
+// The inner special sits off the right and bottom edges, so its badge hangs over the plot diagonally below-right.
+check(inner, `seed ${SEED}: a special field off the map's right and bottom edges, with land below-right`);
 /** The plot the inner badge hangs into; the test gives it to the phone's player, so its owner's mark sits under the overhang. */
 const diagonal = { x: inner.x + 1, y: inner.y + 1 };
 /** A free special for the drone and Develop to look at; not the one whose diagonal the phone's player is given. */
@@ -89,16 +91,7 @@ try {
   await checkSpecialLine(look, inner.special.kind, `B-AC-9: the Look card of ${plotName(inner)}`);
 
   // A tap on the badge's corner, where it hangs over the neighbour below-right, selects the neighbour.
-  // The glyph spans its plot, as in the mock; the badge is its child, hung over the plot's lower-right corner.
-  const badge = await glyph(hubMap, inner).locator(':scope > span').boundingBox({ timeout: SHOWN_MS });
-  check(badge, `B-AC-9: the badge on ${plotName(inner)} has a box`);
-  await phone.touchscreen.tap(badge.x + badge.width - 1.5, badge.y + badge.height - 1.5);
-  const neighbour = { x: inner.x + 1, y: inner.y + 1 };
-  const shown = await look
-    .filter({ hasText: `Plot ${plotName(neighbour)}` })
-    .waitFor({ timeout: 2_000 })
-    .then(() => true, () => false);
-  check(shown, `B-AC-9: a tap on the badge's hanging corner selects the neighbour ${plotName(neighbour)}, the card shows "${(await look.count()) > 0 ? await look.textContent() : 'nothing: the tap went to the special plot and closed it'}"`);
+  await tapOnTheOverhang(phone, hubMap, look, inner, 2_000);
 
   // Negative: a plain plot's card has no special line, only its terrain hint.
   await tapPlot(phone, hubMap, plain);
@@ -114,7 +107,8 @@ try {
   await checkSpecialLine(drone, looked.special.kind, `B-AC-9: the drone rail of ${plotName(looked)}`);
 
   // Land grant: when the light reaches the special plot, the lit card says what it is, and both maps still draw it.
-  await planning.getByRole('button', { name: "I'm ready" }).click();
+  // Through month 1's election first when the table plays politics; with politics off this is one press.
+  await readyThroughTheElection(phone, POLITICS.nominateMs + POLITICS.ballotMs + POLITICS.revealMs + PHASE_MS.planning + SHOWN_MS);
   const grant = phone.locator('[data-phase=landGrant]');
   await grant.waitFor({ timeout: SHOWN_MS });
   const lit = grant.getByTestId('lit').filter({ hasText: plotName(firstLit) });
@@ -145,59 +139,17 @@ try {
 }
 process.exit(0);
 
-type Plot = { x: number; y: number };
-
-function plotName(p: Plot): string {
-  return `${p.x + 1}·${p.y + 1}`;
+/** specials.ts's waits: it plays its own game, so it can give each screen longer than smoke's step does. */
+function checkGlyphs(map: Locator, where: string, density: Density): Promise<void> {
+  return checkGlyphsOf(map, where, density, specials, plain, SHOWN_MS);
 }
 
-function glyph(map: Locator, p: Plot): Locator {
-  return map.locator(`[data-testid="special-glyph-${p.x}-${p.y}"]`);
+function checkSpecialLine(card: Locator, kind: string, what: string): Promise<void> {
+  return checkSpecialLineOf(card, kind, what, SHOWN_MS);
 }
 
-/**
- * B-AC-9: every special plot carries its glyph with its kind, and inside it a visible badge of its density's size
- * (scaled with the map, as the TV's stage is); nothing else on the map does.
- */
-async function checkGlyphs(map: Locator, where: string, density: Density): Promise<void> {
-  const box = SPECIAL_BADGE[density].box;
-  for (const t of specials) {
-    const g = glyph(map, t);
-    const seen = await g.waitFor({ state: 'visible', timeout: SHOWN_MS }).then(() => true, () => false);
-    check(seen, `B-AC-9 (${where}): the ${t.special.kind} on ${plotName(t)} shows its glyph`);
-    check((await g.getAttribute('data-kind')) === t.special.kind, `B-AC-9 (${where}): the glyph on ${plotName(t)} says ${t.special.kind}, got ${await g.getAttribute('data-kind')}`);
-    const badge = await g.evaluate((el) => {
-      const b = el.firstElementChild as HTMLElement | null;
-      const root = el.closest('.shadow-map') as HTMLElement | null;
-      if (!b || !root) return null;
-      const r = b.getBoundingClientRect();
-      return { w: b.offsetWidth, h: b.offsetHeight, rw: r.width, rh: r.height, scale: root.getBoundingClientRect().width / root.offsetWidth, visible: b.checkVisibility({ opacityProperty: true, visibilityProperty: true }), hexagon: !!b.querySelector('svg path') };
-    });
-    check(badge, `B-AC-9 (${where}): the glyph on ${plotName(t)} holds a badge`);
-    check(badge.visible && badge.hexagon, `B-AC-9 (${where}): the badge on ${plotName(t)} is visible and drawn`);
-    const want = box * badge.scale;
-    check(
-      badge.w === box && badge.h === box && Math.abs(badge.rw - want) < 0.5 && Math.abs(badge.rh - want) < 0.5,
-      `B-AC-9 (${where}): the badge on ${plotName(t)} is ${box} px (${want.toFixed(1)} on screen), got ${badge.w}×${badge.h} (${badge.rw.toFixed(1)}×${badge.rh.toFixed(1)})`,
-    );
-  }
-  check((await glyph(map, plain!).count()) === 0, `B-AC-9 (${where}, negative): the plain plot ${plotName(plain!)} shows no glyph`);
-  const all = await map.locator('[data-testid^="special-glyph-"]').count();
-  check(all === specials.length, `B-AC-9 (${where}, negative): ${specials.length} glyphs for ${specials.length} special fields, got ${all}`);
-}
-
-/** The card's special line, with its kind, comes first under the plot's name: before the terrain hint or the ground card. */
-async function checkSpecialLine(card: Locator, kind: string, what: string): Promise<void> {
-  const line = card.getByTestId('special-line');
-  const seen = await line.waitFor({ timeout: SHOWN_MS }).then(() => true, () => false);
-  check(seen, `${what} shows the special line`);
-  check((await line.getAttribute('data-kind')) === kind, `${what}: the special line says ${kind}, got ${await line.getAttribute('data-kind')}`);
-  const before = await card.evaluate((el) => {
-    const l = el.querySelector('[data-testid=special-line]');
-    const next = el.querySelector('[data-testid=terrain-hint], [data-testid=ground]');
-    return !!l && !!next && !!(l.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING);
-  });
-  check(before, `${what}: the special line comes before the terrain hint or the ground card`);
+function tapPlot(page: Page, map: Locator, p: { x: number; y: number }): Promise<void> {
+  return tapPlotOf(page, map, p, dealt.width, SHOWN_MS);
 }
 
 /**
@@ -238,13 +190,6 @@ async function checkMarkOnTop(map: Locator, where: string, mustMeet: boolean): P
   check(r.top !== 'badge' && r.top !== 'neither', `W-I1 (${where}): the owner's mark on ${plotName(diagonal)} paints above the badge hung into it, got ${r.top} on top (${nums})`);
   check(!mustMeet || r.top === 'mark', `W-I1 (${where}): the badge and the mark meet, so the probe tests something (${nums})`);
   return `${where}: ${r.top} (${nums})`;
-}
-
-/** Taps the middle of a plot on the map. Player marks are labelled images inside the plots, so they don't count as plots. */
-async function tapPlot(page: Page, map: Locator, p: Plot): Promise<void> {
-  const box = await map.locator('[aria-label]:not([role=img])').nth(p.y * dealt.width + p.x).boundingBox({ timeout: SHOWN_MS });
-  check(box, `plot ${plotName(p)} is on screen`);
-  await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
 }
 
 function seedFrom(value: string | undefined): number {

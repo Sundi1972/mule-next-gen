@@ -275,6 +275,64 @@ export interface GameState {
   listings: Listing[];
   /** The live land auction, while the landAuction phase runs. */
   landAuction: LandAuction | null;
+  /**
+   * Offices, elections and the Governor's tax; null when the host switched politics off.
+   * Written only by politics.ts, which replaces the object on every write: re-read it, don't hold a reference.
+   */
+  politics: Politics | null;
+}
+
+export type Office = 'governor' | 'sheriff';
+
+/** Why an office went to its winner, as the reveal shows it. */
+export type ElectionHow = 'votes' | 'unopposed' | 'appointed' | 'baron' | 'tieRule';
+
+/** Whether a player may run for an office now, or why not. Running for the other office is no refusal: it moves the candidacy. */
+export type CanRun = true | 'closed' | 'termLimit';
+
+/** A Governor candidate's tax promise, in whole percent for a cap. See WS7 spec RULE-10. */
+export type TaxPromise = { kind: 'cap'; percent: number } | { kind: 'lower' } | { kind: 'hold' };
+
+export interface OfficeResult {
+  winner: string;
+  how: ElectionHow;
+  /** Every candidate's weighted votes, highest first. Never who voted for whom. */
+  tallies: { id: string; votes: number }[];
+}
+
+export type ElectionResult = Record<Office, OfficeResult>;
+
+/** One election, nominate → ballot → reveal → over, inside a planning phase. */
+export interface Election {
+  stage: 'nominate' | 'ballot' | 'reveal' | 'over';
+  /** Ms left in the current stage. */
+  clockMs: number;
+  candidates: Record<Office, string[]>;
+  /** Each Governor candidate's promise, public like the candidacy and dropped with it. */
+  promises: Record<string, TaxPromise>;
+  /** Secret: each voter's choice per office. Only the voter may see their own. */
+  ballots: Record<string, Partial<Record<Office, string>>>;
+  /** Players who pressed Done in this stage. */
+  done: string[];
+  /** Fixed when the ballot closes, then shown on every screen. */
+  result: ElectionResult | null;
+}
+
+export interface Politics {
+  governor: string | null;
+  sheriff: string | null;
+  /** Month the current terms began. */
+  termStart: number;
+  /** Terms served per player, in either office; a term counts once it starts. */
+  terms: Record<string, number>;
+  /** The sitting Governor and how many terms in a row they have served, for the two-in-a-row rule. */
+  governorRun: { id: string; terms: number } | null;
+  /** The Land Baron, fixed when planning opens each month. */
+  baron: string | null;
+  /** treasury.salesTax when this month's planning opened: the Governor's bounds are around it. */
+  taxAtStart: number;
+  /** This month's election, live or just finished; null in a month without one. */
+  election: Election | null;
 }
 
 export type AuctionRole = 'buyer' | 'seller';

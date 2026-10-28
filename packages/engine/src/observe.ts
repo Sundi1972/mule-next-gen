@@ -23,7 +23,8 @@ import { GOODS, type GameState, type Stock, type Tile } from './types.js';
  * - other players' analyses, drone orders, MULE in tow, hunger and sickness;
  * - the seed, the land grant's coming order and the unannounced ship's
  *   wishlist, which would let a reader see the future;
- * - other players' rows in the history (what they had and made).
+ * - other players' rows in the history (what they had and made);
+ * - other players' election ballots, in every stage: the reveal shows totals only.
  */
 export function observe(state: GameState, playerId: string): GameState {
   const me = state.players.find((p) => p.id === playerId);
@@ -69,6 +70,11 @@ export function observe(state: GameState, playerId: string): GameState {
     sim.grant = { order: lit === undefined ? [] : [lit], step: 0, sweep: sim.grant.sweep };
   }
   if (state.month < state.ship.arrives - 1) sim.ship = { arrives: sim.ship.arrives, goods: [], hold: {}, bought: {} };
+  const election = sim.politics?.election;
+  if (election) {
+    const own = election.ballots[playerId];
+    election.ballots = own ? { [playerId]: own } : {};
+  }
   sim.history = sim.history.map((h) => ({
     ...h,
     before: { [playerId]: h.before[playerId] ?? emptyStock() },
@@ -109,5 +115,6 @@ export function cloneForSim(state: GameState): GameState {
     auction: state.auction ? structuredClone(state.auction) : null,
     listings: structuredClone(state.listings),
     landAuction: state.landAuction ? structuredClone(state.landAuction) : null,
+    politics: state.politics ? structuredClone(state.politics) : null,
   };
 }

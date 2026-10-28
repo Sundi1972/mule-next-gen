@@ -6,21 +6,19 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { GAME, LOTS, TAX, WALK, type Good } from '@mule/engine';
+import { GAME, LOTS, POLITICS, TAX, WALK, type Good } from '@mule/engine';
 import type { AuctionView, MuleView } from '@mule/protocol';
 import { errors as playwrightErrors, type Browser, type Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
-import { check, launch, PHONE, startServer, TV, type AuctionSteps } from './harness';
+import { check, headerSlot, launch, PHONE, startServer, TV, type AuctionSteps } from './harness';
+import { readyThroughTheElection } from './politics-steps';
 
 const PRESS_MS = 2_000;
 /** The minimum the Sell form starts at, which listPlot leaves unchanged. */
 const LOTS_MINIMUM = 250;
 
 // --- CT-3 hooks, called by smoke.ts --------------------------------------------
-
-/** The smoke's phone started the room, so it holds the first seat. */
-const SMOKE_PHONE_SLOT = 0;
 
 /** What listedSale put up, for month 2's landAuction to follow. */
 let smokeListing: string | null = null;
@@ -29,7 +27,7 @@ let smokeListing: string | null = null;
 export const listedSale: NonNullable<AuctionSteps['listedSale']> = async ({ phone, check }) => {
   const planning = phone.locator('[data-phase=planning]');
   await planning.getByTestId('tool-list').click({ timeout: PRESS_MS });
-  smokeListing = await listPlot(phone, SMOKE_PHONE_SLOT, 0);
+  smokeListing = await listPlot(phone, await headerSlot(phone, "the smoke's phone"), 0);
   if (smokeListing === null) {
     check(false, "the smoke's phone owns a plot to list");
   } else {
@@ -770,8 +768,12 @@ async function joinRoom(page: Page, base: string, code: string, name: string): P
   return page;
 }
 
+/**
+ * Presses ready through planning, election stages included, until the phone leaves it. Every phone's Done ends a stage
+ * early, but the reveal always runs its clock, so the budget is every stage at full length: a slow runner must not fail here.
+ */
 async function readyInPlanning(page: Page): Promise<void> {
-  await page.locator('[data-phase=planning]').getByRole('button', { name: "I'm ready" }).click({ timeout: within(SCALE, PHASE_MS.upkeep) });
+  await readyThroughTheElection(page, within(SCALE, PHASE_MS.upkeep + POLITICS.nominateMs + POLITICS.ballotMs + POLITICS.revealMs + PHASE_MS.planning));
 }
 
 /**
