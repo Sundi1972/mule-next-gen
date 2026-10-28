@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BRAIN } from '@mule/engine';
 import type { Prompt } from '@mule/ai';
 import { createBudget, worstCaseUsd } from '../src/brain/budget.js';
+import { WRITE_CALLS, WRITE_FALLBACK_MODEL, WRITE_KINDS } from '../src/brain/client.js';
 
 /** The game budget these tests use; two registered seats get a share of 0.5 each. */
 const GAME_BUDGET = 1;
@@ -146,6 +147,35 @@ describe('RULE-3 budget table', () => {
     const tokensWithout = Math.ceil(chars / BRAIN.charsPerToken);
     expect(tokensWithout).toBeLessThan(TOKENS + 1);
     expect(worstCaseUsd({ system: sys, user, schema: SCHEMA })).toBeCloseTo(priced(TOKENS + 1), 12);
+  });
+});
+
+describe("INV-price-by-model: a call's worst case is at its own model's prices and its own reply cap", () => {
+  const TOKENS = 1000;
+  const whole = TOKENS * BRAIN.charsPerToken;
+  /** RULE-3's worst case at a price table and reply cap, from BRAIN's constants. */
+  const pricedAt = (p: Readonly<Record<keyof typeof BRAIN.pricesPerMTok, number>>, maxTokens: number) =>
+    (TOKENS * Math.max(p.input, p.cacheWrite) + maxTokens * p.output) / 1_000_000;
+
+  it('INV-price-by-model: a Sonnet 5.5 call is priced at Sonnet rates, never at Haiku rates', () => {
+    const maxTokens = 3_000;
+    const sonnet = worstCaseUsd(promptOf(whole), { model: 'claude-sonnet-5-5', maxTokens });
+    expect(sonnet).toBeCloseTo(pricedAt(BRAIN.sonnetPricesPerMTok, maxTokens), 12);
+    expect(sonnet).not.toBeCloseTo(pricedAt(BRAIN.pricesPerMTok, maxTokens), 8);
+  });
+
+  it.each(WRITE_KINDS)("INV-price-by-model: a %s call's worst case is at its kind's model and reply cap, and so is the fallback's", (kind) => {
+    const { model, maxTokens } = WRITE_CALLS[kind];
+    expect(worstCaseUsd(promptOf(whole), WRITE_CALLS[kind])).toBeCloseTo(pricedAt(BRAIN[BRAIN.priceTable[model]], maxTokens), 12);
+    expect(worstCaseUsd(promptOf(whole), { model: WRITE_FALLBACK_MODEL, maxTokens })).toBeCloseTo(
+      pricedAt(BRAIN[BRAIN.priceTable[WRITE_FALLBACK_MODEL]], maxTokens),
+      12,
+    );
+  });
+
+  it('INV-price-by-model: a move call is unchanged: BRAIN.model at its prices, BRAIN.maxTokens', () => {
+    expect(worstCaseUsd(promptOf(whole))).toBeCloseTo(pricedAt(BRAIN[BRAIN.priceTable[BRAIN.model]], BRAIN.maxTokens), 12);
+    expect(worstCaseUsd(promptOf(whole))).toBe(worstCaseUsd(promptOf(whole), { model: BRAIN.model, maxTokens: BRAIN.maxTokens }));
   });
 });
 
