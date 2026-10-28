@@ -1,6 +1,6 @@
 import type { Good } from '@mule/engine';
 import { Button, cx, GOOD_NAME, GoodIcon, HoloMap, TERRAIN_NAME, type MapTile } from '@mule/ui';
-import { useState } from 'react';
+import { createContext, useContext, useState } from 'react';
 import { mapTiles, plotName, TERRAIN_ODDS, tileAt } from '../../../../../apps/web/src/game/derive';
 import { MapFit } from '../../../../../apps/web/src/phone/Shell';
 import { H, MARKET, ME, VIEW, W } from '../fixture';
@@ -27,7 +27,7 @@ type Mode = 'look' | 'drone';
 type PhoneTab = 'map' | 'market' | 'talk';
 
 /** This month's needs (fixture), as the engine's monthNeeds counts them: upkeep for Food and Water; Energy 1 per farm or well, 2 per mine. */
-const NEEDS: { good: Good; have: number; need: number; why: string }[] = [
+export const NEEDS: { good: Good; have: number; need: number; why: string }[] = [
   { good: 'food', have: ME.stock.food, need: ME.needs.food, why: 'upkeep' },
   { good: 'water', have: ME.stock.water, need: ME.needs.water, why: 'upkeep' },
   { good: 'energy', have: ME.stock.energy, need: 4, why: '3 farms and a well' },
@@ -167,12 +167,19 @@ export function ThisMonth() {
   );
 }
 
+/**
+ * The UX audit's plain words (H-6, #audit-hub): no codes in the copy. Where a screen says when the export ship calls
+ * in a whole sentence elsewhere, the store strip stops repeating it as a code.
+ */
+export const PlainWords = createContext(false);
+
 /** The store's prices and stock in one row of goods: what buying or selling would cost. */
 export function MarketStrip() {
+  const plain = useContext(PlainWords);
   return (
     <section className="flex flex-col gap-1" data-testid="market-strip">
       <span className="label-caps flex justify-between @min-[1100px]/shell:text-xs!">
-        Store prices <span>MULE {VIEW.mulePrice} cr · {VIEW.storeMules} left · export ship in month {VIEW.ship.arrives}</span>
+        Store prices <span>MULE {VIEW.mulePrice} cr · {VIEW.storeMules} left{plain ? '' : ` · export ship in month ${VIEW.ship.arrives}`}</span>
       </span>
       <div className="grid grid-cols-3 gap-1 @min-[1100px]/shell:grid-cols-5 @min-[1100px]/shell:gap-2">
         {MARKET.map((r) => (

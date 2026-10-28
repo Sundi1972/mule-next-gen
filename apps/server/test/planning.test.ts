@@ -9,8 +9,15 @@ import { fakeContext, readyAll, seats } from './fake-context.js';
 
 /** Far past any planning clock there ever was: no table plans this long by accident. */
 const TEN_MINUTES = 600_000;
-/** An election month's longest run on its own clocks, nominate to reveal, with room to spare. */
+/** An election month's longest run once every player is Done, announce to the ceremony's end, with room to spare. */
 const ELECTION_BOUND_MS = 120_000;
+
+/** One election tick in which every human is Done for announce or the ballot, as their phones' Ready makes them; nothing is pressed in the ceremony. */
+function doneTick(game: MuleGame, advance: (ms: number) => void): void {
+  const stage = game.viewFor(null).politics!.election!.stage;
+  if (stage === 'announce' || stage === 'ballot') for (const id of ['s1', 's2']) game.handle(id, { type: 'ready' });
+  advance(WALK.tickMs);
+}
 
 /** Seed 7 with the three standard seats, in planning; Heiko (s1) hosts unless `host` names another seat or none. */
 function started(options: { phaseScale?: number; politics?: boolean; host?: string | null } = {}) {
@@ -67,12 +74,12 @@ describe('FM-planning-untimed: planning has no clock', () => {
     for (const viewer of ['s1', 's2', null]) expect(game.viewFor(viewer).phaseEndsAt, `seen by ${viewer ?? 'the TV'}`).toBeNull();
   });
 
-  it('FM-planning-untimed: in an election month the election steps on its own clocks, then planning proper waits with no deadline until everyone is Ready', () => {
+  it('FM-planning-untimed: in an election month the election runs until everyone is Done, then planning proper waits with no deadline until everyone is Ready', () => {
     const { game, advance } = started({ politics: true });
     const election = () => game.viewFor(null).politics!.election!;
-    expect(election().stage).toBe('nominate');
-    for (let ms = 0; ms < ELECTION_BOUND_MS && election().stage !== 'over'; ms += WALK.tickMs) advance(WALK.tickMs);
-    expect(election().stage, 'the election ran on its own clocks').toBe('over');
+    expect(election().stage).toBe('announce');
+    for (let ms = 0; ms < ELECTION_BOUND_MS && election().stage !== 'over'; ms += WALK.tickMs) doneTick(game, advance);
+    expect(election().stage, 'the election ran to its end').toBe('over');
 
     advance(TEN_MINUTES);
     expect(phase(game)).toBe('planning');
@@ -94,12 +101,12 @@ describe('FM-planning-untimed: planning has no clock', () => {
       const table = started({ phaseScale, politics: true });
       const { game, advance } = table;
       const election = () => game.viewFor(null).politics!.election!;
-      expect(election().stage).toBe('nominate');
+      expect(election().stage).toBe('announce');
       for (let ms = 0; ms < ELECTION_BOUND_MS && election().stage !== 'over'; ms += WALK.tickMs) {
         expect(game.viewFor(null).phaseEndsAt, 'no planning deadline while the election runs').toBeNull();
-        advance(WALK.tickMs);
+        doneTick(game, advance);
       }
-      expect(election().stage, 'the election ran on its own clocks').toBe('over');
+      expect(election().stage, 'the election ran to its end').toBe('over');
       plannedFor(table, phaseScale);
     }),
   );
@@ -141,8 +148,8 @@ describe('FM-planning-all-ready: planning ends when every human is Ready, connec
   ] as const)('FM-planning-all-ready: in an election month, a phone that drops once the election is over and is not Ready holds planning proper: Mia %s; back and Ready, she starts the land grant', (_, order) => {
     const { game, advance } = started({ politics: true });
     const election = () => game.viewFor(null).politics!.election!;
-    for (let ms = 0; ms < ELECTION_BOUND_MS && election().stage !== 'over'; ms += WALK.tickMs) advance(WALK.tickMs);
-    expect(election().stage, 'the election ran on its own clocks').toBe('over');
+    for (let ms = 0; ms < ELECTION_BOUND_MS && election().stage !== 'over'; ms += WALK.tickMs) doneTick(game, advance);
+    expect(election().stage, 'the election ran to its end').toBe('over');
     for (const step of order) {
       if (step === 'drop') game.connectionChanged('s2', false);
       else game.handle('s1', { type: 'ready' });
@@ -186,20 +193,30 @@ describe("FM-planning-host-continue: the host's Continue ends planning proper; n
     expect(phase(game)).toBe('landGrant');
   });
 
-  it('FM-planning-host-continue: during the election Continue is refused at every stage and nothing changes; once it is over, Continue starts the land grant', () => {
+  it("FM-planning-host-continue, B-AC-61: in the election's announce and ballot the host's Continue goes on without Mia, who is not Done, and the news names her; in the ceremony it is refused and nothing changes; once it is over, Continue starts the land grant", () => {
     const { game, advance } = started({ politics: true });
     const election = () => game.viewFor(null).politics!.election!;
     // Both humans run for Governor, so the office is contested and the election holds a ballot.
     for (const id of ['s1', 's2']) game.handle(id, { type: 'run', office: 'governor', promise: { kind: 'hold' } });
-    const stages = new Set<string>();
+    const stages: string[] = [];
     for (let ms = 0; ms < ELECTION_BOUND_MS && election().stage !== 'over'; ms += WALK.tickMs) {
-      if (!stages.has(election().stage)) {
-        stages.add(election().stage);
-        refusedUnchanged(game, () => game.handle('s1', { type: 'continue' }), `the host's Continue at the election's ${election().stage} stage`);
+      const stage = election().stage;
+      if (!stages.includes(stage)) {
+        stages.push(stage);
+        if (stage === 'ceremony') refusedUnchanged(game, () => game.handle('s1', { type: 'continue' }), "the host's Continue in the ceremony");
+        else {
+          game.handle('s1', { type: 'ready' });
+          // A minute of ticks: the AI seat is Done after its pause, so only Mia holds the stage.
+          for (let t = 0; t < 600; t++) advance(WALK.tickMs);
+          expect(election().stage, `${stage} waits for Mia`).toBe(stage);
+          game.handle('s1', { type: 'continue' });
+          expect(phase(game), `${stage}: Continue does not end planning`).toBe('planning');
+          expect(news(game)[0]).toBe('Heiko continued without Mia.');
+        }
       }
       advance(WALK.tickMs);
     }
-    expect([...stages], 'every stage was tried').toEqual(['nominate', 'ballot', 'reveal']);
+    expect(stages, 'every stage was tried').toEqual(['announce', 'ballot', 'ceremony']);
     expect(election().stage).toBe('over');
     game.handle('s1', { type: 'continue' });
     expect(phase(game)).toBe('landGrant');

@@ -12,7 +12,7 @@ let ClientProvider: typeof import('../src/net/react').ClientProvider;
 let PhoneGameProvider: typeof import('../src/phone/game').PhoneGameProvider;
 
 const player = (id: string, name: string, slot: number): PlayerView =>
-  ({ id, name, isAi: false, color: '', slot, species: 'zipwing', money: 1000, plots: 0, ready: false, doneDeveloping: false }) as PlayerView;
+  ({ id, name, isAi: false, color: '', slot, species: 'zipwing', money: 1000, worth: 0, plots: 0, ready: false, doneDeveloping: false }) as PlayerView;
 const game = { view: { players: [player('s1', 'Heiko', 0), player('s2', 'Mia', 1)] } as unknown as MuleView } as PhoneGame;
 const state = { chat: [{ id: 1, from: 's2', text: 'Who takes the crystite?' }], seatId: 's1' };
 const client = { subscribe: () => () => undefined, getState: () => state, chat: () => undefined } as unknown as TableClient;

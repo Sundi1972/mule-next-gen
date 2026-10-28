@@ -1,4 +1,4 @@
-import type { Outfit, GrownGood, Good, MinedGood, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
+import type { Outfit, GrownGood, Good, MinedGood, Office, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
 
 /**
  * Every balancing number lives here, so playtests and the simulator can tune
@@ -382,6 +382,9 @@ export type FloorGood = 'food' | 'water' | 'energy' | 'smithore';
 /** The 11 land terrains other than the river: the ones with a target share. */
 export type ShareTerrain = Exclude<LandTerrain, 'river'>;
 
+/** The special fields the generator places; a meteor crater only forms in play. */
+export type PlacedSpecialKind = Exclude<SpecialKind, 'meteorCrater'>;
+
 /**
  * What every map must meet (the map rules), read by the checker, the
  * generator and the map gallery. Size bands are sizeBand's. Counts are good
@@ -466,7 +469,7 @@ export const MAP = {
       geyser: ['volcanic', 'tundra', 'ice'],
       oasis: ['desert'],
       relic: ['plains', 'forest', 'hills', 'desert', 'tundra', 'mountains', 'swamp', 'volcanic', 'crater', 'ice'],
-    } satisfies Record<SpecialKind, ShareTerrain[]>,
+    } satisfies Record<PlacedSpecialKind, ShareTerrain[]>,
     maxPerKind: 2,
     minKinds: 3,
     /** Fewest steps between two special fields. */
@@ -496,6 +499,8 @@ export const MAP = {
     /** What ruins pay their first owner, once, by the salvage drawn with the map. */
     salvage: { alloy: 2, electronics: 1 },
   },
+  /** A meteor crater, formed in play: its Crystite rating (the top of the mined scale), and no production bonus. */
+  meteorCrater: { crystite: 4 },
   /** Tuning for the layout stages (map-layout.ts): how the generator meets the rules above, not rules themselves. */
   layout: {
     /** The budget never gives a terrain more than this share, so jitter can't take plains near maxTerrainShare. */
@@ -592,23 +597,26 @@ export const TAX = {
 };
 
 /**
- * Colony politics: the election of a Governor and a Sheriff, the vote weight,
- * the Governor's sales tax and the offices' pay. Times are in milliseconds of
- * game time, stepped like the land auction.
+ * Colony politics: the election of the offices in POLITICS.offices, the vote weight,
+ * the Governor's sales tax and the offices' pay. No decision has a clock; only
+ * the reveal ceremony does, in milliseconds of game time, stepped like the land auction.
  */
 export const POLITICS = {
   /** Months whose planning phase opens with an election; a term runs until the next one. */
   electionMonths: [1, 4, 7, 10],
+  /** The offices elected, in the order the ceremony reveals them; the Sheriff returns with slice 4's powers. */
+  offices: ['governor'] as Office[],
   /** A Governor who has served this many terms in a row may not run for Governor again until someone else has held it. */
   maxGovernorTermsInRow: 2,
-  /** Players declare for Governor or Sheriff. */
-  nominateMs: 20_000,
-  /** Players cast their secret ballots. */
-  ballotMs: 20_000,
-  /** The reveal: a countdown, then the result on every screen. */
-  revealMs: 6_000,
-  /** The countdown part of the reveal, before the result shows. */
-  revealCountdownMs: 3_000,
+  /** The reveal ceremony, per office. Placeholders until WS1 and Heiko set them. */
+  ceremony: {
+    /** The office, each candidate and their promise. */
+    introMs: 3_000,
+    /** Each candidate's bar grows to their weighted votes; skipped with fewer than two candidates. */
+    barsMs: 4_000,
+    /** The winner, how they won, and the congratulations. */
+    winnerMs: 5_000,
+  },
   weight: {
     /** Votes every player has, before the parts below. */
     base: 1,
@@ -630,12 +638,18 @@ export const POLITICS = {
   tax: { min: 0, max: 15, maxStep: 5 },
   /** Paid from the colony fund to each officeholder at upkeep, as far as the fund reaches. */
   pay: { governor: 50, sheriff: 30 },
-  /** Score per term served in either office. A placeholder until the sim balances it. */
-  termScore: 100,
+  /**
+   * Worth per term served in either office: about one good month's income, the median monthly Worth gain of a
+   * top-half player with politics on (1,150-1,222 on the sim's three sets, 28 Oct). No AI choice and no sim check
+   * reads it; it moves only who wins.
+   */
+  termScore: 1200,
   /** How Classic AI seats run, vote and set the tax (VoteHand). Placeholders until the sim balances them. */
   ai: {
-    /** Ms a seat waits before acting in a nominate or ballot stage, drawn per stage: a human's pause, well inside the stage's clock. */
+    /** Ms a seat waits before acting in announce or the ballot, drawn per stage: a human's pause. */
     actMs: [800, 2_500] as [number, number],
+    /** A seat decides whether to run in the first planning phase at most this many months before an election month; in month 1, at the last call. */
+    declareLeadMonths: 1,
     /** Chance per election that a persona runs for Governor. */
     runGovernor: { trader: 0.5, cautious: 0.3, aggressive: 0.8, saboteur: 0.6 } satisfies Record<AiPersonaId, number>,
     /** Chance it runs for Sheriff when it does not run for Governor. */
@@ -644,7 +658,7 @@ export const POLITICS = {
     taxTarget: { trader: 5, cautious: 4, aggressive: 8, saboteur: 10 } satisfies Record<AiPersonaId, number>,
     /** Whole percent a Governor adds when the colony fund is low. */
     taxFundBump: 2,
-    /** The fund is low under this many months of both offices' pay. */
+    /** The fund is low under this many months of the elected offices' pay. */
     fundMonths: 3,
   },
 };
@@ -924,6 +938,8 @@ export const STRATEGIST = {
   cashFloor: 60,
   /** What one colony air point costs it, in credits, rising as the air gets dirtier (doubles by Smoggy). */
   airCost: 10,
+  /** What it counts a green belt as costing a month, in credits (the engine charges none), set against the air it cleans; without full scoring, the cost alone. */
+  greenBeltCost: 5,
   /** Below this utility share of the best, a free plot is not worth pressing for in the first sweep; later sweeps take anything above laterShare. */
   grantShare: 0.75,
   grantLaterShare: 0.5,
@@ -942,6 +958,11 @@ export const STRATEGIST = {
   /** Analyses per month, at most, and never with less than this many seconds left. */
   analysesPerMonth: 2,
   analyseMinSeconds: 20,
+  /** Analyses per month, at most, at a level without full scoring (Rookie), in place of analysesPerMonth. */
+  rookieAnalyses: 1,
+  /** It fits filters once the air is within this many points of Smoggy, and only to polluters of more than filterOverAir air points a month. */
+  filterAirMargin: 10,
+  filterOverAir: 1,
   /** Share of its money it spends on one good at the auction, at most. */
   budgetShare: 0.5,
   /**
@@ -954,8 +975,19 @@ export const STRATEGIST = {
   secondValue: { busy: 10, idle: 3 },
   /** Share it takes off next month's price for a good it would hold, per point of risk weight, because the forecast may be wrong. */
   forecastHaircut: 0.05,
+  /** And this share more off a unit it would buy only to resell, per point of risk weight. */
+  resaleRisk: 0.1,
   /** A corner pays this share over next month's price for the units the others are short of. */
   cornerPremium: 0.5,
+  /** It corners only a good that spoils less than this share a month, and at most this many units. */
+  cornerMaxSpoilage: 0.5,
+  cornerMaxUnits: 6,
+  /**
+   * Spite: while the leader is short of the good, it bids this share of next month's price, times its spite, over its
+   * own value for at least the next spiteUnits units (all the cornered ones while it corners).
+   */
+  spiteShare: 0.1,
+  spiteUnits: 2,
   /**
    * How many months past next the outlook plays the status quo forward
    * (nobody builds or trades), to see a shortage coming before the price
@@ -973,10 +1005,42 @@ export const STRATEGIST = {
   selfSupply: 3,
   /**
    * The "cash left" consideration: spending down to the reserve scores this
-   * much, and keeping twice the reserve scores 1. The reserve itself is a hard
+   * much, and keeping cashLeftFull times the reserve scores 1. The reserve itself is a hard
    * rule, so this is only a mild preference for cash in hand.
    */
   cashLeftFloor: 0.75,
+  cashLeftFull: 2,
+  /** The land plan's considerations (landDecision), besides gainScale.plot. */
+  land: {
+    /** "Known ground": what a plot it hasn't analysed scores; an analysed one scores 1. */
+    unknownGround: 0.8,
+    /** "Next to my land": `full` of its own plots beside a plot score 1, never under `floor`; weighted clusterWeight in the cluster plan, else `weight`. */
+    nextToMine: { full: 2, floor: 0.6, clusterWeight: 2, weight: 0.5 },
+    /** "Blocks the leader": `full` of the leader's plots beside a plot score 1, never under `floor`; weighted by spite, at least minWeight. */
+    blocksLeader: { full: 2, floor: 0.4, minWeight: 0.5 },
+    /** "Feeds me": what a plan scores while its Food and Energy are covered, and, while they are short, any plan but farms first (which scores 1). */
+    feedsMe: { covered: 0.75, short: 0.6 },
+    /** "Can develop it": cash over the reserve scores 1 at `mules` MULE prices; weighted factoryWeight in the factory plan, else `weight`. */
+    canDevelop: { mules: 2, factoryWeight: 1, weight: 0.3 },
+    /** "Hurts the leader": what the plan that fences in the leader scores. */
+    hurtsLeader: 0.7,
+  },
+  /** The development decision's considerations (developDecision), besides gainScale.develop and the cash left. */
+  develop: {
+    /** "Known ground": what an idle plot it hasn't analysed scores; an analysed one scores 1. */
+    unknownGround: 0.75,
+    /** "Feeds me": what a MULE that doesn't cover its own Food or Energy scores (one that does scores 1); weighted this share of the persona's reserve. */
+    feedsMe: { other: 0.8, reserveShare: 0.5 },
+  },
+  /** The auction's trade decision (tradeDecision, expectedPrices), besides gainScale.trade and the cash left. */
+  trade: {
+    /** "Sure thing": what a sale scores, a buy of what it needs, and a buy partly to resell (a forecast); a pass scores 1. */
+    sure: { sell: 0.9, need: 0.9, resale: 0.6 },
+    /** Selling, it also offers to keep a buffer: this share of next month's need, at least 1 unit, over what it would keep. */
+    bufferShare: 0.5,
+    /** It expects a sale to fetch at least this share of the posted price, whoever buys. */
+    sellFloor: 0.85,
+  },
 };
 
 /** The AI's hands in the real-time phases. Times are in ms. */
@@ -1015,6 +1079,29 @@ export const AI_HANDS = {
     /** A go/no-go choice takes this much longer than a bare reaction. */
     choiceMs: [150, 300] as [number, number],
   },
+};
+
+/**
+ * The balance targets `pnpm sim` checks, from the design doc's Economy model tab, each named for its check. Shares are
+ * of months or of games, as the check says; the report prints the targets from here.
+ */
+export const SIM_TARGETS = {
+  /** MULE price median: from min to max credits. */
+  muleMedian: { min: 150, max: 300 },
+  /** MULE price 90th percentile: under this many credits. */
+  mule90th: 500,
+  /** Corral sold out: in under this share of months. */
+  corralSoldOut: 0.1,
+  /** Food above `factor` times its reference price: in this share of games, from min to max. */
+  foodSpike: { factor: 3, min: 0.1, max: 0.5 },
+  /** Colonists short of Food or Water: in under this share of months. */
+  colonistsShort: 0.15,
+  /** Owned plots developed at the end: this share or more. */
+  developed: 0.7,
+  /** No game has an AI broke, under `below` credits with idle land, for `months` months in a row. */
+  broke: { below: 100, months: 3 },
+  /** Ended in Collapse: in this share of games or fewer. */
+  collapsed: 0.1,
 };
 
 /** The language model that decides for Smart AI seats, and its limits. */
