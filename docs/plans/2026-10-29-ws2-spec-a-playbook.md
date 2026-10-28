@@ -4,10 +4,9 @@
 
 **Spec class:** Programme (ruled by the PM, 28 Oct).
 
-**DESIGN GATE: NO IMPLEMENTATION AT ALL**, stubbed unit work included, until Heiko says yes to the one-screen summary
-of spec A's design (sent to the PM on 29 Oct; PM correction, same day). The goal gate passed: Heiko approved the
-restated G-A ("Yes, approve it"). After the design gate, unit work may stub on the frozen v1 types; PR-1's B-AC-A1
-still needs WS1 step 2 and WS3's record append to pass.
+**DESIGN GATE PASSED** (Heiko, "Yes to the design", via the PM, 29 Oct). Unit work may stub on the frozen v1 types;
+PR-1's B-AC-A1 still needs WS1 step 2 and WS3's record append + grant execution to pass. PR-5's paid runs need the
+PM's clearance with the cost stated.
 
 ## Goals — lifted from spec §0. Reference, do not restate.
 
@@ -396,7 +395,7 @@ budget ÷ Smart seats).
 ## Pre-implementation checklist
 
 - [x] **Goal gate:** Heiko approved the restated G-A with the UBER-AC-A additions ("Yes, approve it"); §0 written in verbatim, cost about 5 PRs
-- [ ] **Design gate:** Heiko says yes to the one-screen design summary (sent to the PM 29 Oct); no implementation, stubs included, before it
+- [x] **Design gate:** Heiko said "Yes to the design" to the one-screen summary (via the PM, 29 Oct; spec §8 AM-A8)
 - [ ] Upstream: WS1 step 2 (v1 types in `packages/engine/src/playbook.ts`, validatePlan, engine draft); WS3 record append API and grant execution reading `ranked` — PR-1's B-AC-A1 cannot pass before them
 - [x] Branch policy: sub-PRs → `ws2-brain`; milestones → `feat/strategist` (or `main`) with Heiko's OK via the PM
 - [x] Base `ws2-brain` @ `6805806` green (29 Oct): `pnpm typecheck` 0 · tests ui 46 · tabletop 148 · engine 266 (+1 skipped) · ai 115 (+9) · web 224 · server 225 (+52) · sims seed 1 `8b73b040`, seed 101 `9e7cb57c` · CI also runs `check` and `e2e` on lane PRs

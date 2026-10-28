@@ -366,6 +366,9 @@ Code-only; no existing state to reach. The record starts with WS3's build.
   BRAIN; the capability-first re-run rule → C3, §7. The spike's cause codes → C2.
 - **AM-A6 · 29 Oct · lead:** C4's seam renamed playbooks.ts (no clash with packages/ai's strategist.ts); C3 promotes
   the S-A1 port instead of a second client. Cost note for §0: C8 and C9 add about 2 PRs, so about 5 in all (in §0 since the goal gate).
+- **AM-A8 · 29 Oct · Heiko via PM:** DESIGN GATE PASSED, "Yes to the design" on the one-screen summary. Build may
+  start: unit work on the frozen v1 types now; PR-1 when WS1 step 2 and WS3's record append + grant execution land.
+  PR-5's paid runs still need the PM's clearance with the cost stated.
 - **AM-A7 · 29 Oct · lead, at plan time:** G-A's "check it against what happened" had no AC; T-AC-A10 (the last
   PhaseOutcome reaches the next brief) added → C1.
 
