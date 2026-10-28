@@ -263,6 +263,8 @@ ux           WS6's hub mock at ws6-ux b28ee91 (awaiting Heiko's approval):
              election-stage, run-governor, run-sheriff, withdraw, candidates, voted, vote-weight,
              ballot-countdown, ballot-reveal, result-<office>-<id>, how-<office>, gov-tax, tax-down,
              tax-value, tax-up, tax-confirm, tax-readonly, vote-weights, land-baron.
+             (offices and tax-readonly superseded by A-3: fund-card, fund-in, fund-out,
+             roadmap-offices.)
              GRAFT TARGET: the hub's politics slots (WS6's PR-9 frame).
 depends_on   C9 (contract), WS6 mock approval (not stubbable: an implementer never designs a screen)
 ```

@@ -211,7 +211,7 @@ async function main(): Promise<void> {
     await lena.page.getByTestId('tax-confirm').click({ timeout: PRESS_MS });
     await untilServer(lena.page, () => truth.board().politics!.tax.percent === NEW_TAX, `UBER-AC-2: the server's sales tax is ${NEW_TAX}%`);
     await ossa.page.getByTestId('desk-colony').click({ timeout: PRESS_MS });
-    await ossa.page.getByTestId('tax-readonly').filter({ hasText: `Sales tax ${NEW_TAX}%` }).waitFor({ timeout: PRESS_MS });
+    await ossa.page.getByTestId('fund-in').filter({ hasText: `the ${NEW_TAX}% sales tax` }).waitFor({ timeout: PRESS_MS });
 
     // On to the auction: ready, claim, the pub.
     await everyone(phones, (p) => p.page.getByTestId('ready').click({ timeout: PRESS_MS }));
