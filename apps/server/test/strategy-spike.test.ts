@@ -263,12 +263,12 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:strategy-spike', () => {
       answer({ strategy: { kind: 'hermit' } }),
       answer({ strategy: { moneyMaker: 'gold' } }),
       answer({ strategy: { cashFloor: 12.5 } }),
-      answer({ strategy: { reason: 'x'.repeat(S.reasonChars + 1) } }),
+      answer({ strategy: { reason: 'x'.repeat(BRAIN.writeReasonChars + 1) } }),
       answer({ strategy: { extra: 1 } }),
       JSON.stringify({ strategy: JSON.parse(answer()).strategy, planPick: 'A' }), // no line
     ];
     for (const text of invalid) expect(judgeReply(b, text), text.slice(0, 60)).toMatchObject({ valid: false, within: false });
-    expect(judgeReply(b, answer({ strategy: { reason: 'x'.repeat(S.reasonChars) } })).valid).toBe(true);
+    expect(judgeReply(b, answer({ strategy: { reason: 'x'.repeat(BRAIN.writeReasonChars) } })).valid).toBe(true);
   });
 
   it('S-A1: the report gives per-model latency, validity, bounds, tokens and cost, pair agreement and the upkeep verdict, and says what quality means here', async () => {
@@ -428,7 +428,7 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:strategy-spike', () => {
     { code: 'bad_kind', answer: reply({}, answer({ strategy: { kind: MARK } })) },
     { code: 'bad_good', answer: reply({}, answer({ strategy: { moneyMaker: MARK } })) },
     { code: 'bad_cash_floor', answer: reply({}, answer({ strategy: { cashFloor: 12.5, reason: MARK } })) },
-    { code: 'reason_too_long', answer: reply({}, answer({ strategy: { reason: MARK + 'x'.repeat(S.reasonChars) } })) },
+    { code: 'reason_too_long', answer: reply({}, answer({ strategy: { reason: MARK + 'x'.repeat(BRAIN.writeReasonChars) } })) },
     { code: 'plan_not_offered', answer: reply({}, answer({ planPick: 'C', line: MARK })) },
     { code: 'bad_line', answer: reply({}, JSON.stringify({ ...JSON.parse(answer({ strategy: { reason: MARK } })), line: 7 })) },
     { code: 'refused', answer: { ...reply({}, answer({ line: MARK })), stopReason: 'refusal' } },

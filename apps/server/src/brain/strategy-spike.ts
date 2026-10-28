@@ -129,7 +129,7 @@ Your strategy. You choose:
 - moneyMaker: the good you mean to earn most from, or null.
 - monopolyTarget: the good you mean to corner, or null. Only a monopolist names one, and only a seat whose level may corner.
 - cashFloor: credits you keep back and do not spend below, a whole number from 0 to the money you have.
-- reason: why, in at most ${S.reasonChars} characters.
+- reason: why, in at most ${BRAIN.writeReasonChars} characters.
 You also pick one of this month's land plans by its letter (planPick); the engine ranked them, best first, and the ranking is a guide you may depart from when your strategy calls for it. Never name a plan that is not in the list. And you may say one short sentence at the table (line), at most ${BRAIN.maxLineChars} characters, in the character's voice, or leave it empty. Keep it family-friendly.
 
 Reply with JSON only, in the shape the schema gives.`;
@@ -257,7 +257,7 @@ export function createStrategyComplete(sdk: HaikuSdk, now?: () => number): Strat
 }
 
 export interface Verdict {
-  /** The reply parses, has every field in the schema's shape, a reason within S.reasonChars and a plan from the brief. */
+  /** The reply parses, has every field in the schema's shape, a reason within BRAIN.writeReasonChars and a plan from the brief. */
   valid: boolean;
   /** Valid, and within the seat's bounds: cashFloor 0…money, goods known or null, and no monopoly for a seat that never corners. */
   within: boolean;
@@ -301,7 +301,7 @@ export function judgeReply(brief: Brief, text: string, stopReason: StrategyReply
   if (!isGoodOrNull(moneyMaker) || !isGoodOrNull(monopolyTarget)) return invalid('bad_good');
   if (!Number.isInteger(cashFloor)) return invalid('bad_cash_floor');
   if (typeof reason !== 'string') return invalid('bad_shape');
-  if ([...reason].length > S.reasonChars) return invalid('reason_too_long');
+  if ([...reason].length > BRAIN.writeReasonChars) return invalid('reason_too_long');
   if (typeof planPick !== 'string' || !brief.plans.some((p) => p.id === planPick)) return invalid('plan_not_offered');
   if (typeof line !== 'string') return invalid('bad_line');
   const floor = cashFloor as number;

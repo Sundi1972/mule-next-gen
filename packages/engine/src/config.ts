@@ -1145,8 +1145,6 @@ export const BRAIN = {
     maxTokens: 3_000,
     /** How long one call may take before it counts as a timeout, in ms. */
     timeoutMs: 30_000,
-    /** Longest strategy reason, in characters. */
-    reasonChars: 140,
     /** Strategy calls one seat makes in a game, as the cost projection assumes. */
     callsPerSeatGame: 24,
   },
