@@ -19,6 +19,7 @@ const person = (id: string, name: string, slot: number, ready = false): PlayerVi
   money: 1000,
   worth: 0,
   lastWorth: null,
+  worthBeforeCut: null,
   plots: 0,
   ready,
   doneDeveloping: false,
