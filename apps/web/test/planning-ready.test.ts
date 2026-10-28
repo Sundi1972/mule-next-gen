@@ -125,12 +125,12 @@ describe('planning without a clock: who is still planning, and the host', () => 
     expect(host(run(['ready', 'continue', 'keep-waiting']).confirm), 'Keep waiting puts Continue back').toBe('continue');
   });
 
-  it("T-AC-13: the host's planning footer draws Continue without the one still planning; a player who is not the host gets none", () => {
+  it("T-AC-13: the host's planning footer draws Continue without the one still planning; a player who is not the host gets none; before Ready the line names the viewer first, as \"you\"", () => {
     const all = players({ brix: true, lena: true });
     const t = table(all, BRIX, []);
-    const view = { phase: 'planning', politics: null, players: all, month: 2, maxMonths: 12 } as unknown as MuleView;
-    const footer = (seat: string) => {
-      const self = all.find((p) => p.id === seat)!;
+    const footer = (seat: string, seated = all) => {
+      const view = { phase: 'planning', politics: null, players: seated, month: 2, maxMonths: 12 } as unknown as MuleView;
+      const self = seated.find((p) => p.id === seat)!;
       const client = { intent: () => {} } as unknown as TableClient;
       const game = createElement(PhoneGameProvider, { value: { table: t, view, me: {} as MyView, self, slot: self.slot as Slot }, children: createElement(ReadyBar) });
       return renderToStaticMarkup(createElement(ClientProvider, { client, children: game }));
@@ -143,5 +143,13 @@ describe('planning without a clock: who is still planning, and the host', () => 
     expect(lena).toContain('data-testid="you-are-ready"');
     expect(lena).toContain(`data-testid="waiting-${OSSA}"`);
     expect(lena).not.toContain('data-testid="continue"');
+
+    const ossa = footer(OSSA, players()).replaceAll('<!-- -->', '');
+    expect(ossa).toContain('data-testid="ready"');
+    const at = (id: string) => ossa.indexOf(`data-testid="waiting-${id}"`);
+    expect(at(OSSA), 'Ossa, last in seat order, is named first on her own phone').toBeGreaterThan(-1);
+    expect(at(OSSA)).toBeLessThan(at(BRIX));
+    expect(at(BRIX)).toBeLessThan(at(LENA));
+    expect(ossa.slice(at(OSSA), at(BRIX))).toMatch(/>you<\/span>/);
   });
 });
