@@ -79,14 +79,17 @@ const lines = () => (fs.existsSync(file) ? readLedger(file) : []);
 /** Plain input tokens that bill `usd`. */
 const inputTokensFor = (usd: number) => Math.round((usd * 1_000_000) / BRAIN.pricesPerMTok.input);
 
-const serviceOn = (sdk: HaikuSdk) => createBrain({ gameId: GAME, env: KEY, logPath: file, sdkFactory: () => sdk, now: ticking() });
+const serviceOn = (sdk: HaikuSdk, gameBudgetUsd?: number) =>
+  createBrain({ gameId: GAME, env: KEY, logPath: file, sdkFactory: () => sdk, now: ticking(), ...(gameBudgetUsd === undefined ? {} : { gameBudgetUsd }) });
+/** A second Smart seat: registering it halves each seat's share of the game budget. */
+const OTHER: BrainSeat = { id: 'p1', persona: 'aggressive', level: 'tycoon' };
 
 /**
- * A real Brain on a decider from the service for seat p0. `ask` starts one develop decision, `settle` ends it as the
+ * A real Brain on a decider from the service for `seat` (p0 by default). `ask` starts one develop decision, `settle` ends it as the
  * hand would after its wait; `decide` does both. `topPick` is what TopPickDecider picks given the same arguments.
  */
-function seatOn(service: BrainService, options = list) {
-  const inner = service.deciderFor(SEAT)!;
+function seatOn(service: BrainService, options = list, seat = SEAT) {
+  const inner = service.deciderFor(seat)!;
   let seen: Parameters<Decider['decide']> | null = null;
   const watched: Decider = { name: inner.name, decide: (...args) => ((seen = args), inner.decide(...args)) };
   const records: DecisionRecord[] = [];
@@ -200,11 +203,15 @@ describe('brain service', () => {
     expect(importers).toEqual(['brain/client.ts']);
   });
 
-  it('B-AC-4: a seat at its budget makes no call, plays its top pick and calls no more this game', async () => {
-    // Call 1 bills all but about $0.001 of the seat's budget and call 2 about $0.001, in whole tokens: no call fits after.
-    const billed: Partial<Usage>[] = [{ input: inputTokensFor(BRAIN.seatBudgetUsd - 0.001) }, { input: inputTokensFor(0.001) }];
+  it("B-AC-4: a seat at its share of the game budget makes no call, plays its top pick and calls no more this game", async () => {
+    // Two Smart seats share the game budget. Call 1 bills all but about $0.001 of p0's share and call 2 about $0.001,
+    // in whole tokens: no call fits after.
+    const share = BRAIN.gameBudgetUsd / 2;
+    const billed: Partial<Usage>[] = [{ input: inputTokensFor(share - 0.001) }, { input: inputTokensFor(0.001) }];
     const sdk = fakeSdk((n) => sdkMessage('{"option":"B","line":"Mine."}', billed[n - 1] ?? { input: 1 }));
-    const { decide } = seatOn(serviceOn(sdk));
+    const service = serviceOn(sdk);
+    service.deciderFor(OTHER);
+    const { decide } = seatOn(service);
 
     // Negative: below the budget the call is made, even with only $0.001 left.
     for (let i = 0; i < 2; i++) {
@@ -228,8 +235,11 @@ describe('brain service', () => {
     });
   });
 
-  it('B-AC-4: a seat whose calls all time out or lose the connection locks before its counted spend passes the budget; a 500 or a reply, even an unusable one, counts only its bill', async () => {
-    // Labels this long make each call's worst case a large share of the seat's budget, so only a handful fit.
+  it("B-AC-4: a seat whose calls all time out or lose the connection locks before its counted spend passes its share of the game budget; a 500 or a reply, even an unusable one, counts only its bill", async () => {
+    // Two seats at a $0.08 game budget: a share of $0.04. Labels this long make each call's worst case a large part of
+    // it, so only a handful fit.
+    const gameBudget = 0.08;
+    const share = gameBudget / 2;
     const long = () =>
       shortlist(['a', 'b', 'c'].map((a, i) => candidate(a, a.repeat(105_000), a, 10, [consider('fit', 0.9 - i * 0.05, 1, 'fits')])), 3, 0.5);
     // Replies here bill nothing, so a seat that locks could only have been charged a worst case.
@@ -268,7 +278,8 @@ describe('brain service', () => {
         worst.push(worstUsdOfRequest(params));
         return c.answer();
       });
-      const service = serviceOn(sdk);
+      const service = serviceOn(sdk, gameBudget);
+      service.deciderFor(OTHER);
       const { decide } = seatOn(service, long);
 
       const notes: (string | undefined)[] = [];
@@ -286,8 +297,8 @@ describe('brain service', () => {
       expect(new Set(worst).size, c.name).toBe(1);
       const each = worst[0]!;
       // It called while its counted spend left room for one more worst case, and not once past that.
-      expect(calls * each, c.name).toBeLessThanOrEqual(BRAIN.seatBudgetUsd);
-      expect((calls + 1) * each, c.name).toBeGreaterThan(BRAIN.seatBudgetUsd);
+      expect(calls * each, c.name).toBeLessThanOrEqual(share);
+      expect((calls + 1) * each, c.name).toBeGreaterThan(share);
       expect(notes.slice(calls), c.name).toEqual(Array(8 - calls).fill('decider failed: budget spent'));
 
       // The ledger still records the usage it was given, so the game total stays the sum of its call lines.
@@ -296,6 +307,36 @@ describe('brain service', () => {
       expect(all.map((l) => l.type ?? l.outcome), c.name).toEqual([...Array(calls).fill(c.outcome), 'budget', 'game']);
       expect(all.every((l) => l.usd === 0), c.name).toBe(true);
       expect(all.at(-1), c.name).toMatchObject({ type: 'game', calls, usd: 0 });
+    }
+  });
+
+  it('INV-table-budget: a seat that joins after another spent nearly the whole game budget makes no call though the call fits its share, and the first seat is now past its share', async () => {
+    // p0, alone, bills all but $0.0001 of the game budget; every prompt's worst case is more than that.
+    const sdk = fakeSdk(() => sdkMessage('{"option":"B","line":"Mine."}', { input: inputTokensFor(BRAIN.gameBudgetUsd - 0.0001) }));
+    const service = serviceOn(sdk);
+    const first = seatOn(service);
+    expect((await first.decide()).settled.choice.by).toBe('llm');
+
+    const second = seatOn(service, list, OTHER);
+    const joined = await second.decide();
+    expect(joined.settled.choice).toMatchObject({ by: 'fallback', optionId: joined.topPick });
+    expect(joined.record.note).toBe('decider failed: budget spent');
+    const again = await first.decide();
+    expect(again.record.note).toBe('decider failed: budget spent');
+    expect(sdk.calls).toBe(1);
+    expect(lines().map((l) => [l.seat, l.outcome])).toEqual([['p0', 'llm'], ['p1', 'budget'], ['p0', 'budget']]);
+  });
+
+  it('INV-table-budget: createBrain refuses a game budget that is not above 0 and at most BRAIN.gameBudgetUsd, with the key or without', () => {
+    const sdkFactory = () => fakeSdk(() => sdkMessage('{}'));
+    for (const env of [KEY, {}]) {
+      for (const gameBudgetUsd of [0, -0.01, BRAIN.gameBudgetUsd + 0.01, NaN, Infinity]) {
+        expect(() => createBrain({ gameId: GAME, env, logPath: file, sdkFactory, gameBudgetUsd }), String(gameBudgetUsd)).toThrow(RangeError);
+      }
+      // Negative: the ceiling itself and anything below it down to a cent are budgets.
+      for (const gameBudgetUsd of [BRAIN.gameBudgetUsd, 0.01]) {
+        expect(() => createBrain({ gameId: GAME, env, logPath: file, sdkFactory, gameBudgetUsd })).not.toThrow();
+      }
     }
   });
 
@@ -413,8 +454,8 @@ describe('brain service', () => {
   });
 
   it('INV-finish: finish writes the game line once, counting model calls only, and the game makes no further calls', async () => {
-    // One call bills the seat's whole budget, in whole input tokens.
-    const tokens = inputTokensFor(BRAIN.seatBudgetUsd);
+    // One call bills the only seat's share, the whole game budget, in whole input tokens.
+    const tokens = inputTokensFor(BRAIN.gameBudgetUsd);
     const billed = (tokens * BRAIN.pricesPerMTok.input) / 1_000_000;
     const sdk = fakeSdk(() => sdkMessage('{"option":"B","line":"Mine."}', { input: tokens }));
     const service = serviceOn(sdk);

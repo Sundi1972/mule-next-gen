@@ -1,5 +1,5 @@
 /** The trial's figures and verdicts from what its games left behind: pure, so the tests read the report itself. */
-import { BRAIN, grantDone, type GameState } from '@mule/engine';
+import { grantDone, type GameState } from '@mule/engine';
 import type { Choice, DecisionKind } from '@mule/ai';
 import { KINDS, nearest, table, type StopReason } from './cli.js';
 import type { CallLine } from './ledger.js';
@@ -30,7 +30,7 @@ export interface TrialGame {
   modelLines: Record<string, number[]>;
   /** Phases left open by their tick limit, e.g. "month 3 auction". */
   cutOff: string[];
-  /** The game's counted spend at finish, as its seat budgets counted it. */
+  /** The game's counted spend at finish, as its budget counted it. */
   countedUsd: number;
   /** Model calls that settled, as the trial saw them: each should have its ledger line. */
   settledCalls: number;
@@ -47,6 +47,8 @@ export interface TrialInput {
   seatsPerGame: number;
   /** Null without the key: nothing can be spent. */
   cap: number | null;
+  /** The most each game's Smart seats together could spend in this run; UBER-AC-2 judges each game against it. */
+  gameBudgetUsd: number;
   games: TrialGame[];
   /** The run's call lines from its ledger file. */
   calls: Pick<CallLine, 'game' | 'seat' | 'usd' | 'outcome'>[];
@@ -88,9 +90,13 @@ export interface TrialReport {
   lines: MonthCounts & { seatMonths: number };
   /** Lines per Smart seat-month that the model wrote. */
   modelLines: MonthCounts;
-  seatGameUsd: { seatGames: number; max: number; mean: number; atOrOverBudget: number };
+  /** Ledger dollars per Smart seat-game: information only. */
+  seatGameUsd: { seatGames: number; max: number; mean: number };
+  /** Ledger dollars per game with Smart seats, all of them together: what UBER-AC-2 judges against the game budget. */
+  gameUsd: { games: number; max: number; atOrOverBudget: number };
+  gameBudgetUsd: number;
   ledgerUsd: number;
-  /** Ledger dollars plus each unknown-bill call at its worst case, as the seat budgets count: what the cap is checked against. */
+  /** Ledger dollars plus each unknown-bill call at its worst case, as the game budgets count: what the cap is checked against. */
   countedUsd: number;
   cap: number | null;
   stalls: { unfinished: string[]; cutOff: string[] };
@@ -156,7 +162,9 @@ export function trialReport(input: TrialInput): TrialReport {
   const perMonth = (of: (g: TrialGame) => Record<string, number[]>) =>
     finished.flatMap((g) => g.smart.flatMap((seat) => Array.from({ length: g.months }, (_, m) => of(g)[seat]?.[m] ?? 0)));
   const allLines = perMonth((g) => g.lines);
-  const seatUsd = games.flatMap((g) => g.smart.map((seat) => sum(calls.filter((c) => c.game === g.id && c.seat === seat).map((c) => c.usd))));
+  const seatUsdOf = (g: TrialGame) => g.smart.map((seat) => sum(calls.filter((c) => c.game === g.id && c.seat === seat).map((c) => c.usd)));
+  const seatUsd = games.flatMap(seatUsdOf);
+  const tableUsd = games.filter((g) => g.smart.length > 0).map((g) => sum(seatUsdOf(g)));
 
   const stalls = {
     unfinished: games.filter((g) => g.end === 'unfinished' || g.end === 'crashed').map((g) => g.id),
@@ -173,16 +181,20 @@ export function trialReport(input: TrialInput): TrialReport {
     seatGames: seatUsd.length,
     max: seatUsd.length === 0 ? 0 : Math.max(...seatUsd),
     mean: seatUsd.length === 0 ? 0 : sum(seatUsd) / seatUsd.length,
-    atOrOverBudget: seatUsd.filter((u) => u >= BRAIN.seatBudgetUsd).length,
+  };
+  const gameUsd = {
+    games: tableUsd.length,
+    max: tableUsd.length === 0 ? 0 : Math.max(...tableUsd),
+    atOrOverBudget: tableUsd.filter((u) => u >= input.gameBudgetUsd).length,
   };
   const all = shareOf(asked);
 
-  // A silent seat-month, a stall or a seat-game at the budget fails outright; the rest is judged on a complete run only.
+  // A silent seat-month, a stall or a game at its budget fails outright; the rest is judged on a complete run only.
   const ac1 = input.keyed
     ? verdict({ fails: lines.silent > 0, proven: complete, holds: all.of > 0 && 5 * all.model >= 4 * all.of && lines.seatMonths > 0 })
     : 'n/a';
   const ac2 = input.keyed
-    ? verdict({ fails: stalled || seatGameUsd.atOrOverBudget > 0, proven: complete && seatGameUsd.seatGames > 0, holds: true })
+    ? verdict({ fails: stalled || gameUsd.atOrOverBudget > 0, proven: complete && gameUsd.games > 0, holds: true })
     : verdict({ fails: stalled || topPicks !== allDecisions.of, proven: complete, holds: true });
 
   return {
@@ -200,6 +212,8 @@ export function trialReport(input: TrialInput): TrialReport {
     lines,
     modelLines: monthCounts(perMonth((g) => g.modelLines)),
     seatGameUsd,
+    gameUsd,
+    gameBudgetUsd: input.gameBudgetUsd,
     ledgerUsd: sum(calls.map((c) => c.usd)),
     countedUsd: sum(games.map((g) => g.countedUsd)),
     cap: input.cap,
@@ -256,9 +270,10 @@ export function renderTrialReport(r: TrialReport): string[] {
       ['lines per Smart seat-month', monthText(r.lines, r.lines.seatMonths)],
       ['model-written lines per Smart seat-month', monthText(r.modelLines, r.lines.seatMonths)],
       ['UBER-AC-2', ''],
+      ['ledger $ per Smart seat-game', `max ${usdText(r.seatGameUsd.max)}, mean ${usdText(r.seatGameUsd.mean)}`],
       [
-        'ledger $ per Smart seat-game',
-        `max ${usdText(r.seatGameUsd.max)}, mean ${usdText(r.seatGameUsd.mean)}, at or over $${BRAIN.seatBudgetUsd.toFixed(2)}: ${r.seatGameUsd.atOrOverBudget} of ${r.seatGameUsd.seatGames}`,
+        'ledger $ per game, Smart seats together',
+        `max ${usdText(r.gameUsd.max)}, at or over the game budget ${capText(r.gameBudgetUsd)}: ${r.gameUsd.atOrOverBudget} of ${r.gameUsd.games}`,
       ],
       ['ledger spend', usdText(r.ledgerUsd)],
       [`counted spend (cap ${capText(r.cap ?? 0)})`, usdText(r.countedUsd)],
@@ -267,6 +282,7 @@ export function renderTrialReport(r: TrialReport): string[] {
     ...stallDetail,
     '',
     `UBER-AC-1 ${verdictText(r.ac1)}: ${pct(r.asked.all)} of asked Smart decisions by the model (needs 80%), ${r.lines.silent} Smart seat-months without a line (needs 0)`,
-    `UBER-AC-2 ${verdictText(r.ac2)}: at most ${usdText(r.seatGameUsd.max)} per Smart seat-game (needs under $${BRAIN.seatBudgetUsd.toFixed(2)}), ${r.stalls.unfinished.length + r.stalls.cutOff.length} stalls (needs 0)`,
+    `UBER-AC-2 ${verdictText(r.ac2)}: at most ${usdText(r.gameUsd.max)} per game for all Smart seats together ` +
+      `(needs under the game budget ${capText(r.gameBudgetUsd)}), ${r.stalls.unfinished.length + r.stalls.cutOff.length} stalls (needs 0)`,
   ];
 }
