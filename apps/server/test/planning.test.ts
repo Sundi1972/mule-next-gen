@@ -22,6 +22,7 @@ function started(options: { phaseScale?: number; politics?: boolean; host?: stri
 }
 
 const phase = (game: MuleGame) => game.viewFor(null).phase;
+const news = (game: MuleGame) => game.viewFor(null).news;
 
 /** Everything every screen sees: the TV's view and each human's. A refused move leaves all of it as it was. */
 const screens = (game: MuleGame) => [null, 's1', 's2'].map((viewer) => game.viewFor(viewer));
@@ -219,16 +220,42 @@ describe("FM-planning-host-continue: the host's Continue ends planning proper; n
     expect(tried).toEqual(expect.arrayContaining(['landGrant', 'development', 'production', 'auction', 'upkeep']));
   });
 
-  it("FM-planning-host-continue: a non-host's Continue is refused and nothing changes; the host's ends planning with nobody Ready", () => {
+  it("FM-planning-host-continue: a non-host's Continue is refused and nothing changes; the host's ends planning with nobody Ready, and the news names who was left waiting", () => {
     const { game } = started();
     for (const seat of seats.filter((x) => x.id !== 's1')) {
       const before = screens(game);
       expect(() => game.handle(seat.id, { type: 'continue' }), seat.name).toThrow(new RuleError('Only the host can continue'));
       expect(screens(game), `${seat.name}: nothing changes`).toEqual(before);
+      expect(news(game).join(' | '), `${seat.name}: no news of a refused Continue`).not.toContain('continued');
     }
     expect(phase(game)).toBe('planning');
     game.handle('s1', { type: 'continue' });
     expect(phase(game)).toBe('landGrant');
+    expect(news(game)[0]).toBe('Heiko continued without Mia');
+  });
+
+  /** Four humans and the AI Baron, in seat order Heiko, Mia, Lena, Ossa; Heiko hosts. */
+  const fourHumans = [
+    { id: 's1', name: 'Heiko', isAi: false, color: 0 },
+    { id: 's2', name: 'Mia', isAi: false, color: 1 },
+    { id: 's3', name: 'Lena', isAi: false, color: 2 },
+    { id: 's4', name: 'Ossa', isAi: false, color: 3 },
+    { id: 's5', name: 'The Baron', isAi: true, color: 4 },
+  ];
+
+  it.each([
+    [[], 'Heiko continued without Mia, Lena and Ossa'],
+    [['s3'], 'Heiko continued without Mia and Ossa'],
+    [['s2', 's3'], 'Heiko continued without Ossa'],
+  ] as const)("FM-planning-host-continue: with %j Ready, the host's Continue reads \"%s\": the humans not Ready, in seat order", (readies, line) => {
+    const fake = fakeContext({ table: fourHumans });
+    const game = new MuleGame(fake.ctx, 7);
+    game.start(fourHumans);
+    for (const id of readies) game.handle(id, { type: 'ready' });
+    expect(phase(game)).toBe('planning');
+    game.handle('s1', { type: 'continue' });
+    expect(phase(game)).toBe('landGrant');
+    expect(news(game)[0]).toBe(line);
   });
 
   it("FM-planning-host-continue: while Heiko's phone is locked, hosting passes to Mia: his Continue is refused, hers ends planning", () => {
@@ -238,6 +265,7 @@ describe("FM-planning-host-continue: the host's Continue ends planning proper; n
     refusedUnchanged(game, () => game.handle('s1', { type: 'continue' }), "Heiko's Continue, no longer the host");
     game.handle('s2', { type: 'continue' });
     expect(phase(game)).toBe('landGrant');
+    expect(news(game)[0], 'a dropped human not Ready is named too').toBe('Mia continued without Heiko');
   });
 
   it('FM-planning-host-continue: with no host, no seat can continue', () => {
