@@ -9,14 +9,14 @@ import { errors as playwrightErrors, type Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, held, launch, PHONE, startServer, TV } from './harness';
-import { PRESS_MS } from './politics-steps';
+import { ELECTION_WAIT_MS, PRESS_MS } from './politics-steps';
 
 const SCALE = 0.25;
 /** How long the last phone's Ready takes to land and the land grant to show; planning has no clock. */
 const READY_LANDS_MS = 3_000;
 /** The rate the new Governor sets: UBER-AC-2's 8%. */
 const NEW_TAX = 8;
-/** How often the reveal is read on all three screens at once. */
+/** How often the ceremony is read on all three screens at once. */
 const TICK_MS = 50;
 /** B-AC-6: Lena's promise, stepped up from today's tax. */
 const LENA_CAP = 8;
@@ -74,9 +74,13 @@ async function main(): Promise<void> {
     const [lenaId, ossaId] = [truth.idOf(lena), truth.idOf(ossa)];
     const taxNow = truth.board().politics!.tax.percent;
     check(taxNow < LENA_CAP, `B-AC-6: today's tax ${taxNow}% is under Lena's ${LENA_CAP}%, so she steps the cap up`);
-    const promises = () => truth.state().politics!.election!.promises;
-    // Every tap below lands inside nominate (about 5 s here), so the game clock is held until the look-around is over.
-    // The AI seat acts on that clock too: it runs, if it does, only after the release.
+    // Politics' until the ballot opens, the election's after.
+    const promises = () => {
+      const politics = truth.state().politics!;
+      return politics.election!.stage === 'announce' ? politics.promises : politics.election!.promises;
+    };
+    // Every tap below lands in announce; the game clock is held until the look-around is over, so the AI seat, which
+    // acts on that clock, runs (if it does) only after the release.
     await held(server, code, async () => {
       await everyone(phones, (p) => p.page.locator('[data-phase=planning]').getByTestId('agenda-election').click({ timeout: 5_000 }));
       await Promise.all([
@@ -113,18 +117,18 @@ async function main(): Promise<void> {
       await lena.page.getByTestId('running').filter({ hasText: `You run for Governor, promising “Tax no higher than ${LENA_CAP}%”` }).waitFor({ timeout: PRESS_MS });
       await ossa.page.getByTestId('running').filter({ hasText: 'You run for Governor, promising “Hold the tax”' }).waitFor({ timeout: PRESS_MS });
       await everyone(phones, (p) => p.page.getByTestId('candidates').filter({ hasText: lena.name }).filter({ hasText: ossa.name }).waitFor({ timeout: PRESS_MS }));
-      const running = truth.board().politics!.election!.candidates.governor;
+      const running = truth.board().politics!.candidates.governor;
       const aiIds = truth.board().players.filter((p) => p.isAi).map((p) => p.id);
       check(running.includes(lenaId) && running.includes(ossaId) && running.every((id) => id === lenaId || id === ossaId || aiIds.includes(id)), `B-AC-1: the server has both humans running for Governor, and nobody else but the AI seat, got ${running.join(', ')}`);
       check(JSON.stringify(promises()[lenaId]) === JSON.stringify(LENA_PROMISE) && JSON.stringify(promises()[ossaId]) === JSON.stringify(OSSA_PROMISE), `B-AC-6: the server holds Lena's and Ossa's promises, got ${JSON.stringify(promises())}`);
     });
 
-    // Done with nominate on both phones; the AI seat runs and votes through its own hand. Both humans vote for Lena.
+    // Done with announce on both phones; the AI seat runs and votes through its own hand. Both humans vote for Lena.
     await everyone(phones, (p) => p.page.getByTestId('ready').click({ timeout: PRESS_MS }));
     await everyone(phones, async (p) => {
       const ballot = p.page.locator('[data-phase=planning]').getByTestId('election');
       // Her row is named for her, then her promise.
-      await ballot.getByRole('radio', { name: new RegExp(`^${lena.name}\\b`) }).check({ timeout: within(POLITICS.nominateMs) });
+      await ballot.getByRole('radio', { name: new RegExp(`^${lena.name}\\b`) }).check({ timeout: within(POLITICS.ai.actMs[1]) });
     });
     // B-AC-6: every phone's ballot quotes each Governor candidate's promise, the AI seat's too if it runs; no Sheriff candidate has one.
     const { governor: govs, sheriff: sheriffs } = truth.state().politics!.election!.candidates;
@@ -142,9 +146,9 @@ async function main(): Promise<void> {
     await everyone(phones, (p) => p.page.getByTestId('voted').filter({ hasText: /\b[23] of 3\b/ }).waitFor({ timeout: PRESS_MS }));
     await everyone(phones, (p) => p.page.getByTestId('ready').click({ timeout: PRESS_MS }));
 
-    // The TV counts down, then every screen shows the same result at the same moment.
-    await tv.getByTestId('ballot-countdown').waitFor({ timeout: within(POLITICS.ballotMs) });
-    const reveal = await readTheReveal(tv, lena.page, ossa.page, within(POLITICS.revealMs));
+    // The TV counts through the Governor's intro, then every screen names the Governor at the same moment.
+    await tv.getByTestId('ballot-countdown').waitFor({ timeout: within(POLITICS.ai.actMs[1]) });
+    const reveal = await readTheReveal(tv, lena.page, ossa.page, within(ELECTION_WAIT_MS));
     // No wall-clock assertion in CI (lean CI rule 6): "the same moment" is one broadcast to every view, proven by B-AC-1 (server). The ticks are logged.
     // Every ballot cast for Lena, weighted: both humans' and, if it chose her, the AI seat's.
     const weights = truth.board().politics!.weights;
@@ -162,16 +166,18 @@ async function main(): Promise<void> {
       const name = p === lena ? 'You' : lena.name;
       check(row && row[1] === name && Number(row[2]) === elected[0]!.votes, `B-AC-1: ${p.name}'s phone names ${name} Governor with ${elected[0]!.votes} votes, as the TV does, in the same tick: "${text}"`);
     }
-    // B-AC-6: the TV's result quotes Lena's promise under her name; a Sheriff row quotes nothing.
+    // B-AC-6: the TV's result quotes Lena's promise under her name; a Sheriff row, once the ceremony reaches it, quotes nothing.
     const lenaRow = reveal.tv.find((r) => r.id === lenaId)!;
     check(lenaRow.text.includes(`${lena.name}“Tax no higher than ${LENA_CAP}%”`), `B-AC-6: the TV's result row for Lena quotes her promise, got "${lenaRow.text}"`);
-    check(reveal.sheriff.length > 0 && reveal.sheriff.every((t) => !/[“”]/.test(t)), `B-AC-6 (negative): no Sheriff result row on the TV quotes a promise, got ${JSON.stringify(reveal.sheriff)}`);
+    await tv.locator('[data-testid^="result-sheriff-"]').first().waitFor({ timeout: within(ELECTION_WAIT_MS) });
+    const sheriffRows = await tv.locator('[data-testid^="result-sheriff-"]').allInnerTexts();
+    check(sheriffRows.length > 0 && sheriffRows.every((t) => !/[“”]/.test(t)), `B-AC-6 (negative): no Sheriff result row on the TV quotes a promise, got ${JSON.stringify(sheriffRows)}`);
     console.log(`✓ B-AC-6: the TV's result shows "${lenaRow.text}"; the Sheriff row(s) carry no promise`);
-    console.log(`✓ B-AC-1: both humans run, vote, and see the same result at the same moment: countdown, then Lena Governor with ${expectedVotes} votes on the TV and both phones, first seen at ticks ${reveal.firstTicks.join(', ')}`);
+    console.log(`✓ B-AC-1: both humans run, vote, and see the same result at the same moment: the intro, then Lena Governor with ${expectedVotes} votes on the TV and both phones, first seen at ticks ${reveal.firstTicks.join(', ')}`);
 
     // The winner's phone opens the tax desk; the other phone has no Governor's desk.
     const taxValue = lena.page.getByTestId('tax-value');
-    await taxValue.waitFor({ timeout: within(POLITICS.revealMs) });
+    await taxValue.waitFor({ timeout: within(ELECTION_WAIT_MS) });
     const start = truth.board().politics!.tax.percent;
     check((await taxValue.innerText()).trim() === `${start}%`, `B-AC-1: the tax desk opens at the colony's ${start}%, got "${await taxValue.innerText()}"`);
     check((await ossa.page.getByTestId('desk-governor').count()) === 0, 'B-AC-1 (negative): Ossa, not Governor, has no Governor desk');
@@ -251,23 +257,22 @@ function said(p: TaxPromise): string {
 }
 
 /**
- * Reads the TV's reveal and both phones' result card in one tick, every TICK_MS, until all three show it.
+ * Reads the TV's ceremony and both phones' result card in one tick, every TICK_MS, until all three name the Governor.
  * Returns the tick each was first seen at, how far apart those are, and what each showed in the last tick.
  */
-async function readTheReveal(tv: Page, a: Page, b: Page, timeout: number): Promise<{ firstTicks: number[]; tv: TvRow[]; sheriff: string[]; lena: string; ossa: string }> {
+async function readTheReveal(tv: Page, a: Page, b: Page, timeout: number): Promise<{ firstTicks: number[]; tv: TvRow[]; lena: string; ossa: string }> {
   const readTv = () => ({
-    shown: !!document.querySelector('[data-testid=ballot-reveal]'),
+    shown: !!document.querySelector('[data-testid=how-governor]'),
     rows: [...document.querySelectorAll<HTMLElement>('[data-testid^="result-governor-"]')].map((el) => ({
       id: el.dataset.testid!.slice('result-governor-'.length),
       votes: Number(el.querySelector('[data-num]')?.textContent),
       elected: (el.textContent ?? '').includes('ELECTED'),
       text: el.textContent ?? '',
     })),
-    sheriff: [...document.querySelectorAll<HTMLElement>('[data-testid^="result-sheriff-"]')].map((el) => el.textContent ?? ''),
   });
   const readPhone = () => {
     const card = document.querySelector<HTMLElement>('[data-testid=phone-election-result]');
-    return { shown: !!card, text: card?.textContent ?? '' };
+    return { shown: !!card?.textContent?.includes('Governor'), text: card?.textContent ?? '' };
   };
   const first: (number | null)[] = [null, null, null];
   const deadline = Date.now() + timeout;
@@ -278,7 +283,7 @@ async function readTheReveal(tv: Page, a: Page, b: Page, timeout: number): Promi
     });
     if (t.shown && x.shown && y.shown) {
       const ticks = first as number[];
-      return { firstTicks: ticks, tv: t.rows, sheriff: t.sheriff, lena: x.text, ossa: y.text };
+      return { firstTicks: ticks, tv: t.rows, lena: x.text, ossa: y.text };
     }
     check(Date.now() < deadline, `B-AC-1: the result shows on every screen; seen on TV ${t.shown}, Lena ${x.shown}, Ossa ${y.shown}`);
     await new Promise((r) => setTimeout(r, TICK_MS));
