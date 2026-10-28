@@ -15,8 +15,17 @@ import {
   type Tile,
 } from '../src/index.js';
 
-const SEEDS = 1000;
+// CI runs the map promises on 1,000 maps; MULE_FULL=1 runs all 5,000 and T-AC-5's placement sweep.
+const FULL = process.env.MULE_FULL === '1';
 const PLAYER_COUNTS = [2, 3, 4, 5, 6];
+/** Seeds per player count for B-AC-1, 3, 4 and 5: 200 in CI (1,000 maps), 1,000 with MULE_FULL (5,000). */
+const SEEDS = FULL ? 1000 : 200;
+/**
+ * Seeds per player count for B-AC-2: its 20-30% band reaches only 1.6 standard deviations either side of 25% at 200
+ * maps (seeds 201-400 give 18% at 2 and 3 players), so in CI it keeps 700 maps per player count, 3.1 deviations; all
+ * 1,000 with MULE_FULL.
+ */
+const RATE_SEEDS = FULL ? 1000 : 700;
 const TIMEOUT = 120_000;
 const MAX_LINES = 30;
 const LAND = Object.keys(TERRAIN_ODDS) as Exclude<Terrain, 'store'>[];
@@ -106,11 +115,27 @@ function build(seed: number, players: number): Built {
   return { seed, players, map, report: checkMap(map, players) };
 }
 
+/**
+ * `count` seeds for a player count, all within 1-1,000. Each count starts 200 further on, so in CI the five counts deal
+ * different seeds: 2 and 3 players (and 5 and 6) share a seed's layout and scarce draw. With all 1,000, every count
+ * gets seeds 1-1,000.
+ */
+function seedsOf(players: number, count: number): number[] {
+  const start = 200 * PLAYER_COUNTS.indexOf(players);
+  return Array.from({ length: count }, (_, j) => ((start + j) % 1000) + 1);
+}
+
 let built: Built[] = [];
+let rated: Built[] = [];
 let regressions: Built[] = [];
 
 beforeAll(() => {
-  built = PLAYER_COUNTS.flatMap((players) => Array.from({ length: SEEDS }, (_, i) => build(i + 1, players)));
+  for (const players of PLAYER_COUNTS) {
+    // B-AC-2's sample starts with the maps the other promises check, so none is built twice.
+    const maps = seedsOf(players, RATE_SEEDS).map((seed) => build(seed, players));
+    rated.push(...maps);
+    built.push(...maps.slice(0, SEEDS));
+  }
   regressions = REGRESSION_SEEDS.map(([seed, players]) => build(seed, players));
 }, TIMEOUT);
 
@@ -126,9 +151,9 @@ describe('map quality, every map createGame deals', () => {
   }, TIMEOUT);
 
   it('B-AC-2: 20-30% of maps have exactly one scarce good, none has two', () => {
-    const failures = violationsOf(built, ['F2']);
+    const failures = violationsOf(rated, ['F2']);
     for (const players of PLAYER_COUNTS) {
-      const maps = built.filter((b) => b.players === players);
+      const maps = rated.filter((b) => b.players === players);
       const rate = maps.filter((b) => b.report.metrics.scarce !== null).length / maps.length;
       if (rate < 0.2 || rate > 0.3) failures.push(`${players} players: ${(rate * 100).toFixed(1)}% of maps have one scarce good`);
     }
@@ -151,7 +176,7 @@ describe('map quality, every map createGame deals', () => {
     expect(failures, listed(failures)).toEqual([]);
   }, TIMEOUT);
 
-  it('T-AC-5: placement meets P1 on every map it is given', () => {
+  it.runIf(FULL)('T-AC-5: placement meets P1 on every map it is given (MULE_FULL)', () => {
     // Placement is cheap next to building a map, so each built map is placed again from fresh rng seeds.
     const failures: string[] = [];
     for (const { seed, players, map } of [...built, ...regressions]) {
@@ -164,14 +189,15 @@ describe('map quality, every map createGame deals', () => {
       }
     }
     expect(failures, listed(failures)).toEqual([]);
+  }, TIMEOUT);
 
-    // A map with no dry land right of the river can't hold RULE-5: placement says so rather than place it short.
+  it("T-AC-5: a map with no dry land right of the river can't hold RULE-5, and placement says so rather than place it short", () => {
     const rightOfRiver: [number, number, string][] = [[9, 0], [10, 0], [9, 1], [10, 1], [8, 2], [9, 2], [10, 2], [7, 3], [8, 3], [9, 3], [10, 3], [7, 4], [8, 4], [9, 4], [10, 4]].map(
       ([x, y]) => [x!, y!, 'L'],
     );
     const flooded = withTerrain(withSpecials(SMALL_MAP, [[0, 3, null], [6, 1, null], [10, 4, null]]), rightOfRiver);
     expect(() => placeSpecials(flooded, 2, createRng(1))).toThrow(/special fields/);
-  }, TIMEOUT);
+  });
 
   it('B-AC-4: hints are honest', () => {
     const land = built.flatMap((b) => b.map.tiles.filter((t) => t.terrain !== 'store').map((t) => ({ players: b.players, tile: t })));

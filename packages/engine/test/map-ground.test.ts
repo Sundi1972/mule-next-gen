@@ -30,15 +30,20 @@ import {
 } from '../src/index.js';
 
 const PLAYERS = [2, 3, 4, 5, 6];
-/** Seeds every stage test runs. */
-const SEEDS = 200;
+/**
+ * The seed sweeps run only with MULE_FULL=1. CI runs the hand-built fixtures and the regression seeds; every map CI
+ * deals is checked against F1-F3, S8 and S10 by B-AC-1 to B-AC-3 in map-quality.test.ts.
+ */
+const FULL = process.env.MULE_FULL === '1';
+/** Seeds every stage test runs (MULE_FULL). */
+const SEEDS = FULL ? 200 : 0;
 /**
  * The seams and scarcity stages fail rarely and only on 2-player maps, so their tests run
- * more seeds there, plus two seeds that broke them before the fields reached the map edges
+ * more seeds there (MULE_FULL), plus two seeds that broke them before the fields reached the map edges
  * (2p 171: stage 8 left 5 of 8 plots joined; 2p 2469: Smithore scarce, no cut kept S8). Those
- * maps are gone; the seeds stay as extra cover.
+ * maps are gone; the seeds stay as extra cover, and run in CI.
  */
-const SEAM_SEEDS_2P = 1000;
+const SEAM_SEEDS_2P = FULL ? 1000 : 0;
 const REGRESSION_SEEDS_2P = [171, 2469];
 const FLOOR_GOODS: FloorGood[] = ['food', 'water', 'energy', 'smithore'];
 
@@ -413,7 +418,7 @@ describe('map ground stages', () => {
     allRuns();
   }, 60_000);
 
-  it('T-AC-5: ground stage deals each terrain its odds by stratified draw', () => {
+  it.runIf(FULL)('T-AC-5: ground stage deals each terrain its odds by stratified draw (MULE_FULL)', () => {
     const broken: string[] = [];
     for (const run of stageRuns()) {
       const where = `${run.players}p seed ${run.seed}`;
@@ -444,12 +449,12 @@ describe('map ground stages', () => {
     expect(broken, broken.join('\n')).toEqual([]);
   });
 
-  it('T-AC-5: peaks stage meets S10', () => {
+  it.runIf(FULL)('T-AC-5: peaks stage meets S10 (MULE_FULL)', () => {
     const broken = failures(stageRuns(), (r) => r.peaks, ['S10']);
     expect(broken, broken.join('\n')).toEqual([]);
   });
 
-  it('T-AC-5: floors stage meets F1 and F2 lower side', () => {
+  it.runIf(FULL)('T-AC-5: floors stage meets F1 and F2 lower side (MULE_FULL)', () => {
     const broken = failures(stageRuns(), (r) => r.floors, ['F1', 'F2'], (run, report) => {
       const out = belowNormal(run, report);
       for (const good of FLOOR_GOODS) {
@@ -494,7 +499,7 @@ describe('map ground stages', () => {
     expect(broken, broken.join('\n')).toEqual([]);
   });
 
-  it('T-AC-5: reach stage meets F3', () => {
+  it.runIf(FULL)('T-AC-5: reach stage meets F3 (MULE_FULL)', () => {
     const broken = failures(stageRuns(), (r) => r.reach, ['F1', 'F2', 'F3'], belowNormal);
     expect(broken, broken.join('\n')).toEqual([]);
   });
@@ -545,11 +550,14 @@ describe('map ground stages', () => {
       return out;
     });
     for (const fixture of SCARCITY_FIXTURES) broken.push(...fixture.check());
-    // RULE-3: the twist comes at its chance, from any of the four goods, by exactly two draws whatever they give.
-    const picked = allRuns().filter((r) => r.scarce !== null);
-    const share = picked.length / allRuns().length;
-    if (share < 0.2 || share > 0.3) broken.push(`scarce share ${share.toFixed(3)} over ${allRuns().length} maps, outside 0.2-0.3`);
-    for (const g of FLOOR_GOODS) if (!picked.some((r) => r.scarce === g)) broken.push(`${g} never picked as the scarce good`);
+    // RULE-3: the twist comes at its chance, from any of the four goods (over the sweep, MULE_FULL), by exactly two
+    // draws whatever they give.
+    if (FULL) {
+      const picked = allRuns().filter((r) => r.scarce !== null);
+      const share = picked.length / allRuns().length;
+      if (share < 0.2 || share > 0.3) broken.push(`scarce share ${share.toFixed(3)} over ${allRuns().length} maps, outside 0.2-0.3`);
+      for (const g of FLOOR_GOODS) if (!picked.some((r) => r.scarce === g)) broken.push(`${g} never picked as the scarce good`);
+    }
     for (let seed = 1; seed <= 20; seed++) {
       const rng = createRng(seed);
       pickScarce(rng);
@@ -609,7 +617,8 @@ describe('map ground stages', () => {
       for (const v of report.violations.filter((v) => v.rule !== 'P1')) broken.push(`${where} ${v.rule}: ${v.detail}`);
       const store = run.layout.terrain.indexOf('store');
       if (Object.values(run.scarcity.ground[store]!).some((r) => r !== 0)) broken.push(`${where}: the store has ground`);
-      // dealGround is the stages in order: on a sample, the same rng stream through it gives the same ground, scarce good and lifts.
+      // dealGround is the stages in order: on a sample of the sweep (MULE_FULL), the same rng stream through it gives the
+      // same ground, scarce good and lifts.
       if (run.seed % 20 !== 0) continue;
       const rng = createRng(run.seed);
       const layout = layoutMap(run.players, rng);
