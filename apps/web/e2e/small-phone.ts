@@ -102,6 +102,14 @@ try {
       await button.evaluate((e) => e.scrollIntoView({ block: 'end' }));
       check(await inView(phone, button), `B-AC-11: at ${size.width}×${size.height} the plot card shows ${what} in full`);
     }
+    const spill = await dev.getByRole('button', { name: 'Colony store' }).evaluate((plot) => {
+      const chip = [...plot.querySelectorAll('span')].find((s) => s.textContent === 'STORE');
+      if (!chip) return Infinity;
+      const p = plot.getBoundingClientRect();
+      const c = chip.getBoundingClientRect();
+      return Math.max(p.left - c.left, c.right - p.right, p.top - c.top, c.bottom - p.bottom);
+    });
+    check(spill <= 0.5, `B-AC-11: at ${size.width}×${size.height} the map's STORE chip sits inside its plot, out by ${spill} px`);
   }
   await phone.setViewportSize(PHONE_SMALL.viewport);
   await phone.getByTestId('move-to-phone').click({ timeout: PRESS_MS });
