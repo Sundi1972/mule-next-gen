@@ -8,7 +8,8 @@ import { H, W } from '../fixture';
 
 /**
  * Planning without a clock (Heiko, 2026-10-28: "the planning phase should not be time bound"; AM-16). Planning ends
- * when every human is Ready, or when the host continues without the rest. The host's phone or laptop carries the
+ * when every human is Ready, or when the host continues without the rest (in planning proper only: after the month's
+ * election, or with none; the server refuses it during the election). The host's phone or laptop carries the
  * Continue button (Heiko ruled it: not the TV, which has no seat and which anyone with the link could open).
  *
  * Who is still planning comes from what every screen already has: `players[].ready` and `isAi` (the game),
@@ -89,9 +90,11 @@ function WaitingFor({ seats, me, tv = false }: { seats: Seat[]; me: string | nul
  * you are: who you're waiting for. The host, once ready and while anyone is still planning, can continue without
  * them, after one confirming tap.
  */
-export function ReadyBar({ ready, onReady, confirm: startConfirm = false }: { ready: boolean; onReady: () => void; confirm?: boolean }) {
+export function ReadyBar({ ready, onReady, confirm: startConfirm = false, planningProper }: { ready: boolean; onReady: () => void; confirm?: boolean; planningProper: boolean }) {
   const { self } = usePhoneGame();
-  const { waiting, others, isHost } = useWaiting(ready);
+  const { waiting, others, isHost: host } = useWaiting(ready);
+  // The server accepts Continue only from the host and only in planning proper (after the election, or with none).
+  const isHost = host && planningProper;
   const [confirm, setConfirm] = useState(startConfirm);
 
   if (!ready)

@@ -718,7 +718,8 @@ export function PlanningHub({
   confirm?: boolean;
 }) {
   const [ready, setReady] = useState(startReady);
-  const { players, others, isHost } = useWaiting(ready);
+  const { players, others, isHost: host } = useWaiting(ready);
+  const isHost = host && election === 'done';
   const [desk, setDesk] = useState<Desk>(start);
   const [tool, setTool] = useState<Tool>(startTool);
   const desks = DESKS.filter((d) => !d.office || d.office === office);
@@ -785,7 +786,7 @@ export function PlanningHub({
           </div>
         </>
       }
-      footer={<ReadyBar ready={ready} onReady={() => setReady(true)} confirm={confirm} />}
+      footer={<ReadyBar ready={ready} onReady={() => setReady(true)} confirm={confirm} planningProper={election === 'done'} />}
     >
       <HubStage tools={tools.filter((t) => t.show)} tool={tool} setTool={setTool} tiles={tiles} office={office} after={election === 'done'} setDesk={setDesk} />
     </GameShell>
