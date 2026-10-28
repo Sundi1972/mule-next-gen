@@ -62,6 +62,22 @@ describe('land claims off reading order', () => {
   });
 });
 
+describe('land claims on a single pass', () => {
+  it('T-AC-20: on the one pass, a seat with claims left presses for a plot it values late in the pass, instead of ending the grant landless', () => {
+    // PR-F: the grant is one pass, so the plots the light has gone by never come back, even those still free.
+    const state = fourSeats(3);
+    while (state.phase !== 'landGrant') advancePhase(state);
+    const seat = tycoon();
+    const early = seat.onLit(state);
+    const last = state.grant!.order.length - 1;
+    state.grant!.step = last;
+    expect(state.players[0]!.claimsThisGrant).toBe(0);
+    expect(seat.onLit(state), 'the last plot of the pass is pressed for').toBeTypeOf('number');
+    // Negative case: at the start of the pass the seat still waits for its own top plots, as T-AC-10 shows.
+    expect(early).toBeNull();
+  });
+});
+
 /** Month 1's land grant on seed 3, ai0 already fed by its own Food and Energy plots, Smithore posted at `smithore`. */
 function grantWithFarms(smithore: number): GameState {
   const state = fourSeats(3);
