@@ -25,8 +25,6 @@ const PENDING = new Set<string>([
   'packages/engine/src/observe.ts',
   'packages/engine/src/production.ts',
   // WS2.
-  'packages/ai/src/brain.ts',
-  'packages/ai/src/decider.ts',
   // WS3: marked on ws3-auctions (#107); off when that reaches this branch.
   'packages/ai/src/hands/auction.ts',
   'packages/ai/src/hands/lot.ts',

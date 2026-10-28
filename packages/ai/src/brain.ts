@@ -38,6 +38,7 @@ export interface Pending<A> {
   settled: { choice: Choice; action: A } | null;
 }
 
+// literal-ok: caps a failed decider's message in its diagnostic note; no effect on play
 const NOTE_MESSAGE_CHARS = 80;
 
 /** The note for a decider that failed: its message as one short line, or 'unknown error' when there is none. */
@@ -64,6 +65,7 @@ export class Brain {
     private readonly seed: number,
     private readonly decider: Decider | null,
     private readonly onRecord?: (r: DecisionRecord) => void,
+    // literal-ok: how many decision records the diagnostic log keeps; no effect on play
     private readonly logSize = 200,
   ) {}
 
@@ -82,6 +84,7 @@ export class Brain {
       month: obs.month,
       maxMonths: obs.maxMonths,
       summary,
+      // literal-ok: hash multipliers that spread each decision's seed; changing them reshuffles, never rebalances
       seed: (this.seed * 2_654_435_761 + id * 40_503 + obs.month * 977) >>> 0,
       pickTolerance: this.mind.level.pickTolerance,
       tableTalk: [...this.talk],
@@ -139,6 +142,7 @@ export class Brain {
       month: obs.month,
       phase: obs.phase,
       topic: p.topic,
+      // literal-ok: rounds utilities to three decimals for the decision log
       candidates: p.list.all.map((c) => ({ key: c.key, label: c.label, utility: Math.round(c.utility * 1000) / 1000, value: c.value, veto: c.veto, rationale: c.rationale, considerations: c.considerations })),
       shortlist: p.options,
       pick: { id: choice.optionId, key: picked.key, label: picked.label },
