@@ -14,8 +14,9 @@ import type { PhoneGame } from '../src/phone/game';
  * fixture, its clock set by the server time the client reports.
  */
 
-// The fake document has no dataset; the map's theme reads the page's.
+// The fake document has no dataset (the map's theme reads the page's) and no layout (the shell and the fly targets measure).
 Object.assign(document.documentElement, { dataset: {} });
+Object.assign(FakeElement.prototype, { getBoundingClientRect: () => ({ left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 }), offsetWidth: 0, offsetHeight: 0, querySelectorAll: () => [] });
 
 const W = 6;
 const H = 3;
@@ -81,9 +82,10 @@ function game(boards: number, t: number): PhoneGame {
 }
 
 const sent: unknown[] = [];
+const state = { chat: [], view: null, seatId: LENA };
 const client = {
   subscribe: () => () => undefined,
-  getState: () => ({ chat: [], view: null, seatId: LENA }),
+  getState: () => state,
   serverNow: () => NOW,
   intent: (i: unknown) => sent.push(i),
   chat: (c: unknown) => sent.push(c),
@@ -134,6 +136,7 @@ afterEach(() => {
 /** Mounts the screen in the fake DOM, where a tap runs; returns the host and a way to tap the map. */
 async function mount(boards: number, t: number) {
   prefersReduced(false);
+  vi.stubGlobal('MutationObserver', class { observe() {} disconnect() {} });
   const doc = document as unknown as { createElementNS?: (ns: string, tag: string) => FakeElement };
   doc.createElementNS ??= (_ns, tag) => document.createElement(tag);
   const host = document.createElement('div');

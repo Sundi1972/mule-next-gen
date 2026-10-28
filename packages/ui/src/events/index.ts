@@ -10,6 +10,7 @@ export {
   eventScript,
   eventSegments,
   eventStageAt,
+  eventSkipTo,
   eventFrontAt,
   EVENT_FRONT,
   type EventScript,

@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { PlayerMark } from '../components/PlayerMark';
-import { cx } from '../components/tokens';
+import { cx, type Slot } from '../components/tokens';
 import { EVENT_ENTRY, STORY } from './catalogue';
 import { introLine, eventSegLabel, eventWhoLine } from './copy';
 import { signLook, useShow, type ShowFrame } from './frame';
@@ -300,14 +300,18 @@ function Ash({ ev, seg, size }: { ev: ShowEventView; seg: EventSegment; size: Sh
 
 // --- Over the map: what each plot lost, and what stays on it ------------------------------------------------------
 
-/** Each hit throws its change up off the plot, then the chip settles on the plot's top edge and stays. */
-export function Marks({ size }: { size: ShowSize }) {
+/**
+ * Each hit throws its change up off the plot, then the chip settles on the plot's top edge and stays. With `slot`,
+ * only that player's plots: a phone beside a TV marks your own.
+ */
+export function Marks({ size, slot }: { size: ShowSize; slot?: Slot }) {
   const { s, t, reduced, grid, cast } = useShow();
   const lift = cq(size, 34, 16);
   return (
     <>
       {eventLanded(s, t, reduced, grid).map(({ ev, hit, at }) => {
         if (hit.delta === 0) return null;
+        if (slot !== undefined && cast.slotOf(cast.ownerAt(hit.x, hit.y) ?? '') !== slot) return null;
         const since = t - at;
         const rise = reduced ? 0 : since < 0.45 ? (since / 0.45) * lift : since < 1.3 ? lift * (1 - (since - 0.45) / 0.85) : 0;
         return (
