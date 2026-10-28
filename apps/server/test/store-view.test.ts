@@ -1,4 +1,4 @@
-import { DEV_WALK, DEVELOPMENT, foodShare, hungerPace, needsOf, sickPace, type GameState } from '@mule/engine';
+import { airBand, DEV_WALK, DEVELOPMENT, foodShare, hungerPace, needsOf, POLLUTION, sickPace, type GameState } from '@mule/engine';
 import { describe, expect, it } from 'vitest';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
 import { fakeContext, seats } from './fake-context.js';
@@ -40,18 +40,22 @@ describe('the store view at the start of development', () => {
     expect(view.storeMules).toBe(0);
   });
 
-  it("B-AC-9: every screen sees each seat's condition during development only, its pace the engine's hunger × sickness pace, species aside", () => {
+  it("B-AC-9: every screen sees each seat's condition during development only: its hunger × sickness pace, species aside, and why it is sick", () => {
     const { game, state, planning, advance } = hungryWithAnEmptyCorral();
-    const want = { foodShare: foodShare(state, 's1'), sick: false, conditionPace: hungerPace(state, 's1') };
+    const want = { foodShare: foodShare(state, 's1'), sick: false, sickBecause: null, conditionPace: hungerPace(state, 's1') };
     expect(want.conditionPace).toBeCloseTo(0.52);
     for (const viewer of ['s1', 's2', null]) expect(game.viewFor(viewer).players.find((p) => p.id === 's1')!.condition).toEqual(want);
     expect(game.viewFor('s1').me!.hungry).toBe(true);
     // A fed seat walks at full pace; outside development nobody has a condition.
     expect(game.viewFor(null).players.find((p) => p.id === 's2')!.condition).toMatchObject({ foodShare: 1, conditionPace: sickPace(state, 's2') });
     expect(planning.players.map((p) => p.condition)).toEqual([null, null, null]);
-    // Hungry and sick: the two slow-downs multiply.
+    // Hungry and sick: the two slow-downs multiply. In clean air, with no pollution of its own, it is sick by chance.
     state.players.find((p) => p.id === 's1')!.sick = true;
-    expect(game.viewFor('s2').players.find((p) => p.id === 's1')!.condition).toEqual({ ...want, sick: true, conditionPace: want.conditionPace * DEV_WALK.sickPace });
+    expect(airBand(state.air).name).toBe('clean');
+    const sick = { ...want, sick: true, sickBecause: 'chance', conditionPace: want.conditionPace * DEV_WALK.sickPace };
+    expect(game.viewFor('s2').players.find((p) => p.id === 's1')!.condition).toEqual(sick);
+    state.air = POLLUTION.airMax;
+    expect(game.viewFor('s2').players.find((p) => p.id === 's1')!.condition).toEqual({ ...sick, sickBecause: 'air' });
     // Once development ends, nobody has a condition.
     advance(PHASE_MS.development);
     expect(game.viewFor(null).phase).not.toBe('development');

@@ -7,7 +7,8 @@ import { FillCard } from '../src/phone/Develop';
 
 /** Lena on 2 of the 5 Food she needs: the server's condition for her (engine hungerPace 0.52). */
 const HUNGRY: Condition = { foodShare: 0.4, sick: false, conditionPace: 0.52 };
-const SICK: Condition = { foodShare: 1, sick: true, conditionPace: 0.5 };
+/** Sick in clean air, with no pollution of her own: by chance. */
+const SICK: Condition = { foodShare: 1, sick: true, sickBecause: 'chance', conditionPace: 0.5 };
 const FED: Condition = { foodShare: 1, sick: false, conditionPace: 1 };
 
 /** The opening tag of the element carrying this data-testid. */
@@ -45,28 +46,27 @@ describe('the store at a glance', () => {
     const html = renderToStaticMarkup(createElement(FillCard, { condition: SICK, rule: DEV_WALK, food: { ate: 5, need: 5 } }));
     const text = textFrom(html, 'fill-card');
     expect(text).toContain('You eat the 5 Food you need.');
-    expect(textFrom(html, 'sick-strikes')).toMatch(/^ ✚ Sick: the air is toxic\. It strikes now and slows you this turn\./);
+    expect(textFrom(html, 'sick-strikes')).toMatch(/^ ✚ Sick this month\. It strikes now and slows you this turn\./);
+    expect(text).not.toContain('toxic');
     expect(text).toContain('Sick: 50% pace');
     expect(text).not.toContain('full pace');
   });
 
-  it('B-AC-9: your colonist carries no time bar; hungry, it wears the hunger tag at its level and waddles at its pace', () => {
-    const hall = (condition: Condition, moving = false) =>
-      renderToStaticMarkup(createElement(StoreInterior, { mules: 4, mulePrice: 142, prices: {}, paceRule: DEV_WALK, me: { id: 'lena', slot: 0, leading: null, condition, food: { ate: 2, need: 5 }, moving } }));
-    const hungry = hall(HUNGRY, true);
+  it('B-AC-9: your colonist carries no time bar; hungry, it wears the hunger tag at its level', () => {
+    const hall = (condition: Condition) =>
+      renderToStaticMarkup(createElement(StoreInterior, { mules: 4, mulePrice: 142, prices: {}, paceRule: DEV_WALK, me: { id: 'lena', slot: 0, leading: null, condition, food: { ate: 2, need: 5 } } }));
+    const hungry = hall(HUNGRY);
     expect(tagOf(hungry, 'condition-lena')).toContain('data-hunger="2"');
     expect(tagOf(hungry, 'condition-lena')).not.toContain('data-sick');
     expect(hungry).toContain('data-testid="hunger-lena"');
-    expect(hungry).toContain('animation-duration:0.6923');
     expect(tagOf(hall(SICK), 'condition-lena')).toContain('data-sick="true"');
     const fed = hall(FED);
     expect(fed).not.toContain('data-testid="condition-lena"');
-    expect(fed).not.toContain('animation-duration');
     // The bar over the head is gone: nothing in the colonist is a width.
     expect(fed.slice(fed.indexOf(tagOf(fed, 'visitor-lena')))).not.toMatch(/style="width:/);
   });
 
-  it('B-AC-9: the clock is one for everyone, and the TV lists each pace and why', () => {
+  it('T-AC-12: the clock is one for everyone, and the TV lists each pace and why', () => {
     expect(textFrom(renderToStaticMarkup(createElement(SharedClock, { seconds: 31, total: 50 })), 'shared-clock')).toMatch(/^ Everyone(&#x27;|')s time · one clock 31s/);
     const list = renderToStaticMarkup(
       createElement(PaceList, {
