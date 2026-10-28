@@ -26,6 +26,7 @@ export {
   type HallPlan,
   type Space,
 } from './floor/floor.js';
+export { pathTo, type MapPath } from './floor/path.js';
 export { speedOf, terrainShare } from './floor/speed.js';
 export { stepFloor } from './floor/step.js';
 export * from './auction.js';

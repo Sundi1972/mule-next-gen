@@ -5,6 +5,7 @@ import {
   createRng,
   DEV_STEER,
   floorConfig,
+  pathTo,
   stepFloor,
   type DevFloor,
   type FloorInput,
@@ -41,8 +42,8 @@ const SEED = 29;
 /** A development turn's worth of ticks: 50 s at DEV_STEER.tickMs. */
 const TICKS = 1_000;
 
-/** Four seats on MAP: 'a' a Zipwing, 'b' leading a MULE, 'c' an AI seat, 'd' a Bramblet. */
-function game(seed: number): GameState {
+/** Four seats on the map drawn: 'a' a Zipwing, 'b' leading a MULE, 'c' an AI seat, 'd' a Bramblet. */
+function game(seed: number, map: readonly string[] = MAP): GameState {
   const state = createGame({
     seed,
     players: [
@@ -53,9 +54,9 @@ function game(seed: number): GameState {
     ],
   });
   const template = state.tiles[0]!;
-  state.width = MAP[0]!.length;
-  state.height = MAP.length;
-  state.tiles = MAP.flatMap((row, y) => [...row].map((ch, x) => ({ ...template, x, y, terrain: LAND[ch]!, owner: null, outfit: null })));
+  state.width = map[0]!.length;
+  state.height = map.length;
+  state.tiles = map.flatMap((row, y) => [...row].map((ch, x) => ({ ...template, x, y, terrain: LAND[ch]!, owner: null, outfit: null })));
   state.players[1]!.carriedMule = 'food';
   return state;
 }
@@ -156,5 +157,38 @@ describe('the dev floor: the step', () => {
     const nudged = play(SEED, changed).floors.at(-1)!;
     expect(nudged.colonists[0]!.x).toBeGreaterThan(first.floors.at(-1)!.colonists[0]!.x);
     expect(nudged).not.toEqual(first.floors.at(-1));
+  });
+
+  it('RULE-9, serving B-AC-1: the path goes round a lake, takes plains over mountains when equally short, and reaches a lake plot at its shore', () => {
+    // From beside the store's door, 2·3, to a plot at 7·3, a lake between them: round it above or below, nine steps either way.
+    const across = (above: string, below: string) => ['~~~~~~~~~', above, '....~....', '.S..~....', '....~....', below, '~~~~~~~~~'];
+    const cfg = floorConfig(HALL);
+    const from = { x: 2, y: 3 };
+    const plot = { x: 7, y: 3 };
+    const land = (state: GameState, p: { x: number; y: number }) => state.tiles[p.y * state.width + p.x]!.terrain;
+    for (const [label, map, side] of [
+      ['a mountain above', across('....^....', '.........'), 5],
+      ['a mountain below', across('.........', '....^....'), 1],
+    ] as const) {
+      const state = game(SEED, map);
+      const path = pathTo(state, from, plot, cfg)!;
+      expect(path.tiles[0], label).toEqual(from);
+      expect(path.tiles.at(-1), label).toEqual(plot);
+      expect(path.tiles.some((p) => p.x === 4 && p.y === side), `${label}: round the lake on the plains side`).toBe(true);
+      expect(path.tiles.map((p) => land(state, p)), label).not.toContain('lake');
+      expect(path.tiles.map((p) => land(state, p)), label).not.toContain('mountains');
+      expect(path.tiles.every((p, i) => i === 0 || Math.abs(p.x - path.tiles[i - 1]!.x) + Math.abs(p.y - path.tiles[i - 1]!.y) === 1), label).toBe(true);
+      // Nine plains tiles entered at 1.25 tiles a second.
+      expect(path.seconds, label).toBeCloseTo(7.2, 9);
+    }
+
+    // A lake plot is worked from its shore: the path ends on it, and the step into it costs nothing.
+    const state = game(SEED, across('.........', '.........'));
+    const shore = pathTo(state, from, { x: 4, y: 3 }, cfg)!;
+    expect(shore.tiles).toEqual([from, { x: 3, y: 3 }, { x: 4, y: 3 }]);
+    expect(shore.seconds).toBeCloseTo(0.8, 9);
+
+    // Negative: a plot walled in by lakes has no path.
+    expect(pathTo(game(SEED, ['.....', '..~..', '.~.~.', '..~..', 'S....']), { x: 0, y: 0 }, { x: 2, y: 2 }, cfg)).toBeNull();
   });
 });
