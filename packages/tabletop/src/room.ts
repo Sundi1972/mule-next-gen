@@ -169,11 +169,14 @@ export class Room<Intent, View> {
       conn.send({ t: 'pong', clientTime: msg.clientTime, serverTime: this.opts.now() });
       return;
     }
+    // A connection is a board or a seat, never both. See FM-12.
     if (msg.t === 'join') {
+      if (this.boards.has(conn)) throw new TableError('This screen is already the table');
       from.seatId = this.join(conn, msg.name, msg.seatToken, msg.handoff);
       return;
     }
     if (msg.t === 'board') {
+      if (this.seats.some((s) => s.conn === conn)) throw new TableError('This screen already has a seat');
       this.boards.add(conn);
       conn.send({ t: 'welcome', code: this.code, role: 'board', seatId: null, seatToken: null });
       this.broadcast();
@@ -279,16 +282,13 @@ export class Room<Intent, View> {
     return seat;
   }
 
-  /** A screen's connection closed. */
+  /** A screen's connection closed: it stops being a board and lets go of its seat. */
   disconnect(conn: Connection<View>): void {
-    if (this.boards.delete(conn)) {
-      this.broadcast();
-      return;
-    }
+    const wasBoard = this.boards.delete(conn);
+    // Checked even for a board, so no path leaves a seat on a closed socket.
     const seat = this.seats.find((s) => s.conn === conn);
-    if (!seat) return;
-    this.detach(seat);
-    this.broadcast();
+    if (seat) this.detach(seat);
+    if (wasBoard || seat) this.broadcast();
   }
 
   /** A connection holds one seat: one that joins another lets go of the seat it held, as a disconnect would. See FM-3. */
