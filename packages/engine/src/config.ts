@@ -172,8 +172,8 @@ export const FACTORY = {
 
 /** Species perks. Numbers are placeholders until the balance sim has run. */
 export const SPECIES_PERK = {
-  /** Zipwing: walks this many times as fast in development (the client moves the colonist). */
-  zipwingSpeed: 2,
+  /** Zipwing: walks this many times as fast in development (DEV_WALK). At 2 Zipwings won 34% of games, not 25%. */
+  zipwingSpeed: 1.5,
   /** Bramblet: extra Food on every farm. */
   brambletFood: 1,
   /** Gearling: share of the normal price paid for MULEs and outfits. At 0.75 Gearlings won 44% of games, not 25%. */
@@ -281,6 +281,17 @@ export const DEVELOPMENT = {
   dronePlots: 2,
   /** Alloy a filter costs, from the player's own stock. */
   filterAlloy: 1,
+};
+
+/**
+ * Walking in development costs time off the colonist's clock (Heiko's R1, 0.4 s a tile). A walk goes in grid steps
+ * on the map, never diagonally; the store and its corral are on the store's tile. Not WALK, the goods auction's walk.
+ */
+export const DEV_WALK = {
+  /** Seconds for each step from one map tile to the next. */
+  tileSeconds: 0.4,
+  /** Seconds to cross the store floor to the corral, from the door or any other room. */
+  floorSeconds: 1,
 };
 
 /** What pollutes, and by how much. From the design doc's Pollution tab. */
