@@ -118,6 +118,27 @@ describe('FM-planning-all-ready: planning ends when every human is Ready, connec
     expect(phase(game)).toBe('landGrant');
   });
 
+  it.each([
+    ['drops before the other is Ready', ['drop', 'ready']],
+    ['drops after the other is Ready', ['ready', 'drop']],
+  ] as const)('FM-planning-all-ready: in an election month, a phone that drops once the election is over and is not Ready holds planning proper: Mia %s; back and Ready, she starts the land grant', (_, order) => {
+    const { game, advance } = started({ politics: true });
+    const election = () => game.viewFor(null).politics!.election!;
+    for (let ms = 0; ms < ELECTION_BOUND_MS && election().stage !== 'over'; ms += WALK.tickMs) advance(WALK.tickMs);
+    expect(election().stage, 'the election ran on its own clocks').toBe('over');
+    for (const step of order) {
+      if (step === 'drop') game.connectionChanged('s2', false);
+      else game.handle('s1', { type: 'ready' });
+      expect(phase(game)).toBe('planning');
+    }
+    advance(TEN_MINUTES);
+    expect(phase(game)).toBe('planning');
+    game.connectionChanged('s2', true);
+    expect(phase(game), 'back, but not Ready yet').toBe('planning');
+    game.handle('s2', { type: 'ready' });
+    expect(phase(game)).toBe('landGrant');
+  });
+
   it('FM-planning-all-ready: with every human dropped, planning stays open', () => {
     const { game, advance } = started();
     game.connectionChanged('s1', false);
