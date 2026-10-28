@@ -13,7 +13,7 @@ const BASE: DevelopState = {
   seconds: 40,
   freePlots: [{ x: 4, y: 6 }],
   from: { x: 6, y: 4 },
-  ate: 5,
+  pace: 'Hungry: 52% pace',
   devSeconds: 50,
   mulePrice: 142,
   mulesLeft: 5,
@@ -23,9 +23,10 @@ const at = (s: Partial<DevelopState>) => nextStep({ ...BASE, ...s });
 const text = (node: unknown) => renderToStaticMarkup(createElement(Fragment, null, node as never)).replace(/<[^>]+>/g, '').replace(/&#x27;/g, "'").replace(/&amp;/g, '&');
 
 describe('RULE-7: development says what to do next', () => {
-  it('T-AC-9 row 1: while the card shows, you eat and your bar fills; the corral glows', () => {
+  it('T-AC-9 row 1: while the card shows, you eat and the one clock starts; Now says your pace; the corral glows', () => {
     const r = at({ filling: true });
-    expect(r.now).toMatchObject({ step: 1, of: 3, title: 'You eat and your time bar fills' });
+    expect(r.now).toMatchObject({ step: 1, of: 3, title: 'You eat, and the clock starts for everyone' });
+    expect(text(r.now.detail)).toBe('Hungry: 52% pace. Everyone has the same 50 s; tap a room to start.');
     expect(r.next).toEqual(['corral']);
   });
 

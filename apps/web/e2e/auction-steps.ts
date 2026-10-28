@@ -12,6 +12,7 @@ import { errors as playwrightErrors, type Browser, type Page } from 'playwright'
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, headerSlot, launch, PHONE, startServer, TV, type AuctionSteps } from './harness';
+import { hostContinuesWithout } from './hub-steps';
 import { readyThroughTheElection } from './politics-steps';
 
 const PRESS_MS = 2_000;
@@ -176,7 +177,7 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   console.log(`✓ B-AC-1: ${first} and ${second} listed at ${minimum}, on Lena's and Ossa's phones`);
   await fillTheMonthThenUnlist(lena, ossa);
 
-  await everyone(phones, (p) => readyInPlanning(p.page));
+  await hostContinuesWithout({ host: brix, ready: lena, left: ossa, tv, server, code });
   await everyone(phones, (p) => claimPlots(p.page));
 
   // Brix's lot 1: Lena stops low, Ossa holds Up past her and is still holding when the bell rings. The colony's lot may come up before it.
@@ -751,6 +752,9 @@ async function nextLotFrom(page: Page, seller: string): Promise<void> {
   );
 }
 
+/** How long the last phone's Ready takes to land and the next screen to show; planning has no clock. */
+const READY_LANDS_MS = 3_000;
+
 /** A budget for a phase of `ms` game time at this scale, plus room for the browser and the network. */
 function within(scale: number, ms: number): number {
   return ms * scale + 3_000;
@@ -773,7 +777,7 @@ async function joinRoom(page: Page, base: string, code: string, name: string): P
  * early, but the reveal always runs its clock, so the budget is every stage at full length: a slow runner must not fail here.
  */
 async function readyInPlanning(page: Page): Promise<void> {
-  await readyThroughTheElection(page, within(SCALE, PHASE_MS.upkeep + POLITICS.nominateMs + POLITICS.ballotMs + POLITICS.revealMs + PHASE_MS.planning));
+  await readyThroughTheElection(page, within(SCALE, PHASE_MS.upkeep + POLITICS.nominateMs + POLITICS.ballotMs + POLITICS.revealMs) + READY_LANDS_MS);
 }
 
 /**
@@ -784,7 +788,7 @@ async function readyInPlanning(page: Page): Promise<void> {
 async function claimPlots(page: Page): Promise<void> {
   const claim = page.locator('[data-phase=landGrant]').getByRole('button', { name: /CLAIMS LEFT/ });
   const over = page.locator('[data-phase]:not([data-phase=planning]):not([data-phase=landGrant])');
-  await claim.waitFor({ timeout: within(SCALE, PHASE_MS.planning) });
+  await claim.waitFor({ timeout: READY_LANDS_MS });
   for (let tries = 0; ; tries++) {
     check(tries < 40, 'the land grant let this phone claim its plots');
     await claim.or(over).first().waitFor({ timeout: within(SCALE, PHASE_MS.landGrant) });

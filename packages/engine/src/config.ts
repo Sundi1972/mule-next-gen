@@ -181,8 +181,8 @@ export const FACTORY = {
 
 /** Species perks. Numbers are placeholders until the balance sim has run. */
 export const SPECIES_PERK = {
-  /** Zipwing: walks this many times as fast in development (the client moves the colonist). */
-  zipwingSpeed: 2,
+  /** Zipwing: walks this many times as fast in development (DEV_WALK). At 1.5 Zipwings won 37% of games, not 25%. */
+  zipwingSpeed: 1.25,
   /** Bramblet: extra Food on every farm. */
   brambletFood: 1,
   /** Gearling: share of the normal price paid for MULEs and outfits. At 0.75 Gearlings won 44% of games, not 25%. */
@@ -275,12 +275,8 @@ export const MULE = {
 };
 
 export const DEVELOPMENT = {
-  /** Seconds of development with enough Food for the month. */
+  /** Seconds of development, the same for every player: hunger and sickness slow the walk instead (DEV_WALK). */
   fullSeconds: 50,
-  /** Seconds with no Food at all; the time shrinks linearly with the shortfall. */
-  minSeconds: 15,
-  /** Development never lasts less than this, whatever sickness and penalties take off. */
-  floorSeconds: 5,
   /** Seconds a colonist stands on a plot for a geo analysis. */
   analysisSeconds: 8,
   /** The pub pays base + (start + month * perMonth) * share of time left. */
@@ -290,6 +286,30 @@ export const DEVELOPMENT = {
   dronePlots: 2,
   /** Alloy a filter costs, from the player's own stock. */
   filterAlloy: 1,
+};
+
+/**
+ * Walking in development costs time off the one development clock (Heiko's R1, 0.4 s a tile). A walk goes in grid
+ * steps on the map, never diagonally; the store and its corral are on the store's tile. A hungry or sick colonist
+ * walks slower, and the two multiply: no Food and sick is a tenth of normal pace (Heiko's numbers).
+ * Not WALK, the goods auction's walk.
+ */
+export const DEV_WALK = {
+  /** Seconds for each step from one map tile to the next. */
+  tileSeconds: 0.4,
+  /** Seconds to cross the store floor to the corral, from the door or any other room. */
+  floorSeconds: 1,
+  /** Share of its pace a colonist with no Food walks at; it rises linearly to 1 with the share of the month's Food it holds. */
+  hungerPaceMin: 0.2,
+  /** Share of its pace a sick colonist walks at (EVENTS.player.sickness rolled, and no Medicine held). */
+  sickPace: 0.5,
+  /**
+   * The hunger levels the screens show, as shares of the month's Food missing (0 fed, 1 none): peckish below
+   * hungryFrom, hungry from it, starving from starvingFrom. Display bands only: the pace itself is continuous.
+   * Player.hungry is any shortfall; these levels are only the words on screen.
+   * WS6's thresholds, in the variant-B mock Heiko approved 2026-10-28 (design/mocks/ws6-ux at bb4bc11).
+   */
+  hungerLevels: { hungryFrom: 0.3, starvingFrom: 0.7 },
 };
 
 /** What pollutes, and by how much. From the design doc's Pollution tab. */
@@ -318,12 +338,12 @@ export const POLLUTION = {
   greenBeltAir: 2,
   /** Goods that lose 1 unit per plot pollution level. */
   sensitive: ['food', 'water', 'medicine'] as Good[],
-  /** The colony gauge's bands: from this level, everyone loses devPenalty seconds unless they take Medicine. */
+  /** The colony gauge's bands: from a band that sickens, a colonist who takes no Medicine is sick (DEV_WALK.sickPace). */
   bands: [
-    { name: 'clean', from: 0, devPenalty: 0 },
-    { name: 'smoggy', from: 30, devPenalty: 5 },
-    { name: 'toxic', from: 60, devPenalty: 10 },
-    { name: 'collapse', from: 80, devPenalty: 15 },
+    { name: 'clean', from: 0, sickens: false },
+    { name: 'smoggy', from: 30, sickens: true },
+    { name: 'toxic', from: 60, sickens: true },
+    { name: 'collapse', from: 80, sickens: true },
   ] as const,
   /** Clean colony: off-world buyers pay this much more for exports. */
   cleanExportBonus: 0.1,
@@ -709,6 +729,26 @@ export const LOTS = {
 };
 
 /**
+ * The longest each timed phase lasts, in milliseconds at phaseScale 1. Planning waits for every human's Ready,
+ * a dropped phone's too, unless the host continues. Other phases also end early: when every connected player is
+ * ready, the land grant when the claims are used, development when everyone is out of time or at the pub. The
+ * goods auction and the land auction have no fixed length; they run on WALK's and LOTS' clocks.
+ */
+export const PHASES = {
+  /**
+   * Planning: the hub, listings, and in election months the election first. null: planning waits for every player's
+   * Ready or the host's Continue; a number restores a timer.
+   */
+  planningMs: null as number | null,
+  /** The land grant: the light sweeps the free plots. */
+  landGrantMs: 60_000,
+  /** Production: the show of what each plot made. */
+  productionMs: 15_000,
+  /** Upkeep: colonists eat and goods spoil. */
+  upkeepMs: 8_000,
+};
+
+/**
  * AI players. The strategist scores options with named considerations; a
  * persona is a set of weights on them, and a level sets how complete the
  * scoring is, how many near-best options reach the decider and how fast the
@@ -851,6 +891,23 @@ export const EVENTS = {
   wildfire: { loss: 1 },
   /** How many times its usual output the bumper plot makes. */
   bumperHarvest: { factor: 2 },
+  /**
+   * Player events (Heiko's event model): each rolls per player at the start of each phase it lists, with that
+   * phase's chance plus its modifiers, never above cap. Several can fire in a month.
+   */
+  player: {
+    /**
+     * Sickness, at development start: the colonist walks at DEV_WALK.sickPace this turn unless it holds a Medicine,
+     * which it then takes. Likelier in dirty air (by band) and for a polluter: perPoint for each air point its plots
+     * caused last month (a filter halves them), at most max. Heiko's catalogue numbers.
+     */
+    sickness: {
+      phases: { development: 0.03 },
+      air: { clean: 0, smoggy: 0.15, toxic: 0.3, collapse: 0.5 },
+      pollution: { perPoint: 0.03, max: 0.4 },
+      cap: 0.9,
+    },
+  },
 };
 
 export const STRATEGIST = {
@@ -928,9 +985,13 @@ export const AI_HANDS = {
   devTickMs: 100,
   /** Development steps, as a quick human taps them: to the corral and buy, to an outfitter, out to the plot and install, analyse, the pub. */
   develop: {
+    /** Buying and installing where the game has no walking: each includes a notional walk. */
     buyMs: [1_400, 2_400] as [number, number],
     outfitMs: [1_000, 1_900] as [number, number],
     installMs: [1_800, 3_200] as [number, number],
+    /** The same two taps where the game walks (DEV_WALK charges the walk): the tap alone. */
+    buyTapMs: [600, 1_000] as [number, number],
+    installTapMs: [600, 1_200] as [number, number],
     analyseTapMs: [1_200, 2_000] as [number, number],
     filterMs: [1_200, 2_000] as [number, number],
     pubMs: [800, 1_500] as [number, number],

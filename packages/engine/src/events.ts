@@ -1,7 +1,8 @@
 import { EVENTS, GAME } from './config.js';
 import { neighbours } from './map.js';
+import { airBand } from './pollution.js';
 import { createRng } from './rng.js';
-import { RAW_GOODS, type EventKey, type EventKind, type GameState, type Good, type MonthEvent, type Tile } from './types.js';
+import { RAW_GOODS, type EventKey, type EventKind, type GameState, type Good, type MonthEvent, type Phase, type Tile } from './types.js';
 
 type Rng = ReturnType<typeof createRng>;
 type Direction = NonNullable<MonthEvent['direction']>;
@@ -152,4 +153,58 @@ function spread(state: GameState, start: Tile, joins: (t: Tile) => boolean, max:
     }
   }
   return out;
+}
+
+/** A player event's key: a row of EVENTS.player. */
+export type PlayerEventKey = keyof typeof EVENTS.player;
+
+/**
+ * The chance a player event fires for this player at the start of this phase: the phase's chance, plus the air band's
+ * bonus, plus perPoint for each air point the player's plots caused last month (at most max), never above the cap; 0
+ * in a phase the event doesn't list.
+ */
+export function playerEventChance(state: GameState, key: PlayerEventKey, phase: Phase, id: string): number {
+  const row = EVENTS.player[key];
+  const inPhase = (row.phases as Partial<Record<Phase, number>>)[phase];
+  if (inPhase === undefined) return 0;
+  const { air, pollution } = raises(state, key, id);
+  return Math.min(row.cap, inPhase + air + pollution);
+}
+
+/**
+ * Why a player event would fire for this player, so the screens can say it: the influence that raised its chance
+ * most (the air on a tie), or plain chance when nothing raised it.
+ */
+export function playerEventReason(state: GameState, key: PlayerEventKey, phase: Phase, id: string): 'air' | 'pollution' | 'chance' {
+  const { air, pollution } = raises(state, key, id);
+  if (air <= 0 && pollution <= 0) return 'chance';
+  return pollution > air ? 'pollution' : 'air';
+}
+
+/** What raises a player event's chance for this player: the air band's bonus, and its own pollution last month. */
+function raises(state: GameState, key: PlayerEventKey, id: string): { air: number; pollution: number } {
+  const row = EVENTS.player[key];
+  const caused = state.history.at(-1)?.pollutionBy?.[id] ?? 0;
+  return { air: row.air[airBand(state.air).name], pollution: Math.min(row.pollution.max, row.pollution.perPoint * caused) };
+}
+
+/**
+ * Whether a player event fires for this player at the start of this phase: a roll seeded from the game, the month,
+ * the event, the phase and the player, so a game replays exactly; never on a what-if copy.
+ */
+export function rollPlayerEvent(state: GameState, key: PlayerEventKey, phase: Phase, id: string): boolean {
+  if (state.whatIf) return false;
+  const chance = playerEventChance(state, key, phase, id);
+  if (chance <= 0) return false;
+  return createRng(seedOf(state.seed, state.month, key, phase, id)).chance(chance);
+}
+
+/** A seed from a game's seed, its month and some names: FNV-1a over them. */
+function seedOf(seed: number, month: number, ...names: string[]): number {
+  let h = 2_166_136_261; // literal-ok: FNV-1a offset basis
+  for (const part of [String(seed), String(month), ...names]) {
+    for (let i = 0; i < part.length; i++) h = Math.imul(h ^ part.charCodeAt(i), 16_777_619); // literal-ok: FNV-1a prime
+    h = Math.imul(h ^ 0, 16_777_619); // literal-ok: FNV-1a prime, a separator between parts
+  }
+  return h >>> 0;
 }

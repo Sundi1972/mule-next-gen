@@ -1,5 +1,6 @@
 import { WALK } from './config.js';
 import type { AuctionSide, Deal, Walker, WalkBoard } from './types.js';
+import { MS_PER_SECOND } from './units.js';
 
 /**
  * The walk auction's board, as in the original M.U.L.E.: buyers walk up to
@@ -94,7 +95,7 @@ export function stepBoard(board: WalkBoard, market: WalkMarket, dt: number): Sal
   board.elapsed += dt;
   const sellLine = market.houseSells?.price() ?? null;
   const floor = market.floor();
-  const step = (board.speed * dt) / 1000;
+  const step = (board.speed * dt) / MS_PER_SECOND;
 
   // Walk. Buyers first, then sellers; nobody walks through an active walker of the other side: they meet.
   const minAsk = () => Math.min(Infinity, ...board.walkers.filter((w) => activeSeller(market, w)).map((w) => w.price));

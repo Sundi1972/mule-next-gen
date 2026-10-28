@@ -14,6 +14,8 @@ import {
   shipInPort,
   shipPrice,
   tileIndex,
+  walkSeconds,
+  type DevPlace,
   type GameState,
   type Good,
   type Outfit,
@@ -21,7 +23,7 @@ import {
 } from '@mule/engine';
 import { outlook, type Outlook } from './outlook.js';
 import { candidate, consider, curve, shortlist, type Candidate, type Shortlist } from './utility.js';
-import { afterTax, canFeed, cashReserve, installGain, unitValues, yieldOf, type Mind, type UnitValues } from './value.js';
+import { afterTax, canFeed, cashReserve, installGain, secondValue, unitValues, yieldOf, type Mind, type UnitValues } from './value.js';
 
 /**
  * The strategist: for each of the month's decisions it lists the options,
@@ -251,7 +253,14 @@ export type DevAction = { kind: 'install'; index: number; outfit: Outfit } | { k
  * without leaving the reserve, no factory it can't feed, nothing when the
  * corral is empty or the month's MULEs are used.
  */
-export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number): Shortlist<DevAction> {
+/** A walk-aware seat's development clock: where it is, the seconds it has left, and the seconds its taps for one MULE take. */
+export interface DevWalk {
+  at: DevPlace;
+  left: number;
+  taps: number;
+}
+
+export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, walk?: DevWalk): Shortlist<DevAction> {
   const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
   const p = me(obs, mind);
   const reserve = cashReserve(obs, mind, o);
@@ -268,8 +277,12 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number):
   ];
   for (const tile of idle) {
     const index = tileIndex(obs.width, tile.x, tile.y);
+    // A walk-aware seat walks to the corral, then out to the plot; the seconds are worth what its time is.
+    const walking = walk ? walkSeconds(obs, mind.me, walk.at, 'corral') + walkSeconds(obs, mind.me, 'corral', index) : 0;
     for (const outfit of OUTFITS) {
-      const { gain, cost, net } = installGain(obs, o, tile, outfit, mind);
+      const install = installGain(obs, o, tile, outfit, mind);
+      const { cost, net } = install;
+      const gain = install.gain - walking * secondValue(obs, mind.me);
       const cashAfter = p.money - cost;
       const feeds = (outfit === 'food' && needFood) || (outfit === 'energy' && needEnergy);
       // A farm for a good it is short of is the cure, not a risk: it needn't keep cash back to buy that good.
@@ -278,6 +291,7 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number):
       let veto: string | null = null;
       if (obs.store.mules <= 0) veto = 'the corral is empty';
       else if (mulesSoFar >= mind.level.mulesPerMonth) veto = `already led ${mulesSoFar} MULEs out this month`;
+      else if (walk && walking + walk.taps > walk.left) veto = `the walk takes ${Math.round(walking + walk.taps)} s, ${Math.round(walk.left)} s left`;
       else if (cashAfter < 0) veto = `it costs ${cr(cost)}, more than the ${cr(p.money)} on hand`;
       // What the MULE makes arrives before the auction the reserve is kept for, so it counts toward it.
       else if (cashAfter + Math.max(0, net) < keepBack) veto = `it would leave ${cr(cashAfter)}, under the ${cr(keepBack)} kept for upkeep`;

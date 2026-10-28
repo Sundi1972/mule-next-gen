@@ -196,6 +196,7 @@ function isIntent(v: unknown): v is MuleIntent {
     case 'ready':
     case 'buyMule':
     case 'pub':
+    case 'continue':
       return true;
     case 'claim':
     case 'install':
