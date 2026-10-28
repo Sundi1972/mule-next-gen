@@ -202,7 +202,7 @@ export function SeatRow({ anchored = [] }: { anchored?: string[] }) {
           .map((p) => (
             <span
               key={p.id}
-              className={cx('inline-flex min-w-0 flex-col items-center rounded-control px-0.5 transition-shadow', fallback?.from === p.id && 'ring-2')}
+              className={cx('inline-flex min-w-6 flex-col items-center rounded-control px-0.5 transition-shadow', fallback?.from === p.id && 'ring-2')}
               style={fallback?.from === p.id ? { ['--tw-ring-color' as string]: SLOT_COLOR[P[p.id]!.slot] } : undefined}
               data-testid={`seat-${p.id}`}
               data-speaking={fallback?.from === p.id || undefined}
