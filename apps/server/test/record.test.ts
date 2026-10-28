@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import { configSnapshot, RuleError, stableJson, type GameRecord } from '@mule/engine';
+import { configSnapshot, RuleError, stableJson, type GameRecord, type Playbook, type PlaybookEntry } from '@mule/engine';
 import type { Decider } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { Room, TableError, type ClientEnvelope, type Connection, type GameContext, type ServerEnvelope } from '@tabletop/core';
@@ -17,7 +17,14 @@ import { createRecordedGame, stateHash, type Recorder } from '../src/record.js';
 import { RecordMismatch, replay, ReplayDiverged } from '../src/replay.js';
 
 /** How many MuleGames this file built and SDKs it asked for; the SDK factory throws unless a test gives it a fake. */
-const spies = vi.hoisted(() => ({ games: 0, sdk: 0, client: null as HaikuSdk | null, viewReadsClock: false }));
+const spies = vi.hoisted(() => ({
+  games: 0,
+  sdk: 0,
+  client: null as HaikuSdk | null,
+  viewReadsClock: false,
+  /** The playbook a game writes after accepting an intent, as a playbook builder would; null writes none. */
+  playbookFor: null as ((seat: string, intent: MuleIntent) => PlaybookNote | null) | null,
+}));
 vi.mock('../src/mule-game.js', async (original) => {
   const real = await original<typeof import('../src/mule-game.js')>();
   /** Counts constructions; with `viewReadsClock`, its views read the clock, as a view showing time left would. */
@@ -27,6 +34,11 @@ vi.mock('../src/mule-game.js', async (original) => {
       super(...args);
       this.#clock = args[0];
       spies.games++;
+    }
+    override handle(seatId: string, intent: MuleIntent): void {
+      super.handle(seatId, intent);
+      const entry = spies.playbookFor?.(seatId, intent);
+      if (entry) this.recordPlaybook(entry);
     }
     override viewFor(seatId: string | null): MuleView {
       if (spies.viewReadsClock) this.#clock.now();
@@ -60,6 +72,18 @@ const GAME_OPTIONS = { maxMonths: 1, politics: true };
 const FULL = process.env.MULE_FULL === '1';
 
 type MuleRecord = GameRecord<MuleIntent>;
+type PlaybookNote = Omit<PlaybookEntry, 'type' | 'at' | 'seq'>;
+
+/** The smallest playbook schema v1 allows, for a land grant. */
+const playbookOf = (seat: string, cashFloor: number): Playbook => ({
+  v: 1,
+  seat,
+  month: 1,
+  phase: 'landGrant',
+  by: 'engine',
+  strategy: { kind: 'builder', moneyMaker: null, monopolyTarget: null, cashFloor, landTarget: { plots: 1, byMonth: 1 }, stances: {}, reason: 'Land first.' },
+  landGrant: { ranked: [], pressShare: { start: 1, end: 0 }, deny: [], planB: [], claims: 1 },
+});
 
 /** A Smart brain for seat `smartId` only, answering as ANSWERS says; the rest play Classic. */
 function stubBrain(smartId: string): BrainService & { calls: () => number } {
@@ -511,5 +535,51 @@ describe.runIf(FULL)('the server writes the record', { timeout: 60_000 }, () => 
     const phone = t.phones[0]!;
     t.send(phone, { t: 'ping', clientTime: 1 });
     expect(phone.seen.at(-1)).toBe('pong');
+  });
+});
+
+describe.runIf(FULL)('playbooks in the record', { timeout: 60_000 }, () => {
+  /** Every accepted Ready writes the seat a playbook; returns what was written, in call order. */
+  function writeOnReady(): PlaybookNote[] {
+    const written: PlaybookNote[] = [];
+    spies.playbookFor = (seat, intent) => {
+      if (intent.type !== 'ready') return null;
+      const entry: PlaybookNote = { seat, month: 1, phase: 'landGrant', playbook: playbookOf(seat, 100 * (written.length + 1)) };
+      written.push(entry);
+      return entry;
+    };
+    return written;
+  }
+  afterEach(() => {
+    spies.playbookFor = null;
+  });
+
+  it('T-AC-11: recordPlaybook entries come out in call order with their step\'s at and seq, and the replay ignores them', async () => {
+    const written = writeOnReady();
+    const { record, t } = await recordedGame();
+    const entries = record.events.filter((e) => e.type === 'playbook');
+    expect(entries.length, 'the game wrote playbooks').toBeGreaterThan(1);
+    expect(entries.map(({ seat, month, phase, playbook }) => ({ seat, month, phase, playbook }))).toEqual(written);
+    record.events.forEach((e, i) => {
+      if (e.type !== 'playbook') return;
+      const step = record.events.slice(0, i).findLast(isStep)!;
+      expect(step).toMatchObject({ type: 'intent', seat: e.seat, intent: { type: 'ready' }, at: e.at, seq: e.seq });
+    });
+
+    const last = record.events.findLast(isStep)!;
+    t.recorder().playbook({ seat: 's3', month: 1, phase: 'month', playbook: playbookOf('s3', 0) });
+    expect(t.recorder().record.events.at(-1), 'between steps, the last step stamps it').toMatchObject({ type: 'playbook', seat: 's3', at: last.at, seq: last.seq });
+
+    written.length = 0;
+    expect((await replay(record)).identical).toBe(true);
+  });
+
+  it('T-AC-11 (positive control): a recorded playbook that differs from the one the replay writes diverges at its step', async () => {
+    writeOnReady();
+    const { record } = await recordedGame();
+    const altered = fileCopy(record);
+    const entry = altered.events.filter((e) => e.type === 'playbook')[1]!;
+    if (entry.type === 'playbook') entry.playbook.strategy.cashFloor += 1;
+    await expect(replay(altered)).rejects.toMatchObject({ name: 'ReplayDiverged', seq: entry.seq });
   });
 });
