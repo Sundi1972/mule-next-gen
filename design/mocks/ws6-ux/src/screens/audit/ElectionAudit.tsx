@@ -212,7 +212,7 @@ export interface Race {
  * plots among the tied wins (the engine's decide()): Lena's 7 against Kai's 5.
  */
 export const RESULT: Partial<Record<Office, Race>> = {
-  governor: { office: 'governor', tallies: [{ id: 'lena', votes: 3 }, { id: 'kai', votes: 3 }], winner: 'lena', how: 'tieRule' },
+  governor: { office: 'governor', tallies: [{ id: 'lena', votes: 3 }, { id: 'kai', votes: 3 }], winner: 'lena', how: 'land' },
 };
 
 /** A view for one route: four people, the month, who has pressed Ready. */
@@ -248,8 +248,8 @@ export function howWords(r: Race, me: string | null): string {
   const w = seat(r.winner);
   const l = seat(loser.id);
   if (r.how === 'baron') return `A tie, ${a.votes} votes each, broken by the Land Baron's vote.`;
-  return w.plots === l.plots
-    ? `A tie, ${a.votes} votes each, and the same plots, so seat order decided: this election it starts at ${nameOf(r.winner, me)}.`
+  return r.how === 'lot'
+    ? `A tie, ${a.votes} votes each, and the same plots, so it was decided by lot: ${nameOf(r.winner, me)} ${r.winner === me ? 'win' : 'wins'}.`
     : `A tie, ${a.votes} votes each. Nobody is Land Baron to break it, so the most plots wins: ${nameOf(r.winner, me)} ${r.winner === me ? 'have' : 'has'} ${w.plots}, ${nameOf(loser.id, me)} ${l.plots}.`;
 }
 
