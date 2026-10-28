@@ -421,12 +421,18 @@ Done 29 Oct. PR-2 is #168, `ws1-events-cavern` 28e67a1 into `ws1-events`, merged
       every event of a phase, and the view (WS3's `mule-game.ts`) carries `phase`. The event payloads are agreed with
       WS8 against Task 2's contract (`MonthEvent`, several a phase in the order fired; AM-2's delta-0 plots; AM-3's
       collapse); any field the gallery needs beyond it is a named change to that contract. The PM routes it.
-- [ ] `ws1-events` synced with today's trunk (aae54c4 or later: #151's meteor crater, #164's playbook types, #166's
+- [x] `ws1-events` synced with today's trunk (aae54c4 or later: #151's meteor crater, #164's playbook types, #166's
       one-pass grant). WS5 named the conflicts to expect, all text: specials.ts (imports, `formMeteorCrater`,
       `PlacedSpecialKind`), config.ts (`MAP.meteorCrater` beside `specialEffect`), the map-gallery mock (a `meteorCrater`
       line under `crystalCavern`), specials.test.ts (B-AC-10 and its imports). Keep both sides (the crater never goes
       through `settleSpecials`); send WS5 the merge SHA for those hunks. Re-run the rows after the sync: #166 alone moved
       the shortage check (balance plan, the AM-19 (b) re-measure)
+      Done 29 Oct: #169, `ws1-events-sync` 208b568 into `ws1-events`, merged at a6d1afd (trunk 6d30b69). Three conflicts,
+      all import lines, both sides kept (specials.ts, the mock, smoke.ts); config.ts and specials.test.ts merged clean.
+      typecheck 0, `pnpm test` 0, CI check and e2e green; WS5 OK on its files (specials 14/14, map determinism 2/2).
+      Rows re-run on 208b568, six cells: every check ok but "Colonists short of Food or Water", 13 / 11 / 18 / 20 / 24 /
+      16% (mean 17.0%, 4 of 6 miss; seeds 201 worst); events 0.96 a month clean, so UBER-AC-1 holds. Into the balance
+      plan's food-supply item.
 - [ ] PR-1's and PR-2's rows in the PR body; R-2's options settled by Heiko if any check moved
 - [ ] Heiko's OK through the PM
 
