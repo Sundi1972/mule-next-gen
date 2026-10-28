@@ -5,7 +5,7 @@ import { initWorld, type Seat, type Tunables, type WalkTerrain, type World } fro
 
 /**
  * The arcade's table: the development audit's month 2 (audit/dev/fixture.ts), its map and its four colonists, with one
- * free plot for each bot so every bot has somewhere to install. Lena (this phone) owns Plains 4·1 and Crater 15·1 free,
+ * free plot for each bot so every bot has somewhere to install. Lena (this phone) owns Plains 4·1, Crater 15·1 and Lake 4·4 free,
  * and starts on the plains at 3·7, below her Tundra 3·4. Ossa's free plot is up in the mountains and Kai's across the
  * river, so the TV shows terrain slowing them.
  */
@@ -13,7 +13,13 @@ import { initWorld, type Seat, type Tunables, type WalkTerrain, type World } fro
 export const MONTH = 2;
 const BASE = devView(MONTH, 300);
 const FREED = new Set(['13,4', '6,7']);
-export const ARCADE_TILES: TileView[] = BASE.tiles.map((t) => (FREED.has(`${t.x},${t.y}`) ? { ...t, outfit: null } : t));
+/** Lena's lake plot 4·4 (free), so Heiko's lake question (wade, or install from the shore) can be played. */
+const LENA_LAKE = '3,3';
+export const ARCADE_TILES: TileView[] = BASE.tiles.map((t) => {
+  const k = `${t.x},${t.y}`;
+  if (k === LENA_LAKE) return { ...t, owner: 'lena', outfit: null };
+  return FREED.has(k) ? { ...t, outfit: null } : t;
+});
 
 // Lena starts on open plains south of her Tundra, so her first push in any direction walks. Kai beside his Water
 // plot 10·8, not on it: it is a lake, and a lake is impassable.
@@ -27,6 +33,9 @@ export const SEED = 20261029;
 export const newWorld = (tun: Tunables, seed = SEED): World => initWorld(seed, SEATS, ARCADE_TILES, { width: W, height: H, month: MONTH }, tun);
 
 /** The tunables' test track: one tile of each land with room to walk right across it, for feeling (and measuring) a speed. */
+/** #arcade-wolves: Lena starts here, on forest at 5·2, a plot from the plains and off the map's edge. */
+export const WOLF_START = { x: 4, y: 1 };
+
 export const TRACK: Partial<Record<WalkTerrain, { x: number; y: number }>> = {
   plains: { x: 2, y: 7 },
   mountains: { x: 12, y: 5 },
@@ -34,4 +43,6 @@ export const TRACK: Partial<Record<WalkTerrain, { x: number; y: number }>> = {
   forest: { x: 0, y: 6 },
   river: { x: 6, y: 0 },
   desert: { x: 10, y: 0 },
+  // Beside Lena's lake plot 4·4: walk right into it to wade, or stand here to install from the shore.
+  tundra: { x: 2, y: 3 },
 };

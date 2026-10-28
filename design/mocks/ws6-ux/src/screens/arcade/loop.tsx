@@ -1,6 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from 'react';
-import { ME, newWorld, TRACK } from './fixture';
-import { DEFAULT_TUNABLES, setBot, step, teleport, type Input, type P, type Space, type Tunables, type WalkTerrain, type World } from './sim';
+import { ME, newWorld, TRACK, WOLF_START } from './fixture';
+import { callWolves, DEFAULT_TUNABLES, setBot, step, teleport, type Input, type P, type Space, type Tunables, type WalkTerrain, type World } from './sim';
+
+/** How a page's turn starts: as the table has it, or (#arcade-wolves) Lena on forest with a pack due in about 2 s. */
+export type Scenario = 'table' | 'wolves';
+const WOLVES_DUE_MS = 2000;
 
 /**
  * The imperative shell: one requestAnimationFrame loop per page, stepping the pure sim at a fixed 60 Hz and feeding
@@ -29,9 +33,27 @@ export class Arcade {
   private worldListeners = new Set<Listener>();
   private tunListeners = new Set<Listener>();
 
-  constructor(tunables: Tunables = DEFAULT_TUNABLES) {
+  scenario: Scenario;
+
+  constructor(tunables: Tunables = DEFAULT_TUNABLES, scenario: Scenario = 'table') {
     this.tunables = tunables;
-    this.world = newWorld(tunables);
+    this.scenario = scenario;
+    this.world = this.fresh();
+  }
+
+  private fresh(): World {
+    const w = newWorld(this.tunables);
+    if (this.scenario !== 'wolves') return w;
+    const placed = teleport(w, ME, { x: WOLF_START.x + 0.5, y: WOLF_START.y + 0.5 }, this.tunables);
+    // No chance pack before the called one, so it is always the 2 s one Heiko meets.
+    const held = { ...placed, colonists: placed.colonists.map((c) => (c.id === ME ? { ...c, wolvesAfter: WOLVES_DUE_MS + 1 } : c)) };
+    return callWolves(held, ME, WOLVES_DUE_MS);
+  }
+
+  /** The tunables' "Call the wolves now": a pack for Lena at once, wherever she is on the map. */
+  callWolves() {
+    this.world = callWolves(this.world, ME, 0);
+    this.emit();
   }
 
   subscribe = (l: Listener) => {
@@ -83,7 +105,7 @@ export class Arcade {
 
   restart() {
     const autopilot = this.world.colonists.find((c) => c.id === ME)?.bot ?? false;
-    this.world = setBot(newWorld(this.tunables), ME, autopilot);
+    this.world = setBot(this.fresh(), ME, autopilot);
     this.controls = { keys: new Set(), stick: null, mouse: null, action: false };
     this.emit();
   }
@@ -104,12 +126,12 @@ export class Arcade {
 const Ctx = createContext<Arcade | null>(null);
 
 /** One arcade per page: every view under it draws the same world. */
-export function ArcadeProvider({ children, autopilot = false }: { children: ReactNode; autopilot?: boolean }) {
+export function ArcadeProvider({ children, autopilot = false, scenario = 'table' }: { children: ReactNode; autopilot?: boolean; scenario?: Scenario }) {
   const arcade = useMemo(() => {
-    const a = new Arcade();
+    const a = new Arcade(DEFAULT_TUNABLES, scenario);
     if (autopilot) a.setAutopilot(true);
     return a;
-  }, [autopilot]);
+  }, [autopilot, scenario]);
   useEffect(() => {
     let raf = 0;
     let last = performance.now();

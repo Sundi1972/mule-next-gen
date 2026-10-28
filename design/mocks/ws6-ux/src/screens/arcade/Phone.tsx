@@ -67,6 +67,7 @@ export function PhoneArcade({ variant }: { variant: 'follow' | 'whole' }) {
           </span>
         )}
         <OverCard />
+        <IntentMarker note={NOTE.A7} at="br-in" />
       </div>
       <div className="mt-auto flex items-center gap-4 pb-1" data-testid="phone-controls">
         <span className="relative">

@@ -1,4 +1,4 @@
-import { PaceList, SharedClock, type PaceRow } from '@mule/ui';
+import { cx, PaceList, SharedClock, type PaceRow } from '@mule/ui';
 import type { ReactNode } from 'react';
 import { TvHeader } from '../../../../../../apps/web/src/table/TableApp';
 import { Board } from '../../harness';
@@ -22,7 +22,7 @@ export function ScaledFrame({ width, height, scale, testid, children }: { width:
   );
 }
 
-const doing = (c: Colonist) => (c.done ? 'PUB' : c.space === 'hall' ? (c.mule ? 'OUTFIT' : 'STORE') : c.mule?.good ? '→ PLOT' : c.installs > 0 ? '→ PUB' : '→ STORE');
+const doing = (c: Colonist) => (c.encounter ? (c.encounter.kind === 'fight' ? 'FIGHT' : c.encounter.kind === 'chase' ? 'RUN' : 'WOLVES') : c.done ? 'PUB' : c.space === 'hall' ? (c.mule ? 'OUTFIT' : 'STORE') : c.mule?.good ? '→ PLOT' : c.installs > 0 ? '→ PUB' : '→ STORE');
 
 /**
  * The big screen (1280 × 720): the whole colony with every colonist walking live, named; the store's hall beside it
@@ -41,6 +41,7 @@ export function TvArcade() {
           <div className="relative shrink-0 self-start" data-testid="tv-map">
             <MapStage width={740} density="tv" names testid="tv-map-stage" />
             <IntentMarker note={NOTE.A5} at="tl" />
+            <TvBeats />
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-2">
             <span className="label-caps text-base!">In the store now</span>
@@ -64,6 +65,51 @@ export function TvKeys({ children }: { children: ReactNode }) {
           Click the TV to steer Lena (turns her autopilot off)
         </span>
       )}
+    </div>
+  );
+}
+
+/** How long a beat stays on the TV after it happened. */
+const BEAT_MS = 3000;
+
+/**
+ * The TV's beats along the map's foot, clear of the callouts at the colonists: one line per colonist meeting wolves
+ * right now ("Wolves! Lena — run or fight?", the fight's score), then for a few seconds how it ended. Everyone at the
+ * table sees every pack and every fight.
+ */
+function TvBeats() {
+  const world = useWorld();
+  const tun = useTunables();
+  const live = world.colonists.filter((c) => c.encounter);
+  const recent = world.beats.filter((b) => world.t - b.t < BEAT_MS && !live.some((c) => c.id === b.id) && !b.text.startsWith('Wolves!'));
+  const lines = [
+    ...live.map((c) => {
+      const e = c.encounter!;
+      const text =
+        e.kind === 'choose'
+          ? `Wolves! ${c.name} — run or fight?`
+          : e.kind === 'chase'
+            ? `${c.name} runs from the wolves!`
+            : `${c.name} fights the wolves · ${e.strikes}/${tun.wolves.strikesToWin} strikes · ${e.bites}/${tun.wolves.bitesToLose} bites`;
+      return { key: `live-${c.id}`, text, tone: e.kind === 'fight' ? 'warn' : 'alert' };
+    }),
+    ...recent.slice(-2).map((b) => ({ key: `${b.id}-${b.t}`, text: b.text, tone: b.tone })),
+  ];
+  if (lines.length === 0) return null;
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex flex-col items-center gap-1.5" data-testid="tv-beats">
+      {lines.map((l) => (
+        <span
+          key={l.key}
+          className={cx(
+            'rounded-panel border-2 bg-panel/95 px-4 py-1.5 font-display text-xl font-bold shadow-glow',
+            l.tone === 'alert' ? 'border-alert text-alert' : l.tone === 'ok' ? 'border-ok text-ok' : 'border-warn text-warn',
+          )}
+          data-testid="tv-beat"
+        >
+          {l.text}
+        </span>
+      ))}
     </div>
   );
 }

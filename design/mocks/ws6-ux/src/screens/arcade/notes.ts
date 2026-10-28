@@ -1,14 +1,14 @@
 import type { IntentNoteData } from '../../proposed/IntentNote';
 
 /**
- * The six changes, each with the goal it serves (Heiko's, via the PM) and why it changed. The "why" is the same
- * finding for all six: today's tap-to-walk, and Heiko's verdict on it.
+ * The changes, each with the goal it serves (Heiko's, via the PM) and why it changed. For A-1 to A-6 the "why" is the
+ * same finding: today's tap-to-walk, and Heiko's verdict on it. A-7 is slice 2's.
  */
 
 const VERDICT = 'Heiko’s playtest verdict on it: “this is not at all what i wanted… i can really walk my character… like in an arcade game”.';
 const TODAY = 'Today a colonist walks by tapping a plot: grid steps, 0.4 s a tile (DEV_WALK), never steered.';
 
-const n = (id: string, k: number, title: string, what: string, intent: string, why: string, extra: Partial<IntentNoteData> = {}): IntentNoteData => ({ id, n: k, title, what, serves: id === 'A3' ? 'G-2' : 'G-1', intent, why, ...extra });
+const n = (id: string, k: number, title: string, what: string, intent: string, why: string, extra: Partial<IntentNoteData> = {}): IntentNoteData => ({ id, n: k, title, what, serves: id === 'A3' ? 'G-2' : id === 'A7' ? 'G-3' : 'G-1', intent, why, ...extra });
 
 export const ARCADE_NOTES: IntentNoteData[] = [
   n(
@@ -60,7 +60,16 @@ export const ARCADE_NOTES: IntentNoteData[] = [
     'Every speed, price and pace is a number you can change while you play, with “reset to defaults”. The later slices’ events (wolves, the glint, the corral scramble) already have a home here, at 0, off.',
     'Every speed is a tunable in a panel Heiko can change while playing.',
     `${TODAY} A speed lived in config.ts and needed a rebuild to try. ${VERDICT}`,
+    { differs: 'Slice 2 puts Heiko’s six answers from slice 1 first, as “Heiko’s questions”: each a switch or a number, with the question in plain words above it, so no answer needs a rebuild.' },
+  ),
+  n(
+    'A7',
+    7,
+    'Wolves: run or fight',
+    'On forest, hills or tundra a pack may come for you. The button says FIGHT or RUN: push the stick and you RUN (they chase; caught, you are bitten and slowed till the store or your own plot), or press the button and you FIGHT, about 10 s in place: step off the red ring when a wolf crouches, then STRIKE while it stands open. Win and you carry pelts the store buys; lose and your MULE bolts till you catch it (with no MULE, you are stunned). The TV shows every pack and every fight.',
+    'Three arcade moments, 5–15 s each, tunables for every reward and cost: wolves (run or fight), the glint race, the corral scramble.',
+    'Development had no moments of its own, only errands: store, corral, outfitter, plot, pub. Heiko wants the turn to have arcade moments in it.',
   ),
 ];
 
-export const NOTE = Object.fromEntries(ARCADE_NOTES.map((x) => [x.id, x])) as Record<'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'A6', IntentNoteData>;
+export const NOTE = Object.fromEntries(ARCADE_NOTES.map((x) => [x.id, x])) as Record<'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'A6' | 'A7', IntentNoteData>;

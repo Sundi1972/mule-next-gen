@@ -4,7 +4,8 @@ import { memo, useMemo, useRef, type PointerEvent as ReactPointerEvent, type Rea
 import { mapTiles } from '../../../../../../apps/web/src/game/derive';
 import { ARCADE_VIEW, ME } from './fixture';
 import { useArcade, useTunables, useWorld } from './loop';
-import { HALL, mulePrice, paceOf, pubPayout, reachOf, ROOMS, speedOf, type Colonist, type Reach, type Space, type Tunables, type World } from './sim';
+import { HALL, looseOf, mulePrice, paceOf, pubPayout, reachOf, ROOMS, speedOf, type Colonist, type Reach, type Space, type Tunables, type World } from './sim';
+import { WolfCallout, WolfMarks, WolvesOnMap } from './WolfLayer';
 
 /** The DS's condition, from the sim's pace: what the colonist tags and the pace lines read. */
 export function conditionOf(c: Colonist, tun: Tunables): Condition {
@@ -24,7 +25,7 @@ type Density = 'phone' | 'tv' | 'wide';
  * 700 ms between plots, which turns live steering into a lag, so the walkers are drawn here from the same DS parts
  * (PlayerMark, Mule, ConditionTag).
  */
-function Walkers({ world, space, cell, density, names }: { world: World; space: Space; cell: number; density: Density; names: boolean }) {
+function Walkers({ world, space, cell, density, names, own }: { world: World; space: Space; cell: number; density: Density; names: boolean; own: boolean }) {
   const tun = useTunables();
   const rule = ruleOf(tun);
   const W = space === 'map' ? world.width : HALL.w;
@@ -57,7 +58,12 @@ function Walkers({ world, space, cell, density, names }: { world: World; space: 
                 data-space={c.space}
                 data-moving={c.moving || undefined}
                 data-done={c.done || undefined}
+                data-speed={pace.perSecond.toFixed(4)}
+                data-encounter={c.encounter?.kind}
+                data-bitten={c.bitten || undefined}
+                data-pelts={c.pelts}
               >
+                <WolfCallout world={world} c={c} tun={tun} density={density} mine={mine && own} />
                 <span
                   className={cx('relative block rounded-full', mine && 'ring-2 ring-holo ring-offset-1 ring-offset-table', c.moving && 'animate-[store-waddle_0.36s_ease-in-out_infinite]')}
                   style={c.moving ? { animationDuration: `${waddleSeconds(Math.max(0.1, pace.ground * pace.pace.total))}s` } : undefined}
@@ -68,6 +74,7 @@ function Walkers({ world, space, cell, density, names }: { world: World; space: 
                 {names && (
                   <span className={cx('mt-0.5 whitespace-nowrap rounded-chip bg-map-chip px-1 font-mono font-bold leading-tight text-ink shadow-chip', density === 'tv' ? 'text-xs' : 'text-[9px]')}>{c.name}</span>
                 )}
+                <WolfMarks c={c} density={density} />
               </div>
             </div>
           );
@@ -114,6 +121,7 @@ function reachHits(world: World, reach: Reach, p: { x: number; y: number }, spac
   if (!reach.enabled || !t || t.space !== space) return false;
   if ('tile' in t) return Math.floor(p.x) === t.tile.x && Math.floor(p.y) === t.tile.y;
   if ('door' in t) return Math.floor(p.x) === world.store.x && Math.floor(p.y) === world.store.y;
+  if ('mule' in t) return Math.hypot(p.x - t.mule.x, p.y - t.mule.y) < 0.6;
   const r = ROOMS[t.room];
   const q = { x: (p.x / HALL.w) * 100, y: (p.y / HALL.h) * 100 };
   return q.x >= r.x0 && q.x <= r.x1 && q.y >= r.y0 && q.y <= r.y1;
@@ -165,7 +173,9 @@ export function MapStage({ width, height, across, density, interactive = false, 
             data-testid="me-ring"
           />
         )}
-        <Walkers world={world} space="map" cell={cell} density={density} names={names} />
+        {/* Wolves first: a colonist's callout (run or fight?) draws over its pack. */}
+        <WolvesOnMap world={world} cell={cell} />
+        <Walkers world={world} space="map" cell={cell} density={density} names={names} own={interactive} />
       </div>
     </div>
   );
@@ -211,7 +221,7 @@ export function HallStage({ width, density, store = density, interactive = false
           <span className="absolute left-1/2 top-1 -translate-x-1/2 whitespace-nowrap rounded-full bg-holo px-1.5 font-mono text-[10px] font-bold leading-4 text-on-holo shadow-glow">{SHORT[reach.kind] ?? 'GO'}</span>
         </span>
       )}
-      <Walkers world={world} space="hall" cell={width / HALL.w} density={density} names={names} />
+      <Walkers world={world} space="hall" cell={width / HALL.w} density={density} names={names} own={interactive} />
     </div>
   );
 }
@@ -336,11 +346,12 @@ export function GroundChip({ className }: { className?: string }) {
   const tun = useTunables();
   const me = meOf(world);
   const s = speedOf(world, me, tun);
-  const share = Math.round(s.ground * s.lead * 100);
-  const name = s.terrain ? TERRAIN_NAME[s.terrain] : 'Store floor';
-  const slow = s.ground * s.lead < 0.99;
+  const k = s.ground * s.lead * s.bitten;
+  const share = Math.round(k * 100);
+  const name = `${s.terrain ? TERRAIN_NAME[s.terrain] : 'Store floor'}${s.bitten < 1 ? ', bitten' : ''}`;
+  const slow = k < 0.99;
   return (
-    <span className={cx('inline-flex min-w-0 items-center gap-1.5 rounded-chip border px-2 py-0.5 text-sm', slow ? 'border-warn/60 text-warn' : 'border-holo-faint text-ink-2', className)} data-testid="ground-chip" data-ground={s.ground}>
+    <span className={cx('inline-flex min-w-0 items-center gap-1.5 rounded-chip border px-2 py-0.5 text-sm', slow ? 'border-warn/60 text-warn' : 'border-holo-faint text-ink-2', className)} data-testid="ground-chip" data-ground={s.ground} data-bitten={s.bitten < 1 || undefined}>
       <span className="truncate font-semibold">{name}</span>
       <span data-num className="font-mono text-xs">
         {slow ? `${share}% speed` : 'full speed'}
@@ -354,10 +365,11 @@ export function LeadChip({ className }: { className?: string }) {
   const world = useWorld();
   const me = meOf(world);
   const m = me.mule;
+  const bolted = !m && looseOf(world, me.id);
   return (
-    <span className={cx('inline-flex min-w-0 items-center gap-1.5 rounded-chip border border-holo-faint px-2 py-0.5 text-sm text-ink-2', className)} data-testid="lead-chip" data-lead={m ? (m.good ?? 'empty') : 'none'}>
-      <MuleIcon size={16} className={m ? 'text-holo' : 'text-ink-3'} />
-      <span className="truncate">{!m ? 'No MULE' : m.good ? 'MULE on lead' : 'Empty MULE'}</span>
+    <span className={cx('inline-flex min-w-0 items-center gap-1.5 rounded-chip border px-2 py-0.5 text-sm', bolted ? 'border-alert text-alert' : 'border-holo-faint text-ink-2', className)} data-testid="lead-chip" data-lead={m ? (m.good ?? 'empty') : bolted ? 'bolted' : 'none'}>
+      <MuleIcon size={16} className={m ? 'text-holo' : bolted ? 'text-alert' : 'text-ink-3'} />
+      <span className="truncate">{bolted ? 'MULE bolted!' : !m ? 'No MULE' : m.good ? 'MULE on lead' : 'Empty MULE'}</span>
       {m?.good && <GoodIcon good={m.good} size={14} />}
     </span>
   );

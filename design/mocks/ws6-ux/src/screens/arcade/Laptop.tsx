@@ -41,6 +41,7 @@ export function LaptopArcade() {
         <div className="relative shrink-0">
           <YourStage width={STAGE.w} height={STAGE.h} density="wide" />
           <IntentMarker note={NOTE.A1} at="tl" />
+          <IntentMarker note={NOTE.A7} at="br-in" />
           {!keys.focused && (
             <span className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full bg-panel/90 px-3 py-1 text-sm text-ink-2 shadow-chip" data-testid="focus-hint">
               Click the game to steer

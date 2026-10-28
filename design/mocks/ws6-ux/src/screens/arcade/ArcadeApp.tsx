@@ -10,7 +10,7 @@ import { ScaledFrame, TvArcade, TvKeys } from './Tv';
 import { TunablesPanel } from './Tunables';
 
 /**
- * Arcade development, slice 1, for Heiko to play: hash routes in App.tsx under "For approval" (#arcade-contents and #arcade-*). The
+ * Arcade development, slices 1 and 2, for Heiko to play: hash routes in App.tsx under "For approval" (#arcade-contents and #arcade-*). The
  * bare entry is the contents; every page links back to it.
  */
 
@@ -43,6 +43,12 @@ export const ARCADE_ROUTES: { id: string; title: string; shows: string; controls
     controls: 'As variant A.',
   },
   {
+    id: 'arcade-wolves',
+    title: 'Wolves: meet them in seconds',
+    shows: 'Slice 2. Your phone and the TV, with Lena on forest and a pack due in about 2 s. Run, or fight: dodge the red ring, strike when a wolf stands open. Play again to meet them again.',
+    controls: 'RUN: push the stick (or an arrow key). FIGHT: the button (or SPACE); in the fight, the stick dodges and the button strikes.',
+  },
+  {
     id: 'arcade-tv',
     title: 'The TV alone (1280 × 720)',
     shows: 'The big screen at its design size: every colonist walking live, named, the hall beside it, each one’s pace. Lena is on autopilot here.',
@@ -57,7 +63,9 @@ const DECISIONS = [
   'The MULE follows you on a lead, along your path and through the door after you.',
   'The phone shows where you are: the map, or the hall once you walk in through a door. The TV shows both, everyone at once.',
   'Bots are simple: store → corral → their outfitter → their own plot → install → pub, by the same rules.',
-  'Slices 2–4 (wolves, the glint race, the corral scramble) plug in as seeded events on the world: their numbers already sit in the tunables at 0.',
+  'Slice 2, wolves: on forest, hills or tundra a pack may come (a seeded event on the world). The button says FIGHT or RUN; run and they chase (caught: bitten and slowed till the store or your plot); fight for about 10 s with the same two controls (win pelts the store buys; lose and your MULE bolts till you catch it).',
+  'Heiko’s six answers from slice 1 are switches, first in the tunables as “Heiko’s questions”: none needs a rebuild.',
+  'Slices 3 and 4 (the glint race, the corral scramble) plug in the same way: their numbers already sit in the tunables at 0.',
 ];
 
 function Page({ title, intro, children }: { title: string; intro?: ReactNode; children: ReactNode }) {
@@ -82,7 +90,7 @@ function Page({ title, intro, children }: { title: string; intro?: ReactNode; ch
 const Notes = ({ className }: { className?: string }) => (
   <IntentNotes
     title="What changed and why"
-    intro="Six changes from today’s tap-to-walk development, numbered on the screens. Hover a note to light its number."
+    intro="Seven changes from today’s tap-to-walk development, numbered on the screens (⑦ is slice 2’s wolves). Hover a note to light its number."
     notes={ARCADE_NOTES}
     {...(className ? { className } : {})}
   />
@@ -97,7 +105,7 @@ function Contents() {
         </a>
         <ThemeToggle className="ml-auto" />
       </span>
-      <h1 className="mt-2 font-display text-3xl font-semibold">Arcade development · slice 1</h1>
+      <h1 className="mt-2 font-display text-3xl font-semibold">Arcade development · slices 1 and 2</h1>
       <p className="mt-1 max-w-4xl text-ink-2">
         Steer your colonist yourself, live, everyone at once: walk to the store and in through its door, buy a MULE at the corral, walk into an outfitter to fit it, lead it out to one of your plots and install it, then end your turn in the pub. Play it; that play is the gate.
       </p>
@@ -139,6 +147,29 @@ function Contents() {
 function Table() {
   return (
     <Page title="The table: your phone and the TV" intro="One sim drives both frames: steer on the phone (or with the arrow keys once you click it) and the TV follows. The bots walk the same loop by the same rules.">
+      <div className="flex flex-wrap items-start gap-6">
+        <PortraitFrame>
+          <PhoneArcade variant="follow" />
+        </PortraitFrame>
+        <ScaledFrame width={1280} height={720} scale={0.75} testid="tv-frame">
+          <TvArcade />
+        </ScaledFrame>
+      </div>
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
+        <TunablesPanel />
+        <Notes />
+      </div>
+    </Page>
+  );
+}
+
+/** Slice 2 in seconds: the table view, Lena on forest, a pack due in about 2 s. */
+function Wolves() {
+  return (
+    <Page
+      title="Wolves: run or fight"
+      intro="Lena starts on forest and a pack comes in about 2 s. Push the stick (or an arrow key) to RUN; press the button (or SPACE) to FIGHT. In the fight, step off the red ring when a wolf crouches, then STRIKE while it stands open. “Play again” meets them again; “Call the wolves now” calls another pack wherever she is."
+    >
       <div className="flex flex-wrap items-start gap-6">
         <PortraitFrame>
           <PhoneArcade variant="follow" />
@@ -212,13 +243,13 @@ function TvRoute() {
 
 export function ArcadePage({ route }: { route: string }) {
   const body =
-    route === 'arcade' ? <Table /> : route === 'arcade-computer' ? <Computer /> : route === 'arcade-phone' ? <PhoneRoute variant="follow" /> : route === 'arcade-phone-whole' ? <PhoneRoute variant="whole" /> : route === 'arcade-tv' ? <TvRoute /> : <Contents />;
+    route === 'arcade' ? <Table /> : route === 'arcade-computer' ? <Computer /> : route === 'arcade-phone' ? <PhoneRoute variant="follow" /> : route === 'arcade-phone-whole' ? <PhoneRoute variant="whole" /> : route === 'arcade-tv' ? <TvRoute /> : route === 'arcade-wolves' ? <Wolves /> : <Contents />;
   const isGame = ARCADE_ROUTES.some((r) => r.id === route);
   return (
     <IntentNotesProvider>
       {isGame ? (
         // A fresh sim per route: the key restarts it when the hash changes.
-        <ArcadeProvider key={route} autopilot={route === 'arcade-tv'}>
+        <ArcadeProvider key={route} autopilot={route === 'arcade-tv'} scenario={route === 'arcade-wolves' ? 'wolves' : 'table'}>
           {body}
         </ArcadeProvider>
       ) : (

@@ -1,13 +1,15 @@
 import { DEV_WALK, DEVELOPMENT, MULE, SPECIES_PERK, type Species, type Terrain } from '@mule/engine';
 import type { TileView } from '@mule/protocol';
+import { botWolfInput, endBolt, rollWolves, spawnPack, stepBolts, stepEncounter, wolfReach, type Encounter } from './wolves';
 
 /**
- * Arcade development, slice 1: the functional core. Pure and seeded: `step(world, inputs, dtMs, tunables)` returns the
- * next world and reads no clock, no Math.random and no DOM, so one seed plus the inputs replays a turn. The shell
+ * Arcade development: the functional core. Pure and seeded: `step(world, inputs, dtMs, tunables)` returns the next
+ * world and reads no clock, no Math.random and no DOM, so one seed plus the inputs replays a turn. The shell
  * (loop.tsx) runs it at a fixed 60 Hz and every view on the page draws the same world.
  *
  * Two spaces: the colony map, in tiles, and the store hall, in hall units on a 4:3 floor (every view draws the hall at
  * that aspect, so a step is the same length across and down). Movement is continuous: speed × terrain × condition pace.
+ * Slice 2's wolves live in wolves.ts and come through the world's event queue.
  */
 
 export type Space = 'map' | 'hall';
@@ -19,6 +21,7 @@ export type WalkTerrain = Exclude<Terrain, 'store'>;
 /** The four outfitters slice 1 opens (Heiko's loop); Water, Rare earth and the works stay shut. */
 export const ARCADE_OUTFITS = ['food', 'energy', 'smithore', 'crystite'] as const;
 export type ArcadeOutfit = (typeof ARCADE_OUTFITS)[number];
+export type LakeMode = 'wade' | 'shore';
 
 // --- Tunables ----------------------------------------------------------------------------------
 
@@ -28,12 +31,12 @@ export interface Tunables {
   mapTilesPerSecond: number;
   /** Seconds from the store door to the corral at full pace: today's DEV_WALK.floorSeconds. */
   floorSeconds: number;
-  /** Share of full speed on each land; 0 is impassable. */
+  /** Share of full speed on each land; 0 is impassable. The lake's is its wading speed (questions.lakeMode). */
   terrain: Record<WalkTerrain, number>;
   hungerPaceMin: number;
   sickPace: number;
   zipwingSpeed: number;
-  /** Share of your speed while you lead a MULE: 1 is no drag (an open question). */
+  /** Share of your speed while you lead a MULE: 1 is no drag (Heiko's question 1). */
   leadPace: number;
   /** How far behind you the MULE walks, in tiles on the map. */
   leadTiles: number;
@@ -45,9 +48,51 @@ export interface Tunables {
   /** How long a bot stands at a counter before it presses its action. */
   botThinkSeconds: number;
   seats: Record<string, { food: number; need: number; sick: boolean; money: number }>;
-  /** Slices 2 to 4, each an event on the world: off (0) in slice 1, their numbers already have a home. */
+  /** Heiko's answers to slice 1's open questions, each a switch so no answer needs a rebuild. */
+  questions: {
+    mountainsImpassable: boolean;
+    lakeMode: LakeMode;
+    /** Others' plots: walk across them, or they block you like a lake. */
+    trespass: boolean;
+    /** Share of what a MULE cost you that the pub pays back when you walk in leading it. */
+    pubRefund: number;
+    /** Bots walk at this times the human rules. */
+    botSpeed: number;
+  };
+  /** Slice 2: wolves (Heiko's G-3). */
+  wolves: {
+    on: boolean;
+    /** Chance a second, on forest, hills or tundra, that a pack comes for a colonist. */
+    chancePerSecond: number;
+    packSize: number;
+    /** No second pack for the same colonist for this long. */
+    cooldownSeconds: number;
+    /** Time to pick run or fight before they pounce (a fight). */
+    chooseSeconds: number;
+    chaseSpeed: number;
+    giveUpSeconds: number;
+    giveUpTiles: number;
+    /** Your speed once bitten, till you reach the store or your own plot. */
+    bittenPace: number;
+    fightSeconds: number;
+    lungeEverySeconds: number;
+    /** The crouch that warns of a lunge: the time you have to dodge. */
+    warnSeconds: number;
+    strikesToWin: number;
+    bitesToLose: number;
+    pelts: number;
+    peltPrice: number;
+    /** A lost fight with no MULE on the lead costs this much time instead. */
+    stunSeconds: number;
+    boltTiles: number;
+    boltSpeed: number;
+    /** Share of bots that fight rather than run. */
+    botFightShare: number;
+    /** Chance a bot dodges a lunge. */
+    botDodge: number;
+  };
+  /** Slices 3 and 4, each an event on the world: off (0) until built, their numbers already have a home. */
   events: {
-    wolves: { perMinute: number; reward: number; cost: number };
     glint: { perMinute: number; reward: number };
     scramble: { mulesLeft: number; perMinute: number };
   };
@@ -69,7 +114,7 @@ export const DEFAULT_TUNABLES: Tunables = {
     river: 0.6,
     swamp: 0.5,
     mountains: 0.4,
-    lake: 0,
+    lake: 0.3,
   },
   hungerPaceMin: DEV_WALK.hungerPaceMin,
   sickPace: DEV_WALK.sickPace,
@@ -88,8 +133,32 @@ export const DEFAULT_TUNABLES: Tunables = {
     brix: { food: 8, need: 10, sick: false, money: 410 },
     kai: { food: 3, need: 3, sick: true, money: 280 },
   },
+  // Slice 1's behaviour, unchanged, until Heiko flips one.
+  questions: { mountainsImpassable: false, lakeMode: 'shore', trespass: true, pubRefund: 0, botSpeed: 1 },
+  wolves: {
+    on: true,
+    chancePerSecond: 0.05,
+    packSize: 3,
+    cooldownSeconds: 20,
+    chooseSeconds: 3,
+    chaseSpeed: 2.2,
+    giveUpSeconds: 5,
+    giveUpTiles: 4,
+    bittenPace: 0.5,
+    fightSeconds: 10,
+    lungeEverySeconds: 1.6,
+    warnSeconds: 0.8,
+    strikesToWin: 3,
+    bitesToLose: 3,
+    pelts: 2,
+    peltPrice: 20,
+    stunSeconds: 4,
+    boltTiles: 4,
+    boltSpeed: 3.5,
+    botFightShare: 0.5,
+    botDodge: 0.6,
+  },
   events: {
-    wolves: { perMinute: 0, reward: 50, cost: 30 },
     glint: { perMinute: 0, reward: 80 },
     scramble: { mulesLeft: 0, perMinute: 0 },
   },
@@ -105,6 +174,8 @@ export interface Lead {
   x: number;
   y: number;
   facing: 'left' | 'right';
+  /** What it has cost its owner so far, MULE and outfit: what a pub refund is a share of. */
+  paid: number;
 }
 
 export interface Colonist {
@@ -130,13 +201,57 @@ export interface Colonist {
   botWait: number;
   /** Where it walked lately, newest last: the MULE on the lead walks it. */
   trail: P[];
+  /** Wolf pelts carried, for the store to buy. */
+  pelts: number;
+  /** Caught by a chasing pack: slowed till the store or its own plot. */
+  bitten: boolean;
+  /** A lost fight with no MULE: frozen till then. */
+  stunnedUntil: number;
+  /** No new pack before this. */
+  wolvesAfter: number;
+  encounter: Encounter | null;
 }
 
-/** A slice 2–4 happening, queued by the seed: wolves, a glint, the corral scramble. */
+/** A MULE that bolted from a lost fight: it runs, then stands till its owner catches it. */
+export interface Loose {
+  owner: string;
+  slot: Colonist['slot'];
+  good: ArcadeOutfit | null;
+  paid: number;
+  x: number;
+  y: number;
+  dir: P;
+  /** Tiles still to run. */
+  left: number;
+  facing: 'left' | 'right';
+}
+
+/** A wolf leaving after the moment is over: drawn running off, then gone. */
+export interface Fleeing {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  until: number;
+}
+
+/** A short line the TV shows for a few seconds: "Wolves! Lena — run or fight?". */
+export interface Beat {
+  t: number;
+  id: string;
+  text: string;
+  tone: 'alert' | 'warn' | 'ok';
+}
+
+/** Something happening on the world, queued by the seed: wolves now, the glint and the scramble in later slices. */
 export type EventKind = 'wolves' | 'glint' | 'scramble';
 export interface WorldEvent {
   atMs: number;
   kind: EventKind;
+  /** Whom it comes for. */
+  target?: string;
+  /** Called by the review page: comes whatever the land and the cooldown. */
+  forced?: boolean;
 }
 
 export interface World {
@@ -151,6 +266,9 @@ export interface World {
   colonists: Colonist[];
   storeMules: number;
   queue: WorldEvent[];
+  loose: Loose[];
+  fleeing: Fleeing[];
+  beats: Beat[];
   /** Newest last: what happened, for the TV and the tests. */
   log: string[];
   over: boolean;
@@ -168,7 +286,7 @@ export const IDLE: Input = { dir: { x: 0, y: 0 }, action: false };
 
 // --- Seeded randomness (mulberry32, the engine's, kept as a number in the world so step stays pure) ---
 
-function rand(state: number): [number, number] {
+export function rand(state: number): [number, number] {
   const a = (state + 0x6d2b79f5) >>> 0;
   let t = a;
   t = Math.imul(t ^ (t >>> 15), t | 1);
@@ -176,11 +294,16 @@ function rand(state: number): [number, number] {
   return [((t ^ (t >>> 14)) >>> 0) / 4294967296, a];
 }
 
-/** Each slice-2–4 event at its rate, as a Poisson stream over the turn; a rate of 0 queues none. */
+/** One draw from the world's stream: the value and the world with its stream advanced. */
+export function draw(w: World): [number, World] {
+  const [u, rng] = rand(w.rng);
+  return [u, { ...w, rng }];
+}
+
+/** Slices 3 and 4 at their rates, as a Poisson stream over the turn; a rate of 0 queues none. Wolves roll per step. */
 function schedule(rng: number, tun: Tunables): { queue: WorldEvent[]; rng: number } {
   const queue: WorldEvent[] = [];
   const rates: [EventKind, number][] = [
-    ['wolves', tun.events.wolves.perMinute],
     ['glint', tun.events.glint.perMinute],
     ['scramble', tun.events.scramble.perMinute],
   ];
@@ -199,8 +322,8 @@ function schedule(rng: number, tun: Tunables): { queue: WorldEvent[]; rng: numbe
   return { queue: queue.sort((a, b) => a.atMs - b.atMs), rng: r };
 }
 
-/** Where slices 2–4 plug in: a handler per kind. None is built in slice 1, so a due event is only logged. */
-export const EVENT_HANDLERS: Partial<Record<EventKind, (w: World, e: WorldEvent, tun: Tunables) => World>> = {};
+/** Where each slice plugs in: a handler per kind. Wolves are slice 2's; a kind with none is only logged. */
+export const EVENT_HANDLERS: Partial<Record<EventKind, (w: World, e: WorldEvent, tun: Tunables) => World>> = { wolves: spawnPack };
 
 export interface Seat {
   id: string;
@@ -221,15 +344,19 @@ export function initWorld(seed: number, seats: Seat[], tiles: TileView[], size: 
       space: 'map', x: s.start.x + 0.5, y: s.start.y + 0.5, facing: 'right', moving: false, mule: null,
       money: tun.seats[s.id]?.money ?? 0, done: false, installs: 0,
       plan: ARCADE_OUTFITS[Math.floor(u * ARCADE_OUTFITS.length)]!, botWait: 0, trail: [],
+      pelts: 0, bitten: false, stunnedUntil: 0, wolvesAfter: 0, encounter: null,
     };
   });
   const store = tiles.find((t) => t.terrain === 'store')!;
   const sched = schedule(rng, tun);
   return {
     t: 0, seed, rng: sched.rng, month: size.month, width: size.width, height: size.height, store: { x: store.x, y: store.y },
-    tiles, colonists, storeMules: tun.storeMules, queue: sched.queue, log: [], over: false,
+    tiles, colonists, storeMules: tun.storeMules, queue: sched.queue, loose: [], fleeing: [], beats: [], log: [], over: false,
   };
 }
+
+export const say = (w: World, c: Pick<Colonist, 'name'>, line: string): string[] => [...w.log, `${(w.t / 1000).toFixed(1)}s ${c.name} ${line}`].slice(-60);
+export const beat = (w: World, id: string, text: string, tone: Beat['tone']): Beat[] => [...w.beats, { t: w.t, id, text, tone }].slice(-12);
 
 // --- Condition and speed -------------------------------------------------------------------------
 
@@ -327,7 +454,7 @@ const CORRAL_SPOT = units(60, 54);
 const HALL_CROSS = Math.hypot(CORRAL_SPOT.x - DOOR_SPOT.doorL.x, CORRAL_SPOT.y - DOOR_SPOT.doorL.y);
 
 /** Map clearance in tiles, and the band of the store's left and right faces that is its door. */
-const R = 0.18;
+export const R = 0.18;
 const DOOR_BAND = 0.25;
 
 export function tileAt(w: World, x: number, y: number): TileView | undefined {
@@ -335,7 +462,20 @@ export function tileAt(w: World, x: number, y: number): TileView | undefined {
   return w.tiles[Math.floor(y) * w.width + Math.floor(x)];
 }
 
-export const terrainMult = (tun: Tunables, t: Terrain) => (t === 'store' ? 1 : tun.terrain[t]);
+/** A land's share of full speed under Heiko's switches: impassable mountains, and lakes waded or not. */
+export function terrainMult(tun: Tunables, t: Terrain): number {
+  if (t === 'store') return 1;
+  if (t === 'mountains' && tun.questions.mountainsImpassable) return 0;
+  if (t === 'lake' && tun.questions.lakeMode === 'shore') return 0;
+  return tun.terrain[t];
+}
+
+/** Whether a colonist may set foot on a tile: its land, and (trespass off) whose it is. */
+export function tileOpen(tun: Tunables, t: TileView, who: string | null): boolean {
+  if (terrainMult(tun, t.terrain) <= 0) return false;
+  if (!tun.questions.trespass && who && t.owner && t.owner !== who) return false;
+  return true;
+}
 
 export interface Speed {
   /** Tiles a second on the map, hall units a second in the store. */
@@ -345,29 +485,44 @@ export interface Speed {
   ground: number;
   pace: Pace;
   lead: number;
+  bitten: number;
+  bot: number;
 }
 
 export function speedOf(w: World, c: Colonist, tun: Tunables): Speed {
   const pace = paceOf(c, tun);
   const lead = c.mule ? tun.leadPace : 1;
-  if (c.space === 'hall') return { perSecond: (HALL_CROSS / Math.max(0.05, tun.floorSeconds)) * pace.total * lead, terrain: null, ground: 1, pace, lead };
+  const bitten = c.bitten ? tun.wolves.bittenPace : 1;
+  const bot = c.bot ? tun.questions.botSpeed : 1;
+  const stunned = c.stunnedUntil > w.t ? 0 : 1;
+  const k = pace.total * lead * bitten * bot * stunned;
+  if (c.space === 'hall') return { perSecond: (HALL_CROSS / Math.max(0.05, tun.floorSeconds)) * k, terrain: null, ground: 1, pace, lead, bitten, bot };
   const t = tileAt(w, c.x, c.y)?.terrain ?? 'plains';
-  const ground = terrainMult(tun, t);
-  return { perSecond: tun.mapTilesPerSecond * ground * pace.total * lead, terrain: t, ground, pace, lead };
+  // Standing on a tile you could not walk onto (a flag flipped under you) you still walk at its old speed, to get off.
+  const ground = terrainMult(tun, t) || tun.terrain[t as WalkTerrain] || 1;
+  return { perSecond: tun.mapTilesPerSecond * ground * k, terrain: t, ground, pace, lead, bitten, bot };
 }
 
 // --- Moving ------------------------------------------------------------------------------------
 
-const inStore = (w: World, x: number, y: number) => x > w.store.x - R && x < w.store.x + 1 + R && y > w.store.y - R && y < w.store.y + 1 + R;
+export const inStore = (w: World, x: number, y: number) => x > w.store.x - R && x < w.store.x + 1 + R && y > w.store.y - R && y < w.store.y + 1 + R;
 const doorY = (w: World) => w.store.y + 0.5;
 const inDoorBand = (w: World, y: number) => Math.abs(y - doorY(w)) < DOOR_BAND;
 
-function passable(w: World, tun: Tunables, x: number, y: number): boolean {
+/**
+ * Whether a body may stand at (x, y): inside the map, off the store, and every tile its corners touch open to it. The
+ * tile it stands on now never blocks it, so a flag flipped under a colonist never traps it.
+ */
+export function passable(w: World, tun: Tunables, x: number, y: number, who: Colonist | null): boolean {
   if (x < R || y < R || x > w.width - R || y > w.height - R) return false;
   if (inStore(w, x, y)) return false;
+  const hx = who ? Math.floor(who.x) : -1;
+  const hy = who ? Math.floor(who.y) : -1;
   for (const [cx, cy] of [[x - R, y - R], [x + R, y - R], [x - R, y + R], [x + R, y + R]] as const) {
     const t = tileAt(w, cx, cy);
-    if (!t || terrainMult(tun, t.terrain) <= 0) return false;
+    if (!t) return false;
+    if (t.x === hx && t.y === hy) continue;
+    if (!tileOpen(tun, t, who?.id ?? null)) return false;
   }
   return true;
 }
@@ -385,11 +540,11 @@ function mapMove(w: World, tun: Tunables, c: Colonist, dx: number, dy: number): 
     // Pushing into the store's face near its door slides you onto the door, so it is easy to find.
     if ((fromL || fromR) && Math.abs(y - doorY(w)) < 0.5 && dy === 0) {
       const toward = Math.sign(doorY(w) - y) * Math.min(Math.abs(dx), Math.abs(doorY(w) - y));
-      if (passable(w, tun, x, y + toward)) y += toward;
+      if (passable(w, tun, x, y + toward, c)) y += toward;
     }
-  } else if (passable(w, tun, nx, y)) x = nx;
+  } else if (passable(w, tun, nx, y, c)) x = nx;
   const ny = y + dy;
-  if (passable(w, tun, x, ny)) y = ny;
+  if (passable(w, tun, x, ny, c)) y = ny;
   return { x, y, enter: null };
 }
 
@@ -439,12 +594,13 @@ function arrive(c: Colonist, space: Space, at: P, facing: 'left' | 'right', tun:
   return { ...c, space, x: at.x, y: at.y, facing, trail: [behind, at], mule: c.mule ? { ...c.mule, x: behind.x, y: behind.y, facing } : null };
 }
 
-const enterHall = (c: Colonist, side: 'L' | 'R', tun: Tunables) => arrive(c, 'hall', side === 'L' ? DOOR_SPOT.doorL : DOOR_SPOT.doorR, side === 'L' ? 'right' : 'left', tun);
+// The store is safe ground: a bite heals at its door.
+const enterHall = (c: Colonist, side: 'L' | 'R', tun: Tunables) => ({ ...arrive(c, 'hall', side === 'L' ? DOOR_SPOT.doorL : DOOR_SPOT.doorR, side === 'L' ? 'right' : 'left', tun), bitten: false });
 const leaveHall = (w: World, c: Colonist, side: 'L' | 'R', tun: Tunables) => arrive(c, 'map', doorOutside(w, side), side === 'L' ? 'left' : 'right', tun);
 
 // --- What the action button does -----------------------------------------------------------------
 
-export type ReachKind = 'enter' | 'buy' | 'outfit' | 'leave' | 'install' | 'pub' | 'none';
+export type ReachKind = 'enter' | 'buy' | 'outfit' | 'leave' | 'install' | 'pub' | 'sell' | 'catch' | 'fight' | 'strike' | 'none';
 export interface Reach {
   kind: ReachKind;
   /** The button's words, e.g. "BUY MULE"; with `detail`, e.g. "139 cr". */
@@ -453,7 +609,7 @@ export interface Reach {
   /** False: dim, and pressing does nothing; the words say what to do instead. */
   enabled: boolean;
   /** The thing in reach, for the views to highlight and the mouse to click. */
-  target?: { space: 'map'; door: 'L' | 'R' } | { space: 'map'; tile: P } | { space: 'hall'; room: HallRoom };
+  target?: { space: 'map'; door: 'L' | 'R' } | { space: 'map'; tile: P } | { space: 'map'; mule: P } | { space: 'hall'; room: HallRoom };
   outfit?: ArcadeOutfit;
 }
 
@@ -462,17 +618,45 @@ export const pubPayout = (w: World, tun: Tunables) => {
   const left = Math.max(0, tun.devSeconds * 1000 - w.t) / (tun.devSeconds * 1000);
   return Math.round(DEVELOPMENT.pub.base + (DEVELOPMENT.pub.start + w.month * DEVELOPMENT.pub.perMonth) * left);
 };
+export const refundOf = (c: Colonist, tun: Tunables) => (c.mule ? Math.round(c.mule.paid * tun.questions.pubRefund) : 0);
 export const freePlotsOf = (w: World, id: string) => w.tiles.filter((t) => t.owner === id && !t.outfit);
+/** A colonist's bolted MULE, running or standing: catch it whenever you reach it. */
+export const looseOf = (w: World, id: string) => w.loose.find((m) => m.owner === id) ?? null;
+const CATCH_REACH = 0.6;
+
+/** Your own free lake plot beside the tile you stand on: in shore mode, INSTALL reaches into it. */
+function shorePlot(w: World, c: Colonist, tun: Tunables): TileView | null {
+  if (tun.questions.lakeMode !== 'shore') return null;
+  const cx = Math.floor(c.x);
+  const cy = Math.floor(c.y);
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
+    const t = tileAt(w, cx + dx, cy + dy);
+    if (!t || t.terrain !== 'lake' || t.owner !== c.id || t.outfit) continue;
+    // Close to it, not just on the tile beside it: within reach of its edge.
+    const nx = Math.max(t.x, Math.min(t.x + 1, c.x));
+    const ny = Math.max(t.y, Math.min(t.y + 1, c.y));
+    if (Math.hypot(c.x - nx, c.y - ny) < 0.45) return t;
+  }
+  return null;
+}
 
 /** What pressing the action button would do right now, for this colonist. Never a menu: one thing, or a dim hint. */
 export function reachOf(w: World, c: Colonist, tun: Tunables): Reach {
   if (w.over) return { kind: 'none', verb: 'DEVELOPMENT OVER', enabled: false };
   if (c.done) return { kind: 'none', verb: 'IN THE PUB', detail: 'turn over', enabled: false };
+  if (c.stunnedUntil > w.t) return { kind: 'none', verb: 'STUNNED', detail: `${Math.ceil((c.stunnedUntil - w.t) / 1000)} s`, enabled: false };
+  if (c.encounter) return wolfReach(w, c, tun);
   const price = mulePrice(tun);
   if (c.space === 'hall') {
     const room = roomAt(c);
+    // Walking in with pelts, the store buys them before anything else.
+    if (c.pelts > 0 && (room === null || room === 'doorL' || room === 'doorR'))
+      return { kind: 'sell', verb: `SELL ${c.pelts} PELT${c.pelts > 1 ? 'S' : ''}`, detail: `${c.pelts * tun.wolves.peltPrice} cr`, enabled: true };
     if (room === 'doorL' || room === 'doorR') return { kind: 'leave', verb: 'LEAVE', detail: c.mule ? 'with your MULE' : 'to the colony', enabled: true, target: { space: 'hall', room } };
-    if (room === 'pub') return { kind: 'pub', verb: 'PUB · END TURN', detail: `+${pubPayout(w, tun)} cr${c.mule ? ' · MULE back' : ''}`, enabled: true, target: { space: 'hall', room } };
+    if (room === 'pub') {
+      const back = refundOf(c, tun);
+      return { kind: 'pub', verb: 'PUB · END TURN', detail: `+${pubPayout(w, tun) + back} cr${c.mule ? (back ? ' · refund' : ' · MULE back') : ''}`, enabled: true, target: { space: 'hall', room } };
+    }
     if (room === 'corral') {
       const target = { space: 'hall' as const, room };
       if (c.mule) return { kind: 'none', verb: c.mule.good ? 'MULE ON LEAD' : 'TO AN OUTFITTER', enabled: false };
@@ -489,15 +673,22 @@ export function reachOf(w: World, c: Colonist, tun: Tunables): Reach {
       if (c.money < cost) return { kind: 'outfit', verb: `OUTFIT · ${NAME[g]}`, detail: `need ${cost} cr`, enabled: false, target, outfit: g };
       return { kind: 'outfit', verb: `${c.mule.good ? 'REFIT' : 'OUTFIT'} · ${NAME[g]}`, detail: `${cost} cr`, enabled: true, target, outfit: g };
     }
-    if (room) return { kind: 'none', verb: 'CLOSED', detail: 'not in slice 1', enabled: false };
+    if (room) return { kind: 'none', verb: 'CLOSED', detail: 'not in this mock', enabled: false };
     return { kind: 'none', verb: !c.mule ? 'TO THE CORRAL' : !c.mule.good ? 'TO AN OUTFITTER' : 'TO A DOOR', enabled: false };
+  }
+  const loose = looseOf(w, c.id);
+  if (loose && !c.mule) {
+    if (Math.hypot(c.x - loose.x, c.y - loose.y) < CATCH_REACH) return { kind: 'catch', verb: 'CATCH MULE', enabled: true, target: { space: 'map', mule: { x: loose.x, y: loose.y } } };
+    return { kind: 'none', verb: 'CATCH YOUR MULE', detail: 'it bolted', enabled: false };
   }
   for (const side of ['L', 'R'] as const) {
     const d = doorOutside(w, side);
-    if (Math.hypot(c.x - d.x, c.y - d.y) < 0.6) return { kind: 'enter', verb: 'ENTER STORE', enabled: true, target: { space: 'map', door: side } };
+    if (Math.hypot(c.x - d.x, c.y - d.y) < 0.6) return { kind: 'enter', verb: 'ENTER STORE', detail: c.pelts ? `sell ${c.pelts} pelts` : undefined, enabled: true, target: { space: 'map', door: side } };
   }
   const t = tileAt(w, c.x, c.y);
   const mine = t && t.owner === c.id;
+  const shore = c.mule?.good ? shorePlot(w, c, tun) : null;
+  if (shore) return { kind: 'install', verb: `INSTALL · ${NAME[c.mule!.good!]}`, detail: 'from the shore', enabled: true, target: { space: 'map', tile: { x: shore.x, y: shore.y } }, outfit: c.mule!.good! };
   if (mine && t.outfit && c.mule?.good) return { kind: 'none', verb: 'PLOT HAS A MULE', detail: 'try a free plot', enabled: false };
   if (mine && c.mule?.good) return { kind: 'install', verb: `INSTALL · ${NAME[c.mule.good]}`, enabled: true, target: { space: 'map', tile: { x: t.x, y: t.y } }, outfit: c.mule.good };
   if (mine && c.mule) return { kind: 'none', verb: 'OUTFIT IT FIRST', detail: 'in the store', enabled: false };
@@ -509,7 +700,6 @@ export function reachOf(w: World, c: Colonist, tun: Tunables): Reach {
 function act(w: World, c: Colonist, tun: Tunables): { w: World; c: Colonist } {
   const r = reachOf(w, c, tun);
   if (!r.enabled) return { w, c };
-  const say = (line: string) => [...w.log, `${(w.t / 1000).toFixed(1)}s ${c.name} ${line}`].slice(-40);
   switch (r.kind) {
     case 'enter':
       return { w, c: enterHall(c, r.target && 'door' in r.target ? r.target.door : 'L', tun) };
@@ -518,20 +708,30 @@ function act(w: World, c: Colonist, tun: Tunables): { w: World; c: Colonist } {
     case 'buy': {
       const price = mulePrice(tun);
       const behind = alongTrail(c.trail, c, leadLength('hall', tun));
-      return { w: { ...w, storeMules: w.storeMules - 1, log: say(`bought a MULE (${price} cr)`) }, c: { ...c, money: c.money - price, mule: { good: null, x: behind.x, y: behind.y, facing: c.facing } } };
+      return { w: { ...w, storeMules: w.storeMules - 1, log: say(w, c, `bought a MULE (${price} cr)`) }, c: { ...c, money: c.money - price, mule: { good: null, x: behind.x, y: behind.y, facing: c.facing, paid: price } } };
     }
     case 'outfit': {
       const g = r.outfit!;
-      return { w: { ...w, log: say(`outfitted for ${NAME[g]} (${tun.outfit[g]} cr)`) }, c: { ...c, money: c.money - tun.outfit[g], mule: { ...c.mule!, good: g } } };
+      return { w: { ...w, log: say(w, c, `outfitted for ${NAME[g]} (${tun.outfit[g]} cr)`) }, c: { ...c, money: c.money - tun.outfit[g], mule: { ...c.mule!, good: g, paid: c.mule!.paid + tun.outfit[g] } } };
     }
     case 'install': {
       const at = r.target && 'tile' in r.target ? r.target.tile : { x: Math.floor(c.x), y: Math.floor(c.y) };
       const tiles = w.tiles.map((t) => (t.x === at.x && t.y === at.y ? { ...t, outfit: c.mule!.good } : t));
-      return { w: { ...w, tiles, log: say(`installed ${NAME[c.mule!.good!]} on ${at.x + 1}·${at.y + 1}`) }, c: { ...c, mule: null, installs: c.installs + 1 } };
+      return { w: { ...w, tiles, log: say(w, c, `installed ${NAME[c.mule!.good!]} on ${at.x + 1}·${at.y + 1}`) }, c: { ...c, mule: null, installs: c.installs + 1 } };
     }
     case 'pub': {
       const pay = pubPayout(w, tun);
-      return { w: { ...w, storeMules: w.storeMules + (c.mule ? 1 : 0), log: say(`went to the pub (+${pay} cr)`) }, c: { ...c, money: c.money + pay, done: true, moving: false, mule: null } };
+      const back = refundOf(c, tun);
+      const note = c.mule ? ` and the MULE back${back ? ` (refund ${back} cr)` : ''}` : '';
+      return { w: { ...w, storeMules: w.storeMules + (c.mule ? 1 : 0), log: say(w, c, `went to the pub (+${pay} cr${note})`) }, c: { ...c, money: c.money + pay + back, done: true, moving: false, mule: null } };
+    }
+    case 'sell': {
+      const pay = c.pelts * tun.wolves.peltPrice;
+      return { w: { ...w, log: say(w, c, `sold ${c.pelts} pelts (+${pay} cr)`), beats: beat(w, c.id, `${c.name} sold ${c.pelts} pelts: +${pay} cr`, 'ok') }, c: { ...c, money: c.money + pay, pelts: 0 } };
+    }
+    case 'catch': {
+      const m = looseOf(w, c.id)!;
+      return { w: { ...w, loose: w.loose.filter((x) => x !== m), log: say(w, c, 'caught the MULE') }, c: { ...c, mule: { good: m.good, x: m.x, y: m.y, facing: m.facing, paid: m.paid }, trail: [{ x: m.x, y: m.y }, { x: c.x, y: c.y }] } };
     }
     default:
       return { w, c };
@@ -540,21 +740,23 @@ function act(w: World, c: Colonist, tun: Tunables): { w: World; c: Colonist } {
 
 // --- Bots --------------------------------------------------------------------------------------
 
-/** Cheapest path in tiles (4-way, cost 1/terrain), avoiding the store's tile and impassable land; null if none. */
-export function pathTo(w: World, tun: Tunables, from: P, to: P): P[] | null {
+/** Cheapest path in tiles (4-way, cost 1/terrain) for `who`, avoiding the store's tile and what is shut to it; null if none. */
+export function pathTo(w: World, tun: Tunables, from: P, to: P, who: string | null = null): P[] | null {
   const n = w.width * w.height;
   const idx = (x: number, y: number) => y * w.width + x;
+  const g = idx(to.x, to.y);
   const cost = (i: number) => {
     const t = w.tiles[i]!;
     if (t.terrain === 'store') return Infinity;
+    // The goal itself is always reachable: a plot of your own is never shut to you.
+    if (i !== g && !tileOpen(tun, t, who)) return Infinity;
     const m = terrainMult(tun, t.terrain);
-    return m > 0 ? 1 / m : Infinity;
+    return m > 0 ? 1 / m : 4;
   };
   const dist = new Array<number>(n).fill(Infinity);
   const prev = new Array<number>(n).fill(-1);
   const done = new Array<boolean>(n).fill(false);
   const s = idx(from.x, from.y);
-  const g = idx(to.x, to.y);
   dist[s] = 0;
   for (;;) {
     let u = -1;
@@ -581,7 +783,7 @@ export function pathTo(w: World, tun: Tunables, from: P, to: P): P[] | null {
   return out;
 }
 
-const toward = (from: P, to: P, near = 0.06): P => {
+export const toward = (from: P, to: P, near = 0.06): P => {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const d = Math.hypot(dx, dy);
@@ -590,10 +792,21 @@ const toward = (from: P, to: P, near = 0.06): P => {
 const centreOf = (r: Rect): P => units((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2);
 const WALKWAY_Y = units(0, (TOP.y1 + BOT.y0) / 2).y;
 
-type Goal = { kind: 'room'; room: HallRoom } | { kind: 'plot'; at: P } | { kind: 'store' } | { kind: 'door'; side: 'L' | 'R' } | { kind: 'idle' };
+type Goal = { kind: 'room'; room: HallRoom } | { kind: 'plot'; at: P } | { kind: 'shore'; at: P; stand: P } | { kind: 'store' } | { kind: 'door'; side: 'L' | 'R' } | { kind: 'mule'; at: P } | { kind: 'idle' };
+
+/** For a lake plot in shore mode, an open tile beside it to install from. */
+function shoreStand(w: World, tun: Tunables, plot: P, who: string): P | null {
+  for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+    const t = tileAt(w, plot.x + dx, plot.y + dy);
+    if (t && t.terrain !== 'store' && tileOpen(tun, t, who)) return { x: t.x, y: t.y };
+  }
+  return null;
+}
 
 function botGoal(w: World, c: Colonist, tun: Tunables): Goal {
   if (c.done) return { kind: 'idle' };
+  const loose = looseOf(w, c.id);
+  if (loose && !c.mule) return c.space === 'hall' ? { kind: 'door', side: loose.x < w.store.x + 0.5 ? 'L' : 'R' } : { kind: 'mule', at: { x: loose.x, y: loose.y } };
   const plot = freePlotsOf(w, c.id)[0];
   const side = (x: number): 'L' | 'R' => (x < w.store.x + 0.5 ? 'L' : 'R');
   const pub: Goal = c.space === 'hall' ? { kind: 'room', room: 'pub' } : { kind: 'store' };
@@ -608,14 +821,23 @@ function botGoal(w: World, c: Colonist, tun: Tunables): Goal {
     const g = tun.outfit[c.plan] <= c.money ? c.plan : affordable[0];
     return g ? { kind: 'room', room: g } : { kind: 'room', room: 'pub' };
   }
-  return c.space === 'hall' ? { kind: 'door', side: side(plot.x) } : { kind: 'plot', at: { x: plot.x, y: plot.y } };
+  if (c.space === 'hall') return { kind: 'door', side: side(plot.x) };
+  if (plot.terrain === 'lake' && tun.questions.lakeMode === 'shore') {
+    const stand = shoreStand(w, tun, plot, c.id);
+    return stand ? { kind: 'shore', at: { x: plot.x, y: plot.y }, stand } : pub;
+  }
+  return { kind: 'plot', at: { x: plot.x, y: plot.y } };
 }
 
 /** A bot's input from the world alone: where it is heading next, and whether it presses its action. */
 export function botInput(w: World, c: Colonist, tun: Tunables): Input {
-  const goal = botGoal(w, c, tun);
   const ready = c.botWait >= tun.botThinkSeconds * 1000;
   const press = (at: boolean): Input => (at ? { dir: { x: 0, y: 0 }, action: ready } : IDLE);
+  // A wolf encounter overrides any errand (wolves.ts); stunned, nothing; then the store buys pelts first.
+  if (c.encounter) return botWolfInput(w, c, tun);
+  if (c.stunnedUntil > w.t) return IDLE;
+  if (c.space === 'hall' && c.pelts > 0 && reachOf(w, c, tun).kind === 'sell') return press(true);
+  const goal = botGoal(w, c, tun);
   if (goal.kind === 'idle') return IDLE;
   if (c.space === 'hall') {
     const room = roomAt(c);
@@ -628,19 +850,26 @@ export function botInput(w: World, c: Colonist, tun: Tunables): Input {
   }
   const here = { x: Math.floor(c.x), y: Math.floor(c.y) };
   const side: 'L' | 'R' = c.x < w.store.x + 0.5 ? 'L' : 'R';
-  const goalTile = goal.kind === 'plot' ? goal.at : { x: side === 'L' ? w.store.x - 1 : w.store.x + 1, y: w.store.y };
+  const goalTile =
+    goal.kind === 'plot' ? goal.at : goal.kind === 'shore' ? goal.stand : goal.kind === 'mule' ? { x: Math.floor(goal.at.x), y: Math.floor(goal.at.y) } : { x: side === 'L' ? w.store.x - 1 : w.store.x + 1, y: w.store.y };
   if (here.x === goalTile.x && here.y === goalTile.y) {
-    if (goal.kind === 'plot') {
-      const centre = { x: goal.at.x + 0.5, y: goal.at.y + 0.5 };
-      if (Math.hypot(c.x - centre.x, c.y - centre.y) < 0.2) return press(true);
-      return { dir: toward(c, centre), action: false };
+    if (goal.kind === 'plot' || goal.kind === 'mule' || goal.kind === 'shore') {
+      // On the plot's centre; beside the loose MULE; at the shore's edge facing the lake plot.
+      const spot =
+        goal.kind === 'plot'
+          ? { x: goal.at.x + 0.5, y: goal.at.y + 0.5 }
+          : goal.kind === 'mule'
+            ? goal.at
+            : { x: goal.stand.x + 0.5 + (goal.at.x - goal.stand.x) * 0.3, y: goal.stand.y + 0.5 + (goal.at.y - goal.stand.y) * 0.3 };
+      if (Math.hypot(c.x - spot.x, c.y - spot.y) < (goal.kind === 'mule' ? 0.4 : 0.2)) return press(true);
+      return { dir: toward(c, spot), action: false };
     }
     // Line up on the door, then walk in through it.
     const d = doorOutside(w, side);
     if (Math.abs(c.y - d.y) > 0.1) return { dir: toward(c, { x: d.x, y: d.y }, 0.02), action: false };
     return { dir: { x: side === 'L' ? 1 : -1, y: 0 }, action: false };
   }
-  const path = pathTo(w, tun, here, goalTile);
+  const path = pathTo(w, tun, here, goalTile, c.id);
   if (!path || path.length < 2) return IDLE;
   const next = path[1]!;
   return { dir: toward(c, { x: next.x + 0.5, y: next.y + 0.5 }), action: false };
@@ -648,31 +877,59 @@ export function botInput(w: World, c: Colonist, tun: Tunables): Input {
 
 // --- The step ----------------------------------------------------------------------------------
 
-function stepColonist(w: World, c0: Colonist, input: Input, dtMs: number, tun: Tunables): { w: World; c: Colonist } {
+/** Moves a colonist by a direction for one step: across the map or the hall, through doors, the MULE following. */
+export function moveColonist(w: World, c0: Colonist, dir: P, dtMs: number, tun: Tunables, clamp?: (p: P) => P): Colonist {
   let c = c0;
+  const mag = Math.min(1, Math.hypot(dir.x, dir.y));
+  if (mag <= 0.05) return c.moving ? { ...c, moving: false } : c;
+  const len = Math.hypot(dir.x, dir.y);
+  const d = (speedOf(w, c, tun).perSecond * dtMs) / 1000;
+  const dx = (dir.x / len) * mag * d;
+  const dy = (dir.y / len) * mag * d;
+  const facing = dir.x > 0.05 ? 'right' : dir.x < -0.05 ? 'left' : c.facing;
+  if (c.space === 'map') {
+    const m = mapMove(w, tun, c, dx, dy);
+    if (m.enter) c = enterHall(c, m.enter, tun);
+    else {
+      const p = clamp ? clamp(m) : m;
+      c = { ...c, x: p.x, y: p.y, facing };
+    }
+  } else {
+    const m = hallMove(c, dx, dy);
+    c = m.exit ? leaveHall(w, c, m.exit, tun) : { ...c, x: m.x, y: m.y, facing };
+  }
+  // Standing on your own plot heals a bite.
+  if (c.bitten && c.space === 'map' && tileAt(w, c.x, c.y)?.owner === c.id) c = { ...c, bitten: false };
+  const last = c.trail[c.trail.length - 1];
+  const moved = c.x !== c0.x || c.y !== c0.y;
+  if (!last || Math.hypot(c.x - last.x, c.y - last.y) > 0.04) c = { ...c, trail: [...c.trail, { x: c.x, y: c.y }].slice(-48) };
+  return follow({ ...c, moving: moved }, tun);
+}
+
+function stepColonist(w0: World, c0: Colonist, input0: Input, dtMs: number, tun: Tunables): { w: World; c: Colonist } {
+  let w = w0;
+  let c = c0;
+  // Stunned: no move, no action.
+  const input = c.stunnedUntil > w.t ? IDLE : input0;
   let dir = input.dir;
   if (input.toward && input.toward.space === c.space) dir = toward(c, input.toward, 0.08);
-  const mag = Math.min(1, Math.hypot(dir.x, dir.y));
-  if (mag > 0.05) {
-    const len = Math.hypot(dir.x, dir.y);
-    const d = (speedOf(w, c, tun).perSecond * dtMs) / 1000;
-    const dx = (dir.x / len) * mag * d;
-    const dy = (dir.y / len) * mag * d;
-    const facing = dir.x > 0.05 ? 'right' : dir.x < -0.05 ? 'left' : c.facing;
-    if (c.space === 'map') {
-      const m = mapMove(w, tun, c, dx, dy);
-      c = m.enter ? enterHall(c, m.enter, tun) : { ...c, x: m.x, y: m.y, facing };
-    } else {
-      const m = hallMove(c, dx, dy);
-      c = m.exit ? leaveHall(w, c, m.exit, tun) : { ...c, x: m.x, y: m.y, facing };
+  if (c.encounter) {
+    const r = stepEncounter(w, c, { ...input, dir }, dtMs, tun);
+    w = r.w;
+    c = r.c;
+  } else {
+    c = moveColonist(w, c, dir, dtMs, tun);
+    if (input.action) {
+      const r = act(w, c, tun);
+      w = r.w;
+      c = r.c;
     }
-    const last = c.trail[c.trail.length - 1];
-    const moved = c.x !== c0.x || c.y !== c0.y;
-    if (!last || Math.hypot(c.x - last.x, c.y - last.y) > 0.04) c = { ...c, trail: [...c.trail, { x: c.x, y: c.y }].slice(-48) };
-    c = follow({ ...c, moving: moved }, tun);
-  } else if (c.moving) c = { ...c, moving: false };
-  c = { ...c, botWait: c.bot && mag <= 0.05 && !input.action ? c.botWait + dtMs : 0 };
-  if (input.action) return act(w, c, tun);
+    const roll = rollWolves(w, c, dtMs, tun);
+    w = roll.w;
+    c = roll.c;
+  }
+  const still = Math.hypot(dir.x, dir.y) <= 0.05;
+  c = { ...c, botWait: c.bot && still && !input.action ? c.botWait + dtMs : 0 };
   return { w, c };
 }
 
@@ -690,18 +947,22 @@ export function step(w0: World, inputs: Record<string, Input>, dtMs: number, tun
       continue;
     }
     const input = c0.bot ? botInput(w, c0, tun) : (inputs[c0.id] ?? IDLE);
+    // Later colonists read the earlier ones' new state, so the world they step on is the one being built.
+    w = { ...w, colonists: [...colonists, ...w0.colonists.slice(colonists.length)] };
     const r = stepColonist(w, c0, input, dtMs, tun);
     w = r.w;
     colonists.push(r.c);
   }
   w = { ...w, colonists };
+  w = stepBolts(w, dtMs, tun);
+  w = { ...w, fleeing: w.fleeing.filter((f) => f.until > w.t).map((f) => ({ ...f, x: f.x + (f.vx * dtMs) / 1000, y: f.y + (f.vy * dtMs) / 1000 })) };
   while (w.queue.length > 0 && w.queue[0]!.atMs <= w.t) {
     const [e, ...rest] = w.queue;
     w = { ...w, queue: rest };
     const handle = EVENT_HANDLERS[e!.kind];
-    w = handle ? handle(w, e!, tun) : { ...w, log: [...w.log, `${(w.t / 1000).toFixed(1)}s ${e!.kind} (a later slice: not built)`].slice(-40) };
+    w = handle ? handle(w, e!, tun) : { ...w, log: [...w.log, `${(w.t / 1000).toFixed(1)}s ${e!.kind} (a later slice: not built)`].slice(-60) };
   }
-  if (w.t >= tun.devSeconds * 1000 || w.colonists.every((c) => c.done)) w = { ...w, over: true, colonists: w.colonists.map((c) => ({ ...c, moving: false })) };
+  if (w.t >= tun.devSeconds * 1000 || w.colonists.every((c) => c.done)) w = { ...endBolt(w), over: true, colonists: w.colonists.map((c) => ({ ...c, moving: false, encounter: null })) };
   return w;
 }
 
@@ -709,7 +970,13 @@ export function step(w0: World, inputs: Record<string, Input>, dtMs: number, tun
 
 /** Drop a colonist on a tile of the map, to feel a land's speed (the tunables' test track). */
 export function teleport(w: World, id: string, at: P, tun: Tunables): World {
-  return { ...w, colonists: w.colonists.map((c) => (c.id === id ? arrive(c, 'map', at, 'right', tun) : c)) };
+  return { ...w, colonists: w.colonists.map((c) => (c.id === id ? { ...arrive(c, 'map', at, 'right', tun), encounter: null } : c)) };
 }
 
 export const setBot = (w: World, id: string, bot: boolean): World => ({ ...w, colonists: w.colonists.map((c) => (c.id === id ? { ...c, bot, botWait: 0 } : c)) });
+
+/** "Call the wolves now": a pack for this colonist, due in `inMs`, whatever the land or the cooldown. */
+export function callWolves(w: World, id: string, inMs = 0): World {
+  const queue = [...w.queue, { atMs: w.t + inMs, kind: 'wolves' as const, target: id, forced: true }].sort((a, b) => a.atMs - b.atMs);
+  return { ...w, queue };
+}
