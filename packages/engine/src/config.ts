@@ -1013,3 +1013,32 @@ export const AI_HANDS = {
     choiceMs: [150, 300] as [number, number],
   },
 };
+
+/** The language model that decides for Smart AI seats, and its limits. */
+export const BRAIN = {
+  /** The model that decides and talks. */
+  model: 'claude-haiku-5-5',
+  /** A Smart seat's model budget per game, in US dollars; past it the seat plays Classic. */
+  seatBudgetUsd: 0.06,
+  /** Hard ceiling, in US dollars, for the latency spike command. */
+  spikeCapUsd: 0.05,
+  /** US dollars per million tokens. */
+  pricesPerMTok: { input: 0.1, cacheRead: 0.01, cacheWrite: 0.125, output: 0.5 },
+  /** Reply cap, in tokens. */
+  maxTokens: 200,
+  /**
+   * Prompt characters per token, as the budget assumes. Haiku 5.5 measured 2.56 to 2.65 on real prompts; this sits
+   * below the lowest so the worst case never undercounts.
+   */
+  charsPerToken: 2.5,
+  /** Longest chat line an AI says, in characters. */
+  maxLineChars: 140,
+  /** Most chat lines per AI seat per game month: one each for land, development and the auction, since a seat says at most one a phase. */
+  linesPerMonth: 3,
+  /** Longest quoted table-talk line put in a prompt, in characters. */
+  maxTalkChars: 200,
+  /** How many of the latest table-talk lines an AI keeps for its next prompt; each one costs prompt tokens. */
+  talkLines: 6,
+  /** How long a land decision may wait for the model, in ms; planning lasts up to 45 s. */
+  landTimeoutMs: 5_000,
+} as const;

@@ -25,9 +25,6 @@ const PENDING = new Set<string>([
   'packages/engine/src/events.ts',
   'packages/engine/src/observe.ts',
   'packages/engine/src/production.ts',
-  // WS2.
-  'packages/ai/src/brain.ts',
-  'packages/ai/src/decider.ts',
 ]);
 /** A literal that is not balance says why, on its line or the line above. */
 const MARKER = /\/\/ literal-ok: (.{10,})/;
