@@ -11,7 +11,7 @@ import { check, claimAPlot, headerSlot, held, launch, PHONE, startServer, TV, ty
 import { planningIsTheHub } from './hub-steps';
 import { readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
-import { fedPlayerFillsAFullHoloBar, hungryPlayerSeesAShortOrangeBar, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
+import { fedPlayerSeesNoHunger, hungryPlayerSeesHerPace, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
 import { specialFieldsShowTheirGlyphs } from './special-steps';
 import { doneThroughTheElection, doubleTapZoomsToYourLand, moveDialogOpensInProduction, moveDialogOutlivedThePhase, noZoomBeforeYourFirstPlot, thePhonePicksRose, theSeatMovesToAnotherDevice, theTvDrawsRose, watchIntents, zoomButtonOnceYouOwnAPlot } from './table-steps';
 
@@ -38,6 +38,8 @@ const within = (ms: number) => ms * PHASE_SCALE + 3_000;
 /** A good's walk, its clock slowed the whole time by trading. */
 const AUCTION_STAGE_MS = within(WALK.goodMs / WALK.tradeClockRate);
 const PRESS_MS = 2_000;
+/** How long the phone has to find Ready and press its way out of planning, which has no clock and waits for it. */
+const READY_MS = 7_500;
 /** The auction offers at most 9 goods of 3 stages each; more Done presses than that means it is not moving on. */
 const MAX_AUCTION_PRESSES = 40;
 /** The host sits in seat 1. */
@@ -112,7 +114,7 @@ try {
   console.log(`election: ${await doneThroughTheElection(ctx, within(POLITICS.nominateMs + POLITICS.ballotMs + POLITICS.revealMs))}`);
   await theTvDrawsRose(ctx, 'planning');
   await specialFieldsShowTheirGlyphs(ctx);
-  await readyThroughTheElection(phone, within(PHASE_MS.planning));
+  await readyThroughTheElection(phone, READY_MS);
   const claim = phone.getByRole('button', { name: /CLAIM/ });
   await claim.waitFor({ timeout: 5_000 });
   check(await claim.isVisible(), 'CLAIM button visible');
@@ -133,7 +135,7 @@ try {
   await storeIsOneHallWithTwoRows(phone, within(PHASE_MS.landGrant));
   // B-AC-15 and B-AC-16: the store says what to do next, and the MULE is a character.
   await theCorralGlowsWithNoMule(phone, server, code);
-  await fedPlayerFillsAFullHoloBar(phone);
+  await fedPlayerSeesNoHunger(phone, server, code);
   await outfittersOpenWithAnEmptyMule(phone);
   console.log(`store hall fills the stage: ${await theLedMuleLightsUp(phone, server, code)}`);
   await checkOwnsAPlot(phone);
@@ -163,7 +165,7 @@ try {
   await readyIfStillPlanning(phone);
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 2);
-  await hungryPlayerSeesAShortOrangeBar(phone, within(PHASE_MS.landGrant));
+  await hungryPlayerSeesHerPace(phone, server, code, within(PHASE_MS.landGrant));
   await goToThePub(phone);
   const moveLink = await moveDialogOpensInProduction(ctx, within(PHASE_MS.development));
   // B-AC-6, B-AC-7 and B-AC-8: month 2's show, with the seed's event.
@@ -199,14 +201,14 @@ try {
 process.exit(0);
 
 /**
- * Presses "I'm ready" while planning still shows. A hook may use most of
- * planning, which can then end on its own clock first; that skips the press,
- * and the phase-order check still sees planning.
+ * Presses "I'm ready" while planning still shows. Planning has no clock, so it
+ * waits for this press; if a hook already ended it, the press is skipped and
+ * the phase-order check still sees planning.
  */
 async function readyIfStillPlanning(phone: Page): Promise<void> {
   const ready = phone.locator('[data-phase=planning]').getByRole('button', { name: "I'm ready" });
   const over = phone.locator('[data-phase]:not([data-phase=planning])');
-  await ready.or(over).first().waitFor({ timeout: within(PHASE_MS.planning) });
+  await ready.or(over).first().waitFor({ timeout: READY_MS });
   if (await over.count()) return;
   try {
     await ready.click({ timeout: PRESS_MS });
@@ -236,7 +238,7 @@ async function checkOwnsAPlot(phone: Page): Promise<void> {
 
 /** Waits until the phone has moved past planning and the land grant. */
 async function pastTheLandGrant(phone: Page): Promise<void> {
-  await phone.locator('[data-phase]:not([data-phase=planning]):not([data-phase=landGrant])').waitFor({ timeout: within(PHASE_MS.planning + PHASE_MS.landGrant) });
+  await phone.locator('[data-phase]:not([data-phase=planning]):not([data-phase=landGrant])').waitFor({ timeout: READY_MS + within(PHASE_MS.landGrant) });
 }
 
 /** Development: walk into the pub, which ends the human's turn. */

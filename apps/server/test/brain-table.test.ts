@@ -23,9 +23,15 @@ const CODE = 'TABLE';
  * A shorter phase scale breaks them: the land grant's tick does not scale with it, so the AIs end up with no land and
  * every develop or trade decision has one option. If a strategist change moves them, pick a seed where they hold.
  */
-const SEED = 9;
+const SEED = 10;
 /** Game time per step of the fake clock; every timer due in a step runs, with promises settled between them. */
 const STEP_MS = 500;
+/**
+ * How long the players look at the planning screen before they all press Ready. Planning has no clock, and an AI's
+ * land decision, asked as planning opens, settles when the first plot lights: a table that readies at once leaves the
+ * model well under its usual latency.
+ */
+const PLANNING_READY_MS = 3_000;
 /** Longer than any game these tests play (≤ 2 months, phaseScale ≤ 1). */
 const GAME_LIMIT_MS = 30 * 60_000;
 /** Twice the longest a model call may wait (land's timeout), so a call still open at finish has settled. */
@@ -53,11 +59,14 @@ interface TableOptions {
 
 let dir: string;
 let rooms: Room<MuleIntent, MuleView>[];
+/** Each table's Ready step: one table's clock runs every table's game, so each one's phones must press Ready. */
+let readies: (() => void)[];
 
 beforeEach(() => {
   sdkModule.built = [];
   sdkModule.create = null;
   rooms = [];
+  readies = [];
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'brain-table-'));
   vi.useFakeTimers();
 });
@@ -124,9 +133,27 @@ function table(options: TableOptions) {
   if (options.start ?? true) send(host, { t: 'start' });
 
   const finished = () => room.viewFor(null).game?.finished ?? false;
+  /**
+   * Planning has no clock: once the table has sat in it for PLANNING_READY_MS, every phone presses Ready, as its
+   * player would. Only while planning lasts, since a Ready means something else in the next phase.
+   */
+  let planningFor = 0;
+  const readyInPlanning = () => {
+    if (game?.viewFor(null).phase !== 'planning') {
+      planningFor = 0;
+      return;
+    }
+    planningFor += STEP_MS;
+    if (planningFor < PLANNING_READY_MS) return;
+    for (const phone of phones) if (game?.viewFor(null).phase === 'planning') send(phone, { t: 'intent', intent: { type: 'ready' } });
+  };
+  readies.push(readyInPlanning);
   /** Runs the fake clock until `done`, or the game's end; false if `done` never held. */
   const runUntil = async (done: () => boolean, limitMs = GAME_LIMIT_MS) => {
-    for (let t = 0; t < limitMs && !done(); t += STEP_MS) await vi.advanceTimersByTimeAsync(STEP_MS);
+    for (let t = 0; t < limitMs && !done(); t += STEP_MS) {
+      await vi.advanceTimersByTimeAsync(STEP_MS);
+      for (const ready of readies) ready();
+    }
     return done();
   };
   return {
@@ -420,7 +447,7 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
   });
 
   it('INV-heard: heard from an unknown speaker, or to an unknown seat, does not throw, before or after start; an AI\'s own line goes to the other AIs only', async () => {
-    const lobby = new MuleGame({ now: () => 0, schedule: () => () => {}, changed: () => {} }, SEED, { brain: createBrain({ gameId: 'g-lobby', env: {} }) });
+    const lobby = new MuleGame({ now: () => 0, schedule: () => () => {}, changed: () => {}, hostId: () => null }, SEED, { brain: createBrain({ gameId: 'g-lobby', env: {} }) });
     expect(() => lobby.heard?.('s9', 'hello')).not.toThrow();
 
     const sdk = fakeSdk(() => reply('A', ''));

@@ -34,6 +34,11 @@ export interface GameContext {
    * not let it throw: from a timer, a throw is unhandled.
    */
   say?(from: string, text: string, to?: string): void;
+  /**
+   * The seat that hosts the table: the first connected human, passing to the next while the host is disconnected and
+   * back when they return; the first human seat if none is connected; null with no human seated.
+   */
+  hostId(): string | null;
 }
 
 /** The part a game supplies. The room does everything else. */
@@ -152,6 +157,7 @@ export class Room<Intent, View> {
       },
       changed: () => this.broadcast(),
       say: (from, text, to) => void this.deliver(from, text, to),
+      hostId: () => this.hostId,
     });
   }
 
