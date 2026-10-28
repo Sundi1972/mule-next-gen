@@ -107,8 +107,9 @@ Living weather, plus phone-only play). WS1 sends the hunk to WS8, with WS6 copie
 owner; no action). The screens are built in parallel with Tasks 3-9.
 
 **Named edits beyond the authority lists (PM-approved, 28 Oct):** a required `phase` breaks two `MonthEvent`
-literals in WS3's `apps/server/test/production-view.test.ts`; Task 2 adds `phase: 'production'` to them, and WS3
-reviews them with the types.ts hunk.
+literals in WS6's `apps/server/test/production-view.test.ts` (born in WS6's production view, 583d3dc; SEAMS line 480;
+first named here as WS3's, corrected by WS3); Task 2 adds `phase: 'production'` to them, and WS6 reviews them. WS3
+reviews the types.ts hunk.
 
 ---
 
@@ -136,8 +137,10 @@ reviews them with the types.ts hunk.
       Run: `pnpm --filter @mule/engine exec vitest run test/events.test.ts -t "T-AC-3"`
 - [ ] **Step 3: Implement** `phase: Phase` on `MonthEvent` per spec §3; `buildEvent` sets `'production'`.
 - [ ] **Step 4: Run events.test.ts and `pnpm typecheck`; expect PASS / exit 0.**
-- [ ] **Step 5: Commit** (red then green); send WS3 the types.ts hunk and the production-view.test.ts fixture lines;
+- [x] **Step 5: Commit** (red then green); send WS3 the types.ts hunk and WS6 the production-view.test.ts fixture lines;
       send WS8 the contract hunk (primary reviewer) with WS6 copied as an FYI; tell the PM the contract is frozen.
+      Done 28 Oct: red 6046578, green 0582373; WS3 OK on types.ts at 0582373 (on condition that CI's check is green on
+      the PR head); WS6 OK on the fixture lines at 0582373; WS8 OK on the contract (asks settled as AM-2 and AM-3).
 
 ### Task 3: The rows and the chance — C1 (RULE-1)
 
@@ -241,7 +244,8 @@ Before suggesting merge of `ws1-events-roller` into `ws1-events`:
 - [ ] Tests are named after the AC id; `trace-check.sh origin/feat/strategist...HEAD` reports no untraced test
 - [ ] Each failing-test commit precedes its passing commit
 - [ ] The contract (`MonthEvent.phase`, several events) is exercised by a consumer: EM-T-AC-3 reads the report as the screens will
-- [ ] WS3 OK on the types.ts hunk
+- [ ] WS3 OK on the types.ts hunk (given at 0582373, conditional on CI's check green on the PR head); WS6 OK on the
+      production-view.test.ts fixture lines (given at 0582373)
 - [ ] No new `@ts-ignore` / `eslint-disable` without a reason on the same line; every new number is in `EVENTS` (HC-1)
 - [ ] `pnpm typecheck && pnpm test` exit 0 on the sub-branch; CI green
 
