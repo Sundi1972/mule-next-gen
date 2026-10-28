@@ -4,8 +4,10 @@
  */
 import { DEV_STEER, WOLVES } from '../config.js';
 import { pace } from '../dev-walk.js';
+import { tileAt } from '../grid.js';
 import type { GameState, Outfit, Tile } from '../types.js';
 import { HALL, HALL_DOORS, type HallDoor, type HallPlan, type HallPoint, type HallRect } from './hall.js';
+import { terrainShare } from './speed.js';
 
 export type Space = 'map' | 'hall';
 
@@ -100,12 +102,23 @@ export function leadFor(state: GameState, c: Pick<FloorColonist, 'id' | 'x' | 'y
   return { good, x: c.lead?.x ?? c.x, y: c.lead?.y ?? c.y };
 }
 
-/** The floor at development start: each colonist outside a store door, the seats taking the two doors in turn. */
+/** The door a colonist uses onto the map: `door`, or the other one when the ground outside `door` is blocked. */
+export function openDoor(state: GameState, door: HallDoor, cfg: FloorConfig): HallDoor {
+  const open = (d: HallDoor) => {
+    const at = doorOutside(state, d, cfg);
+    const tile = tileAt(state.tiles, state.width, Math.floor(at.x), Math.floor(at.y));
+    return tile !== undefined && terrainShare(tile.terrain, cfg) > 0;
+  };
+  const other = HALL_DOORS.find((d) => d !== door)!;
+  return open(door) || !open(other) ? door : other;
+}
+
+/** The floor at development start: each colonist outside a store door, the seats taking the open doors in turn. */
 export function buildFloor(state: GameState, cfg: FloorConfig): DevFloor {
   return {
     tick: 0,
     colonists: state.players.map((p, seat): FloorColonist => {
-      const door = HALL_DOORS[seat % HALL_DOORS.length]!;
+      const door = openDoor(state, HALL_DOORS[seat % HALL_DOORS.length]!, cfg);
       const at = doorOutside(state, door, cfg);
       return {
         id: p.id,

@@ -7,6 +7,7 @@ import {
   HALL,
   speedOf,
   stepFloor,
+  terrainShare,
   type DevFloor,
   type FloorColonist,
   type FloorConfig,
@@ -66,9 +67,9 @@ describe('the dev floor: speed', () => {
       ['swamp', 'zip', onTile(2, 0), {}, 0.78, 2],
       ['leading a MULE on plains', 'zip', { ...onTile(0, 1), ...leading }, {}, 1.41, 2],
       ['bitten, on plains', 'zip', { ...onTile(0, 1), bitten: true }, {}, 0.78, 2],
-      ['a lake, worked from its shore: 0 blocks', 'zip', onTile(3, 0), {}, 0, 9],
+      ['standing on a lake worked from its shore: 1, to get off it', 'zip', onTile(3, 0), {}, 1.5625, 9],
       ['a lake, waded', 'zip', onTile(3, 0), { lakeMode: 'wade' }, 0.47, 2],
-      ['mountains, impassable', 'zip', onTile(1, 0), { mountainsImpassable: true }, 0, 9],
+      ['standing on mountains made impassable: their 0.4, to get off them', 'zip', onTile(1, 0), { mountainsImpassable: true }, 0.625, 9],
       ['an AI Bramblet on plains, bots at 0.8', 'bot', onTile(0, 1), { botSpeed: 0.8 }, 1, 9],
       // The hall: 8.893 units from the left door's spot to the corral's, in floorSeconds 3: 2.9643 units a second.
       ['in the hall: door to corral in 3 s, × the Zipwing', 'zip', { space: 'hall', x: 8, y: 6 }, {}, 3.7054, 4],
@@ -78,6 +79,8 @@ describe('the dev floor: speed', () => {
       const c = placed(floor, id, change).colonists.find((x) => x.id === id)!;
       expect(speedOf(c, state, withSteer(cfg, steer)), label).toBeCloseTo(expected, digits);
     }
+    expect(terrainShare('lake', cfg), 'a lake, worked from its shore: 0 blocks it').toBe(0);
+    expect(terrainShare('mountains', withSteer(cfg, { mountainsImpassable: true })), 'mountains, impassable: 0 blocks them').toBe(0);
 
     // Held for one second: the distance walked is the speed, a diagonal no faster, and a lake never entered.
     const second = (start: Partial<FloorColonist>, input: FloorInput): FloorColonist => {

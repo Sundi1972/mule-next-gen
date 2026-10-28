@@ -1,7 +1,7 @@
 import { tileAt } from '../grid.js';
 import type { GameState, Tile } from '../types.js';
 import { MS_PER_SECOND } from '../units.js';
-import { doorOutside, IDLE_INPUT, leadFor, middleOf, storeOf, type DevFloor, type FloorColonist, type FloorConfig, type FloorInput } from './floor.js';
+import { doorOutside, IDLE_INPUT, leadFor, middleOf, openDoor, storeOf, type DevFloor, type FloorColonist, type FloorConfig, type FloorInput, type FloorPoint } from './floor.js';
 import { HALL_DOORS, isOpenFloor, placeAt, type HallDoor, type HallPlan } from './hall.js';
 import { reachOf } from './reach.js';
 import { speedOf, terrainShare } from './speed.js';
@@ -47,18 +47,24 @@ function stepColonist(c: FloorColonist, state: GameState, input: FloorInput, dtM
 const inStore = (store: Tile, body: number, x: number, y: number) =>
   x > store.x - body && x < store.x + 1 + body && y > store.y - body && y < store.y + 1 + body;
 
-/** Whether a colonist may stand here: clear of the store's walls, and every tile its body touches on the map and open. */
-function passable(state: GameState, cfg: FloorConfig, x: number, y: number): boolean {
+/** The map tiles under a body standing at p, one under each of its corners; undefined off the map's edge. */
+function underfoot(state: GameState, body: number, p: FloorPoint): (Tile | undefined)[] {
+  const corners = [[p.x - body, p.y - body], [p.x + body, p.y - body], [p.x - body, p.y + body], [p.x + body, p.y + body]] as const;
+  return corners.map(([cx, cy]) => tileAt(state.tiles, state.width, Math.floor(cx), Math.floor(cy)));
+}
+
+/**
+ * Whether a colonist standing at `from` may step to (x, y): clear of the store's walls, and every tile its body
+ * touches on the map and open. Land under it at `from` never blocks it, so one on land it may not enter walks off it.
+ */
+function passable(state: GameState, cfg: FloorConfig, from: FloorPoint, x: number, y: number): boolean {
   const body = cfg.steer.bodyTiles;
   if (inStore(storeOf(state), body, x, y)) return false;
-  for (const [cx, cy] of [[x - body, y - body], [x + body, y - body], [x - body, y + body], [x + body, y + body]] as const) {
-    const tile = tileAt(state.tiles, state.width, Math.floor(cx), Math.floor(cy));
-    // Off the map's edge there is no tile.
-    if (!tile) return false;
+  const standing = underfoot(state, body, from);
+  return underfoot(state, body, { x, y }).every(
     // Touching the store's tile is its walls' business, judged above.
-    if (tile.terrain !== 'store' && terrainShare(tile.terrain, cfg) <= 0) return false;
-  }
-  return true;
+    (tile) => tile !== undefined && (tile.terrain === 'store' || terrainShare(tile.terrain, cfg) > 0 || standing.includes(tile)),
+  );
 }
 
 /** On the map: each axis on its own, so a blocked step slides along the free one; into a door, into the hall. */
@@ -73,10 +79,10 @@ function mapMove(c: FloorColonist, dx: number, dy: number, state: GameState, cfg
     // Pushing straight into the store's side slides you along it onto the door, so the door is easy to find.
     if (door && dy === 0) {
       const slide = Math.max(-Math.abs(dx), Math.min(Math.abs(dx), doorY - y));
-      if (passable(state, cfg, x, y + slide)) y += slide;
+      if (passable(state, cfg, c, x, y + slide)) y += slide;
     }
-  } else if (passable(state, cfg, x + dx, y)) x += dx;
-  if (passable(state, cfg, x, y + dy)) y += dy;
+  } else if (passable(state, cfg, c, x + dx, y)) x += dx;
+  if (passable(state, cfg, c, x, y + dy)) y += dy;
   return { ...c, x, y };
 }
 
@@ -120,9 +126,11 @@ function enterHall(c: FloorColonist, door: HallDoor, hall: HallPlan): FloorColon
   return { ...c, space: 'hall', ...at, facing: door === 'doorL' ? 'right' : 'left', lead: c.lead && { ...c.lead, ...at } };
 }
 
+/** Out onto the map at a door, or at the other one when the ground outside it is blocked. */
 function leaveHall(c: FloorColonist, door: HallDoor, state: GameState, cfg: FloorConfig): FloorColonist {
-  const at = doorOutside(state, door, cfg);
-  return { ...c, space: 'map', ...at, facing: door === 'doorL' ? 'left' : 'right', lead: c.lead && { ...c.lead, ...at } };
+  const out = openDoor(state, door, cfg);
+  const at = doorOutside(state, out, cfg);
+  return { ...c, space: 'map', ...at, facing: out === 'doorL' ? 'left' : 'right', lead: c.lead && { ...c.lead, ...at } };
 }
 
 /** The MULE on its lead, pulled after its colonist to the rope's length. */

@@ -25,7 +25,9 @@ export function doorToCorral(hall: HallPlan): number {
 export function speedOf(c: FloorColonist, state: GameState, cfg: FloorConfig): number {
   const lead = c.lead ? cfg.steer.leadPace : 1;
   if (c.space === 'hall') return (doorToCorral(cfg.hall) / cfg.steer.floorSeconds) * c.pace * lead;
-  const ground = terrainShare(tileAt(state.tiles, state.width, Math.floor(c.x), Math.floor(c.y))!.terrain, cfg);
+  const terrain = tileAt(state.tiles, state.width, Math.floor(c.x), Math.floor(c.y))!.terrain;
+  // On land it may not enter, a colonist still walks at the land's listed speed, or 1 if it has none, to get off it.
+  const ground = terrainShare(terrain, cfg) || (terrain === 'store' ? 0 : cfg.steer.terrain[terrain]) || 1;
   const bitten = c.bitten ? cfg.wolves.bittenPace : 1;
   const bot = c.bot ? cfg.steer.botSpeed : 1;
   return cfg.steer.mapTilesPerSecond * ground * c.pace * lead * bitten * bot;

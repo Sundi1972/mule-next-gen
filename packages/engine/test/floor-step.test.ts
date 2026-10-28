@@ -29,6 +29,9 @@ const MAP = [
   '.............',
 ];
 
+/** MAP with a lake beside the store's left door. */
+const LAKE_MAP = MAP.map((row, y) => (y === 3 ? '.s..~S.......' : row));
+
 const SEED = 29;
 /** A development turn's worth of ticks: 50 s at DEV_STEER.tickMs. */
 const TICKS = 1_000;
@@ -92,11 +95,14 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-/** Every floor of a turn played from the seed, the game and the inputs frozen so that a write to either throws. */
-function play(seed: number, inputs: Script): { state: GameState; floors: DevFloor[] } {
-  const state = game(seed);
+/**
+ * Every floor of a turn played from the seed, the game and the inputs frozen so that a write to either throws. The
+ * floor is built under `built`, the config it is stepped under unless a test says otherwise.
+ */
+function play(seed: number, inputs: Script, map: readonly string[] = MAP, built = floorConfig(HALL)): { state: GameState; floors: DevFloor[] } {
+  const state = game(seed, map);
   const cfg = floorConfig(HALL);
-  let floor = buildFloor(state, cfg);
+  let floor = buildFloor(state, built);
   deepFreeze(state);
   deepFreeze(inputs);
   const floors = [deepFreeze(floor)];
@@ -108,8 +114,8 @@ function play(seed: number, inputs: Script): { state: GameState; floors: DevFloo
 }
 
 /**
- * Why a colonist stands where it may not: on a lake, in the store's walls, off the map or off the hall's floor; or
- * its MULE is further behind than the lead reaches.
+ * Why a colonist stands where it may not: any of its body on a lake, in the store's walls, off the map or off the
+ * hall's floor; or its MULE is further behind than the lead reaches.
  */
 function misplaced(state: GameState, floor: DevFloor): string[] {
   const store = state.tiles.find((t) => t.terrain === 'store')!;
@@ -121,7 +127,9 @@ function misplaced(state: GameState, floor: DevFloor): string[] {
       return HALL.floor.some((r) => c.x >= r.x0 && c.x <= r.x1 && c.y >= r.y0 && c.y <= r.y1) ? [] : [`${where}: off the hall's floor`];
     }
     if (c.x < 0 || c.y < 0 || c.x > state.width || c.y > state.height) return [`${where}: off the map`];
-    if (state.tiles[Math.floor(c.y) * state.width + Math.floor(c.x)]?.terrain === 'lake') return [`${where}: on a lake`];
+    const body = DEV_STEER.bodyTiles;
+    const feet = [[c.x - body, c.y - body], [c.x + body, c.y - body], [c.x - body, c.y + body], [c.x + body, c.y + body]];
+    if (feet.some(([x, y]) => state.tiles[Math.floor(y!) * state.width + Math.floor(x!)]?.terrain === 'lake')) return [`${where}: on a lake`];
     if (c.x > store.x && c.x < store.x + 1 && c.y > store.y && c.y < store.y + 1) return [`${where}: in the store's walls`];
     return [];
   });
@@ -142,6 +150,20 @@ describe('the dev floor: the step', () => {
     expect(spaces(3, D_LEGS.at(-1)![0]), "'d' slid along the store's side onto its door, and through").toEqual(['map', 'hall', 'map']);
     const facing = (t: number) => first.floors[t]!.colonists[3]!.facing;
     expect([facing(30), facing(70)], "'d' faces the way it walks: left, then right").toEqual(['left', 'right']);
+
+    // A lake beside the store's left door: nobody starts on it, and that door lets out at the right door.
+    const lake = play(SEED, inputs, LAKE_MAP);
+    expect(lake.floors.flatMap((f) => misplaced(lake.state, f)), 'beside a lake').toEqual([]);
+    const outLeft = lake.floors.slice(1).flatMap((f, t) => f.colonists.filter((c, i) => {
+      const was = lake.floors[t]!.colonists[i]!;
+      return c.space === 'map' && was.space === 'hall' && placeAt(was, HALL) === 'doorL';
+    }));
+    expect(outLeft.length, "out through the lake's door").toBeGreaterThan(0);
+    // Built while lakes were waded, stepped with them worked from the shore: those standing in it walk out, and stay out.
+    const waded = play(SEED, inputs, LAKE_MAP, { ...floorConfig(HALL), steer: { ...DEV_STEER, lakeMode: 'wade' } });
+    const wet = waded.floors.map((f) => misplaced(waded.state, f));
+    expect(wet[0]!.length, 'in the lake at the start').toBe(2);
+    expect(wet.slice(1_000 / DEV_STEER.tickMs).flat(), 'out of it within a second, for good').toEqual([]);
 
     // One input changed at one tick: 'a', standing still in the corner, steps right once.
     const changed = inputs.map((tick, t) => (t === 700 ? { ...tick, a: go(1, 0) } : tick));
