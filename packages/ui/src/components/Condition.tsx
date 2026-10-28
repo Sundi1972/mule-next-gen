@@ -40,6 +40,7 @@ export type HungerLevel = 0 | 1 | 2 | 3;
 export const HUNGER_WORD = ['Fed', 'Peckish', 'Hungry', 'Starving'] as const;
 
 export type PaceTone = 'ok' | 'warn' | 'alert';
+const TONE_TEXT: Record<PaceTone, string> = { ok: 'text-ok', warn: 'text-warn', alert: 'text-alert' };
 type TagSize = 'phone' | 'tv' | 'wide';
 
 /** How long a thought bubble shows, in ms (display timing, not balance). */
@@ -323,12 +324,26 @@ export function ThoughtBubble({
   );
 }
 
-/** The one development clock, the same on every screen: big, labelled as everyone's, red in its last seconds. */
-export function SharedClock({ seconds, total, size = 'phone' }: { seconds: number; total: number; size?: 'phone' | 'tv' }) {
+/**
+ * The one development clock, the same on every screen: big, labelled as everyone's, red in its last seconds. With
+ * `pace`, a small phone's rail shows your pace on the label's line, where YourPace would fall under the fold.
+ */
+export function SharedClock({ seconds, total, size = 'phone', pace }: { seconds: number; total: number; size?: 'phone' | 'tv'; pace?: { title: string; tone: PaceTone } }) {
   const tv = size === 'tv';
   return (
     <div className="flex flex-col gap-1" data-testid="shared-clock">
-      <span className={cx('label-caps', tv ? 'text-base!' : 'text-[10px]!')}>{tv ? "Everyone's time" : "Everyone's time · one clock"}</span>
+      {tv ? (
+        <span className="label-caps text-base!">Everyone's time</span>
+      ) : pace ? (
+        <span className="label-caps text-[10px]!">
+          <span className="@min-[1100px]/shell:hidden">
+            Everyone's time · <span className={TONE_TEXT[pace.tone]}>{pace.title}</span>
+          </span>
+          <span className="hidden @min-[1100px]/shell:inline">Everyone's time · one clock</span>
+        </span>
+      ) : (
+        <span className="label-caps text-[10px]!">Everyone's time · one clock</span>
+      )}
       <TimeBar seconds={seconds} total={total} size={tv ? 'tv-clock' : 'phone-clock'} urgentSeconds={URGENT_SECONDS} />
     </div>
   );
@@ -339,7 +354,7 @@ export function YourPace({ condition, rule, food }: { condition: Condition; rule
   const l = paceLine(condition, rule, food);
   return (
     <div className="flex flex-col gap-0.5" data-testid="your-pace" data-tone={l.tone}>
-      <span className={cx('font-display text-sm font-semibold leading-tight @min-[1100px]/shell:text-lg', l.tone === 'ok' ? 'text-ok' : l.tone === 'warn' ? 'text-warn' : 'text-alert')}>
+      <span className={cx('font-display text-sm font-semibold leading-tight @min-[1100px]/shell:text-lg', TONE_TEXT[l.tone])}>
         {l.title}
       </span>
       {/* A sideways phone's rail has room for the line, not the why: the why shows from a laptop up, and on the start card. */}

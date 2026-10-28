@@ -111,11 +111,13 @@ export function Develop() {
       fill
       rail={
         <>
-          {/* The time first, then what your condition does to it: both above the fold on a small phone. */}
+          {/* The time first, then what your condition does to it: on a small phone both on the clock, above the fold. */}
           {place === 'store' && (
             <>
-              <SharedClock seconds={seconds} total={Math.max(me.devSeconds, 1)} />
-              <YourPace condition={condition} rule={DEV_WALK} food={food} />
+              <SharedClock seconds={seconds} total={Math.max(me.devSeconds, 1)} pace={paceLine(condition, DEV_WALK, food)} />
+              <div className="hidden @min-[1100px]/shell:block">
+                <YourPace condition={condition} rule={DEV_WALK} food={food} />
+              </div>
             </>
           )}
           <div className="flex items-center gap-2.5 @min-[1100px]/shell:text-lg" data-testid="mule">
