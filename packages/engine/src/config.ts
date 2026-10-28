@@ -722,8 +722,11 @@ export const LOTS = {
  * LOTS' clocks.
  */
 export const PHASES = {
-  /** Planning: the hub, listings, and in election months the election first. */
-  planningMs: 45_000,
+  /**
+   * Planning: the hub, listings, and in election months the election first. null: planning waits for every player's
+   * Ready or the host's Continue; a number restores a timer.
+   */
+  planningMs: null as number | null,
   /** The land grant: the light sweeps the free plots. */
   landGrantMs: 60_000,
   /** Production: the show of what each plot made. */

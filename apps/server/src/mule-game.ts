@@ -75,12 +75,13 @@ import { boardRange, landAuctionView, listingView, lotNews } from './land-auctio
 import { electionNews, myPoliticsView, politicsView, resultShown } from './politics-view.js';
 
 /**
- * The longest each phase lasts, in milliseconds, from the engine's PHASES. The
+ * The longest each phase lasts, in milliseconds, from the engine's PHASES.
+ * Planning's is null: it has no clock and waits for every player's Ready. The
  * auction has no entry: it runs good by good on its own clocks (WALK), stepped
  * by the server every WALK.tickMs. The land auction runs the same way, lot by
  * lot on its own clocks (LOTS).
  */
-export const PHASE_MS: Record<Exclude<Phase, 'gameOver' | 'auction' | 'landAuction'>, number> = {
+export const PHASE_MS: { planning: number | null } & Record<Exclude<Phase, 'gameOver' | 'auction' | 'landAuction' | 'planning'>, number> = {
   planning: PHASES.planningMs,
   landGrant: PHASES.landGrantMs,
   development: DEVELOPMENT.fullSeconds * 1_000,
@@ -539,8 +540,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     if (state.phase === 'upkeep') this.reportUpkeep();
   }
 
+  /** Ends the phase when its PHASE_MS runs out; a phase whose PHASE_MS is null has no clock and waits for Ready. */
   private startPhaseTimer(phase: keyof typeof PHASE_MS): void {
-    const ms = PHASE_MS[phase] * this.phaseScale;
+    const length = PHASE_MS[phase];
+    this.phaseEndsAt = null;
+    if (length === null) return;
+    const ms = length * this.phaseScale;
     this.phaseEndsAt = this.ctx.now() + ms;
     this.cancels.push(
       this.ctx.schedule(ms, () => {
