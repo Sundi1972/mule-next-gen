@@ -388,7 +388,7 @@ describe('the election runs first in planning', () => {
     expect(election(g.game).stage).toBe('announce');
     g.game.handle('lena', { type: 'continue' });
     expect([...election(g.game).done].sort(), 'every human, the host too; never the AI seat').toEqual(['brix', 'lena', 'ossa']);
-    expect(g.game.viewFor(null).news[0], 'the host is not named').toBe('Lena opened the ballot without Brix and Ossa.');
+    expect(g.game.viewFor(null).news[0], 'the host is not named; nobody runs, so no ballot opens').toBe('Lena continued without Brix and Ossa.');
     g.advance(WALK.tickMs);
     expect(election(g.game).stage, 'the last call waits for the AI seat').toBe('announce');
 

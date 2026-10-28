@@ -259,7 +259,9 @@ today        one news line in every stage: "Lena continued without Kai".
              anchors: apps/server/src/mule-game.ts::MuleGame continuePlanning
              verified_by: read
 tomorrow     MUST say "Lena opened the ballot without Kai" in announce, "Lena closed the ballot
-             without Kai" in the ballot, and "Lena continued without Kai" in planning proper.
+             without Kai" in the ballot, and "Lena continued without Kai" in planning proper. In an
+             announce with no contested office there is no ballot to open, so it says "continued"
+             (PM ruling 2026-10-29).
 seam         mule-game.ts (WS3 named edit)
 mechanism    in_place
 pin          T-AC-64's server rows, restated with the new words
