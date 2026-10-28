@@ -196,7 +196,9 @@ RULE-2 · What fires in a phase                                                s
 3  a row whose "only if" finds nothing to hit fires nothing (a flood needs a river farm; pests need a Food plot)
 4  excludes: if both of a pair fired, the seeded dice keep one (drought/flood, dust storm/solar flare)
 5  onceAMonth (default true): a row that fired earlier this month doesn't fire again
-6  effects apply in the order fired; two on one plot both apply; output never below 0
+6  effects apply in the order fired; two on one plot both apply; output never below 0. Each event's
+   plots[].delta is its own change, worked on the output the earlier events left; a plot the event
+   reaches is listed even when its delta is 0, so the screens rebuild a plot by adding deltas in order
 seeds           each roll from (seed, month, phase, row key, and the player or plot), so a replay is exact
 ```
 
@@ -205,7 +207,9 @@ seeds           each roll from (seed, month, phase, row key, and the player or p
 MonthEvent · MODIFIED · not breaking: gains `phase: Phase` (a named edit in WS3's `types.ts`, WS3 reviews; produced
 by C2). MonthReport.events may now hold several events, in the order they fired; readers
 that take `events[0]` keep working but show only the first (WS6, §9). Example: a production month with a drought
-and a pest swarm on p2's farms gives two MonthEvents, both phase 'production', in that order.
+and a pest swarm on p2's farms gives two MonthEvents, both phase 'production', in that order. Stacking (RULE-2
+step 6): a plot's `delta` in each event is that event's own change on what the earlier events left, and a plot an
+event reaches is listed even at delta 0. A Food plot making 1 hit by a drought and then acid rain lists −1, then 0.
 
 ## §4 · Failure & Ops `[handoff]`
 
@@ -285,6 +289,21 @@ did       grounded every anchor against the merged tree before planning.
           §0.1's reason was checked and holds: the catalogue's pest swarm, wildfire, bumper harvest and sickness roll
           for each player, and sickness rolls in development.
 goal      G-1 (the same goal; the slices are accurate to the code)
+```
+
+```
+AM-2 · 2026-10-28 · Task 2's freeze point, WS8's review (primary reviewer, PM ruling)
+
+target    §2 RULE-2 step 6 · §3
+did       wrote down the stacking rule the screens rebuild a plot from: each event's plots[].delta is
+          its own change, worked on the output the earlier events left, and a plot the event reaches
+          is listed even when its delta is 0. Both already hold in the code: buildEvent lists every
+          plot an event reaches with delta 0, and production.ts::runProduction fills
+          delta = eventOutput(key, before) − before, with before summing the parts so far, so
+          chaining events (Task 6) keeps the rule. EM-T-AC-3 asserts the delta-0 entry.
+because   WS8 asked for it at the freeze point: the screens add a plot's deltas in order, and must
+          know whether a plot at 0 is listed
+goal      G-1 (unchanged; the contract is clearer, not different)
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`

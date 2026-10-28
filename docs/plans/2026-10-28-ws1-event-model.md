@@ -194,6 +194,7 @@ reviews them with the types.ts hunk.
 - [ ] **Step 1: Write `EM-T-AC-3: two events on one plot both apply in order, never below 0, and an excluded pair keeps one`**
       at the month report and the plot's line, with rows forced.
       - Drought and acid rain on a Food plot that makes 1: both listed in that order, and the plot makes 0, not −1.
+        The plot's deltas are −1 (drought), then 0 (acid rain), and acid rain still lists the plot (spec §8 AM-2).
       - Drought and flood: exactly one listed, the same one on replay.
       - The line's parts still sum to `made`; the events spec's T-AC-5 INV is the pin.
 - [ ] **Step 2: Run; expect FAIL** (production applies at most one event).
