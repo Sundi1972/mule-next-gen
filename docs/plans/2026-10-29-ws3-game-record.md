@@ -250,12 +250,13 @@ Before suggesting a merge of `ws3-record-pr1` into `ws3-auctions`:
 
 **ACs verified:** T-AC-10. **Spec sections consumed:** §1 C6, §3 `NoticeEntry`, RULE-6 (notices skipped).
 
-- [ ] **Step 1: Write `T-AC-10: claims, trades and lot sales appear as notices, and a replay without them is identical`** (red).
+- [ ] **Step 1: Write `T-AC-10: claims, declarations, trades (the ship included) and lot sales appear as notices, phaseNotices() holds them with recording off, and a replay without them is identical`** (red, AM-2).
   - Altitude: contract, at the record. Use T-AC-1's game, which includes a claim, an auction trade and a lot sale.
   - Use a seed whose month 1 lists a lot; pick it in a debug run and fix it in the test.
 - [ ] **Step 2: Implement C6 per spec §1 C6** (in_place). It goes at the three sites in `mule-game.ts` the spec names:
-  handle 'claim' with resolveGrantBids, `dealsInGood` in scheduleAuctionTick, and lot results in
-  scheduleLandAuctionTick.
+  handle 'claim' with resolveGrantBids, each good's settled declarations and `dealsInGood` in scheduleAuctionTick
+  (a ship sale has buyer `'ship'`), and lot results in scheduleLandAuctionTick. `phaseNotices()` keeps them
+  whether or not there's a recorder, and it's cleared in enterPhase (AM-2).
 - [ ] **Step 3: Run it; it passes.** Commit `feat(C6): claims, trades and lot sales as notice events (verifies T-AC-10)`.
 
 ### Task 8: playbook entries: C7

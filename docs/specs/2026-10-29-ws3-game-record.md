@@ -209,16 +209,20 @@ depends_on   C3
 ```
 
 ```
-C6 · ADDED · derived notices: claims, trades and lot sales as public facts
+C6 · ADDED · derived notices: claims, declarations, trades and lot sales as public facts
 
 today        none. A claim, trade or sale shows only in news lines and the state's own history.
              verified_by: read (mule-game.ts: `dealsInGood` in scheduleAuctionTick, the grant's claims in handle
              'claim' and resolveGrantBids, lot results in scheduleLandAuctionTick. apps/server/src/land-auction.ts
              is only the view helper)
-tomorrow     MuleGame calls an optional `notice?: (n: Notice) => void` option at each claim (landGrant), trade
-             (auction) and lot sale (landAuction). The recorder appends it as a `notice` event in the open step.
-             The replay skips notices (RULE-6 row 7).
-seam         mule-game.ts at the three places these facts are settled (WS3's file).
+tomorrow     (AM-2) MuleGame emits a notice at each claim (landGrant), each good's settled declarations (one
+             `declare` notice per seat, auction), each trade (auction, the ship included as buyer `'ship'`) and
+             each lot sale (landAuction). It ALWAYS keeps the open phase's notices, whether or not a recorder
+             exists, readable as `phaseNotices(): readonly Notice[]` until the next phase opens, for the
+             PhaseOutcome builders in every Smart game, tests and e2e included. It also passes each notice to an
+             optional `notice?` option, the recorder's, which appends it as a `notice` event in the open step.
+             The replay skips notices (RULE-6).
+seam         mule-game.ts at the four places these facts are settled (WS3's file).
 senior       junior would: recompute them later by replaying (PhaseOutcome would then need a replay) · senior does:
              record them as they settle; the replay ignores them, so they can never cause a divergence.
 mechanism    in_place
@@ -233,7 +237,9 @@ C7 · ADDED · playbook entries: the append API WS1 and WS2 write through
 tomorrow     The recorder exposes `playbook(entry: Omit<PlaybookEntry, 'type' | 'at' | 'seq'>)`. It stamps `at`
              and `seq` from the open step, or from the last step when called between steps. MuleGame passes a
              `recordPlaybook` callback to whoever builds playbooks (today: nobody; WS1's step-2 build). The replay
-             ignores these events: a replay plays from inputs, and its playbooks come out the same.
+             does not take these entries as inputs: an engine draft is re-derived from the inputs, and a Claude-
+             edited one from the recorded writer reply (AM-1), with no call, so schema v1 principle 5 holds.
+             Each replayed playbook must equal its recorded entry, or ReplayDiverged (T-AC-11).
 seam         apps/server/src/record.ts (WS3); the caller is WS1/WS2's, through MuleGame's options.
 mechanism    sprout
 pin          T-AC-11
@@ -361,7 +367,7 @@ RULE-6 · Replay, step by step                                     shape: sequen
 and by WS1/WS2 (`PlaybookEntry`, `NoticeEntry`). It is the freeze candidate for WS1 and WS2.
 
 ```ts
-import type { Good, Phase } from './types.js';
+import type { AuctionSide, Good, Phase } from './types.js';
 import type { Playbook, PlayerId, PlotIndex, Strategy } from './playbook.js';
 
 /** Claude's answer as play used it: the structural subset of @mule/ai's Choice. */
@@ -404,7 +410,8 @@ export type RecordEvent<Intent> =
 /** A public fact as it settled; derived, so the replay ignores it. */
 export type NoticeEntry = { type: 'notice'; at: number; seq: number; month: number; phase: Phase } & (
   | { kind: 'claim'; seat: PlayerId; plot: PlotIndex }
-  | { kind: 'trade'; good: Good; buyer: PlayerId | 'store'; seller: PlayerId | 'store'; price: number; qty: number }
+  | { kind: 'declare'; seat: PlayerId; good: Good; side: AuctionSide }
+  | { kind: 'trade'; good: Good; buyer: PlayerId | 'store' | 'ship'; seller: PlayerId | 'store'; price: number; qty: number }
   | { kind: 'sale'; item: 'plot' | 'mule'; plot: PlotIndex; seller: PlayerId; buyer: PlayerId | 'store'; price: number }
 );
 
@@ -478,7 +485,7 @@ already git-ignored.
 | **T-AC-7** | HC-3: the same scripted game with recording on and off ends in the same state hash, and nothing is written before game over (fs spy) | hash and fs spy | C2, C4 |
 | **T-AC-8** | RULE-2 row 3: an unwritable recordDir at game over → one console.error, and the room still shows game over and stays reachable | room view, log spy | C4 |
 | **T-AC-9** | A refused intent is recorded with its message, and the replay refuses it with the same message | record + replay | C2, C3 |
-| **T-AC-10** | Claims, trades and lot sales appear as `notice` events with month and phase. A replay of the record with every notice removed is still identical | record + `replay()` | C6 |
+| **T-AC-10** | Claims, declarations, trades (a sale to the ship included) and lot sales appear as `notice` events with month and phase, and `phaseNotices()` holds the same notices with recording off. A replay of the record with every notice removed is still identical | record, `phaseNotices()`, `replay()` | C6 |
 | **T-AC-11** | `recordPlaybook` entries come out in call order with their step's at and seq. The replay skips them as inputs, but each replayed playbook must equal its recorded entry, or ReplayDiverged (AM-1) | record + `replay()` | C7 |
 
 All T-ACs are server tests (`apps/server/test/record.test.ts`). Only T-AC-1 belongs in Tier 1 CI (lean CI); the rest
@@ -514,6 +521,15 @@ stay local.
   - **Rejected alternative:** treat `by: 'llm'` playbook entries as replay inputs. That breaks "inputs only" and skips
     re-validation on replay.
   - **Also:** the §3 example seat is renamed "The Big Spender" (AM-18).
+- **AM-2 (2026-10-29, WS1's review of §3, adopted by WS3):**
+  - (1) The `trade` notice's buyer may be `'ship'`: the export ship buys in the auction (`auction.ts::SHIP_ID`).
+  - (2) There is a new `declare` notice per seat and good. Nothing else keeps sides after the auction, and frozen v1's
+    `PhaseOutcome.rivals.declaredButIdle` needs them.
+  - (3) C7 no longer says "ignores". A Claude-edited playbook replays from the recorded writer reply (AM-1), without
+    a call, which keeps schema v1 principle 5 and HC-1. Each replayed playbook is checked against its entry.
+  - (4) The notices no longer depend on recording. MuleGame keeps the open phase's notices (`phaseNotices()`) for
+    the PhaseOutcome builders in every game; the recorder is only one listener. I chose a kept list over several
+    listeners: the builders run inside MuleGame at the phase's end, so a list they read needs no wiring.
 
 ## §9 · Ownership Boundaries `[handoff]`
 
