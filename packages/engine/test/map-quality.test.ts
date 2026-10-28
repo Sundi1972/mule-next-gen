@@ -15,17 +15,14 @@ import {
   type Tile,
 } from '../src/index.js';
 
-// CI runs the map promises on 1,000 maps; MULE_FULL=1 runs all 5,000 and T-AC-5's placement sweep.
+// CI runs every map promise on 3,500 maps; MULE_FULL=1 runs 5,000 and T-AC-5's placement sweep.
 const FULL = process.env.MULE_FULL === '1';
 const PLAYER_COUNTS = [2, 3, 4, 5, 6];
-/** Seeds per player count for B-AC-1, 3, 4 and 5: 200 in CI (1,000 maps), 1,000 with MULE_FULL (5,000). */
-const SEEDS = FULL ? 1000 : 200;
 /**
- * Seeds per player count for B-AC-2: its 20-30% band reaches only 1.6 standard deviations either side of 25% at 200
- * maps (seeds 201-400 give 18% at 2 and 3 players), so in CI it keeps 700 maps per player count, 3.1 deviations; all
- * 1,000 with MULE_FULL.
+ * Maps per player count, for every promise: 700 in CI, 1,000 with MULE_FULL. B-AC-2's 20-30% band sets it: at 700 the
+ * band reaches 3.1 standard deviations either side of 25% (1.6 at 200), and B-AC-4's place check has 5.
  */
-const RATE_SEEDS = FULL ? 1000 : 700;
+const SEEDS = FULL ? 1000 : 700;
 const TIMEOUT = 120_000;
 const MAX_LINES = 30;
 const LAND = Object.keys(TERRAIN_ODDS) as Exclude<Terrain, 'store'>[];
@@ -34,10 +31,10 @@ const MINERALS = ['crystite', 'rareEarth'] as const;
 /** RULE-5's count by player count: 3 small, 4 mid, 5 large. */
 const SPECIALS: Record<number, number> = { 2: 3, 3: 3, 4: 4, 5: 5, 6: 5 };
 /**
- * Maps outside the 5,000 that once broke RULE-5, as [seed, players]: 1090 at 2 and 3 players
- * got only ruins and a relic, both left of the river, because the last slot had to be a third
- * kind on the right and the right had no plot for one. Placement no longer falls short; the
- * seeds stay as extra cover.
+ * Maps that once broke RULE-5, as [seed, players]: 1090 at 2 and 3 players got only ruins and a
+ * relic, both left of the river, because the last slot had to be a third kind on the right and the
+ * right had no plot for one. Placement no longer falls short; the seeds stay by name, since only
+ * they need placement to backtrack (3 players' sample happens to hold 1090 too).
  */
 const REGRESSION_SEEDS: [number, number][] = [[1090, 2], [1090, 3]];
 /** Placement draws per map beyond the one createGame made, each from its own rng seed. */
@@ -116,26 +113,20 @@ function build(seed: number, players: number): Built {
 }
 
 /**
- * `count` seeds for a player count, all within 1-1,000. Each count starts 200 further on, so in CI the five counts deal
- * different seeds: 2 and 3 players (and 5 and 6) share a seed's layout and scarce draw. With all 1,000, every count
- * gets seeds 1-1,000.
+ * Each player count deals its own seeds, from its own thousand: 2 players 1-1,000, 3 players 1,001-2,000, and so on,
+ * the first SEEDS of each. 2 and 3 players (and 5 and 6) share a seed's layout and scarce draw, so the same seed at
+ * both would not be two independent maps.
  */
-function seedsOf(players: number, count: number): number[] {
-  const start = 200 * PLAYER_COUNTS.indexOf(players);
-  return Array.from({ length: count }, (_, j) => ((start + j) % 1000) + 1);
+function seedsOf(players: number): number[] {
+  const start = 1000 * PLAYER_COUNTS.indexOf(players);
+  return Array.from({ length: SEEDS }, (_, j) => start + j + 1);
 }
 
 let built: Built[] = [];
-let rated: Built[] = [];
 let regressions: Built[] = [];
 
 beforeAll(() => {
-  for (const players of PLAYER_COUNTS) {
-    // B-AC-2's sample starts with the maps the other promises check, so none is built twice.
-    const maps = seedsOf(players, RATE_SEEDS).map((seed) => build(seed, players));
-    rated.push(...maps);
-    built.push(...maps.slice(0, SEEDS));
-  }
+  built = PLAYER_COUNTS.flatMap((players) => seedsOf(players).map((seed) => build(seed, players)));
   regressions = REGRESSION_SEEDS.map(([seed, players]) => build(seed, players));
 }, TIMEOUT);
 
@@ -150,12 +141,16 @@ describe('map quality, every map createGame deals', () => {
     expect(failures, listed(failures)).toEqual([]);
   }, TIMEOUT);
 
-  it('B-AC-2: 20-30% of maps have exactly one scarce good, none has two', () => {
-    const failures = violationsOf(rated, ['F2']);
+  it('B-AC-2: 20-30% of maps have exactly one scarce good, none has two, and any of the four goods can be it', () => {
+    const failures = violationsOf(built, ['F2']);
     for (const players of PLAYER_COUNTS) {
-      const maps = rated.filter((b) => b.players === players);
+      const maps = built.filter((b) => b.players === players);
       const rate = maps.filter((b) => b.report.metrics.scarce !== null).length / maps.length;
       if (rate < 0.2 || rate > 0.3) failures.push(`${players} players: ${(rate * 100).toFixed(1)}% of maps have one scarce good`);
+      // RULE-3: the twist can fall on any floor good (at 700 maps the rarest is scarce on 26).
+      for (const good of HINTED) {
+        if (!maps.some((b) => b.report.metrics.scarce === good)) failures.push(`${players} players: ${good} is never the scarce good on ${maps.length} maps`);
+      }
     }
     for (const players of PLAYER_COUNTS) {
       for (let seed = 1; seed <= 20; seed++) {

@@ -15,10 +15,10 @@ import {
 
 // One player count per size band: 3 and 6 players get the same map size, so they would repeat 2's and 5's layouts.
 const BANDS = [2, 4, 5];
-// The 500-seed sweep per band runs only with MULE_FULL=1; CI runs the regression seeds below. Every map CI deals is
-// checked against S1-S8 by B-AC-3 in map-quality.test.ts.
+// Seeds per band: 50 in CI, 500 with MULE_FULL=1, plus the regression seeds below. Every map CI deals is also checked
+// against S1-S8 by B-AC-3 in map-quality.test.ts.
 const FULL = process.env.MULE_FULL === '1';
-const SEEDS = FULL ? 500 : 0;
+const SEEDS = FULL ? 500 : 50;
 /**
  * Seeds whose layout once broke a rule, checked by name on top of the sweep (and in CI): 28670 (S5) and 45216 (S4)
  * from review, 3475 and 9530 (AM-4) that only the repair's lookahead fixes.
