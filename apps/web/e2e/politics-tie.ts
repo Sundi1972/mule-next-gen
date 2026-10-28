@@ -10,7 +10,7 @@
 import { POLITICS, type GameState } from '@mule/engine';
 import type { Page } from 'playwright';
 import { check, held, launch, PHONE, startServer, TV } from './harness';
-import { PRESS_MS } from './politics-steps';
+import { ELECTION_WAIT_MS, PRESS_MS } from './politics-steps';
 
 const SEED = seedFrom(process.env.MULE_E2E_SEED);
 // Full-length clocks: both phones end announce and the ballot themselves, so only the ceremony runs on its clocks.
@@ -81,10 +81,11 @@ try {
     check(Date.now() < deadline, `the server holds Lena's ballot for Ossa and Ossa's for Lena, got ${JSON.stringify(ballots())}`);
     await new Promise((r) => setTimeout(r, 20));
   }
-  // Both ballots name a candidate for the one contested office, so both phones are Done and the ballot closes.
+  // Picking is not Done (AM-21): both phones press Cast my vote, and the ballot closes.
+  await Promise.all(phones.map((p) => p.getByTestId('ready').click({ timeout: PRESS_MS })));
 
   // The Governor's winner step, read with the clock held so it stands while every screen is read.
-  await tv.getByTestId('tv-election').getByTestId('how-governor').waitFor({ timeout: POLITICS.ceremony.introMs + POLITICS.ceremony.barsMs + PRESS_MS });
+  await tv.getByTestId('tv-election').getByTestId('how-governor').waitFor({ timeout: ELECTION_WAIT_MS + PRESS_MS });
   await held(server, code, async () => {
     // The approved mock's words for a tie the Baron broke.
     const tieBroken = `A tie: Ossa, the Land Baron, broke it.`;
