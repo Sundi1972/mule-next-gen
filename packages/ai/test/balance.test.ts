@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, AI_LEVELS, AI_PERSONAS, createGame, EVENTS, GAME, GOODS, mulePriceFor, observe, STRATEGIST, walkSeconds, type GameState } from '@mule/engine';
+import { advancePhase, AI_LEVELS, AI_PERSONAS, createGame, EVENTS, GAME, GOODS, mulePriceFor, observe, STRATEGIST, walkSeconds, type EventRow, type GameState } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
 import { AiSeat } from '../src/seat.js';
 import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, tradeDecision, wantsPlot } from '../src/strategist.js';
@@ -305,9 +305,9 @@ describe('production events and the outlook', () => {
     };
     /** The outlook with every event row that rolls in production at exactly `chance`, nothing raising or lowering it. */
     const forecast = (seed: number, chance: number) => {
-      const rows = [...Object.values(EVENTS.colony), ...Object.values(EVENTS.player)].filter((row) => 'production' in row.phases);
+      const rows: EventRow[] = [...Object.values(EVENTS.colony), ...Object.values(EVENTS.player)].filter((row) => 'production' in row.phases);
       const saved = rows.map((row) => ({ ...row }));
-      for (const row of rows) reset(row, { phases: { production: chance }, cap: 1 });
+      for (const row of rows) reset(row, { phases: { production: chance }, cap: 1, ...(row.perPlot && { perPlot: row.perPlot }) });
       try {
         const state = fourSeats(seed);
         while (state.phase !== 'development') advancePhase(state);
