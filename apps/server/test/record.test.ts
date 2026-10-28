@@ -2,14 +2,35 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { RuleError, type GameRecord } from '@mule/engine';
+import { createHash } from 'node:crypto';
+import { configSnapshot, RuleError, stableJson, type GameRecord } from '@mule/engine';
 import type { Decider } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { Room, TableError, type ClientEnvelope, type Connection, type GameContext, type ServerEnvelope } from '@tabletop/core';
 import type { BrainService } from '../src/brain/index.js';
 import { chatter } from '../src/brain/chat.js';
 import { AI_NAMES, MuleGame } from '../src/mule-game.js';
-import { createRecordedGame, replay, ReplayDiverged, stateHash, type Recorder } from '../src/record.js';
+import { createRecordedGame, RecordMismatch, replay, ReplayDiverged, stateHash, type Recorder } from '../src/record.js';
+
+/** How many MuleGames this file built, and an SDK factory that must never be reached. */
+const spies = vi.hoisted(() => ({ games: 0, sdk: 0 }));
+vi.mock('../src/mule-game.js', async (original) => {
+  const real = await original<typeof import('../src/mule-game.js')>();
+  class CountedMuleGame extends real.MuleGame {
+    constructor(...args: ConstructorParameters<typeof real.MuleGame>) {
+      super(...args);
+      spies.games++;
+    }
+  }
+  return { ...real, MuleGame: CountedMuleGame };
+});
+vi.mock('../src/brain/client.js', async (original) => ({
+  ...(await original<typeof import('../src/brain/client.js')>()),
+  createAnthropicSdk: () => {
+    spies.sdk++;
+    throw new Error('a replay must never build the SDK');
+  },
+}));
 
 const CODE = 'RECRD';
 const SEED = 10;
@@ -70,6 +91,7 @@ afterEach(() => {
   for (const room of rooms) room.dispose();
   vi.useRealTimers();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 /**
@@ -295,5 +317,44 @@ describe.runIf(FULL)('the recorder', { timeout: 60_000 }, () => {
     expect(t.recorder().finished).toBeNull();
     expect(fs.readdirSync(dir)).toEqual([]);
     expect(errors).toHaveBeenCalled();
+  });
+});
+
+describe.runIf(FULL)('the replay', { timeout: 60_000 }, () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mule-replay-'));
+  });
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  it('T-AC-2: an intent tampered to claim another plot diverges at that step or later, never a silent pass', async () => {
+    const { record } = await recordedGame();
+    const tampered = fileCopy(record);
+    const claim = tampered.events.find((e) => e.type === 'intent' && e.intent.type === 'claim' && !e.refused)!;
+    if (claim.type === 'intent' && claim.intent.type === 'claim') claim.intent.x = (claim.intent.x + 1) % 9;
+    const err: unknown = await replay(tampered).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ReplayDiverged);
+    expect((err as ReplayDiverged).seq).toBeGreaterThanOrEqual(claim.seq);
+  });
+
+  it('T-AC-3: a record made under one changed config value is refused before any game is built', async () => {
+    const { record } = await recordedGame();
+    const changed = structuredClone(configSnapshot()) as { GAME: { claimsPerGrant: number } };
+    changed.GAME.claimsPerGrant += 1;
+    const other = { ...fileCopy(record), configFingerprint: createHash('sha256').update(stableJson(changed)).digest('hex') };
+    const built = spies.games;
+    await expect(replay(other)).rejects.toBeInstanceOf(RecordMismatch);
+    expect(spies.games - built).toBe(0);
+  });
+
+  it('T-AC-4: a replay with the key set and an SDK that throws if built completes, with no call and no ledger line', async () => {
+    const { record } = await recordedGame();
+    const ledger = path.join(dir, 'costs.jsonl');
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-key-not-real');
+    vi.stubEnv('MULE_BRAIN_LOG', ledger);
+    const sdkBefore = spies.sdk;
+    expect((await replay(record)).identical).toBe(true);
+    expect(spies.sdk - sdkBefore).toBe(0);
+    expect(fs.existsSync(ledger)).toBe(false);
   });
 });
