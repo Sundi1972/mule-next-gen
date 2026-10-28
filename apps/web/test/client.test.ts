@@ -362,26 +362,50 @@ describe('TableClient', () => {
   });
 
   it.each([
-    { between: 'closing the dialog', reopen: (client: TableClient) => (client.closeHandoff(), client.handoff()) },
-    { between: 'nothing', reopen: (client: TableClient) => client.handoff() },
-  ])('FM-4: a code asked for again with $between in between, within one round trip, shows only once the newest request is answered', ({ reopen }) => {
-    const { client, last } = seated();
-    client.handoff();
-    reopen(client);
-    expect(last().sent.filter((m) => m.t === 'handoff')).toHaveLength(2);
+    { row: 'asked twice, with the dialog closed in between', act: (t: ReturnType<typeof seated>) => (t.client.handoff(), t.client.closeHandoff(), t.client.handoff()), requests: 2 },
+    { row: 'asked twice', act: (t: ReturnType<typeof seated>) => (t.client.handoff(), t.client.handoff()), requests: 2 },
+    {
+      row: 'asked once while the screen joins again on the same connection',
+      act: (t: ReturnType<typeof seated>) => {
+        t.client.join('KRTX', 'Mia');
+        t.client.handoff();
+        t.last().deliver({ t: 'welcome', code: 'KRTX', role: 'player', seatId: 's2', seatToken: 'secret' });
+      },
+      requests: 1,
+    },
+    {
+      row: 'asked once on a new connection, after the screen was removed with a request in flight',
+      act: (t: ReturnType<typeof seated>) => {
+        t.client.handoff();
+        t.last().deliver({ t: 'removed', reason: 'kicked' });
+        t.client.join('KRTX', 'Mia');
+        t.last().open();
+        t.last().deliver({ t: 'welcome', code: 'KRTX', role: 'player', seatId: 's2', seatToken: 'secret' });
+        t.client.handoff();
+      },
+      requests: 1,
+    },
+  ])('FM-4: a code $row, within one round trip, shows nothing until the newest request is answered, then that code', ({ act, requests }) => {
+    const t = seated();
+    act(t);
+    expect(t.last().sent.filter((m) => m.t === 'handoff')).toHaveLength(requests);
+    expect(t.client.getState().handoffCode).toBeNull();
 
-    last().deliver({ t: 'handoffCode', code: 'dead', expiresAt: 999_999 });
-    expect(client.getState().handoffCode).toBeNull();
-    last().deliver({ t: 'handoffCode', code: 'live', expiresAt: 999_999 });
-    expect(client.getState().handoffCode).toEqual({ code: 'live', expiresAt: 999_999, expired: false });
+    for (let earlier = 1; earlier < requests; earlier++) {
+      t.last().deliver({ t: 'handoffCode', code: 'dead', expiresAt: 999_999 });
+      expect(t.client.getState().handoffCode).toBeNull();
+    }
+    t.last().deliver({ t: 'handoffCode', code: 'live', expiresAt: 999_999 });
+    expect(t.client.getState().handoffCode).toEqual({ code: 'live', expiresAt: 999_999, expired: false });
 
-    client.handoff();
-    last().deliver({ t: 'handoffCode', code: 'next', expiresAt: 999_999 });
-    expect(client.getState().handoffCode).toEqual({ code: 'next', expiresAt: 999_999, expired: false });
+    t.client.handoff();
+    t.last().deliver({ t: 'handoffCode', code: 'next', expiresAt: 999_999 });
+    expect(t.client.getState().handoffCode).toEqual({ code: 'next', expiresAt: 999_999, expired: false });
   });
 
   it.each([
     { row: 'opened while reconnecting', before: (t: ReturnType<typeof seated>) => (t.last().drop(), t.client.handoff()), asks: true, shows: 'fresh' },
+    { row: 'opened while the new connection is still opening', before: (t: ReturnType<typeof seated>) => (t.last().drop(), t.advance(500), t.client.handoff()), asks: true, shows: 'fresh' },
     { row: 'whose request was lost with the socket', before: (t: ReturnType<typeof seated>) => (t.client.handoff(), t.last().drop()), asks: true, shows: 'fresh' },
     {
       row: 'already showing a code',
