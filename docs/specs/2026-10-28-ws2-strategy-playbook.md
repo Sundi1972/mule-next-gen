@@ -148,6 +148,8 @@ tomorrow     MUST render, from WS1's move descriptors plus config only: each pha
              office terms; the Collapse cut ×POLLUTION.collapseScore on all but office; the colony score apart, as
              engine/src/game.ts::scoreParts defines it); and every move: what it does, when it is legal, what it
              costs, when it is smart. Byte-stable for a given config, so it sits in the cached system block.
+             The level's bounds are stated in the seat's part: a seat whose level has `corners` false is told it
+             never aims for a monopoly (HC-8), so it never proposes monopolyTarget or 'monopolist'.
 seam         packages/ai/src/llm/manual.ts (new) — pure; prompt.ts and the writer's system block both read it
 senior       junior would: write a longer PRIMER by hand · senior does: render from the descriptors and config, so
              a rule change cannot leave it stale; the coverage test (WS1) fails before the manual can miss a move
@@ -218,7 +220,8 @@ examples → §6: Rookie + edit monopolyTarget 'smithore' → rejected, null · 
 - **Playbook schema** (ADDED, owned by WS1, frozen with WS3 and WS2): v0.2 at
   `.handover/ws2-findings/playbook-schema-v0.md`, settled by WS3 on 29 Oct: `LandGrantPlay.pressShare: { start; end }` (a
   floor read against the pass's progress, falling start → end; the grant is one pass, `grantSweeps` 1); types in `packages/engine/src/playbook.ts` (WS1 holds the pen,
-  a change after the freeze needs all three OKs). WS3 OK'd v1 at type level; WS1's type-level OK is the last.
+  a change after the freeze needs all three OKs). WS1, WS3 and WS2 OK'd v1 at type level (29 Oct); the validator enforces 0 ≤ end ≤ start ≤ 1. `PlanningPlay.list`
+  (later, AM-20, mirrors protocol's `list`) awaits WS3's OK as lots.ts owner, else it moves to v2.
   This spec adopts the frozen version by reference.
 - **Game record** (ADDED, WS3): types in `packages/engine/src/record.ts` (`GameRecord`, `RecordEvent`,
   `PlaybookEntry`); recorder and replay in `apps/server/src/record.ts`. Derived `notice` events (trades, claims, sales)
