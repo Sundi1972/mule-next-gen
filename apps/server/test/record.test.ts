@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RuleError, type GameRecord } from '@mule/engine';
 import type { Decider } from '@mule/ai';
@@ -5,8 +8,8 @@ import type { MuleIntent, MuleView } from '@mule/protocol';
 import { Room, TableError, type ClientEnvelope, type Connection, type GameContext, type ServerEnvelope } from '@tabletop/core';
 import type { BrainService } from '../src/brain/index.js';
 import { chatter } from '../src/brain/chat.js';
-import { AI_NAMES } from '../src/mule-game.js';
-import { createRecordedGame, replay, ReplayDiverged, type Recorder } from '../src/record.js';
+import { AI_NAMES, MuleGame } from '../src/mule-game.js';
+import { createRecordedGame, replay, ReplayDiverged, stateHash, type Recorder } from '../src/record.js';
 
 const CODE = 'RECRD';
 const SEED = 10;
@@ -16,6 +19,9 @@ const PLANNING_READY_MS = 3_000;
 const GAME_LIMIT_MS = 30 * 60_000;
 /** How long the Claude stand-in takes per call, in turn: some land within a tick, some many ticks later. */
 const ANSWER_DELAYS_MS = [40, 1_300, 260, 3_100, 90, 700];
+const GAME_OPTIONS = { maxMonths: 1, politics: true };
+/** The rows beyond T-AC-1 run locally only (MULE_FULL=1, `pnpm test:full`); each plays one or two whole games. */
+const FULL = process.env.MULE_FULL === '1';
 
 type MuleRecord = GameRecord<MuleIntent>;
 
@@ -46,9 +52,11 @@ interface Screen {
 }
 
 interface TableOptions {
-  /** Absent: no recorder, the game as the server builds it with recording off. */
+  /** Default true. False builds the game as the server does with recording off. */
   record?: boolean;
-  /** Fetches every view at these extra moments, as joins and pongs do. */
+  /** Where the recorder writes the file at game over; absent writes nothing. */
+  dir?: string;
+  /** Fetches views and pongs at extra moments, as joins and pings do. */
   extraViews?: boolean;
 }
 
@@ -68,14 +76,20 @@ afterEach(() => {
  * A real Room hosting a recorded MuleGame: two humans on phones, a TV, a Smart AI (s3) and a Classic one (s4). The
  * script claims a lit plot, chats, sends one illegal intent, and drops and brings back s2's phone.
  */
-function table(options: TableOptions = { record: true }) {
+function table(options: TableOptions = {}) {
   let recorder: Recorder | null = null;
   let game: { viewFor(seat: string | null): MuleView } | null = null;
+  let unrecordedHash: string | null = null;
   const brain = stubBrain('s3');
   const room = new Room<MuleIntent, MuleView>({
     code: CODE,
     createGame: (ctx: GameContext) => {
-      const made = createRecordedGame({ ctx, seed: SEED, options: { maxMonths: 1, politics: true }, brain, record: options.record ?? true });
+      if (options.record === false) {
+        const plain = new MuleGame(ctx, SEED, { ...GAME_OPTIONS, brain, onGameOver: (state) => (unrecordedHash = stateHash(state)) });
+        game = plain;
+        return plain;
+      }
+      const made = createRecordedGame({ ctx, seed: SEED, options: GAME_OPTIONS, brain, dir: options.dir ?? null });
       recorder = made.recorder;
       game = made.game;
       return made.game;
@@ -157,6 +171,7 @@ function table(options: TableOptions = { record: true }) {
     room,
     brain,
     recorder: () => recorder!,
+    unrecordedHash: () => unrecordedHash,
     finished,
     /** Plays to game over, then lets the record be written. */
     toGameOver: async () => {
@@ -220,5 +235,64 @@ describe('the game record', { timeout: 60_000 }, () => {
       },
     );
     expect(outcome).toBe(false);
+  });
+});
+
+describe.runIf(FULL)('the recorder', { timeout: 60_000 }, () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mule-record-'));
+  });
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  it('T-AC-6: a game whose views and pongs are fetched at extra moments still replays identical', async () => {
+    const { record } = await recordedGame({ extraViews: true });
+    expect((await replay(record)).identical).toBe(true);
+  });
+
+  it('T-AC-7: the same game recorded and unrecorded ends in the same state hash, and nothing is written before game over', async () => {
+    const t = table({ dir });
+    const written: boolean[] = [];
+    const promised = fs.promises.writeFile.bind(fs.promises);
+    vi.spyOn(fs.promises, 'writeFile').mockImplementation((...args: Parameters<typeof fs.promises.writeFile>) => {
+      written.push(t.finished());
+      return promised(...args);
+    });
+    const sync = vi.spyOn(fs, 'writeFileSync');
+    expect(await t.toGameOver()).toBe(true);
+    expect(written, 'one write, after game over').toEqual([true]);
+    expect(sync).not.toHaveBeenCalled();
+    const recordedHash = t.recorder().finished!.outcome!.stateHash;
+
+    const off = table({ record: false });
+    expect(await off.toGameOver()).toBe(true);
+    expect(off.unrecordedHash()).toBe(recordedHash);
+  });
+
+  it('T-AC-9: a refused intent is recorded with its message, and the replay refuses it with the same message', async () => {
+    const { record } = await recordedGame();
+    const refused = record.events.find((e) => e.type === 'intent' && e.refused !== undefined);
+    expect(refused).toMatchObject({ type: 'intent', seat: 's2', intent: { type: 'setTax' } });
+    const message = refused!.type === 'intent' ? refused!.refused! : '';
+    expect(message.length).toBeGreaterThan(0);
+    expect((await replay(record)).identical).toBe(true);
+
+    const reworded = fileCopy(record);
+    const step = reworded.events.find((e) => e.type === 'intent' && e.refused !== undefined)!;
+    if (step.type === 'intent') step.refused = `${message} (reworded)`;
+    await expect(replay(reworded)).rejects.toMatchObject({ name: 'ReplayDiverged', seq: refused!.seq });
+  });
+
+  it('FM-REC-1: a recorder whose bookkeeping throws still lets the game reach game over, and writes no file', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const t = table({ dir });
+    t.recorder().record.events.push = () => {
+      throw new Error('bookkeeping fault');
+    };
+    expect(await t.toGameOver()).toBe(true);
+    expect(t.recorder().broken).toBe(true);
+    expect(t.recorder().finished).toBeNull();
+    expect(fs.readdirSync(dir)).toEqual([]);
+    expect(errors).toHaveBeenCalled();
   });
 });
