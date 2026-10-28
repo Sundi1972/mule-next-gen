@@ -1,5 +1,5 @@
 /**
- * B-AC-12: the shell fills the stage at 1440×900 and 844×390 (shell-steps.ts), in a game of its own at full-length
+ * B-AC-12: the shell fills the stage at 1440×900, 844×390 and 667×375 (shell-steps.ts), in a game of its own at full-length
  * phases. In smoke's month-2 planning the step had about two seconds left after the other planning steps, ran on
  * through the land grant and the land auction, and the steps waiting on those missed them.
  * B-AC-19's six-seat TV case runs here too, in a room of its own (hub-steps.ts).
@@ -20,7 +20,8 @@ try {
   await phone.getByPlaceholder('Heiko').fill('Heiko');
   await phone.getByRole('button', { name: 'Start a new game' }).click();
   await phone.getByText("You're at the table").waitFor();
-  await phone.getByRole('button', { name: 'Add AI player' }).click();
+  // A full table: the rail's seat row holds five others, the longest it gets, so the small phone's checks see its worst.
+  for (let ai = 0; ai < 5; ai++) await phone.getByRole('button', { name: 'Add AI player' }).click();
   await phone.getByRole('button', { name: 'Start game' }).click();
   await phone.locator('[data-phase=planning]').waitFor({ timeout: 5_000 });
 
