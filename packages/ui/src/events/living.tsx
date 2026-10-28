@@ -213,7 +213,7 @@ function Fire({ ev, seg }: { ev: ShowEventView; seg: EventSegment }) {
         const first = h.order === 0;
         const burning = !reduced && since < 1.6;
         return (
-          <div key={`${h.x},${h.y}`} className="absolute rounded-[10%]" style={{ ...cell(h.x, h.y), background: first ? `color-mix(in srgb, var(--color-void) ${clamp(since / 1.4) * 70}%, transparent)` : `color-mix(in srgb, ${c} ${clamp(since / 0.5) * 30}%, transparent)` }}>
+          <div key={`${h.x},${h.y}`} className="absolute rounded-[10%]" data-testid={`fire-${h.x}-${h.y}`} style={{ ...cell(h.x, h.y), background: first ? `color-mix(in srgb, var(--color-void) ${clamp(since / 1.4) * 70}%, transparent)` : `color-mix(in srgb, ${c} ${clamp(since / 0.5) * 30}%, transparent)` }}>
             {burning &&
               (first ? [-14, 22, 56] : [26]).map((left, k) => (
                 <span key={k} aria-hidden className="absolute bottom-[10%] animate-[show-flicker_0.25s_ease-in-out_infinite_alternate]" style={{ left: `${left}%`, width: first ? '58%' : '48%', color: c, opacity: first ? clamp(1.6 - since) : clamp(since * 3) * clamp(1.2 - since), animationDelay: `${k * 0.07}s`, transformOrigin: 'bottom' }}>
@@ -292,7 +292,7 @@ function Ash({ ev, seg, size }: { ev: ShowEventView; seg: EventSegment; size: Sh
         })}
       {ev.hits.map((h) => {
         const k = clamp((t - eventHitAt(seg, ev, h, reduced, grid)) / 0.5);
-        return k > 0 && <div key={`${h.x},${h.y}`} className="absolute rounded-[10%]" style={{ ...cell(h.x, h.y), background: 'radial-gradient(circle, color-mix(in srgb, var(--color-g-alloy) 85%, transparent) 0 1.2px, transparent 1.8px) 0 0 / 7px 7px, color-mix(in srgb, var(--color-g-alloy) 25%, transparent)', opacity: k }} />;
+        return k > 0 && <div key={`${h.x},${h.y}`} className="absolute rounded-[10%]" data-testid={`ash-${h.x}-${h.y}`} style={{ ...cell(h.x, h.y), background: 'radial-gradient(circle, color-mix(in srgb, var(--color-g-alloy) 85%, transparent) 0 1.2px, transparent 1.8px) 0 0 / 7px 7px, color-mix(in srgb, var(--color-g-alloy) 25%, transparent)', opacity: k }} />;
       })}
     </>
   );

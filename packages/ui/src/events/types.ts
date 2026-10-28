@@ -13,7 +13,8 @@ export type ShowEventKey =
   | 'wildfire'
   | 'bumperHarvest';
 
-export type ShowPhase = 'planning' | 'landGrant' | 'development' | 'production' | 'auction' | 'upkeep';
+/** The engine's phases (packages/engine/src/types.ts Phase), so the protocol's views fit without a cast. */
+export type ShowPhase = 'planning' | 'landGrant' | 'landAuction' | 'development' | 'production' | 'auction' | 'upkeep' | 'gameOver';
 
 /**
  * How loud an event is on the TV. A headline takes the screen for a moment; a spotlight singles out a place on the

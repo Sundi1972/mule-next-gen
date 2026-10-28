@@ -96,8 +96,11 @@ describe('the production show plays every event of the month', () => {
     const keys: ShowEventKey[] = ['dustStorm', 'drought', 'acidRain', 'solarFlare', 'cometPass', 'flood', 'volcanicAsh', 'pestSwarm', 'wildfire', 'bumperHarvest'];
     const events = keys.map((k) => fired(k, 4000, [[1, 0, -1]]));
     const all: ProductionView = { lines: month.lines, events, lengthMs: lengthOf(events) };
+    // The first segment opens on the phase's intro card (no event yet); every later one plays from its first moment.
+    expect(playing(render(all, EVENT_AT + 0.05))).toEqual([]);
     keys.forEach((k, i) => {
-      for (const t of [EVENT_AT + 4 * i + 0.05, EVENT_AT + 4 * i + 2, EVENT_AT + 4 * (i + 1) - 0.05]) expect(playing(render(all, t)), `${k} at ${t}`).toEqual([k]);
+      const at = [EVENT_AT + 4 * i + 2, EVENT_AT + 4 * (i + 1) - 0.05, ...(i > 0 ? [EVENT_AT + 4 * i + 0.05] : [])];
+      for (const t of at) expect(playing(render(all, t)), `${k} at ${t}`).toEqual([k]);
     });
     const end = EVENT_AT + 40;
     expect(playing(render(all, end + 0.05))).toEqual([]);
