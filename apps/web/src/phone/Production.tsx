@@ -1,24 +1,69 @@
 import type { ProductionView } from '@mule/protocol';
-import { useMemo } from 'react';
-import { Button, cx, EventCard, frameMs, GOOD_NAME, GoodIcon, harvest, landed, landing, ProductionMap, SHOW, ShowRoot, showTime, type Good, type Slot } from '@mule/ui';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Button,
+  cx,
+  EventShow,
+  EventSkipHint,
+  EventSoloRail,
+  EventTvPhoneRail,
+  eventScript,
+  eventSkipTo,
+  eventStageAt,
+  frameMs,
+  GOOD_NAME,
+  GoodIcon,
+  harvest,
+  landed,
+  landing,
+  ProductionMap,
+  productionShowProps,
+  SHOW,
+  ShowRoot,
+  showEnd,
+  showTime,
+  type Good,
+  type ShowMode,
+  type Slot,
+  useEventReducedMotion,
+} from '@mule/ui';
 import { mapTiles, slotOf } from '../game/derive';
 import { useClient, useServerNow } from '../net/react';
 import { usePhoneGame } from './game';
 import { PhoneShell } from './Shell';
 
+/** How long the phone vibrates as an event is announced, in ms. */
+const BUZZ_MS = 200;
+
 const GOODS: Good[] = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine'];
 
-/** Production on your phone: only your plots fill, and your harvest flies into your private stock strip. */
+/**
+ * Production on your phone: only your plots fill, and your harvest flies into your private stock strip. With a TV in
+ * the room the phone carries the light card for each event (RULE-3 row 1); alone (no board connected), it plays each
+ * event on its own map at the solo beat, and a tap on the map skips this phone's show to the result (rows 2-4).
+ */
 export function Production({ production }: { production: ProductionView }) {
   const client = useClient();
-  const { view, me, self } = usePhoneGame();
-  const t = showTime(view.phaseEndsAt, useServerNow(frameMs(production.lengthMs)), production.lengthMs, production);
+  const { table, view, me, self } = usePhoneGame();
+  const serverT = showTime(view.phaseEndsAt, useServerNow(frameMs(production.lengthMs)), production.lengthMs, production);
+  const solo = table.boards === 0;
+  // A skip is this phone's alone: it moves the phone's show ahead of the server's clock, never the clock itself. With
+  // a TV in the room the phone is back on the TV's clock, whatever it skipped while alone.
+  const [ahead, setAhead] = useState(0);
+  const t = solo ? Math.min(showEnd(production), serverT + ahead) : serverT;
+  const mode: ShowMode = solo ? 'solo' : 'tv';
+  const reduced = useEventReducedMotion();
   const tiles = useMemo(() => mapTiles(view), [view]);
-  const ev = production.events[0] ?? null;
   const slots = Object.fromEntries(view.players.map((p) => [p.id, (slotOf(view, p.id) ?? 0) as Slot]));
+  const players = useMemo(() => view.players.map((p) => ({ id: p.id, name: p.name, slot: (slotOf(view, p.id) ?? 0) as Slot })), [view]);
+  // The same script the map's and the rail's <EventShow> build from productionShowProps: equal by value (eventScript
+  // is pure in the same events, intro, start and mode), read here for the skip hint and the buzz.
+  const script = useMemo(() => eventScript(production, SHOW.eventAt, mode), [production, mode]);
+  const skipTo = solo ? eventSkipTo(script, t) : null;
+  const playingNow = eventStageAt(script, t).seg;
   const mine = harvest(production, me.id);
   const arrived = landed(production, t, me.id);
-  const shown = t >= SHOW.cardAt && ev;
+  useBuzz(solo ? null : (playingNow?.n ?? null));
 
   return (
     <PhoneShell
@@ -26,11 +71,12 @@ export function Production({ production }: { production: ProductionView }) {
       fill
       rail={
         <>
-          {shown ? <EventCard ev={ev} t={t} /> : <span className="label-caps">Your plots are working</span>}
-          {shown && (
-            <p className="text-xs leading-snug text-ink-2" data-testid="hit-me">
-              {eventOnYou(production, me.id)}
-            </p>
+          {production.events.length === 0 ? (
+            <span className="label-caps">Your plots are working</span>
+          ) : (
+            <EventShow {...productionShowProps(production, t, { reduced, mode, players, tiles, width: view.width, height: view.height })}>
+              {solo ? <EventSoloRail me={me.id} /> : <EventTvPhoneRail me={me.id} />}
+            </EventShow>
           )}
           <ul className="flex flex-col gap-1" data-testid="harvest">
             {(Object.entries(mine) as [Good, number][]).map(([g, n]) => (
@@ -49,15 +95,32 @@ export function Production({ production }: { production: ProductionView }) {
         </>
       }
       footer={
-        <Button size="lg" variant={self.ready ? 'outline' : 'holo'} className="w-full px-2" disabled={self.ready} onClick={() => client.intent({ type: 'ready' })}>
-          {self.ready ? 'Waiting for the others' : 'On to the auction'}
-        </Button>
+        <>
+          {/* Alone, what a tap on the map does now, by the screen's actions (AM-2: the rail's foot). */}
+          {skipTo !== null && <EventSkipHint playing={skipTo === playingNow?.settleAt} className="self-end" />}
+          <Button size="lg" variant={self.ready ? 'outline' : 'holo'} className="w-full px-2" disabled={self.ready} onClick={() => client.intent({ type: 'ready' })}>
+            {self.ready ? 'Waiting for the others' : 'On to the auction'}
+          </Button>
+        </>
       }
     >
       <ShowRoot className="flex min-h-0 flex-1 flex-col">
         <div className="flex min-h-0 flex-1 items-center justify-center [container-type:size]">
           <div style={{ width: `min(100cqw, calc(100cqh * ${view.width} / ${view.height}))` }}>
-            <ProductionMap width={view.width} height={view.height} tiles={tiles} production={production} t={t} slots={slots} only={me.id} />
+            <ProductionMap
+              width={view.width}
+              height={view.height}
+              tiles={tiles}
+              production={production}
+              t={t}
+              slots={slots}
+              players={players}
+              only={me.id}
+              reduced={reduced}
+              mode={mode}
+              light={!solo}
+              {...(solo ? { onSkip: (to: number) => setAhead((a) => a + to - t) } : {})}
+            />
           </div>
         </div>
         <div
@@ -83,16 +146,10 @@ export function Production({ production }: { production: ProductionView }) {
   );
 }
 
-/** One line on what the month's event did to your plots. */
-function eventOnYou(production: ProductionView, id: string): string {
-  const hits = new Map(production.events[0]?.hits.map((h) => [`${h.x},${h.y}`, h.delta]));
-  const change: Partial<Record<Good, number>> = {};
-  for (const l of production.lines) {
-    const delta = hits.get(`${l.x},${l.y}`);
-    if (l.owner !== id || delta === undefined) continue;
-    change[l.good] = (change[l.good] ?? 0) + Math.max(-l.made, delta);
-  }
-  const parts = (Object.entries(change) as [Good, number][]).filter(([, n]) => n !== 0);
-  if (parts.length === 0) return 'Your plots are clear of it.';
-  return `It hit your plots: ${parts.map(([g, n]) => `${Math.abs(n)} ${GOOD_NAME[g]} ${n < 0 ? 'lost' : 'more'}`).join(', ')}.`;
+/** With a TV in the room, the phone vibrates as each event is announced, where the device can. */
+function useBuzz(event: number | null) {
+  useEffect(() => {
+    if (event === null || typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return;
+    navigator.vibrate(BUZZ_MS);
+  }, [event]);
 }

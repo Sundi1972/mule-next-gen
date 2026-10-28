@@ -88,7 +88,11 @@ export const frameMs = (lengthMs: number) => Math.min(40, Math.max(16, lengthMs 
 /** Any grid: once every event has landed, when each one did no longer matters. */
 const ANY_GRID = { width: 1, height: 1 };
 
-/** What a plot makes once every event has reached it: RULE-2 (plotUnitsAt) after the last of them. */
+/**
+ * What a plot makes once every event has reached it: RULE-2 (plotUnitsAt) after the last of them. It goes through the
+ * event catalogue (each event's motion), so a key the catalogue lacks would throw; unreachable today, since the view's
+ * keys are a typed union the catalogue covers.
+ */
 export function finalUnits(line: ShowLine, events: ShowEventView[]): number {
   return plotUnitsAt(eventSegments({ events, introMs: 0 }), line, Infinity, false, ANY_GRID);
 }
@@ -195,13 +199,17 @@ export interface ProductionMapProps {
   reduced?: boolean;
   /** The events' pace: the TV's, or a phone's with no TV in the room. */
   mode?: ShowMode;
+  /** A phone with a TV in the room: the map plays no event, and marks only the `only` player's plots. */
+  light?: boolean;
+  /** A phone alone: the whole map is the tap target; called with the show time to jump to. */
+  onSkip?: (to: number) => void;
   className?: string;
 }
 
 /** How long before the goods fly the bars leave the map's camera frame, so they can fly past its edge. */
 const HANDOFF = 0.2;
 
-export function ProductionMap({ width, height, tiles, production, t, slots, players, only, tv = false, reduced = false, mode = 'tv', className }: ProductionMapProps) {
+export function ProductionMap({ width, height, tiles, production, t, slots, players, only, tv = false, reduced = false, mode = 'tv', light = false, onSkip, className }: ProductionMapProps) {
   const map = useRef<HTMLDivElement>(null);
   const { events } = production;
   const flyStart = flyAt(0, production);
@@ -232,7 +240,7 @@ export function ProductionMap({ width, height, tiles, production, t, slots, play
     <div ref={map} className={cx('relative', className)} data-testid="map-show">
       {/* The bars render inside the show, so they read the very script the module draws the events with. */}
       <EventShow {...productionShowProps(production, t, { reduced, mode, players: cast, tiles, width, height })}>
-        <EventLivingMap size={tv ? 'tv' : 'phone'} {...(focus !== undefined ? { focusSlot: focus } : {})} {...(framed ? { bars } : {})} />
+        <EventLivingMap size={tv ? 'tv' : 'phone'} light={light} {...(focus !== undefined ? { focusSlot: focus } : {})} {...(framed ? { bars } : {})} {...(onSkip ? { onSkip } : {})} />
         {!framed && <div className="pointer-events-none absolute inset-0">{bars}</div>}
       </EventShow>
     </div>

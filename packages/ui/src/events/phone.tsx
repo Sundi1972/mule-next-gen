@@ -2,7 +2,7 @@ import { cx } from '../components/tokens';
 import { eventMissLine, eventSegLabel, segTitle, eventWhoLine, eventYouSummary } from './copy';
 import { signLook, useShow } from './frame';
 import { EventBuzz, EventSignBadge } from './glyphs';
-import { eventStageAt, type EventSegment } from './timing';
+import { eventSkipTo, eventStageAt, type EventSegment } from './timing';
 
 /**
  * The phone's rail through a phase, inside <EventShow>; the screen's shell places it. One small card at a time
@@ -119,22 +119,29 @@ export function EventTvPhoneRail({ me }: { me: string }) {
 }
 
 /**
+ * On a phone alone, what a tap on the map does now: skip to the event's result while it plays, or, from a result,
+ * go to the next event. Pure, so a screen can place it outside the show (the product's shell: by its actions).
+ */
+export function EventSkipHint({ playing, className }: { playing: boolean; className?: string }) {
+  return (
+    <span className={cx('rounded-chip bg-void/75 px-1.5 py-0.5 font-mono text-[10px] text-ink-2', className)} data-testid="skip-hint">
+      {playing ? 'tap the map to skip ›' : 'tap the map: next ›'}
+    </span>
+  );
+}
+
+/**
  * With no TV in the room, the rail beside the phone's own show: what is playing, then what it did to you, the skip
- * hint (when the map can be tapped), and the phase's earlier events.
+ * hint at its foot when `canSkip` (the gallery's place for it), and the phase's earlier events.
  */
 export function EventSoloRail({ me, canSkip = false }: { me: string; canSkip?: boolean }) {
   const { s, t } = useShow();
   const { seg, stage } = eventStageAt(s, t);
   const shown = seg ?? (stage === 'outro' ? (s.segments.at(-1) ?? null) : null);
-  const playing = seg !== null && t < seg.settleAt - 0.05;
   return (
     <>
       {!shown ? <EventWaiting /> : t < shown.settleAt - 0.2 ? <EventNowPlaying seg={shown} buzz={t - shown.announceAt < 1.2} /> : <EventPhoneCard seg={shown} me={me} at="you" />}
-      {seg && canSkip && (
-        <span className="mt-auto self-end rounded-chip bg-void/75 px-1.5 py-0.5 font-mono text-[10px] text-ink-2" data-testid="skip-hint">
-          {playing ? 'tap the map to skip ›' : 'tap the map: next ›'}
-        </span>
-      )}
+      {seg && canSkip && <EventSkipHint playing={eventSkipTo(s, t) === seg.settleAt} className="mt-auto self-end" />}
       <EventRailTail me={me} current={shown} />
     </>
   );

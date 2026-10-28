@@ -106,6 +106,16 @@ export function eventStageAt(s: EventScript, t: number): { stage: EventStage; se
   return { stage: t < seg.playAt ? 'announce' : t < seg.settleAt ? 'play' : 'settle', seg };
 }
 
+/**
+ * Where a tap on a phone alone jumps the show to: from an event still playing, to its result; from a result, to the
+ * next event. Null when no event is on (the intro, the outro): there is nothing to skip.
+ */
+export function eventSkipTo(s: EventScript, t: number): number | null {
+  const { seg } = eventStageAt(s, t);
+  if (!seg) return null;
+  return t < seg.settleAt - 0.05 ? seg.settleAt : seg.endAt;
+}
+
 /** How far a colony sweep has to travel to reach a plot: 0 at its edge, 1 at the far one. */
 export function sweepShare(ev: ShowEventView, h: { x: number; y: number }, w: number, hgt: number): number {
   switch (ev.from ?? 'w') {
@@ -199,7 +209,11 @@ export function plotStrikes(segments: EventSegment[], plot: ShowPlot, reduced: b
   );
 }
 
-/** What a plot makes at `t`: after the last strike that has landed, or what it made. */
+/**
+ * What a plot makes at `t`: after the last strike that has landed, or what it made. Taking the last landed strike's
+ * `after` relies on strikes landing in fired order: segments run back to back, and every hit is clamped to its
+ * segment's settle, which is never past its end.
+ */
 export function plotUnitsAt(segments: EventSegment[], plot: ShowPlot, t: number, reduced: boolean, grid: ShowGrid): number {
   return plotStrikes(segments, plot, reduced, grid)
     .filter((s) => t >= s.at)
