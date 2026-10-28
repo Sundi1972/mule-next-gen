@@ -29,7 +29,7 @@ const DECISIONS = [
   'Store (D1, Heiko): one hall, two rows. Top: the six outfitters, crops left, mines right. Bottom: the works (three factory fits), green belt, MULE corral, pub, with a door to the map at each end.',
   'Tap to walk (R1): tap a room and your creature walks there; time keeps running, so walking costs time. Heiko’s speeds (2026-10-28): 0.4 s a step on the map, along rows and columns, 1 s across the store, a Zipwing at pace 1.5.',
   'One clock for everyone (Heiko 2026-10-28): development is the same 50 s for all, on the TV and every phone. Hunger and sickness slow your WALK instead of shortening your time; no screen shows a player’s own countdown.',
-  'How you feel shows on your colonist wherever it walks in development: an amber bowl when a little short of Food, a larger red one that pulses when more than half is missing, a pink cross when sick. Its waddle slows with its pace. Start of development: “You eat 2 of the 5 Food you need. Hungry: you walk at 70% pace.”',
+  'How you feel shows on your colonist wherever it walks in development, in one family of chips: hunger as a bowl at three levels (peckish, hungry, starving; the bowl shows how much you ate), sickness as a pink cross, both at once when both. Pace (Heiko): 100% fed down to 20% with no Food, halved when sick, so 10% at worst. The waddle slows with it. “Hungry: 60% pace”, “Starving and sick: 10% pace”; press and hold your tag for the rule in Heiko’s words.',
   'Redesign (Heiko, 2026-10-22): every player screen is a stage (what you act on) and a guide rail that opens with “Now”, the next step and why; from a phone held sideways to a laptop, using the space.',
   'Development on a laptop: the store above the map (Heiko chose A), so walking out of the door lands you on the map; the next room glows and says TAP.',
 ];
@@ -41,12 +41,16 @@ const STORE_STATES = [
 ];
 
 /** The seats' condition this month (fixture): Ossa is sick, Brix a little short of Food, Kai fed; Lena per state. */
-const LENA: Record<'fed' | 'hungry' | 'sick', Condition> = {
-  fed: { ate: 5, need: 5, sick: false },
-  hungry: { ate: 2, need: 5, sick: false },
-  sick: { ate: 5, need: 5, sick: true },
-};
-const conditions = (lena: Condition): Record<string, Condition> => ({ lena, ossa: { ate: 5, need: 5, sick: true }, brix: { ate: 4, need: 5, sick: false }, kai: FED });
+const LENA = {
+  fed: { ate: 10, need: 10, sick: false },
+  peckish: { ate: 8, need: 10, sick: false },
+  hungry: { ate: 5, need: 10, sick: false },
+  starving: { ate: 2, need: 10, sick: false },
+  sick: { ate: 10, need: 10, sick: true },
+  hungrySick: { ate: 5, need: 10, sick: true },
+  worst: { ate: 0, need: 10, sick: true },
+} satisfies Record<string, Condition>;
+const conditions = (lena: Condition): Record<string, Condition> => ({ lena, ossa: { ate: 10, need: 10, sick: true }, brix: { ate: 8, need: 10, sick: false }, kai: FED });
 
 /** Lena's condition and the marker variant, around a screen. */
 function Feeling({ lena, variant = 'B', children }: { lena: Condition; variant?: 'A' | 'B'; children: ReactNode }) {
@@ -155,10 +159,14 @@ const DEV_STATES: { id: string; title: string; start: Start; lena?: keyof typeof
 
 /** For Heiko's approval (2026-10-28): one clock, and how hunger and sickness show. */
 const FEEL_STATES: { id: string; title: string; start: Start; lena: keyof typeof LENA; variant: 'A' | 'B' }[] = [
-  { id: 'dev-hungry-a', title: 'A · Hungry: the tag only', start: 'start', lena: 'hungry', variant: 'A' },
-  { id: 'dev-hungry', title: 'B · Hungry: the tag and a thought bubble', start: 'start', lena: 'hungry', variant: 'B' },
-  { id: 'dev-hungry-map', title: 'B · Hungry on the map: the slow walk', start: 'map', lena: 'hungry', variant: 'B' },
-  { id: 'dev-sick', title: 'B · Sick', start: 'start', lena: 'sick', variant: 'B' },
+  { id: 'dev-hungry-a', title: 'A · Hungry, 5 of 10 Food: the tag only (60%)', start: 'start', lena: 'hungry', variant: 'A' },
+  { id: 'dev-hungry', title: 'B · Hungry, 5 of 10: tag and thought bubble (60%)', start: 'start', lena: 'hungry', variant: 'B' },
+  { id: 'dev-peckish', title: 'B · Peckish, 8 of 10 (84%)', start: 'start', lena: 'peckish', variant: 'B' },
+  { id: 'dev-starving', title: 'B · Starving, 2 of 10 (36%)', start: 'start', lena: 'starving', variant: 'B' },
+  { id: 'dev-sick', title: 'B · Sick, fed (50%)', start: 'start', lena: 'sick', variant: 'B' },
+  { id: 'dev-hungry-sick', title: 'B · Hungry and sick, 5 of 10 (30%)', start: 'start', lena: 'hungrySick', variant: 'B' },
+  { id: 'dev-worst', title: 'B · Starving and sick, no Food: on the map at 10%', start: 'map', lena: 'worst', variant: 'B' },
+  { id: 'dev-hungry-map', title: 'B · Hungry on the map: the slow walk (60%)', start: 'map', lena: 'hungry', variant: 'B' },
 ];
 
 const LOBBY_STATES: { id: string; title: string; state: LobbyState }[] = [
@@ -331,7 +339,7 @@ export default function App() {
         <Links states={feel ? FEEL_STATES : DEV_STATES} current={hash} />
         <p className="max-w-[900px] text-sm text-ink-2">
           {feel
-            ? 'Playable. One clock for everyone; Lena is short of Food (or sick), so her Zipwing walks slower: watch the tag at her shoulder and her slower waddle. Ossa (sick) and Brix (a little short) carry theirs in the store. In B, a thought bubble says why when the clock starts and when she sets off on a walk. Tap a room to walk.'
+            ? 'Playable. One clock for everyone; Lena is short of Food or sick, so her Zipwing walks slower (Heiko: 100% fed down to 20% with no Food, halved when sick): watch the tag at her shoulder and her slower waddle; press and hold her tag for the rule. Ossa (sick) and Brix (peckish) carry theirs in the store. In B, a thought bubble says how she feels and her pace when the clock starts and when she sets off. Tap a room to walk.'
             : 'Playable. The rail always opens with "Now": the one next step and why. The room for it glows and says TAP; rooms you can\'t use yet say why. Your Zipwing walks (and waddles) from room to room and out of the door; the clock never stops. Laptop window (1440 × 900) first, then the phone held sideways.'}
         </p>
         <Feeling lena={LENA[dev.lena ?? 'fed']} variant={dev.variant ?? 'B'}>
@@ -393,12 +401,12 @@ export default function App() {
       <Page title="Development on the big screen · everyone walking">
         <TvFrame>
           <Board>
-            <Feeling lena={LENA.hungry}>
+            <Feeling lena={LENA.hungrySick}>
               <TvDevelop />
             </Feeling>
           </Board>
         </TvFrame>
-        <p className="max-w-[960px] text-sm text-ink-2">One clock across the top for everyone. Ossa (sick) leads an Energy MULE out to a far plot at 80% pace, Kai (fed) walks to the lakes, Brix (a little short of Food) goes into the store; Lena, very hungry, is in the store. The list says who walks slower this month, and why.</p>
+        <p className="max-w-[960px] text-sm text-ink-2">One clock across the top for everyone. Ossa (sick, 50%) leads an Energy MULE out to a far plot, Kai (fed) walks to the lakes, Brix (peckish, 84%) goes into the store; Lena, hungry and sick (30%), is in the store. The list says who walks slower this month, and why.</p>
       </Page>
     );
 

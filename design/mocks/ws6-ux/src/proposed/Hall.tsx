@@ -330,7 +330,7 @@ export function HallWalker({ v, wide }: { v: Visitor; wide: boolean }) {
         <Speaker id={v.id}>
           <span className={cx('relative rounded-full', v.me && 'ring-2 ring-holo ring-offset-1 ring-offset-table')}>
             <Creature species={species} color={SLOT_COLOR[slot]} size={wide ? 52 : 28} />
-            <ConditionTag id={v.id} size={wide ? 'wide' : 'phone'} />
+            <ConditionTag id={v.id} size={wide ? 'wide' : 'phone'} explain={!!v.me} />
             <ThoughtBubble id={v.id} moving={!!v.moving} size={wide ? 'wide' : 'phone'} edge={v.at.x < 15 ? 'left' : v.at.x > 85 ? 'right' : undefined} />
           </span>
         </Speaker>

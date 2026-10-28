@@ -22,22 +22,23 @@ import { useChat } from './Chat';
  */
 
 /**
- * STAND-IN for config.ts DEV_WALK (WS1, R1), until it lands: the mock reads these as the screens will read
- * config, never a number of their own. `paceAtNoFood` and `sickPace` stand in for WS1's hungerPace.
+ * STAND-IN for config.ts DEV_WALK (WS1, R1), until it lands: the mock reads these as the screens will read config, never
+ * a number of their own. The pace rule is Heiko's (2026-10-28): it falls linearly from 100% fed to 20% with no Food, and
+ * sickness halves it (5/10 Food 60%, 2/10 36%, sick and fed 50%, 0/10 and sick 10%). WS1 exports hungerShare and hungerPace.
  */
 export const DEV_WALK_STAND_IN = {
-  /** Seconds a step on the map takes at full pace (Heiko 2026-10-28). */
+  /** Seconds a step on the map takes at full pace. */
   tileSeconds: 0.4,
   /** Seconds one walk across the store floor takes at full pace. */
   hallSeconds: 1,
   /** A Zipwing's pace. */
   zipwingPace: 1.5,
   /** Pace with no Food at all; it rises linearly to 1 with the share of Food eaten. */
-  paceAtNoFood: 0.5,
-  /** Pace while sick, multiplied with hunger's. */
-  sickPace: 0.8,
-  /** The hunger tag turns strong (red) once this share of the month's Food is missing. */
-  hungerStrongShare: 0.5,
+  paceAtNoFood: 0.2,
+  /** Sickness multiplies the pace by this. */
+  sickPace: 0.5,
+  /** The hunger levels, by the share of the month's Food missing: peckish below the first, starving from the second. */
+  hungerLevels: { hungryFrom: 0.3, starvingFrom: 0.7 },
 };
 
 /** How long a thought bubble shows (display timing, not balance). */
@@ -46,11 +47,19 @@ export const THOUGHT_MS = { atClockStart: 3000, onSetOff: 2000, quiet: 8000 };
 export type Condition = { ate: number; need: number; sick: boolean };
 export const FED: Condition = { ate: 1, need: 1, sick: false };
 
-/** The share of the month's Food the colonist went without, 0 (fed) to 1 (none). */
+/** The share of the month's Food the colonist went without, 0 (fed) to 1 (none): WS1's hungerShare. */
 export const shortfall = (c: Condition) => (c.need > 0 ? Math.max(0, Math.min(1, 1 - c.ate / c.need)) : 0);
-export const hungerLevel = (c: Condition): 0 | 1 | 2 => (shortfall(c) === 0 ? 0 : shortfall(c) >= DEV_WALK_STAND_IN.hungerStrongShare ? 2 : 1);
 
-/** The colonist's pace this month, 1 = full: hunger and sickness multiply (species aside). */
+/** 0 fed, 1 peckish, 2 hungry, 3 starving, by DEV_WALK's hungerLevels. */
+export type HungerLevel = 0 | 1 | 2 | 3;
+export function hungerLevel(c: Condition): HungerLevel {
+  const s = shortfall(c);
+  const { hungryFrom, starvingFrom } = DEV_WALK_STAND_IN.hungerLevels;
+  return s === 0 ? 0 : s < hungryFrom ? 1 : s < starvingFrom ? 2 : 3;
+}
+export const HUNGER_WORD = ['Fed', 'Peckish', 'Hungry', 'Starving'] as const;
+
+/** The colonist's pace this month, 1 = full: WS1's hungerPace, then halved when sick (species aside). */
 export function paceOf(c: Condition): number {
   const hunger = 1 - (1 - DEV_WALK_STAND_IN.paceAtNoFood) * shortfall(c);
   return hunger * (c.sick ? DEV_WALK_STAND_IN.sickPace : 1);
@@ -58,15 +67,30 @@ export function paceOf(c: Condition): number {
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
-/** The one line that says what your condition does, for the rail and the start card. */
+/** What the colonist feels, as a word: "Hungry", "Sick", "Starving and sick". */
+export function feeling(c: Condition): string {
+  const level = hungerLevel(c);
+  return level > 0 && c.sick ? `${HUNGER_WORD[level]} and sick` : level > 0 ? HUNGER_WORD[level] : c.sick ? 'Sick' : 'Fed';
+}
+
+/** Heiko's plain rule, in his words, from config: wherever a screen explains the slowdown. */
+export function paceRule(c: Condition): string[] {
+  const points = Math.round((1 - DEV_WALK_STAND_IN.paceAtNoFood) * 10);
+  return [
+    ...(hungerLevel(c) > 0 ? [`You ate ${c.ate} of the ${c.need} Food you need. You lose ${points} points of walking speed per 10% of Food missing.`] : []),
+    ...(c.sick ? ['The dirty air made you sick. Sickness halves your walking speed.'] : []),
+  ];
+}
+
+/** The one line that says what your condition does, for the rail and the start card: "Hungry: 60% pace". */
 export function paceLine(c: Condition): { title: string; detail: string; tone: 'ok' | 'warn' | 'alert' } {
   const level = hungerLevel(c);
-  const pace = pct(paceOf(c));
   if (level === 0 && !c.sick) return { title: 'Fed: full pace', detail: `You ate the ${c.need} Food you need.`, tone: 'ok' };
-  const food = level > 0 ? `You ate ${c.ate} of the ${c.need} Food you need.` : `You ate the ${c.need} Food you need.`;
-  const sick = c.sick ? ' The dirty air made you sick; a Medicine before the month keeps it away.' : '';
-  const what = level > 0 && c.sick ? 'Hungry and sick' : level > 0 ? 'Hungry' : 'Sick';
-  return { title: `${what}: you walk at ${pace} pace`, detail: `${food}${sick} Everyone has the same time; you just cover less ground.`, tone: level === 2 || c.sick ? 'alert' : 'warn' };
+  return {
+    title: `${feeling(c)}: ${pct(paceOf(c))} pace`,
+    detail: `${paceRule(c).join(' ')} Everyone has the same time; you just cover less ground.`,
+    tone: level === 3 || c.sick ? 'alert' : 'warn',
+  };
 }
 
 /** Each seat's condition this month (fixture). Public: everyone sees the slow walk, so the tag says why. */
@@ -79,11 +103,18 @@ const VariantContext = createContext<'A' | 'B'>('B');
 export const ConditionVariant = VariantContext.Provider;
 export const useConditionVariant = () => useContext(VariantContext);
 
-function Bowl({ size }: { size: number }) {
+/** A bowl whose contents show how much of the month's Food was eaten: the hunger level reads even without colour. */
+function Bowl({ size, eaten = 0 }: { size: number; eaten?: number }) {
+  const top = 7.5 + 6 * (1 - eaten);
   return (
     <svg viewBox="0 0 16 16" width={size} height={size} aria-hidden>
-      <path d="M2 7.5h12a6 6 0 0 1-12 0Z" fill="currentColor" />
-      <path d="M5 2.5c.6.8.6 1.7 0 2.5M8 2c.6.8.6 1.7 0 2.5M11 2.5c.6.8.6 1.7 0 2.5" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" opacity="0.55" />
+      <path d="M2 7.5h12a6 6 0 0 1-12 0Z" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      {eaten > 0 && (
+        <clipPath id={`bowl-${size}-${Math.round(eaten * 10)}`}>
+          <rect x="0" y={top} width="16" height="16" />
+        </clipPath>
+      )}
+      {eaten > 0 && <path d="M2 7.5h12a6 6 0 0 1-12 0Z" fill="currentColor" clipPath={`url(#bowl-${size}-${Math.round(eaten * 10)})`} />}
     </svg>
   );
 }
@@ -96,38 +127,68 @@ function Cross({ size }: { size: number }) {
   );
 }
 
+/** A tag's chip: hunger and sickness are one family (the same chip, border and size), told apart by glyph and colour. */
+const CHIP = 'flex items-center justify-center rounded-[5px] border border-void/60 shadow-chip';
+
 /**
- * The tag at a colonist's shoulder (variant A and B): nothing when fed and well. Its strength follows the shortfall:
- * a small amber bowl when a little short, a larger red one that pulses when more than half the Food is missing.
+ * The tag at a colonist's shoulder (variant A and B): nothing when fed and well. Hunger has three levels, by how much
+ * Food is missing: peckish (an amber outline), hungry (filled amber), starving (red, pulsing); the bowl shows how much
+ * was eaten. Sickness is a pink cross on the same chip. On your own colonist, press and hold for the rule.
  */
-export function ConditionTag({ id, size = 'phone', inline = false }: { id: string; size?: 'phone' | 'tv' | 'wide'; inline?: boolean }) {
+export function ConditionTag({ id, size = 'phone', inline = false, explain = false }: { id: string; size?: 'phone' | 'tv' | 'wide'; inline?: boolean; explain?: boolean }) {
   const c = useCondition(id);
   const level = hungerLevel(c);
+  const [open, setOpen] = useState(false);
+  const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
   if (level === 0 && !c.sick) return null;
   const g = size === 'tv' ? 18 : size === 'wide' ? 16 : 10;
+  const box = g + 4;
+  const press = explain
+    ? {
+        onPointerDown: () => (hold.current = setTimeout(() => setOpen(true), 400)),
+        onPointerUp: () => hold.current && clearTimeout(hold.current),
+        onPointerLeave: () => {
+          if (hold.current) clearTimeout(hold.current);
+          setOpen(false);
+        },
+      }
+    : {};
   return (
-    <span className={cx('pointer-events-none z-20 flex gap-0.5', inline ? 'items-center' : 'absolute -right-1 -top-1')} data-testid={`condition-${id}`} data-hunger={level} data-sick={c.sick || undefined}>
+    <span
+      className={cx('z-20 flex gap-0.5', inline ? 'items-center' : 'absolute -right-1 -top-1', explain ? 'pointer-events-auto cursor-help touch-none' : 'pointer-events-none')}
+      data-testid={`condition-${id}`}
+      data-hunger={level}
+      data-sick={c.sick || undefined}
+      aria-label={`${feeling(c)}: ${pct(paceOf(c))} pace`}
+      {...press}
+    >
       {level > 0 && (
         <span
           className={cx(
-            'flex items-center justify-center rounded-[5px] border border-void/60 shadow-chip',
-            level === 2 ? 'bg-alert text-alert-ink motion-safe:animate-pulse' : 'bg-warn text-void',
+            CHIP,
+            level === 1 && 'border-warn bg-panel text-warn',
+            level === 2 && 'bg-warn text-void',
+            level === 3 && 'bg-alert text-alert-ink motion-safe:animate-pulse',
           )}
-          style={{ width: g + (level === 2 ? 6 : 4), height: g + (level === 2 ? 6 : 4) }}
-          aria-label={level === 2 ? 'very hungry' : 'hungry'}
+          style={{ width: box, height: box }}
           data-testid={`hunger-${id}`}
         >
-          <Bowl size={g} />
+          <Bowl size={g} eaten={1 - shortfall(c)} />
         </span>
       )}
       {c.sick && (
-        <span
-          className="flex items-center justify-center rounded-full border border-void/60 text-void shadow-chip"
-          style={{ width: g + 4, height: g + 4, background: 'var(--color-g-medicine)' }}
-          aria-label="sick"
-          data-testid={`sick-${id}`}
-        >
+        <span className={cx(CHIP, 'text-void')} style={{ width: box, height: box, background: 'var(--color-g-medicine)' }} data-testid={`sick-${id}`}>
           <Cross size={g - 2} />
+        </span>
+      )}
+      {open && (
+        <span className="absolute bottom-full left-1/2 z-40 mb-2 flex w-56 -translate-x-1/2 flex-col gap-1 rounded-panel border border-holo-line bg-panel p-2 text-left text-xs not-italic text-ink shadow-chip" data-testid={`rule-${id}`} role="tooltip">
+          <strong className="font-display text-sm">{feeling(c)}: {pct(paceOf(c))} pace</strong>
+          {paceRule(c).map((r) => (
+            <span key={r} className="text-ink-2">
+              {r}
+            </span>
+          ))}
         </span>
       )}
     </span>
@@ -201,8 +262,8 @@ export function ThoughtBubble({
     >
       <span className={cx('flex w-max items-center gap-1 rounded-full border-2 border-dotted border-ink-2 bg-raised font-display italic text-ink', size === 'tv' ? 'px-3 py-1 text-lg' : big ? 'px-2.5 py-0.5 text-sm' : 'px-1.5 py-0.5 text-[10px]')}>
         {level > 0 && (
-          <span className={level === 2 ? 'text-alert' : 'text-warn'}>
-            <Bowl size={g} />
+          <span className={level === 3 ? 'text-alert' : 'text-warn'}>
+            <Bowl size={g} eaten={1 - shortfall(c)} />
           </span>
         )}
         {c.sick && (
@@ -210,7 +271,9 @@ export function ThoughtBubble({
             <Cross size={g - 2} />
           </span>
         )}
-        <span>{level > 0 && c.sick ? 'Hungry and sick…' : level === 2 ? 'So hungry…' : level === 1 ? 'A bit hungry…' : 'I feel sick…'}</span>
+        <span>
+          {feeling(c)}… <span className="not-italic font-mono font-bold">{pct(paceOf(c))} pace</span>
+        </span>
       </span>
       <span className={cx('mt-0.5 rounded-full border-2 border-dotted border-ink-2 bg-raised', big ? 'h-2.5 w-2.5' : 'h-1.5 w-1.5', edge && (big ? 'mx-5' : 'mx-3'))} />
       <span className={cx('mt-0.5 rounded-full border border-dotted border-ink-2 bg-raised', big ? 'h-1.5 w-1.5' : 'h-1 w-1', edge && (big ? 'mx-6' : 'mx-3.5'))} />
@@ -264,7 +327,7 @@ function PaceRow({ id, name, slot }: { id: string; name: string; slot: Slot }) {
       <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-raised">
         <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: pct(pace), background: SLOT_COLOR[slot] }} />
       </div>
-      <span data-num className={cx('w-10 text-right font-mono text-sm', pace < 1 ? (level === 2 || c.sick ? 'text-alert' : 'text-warn') : 'text-ink-2')}>
+      <span data-num className={cx('w-10 text-right font-mono text-sm', pace < 1 ? (level === 3 || c.sick ? 'text-alert' : 'text-warn') : 'text-ink-2')}>
         {pct(pace)}
       </span>
       <span className="flex w-9 justify-start">
