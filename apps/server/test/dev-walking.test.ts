@@ -308,3 +308,37 @@ describe('FM-pub-late: the pub pays for the time left when the colonist gets the
     expect(after.tiles[home.index]).toMatchObject({ owner: LENA, outfit: 'food' });
   });
 });
+
+describe('FM-ai-still-walking: AI seats walk too', () => {
+  it('FM-ai-still-walking: at phaseScale 1 an AI seat buys, outfits and installs a MULE without one "Still walking" or "Still assaying" refusal, and each install lands on its arrival', () => {
+    const AI = 's3';
+    const { game, ctx, advance } = toDevelopment();
+    const refused: string[] = [];
+    const handle = game.handle.bind(game);
+    game.handle = (seatId, intent) => {
+      try {
+        handle(seatId, intent);
+      } catch (err) {
+        if (seatId === AI) refused.push(`${intent.type}: ${(err as Error).message}`);
+        throw err;
+      }
+    };
+    for (const id of ['s1', 's2']) game.handle(id, { type: 'pub' });
+
+    const installs: { good: Outfit; before: Outfit | null; after: Outfit | null }[] = [];
+    while (game.viewFor(null).phase === 'development') {
+      const colonist = colonistOf(game.viewFor(null), AI);
+      const good = game.viewFor(AI).me!.carriedMule;
+      if (colonist?.walk && typeof colonist.at === 'number' && good && good !== 'empty') {
+        advance(colonist.walk.arrivesAt - 1 - ctx.now());
+        const before = game.viewFor(null).tiles[colonist.at]!.outfit;
+        advance(1);
+        installs.push({ good, before, after: game.viewFor(null).tiles[colonist.at]!.outfit });
+      }
+      advance(100);
+    }
+    expect(refused.filter((r) => r.includes('Still'))).toEqual([]);
+    expect(installs.length).toBeGreaterThan(0);
+    for (const i of installs) expect(i).toEqual({ good: i.good, before: null, after: i.good });
+  });
+});
