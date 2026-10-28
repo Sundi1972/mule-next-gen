@@ -1,8 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { describe, expect, it, vi } from 'vitest';
 import { BRAIN } from '@mule/engine';
-import { buildPrompt, PERSONAS, type DecisionContext, type Prompt } from '@mule/ai';
-import { CallFailed, createHaikuComplete } from '../src/brain/client.js';
+import { buildPrompt, PERSONAS, type DecisionContext, type DecisionKind, type Prompt } from '@mule/ai';
+import { billUnknown, CallFailed, createHaikuComplete, createWriteComplete, WRITE_KINDS, type WritePrompt } from '../src/brain/client.js';
 import { fakeSdk, sdkMessage, type SdkMessage } from './brain-fakes.js';
 
 const CONTEXT: DecisionContext = {
@@ -199,5 +199,112 @@ describe('Haiku client', () => {
     expect(r.stopReason).toBe('refusal');
     const empty = fakeSdk(() => sent({ stop_reason: 'refusal', content: [] }));
     expect((await createHaikuComplete(empty)(PROMPT, 1000)).text).toBe('');
+  });
+});
+
+/** A strategy or playbook prompt: the port sends any JSON schema as it is given. */
+const WRITE: WritePrompt = {
+  system: "You write a seat's strategy.",
+  user: 'Month 2. Write the strategy.',
+  schema: { type: 'object', properties: { line: { type: 'string' } }, required: ['line'], additionalProperties: false },
+};
+const MOVES: readonly DecisionKind[] = ['land', 'develop', 'trade'];
+const movePrompt = (kind: DecisionKind): Prompt =>
+  buildPrompt([{ id: 'A', key: 'river', label: 'Claim river plot', utility: 0.5, value: 1, rationale: 'because river' }], PERSONAS.trader, { ...CONTEXT, kind });
+
+describe("T-AC-A6: strategy and playbook calls send adaptive thinking with BRAIN's model and effort for their kind; move calls keep thinking off and Haiku", () => {
+  it.each(WRITE_KINDS)("T-AC-A6: a %s call sends adaptive thinking at its kind's model, effort, reply cap and wait, one try; no timer outlives it", async (kind) => {
+    const settings = BRAIN.writeCalls[kind];
+    const sdk = fakeSdk(() => sdkMessage(USABLE));
+    vi.useFakeTimers();
+    try {
+      await createWriteComplete(sdk)(kind, WRITE);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(sdk.requests).toHaveLength(1);
+    expect(sdk.requests[0]!.params).toEqual({
+      model: settings.model,
+      max_tokens: settings.maxTokens,
+      thinking: { type: 'adaptive' },
+      system: [{ type: 'text', text: WRITE.system, cache_control: { type: 'ephemeral' } }],
+      messages: [{ role: 'user', content: WRITE.user }],
+      output_config: { effort: settings.effort, format: { type: 'json_schema', schema: WRITE.schema } },
+    });
+    expect(sdk.requests[0]!.options).toEqual({ timeout: settings.timeoutMs, maxRetries: 0, signal: expect.any(AbortSignal) });
+  });
+
+  it.each(WRITE_KINDS)("T-AC-A6: a %s call sends the model its caller names, the fallback included, with its kind's other settings", async (kind) => {
+    const sdk = fakeSdk(() => sdkMessage(USABLE));
+    await createWriteComplete(sdk)(kind, WRITE, BRAIN.writeFallbackModel);
+    expect(sdk.requests[0]!.params).toMatchObject({
+      model: BRAIN.writeFallbackModel,
+      max_tokens: BRAIN.writeCalls[kind].maxTokens,
+      thinking: { type: 'adaptive' },
+      output_config: { effort: BRAIN.writeCalls[kind].effort },
+    });
+  });
+
+  it.each(MOVES)('T-AC-A6: a %s call keeps thinking off, on BRAIN.model, with no effort', async (kind) => {
+    const sdk = fakeSdk(() => sdkMessage(USABLE));
+    await createHaikuComplete(sdk)(movePrompt(kind), BRAIN.landTimeoutMs);
+    const params = sdk.requests[0]!.params;
+    expect(params.thinking).toEqual({ type: 'disabled' });
+    expect(params.model).toBe(BRAIN.model);
+    expect(params.max_tokens).toBe(BRAIN.maxTokens);
+    expect(params.output_config).not.toHaveProperty('effort');
+  });
+
+  it("T-AC-A6: a write call whose body never ends settles as CallFailed 'timeout' at its kind's wait, its bill unknown", async () => {
+    vi.useFakeTimers();
+    try {
+      const stalled = fakeSdk(
+        (_n, _params, options) =>
+          new Promise<SdkMessage>((_, reject) => {
+            options.signal!.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+          }),
+      );
+      const wait = BRAIN.writeCalls.strategy.timeoutMs;
+      let settled: unknown;
+      const p = createWriteComplete(stalled, clock(wait))('strategy', WRITE).then(
+        (v) => (settled = v),
+        (e: unknown) => (settled = e),
+      );
+      await vi.advanceTimersByTimeAsync(wait - 1);
+      expect(settled).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      await p;
+      expect(vi.getTimerCount()).toBe(0);
+      expect(settled).toBeInstanceOf(CallFailed);
+      expect((settled as CallFailed).outcome).toBe('timeout');
+      expect((settled as CallFailed).ms).toBe(wait);
+      expect(billUnknown(null, settled)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("T-AC-A6: a 401 on a write call is CallFailed 'error', auth true, answered so billed nothing, with only our message and no retry", async () => {
+    const sdk = fakeSdk(() => {
+      throw Anthropic.APIError.generate(401, { type: 'error', error: { type: 'x', message: 'sk-ant-LEAK' } }, 'sk-ant-LEAK', new Headers());
+    });
+    const f = (await createWriteComplete(sdk)('playbook', WRITE).catch((e: unknown) => e)) as CallFailed;
+    expect(f).toBeInstanceOf(CallFailed);
+    expect(f.outcome).toBe('error');
+    expect(f.auth).toBe(true);
+    expect(billUnknown(null, f)).toBe(false);
+    expect(f.message).not.toContain('sk-ant');
+    expect(sdk.calls).toBe(1);
+  });
+
+  it('T-AC-A6: a write reply carries its text, usage and thinking tokens; a response without thinking tokens reads null', async () => {
+    const withThinking = sent({
+      usage: { input_tokens: 7, output_tokens: 9, cache_read_input_tokens: 3, cache_creation_input_tokens: null, output_tokens_details: { thinking_tokens: 40 } },
+    });
+    const r = await createWriteComplete(fakeSdk(() => withThinking))('strategy', WRITE);
+    expect(r).toMatchObject({ text: USABLE, thinking: 40, stopReason: 'end_turn', usage: { input: 7, cached_read: 3, cache_write: 0, output: 9 } });
+    const none = await createWriteComplete(fakeSdk(() => sdkMessage(USABLE)))('playbook', WRITE);
+    expect(none.thinking).toBeNull();
   });
 });
