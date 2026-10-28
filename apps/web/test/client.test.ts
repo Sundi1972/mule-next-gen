@@ -809,6 +809,14 @@ describe('TableClient', () => {
         slept += ms;
       },
       jump: (ms: number) => t.setNow(t.now() + ms),
+      /** Reads the server clock as a render does; returns how many subscribers heard of it (React forbids a set during render). */
+      readAsRender: () => {
+        let heard = 0;
+        const stopListening = t.client.subscribe(() => heard++);
+        t.client.serverNow();
+        stopListening();
+        return heard;
+      },
       /** The server's clock is set by `ms`; the next round trip measures it. */
       stepServer: (ms: number) => (stepped += ms),
     };
@@ -818,7 +826,11 @@ describe('TableClient', () => {
   it.each([
     { row: 'shown across a 90 s sleep that paused the monotonic clock', inFlight: () => undefined, shown: (t: Synced) => (t.advance(10_000), t.sleep(90_000), t.notice(), t.measure()) },
     { row: 'shown across a sleep that outlasted it', inFlight: () => undefined, shown: (t: Synced) => (t.advance(10_000), t.sleep(130_000), t.notice(), t.measure()) },
-    { row: 'shown while the device clock jumps 2 minutes ahead', inFlight: () => undefined, shown: (t: Synced) => (t.advance(10_000), t.jump(120_000), t.notice(), t.measure()) },
+    {
+      row: 'shown while the device clock jumps 2 minutes ahead, which a render notices first and tells no subscriber',
+      inFlight: () => undefined,
+      shown: (t: Synced) => (t.advance(10_000), t.jump(120_000), expect(t.readAsRender()).toBe(0), t.notice(), t.measure()),
+    },
     { row: 'shown while the device clock jumps 2 minutes back', inFlight: () => undefined, shown: (t: Synced) => (t.advance(10_000), t.jump(-120_000), t.notice(), t.measure()) },
     { row: 'requested before a 60 s sleep and arriving right after it, which notices the sleep', inFlight: (t: Synced) => t.sleep(60_000), shown: (t: Synced) => t.measure() },
     { row: 'arriving exactly at its expiresAt', lifeMs: 20, inFlight: () => undefined, shown: () => [] },
