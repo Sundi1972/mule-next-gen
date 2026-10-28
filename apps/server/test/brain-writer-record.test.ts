@@ -50,7 +50,11 @@ vi.mock('../src/mule-game.js', async (original) => {
     start(seats: SeatInfo[]): void {
       const writer = this.options.brain.writerFor({ id: seats[0]!.id, persona: 'trader', level: 'trader' });
       void writer?.write('strategy', ASK).then((r) => {
-        asked.written.push(r);
+        asked.written.push(structuredClone(r));
+        // A caller that goes on to change the reply it was handed must not change what was recorded.
+        r.reply.line = 'MUTATED';
+        r.reply.edits[0]!.to = 'MUTATED';
+        r.reply.edits.push({ path: '/landGrant/claims', to: 9, reason: 'MUTATED' });
         this.options.onGameOver?.(STATE);
       });
     }
@@ -125,7 +129,10 @@ describe('the writer port through the game record', () => {
     expect(sdk.requests[0]!.params.model).toBe(WRITE_CALLS.strategy.model);
     expect(promptOf(sdk.requests[0]!.params)).toEqual({ system: ASK.system, user: BRIEF.text });
     expect(sdk.requests[0]!.options.timeout).toBe(ASK.waitMs);
-    expect(readLedger(logPath).filter((l) => l.type === undefined).map((l) => [l.kind, l.outcome])).toEqual([['strategy', 'llm']]);
+    const calls = readLedger(logPath).filter((l) => l.type === undefined);
+    expect(calls.map((l) => [l.kind, l.outcome])).toEqual([['strategy', 'llm']]);
+    expect(calls[0]).toMatchObject({ input: 400, output: 60 });
+    expect(calls[0]!.usd).toBeGreaterThan(0);
 
     // The record: the seat is Smart, the start step notes the call pending, and one answer step holds the reply.
     expect(record.seats.map((s) => [s.id, s.smart])).toEqual([['p0', true], ['p1', false]]);
@@ -135,6 +142,7 @@ describe('the writer port through the game record', () => {
     expect(answers).toHaveLength(1);
     expect(answers[0]).toMatchObject({ type: 'answer', seat: 'p0', call: 1, kind: 'strategy' });
     expect(answers[0]!.type === 'answer' && answers[0]!.write).toEqual(reply);
+    expect(JSON.stringify(record)).not.toContain('MUTATED');
 
     // The replay, with the key set: the game is handed the recorded reply, no SDK is built and no call is made.
     vi.stubEnv('ANTHROPIC_API_KEY', KEY.ANTHROPIC_API_KEY);

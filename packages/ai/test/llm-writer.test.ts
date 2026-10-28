@@ -183,8 +183,11 @@ describe('C2: the checks the schema cannot carry, each a cause code with no repl
     { cause: 'bad_cash_floor', over: { cashFloor: 12.5 }, path: '/strategy/cashFloor' },
   ];
   it.each(fields)('C2: a strategy field with $cause is refused alone; the other fields reach validate', async ({ cause, over, path }) => {
-    const { written, v } = await write('trader', replyText({ strategy: strategyReply(over) }));
+    const { written, v, brief } = await write('trader', replyText({ strategy: strategyReply(over) }));
     expect(written.refused).toEqual([{ path, cause }]);
+    // The reply's strategy is a copy: changing it later never reaches the brief's draft.
+    expect(written.reply.strategy!.landTarget).toEqual(brief.strategy.landTarget);
+    expect(written.reply.strategy!.landTarget).not.toBe(brief.strategy.landTarget);
     expect(paths(v.seen[0]!)).not.toContain(path);
     expect(paths(v.seen[0]!)).toContain('/strategy/reason');
     expect(kept(written)).not.toContain(MARK);
