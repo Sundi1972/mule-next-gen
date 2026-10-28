@@ -2,15 +2,16 @@ import { EVENT_ENTRY, STORY } from './catalogue';
 import type { ShowEventView, ShowHit, ShowMode, ShowPhase, ShowTimeline } from './types';
 
 /**
- * The show's timeline, in seconds on the caller's clock. Each event plays in its own segment, exactly as long as the
- * server said (playMs), back to back in the order they fired. Inside a segment the gallery's beats keep their
- * proportions: the phase's intro (first segment only), the announcement, the motion, the settle.
+ * The show's timeline, in seconds on the caller's clock. The phase's intro plays first, as long as the server said
+ * (introMs); then each event plays in its own segment, exactly as long as the server said (playMs), back to back in
+ * the order they fired. Inside a segment the gallery's beats keep their proportions: the announcement, the motion,
+ * the settle.
  */
 
 /** The gallery's beats on the TV, in seconds: proportions only, scaled to fit each segment. */
-export const EVENT_BEAT = { intro: 1.8, announce: 2.2, settle: 1.2 } as const;
+export const EVENT_BEAT = { announce: 2.2, settle: 1.2 } as const;
 /** A phone with no TV in the room: quicker cards, and the motion at 75% of the TV's share. */
-export const EVENT_SOLO_BEAT = { intro: 1.1, announce: 1.4, settle: 0.8 } as const;
+export const EVENT_SOLO_BEAT = { announce: 1.4, settle: 0.8 } as const;
 export const EVENT_SOLO_PACE = 0.75;
 
 /** How long an event's motion plays in the gallery, at the TV's pace: a proportion, never a length on its own. */
@@ -47,20 +48,19 @@ export interface EventSegment {
 /** The least a segment's beats are scaled by, so its pace stays above 0. */
 const MIN_SCALE = 1e-3;
 
-export function eventSegments({ events }: ShowTimeline, start = 0, mode: ShowMode = 'tv'): EventSegment[] {
+export function eventSegments({ events, introMs }: ShowTimeline, start = 0, mode: ShowMode = 'tv'): EventSegment[] {
   const beat = mode === 'tv' ? EVENT_BEAT : EVENT_SOLO_BEAT;
   const modePace = mode === 'tv' ? 1 : EVENT_SOLO_PACE;
-  // Each end is the start plus every length so far, so the segments sum to the server's lengths exactly.
-  let ms = 0;
+  // Each end is the start plus the intro and every length so far, so the show sums to the server's lengths exactly.
+  // A length below 0 counts as 0: a moment, never time running back.
+  let ms = Math.max(0, introMs);
   return events.map((ev, i) => {
     const startAt = start + ms / 1000;
-    // A length below 0 counts as 0: a moment, never time running back.
     ms += Math.max(0, ev.playMs);
     const endAt = start + ms / 1000;
-    const intro = i === 0 ? beat.intro : 0;
     const play = playShare(ev) * modePace;
-    const k = (endAt - startAt) / (intro + beat.announce + play + beat.settle);
-    const announceAt = startAt + intro * k;
+    const k = (endAt - startAt) / (beat.announce + play + beat.settle);
+    const announceAt = startAt;
     const playAt = announceAt + beat.announce * k;
     // The pace divides the clock in the layers (a story's seconds, a front's progress): never 0. A 0 ms segment's
     // hits still land at once, clamped to its settle.
@@ -75,7 +75,7 @@ export interface EventScript {
   events: ShowEventView[];
   segments: EventSegment[];
   start: number;
-  /** When the phase's intro ends and the first event is announced. */
+  /** When the phase's intro ends and the first segment starts: `start` plus the server's introMs. */
   intro: number;
   end: number;
   mode: ShowMode;
@@ -84,13 +84,14 @@ export interface EventScript {
 export function eventScript(show: ShowTimeline, start = 0, mode: ShowMode = 'tv'): EventScript {
   const { events } = show;
   const segments = eventSegments(show, start, mode);
+  const intro = start + Math.max(0, show.introMs) / 1000;
   return {
     phase: events[0]?.phase ?? 'production',
     events,
     segments,
     start,
-    intro: segments[0]?.announceAt ?? start,
-    end: segments.at(-1)?.endAt ?? start,
+    intro,
+    end: segments.at(-1)?.endAt ?? intro,
     mode,
   };
 }

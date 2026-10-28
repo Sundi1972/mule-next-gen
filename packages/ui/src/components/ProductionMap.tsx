@@ -57,9 +57,9 @@ export const SHOW = {
   end: 15,
 } as const;
 
-/** How long the events play, in seconds: the server's lengths back to back, never shorter than a quiet month's window. */
-export function eventWindow({ events }: Lengths = QUIET): number {
-  const ms = events.reduce((n, e) => n + Math.max(0, e.playMs), 0);
+/** How long the events play, in seconds: the server's intro and lengths back to back, never shorter than a quiet month's window. */
+export function eventWindow({ events, introMs }: Lengths = QUIET): number {
+  const ms = events.reduce((n, e) => n + Math.max(0, e.playMs), Math.max(0, introMs));
   return Math.max(SHOW.flyStart - SHOW.eventAt, ms / 1000);
 }
 
@@ -224,7 +224,7 @@ export function ProductionMap({ width, height, tiles, production, t, slots, play
   return (
     <div ref={map} className={cx('relative', className)} data-testid="map-show">
       {/* The bars render inside the show, so they read the very script the module draws the events with. */}
-      <EventShow events={events} introMs={0} t={t} start={SHOW.eventAt} mode={mode} reduced={reduced} width={width} height={height} tiles={tiles} players={cast}>
+      <EventShow events={events} introMs={production.introMs} t={t} start={SHOW.eventAt} mode={mode} reduced={reduced} width={width} height={height} tiles={tiles} players={cast}>
         <EventLivingMap size={tv ? 'tv' : 'phone'} {...(focus !== undefined ? { focusSlot: focus } : {})} {...(framed ? { bars } : {})} />
         {!framed && <div className="pointer-events-none absolute inset-0">{bars}</div>}
       </EventShow>
