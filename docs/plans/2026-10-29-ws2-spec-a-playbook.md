@@ -186,9 +186,15 @@ Every handoff carries this line verbatim:
 - [ ] **Step 4: Run all three** → FAIL
 - [ ] **Step 5: Implement C4 per spec §1 C4 and §2 RULE-A1, RULE-A2 rows 1-2, RULE-A5** — fire-and-forget with a deadline at the land grant; asks through createBrain so `busy` (INV-one-in-flight) and the budget hold; the model per call from RULE-A5. Mechanism: sprout + one named edit.
   Plan-drift corrections from Tasks 1.1-1.3 (ws2-a-pr1-land @ ff8dbdb), to fold in:
-  - `BrainService.writerFor(seat)` returns the writer's checked reply and its refusals (`{ reply, refused }`), and
-    validate runs OUTSIDE it, so WS3's recorder captures the reply before validatePlan and a replay returns it as
-    recorded, never re-checking it. Send WS3 `writerFor`'s exact signature before the PR opens.
+  - `BrainService.writerFor(seat: BrainSeat): PlaybookWriter | null`, with
+    `write(kind: WriteKind, { brief, system, waitMs }) → Promise<{ reply: RecordedWrite; refused }>`; never throws
+    (every failure, budget included, is `reply.cause`). Signature sent to WS3 29 Oct. Split `writePlaybook` so
+    validate runs OUTSIDE `write`, in C4: WS3's recorder captures `reply` before validatePlan and a replay returns it
+    as recorded, never re-checking it.
+  - `refused` feeds only the next brief, NEVER the playbook (it is not in WS3's RecordedWrite, so a playbook built
+    from it would fail WS3's replay check that each replayed playbook equals its recorded entry).
+  - WS3's `recordPlaybook?: (entry: PlaybookNote) => void` (exported from mule-game.ts, WS3 #175 at 79eb63a on
+    ws3-auctions) is what C5 calls; build on it once it reaches feat/strategist, never on ws3-auctions.
   - The adapter over `client.ts::createWriteComplete` passes `stopReason` through (the writer's `refused` and
     `cut_off` causes need it).
   - If validatePlan throws, catch it here: log it, and the engine's playbook plays (the game never stalls on it).

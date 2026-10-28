@@ -402,6 +402,9 @@ Code-only; no existing state to reach. The record starts with WS3's build.
   BRAIN; the capability-first re-run rule → C3, §7. The spike's cause codes → C2.
 - **AM-A6 · 29 Oct · lead:** C4's seam renamed playbooks.ts (no clash with packages/ai's strategist.ts); C3 promotes
   the S-A1 port instead of a second client. Cost note for §0: C8 and C9 add about 2 PRs, so about 5 in all (in §0 since the goal gate).
+- **AM-A13 · 29 Oct · lead:** `writerFor(seat): PlaybookWriter | null`, `write(kind, {brief, system, waitMs})` never
+  throws and returns `{ reply: RecordedWrite, refused }`; validatePlan runs outside it (C4). The writer's `refused`
+  feeds only the next brief, never the playbook, so a replayed playbook equals its recorded entry (WS3 T-AC-11).
 - **AM-A12 · 29 Oct · WS3's record frozen (6b541f9):** writer replies are recorded inputs through
   `BrainService.writerFor` (WS3 AM-1, from WS2's review); playbooks go through `recordPlaybook` → C5, §3. WS2's
   server-side ledger type `CallKind` is renamed on PR-1's branch, so the engine's `CallKind` keeps the name.
