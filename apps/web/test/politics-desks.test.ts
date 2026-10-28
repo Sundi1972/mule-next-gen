@@ -122,23 +122,8 @@ function onTv(game: MuleView): string {
 /** The opening tag of the element carrying this data-testid, or undefined. */
 const tagOf = (html: string, testid: string) => html.match(new RegExp(`<[a-z]+[^>]*data-testid="${testid}"[^>]*>`))?.[0];
 
-/** The text inside the element carrying this data-testid, tags stripped. Assumes no element of the same tag nests in it. */
+/** The text inside the element carrying this data-testid, tags stripped, up to its own closing tag. */
 function textOf(html: string, testid: string): string {
-  const open = tagOf(html, testid);
-  expect(open, `an element with data-testid="${testid}"`).toBeDefined();
-  const tag = /^<([a-z]+)/.exec(open!)![1]!;
-  const from = html.indexOf(open!) + open!.length;
-  return html
-    .slice(from, html.indexOf(`</${tag}>`, from))
-    .replace(/<[^>]+>/g, '')
-    .replace(/&#x27;|&#39;/g, "'")
-    .replace(/&amp;/g, '&')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-/** The text inside the element carrying this data-testid, tags stripped, with elements of its own tag nesting in it. */
-function wordsOf(html: string, testid: string): string {
   const open = tagOf(html, testid);
   expect(open, `an element with data-testid="${testid}"`).toBeDefined();
   const tag = /^<([a-z]+)/.exec(open!)![1]!;
@@ -280,8 +265,8 @@ describe('the politics desks', () => {
     const desk = onPhone(on, ColonyDesk);
     expect(html.indexOf('data-testid="fund-card"')).toBeLessThan(html.indexOf(desk));
     expect(html.indexOf(desk)).toBeLessThan(html.indexOf('data-testid="colony-facts"'));
-    expect(wordsOf(html, 'fund-in')).toBe('the 8% sales tax on every sale; Ossa, the Governor, sets it');
-    expect(wordsOf(html, 'fund-out')).toBe('Governor 50 cr a month, Sheriff 30 cr a month');
+    expect(textOf(html, 'fund-in')).toBe('the 8% sales tax on every sale; Ossa, the Governor, sets it');
+    expect(textOf(html, 'fund-out')).toBe('Governor 50 cr a month, Sheriff 30 cr a month');
     expect(textOf(html, 'land-baron')).toContain('Land Baron Ossa');
   });
 
@@ -318,7 +303,6 @@ describe('the politics desks', () => {
     const html = onPhone(view(politics({ weights })), CouncilDesk);
     const table = html.slice(html.indexOf('data-testid="vote-weights"'));
     expect(table.match(/<th\b/g)?.length, 'Player and Votes only').toBe(2);
-    // The row, not the parts span: textOf stops at the first closing tag of its kind, and the parts nest spans.
     expect(textOf(html, 'weight-s2')).toBe('Ossa' + 'base 1 · land +1 · rep. −1 · Baron +1 · taxes +2' + '4');
     expect(textOf(html, 'weight-votes-s2')).toBe('4');
     expect(textOf(html, 'weight-s3'), 'zero parts left out').toBe('Kai' + 'base 1 · taxes +1' + '2');
@@ -393,7 +377,7 @@ describe('T-AC-62: Governor only, the default POLITICS.offices', () => {
     expect(textOf(council, 'candidates')).toBe('Governor: Ossa');
     expect(electionNow({ view: announce, me: announce.me!, self: PLAYERS[0]! })?.detail).toMatch(/^Election month: Governor\. /);
     const colony = onPhone(announce, ColonyWithFacts);
-    expect(wordsOf(colony, 'fund-out')).toBe('Governor 50 cr a month');
+    expect(textOf(colony, 'fund-out')).toBe('Governor 50 cr a month');
     expect(colony).not.toContain('Sheriff');
 
     const tv = onTv(view(politics({ election: election({ stage: 'ceremony', ceremony: at('governor', 'intro'), candidates: { governor: ['s1', 's2'] } }) })));
@@ -410,8 +394,8 @@ describe("the hub's politics parts in plain words (UX audit A-3)", () => {
     const html = onPhone(month(4, { governor: 's3', term: [4, 6], next: 7, election: election({ stage: 'over' }), tax: { percent: 6, start: 5, low: 0, high: 10 }, fund: 1240 }), ColonyWithFacts);
     expect(html.match(/data-testid="([^"]+)"/)?.[1], 'the first thing in the Colony desk').toBe('fund-card');
     expect(textOf(html, 'fund-total')).toBe('1,240 cr');
-    expect(wordsOf(html, 'fund-in')).toBe('the 6% sales tax on every sale; Kai, the Governor, sets it');
-    expect(wordsOf(html, 'fund-out')).toBe('Governor 50 cr a month');
+    expect(textOf(html, 'fund-in')).toBe('the 6% sales tax on every sale; Kai, the Governor, sets it');
+    expect(textOf(html, 'fund-out')).toBe('Governor 50 cr a month');
   });
 
   it.each<[string, MuleView, string, string | null]>([
@@ -420,9 +404,9 @@ describe("the hub's politics parts in plain words (UX audit A-3)", () => {
     ['when the game ends before another election', month(10, { governor: 's3', term: [10, 12], next: null, election: null }), 'Governor: Kai, until month 12', null],
   ])("H-6: the hub's offices line says who governs until when, and when the next election is, in words (%s)", (_, game, governor, next) => {
     const html = onPhone(game, OfficesLine);
-    expect(wordsOf(html, 'office-governor')).toBe(governor);
+    expect(textOf(html, 'office-governor')).toBe(governor);
     if (next === null) expect(tagOf(html, 'next-election')).toBeUndefined();
-    else expect(wordsOf(html, 'next-election')).toBe(next);
-    expect(wordsOf(html, 'roadmap-offices'), 'no codes').not.toMatch(/\bM\d|NEXT|ELECTION/);
+    else expect(textOf(html, 'next-election')).toBe(next);
+    expect(textOf(html, 'roadmap-offices'), 'no codes').not.toMatch(/\bM\d|NEXT|ELECTION/);
   });
 });
