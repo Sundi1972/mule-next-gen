@@ -1,7 +1,8 @@
 /**
  * Just enough of a browser for react-dom/client to mount a component in node: elements, text, attributes,
- * a 2D canvas that records what was painted on it, ResizeObserver, ImageData, a screen and a pixel ratio.
- * Import it before react-dom, which decides at load whether a DOM exists. The repo has no jsdom.
+ * a 2D canvas that records what was painted on it, ResizeObserver, ImageData, a screen, a window and a pixel
+ * ratio, and on request a Worker with OffscreenCanvas. Import it before react-dom, which decides at load whether
+ * a DOM exists. The repo has no jsdom.
  */
 
 class FakeNode {
@@ -112,6 +113,11 @@ class FakeCanvas extends FakeElement {
   toDataURL() {
     return `data:image/png;base64,${this.width}x${this.height}#${paintedCanvases.length}`;
   }
+  toBlob(done: (blob: Blob | null) => void, type: string) {
+    // Browsers encode in the background and call back in a later task.
+    const blob = new Blob([`${this.width}x${this.height}#${paintedCanvases.length}`], { type });
+    setTimeout(() => done(blob), 0);
+  }
 }
 
 class FakeDocument extends FakeNode {
@@ -158,20 +164,22 @@ class FakeResizeObserver {
 
 export const document = new FakeDocument();
 
-/** The device the page runs on. */
-export const device = { screen: { width: 0, height: 0 }, devicePixelRatio: 1 };
+/** The device the page runs on: its screen, and the browser window on it. */
+export const device = { screen: { width: 0, height: 0 }, window: { width: 0, height: 0 }, devicePixelRatio: 1 };
 
 const window = {
   document,
-  screen: device.screen,
+  get screen() {
+    return device.screen;
+  },
   get devicePixelRatio() {
     return device.devicePixelRatio;
   },
   get innerWidth() {
-    return device.screen.width;
+    return device.window.width;
   },
   get innerHeight() {
-    return device.screen.height;
+    return device.window.height;
   },
   event: undefined,
   HTMLIFrameElement: class {},
@@ -182,3 +190,62 @@ const window = {
 };
 
 Object.assign(globalThis, { window, document, ImageData: FakeImageData, ResizeObserver: FakeResizeObserver });
+
+/**
+ * How the worker answers each job it is sent, in order: a PNG, a PNG once the test calls `fakeWorker.release()`,
+ * a failed job, no 2D OffscreenCanvas, a crash, or nothing ever.
+ */
+export type WorkerAnswer = 'blob' | 'held' | 'fail' | 'incapable' | 'crash' | 'silent';
+
+/** The installed worker's script of answers ('blob' once it runs out), every job it was sent, and its held answers. */
+export const fakeWorker = {
+  answers: [] as WorkerAnswer[],
+  jobs: [] as { width: number; height: number; pxPerTile: number }[],
+  held: [] as (() => void)[],
+  /** Sends the oldest held answer. */
+  release() {
+    fakeWorker.held.shift()?.();
+  },
+};
+
+type Job = { width: number; height: number; pxPerTile: number };
+
+class FakeWorker {
+  onmessage: ((e: { data: unknown }) => void) | null = null;
+  onerror: ((e: { message: string; preventDefault(): void }) => void) | null = null;
+  private terminated = false;
+  postMessage({ id, job }: { id: number; job: Job }) {
+    fakeWorker.jobs.push({ width: job.width, height: job.height, pxPerTile: job.pxPerTile });
+    const answer = fakeWorker.answers.shift() ?? 'blob';
+    if (answer === 'silent') return;
+    const reply = () => {
+      if (this.terminated) return;
+      if (answer === 'crash') this.onerror?.({ message: 'the worker crashed', preventDefault() {} });
+      else if (answer === 'blob' || answer === 'held') this.onmessage?.({ data: { id, blob: new Blob([`${job.width}x${job.height}@${job.pxPerTile}`], { type: 'image/png' }) } });
+      else this.onmessage?.({ data: { id, error: answer, incapable: answer === 'incapable' } });
+    };
+    // A worker answers in a later task, and a terminated one never does.
+    if (answer === 'held') fakeWorker.held.push(() => setTimeout(reply, 0));
+    else setTimeout(reply, 0);
+  }
+  terminate() {
+    this.terminated = true;
+  }
+}
+
+/**
+ * Gives the page a Worker, answering in the order given, and an OffscreenCanvas unless `offscreen` is false.
+ * Before this the page has neither.
+ */
+export function installWorker(answers: WorkerAnswer[] = [], { offscreen = true } = {}): void {
+  fakeWorker.answers = [...answers];
+  fakeWorker.jobs = [];
+  fakeWorker.held = [];
+  Object.assign(globalThis, { Worker: FakeWorker }, offscreen ? { OffscreenCanvas: class {} } : {});
+}
+
+export function removeWorker(): void {
+  const g = globalThis as { Worker?: unknown; OffscreenCanvas?: unknown };
+  delete g.Worker;
+  delete g.OffscreenCanvas;
+}

@@ -1,8 +1,9 @@
-import { device, document, layout, paintedCanvases } from './fake-dom';
-import { Landscape, type Terrain } from '@mule/ui';
-import { createElement } from 'react';
+import { device, document, fakeWorker, installWorker, layout, paintedCanvases, removeWorker, type FakeElement, type WorkerAnswer } from './fake-dom';
+import type { Terrain } from '@mule/ui';
+import { createElement, Fragment, type ReactElement } from 'react';
+import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const W = 13;
 const H = 7;
@@ -16,43 +17,225 @@ const TERRAIN: Terrain[] = Array.from({ length: W * H }, (_, i) => {
   return 'plains';
 });
 
-/** Mounts the map's landscape laid out `width` CSS px wide, waits for its picture, unmounts it and returns the picture. */
-async function showAt(width: number): Promise<string | null> {
-  layout.width = width;
+/** A 3×2 swatch of one terrain, like the holo-table's terrain cards. */
+const swatch = (seed: number, terrain: Terrain = 'plains') => ({ width: 3, height: 2, terrain: new Array<Terrain>(6).fill(terrain), seed });
+
+type Props = { width: number; height: number; terrain: Terrain[]; seed: number; theme?: 'light' | 'dark' };
+
+/** Each test loads the UI afresh, as a page does: nothing painted yet, no worker made. */
+let Landscape: typeof import('@mule/ui').Landscape;
+
+beforeEach(async () => {
+  vi.resetModules();
+  ({ Landscape } = await import('@mule/ui'));
+  paintedCanvases.length = 0;
+  performance.clearMarks('landscape-paint');
+  // A small screen with an even smaller window, so pictures are cheap to paint here.
+  device.screen = { width: 192, height: 128 };
+  device.window = { width: 96, height: 64 };
+  device.devicePixelRatio = 1;
+});
+
+afterEach(() => {
+  removeWorker();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
+
+const land = ({ theme = 'light', ...map }: Props) => createElement(Landscape, { ...map, theme });
+
+/**
+ * Mounts the maps on one screen. Each render commits at once, effects included, as React does for a tap.
+ * `render(maps, remount)` renders again; with `remount` every map is a new element, as on a phase change.
+ */
+function mount(...maps: Props[]) {
   const host = document.createElement('div');
   document.body.appendChild(host);
   const root = createRoot(host as unknown as HTMLElement);
-  root.render(createElement(Landscape, { width: W, height: H, terrain: TERRAIN, theme: 'light', seed: 93 }));
-  const src = await vi.waitFor(
+  let generation = 0;
+  const render = (list: Props[], remount = false) => {
+    if (remount) generation++;
+    flushSync(() => root.render(createElement(Fragment, null, ...list.map((m, i) => createElement(Fragment, { key: `${generation}-${i}` }, land(m))))));
+  };
+  render(maps);
+  return {
+    host,
+    render,
+    srcs: () => host.findAll('img').map((img: FakeElement) => img.getAttribute('src')),
+    unmount() {
+      root.unmount();
+      document.body.removeChild(host);
+    },
+  };
+}
+
+/** Waits until `host` shows `n` pictures, and returns their sources. */
+async function pictures(host: FakeElement, n: number): Promise<(string | null)[]> {
+  return vi.waitFor(
     () => {
-      const img = host.findAll('img')[0];
-      if (!img) throw new Error('the landscape has no picture yet');
-      return img.getAttribute('src');
+      const srcs = host.findAll('img').map((img) => img.getAttribute('src'));
+      if (srcs.length < n) throw new Error(`${srcs.length} of ${n} pictures so far`);
+      return srcs;
     },
     { timeout: 10_000, interval: 5 },
   );
-  root.unmount();
-  document.body.removeChild(host);
-  return src;
+}
+
+/** Shows one map until its picture arrives, then leaves. */
+async function show(map: Props): Promise<string | null> {
+  const screen = mount(map);
+  const [src] = await pictures(screen.host, 1);
+  screen.unmount();
+  return src ?? null;
 }
 
 describe('the landscape on a phase change', () => {
   it('FM-FREEZE-1: a map laid out 955 px wide and then 992 px wide on the same device is painted once, at the device resolution, and shown both times', async () => {
     // An iPhone SE held sideways: 568×320 CSS px at 2×. The map fits it at min(568 / 13, 320 / 7) = 43.7 px a plot,
-    // 87.4 device px, rounded up to the step of 32: 96 px a plot, a 1248×672 picture.
-    device.screen.width = 568;
-    device.screen.height = 320;
+    // 87.4 device px, rounded up to the step of 32: 96 px a plot, a 1248×672 picture. The browser window is smaller,
+    // 400×220, and must not count: it would give 30.8 px a plot, 64 at 2×.
+    device.screen = { width: 568, height: 320 };
+    device.window = { width: 400, height: 220 };
     device.devicePixelRatio = 2;
-    performance.clearMarks('landscape-paint');
+    const map = { width: W, height: H, terrain: TERRAIN, seed: 93 };
 
     // The hub draws the map 955 px wide; the land grant, 992 px.
-    const hub = await showAt(955);
-    const grant = await showAt(992);
+    layout.width = 955;
+    const hub = await show(map);
+    layout.width = 992;
+    const grant = await show(map);
 
     expect(paintedCanvases).toEqual([{ width: 13 * 96, height: 7 * 96 }]);
-    expect(hub).toBeTruthy();
+    // Encoded off this thread where the browser can, into the same blob-URL cache as the worker's pictures.
+    expect(hub).toMatch(/^blob:/);
     expect(grant).toBe(hub);
     // The counter the browser checks reads the same paint.
     expect(performance.getEntriesByName('landscape-paint')).toHaveLength(1);
+  });
+
+  it('FM-FREEZE-1: a screen that leaves before its picture arrives costs no paint', async () => {
+    const gone = mount({ ...swatch(1), width: 4 });
+    gone.unmount();
+    // The queue paints in order asked, so once this later map shows, the gone screen's turn has passed.
+    await show(swatch(2));
+
+    // 3×2 on the 192×128 screen: 64 px a plot.
+    expect(paintedCanvases).toEqual([{ width: 192, height: 128 }]);
+  });
+
+  it('FM-FREEZE-1: two maps of one colony on one screen share one paint and one picture; the night theme paints its own', async () => {
+    const screen = mount(swatch(3), swatch(3));
+    const [a, b] = await pictures(screen.host, 2);
+    screen.unmount();
+
+    expect(paintedCanvases).toHaveLength(1);
+    expect(a).toBeTruthy();
+    expect(b).toBe(a);
+
+    const night = await show({ ...swatch(3), theme: 'dark' });
+    expect(paintedCanvases).toHaveLength(2);
+    expect(night).not.toBe(a);
+  });
+
+  it('FM-FREEZE-2: five maps on a screen that re-renders, or is remounted, keep their pictures, with no repaint', async () => {
+    const maps = [1, 2, 3, 4, 5].map((seed) => swatch(seed));
+    const screen = mount(...maps);
+    const before = await pictures(screen.host, 5);
+    expect(paintedCanvases).toHaveLength(5);
+
+    // The holo-table's terrain cards re-render as the slider moves: equal terrain in new arrays.
+    screen.render(maps.map((m) => ({ ...m, terrain: [...m.terrain] })));
+    // A phase change remounts them: every old effect is cleaned up before any new one runs.
+    screen.render(maps, true);
+    await show(swatch(6));
+
+    expect(paintedCanvases).toHaveLength(6);
+    expect(screen.srcs()).toEqual(before);
+    screen.unmount();
+  });
+});
+
+describe('the landscape painted in a worker', () => {
+  it('FM-FREEZE-1: a map re-rendered dark while its light picture is painting shows the dark picture, never the light one', async () => {
+    installWorker(['held', 'held']);
+    const made: string[] = [];
+    const createObjectURL = URL.createObjectURL.bind(URL);
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+      const url = createObjectURL(blob as Blob);
+      made.push(url);
+      return url;
+    });
+    const screen = mount(swatch(11));
+    await vi.waitFor(() => expect(fakeWorker.jobs).toHaveLength(1), { interval: 5 });
+
+    screen.render([{ ...swatch(11), theme: 'dark' }]);
+    fakeWorker.release();
+    // The light picture is in, and the dark one sent, 16 ms later: long after any render the light one caused.
+    await vi.waitFor(() => expect(fakeWorker.jobs).toHaveLength(2), { interval: 5 });
+    expect(made).toHaveLength(1);
+    expect(screen.srcs()).toEqual([]);
+
+    fakeWorker.release();
+    expect(await pictures(screen.host, 1)).toEqual([made[1]]);
+    screen.unmount();
+  });
+
+  it('FM-FREEZE-2: of five maps shown in turn, the two oldest pictures are revoked, never the one on screen', async () => {
+    installWorker();
+    const revoked: string[] = [];
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation((url) => void revoked.push(url));
+
+    const shown = [];
+    for (const seed of [1, 2, 3, 4]) shown.push(await show(swatch(seed)));
+    const onScreen = mount(swatch(5));
+    shown.push((await pictures(onScreen.host, 1))[0]);
+
+    expect(fakeWorker.jobs).toHaveLength(5);
+    expect(paintedCanvases).toHaveLength(0);
+    expect(shown.every((src) => src?.startsWith('blob:'))).toBe(true);
+    expect(revoked).toEqual([shown[0], shown[1]]);
+    onScreen.unmount();
+  });
+
+  const BOTH_HERE = [{ width: 256, height: 128 }, { width: 192, height: 128 }];
+  // Two maps in turn: what the worker answers the first (and whether the page has OffscreenCanvas), how many jobs
+  // the worker is sent, and which pictures are then painted on this thread.
+  const FAILURES: [string, WorkerAnswer[], boolean, number, { width: number; height: number }[]][] = [
+    ['a job the worker fails is painted on this thread, and the next picture comes from the worker again', ['fail'], true, 2, [{ width: 256, height: 128 }]],
+    ['a worker with no 2D OffscreenCanvas is given up, and both pictures are painted on this thread', ['incapable'], true, 1, BOTH_HERE],
+    ['a worker that crashes is given up, and both pictures are painted on this thread', ['crash'], true, 1, BOTH_HERE],
+    ['a page with workers but no OffscreenCanvas sends the worker nothing and paints both on this thread', [], false, 0, BOTH_HERE],
+  ];
+
+  it.each(FAILURES)('FM-FREEZE-3: %s', async (_label, answers, offscreen, posted, paintedHere) => {
+    installWorker(answers, { offscreen });
+    const first = await show({ ...swatch(7), width: 4 });
+    const second = await show(swatch(8));
+
+    expect(first).toBeTruthy();
+    expect(second).toBeTruthy();
+    expect(fakeWorker.jobs).toHaveLength(posted);
+    expect(paintedCanvases).toEqual(paintedHere);
+  });
+
+  it('FM-FREEZE-3: a worker that never answers is given up after 30 s; the picture is painted on this thread, and so is the next', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    installWorker(['silent']);
+    const screen = mount({ ...swatch(9), width: 4 });
+    await vi.waitFor(() => expect(fakeWorker.jobs).toHaveLength(1), { interval: 5 });
+
+    // A slow paint is not a hung worker: nothing is painted twice before the 30 s are up.
+    await vi.advanceTimersByTimeAsync(29_900);
+    expect(paintedCanvases).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(paintedCanvases).toEqual([{ width: 256, height: 128 }]);
+    await pictures(screen.host, 1);
+    screen.unmount();
+
+    const next = mount(swatch(10));
+    await pictures(next.host, 1);
+    expect(fakeWorker.jobs).toHaveLength(1);
+    expect(paintedCanvases).toHaveLength(2);
+    next.unmount();
   });
 });
