@@ -777,8 +777,11 @@ export const STRATEGIST = {
   horizon: 6,
   /** Each later month counts this share of the one before. */
   discount: 0.9,
-  /** Credits of gain that score 0.75 on the gain curve (0 scores 0.5). */
-  gainScale: { plot: 400, develop: 300, trade: 80 },
+  /**
+   * Credits of gain that score 0.75 on the gain curve (0 scores 0.5). A plot's gain over the game runs to
+   * several thousand, so its scale is wide: at 400 every plot above about 1,200 scored the same.
+   */
+  gainScale: { plot: 1200, develop: 300, trade: 80 },
   /** Cash it always keeps back, before the persona's reserve multiplier, plus the cost of next month's Food, Water and Energy shortfall. */
   cashFloor: 60,
   /** What one colony air point costs it, in credits, rising as the air gets dirtier (doubles by Smoggy). */

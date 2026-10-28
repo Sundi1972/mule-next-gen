@@ -1,3 +1,4 @@
+import { advancePhase, COLONY_SELLER, createGame } from '@mule/engine';
 import type { GameContext } from '@tabletop/core';
 
 /** The three seats these server tests play with. */
@@ -40,4 +41,15 @@ export function fakeContext(options: { onChanged?: (at: number) => void } = {}) 
     }
   };
   return { ctx, advance, waits };
+}
+
+/** The first seed whose month-1 roll brings a colony lot for these seats, found by playing the engine, never by mocking its RNG. */
+export function colonySeed(players: { id: string; name: string; isAi: boolean }[] = seats): number {
+  for (let seed = 1; seed < 1_000; seed++) {
+    const state = createGame({ seed, players });
+    while (state.phase !== 'landGrant') advancePhase(state);
+    advancePhase(state);
+    if (state.landAuction?.lot?.seller === COLONY_SELLER) return seed;
+  }
+  throw new Error('no colony seed under 1000');
 }
