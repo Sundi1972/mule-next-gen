@@ -207,33 +207,38 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
       <>
         {/* This branch also draws an auction or land auction for the moment before its data arrives; Ready means Done there. */}
         {phase !== 'planning' ? null : waiting.length > 0 ? (
-          <div className="flex flex-col gap-3 rounded-panel border-2 border-holo bg-holo-soft p-5 shadow-glow" data-testid="tv-waiting">
+          <div className="flex shrink-0 flex-col gap-3 rounded-panel border-2 border-holo bg-holo-soft p-5 shadow-glow" data-testid="tv-waiting">
             <WaitingFor seats={waiting} me={null} tv />
             {hostCanContinue && <span className="text-lg text-ink-2">{host.name}, the host, can continue without them.</span>}
           </div>
         ) : (
-          <div className="rounded-panel border-2 border-holo bg-holo-soft p-5 font-display text-3xl font-semibold shadow-glow">Everyone is ready</div>
+          <div className="shrink-0 rounded-panel border-2 border-holo bg-holo-soft p-5 font-display text-3xl font-semibold shadow-glow">Everyone is ready</div>
         )}
-        <MarketTiles game={game} />
-        <News news={game.news} />
-        <ul className="flex flex-col gap-3">
-          {chat
-            .filter((c) => !c.to)
-            .slice(-4)
-            .map((c) => (
-              <li key={c.id} className="flex items-start gap-3">
-                <PlayerMark slot={slotOf(game, c.from) ?? 0} size={22} />
-                <p className="text-lg leading-snug">
-                  <span className="font-display font-semibold">{player(game, c.from)?.name}</span>
-                  <span className="text-ink-2"> {c.text}</span>
-                </p>
-              </li>
-            ))}
-        </ul>
+        <div className="shrink-0">
+          <MarketTiles game={game} />
+        </div>
+        {/* News and chat give way when the column is full, so the prices and who we wait for always show; chat is cut first. */}
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+          <News news={game.news} />
+          <ul className="flex flex-col gap-3">
+            {chat
+              .filter((c) => !c.to)
+              .slice(-4)
+              .map((c) => (
+                <li key={c.id} className="flex items-start gap-3">
+                  <PlayerMark slot={slotOf(game, c.from) ?? 0} size={22} />
+                  <p className="text-lg leading-snug">
+                    <span className="font-display font-semibold">{player(game, c.from)?.name}</span>
+                    <span className="text-ink-2"> {c.text}</span>
+                  </p>
+                </li>
+              ))}
+          </ul>
+        </div>
         {phase !== 'planning' ? (
           <Players game={game} className="mt-auto" right={(p) => <span className="font-mono text-sm text-ink-3">{p.isAi ? 'AI' : p.ready ? 'READY' : '…'}</span>} />
         ) : (
-          <ul className="mt-auto flex flex-col gap-2" data-testid="tv-ready-list">
+          <ul className="mt-auto flex shrink-0 flex-col gap-2" data-testid="tv-ready-list">
             {game.players.map((p) => {
               const isAway = !p.isAi && !connected(p.id);
               const state = p.isAi ? 'AI · READY' : p.ready ? 'READY' : isAway ? 'AWAY · PLANNING' : 'PLANNING';
