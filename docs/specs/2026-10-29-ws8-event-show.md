@@ -593,6 +593,21 @@ goal      G-2 (unchanged)
 folded    RULE-3 row 4: the solo show plays, then the result holds to the phase's end; T-AC-5 asserts the hold
 ```
 
+```
+AM-9 · 2026-10-28 · PM ruling (A), PR-1 Task 4 (the TV's pips)
+
+target    §1 C6 · §9 (a new WS4 named edit)
+said      C6 composes the gallery's TV parts in TvProduction's right-hand column
+did       the gallery puts the event pips at the right of the TV header (headerExtra); TvHeader is WS4's
+          (apps/web/src/table/TableApp.tsx). A named edit, WS4 reviewing: TvHeader gains one optional
+          `extra?: ReactNode` in its right cluster; existing callers pass nothing and render as today; TvProduction
+          passes the pips. A render check proves the pips sit in the header and the log opens the rail (at the TV's
+          1280×720 frame; the phone sizes do not apply to the TV screen).
+because   HC-1: the approved layout
+goal      G-1 (unchanged)
+folded    §9 WS4 named edits gain TableApp.tsx::TvHeader `extra`
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: the event show
@@ -602,7 +617,6 @@ folded    RULE-3 row 4: the solo show plays, then the result holds to the phase'
   rulings).
 - Read contract: the view (`ProductionEventView` → `EventView`, `MuleView.events`); `EVENT_SHOW` read by the server only.
 - Write contract: named edits only, each reviewed by its owner on WS8's SHAs — WS4: `packages/ui/src/index.ts` (export),
-  `packages/ui/src/theme.css` (@import), `apps/web/src/table/TableApp.tsx`, `apps/web/src/phone/PhoneApp.tsx` (one line
-  each); WS3: `packages/protocol/src/index.ts`, `apps/server/src/mule-game.ts`; WS6: `ProductionMap.tsx`,
+  `packages/ui/src/theme.css` (@import), X  each); WS3: `packages/protocol/src/index.ts`, `apps/server/src/mule-game.ts`; WS6: `ProductionMap.tsx`,
   `TvProduction.tsx`, `phone/Production.tsx`, `apps/server/test/production-view.test.ts`.
 - Enforcement: `.handover/SEAMS.md` (PM-owned) and owner review on every PR; no CODEOWNERS (debt, §7 R-6).
