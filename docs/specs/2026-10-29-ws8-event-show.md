@@ -490,6 +490,24 @@ folded    T-AC-5 runs in the shell at 844×390 and 667×375 (and 844 with a 47 p
           rail was the tighter case, so its 667 check stands
 ```
 
+```
+AM-3 · 2026-10-28 · lead · PR-1 Task 1 (codebase drift: the trunk base, ws8-show-pr1 @ 979875a2)
+
+target    §1 C3, §6 T-AC-1/T-AC-2, §7 R-1
+said      C3 copies MonthEvent.phase into the view; the report holds several events a phase
+did       on the trunk base MonthEvent has no `phase` (it still has `when: 'afterProduction'`), and runProduction
+          returns at most one event (packages/engine/src/production.ts, `events: event ? [event] : []`); WS1's
+          contract (phase, several events) is on ws1-events, not yet in the trunk. So PR-1's view sets `phase` from
+          the phase it shows (production), and T-AC-1/T-AC-2 arrange several events by setting the pushed month
+          report's events in the test (a seed cannot produce two today). The graft onto WS1's real report (R-1)
+          happens when ws1-events reaches the trunk: then the view reads MonthEvent.phase and T-AC-1/2 re-run on a
+          real two-event month.
+because   G-1: the TV must play every event the report holds; PR-1 cannot wait for WS1's merge, and must not merge
+          WS1's unmerged branch into ours
+goal      G-1 (unchanged)
+folded    C3 reads as above for PR-1; R-1's graft stays a PR-1 merge-gate line (already in the plan)
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: the event show
