@@ -215,8 +215,9 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
   while (state.phase !== 'gameOver' && guard++ < 500) {
     switch (state.phase) {
       case 'planning': {
-        // The election comes first: hands act before each step, with the same dt, until it is over;
-        // one more tick lets the Governor set the tax (every month, with or without an election).
+        // The election comes first: hands act before each step, with the same dt, until every seat is Done and the
+        // ceremony is over; one more tick lets the Governor set the tax and a seat declare ahead of the next election
+        // (every month, with or without an election).
         const vote = (i: number) => voteHands[i]!.tick(state, WALK.tickMs, (a) => applyAction(state, seats[i]!.id, a));
         for (let ticks = 0; state.politics?.election && state.politics.election.stage !== 'over' && ticks < 100_000; ticks++) {
           seats.forEach((_, i) => vote(i));

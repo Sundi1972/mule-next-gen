@@ -854,7 +854,8 @@ did       Heiko: "we shouldn't make this time bound": run for office in any mont
           bars and a celebration. Designed in docs/specs/2026-10-28-ws7-untimed-election.md (C60-C67,
           RULE-60..64): candidacy lives on Politics; announce (last call) → ballot (closes when all
           are Done) → ceremony (presentation clocks only) → over; away seats are not Done; the host's
-          Continue closes a stage for absent players. Replaces E-1.
+          Continue closes a stage for every human not Done, present or away (PM ruling
+          2026-10-29: one rule for one button, as in planning proper). Replaces E-1.
 because   P-1: the table governs itself only if a newcomer can take part; 20 s stages shut them out
           (WS6 audit §3)
 goal      P-1 — still met

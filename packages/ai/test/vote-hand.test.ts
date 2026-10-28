@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AI_LEVELS,
   AI_PERSONAS,
@@ -28,7 +28,7 @@ import type { Mind } from '../src/value.js';
 
 const SEATS = ['ai0', 'ai1', 'ai2', 'ai3'];
 const PERSONAS: AiPersonaId[] = ['trader', 'cautious', 'aggressive', 'saboteur'];
-/** Longer than any seat's seeded pause before it acts in a stage. */
+/** Longer than any seat's seeded pause before it acts in announce or the ballot. */
 const PAUSE_MS = POLITICS.ai.actMs[1] + WALK.tickMs;
 /** RULE-10: a Governor run carries a promise; tests about something else hold the tax. */
 const HOLD: TaxPromise = { kind: 'hold' };
@@ -89,8 +89,10 @@ function electionOf(state: GameState): Election {
 interface StageEnd {
   stage: Election['stage'];
   everyoneDone: boolean;
-  msLeft: number;
+  /** Game time the stage ran, the step that ended it included. */
+  msIn: number;
   ballots: Election['ballots'];
+  /** Who ran: Politics' candidacy in announce, the election's after. */
   candidates: Election['candidates'];
   promises: Election['promises'];
 }
@@ -99,21 +101,36 @@ interface StageEnd {
 function playElection(state: GameState, hands: VoteHand[]) {
   const refused: AiAction[] = [];
   const ends: StageEnd[] = [];
+  let msIn = 0;
   for (let t = 0; t < 120_000 && electionOf(state).stage !== 'over'; t += WALK.tickMs) {
     for (const h of hands) h.tick(state, WALK.tickMs, engineAct(state, h.mind.me, refused));
     const before = electionOf(state);
+    const running = before.stage === 'announce' ? state.politics! : before;
+    msIn += WALK.tickMs;
     const end: StageEnd = {
       stage: before.stage,
       everyoneDone: SEATS.every((id) => before.done.includes(id)),
-      msLeft: before.clockMs - WALK.tickMs,
+      msIn,
       ballots: structuredClone(before.ballots),
-      candidates: structuredClone(before.candidates),
-      promises: structuredClone(before.promises),
+      candidates: structuredClone(running.candidates),
+      promises: structuredClone(running.promises),
     };
     stepElection(state, WALK.tickMs);
-    if (electionOf(state).stage !== end.stage) ends.push(end);
+    if (electionOf(state).stage !== end.stage) {
+      ends.push(end);
+      msIn = 0;
+    }
   }
   return { refused, ends };
+}
+
+/** Everyone Done through announce and the ballot, then the ceremony to its end. */
+function finishElection(state: GameState): void {
+  for (let i = 0; i < 100 && electionOf(state).stage !== 'over'; i++) {
+    for (const id of state.players.map((p) => p.id)) electionDone(state, id);
+    stepElection(state, electionOf(state).ceremony?.clockMs ?? 0);
+  }
+  expect(electionOf(state).stage).toBe('over');
 }
 
 function contestedOffices(candidates: Election['candidates']): Office[] {
@@ -131,7 +148,8 @@ function ballotWith(candidates: Partial<Record<Office, string[]>>, plots: Record
   const state = newGame(seed);
   givePlots(state, plots);
   for (const [office, ids] of Object.entries(candidates) as [Office, string[]][]) for (const id of ids) runFor(state, id, office, office === 'governor' ? HOLD : undefined);
-  stepElection(state, electionOf(state).clockMs);
+  for (const id of SEATS) electionDone(state, id);
+  stepElection(state, 0);
   expect(electionOf(state).stage).toBe('ballot');
   return state;
 }
@@ -146,8 +164,22 @@ function tickAlone(state: GameState, hand: VoteHand): { refused: AiAction[]; sen
 
 afterEach(() => vi.unstubAllEnvs());
 
+/** The Sheriff path: each test of the calling block runs with both offices elected, and the config's list comes back after it. */
+function bothOffices(): void {
+  let saved: Office[];
+  beforeEach(() => {
+    saved = POLITICS.offices;
+    POLITICS.offices = ['governor', 'sheriff'];
+  });
+  afterEach(() => {
+    POLITICS.offices = saved;
+  });
+}
+
 describe('VoteHand on a Classic table', () => {
-  it("T-AC-6: every Classic seat acts and presses Done within each stage's clock with no API key", () => {
+  bothOffices();
+
+  it('T-AC-6, T-AC-63: on an AI-only table every Classic seat acts and presses Done in announce and the ballot within its longest pause, with no API key, so the election ends with no clock', () => {
     vi.stubEnv('ANTHROPIC_API_KEY', undefined);
     let ballotStages = 0;
     for (const seed of [1, 2, 3, 4, 5, 6]) {
@@ -157,11 +189,11 @@ describe('VoteHand on a Classic table', () => {
       expect(refused).toEqual([]);
       expect(electionOf(state).stage).toBe('over');
       expect(state.politics!.governor).not.toBeNull();
-      const voting = ends.filter((e) => e.stage === 'nominate' || e.stage === 'ballot');
-      expect(voting[0]?.stage).toBe('nominate');
+      const voting = ends.filter((e) => e.stage === 'announce' || e.stage === 'ballot');
+      expect(voting[0]?.stage).toBe('announce');
       for (const end of voting) {
         expect(end.everyoneDone).toBe(true);
-        expect(end.msLeft).toBeGreaterThan(0);
+        expect(end.msIn).toBeLessThanOrEqual(PAUSE_MS);
       }
       const ballot = voting.find((e) => e.stage === 'ballot');
       if (!ballot) continue;
@@ -182,7 +214,7 @@ describe('VoteHand on a Classic table', () => {
   ])('T-AC-6: an AI Governor sets a tax inside RULE-6 ($persona, fund $fund → $month1, then $month2)', ({ persona, fund, month1, month2 }) => {
     const state = newGame();
     runFor(state, 'ai2', 'governor', HOLD);
-    while (electionOf(state).stage !== 'over') stepElection(state, electionOf(state).clockMs);
+    finishElection(state);
     expect(state.politics!.governor).toBe('ai2');
     const hands = SEATS.map((id, i) => handOf(mindOf(id, id === 'ai2' ? persona : PERSONAS[i]!), i));
     const refused: AiAction[] = [];
@@ -221,8 +253,8 @@ function drawsOf(draws: number[]): Rng {
   return { ...createRng(1), next, chance: (p: number) => next() < p, int: (min: number) => min };
 }
 
-/** One nominate tick that covers the longest pause: the moves the seat sends. */
-function nominate(state: GameState, mind: Mind, rng: Rng): AiAction[] {
+/** One announce tick that covers the longest pause: the moves the seat sends. */
+function announce(state: GameState, mind: Mind, rng: Rng): AiAction[] {
   const sent: AiAction[] = [];
   const refused: AiAction[] = [];
   new VoteHand(mind, rng).tick(state, POLITICS.ai.actMs[1], engineAct(state, mind.me, refused, sent));
@@ -231,6 +263,8 @@ function nominate(state: GameState, mind: Mind, rng: Rng): AiAction[] {
 }
 
 describe('RULE-8: who runs', () => {
+  bothOffices();
+
   const { runGovernor, runSheriff } = POLITICS.ai;
   const g = runGovernor.aggressive;
   const sh = runSheriff.aggressive;
@@ -239,8 +273,8 @@ describe('RULE-8: who runs', () => {
     { name: 'draw at the Governor chance, under the Sheriff one', draws: [g, sh - 0.01], want: [{ type: 'run', office: 'sheriff' }] },
     { name: 'draws at both chances', draws: [g, sh], want: [] },
     { name: 'draws over both chances', draws: [g + 0.01, sh + 0.01], want: [] },
-  ])("RULE-8: a seat runs for Governor, else Sheriff, by its persona's seeded chances ($name)", ({ draws, want }) => {
-    const sent = nominate(newGame(), mindOf('ai2', 'aggressive'), drawsOf([...draws]));
+  ])("T-AC-63 row 2, RULE-8: in month 1 a seat decides at the last call: it runs for Governor, else Sheriff, by its persona's seeded chances ($name), then is Done", ({ draws, want }) => {
+    const sent = announce(newGame(), mindOf('ai2', 'aggressive'), drawsOf([...draws]));
 
     expect(sent).toEqual([...want, { type: 'done', done: true }]);
   });
@@ -249,13 +283,13 @@ describe('RULE-8: who runs', () => {
     const state = newGame();
     for (let term = 0; term < POLITICS.maxGovernorTermsInRow; term++) {
       runFor(state, 'ai2', 'governor', HOLD);
-      while (electionOf(state).stage !== 'over') stepElection(state, electionOf(state).clockMs);
+      finishElection(state);
       const next = POLITICS.electionMonths.find((m) => m > state.month)!;
       while (state.phase !== 'planning' || state.month !== next) advancePhase(state);
     }
     expect(canRun(state, 'ai2').governor).toBe('termLimit');
 
-    const sent = nominate(state, mindOf('ai2', 'aggressive'), drawsOf([0, 0]));
+    const sent = announce(state, mindOf('ai2', 'aggressive'), drawsOf([0, 0]));
 
     expect(sent).toEqual([
       { type: 'run', office: 'sheriff' },
@@ -281,8 +315,66 @@ describe('RULE-8: who runs', () => {
   });
 });
 
+describe('RULE-63: a seat declares ahead of the election', () => {
+  bothOffices();
+
+  /** Plays on, nobody acting, to the planning phase of `month`; ai0 is the richest, so the appointed Governor. */
+  function toMonth(state: GameState, month: number): void {
+    state.players.find((p) => p.id === 'ai0')!.money += 1_000;
+    while (state.phase !== 'planning' || state.month !== month) advancePhase(state);
+  }
+
+  /** One tick that covers the longest pause: what the seat sends. */
+  function planTick(state: GameState, hand: VoteHand): AiAction[] {
+    const sent: AiAction[] = [];
+    const refused: AiAction[] = [];
+    hand.tick(state, PAUSE_MS, engineAct(state, hand.mind.me, refused, sent));
+    expect(refused).toEqual([]);
+    return sent;
+  }
+
+  const { runGovernor, runSheriff } = POLITICS.ai;
+  it.each([
+    { name: 'it runs for Governor', draws: [0], run: [{ type: 'run', office: 'governor', promise: { kind: 'cap', percent: 8 } }], running: ['ai2'] },
+    { name: 'it stays out', draws: [runGovernor.aggressive, runSheriff.aggressive], run: [], running: [] },
+  ])('T-AC-63 rows 1, 2: a seat decides once per cycle, in the first planning phase POLITICS.ai.declareLeadMonths or fewer months before the election, and at the last call only presses Done ($name)', ({ draws, run, running }) => {
+    const state = newGame();
+    const hand = new VoteHand(mindOf('ai2', 'aggressive'), drawsOf([...draws]));
+    const declareIn = Math.max(2, 4 - POLITICS.ai.declareLeadMonths);
+    for (let month = 2; month < 4; month++) {
+      toMonth(state, month);
+      // Twice a month: the second tick draws nothing, or drawsOf throws.
+      expect([...planTick(state, hand), ...planTick(state, hand)], `month ${month}`).toEqual(month === declareIn ? run : []);
+    }
+    toMonth(state, 4);
+    expect(electionOf(state).stage).toBe('announce');
+
+    expect(planTick(state, hand)).toEqual([{ type: 'done', done: true }]);
+    expect(state.politics!.candidates.governor).toEqual(running);
+  });
+
+  it('T-AC-63 row 3: a seat that declared for Governor ahead refreshes its promise against the tax at the last call, keeping its place in the list, then is Done', () => {
+    const state = newGame();
+    const hand = new VoteHand(mindOf('ai2', 'aggressive'), drawsOf([0]));
+    toMonth(state, 4 - POLITICS.ai.declareLeadMonths);
+    runFor(state, 'ai1', 'governor', HOLD);
+    expect(planTick(state, hand)).toEqual([{ type: 'run', office: 'governor', promise: { kind: 'cap', percent: 8 } }]);
+    toMonth(state, 4);
+    // The tax reached the aggressive target, 8%, since the seat declared: its cap becomes a hold.
+    state.treasury.salesTax = 0.08;
+
+    expect(planTick(state, hand)).toEqual([
+      { type: 'run', office: 'governor', promise: { kind: 'hold' } },
+      { type: 'done', done: true },
+    ]);
+    expect(state.politics).toMatchObject({ candidates: { governor: ['ai1', 'ai2'] }, promises: { ai1: HOLD, ai2: { kind: 'hold' } } });
+  });
+});
+
 describe("RULE-8, RULE-10: an AI Governor candidate's promise (C12)", () => {
-  // RULE-10's AI row: persona target T against the tax at nominate C. Month 1 opens at 5%.
+  bothOffices();
+
+  // RULE-10's AI row: persona target T against the tax at the last call C. Month 1 opens at 5%.
   it.each([
     { persona: 'aggressive' as const, tax: 5, want: { kind: 'cap', percent: 8 } },
     { persona: 'saboteur' as const, tax: 5, want: { kind: 'cap', percent: 10 } },
@@ -297,22 +389,22 @@ describe("RULE-8, RULE-10: an AI Governor candidate's promise (C12)", () => {
     state.politics!.taxAtStart = tax / 100;
 
     // One draw under every Governor chance: it runs for Governor, and draws nothing more for its promise.
-    const sent = nominate(state, mindOf('ai2', persona), drawsOf([0]));
+    const sent = announce(state, mindOf('ai2', persona), drawsOf([0]));
 
     expect(sent).toEqual([{ type: 'run', office: 'governor', promise: want }, { type: 'done', done: true }]);
-    expect(electionOf(state).candidates.governor).toEqual(['ai2']);
-    expect(electionOf(state).promises).toEqual({ ai2: want });
+    expect(state.politics!.candidates.governor).toEqual(['ai2']);
+    expect(state.politics!.promises).toEqual({ ai2: want });
   });
 
   it('T-AC-9: running for Sheriff, a seat makes no promise', () => {
     const state = newGame();
     const { runGovernor } = POLITICS.ai;
 
-    const sent = nominate(state, mindOf('ai2', 'saboteur'), drawsOf([runGovernor.saboteur, 0]));
+    const sent = announce(state, mindOf('ai2', 'saboteur'), drawsOf([runGovernor.saboteur, 0]));
 
     expect(sent).toEqual([{ type: 'run', office: 'sheriff' }, { type: 'done', done: true }]);
-    expect(electionOf(state).candidates.sheriff).toEqual(['ai2']);
-    expect(electionOf(state).promises).toEqual({});
+    expect(state.politics!.candidates.sheriff).toEqual(['ai2']);
+    expect(state.politics!.promises).toEqual({});
   });
 
   it('T-AC-9: on a seeded Classic table every Governor candidate holds a promise and no run is refused', () => {
@@ -320,7 +412,7 @@ describe("RULE-8, RULE-10: an AI Governor candidate's promise (C12)", () => {
     for (const seed of [1, 2, 3, 4, 5, 6]) {
       const state = newGame(seed);
       const { refused, ends } = playElection(state, classicHands(seed));
-      const nominated = ends.find((e) => e.stage === 'nominate')!;
+      const nominated = ends.find((e) => e.stage === 'announce')!;
 
       expect(refused).toEqual([]);
       expect(Object.keys(nominated.promises).sort()).toEqual([...nominated.candidates.governor].sort());
@@ -331,9 +423,11 @@ describe("RULE-8, RULE-10: an AI Governor candidate's promise (C12)", () => {
 });
 
 describe('RULE-8: how a seat votes', () => {
+  bothOffices();
+
   it.each([
     { name: 'fewest plots', candidates: { governor: ['ai1', 'ai2', 'ai3'] }, plots: { ai1: 3, ai2: 1, ai3: 2 }, want: 'ai2' },
-  ])('RULE-8: a non-candidate votes for the candidate with the fewest plots ($name)', ({ candidates, plots, want }) => {
+  ])('T-AC-63 row 4, RULE-8: in the ballot a non-candidate waits its seeded pause, votes for the candidate with the fewest plots ($name), then is Done', ({ candidates, plots, want }) => {
     const state = ballotWith(candidates, plots);
     const hand = handOf(mindOf('ai0', 'trader'), 11);
     const refused: AiAction[] = [];
@@ -412,6 +506,8 @@ describe('RULE-8: how a seat votes', () => {
 });
 
 describe('RULE-8: the Governor steps the tax', () => {
+  bothOffices();
+
   // Fund is low under 3 months of both offices' pay: 3 × (50 + 30) = 240, from month 2 (AM-9: the fund starts empty, before any payday).
   it.each([
     { month: 2, current: 5, target: 8, fund: 1_000, low: 0, high: 10, want: 8 },
@@ -448,7 +544,7 @@ function electionWithHumans(hand: Pick<VoteHand, 'tick'>, pick: string): { sent:
   const act = engineAct(state, 'ai0', [], sent);
   for (let t = 0; t < 120_000 && electionOf(state).stage !== 'over'; t += WALK.tickMs) {
     const stage = electionOf(state).stage;
-    if ((stage === 'nominate' || stage === 'ballot') && !electionOf(state).done.includes('h1')) {
+    if ((stage === 'announce' || stage === 'ballot') && !electionOf(state).done.includes('h1')) {
       if (stage === 'ballot') for (const h of HUMANS) castVote(state, h, 'governor', pick);
       for (const h of HUMANS) electionDone(state, h);
     }
@@ -462,7 +558,9 @@ function electionWithHumans(hand: Pick<VoteHand, 'tick'>, pick: string): { sent:
 const bandwagon: Pick<VoteHand, 'tick'> = {
   tick(state, _dt, act) {
     const election = state.politics?.election;
-    if (election?.stage !== 'ballot' || election.done.includes('ai0')) return;
+    if (!election || election.done.includes('ai0')) return;
+    if (election.stage === 'announce') return void act({ type: 'done', done: true });
+    if (election.stage !== 'ballot') return;
     const votes = Object.values(election.ballots).map((b) => b.governor);
     const leader = election.candidates.governor.reduce((a, b) => (votes.filter((v) => v === b).length > votes.filter((v) => v === a).length ? b : a));
     act({ type: 'vote', office: 'governor', candidate: leader });
@@ -471,6 +569,8 @@ const bandwagon: Pick<VoteHand, 'tick'> = {
 };
 
 describe('HC-4: secret ballots', () => {
+  bothOffices();
+
   it("HC-4: the hand never reads another seat's ballot", () => {
     // Positive control: the humans' ballots decide the race, and a hand that reads them moves with them.
     expect(electionWithHumans(bandwagon, 'h1')).toMatchObject({ governor: 'h1' });
@@ -489,5 +589,26 @@ describe('HC-4: secret ballots', () => {
       }
     // The comparison bites only where the hand votes for someone else.
     expect(votedForAnother).toBeGreaterThan(0);
+  });
+});
+
+describe('T-AC-62: Governor only, the default POLITICS.offices', () => {
+  it('T-AC-62: by default a seat never runs for Sheriff: a draw that misses the Governor chance draws no Sheriff chance, and the seat only presses Done', () => {
+    expect(POLITICS.offices).toEqual(['governor']);
+    const draws = [POLITICS.ai.runGovernor.aggressive, 0];
+
+    const sent = announce(newGame(), mindOf('ai2', 'aggressive'), drawsOf(draws));
+
+    expect(sent).toEqual([{ type: 'done', done: true }]);
+    expect(draws, 'the Sheriff draw is left unused').toEqual([0]);
+  });
+
+  // Low under fundMonths × the Governor's pay alone: 3 × 50 = 150, where both offices made it 240.
+  it.each([
+    { fund: 149, want: 7 },
+    { fund: 150, want: 5 },
+    { fund: 239, want: 5 },
+  ])('T-AC-62: by default the fund counts as low under POLITICS.ai.fundMonths of the elected offices\' pay: fund $fund → $want', ({ fund, want }) => {
+    expect(nextTax(5, 5, fund, { low: 0, high: 10 }, 2)).toBe(want);
   });
 });

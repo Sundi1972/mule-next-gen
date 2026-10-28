@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
-import { connectedIn, namesOf, planningProper, press, readyFooter, readyNow, readyNowIn, stillPlanning, type Press } from '../src/phone/hub/ready';
+import { connectedIn, continueQuestion, hostMayContinue, namesOf, planningProper, press, readyFooter, readyNow, readyNowIn, stillPlanning, type Press } from '../src/phone/hub/ready';
 import { ReadyBar } from '../src/phone/hub/ReadyBar';
 
 const person = (id: string, name: string, slot: number, ready = false): PlayerView => ({
@@ -39,7 +39,7 @@ const table = (players: PlayerView[], hostId: string | null = BRIX, away: string
   game: null,
 });
 const players = ({ brix = false, lena = false, ossa = false } = {}): PlayerView[] => [person(BRIX, 'Brix', 0, brix), person(LENA, 'Lena', 1, lena), ai(KAI, 'Kai', 2), person(OSSA, 'Ossa', 3, ossa)];
-const planning = (stage: 'nominate' | 'ballot' | 'reveal' | 'over' | null = null, phase: MuleView['phase'] = 'planning') =>
+const planning = (stage: 'announce' | 'ballot' | 'ceremony' | 'over' | null = null, phase: MuleView['phase'] = 'planning') =>
   ({ phase, politics: stage === null ? null : { election: { stage } } }) as unknown as Pick<MuleView, 'phase' | 'politics'>;
 
 describe('planning without a clock: who is still planning, and the host', () => {
@@ -73,12 +73,12 @@ describe('planning without a clock: who is still planning, and the host', () => 
     expect(readyNow([], true).title).toBe('Everyone is ready');
     expect(readyNowIn(planning(), true, others, true)?.title, 'a Ready player in planning proper is told who the table waits for').toBe("You're ready. Waiting for Lena and Ossa");
     expect(readyNowIn(planning('over'), true, others, false)?.title, 'after the election too').toBe("You're ready. Waiting for Lena and Ossa");
-    for (const stage of ['nominate', 'ballot', 'reveal'] as const)
+    for (const stage of ['announce', 'ballot', 'ceremony'] as const)
       expect(readyNowIn(planning(stage), true, others, true), `during the ${stage}, Ready is Done for the stage and the election's Now stays`).toBeNull();
     expect(readyNowIn(planning(), false, others, true), 'before Ready the screen keeps its own Now').toBeNull();
   });
 
-  it('T-AC-13: Continue is offered only to table.hostId, once Ready, in planning proper, while someone else is still planning; never to anyone else, nor during the election', () => {
+  it("T-AC-13, B-AC-61: Continue is offered only to table.hostId, once Ready, in planning proper or the election's announce and ballot, while someone else is still planning; never to anyone else, nor in the ceremony", () => {
     type Row = { why: string; me: string; ready: { brix?: boolean; lena?: boolean; ossa?: boolean }; hostId?: string | null; stage?: Parameters<typeof planning>[0]; confirm?: boolean; host: 'none' | 'continue' | 'confirm' };
     const rows: Row[] = [
       { why: 'the host, Ready, in planning proper, two still planning', me: BRIX, ready: { brix: true }, host: 'continue' },
@@ -88,26 +88,52 @@ describe('planning without a clock: who is still planning, and the host', () => 
       { why: 'the host before pressing Ready', me: BRIX, ready: {}, host: 'none' },
       { why: 'a player who is not the host', me: LENA, ready: { brix: true, lena: true }, host: 'none' },
       { why: 'a player who is not the host, with the confirm asked for', me: LENA, ready: { lena: true }, confirm: true, host: 'none' },
-      { why: 'the host during the nomination', me: BRIX, ready: { brix: true }, stage: 'nominate', host: 'none' },
-      { why: 'the host during the ballot', me: BRIX, ready: { brix: true }, stage: 'ballot', host: 'none' },
-      { why: 'the host during the reveal', me: BRIX, ready: { brix: true }, stage: 'reveal', host: 'none' },
+      { why: 'B-AC-61: the host, Done in announce, others not', me: BRIX, ready: { brix: true }, stage: 'announce', host: 'continue' },
+      { why: 'B-AC-61: the host, Done in the ballot, others not', me: BRIX, ready: { brix: true }, stage: 'ballot', host: 'continue' },
+      { why: 'B-AC-61: the host in the ballot, before his own Done', me: BRIX, ready: {}, stage: 'ballot', host: 'none' },
+      { why: 'B-AC-61: a player who is not the host, in the ballot', me: LENA, ready: { lena: true }, stage: 'ballot', host: 'none' },
+      { why: 'B-AC-61: the host during the ceremony', me: BRIX, ready: { brix: true }, stage: 'ceremony', host: 'none' },
       { why: 'every person Ready, the AI left: nobody to continue without', me: BRIX, ready: { brix: true, lena: true, ossa: true }, host: 'none' },
       { why: 'a room with no host', me: BRIX, ready: { brix: true }, hostId: null, host: 'none' },
     ];
     for (const row of rows) {
       const all = players(row.ready);
       const t = table(all, row.hostId === undefined ? BRIX : row.hostId);
-      const footer = readyFooter({ me: row.me, players: all, hostId: t.hostId, connected: connectedIn(t.seats), planningProper: planningProper(planning(row.stage ?? null)), confirm: row.confirm ?? false });
+      const footer = readyFooter({ me: row.me, players: all, hostId: t.hostId, connected: connectedIn(t.seats), mayContinue: hostMayContinue(planning(row.stage ?? null)), confirm: row.confirm ?? false });
       expect(footer.host, row.why).toBe(row.host);
     }
 
-    const before = readyFooter({ me: LENA, players: players({ brix: true }), hostId: BRIX, connected: connectedIn(table(players()).seats), planningProper: true, confirm: false });
+    const before = readyFooter({ me: LENA, players: players({ brix: true }), hostId: BRIX, connected: connectedIn(table(players()).seats), mayContinue: true, confirm: false });
     expect(before.ready).toBe(false);
     expect(namesOf(before.waiting, LENA), 'before Ready the line names the viewer first, as "you"').toBe('you and Ossa');
-    const after = readyFooter({ me: LENA, players: players({ brix: true, lena: true }), hostId: BRIX, connected: connectedIn(table(players()).seats), planningProper: true, confirm: false });
+    const after = readyFooter({ me: LENA, players: players({ brix: true, lena: true }), hostId: BRIX, connected: connectedIn(table(players()).seats), mayContinue: true, confirm: false });
     expect(after.ready).toBe(true);
     expect(after.waiting.map((s) => [s.name, s.away]), 'once Ready the line names the others; the dropped Ossa still, as away').toEqual([['Ossa', true]]);
     expect(planningProper(planning(null, 'landGrant')), 'Continue ends planning only').toBe(false);
+  });
+
+  it("B-AC-61: the server takes the host's Continue, so the phone and the TV offer it, in planning proper and the election's announce and ballot; not in the ceremony nor outside planning", () => {
+    const rows: [Parameters<typeof planning>, boolean][] = [
+      [[null], true],
+      [['over'], true],
+      [['announce'], true],
+      [['ballot'], true],
+      [['ceremony'], false],
+      [[null, 'landGrant'], false],
+      [['announce', 'landGrant'], false],
+    ];
+    for (const [args, may] of rows) expect(hostMayContinue(planning(...args)), JSON.stringify(args)).toBe(may);
+    expect(planningProper(planning('ballot')), "the election's Now card still holds in the ballot").toBe(false);
+  });
+
+  it("B-AC-61: the host's confirm says what Continue does: in planning proper the land grant starts, in announce the candidates close, in the ballot the absent don't vote", () => {
+    const ossa = players().filter((p) => p.id === OSSA).map((p) => ({ ...p, away: true }));
+    const two = players().filter((p) => p.id === LENA || p.id === OSSA).map((p) => ({ ...p, away: false }));
+    expect(continueQuestion(null, ossa)).toBe('End planning for everyone now? Ossa stops where they are, and the land grant starts.');
+    expect(continueQuestion('over', two)).toBe('End planning for everyone now? Lena and Ossa stop where they are, and the land grant starts.');
+    expect(continueQuestion('announce', ossa)).toBe('Go on without Ossa? The candidates close as they are.');
+    expect(continueQuestion('ballot', ossa)).toBe("Go on without Ossa? Ossa doesn't vote this time.");
+    expect(continueQuestion('ballot', two)).toBe("Go on without Lena and Ossa? Lena and Ossa don't vote this time.");
   });
 
   it('T-AC-13: Ready → Continue → Continue now sends ready, nothing (the confirm opens), then continue; Keep waiting sends nothing and closes the confirm', () => {
@@ -125,7 +151,7 @@ describe('planning without a clock: who is still planning, and the host', () => 
     expect(run(['ready', 'continue'])).toEqual({ confirm: true, intents: ['ready', null] });
     expect(run(['ready', 'continue', 'keep-waiting'])).toEqual({ confirm: false, intents: ['ready', null, null] });
 
-    const host = (confirm: boolean) => readyFooter({ me: BRIX, players: players({ brix: true }), hostId: BRIX, connected: () => true, planningProper: true, confirm }).host;
+    const host = (confirm: boolean) => readyFooter({ me: BRIX, players: players({ brix: true }), hostId: BRIX, connected: () => true, mayContinue: true, confirm }).host;
     expect(host(run(['ready', 'continue']).confirm), 'one tap on Continue opens the confirm').toBe('confirm');
     expect(host(run(['ready', 'continue', 'keep-waiting']).confirm), 'Keep waiting puts Continue back').toBe('continue');
   });
@@ -156,5 +182,19 @@ describe('planning without a clock: who is still planning, and the host', () => 
     expect(at(OSSA)).toBeLessThan(at(BRIX));
     expect(at(BRIX)).toBeLessThan(at(LENA));
     expect(ossa.slice(at(OSSA), at(BRIX))).toMatch(/>you<\/span>/);
+  });
+
+  it("B-AC-61: the host's bar draws Continue in the election's announce and ballot while someone is not Done, and none in the ceremony", () => {
+    const all = players({ brix: true, lena: true });
+    const t = table(all, BRIX, [OSSA]);
+    const bar = (stage: 'announce' | 'ballot' | 'ceremony') => {
+      const view = { phase: 'planning', politics: { election: { stage } }, players: all, month: 1, maxMonths: 12 } as unknown as MuleView;
+      const self = all.find((p) => p.id === BRIX)!;
+      const client = { intent: () => {} } as unknown as TableClient;
+      const game = createElement(PhoneGameProvider, { value: { table: t, view, me: {} as MyView, self, slot: self.slot as Slot }, children: createElement(ReadyBar) });
+      return renderToStaticMarkup(createElement(ClientProvider, { client, children: game })).replaceAll('<!-- -->', '');
+    };
+    for (const stage of ['announce', 'ballot'] as const) expect(bar(stage), stage).toMatch(/data-testid="continue"[^>]*>Continue without Ossa</);
+    expect(bar('ceremony')).not.toContain('data-testid="continue"');
   });
 });
