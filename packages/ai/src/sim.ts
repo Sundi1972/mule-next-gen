@@ -96,6 +96,8 @@ function main() {
     }
   };
 
+  // Month offsets of a broke run: the check looks for SIM_TARGETS.broke.months in a row.
+  const brokeRun = Array.from({ length: SIM_TARGETS.broke.months }, (_, k) => k);
   for (let seed = first; seed < first + games; seed++) {
     const specs = simSeats(players, level, seed, persona);
     // Who starts each development hungry, for the spiral: a player hungry SPIRAL_MONTHS months running.
@@ -131,7 +133,6 @@ function main() {
     const mine = state.tiles.filter((t) => t.owner);
     owned += mine.length;
     developed += mine.filter((t) => t.outfit).length;
-    const brokeRun = Array.from({ length: SIM_TARGETS.broke.months }, (_, k) => k);
     if (state.players.some((p) => broke.some((_, m) => brokeRun.every((k) => broke[m + k]?.includes(p.id))))) longBroke++;
     if (colonyFailed(state)) collapsed++;
     const keys = state.history.flatMap((h) => h.events ?? []).map((e) => e.key);
@@ -147,24 +148,23 @@ function main() {
 
   const check = (ok: boolean) => (ok ? 'ok  ' : 'MISS');
   const share = (target: number) => pct(target, 1);
-  const T = SIM_TARGETS;
   // literal-ok: the median, the statistic its check is named for
   const muleMedian = quantile(mulePrices, 0.5);
   // literal-ok: the 90th percentile, the statistic its check is named for
   const mule90 = quantile(mulePrices, 0.9);
   if (overrides.length > 0) console.log(`config: ${overrides.join(' ')}`);
   console.log(`${games} games (seeds ${first} to ${first + games - 1}), ${players} strategist seats at ${level}, ${(months / games).toFixed(1)} months on average\n`);
-  console.log(`${check(muleMedian >= T.muleMedian.min && muleMedian <= T.muleMedian.max)} MULE price median ${muleMedian} (target ${T.muleMedian.min} to ${T.muleMedian.max})`);
-  console.log(`${check(mule90 < T.mule90th)} MULE price 90th percentile ${mule90} (target under ${T.mule90th})`);
-  console.log(`${check(soldOut / months < T.corralSoldOut)} Corral sold out in ${pct(soldOut, months)} of months (target under ${share(T.corralSoldOut)})`);
+  console.log(`${check(muleMedian >= SIM_TARGETS.muleMedian.min && muleMedian <= SIM_TARGETS.muleMedian.max)} MULE price median ${muleMedian} (target ${SIM_TARGETS.muleMedian.min} to ${SIM_TARGETS.muleMedian.max})`);
+  console.log(`${check(mule90 < SIM_TARGETS.mule90th)} MULE price 90th percentile ${mule90} (target under ${SIM_TARGETS.mule90th})`);
+  console.log(`${check(soldOut / months < SIM_TARGETS.corralSoldOut)} Corral sold out in ${pct(soldOut, months)} of months (target under ${share(SIM_TARGETS.corralSoldOut)})`);
   console.log(
-    `${check(foodSpike / games >= T.foodSpike.min && foodSpike / games <= T.foodSpike.max)} Food above ${T.foodSpike.factor}x reference in ${pct(foodSpike, games)} of games (target ${share(T.foodSpike.min)} to ${share(T.foodSpike.max)})`,
+    `${check(foodSpike / games >= SIM_TARGETS.foodSpike.min && foodSpike / games <= SIM_TARGETS.foodSpike.max)} Food above ${SIM_TARGETS.foodSpike.factor}x reference in ${pct(foodSpike, games)} of games (target ${share(SIM_TARGETS.foodSpike.min)} to ${share(SIM_TARGETS.foodSpike.max)})`,
   );
-  console.log(`${check(hungry / months < T.colonistsShort)} Colonists short of Food or Water in ${pct(hungry, months)} of months (target under ${share(T.colonistsShort)})`);
-  console.log(`${check(developed / owned >= T.developed)} Owned plots developed at the end: ${pct(developed, owned)} (target ${share(T.developed)} or more)`);
-  console.log(`${check(longBroke === 0)} Games with an AI broke for ${T.broke.months} months in a row: ${pct(longBroke, games)} (target none)`);
+  console.log(`${check(hungry / months < SIM_TARGETS.colonistsShort)} Colonists short of Food or Water in ${pct(hungry, months)} of months (target under ${share(SIM_TARGETS.colonistsShort)})`);
+  console.log(`${check(developed / owned >= SIM_TARGETS.developed)} Owned plots developed at the end: ${pct(developed, owned)} (target ${share(SIM_TARGETS.developed)} or more)`);
+  console.log(`${check(longBroke === 0)} Games with an AI broke for ${SIM_TARGETS.broke.months} months in a row: ${pct(longBroke, games)} (target none)`);
   console.log(`${check(minFund >= 0)} Lowest colony fund ${minFund} (target 0 or more)`);
-  console.log(`${check(collapsed / games <= T.collapsed)} Ended in Collapse: ${pct(collapsed, games)} (target ${share(T.collapsed)} or less)`);
+  console.log(`${check(collapsed / games <= SIM_TARGETS.collapsed)} Ended in Collapse: ${pct(collapsed, games)} (target ${share(SIM_TARGETS.collapsed)} or less)`);
   console.log(`     Store capital: lowest ${minCapital} (no check: the store never runs out of money)`);
   console.log(`     MULEs lost to the clock: ${(mulesLost / games).toFixed(1)} a game (walking ${walking ? 'on' : 'off'}; no check)`);
   console.log(`     Players hungry ${SPIRAL_MONTHS} or more months running: ${pct(spirals, playerGames)} (no check)`);

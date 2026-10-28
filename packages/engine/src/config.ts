@@ -918,7 +918,7 @@ export const STRATEGIST = {
   cashFloor: 60,
   /** What one colony air point costs it, in credits, rising as the air gets dirtier (doubles by Smoggy). */
   airCost: 10,
-  /** A green belt's running cost to it, in credits a month, set against the air it cleans (without full scoring, the cost alone). */
+  /** What it counts a green belt as costing a month, in credits (the engine charges none), set against the air it cleans; without full scoring, the cost alone. */
   greenBeltCost: 5,
   /** Below this utility share of the best, a free plot is not worth pressing for in the first sweep; later sweeps take anything above laterShare. */
   grantShare: 0.75,
@@ -959,7 +959,10 @@ export const STRATEGIST = {
   /** It corners only a good that spoils less than this share a month, and at most this many units. */
   cornerMaxSpoilage: 0.5,
   cornerMaxUnits: 6,
-  /** Spite: while the leader is short of the good, it bids this share of next month's price, times its spite, over its own value for the next spiteUnits units. */
+  /**
+   * Spite: while the leader is short of the good, it bids this share of next month's price, times its spite, over its
+   * own value for at least the next spiteUnits units (all the cornered ones while it corners).
+   */
   spiteShare: 0.1,
   spiteUnits: 2,
   /**
@@ -1001,7 +1004,7 @@ export const STRATEGIST = {
   },
   /** The development decision's considerations (developDecision), besides gainScale.develop and the cash left. */
   develop: {
-    /** "Known ground": what an idle plot it hasn't analysed scores; an analysed one scores 1. Not land.unknownGround's value, as found. */
+    /** "Known ground": what an idle plot it hasn't analysed scores; an analysed one scores 1. */
     unknownGround: 0.75,
     /** "Feeds me": what a MULE that doesn't cover its own Food or Energy scores (one that does scores 1); weighted this share of the persona's reserve. */
     feedsMe: { other: 0.8, reserveShare: 0.5 },
