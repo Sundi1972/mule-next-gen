@@ -15,8 +15,15 @@ const AI_LINES = process.env.E2E_AI_LINES === '1';
 /** Wall-clock bounds assert only off CI (Heiko, 2026-10-28): a shared CI runner's timing says nothing about the product. */
 const STRICT_TIMING = !process.env.CI || process.env.E2E_STRICT_TIMING === '1';
 const timed = { checked: 0, wouldFail: 0 };
+/** Every line the phones said, for the check that each comes back to every screen it is for. */
+const sent: { text: string; whisper: boolean }[] = [];
 /** The phases B-AC-17 names: each page must hear a line in each, and each phone show a bubble in each. */
 const NAMED_PHASES = ['landGrant', 'development', 'auction'] as const;
+/**
+ * Where the TV draws every seat as a creature (spec AM-11): its player lists in planning, the land grant and
+ * development, and in the auction the walk's board (each walker not passing). Elsewhere its ticker alone carries a line.
+ */
+const TV_DRAWS_EVERY_SEAT = ['planning', 'landGrant', 'development'];
 /** RULE-9, from the spec's words: the test's own reading of it, so the page is checked against the rule, not itself. */
 const RULE = { minMs: 2_000, maxMs: 4_500, maxWaitMs: 4_000 };
 /**
@@ -55,10 +62,10 @@ const REACH = {
 
 type Said = { id: number; from: string; to?: string; text: string };
 /** What one page's socket received, in frame order, each with the time it arrived. */
-type Frame = { kind: 'line'; line: Said; at: number } | { kind: 'phase'; key: string; phase: string; at: number };
+type Frame = { kind: 'line'; line: Said; at: number } | { kind: 'phase'; key: string; phase: string; at: number; tvDraws: string[] };
 type Raw = { frames: Frame[]; seatId: string | null; ai: Set<string> };
 /** A line, in the phase of the last view its page received before it: the order, not the clock, decides. */
-type Line = Said & { at: number; phase: number };
+type Line = Said & { at: number; phase: number; tvDraws: string[] };
 type Phase = { key: string; name: string; at: number };
 type Wire = { lines: Line[]; phases: Phase[]; seatId: string | null; ai: Set<string> };
 type Rect = { l: number; t: number; r: number; b: number };
@@ -230,7 +237,14 @@ function listen(p: Page): Raw {
         t: string;
         message?: Said;
         seatId?: string | null;
-        view?: { game?: { month: number; phase: string; players: { id: string; isAi: boolean }[] } | null };
+        view?: {
+          game?: {
+            month: number;
+            phase: string;
+            players: { id: string; isAi: boolean }[];
+            auction?: { stage: string; walkers: { id: string; side: string }[] } | null;
+          } | null;
+        };
       };
       const at = Date.now();
       if (msg.t === 'welcome') raw.seatId = msg.seatId ?? null;
@@ -238,7 +252,9 @@ function listen(p: Page): Raw {
       const game = msg.t === 'view' ? msg.view?.game : null;
       if (!game) return;
       for (const pl of game.players) if (pl.isAi) raw.ai.add(pl.id);
-      raw.frames.push({ kind: 'phase', key: `${game.month}-${game.phase}`, phase: game.phase, at });
+      const walk = game.phase === 'auction' && game.auction?.stage === 'walk' ? game.auction.walkers.filter((w) => w.side !== 'pass').map((w) => w.id) : [];
+      const tvDraws = TV_DRAWS_EVERY_SEAT.includes(game.phase) ? game.players.map((pl) => pl.id) : walk;
+      raw.frames.push({ kind: 'phase', key: `${game.month}-${game.phase}`, phase: game.phase, at, tvDraws });
     }),
   );
   return raw;
@@ -247,15 +263,20 @@ function listen(p: Page): Raw {
 /** Each line in the phase of the last view before it in the stream; the phases where they changed. */
 function inOrder(raw: Raw): Wire {
   const wire: Wire = { lines: [], phases: [], seatId: raw.seatId, ai: raw.ai };
+  let tvDraws: string[] = [];
   for (const f of raw.frames) {
-    if (f.kind === 'line') wire.lines.push({ ...f.line, at: f.at, phase: wire.phases.length - 1 });
-    else if (wire.phases.at(-1)?.key !== f.key) wire.phases.push({ key: f.key, name: f.phase, at: f.at });
+    if (f.kind === 'line') wire.lines.push({ ...f.line, at: f.at, phase: wire.phases.length - 1, tvDraws });
+    else {
+      tvDraws = f.tvDraws;
+      if (wire.phases.at(-1)?.key !== f.key) wire.phases.push({ key: f.key, name: f.phase, at: f.at });
+    }
   }
   return wire;
 }
 
 /** Sends a chat line from this phone over its own open socket (kept by KEEP_SOCKETS), as the app's client does. */
 async function say(p: Page, text: string, to?: string): Promise<void> {
+  sent.push({ text, whisper: !!to });
   const msg = JSON.stringify({ t: 'chat', text, ...(to ? { to } : {}) });
   const open = await p.evaluate(`(() => {
     const open = window.__sockets.filter((w) => w.readyState === 1);
@@ -395,13 +416,13 @@ function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
   for (const b of due) {
     if (b.to - b.from < SHORTEST_LOOKED_FOR_MS) continue;
     const line = wire.lines.find((l) => l.id === b.id)!;
-    const drawn = samples.some((s) => s.t >= b.from && s.t < b.to && s.speakers.includes(line.from));
-    // The TV has no seat row: a speaker it doesn't draw has only the ticker there.
-    if (tv && !drawn) continue;
+    // The TV has no seat row: a speaker it doesn't draw (by the views it received) has only the ticker there.
+    if (tv && !line.tvDraws.includes(line.from)) continue;
     const shown = samples.find((s) => s.t >= b.from && s.bubbles.some((x) => x.line === b.id));
     const due = Math.min(b.to, deadline(samples, name(line), b.from));
     timing(!!shown && shown.t <= due, `B-AC-17: on ${who} line ${b.id}'s bubble shown ${shown ? `+${shown.t - b.from} ms` : 'never'} after its start (deadline +${due - b.from} ms)`);
-    // Whether a bubble is due at all follows RULE-9's clock; when the page gave it none, the per-phase count below decides.
+    // A full minimum-length slot that no phase change cuts is RULE-9's structure, not its clock: the bubble must show.
+    if (b.to - b.from >= RULE.minMs && !b.endsPhase) check(shown, `B-AC-17: on ${who} line ${b.id} ("${line.text}"), given a full ${b.to - b.from} ms slot, shows its bubble`);
     if (!shown) continue;
     const bubble = shown.bubbles.find((x) => x.line === b.id)!;
     check(bubble.seat === line.from, `B-AC-17: on ${who} line ${b.id}'s bubble is ${line.from}'s, got ${bubble.seat}`);
@@ -423,10 +444,8 @@ function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
     }
   }
   const bubbles = anchors.creature + anchors.seatRow;
-  // The TV draws only some speakers, so it shows only their bubbles; each phone shows every speaker's.
-  if (!tv)
-    for (const phase of NAMED_PHASES)
-      check((bubblesIn.get(phase) ?? 0) > 0, `B-AC-17: on ${who} at least one line's bubble showed at its speaker in ${phase}; got ${JSON.stringify(Object.fromEntries(bubblesIn))}`);
+  for (const phase of NAMED_PHASES)
+    check((bubblesIn.get(phase) ?? 0) > 0, `B-AC-17: on ${who} at least one line's bubble showed at its speaker in ${phase}; got ${JSON.stringify(Object.fromEntries(bubblesIn))}`);
 
   for (const s of samples)
     for (const x of s.bubbles) {
@@ -456,6 +475,12 @@ function sameLinesEverywhere(lena: Seen, kai: Seen, tv: Seen): void {
   check(ids(lena) === ids(kai) && ids(kai) === ids(tv), `B-AC-17: Lena, Kai and the TV received the same public lines, got lena [${ids(lena)}], kai [${ids(kai)}], tv [${ids(tv)}]`);
   const whisper = lena.wire.lines.find((l) => l.to);
   check(whisper && kai.wire.lines.some((l) => l.id === whisper.id) && !tv.wire.lines.some((l) => l.id === whisper.id), `B-AC-17: the whisper's id is on both phones and never on the TV`);
+  for (const line of sent)
+    for (const screen of line.whisper ? [lena, kai] : [lena, kai, tv])
+      check(
+        screen.wire.lines.some((l) => l.text === line.text && !!l.to === line.whisper),
+        `B-AC-17: ${screen.who} received the ${line.whisper ? 'whisper' : 'line'} a phone said, "${line.text}"`,
+      );
 }
 
 /** With E2E_AI_LINES=1: the page heard an AI seat in each named phase, by frame order (each line's ticker is checked above). */
