@@ -177,7 +177,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                 </span>
               )}
               {t.terrain === 'store' && (
-                <span className={cx('relative rounded-chip bg-map-chip font-mono font-bold text-holo shadow-chip', tv ? 'px-2 py-0.5 text-sm' : 'px-1 text-[8px]')}>STORE</span>
+                <span className={cx('relative rounded-chip bg-map-chip font-mono font-bold text-holo shadow-chip', tv ? 'px-2 py-0.5 text-sm' : 'px-0.5 text-[10px] tracking-tight')}>STORE</span>
               )}
               {t.good && (
                 <span
@@ -202,8 +202,8 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                 // z-[4], after the tab: above the disc and the tab.
                 <span
                   className={cx(
-                    'absolute right-0.5 top-0.5 z-[4] rounded-chip px-1 font-mono font-bold leading-tight shadow-chip',
-                    tv ? 'text-[11px]' : 'text-[7px]',
+                    'absolute right-0.5 top-0.5 z-[4] rounded-chip font-mono font-bold leading-tight shadow-chip',
+                    tv ? 'px-1 text-[11px]' : 'px-0.5 text-[10px]',
                     t.flag === 'sabotage' ? 'bg-alert text-white' : t.flag === 'sale' ? 'bg-warn text-void' : 'bg-holo text-on-holo',
                     fade,
                   )}
