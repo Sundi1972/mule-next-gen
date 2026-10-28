@@ -327,7 +327,7 @@ function News({ news }: { news: string[] }) {
 function MarketTiles({ game }: { game: MuleView }) {
   const rows = game.market.slice(0, 6);
   return (
-    <div className="grid grid-cols-3 gap-px overflow-hidden rounded-panel border border-holo-line bg-holo-line">
+    <div className="grid grid-cols-3 gap-px overflow-hidden rounded-panel border border-holo-line bg-holo-line" data-testid="tv-market">
       {rows.map((r) => (
         <div key={r.good} className="flex flex-col gap-1 bg-panel p-3">
           <GoodTag good={r.good} name />

@@ -150,6 +150,18 @@ type Seated = { page: Page; name: string };
  * Continue; once confirmed, the land grant opens on every screen and the server's news names who was left. With
  * MULE_SHOTS set to a directory, the step also saves the four screens there at night, for a look against the mock.
  */
+/** Test fixture: a busy month's news, as many lines as the server keeps (three), told to every screen at once. */
+function busyNews(room: unknown): void {
+  const game = (room as { game?: { news?: unknown; ctx?: { changed?: unknown } } }).game;
+  check(Array.isArray(game?.news) && typeof game?.ctx?.changed === 'function', 'the room game still exposes its news and ctx');
+  (game as { news: string[] }).news = [
+    'Brix is Governor (appointed) · Lena is Sheriff (appointed).',
+    'Brix listed plot 3·4 for the land auction at 160 cr, and the colony lists plot 9·2.',
+    'Welcome to the colony. Talk tactics, then grab land.',
+  ];
+  (game as { ctx: { changed(): void } }).ctx.changed();
+}
+
 export async function hostContinuesWithout({ host, ready, left, tv, server, code }: { host: Seated; ready: Seated; left: Seated; tv: Page; server: MuleServer; code: string }, timeout = 3_000): Promise<void> {
   const room = server.registry.get(code);
   check(room, `a room ${code} on the server`);
@@ -197,6 +209,8 @@ export async function hostContinuesWithout({ host, ready, left, tv, server, code
     const now = (await planning(p).getByTestId('now-title').innerText()).trim();
     check(now.includes(left.name), `B-AC-19: once Ready, ${p.name}'s Now names ${left.name} as who the table waits for, got "${now}"`);
   }
+  // The TV's side column at its fullest: the three news lines the server keeps, beside the waiting band.
+  busyNews(room);
   const board = tv.locator('[data-phase=planning]');
   const tvWaiting = board.getByTestId('tv-waiting');
   await tvWaiting.getByTestId(`waiting-${leftId}`).filter({ hasText: left.name }).waitFor({ timeout });
@@ -205,6 +219,9 @@ export async function hostContinuesWithout({ host, ready, left, tv, server, code
   check(/\bPLANNING$/.test((await row(left)).trim()) && !(await row(left)).includes('AWAY'), `B-AC-19: the TV's list says ${left.name} is PLANNING, got "${await row(left)}"`);
   check(/\bREADY$/.test((await row(host)).trim()), `B-AC-19: the TV's list says ${host.name} is READY, got "${await row(host)}"`);
   check((await board.getByTestId('ready-count').innerText()).trim() === count, `B-AC-19: the TV shows ${count}, got "${await board.getByTestId('ready-count').innerText()}"`);
+  // The waiting band takes room from the side column; the market prices must still show whole beside it.
+  const market = await board.getByTestId('tv-market').evaluate((e) => [e.scrollHeight, e.clientHeight]);
+  check(market[0]! <= market[1]! + 1, `B-AC-19: the TV keeps its market tiles whole beside the waiting band, got ${market[1]} of ${market[0]} px`);
 
   const go = planning(host).getByTestId('continue');
   await go.waitFor({ timeout });
