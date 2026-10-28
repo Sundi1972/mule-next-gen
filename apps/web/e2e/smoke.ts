@@ -9,9 +9,9 @@ import { errors as playwrightErrors, type BrowserContext, type Page } from 'play
 import { PHASE_MS } from '../../server/src/mule-game.js';
 import { check, claimAPlot, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
 import { planningIsTheHub } from './hub-steps';
-import { checkTheShow, watchShow } from './production-steps';
+import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
 import { fedPlayerFillsAFullHoloBar, hungryPlayerSeesAShortOrangeBar, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
-import { doubleTapZoomsToYourLand, noZoomBeforeYourFirstPlot, watchIntents, zoomButtonOnceYouOwnAPlot } from './table-steps';
+import { doubleTapZoomsToYourLand, moveDialogOpensInProduction, moveDialogOutlivedThePhase, noZoomBeforeYourFirstPlot, theSeatMovesToAnotherDevice, watchIntents, zoomButtonOnceYouOwnAPlot } from './table-steps';
 
 /** Loaded by a path held in a variable, so tsc never resolves a file that may not exist yet. */
 async function loadAuctionSteps(): Promise<AuctionSteps> {
@@ -49,14 +49,11 @@ const SEED = seedFrom(process.env.MULE_E2E_SEED);
 const steps = await loadAuctionSteps();
 const { server, base } = await startServer({ maxMonths: 2, phaseScale: PHASE_SCALE, seed: () => SEED });
 const browser = await launch();
-let seen: Shown[] = [];
+/** Every phase the player's devices showed: the phone, and from the move on the second device. */
+const seen: Shown[] = [];
 const errors: string[] = [];
 try {
-  const phoneContext = await browser.newContext(PHONE);
-  seen = await recordPhases(phoneContext);
-  const phone = await phoneContext.newPage();
-  phone.on('pageerror', (e) => errors.push(`phone: ${e.message}`));
-  const phoneShow = await watchShow(phone);
+  let { page: phone, show: phoneShow } = await newPhone('phone');
   const phoneIntents = watchIntents(phone);
 
   await phone.goto(base);
@@ -75,7 +72,7 @@ try {
   const tvShow = await watchShow(tv);
   await tv.goto(`${base}/table?room=${code}`);
   await tv.getByTestId('room-code').waitFor();
-  const ctx: GameStepContext = { phone, tv, check, server, code, held: (step) => held(server, code, step) };
+  let ctx: GameStepContext = { phone, tv, check, server, code, held: (step) => held(server, code, step) };
 
   await phone.getByRole('button', { name: 'Add AI player' }).click();
   await phone.getByRole('button', { name: 'Add AI player' }).click();
@@ -151,13 +148,20 @@ try {
   makeHungry(server, code);
   // B-AC-14: planning is the hub, its needs read from that seed; with B-AC-12's planning part.
   console.log(`hub: ${await planningIsTheHub(phone, server, code)}`);
+  // B-AC-7 (in game): the player moves to a second device, which plays the rest of the game.
+  const second = await newPhone('second device');
+  console.log(`move: ${await theSeatMovesToAnotherDevice(ctx, second.page)}`);
+  ({ page: phone, show: phoneShow } = second);
+  ctx = { ...ctx, phone };
   await readyIfStillPlanning(phone);
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 2);
   await hungryPlayerSeesAShortOrangeBar(phone, within(PHASE_MS.landGrant));
   await goToThePub(phone);
+  const moveLink = await moveDialogOpensInProduction(ctx, within(PHASE_MS.development));
   // B-AC-6, B-AC-7 and B-AC-8: month 2's show, with the seed's event.
   await phone.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
+  await moveDialogOutlivedThePhase(ctx, moveLink);
   console.log(`production show, month 2: ${await checkTheShow({ tv: tvShow, phone: phoneShow, event: SEED === SHOW_SEED })}`);
   await pressDoneThroughTheAuction(phone);
 
@@ -369,12 +373,21 @@ function readNumber(text: string | null, what: string): number {
 
 type Shown = { phase: string; at: number };
 
+/** A phone on its own browser context, played sideways: its phases recorded into `seen`, its shows watched, its page errors kept. */
+async function newPhone(who: string): Promise<{ page: Page; show: ShowWatch }> {
+  const context = await browser.newContext(PHONE);
+  await recordPhases(context);
+  const page = await context.newPage();
+  page.on('pageerror', (e) => errors.push(`${who}: ${e.message}`));
+  return { page, show: await watchShow(page) };
+}
+
 /**
- * Every phase the phone puts on screen, in order, with when it appeared. Kept
- * on the test's side, so a reload doesn't lose what was seen before it.
+ * Adds every phase the context's pages put on screen to `seen`, in order, with when it appeared. Kept on the test's
+ * side, so a reload doesn't lose what was seen before it. A device that steps aside shows no phase, so two devices
+ * add one timeline.
  */
-async function recordPhases(context: BrowserContext): Promise<Shown[]> {
-  const seen: Shown[] = [];
+async function recordPhases(context: BrowserContext): Promise<void> {
   await context.exposeBinding('__phaseShown', (_source, phase: string) => {
     if (seen.at(-1)?.phase !== phase) seen.push({ phase, at: Date.now() });
   });
@@ -388,7 +401,6 @@ async function recordPhases(context: BrowserContext): Promise<Shown[]> {
       if (phase) window.__phaseShown(phase);
     }).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-phase'] });
   }`);
-  return seen;
 }
 
 /** Each phase with how long it stayed on screen, e.g. "planning 1.2s, landGrant 5.9s". */

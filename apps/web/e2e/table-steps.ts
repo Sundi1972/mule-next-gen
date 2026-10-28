@@ -1,13 +1,14 @@
-/** WS4's steps in smoke.ts's whole game: map zoom (B-AC-2, T-AC-9). Each takes smoke's GameStepContext. */
+/** WS4's steps in smoke.ts's whole game: map zoom (B-AC-2, T-AC-9) and the move to another device (B-AC-7, B-AC-13). */
 import type { GameState } from '@mule/engine';
 import type { Locator, Page } from 'playwright';
-import { check, type GameStepContext } from './harness';
+import { check, checkLink, EXPIRED, gone, MOVED, onStartScreen, PHONE, qrLink, seatToken, shows, type GameStepContext } from './harness';
 
 /** B-AC-2: a zoomed plot is at least this wide, a thumb's width. */
 const MIN_PLOT_PX = 44;
 /** T-AC-9 watches the wire from the first tap to at least this long after the second. */
 const QUIET_MS = 400;
 const PRESS_MS = 2_000;
+const READY = '[data-testid=handoff-qr][data-state=ready]';
 
 type Plot = { x: number; y: number };
 type Box = { x: number; y: number; width: number; height: number };
@@ -93,6 +94,108 @@ export async function doubleTapZoomsToYourLand(ctx: GameStepContext, intents: ()
   await dev.getByTestId('zoom-button').tap({ timeout: PRESS_MS });
   await checkWholeMap(dev, own, whole, 'B-AC-2: after the zoom button again');
   return `plot ${plotName(target)}, whole ${px(whole[0]!)}, zoomed ${px(zoomed[0]!)}; ${turnLeft(ctx)}`;
+}
+
+/**
+ * B-AC-13 (handoff, in game) and B-AC-7 (in game), held and outside development, whose turn runs on real time: the
+ * move dialog opens with a ready code and Escape closes it; then the seat moves to `second`, a device that has not
+ * loaded the game, keeping its name, species, colour and money. The TV still draws its plots in its colour, the first
+ * device steps aside, and the used link moves nothing. `second` is the phone from here on. Returns a line for the log.
+ */
+export async function theSeatMovesToAnotherDevice(ctx: GameStepContext, second: Page): Promise<string> {
+  const started = Date.now();
+  return ctx.held(async () => {
+    const { phone: first, tv } = ctx;
+    const game = gameOf(ctx);
+    const phase = game.state.phase;
+    check(phase !== 'development', `B-AC-7 (in game): the move runs held, outside development, but the game is in ${phase}`);
+
+    const move = first.getByTestId('move-to-phone');
+    check(await shows(move), "B-AC-13 (handoff, in game): the host's game shell has move-to-phone");
+    await move.click();
+    const dialog = first.getByRole('dialog', { name: 'Move to your phone' });
+    check(await shows(dialog.locator(READY)), 'B-AC-13 (handoff, in game): move-to-phone opens "Move to your phone" with a ready code');
+    await first.keyboard.press('Escape');
+    check(await gone(first.getByTestId('host-dialog')), 'B-AC-13 (handoff, in game): Escape closes the move dialog');
+    check(await move.evaluate((el) => el === document.activeElement), 'B-AC-13 (handoff, in game): focus goes back to move-to-phone');
+
+    const was = await playingAs(first);
+    const seat = game.state.players.find((p) => p.name === was.name);
+    check(seat, `B-AC-7 (in game): ${was.name} plays in the game`);
+    await move.click();
+    check(await shows(dialog.getByText(`you, ${was.name}`, { exact: true })), `B-AC-7 (in game): the dialog says the phone becomes "you, ${was.name}"`);
+    const link = await qrLink(dialog, 'B-AC-7 (in game)');
+    checkLink(link, ctx.code, await seatToken(first), was.name, 'B-AC-7 (in game)');
+    await second.goto(link);
+    check(await shows(second.getByTestId('game-shell')), 'B-AC-7 (in game): the second device opens the link into the game');
+    check((await second.getByTestId('lobby').count()) === 0, 'B-AC-7 (in game): the second device is not in the lobby');
+    const is = await playingAs(second);
+    check(is.name === was.name, `B-AC-7 (in game): the second device is ${was.name}, got "${is.name}"`);
+    check(is.mark === was.mark, `B-AC-7 (in game): the second device keeps ${was.name}'s species, "${was.mark}", got "${is.mark}"`);
+    check(is.slot === was.slot, `B-AC-7 (in game): the second device keeps ${was.name}'s colour, slot ${was.slot}, got slot ${is.slot}`);
+    check(is.money === was.money, `B-AC-7 (in game): the second device has ${was.name}'s money, ${was.money}, got ${is.money}`);
+
+    const plots = game.state.tiles.filter((t) => t.owner === seat.id).length;
+    const drawn = await tv
+      .locator('[data-phase] [aria-label*="owned by"]')
+      .evaluateAll((els, source) => els.filter((e) => new RegExp(source).test(e.getAttribute('aria-label') ?? '')).map((e) => e.querySelector('[data-slot]')?.getAttribute('data-slot') ?? 'none'), ownedBy(Number(was.slot)).source);
+    check(plots > 0 && drawn.length === plots && drawn.every((s) => s === was.slot), `B-AC-7 (in game): the TV still draws ${was.name}'s ${plots} plots in slot ${was.slot}, got [${drawn.join(', ')}]`);
+
+    check(await shows(first.getByText(MOVED)), `B-AC-7 (in game): the first device shows "${MOVED}"`);
+    check(await onStartScreen(first), 'B-AC-7 (in game): the first device steps aside to the start screen');
+    const browser = second.context().browser();
+    check(browser, 'the second device runs in a browser that can open a third');
+    const reused = await (await browser.newContext(PHONE)).newPage();
+    const reusedErrors: string[] = [];
+    reused.on('pageerror', (e) => reusedErrors.push(e.message));
+    await reused.goto(link);
+    check(await shows(reused.getByTestId('removed-notice').getByText(EXPIRED)), `B-AC-7 (in game): the same link opened again shows "${EXPIRED}"`);
+    check(await onStartScreen(reused), 'B-AC-7 (in game): the used link stays on the start screen');
+    check(reusedErrors.length === 0, `B-AC-7 (in game): no page errors on the device that reused the link: ${reusedErrors.join('; ')}`);
+    await reused.context().close();
+    check((await playingAs(second)).name === was.name, `B-AC-7 (in game): the used link does not move the seat: the second device is still ${was.name}`);
+    check(gameOf(ctx).state.phase === phase, `B-AC-7 (in game): the move ends no phase: the game was in ${phase}, now ${gameOf(ctx).state.phase}`);
+    return `${was.name} moved in ${phase} with ${plots} plots, ${((Date.now() - started) / 1_000).toFixed(2)} s held`;
+  });
+}
+
+/** B-AC-13 (handoff, in game): opens the move dialog during production. Returns its link, for moveDialogOutlivedThePhase. */
+export async function moveDialogOpensInProduction(ctx: GameStepContext, timeout: number): Promise<string> {
+  const { phone } = ctx;
+  const production = phone.locator('[data-phase=production]');
+  await production.waitFor({ timeout });
+  await phone.getByTestId('move-to-phone').click({ timeout: PRESS_MS });
+  const dialog = phone.getByRole('dialog', { name: 'Move to your phone' });
+  check(await shows(dialog.locator(READY)), 'B-AC-13 (handoff, in game): the moved device opens the move dialog with a ready code');
+  const link = await qrLink(dialog, 'B-AC-13 (handoff, in game)');
+  check((await production.count()) === 1, 'B-AC-13 (handoff, in game): the move dialog was open with its code before production ended');
+  return link;
+}
+
+/** B-AC-13 (handoff, in game): once the phase after production shows, the dialog is still open with the same ready code; Escape closes it. */
+export async function moveDialogOutlivedThePhase(ctx: GameStepContext, link: string): Promise<void> {
+  const { phone } = ctx;
+  const dialog = phone.getByRole('dialog', { name: 'Move to your phone' });
+  const now = (await phone.locator('[data-phase]').first().getAttribute('data-phase')) ?? 'nothing';
+  check(now !== 'production', 'B-AC-13 (handoff, in game): production has given way to the next phase');
+  check(
+    (await shows(dialog.locator(READY))) && (await qrLink(dialog, 'B-AC-13 (handoff, in game)')) === link,
+    `B-AC-13 (handoff, in game): after production gives way to ${now}, the dialog is still open with the same ready code`,
+  );
+  await phone.keyboard.press('Escape');
+  check(await gone(phone.getByTestId('host-dialog')), 'B-AC-13 (handoff, in game): Escape closes the move dialog after the phase change');
+  check(await phone.getByTestId('move-to-phone').evaluate((el) => el === document.activeElement), "B-AC-13 (handoff, in game): focus goes back to the new phase's move-to-phone");
+}
+
+/** Who this page plays as, from its game shell's header: name, species (the mark's label), colour (its slot) and money. */
+async function playingAs(page: Page): Promise<{ name: string; mark: string; slot: string; money: string }> {
+  const mark = page.getByTestId('guide').locator('header [role=img][data-slot]').first();
+  return {
+    name: ((await mark.locator('xpath=following-sibling::span[1]').textContent()) ?? '').trim(),
+    mark: (await mark.getAttribute('aria-label')) ?? '',
+    slot: (await mark.getAttribute('data-slot')) ?? '',
+    money: ((await page.getByTestId('money').textContent()) ?? '').trim(),
+  };
 }
 
 /** B-AC-2: each of your plots is at least MIN_PLOT_PX wide, larger than on the whole map, and inside the map's viewport. */
