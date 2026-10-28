@@ -2,13 +2,14 @@
  * B-AC-14 (C17, RULE-8): planning is the hub for the month. Run by smoke.ts in month-2 planning, right after
  * store-steps' makeHungry seated the human at 2 Food against a need of 5 (nine farms, which also burn Energy).
  * Quick by design: planning is about 4.5 s at the smoke's phase scale, and listedSale has used part of it.
- * B-AC-19 (AM-16), the host's Continue, is run by auction-steps.ts in its month-2 planning.
+ * B-AC-19 (AM-16), the host's Continue, is run by auction-steps.ts in its month-2 planning; its six-seat TV case
+ * (sixSeatsOnTheTv) by shell.ts, in a room of its own.
  */
 import { join } from 'node:path';
 import { GOODS, monthNeeds, type GameState, type Good } from '@mule/engine';
-import type { Page } from 'playwright';
+import type { Browser, Page } from 'playwright';
 import type { MuleServer } from '../../server/src/server.js';
-import { check, PHONE } from './harness';
+import { check, PHONE, TV } from './harness';
 import { LAPTOP } from './shell-steps';
 
 /** The human sits in seat 1. */
@@ -240,4 +241,58 @@ export async function hostContinuesWithout({ host, ready, left, tv, server, code
   const line = `${host.name} continued without ${left.name}.`;
   check(news.includes(line), `B-AC-19: the server's news says "${line}", got ${JSON.stringify(news)}`);
   console.log(`✓ B-AC-19: ${host.name} and ${ready.name} Ready, ${left.name} named on every phone and the TV (${count}); only ${host.name} had Continue; the land grant opened everywhere, and the news says "${line}"`);
+}
+
+/**
+ * B-AC-19 at six seats: one person and five AIs, the TV in planning with a busy month's news. The ready list stays on
+ * the canvas, the market tiles whole, and the newest news line, the election result, shows whole beside them.
+ */
+export async function sixSeatsOnTheTv({ browser, base, server }: { browser: Browser; base: string; server: MuleServer }, timeout = 5_000): Promise<string> {
+  const phone = await (await browser.newContext(PHONE)).newPage();
+  const tv = await (await browser.newContext(TV)).newPage();
+  try {
+    await phone.goto(base);
+    await phone.getByPlaceholder('Heiko').fill('Mia');
+    await phone.getByRole('button', { name: 'Start a new game' }).click();
+    await phone.getByText("You're at the table").waitFor({ timeout });
+    const code = (await phone.getByTestId('room-code').textContent())?.trim() ?? '';
+    for (let i = 1; i <= 5; i++) {
+      await phone.getByRole('button', { name: 'Add AI player' }).click();
+      await phone.locator('[data-testid=seats] li').nth(i).waitFor({ timeout });
+    }
+    await phone.getByRole('button', { name: 'Start game' }).click();
+    await tv.goto(`${base}/table?room=${code}`);
+    const board = tv.locator('[data-phase=planning]');
+    await board.getByTestId('tv-ready-list').waitFor({ timeout });
+    busyNews(server.registry.get(code));
+    const newest = board.getByTestId('tv-news').locator('li').first();
+    await newest.filter({ hasText: 'is Governor' }).waitFor({ state: 'attached', timeout });
+
+    // The column is checked twice: as it stands, then with the TV's chat ticker showing a line above it (C20).
+    const fits = async (when: string) => {
+      const canvas = await board.evaluate((e) => e.getBoundingClientRect().bottom);
+      const list = await board.getByTestId('tv-ready-list').evaluate((e) => e.getBoundingClientRect().bottom);
+      check(list <= canvas + 1, `B-AC-19 (six seats${when}): the TV's ready list stays on the canvas, got its bottom at ${list.toFixed(0)} of ${canvas.toFixed(0)} px`);
+      const market = await board.getByTestId('tv-market').evaluate((e) => [e.scrollHeight, e.clientHeight]);
+      check(market[0]! <= market[1]! + 1, `B-AC-19 (six seats${when}): the market tiles are whole, got ${market[1]} of ${market[0]} px`);
+      // Whole means both edges of the line can be hit: clipped by its column or covered by the list, they can't.
+      const shown = await newest.evaluate((li) => {
+        const r = li.getBoundingClientRect();
+        // No named function in here: tsx would wrap it in a helper the page doesn't have.
+        const [top, bottom] = [r.top + 2, r.bottom - 2].map((y) => li.contains(document.elementFromPoint(r.left + 8, y)));
+        return { top, bottom, height: r.height };
+      });
+      check(shown.height > 0 && shown.top && shown.bottom, `B-AC-19 (six seats${when}): the election result shows whole in the TV's news, got ${JSON.stringify(shown)}`);
+      return `the ready list ends at ${list.toFixed(0)} of ${canvas.toFixed(0)} px`;
+    };
+    const quiet = await fits('');
+    const room = server.registry.get(code) as unknown as { seats: { id: string }[]; chat: (from: string, text: string) => void };
+    room.chat(room.seats[0]!.id, 'Six of us at one table, then.');
+    await tv.getByText('Six of us at one table, then.').first().waitFor({ timeout });
+    const talking = await fits(', with a chat line');
+    return `six seats: ${quiet}, ${talking} with a chat line showing; the market whole, the election result whole in the news`;
+  } finally {
+    await phone.context().close();
+    await tv.context().close();
+  }
 }

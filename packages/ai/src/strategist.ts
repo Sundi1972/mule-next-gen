@@ -7,6 +7,7 @@ import {
   mulePriceFor,
   neighbours,
   POLLUTION,
+  PRICE,
   PROCESSED_GOODS,
   RAW_GOODS,
   STRATEGIST,
@@ -126,19 +127,20 @@ function scorePlot(obs: GameState, gains: Map<Outfit, number>, tile: Tile, focus
   const leaderAround = leader ? around.filter((t) => t.owner === leader).length : 0;
   const known = obs.players.find((p) => p.id === mind.me)!.analysed.includes(tileIndex(obs.width, tile.x, tile.y));
   const spite = mind.level.sabotage ? mind.persona.spite : 0;
+  const land = STRATEGIST.land;
   const cons = [
     consider('Best use', curve.gain(best.gain, STRATEGIST.gainScale.plot), mind.persona.greed, `${outfitName(best.outfit)} here earns about ${cr(best.gain)} over the game`),
-    consider('Known ground', known ? 1 : 0.8, mind.persona.risk, known ? 'ground analysed' : 'ground not analysed: a guess from the terrain'),
-    consider('Next to my land', curve.floor(ownAround / 2, 0.6), focus === 'cluster' ? 2 : 0.5, `${ownAround} of my plots beside it`),
+    consider('Known ground', known ? 1 : land.unknownGround, mind.persona.risk, known ? 'ground analysed' : 'ground not analysed: a guess from the terrain'),
+    consider('Next to my land', curve.floor(ownAround / land.nextToMine.full, land.nextToMine.floor), focus === 'cluster' ? land.nextToMine.clusterWeight : land.nextToMine.weight, `${ownAround} of my plots beside it`),
   ];
-  if (focus === 'block') cons.push(consider('Blocks the leader', curve.floor(leaderAround / 2, 0.4), Math.max(0.5, spite), `${leaderAround} of the leader's plots beside it`));
+  if (focus === 'block') cons.push(consider('Blocks the leader', curve.floor(leaderAround / land.blocksLeader.full, land.blocksLeader.floor), Math.max(land.blocksLeader.minWeight, spite), `${leaderAround} of the leader's plots beside it`));
   const index = tileIndex(obs.width, tile.x, tile.y);
   return candidate(`plot:${index}`, plotName(tile), { index, outfit: best.outfit }, best.gain + GAME.plotScore, cons);
 }
 
 /** Where a plot falls among plots the seat values the same: seeded per seat, so ties don't follow the map's reading order. */
 function tieOrder(mind: Mind, index: number): number {
-  return Math.imul((mind.salt ?? 0) ^ Math.imul(index + 1, 0x9e3779b1), 0x85ebca6b) >>> 0;
+  return Math.imul((mind.salt ?? 0) ^ Math.imul(index + 1, 0x9e3779b1), 0x85ebca6b) >>> 0; // literal-ok: hash constants that scatter the tie order
 }
 
 /** The land plans for this month, each with its full ranking of free plots. */
@@ -154,6 +156,7 @@ export function landDecision(obs: GameState, mind: Mind): Shortlist<LandPlan> {
   const shortOfFood = !obs.tiles.some((t) => t.owner === mind.me && t.outfit === 'food') || !obs.tiles.some((t) => t.owner === mind.me && t.outfit === 'energy');
 
   const gains = new Map(free.map((t) => [t, plotGains(obs, o, t, mind)]));
+  const land = STRATEGIST.land;
   const plans = focuses.map((focus) => {
     const ranking = free
       .map((t) => scorePlot(obs, gains.get(t)!, t, focus, mind, leader))
@@ -162,16 +165,17 @@ export function landDecision(obs: GameState, mind: Mind): Shortlist<LandPlan> {
     const top = ranking.slice(0, claims);
     const worth = top.reduce((n, s) => n + s.value, 0);
     const cons = [
-      consider('Worth of the best plots', curve.gain(worth - 600, STRATEGIST.gainScale.plot * claims), mind.persona.greed, `its best ${claims} plots are worth about ${cr(worth)}`),
+      // Each plot's value includes its GAME.plotScore (scorePlot): the curve weighs what the plots gain beyond that.
+      consider('Worth of the best plots', curve.gain(worth - claims * GAME.plotScore, STRATEGIST.gainScale.plot * claims), mind.persona.greed, `its best ${claims} plots are worth about ${cr(worth)}`),
       consider(
         'Feeds me',
-        focus === 'grown' ? (shortOfFood ? 1 : 0.75) : shortOfFood ? 0.6 : 0.75,
+        focus === 'grown' ? (shortOfFood ? 1 : land.feedsMe.covered) : shortOfFood ? land.feedsMe.short : land.feedsMe.covered,
         mind.persona.reserve,
         shortOfFood ? 'I still buy my Food and Energy' : 'my Food and Energy are covered',
       ),
-      consider('Can develop it', curve.ramp(p.money - reserve, 0, mulePrice(obs) * 2), focus === 'factory' ? 1 : 0.3, `${cr(p.money)} on hand, ${cr(reserve)} kept back`),
+      consider('Can develop it', curve.ramp(p.money - reserve, 0, mulePrice(obs) * land.canDevelop.mules), focus === 'factory' ? land.canDevelop.factoryWeight : land.canDevelop.weight, `${cr(p.money)} on hand, ${cr(reserve)} kept back`),
     ];
-    if (focus === 'block') cons.push(consider('Hurts the leader', 0.7, mind.persona.spite, 'the leader needs room to grow'));
+    if (focus === 'block') cons.push(consider('Hurts the leader', land.hurtsLeader, mind.persona.spite, 'the leader needs room to grow'));
     const labels = top.map((s) => s.label).join(' and ');
     return candidate<LandPlan>(`land:${focus}`, `${FOCUS_LABEL[focus]}: ${labels || 'nothing left'}`, { focus, ranking }, worth, cons);
   });
@@ -271,9 +275,9 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
   const cands: Candidate<DevAction>[] = [];
   const common = (cashAfter: number, known: boolean, feeds: boolean, gain: number, why: string) => [
     consider('Gain', curve.gain(gain, STRATEGIST.gainScale.develop), mind.persona.greed, why),
-    consider('Cash left', curve.floor(curve.ramp(cashAfter, reserve, reserve * 2), STRATEGIST.cashLeftFloor), mind.persona.reserve, `${cr(cashAfter)} left, ${cr(reserve)} kept back`),
-    consider('Known ground', known ? 1 : 0.75, mind.persona.risk, known ? 'ground analysed' : 'ground not analysed'),
-    consider('Feeds me', feeds ? 1 : 0.8, mind.persona.reserve * 0.5, feeds ? 'covers my own Food or Energy' : 'I buy my Food and Energy'),
+    consider('Cash left', curve.floor(curve.ramp(cashAfter, reserve, reserve * STRATEGIST.cashLeftFull), STRATEGIST.cashLeftFloor), mind.persona.reserve, `${cr(cashAfter)} left, ${cr(reserve)} kept back`),
+    consider('Known ground', known ? 1 : STRATEGIST.develop.unknownGround, mind.persona.risk, known ? 'ground analysed' : 'ground not analysed'),
+    consider('Feeds me', feeds ? 1 : STRATEGIST.develop.feedsMe.other, mind.persona.reserve * STRATEGIST.develop.feedsMe.reserveShare, feeds ? 'covers my own Food or Energy' : 'I buy my Food and Energy'),
   ];
   for (const tile of idle) {
     const index = tileIndex(obs.width, tile.x, tile.y);
@@ -328,7 +332,7 @@ export function analysesWanted(obs: GameState, mind: Mind, secondsLeft: number):
     const closeness = Math.abs(a - b) / Math.max(1, Math.abs(a));
     if (closeness < STRATEGIST.analyseWhenClose) out.push({ index, closeness });
   }
-  const per = mind.level.fullScoring ? STRATEGIST.analysesPerMonth : 1;
+  const per = mind.level.fullScoring ? STRATEGIST.analysesPerMonth : STRATEGIST.rookieAnalyses;
   const budget = Math.floor((secondsLeft - STRATEGIST.analyseMinSeconds) / DEVELOPMENT.analysisSeconds) + 1;
   return out
     .sort((x, y) => x.closeness - y.closeness)
@@ -338,10 +342,10 @@ export function analysesWanted(obs: GameState, mind: Mind, secondsLeft: number):
 
 /** Own unfiltered polluters to fit with a filter while the air is turning and Alloy lasts, worst first. */
 export function filtersWanted(obs: GameState, mind: Mind): number[] {
-  if (!mind.level.fullScoring || obs.air < POLLUTION.bands[1].from - 10) return [];
+  if (!mind.level.fullScoring || obs.air < POLLUTION.bands[1].from - STRATEGIST.filterAirMargin) return [];
   const alloy = me(obs, mind).stock.alloy;
   return obs.tiles
-    .filter((t) => t.owner === mind.me && !t.filter && airPoints(t) > 1)
+    .filter((t) => t.owner === mind.me && !t.filter && airPoints(t) > STRATEGIST.filterOverAir)
     .sort((a, b) => airPoints(b) - airPoints(a))
     .slice(0, alloy)
     .map((t) => tileIndex(obs.width, t.x, t.y));
@@ -385,16 +389,16 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
   const others = rows.filter((r) => r.id !== mind.me);
   const shortfall = others.reduce((n, r) => n + Math.max(0, r.need - r.now), 0);
   const scarce = obs.store.stock[good] <= shortfall;
-  const cornering = mind.level.corners && mind.persona.corner > 0 && scarce && shortfall > 0 && GOOD_CONFIG[good].spoilage < 0.5;
+  const cornering = mind.level.corners && mind.persona.corner > 0 && scarce && shortfall > 0 && GOOD_CONFIG[good].spoilage < STRATEGIST.cornerMaxSpoilage;
   const next = o.final ? obs.store.posted[good] : o.price(good);
-  const corner = cornering ? { units: Math.min(shortfall, 6), premium: next * STRATEGIST.cornerPremium * mind.persona.corner } : { units: 0, premium: 0 };
+  const corner = cornering ? { units: Math.min(shortfall, STRATEGIST.cornerMaxUnits), premium: next * STRATEGIST.cornerPremium * mind.persona.corner } : { units: 0, premium: 0 };
   const leader = leaderOf(obs, mind.me);
   const leaderShort = leader ? rows.some((r) => r.id === leader && r.now < r.need) : false;
-  const spiteBid = mind.level.sabotage && leaderShort ? Math.round(next * 0.1 * mind.persona.spite) : 0;
+  const spiteBid = mind.level.sabotage && leaderShort ? Math.round(next * STRATEGIST.spiteShare * mind.persona.spite) : 0;
   if (corner.units > 0 || spiteBid > 0) {
     // Raise the buy ceiling of the next few units the seat doesn't hold yet.
     const h = p.stock[good];
-    for (let k = h; k < h + Math.max(corner.units, spiteBid > 0 ? 2 : 0) && k < values.buy.length; k++) {
+    for (let k = h; k < h + Math.max(corner.units, spiteBid > 0 ? STRATEGIST.spiteUnits : 0) && k < values.buy.length; k++) {
       values.buy[k] = values.buy[k]! + (k - h < corner.units ? corner.premium : 0) + spiteBid;
     }
     values.buy.sort((x, y) => y - x);
@@ -406,10 +410,10 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
 export function expectedPrices(obs: GameState, good: Good): { sell: number; buy: number } {
   const a = obs.auction;
   const posted = obs.store.posted[good];
-  const storeBuy = a?.good === good ? (a.storeBudget > 0 ? a.storeBuy : 0) : Math.floor(posted * 0.9);
+  const storeBuy = a?.good === good ? (a.storeBudget > 0 ? a.storeBuy : 0) : Math.floor(posted * (1 - PRICE.storeSpread));
   const ship = shipInPort(obs) ? (shipPrice(obs, good) ?? 0) : 0;
-  const sell = Math.max(storeBuy, ship, Math.floor(posted * 0.85));
-  const storeSell = a?.good === good ? a.storeSell : Math.ceil(posted * 1.1);
+  const sell = Math.max(storeBuy, ship, Math.floor(posted * STRATEGIST.trade.sellFloor));
+  const storeSell = a?.good === good ? a.storeSell : Math.ceil(posted * (1 + PRICE.storeSpread));
   return { sell, buy: storeSell };
 }
 
@@ -425,10 +429,11 @@ export function tradeDecision(obs: GameState, mind: Mind, plan: GoodPlan): Short
   const h = p.stock[good];
   const { sell, buy } = expectedPrices(obs, good);
   const v = plan.values;
+  const { sure } = STRATEGIST.trade;
   const cands: Candidate<TradeAction>[] = [];
   const gainCons = (gain: number, cashAfter: number, sure: number, why: string, sureWhy: string) => [
     consider('Gain', curve.gain(gain, STRATEGIST.gainScale.trade), mind.persona.greed, why),
-    consider('Cash left', curve.floor(curve.ramp(cashAfter, plan.reserve, plan.reserve * 2), STRATEGIST.cashLeftFloor), mind.persona.reserve, `${cr(cashAfter)} left after, ${cr(plan.reserve)} kept back`),
+    consider('Cash left', curve.floor(curve.ramp(cashAfter, plan.reserve, plan.reserve * STRATEGIST.cashLeftFull), STRATEGIST.cashLeftFloor), mind.persona.reserve, `${cr(cashAfter)} left after, ${cr(plan.reserve)} kept back`),
     consider('Sure thing', sure, mind.persona.risk, sureWhy),
   ];
 
@@ -441,12 +446,12 @@ export function tradeDecision(obs: GameState, mind: Mind, plan: GoodPlan): Short
     for (let k = keep; k < h; k++) gain += kept - (v.keep[k] ?? 0);
     const veto = keep < v.floorUnits ? `it needs ${v.floorUnits} ${GOOD_NAME[good]} itself` : null;
     cands.push(
-      candidate<TradeAction>(key, label, { side: 'seller', keep }, gain, gainCons(gain, p.money + (h - keep) * kept, 0.9,`sells ${h - keep} at about ${sell}, worth ${cr(gain)} more than keeping them`, 'the store or the ship will take them'), veto),
+      candidate<TradeAction>(key, label, { side: 'seller', keep }, gain, gainCons(gain, p.money + (h - keep) * kept, sure.sell, `sells ${h - keep} at about ${sell}, worth ${cr(gain)} more than keeping them`, 'the store or the ship will take them'), veto),
     );
   };
   if (keepAt < h) {
     sellTo(keepAt, `Sell ${h - keepAt} ${GOOD_NAME[good]}, keep ${keepAt}`, 'sell');
-    const buffer = Math.min(h - 1, keepAt + Math.max(1, Math.ceil(v.need / 2)));
+    const buffer = Math.min(h - 1, keepAt + Math.max(1, Math.ceil(v.need * STRATEGIST.trade.bufferShare)));
     if (buffer > keepAt && buffer < h) sellTo(buffer, `Sell ${h - buffer} ${GOOD_NAME[good]}, keep a buffer of ${buffer}`, 'sell:buffer');
   }
 
@@ -468,8 +473,8 @@ export function tradeDecision(obs: GameState, mind: Mind, plan: GoodPlan): Short
   if (upTo > h) {
     const needOnly = Math.min(upTo, Math.max(h, v.block));
     const speculative = upTo > Math.max(h, v.block);
-    buyTo(upTo, `Buy ${upTo - h} ${GOOD_NAME[good]}${speculative ? ' (some to resell)' : ''}`, 'buy', speculative ? 0.6 : 0.9, speculative ? 'resale next month is a forecast' : 'it needs them');
-    if (speculative && needOnly > h) buyTo(needOnly, `Buy ${needOnly - h} ${GOOD_NAME[good]}, just what I need`, 'buy:need', 0.9, 'it needs them');
+    buyTo(upTo, `Buy ${upTo - h} ${GOOD_NAME[good]}${speculative ? ' (some to resell)' : ''}`, 'buy', speculative ? sure.resale : sure.need, speculative ? 'resale next month is a forecast' : 'it needs them');
+    if (speculative && needOnly > h) buyTo(needOnly, `Buy ${needOnly - h} ${GOOD_NAME[good]}, just what I need`, 'buy:need', sure.need, 'it needs them');
   }
 
   cands.push(candidate<TradeAction>('pass', `Pass on ${GOOD_NAME[good]}`, { side: 'pass' }, 0, gainCons(0, p.money, 1, 'no trade', 'nothing at stake')));

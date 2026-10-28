@@ -2,7 +2,7 @@ import { POLITICS, type CanRun, type ElectionHow, type Office, type TaxPromise }
 import type { ElectionView, MuleView, MyView, PlayerView, PoliticsView } from '@mule/protocol';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
@@ -13,21 +13,24 @@ import { GovernorDesk } from '../src/phone/hub/politics/Governor';
 import { electionNow } from '../src/phone/hub/politics/slots';
 import { TvElection } from '../src/table/TvElection';
 
-const player = (id: string, name: string, slot: number): PlayerView => ({ id, name, isAi: false, color: '', species: 'zipwing', money: 1000, plots: 0, ready: false, doneDeveloping: false, condition: null, colonist: null, slot });
+const player = (id: string, name: string, slot: number): PlayerView => ({ id, name, isAi: false, color: '', species: 'zipwing', money: 1000, worth: 0, plots: 0, ready: false, doneDeveloping: false, condition: null, colonist: null, slot });
 const PLAYERS = [player('s1', 'Lena', 0), player('s2', 'Ossa', 1), player('s3', 'Kai', 2), player('s4', 'Brix', 3), player('s5', 'Pip', 4)];
 const stock = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0, alloy: 0, electronics: 0, medicine: 0 };
 
 const election = (extra: Partial<ElectionView> = {}): ElectionView => ({
-  stage: 'nominate',
-  seconds: 14,
-  total: 20,
+  stage: 'announce',
+  ceremony: null,
   candidates: { governor: [], sheriff: [] },
   promises: {},
   voted: [],
   done: [],
-  result: null,
+  waitingFor: [],
+  result: {},
   ...extra,
 });
+
+/** The ceremony at an office's step, with this many seconds of it left. */
+const at = (office: Office, step: 'intro' | 'bars' | 'winner', seconds = 2): ElectionView['ceremony'] => ({ office, step, seconds, total: 5 });
 
 const politics = (extra: Partial<PoliticsView> = {}): PoliticsView => ({
   governor: null,
@@ -39,6 +42,8 @@ const politics = (extra: Partial<PoliticsView> = {}): PoliticsView => ({
   fund: 0,
   pay: { governor: 50, sheriff: 30 },
   weights: PLAYERS.map(({ id }) => ({ id, votes: 1, parts: { base: 1, land: 0, reputation: 0, baron: 0, taxes: 0 } })),
+  candidates: { governor: [], sheriff: [] },
+  promises: {},
   election: election(),
   ...extra,
 });
@@ -49,6 +54,7 @@ const me = (extra: Partial<NonNullable<MyView['politics']>> = {}): MyView => ({
   stock: { ...stock, food: 9 },
   carriedMule: null,
   installedThisTurn: false,
+  worthParts: { money: 0, goods: 0, plots: 0, land: 0, mules: 0, muleValue: 0, office: 0, cut: 0 },
   claimsLeft: 0,
   hungry: false,
   sick: false,
@@ -147,15 +153,29 @@ function picker(percent: number): string {
   return onPhone(view(politics({ tax: { percent, start: percent, low: 0, high: 15 } })), Picker);
 }
 
+/** The Sheriff path: each test of the calling block runs with both offices elected, and the config's list comes back after it. */
+function bothOffices(): void {
+  let saved: Office[];
+  beforeEach(() => {
+    saved = POLITICS.offices;
+    POLITICS.offices = ['governor', 'sheriff'];
+  });
+  afterEach(() => {
+    POLITICS.offices = saved;
+  });
+}
+
 const CAP_8: TaxPromise = { kind: 'cap', percent: 8 };
 const HOLD: TaxPromise = { kind: 'hold' };
 
 describe('the politics desks', () => {
+  bothOffices();
+
   it.each<[string, Record<Office, CanRun>, Record<Office, string | null>]>([
     ['both open', { governor: true, sheriff: true }, { governor: null, sheriff: null }],
     ['two Governor terms in a row', { governor: 'termLimit', sheriff: true }, { governor: '2 Governor terms in a row', sheriff: null }],
-    ['candidates closed', { governor: 'closed', sheriff: 'closed' }, { governor: 'Candidates are closed', sheriff: 'Candidates are closed' }],
-  ])('RULE-2: a seat that may not run sees why on the run button (%s)', (_, canRun, why) => {
+    ['candidates closed', { governor: 'closed', sheriff: 'closed' }, { governor: 'Candidates are closed until the result', sheriff: 'Candidates are closed until the result' }],
+  ])('T-AC-60, RULE-60: a seat that may not run sees why on the run button (%s)', (_, canRun, why) => {
     const html = onPhone(view(politics(), me({ canRun })), CouncilDesk);
     for (const office of ['governor', 'sheriff'] as const) {
       const button = `run-${office}`;
@@ -169,15 +189,16 @@ describe('the politics desks', () => {
   it.each<[ElectionHow, Office, string]>([
     ['votes', 'governor', 'Won on votes.'],
     ['unopposed', 'governor', 'Elected unopposed: no ballot for this office.'],
-    ['appointed', 'governor', 'Nobody ran: the richest player is appointed.'],
-    ['appointed', 'sheriff', 'Nobody ran: the richest player who isn’t Governor is appointed.'],
+    ['appointed', 'governor', 'Nobody ran: the richest player is appointed, by lot if several are.'],
+    ['appointed', 'sheriff', 'Nobody ran: the richest player who isn’t Governor is appointed, by lot if several are.'],
     ['baron', 'sheriff', 'A tie: Ossa, the Land Baron, broke it.'],
-    ['tieRule', 'governor', 'Tied: most plots wins, then seat order.'],
+    ['land', 'governor', 'A tie: the most plots won it.'],
+    ['lot', 'governor', 'A tie: decided by lot.'],
   ])('RULE-3: the TV and the phones say how an office was won (%s, %s)', (how, office, line) => {
     const other: Office = office === 'governor' ? 'sheriff' : 'governor';
     const tallies = how === 'appointed' || how === 'unopposed' ? [] : [{ id: 's2', votes: 2 }, { id: 's3', votes: 2 }];
     const result = { [office]: { winner: 's2', how, tallies }, [other]: { winner: 's3', how: 'votes' as const, tallies: [{ id: 's3', votes: 1 }] } } as Record<Office, { winner: string; how: ElectionHow; tallies: { id: string; votes: number }[] }>;
-    const game = view(politics({ baron: 's2', election: election({ stage: 'reveal', seconds: 2, total: 6, result }) }));
+    const game = view(politics({ baron: 's2', election: election({ stage: 'ceremony', ceremony: at('sheriff', 'winner'), result }) }));
     expect(textOf(onTv(game), `how-${office}`)).toBe(line);
     expect(textOf(onPhone(game, CouncilDesk), 'phone-election-result')).toContain(line);
   });
@@ -196,14 +217,32 @@ describe('the politics desks', () => {
   });
 
   it.each<[number, string]>([
-    [6, '3'],
-    [4.2, '2'],
-    [3.05, '1'],
-  ])("AM-8: while the result is withheld the TV counts down the reveal's first part (%s s left → %s)", (seconds, shown) => {
-    const html = onTv(view(politics({ election: election({ stage: 'reveal', seconds, total: 6 }) })));
+    [3, '3'],
+    [2.2, '3'],
+    [0.05, '1'],
+  ])("B-AC-62: in the first office's intro, before anything is shown, the TV counts down the step (%s s left → %s)", (seconds, shown) => {
+    const html = onTv(view(politics({ election: election({ stage: 'ceremony', ceremony: at('governor', 'intro', seconds), result: {} }) })));
     expect(tagOf(html, 'ballot-reveal')).toBeUndefined();
-    expect(textOf(html, 'ballot-countdown')).toContain(shown);
     expect(textOf(html, 'ballot-countdown').match(/\d+/)?.[0]).toBe(shown);
+  });
+
+  it("B-AC-62: the TV and the phones draw an office's totals only from its bars step and its winner only from its winner step", () => {
+    const tallies = [{ id: 's1', votes: 3 }, { id: 's2', votes: 1 }];
+    const bars = view(politics({ election: election({ stage: 'ceremony', ceremony: at('governor', 'bars'), result: { governor: { tallies } } }) }));
+    const tv = onTv(bars);
+    const row = (html: string, id: string) => chunkOf(html, `result-governor-${id}`, 'result-').replace(/<[^>]+>/g, '');
+    expect(row(tv, 's1'), 'the bars step draws the candidates and their totals').toMatch(/^Lena3(?!\d)/);
+    expect(row(tv, 's2')).toMatch(/^Ossa1(?!\d)/);
+    expect(tv, 'no winner in the bars step').not.toContain('ELECTED');
+    expect(tagOf(tv, 'how-governor')).toBeUndefined();
+    expect(textOf(onPhone(bars, CouncilDesk), 'phone-election-result')).not.toContain('Governor');
+
+    const winner = view(politics({ election: election({ stage: 'ceremony', ceremony: at('governor', 'winner'), result: { governor: { winner: 's1', how: 'votes', tallies } } }) }));
+    expect(row(onTv(winner), 's1')).toMatch(/^Lena3ELECTED/);
+    expect(textOf(onTv(winner), 'how-governor')).toBe('Won on votes.');
+    expect(tagOf(onTv(winner), 'result-sheriff-s3'), 'the Sheriff comes after').toBeUndefined();
+    expect(textOf(onPhone(winner, CouncilDesk), 'phone-election-result')).toMatch(/Governor\s*You\s*3 votes/);
+    expect(textOf(onPhone(winner, CouncilDesk), 'phone-election-result')).not.toContain('Sheriff');
   });
 
   it("C11: with politics off the Colony desk is exactly WS6's; with it on, the colony facts follow it", () => {
@@ -244,11 +283,12 @@ describe('the politics desks', () => {
     else expect(textOf(html, 'promise-lower')).toBe('Lower the tax');
   });
 
-  it("C12: after running, the line names the office and, for Governor, the promise; a Sheriff's line has none", () => {
-    const gov = onPhone(view(politics({ election: election({ candidates: { governor: ['s1'], sheriff: [] }, promises: { s1: CAP_8 } }) }), me({ running: 'governor' })), CouncilDesk);
+  it("C12, B-AC-60: in announce the desk lists the candidacy Politics holds; after running, the line names the office and, for Governor, the promise; a Sheriff's line has none", () => {
+    const gov = onPhone(view(politics({ candidates: { governor: ['s1', 's2'], sheriff: [] }, promises: { s1: CAP_8, s2: HOLD } }), me({ running: 'governor' })), CouncilDesk);
     expect(textOf(gov, 'running')).toBe('You run for Governor, promising “Tax no higher than 8%”; one office at a time.Withdraw');
+    expect(textOf(gov, 'candidates')).toBe('Governor: Lena, OssaSheriff: nobody yet');
     expect(tagOf(gov, 'promise-pick')).toBeUndefined();
-    const sheriff = onPhone(view(politics({ election: election({ candidates: { governor: [], sheriff: ['s1'] } }) }), me({ running: 'sheriff' })), CouncilDesk);
+    const sheriff = onPhone(view(politics({ candidates: { governor: [], sheriff: ['s1'] } }), me({ running: 'sheriff' })), CouncilDesk);
     expect(textOf(sheriff, 'running')).toBe('You run for Sheriff; one office at a time.Withdraw');
   });
 
@@ -270,7 +310,7 @@ describe('the politics desks', () => {
       sheriff: { winner: 's3', how: 'votes' as const, tallies: [{ id: 's3', votes: 2 }, { id: 's4', votes: 2 }] },
     };
     const promises = { s1: CAP_8, s2: HOLD, s3: { kind: 'lower' } as TaxPromise };
-    const html = onTv(view(politics({ election: election({ stage: 'reveal', seconds: 2, total: 6, result, promises }) })));
+    const html = onTv(view(politics({ election: election({ stage: 'ceremony', ceremony: at('sheriff', 'winner'), result, promises }) })));
     const row = (office: Office, id: string) => chunkOf(html, `result-${office}-${id}`, 'result-').replace(/<[^>]+>/g, '');
     expect(row('governor', 's1')).toContain('Lena“Tax no higher than 8%”');
     expect(row('governor', 's2')).toContain('Ossa“Hold the tax”');
@@ -289,15 +329,34 @@ describe('the politics desks', () => {
       governor: { winner: 's1', how: 'votes' as const, tallies: [{ id: 's1', votes: 2 }, { id: 's5', votes: 1 }] },
       sheriff: { winner: 's3', how: 'appointed' as const, tallies: [] },
     };
-    const tv = onTv(view(politics({ election: election({ stage: 'reveal', seconds: 2, total: 6, candidates, result, promises: { s1: CAP_8 } }) })));
+    const tv = onTv(view(politics({ election: election({ stage: 'ceremony', ceremony: at('sheriff', 'winner'), candidates, result, promises: { s1: CAP_8 } }) })));
     expect(chunkOf(tv, 'result-governor-s5', 'how-').replace(/<[^>]+>/g, '')).not.toMatch(/[“”]/);
     expect(tv).not.toContain('“”');
   });
 
-  it("C12: Now at nominate says a Governor candidate promises something about the tax", () => {
+  it("B-AC-6, C12: Now at announce says a Governor candidate promises something about the tax", () => {
     const game = view(politics());
     expect(electionNow({ view: game, me: game.me!, self: PLAYERS[0]! })?.detail).toBe(
       'Election month: Governor and Sheriff. A Governor candidate promises something about the tax. Then the secret ballot, then the result on every screen at once.',
     );
+  });
+});
+
+describe('T-AC-62: Governor only, the default POLITICS.offices', () => {
+  it('T-AC-62: by default the desks and the TV draw one office: no Sheriff run button, candidate row, pay line, Now line or TV line', () => {
+    expect(POLITICS.offices).toEqual(['governor']);
+    const announce = view(politics({ candidates: { governor: ['s2'] }, pay: { governor: 50 } }), me({ canRun: { governor: true } }));
+    const council = onPhone(announce, CouncilDesk);
+    expect(tagOf(council, 'run-governor')).toBeDefined();
+    expect(tagOf(council, 'run-sheriff')).toBeUndefined();
+    expect(textOf(council, 'candidates')).toBe('Governor: Ossa');
+    expect(electionNow({ view: announce, me: announce.me!, self: PLAYERS[0]! })?.detail).toMatch(/^Election month: Governor\. /);
+    const colony = onPhone(announce, ColonyWithFacts).replace(/<!-- -->/g, '');
+    expect(colony).toContain('From the fund each month: Governor 50 cr');
+    expect(colony).not.toContain('Sheriff');
+
+    const tv = onTv(view(politics({ election: election({ stage: 'ceremony', ceremony: at('governor', 'intro'), candidates: { governor: ['s1', 's2'] } }) })));
+    expect(textOf(tv, 'ballot-countdown')).toContain('Governor, revealed on every screen together');
+    expect(tv).not.toContain('Sheriff');
   });
 });

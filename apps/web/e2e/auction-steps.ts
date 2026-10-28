@@ -6,14 +6,14 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { GAME, LOTS, POLITICS, TAX, WALK, type Good } from '@mule/engine';
+import { GAME, LOTS, TAX, WALK, type Good } from '@mule/engine';
 import type { AuctionView, MuleView } from '@mule/protocol';
 import { errors as playwrightErrors, type Browser, type Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, headerSlot, launch, PHONE, startServer, TV, type AuctionSteps } from './harness';
 import { hostContinuesWithout } from './hub-steps';
-import { readyThroughTheElection } from './politics-steps';
+import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
 
 const PRESS_MS = 2_000;
 /** The minimum the Sell form starts at, which listPlot leaves unchanged. */
@@ -422,11 +422,10 @@ async function tapSide(truth: Truth, p: Phone, tap: 'buyer' | 'seller', lands: '
   await untilShows({ name: `${p.name}'s phone`, page: p.page }, readPicker, { side: lands, sellOff: truth.stockOf(p, good!) === 0 }, what);
 }
 
-/** What a screen draws of the goods auction, as "<good>:<stage>"; null off the auction. Any sign of a declare screen counts as one. */
+/** What a screen draws of the goods auction, as "<good>:<stage>"; null off the auction. */
 const stageShown = () => {
   const root = document.querySelector('[data-phase=auction]');
   if (!root) return null;
-  const text = root.textContent ?? '';
   let good = '?';
   for (const el of root.querySelectorAll('h1, span')) {
     const m = /^Auction · (.+)$/.exec(el.textContent ?? '') ?? /^(.+) · buy or sell\?$/.exec(el.textContent ?? '') ?? /^(.+) auction$/.exec(el.textContent ?? '');
@@ -435,7 +434,6 @@ const stageShown = () => {
       break;
     }
   }
-  if (/SELLERS START AT THE TOP|Done choosing|Buy, sell or pass\?/.test(text)) return `${good}:declare`;
   if (root.querySelector('[data-testid=status-table]')) return `${good}:status`;
   if (root.querySelector('[data-testid=walk-board]')) return `${good}:walk`;
   return null;
@@ -777,7 +775,7 @@ async function joinRoom(page: Page, base: string, code: string, name: string): P
  * early, but the reveal always runs its clock, so the budget is every stage at full length: a slow runner must not fail here.
  */
 async function readyInPlanning(page: Page): Promise<void> {
-  await readyThroughTheElection(page, within(SCALE, PHASE_MS.upkeep + POLITICS.nominateMs + POLITICS.ballotMs + POLITICS.revealMs) + READY_LANDS_MS);
+  await readyThroughTheElection(page, within(SCALE, PHASE_MS.upkeep + ELECTION_WAIT_MS) + READY_LANDS_MS);
 }
 
 /**

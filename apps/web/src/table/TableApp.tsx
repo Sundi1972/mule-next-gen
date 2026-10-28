@@ -1,15 +1,16 @@
 import { DEV_WALK, DEVELOPMENT } from '@mule/engine';
 import type { DealView, MuleView, TableView } from '@mule/protocol';
 import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PaceList, PlayerMark, SeatSpeciesProvider, SharedClock, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard } from '@mule/ui';
+import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
 import { boardWalkers, dealLine, LineReadout, newestFirst, SIDE_WORD, skippedLine, StatusTable, StoreBox, type DealRow } from '../components/AuctionParts';
 import { useEffect, useState, type ReactNode } from 'react';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
 import { ThemeToggle } from '../components/ThemeToggle';
-import { colonyVerdict, fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, player, plotName, seatSpecies, secondsUntil, slotOf, standings, tileAt, toSlot } from '../game/derive';
+import { colonyVerdict, fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, plotName, seatSpecies, secondsUntil, slotOf, standings, tileAt, toSlot } from '../game/derive';
 import { useAuctionSound } from '../game/sound';
 import { useClient, useClientState, useServerNow } from '../net/react';
-import { connectedIn, planningProper, stillPlanning } from '../phone/hub/ready';
+import { connectedIn, hostMayContinue, readyRows, stillPlanning } from '../phone/hub/ready';
 import { ReadyCount, WaitingFor } from '../phone/hub/ReadyBar';
 import { TvElection } from './TvElection';
 import { TvLandAuction } from './TvLandAuction';
@@ -123,27 +124,29 @@ function TvLobby({ table }: { table: TableView<MuleView> }) {
 
 export function TvHeader({ game, title, seconds }: { game: MuleView; title: string; seconds?: number | undefined }) {
   return (
-    <header className="flex items-end justify-between gap-6">
-      <div className="flex flex-col gap-1">
-        <span className="label-caps text-base!">
-          Month {game.month} / {game.maxMonths}
-        </span>
-        <h1 className="font-display text-5xl font-semibold leading-none" data-testid="tv-phase">
-          {title}
-        </h1>
-      </div>
-      <div className="flex items-center gap-4">
-        <ThemeToggle />
-        <AirGauge level={game.air.level} band={game.air.band} tv />
-        {seconds !== undefined && <Timer seconds={seconds} className="h-14! px-5! text-3xl!" />}
-      </div>
-    </header>
+    <>
+      <header className="flex items-end justify-between gap-6">
+        <div className="flex flex-col gap-1">
+          <span className="label-caps text-base!">
+            Month {game.month} / {game.maxMonths}
+          </span>
+          <h1 className="font-display text-5xl font-semibold leading-none" data-testid="tv-phase">
+            {title}
+          </h1>
+        </div>
+        <div className="flex items-center gap-4">
+          <ThemeToggle />
+          <AirGauge level={game.air.level} band={game.air.band} tv />
+          {seconds !== undefined && <Timer seconds={seconds} className="h-14! px-5! text-3xl!" />}
+        </div>
+      </header>
+      <TvTicker />
+    </>
   );
 }
 
 function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView }) {
   const now = useServerNow(200);
-  const { chat } = useClientState();
   const tiles = mapTiles(game);
   const lit = game.lit ? tileAt(game, game.lit.x, game.lit.y) : undefined;
   const phase = game.phase;
@@ -157,7 +160,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   }
 
   if (phase === 'production' && game.production) return <TvProduction game={game} production={game.production} />;
-  if (phase === 'planning' && game.politics?.election?.stage === 'reveal') return <TvElection game={game} />;
+  if (phase === 'planning' && game.politics?.election?.stage === 'ceremony') return <TvElection game={game} />;
 
   let side: ReactNode;
   if (phase === 'landGrant')
@@ -191,6 +194,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
           <PaceList
             rule={DEV_WALK}
             columns={1}
+            wrapMark={tvSpeakerAt}
             rows={game.players.map((p) => ({ id: p.id, name: p.name, slot: toSlot(p.slot), condition: p.condition, note: p.doneDeveloping ? 'PUB' : 'BUILDING', done: p.doneDeveloping }))}
           />
         </div>
@@ -201,8 +205,8 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
     const connected = connectedIn(table.seats);
     const waiting = stillPlanning(game.players, connected);
     const host = game.players.find((p) => p.id === table.hostId);
-    // The host's Continue is refused while the election runs, so the TV offers it only after.
-    const hostCanContinue = !!host && (host.ready || host.isAi) && planningProper(game);
+    // The host's Continue goes on without the others in planning proper and the election's announce and ballot; never in its ceremony.
+    const hostCanContinue = !!host && (host.ready || host.isAi) && hostMayContinue(game);
     side = (
       <>
         {/* This branch also draws an auction or land auction for the moment before its data arrives; Ready means Done there. */}
@@ -217,36 +221,35 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         <div className="shrink-0">
           <MarketTiles game={game} />
         </div>
-        {/* News and chat give way when the column is full, so the prices and who we wait for always show; chat is cut first. */}
+        {/* News gives way when the column is full, so the prices and who we wait for always show; chat is the ticker's. */}
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
           <News news={game.news} />
-          <ul className="flex flex-col gap-3">
-            {chat
-              .filter((c) => !c.to)
-              .slice(-4)
-              .map((c) => (
-                <li key={c.id} className="flex items-start gap-3">
-                  <PlayerMark slot={slotOf(game, c.from) ?? 0} size={22} />
-                  <p className="text-lg leading-snug">
-                    <span className="font-display font-semibold">{player(game, c.from)?.name}</span>
-                    <span className="text-ink-2"> {c.text}</span>
-                  </p>
-                </li>
-              ))}
-          </ul>
         </div>
         {phase !== 'planning' ? (
           <Players game={game} className="mt-auto" right={(p) => <span className="font-mono text-sm text-ink-3">{p.isAi ? 'AI' : p.ready ? 'READY' : '…'}</span>} />
         ) : (
           <ul className="mt-auto flex shrink-0 flex-col gap-2" data-testid="tv-ready-list">
-            {game.players.map((p) => {
-              const isAway = !p.isAi && !connected(p.id);
-              const state = p.isAi ? 'AI · READY' : p.ready ? 'READY' : isAway ? 'AWAY · PLANNING' : 'PLANNING';
+            {readyRows(game.players, connected).map((row) => {
+              if (row.kind === 'ais')
+                return (
+                  <li key="ais" className="flex items-center gap-3 opacity-60" data-testid="tv-ready-ais" data-count={row.seats.length}>
+                    <span className="flex shrink-0 -space-x-1.5">
+                      {row.seats.map((s) => (
+                        <PlayerMark key={s.id} slot={toSlot(s.slot)} size={22} />
+                      ))}
+                    </span>
+                    <span className="flex-1 truncate font-display text-xl font-semibold">{row.seats.map((s) => s.name).join(', ')}</span>
+                    <span className="font-mono text-sm text-ink-3">{row.seats.length} AI · READY</span>
+                  </li>
+                );
+              const s = row.seat;
+              const isAway = !s.isAi && s.away;
+              const state = s.isAi ? 'AI · READY' : s.ready ? 'READY' : isAway ? 'AWAY · PLANNING' : 'PLANNING';
               return (
-                <li key={p.id} className={cx('flex items-center gap-3', (p.isAi || p.ready) && 'opacity-60')}>
-                  <PlayerMark slot={toSlot(p.slot)} size={22} glow={!(p.isAi || p.ready)} />
-                  <span className="flex-1 truncate font-display text-xl font-semibold">{p.name}</span>
-                  <span className={cx('font-mono text-sm', isAway ? 'text-warn' : p.ready || p.isAi ? 'text-ink-3' : 'text-holo')}>{state}</span>
+                <li key={s.id} className={cx('flex items-center gap-3', (s.isAi || s.ready) && 'opacity-60')}>
+                  <PlayerMark slot={toSlot(s.slot)} size={22} glow={!(s.isAi || s.ready)} />
+                  <span className="flex-1 truncate font-display text-xl font-semibold">{s.name}</span>
+                  <span className={cx('font-mono text-sm', isAway ? 'text-warn' : s.ready || s.isAi ? 'text-ink-3' : 'text-holo')}>{state}</span>
                 </li>
               );
             })}
@@ -308,7 +311,9 @@ function Players({ game, right, className }: { game: MuleView; right: (p: MuleVi
     <ul className={cx('flex flex-col gap-2', className)}>
       {game.players.map((p) => (
         <li key={p.id} className="flex items-center gap-3">
-          <PlayerMark slot={toSlot(p.slot)} size={22} />
+          <Speaker id={p.id} size="tv">
+            <PlayerMark slot={toSlot(p.slot)} size={22} />
+          </Speaker>
           <span className="flex-1 truncate font-display text-xl font-semibold">{p.name}</span>
           {right(p)}
         </li>
@@ -403,6 +408,7 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
               shipPays={auction.shipPays}
               storeStock={stock}
               marks={{ ask: true, bid: true }}
+              wrapCreature={tvSpeakerAt}
               className="min-h-0 flex-1"
             />
           )}
@@ -498,13 +504,13 @@ function MonthEnd({ game }: { game: MuleView }) {
           </span>
         </div>
       </div>
-      <Scores game={game} />
+      <TvStandings game={game} />
     </>
   );
 }
 
 /** The big screen at the end: everyone's total, readable from across the room. Totals only: goods are private. */
-function TvGameOver({ game }: { game: MuleView }) {
+export function TvGameOver({ game }: { game: MuleView }) {
   const ranks = standings(game);
   const winner = ranks[0];
   const v = colonyVerdict(game.air);
@@ -546,10 +552,11 @@ function TvGameOver({ game }: { game: MuleView }) {
   );
 }
 
-function Scores({ game }: { game: MuleView }) {
+/** The month-end standings beside the map, best first. */
+export function TvStandings({ game }: { game: MuleView }) {
   return (
-    <div className="flex flex-col gap-2 rounded-panel border border-holo-line bg-panel p-4">
-      <span className="label-caps">Standings · money</span>
+    <div className="flex flex-col gap-2 rounded-panel border border-holo-line bg-panel p-4" data-testid="tv-standings">
+      <span className="label-caps">Standings · worth</span>
       <ol className="flex flex-col gap-2">
         {standings(game).map((s, i) => (
           <li key={s.player.id} className="flex items-center gap-3">
