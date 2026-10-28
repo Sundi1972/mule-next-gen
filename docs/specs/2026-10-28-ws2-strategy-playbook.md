@@ -144,9 +144,9 @@ today        PRIMER in llm/prompt.ts is hand-written: phases in prose, three dec
              verified_by: read. AiAction lacks protocol's drone, list, unlist, ready and continue
              (packages/protocol/src/index.ts::MuleIntent), so the AI cannot list a plot or MULE for sale.
 tomorrow     MUST render, from WS1's move descriptors plus config only: each phase and its rules; how the game is won
-             (Worth = cash + goods at the colony price + plots × GAME.plotScore + installed MULEs × mulePrice +
-             office terms; the Collapse cut ×POLLUTION.collapseScore on all but office; the colony score apart, as
-             engine/src/game.ts::scoreParts defines it); and every move: what it does, when it is legal, what it
+             (Worth exactly as engine/src/game.ts::scoreParts computes it, its lines and the Collapse cut read from
+             the code, never restated here: when WS4's #143 moves office under the cut, the manual follows; the
+             colony score joins when the code has it, G-5); and every move: what it does, when it is legal, what it
              costs, when it is smart. Byte-stable for a given config, so it sits in the cached system block.
              The level's bounds are stated in the seat's part: a seat whose level has `corners` false is told it
              never aims for a monopoly (HC-8), so it never proposes monopolyTarget or 'monopolist'.
