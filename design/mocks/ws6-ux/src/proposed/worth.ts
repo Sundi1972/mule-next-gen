@@ -11,7 +11,8 @@ import { ME, VIEW } from '../fixture';
  *
  *   Worth = cash + goods at the store's posted price + land (GAME.plotScore a plot) + installed MULEs (the store's
  *           MULE price each) + office terms (POLITICS.termScore a term) [+ colony donations 1:1, with G-5]
- *   In Collapse: (cash + goods + land + MULEs) × POLLUTION.collapseScore, rounded, + offices (never cut).
+ *   In Collapse: (cash + goods + land + MULEs + offices) × POLLUTION.collapseScore, rounded: the cut takes every line,
+ *   offices too (Heiko, WS4's AM-31).
  *
  * This is the engine's final score, line by line: scoreParts() in packages/engine/src/game.ts already adds exactly
  * these lines, in this order, with this rounding. So the month-end Worth and the game-over score are one function;
@@ -96,7 +97,7 @@ export type WorthParts = ScorePartsView & {
 
 export interface Worth {
   id: string;
-  /** The number everyone is ranked by: in Collapse, with the cut (offices aside). */
+  /** The number everyone is ranked by: in Collapse, with the cut on every line. */
   total: number;
   /** Before the Collapse cut. Equal to total out of Collapse. */
   uncut: number;
@@ -122,7 +123,7 @@ export function worthOf(view: MuleView, id: string, termsServed: Record<string, 
   const before = Math.round(raw);
   const terms = termsServed[id] ?? 0;
   const office = terms * POLITICS.termScore;
-  const kept = inCollapse(view) ? Math.round(raw * POLLUTION.collapseScore) : before;
+  const total = inCollapse(view) ? Math.round((raw + office) * POLLUTION.collapseScore) : before + office;
   const money = Math.round(p.money);
   const parts: WorthParts | null = own
     ? {
@@ -135,11 +136,11 @@ export function worthOf(view: MuleView, id: string, termsServed: Record<string, 
         muleValue,
         office,
         terms,
-        cut: before - kept,
+        cut: before + office - total,
         donations: 0,
       }
     : null;
-  return { id, total: kept + office, uncut: before + office, cut: before - kept, parts };
+  return { id, total, uncut: before + office, cut: before + office - total, parts };
 }
 
 export interface LeagueRow extends Worth {
