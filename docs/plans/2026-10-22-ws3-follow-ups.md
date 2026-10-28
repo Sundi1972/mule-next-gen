@@ -54,7 +54,16 @@
 - B.4: 71b347f, the e2e.
 - Fix round: RED d4a1133, then b919659. 9e98957 holds WS3's M16 test fix and a comment fix.
 
-**Lane:** `ws3-auctions` synced with feat/strategist 2c00817 (#75). WS3 measured it: typecheck 0; tabletop 96, ui 15, engine 205, ai 15, web 96, server 77; `tsx e2e/auction-steps.ts` green; the sim is byte-identical to trunk on seeds 101 and 1. Next: the lane PR to feat/strategist, for Heiko's OK through the PM. Still open: A.4 Step 2 (waits for ws2-brain's setup.ts) and PR-B's hands-on goal check.
+**Lane:** PR-A and PR-B reached trunk as #86 (c3f1ffe, Heiko: "merge"). Still open: A.4 Step 2 (waits for ws2-brain's setup.ts) and PR-B's hands-on goal check.
+
+**Lean CI (2026-10-28, Heiko's directive; SEAMS ruling; WS4's `docs/plans/2026-10-28-lean-ci.md`):** WS3's part merged into the lane as #94.
+- T-AC-7 moves to Tier 2 under `MULE_TIER2`.
+- B-AC-7's long-tick sweep plays the short table only: 1.17 s → 0.61 s.
+- RULE-7 row 1 samples 100 seeds: 0.84 s → under 0.5 s.
+- Each trim kills the same mutants as before.
+- WS3's Tier 1 unit time: about 15 s → 7.5 s locally.
+- auction-steps.ts stays one Tier 2 game.
+- Owed: trim auction-steps.ts:439's three declare-text alternatives once WS4's FU-17 (#96) is on trunk.
 
 ## PR-A: engine and server (`ws3-fu-a` from `ws3-auctions`)
 
