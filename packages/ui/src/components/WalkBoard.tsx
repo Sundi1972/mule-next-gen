@@ -197,7 +197,7 @@ export function WalkBoard({
             <span
               data-num
               data-testid="store-sold-out"
-              className={cx('absolute right-0 top-0 z-20 rounded-sm bg-void px-1 text-right font-mono font-bold leading-tight text-rise', tv ? 'text-base' : 'text-[9px]')}
+              className={cx('absolute right-0 top-0 z-20 rounded-sm bg-void px-1 text-right font-mono font-bold leading-tight text-rise', tv ? 'text-base' : 'text-[10px]')}
               style={{ width: gutter }}
             >
               <span className="block font-normal opacity-80">STORE</span>SOLD OUT
@@ -220,9 +220,9 @@ export function WalkBoard({
               className={cx(
                 // Under the line, against the gutter: sellers walk down from above, so the room under it is clear.
                 'pointer-events-none absolute z-20 whitespace-nowrap rounded-chip border border-warn/70 bg-void/90 font-display font-semibold text-warn',
-                tv ? 'right-[calc(104px+0.5rem)] mt-1.5 px-2.5 py-0.5 text-xl' : 'right-[calc(56px+0.25rem)] mt-1 px-1.5 text-[11px] @min-[1100px]/shell:text-base',
+                tv ? 'mt-1.5 px-2.5 py-0.5 text-xl' : 'mt-1 px-1.5 text-[11px] @min-[1100px]/shell:text-base',
               )}
-              style={{ top: `${pct(shipPays)}%` }}
+              style={{ top: `${pct(shipPays)}%`, right: `calc(${gutter}px + ${tv ? 0.5 : 0.25}rem)` }}
               data-testid="ship-caption"
             >
               {shipCaption}
