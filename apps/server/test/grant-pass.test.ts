@@ -19,8 +19,8 @@ const withAnAi = [
 ];
 
 /** A game on the fake clock, through planning and into the land grant. */
-function inTheGrant(table = humans) {
-  const fake = fakeContext({ table });
+function inTheGrant(table = humans, onChanged?: (at: number) => void) {
+  const fake = fakeContext({ table, onChanged });
   const game = new MuleGame(fake.ctx, 7);
   game.start(table);
   readyAll(game);
@@ -120,5 +120,27 @@ describe('the land grant is one pass with no clock', () => {
     expect(fast.owned, 'fast-forward resolves the AI presses as the normal ticks do').toEqual(normal.owned);
     expect(fast.lit, 'the TV sees the light move on plot by plot').toBeGreaterThan(1);
     expect(fast.lasted, 'the light races: one display step a plot left in the pass, and a little slack').toBeLessThanOrEqual(fast.left * PHASES.grantFastForwardMs + GRANT_TICK_MS);
+  });
+
+  it('fast-forward broadcasts once per move of the light: every phone and the TV build a view per broadcast', () => {
+    const table = [
+      { id: 's1', name: 'Heiko', isAi: false, color: 0 },
+      { id: 's2', name: 'The Accountant', isAi: true, color: 1 },
+      { id: 's3', name: 'The Baron', isAi: true, color: 2 },
+    ];
+    let broadcasts = 0;
+    const g = inTheGrant(table, () => broadcasts++);
+    const state = (g.game as unknown as { state: GameState }).state;
+    g.game.handle('s1', { type: 'ready' });
+    broadcasts = 0;
+    let moves = 0;
+    for (let i = 0; i < 1_000_000 && state.phase === 'landGrant'; i++) {
+      const before = state.grant!.step;
+      g.advance(1);
+      if (state.phase !== 'landGrant' || state.grant!.step !== before) moves++;
+    }
+    const claims = state.players.filter((p) => p.id !== 's1').reduce((n, p) => n + p.claimsThisGrant, 0);
+    expect(moves, 'the light raced through the rest of the pass').toBeGreaterThan(10);
+    expect(broadcasts, 'one broadcast per move of the light, plus at most one per claim').toBeLessThanOrEqual(moves + claims);
   });
 });

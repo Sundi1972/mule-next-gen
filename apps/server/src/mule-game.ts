@@ -753,7 +753,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     if (lit) for (const { seat } of [...bids].sort((a, b) => a.ms - b.ms)) if (this.aiAct(seat.id, { type: 'claim', x: lit.x, y: lit.y })) break;
     if (grantDone(state)) this.nextPhase();
     else this.scheduleGrantTick();
-    this.ctx.changed();
+    // No broadcast here: the tick that moved the light sends one, and a human's intent is broadcast by the room.
   }
 
   /**
