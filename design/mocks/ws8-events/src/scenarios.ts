@@ -132,12 +132,13 @@ const STORE_FIRE = ev('storeFire', 'Fire at the store: all its Food burns, and F
 const RATS = ev('ratsInSilo', 'Rats get into Lena’s silo and eat half the stored Food.', { origin: STORE, player: 'lena', effects: [{ on: 'lena', what: 'food', delta: -3 }] });
 const ACCOUNTANT = ev('crookedAccountant', 'Ossa’s accountant skims 10% of the cash.', { origin: STORE, player: 'ossa', effects: [cash('ossa', -91)] });
 const PACKAGE = ev('packageFromHome', 'A package from home: Kai gets 3 Food.', { origin: STORE, player: 'kai', effects: [{ on: 'kai', what: 'food', delta: 3 }] });
-const RIOT = ev('riot', 'A riot: the stadium is damaged, and the store loses a third of its stock.', {
-  origin: STORE,
+/** The mob gathers in the west, loots the store on its way, then smashes the stadium: the effects land in that order. */
+const RIOT = ev('riot', 'A riot: the store loses a third of its stock, and the stadium is damaged.', {
+  origin: { x: 2, y: 6 },
   effects: [
-    { on: 'colony', what: 'prestige', delta: -2 },
     { on: 'store', what: 'food', delta: -5 },
     { on: 'store', what: 'energy', delta: -4 },
+    { on: 'colony', what: 'prestige', delta: -2 },
   ],
 });
 const CLEANUP = ev('volunteerCleanup', 'Volunteers clean up the colony: the air gauge drops by 5.', { origin: STORE, effects: [{ on: 'colony', what: 'air', delta: -5 }] });

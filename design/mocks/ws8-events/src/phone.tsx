@@ -4,6 +4,7 @@ import { PHASE_NAME } from './catalogue';
 import { colonyNews, hitText, label, missLine, name, segTitle, who, youSummary } from './copy';
 import { effectsAt, isRollCall, landed, sickAt, stageAt, TIER, type Segment } from './events';
 import { Marks, Overlays, Shade, useLiveTiles, useLiving, Weather } from './living';
+import { Stories } from './stories';
 import { ownerAt, seat } from './fixture';
 import { OnPlot } from './fx';
 import { Buzz, DeltaChip, EffectChip, SignBadge } from './glyphs';
@@ -169,7 +170,7 @@ export function PhoneShow({ me }: { me: string }) {
  */
 export function PhoneSolo({ me }: { me: string }) {
   const { s, t, reduced, seek } = useShow();
-  const { seg, stage, shake } = useLiving('phone');
+  const { seg, stage, view } = useLiving('phone');
   const tiles = useLiveTiles();
   const sick = sickAt(s, t, reduced);
   const shown = seg ?? (stage === 'outro' ? (s.segments.at(-1) ?? null) : null);
@@ -181,24 +182,27 @@ export function PhoneSolo({ me }: { me: string }) {
       me={me}
       map={
         <div className="relative">
-          <MapBox
-            tv={false}
-            focusSlot={seat(me).slot}
-            tiles={tiles}
-            shake={shake}
-            under={
-              <>
-                <Weather size="phone" />
-                <Shade size="phone" />
-              </>
-            }
-            over={
-              <>
-                <Marks size="phone" />
-                {s.phase === 'development' && <Colonists tv={false} tag={(id) => sick.has(id) && <SickTag size="phone" className="absolute -right-1.5 -top-1.5 animate-[ev-pop_0.4s_ease-out]" />} />}
-              </>
-            }
-          />
+          <div className="overflow-hidden rounded-panel">
+            <MapBox
+              tv={false}
+              focusSlot={seat(me).slot}
+              tiles={tiles}
+              shake={view}
+              under={
+                <>
+                  <Weather size="phone" />
+                  <Shade size="phone" />
+                </>
+              }
+              over={
+                <>
+                  <Stories size="phone" />
+                  <Marks size="phone" />
+                  {s.phase === 'development' && <Colonists tv={false} tag={(id) => sick.has(id) && <SickTag size="phone" className="absolute -right-1.5 -top-1.5 animate-[ev-pop_0.4s_ease-out]" />} />}
+                </>
+              }
+            />
+          </div>
           <Overlays size="phone" />
           {seg && seek && (
             <button type="button" onClick={skip} className="absolute inset-0 z-30 flex items-start justify-end p-1.5" aria-label={playing ? 'Tap to skip to what it did to you' : 'Tap for the next event'} data-testid="skip">

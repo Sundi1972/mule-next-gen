@@ -2,6 +2,7 @@ import type { MonthEvent } from '@mule/engine';
 import type { Good } from '@mule/ui';
 import { ENTRY, TIER, type EventKey, type Phase } from './catalogue';
 import { H, OUTPUT, W } from './fixture';
+import { STORY } from './story';
 
 export { TIER, type EventKey, type Phase, type Tier } from './catalogue';
 
@@ -171,8 +172,10 @@ export const SOLO_BEAT = { intro: 1.1, announce: 1.4, settle: 0.8, outro: 2.4 } 
 export const SOLO_PACE = 0.75;
 export type Mode = 'tv' | 'solo';
 
-/** How long an event plays, by how it moves. */
+/** How long an event plays: its own story's length, or by how it moves. */
 export function playLength(ev: ShowEvent): number {
+  const story = STORY[ev.key];
+  if (story) return story.length;
   switch (ENTRY[ev.key].motion) {
     case 'sweep':
       return 3.6;
@@ -270,7 +273,9 @@ export function hitAt(seg: Segment, ev: ShowEvent, h: Hit | null, reduced: boole
   const p = seg.playAt;
   if (reduced) return p + 0.2;
   const nth = seg.events.indexOf(ev);
+  const story = STORY[ev.key];
   const after = (() => {
+    if (story) return story.lands + (h?.order ?? 0) * (story.step ?? 0.15);
     switch (ENTRY[ev.key].motion) {
       case 'sweep':
         return h ? FRONT.lead + sweep(ev, h) * FRONT.cross : FRONT.lead + FRONT.cross / 2;
@@ -307,7 +312,8 @@ export function effectsAt(s: Script, t: number, reduced: boolean): { ev: ShowEve
   return s.segments.flatMap((seg) =>
     seg.events.flatMap((ev) => {
       const at = Math.max(hitAt(seg, ev, null, reduced), ...ev.plots.map((h) => hitAt(seg, ev, h, reduced)));
-      return (ev.effects ?? []).map((effect, i) => ({ ev, seg, effect, at: at + (reduced ? 0 : i * 0.15) })).filter((l) => t >= l.at);
+      const step = (STORY[ev.key]?.step ?? 0.15) * seg.pace;
+      return (ev.effects ?? []).map((effect, i) => ({ ev, seg, effect, at: at + (reduced ? 0 : i * step) })).filter((l) => t >= l.at);
     }),
   );
 }

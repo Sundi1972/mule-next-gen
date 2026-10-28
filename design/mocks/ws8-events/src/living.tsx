@@ -7,6 +7,7 @@ import { H, SEATS, seat, TILES, W } from './fixture';
 import { band, clamp, Crater, Dim, EDGE, MeteorFall, OnPlot, ramp, Spotlight, Swarm, Trail } from './fx';
 import { accent, DeltaChip, EffectChip, EventGlyph, SignBadge } from './glyphs';
 import { cell, centre, useShow } from './stage';
+import { STORY } from './story';
 
 /**
  * B · Living weather, Heiko's pick (28 Oct). One engine for the TV and for a phone with no TV in the room: the map
@@ -16,8 +17,18 @@ import { cell, centre, useShow } from './stage';
  */
 
 export type Size = 'tv' | 'phone';
-const MAP: Record<Size, { w: number; h: number }> = { tv: { w: 820, h: 492 }, phone: { w: 540, h: 324 } };
-const STORE = { x: 6, y: 4 };
+export const MAP: Record<Size, { w: number; h: number }> = { tv: { w: 820, h: 492 }, phone: { w: 540, h: 324 } };
+export const STORE = { x: 6, y: 4 };
+const ease = (v: number) => v * v * (3 - 2 * v);
+
+/** Where an event's story happens, in tiles: the store, its origin, or a point of its own; null for the whole map. */
+export function storyPlace(ev: ShowEvent): { x: number; y: number } | null {
+  const f = STORY[ev.key]?.focus;
+  return !f ? null : f === 'store' ? STORE : f === 'origin' ? ev.origin : f;
+}
+
+/** When a segment's card of what was lost comes up: at its story's reveal, or as soon as it plays. */
+export const cardAt = (seg: Segment) => seg.playAt + (STORY[seg.events[0]!.key]?.reveal ?? 0) * seg.pace;
 
 // --- What the show does to the whole map --------------------------------------------------------------------------
 
@@ -32,20 +43,36 @@ export function useLiving(size: Size) {
   const spot = player && seg ? ramp(t, seg.playAt - 0.5, 0.5) * (1 - ramp(t, seg.endAt - 0.5, 0.5)) : 0;
   // The map dims under the intro and each title card, clears as the card flies off, and stays half dim under a
   // card of changes off the map (money, goods, gauges).
-  const offMap = motion === 'ledger' || motion === 'colony';
+  const story = ev ? STORY[ev.key] : undefined;
+  const offMap = (motion === 'ledger' || motion === 'colony' || motion === 'store') && !!ev?.effects?.length;
   const dim = quiet
     ? 0
     : stage === 'intro'
       ? ramp(t, 0, 0.3)
       : seg && !isRollCall(seg) && stage === 'announce'
-        ? ramp(t, seg.announceAt, 0.3) * (offMap ? 1 - 0.4 * ramp(t, seg.playAt - 0.5, 0.5) : 1 - ramp(t, seg.playAt - 0.5, 0.5))
-        : seg && offMap && (stage === 'play' || stage === 'settle')
-          ? 0.6 * (1 - ramp(t, seg.endAt - 0.4, 0.4))
+        ? ramp(t, seg.announceAt, 0.3) * (offMap && !story ? 1 - 0.4 * ramp(t, seg.playAt - 0.5, 0.5) : 1 - ramp(t, seg.playAt - 0.5, 0.5))
+        : seg && offMap && (stage === 'play' || stage === 'settle') && t >= cardAt(seg)
+          ? 0.6 * ramp(t, cardAt(seg), 0.3) * (1 - ramp(t, seg.endAt - 0.4, 0.4))
           : 0;
   const amp = size === 'tv' ? 1 : 0.5;
-  const jolt = s.segments.flatMap((g) => g.events.filter((e) => e.key === 'meteorStrike' || e.key === 'riot').map((e) => (e.key === 'meteorStrike' ? impactAt(g) : hitAt(g, e, null, false)))).find((at) => t >= at && t < at + 0.6);
+  const jolt = s.segments.flatMap((g) => g.events.flatMap((e) => (e.key === 'meteorStrike' ? [impactAt(g)] : STORY[e.key]?.jolt !== undefined ? [g.playAt + STORY[e.key]!.jolt! * g.pace] : []))).find((at) => t >= at && t < at + 0.6);
   const shake = jolt !== undefined && !reduced ? `translate(${Math.sin(t * 80) * 5 * amp * (1 - (t - jolt) / 0.6)}px, ${Math.cos(t * 63) * 3 * amp}px)` : undefined;
-  return { stage, seg, dim, player, spot, shake, quiet };
+  // The camera flies in to where the story happens while it plays, and pulls back for the card of what was lost.
+  const place = ev && seg && !reduced ? storyPlace(ev) : null;
+  const lens = place && seg ? ease(ramp(t, seg.playAt - 0.3, 0.8)) * (1 - ease(ramp(t, cardAt(seg) - 0.2, 0.8))) : 0;
+  const camera = (() => {
+    if (!place || !seg || !story?.zoom) return undefined;
+    const e = lens;
+    if (e <= 0) return undefined;
+    const m = MAP[size];
+    const k = 1 + (story.zoom - 1) * e;
+    const p = { x: ((place.x + 0.5) / W) * m.w - m.w / 2, y: ((place.y + 0.5) / H) * m.h - m.h / 2 };
+    // Zoom about the place, then slide it toward the middle, never showing past the map's edge.
+    const edge = (v: number, half: number) => Math.max(-(k - 1) * half, Math.min((k - 1) * half, v));
+    return `translate(${edge(p.x * (1 - e - k), m.w / 2)}px, ${edge(p.y * (1 - e - k), m.h / 2)}px) scale(${k})`;
+  })();
+  const view = [camera, shake].filter(Boolean).join(' ') || undefined;
+  return { stage, seg, dim, player, spot, shake, quiet, view, place, lens };
 }
 
 /** The map as it changes: a cavern caves in, a MULE is taken, a plot is flagged for sale, once each lands. */
@@ -89,6 +116,7 @@ export function Weather({ size }: { size: Size }) {
 }
 
 function EventWeather({ ev, seg, size }: { ev: ShowEvent; seg: Segment; size: Size }) {
+  if (STORY[ev.key]) return null;
   switch (ENTRY[ev.key].motion) {
     case 'sweep':
       return (
@@ -450,6 +478,7 @@ export function IntroCard({ size }: { size: Size }) {
 function target(ev: ShowEvent, size: Size): { x: number; y: number } | null {
   const m = MAP[size];
   const at = (p: { x: number; y: number }) => ({ x: ((p.x + 0.5) / W) * m.w, y: ((p.y + 0.5) / H) * m.h });
+  if (STORY[ev.key]) return at(STORY[ev.key]!.focus === 'store' ? STORE : ev.origin);
   switch (ENTRY[ev.key].motion) {
     case 'ledger':
       return { x: m.w / 2, y: m.h * 1.15 };
@@ -503,7 +532,7 @@ export function EffectsCard({ seg, size }: { seg: Segment; size: Size }) {
   const { s, t, reduced } = useShow();
   const ev = seg.events[0]!;
   const fx = ev.effects ?? [];
-  if (!fx.length || t < seg.playAt || t > seg.endAt) return null;
+  if (!fx.length || t < cardAt(seg) || t > seg.endAt) return null;
   const seen = effectsAt(s, t, reduced).filter((l) => l.seg === seg).map((l) => l.effect);
   const rows: { key: string; head: ReactNode; items: Effect[] }[] = [
     ...SEATS.filter((p) => fx.some((f) => f.on === p.id)).map((p) => ({ key: p.id, head: <SeatHead id={p.id} size={size} />, items: fx.filter((f) => f.on === p.id) })),
@@ -511,7 +540,7 @@ export function EffectsCard({ seg, size }: { seg: Segment; size: Size }) {
   ];
   const out = ramp(t, seg.endAt - 0.4, 0.4);
   // At the store, the card sits at the map's foot so the flames and smoke on the store stay in view.
-  const atStore = ENTRY[ev.key].motion === 'store';
+  const atStore = ENTRY[ev.key].motion === 'store' && !STORY[ev.key];
   return (
     <div className={cx('absolute inset-0 z-20 flex justify-center', atStore ? (size === 'tv' ? 'items-end pb-4' : 'items-end pb-1.5') : 'items-center')} style={{ opacity: 1 - out }} data-testid="effects-card">
       <div className={cx('flex flex-col rounded-panel border-2 bg-panel/95 shadow-chip animate-[ev-pop_0.35s_ease-out]', size === 'tv' ? 'w-[520px] gap-3 p-5' : 'w-[300px] gap-1.5 p-2.5')} style={{ borderColor: ev.sign === 'good' ? 'var(--color-ok)' : 'var(--color-alert)' }}>
@@ -601,10 +630,12 @@ export function Overlays({ size }: { size: Size }) {
 
 /** The player's spotlight and the dim, under the bars. */
 export function Shade({ size }: { size: Size }) {
-  const { dim, player, spot } = useLiving(size);
+  const { dim, player, spot, place, lens } = useLiving(size);
   return (
     <>
       {player && <Spotlight id={player} amount={spot} />}
+      {/* While a story plays, the map darkens round its place, so the eye goes where it happens. */}
+      {place && lens > 0 && <div className="absolute inset-0" style={{ background: `radial-gradient(circle at ${((place.x + 0.5) / W) * 100}% ${((place.y + 0.5) / H) * 100}%, transparent 0 16%, color-mix(in srgb, var(--color-void) 72%, transparent) 46%)`, opacity: lens }} data-testid="vignette" />}
       <Dim amount={dim} />
     </>
   );

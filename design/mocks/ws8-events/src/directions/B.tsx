@@ -5,6 +5,7 @@ import { ME } from '../fixture';
 import { Marks, Overlays, Shade, useLiveTiles, useLiving, Weather } from '../living';
 import { EffectChip, SignBadge } from '../glyphs';
 import { PhoneShow } from '../phone';
+import { Stories } from '../stories';
 import { ColonyBar, Colonists, MapBox, SickTag, TvLayout, useShow } from '../stage';
 
 /**
@@ -15,7 +16,7 @@ import { ColonyBar, Colonists, MapBox, SickTag, TvLayout, useShow } from '../sta
 
 export function TvB() {
   const { s, t, reduced } = useShow();
-  const { shake, player, spot } = useLiving('tv');
+  const { view, player, spot } = useLiving('tv');
   const tiles = useLiveTiles();
   const sick = sickAt(s, t, reduced);
   const fx = effectsAt(s, t, reduced);
@@ -23,23 +24,27 @@ export function TvB() {
     <TvLayout
       headerExtra={<Pips />}
       map={
-        <MapBox
-          tv
-          tiles={tiles}
-          shake={shake}
-          under={
-            <>
-              <Weather size="tv" />
-              <Shade size="tv" />
-            </>
-          }
-          over={
-            <>
-              <Marks size="tv" />
-              {s.phase === 'development' && <Colonists tv tag={(id) => sick.has(id) && <SickTag className="absolute -right-2 -top-2 animate-[ev-pop_0.4s_ease-out]" />} />}
-            </>
-          }
-        />
+        // The camera flies in to a story's place; the frame keeps the zoomed map inside the map's own box.
+        <div className="overflow-hidden rounded-panel">
+          <MapBox
+            tv
+            tiles={tiles}
+            shake={view}
+            under={
+              <>
+                <Weather size="tv" />
+                <Shade size="tv" />
+              </>
+            }
+            over={
+              <>
+                <Stories size="tv" />
+                <Marks size="tv" />
+                {s.phase === 'development' && <Colonists tv tag={(id) => sick.has(id) && <SickTag className="absolute -right-2 -top-2 animate-[ev-pop_0.4s_ease-out]" />} />}
+              </>
+            }
+          />
+        </div>
       }
       banner={<Overlays size="tv" />}
       rail={<Log />}
