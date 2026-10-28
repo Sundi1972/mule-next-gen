@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GAME } from '@mule/engine';
+import { GAME, PHASES, type GameState } from '@mule/engine';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
 import { fakeContext, readyAll } from './fake-context.js';
 
@@ -84,5 +84,38 @@ describe('the land grant is one pass with no clock', () => {
     game.handle('s1', { type: 'ready' });
     expect(game.viewFor(null).phase).toBe('landGrant');
     expect(game.viewFor(null).players.find((p) => p.id === 's1')!.ready).toBe(true);
+  });
+
+  it('fast-forward: once every human is done, the AI seats claim exactly what they claim at normal speed, and the light races through the rest of the pass', () => {
+    const table = [
+      { id: 's1', name: 'Heiko', isAi: false, color: 0 },
+      { id: 's2', name: 'The Accountant', isAi: true, color: 1 },
+      { id: 's3', name: 'The Baron', isAi: true, color: 2 },
+      { id: 's4', name: 'The Grudge', isAi: true, color: 3 },
+    ];
+    const ais = table.filter((s) => s.isAi).map((s) => s.id);
+    // The AI seats' plots when the grant ends, and how long it ran after Heiko was done.
+    const play = (heikoDone: boolean) => {
+      const g = inTheGrant(table);
+      const state = (g.game as unknown as { state: GameState }).state;
+      if (heikoDone) g.game.handle('s1', { type: 'ready' });
+      const doneAt = g.ctx.now();
+      const left = state.grant!.order.length - state.grant!.step;
+      const lit = new Set<string>();
+      const step = heikoDone ? PHASES.grantFastForwardMs : GRANT_TICK_MS;
+      for (let i = 0; i < 10_000 && state.phase === 'landGrant'; i++) {
+        const at = g.game.viewFor(null).lit;
+        if (at) lit.add(`${at.x},${at.y}`);
+        g.advance(step);
+      }
+      const owned = Object.fromEntries(ais.map((id) => [id, state.tiles.flatMap((t, i) => (t.owner === id ? [i] : [])).sort((a, b) => a - b)]));
+      return { owned, lasted: g.ctx.now() - doneAt, left, lit: lit.size };
+    };
+    const fast = play(true);
+    const normal = play(false);
+    expect(Object.values(normal.owned).flat().length, 'the AI seats claim land at normal speed').toBeGreaterThan(0);
+    expect(fast.owned, 'fast-forward resolves the AI presses as the normal ticks do').toEqual(normal.owned);
+    expect(fast.lit, 'the TV sees the light move on plot by plot').toBeGreaterThan(1);
+    expect(fast.lasted, 'the light races: one display step a plot left in the pass, and a little slack').toBeLessThanOrEqual(fast.left * PHASES.grantFastForwardMs + GRANT_TICK_MS);
   });
 });

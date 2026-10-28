@@ -754,6 +754,12 @@ export const PHASES = {
    * the pass or once every claim is used. A number restores a timer.
    */
   landGrantMs: null as number | null,
+  /**
+   * The land grant's fast-forward: once every human has used their claims or is done with land, the AI seats' presses
+   * resolve at once at each lit plot, and the light moves on after this display step, so it races across the TV. Like
+   * the grant's tick, phaseScale never changes it.
+   */
+  grantFastForwardMs: GAME.grantTickMs / 8,
   /** Production: the show of what each plot made. */
   productionMs: 15_000,
   /** Upkeep: colonists eat and goods spoil. */
