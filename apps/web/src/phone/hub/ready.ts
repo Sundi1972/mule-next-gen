@@ -75,10 +75,13 @@ export function planningProper(view: Pick<MuleView, 'phase' | 'politics'>): bool
   return view.phase === 'planning' && !(election && election.stage !== 'over');
 }
 
-/** When the server takes the host's Continue: planning proper, or the election's announce or ballot; never its ceremony. */
+/**
+ * When the server takes the host's Continue: planning proper, the election's announce or ballot (never its ceremony),
+ * and the month end (upkeep), which also waits for every Ready.
+ */
 export function hostMayContinue(view: Pick<MuleView, 'phase' | 'politics'>): boolean {
   const stage = view.politics?.election?.stage;
-  return planningProper(view) || (view.phase === 'planning' && (stage === 'announce' || stage === 'ballot'));
+  return planningProper(view) || (view.phase === 'planning' && (stage === 'announce' || stage === 'ballot')) || view.phase === 'upkeep';
 }
 
 /** The host's confirm before Continue is sent: what it does to the players not yet Ready, at this election stage. */
