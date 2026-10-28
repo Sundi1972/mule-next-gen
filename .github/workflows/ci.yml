@@ -1,11 +1,17 @@
 name: CI
 
+# Lean CI (SEAMS 2026-10-28). Tier 1 runs on every pull request, lane sub-PRs included: typecheck, unit tests and one
+# pinned-seed whole game. Tier 2 adds the rest of the regression e2e and the sim smoke, only where code lands on the
+# trunk: pull requests into feat/strategist or main, and pushes to main. Render gates, mutation sweeps, probes, timing
+# and three-set sims are Tier 3: local, never CI.
+
 on:
   pull_request:
   push:
     branches: [main]
 
 jobs:
+  # Tier 1
   check:
     runs-on: ubuntu-latest
     steps:
@@ -18,9 +24,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
-      - name: Balancing simulator smoke run
-        run: pnpm sim -- --games 20 --players 4
 
+  # Tier 1: the whole game on a pinned seed whose month 2 has a production event, with WS3's auction hooks inside it.
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -34,12 +39,42 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Install Chromium for Playwright
         run: pnpm --filter @mule/web exec playwright install --with-deps chromium
-      - name: Whole-game e2e
-        run: pnpm --filter @mule/web e2e
-      # The run above uses a random map for coverage; this one replays a seed whose month 2 has a production event.
+      - run: pnpm --filter @mule/web build
       - name: Whole-game e2e, pinned seed
-        run: pnpm --filter @mule/web exec tsx e2e/smoke.ts
+        run: pnpm --filter @mule/web e2e:core
         env:
           MULE_E2E_SEED: '1'
-      - name: Land and goods auction e2e
-        run: pnpm --filter @mule/web exec tsx e2e/auction-steps.ts
+
+  # Tier 2
+  sim:
+    if: github.event_name == 'push' || github.base_ref == 'feat/strategist' || github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Balancing simulator smoke run
+        run: pnpm sim -- --games 20 --players 4
+
+  # Tier 2: the regression e2e beyond the whole game. New checks go in as steps of an existing game, not new files.
+  e2e-regression:
+    if: github.event_name == 'push' || github.base_ref == 'feat/strategist' || github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Chromium for Playwright
+        run: pnpm --filter @mule/web exec playwright install --with-deps chromium
+      - run: pnpm --filter @mule/web build
+      - name: Regression e2e
+        run: pnpm --filter @mule/web e2e:regression
