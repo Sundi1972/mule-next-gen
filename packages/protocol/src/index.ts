@@ -343,6 +343,12 @@ export interface ProductionEventView {
   from?: 'n' | 'e' | 's' | 'w';
   /** The plots it hit, in the order it reached them, and how many units each gained or lost. */
   hits: { x: number; y: number; order: number; delta: number }[];
+  /** The phase whose show plays it. */
+  phase: Phase;
+  /** How big its story is on the TV. */
+  weight: 'headline' | 'spotlight' | 'bulletin';
+  /** How long the show plays it, in ms at full pace; the client never computes this itself. */
+  playMs: number;
 }
 
 /** What every plot made this month and what the month's event did: never anything a player holds. */

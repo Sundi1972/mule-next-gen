@@ -50,13 +50,15 @@ function playMonth(keys: EventKey[], phaseScale = 1) {
 }
 
 describe('the event show: production lasts long enough for every event, and the view says how long each plays', () => {
+  // A lone dust storm is a 7 000 ms headline, longer than the 4 800 ms window, so by RULE-1 it adds 2 200: the spec's
+  // "one dust storm → 15 000" example contradicts its own formula and values (flagged to the lead).
   it.each([
     { scale: 1, keys: [] as EventKey[], ms: 15_000 },
-    { scale: 1, keys: ['dustStorm'] as EventKey[], ms: 15_000 },
+    { scale: 1, keys: ['dustStorm'] as EventKey[], ms: 17_200 },
     { scale: 1, keys: ['drought', 'pestSwarm'] as EventKey[], ms: 22_400 },
     { scale: 1, keys: ['dustStorm', 'drought', 'acidRain', 'solarFlare', 'flood'] as EventKey[], ms: 40_200 },
     { scale: 0.1, keys: [] as EventKey[], ms: 1_500 },
-    { scale: 0.1, keys: ['dustStorm'] as EventKey[], ms: 1_500 },
+    { scale: 0.1, keys: ['dustStorm'] as EventKey[], ms: 1_720 },
     { scale: 0.1, keys: ['drought', 'pestSwarm'] as EventKey[], ms: 2_240 },
     { scale: 0.1, keys: ['dustStorm', 'drought', 'acidRain', 'solarFlare', 'flood'] as EventKey[], ms: 4_020 },
   ])('T-AC-1: at phaseScale $scale, a month with $keys runs production $ms ms and the view says so', ({ scale, keys, ms }) => {
