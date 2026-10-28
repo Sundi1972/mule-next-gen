@@ -12,6 +12,8 @@ import { check, launch, PHONE, startServer, TV } from './harness';
 import { PRESS_MS } from './politics-steps';
 
 const SCALE = 0.25;
+/** How long the last phone's Ready takes to land and the land grant to show; planning has no clock. */
+const READY_LANDS_MS = 3_000;
 /** The rate the new Governor sets: UBER-AC-2's 8%. */
 const NEW_TAX = 8;
 /** How often the reveal is read on all three screens at once. */
@@ -352,7 +354,7 @@ async function claimPlots(page: Page): Promise<void> {
   const over = page.locator('[data-phase]:not([data-phase=planning]):not([data-phase=landGrant])');
   for (let tries = 0; ; tries++) {
     check(tries < 40, 'the land grant let this phone claim its plots');
-    await claim.or(over).first().waitFor({ timeout: within(PHASE_MS.planning + PHASE_MS.landGrant) });
+    await claim.or(over).first().waitFor({ timeout: READY_LANDS_MS + within(PHASE_MS.landGrant) });
     if (await over.count()) return;
     try {
       const left = Number(/(\d+) OF/.exec(await claim.innerText({ timeout: PRESS_MS }))?.[1]);

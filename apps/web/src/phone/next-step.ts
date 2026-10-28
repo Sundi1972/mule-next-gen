@@ -25,8 +25,8 @@ export interface DevelopState {
    * unknown: then row 3 glows nothing.
    */
   month?: { needs: Partial<Record<Good, number>>; have: Partial<Record<Good, number>> } | undefined;
-  /** For the words: Food eaten, this month's seconds, the corral, the pub. */
-  ate: number;
+  /** For the words: your pace line ("Hungry: 52% pace"), everyone's seconds, the corral, the pub. */
+  pace: string;
   devSeconds: number;
   mulePrice: number;
   mulesLeft: number;
@@ -105,7 +105,7 @@ export function nextStep(s: DevelopState): NextStep {
     locks,
   });
   // Row 1.
-  if (s.filling) return step(1, 'You eat and your time bar fills', `You ate ${s.ate} Food: ${s.devSeconds} s this month. The clock is running; tap a room to start.`, ['corral']);
+  if (s.filling) return step(1, 'You eat, and the clock starts for everyone', `${s.pace}. Everyone has the same ${s.devSeconds} s; tap a room to start.`, ['corral']);
   // Row 2.
   if (s.carry === null && !s.installed)
     return step(
