@@ -212,6 +212,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private cancels: (() => void)[] = [];
   private news: string[] = [];
   private phaseEndsAt: number | null = null;
+  /** This month's production length in real ms, as its timer was given: the show stretches over it through upkeep. */
+  private productionMs = 0;
   /** The AI players: strategist, decider and hands, keyed by seat id. */
   private readonly ai = new Map<string, AiSeat>();
   /** Each AI player's hand at the land auction, keyed by seat id. */
@@ -587,6 +589,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     if (length === null) return;
     const ms = length * this.phaseScale;
     this.phaseEndsAt = this.ctx.now() + ms;
+    if (phase === 'production') this.productionMs = ms;
     this.cancels.push(
       this.ctx.schedule(ms, () => {
         this.nextPhase();
@@ -1026,7 +1029,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       listings: state.listings.map(listingView),
       lotSlots: { used: state.listings.length, max: LOTS.maxLotsPerMonth },
       landAuction: landAuctionView(state),
-      production: state.phase === 'production' || state.phase === 'upkeep' ? productionView(state, PHASE_MS.production * this.phaseScale) : null,
+      production: state.phase === 'production' || state.phase === 'upkeep' ? productionView(state, this.productionMs) : null,
       politics: politicsView(state),
     };
   }
