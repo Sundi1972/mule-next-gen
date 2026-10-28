@@ -344,6 +344,14 @@ describe('the phone plays the show alone (C7)', () => {
     expect(sent, 'a skip is this phone’s alone: nothing is sent').toEqual([]);
   });
 
+  it('B-AC-2: the harvest says its goods are flying home only once they fly, after the last event, never while one plays', async () => {
+    // The drought plays at 10.6, past a quiet month's fly start (9.6); the goods fly from 15.6, when the events end.
+    for (const boards of [0, 1]) {
+      expect(text(await render(boards, EVENTS_END + 0.2), 'harvest'), `boards ${boards}, the goods fly`).toContain('flying home');
+    }
+    expect(text(await render(1, DROUGHT_AT + 1), 'harvest'), 'with a TV, mid-drought').not.toContain('flying home');
+  });
+
   it('T-AC-5: inside the intro no story plays yet, and the first one starts as the intro ends', async () => {
     for (const t of [INTRO_AT + 0.2, DUST_AT - 0.2]) {
       const html = await render(0, t);
