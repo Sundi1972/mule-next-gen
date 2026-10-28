@@ -1,5 +1,6 @@
+import { DEV_WALK, DEVELOPMENT } from '@mule/engine';
 import type { DealView, MuleView, TableView } from '@mule/protocol';
-import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PlayerMark, SeatSpeciesProvider, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard } from '@mule/ui';
+import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PaceList, PlayerMark, SeatSpeciesProvider, SharedClock, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard } from '@mule/ui';
 import { boardWalkers, dealLine, LineReadout, newestFirst, SIDE_WORD, skippedLine, StatusTable, StoreBox, type DealRow } from '../components/AuctionParts';
 import { useEffect, useState, type ReactNode } from 'react';
 import { joinUrl, Qr } from '../components/Qr';
@@ -192,6 +193,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
             </li>
           ))}
         </ul>
+        <PaceList rule={DEV_WALK} rows={game.players.map((p) => ({ id: p.id, name: p.name, slot: toSlot(p.slot), condition: p.condition }))} />
       </>
     );
   else if (phase === 'production' || phase === 'upkeep') side = <MonthEnd game={game} />;
@@ -238,6 +240,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
     <SeatSpeciesProvider value={seatSpecies(game)}>
       <div className="flex h-[720px] w-[1280px] flex-col gap-5 bg-table p-10 text-ink" data-phase={phase}>
         <TvHeader game={game} title={PHASE_NAME[phase]} seconds={secondsUntil(game.phaseEndsAt, now)} />
+        {phase === 'development' && <SharedClock seconds={secondsUntil(game.phaseEndsAt, now) ?? 0} total={DEVELOPMENT.fullSeconds} size="tv" />}
         <div className="flex min-h-0 flex-1 gap-6">
           <div className="flex w-[700px] shrink-0 flex-col gap-3">
             <HoloMap width={game.width} height={game.height} tiles={tiles} cursor={game.lit} density="tv" hideGround className="w-full" />
