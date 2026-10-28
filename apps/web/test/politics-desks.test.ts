@@ -12,7 +12,7 @@ import { AgendaRow, Hub } from '../src/phone/hub/Hub';
 import { ColonyWithFacts } from '../src/phone/hub/politics/Colony';
 import { CouncilBody } from '../src/phone/hub/politics/Council';
 import { ElectionDay, forgetPicks, pickOn } from '../src/phone/hub/politics/ElectionDay';
-import { GovernorDesk } from '../src/phone/hub/politics/Governor';
+import { GovernorDesk, setState } from '../src/phone/hub/politics/Governor';
 import { OfficesLine } from '../src/phone/hub/politics/Offices';
 import { PromiseSheet } from '../src/phone/hub/politics/Run';
 import { electionNow, electionReadyWords } from '../src/phone/hub/politics/slots';
@@ -610,6 +610,16 @@ describe("the new Governor's promise (C68, E-7)", () => {
     const set = onPhone(term(CAP_4, 4, 5), GovernorDesk);
     expect(textOf(set, 'gov-done')).toBe('Done: 4% from now on.');
     expect(disabled(set, 'tax-confirm')).toBe(true);
+  });
+
+  it.each<[string, number, number | null, { percent: number; start: number }, ReturnType<typeof setState>]>([
+    ['Set where the month opened', 5, 5, { percent: 5, start: 5 }, 'done'],
+    ['nothing set yet', 5, null, { percent: 5, start: 5 }, 'open'],
+    ['set before, on another phone', 4, null, { percent: 4, start: 5 }, 'done'],
+    ['a tax on its way', 4, 4, { percent: 5, start: 5 }, 'sending'],
+    ['a new tax after one came back', 3, 4, { percent: 4, start: 5 }, 'open'],
+  ])("E-7: the Governor's Set is done once the tax is set, off while one is on its way, else open (%s)", (_, tax, sent, now, state) => {
+    expect(setState(tax, sent, now)).toBe(state);
   });
 
   it.each<[{ percent: number; start: number; low: number; high: number }, { down: boolean; up: boolean }]>([
