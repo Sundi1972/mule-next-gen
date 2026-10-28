@@ -121,23 +121,24 @@ reviews the types.ts hunk.
 **Depends on:** none · **Spec sections consumed:** §8 AM-1 (§6 paragraph)
 **Files:** Modify: `docs/specs/2026-10-21-ws1-events.md` (§8, a new amendment)
 
-- [ ] **Step 1: Write the amendment** in the WS1 events spec, superseding its RULE-1 (one dice), T-AC-2's "never
+- [x] **Step 1: Write the amendment** in the WS1 events spec, superseding its RULE-1 (one dice), T-AC-2's "never
       twice in a row", T-AC-6 (targetBias; replaced by C3), and B-AC-1, T-AC-1 and T-AC-8 (`EVENTS.chance`, the
       30-60% band; replaced by this spec's UBER-AC-1). T-AC-3, T-AC-4, T-AC-5 and T-AC-7 stay as pins, forced
       through the rows. Point at this spec.
-- [ ] **Step 2: Commit** `docs(ws1): the events spec's one-dice ACs are superseded by the event model`
+- [x] **Step 2: Commit** `docs(ws1): the events spec's one-dice ACs are superseded by the event model`
+      Done 28 Oct: 363edf2, review fix 0542388 (on `ws1-events-t12` with Task 2).
 
 ### Task 2: The contract — `MonthEvent.phase` (C2's contract, the freeze point)
 
 **Depends on:** none · **ACs verified:** T-AC-5 (strengthened pin) · **Spec sections consumed:** §3
 **Files:** Modify: `packages/engine/src/types.ts::MonthEvent` (named edit, WS3 reviews), `packages/engine/src/events.ts::buildEvent`; Test: `packages/engine/test/events.test.ts`
 
-- [ ] **Step 1: Strengthen the WS1 events spec's `T-AC-3: each event changes exactly the plots it hits…`** (R6, not a
+- [x] **Step 1: Strengthen the WS1 events spec's `T-AC-3: each event changes exactly the plots it hits…`** (R6, not a
       new test): every event in the report carries `phase: 'production'`. Altitude: the month report.
-- [ ] **Step 2: Run it; expect FAIL** (`phase` undefined).
+- [x] **Step 2: Run it; expect FAIL** (`phase` undefined).
       Run: `pnpm --filter @mule/engine exec vitest run test/events.test.ts -t "T-AC-3"`
-- [ ] **Step 3: Implement** `phase: Phase` on `MonthEvent` per spec §3; `buildEvent` sets `'production'`.
-- [ ] **Step 4: Run events.test.ts and `pnpm typecheck`; expect PASS / exit 0.**
+- [x] **Step 3: Implement** `phase: Phase` on `MonthEvent` per spec §3; `buildEvent` sets `'production'`.
+- [x] **Step 4: Run events.test.ts and `pnpm typecheck`; expect PASS / exit 0.**
 - [x] **Step 5: Commit** (red then green); send WS3 the types.ts hunk and WS6 the production-view.test.ts fixture lines;
       send WS8 the contract hunk (primary reviewer) with WS6 copied as an FYI; tell the PM the contract is frozen.
       Done 28 Oct: red 6046578, green 0582373; WS3 OK on types.ts at 0582373 (on condition that CI's check is green on
@@ -148,10 +149,10 @@ reviews the types.ts hunk.
 **Depends on:** Task 2 · **ACs verified:** T-AC-1 · **Spec sections consumed:** §1 C1, §2 RULE-1, wave 1's rows
 **Files:** Modify: `EVENTS` in `config.ts`, `packages/engine/src/events.ts`; Test: `packages/engine/test/events.test.ts`
 
-- [ ] **Step 1: Add the rows to config first**, per spec §2's wave-1 table (`EVENTS.colony.<key>`,
+- [x] **Step 1: Add the rows to config first**, per spec §2's wave-1 table (`EVENTS.colony.<key>`,
       `EVENTS.player.<key>`, `EVENTS.excludes`), keeping `planEvent` and its knobs, so the red is an assertion and
       never a TypeError. Sickness's existing row stays.
-- [ ] **Step 2: Write `EM-T-AC-1: an event's chance is its phase's base plus its raises minus its lowers, between 0 and its cap`**
+- [x] **Step 2: Write `EM-T-AC-1: an event's chance is its phase's base plus its raises minus its lowers, between 0 and its cap`**
       at `events.ts::eventChance` (one table test, R3a pure core). Rows, by hand: dust storm, any air, 5%; drought
       in Toxic 7%; acid rain in Collapse 13%; flood the month after a drought 15%; pest swarm richest 2.5%, poorest
       0.5%; bumper harvest poorest 3%, richest 0.5%; wildfire richest during a drought 5.5%; sickness clean with 5
@@ -163,45 +164,60 @@ reviews the types.ts hunk.
       the month after a drought (lastMonth only); a flood-like row two months after a drought reads nothing. The real
       rows' match to the catalogue is a review check; `satisfies EventRow` makes a misspelt row field a type error.
       `events.ts` comes off the guard's PENDING list in this task's fix (four markers), so HC-1 is enforced from here.
-- [ ] **Step 3: Run it; expect FAIL** with `NotImplemented: eventChance`.
-- [ ] **Step 4: Implement C1's chance** per RULE-1. The ranks read cash plus land at `GAME.plotScore` a plot; a tie goes to
+- [x] **Step 3: Run it; expect FAIL** with `NotImplemented: eventChance`.
+- [x] **Step 4: Implement C1's chance** per RULE-1. The ranks read cash plus land at `GAME.plotScore` a plot; a tie goes to
       the first in seat order. Sickness's `playerEventChance` reads the same function.
-- [ ] **Step 5: Run events.test.ts; expect PASS, the balance spec's T-AC-24 unchanged.**
-- [ ] **Step 6: Commit** red then green.
+- [x] **Step 5: Run events.test.ts; expect PASS, the balance spec's T-AC-24 unchanged.**
+- [x] **Step 6: Commit** red then green.
+      Done 28 Oct: red d61f3e4, green 0d69afd; review fixes 4323e17, 260665c, b84b0c4, 000dfde.
 
 ### Task 4: The roller — C1 (RULE-2)
 
 **Depends on:** Task 3 · **ACs verified:** T-AC-2 · **Spec sections consumed:** §1 C1, §2 RULE-2
 **Files:** Modify: `packages/engine/src/events.ts` (new `rollPhase`); Test: `packages/engine/test/events.test.ts`
 
-- [ ] **Step 1: Write `EM-T-AC-2: no event in month 1 or on a what-if copy, and a seed replays the same events`** at
+- [x] **Step 1: Write `EM-T-AC-2: no event in month 1 or on a what-if copy, and a seed replays the same events`** at
       `rollPhase(state, 'production')`, with every row forced to 1: month 1 → nothing; `cloneForSim` → nothing; the
       same state rolled twice → the same keys and players in the same order (colony rows first, then players in seat
       order). Negative: a different seed over 40 months differs somewhere.
-- [ ] **Step 2: Run; expect FAIL** (`NotImplemented: rollPhase` stub).
-- [ ] **Step 3: Implement C1's roller** per RULE-2 steps 1, 2, 3 and 5. Seeds per HC-3: `(seed, month, phase, row, player)`, through the
+- [x] **Step 2: Run; expect FAIL** (`NotImplemented: rollPhase` stub).
+- [x] **Step 3: Implement C1's roller** per RULE-2 steps 1, 2, 3 and 5; step 5 (once a month) holds by construction in
+      wave 1, so no state is built for it. Seeds per HC-3: `(seed, month, phase, row, player)`, through the
       FNV-1a seed sickness uses. The excludes are step 4, proved in Task 6.
-- [ ] **Step 4: Run; expect PASS.** **Step 5: Commit** red then green.
+- [x] **Step 4: Run; expect PASS.** **Step 5: Commit** red then green.
+      Done 28 Oct: red 592db82, green 431b449; strengthened 75ad821, refactor 1d8e6d7; review fix 2158c40 (the
+      review's probes P1-P5 folded into EM-T-AC-2: sickness's dice as the oracle, a drought feeding wildfire's
+      `firedThisPhase`, all four directions, seats' pests differ, development rolls nothing). Plan gap: P2's property
+      (a later row reads this phase's fired events) has no AC id of its own, so it rides EM-T-AC-2. The roller is at
+      2158c40 and also carries the merge of `ws1-events` (23736cf).
 
 ### Task 5: Personal events roll per player, and lean on wealth — C3
 
 **Depends on:** Task 4 · **ACs verified:** T-AC-4 · **Spec sections consumed:** §1 C3, §2 RULE-1 (wealth rank)
 **Files:** Modify: `packages/engine/src/events.ts` (`buildEvent` for a given player; `pickStart` and `EVENTS.targetBias` go); Test: `packages/engine/test/events.test.ts`
 
-- [ ] **Step 1: Write `EM-T-AC-4: a personal event starts on its own player's plots, and the richest and poorest read their rows' points`**
+- [x] **Step 1: Write `EM-T-AC-4: a personal event starts on its own player's plots, and the richest and poorest read their rows' points`**
       at the month report.
       - Pest swarm forced for p2 only: `event.player === 'p2'`, and the order-0 plot is p2's. The spread is today's (HC-4): a pest reaches joined Food plots of anyone, a wildfire only its owner's.
       - A player with no Food plot fires no pest swarm.
       - The ranks: the richest p1 rolls pest at base +1, the poorest bumper at base +1.5 (read through `eventChance` on the report's state).
-- [ ] **Step 2: Run; expect FAIL** (today's `pickStart` starts anywhere).
-- [ ] **Step 3: Implement C3.** Delete the WS1 events spec's `T-AC-6` test (superseded, Task 1; R7). Re-force its
+      Built at `rollPhase`'s return (production calls it from Task 6), on test-local rows: a wealth point is the only
+      thing raising a row above 0, so the rank group proves the lean and the own-plot start in one assertion.
+- [x] **Step 2: Run; expect FAIL** (today's `pickStart` starts anywhere).
+- [x] **Step 3: Implement C3.** Delete the WS1 events spec's `T-AC-6` test (superseded, Task 1; R7). Re-force its
       `T-AC-4` pest test through the rows instead of `targetBias`, with the assertions unchanged.
-- [ ] **Step 4: Run events.test.ts; expect PASS.** **Step 5: Commit** red then green.
+- [x] **Step 4: Run events.test.ts; expect PASS.** **Step 5: Commit** red then green.
+      Done 29 Oct: red 19b21cc, green 2eede4a (`EVENTS.targetBias` removed here); review fix 50bd61a (EM-T-AC-4 checks
+      the start is drawn among the roller's own plots: a start fixed to the first plot survived). Roller at 50bd61a.
 
 ### Task 6: Production applies every event that fired — C2
 
 **Depends on:** Tasks 4, 5 · **ACs verified:** T-AC-3, T-AC-5 (the ten events) · **Spec sections consumed:** §1 C2, §2 RULE-2 (4, 6), HC-4
-**Files:** Modify: `packages/engine/src/production.ts::runProduction`, `events.ts` (remove `planEvent`), `EVENTS` (remove `chance`, `weights`, `targetBias`); Test: `events.test.ts`, `packages/ai/test/balance.test.ts`
+**Files:** Modify: `packages/engine/src/production.ts::runProduction`, `events.ts` (remove `planEvent`), `EVENTS` (remove `chance`, `weights`; `targetBias` went in Task 5); Test: `events.test.ts`, `packages/ai/test/balance.test.ts`
+
+From Task 5's review: with `planEvent` gone, `buildEvent`'s no-player arm goes too (a personal key needs its player)
+and its docstring loses "otherwise on anyone's"; EM-T-AC-3's re-forced T-AC-3 pins that a bumper harvest reaches only
+its start plot (HC-4; that mutant survives today).
 
 - [ ] **Step 1: Write `EM-T-AC-3: two events on one plot both apply in order, never below 0, and an excluded pair keeps one`**
       at the month report and the plot's line, with rows forced.
@@ -219,7 +235,9 @@ reviews the types.ts hunk.
       left it to this task; `events.ts` came off in Task 3's fix). Rewrite the top-of-`EVENTS` docstring, which still
       describes planEvent's one event a month. Make `excludes` and every row's `follows` keys name real rows: the
       EM-T-AC-3 test that first reads `excludes` also asserts each excludes member and each follows key is a key of
-      `EVENTS.colony` or `EVENTS.player` (a misspelt key would otherwise never fire).
+      `EVENTS.colony` or `EVENTS.player` (a misspelt key would otherwise never fire). The excludes (RULE-2 step 4)
+      resolve among the colony rows, which both pairs are, before any player row reads `firedThisPhase`: an excluded
+      drought has not fired, so it never raises wildfire (lead's ruling at Task 4's review). EM-T-AC-3 asserts it.
 - [ ] **Step 4: Run `pnpm typecheck && pnpm test`; expect exit 0.** **Step 5: Commit** red then green.
 
 ### Task 7: The month report and the sim count every event — C5
@@ -281,6 +299,9 @@ Before suggesting merge of `ws1-events-roller` into `ws1-events`:
 - [ ] **Step 3: Implement C4.** `collapses` asks the row dice from `(seed, month, 'production', 'cavernCollapse', plot)`.
       Its "produced Crystite this month" check and its what-if guard stay. `EFFECT.collapseChance` goes. Production
       lists each collapse as a MonthEvent after the output events (AM-3); `eventOutput` gets a no-op entry.
+      `rollPhase` must not roll `cavernCollapse` at the phase start: its rows are picked by "key is in SHAPE", which
+      the cavern row joins here, but C4 rolls it once per mined cavern plot after output. EM-T-AC-2's key literal goes
+      red if it slips (Task 4's review).
 - [ ] **Step 4: Run `specials.test.ts` unedited; expect WS5's T-AC-6 green** (replay; about 6% within ±30%; the same
       rate with or without a production event; each plot its own fate; unmined never). Then run events.test.ts and
       `pnpm typecheck && pnpm test`.
@@ -296,10 +317,13 @@ Before suggesting merge of `ws1-events-roller` into `ws1-events`:
 
 ## Gate: wave 1 reaches a table (`ws1-events` → `feat/strategist`)
 
-- [ ] #109 merged into `feat/strategist`; `ws1-events` rebased onto it, gates re-run on the rebased head
-- [ ] **WS6's several-events surface** is merged into `feat/strategist`, or merges with this branch: the phone and
-      TV show every event of a phase, and the view (WS3's `mule-game.ts`) carries `phase`. It is built against Task 2's
-      contract; the PM routes it.
+- [x] #109 merged into `feat/strategist`; `ws1-events` synced with it (merged, not rebased, so the task SHAs hold):
+      trunk b3774fa at 946ab96, typecheck 0 and the suite green
+- [ ] **The events gallery is built** (Heiko, 29 Oct: "Living weather" approved as the design to build; WS8 writes the
+      build spec and names its files): merged into `feat/strategist`, or merges with this branch. The phone and TV show
+      every event of a phase, and the view (WS3's `mule-game.ts`) carries `phase`. The event payloads are agreed with
+      WS8 against Task 2's contract (`MonthEvent`, several a phase in the order fired; AM-2's delta-0 plots; AM-3's
+      collapse); any field the gallery needs beyond it is a named change to that contract. The PM routes it.
 - [ ] PR-1's and PR-2's rows in the PR body; R-2's options settled by Heiko if any check moved
 - [ ] Heiko's OK through the PM
 
