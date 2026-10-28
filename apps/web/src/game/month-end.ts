@@ -119,6 +119,8 @@ export interface ColonyReport {
   fund: { balance: number };
   hungry: Hungry[];
   colonists: number;
+  /** Whether that upkeep's store fed the colonists; null when the view doesn't say (outside the month end). */
+  colonistsFed: boolean | null;
 }
 
 /** How the colony is doing, apart from the players: the air against last month, the fund, who went hungry. */
@@ -136,6 +138,7 @@ export function colonyReport(view: MuleView): ColonyReport {
     fund: { balance: view.treasury.money },
     hungry: hungerOf(view),
     colonists: view.colonists,
+    colonistsFed: view.colonistsFed,
   };
 }
 

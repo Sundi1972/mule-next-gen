@@ -331,8 +331,8 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false }
                 );
               })
             )}
-            <span className={cx(line, 'text-ink-2')} data-testid="colonists">
-              Colonists · {fmt(r.colonists)}
+            <span className={cx(line, r.colonistsFed === false ? 'text-alert' : 'text-ink-2')} data-testid="colonists">
+              {r.colonistsFed === null ? 'Colonists' : r.colonistsFed ? 'Colonists fed' : 'Colonists went short'} · {fmt(r.colonists)}
             </span>
           </span>
         </Block>
