@@ -97,7 +97,8 @@ C3 · MODIFIED · the client takes a per-kind thinking setting
 today        thinking: { type: 'disabled' } for every call · anchors: apps/server/src/brain/client.ts::createHaikuComplete
              verified_by: read
 tomorrow     MUST send adaptive thinking with a config effort for 'strategy' and 'playbook' calls; moves keep thinking
-             off. The wait per kind comes from config (BRAIN), not from the hands.
+             off. The model, effort and wait per kind come from config (BRAIN), never from constants or the hands;
+             default Haiku 5.5, effort medium (S-A1); §7's model rule may move the strategy call to Sonnet.
 pin          INV-HC3 and the client tests keep passing for moves.
 mechanism    in_place
 
@@ -271,6 +272,13 @@ Code-only; no existing state to reach. The record starts with WS3's build.
   BRAIN.charsPerToken 2.5. **C3 decision: Haiku 5.5, adaptive thinking, effort medium**: the cheapest, under the
   window, and its validity failures are prompt-side. Sonnet stays affordable at this brief size but is unproven on
   quality; revisit with the real brief (C1, C8) and validatePlan.
+  **Model rule (PM, 29 Oct, Heiko's steer: capability first, the budget as the safety net).** Haiku 5.5 with adaptive
+  thinking at effort medium is the DEFAULT; the model and effort per call kind stay named BRAIN config values, never
+  constants. When validatePlan (WS1) and the real brief (C1 + C8 manual + C9 tools) exist, re-run S-A1 PAIRED on the
+  same tool (`brain:strategy-spike`, same briefs, both models): the monthly strategy call moves to Sonnet 5.5 if Sonnet
+  is measurably better on accepted edits AND the measured seat share (all calls, tool rounds included, × the calls
+  per seat-game) still fits the game budget ÷ the Smart seats. Otherwise Haiku stays. The playbook edit calls stay
+  on Haiku unless the same test says otherwise for them.
 - **R-A1:** slack windows shorter than the model at fast tables. Mitigation: RULE-A1 row 2; the trial measures the
   late share.
 - **R-A2:** the schema freezes late. Mitigation: C1-C2 stub on schema v0; C4-C5 wait.
