@@ -1,4 +1,4 @@
-import { POLLUTION, UPKEEP } from '@mule/engine';
+import { POLLUTION } from '@mule/engine';
 import type { MuleView, MyView, PlayerView, TableView } from '@mule/protocol';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -17,10 +17,10 @@ import { TvGameOver, TvMonthEnd } from '../src/table/TableApp';
  */
 
 type Condition = NonNullable<PlayerView['condition']>;
-const FED: Condition = { foodShare: 1, sick: false, sickBecause: null, conditionPace: 1 };
-/** A household with no working plot needs UPKEEP.baseFood; Kai held one unit of it. */
-const KAI_NEED = UPKEEP.baseFood;
-const KAI_SHORT: Condition = { foodShare: 1 / KAI_NEED, sick: false, sickBecause: null, conditionPace: 0.6 };
+const FED: Condition = { foodShare: 1, foodNeed: 2, sick: false, sickBecause: null, conditionPace: 1 };
+/** Kai's household needs 3 Food this month, as the view says (its crew is on plots this fixture doesn't draw); he held 1. */
+const KAI_NEED = 3;
+const KAI_SHORT: Condition = { foodShare: 1 / KAI_NEED, foodNeed: KAI_NEED, sick: false, sickBecause: null, conditionPace: 0.6 };
 
 const row = (id: string, name: string, slot: number, money: number, worth: number, lastWorth: number | null, condition: Condition | null = FED): PlayerView => ({
   id,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { foodShare, player, POLLUTION, RuleError, scoreParts, type GameState } from '@mule/engine';
+import { foodShare, needsOf, player, POLLUTION, RuleError, scoreParts, type GameState } from '@mule/engine';
 import type { MuleView, PlayerView } from '@mule/protocol';
 import { MuleGame } from '../src/mule-game.js';
 import { fakeContext, readyAll, seats } from './fake-context.js';
@@ -22,6 +22,8 @@ interface MonthEnd {
   developed: Record<string, PlayerView['condition']>;
   /** s1's food share as the engine reads it at the month's end, after the colonists ate. */
   liveShare: number;
+  /** Each player's Food need as the engine reads it at the month's end: the plots haven't changed since development. */
+  needs: Record<string, number>;
 }
 
 /**
@@ -46,7 +48,7 @@ function playThreeMonths(): { ends: MonthEnd[]; over: MuleView } {
     }
     if (state.phase === 'development') developed = conditionsIn(game.viewFor(null));
     if (state.phase === 'upkeep' && ends.at(-1)?.month !== state.month) {
-      ends.push({ month: state.month, views: new Map(VIEWERS.map((v) => [v, game.viewFor(v)])), developed, liveShare: foodShare(state, 's1') });
+      ends.push({ month: state.month, views: new Map(VIEWERS.map((v) => [v, game.viewFor(v)])), developed, liveShare: foodShare(state, 's1'), needs: Object.fromEntries(seats.map((s) => [s.id, needsOf(state, s.id).food])) });
     }
     if (state.phase === 'planning' || state.phase === 'upkeep') readyAll(game);
     const lit = state.phase === 'landGrant' && claimedIn !== state.month ? game.viewFor('s1').lit : null;
@@ -91,6 +93,13 @@ describe('Month end: last month against this one (C20)', () => {
     expect(s1, "s1's condition in month 2's development").not.toBeNull();
     expect(s1.foodShare, 's1 went hungry in month 2').toBeLessThan(1);
     expect(second.liveShare, "the engine's food share after upkeep has eaten the Food: a re-read would differ").not.toBe(s1.foodShare);
+    // Each condition carries the month's Food need, so every screen can say "ate n of m".
+    for (const end of ends) {
+      for (const viewer of VIEWERS) {
+        for (const p of end.views.get(viewer)!.players) expect(p.condition?.foodNeed, `${p.id}'s need at month ${end.month}'s end, ${viewer ?? 'the board'}`).toBe(end.needs[p.id]);
+      }
+    }
+    expect(second.needs['s1'], "s1's need is more than the one Food it held").toBeGreaterThan(1);
     const s2 = second.developed['s2']!;
     expect(s2.foodShare, 's2 was fed').toBe(1);
   });
