@@ -257,7 +257,7 @@ describe('TableClient', () => {
     return t;
   }
 
-  it('B-AC-7: asking to move sends handoff; the code is live until it expires by the server clock, then shows as expired until a new one is asked for, and a newer code replaces it and its expiry', () => {
+  it('FM-7: asking to move sends handoff; the code is live until it expires by the server clock, then shows as expired until a new one is asked for, and a newer code replaces it and its expiry', () => {
     const { client, last, advance, setNow } = seated();
     setNow(10_000);
     // The server's clock runs 50 s ahead of this screen's.
@@ -298,7 +298,7 @@ describe('TableClient', () => {
     expect(client.getState().handoffCode).toBeNull();
   });
 
-  it('B-AC-7: closing the dialog drops the code and sends nothing; being moved away drops it too', () => {
+  it('FM-8: closing the dialog drops the code and sends nothing; being moved away drops it too', () => {
     const { client, last } = seated();
     client.handoff();
     last().deliver({ t: 'handoffCode', code: 'one', expiresAt: 999_999 });
@@ -323,7 +323,7 @@ describe('TableClient', () => {
   it.each([
     { saved: { code: 'KRTX', token: 'mine', name: 'Old' }, kept: 'this room' },
     { saved: { code: 'BBBB', token: 'other', name: 'Heiko' }, kept: 'another room' },
-  ])('B-AC-7: a handoff join sends the code, not the token saved for $kept, then keeps the new token and the seat\'s name', ({ saved }) => {
+  ])('FM-9: a handoff join sends the code, not the token saved for $kept, then keeps the new token and the seat\'s name', ({ saved }) => {
     const storage = memoryStore();
     saveSeat(storage, saved);
     const { client, last, advance } = setup(storage);
@@ -346,7 +346,7 @@ describe('TableClient', () => {
   it.each([
     { saved: { code: 'KRTX', token: 'mine', name: 'Mia' }, kept: 'this room' },
     { saved: { code: 'BBBB', token: 'other', name: 'Heiko' }, kept: 'another room' },
-  ])('B-AC-7: a used or expired link shows "That link has expired" on the start screen and keeps the seat saved for $kept', ({ saved }) => {
+  ])('FM-10: a used or expired link shows "That link has expired" on the start screen and keeps the seat saved for $kept', ({ saved }) => {
     const storage = memoryStore();
     saveSeat(storage, saved);
     const { client, sockets, last, advance } = setup(storage);
