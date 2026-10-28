@@ -47,7 +47,7 @@ All three goals trace to Mission G-4: "The table plays politics: players make an
 - **D2 · Laws in v1.** Recommended: the six laws that only move money or block an action: export tax, land tax, pollution tax, emission cap, sabotage ban, and (from slice 4) the Sheriff's fines under it. The other six wait for the systems named in the non-goals. Alternative: all twelve, which puts named edits into WS1's store and WS3's auction now and roughly doubles slice 2.
 - **D3 · Balance.** Taxes, fines, pay and Welfare move money, so each slice that touches money ships with sim rows on both seed sets and needs Heiko's OK, with WS1 measuring. Recommended: politics is a host option, on by default (as sabotage is), so the sim and Beginner mode can run with it off.
 
-*Count note (2026-10-22, WS7):* D2's "six" counts five laws (export tax, land tax, pollution tax, emission cap, sabotage ban) plus the Sheriff's fines under the ban as the sixth item. Raised with the PM; windfall tax would be the natural sixth law if Heiko wants six laws.
+*Count note (2026-10-22, WS7; AM-16: designed as option A, D2 still Heiko's on the G-5 card):* D2's "six" counts five laws (export tax, land tax, pollution tax, emission cap, sabotage ban) plus the Sheriff's fines under the ban as the sixth item. Raised with the PM; windfall tax would be the natural sixth law if Heiko wants six laws.
 
 ### §0.1 · Decision Record `[review-only]`
 
@@ -805,6 +805,23 @@ did       Heiko: planning has no clock. The election keeps its own stage clocks;
 because   G-4 / P-1: Heiko's play-test; the election's timing is unchanged
 goal      P-1 — still met
 folded    C9 tomorrow; politics.test.ts row FM-planning-untimed (WS3's ee5318f)
+```
+
+```
+AM-16 · 2026-10-28 · PM goal gate · slice 2a designed
+
+target    §0 D2 and its count note; D1 slice 2; non-goals
+did       Slice 2a's §0 passed the PM's goal gate: the council and four laws (export, land and
+          pollution tax, emission cap), designed in docs/specs/2026-10-28-ws7-slice2a-council.md
+          (ids C40+, RULE-40+, UBER-AC-8..10). This is D2's note as option A: the sabotage ban and the
+          Sheriff's fines move to slice 4 with the Sheriff's powers; B (A plus the windfall tax) and C
+          (keep the inert ban in slice 2) stay in that spec's decision record. D2 is Heiko's and goes
+          on the G-5 card; B or C amends slice 2a's non-goals before any build. Law promises in
+          campaigns move from slice 2 (AM-11) to slice 3, with deal cards.
+because   P-1: "the colony votes laws" (UBER-AC-1's law clause) is the unmet half of P-1; G-5: the law
+          taxes are the fund's main income
+goal      P-1 — still met; G-5's income
+folded    D2 count note below; slice 2a spec
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
