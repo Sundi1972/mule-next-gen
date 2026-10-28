@@ -650,8 +650,9 @@ describe('the roller', () => {
 
 describe('cavern collapse', () => {
   /**
-   * At `month`, crystal caverns and no other special field: p0 and p1 each mine one for Crystite, p2 mines one on
-   * Crystite 0 and p3 farms one, which a drought reaches. Every seat has Energy and Water to spare.
+   * At `month`, crystal caverns and one ruin, and no other special field: p0 and p1 each mine a cavern for Crystite, p2
+   * mines one on Crystite 0 and p3 farms one, which a drought reaches; p0's ruin settles in production, and doesn't
+   * collapse. Every seat has Energy and Water to spare.
    */
   const caverns = (month: number) => {
     const state = createGame({ seed: 4, players: [0, 1, 2, 3].map((i) => ({ id: `p${i}`, name: `P${i}`, isAi: false })) });
@@ -665,6 +666,7 @@ describe('cavern collapse', () => {
       tile.ground.crystite = crystite;
       return state.tiles.indexOf(tile);
     }) as [number, number, number, number];
+    Object.assign(land[24]!, { owner: 'p0', special: { kind: 'ruins', salvage: 'alloy' } });
     for (const p of state.players) Object.assign(p.stock, { energy: 10, water: 10 });
     return { state, mined: [one, two], empty, farmed };
   };
@@ -714,6 +716,11 @@ describe('cavern collapse', () => {
       const whatIf = cloneForSim(state);
       expect(produce(whatIf).events).toEqual([]);
       expect(mined.map((i) => kindAt(whatIf, i))).toEqual(['crystalCavern', 'crystalCavern']);
+
+      EVENTS.colony.cavernCollapse.cap = 0;
+      const capped = caverns(EVENTS.firstMonth);
+      expect(produce(capped.state).events!.map((e) => e.key)).toEqual(['drought']);
+      expect(capped.mined.map((i) => kindAt(capped.state, i))).toEqual(['crystalCavern', 'crystalCavern']);
     });
   });
 });
