@@ -82,11 +82,13 @@ PR-2 is a named edit in WS5's file and block, with WS5 as its reviewer.
   behind the table gate), the sim's nine checks.
 
 **PR-2 authority**
-- `may_edit`: `packages/engine/src/events.ts`, the `EVENTS` block, `packages/engine/test/events.test.ts`.
+- `may_edit`: `packages/engine/src/events.ts`, the `EVENTS` block, `packages/engine/test/events.test.ts`,
+  `packages/engine/src/production.ts` (the collapse's MonthEvent after the output events, AM-3; PR-1 has merged by then).
 - Named edits, WS5 reviews: `packages/engine/src/specials.ts::collapses`, `EFFECT.collapseChance` in `config.ts` (it
   moves into the row).
-- `must_not_edit`: `packages/engine/test/specials.test.ts` (WS5's T-AC-6 pins stay unedited and green),
-  `packages/engine/src/production.ts`, `game.ts`.
+- Named edit, WS3 reviews (AM-3, PM ruling A): `packages/engine/src/types.ts::EventKey` gains `'cavernCollapse'`.
+- `must_not_edit`: `packages/engine/test/specials.test.ts` (WS5's T-AC-6 pins stay unedited and green), `game.ts`,
+  `apps/**`.
 
 > Naming, internal structure, helper decomposition and test fixtures are yours. Everything else in your payload is specified. If you need to change anything outside it — including because it appears impossible — stop and report to the lead with the element id and the goal it fails. Do not deviate: you can see one task, and the lead can see the whole graph.
 
@@ -247,25 +249,31 @@ Before suggesting merge of `ws1-events-roller` into `ws1-events`:
 
 ### Task 9: Cavern collapse rolls on the table — C4
 
-**Depends on:** PR-1 merged into `ws1-events` · **ACs verified:** T-AC-5 (cavern collapse) · **Spec sections consumed:** §1 C4, §8 AM-1
-**Files:** Modify: `EVENTS` (the `cavernCollapse` row), `events.ts`; named edits `packages/engine/src/specials.ts::collapses` and `EFFECT.collapseChance` (WS5 reviews); Test: `packages/engine/test/events.test.ts`
+**Depends on:** PR-1 merged into `ws1-events` · **ACs verified:** T-AC-5 (cavern collapse) · **Spec sections consumed:** §1 C4, §3, §8 AM-1, AM-3
+**Files:** Modify: `EVENTS` (the `cavernCollapse` row), `events.ts` (`SHAPE`, `eventOutput`'s no-op entry), `production.ts` (the collapse's MonthEvent, after the output events); named edits `packages/engine/src/specials.ts::collapses` and `EFFECT.collapseChance` (WS5 reviews), `packages/engine/src/types.ts::EventKey` gains `'cavernCollapse'` (WS3 reviews, AM-3); Test: `packages/engine/test/events.test.ts` (with `RULE_3`'s cavernCollapse entry)
 
 - [ ] **Step 1: Write `EM-T-AC-5: cavern collapse rolls on its row, with today's effect`** at the tiles after
       production.
       - With the row forced to 1, every cavern that produced Crystite becomes a plain plot, and one mined on Crystite 0 or farmed for Food stays.
       - With the row at 0, none collapses.
       - A what-if copy never collapses.
+      - Each collapse is in the month report as a MonthEvent after the output events (AM-3): key `cavernCollapse`,
+        kind `quake`, scope `personal`, `player` the owner, `plots` [{index, order 0, good 'crystite', delta 0}],
+        phase 'production'; with the row at 0, no such event.
 - [ ] **Step 2: Run; expect FAIL** (collapse still reads `EFFECT.collapseChance`).
 - [ ] **Step 3: Implement C4.** `collapses` asks the row dice from `(seed, month, 'production', 'cavernCollapse', plot)`.
-      Its "produced Crystite this month" check and its what-if guard stay. `EFFECT.collapseChance` goes.
+      Its "produced Crystite this month" check and its what-if guard stay. `EFFECT.collapseChance` goes. Production
+      lists each collapse as a MonthEvent after the output events (AM-3); `eventOutput` gets a no-op entry.
 - [ ] **Step 4: Run `specials.test.ts` unedited; expect WS5's T-AC-6 green** (replay; about 6% within ±30%; the same
       rate with or without a production event; each plot its own fate; unmined never). Then run events.test.ts and
       `pnpm typecheck && pnpm test`.
-- [ ] **Step 5: Commit** red then green; send WS5 the hunks.
+- [ ] **Step 5: Commit** red then green; send WS5 the specials.ts and EFFECT hunks and WS3 the EventKey hunk; tell WS8
+      the ruling with the hunk (PM, 28 Oct).
 
 ### PR-2 merge gate
 
-- [ ] EM-T-AC-5 green; WS5's T-AC-6 green and unedited; WS5 OK on the specials.ts and EFFECT hunks
+- [ ] EM-T-AC-5 green; WS5's T-AC-6 green and unedited; WS5 OK on the specials.ts and EFFECT hunks; WS3 OK on the
+      EventKey hunk (AM-3)
 - [ ] Each failing-test commit precedes its passing commit; trace-check clean; `pnpm typecheck && pnpm test` exit 0; CI green
 - [ ] The rows of Task 8 re-run on one set (seeds 1-40, politics on): the cavern line moves only by its new dice
 

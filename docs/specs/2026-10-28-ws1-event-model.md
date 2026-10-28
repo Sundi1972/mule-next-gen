@@ -130,7 +130,10 @@ today        specials.ts (WS5's) collapses a cavern that produced Crystite with 
 tomorrow     a row in EVENTS.colony (cavernCollapse), rolled once per cavern plot that produced Crystite this
              month, after production's output, through events.ts's row dice; specials.ts::collapses asks it instead
              of its own hash, and EFFECT.collapseChance moves into the row. Named edits in WS5's file and config
-             block; WS5 reviews.
+             block; WS5 reviews. Each collapse is also a MonthEvent in MonthReport.events, after the output
+             events (AM-3): key cavernCollapse, kind quake, scope personal, player = the cavern's owner,
+             plots [{index, order 0, good 'crystite', delta 0}], phase 'production'. EventKey gains
+             'cavernCollapse' (a named edit in WS3's types.ts, WS3 reviews); eventOutput gets a no-op entry.
 pin          specials.test.ts T-AC-6 (WS5's) keeps passing unchanged: the same (seed, month, plot) collapses the
              same; never on a what-if copy; only in a month the cavern is mined; independent of the month's other
              events (a month with a production event collapses at the same rate); about 6% a mined cavern-month,
@@ -142,8 +145,8 @@ depends_on   C1
 C5 · MODIFIED · the month report and the sim count every event
 
 today        MonthReport.events holds 0 or 1 event; the sim prints events in N% of months.
-tomorrow     MonthReport.events holds every production MonthEvent that fired, each with phase 'production'
-             (sickness stays on Player.sick, a collapse on the tile); the sim counts all three by phase and prints
+tomorrow     MonthReport.events holds every production MonthEvent that fired, each with phase 'production',
+             cavern collapses last (AM-3); sickness stays on Player.sick. The sim counts all three by phase and prints
              events per month by phase and for the month, and the share of months with 0, 1, 2, 3, 4+ (UBER-AC-1).
              `pnpm sim -- --air smoggy|toxic` counts each month as if the air were that band and every player had
              caused 5 air points (measure only; the games play on unforced).
@@ -210,6 +213,8 @@ that take `events[0]` keep working but show only the first (WS6, §9). Example: 
 and a pest swarm on p2's farms gives two MonthEvents, both phase 'production', in that order. Stacking (RULE-2
 step 6): a plot's `delta` in each event is that event's own change on what the earlier events left, and a plot an
 event reaches is listed even at delta 0. A Food plot making 1 hit by a drought and then acid rain lists −1, then 0.
+EventKey · MODIFIED · not breaking (PR-2, AM-3): gains 'cavernCollapse', a named edit in WS3's `types.ts`. A
+collapse is listed last in MonthReport.events, after the output events; the screens read `kind` ('quake').
 
 ## §4 · Failure & Ops `[handoff]`
 
@@ -304,6 +309,22 @@ did       wrote down the stacking rule the screens rebuild a plot from: each eve
 because   WS8 asked for it at the freeze point: the screens add a plot's deltas in order, and must
           know whether a plot at 0 is listed
 goal      G-1 (unchanged; the contract is clearer, not different)
+```
+
+```
+AM-3 · 2026-10-28 · PM ruling A, on WS8's review of the freeze point
+
+target    §1 C4, C5 · §3 · supersedes AM-1's "a collapse is not a MonthEvent"
+did       a cavern collapse is a MonthEvent in production, after the output events: key cavernCollapse,
+          kind quake, scope personal, player = the cavern's owner, plots [{index, order 0, good
+          'crystite', delta 0}] (this month's Crystite is already made), phase 'production'.
+          EventKey gains 'cavernCollapse': a named edit in WS3's types.ts, which WS3 reviews in PR-2
+          with eventOutput's no-op entry. The collapse itself (C4, WS5's T-AC-6 pins) is unchanged.
+          Lands in PR-2 (Task 9); PR-1 is unchanged.
+because   Heiko's catalogue lists cavern collapse as one of its 35 events, and he wants events
+          announced on the TV and on a phone alone; a badge that vanishes silently fails both
+          (PM, 28 Oct). The screens would otherwise have to diff tiles to find it.
+goal      G-1 (unchanged)
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
