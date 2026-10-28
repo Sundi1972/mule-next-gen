@@ -65,8 +65,9 @@ describe('phaseScale and maxMonths', () => {
     const now = ctx.now();
     expect(view.me!.devEndsAt! - now).toBeCloseTo(view.me!.devSeconds * msPerSecond, 6);
     expect(view.phaseEndsAt! - now).toBeCloseTo(PHASE_MS.development * (phaseScale ?? 1), 6);
-    // Each player's clock is checked the moment it runs out.
-    expect(waits).toContainEqual(expect.closeTo(view.me!.devSeconds * msPerSecond + 1, 6));
+    expect(view.phaseEndsAt, 'the one development clock is the phase clock').toBe(view.me!.devEndsAt);
+    // The one clock is checked the moment it runs out.
+    expect(waits).toContainEqual(expect.closeTo(view.me!.devSeconds * msPerSecond, 6));
   });
 
   it.each([[undefined], [1], [0.1]])('T-AC-2: with phaseScale %s the auction status clock runs tick / phaseScale, clamped for a stall before scaling', (phaseScale) => {
