@@ -38,7 +38,15 @@ the same turn."** (Heiko, 28 Oct)
   Wave 2 includes the **meteor strike** (Heiko, 28 Oct): a colony event in production, 2% a month. It hits any tile on
   the map at random, owned or not. An installation there is destroyed and makes nothing this month, and the tile
   becomes a crater with Crystite at the top of today's scale. The crater is a WS5 special field, and the event row
-  calls it.
+  calls it. Two wave-2 effects ruled by Heiko (28 Oct; chances and phases as catalogued, colony rows at 1% in the goods
+  auction, before trading opens; AM-4):
+  - **Pirate raid** ("pirates take all crystite"): every player's Crystite AND the store's Crystite stock go to 0.
+  - **Store fire** ("store fire burns all store storage, not only food, all the storage that the store had"): the
+    store's whole stock of every good goes to 0; prices follow the empty store as usual. Whether the store's built
+    MULEs burn too is asked through the PM (the engine keeps them apart from the stock: `Store.mules`, built at
+    upkeep from the store's Smithore).
+  Wave 2's sim report shows how often each fires and the loss per game; a balance check they break goes to Heiko
+  as options, never a silent tune.
 - Changing any event's effect (wave 1 moves events onto their own dice only).
 - Showing several events on the screens: the phone and TV read `events[0]` today (`table/TvProduction.tsx`,
   `phone/Production.tsx`). WS6 owns that surface; wave 1 needs it before it reaches a table (§9).
@@ -331,6 +339,23 @@ because   Heiko's catalogue lists cavern collapse as one of its 35 events, and h
           announced on the TV and on a phone alone; a badge that vanishes silently fails both
           (PM, 28 Oct). The screens would otherwise have to diff tiles to find it.
 goal      G-1 (unchanged)
+```
+
+```
+AM-4 · 2026-10-28 · Heiko's ruling on two wave-2 effects (through the PM)
+
+target    §0 Non-goals (the wave-2 note) · the catalogue's pirate raid and store fire rows
+did       recorded the new effects for wave 2's amendment and PR:
+          pirate raid: every player's Crystite and the store's Crystite stock go to 0 (the catalogue said
+          "the Crystite the players hold"); store fire: the store's whole stock of every good goes to 0
+          (the catalogue said "one good"). Chances, raises and the phase stay as catalogued (colony, 1%,
+          the goods auction before trading opens). Open: whether the store's built MULEs (Store.mules,
+          kept apart from the stock and built at upkeep from Smithore) burn in a store fire.
+          Wave 1 is unchanged: neither row is in it.
+because   Heiko, 28 Oct: "pirates take all crystite"; "store fire burns all store storage, not only food,
+          all the storage that the store had". WS8 updates the animations to match.
+goal      G-1 (unchanged); wave 2's rows carry the new effects, its sim report shows each one's rate and
+          loss per game, and a balance check it breaks goes to Heiko as options
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
