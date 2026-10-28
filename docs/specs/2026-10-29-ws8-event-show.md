@@ -575,6 +575,23 @@ goal      G-1 (unchanged)
 folded    T-AC-3 asserts the per-event chips in fired order
 ```
 
+```
+AM-8 · 2026-10-28 · PM ruling (A), PR-1 (a phone alone: what "shorter" means)
+
+target    §0 UBER-AC-2 (reading, not wording) · §1 C7 · §2 RULE-3 · §6 B-AC-2, T-AC-5
+said      a phone alone plays each event "shorter, tap to skip"
+did       one phase length for everyone, from the server (HC-3): the server cannot see whether a TV is connected
+          (tabletop's GameContext has no board count). A phone alone plays the gallery's solo beats at the solo pace
+          inside the same segments, so its show is shorter; then it holds on "what it did to you" until the phase
+          ends; a tap jumps straight to the result. "Shorter" means the phone's show, not the phase. Parked as a PR-2
+          option (B): a truly shorter phase without a TV (GameContext `boards`, WS4; a solo length in mule-game, WS3;
+          a solo pace in EVENT_SHOW). The PM tells Heiko, since this narrows how UBER-AC-2 reads; B un-parks only if
+          he wants solo phases shorter in wall time.
+because   G-2 within HC-3: the phone alone gets the full show, shorter, without a clock the server does not own
+goal      G-2 (unchanged)
+folded    RULE-3 row 4: the solo show plays, then the result holds to the phase's end; T-AC-5 asserts the hold
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: the event show
