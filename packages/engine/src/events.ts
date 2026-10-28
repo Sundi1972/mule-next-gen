@@ -224,7 +224,8 @@ export function rollPhase(state: GameState, phase: Phase): MonthEvent[] {
   if (state.whatIf || state.month < EVENTS.firstMonth) return [];
   // Each row lists one phase and rolls once per roller, so none fires twice in a month (RULE-2's onceAMonth).
   const colony = roll(state, phase, rowsOf(EVENTS.colony), []);
-  // The excludes pair colony rows, and resolve before any player row reads what fired: a dropped event never fired.
+  // The excludes resolve here, before any player row reads what fired, so a dropped event never fired. That needs every
+  // excludes member to be a colony row and no colony row to follow one thisPhase; EM-T-AC-3's key check holds both.
   const kept = keepOneOfEachPair(state, phase, colony);
   return roll(state, phase, state.players.flatMap((p) => rowsOf(EVENTS.player, p.id)), kept);
 }

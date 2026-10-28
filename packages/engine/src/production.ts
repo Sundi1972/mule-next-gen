@@ -220,7 +220,13 @@ export function runProduction(state: GameState): {
   const lines: ProductionLine[] = [];
   const events = rollPhase(state, 'production');
   const reaching = new Map<number, { key: EventKey; plot: MonthEvent['plots'][number] }[]>();
-  for (const { key, plots } of events) for (const plot of plots) reaching.set(plot.index, [...(reaching.get(plot.index) ?? []), { key, plot }]);
+  for (const { key, plots } of events) {
+    for (const plot of plots) {
+      const list = reaching.get(plot.index) ?? [];
+      list.push({ key, plot });
+      reaching.set(plot.index, list);
+    }
+  }
   const credit = (tile: Tile, good: Good, parts: Part[]) => {
     // The events come last, in the order they fired, each on the output the ones before it left.
     for (const { key, plot } of reaching.get(indexOf.get(tile)!) ?? []) {
