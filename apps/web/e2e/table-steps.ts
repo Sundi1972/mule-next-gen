@@ -13,6 +13,10 @@ const MIN_PLOT_PX = 44;
 /** B-AC-9 (WS4, plot look A): a mark's width as a share of its plot's, with slack for rounding and the 2 px minimums. */
 const LOOK_A = { tab: 0.46, disc: 0.62 };
 const SHARE_SLACK = 0.06;
+/** B-AC-9 (WS4, plot look A): the least share of the selected ring and pin inside the map's visible box. */
+const SEEN = 0.9;
+/** B-AC-9 (WS4, plot look A): a faded plot's marks, as a phone draws another player's land. */
+const FADED = 0.45;
 /** T-AC-9 watches the wire from the first tap to at least this long after the second. */
 const QUIET_MS = 400;
 const PRESS_MS = 2_000;
@@ -20,8 +24,10 @@ const READY = '[data-testid=handoff-qr][data-state=ready]';
 
 export type Plot = { x: number; y: number };
 type Box = { x: number; y: number; width: number; height: number };
-/** A plot as drawn: its x-y, its label, its box on screen, its map's box (the clip) and every mark inside it with a test id. */
-type DrawnPlot = { at: string; label: string; box: Box; map: Box; marks: { id: string; box: Box; visible: boolean }[] };
+/** A plot as drawn: its x-y, its label, its box on screen and every mark inside it with a test id, with its effective opacity. */
+type DrawnPlot = { at: string; label: string; box: Box; marks: { id: string; box: Box; visible: boolean; opacity: number }[] };
+/** A map as drawn: its plots, and the box it is seen through, the map clipped by a zoom's viewport. */
+type DrawnMap = { clip: Box; plots: DrawnPlot[] };
 type Game = { state: GameState; devEndsAt: Map<string, number>; phaseEndsAt: number | null; ctx: { now(): number } };
 
 /** T-AC-9: counts the intents a page sends on its game sockets. Attach before the page loads, as watchShow. */
@@ -298,25 +304,68 @@ export async function theTvShowsWhoOwnsEachPlot(ctx: GameStepContext): Promise<s
 
 /**
  * B-AC-9 (WS4, plot look A) on the phone's development map, right after the phone has selected a plot of its own and
- * installed a MULE this turn: its owners, its installed goods, and the plot its rail reads out as selected.
+ * installed a MULE this turn: its owners, its installed goods, and the plot its rail reads out as selected. Then, held,
+ * a plot another player owns: the test gives the first AI a free interior plot for the moment, as store-steps seeds
+ * hunger, and the phone selects it. Every failure of both reads is reported at once.
  */
 export async function thePhoneShowsItsSelectedPlot(ctx: GameStepContext): Promise<string> {
   const dev = ctx.phone.locator('[data-phase=development]');
+  const map = dev.getByTestId('dev-map');
   const heading = (await dev.getByTestId('plot-title').textContent({ timeout: PRESS_MS })) ?? '';
   const named = heading.match(/(\d+)·(\d+)/);
   check(named, `B-AC-9 (WS4, plot look A, phone): the rail names the selected plot, got "${heading}"`);
-  const selected = { x: Number(named[1]) - 1, y: Number(named[2]) - 1 };
-  return checkPlotLook(dev.getByTestId('dev-map'), 'phone, development', { installed: true, selected });
+  const own = await readPlotLook(map, 'phone, its own plot', { installed: true, selected: { x: Number(named[1]) - 1, y: Number(named[2]) - 1 } });
+  const theirs = await ctx.held(async () => {
+    const room = ctx.server.registry.get(ctx.code) as unknown as { game: Game; broadcast(): void };
+    const { game } = room;
+    const { state } = game;
+    const ai = state.players.find((p) => p.isAi);
+    const plot = state.tiles.find((t) => t.owner === null && t.terrain !== 'store' && !t.special && t.x > 0 && t.y > 0 && t.x < state.width - 1 && t.y < state.height - 1);
+    check(ai && plot, 'B-AC-9 (WS4, plot look A, phone): an AI seat, and a free interior plot to give it');
+    const started = Date.now();
+    plot.owner = ai.id;
+    room.broadcast();
+    try {
+      const at = `${plot.x}-${plot.y}`;
+      await map.getByTestId(`owner-${at}`).waitFor({ timeout: PRESS_MS });
+      await map.getByTestId(`map-plot-${at}`).click({ timeout: PRESS_MS });
+      await dev.getByTestId('plot-title').filter({ hasText: plotName(plot) }).waitFor({ timeout: PRESS_MS });
+      return await readPlotLook(map, "phone, another player's plot", { installed: true, selected: plot, faded: true });
+    } finally {
+      plot.owner = null;
+      // The phone's turn runs on wall time, held or not: give back what this read took.
+      game.devEndsAt.set('s1', (game.devEndsAt.get('s1') ?? game.ctx.now()) + Date.now() - started);
+      room.broadcast();
+    }
+  });
+  const fails = [...own.fails, ...theirs.fails];
+  check(fails.length === 0, fails.join('\n'));
+  return `${own.read}. ${theirs.read}`;
 }
+
+/** checkPlotLook's read, failing with every check that failed. Returns a line for the log. */
+export async function checkPlotLook(map: Locator, where: string, want: LookWanted): Promise<string> {
+  const { read, fails } = await readPlotLook(map, where, want);
+  check(fails.length === 0, fails.join('\n'));
+  return read;
+}
+
+type LookWanted = { installed: boolean; selected?: Plot; faded?: boolean };
 
 /**
  * B-AC-9 (WS4, plot look A) on one map, measured on screen as drawn, so a zoomed or scaled map shows the same shares:
  * every owned plot holds its owner's tab at about 0.46 of the plot's width; every installed good sits on a disc of about
- * 0.62; `selected`'s ring reaches outside the plot on every side, and its pin shows. Returns a line for the log.
+ * 0.62. `selected` alone shows the ring: inside the plot on the map's edge, outside it on every side elsewhere; the ring
+ * and the pin lie at least SEEN inside the box the map is seen through, and never fade. With `faded`, the selected
+ * plot's tab is at FADED. Returns a line for the log and every check that failed.
  */
-export async function checkPlotLook(map: Locator, where: string, want: { installed: boolean; selected?: Plot }): Promise<string> {
+export async function readPlotLook(map: Locator, where: string, want: LookWanted): Promise<{ read: string; fails: string[] }> {
   const id = `B-AC-9 (WS4, plot look A, ${where})`;
-  const drawn = await drawnPlots(map);
+  const fails: string[] = [];
+  const fail = (ok: boolean, message: string) => {
+    if (!ok) fails.push(`${id}: ${message}`);
+  };
+  const { clip, plots: drawn } = await drawnMap(map);
   check(drawn.length > 0, `${id}: the map draws its plots as map-plot-<x>-<y>, found none`);
   const owned = drawn.filter((p) => /\bowned by player \d+\b/.test(p.label));
   check(owned.length > 0, `${id}: the map has owned plots to measure`);
@@ -325,51 +374,75 @@ export async function checkPlotLook(map: Locator, where: string, want: { install
     check(tab.length === 1, `${id}: the owned plot ${p.at} holds one owner's tab, found ${tab.length}`);
     return tab[0]!.box.width / p.box.width;
   });
-  check(tabs.every((s) => Math.abs(s - LOOK_A.tab) <= SHARE_SLACK), `${id}: each owner's tab is ${LOOK_A.tab} ± ${SHARE_SLACK} of its plot, got ${shares(tabs)}`);
+  fail(tabs.every((s) => Math.abs(s - LOOK_A.tab) <= SHARE_SLACK), `each owner's tab is ${LOOK_A.tab} ± ${SHARE_SLACK} of its plot, got ${shares(tabs)}`);
   const discs = drawn.flatMap((p) => p.marks.filter((m) => m.id === `installed-${p.at}`).map((m) => m.box.width / p.box.width));
-  check(!want.installed || discs.length > 0, `${id}: the map shows an installed good`);
-  check(discs.every((s) => Math.abs(s - LOOK_A.disc) <= SHARE_SLACK), `${id}: each installed good's disc is ${LOOK_A.disc} ± ${SHARE_SLACK} of its plot, got ${shares(discs)}`);
-  const plot = owned[0]!.box.width;
-  const read = `${where}: tabs ${shares(tabs)}, discs ${shares(discs) || 'none'} of a ${px(plot)} plot`;
-  if (!want.selected) return read;
+  fail(!want.installed || discs.length > 0, 'the map shows an installed good');
+  fail(discs.every((s) => Math.abs(s - LOOK_A.disc) <= SHARE_SLACK), `each installed good's disc is ${LOOK_A.disc} ± ${SHARE_SLACK} of its plot, got ${shares(discs)}`);
+  const read = `${where}: tabs ${shares(tabs)}, discs ${shares(discs) || 'none'} of a ${px(owned[0]!.box.width)} plot`;
+  if (!want.selected) return { read, fails };
 
-  const at = `${want.selected.x}-${want.selected.y}`;
+  const { x, y } = want.selected;
+  const at = `${x}-${y}`;
   const rings = drawn.filter((p) => p.marks.some((m) => m.id === 'selected-ring'));
   check(rings.length === 1 && rings[0]!.at === at, `${id}: the selected plot ${at} alone shows the selected ring, found it on [${rings.map((p) => p.at).join(', ')}]`);
   const sel = rings[0]!;
-  const ring = sel.marks.find((m) => m.id === 'selected-ring')!.box;
-  const out = [sel.box.x - ring.x, sel.box.y - ring.y, ring.x + ring.width - (sel.box.x + sel.box.width), ring.y + ring.height - (sel.box.y + sel.box.height)];
-  check(out.every((d) => d > 0), `${id}: the selected ring reaches outside plot ${at} on every side, by ${out.map(px).join(', ')} (left, top, right, bottom)`);
-  const pins = sel.marks.filter((m) => m.id === 'selected-pin');
-  check(pins.length === 1 && pins[0]!.visible && pins[0]!.box.width > 0 && pins[0]!.box.height > 0, `${id}: the selected plot ${at} shows its pin`);
-  // Read, not checked: the map clips at its edge, so a pin over the top row is drawn but not seen.
-  const seen = Math.round(onScreen(pins[0]!.box, sel.map) * 100);
-  return `${read}; ${at} selected, its ring ${px(Math.min(...out))} or more outside, ${seen}% of its pin inside the map`;
+  const ring = sel.marks.find((m) => m.id === 'selected-ring')!;
+  const pin = sel.marks.find((m) => m.id === 'selected-pin');
+  const cells = drawn.map((p) => p.at.split('-').map(Number) as [number, number]);
+  const edge = x === 0 || y === 0 || x === Math.max(...cells.map(([cx]) => cx)) || y === Math.max(...cells.map(([, cy]) => cy));
+  // How far the ring's box reaches outside the plot's: left, top, right, bottom.
+  const out = [sel.box.x - ring.box.x, sel.box.y - ring.box.y, ring.box.x + ring.box.width - (sel.box.x + sel.box.width), ring.box.y + ring.box.height - (sel.box.y + sel.box.height)];
+  if (edge) fail(out.every((d) => d <= 0.5), `on the map's edge the selected ring lies inside plot ${at}, but reaches ${out.map(px).join(', ')} out (left, top, right, bottom)`);
+  else fail(out.every((d) => d > 0), `inside the map the selected ring reaches outside plot ${at} on every side, by ${out.map(px).join(', ')} (left, top, right, bottom)`);
+  const ringSeen = onScreen(ring.box, clip);
+  fail(ringSeen >= SEEN, `at least ${SEEN * 100}% of the selected ring on ${at} is inside the map's visible box, got ${percent(ringSeen)}`);
+  const pinSeen = pin ? onScreen(pin.box, clip) : 0;
+  fail(!!pin && pin.visible && pinSeen >= SEEN, `the selected plot ${at} shows its pin, at least ${SEEN * 100}% inside the map's visible box, got ${pin ? percent(pinSeen) : 'no pin'}`);
+  fail(ring.opacity > 0.99 && (pin?.opacity ?? 0) > 0.99, `the selection never fades: the ring on ${at} draws at ${ring.opacity.toFixed(2)}, its pin at ${pin?.opacity.toFixed(2) ?? 'none'}`);
+  const tab = sel.marks.find((m) => m.id === `owner-${at}`);
+  if (want.faded) fail(!!tab && Math.abs(tab.opacity - FADED) <= 0.05, `another player's plot ${at} fades its tab to ${FADED}, got ${tab?.opacity.toFixed(2) ?? 'no tab'}`);
+  const faded = want.faded && tab ? `, its tab at ${tab.opacity.toFixed(2)}` : '';
+  return { read: `${read}; ${at} selected${edge ? ' on the edge' : ''}, ring ${percent(ringSeen)} and pin ${percent(pinSeen)} in view at ${ring.opacity.toFixed(2)}${faded}`, fails };
 }
 
-/** Every plot on the map with its marks, in one read. */
-async function drawnPlots(map: Locator): Promise<DrawnPlot[]> {
+/** Every plot on the map with its marks, in one read once its fades have run. */
+async function drawnMap(map: Locator): Promise<DrawnMap> {
   // Kept free of named functions: tsx's keepNames wraps them with `__name`, which the page lacks.
-  return map.evaluate((root) =>
-    [...root.querySelectorAll('[data-testid^="map-plot-"]')].map((p) => {
-      const r = p.getBoundingClientRect();
-      const c = (p.closest('.shadow-map') ?? p).getBoundingClientRect();
+  return map.evaluate(async (el) => {
+    // A fade still running reads mid-way; the selection's glow breathes forever, but it is an animation, not a transition.
+    await Promise.all(el.getAnimations({ subtree: true }).filter((a) => a instanceof CSSTransition).map((a) => a.finished.catch(() => undefined)));
+    const root = el.querySelector('.shadow-map');
+    const r = root?.getBoundingClientRect();
+    // The map clips at its padding box, inside its border, scaled as the map is.
+    const s = root && r ? r.width / (root as HTMLElement).offsetWidth : 1;
+    const p = root && r ? { left: r.x + root.clientLeft * s, top: r.y + root.clientTop * s, right: r.x + (root.clientLeft + root.clientWidth) * s, bottom: r.y + (root.clientTop + root.clientHeight) * s } : null;
+    const v = root?.closest('[data-testid=map-viewport]')?.getBoundingClientRect() ?? p;
+    const clip = p && v ? { x: Math.max(p.left, v.left), y: Math.max(p.top, v.top), width: Math.min(p.right, v.right) - Math.max(p.left, v.left), height: Math.min(p.bottom, v.bottom) - Math.max(p.top, v.top) } : { x: 0, y: 0, width: 0, height: 0 };
+    const plots = [...el.querySelectorAll('[data-testid^="map-plot-"]')].map((p) => {
+      const b = p.getBoundingClientRect();
       return {
         at: (p.getAttribute('data-testid') ?? '').slice('map-plot-'.length),
         label: p.getAttribute('aria-label') ?? '',
-        box: { x: r.x, y: r.y, width: r.width, height: r.height },
-        map: { x: c.x, y: c.y, width: c.width, height: c.height },
+        box: { x: b.x, y: b.y, width: b.width, height: b.height },
         marks: [...p.querySelectorAll('[data-testid]')].map((m) => {
-          const b = m.getBoundingClientRect();
-          return { id: m.getAttribute('data-testid') ?? '', box: { x: b.x, y: b.y, width: b.width, height: b.height }, visible: m.checkVisibility({ opacityProperty: true, visibilityProperty: true }) };
+          const k = m.getBoundingClientRect();
+          // What the eye gets: the product of the opacities of the mark and everything it sits in.
+          let opacity = 1;
+          for (let e: Element | null = m; e; e = e.parentElement) opacity *= Number(getComputedStyle(e).opacity);
+          return { id: m.getAttribute('data-testid') ?? '', box: { x: k.x, y: k.y, width: k.width, height: k.height }, visible: m.checkVisibility({ opacityProperty: true, visibilityProperty: true }), opacity };
         }),
       };
-    }),
-  );
+    });
+    return { clip, plots };
+  });
 }
 
 function shares(list: number[]): string {
   return list.map((s) => s.toFixed(2)).join(', ');
+}
+
+function percent(share: number): string {
+  return `${(share * 100).toFixed(1)}%`;
 }
 
 /** The share of `b`'s area inside `clip`. */

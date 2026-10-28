@@ -100,8 +100,8 @@ async function checkASingleTapSelectsAtOnce(phone: Page, dev: Locator, whole: nu
 
 /**
  * B-AC-9 (WS4, plot look A) on the zoomed phone: a double-tap on your plot zooms to your land and selects it, and its
- * marks are the same shares of the zoomed plot on screen as on the whole map, not scaled twice. Again after a store
- * trip, which mounts the map already zoomed.
+ * marks are the same shares of the zoomed plot on screen as on the whole map, not scaled twice; its ring and pin lie
+ * inside the zoom's visible window. Again after a store trip, which mounts the map already zoomed.
  */
 async function checkZoomedPlotLook(phone: Page, dev: Locator): Promise<string> {
   const labels = await plots(dev).evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''));
