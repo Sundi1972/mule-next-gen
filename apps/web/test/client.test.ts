@@ -247,6 +247,119 @@ describe('TableClient', () => {
     client.join('KRTX', 'Heiko');
     expect(client.getState().notice).toBeNull();
   });
+
+  /** A phone seated as s2 at KRTX, with its clock in sync. */
+  function seated() {
+    const t = setup();
+    t.client.join('KRTX', 'Mia');
+    t.last().open();
+    t.last().deliver({ t: 'welcome', code: 'KRTX', role: 'player', seatId: 's2', seatToken: 'secret' });
+    return t;
+  }
+
+  it('B-AC-7: asking to move sends handoff; the code is live until it expires by the server clock, then shows as expired until a new one is asked for, and a newer code replaces it and its expiry', () => {
+    const { client, last, advance, setNow } = seated();
+    setNow(10_000);
+    // The server's clock runs 50 s ahead of this screen's.
+    last().deliver({ t: 'pong', clientTime: 10_000, serverTime: 60_000 });
+    expect(client.getState().clockOffset).toBe(50_000);
+
+    client.handoff();
+    expect(last().sent.at(-1)).toEqual({ t: 'handoff' });
+    last().deliver({ t: 'handoffCode', code: 'one', expiresAt: 180_000 });
+    expect(client.getState().handoffCode).toEqual({ code: 'one', expiresAt: 180_000, expired: false });
+    advance(119_999);
+    expect(client.getState().handoffCode).toEqual({ code: 'one', expiresAt: 180_000, expired: false });
+    advance(1);
+    expect(client.getState().handoffCode).toEqual({ code: 'one', expiresAt: 180_000, expired: true });
+    advance(600_000);
+    expect(client.getState().handoffCode).toEqual({ code: 'one', expiresAt: 180_000, expired: true });
+
+    const sent = last().sent.length;
+    client.handoff();
+    expect(last().sent.slice(sent)).toEqual([{ t: 'handoff' }]);
+    expect(client.getState().handoffCode).toBeNull();
+    last().deliver({ t: 'handoffCode', code: 'two', expiresAt: 900_000 });
+    advance(60_000);
+    client.handoff();
+    // The room has killed 'two' by now; it must not show while 'three' is on its way.
+    expect(client.getState().handoffCode).toBeNull();
+    last().deliver({ t: 'handoffCode', code: 'three', expiresAt: 960_000 });
+    expect(client.getState().handoffCode).toEqual({ code: 'three', expiresAt: 960_000, expired: false });
+
+    advance(60_000);
+    expect(client.getState().handoffCode).toEqual({ code: 'three', expiresAt: 960_000, expired: false });
+    advance(59_999);
+    expect(client.getState().handoffCode).toEqual({ code: 'three', expiresAt: 960_000, expired: false });
+    advance(1);
+    expect(client.getState().handoffCode).toEqual({ code: 'three', expiresAt: 960_000, expired: true });
+
+    client.closeHandoff();
+    expect(client.getState().handoffCode).toBeNull();
+  });
+
+  it('B-AC-7: closing the dialog drops the code and sends nothing; being moved away drops it too', () => {
+    const { client, last } = seated();
+    client.handoff();
+    last().deliver({ t: 'handoffCode', code: 'one', expiresAt: 999_999 });
+    const sent = last().sent.length;
+
+    client.closeHandoff();
+    expect(client.getState().handoffCode).toBeNull();
+    expect(last().sent).toHaveLength(sent);
+
+    // A code that arrives after the dialog closed is not shown later.
+    client.handoff();
+    client.closeHandoff();
+    last().deliver({ t: 'handoffCode', code: 'late', expiresAt: 999_999 });
+    expect(client.getState().handoffCode).toBeNull();
+
+    client.handoff();
+    last().deliver({ t: 'handoffCode', code: 'two', expiresAt: 999_999 });
+    last().deliver({ t: 'removed', reason: 'moved' });
+    expect(client.getState().handoffCode).toBeNull();
+  });
+
+  it.each([
+    { saved: { code: 'KRTX', token: 'mine', name: 'Old' }, kept: 'this room' },
+    { saved: { code: 'BBBB', token: 'other', name: 'Heiko' }, kept: 'another room' },
+  ])('B-AC-7: a handoff join sends the code, not the token saved for $kept, then keeps the new token and the seat\'s name', ({ saved }) => {
+    const storage = memoryStore();
+    saveSeat(storage, saved);
+    const { client, last, advance } = setup(storage);
+
+    client.join('krtx', '', 'code-1');
+    last().open();
+    expect(last().sent[0]).toEqual({ t: 'join', code: 'KRTX', name: '', handoff: 'code-1' });
+
+    last().deliver({ t: 'welcome', code: 'KRTX', role: 'player', seatId: 's2', seatToken: 'fresh' });
+    last().deliver({ t: 'view', view: { ...lobbyView('KRTX'), seats: [{ id: 's2', name: 'Mia', isAi: false, connected: true, color: 1 }] } });
+    expect(loadSeat(storage)).toEqual({ code: 'KRTX', token: 'fresh', name: 'Mia' });
+
+    // A dropped connection comes back with the new token; the used code would be refused.
+    last().drop();
+    advance(500);
+    last().open();
+    expect(last().sent[0]).toEqual({ t: 'join', code: 'KRTX', name: 'Mia', seatToken: 'fresh' });
+  });
+
+  it.each([
+    { saved: { code: 'KRTX', token: 'mine', name: 'Mia' }, kept: 'this room' },
+    { saved: { code: 'BBBB', token: 'other', name: 'Heiko' }, kept: 'another room' },
+  ])('B-AC-7: a used or expired link shows "That link has expired" on the start screen and keeps the seat saved for $kept', ({ saved }) => {
+    const storage = memoryStore();
+    saveSeat(storage, saved);
+    const { client, sockets, last, advance } = setup(storage);
+
+    client.join('KRTX', '', 'used');
+    last().open();
+    last().deliver({ t: 'error', message: 'That link has expired' });
+    advance(10_000);
+
+    expect(client.getState()).toMatchObject({ status: 'idle', role: null, seatId: null, notice: 'That link has expired' });
+    expect(loadSeat(storage)).toEqual(saved);
+    expect(sockets).toHaveLength(1);
+  });
 });
 
 describe('ClockSync', () => {
