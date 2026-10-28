@@ -75,18 +75,21 @@ PR-2 is a named edit in WS5's file and block, with WS5 as its reviewer.
 - `may_edit`: `packages/engine/src/{events,production}.ts`, the `EVENTS` block of `packages/engine/src/config.ts`,
   `packages/engine/test/events.test.ts`, `packages/ai/src/sim.ts` (report lines only, not the checks),
   `packages/ai/test/balance.test.ts` (T-AC-7's forcing only), `docs/specs/2026-10-21-ws1-events.md` (its amendment),
-  this spec and this plan.
+  this spec and this plan, and `packages/engine/test/config-guard.test.ts` (the PENDING list only: Task 3's fix takes
+  `events.ts` off it, Task 6 `production.ts`).
 - Named edit, WS3 reviews: `packages/engine/src/types.ts::MonthEvent` (`phase`).
 - `must_not_edit`: `packages/engine/src/game.ts` (WS3's; wave 1 needs no edit there), `packages/engine/src/specials.ts`
   and the `EFFECT` block (WS5's, PR-2's named edit), `apps/server/**` and `apps/web/**` (WS3's view and WS6's screens,
   behind the table gate), the sim's nine checks.
 
 **PR-2 authority**
-- `may_edit`: `packages/engine/src/events.ts`, the `EVENTS` block, `packages/engine/test/events.test.ts`.
+- `may_edit`: `packages/engine/src/events.ts`, the `EVENTS` block, `packages/engine/test/events.test.ts`,
+  `packages/engine/src/production.ts` (the collapse's MonthEvent after the output events, AM-3; PR-1 has merged by then).
 - Named edits, WS5 reviews: `packages/engine/src/specials.ts::collapses`, `EFFECT.collapseChance` in `config.ts` (it
   moves into the row).
-- `must_not_edit`: `packages/engine/test/specials.test.ts` (WS5's T-AC-6 pins stay unedited and green),
-  `packages/engine/src/production.ts`, `game.ts`.
+- Named edit, WS3 reviews (AM-3, PM ruling A): `packages/engine/src/types.ts::EventKey` gains `'cavernCollapse'`.
+- `must_not_edit`: `packages/engine/test/specials.test.ts` (WS5's T-AC-6 pins stay unedited and green), `game.ts`,
+  `apps/**`.
 
 > Naming, internal structure, helper decomposition and test fixtures are yours. Everything else in your payload is specified. If you need to change anything outside it — including because it appears impossible — stop and report to the lead with the element id and the goal it fails. Do not deviate: you can see one task, and the lead can see the whole graph.
 
@@ -98,9 +101,16 @@ PR-2 is a named edit in WS5's file and block, with WS5 as its reviewer.
 | `config.ts` `EVENTS` block | PR-1, PR-2 | **serialised** — PR-2 adds the cavern row after PR-1's rows |
 | `packages/engine/test/events.test.ts` | PR-1, PR-2 | **serialised** |
 
-**Freeze point:** Task 2 publishes the contract WS6 builds against (`MonthEvent.phase`; several events per phase in
-`MonthReport.events`, in the order fired). The PM routes it to WS6 once it lands, so WS6's screens are built in
-parallel with Tasks 3-9.
+**Freeze point:** Task 2 publishes the contract the screens build against (`MonthEvent.phase`; several events per
+phase in `MonthReport.events`, in the order fired). PM ruling, 28 Oct: WS8 is its primary reviewer. WS8's gallery
+models events per phase and mirrors this contract, so the later build grafts onto it (Heiko picked direction B,
+Living weather, plus phone-only play). WS1 sends the hunk to WS8, with WS6 copied as an FYI only (the production show's
+owner; no action). The screens are built in parallel with Tasks 3-9.
+
+**Named edits beyond the authority lists (PM-approved, 28 Oct):** a required `phase` breaks two `MonthEvent`
+literals in WS6's `apps/server/test/production-view.test.ts` (born in WS6's production view, 583d3dc; SEAMS line 480;
+first named here as WS3's, corrected by WS3); Task 2 adds `phase: 'production'` to them, and WS6 reviews them. WS3
+reviews the types.ts hunk.
 
 ---
 
@@ -128,7 +138,10 @@ parallel with Tasks 3-9.
       Run: `pnpm --filter @mule/engine exec vitest run test/events.test.ts -t "T-AC-3"`
 - [ ] **Step 3: Implement** `phase: Phase` on `MonthEvent` per spec §3; `buildEvent` sets `'production'`.
 - [ ] **Step 4: Run events.test.ts and `pnpm typecheck`; expect PASS / exit 0.**
-- [ ] **Step 5: Commit** (red then green); send WS3 the types.ts hunk, and tell the PM the contract is frozen (route to WS6).
+- [x] **Step 5: Commit** (red then green); send WS3 the types.ts hunk and WS6 the production-view.test.ts fixture lines;
+      send WS8 the contract hunk (primary reviewer) with WS6 copied as an FYI; tell the PM the contract is frozen.
+      Done 28 Oct: red 6046578, green 0582373; WS3 OK on types.ts at 0582373 (on condition that CI's check is green on
+      the PR head); WS6 OK on the fixture lines at 0582373; WS8 OK on the contract (asks settled as AM-2 and AM-3).
 
 ### Task 3: The rows and the chance — C1 (RULE-1)
 
@@ -144,6 +157,12 @@ parallel with Tasks 3-9.
       0.5%; bumper harvest poorest 3%, richest 0.5%; wildfire richest during a drought 5.5%; sickness clean with 5
       points 18%; Collapse with 20 points 93→90%; a forced row summing below 0 → 0; a phase the row doesn't list → 0.
       Stub `eventChance` with `throw new Error('NotImplemented: eventChance')`.
+      Amended at Task 3's review (28 Oct): the rows are test-local `EventRow`s shaped like the catalogue's, with these
+      same values and expected literals, so a retune in config never turns EM-T-AC-1 red (G-1: a retune is one row
+      edit; no change detector). Three more rows: a tie for the poorest goes to the first seat; a wildfire-like row
+      the month after a drought (lastMonth only); a flood-like row two months after a drought reads nothing. The real
+      rows' match to the catalogue is a review check; `satisfies EventRow` makes a misspelt row field a type error.
+      `events.ts` comes off the guard's PENDING list in this task's fix (four markers), so HC-1 is enforced from here.
 - [ ] **Step 3: Run it; expect FAIL** with `NotImplemented: eventChance`.
 - [ ] **Step 4: Implement C1's chance** per RULE-1. The ranks read cash plus land at `GAME.plotScore` a plot; a tie goes to
       the first in seat order. Sickness's `playerEventChance` reads the same function.
@@ -187,6 +206,7 @@ parallel with Tasks 3-9.
 - [ ] **Step 1: Write `EM-T-AC-3: two events on one plot both apply in order, never below 0, and an excluded pair keeps one`**
       at the month report and the plot's line, with rows forced.
       - Drought and acid rain on a Food plot that makes 1: both listed in that order, and the plot makes 0, not −1.
+        The plot's deltas are −1 (drought), then 0 (acid rain), and acid rain still lists the plot (spec §8 AM-2).
       - Drought and flood: exactly one listed, the same one on replay.
       - The line's parts still sum to `made`; the events spec's T-AC-5 INV is the pin.
 - [ ] **Step 2: Run; expect FAIL** (production applies at most one event).
@@ -194,12 +214,18 @@ parallel with Tasks 3-9.
       event, in order. Remove `planEvent`, `EVENTS.chance` and `EVENTS.weights`. Delete the events spec's two `T-AC-2`
       tests: never twice in a row is superseded, and the what-if case is EM-T-AC-2's. Re-force its `T-AC-3` test (each
       key, one at a time) and the `T-AC-7` outlook test in balance.test.ts through the rows (all at 1 against all at
-      0), with the assertions unchanged (HC-4 pin).
+      0), with the assertions unchanged (HC-4 pin). Take `production.ts` off the guard's PENDING list: each literal
+      moves into a config block or is marked `// literal-ok: <reason>` (the balance plan's PENDING clean-up, 28 Oct,
+      left it to this task; `events.ts` came off in Task 3's fix). Rewrite the top-of-`EVENTS` docstring, which still
+      describes planEvent's one event a month. Make `excludes` and every row's `follows` keys name real rows: the
+      EM-T-AC-3 test that first reads `excludes` also asserts each excludes member and each follows key is a key of
+      `EVENTS.colony` or `EVENTS.player` (a misspelt key would otherwise never fire).
 - [ ] **Step 4: Run `pnpm typecheck && pnpm test`; expect exit 0.** **Step 5: Commit** red then green.
 
 ### Task 7: The month report and the sim count every event — C5
 
-**Depends on:** Task 6 · **ACs verified:** UBER-AC-1 (the report) · **Spec sections consumed:** §1 C5, §0 UBER-AC-1
+**Depends on:** Task 6, and the balance plan's PENDING clean-up merged (it cleans `sim.ts`; `ws1-events` takes it in
+before this task, so the two never edit sim.ts at once) · **ACs verified:** UBER-AC-1 (the report) · **Spec sections consumed:** §1 C5, §0 UBER-AC-1
 **Files:** Modify: `packages/ai/src/sim.ts` (report lines and its `onEachPhase` hook; not the checks)
 
 - [ ] **Step 1: Implement C5's report lines.** Events a month by phase (development: players sick at its start;
@@ -231,7 +257,8 @@ Before suggesting merge of `ws1-events-roller` into `ws1-events`:
 - [ ] Tests are named after the AC id; `trace-check.sh origin/feat/strategist...HEAD` reports no untraced test
 - [ ] Each failing-test commit precedes its passing commit
 - [ ] The contract (`MonthEvent.phase`, several events) is exercised by a consumer: EM-T-AC-3 reads the report as the screens will
-- [ ] WS3 OK on the types.ts hunk
+- [ ] WS3 OK on the types.ts hunk (given at 0582373, conditional on CI's check green on the PR head); WS6 OK on the
+      production-view.test.ts fixture lines (given at 0582373)
 - [ ] No new `@ts-ignore` / `eslint-disable` without a reason on the same line; every new number is in `EVENTS` (HC-1)
 - [ ] `pnpm typecheck && pnpm test` exit 0 on the sub-branch; CI green
 
@@ -239,25 +266,31 @@ Before suggesting merge of `ws1-events-roller` into `ws1-events`:
 
 ### Task 9: Cavern collapse rolls on the table — C4
 
-**Depends on:** PR-1 merged into `ws1-events` · **ACs verified:** T-AC-5 (cavern collapse) · **Spec sections consumed:** §1 C4, §8 AM-1
-**Files:** Modify: `EVENTS` (the `cavernCollapse` row), `events.ts`; named edits `packages/engine/src/specials.ts::collapses` and `EFFECT.collapseChance` (WS5 reviews); Test: `packages/engine/test/events.test.ts`
+**Depends on:** PR-1 merged into `ws1-events` · **ACs verified:** T-AC-5 (cavern collapse) · **Spec sections consumed:** §1 C4, §3, §8 AM-1, AM-3
+**Files:** Modify: `EVENTS` (the `cavernCollapse` row), `events.ts` (`SHAPE`, `eventOutput`'s no-op entry), `production.ts` (the collapse's MonthEvent, after the output events); named edits `packages/engine/src/specials.ts::collapses` and `EFFECT.collapseChance` (WS5 reviews), `packages/engine/src/types.ts::EventKey` gains `'cavernCollapse'` (WS3 reviews, AM-3); Test: `packages/engine/test/events.test.ts` (with `RULE_3`'s cavernCollapse entry)
 
 - [ ] **Step 1: Write `EM-T-AC-5: cavern collapse rolls on its row, with today's effect`** at the tiles after
       production.
       - With the row forced to 1, every cavern that produced Crystite becomes a plain plot, and one mined on Crystite 0 or farmed for Food stays.
       - With the row at 0, none collapses.
       - A what-if copy never collapses.
+      - Each collapse is in the month report as a MonthEvent after the output events (AM-3): key `cavernCollapse`,
+        kind `quake`, scope `personal`, `player` the owner, `plots` [{index, order 0, good 'crystite', delta 0}],
+        phase 'production'; with the row at 0, no such event.
 - [ ] **Step 2: Run; expect FAIL** (collapse still reads `EFFECT.collapseChance`).
 - [ ] **Step 3: Implement C4.** `collapses` asks the row dice from `(seed, month, 'production', 'cavernCollapse', plot)`.
-      Its "produced Crystite this month" check and its what-if guard stay. `EFFECT.collapseChance` goes.
+      Its "produced Crystite this month" check and its what-if guard stay. `EFFECT.collapseChance` goes. Production
+      lists each collapse as a MonthEvent after the output events (AM-3); `eventOutput` gets a no-op entry.
 - [ ] **Step 4: Run `specials.test.ts` unedited; expect WS5's T-AC-6 green** (replay; about 6% within ±30%; the same
       rate with or without a production event; each plot its own fate; unmined never). Then run events.test.ts and
       `pnpm typecheck && pnpm test`.
-- [ ] **Step 5: Commit** red then green; send WS5 the hunks.
+- [ ] **Step 5: Commit** red then green; send WS5 the specials.ts and EFFECT hunks and WS3 the EventKey hunk; tell WS8
+      the ruling with the hunk (PM, 28 Oct).
 
 ### PR-2 merge gate
 
-- [ ] EM-T-AC-5 green; WS5's T-AC-6 green and unedited; WS5 OK on the specials.ts and EFFECT hunks
+- [ ] EM-T-AC-5 green; WS5's T-AC-6 green and unedited; WS5 OK on the specials.ts and EFFECT hunks; WS3 OK on the
+      EventKey hunk (AM-3)
 - [ ] Each failing-test commit precedes its passing commit; trace-check clean; `pnpm typecheck && pnpm test` exit 0; CI green
 - [ ] The rows of Task 8 re-run on one set (seeds 1-40, politics on): the cavern line moves only by its new dice
 
