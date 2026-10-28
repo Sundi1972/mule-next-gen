@@ -252,9 +252,12 @@ its start plot (HC-4; that mutant survives today).
 `events.ts::buildEvent`; any test literal that sets `when` (grep `packages/` and `apps/`; another lane's test gets a
 named edit its owner OKs)
 
-- [ ] Remove `when` from `MonthEvent` and from `buildEvent`; typecheck finds every reader (AM-5 names two)
-- [ ] `pnpm typecheck && pnpm test` exit 0; send the hunk to WS8 (primary reviewer) and WS3 (types.ts), WS6 copied;
+- [x] Remove `when` from `MonthEvent` and from `buildEvent`; typecheck finds every reader (AM-5 names two)
+- [x] `pnpm typecheck && pnpm test` exit 0; send the hunk to WS8 (primary reviewer) and WS3 (types.ts), WS6 copied;
       tell WS8 the real report carries several events (Task 6), so the gallery grafts onto it
+      Done 29 Oct: 6c6c1db (four deletions; WS6's two test literals were a named edit too). OKs, each direct: WS8
+      (primary), WS6 (its test lines), WS3 (types.ts). Merged into the roller with a merge commit, 7b69cf7, so the OK'd
+      SHA holds; typecheck 0 and `pnpm test` exit 0 on the merge. WS8 confirmed Task 6's report fits its PR-1.
 
 ### Task 7: The month report and the sim count every event — C5
 
