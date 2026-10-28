@@ -839,10 +839,11 @@ describe('Room: a held room runs no game callback until release (FM-11)', () => 
     for (const screen of [phone, tv]) expect(seen(screen)?.phase).toBe('development');
   });
 
-  it('FM-11: callbacks that come due while held run once at release, in the order they came due; one scheduled while held and due after release runs at its own time', async () => {
+  it('FM-11: callbacks that come due while held run once at release, in the order they came due (two due in the same ms both run, in the order scheduled); one scheduled while held and due after release runs at its own time', async () => {
     const { room, tv, at } = clockRoom();
     at(2_500, 'due 2500');
     at(2_000, 'due 2000');
+    at(2_000, 'due 2000 too');
     await until(1_000);
     room.hold();
     at(2_000, 'due 3000');
@@ -855,12 +856,12 @@ describe('Room: a held room runs no game callback until release (FM-11)', () => 
     room.release();
     room.release();
     await until(4_000);
-    expect(seen(tv)?.fired).toEqual(['due 2000', 'due 2500', 'due 3000']);
+    expect(seen(tv)?.fired).toEqual(['due 2000', 'due 2000 too', 'due 2500', 'due 3000']);
 
     await until(5_999);
-    expect(seen(tv)?.fired).toEqual(['due 2000', 'due 2500', 'due 3000']);
+    expect(seen(tv)?.fired).toEqual(['due 2000', 'due 2000 too', 'due 2500', 'due 3000']);
     await until(6_000);
-    expect(seen(tv)?.fired).toEqual(['due 2000', 'due 2500', 'due 3000', 'due 6000']);
+    expect(seen(tv)?.fired).toEqual(['due 2000', 'due 2000 too', 'due 2500', 'due 3000', 'due 6000']);
   });
 
   it.each([
