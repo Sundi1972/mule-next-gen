@@ -939,16 +939,13 @@ export const STRATEGIST = {
   /** What it counts a green belt as costing a month, in credits (the engine charges none), set against the air it cleans; without full scoring, the cost alone. */
   greenBeltCost: 5,
   /**
-   * The land grant is one pass, so a lit plot is weighed against the free plots still ahead of the light: it must be
-   * worth at least this share of the best of them to be pressed for.
+   * The land grant is one pass, so a lit plot is weighed against the free plots still ahead of the light: its utility
+   * must be at least this share of the best of theirs to be pressed for.
    */
   grantShare: 0.75,
-  /** Unused since the land grant became one pass (PR-F): kept for WS1 to retire or reuse. */
-  grantLaterShare: 0.5,
   /**
-   * Beyond the claims it has left, how many more of its top plots still ahead of the light it presses for, so it waits
-   * for the land it wants instead of the first that will do. 0: any spare lets the grant's reading order pick among
-   * them, which piles AI land at the top of the map.
+   * Beyond the claims it has left, how many more of its top plots still ahead of the light it presses for. 0: it
+   * presses only for plots it would claim with the claims it has left.
    */
   grantSpare: 0,
   /** A factory needs this many months of its inputs on hand or from its own plots. */

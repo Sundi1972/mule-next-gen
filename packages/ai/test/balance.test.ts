@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { advancePhase, AI_LEVELS, AI_PERSONAS, createGame, EVENTS, GAME, GOODS, mulePriceFor, observe, STRATEGIST, walkSeconds, type GameState } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
-import type { Pending } from '../src/brain.js';
 import { AiSeat } from '../src/seat.js';
-import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, tradeDecision, wantsPlot, type LandPlan } from '../src/strategist.js';
+import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, tradeDecision, wantsPlot } from '../src/strategist.js';
 import { cashReserve, installGain, type Mind } from '../src/value.js';
 
 const fourSeats = (seed: number) => createGame({ seed, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI${i}`, isAi: true })) });
@@ -65,7 +64,7 @@ describe('land claims off reading order', () => {
 
 describe('land claims on a single pass', () => {
   it('T-AC-20: on the one pass, a seat with claims left presses for a plot it values late in the pass, instead of ending the grant landless', () => {
-    // PR-F: the grant is one pass, so the plots the light has gone by never come back, even those still free.
+    // The grant is one pass: plots the light has gone by never come back, even those still free.
     const state = fourSeats(3);
     while (state.phase !== 'landGrant') advancePhase(state);
     const seat = tycoon();
@@ -81,10 +80,9 @@ describe('land claims on a single pass', () => {
   it('T-AC-21: with plots it ranks higher still ahead of the light, a seat waits on a merely decent lit plot', () => {
     const state = fourSeats(3);
     while (state.phase !== 'landGrant') advancePhase(state);
-    const seat = tycoon();
-    seat.onLit(state);
-    // The seat's own plan for the month, as its hands read it.
-    const plan = seat.brain.resolveNow((seat as unknown as { land: Pending<LandPlan> }).land, state).action;
+    const { mind } = tycoon();
+    const obs = observe(state, 'ai0');
+    const plan = landDecision(obs, mind).all[0]!.action;
     const order = state.grant!.order;
     const top = GAME.claimsPerGrant + STRATEGIST.grantSpare;
     // Early-ish in the pass (40% in): the first lit plot the seat values that still has `top` plots it ranks higher ahead.
@@ -95,8 +93,27 @@ describe('land claims on a single pass', () => {
       return rank >= top && plan.ranking.find((s) => s.index === index)!.value > 0;
     });
     expect(step).toBeGreaterThan(0);
-    state.grant!.step = step;
-    expect(seat.onLit(state), 'it waits for the better plots still to light').toBeNull();
+    expect(wantsPlot(plan, obs, order[step]!, order.slice(step), mind), 'it waits for the better plots still to light').toBe(false);
+  });
+
+  it('T-AC-22: the lit plot is weighed by the utility it is ranked by: within its claims and clearing grantShare of the best utility ahead, it is wanted', () => {
+    const state = fourSeats(1);
+    while (state.phase !== 'landGrant') advancePhase(state);
+    const mind: Mind = { ...traderMind, levelId: 'tycoon', level: AI_LEVELS.tycoon, salt: 1 };
+    const obs = observe(state, 'ai0');
+    const plan = landDecision(obs, mind).all[0]!.action;
+    const order = state.grant!.order;
+    // A lit plot within its claims whose utility clears the share while its value falls short of it: the two metrics disagree.
+    const step = order.findIndex((index, k) => {
+      const ahead = new Set(order.slice(k));
+      const rivals = plan.ranking.filter((s) => ahead.has(s.index));
+      const rank = rivals.findIndex((s) => s.index === index);
+      const lit = rivals[rank];
+      if (!lit || lit.value <= 0 || rank >= GAME.claimsPerGrant + STRATEGIST.grantSpare) return false;
+      return lit.utility >= rivals[0]!.utility * STRATEGIST.grantShare && lit.value < Math.max(...rivals.map((s) => s.value)) * STRATEGIST.grantShare;
+    });
+    expect(step).toBeGreaterThanOrEqual(0);
+    expect(wantsPlot(plan, obs, order[step]!, order.slice(step), mind)).toBe(true);
   });
 });
 

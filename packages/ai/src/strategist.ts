@@ -185,8 +185,9 @@ export function landDecision(obs: GameState, mind: Mind): Shortlist<LandPlan> {
 /**
  * Whether the hands should press for the lit plot. The grant is one pass, so the seat weighs the lit plot only against
  * the free plots still ahead of the light (`ahead`: the pass's order from the lit plot on): plots it has gone by never
- * come back. It wants the lit plot when that ranks within its claims left plus STRATEGIST.grantSpare among them, and is
- * worth at least STRATEGIST.grantShare of the best of them. Early in the pass better plots lie ahead and it waits;
+ * come back. It wants the lit plot when that ranks within its claims left plus STRATEGIST.grantSpare among them by the
+ * plan's utility, and its utility is at least STRATEGIST.grantShare of the best of theirs; a plot it values at nothing
+ * it never wants. Early in the pass better plots lie ahead and it waits;
  * late, few do and it takes the best that is left. Never while the seat already holds a month's worth of idle plots
  * it can't pay to develop: hoarded land earns nothing and every idle plot counts as Smithore demand.
  */
@@ -200,7 +201,7 @@ export function wantsPlot(plan: LandPlan, obs: GameState, index: number, ahead: 
   if (!lit || lit.value <= 0) return false;
   const claimsLeft = GAME.claimsPerGrant - me(obs, mind).claimsThisGrant;
   if (rank >= claimsLeft + STRATEGIST.grantSpare) return false;
-  return lit.value >= Math.max(...rivals.map((s) => s.value)) * STRATEGIST.grantShare;
+  return lit.utility >= (rivals[0]?.utility ?? 0) * STRATEGIST.grantShare;
 }
 
 // --- Values for lot bids ----------------------------------------------------
