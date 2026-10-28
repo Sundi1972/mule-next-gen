@@ -196,6 +196,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private devEndsAt: number | null = null;
   /** Each seat's colonist during development, keyed by seat id. */
   private readonly colonists = new Map<string, Colonist>();
+  /** Every human was Ready, away or done while a colonist was still out; development ends once all have arrived. */
+  private endWhenSettled = false;
   private cancels: (() => void)[] = [];
   private news: string[] = [];
   private phaseEndsAt: number | null = null;
@@ -338,14 +340,25 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       return;
     }
     this.settleArrivals();
-    this.checkDevelopmentOver();
+    this.checkEarlyEnd();
   }
 
   /** A walk or an assay is due: applies what has arrived, ends development if that was the last seat, tells every screen. */
   private settle(): void {
     this.settleArrivals();
-    this.checkDevelopmentOver();
+    this.checkEarlyEnd();
     this.ctx.changed();
+  }
+
+  /** Development's two early ends, checked again whenever a colonist arrives or finishes an assay. */
+  private checkEarlyEnd(): void {
+    if (this.endWhenSettled) this.checkAllReady();
+    this.checkDevelopmentOver();
+  }
+
+  /** True when no colonist is walking or assaying, so ending development drops no move. */
+  private colonistsSettled(): boolean {
+    return [...this.colonists.values()].every((c) => c.walk === null && c.assayUntil === null);
   }
 
   /**
@@ -466,7 +479,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const excused = (id: string) => this.away.has(id) && phase !== 'landGrant';
     const waiting = this.seats.filter((s) => !s.isAi && !excused(s.id) && !this.ready.has(s.id) && !this.doneDeveloping(s.id));
     // The auctions end on their own, good by good and lot by lot.
-    if (phase && phase !== 'gameOver' && phase !== 'auction' && phase !== 'landAuction' && waiting.length === 0) this.nextPhase();
+    if (!phase || phase === 'gameOver' || phase === 'auction' || phase === 'landAuction' || waiting.length > 0) return;
+    if (phase === 'development' && !this.colonistsSettled()) {
+      this.endWhenSettled = true;
+      return;
+    }
+    this.nextPhase();
   }
 
   /** During development: true once a player went to the pub or ran out of time. */
@@ -477,11 +495,11 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     return !!p?.doneDeveloping || (this.devEndsAt ?? 0) <= this.ctx.now();
   }
 
-  /** Development ends once every player, AI included, is at the pub or out of time. */
+  /** Development ends once every player, AI included, is at the pub, out of time or away, and no colonist is still out. */
   private checkDevelopmentOver(): void {
     const state = this.requireState();
     if (state.phase !== 'development') return;
-    if (this.seats.every((s) => this.away.has(s.id) || this.doneDeveloping(s.id))) this.nextPhase();
+    if (this.seats.every((s) => this.away.has(s.id) || this.doneDeveloping(s.id)) && this.colonistsSettled()) this.nextPhase();
   }
 
   private requireState(): GameState {
@@ -660,6 +678,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const now = this.ctx.now();
     this.devEndsAt = now + this.realMs(DEVELOPMENT.fullSeconds);
     this.phaseEndsAt = null;
+    this.endWhenSettled = false;
     // Everyone starts the month in the store.
     for (const s of this.seats) this.colonists.set(s.id, { at: 'store', walk: null, assayUntil: null });
     this.scheduleDevelopmentEnd(state.month);
@@ -707,7 +726,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           seat.developTick(state, this.gameSeconds(dt) * 1_000, left, (a) => this.aiAct(seat.id, a), walk);
           if (state.phase !== 'development') break;
         }
-        this.checkDevelopmentOver();
+        this.checkEarlyEnd();
         if (state.phase === 'development') this.scheduleAiDevelop(month, now);
         this.ctx.changed();
       }),
