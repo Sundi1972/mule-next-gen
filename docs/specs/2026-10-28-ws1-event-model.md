@@ -42,11 +42,11 @@ the same turn."** (Heiko, 28 Oct)
   auction, before trading opens; AM-4):
   - **Pirate raid** ("pirates take all crystite"): every player's Crystite AND the store's Crystite stock go to 0.
   - **Store fire** ("store fire burns all store storage, not only food, all the storage that the store had"): the
-    store's whole stock of every good goes to 0; prices follow the empty store as usual. Whether the store's built
-    MULEs burn too is asked through the PM (the engine keeps them apart from the stock: `Store.mules`, built at
-    upkeep from the store's Smithore).
-  Wave 2's sim report shows how often each fires and the loss per game; a balance check they break goes to Heiko
-  as options, never a silent tune.
+    store's whole stock of every good goes to 0, and the corral's built MULEs too (PM ruling B, 28 Oct: "all the
+    storage the store had"); upkeep rebuilds the corral only from what the store holds after that auction; prices
+    follow the empty store as usual.
+  Wave 2's sim report shows how often each fires, the loss per game, and the MULE price and plots developed in the
+  month after a fire; a balance check they break goes to Heiko as options, never a silent tune.
 - Changing any event's effect (wave 1 moves events onto their own dice only).
 - Showing several events on the screens: the phone and TV read `events[0]` today (`table/TvProduction.tsx`,
   `phone/Production.tsx`). WS6 owns that surface; wave 1 needs it before it reaches a table (§9).
@@ -349,13 +349,15 @@ did       recorded the new effects for wave 2's amendment and PR:
           pirate raid: every player's Crystite and the store's Crystite stock go to 0 (the catalogue said
           "the Crystite the players hold"); store fire: the store's whole stock of every good goes to 0
           (the catalogue said "one good"). Chances, raises and the phase stay as catalogued (colony, 1%,
-          the goods auction before trading opens). Open: whether the store's built MULEs (Store.mules,
-          kept apart from the stock and built at upkeep from Smithore) burn in a store fire.
+          the goods auction before trading opens). A store fire empties the corral too (PM ruling B,
+          28 Oct): Store.mules goes to 0 with the stock, and upkeep rebuilds the corral only from what
+          the store holds after that auction (upkeep.ts builds a MULE from each Smithore).
           Wave 1 is unchanged: neither row is in it.
 because   Heiko, 28 Oct: "pirates take all crystite"; "store fire burns all store storage, not only food,
           all the storage that the store had". WS8 updates the animations to match.
-goal      G-1 (unchanged); wave 2's rows carry the new effects, its sim report shows each one's rate and
-          loss per game, and a balance check it breaks goes to Heiko as options
+goal      G-1 (unchanged); wave 2's rows carry the new effects, its sim report shows each one's rate, its
+          loss per game, and the MULE price and plots developed in the month after a fire; a balance check
+          it breaks goes to Heiko as options
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
