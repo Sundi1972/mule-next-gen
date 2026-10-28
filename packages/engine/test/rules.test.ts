@@ -129,7 +129,7 @@ describe('land grant', () => {
     expect(grantDone(state)).toBe(true);
   });
 
-  it('INV-grant-order: the light steps through free plots in reading order, the same order every sweep, skipping owned plots', () => {
+  it('INV-grant-order: the light steps once through the free plots in reading order, skipping owned plots, and then the grant is done', () => {
     const state = newGame();
     const owned = [state.tiles[1]!, state.tiles[state.width + 3]!];
     for (const t of owned) t.owner = 'p3';
@@ -149,11 +149,12 @@ describe('land grant', () => {
     }
     expect(firstSweep).toEqual(free);
 
-    const secondSweep: Tile[] = [];
-    for (let tile = litPlot(state); tile && state.grant!.sweep === 1; tile = advanceGrant(state)) secondSweep.push(tile);
-    expect(secondSweep).toEqual(free.filter((t) => t !== claimed));
+    // The grant is one pass (PR-F): after it, the grant is done and the light lights nothing more.
+    expect(claimed).not.toBeNull();
+    expect(grantDone(state)).toBe(true);
+    expect(advanceGrant(state)).toBeNull();
 
-    for (const lit of [...firstSweep, ...secondSweep]) {
+    for (const lit of firstSweep) {
       expect(lit).not.toBe(store);
       expect(owned).not.toContain(lit);
     }
