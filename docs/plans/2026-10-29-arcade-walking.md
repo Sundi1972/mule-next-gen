@@ -240,7 +240,7 @@ RULE-2, HC-1, HC-4
 
 ### Task 1.5 — T-AC-3 and C3: reach, rows 5–14
 
-**Depends on:** Tasks 1.3, 1.4 **ACs verified:** T-AC-3 (rows 5–14) **Spec sections consumed:** §1 C3, §2 RULE-3
+**Depends on:** Tasks 1.3, 1.4 (row 13's payout stubbed until Task 7.0's `pubPayoutFor`) **ACs verified:** T-AC-3 (rows 5–14, with 8b, 8c and row 10's swap, AM-9) **Spec sections consumed:** §1 C3, §2 RULE-3
 
 **Files:** Create `packages/engine/src/floor/reach.ts`; test `packages/engine/test/floor-reach.test.ts`.
 
@@ -257,8 +257,8 @@ RULE-2, HC-1, HC-4
 **Spec sections consumed:** §1 C9 seam, §2 RULE-9 **Files:** Create `packages/engine/src/floor/path.ts`; test in
 `floor-step.test.ts`.
 
-- [ ] **Step 1: Write the failing case**: the path from the store to a plot avoids lakes and prefers plains over
-  mountains when equally short. Altitude: unit.
+- [ ] **Step 1: Write the failing case `C9: a terrain-weighted path…`**: the path from the store to a plot avoids
+  lakes and prefers plains over mountains when equally short. Altitude: unit.
 - [ ] **Step 2: Implement `pathTo` per spec §1 C9 and RULE-9**; shared by the AI (PR-4) and the guide ring (PR-6).
 - [ ] **Step 3: Commit** `feat(engine): a terrain-weighted path for the AI and the ring`.
 
@@ -524,6 +524,14 @@ in `apps/web/src/phone/PhoneApp.tsx` (the development route, behind the flag; WS
 - [ ] G-1's goal check recorded (Task 6.8); CI green; Heiko's OK via the PM
 
 ## PR-7 · The moments' payouts and the re-outfit in the rules (WS3)
+
+### Task 7.0 — `pubPayoutFor`, a pure extract (builds now, merges any time before PR-1 needs it unstubbed)
+
+**Spec sections consumed:** RULE-3 row 13, AM-9 **Files:** Modify `packages/engine/src/game.ts` (WS3's own).
+
+- [ ] **Step 1: Extract `pubPayoutFor(state, id, secondsLeft)` from `visitPub`**, which then calls it; the rules
+  tests keep passing unchanged (the pin). A case: the payout equals what visitPub paid before, at three clock values.
+  Commit.
 
 ### Task 7.1 — C4 (game.ts): pelts, the glint's prize, the bolted MULE
 

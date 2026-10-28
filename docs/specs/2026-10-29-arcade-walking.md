@@ -443,6 +443,8 @@ depends_on   C6, C11
 ```
 RULE-1 · The development tick                                   shape: sequence (existing contracts marked)
 
+at development start each colonist stands just outside a store door, seats alternating doorL / doorR, the other door
+when one door's outside is a lake (AM-9).
 every DEV_STEER.tickMs (50 ms) of game time, while phase = development:
   1  inputs ← for each seat: away → IDLE; else its latest steer (latest-wins) and any act pressed since the last tick
   2  ai     ← each AI seat's hand reads (floor, state) and returns an input (C9)
@@ -494,17 +496,27 @@ RULE-3 · What a press does (Reach)                               shape: decisio
   5  on the map at the store's door                           ENTER
   6  in the hall, at a door, carrying pelts                   SELL n PELTS · n × WOLVES.peltPrice
   7  in the hall, at the corral, no MULE, MULEs left, money   BUY MULE · mulePrice
-  8  in the hall, at an outfitter, an unfitted MULE, money    OUTFIT · good · cost
+  8  in the hall, at an outfitter, an unfitted MULE, money    OUTFIT · good · cost (all six shopfronts: Food,
+                                                              Water, Energy, Smithore, Crystite, Rare earth; AM-9)
+  8b in the hall, at one of the works' three fitting bays,     OUTFIT · Alloy | Electronics | Medicine · cost
+     an unfitted MULE, money                                  (where you stand picks the good; AM-9)
+  8c in the hall, at the Green belt, an unfitted MULE, money   OUTFIT · Green belt · cost (AM-9)
   8a in the hall, at an outfitter, leading a MULE fitted for   RE-OUTFIT · good · DEV_STEER.reoutfitCost(good)
      another good (one taken off a plot, row 11a), money      (AM-2; the outfit price by default)
   9  in the hall, at a door                                   LEAVE
  10  on the map on an own plot, leading a fitted MULE         INSTALL · good (or a lake plot from its shore,
-                                                                per cfg lakeMode)
- 11  on the map on an own plot, no MULE, not analysed         ANALYSE
+                                                                per cfg lakeMode); on a plot that has a MULE:
+                                                                SWAP · your <good> MULE runs away (today's rule,
+                                                                V-4's words; AM-9)
+ 11  on the map on an own plot, leading no MULE, not analysed  ANALYSE (a plot with a MULE installed too; AM-9)
+ 12  on an own plot with a MULE and no filter, Alloy held     FIT FILTER
  11a on an own plot with a MULE, leading none                 TAKE MULE (it follows on its lead; the plot makes
-                                                              nothing until a MULE is installed again; AM-2)
- 12  on an own plot with a MULE, Alloy held                   FIT FILTER
- 13  in the hall at the pub                                   PUB · END TURN · +payout (and the lead-refund share)
+                                                              nothing until a MULE is installed again; AM-2;
+                                                              after 11 and 12, so analysing and the filter stay
+                                                              reachable: AM-9)
+ 13  in the hall at the pub                                   PUB · END TURN · +payout, from game.ts's pure
+                                                              pubPayoutFor(state, id, secondsLeft) (AM-9); reachOf
+                                                              takes secondsLeft (the lead refund is 0 today)
  14  otherwise                                                none (the button dims and says where to go)
 unknown      money short → the row's words with the shortfall, disabled; the corral empty → NO MULES LEFT
 examples     → B-AC-1's loop, T-AC-3
@@ -703,6 +715,15 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-9 (2026-10-29, WS1's readings at PR-1 Task 1.5, ruled by WS6).** RULE-3: row 8 is all six shopfronts; new
+  rows 8b (each of the works' three fitting bays is its own place, so where you stand picks Alloy, Electronics or
+  Medicine) and 8c (the Green belt): a spec gap, since today's game sells all of them and the mock's slice 1 opened
+  four outfitters only as a simplification. Row 10 on a plot that has a MULE keeps today's rule, a swap, in V-4's
+  approved words ("SWAP · your Energy MULE runs away"); the mock's dimmed "PLOT HAS A MULE" was not a ruling and goes.
+  Row 11 reads "leading no MULE", so a plot with a MULE can be analysed; rows order ANALYSE, FIT FILTER (no filter
+  yet), then TAKE MULE, so first-match-wins never hides the filter. Row 13's payout comes from a pure
+  `pubPayoutFor(state, id, secondsLeft)` WS3 adds to game.ts (visitPub calls it); reachOf takes secondsLeft. RULE-1:
+  start positions just outside a store door, alternating, the other door past a lake.
 - **AM-7 (2026-10-29, S-2 played by Heiko).** "tested phone sterring ok. but too fast in store", then "3 is fine".
   Steering passes with the phone stamping each input with its tick and the server applying it at that tick
   (RULE-10, §3's `steer.tick`, already frozen in #176; WS3's PR-3 buffers inputs by tick). The store floor is 3 s from
