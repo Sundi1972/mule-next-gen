@@ -59,7 +59,7 @@ export function LandGrant() {
             disabled={!canClaim}
             onClick={() => lit && client.intent({ type: 'claim', x: lit.x, y: lit.y })}
             className={cx(
-              'flex h-24 shrink-0 select-none flex-col items-center justify-center gap-0.5 rounded-sheet font-display transition active:scale-[0.98]',
+              'flex h-16 shrink-0 select-none flex-col items-center justify-center gap-0.5 rounded-sheet font-display transition active:scale-[0.98] @min-[1100px]/shell:h-24',
               left === 0 ? 'border border-holo-faint bg-panel text-ink-3' : 'bg-holo text-on-holo shadow-glow hover:bg-holo-strong disabled:opacity-60',
             )}
           >
@@ -74,7 +74,7 @@ export function LandGrant() {
               You're done with land
             </span>
           ) : (
-            <Button size="lg" variant="outline" className="w-full @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" onClick={() => client.intent({ type: 'ready' })} data-testid="ready">
+            <Button size="md" variant="outline" className="w-full @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" onClick={() => client.intent({ type: 'ready' })} data-testid="ready">
               I'm ready
             </Button>
           )}
