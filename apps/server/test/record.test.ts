@@ -326,6 +326,22 @@ describe.runIf(FULL)('the recorder', { timeout: 60_000 }, () => {
     expect(fs.readdirSync(dir)).toEqual([]);
     expect(errors).toHaveBeenCalled();
   });
+
+  it('FM-REC-1: a recorder that fails while closing the record at game over leaves the room at game over and answering, and writes no file', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const t = table({ dir });
+    // An unprintable start time: naming the file throws once the game is over.
+    t.recorder().record.t0 = Number.NaN;
+    expect(await t.toGameOver()).toBe(true);
+    expect(t.recorder().broken).toBe(true);
+    expect(t.recorder().finished).toBeNull();
+    expect(t.room.viewFor(null).game?.finished).toBe(true);
+    const phone = t.phones[0]!;
+    t.send(phone, { t: 'ping', clientTime: 1 });
+    expect(phone.seen.at(-1)).toBe('pong');
+    expect(fs.readdirSync(dir)).toEqual([]);
+    expect(errors).toHaveBeenCalled();
+  });
 });
 
 describe.runIf(FULL)('the replay', { timeout: 60_000 }, () => {
