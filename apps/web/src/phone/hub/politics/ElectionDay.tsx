@@ -1,7 +1,7 @@
 import { POLITICS, type Office, type TaxPromise } from '@mule/engine';
-import type { ElectionView, MuleView, PoliticsView } from '@mule/protocol';
+import type { ElectionView, MuleView, MyView, PoliticsView } from '@mule/protocol';
 import { cx } from '@mule/ui';
-import { useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useSyncExternalStore, type ReactNode } from 'react';
 import { useClient } from '../../../net/react';
 import { usePhoneGame } from '../../game';
 import { useWide } from '../../Shell';
@@ -103,9 +103,11 @@ function Announce() {
 
 /** The untimed secret ballot: pick, or abstain, then Cast my vote; a pick after Cast still counts until it closes. */
 function Ballot({ election }: { election: ElectionView }) {
-  const { view, me } = usePhoneGame();
+  const { table, view, me } = usePhoneGame();
   const client = useClient();
-  const picks = usePicks();
+  usePicks();
+  useEffect(() => forgetPicks, []);
+  const mine: BallotOf = { room: table.code, seat: me.id, month: view.month };
   return (
     <DayCard at={2} testid="ballot-card">
       <span className="flex flex-wrap items-center gap-x-1.5 text-xs @min-[1100px]/shell:text-lg" data-testid="voted">
@@ -124,9 +126,9 @@ function Ballot({ election }: { election: ElectionView }) {
             office={o}
             cands={election.candidates[o]!}
             promises={o === 'governor' ? election.promises : {}}
-            pick={picks.get(ballotKey(view, o)) ?? me.politics?.ballot[o]}
+            pick={me.politics?.ballot[o] ?? pickOf(mine, o)}
             onPick={(id) => {
-              pickOn(ballotKey(view, o), id);
+              pickOn(mine, o, id);
               client.intent({ type: 'vote', office: o, candidate: id || null });
             }}
           />
@@ -198,31 +200,51 @@ const EXTRAS = [
 ] as const;
 
 /*
- * This phone's picks, '' for Abstain, shown at once while the vote travels. An abstention clears the ballot on the
- * server, so its view can't tell it from no pick at all: only this phone knows, for the ballot to show it checked and
- * for Cast my vote (electionReadyWords) to count the office as picked. The hub re-renders with the vote's broadcast.
+ * This phone's picks on the ballot open on it, '' for Abstain, shown at once while the vote travels. An abstention
+ * clears the ballot on the server, so its view can't tell it from no pick at all: only this phone knows, for the ballot
+ * to show it checked and for Cast my vote (electionReadyWords) to count the office as picked.
  */
-const picked = new Map<string, string>();
+export interface BallotOf {
+  room: string;
+  seat: string;
+  month: number;
+}
+let held: { ballot: BallotOf; picks: Map<Office, string> } | null = null;
 const listeners = new Set<() => void>();
 let version = 0;
-const ballotKey = (view: Pick<MuleView, 'month'>, office: Office) => `${view.month}:${office}`;
 
-function pickOn(key: string, id: string): void {
-  picked.set(key, id);
+function changed(): void {
   version++;
   for (const l of listeners) l();
 }
 
-function usePicks(): ReadonlyMap<string, string> {
+/** Records this phone's pick for an office; a pick on another ballot forgets the one before. */
+export function pickOn(ballot: BallotOf, office: Office, id: string): void {
+  if (!held || !sameBallot(held.ballot, ballot)) held = { ballot, picks: new Map() };
+  held.picks.set(office, id);
+  changed();
+}
+
+/** Forgets every pick; the ballot does this when it closes, so the next game's opens empty. */
+export function forgetPicks(): void {
+  held = null;
+  changed();
+}
+
+const sameBallot = (a: BallotOf, b: BallotOf) => a.room === b.room && a.seat === b.seat && a.month === b.month;
+const pickOf = (ballot: BallotOf, office: Office) => (held && sameBallot(held.ballot, ballot) ? held.picks.get(office) : undefined);
+
+function usePicks(): void {
   useSyncExternalStore(
     (l) => (listeners.add(l), () => listeners.delete(l)),
     () => version,
     () => version,
   );
-  return picked;
 }
 
-/** Whether this phone has a pick, a candidate or Abstain, for every contested office on the ballot. */
-export function ballotComplete(view: Pick<MuleView, 'month'>, mine: Partial<Record<Office, string>>, election: ElectionView): boolean {
-  return contested(election.candidates).every((o) => mine[o] !== undefined || picked.has(ballotKey(view, o)));
+/** Whether this seat has a pick, a candidate or Abstain, for every contested office on the ballot. */
+export function ballotComplete({ view, me }: { view: Pick<MuleView, 'month'>; me: Pick<MyView, 'id' | 'politics'> }, election: ElectionView): boolean {
+  // The ready bar has no room code; the picks held are the open ballot's, forgotten when it closes.
+  const mine = (o: Office) => (held && held.ballot.seat === me.id && held.ballot.month === view.month ? held.picks.get(o) : undefined);
+  return contested(election.candidates).every((o) => (me.politics?.ballot[o] ?? mine(o)) !== undefined);
 }

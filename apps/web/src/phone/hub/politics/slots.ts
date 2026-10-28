@@ -75,7 +75,7 @@ export function electionReadyWords({ view, me }: HubSeat): ReadyBarWords | null 
   const election = politics?.election;
   if (!election) return null;
   if (election.stage === 'announce') return contested(politics.candidates).length > 0 ? ANNOUNCE_WORDS : NO_BALLOT_WORDS;
-  if (election.stage === 'ballot') return { ...BALLOT_WORDS, label: 'VOTED', canReady: ballotComplete(view, me.politics?.ballot ?? {}, election) };
+  if (election.stage === 'ballot') return { ...BALLOT_WORDS, label: 'VOTED', canReady: ballotComplete({ view, me }, election) };
   return null;
 }
 
