@@ -26,10 +26,10 @@ const T: Record<string, Terrain> = {
 };
 
 export const PLAYERS: PlayerView[] = [
-  { id: 'lena', name: 'Lena', isAi: false, color: '#e4572e', species: 'zipwing', money: 640, plots: 7, ready: false, doneDeveloping: false },
-  { id: 'ossa', name: 'Ossa', isAi: true, color: '#3a86ff', species: 'bramblet', money: 910, plots: 7, ready: true, doneDeveloping: false },
-  { id: 'brix', name: 'Brix', isAi: false, color: '#2bb673', species: 'gearling', money: 380, plots: 7, ready: false, doneDeveloping: false },
-  { id: 'kai', name: 'Kai', isAi: true, color: '#f2a541', species: 'mollox', money: 215, plots: 5, ready: true, doneDeveloping: false },
+  { id: 'lena', slot: 0, name: 'Lena', isAi: false, color: '#e4572e', species: 'zipwing', money: 640, plots: 7, ready: false, doneDeveloping: false, colonist: null, condition: null, worth: 4333 },
+  { id: 'ossa', slot: 1, name: 'Ossa', isAi: true, color: '#3a86ff', species: 'bramblet', money: 910, plots: 7, ready: true, doneDeveloping: false, colonist: null, condition: null, worth: 4543 },
+  { id: 'brix', slot: 2, name: 'Brix', isAi: false, color: '#2bb673', species: 'gearling', money: 380, plots: 7, ready: false, doneDeveloping: false, colonist: null, condition: null, worth: 4178 },
+  { id: 'kai', slot: 3, name: 'Kai', isAi: true, color: '#f2a541', species: 'mollox', money: 215, plots: 5, ready: true, doneDeveloping: false, colonist: null, condition: null, worth: 2625 },
 ];
 
 /** Who owns which plot, and what stands on it. Empty outfit: claimed, no MULE yet. */
@@ -55,11 +55,13 @@ export const TILES: TileView[] = ROWS.flatMap((row, y) =>
   }),
 );
 
+/** Lena's own Worth, line by line (the month-end mock's numbers: 640 + 605 + 7 × 300 + 6 × 148 + 1 term). */
 export const ME: MyView = {
+  worthParts: { money: 640, goods: 605, plots: 7, land: 2100, mules: 6, muleValue: 888, office: 100, cut: 0 },
   id: 'lena', species: 'zipwing', stock: { ...emptyStock(), food: 9, water: 4, energy: 3, smithore: 0, alloy: 1 }, carriedMule: null, claimsLeft: 0,
-  hungry: false, sick: false, needs: { food: 5, water: 3 }, monthNeeds: { ...emptyStock(), food: 5, water: 3, energy: 4 }, devEndsAt: null, devSeconds: 50, produced: { ...emptyStock(), food: 11, water: 3, energy: 6 }, mulePrice: 148,
+  hungry: false, sick: false, installedThisTurn: false, needs: { food: 5, water: 3 }, monthNeeds: { ...emptyStock(), food: 5, water: 3, energy: 4 }, devEndsAt: null, devSeconds: 50, produced: { ...emptyStock(), food: 11, water: 3, energy: 6 }, mulePrice: 148,
   outfitCosts: { food: 25, water: 25, energy: 50, smithore: 75, crystite: 100, rareEarth: 100, alloy: 150, electronics: 200, medicine: 150, greenBelt: 40 },
-  droneOrder: [],
+  droneOrder: [], politics: null,
 };
 
 const row = (good: Good, price: number, storeStock: number, cover: number): MarketRow => ({
@@ -71,7 +73,7 @@ export const VIEW: MuleView = {
   finished: false, month: 5, maxMonths: 12, phase: 'auction', phaseEndsAt: null, width: W, height: H, tiles: TILES, lit: null,
   players: PLAYERS, me: ME, market: MARKET, storeMules: 5, mulePrice: 148, colonists: 1260, air: { level: 22, band: 'clean' },
   ship: { arrives: 6, inPort: false, wants: null }, treasury: { money: 340, salesTax: 0.05 }, news: ['Ossa bought 2 Food from the store.'],
-  scores: null, auction: null, listings: [], lotSlots: { used: 0, max: 4 }, landAuction: null, production: null,
+  scores: null, auction: null, listings: [], lotSlots: { used: 0, max: 4 }, landAuction: null, production: null, politics: null,
 };
 
 // --- The Smithore auction -----------------------------------------------------

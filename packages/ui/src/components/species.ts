@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import type { Slot } from './tokens';
 
 export type Species = 'zipwing' | 'bramblet' | 'gearling' | 'mollox' | 'glimmer' | 'quibbit';
@@ -28,6 +28,9 @@ export const SPECIES_PERK: Record<Species, string> = {
 const SeatSpecies = createContext<Record<Slot, Species>>({ 0: 'zipwing', 1: 'bramblet', 2: 'gearling', 3: 'mollox', 4: 'glimmer', 5: 'quibbit' });
 
 export const SeatSpeciesProvider = SeatSpecies.Provider;
+
+/** Wraps a seat's drawn creature: the screen's hook to anchor something at it. */
+export type CreatureWrap = (seatId: string, creature: ReactNode) => ReactNode;
 
 export function useSeatSpecies(slot: Slot): Species {
   return useContext(SeatSpecies)[slot];
