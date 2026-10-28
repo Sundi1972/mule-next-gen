@@ -11,7 +11,7 @@ import type { AuctionView, MuleView } from '@mule/protocol';
 import { errors as playwrightErrors, type Browser, type Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
-import { check, launch, PHONE, startServer, TV, type AuctionSteps } from './harness';
+import { check, headerSlot, launch, PHONE, startServer, TV, type AuctionSteps } from './harness';
 
 const PRESS_MS = 2_000;
 /** The minimum the Sell form starts at, which listPlot leaves unchanged. */
@@ -26,11 +26,7 @@ let smokeListing: string | null = null;
 export const listedSale: NonNullable<AuctionSteps['listedSale']> = async ({ phone, check }) => {
   const planning = phone.locator('[data-phase=planning]');
   await planning.getByTestId('tool-list').click({ timeout: PRESS_MS });
-  // The phone's colour slot, 0-based, as its header mark draws it: the plot labels name owners by it.
-  const mark = await phone.getByTestId('guide').locator('header [role=img][data-slot]').first().getAttribute('data-slot', { timeout: PRESS_MS }).catch(() => null);
-  const slot = Number.parseInt(mark ?? '', 10);
-  check(Number.isInteger(slot), `the smoke phone's header names its colour slot, got ${mark}`);
-  smokeListing = await listPlot(phone, slot, 0);
+  smokeListing = await listPlot(phone, await headerSlot(phone, "the smoke's phone"), 0);
   if (smokeListing === null) {
     check(false, "the smoke's phone owns a plot to list");
   } else {
