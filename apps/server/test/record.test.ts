@@ -9,11 +9,14 @@ import type { MuleIntent, MuleView } from '@mule/protocol';
 import { Room, TableError, type ClientEnvelope, type Connection, type GameContext, type ServerEnvelope } from '@tabletop/core';
 import type { BrainService } from '../src/brain/index.js';
 import { chatter } from '../src/brain/chat.js';
+import type { HaikuSdk } from '../src/brain/client.js';
 import { AI_NAMES, MuleGame } from '../src/mule-game.js';
+import { createMuleServer, type MuleServer } from '../src/server.js';
+import { fakeSdk, KEY, sdkMessage } from './brain-fakes.js';
 import { createRecordedGame, RecordMismatch, replay, ReplayDiverged, stateHash, type Recorder } from '../src/record.js';
 
-/** How many MuleGames this file built, and an SDK factory that must never be reached. */
-const spies = vi.hoisted(() => ({ games: 0, sdk: 0 }));
+/** How many MuleGames this file built and SDKs it asked for; the SDK factory throws unless a test gives it a fake. */
+const spies = vi.hoisted(() => ({ games: 0, sdk: 0, client: null as HaikuSdk | null }));
 vi.mock('../src/mule-game.js', async (original) => {
   const real = await original<typeof import('../src/mule-game.js')>();
   class CountedMuleGame extends real.MuleGame {
@@ -28,7 +31,8 @@ vi.mock('../src/brain/client.js', async (original) => ({
   ...(await original<typeof import('../src/brain/client.js')>()),
   createAnthropicSdk: () => {
     spies.sdk++;
-    throw new Error('a replay must never build the SDK');
+    if (!spies.client) throw new Error('this test must never build the SDK');
+    return spies.client;
   },
 }));
 
@@ -70,9 +74,14 @@ interface Screen {
   conn: Connection<MuleView>;
   from: { seatId: string | null };
   token: string | null;
+  handoff: string | null;
+  /** Every message type the screen received, in order. */
+  seen: string[];
 }
 
 interface TableOptions {
+  /** A room the server made; absent, the table builds its own around the stub brain. */
+  room?: Room<MuleIntent, MuleView>;
   /** Default true. False builds the game as the server does with recording off. */
   record?: boolean;
   /** Where the recorder writes the file at game over; absent writes nothing. */
@@ -100,33 +109,29 @@ afterEach(() => {
  */
 function table(options: TableOptions = {}) {
   let recorder: Recorder | null = null;
-  let game: { viewFor(seat: string | null): MuleView } | null = null;
   let unrecordedHash: string | null = null;
   const brain = stubBrain('s3');
-  const room = new Room<MuleIntent, MuleView>({
-    code: CODE,
-    createGame: (ctx: GameContext) => {
-      if (options.record === false) {
-        const plain = new MuleGame(ctx, SEED, { ...GAME_OPTIONS, brain, onGameOver: (state) => (unrecordedHash = stateHash(state)) });
-        game = plain;
-        return plain;
-      }
-      const made = createRecordedGame({ ctx, seed: SEED, options: GAME_OPTIONS, brain, dir: options.dir ?? null });
-      recorder = made.recorder;
-      game = made.game;
-      return made.game;
-    },
-    aiNames: AI_NAMES,
-    isUserError: (err) => err instanceof RuleError || err instanceof TableError,
-  });
+  const createGame = (ctx: GameContext) => {
+    if (options.record === false) {
+      return new MuleGame(ctx, SEED, { ...GAME_OPTIONS, brain, onGameOver: (state) => (unrecordedHash = stateHash(state)) });
+    }
+    const made = createRecordedGame({ ctx, seed: SEED, options: GAME_OPTIONS, brain, dir: options.dir ?? null });
+    recorder = made.recorder;
+    return made.game;
+  };
+  const room = options.room ?? new Room<MuleIntent, MuleView>({ code: CODE, createGame, aiNames: AI_NAMES, isUserError: (err) => err instanceof RuleError || err instanceof TableError });
   rooms.push(room);
   const screen = (): Screen => {
     const s: Screen = {
       from: { seatId: null },
       token: null,
+      handoff: null,
+      seen: [],
       conn: {
         send: (msg: ServerEnvelope<MuleView>) => {
           if (msg.t === 'welcome' && msg.seatToken) s.token = msg.seatToken;
+          if (msg.t === 'handoffCode') s.handoff = msg.code;
+          s.seen.push(msg.t);
         },
       },
     };
@@ -144,7 +149,7 @@ function table(options: TableOptions = {}) {
   send(phones[0]!, { t: 'addAi' });
   send(phones[0]!, { t: 'start' });
 
-  const view = () => game!.viewFor(null);
+  const view = () => room.viewFor(null).game!;
   const finished = () => room.viewFor(null).game?.finished ?? false;
   let planningFor = 0;
   let claimed = false;
@@ -192,6 +197,8 @@ function table(options: TableOptions = {}) {
   return {
     room,
     brain,
+    phones,
+    send,
     recorder: () => recorder!,
     unrecordedHash: () => unrecordedHash,
     finished,
@@ -356,5 +363,60 @@ describe.runIf(FULL)('the replay', { timeout: 60_000 }, () => {
     expect((await replay(record)).identical).toBe(true);
     expect(spies.sdk - sdkBefore).toBe(0);
     expect(fs.existsSync(ledger)).toBe(false);
+  });
+});
+
+describe.runIf(FULL)('the server writes the record', { timeout: 60_000 }, () => {
+  let dir: string;
+  let server: MuleServer | null;
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mule-records-'));
+    server = null;
+  });
+  afterEach(async () => {
+    spies.client = null;
+    await server?.close();
+    for (const entry of fs.readdirSync(dir)) fs.chmodSync(path.join(dir, entry), 0o700);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  /** A table in a room the server made, recording into `recordDir`. */
+  const serverTable = (recordDir: string) => {
+    server = createMuleServer({ recordDir, seed: () => SEED, maxMonths: 1 });
+    return table({ room: server.registry.create() });
+  };
+
+  it('T-AC-5: the file a Smart game writes at game over holds no seat token, handoff code, room code or API key', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', KEY.ANTHROPIC_API_KEY);
+    spies.client = fakeSdk(() => sdkMessage(JSON.stringify({ option: 'A', line: 'Mine.' })));
+    const t = serverTable(dir);
+    t.send(t.phones[0]!, { t: 'handoff' });
+    expect(await t.toGameOver()).toBe(true);
+    await vi.waitFor(() => expect(fs.readdirSync(dir)).toHaveLength(1));
+
+    const text = fs.readFileSync(path.join(dir, fs.readdirSync(dir)[0]!), 'utf8');
+    const record = JSON.parse(text) as MuleRecord;
+    expect(record.seats.filter((s) => s.smart).length, 'the AI seats played Smart').toBeGreaterThan(0);
+    const secrets = [...t.phones.map((p) => p.token), t.phones[0]!.handoff, t.room.code, KEY.ANTHROPIC_API_KEY];
+    expect(secrets.every((s) => typeof s === 'string' && s.length > 0)).toBe(true);
+    for (const secret of secrets) expect(text).not.toContain(secret);
+  });
+
+  it('T-AC-8: an unwritable record folder at game over logs one error naming the path, and the room still shows game over and answers', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const readOnly = path.join(dir, 'read-only');
+    fs.mkdirSync(readOnly);
+    fs.chmodSync(readOnly, 0o500);
+    const t = serverTable(readOnly);
+    expect(await t.toGameOver()).toBe(true);
+    await vi.waitFor(() => expect(errors).toHaveBeenCalled());
+
+    expect(errors).toHaveBeenCalledTimes(1);
+    expect(String(errors.mock.calls[0]![0])).toContain(readOnly);
+    expect(server!.registry.get(t.room.code)).toBe(t.room);
+    expect(t.room.viewFor(null).game?.finished).toBe(true);
+    const phone = t.phones[0]!;
+    t.send(phone, { t: 'ping', clientTime: 1 });
+    expect(phone.seen.at(-1)).toBe('pong');
   });
 });
