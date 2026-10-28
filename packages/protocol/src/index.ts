@@ -391,9 +391,12 @@ export interface MuleView {
   colonists: number;
   /** Colony air gauge 0 to 100 and its band. */
   air: { level: number; band: 'clean' | 'smoggy' | 'toxic' | 'collapse' };
-  /** The air level at last month's end (upkeep), as `air.level` showed it then; null in month 1. */
-  lastAir: number | null;
-  /** At the month end (upkeep, and game over after the last): true when that upkeep's store ran short of nothing. Null otherwise. */
+  /** The air at last month's end (upkeep), level and band as `air` showed them then; null in month 1. */
+  lastAir: MuleView['air'] | null;
+  /**
+   * At the month end (upkeep, and game over after the last): true when that upkeep fed the colonists, false when they
+   * went short, because the store ran out or its price was beyond their wages (the engine's colonistsHungry). Null otherwise.
+   */
   colonistsFed: boolean | null;
   ship: ShipView;
   /** The colony fund and the sales tax rate. */
