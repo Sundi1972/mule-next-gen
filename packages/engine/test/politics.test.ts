@@ -624,10 +624,12 @@ describe('RULE-3: tally and winner', () => {
     expect([...won.sheriff].sort()).toEqual([...SEATS].sort());
   });
 
-  it('T-AC-2 invariant: one player never holds both offices and the fund never goes below 0, over 150 seeded games of random candidacies, ballots, Done presses and AM-1 closes', () => {
+  // Lean CI: 25 games on every PR, the full 150 with MULE_FULL=1 (pnpm test:full).
+  const INVARIANT_GAMES = process.env.MULE_FULL === '1' ? 150 : 25;
+  it(`T-AC-2 invariant: one player never holds both offices and the fund never goes below 0, over ${INVARIANT_GAMES} seeded games of random candidacies, ballots, Done presses and AM-1 closes`, () => {
     const broken: string[] = [];
     const hows = new Set<string>();
-    for (let seed = 1; seed <= 150; seed++) {
+    for (let seed = 1; seed <= INVARIANT_GAMES; seed++) {
       const rng = createRng(seed);
       const seats = Array.from({ length: rng.int(2, 6) }, (_, i) => `p${i}`);
       const state = newGame({ seats });
