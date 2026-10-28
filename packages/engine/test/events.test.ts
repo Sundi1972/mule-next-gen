@@ -193,15 +193,18 @@ describe('several events in one production', () => {
     advancePhase(state);
     return state.history.at(-1)!;
   };
-  /** At the first month events may roll, p0's lone farm: no special, trait, pollution or neighbour, Energy and Water to spare. */
-  const loneFarm = () => {
+  /**
+   * At the first month events may roll, p0's lone farm growing `grown`: no special, trait, pollution or neighbour, and
+   * Energy to spare. p0 holds `water` Water; at 0 it is short, and the farm halves.
+   */
+  const loneFarm = ({ grown = 1, water = 10 } = {}) => {
     const state = createGame({ seed: 4, players: [0, 1, 2, 3].map((i) => ({ id: `p${i}`, name: `P${i}`, isAi: false })) });
     state.month = EVENTS.firstMonth;
     for (const t of state.tiles) delete t.special;
     const farm = state.tiles.find((t) => t.terrain !== 'store')!;
     Object.assign(farm, { owner: 'p0', outfit: 'food', traits: [], pollution: 0 });
-    farm.ground.food = 1 - GROWN_BASE;
-    Object.assign(state.players[0]!.stock, { energy: 10, water: 10 });
+    farm.ground.food = grown - GROWN_BASE;
+    Object.assign(state.players[0]!.stock, { energy: 10, water });
     return { state, farm: state.tiles.indexOf(farm) };
   };
   const lineOf = (report: MonthReport, tile: number) => report.lines!.find((l) => l.tile === tile)!;
@@ -211,6 +214,18 @@ describe('several events in one production', () => {
     const named = [...EVENTS.excludes.flat(), ...rows().flatMap((row) => Object.keys(row.follows ?? {}))];
     expect(named.length).toBeGreaterThan(0);
     expect(named.filter((key) => !Object.hasOwn(EVENTS.colony, key) && !Object.hasOwn(EVENTS.player, key))).toEqual([]);
+    // ...and a row rollPhase rolls: one that makes a MonthEvent, which sickness does not.
+    const rolled = (table: object) => Object.keys(table).filter((key) => Object.hasOwn(RULE_3, key));
+    expect(named.filter((key) => ![...rolled(EVENTS.colony), ...rolled(EVENTS.player)].includes(key))).toEqual([]);
+    // rollPhase resolves the excludes after the colony rows and before the player rows: a player-row pair would never
+    // resolve, and a colony row following a member this phase would read one the dice may yet drop.
+    const excluded = EVENTS.excludes.flat();
+    expect(excluded.filter((key) => !rolled(EVENTS.colony).includes(key))).toEqual([]);
+    const colonyRows: Record<string, EventRow> = EVENTS.colony;
+    const readsThisPhase = Object.entries(colonyRows).flatMap(([key, row]) =>
+      Object.entries(row.follows ?? {}).flatMap(([follows, f]) => (f.thisPhase && excluded.includes(follows) ? [[key, follows]] : [])),
+    );
+    expect(readsThisPhase).toEqual([]);
 
     withEveryRowAt(0, () => {
       const calm = loneFarm();
@@ -232,6 +247,21 @@ describe('several events in one production', () => {
         { why: 'event', delta: 0, event: 'acidRain' },
       ]);
       expect(line.parts.reduce((n, p) => n + p.delta, 0)).toBe(line.made);
+      expect(line.parts.slice(-2)).toEqual([
+        { why: 'event', delta: -1, event: 'drought' },
+        { why: 'event', delta: 0, event: 'acidRain' },
+      ]);
+
+      // A dry farm growing 4 halves to 2 first; then the drought takes it to 1 and acid rain to 0.
+      const dry = loneFarm({ grown: 4, water: 0 });
+      const dryLine = lineOf(produce(dry.state), dry.farm);
+      expect(dryLine.parts).toEqual([
+        { why: 'ground', delta: 4 },
+        { why: 'noWater', delta: -2 },
+        { why: 'event', delta: -1, event: 'drought' },
+        { why: 'event', delta: -1, event: 'acidRain' },
+      ]);
+      expect(dryLine.made).toBe(0);
     });
 
     withEveryRowAt(0, () => {
@@ -261,6 +291,44 @@ describe('several events in one production', () => {
       // Kept by the dice, not by the table's order.
       expect([...keepers].sort()).toEqual(['drought', 'flood']);
     });
+
+    const seeds = Array.from({ length: 20 }, (_, i) => i + 1);
+    for (const pair of EVENTS.excludes) {
+      withEveryRowAt(0, () => {
+        const row = (key: string) => colonyRows[key]!;
+        /** The pair's members the month report lists, for colonyForEvents(3) at `month` on dice seeded from `seed`. */
+        const listed = (seed: number, month = EVENTS.firstMonth) => {
+          const state = colonyForEvents(3);
+          Object.assign(state, { seed, month });
+          return produce(state).events!.flatMap((e) => (pair.includes(e.key) ? [e.key] : []));
+        };
+        const both = new Set(pair);
+
+        // Both certain: one is listed, and the dice keep either, seed by seed and, on one seed, month by month.
+        for (const key of pair) row(key).phases = { production: 1 };
+        const bySeed = seeds.map((seed) => listed(seed));
+        expect([pair, bySeed.filter((keys) => keys.length !== 1)]).toEqual([pair, []]);
+        expect([pair, new Set(bySeed.flat())]).toEqual([pair, both]);
+        const byMonth = Array.from({ length: 12 }, (_, i) => listed(1, EVENTS.firstMonth + i));
+        expect([pair, byMonth.filter((keys) => keys.length !== 1)]).toEqual([pair, []]);
+        expect([pair, new Set(byMonth.flat())]).toEqual([pair, both]);
+
+        // One alone: listed on every seed, whatever the pair's dice would say.
+        for (const [alone, partner] of [pair, [pair[1], pair[0]]] satisfies [string, string][]) {
+          row(alone).phases = { production: 1 };
+          row(partner).phases = { production: 0 };
+          expect([alone, seeds.map((seed) => listed(seed))]).toEqual([alone, seeds.map(() => [alone])]);
+        }
+
+        // The pair's dice are not the first member's own: where it fires alone at 0.5, a certain partner still lets either be kept.
+        row(pair[0]).phases = { production: 0.5 };
+        row(pair[1]).phases = { production: 0 };
+        const firesAlone = seeds.filter((seed) => listed(seed).length > 0);
+        expect([pair, firesAlone.length > 0]).toEqual([pair, true]);
+        row(pair[1]).phases = { production: 1 };
+        expect([pair, new Set(firesAlone.flatMap((seed) => listed(seed)))]).toEqual([pair, both]);
+      });
+    }
   });
 });
 
