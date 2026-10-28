@@ -1,4 +1,4 @@
-import type { AuctionSide, CanRun, DevPlace, Election, ElectionResult, EventKey, EventKind, Good, Ground, MonthEvent, Office, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
+import type { AuctionSide, CanRun, CeremonyStep, DevPlace, Election, EventKey, EventKind, Good, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -30,13 +30,13 @@ export type MuleIntent =
   | { type: 'list'; item: { kind: 'plot' | 'mule'; x: number; y: number }; minimum: number; unsold: 'store' | 'keep' }
   /** Planning: take one of your listings back. */
   | { type: 'unlist'; id: string }
-  /** Election, nominate: run for an office (moving any candidacy for the other one); null withdraws. A Governor run needs a promise (RULE-10). */
+  /** Planning, until the election's ballot opens: run for an office (moving any candidacy for the other one); null withdraws. A Governor run needs a promise (RULE-10). */
   | { type: 'run'; office: Office | null; promise?: TaxPromise }
   /** Election, ballot: cast or change your secret vote for a contested office; null clears it. */
   | { type: 'vote'; office: Office; candidate: string | null }
   /** Planning, after the election: the Governor sets the sales tax in whole percent. */
   | { type: 'setTax'; percent: number }
-  /** Planning, after any election: the host ends planning with players not yet Ready. */
+  /** Planning: the host ends planning with players not yet Ready; in the election's announce or ballot, it goes on without players not Done. */
   | { type: 'continue' };
 
 export const EMOTES = ['Deal?', 'Nice!', 'Traitor!', 'Ha!', 'Help!'] as const;
@@ -132,22 +132,26 @@ export interface MyPoliticsView {
   canRun: Record<Office, CanRun>;
 }
 
+/** One office's result as far as the ceremony has shown it: the totals from its bars step, the winner and how from its winner step. */
+export type OfficeReveal = Pick<OfficeResult, 'tallies'> & Partial<Pick<OfficeResult, 'winner' | 'how'>>;
+
 /** This month's election as every screen sees it: who runs and who has voted, never for whom. */
 export interface ElectionView {
   stage: Election['stage'];
-  /** Seconds left on the stage's clock, in game time. */
-  seconds: number;
-  /** The stage's full time in seconds. */
-  total: number;
+  /** The office the ceremony shows and its step, with the step's clock in game seconds; null outside the ceremony. */
+  ceremony: { office: Office; step: CeremonyStep; seconds: number; total: number } | null;
+  /** Empty until the ballot opens: until then the candidacy is Politics'. */
   candidates: Record<Office, string[]>;
   /** Each Governor candidate's tax promise, public like the candidacy. */
   promises: Record<string, TaxPromise>;
   /** Players with a ballot in, never for whom. */
   voted: string[];
-  /** Players who pressed Done in this stage. */
+  /** Players who are Done in announce or the ballot: they pressed Done, or their ballot covers every contested office. */
   done: string[];
-  /** The totals and winners; null until the reveal's countdown has run, so every screen shows it at the same moment. */
-  result: ElectionResult | null;
+  /** Players announce or the ballot still waits for; empty from the ceremony on. */
+  waitingFor: string[];
+  /** The offices the ceremony has reached, every screen in the same step. */
+  result: Partial<Record<Office, OfficeReveal>>;
 }
 
 /** The colony's offices, tax and vote weights, public on every screen. */
@@ -168,6 +172,10 @@ export interface PoliticsView {
   pay: { governor: number; sheriff: number };
   /** Every player's votes, part by part. */
   weights: { id: string; votes: number; parts: VoteWeight['parts'] }[];
+  /** Who runs for each office in the next election, until its ballot opens. */
+  candidates: Record<Office, string[]>;
+  /** Each Governor candidate's tax promise, public like the candidacy. */
+  promises: Record<string, TaxPromise>;
   /** This month's election, or null in a month without one. */
   election: ElectionView | null;
 }
