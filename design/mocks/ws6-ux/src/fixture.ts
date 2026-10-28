@@ -25,6 +25,7 @@ const T: Record<string, Terrain> = {
   l: 'lake', c: 'crater', v: 'volcanic', S: 'store',
 };
 
+/** `worth` is the server's (PlayerView.worth); the mocks rank by proposed/worth.ts, which computes it from this fixture. */
 export const PLAYERS: PlayerView[] = [
   { id: 'lena', slot: 0, name: 'Lena', isAi: false, color: '#e4572e', species: 'zipwing', money: 640, plots: 7, ready: false, doneDeveloping: false, colonist: null, condition: null, worth: 4333 },
   { id: 'ossa', slot: 1, name: 'Ossa', isAi: true, color: '#3a86ff', species: 'bramblet', money: 910, plots: 7, ready: true, doneDeveloping: false, colonist: null, condition: null, worth: 4543 },

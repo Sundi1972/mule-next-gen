@@ -2,16 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { advancePhase, AI_LEVELS, AI_PERSONAS, createGame, EVENTS, GAME, GOODS, mulePriceFor, observe, STRATEGIST, walkSeconds, type GameState } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
 import { AiSeat } from '../src/seat.js';
-import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, tradeDecision, wantsPlot } from '../src/strategist.js';
+import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, tradeDecision, wantsAnyAhead, wantsPlot } from '../src/strategist.js';
 import { cashReserve, installGain, type Mind } from '../src/value.js';
 
 const fourSeats = (seed: number) => createGame({ seed, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI${i}`, isAi: true })) });
 
-/** A land grant in its third sweep, where any free plot is otherwise wanted, with `idle` undeveloped plots given to ai0. */
+/** A land grant at the last plot of its one pass, where any free plot is otherwise wanted, with `idle` undeveloped plots given to ai0. */
 function grantWithIdleLand(idle: number, money: number): GameState {
   const state = fourSeats(3);
   while (state.phase !== 'landGrant') advancePhase(state);
-  state.grant!.sweep = 2;
+  state.grant!.step = state.grant!.order.length - 1;
   const lit = state.grant!.order[state.grant!.step];
   const spare = state.tiles.map((t, i) => ({ t, i })).filter(({ t, i }) => !t.owner && t.terrain !== 'store' && i !== lit);
   for (const { t } of spare.slice(0, idle)) t.owner = 'ai0';
@@ -28,6 +28,35 @@ describe('land claims', () => {
     // Negative cases: no idle land, or the money to develop it, and it bids as before.
     expect(tycoon().onLit(grantWithIdleLand(0, 100))).toBeTypeOf('number');
     expect(tycoon().onLit(grantWithIdleLand(3, 5_000))).toBeTypeOf('number');
+  });
+
+  it('T-AC-32: a seat with claims left and nothing ahead of the light it wants presses Done with land', () => {
+    // Idle land it can't develop: it wants no plot at all.
+    expect(tycoon().passesGrant(grantWithIdleLand(3, 100))).toBe(true);
+    // Negative cases: it still wants the last plot, it wants plots ahead at the start of the pass, or its claims are used.
+    expect(tycoon().passesGrant(grantWithIdleLand(0, 100))).toBe(false);
+    const start = fourSeats(3);
+    while (start.phase !== 'landGrant') advancePhase(start);
+    expect(tycoon().passesGrant(start)).toBe(false);
+    const used = grantWithIdleLand(3, 100);
+    used.players[0]!.claimsThisGrant = GAME.claimsPerGrant;
+    expect(tycoon().passesGrant(used), 'its claims are used: nothing more to press').toBe(false);
+  });
+
+  it('INV-grant-ahead: wantsAnyAhead is true exactly when wantsPlot would take some plot still ahead of the light', () => {
+    for (const seed of [1, 3]) {
+      const state = fourSeats(seed);
+      while (state.phase !== 'landGrant') advancePhase(state);
+      const { mind } = tycoon();
+      const obs = observe(state, 'ai0');
+      const plan = landDecision(obs, mind).all[0]!.action;
+      const order = state.grant!.order;
+      for (let step = 0; step < order.length; step++) {
+        const ahead = order.slice(step);
+        const some = ahead.some((index, k) => wantsPlot(plan, obs, index, ahead.slice(k), mind));
+        expect(wantsAnyAhead(plan, obs, ahead, mind), `seed ${seed}, step ${step}`).toBe(some);
+      }
+    }
   });
 });
 
@@ -54,11 +83,66 @@ describe('land claims off reading order', () => {
     const outside = ranking.slice(top).find((s) => s.utility >= ranking[0]!.utility * STRATEGIST.grantShare);
     expect(outside).toBeDefined();
     const plan = landDecision(obs, mind(1)).all[0]!.action;
-    expect(wantsPlot(plan, obs, outside!.index, 0, mind(1))).toBe(false);
-    expect(wantsPlot(plan, obs, ranking[0]!.index, 0, mind(1))).toBe(true);
+    expect(wantsPlot(plan, obs, outside!.index, state.grant!.order, mind(1))).toBe(false);
+    expect(wantsPlot(plan, obs, ranking[0]!.index, state.grant!.order, mind(1))).toBe(true);
     // Tied plots: two salts order them differently, so seats don't all reach for the same first rows.
     const order = (salt: number) => landDecision(obs, mind(salt)).all[0]!.action.ranking.map((s) => s.index);
     expect(order(1)).not.toEqual(order(2));
+  });
+});
+
+describe('land claims on a single pass', () => {
+  it('T-AC-29: on the one pass, a seat with claims left presses for a plot it values late in the pass, instead of ending the grant landless', () => {
+    // The grant is one pass: plots the light has gone by never come back, even those still free.
+    const state = fourSeats(3);
+    while (state.phase !== 'landGrant') advancePhase(state);
+    const seat = tycoon();
+    const early = seat.onLit(state);
+    const last = state.grant!.order.length - 1;
+    state.grant!.step = last;
+    expect(state.players[0]!.claimsThisGrant).toBe(0);
+    expect(seat.onLit(state), 'the last plot of the pass is pressed for').toBeTypeOf('number');
+    // Negative case: at the start of the pass the seat still waits for its own top plots, as T-AC-10 shows.
+    expect(early).toBeNull();
+  });
+
+  it('T-AC-30: with plots it ranks higher still ahead of the light, a seat waits on a merely decent lit plot', () => {
+    const state = fourSeats(3);
+    while (state.phase !== 'landGrant') advancePhase(state);
+    const { mind } = tycoon();
+    const obs = observe(state, 'ai0');
+    const plan = landDecision(obs, mind).all[0]!.action;
+    const order = state.grant!.order;
+    const top = GAME.claimsPerGrant + STRATEGIST.grantSpare;
+    // Early-ish in the pass (40% in): the first lit plot the seat values that still has `top` plots it ranks higher ahead.
+    const step = order.findIndex((index, k) => {
+      if (k < Math.ceil(order.length * 0.4)) return false;
+      const ahead = new Set(order.slice(k));
+      const rank = plan.ranking.filter((s) => ahead.has(s.index)).findIndex((s) => s.index === index);
+      return rank >= top && plan.ranking.find((s) => s.index === index)!.value > 0;
+    });
+    expect(step).toBeGreaterThan(0);
+    expect(wantsPlot(plan, obs, order[step]!, order.slice(step), mind), 'it waits for the better plots still to light').toBe(false);
+  });
+
+  it('T-AC-31: the lit plot is weighed by the utility it is ranked by: within its claims and clearing grantShare of the best utility ahead, it is wanted', () => {
+    const state = fourSeats(1);
+    while (state.phase !== 'landGrant') advancePhase(state);
+    const mind: Mind = { ...traderMind, levelId: 'tycoon', level: AI_LEVELS.tycoon, salt: 1 };
+    const obs = observe(state, 'ai0');
+    const plan = landDecision(obs, mind).all[0]!.action;
+    const order = state.grant!.order;
+    // A lit plot within its claims whose utility clears the share while its value falls short of it: the two metrics disagree.
+    const step = order.findIndex((index, k) => {
+      const ahead = new Set(order.slice(k));
+      const rivals = plan.ranking.filter((s) => ahead.has(s.index));
+      const rank = rivals.findIndex((s) => s.index === index);
+      const lit = rivals[rank];
+      if (!lit || lit.value <= 0 || rank >= GAME.claimsPerGrant + STRATEGIST.grantSpare) return false;
+      return lit.utility >= rivals[0]!.utility * STRATEGIST.grantShare && lit.value < Math.max(...rivals.map((s) => s.value)) * STRATEGIST.grantShare;
+    });
+    expect(step).toBeGreaterThanOrEqual(0);
+    expect(wantsPlot(plan, obs, order[step]!, order.slice(step), mind)).toBe(true);
   });
 });
 
