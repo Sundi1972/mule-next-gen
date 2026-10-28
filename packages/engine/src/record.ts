@@ -10,9 +10,8 @@ export interface RecordedChoice { optionId: string; line: string | null; by: 'to
 export type CallKind = 'move' | 'strategy' | 'playbook';
 
 /**
- * A writer call's reply as the writer received it, before validatePlan; never raw model text. `cause` is the writer's
- * code when the reply was unusable. The replay feeds it back, and validatePlan and the engine draft re-derive the
- * playbook.
+ * The writer's checked reply, before validatePlan; never raw model text. `cause` is the writer's code when the reply
+ * was unusable. The replay returns it as it is, and validatePlan and the engine draft re-derive the playbook.
  */
 export interface RecordedWrite {
   strategy?: Strategy;
