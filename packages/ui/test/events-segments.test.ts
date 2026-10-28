@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { eventFrontAt, eventHitAt, eventScript, eventSegments, eventStageAt, type ShowEventKey, type ShowEventView, type ShowGrid, type ShowMode } from '../src/index';
+import { EVENT_FRONT, eventFrontAt, eventHitAt, eventScript, eventSegments, eventStageAt, type ShowEventKey, type ShowEventView, type ShowGrid, type ShowMode } from '../src/index';
 
 const G15: ShowGrid = { width: 15, height: 9 };
 const G19: ShowGrid = { width: 19, height: 11 };
@@ -70,6 +70,9 @@ describe('the show timing core', () => {
       expect(seg.startAt <= seg.announceAt && seg.announceAt <= seg.playAt && seg.playAt <= seg.settleAt && seg.settleAt <= seg.endAt).toBe(true);
       expect(seg.pace).toBeGreaterThan(0);
       expect(Number.isFinite(eventFrontAt(seg, seg.settleAt))).toBe(true);
+      // The front leaves its edge `lead` into the play and is off the far side `cross` later, both at the segment's pace.
+      expect(eventFrontAt(seg, seg.playAt + EVENT_FRONT.lead * seg.pace)).toBeCloseTo(0, 9);
+      expect(eventFrontAt(seg, seg.playAt + (EVENT_FRONT.lead + EVENT_FRONT.cross) * seg.pace)).toBeCloseTo(1, 9);
 
       const at = ev.hits.map((h) => eventHitAt(seg, ev, h, false, grid));
       at.forEach((a) => {
