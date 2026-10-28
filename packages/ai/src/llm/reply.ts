@@ -11,6 +11,7 @@ export type ParsedReply = { ok: true; optionId: string; line: string | null } | 
 const QUOTE_MARKS = '"\'“”‘’';
 
 // Long enough to recognise a stray option letter or word, short enough that the note stays one glance.
+// literal-ok: caps a rejected reply's name in its diagnostic note; no effect on play
 const NOTE_NAME_CHARS = 8;
 
 function isQuote(char: string | undefined): boolean {
@@ -20,6 +21,7 @@ function isQuote(char: string | undefined): boolean {
 /** Strips quote marks only while both ends carry one: a lone apostrophe is speech. */
 function stripQuotePairs(text: string): string {
   let chars = [...text];
+  // literal-ok: a pair of quote marks needs two characters, an opening and a closing one
   while (chars.length >= 2 && isQuote(chars[0]) && isQuote(chars[chars.length - 1])) {
     chars = chars.slice(1, -1);
     text = chars.join('').trim();

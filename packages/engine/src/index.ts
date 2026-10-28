@@ -1,5 +1,6 @@
 export * from './types.js';
 export * from './config.js';
+export * from './units.js';
 export * from './rng.js';
 export * from './stock.js';
 export * from './map.js';

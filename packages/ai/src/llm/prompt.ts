@@ -69,6 +69,7 @@ function quoteTalk(talk: TableTalk): string {
 }
 
 function optionLine(o: ShortOption): string {
+  // literal-ok: shows each score to two decimals in the prompt
   return `${o.id}. ${o.label} — ${o.rationale} (score ${o.utility.toFixed(2)})`;
 }
 
