@@ -78,9 +78,3 @@ production event show. Animated text (thought bubbles, "+1" chips) was not judge
    phone stays checked: one line in `apps/web/e2e/shell.ts` (WS6's).
 3. WS6's own rows: the arcade phone at 667 goes into the arcade build spec (the map scales to the frame, status
    overlays the map's top edge when the side room is too narrow); hub, plan and month-end mock rows fixed in the mocks.
-</content>
-</invoke>
-<invoke name="Bash">
-<parameter name="command">cd /Users/heiko/Projects/mule-next-gen/.claude/worktrees/ws6-ux && git add docs/research/2026-10-29-small-phone-audit.md && git commit -q -m "docs(research): the phone at 667×375, every approved mock and the real app against 844×390, by owner
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git push -q origin ws6-ux && git log --oneline -1

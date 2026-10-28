@@ -11,11 +11,12 @@ RULE-5 (tap-to-walk timing), and `docs/plans/2026-10-28-ws3-dev-walking.md`'s sa
 
 ## §0 · Business Goals & Value
 
-The goal gate Heiko passed on 2026-10-28, as the PM relayed it on 2026-10-29 (goals and non-goals verbatim; the PM
-confirms the text matches the gate). Heiko's playtest verdict on today's walking: "this is not at all what i
+The goal gate Heiko passed on 2026-10-28 ("Yes, start the mock"; SEAMS 2026-10-28), checked against the gate by the PM
+on 2026-10-29. The goal lines and proofs are the gate's; bullets marked *from the mock design gate* are design detail
+Heiko approved by playing the mock (ceedd23f), bound in §1 and §2. Heiko's playtest verdict on today's walking: "this is not at all what i
 wanted… i can really walk my character… like in an arcade game".
 
-**G-1 · You steer your colonist yourself, everyone at once.** `[handoff]`
+**G-1 · You steer your colonist like an arcade game, everyone at once.** `[handoff]`
 - Computer: ARROW KEYS to move, SPACE as the action button, the MOUSE as the alternative ("arrow keys and space for
   clicking, alternative the mouse"). Phone: a thumb joystick plus one action button.
 - The loop, with no menus: walk to the store, in through the door; walk to the corral and buy a MULE; walk INTO one
@@ -28,22 +29,23 @@ wanted… i can really walk my character… like in an arcade game".
   has no development keys. verified_by: read + played (Heiko's playtest, 28 Oct).
 - *Value* `[review-only]`: development becomes the game's physical, shared moment — the thing Heiko asked for in
   his own words, and the gate for the rest of the arcade.
-- **UBER-AC-1:** On the rig, a player with only a phone held sideways (no TV) plays a whole development turn with
+- **UBER-AC-1:** On the rig, a first-time player with only a phone held sideways (no TV) plays a whole development turn with
   the stick and the button — store, corral, outfitter, out with the MULE on its lead, own plot, install, pub — with
   no menu opened; and on the TV in the same room every colonist is seen moving while they do it.
 
-**G-2 · Terrain slows you.** `[handoff]`
-- Mountains and swamp slower, plains normal, plus today's hunger/sickness pace. Every speed a tunable. AI colonists
-  walk by the same rules.
+**G-2 · Terrain slows you, and the AI walks by the same rules.** `[handoff]`
+- Mountains and swamp slower, plains normal, plus today's hunger/sickness pace. Every speed a named config value.
 - *Today* `[review-only]`: terrain never affects speed (`walkSeconds` reads only x and y); the pace is hunger ×
   sickness × the Zipwing perk (`dev-walk.ts::pace`).
 - *Value* `[review-only]`: where your plots are starts to matter; the map is felt, not read.
 - **UBER-AC-2:** On the rig, a colonist held to the right for 2 s crosses about 2.5 tiles of plains and about 1 of
-  mountains (the config's 1.25 tiles/s × 1 and × 0.4, × pace); and in 20 seeded AI-only turns every AI colonist
-  reaches the pub inside the 50 s clock.
+  mountains (the config's 1.25 tiles/s × 1 and × 0.4, × pace); and the same holds for the AI: in a seeded AI-only
+  turn, an AI colonist's walk of the same length takes measurably longer over mountains than over plains (the same
+  2.5× ratio, read from the server's frames).
 
-**G-3 · Three arcade moments, each 5–15 s, joystick + one button only.** `[handoff]`
-- WOLVES (forest, hills or tundra): RUN, or FIGHT a ~10 s dodge-and-strike; win pelts the store buys; lose and your
+**G-3 · Arcade moments and light competition in development; the AI plays them all and the TV shows the drama.**
+`[handoff]`
+- *From the mock design gate:* each moment 5–15 s, played with the stick and the one button only. WOLVES (forest, hills or tundra): RUN, or FIGHT a ~10 s dodge-and-strike; win pelts the store buys; lose and your
   MULE bolts, and you catch it. GLINT RACE: a Crystite sparkle on a random tile for ~8 s, on every phone and the TV;
   the first there wins. CORRAL SCRAMBLE: when the store is down to its last MULEs the TV announces it and you see
   everyone racing. Every reward, cost and frequency a tunable.
@@ -51,12 +53,13 @@ wanted… i can really walk my character… like in an arcade game".
 - *Value* `[review-only]`: stories at the table; reasons to look up at the TV.
 - **UBER-AC-3:** In a seeded 12-month AI game on the server, each of the three moments happens at least once and
   each reward or cost lands in the game state (pelts sold, a bolted MULE caught or lost to the clock, a glint's
-  Crystite in stock, a colonist left without a MULE by the scramble).
+  Crystite in stock, a colonist left without a MULE by the scramble); and on the TV in that game the table sees at
+  least one wolf encounter and at least one glint race, with an AI colonist taking part in each.
 
 **Non-goals** `[review-only]`: the Wampus; a MULE running away on its own (it only bolts after a lost fight);
-colonists colliding; walking in other phases; a game record / replay-from-record module (none exists today — see
-§2 RULE-1's note; this spec keeps development deterministic so one can be added, it does not add it); balancing
-beyond the numbers Heiko ruled (WS1's sim sweeps them after the build).
+colonists colliding; walking in other phases; balancing beyond the numbers Heiko ruled (WS1's sim sweeps them after
+the build). The game record is not this spec's: WS3's (`docs/specs/2026-10-29-ws3-game-record.md` on ws3-auctions,
+Heiko's OK 28 Oct, §3 frozen at 04406300) records development through the seam in HC-9 and HC-10.
 
 **Rough cost** `[review-only]`: chosen approach ≈ 6–8 PRs over 3 waves (engine + config; server + protocol +
 tabletop stream; AI + sim; phone/laptop/TV screens; moments; switch-over and removal). Thin baseline ≈ 3 PRs
@@ -101,6 +104,13 @@ HC-6  The mock at ceedd23f is the binding scaffold for every screen here; an imp
 HC-7  Rules errors throw RuleError; the server turns them into messages.   source: CLAUDE.md   breach: fatal
 HC-8  Lean CI: no new e2e files; development's browser checks extend shell.ts / store-steps.ts / auction-steps.ts.
                                                         source: memory "lean CI"             breach: needs decision
+HC-9  The dev tick runs only through ctx.schedule and reads time only through ctx.now(): no setInterval, Date.now or
+      performance.now in apps/server. Steer and act are MuleIntent members, so WS3's recorder takes them as intents;
+      the tick is a recorded `fire` step with its now() reads taped.
+                                                        source: WS3, game record §3 (04406300), via the PM  breach: fatal
+HC-10 The frame is output and is not recorded: it leaves through a GameContext output and returns nothing to the
+      game. A ctx method that returns a value to the game is a new input and needs a record amendment with WS1, WS2
+      and WS3 OKs.                                      source: WS3, game record §3, via the PM  breach: needs decision
 ```
 
 ---
@@ -199,7 +209,7 @@ tomorrow     MUST: three pure modules under `packages/engine/src/floor/` — wol
 logic        → §2 RULE-4 (wolves), RULE-5 (glint), RULE-6 (scramble)
 seam         new packages/engine/src/floor/{wolves,glint,scramble}.ts; game.ts named edits for the payouts
 senior       junior would: timers in the server for each moment. senior does: seeded engine steps, so the sim
-             plays the moments too (UBER-AC-3 runs headless) and a replay of the inputs replays the wolves.
+             plays the moments too (UBER-AC-3 runs headless) and WS3's record replays the wolves from the intents.
 mechanism    sprout
 pin          none, because ADDED
 ux           mock wolves.ts, glint.ts, scramble.ts, WolfLayer.tsx, GlintLayer.tsx, ScrambleLayer.tsx
@@ -270,7 +280,8 @@ today        the room sends only full views (`room.ts::broadcast` → each seat'
              plus chat and emote messages to everyone (`room.ts` everyone()).      verified_by: read
 tomorrow     MUST: the room's Game may emit a transient frame to everyone (`ctx.frame(payload)`), sent as one
                message per tick to every connection, never queued behind a full view, dropped (not buffered) for a
-               connection that is behind.
+               connection that is behind. `frame` returns void: an output the record does not tape (HC-10). It is
+               a new GameContext member, so WS3 confirms it counts as output under its record's §3 before C8 is built.
 seam         packages/tabletop/src/room.ts (+ protocol.ts message type)
 senior       junior would: put positions in viewFor and broadcast it 20×/s. senior does: a frame of ~200 bytes per
              tick, full views stay event-driven (S-1 measures both).
@@ -443,9 +454,9 @@ time         game ms = tick × tickMs; the server maps its clock to ticks (phase
              a late timer runs the missed ticks, at most DEV_STEER.catchUpTicks, then resyncs (mule-game.ts's
              existing dt clamp, AI_DEV_TICK_MS × 10, is the precedent)
 determinism  (seed, the per-tick inputs) → the same floor and state, in the engine, the sim and the server (HC-4).
-             Note: there is no game-record module today (grep "replay|actionLog" finds only a comment in
-             packages/engine/src/playbook.ts:7); replay is pinned by seeded tests (ai.test.ts, auction/lots tests). This rule keeps
-             development replayable from per-tick inputs; recording them is a non-goal.
+             The record seam: steer/act reach the game as intents and the tick as a scheduled `fire` (HC-9), so WS3's
+             game record (ws3-auctions, §3 frozen at 04406300) replays development with no change to its format;
+             the frame (step 5) is output and is not recorded (HC-10).
 unknown      a seat with no input yet → IDLE (stands still). A steer with |v| > 1 → normalised. An act while nothing is
              in reach → ignored (no RuleError: the button was dim).
 ```
@@ -669,13 +680,21 @@ inside a wall; money and stock change only through game.ts rules; development en
   no file-level ruling). Mitigation: C11 retires it for a new owned folder; the PM rules.
 - **R-4 · SEAMS.md is not on trunk** (untracked in the main checkout). Ownership claims here come from that file.
   Mitigation: the PM's ruling on the file list below is the record.
+- **W-1 · The record's size (watch item, WS3 measures).** The 50 ms tick roughly triples the development steps in
+  WS3's game record, about 0.5 MB more per 12-month game in memory (WS3's estimate). WS3 measures it once the tick
+  exists; tickMs is config if it needs to come down.
 - **Landmines** (memory): positive-control every gate (anchor-check, the 0 px² overlap); a render check by text
   length cannot see numbers change (diff the text); count console errors over the whole run, not the first second
   (the scramble's 181); the shared Docker engine and dev servers: tests own their stack (HC: ephemeral rigs).
 
 ## §8 · Amendments `[review-only]`
 
-(none yet)
+- **AM-1 (2026-10-29, PM's check of 7a0eaf76).** §0 brought back to the gate: "a first-time player" (UBER-AC-1);
+  mountains slow the AI too (UBER-AC-2); the TV shows a wolf encounter and a glint race with the AI in both
+  (UBER-AC-3); the goal lines restored to the gate's, the 5–15 s detail marked as from the mock design gate. The
+  game-record non-goal was false (WS3's record is approved and in build on ws3-auctions; WS6's grep covered trunk
+  only): removed, with RULE-1's note, for the record seam HC-9, HC-10 and watch item W-1. WS3 confirms its §3 needs
+  no amendment.
 
 ## §9 · Ownership Boundaries `[handoff]`
 
