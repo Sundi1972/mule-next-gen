@@ -36,6 +36,7 @@ import {
   outfitCostFor,
   outfitMule,
   PHASES,
+  plotAt,
   RuleError,
   runFor,
   score,
@@ -156,8 +157,11 @@ interface Colonist {
   assayUntil: number | null;
 }
 
-/** Where a development move happens: the corral for a MULE, the store for the pub, the plot; null for an outfit, done where the colonist stands. */
-function walkTarget(width: number, intent: DevIntent): DevPlace | null {
+/**
+ * Where a development move happens: the corral for a MULE, the store for the pub, the plot; null for an outfit, done
+ * where the colonist stands. Throws RuleError for a tap off the map or on the store, which no walk can reach.
+ */
+function walkTarget(state: GameState, intent: DevIntent): DevPlace | null {
   switch (intent.type) {
     case 'buyMule':
       return 'corral';
@@ -166,7 +170,8 @@ function walkTarget(width: number, intent: DevIntent): DevPlace | null {
     case 'install':
     case 'analyse':
     case 'filter':
-      return tileIndex(width, intent.x, intent.y);
+      plotAt(state, intent.x, intent.y);
+      return tileIndex(state.width, intent.x, intent.y);
     case 'outfit':
       return null;
   }
@@ -319,7 +324,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     if (state.players.find((p) => p.id === seatId)?.doneDeveloping) throw new RuleError('Your turn is over: you went to the pub');
     if (colonist.walk) throw new RuleError('Still walking');
     if (colonist.assayUntil !== null) throw new RuleError('Still assaying');
-    const to = walkTarget(state.width, intent);
+    const to = walkTarget(state, intent);
     if (to === null) {
       this.act(seatId, intent, now);
       return;
