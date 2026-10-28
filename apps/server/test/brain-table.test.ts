@@ -237,14 +237,33 @@ describe('the brain at the table', () => {
   });
 
   it('B-AC-1 (AM-14): every screen receives an AI\'s line after the view of the phase it was said in, the land grant\'s first plot included', async () => {
-    const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain: createBrain({ gameId: 'g-order', env: {} }), phaseScale: 1 });
+    // Each line said, with the phase of the decision that said it: not the game's phase when the line is delivered.
+    const said: { seat: string; phase: string }[] = [];
+    const classic = createBrain({ gameId: 'g-order', env: {} });
+    const brain: BrainService = {
+      ...classic,
+      chatter: (seat, say) => {
+        let deciding: DecisionRecord | null = null;
+        const onDecision = classic.chatter(seat, (line) => {
+          said.push({ seat: seat.id, phase: deciding!.phase });
+          say(line);
+        });
+        return (record) => {
+          deciding = record;
+          onDecision(record);
+          deciding = null;
+        };
+      },
+    };
+    const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain, phaseScale: 1 });
     expect(await t.toGameOver()).toBe(true);
 
-    const aiIds = new Set(t.ais.map((s) => s.id));
+    expect(said.some((l) => l.phase === 'landGrant')).toBe(true);
     for (const s of t.screens) {
-      const ai = s.chat.filter((m) => aiIds.has(m.from));
-      expect(ai.some((m) => m.phase === 'landGrant')).toBe(true);
-      expect(ai.map((m) => [m.phase, m.showing])).toEqual(ai.map((m) => [m.phase, m.phase]));
+      for (const ai of t.ais) {
+        const shown = s.chat.filter((m) => m.from === ai.id).map((m) => m.showing);
+        expect(shown).toEqual(said.filter((l) => l.seat === ai.id).map((l) => l.phase));
+      }
     }
   });
 
