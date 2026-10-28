@@ -220,8 +220,10 @@ examples → §6: Rookie + edit monopolyTarget 'smithore' → rejected, null · 
 - **Playbook schema** (ADDED, owned by WS1, frozen with WS3 and WS2): v0.2 at
   `.handover/ws2-findings/playbook-schema-v0.md`, settled by WS3 on 29 Oct: `LandGrantPlay.pressShare: { start; end }` (a
   floor read against the pass's progress, falling start → end; the grant is one pass, `grantSweeps` 1); types in `packages/engine/src/playbook.ts` (WS1 holds the pen,
-  a change after the freeze needs all three OKs). WS1, WS3 and WS2 OK'd v1 at type level (29 Oct); the validator enforces 0 ≤ end ≤ start ≤ 1. `PlanningPlay.list`
-  (later, AM-20, mirrors protocol's `list`) awaits WS3's OK as lots.ts owner, else it moves to v2.
+  a change after the freeze needs all three OKs). WS1, WS3 and WS2 OK'd v1 at type level (29 Oct); the validator enforces 0 ≤ end ≤ start ≤ 1. **v1 is frozen.** `PlanningPlay.list`
+  (later, AM-20, mirrors protocol's `list`; WS3 OK'd) is in v1. Its execution, when built, lists only in planning before the
+  land auction, and a refusal from `lots.ts::list` (full, not owned, no MULE, minimum out of bounds) is skipped and logged,
+  never retried.
   This spec adopts the frozen version by reference.
 - **Game record** (ADDED, WS3): types in `packages/engine/src/record.ts` (`GameRecord`, `RecordEvent`,
   `PlaybookEntry`); recorder and replay in `apps/server/src/record.ts`. Derived `notice` events (trades, claims, sales)
