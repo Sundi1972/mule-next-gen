@@ -3,7 +3,8 @@ import { GAME } from '@mule/engine';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
 import { fakeContext, readyAll } from './fake-context.js';
 
-// PR-F (Heiko option B): the land grant is one pass of the light over the free plots, with no phase clock.
+// PR-F: the land grant is one pass of the light over the free plots, with no phase clock (Heiko option B). It ends
+// earlier once every player has used their claims or pressed Done, the phone's Ready (Heiko option A, "Done with land").
 
 /** Two humans and no AI, so nobody claims unless the test says so. */
 const humans = [
@@ -11,11 +12,17 @@ const humans = [
   { id: 's2', name: 'Mia', isAi: false, color: 1 },
 ];
 
+/** A human and an AI that plays the grant as it would at a table. */
+const withAnAi = [
+  { id: 's1', name: 'Heiko', isAi: false, color: 0 },
+  { id: 's3', name: 'The Baron', isAi: true, color: 2 },
+];
+
 /** A game on the fake clock, through planning and into the land grant. */
-function inTheGrant() {
-  const fake = fakeContext({ table: humans });
+function inTheGrant(table = humans) {
+  const fake = fakeContext({ table });
   const game = new MuleGame(fake.ctx, 7);
-  game.start(humans);
+  game.start(table);
   readyAll(game);
   expect(game.viewFor(null).phase).toBe('landGrant');
   const freePlots = game.viewFor(null).tiles.filter((t) => t.terrain !== 'store' && t.owner === null).length;
@@ -52,5 +59,30 @@ describe('the land grant is one pass with no clock', () => {
     }
     expect(game.viewFor(null).phase).toBe('development');
     expect(ticks).toBeLessThan(freePlots);
+  });
+
+  it('Done with land: a human claims one plot and presses Ready once the AI has used its claims or pressed Done, and the grant ends at once', () => {
+    const { game, freePlots, advance } = inTheGrant(withAnAi);
+    const lit = game.viewFor('s1').lit!;
+    game.handle('s1', { type: 'claim', x: lit.x, y: lit.y });
+    const aiDone = () => game.viewFor(null).players.find((p) => p.id === 's3')!.ready;
+    let ticks = 0;
+    while (game.viewFor(null).phase === 'landGrant' && !aiDone() && ticks <= freePlots) {
+      advance(GRANT_TICK_MS);
+      ticks++;
+    }
+    expect(game.viewFor(null).phase, 'the human has a claim left and has not pressed Ready: the grant waits').toBe('landGrant');
+    expect(aiDone(), 'the AI used its claims or pressed Done before the pass ended').toBe(true);
+    expect(game.viewFor('s1').players.find((p) => p.id === 's1')!.ready).toBe(false);
+    game.handle('s1', { type: 'ready' });
+    expect(game.viewFor(null).phase, 'Ready is Done with land: the grant ends at once').not.toBe('landGrant');
+  });
+
+  it('negative: a human who presses Ready while the AI still wants land is shown done, and the grant goes on', () => {
+    const { game } = inTheGrant(withAnAi);
+    expect(game.viewFor(null).players.find((p) => p.id === 's3')!.ready, 'at the first plot the AI still wants land').toBe(false);
+    game.handle('s1', { type: 'ready' });
+    expect(game.viewFor(null).phase).toBe('landGrant');
+    expect(game.viewFor(null).players.find((p) => p.id === 's1')!.ready).toBe(true);
   });
 });
