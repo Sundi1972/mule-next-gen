@@ -637,10 +637,13 @@ describe('the politics view', () => {
     const { at } = beatsOf(g.game).offices.find((o) => o.office === 'governor')!;
     expect(at.tie).not.toBeNull();
     const seen = { before: 0, at: 0 };
+    // The news names the Governor at the winner beat, never at the tie beat the views reveal it.
+    const winnerNews = () => g.game.viewFor(null).news.filter((n) => /is Governor \(/.test(n)).length;
     while (election(g.game).stage === 'ceremony') {
       const ms = state.politics!.election!.ceremony!.elapsedMs;
       const view = election(g.game);
       const shown = view.result.governor;
+      expect(winnerNews(), `${ms} ms: the Governor's news line`).toBe(ms < at.winner ? 0 : 1);
       if (ms < at.tie!) {
         for (const v of screens(g.game)) expect(v.politics!.election!.result.governor?.winner, `${ms} ms: no winner before the tie beat`).toBeUndefined();
         expect(shown?.how, `${ms} ms: no rule before the tie beat`).toBeUndefined();
