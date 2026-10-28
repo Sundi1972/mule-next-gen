@@ -137,7 +137,9 @@ const KEEP_SOCKETS = `{
 }`;
 
 const started = Date.now();
-const { server, base } = await startServer({ maxMonths: 1 });
+// Without politics: month 1's election would sit between planning and the land grant, and this script grades chat,
+// not the election (politics.ts does); planning's end under Kai's bubble stays one press away.
+const { server, base } = await startServer({ maxMonths: 1, politics: false });
 const browser = await launch();
 const errors: string[] = [];
 try {
