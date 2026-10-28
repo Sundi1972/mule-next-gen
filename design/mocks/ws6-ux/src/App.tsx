@@ -22,6 +22,7 @@ import { PlotMap, type PlotLook } from './proposed/PlotMap';
 import { TvPlanning } from './proposed/PlanningReady';
 import { IntentNotes, IntentNotesProvider } from './proposed/IntentNote';
 import { HUB_NOTES, HubAudit } from './screens/audit/HubAudit';
+import { ELECTION_LINKS, ElectionAuditPage, electionRoute } from './screens/audit/ElectionAuditPage';
 import { H, W } from './fixture';
 
 const DECISIONS = [
@@ -303,6 +304,15 @@ export default function App() {
   const audit = AUDIT_STATES.find((s) => s.id === hash);
   if (audit) return <AuditHubPage state={audit} />;
 
+  const election = electionRoute(hash);
+  if (election)
+    return (
+      <Page title={`For approval · UX audit · ${election.title}`}>
+        <Links states={ELECTION_LINKS} current={election.main} />
+        <ElectionAuditPage key={hash} hash={hash} />
+      </Page>
+    );
+
   if (hash === 'game-handoff' || hash === 'game-handoff-expired')
     return (
       <Page title="Mid-game: move to your phone (WS4's hand-off, any game screen)">
@@ -550,6 +560,7 @@ export default function App() {
       </p>
       <div className="mt-2 flex flex-col gap-2" data-testid="audit-links">
         <Links states={AUDIT_STATES} />
+        <Links states={ELECTION_LINKS} />
       </div>
       <h2 className="label-caps mt-6">For approval 2026-10-28 · planning without a clock (Heiko's playtest)</h2>
       <div className="mt-2 flex flex-col gap-2" data-testid="wait-links">

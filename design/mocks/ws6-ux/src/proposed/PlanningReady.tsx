@@ -59,24 +59,24 @@ export function readyNow(others: Seat[], isHost: boolean): { title: string; deta
 }
 
 /** The ready count, where the clock used to be: planning has none. */
-export function ReadyCount({ players, tv = false }: { players: PlayerView[]; tv?: boolean }) {
+export function ReadyCount({ players, tv = false, label = 'READY' }: { players: PlayerView[]; tv?: boolean; /** What is counted: "VOTED" on the untimed ballot (UX audit E-2, #audit-election-ballot). */ label?: string }) {
   const ready = players.filter((p) => p.isAi || p.ready).length;
   return (
     <span
       className={cx('flex shrink-0 items-center gap-1.5 rounded-chip border border-holo-line bg-holo-soft font-mono font-bold text-holo', tv ? 'h-14 px-5 text-3xl' : 'h-8 px-2.5 text-sm @min-[1100px]/shell:h-11 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-2xl')}
       data-testid="ready-count"
     >
-      {ready} / {players.length} READY
+      {ready} / {players.length} {label}
     </span>
   );
 }
 
 /** The names still planning, each with its creature, and an away mark for a dropped phone. */
-function WaitingFor({ seats, me, tv = false }: { seats: Seat[]; me: string | null; tv?: boolean }) {
+function WaitingFor({ seats, me, tv = false, lead = 'Waiting for' }: { seats: Seat[]; me: string | null; tv?: boolean; lead?: string }) {
   const ordered = [...seats.filter((s) => s.id === me), ...seats.filter((s) => s.id !== me)];
   return (
     <span className={cx('flex flex-wrap items-center gap-x-2 gap-y-1', tv ? 'text-3xl' : 'text-sm @min-[1100px]/shell:text-lg')} data-testid="waiting-for">
-      <span className="text-ink-2">Waiting for</span>
+      <span className="text-ink-2">{lead}</span>
       {ordered.map((s) => (
         <span key={s.id} className="flex items-center gap-1 font-semibold" data-testid={`waiting-${s.id}`}>
           <PlayerMark slot={s.slot as Slot} size={tv ? 30 : 14} glow={!s.away} />
@@ -89,11 +89,58 @@ function WaitingFor({ seats, me, tv = false }: { seats: Seat[]; me: string | nul
 }
 
 /**
+ * What the footer says. Planning's words are the default; the untimed election (UX audit E-10, #audit-election-*)
+ * passes its own, so its announcement and ballot use this same footer and confirm, and the host's Continue reads the
+ * same in every stage that waits for people.
+ */
+export interface ReadyWords {
+  /** The button before you're done. */
+  ready: string;
+  /** Once you are. */
+  done: string;
+  /** Once you are, before the names still to come. */
+  waiting: string;
+  /** When nobody is left. */
+  all: string;
+  /** The host's confirm, given the names left and how many. */
+  confirm: (names: string, n: number) => string;
+}
+export const PLANNING_WORDS: ReadyWords = {
+  ready: "I'm ready",
+  done: "You're ready",
+  waiting: 'Waiting for',
+  all: 'Everyone is ready. The land grant starts.',
+  confirm: (names, n) => `End planning for everyone now? ${names} stop${n === 1 ? 's' : ''} where they are, and the land grant starts.`,
+};
+
+/**
  * The planning footer on every phone and laptop. Before you're ready: who is still planning, then I'm ready. Once
  * you are: who you're waiting for. The host, once ready and while anyone is still planning, can continue without
  * them, after one confirming tap.
  */
-export function ReadyBar({ ready, onReady, confirm: startConfirm = false, planningProper }: { ready: boolean; onReady: () => void; confirm?: boolean; planningProper: boolean }) {
+export function ReadyBar({
+  ready,
+  onReady,
+  confirm: startConfirm = false,
+  planningProper,
+  words = PLANNING_WORDS,
+  canReady = true,
+  onContinue,
+  fit = false,
+}: {
+  ready: boolean;
+  onReady: () => void;
+  confirm?: boolean;
+  planningProper: boolean;
+  /** Off unless given: planning's own words. */
+  words?: ReadyWords;
+  /** Off unless given: the ready button is always live. False greys it (the ballot, before a pick). */
+  canReady?: boolean;
+  /** Mock only: what Continue now does (the election's mock moves on). */
+  onContinue?: () => void;
+  /** Off unless given: the confirm's two buttons keep their words on one line in a phone's rail (UX audit E-10). */
+  fit?: boolean;
+}) {
   const { self } = usePhoneGame();
   const { waiting, others, isHost: host } = useWaiting(ready);
   // The server accepts Continue only from the host and only in planning proper (after the election, or with none).
@@ -104,8 +151,8 @@ export function ReadyBar({ ready, onReady, confirm: startConfirm = false, planni
     return (
       <>
         {waiting.length > 0 && <WaitingFor seats={waiting} me={self.id} />}
-        <Button size="lg" className="w-full @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" onClick={onReady} data-testid="ready">
-          I'm ready
+        <Button size="lg" className="w-full @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" onClick={onReady} disabled={!canReady} data-testid="ready">
+          {words.ready}
         </Button>
       </>
     );
@@ -116,9 +163,9 @@ export function ReadyBar({ ready, onReady, confirm: startConfirm = false, planni
         <svg aria-hidden viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
           <path d="M5 12.5l4.5 4.5L19 7" />
         </svg>
-        You're ready
+        {words.done}
       </span>
-      {others.length > 0 ? <WaitingFor seats={others} me={self.id} /> : <span className="text-sm text-ink-2">Everyone is ready. The land grant starts.</span>}
+      {others.length > 0 ? <WaitingFor seats={others} me={self.id} lead={words.waiting} /> : <span className="text-sm text-ink-2">{words.all}</span>}
       {isHost && others.length > 0 && !confirm && (
         <Button size="md" variant="outline" className="w-full" onClick={() => setConfirm(true)} data-testid="continue">
           Continue without {others.length === 1 ? others[0]!.name : 'them'}
@@ -126,14 +173,12 @@ export function ReadyBar({ ready, onReady, confirm: startConfirm = false, planni
       )}
       {isHost && others.length > 0 && confirm && (
         <div className="flex flex-col gap-2 rounded-panel border border-warn/60 bg-panel p-2.5 @min-[1100px]/shell:p-4" role="alertdialog" aria-label="Continue without them?" data-testid="continue-confirm">
-          <p className="text-sm @min-[1100px]/shell:text-base">
-            End planning for everyone now? {namesOf(others, null)} stop{others.length === 1 ? 's' : ''} where they are, and the land grant starts.
-          </p>
+          <p className="text-sm @min-[1100px]/shell:text-base">{words.confirm(namesOf(others, null), others.length)}</p>
           <div className="flex gap-2">
-            <Button size="md" className="flex-1" data-testid="continue-now">
+            <Button size="md" className={cx('flex-1', fit && 'whitespace-nowrap px-2')} onClick={onContinue} data-testid="continue-now">
               Continue now
             </Button>
-            <Button size="md" variant="ghost" className="flex-1" onClick={() => setConfirm(false)} data-testid="keep-waiting">
+            <Button size="md" variant="ghost" className={cx('flex-1', fit && 'whitespace-nowrap px-2')} onClick={() => setConfirm(false)} data-testid="keep-waiting">
               Keep waiting
             </Button>
           </div>

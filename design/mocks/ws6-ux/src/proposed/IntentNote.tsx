@@ -31,6 +31,8 @@ export interface IntentNoteData {
   elsewhere?: string;
   /** A question for Heiko the mock cannot settle. */
   open?: string;
+  /** A change to the game's rules, not only its screens: what WS7 would build. Off unless given. */
+  rule?: string;
 }
 
 const CIRCLED = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
@@ -117,7 +119,7 @@ export function IntentNotes({ title, intro, notes, className }: { title: string;
                 {circled(n.n)}
               </span>
               <span className="font-display font-semibold">
-                {n.title} <span className="font-mono text-xs font-normal text-ink-3">H-{n.id.slice(1)}</span>
+                {n.title} <span className="font-mono text-xs font-normal text-ink-3">{n.id.slice(0, 1)}-{n.id.slice(1)}</span>
               </span>
             </span>
             <span className="text-ink">{n.what}</span>
@@ -135,6 +137,11 @@ export function IntentNotes({ title, intro, notes, className }: { title: string;
             {n.elsewhere && (
               <span className="text-ink-3">
                 <strong className="font-semibold">On another screen, not drawn here:</strong> {n.elsewhere}
+              </span>
+            )}
+            {n.rule && (
+              <span className="rounded-chip border border-holo/60 px-1.5 py-0.5 text-ink-2" data-testid={`intent-rule-${n.id}`}>
+                <strong className="font-semibold text-holo">A rule change: Heiko's decision.</strong> {n.rule}
               </span>
             )}
             {n.open && (
