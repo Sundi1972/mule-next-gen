@@ -284,7 +284,7 @@ export interface GameState {
 
 export type Office = 'governor' | 'sheriff';
 
-/** Why an office went to its winner, as the reveal shows it. */
+/** Why an office went to its winner, as the ceremony shows it. */
 export type ElectionHow = 'votes' | 'unopposed' | 'appointed' | 'baron' | 'land' | 'lot';
 
 /** Whether a player may run for an office now, or why not. Running for the other office is no refusal: it moves the candidacy. */
@@ -300,21 +300,26 @@ export interface OfficeResult {
   tallies: { id: string; votes: number }[];
 }
 
-export type ElectionResult = Record<Office, OfficeResult>;
+/** One entry per office elected, keyed by POLITICS.offices. */
+export type ElectionResult = Partial<Record<Office, OfficeResult>>;
 
-/** One election, nominate → ballot → reveal → over, inside a planning phase. */
+/** What the ceremony shows of one office: the office and its candidates, then their bars, then the winner. */
+export type CeremonyStep = 'intro' | 'bars' | 'winner';
+
+/** One election, announce → ballot → ceremony → over, inside a planning phase. Only the ceremony runs on a clock. */
 export interface Election {
-  stage: 'nominate' | 'ballot' | 'reveal' | 'over';
-  /** Ms left in the current stage. */
-  clockMs: number;
+  stage: 'announce' | 'ballot' | 'ceremony' | 'over';
+  /** The office the ceremony is showing, its step and the ms left in that step; null outside the ceremony. */
+  ceremony: { office: Office; step: CeremonyStep; clockMs: number } | null;
+  /** Copied from Politics when the ballot opens; empty until then. */
   candidates: Record<Office, string[]>;
-  /** Each Governor candidate's promise, public like the candidacy and dropped with it. */
+  /** Each Governor candidate's promise, copied with the candidacy. */
   promises: Record<string, TaxPromise>;
   /** Secret: each voter's choice per office. Only the voter may see their own. */
   ballots: Record<string, Partial<Record<Office, string>>>;
   /** Players who pressed Done in this stage. */
   done: string[];
-  /** Fixed when the ballot closes, then shown on every screen. */
+  /** Fixed when the ballot closes; the ceremony shows it office by office. */
   result: ElectionResult | null;
 }
 
@@ -331,6 +336,10 @@ export interface Politics {
   baron: string | null;
   /** treasury.salesTax when this month's planning opened: the Governor's bounds are around it. */
   taxAtStart: number;
+  /** Who runs for each office in the next election, public, from declaration until that election's ballot opens. */
+  candidates: Record<Office, string[]>;
+  /** Each Governor candidate's promise, public like the candidacy and dropped with it. */
+  promises: Record<string, TaxPromise>;
   /** This month's election, live or just finished; null in a month without one. */
   election: Election | null;
 }
