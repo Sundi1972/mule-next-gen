@@ -192,6 +192,7 @@ describe('a dropped phone in the land grant', () => {
     const idle = playGrant(() => {});
     expect(passed.next).not.toBe('landGrant');
     expect(passed.plots.s1).toBe(0);
+    expect(passed.lasted, 'Ready alone does not end it: the AI is still choosing').toBeGreaterThan(0);
     expect(passed.lasted, 'the grant waits for the AI, not for the pass').toBeLessThan(idle.lasted);
   });
 });
