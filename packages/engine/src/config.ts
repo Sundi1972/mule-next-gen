@@ -1123,7 +1123,7 @@ export const BRAIN = {
   priceTable: { 'claude-haiku-5-5': 'pricesPerMTok', 'claude-sonnet-5-5': 'sonnetPricesPerMTok' },
   /**
    * The calls that write a seat's strategy and its playbook edits, by kind: adaptive thinking at this effort, a reply
-   * cap that includes the thinking, and how long one call may take in ms (spike S-A1 measured a p90 of 3.9 s).
+   * cap that includes the thinking, and how long one call may take in ms (a p90 of 3.9 s was measured).
    */
   writeCalls: {
     strategy: { model: 'claude-sonnet-5-5', effort: 'medium', maxTokens: 3_000, timeoutMs: 30_000 },
