@@ -98,9 +98,10 @@ function walkTarget(state: GameState, action: AiAction): DevPlace | null {
  * ends, except to the pub, which ends the turn and pays for whatever time is left when the colonist gets there.
  */
 export function applyAction(state: GameState, id: string, action: AiAction, clock?: DevClock): boolean {
-  const to = clock?.at !== undefined && state.phase === 'development' ? walkTarget(state, action) : null;
+  const walking = clock?.at !== undefined && state.phase === 'development';
+  if (walking && clock!.busy) return false;
+  const to = walking ? walkTarget(state, action) : null;
   if (clock?.at === undefined || to === null) return applyRule(state, id, action, clock);
-  if (clock.busy) return false;
   const walk = walkSeconds(state, id, clock.at, to);
   if (walk > clock.left && action.type !== 'pub') return false;
   clock.at = to;
