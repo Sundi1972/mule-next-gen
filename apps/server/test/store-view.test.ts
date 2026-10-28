@@ -42,7 +42,7 @@ describe('the store view at the start of development', () => {
 
   it("B-AC-9: every screen sees each seat's condition during development only: its hunger × sickness pace, species aside, and why it is sick", () => {
     const { game, state, planning, ctx, advance } = hungryWithAnEmptyCorral();
-    const want = { foodShare: foodShare(state, 's1'), sick: false, sickBecause: null, conditionPace: hungerPace(state, 's1') };
+    const want = { foodShare: foodShare(state, 's1'), foodNeed: needsOf(state, 's1').food, sick: false, sickBecause: null, conditionPace: hungerPace(state, 's1') };
     expect(want.conditionPace).toBeCloseTo(0.52);
     for (const viewer of ['s1', 's2', null]) expect(game.viewFor(viewer).players.find((p) => p.id === 's1')!.condition).toEqual(want);
     expect(game.viewFor('s1').me!.hungry).toBe(true);
