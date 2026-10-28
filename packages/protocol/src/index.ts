@@ -125,11 +125,11 @@ export interface MyView {
   installedThisTurn: boolean;
 }
 
-/** Only on the owner's phone: their candidacy, their secret ballot, and whether they may run now. */
+/** Only on the owner's phone: their candidacy, their secret ballot, and whether they may run now for each elected office. */
 export interface MyPoliticsView {
   running: Office | null;
   ballot: Partial<Record<Office, string>>;
-  canRun: Record<Office, CanRun>;
+  canRun: Partial<Record<Office, CanRun>>;
 }
 
 /** One office's result as far as the ceremony has shown it: the totals from its bars step, the winner and how from its winner step. */
@@ -140,8 +140,8 @@ export interface ElectionView {
   stage: Election['stage'];
   /** The office the ceremony shows and its step, with the step's clock in game seconds; null outside the ceremony. */
   ceremony: { office: Office; step: CeremonyStep; seconds: number; total: number } | null;
-  /** Empty until the ballot opens: until then the candidacy is Politics'. */
-  candidates: Record<Office, string[]>;
+  /** Per elected office; empty until the ballot opens: until then the candidacy is Politics'. */
+  candidates: Partial<Record<Office, string[]>>;
   /** Each Governor candidate's tax promise, public like the candidacy. */
   promises: Record<string, TaxPromise>;
   /** Players with a ballot in, never for whom. */
@@ -168,12 +168,12 @@ export interface PoliticsView {
   tax: { percent: number; start: number; low: number; high: number };
   /** The colony fund the offices are paid from. */
   fund: number;
-  /** What each office is paid at upkeep, as far as the fund reaches. */
-  pay: { governor: number; sheriff: number };
+  /** What each elected office is paid at upkeep, as far as the fund reaches. */
+  pay: Partial<Record<Office, number>>;
   /** Every player's votes, part by part. */
   weights: { id: string; votes: number; parts: VoteWeight['parts'] }[];
-  /** Who runs for each office in the next election, until its ballot opens. */
-  candidates: Record<Office, string[]>;
+  /** Who runs for each elected office in the next election, until its ballot opens. */
+  candidates: Partial<Record<Office, string[]>>;
   /** Each Governor candidate's tax promise, public like the candidacy. */
   promises: Record<string, TaxPromise>;
   /** This month's election, or null in a month without one. */
