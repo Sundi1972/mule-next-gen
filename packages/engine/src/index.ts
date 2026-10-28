@@ -24,6 +24,7 @@ export {
   type Space,
 } from './floor/floor.js';
 export { pathTo, type MapPath } from './floor/path.js';
+export { applyReach, reachOf, reachWords, type Press, type Reach, type ReachHint, type ReachKind, type ReachRefusal, type ReachWords } from './floor/reach.js';
 export { speedOf, terrainShare } from './floor/speed.js';
 export { stepFloor } from './floor/step.js';
 export * from './floor/hall.js';

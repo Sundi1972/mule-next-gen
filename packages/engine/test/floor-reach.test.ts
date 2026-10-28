@@ -23,6 +23,7 @@ import {
   type FloorColonist,
   type FloorInput,
   type GameState,
+  type HallPlace,
   type Press,
   type Reach,
   type ReachWords,
@@ -57,7 +58,11 @@ const cfg = floorConfig(HALL);
 
 const tileOf = (state: GameState, x: number, y: number) => state.tiles[y * state.width + x]!;
 const onTile = (x: number, y: number): Partial<FloorColonist> => ({ space: 'map', x: x + 0.5, y: y + 0.5 });
-const inHall = (place: keyof typeof HALL.spots): Partial<FloorColonist> => ({ space: 'hall', ...HALL.spots[place] });
+/** Standing in the middle of a room or a door's frame: being at it. */
+const inHall = (place: HallPlace): Partial<FloorColonist> => {
+  const box = place === 'doorL' || place === 'doorR' ? HALL.doors[place] : HALL.rooms[place];
+  return { space: 'hall', x: (box.x0 + box.x1) / 2, y: (box.y0 + box.y1) / 2 };
+};
 const words = (verb: string, detail: string | null = null, enabled = true): ReachWords => ({ verb, detail, enabled });
 const a = (state: GameState) => state.players[0]!;
 

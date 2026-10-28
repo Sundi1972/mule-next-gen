@@ -17,7 +17,7 @@ export interface FloorPoint {
 
 export interface FloorConfig {
   steer: typeof DEV_STEER;
-  wolves: Pick<typeof WOLVES, 'bittenPace'>;
+  wolves: Pick<typeof WOLVES, 'bittenPace' | 'peltPrice'>;
   /** Crossing its width takes steer.floorSeconds at full pace. */
   hall: HallPlan;
 }

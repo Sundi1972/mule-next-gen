@@ -3,16 +3,25 @@ import type { GameState, Tile } from '../types.js';
 import { MS_PER_SECOND } from '../units.js';
 import { doorOutside, IDLE_INPUT, leadFor, middleOf, storeOf, type DevFloor, type FloorColonist, type FloorConfig, type FloorInput } from './floor.js';
 import { HALL_DOORS, isOpenFloor, placeAt, type HallDoor, type HallPlan } from './hall.js';
+import { reachOf } from './reach.js';
 import { speedOf, terrainShare } from './speed.js';
 
 /**
- * One tick of the floor: every colonist moved by its seat's input, at RULE-2's speed. Pure: a new floor, the old one
- * and the game untouched. A seat with no input stands still.
+ * One tick of the floor: every colonist moved by its seat's input, at RULE-2's speed, or through a door when its press
+ * reached ENTER or LEAVE on this floor. Pure: a new floor, the old one and the game untouched. A seat with no input
+ * stands still.
  */
 export function stepFloor(floor: DevFloor, state: GameState, inputs: Readonly<Record<string, FloorInput>>, dtMs: number, cfg: FloorConfig): DevFloor {
   return {
     tick: floor.tick + 1,
-    colonists: floor.colonists.map((c) => stepColonist(withLead(c, state), state, inputs[c.id] ?? IDLE_INPUT, dtMs, cfg)),
+    colonists: floor.colonists.map((c) => {
+      const input = inputs[c.id] ?? IDLE_INPUT;
+      const reach = input.act ? reachOf(floor, state, c.id, cfg) : null;
+      const led = withLead(c, state);
+      if (reach?.kind === 'enter') return follow({ ...enterHall(led, reach.door, cfg.hall), moving: true }, cfg);
+      if (reach?.kind === 'leave') return follow({ ...leaveHall(led, reach.door, state, cfg), moving: true }, cfg);
+      return stepColonist(led, state, input, dtMs, cfg);
+    }),
   };
 }
 
