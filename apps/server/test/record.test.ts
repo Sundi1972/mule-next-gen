@@ -539,7 +539,7 @@ describe.runIf(FULL)('the server writes the record', { timeout: 60_000 }, () => 
 });
 
 describe.runIf(FULL)('playbooks in the record', { timeout: 60_000 }, () => {
-  /** Every accepted Ready writes the seat a playbook; returns what was written, in call order. */
+  /** Every accepted Ready writes the seat a playbook; returns what was written, in call order. Empty it before a replay. */
   function writeOnReady(): PlaybookNote[] {
     const written: PlaybookNote[] = [];
     spies.playbookFor = (seat, intent) => {
@@ -562,11 +562,11 @@ describe.runIf(FULL)('playbooks in the record', { timeout: 60_000 }, () => {
     expect(entries.map(({ seat, month, phase, playbook }) => ({ seat, month, phase, playbook }))).toEqual(written);
     record.events.forEach((e, i) => {
       if (e.type !== 'playbook') return;
-      const step = record.events.slice(0, i).findLast(isStep)!;
+      const step = record.events.slice(0, i).filter(isStep).at(-1)!;
       expect(step).toMatchObject({ type: 'intent', seat: e.seat, intent: { type: 'ready' }, at: e.at, seq: e.seq });
     });
 
-    const last = record.events.findLast(isStep)!;
+    const last = record.events.filter(isStep).at(-1)!;
     t.recorder().playbook({ seat: 's3', month: 1, phase: 'month', playbook: playbookOf('s3', 0) });
     expect(t.recorder().record.events.at(-1), 'between steps, the last step stamps it').toMatchObject({ type: 'playbook', seat: 's3', at: last.at, seq: last.seq });
 
@@ -575,8 +575,11 @@ describe.runIf(FULL)('playbooks in the record', { timeout: 60_000 }, () => {
   });
 
   it('T-AC-11 (positive control): a recorded playbook that differs from the one the replay writes diverges at its step', async () => {
-    writeOnReady();
+    const written = writeOnReady();
     const { record } = await recordedGame();
+    written.length = 0;
+    expect((await replay(record)).identical).toBe(true);
+    written.length = 0;
     const altered = fileCopy(record);
     const entry = altered.events.filter((e) => e.type === 'playbook')[1]!;
     if (entry.type === 'playbook') entry.playbook.strategy.cashFloor += 1;

@@ -1,9 +1,9 @@
 /** Replays a game record through a fresh MuleGame and names the first step that doesn't play as recorded. */
-import type { CallKind } from '@mule/engine';
+import { stableJson, type CallKind, type PlaybookEntry } from '@mule/engine';
 import type { Choice } from '@mule/ai';
 import type { GameContext, SeatInfo } from '@tabletop/core';
 import type { BrainService } from './brain/index.js';
-import { MuleGame } from './mule-game.js';
+import { MuleGame, type PlaybookNote } from './mule-game.js';
 import { configFingerprint, messageOf, outcomeOf, type MuleRecord, type StepEvent } from './record.js';
 
 /** The replay reached a step that does not play as recorded. `seq` is that step's. */
@@ -46,8 +46,11 @@ class Script {
   private made: { seat: string; call: number; kind: CallKind }[] = [];
   private readonly pending = new Map<string, { resolve: (value: unknown) => void; reject: (err: Error) => void }>();
   private divergence: string | null = null;
+  private readonly playbooks: PlaybookEntry[];
+  private playbooksWritten = 0;
 
   constructor(private readonly record: MuleRecord) {
+    this.playbooks = record.events.filter((e) => e.type === 'playbook');
     this.lastNow = record.t0;
     this.ctx = {
       now: () => this.now(),
@@ -109,6 +112,19 @@ class Script {
     else if (step.kind === 'move' && step.choice) waiting.resolve({ ...step.choice });
     else if (step.kind !== 'move' && step.write) waiting.resolve(structuredClone(step.write));
     else this.diverge(`answer to ${key} has no outcome`);
+  }
+
+  /** A playbook the game wrote must be the recorded one at the same place: same step, same content. */
+  playbook(entry: PlaybookNote): void {
+    const recorded = this.playbooks[this.playbooksWritten++];
+    if (!recorded) return this.diverge(`seat ${entry.seat} wrote a playbook the record does not hold`);
+    const { type: _type, at: _at, seq, ...content } = recorded;
+    if (seq !== this.step?.seq || stableJson(content) !== stableJson(entry)) this.diverge(`seat ${entry.seat}'s playbook differs from the recorded one`);
+  }
+
+  /** The first recorded playbook the replay never wrote, if any. */
+  unwritten(): PlaybookEntry | undefined {
+    return this.playbooks[this.playbooksWritten];
   }
 
   dispose(): void {
@@ -174,6 +190,7 @@ export async function replay(record: MuleRecord): Promise<ReplayResult> {
     ...record.options,
     brain: script.brain,
     onGameOver: (state) => (replayed ??= outcomeOf(state, record.seats)),
+    recordPlaybook: (entry) => script.playbook(entry),
   });
   const seats: SeatInfo[] = record.seats.map(({ id, name, isAi, color, pick }) => ({ id, name, isAi, color, ...(pick !== undefined ? { pick } : {}) }));
   try {
@@ -184,6 +201,8 @@ export async function replay(record: MuleRecord): Promise<ReplayResult> {
       await settle();
       script.leave(event);
     }
+    const unwritten = script.unwritten();
+    if (unwritten) throw new ReplayDiverged(unwritten.seq, `seat ${unwritten.seat}'s recorded playbook was never written`);
   } finally {
     script.dispose();
     game.dispose();

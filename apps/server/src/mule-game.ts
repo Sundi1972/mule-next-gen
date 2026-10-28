@@ -70,6 +70,7 @@ import {
   type Good,
   type Outfit,
   type Phase,
+  type PlaybookEntry,
   type Trade,
 } from '@mule/engine';
 import { AiSeat, LotHand, personaFor, VoteHand, type AiAction } from '@mule/ai';
@@ -188,6 +189,9 @@ export function ledgerGameId(seed: number, now: number): string {
   return `g-${seed}-${now}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
+/** A seat's playbook as its builder hands it to the record, which stamps the step. */
+export type PlaybookNote = Omit<PlaybookEntry, 'type' | 'at' | 'seq'>;
+
 /** M.U.L.E. as a game hosted by a @tabletop/core room. */
 export class MuleGame implements Game<MuleIntent, MuleView> {
   private state: GameState | null = null;
@@ -225,6 +229,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private readonly phaseScale: number;
   /** Deciders and table chat for the AI seats; Classic when the server has no key. */
   private readonly brain: BrainService;
+  /** Where whoever builds a seat's playbook hands the final one; a no-op unless the game is recorded or replayed. */
+  protected readonly recordPlaybook: (entry: PlaybookNote) => void;
 
   constructor(
     private readonly ctx: GameContext,
@@ -237,11 +243,13 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       brain?: BrainService;
       /** Called once, as the game ends, with its final state. */
       onGameOver?: (state: GameState) => void;
+      recordPlaybook?: (entry: PlaybookNote) => void;
     } = {},
   ) {
     this.phaseScale = options.phaseScale ?? 1;
     if (!(this.phaseScale > 0 && this.phaseScale <= 1)) throw new RangeError(`phaseScale must be in (0, 1], got ${this.phaseScale}`);
     this.brain = options.brain ?? createBrain({ gameId: ledgerGameId(seed, ctx.now()) });
+    this.recordPlaybook = options.recordPlaybook ?? (() => {});
   }
 
   start(seats: SeatInfo[]): void {
