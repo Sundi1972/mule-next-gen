@@ -11,6 +11,7 @@ import {
   electionDone,
   GAME,
   GOODS,
+  newPolitics,
   grantDone,
   installMule,
   litPlot,
@@ -240,5 +241,23 @@ describe('T-AC-6: score parts add up and score() is unchanged', () => {
     const governed = colonyFailed(state) ? Math.round((raw + office) * POLLUTION.collapseScore) : raw + office;
     expect(scoreParts(state, 'a')).toEqual({ ...before, office, total: governed, cut: raw + office - governed });
     if (colonyFailed(state)) expect(governed, 'a fifth of the office line goes with the rest').toBeLessThan(total + office);
+  });
+
+  it('C7: in Collapse the office line is cut inside the one rounding, round((raw + office) × collapseScore), even when its share is not whole credits', () => {
+    const saved = POLITICS.termScore;
+    try {
+      (POLITICS as { termScore: number }).termScore = 101;
+      const state = createGame({ seed: 7, players: [{ id: 'a', name: 'A', isAi: false }, { id: 'b', name: 'B', isAi: false }] });
+      state.air = COLLAPSE_AIR;
+      const a = player(state, 'a');
+      for (const g of GOODS) a.stock[g] = 0;
+      for (const t of state.tiles) if (t.owner === 'a') t.owner = null;
+      a.money = 5300.75;
+      state.politics = { ...newPolitics(), terms: { a: 1 } };
+      // round((5300.75 + 101) × 0.8) = round(4321.4) = 4321; rounding the office apart would give 4241 + 81 = 4322.
+      expect(scoreParts(state, 'a')).toMatchObject({ money: 5301, office: 101, total: 4321, cut: 5301 + 101 - 4321 });
+    } finally {
+      (POLITICS as { termScore: number }).termScore = saved;
+    }
   });
 });

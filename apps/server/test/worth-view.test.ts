@@ -59,6 +59,7 @@ describe('Worth in every view (C18)', () => {
         const { total, ...parts } = scoreParts(state, viewer);
         expect(view.me!.worthParts, `${viewer}'s own parts in ${state.phase}`).toEqual(parts);
         expect(partsTotal(view)).toBe(total);
+        expect(view.air.band, 'this game never reaches Collapse, so no cut is due').not.toBe('collapse');
         expect(view.me!.worthParts.cut, 'clean air cuts nothing').toBe(0);
       }
       if (state.phase === 'gameOver') atEnd = game.viewFor(null);
