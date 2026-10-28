@@ -48,12 +48,27 @@ export function Board({ view = VIEW, children }: { view?: MuleView; children: Re
 /** The table as the TV's header and parts expect it. */
 export const TABLE = { code: 'MULE', status: 'playing' as const, hostId: 'lena', seats: [], boards: 1, game: VIEW };
 
-/** A phone held sideways at the e2e harness's size (844 × 390). */
+/**
+ * `?phone=667` (before the hash: /?phone=667#plan) puts every phone frame on the page at the small landscape phone,
+ * an iPhone SE held sideways (667 × 375), instead of 844 × 390.
+ */
+export const SMALL_PHONE = new URLSearchParams(window.location.search).get('phone') === '667';
+
+/**
+ * A phone held sideways at the e2e harness's size (844 × 390), or at 667 × 375 with `?phone=667`. The app's rail is
+ * `--rail: clamp(232px, 31vw, 300px)`; in a desktop browser 31vw is the window's, so the 844 frame keeps the 300 px
+ * rail it was approved with. The small frame reads the same clamp against the frame (31cqw of the shell), so its rail
+ * is the 232 px the phone itself gives it, and its stage is the phone's too.
+ */
 export function PhoneFrame({ children }: { children: ReactNode }) {
   return (
     // A narrow window scrolls the frame, never the page.
     <div className="max-w-full overflow-x-auto">
-      <div className="h-[390px] w-[844px] overflow-hidden rounded-sheet border border-holo-line shadow-map" data-testid="phone-frame">
+      <div
+        className={`${SMALL_PHONE ? 'h-[375px] w-[667px] [--rail:clamp(232px,31cqw,300px)]' : 'h-[390px] w-[844px]'} overflow-hidden rounded-sheet border border-holo-line shadow-map`}
+        data-testid="phone-frame"
+        data-phone={SMALL_PHONE ? '667' : '844'}
+      >
         {children}
       </div>
     </div>
