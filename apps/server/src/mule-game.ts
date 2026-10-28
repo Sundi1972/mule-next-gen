@@ -675,8 +675,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   /**
    * AI hands in development: every tick each AI player works through its
-   * to-do list (buy, outfit, install, pub) at a quick human's pace, on its
-   * own clock, through the same moves a phone sends.
+   * to-do list (buy, outfit, install, pub) at a quick human's pace, in game
+   * time on the one clock, told where its colonist stands and whether it is
+   * still walking or assaying. Its taps walk through the same moves a phone sends.
    */
   private scheduleAiDevelop(month: number, last: number): void {
     const state = this.requireState();
@@ -686,11 +687,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         const now = this.ctx.now();
         // The time that really passed, capped so a stalled loop doesn't make the hands skip ahead.
         const dt = Math.min(Math.max(0, now - last), AI_DEV_TICK_MS * 10);
+        // A walk due this ms lands before the hands look, whichever timer fired first.
+        this.settleArrivals();
         for (const seat of this.ai.values()) {
           const p = state.players.find((q) => q.id === seat.id)!;
           const left = this.secondsLeft(now);
-          if (p.doneDeveloping || left <= 0) continue;
-          seat.developTick(state, dt, left, (a) => this.aiAct(seat.id, a));
+          const colonist = this.colonists.get(seat.id);
+          if (p.doneDeveloping || left <= 0 || !colonist) continue;
+          const walk = { at: colonist.at, busy: colonist.walk !== null || colonist.assayUntil !== null };
+          seat.developTick(state, this.gameSeconds(dt) * 1_000, left, (a) => this.aiAct(seat.id, a), walk);
           if (state.phase !== 'development') break;
         }
         this.checkDevelopmentOver();
