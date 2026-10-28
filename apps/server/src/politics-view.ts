@@ -74,7 +74,8 @@ const HOW: Record<ElectionHow, string> = {
   unopposed: 'unopposed',
   appointed: 'appointed',
   baron: 'the Land Baron broke the tie',
-  tieRule: 'tie broken by land',
+  land: 'a tie: most plots',
+  lot: 'a tie: decided by lot',
 };
 
 /** The news line when the result is revealed. */

@@ -285,7 +285,7 @@ export interface GameState {
 export type Office = 'governor' | 'sheriff';
 
 /** Why an office went to its winner, as the reveal shows it. */
-export type ElectionHow = 'votes' | 'unopposed' | 'appointed' | 'baron' | 'tieRule';
+export type ElectionHow = 'votes' | 'unopposed' | 'appointed' | 'baron' | 'land' | 'lot';
 
 /** Whether a player may run for an office now, or why not. Running for the other office is no refusal: it moves the candidacy. */
 export type CanRun = true | 'closed' | 'termLimit';

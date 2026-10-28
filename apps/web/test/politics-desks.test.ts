@@ -169,10 +169,11 @@ describe('the politics desks', () => {
   it.each<[ElectionHow, Office, string]>([
     ['votes', 'governor', 'Won on votes.'],
     ['unopposed', 'governor', 'Elected unopposed: no ballot for this office.'],
-    ['appointed', 'governor', 'Nobody ran: the richest player is appointed.'],
-    ['appointed', 'sheriff', 'Nobody ran: the richest player who isn’t Governor is appointed.'],
+    ['appointed', 'governor', 'Nobody ran: the richest player is appointed, by lot if several are.'],
+    ['appointed', 'sheriff', 'Nobody ran: the richest player who isn’t Governor is appointed, by lot if several are.'],
     ['baron', 'sheriff', 'A tie: Ossa, the Land Baron, broke it.'],
-    ['tieRule', 'governor', 'Tied: most plots wins, then seat order.'],
+    ['land', 'governor', 'A tie: the most plots won it.'],
+    ['lot', 'governor', 'A tie: decided by lot.'],
   ])('RULE-3: the TV and the phones say how an office was won (%s, %s)', (how, office, line) => {
     const other: Office = office === 'governor' ? 'sheriff' : 'governor';
     const tallies = how === 'appointed' || how === 'unopposed' ? [] : [{ id: 's2', votes: 2 }, { id: 's3', votes: 2 }];

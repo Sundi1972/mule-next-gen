@@ -24,11 +24,15 @@ export function howWon(office: Office, how: ElectionHow, baron: string | null): 
     case 'unopposed':
       return 'Elected unopposed: no ballot for this office.';
     case 'appointed':
-      return office === 'sheriff' ? 'Nobody ran: the richest player who isn’t Governor is appointed.' : 'Nobody ran: the richest player is appointed.';
+      return office === 'sheriff'
+        ? 'Nobody ran: the richest player who isn’t Governor is appointed, by lot if several are.'
+        : 'Nobody ran: the richest player is appointed, by lot if several are.';
     case 'baron':
       return baron ? `A tie: ${baron}, the Land Baron, broke it.` : 'A tie: the Land Baron broke it.';
-    case 'tieRule':
-      return 'Tied: most plots wins, then seat order.';
+    case 'land':
+      return 'A tie: the most plots won it.';
+    case 'lot':
+      return 'A tie: decided by lot.';
   }
 }
 

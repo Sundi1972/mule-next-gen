@@ -39,7 +39,7 @@ function newGame(options: { politics?: boolean; seats?: string[]; seed?: number 
   return createGame({ seed: options.seed ?? 7, players: seats.map((id) => ({ id, name: id, isAi: false })), politics: options.politics });
 }
 
-/** AM-12's round starts at seat (seed + k) mod n: with 4 seats, seed 8 starts month 1 at the first seat. */
+/** One fixed game for the rows that play several months. */
 const ROUND_SEED = 8;
 
 function politicsOf(state: GameState): Politics {
@@ -492,7 +492,7 @@ describe("RULE-10: a Governor candidate's tax promise (C12, AM-11)", () => {
 describe('RULE-3: tally and winner', () => {
   it('B-AC-3: nobody runs → the richest player is Governor and the richest other player Sheriff, both appointed', () => {
     const state = newGame();
-    // Strictly richest each time, so no tie (AM-12's round) decides this one.
+    // Strictly richest each time, so no draw decides this one.
     setMoney(state, { lena: 900, brix: 1200, ossa: 1000, ai1: 950 });
     const result = runOutClock(state);
     expect(result).toEqual({
@@ -534,13 +534,13 @@ describe('RULE-3: tally and winner', () => {
     expect(result?.governor).toEqual({ winner: 'brix', how: 'baron', tallies: [{ id: 'lena', votes: 2 }, { id: 'brix', votes: 2 }] });
   });
 
-  // Months 1 and 4 are elections 0 and 1: the round starts at lena, then at brix. The plots cases go against the round.
+  // The plots cases name both orders, so neither seat wins by its place at the table.
   it.each([
-    { month: 1, plots: { lena: 1, brix: 2 }, winner: 'brix' },
-    { month: 4, plots: { lena: 2, brix: 1 }, winner: 'lena' },
-    { month: 1, plots: { lena: 2, brix: 2 }, winner: 'lena' },
-    { month: 4, plots: { lena: 2, brix: 2 }, winner: 'brix' },
-  ])('B-AC-4, T-AC-2 RULE-3 row 6 (AM-12): a tie the Baron\'s ballot does not break goes to the most plots, then round the table from seat (seed + k) mod n: month $month → $winner', ({ month, plots, winner }) => {
+    { month: 1, plots: { lena: 1, brix: 2 }, how: 'land', winner: 'brix' },
+    { month: 4, plots: { lena: 2, brix: 1 }, how: 'land', winner: 'lena' },
+    { month: 1, plots: { lena: 2, brix: 2 }, how: 'lot', winner: undefined },
+    { month: 4, plots: { lena: 2, brix: 2 }, how: 'lot', winner: undefined },
+  ])('B-AC-4, T-AC-2 RULE-3 rows 6, 7 (AM-17): a tie the Baron\'s ballot does not break goes to the most plots, else by lot: month $month, plots $plots → $how', ({ month, plots, how, winner }) => {
     const state = newGame({ seed: ROUND_SEED });
     give(state, 'ossa', 3);
     give(state, 'lena', plots.lena);
@@ -565,63 +565,57 @@ describe('RULE-3: tally and winner', () => {
       { id: 'brix', votes: 3 },
       { id: 'ai1', votes: 2 },
     ]);
-    expect(result?.governor).toMatchObject({ winner, how: 'tieRule' });
+    expect(result?.governor.how).toBe(how);
+    if (winner) expect(result?.governor.winner).toBe(winner);
+    else expect(['lena', 'brix']).toContain(result?.governor.winner);
   });
 
-  it.each([
-    { month: 1, governor: 'lena', sheriff: 'brix' },
-    { month: 4, governor: 'brix', sheriff: 'ossa' },
-    { month: 10, governor: 'ai1', sheriff: 'lena' },
-  ])('T-AC-2 RULE-3 row 1/2 (AM-12): nobody runs and money is equal → the appointed Governor and Sheriff go round the table: month $month → $governor, $sheriff', ({ month, governor, sheriff }) => {
+  it.each([1, 4, 10])('T-AC-2 RULE-3 rows 1/2 (AM-17): nobody runs and money is equal: month %i appoints a Governor and a different Sheriff, both by lot', (month) => {
     const state = newGame({ seed: ROUND_SEED });
     toMonth(state, month);
     setMoney(state, { lena: 1000, brix: 1000, ossa: 1000, ai1: 1000 });
 
-    const result = runOutClock(state);
-    expect(result).toEqual({
-      governor: { winner: governor, how: 'appointed', tallies: [] },
-      sheriff: { winner: sheriff, how: 'appointed', tallies: [] },
-    });
+    const result = runOutClock(state)!;
+    expect(result.governor).toMatchObject({ how: 'appointed', tallies: [] });
+    expect(result.sheriff).toMatchObject({ how: 'appointed', tallies: [] });
+    expect(result.sheriff.winner).not.toBe(result.governor.winner);
   });
 
-  it('T-AC-2 RULE-3 rows 2, 6 (AM-12) property: over the 4 elections of a 4-seat game where every tie is total, each seat wins the tieRule Governor once and the appointed Sheriff once', () => {
-    const state = newGame({ seed: ROUND_SEED });
-    const won = { governor: [] as string[], sheriff: [] as string[] };
-    for (const month of POLITICS.electionMonths) {
-      toMonth(state, month);
-      // No plots, no ballots, equal money: every seat ties at every step down to the last resort.
-      setMoney(state, { lena: 1000, brix: 1000, ossa: 1000, ai1: 1000 });
-      // A seat at the term limit sits out, so a rule that keeps one seat winning shows in the winners, not as a refusal.
-      for (const id of SEATS) if (canRun(state, id).governor === true) runFor(state, id, 'governor', HOLD);
-      runOutClock(state);
-      const result = runOutClock(state)!;
-      expect(result.governor.how).toBe('tieRule');
-      expect(result.sheriff.how).toBe('appointed');
-      won.governor.push(result.governor.winner);
-      won.sheriff.push(result.sheriff.winner);
-    }
+  // A round from a seeded start is fair only when every seat ties: two seats side by side, the first wins unless the
+  // start falls on the second, 3 games in 4 at a 4-seat table. Seat 0 is the host.
+  const FAIR_GAMES = 200;
+  const fairShare = (wins: number, of: number) => wins >= of * 0.4 && wins <= of * 0.6;
 
-    expect(won.governor).toEqual(['lena', 'brix', 'ossa', 'ai1']);
-    expect(won.sheriff).toEqual(['brix', 'ossa', 'ai1', 'lena']);
-  });
-
-  // Most ties come in month 1, when nobody owns land and money is equal: the round must move between games, not only between elections.
-  it('T-AC-2 RULE-3 rows 2, 6 (AM-12) property: over 4 games in a row, month 1\'s total ties give each seat the tieRule Governor once and the appointed Sheriff once', () => {
-    const won = { governor: [] as string[], sheriff: [] as string[] };
-    for (let seed = ROUND_SEED; seed < ROUND_SEED + SEATS.length; seed++) {
+  it(`T-AC-2 RULE-3 row 7 (AM-17): a tie the Baron and land leave is a fair draw: lena and brix, seats 0 and 1, tie in month 1 of ${FAIR_GAMES} games and each wins about half`, () => {
+    const wins: Record<string, number> = { lena: 0, brix: 0 };
+    const hows = new Set<string>();
+    for (let seed = 0; seed < FAIR_GAMES; seed++) {
       const state = newGame({ seed });
-      setMoney(state, { lena: 1000, brix: 1000, ossa: 1000, ai1: 1000 });
-      for (const id of SEATS) runFor(state, id, 'governor', HOLD);
+      runFor(state, 'lena', 'governor', HOLD);
+      runFor(state, 'brix', 'governor', HOLD);
       runOutClock(state);
+      castVote(state, 'lena', 'governor', 'lena');
+      castVote(state, 'brix', 'governor', 'brix');
       const result = runOutClock(state)!;
-      expect(result.governor.how).toBe('tieRule');
-      expect(result.sheriff.how).toBe('appointed');
-      won.governor.push(result.governor.winner);
-      won.sheriff.push(result.sheriff.winner);
+      hows.add(result.governor.how);
+      wins[result.governor.winner]!++;
     }
 
-    expect([...won.governor].sort()).toEqual([...SEATS].sort());
-    expect([...won.sheriff].sort()).toEqual([...SEATS].sort());
+    expect(fairShare(wins.lena!, FAIR_GAMES), `lena won ${wins.lena} of ${FAIR_GAMES}`).toBe(true);
+    expect([...hows], 'nobody owns land, so the result says it was a draw').toEqual(['lot']);
+  });
+
+  it(`T-AC-2 RULE-3 row 1 (AM-17): nobody runs and lena and brix are richest: the appointment is the same fair draw, each appointed Governor in about half of ${FAIR_GAMES} games`, () => {
+    const wins: Record<string, number> = { lena: 0, brix: 0 };
+    for (let seed = 0; seed < FAIR_GAMES; seed++) {
+      const state = newGame({ seed });
+      setMoney(state, { lena: 1000, brix: 1000, ossa: 900, ai1: 900 });
+      const result = runOutClock(state)!;
+      expect(result.governor.how, `seed ${seed}`).toBe('appointed');
+      wins[result.governor.winner]!++;
+    }
+
+    expect(fairShare(wins.lena!, FAIR_GAMES), `lena was appointed ${wins.lena} of ${FAIR_GAMES}`).toBe(true);
   });
 
   // Lean CI: 25 games on every PR, the full 150 with MULE_FULL=1 (pnpm test:full).
@@ -651,7 +645,7 @@ describe('RULE-3: tally and winner', () => {
     }
 
     expect(broken).toEqual([]);
-    expect([...hows].sort()).toEqual(['appointed', 'baron', 'tieRule', 'unopposed', 'votes']);
+    expect([...hows].sort()).toEqual(['appointed', 'baron', 'land', 'lot', 'unopposed', 'votes']);
   });
 
   it('AM-2: nobody runs for Governor and the richest runs alone for Sheriff → they are Sheriff (\'unopposed\') and the richest other player is appointed Governor', () => {
