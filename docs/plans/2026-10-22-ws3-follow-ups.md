@@ -206,3 +206,19 @@ WS5's #112 (maps 2.7× faster) is on trunk via #133. Row 1 in `packages/engine/t
 
 - [x] **Step 1:** time the row 5 times under the machine's normal load, recording each time and the load average. If every run is under 2.5 s, drop the timeout and the comment's headroom clause. Otherwise set it to about 2× the slowest run, in whole seconds, and say so in the comment.
 - [x] **Merge gate:** no assertion edited; `pnpm --filter @mule/engine test` green; typecheck 0; only lots-colony.test.ts changes; review clean.
+
+## PR-F: the land grant is one pass with no clock (`ws3-grant-pass` from `ws3-auctions`)
+
+Heiko's ruling, option B (2026-10-28, through the PM): the grant always completes one full pass over the free plots, then stops, or stops earlier once every player has used their claims. The fixed 60 s cap is gone. Class: Sketch.
+
+**Authority:**
+- `may_edit`: `packages/engine/src/config.ts` (the PHASES block, WS3's: `landGrantMs: null as number | null`); `apps/server/src/mule-game.ts`; WS3's tests; `apps/web/src/phone/LandGrant.tsx`, if it needs to draw no countdown.
+- **Named edits, each in its own commit:**
+  - (a) WS1's GAME block: `grantSweeps` 3 → 1, with its doc comment restated as "one pass, or earlier once every claim is used". WS1 reviews it and re-measures the balance rows.
+  - (b) WS4's `apps/server/test/phase-scale.test.ts` T-AC-2: the timer rows move from the land grant to production (15 s). WS4 reviews on the SHAs.
+  - Any other lane's file that breaks is a stop-and-report, not an edit.
+
+- [ ] **Step 1 (RED):** at viewFor, a land grant has no clock (`phaseEndsAt` null), and it ends after one pass over the free plots with claims unused, not at 60 s. It still ends early once every claim is used.
+- [ ] **Step 2:** `PHASES.landGrantMs` null means no phase timer (as `planningMs`), and `GAME.grantSweeps` is 1. The sim already ends the grant through `grantDone`.
+- [ ] **Step 3:** the phone's and TV's grant views draw no countdown while `phaseEndsAt` is null, as in untimed planning.
+- [ ] **Merge gate:** typecheck and test green; e2e:core green, with its wall time before and after; the sim's 4-game smoke runs; the named edits are each their own commit; review clean.
