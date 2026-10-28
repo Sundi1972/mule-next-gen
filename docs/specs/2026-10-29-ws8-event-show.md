@@ -560,6 +560,21 @@ goal      G-1 (unchanged)
 folded    C5 pin: production-show.test.ts stays green with only this named edit; T-AC-4 strengthened as above
 ```
 
+```
+AM-7 · 2026-10-28 · PM ruling (A), at PR-1 Task 3's review
+
+target    §1 C5 · §6 T-AC-3 · apps/web/test/production-show.test.ts (WS6's)
+said      (unstated) WS6's net hit-x-y badge stayed on the bars beside the module's per-event chips
+did       the bars show no event badge; each event's own chip (data-delta at the plot) carries the figure, as in the
+          gallery (stage.tsx OutputBars has none). Two figures that can disagree (a net badge that vanishes when events
+          cancel, beside chips reading −2 and +1) are not acceptable. Named edits, WS6 reviewing: the badge removal in
+          ProductionMap.tsx; AM-6's kept frames in production-show.test.ts switch from hit-x-y to the per-event
+          chip, still at the window end and computed from playMs. Positive control: a chip with the wrong delta goes red.
+because   HC-1 and G-1: each event shows what it did, as approved
+goal      G-1 (unchanged)
+folded    T-AC-3 asserts the per-event chips in fired order
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: the event show
