@@ -200,7 +200,8 @@ function NeedsStrip({ onOpen }: { onOpen: (el: Element) => void }) {
       type="button"
       onClick={(e) => onOpen(e.currentTarget)}
       className={cx(
-        'relative flex items-center gap-x-2 whitespace-nowrap rounded-control border bg-panel px-2 py-1 text-left text-[11px] hover:border-holo @min-[1100px]/shell:gap-x-4 @min-[1100px]/shell:px-4 @min-[1100px]/shell:py-2 @min-[1100px]/shell:text-base',
+        // On a small phone the strip has no room for all three goods on one line, so it wraps between them, never inside one.
+        'relative flex flex-wrap items-center gap-x-2 gap-y-0.5 whitespace-nowrap rounded-control border bg-panel px-2 py-1 text-left text-[11px] hover:border-holo @min-[1100px]/shell:gap-x-4 @min-[1100px]/shell:px-4 @min-[1100px]/shell:py-2 @min-[1100px]/shell:text-base',
         short.length > 0 ? 'border-alert/60' : 'border-holo-line',
       )}
       aria-label={`This month you need: ${rows.map((n) => `${GOOD_NAME[n.good]}, ${n.have} of ${n.need}${n.have < n.need ? `, short ${n.need - n.have}` : ''}`).join('; ')}. Opens the Colony desk.`}
@@ -497,7 +498,11 @@ function ToolsAndMap({ tools, tool, setTool, hint, tiles, onTile, selected }: { 
   const wide = useWide();
   return (
     <div className="flex min-h-0 flex-1 gap-2 @min-[1100px]/shell:flex-col @min-[1100px]/shell:gap-4">
-      <div className="flex shrink-0 flex-col items-stretch gap-1 @min-[1100px]/shell:flex-row @min-[1100px]/shell:flex-wrap @min-[1100px]/shell:items-center" role="toolbar" aria-label="Map tools" data-testid="map-tools">
+      {/*
+        A column of four 32 px tools; a fifth (Target, on the Secret desk) starts a second column. A small phone
+        (667 × 375) has height for two, so there they stand two to a column, in narrower columns.
+      */}
+      <div className="grid shrink-0 grid-flow-col grid-rows-[repeat(4,auto)] content-start justify-start gap-1 @max-3xl/shell:auto-cols-[--spacing(22)] @max-3xl/shell:grid-rows-[repeat(2,auto)] @min-[1100px]/shell:flex @min-[1100px]/shell:flex-row @min-[1100px]/shell:flex-wrap @min-[1100px]/shell:items-center" role="toolbar" aria-label="Map tools" data-testid="map-tools">
         {tools.map((t) => (
           <button
             key={t.id}
@@ -505,7 +510,7 @@ function ToolsAndMap({ tools, tool, setTool, hint, tiles, onTile, selected }: { 
             aria-pressed={tool === t.id}
             onClick={() => setTool(t.id)}
             className={cx(
-              'relative flex h-7 items-center gap-1 rounded-control border px-2 text-[11px] font-semibold @min-[1100px]/shell:h-9 @min-[1100px]/shell:px-3 @min-[1100px]/shell:text-sm',
+              'relative flex min-h-8 shrink-0 items-center gap-1 rounded-control border px-2 text-[11px] font-semibold @max-3xl/shell:flex-wrap @max-3xl/shell:py-0.5 @max-3xl/shell:text-left @max-3xl/shell:leading-tight @min-[1100px]/shell:h-9 @min-[1100px]/shell:px-3 @min-[1100px]/shell:text-sm',
               tool === t.id ? 'border-holo bg-holo-soft text-holo' : 'border-holo-line text-ink-2',
             )}
             data-testid={`tool-${t.id}`}
