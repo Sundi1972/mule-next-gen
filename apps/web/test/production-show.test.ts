@@ -37,6 +37,7 @@ function month(kind: EventKind, deltas: [number, number] = [-2, 2]): ProductionV
       },
     ],
     lengthMs: 15_000,
+    introMs: 0,
   };
 }
 
@@ -93,6 +94,7 @@ describe('the production show on the map', () => {
       lines,
       events: [{ ...month('fire').events[0]!, hits: lines.map((l, order) => ({ x: l.x, y: l.y, order, delta: -1 })) }],
       lengthMs: 15_000,
+      introMs: 0,
     };
     const html = render(fire, windowEnd(fire) - 0.05);
     for (const l of lines) expect(chips(html, l.x, l.y), `the chip on ${l.x}, ${l.y}`).toEqual([-1]);

@@ -1,5 +1,5 @@
 import { EVENT_ENTRY, STORY } from './catalogue';
-import type { ShowEventView, ShowHit, ShowMode, ShowPhase } from './types';
+import type { ShowEventView, ShowHit, ShowMode, ShowPhase, ShowTimeline } from './types';
 
 /**
  * The show's timeline, in seconds on the caller's clock. Each event plays in its own segment, exactly as long as the
@@ -47,7 +47,7 @@ export interface EventSegment {
 /** The least a segment's beats are scaled by, so its pace stays above 0. */
 const MIN_SCALE = 1e-3;
 
-export function eventSegments(events: ShowEventView[], start = 0, mode: ShowMode = 'tv'): EventSegment[] {
+export function eventSegments({ events }: ShowTimeline, start = 0, mode: ShowMode = 'tv'): EventSegment[] {
   const beat = mode === 'tv' ? EVENT_BEAT : EVENT_SOLO_BEAT;
   const modePace = mode === 'tv' ? 1 : EVENT_SOLO_PACE;
   // Each end is the start plus every length so far, so the segments sum to the server's lengths exactly.
@@ -81,8 +81,9 @@ export interface EventScript {
   mode: ShowMode;
 }
 
-export function eventScript(events: ShowEventView[], start = 0, mode: ShowMode = 'tv'): EventScript {
-  const segments = eventSegments(events, start, mode);
+export function eventScript(show: ShowTimeline, start = 0, mode: ShowMode = 'tv'): EventScript {
+  const { events } = show;
+  const segments = eventSegments(show, start, mode);
   return {
     phase: events[0]?.phase ?? 'production',
     events,

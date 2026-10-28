@@ -32,10 +32,16 @@ export interface ShowData {
   events: ShowEventView[];
   /** How long the phase runs, in ms: the whole timeline plays over it. */
   lengthMs: number;
+  /** How long the phase's intro plays before the first event, in ms: 0 in a quiet month. */
+  introMs: number;
 }
 
-/** The events' lengths, all the timeline reads of them. */
-type Lengths = readonly Pick<ShowEventView, 'playMs'>[];
+/** The lengths the server sent, all the timeline reads of a show. */
+interface Lengths {
+  events: readonly Pick<ShowEventView, 'playMs'>[];
+  introMs: number;
+}
+const QUIET: Lengths = { events: [], introMs: 0 };
 
 // --- The timeline, in show seconds: 0 at the phase's start, its end at the phase's scheduled end ---
 
@@ -52,25 +58,25 @@ export const SHOW = {
 } as const;
 
 /** How long the events play, in seconds: the server's lengths back to back, never shorter than a quiet month's window. */
-export function eventWindow(events: Lengths = []): number {
+export function eventWindow({ events }: Lengths = QUIET): number {
   const ms = events.reduce((n, e) => n + Math.max(0, e.playMs), 0);
   return Math.max(SHOW.flyStart - SHOW.eventAt, ms / 1000);
 }
 
 /** How much later than a quiet month the goods fly and the show ends. */
-const later = (events: Lengths) => eventWindow(events) - (SHOW.flyStart - SHOW.eventAt);
+const later = (show: Lengths) => eventWindow(show) - (SHOW.flyStart - SHOW.eventAt);
 
 export const fillAt = (i: number) => SHOW.fillStart + i * SHOW.fillStep;
-export const flyAt = (i: number, events: Lengths = []) => SHOW.flyStart + later(events) + i * SHOW.flyStep;
+export const flyAt = (i: number, show: Lengths = QUIET) => SHOW.flyStart + later(show) + i * SHOW.flyStep;
 /** When the show ends: the phase's scheduled end. */
-export const showEnd = (events: Lengths = []) => SHOW.end + later(events);
+export const showEnd = (show: Lengths = QUIET) => SHOW.end + later(show);
 
 /**
  * Where the show is, from how much of the phase's scheduled length has passed on the server's clock. The server's
  * length is the same timeline in ms (times the phase scale), so the share passed maps straight onto it.
  */
-export function showTime(phaseEndsAt: number | null, serverNow: number, lengthMs: number, events: Lengths = []): number {
-  const end = showEnd(events);
+export function showTime(phaseEndsAt: number | null, serverNow: number, lengthMs: number, show: Lengths = QUIET): number {
+  const end = showEnd(show);
   if (phaseEndsAt === null || lengthMs <= 0) return end;
   const done = 1 - (phaseEndsAt - serverNow) / lengthMs;
   return Math.min(end, Math.max(0, done * end));
@@ -93,7 +99,7 @@ export function finalUnits(line: ShowLine, events: ShowEventView[]): number {
 export function landed(show: ShowData, t: number, owner: string): Partial<Record<Good, number>> {
   const out: Partial<Record<Good, number>> = {};
   show.lines.forEach((l, i) => {
-    if (l.owner !== owner || t < flyAt(i, show.events) + SHOW.flight) return;
+    if (l.owner !== owner || t < flyAt(i, show) + SHOW.flight) return;
     const n = finalUnits(l, show.events);
     if (n > 0) out[l.good] = (out[l.good] ?? 0) + n;
   });
@@ -108,7 +114,7 @@ export function harvest(show: ShowData, owner: string): Partial<Record<Good, num
 /** True for a short moment after any of the player's plots lands, to light up where it landed. */
 export function landing(show: ShowData, t: number, owner: string): boolean {
   return show.lines.some((l, i) => {
-    const at = flyAt(i, show.events) + SHOW.flight;
+    const at = flyAt(i, show) + SHOW.flight;
     return l.owner === owner && t >= at && t < at + 0.25;
   });
 }
@@ -191,7 +197,7 @@ const HANDOFF = 0.2;
 export function ProductionMap({ width, height, tiles, production, t, slots, players, only, tv = false, reduced = false, mode = 'tv', className }: ProductionMapProps) {
   const map = useRef<HTMLDivElement>(null);
   const { events } = production;
-  const flyStart = flyAt(0, events);
+  const flyStart = flyAt(0, production);
   const geom = useTargets(map, t, flyStart);
   const focus = only !== undefined ? slots[only] : undefined;
   const cast = useMemo(() => players ?? Object.entries(slots).map(([id, slot]) => ({ id, slot, name: id })), [players, slots]);
@@ -203,7 +209,7 @@ export function ProductionMap({ width, height, tiles, production, t, slots, play
           line={l}
           index={i}
           t={t}
-          flyAt={flyAt(i, events)}
+          flyAt={flyAt(i, production)}
           tv={tv}
           colour={SLOT_COLOR[slots[l.owner] ?? 0]}
           target={geom?.to[l.owner]}
@@ -218,7 +224,7 @@ export function ProductionMap({ width, height, tiles, production, t, slots, play
   return (
     <div ref={map} className={cx('relative', className)} data-testid="map-show">
       {/* The bars render inside the show, so they read the very script the module draws the events with. */}
-      <EventShow events={events} t={t} start={SHOW.eventAt} mode={mode} reduced={reduced} width={width} height={height} tiles={tiles} players={cast}>
+      <EventShow events={events} introMs={0} t={t} start={SHOW.eventAt} mode={mode} reduced={reduced} width={width} height={height} tiles={tiles} players={cast}>
         <EventLivingMap size={tv ? 'tv' : 'phone'} {...(focus !== undefined ? { focusSlot: focus } : {})} {...(framed ? { bars } : {})} />
         {!framed && <div className="pointer-events-none absolute inset-0">{bars}</div>}
       </EventShow>

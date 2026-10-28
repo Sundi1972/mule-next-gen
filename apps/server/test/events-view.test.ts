@@ -50,20 +50,33 @@ function playMonth(keys: EventKey[], phaseScale = 1) {
 }
 
 describe('the event show: production lasts long enough for every event, and the view says how long each plays', () => {
-  // A lone dust storm plays 7 000 ms, past the 4 800 ms window, so it lasts 17 200 (spec AM-4).
+  // A lone dust storm plays the 1 800 ms intro and its 7 000 ms, past the 4 800 ms window, so it lasts 19 000 (spec AM-5).
+  // The five headlines, and two headlines with three spotlights, hit the 30 000 ms cap: 29 600 of stories alone would
+  // fit under it, so the second row caps only because the cap counts the intro.
+  const capped: EventKey[] = ['drought', 'dustStorm', 'pestSwarm', 'wildfire', 'bumperHarvest'];
   it.each([
     { scale: 1, keys: [] as EventKey[], ms: 15_000 },
-    { scale: 1, keys: ['dustStorm'] as EventKey[], ms: 17_200 },
-    { scale: 1, keys: ['drought', 'pestSwarm'] as EventKey[], ms: 22_400 },
+    { scale: 1, keys: ['dustStorm'] as EventKey[], ms: 19_000 },
+    { scale: 1, keys: ['drought', 'pestSwarm'] as EventKey[], ms: 24_200 },
     { scale: 1, keys: ['dustStorm', 'drought', 'acidRain', 'solarFlare', 'flood'] as EventKey[], ms: 40_200 },
+    { scale: 1, keys: capped, ms: 40_200 },
     { scale: 0.1, keys: [] as EventKey[], ms: 1_500 },
-    { scale: 0.1, keys: ['dustStorm'] as EventKey[], ms: 1_720 },
-    { scale: 0.1, keys: ['drought', 'pestSwarm'] as EventKey[], ms: 2_240 },
+    { scale: 0.1, keys: ['dustStorm'] as EventKey[], ms: 1_900 },
+    { scale: 0.1, keys: ['drought', 'pestSwarm'] as EventKey[], ms: 2_420 },
     { scale: 0.1, keys: ['dustStorm', 'drought', 'acidRain', 'solarFlare', 'flood'] as EventKey[], ms: 4_020 },
+    { scale: 0.1, keys: capped, ms: 4_020 },
   ])('T-AC-1: at phaseScale $scale, a month with $keys runs production $ms ms and the view says so', ({ scale, keys, ms }) => {
     const { production, length } = playMonth(keys, scale);
     expect(length('production')).toBe(ms);
     expect(production.lengthMs).toBe(ms);
+  });
+
+  it('T-AC-1: when the cap bites the intro keeps its 1 800 ms and the events share the rest, adding up to the cap exactly', () => {
+    const { production } = playMonth(capped);
+    // 28 200 ms left after the intro, cut from 29 600 in proportion and rounded on the running total.
+    expect(production.introMs).toBe(1_800);
+    expect(production.events.map((e) => e.playMs)).toEqual([6_669, 6_669, 4_954, 4_954, 4_954]);
+    expect(production.introMs + production.events.reduce((sum, e) => sum + e.playMs, 0)).toBe(30_000);
   });
 
   it('T-AC-1: after five headlines, upkeep still runs its own 8 000 ms (800 at phaseScale 0.1)', () => {
@@ -79,25 +92,30 @@ describe('the event show: production lasts long enough for every event, and the 
       { key: 'pestSwarm', phase: 'production', weight: 'spotlight', playMs: 5_200 },
       { key: 'bumperHarvest', phase: 'production', weight: 'spotlight', playMs: 5_200 },
     ]);
+    // The intro plays once before them, its own length.
+    expect(production.introMs).toBe(1_800);
     // A key the weight table lacks plays as a headline, in the view and in production's length.
     const unknown = playMonth(['pirateRaid' as EventKey]);
     expect(unknown.production.events.map(({ weight, playMs }) => ({ weight, playMs }))).toEqual([{ weight: 'headline', playMs: 7_000 }]);
-    expect(unknown.length('production')).toBe(17_200);
+    expect(unknown.length('production')).toBe(19_000);
   });
 
-  it('T-AC-2: when the cap bites, five headlines share it equally, 6 000 each, unscaled at phaseScale 0.1', () => {
+  it('T-AC-2: when the cap bites, five headlines share what the intro leaves of it equally, 5 640 each, unscaled at phaseScale 0.1', () => {
     const five: EventKey[] = ['dustStorm', 'drought', 'acidRain', 'solarFlare', 'flood'];
     const { production } = playMonth(five, 0.1);
+    expect(production.introMs).toBe(1_800);
     expect(production.events.map(({ key, weight, playMs }) => ({ key, weight, playMs }))).toEqual(
-      five.map((key) => ({ key, weight: 'headline', playMs: 6_000 })),
+      five.map((key) => ({ key, weight: 'headline', playMs: 5_640 })),
     );
-    // An uneven cut: 40 200 ms of stories into 30 000, shares rounded on the running total so they add up exactly.
-    const uneven = playMonth([...five, 'pestSwarm']).production.events.map((e) => e.playMs);
-    expect(uneven).toEqual([5_224, 5_224, 5_224, 5_224, 5_223, 3_881]);
-    expect(uneven.reduce((sum, ms) => sum + ms, 0)).toBe(30_000);
+    // An uneven cut: 40 200 ms of stories into the 28 200 the intro leaves of 30 000, rounded on the running total.
+    const uneven = playMonth([...five, 'pestSwarm']).production;
+    expect(uneven.events.map((e) => e.playMs)).toEqual([4_910, 4_911, 4_910, 4_911, 4_910, 3_648]);
+    expect(uneven.introMs + uneven.events.reduce((sum, e) => sum + e.playMs, 0)).toBe(30_000);
   });
 
-  it('T-AC-2: a quiet month lists no events', () => {
-    expect(playMonth([]).production.events).toEqual([]);
+  it('T-AC-2: a quiet month lists no events and plays no intro', () => {
+    const { production } = playMonth([]);
+    expect(production.events).toEqual([]);
+    expect(production.introMs).toBe(0);
   });
 });

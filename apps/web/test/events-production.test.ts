@@ -13,6 +13,8 @@ const tiles: MapTile[] = Array.from({ length: W * H }, (_, i) => ({ x: i % W, y:
 const EVENT_AT = 4.8;
 const QUIET_FLY = 9.6;
 const QUIET_END = 15;
+/** The phase's intro, as the server sends it whenever an event fired: it plays before the first event's segment. */
+const INTRO = 1.8;
 const FLIGHT = 0.9;
 const FLY_STEP = 0.09;
 
@@ -33,11 +35,16 @@ function fired(key: ShowEventKey, playMs: number, hits: [x: number, y: number, d
   };
 }
 
+/** The server's intro for these events: the engine's own number when any fired, none in a quiet month. */
+const introOf = (events: ProductionEventView[]) => (events.length > 0 ? EVENT_SHOW.introMs : 0);
 /** The server's production length for these events at phaseScale 1 (RULE-1), from the engine's own numbers. */
-const lengthOf = (events: ProductionEventView[]) => PHASES.productionMs + Math.max(0, events.reduce((n, e) => n + e.playMs, 0) - EVENT_SHOW.productionWindowMs);
+const lengthOf = (events: ProductionEventView[]) =>
+  PHASES.productionMs + Math.max(0, introOf(events) + events.reduce((n, e) => n + e.playMs, 0) - EVENT_SHOW.productionWindowMs);
+/** A month's view as the server builds it from its lines and events. */
+const viewOf = (lines: ProductionView['lines'], events: ProductionEventView[]): ProductionView => ({ lines, events, lengthMs: lengthOf(events), introMs: introOf(events) });
 
-const render = (production: ProductionView, t: number, { mode = 'tv', reduced = false }: { mode?: ShowMode; reduced?: boolean } = {}) =>
-  renderToStaticMarkup(createElement(ProductionMap, { width: W, height: H, tiles, production, t, slots: { lena: 0, ossa: 1 }, tv: true, mode, reduced }));
+const render = (production: ProductionView, t: number, { mode, reduced = false, tv = true }: { mode?: ShowMode; reduced?: boolean; tv?: boolean } = {}) =>
+  renderToStaticMarkup(createElement(ProductionMap, { width: W, height: H, tiles, production, t, slots: { lena: 0, ossa: 1 }, tv, reduced, ...(mode ? { mode } : {}) }));
 
 function plot(html: string, x: number, y: number): string {
   const start = html.indexOf(`data-testid="plot-${x}-${y}"`);
@@ -80,18 +87,17 @@ describe('the production show plays every event of the month', () => {
     [1, 0, 0],
     [2, 2, 1],
   ]);
-  const month: ProductionView = {
-    lines: [
+  const month = viewOf(
+    [
       { x: 1, y: 0, owner: 'lena', good: 'food', made: 1, parts: [] },
       { x: 4, y: 0, owner: 'lena', good: 'water', made: 2, parts: [] },
       { x: 2, y: 2, owner: 'ossa', good: 'energy', made: 1, parts: [] },
     ],
-    events: [drought, acid],
-    lengthMs: lengthOf([drought, acid]),
-  };
-  // The drought plays 4.8..7.8, the acid rain 7.8..10.8; the goods fly from 10.8.
-  const droughtEnds = EVENT_AT + 3;
-  const windowEnds = EVENT_AT + 6;
+    [drought, acid],
+  );
+  // The intro plays 4.8..6.6, the drought 6.6..9.6, the acid rain 9.6..12.6; the goods fly from 12.6.
+  const droughtEnds = EVENT_AT + INTRO + 3;
+  const windowEnds = EVENT_AT + INTRO + 6;
 
   it("T-AC-3: a plot's bars add every event's delta in fired order, never below 0, and that is what flies home", () => {
     const before = render(month, EVENT_AT - 0.1);
@@ -122,7 +128,7 @@ describe('the production show plays every event of the month', () => {
     { mode: 'tv' as const, reduced: true },
     { mode: 'solo' as const, reduced: true },
   ])('T-AC-3: the bars change in the very frame the event lands and its chip appears ($mode, reduced $reduced)', ({ mode, reduced }) => {
-    const seg = eventSegments(month.events, EVENT_AT, mode)[0]!;
+    const seg = eventSegments(month, EVENT_AT, mode)[0]!;
     const at = eventHitAt(seg, drought, drought.hits[0]!, reduced, GRID);
     const just = render(month, at - 0.02, { mode, reduced });
     expect(bars(plot(just, 1, 0))).toBe(1);
@@ -137,21 +143,24 @@ describe('the production show plays every event of the month', () => {
   it('T-AC-4: inside each event’s segment the map plays that event, in fired order, and the goods fly only after the last', () => {
     const keys: ShowEventKey[] = ['dustStorm', 'drought', 'acidRain', 'solarFlare', 'cometPass', 'flood', 'volcanicAsh', 'pestSwarm', 'wildfire', 'bumperHarvest'];
     const events = keys.map((k) => fired(k, 4000, [[1, 0, -1]]));
-    const all: ProductionView = { lines: month.lines, events, lengthMs: lengthOf(events) };
-    // The first segment opens on the phase's intro card (no event yet); every later one plays from its first moment.
-    expect(playing(render(all, EVENT_AT + 0.05))).toEqual([]);
+    const all = viewOf(month.lines, events);
+    // The phase's intro card plays in its own slot (no event yet); then every segment plays from its first moment.
+    const first = EVENT_AT + INTRO;
+    for (const t of [EVENT_AT + 0.05, first - 0.05]) expect(playing(render(all, t)), `intro at ${t}`).toEqual([]);
     keys.forEach((k, i) => {
-      const at = [EVENT_AT + 4 * i + 2, EVENT_AT + 4 * (i + 1) - 0.05, ...(i > 0 ? [EVENT_AT + 4 * i + 0.05] : [])];
+      const at = [first + 4 * i + 0.05, first + 4 * i + 2, first + 4 * (i + 1) - 0.05];
       for (const t of at) expect(playing(render(all, t)), `${k} at ${t}`).toEqual([k]);
     });
-    const end = EVENT_AT + 40;
+    const end = first + 40;
     expect(playing(render(all, end + 0.05))).toEqual([]);
 
-    // The client's timeline is the server's length: no length of its own (HC-3).
-    expect(showEnd(all.events) * 1000).toBeCloseTo(all.lengthMs, 6);
+    // The client's timeline is the server's length, intro included: no length of its own (HC-3).
+    expect(showEnd(all) * 1000).toBeCloseTo(all.lengthMs, 6);
+    // The window W = max(4.8, (introMs + Σ playMs) / 1000), and the goods fly when it closes.
+    expect(flyAt(0, all)).toBeCloseTo(EVENT_AT + (all.introMs + 40_000) / 1000, 9);
     const start = 1_000_000;
-    expect(showTime(start + all.lengthMs, start + all.lengthMs * (end / showEnd(all.events)), all.lengthMs, all.events)).toBeCloseTo(end, 9);
-    expect(showTime(start + all.lengthMs, start + all.lengthMs, all.lengthMs, all.events)).toBeCloseTo(all.lengthMs / 1000, 9);
+    expect(showTime(start + all.lengthMs, start + all.lengthMs * (end / showEnd(all)), all.lengthMs, all)).toBeCloseTo(end, 9);
+    expect(showTime(start + all.lengthMs, start + all.lengthMs, all.lengthMs, all)).toBeCloseTo(all.lengthMs / 1000, 9);
 
     // Nothing has landed while the events play: the untouched Water plot (second in reading order) lands one step and
     // one flight after the window, never before, and its landing lights up then, not at a quiet month's time.
@@ -164,14 +173,16 @@ describe('the production show plays every event of the month', () => {
     // While events play the bars sit in the map's frame (under the stories, with the camera); just before they fly they
     // leave it, already grown, so leaving does not grow them again.
     expect(inside(render(all, EVENT_AT + 6), 'event-map')).toContain('data-testid="plot-1-0"');
-    const handed = render(all, flyAt(0, all.events) - 0.1);
+    // They leave no earlier than 0.2 s before the goods fly.
+    expect(inside(render(all, flyAt(0, all) - 0.2 - 0.05), 'event-map')).toContain('data-testid="plot-1-0"');
+    const handed = render(all, flyAt(0, all) - 0.1);
     expect(inside(handed, 'event-map')).not.toContain('data-testid="plot-');
     expect(plot(handed, 4, 0)).toContain('data-bar="unit"');
     expect(plot(handed, 4, 0)).not.toContain('show-bar-in');
     expect(plot(render(all, fillAt(1) + 0.1), 4, 0)).toContain('show-bar-in');
 
     // HC-6: the camera flies in to the bumper harvest's plot, never with reduced motion.
-    const bumper = frames(EVENT_AT + 36, end);
+    const bumper = frames(first + 36, end);
     expect(bumper.some((t) => camera(render(all, t)))).toBe(true);
     expect(bumper.some((t) => camera(render(all, t, { reduced: true })))).toBe(false);
   });
@@ -192,8 +203,8 @@ describe('the production show plays every event of the month', () => {
     const keys = Object.keys(OWN) as ShowEventKey[];
     for (const k of keys) {
       const ev = fired(k, 4000, [[1, 0, -1]]);
-      const one: ProductionView = { lines: month.lines, events: [ev], lengthMs: lengthOf([ev]) };
-      const shown = frames(EVENT_AT, EVENT_AT + 4).map((t) => render(one, t));
+      const one = viewOf(month.lines, [ev]);
+      const shown = frames(EVENT_AT + INTRO, EVENT_AT + INTRO + 4).map((t) => render(one, t));
       expect(
         shown.some((html) => OWN[k].test(html)),
         `${k} draws its own story`,
@@ -203,11 +214,12 @@ describe('the production show plays every event of the month', () => {
   });
 
   it("T-AC-4: a quiet month's timeline is unchanged: the goods fly at 9.6 and the show ends at 15", () => {
-    const quiet: ProductionView = { lines: month.lines, events: [], lengthMs: lengthOf([]) };
+    const quiet = viewOf(month.lines, []);
     const start = 1_000_000;
-    expect(showEnd([]) * 1000).toBe(quiet.lengthMs);
-    expect(showTime(start + 15_000, start + 15_000, 15_000, [])).toBe(QUIET_END);
-    expect(showTime(start + 15_000, start + 15_000 * (QUIET_FLY / QUIET_END), 15_000, [])).toBeCloseTo(QUIET_FLY, 9);
+    expect(quiet.introMs).toBe(0);
+    expect(showEnd(quiet) * 1000).toBe(quiet.lengthMs);
+    expect(showTime(start + 15_000, start + 15_000, 15_000, quiet)).toBe(QUIET_END);
+    expect(showTime(start + 15_000, start + 15_000 * (QUIET_FLY / QUIET_END), 15_000, quiet)).toBeCloseTo(QUIET_FLY, 9);
     expect(landed(quiet, QUIET_FLY + FLIGHT - 0.01, 'lena')).toEqual({});
     expect(landed(quiet, QUIET_FLY + FLIGHT + 0.01, 'lena')).toEqual({ food: 1 });
     expect(playing(render(quiet, 7))).toEqual([]);
@@ -215,11 +227,31 @@ describe('the production show plays every event of the month', () => {
     expect(inside(render(quiet, 7), 'event-map')).not.toContain('data-testid="plot-');
 
     // A month whose events play shorter than the window keeps a quiet month's timeline.
-    const short = fired('drought', 3000, [[2, 2, -1]]);
-    const brief: ProductionView = { lines: month.lines, events: [short], lengthMs: lengthOf([short]) };
+    // With its intro, 1.8 + 2.5 s fits inside the 4.8 s window.
+    const short = fired('drought', 2500, [[2, 2, -1]]);
+    const brief = viewOf(month.lines, [short]);
     expect(brief.lengthMs).toBe(15_000);
-    expect(showEnd(brief.events)).toBe(QUIET_END);
+    expect(showEnd(brief)).toBe(QUIET_END);
     expect(landed(brief, QUIET_FLY + FLY_STEP + FLIGHT - 0.01, 'lena')).toEqual({ food: 1 });
     expect(landed(brief, QUIET_FLY + FLY_STEP + FLIGHT + 0.01, 'lena')).toEqual({ food: 1, water: 2 });
+  });
+
+  it("T-AC-4: ProductionMap plays at the TV's pace unless told otherwise", () => {
+    // The drought's motion: the same frames with no mode as with 'tv', and different from a phone alone's.
+    const t = frames(EVENT_AT + INTRO, EVENT_AT + INTRO + 3, 0.25);
+    const html = (mode?: ShowMode) => t.map((at) => render(month, at, mode ? { mode } : {})).join('');
+    expect(html()).toBe(html('tv'));
+    expect(html()).not.toBe(html('solo'));
+  });
+
+  it('T-AC-4: on the phone a 0-delta hit on a plot with reasons does not hide its reasons; a real loss does', () => {
+    const lines: ProductionView['lines'] = [
+      { x: 1, y: 0, owner: 'lena', good: 'food', made: 2, parts: [{ why: 'cluster', delta: 1 }] },
+      { x: 4, y: 0, owner: 'lena', good: 'water', made: 2, parts: [{ why: 'cluster', delta: 1 }] },
+    ];
+    const rain = viewOf(lines, [fired('acidRain', 3000, [[1, 0, 0], [4, 0, -1]])]);
+    const after = render(rain, EVENT_AT + INTRO + 3 - 0.05, { tv: false });
+    expect(plot(after, 1, 0)).toContain('data-badge="reason"');
+    expect(plot(after, 4, 0)).not.toContain('data-badge="reason"');
   });
 });

@@ -116,6 +116,7 @@ describe('the production view', () => {
           },
         ],
         lengthMs: 15_000,
+        introMs: 1_800,
       });
       expect(Object.keys(view.production!.events[0]!)).not.toContain('from');
       expect(keysOf(view.production)).not.toContainEqual(expect.stringMatching(/before|stock/i));
