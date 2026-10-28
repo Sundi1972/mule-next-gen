@@ -14,7 +14,7 @@
 
 The goal id is the politics spec's P-1; plan-check's `G-n` pattern does not match it (as in the slice-1 plan).
 
-<!-- plan-check: no-task C40 C47 T-AC-40 — named only in the spec's id-continuation line (slice 2a's range), not this amendment's changes -->
+<!-- plan-check: no-task C40 C47 T-AC-40 B-AC-43 — slice 2a's ids, named only in the spec's id-continuation line and its §8 note on the council; not this amendment's changes -->
 
 **Non-goals (spec §0), lifted verbatim. A task serving one is cut:**
 - the screens before WS6's mock is approved;
@@ -49,7 +49,7 @@ The goal id is the politics spec's P-1; plan-check's `G-n` pattern does not matc
 
 | PR | Sub-branch | Scope | ACs verified | Contracts produced | Contracts consumed | Frontend touched? |
 |----|------------|-------|--------------|--------------------|--------------------|-------------------|
-| PR-1 | `ws7-untimed` | Tasks 1.1-1.7 (C65, C60, C61, C62, C63, C64; WS1's play.ts loop) | B-AC-60, B-AC-61, B-AC-62, T-AC-60..64 | §3 engine and protocol shapes | — | Yes, rename only (today's desks on the new stage names) |
+| PR-1 ✅ | `ws7-untimed` | Tasks 1.1-1.9 (C65, C60, C61, C62, C63, C64; WS1's play.ts loop) | B-AC-60, B-AC-61, B-AC-62, T-AC-60..64 | §3 engine and protocol shapes | — | Yes, rename only (today's desks on the new stage names) |
 | PR-2 (WS1) | `ws1-untimed-rows` | Task 2.1 (C67) | T-AC-65 | — | PR-1 | No |
 | PR-3 | `ws7-ceremony` | Tasks 3.1-3.3 (C66) | B-AC-63 | — | PR-1's view; WS6's approved mock | Yes |
 
@@ -81,70 +81,88 @@ The goal id is the politics spec's P-1; plan-check's `G-n` pattern does not matc
 
 **ACs verified:** none (contract) · **Spec:** §3
 
-- [ ] **Step 1: Change C65's shapes in `packages/engine/src/types.ts` and `packages/protocol/src/index.ts`, and the POLITICS block, per spec §3 (named edits).**
-- [ ] **Step 2: Run `pnpm typecheck`. Expected: errors only at the consumers Tasks 1.2-1.6 change. List them in the task report.**
-- [ ] **Step 3: Commit `feat(C65): candidacy on Politics, the election's stages and ceremony (contract)`.**
+- [x] **Step 1: Change C65's shapes in `packages/engine/src/types.ts` and `packages/protocol/src/index.ts`, and the POLITICS block, per spec §3 (named edits).**
+- [x] **Step 2: Run `pnpm typecheck`. Expected: errors only at the consumers Tasks 1.2-1.6 change. List them in the task report.**
+- [x] **Step 3: Commit `feat(C65): candidacy on Politics, the election's stages and ceremony (contract)`.**
 
 ### Task 1.2: C60 — run in any month's planning
 
 **ACs verified:** T-AC-60 · **Spec:** §1 C60, §2 RULE-60
 
-- [ ] **Step 1: Write failing tests `T-AC-60: <RULE-60 row>` in `packages/engine/test/politics.test.ts`, one per row with its message.** Altitude: unit (a rule table). Negative: a run in development (row 1).
-- [ ] **Step 2: Run them; expected FAIL.**
-- [ ] **Step 3: Implement C60 per spec §1 C60 and RULE-60 in `packages/engine/src/politics.ts` (runFor, canRun). Mechanism: in_place.**
-- [ ] **Step 4: Run; expected PASS; RULE-10's promise tests unchanged (C60's pin).**
-- [ ] **Step 5: Commit `feat(C60): run for office in any month's planning (verifies T-AC-60)`.**
+- [x] **Step 1: Write failing tests `T-AC-60: <RULE-60 row>` in `packages/engine/test/politics.test.ts`, one per row with its message.** Altitude: unit (a rule table). Negative: a run in development (row 1).
+- [x] **Step 2: Run them; expected FAIL.**
+- [x] **Step 3: Implement C60 per spec §1 C60 and RULE-60 in `packages/engine/src/politics.ts` (runFor, canRun). Mechanism: in_place.**
+- [x] **Step 4: Run; expected PASS; RULE-10's promise tests unchanged (C60's pin).**
+- [x] **Step 5: Commit `feat(C60): run for office in any month's planning (verifies T-AC-60)`.**
 
 ### Task 1.3: C61 and C62 — announce, ballot, ceremony
 
 **ACs verified:** T-AC-61, T-AC-62 · **Spec:** §1 C61, C62, §2 RULE-61, RULE-62
 
-- [ ] **Step 1: Write failing tests `T-AC-61: <RULE-61 transition>`, including "no stage ends on a clock" (step a ballot by an hour of game time: still open) and AM-1's close. Also `T-AC-62: the ceremony steps each office of POLITICS.offices; a Governor-only list runs one office`.** Altitude: unit. Restate (do not drop) slice 1's RULE-1 rows that named the clocks.
-- [ ] **Step 2: Run; expected FAIL.**
-- [ ] **Step 3: Implement C61 and C62 per spec §1 and RULE-61, RULE-62 (openPlanning, stepElection, electionDone, closeBallot, takeOffice; the tally is AM-17's). Mechanism: in_place + sprout.**
-- [ ] **Step 4: Run `pnpm --filter @mule/engine test`; expected PASS.**
-- [ ] **Step 5: Commit `feat(C61, C62): the election waits for everyone, then reveals office by office (verifies T-AC-61, T-AC-62)`.**
+- [x] **Step 1: Write failing tests `T-AC-61: <RULE-61 transition>`, including "no stage ends on a clock" (step a ballot by an hour of game time: still open) and AM-1's close. Also `T-AC-62: the ceremony steps each office of POLITICS.offices; a Governor-only list runs one office`.** Altitude: unit. Restate (do not drop) slice 1's RULE-1 rows that named the clocks.
+- [x] **Step 2: Run; expected FAIL.**
+- [x] **Step 3: Implement C61 and C62 per spec §1 and RULE-61, RULE-62 (openPlanning, stepElection, electionDone, closeBallot, takeOffice; the tally is AM-17's). Mechanism: in_place + sprout.**
+- [x] **Step 4: Run `pnpm --filter @mule/engine test`; expected PASS.**
+- [x] **Step 5: Commit `feat(C61, C62): the election waits for everyone, then reveals office by office (verifies T-AC-61, T-AC-62)`.**
 
 ### Task 1.4: C63 — the AI declares ahead and votes at its own pace
 
 **ACs verified:** T-AC-63 · **Spec:** §1 C63, §2 RULE-63
 
-- [ ] **Step 1: Write failing tests `T-AC-63: <RULE-63 row>` in `packages/ai/test/vote-hand.test.ts`. Restate slice 1's rows that assumed the nominate clock.**
-- [ ] **Step 2: Run; expected FAIL.**
-- [ ] **Step 3: Implement C63 per spec §1 C63 and RULE-63. Mechanism: in_place.**
-- [ ] **Step 4: Run `pnpm --filter @mule/ai test`; expected PASS, including `play-politics.test.ts`'s UBER-AC-1 (both offices filled by votes).**
-- [ ] **Step 5: Commit `feat(C63): AI seats declare ahead of the election and vote at their own pace (verifies T-AC-63)`.**
+- [x] **Step 1: Write failing tests `T-AC-63: <RULE-63 row>` in `packages/ai/test/vote-hand.test.ts`. Restate slice 1's rows that assumed the nominate clock.**
+- [x] **Step 2: Run; expected FAIL.**
+- [x] **Step 3: Implement C63 per spec §1 C63 and RULE-63. Mechanism: in_place.**
+- [x] **Step 4: Run `pnpm --filter @mule/ai test`; expected PASS, including `play-politics.test.ts`'s UBER-AC-1 (both offices filled by votes).**
+- [x] **Step 5: Commit `feat(C63): AI seats declare ahead of the election and vote at their own pace (verifies T-AC-63)`.**
 
 ### Task 1.5: C67's loop — the sim keeps playing (WS1 named edit)
 
-- [ ] **Step 1: Make `packages/ai/src/play.ts`'s planning loop step until the election is over and tick the vote hands in every month's planning (C67). Then run `pnpm sim` on all three seed sets. Expected: it finishes; politics-off rows byte-identical (HC-63); politics-on numbers go to WS1 for PR-2.**
-- [ ] **Step 2: Commit `feat(C67): the sim plays the untimed election (WS1 named edit)`.**
+- [x] **Step 1: Make `packages/ai/src/play.ts`'s planning loop step until the election is over and tick the vote hands in every month's planning (C67). Then run `pnpm sim` on all three seed sets. Expected: it finishes; politics-off rows byte-identical (HC-63); politics-on numbers go to WS1 for PR-2.**
+- [x] **Step 2: Commit `feat(C67): the sim plays the untimed election (WS1 named edit)`.**
 
 ### Task 1.6: C64 — the server
 
 **ACs verified:** B-AC-60, B-AC-61, B-AC-62, T-AC-64 · **Spec:** §1 C64, §2 RULE-61, RULE-64
 
-- [ ] **Step 1: Write failing tests in `apps/server/test/politics.test.ts`: `B-AC-60` (run in month 2, change in month 3, the month 4 announcement shows it, on every view), `B-AC-61` (no close while a human has not voted; closes on the last vote; the host's Continue closes and the news names them), `B-AC-62` (office by office; totals never before the bars step), `T-AC-64` (away is not Done; Continue refused in the ceremony).** Altitude: server (the promise is what each screen receives). Restate the clock rows of slice 1's C9 tests and WS3's planning.test.ts row for Continue in the election.
-- [ ] **Step 2: Run; expected FAIL.**
-- [ ] **Step 3: Implement C64 per spec §1 C64: the tick and continuePlanning (WS3 named edits), and `apps/server/src/politics-view.ts` per RULE-64.**
-- [ ] **Step 4: Run `pnpm --filter @mule/server test`; expected PASS.**
-- [ ] **Step 5: Commit `feat(C64): the server waits for every vote; the host's Continue moves past absent players (verifies B-AC-60, B-AC-61, B-AC-62, T-AC-64)`.**
+- [x] **Step 1: Write failing tests in `apps/server/test/politics.test.ts`: `B-AC-60` (run in month 2, change in month 3, the month 4 announcement shows it, on every view), `B-AC-61` (no close while a human has not voted; closes on the last vote; the host's Continue closes and the news names them), `B-AC-62` (office by office; totals never before the bars step), `T-AC-64` (away is not Done; Continue refused in the ceremony).** Altitude: server (the promise is what each screen receives). Restate the clock rows of slice 1's C9 tests and WS3's planning.test.ts row for Continue in the election.
+- [x] **Step 2: Run; expected FAIL.**
+- [x] **Step 3: Implement C64 per spec §1 C64: the tick and continuePlanning (WS3 named edits), and `apps/server/src/politics-view.ts` per RULE-64.**
+- [x] **Step 4: Run `pnpm --filter @mule/server test`; expected PASS.**
+- [x] **Step 5: Commit `feat(C64): the server waits for every vote; the host's Continue moves past absent players (verifies B-AC-60, B-AC-61, B-AC-62, T-AC-64)`.**
 
 ### Task 1.7: today's desks and every lane's e2e on the new stage names
 
-- [ ] **Step 1: Rename the stages in the politics desks and `TvElection.tsx`, with no new layout (C66's interim). Keep `readyThroughTheElection` (politics-steps.ts) working: Ready in announce and ballot, then wait out the ceremony.**
-- [ ] **Step 2: Run `pnpm --filter @mule/web test`, then `pnpm --filter @mule/web e2e:core` and `e2e:regression` locally. Expected: green. Any other lane's e2e that still fails gets a named edit, recorded in SEAMS.**
-- [ ] **Step 3: Commit `fix(C66): today's desks and e2e helpers on the new election stages`.**
+- [x] **Step 1: Rename the stages in the politics desks and `TvElection.tsx`, with no new layout (C66's interim). Keep `readyThroughTheElection` (politics-steps.ts) working: Ready in announce and ballot, then wait out the ceremony.**
+- [x] **Step 2: Run `pnpm --filter @mule/web test`, then `pnpm --filter @mule/web e2e:core` and `e2e:regression` locally. Expected: green. Any other lane's e2e that still fails gets a named edit, recorded in SEAMS.**
+- [x] **Step 3: Commit `fix(C66): today's desks and e2e helpers on the new election stages`.**
+
+### Task 1.8: Governor only (AM-19, Heiko's ruling "Governor only for now")
+
+- [x] **Step 1: `POLITICS.offices = ['governor']`, read at call time everywhere; the OFFICES constants removed; tests that need both offices use a `bothOffices()` helper. `pnpm sim` politics-off byte-identical.** Done at 0b77403.
+
+### Task 1.9: the host's Continue on the client (PM ruling 2026-10-29)
+
+- [x] **Step 1: `hostMayContinue(view)` in `apps/web/src/phone/hub/ready.ts` (true in planning proper, announce and ballot; never in the ceremony); ReadyBar's stage-specific confirm copy; TableApp's TV hint uses it. Continue marks every human not Done as Done, present or away.** Done at d0a4c03 (ready.ts), 383766a (ReadyBar), a6bd5a1 (TableApp).
 
 ### PR-1 merge gate
 
-- [ ] Every AC in PR-1's row has a green test named after its id; failing-test commits come first.
-- [ ] typecheck 0; `pnpm test` green; config guard green; smoke and Tier 2 green locally.
-- [ ] `pnpm sim` politics-off byte-identical; the politics-on report sent to WS1.
-- [ ] Named edits recorded in SEAMS and reviewed: WS3 (types, protocol, mule-game.ts, planning.test.ts), WS1 (play.ts, observe.test.ts).
-- [ ] CI green on the PR into `ws7-politics`.
+- [x] Every AC in PR-1's row has a green test named after its id; failing-test commits come first.
+- [x] typecheck 0; `pnpm test` green; config guard green; smoke and Tier 2 green locally.
+- [x] `pnpm sim` politics-off byte-identical; the politics-on report sent to WS1.
+- [x] Named edits recorded in SEAMS and reviewed: WS3 (types, protocol, mule-game.ts, planning.test.ts), WS1 (play.ts, observe.test.ts).
+- [x] CI green on the PR into `ws7-politics`.
+
+### PR-1 record (done)
+
+- **SHAs:** types e7dc633/42da203 · protocol 3735583/87d7c9e · mule-game 8412b5f · planning.test 25db5b0 · ready.ts d0a4c03 · ReadyBar 383766a · TableApp a6bd5a1 · Governor only 0b77403 · review: M7/M8 test d42078a, minors cac2d80.
+- **Merges:** #148 into `ws7-politics` at 2200d28; lane PR #155 into `feat/strategist` at e40978c (Heiko's OK via the PM).
+- **Review findings carried:** Important 1 (sim.ts's Politics line divides by 2, so "50%" filled with one office) → WS1's PR-2, using `POLITICS.offices.length`. Minor 4 (`canRun` says 'closed' outside planning) and Minor 6 (B-AC-60 asserted only in views) → PR-3. Minor 5 (`apps/web/e2e/hub-steps.ts:158`) → WS6's.
+- **Extra named edits OK'd beyond the authority table:** `score-parts.test.ts` (WS4), auction-steps (WS3), smoke/table-steps (WS4), specials (WS5), `observe.test.ts`/`play.ts` (WS1), `planning-ready.test.ts` (WS6).
+- **Measured at e2588ec (before #155):** typecheck 0; engine 280 · ai 120 (9 skipped) · server 226 (24 skipped) · web 236 · ui 46 · tabletop 148. Local `e2e/politics.ts` exit 0 on #148's head. Sim politics-on: 2520 cr / 8.0 terms before Governor only, 2399 cr / 4.0 terms after.
 
 ## PR-2 · WS1 re-measures (`ws1-untimed-rows`)
+
+**Status: pending (WS1).** Includes Important 1 from PR-1's review.
 
 ### Task 2.1: C67 — the rows
 
@@ -152,6 +170,8 @@ The goal id is the politics spec's P-1; plan-check's `G-n` pattern does not matc
 - [ ] **Step 2: Commit and PR with the before/after table.**
 
 ## PR-3 · the ceremony screens (`ws7-ceremony`)
+
+**Status: pending, until Heiko approves WS6's election mock (ws6-ux 7c0c466).** Folds in PR-1's review Minors 4 and 6.
 
 **Base:** the lane at a commit that contains WS6's approved election mock (HC: no screen before the mock).
 
@@ -165,7 +185,7 @@ The goal id is the politics spec's P-1; plan-check's `G-n` pattern does not matc
 
 ### Task 3.3: B-AC-63 — the politics e2e step
 
-- [ ] **Step 1: Restate UBER-AC-2's step in `apps/web/e2e/politics.ts` (no new file) as `B-AC-63`. Both humans run, nothing closes until the last phone votes, every screen shows the Governor's ceremony then the Sheriff's, and the next sale is taxed at the new Governor's rate. The test owns its stack.**
+- [ ] **Step 1: Restate UBER-AC-2's step in `apps/web/e2e/politics.ts` (no new file) as `B-AC-63`. Both humans run, nothing closes until the last phone votes, every screen shows the Governor's ceremony (Governor only, AM-19: one office), and the next sale is taxed at the new Governor's rate. The test owns its stack.**
 - [ ] **Step 2: Run `pnpm --filter @mule/web exec tsx e2e/politics.ts`; expected PASS. Commit `test(B-AC-63): the untimed election and its ceremony`.**
 
 ### PR-3 merge gate
@@ -174,10 +194,10 @@ The goal id is the politics spec's P-1; plan-check's `G-n` pattern does not matc
 
 ## Pre-implementation checklist
 
-- [ ] Spec reviewed by the PM; Heiko's ruling quoted in §0
-- [ ] #130 merged into trunk; #135 (AM-17) in `ws7-politics`
-- [ ] SEAMS records PR-1's named edits (WS3, WS1) before it opens
-- [ ] Base `ws7-politics` green, measured at the pre-flight (last: afb2daf, typecheck 0 · engine 264 · ai 59 · server 153 · web 156 · #130's CI 4/4)
+- [x] Spec reviewed by the PM; Heiko's ruling quoted in §0
+- [x] #130 merged into trunk; #135 (AM-17) in `ws7-politics`
+- [x] SEAMS records PR-1's named edits (WS3, WS1) before it opens
+- [x] Base `ws7-politics` green, measured at the pre-flight (last: afb2daf, typecheck 0 · engine 264 · ai 59 · server 153 · web 156 · #130's CI 4/4)
 - [ ] WS6's election mock approved by Heiko (for PR-3 only)
-- [ ] No spike
+- [x] No spike
 - [ ] Effort: PR-1 is large (one atomic contract change), PR-2 small (WS1), PR-3 medium
