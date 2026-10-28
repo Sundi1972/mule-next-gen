@@ -37,7 +37,14 @@ export type MuleIntent =
   /** Planning, after the election: the Governor sets the sales tax in whole percent. */
   | { type: 'setTax'; percent: number }
   /** Planning: the host ends planning with players not yet Ready; in the election's announce or ballot, it goes on without players not Done. */
-  | { type: 'continue' };
+  | { type: 'continue' }
+  /**
+   * Development: the stick's direction, sent on change. Each component is in [-1, 1] in steps of 1/8, and the vector's
+   * length is at most 1. `tick` is the development tick the phone applied it at, when the phone predicts.
+   */
+  | { type: 'steer'; x: number; y: number; tick?: number }
+  /** Development: the one button; it does what the player's `reach` says. */
+  | { type: 'act' };
 
 export const EMOTES = ['Deal?', 'Nice!', 'Traitor!', 'Ha!', 'Help!'] as const;
 export type Emote = (typeof EMOTES)[number];
@@ -99,10 +106,67 @@ export interface ColonistView {
   walk: { from: DevPlace; startedAt: number; arrivesAt: number } | null;
   /** While it stands on a plot for a geo analysis: when the analysis is done. */
   assayUntil: number | null;
+  /**
+   * Steered development: where it stands, absent until the server steers. In map tiles when `space` is 'map', in the
+   * hall plan's units (`HALL.w` × `HALL.h`) when it is 'hall'.
+   */
+  x?: number;
+  y?: number;
+  space?: ColonistSpace;
+  facing?: 'left' | 'right';
+  moving?: boolean;
+  /** The MULE on its lead, outfitted or not, and where it trots. */
+  lead?: ColonistLead | null;
+  /** How fast it walks, 1 is normal. */
+  pace?: number;
+  /** Wolf pelts it carries to sell at the store. */
+  pelts?: number;
+  /** The moment it is in, if any. */
+  encounter?: 'choose' | 'chase' | 'fight' | null;
+}
+
+/** Out on the map, or inside the store's hall. */
+export type ColonistSpace = 'map' | 'hall';
+
+/** The MULE on its lead. `x` and `y` are in the same units as its colonist's: map tiles, or hall-plan units in the hall. */
+export interface ColonistLead {
+  good: Outfit | null;
+  x: number;
+  y: number;
+}
+
+/** What the one button does where the player stands: its words, a detail such as a price, and whether it works. */
+export interface ReachView {
+  verb: string;
+  detail: string | null;
+  enabled: boolean;
+}
+
+/** One development tick's positions for every screen, sent beside the full view. */
+export interface DevFrame {
+  tick: number;
+  /** ms since development started, at this tick. */
+  at: number;
+  /** Each colonist's position: map tiles when `space` is 'map', the hall plan's units (`HALL.w` × `HALL.h`) when 'hall'. */
+  colonists: {
+    id: string;
+    x: number;
+    y: number;
+    space: ColonistSpace;
+    facing: 'left' | 'right';
+    moving: boolean;
+    lead: ColonistLead | null;
+  }[];
+  /** The moments' lines everyone sees this tick. */
+  beats: string[];
 }
 
 export interface MyView {
   id: string;
+  /** Steered development: what this player's button does now; absent until the server steers. */
+  reach?: ReachView;
+  /** Steered development: the moments' lines for this player. */
+  banners?: string[];
   species: Species;
   stock: Stock;
   carriedMule: Outfit | 'empty' | null;
