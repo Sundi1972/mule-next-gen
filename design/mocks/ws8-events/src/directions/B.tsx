@@ -105,12 +105,12 @@ function Log() {
 
 function NowCard({ seg }: { seg: Segment }) {
   const ev = seg.events[0]!;
-  const good = seg.events.every((e) => e.sign === 'good');
+  const tone = seg.events.every((e) => e.sign === 'good') ? 'good' : seg.events.every((e) => e.sign === 'bad') ? 'bad' : 'news';
   return (
-    <div className={cx('flex items-center gap-3 rounded-panel border-2 p-3 animate-[ev-drop_0.35s_ease-out]', good ? 'border-ok bg-holo-soft' : 'border-alert bg-alert-bg shadow-glow-alert')}>
+    <div className={cx('flex items-center gap-3 rounded-panel border-2 p-3 animate-[ev-drop_0.35s_ease-out]', tone === 'good' ? 'border-ok bg-holo-soft' : tone === 'bad' ? 'border-alert bg-alert-bg shadow-glow-alert' : 'border-holo bg-holo-soft')}>
       <SignBadge ev={ev} size={52} />
       <span className="flex flex-col">
-        <span className={cx('label-caps', good ? 'text-ok!' : 'text-alert-ink!')}>Now</span>
+        <span className={cx('label-caps', tone === 'good' ? 'text-ok!' : tone === 'bad' ? 'text-alert-ink!' : 'text-holo!')}>Now</span>
         <span className="font-display text-2xl font-bold leading-tight">{segTitle(seg)}</span>
         <span className="text-base text-ink-2">{whoSeg(seg)}</span>
       </span>

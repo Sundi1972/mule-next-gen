@@ -235,9 +235,9 @@ function Fire({ ev, seg }: { ev: ShowEvent; seg: Segment }) {
         return (
           <div key={`${h.x},${h.y}`} className="absolute rounded-[10%]" style={{ ...cell(h.x, h.y), background: first ? `color-mix(in srgb, var(--color-void) ${clamp(since / 1.4) * 70}%, transparent)` : `color-mix(in srgb, ${c} ${clamp(since / 0.5) * 30}%, transparent)` }}>
             {burning &&
-              (first ? [22, 44, 64] : [40]).map((left, k) => (
-                <span key={k} aria-hidden className="absolute bottom-[14%] animate-[show-flicker_0.25s_ease-in-out_infinite_alternate]" style={{ left: `${left - 12}%`, width: first ? '40%' : '26%', color: c, opacity: first ? clamp(1.6 - since) : clamp(since * 3) * clamp(1.2 - since), animationDelay: `${k * 0.07}s` }}>
-                  <EventGlyph k="wildfire" size={first ? 40 : 22} className="h-auto w-full" />
+              (first ? [-14, 22, 56] : [26]).map((left, k) => (
+                <span key={k} aria-hidden className="absolute bottom-[10%] animate-[show-flicker_0.25s_ease-in-out_infinite_alternate]" style={{ left: `${left}%`, width: first ? '58%' : '48%', color: c, opacity: first ? clamp(1.6 - since) : clamp(since * 3) * clamp(1.2 - since), animationDelay: `${k * 0.07}s`, transformOrigin: 'bottom' }}>
+                  <EventGlyph k="wildfire" size={first ? 40 : 22} className="h-auto w-full drop-shadow-[0_0_6px_var(--color-warn)]" />
                 </span>
               ))}
           </div>
@@ -364,19 +364,22 @@ function StoreFx({ ev, seg, size }: { ev: ShowEvent; seg: Segment; size: Size })
   return (
     <div className="absolute" style={cell(STORE.x, STORE.y)} data-testid={`store-${ev.key}`}>
       {ev.key === 'storeStrike' && <div className="absolute inset-0 rounded-[10%]" style={{ background: 'repeating-linear-gradient(135deg, color-mix(in srgb, var(--color-alert) 45%, transparent) 0 5px, transparent 5px 11px)' }} />}
-      {ev.key === 'storeFire' &&
-        !reduced &&
-        [10, 36, 60].map((left, k) => (
-          <span key={k} aria-hidden className="absolute bottom-[30%] w-[34%] animate-[show-flicker_0.22s_ease-in-out_infinite_alternate] text-alert" style={{ left: `${left}%`, animationDelay: `${k * 0.06}s` }}>
-            <EventGlyph k="wildfire" size={30 * u} className="h-auto w-full" />
-          </span>
-        ))}
+      {ev.key === 'storeFire' && (
+        // Bigger than the store's tile, rising above it, so the fire reads from the couch.
+        <div className="absolute -inset-x-[45%] bottom-[15%] h-[150%]">
+          {[0, 30, 58].map((left, k) => (
+            <span key={k} aria-hidden className={cx('absolute bottom-0 w-[44%] text-alert', !reduced && 'animate-[show-flicker_0.22s_ease-in-out_infinite_alternate]')} style={{ left: `${left}%`, animationDelay: `${k * 0.06}s`, transformOrigin: 'bottom' }}>
+              <EventGlyph k="wildfire" size={30 * u} className="h-auto w-full drop-shadow-[0_0_6px_var(--color-warn)]" />
+            </span>
+          ))}
+        </div>
+      )}
       {smoke &&
         !reduced &&
         [0, 0.35, 0.7, 1.05].map((d, i) => {
           const v = (since - d) % 1.4;
           if (since < d) return null;
-          return <span key={i} className="absolute left-1/2 top-0 rounded-full" style={{ width: (20 + v * 26) * u, height: (20 + v * 26) * u, transform: `translate(calc(-50% + ${(i % 2 ? 1 : -1) * 6 * u}px), calc(-50% - ${v * 50 * u}px))`, background: 'radial-gradient(circle, color-mix(in srgb, var(--color-ink-3) 85%, transparent), transparent 70%)', opacity: clamp(1 - v / 1.4) }} />;
+          return <span key={i} className="absolute left-1/2 top-0 rounded-full" style={{ width: (30 + v * 40) * u, height: (30 + v * 40) * u, transform: `translate(calc(-50% + ${(i % 2 ? 1 : -1) * 8 * u}px), calc(-50% - ${v * 70 * u}px))`, background: 'radial-gradient(circle, color-mix(in srgb, var(--color-ink-3) 85%, transparent), transparent 70%)', opacity: clamp(1 - v / 1.4) }} />;
         })}
     </div>
   );
@@ -507,8 +510,10 @@ export function EffectsCard({ seg, size }: { seg: Segment; size: Size }) {
     ...(['colony', 'store'] as const).filter((on) => fx.some((f) => f.on === on)).map((on) => ({ key: on, head: <span className={cx('label-caps', size === 'tv' ? 'text-base!' : 'text-[10px]!')}>{on === 'colony' ? 'The colony' : 'The store'}</span>, items: fx.filter((f) => f.on === on) })),
   ];
   const out = ramp(t, seg.endAt - 0.4, 0.4);
+  // At the store, the card sits at the map's foot so the flames and smoke on the store stay in view.
+  const atStore = ENTRY[ev.key].motion === 'store';
   return (
-    <div className="absolute inset-0 z-20 flex items-center justify-center" style={{ opacity: 1 - out }} data-testid="effects-card">
+    <div className={cx('absolute inset-0 z-20 flex justify-center', atStore ? (size === 'tv' ? 'items-end pb-4' : 'items-end pb-1.5') : 'items-center')} style={{ opacity: 1 - out }} data-testid="effects-card">
       <div className={cx('flex flex-col rounded-panel border-2 bg-panel/95 shadow-chip animate-[ev-pop_0.35s_ease-out]', size === 'tv' ? 'w-[520px] gap-3 p-5' : 'w-[300px] gap-1.5 p-2.5')} style={{ borderColor: ev.sign === 'good' ? 'var(--color-ok)' : 'var(--color-alert)' }}>
         <span className="flex items-center gap-2">
           <SignBadge ev={ev} size={size === 'tv' ? 44 : 26} />

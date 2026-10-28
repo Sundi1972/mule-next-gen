@@ -201,7 +201,7 @@ export function PhoneSolo({ me }: { me: string }) {
           />
           <Overlays size="phone" />
           {seg && seek && (
-            <button type="button" onClick={skip} className="absolute inset-0 z-30 flex items-end justify-end p-1.5" aria-label={playing ? 'Tap to skip to what it did to you' : 'Tap for the next event'} data-testid="skip">
+            <button type="button" onClick={skip} className="absolute inset-0 z-30 flex items-start justify-end p-1.5" aria-label={playing ? 'Tap to skip to what it did to you' : 'Tap for the next event'} data-testid="skip">
               <span className="rounded-chip bg-void/75 px-1.5 py-0.5 font-mono text-[10px] text-ink-2">{playing ? 'tap to skip ›' : 'tap: next ›'}</span>
             </button>
           )}
