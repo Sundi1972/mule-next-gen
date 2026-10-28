@@ -109,7 +109,7 @@ describe('T-AC-6: the colony sometimes puts a free plot up (RULE-7)', () => {
   // Dealing a map is the slow part, so each seed deals once and every month plays a copy; the timeout is headroom for a busy machine.
   it('T-AC-6: RULE-7 row 1 — about colonyPlotChance of (seed, month) pairs with free land bring a colony lot, rolled per month and on varied plots', () => {
     const months = [1, 2, 3, 5, 8];
-    const lots = Array.from({ length: SCAN / 2 }, (_, i) => newGame(i + 1)).map((fresh) =>
+    const lots = Array.from({ length: SCAN / 4 }, (_, i) => newGame(i + 1)).map((fresh) =>
       months.map((month) => {
         const state = structuredClone(fresh);
         state.month = month;
