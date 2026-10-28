@@ -1,6 +1,7 @@
 import {
   canRun,
   observe,
+  PERCENT,
   plotsOwned,
   POLITICS,
   taxBounds,
@@ -81,8 +82,7 @@ export class VoteHand {
   /** RULE-10's AI row: the persona's target against the tax now, with no draw, so the seeded stream is unchanged. */
   private promise(obs: GameState): TaxPromise {
     const target = POLITICS.ai.taxTarget[this.persona];
-    // literal-ok: a rate to whole percent and back, a unit conversion, not balance
-    const current = Math.round(obs.treasury.salesTax * 100);
+    const current = Math.round(obs.treasury.salesTax * PERCENT);
     if (target > current) return { kind: 'cap', percent: target };
     return target < current ? { kind: 'lower' } : { kind: 'hold' };
   }
@@ -110,8 +110,7 @@ export class VoteHand {
 
   private govern(obs: GameState, act: Act): void {
     if (obs.politics!.governor !== this.mind.me) return;
-    // literal-ok: a rate to whole percent and back, a unit conversion, not balance
-    const current = Math.round(obs.treasury.salesTax * 100);
+    const current = Math.round(obs.treasury.salesTax * PERCENT);
     const next = nextTax(current, POLITICS.ai.taxTarget[this.persona], obs.treasury.money, taxBounds(obs), obs.month);
     if (next !== current) act({ type: 'setTax', percent: next });
   }
