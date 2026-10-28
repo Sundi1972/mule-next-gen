@@ -16,14 +16,14 @@ import {
 import type { Act } from '../actions.js';
 import type { Mind } from '../value.js';
 
-/**
- * The Governor's next rate: a step toward the target of at most maxStep, a bump when the fund is low, inside the bounds.
- * The fund starts empty, so it counts as low only from month 2, after the offices' first payday. See WS7 spec RULE-8, AM-9.
- */
 function samePromise(a: TaxPromise | undefined, b: TaxPromise): boolean {
   return a?.kind === b.kind && (a.kind !== 'cap' || (b.kind === 'cap' && a.percent === b.percent));
 }
 
+/**
+ * The Governor's next rate: a step toward the target of at most maxStep, a bump when the fund is low, inside the bounds.
+ * The fund starts empty, so it counts as low only from month 2, after the offices' first payday. See WS7 spec RULE-8, AM-9.
+ */
 export function nextTax(current: number, target: number, fund: number, bounds: { low: number; high: number }, month: number): number {
   const { maxStep } = POLITICS.tax;
   const { taxFundBump, fundMonths } = POLITICS.ai;

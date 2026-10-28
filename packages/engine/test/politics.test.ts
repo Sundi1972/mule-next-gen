@@ -441,7 +441,7 @@ describe('C61, C62: the election', () => {
     runFor(state, 'lena', 'governor', HOLD);
     expect(everyoneDone(state)).toMatchObject({ governor: { how: 'unopposed' }, sheriff: { how: 'appointed' } });
     const steps: string[] = [];
-    while (electionOf(state).stage === 'ceremony') {
+    for (let i = 0; i < 20 && electionOf(state).stage === 'ceremony'; i++) {
       const { office, step, clockMs } = electionOf(state).ceremony!;
       steps.push(`${office} ${step}`);
       stepElection(state, clockMs);
@@ -460,7 +460,7 @@ describe('C61, C62: the election', () => {
       expect(Object.keys(result!)).toEqual(['governor']);
       expect(result!.governor).toMatchObject({ winner: 'brix', how: 'votes' });
       const steps: string[] = [];
-      while (electionOf(state).stage === 'ceremony') {
+      for (let i = 0; i < 20 && electionOf(state).stage === 'ceremony'; i++) {
         const { office, step, clockMs } = electionOf(state).ceremony!;
         steps.push(`${office} ${step}`);
         stepElection(state, clockMs);
@@ -995,7 +995,7 @@ describe('T-AC-62: Governor only, the default POLITICS.offices', () => {
     runFor(state, 'lena', 'governor', HOLD);
     expect(everyoneDone(state)).toEqual({ governor: { winner: 'lena', how: 'unopposed', tallies: [{ id: 'lena', votes: 0 }] } });
     const steps: string[] = [];
-    while (electionOf(state).stage === 'ceremony') {
+    for (let i = 0; i < 20 && electionOf(state).stage === 'ceremony'; i++) {
       const { office, step, clockMs } = electionOf(state).ceremony!;
       steps.push(`${office} ${step}`);
       stepElection(state, clockMs);
