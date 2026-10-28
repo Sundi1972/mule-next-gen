@@ -780,6 +780,102 @@ describe('Room: a one-time code moves a seat to another device (RULE-6, AM-16)',
   );
 });
 
+/** Each seat's id and whether it shows connected, in the last view this screen received. */
+const presence = (screen: Screen) => screen.last('view')!.view.seats.map((s) => [s.id, s.connected]);
+
+describe('Room: a connection holds at most one seat (FM-3)', () => {
+  it('FM-3: in the lobby, the host\'s connection joining again by name lets go of its seat: it shows away, hosting moves on, its token still takes it back, and a later disconnect frees only the new seat', async () => {
+    const { room, heiko, mia } = clockLobby();
+    const heikoToken = heiko.last('welcome')!.seatToken!;
+
+    room.receive(heiko, heiko.from, { t: 'join', code: room.code, name: 'Jonas' });
+    await flush();
+
+    expect(heiko.last('welcome')!.seatId).toBe('s4');
+    expect(presence(mia)).toStrictEqual([['s1', false], ['s2', true], ['s3', true], ['s4', true]]);
+    expect(mia.last('view')!.view.hostId).toBe('s2');
+
+    room.disconnect(heiko);
+    await flush();
+
+    expect(presence(mia)).toStrictEqual([['s1', false], ['s2', true], ['s3', true], ['s4', false]]);
+    expect(join(room, 'Heiko', heikoToken).last('welcome')!.seatId).toBe('s1');
+  });
+
+  it.each([
+    {
+      how: "s2's move code",
+      fields: (ctx: ReturnType<typeof clockLobby>) => ({ handoff: handoff(ctx.room, ctx.mia) }),
+      miaHears: { t: 'removed', reason: 'moved' },
+      heardOnJoin: { changes: [['s1', false]], moved: ['s2'] },
+    },
+    {
+      how: "s2's seat token",
+      fields: (ctx: ReturnType<typeof clockLobby>) => ({ seatToken: ctx.mia.last('welcome')!.seatToken! }),
+      miaHears: undefined,
+      heardOnJoin: { changes: [['s1', false], ['s2', true]], moved: [] },
+    },
+  ])('FM-3: after Start, a connection on s1 that joins with $how lets go of s1: s1 shows away, the game hears s1 disconnected, and a later disconnect frees s2 only', async ({ fields, miaHears, heardOnJoin }) => {
+    const ctx = clockLobby();
+    const { room, heiko, mia, heard } = ctx;
+    room.receive(heiko, heiko.from, { t: 'start' });
+    const tv = watch(room);
+    const via = fields(ctx);
+
+    room.receive(heiko, heiko.from, { t: 'join', code: room.code, name: 'Heiko', ...via });
+    await flush();
+
+    expect(heiko.last('welcome')!.seatId).toBe('s2');
+    expect(mia.last('removed')).toStrictEqual(miaHears);
+    expect(presence(tv)).toStrictEqual([['s1', false], ['s2', true], ['s3', true]]);
+    expect(heard).toStrictEqual({ starts: 1, ...heardOnJoin });
+
+    room.disconnect(heiko);
+    await flush();
+
+    expect(presence(tv)).toStrictEqual([['s1', false], ['s2', false], ['s3', true]]);
+    expect(heard.changes).toStrictEqual([...heardOnJoin.changes, ['s2', false]]);
+  });
+
+  it.each([
+    { row: 'rejoins s1 by its own token', fields: (ctx: ReturnType<typeof clockLobby>) => ({ seatToken: ctx.heiko.last('welcome')!.seatToken! }), error: undefined, hears: [['s1', true]] },
+    { row: 'joins by name and is refused', fields: () => ({}), error: 'This game has already started', hears: [] },
+    {
+      row: "joins with s2's expired move link and is refused",
+      fields: (ctx: ReturnType<typeof clockLobby>) => {
+        const code = handoff(ctx.room, ctx.mia);
+        ctx.clock.now += TWO_MINUTES;
+        return { handoff: code };
+      },
+      error: 'That link has expired',
+      hears: [],
+    },
+  ])('FM-3: after Start, a connection on s1 that $row keeps s1: still connected and host, the game hears no disconnect, its moves land on s1, and a later disconnect frees s1', async ({ fields, error, hears }) => {
+    const ctx = clockLobby();
+    const { room, heiko, heard } = ctx;
+    room.receive(heiko, heiko.from, { t: 'start' });
+    const tv = watch(room);
+    const via = fields(ctx);
+    const heardBefore = [...heard.changes];
+
+    room.receive(heiko, heiko.from, { t: 'join', code: room.code, name: 'Heiko', ...via });
+    await flush();
+
+    expect(heiko.last('error')?.message).toBe(error);
+    expect(presence(tv)).toStrictEqual([['s1', true], ['s2', true], ['s3', true]]);
+    expect(tv.last('view')!.view.hostId).toBe('s1');
+    expect(heard.changes).toStrictEqual([...heardBefore, ...hears]);
+    room.receive(heiko, heiko.from, { t: 'intent', intent: { secret: 'still s1' } });
+    expect(room.viewFor('s1').game?.mySecret).toBe('still s1');
+
+    room.disconnect(heiko);
+    await flush();
+
+    expect(presence(tv)).toStrictEqual([['s1', false], ['s2', true], ['s3', true]]);
+    expect(heard.changes.at(-1)).toStrictEqual(['s1', false]);
+  });
+});
+
 /** The secrets game with a bug: the secret 'boom' throws a plain Error, as an engine bug would, and so can a tick it schedules. */
 function buggyRoom(tick?: 'throws') {
   const errors: unknown[] = [];

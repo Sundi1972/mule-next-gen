@@ -257,7 +257,7 @@ describe('TableClient', () => {
     return t;
   }
 
-  it('B-AC-7: asking to move sends handoff; the code is live until it expires by the server clock, then shows as expired until a new one is asked for, and a newer code replaces it and its expiry', () => {
+  it('FM-7: asking to move sends handoff; the code is live until it expires by the server clock, then shows as expired until a new one is asked for, and a newer code replaces it and its expiry', () => {
     const { client, last, advance, setNow } = seated();
     setNow(10_000);
     // The server's clock runs 50 s ahead of this screen's.
@@ -298,7 +298,7 @@ describe('TableClient', () => {
     expect(client.getState().handoffCode).toBeNull();
   });
 
-  it('B-AC-7: closing the dialog drops the code and sends nothing; being moved away drops it too', () => {
+  it('FM-8: closing the dialog drops the code and sends nothing; being moved away drops it too', () => {
     const { client, last } = seated();
     client.handoff();
     last().deliver({ t: 'handoffCode', code: 'one', expiresAt: 999_999 });
@@ -323,7 +323,7 @@ describe('TableClient', () => {
   it.each([
     { saved: { code: 'KRTX', token: 'mine', name: 'Old' }, kept: 'this room' },
     { saved: { code: 'BBBB', token: 'other', name: 'Heiko' }, kept: 'another room' },
-  ])('B-AC-7: a handoff join sends the code, not the token saved for $kept, then keeps the new token and the seat\'s name', ({ saved }) => {
+  ])('FM-9: a handoff join sends the code, not the token saved for $kept, then keeps the new token and the seat\'s name', ({ saved }) => {
     const storage = memoryStore();
     saveSeat(storage, saved);
     const { client, last, advance } = setup(storage);
@@ -346,7 +346,7 @@ describe('TableClient', () => {
   it.each([
     { saved: { code: 'KRTX', token: 'mine', name: 'Mia' }, kept: 'this room' },
     { saved: { code: 'BBBB', token: 'other', name: 'Heiko' }, kept: 'another room' },
-  ])('B-AC-7: a used or expired link shows "That link has expired" on the start screen and keeps the seat saved for $kept', ({ saved }) => {
+  ])('FM-10: a used or expired link shows "That link has expired" on the start screen and keeps the seat saved for $kept', ({ saved }) => {
     const storage = memoryStore();
     saveSeat(storage, saved);
     const { client, sockets, last, advance } = setup(storage);
@@ -360,6 +360,106 @@ describe('TableClient', () => {
     expect(loadSeat(storage)).toEqual(saved);
     expect(sockets).toHaveLength(1);
   });
+
+  it.each([
+    { row: 'asked twice, with the dialog closed in between', act: (t: ReturnType<typeof seated>) => (t.client.handoff(), t.client.closeHandoff(), t.client.handoff()), requests: 2 },
+    { row: 'asked twice', act: (t: ReturnType<typeof seated>) => (t.client.handoff(), t.client.handoff()), requests: 2 },
+    {
+      row: 'asked once while the screen joins again on the same connection',
+      act: (t: ReturnType<typeof seated>) => {
+        t.client.join('KRTX', 'Mia');
+        t.client.handoff();
+        t.last().deliver({ t: 'welcome', code: 'KRTX', role: 'player', seatId: 's2', seatToken: 'secret' });
+      },
+      requests: 1,
+    },
+    {
+      row: 'asked once on a new connection, after the screen was removed with a request in flight',
+      act: (t: ReturnType<typeof seated>) => {
+        t.client.handoff();
+        t.last().deliver({ t: 'removed', reason: 'kicked' });
+        t.client.join('KRTX', 'Mia');
+        t.last().open();
+        t.last().deliver({ t: 'welcome', code: 'KRTX', role: 'player', seatId: 's2', seatToken: 'secret' });
+        t.client.handoff();
+      },
+      requests: 1,
+    },
+  ])('FM-4: a code $row, within one round trip, shows nothing until the newest request is answered, then that code', ({ act, requests }) => {
+    const t = seated();
+    act(t);
+    expect(t.last().sent.filter((m) => m.t === 'handoff')).toHaveLength(requests);
+    expect(t.client.getState().handoffCode).toBeNull();
+
+    for (let earlier = 1; earlier < requests; earlier++) {
+      t.last().deliver({ t: 'handoffCode', code: 'dead', expiresAt: 999_999 });
+      expect(t.client.getState().handoffCode).toBeNull();
+    }
+    t.last().deliver({ t: 'handoffCode', code: 'live', expiresAt: 999_999 });
+    expect(t.client.getState().handoffCode).toEqual({ code: 'live', expiresAt: 999_999, expired: false });
+
+    t.client.handoff();
+    t.last().deliver({ t: 'handoffCode', code: 'next', expiresAt: 999_999 });
+    expect(t.client.getState().handoffCode).toEqual({ code: 'next', expiresAt: 999_999, expired: false });
+  });
+
+  it.each([
+    { row: 'opened while reconnecting', before: (t: ReturnType<typeof seated>) => (t.last().drop(), t.client.handoff()), asks: true, shows: 'fresh' },
+    { row: 'opened while the new connection is still opening', before: (t: ReturnType<typeof seated>) => (t.last().drop(), t.advance(500), t.client.handoff()), asks: true, shows: 'fresh' },
+    { row: 'whose request was lost with the socket', before: (t: ReturnType<typeof seated>) => (t.client.handoff(), t.last().drop()), asks: true, shows: 'fresh' },
+    {
+      row: 'already showing a code',
+      before: (t: ReturnType<typeof seated>) => (t.client.handoff(), t.last().deliver({ t: 'handoffCode', code: 'kept', expiresAt: 999_999 }), t.last().drop()),
+      asks: false,
+      shows: 'kept',
+    },
+    { row: 'closed before the drop', before: (t: ReturnType<typeof seated>) => (t.client.handoff(), t.client.closeHandoff(), t.last().drop()), asks: false, shows: null },
+  ])('FM-5: when the seat is back after a drop, a move dialog $row asks the room for a code again: $asks', ({ before, asks, shows }) => {
+    const t = seated();
+    before(t);
+
+    t.advance(500);
+    t.last().open();
+    t.last().deliver({ t: 'welcome', code: 'KRTX', role: 'player', seatId: 's2', seatToken: 'secret' });
+
+    expect(t.last().sent.filter((m) => m.t === 'handoff')).toEqual(asks ? [{ t: 'handoff' }] : []);
+    if (asks) t.last().deliver({ t: 'handoffCode', code: 'fresh', expiresAt: 999_999 });
+    expect(t.client.getState().handoffCode?.code ?? null).toBe(shows);
+  });
+
+  it.each([
+    { reason: 'moved', join: (c: TableClient) => c.join('KRTX', '', 'code-1'), seatId: 's2', name: 'Mia' },
+    { reason: 'kicked', join: (c: TableClient) => c.join('KRTX', 'Jonas'), seatId: 's3', name: 'Jonas' },
+    { reason: 'closed', join: (c: TableClient) => c.join('KRTX', 'Jonas'), seatId: 's3', name: 'Jonas' },
+  ] as const)(
+    'FM-6: a screen removed ($reason) while another tab of the browser holds the saved seat leaves it saved, so that tab rejoins with its own token after a reload; removed in turn, that tab forgets it',
+    ({ reason, join, seatId, name }) => {
+      const storage = memoryStore();
+      const oldTab = setup(storage);
+      oldTab.client.join('KRTX', 'Mia');
+      oldTab.last().open();
+      oldTab.last().deliver({ t: 'welcome', code: 'KRTX', role: 'player', seatId: 's2', seatToken: 'old' });
+      const newTab = setup(storage);
+      join(newTab.client);
+      newTab.last().open();
+      newTab.last().deliver({ t: 'welcome', code: 'KRTX', role: 'player', seatId, seatToken: 'new' });
+      const seats = [
+        { id: 's2', name: 'Mia', isAi: false, connected: true, color: 1 },
+        { id: 's3', name: 'Jonas', isAi: false, connected: true, color: 2 },
+      ];
+      newTab.last().deliver({ t: 'view', view: { ...lobbyView('KRTX'), seats } });
+
+      oldTab.last().deliver({ t: 'removed', reason });
+
+      const reloaded = setup(storage);
+      reloaded.client.join('KRTX', '');
+      reloaded.last().open();
+      expect(reloaded.last().sent[0]).toEqual({ t: 'join', code: 'KRTX', name, seatToken: 'new' });
+
+      newTab.last().deliver({ t: 'removed', reason });
+      expect(loadSeat(storage)).toBeNull();
+    },
+  );
 });
 
 describe('ClockSync', () => {
