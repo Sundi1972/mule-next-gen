@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
-import { connectedIn, namesOf, planningProper, press, readyFooter, readyNow, stillPlanning, type Press } from '../src/phone/hub/ready';
+import { connectedIn, namesOf, planningProper, press, readyFooter, readyNow, readyNowIn, stillPlanning, type Press } from '../src/phone/hub/ready';
 import { ReadyBar } from '../src/phone/hub/ReadyBar';
 
 const person = (id: string, name: string, slot: number, ready = false): PlayerView => ({
@@ -71,6 +71,11 @@ describe('planning without a clock: who is still planning, and the host', () => 
     expect(readyNow(others, false).title).toBe("You're ready. Waiting for Lena and Ossa");
     expect(readyNow(others, false).detail, 'a player who is not the host is not offered to continue').not.toContain('As the host');
     expect(readyNow([], true).title).toBe('Everyone is ready');
+    expect(readyNowIn(planning(), true, others, true)?.title, 'a Ready player in planning proper is told who the table waits for').toBe("You're ready. Waiting for Lena and Ossa");
+    expect(readyNowIn(planning('over'), true, others, false)?.title, 'after the election too').toBe("You're ready. Waiting for Lena and Ossa");
+    for (const stage of ['nominate', 'ballot', 'reveal'] as const)
+      expect(readyNowIn(planning(stage), true, others, true), `during the ${stage}, Ready is Done for the stage and the election's Now stays`).toBeNull();
+    expect(readyNowIn(planning(), false, others, true), 'before Ready the screen keeps its own Now').toBeNull();
   });
 
   it('T-AC-13: Continue is offered only to table.hostId, once Ready, in planning proper, while someone else is still planning; never to anyone else, nor during the election', () => {
