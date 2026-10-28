@@ -259,7 +259,7 @@ Before suggesting merge of `ws8-show-pr1` into `ws8-events`:
 
 **Depends on:** Tasks 9, 11 · **ACs verified:** T-AC-10 (the sick bulletin case)
 
-- [ ] **Step 1: Extend `T-AC-10` with a development case: a player who fell sick is listed as a bulletin with its reason** → run → FAIL
+- [ ] **Step 1: Extend `T-AC-10` with a development case: a player who fell sick is listed as a bulletin with its reason**, and RULE-1's roll call: one sick player plays rollCallMs (4 000); two share it (2 000 each) and production's or the hold's length counts it once → run → FAIL (kills the bulletin mutants the Task 1 review found surviving)
 - [ ] **Step 2: Implement C11 per spec §1 C11.** Pin: `phone/Develop.tsx`'s sick status line untouched.
 - [ ] **Step 3: Run** → PASS · **Step 4: Commit**
 

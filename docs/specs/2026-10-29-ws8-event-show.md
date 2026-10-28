@@ -120,7 +120,7 @@ senior       junior would: raise PHASES.productionMs for everyone · senior does
 mechanism    in_place
 call sites   startPhaseTimer ← enterPhase, and the election tick when planning opens after an election (mule-game.ts,
              both with phase planning there; only enterPhase reaches production)
-pin          apps/server/test/production-view.test.ts and apps/server/test/phase-scale.test.ts stay green unchanged
+pin          apps/server/test/phase-scale.test.ts stays green unchanged; production-view.test.ts stays green with only C3's fixture fields added
 depends_on   C1 (data)
 atomicity    ships with C3: the view's lengthMs and playMs must come from the same computation
 ```
