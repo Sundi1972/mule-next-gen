@@ -188,3 +188,17 @@ No behaviour change: a pure move, as land-auction.ts and politics-view.ts alread
 - [x] The positive control went red, and the tree is clean after the restore
 - [x] `pnpm --filter @mule/web build` and `pnpm --filter @mule/web e2e:core` are green (the walk is driven in the smoke)
 - [x] A code review has come back clean
+
+## PR-D: the FU-17 trim (`ws3-fu17-trim` from `ws3-auctions`)
+
+WS4's FU-17 (#96, on trunk via #132) removed WalkBoard's dead declare block and narrowed its stage to `'walk'`. The three declare texts that `stageShown` in `apps/web/e2e/auction-steps.ts` (WS3's) looks for (`SELLERS START AT THE TOP`, `Done choosing`, `Buy, sell or pass?`) now exist nowhere in `apps/web/src` or `packages/ui/src`, so that check can't fire.
+
+- [ ] **Step 1:** remove that check, the `text` it alone used, and the doc comment's "Any sign of a declare screen counts as one". Keep the `· buy or sell?` heading alternative, which names the good on the status screen (Auction.tsx:60). The server-side UBER-AC-1 check (no declare stage) stays.
+- [ ] **Merge gate:** the grep is still empty at the head; `tsx e2e/auction-steps.ts` exits 0 with UBER-AC-1's ✓ (Tier 2, so run locally); typecheck 0; only auction-steps.ts changes; review clean.
+
+## PR-E: RULE-7 row 1's timeout (`ws3-rule7-timeout` from `ws3-auctions`)
+
+WS5's #112 (maps 2.7× faster) is on trunk via #133. Row 1 in `packages/engine/test/lots-colony.test.ts` (:110–128) still carries a `30_000` timeout as headroom (5b3f3c8).
+
+- [ ] **Step 1:** time the row 5 times under the machine's normal load, recording each time and the load average. If every run is under 2.5 s, drop the timeout and the comment's headroom clause. Otherwise set it to about 2× the slowest run, in whole seconds, and say so in the comment.
+- [ ] **Merge gate:** no assertion edited; `pnpm --filter @mule/engine test` green; typecheck 0; only lots-colony.test.ts changes; review clean.
