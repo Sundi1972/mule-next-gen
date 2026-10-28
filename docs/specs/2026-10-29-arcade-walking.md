@@ -697,6 +697,21 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-4 (2026-10-29, the PM's owner ruling).** WS1 is the new sole owner of floor/** with the config blocks, the AI
+  hands, play/sim, dev-walk.ts's removal and the play-walk/balance tests. WS3: game.ts as its own edit, dev-steer.ts,
+  the mule-game.ts tick, dev-walking.ts's removal, the protocol, the server tests with fake-context, goToThePub. WS4:
+  tabletop room/protocol and Store.tsx as its own edits (WS6 reviews Store.tsx; one writer: WS4's small-phone size
+  table lands first), harness.ts, smoke, table-steps, zoom. WS6: arcade/**, TvDevelop.tsx, the new packages/ui
+  pieces by build ruling (WS4 reviews), shell.ts, screens.ts, store-steps.ts, the next-step/store-view tests, and the
+  PhoneApp.tsx/TableApp.tsx route lines as WS6 named edits WS4 reviews. WS5: specials.ts and special-steps.ts. R-3
+  closed: Develop.tsx is WS4's by default (born in b29cd15c), next-step.ts WS6's (d4411d6d); WS6 removes both in the
+  removal PR, Develop.tsx's deletion a named edit WS4 reviews. Heiko's OK to build: "Yes, build it" (via the PM,
+  29 Oct), experiments first, the four open items as built.
+- **AM-5 (2026-10-29, plan time).** AM-2 and AM-3 said "WS1's sim first", but the sim cannot play a rule the floor
+  does not have yet: it plays the floor from C10. So both sim checks run as soon as the sim plays the floor and gate
+  the rule's switch-on, not its code: AM-3's month-1 timing in the AI-and-sim PR, behind
+  `month1WaitsForFirstMule`; AM-2's re-outfit sweep before its rows are built, in the moments wave. Each lands behind
+  DEV_STEER.on = false, so nobody plays either before the measurement.
 - **AM-2 (2026-10-29, Heiko's Q2 "yes", via the PM).** Re-outfitting a MULE is a rule: walk onto your own plot
   with no MULE in tow and TAKE MULE (RULE-3 row 11a), lead it into another outfitter and RE-OUTFIT for the outfit
   price (row 8a, `DEV_STEER.reoutfitCost`), then install it on an own plot (row 10, unchanged). The ring follows
@@ -733,7 +748,7 @@ inside a wall; money and stock change only through game.ts rules; development en
 - **Enforcement:** a package-boundary test in packages/engine (floor/ imports nothing from apps/ or packages/ai,
   and nothing outside floor/ assigns DevFloor fields), plus the PR review rule R-2.
 
-### The file list, with proposed owners (the PM rules before any build)
+### The file list, with owners (ruled by the PM, 2026-10-29, AM-4)
 
 | File | New / edit | Proposed owner | Reviewers | Change |
 |---|---|---|---|---|
@@ -743,25 +758,28 @@ inside a wall; money and stock change only through game.ts rules; development en
 | packages/engine/src/floor/path.ts | new | WS1 | WS6 | C9, RULE-9 |
 | packages/engine/src/floor/wolves.ts, glint.ts, scramble.ts | new | WS1 | WS6 | C4 |
 | packages/engine/src/config.ts (DEV_STEER, WOLVES, GLINT, SCRAMBLE) | edit | WS1 | WS6 | C5 |
-| packages/engine/src/game.ts (pelts, glint prize, the bolted MULE's lead) | named edit | WS3 | WS1 | C4 |
+| packages/engine/src/game.ts (pelts, glint prize, the bolted MULE's lead; AM-2's take and re-outfit) | edit (WS3's own) | WS3 | WS1 | C4, AM-2 |
 | packages/engine/src/dev-walk.ts | remove (C14) | WS1 | — | C14 |
 | apps/server/src/dev-steer.ts | new | WS3 | WS1 | C6 |
 | apps/server/src/mule-game.ts (the tick, end conditions, away) | edit | WS3 | WS1, WS6 | C6, C14 |
 | apps/server/src/dev-walking.ts | remove (C14) | WS3 | — | C14 |
 | packages/protocol/src/index.ts | edit | WS3 | WS6 | C7 |
-| packages/tabletop/src/room.ts, protocol.ts (frame message) | named edit | WS4 | WS3 | C8 |
+| packages/tabletop/src/room.ts, protocol.ts (frame message) | edit (WS4's own) | WS4 | WS3 | C8 |
 | packages/ai/src/hands/develop.ts, seat.ts, strategist.ts, value.ts | edit | WS1 | WS2 | C9 |
 | packages/ai/src/play.ts, sim.ts | edit | WS1 | WS3 | C10 |
 | apps/web/src/phone/arcade/** (Develop screen, controls, prediction, layers, guide ring) | new | WS6 | WS4 | C11 |
-| apps/web/src/phone/PhoneApp.tsx (the development route) | named edit | WS4 | WS6 | C11 |
-| apps/web/src/phone/Develop.tsx, next-step.ts (the tap guide) | remove (C14) | PM to rule (R-3) | WS4, WS6 | C14 |
+| apps/web/src/phone/PhoneApp.tsx (the development route) | named edit by WS6 | WS4's file | WS4 | C11 |
+| apps/web/src/phone/Develop.tsx (WS4's by default) | remove (C14), a named edit by WS6 | WS6 removes | WS4 | C14 |
+| apps/web/src/phone/next-step.ts (WS6's, born in C18/C19) | remove (C14) | WS6 | WS4 | C14 |
 | apps/web/src/table/TvDevelop.tsx | new | WS6 | WS4 | C12 |
-| apps/web/src/table/TableApp.tsx (the development branch) | named edit | WS4 | WS6 | C12 |
-| packages/ui/src/components/Store.tsx (plan, free visitor positions) | named edit | WS4 | WS6 | C2 |
-| packages/ui (live map overlay; Joystick, ActionButton, Wolf/Glint sprites) | new components | WS6 | WS4 | C11, C13 |
+| apps/web/src/table/TableApp.tsx (the development branch) | named edit by WS6 | WS4's file | WS4 | C12 |
+| packages/ui/src/components/Store.tsx (plan, free visitor positions) | edit (WS4's own), after WS4's small-phone size table | WS4 | WS6 | C2 |
+| packages/ui (live map overlay; Joystick, ActionButton, Wolf/Glint sprites) | new components, by build ruling (as PR-2's ProductionMap) | WS6 | WS4 | C11, C13 |
 | apps/server/test/fake-context.ts (steerTo), dev-walking.test.ts and the C15 server tests | edit | WS3 | WS1 | C15 |
 | packages/ai/test/play-walk.test.ts, balance.test.ts | edit | WS1 | WS3 | C15 |
-| apps/web/e2e/harness.ts (steering step), store-steps.ts, smoke.ts, table-steps.ts, screens.ts, zoom.ts, specials.ts | edit | WS4 (store/table/smoke), WS6 (screens), WS5 (specials) | WS6 | C15 |
+| apps/web/e2e/harness.ts (steering step), smoke.ts, table-steps.ts, zoom.ts | edit | WS4 | WS6 | C15 |
+| apps/web/e2e/store-steps.ts, screens.ts | edit | WS6 | WS4 | C15 |
+| apps/web/e2e/specials.ts, special-steps.ts | edit | WS5 | WS6 | C15 |
 | apps/web/e2e/auction-steps.ts::goToThePub | named edit | WS3 | WS6 | C15 |
 | apps/web/e2e/shell.ts (667×375) | edit | WS6 | WS4 | C15 |
 | apps/web/test/next-step.test.ts, store-view.test.ts | edit / remove | WS6 | WS4 | C15 |
@@ -770,5 +788,3 @@ inside a wall; money and stock change only through game.ts rules; development en
 (RULE-9); (2) pelts not sold by the turn's end are lost (RULE-4); (3) chat during development: the mock's phone
 shows no ticker — default: the existing chat ticker (C20) sits along the map's top edge on the phone, as the TV keeps
 it; (4) the left side room's small status text at 844×390.
-</content>
-</invoke>
