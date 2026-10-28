@@ -301,14 +301,29 @@ before this task, so the two never edit sim.ts at once) · **ACs verified:** UBE
 
 Before suggesting merge of `ws1-events-roller` into `ws1-events`:
 
-- [ ] Every AC the PR claims has a green test or its rows: UBER-AC-1 (rows), EM-T-AC-1..4, the pins T-AC-3, T-AC-4, T-AC-5, T-AC-7
-- [ ] Tests are named after the AC id; `trace-check.sh origin/feat/strategist...HEAD` reports no untraced test
-- [ ] Each failing-test commit precedes its passing commit
-- [ ] The contract (`MonthEvent.phase`, several events) is exercised by a consumer: EM-T-AC-3 reads the report as the screens will
-- [ ] WS3 OK on the types.ts hunk (given at 0582373, conditional on CI's check green on the PR head); WS6 OK on the
+- [x] Every AC the PR claims has a green test or its rows: UBER-AC-1 (rows), EM-T-AC-1..4, the pins T-AC-3, T-AC-4, T-AC-5, T-AC-7
+- [x] Tests are named after the AC id; `trace-check.sh origin/feat/strategist...HEAD` reports no untraced test
+- [x] Each failing-test commit precedes its passing commit
+- [x] The contract (`MonthEvent.phase`, several events) is exercised by a consumer: EM-T-AC-3 reads the report as the screens will
+- [x] WS3 OK on the types.ts hunk (given at 0582373, conditional on CI's check green on the PR head); WS6 OK on the
       production-view.test.ts fixture lines (given at 0582373)
-- [ ] No new `@ts-ignore` / `eslint-disable` without a reason on the same line; every new number is in `EVENTS` (HC-1)
-- [ ] `pnpm typecheck && pnpm test` exit 0 on the sub-branch; CI green
+- [x] No new `@ts-ignore` / `eslint-disable` without a reason on the same line; every new number is in `EVENTS` (HC-1)
+- [x] `pnpm typecheck && pnpm test` exit 0 on the sub-branch; CI green
+
+Done 29 Oct. PR-1 is #162, `ws1-events-roller` aeccb57 into `ws1-events`, merged at fc1c2eb under the lane rule.
+- The PR boundary review (at 5d5ec4d) found the code matching the spec and AM-1..AM-7, and every item above passing
+  locally: trace-check over the PR 4 added, 3 removed, every one traced; each task's red commit before its green
+  (the SDD ledger names both SHAs); the literal guard's PENDING list empty, so HC-1 holds on events.ts and production.ts.
+- Its one blocker, C-1, was the CI Tier-1 e2e: on seed 1 the new rows fire no event in month 2, which B-AC-7's show
+  needs (measured red locally; the base passed). Fixed by 56508dd + aeccb57, a named edit in WS4's `smoke.ts` that
+  makes the show seed's dust storm certain (its row at 100%, cap included, put back when the game ends), which WS4
+  OK'd directly, and 3eee4a4 (the ci.yml comment). Local seed-1 e2e:core exit 0, "a storm event hitting 1".
+  Its importants went to AM-7 (sickness rolls in month 1; HC-2 scoped to rollPhase) and to Task 9's notes below.
+- Owner OKs: WS3 types.ts (0582373, 6c6c1db; its condition met by CI's `check` green on aeccb57), WS6
+  production-view.test.ts (0582373, 6c6c1db), WS5 specials.test.ts (b6c94d7), WS4 smoke.ts (56508dd + aeccb57),
+  WS8 the contract and dropping `when`.
+- CI on aeccb57: `check` and `e2e` green; `sim` and `e2e-regression` skipped (Tier 2 runs only into
+  `feat/strategist` or `main`).
 
 ## Phase P2 — PR-2: cavern collapse on the table
 
