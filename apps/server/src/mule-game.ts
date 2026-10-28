@@ -657,6 +657,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const p = state.players.find((q) => q.id === id)!;
     return {
       foodShare: foodShare(state, id),
+      foodNeed: needsOf(state, id).food,
       sick: p.sick,
       sickBecause: p.sick ? playerEventReason(state, 'sickness', 'development', id) : null,
       conditionPace: hungerPace(state, id) * sickPace(state, id),
