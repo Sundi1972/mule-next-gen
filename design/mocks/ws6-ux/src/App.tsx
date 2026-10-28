@@ -237,7 +237,7 @@ function AuditHubPage({ state }: { state: (typeof AUDIT_STATES)[number] }) {
     <Page title={`For approval · UX audit · ${state.title}`}>
       <Links states={AUDIT_STATES} current={state.id} />
       <p className="max-w-[900px] text-sm text-ink-2">
-        The planning hub redesigned from the UX audit (a newcomer of 14 playing it for real). Month 4, just after the election: Kai is the new Governor, Brix the Sheriff, Lena (you) holds no office. The phone held sideways (844 × 390) first, then the laptop (1440 × 900). Each number on a screen marks one change; the notes beside say which player intent it serves and why it was made. It all works: tap the needs strip, the drone and free plots on the map, “2nd of 4”, the folded Now card.
+        The planning hub redesigned from the UX audit (a newcomer of 14 playing it for real). Month 4, just after the election: Kai is the new Governor (Governor only, as Heiko ruled), and Lena (you) holds no office. The phone held sideways (844 × 390) first, then the laptop (1440 × 900). Each number on a screen marks one change; the notes beside say which player intent it serves and why it was made. It all works: tap the needs strip, the drone and free plots on the map, “2nd of 4”, the folded Now card.
       </p>
       <IntentNotesProvider>
         <div className="flex flex-wrap items-start gap-6">

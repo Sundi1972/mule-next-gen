@@ -8,6 +8,7 @@ import { usePhoneGame } from '../../../../../../apps/web/src/phone/game';
 import { H, W } from '../../fixture';
 import { GameShell, useWide, type Now } from '../../proposed/GameShell';
 import { IntentMarker, type IntentNoteData } from '../../proposed/IntentNote';
+import { league } from '../../proposed/worth';
 import { ReadyBar, ReadyCount, readyNow, useWaiting } from '../../proposed/PlanningReady';
 import { MarketStrip, NEEDS, News, PlainWords, ThisMonth } from '../PlanningBrief';
 import { CouncilDesk, DESKS, EyeOff, Glyph, ICON, MarketDesk, OnlyYouLook, PLAYER, Private, SecretDesk, Section, Soon, TalkDesk, Who, type Desk, type Status, type Tool } from '../PlanningHub';
@@ -18,7 +19,7 @@ import { CouncilDesk, DESKS, EyeOff, Glyph, ICON, MarketDesk, OnlyYouLook, PLAYE
  * proposal changes is drawn here. Each change carries a numbered IntentMarker; the review page lists, per number, the
  * intent it serves and why (HUB_NOTES, below).
  *
- * Month 4 after the election, Lena holds no office: Kai is the new Governor, Brix the Sheriff. Every rule number comes
+ * Month 4 after the election, Lena holds no office: Kai is the new Governor (Governor only, Heiko 2026-10-28). Every rule number comes
  * from @mule/engine's config (the drone's fee and plots, the offices' pay, the election months, a plot's score).
  *
  * GRAFT TARGET: apps/web/src/phone/hub/ (Hub.tsx's stage and rail, today.tsx's agenda and drone slots, tools.tsx's
@@ -61,23 +62,22 @@ export const HUB_NOTES = {
     id: 'H4',
     n: 4,
     title: 'Standings',
-    what: '“2nd of 4” under your money; tap either for the standings: rank, creature, name, money, land, goods and worth.',
+    what: '“2nd of 4” under your money, ranked by Worth; tap it for the standings: every player\'s Worth, and your own Worth line by line.',
     serves: '6',
     intent: "See how I'm doing against the others",
     why: "Nothing in planning ranked the players, on the phone or the TV, and others' money was not shown; “who's winning?” was a newcomer's own top question.",
-    differs: 'under the money, not beside it: beside it, on a phone’s rail, it pushed your name down to “L”.',
+    differs:
+      'under the money, not beside it: beside it, on a phone’s rail, it pushed your name down to “L”. Ranked by Worth, as Heiko decided 2026-10-28: one number in credits, every month and at the end (cash + goods at the store’s price + land + MULEs + office terms); everyone sees each other’s total, only you see your own lines, and nobody sees which goods anyone holds.',
     elsewhere: "the TV's ready list gains each player's rank.",
-    open:
-      'others’ goods are private today, so the rank is money plus land (300 cr a plot, the score’s own value), and their Goods say “secret”. Show goods for everyone, or keep them secret until each good’s auction?',
   },
   H5: {
     id: 'H5',
     n: 5,
     title: 'The colony fund in one card',
-    what: 'First in the Colony desk: how much is in the fund, what fills it (the sales tax) and what it pays out each month (the Governor and the Sheriff).',
+    what: 'First in the Colony desk: how much is in the fund, what fills it (the sales tax) and what it pays out each month (the Governor).',
     serves: '7',
     intent: 'The colony fund, how much and where it goes',
-    why: 'The fund and its two pay lines sat in the last block of the Colony desk, 1–2 scrolls down, and that the sales tax fills it was a separate line.',
+    why: 'The fund and what it pays out sat in the last block of the Colony desk, 1–2 scrolls down, and that the sales tax fills it was a separate line.',
   },
   H6: {
     id: 'H6',
@@ -117,20 +117,16 @@ const STEPS: { id: string; label: string; show: boolean }[] = [
 
 const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th'}`;
 
-/**
- * Public worth: money plus land at a plot's score, what everyone can see, and the measure the engine already ranks
- * players by (events.ts pickStart). derive's standings() ranks by money alone; goods are private until game over.
- */
-export function worthStandings(view: MuleView) {
-  return view.players
-    .map((p) => ({ player: p, slot: toSlot(p.slot), land: p.plots * GAME.plotScore, worth: p.money + p.plots * GAME.plotScore }))
-    .sort((a, b) => b.worth - a.worth);
-}
+/** This story's office terms, for Worth: Ossa governed months 1–3, Kai from month 4. */
+const HUB_TERMS: Record<string, number> = { ossa: 1, kai: 1 };
+
+/** The standings by Worth, the one number Heiko agreed (2026-10-28); proposed/worth.ts mirrors the engine's score. */
+const standings = (view: MuleView) => league(view, null, HUB_TERMS);
 
 /** After this month's election: who holds what, until when, and when the next vote is. */
 function offices(month: number) {
   const next = POLITICS.electionMonths.find((m) => m > month);
-  return { governor: 'kai', sheriff: 'brix', until: next ? next - 1 : null, next: next ?? null };
+  return { governor: 'kai', until: next ? next - 1 : null, next: next ?? null };
 }
 
 // --- H-1 · the month roadmap ------------------------------------------------------------------
@@ -179,10 +175,6 @@ function Roadmap({ month, ready }: { month: number; ready: boolean }) {
         <span data-testid="office-governor">
           Governor: <Who id={o.governor} size={12} />
           {o.until && `, until month ${o.until}`}
-        </span>
-        ·
-        <span data-testid="office-sheriff">
-          Sheriff: <Who id={o.sheriff} size={12} />
         </span>
         {o.next && (
           <>
@@ -335,18 +327,20 @@ function DroneSend({ picked, onSend }: { picked: number; onSend: () => void }) {
 /** Your place, for the shell's header: "2nd of 4" under your money. */
 function useStanding(onOpen: () => void) {
   const { view, self } = usePhoneGame();
-  const rank = worthStandings(view).findIndex((r) => r.player.id === self.id) + 1;
+  const rank = standings(view).rows.find((r) => r.player.id === self.id)?.rank ?? view.players.length;
   const label = `${ordinal(rank)} of ${view.players.length}`;
   return { label, aria: `You're ${label}. Open the standings.`, onOpen, mark: <IntentMarker note={N.H4} at="left" /> };
 }
 
 function StandingsSheet({ onClose }: { onClose: () => void }) {
-  const { view, self, me } = usePhoneGame();
-  const rows = worthStandings(view);
-  const units = Object.values(me.stock).reduce((a, b) => a + b, 0);
+  const { view, self } = usePhoneGame();
+  const { rows } = standings(view);
+  const mine = rows.find((r) => r.player.id === self.id);
+  const p = mine?.parts;
+  const line = 'flex justify-between gap-3';
   return (
     <div className="absolute inset-0 z-40 grid place-items-center bg-void/70 p-3" role="dialog" aria-modal aria-labelledby="standings-title" data-testid="standings-sheet">
-      <div className="relative flex w-full max-w-[560px] flex-col gap-2 rounded-sheet border-2 border-holo bg-panel p-3 shadow-glow @min-[1100px]/shell:max-w-[720px] @min-[1100px]/shell:gap-4 @min-[1100px]/shell:p-6">
+      <div className="relative flex w-full max-w-[600px] flex-col gap-2 rounded-sheet border-2 border-holo bg-panel p-3 shadow-glow @min-[1100px]/shell:max-w-[760px] @min-[1100px]/shell:gap-4 @min-[1100px]/shell:p-6">
         <header className="flex items-center justify-between gap-2">
           <h2 id="standings-title" className="font-display text-lg font-semibold @min-[1100px]/shell:text-3xl">
             Standings · month {view.month}
@@ -355,58 +349,82 @@ function StandingsSheet({ onClose }: { onClose: () => void }) {
             Close
           </Button>
         </header>
-        <table className="w-full text-left text-sm @min-[1100px]/shell:text-lg" data-testid="standings-table">
-          <thead className="text-xs text-ink-3 @min-[1100px]/shell:text-sm">
-            <tr>
-              <th className="w-6 font-normal">#</th>
-              <th className="font-normal">Player</th>
-              <th className="text-right font-normal">Money</th>
-              <th className="text-right font-normal">Land</th>
-              <th className="text-right font-normal">Goods</th>
-              <th className="text-right font-semibold text-ink">Worth</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => {
-              const mine = r.player.id === self.id;
-              return (
-                <tr key={r.player.id} className={cx('border-t border-holo-faint', mine && 'bg-holo-soft')} data-testid={`standing-${r.player.id}`}>
-                  <td data-num className="py-1 font-mono text-ink-3 @min-[1100px]/shell:py-2">
-                    {i + 1}
-                  </td>
-                  <td>
-                    <span className="flex items-center gap-1.5 font-semibold">
-                      <Creature species={r.player.species} color={SLOT_COLOR[r.slot]} size={18} />
-                      {mine ? `You (${r.player.name})` : r.player.name}
-                    </span>
-                  </td>
-                  <td data-num className="text-right font-mono">
-                    {fmt(r.player.money)}
-                  </td>
-                  <td data-num className="text-right font-mono" title={`${fmt(r.land)} cr at ${GAME.plotScore} cr a plot`}>
-                    {r.player.plots} plots
-                  </td>
-                  <td className="text-right">
-                    {mine ? (
-                      <span data-num className="font-mono">
-                        {units} units
+        <div className="grid grid-cols-[1fr_auto] items-start gap-3 @min-[1100px]/shell:gap-6">
+          <table className="w-full text-left text-sm @min-[1100px]/shell:text-lg" data-testid="standings-table">
+            <thead className="text-xs text-ink-3 @min-[1100px]/shell:text-sm">
+              <tr>
+                <th className="w-6 font-normal">#</th>
+                <th className="font-normal">Player</th>
+                <th className="text-right font-semibold text-ink">Worth</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const you = r.player.id === self.id;
+                return (
+                  <tr key={r.player.id} className={cx('border-t border-holo-faint', you && 'bg-holo-soft')} data-testid={`standing-${r.player.id}`}>
+                    <td data-num className="py-1 font-mono text-ink-3 @min-[1100px]/shell:py-2">
+                      {r.rank}
+                    </td>
+                    <td>
+                      <span className="flex items-center gap-1.5 font-semibold">
+                        <Creature species={r.player.species} color={SLOT_COLOR[r.slot]} size={18} />
+                        {you ? `You (${r.player.name})` : r.player.name}
                       </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-0.5 text-xs text-ink-3 @min-[1100px]/shell:text-sm" data-testid={`goods-secret-${r.player.id}`}>
-                        <EyeOff /> secret
-                      </span>
-                    )}
-                  </td>
-                  <td data-num className="text-right font-mono font-bold">
-                    {fmt(r.worth)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    </td>
+                    <td data-num className="text-right font-mono font-bold">
+                      {fmt(r.total)} cr
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {p && mine && (
+            <div className="flex min-w-[170px] flex-col gap-0.5 rounded-panel border border-holo-line p-2 text-xs @min-[1100px]/shell:min-w-[240px] @min-[1100px]/shell:text-base" data-testid="standings-mine">
+              <span className="mb-0.5 flex items-center justify-between gap-2">
+                <span className="label-caps text-[10px]! @min-[1100px]/shell:text-xs!">Your worth</span>
+                <Private text="Only you" />
+              </span>
+              <span className={line}>
+                <span>Cash</span>
+                <span data-num className="font-mono">{fmt(p.money)}</span>
+              </span>
+              <span className={line}>
+                <span>Goods · {p.units} units</span>
+                <span data-num className="font-mono">{fmt(p.goods)}</span>
+              </span>
+              <span className={line}>
+                <span>
+                  Land · {p.plots} × {GAME.plotScore}
+                </span>
+                <span data-num className="font-mono">{fmt(p.land)}</span>
+              </span>
+              <span className={line}>
+                <span>
+                  MULEs · {p.mules} × {fmt(view.mulePrice)}
+                </span>
+                <span data-num className="font-mono">{fmt(p.muleValue)}</span>
+              </span>
+              <span className={line}>
+                <span>
+                  Offices · {p.terms} × {POLITICS.termScore}
+                </span>
+                <span data-num className="font-mono">{fmt(p.office)}</span>
+              </span>
+              <span className={cx(line, 'text-ink-3')}>
+                <span>Donations · comes with G-5</span>
+                <span>—</span>
+              </span>
+              <span className={cx(line, 'mt-0.5 border-t border-holo-faint pt-0.5 font-semibold')}>
+                <span>Your worth</span>
+                <span data-num className="font-mono font-bold">{fmt(mine.total)}</span>
+              </span>
+            </div>
+          )}
+        </div>
         <p className="text-xs leading-snug text-ink-2 @min-[1100px]/shell:text-base" data-testid="standings-rule">
-          Worth is money plus land at {GAME.plotScore} cr a plot: what everyone can see. Goods stay secret until their auction, where everyone's stock of that good shows; at the end of the game they count too.
+          Worth, in credits: cash, goods at the store&apos;s price, land at {GAME.plotScore} cr a plot, MULEs at the store&apos;s price, and {POLITICS.termScore} cr a term in office. Everyone sees each other&apos;s total; nobody sees which goods anyone holds.
         </p>
         <IntentMarker note={N.H4} part="sheet" />
       </div>
@@ -434,7 +452,7 @@ function FundCard() {
         </span>
         <span className="label-caps text-[10px]! @min-[1100px]/shell:text-xs!">Out</span>
         <span data-testid="fund-out">
-          Governor {POLITICS.pay.governor} cr, Sheriff {POLITICS.pay.sheriff} cr, every month
+          Governor {POLITICS.pay.governor} cr a month
         </span>
       </span>
       <span>

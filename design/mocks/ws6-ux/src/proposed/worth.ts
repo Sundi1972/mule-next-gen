@@ -7,7 +7,7 @@ import { ME, VIEW } from '../fixture';
 /**
  * Worth: the one number a player is ranked by, in credits, the same every month and at the game's end (Heiko agreed
  * the model 2026-10-28, via the PM). Pure functions over a view, for the month-end screen (#monthend) and, later, the
- * planning hub's "2nd of 4" (HubAudit's worthStandings, which ranks by money and land only).
+ * planning hub's "2nd of 4" (HubAudit's standings, with that story's office terms).
  *
  *   Worth = cash + goods at the store's posted price + land (GAME.plotScore a plot) + installed MULEs (the store's
  *           MULE price each) + office terms (POLITICS.termScore a term) [+ colony donations 1:1, with G-5]
@@ -110,7 +110,7 @@ export interface Worth {
  * A player's Worth in this view. The viewer's own row carries its parts; anyone else's is a total only, as the server
  * would send it. Mirrors scoreParts(): keep its order of addition and its rounding.
  */
-export function worthOf(view: MuleView, id: string): Worth {
+export function worthOf(view: MuleView, id: string, termsServed: Record<string, number> = TERMS_SERVED): Worth {
   const p = view.players.find((x) => x.id === id);
   if (!p) throw new Error(`worthOf: no player ${id}`);
   const own = view.me?.id === id;
@@ -120,7 +120,7 @@ export function worthOf(view: MuleView, id: string): Worth {
   const muleValue = mules * view.mulePrice;
   const raw = p.money + goods + (land + muleValue);
   const before = Math.round(raw);
-  const terms = TERMS_SERVED[id] ?? 0;
+  const terms = termsServed[id] ?? 0;
   const office = terms * POLITICS.termScore;
   const kept = inCollapse(view) ? Math.round(raw * POLLUTION.collapseScore) : before;
   const money = Math.round(p.money);
@@ -161,9 +161,9 @@ export interface League {
  * The league table: every player by Worth, highest first, with the change since last month. `lastMonth` is each
  * player's Worth as it showed at last month's end (cut then if the air was in Collapse then): WS3 sends it.
  */
-export function league(view: MuleView, lastMonth: Record<string, number> | null): League {
+export function league(view: MuleView, lastMonth: Record<string, number> | null, termsServed: Record<string, number> = TERMS_SERVED): League {
   const sorted = view.players
-    .map((player) => ({ player, slot: toSlot(player.slot), w: worthOf(view, player.id) }))
+    .map((player) => ({ player, slot: toSlot(player.slot), w: worthOf(view, player.id, termsServed) }))
     .sort((a, b) => b.w.total - a.w.total || a.player.slot - b.player.slot);
   const rows: LeagueRow[] = sorted.map(({ player, slot, w }) => ({
     ...w,
