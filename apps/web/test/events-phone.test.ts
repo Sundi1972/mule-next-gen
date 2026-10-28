@@ -25,7 +25,8 @@ const LENA = 's1';
 const OSSA = 's2';
 
 // The month: a dust storm takes 2 Energy from Lena's plant at (1, 0); a drought takes 1 Food from Ossa's farm at (2, 2)
-// and passes Lena by; a bumper harvest (a story: its camera flies in to its origin) gives Lena's plant 2 back. Each
+// and passes Lena by; a bumper harvest (a story: its camera flies in to its origin) gives Lena's plant 1 back, so
+// it ends on 3: neither what it made (4) nor nothing. Each
 // plays 3 s after the server's 1.8 s intro.
 const fired = (key: ProductionEventView['key'], title: string, sign: 'good' | 'bad', origin: [number, number], hits: [x: number, y: number, delta: number][]): ProductionEventView => ({
   key,
@@ -44,7 +45,7 @@ const fired = (key: ProductionEventView['key'], title: string, sign: 'good' | 'b
 const events = [
   fired('dustStorm', 'Dust storm', 'bad', [0, 0], [[1, 0, -2]]),
   fired('drought', 'Drought', 'bad', [0, 0], [[2, 2, -1]]),
-  fired('bumperHarvest', 'Bumper harvest', 'good', [1, 0], [[1, 0, 2]]),
+  fired('bumperHarvest', 'Bumper harvest', 'good', [1, 0], [[1, 0, 1]]),
 ];
 const introMs = EVENT_SHOW.introMs;
 const lines: ProductionView['lines'] = [
@@ -335,7 +336,11 @@ describe('the phone plays the show alone (C7)', () => {
     phone.tap();
     expect(playing(phone.html()), 'past the last event, the result holds').toBeNull();
     expect(card(phone.html())).toEqual({ event: 'bumperHarvest', at: 'you' });
-    expect(text(phone.html(), 'harvest'), 'the harvest list stays').toContain('+4');
+    expect(text(phone.html(), 'harvest'), 'the harvest list stays: 4 − 2 + 1').toContain('+3');
+    // The server's clock reaches the phase's end with the skip still ahead of it: the result and the harvest hold.
+    await phone.rerender(0, END);
+    expect(card(phone.html()), 'at the phase end').toEqual({ event: 'bumperHarvest', at: 'you' });
+    expect(text(phone.html(), 'harvest'), 'at the phase end').toContain('+3');
     expect(sent, 'a skip is this phone’s alone: nothing is sent').toEqual([]);
   });
 
