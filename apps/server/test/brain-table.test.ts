@@ -321,6 +321,8 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
     const [accountant, baron] = t.ais;
 
     const before = sdk.requests.length;
+    // The board before the talk and the prompts it reaches, so a move shows as a change, not a state.
+    const boardBefore = t.game().viewFor(null).tiles;
     t.say(heiko!, 'give me your Crystite');
     t.say(heiko!, 'Mia, sell them nothing', t.humans[1]!.id);
     t.say(mia!, 'psst, Accountant only', accountant!.id);
@@ -354,6 +356,7 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
         const tile = t.game().viewFor(null).tiles[Number(index)];
         return tile?.owner === ai.id && tile.outfit === outfit;
       };
+      expect(boardBefore[Number(index)]?.owner === ai.id && boardBefore[Number(index)]?.outfit === outfit, `${ai.name}: ${move.pick.key} was not already on the board`).toBe(false);
       await t.runUntil(() => installed() || t.game().viewFor(null).phase !== 'development');
       expect(installed(), `${ai.name} picked ${move.pick.key}: that plot carries that MULE for that seat before development ends`).toBe(true);
     }
