@@ -79,14 +79,16 @@ export const RECIPES: Record<ProcessedGood, { inputs: Partial<Stock>; output: nu
 export const GROWN_BASE = 2;
 export const GROWN_MIN = 1;
 
-/** Chance of each grown-good rating from -2 to +3, by how the terrain suits the good. */
+/** Chance of each grown-good rating from GROWN_ODDS_MIN up (today -2 to +3), by how the terrain suits the good. */
 export const GROWN_ODDS = {
   good: [0, 0.05, 0.15, 0.3, 0.3, 0.2],
   neutral: [0.05, 0.2, 0.4, 0.25, 0.1, 0],
   poor: [0.3, 0.35, 0.25, 0.1, 0, 0],
 } as const;
+/** The grown-good rating GROWN_ODDS' first chance is for; each later chance is one rating higher. */
+export const GROWN_ODDS_MIN = -2;
 
-/** Chance of each mineral deposit rating from 0 to 4. */
+/** Chance of each mineral deposit rating from MINERAL_ODDS_MIN up (today 0 to 4). */
 export const MINERAL_ODDS = {
   none: [1, 0, 0, 0, 0],
   low: [0.7, 0.2, 0.1, 0, 0],
@@ -94,6 +96,13 @@ export const MINERAL_ODDS = {
   high: [0.05, 0.15, 0.3, 0.3, 0.2],
   veryHigh: [0.02, 0.08, 0.15, 0.4, 0.35],
 } as const;
+/** The deposit rating MINERAL_ODDS' first chance is for; each later chance is one rating higher. */
+export const MINERAL_ODDS_MIN = 0;
+
+/** The rating each chance in an odds row stands for: `lowest` for the first, one higher for each after it. */
+export function ratingsOf(odds: readonly number[], lowest: number): number[] {
+  return odds.map((_, i) => lowest + i);
+}
 
 type LandTerrain = Exclude<Terrain, 'store'>;
 
@@ -176,8 +185,8 @@ export const SPECIES_PERK = {
   zipwingSpeed: 2,
   /** Bramblet: extra Food on every farm. */
   brambletFood: 1,
-  /** Gearling: share of the normal price paid for MULEs and outfits. */
-  gearlingPrice: 0.75,
+  /** Gearling: share of the normal price paid for MULEs and outfits. At 0.75 Gearlings won 44% of games, not 25%. */
+  gearlingPrice: 0.95,
   /** Mollox: extra output on every working mine, and share of the normal geo analysis time. */
   molloxMine: 1,
   molloxAnalysis: 0.5,
@@ -417,9 +426,13 @@ export const MAP = {
   placeHonesty: 0.1,
   /**
    * Crystite and Rare earth come in rings: a peak plot rated `high`, the plots
-   * one step from it `medium`, two steps `low`, and 0 beyond.
+   * `steps.medium` steps from it `medium`, `steps.low` steps `low`, and 0 elsewhere.
    */
-  peak: { high: 4, medium: 3, low: { min: 1, max: 2 }, count: { min: 3, max: 4 } },
+  peak: { high: 4, medium: 3, low: { min: 1, max: 2 }, count: { min: 3, max: 4 }, steps: { medium: 1, low: 2 } },
+  /** Hidden hazard traits: a land plot draws its trait count evenly from this list (a repeat weights a count), then that many traits, a duplicate adding none. */
+  traits: { counts: [0, 0, 0, 1, 1, 2] },
+  /** Peaks drawn on a mountain plot, evenly from min to max. For the picture only: yield comes from the ground. */
+  mountainPeaks: { min: 1, max: 3 },
   /** Chance a map has one scarce good. Read by the generator and the map-quality test, not the checker. */
   scarceChance: 0.25,
   /** Special fields on each map. */
@@ -469,9 +482,17 @@ export const MAP = {
     shareCap: 0.3,
     /** Plots a region aims for: each terrain's count is split into regions about this size. */
     avgRegion: 6,
+    /** River bends beyond MAP.bends, drawn evenly from min to max. */
+    extraBends: { min: 0, max: 1 },
     /** A region's seed scores its distance to seeds of its own terrain up to this many steps, and to any seed up to seedSpacing. */
     twinSpacing: 8,
     seedSpacing: 4,
+    /** Distance to any seed scores this many times distance to a twin's seed: a crowded seed is the one that ends up boxed in. */
+    crowdWeight: 2,
+    /** A growing region weights a free neighbour by how many of its plots touch it, to this power: higher grows rounder regions. */
+    compactPower: 2,
+    /** A pocket's new region seeds on a plot weighted 1 plus its free neighbours to this power: higher seeds deeper in the pocket. */
+    roomPower: 2,
     /** Growth steps, per free plot, before the regions stop growing. */
     growPasses: 4,
     /** Rounds of planting new regions in pockets the first growth left. */
@@ -493,6 +514,8 @@ export const MAP = {
     lookaheadEvaluations: 20000,
     /** Edge plots of each big patch tried as the start of a carved region. */
     carveStarts: 3,
+    /** A patch is big enough to carve from at this many times minRegion; under 2, what is left could be a speck. */
+    carveFrom: 2,
   },
   /** Tuning for the ground stages (map-ground.ts): how the generator meets the rules above, not rules themselves. */
   ground: {
@@ -546,6 +569,58 @@ export const EXPORT_SHIP = {
 export const TAX = {
   /** Sales tax on every sale a player makes, into the colony fund. The Governor sets it later; this is the start. */
   salesTax: 0.05,
+};
+
+/**
+ * Colony politics: the election of a Governor and a Sheriff, the vote weight,
+ * the Governor's sales tax and the offices' pay. Times are in milliseconds of
+ * game time, stepped like the land auction.
+ */
+export const POLITICS = {
+  /** Months whose planning phase opens with an election; a term runs until the next one. */
+  electionMonths: [1, 4, 7, 10],
+  /** A Governor who has served this many terms in a row may not run for Governor again until someone else has held it. */
+  maxGovernorTermsInRow: 2,
+  /** Players declare for Governor or Sheriff. */
+  nominateMs: 20_000,
+  /** Players cast their secret ballots. */
+  ballotMs: 20_000,
+  /** The reveal: a countdown, then the result on every screen. */
+  revealMs: 6_000,
+  /** The countdown part of the reveal, before the result shows. */
+  revealCountdownMs: 3_000,
+  weight: {
+    /** One extra vote per this many plots owned. */
+    plotsPerVote: 10,
+    /** Reputation at or above this adds a vote. */
+    repHigh: 70,
+    /** Reputation below this takes a vote away. */
+    repLow: 30,
+    /** One extra vote per this much sales tax paid over the game, up to taxCap votes. */
+    taxPerVote: 300,
+    taxCap: 2,
+  },
+  /** The sales tax the Governor may set, in whole percent, and how far it may move from the month's starting rate. */
+  tax: { min: 0, max: 15, maxStep: 5 },
+  /** Paid from the colony fund to each officeholder at upkeep, as far as the fund reaches. */
+  pay: { governor: 50, sheriff: 30 },
+  /** Score per term served in either office. A placeholder until the sim balances it. */
+  termScore: 100,
+  /** How Classic AI seats run, vote and set the tax (VoteHand). Placeholders until the sim balances them. */
+  ai: {
+    /** Ms a seat waits before acting in a nominate or ballot stage, drawn per stage: a human's pause, well inside the stage's clock. */
+    actMs: [800, 2_500] as [number, number],
+    /** Chance per election that a persona runs for Governor. */
+    runGovernor: { trader: 0.5, cautious: 0.3, aggressive: 0.8, saboteur: 0.6 } satisfies Record<AiPersonaId, number>,
+    /** Chance it runs for Sheriff when it does not run for Governor. */
+    runSheriff: { trader: 0.3, cautious: 0.4, aggressive: 0.3, saboteur: 0.7 } satisfies Record<AiPersonaId, number>,
+    /** The sales tax in whole percent a persona steers toward as Governor. */
+    taxTarget: { trader: 5, cautious: 4, aggressive: 8, saboteur: 10 } satisfies Record<AiPersonaId, number>,
+    /** Whole percent a Governor adds when the colony fund is low. */
+    taxFundBump: 2,
+    /** The fund is low under this many months of both offices' pay. */
+    fundMonths: 3,
+  },
 };
 
 /**
@@ -806,8 +881,12 @@ export const STRATEGIST = {
   analyseMinSeconds: 20,
   /** Share of its money it spends on one good at the auction, at most. */
   budgetShare: 0.5,
-  /** A developed plot counts in the final score at the MULE price; it counts this share of that as won back. */
-  residual: 0.8,
+  /**
+   * A developed plot counts in the final score at the MULE price; it counts this share of that as won back. A price
+   * in a sell-out doesn't last to the game's end, so counting most of it made a MULE bought while the corral was
+   * short look cheaper than it is.
+   */
+  residual: 0.6,
   /** What a second of development time is worth, with idle land to work and without. */
   secondValue: { busy: 10, idle: 3 },
   /** Share it takes off next month's price for a good it would hold, per point of risk weight, because the forecast may be wrong. */

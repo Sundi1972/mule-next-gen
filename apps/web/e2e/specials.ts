@@ -7,11 +7,12 @@
  * owner's mark of the plot it hangs into.
  * Run with `pnpm --filter @mule/web e2e`; another map with `MULE_E2E_SEED=<seed>`.
  */
-import { createGame, type GameState, type Tile } from '@mule/engine';
+import { createGame, POLITICS, type GameState, type Tile } from '@mule/engine';
 import type { Locator, Page } from 'playwright';
 import { SPECIAL_BADGE } from '@mule/ui';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import { check, claimAPlot, launch, PHONE, startServer, TV } from './harness';
+import { readyThroughTheElection } from './politics-steps';
 
 /** Seed 93 with two seats: a 13×7 map with ruins on the top row (7,0), a crystal cavern inside (10,3) and an oasis on the bottom edge (9,6). */
 const DEFAULT_SEED = 93;
@@ -114,7 +115,8 @@ try {
   await checkSpecialLine(drone, looked.special.kind, `B-AC-9: the drone rail of ${plotName(looked)}`);
 
   // Land grant: when the light reaches the special plot, the lit card says what it is, and both maps still draw it.
-  await planning.getByRole('button', { name: "I'm ready" }).click();
+  // Through month 1's election first when the table plays politics; with politics off this is one press.
+  await readyThroughTheElection(phone, POLITICS.nominateMs + POLITICS.ballotMs + POLITICS.revealMs + PHASE_MS.planning + SHOWN_MS);
   const grant = phone.locator('[data-phase=landGrant]');
   await grant.waitFor({ timeout: SHOWN_MS });
   const lit = grant.getByTestId('lit').filter({ hasText: plotName(firstLit) });

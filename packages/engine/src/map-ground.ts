@@ -1,6 +1,6 @@
-import { GROWN_ODDS, MAP, MINERAL_ODDS, TERRAIN_ODDS, sizeBand, type FloorGood } from './config.js';
+import { GROWN_ODDS, GROWN_ODDS_MIN, MAP, MINERAL_ODDS, MINERAL_ODDS_MIN, ratingsOf, TERRAIN_ODDS, sizeBand, type FloorGood } from './config.js';
 import type { Layout } from './map-layout.js';
-import { zeroGround } from './map.js';
+import { EPS, zeroGround } from './grid.js';
 import type { Rng } from './rng.js';
 import type { Ground, Terrain } from './types.js';
 
@@ -76,8 +76,6 @@ type Odds = { values: number[]; weights: readonly number[] };
 
 const FLOOR_GOODS = Object.keys(MAP.floor) as FloorGood[];
 const MINERALS = ['crystite', 'rareEarth'] as const;
-// S8 compares a share; a share exactly on the edge must pass here as it does in the checker.
-const EPS = 1e-9;
 
 /** Deals a laid-out map its hidden ground (spec RULE-2 stages 4-9). Pure: every choice comes from `rng`; never throws. */
 export function dealGround(layout: Layout, players: number, rng: Rng): GroundDeal {
@@ -247,7 +245,7 @@ export function joinSeams(dealt: Dealt): Dealt & { lifts: SeamLift[] } {
   const lifts: SeamLift[] = [];
   // Each lift joins at least one isolated plot, so no more lifts than isolated plots are ever needed.
   for (let budget = isolatedCount(board, ground); budget > 0 && !seamsHold(board, ground); budget--) {
-    const lift = seamLift(board, ground, raised, new Set());
+    const lift = seamLift(board, ground, raised, cover, new Set());
     if (!lift) break;
     lifts.push(lift);
   }
@@ -286,15 +284,15 @@ export function applyScarcity(dealt: Dealt, scarce: FloorGood | null): Dealt & {
   const lifts: SeamLift[] = [];
   if (scarce !== 'smithore') return { ...dealt, ground, lifts };
   const lowered = new Set(cut);
-  // Lifted plots and the plots they join are never lowered again: that would undo the seam it paid for.
+  // Lifted plots and the plots they join are never lowered again: that would undo the seam it paid for. Only the
+  // recorded joined plot is kept; that alone keeps the lift in a seam, and a second lone plot it touches may still
+  // be the cheapest to lower (keeping it too can leave the stage short of seams).
   const kept = new Set<number>();
   const raised = new Raised(board, ground, 'smithore', field);
   // Each round adds one seam lift and one lowering, or undoes its lift and stops; at most one round per good plot.
   for (let round = 0; round < goods.length && !seamsHold(board, ground); round++) {
-    const lift = seamLift(board, ground, raised, lowered);
+    const lift = seamLift(board, ground, raised, cover, lowered);
     if (!lift) break;
-    // The lift reaches plots too: coverage must count it, or a later lowering could strand what it covers.
-    cover.move([], [lift.plot]);
     const extra = leastIsolating(board, ground, cover, new Set([...lowered, ...kept, lift.plot, lift.joins]));
     if (extra === undefined) {
       cover.move([lift.plot]);
@@ -363,9 +361,10 @@ function leastIsolating(board: Board, ground: Ground[], cover: Coverage, barred:
 
 /**
  * One seam lift: a non-good plot of a capable terrain beside an isolated good Smithore plot,
- * joining the most isolated plots, then on the terrain whose mean it raises least.
+ * joining the most isolated plots, then on the terrain whose mean it raises least. The lift
+ * reaches plots too, so it enters `cover`, as every lift does, or a later change could strand what it covers.
  */
-function seamLift(board: Board, ground: Ground[], raised: Raised, barred: Set<number>): SeamLift | undefined {
+function seamLift(board: Board, ground: Ground[], raised: Raised, cover: Coverage, barred: Set<number>): SeamLift | undefined {
   const good = 'smithore';
   const lonely = (i: number) => board.neighbours[i]!.filter((n) => isLoneGood(board, ground, n, good));
   const options = board.land.filter((i) => !barred.has(i) && !isGood(ground, i, good) && pGood(board.terrain[i]!, good) > 0 && lonely(i).length > 0);
@@ -374,6 +373,7 @@ function seamLift(board: Board, ground: Ground[], raised: Raised, barred: Set<nu
   if (plot === undefined) return undefined;
   const lift: SeamLift = { kind: 'seam', good, plot, from: ground[plot]!.smithore, joins: lonely(plot)[0]! };
   raised.lift(plot);
+  cover.move([], [plot]);
   return lift;
 }
 
@@ -545,13 +545,15 @@ function smoothField(layout: Layout, good: FloorGood, rng: Rng): number[] {
   // Centres fall in the plot box padded on every side, at the same density, so an edge plot has as many bumps
   // around it as an interior one; otherwise the edges come out poorer than the hint says.
   const pad = MAP.ground.blobPad;
-  const boxWidth = width - 1 + 2 * pad;
-  const boxHeight = height - 1 + 2 * pad;
+  const padded = (plots: number) => plots - 1 + 2 * pad; // literal-ok: the pad goes on both sides
+  const boxWidth = padded(width);
+  const boxHeight = padded(height);
   const count = Math.max(MAP.ground.minBlobs, Math.round((boxWidth * boxHeight) / area));
   const blobs = Array.from({ length: count }, () => ({ x: rng.next() * boxWidth - pad, y: rng.next() * boxHeight - pad, weight: rng.next() }));
   return layout.terrain.map((_, i) => {
     const x = i % width;
     const y = Math.floor(i / width);
+    // literal-ok: a Gaussian bump, exp(-distance squared / 2 variance)
     const bumps = blobs.reduce((sum, b) => sum + b.weight * Math.exp(-((x - b.x) ** 2 + (y - b.y) ** 2) / (2 * spread)), 0);
     return bumps + rng.next() * MAP.ground.fieldNoise;
   });
@@ -577,8 +579,12 @@ function stratifiedDraw(n: number, { values, weights }: Odds, rng: Rng): number[
 
 function oddsOf(terrain: LandTerrain, good: FloorGood): Odds {
   const odds = TERRAIN_ODDS[terrain];
-  if (good === 'smithore') return { values: [0, 1, 2, 3, 4], weights: MINERAL_ODDS[odds.mined.smithore] };
-  return { values: [-2, -1, 0, 1, 2, 3], weights: GROWN_ODDS[odds.grown[good] ?? 'neutral'] };
+  if (good === 'smithore') {
+    const weights = MINERAL_ODDS[odds.mined.smithore];
+    return { values: ratingsOf(weights, MINERAL_ODDS_MIN), weights };
+  }
+  const weights = GROWN_ODDS[odds.grown[good] ?? 'neutral'];
+  return { values: ratingsOf(weights, GROWN_ODDS_MIN), weights };
 }
 
 const ODDS_FACTS = new Map(
@@ -603,10 +609,10 @@ function pGood(terrain: LandTerrain, good: FloorGood): number {
 }
 
 function ringRating(stepsToCentre: number, rng: Rng): number {
-  const { high, medium, low } = MAP.peak;
+  const { high, medium, low, steps } = MAP.peak;
   if (stepsToCentre === 0) return high;
-  if (stepsToCentre === 1) return medium;
-  if (stepsToCentre === 2) return rng.int(low.min, low.max);
+  if (stepsToCentre === steps.medium) return medium;
+  if (stepsToCentre === steps.low) return rng.int(low.min, low.max);
   return 0;
 }
 
@@ -640,6 +646,7 @@ function seamsHoldWithout(board: Board, ground: Ground[], lowered: Set<number>):
   const good = (i: number) => !lowered.has(i) && isGood(ground, i, 'smithore');
   const kept = board.land.filter(good);
   const joined = kept.filter((i) => board.neighbours[i]!.some(good)).length;
+  // A share exactly on the edge must pass here as it does in the checker.
   return kept.length === 0 || joined + EPS >= MAP.seamShare * kept.length;
 }
 
