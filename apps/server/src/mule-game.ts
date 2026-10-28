@@ -675,6 +675,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       this.ctx.schedule(GRANT_TICK_MS, () => {
         if (state.phase !== 'landGrant') return;
         advanceGrant(state);
+        // An AI seat that wants nothing still ahead of the light presses Done with land, as a phone's Ready.
+        for (const seat of this.ai.values()) if (seat.passesGrant(state)) this.aiAct(seat.id, { type: 'done', done: true });
         // The pass ends when the last plot's tick does, so the light never comes back round to the first.
         if (grantDone(state)) this.nextPhase();
         else {
