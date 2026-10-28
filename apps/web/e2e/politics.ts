@@ -141,9 +141,11 @@ async function main(): Promise<void> {
     await lenaRadio(lena).check({ timeout: PRESS_MS });
     const ballots = () => truth.state().politics!.election!.ballots;
     await untilServer(lena.page, () => ballots()[lenaId]?.governor === lenaId || null, "B-AC-1: the server holds Lena's ballot for herself");
+    // Picking is not Done (AM-21): Lena casts her vote.
+    await lena.page.getByTestId('ready').click({ timeout: PRESS_MS });
 
     // B-AC-61: Ossa's phone drops before she votes. The ballot waits for her once the AI seat has voted; Lena, who hosts
-    // and is Done by her ballot, goes on without her, and the news names her.
+    // has cast her vote, goes on without her, and the news names her.
     const ossaUrl = ossa.page.url();
     await ossa.page.goto('about:blank');
     const seatOf = (id: string) => truth.room().viewFor(null).seats.find((seat) => seat.id === id);
@@ -157,7 +159,7 @@ async function main(): Promise<void> {
       await lena.page.getByTestId('continue').filter({ hasText: `Continue without ${ossa.name}` }).click({ timeout: PRESS_MS });
       await lena.page.getByTestId('continue-confirm').filter({ hasText: `Go on without ${ossa.name}? ${ossa.name} doesn't vote this time.` }).waitFor({ timeout: PRESS_MS });
       await lena.page.getByTestId('continue-now').click({ timeout: PRESS_MS });
-      const line = `${lena.name} continued without ${ossa.name}.`;
+      const line = `${lena.name} closed the ballot without ${ossa.name}.`;
       await untilServer(lena.page, () => truth.board().news[0] === line || null, `B-AC-61: the news says "${line}"`);
       await tv.getByText(line).first().waitFor({ timeout: PRESS_MS });
       await ossa.page.goto(ossaUrl);

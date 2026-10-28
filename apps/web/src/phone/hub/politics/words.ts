@@ -10,6 +10,8 @@ export function officeNames(): string[] {
 /** Why the run button for an office is refused, from the view's canRun. */
 export function whyNot(reason: Exclude<CanRun, true>): string {
   switch (reason) {
+    case 'notPlanning':
+      return 'You can run for office in planning';
     case 'closed':
       return 'Candidates are closed until the result';
     case 'termLimit':

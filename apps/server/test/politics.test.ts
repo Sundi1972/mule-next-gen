@@ -3,7 +3,7 @@ import { Brain } from '@mule/ai';
 import type { MuleView, ServerEnvelope } from '@mule/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
-import { openPlanning, POLITICS, RuleError, WALK, type GameState, type Office, type TaxPromise } from '@mule/engine';
+import { ceremonyBeats, openPlanning, POLITICS, RuleError, WALK, type CeremonyBeat, type GameState, type Office, type TaxPromise } from '@mule/engine';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
 import { createMuleServer, type MuleServer } from '../src/server.js';
 import { fakeContext, readyAll } from './fake-context.js';
@@ -244,8 +244,11 @@ function doneThrough(g: Started) {
   expect(election(g.game).stage).toBe('over');
 }
 
-/** The ceremony's length when no office has bars: each office's intro and winner. */
-const unbarredCeremonyMs = () => POLITICS.offices.length * (POLITICS.ceremony.introMs + POLITICS.ceremony.winnerMs);
+/** The show's beats for the result the engine closed, the ground truth every screen follows. */
+const beatsOf = (game: MuleGame) => {
+  const state = engineOf(game);
+  return ceremonyBeats(state.players.map((p) => p.id), state.politics!.election!.result!);
+};
 
 /** Plays out the longest pause an AI seat takes before it acts and presses Done (RULE-8). */
 const aiPause = (g: Started) => tickFor(g, POLITICS.ai.actMs[1] + WALK.tickMs);
@@ -286,7 +289,8 @@ describe('the election runs first in planning', () => {
       if (election(g.game).stage === 'over') overAt = g.ctx.now();
     }
     expect(election(g.game).candidates, 'seed precondition').toEqual(BARON_ALONE);
-    expect(overAt! - ceremonyAt!, 'The Baron runs alone: no ballot, and no office has bars').toBe(unbarredCeremonyMs());
+    const { total } = beatsOf(g.game);
+    expect(overAt! - ceremonyAt!, 'The Baron runs alone: the show runs its length, to the tick').toBe(Math.ceil(total / WALK.tickMs) * WALK.tickMs);
     expect(landAsks, 'one land plan per AI seat, as the election ends').toEqual([{ seat: 'ai1', at: overAt }]);
     expect(g.game.viewFor(null).phase).toBe('planning');
     expect(g.game.viewFor(null).phaseEndsAt, 'planning proper has no clock').toBeNull();
@@ -365,11 +369,12 @@ describe('the election runs first in planning', () => {
 
     g.game.handle('lena', { type: 'continue' });
     expect(readyOn(g.game, 'ossa'), "the host's Continue counts Ossa Done").toEqual([true, true, true, true]);
-    expect(g.game.viewFor(null).news[0]).toBe('Lena continued without Ossa.');
+    expect(g.game.viewFor(null).news[0]).toBe('Lena opened the ballot without Ossa.');
     g.advance(WALK.tickMs);
     expect(election(g.game).stage).toBe('ballot');
 
     g.game.handle('lena', { type: 'vote', office: 'governor', candidate: 'lena' });
+    g.game.handle('lena', { type: 'ready' });
     g.game.connectionChanged('brix', false);
     g.game.connectionChanged('lena', false);
     tickFor(g, LONG_WAIT_MS);
@@ -383,7 +388,7 @@ describe('the election runs first in planning', () => {
     expect(election(g.game).stage).toBe('announce');
     g.game.handle('lena', { type: 'continue' });
     expect([...election(g.game).done].sort(), 'every human, the host too; never the AI seat').toEqual(['brix', 'lena', 'ossa']);
-    expect(g.game.viewFor(null).news[0], 'the host is not named').toBe('Lena continued without Brix and Ossa.');
+    expect(g.game.viewFor(null).news[0], 'the host is not named').toBe('Lena opened the ballot without Brix and Ossa.');
     g.advance(WALK.tickMs);
     expect(election(g.game).stage, 'the last call waits for the AI seat').toBe('announce');
 
@@ -438,36 +443,34 @@ describe('the election runs first in planning', () => {
     expect(month4.phaseEndsAt, "no deadline left over from upkeep").toBeNull();
   });
 
-  it.each([1, 0.1])('T-AC-61, T-AC-62 (server, phaseScale %s): announce never ends on time; the ceremony runs on its clocks, scaled, and every screen sees its office, step and seconds', (phaseScale) => {
+  it.each([1, 0.1])('T-AC-61, T-AC-62 (server, phaseScale %s): announce never ends on time; the ceremony runs on its one show clock, scaled, every screen at the same second, and the winners take office at its end', (phaseScale) => {
     const g = started({ phaseScale });
     tickFor(g, LONG_WAIT_MS);
     expect(election(g.game)).toMatchObject({ stage: 'announce', ceremony: null });
     allReady(g.game);
     untilStage(g, 'ceremony');
     expect(election(g.game).candidates, 'seed precondition: no contested office, so no ballot').toEqual(BARON_ALONE);
-    const { introMs, winnerMs } = POLITICS.ceremony;
-    expect(election(g.game).ceremony).toEqual({ office: 'governor', step: 'intro', seconds: introMs / 1_000, total: introMs / 1_000 });
-    tickFor(g, introMs * phaseScale - WALK.tickMs);
-    expect(election(g.game).ceremony).toMatchObject({ office: 'governor', step: 'intro' });
-    g.advance(WALK.tickMs);
-    expect(election(g.game).ceremony, 'the Baron is unopposed: no bars').toEqual({ office: 'governor', step: 'winner', seconds: winnerMs / 1_000, total: winnerMs / 1_000 });
-    for (const view of screens(g.game)) expect(view.politics!.election!.ceremony).toEqual(election(g.game).ceremony);
+    const total = beatsOf(g.game).total / 1_000;
+    expect(election(g.game).ceremony).toEqual({ seconds: 0, total, reached: {} });
 
+    // Each tick runs the show clock on by a tick of game time.
+    const perTick = WALK.tickMs / phaseScale / 1_000;
+    for (let tick = 1; tick <= 5; tick++) {
+      g.advance(WALK.tickMs);
+      expect(election(g.game).ceremony!.seconds).toBeCloseTo(tick * perTick);
+      for (const view of screens(g.game)) expect(view.politics!.election!.ceremony).toEqual(election(g.game).ceremony);
+    }
     // A stalled server loop: one late tick moves the clock at most three ticks' worth.
-    const stalled = (3 * WALK.tickMs) / phaseScale;
-    expect(stalled, 'precondition: a stall fits inside the winner step').toBeLessThan(winnerMs);
     g.advance(10_000);
-    expect(election(g.game).ceremony).toMatchObject({ office: 'governor', step: 'winner' });
-    expect(election(g.game).ceremony!.seconds).toBeCloseTo((winnerMs - stalled) / 1_000);
-    tickFor(g, (winnerMs - stalled) * phaseScale - WALK.tickMs);
-    expect(election(g.game).ceremony).toMatchObject({ office: 'governor', step: 'winner' });
-    g.advance(WALK.tickMs);
-    expect(election(g.game).ceremony).toMatchObject({ office: 'sheriff', step: 'intro' });
-    // Nobody runs for Sheriff: appointed, no bars.
-    tickFor(g, (introMs + winnerMs) * phaseScale - WALK.tickMs);
-    expect(election(g.game).ceremony).toMatchObject({ office: 'sheriff', step: 'winner' });
+    expect(election(g.game).ceremony!.seconds).toBeCloseTo(8 * perTick);
+
+    const left = total - election(g.game).ceremony!.seconds;
+    tickFor(g, Math.ceil(left / perTick - 1) * WALK.tickMs);
+    expect(election(g.game).stage, 'the show is not over before its end').toBe('ceremony');
+    expect(g.game.viewFor(null).politics!.governor, 'nobody takes office before the end').toBeNull();
     g.advance(WALK.tickMs);
     expect(election(g.game)).toMatchObject({ stage: 'over', ceremony: null });
+    expect(g.game.viewFor(null).politics!.governor).toBe('ai1');
     expect(g.game.viewFor(null).phase).toBe('planning');
     expect(g.game.viewFor(null).phaseEndsAt, 'planning proper has no clock').toBeNull();
   });
@@ -509,17 +512,23 @@ describe('B-AC-60, B-AC-61: running any month, and a ballot that waits for every
     expect(election(g.game).candidates, 'seed precondition').toEqual({ governor: ['lena', 'brix', 'ai1'], sheriff: [] });
     g.game.handle('lena', { type: 'vote', office: 'governor', candidate: 'lena' });
     g.game.handle('brix', { type: 'vote', office: 'governor', candidate: 'brix' });
+    for (const id of ['lena', 'brix']) g.game.handle(id, { type: 'ready' });
     aiPause(g);
     return g;
   }
 
-  it('B-AC-61: while Ossa has not voted the ballot stays open however long, every screen waits for her; it closes at the next tick once she votes', () => {
+  it('B-AC-61, T-AC-68 (server): while Ossa has not cast her vote the ballot stays open however long, picked or not, and every screen waits for her; it closes at the next tick once she casts', () => {
     const g = ballotOpen();
     tickFor(g, LONG_WAIT_MS);
     expect(election(g.game).stage).toBe('ballot');
     for (const view of screens(g.game)) expect(view.politics!.election!.waitingFor).toEqual(['ossa']);
 
     g.game.handle('ossa', { type: 'vote', office: 'governor', candidate: 'brix' });
+    tickFor(g, LONG_WAIT_MS);
+    expect(election(g.game).stage, 'picking alone is not Done').toBe('ballot');
+    for (const view of screens(g.game)) expect(view.politics!.election!.waitingFor).toEqual(['ossa']);
+
+    g.game.handle('ossa', { type: 'ready' });
     g.advance(WALK.tickMs);
     expect(election(g.game).stage).toBe('ceremony');
     expect(engineOf(g.game).politics!.election!.result!.governor).toMatchObject({ winner: 'brix', how: 'votes' });
@@ -532,7 +541,7 @@ describe('B-AC-60, B-AC-61: running any month, and a ballot that waits for every
     expect(election(g.game).stage).toBe('ballot');
 
     g.game.handle('lena', { type: 'continue' });
-    expect(g.game.viewFor(null).news[0]).toBe('Lena continued without Ossa.');
+    expect(g.game.viewFor(null).news[0]).toBe('Lena closed the ballot without Ossa.');
     g.advance(WALK.tickMs);
     expect(election(g.game).stage).toBe('ceremony');
     expect(engineOf(g.game).politics!.election!.ballots, 'Ossa abstained').not.toHaveProperty('ossa');
@@ -542,7 +551,7 @@ describe('B-AC-60, B-AC-61: running any month, and a ballot that waits for every
 describe('the politics view', () => {
   bothOffices();
 
-  it('B-AC-62, B-AC-1 (server): the ceremony shows the Governor, then the Sheriff, on every screen in the same tick: an office\'s totals from its bars step, its winner from its winner step, one news line each; then the winner has the tax desk', () => {
+  it("B-AC-62, B-AC-1, T-AC-69 (server): the ceremony shows the Governor, then the Sheriff, on every screen in the same tick, beat by beat as RULE-62 times them: an office's totals from its bars beat, its winner from its winner beat, one news line each then; then the winner has the tax desk", () => {
     const g = started();
     // The Baron runs for Governor too and votes for himself; Ossa runs alone for Sheriff, unopposed.
     setMoney(g.game, { lena: 900, brix: 1_000, ossa: 1_300, ai1: 1_100 });
@@ -555,53 +564,98 @@ describe('the politics view', () => {
     g.game.handle('lena', { type: 'vote', office: 'governor', candidate: 'lena' });
     g.game.handle('brix', { type: 'vote', office: 'governor', candidate: 'brix' });
     g.game.handle('ossa', { type: 'vote', office: 'governor', candidate: 'brix' });
+    allReady(g.game);
     untilStage(g, 'ceremony');
 
     const governor = { winner: 'brix', how: 'votes', tallies: [{ id: 'brix', votes: 2 }, { id: 'lena', votes: 1 }, { id: 'ai1', votes: 1 }] };
     const sheriff = { winner: 'ossa', how: 'unopposed', tallies: [{ id: 'ossa', votes: 0 }] };
-    const governorLine = 'Brix is Governor (elected).';
-    const sheriffLine = 'Ossa is Sheriff (unopposed).';
+    const full = { governor, sheriff };
+    const lines = { governor: 'Brix is Governor (elected).', sheriff: 'Ossa is Sheriff (unopposed).' };
+    const beats = beatsOf(g.game);
+    expect(beats.offices.find((o) => o.office === 'governor')!.blocks, 'four blocks, interleaved in seat order').toEqual(['lena', 'brix', 'ai1', 'brix']);
+    const order: CeremonyBeat[] = ['title', 'candidates', 'bars', 'tie', 'winner', 'end'];
     const seen: string[] = [];
     while (election(g.game).stage !== 'over') {
       const views = screens(g.game).map((v) => v.politics!.election!);
       for (const v of views) {
-        expect(v.ceremony, 'every screen in the same step').toEqual(views[0]!.ceremony);
+        expect(v.ceremony, 'every screen at the same second').toEqual(views[0]!.ceremony);
         expect(v.result).toEqual(views[0]!.result);
       }
-      const { office, step } = views[0]!.ceremony!;
-      const at = `${office} ${step}`;
-      if (seen.at(-1) !== at) seen.push(at);
-      const news = g.game.viewFor(null).news;
-      const expected = {
-        'governor intro': [{}, []],
-        'governor bars': [{ governor: { tallies: governor.tallies } }, []],
-        'governor winner': [{ governor }, [governorLine]],
-        'sheriff intro': [{ governor }, [governorLine]],
-        'sheriff winner': [{ governor, sheriff }, [sheriffLine, governorLine]],
-      }[at];
-      expect(expected, at).toBeDefined();
-      expect(views[0]!.result, at).toEqual(expected![0]);
-      expect(news.filter((n) => / is (Governor|Sheriff) /.test(n)), `${at}: the news`).toEqual(expected![1]);
+      const ms = engineOf(g.game).politics!.election!.ceremony!.elapsedMs;
+      const { reached } = views[0]!.ceremony!;
+      for (const { office, at } of beats.offices) {
+        // The latest beat the show clock has reached, as RULE-62 times it, and nothing later.
+        const latest = order.filter((b) => at[b] !== null && at[b]! <= ms).at(-1);
+        const where = `${office} at ${ms} ms`;
+        expect(reached[office], where).toEqual(latest ? { beat: latest, at: at[latest]! / 1_000 } : undefined);
+        const shown = views[0]!.result[office];
+        if (ms < at.bars) expect(shown, `${where}: no totals before the bars beat`).toBeUndefined();
+        else if (ms < at.winner) expect(shown, `${where}: totals, no winner`).toEqual({ tallies: full[office as 'governor'].tallies });
+        else expect(shown, `${where}: the winner`).toEqual(full[office as 'governor']);
+        const news = g.game.viewFor(null).news.filter((n) => n === lines[office as 'governor']);
+        expect(news, `${where}: the news line from the winner beat, once`).toHaveLength(ms < at.winner ? 0 : 1);
+        if (latest && seen.at(-1) !== `${office} ${latest}` && !seen.includes(`${office} ${latest}`)) seen.push(`${office} ${latest}`);
+      }
       g.advance(WALK.tickMs);
     }
-    expect(seen).toEqual(['governor intro', 'governor bars', 'governor winner', 'sheriff intro', 'sheriff winner']);
+    expect(seen).toEqual(['governor title', 'governor candidates', 'governor bars', 'governor winner', 'governor end', 'sheriff title', 'sheriff candidates', 'sheriff bars', 'sheriff winner', 'sheriff end']);
 
     tickFor(g, 1_000);
     for (const view of screens(g.game)) {
-      expect(view.politics!.election!.result).toEqual({ governor, sheriff });
+      expect(view.politics!.election!.result).toEqual(full);
       expect(view.politics!.governor).toBe('brix');
-      expect(view.news.slice(0, 2)).toEqual([sheriffLine, governorLine]);
+      expect(view.news.slice(0, 2)).toEqual([lines.sheriff, lines.governor]);
     }
     const brix = g.game.viewFor('brix');
     expect(brix.politics!.weights.find((w) => w.id === 'brix'), 'month 1: no land, no taxes paid, no Baron').toEqual({ id: 'brix', votes: 1, parts: { base: 1, land: 0, reputation: 0, baron: 0, taxes: 0 } });
     expect(brix.politics!.tax).toEqual({ percent: 5, start: 5, low: 0, high: 10 });
-    expect(brix.me!.politics, 'running is open again, for the next election').toEqual({ running: null, ballot: { governor: 'brix' }, canRun: { governor: true, sheriff: true } });
+    const reputation = engineOf(g.game).players.find((p) => p.id === 'brix')!.reputation;
+    expect(brix.me!.politics, 'running is open again, for the next election').toEqual({ running: null, ballot: { governor: 'brix' }, canRun: { governor: true, sheriff: true }, paid: 0, reputation });
     expect(brix.politics!.election!.stage, 'planning proper has started, so the Governor can set the tax').toBe('over');
     expect(() => g.game.handle('lena', { type: 'setTax', percent: 8 })).toThrow('Only the Governor sets the tax');
     g.game.handle('brix', { type: 'setTax', percent: 8 });
     for (const view of screens(g.game)) expect(view.politics!.tax.percent).toBe(8);
   });
 
+  it.each(['land', 'lot'] as const)("T-AC-69 (server): a tie broken by %s reaches the views at its tie beat, the rule and the winner with it, as the mock stamps them; one tick before, neither", (how) => {
+    const g = started();
+    g.game.handle('lena', { type: 'run', office: 'governor', promise: HOLD });
+    g.game.handle('brix', { type: 'run', office: 'governor', promise: HOLD });
+    allReady(g.game);
+    untilStage(g, 'ballot');
+    expect(election(g.game).candidates.governor, 'seed precondition').toEqual(['lena', 'brix', 'ai1']);
+    // Two plots each for a lot, or one more for Brix; the Baron (ai1) votes for himself, so his ballot breaks nothing.
+    const state = engineOf(g.game);
+    const free = state.tiles.filter((t) => t.owner === null && t.terrain !== 'store');
+    for (const [i, id] of ['lena', 'lena', 'brix', 'brix', ...(how === 'land' ? ['brix'] : [])].entries()) free[i]!.owner = id;
+    g.game.handle('lena', { type: 'vote', office: 'governor', candidate: 'lena' });
+    g.game.handle('brix', { type: 'vote', office: 'governor', candidate: 'brix' });
+    allReady(g.game);
+    untilStage(g, 'ceremony');
+    const result = state.politics!.election!.result!.governor!;
+    if (result.how !== how) expect.fail(`seed precondition: the tie went by ${result.how}`);
+    const { at } = beatsOf(g.game).offices.find((o) => o.office === 'governor')!;
+    expect(at.tie).not.toBeNull();
+    const seen = { before: 0, at: 0 };
+    while (election(g.game).stage === 'ceremony') {
+      const ms = state.politics!.election!.ceremony!.elapsedMs;
+      const view = election(g.game);
+      const shown = view.result.governor;
+      if (ms < at.tie!) {
+        for (const v of screens(g.game)) expect(v.politics!.election!.result.governor?.winner, `${ms} ms: no winner before the tie beat`).toBeUndefined();
+        expect(shown?.how, `${ms} ms: no rule before the tie beat`).toBeUndefined();
+        if (ms + WALK.tickMs >= at.tie!) seen.before++;
+      } else if (ms < at.winner) {
+        expect(view.ceremony!.reached.governor, `${ms} ms`).toEqual({ beat: 'tie', at: at.tie! / 1_000 });
+        for (const v of screens(g.game)) expect(v.politics!.election!.result.governor, `${ms} ms: the tie's rule and winner`).toEqual(result);
+        seen.at++;
+      }
+      g.advance(WALK.tickMs);
+    }
+    expect(seen.before, 'the tick before the tie beat was read').toBe(1);
+    expect(seen.at, 'the tie beat was read').toBeGreaterThan(0);
+    expect(election(g.game).result.governor).toMatchObject({ how });
+  });
   it('B-AC-2: after the Governor sets 8%, the next auction sale is taxed at 8%', () => {
     const g = started();
     // The Baron runs against Lena; the three humans vote her in.
@@ -743,6 +797,53 @@ describe('the politics view', () => {
     }
   });
 
+  it("T-AC-70 (server): every screen carries the Governor's promise for the term from the end of the ceremony, through the months to the next election; my tax paid and my reputation reach my phone only", () => {
+    const g = started({ phaseScale: 0.1 });
+    g.game.handle('lena', { type: 'run', office: 'governor', promise: CAP_8 });
+    g.game.handle('brix', { type: 'run', office: 'governor', promise: HOLD });
+    allReady(g.game);
+    untilStage(g, 'ballot');
+    for (const id of humans) g.game.handle(id, { type: 'vote', office: 'governor', candidate: 'lena' });
+    allReady(g.game);
+    untilStage(g, 'ceremony');
+    for (const view of screens(g.game)) expect(view.politics!.promise, 'not before Lena takes office').toBeNull();
+    untilStage(g, 'over');
+    for (const view of screens(g.game)) expect(view.politics).toMatchObject({ governor: 'lena', promise: CAP_8 });
+
+    const state = engineOf(g.game);
+    state.treasury.paid = { lena: 123, brix: 456 };
+    const rep = { lena: 71, brix: 29, ossa: 50 };
+    for (const p of state.players) if (p.id in rep) p.reputation = rep[p.id as keyof typeof rep];
+    for (const id of humans) expect(g.game.viewFor(id).me!.politics, id).toMatchObject({ paid: state.treasury.paid[id] ?? 0, reputation: rep[id as keyof typeof rep] });
+    expect(g.game.viewFor(null).me, 'the board has no "my" side').toBeNull();
+    expect(JSON.stringify(g.game.viewFor('ossa')), "Ossa's phone carries nobody else's paid").not.toMatch(/"paid":(123|456)/);
+
+    // The next term's candidacy leaves this term's promise alone.
+    playUntil(g, () => g.game.viewFor(null).month === 3, 1_200_000);
+    g.game.handle('lena', { type: 'run', office: 'governor', promise: { kind: 'lower' } });
+    for (const view of screens(g.game)) expect(view.politics, 'month 3').toMatchObject({ governor: 'lena', promise: CAP_8 });
+  });
+
+  it("T-AC-71: the host's Continue news names the stage it moved past: opened the ballot in announce, closed it in the ballot, continued in planning proper", () => {
+    const g = started();
+    g.game.handle('lena', { type: 'run', office: 'governor', promise: HOLD });
+    g.game.handle('brix', { type: 'run', office: 'governor', promise: HOLD });
+    g.game.handle('lena', { type: 'ready' });
+    g.game.handle('lena', { type: 'continue' });
+    expect(g.game.viewFor(null).news[0]).toBe('Lena opened the ballot without Brix and Ossa.');
+    untilStage(g, 'ballot');
+
+    g.game.handle('brix', { type: 'ready' });
+    g.game.handle('lena', { type: 'continue' });
+    expect(g.game.viewFor(null).news[0]).toBe('Lena closed the ballot without Ossa.');
+    untilStage(g, 'over');
+
+    g.game.handle('lena', { type: 'ready' });
+    g.game.handle('lena', { type: 'continue' });
+    expect(g.game.viewFor(null).news[0]).toBe('Lena continued without Brix and Ossa.');
+    expect(g.game.viewFor(null).phase).toBe('landGrant');
+  });
+
   it("HC-2: the board's politics view carries exactly these keys", () => {
     const g = started();
     g.game.handle('lena', { type: 'run', office: 'governor', promise: HOLD });
@@ -752,6 +853,10 @@ describe('the politics view', () => {
     g.game.handle('brix', { type: 'vote', office: 'governor', candidate: 'lena' });
     expectBoardKeys(g.game.viewFor(null));
     allReady(g.game);
+    untilStage(g, 'ceremony');
+    tickFor(g, 3_000);
+    expect(keysOf(election(g.game).ceremony!.reached), 'precondition: the show has reached an office').not.toEqual([]);
+    expectBoardKeys(g.game.viewFor(null));
     untilStage(g, 'over');
     const board = g.game.viewFor(null);
     expect(board.politics!.election!.result).not.toBeNull();
@@ -901,7 +1006,8 @@ describe('T-AC-62 (server): Governor only, the default POLITICS.offices', () => 
     allReady(g.game);
     untilStage(g, 'ballot');
     for (const id of humans) g.game.handle(id, { type: 'vote', office: 'governor', candidate: 'lena' });
-    const steps: string[] = [];
+    allReady(g.game);
+    const beats: string[] = [];
     const governorOnly = () => {
       for (const view of screens(g.game)) {
         const politics = view.politics!;
@@ -916,12 +1022,14 @@ describe('T-AC-62 (server): Governor only, the default POLITICS.offices', () => 
     };
     while (election(g.game).stage !== 'over') {
       governorOnly();
-      const c = election(g.game).ceremony;
-      if (c && steps.at(-1) !== `${c.office} ${c.step}`) steps.push(`${c.office} ${c.step}`);
+      const reached = election(g.game).ceremony?.reached ?? {};
+      expect(keysOf(reached)).not.toContain('sheriff');
+      const beat = reached.governor?.beat;
+      if (beat && beats.at(-1) !== beat) beats.push(beat);
       g.advance(WALK.tickMs);
     }
     governorOnly();
-    expect(steps).toEqual(['governor intro', 'governor bars', 'governor winner']);
+    expect(beats).toEqual(['title', 'candidates', 'bars', 'winner', 'end']);
     expect(keysOf(election(g.game).result)).toEqual(['governor']);
     expect(g.game.viewFor(null).news[0]).toBe('Lena is Governor (elected).');
   });
@@ -934,7 +1042,7 @@ const NEW_FIELD = 'a new board field: check it against HC-4 (secret ballots stay
 function expectBoardKeys(board: MuleView) {
   const politics = board.politics!;
   expect(board.me).toBeNull();
-  expect(keysOf(politics), NEW_FIELD).toEqual(['baron', 'candidates', 'election', 'fund', 'governor', 'next', 'pay', 'promises', 'sheriff', 'tax', 'term', 'weights']);
+  expect(keysOf(politics), NEW_FIELD).toEqual(['baron', 'candidates', 'election', 'fund', 'governor', 'next', 'pay', 'promise', 'promises', 'sheriff', 'tax', 'term', 'weights']);
   expect(keysOf(politics.tax), NEW_FIELD).toEqual(['high', 'low', 'percent', 'start']);
   expect(keysOf(politics.pay), NEW_FIELD).toEqual(['governor', 'sheriff']);
   for (const w of politics.weights) {
@@ -943,7 +1051,12 @@ function expectBoardKeys(board: MuleView) {
   }
   const e = politics.election!;
   expect(keysOf(e), NEW_FIELD).toEqual(['candidates', 'ceremony', 'done', 'promises', 'result', 'stage', 'voted', 'waitingFor']);
-  if (e.ceremony) expect(keysOf(e.ceremony), NEW_FIELD).toEqual(['office', 'seconds', 'step', 'total']);
+  if (e.ceremony) {
+    expect(keysOf(e.ceremony), NEW_FIELD).toEqual(['reached', 'seconds', 'total']);
+    for (const office of keysOf(e.ceremony.reached)) expect(POLITICS.offices, NEW_FIELD).toContain(office);
+    for (const r of Object.values(e.ceremony.reached)) expect(keysOf(r), NEW_FIELD).toEqual(['at', 'beat']);
+  }
+  if (politics.promise) expect(keysOf(politics.promise), NEW_FIELD).toEqual(politics.promise.kind === 'cap' ? ['kind', 'percent'] : ['kind']);
   const seatIds = people.map((p) => p.id);
   // C12: public like the candidacy (RULE-10); a promise is only its closed shape, keyed by a Governor candidate.
   for (const running of [politics, e]) {

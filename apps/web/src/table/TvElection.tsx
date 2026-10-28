@@ -6,9 +6,9 @@ import { howWon, OFFICE_NAME, officeNames, promiseText } from '../phone/hub/poli
 import { TvHeader } from './TableApp';
 
 /**
- * The ceremony on the big screen: a count through the first office's intro, then each office as the view reveals
- * it, its candidates' weighted totals from its bars step and the winner marked from its winner step. Never who
- * voted for whom.
+ * The ceremony on the big screen: a count of the show's seconds left until the first office's totals, then each
+ * office as the view reveals it, its candidates' weighted totals from its bars beat and the winner marked from its
+ * winner beat. Never who voted for whom.
  */
 export function TvElection({ game }: { game: MuleView }) {
   const politics = game.politics;
@@ -24,7 +24,7 @@ export function TvElection({ game }: { game: MuleView }) {
         <div className="flex flex-1 flex-col items-center justify-center gap-6" data-testid="ballot-countdown">
           <span className="label-caps text-xl!">The ballots are in · secret ballot</span>
           <span data-num className="font-display text-[160px] font-bold leading-none text-holo" style={{ textShadow: '0 0 40px var(--color-holo-line)' }}>
-            {Math.ceil(election.ceremony?.seconds ?? 0)}
+            {Math.ceil(election.ceremony ? election.ceremony.total - election.ceremony.seconds : 0)}
           </span>
           <span className="text-2xl text-ink-2">{officeNames().join(', then ')}, revealed on every screen together</span>
         </div>

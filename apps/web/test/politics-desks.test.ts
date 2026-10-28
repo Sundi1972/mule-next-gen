@@ -1,4 +1,4 @@
-import { POLITICS, type CanRun, type ElectionHow, type Office, type TaxPromise } from '@mule/engine';
+import { POLITICS, type CanRun, type CeremonyBeat, type ElectionHow, type Office, type TaxPromise } from '@mule/engine';
 import type { ElectionView, MuleView, MyView, PlayerView, PoliticsView } from '@mule/protocol';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -29,8 +29,8 @@ const election = (extra: Partial<ElectionView> = {}): ElectionView => ({
   ...extra,
 });
 
-/** The ceremony at an office's step, with this many seconds of it left. */
-const at = (office: Office, step: 'intro' | 'bars' | 'winner', seconds = 2): ElectionView['ceremony'] => ({ office, step, seconds, total: 5 });
+/** The ceremony with the show at an office's beat, this many seconds of a 5-second show left. */
+const at = (office: Office, beat: CeremonyBeat, left = 2): ElectionView['ceremony'] => ({ seconds: 5 - left, total: 5, reached: { [office]: { beat, at: 0 } } });
 
 const politics = (extra: Partial<PoliticsView> = {}): PoliticsView => ({
   governor: null,
@@ -44,6 +44,7 @@ const politics = (extra: Partial<PoliticsView> = {}): PoliticsView => ({
   weights: PLAYERS.map(({ id }) => ({ id, votes: 1, parts: { base: 1, land: 0, reputation: 0, baron: 0, taxes: 0 } })),
   candidates: { governor: [], sheriff: [] },
   promises: {},
+  promise: null,
   election: election(),
   ...extra,
 });
@@ -66,7 +67,7 @@ const me = (extra: Partial<NonNullable<MyView['politics']>> = {}): MyView => ({
   mulePrice: 148,
   outfitCosts: { food: 25, water: 25, energy: 50, smithore: 75, crystite: 100, rareEarth: 100, alloy: 150, electronics: 200, medicine: 150, greenBelt: 40 },
   droneOrder: [],
-  politics: { running: null, ballot: {}, canRun: { governor: true, sheriff: true }, ...extra },
+  politics: { running: null, ballot: {}, canRun: { governor: true, sheriff: true }, paid: 0, reputation: 50, ...extra },
 });
 
 function view(p: PoliticsView | null, mine = me()): MuleView {
@@ -220,20 +221,20 @@ describe('the politics desks', () => {
     [3, '3'],
     [2.2, '3'],
     [0.05, '1'],
-  ])("B-AC-62: in the first office's intro, before anything is shown, the TV counts down the step (%s s left → %s)", (seconds, shown) => {
-    const html = onTv(view(politics({ election: election({ stage: 'ceremony', ceremony: at('governor', 'intro', seconds), result: {} }) })));
+  ])("B-AC-62: before the first office's bars beat, with nothing shown, the TV counts down the show (%s s left → %s)", (left, shown) => {
+    const html = onTv(view(politics({ election: election({ stage: 'ceremony', ceremony: at('governor', 'title', left), result: {} }) })));
     expect(tagOf(html, 'ballot-reveal')).toBeUndefined();
     expect(textOf(html, 'ballot-countdown').match(/\d+/)?.[0]).toBe(shown);
   });
 
-  it("B-AC-62: the TV and the phones draw an office's totals only from its bars step and its winner only from its winner step", () => {
+  it("B-AC-62: the TV and the phones draw an office's totals only from its bars beat and its winner only from its winner beat", () => {
     const tallies = [{ id: 's1', votes: 3 }, { id: 's2', votes: 1 }];
     const bars = view(politics({ election: election({ stage: 'ceremony', ceremony: at('governor', 'bars'), result: { governor: { tallies } } }) }));
     const tv = onTv(bars);
     const row = (html: string, id: string) => chunkOf(html, `result-governor-${id}`, 'result-').replace(/<[^>]+>/g, '');
-    expect(row(tv, 's1'), 'the bars step draws the candidates and their totals').toMatch(/^Lena3(?!\d)/);
+    expect(row(tv, 's1'), 'the bars beat draws the candidates and their totals').toMatch(/^Lena3(?!\d)/);
     expect(row(tv, 's2')).toMatch(/^Ossa1(?!\d)/);
-    expect(tv, 'no winner in the bars step').not.toContain('ELECTED');
+    expect(tv, 'no winner in the bars beat').not.toContain('ELECTED');
     expect(tagOf(tv, 'how-governor')).toBeUndefined();
     expect(textOf(onPhone(bars, CouncilDesk), 'phone-election-result')).not.toContain('Governor');
 
@@ -368,7 +369,7 @@ describe('T-AC-62: Governor only, the default POLITICS.offices', () => {
     expect(colony).toContain('From the fund each month: Governor 50 cr');
     expect(colony).not.toContain('Sheriff');
 
-    const tv = onTv(view(politics({ election: election({ stage: 'ceremony', ceremony: at('governor', 'intro'), candidates: { governor: ['s1', 's2'] } }) })));
+    const tv = onTv(view(politics({ election: election({ stage: 'ceremony', ceremony: at('governor', 'title'), candidates: { governor: ['s1', 's2'] } }) })));
     expect(textOf(tv, 'ballot-countdown')).toContain('Governor, revealed on every screen together');
     expect(tv).not.toContain('Sheriff');
   });
