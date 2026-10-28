@@ -283,6 +283,15 @@ describe('the politics desks', () => {
     else expect(textOf(html, 'promise-lower')).toBe('Lower the tax');
   });
 
+  it('C4, RULE-4: the vote weights are two columns, Player and Votes, with the parts under the name and a zero part left out', () => {
+    const weights = politics().weights.map((w) => (w.id === 's2' ? { id: 's2', votes: 4, parts: { base: 1, land: 1, reputation: -1, baron: 1, taxes: 2 } } : w));
+    const html = onPhone(view(politics({ weights })), CouncilDesk);
+    const table = html.slice(html.indexOf('data-testid="vote-weights"'));
+    expect(table.match(/<th\b/g)?.length, 'Player and Votes only').toBe(2);
+    expect(textOf(html, 'weight-s2')).toBe('Ossabase 1 · land +1 · rep. −1 · Baron +1 · taxes +24');
+    expect(textOf(html, 'weight-parts-s1')).toBe('base 1');
+  });
+
   it("C12, B-AC-60: in announce the desk lists the candidacy Politics holds; after running, the line names the office and, for Governor, the promise; a Sheriff's line has none", () => {
     const gov = onPhone(view(politics({ candidates: { governor: ['s1', 's2'], sheriff: [] }, promises: { s1: CAP_8, s2: HOLD } }), me({ running: 'governor' })), CouncilDesk);
     expect(textOf(gov, 'running')).toBe('You run for Governor, promising “Tax no higher than 8%”; one office at a time.Withdraw');
