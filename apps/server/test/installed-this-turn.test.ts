@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { tapThere, toDevelopment as reachDevelopment } from './fake-context.js';
+import { readyAll, tapThere, toDevelopment as reachDevelopment } from './fake-context.js';
 
 /** Month 1 into development with Heiko (s1) owning the first plot that lit up in the grant. */
 function toDevelopment() {
@@ -32,7 +32,10 @@ describe("MyView.installedThisTurn: the store's Now line after a reload", () => 
       for (const p of view.players) expect(Object.keys(p)).not.toContain('installedThisTurn');
     }
 
-    for (let i = 0; i < 10_000 && !(game.viewFor(null).phase === 'development' && game.viewFor(null).month === 2); i++) advance(100);
+    for (let i = 0; i < 10_000 && !(game.viewFor(null).phase === 'development' && game.viewFor(null).month === 2); i++) {
+      if (game.viewFor(null).phase === 'planning') readyAll(game);
+      advance(100);
+    }
     expect(game.viewFor(null)).toMatchObject({ phase: 'development', month: 2 });
     expect(game.viewFor('s1').me!.installedThisTurn, "the next development turn starts with nothing installed").toBe(false);
   });
@@ -49,6 +52,7 @@ describe("MyView.installedThisTurn: the store's Now line after a reload", () => 
     // The flag as s1's phone saw it on entering each phase, keyed "month phase".
     const seen = new Map<string, boolean>();
     for (let i = 0; i < 10_000 && !(game.viewFor(null).phase === 'development' && game.viewFor(null).month === 2); i++) {
+      if (game.viewFor(null).phase === 'planning') readyAll(game);
       advance(100);
       const { month, phase, me } = game.viewFor('s1');
       if (!seen.has(`${month} ${phase}`)) seen.set(`${month} ${phase}`, me!.installedThisTurn);

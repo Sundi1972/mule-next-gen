@@ -1,7 +1,8 @@
 import type { GameContext } from '@tabletop/core';
 import { describe, expect, it } from 'vitest';
 import { WALK, type GameState } from '@mule/engine';
-import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
+import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
+import { readyAll } from './fake-context.js';
 
 /** A context with a manual clock, so phase timers run instantly. */
 function fakeContext() {
@@ -41,15 +42,6 @@ const seats = [
 ];
 
 describe('MuleGame', () => {
-  it('moves on when the phase timer runs out', () => {
-    const { ctx, advance } = fakeContext();
-    const game = new MuleGame(ctx, 7);
-    game.start(seats);
-    expect(game.viewFor('s1').phase).toBe('planning');
-    advance(PHASE_MS.planning);
-    expect(game.viewFor('s1').phase).toBe('landGrant');
-  });
-
   it('moves on early when every connected player is ready, without waiting for a dropped phone', () => {
     const { ctx } = fakeContext();
     const game = new MuleGame(ctx, 7);
@@ -64,7 +56,7 @@ describe('MuleGame', () => {
     const { ctx, advance } = fakeContext();
     const game = new MuleGame(ctx, 7);
     game.start(seats);
-    advance(PHASE_MS.planning);
+    readyAll(game);
     const lit = game.viewFor('s1').lit!;
     game.handle('s1', { type: 'claim', x: lit.x, y: lit.y });
     const mine = game.viewFor('s1').tiles.find((t) => t.x === lit.x && t.y === lit.y)!;
@@ -97,7 +89,7 @@ describe('MuleGame', () => {
     const { ctx, advance } = fakeContext();
     const game = new MuleGame(ctx, 7);
     game.start(seats);
-    advance(PHASE_MS.planning);
+    readyAll(game);
     const first = game.viewFor('s1').lit!;
     const other = game.viewFor('s1').tiles.find((t) => t.terrain !== 'store' && !t.owner && (t.x !== first.x || t.y !== first.y))!;
     expect(() => game.handle('s1', { type: 'claim', x: other.x, y: other.y })).toThrow('not lit');
@@ -109,7 +101,7 @@ describe('MuleGame', () => {
     const { ctx, advance } = fakeContext();
     const game = new MuleGame(ctx, 7);
     game.start(seats);
-    advance(PHASE_MS.planning);
+    readyAll(game);
     while (game.viewFor('s1').phase === 'landGrant') advance(GRANT_TICK_MS);
     const view = game.viewFor('s1');
     expect(view.phase).toBe('development');
@@ -138,7 +130,7 @@ describe('MuleGame', () => {
     const { ctx, advance } = fakeContext();
     const game = new MuleGame(ctx, 7);
     game.start(seats);
-    advance(PHASE_MS.planning);
+    readyAll(game);
     while (game.viewFor('s1').phase === 'landGrant') advance(GRANT_TICK_MS);
     const owned = () => game.viewFor(null).tiles.filter((t) => t.owner === 's3');
     expect(owned().length).toBeGreaterThan(0);
@@ -156,7 +148,7 @@ describe('MuleGame', () => {
     const game = new MuleGame(ctx, 7);
     game.start(seats);
     expect(game.viewFor('s1').me!.produced).toBeNull();
-    advance(PHASE_MS.planning);
+    readyAll(game);
     while (game.viewFor('s1').phase === 'landGrant') advance(GRANT_TICK_MS);
     const dev = game.viewFor('s1').me!;
     expect(dev.devSeconds).toBeGreaterThan(0);
@@ -173,7 +165,7 @@ describe('MuleGame', () => {
     const { ctx, advance } = fakeContext();
     const game = new MuleGame(ctx, 7);
     game.start(seats);
-    advance(PHASE_MS.planning);
+    readyAll(game);
     while (game.viewFor('s1').phase === 'landGrant') advance(GRANT_TICK_MS);
     while (game.viewFor('s1').phase === 'development') advance(1_000);
     while (game.viewFor('s1').phase === 'production') advance(1_000);

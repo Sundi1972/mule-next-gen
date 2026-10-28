@@ -18,7 +18,8 @@ export const walkers: SeatInfo[] = [
 
 /**
  * Plays month 1 into development on the fake clock, seed 7. `prepare` runs once while planning is open, to set the
- * state up as a test needs it. With `claimer`, that seat claims the first plot lit in the land grant, returned as `plot`.
+ * state up as a test needs it; then every human is Ready. With `claimer`, that seat claims the first plot lit in the
+ * land grant, returned as `plot`.
  */
 export function toDevelopment(options: { players?: SeatInfo[]; phaseScale?: number; claimer?: string; prepare?: (state: GameState) => void } = {}) {
   const fake = fakeContext();
@@ -26,6 +27,7 @@ export function toDevelopment(options: { players?: SeatInfo[]; phaseScale?: numb
   game.start(options.players ?? seats);
   const state = (game as unknown as { state: GameState }).state;
   options.prepare?.(state);
+  readyAll(game);
   let plot: { x: number; y: number } | null = null;
   for (let i = 0; i < 10_000 && game.viewFor(null).phase !== 'development'; i++) {
     const lit: { x: number; y: number } | null = options.claimer && !plot && game.viewFor(null).phase === 'landGrant' ? game.viewFor(options.claimer).lit : null;
@@ -37,6 +39,18 @@ export function toDevelopment(options: { players?: SeatInfo[]; phaseScale?: numb
   }
   if (game.viewFor(null).phase !== 'development') throw new Error('month 1 never reached development');
   return { game, state, plot, ...fake };
+}
+
+/**
+ * Every human seat presses Ready, as their phones would, so planning, which has no clock, moves on. It stops once
+ * the phase changes, so no Ready lands in the next one (where it could end the land grant early).
+ */
+export function readyAll(game: MuleGame): void {
+  const phase = game.viewFor(null).phase;
+  for (const p of game.viewFor(null).players) {
+    if (game.viewFor(null).phase !== phase) return;
+    if (!p.isAi) game.handle(p.id, { type: 'ready' });
+  }
 }
 
 /**

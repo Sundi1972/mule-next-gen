@@ -751,6 +751,9 @@ async function nextLotFrom(page: Page, seller: string): Promise<void> {
   );
 }
 
+/** How long the last phone's Ready takes to land and the next screen to show; planning has no clock. */
+const READY_LANDS_MS = 3_000;
+
 /** A budget for a phase of `ms` game time at this scale, plus room for the browser and the network. */
 function within(scale: number, ms: number): number {
   return ms * scale + 3_000;
@@ -773,7 +776,7 @@ async function joinRoom(page: Page, base: string, code: string, name: string): P
  * early, but the reveal always runs its clock, so the budget is every stage at full length: a slow runner must not fail here.
  */
 async function readyInPlanning(page: Page): Promise<void> {
-  await readyThroughTheElection(page, within(SCALE, PHASE_MS.upkeep + POLITICS.nominateMs + POLITICS.ballotMs + POLITICS.revealMs + PHASE_MS.planning));
+  await readyThroughTheElection(page, within(SCALE, PHASE_MS.upkeep + POLITICS.nominateMs + POLITICS.ballotMs + POLITICS.revealMs) + READY_LANDS_MS);
 }
 
 /**
@@ -784,7 +787,7 @@ async function readyInPlanning(page: Page): Promise<void> {
 async function claimPlots(page: Page): Promise<void> {
   const claim = page.locator('[data-phase=landGrant]').getByRole('button', { name: /CLAIMS LEFT/ });
   const over = page.locator('[data-phase]:not([data-phase=planning]):not([data-phase=landGrant])');
-  await claim.waitFor({ timeout: within(SCALE, PHASE_MS.planning) });
+  await claim.waitFor({ timeout: READY_LANDS_MS });
   for (let tries = 0; ; tries++) {
     check(tries < 40, 'the land grant let this phone claim its plots');
     await claim.or(over).first().waitFor({ timeout: within(SCALE, PHASE_MS.landGrant) });
