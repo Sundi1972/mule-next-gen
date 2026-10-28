@@ -13,10 +13,10 @@ const worthIn = (view: MuleView) => Object.fromEntries(view.players.map((p) => [
 const ruleWorth = (state: GameState) => Object.fromEntries(seats.map((s) => [s.id, scoreParts(state, s.id).total]));
 const leaderBy = (view: MuleView, key: 'money' | 'worth') => [...view.players].sort((a, b) => b[key] - a[key])[0]!.id;
 
-/** Plays a one-month game to game over, calling `look` once per step in every phase, game over included. */
-function playOneMonth(look: (game: MuleGame, state: GameState) => void): Set<Phase> {
+/** Plays a two-month game to game over, calling `look` once per step in every phase. The last upkeep turns straight into game over, so month 1 is the one that shows upkeep. */
+function playTwoMonths(look: (game: MuleGame, state: GameState) => void): Set<Phase> {
   const { ctx, advance } = fakeContext();
-  const game = new MuleGame(ctx, 7, { maxMonths: 1, phaseScale: 0.1 });
+  const game = new MuleGame(ctx, 7, { maxMonths: 2, phaseScale: 0.1 });
   game.start(seats);
   const state = stateOf(game);
   const phases = new Set<Phase>();
@@ -41,7 +41,7 @@ function partsTotal(view: MuleView): number {
 describe('Worth in every view (C18)', () => {
   it("T-AC-14: in every phase, every player's worth in every view is scoreParts().total, and your own worthParts add up to yours", () => {
     let atEnd: MuleView | null = null;
-    const phases = playOneMonth((game, state) => {
+    const phases = playTwoMonths((game, state) => {
       for (const viewer of VIEWERS) {
         const view = game.viewFor(viewer);
         expect(worthIn(view), `${viewer ?? 'the board'} in ${state.phase}`).toEqual(ruleWorth(state));
@@ -129,7 +129,7 @@ describe('Worth in every view (C18)', () => {
   });
 
   it("T-AC-14 (negative, HC-4): the board has no me, and in every phase no player entry in any view carries parts; a phone's parts are its own", () => {
-    playOneMonth((game, state) => {
+    playTwoMonths((game, state) => {
       const board = game.viewFor(null);
       expect(board.me, `the board in ${state.phase}`).toBeNull();
       expect(JSON.stringify(board), `the board in ${state.phase}`).not.toContain('muleValue');
