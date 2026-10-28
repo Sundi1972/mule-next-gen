@@ -1,4 +1,4 @@
-import { DEVELOPMENT, foodShare, hungerPace, needsOf, sickPace, type GameState } from '@mule/engine';
+import { DEV_WALK, DEVELOPMENT, foodShare, hungerPace, needsOf, sickPace, type GameState } from '@mule/engine';
 import { describe, expect, it } from 'vitest';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
 import { fakeContext, seats } from './fake-context.js';
@@ -25,7 +25,7 @@ function hungryWithAnEmptyCorral() {
   advance(PHASE_MS.planning);
   while (game.viewFor(null).phase === 'landGrant') advance(GRANT_TICK_MS);
   expect(game.viewFor(null).phase).toBe('development');
-  return { game, state, planning };
+  return { game, state, planning, advance };
 }
 
 describe('the store view at the start of development', () => {
@@ -40,8 +40,8 @@ describe('the store view at the start of development', () => {
     expect(view.storeMules).toBe(0);
   });
 
-  it("B-AC-9: every screen sees the hungry seat's condition, its pace the engine's hungerPace, species aside", () => {
-    const { game, state, planning } = hungryWithAnEmptyCorral();
+  it("B-AC-9: every screen sees each seat's condition during development only, its pace the engine's hunger × sickness pace, species aside", () => {
+    const { game, state, planning, advance } = hungryWithAnEmptyCorral();
     const want = { foodShare: foodShare(state, 's1'), sick: false, conditionPace: hungerPace(state, 's1') };
     expect(want.conditionPace).toBeCloseTo(0.52);
     for (const viewer of ['s1', 's2', null]) expect(game.viewFor(viewer).players.find((p) => p.id === 's1')!.condition).toEqual(want);
@@ -49,5 +49,12 @@ describe('the store view at the start of development', () => {
     // A fed seat walks at full pace; outside development nobody has a condition.
     expect(game.viewFor(null).players.find((p) => p.id === 's2')!.condition).toMatchObject({ foodShare: 1, conditionPace: sickPace(state, 's2') });
     expect(planning.players.map((p) => p.condition)).toEqual([null, null, null]);
+    // Hungry and sick: the two slow-downs multiply.
+    state.players.find((p) => p.id === 's1')!.sick = true;
+    expect(game.viewFor('s2').players.find((p) => p.id === 's1')!.condition).toEqual({ ...want, sick: true, conditionPace: want.conditionPace * DEV_WALK.sickPace });
+    // Once development ends, nobody has a condition.
+    advance(PHASE_MS.development);
+    expect(game.viewFor(null).phase).not.toBe('development');
+    expect(game.viewFor(null).players.map((p) => p.condition)).toEqual([null, null, null]);
   });
 });
