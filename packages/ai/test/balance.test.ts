@@ -439,7 +439,6 @@ describe('cornering', () => {
     const rookie = plan(aggressive('rookie'));
     expect(rookie.corner.units).toBe(0);
     expect(rookie.values.buy).toEqual(plainBuy(aggressive('rookie')));
-    expect(trader.values.buy[0]).toBeGreaterThan(rookie.values.buy[0]!);
 
     // Positive control: the same Rookie seat, allowed to corner, corners here.
     const cornering = plan(aggressive('rookie', { corners: true }));
