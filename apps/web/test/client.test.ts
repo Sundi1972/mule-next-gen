@@ -402,6 +402,40 @@ describe('TableClient', () => {
     if (asks) t.last().deliver({ t: 'handoffCode', code: 'fresh', expiresAt: 999_999 });
     expect(t.client.getState().handoffCode?.code ?? null).toBe(shows);
   });
+
+  it.each([
+    { reason: 'moved', join: (c: TableClient) => c.join('KRTX', '', 'code-1'), seatId: 's2', name: 'Mia' },
+    { reason: 'kicked', join: (c: TableClient) => c.join('KRTX', 'Jonas'), seatId: 's3', name: 'Jonas' },
+    { reason: 'closed', join: (c: TableClient) => c.join('KRTX', 'Jonas'), seatId: 's3', name: 'Jonas' },
+  ] as const)(
+    'FM-6: a screen removed ($reason) while another tab of the browser holds the saved seat leaves it saved, so that tab rejoins with its own token after a reload; removed in turn, that tab forgets it',
+    ({ reason, join, seatId, name }) => {
+      const storage = memoryStore();
+      const oldTab = setup(storage);
+      oldTab.client.join('KRTX', 'Mia');
+      oldTab.last().open();
+      oldTab.last().deliver({ t: 'welcome', code: 'KRTX', role: 'player', seatId: 's2', seatToken: 'old' });
+      const newTab = setup(storage);
+      join(newTab.client);
+      newTab.last().open();
+      newTab.last().deliver({ t: 'welcome', code: 'KRTX', role: 'player', seatId, seatToken: 'new' });
+      const seats = [
+        { id: 's2', name: 'Mia', isAi: false, connected: true, color: 1 },
+        { id: 's3', name: 'Jonas', isAi: false, connected: true, color: 2 },
+      ];
+      newTab.last().deliver({ t: 'view', view: { ...lobbyView('KRTX'), seats } });
+
+      oldTab.last().deliver({ t: 'removed', reason });
+
+      const reloaded = setup(storage);
+      reloaded.client.join('KRTX', '');
+      reloaded.last().open();
+      expect(reloaded.last().sent[0]).toEqual({ t: 'join', code: 'KRTX', name, seatToken: 'new' });
+
+      newTab.last().deliver({ t: 'removed', reason });
+      expect(loadSeat(storage)).toBeNull();
+    },
+  );
 });
 
 describe('ClockSync', () => {
