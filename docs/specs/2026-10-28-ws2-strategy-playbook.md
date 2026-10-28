@@ -1,6 +1,7 @@
 # WS2 · Spec A: Claude writes the strategy and the playbook
 
-**Status:** DRAFT (§0–§9; §1–§9 brought current 29 Oct: schema v1, option B, S-A1), 2026-10-28. Goal gate passed (Heiko, "Yes, as recommended"); approach and class ruled by the
+**Status:** §0 APPROVED (restated G-A, Heiko "Yes, approve it", via the PM); §1–§9 written and self-reviewed; DESIGN
+GATE next (Heiko reads the design summary before PR-1 builds). 2026-10-28. Goal gate passed (Heiko, "Yes, as recommended"); approach and class ruled by the
 PM the same day (recommended approach widened to Heiko's two layers; class **Programme**). G-A's proof below is
 restated for the two layers and **approved by Heiko** ("Yes, all eight", 29 Oct). Prompt and tool design: HOLD lifted (PM, 29 Oct):
 Heiko chose option B, a generated manual (C8) and live tools (C9); the MCP server is parked. Build waits for WS1's step 2 (playbook
@@ -10,13 +11,10 @@ mind". Spec B (diplomacy, and the shared memory module: notebook, stances, promi
 
 ## §0 · Business Goals & Value
 
-**G-A · Smart AI players play to a strategy they write in character, check it against what happened, and adjust it;
-and they play better for it.** `[handoff]`
-⚠ Restated for Heiko via the PM (29 Oct, option B), awaiting his OK: **Smart AI players know every rule, every legal
-move and how the game is won; they play to a strategy they write in character, check it against what happened and
-adjust it; and they play better for it.** Proof added to UBER-AC-A: the manual covers every client command in
-packages/protocol except a short reviewed exclusion list (WS1's coverage test green), and changing a rule's number in
-config changes the manual with no hand edit.
+**G-A · Smart AI players know every rule, every legal move and how the game is won; they play to a strategy they
+write in character, check it against what happened and adjust it; and they play better for it.** `[handoff]`
+(approved by Heiko, "Yes, approve it", via the PM; restated for option B, replacing "Smart AI players play to a
+strategy they write in character, check it against what happened, and adjust it; and they play better for it.")
 - **Who benefits** `[review-only]`: the players at the table, Heiko's playtest first.
 - **Today** `[review-only]`: Claude decides one move at a time from a five-line brief (month; own money, plots, goods;
   MULE price; the richest rival), inside the hands' 2.5–5 s waits; 95 of 2,529 asked decisions in the paid trial fell
@@ -25,17 +23,20 @@ config changes the manual with no hand edit.
   packages/ai/src/brain.ts::Brain.ask) + `executed` (trial 2026-10-28).
 - **Value** `[review-only]`: an opponent whose play coheres across months, reads the table and learns within the game,
   at a few cents a game; the real-time phases never wait for a model.
-- **UBER-AC-A** (approved 29 Oct): in a paid 20-game run on the same seeds, Claude-playbook seats beat engine-playbook seats
-  (bar set with WS1's tournament numbers); ≥80% of the playbooks that take effect carry Claude's accepted edits; no
-  phase waits for Claude; replaying any game from its record with the key unset gives the same final scores; all AI
-  seats together stay within the $1 table budget (AM-19).
+- **UBER-AC-A** (approved 29 Oct; additions approved with the restated G-A): in a paid 20-game run on the same seeds,
+  Claude-playbook seats beat engine-playbook seats (bar set with WS1's tournament numbers); ≥80% of the playbooks that
+  take effect carry Claude's accepted edits; no phase waits for Claude; replaying any game from its record with the key
+  unset gives the same final scores; all AI seats together stay within the $1 table budget (AM-19); the manual covers
+  every client command in packages/protocol except a short reviewed exclusion list (WS1's coverage test green); and
+  changing a rule's number in config changes the manual with no hand edit.
 
 **Non-goals** `[review-only]`: the execution layer and the engine's own playbook (WS1); the land-grant execution and the
 game record (WS3); deal cards, trust, votes' rules (WS7); diplomacy, the notebook, stances and promises (spec B,
 WS2); memory across games; bring-your-own-key (parked); any model call inside a real-time phase; the MCP server itself (parked by Heiko, 29 Oct, until BYOK, tournaments or
 benchmarks need it; C9's definitions are MCP-shaped so it is a wrapper later).
 
-**Rough cost** `[review-only]`: 3 PRs after WS1's step 2 and WS3's record land. Thin baseline (plan as a fourth
+**Rough cost** `[review-only]`: about 5 PRs after WS1's step 2 and WS3's record land (3 for the two layers, about 2
+more for the manual C8 and the tools C9; AM-A6). Thin baseline (plan as a fourth
 decision kind on today's prompt): 1 PR, loses (§0.1).
 
 ## §0.1 · Decision Record `[review-only]`
@@ -359,11 +360,12 @@ Code-only; no existing state to reach. The record starts with WS3's build.
 - **AM-A3 · 29 Oct · PM, WS1, WS3:** playbook v1 frozen (pressShare {start, end}; PlanningPlay.list later, AM-20;
   types in engine/src/playbook.ts and record.ts) → §3, C1, C5.
 - **AM-A4 · 29 Oct · Heiko via PM (option B):** a generated manual and live tools; the MCP server parked → C8, C9,
-  RULE-A4, HC-9, T-AC-A7..A9, §9. G-A's line restated again, awaiting Heiko (§0 held).
+  RULE-A4, HC-9, T-AC-A7..A9, §9. G-A's line restated again and approved by Heiko ("Yes, approve it"), with the
+  UBER-AC-A additions; §0's cost line set to about 5 PRs.
 - **AM-A5 · 28-29 Oct · S-A1 measured, PM:** Haiku 5.5 adaptive, effort medium is the default; model per kind in
   BRAIN; the capability-first re-run rule → C3, §7. The spike's cause codes → C2.
 - **AM-A6 · 29 Oct · lead:** C4's seam renamed playbooks.ts (no clash with packages/ai's strategist.ts); C3 promotes
-  the S-A1 port instead of a second client. Cost note for §0 (held): C8 and C9 add about 2 PRs, so about 5 in all.
+  the S-A1 port instead of a second client. Cost note for §0: C8 and C9 add about 2 PRs, so about 5 in all (in §0 since the goal gate).
 - **AM-A7 · 29 Oct · lead, at plan time:** G-A's "check it against what happened" had no AC; T-AC-A10 (the last
   PhaseOutcome reaches the next brief) added → C1.
 

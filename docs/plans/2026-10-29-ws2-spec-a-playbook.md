@@ -4,8 +4,10 @@
 
 **Spec class:** Programme (ruled by the PM, 28 Oct).
 
-**DESIGN GATE: NO BUILD STARTS** until Heiko approves the restated G-A and has read the written spec (PM, 29 Oct).
-This plan is written ahead of that gate so the gate is the only thing left.
+**DESIGN GATE: NO PR-1 BUILD STARTS** until Heiko says yes to a one-screen summary of spec A's design, which the
+lead sends the PM when PR-1's upstream is close (WS1 step 2 types, validatePlan, engine draft; WS3 record append).
+The goal gate passed: Heiko approved the restated G-A ("Yes, approve it"). Until the design gate, unit work may
+stub on the frozen v1 types (PM, 29 Oct).
 
 ## Goals — lifted from spec §0. Reference, do not restate.
 
@@ -393,10 +395,11 @@ budget ÷ Smart seats).
 
 ## Pre-implementation checklist
 
-- [ ] **Design gate:** Heiko approves the restated G-A and has read the spec (PM carries it, 29 Oct); §0's cost line updated to about 5 PRs on his answer
+- [x] **Goal gate:** Heiko approved the restated G-A with the UBER-AC-A additions ("Yes, approve it"); §0 written in verbatim, cost about 5 PRs
+- [ ] **Design gate:** Heiko says yes to the one-screen design summary (lead → PM when PR-1's upstream is close)
 - [ ] Upstream: WS1 step 2 (v1 types in `packages/engine/src/playbook.ts`, validatePlan, engine draft); WS3 record append API and grant execution reading `ranked` — PR-1's B-AC-A1 cannot pass before them
 - [x] Branch policy: sub-PRs → `ws2-brain`; milestones → `feat/strategist` (or `main`) with Heiko's OK via the PM
 - [x] Base `ws2-brain` @ `6805806` green (29 Oct): `pnpm typecheck` 0 · tests ui 46 · tabletop 148 · engine 266 (+1 skipped) · ai 115 (+9) · web 224 · server 225 (+52) · sims seed 1 `8b73b040`, seed 101 `9e7cb57c` · CI also runs `check` and `e2e` on lane PRs
 - [x] Provider access: the key file `~/.config/mule/anthropic.env`, loaded only inside one command via `--env-file`; every paid run on the PM's clearance
 - [x] Spike outcomes recorded: S-A1 in spec §7 (Haiku 5.5, adaptive, effort medium; paired re-run is Task 5.4)
-- [ ] Effort estimate communicated: about 5 PRs (PM carries it to Heiko with G-A)
+- [x] Effort estimate communicated: about 5 PRs (carried to Heiko with G-A; in §0's cost line)
