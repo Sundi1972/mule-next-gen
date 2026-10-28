@@ -119,13 +119,21 @@ describe('Month end: last month against this one (C20)', () => {
   });
 });
 
-/** Month 1 played to its month end: Heiko (s1) hosts, Mia (s2) is the other phone, The Baron (s3) is an AI. */
-function toMonthEnd() {
+/**
+ * Month 1 played to its month end: Heiko (s1) hosts, Mia (s2) is the other phone, The Baron (s3) is an AI. With
+ * `emptyStore`, the store's Food and Water are kept at nothing through the auction, so the colonists run short at upkeep.
+ */
+function toMonthEnd(options: { emptyStore?: boolean } = {}) {
   const fake = fakeContext();
   const game = new MuleGame(fake.ctx, 7, { maxMonths: 3, phaseScale: 0.1 });
   game.start(seats);
+  const state = stateOf(game);
   for (let n = 0; n < 100_000 && game.viewFor(null).phase !== 'upkeep'; n++) {
     if (game.viewFor(null).phase === 'planning') readyAll(game);
+    if (options.emptyStore && state.phase === 'auction') {
+      state.store.stock.food = 0;
+      state.store.stock.water = 0;
+    }
     fake.advance(100);
   }
   expect(game.viewFor(null).phase).toBe('upkeep');
@@ -195,5 +203,27 @@ describe('Before the cut, from the view (C20, fix F1)', () => {
       expect(view.air.band).toBe('collapse');
       expect(Object.fromEntries(view.players.map((p) => [p.id, p.worthBeforeCut])), viewer ?? 'the board').toEqual(Object.fromEntries(seats.map((s) => [s.id, beforeCut(s.id)])));
     }
+  });
+});
+
+describe('Colonists fed or short (C20, fix F3)', () => {
+  const shortages = (game: MuleGame) => stateOf(game).history.at(-1)!.shortages;
+
+  it("T-AC-15: at the month end colonistsFed is true when that upkeep's store ran short of nothing, false when it ran short; null before it", () => {
+    const fed = toMonthEnd();
+    expect(shortages(fed.game), 'precondition: month 1 runs short of nothing').toEqual([]);
+    for (const viewer of VIEWERS) expect(fed.game.viewFor(viewer).colonistsFed, viewer ?? 'the board').toBe(true);
+    readyAll(fed.game);
+    expect(fed.game.viewFor(null).phase).toBe('planning');
+    for (const viewer of VIEWERS) expect(fed.game.viewFor(viewer).colonistsFed, `${viewer ?? 'the board'} in planning`).toBeNull();
+
+    const short = toMonthEnd({ emptyStore: true });
+    expect(shortages(short.game), 'precondition: the empty store runs short').not.toEqual([]);
+    for (const viewer of VIEWERS) expect(short.game.viewFor(viewer).colonistsFed, viewer ?? 'the board').toBe(false);
+  });
+
+  it("T-AC-15: at game over colonistsFed is the last upkeep's", () => {
+    const { over } = playThreeMonths();
+    expect(typeof over.colonistsFed).toBe('boolean');
   });
 });

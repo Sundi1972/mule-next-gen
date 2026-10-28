@@ -87,6 +87,7 @@ function view(extra: Partial<MuleView> = {}): MuleView {
     colonists: 1_240,
     air: { level: 34, band: 'smoggy' },
     lastAir: 27,
+    colonistsFed: true,
     ship: { arrives: 6, inPort: false, wants: null },
     treasury: { money: 640, salesTax: 0.05 },
     news: [],
@@ -203,6 +204,13 @@ describe('B-AC-12 (WS4, month end): the league table and the colony, on the phon
     expect(said(tv, 'fund-month')).toContain('comes with the colony fund’s month');
     const fed = onTv(view({ players: PLAYERS.map((p) => ({ ...p, condition: FED })) }), TvMonthEnd);
     expect(said(fed, 'nobody-hungry')).toBe('✓ Nobody went hungry');
+  });
+
+  it('B-AC-12 (WS4, month end): the colony panel says whether the colonists were fed or went short', () => {
+    expect(said(tv, 'colonists')).toBe('Colonists fed · 1,240');
+    const short = onTv(view({ colonistsFed: false }), TvMonthEnd);
+    expect(said(short, 'colonists')).toBe('Colonists went short · 1,240');
+    expect(element(short, 'colonists')).toContain('text-alert');
   });
 
   it('B-AC-12 (WS4, month end): your phone alone shows your own lines, and they add up to your Worth', () => {
