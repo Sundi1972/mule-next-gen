@@ -16,7 +16,7 @@ const OUTFIT_NAME = (o: TileView['outfit']) => (o === null ? '' : o === 'greenBe
 const FILL_CARD_SECONDS = 2.2;
 
 /** Fed and well: what the screen shows should the view carry no condition. */
-const WELL: Condition = { foodShare: 1, sick: false, conditionPace: 1 };
+const WELL: Condition = { foodShare: 1, sick: false, sickBecause: null, conditionPace: 1 };
 
 /**
  * Development: one clock runs for everyone; hunger and sickness slow your walk. Buy a MULE in the store, outfit it,
@@ -122,8 +122,8 @@ export function Develop() {
           </div>
           {place === 'store' && (
             <>
-              <SharedClock seconds={seconds} total={Math.max(me.devSeconds, 1)} />
               <YourPace condition={condition} rule={DEV_WALK} food={food} />
+              <SharedClock seconds={seconds} total={Math.max(me.devSeconds, 1)} />
               <YourPlots tiles={view.tiles} me={me.id} />
             </>
           )}
@@ -315,8 +315,8 @@ export function FillCard({ condition, rule, food }: { condition: Condition; rule
         </span>
         {/* Sickness is rolled as development starts and slows this same turn: the card announces it. */}
         {condition.sick && (
-          <span className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: 'var(--color-g-medicine)' }} data-testid="sick-strikes">
-            ✚ {sickReason()} It strikes now and slows you this turn.
+          <span className="flex items-center gap-1.5 text-sm font-semibold text-g-medicine" data-testid="sick-strikes">
+            ✚ {sickReason(condition.sickBecause)} It strikes now and slows you this turn.
           </span>
         )}
         <div className="relative h-3 overflow-hidden rounded-full bg-raised @min-[1100px]/shell:h-4" data-testid="pace-gauge">

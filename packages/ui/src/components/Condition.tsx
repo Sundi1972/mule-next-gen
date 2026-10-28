@@ -13,6 +13,8 @@ export interface Condition {
   /** 0..1 of the month's Food held. */
   foodShare: number;
   sick: boolean;
+  /** Why it is sick; null when well. */
+  sickBecause?: SickBecause | null;
   /** Hunger × sickness, 1 is normal; species aside. */
   conditionPace: number;
 }
@@ -30,8 +32,8 @@ export interface FoodEaten {
   need: number;
 }
 
-/** Why a colonist is sick. The view gives no reason yet, so every sickness reads as the air's. */
-export type SickReason = { kind: 'air' };
+/** Why a colonist is sick: the colony's air, its own pollution, or plain chance. */
+export type SickBecause = 'air' | 'pollution' | 'chance';
 
 /** 0 fed, 1 peckish, 2 hungry, 3 starving. */
 export type HungerLevel = 0 | 1 | 2 | 3;
@@ -64,21 +66,24 @@ export function feeling(c: Condition, rule: PaceRule): string {
   return level === 0 ? 'Sick' : `${HUNGER_WORD[level]} and sick`;
 }
 
-/** The sick line, from the reason the view gives. */
-export function sickReason(reason?: SickReason): string {
-  switch (reason?.kind) {
+/** The sick line, from the reason the view gives; with none, it claims no cause. */
+export function sickReason(because?: SickBecause | null): string {
+  switch (because) {
     case 'air':
-    default:
       return 'Sick: the air is toxic.';
+    case 'pollution':
+      return 'Sick: your own pollution fouled the air.';
+    default:
+      return 'Sick this month.';
   }
 }
 
-/** Heiko's hunger rule, its points from the rule's hungerPaceMin. */
+/** What hunger costs, its points from the rule's hungerPaceMin. */
 export function hungerRule(rule: PaceRule): string {
   return `You lose ${Math.round((1 - rule.hungerPaceMin) * 10)} points of walking speed per 10% of Food missing.`;
 }
 
-/** Heiko's sickness rule. */
+/** What sickness costs. */
 export function sickRule(rule: PaceRule): string {
   return rule.sickPace === 0.5 ? 'Sickness halves your walking speed.' : `Sickness slows you to ${pct(rule.sickPace)} of your walking speed.`;
 }
@@ -86,7 +91,7 @@ export function sickRule(rule: PaceRule): string {
 /** Why the colonist walks slower, one sentence per cause: the long press, and the detail under a pace line. */
 export function paceRule(c: Condition, rule: PaceRule, food?: FoodEaten): string[] {
   const ate = food ? `You ate ${food.ate} of the ${food.need} Food you need. ` : '';
-  return [...(hungerLevel(c, rule) > 0 ? [`${ate}${hungerRule(rule)}`] : []), ...(c.sick ? [`${sickReason()} ${sickRule(rule)}`] : [])];
+  return [...(hungerLevel(c, rule) > 0 ? [`${ate}${hungerRule(rule)}`] : []), ...(c.sick ? [`${sickReason(c.sickBecause)} ${sickRule(rule)}`] : [])];
 }
 
 /** The one line that says what your condition does, for the rail and the start card: "Hungry: 60% pace". */
@@ -181,6 +186,7 @@ export function ConditionTag({
       data-testid={`condition-${id}`}
       data-hunger={level}
       data-sick={condition.sick || undefined}
+      role="img"
       aria-label={said}
       {...press}
     >
@@ -194,7 +200,7 @@ export function ConditionTag({
         </span>
       )}
       {condition.sick && (
-        <span className={cx(CHIP, 'text-void')} style={{ width: box, height: box, background: 'var(--color-g-medicine)' }} data-testid={`sick-${id}`}>
+        <span className={cx(CHIP, 'bg-g-medicine text-void')} style={{ width: box, height: box }} data-testid={`sick-${id}`}>
           <Cross size={g - 2} />
         </span>
       )}
@@ -275,6 +281,7 @@ export function ThoughtBubble({
   edge?: 'left' | 'right' | undefined;
 }) {
   const level = condition ? hungerLevel(condition, rule) : 0;
+  // TODO(AM-14): hide the thought while the colonist speaks, once chat bubbles reach the hall.
   const showing = useThought(!!condition && (level > 0 || condition.sick), moving, clockStartsAt);
   if (!showing || !condition) return null;
   const big = size !== 'phone';
@@ -300,7 +307,7 @@ export function ThoughtBubble({
           </span>
         )}
         {condition.sick && (
-          <span style={{ color: 'var(--color-g-medicine)' }}>
+          <span className="text-g-medicine">
             <Cross size={g - 2} />
           </span>
         )}
@@ -357,8 +364,8 @@ export function PaceList({ rows, rule }: { rows: PaceRow[]; rule: PaceRule }) {
         return (
           <div key={r.id} className="flex items-center gap-2" data-testid={`pace-${r.id}`}>
             <PlayerMark slot={r.slot} size={18} glow={false} />
-            <span className="w-12 truncate text-sm font-semibold">{r.name}</span>
-            <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-raised">
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold">{r.name}</span>
+            <div className="relative h-2 w-12 shrink-0 overflow-hidden rounded-full bg-raised">
               <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: pct(pace), background: SLOT_COLOR[r.slot] }} />
             </div>
             <span data-num className={cx('w-10 text-right font-mono text-sm', pace < 1 ? (alarm ? 'text-alert' : 'text-warn') : 'text-ink-2')}>
