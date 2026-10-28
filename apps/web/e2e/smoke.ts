@@ -11,7 +11,7 @@ import { check, claimAPlot, launch, PHONE, startServer, TV, type AuctionSteps } 
 import { planningIsTheHub } from './hub-steps';
 import { readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow } from './production-steps';
-import { fedPlayerFillsAFullHoloBar, hungryPlayerSeesAShortOrangeBar, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
+import { fedPlayerSeesNoHunger, hungryPlayerSeesHerPace, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
 
 /** Loaded by a path held in a variable, so tsc never resolves a file that may not exist yet. */
 async function loadAuctionSteps(): Promise<AuctionSteps> {
@@ -126,7 +126,7 @@ try {
   await storeIsOneHallWithTwoRows(phone, within(PHASE_MS.landGrant));
   // B-AC-15 and B-AC-16: the store says what to do next, and the MULE is a character.
   await theCorralGlowsWithNoMule(phone, server, code);
-  await fedPlayerFillsAFullHoloBar(phone);
+  await fedPlayerSeesNoHunger(phone, server, code);
   await outfittersOpenWithAnEmptyMule(phone);
   console.log(`store hall fills the stage: ${await theLedMuleLightsUp(phone, server, code)}`);
   await checkOwnsAPlot(phone);
@@ -149,7 +149,7 @@ try {
   await readyIfStillPlanning(phone);
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 2);
-  await hungryPlayerSeesAShortOrangeBar(phone, within(PHASE_MS.landGrant));
+  await hungryPlayerSeesHerPace(phone, server, code, within(PHASE_MS.landGrant));
   await goToThePub(phone);
   // B-AC-6, B-AC-7 and B-AC-8: month 2's show, with the seed's event.
   await phone.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
