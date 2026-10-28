@@ -310,11 +310,17 @@ export function fitFilter(state: GameState, playerId: string, x: number, y: numb
  * have left, and more later in the game. A MULE you were leading runs off.
  * The server says how many seconds the player had left. Returns the payout.
  */
-export function visitPub(state: GameState, playerId: string, secondsLeft: number): number {
-  const p = developer(state, playerId);
+/** What the pub would pay a player with `secondsLeft` of their development time: more the earlier they go. Changes nothing. */
+export function pubPayoutFor(state: GameState, playerId: string, secondsLeft: number): number {
+  const p = player(state, playerId);
   const share = Math.min(1, Math.max(0, secondsLeft / p.devSeconds));
   const { base, start, perMonth } = DEVELOPMENT.pub;
-  const payout = Math.round(base + (start + state.month * perMonth) * share);
+  return Math.round(base + (start + state.month * perMonth) * share);
+}
+
+export function visitPub(state: GameState, playerId: string, secondsLeft: number): number {
+  const p = developer(state, playerId);
+  const payout = pubPayoutFor(state, playerId, secondsLeft);
   p.money += payout;
   p.carriedMule = null;
   p.doneDeveloping = true;
