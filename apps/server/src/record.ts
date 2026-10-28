@@ -233,6 +233,9 @@ export class Recorder {
             this.call(seat.id, 'move', () => decider.decide(shortlist, persona, context), (choice) => ({ choice: recordedChoice(choice) })),
         };
       },
+      writerFor: () => {
+        throw new Error('NotImplemented: record-writer-for');
+      },
       chatter: (seat, say) => inner.chatter(seat, say),
       finish: () => inner.finish(),
     };

@@ -246,6 +246,19 @@ describe("T-AC-A6: strategy and playbook calls send adaptive thinking with BRAIN
     });
   });
 
+  it("T-AC-A1 (wait bound): a write call given waitMs below its kind's timeoutMs sends that smaller timeout; above it, the kind's", async () => {
+    for (const kind of WRITE_KINDS) {
+      const own = BRAIN.writeCalls[kind].timeoutMs;
+      const sdk = fakeSdk(() => sdkMessage(USABLE));
+      const write = createWriteComplete(sdk);
+      await write(kind, WRITE, undefined, own - 1_234);
+      await write(kind, WRITE, BRAIN.writeFallbackModel, 900);
+      await write(kind, WRITE, undefined, own + 1);
+      await write(kind, WRITE);
+      expect(sdk.requests.map((r) => r.options.timeout)).toEqual([own - 1_234, 900, own, own]);
+    }
+  });
+
   it.each(MOVES)('T-AC-A6: a %s call keeps thinking off, on BRAIN.model, with no effort', async (kind) => {
     const sdk = fakeSdk(() => sdkMessage(USABLE));
     await createHaikuComplete(sdk)(movePrompt(kind), BRAIN.landTimeoutMs);

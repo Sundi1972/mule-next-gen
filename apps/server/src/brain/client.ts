@@ -201,7 +201,7 @@ export const WRITE_FALLBACK_MODEL: ModelId = BRAIN.writeFallbackModel;
 export function createWriteComplete(
   sdk: HaikuSdk,
   now?: () => number,
-): (kind: WriteKind, prompt: WritePrompt, model?: ModelId) => Promise<ThinkingReply> {
+): (kind: WriteKind, prompt: WritePrompt, model?: ModelId, waitMs?: number) => Promise<ThinkingReply> {
   const think = createThinkingComplete(sdk, now);
-  return (kind, prompt, model = WRITE_CALLS[kind].model) => think({ ...WRITE_CALLS[kind], model }, prompt);
+  return (kind, prompt, model = WRITE_CALLS[kind].model, _waitMs) => think({ ...WRITE_CALLS[kind], model }, prompt);
 }

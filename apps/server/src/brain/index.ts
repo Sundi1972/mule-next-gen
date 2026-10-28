@@ -1,8 +1,8 @@
 import { BRAIN, type AiLevelId, type AiPersonaId } from '@mule/engine';
-import { LlmDecider, ReplyRejected, type Complete, type Decider, type DecisionRecord } from '@mule/ai';
+import { LlmDecider, ReplyRejected, type Complete, type Decider, type DecisionRecord, type LandBrief, type WriterReply } from '@mule/ai';
 import { createBudget, MOVE_CALL, worstCaseUsd } from './budget.js';
 import { chatter } from './chat.js';
-import { billUnknown, CallFailed, createAnthropicSdk, createHaikuComplete, type HaikuReply, type HaikuSdk } from './client.js';
+import { billUnknown, CallFailed, createAnthropicSdk, createHaikuComplete, type HaikuReply, type HaikuSdk, type WriteKind } from './client.js';
 import { createLedger, NO_USAGE, type Outcome, type Usage } from './ledger.js';
 
 /** The seat a decider is built for: its id, persona and level. */
@@ -16,10 +16,24 @@ export interface BrainSeat {
 export interface BrainService {
   /** A decider for a Smart seat, or null: the seat plays Classic. */
   deciderFor(seat: BrainSeat): Decider | null;
+  /** A playbook writer for a Smart seat, or null: the seat plays the engine's playbooks. */
+  writerFor(seat: BrainSeat): PlaybookWriter | null;
   /** The seat's onDecision callback: passes its lines to `say`: at most BRAIN.linesPerMonth a month and one a phase. Never throws. See RULE-2. */
   chatter(seat: BrainSeat, say: (line: string) => void): (record: DecisionRecord) => void;
   /** Closes the game; a Smart brain that built a decider also writes its total line. A second call does nothing. */
   finish(): void;
+}
+
+/** What a writer call is given: the seat's brief, the system text and the longest it may wait in ms. */
+export interface WriteAsk {
+  brief: LandBrief;
+  system: string;
+  waitMs: number;
+}
+
+/** A seat's strategy and playbook writer. `write` never throws: every failure is the reply's cause. */
+export interface PlaybookWriter {
+  write(kind: WriteKind, ask: WriteAsk): Promise<WriterReply>;
 }
 
 /** The brain as its owner holds it: the game's contract, plus the spend a run caps on. */
@@ -66,6 +80,7 @@ export function outcomeOf(reply: Pick<HaikuReply, 'stopReason'> | null, failure:
 /** Without the key there is no client and no decider, so nothing can make a paid call. See RULE-3. */
 const CLASSIC: MeteredBrain = {
   deciderFor: () => null,
+  writerFor: () => null,
   chatter: (seat, say) => chatter(seat.id, say),
   finish: () => {},
   countedUsd: () => 0,
@@ -155,6 +170,9 @@ export function createBrain(options: BrainOptions): MeteredBrain {
 
   return {
     deciderFor,
+    writerFor: () => {
+      throw new Error('NotImplemented: writer-for');
+    },
     chatter: (seat, say) => chatter(seat.id, say),
     finish() {
       countedAtFinish ??= counted();

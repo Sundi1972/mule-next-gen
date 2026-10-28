@@ -102,6 +102,7 @@ function stubBrain(smartId: string): BrainService & { calls: () => number } {
   };
   return {
     deciderFor: (seat) => (seat.id === smartId ? decider : null),
+    writerFor: () => null,
     chatter: (seat, say) => chatter(seat.id, say),
     finish: () => {},
     calls: () => calls,

@@ -177,6 +177,7 @@ function watched(inner: BrainService) {
   let finishes = 0;
   const brain: BrainService = {
     deciderFor: (seat) => inner.deciderFor(seat),
+    writerFor: (seat) => inner.writerFor(seat),
     chatter: (seat, say) => {
       const onDecision = inner.chatter(seat, say);
       return (record) => {

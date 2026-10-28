@@ -146,10 +146,22 @@ export interface WriteRequest {
   waitMs: number;
 }
 
+/** An edit the writer refused before validation, by path when the brief offered it, else null. */
+export interface Refusal {
+  path: string | null;
+  cause: Cause;
+}
+
+/** The writer's checked reply, as recorded, and beside it the edits it refused, which are never recorded. */
+export interface WriterReply {
+  reply: RecordedWrite;
+  refused: Refusal[];
+}
+
 export interface Written {
   reply: RecordedWrite;
   /** The edits the writer refused before validation, by path when the brief offered it, else null. */
-  refused: { path: string | null; cause: Cause }[];
+  refused: Refusal[];
   /** What validatePlan made of the draft and the accepted edits: what plays. */
   result: ReturnType<ValidatePlan>;
 }

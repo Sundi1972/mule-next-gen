@@ -24,6 +24,8 @@ export interface LandBrief {
   plans: OfferedPlan[];
   /** AI_LEVELS[level].corners: whether the seat may aim to corner a good. */
   corners: boolean;
+  /** The draft's strategy the brief shows: what the writer's accepted strategy fields are set on. */
+  strategy: Strategy;
 }
 
 /** The playbook paths a land brief lets the writer edit, besides the strategy's fields. */
@@ -130,5 +132,5 @@ export function landBrief(state: GameState, mind: Mind, persona: Persona, draft:
     '',
     'Write your strategy and your edits, and reply with the JSON.',
   ].join('\n');
-  return { text, plans, corners };
+  return { text, plans, corners, strategy: draft.strategy };
 }

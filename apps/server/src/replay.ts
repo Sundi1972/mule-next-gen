@@ -67,6 +67,9 @@ class Script {
     this.brain = {
       deciderFor: (seat) =>
         smart.has(seat.id) ? { name: 'recorded', decide: () => this.call(seat.id, 'move') as Choice | Promise<Choice> } : null,
+      writerFor: () => {
+        throw new Error('NotImplemented: replay-writer-for');
+      },
       chatter: () => () => {},
       finish: () => {},
     };
