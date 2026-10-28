@@ -2,6 +2,9 @@
 
 import { GROWN_GOODS, MINED_GOODS, type Ground, type Tile } from './types.js';
 
+/** Shares and odds are fractions: a value exactly on an edge must land on the side it would without float rounding. */
+export const EPS = 1e-9; // literal-ok: float tolerance for shares and odds
+
 export function tileIndex(width: number, x: number, y: number): number {
   return y * width + x;
 }
