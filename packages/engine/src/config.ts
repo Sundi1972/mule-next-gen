@@ -922,6 +922,8 @@ export const STRATEGIST = {
   cashFloor: 60,
   /** What one colony air point costs it, in credits, rising as the air gets dirtier (doubles by Smoggy). */
   airCost: 10,
+  /** What it counts a green belt as costing a month, in credits (the engine charges none), set against the air it cleans; without full scoring, the cost alone. */
+  greenBeltCost: 5,
   /** Below this utility share of the best, a free plot is not worth pressing for in the first sweep; later sweeps take anything above laterShare. */
   grantShare: 0.75,
   grantLaterShare: 0.5,
@@ -940,6 +942,11 @@ export const STRATEGIST = {
   /** Analyses per month, at most, and never with less than this many seconds left. */
   analysesPerMonth: 2,
   analyseMinSeconds: 20,
+  /** Analyses per month, at most, at a level without full scoring (Rookie), in place of analysesPerMonth. */
+  rookieAnalyses: 1,
+  /** It fits filters once the air is within this many points of Smoggy, and only to polluters of more than filterOverAir air points a month. */
+  filterAirMargin: 10,
+  filterOverAir: 1,
   /** Share of its money it spends on one good at the auction, at most. */
   budgetShare: 0.5,
   /**
@@ -952,8 +959,19 @@ export const STRATEGIST = {
   secondValue: { busy: 10, idle: 3 },
   /** Share it takes off next month's price for a good it would hold, per point of risk weight, because the forecast may be wrong. */
   forecastHaircut: 0.05,
+  /** And this share more off a unit it would buy only to resell, per point of risk weight. */
+  resaleRisk: 0.1,
   /** A corner pays this share over next month's price for the units the others are short of. */
   cornerPremium: 0.5,
+  /** It corners only a good that spoils less than this share a month, and at most this many units. */
+  cornerMaxSpoilage: 0.5,
+  cornerMaxUnits: 6,
+  /**
+   * Spite: while the leader is short of the good, it bids this share of next month's price, times its spite, over its
+   * own value for at least the next spiteUnits units (all the cornered ones while it corners).
+   */
+  spiteShare: 0.1,
+  spiteUnits: 2,
   /**
    * How many months past next the outlook plays the status quo forward
    * (nobody builds or trades), to see a shortage coming before the price
@@ -971,10 +989,42 @@ export const STRATEGIST = {
   selfSupply: 3,
   /**
    * The "cash left" consideration: spending down to the reserve scores this
-   * much, and keeping twice the reserve scores 1. The reserve itself is a hard
+   * much, and keeping cashLeftFull times the reserve scores 1. The reserve itself is a hard
    * rule, so this is only a mild preference for cash in hand.
    */
   cashLeftFloor: 0.75,
+  cashLeftFull: 2,
+  /** The land plan's considerations (landDecision), besides gainScale.plot. */
+  land: {
+    /** "Known ground": what a plot it hasn't analysed scores; an analysed one scores 1. */
+    unknownGround: 0.8,
+    /** "Next to my land": `full` of its own plots beside a plot score 1, never under `floor`; weighted clusterWeight in the cluster plan, else `weight`. */
+    nextToMine: { full: 2, floor: 0.6, clusterWeight: 2, weight: 0.5 },
+    /** "Blocks the leader": `full` of the leader's plots beside a plot score 1, never under `floor`; weighted by spite, at least minWeight. */
+    blocksLeader: { full: 2, floor: 0.4, minWeight: 0.5 },
+    /** "Feeds me": what a plan scores while its Food and Energy are covered, and, while they are short, any plan but farms first (which scores 1). */
+    feedsMe: { covered: 0.75, short: 0.6 },
+    /** "Can develop it": cash over the reserve scores 1 at `mules` MULE prices; weighted factoryWeight in the factory plan, else `weight`. */
+    canDevelop: { mules: 2, factoryWeight: 1, weight: 0.3 },
+    /** "Hurts the leader": what the plan that fences in the leader scores. */
+    hurtsLeader: 0.7,
+  },
+  /** The development decision's considerations (developDecision), besides gainScale.develop and the cash left. */
+  develop: {
+    /** "Known ground": what an idle plot it hasn't analysed scores; an analysed one scores 1. */
+    unknownGround: 0.75,
+    /** "Feeds me": what a MULE that doesn't cover its own Food or Energy scores (one that does scores 1); weighted this share of the persona's reserve. */
+    feedsMe: { other: 0.8, reserveShare: 0.5 },
+  },
+  /** The auction's trade decision (tradeDecision, expectedPrices), besides gainScale.trade and the cash left. */
+  trade: {
+    /** "Sure thing": what a sale scores, a buy of what it needs, and a buy partly to resell (a forecast); a pass scores 1. */
+    sure: { sell: 0.9, need: 0.9, resale: 0.6 },
+    /** Selling, it also offers to keep a buffer: this share of next month's need, at least 1 unit, over what it would keep. */
+    bufferShare: 0.5,
+    /** It expects a sale to fetch at least this share of the posted price, whoever buys. */
+    sellFloor: 0.85,
+  },
 };
 
 /** The AI's hands in the real-time phases. Times are in ms. */
@@ -1010,4 +1060,27 @@ export const AI_HANDS = {
     /** A go/no-go choice takes this much longer than a bare reaction. */
     choiceMs: [150, 300] as [number, number],
   },
+};
+
+/**
+ * The balance targets `pnpm sim` checks, from the design doc's Economy model tab, each named for its check. Shares are
+ * of months or of games, as the check says; the report prints the targets from here.
+ */
+export const SIM_TARGETS = {
+  /** MULE price median: from min to max credits. */
+  muleMedian: { min: 150, max: 300 },
+  /** MULE price 90th percentile: under this many credits. */
+  mule90th: 500,
+  /** Corral sold out: in under this share of months. */
+  corralSoldOut: 0.1,
+  /** Food above `factor` times its reference price: in this share of games, from min to max. */
+  foodSpike: { factor: 3, min: 0.1, max: 0.5 },
+  /** Colonists short of Food or Water: in under this share of months. */
+  colonistsShort: 0.15,
+  /** Owned plots developed at the end: this share or more. */
+  developed: 0.7,
+  /** No game has an AI broke, under `below` credits with idle land, for `months` months in a row. */
+  broke: { below: 100, months: 3 },
+  /** Ended in Collapse: in this share of games or fewer. */
+  collapsed: 0.1,
 };

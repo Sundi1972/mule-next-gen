@@ -15,6 +15,7 @@ import {
   pace,
   playerEventChance,
   POLLUTION,
+  PRICE,
   rawOutput,
   RECIPES,
   SPECIES_PERK,
@@ -84,12 +85,12 @@ export type PriceOf = (good: Good, extra?: number) => number;
 export const afterTax = (obs: GameState, price: number) => price * (1 - obs.treasury.salesTax);
 
 /** The sale price that leaves a seller `kept` after the sales tax. */
-export const beforeTax = (obs: GameState, kept: number) => kept / Math.max(0.01, 1 - obs.treasury.salesTax);
+export const beforeTax = (obs: GameState, kept: number) => kept / Math.max(0.01, 1 - obs.treasury.salesTax); // literal-ok: keeps the division finite at a 100% tax
 
 /** Net credits a month from running this outfit here, at the given prices (the outlook's by default, its own extra supply included). */
 export function monthlyNet(obs: GameState, o: Outlook, y: Yield, outfit: Outfit, mind: Mind, price?: PriceOf): number {
   const full = mind.level.fullScoring;
-  if (outfit === 'greenBelt') return full ? POLLUTION.greenBeltAir * airUnitCost(obs) - 5 : -5;
+  if (outfit === 'greenBelt') return full ? POLLUTION.greenBeltAir * airUnitCost(obs) - STRATEGIST.greenBeltCost : -STRATEGIST.greenBeltCost;
   const P: PriceOf = price ?? ((g, extra = 0) => o.price(g, extra));
   let revenue = afterTax(obs, y.made * P(outfit, y.made));
   if (full && (outfit === 'food' || outfit === 'water' || outfit === 'energy')) {
@@ -203,7 +204,7 @@ export function cashReserve(obs: GameState, mind: Mind, o?: Outlook, except?: Go
   for (const g of ['food', 'water', 'energy'] as const) {
     if (g === except) continue;
     const short = Math.max(0, need[g] - p.stock[g] - (o?.made[g] ?? 0));
-    cost += short * Math.min(obs.store.posted[g] * 1.1, obs.store.refPrice[g] * STRATEGIST.reservePriceCap);
+    cost += short * Math.min(obs.store.posted[g] * (1 + PRICE.storeSpread), obs.store.refPrice[g] * STRATEGIST.reservePriceCap);
   }
   return Math.round((STRATEGIST.cashFloor + cost) * mind.persona.reserve);
 }
@@ -253,7 +254,7 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
     const drink = needsOf(obs, me).water;
     if (farms.length > 0) {
       block = drink + Math.ceil(drink / keepRate);
-      use = (farms.reduce((n, t) => n + rawOutput(obs, t), 0) * 0.5 * afterTax(obs, P('food'))) / block;
+      use = (farms.reduce((n, t) => n + rawOutput(obs, t), 0) * (1 - UPKEEP.shortOutputShare) * afterTax(obs, P('food'))) / block;
     }
   } else if (good === 'energy') {
     const own = mine.filter((t) => t.outfit === 'energy').reduce((n, t) => n + rawOutput(obs, t), 0);
@@ -262,7 +263,7 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
       block = Math.ceil(short / keepRate);
       const runs = mine
         .filter((t) => t.outfit !== 'energy')
-        .reduce((n, t) => n + (isRaw(t.outfit!) ? 0.5 * rawOutput(obs, t) * P(t.outfit as Good) : factoryFit(obs, t, t.outfit as never, me).output * P(t.outfit as Good)), 0);
+        .reduce((n, t) => n + (isRaw(t.outfit!) ? (1 - UPKEEP.shortOutputShare) * rawOutput(obs, t) * P(t.outfit as Good) : factoryFit(obs, t, t.outfit as never, me).output * P(t.outfit as Good)), 0);
       use = afterTax(obs, runs) / Math.max(1, need);
     }
   } else if (good === 'medicine' && need > 0) {
@@ -286,7 +287,8 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
   // Beyond the block: resale next month, after spoilage, the sales tax and the depot limit.
   const haircut = full ? 1 - STRATEGIST.forecastHaircut * mind.persona.risk : 1;
   const resale = afterTax(obs, P(good)) * keepRate * haircut;
-  const resaleBuy = resale * Math.min(1, mind.persona.speculate) * (1 - 0.1 * mind.persona.risk);
+  const resaleBuy = resale * Math.min(1, mind.persona.speculate) * (1 - STRATEGIST.resaleRisk * mind.persona.risk);
+  // literal-ok: 0.05 keeps the division finite for a good that all spoils; 99 stands for no depot limit (Rookie ignores it)
   const depot = full ? Math.ceil(UPKEEP.depotCapacity / Math.max(0.05, keepRate)) : 99;
   const eaten = good === 'food' || good === 'water' ? needsOf(obs, me)[good] : 0;
   const length = Math.max(block, eaten + depot) + 1;

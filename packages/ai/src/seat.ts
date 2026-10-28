@@ -55,12 +55,12 @@ export class AiSeat {
       persona: AI_PERSONAS[options.persona],
       levelId: options.level,
       level: AI_LEVELS[options.level],
-      salt: (options.seed ^ 0x27d4eb2d) >>> 0,
+      salt: (options.seed ^ 0x27d4eb2d) >>> 0, // literal-ok: a hash salt, so the seat's tie-break stream is its own
     };
     this.rng = createRng(options.seed >>> 0);
     this.brain = new Brain(this.mind, PERSONAS[options.persona], options.name, options.seed, options.decider ?? null, options.onDecision);
-    this.develop = new DevelopHand(this.brain, createRng((options.seed ^ 0x9e3779b9) >>> 0));
-    this.auction = new AuctionHand(this.brain, createRng((options.seed ^ 0x85ebca6b) >>> 0));
+    this.develop = new DevelopHand(this.brain, createRng((options.seed ^ 0x9e3779b9) >>> 0)); // literal-ok: a hash salt for the develop hand's rng stream
+    this.auction = new AuctionHand(this.brain, createRng((options.seed ^ 0x85ebca6b) >>> 0)); // literal-ok: a hash salt for the auction hand's rng stream
   }
 
   get id(): string {
@@ -122,10 +122,11 @@ export class AiSeat {
     return {
       persona: this.mind.personaId as AiPersonaId,
       level: this.mind.levelId as AiLevelId,
+      // literal-ok: the dev view's top five plots, utility to three decimals: display only
       landPlan: plan ? { focus: plan.focus, top: plan.ranking.slice(0, 5).map((s) => ({ label: s.label, utility: Math.round(s.utility * 1000) / 1000, value: s.value })) } : null,
       developPlan: this.develop.plan(),
       auction: this.auction.debug(),
-      recent: this.brain.log.slice(-5),
+      recent: this.brain.log.slice(-5), // literal-ok: the dev view's last five decisions, display only
     };
   }
 }
