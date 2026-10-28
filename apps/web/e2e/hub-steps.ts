@@ -2,7 +2,9 @@
  * B-AC-14 (C17, RULE-8): planning is the hub for the month. Run by smoke.ts in month-2 planning, right after
  * store-steps' makeHungry seated the human at 2 Food against a need of 5 (nine farms, which also burn Energy).
  * Quick by design: planning is about 4.5 s at the smoke's phase scale, and listedSale has used part of it.
+ * B-AC-19 (AM-16), the host's Continue, is run by auction-steps.ts in its month-2 planning.
  */
+import { join } from 'node:path';
 import { GOODS, monthNeeds, type GameState, type Good } from '@mule/engine';
 import type { Page } from 'playwright';
 import type { MuleServer } from '../../server/src/server.js';
@@ -137,4 +139,82 @@ async function read(phone: Page): Promise<Shown> {
       fill: content && stageBox ? content.getBoundingClientRect().height / (stageBox.height - pad) : 0,
     };
   });
+}
+
+/** A phone at the table, as the e2e scripts hold it. */
+type Seated = { page: Page; name: string };
+
+/**
+ * B-AC-19 (AM-16): planning has no clock. In planning proper `host` and `ready` press Ready and `left` does not; every
+ * phone and the TV say `left` is still planning, and each phone's header shows the ready count. Only the host gets
+ * Continue; once confirmed, the land grant opens on every screen and the server's news names who was left. With
+ * MULE_SHOTS set to a directory, the step also saves the four screens there at night, for a look against the mock.
+ */
+export async function hostContinuesWithout({ host, ready, left, tv, server, code }: { host: Seated; ready: Seated; left: Seated; tv: Page; server: MuleServer; code: string }, timeout = 3_000): Promise<void> {
+  const room = server.registry.get(code);
+  check(room, `a room ${code} on the server`);
+  const table = () => room.viewFor(null);
+  const seatOf = (p: Seated) => {
+    const id = table().seats.find((s) => s.name === p.name)?.id;
+    check(id, `${p.name} has a seat`);
+    return id;
+  };
+  const [hostId, readyId, leftId] = [seatOf(host), seatOf(ready), seatOf(left)];
+  const start = table().game;
+  const election = start?.politics?.election;
+  check(start?.phase === 'planning' && !(election && election.stage !== 'over'), `B-AC-19: the step runs in planning proper, got ${start?.phase}, election ${election?.stage}`);
+  check(table().hostId === hostId, `B-AC-19: ${host.name} hosts the table, got ${table().hostId}`);
+  const phones = [host, ready, left];
+  const shots = process.env.MULE_SHOTS;
+  const shot = async (page: Page, name: string) => {
+    if (shots) await page.screenshot({ path: join(shots, `b-ac-19-${name}.png`) });
+  };
+  if (shots) await Promise.all([...phones.map((p) => p.page), tv].map((page) => page.getByRole('button', { name: 'Night', exact: true }).first().click({ timeout })));
+
+  const planning = (p: Seated) => p.page.locator('[data-phase=planning]');
+  await Promise.all(
+    [host, ready].map(async (p) => {
+      await planning(p).getByTestId('ready').click({ timeout });
+      await planning(p).getByTestId('you-are-ready').waitFor({ timeout });
+    }),
+  );
+
+  const players = start.players;
+  const count = `${2 + players.filter((p) => p.isAi).length} / ${players.length} READY`;
+  for (const p of phones) {
+    const header = p.page.locator('[data-phase=planning] [data-testid=guide] header [data-testid=ready-count]');
+    await header.filter({ hasText: count }).waitFor({ timeout });
+    const waiting = planning(p).getByTestId('waiting-for');
+    await waiting.getByTestId(`waiting-${leftId}`).waitFor({ timeout });
+    const named = (await waiting.getByTestId(`waiting-${leftId}`).innerText()).trim();
+    check(named === (p === left ? 'you' : left.name), `B-AC-19: ${p.name}'s phone names ${p === left ? 'her as "you"' : left.name} as still planning, got "${named}"`);
+    const readyNamed = (await waiting.getByTestId(`waiting-${hostId}`).count()) + (await waiting.getByTestId(`waiting-${readyId}`).count());
+    check(readyNamed === 0, `B-AC-19: ${p.name}'s phone waits for nobody who is Ready, got "${await waiting.innerText()}"`);
+  }
+  const board = tv.locator('[data-phase=planning]');
+  const tvWaiting = board.getByTestId('tv-waiting');
+  await tvWaiting.getByTestId(`waiting-${leftId}`).filter({ hasText: left.name }).waitFor({ timeout });
+  check((await tvWaiting.getByTestId(`waiting-${hostId}`).count()) + (await tvWaiting.getByTestId(`waiting-${readyId}`).count()) === 0, `B-AC-19: the TV waits for nobody who is Ready, got "${await tvWaiting.innerText()}"`);
+  const row = (p: Seated) => board.getByTestId('tv-ready-list').locator('li', { hasText: p.name }).innerText();
+  check(/\bPLANNING$/.test((await row(left)).trim()) && !(await row(left)).includes('AWAY'), `B-AC-19: the TV's list says ${left.name} is PLANNING, got "${await row(left)}"`);
+  check(/\bREADY$/.test((await row(host)).trim()), `B-AC-19: the TV's list says ${host.name} is READY, got "${await row(host)}"`);
+  check((await board.getByTestId('ready-count').innerText()).trim() === count, `B-AC-19: the TV shows ${count}, got "${await board.getByTestId('ready-count').innerText()}"`);
+
+  const go = planning(host).getByTestId('continue');
+  await go.waitFor({ timeout });
+  check((await go.innerText()).trim() === `Continue without ${left.name}`, `B-AC-19: the host's button reads "Continue without ${left.name}", got "${await go.innerText()}"`);
+  for (const p of [ready, left]) check((await planning(p).getByTestId('continue').count()) === 0, `B-AC-19 (negative): ${p.name}, who is not the host, has no Continue`);
+  await Promise.all([shot(host.page, 'host'), shot(ready.page, 'not-host'), shot(left.page, 'left'), shot(tv, 'tv')]);
+
+  await go.click({ timeout });
+  await planning(host).getByTestId('continue-confirm').waitFor({ timeout });
+  await shot(host.page, 'confirm');
+  check(table().game?.phase === 'planning', `B-AC-19: one tap on Continue ends nothing before the confirm, got ${table().game?.phase}`);
+  await planning(host).getByTestId('continue-now').click({ timeout });
+
+  await Promise.all([...phones.map((p) => p.page), tv].map((page) => page.locator('[data-phase=landGrant]').waitFor({ timeout })));
+  const news = table().game?.news ?? [];
+  const line = `${host.name} continued without ${left.name}.`;
+  check(news.includes(line), `B-AC-19: the server's news says "${line}", got ${JSON.stringify(news)}`);
+  console.log(`✓ B-AC-19: ${host.name} and ${ready.name} Ready, ${left.name} named on every phone and the TV (${count}); only ${host.name} had Continue; the land grant opened everywhere, and the news says "${line}"`);
 }
