@@ -78,7 +78,7 @@ function Bubble({ line, seat, me, size = 'phone', left = false }: { line: ChatMe
       data-line={line.id}
       role="status"
     >
-      {whisper && <span className="mr-1 font-mono text-[9px] font-bold text-holo">🔒 TO {to}</span>}
+      {whisper && <span className="mr-1 font-mono text-[10px] font-bold text-holo">🔒 TO {to}</span>}
       {line.text}
       {/* The tail still points at the speaker when the bubble has slid. */}
       <span
@@ -141,7 +141,7 @@ function SeatRow() {
               data-speaking={fallback?.from === player.id || undefined}
             >
               <Creature species={player.species} color={SLOT_COLOR[slot]} size={20} />
-              <span className="font-mono text-[9px] text-ink-3 @min-[1100px]/shell:text-[10px]">{player.name}</span>
+              <span className="font-mono text-[10px] text-ink-3">{player.name}</span>
             </span>
           ))}
       </div>
