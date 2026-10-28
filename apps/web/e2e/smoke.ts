@@ -50,10 +50,11 @@ const PART_LINES = ['money', 'goods', 'land', 'mules'] as const;
 /** A run with MULE_E2E_SEED=1 checks month 2's event show (B-AC-7). */
 const SHOW_SEED = 1;
 const SEED = seedFrom(process.env.MULE_E2E_SEED);
-// Every event rolls on its own row's dice, so no seed promises one: this run makes month 2's dust storm certain (it
-// needs only an Energy plot, which month 1 builds) and puts the row back when the game ends.
-const dustStormPhases = EVENTS.colony.dustStorm.phases;
-if (SEED === SHOW_SEED) EVENTS.colony.dustStorm.phases = { production: 1 };
+// Every event rolls on its own row's dice, so no seed promises one: this run makes an event in month 2 certain. The
+// dust storm's row rolls at 100%, its cap included (it needs only an Energy plot, which month 1 builds; should a solar
+// flare fire too, the pair's dice keep one of the two), and the row is put back when the game ends.
+const dustStorm = { ...EVENTS.colony.dustStorm };
+if (SEED === SHOW_SEED) Object.assign(EVENTS.colony.dustStorm, { phases: { production: 1 }, cap: 1 });
 const steps = await loadAuctionSteps();
 const { server, base } = await startServer({ maxMonths: 2, phaseScale: PHASE_SCALE, seed: () => SEED });
 const browser = await launch();
@@ -175,7 +176,7 @@ try {
   await hungryPlayerSeesHerPace(phone, server, code, within(PHASE_MS.landGrant));
   await goToThePub(phone);
   const moveLink = await moveDialogOpensInProduction(ctx, within(PHASE_MS.development));
-  // B-AC-6, B-AC-7 and B-AC-8: month 2's show, with the run's dust storm.
+  // B-AC-6, B-AC-7 and B-AC-8: month 2's show, with the run's certain event.
   await phone.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
   await moveDialogOutlivedThePhase(ctx, moveLink);
   console.log(`production show, month 2: ${await checkTheShow({ tv: tvShow, phone: phoneShow, event: SEED === SHOW_SEED })}`);
@@ -201,7 +202,7 @@ try {
   if (errors.length > 0) console.error(`page errors: ${errors.join('; ')}`);
   throw err;
 } finally {
-  EVENTS.colony.dustStorm.phases = dustStormPhases;
+  Object.assign(EVENTS.colony.dustStorm, dustStorm);
   await browser.close();
   await server.close();
 }
