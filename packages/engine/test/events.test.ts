@@ -10,6 +10,7 @@ import {
   neighbours,
   planEvent,
   playerEventChance,
+  playerEventReason,
   rollPlayerEvent,
   type EventKey,
   type GameState,
@@ -231,14 +232,23 @@ describe('player events', () => {
       [80, sickness.air.collapse],
     ];
     // By the air band, for a player who caused none of last month's pollution.
-    for (const [air, bonus] of bands) expect(chance(colony(air, [6, 3, 3, 0]), 'p3'), `air ${air}`).toBeCloseTo(base + bonus, 9);
-    // By the player's own share of it: half, a quarter, none.
-    const polluted = colony(0, [6, 3, 3, 0]);
-    expect(chance(polluted, 'p0')).toBeCloseTo(base + sickness.pollutionShare * 0.5, 9);
-    expect(chance(polluted, 'p1')).toBeCloseTo(base + sickness.pollutionShare * 0.25, 9);
-    // Never above the cap: the only polluter in Collapse.
-    expect(base + sickness.air.collapse + sickness.pollutionShare).toBeGreaterThan(sickness.cap);
-    expect(chance(colony(80, [12, 0, 0, 0]), 'p0')).toBeCloseTo(sickness.cap, 9);
+    for (const [air, bonus] of bands) expect(chance(colony(air, [5, 20, 3, 0]), 'p3'), `air ${air}`).toBeCloseTo(base + bonus, 9);
+    // By the air points its own plots caused last month: 5 points add 5 x perPoint; 20 points hit the most it adds.
+    const polluted = colony(0, [5, 20, 3, 0]);
+    expect(5 * sickness.pollution.perPoint).toBeLessThan(sickness.pollution.max);
+    expect(20 * sickness.pollution.perPoint).toBeGreaterThan(sickness.pollution.max);
+    expect(chance(polluted, 'p0')).toBeCloseTo(base + 5 * sickness.pollution.perPoint, 9);
+    expect(chance(polluted, 'p1')).toBeCloseTo(base + sickness.pollution.max, 9);
+    // Never above the cap: the biggest polluter in Collapse.
+    expect(base + sickness.air.collapse + sickness.pollution.max).toBeGreaterThan(sickness.cap);
+    expect(chance(colony(80, [20, 0, 0, 0]), 'p0')).toBeCloseTo(sickness.cap, 9);
+    // Why: the biggest raise in the roll wins, so the screens can say it; with no raise it is plain chance.
+    const why = (air: number, points: number) => playerEventReason(colony(air, [points, 0, 0, 0]), 'sickness', 'development', 'p0');
+    expect(why(0, 5)).toBe('pollution');
+    expect(why(30, 0)).toBe('air');
+    expect(why(30, 20)).toBe('pollution');
+    expect(why(60, 5)).toBe('air');
+    expect(why(0, 0)).toBe('chance');
     // No roll in another phase, and none on a what-if copy.
     expect(playerEventChance(colony(80), 'sickness', 'production', 'p0')).toBe(0);
     expect(rollPlayerEvent(cloneForSim(colony(80, [12, 0, 0, 0])), 'sickness', 'development', 'p0')).toBe(false);

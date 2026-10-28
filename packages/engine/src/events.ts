@@ -160,17 +160,32 @@ export type PlayerEventKey = keyof typeof EVENTS.player;
 
 /**
  * The chance a player event fires for this player at the start of this phase: the phase's chance, plus the air band's
- * bonus, plus pollutionShare x the player's share of the colony's pollution last month, never above the cap; 0 in a
- * phase the event doesn't list.
+ * bonus, plus perPoint for each air point the player's plots caused last month (at most max), never above the cap; 0
+ * in a phase the event doesn't list.
  */
 export function playerEventChance(state: GameState, key: PlayerEventKey, phase: Phase, id: string): number {
   const row = EVENTS.player[key];
   const inPhase = (row.phases as Partial<Record<Phase, number>>)[phase];
   if (inPhase === undefined) return 0;
-  const by = state.history.at(-1)?.pollutionBy ?? {};
-  const total = Object.values(by).reduce((n, v) => n + v, 0);
-  const share = total > 0 ? (by[id] ?? 0) / total : 0;
-  return Math.min(row.cap, inPhase + row.air[airBand(state.air).name] + row.pollutionShare * share);
+  const { air, pollution } = raises(state, key, id);
+  return Math.min(row.cap, inPhase + air + pollution);
+}
+
+/**
+ * Why a player event would fire for this player, so the screens can say it: the influence that raised its chance
+ * most (the air on a tie), or plain chance when nothing raised it.
+ */
+export function playerEventReason(state: GameState, key: PlayerEventKey, phase: Phase, id: string): 'air' | 'pollution' | 'chance' {
+  const { air, pollution } = raises(state, key, id);
+  if (air <= 0 && pollution <= 0) return 'chance';
+  return pollution > air ? 'pollution' : 'air';
+}
+
+/** What raises a player event's chance for this player: the air band's bonus, and its own pollution last month. */
+function raises(state: GameState, key: PlayerEventKey, id: string): { air: number; pollution: number } {
+  const row = EVENTS.player[key];
+  const caused = state.history.at(-1)?.pollutionBy?.[id] ?? 0;
+  return { air: row.air[airBand(state.air).name], pollution: Math.min(row.pollution.max, row.pollution.perPoint * caused) };
 }
 
 /**

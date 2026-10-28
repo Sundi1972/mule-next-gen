@@ -847,13 +847,13 @@ export const EVENTS = {
   player: {
     /**
      * Sickness, at development start: the colonist walks at DEV_WALK.sickPace this turn unless it holds a Medicine,
-     * which it then takes. Likelier in dirty air (by band) and for a big polluter: pollutionShare x the player's share
-     * of the colony's pollution last month. Starting numbers, for Heiko.
+     * which it then takes. Likelier in dirty air (by band) and for a polluter: perPoint for each air point its plots
+     * caused last month (a filter halves them), at most max. Heiko's catalogue numbers.
      */
     sickness: {
-      phases: { development: 0.05 },
+      phases: { development: 0.03 },
       air: { clean: 0, smoggy: 0.15, toxic: 0.3, collapse: 0.5 },
-      pollutionShare: 0.4,
+      pollution: { perPoint: 0.03, max: 0.4 },
       cap: 0.9,
     },
   },
