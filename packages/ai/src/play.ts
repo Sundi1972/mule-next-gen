@@ -15,6 +15,7 @@ import {
   fitFilter,
   GAME,
   grantDone,
+  grantPass,
   installMule,
   litPlot,
   lotDone,
@@ -168,7 +169,8 @@ function applyRule(state: GameState, id: string, action: AiAction, clock?: DevCl
         setSalesTax(state, id, action.percent);
         break;
       case 'done':
-        if (state.phase === 'landAuction') lotDone(state, id, action.done);
+        if (state.phase === 'landGrant') grantPass(state, id);
+        else if (state.phase === 'landAuction') lotDone(state, id, action.done);
         else if (state.phase === 'planning' && state.politics?.election) electionDone(state, id, action.done);
         else auctionDone(state, id, action.done);
         break;
@@ -251,8 +253,9 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
   while (state.phase !== 'gameOver' && guard++ < maxSteps) {
     switch (state.phase) {
       case 'planning': {
-        // The election comes first: hands act before each step, with the same dt, until it is over;
-        // one more tick lets the Governor set the tax (every month, with or without an election).
+        // The election comes first: hands act before each step, with the same dt, until every seat is Done and the
+        // ceremony is over; one more tick lets the Governor set the tax and a seat declare ahead of the next election
+        // (every month, with or without an election).
         const vote = (i: number) => voteHands[i]!.tick(state, WALK.tickMs, (a) => applyAction(state, seats[i]!.id, a));
         // literal-ok: a runaway guard on the election's ticks, not a game clock
         for (let ticks = 0; state.politics?.election && state.politics.election.stage !== 'over' && ticks < 100_000; ticks++) {
@@ -266,6 +269,9 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
       case 'landGrant': {
         // literal-ok: a runaway guard on the grant's steps, not a game clock
         for (let steps = 0; !grantDone(state) && steps < 2_000; steps++) {
+          // As on the server: from the light's first move on, a seat that wants nothing ahead presses Done with land.
+          if (steps > 0) for (const s of seats) if (s.passesGrant(state)) applyAction(state, s.id, { type: 'done', done: true });
+          if (grantDone(state)) break;
           const lit = litPlot(state);
           if (lit) {
             const bids = seats

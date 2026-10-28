@@ -4,12 +4,12 @@
  * Run with `pnpm --filter @mule/web e2e`; replay a red run's map with `MULE_E2E_SEED=<seed>`.
  */
 import { existsSync } from 'node:fs';
-import { POLITICS, WALK } from '@mule/engine';
+import { WALK } from '@mule/engine';
 import { errors as playwrightErrors, type BrowserContext, type Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
-import { check, claimAPlot, headerSlot, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
+import { check, CLAIM_MS, claimAPlot, doneWithLand, headerSlot, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
 import { planningIsTheHub } from './hub-steps';
-import { readyThroughTheElection } from './politics-steps';
+import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
 import { fedPlayerSeesNoHunger, hungryPlayerSeesHerPace, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
 import { specialFieldsShowTheirGlyphs } from './special-steps';
@@ -40,6 +40,8 @@ const AUCTION_STAGE_MS = within(WALK.goodMs / WALK.tradeClockRate);
 const PRESS_MS = 2_000;
 /** How long the phone has to find Ready and press its way out of planning, which has no clock and waits for it. */
 const READY_MS = 7_500;
+/** Once the land grant is over: its land auction, when one runs, and development's first frame. */
+const PAST_THE_GRANT_MS = 9_000;
 /** The auction offers at most 9 goods of 3 stages each; more Done presses than that means it is not moving on. */
 const MAX_AUCTION_PRESSES = 40;
 /** The host sits in seat 1. */
@@ -111,7 +113,7 @@ try {
   check((await tvGame.getByRole('img', { name: 'Bramblet' }).count()) >= 1, 'B-AC-1: the TV game still shows the first AI as a Bramblet');
 
   // Month 1: the election, then planning's steps, then Ready.
-  console.log(`election: ${await doneThroughTheElection(ctx, within(POLITICS.nominateMs + POLITICS.ballotMs + POLITICS.revealMs))}`);
+  console.log(`election: ${await doneThroughTheElection(ctx, within(ELECTION_WAIT_MS))}`);
   await theTvDrawsRose(ctx, 'planning');
   await specialFieldsShowTheirGlyphs(ctx);
   await readyThroughTheElection(phone, READY_MS);
@@ -120,7 +122,7 @@ try {
   check(await claim.isVisible(), 'CLAIM button visible');
   await tv.getByTestId('tv-phase').filter({ hasText: 'Land grant' }).waitFor({ timeout: 3_000 });
   await noZoomBeforeYourFirstPlot(ctx);
-  await claimAPlot(phone, within(PHASE_MS.landGrant), 'AM-7: the phone claims a plot in the month-1 land grant');
+  await claimAPlot(phone, CLAIM_MS, 'AM-7: the phone claims a plot in the month-1 land grant');
   await zoomButtonOnceYouOwnAPlot(ctx, phoneIntents);
 
   // Reload: the phone takes its seat back by itself.
@@ -132,7 +134,7 @@ try {
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 1);
   // B-AC-10 and B-AC-9's fed case as development starts; the phone buys a MULE through the start-of-turn card.
-  await storeIsOneHallWithTwoRows(phone, within(PHASE_MS.landGrant));
+  await storeIsOneHallWithTwoRows(phone, PAST_THE_GRANT_MS);
   // B-AC-15 and B-AC-16: the store says what to do next, and the MULE is a character.
   await theCorralGlowsWithNoMule(phone, server, code);
   await fedPlayerSeesNoHunger(phone, server, code);
@@ -168,7 +170,7 @@ try {
   await readyIfStillPlanning(phone);
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 2);
-  await hungryPlayerSeesHerPace(phone, server, code, within(PHASE_MS.landGrant));
+  await hungryPlayerSeesHerPace(phone, server, code, PAST_THE_GRANT_MS);
   await goToThePub(phone);
   const moveLink = await moveDialogOpensInProduction(ctx, within(PHASE_MS.development));
   // B-AC-6, B-AC-7 and B-AC-8: month 2's show, with the seed's event.
@@ -224,7 +226,7 @@ async function readyIfStillPlanning(phone: Page): Promise<void> {
 /** Development: walk out to the map and tap a plot in your colour; the phone calls it yours. */
 async function checkOwnsAPlot(phone: Page): Promise<void> {
   const dev = phone.locator('[data-phase=development]');
-  await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: within(PHASE_MS.landGrant + PHASE_MS.development) });
+  await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: within(PHASE_MS.development) });
   await dev.getByRole('button', { name: /, free\b/ }).first().waitFor({ timeout: 3_000 });
   // The map names each plot's owner by colour slot, counted from 1.
   const mine = dev.getByRole('button', { name: new RegExp(`owned by player ${(await headerSlot(phone, 'T-AC-1')) + 1}\\b`) });
@@ -239,9 +241,9 @@ async function checkOwnsAPlot(phone: Page): Promise<void> {
   }
 }
 
-/** Waits until the phone has moved past planning and the land grant. */
+/** Done with land: the phone presses Ready in the land grant and waits until it has moved past planning and the grant. */
 async function pastTheLandGrant(phone: Page): Promise<void> {
-  await phone.locator('[data-phase]:not([data-phase=planning]):not([data-phase=landGrant])').waitFor({ timeout: READY_MS + within(PHASE_MS.landGrant) });
+  await doneWithLand(phone);
 }
 
 /** Development: walk into the pub, which ends the human's turn. */
@@ -249,7 +251,7 @@ async function goToThePub(phone: Page): Promise<void> {
   await phone
     .locator('[data-phase=development]')
     .getByRole('button', { name: 'Go to the pub and end your turn' })
-    .click({ timeout: within(PHASE_MS.landGrant + PHASE_MS.development) });
+    .click({ timeout: within(PHASE_MS.development) });
 }
 
 /**

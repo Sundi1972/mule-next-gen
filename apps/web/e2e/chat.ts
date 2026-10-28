@@ -7,7 +7,7 @@
  */
 import { LOTS, WALK } from '@mule/engine';
 import type { Page } from 'playwright';
-import { PHASE_MS } from '../../server/src/mule-game.js';
+import { GRANT_PASS_MAX_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import { check, launch, PHONE, startServer, TV } from './harness';
 
 const LAPTOP = { width: 1440, height: 900 };
@@ -56,7 +56,8 @@ const REACH = {
   planning: within(0),
   // Planning has no clock: it ends on the presses below, when both phones are Ready.
   landGrant: within(PHASE_MS.planning ?? 0),
-  development: within(PHASE_MS.landGrant + LAND_AUCTION_MS),
+  // The land grant has no clock: one pass over the free plots at most.
+  development: within(GRANT_PASS_MAX_MS + LAND_AUCTION_MS),
   auction: within(PHASE_MS.development + PHASE_MS.production),
   walk: within(WALK.statusMs),
 };
@@ -301,7 +302,7 @@ async function burst(a: Page, b: Page, tag: string): Promise<void> {
 async function claimOne(p: Page): Promise<void> {
   const grant = p.locator('[data-phase=landGrant]');
   const claim = grant.getByRole('button', { name: /CLAIM/ });
-  const deadline = Date.now() + within(PHASE_MS.landGrant);
+  const deadline = Date.now() + within(GRANT_PASS_MAX_MS);
   while ((await grant.count()) > 0 && Date.now() < deadline) {
     try {
       await claim.click({ timeout: 1_000 });

@@ -183,26 +183,54 @@ export function landDecision(obs: GameState, mind: Mind): Shortlist<LandPlan> {
 }
 
 /**
- * Whether the hands should press for the lit plot: it must clear a share of
- * the best plot still free in the plan's ranking (lower after the first
- * sweep, so the seat doesn't end the month empty-handed), and in the first
- * two sweeps be among its top open plots: the grant lights plots in reading
- * order, and the first that will do would always be near the top. Never while the
- * seat already holds a month's worth of idle plots it can't pay to develop:
- * hoarded land earns nothing and every idle plot counts as Smithore demand.
+ * Whether the hands should press for the lit plot. The grant is one pass, so the seat weighs the lit plot only against
+ * the free plots still ahead of the light (`ahead`: the pass's order from the lit plot on): plots it has gone by never
+ * come back. It wants the lit plot when that ranks within its claims left plus STRATEGIST.grantSpare among them by the
+ * plan's utility, and its utility is at least STRATEGIST.grantShare of the best of theirs; a plot it values at nothing
+ * it never wants. Early in the pass better plots lie ahead and it waits;
+ * late, few do and it takes the best that is left. Never while the seat already holds a month's worth of idle plots
+ * it can't pay to develop: hoarded land earns nothing and every idle plot counts as Smithore demand.
  */
-export function wantsPlot(plan: LandPlan, obs: GameState, index: number, sweep: number, mind: Mind): boolean {
+export function wantsPlot(plan: LandPlan, obs: GameState, index: number, ahead: readonly number[], mind: Mind): boolean {
   const idle = obs.tiles.filter((t) => t.owner === mind.me && !t.outfit).length;
   if (idle >= mind.level.mulesPerMonth && me(obs, mind).money < (idle + 1) * mulePriceFor(obs, mind.me)) return false;
-  const free = new Set(obs.tiles.map((t, i) => (t.owner === null && t.terrain !== 'store' ? i : -1)).filter((i) => i >= 0));
-  const open = plan.ranking.filter((s) => free.has(s.index));
-  const rank = open.findIndex((s) => s.index === index);
-  const lit = open[rank];
-  if (!lit) return sweep > 1;
-  if (sweep > 1) return true;
-  if (rank >= (GAME.claimsPerGrant + STRATEGIST.grantSpare) * (sweep + 1)) return false;
-  const share = sweep === 0 ? STRATEGIST.grantShare : STRATEGIST.grantLaterShare;
-  return lit.utility >= (open[0]?.utility ?? 0) * share;
+  const coming = new Set(ahead.filter((i) => obs.tiles[i]?.owner === null && obs.tiles[i]?.terrain !== 'store'));
+  const rivals = plan.ranking.filter((s) => coming.has(s.index));
+  const rank = rivals.findIndex((s) => s.index === index);
+  const lit = rivals[rank];
+  if (!lit || lit.value <= 0) return false;
+  const claimsLeft = GAME.claimsPerGrant - me(obs, mind).claimsThisGrant;
+  if (rank >= claimsLeft + STRATEGIST.grantSpare) return false;
+  return lit.utility >= (rivals[0]?.utility ?? 0) * STRATEGIST.grantShare;
+}
+
+/**
+ * Whether the seat would press for any plot still ahead of the light (`ahead`: the pass's order from the lit plot on),
+ * each weighed as wantsPlot weighs it when lit, against the plots ahead of it then. False means it is done with land.
+ * It walks the pass backwards, keeping the best few ranks seen, so one call is linear in the plots ahead.
+ */
+export function wantsAnyAhead(plan: LandPlan, obs: GameState, ahead: readonly number[], mind: Mind): boolean {
+  const idle = obs.tiles.filter((t) => t.owner === mind.me && !t.outfit).length;
+  if (idle >= mind.level.mulesPerMonth && me(obs, mind).money < (idle + 1) * mulePriceFor(obs, mind.me)) return false;
+  const room = GAME.claimsPerGrant - me(obs, mind).claimsThisGrant + STRATEGIST.grantSpare;
+  if (room <= 0) return false;
+  const rankOf = new Map(plan.ranking.map((s, rank) => [s.index, rank]));
+  // The ranks, best first, of the `room` best plots later in the pass than the one being weighed.
+  const later: number[] = [];
+  for (let k = ahead.length - 1; k >= 0; k--) {
+    const index = ahead[k]!;
+    const tile = obs.tiles[index];
+    const rank = rankOf.get(index);
+    if (tile?.owner !== null || tile.terrain === 'store' || rank === undefined) continue;
+    const lit = plan.ranking[rank]!;
+    const withinRoom = later.length < room || later[room - 1]! > rank;
+    const best = plan.ranking[Math.min(rank, later[0] ?? rank)]!;
+    if (lit.value > 0 && withinRoom && lit.utility >= best.utility * STRATEGIST.grantShare) return true;
+    const at = later.findIndex((r) => r > rank);
+    later.splice(at === -1 ? later.length : at, 0, rank);
+    later.length = Math.min(later.length, room);
+  }
+  return false;
 }
 
 // --- Values for lot bids ----------------------------------------------------
