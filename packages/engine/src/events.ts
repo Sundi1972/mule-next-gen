@@ -70,15 +70,18 @@ export function eventOutput(key: EventKey, before: number, first: boolean): numb
   return Math.max(0, after);
 }
 
-/** What one event would hit this month, in the order it reaches the plots; null when it would hit nothing. */
-export function buildEvent(state: GameState, key: EventKey, rng: Rng): MonthEvent | null {
+/**
+ * What one event would hit this month, in the order it reaches the plots; null when it would hit nothing. A personal
+ * event starts on `player`'s plots when one is given (null when they have none), otherwise on anyone's.
+ */
+export function buildEvent(state: GameState, key: EventKey, rng: Rng, player?: string): MonthEvent | null {
   const shape = SHAPE[key];
   const working = state.tiles.filter((t) => t.owner && t.outfit && (RAW_GOODS as readonly string[]).includes(t.outfit));
   const food = working.filter((t) => t.outfit === 'food');
   let hit: Tile[] = [];
   let origin: { x: number; y: number };
   let direction: Direction | undefined;
-  let player: string | undefined;
+  let owner: string | undefined;
 
   const goods = COLONY_GOODS[key];
   if (goods) {
@@ -101,10 +104,11 @@ export function buildEvent(state: GameState, key: EventKey, rng: Rng): MonthEven
     origin = { x: source.x, y: source.y };
     hit = reach(source).sort((a, b) => steps(a, source) - steps(b, source));
   } else {
-    const start = pickStart(state, key === 'bumperHarvest' ? working : food, shape.sign, rng);
-    if (!start) return null;
+    const candidates = (key === 'bumperHarvest' ? working : food).filter((t) => player === undefined || t.owner === player);
+    if (candidates.length === 0) return null;
+    const start = rng.pick(candidates);
     origin = { x: start.x, y: start.y };
-    player = start.owner!;
+    owner = start.owner!;
     hit =
       key === 'pestSwarm'
         ? spread(state, start, (t) => t.outfit === 'food' && t.owner !== null, EVENTS.pestSwarm.maxPlots)
@@ -123,25 +127,11 @@ export function buildEvent(state: GameState, key: EventKey, rng: Rng): MonthEven
     origin,
     ...(direction ? { direction } : {}),
     plots: hit.map((t, order) => ({ index: index.get(t)!, order, good: t.outfit as Good, delta: 0 })),
-    ...(player ? { player } : {}),
+    ...(owner ? { player: owner } : {}),
     sign: shape.sign,
     when: 'afterProduction',
     phase: 'production',
   };
-}
-
-/**
- * Where a personal event starts: with chance EVENTS.targetBias on the
- * leader's land for a bad event or the trailing player's for a good one,
- * otherwise anywhere it could. Wealth here is money plus land at its score.
- */
-function pickStart(state: GameState, candidates: Tile[], sign: MonthEvent['sign'], rng: Rng): Tile | null {
-  if (candidates.length === 0) return null;
-  const wealth = (id: string) => state.players.find((p) => p.id === id)!.money + GAME.plotScore * state.tiles.filter((t) => t.owner === id).length;
-  const ranked = state.players.map((p) => p.id);
-  const pick = sign === 'bad' ? ranked.reduce((a, b) => (wealth(b) > wealth(a) ? b : a)) : ranked.reduce((a, b) => (wealth(b) < wealth(a) ? b : a));
-  const own = candidates.filter((t) => t.owner === pick);
-  return rng.chance(EVENTS.targetBias) && own.length > 0 ? rng.pick(own) : rng.pick(candidates);
 }
 
 /** The start plot, then neighbours that `joins`, breadth first, up to `max` plots. */
@@ -246,8 +236,8 @@ export function rollPlayerEvent(state: GameState, key: PlayerEventKey, phase: Ph
 
 /**
  * The events that fire at the start of a phase, in order: each colony row once in table order, then each player's
- * rows in seat order. A row fires when its seeded roll hits and its event finds a plot to hit; never on a what-if
- * copy or before EVENTS.firstMonth.
+ * rows in seat order. A row fires when its seeded roll hits and its event finds a plot to hit, a player row on that
+ * player's own plots; never on a what-if copy or before EVENTS.firstMonth.
  */
 export function rollPhase(state: GameState, phase: Phase): MonthEvent[] {
   if (state.whatIf || state.month < EVENTS.firstMonth) return [];
@@ -259,7 +249,7 @@ export function rollPhase(state: GameState, phase: Phase): MonthEvent[] {
     if (chance <= 0) continue;
     // Its own dice for the roll and the event's shape: a shared rng would let retuning one row move every later one.
     const rng = createRng(seedOf(state.seed, state.month, key, phase, ...(player === undefined ? [] : [player])));
-    const event = rng.chance(chance) ? buildEvent(state, key, rng) : null;
+    const event = rng.chance(chance) ? buildEvent(state, key, rng, player) : null;
     if (event) fired.push(event);
   }
   return fired;

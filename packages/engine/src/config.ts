@@ -853,8 +853,6 @@ export const EVENTS = {
   chance: 0.5,
   /** No event before this month: there is nothing developed to hit. */
   firstMonth: 2,
-  /** Chance a bad personal event starts on the leader's land, a good one on the trailing player's; otherwise anyone's. */
-  targetBias: 0.5,
   weights: {
     dustStorm: 1,
     drought: 1,
