@@ -101,6 +101,14 @@ function contestedOffices(election: Shared<Election>): Office[] {
   return POLITICS.offices.filter((o) => contested(election, o));
 }
 
+/** Whether this month's election will hold a ballot: in announce, whether any office has two or more candidates so far. */
+export function ballotAhead(state: GameState): boolean {
+  const election = currentElection(state);
+  if (!election || election.stage === 'ceremony' || election.stage === 'over') return false;
+  if (election.stage === 'ballot') return contestedOffices(election).length > 0;
+  return POLITICS.offices.some((o) => (state.politics!.candidates[o]?.length ?? 0) > 1);
+}
+
 /**
  * True from the ballot until the result, and in an election month's announce after month 1: the field closes as the
  * month opens, but month 1 has no planning before it, so its announce is the time to run.
