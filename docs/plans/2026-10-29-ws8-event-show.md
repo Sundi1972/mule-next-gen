@@ -35,7 +35,7 @@ one overlay on the TV and one on the phone.
 
 **Inputs:**
 - Spec: `docs/specs/2026-10-29-ws8-event-show.md`
-- Binding scaffold: `design/mocks/ws8-events/` at de9d6b7
+- Binding scaffold: `design/mocks/ws8-events/` at de9d6b7, phone fixes at 522ebac4 (spec AM-1)
 - Sections present and consumed: §0, §0.1, §0.2, §1 (C1-C12), §2 (RULE-1..4), §3, §4, §6, §7, §9
 - Sections declared N/A by the spec, with its reason: §5 Delivery ("Code-only; no existing state to reach")
 - N/A claims I checked: §5: no persisted state reads EVENT_SHOW or the view; games re-read lengths at phase entry. True.
@@ -188,7 +188,7 @@ Standing authority line, in every handoff:
 
 - [ ] **Step 1: Write the failing tests `B-AC-2: alone, the phone plays each event and a tap skips to the result` and `T-AC-5: RULE-3's four rows`**
   Altitude: promise — rendered phone Production under `PhoneGameProvider` with `table.boards` 0 and 1, reduced motion
-  on and off (matchMedia stub), a real click on `data-testid="skip"`. Negative: boards 1 → no map show, card only.
+  on and off (matchMedia stub), a real click on `data-testid="skip"`. Both landscape sizes, 844×390 and 667×375 (spec AM-1). Negative: boards 1 → no map show, card only.
 - [ ] **Step 2: Run** → FAIL
 - [ ] **Step 3: Implement C7 per spec §1 C7 and §2 RULE-3.** Mechanism: in_place. Pin: `data-testid="harvest"` unchanged.
 - [ ] **Step 4: Run** `pnpm --filter @mule/web exec vitest run` → PASS

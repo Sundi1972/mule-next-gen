@@ -1,7 +1,7 @@
 # WS8 · The event show in the game
 
 Spec class **Programme** (Heiko, 29 Oct, "Yes, as recommended"). Goal gate passed 29 Oct (PM). Lane WS8, branch
-`ws8-events`. Binding scaffold: the Living weather gallery, `design/mocks/ws8-events/` at **de9d6b7** (Heiko approved it
+`ws8-events`. Binding scaffold: the Living weather gallery, `design/mocks/ws8-events/` at **de9d6b7**, phone fixes at **522ebac4** (AM-1) (Heiko approved it
 as the design to build, "Yes, all eight", 29 Oct). Read against trunk `feat/strategist` b3774fa (merged into
 `ws8-events` at bb15a2b) and WS1's event contract on `ws1-events-roller` 605749d.
 
@@ -212,15 +212,16 @@ today        phone Production shows EventCard(events[0]) and one "what it did to
 tomorrow     MUST: with a board connected (TableView.boards > 0), the light card for each event as it plays, with a
              buzz and what it did to you; MUST: with none (boards === 0), the phone plays each event on its own map
              (shorter, the gallery's solo beat), a tap skips to the result, reduced motion honoured; MUST: the
-             harvest strip unchanged
+             harvest strip unchanged; MUST: landscape at 844×390 and at 667×375, inside WS6's landscape phone
+             shell: the show fills the shell's map box, the cards its rail (AM-1)
 logic        → §2 RULE-3
 seam         phone/Production.tsx (WS6's file, named edit); the table view from phone/game.tsx::usePhoneGame
 senior       junior would: invent a "solo mode" flag · senior does: reads the count WS4's lobby already reads
              (apps/web/src/phone/Lobby.tsx, `view.boards > 0`), as the PM ruled
 mechanism    in_place
 call sites   Production ← phone/PhoneApp.tsx (production branch)
-ux           design/mocks/ws8-events · #event-<key>/phone (phone only), #event-<key> (Lena's phone with a TV) ·
-             GRAFT TARGET: phone/Production.tsx
+ux           design/mocks/ws8-events at 522ebac4 (landscape, AM-1) · #event-<key>/phone (phone only), #event-<key>
+             (Lena's phone with a TV) · sizes 844×390 and 667×375 · GRAFT TARGET: phone/Production.tsx
 pin          the harvest list (data-testid="harvest") unchanged
 depends_on   C5
 ```
@@ -418,7 +419,7 @@ Code-only; no existing state to reach. Games in progress pick up the new lengths
 | T-AC-2 (serves B-AC-1) | The production view lists every event of the month in fired order with phase, weight and playMs | `apps/server/test/events-view.test.ts` on `MuleGame`'s view | a month with no events lists none | C3 |
 | T-AC-3 (serves B-AC-1) | RULE-2: a plot's units add every event's delta in order, never below 0; landed/harvest match | ProductionMap's exported `finalUnits`/`landed` and the rendered bars | a plot no event reached keeps `made` | C5 |
 | T-AC-4 (serves B-AC-1) | At a time inside event i's segment the map shows event i (`data-event`), and the goods fly only after the last | rendered ProductionMap | quiet month: timeline as today | C5 |
-| T-AC-5 (serves B-AC-2) | RULE-3's four rows | rendered phone Production (boards 0/1, reduced on/off, a tap) | — | C7 |
+| T-AC-5 (serves B-AC-2) | RULE-3's four rows, at 844×390 and at 667×375 (AM-1) | rendered phone Production (boards 0/1, reduced on/off, a tap) | — | C7 |
 | T-AC-6 (serves B-AC-1, B-AC-2) | The screens keep the gallery's data-testids for the views they graft (render gate against the mock) | `review-loop/render-gate.mjs`, mock vs build | — | C4, C6, C7 |
 | T-AC-7 (serves B-AC-3) | RULE-4 row 3: an AI hand's press during the auction's show is not applied; a human's bid gets RuleError | `MuleGame` with a fake context | after the hold, the same press applies | C9 |
 | T-AC-8 (serves B-AC-3) | RULE-4: five events hold only `capMs`; planning is not held | `MuleGame` clocks | — | C9 |
@@ -432,8 +433,10 @@ Invariant (every test): a screen never shows a figure the month report does not 
 - **R-1 · WS1's Task 6 has not landed:** today's report holds one production event. Mitigation: PR-1 builds against
   fixture views (two and five events) and grafts onto the real report when WS1 says Task 6 is in; T-AC-1/2 re-run then.
 - **R-2 · WS6's #139 touches TvProduction:** Mitigation: sync with trunk after #139 merges, before C6's edit (PM).
-- **R-3 · The stories at phone size (844×390):** the gallery's phone map is 540×324 inside a frame. Mitigation: T-AC-6's
-  render gate, and screenshots at 844×390 reviewed by WS8 before the PR.
+- **R-3 · The stories at phone size (landscape 844×390 and 667×375, AM-1):** at 667×375 a fixed 268 px rail leaves the
+  map about 370 px wide. Checked in the gallery at both sizes (AM-1): readable, two collisions fixed at 522ebac4. The
+  rail's width is WS6's shell's. Mitigation: the show sizes to the map box it is given, never a fixed width; T-AC-5 and
+  T-AC-6 run at both sizes; screenshots at both reviewed by WS8 before the PR.
 - **R-4 · Frame cost on the TV:** many layers redraw each frame. Mitigation: reuse `frameMs`/`useServerNow` as the
   production show does; the painted map renders once (`useMemo`, as ProductionMap does).
 - **R-5 · EventKey has 10 keys (11 with cavern collapse), the gallery 35:** Mitigation: the module is keyed by
@@ -445,7 +448,25 @@ Invariant (every test): a screen never shows a figure the month report does not 
 
 ## §8 · Amendments `[review-only]`
 
-(none yet)
+```
+AM-1 · 2026-10-28 · lead · before PR-1 (Heiko's ruling via the PM: the phone is landscape for the whole game)
+
+target    §1 C7 (tomorrow, ux), §1 C10's phone part, §2 RULE-3, §6 T-AC-5, §7 R-3
+said      phone sizes unstated, except R-3's 844×390
+did       the phone parts are landscape: 844×390 (reference) and 667×375 (small). C7 and C10's phone overlay render
+          inside WS6's landscape phone shell: the show fills the shell's map box, the light card and the result its
+          rail; nothing in the show has a fixed width. Checked the gallery at both sizes (frame pinned to the
+          viewport, every phone-only page scrubbed): the light card fits both (#together-tg-auction); the phone-alone
+          show fits 844×390; at 667×375 the skip hint covered the story panels, and the store fire's storage panel
+          stayed under the card of losses (at both sizes). Fixed in the gallery at 522ebac4: the hint moves to the
+          rail's foot (the whole map stays the tap target, data-testid="skip"; the hint is "skip-hint"), and story
+          panels leave at their story's reveal. 43 phone-only pages, 0 console errors at 667×375.
+because   Heiko's ruling (landscape); G-2: a player alone on a phone sees every event on the phone itself, on the
+          phones the game runs on
+goal      G-2 (unchanged)
+folded    C7 tomorrow + ux (scaffold 522ebac4) · R-3 rewritten · T-AC-5 runs at both sizes · the shell's frame is
+          coordinated with WS6 (its rail width sets the map box)
+```
 
 ## §9 · Ownership Boundaries `[handoff]`
 
