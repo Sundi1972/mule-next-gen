@@ -98,6 +98,8 @@ export interface MyView {
   droneOrder: { x: number; y: number }[];
   /** This player's own side of the election; null when the game plays without politics. */
   politics: MyPoliticsView | null;
+  /** True once this player has installed a MULE in this development turn, and until their next one starts. */
+  installedThisTurn: boolean;
 }
 
 /** Only on the owner's phone: their candidacy, their secret ballot, and whether they may run now. */
