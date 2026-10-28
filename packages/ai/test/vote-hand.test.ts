@@ -372,8 +372,8 @@ describe("RULE-8, RULE-10: an AI Governor candidate's promise (C12)", () => {
     const sent = announce(state, mindOf('ai2', persona), drawsOf([0]));
 
     expect(sent).toEqual([{ type: 'run', office: 'governor', promise: want }, { type: 'done', done: true }]);
-    expect(electionOf(state).candidates.governor).toEqual(['ai2']);
-    expect(electionOf(state).promises).toEqual({ ai2: want });
+    expect(state.politics!.candidates.governor).toEqual(['ai2']);
+    expect(state.politics!.promises).toEqual({ ai2: want });
   });
 
   it('T-AC-9: running for Sheriff, a seat makes no promise', () => {
@@ -383,8 +383,8 @@ describe("RULE-8, RULE-10: an AI Governor candidate's promise (C12)", () => {
     const sent = announce(state, mindOf('ai2', 'saboteur'), drawsOf([runGovernor.saboteur, 0]));
 
     expect(sent).toEqual([{ type: 'run', office: 'sheriff' }, { type: 'done', done: true }]);
-    expect(electionOf(state).candidates.sheriff).toEqual(['ai2']);
-    expect(electionOf(state).promises).toEqual({});
+    expect(state.politics!.candidates.sheriff).toEqual(['ai2']);
+    expect(state.politics!.promises).toEqual({});
   });
 
   it('T-AC-9: on a seeded Classic table every Governor candidate holds a promise and no run is refused', () => {
@@ -534,7 +534,9 @@ function electionWithHumans(hand: Pick<VoteHand, 'tick'>, pick: string): { sent:
 const bandwagon: Pick<VoteHand, 'tick'> = {
   tick(state, _dt, act) {
     const election = state.politics?.election;
-    if (election?.stage !== 'ballot' || election.done.includes('ai0')) return;
+    if (!election || election.done.includes('ai0')) return;
+    if (election.stage === 'announce') return void act({ type: 'done', done: true });
+    if (election.stage !== 'ballot') return;
     const votes = Object.values(election.ballots).map((b) => b.governor);
     const leader = election.candidates.governor.reduce((a, b) => (votes.filter((v) => v === b).length > votes.filter((v) => v === a).length ? b : a));
     act({ type: 'vote', office: 'governor', candidate: leader });
