@@ -10,6 +10,7 @@ import {
   eventScript,
   eventSkipTo,
   eventStageAt,
+  flyAt,
   frameMs,
   GOOD_NAME,
   GoodIcon,
@@ -88,7 +89,7 @@ export function Production({ production }: { production: ProductionView }) {
                 </span>
                 <span data-num className="font-mono text-sm font-bold">
                   +{n}
-                  {t >= SHOW.flyStart && (arrived[g] ?? 0) < n && <span className="font-normal text-ink-3"> · flying home</span>}
+                  {t >= flyAt(0, production) && (arrived[g] ?? 0) < n && <span className="font-normal text-ink-3"> · flying home</span>}
                 </span>
               </li>
             ))}
