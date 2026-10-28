@@ -1,9 +1,9 @@
-import { AI_HANDS, AI_LEVELS, AI_PERSONAS, createRng, GAME, observe, type AiLevelId, type AiPersonaId, type DevPlace, type GameState } from '@mule/engine';
+import { AI_HANDS, AI_LEVELS, AI_PERSONAS, createRng, GAME, observe, type AiLevelId, type AiPersonaId, type GameState } from '@mule/engine';
 import type { Act } from './actions.js';
 import { Brain, type DecisionRecord, type Pending } from './brain.js';
 import type { Decider, TableTalk } from './decider.js';
 import { AuctionHand, type AuctionDebug } from './hands/auction.js';
-import { DevelopHand } from './hands/develop.js';
+import { DevelopHand, type DevWalking } from './hands/develop.js';
 import { PERSONAS } from './personas.js';
 import { landDecision, wantsPlot, type LandPlan } from './strategist.js';
 import { situation } from './summary.js';
@@ -99,9 +99,13 @@ export class AiSeat {
     return this.rng.int(...this.mind.level.reactMs) + this.rng.int(...AI_HANDS.grant.choiceMs);
   }
 
-  /** `at` is where the seat stands, when the game walks; without it the seat develops as it does where nobody walks. */
-  developTick(state: GameState, dt: number, secondsLeft: number, act: Act, at?: DevPlace): void {
-    this.develop.tick(state, dt, secondsLeft, act, at);
+  /**
+   * One development tick: `dt` in game ms, `secondsLeft` the game seconds left on the one development clock. Where
+   * the game walks, `walk` says where the colonist stands (or is walking to) and whether it is still walking or
+   * assaying; the referee refuses taps meanwhile, so the hands wait. Without it the seat develops as where nobody walks.
+   */
+  developTick(state: GameState, dt: number, secondsLeft: number, act: Act, walk?: DevWalking): void {
+    this.develop.tick(state, dt, secondsLeft, act, walk);
   }
 
   auctionTick(state: GameState, dt: number, act: Act): void {

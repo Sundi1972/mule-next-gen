@@ -20,6 +20,12 @@ import { situation } from '../summary.js';
  * seat can't walk out before its time runs out is not bought.
  */
 
+/** Where the colonist stands (or is walking to), and whether it is still walking or assaying, when the game walks. */
+export interface DevWalking {
+  at: DevPlace;
+  busy: boolean;
+}
+
 /** The middle of a ms range, in seconds. */
 const midSeconds = ([lo, hi]: [number, number]) => (lo + hi) / 2 / 1_000; // literal-ok: midpoint of a range, ms to s
 
@@ -60,11 +66,14 @@ export class DevelopHand {
     return this.queue.map((s) => s.label);
   }
 
-  /** Advances by dt ms. `secondsLeft` is the seat's development time left; `at` is where it stands, if the game walks. */
-  tick(state: GameState, dt: number, secondsLeft: number, act: Act, at?: DevPlace): void {
+  /** Advances by dt ms. `secondsLeft` is the development time left; `walk` says where it stands, if the game walks. */
+  tick(state: GameState, dt: number, secondsLeft: number, act: Act, walk?: DevWalking): void {
     const mind = this.brain.mind;
     if (state.phase !== 'development') return;
     if (state.month !== this.month) this.reset(state.month);
+    // While the colonist walks or assays nothing else happens; the next tap's time starts when it is done.
+    if (walk?.busy) return;
+    const at = walk?.at;
     this.at = at;
     const me = state.players.find((p) => p.id === mind.me)!;
     if (me.doneDeveloping || this.stage === 'done') return;

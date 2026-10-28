@@ -7,7 +7,7 @@
  *   pnpm sim -- --games 100 --players 4 --level trader
  *   pnpm sim -- --persona cautious     (every seat the same persona; default: they rotate)
  */
-import { AI_LEVELS, AI_PERSONAS, colonyFailed, GOOD_CONFIG, GOODS, score, type AiLevelId, type AiPersonaId } from '@mule/engine';
+import { AI_LEVELS, AI_PERSONAS, colonyFailed, GOOD_CONFIG, GOODS, score, type AiLevelId, type AiPersonaId, type GameState } from '@mule/engine';
 import { simSeats } from './lineup.js';
 import { playGame } from './play.js';
 
@@ -22,6 +22,8 @@ function argText(name: string): string | null {
 }
 
 const pct = (n: number, of: number) => `${((n / Math.max(1, of)) * 100).toFixed(0)}%`;
+/** A player hungry this many months in a row is in the hunger spiral the report counts (Heiko's question). */
+const SPIRAL_MONTHS = 3; // literal-ok: the report's definition of the spiral, not a game rule
 const quantile = (values: number[], q: number) => {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] ?? 0;
@@ -38,6 +40,8 @@ function main() {
   // `--walking off` plays the game as it was before walking cost development time.
   const walking = argText('walking') !== 'off';
   let mulesLost = 0;
+  let playerGames = 0;
+  let spirals = 0;
   const byPersona: Record<string, number> = {};
   const prices = Object.fromEntries(GOODS.map((g) => [g, [] as number[]]));
   const mulePrices: number[] = [];
@@ -60,8 +64,21 @@ function main() {
 
   for (let seed = first; seed < first + games; seed++) {
     const specs = simSeats(players, level, seed, persona);
-    const { state, broke, auction: a, lots: l, mulesLost: lost } = playGame(seed, specs, { walking });
+    // Who starts each development hungry, for the spiral: a player hungry SPIRAL_MONTHS months running.
+    const hungryRun = new Map<string, { run: number; spiral: boolean }>();
+    const onPhase = (s: GameState) => {
+      if (s.phase !== 'development') return;
+      for (const p of s.players) {
+        const h = hungryRun.get(p.id) ?? { run: 0, spiral: false };
+        h.run = p.hungry ? h.run + 1 : 0;
+        h.spiral ||= h.run >= SPIRAL_MONTHS;
+        hungryRun.set(p.id, h);
+      }
+    };
+    const { state, broke, auction: a, lots: l, mulesLost: lost } = playGame(seed, specs, { walking, onPhase });
     mulesLost += lost;
+    playerGames += state.players.length;
+    spirals += [...hungryRun.values()].filter((h) => h.spiral).length;
     for (const k of ['between', 'store', 'ship', 'ms'] as const) auction[k] += a[k];
     for (const k of Object.keys(lots) as (keyof typeof lots)[]) lots[k] += l[k];
     months += state.history.length;
@@ -105,6 +122,7 @@ function main() {
   console.log(`${check(collapsed / games <= 0.1)} Ended in Collapse: ${pct(collapsed, games)} (target 10% or less)`);
   console.log(`     Store capital: lowest ${minCapital} (no check: the store never runs out of money)`);
   console.log(`     MULEs lost to the clock: ${(mulesLost / games).toFixed(1)} a game (walking ${walking ? 'on' : 'off'}; no check)`);
+  console.log(`     Players hungry ${SPIRAL_MONTHS} or more months running: ${pct(spirals, playerGames)} (no check)`);
   console.log(`     Wins by species:${Object.entries(wins).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
   console.log(`     Wins by persona: ${Object.entries(byPersona).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
   console.log(
