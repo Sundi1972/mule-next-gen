@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { Room, RoomRegistry, TableError, type Connection, type Game, type SeatInfo, type ServerEnvelope } from '../src/index.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Room, RoomRegistry, TableError, type Connection, type Game, type GameContext, type SeatInfo, type ServerEnvelope } from '../src/index.js';
 
 type Intent = { secret: string };
 type View = { mySecret: string | null; secretsTold: number };
@@ -19,14 +19,14 @@ function secretsGame(): Game<Intent, View> {
   };
 }
 
-class Screen implements Connection<View> {
-  readonly inbox: ServerEnvelope<View>[] = [];
+class Screen<V = View> implements Connection<V> {
+  readonly inbox: ServerEnvelope<V>[] = [];
   readonly from = { seatId: null as string | null };
-  send(msg: ServerEnvelope<View>) {
+  send(msg: ServerEnvelope<V>) {
     this.inbox.push(msg);
   }
-  last<T extends ServerEnvelope<View>['t']>(t: T) {
-    return this.inbox.filter((m) => m.t === t).at(-1) as Extract<ServerEnvelope<View>, { t: T }> | undefined;
+  last<T extends ServerEnvelope<V>['t']>(t: T) {
+    return this.inbox.filter((m) => m.t === t).at(-1) as Extract<ServerEnvelope<V>, { t: T }> | undefined;
   }
 }
 
@@ -35,8 +35,8 @@ let tokens = 0;
 const newRoom = () =>
   new Room<Intent, View>({ code: 'KRTX', createGame: secretsGame, aiNames: ['Brix'], emotes: ['Nice!'], newToken: () => `t${++tokens}` });
 
-function join(room: Room<Intent, View>, name: string, seatToken?: string): Screen {
-  const screen = new Screen();
+function join<V = View>(room: Room<Intent, V>, name: string, seatToken?: string): Screen<V> {
+  const screen = new Screen<V>();
   room.receive(screen, screen.from, { t: 'join', code: room.code, name, ...(seatToken ? { seatToken } : {}) });
   return screen;
 }
@@ -247,8 +247,8 @@ const close = (room: Room<Intent, View>, screen: Screen) => room.receive(screen,
 const leave = (room: Room<Intent, View>, screen: Screen) => room.receive(screen, screen.from, { t: 'leave' });
 const seatIds = (room: Room<Intent, View>) => room.viewFor(null).seats.map((s) => s.id);
 
-function watch(room: Room<Intent, View>): Screen {
-  const board = new Screen();
+function watch<V = View>(room: Room<Intent, V>): Screen<V> {
+  const board = new Screen<V>();
   room.receive(board, board.from, { t: 'board', code: room.code });
   return board;
 }
@@ -762,3 +762,157 @@ function mulberry32(seed: number): () => number {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+type ClockView = { phase: string; fired: string[]; moves: string[] };
+const PLANNING_MS = 4_500;
+
+/**
+ * A started room whose game runs on the room's clock: planning ends PLANNING_MS after Start, and `at` schedules a
+ * named callback that logs its name in every screen's view. A callback named 'throws' throws, as an engine bug would.
+ */
+function clockRoom() {
+  const fired: string[] = [];
+  const moves: string[] = [];
+  const errors: unknown[] = [];
+  let phase = 'planning';
+  let closes = 0;
+  let ctx!: GameContext;
+  const room = new Room<Intent, ClockView>({
+    code: 'KRTX',
+    createGame: (c) => {
+      ctx = c;
+      return {
+        start: () =>
+          void ctx.schedule(PLANNING_MS, () => {
+            phase = 'development';
+            ctx.changed();
+          }),
+        handle: (_seatId, intent) => void moves.push(intent.secret),
+        viewFor: () => ({ phase, fired: [...fired], moves: [...moves] }),
+      };
+    },
+    newToken: () => `t${++tokens}`,
+    onError: (err) => void errors.push(err),
+    onClose: () => void closes++,
+  });
+  const at = (ms: number, name: string, then: () => void = () => {}) =>
+    ctx.schedule(ms, () => {
+      if (name === 'throws') throw new Error('tick boom');
+      fired.push(name);
+      then();
+      ctx.changed();
+    });
+  const phone = join(room, 'Heiko');
+  join(room, 'Mia');
+  const tv = watch(room);
+  room.receive(phone, phone.from, { t: 'start' });
+  return { room, phone, tv, at, fired, errors, closes: () => closes };
+}
+
+const seen = (screen: Screen<ClockView>) => screen.last('view')?.view.game;
+
+describe('Room: a held room runs no game callback until release (FM-3)', () => {
+  let clock = 0;
+  /** Moves the fake clock to `ms` after the test began, running every timer due on the way. */
+  const until = async (ms: number) => {
+    await vi.advanceTimersByTimeAsync(ms - clock);
+    clock = ms;
+  };
+  beforeEach(() => {
+    vi.useFakeTimers();
+    clock = 0;
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('FM-3: planning that comes due while the room is held ends only at release, and every screen hears it then', async () => {
+    const { room, phone, tv } = clockRoom();
+    await until(1_000);
+    room.hold();
+
+    await until(11_000);
+    for (const screen of [phone, tv]) expect(seen(screen)?.phase).toBe('planning');
+
+    room.release();
+    await until(11_000);
+    for (const screen of [phone, tv]) expect(seen(screen)?.phase).toBe('development');
+  });
+
+  it('FM-3: callbacks that come due while held run once at release, in the order they came due; one scheduled while held and due after release runs at its own time', async () => {
+    const { room, tv, at } = clockRoom();
+    at(2_500, 'due 2500');
+    at(2_000, 'due 2000');
+    await until(1_000);
+    room.hold();
+    at(2_000, 'due 3000');
+    at(5_000, 'due 6000');
+    await until(2_200);
+    room.hold();
+    await until(4_000);
+    expect(seen(tv)?.fired).toEqual([]);
+
+    room.release();
+    room.release();
+    await until(4_000);
+    expect(seen(tv)?.fired).toEqual(['due 2000', 'due 2500', 'due 3000']);
+
+    await until(5_999);
+    expect(seen(tv)?.fired).toEqual(['due 2000', 'due 2500', 'due 3000']);
+    await until(6_000);
+    expect(seen(tv)?.fired).toEqual(['due 2000', 'due 2500', 'due 3000', 'due 6000']);
+  });
+
+  it.each([
+    { row: 'by its cancel function', by: 'cancel', ran: ['due 2000'] },
+    { row: 'by a callback released before it', by: 'earlier callback', ran: ['due 2000'] },
+    { row: 'by the room being disposed, as the registry sweep does', by: 'dispose', ran: [] },
+  ])('FM-3: a queued callback dropped $row never runs', async ({ by, ran }) => {
+    const { room, at, fired } = clockRoom();
+    let cancelLater = () => {};
+    at(2_000, 'due 2000', () => {
+      if (by === 'earlier callback') cancelLater();
+    });
+    cancelLater = at(3_000, 'due 3000');
+    room.hold();
+    await until(4_000);
+
+    if (by === 'cancel') cancelLater();
+    if (by === 'dispose') room.dispose();
+    room.release();
+    await until(10_000);
+
+    expect(fired).toEqual(ran);
+  });
+
+  it('FM-3: while held, a move and a chat line are handled and every screen hears them', async () => {
+    const { room, phone, tv } = clockRoom();
+    room.hold();
+
+    room.receive(phone, phone.from, { t: 'intent', intent: { secret: 'claim 3,4' } });
+    room.receive(phone, phone.from, { t: 'chat', text: 'mine!' });
+    await until(0);
+
+    for (const screen of [phone, tv]) {
+      expect(seen(screen)?.moves).toEqual(['claim 3,4']);
+      expect(screen.last('chat')?.message.text).toBe('mine!');
+    }
+  });
+
+  it('FM-3: a released callback that throws ends the room through fail, as an unheld one does, and nothing queued after it runs', async () => {
+    const { room, phone, tv, at, fired, errors, closes } = clockRoom();
+    room.hold();
+    at(1_000, 'throws');
+    at(2_000, 'due 2000');
+    await until(3_000);
+    expect([...phone.inbox, ...tv.inbox].some((m) => m.t === 'removed')).toBe(false);
+
+    expect(() => room.release()).not.toThrow();
+    await until(3_000);
+
+    for (const screen of [phone, tv]) expect(screen.inbox.at(-1)).toStrictEqual({ t: 'removed', reason: 'error' });
+    expect(errors.map((err) => (err as Error).message)).toEqual(['tick boom']);
+    expect(closes()).toBe(1);
+    expect(fired).toEqual([]);
+  });
+});

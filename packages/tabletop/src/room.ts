@@ -405,6 +405,14 @@ export class Room<Intent, View> {
     };
   }
 
+  hold(): void {
+    throw new Error('NotImplemented: hold');
+  }
+
+  release(): void {
+    throw new Error('NotImplemented: release');
+  }
+
   dispose(): void {
     for (const t of this.timers) clearTimeout(t);
     this.timers.clear();
