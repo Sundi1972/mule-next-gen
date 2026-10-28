@@ -80,19 +80,38 @@ function mapMove(c: FloorColonist, dx: number, dy: number, state: GameState, cfg
   return { ...c, x, y };
 }
 
-/** In the hall: walls are wherever the plan has no floor; out through a door's outer side, onto the map. */
+/**
+ * In the hall: walls are wherever the plan has no floor; out through a door's outer side, onto the map. A step is
+ * walked in pieces each shorter than the plan's thinnest wall, so no speed carries a colonist over one.
+ */
 function hallMove(c: FloorColonist, dx: number, dy: number, state: GameState, cfg: FloorConfig): FloorColonist {
   const { hall } = cfg;
-  const at = placeAt(c, hall);
-  for (const door of HALL_DOORS) {
-    const frame = hall.doors[door];
-    const out = door === 'doorL' ? c.x + dx < frame.x0 : c.x + dx > frame.x1;
-    if (out && at === door) return leaveHall(c, door, state, cfg);
-  }
+  const pieces = Math.floor(Math.hypot(dx, dy) / thinnestWall(hall)) + 1;
+  const [px, py] = [dx / pieces, dy / pieces];
   let { x, y } = c;
-  if (isOpenFloor({ x: x + dx, y }, hall)) x += dx;
-  if (isOpenFloor({ x, y: y + dy }, hall)) y += dy;
+  for (let i = 0; i < pieces; i++) {
+    const at = placeAt({ x, y }, hall);
+    for (const door of HALL_DOORS) {
+      const frame = hall.doors[door];
+      const out = door === 'doorL' ? x + px < frame.x0 : x + px > frame.x1;
+      if (out && at === door) return leaveHall(c, door, state, cfg);
+    }
+    if (isOpenFloor({ x: x + px, y }, hall)) x += px;
+    if (isOpenFloor({ x, y: y + py }, hall)) y += py;
+  }
   return { ...c, x, y };
+}
+
+/** The narrowest gap between two of the plan's floor boxes that do not touch. */
+function thinnestWall(hall: HallPlan): number {
+  let thinnest = Infinity;
+  hall.floor.forEach((a, i) => {
+    for (const b of hall.floor.slice(i + 1)) {
+      const gap = Math.hypot(Math.max(0, b.x0 - a.x1, a.x0 - b.x1), Math.max(0, b.y0 - a.y1, a.y0 - b.y1));
+      if (gap > 0) thinnest = Math.min(thinnest, gap);
+    }
+  });
+  return thinnest;
 }
 
 /** In at a door, facing into the hall; a MULE on the lead comes through with its colonist. */

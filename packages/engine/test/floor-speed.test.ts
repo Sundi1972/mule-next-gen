@@ -70,8 +70,9 @@ describe('the dev floor: speed', () => {
       ['a lake, waded', 'zip', onTile(3, 0), { lakeMode: 'wade' }, 0.47, 2],
       ['mountains, impassable', 'zip', onTile(1, 0), { mountainsImpassable: true }, 0, 9],
       ['an AI Bramblet on plains, bots at 0.8', 'bot', onTile(0, 1), { botSpeed: 0.8 }, 1, 9],
-      ['in the hall: its width a second, × the Zipwing', 'zip', { space: 'hall', x: 8, y: 6 }, {}, 20, 9],
-      ['in the hall, leading a MULE', 'zip', { space: 'hall', x: 8, y: 6, ...leading }, {}, 18, 9],
+      // The hall: 8.893 units from the left door's spot to the corral's, in floorSeconds 3: 2.9643 units a second.
+      ['in the hall: door to corral in 3 s, × the Zipwing', 'zip', { space: 'hall', x: 8, y: 6 }, {}, 3.7054, 4],
+      ['in the hall, leading a MULE', 'zip', { space: 'hall', x: 8, y: 6, ...leading }, {}, 3.3349, 4],
     ];
     for (const [label, id, change, steer, expected, digits] of rows) {
       const c = placed(floor, id, change).colonists.find((x) => x.id === id)!;

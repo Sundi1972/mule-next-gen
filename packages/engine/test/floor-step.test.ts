@@ -7,6 +7,8 @@ import {
   floorConfig,
   HALL,
   pathTo,
+  placeAt,
+  speedOf,
   stepFloor,
   type DevFloor,
   type FloorInput,
@@ -54,14 +56,14 @@ type Script = Record<string, FloorInput>[];
 
 const go = (x: number, y: number): FloorInput => ({ x, y, act: false });
 
-/** 'd' from outside the store's right door: under the store and up into its wall, then into its side off the door. */
+/** 'd' from outside the store's right door: under the store and up into its wall, then into its side off the door and across the hall. */
 const D_LEGS: [number, FloorInput][] = [
   [20, go(0, 1)],
   [35, go(-1, 0)],
   [60, go(0, -1)],
   [80, go(1, 0)],
   [100, go(0, -1)],
-  [180, go(-1, 0)],
+  [240, go(-1, 0)],
 ];
 
 /**
@@ -146,6 +148,36 @@ describe('the dev floor: the step', () => {
     const nudged = play(SEED, changed).floors.at(-1)!;
     expect(nudged.colonists[0]!.x).toBeGreaterThan(first.floors.at(-1)!.colonists[0]!.x);
     expect(nudged).not.toEqual(first.floors.at(-1));
+  });
+
+  it("INV-walls: a colonist held for a second into an outfitter's side wall stays in that outfitter, at floorSeconds 3 and at 0.5", () => {
+    const state = game(SEED);
+    const room = HALL.rooms.water;
+    const y = (room.y0 + room.y1) / 2;
+    const escaped: string[] = [];
+    const short: string[] = [];
+    for (const floorSeconds of [3, 0.5]) {
+      const cfg = { ...floorConfig(HALL), steer: { ...DEV_STEER, floorSeconds } };
+      const built = buildFloor(state, cfg);
+      // From every point across the room's floor, held left and held right.
+      for (let x = room.x0; x <= room.x1; x += 0.05) {
+        const box = HALL.floor.find((r) => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1);
+        if (!box) continue;
+        for (const way of [-1, 1]) {
+          let floor: DevFloor = { ...built, colonists: built.colonists.map((c) => (c.id === 'a' ? { ...c, space: 'hall', x, y } : c)) };
+          const walk = (speedOf(floor.colonists[0]!, state, cfg) * DEV_STEER.tickMs) / 1_000;
+          for (let t = 0; t < 1_000 / DEV_STEER.tickMs; t++) {
+            floor = stepFloor(floor, state, { a: go(way, 0) }, DEV_STEER.tickMs, cfg);
+            const a = floor.colonists[0]!;
+            if (placeAt(a, HALL) !== 'water') escaped.push(`${floorSeconds} s, from ${x.toFixed(2)} held ${way}: at tick ${t} in ${placeAt(a, HALL)}`);
+          }
+          const wall = way < 0 ? box.x0 : box.x1;
+          if (Math.abs(floor.colonists[0]!.x - wall) >= walk) short.push(`${floorSeconds} s, from ${x.toFixed(2)} held ${way}: ended at ${floor.colonists[0]!.x.toFixed(2)}`);
+        }
+      }
+    }
+    expect(escaped, 'through a wall, out of the outfitter').toEqual([]);
+    expect(short, 'stopped short of the wall it was held into').toEqual([]);
   });
 
   it('RULE-9, serving B-AC-1: the path goes round a lake, takes plains over mountains when equally short, and reaches a lake plot at its shore', () => {

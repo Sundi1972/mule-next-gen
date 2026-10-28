@@ -326,8 +326,8 @@ export const DEV_STEER = {
   on: false as boolean,
   /** Tiles a second on plains at full pace: half of today's 1 / DEV_WALK.tileSeconds. */
   mapTilesPerSecond: 1.25,
-  /** Seconds to cross the store's hall from wall to wall at full pace. */
-  floorSeconds: 1,
+  /** Seconds across the store's hall at full pace, door to corral. */
+  floorSeconds: 3,
   /** Share of its speed a colonist keeps while it leads a MULE. */
   leadPace: 0.9,
   /** Share of full speed on each land. 0 blocks it. */
