@@ -1,6 +1,6 @@
-import { GROWN_ODDS, MAP, MINERAL_ODDS, TERRAIN_ODDS, sizeBand, type FloorGood } from './config.js';
+import { GROWN_ODDS, GROWN_ODDS_MIN, MAP, MINERAL_ODDS, MINERAL_ODDS_MIN, ratingsOf, TERRAIN_ODDS, sizeBand, type FloorGood } from './config.js';
 import type { Layout } from './map-layout.js';
-import { zeroGround } from './grid.js';
+import { EPS, zeroGround } from './grid.js';
 import type { Rng } from './rng.js';
 import type { Ground, Terrain } from './types.js';
 
@@ -76,8 +76,6 @@ type Odds = { values: number[]; weights: readonly number[] };
 
 const FLOOR_GOODS = Object.keys(MAP.floor) as FloorGood[];
 const MINERALS = ['crystite', 'rareEarth'] as const;
-// S8 compares a share; a share exactly on the edge must pass here as it does in the checker.
-const EPS = 1e-9;
 
 /** Deals a laid-out map its hidden ground (spec RULE-2 stages 4-9). Pure: every choice comes from `rng`; never throws. */
 export function dealGround(layout: Layout, players: number, rng: Rng): GroundDeal {
@@ -547,13 +545,15 @@ function smoothField(layout: Layout, good: FloorGood, rng: Rng): number[] {
   // Centres fall in the plot box padded on every side, at the same density, so an edge plot has as many bumps
   // around it as an interior one; otherwise the edges come out poorer than the hint says.
   const pad = MAP.ground.blobPad;
-  const boxWidth = width - 1 + 2 * pad;
-  const boxHeight = height - 1 + 2 * pad;
+  const padded = (plots: number) => plots - 1 + 2 * pad; // literal-ok: the pad goes on both sides
+  const boxWidth = padded(width);
+  const boxHeight = padded(height);
   const count = Math.max(MAP.ground.minBlobs, Math.round((boxWidth * boxHeight) / area));
   const blobs = Array.from({ length: count }, () => ({ x: rng.next() * boxWidth - pad, y: rng.next() * boxHeight - pad, weight: rng.next() }));
   return layout.terrain.map((_, i) => {
     const x = i % width;
     const y = Math.floor(i / width);
+    // literal-ok: a Gaussian bump, exp(-distance squared / 2 variance)
     const bumps = blobs.reduce((sum, b) => sum + b.weight * Math.exp(-((x - b.x) ** 2 + (y - b.y) ** 2) / (2 * spread)), 0);
     return bumps + rng.next() * MAP.ground.fieldNoise;
   });
@@ -579,8 +579,12 @@ function stratifiedDraw(n: number, { values, weights }: Odds, rng: Rng): number[
 
 function oddsOf(terrain: LandTerrain, good: FloorGood): Odds {
   const odds = TERRAIN_ODDS[terrain];
-  if (good === 'smithore') return { values: [0, 1, 2, 3, 4], weights: MINERAL_ODDS[odds.mined.smithore] };
-  return { values: [-2, -1, 0, 1, 2, 3], weights: GROWN_ODDS[odds.grown[good] ?? 'neutral'] };
+  if (good === 'smithore') {
+    const weights = MINERAL_ODDS[odds.mined.smithore];
+    return { values: ratingsOf(weights, MINERAL_ODDS_MIN), weights };
+  }
+  const weights = GROWN_ODDS[odds.grown[good] ?? 'neutral'];
+  return { values: ratingsOf(weights, GROWN_ODDS_MIN), weights };
 }
 
 const ODDS_FACTS = new Map(
@@ -605,10 +609,10 @@ function pGood(terrain: LandTerrain, good: FloorGood): number {
 }
 
 function ringRating(stepsToCentre: number, rng: Rng): number {
-  const { high, medium, low } = MAP.peak;
+  const { high, medium, low, steps } = MAP.peak;
   if (stepsToCentre === 0) return high;
-  if (stepsToCentre === 1) return medium;
-  if (stepsToCentre === 2) return rng.int(low.min, low.max);
+  if (stepsToCentre === steps.medium) return medium;
+  if (stepsToCentre === steps.low) return rng.int(low.min, low.max);
   return 0;
 }
 
@@ -642,6 +646,7 @@ function seamsHoldWithout(board: Board, ground: Ground[], lowered: Set<number>):
   const good = (i: number) => !lowered.has(i) && isGood(ground, i, 'smithore');
   const kept = board.land.filter(good);
   const joined = kept.filter((i) => board.neighbours[i]!.some(good)).length;
+  // A share exactly on the edge must pass here as it does in the checker.
   return kept.length === 0 || joined + EPS >= MAP.seamShare * kept.length;
 }
 
