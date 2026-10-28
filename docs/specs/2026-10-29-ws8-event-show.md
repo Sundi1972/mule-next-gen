@@ -593,6 +593,12 @@ goal      G-2 (unchanged)
 folded    RULE-3 row 4: the solo show plays, then the result holds to the phase's end; T-AC-5 asserts the hold
 ```
 
+AM-8 correction (2026-10-28, lead, Task 5's review): the solo show is not shorter in wall time. Each segment's
+beats stretch to fill the server's playMs in either mode (HC-3: the client computes no length), so the solo beat
+changes the proportions only (quicker cards, 75% motion within the segment). A phone alone gets a shorter show only
+by tapping: a tap jumps to the result and then to the next event. "Shorter" in UBER-AC-2 therefore reads as "the
+player can cut it short". The PM is told; the parked option (B) is the only route to a shorter wall-time show.
+
 ```
 AM-9 · 2026-10-28 · PM ruling (A), PR-1 Task 4 (the TV's pips)
 
