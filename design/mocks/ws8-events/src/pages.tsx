@@ -2,12 +2,13 @@ import { cx, PlayerMark, SLOT_COLOR, type MapTile } from '@mule/ui';
 import { useMemo, useState, type ReactNode } from 'react';
 import { CATALOGUE, ENTRY, PHASE_NAME, PHASES, WAVE_NAME, type CatalogueEntry, type EventKey, type Tier } from './catalogue';
 import { name, segTitle } from './copy';
-import { EVENT_GAPS, GAPS, isRollCall, script, stageAt, type Script, type ShowEvent } from './events';
+import { EVENT_GAPS, GAPS, isRollCall, script, SOLO_BEAT, SOLO_PACE, stageAt, type Mode, type Script, type ShowEvent } from './events';
 import { ME, ownerAt, SEATS, seat, TILES, W } from './fixture';
 import { EffectChip, effectIsGood, EventGlyph, SignBadge } from './glyphs';
-import { EventPhoneCard, PhoneShow } from './phone';
+import { TvB } from './directions/B';
+import { EventPhoneCard, PhoneShow, PhoneSolo } from './phone';
 import { drivesOf, EVENT_SCENES, OPPOSITES, sceneOf, scenesWith, TOGETHER, type Scene } from './scenarios';
-import { Controls, PhoneFrame, ShowProvider, useShowClock } from './stage';
+import { Controls, PhoneFrame, ShowProvider, TvFrame, useShowClock } from './stage';
 
 /**
  * The shared layer, before Heiko picks a direction: all 35 events with their phase, weight, glyph, copy, where they
@@ -372,49 +373,98 @@ function phonesFor(scene: Scene): string[] {
   return other ? [ME, other] : [ME];
 }
 
-export function ScenePage({ scene, why }: { scene: Scene; why?: string }) {
-  const s = useMemo(() => script(scene.phase, scene.events), [scene]);
+/** The gallery's order: headline events first, then spotlights, then bulletins, then the sets that fire together. */
+export const GALLERY: { id: string; hash: string; tier: Tier | 'together' }[] = [
+  ...(['headline', 'spotlight', 'bulletin'] as const).flatMap((tier) => CATALOGUE.filter((c) => c.tier === tier).map((c) => ({ id: c.key as string, hash: `event-${c.key}`, tier }))),
+  ...TOGETHER.map((s) => ({ id: s.id, hash: `together-${s.id}`, tier: 'together' as const })),
+];
+
+export function ScenePage({ scene, why, hash, mode }: { scene: Scene; why?: string; hash: string; mode: Mode }) {
+  const s = useMemo(() => script(scene.phase, scene.events, mode), [scene, mode]);
   const clock = useShowClock(s.end);
   const [reduced, setReduced] = useReduced();
   const marks = s.segments.map((g) => ({ at: g.announceAt, label: segTitle(g).toLowerCase() }));
   const single = scene.events.length === 1 ? ENTRY[scene.events[0]!.key] : null;
   const keys = [...new Set(scene.events.map((e) => e.key))] as EventKey[];
+  const i = GALLERY.findIndex((g) => g.hash === hash);
+  const prev = GALLERY[i - 1];
+  const next = GALLERY[i + 1];
+  const suffix = mode === 'solo' ? '/phone' : '';
   return (
-    <Page>
+    <Page back="#gallery" backLabel="The gallery">
       <div className="flex flex-wrap items-end gap-6">
         <div className="flex flex-col gap-1">
           <span className="label-caps">
-            {PHASE_NAME[scene.phase]} · {single ? `${TIER_WORD[single.tier]} · ${WAVE_NAME[single.wave]}` : `${scene.events.length} events in one phase`}
+            B · Living weather · {PHASE_NAME[scene.phase]} · {single ? `${TIER_WORD[single.tier]} · ${WAVE_NAME[single.wave]}` : `${scene.events.length} events in one phase`}
           </span>
           <h1 className="flex items-center gap-3 font-display text-3xl font-semibold">
-            {scene.events.slice(0, 4).map((e, i) => (
-              <SignBadge key={i} ev={e} size={44} />
+            {scene.events.slice(0, 4).map((e, k) => (
+              <SignBadge key={k} ev={e} size={44} />
             ))}
             {scene.title}
           </h1>
           <p className="max-w-[860px] text-sm text-ink-2">{why ?? scene.shows}</p>
         </div>
+        <div className="ml-auto flex flex-col items-end gap-2">
+          <div className="flex rounded-control border border-holo-line p-0.5" role="group" aria-label="Who is at the table" data-testid="mode-switch">
+            {(['tv', 'solo'] as const).map((m) => (
+              <a key={m} href={`#${hash}${m === 'solo' ? '/phone' : ''}`} className={cx('rounded-chip px-3 py-1 font-display text-sm font-semibold', m === mode ? 'bg-holo text-on-holo' : 'text-ink-2 hover:text-ink')} aria-current={m === mode} data-testid={`mode-${m}`}>
+                {m === 'tv' ? 'With TV' : 'Phone only'}
+              </a>
+            ))}
+          </div>
+          <span className="flex gap-3 text-sm">
+            {prev && (
+              <a href={`#${prev.hash}${suffix}`} className="text-holo underline" data-testid="prev">
+                ← previous
+              </a>
+            )}
+            {next && (
+              <a href={`#${next.hash}${suffix}`} className="text-holo underline" data-testid="next">
+                next →
+              </a>
+            )}
+          </span>
+        </div>
       </div>
       <Controls clock={clock} end={s.end} reduced={reduced} setReduced={setReduced} marks={marks} />
       <RunningOrder s={s} t={clock.t} seek={clock.seek} />
-      <ShowProvider value={{ s, t: clock.t, reduced }}>
-        <div className="flex flex-wrap items-start gap-4" data-reduced={reduced}>
-          {phonesFor(scene).map((id) => (
-            <div key={id} className="flex flex-col gap-1">
+      <ShowProvider value={{ s, t: clock.t, reduced, seek: clock.seek, ...(scene.tiles ? { tiles: scene.tiles } : {}) }}>
+        {mode === 'tv' ? (
+          <div className="flex flex-col gap-4" data-reduced={reduced}>
+            <TvFrame>
+              <TvB />
+            </TvFrame>
+            <div className="flex flex-wrap items-start gap-4">
+              {phonesFor(scene).map((id) => (
+                <div key={id} className="flex flex-col gap-1">
+                  <span className="label-caps flex items-center gap-1">
+                    <PlayerMark slot={seat(id).slot} size={14} /> {name(id)}’s phone, with the TV in the room
+                  </span>
+                  <PhoneFrame>
+                    <PhoneShow me={id} />
+                  </PhoneFrame>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-start gap-4" data-reduced={reduced}>
+            <div className="flex flex-col gap-1">
               <span className="label-caps flex items-center gap-1">
-                <PlayerMark slot={seat(id).slot} size={14} /> {name(id)}’s phone
+                <PlayerMark slot={seat(ME).slot} size={14} /> Lena’s phone, no TV: playing alone against the AI
               </span>
               <PhoneFrame>
-                <PhoneShow me={id} {...(scene.tiles ? { tiles: scene.tiles } : {})} />
+                <PhoneSolo me={ME} />
               </PhoneFrame>
             </div>
-          ))}
-          <TvPending />
-        </div>
+            <SoloNotes />
+          </div>
+        )}
       </ShowProvider>
       <div className="flex flex-wrap gap-4">
-        {scene.events.map((e, i) => (
-          <SceneData key={i} ev={e} {...(scene.tiles ? { tiles: scene.tiles } : {})} />
+        {scene.events.map((e, k) => (
+          <SceneData key={k} ev={e} {...(scene.tiles ? { tiles: scene.tiles } : {})} />
         ))}
       </div>
       <section className="flex flex-col gap-2">
@@ -425,12 +475,20 @@ export function ScenePage({ scene, why }: { scene: Scene; why?: string }) {
   );
 }
 
-/** Where the TV goes: it plays in the direction Heiko picks. */
-function TvPending() {
+/** How the phone alone differs, and the signal it runs on. */
+function SoloNotes() {
   return (
-    <div className="flex h-[200px] w-[420px] flex-col justify-center gap-1 rounded-panel border border-dashed border-holo-line p-4 text-sm text-ink-2" data-testid="tv-pending">
-      <span className="label-caps">The TV</span>
-      Plays in the direction Heiko picks: headline events first. The phones, the running order and the copy here are the same in every direction.
+    <div className="flex max-w-[420px] flex-col gap-2 rounded-panel border border-holo-line bg-panel p-3 text-sm text-ink-2" data-testid="solo-notes">
+      <span className="label-caps">Phone only</span>
+      <span>
+        With no TV in the room the phone plays the weather itself, on its own map: the title card, the motion, the plots throwing up their change, then what it did to you. Shorter than the TV ({SOLO_BEAT.announce} s cards, motion at {Math.round(SOLO_PACE * 100)}%), and a tap on the map skips to the result.
+      </span>
+      <span>
+        <span className="text-ink">When:</span> <code className="font-mono text-xs">TableView.boards === 0</code>, the big-screen count every view carries (packages/tabletop/src/protocol.ts). WS4’s lobby reads the same count for B-AC-4 (apps/web/src/phone/Lobby.tsx). No new signal.
+      </span>
+      <span>
+        <span className="text-ink">Light to paint:</span> one motion at a time, no blur, only transform and opacity change each frame. Reduced motion holds every motion still and shows the marks where they land.
+      </span>
     </div>
   );
 }
@@ -466,18 +524,81 @@ function SceneData({ ev, tiles }: { ev: ShowEvent; tiles?: MapTile[] }) {
   );
 }
 
-/** Routes this layer owns: #catalogue, #event-<key>, #together-<id>. Null for any other hash. */
+/** Routes this layer owns: #gallery, #catalogue, #event-<key>, #together-<id>; a scene ends in /phone for phone only. */
 export function sharedRoute(hash: string): ReactNode | null {
-  if (hash === 'catalogue') return <CataloguePage />;
-  if (hash.startsWith('event-')) {
-    const scene = EVENT_SCENES.find((s) => s.id === `ev-${hash.slice(6)}`);
-    return scene ? <ScenePage key={hash} scene={scene} /> : null;
+  const [path, view] = hash.split('/') as [string, string | undefined];
+  const mode: Mode = view === 'phone' ? 'solo' : 'tv';
+  if (path === 'gallery') return <GalleryPage />;
+  if (path === 'catalogue') return <CataloguePage />;
+  if (path.startsWith('event-')) {
+    const scene = EVENT_SCENES.find((s) => s.id === `ev-${path.slice(6)}`);
+    return scene ? <ScenePage key={hash} scene={scene} hash={path} mode={mode} /> : null;
   }
-  if (hash.startsWith('together-')) {
-    const scene = TOGETHER.find((s) => s.id === hash.slice(9));
-    return scene ? <ScenePage key={hash} scene={scene} why={scene.why} /> : null;
+  if (path.startsWith('together-')) {
+    const scene = TOGETHER.find((s) => s.id === path.slice(9));
+    return scene ? <ScenePage key={hash} scene={scene} why={scene.why} hash={path} mode={mode} /> : null;
   }
   return null;
+}
+
+/** Heiko's gallery in B: headline events first, then spotlights, then bulletins, then several in one phase. */
+export function GalleryPage() {
+  const groups: { tier: Tier | 'together'; title: string; hint: string }[] = [
+    { tier: 'headline', title: 'Headlines', hint: 'Take the TV for a moment: the title card, then the weather itself.' },
+    { tier: 'spotlight', title: 'Spotlights', hint: 'Single out a place on the map: a player’s land, or one plot.' },
+    { tier: 'bulletin', title: 'Bulletins', hint: 'Gather into one roll call that closes the phase; never cover the map.' },
+    { tier: 'together', title: 'Several in one phase', hint: 'One after another in the order they fired; the roll call last.' },
+  ];
+  return (
+    <Page back="#catalogue" backLabel="All 35 by phase">
+      <div className="flex flex-col gap-1">
+        <span className="label-caps">B · Living weather · Heiko’s pick, 28 Oct</span>
+        <h1 className="font-display text-4xl font-semibold">The event gallery</h1>
+        <p className="max-w-4xl text-base text-ink-2">
+          Every event in Living weather, headline events first. Each page plays the TV and the phones on one clock; switch to <strong className="text-ink">Phone only</strong> for a player alone with no TV, where the phone plays the weather itself. Previous and next walk the gallery in this order.
+        </p>
+      </div>
+      {groups.map((g) => {
+        const items = GALLERY.filter((x) => x.tier === g.tier);
+        return (
+          <section key={g.tier} className="flex flex-col gap-2" data-testid={`gallery-${g.tier}`}>
+            <div className="flex items-baseline gap-3 border-b border-holo-line pb-1">
+              <h2 className="font-display text-2xl font-semibold">
+                {g.title} · {items.length}
+              </h2>
+              <span className="text-sm text-ink-2">{g.hint}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-6">
+              {items.map((x) => {
+                const scene = g.tier === 'together' ? TOGETHER.find((s) => s.id === x.id)! : sceneOf(x.id as EventKey);
+                return (
+                  <div key={x.id} className="flex flex-col gap-1.5 rounded-panel border border-holo-line bg-panel p-3" data-testid={`gallery-item-${x.id}`}>
+                    <span className="flex -space-x-2">
+                      {scene.events.slice(0, 4).map((e, k) => (
+                        <SignBadge key={k} ev={e} size={g.tier === 'together' ? 30 : 44} />
+                      ))}
+                    </span>
+                    <a href={`#${x.hash}`} className="font-display text-base font-semibold leading-tight text-holo underline">
+                      {scene.title}
+                    </a>
+                    <span className="text-[11px] text-ink-3">{PHASE_NAME[scene.phase]}</span>
+                    <span className="mt-auto flex gap-2 text-xs">
+                      <a href={`#${x.hash}`} className="rounded-chip border border-holo-line px-1.5 py-0.5 text-ink-2 hover:text-ink">
+                        With TV
+                      </a>
+                      <a href={`#${x.hash}/phone`} className="rounded-chip border border-holo-line px-1.5 py-0.5 text-ink-2 hover:text-ink" data-testid={`phone-only-${x.id}`}>
+                        Phone only
+                      </a>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })}
+    </Page>
+  );
 }
 
 export const EVENT_COUNT = CATALOGUE.length;

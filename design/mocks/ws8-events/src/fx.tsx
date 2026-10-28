@@ -1,6 +1,6 @@
 import { cx, SLOT_COLOR } from '@mule/ui';
 import type { CSSProperties, ReactNode } from 'react';
-import { frontAt, hitAt, METEOR_FALL, type Segment, type ShowEvent } from './events';
+import { frontAt, hitAt, impactAt, type Segment, type ShowEvent } from './events';
 import { H, ownerAt, seat, W } from './fixture';
 import { cell, centre, useShow } from './stage';
 
@@ -40,13 +40,13 @@ export function Spotlight({ id, amount }: { id: string; amount: number }) {
 }
 
 /** Where a storm's front stands, as CSS for a band crossing from its edge. */
-const EDGE = {
+export const EDGE = {
   w: { side: 'left', span: 'width', angle: 90 },
   e: { side: 'right', span: 'width', angle: 270 },
   n: { side: 'top', span: 'height', angle: 180 },
   s: { side: 'bottom', span: 'height', angle: 0 },
 } as const;
-const band = (dir: keyof typeof EDGE, offset: number, span: string): CSSProperties => {
+export const band = (dir: keyof typeof EDGE, offset: number, span: string): CSSProperties => {
   const e = EDGE[dir];
   return e.span === 'width' ? { top: 0, bottom: 0, [e.side]: `${offset}%`, width: span } : { left: 0, right: 0, [e.side]: `${offset}%`, height: span };
 };
@@ -154,7 +154,7 @@ export function MeteorFall({ ev, seg, tv, look }: { ev: ShowEvent; seg: Segment;
   const { t, reduced } = useShow();
   const o = ev.origin;
   const since = t - seg.playAt;
-  const impact = METEOR_FALL;
+  const impact = impactAt(seg) - seg.playAt;
   const after = since - impact;
   const c = centre(o.x, o.y);
   const fall = clamp(since / impact);

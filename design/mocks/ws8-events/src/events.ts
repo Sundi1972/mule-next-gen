@@ -151,7 +151,7 @@ export const SCENARIOS: Scenario[] = [
 
 // --- The timeline, in seconds from the phase's start ------------------------------------------------------------
 
-/** Display timing, not balance: how long each step of the show lasts. */
+/** Display timing, not balance: how long each step of the show lasts on the TV. */
 export const BEAT = {
   /** The phase opens with its roll call of what fired. */
   intro: 1.8,
@@ -162,6 +162,14 @@ export const BEAT = {
   /** The recap holds at the end. */
   outro: 3,
 } as const;
+
+/**
+ * A phone with no TV in the room plays the weather itself, shorter: quicker cards, and the motion itself at 75% of
+ * the TV's length. With a TV, the phone keeps the light card and runs on the TV's clock.
+ */
+export const SOLO_BEAT = { intro: 1.1, announce: 1.4, settle: 0.8, outro: 2.4 } as const;
+export const SOLO_PACE = 0.75;
+export type Mode = 'tv' | 'solo';
 
 /** How long an event plays, by how it moves. */
 export function playLength(ev: ShowEvent): number {
@@ -189,6 +197,8 @@ export function playLength(ev: ShowEvent): number {
 /** One beat of the show: a single event, or the phase's roll call of bulletins. */
 export interface Segment {
   events: ShowEvent[];
+  /** How fast its motion plays: 1 on the TV, SOLO_PACE on a phone alone. */
+  pace: number;
   /** 1-based, of `count`. */
   n: number;
   count: number;
@@ -203,21 +213,26 @@ export interface Script {
   events: ShowEvent[];
   segments: Segment[];
   end: number;
+  mode: Mode;
+  /** When the phase's intro ends and the first event is announced. */
+  intro: number;
 }
 
-export function script(phase: Phase, events: ShowEvent[]): Script {
+export function script(phase: Phase, events: ShowEvent[], mode: Mode = 'tv'): Script {
+  const beat = mode === 'tv' ? BEAT : SOLO_BEAT;
+  const pace = mode === 'tv' ? 1 : SOLO_PACE;
   // Headlines and spotlights play one by one, in the order they fired; every bulletin of the phase gathers into one
   // roll call that closes it, so the big news comes first and the personal news never interrupts it.
   const roll = events.filter((ev) => TIER[ev.key] === 'bulletin');
   const groups = [...events.filter((ev) => TIER[ev.key] !== 'bulletin').map((ev) => [ev]), ...(roll.length ? [roll] : [])];
-  let at: number = BEAT.intro;
+  let at: number = beat.intro;
   const segments = groups.map((g, i) => {
-    const play = Math.max(...g.map(playLength)) + (g.length - 1) * 0.5;
-    const s = { events: g, n: i + 1, count: groups.length, announceAt: at, playAt: at + BEAT.announce, settleAt: at + BEAT.announce + play, endAt: at + BEAT.announce + play + BEAT.settle };
+    const play = (Math.max(...g.map(playLength)) + (g.length - 1) * 0.5) * pace;
+    const s = { events: g, pace, n: i + 1, count: groups.length, announceAt: at, playAt: at + beat.announce, settleAt: at + beat.announce + play, endAt: at + beat.announce + play + beat.settle };
     at = s.endAt;
     return s;
   });
-  return { phase, events, segments, end: at + BEAT.outro };
+  return { phase, events, segments, end: at + beat.outro, mode, intro: beat.intro };
 }
 
 /** A roll call: a segment of bulletins. */
@@ -226,7 +241,7 @@ export const isRollCall = (seg: Segment) => TIER[seg.events[0]!.key] === 'bullet
 export type Stage = 'intro' | 'announce' | 'play' | 'settle' | 'outro';
 
 export function stageAt(s: Script, t: number): { stage: Stage; seg: Segment | null } {
-  if (t < BEAT.intro) return { stage: 'intro', seg: null };
+  if (t < s.intro) return { stage: 'intro', seg: null };
   const seg = s.segments.find((g) => t < g.endAt) ?? null;
   if (!seg) return { stage: 'outro', seg: null };
   return { stage: t < seg.playAt ? 'announce' : t < seg.settleAt ? 'play' : 'settle', seg };
@@ -248,30 +263,35 @@ export function sweep(ev: ShowEvent, h: { x: number; y: number }): number {
 
 /** The storm's front, 0 at its edge to 1 off the far side, over its play. */
 export const FRONT = { lead: 0.3, cross: 2.8 } as const;
-export const frontAt = (seg: Segment, t: number) => (t - seg.playAt - FRONT.lead) / FRONT.cross;
+export const frontAt = (seg: Segment, t: number) => (t - seg.playAt - FRONT.lead * seg.pace) / (FRONT.cross * seg.pace);
 
 /** When the event lands on a plot (or, with none, on its player). Without motion, everything lands at once. */
 export function hitAt(seg: Segment, ev: ShowEvent, h: Hit | null, reduced: boolean): number {
   const p = seg.playAt;
   if (reduced) return p + 0.2;
   const nth = seg.events.indexOf(ev);
-  switch (ENTRY[ev.key].motion) {
-    case 'sweep':
-      return h ? p + FRONT.lead + sweep(ev, h) * FRONT.cross : p + FRONT.lead + FRONT.cross / 2;
-    case 'spread':
-      return p + 0.4 + (h?.order ?? 0) * 0.9;
-    case 'strike':
-      return p + METEOR_FALL;
-    case 'colonists':
-      return p + 0.3 + nth * 0.5;
-    case 'source':
-      return p + 0.5 + (h?.order ?? 0) * 0.35;
-    default:
-      return p + 0.5 + nth * 0.5 + (h?.order ?? 0) * 0.15;
-  }
+  const after = (() => {
+    switch (ENTRY[ev.key].motion) {
+      case 'sweep':
+        return h ? FRONT.lead + sweep(ev, h) * FRONT.cross : FRONT.lead + FRONT.cross / 2;
+      case 'spread':
+        return 0.4 + (h?.order ?? 0) * 0.9;
+      case 'strike':
+        return METEOR_FALL;
+      case 'colonists':
+        return 0.3 + nth * 0.5;
+      case 'source':
+        return 0.5 + (h?.order ?? 0) * 0.35;
+      default:
+        return 0.5 + nth * 0.5 + (h?.order ?? 0) * 0.15;
+    }
+  })();
+  return p + after * seg.pace;
 }
-/** Seconds from the meteor's first glint to impact. */
+/** Seconds from the meteor's first glint to impact, on the TV. */
 export const METEOR_FALL = 1.4;
+/** When a segment's meteor lands. */
+export const impactAt = (seg: Segment) => seg.playAt + METEOR_FALL * seg.pace;
 
 /** Every hit that has landed by `t`, with its event and segment. */
 export function landed(s: Script, t: number, reduced: boolean): { ev: ShowEvent; seg: Segment; hit: Hit; at: number }[] {

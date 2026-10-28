@@ -216,19 +216,33 @@ function Index() {
         Three directions for the overall look, each shown on four events: a dust storm (the whole colony), a pest swarm (one player’s land), sickness (two players, as development starts) and the new meteor strike. Then all three in one production phase. Every page plays the TV and Lena’s phone on one clock: play, pause, scrub, slow it down, or switch on reduced motion.
       </p>
 
-      <a href="#catalogue" className="mt-5 flex max-w-3xl items-center gap-4 rounded-panel border-2 border-holo-line bg-panel p-4 hover:border-holo" data-testid="link-catalogue">
-        <span className="flex -space-x-2">
-          {(['federationTax', 'colonyPlot', 'epidemic', 'meteorStrike', 'pirateRaid', 'volunteerCleanup'] as const).map((k) => (
-            <SignBadge key={k} ev={{ key: k, sign: k === 'colonyPlot' ? 'neutral' : k === 'volunteerCleanup' ? 'good' : 'bad' }} size={34} />
-          ))}
-        </span>
-        <span className="flex flex-col">
-          <span className="font-display text-xl font-semibold text-holo underline">All {EVENT_COUNT} events, phase by phase ▸</span>
-          <span className="text-sm text-ink-2">The same in every direction: each event’s glyph, weight, motion, where it lands and its phone card, and the sets that fire together.</span>
-        </span>
-      </a>
+      <div className="mt-5 flex max-w-5xl flex-wrap gap-3">
+        <a href="#gallery" className="flex min-w-[340px] flex-1 items-center gap-4 rounded-panel border-2 border-holo bg-panel p-4 shadow-glow" data-testid="link-gallery">
+          <span className="flex -space-x-2">
+            {(['meteorStrike', 'dustStorm', 'flood', 'solarFlare', 'festival'] as const).map((k) => (
+              <SignBadge key={k} ev={{ key: k, sign: k === 'solarFlare' || k === 'festival' ? 'good' : 'bad' }} size={38} />
+            ))}
+          </span>
+          <span className="flex flex-col">
+            <span className="label-caps text-holo!">Heiko picked B · Living weather · 28 Oct</span>
+            <span className="font-display text-2xl font-semibold text-holo underline">The event gallery ▸</span>
+            <span className="text-sm text-ink-2">All {EVENT_COUNT} events in Living weather, headline events first, with the TV or on a phone alone.</span>
+          </span>
+        </a>
+        <a href="#catalogue" className="flex min-w-[300px] flex-1 items-center gap-4 rounded-panel border-2 border-holo-line bg-panel p-4 hover:border-holo" data-testid="link-catalogue">
+          <span className="flex -space-x-2">
+            {(['federationTax', 'colonyPlot', 'epidemic', 'pirateRaid', 'volunteerCleanup'] as const).map((k) => (
+              <SignBadge key={k} ev={{ key: k, sign: k === 'colonyPlot' ? 'neutral' : k === 'volunteerCleanup' ? 'good' : 'bad' }} size={30} />
+            ))}
+          </span>
+          <span className="flex flex-col">
+            <span className="font-display text-xl font-semibold text-holo underline">All {EVENT_COUNT} events, phase by phase ▸</span>
+            <span className="text-sm text-ink-2">Each event’s weight, motion, where it lands, its phone card and the engine data it needs.</span>
+          </span>
+        </a>
+      </div>
 
-      <h2 className="label-caps mt-8">Pick a direction</h2>
+      <h2 className="label-caps mt-8">The three directions · the record (Heiko picked B)</h2>
       <div className="mt-3 grid max-w-[1400px] grid-cols-1 gap-4 lg:grid-cols-3" data-testid="directions">
         {DIRECTIONS.map((d) => (
           <section key={d.id} className={cx('flex flex-col gap-3 rounded-panel border-2 bg-panel p-5', d.id === 'B' ? 'border-holo shadow-glow' : 'border-holo-line')} data-testid={`direction-${d.id}`}>

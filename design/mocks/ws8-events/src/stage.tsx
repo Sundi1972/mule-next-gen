@@ -12,6 +12,10 @@ export interface Show {
   s: Script;
   t: number;
   reduced: boolean;
+  /** The scene's map, when it differs from the fixture's (a cavern, a plot for sale). */
+  tiles?: MapTile[];
+  /** Moves the clock: the phone's tap to skip. */
+  seek?: (t: number) => void;
 }
 const ShowContext = createContext<Show | null>(null);
 export const ShowProvider = ShowContext.Provider;
