@@ -550,7 +550,7 @@ export function TvGameOver({ game }: { game: MuleView }) {
 export function TvStandings({ game }: { game: MuleView }) {
   return (
     <div className="flex flex-col gap-2 rounded-panel border border-holo-line bg-panel p-4" data-testid="tv-standings">
-      <span className="label-caps">Standings · money</span>
+      <span className="label-caps">Standings · worth</span>
       <ol className="flex flex-col gap-2">
         {standings(game).map((s, i) => (
           <li key={s.player.id} className="flex items-center gap-3">

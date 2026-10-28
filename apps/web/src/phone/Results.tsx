@@ -34,7 +34,7 @@ export function Results() {
           </div>
           <section className="flex flex-col gap-1.5">
             <h2 className="label-caps flex justify-between">
-              Standings <span className="text-holo">BY MONEY</span>
+              Standings <span className="text-holo">BY WORTH</span>
             </h2>
             <ol className="flex flex-col gap-1.5" data-testid="standings">
               {ranking.map((r, i) => (
