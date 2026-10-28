@@ -475,7 +475,7 @@ AM-2 · 2026-10-28 · lead · before PR-1 (WS6's answer on the shell's frame; tr
 
 target    §1 C7, C10 (phone), §6 T-AC-5, §7 R-3
 said      the show fills "the shell's map box"; sizes not pinned; the gallery's rail is 268 px
-did       the frame is the approved shell (WS6's C15, PR-7), read in code: the rail is `--rail: clamp(232px, 31vw,
+did       the frame is WS6's approved landscape shell (its PR-7), read in code: the rail is `--rail: clamp(232px, 31vw,
           300px)` (apps/web/src/index.css), 400 px from a 1 100 px shell (phone/Shell.tsx); the stage
           (`main[data-testid=stage]`) takes the rest, padded 10 px. So the show's box is about 562×370 at 844×390
           (rail 261.6) and about 415×355 at 667×375 (rail 232, not the gallery's 268: more map than the gallery
