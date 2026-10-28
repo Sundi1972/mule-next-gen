@@ -17,7 +17,7 @@ export const NO_USAGE: Readonly<Usage> = Object.freeze({ input: 0, cached_read: 
 export type Outcome = RejectOutcome | 'llm' | 'refused' | 'timeout' | 'error' | 'budget';
 
 /** What a call was for: a move (land, develop, trade), or writing a seat's strategy or playbook. */
-export type CallKind = DecisionKind | WriteKind;
+export type LedgerKind = DecisionKind | WriteKind;
 
 /** A model BRAIN has a price table for: the only models a call may name. */
 export type ModelId = keyof typeof BRAIN.priceTable;
@@ -28,7 +28,7 @@ export interface CallRecord extends Usage {
   persona: AiPersonaId;
   level: AiLevelId;
   model: ModelId;
-  kind: CallKind;
+  kind: LedgerKind;
   ms: number;
   outcome: Outcome;
 }
@@ -41,7 +41,7 @@ export interface CallLine extends Usage {
   persona: AiPersonaId;
   level: AiLevelId;
   model: string;
-  kind: CallKind;
+  kind: LedgerKind;
   usd: number;
   ms: number;
   timed_out: boolean;
