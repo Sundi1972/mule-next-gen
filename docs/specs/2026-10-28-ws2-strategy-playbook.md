@@ -410,7 +410,7 @@ Code-only; no existing state to reach. The record starts with WS3's build.
 - **AM-A10 · 29 Oct · Heiko via PM:** Sonnet 5.5 is the default for strategy and playbook calls; Haiku 5.5 the
   fallback, then the engine's playbook, by the seat's remaining share → C3, RULE-A5, T-AC-A11, §7. The cap and
   shares are unchanged. Social table talk (jokes, game comments, seeking allies) goes to spec B, not here.
-- **AM-A9 · 29 Oct · WS1's descriptor shape:** `MoveDescriptor` / `MOVES` as WS1 proposed (§3); "when it is smart"
+- **AM-A9 · 29 Oct · WS1's descriptor shape; agreed by Heiko at WS1's step-2 goal gate ("Yes, as recommended"):** `MoveDescriptor` / `MOVES` as WS1 proposed (§3); "when it is smart"
   moves from the descriptors to the manual's own advice table, each line tied to a move in MOVES and a playbook field
   so it cannot go stale silently (C8). What the manual tells Claude is unchanged from option B. T-AC-A7 gains the
   case: an advice line naming a move or field that does not exist fails. WS1's `playbook.ts` lands early as a
