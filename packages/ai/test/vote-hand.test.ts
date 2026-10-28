@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AI_LEVELS,
   AI_PERSONAS,
@@ -164,7 +164,21 @@ function tickAlone(state: GameState, hand: VoteHand): { refused: AiAction[]; sen
 
 afterEach(() => vi.unstubAllEnvs());
 
+/** The Sheriff path: each test of the calling block runs with both offices elected, and the config's list comes back after it. */
+function bothOffices(): void {
+  let saved: Office[];
+  beforeEach(() => {
+    saved = POLITICS.offices;
+    POLITICS.offices = ['governor', 'sheriff'];
+  });
+  afterEach(() => {
+    POLITICS.offices = saved;
+  });
+}
+
 describe('VoteHand on a Classic table', () => {
+  bothOffices();
+
   it('T-AC-6, T-AC-63: on an AI-only table every Classic seat acts and presses Done in announce and the ballot within its longest pause, with no API key, so the election ends with no clock', () => {
     vi.stubEnv('ANTHROPIC_API_KEY', undefined);
     let ballotStages = 0;
@@ -249,6 +263,8 @@ function announce(state: GameState, mind: Mind, rng: Rng): AiAction[] {
 }
 
 describe('RULE-8: who runs', () => {
+  bothOffices();
+
   const { runGovernor, runSheriff } = POLITICS.ai;
   const g = runGovernor.aggressive;
   const sh = runSheriff.aggressive;
@@ -300,6 +316,8 @@ describe('RULE-8: who runs', () => {
 });
 
 describe('RULE-63: a seat declares ahead of the election', () => {
+  bothOffices();
+
   /** Plays on, nobody acting, to the planning phase of `month`; ai0 is the richest, so the appointed Governor. */
   function toMonth(state: GameState, month: number): void {
     state.players.find((p) => p.id === 'ai0')!.money += 1_000;
@@ -354,6 +372,8 @@ describe('RULE-63: a seat declares ahead of the election', () => {
 });
 
 describe("RULE-8, RULE-10: an AI Governor candidate's promise (C12)", () => {
+  bothOffices();
+
   // RULE-10's AI row: persona target T against the tax at the last call C. Month 1 opens at 5%.
   it.each([
     { persona: 'aggressive' as const, tax: 5, want: { kind: 'cap', percent: 8 } },
@@ -403,6 +423,8 @@ describe("RULE-8, RULE-10: an AI Governor candidate's promise (C12)", () => {
 });
 
 describe('RULE-8: how a seat votes', () => {
+  bothOffices();
+
   it.each([
     { name: 'fewest plots', candidates: { governor: ['ai1', 'ai2', 'ai3'] }, plots: { ai1: 3, ai2: 1, ai3: 2 }, want: 'ai2' },
   ])('T-AC-63 row 4, RULE-8: in the ballot a non-candidate waits its seeded pause, votes for the candidate with the fewest plots ($name), then is Done', ({ candidates, plots, want }) => {
@@ -545,6 +567,8 @@ const bandwagon: Pick<VoteHand, 'tick'> = {
 };
 
 describe('HC-4: secret ballots', () => {
+  bothOffices();
+
   it("HC-4: the hand never reads another seat's ballot", () => {
     // Positive control: the humans' ballots decide the race, and a hand that reads them moves with them.
     expect(electionWithHumans(bandwagon, 'h1')).toMatchObject({ governor: 'h1' });
@@ -563,5 +587,17 @@ describe('HC-4: secret ballots', () => {
       }
     // The comparison bites only where the hand votes for someone else.
     expect(votedForAnother).toBeGreaterThan(0);
+  });
+});
+
+describe('T-AC-62: Governor only, the default POLITICS.offices', () => {
+  it('T-AC-62: by default a seat never runs for Sheriff: a draw that misses the Governor chance draws no Sheriff chance, and the seat only presses Done', () => {
+    expect(POLITICS.offices).toEqual(['governor']);
+    const draws = [POLITICS.ai.runGovernor.aggressive, 0];
+
+    const sent = announce(newGame(), mindOf('ai2', 'aggressive'), drawsOf(draws));
+
+    expect(sent).toEqual([{ type: 'done', done: true }]);
+    expect(draws, 'the Sheriff draw is left unused').toEqual([0]);
   });
 });

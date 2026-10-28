@@ -2,7 +2,7 @@ import { POLITICS, type CanRun, type ElectionHow, type Office, type TaxPromise }
 import type { ElectionView, MuleView, MyView, PlayerView, PoliticsView } from '@mule/protocol';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
@@ -152,10 +152,24 @@ function picker(percent: number): string {
   return onPhone(view(politics({ tax: { percent, start: percent, low: 0, high: 15 } })), Picker);
 }
 
+/** The Sheriff path: each test of the calling block runs with both offices elected, and the config's list comes back after it. */
+function bothOffices(): void {
+  let saved: Office[];
+  beforeEach(() => {
+    saved = POLITICS.offices;
+    POLITICS.offices = ['governor', 'sheriff'];
+  });
+  afterEach(() => {
+    POLITICS.offices = saved;
+  });
+}
+
 const CAP_8: TaxPromise = { kind: 'cap', percent: 8 };
 const HOLD: TaxPromise = { kind: 'hold' };
 
 describe('the politics desks', () => {
+  bothOffices();
+
   it.each<[string, Record<Office, CanRun>, Record<Office, string | null>]>([
     ['both open', { governor: true, sheriff: true }, { governor: null, sheriff: null }],
     ['two Governor terms in a row', { governor: 'termLimit', sheriff: true }, { governor: '2 Governor terms in a row', sheriff: null }],
@@ -324,5 +338,24 @@ describe('the politics desks', () => {
     expect(electionNow({ view: game, me: game.me!, self: PLAYERS[0]! })?.detail).toBe(
       'Election month: Governor and Sheriff. A Governor candidate promises something about the tax. Then the secret ballot, then the result on every screen at once.',
     );
+  });
+});
+
+describe('T-AC-62: Governor only, the default POLITICS.offices', () => {
+  it('T-AC-62: by default the desks and the TV draw one office: no Sheriff run button, candidate row, pay line, Now line or TV line', () => {
+    expect(POLITICS.offices).toEqual(['governor']);
+    const announce = view(politics({ candidates: { governor: ['s2'] }, pay: { governor: 50 } }), me({ canRun: { governor: true } }));
+    const council = onPhone(announce, CouncilDesk);
+    expect(tagOf(council, 'run-governor')).toBeDefined();
+    expect(tagOf(council, 'run-sheriff')).toBeUndefined();
+    expect(textOf(council, 'candidates')).toBe('Governor: Ossa');
+    expect(electionNow({ view: announce, me: announce.me!, self: PLAYERS[0]! })?.detail).toMatch(/^Election month: Governor\. /);
+    const colony = onPhone(announce, ColonyWithFacts).replace(/<!-- -->/g, '');
+    expect(colony).toContain('From the fund each month: Governor 50 cr');
+    expect(colony).not.toContain('Sheriff');
+
+    const tv = onTv(view(politics({ election: election({ stage: 'ceremony', ceremony: at('governor', 'intro'), candidates: { governor: ['s1', 's2'] } }) })));
+    expect(textOf(tv, 'ballot-countdown')).toContain('Governor, revealed on every screen together');
+    expect(tv).not.toContain('Sheriff');
   });
 });

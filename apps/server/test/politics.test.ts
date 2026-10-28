@@ -1,9 +1,9 @@
 import type { AddressInfo } from 'node:net';
 import { Brain } from '@mule/ai';
 import type { MuleView, ServerEnvelope } from '@mule/protocol';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
-import { openPlanning, POLITICS, RuleError, WALK, type GameState, type TaxPromise } from '@mule/engine';
+import { openPlanning, POLITICS, RuleError, WALK, type GameState, type Office, type TaxPromise } from '@mule/engine';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
 import { createMuleServer, type MuleServer } from '../src/server.js';
 import { fakeContext, readyAll } from './fake-context.js';
@@ -11,6 +11,18 @@ import { fakeContext, readyAll } from './fake-context.js';
 /** RULE-10: a Governor run carries a promise; tests about something else hold the tax. */
 const HOLD: TaxPromise = { kind: 'hold' };
 const CAP_8: TaxPromise = { kind: 'cap', percent: 8 };
+
+/** The Sheriff path: each test of the calling block runs with both offices elected, and the config's list comes back after it. */
+function bothOffices(): void {
+  let saved: Office[];
+  beforeEach(() => {
+    saved = POLITICS.offices;
+    POLITICS.offices = ['governor', 'sheriff'];
+  });
+  afterEach(() => {
+    POLITICS.offices = saved;
+  });
+}
 
 let running: MuleServer | null = null;
 afterEach(async () => {
@@ -72,6 +84,8 @@ async function latestGame(inbox: ServerEnvelope<MuleView>[], pred: (g: MuleView)
 }
 
 describe('politics over the wire', () => {
+  bothOffices();
+
   it('C1: the server a player joins plays politics by default', async () => {
     const table = await seatedPhone();
     expect(table.first.month).toBe(1);
@@ -237,6 +251,8 @@ const screens = (game: MuleGame) => [...humans.map((id) => game.viewFor(id)), ga
 const readyOn = (game: MuleGame, id: string) => screens(game).map((v) => v.players.find((p) => p.id === id)!.ready);
 
 describe('the election runs first in planning', () => {
+  bothOffices();
+
   it('C9 · FM-planning-untimed: in month 1 planning proper starts only after the election is over, and then waits for every Ready', () => {
     // Each AI seat's land plan is a 'land' ask of its brain, made when planning proper starts.
     const landAsks: { seat: string; at: number }[] = [];
@@ -434,6 +450,8 @@ describe('the election runs first in planning', () => {
 });
 
 describe('B-AC-60, B-AC-61: running any month, and a ballot that waits for everyone', () => {
+  bothOffices();
+
   it('B-AC-60: Ossa runs for Governor promising 8% in month 2 and changes it to 7% in month 3; every screen lists her from month 2, and the month 4 announcement shows 7%', () => {
     const g = started({ phaseScale: 0.1 });
     playUntil(g, () => g.game.viewFor(null).month === 2, 600_000);
@@ -498,6 +516,8 @@ describe('B-AC-60, B-AC-61: running any month, and a ballot that waits for every
 });
 
 describe('the politics view', () => {
+  bothOffices();
+
   it('B-AC-62, B-AC-1 (server): the ceremony shows the Governor, then the Sheriff, on every screen in the same tick: an office\'s totals from its bars step, its winner from its winner step, one news line each; then the winner has the tax desk', () => {
     const g = started();
     // The Baron runs for Governor too and votes for himself; Ossa runs alone for Sheriff, unopposed.
@@ -727,6 +747,8 @@ const aiTable = [
 const aiIds = ['acc', 'baron', 'grudge'];
 
 describe('AI seats in the election', () => {
+  bothOffices();
+
   it.each([1, 0.1])("T-AC-6, T-AC-63 (server) · C8: AI seats run and vote in the server's election, and every one presses Done within its longest pause of the stage opening (phaseScale %s)", (phaseScale) => {
     // The slowest AI pause is in game time; one more tick for the step that ends the stage.
     const within = (POLITICS.ai.actMs[1] + WALK.tickMs) * phaseScale + WALK.tickMs;
@@ -833,6 +855,42 @@ describe('AI seats in the election', () => {
     g.game.handle('lena', { type: 'ready' });
     expect(g.game.viewFor(null).phase, 'planning ended at once').toBe('landGrant');
     expect(g.game.viewFor(null).politics!.tax.percent, 'month 2: the tax landed first').toBe(10);
+  });
+});
+
+describe('T-AC-62 (server): Governor only, the default POLITICS.offices', () => {
+  it('T-AC-62 (server): by default every screen shows one office: a Sheriff run is refused, and no screen carries a Sheriff candidacy, result, pay, run button or news line, nor anyone holding the office', () => {
+    expect(POLITICS.offices).toEqual(['governor']);
+    const g = started();
+    expect(() => g.game.handle('ossa', { type: 'run', office: 'sheriff' })).toThrow(new RuleError('The Sheriff is not elected yet'));
+    g.game.handle('lena', { type: 'run', office: 'governor', promise: HOLD });
+    g.game.handle('brix', { type: 'run', office: 'governor', promise: HOLD });
+    allReady(g.game);
+    untilStage(g, 'ballot');
+    for (const id of humans) g.game.handle(id, { type: 'vote', office: 'governor', candidate: 'lena' });
+    const steps: string[] = [];
+    const governorOnly = () => {
+      for (const view of screens(g.game)) {
+        const politics = view.politics!;
+        expect(politics.sheriff).toBeNull();
+        expect(keysOf(politics.candidates)).toEqual(['governor']);
+        expect(keysOf(politics.election!.candidates)).toEqual(['governor']);
+        expect(keysOf(politics.pay)).toEqual(['governor']);
+        expect(keysOf(politics.election!.result)).not.toContain('sheriff');
+        if (view.me) expect(keysOf(view.me.politics!.canRun)).toEqual(['governor']);
+        expect(view.news.join(' ')).not.toMatch(/Sheriff/);
+      }
+    };
+    while (election(g.game).stage !== 'over') {
+      governorOnly();
+      const c = election(g.game).ceremony;
+      if (c && steps.at(-1) !== `${c.office} ${c.step}`) steps.push(`${c.office} ${c.step}`);
+      g.advance(WALK.tickMs);
+    }
+    governorOnly();
+    expect(steps).toEqual(['governor intro', 'governor bars', 'governor winner']);
+    expect(keysOf(election(g.game).result)).toEqual(['governor']);
+    expect(g.game.viewFor(null).news[0]).toBe('Lena is Governor (elected).');
   });
 });
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   advancePhase,
   canRun,
@@ -94,6 +94,18 @@ function seatGovernor(state: GameState, id: string): void {
 /** An hour of game time: far longer than any clock the election ever had. */
 const HOUR_MS = 3_600_000;
 
+/** The Sheriff path: each test of the calling block runs with both offices elected, and the config's list comes back after it. */
+function bothOffices(): void {
+  let saved: Office[];
+  beforeEach(() => {
+    saved = POLITICS.offices;
+    POLITICS.offices = ['governor', 'sheriff'];
+  });
+  afterEach(() => {
+    POLITICS.offices = saved;
+  });
+}
+
 /** Runs `body` with POLITICS.offices set to `offices`, restoring the list after. */
 function withOffices(offices: Office[], body: () => void): void {
   const saved = POLITICS.offices;
@@ -158,6 +170,8 @@ function give(state: GameState, id: string, count: number): void {
 }
 
 describe('C1, C2: the host option and the month opening', () => {
+  bothOffices();
+
   it('C1: politics off leaves the game as before', () => {
     expect(newGame().politics).not.toBeNull();
 
@@ -240,6 +254,8 @@ describe('C4: vote weight', () => {
 });
 
 describe('C61, C62: the election', () => {
+  bothOffices();
+
   it('T-AC-61: an election month opens in announce, moves to the ballot once every player is Done and closes it once every player is Done; an hour of game time ends neither', () => {
     const state = newGame();
     expect(electionOf(state)).toMatchObject({ stage: 'announce', ceremony: null, done: [], result: null });
@@ -456,6 +472,8 @@ describe('C61, C62: the election', () => {
 });
 
 describe('RULE-60: who may run, and when', () => {
+  bothOffices();
+
   it('T-AC-60 row 1: outside planning, development among them, a run, a switch or a withdrawal is refused with "You can run for office in planning" and changes nothing', () => {
     const state = newGame();
     toMonth(state, 2);
@@ -562,6 +580,8 @@ describe('RULE-60: who may run, and when', () => {
 });
 
 describe("RULE-10: a Governor candidate's tax promise (C12, AM-11)", () => {
+  bothOffices();
+
   it('T-AC-8: RULE-10 row 1: a Sheriff run with a promise is refused and changes nothing', () => {
     const state = newGame();
     expect(politicsOf(state).promises).toEqual({});
@@ -643,6 +663,8 @@ describe("RULE-10: a Governor candidate's tax promise (C12, AM-11)", () => {
 });
 
 describe('RULE-3: tally and winner', () => {
+  bothOffices();
+
   it('B-AC-3: nobody runs → the richest player is Governor and the richest other player Sheriff, both appointed', () => {
     const state = newGame();
     // Strictly richest each time, so no draw decides this one.
@@ -837,6 +859,8 @@ describe('RULE-3: tally and winner', () => {
 });
 
 describe('FM-WS3-4: what-if copies', () => {
+  bothOffices();
+
   it('FM-WS3-4: playing a month forward on a cloneForSim copy leaves the real game\'s election and offices untouched', () => {
     const state = newGame();
     runFor(state, 'lena', 'governor', HOLD);
@@ -929,6 +953,8 @@ describe('C5: the Governor sets the sales tax', () => {
 });
 
 describe('C6, C7: office pay and the term score', () => {
+  bothOffices();
+
   it.each([
     { fund: 20, governor: 20, sheriff: 0, left: 0 },
     { fund: 100, governor: 50, sheriff: 30, left: 20 },
@@ -954,5 +980,42 @@ describe('C6, C7: office pay and the term score', () => {
     const state = newGame({ politics: false });
     toNextPlanning(state);
     for (const id of SEATS) expect(scoreParts(state, id).office).toBe(0);
+  });
+});
+
+describe('T-AC-62: Governor only, the default POLITICS.offices', () => {
+  it("T-AC-62: by default only the Governor is elected: a Sheriff run is refused with 'The Sheriff is not elected yet' and changes nothing, the ceremony runs one office and nobody is seated as Sheriff", () => {
+    expect(POLITICS.offices).toEqual(['governor']);
+    const state = newGame();
+    expect(canRun(state, 'ossa')).toEqual({ governor: true, sheriff: 'notElected' });
+    const before = structuredClone(state.politics);
+    expect(() => runFor(state, 'ossa', 'sheriff')).toThrow(new RuleError('The Sheriff is not elected yet'));
+    expect(state.politics).toEqual(before);
+
+    runFor(state, 'lena', 'governor', HOLD);
+    expect(everyoneDone(state)).toEqual({ governor: { winner: 'lena', how: 'unopposed', tallies: [{ id: 'lena', votes: 0 }] } });
+    const steps: string[] = [];
+    while (electionOf(state).stage === 'ceremony') {
+      const { office, step, clockMs } = electionOf(state).ceremony!;
+      steps.push(`${office} ${step}`);
+      stepElection(state, clockMs);
+    }
+    expect(steps).toEqual(['governor intro', 'governor winner']);
+    expect(politicsOf(state)).toMatchObject({ governor: 'lena', sheriff: null, terms: { lena: 1 } });
+    expect(Object.keys(politicsOf(state).terms)).toEqual(['lena']);
+  });
+
+  it("T-AC-62: by default upkeep pays the Governor 50 from the fund and keeps the Sheriff's 30; the office line counts the Governor's term only", () => {
+    const state = newGame();
+    seatGovernor(state, 'lena');
+    while (state.phase !== 'auction') advancePhase(state);
+    state.treasury.money = 1_000;
+    const money = Object.fromEntries(SEATS.map((id) => [id, player(state, id).money]));
+
+    advancePhase(state);
+    expect(state.phase).toBe('upkeep');
+    expect(state.treasury.money, 'the fund pays 50 a month, not 80').toBe(1_000 - POLITICS.pay.governor);
+    for (const id of SEATS) expect(player(state, id).money - money[id]!, id).toBe(id === 'lena' ? POLITICS.pay.governor : 0);
+    for (const id of SEATS) expect(scoreParts(state, id).office, id).toBe(id === 'lena' ? POLITICS.termScore : 0);
   });
 });
