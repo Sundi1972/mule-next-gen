@@ -128,6 +128,16 @@ function toMonth(state: GameState, month: number): void {
   while (state.month < month) toNextPlanning(state);
 }
 
+/**
+ * Plays on to the announce of election month `month` with `declare`'s candidacies in: declared in the planning phase
+ * before, since from month 4 the field closes as the election month opens; in month 1's announce itself.
+ */
+function toElection(state: GameState, month: number, declare: () => void): void {
+  if (month > 1) toMonth(state, month - 1);
+  declare();
+  toMonth(state, month);
+}
+
 function setMoney(state: GameState, money: Record<string, number>): void {
   for (const [id, amount] of Object.entries(money)) player(state, id).money = amount;
 }
@@ -139,16 +149,8 @@ function setMoney(state: GameState, money: Record<string, number>): void {
  * so the rest is closed by AM-1 when planning ends.
  */
 function* playRandomElection(state: GameState, rng: Rng, seats: string[]): Generator<string> {
-  const choices: (Office | null)[] = ['governor', 'sheriff', null, null];
   state.treasury.money += rng.int(0, 100);
-  for (const id of seats) {
-    try {
-      const office = rng.pick(choices);
-      runFor(state, id, office, office === 'governor' ? HOLD : undefined);
-    } catch (e) {
-      if (!(e instanceof RuleError)) throw e;
-    }
-  }
+  declareAtRandom(state, rng, seats);
   for (let round = 0; round < 50 && electionOf(state).stage !== 'over' && !rng.chance(0.1); round++) {
     const e = electionOf(state);
     if (e.stage === 'ballot') {
@@ -160,6 +162,19 @@ function* playRandomElection(state: GameState, rng: Rng, seats: string[]): Gener
     stepElection(state, rng.int(1, 25_000));
     const moved = electionOf(state).stage !== before.stage && (before.stage === 'announce' || before.stage === 'ballot');
     yield `month ${state.month} ${electionOf(state).stage}${moved && waiting.length > 0 ? `: ${before.stage} ended waiting for ${waiting.join(', ')}` : ''}`;
+  }
+}
+
+/** Each seat runs for an office, or withdraws, at random; a refused run (a closed field, a term limit) changes nothing. */
+function declareAtRandom(state: GameState, rng: Rng, seats: string[]): void {
+  const choices: (Office | null)[] = ['governor', 'sheriff', null, null];
+  for (const id of seats) {
+    try {
+      const office = rng.pick(choices);
+      runFor(state, id, office, office === 'governor' ? HOLD : undefined);
+    } catch (e) {
+      if (!(e instanceof RuleError)) throw e;
+    }
   }
 }
 
@@ -617,8 +632,7 @@ describe('RULE-60: who may run, and when', () => {
   it('T-AC-60 row 3: two Governor terms in a row refuse a third Governor run at declaration, in any month the field is open, ahead of any promise check', () => {
     const state = newGame();
     for (const month of [1, 4]) {
-      toMonth(state, month);
-      runFor(state, 'lena', 'governor', HOLD);
+      toElection(state, month, () => runFor(state, 'lena', 'governor', HOLD));
       advancePhase(state);
       expect(politicsOf(state)).toMatchObject({ governor: 'lena', termStart: month });
     }
@@ -776,10 +790,11 @@ describe('RULE-3: tally and winner', () => {
   it('T-AC-2 RULE-3 row 4: the strictly highest weighted total wins, and every candidate is tallied highest first', () => {
     const state = newGame();
     give(state, 'lena', 23);
-    toMonth(state, 4);
+    toElection(state, 4, () => {
+      runFor(state, 'lena', 'governor', HOLD);
+      runFor(state, 'brix', 'governor', HOLD);
+    });
     expect(voteWeight(state, 'lena').total).toBe(4);
-    runFor(state, 'lena', 'governor', HOLD);
-    runFor(state, 'brix', 'governor', HOLD);
     everyoneDone(state);
     castVote(state, 'lena', 'governor', 'lena');
     for (const id of ['brix', 'ossa', 'ai1']) castVote(state, id, 'governor', 'brix');
@@ -791,10 +806,11 @@ describe('RULE-3: tally and winner', () => {
   it('B-AC-4: a 2–2 tie goes to the candidate the Land Baron voted for', () => {
     const state = newGame();
     give(state, 'ossa', 3);
-    toMonth(state, 4);
+    toElection(state, 4, () => {
+      runFor(state, 'lena', 'governor', HOLD);
+      runFor(state, 'brix', 'governor', HOLD);
+    });
     expect(politicsOf(state).baron).toBe('ossa');
-    runFor(state, 'lena', 'governor', HOLD);
-    runFor(state, 'brix', 'governor', HOLD);
     everyoneDone(state);
     castVote(state, 'lena', 'governor', 'lena');
     castVote(state, 'ai1', 'governor', 'lena');
@@ -815,14 +831,15 @@ describe('RULE-3: tally and winner', () => {
     give(state, 'ossa', 3);
     give(state, 'lena', plots.lena);
     give(state, 'brix', plots.brix);
-    toMonth(state, month);
+    toElection(state, month, () => {
+      runFor(state, 'brix', 'governor', HOLD);
+      runFor(state, 'lena', 'governor', HOLD);
+      runFor(state, 'ai1', 'governor', HOLD);
+    });
     // Month 1's Baron was fixed before the plots were handed out: name the one they make.
     if (month === 1) politicsOf(state).baron = 'ossa';
     expect(politicsOf(state).baron).toBe('ossa');
     state.treasury.paid = { lena: 600, brix: 600 };
-    runFor(state, 'brix', 'governor', HOLD);
-    runFor(state, 'lena', 'governor', HOLD);
-    runFor(state, 'ai1', 'governor', HOLD);
     everyoneDone(state);
     castVote(state, 'lena', 'governor', 'lena');
     castVote(state, 'brix', 'governor', 'brix');
@@ -911,6 +928,8 @@ describe('RULE-3: tally and winner', () => {
             if (when.includes('ended waiting')) broken.push(`seed ${seed} ${when}`);
             check(when);
           }
+        // The field for the next election is declared in the planning phases before it.
+        else if (state.phase === 'planning') declareAtRandom(state, rng, seats);
         advancePhase(state);
         check(`month ${state.month} ${state.phase}`);
         const result = politicsOf(state).election?.result;
