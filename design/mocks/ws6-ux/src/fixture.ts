@@ -26,10 +26,10 @@ const T: Record<string, Terrain> = {
 };
 
 export const PLAYERS: PlayerView[] = [
-  { id: 'lena', name: 'Lena', isAi: false, color: '#e4572e', species: 'zipwing', money: 640, plots: 7, ready: false, doneDeveloping: false },
-  { id: 'ossa', name: 'Ossa', isAi: true, color: '#3a86ff', species: 'bramblet', money: 910, plots: 7, ready: true, doneDeveloping: false },
-  { id: 'brix', name: 'Brix', isAi: false, color: '#2bb673', species: 'gearling', money: 380, plots: 7, ready: false, doneDeveloping: false },
-  { id: 'kai', name: 'Kai', isAi: true, color: '#f2a541', species: 'mollox', money: 215, plots: 5, ready: true, doneDeveloping: false },
+  { id: 'lena', slot: 0, name: 'Lena', isAi: false, color: '#e4572e', species: 'zipwing', money: 640, plots: 7, ready: false, doneDeveloping: false },
+  { id: 'ossa', slot: 1, name: 'Ossa', isAi: true, color: '#3a86ff', species: 'bramblet', money: 910, plots: 7, ready: true, doneDeveloping: false },
+  { id: 'brix', slot: 2, name: 'Brix', isAi: false, color: '#2bb673', species: 'gearling', money: 380, plots: 7, ready: false, doneDeveloping: false },
+  { id: 'kai', slot: 3, name: 'Kai', isAi: true, color: '#f2a541', species: 'mollox', money: 215, plots: 5, ready: true, doneDeveloping: false },
 ];
 
 /** Who owns which plot, and what stands on it. Empty outfit: claimed, no MULE yet. */
@@ -57,7 +57,7 @@ export const TILES: TileView[] = ROWS.flatMap((row, y) =>
 
 export const ME: MyView = {
   id: 'lena', species: 'zipwing', stock: { ...emptyStock(), food: 9, water: 4, energy: 3, smithore: 0, alloy: 1 }, carriedMule: null, claimsLeft: 0,
-  hungry: false, sick: false, needs: { food: 5, water: 3 }, monthNeeds: { ...emptyStock(), food: 5, water: 3, energy: 4 }, devEndsAt: null, devSeconds: 50, produced: { ...emptyStock(), food: 11, water: 3, energy: 6 }, mulePrice: 148,
+  hungry: false, sick: false, installedThisTurn: false, needs: { food: 5, water: 3 }, monthNeeds: { ...emptyStock(), food: 5, water: 3, energy: 4 }, devEndsAt: null, devSeconds: 50, produced: { ...emptyStock(), food: 11, water: 3, energy: 6 }, mulePrice: 148,
   outfitCosts: { food: 25, water: 25, energy: 50, smithore: 75, crystite: 100, rareEarth: 100, alloy: 150, electronics: 200, medicine: 150, greenBelt: 40 },
   droneOrder: [],
 };
