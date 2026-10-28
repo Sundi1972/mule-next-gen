@@ -100,6 +100,11 @@ export function PlotMap({
           const isSelected = !!selected && selected.x === t.x && selected.y === t.y;
           const color = t.owner === null ? null : SLOT_COLOR[t.owner];
           const faded = focusSlot !== undefined && t.owner !== null && t.owner !== focusSlot;
+          // A faded plot fades its marks, never its selection.
+          const fade = faded ? 'opacity-45' : undefined;
+          // The map clips at its edge, so a selection on an edge plot is drawn inside it, and on the top row the pin
+          // hangs below.
+          const onEdge = t.x === 0 || t.y === 0 || t.x === width - 1 || t.y === height - 1;
           const label = [TERRAIN_NAME[t.terrain], t.special ? specialLabel(t.special) : '', t.owner !== null ? `owned by player ${t.owner + 1}` : t.terrain === 'store' ? '' : 'free', t.good ? GOOD_NAME[t.good] : '']
             .filter(Boolean)
             .join(', ');
@@ -118,17 +123,17 @@ export function PlotMap({
               key={`${t.x},${t.y}`}
               {...(onTile ? { type: 'button' as const, onClick: () => onTile(t as MapTile) } : {})}
               aria-label={label}
-              className={cx('relative flex items-center justify-center transition-opacity', faded && 'opacity-45', onTile && 'cursor-pointer', isSelected && 'z-[6]')}
+              className={cx('relative flex items-center justify-center', onTile && 'cursor-pointer', isSelected && 'z-[6]')}
               data-testid={`map-plot-${t.x}-${t.y}`}
               {...(isSelected ? { 'data-selected': true } : {})}
             >
               {color && look === 'A' && (
-                <span aria-hidden className="absolute inset-[2%] rounded-[10%]" style={{ boxShadow: `inset 0 0 0 ${z.border}px ${color}`, background: `color-mix(in srgb, ${color} 30%, transparent)` }} />
+                <span aria-hidden className={cx('absolute inset-[2%] rounded-[10%] transition-opacity', fade)} style={{ boxShadow: `inset 0 0 0 ${z.border}px ${color}`, background: `color-mix(in srgb, ${color} 30%, transparent)` }} />
               )}
               {color && edge && t.owner !== null && (
                 <span
                   aria-hidden
-                  className="absolute inset-0"
+                  className={cx('absolute inset-0 transition-opacity', fade)}
                   style={{
                     background: hatch(t.owner, color, tv),
                     borderStyle: 'solid',
@@ -143,7 +148,7 @@ export function PlotMap({
               {color && t.owner !== null && (
                 // z-[4]: above the special badge layer (z-[3]), so a neighbour's badge never covers the owner's mark.
                 <span
-                  className={cx('absolute left-[4%] top-[4%] z-[4] flex items-center justify-center rounded-[30%] bg-map-chip shadow-chip')}
+                  className={cx('absolute left-[4%] top-[4%] z-[4] flex items-center justify-center rounded-[30%] bg-map-chip shadow-chip transition-opacity', fade)}
                   style={{ width: look === 'A' ? z.tab : z.tab * 0.75, height: look === 'A' ? z.tab : z.tab * 0.75, boxShadow: `0 0 0 ${tv ? 2 : 1}px ${color}` }}
                   data-testid={`owner-${t.x}-${t.y}`}
                 >
@@ -153,7 +158,7 @@ export function PlotMap({
               {t.terrain === 'store' && <span className={cx('relative rounded-chip bg-map-chip font-mono font-bold text-holo shadow-chip', tv ? 'px-2 py-0.5 text-sm' : 'px-1 text-[8px]')}>STORE</span>}
               {t.good && (
                 <span
-                  className="relative z-[2] flex items-center justify-center rounded-full bg-map-chip shadow-chip"
+                  className={cx('relative z-[2] flex items-center justify-center rounded-full bg-map-chip shadow-chip transition-opacity', fade)}
                   style={{ width: z.disc, height: z.disc, boxShadow: `0 0 0 ${tv ? 3 : 2}px var(--color-g-${t.good})` }}
                   data-testid={`installed-${t.x}-${t.y}`}
                 >
@@ -161,7 +166,7 @@ export function PlotMap({
                 </span>
               )}
               {t.special && (
-                <span aria-hidden className="pointer-events-none absolute inset-0 z-[3]" data-testid={`special-glyph-${t.x}-${t.y}`} data-kind={t.special.kind}>
+                <span aria-hidden className={cx('pointer-events-none absolute inset-0 z-[3] transition-opacity', fade)} data-testid={`special-glyph-${t.x}-${t.y}`} data-kind={t.special.kind}>
                   <SpecialBadge
                     special={t.special}
                     density={density}
@@ -174,21 +179,30 @@ export function PlotMap({
                 </span>
               )}
               {isSelected && (
-                // The same strong selection in both looks: a bright double ring, lifted, with a pin above it.
+                // The same strong selection in both looks: a bright double ring, lifted, with a pin.
                 <>
                   {/* The ring stays solid; only its glow breathes, so the selection never dims. */}
-                  <span aria-hidden className="pointer-events-none absolute -inset-[8%] z-[5] rounded-[16%] motion-safe:animate-pulse" style={{ boxShadow: `0 0 ${tv ? 26 : 12}px ${tv ? 8 : 4}px var(--color-holo)` }} />
                   <span
                     aria-hidden
-                    className="pointer-events-none absolute -inset-[6%] z-[5] rounded-[14%]"
-                    style={{ boxShadow: `0 0 0 ${z.ring}px var(--color-holo-strong), 0 0 0 ${z.ring + (tv ? 3 : 2)}px var(--color-void)` }}
-                    data-testid="selected-ring"
+                    className={cx('pointer-events-none absolute z-[5] motion-safe:animate-pulse', onEdge ? 'inset-0 rounded-[10%]' : '-inset-[8%] rounded-[16%]')}
+                    style={{ boxShadow: `${onEdge ? 'inset ' : ''}0 0 ${tv ? 26 : 12}px ${tv ? 8 : 4}px var(--color-holo)` }}
                   />
                   <span
-                    className={cx('pointer-events-none absolute bottom-full left-1/2 z-[6] mb-1 -translate-x-1/2 whitespace-nowrap rounded-chip bg-holo font-mono font-bold text-on-holo shadow-glow', tv ? 'px-2 py-0.5 text-sm' : 'px-1 text-[8px]')}
+                    aria-hidden
+                    className={cx('pointer-events-none absolute z-[5]', onEdge ? 'inset-0 rounded-[10%]' : '-inset-[6%] rounded-[14%]')}
+                    style={{
+                      boxShadow: onEdge
+                        ? `inset 0 0 0 ${z.ring}px var(--color-holo-strong), inset 0 0 0 ${z.ring + (tv ? 3 : 2)}px var(--color-void)`
+                        : `0 0 0 ${z.ring}px var(--color-holo-strong), 0 0 0 ${z.ring + (tv ? 3 : 2)}px var(--color-void)`,
+                    }}
+                    data-testid="selected-ring"
+                  />
+                  {/* The arrow alone: the ring and glow carry the selection, and a wide label covers the neighbours. */}
+                  <span
+                    className={cx('pointer-events-none absolute left-1/2 z-[6] -translate-x-1/2 whitespace-nowrap rounded-chip bg-holo font-mono font-bold text-on-holo shadow-glow', t.y === 0 ? 'top-full mt-1' : 'bottom-full mb-1', tv ? 'px-2 py-0.5 text-sm' : 'px-1 text-[8px]')}
                     data-testid="selected-pin"
                   >
-                    {tv ? 'SELECTED ▾' : '▾'}
+                    {t.y === 0 ? '▴' : '▾'}
                   </span>
                 </>
               )}

@@ -570,15 +570,18 @@ const PLOT_TILES: MapTile[] = mapTiles(VIEW).map((t) =>
 const PLOT_SELECTED = { x: 6, y: 5 };
 
 function PlotsPage() {
+  // Tap any plot on any map to select it on all of them: try a corner, an edge, and another player's plot on the phone.
+  const [sel, setSel] = useState(PLOT_SELECTED);
+  const pick = (t: MapTile) => setSel({ x: t.x, y: t.y });
   const looks: { look: PlotLook | 'today'; title: string; note: string }[] = [
     { look: 'today', title: 'Today', note: 'A thin outline at 16% tint, a 7–12 px owner mark, a 10–20 px icon; the selection is a 2 px ring.' },
-    { look: 'A', title: 'A · bold plots (recommended)', note: 'Every owned plot: a thick border and a 30% tint in its owner’s colour, and a corner tab with the owner’s creature, big enough to tell the shapes apart without colour. Installed: a large icon on a disc ringed in the good’s colour. Selected: a pulsing double ring, lifted, with a pin.' },
+    { look: 'A', title: 'A · bold plots (recommended)', note: 'Every owned plot: a thick border and a 30% tint in its owner’s colour, and a corner tab with the owner’s creature, big enough to tell the shapes apart without colour. Installed: a large icon on a disc ringed in the good’s colour. Selected: a double ring with a breathing glow and an arrow pin, drawn inside the plot on the map’s edge (the pin below on the top row), never faded.' },
     { look: 'B', title: 'B · territories', note: 'A thick border only round the edge of each player’s land, so a holding reads as one shape, and a hatch unique to each player inside, which tells owners apart without colour. Same installed icon and selection as A.' },
   ];
   return (
     <Page title="Plots you can read from the couch · who owns it, what's on it, which you selected">
       <p className="max-w-[1000px] text-sm text-ink-2">
-        Heiko’s playtest: “the plot that I selected must be clearer visible. it is hard to see which plot belongs to which player and what is on them.” The same map three ways, Lena’s Energy plant (6·5) selected, a ruins field hanging into it, an oasis and a crystal cavern. TV at its real width first, then the phone. I recommend A: each plot reads on its own from across the room, the creature tab works without colour, and the painted land stays calm; B’s hatch is the stronger colour-blind cue but makes the land busy.
+        Heiko’s playtest: “the plot that I selected must be clearer visible. it is hard to see which plot belongs to which player and what is on them.” The same map three ways, Lena’s Energy plant (6·5) selected, a ruins field hanging into it, an oasis and a crystal cavern. TV at its real width first, then the phone. Tap any plot to select it everywhere: a corner or an edge keeps its ring and pin inside the map, and another player's faded plot keeps its selection bright. I recommend A: each plot reads on its own from across the room, the creature tab works without colour, and the painted land stays calm; B’s hatch is the stronger colour-blind cue but makes the land busy.
       </p>
       {looks.map((l) => (
         <section key={l.look} className="flex flex-col gap-2" data-testid={`look-${l.look}`}>
@@ -587,16 +590,16 @@ function PlotsPage() {
           <div className="flex flex-wrap items-start gap-6">
             <div className="w-[760px] rounded-panel bg-table p-3" data-testid={`tv-${l.look}`}>
               {l.look === 'today' ? (
-                <HoloMap width={W} height={H} tiles={PLOT_TILES} density="tv" hideGround selected={PLOT_SELECTED} />
+                <HoloMap width={W} height={H} tiles={PLOT_TILES} density="tv" hideGround selected={sel} onTile={pick} />
               ) : (
-                <PlotMap look={l.look} width={W} height={H} tiles={PLOT_TILES} density="tv" selected={PLOT_SELECTED} />
+                <PlotMap look={l.look} width={W} height={H} tiles={PLOT_TILES} density="tv" selected={sel} onTile={pick} />
               )}
             </div>
             <div className="w-[420px] rounded-panel bg-table p-2" data-testid={`phone-${l.look}`}>
               {l.look === 'today' ? (
-                <HoloMap width={W} height={H} tiles={PLOT_TILES} selected={PLOT_SELECTED} focusSlot={0} />
+                <HoloMap width={W} height={H} tiles={PLOT_TILES} selected={sel} focusSlot={0} onTile={pick} />
               ) : (
-                <PlotMap look={l.look} width={W} height={H} tiles={PLOT_TILES} selected={PLOT_SELECTED} focusSlot={0} onTile={() => undefined} />
+                <PlotMap look={l.look} width={W} height={H} tiles={PLOT_TILES} selected={sel} focusSlot={0} onTile={pick} />
               )}
             </div>
           </div>
