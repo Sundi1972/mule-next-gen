@@ -55,8 +55,8 @@ describe('land claims off reading order', () => {
     const outside = ranking.slice(top).find((s) => s.utility >= ranking[0]!.utility * STRATEGIST.grantShare);
     expect(outside).toBeDefined();
     const plan = landDecision(obs, mind(1)).all[0]!.action;
-    expect(wantsPlot(plan, obs, outside!.index, 0, mind(1))).toBe(false);
-    expect(wantsPlot(plan, obs, ranking[0]!.index, 0, mind(1))).toBe(true);
+    expect(wantsPlot(plan, obs, outside!.index, state.grant!.order, mind(1))).toBe(false);
+    expect(wantsPlot(plan, obs, ranking[0]!.index, state.grant!.order, mind(1))).toBe(true);
     // Tied plots: two salts order them differently, so seats don't all reach for the same first rows.
     const order = (salt: number) => landDecision(obs, mind(salt)).all[0]!.action.ranking.map((s) => s.index);
     expect(order(1)).not.toEqual(order(2));
