@@ -10,9 +10,11 @@ import { eventStageAt, plotUnitsAt, type EventScript, type EventSegment, type Sh
  * de9d6b7). The screen's shell places each part.
  */
 
-/** The phase's row of events: one badge each, the current one lit, the done ones ticked. */
+/** The phase's row of events: one badge each, the current one lit, the done ones ticked. None in a quiet phase. */
 export function EventPips() {
   const { s, t } = useShow();
+  // An empty row would still take the header's gap and push its controls aside.
+  if (s.segments.length === 0) return null;
   return (
     <span className="flex items-center gap-2" data-testid="pips">
       {s.segments.map((g) => {

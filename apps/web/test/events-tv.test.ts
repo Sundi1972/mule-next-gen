@@ -2,6 +2,7 @@
 import { document, type FakeElement } from './fake-dom';
 import { EVENT_SHOW, PHASES } from '@mule/engine';
 import type { MuleView, PlayerView, ProductionEventView, ProductionView, TileView } from '@mule/protocol';
+import { eventSegments, plotStrikes } from '@mule/ui';
 import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
@@ -170,6 +171,8 @@ const playing = (html: string) => [...html.matchAll(/data-event="([^"]+)"/g)].ma
 const now = (html: string) => [...html.matchAll(/data-now="([^"]+)"/g)].map((m) => m[1]);
 /** The rail's log of what already happened: each entry's key and its words. */
 const log = (html: string) => [...html.matchAll(/data-log="([^"]+)"/g)].map((m) => ({ key: m[1], words: text(inside(html.slice(html.lastIndexOf('<', m.index)), 'data-log=')) }));
+/** One event's pip in the header: 'next', 'now' or 'done'. */
+const pip = (html: string, key: string) => /data-state="(\w+)"/.exec(openTag(html, `data-pip="${key}"`))?.[1];
 /** The event chips on one player's slot of the colony bar. */
 const chips = (html: string, id: string) => [...inside(html, `data-testid="slot-${id}"`).matchAll(/data-delta="(-?\d+)"/g)].map((m) => Number(m[1]));
 /** One plot's bars on the map, from its test id to the next plot's. */
@@ -200,6 +203,15 @@ describe("the TV's production screen follows the event that is playing", () => {
     // The pips sit in the header (the gallery's headerExtra); the rail opens on the log.
     expect(inside(mid, '<header')).toContain('data-testid="pips"');
     expect(inside(mid, 'data-testid="rail"')).toMatch(/^<div[^>]*data-testid="log"/);
+    // The pip of the event playing is lit; the one still to come waits.
+    expect([pip(mid, 'drought'), pip(mid, 'pestSwarm')]).toEqual(['now', 'next']);
+
+    // The drought has settled but its segment runs on: it is in the log, and its pip is still the lit one.
+    const drySeg = eventSegments(both, EVENT_AT, 'tv')[0]!;
+    const settling = tvAt(both, (drySeg.settleAt + drySeg.endAt) / 2);
+    expect(playing(settling)).toEqual(['drought']);
+    expect(log(settling).map((l) => l.key)).toEqual(['drought']);
+    expect([pip(settling, 'drought'), pip(settling, 'pestSwarm')]).toEqual(['now', 'next']);
 
     // The swarm is announced: its title card names Lena, never her seat id, and the rail's card waits for it to play.
     const announced = tvAt(both, pestsAt + 0.3);
@@ -216,6 +228,9 @@ describe("the TV's production screen follows the event that is playing", () => {
     expect(now(later)).toEqual(['pestSwarm']);
     expect(text(inside(later, 'data-now="pestSwarm"'))).toContain(nameOf('s1'));
     expect(log(later)).toEqual([{ key: 'drought', words: words(drought) }]);
+    // The same line as the report's figures read: −1 on (1, 0) and −2 on (2, 2), both farms.
+    expect(log(later)[0]!.words).toBe('Drought −3 Food on 2 farms');
+    expect([pip(later, 'drought'), pip(later, 'pestSwarm')]).toEqual(['done', 'now']);
     expect(inside(later, 'data-pip="drought"')).toContain('✓');
     expect(inside(later, 'data-pip="pestSwarm"')).not.toContain('✓');
     expect(openTag(later, 'data-testid="slot-s1"')).toContain('shadow-glow');
@@ -263,6 +278,20 @@ describe("the TV's production screen follows the event that is playing", () => {
           ).toBe(onMap);
         }
       }
+
+    // In the very frame each strike lands, its owner's chip takes it, and not a moment before (as T-AC-3's bars do).
+    const EPS = 0.01;
+    const chipSum = (html: string, id: string) => chips(html, id).reduce((n, d) => n + d, 0);
+    for (const m of [both, starved]) {
+      const segments = eventSegments(m, EVENT_AT, 'tv');
+      for (const l of lines)
+        for (const s of plotStrikes(segments, l, false, { width: W, height: H })) {
+          const before = chipSum(tvAt(m, s.at - EPS), l.owner);
+          // The screen reads `t` back from the server's clock in ms, which can land a hair under `at`: a microsecond on.
+          const struck = chipSum(tvAt(m, s.at + 1e-6), l.owner);
+          expect(struck - before, `${l.owner} on (${l.x}, ${l.y}) at ${s.at.toFixed(3)}`).toBe(s.after - s.before);
+        }
+    }
   });
 
   it('B-AC-1: the rail plays the map’s script: one of title card, card or log entry per moment, the log a prefix of fired order', () => {
@@ -297,7 +326,7 @@ describe("the TV's production screen follows the event that is playing", () => {
     expect(playing(tvAt(both, droughtAt + 0.05))).toEqual(['drought']);
   });
 
-  it('B-AC-1: a quiet month shows no event card, no log entry, no pip and no chip', () => {
+  it('B-AC-1: a quiet month shows no event card, no log entry, no pips row and no chip', () => {
     const quiet = month([]);
     // Before the card's time there is no log at all.
     expect(tvAt(quiet, 2)).not.toContain('data-testid="log"');
@@ -307,9 +336,8 @@ describe("the TV's production screen follows the event that is playing", () => {
       expect(now(html), `at ${t}`).toEqual([]);
       expect(log(html), `at ${t}`).toEqual([]);
       expect(html).not.toContain('data-testid="event-card"');
-      // The pips' row is there, as in the gallery, and empty.
-      expect(html).toContain('data-testid="pips"');
-      expect(inside(html, 'data-testid="pips"')).toBe('');
+      // No pips at all: an empty row would push the header's controls aside.
+      expect(html).not.toContain('data-testid="pips"');
       expect(chips(html, 's1')).toEqual([]);
       expect(chips(html, 's2')).toEqual([]);
     }
@@ -325,9 +353,24 @@ describe("HC-6 on the TV: the device's reduced-motion setting reaches the map", 
     delete (window as { matchMedia?: unknown }).matchMedia;
   });
 
-  /** Mounts the screen in the browser, with the device's prefers-reduced-motion set to `reduced`. */
-  function mount(production: ProductionView, t: number, reduced: boolean): FakeElement {
-    Object.assign(window, { matchMedia: (q: string) => ({ media: q, matches: reduced && q === '(prefers-reduced-motion: reduce)', addEventListener() {}, removeEventListener() {} }) });
+  /** The device's setting, and who is listening for it to change. */
+  const device = { reduced: false, listeners: new Set<() => void>() };
+  /** Mounts the screen in the browser, with the device's prefers-reduced-motion set to `reduced`; null: no matchMedia at all. */
+  function mount(production: ProductionView, t: number, reduced: boolean | null): FakeElement {
+    device.reduced = reduced === true;
+    device.listeners.clear();
+    if (reduced === null) delete (window as { matchMedia?: unknown }).matchMedia;
+    else
+      Object.assign(window, {
+        matchMedia: (q: string) => ({
+          media: q,
+          get matches() {
+            return device.reduced && q === '(prefers-reduced-motion: reduce)';
+          },
+          addEventListener: (_: string, l: () => void) => device.listeners.add(l),
+          removeEventListener: (_: string, l: () => void) => device.listeners.delete(l),
+        }),
+      });
     const host = document.createElement('div');
     document.body.appendChild(host);
     const root = createRoot(host as unknown as HTMLElement);
@@ -355,5 +398,20 @@ describe("HC-6 on the TV: the device's reduced-motion setting reaches the map", 
     expect(moves(true).some(Boolean)).toBe(false);
     // Positive control: the same frames on a device without the setting fly the camera in.
     expect(moves(false).some(Boolean)).toBe(true);
+
+    // The setting is followed live: switched on while the TV shows the month, the map turns reduced, and back.
+    const live = mount(harvest, span[0]!, false);
+    const box = () => byTestId(live, 'event-map-box')?.getAttribute('data-reduced');
+    expect(box()).toBe('false');
+    expect(device.listeners.size).toBeGreaterThan(0);
+    device.reduced = true;
+    flushSync(() => device.listeners.forEach((l) => l()));
+    expect(box()).toBe('true');
+    device.reduced = false;
+    flushSync(() => device.listeners.forEach((l) => l()));
+    expect(box()).toBe('false');
+
+    // A browser with no matchMedia plays the show with motion, and does not break.
+    expect(byTestId(mount(harvest, span[0]!, null), 'event-map-box')?.getAttribute('data-reduced')).toBe('false');
   });
 });
