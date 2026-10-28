@@ -10,7 +10,7 @@ const fourSeats = (seed: number) => createGame({ seed, players: [0, 1, 2, 3].map
 /** A store whose Water lasts the colonists past the outlook, so Water is priced at the market, not at what colonists pay. */
 const WATER_TO_SPARE = 36;
 
-/** fourSeats, with the store's Water at `water` from the start. */
+/** fourSeats, with the store holding `water` Water before month 1 plays; the opening prices stay posted from START's stock. */
 function fourSeatsWithWater(seed: number, water: number): GameState {
   const state = fourSeats(seed);
   state.store.stock.water = water;
