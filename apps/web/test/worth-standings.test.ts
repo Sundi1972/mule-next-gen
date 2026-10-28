@@ -143,7 +143,8 @@ describe('B-AC-10 (WS4, Worth): who is leading, in credits, every month', () => 
     expect(rows(phone, 'scores')).toEqual(final.map((f, i) => `${i + 1} ${f.name}${f.name === 'Heiko' ? ' (you)' : ''} ${f.score}`));
     expect(text(element(phone, 'winner'))).toContain(`Mia ${final[0]!.score} points`);
 
-    const tv = renderToStaticMarkup(createElement(TvGameOver, { game: OVER }));
+    // The TV's header carries the table chat's ticker, which reads its client (C20).
+    const tv = renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(TvGameOver, { game: OVER }) }));
     expect(rows(tv, 'tv-scores')).toEqual(final.map((f, i) => `${i + 1} ${f.name} ${f.score}`));
     expect(text(element(tv, 'tv-winner'))).toBe(`The colony goes to Mia ${final[0]!.score}`);
   });

@@ -17,9 +17,9 @@ export const SALES_TAX = 0.1;
 export const LENA_MONEY = 280;
 
 export const PLAYERS: PlayerView[] = [
-  { id: 'lena', slot: 0, name: 'Lena', isAi: false, color: '#e4572e', species: 'zipwing', money: LENA_MONEY, plots: 3, ready: true, doneDeveloping: false, colonist: null, condition: null },
-  { id: 'accountant', slot: 1, name: 'The Accountant', isAi: true, color: '#3a86ff', species: 'bramblet', money: 520, plots: 4, ready: true, doneDeveloping: false, colonist: null, condition: null },
-  { id: 'kai', slot: 3, name: 'Kai', isAi: false, color: '#f2a541', species: 'mollox', money: 310, plots: 3, ready: false, doneDeveloping: false, colonist: null, condition: null },
+  { id: 'lena', slot: 0, name: 'Lena', isAi: false, color: '#e4572e', species: 'zipwing', money: LENA_MONEY, plots: 3, ready: true, doneDeveloping: false, colonist: null, condition: null, worth: LENA_MONEY + 3 * 300 },
+  { id: 'accountant', slot: 1, name: 'The Accountant', isAi: true, color: '#3a86ff', species: 'bramblet', money: 520, plots: 4, ready: true, doneDeveloping: false, colonist: null, condition: null, worth: 1720 },
+  { id: 'kai', slot: 3, name: 'Kai', isAi: false, color: '#f2a541', species: 'mollox', money: 310, plots: 3, ready: false, doneDeveloping: false, colonist: null, condition: null, worth: 1210 },
 ];
 
 /** Kai's phone has dropped: he is away, but still a person the side-pick waits for. */
