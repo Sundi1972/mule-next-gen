@@ -25,18 +25,21 @@ export const ELECTION_WAIT_MS = (() => {
 })();
 
 /**
- * Month 1's "I'm ready" on a table that plays politics: presses ready, which is Done in announce and the ballot,
- * through the ceremony, until the phone leaves planning. Used by smoke.ts and zoom.ts, whose phones only want to get
- * to the land grant.
+ * Month 1's "I'm ready" on a table that plays politics: presses Ready to vote in announce, abstains and presses Cast
+ * my vote in the ballot, then I'm ready once the ceremony is over, until the phone leaves planning. Used by smoke.ts
+ * and zoom.ts, whose phones only want to get to the land grant.
  */
 export async function readyThroughTheElection(phone: Page, timeout: number): Promise<void> {
   const ready = phone.locator('[data-phase=planning] [data-testid=ready]:not([disabled])');
+  // Cast my vote waits for a pick on every ballot paper.
+  const abstain = phone.locator('[data-testid=ballot-card] [data-testid$="-abstain"] input:not(:checked)');
   const over = phone.locator('[data-phase]:not([data-phase=planning])');
   const deadline = Date.now() + timeout;
   for (;;) {
-    await ready.or(over).first().waitFor({ timeout: Math.max(1, deadline - Date.now()) });
+    await ready.or(abstain).or(over).first().waitFor({ timeout: Math.max(1, deadline - Date.now()) });
     if (await over.count()) return;
     try {
+      for (const box of await abstain.all()) await box.check({ timeout: PRESS_MS });
       await ready.click({ timeout: PRESS_MS });
       // Done keeps the button enabled for the next stage; Ready after the election disables it.
       await ready.waitFor({ state: 'hidden', timeout: PRESS_MS / 4 });
