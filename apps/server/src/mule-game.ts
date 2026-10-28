@@ -180,6 +180,14 @@ function productionView(state: GameState, lengthMs: number): ProductionView | nu
   return { lines, events, lengthMs };
 }
 
+/**
+ * A game's id in the brain's ledger. One ledger file holds every game, so the id must not repeat: the seed, the room's
+ * clock at creation, and a random suffix for two games made in the same tick.
+ */
+export function ledgerGameId(seed: number, now: number): string {
+  return `g-${seed}-${now}-${crypto.randomUUID().slice(0, 8)}`;
+}
+
 /** M.U.L.E. as a game hosted by a @tabletop/core room. */
 export class MuleGame implements Game<MuleIntent, MuleView> {
   private state: GameState | null = null;
@@ -222,13 +230,18 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     private readonly ctx: GameContext,
     private readonly seed: number,
     /** `politics` plays elections, offices and the Governor's tax; off unless the server is created with it on. */
-    private readonly options: { maxMonths?: number; phaseScale?: number; politics?: boolean; brain?: BrainService } = {},
+    private readonly options: {
+      maxMonths?: number;
+      phaseScale?: number;
+      politics?: boolean;
+      brain?: BrainService;
+      /** Called once, as the game ends, with its final state. */
+      onGameOver?: (state: GameState) => void;
+    } = {},
   ) {
     this.phaseScale = options.phaseScale ?? 1;
     if (!(this.phaseScale > 0 && this.phaseScale <= 1)) throw new RangeError(`phaseScale must be in (0, 1], got ${this.phaseScale}`);
-    // One ledger file holds every game, so the id must not repeat: the seed, the room's clock at creation, and a
-    // random suffix for two games made in the same tick.
-    this.brain = options.brain ?? createBrain({ gameId: `g-${seed}-${ctx.now()}-${crypto.randomUUID().slice(0, 8)}` });
+    this.brain = options.brain ?? createBrain({ gameId: ledgerGameId(seed, ctx.now()) });
   }
 
   start(seats: SeatInfo[]): void {
@@ -579,6 +592,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       const ranking = [...this.seats].sort((a, b) => score(state, b.id) - score(state, a.id));
       this.news = [`Game over. ${ranking[0]?.name} wins the colony!`];
       this.brain.finish();
+      this.options.onGameOver?.(state);
       return;
     }
 
