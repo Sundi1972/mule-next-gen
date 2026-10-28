@@ -492,7 +492,8 @@ describe("RULE-10: a Governor candidate's tax promise (C12, AM-11)", () => {
 describe('RULE-3: tally and winner', () => {
   it('B-AC-3: nobody runs → the richest player is Governor and the richest other player Sheriff, both appointed', () => {
     const state = newGame();
-    setMoney(state, { lena: 900, brix: 1200, ossa: 1000, ai1: 1000 });
+    // Strictly richest each time, so no tie (AM-12's round) decides this one.
+    setMoney(state, { lena: 900, brix: 1200, ossa: 1000, ai1: 950 });
     const result = runOutClock(state);
     expect(result).toEqual({
       governor: { winner: 'brix', how: 'appointed', tallies: [] },
@@ -780,6 +781,8 @@ describe('C6, C7: office pay and the term score', () => {
     { fund: 100, governor: 50, sheriff: 30, left: 20 },
   ])('T-AC-5: pay never takes the fund below 0: fund $fund → Governor $governor, Sheriff $sheriff', ({ fund, governor, sheriff, left }) => {
     const state = newGame();
+    // Brix the richest after Lena, so he is the appointed Sheriff by money, not by a tie.
+    setMoney(state, { brix: player(state, 'brix').money + 1 });
     seatGovernor(state, 'lena');
     expect(politicsOf(state).sheriff).toBe('brix');
     while (state.phase !== 'auction') advancePhase(state);

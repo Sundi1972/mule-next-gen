@@ -250,12 +250,14 @@ function decide(state: GameState, election: Shared<Election>, office: Office, go
 
 /**
  * The last resort among players still tied: the first in seat order from seat
- * k mod n, k this election's index in POLITICS.electionMonths, so no seat number
- * decides offices. Outside an election month (never, as decide runs) k is 0. See WS7 spec RULE-3, AM-12.
+ * (seed + k) mod n, k this election's index in POLITICS.electionMonths. The seed
+ * moves the start between games, since most ties come in month 1; k moves it
+ * between elections. Outside an election month (never, as decide runs) k is 0. See WS7 spec RULE-3, AM-12.
  */
 function roundTheTable(state: GameState, tied: readonly string[]): string {
   const n = state.players.length;
-  const start = Math.max(0, POLITICS.electionMonths.indexOf(state.month)) % n;
+  const k = Math.max(0, POLITICS.electionMonths.indexOf(state.month));
+  const start = (((state.seed + k) % n) + n) % n;
   const place = (id: string) => (state.players.findIndex((p) => p.id === id) - start + n) % n;
   return tied.reduce((first, id) => (place(id) < place(first) ? id : first));
 }

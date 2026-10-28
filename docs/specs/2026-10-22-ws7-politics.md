@@ -363,9 +363,10 @@ first match wins
                                                  most plots, then round the
                                                  table (AM-12)
 round the table (AM-12)  among players still tied, the first in seat order starting from
-           seat (k mod n), where k is this election's index in POLITICS.electionMonths
-           (0 for month 1) and n the number of players. No RNG: the same game gives the
-           same offices, and every seat starts once per n elections.
+           seat (seed + k) mod n, where seed is the game's seed, k this election's index in
+           POLITICS.electionMonths (0 for month 1) and n the number of players. No RNG draw:
+           the same game gives the same offices; the start moves between elections (k) and
+           between games (seed), since most ties come in month 1.
 visibility  the result shows each candidate's weighted total, never who voted for whom.
 examples   3 vs 2 votes → the 3; 2 vs 2, Baron voted the second → the second; nobody runs
            for Sheriff → the richest non-Governor
@@ -737,6 +738,11 @@ did       After AM-10, WS1 measured ai0 still at 27.7% of terms (960 terms, thre
           order: Governor by tieRule 55 offices, ai0 28 / ai1 19 / ai2 7 / ai3 1; Sheriff
           appointed 188, ai0 61 / ai3 31 (equal money in month 1). Both last resorts now go
           round the table from a seat that moves each election.
+          Amended at build: a start of k mod n alone left month 1 (k = 0 in every game) at
+          seat 0, and month 1 is where most ties fall (WS1's howwon.ts on 3b7727a: Governor
+          tieRule ai3 0/0/1 across the sets). The start is (seed + k) mod n. Measured after:
+          Governor tieRule ai0 11 / ai1 16 / ai2 16 / ai3 15 of 58; Sheriff appointed 41 / 38 /
+          59 / 48 of 186, ai2's lean being money (the gearling seat), not a tie.
 because   fairness: a seat number must not decide offices; no RNG, so the rule stays
           explainable and replays from seed + actions
 goal      P-1 — still met
