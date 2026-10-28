@@ -190,7 +190,7 @@ export function repairReach(dealt: Dealt): Dealt & { lifts: ReachLift[] } {
         cover.move([swap[0]], [swap[1]]);
         continue;
       }
-      const pick = [...near].sort(liftFirst)[0]!;
+      const pick = minBy(near, liftFirst)!;
       lifts.push({ kind: 'reach', good, plot: pick.i, from: pick.rating, stranded, impossible: pick.odds === 0 });
       ground[pick.i]![good] = MAP.goodAt[good];
       cover.move([], [pick.i]);
@@ -356,7 +356,10 @@ function leastIsolating(board: Board, ground: Ground[], cover: Coverage, barred:
     ground[i]!.smithore += MAP.goodAt.smithore;
     return count;
   };
-  return options.map((i) => ({ i, isolated: after(i) })).sort((a, b) => a.isolated - b.isolated || a.i - b.i)[0]?.i;
+  return minBy(
+    options.map((i) => ({ i, isolated: after(i) })),
+    (a, b) => a.isolated - b.isolated || a.i - b.i,
+  )?.i;
 }
 
 /**
@@ -380,20 +383,27 @@ function seamLift(board: Board, ground: Ground[], raised: Raised, cover: Coverag
 /** Stage 8's trades: same-terrain, reach-keeping, each leaving fewer isolated good Smithore plots. */
 function seamTrades(board: Board, ground: Ground[], field: number[], cover: Coverage): void {
   const good = 'smithore';
-  const best = (plots: number[]) => plots.sort(highestField(field))[0];
+  // The highest-field plot that helps is the first, in field order, that does; the rest need not be tried.
+  const best = (plots: number[], helpsAt: (i: number) => boolean) => plots.sort(highestField(field)).find(helpsAt);
   const helps = (from: number, to: number) => loneChange(board, ground, good, from, to) < 0 && cover.keeps([from], [to]);
   for (let pass = 0; pass < MAP.ground.seamPasses; pass++) {
     let moved = false;
     for (const lone of board.land) {
       if (!isLoneGood(board, ground, lone, good)) continue;
-      const terrain = board.terrain[lone];
+      const sameTerrain = board.byTerrain.get(board.terrain[lone]!)!;
       let trade: [number, number] | undefined;
-      const spot = best(board.land.filter((i) => board.terrain[i] === terrain && !isGood(ground, i, good) && helps(lone, i)));
+      const spot = best(
+        sameTerrain.filter((i) => !isGood(ground, i, good)),
+        (i) => helps(lone, i),
+      );
       if (spot !== undefined) trade = [lone, spot];
       for (const beside of board.neighbours[lone]!) {
         if (trade || isGood(ground, beside, good)) continue;
-        const partner = board.terrain[beside];
-        const donor = best(board.land.filter((i) => i !== lone && board.terrain[i] === partner && isGood(ground, i, good) && helps(i, beside)));
+        const partners = board.byTerrain.get(board.terrain[beside]!)!;
+        const donor = best(
+          partners.filter((i) => i !== lone && isGood(ground, i, good)),
+          (i) => helps(i, beside),
+        );
         if (donor !== undefined) trade = [donor, beside];
       }
       if (!trade) continue;
@@ -459,7 +469,7 @@ class Raised {
       return ((this.gained.get(terrain) ?? 0) + MAP.goodAt[this.good] - this.ground[i]![this.good]) / this.board.byTerrain.get(terrain)!.length;
     };
     const odds = (i: number) => pGood(this.board.terrain[i]!, this.good);
-    return [...offered].sort((a, b) => rise(a) - rise(b) || odds(b) - odds(a) || highestField(this.field)(a, b))[0];
+    return minBy(offered, (a, b) => rise(a) - rise(b) || odds(b) - odds(a) || highestField(this.field)(a, b));
   }
 
   lift(i: number): void {
@@ -478,8 +488,19 @@ class Raised {
 /** How a trade of ratings between `from` (good) and `to` changes the number of isolated good plots. */
 function loneChange(board: Board, ground: Ground[], good: FloorGood, from: number, to: number): number {
   // Only the two plots and their neighbours can change isolation.
-  const around = new Set([from, to, ...board.neighbours[from]!, ...board.neighbours[to]!]);
-  const count = () => [...around].filter((i) => isLoneGood(board, ground, i, good)).length;
+  const around: number[] = [];
+  const add = (i: number) => {
+    if (!around.includes(i)) around.push(i);
+  };
+  add(from);
+  add(to);
+  board.neighbours[from]!.forEach(add);
+  board.neighbours[to]!.forEach(add);
+  const count = () => {
+    let lone = 0;
+    for (const i of around) if (isLoneGood(board, ground, i, good)) lone++;
+    return lone;
+  };
   const before = count();
   swapRatings(ground, good, from, to);
   const after = count();
@@ -579,7 +600,8 @@ function stratifiedDraw(n: number, { values, weights }: Odds, rng: Rng): number[
     }
     out.push(values[k]!);
   }
-  return out.sort((a, b) => b - a);
+  // u rises with i, so each slot's rating is at least the last one's: reversed is high to low.
+  return out.reverse();
 }
 
 function oddsOf(terrain: LandTerrain, good: FloorGood): Odds {
@@ -619,6 +641,13 @@ function ringRating(stepsToCentre: number, rng: Rng): number {
   if (stepsToCentre === steps.medium) return medium;
   if (stepsToCentre === steps.low) return rng.int(low.min, low.max);
   return 0;
+}
+
+/** What sorting by `compare` would put first (the earliest of equals), without sorting. */
+function minBy<T>(items: readonly T[], compare: (a: T, b: T) => number): T | undefined {
+  let best = items[0];
+  for (let k = 1; k < items.length; k++) if (compare(items[k]!, best!) < 0) best = items[k];
+  return best;
 }
 
 /** Orders plots highest field first, index breaking ties. */
