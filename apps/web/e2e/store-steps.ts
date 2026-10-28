@@ -149,25 +149,26 @@ export async function outfittersOpenWithAnEmptyMule(phone: Page): Promise<void> 
   for (const fit of FITS) check(await hall.getByTestId(`fit-${fit}`).isEnabled(), `B-AC-10: the ${fit} fit opens once she leads an empty MULE`);
 }
 
-type Game = { state: GameState; devEndsAt: Map<string, number>; ctx: { now(): number; changed(): void } };
+type Game = { state: GameState; devEndsAt: number | null; ctx: { now(): number; changed(): void } };
 
-/** The game behind a room on the in-process server: its state, the development clocks and the room's context. */
+/** The game behind a room on the in-process server: its state, the one development clock and the room's context. */
 function gameOf(server: MuleServer, code: string): Game {
   const room = server.registry.get(code);
   check(room, `a room ${code} on the server`);
   const game = (room as unknown as { game: Game }).game;
-  check(typeof game?.ctx?.now === 'function' && typeof game.ctx.changed === 'function' && game.devEndsAt instanceof Map, 'the room game still exposes ctx and devEndsAt');
+  check(typeof game?.ctx?.now === 'function' && typeof game.ctx.changed === 'function' && typeof game.devEndsAt === 'number', 'the room game still exposes ctx and devEndsAt');
   return game;
 }
 
 /**
- * Test fixture: gives the seat STORE_WALK_SECONDS of wall time from now. Smoke runs at phaseScale 0.1, so a fed
- * seat's development lasts 5 s of wall time, too short to walk the whole store. Call once development has started.
+ * Test fixture: gives development STORE_WALK_SECONDS of wall time from now, on the one clock every seat shares. Smoke
+ * runs at phaseScale 0.1, so development lasts 5 s of wall time, too short to walk the whole store. Call once
+ * development has started.
  */
 function giveStoreTime(server: MuleServer, code: string, seat: string): void {
   const game = gameOf(server, code);
-  check(game.state.phase === 'development', `the store walk-through starts in development, not ${game.state.phase}`);
-  game.devEndsAt.set(seat, game.ctx.now() + STORE_WALK_SECONDS * 1_000);
+  check(game.state.phase === 'development', `the store walk-through for ${seat} starts in development, not ${game.state.phase}`);
+  game.devEndsAt = game.ctx.now() + STORE_WALK_SECONDS * 1_000;
   // Send every phone the new clock now, rather than at the next AI tick.
   game.ctx.changed();
 }
