@@ -196,8 +196,8 @@ The standing line, verbatim, in every handoff:
 
 **Files:** Modify `packages/engine/src/config.ts`.
 
-- [ ] **Step 1: Add DEV_STEER, WOLVES, GLINT, SCRAMBLE per spec §1 C5 and RULE-7's table**, with `DEV_STEER.on =
-  false`, `reoutfitCost` and `month1WaitsForFirstMule` (AM-2, AM-3). Every number named (HC-2); `pnpm sim --set`
+- [ ] **Step 1: Add DEV_STEER, WOLVES, GLINT, SCRAMBLE per spec §1 C5 and RULE-7's table** (`floorSeconds` 3,
+  AM-7), with `DEV_STEER.on = false`, `reoutfitCost` and `month1WaitsForFirstMule` (AM-2, AM-3). Every number named (HC-2); `pnpm sim --set`
   reaches each.
 - [ ] **Step 2: Run `pnpm typecheck`**. Expected: exit 0.
 - [ ] **Step 3: Commit** `feat(engine): C5 the arcade walking numbers, off by default`.
@@ -296,6 +296,14 @@ C8, §3 (the frame message), HC-10
 - [ ] **Step 4: Run it, and the tabletop room tests (C8's pin).** Expected: PASS.
 - [ ] **Step 5: Commit** `feat(tabletop): C8 a light frame channel (verifies T-AC-4, tabletop part)`.
 
+### Task 2.2 — C8 (WS3's part, in this wave): the recorder and replay pass `frame` through
+
+**Depends on:** Task 2.1 **Spec sections consumed:** §1 C8 (AM-8), HC-10 **Files:** WS3's record.ts and replay.ts
+(its game record, on ws3-auctions or trunk by then), a WS3 test; WS6 reviews.
+
+- [ ] **Step 1: Write the failing test row** "a recorded game's frames still reach a client" (altitude: contract,
+  recorder to room); then pass `frame` through: to the room when recording, a no-op on replay. Run it: PASS. Commit.
+
 ### PR-2 merge gate
 
 - [ ] T-AC-4 (tabletop part) green and named; the tabletop tests unchanged and green
@@ -352,7 +360,7 @@ the tick, checkDevelopmentOver).
 
 - [ ] **Step 1: Implement C6 per spec §1 C6 and RULE-1.** Mechanism: branch_by_abstraction (`DEV_STEER.on`). The
   tick runs only through `ctx.schedule` and reads only `ctx.now()` (HC-9); the frame leaves through PR-2's output
-  (HC-10); month 1's clock rule (AM-3, already on trunk from the audit build's own PR, AM-6) holds with the tick
+  (HC-10); each seat's inputs are buffered by `tick` and applied at their tick (RULE-10, AM-7); month 1's clock rule (AM-3, already on trunk from the audit build's own PR, AM-6) holds with the tick
   too; the per-phase log lines of §4.
 - [ ] **Step 2: Run the Task 3.3 tests.** Expected: PASS. Run the whole server suite at `DEV_STEER.on = false`:
   unchanged.
@@ -456,7 +464,8 @@ commit that contains it.
 **Depends on:** S-2 **ACs verified:** T-AC-10 **Files:** Test `apps/web/test/arcade-predict.test.ts` (new).
 
 - [ ] **Step 1: Write the failing test `T-AC-10: the phone's prediction stays within snapTiles of the server over a
-  scripted turn at 100 ms simulated latency`.** Altitude: unit (a pure loop the browser cannot time). Negative:
+  scripted turn at 100 ms simulated latency`**, with inputs stamped by tick (RULE-10, AM-7; S-2's harness in
+  `docs/research/2026-10-29-arcade-s2-feel.md` is the reference). Altitude: unit (a pure loop the browser cannot time). Negative:
   beyond snapTiles it snaps.
 
 ### Task 6.3 — C11: steer, act, see the whole map

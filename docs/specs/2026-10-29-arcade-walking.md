@@ -282,8 +282,11 @@ today        the room sends only full views (`room.ts::broadcast` → each seat'
              plus chat and emote messages to everyone (`room.ts` everyone()).      verified_by: read
 tomorrow     MUST: the room's Game may emit a transient frame to everyone (`ctx.frame(payload)`), sent as one
                message per tick to every connection, never queued behind a full view, dropped (not buffered) for a
-               connection that is behind. `frame` returns void: an output the record does not tape (HC-10). It is
-               a new GameContext member, so WS3 confirms it counts as output under its record's §3 before C8 is built.
+               connection that is behind. `frame` returns void: an output the record does not tape (HC-10); WS3
+               confirmed (29 Oct) it needs no change to the record's §3.
+             MUST (AM-8): WS3's recorder and replay pass `frame` through: recording, to the room; on replay, a no-op
+               (record.ts, replay.ts, two lines, WS3's, WS6 reviewing), or a recorded game loses its frames silently.
+               Test row: a recorded game's frames still reach a client.
 seam         packages/tabletop/src/room.ts (+ protocol.ts message type)
 senior       junior would: put positions in viewFor and broadcast it 20×/s. senior does: a frame of ~200 bytes per
              tick, full views stay event-driven (S-1 measures both).
@@ -472,7 +475,7 @@ speed (tiles/s) on the map = DEV_STEER.mapTilesPerSecond × terrain[t] × pace �
   lead         DEV_STEER.leadPace (0.9) while leading a MULE, else 1
   bitten       WOLVES.bittenPace (0.5) until the store or an own plot, else 1
   bot          1 for people; DEV_STEER.botSpeed for AI seats (1 by default)
-in the hall  speed = hall width / DEV_STEER.floorSeconds × pace × lead (no terrain)
+in the hall  speed = the door-to-corral distance / DEV_STEER.floorSeconds × pace × lead (no terrain; floorSeconds 3, AM-7)
 movement     position += unit(input) × |input| × speed × dt; diagonals normalised; a blocked step slides along the
              free axis
 unknown      a tile with no terrain entry → 1 (and a typecheck error: DEV_STEER.terrain is keyed by Terrain)
@@ -553,7 +556,7 @@ unknown  no seat needs a MULE → no call                                       
 ```
 RULE-7 · Heiko's starting values (config)                         shape: table
 
-  DEV_STEER.mapTilesPerSecond 1.25 (half of 1 / DEV_WALK.tileSeconds) · .floorSeconds 1 · .leadPace 0.9 ·
+  DEV_STEER.mapTilesPerSecond 1.25 (half of 1 / DEV_WALK.tileSeconds) · .floorSeconds 3 (door to corral; Heiko, S-2: "3 is fine") · .leadPace 0.9 ·
     .terrain plains 1, desert 0.9, tundra 0.85, forest 0.75, ice 0.75, crater 0.8, hills 0.7, volcanic 0.6,
     river 0.6, swamp 0.5, mountains 0.4, lake 0 (lakeMode 'shore', wading 0.3) · .tickMs 50 · .catchUpTicks 10 ·
     .steerMaxPerSecond 10 · .botSpeed 1 · .botCounterPauseSeconds 0.5 · .trespass true · .mountainsImpassable false ·
@@ -596,7 +599,10 @@ unknown      no own plot free → the pub                                       
 ```
 RULE-10 · Your own colonist on your phone                        shape: sequence
 
-  each input the phone sends, it also applies to its own copy of its colonist with the same engine step and tick;
+  each input the phone sends carries the tick it applies at (`steer.tick`, `act.tick`): the phone runs ahead of the
+  server by half the round trip plus one tick, applies the input to its own copy at that tick, and the server buffers
+  each seat's inputs by tick and applies each at its tick (an input that arrives after its tick applies at the next,
+  and the phone's copy corrects as below) (S-2, AM-7);
   on each frame it compares its copy at that tick: within DEV_STEER.snapTiles (0.25) → ease towards the server's
   over DEV_STEER.correctMs (150); beyond → snap. Other colonists draw DEV_STEER.interpolateMs (100) behind the
   newest frame, interpolated between frames. The button's Reach comes from the server's view.
@@ -607,7 +613,7 @@ unknown      no frame for > DEV_STEER.staleMs (1000) → the phone shows "reconn
 
 | Contract | change_kind | breaking | produced by | consumers |
 |---|---|---|---|---|
-| `MuleIntent` += `{type:'steer'; x: number; y: number}` (x, y ∈ [-1, 1] in 1/8 steps, \|v\| ≤ 1), `{type:'act'}` | ADDED | no | C7 | server C6, phone C11, AI C9 |
+| `MuleIntent` += `{type:'steer'; x: number; y: number; tick?: number}` (x, y ∈ [-1, 1] in 1/8 steps, \|v\| ≤ 1; `tick`, the development tick the phone applied it at, AM-7), `{type:'act'}` | ADDED | no | C7 (#176) | server C6, phone C11, AI C9 |
 | `ColonistView` v2: `{x, y, space: 'map'\|'hall', facing: 'left'\|'right', moving, lead: {good: Outfit\|null, x, y}\|null, pace, pelts, encounter: 'choose'\|'chase'\|'fight'\|null}` | MODIFIED (v1 fields `at`, `walk`, `assayUntil` go in C14) | yes, at C14 | C7 | phone, TV |
 | `MyView.reach: {verb, detail, enabled}`; `MyView.banners` (the moments' lines for you) | ADDED | no | C7 | phone C11 |
 | `DevFrame {tick, at, colonists: [{id, x, y, space, facing, moving, lead}], beats: string[]}` via the tabletop's frame message `{t:'frame'; payload}` | ADDED | no | C7, C8 | phone, TV |
@@ -697,6 +703,14 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-7 (2026-10-29, S-2 played by Heiko).** "tested phone sterring ok. but too fast in store", then "3 is fine".
+  Steering passes with the phone stamping each input with its tick and the server applying it at that tick
+  (RULE-10, §3's `steer.tick`, already frozen in #176; WS3's PR-3 buffers inputs by tick). The store floor is 3 s from
+  the door to the corral (RULE-2, RULE-7; was DEV_WALK's 1 s). Record: `docs/research/2026-10-29-arcade-s2-feel.md`.
+- **AM-8 (2026-10-29, WS3 accepts ctx.frame, option A).** A void `ctx.frame(payload)` is unrecorded output, no change
+  to the record's §3. Coupling into C8: WS3's recorder and replay pass `frame` through (to the room when recording, a
+  no-op on replay), two WS3 lines in C8's wave that WS6 reviews, with a test row that a recorded game's frames still
+  reach a client. S-1 still settles 20 Hz against 10 Hz.
 - **AM-6 (2026-10-29, PM ruling).** AM-3's month-1 clock does not wait for the arcade switch: Heiko approved it for
   the game now. It is a clock rule in mule-game.ts, not the tick, so it applies with `DEV_STEER.on` false, on
   today's walk. It is built as its own small WS3 PR in the audit build split, after WS1 measures month 1's
