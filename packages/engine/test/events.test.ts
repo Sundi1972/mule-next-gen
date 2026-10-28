@@ -306,20 +306,26 @@ describe('the event table', () => {
     /** Air points p0's plots caused last month. */
     points?: number;
     lastMonth?: EventKey[];
+    /** Events in month 1's report, filed before last month's. */
+    earlier?: EventKey[];
     p0Money?: number;
     /** Whose roll it is; none for a colony row. */
     player?: string;
     fired?: EventKey[];
   }
   /** Four players at month 3: p0 has the most cash, but p1 is the richest by its land; p3 is the poorest. */
-  const chanceIn = (row: EventRow, phase: Phase, { air = 0, points = 0, lastMonth = [], p0Money = land - 100, player, fired }: World) => {
+  const chanceIn = (row: EventRow, phase: Phase, { air = 0, points = 0, lastMonth = [], earlier = [], p0Money = land - 100, player, fired }: World) => {
     const state = createGame({ seed: 5, players: [0, 1, 2, 3].map((i) => ({ id: `p${i}`, name: `P${i}`, isAi: false })) });
     state.month = 3;
     state.air = air;
     [p0Money, 0, 100, 50].forEach((money, i) => (state.players[i]!.money = money));
     for (const t of state.tiles.filter((t) => t.terrain !== 'store').slice(0, 4)) t.owner = 'p1';
-    const report: Partial<MonthReport> = { month: 2, pollutionBy: { p0: points }, events: lastMonth.map((key) => ({ key }) as MonthEvent) };
-    state.history.push(report as MonthReport);
+    const events = (keys: EventKey[]) => keys.map((key) => ({ key }) as MonthEvent);
+    const reports: Partial<MonthReport>[] = [
+      { month: 1, events: events(earlier) },
+      { month: 2, pollutionBy: { p0: points }, events: events(lastMonth) },
+    ];
+    state.history.push(...(reports as MonthReport[]));
     return eventChance(state, row, phase, { player, firedThisPhase: fired });
   };
   /** Rows shaped like the catalogue's wave-1 examples, here rather than read from EVENTS, so a retune is one row edit. */
@@ -339,12 +345,15 @@ describe('the event table', () => {
     ['a drought-like row in Toxic air: 5 + 2', like.drought, 'production', { air: 60 }, 0.07],
     ['an acid-rain-like row in Collapse air: 1 + 12', like.acidRain, 'production', { air: 80 }, 0.13],
     ['a flood-like row the month after a drought: 5 + 10', like.flood, 'production', { lastMonth: ['drought'] }, 0.15],
+    ['a flood-like row two months after a drought: 5', like.flood, 'production', { earlier: ['drought'] }, 0.05],
     ['a pest-swarm-like row, the richest by land: 1.5 + 1', like.pestSwarm, 'production', { player: 'p1' }, 0.025],
     ['a pest-swarm-like row, the poorest: 1.5 - 1', like.pestSwarm, 'production', { player: 'p3' }, 0.005],
     ['a pest-swarm-like row, a tie for the richest goes to the first seat: 1.5', like.pestSwarm, 'production', { p0Money: land, player: 'p1' }, 0.015],
     ['a bumper-harvest-like row, the poorest: 1.5 + 1.5', like.bumperHarvest, 'production', { player: 'p3' }, 0.03],
     ['a bumper-harvest-like row, the richest: 1.5 - 1', like.bumperHarvest, 'production', { player: 'p1' }, 0.005],
+    ['a bumper-harvest-like row, a tie for the poorest goes to the first seat: 1.5', like.bumperHarvest, 'production', { p0Money: 50, player: 'p3' }, 0.015],
     ['a wildfire-like row, the richest during a drought: 1.5 + 1 + 3', like.wildfire, 'production', { player: 'p1', fired: ['drought'] }, 0.055],
+    ['a wildfire-like row the month after a drought: 1.5 + 3', like.wildfire, 'production', { lastMonth: ['drought'], player: 'p2' }, 0.045],
     ['a wildfire-like row during and after a drought: 1.5 + 3 once', like.wildfire, 'production', { lastMonth: ['drought'], player: 'p2', fired: ['drought'] }, 0.045],
     ['a sickness-like row, clean air, 5 points of its own: 3 + 15', like.sickness, 'development', { points: 5, player: 'p0' }, 0.18],
     ['a sickness-like row, Collapse, 20 points: 3 + 50 + 40 = 93, capped', like.sickness, 'development', { air: 80, points: 20, player: 'p0' }, 0.9],
