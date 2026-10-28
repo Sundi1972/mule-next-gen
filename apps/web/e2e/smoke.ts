@@ -4,7 +4,7 @@
  * Run with `pnpm --filter @mule/web e2e`; replay a red run's map with `MULE_E2E_SEED=<seed>`.
  */
 import { existsSync } from 'node:fs';
-import { POLITICS, WALK } from '@mule/engine';
+import { EVENTS, POLITICS, WALK } from '@mule/engine';
 import { errors as playwrightErrors, type BrowserContext, type Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
 import { check, claimAPlot, headerSlot, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
@@ -47,9 +47,13 @@ const HOST_WALKER = 'walker-s1';
 /** The phone's score lines at game over that add up; a Collapse line, when there is one, is taken off them. */
 const PART_LINES = ['money', 'goods', 'land', 'mules'] as const;
 
-/** Month 2 of this seed rolls a production event: a run with MULE_E2E_SEED=1 checks the event's show (B-AC-7). */
+/** A run with MULE_E2E_SEED=1 checks month 2's event show (B-AC-7). */
 const SHOW_SEED = 1;
 const SEED = seedFrom(process.env.MULE_E2E_SEED);
+// Every event rolls on its own row's dice, so no seed promises one: this run makes month 2's dust storm certain (it
+// needs only an Energy plot, which month 1 builds) and puts the row back when the game ends.
+const dustStormPhases = EVENTS.colony.dustStorm.phases;
+if (SEED === SHOW_SEED) EVENTS.colony.dustStorm.phases = { production: 1 };
 const steps = await loadAuctionSteps();
 const { server, base } = await startServer({ maxMonths: 2, phaseScale: PHASE_SCALE, seed: () => SEED });
 const browser = await launch();
@@ -171,7 +175,7 @@ try {
   await hungryPlayerSeesHerPace(phone, server, code, within(PHASE_MS.landGrant));
   await goToThePub(phone);
   const moveLink = await moveDialogOpensInProduction(ctx, within(PHASE_MS.development));
-  // B-AC-6, B-AC-7 and B-AC-8: month 2's show, with the seed's event.
+  // B-AC-6, B-AC-7 and B-AC-8: month 2's show, with the run's dust storm.
   await phone.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
   await moveDialogOutlivedThePhase(ctx, moveLink);
   console.log(`production show, month 2: ${await checkTheShow({ tv: tvShow, phone: phoneShow, event: SEED === SHOW_SEED })}`);
@@ -197,6 +201,7 @@ try {
   if (errors.length > 0) console.error(`page errors: ${errors.join('; ')}`);
   throw err;
 } finally {
+  EVENTS.colony.dustStorm.phases = dustStormPhases;
   await browser.close();
   await server.close();
 }
