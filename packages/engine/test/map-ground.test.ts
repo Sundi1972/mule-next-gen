@@ -372,6 +372,13 @@ const SCARCITY_FIXTURES = [
     [],
     (out) => (out.lifts.length === 0 ? ['no seam lift; the fixture needs one'] : []),
   ),
+  // Found by a random search: three seam lifts (11, 29, 23), each paid for by an extra lowering that keeps reach only
+  // because the lift's own reach is counted, and that must skip the plot each lift joins (10, 30, 22), in its round and
+  // later ones. Without either, the stage stops short at 4 of 7 joined.
+  scarcityFixture('lift counted and its joined plot kept', { players: 2, width: 31, height: 1, smithore: goodAt(0, 7, 10, 12, 16, 17, 22, 30) }, ['S8'], (out) => [
+    ...(out.lifts.length !== 3 ? [`${out.lifts.length} seam lifts, three are needed`] : []),
+    ...(smithoreCount(out.ground) !== 7 ? [`${smithoreCount(out.ground)} good Smithore plots, the band's top is 7`] : []),
+  ]),
   // The cut lowers plot 0 (rated 2 after), the cheapest plot to lift next to the lone plot 1; it must not be lifted again.
   scarcityFixture(
     'lowered plot not lifted',

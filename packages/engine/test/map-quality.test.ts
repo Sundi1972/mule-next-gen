@@ -55,6 +55,8 @@ interface Drift {
   label: string;
   mean: number;
   hint: number;
+  /** The mean is already rating minus hint, so its line gives only how far off it is. */
+  gapOnly?: boolean;
 }
 
 function drift(label: string, ratings: number[], hint: number): Drift {
@@ -84,7 +86,7 @@ function placeDrifts(built: Built[]): Drift[] {
       }
     }
   }
-  return [...gaps].map(([label, ratings]) => drift(label, ratings, 0));
+  return [...gaps].map(([label, ratings]) => ({ ...drift(label, ratings, 0), gapOnly: true }));
 }
 
 /** Every failing line, capped, with a count of the rest. */
@@ -187,7 +189,7 @@ describe('map quality, every map createGame deals', () => {
       .concat(placeDrifts(built).filter((d) => Math.abs(d.mean - d.hint) > MAP.placeHonesty));
     const offenders = misleading
       .sort((a, b) => Math.abs(b.mean - b.hint) - Math.abs(a.mean - a.hint))
-      .map((d) => `${d.label}: mean ${d.mean.toFixed(3)}, hint ${d.hint.toFixed(3)}, off by ${(d.mean - d.hint).toFixed(3)}`);
+      .map((d) => `${d.label}: ${d.gapOnly ? '' : `mean ${d.mean.toFixed(3)}, hint ${d.hint.toFixed(3)}, `}off by ${(d.mean - d.hint).toFixed(3)}`);
     expect(offenders, listed(offenders)).toEqual([]);
   }, TIMEOUT);
 });
