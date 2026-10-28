@@ -66,8 +66,7 @@ export interface PlayedGame {
   decisions: number;
 }
 
-const DEV_TICK_MS = AI_HANDS.devTickMs;
-const rot = (i: number, k: number, n = 6) => (((i - k) % n) + n) % n;
+const rot =(i: number, k: number, n = 6) => (((i - k) % n) + n) % n;
 
 /** Applies a seat's action with the engine's own checks; a RuleError means the rules refused it. */
 export function applyAction(state: GameState, id: string, action: AiAction, clock?: { left: number }): boolean {
@@ -135,6 +134,8 @@ export interface PlayOptions {
 
 export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions = {}): PlayedGame {
   const state = createGame({ seed, players: specs.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })), politics: options.politics });
+  // Read per game, so a sim run's --set reaches it.
+  const DEV_TICK_MS = AI_HANDS.devTickMs;
   let decisions = 0;
   const seats = specs.map(
     (s, i) =>
