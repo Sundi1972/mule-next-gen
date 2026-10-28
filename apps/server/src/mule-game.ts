@@ -145,6 +145,13 @@ function worthPartsOf(state: GameState, playerId: string): ScorePartsView {
   return parts;
 }
 
+/** At the month end (upkeep, or game over after the last): whether that upkeep's store ran short of nothing. Null otherwise. */
+function colonistsFedAt(state: GameState): boolean | null {
+  if (state.phase !== 'upkeep' && state.phase !== 'gameOver') return null;
+  const report = state.history.at(-1);
+  return report && report.month === state.month ? report.shortages.length === 0 : null;
+}
+
 /** A player's Worth before the Collapse cut while the air is in Collapse (scoreParts' total plus its cut); otherwise null. */
 function worthBeforeCutOf(state: GameState, playerId: string): number | null {
   if (!colonyFailed(state)) return null;
@@ -1176,6 +1183,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       colonists: state.colonists,
       air: { level: Math.round(state.air), band },
       lastAir: lastEnd?.air ?? null,
+      colonistsFed: colonistsFedAt(state),
       ship: {
         arrives: state.ship.arrives,
         inPort: shipInPort(state),
