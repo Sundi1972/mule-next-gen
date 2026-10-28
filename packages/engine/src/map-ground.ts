@@ -411,12 +411,21 @@ function seamTrades(board: Board, ground: Ground[], field: number[], cover: Cove
  * fewest lone plots wins outright.
  */
 function findSwap(board: Board, ground: Ground[], field: number[], good: FloorGood, plots: number[], cover: Coverage): [number, number] | undefined {
-  const donorsFor = (plot: number) =>
-    board.land
-      .filter((d) => board.terrain[d] === board.terrain[plot] && isGood(ground, d, good))
-      .map((d) => ({ d, breaks: seamBreaks(board, ground, d, good) }))
-      .sort((a, b) => a.breaks - b.breaks || field[a.d]! - field[b.d]! || a.d - b.d)
-      .map(({ d }) => d);
+  // A plot's donors depend only on its terrain, and the ground is as it was each time they are asked for.
+  const donorLists = new Map<LandTerrain | undefined, number[]>();
+  const donorsFor = (plot: number) => {
+    const terrain = board.terrain[plot];
+    let donors = donorLists.get(terrain);
+    if (!donors) {
+      donors = board.land
+        .filter((d) => board.terrain[d] === terrain && isGood(ground, d, good))
+        .map((d) => ({ d, breaks: seamBreaks(board, ground, d, good) }))
+        .sort((a, b) => a.breaks - b.breaks || field[a.d]! - field[b.d]! || a.d - b.d)
+        .map(({ d }) => d);
+      donorLists.set(terrain, donors);
+    }
+    return donors;
+  };
   if (good !== 'smithore') {
     for (const plot of plots) {
       const donor = donorsFor(plot).find((d) => cover.keeps([d], [plot]));
@@ -544,11 +553,13 @@ function smoothField(layout: Layout, good: FloorGood, rng: Rng): number[] {
   const boxHeight = padded(height);
   const count = Math.max(MAP.ground.minBlobs, Math.round((boxWidth * boxHeight) / area));
   const blobs = Array.from({ length: count }, () => ({ x: rng.next() * boxWidth - pad, y: rng.next() * boxHeight - pad, weight: rng.next() }));
+  const twiceVariance = 2 * spread; // literal-ok: a Gaussian bump, exp(-distance squared / 2 variance)
   return layout.terrain.map((_, i) => {
     const x = i % width;
     const y = Math.floor(i / width);
-    // literal-ok: a Gaussian bump, exp(-distance squared / 2 variance)
-    const bumps = blobs.reduce((sum, b) => sum + b.weight * Math.exp(-((x - b.x) ** 2 + (y - b.y) ** 2) / (2 * spread)), 0);
+    // Summed in blob order from 0, as the float sum must be for the same field.
+    let bumps = 0;
+    for (const b of blobs) bumps = bumps + b.weight * Math.exp(-((x - b.x) ** 2 + (y - b.y) ** 2) / twiceVariance);
     return bumps + rng.next() * MAP.ground.fieldNoise;
   });
 }

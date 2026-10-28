@@ -55,6 +55,8 @@ export function reachTable(width: number, height: number, skip: number, limit: n
   return table;
 }
 
+const ZERO_GROUND = Object.fromEntries([...GROWN_GOODS, ...MINED_GOODS].map((g) => [g, 0])) as Ground;
+
 export function zeroGround(): Ground {
-  return Object.fromEntries([...GROWN_GOODS, ...MINED_GOODS].map((g) => [g, 0])) as Ground;
+  return { ...ZERO_GROUND };
 }
