@@ -213,8 +213,9 @@ depends_on   C2, C3, C6 (contract), C8
 C8 · ADDED · AI seats bid on lots
 today        AI hands: develop and goods auction only.  anchors: packages/ai/src/hands/auction.ts::AuctionHand
              verified_by: read
-tomorrow     MUST bid up to limit = max(0, min(money − cashReserve(obs, mind), value)), where
-             value is plotValue(obs, mind, index) or muleValue(obs, mind). It re-aims after the
+tomorrow     MUST bid up to limit = max(0, min(money − cashReserve(obs, mind), value, room)), where
+             value is plotValue(obs, mind, index) or muleValue(obs, mind), and room is
+             plotRoom(obs, mind) for a plot (WS1's), ∞ for a MULE (AM-8). It re-aims after the
              level's reaction time, stops when leading needs more than its limit, and never
              makes an LLM call.
 logic        → §2 RULE-6
@@ -432,8 +433,9 @@ examples  bids 310 (Ossa) and 290 (Lena), min 250 → Ossa pays 310, Brix gets 2
 
 ```
 RULE-6 · How an AI bids                                         shape: formula + rules
-limit = max(0, min(money − cashReserve(obs, mind), value))
+limit = max(0, min(money − cashReserve(obs, mind), value, room))
         value = plotValue(obs, mind, index) | muleValue(obs, mind)     (WS1's)
+        room  = plotRoom(obs, mind) for a plot (WS1's) | ∞ for a MULE   AM-8
 limit < minimum or not a buyer                     → stand still, press Done
 leading, and every other buyer is done             → press Done (the bell rings now)   AM-4
 leading                                            → stand still
@@ -659,6 +661,18 @@ because   Heiko's ruling. WS1 drops the goods auction's capital gates (auction.t
           edits); this is the land auction's matching gate, in WS3's lots.ts
 goal      G-1 unchanged: listing "store" is now a guaranteed exit
 folded    RULE-5 · the AM-6 PR (test: a store with capital below storePays still buys the lot)
+
+AM-8 · 2026-10-22 · WS1 (#88, gainScale.plot 400 → 1200), WS3 agreed
+
+target    §1 C8 tomorrow · §2 RULE-6 (limit) · §6 B-AC-7's tests
+said      limit = max(0, min(money − cashReserve, value))
+did       for a plot the limit is also within WS1's plotRoom = max(0, money − (idle plots + 1)
+          × mulePriceFor): it keeps the price of a MULE for the plot and each idle one it holds.
+          A MULE lot is unchanged
+because   once the land plan sees a plot's worth, a seat would spend 933 of its 1,000 on a
+          month-1 lot and have nothing left to develop it
+goal      G-2 unchanged: AIs still bid sensibly. HC-3 holds, since the cap only lowers a bid
+folded    RULE-6 · #88 (tests: B-AC-7 with the reserve binding in one seed and plotRoom in another)
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`

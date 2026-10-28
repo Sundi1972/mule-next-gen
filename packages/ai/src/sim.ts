@@ -6,8 +6,7 @@
  *
  *   pnpm sim -- --games 100 --players 4 --level trader
  *   pnpm sim -- --persona cautious     (every seat the same persona; default: they rotate)
- *   pnpm sim -- --politics on          (offices, elections and the Governor's tax; default: off until real tables
- *                                       play politics, PM ruling 22 Oct; `--politics off` still accepted)
+ *   pnpm sim -- --politics off         (no offices, elections or Governor's tax; default: on, as at real tables)
  */
 import { AI_LEVELS, AI_PERSONAS, colonyFailed, GOOD_CONFIG, GOODS, score, type AiLevelId, type AiPersonaId } from '@mule/engine';
 import { simSeats } from './lineup.js';
@@ -56,7 +55,7 @@ function main() {
   const wins: Record<string, number> = {};
   const auction = { between: 0, store: 0, ship: 0, ms: 0 };
   const lots = { sold: 0, unsold: 0, colonyOffered: 0, colonySold: 0, stalled: 0 };
-  const politics = argText('politics') === 'on';
+  const politics = argText('politics') !== 'off';
   const pol = { elections: 0, filled: 0, taxes: [] as number[], taxPaid: 0, terms: 0 };
   // Read once the land grant opens: by then the month's election is closed and the Governor has set the tax.
   const onPhase = (s: Parameters<NonNullable<Parameters<typeof playGame>[2]>['onPhase'] & {}>[0]) => {
