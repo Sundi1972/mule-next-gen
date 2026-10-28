@@ -14,6 +14,8 @@ import {
   shipInPort,
   shipPrice,
   tileIndex,
+  walkSeconds,
+  type DevPlace,
   type GameState,
   type Good,
   type Outfit,
@@ -251,7 +253,14 @@ export type DevAction = { kind: 'install'; index: number; outfit: Outfit } | { k
  * without leaving the reserve, no factory it can't feed, nothing when the
  * corral is empty or the month's MULEs are used.
  */
-export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number): Shortlist<DevAction> {
+/** A walk-aware seat's development clock: where it is, the seconds it has left, and the seconds its taps for one MULE take. */
+export interface DevWalk {
+  at: DevPlace;
+  left: number;
+  taps: number;
+}
+
+export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, walk?: DevWalk): Shortlist<DevAction> {
   const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
   const p = me(obs, mind);
   const reserve = cashReserve(obs, mind, o);
