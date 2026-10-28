@@ -14,6 +14,13 @@ export function GovernorDesk() {
   return <SalesTax politics={view.politics} />;
 }
 
+/** Where the desk's Set stands: the tax set this month, a tax on its way to the server, or open. */
+export function setState(tax: number, sent: number | null, { percent, start }: Pick<PoliticsView['tax'], 'percent' | 'start'>): 'done' | 'sending' | 'open' {
+  // Set this month: by this phone, or before, when the tax has moved from where the month opened.
+  if (tax === percent && (sent === percent || percent !== start)) return 'done';
+  return sent === tax ? 'sending' : 'open';
+}
+
 function SalesTax({ politics }: { politics: PoliticsView }) {
   const client = useClient();
   const { percent, start, low, high } = politics.tax;
@@ -21,8 +28,8 @@ function SalesTax({ politics }: { politics: PoliticsView }) {
   const [sent, setSent] = useState<number | null>(null);
   const promise = politics.promise;
   const breaks = promise !== null && !promiseKept(promise, politics.tax, tax);
-  // Set this month: by this phone, or before, when the tax has moved from where the month opened.
-  const done = tax === percent && (sent === percent || percent !== start);
+  const state = setState(tax, sent, politics.tax);
+  const done = state === 'done';
   return (
     <section className="flex flex-col gap-1 @min-[1100px]/shell:gap-2" data-testid="gov-tax">
       <p className="text-xs @min-[1100px]/shell:text-base" data-testid="gov-promise">
@@ -46,7 +53,7 @@ function SalesTax({ politics }: { politics: PoliticsView }) {
         <Button
           size="md"
           className="min-w-0 flex-1 whitespace-nowrap px-2"
-          disabled={done}
+          disabled={state !== 'open'}
           onClick={() => {
             client.intent({ type: 'setTax', percent: tax });
             setSent(tax);
