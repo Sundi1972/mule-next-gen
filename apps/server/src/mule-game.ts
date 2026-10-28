@@ -177,13 +177,17 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     seats.forEach((s, i) => {
       if (!s.isAi) return;
       const brainSeat = { id: s.id, persona: personaFor(s.name, i), level: DEFAULT_AI_LEVEL };
+      const chat = this.brain.chatter(brainSeat, (line) => this.ctx.say?.(s.id, line));
       const seat = new AiSeat({
         ...brainSeat,
         name: s.name,
         // From the game seed and the seat, so a replay plays the same AI.
         seed: (this.seed * 7_919 + i * 104_729 + 17) >>> 0,
         decider: this.brain.deciderFor(brainSeat),
-        onDecision: this.brain.chatter(brainSeat, (line) => this.ctx.say?.(s.id, line)),
+        // A decision can come in the tick that enters a phase, before that phase's view goes out; its line waits for it.
+        onDecision: (record) => {
+          this.ctx.schedule(0, () => chat(record));
+        },
       });
       this.ai.set(s.id, seat);
       this.lotHands.set(s.id, new LotHand(seat.mind, createRng((seat.options.seed ^ 0xc2b2ae35) >>> 0)));
