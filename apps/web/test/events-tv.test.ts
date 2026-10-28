@@ -253,15 +253,24 @@ describe("the TV's production screen follows the event that is playing", () => {
     expect(tvAt(both, windowEnds + 0.05)).toContain('The goods fly home');
   });
 
-  it('B-AC-1: a drought on farms and a well logs each good’s own figure, on plots, never every hit under the first one’s good', () => {
+  it('B-AC-1: a drought on farms and a well logs each good’s own figure, on plots, never every hit under the first one’s good, and never a hit that changed nothing', () => {
     // −1 Food on Lena's (1, 0), −1 Water on Ossa's well (0, 2), −2 Food on Ossa's (2, 2): the report holds −3 Food and −1 Water.
     const wet = fired('drought', { title: 'Drought', scope: 'colony', origin: { x: 0, y: 0 } }, [
       [1, 0, -1],
       [0, 2, -1],
       [2, 2, -2],
     ]);
-    const settled = tvAt(month([wet]), droughtAt + wet.playMs / 1000 - 0.05);
-    expect(log(settled)).toEqual([{ key: 'drought', words: 'Drought −3 Food, −1 Water on 3 plots' }]);
+    const settled = (ev: ProductionEventView) => log(tvAt(month([ev]), droughtAt + ev.playMs / 1000 - 0.05));
+    expect(settled(wet)).toEqual([{ key: 'drought', words: 'Drought −3 Food, −1 Water on 3 plots' }]);
+    // A hit that changed nothing is no loss: it is in no figure and no plot count; with only farms left, they are farms.
+    const dryWell = fired('drought', { title: 'Drought', scope: 'colony', origin: { x: 0, y: 0 } }, [
+      [1, 0, -1],
+      [0, 2, 0],
+      [2, 2, -2],
+    ]);
+    expect(settled(dryWell)).toEqual([{ key: 'drought', words: 'Drought −3 Food on 2 farms' }]);
+    const nothing = fired('drought', { title: 'Drought', scope: 'colony', origin: { x: 0, y: 0 } }, [[0, 2, 0]]);
+    expect(settled(nothing)).toEqual([{ key: 'drought', words: 'Drought' }]);
   });
 
   it('B-AC-1: the colony bar’s chips never run ahead of the map, add up to its bars, and stop where a plot runs out', () => {

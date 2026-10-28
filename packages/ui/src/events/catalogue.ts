@@ -21,8 +21,8 @@ export interface EventEntry {
   look: string;
 }
 
-/** Keyed by every ShowEventKey, so an event the show does not know is a compile error, never a missing entry. */
-export const EVENT_ENTRY: Record<ShowEventKey, EventEntry> = {
+/** Keyed by every ShowEventKey, each entry carrying its own key: a missing or mislabelled entry is a compile error. */
+export const EVENT_ENTRY: { [K in ShowEventKey]: EventEntry & { key: K } } = {
   dustStorm: { key: 'dustStorm', motion: 'sweep', look: 'A wall of dust blows in from one edge and takes half of each Energy plot as it passes.' },
   drought: { key: 'drought', motion: 'sweep', look: 'Heat shimmer crosses the map; the ground cracks under each Food and Water plot.' },
   acidRain: { key: 'acidRain', motion: 'sweep', look: 'A sickly green rain front crosses the map; Energy and Food plots hiss as it passes.' },
