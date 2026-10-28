@@ -245,17 +245,14 @@ export class Room<Intent, View> {
 
   private seatFor(conn: Connection<View>, name: string, token?: string): Seat<View> {
     const back = token ? this.seats.find((s) => s.token === token) : undefined;
-    let seat: Seat<View>;
-    if (back) {
-      seat = back;
-      back.conn = conn;
-      this.game.connectionChanged?.(seat.id, true);
-    } else {
+    if (!back) {
       if (this.started) throw new TableError('This game has already started');
       if (this.seats.length >= this.opts.maxSeats) throw new TableError('The table is full');
-      seat = this.addSeat(name.trim().slice(0, 16) || 'Player', false);
-      seat.conn = conn;
     }
+    const seat = back ?? this.addSeat(name.trim().slice(0, 16) || 'Player', false);
+    this.letGoOfOtherSeats(conn, seat);
+    seat.conn = conn;
+    if (back) this.game.connectionChanged?.(seat.id, true);
     return seat;
   }
 
@@ -266,6 +263,7 @@ export class Room<Intent, View> {
     if (!seat) throw new TableError('That link has expired');
     seat.handoff = null;
     const old = seat.conn;
+    this.letGoOfOtherSeats(conn, seat);
     seat.conn = conn;
     seat.token = this.opts.newToken();
     if (!old) this.game.connectionChanged?.(seat.id, true);
@@ -284,9 +282,18 @@ export class Room<Intent, View> {
     }
     const seat = this.seats.find((s) => s.conn === conn);
     if (!seat) return;
+    this.detach(seat);
+    this.broadcast();
+  }
+
+  /** A connection holds one seat: one that joins another lets go of the seat it held, as a disconnect would. See FM-3. */
+  private letGoOfOtherSeats(conn: Connection<View>, joining: Seat<View>): void {
+    for (const seat of this.seats) if (seat !== joining && seat.conn === conn) this.detach(seat);
+  }
+
+  private detach(seat: Seat<View>): void {
     seat.conn = null;
     if (this.started) this.game.connectionChanged?.(seat.id, false);
-    this.broadcast();
   }
 
   private addSeat(name: string, isAi: boolean): Seat<View> {
