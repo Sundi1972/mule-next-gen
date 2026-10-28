@@ -624,8 +624,12 @@ export const POLITICS = {
   tax: { min: 0, max: 15, maxStep: 5 },
   /** Paid from the colony fund to each officeholder at upkeep, as far as the fund reaches. */
   pay: { governor: 50, sheriff: 30 },
-  /** Score per term served in either office. A placeholder until the sim balances it. */
-  termScore: 100,
+  /**
+   * Worth per term served in either office: about one good month's income, the median monthly Worth gain of a
+   * top-half player with politics on (1,150-1,222 on the sim's three sets, 28 Oct). No AI choice and no sim check
+   * reads it; it moves only who wins.
+   */
+  termScore: 1200,
   /** How Classic AI seats run, vote and set the tax (VoteHand). Placeholders until the sim balances them. */
   ai: {
     /** Ms a seat waits before acting in a nominate or ballot stage, drawn per stage: a human's pause, well inside the stage's clock. */
