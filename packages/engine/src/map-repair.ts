@@ -25,6 +25,8 @@ export function isMining(t: Terrain | null | undefined): boolean {
 /** The sketch's free plots and their free neighbours, and which land plots each free plot reaches for AM-4. */
 export class Grid {
   readonly width: number;
+  private readonly col: number[];
+  private readonly row: number[];
   readonly free: number[];
   readonly next: number[][];
   /** Every plot but the store: what AM-4 covers. */
@@ -38,6 +40,8 @@ export class Grid {
     const height = terrain.length / width;
     const isFree = terrain.map((t) => t === null);
     this.width = width;
+    this.col = terrain.map((_, i) => i % width);
+    this.row = terrain.map((_, i) => Math.floor(i / width));
     this.free = terrain.flatMap((t, i) => (t === null ? [i] : []));
     this.land = terrain.flatMap((t, i) => (t === 'store' ? [] : [i]));
     this.next = terrain.map((_, i) => {
@@ -53,7 +57,7 @@ export class Grid {
   }
 
   steps(a: number, b: number): number {
-    return Math.abs((a % this.width) - (b % this.width)) + Math.abs(Math.floor(a / this.width) - Math.floor(b / this.width));
+    return Math.abs(this.col[a]! - this.col[b]!) + Math.abs(this.row[a]! - this.row[b]!);
   }
 }
 

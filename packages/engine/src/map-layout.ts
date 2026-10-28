@@ -140,6 +140,8 @@ class Plan {
   private readonly reachedBy: number[];
   /** Per free plot, `gain`'s answer, lowered as each land plot is first reached. */
   private readonly unreached: number[];
+  /** Per terrain, per plot, how many of its neighbours regions of that terrain own. */
+  private readonly owned = new Map<ShareTerrain, Int32Array>();
   private readonly seen: number[];
   private stamp = 0;
 
@@ -156,6 +158,8 @@ class Plan {
   own(r: number, i: number): void {
     this.owner[i] = r;
     this.regions[r]!.cells.push(i);
+    const beside = this.ownedBeside(this.regions[r]!.terrain);
+    for (const j of this.grid.next[i]!) beside[j]!++;
     if (!isMining(this.regions[r]!.terrain)) return;
     for (const l of this.grid.within[i]!) {
       // Reach is symmetric: the plots that count l among theirs are the plots l reaches.
@@ -171,11 +175,21 @@ class Plan {
   /** True when plot `i` touches another region of `r`'s terrain: taking it would merge the two into one. */
   touchesTwin(i: number, r: number): boolean {
     const terrain = this.regions[r]!.terrain;
+    if (this.ownedBeside(terrain)[i] === 0) return false;
     for (const j of this.grid.next[i]!) {
       const other = this.owner[j]!;
       if (other >= 0 && other !== r && this.regions[other]!.terrain === terrain) return true;
     }
     return false;
+  }
+
+  private ownedBeside(terrain: ShareTerrain): Int32Array {
+    let counts = this.owned.get(terrain);
+    if (!counts) {
+      counts = new Int32Array(this.owner.length);
+      this.owned.set(terrain, counts);
+    }
+    return counts;
   }
 
   quotaLeft(r: number): number {
