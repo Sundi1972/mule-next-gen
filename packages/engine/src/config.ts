@@ -938,8 +938,11 @@ export const STRATEGIST = {
   /** Analyses per month, at most, and never with less than this many seconds left. */
   analysesPerMonth: 2,
   analyseMinSeconds: 20,
-  /** It fits filters once the air is within this many points of Smoggy. */
+  /** Analyses per month, at most, at a level without full scoring (Rookie), in place of analysesPerMonth. */
+  rookieAnalyses: 1,
+  /** It fits filters once the air is within this many points of Smoggy, and only to polluters of more than filterOverAir air points a month. */
   filterAirMargin: 10,
+  filterOverAir: 1,
   /** Share of its money it spends on one good at the auction, at most. */
   budgetShare: 0.5,
   /**
@@ -997,8 +1000,8 @@ export const STRATEGIST = {
     blocksLeader: { full: 2, floor: 0.4, minWeight: 0.5 },
     /** "Feeds me": what a plan scores while its Food and Energy are covered, and, while they are short, any plan but farms first (which scores 1). */
     feedsMe: { covered: 0.75, short: 0.6 },
-    /** "Can develop it": cash over the reserve scores 1 at this many MULE prices; weighted 1 in the factory plan, else `weight`. */
-    canDevelop: { mules: 2, weight: 0.3 },
+    /** "Can develop it": cash over the reserve scores 1 at `mules` MULE prices; weighted factoryWeight in the factory plan, else `weight`. */
+    canDevelop: { mules: 2, factoryWeight: 1, weight: 0.3 },
     /** "Hurts the leader": what the plan that fences in the leader scores. */
     hurtsLeader: 0.7,
   },

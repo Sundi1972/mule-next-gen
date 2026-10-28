@@ -173,7 +173,7 @@ export function landDecision(obs: GameState, mind: Mind): Shortlist<LandPlan> {
         mind.persona.reserve,
         shortOfFood ? 'I still buy my Food and Energy' : 'my Food and Energy are covered',
       ),
-      consider('Can develop it', curve.ramp(p.money - reserve, 0, mulePrice(obs) * land.canDevelop.mules), focus === 'factory' ? 1 : land.canDevelop.weight, `${cr(p.money)} on hand, ${cr(reserve)} kept back`),
+      consider('Can develop it', curve.ramp(p.money - reserve, 0, mulePrice(obs) * land.canDevelop.mules), focus === 'factory' ? land.canDevelop.factoryWeight : land.canDevelop.weight, `${cr(p.money)} on hand, ${cr(reserve)} kept back`),
     ];
     if (focus === 'block') cons.push(consider('Hurts the leader', land.hurtsLeader, mind.persona.spite, 'the leader needs room to grow'));
     const labels = top.map((s) => s.label).join(' and ');
@@ -332,7 +332,7 @@ export function analysesWanted(obs: GameState, mind: Mind, secondsLeft: number):
     const closeness = Math.abs(a - b) / Math.max(1, Math.abs(a));
     if (closeness < STRATEGIST.analyseWhenClose) out.push({ index, closeness });
   }
-  const per = mind.level.fullScoring ? STRATEGIST.analysesPerMonth : 1;
+  const per = mind.level.fullScoring ? STRATEGIST.analysesPerMonth : STRATEGIST.rookieAnalyses;
   const budget = Math.floor((secondsLeft - STRATEGIST.analyseMinSeconds) / DEVELOPMENT.analysisSeconds) + 1;
   return out
     .sort((x, y) => x.closeness - y.closeness)
@@ -345,7 +345,7 @@ export function filtersWanted(obs: GameState, mind: Mind): number[] {
   if (!mind.level.fullScoring || obs.air < POLLUTION.bands[1].from - STRATEGIST.filterAirMargin) return [];
   const alloy = me(obs, mind).stock.alloy;
   return obs.tiles
-    .filter((t) => t.owner === mind.me && !t.filter && airPoints(t) > 1)
+    .filter((t) => t.owner === mind.me && !t.filter && airPoints(t) > STRATEGIST.filterOverAir)
     .sort((a, b) => airPoints(b) - airPoints(a))
     .slice(0, alloy)
     .map((t) => tileIndex(obs.width, t.x, t.y));
