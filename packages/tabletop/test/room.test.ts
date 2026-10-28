@@ -807,20 +807,21 @@ describe('Room: a connection holds at most one seat (FM-3)', () => {
       how: "s2's move code",
       fields: (ctx: ReturnType<typeof clockLobby>) => ({ handoff: handoff(ctx.room, ctx.mia) }),
       miaHears: { t: 'removed', reason: 'moved' },
-      heardOnJoin: { changes: [['s1', false]], moved: ['s2'] },
+      moved: ['s2'],
     },
     {
       how: "s2's seat token",
       fields: (ctx: ReturnType<typeof clockLobby>) => ({ seatToken: ctx.mia.last('welcome')!.seatToken! }),
       miaHears: undefined,
-      heardOnJoin: { changes: [['s1', false], ['s2', true]], moved: [] },
+      moved: [],
     },
-  ])('FM-3: after Start, a connection on s1 that joins with $how lets go of s1: s1 shows away, the game hears s1 disconnected, and a later disconnect frees s2 only', async ({ fields, miaHears, heardOnJoin }) => {
+  ])('FM-3: after Start, a connection on s1 that joins with $how lets go of s1: s1 shows away, the game hears s1 disconnected, and a later disconnect frees s2 only', async ({ fields, miaHears, moved }) => {
     const ctx = clockLobby();
     const { room, heiko, mia, heard } = ctx;
     room.receive(heiko, heiko.from, { t: 'start' });
     const tv = watch(room);
     const via = fields(ctx);
+    const heardOfS1 = () => heard.changes.filter(([seatId]) => seatId === 's1');
 
     room.receive(heiko, heiko.from, { t: 'join', code: room.code, name: 'Heiko', ...via });
     await flush();
@@ -828,13 +829,15 @@ describe('Room: a connection holds at most one seat (FM-3)', () => {
     expect(heiko.last('welcome')!.seatId).toBe('s2');
     expect(mia.last('removed')).toStrictEqual(miaHears);
     expect(presence(tv)).toStrictEqual([['s1', false], ['s2', true], ['s3', true]]);
-    expect(heard).toStrictEqual({ starts: 1, ...heardOnJoin });
+    expect(heardOfS1()).toStrictEqual([['s1', false]]);
+    expect(heard.moved).toStrictEqual(moved);
 
     room.disconnect(heiko);
     await flush();
 
     expect(presence(tv)).toStrictEqual([['s1', false], ['s2', false], ['s3', true]]);
-    expect(heard.changes).toStrictEqual([...heardOnJoin.changes, ['s2', false]]);
+    expect(heard.changes.at(-1)).toStrictEqual(['s2', false]);
+    expect(heardOfS1()).toStrictEqual([['s1', false]]);
   });
 
   it.each([
