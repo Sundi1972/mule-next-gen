@@ -22,10 +22,11 @@ const RAIL: AuditScope = { roots: ['[data-testid=guide] > header', '[data-testid
 /** A WS4 screen: all of it, less the table chat. */
 const WHOLE: AuditScope = { roots: ['[data-testid=game-shell]'], skip: ['[data-testid=table-chat]'] };
 /**
- * The development map's plots are the map's own grid: 13 across the stage, 31.8 px at 667. They are not counted as
- * taps; the map's zoom (C11) is what makes them bigger.
+ * Out on the development map: the rail header and the map. The plot card (the rail's body and its footer) is excluded:
+ * it retires in arcade C14, so it is measured and printed, not asserted. The plots are the map's own grid, 13 across
+ * the stage, 31.8 px at 667: not counted as taps, since the map's zoom (C11) is what makes them bigger.
  */
-const DEV_MAP: AuditScope = { ...WHOLE, tapsNotCounted: ['[data-testid^=map-plot-]'] };
+const DEV_MAP: AuditScope = { roots: [...RAIL.roots, '[data-testid=dev-map]'], skip: RAIL.skip, tapsNotCounted: ['[data-testid^=map-plot-]'] };
 
 type Read = { screen: string; small: AuditRead; base: AuditRead };
 /** The screens whose rail is the game shell's, with your name in its header: every phase, not the lobby. */
@@ -95,13 +96,15 @@ try {
   await swap.waitFor({ timeout: PRESS_MS });
   await both('development, your plot with a MULE', DEV_MAP);
   const filter = dev.getByRole('button', { name: /^(Fit a filter|Filter fitted)/ });
-  await both('development, the plot card scrolled to its filter', DEV_MAP, () => filter.evaluate((e) => e.scrollIntoView({ block: 'end' })));
   for (const size of [PHONE_SMALL.viewport, PHONE.viewport]) {
     await phone.setViewportSize(size);
-    for (const [what, button] of [['the swap', swap], ['"Fit a filter"', filter]] as const) {
+    const card: string[] = [];
+    for (const [what, button] of [['swap', swap], ['filter', filter]] as const) {
       await button.evaluate((e) => e.scrollIntoView({ block: 'end' }));
-      check(await inView(phone, button), `B-AC-11: at ${size.width}×${size.height} the plot card shows ${what} in full`);
+      const box = await button.boundingBox();
+      card.push(`${what} ${box ? `${box.width.toFixed(1)}×${box.height.toFixed(1)}` : 'absent'}${(await inView(phone, button)) ? ' in full' : ' cut'}`);
     }
+    console.log(`  plot card at ${size.width}×${size.height}, measured, not asserted (retires in arcade C14): ${card.join(', ')}`);
     const spill = await dev.getByRole('button', { name: 'Colony store' }).evaluate((plot) => {
       const chip = [...plot.querySelectorAll('span')].find((s) => s.textContent === 'STORE');
       if (!chip) return Infinity;
