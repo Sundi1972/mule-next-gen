@@ -145,7 +145,7 @@ try {
   await phone.getByRole('button', { name: 'Day' }).click();
   // Done with every good that comes up, until the auction closes.
   for (let i = 0; i < 60 && (await phone.locator('[data-phase=auction]').count()) > 0; i++) {
-    const done = phone.getByRole('button', { name: /^(Ready|Done choosing|Done with )/ });
+    const done = phone.getByRole('button', { name: /^(Ready|Done with )/ });
     if ((await done.count()) > 0 && (await done.isEnabled())) await done.click().catch(() => {});
     await phone.waitForTimeout(500);
   }
