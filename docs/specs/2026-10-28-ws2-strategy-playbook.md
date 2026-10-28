@@ -431,5 +431,9 @@ Code-only; no existing state to reach. The record starts with WS3's build.
   WS1 owns the coverage test: every MuleIntent in packages/protocol has an AI move or sits on a short reviewed
   exclusion list. WS2 owns the manual's rendering (C8) and the tools (C9), and reads the descriptors only.
   Settled at the schema freeze with WS1 and WS3 (PM, 29 Oct).
+- The writer and the validator (agreed with WS1, 29 Oct): WS2's writer checks only the reply's shape (it parses,
+  offered paths once each, enums, types, lengths) plus `never_corners` on the same `AI_LEVELS[level].corners` flag as a
+  first filter. Every value bound lives in WS1's validatePlan, the gate for every playbook including the engine's
+  draft, and only its result plays. A value bound found in the writer is a bug to move to validatePlan.
 - The tools (`packages/ai/src/llm/tools.ts`) and the manual (`llm/manual.ts`): WS2. The SDK stays imported by
   `apps/server/src/brain/client.ts` only (the existing §9 guard test); the tool loop lives there.
