@@ -32,8 +32,8 @@ describe('walking in development', () => {
       ['bram', plot, 'corral', 3],
       ['bram', plot, 'store', 2],
       ['bram', plot, diagonal, 0.8],
-      ['zip', plot, 'corral', 2],
-      ['zip', 'corral', plot, 2 / 1.5],
+      ['zip', plot, 'corral', 2.4],
+      ['zip', 'corral', plot, 1.6],
     ];
     for (const [id, from, to, seconds] of rows) {
       expect(walkSeconds(state, id, from, to), `${id} ${from} -> ${to}`).toBeCloseTo(seconds, 9);
@@ -67,6 +67,6 @@ describe('walking in development', () => {
     const zip = state.players.find((p) => p.id === 'zip')!;
     zip.stock.food = 0;
     zip.sick = false;
-    expect(walkSeconds(state, 'zip', 'corral', plot)).toBeCloseTo(2 / (1.5 * 0.2), 9);
+    expect(walkSeconds(state, 'zip', 'corral', plot)).toBeCloseTo(8, 9);
   });
 });
