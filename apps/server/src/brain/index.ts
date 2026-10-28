@@ -1,8 +1,8 @@
 import { BRAIN, type AiLevelId, type AiPersonaId } from '@mule/engine';
 import { LlmDecider, ReplyRejected, unusableReply, writeReply, type Complete, type Decider, type DecisionRecord, type WriteAsk, type WriteComplete, type WriterReply } from '@mule/ai';
-import { createBudget, MOVE_CALL, worstCaseUsd } from './budget.js';
+import { createBudget, MOVE_CALL, worstCaseUsd, type PromptText } from './budget.js';
 import { chatter } from './chat.js';
-import { billUnknown, CallFailed, createAnthropicSdk, createHaikuComplete, createWriteComplete, WRITE_CALLS, type HaikuReply, type HaikuSdk, type WriteKind } from './client.js';
+import { billUnknown, CallFailed, createAnthropicSdk, createHaikuComplete, createWriteComplete, WRITE_CALLS, WRITE_FALLBACK_MODEL, type HaikuReply, type HaikuSdk, type WriteKind } from './client.js';
 import { createLedger, NO_USAGE, type LedgerKind, type ModelId, type Outcome, type Usage } from './ledger.js';
 
 /** The seat a decider is built for: its id, persona and level. */
@@ -26,7 +26,10 @@ export interface BrainService {
 
 export type { WriteAsk };
 
-/** A seat's strategy and playbook writer. `write` never throws: every failure is the reply's cause. */
+/**
+ * A seat's strategy and playbook writer. `write` never throws: every failure is the reply's cause. A busy seat, a game
+ * that is over, a wait that is not above 0, or a budget no model fits returns cause 'no_reply' without a model call.
+ */
 export interface PlaybookWriter {
   write(kind: WriteKind, ask: WriteAsk): Promise<WriterReply>;
 }
@@ -54,6 +57,14 @@ class BudgetSpent extends Error {
   constructor(readonly lockedNow: boolean) {
     super('budget spent');
     this.name = 'BudgetSpent';
+  }
+}
+
+/** No model a write call may use fits the seat's share and the game budget: no call is made. */
+class NoModelFits extends Error {
+  constructor() {
+    super('no model fits the budget');
+    this.name = 'NoModelFits';
   }
 }
 
@@ -180,22 +191,35 @@ export function createBrain(options: BrainOptions): MeteredBrain {
   function writerFor(seat: BrainSeat): PlaybookWriter | null {
     const line = enter(seat);
     if (!line) return null;
+
+    /** The kind's model if its worst case fits, else the fallback's if that fits, else none. Never locks the seat. */
+    const modelFor = (prompt: PromptText, call: { model: ModelId; maxTokens: number }) => {
+      for (const model of [call.model, WRITE_FALLBACK_MODEL]) {
+        // A model with no price table could never be counted, so it is never allowed.
+        if (!Object.hasOwn(BRAIN.priceTable, model)) continue;
+        const worstUsd = worstCaseUsd(prompt, { model, maxTokens: call.maxTokens });
+        if (budget.fits(gameId, seat.id, worstUsd)) return { model, worstUsd };
+      }
+      return null;
+    };
     return {
       async write(kind, ask) {
-        if (finished || busy.has(seat.id)) return unusableReply('no_reply');
+        if (finished || busy.has(seat.id) || !(ask.waitMs > 0)) return unusableReply('no_reply');
         busy.add(seat.id);
         const call = WRITE_CALLS[kind];
         const slot: CallSlot = { called: false, worstUsd: 0, reply: null };
+        let model: ModelId = call.model;
         let failure: unknown;
         // The writer turns any throw from here into its 'no_reply' cause, so the port keeps what was thrown.
         const port: WriteComplete = async (prompt, waitMs) => {
           try {
             if (finished) throw new Error('game over');
-            slot.worstUsd = worstCaseUsd(prompt, call);
-            const { allowed, lockedNow } = budget.allow(gameId, seat.id, slot.worstUsd);
-            if (!allowed) throw new BudgetSpent(lockedNow);
+            const pick = modelFor(prompt, call);
+            if (!pick) throw new NoModelFits();
+            model = pick.model;
+            slot.worstUsd = pick.worstUsd;
             slot.called = true;
-            slot.reply = await writeComplete(kind, prompt, call.model, waitMs);
+            slot.reply = await writeComplete(kind, prompt, model, waitMs);
             return { text: slot.reply.text, stopReason: slot.reply.stopReason };
           } catch (err) {
             failure = err ?? new Error('unknown error');
@@ -209,11 +233,12 @@ export function createBrain(options: BrainOptions): MeteredBrain {
           failure ??= err ?? new Error('unknown error');
         } finally {
           busy.delete(seat.id);
-          if (failure instanceof BudgetSpent) {
-            if (failure.lockedNow) line(kind, call.model, 'budget', NO_USAGE, 0);
+          if (failure instanceof NoModelFits) {
+            line(kind, call.model, 'budget', NO_USAGE, 0);
           } else if (slot.called) {
             const ms = slot.reply?.ms ?? (failure instanceof CallFailed ? failure.ms : 0);
-            line(kind, call.model, writeOutcomeOf(slot.reply, failure, written), slot.reply?.usage ?? NO_USAGE, ms);
+            const outcome = writeOutcomeOf(slot.reply, failure, written);
+            line(kind, model, outcome === 'llm' && model !== call.model ? 'fallback' : outcome, slot.reply?.usage ?? NO_USAGE, ms);
             if (billUnknown(slot.reply, failure) && !finished) budget.countUnknownBill(gameId, seat.id, slot.worstUsd);
           }
         }

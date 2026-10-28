@@ -48,6 +48,8 @@ export interface Budget {
    * `lockedNow` is true only for the refusal that locked it. See RULE-3.
    */
   allow(game: string, seat: string, nextUsd: number): { allowed: boolean; lockedNow: boolean };
+  /** Would allow() let this call through? Never locks; a seat already locked never fits. */
+  fits(game: string, seat: string, nextUsd: number): boolean;
   /** The seat's spend this game as allow() checks it: ledger dollars plus its unknown bills at their worst case. */
   spent(game: string, seat: string): number;
   /** Counts a call whose bill is unknown toward the seat's spend at its worst case; its ledger line is left as it is. */
@@ -74,19 +76,24 @@ export function createBudget(ledger: Pick<Ledger, 'seatSpent'>, options: BudgetO
   const unknown = new Map<string, Map<string, number>>();
   const spentBy = (game: string, seat: string) => ledger.seatSpent(game, seat) + (unknown.get(game)?.get(seat) ?? 0);
 
+  /** Within the seat's share and the game budget, ignoring locks. */
+  function within(game: string, seat: string, nextUsd: number): boolean {
+    // A seat that asks before it is registered still takes a share and puts its spend on the table.
+    const table = new Set(options.seats(game)).add(seat);
+    const share = options.budgetUsd / table.size;
+    const spent = spentBy(game, seat);
+    let tableSpent = 0;
+    for (const s of table) tableSpent += spentBy(game, s);
+    // A negative or infinite term could hide spend; !(<=) also refuses a NaN.
+    const sane = Number.isFinite(spent) && Number.isFinite(tableSpent) && Number.isFinite(nextUsd) && nextUsd >= 0;
+    // The table check holds the game budget even after a late seat shrinks the shares below what a seat has spent.
+    return sane && spent + nextUsd <= share && tableSpent + nextUsd <= options.budgetUsd;
+  }
+
   return {
     allow(game, seat, nextUsd) {
       if (locked.get(game)?.has(seat)) return { allowed: false, lockedNow: false };
-      // A seat that asks before it is registered still takes a share and puts its spend on the table.
-      const table = new Set(options.seats(game)).add(seat);
-      const share = options.budgetUsd / table.size;
-      const spent = spentBy(game, seat);
-      let tableSpent = 0;
-      for (const s of table) tableSpent += spentBy(game, s);
-      // A negative or infinite term could hide spend; !(<=) also refuses a NaN.
-      const sane = Number.isFinite(spent) && Number.isFinite(tableSpent) && Number.isFinite(nextUsd) && nextUsd >= 0;
-      // The table check holds the game budget even after a late seat shrinks the shares below what a seat has spent.
-      if (!sane || !(spent + nextUsd <= share) || !(tableSpent + nextUsd <= options.budgetUsd)) {
+      if (!within(game, seat, nextUsd)) {
         const seats = locked.get(game) ?? new Set<string>();
         seats.add(seat);
         locked.set(game, seats);
@@ -94,6 +101,8 @@ export function createBudget(ledger: Pick<Ledger, 'seatSpent'>, options: BudgetO
       }
       return { allowed: true, lockedNow: false };
     },
+
+    fits: (game, seat, nextUsd) => !locked.get(game)?.has(seat) && within(game, seat, nextUsd),
 
     spent: spentBy,
 

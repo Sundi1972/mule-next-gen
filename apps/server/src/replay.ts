@@ -67,6 +67,7 @@ class Script {
     this.brain = {
       deciderFor: (seat) =>
         smart.has(seat.id) ? { name: 'recorded', decide: () => this.call(seat.id, 'move') as Choice | Promise<Choice> } : null,
+      // The record holds no refusals, so a replayed reply never has any.
       writerFor: (seat) =>
         smart.has(seat.id) ? { write: async (kind) => ({ reply: (await this.call(seat.id, kind)) as RecordedWrite, refused: [] }) } : null,
       chatter: () => () => {},

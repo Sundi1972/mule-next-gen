@@ -241,7 +241,7 @@ export class Recorder {
           if (header) header.smart = true;
         });
         return {
-          write: async (kind, ask) => this.call(seat.id, kind, () => writer.write(kind, ask), (r) => ({ write: r.reply })),
+          write: async (kind, ask) => this.call(seat.id, kind, () => writer.write(kind, ask), (r) => ({ write: structuredClone(r.reply) })),
         };
       },
       chatter: (seat, say) => inner.chatter(seat, say),

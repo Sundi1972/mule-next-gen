@@ -14,7 +14,8 @@ export interface Usage {
 
 export const NO_USAGE: Readonly<Usage> = Object.freeze({ input: 0, cached_read: 0, cache_write: 0, output: 0 });
 
-export type Outcome = RejectOutcome | 'llm' | 'refused' | 'timeout' | 'error' | 'budget';
+/** 'fallback' is a write call's usable reply from the fallback model, sent because its kind's model did not fit the budget. */
+export type Outcome = RejectOutcome | 'llm' | 'fallback' | 'refused' | 'timeout' | 'error' | 'budget';
 
 /** What a call was for: a move (land, develop, trade), or writing a seat's strategy or playbook. */
 export type LedgerKind = DecisionKind | WriteKind;
