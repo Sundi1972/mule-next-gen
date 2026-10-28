@@ -735,7 +735,7 @@ export const LOTS = {
 /**
  * The longest each timed phase lasts, in milliseconds at phaseScale 1. Planning waits for every human's Ready,
  * a dropped phone's too, unless the host continues. Other phases also end early: when every connected player is
- * ready, the land grant when the claims are used, development when everyone is out of time or at the pub. The
+ * ready, the land grant after its one pass or once the claims are used, development when everyone is out of time or at the pub. The
  * goods auction and the land auction have no fixed length; they run on WALK's and LOTS' clocks.
  */
 export const PHASES = {
@@ -744,8 +744,11 @@ export const PHASES = {
    * Ready or the host's Continue; a number restores a timer.
    */
   planningMs: null as number | null,
-  /** The land grant: the light sweeps the free plots. */
-  landGrantMs: 60_000,
+  /**
+   * The land grant: the light passes once over the free plots, GAME.grantTickMs a plot. null: no clock; it ends after
+   * the pass or once every claim is used. A number restores a timer.
+   */
+  landGrantMs: null as number | null,
   /** Production: the show of what each plot made. */
   productionMs: 15_000,
   /** Upkeep: colonists eat and goods spoil. */

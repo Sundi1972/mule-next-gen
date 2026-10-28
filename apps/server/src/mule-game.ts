@@ -18,6 +18,7 @@ import {
   fitFilter,
   foodShare,
   GAME,
+  mapSize,
   GOODS,
   goodsMarket,
   type AiLevelId,
@@ -82,11 +83,14 @@ import { electionNews, myPoliticsView, politicsView, resultShown } from './polit
  * The longest each phase lasts, in milliseconds, from the engine's PHASES.
  * Each is read from the config when asked, so a value set at runtime times the
  * next phase that starts. Planning's is null: it has no clock and waits for
- * every player's Ready. The auction has no entry: it runs good by good on its
+ * every player's Ready. The land grant's is null too: it ends after one pass of
+ * its light, or once every claim is used. The auction has no entry: it runs good by good on its
  * own clocks (WALK), stepped by the server every WALK.tickMs. The land auction
  * runs the same way, lot by lot on its own clocks (LOTS).
  */
-export const PHASE_MS: { readonly planning: number | null } & Readonly<Record<Exclude<Phase, 'gameOver' | 'auction' | 'landAuction' | 'planning'>, number>> = {
+export const PHASE_MS: { readonly planning: number | null; readonly landGrant: number | null } & Readonly<
+  Record<Exclude<Phase, 'gameOver' | 'auction' | 'landAuction' | 'planning' | 'landGrant'>, number>
+> = {
   get planning() {
     return PHASES.planningMs;
   },
@@ -106,6 +110,9 @@ export const PHASE_MS: { readonly planning: number | null } & Readonly<Record<Ex
 
 /** How long each free plot stays lit in the land grant. */
 export const GRANT_TICK_MS = GAME.grantTickMs;
+
+/** The longest a land grant runs: one pass over every plot of the largest map. phaseScale never shortens it. */
+export const GRANT_PASS_MAX_MS = ((size) => size.width * size.height)(mapSize(GAME.maxPlayers)) * GRANT_TICK_MS;
 
 export const AI_NAMES = ['The Accountant', 'The Baron', 'The Grudge', 'The Gambler', 'The Good Neighbour'];
 
@@ -653,9 +660,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.cancels.push(
       this.ctx.schedule(GRANT_TICK_MS, () => {
         if (state.phase !== 'landGrant') return;
+        advanceGrant(state);
+        // The pass ends when the last plot's tick does, so the light never comes back round to the first.
         if (grantDone(state)) this.nextPhase();
         else {
-          advanceGrant(state);
           this.aiGrantBids();
           this.scheduleGrantTick();
         }
