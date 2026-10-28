@@ -16,6 +16,10 @@ import { PhoneLandLine, TvLandLine } from './screens/LandLine';
 import { PhoneProduction, ShowControls, TvProduction, useShow } from './screens/Production';
 import { PhoneStatusDeclare, TvStatusDeclare } from './screens/StatusDeclare';
 import { PhoneStore, TvDevelop } from './screens/Store';
+import { HoloMap, type MapTile } from '@mule/ui';
+import { mapTiles } from '../../../../apps/web/src/game/derive';
+import { PlotMap, type PlotLook } from './proposed/PlotMap';
+import { H, W } from './fixture';
 
 const DECISIONS = [
   'Concepts from the original, never its art or layout: every screen here is our holo-table style on @mule/ui.',
@@ -396,6 +400,8 @@ export default function App() {
       </Page>
     );
 
+  if (hash === 'plots') return <PlotsPage />;
+
   if (hash === 'tv-develop')
     return (
       <Page title="Development on the big screen · everyone walking">
@@ -447,6 +453,10 @@ export default function App() {
 
   return (
     <div className="min-h-full bg-table p-8 text-ink" data-testid="index">
+      <h2 className="label-caps">For approval 2026-10-28 · plots you can read from the couch (Heiko's playtest)</h2>
+      <div className="mt-2 flex flex-col gap-2">
+        <Links states={[{ id: 'plots', title: 'Who owns a plot, what is on it, which one you selected: today, A and B (TV and phone)' }]} />
+      </div>
       <h1 className="font-display text-3xl font-semibold">WS6 · UX & gameplay · mocks</h1>
       <p className="mt-1 max-w-3xl text-sm text-ink-2">
         What we take from the original M.U.L.E., as concepts on our own screens. Analysis: docs/research/2026-10-21-ws6-original-vs-ours.md. Fixture: month 5, four players; Lena holds the phone, Ossa and Kai are AI.
@@ -500,5 +510,49 @@ export default function App() {
         <Links states={[...STORE_STATES, { id: 'tv-develop', title: 'Big screen: everyone walking' }]} />
       </div>
     </div>
+  );
+}
+
+/** The fixture's map with three special fields, one hanging into Lena's plot, to show the owner's mark stays on top. */
+const PLOT_TILES: MapTile[] = mapTiles(VIEW).map((t) =>
+  t.x === 5 && t.y === 4 ? { ...t, special: { kind: 'ruins', salvage: 'alloy' } } : t.x === 12 && t.y === 5 ? { ...t, special: { kind: 'crystalCavern' } } : t.x === 9 && t.y === 3 ? { ...t, special: { kind: 'oasis' } } : t,
+);
+/** Lena's Energy plant, selected. */
+const PLOT_SELECTED = { x: 6, y: 5 };
+
+function PlotsPage() {
+  const looks: { look: PlotLook | 'today'; title: string; note: string }[] = [
+    { look: 'today', title: 'Today', note: 'A thin outline at 16% tint, a 7–12 px owner mark, a 10–20 px icon; the selection is a 2 px ring.' },
+    { look: 'A', title: 'A · bold plots (recommended)', note: 'Every owned plot: a thick border and a 30% tint in its owner’s colour, and a corner tab with the owner’s creature, big enough to tell the shapes apart without colour. Installed: a large icon on a disc ringed in the good’s colour. Selected: a pulsing double ring, lifted, with a pin.' },
+    { look: 'B', title: 'B · territories', note: 'A thick border only round the edge of each player’s land, so a holding reads as one shape, and a hatch unique to each player inside, which tells owners apart without colour. Same installed icon and selection as A.' },
+  ];
+  return (
+    <Page title="Plots you can read from the couch · who owns it, what's on it, which you selected">
+      <p className="max-w-[1000px] text-sm text-ink-2">
+        Heiko’s playtest: “the plot that I selected must be clearer visible. it is hard to see which plot belongs to which player and what is on them.” The same map three ways, Lena’s Energy plant (6·5) selected, a ruins field hanging into it, an oasis and a crystal cavern. TV at its real width first, then the phone. I recommend A: each plot reads on its own from across the room, the creature tab works without colour, and the painted land stays calm; B’s hatch is the stronger colour-blind cue but makes the land busy.
+      </p>
+      {looks.map((l) => (
+        <section key={l.look} className="flex flex-col gap-2" data-testid={`look-${l.look}`}>
+          <h2 className="font-display text-xl font-semibold">{l.title}</h2>
+          <p className="max-w-[1000px] text-sm text-ink-2">{l.note}</p>
+          <div className="flex flex-wrap items-start gap-6">
+            <div className="w-[760px] rounded-panel bg-table p-3" data-testid={`tv-${l.look}`}>
+              {l.look === 'today' ? (
+                <HoloMap width={W} height={H} tiles={PLOT_TILES} density="tv" hideGround selected={PLOT_SELECTED} />
+              ) : (
+                <PlotMap look={l.look} width={W} height={H} tiles={PLOT_TILES} density="tv" selected={PLOT_SELECTED} />
+              )}
+            </div>
+            <div className="w-[420px] rounded-panel bg-table p-2" data-testid={`phone-${l.look}`}>
+              {l.look === 'today' ? (
+                <HoloMap width={W} height={H} tiles={PLOT_TILES} selected={PLOT_SELECTED} focusSlot={0} />
+              ) : (
+                <PlotMap look={l.look} width={W} height={H} tiles={PLOT_TILES} selected={PLOT_SELECTED} focusSlot={0} onTile={() => undefined} />
+              )}
+            </div>
+          </div>
+        </section>
+      ))}
+    </Page>
   );
 }
