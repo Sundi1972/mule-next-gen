@@ -74,8 +74,10 @@
 
 **Found in WS6-C13's review (round 1, 2026-10-28), not in that PR:**
 - **Extract the walking state machine's pure parts** into `apps/server/src/dev-walking.ts`, as land-auction.ts and politics-view.ts are: `DevIntent`, `Colonist`, `walkTarget`, `placeName`, the order of due arrivals, `colonistView`. The timer wiring stays in `MuleGame`. mule-game.ts went from 881 to 1036 lines.
-- **`GRANT_TICK_MS` isn't scaled by `phaseScale`.** At phaseScale 0.1 on seed 7, the AI wins no land in month 1. This predates C13.
-- **RULE-7 row 1's 30 s timeout** (WS5's 5b3f3c8): re-time it under load once WS5's #112 (maps 2.7× faster) is on trunk, and drop it if the row stays well inside vitest's 5 s default.
+- **Extracting the walking parts is PR-C, below** (the PM's order, 2026-10-28).
+- **`GRANT_TICK_MS` isn't scaled by `phaseScale`.** At phaseScale 0.1 on seed 7, the AI wins no land in month 1. This predates C13. **On hold with the PM (2026-10-28):** WS4's T-AC-2 (phase-scale.test.ts) pins the tick at its real pace on purpose, so any fix restates WS4's rule. WS3 recommends dropping it.
+- **RULE-7 row 1's 30 s timeout** (WS5's 5b3f3c8): re-time it under load once WS5's #112 (maps 2.7× faster) is on trunk, and drop it if the row stays well inside vitest's 5 s default. **Blocked:** #112 is merged into ws5-maps only, not into trunk 9e433ca.
+- **The FU-17 trim** (auction-steps.ts's three declare-text alternatives in `stageShown`). **Blocked:** WS4's #96 is merged into ws4-table only, not into trunk 9e433ca.
 - **The AI's rule when humans finish development early** (parked by the PM): the pub path waits for AI seats, the Ready/drop path doesn't. Unify only on a PM ruling.
 
 ## PR-A: engine and server (`ws3-fu-a` from `ws3-auctions`)
@@ -163,3 +165,24 @@ WS4's PR-6 adds a "move to your phone" dialog (`role="dialog"`, `aria-modal`, te
 - [x] `pnpm typecheck` · `pnpm --filter @mule/web test` · build, then `tsx e2e/auction-steps.ts` · `pnpm --filter @mule/web e2e` are green
 - [ ] (automated only: B.4 drives this in a real browser and asserts it at the server; no hands-on check yet, owed at UAT) A goal check in the browser: hold Up across a good's switch, and the next good's first press moves the walker
 - [x] A code review has come back clean
+
+## PR-C: the walking parts in their own file (`ws3-fu-walk` from `ws3-auctions`)
+
+No behaviour change: a pure move, as land-auction.ts and politics-view.ts already sit beside `MuleGame`. The C13 suite (`apps/server/test/dev-walking.test.ts`, WS3's) is the pin, and it stays unedited.
+
+**Authority:**
+- `may_edit`: `apps/server/src/mule-game.ts`, and the new `apps/server/src/dev-walking.ts` (a split from WS3's mule-game.ts, so WS3's).
+- `must_not_edit`: every test file, every other lane's file, `packages/**` (no engine, protocol or AI change), and the 25 importers of mule-game.js. Its exports (`MuleGame`, `GRANT_TICK_MS`, `PHASE_MS`, `DEFAULT_AI_LEVEL`, `AI_NAMES`, `AI_DEV_TICK_MS`) stay where they are.
+
+### Task C.1: move the pure walking parts
+
+- [ ] **Step 1:** move into `dev-walking.ts`: `DevIntent`, `Colonist`, `walkTarget`, `placeName`, the order of due arrivals (the sort inside `settleArrivals`), and the colonist view (the body of `colonistView`, as a function of the colonist and the clock). The timer wiring (scheduling, `settleArrivals`/`arrive`/`act` as methods, `devEndsAt`, the early end) stays in `MuleGame`.
+- [ ] **Step 2:** the pin. `dev-walking.test.ts`, `planning.test.ts` and the whole server suite pass unedited. **Positive control:** break `walkTarget` in its new home (one place returns the wrong target), watch dev-walking.test.ts go red, then restore.
+
+### PR-C merge gate
+
+- [ ] `git diff --stat` shows only the two server source files; no test is edited
+- [ ] `pnpm typecheck` · `pnpm test` are green, and the server count is unchanged (153 +1 skipped)
+- [ ] The positive control went red, and the tree is clean after the restore
+- [ ] `pnpm --filter @mule/web build` and `pnpm --filter @mule/web e2e:core` are green (the walk is driven in the smoke)
+- [ ] A code review has come back clean
