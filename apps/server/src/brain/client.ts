@@ -73,13 +73,24 @@ export function fail(e: unknown, ms: number, waitMs: number, aborted: boolean): 
   return new CallFailed('model call failed', 'error', false, ms);
 }
 
-/** A mutable deep copy: the readonly PromptSchema is not assignable to the SDK's `{ [key: string]: unknown }`. */
-function copyOf(schema: Prompt['schema']): Record<string, unknown> {
+/** A mutable deep copy: a readonly schema is not assignable to the SDK's `{ [key: string]: unknown }`. */
+function copyOf(schema: object): Record<string, unknown> {
   return JSON.parse(JSON.stringify(schema));
 }
 
 /** Null (the SDK's value for a cache field that does not apply) or a missing field is 0, never NaN. */
 const count = (n: number | null | undefined): number => n ?? 0;
+
+/** A response's billed tokens in the ledger's terms. */
+const usageOf = (u: Anthropic.Usage): Usage => ({
+  input: count(u.input_tokens),
+  cached_read: count(u.cache_read_input_tokens),
+  cache_write: count(u.cache_creation_input_tokens),
+  output: count(u.output_tokens),
+});
+
+/** A response's text blocks, joined; thinking blocks are left out. */
+const textOf = (res: Anthropic.Message): string => res.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('');
 
 /** The decider's port over Haiku: one try, no retries, never waits past waitMs, reports what it was billed. */
 export function createHaikuComplete(
@@ -110,18 +121,90 @@ export function createHaikuComplete(
       clearTimeout(timer);
     }
     const ms = now() - start;
-    const text = res.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('');
-    const u = res.usage;
+    return { text: textOf(res), ms, stopReason: res.stop_reason, usage: usageOf(res.usage) };
+  };
+}
+
+/** A model BRAIN has a price table for: the only models a call may name. */
+export type ModelId = keyof typeof BRAIN.priceTable;
+
+/** What a thinking call sends: its model, its effort, a reply cap that includes the thinking, and its wait in ms. */
+export interface ThinkingCall {
+  model: ModelId;
+  effort: NonNullable<Anthropic.OutputConfig['effort']>;
+  maxTokens: number;
+  timeoutMs: number;
+}
+
+/** A prompt for a thinking call: the cached system text, the user text and the reply's JSON schema. */
+export interface WritePrompt {
+  system: string;
+  user: string;
+  schema: object;
+}
+
+export interface ThinkingReply extends HaikuReply {
+  /** usage.output_tokens_details.thinking_tokens, or null when the response carries none. */
+  thinking: number | null;
+}
+
+/** The port for thinking calls: adaptive thinking at the call's effort, the schema; one try, no retries, never past its wait. */
+export function createThinkingComplete(
+  sdk: HaikuSdk,
+  now: () => number = () => performance.now(),
+): (call: ThinkingCall, prompt: WritePrompt) => Promise<ThinkingReply> {
+  return async (call, prompt) => {
+    const start = now();
+    // The SDK's timeout stops at the response headers; this abort bounds the body read too.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), call.timeoutMs);
+    let res: Anthropic.Message;
+    try {
+      res = await sdk.messages.create(
+        {
+          model: call.model,
+          max_tokens: call.maxTokens,
+          thinking: { type: 'adaptive' },
+          system: [{ type: 'text', text: prompt.system, cache_control: { type: 'ephemeral' } }],
+          messages: [{ role: 'user', content: prompt.user }],
+          output_config: { effort: call.effort, format: { type: 'json_schema', schema: copyOf(prompt.schema) } },
+        },
+        { timeout: Math.ceil(call.timeoutMs), maxRetries: 0, signal: controller.signal },
+      );
+    } catch (e) {
+      throw fail(e, now() - start, call.timeoutMs, controller.signal.aborted);
+    } finally {
+      clearTimeout(timer);
+    }
+    const ms = now() - start;
     return {
-      text,
+      text: textOf(res),
       ms,
       stopReason: res.stop_reason,
-      usage: {
-        input: count(u.input_tokens),
-        cached_read: count(u.cache_read_input_tokens),
-        cache_write: count(u.cache_creation_input_tokens),
-        output: count(u.output_tokens),
-      },
+      thinking: res.usage.output_tokens_details?.thinking_tokens ?? null,
+      usage: usageOf(res.usage),
     };
   };
+}
+
+/** The kinds of call that write a seat's strategy and its playbook edits. */
+export const WRITE_KINDS = ['strategy', 'playbook'] as const;
+export type WriteKind = (typeof WRITE_KINDS)[number];
+
+/** BRAIN's settings per write kind, typed so that a kind naming an unpriced model or an unknown effort fails to compile. */
+export const WRITE_CALLS: Readonly<Record<WriteKind, ThinkingCall>> = BRAIN.writeCalls;
+
+/** The fallback model, typed so that an unpriced one fails to compile. */
+export const WRITE_FALLBACK_MODEL: ModelId = BRAIN.writeFallbackModel;
+
+/**
+ * The port for strategy and playbook calls: the kind's BRAIN settings, sent to the model the caller names (the kind's
+ * own by default). It only talks to the API; the caller checks the budget before and ledgers after.
+ */
+export function createWriteComplete(
+  sdk: HaikuSdk,
+  now?: () => number,
+): (kind: WriteKind, prompt: WritePrompt, model?: ModelId) => Promise<ThinkingReply> {
+  const think = createThinkingComplete(sdk, now);
+  return (kind, prompt, model = WRITE_CALLS[kind].model) => think({ ...WRITE_CALLS[kind], model }, prompt);
 }

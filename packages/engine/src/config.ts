@@ -1030,8 +1030,20 @@ export const BRAIN = {
   spikeCapUsd: 0.05,
   /** US dollars per million tokens, for `model` (Haiku 5.5). */
   pricesPerMTok: { input: 0.1, cacheRead: 0.01, cacheWrite: 0.125, output: 0.5 },
-  /** US dollars per million tokens for Sonnet 5.5: cache reads 0.1x input, 5-minute cache writes 1.25x. Spike S-A1 only. */
+  /** US dollars per million tokens for Sonnet 5.5: cache reads 0.1x input, 5-minute cache writes 1.25x. */
   sonnetPricesPerMTok: { input: 2, cacheRead: 0.2, cacheWrite: 2.5, output: 10 },
+  /** The price table each model is billed at. Every model a call may name is listed here, so none is priced as another. */
+  priceTable: { 'claude-haiku-5-5': 'pricesPerMTok', 'claude-sonnet-5-5': 'sonnetPricesPerMTok' },
+  /**
+   * The calls that write a seat's strategy and its playbook edits, by kind: adaptive thinking at this effort, a reply
+   * cap that includes the thinking, and how long one call may take in ms (spike S-A1 measured a p90 of 3.9 s).
+   */
+  writeCalls: {
+    strategy: { model: 'claude-sonnet-5-5', effort: 'medium', maxTokens: 3_000, timeoutMs: 30_000 },
+    playbook: { model: 'claude-sonnet-5-5', effort: 'medium', maxTokens: 3_000, timeoutMs: 30_000 },
+  },
+  /** The cheaper model a strategy or playbook call may be sent to instead of its kind's model. */
+  writeFallbackModel: 'claude-haiku-5-5',
   /**
    * Spike S-A1 (WS2 spec A §7), brain:strategy-spike: Haiku 5.5 with adaptive thinking against Sonnet 5.5 writing a
    * seat's strategy. `models.haiku` is priced at pricesPerMTok, `models.sonnet` at sonnetPricesPerMTok.

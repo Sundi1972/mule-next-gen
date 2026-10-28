@@ -26,7 +26,7 @@ import {
 } from '@mule/engine';
 import { GOOD_NAME, landDecision, OPTION_IDS, PERSONAS, playGame, simSeats, situation, toOptions, type ShortOption } from '@mule/ai';
 import { alreadyRanToday, AUTH_STOPPED, claimLedger, day, dayLedgerPath, nearest, numberFlags, resolveDeps, runAsScript, table, type MainDeps, type StopReason } from './cli.js';
-import { billUnknown, CallFailed, createAnthropicSdk, fail, type HaikuReply, type HaikuSdk } from './client.js';
+import { billUnknown, CallFailed, createAnthropicSdk, createThinkingComplete, type HaikuSdk, type ThinkingReply } from './client.js';
 import { API_KEY_ENV, apiKeyFrom } from './index.js';
 import { NO_USAGE, type Usage } from './ledger.js';
 
@@ -246,53 +246,14 @@ export function capFor(flagMaxUsd: number): number {
   return Number.isFinite(flagMaxUsd) && flagMaxUsd > 0 ? Math.min(flagMaxUsd, S.capUsd) : 0;
 }
 
-export interface StrategyReply extends HaikuReply {
-  /** usage.output_tokens_details.thinking_tokens, or null when the response carries none. */
-  thinking: number | null;
-}
+export type StrategyReply = ThinkingReply;
 
 export type StrategyComplete = (role: ModelRole, prompt: StrategyPrompt) => Promise<StrategyReply>;
 
-/** The SDK's message type, through the client seam: only brain/client.ts imports the SDK. */
-type SdkMessage = Awaited<ReturnType<HaikuSdk['messages']['create']>>;
-
-const count = (n: number | null | undefined): number => n ?? 0;
-
-/** The port over both models: adaptive thinking, the effort, the schema; one try, no retries, never past S.timeoutMs. */
-export function createStrategyComplete(sdk: HaikuSdk, now: () => number = () => performance.now()): StrategyComplete {
-  return async (role, prompt) => {
-    const start = now();
-    // The SDK's timeout stops at the response headers; this abort bounds the body read too.
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), S.timeoutMs);
-    let res: SdkMessage;
-    try {
-      res = await sdk.messages.create(
-        {
-          model: S.models[role],
-          max_tokens: S.maxTokens,
-          thinking: { type: 'adaptive' },
-          system: [{ type: 'text', text: prompt.system, cache_control: { type: 'ephemeral' } }],
-          messages: [{ role: 'user', content: prompt.user }],
-          output_config: { effort: S.effort, format: { type: 'json_schema', schema: JSON.parse(JSON.stringify(prompt.schema)) } },
-        },
-        { timeout: S.timeoutMs, maxRetries: 0, signal: controller.signal },
-      );
-    } catch (e) {
-      throw fail(e, now() - start, S.timeoutMs, controller.signal.aborted);
-    } finally {
-      clearTimeout(timer);
-    }
-    const ms = now() - start;
-    const u = res.usage;
-    return {
-      text: res.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join(''),
-      ms,
-      stopReason: res.stop_reason,
-      thinking: u.output_tokens_details?.thinking_tokens ?? null,
-      usage: { input: count(u.input_tokens), cached_read: count(u.cache_read_input_tokens), cache_write: count(u.cache_creation_input_tokens), output: count(u.output_tokens) },
-    };
-  };
+/** The client's thinking port at this spike's settings for the role's model. */
+export function createStrategyComplete(sdk: HaikuSdk, now?: () => number): StrategyComplete {
+  const think = createThinkingComplete(sdk, now);
+  return (role, prompt) => think({ model: S.models[role], effort: S.effort, maxTokens: S.maxTokens, timeoutMs: S.timeoutMs }, prompt);
 }
 
 export interface Verdict {
