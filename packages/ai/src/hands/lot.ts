@@ -119,7 +119,7 @@ export class LotHand {
    */
   private steer(w: Walker, speed: number, dt: number, act: Act, isDone: boolean): void {
     const bid = Math.round(w.price);
-    const fits = (ms: number) => Math.round(w.price + (speed * ms) / 1000) <= this.limit;
+    const fits = (ms: number) => Math.round(w.price + (speed * ms) / 1000) <= this.limit; // literal-ok: ms per second
     let dir: 0 | 1 = 0;
     if (this.target !== null && bid < this.target) {
       if (fits(dt)) dir = 1;

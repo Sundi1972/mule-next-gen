@@ -628,6 +628,25 @@ export const LOTS = {
 };
 
 /**
+ * The longest each timed phase lasts, in milliseconds at phaseScale 1. Phases also end early: when every
+ * connected player is ready, the land grant when the claims are used, development when everyone is out of
+ * time or at the pub. The goods auction and the land auction have no fixed length; they run on WALK's and
+ * LOTS' clocks.
+ */
+export const PHASES = {
+  /** Planning: the hub, listings, and in election months the election first. */
+  planningMs: 45_000,
+  /** The land grant: the light sweeps the free plots. */
+  landGrantMs: 60_000,
+  /** Development lasts the longest turn (DEVELOPMENT.fullSeconds) plus this grace for the last walk home. */
+  developmentGraceMs: 5_000,
+  /** Production: the show of what each plot made. */
+  productionMs: 15_000,
+  /** Upkeep: colonists eat and goods spoil. */
+  upkeepMs: 8_000,
+};
+
+/**
  * AI players. The strategist scores options with named considerations; a
  * persona is a set of weights on them, and a level sets how complete the
  * scoring is, how many near-best options reach the decider and how fast the
