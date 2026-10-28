@@ -75,7 +75,8 @@ PR-2 is a named edit in WS5's file and block, with WS5 as its reviewer.
 - `may_edit`: `packages/engine/src/{events,production}.ts`, the `EVENTS` block of `packages/engine/src/config.ts`,
   `packages/engine/test/events.test.ts`, `packages/ai/src/sim.ts` (report lines only, not the checks),
   `packages/ai/test/balance.test.ts` (T-AC-7's forcing only), `docs/specs/2026-10-21-ws1-events.md` (its amendment),
-  this spec and this plan.
+  this spec and this plan, and `packages/engine/test/config-guard.test.ts` (the PENDING list only: Task 6 takes
+  `events.ts` and `production.ts` off it).
 - Named edit, WS3 reviews: `packages/engine/src/types.ts::MonthEvent` (`phase`).
 - `must_not_edit`: `packages/engine/src/game.ts` (WS3's; wave 1 needs no edit there), `packages/engine/src/specials.ts`
   and the `EFFECT` block (WS5's, PR-2's named edit), `apps/server/**` and `apps/web/**` (WS3's view and WS6's screens,
@@ -207,12 +208,15 @@ reviews the types.ts hunk.
       event, in order. Remove `planEvent`, `EVENTS.chance` and `EVENTS.weights`. Delete the events spec's two `T-AC-2`
       tests: never twice in a row is superseded, and the what-if case is EM-T-AC-2's. Re-force its `T-AC-3` test (each
       key, one at a time) and the `T-AC-7` outlook test in balance.test.ts through the rows (all at 1 against all at
-      0), with the assertions unchanged (HC-4 pin).
+      0), with the assertions unchanged (HC-4 pin). Take `events.ts` and `production.ts` off the guard's PENDING list:
+      with `planEvent` gone, each remaining literal moves into `EVENTS` or is marked `// literal-ok: <reason>` (the
+      balance plan's PENDING clean-up, 28 Oct, left these two to this task).
 - [ ] **Step 4: Run `pnpm typecheck && pnpm test`; expect exit 0.** **Step 5: Commit** red then green.
 
 ### Task 7: The month report and the sim count every event — C5
 
-**Depends on:** Task 6 · **ACs verified:** UBER-AC-1 (the report) · **Spec sections consumed:** §1 C5, §0 UBER-AC-1
+**Depends on:** Task 6, and the balance plan's PENDING clean-up merged (it cleans `sim.ts`; `ws1-events` takes it in
+before this task, so the two never edit sim.ts at once) · **ACs verified:** UBER-AC-1 (the report) · **Spec sections consumed:** §1 C5, §0 UBER-AC-1
 **Files:** Modify: `packages/ai/src/sim.ts` (report lines and its `onEachPhase` hook; not the checks)
 
 - [ ] **Step 1: Implement C5's report lines.** Events a month by phase (development: players sick at its start;
