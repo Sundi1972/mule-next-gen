@@ -227,7 +227,7 @@ const screens = (game: MuleGame) => [...humans.map((id) => game.viewFor(id)), ga
 const readyOn = (game: MuleGame, id: string) => screens(game).map((v) => v.players.find((p) => p.id === id)!.ready);
 
 describe('the election runs first in planning', () => {
-  it('C9: in month 1 planning proper starts only after the election is over, and then waits for every Ready', () => {
+  it('C9 · FM-planning-untimed: in month 1 planning proper starts only after the election is over, and then waits for every Ready', () => {
     // Each AI seat's land plan is a 'land' ask of its brain, made when planning proper starts.
     const landAsks: { seat: string; at: number }[] = [];
     const ask = Brain.prototype.ask;
