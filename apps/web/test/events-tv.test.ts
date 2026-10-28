@@ -28,8 +28,8 @@ const FLY_STEP = 0.09;
 const player = (id: string, name: string, slot: number): PlayerView => ({ id, name, isAi: false, color: '', species: 'zipwing', money: 1000, worth: 0, plots: 0, ready: false, doneDeveloping: false, condition: null, colonist: null, slot });
 const PLAYERS = [player('s1', 'Lena', 0), player('s2', 'Ossa', 1)];
 
-/** Lena farms (1, 0) and (4, 0); Ossa farms (2, 2) and runs a plant at (5, 2), which no event reaches. */
-const OWNED: Record<string, [owner: string, outfit: 'food' | 'energy']> = { '1,0': ['s1', 'food'], '4,0': ['s1', 'food'], '2,2': ['s2', 'food'], '5,2': ['s2', 'energy'] };
+/** Lena farms (1, 0) and (4, 0); Ossa farms (2, 2), runs a plant at (5, 2) and a well at (0, 2), which only the wet drought reaches. */
+const OWNED: Record<string, [owner: string, outfit: 'food' | 'energy' | 'water']> = { '1,0': ['s1', 'food'], '4,0': ['s1', 'food'], '2,2': ['s2', 'food'], '5,2': ['s2', 'energy'], '0,2': ['s2', 'water'] };
 const tiles: TileView[] = Array.from({ length: W * H }, (_, i) => {
   const x = i % W;
   const y = Math.floor(i / W);
@@ -41,6 +41,7 @@ const lines: ProductionView['lines'] = [
   { x: 4, y: 0, owner: 's1', good: 'food', made: 2, parts: [] },
   { x: 2, y: 2, owner: 's2', good: 'food', made: 3, parts: [] },
   { x: 5, y: 2, owner: 's2', good: 'energy', made: 2, parts: [] },
+  { x: 0, y: 2, owner: 's2', good: 'water', made: 2, parts: [] },
 ];
 
 type Key = 'drought' | 'pestSwarm' | 'bumperHarvest';
@@ -250,6 +251,17 @@ describe("the TV's production screen follows the event that is playing", () => {
     expect(settled).not.toContain('watch the map');
     expect(settled).not.toContain('The goods fly home');
     expect(tvAt(both, windowEnds + 0.05)).toContain('The goods fly home');
+  });
+
+  it('B-AC-1: a drought on farms and a well logs each good’s own figure, on plots, never every hit under the first one’s good', () => {
+    // −1 Food on Lena's (1, 0), −1 Water on Ossa's well (0, 2), −2 Food on Ossa's (2, 2): the report holds −3 Food and −1 Water.
+    const wet = fired('drought', { title: 'Drought', scope: 'colony', origin: { x: 0, y: 0 } }, [
+      [1, 0, -1],
+      [0, 2, -1],
+      [2, 2, -2],
+    ]);
+    const settled = tvAt(month([wet]), droughtAt + wet.playMs / 1000 - 0.05);
+    expect(log(settled)).toEqual([{ key: 'drought', words: 'Drought −3 Food, −1 Water on 3 plots' }]);
   });
 
   it('B-AC-1: the colony bar’s chips never run ahead of the map, add up to its bars, and stop where a plot runs out', () => {
