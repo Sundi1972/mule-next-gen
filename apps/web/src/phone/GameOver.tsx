@@ -97,6 +97,12 @@ export function GameOver() {
                     <td className="py-1 font-sans text-ink-2">MULEs · {p.mules} working</td>
                     <td className="py-1 text-right font-bold">{fmt(p.muleValue)}</td>
                   </tr>
+                  {p.office > 0 && (
+                    <tr className="border-t border-holo-faint" data-testid="part-office">
+                      <td className="py-1 font-sans text-ink-2">Offices held</td>
+                      <td className="py-1 text-right font-bold">+{fmt(p.office)}</td>
+                    </tr>
+                  )}
                   {p.cut > 0 && (
                     <tr className="border-t border-holo-faint text-alert" data-testid="part-collapse">
                       <td className="py-1 font-sans">Collapse · −{Math.round((1 - POLLUTION.collapseScore) * 100)}%</td>

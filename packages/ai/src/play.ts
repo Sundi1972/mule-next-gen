@@ -1,14 +1,17 @@
 import {
   advanceGrant,
   advancePhase,
+  AI_HANDS,
   analysePlot,
   auctionDone,
   buyMule,
+  castVote,
   claimPlot,
   COLONY_SELLER,
   createGame,
   createRng,
   declareRole,
+  electionDone,
   fitFilter,
   GAME,
   grantDone,
@@ -17,10 +20,13 @@ import {
   lotDone,
   outfitMule,
   RuleError,
+  runFor,
   setLotWalk,
+  setSalesTax,
   setWalk,
   SHIP_ID,
   stepAuction,
+  stepElection,
   stepLandAuction,
   STORE_ID,
   visitPub,
@@ -31,7 +37,9 @@ import {
 } from '@mule/engine';
 import type { Act, AiAction } from './actions.js';
 import type { DecisionRecord } from './brain.js';
+import type { Decider } from './decider.js';
 import { LotHand } from './hands/lot.js';
+import { VoteHand } from './hands/vote.js';
 import { AiSeat } from './seat.js';
 
 /**
@@ -59,7 +67,7 @@ export interface PlayedGame {
   decisions: number;
 }
 
-const DEV_TICK_MS = 100;
+const DEV_TICK_MS = AI_HANDS.devTickMs;
 const rot = (i: number, k: number, n = 6) => (((i - k) % n) + n) % n;
 
 /** Applies a seat's action with the engine's own checks; a RuleError means the rules refused it. */
@@ -96,8 +104,18 @@ export function applyAction(state: GameState, id: string, action: AiAction, cloc
         if (state.phase === 'landAuction') setLotWalk(state, id, action.dir);
         else setWalk(state, id, action.dir);
         break;
+      case 'run':
+        runFor(state, id, action.office, action.promise);
+        break;
+      case 'vote':
+        castVote(state, id, action.office, action.candidate);
+        break;
+      case 'setTax':
+        setSalesTax(state, id, action.percent);
+        break;
       case 'done':
         if (state.phase === 'landAuction') lotDone(state, id, action.done);
+        else if (state.phase === 'planning' && state.politics?.election) electionDone(state, id, action.done);
         else auctionDone(state, id, action.done);
         break;
     }
@@ -112,10 +130,39 @@ export interface PlayOptions {
   onDecision?: (r: DecisionRecord) => void;
   /** Called after each phase is played, before the game moves on: for diagnostics. */
   onPhase?: (state: GameState) => void;
+  /** The host option: false plays without offices, elections or a moving tax. On by default, as in createGame. */
+  politics?: boolean;
+  /**
+   * The decider for a seat; null or absent plays the default pick.
+   * playGame never waits, so an async decider's answers arrive too late; use playGameAsync.
+   */
+  deciderFor?: (seatId: string, spec: SeatSpec, index: number) => Decider | null;
+  /** Awaited by playGameAsync at every tick step and at least once at the end of every phase; playGame ignores it. */
+  between?: () => Promise<void> | void;
 }
 
+/** Plays one game to the end; the same game, step for step, as playGameAsync without hooks. */
 export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions = {}): PlayedGame {
-  const state = createGame({ seed, players: specs.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
+  const game = playSteps(seed, specs, options);
+  for (;;) {
+    const step = game.next();
+    if (step.done) return step.value;
+  }
+}
+
+/** Plays one game, awaiting `options.between` at every step so a decider's answer can arrive before simulated time moves on. */
+export async function playGameAsync(seed: number, specs: SeatSpec[], options: PlayOptions = {}): Promise<PlayedGame> {
+  const game = playSteps(seed, specs, options);
+  for (;;) {
+    const step = game.next();
+    if (step.done) return step.value;
+    await options.between?.();
+  }
+}
+
+/** The game loop, yielding after every tick where a decider may be waiting, and once at the end of each phase. */
+function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Generator<void, PlayedGame, void> {
+  const state = createGame({ seed, players: specs.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })), politics: options.politics });
   let decisions = 0;
   const seats = specs.map(
     (s, i) =>
@@ -125,6 +172,7 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
         persona: s.persona,
         level: s.level,
         seed: (seed * 7_919 + i * 104_729 + 17) >>> 0,
+        decider: options.deciderFor?.(`ai${i}`, s, i) ?? null,
         onDecision: (r) => {
           decisions++;
           options.onDecision?.(r);
@@ -134,13 +182,23 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
   const broke: string[][] = [];
   const auction = { between: 0, store: 0, ship: 0, ms: 0 };
   const lotHands = seats.map((s) => new LotHand(s.mind, createRng((s.options.seed ^ 0xc2b2ae35) >>> 0)));
+  const voteHands = seats.map((s) => new VoteHand(s.mind, createRng((s.options.seed ^ 0x165667b1) >>> 0)));
   const lots = { sold: 0, unsold: 0, colonyOffered: 0, colonySold: 0, stalled: 0 };
   let guard = 0;
   while (state.phase !== 'gameOver' && guard++ < 500) {
     switch (state.phase) {
-      case 'planning':
+      case 'planning': {
+        // The election comes first: hands act before each step, with the same dt, until it is over;
+        // one more tick lets the Governor set the tax (every month, with or without an election).
+        const vote = (i: number) => voteHands[i]!.tick(state, WALK.tickMs, (a) => applyAction(state, seats[i]!.id, a));
+        for (let ticks = 0; state.politics?.election && state.politics.election.stage !== 'over' && ticks < 100_000; ticks++) {
+          seats.forEach((_, i) => vote(i));
+          stepElection(state, WALK.tickMs);
+        }
+        seats.forEach((_, i) => vote(i));
         for (const s of seats) s.planMonth(state);
         break;
+      }
       case 'landGrant': {
         for (let steps = 0; !grantDone(state) && steps < 2_000; steps++) {
           const lit = litPlot(state);
@@ -152,6 +210,7 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
             for (const b of bids) if (applyAction(state, b.s.id, { type: 'claim', x: lit.x, y: lit.y })) break;
           }
           if (!grantDone(state)) advanceGrant(state);
+          yield;
         }
         break;
       }
@@ -170,6 +229,7 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
             s.developTick(state, DEV_TICK_MS, clock.left, act);
             clock.left -= DEV_TICK_MS / 1_000;
           }
+          yield;
         }
         break;
       }
@@ -182,6 +242,7 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
             else auction.between++;
           }
           auction.ms += WALK.tickMs;
+          yield;
         }
         break;
       }
@@ -190,12 +251,14 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
           seats.forEach((s, i) => lotHands[i]!.tick(state, WALK.tickMs, (a) => applyAction(state, s.id, a)));
           const lot = state.landAuction.lot;
           const result = stepLandAuction(state, WALK.tickMs);
-          if (!lot || !result) continue;
-          const colony = lot.seller === COLONY_SELLER;
-          if (result.kind === 'sold') lots.sold++;
-          else lots.unsold++;
-          if (colony) lots.colonyOffered++;
-          if (colony && result.kind === 'sold') lots.colonySold++;
+          if (lot && result) {
+            const colony = lot.seller === COLONY_SELLER;
+            if (result.kind === 'sold') lots.sold++;
+            else lots.unsold++;
+            if (colony) lots.colonyOffered++;
+            if (colony && result.kind === 'sold') lots.colonySold++;
+          }
+          yield;
         }
         if (state.landAuction && state.landAuction.stage !== 'over') lots.stalled++;
         break;
@@ -204,6 +267,7 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
         broke.push(state.players.filter((p) => p.money < 100 && state.tiles.some((t) => t.owner === p.id && !t.outfit)).map((p) => p.id));
         break;
     }
+    yield;
     options.onPhase?.(state);
     advancePhase(state);
   }

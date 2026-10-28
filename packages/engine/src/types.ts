@@ -70,6 +70,16 @@ export interface Tile {
   filter: boolean;
   /** Months in a row this plot's current outfit has run. Factories gain from experience. */
   runMonths: number;
+  /** A special field on this plot, placed with the map; absent on most plots. */
+  special?: SpecialField;
+}
+
+export type SpecialKind = 'ruins' | 'crystalCavern' | 'geyser' | 'oasis' | 'relic';
+
+export interface SpecialField {
+  kind: SpecialKind;
+  /** Ruins only: the good its salvage pays, drawn when the map is made. */
+  salvage?: 'alloy' | 'electronics';
 }
 
 export interface Player {
@@ -92,6 +102,8 @@ export interface Player {
   sick: boolean;
   /** True once the player has gone to the pub: their development turn is over. */
   doneDeveloping: boolean;
+  /** True once the player has installed a MULE in this development turn, so a reloaded phone still knows. */
+  installedThisTurn: boolean;
   /** Indices of tiles whose ground this player has analysed. Private to them. */
   analysed: number[];
   /** Free plots chosen for a geo drone this planning phase, analysed when the land grant starts. */
@@ -230,7 +242,7 @@ export interface ProductionLine {
   made: number;
   /** What made up the output, in order; the deltas sum to `made`. */
   parts: {
-    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'noEnergy' | 'noWater' | 'event' | 'factory';
+    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'noEnergy' | 'noWater' | 'event' | 'factory' | 'special';
     delta: number;
     event?: EventKey;
   }[];
@@ -263,6 +275,64 @@ export interface GameState {
   listings: Listing[];
   /** The live land auction, while the landAuction phase runs. */
   landAuction: LandAuction | null;
+  /**
+   * Offices, elections and the Governor's tax; null when the host switched politics off.
+   * Written only by politics.ts, which replaces the object on every write: re-read it, don't hold a reference.
+   */
+  politics: Politics | null;
+}
+
+export type Office = 'governor' | 'sheriff';
+
+/** Why an office went to its winner, as the reveal shows it. */
+export type ElectionHow = 'votes' | 'unopposed' | 'appointed' | 'baron' | 'tieRule';
+
+/** Whether a player may run for an office now, or why not. Running for the other office is no refusal: it moves the candidacy. */
+export type CanRun = true | 'closed' | 'termLimit';
+
+/** A Governor candidate's tax promise, in whole percent for a cap. See WS7 spec RULE-10. */
+export type TaxPromise = { kind: 'cap'; percent: number } | { kind: 'lower' } | { kind: 'hold' };
+
+export interface OfficeResult {
+  winner: string;
+  how: ElectionHow;
+  /** Every candidate's weighted votes, highest first. Never who voted for whom. */
+  tallies: { id: string; votes: number }[];
+}
+
+export type ElectionResult = Record<Office, OfficeResult>;
+
+/** One election, nominate → ballot → reveal → over, inside a planning phase. */
+export interface Election {
+  stage: 'nominate' | 'ballot' | 'reveal' | 'over';
+  /** Ms left in the current stage. */
+  clockMs: number;
+  candidates: Record<Office, string[]>;
+  /** Each Governor candidate's promise, public like the candidacy and dropped with it. */
+  promises: Record<string, TaxPromise>;
+  /** Secret: each voter's choice per office. Only the voter may see their own. */
+  ballots: Record<string, Partial<Record<Office, string>>>;
+  /** Players who pressed Done in this stage. */
+  done: string[];
+  /** Fixed when the ballot closes, then shown on every screen. */
+  result: ElectionResult | null;
+}
+
+export interface Politics {
+  governor: string | null;
+  sheriff: string | null;
+  /** Month the current terms began. */
+  termStart: number;
+  /** Terms served per player, in either office; a term counts once it starts. */
+  terms: Record<string, number>;
+  /** The sitting Governor and how many terms in a row they have served, for the two-in-a-row rule. */
+  governorRun: { id: string; terms: number } | null;
+  /** The Land Baron, fixed when planning opens each month. */
+  baron: string | null;
+  /** treasury.salesTax when this month's planning opened: the Governor's bounds are around it. */
+  taxAtStart: number;
+  /** This month's election, live or just finished; null in a month without one. */
+  election: Election | null;
 }
 
 export type AuctionRole = 'buyer' | 'seller';
@@ -336,13 +406,14 @@ export interface StatusRow {
 /** Why a good was skipped without a screen of its own. */
 export type SkipReason = 'nobody has any' | 'nobody buys' | 'nobody trading';
 
-/** The live goods auction: goods one at a time, each with a status screen, a declare and a walk. */
+/** The live goods auction: goods one at a time, each with a status screen and then a walk. */
 export interface LiveAuction extends WalkBoard {
-  /** clockMs is the status screen's, the declare's or the walk's clock, by stage. */
+  /** The status screen's or the walk's clock, by stage. */
+  clockMs: number;
   /** Goods still to come after the current one. */
   queue: Good[];
   good: Good | null;
-  stage: 'status' | 'declare' | 'walk' | 'over';
+  stage: 'status' | 'walk' | 'over';
   /** Store prices for this good, fixed when it comes up. Whether the store trades at them depends on its stock and budget. */
   storeBuy: number;
   storeSell: number;
@@ -392,4 +463,10 @@ export interface LandAuction extends WalkBoard {
   /** This lot's place in the month's line-up, from 1, and the line-up's length. */
   number: number;
   count: number;
+  /** True once this lot's leading bid has passed hi and the walk sped up. */
+  fast: boolean;
+  /** Ms the soft close has put back on this lot's walk clock. */
+  addedMs: number;
+  /** The last buyer to lead this lot, kept while nobody reaches the minimum, so only a change of hands counts as an overtake. */
+  leaderId: string | null;
 }

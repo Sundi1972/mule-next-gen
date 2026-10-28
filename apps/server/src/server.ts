@@ -31,17 +31,20 @@ export interface MuleServer {
 /**
  * The game server: an HTTP server for the web client and `POST /rooms`, and a
  * WebSocket endpoint at `/ws` where phones and boards talk to their room.
+ * Games play politics unless `politics` is false.
  */
 export function createMuleServer(
-  options: { staticDir?: string; seed?: () => number; maxMonths?: number; phaseScale?: number } = {},
+  options: { staticDir?: string; seed?: () => number; maxMonths?: number; phaseScale?: number; politics?: boolean } = {},
 ): MuleServer {
   const seed = options.seed ?? (() => Math.floor(Math.random() * 2 ** 31));
   const registry = new RoomRegistry<MuleIntent, MuleView>({
-    createGame: (ctx) => new MuleGame(ctx, seed(), { maxMonths: options.maxMonths, phaseScale: options.phaseScale }),
+    createGame: (ctx) => new MuleGame(ctx, seed(), { maxMonths: options.maxMonths, phaseScale: options.phaseScale, politics: options.politics ?? true }),
     aiNames: AI_NAMES,
     emotes: EMOTES,
     picks: SPECIES,
     isUserError: (err) => err instanceof RuleError || err instanceof TableError,
+    // The room has already ended itself; only the stack is logged, never what the players sent.
+    onError: (err) => console.error(`game error: ${err instanceof Error ? err.stack : String(err)}`),
   });
   const staticDir = options.staticDir && existsSync(options.staticDir) ? resolve(options.staticDir) : null;
 
@@ -147,13 +150,16 @@ function parse(text: string): ClientEnvelope<MuleIntent> | null {
   const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
   switch (m.t) {
     case 'join':
-      return str(m.code) && str(m.name) && (m.seatToken === undefined || str(m.seatToken)) ? (m as ClientEnvelope<MuleIntent>) : null;
+      return str(m.code) && str(m.name) && (m.seatToken === undefined || str(m.seatToken)) && (m.handoff === undefined || str(m.handoff))
+        ? (m as ClientEnvelope<MuleIntent>)
+        : null;
     case 'board':
       return str(m.code) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'addAi':
     case 'start':
     case 'close':
     case 'leave':
+    case 'handoff':
       return m as ClientEnvelope<MuleIntent>;
     case 'kick':
       return str(m.seatId) ? (m as ClientEnvelope<MuleIntent>) : null;
@@ -163,6 +169,8 @@ function parse(text: string): ClientEnvelope<MuleIntent> | null {
       return str(m.emote) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'pick':
       return str(m.pick) ? (m as ClientEnvelope<MuleIntent>) : null;
+    case 'color':
+      return num(m.color) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'ping':
       return num(m.clientTime) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'intent':
@@ -171,6 +179,14 @@ function parse(text: string): ClientEnvelope<MuleIntent> | null {
       return null;
   }
 }
+
+const isOffice = (x: unknown) => x === 'governor' || x === 'sheriff';
+/** The shape of a tax promise; RULE-10 in the engine checks the rest. */
+const isPromise = (x: unknown) => {
+  if (typeof x !== 'object' || x === null) return false;
+  const p = x as Record<string, unknown>;
+  return p.kind === 'cap' ? Number.isInteger(p.percent) : p.kind === 'lower' || p.kind === 'hold';
+};
 
 function isIntent(v: unknown): v is MuleIntent {
   if (typeof v !== 'object' || v === null) return false;
@@ -200,6 +216,12 @@ function isIntent(v: unknown): v is MuleIntent {
     }
     case 'unlist':
       return typeof i.id === 'string';
+    case 'run':
+      return (i.office === null || isOffice(i.office)) && (i.promise === undefined || isPromise(i.promise));
+    case 'vote':
+      return isOffice(i.office) && (i.candidate === null || typeof i.candidate === 'string');
+    case 'setTax':
+      return int(i.percent);
     default:
       return false;
   }

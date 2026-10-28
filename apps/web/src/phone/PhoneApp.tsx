@@ -1,5 +1,5 @@
 import { SeatSpeciesProvider } from '@mule/ui';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { player, seatSpecies, slotOf } from '../game/derive';
 import { useClient, useClientState } from '../net/react';
 import { Auction } from './Auction';
@@ -13,17 +13,17 @@ import { EmoteBubbles } from './parts';
 import { Planning } from './Planning';
 import { Production } from './Production';
 import { Results } from './Results';
-import { ShellLayer, TurnSideways } from './Shell';
+import { MoveDialog, MoveToPhoneOpener, ShellLayer, TurnSideways } from './Shell';
 
 /**
  * The phone: your private controller, played sideways. Held upright it asks to be
  * turned; the game stays mounted underneath so nothing is lost while turning.
  */
-export function PhoneApp({ room }: { room: string }) {
+export function PhoneApp({ room, moving = false }: { room: string; moving?: boolean }) {
   return (
     <>
       <div className="h-full portrait:hidden">
-        <PhoneScreens room={room} />
+        <PhoneScreens room={room} moving={moving} />
       </div>
       <div className="h-full landscape:hidden">
         <TurnSideways />
@@ -33,15 +33,15 @@ export function PhoneApp({ room }: { room: string }) {
 }
 
 /** Which screen shows follows the game's phase. */
-function PhoneScreens({ room }: { room: string }) {
+function PhoneScreens({ room, moving }: { room: string; moving: boolean }) {
   const client = useClient();
   const state = useClientState();
 
-  // After a reload, take the saved seat back by itself, unless the link is for another table.
+  // After a reload, take the saved seat back by itself, unless the link is for another table or moves a seat here.
   useEffect(() => {
     const saved = client.savedSeat();
-    if (saved && (!room || room === saved.code)) client.join(saved.code, saved.name);
-  }, [client, room]);
+    if (!moving && saved && (!room || room === saved.code)) client.join(saved.code, saved.name);
+  }, [client, room, moving]);
 
   const table = state.view;
   if (!table || state.role !== 'player' || !state.seatId) return <Entry initialCode={room} />;
@@ -76,12 +76,34 @@ function PhoneScreens({ room }: { room: string }) {
       <PhoneGameProvider value={{ table, view, me, self, slot }}>
         {/* Emotes float inside each screen's shell, clear of its rail. */}
         <ShellLayer.Provider value={<EmoteBubbles view={view} />}>
-          {/* Keyed by phase so each phase starts with fresh screen state. */}
-          <div key={`${view.month}-${view.phase}`} className="h-full" data-phase={view.phase}>
-            {screen}
-          </div>
+          <InGame room={table.code} name={self.name}>
+            {/* Keyed by phase so each phase starts with fresh screen state. */}
+            <div key={`${view.month}-${view.phase}`} className="h-full" data-phase={view.phase}>
+              {screen}
+            </div>
+          </InGame>
         </ShellLayer.Provider>
       </PhoneGameProvider>
     </SeatSpeciesProvider>
+  );
+}
+
+/**
+ * What outlives the phase's screen: the move-to-phone dialog stays open, with its code, as the phase moves on, and
+ * closes for good when the game leaves for the start screen.
+ */
+function InGame({ room, name, children }: { room: string; name: string; children: ReactNode }) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const button = useRef<HTMLButtonElement>(null);
+  const opener = useMemo(() => ({ open: () => setDialogOpen(true), button }), []);
+  const close = useCallback(() => {
+    setDialogOpen(false);
+    button.current?.focus();
+  }, []);
+  return (
+    <div className="relative h-full">
+      <MoveToPhoneOpener.Provider value={opener}>{children}</MoveToPhoneOpener.Provider>
+      {dialogOpen && <MoveDialog room={room} name={name} onClose={close} />}
+    </div>
   );
 }

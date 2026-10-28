@@ -1,9 +1,9 @@
 import { POLLUTION } from '@mule/engine';
 import type { MuleView, PlayerView, TileView } from '@mule/protocol';
 import { describe, expect, it } from 'vitest';
-import { colonyVerdict, groundPips, mapTiles, secondsUntil, slotOf, standings } from '../src/game/derive';
+import { colonyVerdict, groundPips, mapTiles, seatSpecies, secondsUntil, slotOf, standings } from '../src/game/derive';
 
-const p = (id: string, money: number): PlayerView => ({ id, name: id, isAi: false, color: '', species: 'zipwing', money, plots: 0, ready: false, doneDeveloping: false });
+const p = (id: string, money: number, slot: number): PlayerView => ({ id, name: id, isAi: false, color: '', slot, species: 'zipwing', money, plots: 0, ready: false, doneDeveloping: false });
 const tile = (x: number, y: number, extra: Partial<TileView> = {}): TileView => ({ x, y, terrain: 'plains', peaks: 0, owner: null, outfit: null, pollution: 0, filter: false, ...extra });
 
 function view(extra: Partial<MuleView> = {}): MuleView {
@@ -17,7 +17,7 @@ function view(extra: Partial<MuleView> = {}): MuleView {
     height: 1,
     tiles: [tile(0, 0, { owner: 's2', outfit: 'energy' }), tile(1, 0, { outfit: 'greenBelt', owner: 's1', ground: { food: -2, water: 3, energy: 0, smithore: 4, crystite: 0, rareEarth: 1 }, pollution: 2 })],
     lit: null,
-    players: [p('s1', 500), p('s2', 900)],
+    players: [p('s1', 500, 0), p('s2', 900, 1)],
     me: null,
     market: [],
     storeMules: 0,
@@ -33,15 +33,32 @@ function view(extra: Partial<MuleView> = {}): MuleView {
     lotSlots: { used: 0, max: 4 },
     landAuction: null,
     production: null,
+    politics: null,
     ...extra,
   };
 }
 
 describe('reading the view', () => {
-  it('gives each seat its colour slot by place at the table', () => {
-    expect(slotOf(view(), 's2')).toBe(1);
-    expect(slotOf(view(), 'nobody')).toBeNull();
-    expect(slotOf(view(), null)).toBeNull();
+  it("T-AC-13: gives each seat its colour slot by the seat's chosen colour, not its place at the table", () => {
+    const chosen = view({ players: [p('s1', 500, 5), p('s2', 900, 2)] });
+    expect(slotOf(chosen, 's1')).toBe(5);
+    expect(slotOf(chosen, 's2')).toBe(2);
+    expect(mapTiles(chosen).map((t) => t.owner)).toEqual([2, 5]);
+    expect(standings(chosen).map((s) => [s.player.id, s.slot])).toEqual([['s2', 2], ['s1', 5]]);
+    expect(slotOf(chosen, 'nobody')).toBeNull();
+    expect(slotOf(chosen, null)).toBeNull();
+  });
+
+  it('T-AC-13: a room where nobody picked draws seat i in colour i, as before', () => {
+    expect(view().players.map((q) => slotOf(view(), q.id))).toEqual([0, 1]);
+    expect(standings(view()).map((s) => s.slot)).toEqual([1, 0]);
+  });
+
+  it('T-AC-13: each colour shows its own seat\'s species, whatever the seat\'s place at the table', () => {
+    const chosen = view({ players: [{ ...p('s1', 500, 3), species: 'mollox' }, { ...p('s2', 900, 0), species: 'gearling' }] });
+    const bySlot = seatSpecies(chosen);
+    expect(bySlot[3]).toBe('mollox');
+    expect(bySlot[0]).toBe('gearling');
   });
 
   it('turns tiles into map tiles: owner slots, outfits as goods, ground on four pips', () => {

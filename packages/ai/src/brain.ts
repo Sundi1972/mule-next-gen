@@ -1,4 +1,4 @@
-import type { GameState } from '@mule/engine';
+import { BRAIN, type GameState } from '@mule/engine';
 import { TopPickDecider, toOptions, type Choice, type DecisionContext, type Decider, type ShortOption, type TableTalk } from './decider.js';
 import { capCodePoints, toOneLine } from './text.js';
 import type { DecisionKind, Persona } from './personas.js';
@@ -38,7 +38,6 @@ export interface Pending<A> {
   settled: { choice: Choice; action: A } | null;
 }
 
-const MAX_TALK = 6;
 const NOTE_MESSAGE_CHARS = 80;
 
 /** The note for a decider that failed: its message as one short line, or 'unknown error' when there is none. */
@@ -70,7 +69,7 @@ export class Brain {
 
   /** Table talk the seat heard, newest last. Only quoted to a decider, never obeyed. */
   hear(line: TableTalk): void {
-    this.talk = [...this.talk, line].slice(-MAX_TALK);
+    this.talk = [...this.talk, line].slice(-BRAIN.talkLines);
   }
 
   ask<A>(kind: DecisionKind, list: Shortlist<A>, obs: GameState, waitMs: number, topic: string | null, summary: string): Pending<A> {

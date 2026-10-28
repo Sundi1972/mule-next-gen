@@ -1,13 +1,13 @@
 import { COLONY_SELLER } from '@mule/engine';
 import type { LandAuctionView, MuleView } from '@mule/protocol';
 import { Button, cx, HoloMap, TimeBar, WalkBoard } from '@mule/ui';
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { LeaderBox, LotCard, lotWalkers, sellerName } from '../components/AuctionParts';
 import { mapTiles, PHASE_NAME, plotName } from '../game/derive';
 import { useClient } from '../net/react';
 import { Hold } from './Auction';
 import { usePhoneGame } from './game';
 import { MapFit, PhoneShell } from './Shell';
+import { stepDir, useWalkIntent } from './useWalkIntent';
 
 /**
  * The land auction on the phone, board first.
@@ -21,41 +21,9 @@ export function LandAuction() {
   const lot = view.landAuction;
   const mine = lot?.walkers.find((w) => w.id === self.id);
   const onBoard = lot?.stage === 'walk' && mine?.side === 'buyer';
-  const dir = useRef<'up' | 'down' | 'stop'>('stop');
-  const live = useRef(false);
-  // Off the board (the bell, the next lot's intro) the engine has already stopped this walker:
-  // forget the held direction without telling it, so the next lot's first press always goes out,
-  // and send nothing at all until this phone is walking again.
-  useLayoutEffect(() => {
-    live.current = onBoard;
-    if (!onBoard) dir.current = 'stop';
-  }, [onBoard]);
-  const send = useCallback(
-    (next: 'up' | 'down' | 'stop') => {
-      if (!live.current || dir.current === next) return;
-      dir.current = next;
-      client.intent({ type: 'walk', dir: next });
-    },
-    [client],
-  );
-  const walk = (d: -1 | 0 | 1) => send(d > 0 ? 'up' : d < 0 ? 'down' : 'stop');
+  const send = useWalkIntent(onBoard, String(lot?.number ?? ''));
+  const walk = (d: -1 | 0 | 1) => send(stepDir(d));
   const ready = () => client.intent({ type: 'ready' });
-
-  // The arrow keys walk too, on a laptop.
-  useEffect(() => {
-    if (!onBoard) return;
-    const down = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowUp') send('up');
-      if (e.key === 'ArrowDown') send('down');
-    };
-    const up = (e: KeyboardEvent) => (e.key === 'ArrowUp' || e.key === 'ArrowDown') && send('stop');
-    window.addEventListener('keydown', down);
-    window.addEventListener('keyup', up);
-    return () => {
-      window.removeEventListener('keydown', down);
-      window.removeEventListener('keyup', up);
-    };
-  }, [onBoard, send]);
 
   if (!lot) {
     return (
@@ -116,6 +84,7 @@ export function LandAuction() {
       storeSells={null}
       shipPays={null}
       lines={[{ id: 'min', label: 'MIN', price: lot.lot.minimum }]}
+      marks={{ ask: false, bid: true }}
       stage="walk"
       meId={self.id}
       {...(onBoard ? { onDir: walk } : {})}

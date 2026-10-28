@@ -9,7 +9,7 @@ import { Brain, candidate, consider, PERSONAS, shortlist, TopPickDecider, WAIT_M
 import type { HaikuSdk } from '../src/brain/client.js';
 import { API_KEY_ENV, createBrain, type BrainSeat, type BrainService } from '../src/brain/index.js';
 import { NO_USAGE, type Usage } from '../src/brain/ledger.js';
-import { fakeSdk, KEY, promptOf, readLedger, sdkMessage, worstUsdOf, type SdkMessage, type SdkModuleFake, type SdkParams } from './brain-fakes.js';
+import { fakeSdk, KEY, readLedger, sdkMessage, worstUsdOfRequest, type SdkMessage, type SdkModuleFake } from './brain-fakes.js';
 
 /** The SDK module's constructor: records its options and builds nothing, so no network and no credential chain. */
 const sdkModule = vi.hoisted((): SdkModuleFake => ({ built: [], create: null }));
@@ -232,12 +232,6 @@ describe('brain service', () => {
     // Labels this long make each call's worst case a large share of the seat's budget, so only a handful fit.
     const long = () =>
       shortlist(['a', 'b', 'c'].map((a, i) => candidate(a, a.repeat(105_000), a, 10, [consider('fit', 0.9 - i * 0.05, 1, 'fits')])), 3, 0.5);
-    /** RULE-3's worst case for the request the SDK received. */
-    const worstOf = (params: SdkParams): number => {
-      const { system, user } = promptOf(params);
-      const schema = JSON.stringify(params.output_config!.format!.schema);
-      return worstUsdOf(system.length + user.length + schema.length);
-    };
     // Replies here bill nothing, so a seat that locks could only have been charged a worst case.
     const cases: { name: string; answer: () => SdkMessage; outcome: string; locks: boolean }[] = [
       {
@@ -271,7 +265,7 @@ describe('brain service', () => {
       fs.rmSync(file, { force: true });
       const worst: number[] = [];
       const sdk = fakeSdk((_n, params) => {
-        worst.push(worstOf(params));
+        worst.push(worstUsdOfRequest(params));
         return c.answer();
       });
       const service = serviceOn(sdk);
@@ -394,6 +388,28 @@ describe('brain service', () => {
     expect(next.settled.choice).toMatchObject({ by: 'llm', optionId: 'C' });
     expect(sdk.calls).toBe(2);
     expect(lines()).toHaveLength(2);
+  });
+
+  it("INV-trial-cap: countedUsd is the game's spend as the seat budget counts it, billed dollars plus each unknown-bill call at its worst case, and keeps that figure after finish", async () => {
+    const worst: number[] = [];
+    const sdk = fakeSdk((n, params) => {
+      worst.push(worstUsdOfRequest(params));
+      if (n === 1) return sdkMessage('{"option":"B","line":"Mine."}', { input: 1_000, output: 20 });
+      if (n === 2) throw new Anthropic.APIConnectionTimeoutError();
+      throw Anthropic.APIError.generate(500, { type: 'error', error: { type: 'api_error', message: 'x' } }, 'x', new Headers());
+    });
+    const service = serviceOn(sdk);
+    const seat = seatOn(service);
+    expect(service.countedUsd()).toBe(0);
+    for (let i = 0; i < 3; i++) await seat.decide();
+    expect(sdk.calls).toBe(3);
+
+    const billed = (1_000 * BRAIN.pricesPerMTok.input + 20 * BRAIN.pricesPerMTok.output) / 1_000_000;
+    // The reply bills its usage, the timeout its worst case, and the 500 nothing: the API answered it.
+    expect(service.countedUsd()).toBeCloseTo(billed + worst[1]!, 12);
+    service.finish();
+    expect(service.countedUsd()).toBeCloseTo(billed + worst[1]!, 12);
+    expect(createBrain({ gameId: GAME, env: {} }).countedUsd()).toBe(0);
   });
 
   it('INV-finish: finish writes the game line once, counting model calls only, and the game makes no further calls', async () => {

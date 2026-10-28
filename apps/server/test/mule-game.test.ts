@@ -1,6 +1,6 @@
 import type { GameContext } from '@tabletop/core';
 import { describe, expect, it } from 'vitest';
-import { WALK } from '@mule/engine';
+import { WALK, type GameState } from '@mule/engine';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
 
 /** A context with a manual clock, so phase timers run instantly. */
@@ -35,9 +35,9 @@ function fakeContext() {
 }
 
 const seats = [
-  { id: 's1', name: 'Heiko', isAi: false },
-  { id: 's2', name: 'Mia', isAi: false },
-  { id: 's3', name: 'The Baron', isAi: true },
+  { id: 's1', name: 'Heiko', isAi: false, color: 0 },
+  { id: 's2', name: 'Mia', isAi: false, color: 1 },
+  { id: 's3', name: 'The Baron', isAi: true, color: 2 },
 ];
 
 describe('MuleGame', () => {
@@ -77,6 +77,20 @@ describe('MuleGame', () => {
     expect(game.viewFor('s2').me?.id).toBe('s2');
     expect(board.me).toBeNull();
     expect(board.tiles.every((t) => t.traits === undefined && t.ground === undefined)).toBe(true);
+  });
+
+  it('B-AC-9: every view, phone and TV, carries each plot\'s special field; plain plots carry none', () => {
+    const { ctx } = fakeContext();
+    const game = new MuleGame(ctx, 93);
+    game.start(seats);
+    const state = (game as unknown as { state: GameState }).state;
+    const specials = state.tiles.filter((t) => t.special);
+    expect(specials.length).toBeGreaterThan(0);
+    for (const viewer of ['s1', 's2', null]) {
+      const tiles = game.viewFor(viewer).tiles;
+      for (const t of state.tiles) expect(tiles[t.y * state.width + t.x]!.special).toEqual(t.special);
+      expect(tiles.filter((t) => t.special)).toHaveLength(specials.length);
+    }
   });
 
   it('moves the land grant light on a tick and only lets the lit plot be claimed', () => {
@@ -167,7 +181,7 @@ describe('MuleGame', () => {
     return { game, advance, ctx };
   }
 
-  it('runs the auction live on the server clock: status, declare, walk, good by good', () => {
+  it('T-AC-3: runs the auction live on the server clock: status then walk, good by good, on the side picked during status', () => {
     const { game, advance } = toAuction();
     const view = game.viewFor(null);
     expect(view.phaseEndsAt).toBeNull();
@@ -175,13 +189,10 @@ describe('MuleGame', () => {
     expect(first.stage).toBe('status');
     expect(first.total).toBe(WALK.statusMs / 1_000);
     expect(first.status.map((r) => r.id)).toEqual(['s1', 's2', 's3']);
-    // Both humans are done with the status screen; the AI is done by itself.
-    game.handle('s1', { type: 'ready' });
-    game.handle('s2', { type: 'ready' });
-    advance(WALK.tickMs * 2);
-    expect(game.viewFor(null).auction!.stage).toBe('declare');
     expect(() => game.handle('s1', { type: 'walk', dir: 'up' })).toThrow('Not walking');
     game.handle('s1', { type: 'declare', side: 'buyer' });
+    expect(game.viewFor(null).auction!.walkers.find((w) => w.id === 's1')!.side).toBe('buyer');
+    // Both humans are done with the status screen; the AI is done by itself.
     game.handle('s1', { type: 'ready' });
     game.handle('s2', { type: 'ready' });
     advance(WALK.tickMs * 2);

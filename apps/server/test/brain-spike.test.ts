@@ -71,7 +71,8 @@ const usableReply = () => Promise.resolve(sdkMessage(USABLE, { input: 120, outpu
 /** One line per prefix: the report row that starts with it. */
 const rowOf = (lines: string[], start: string) => lines.find((l) => l.startsWith(`${start} `));
 
-describe('brain:spike', () => {
+// Local only (MULE_FULL=1, `pnpm test:full`): brain:spike is a command run by hand, and only with the PM's clearance.
+describe.runIf(process.env.MULE_FULL === '1')('brain:spike', () => {
   it('INV-spike-cap: a cap above BRAIN.spikeCapUsd is clamped, and the run stops at the first call whose worst case would pass it', async () => {
     expect(capFor(1)).toBe(BRAIN.spikeCapUsd);
     expect(capFor(0.01)).toBe(0.01);

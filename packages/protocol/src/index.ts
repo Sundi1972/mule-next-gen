@@ -1,4 +1,4 @@
-import type { AuctionSide, EventKey, EventKind, Good, Ground, MonthEvent, Outfit, Phase, ScoreParts, SkipReason, Species, StatusRow, Stock, Terrain, TileTrait } from '@mule/engine';
+import type { AuctionSide, CanRun, Election, ElectionResult, EventKey, EventKind, Good, Ground, MonthEvent, Office, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -29,7 +29,13 @@ export type MuleIntent =
   /** Planning: put a plot, or the MULE on one, up for the land auction, with a minimum and what happens if nobody bids it. */
   | { type: 'list'; item: { kind: 'plot' | 'mule'; x: number; y: number }; minimum: number; unsold: 'store' | 'keep' }
   /** Planning: take one of your listings back. */
-  | { type: 'unlist'; id: string };
+  | { type: 'unlist'; id: string }
+  /** Election, nominate: run for an office (moving any candidacy for the other one); null withdraws. A Governor run needs a promise (RULE-10). */
+  | { type: 'run'; office: Office | null; promise?: TaxPromise }
+  /** Election, ballot: cast or change your secret vote for a contested office; null clears it. */
+  | { type: 'vote'; office: Office; candidate: string | null }
+  /** Planning, after the election: the Governor sets the sales tax in whole percent. */
+  | { type: 'setTax'; percent: number };
 
 export const EMOTES = ['Deal?', 'Nice!', 'Traitor!', 'Ha!', 'Help!'] as const;
 export type Emote = (typeof EMOTES)[number];
@@ -48,6 +54,8 @@ export interface TileView {
   ground?: Ground;
   /** Only for the plot's owner or a player who analysed it: its hazard traits. */
   traits?: TileTrait[];
+  /** The plot's special field, while it lasts. Public: every viewer, phone and TV, sees it; only the ground is private. */
+  special?: SpecialField;
 }
 
 export interface PlayerView {
@@ -55,6 +63,8 @@ export interface PlayerView {
   name: string;
   isAi: boolean;
   color: string;
+  /** The player's colour index, the one their seat chose in the lobby. */
+  slot: number;
   species: Species;
   money: number;
   plots: number;
@@ -73,6 +83,8 @@ export interface MyView {
   sick: boolean;
   /** Food and Water this player's household and crew need each month. */
   needs: { food: number; water: number };
+  /** What this player needs of each good this month: the engine's monthNeeds. */
+  monthNeeds: Stock;
   /** Epoch ms when this player's development time runs out, during development. */
   devEndsAt: number | null;
   /** Seconds of development time this player got this month, before analyses. */
@@ -84,6 +96,57 @@ export interface MyView {
   outfitCosts: Record<Outfit, number>;
   /** Free plots chosen for the geo drone this month. */
   droneOrder: { x: number; y: number }[];
+  /** This player's own side of the election; null when the game plays without politics. */
+  politics: MyPoliticsView | null;
+  /** True once this player has installed a MULE in this development turn, and until their next one starts. */
+  installedThisTurn: boolean;
+}
+
+/** Only on the owner's phone: their candidacy, their secret ballot, and whether they may run now. */
+export interface MyPoliticsView {
+  running: Office | null;
+  ballot: Partial<Record<Office, string>>;
+  canRun: Record<Office, CanRun>;
+}
+
+/** This month's election as every screen sees it: who runs and who has voted, never for whom. */
+export interface ElectionView {
+  stage: Election['stage'];
+  /** Seconds left on the stage's clock, in game time. */
+  seconds: number;
+  /** The stage's full time in seconds. */
+  total: number;
+  candidates: Record<Office, string[]>;
+  /** Each Governor candidate's tax promise, public like the candidacy. */
+  promises: Record<string, TaxPromise>;
+  /** Players with a ballot in, never for whom. */
+  voted: string[];
+  /** Players who pressed Done in this stage. */
+  done: string[];
+  /** The totals and winners; null until the reveal's countdown has run, so every screen shows it at the same moment. */
+  result: ElectionResult | null;
+}
+
+/** The colony's offices, tax and vote weights, public on every screen. */
+export interface PoliticsView {
+  governor: string | null;
+  sheriff: string | null;
+  /** The months the sitting officeholders serve, or null before anyone holds office. */
+  term: [number, number] | null;
+  /** The next election's month, or null when the game ends first. */
+  next: number | null;
+  /** The Land Baron, fixed when planning opened. */
+  baron: string | null;
+  /** The sales tax in whole percent: now, when the month's planning opened, and the range the Governor may set. */
+  tax: { percent: number; start: number; low: number; high: number };
+  /** The colony fund the offices are paid from. */
+  fund: number;
+  /** What each office is paid at upkeep, as far as the fund reaches. */
+  pay: { governor: number; sheriff: number };
+  /** Every player's votes, part by part. */
+  weights: { id: string; votes: number; parts: VoteWeight['parts'] }[];
+  /** This month's election, or null in a month without one. */
+  election: ElectionView | null;
 }
 
 /** A player on the auction board. */
@@ -97,6 +160,8 @@ export interface WalkerView {
   at: number;
   dir: -1 | 0 | 1;
   done: boolean;
+  /** Their stock of the good up now, live as units trade; public like the status table. */
+  units: number;
 }
 
 /** Units changing hands right now: between two players, or with the store or the ship ('store', 'ship'). */
@@ -110,7 +175,7 @@ export interface DealView {
 /** The live goods auction, on every screen. */
 export interface AuctionView {
   good: Good;
-  stage: 'status' | 'declare' | 'walk';
+  stage: 'status' | 'walk';
   /** Seconds left on the stage's clock. It runs slower while units change hands. */
   seconds: number;
   /** The stage's full time in seconds, for the draining time bar. */
@@ -122,6 +187,8 @@ export interface AuctionView {
   /** What the store pays and charges, or null while it doesn't trade at that line. */
   storeBuys: number | null;
   storeSells: number | null;
+  /** Units the store will sell of this good: its stock less the colonists' Food and Water reserve. */
+  storeForSale: number;
   /** What the export ship pays for the next unit, while it is in port and wants this good. */
   shipPays: number | null;
   /** The board's price range: it grows when a walker goes past it. */
@@ -155,7 +222,7 @@ export interface ListingView {
 }
 
 /** A buyer on a lot's board. Everyone but the seller, if they can pay the minimum (and, for a MULE, has no MULE in hand). */
-export interface LotWalkerView extends WalkerView {
+export interface LotWalkerView extends Omit<WalkerView, 'units'> {
   /** Why a player stands aside, for the names along the bottom. */
   aside?: 'money' | 'mule';
 }
@@ -286,6 +353,8 @@ export interface MuleView {
   landAuction: LandAuctionView | null;
   /** The month's production show, during production and upkeep. */
   production: ProductionView | null;
+  /** Offices, tax, vote weights and the election; null when the game plays without politics. */
+  politics: PoliticsView | null;
 }
 
 export const PLAYER_COLORS = ['#e4572e', '#3a86ff', '#2bb673', '#f2a541', '#9b5de5', '#00b4d8'];

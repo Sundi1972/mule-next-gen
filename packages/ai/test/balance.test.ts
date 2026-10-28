@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, AI_LEVELS, AI_PERSONAS, createGame, EVENTS, GAME, GOODS, mulePriceFor, observe, type GameState } from '@mule/engine';
+import { advancePhase, AI_LEVELS, AI_PERSONAS, createGame, EVENTS, GAME, GOODS, mulePriceFor, observe, STRATEGIST, type GameState } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
 import { AiSeat } from '../src/seat.js';
-import { developDecision, goodPlan, muleValue, plotValue, tradeDecision } from '../src/strategist.js';
+import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, tradeDecision, wantsPlot } from '../src/strategist.js';
 import { cashReserve, installGain, type Mind } from '../src/value.js';
 
 const fourSeats = (seed: number) => createGame({ seed, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI${i}`, isAi: true })) });
@@ -41,6 +41,51 @@ function developmentWithWater(water: number): GameState {
 }
 
 const traderMind: Mind = { me: 'ai0', personaId: 'trader', persona: AI_PERSONAS.trader, levelId: 'trader', level: AI_LEVELS.trader };
+
+describe('land claims off reading order', () => {
+  it('T-AC-10: in the first sweep a seat lets go of a plot outside its top open plots, and seats break ties differently', () => {
+    const state = fourSeats(3);
+    while (state.phase !== 'landGrant') advancePhase(state);
+    const obs = observe(state, 'ai0');
+    const mind = (salt: number): Mind => ({ ...traderMind, salt });
+    const ranking = landDecision(obs, mind(1)).all[0]!.action.ranking;
+    const top = GAME.claimsPerGrant + STRATEGIST.grantSpare;
+    // A plot that clears grantShare of the best, but ranks below the seat's top open plots.
+    const outside = ranking.slice(top).find((s) => s.utility >= ranking[0]!.utility * STRATEGIST.grantShare);
+    expect(outside).toBeDefined();
+    const plan = landDecision(obs, mind(1)).all[0]!.action;
+    expect(wantsPlot(plan, obs, outside!.index, 0, mind(1))).toBe(false);
+    expect(wantsPlot(plan, obs, ranking[0]!.index, 0, mind(1))).toBe(true);
+    // Tied plots: two salts order them differently, so seats don't all reach for the same first rows.
+    const order = (salt: number) => landDecision(obs, mind(salt)).all[0]!.action.ranking.map((s) => s.index);
+    expect(order(1)).not.toEqual(order(2));
+  });
+});
+
+/** Month 1's land grant on seed 3, ai0 already fed by its own Food and Energy plots, Smithore posted at `smithore`. */
+function grantWithFarms(smithore: number): GameState {
+  const state = fourSeats(3);
+  while (state.phase !== 'landGrant') advancePhase(state);
+  state.store.posted.smithore = smithore;
+  const [food, energy] = state.tiles.filter((t) => !t.owner && t.terrain === 'plains');
+  Object.assign(food!, { owner: 'ai0', outfit: 'food' });
+  Object.assign(energy!, { owner: 'ai0', outfit: 'energy' });
+  return state;
+}
+
+describe('land plans by worth', () => {
+  it('T-AC-14: a land plan worth a quarter of the best is not offered to the decider; plans close in worth still are', () => {
+    // Smithore at 400: two mountain mines are worth about 6,400, the best two farms about 1,700.
+    const rich = landDecision(observe(grantWithFarms(400), 'ai0'), traderMind);
+    const best = Math.max(...rich.all.map((c) => c.value));
+    expect(best).toBeGreaterThan(3 * Math.min(...rich.all.filter((c) => c.action.focus === 'grown').map((c) => c.value)));
+    for (const option of rich.options) expect(option.value).toBeGreaterThan(best / 2);
+    // Negative case: at month 1's own Smithore price the farm plan is worth about 70% of the mines, and stays on offer.
+    const even = landDecision(observe(grantWithFarms(31), 'ai0'), traderMind);
+    const top = Math.max(...even.all.map((c) => c.value));
+    expect(even.options.some((c) => c.value < top && c.value > top / 2)).toBe(true);
+  });
+});
 
 describe('cash reserve', () => {
   it('T-AC-3: a Water farm whose own first output covers the gap is not vetoed by the reserve', () => {
@@ -125,6 +170,38 @@ describe('values for lot bids (WS3 caps AI bids at these)', () => {
     }
   });
 
+  it('T-AC-15: a seat bids for a lot plot only what leaves the cash to develop it and its idle plots', () => {
+    const state = developmentWithWater(36);
+    const index = state.tiles.findIndex((t) => !t.owner && t.terrain === 'river');
+    const [a, b] = state.tiles.filter((t, i) => !t.owner && t.terrain !== 'store' && i !== index);
+    a!.owner = 'ai0';
+    b!.owner = 'ai0';
+    const mule = mulePriceFor(state, 'ai0');
+    // The lot hand bids up to the lower of the two (and its cash reserve).
+    const bidWith = (money: number) => {
+      state.players[0]!.money = money;
+      const obs = observe(state, 'ai0');
+      return Math.min(plotValue(obs, traderMind, index), plotRoom(obs, traderMind));
+    };
+    // Rich, it bids the plot's worth; with 1,000 cr and 2 idle plots, no more than 1,000 less 3 MULEs.
+    const worth = bidWith(100_000);
+    expect(worth).toBeGreaterThan(1000 - 3 * mule);
+    expect(bidWith(1000)).toBe(1000 - 3 * mule);
+    // With less than 3 MULEs' price on hand it bids nothing.
+    expect(bidWith(3 * mule - 1)).toBe(0);
+  });
+
+  it('INV-WS5-1: the AI values a geyser plot above the same plot without it', () => {
+    // The colony is out of Water, so a Water plot pays; a geyser adds to it (spec RULE-6).
+    const state = developmentWithWater(0);
+    const index = state.tiles.findIndex((t) => !t.owner && !t.special && ['tundra', 'volcanic', 'ice'].includes(t.terrain));
+    expect(index).toBeGreaterThanOrEqual(0);
+    const plain = plotValue(observe(state, 'ai0'), traderMind, index);
+    state.tiles[index]!.special = { kind: 'geyser' };
+    const geyser = plotValue(observe(state, 'ai0'), traderMind, index);
+    expect(geyser).toBeGreaterThan(plain);
+  });
+
   it('INV-WS3-2: a MULE is worth nothing without idle land, and at least the store price with a profitable use', () => {
     const state = developmentWithWater(0);
     state.players[0]!.money = 5_000;
@@ -158,6 +235,37 @@ describe('surplus to a short store', () => {
     const full = observe(auctionWithShelf(40), 'ai0');
     const before = tradeDecision(full, traderMind, goodPlan(full, traderMind, 'water')).all.find((c) => c.key === 'sell');
     expect(before === undefined || (before.action as { keep: number }).keep > plan.values.block).toBe(true);
+  });
+});
+
+/** The month-1 auction with the store's shelves full, ai0 holding `stock` of `good`, and the sales tax at `tax`. */
+function auctionAtTax(tax: number, good: 'food' | 'water', stock: number): GameState {
+  const state = auctionWithShelf(40);
+  state.store.stock.food = 40;
+  state.players[0]!.stock[good] = stock;
+  state.treasury.salesTax = tax;
+  return state;
+}
+
+describe('the sales tax', () => {
+  it('T-AC-9: at a 15% tax a seat sells the same resale stock for 85% of the gain, and values its own use the same', () => {
+    const sell = (tax: number) => {
+      const obs = observe(auctionAtTax(tax, 'water', 30), 'ai0');
+      return tradeDecision(obs, traderMind, goodPlan(obs, traderMind, 'water')).all.find((c) => c.key === 'sell')!;
+    };
+    const [free, taxed] = [sell(0), sell(0.15)];
+    expect(free).toBeDefined();
+    expect((taxed.action as { keep: number }).keep).toBe((free.action as { keep: number }).keep);
+    expect(taxed.value).toBeCloseTo(free.value * 0.85, 0);
+
+    const food = (tax: number) => goodPlan(observe(auctionAtTax(tax, 'food', 20), 'ai0'), traderMind, 'food').values;
+    const [v0, v15] = [food(0), food(0.15)];
+    const resale0 = v0.keep[v0.block]!;
+    const own = [...Array(v0.block).keys()].filter((k) => k >= v0.floorUnits && v0.keep[k]! > resale0);
+    expect(own.length).toBeGreaterThan(0);
+    for (const k of own) expect(v15.keep[k]).toBe(v0.keep[k]);
+    // Negative case: a unit held for resale next month is taxed when it sells, so it is worth 85%.
+    expect(v15.keep[v15.block]).toBeCloseTo(resale0 * 0.85, 6);
   });
 });
 

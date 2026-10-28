@@ -3,8 +3,7 @@
  * its OWN width at WIDE_PX = 1100 (HC-8). Run by smoke.ts on whatever phone screen is showing; every game screen
  * uses PhoneShell, so the step holds if the phase moves on under it.
  */
-import type { Page } from 'playwright';
-import type { MuleServer } from '../../server/src/server.js';
+import { errors as playwrightErrors, type Page } from 'playwright';
 import { check, PHONE } from './harness';
 
 /** Heiko's laptop. */
@@ -15,8 +14,6 @@ const WIDE_RAIL_PX = 400;
 const WIDE_PX = 1100;
 /** A notched phone on its side: the notch's inset on one side, the home bar's at the bottom. */
 const NOTCH = { top: 0, left: 47, bottom: 21, right: 47 };
-/** An AI seat, which sends the emote the step measures. The host sits in s1. */
-const EMOTER = 's2';
 
 /** One read of the screen showing, in one pass, since a phase can end between two reads. */
 type Frame = {
@@ -76,10 +73,11 @@ const RECORD_PAINTS = `{
 /**
  * B-AC-12: the shell fills the stage at 1440×900 and 844×390, switching on its own width at exactly 1100 px, with
  * useWide equal to the container query in every painted frame and the emotes clear of the rail at every size.
- * Reloads the phone once, at 1440×900, so a shell mounts wide. Leaves the phone at 844×390 with no notch, as the
- * rest of smoke.ts expects. Returns what it measured, to log.
+ * Reloads the phone once, at 1440×900, so a shell mounts wide, and does that last: a reload by the only human ends the
+ * phase, and the steps after this one wait on the phases that follow. Leaves the phone at 844×390 with no notch, as
+ * the rest of smoke.ts expects. Returns what it measured, to log.
  */
-export async function shellFillsTheStage(phone: Page, server: MuleServer, code: string, timeout = 5_000): Promise<string> {
+export async function shellFillsTheStage(phone: Page, timeout = 5_000): Promise<string> {
   const log: string[] = [];
   /** What the page painted, kept on the test's side, since the reload starts a fresh record. */
   const paints: Painted[] = [];
@@ -95,7 +93,7 @@ export async function shellFillsTheStage(phone: Page, server: MuleServer, code: 
     log.push(`${LAPTOP.width}: stage ${wide.stage.toFixed(1)} + rail ${wide.guide.toFixed(1)}`);
 
     // I-4: the emotes float left of the 400 px rail.
-    emote(server, code);
+    await emote(phone);
     log.push(`emotes ${await emotesClear(phone, LAPTOP.width)}`);
 
     // I-3: the switch reads the shell's own width, not the window's, at exactly WIDE_PX.
@@ -106,13 +104,6 @@ export async function shellFillsTheStage(phone: Page, server: MuleServer, code: 
       log.push(`shell ${box}: rail ${f.guide.toFixed(1)} wide=${f.wide}`);
     }
     await read(phone, null);
-
-    // I-1: a shell that mounts on a laptop is wide from its first frame.
-    paints.push(...((await phone.evaluate('window.__shellPaints')) as Painted[]));
-    await phone.reload();
-    await phone.locator('[data-phase] [data-testid=game-shell]').waitFor({ timeout });
-    const mounted = await read(phone);
-    checkFrame(mounted, `a ${LAPTOP.width} px window, after a reload`, LAPTOP.width, WIDE_RAIL_PX, 'true');
   } finally {
     await phone.setViewportSize(PHONE.viewport);
   }
@@ -122,7 +113,7 @@ export async function shellFillsTheStage(phone: Page, server: MuleServer, code: 
   const narrow = await read(phone);
   checkFrame(narrow, `a ${vw} px window`, vw, narrowRail(vw), 'false');
   log.push(`${vw}: stage ${narrow.stage.toFixed(1)} + rail ${narrow.guide.toFixed(1)}`);
-  emote(server, code);
+  await emote(phone);
   log.push(`emotes ${await emotesClear(phone, vw)}`);
 
   // A notch on the right: the rail and the emotes move in by the inset together.
@@ -137,6 +128,19 @@ export async function shellFillsTheStage(phone: Page, server: MuleServer, code: 
     await cdp.detach();
   }
 
+  // I-1: a shell that mounts on a laptop is wide from its first frame.
+  try {
+    await phone.setViewportSize(LAPTOP);
+    paints.push(...((await phone.evaluate('window.__shellPaints')) as Painted[]));
+    await phone.reload();
+    await phone.locator('[data-phase] [data-testid=game-shell]').waitFor({ timeout });
+    const mounted = await read(phone);
+    checkFrame(mounted, `a ${LAPTOP.width} px window, after a reload`, LAPTOP.width, WIDE_RAIL_PX, 'true');
+  } finally {
+    await phone.setViewportSize(PHONE.viewport);
+  }
+  await read(phone);
+
   // I-1: every frame the page painted agrees with the switch, at each mount and each resize.
   paints.push(...((await phone.evaluate('window.__shellPaints')) as Painted[]));
   for (const p of paints) {
@@ -147,7 +151,7 @@ export async function shellFillsTheStage(phone: Page, server: MuleServer, code: 
   const wideMounts = paints.filter((p) => p.at === 'mount' && p.box >= WIDE_PX).length;
   const resizes = paints.filter((p) => p.at === 'resize').length;
   check(wideMounts >= 1, `B-AC-12 (I-1): a shell mounted at ${LAPTOP.width} px was recorded, got ${wideMounts}`);
-  // To 1440, to 1099, to 1100, back to 1440, and to 844 after the reload.
+  // To 1440, to 1099, to 1100, back to 1440, to 844, then to 844 again after the reload.
   check(resizes >= 5, `B-AC-12 (I-1): every resize of the shell was recorded before paint, got ${resizes}`);
   log.push(`painted frames checked ${paints.length} (${wideMounts} wide mounts, ${resizes} resizes)`);
 
@@ -157,11 +161,27 @@ export async function shellFillsTheStage(phone: Page, server: MuleServer, code: 
   return log.join(', ');
 }
 
-/** An AI seat sends an emote through the room, as its phone would; every screen shows it for a few seconds. */
-function emote(server: MuleServer, code: string): void {
-  const room = server.registry.get(code);
-  check(room, `a room ${code} on the server`);
-  room.receive({ send: () => {} }, { seatId: EMOTER }, { t: 'emote', emote: 'Ha!' });
+/**
+ * The phone sends an emote over its own connection, the message its emote buttons send; every screen shows it for a
+ * few seconds. Only planning has the buttons and the step spans phases, so the page's open socket is found through the
+ * DevTools protocol. The server sees the phone's own seat, so this holds under the rule that a seat-only message must
+ * come from the connection holding the seat.
+ */
+async function emote(phone: Page): Promise<void> {
+  const cdp = await phone.context().newCDPSession(phone);
+  try {
+    const proto = await cdp.send('Runtime.evaluate', { expression: 'WebSocket.prototype' });
+    const { objects } = await cdp.send('Runtime.queryObjects', { prototypeObjectId: proto.result.objectId! });
+    const sent = await cdp.send('Runtime.callFunctionOn', {
+      objectId: objects.objectId!,
+      functionDeclaration: 'function (msg) { const open = this.filter((w) => w.readyState === 1); if (open.length === 1) open[0].send(msg); return open.length; }',
+      arguments: [{ value: JSON.stringify({ t: 'emote', emote: 'Ha!' }) }],
+      returnByValue: true,
+    });
+    check(sent.result.value === 1, `the phone has one open socket to send its emote on, found ${sent.result.value}`);
+  } finally {
+    await cdp.detach();
+  }
 }
 
 /** I-4: the emote layer's right edge sits left of the rail's left edge. Returns the gap, to log. */
@@ -217,7 +237,11 @@ async function read(phone: Page, box?: number | null): Promise<Frame> {
       },
       box,
       { timeout: 2_000 },
-    );
+    ).catch((err: unknown) => {
+      // A phase change can replace the screen mid-read and leave the read waiting: read the screen that replaced it.
+      if (err instanceof playwrightErrors.TimeoutError) return null;
+      throw err;
+    });
     if (f) return f;
     check(attempt < 2, 'B-AC-12: a game screen with the shell to measure');
   }
