@@ -77,17 +77,28 @@ import { electionNews, myPoliticsView, politicsView, resultShown } from './polit
 
 /**
  * The longest each phase lasts, in milliseconds, from the engine's PHASES.
- * Planning's is null: it has no clock and waits for every player's Ready. The
- * auction has no entry: it runs good by good on its own clocks (WALK), stepped
- * by the server every WALK.tickMs. The land auction runs the same way, lot by
- * lot on its own clocks (LOTS).
+ * Each is read from the config when asked, so a value set at runtime times the
+ * next phase that starts. Planning's is null: it has no clock and waits for
+ * every player's Ready. The auction has no entry: it runs good by good on its
+ * own clocks (WALK), stepped by the server every WALK.tickMs. The land auction
+ * runs the same way, lot by lot on its own clocks (LOTS).
  */
-export const PHASE_MS: { planning: number | null } & Record<Exclude<Phase, 'gameOver' | 'auction' | 'landAuction' | 'planning'>, number> = {
-  planning: PHASES.planningMs,
-  landGrant: PHASES.landGrantMs,
-  development: DEVELOPMENT.fullSeconds * 1_000,
-  production: PHASES.productionMs,
-  upkeep: PHASES.upkeepMs,
+export const PHASE_MS: { readonly planning: number | null } & Readonly<Record<Exclude<Phase, 'gameOver' | 'auction' | 'landAuction' | 'planning'>, number>> = {
+  get planning() {
+    return PHASES.planningMs;
+  },
+  get landGrant() {
+    return PHASES.landGrantMs;
+  },
+  get development() {
+    return DEVELOPMENT.fullSeconds * 1_000;
+  },
+  get production() {
+    return PHASES.productionMs;
+  },
+  get upkeep() {
+    return PHASES.upkeepMs;
+  },
 };
 
 /** How long each free plot stays lit in the land grant. */
