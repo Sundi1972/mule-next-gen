@@ -260,6 +260,7 @@ describe.runIf(FULL)('the recorder', { timeout: 60_000 }, () => {
     });
     const sync = vi.spyOn(fs, 'writeFileSync');
     expect(await t.toGameOver()).toBe(true);
+    await vi.waitFor(() => expect(fs.readdirSync(dir)).toHaveLength(1));
     expect(written, 'one write, after game over').toEqual([true]);
     expect(sync).not.toHaveBeenCalled();
     const recordedHash = t.recorder().finished!.outcome!.stateHash;

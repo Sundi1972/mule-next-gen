@@ -222,7 +222,14 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     private readonly ctx: GameContext,
     private readonly seed: number,
     /** `politics` plays elections, offices and the Governor's tax; off unless the server is created with it on. */
-    private readonly options: { maxMonths?: number; phaseScale?: number; politics?: boolean; brain?: BrainService } = {},
+    private readonly options: {
+      maxMonths?: number;
+      phaseScale?: number;
+      politics?: boolean;
+      brain?: BrainService;
+      /** Called once, as the game ends, with its final state. */
+      onGameOver?: (state: GameState) => void;
+    } = {},
   ) {
     this.phaseScale = options.phaseScale ?? 1;
     if (!(this.phaseScale > 0 && this.phaseScale <= 1)) throw new RangeError(`phaseScale must be in (0, 1], got ${this.phaseScale}`);
@@ -579,6 +586,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       const ranking = [...this.seats].sort((a, b) => score(state, b.id) - score(state, a.id));
       this.news = [`Game over. ${ranking[0]?.name} wins the colony!`];
       this.brain.finish();
+      this.options.onGameOver?.(state);
       return;
     }
 
