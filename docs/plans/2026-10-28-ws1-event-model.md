@@ -196,20 +196,28 @@ reviews the types.ts hunk.
 **Depends on:** Task 4 · **ACs verified:** T-AC-4 · **Spec sections consumed:** §1 C3, §2 RULE-1 (wealth rank)
 **Files:** Modify: `packages/engine/src/events.ts` (`buildEvent` for a given player; `pickStart` and `EVENTS.targetBias` go); Test: `packages/engine/test/events.test.ts`
 
-- [ ] **Step 1: Write `EM-T-AC-4: a personal event starts on its own player's plots, and the richest and poorest read their rows' points`**
+- [x] **Step 1: Write `EM-T-AC-4: a personal event starts on its own player's plots, and the richest and poorest read their rows' points`**
       at the month report.
       - Pest swarm forced for p2 only: `event.player === 'p2'`, and the order-0 plot is p2's. The spread is today's (HC-4): a pest reaches joined Food plots of anyone, a wildfire only its owner's.
       - A player with no Food plot fires no pest swarm.
       - The ranks: the richest p1 rolls pest at base +1, the poorest bumper at base +1.5 (read through `eventChance` on the report's state).
-- [ ] **Step 2: Run; expect FAIL** (today's `pickStart` starts anywhere).
-- [ ] **Step 3: Implement C3.** Delete the WS1 events spec's `T-AC-6` test (superseded, Task 1; R7). Re-force its
+      Built at `rollPhase`'s return (production calls it from Task 6), on test-local rows: a wealth point is the only
+      thing raising a row above 0, so the rank group proves the lean and the own-plot start in one assertion.
+- [x] **Step 2: Run; expect FAIL** (today's `pickStart` starts anywhere).
+- [x] **Step 3: Implement C3.** Delete the WS1 events spec's `T-AC-6` test (superseded, Task 1; R7). Re-force its
       `T-AC-4` pest test through the rows instead of `targetBias`, with the assertions unchanged.
-- [ ] **Step 4: Run events.test.ts; expect PASS.** **Step 5: Commit** red then green.
+- [x] **Step 4: Run events.test.ts; expect PASS.** **Step 5: Commit** red then green.
+      Done 29 Oct: red 19b21cc, green 2eede4a (`EVENTS.targetBias` removed here); review fix 50bd61a (EM-T-AC-4 checks
+      the start is drawn among the roller's own plots: a start fixed to the first plot survived). Roller at 50bd61a.
 
 ### Task 6: Production applies every event that fired — C2
 
 **Depends on:** Tasks 4, 5 · **ACs verified:** T-AC-3, T-AC-5 (the ten events) · **Spec sections consumed:** §1 C2, §2 RULE-2 (4, 6), HC-4
-**Files:** Modify: `packages/engine/src/production.ts::runProduction`, `events.ts` (remove `planEvent`), `EVENTS` (remove `chance`, `weights`, `targetBias`); Test: `events.test.ts`, `packages/ai/test/balance.test.ts`
+**Files:** Modify: `packages/engine/src/production.ts::runProduction`, `events.ts` (remove `planEvent`), `EVENTS` (remove `chance`, `weights`; `targetBias` went in Task 5); Test: `events.test.ts`, `packages/ai/test/balance.test.ts`
+
+From Task 5's review: with `planEvent` gone, `buildEvent`'s no-player arm goes too (a personal key needs its player)
+and its docstring loses "otherwise on anyone's"; EM-T-AC-3's re-forced T-AC-3 pins that a bumper harvest reaches only
+its start plot (HC-4; that mutant survives today).
 
 - [ ] **Step 1: Write `EM-T-AC-3: two events on one plot both apply in order, never below 0, and an excluded pair keeps one`**
       at the month report and the plot's line, with rows forced.
@@ -309,10 +317,13 @@ Before suggesting merge of `ws1-events-roller` into `ws1-events`:
 
 ## Gate: wave 1 reaches a table (`ws1-events` → `feat/strategist`)
 
-- [ ] #109 merged into `feat/strategist`; `ws1-events` rebased onto it, gates re-run on the rebased head
-- [ ] **WS6's several-events surface** is merged into `feat/strategist`, or merges with this branch: the phone and
-      TV show every event of a phase, and the view (WS3's `mule-game.ts`) carries `phase`. It is built against Task 2's
-      contract; the PM routes it.
+- [x] #109 merged into `feat/strategist`; `ws1-events` synced with it (merged, not rebased, so the task SHAs hold):
+      trunk b3774fa at 946ab96, typecheck 0 and the suite green
+- [ ] **The events gallery is built** (Heiko, 29 Oct: "Living weather" approved as the design to build; WS8 writes the
+      build spec and names its files): merged into `feat/strategist`, or merges with this branch. The phone and TV show
+      every event of a phase, and the view (WS3's `mule-game.ts`) carries `phase`. The event payloads are agreed with
+      WS8 against Task 2's contract (`MonthEvent`, several a phase in the order fired; AM-2's delta-0 plots; AM-3's
+      collapse); any field the gallery needs beyond it is a named change to that contract. The PM routes it.
 - [ ] PR-1's and PR-2's rows in the PR body; R-2's options settled by Heiko if any check moved
 - [ ] Heiko's OK through the PM
 
