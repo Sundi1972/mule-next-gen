@@ -76,12 +76,13 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:spike', () => {
   it('INV-spike-cap: a cap above BRAIN.spikeCapUsd is clamped, and the run stops at the first call whose worst case would pass it', async () => {
     expect(capFor(1)).toBe(BRAIN.spikeCapUsd);
     expect(capFor(0.01)).toBe(0.01);
-    // Each prompt's worst case prices about 270,000 chars as a cache write; the fake bills 90,000 plain input tokens.
+    // Each prompt's worst case prices about 108,000 tokens as a cache write; the fake bills 90,000 plain input tokens.
+    const chars = Math.round(108_000 * BRAIN.charsPerToken);
     const p = BRAIN.pricesPerMTok;
     const billed = (90_000 * p.input + 20 * p.output) / 1_000_000;
-    const worst = worstOf(270_000);
+    const worst = worstOf(chars);
     const waits: number[] = [];
-    const report = await run(items(40, 270_000), async (_p, w) => (waits.push(w), reply(100, { input: 90_000, cached_read: 0, cache_write: 0 })), 1);
+    const report = await run(items(40, chars), async (_p, w) => (waits.push(w), reply(100, { input: 90_000, cached_read: 0, cache_write: 0 })), 1);
     expect(report.cap).toBe(BRAIN.spikeCapUsd);
     expect(report.stopped).toBe('cap');
     expect(report.calls).toBe(5);
@@ -175,7 +176,7 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:spike', () => {
   it("INV-spike-report: a mixed-kind run waits each call at its own kind's wait, logs its kind, and reports a row per kind plus pooled", async () => {
     const kinds: SpikeItem['kind'][] = ['land', 'develop', 'trade', 'land', 'develop', 'trade', 'land', 'develop', 'trade', 'trade'];
     const list = kinds.map((k, i) => item(i, SYSTEM, k));
-    const answerMs = { land: 4000, develop: 1000, trade: 2000 };
+    const answerMs = { land: 4500, develop: 1000, trade: 2000 };
     const waits: number[] = [];
     let n = 0;
     const report = await run(list, async (_p, w) => {
@@ -187,13 +188,13 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:spike', () => {
     expect(ledgerLines().map((l) => l.kind)).toEqual(kinds);
     expect(report.kinds.map((r) => r.kind)).toEqual(['land', 'develop', 'trade', 'all']);
 
-    // A land answer at 4 s is inside land's wait but outside develop's and trade's: each row uses its own kind's wait.
+    // A land answer at 4.5 s is inside land's wait but outside develop's and trade's: each row uses its own kind's wait.
     expect(answerMs.land).toBeLessThanOrEqual(WAIT_MS.land);
     expect(answerMs.land).toBeGreaterThan(Math.max(WAIT_MS.develop, WAIT_MS.trade));
     expect(answerMs.develop).toBeLessThanOrEqual(WAIT_MS.develop);
     expect(answerMs.trade).toBeLessThanOrEqual(WAIT_MS.trade);
     const lines = renderReport(report);
-    expect(rowOf(lines, 'land')).toMatch(new RegExp(`^land\\s+3\\s+0\\s+0\\s+4000 ms\\s+4000 ms\\s+4000 ms\\s+100% within ${WAIT_MS.land} ms\\s+100% of 3$`));
+    expect(rowOf(lines, 'land')).toMatch(new RegExp(`^land\\s+3\\s+0\\s+0\\s+4500 ms\\s+4500 ms\\s+4500 ms\\s+100% within ${WAIT_MS.land} ms\\s+100% of 3$`));
     expect(rowOf(lines, 'develop')).toMatch(new RegExp(`^develop\\s+3\\s+0\\s+0\\s+1000 ms\\s+1000 ms\\s+1000 ms\\s+100% within ${WAIT_MS.develop} ms\\s+100% of 3$`));
     expect(rowOf(lines, 'trade')).toMatch(new RegExp(`^trade\\s+4\\s+1\\s+0\\s+2000 ms\\s+> ${WAIT_MS.trade} ms\\s+> ${WAIT_MS.trade} ms\\s+75% within ${WAIT_MS.trade} ms\\s+100% of 3$`));
     // Across mixed waits a pooled percentile mixes upper and lower bounds, so the pooled row prints none.

@@ -1,9 +1,9 @@
 /**
  * Plays Smart seats against strategist seats and reports whether the Smart AI decides and talks in character, never
  * stalls a game, and stays within its budget. See C6.
- * Usage: pnpm --filter @mule/server brain:trial -- --games 20 --seed 101 [--smart 2] [--max-usd X]
+ * Usage: pnpm --filter @mule/server brain:trial -- --games 20 --seed 101 [--smart 2] [--max-usd X] [--game-budget-usd Y]
  * Without the key every seat plays Classic and nothing is called. With it, real money: --max-usd is required, and one
- * run per UTC day.
+ * run per UTC day. Each game's Smart seats together spend at most the game budget (default BRAIN.gameBudgetUsd).
  */
 import fs from 'node:fs';
 import { BRAIN } from '@mule/engine';
@@ -70,6 +70,7 @@ interface GameSetup {
   env: Readonly<Record<string, string | undefined>>;
   logPath: string | null;
   smart: number;
+  gameBudgetUsd: number;
   out: (line: string) => void;
 }
 
@@ -81,7 +82,7 @@ const bump = (counts: number[], month: number) => {
 /** Plays one game with its own brain; pauses simulated time while a model call is open, and always closes the brain. */
 async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
   const { id } = setup;
-  const brain = createBrain({ gameId: id, env: setup.env, ...(setup.logPath === null ? {} : { logPath: setup.logPath }) });
+  const brain = createBrain({ gameId: id, env: setup.env, gameBudgetUsd: setup.gameBudgetUsd, ...(setup.logPath === null ? {} : { logPath: setup.logPath }) });
   const game: TrialGame = { id, end: 'unfinished', months: 0, smart: [], decisions: [], lines: {}, modelLines: {}, cutOff: [], countedUsd: 0, settledCalls: 0 };
   const calls = trackCalls();
   const chat = new Map<string, (record: DecisionRecord) => void>();
@@ -164,22 +165,28 @@ export interface TrialFlags {
   smart: number;
   /** Null when not given: a paid run needs it. */
   maxUsd: number | null;
+  /** The most each game's Smart seats together may spend. */
+  gameBudgetUsd: number;
 }
 
-const USAGE = 'Usage: brain:trial [--games N] [--seed S] [--smart K] [--max-usd X]; nothing played.';
+const USAGE =
+  `Usage: brain:trial [--games N] [--seed S] [--smart K] [--max-usd X] [--game-budget-usd Y], ` +
+  `Y above 0 and at most ${BRAIN.gameBudgetUsd.toFixed(2)}; nothing played.`;
 
 /** The flags, or null for anything numberFlags refuses or a value out of range. */
 function parseFlags(argv: readonly string[]): TrialFlags | null {
-  const given = numberFlags(argv, ['--games', '--seed', '--smart', '--max-usd']);
+  const given = numberFlags(argv, ['--games', '--seed', '--smart', '--max-usd', '--game-budget-usd']);
   if (!given) return null;
   const flags = {
     games: given.get('--games') ?? 20,
     seed: given.get('--seed') ?? 101,
     smart: given.get('--smart') ?? 2,
     maxUsd: given.get('--max-usd') ?? null,
+    gameBudgetUsd: given.get('--game-budget-usd') ?? BRAIN.gameBudgetUsd,
   };
   const ok = Number.isInteger(flags.games) && flags.games >= 1 && Number.isInteger(flags.seed) && Number.isInteger(flags.smart);
-  return ok && flags.smart >= 1 && flags.smart <= SEATS && (flags.maxUsd === null || flags.maxUsd > 0) ? flags : null;
+  const budgetOk = flags.gameBudgetUsd > 0 && flags.gameBudgetUsd <= BRAIN.gameBudgetUsd;
+  return ok && budgetOk && flags.smart >= 1 && flags.smart <= SEATS && (flags.maxUsd === null || flags.maxUsd > 0) ? flags : null;
 }
 
 /** A keyed run's ledger and cap. */
@@ -200,13 +207,21 @@ async function playRun(flags: TrialFlags, env: Readonly<Record<string, string | 
   const games: TrialGame[] = [];
   for (let i = 0; i < flags.games; i++) {
     if (paid) {
-      // Each Smart seat's budget holds its game to BRAIN.seatBudgetUsd, unknown bills included. !(<=) refuses a NaN.
-      if (!(sum(games.map((g) => g.countedUsd)) + flags.smart * BRAIN.seatBudgetUsd <= paid.cap)) return { games, stopped: 'cap', lostLines: null };
+      // The brain's table check holds a game to the game budget, unknown bills included. !(<=) refuses a NaN.
+      if (!(sum(games.map((g) => g.countedUsd)) + flags.gameBudgetUsd <= paid.cap)) return { games, stopped: 'cap', lostLines: null };
       // The day's clearance is used once, by the run that starts the first game.
       if (i === 0) claimLedger(paid.logPath);
     }
     const seed = flags.seed + i;
-    const game = await playTrialGame({ seed, id: `trial-${today}-${flags.seed}-${i}`, env, logPath: paid?.logPath ?? null, smart: flags.smart, out });
+    const game = await playTrialGame({
+      seed,
+      id: `trial-${today}-${flags.seed}-${i}`,
+      env,
+      logPath: paid?.logPath ?? null,
+      smart: flags.smart,
+      gameBudgetUsd: flags.gameBudgetUsd,
+      out,
+    });
     games.push(game);
     out(`game ${i + 1}/${flags.games} seed ${seed}: ${game.end}, ${game.cutOff.length} phases cut off, ${game.settledCalls} model calls`);
     if (game.end === 'auth') return { games, stopped: 'auth', lostLines: null };
@@ -258,7 +273,7 @@ export async function trial(
     paid = { logPath, cap: flags.maxUsd };
     out(
       `brain:trial model ${BRAIN.model}, cap ${capText(paid.cap)}, planned ${flags.games} games with ${flags.smart} Smart seats ` +
-        `(each held to $${BRAIN.seatBudgetUsd.toFixed(2)} a game), ledger ${logPath}`,
+        `(together held to ${capText(flags.gameBudgetUsd)} a game, an equal share each), ledger ${logPath}`,
     );
   }
 
@@ -270,12 +285,13 @@ export async function trial(
     smartPerGame: keyed ? flags.smart : 0,
     seatsPerGame: SEATS,
     cap: paid?.cap ?? null,
+    gameBudgetUsd: flags.gameBudgetUsd,
     games,
     calls: paid ? readCalls(paid.logPath) : [],
   });
   for (const line of renderTrialReport(report)) out(line);
   if (paid && stopped === 'cap' && games.length === 0) {
-    out(`No game started: cap ${capText(paid.cap)} is below one game's Smart budgets ($${(flags.smart * BRAIN.seatBudgetUsd).toFixed(2)}).`);
+    out(`No game started: cap ${capText(paid.cap)} is below one game's budget (${capText(flags.gameBudgetUsd)}).`);
   }
   if (stopped === 'auth') out(AUTH_STOPPED);
   if (lostLines) out(lostLines);

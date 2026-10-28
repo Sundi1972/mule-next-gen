@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { advancePhase, createGame, expectedGround, isGameOver, observe, stepAuction, WALK, type Trade } from '@mule/engine';
 import { applyAction, playGame } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
+import type { DecisionRecord } from '../src/brain.js';
+import type { Choice, Decider, ShortOption } from '../src/decider.js';
 import { candidate, consider, shortlist } from '../src/utility.js';
 import { simSeats } from '../src/lineup.js';
 
@@ -48,6 +50,51 @@ describe('AI seats at the auction', () => {
     expect(trades.some((t) => t.good === 'food' && t.seller === 'ai0')).toBe(true);
     expect(trades.some((t) => t.good === 'food' && t.buyer === 'ai1')).toBe(true);
     expect(play()).toEqual(trades);
+  });
+
+  // 4 s is the PM's ruling of 2026-10-28 on the paid trial's latency (spec AM-17), so these times are pinned here.
+  it.each([
+    { answerMs: 3_900, by: 'llm', note: undefined },
+    { answerMs: 4_100, by: 'fallback', note: 'decider too slow' },
+  ])('T-AC-7 (AM-17): a trade answer $answerMs ms into the status screen is played by $by, declared before the walk', async ({ answerMs, by, note }) => {
+    const state = createGame({ seed: 5, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI${i}`, isAi: true })) });
+    let now = 0;
+    // Set inside the decider, so TypeScript must not narrow it to null here.
+    let asked = null as { at: number; good: string; options: ShortOption[]; answer: (c: Choice) => void } | null;
+    const slow: Decider = {
+      name: 'slow',
+      decide: (options) =>
+        asked ? { optionId: options[0]!.id, line: null, by: 'llm' } : new Promise<Choice>((answer) => (asked = { at: now, good: state.auction!.good!, options, answer })),
+    };
+    const records: DecisionRecord[] = [];
+    const seats = state.players.map(
+      (p, i) => new AiSeat({ id: p.id, name: p.name, persona: 'trader', level: 'trader', seed: 100 + i, decider: i === 0 ? slow : null, onDecision: (r) => i === 0 && records.push(r) }),
+    );
+    while (state.phase !== 'auction') advancePhase(state);
+    state.players[0]!.stock.food = 30;
+    state.players[1]!.stock.food = 0;
+    const declared: { good: string; stage: string }[] = [];
+    let answered = false;
+    for (let i = 0; i < 20_000 && state.auction!.stage !== 'over' && !(asked && declared.some((d) => d.good === asked!.good)); i++) {
+      for (const s of seats)
+        s.auctionTick(state, WALK.tickMs, (a) => {
+          if (s.id === 'ai0' && a.type === 'declare') declared.push({ good: state.auction!.good!, stage: state.auction!.stage });
+          return applyAction(state, s.id, a);
+        });
+      stepAuction(state, WALK.tickMs);
+      now += WALK.tickMs;
+      if (asked && !answered && now - asked.at >= answerMs) {
+        answered = true;
+        asked.answer({ optionId: asked.options.at(-1)!.id, line: null, by: 'llm' });
+        await new Promise((r) => setTimeout(r, 0));
+      }
+    }
+
+    expect(asked, 'the seat asked its decider about a trade').not.toBeNull();
+    const record = records.find((r) => r.kind === 'trade' && r.by !== 'top')!;
+    expect({ by: record.by, note: record.note }).toEqual({ by, note });
+    if (by === 'llm') expect(record.pick.id).toBe(asked!.options.at(-1)!.id);
+    expect(declared.filter((d) => d.good === asked!.good)).toEqual([{ good: asked!.good, stage: 'status' }]);
   });
 });
 

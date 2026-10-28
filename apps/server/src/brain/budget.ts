@@ -35,8 +35,18 @@ export interface Budget {
   release(game: string): void;
 }
 
-/** Per-seat spend checks over the ledger's in-memory totals plus unknown bills; never reads the file. */
-export function createBudget(ledger: Pick<Ledger, 'seatSpent'>): Budget {
+export interface BudgetOptions {
+  /** The most a game's Smart seats together may spend, in US dollars. */
+  budgetUsd: number;
+  /** The game's registered Smart seats; each holds an equal share of the budget. */
+  seats: (game: string) => Iterable<string>;
+}
+
+/**
+ * Spend checks over the ledger's in-memory totals plus unknown bills; never reads the file. A seat may call while its
+ * own spend stays within its share and the table's stays within the game budget. See RULE-3, INV-table-budget.
+ */
+export function createBudget(ledger: Pick<Ledger, 'seatSpent'>, options: BudgetOptions): Budget {
   // game -> seats locked out. A locked seat never calls again, so it cannot flip between Smart and Classic.
   const locked = new Map<string, Set<string>>();
   // game -> seat -> worst cases of its calls whose bill is unknown.
@@ -46,10 +56,16 @@ export function createBudget(ledger: Pick<Ledger, 'seatSpent'>): Budget {
   return {
     allow(game, seat, nextUsd) {
       if (locked.get(game)?.has(seat)) return { allowed: false, lockedNow: false };
+      // A seat that asks before it is registered still takes a share and puts its spend on the table.
+      const table = new Set(options.seats(game)).add(seat);
+      const share = options.budgetUsd / table.size;
       const spent = spentBy(game, seat);
+      let tableSpent = 0;
+      for (const s of table) tableSpent += spentBy(game, s);
       // A negative or infinite term could hide spend; !(<=) also refuses a NaN.
-      const sane = Number.isFinite(spent) && Number.isFinite(nextUsd) && nextUsd >= 0;
-      if (!sane || !(spent + nextUsd <= BRAIN.seatBudgetUsd)) {
+      const sane = Number.isFinite(spent) && Number.isFinite(tableSpent) && Number.isFinite(nextUsd) && nextUsd >= 0;
+      // The table check holds the game budget even after a late seat shrinks the shares below what a seat has spent.
+      if (!sane || !(spent + nextUsd <= share) || !(tableSpent + nextUsd <= options.budgetUsd)) {
         const seats = locked.get(game) ?? new Set<string>();
         seats.add(seat);
         locked.set(game, seats);

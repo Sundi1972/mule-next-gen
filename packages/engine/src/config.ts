@@ -1005,8 +1005,11 @@ export const AI_HANDS = {
     waitGap: [0.03, 0.08] as [number, number],
     /** It wanders its target up to this share of the board inside its limit, so its stops are hard to read. */
     targetJitter: 0.03,
-    /** How long it waits for the decider at the status screen before it plays its own top option. */
-    decideWaitMs: 2_500,
+    /**
+     * How long it waits for the decider at the status screen before it plays its own top option. It asks as the
+     * screen opens, so this stays well under WALK.statusMs and a late answer is still declared before the walk.
+     */
+    decideWaitMs: 4_000,
   },
   grant: {
     /** A go/no-go choice takes this much longer than a bare reaction. */
@@ -1018,19 +1021,44 @@ export const AI_HANDS = {
 export const BRAIN = {
   /** The model that decides and talks. */
   model: 'claude-haiku-5-5',
-  /** A Smart seat's model budget per game, in US dollars; past it the seat plays Classic. */
-  seatBudgetUsd: 0.06,
+  /**
+   * The most all of a game's Smart AI seats together may spend on the model, in US dollars. Each Smart seat holds an
+   * equal share of it; past its share a seat plays Classic.
+   */
+  gameBudgetUsd: 1.0,
   /** Hard ceiling, in US dollars, for the latency spike command. */
   spikeCapUsd: 0.05,
-  /** US dollars per million tokens. */
+  /** US dollars per million tokens, for `model` (Haiku 5.5). */
   pricesPerMTok: { input: 0.1, cacheRead: 0.01, cacheWrite: 0.125, output: 0.5 },
+  /** US dollars per million tokens for Sonnet 5.5: cache reads 0.1x input, 5-minute cache writes 1.25x. Spike S-A1 only. */
+  sonnetPricesPerMTok: { input: 2, cacheRead: 0.2, cacheWrite: 2.5, output: 10 },
+  /**
+   * Spike S-A1 (WS2 spec A §7), brain:strategy-spike: Haiku 5.5 with adaptive thinking against Sonnet 5.5 writing a
+   * seat's strategy. `models.haiku` is priced at pricesPerMTok, `models.sonnet` at sonnetPricesPerMTok.
+   */
+  strategySpike: {
+    /** Hard ceiling for one run, in US dollars; the --max-usd flag may only lower it. */
+    capUsd: 0.1,
+    models: { haiku: 'claude-haiku-5-5', sonnet: 'claude-sonnet-5-5' },
+    /** output_config.effort for both models: Haiku 5.5's default, one below Sonnet 5.5's. */
+    effort: 'medium',
+    /** Reply cap per call, in tokens, thinking included. */
+    maxTokens: 3_000,
+    /** How long one call may take before it counts as a timeout, in ms. */
+    timeoutMs: 30_000,
+    /** Longest strategy reason, in characters. */
+    reasonChars: 140,
+    /** Strategy calls one seat makes in a game, as the cost projection assumes. */
+    callsPerSeatGame: 24,
+  },
   /** Reply cap, in tokens. */
   maxTokens: 200,
   /**
-   * Prompt characters per token, as the budget assumes. Haiku 5.5 measured 2.56 to 2.65 on real prompts; this sits
-   * below the lowest so the worst case never undercounts.
+   * Prompt characters per token, as the budget assumes. Haiku 5.5 measured 2.56 to 2.65 on decision prompts, and about
+   * 2.24 on strategy prompts with adaptive thinking (spike S-A1); this sits below the lowest so the worst case never
+   * undercounts.
    */
-  charsPerToken: 2.5,
+  charsPerToken: 2.2,
   /** Longest chat line an AI says, in characters. */
   maxLineChars: 140,
   /** Most chat lines per AI seat per game month: one each for land, development and the auction, since a seat says at most one a phase. */

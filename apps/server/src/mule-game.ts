@@ -107,7 +107,7 @@ export const PHASE_MS: { readonly planning: number | null } & Readonly<Record<Ex
 /** How long each free plot stays lit in the land grant. */
 export const GRANT_TICK_MS = GAME.grantTickMs;
 
-export const AI_NAMES = ['The Accountant', 'The Baron', 'The Grudge', 'The Gambler', 'The Good Neighbour'];
+export const AI_NAMES = ['The Accountant', 'The Big Spender', 'The Grudge', 'The Gambler', 'The Good Neighbour'];
 
 /** How often AI hands act during development. */
 export const AI_DEV_TICK_MS = AI_HANDS.devTickMs;
