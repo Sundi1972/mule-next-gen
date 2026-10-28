@@ -208,16 +208,17 @@ describe('AI seats at the land auction', () => {
 
   it('B-AC-7: an AI whose money − reserve is under the minimum never moves, and presses Done', () => {
     for (const seed of [3, 7, 11]) {
-      // a2 holds no idle plot, so plotRoom keeps back one MULE and the reserve, the larger, is what stops it.
-      const probe = landAuction(seed, { bare: ['a2'], glut: true });
-      const mind = probe.seats[1]!.mind;
+      // a3 (cautious, the largest reserve) holds no idle plot, so plotRoom keeps back one MULE and the reserve, the
+      // larger, is what stops it.
+      const probe = landAuction(seed, { bare: ['a3'], glut: true });
+      const mind = probe.seats[2]!.mind;
       const reserve = cashReserve(observe(probe.state, mind.me), mind);
-      const mule = mulePriceFor(probe.state, 'a2');
+      const mule = mulePriceFor(probe.state, 'a3');
       expect(reserve, `seed ${seed}`).toBeGreaterThan(mule);
       // A buyer by the engine's rule (money ≥ minimum) with a MULE to spare, but short once it keeps its reserve.
       const money = PLOT_MIN + mule + Math.floor((reserve - mule) / 2);
-      const { state, hands } = landAuction(seed, { money: { a2: money }, bare: ['a2'], glut: true });
-      const mine = play(state, hands).samples.filter((s) => s.id === 'a2' && s.lot.item.kind === 'plot');
+      const { state, hands } = landAuction(seed, { money: { a3: money }, bare: ['a3'], glut: true });
+      const mine = play(state, hands).samples.filter((s) => s.id === 'a3' && s.lot.item.kind === 'plot');
       expect(mine.length).toBeGreaterThan(0);
       for (const s of mine) {
         expect(s.room).toBeGreaterThanOrEqual(PLOT_MIN);
