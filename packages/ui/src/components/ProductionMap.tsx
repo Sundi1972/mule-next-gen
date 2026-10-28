@@ -1,5 +1,5 @@
 import { createContext, useContext, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
-import { eventHitAt, EventLivingMap, EventShow, type EventSegment, type ShowEventView, type ShowMode, type ShowPlayer } from '../events';
+import { EventLivingMap, EventShow, eventSegments, plotStrikes, plotUnitsAt, type EventShowProps, type ShowEventView, type ShowMode, type ShowPlayer } from '../events';
 import { useShow } from '../events/frame';
 import { GoodIcon } from './GoodIcon';
 import type { MapTile } from './HoloMap';
@@ -85,14 +85,21 @@ export function showTime(phaseEndsAt: number | null, serverNow: number, lengthMs
 /** How often a screen redraws the show: 40 ms over a 15 s phase, more often over a shorter one, so a short-lived badge still gets drawn. */
 export const frameMs = (lengthMs: number) => Math.min(40, Math.max(16, lengthMs / 375));
 
-/** Each event's hit on one plot, in fired order. */
-function hitsOn(events: ShowEventView[], line: { x: number; y: number }) {
-  return events.flatMap((ev) => ev.hits.filter((h) => h.x === line.x && h.y === line.y).map((h) => ({ ev, h })));
+/** Any grid: once every event has landed, when each one did no longer matters. */
+const ANY_GRID = { width: 1, height: 1 };
+
+/** What a plot makes once every event has reached it: RULE-2 (plotUnitsAt) after the last of them. */
+export function finalUnits(line: ShowLine, events: ShowEventView[]): number {
+  return plotUnitsAt(eventSegments({ events, introMs: 0 }), line, Infinity, false, ANY_GRID);
 }
 
-/** What a plot makes once every event has reached it: each delta in turn, never below 0. */
-export function finalUnits(line: ShowLine, events: ShowEventView[]): number {
-  return hitsOn(events, line).reduce((n, { h }) => Math.max(0, n + h.delta), line.made);
+/** The production show's props for <EventShow>: the map's and every rail's beside it, so they play one script. */
+export function productionShowProps(
+  production: Pick<ShowData, 'events' | 'introMs'>,
+  t: number,
+  { reduced, mode, players, tiles, width, height }: { reduced: boolean; mode: ShowMode; players: ShowPlayer[]; tiles: MapTile[]; width: number; height: number },
+): Omit<EventShowProps, 'children'> {
+  return { events: production.events, introMs: production.introMs, t, start: SHOW.eventAt, mode, reduced, width, height, tiles, players };
 }
 
 /** What has flown home to one player by `t`, per good. */
@@ -224,37 +231,11 @@ export function ProductionMap({ width, height, tiles, production, t, slots, play
   return (
     <div ref={map} className={cx('relative', className)} data-testid="map-show">
       {/* The bars render inside the show, so they read the very script the module draws the events with. */}
-      <EventShow events={events} introMs={production.introMs} t={t} start={SHOW.eventAt} mode={mode} reduced={reduced} width={width} height={height} tiles={tiles} players={cast}>
+      <EventShow {...productionShowProps(production, t, { reduced, mode, players: cast, tiles, width, height })}>
         <EventLivingMap size={tv ? 'tv' : 'phone'} {...(focus !== undefined ? { focusSlot: focus } : {})} {...(framed ? { bars } : {})} />
         {!framed && <div className="pointer-events-none absolute inset-0">{bars}</div>}
       </EventShow>
     </div>
-  );
-}
-
-type Grid = { width: number; height: number };
-
-/** One event reaching a plot: when, and its units before and after. */
-interface Strike {
-  at: number;
-  delta: number;
-  before: number;
-  after: number;
-}
-
-/** RULE-2: from `made`, each event's delta in fired order as it lands, never below 0 (a delta of 0 still reaches it). */
-function strikesOn(segments: EventSegment[], line: ShowLine, reduced: boolean, grid: Grid): Strike[] {
-  let units = line.made;
-  return segments.flatMap((seg) =>
-    seg.events.flatMap((ev) =>
-      ev.hits
-        .filter((h) => h.x === line.x && h.y === line.y)
-        .map((h) => {
-          const before = units;
-          units = Math.max(0, units + h.delta);
-          return { at: eventHitAt(seg, ev, h, reduced, grid), delta: h.delta, before, after: units };
-        }),
-    ),
   );
 }
 
@@ -278,7 +259,7 @@ function PlotBars({
   size: { w: number; h: number } | undefined;
 }) {
   const { s, reduced, grid } = useShow();
-  const strikes = strikesOn(s.segments, line, reduced, grid);
+  const strikes = plotStrikes(s.segments, line, reduced, grid);
   const filled = t >= fillAt(index);
   // Once the bars have grown in, they stop animating: moving them out of the map's frame must not grow them again.
   const grown = t >= fillAt(index) + 0.6;
