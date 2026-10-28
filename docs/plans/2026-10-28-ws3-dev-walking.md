@@ -220,7 +220,7 @@ The PM put it in this PR because it changes the same `PHASE_MS` table. WS6 build
 **No spec ID exists yet.** Tests are named with plan-level IDs: FM-planning-untimed, FM-planning-all-ready and FM-planning-host-continue. They are renamed if WS6 mints spec IDs.
 
 **Facts this task rests on** (read at 1a945b1):
-- **Dropped phones are already excused.** `checkAllReady` excuses away seats in every phase but the land grant, so "a player is absent" only needs Continue for a player who is connected but idle.
+- **Today, `checkAllReady` excuses away seats** in every phase but the land grant. **Planning must stop excusing them** (the lead's correction, after Steps 6.0–6.3 were built). Under Heiko's rule only Ready or the host's Continue ends planning. A player who locks their phone to think drops the connection, and must not be skipped. Continue is the way past an absent player.
 - **The election keeps its own stage clocks** (`scheduleElectionTick`). Planning proper starts when it ends; that start then waits for Ready instead of starting a timer.
 - **The game can't tell who the host is.** `GameContext` offers only `now`, `schedule` and `changed`.
 - **A board (the TV) can't send intents:** `room.ts::apply` refuses it with "Join the game first". Either way of placing Continue needs a named edit in WS4's `packages/tabletop`, which is why Step 6.4 waits for the PM.
@@ -232,8 +232,9 @@ The PM put it in this PR because it changes the same `PHASE_MS` table. WS6 build
   - **FM-planning-untimed:** after the clock runs far past the old 45 s (and at phaseScale 0.1), the phase is still `planning`, and the public `phaseEndsAt` is null. In an election month the election still steps on its own clocks, and planning proper then waits.
   - **FM-planning-all-ready:**
     - one human Ready → still planning;
-    - the last connected human Ready → the land grant starts;
-    - a dropped phone doesn't hold it;
+    - the last human Ready → the land grant starts;
+    - a dropped human who isn't Ready holds planning, even when every human has dropped;
+    - once they're back and Ready, it ends;
     - AI seats never hold it.
 - [ ] **Step 6.2: implement.**
   - `PHASES.planningMs: number | null = null`, documented as "null: planning waits for every player's Ready or the host's Continue; a number restores a timer".
