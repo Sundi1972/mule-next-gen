@@ -17,6 +17,7 @@ import {
   mulePrice,
   mulePriceFor,
   outfitMule,
+  pubPayoutFor,
   rawOutput,
   runPollution,
   RuleError,
@@ -217,6 +218,17 @@ describe('development', () => {
     const late = visitPub(state, 'p1', 5);
     expect(early).toBeGreaterThan(late);
     expect(() => buyMule(state, 'p0')).toThrow(RuleError);
+  });
+
+  it('quotes the pub payout without changing the game, and pays exactly that', () => {
+    const state = newGame();
+    toPhase(state, 'development');
+    for (const [id, left] of [['p0', 50], ['p1', 5], ['p2', 0], ['p3', 999]] as const) {
+      const money = state.players.find((p) => p.id === id)!.money;
+      const quote = pubPayoutFor(state, id, left);
+      expect(state.players.find((p) => p.id === id)!.money, `${id}: a quote pays nothing`).toBe(money);
+      expect(visitPub(state, id, left), `${id}: the pub pays the quote`).toBe(quote);
+    }
   });
 
   it('builds a green belt as a cheap outfit', () => {
