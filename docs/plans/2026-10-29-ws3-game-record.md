@@ -233,8 +233,10 @@ Before suggesting a merge of `ws3-record-pr1` into `ws3-auctions`:
 - [ ] `pnpm typecheck && pnpm test` is green. Lean CI: only T-AC-1 sits in Tier 1, the rest stay local (spec §6). The
   implementer tags the others as local the way the server suite already does (check `apps/server/vitest.config.ts`
   before choosing).
-- [ ] The literal guard holds: no numeric literal outside config without `literal-ok`. The 120-character cap goes
-  into config, as `RECORD.messageChars` in the engine's config.ts PHASES-adjacent WS3 block.
+- [ ] The literal guard (`packages/engine/test/config-guard.test.ts`, which scans engine/src and ai/src) stays
+  green, and `packages/engine/src/record.ts` has no numeric literals. The 120-character message cap is a named
+  constant in `apps/server/src/record.ts`, as `brain.ts::NOTE_MESSAGE_CHARS` is: not a balance number, so not
+  config (plan-time correction, 2026-10-29).
 - [ ] HC-2 is proven by T-AC-5, and HC-1 by T-AC-4.
 - [ ] No edit outside PR-1's `may_edit`.
 - [ ] Code review is clean, and so is the maintainability review.
