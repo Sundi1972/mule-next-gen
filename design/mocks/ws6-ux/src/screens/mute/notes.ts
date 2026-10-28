@@ -58,6 +58,6 @@ export const MUTE_NOTES = {
     serves: '1',
     intent: INTENT,
     why: 'Hiding an open offer would let it expire unanswered, which is a move in the game made by the mute. Spec B has AIs propose WS7’s cards (pacts and vote deals); nothing of value changes hands in a deal (WS7 HC-3), so the card is a pact, not “2 Food for 40 cr”.',
-    open: 'Shape to confirm with WS2’s spec B: no AI offer card exists in apps/web or on any ws2 branch yet. And: should an open offer stay when you mute (drawn) or go?',
+    open: 'Shape to confirm with WS2’s spec B (v2 still courts through WS7’s cards). Ruled by the PM, 29 Oct: an open offer stays after a mute until Ready, and a mute stops new offers only; a mute never makes a move.',
   },
 } satisfies Record<string, IntentNoteData>;
