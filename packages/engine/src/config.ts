@@ -852,7 +852,6 @@ export const AI_LEVELS = {
 
 export type AiLevelId = keyof typeof AI_LEVELS;
 
-/** Numbers the strategist's considerations use. */
 /**
  * Events: each row of the table below rolls on its own seeded dice, so several can fire in one phase and their effects
  * stack on the same plots. Each event's effect numbers sit under its key.
@@ -920,6 +919,7 @@ export const EVENTS = {
   ] satisfies [string, string][],
 };
 
+/** Numbers the strategist's considerations use. */
 export const STRATEGIST = {
   /** Months of output it counts a MULE as earning, at most. */
   horizon: 6,
