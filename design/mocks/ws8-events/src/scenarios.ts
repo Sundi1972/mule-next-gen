@@ -112,20 +112,31 @@ const CREW = ev('loyalCrew', 'Kai’s crew works through: one plot makes 1 more 
 
 // --- Goods auction ----------------------------------------------------------------------------------------------
 
-const PIRATES = ev('pirateRaid', 'Pirates raid the colony and take all the Crystite the players hold.', {
+/** Heiko (28 Oct): "pirates take all crystite": the store's stock and every player's. The store's crates go first. */
+const PIRATES = ev('pirateRaid', 'Pirates raid the colony and take all the Crystite: the store’s and every player’s.', {
   origin: STORE,
   effects: [
+    { on: 'store', what: 'crystite', delta: -8 },
     { on: 'ossa', what: 'crystite', delta: -6 },
     { on: 'lena', what: 'crystite', delta: -3 },
   ],
 });
-const STORE_FIRE = ev('storeFire', 'Fire at the store: all its Food burns, and Food’s price jumps until it’s restocked.', {
+/** Heiko (28 Oct): "store fire burns all store storage": every good the store holds, and the MULEs in its corral. */
+const STORE_FIRE = ev('storeFire', 'Fire at the store: everything it holds burns, every good and the MULEs, and prices jump until it’s restocked.', {
   origin: STORE,
   effects: [
     { on: 'store', what: 'food', delta: -14 },
-    { on: 'store', what: 'price', good: 'food', delta: 60, pct: true },
+    { on: 'store', what: 'water', delta: -9 },
+    { on: 'store', what: 'energy', delta: -12 },
+    { on: 'store', what: 'smithore', delta: -10 },
+    { on: 'store', what: 'crystite', delta: -6 },
+    { on: 'store', what: 'mules', delta: -8 },
+    { on: 'store', what: 'price', delta: 60, pct: true },
   ],
 });
+/** The same fire after a raid in that phase: the pirates left no Crystite to burn (each change is on what the earlier
+ * events left, WS1's AM-2). */
+const FIRE_AFTER_RAID: ShowEvent = { ...STORE_FIRE, effects: STORE_FIRE.effects!.filter((f) => f.what !== 'crystite') };
 
 // --- Upkeep -----------------------------------------------------------------------------------------------------
 
@@ -214,8 +225,8 @@ export const TOGETHER: (Scene & { why: string })[] = [
     why: 'Good events stack too: Kai’s well makes 4, the comet adds 2, the harvest doubles the 6.',
   },
   {
-    id: 'tg-auction', title: 'Raid and fire before the auction', phase: 'auction', events: [PIRATES, STORE_FIRE],
-    shows: 'Pirates take the players’ Crystite, then the store’s Food burns: both change what is worth selling.',
+    id: 'tg-auction', title: 'Raid and fire before the auction', phase: 'auction', events: [PIRATES, FIRE_AFTER_RAID],
+    shows: 'Pirates take all the Crystite, then the store burns with everything else it held: both change what is worth selling.',
     why: 'The auction rolls before trading opens, so both land before the first bid.',
   },
   {

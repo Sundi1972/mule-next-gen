@@ -1,4 +1,4 @@
-import { Creature, cx, GoodIcon, MuleIcon, PlayerMark, SLOT_COLOR, type Species } from '@mule/ui';
+import { Creature, cx, GoodIcon, MuleIcon, PlayerMark, SLOT_COLOR, type Good, type Species } from '@mule/ui';
 import type { ReactNode } from 'react';
 import type { EventKey } from './catalogue';
 import { effectWords } from './copy';
@@ -45,35 +45,37 @@ function PirateShip({ thrust, ramp: open }: { thrust: number; ramp: number }) {
 }
 
 /**
- * Heiko: "a pirate ship comes, lands at the store and takes all Crystite with it and then takes off again." The crates
- * come out of the store in their owners' colours (the Crystite the players hold), each player's count runs to 0.
+ * Heiko: "a pirate ship comes, lands at the store and takes all Crystite with it and then takes off again", and "pirates
+ * take all crystite": the store's crates go up the ramp first, then every player's in their colour; each count runs to 0.
  */
 function PirateRaid({ ev, seg, size }: { ev: ShowEvent; seg: Segment; size: Size }) {
   const { u, reduced } = useStoryClock(seg);
-  if (u < -0.2 || u > 7.2) return null;
+  if (u < -0.2 || u > 7.6) return null;
   const land: P = { x: STORE.x - 1.45, y: STORE.y - 0.35 };
   const sky: P = { x: STORE.x + 2.6, y: STORE.y - 5.5 };
   const away: P = { x: STORE.x - 6.5, y: STORE.y - 6 };
   const door: P = { x: STORE.x - 0.25, y: STORE.y + 0.2 };
   const hatch: P = { x: land.x + 0.15, y: land.y + 0.5 };
   const held = (ev.effects ?? []).filter((f) => f.what === 'crystite' && f.delta < 0).map((f) => ({ id: f.on, n: -f.delta }));
-  // One crate for every 3 units, in its owner's colour.
+  const ring = (id: string) => (id === 'store' ? 'var(--color-holo)' : SLOT_COLOR[seat(id).slot]);
+  // One crate for every 3 units, in its owner's colour; the store's in the holo colour.
   const crates = held.flatMap((h) => Array.from({ length: Math.ceil(h.n / 3) }, () => ({ id: h.id })));
-  const crateAt = (i: number) => 2 + i * 0.55;
+  const crateAt = (i: number) => 2 + i * 0.42;
   const arrived = (i: number) => u >= crateAt(i) + 0.5 || reduced;
-  // The ship: coming in, on the ground, lifting off.
+  // The ship: coming in, on the ground, lifting off once the last crate is aboard.
+  const liftAt = 5;
   const inK = reduced ? 1 : ease(ramp(u, 0, 1.4));
-  const outK = reduced ? 0 : ease(ramp(u, 4.7, 1.3)) ** 1.5;
-  const ship = u < 4.7 ? mix(sky, land, inK) : mix(land, away, outK);
-  const scale = u < 4.7 ? lerp(0.55, 1, inK) : lerp(1, 0.45, outK);
-  const thrust = u < 1.4 ? 1 : u < 1.8 ? 1 - ramp(u, 1.4, 0.4) : u > 4.4 ? ramp(u, 4.4, 0.3) : 0;
-  const hatchOpen = clamp(ramp(u, 1.6, 0.4) - ramp(u, 4.1, 0.4));
-  const gone = u > 6.1 && !reduced;
+  const outK = reduced ? 0 : ease(ramp(u, liftAt, 1.3)) ** 1.5;
+  const ship = u < liftAt ? mix(sky, land, inK) : mix(land, away, outK);
+  const scale = u < liftAt ? lerp(0.55, 1, inK) : lerp(1, 0.45, outK);
+  const thrust = u < 1.4 ? 1 : u < 1.8 ? 1 - ramp(u, 1.4, 0.4) : u > liftAt - 0.3 ? ramp(u, liftAt - 0.3, 0.3) : 0;
+  const hatchOpen = clamp(ramp(u, 1.6, 0.4) - ramp(u, liftAt - 0.6, 0.4));
+  const gone = u > 6.4 && !reduced;
   return (
     <>
       {/* Its shadow on the ground grows as it comes in. */}
       {!gone && (
-        <At p={{ x: land.x, y: land.y + 0.7 }} w={2.1 * (u < 4.7 ? inK : 1 - outK)}>
+        <At p={{ x: land.x, y: land.y + 0.7 }} w={2.1 * (u < liftAt ? inK : 1 - outK)}>
           <div className="aspect-[3/1] rounded-full bg-void/60" style={{ filter: size === 'tv' ? 'blur(2px)' : undefined }} />
         </At>
       )}
@@ -90,29 +92,29 @@ function PirateRaid({ ev, seg, size }: { ev: ShowEvent; seg: Segment; size: Size
         const p = mix(door, hatch, ease(k));
         return (
           <At key={i} p={{ x: p.x, y: p.y - Math.sin(k * Math.PI) * 0.35 }} w={0.55}>
-            <Crate good="crystite" ring={SLOT_COLOR[seat(c.id).slot]} />
+            <Crate good="crystite" ring={ring(c.id)} />
           </At>
         );
       })}
       {!gone && (
-        <At p={ship} w={2.9} style={{ transform: `translate(-50%, -60%) scale(${scale}) rotate(${u > 4.7 ? -8 * outK : (1 - inK) * 6}deg)` }}>
+        <At p={ship} w={2.9} style={{ transform: `translate(-50%, -60%) scale(${scale}) rotate(${u > liftAt ? -8 * outK : (1 - inK) * 6}deg)` }}>
           <PirateShip thrust={reduced ? 0 : thrust} ramp={reduced ? 0 : hatchOpen} />
         </At>
       )}
-      {/* The players' Crystite, counted down as their crates go aboard. */}
-      {u > 1.2 && u < 6 && (
-        <At p={{ x: STORE.x + 1.15, y: STORE.y - 1.1 }} w={1.9}>
+      {/* All the colony's Crystite, the store's and each player's, counted down as its crates go aboard. */}
+      {u > 1.2 && u < 6.3 && (
+        <At p={{ x: STORE.x + 1.2, y: STORE.y - 1.15 }} w={1.95}>
           <div className="flex flex-col gap-[3px] rounded-control border border-g-crystite bg-panel/95 p-[4px] shadow-chip" style={{ fontSize: px(size, 11) }}>
             <span className="flex items-center gap-1 font-mono font-bold uppercase leading-none text-g-crystite">
-              <GoodIcon good="crystite" size={px(size, 9)} /> Crystite held
+              <GoodIcon good="crystite" size={px(size, 9)} /> All the Crystite
             </span>
             {held.map((h) => {
               const mine = crates.map((c, i) => ({ c, i })).filter(({ c }) => c.id === h.id);
               const left = Math.round(h.n * (1 - mine.filter(({ i }) => arrived(i)).length / mine.length));
               return (
                 <span key={h.id} className="flex items-center gap-1 leading-none">
-                  <PlayerMark slot={seat(h.id).slot} size={px(size, 10)} />
-                  <span className="flex-1 font-semibold">{seat(h.id).name}</span>
+                  {h.id === 'store' ? <span className="aspect-square rounded-[3px] bg-holo" style={{ width: px(size, 10) }} /> : <PlayerMark slot={seat(h.id).slot} size={px(size, 10)} />}
+                  <span className="flex-1 font-semibold">{h.id === 'store' ? 'Store' : seat(h.id).name}</span>
                   <span className={cx('font-mono font-bold', left === 0 ? 'text-alert' : 'text-ink')}>{left}</span>
                 </span>
               );
@@ -126,27 +128,27 @@ function PirateRaid({ ev, seg, size }: { ev: ShowEvent; seg: Segment; size: Size
 
 // --- Store fire --------------------------------------------------------------------------------------------------------
 
-/** Heiko: "we need to show how the store is in flames." The store catches, its Food burns crate by crate, the price jumps. */
+/**
+ * Heiko: "we need to show how the store is in flames", and "store fire burns all store storage". The store goes up;
+ * shelf after shelf of its stock burns to 0, then the MULEs in its corral; the prices jump on what is gone.
+ */
 function StoreFire({ ev, seg, size }: { ev: ShowEvent; seg: Segment; size: Size }) {
   const { u, reduced } = useStoryClock(seg);
   if (u < 0) return null;
-  const lost = -(ev.effects?.find((f) => f.on === 'store' && f.what !== 'price')?.delta ?? 0);
+  const shelves = (ev.effects ?? []).filter((f) => f.on === 'store' && f.what !== 'price');
   const price = ev.effects?.find((f) => f.what === 'price')?.delta ?? 0;
   const grow = reduced ? 1 : ease(ramp(u, 0.2, 1.2));
-  const die = reduced ? 0 : ramp(u, 3.8, 0.8);
+  const die = reduced ? 0 : ramp(u, 4.4, 0.8);
   const blaze = grow * (1 - die * 0.75);
-  const char = clamp(ramp(u, 0.8, 2.4));
-  const shelf: P = { x: STORE.x + 1.55, y: STORE.y + 0.1 };
-  const burnAt = (j: number) => 1 + j * 0.35;
-  const burnt = (j: number) => (reduced ? 1 : clamp((u - burnAt(j)) / 0.5));
-  const burning = Array.from({ length: 6 }, (_, j) => burnt(j)).filter((b) => b >= 1).length;
-  const stock = Math.round(lost * (1 - burning / 6));
-  const fireOn = u < 4.8 || reduced;
+  const char = clamp(ramp(u, 0.8, 3));
+  // Shelf r catches at 1 + 0.4r and is ash 0.7 s later, when its change lands.
+  const burnt = (r: number, j = 0) => (reduced ? 1 : clamp((u - 1 - r * 0.4 - j * 0.12) / 0.45));
+  const fireOn = u < 5.4 || reduced;
   return (
     <>
       {/* The store scorched, from the middle of the fire on. */}
       <At p={STORE} w={1}>
-        <div className="aspect-square rounded-[12%]" style={{ background: `radial-gradient(circle, color-mix(in srgb, var(--color-void) 80%, transparent), color-mix(in srgb, var(--color-void) 40%, transparent))`, opacity: char * 0.8 }} />
+        <div className="aspect-square rounded-[12%]" style={{ background: `radial-gradient(circle, color-mix(in srgb, var(--color-void) 80%, transparent), color-mix(in srgb, var(--color-void) 40%, transparent))`, opacity: char * 0.85 }} />
       </At>
       {/* The flames: bigger than the store, rising off its roof. */}
       {fireOn && (
@@ -171,35 +173,46 @@ function StoreFire({ ev, seg, size }: { ev: ShowEvent; seg: Segment; size: Size 
           <div className="aspect-square rounded-full" style={{ background: 'radial-gradient(circle, color-mix(in srgb, var(--color-g-smithore) 45%, transparent), transparent 65%)', opacity: blaze }} />
         </At>
       )}
-      {!reduced && <Smoke from={{ x: STORE.x, y: STORE.y - 1.3 }} u={u - 0.5} every={0.28} until={4.6} size={size} dark />}
-      {/* The store's Food on its shelf: each crate catches and chars in turn, the count runs down. */}
-      <At p={shelf} w={1.35}>
-        <div className="flex flex-col gap-[3px] rounded-control border border-alert bg-panel/95 p-[4px] shadow-chip" style={{ fontSize: px(size, 11) }}>
-          <span className="flex items-center justify-between gap-1 font-mono font-bold uppercase leading-none text-ink-2">
-            <span className="flex items-center gap-0.5">
-              <GoodIcon good="food" size={px(size, 11)} />
-              Food in store
-            </span>
-            <span className={cx(stock === 0 ? 'text-alert' : 'text-ink')}>{stock}</span>
-          </span>
-          <span className="grid grid-cols-3 gap-[2px]">
-            {Array.from({ length: 6 }, (_, j) => {
-              const b = burnt(j);
-              return (
-                <span key={j} className="relative">
-                  <Crate good="food" burnt={b} />
-                  {b > 0 && b < 1 && !reduced && (
-                    <span className="absolute -top-[60%] left-[10%] w-[80%]">
-                      <Flame flicker />
-                    </span>
-                  )}
+      {!reduced && <Smoke from={{ x: STORE.x, y: STORE.y - 1.3 }} u={u - 0.5} every={0.28} until={5.2} size={size} dark />}
+      {/* Everything the store holds, shelf by shelf: three crates catch and char, the count runs down to 0. */}
+      <At p={{ x: STORE.x + 1.75, y: STORE.y + 0.15 }} w={1.9}>
+        <div className="flex flex-col gap-[3px] rounded-control border border-alert bg-panel/95 p-[4px] shadow-chip" style={{ fontSize: px(size, 10) }} data-testid="store-storage">
+          <span className="font-mono font-bold uppercase leading-none text-alert-ink">Store storage</span>
+          {shelves.map((f, r) => {
+            const b = burnt(r);
+            const left = Math.round(-f.delta * (1 - b));
+            const mules = f.what === 'mules';
+            return (
+              <span key={f.what} className="flex items-center gap-1 leading-none">
+                <span className="flex w-[14%]">{mules ? <MuleIcon size={px(size, 11)} className="h-auto w-full text-mule-metal" /> : <GoodIcon good={f.what as Good} size={px(size, 11)} className="h-auto w-full" />}</span>
+                <span className="grid flex-1 grid-cols-3 gap-[2px]">
+                  {[0, 1, 2].map((j) => {
+                    const c = burnt(r, j);
+                    return (
+                      <span key={j} className="relative">
+                        {mules ? (
+                          <span className="flex aspect-square items-center justify-center rounded-[18%] bg-raised" style={{ filter: `brightness(${1 - c * 0.75})` }}>
+                            <MuleIcon size={px(size, 10)} className="h-auto w-[80%] text-mule-metal" />
+                          </span>
+                        ) : (
+                          <Crate good={f.what as Good} burnt={c} />
+                        )}
+                        {c > 0 && c < 1 && !reduced && (
+                          <span className="absolute -top-[60%] left-[10%] w-[80%]">
+                            <Flame flicker />
+                          </span>
+                        )}
+                      </span>
+                    );
+                  })}
                 </span>
-              );
-            })}
-          </span>
-          {(u > 3.7 || reduced) && (
+                <span className={cx('w-[16%] text-right font-mono font-bold', left === 0 ? 'text-alert' : 'text-ink')}>{left}</span>
+              </span>
+            );
+          })}
+          {(u > 4.1 || reduced) && (
             <span className="flex items-center justify-center gap-0.5 rounded-chip bg-alert px-0.5 font-mono font-bold leading-none text-white animate-[ev-pop_0.3s_ease-out]">
-              ▲ price +{price}%
+              ▲ prices +{price}%
             </span>
           )}
         </div>

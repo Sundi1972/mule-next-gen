@@ -42,11 +42,11 @@ export function effectWords(f: Effect): string {
     case 'demand':
       return `${f.good ? GOOD_NAME[f.good] : ''} demand ${n}`.trim();
     case 'price':
-      return `${f.good ? GOOD_NAME[f.good] : ''} price ${n}`.trim();
+      return f.good ? `${GOOD_NAME[f.good]} price ${n}` : `Prices ${n}`;
     case 'energyNeed':
       return `Energy need ${n}`;
     case 'mules':
-      return 'No MULEs for sale';
+      return f.delta === 0 ? 'No MULEs for sale' : `${signed(f.delta)} MULEs`;
     default:
       return `${n} ${GOOD_NAME[f.what]}`;
   }
@@ -99,7 +99,9 @@ function eventSummary(ev: ShowEvent): string {
       : cash.length === players.length && cash.length > 1
         ? [`${signed(cash.reduce((n, f) => n + f.delta, 0))} cr ${cash[0]!.delta < 0 ? 'from' : 'to'} ${cash.length} players`]
         : players.map(named);
-  return [...parts, ...rest.filter((f) => f.what !== 'fund').map(effectWords)].join(' · ');
+  // Beside players' changes, the store's need its name too: "Ossa −6 Crystite · Store −8 Crystite".
+  const bare = (f: Effect) => (f.on === 'store' && players.length ? `Store ${lower(effectWords(f))}` : effectWords(f));
+  return [...parts, ...rest.filter((f) => f.what !== 'fund').map(bare)].join(' · ');
 }
 
 /** The whole segment's effect, for the TV's log. A roll call says each person's in turn. */
@@ -124,7 +126,7 @@ const YOU: Partial<Record<EventKey, (ev: ShowEvent) => string>> = {
   walkout: (ev) => `Your ${ev.plots[0]?.good ? GOOD_NAME[ev.plots[0].good] : ''} crews walked out: those plots make a fifth this month.`,
   loyalCrew: () => 'Your crew worked through: one plot makes 1 more this month.',
   generalStrike: (ev) => `Your ${ev.plots[0]?.good ? GOOD_NAME[ev.plots[0].good] : ''} plots make 20% in production, unless the Governor pays the strikers.`,
-  pirateRaid: () => 'Pirates took all the Crystite you held, before the auction opens.',
+  pirateRaid: () => 'Pirates took all the Crystite you held, and the store’s too, before the auction opens.',
   ratsInSilo: () => 'Rats ate half the Food you had stored.',
   crookedAccountant: () => 'Your accountant skimmed a tenth of your cash.',
   packageFromHome: () => 'Family sent food from home.',
@@ -137,10 +139,7 @@ const ALL: Partial<Record<EventKey, (ev: ShowEvent) => string>> = {
   festival: () => 'For everyone: mood +10, prestige +2, and Food demand +25% this month.',
   colonyPlot: () => 'One free plot, flagged on your map, goes to auction after the grant. Bid for it there.',
   storeStrike: () => 'For everyone: the store sells no MULEs this turn.',
-  storeFire: (ev) => {
-    const g = ev.effects?.find((f) => f.on === 'store' && f.what !== 'price')?.what as Good | undefined;
-    return `For everyone: the store lost all its ${g ? GOOD_NAME[g] : 'stock'}; the price jumps until it’s restocked.`;
-  },
+  storeFire: () => 'For everyone: the store lost everything it held, every good and its MULEs; prices jump until it’s restocked.',
   riot: () => 'For everyone: the stadium is damaged (no prestige until it’s repaired), and the store lost a third of its stock.',
   volunteerCleanup: () => 'For everyone: volunteers cleaned up, and the air gauge drops by 5.',
   coldSnap: () => 'For everyone: every plot needs twice its Energy this month.',

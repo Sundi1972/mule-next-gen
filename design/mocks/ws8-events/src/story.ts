@@ -22,9 +22,10 @@ export interface StoryTime {
 
 export const STORY: Partial<Record<EventKey, StoryTime>> = {
   // The ship comes in, lands, the crates go aboard (one player's Crystite at a time), it lifts off and goes.
-  pirateRaid: { length: 7.2, focus: 'store', zoom: 1.8, lands: 3.05, step: 0.55, reveal: 5.9 },
-  // The store catches, burns with its stock, and the fire dies to smoke; then what was lost.
-  storeFire: { length: 5.8, focus: 'store', zoom: 1.8, lands: 3.2, step: 0.5, reveal: 4.6 },
+  pirateRaid: { length: 7.6, focus: 'store', zoom: 1.8, lands: 3.3, step: 0.6, reveal: 6.2 },
+  // The store catches and burns with everything it holds, shelf by shelf and the MULEs; the fire dies to smoke; then
+  // what was lost.
+  storeFire: { length: 6.4, focus: 'store', zoom: 1.8, lands: 1.7, step: 0.4, reveal: 5.2 },
   // An angry mob gathers in the west, marches on the store and loots it, smashes the stadium, and scatters.
   riot: { length: 7, focus: { x: 6, y: 5 }, zoom: 1.35, lands: 3.4, step: 0.5, reveal: 5.8, jolt: 4.5 },
 

@@ -1,4 +1,4 @@
-import { Creature, cx, GoodIcon, type Species } from '@mule/ui';
+import { Creature, cx, GoodIcon, type Good, type Species } from '@mule/ui';
 import type { CSSProperties, ReactNode } from 'react';
 import type { Segment } from './events';
 import { H, W } from './fixture';
@@ -71,7 +71,7 @@ export function Smoke({ from, u, every = 0.35, until, size, dark = false }: { fr
 }
 
 /** A crate of goods, its owner's colour round the edge when it has one. */
-export function Crate({ good, ring, burnt = 0 }: { good: 'crystite' | 'food' | 'energy'; ring?: string; burnt?: number }) {
+export function Crate({ good, ring, burnt = 0 }: { good: Good; ring?: string | undefined; burnt?: number }) {
   return (
     <div className="relative flex aspect-square items-center justify-center rounded-[18%] shadow-chip" style={{ background: `color-mix(in srgb, var(--color-g-smithore) ${45 - burnt * 40}%, var(--color-void))`, boxShadow: ring ? `0 0 0 2px ${ring}, var(--shadow-chip)` : undefined }}>
       <span className="absolute inset-[12%] rounded-[10%] border border-void/50" />

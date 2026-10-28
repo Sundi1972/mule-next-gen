@@ -1,5 +1,5 @@
 import { Creature, cx, GoodIcon, PlayerMark, SeatSpeciesProvider, SLOT_COLOR, type Good, type MapTile, type Slot } from '@mule/ui';
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type Context, type CSSProperties, type ReactNode } from 'react';
 import { PlotMap } from './borrowed/PlotMap';
 import { PHASE_NAME } from './catalogue';
 import { landed, playerChange, unitsAt, type Script } from './events';
@@ -17,7 +17,10 @@ export interface Show {
   /** Moves the clock: the phone's tap to skip. */
   seek?: (t: number) => void;
 }
-const ShowContext = createContext<Show | null>(null);
+// One context for the life of the page: a hot update re-runs this module whenever something it imports changes, and a
+// second context would leave the screens already rendered reading null.
+const page = globalThis as { __ws8Show?: Context<Show | null> };
+const ShowContext = (page.__ws8Show ??= createContext<Show | null>(null));
 export const ShowProvider = ShowContext.Provider;
 export const useShow = () => useContext(ShowContext)!;
 
