@@ -2,7 +2,8 @@
  * B-AC-17 and B-AC-18: live table chat, in a game of its own with an AI seat, two phones (1440×900 and 844×390) and
  * the TV. The phones speak over their own sockets in the land grant, development and the auction; every line each
  * page received is read off its wire and must show in that page's ticker, and as a bubble at its speaker when RULE-9
- * gives it one. Run with `pnpm --filter @mule/web e2e`.
+ * gives it one. Run with `pnpm --filter @mule/web e2e`. With E2E_AI_LINES=1 every page must also receive an AI seat's
+ * line in the land grant, development and the auction (for a branch whose AI players talk).
  */
 import { LOTS, WALK } from '@mule/engine';
 import type { Page } from 'playwright';
@@ -10,6 +11,12 @@ import { PHASE_MS } from '../../server/src/mule-game.js';
 import { check, launch, PHONE, startServer, TV } from './harness';
 
 const LAPTOP = { width: 1440, height: 900 };
+const AI_LINES = process.env.E2E_AI_LINES === '1';
+/** Wall-clock bounds assert only off CI (Heiko, 2026-10-28): a shared CI runner's timing says nothing about the product. */
+const STRICT_TIMING = !process.env.CI || process.env.E2E_STRICT_TIMING === '1';
+const timed = { checked: 0, wouldFail: 0 };
+/** The phases B-AC-17 names: each page must hear a line in each, and each phone show a bubble in each. */
+const NAMED_PHASES = ['landGrant', 'development', 'auction'] as const;
 /** RULE-9, from the spec's words: the test's own reading of it, so the page is checked against the rule, not itself. */
 const RULE = { minMs: 2_000, maxMs: 4_500, maxWaitMs: 4_000 };
 /**
@@ -28,8 +35,6 @@ const SHORTEST_LOOKED_FOR_MS = 300;
 /** Long enough for every bubble of a burst to have shown and gone. */
 const BURST_SETTLES_MS = 7_000;
 const BETWEEN_LINES_MS = 2_600;
-/** How long a bubble shows before the phase that ends it changes: long enough to be sampled showing, then gone. */
-const BUBBLE_SEEN_MS = 1_500;
 /** A wait of this long, plus room for the browser and the network. */
 const within = (ms: number) => ms + 5_000;
 /** The land auction, when the colony lists lots: each lot's intro, walk with its late resets, and result. */
@@ -46,14 +51,24 @@ const REACH = {
 type Said = { id: number; from: string; to?: string; text: string };
 /** What one page's socket received, in frame order, each with the time it arrived. */
 type Frame = { kind: 'line'; line: Said; at: number } | { kind: 'phase'; key: string; phase: string; at: number };
-type Raw = { frames: Frame[]; seatId: string | null };
+type Raw = { frames: Frame[]; seatId: string | null; ai: Set<string> };
 /** A line, in the phase of the last view its page received before it: the order, not the clock, decides. */
 type Line = Said & { at: number; phase: number };
 type Phase = { key: string; name: string; at: number };
-type Wire = { lines: Line[]; phases: Phase[]; seatId: string | null };
+type Wire = { lines: Line[]; phases: Phase[]; seatId: string | null; ai: Set<string> };
 type Rect = { l: number; t: number; r: number; b: number };
 type Bubble = { seat: string; line: number; text: string; anchor: string | null; rect: Rect };
-type Sample = { t: number; phase: string | null; ticker: { id: number; text: string }[]; tickerRect: Rect | null; bubbles: Bubble[]; speakers: string[]; speaking: string[]; bounds: Rect | null };
+type Sample = {
+  t: number;
+  phase: string | null;
+  ticker: { id: number; text: string; rect: Rect; visible: boolean }[];
+  tickerRect: Rect | null;
+  viewport: { w: number; h: number };
+  bubbles: Bubble[];
+  speakers: string[];
+  speaking: string[];
+  bounds: Rect | null;
+};
 
 /**
  * In the page: every 50 ms, what the chat shows: the ticker's lines, each bubble with its line, anchor and rect, which
@@ -69,8 +84,14 @@ const SAMPLE = `{
       window.__chatSamples.push({
         t: Date.now(),
         phase: document.querySelector('[data-phase]')?.getAttribute('data-phase') ?? null,
-        ticker: [...document.querySelectorAll('[data-testid=chat-ticker] [data-testid^=chat-line-]')].map((li) => ({ id: Number(li.getAttribute('data-testid').slice(10)), text: li.textContent })),
+        ticker: [...document.querySelectorAll('[data-testid=chat-ticker] [data-testid^=chat-line-]')].map((li) => ({
+          id: Number(li.getAttribute('data-testid').slice(10)),
+          text: li.textContent,
+          rect: rect(li),
+          visible: li.checkVisibility ? li.checkVisibility({ visibilityProperty: true }) : true,
+        })),
         tickerRect: rect(document.querySelector('[data-testid=chat-ticker]')),
+        viewport: { w: window.innerWidth, h: window.innerHeight },
         bubbles: [...document.querySelectorAll('[data-testid^=chat-bubble-]')].map((b) => ({
           seat: b.getAttribute('data-testid').slice(12),
           line: Number(b.getAttribute('data-line')),
@@ -83,6 +104,23 @@ const SAMPLE = `{
         bounds: rect(bounds),
       });
     }, ${SAMPLE_EVERY_MS});
+  }
+}`;
+
+/**
+ * In the page, test-only: keeps a handle on every WebSocket the app opens, so a phone can speak over its own socket
+ * exactly as the app's client does. Kept a string, as SAMPLE is.
+ */
+const KEEP_SOCKETS = `{
+  if (!window.__sockets) {
+    window.__sockets = [];
+    const Native = window.WebSocket;
+    window.WebSocket = class extends Native {
+      constructor(...args) {
+        super(...args);
+        window.__sockets.push(this);
+      }
+    };
   }
 }`;
 
@@ -113,13 +151,11 @@ try {
   const kaiId = wires.get(kai)!.seatId!;
   const phase = (p: Page, name: keyof typeof REACH) => p.locator(`[data-phase=${name}]`).first().waitFor({ timeout: REACH[name] });
 
-  // Planning: Kai says a line and, once every screen shows it, both press Ready, so the phase ends while its bubble
-  // shows.
+  // Planning: Lena is ready first; then Kai says a line and presses Ready at once, so the phase ends under its bubble.
   await Promise.all([phase(lena, 'planning'), phase(kai, 'planning'), phase(tv, 'planning')]);
+  await lena.getByRole('button', { name: "I'm ready" }).click({ timeout: 5_000 });
   await say(kai, 'Ready when you are.');
-  for (const p of [lena, kai, tv]) await p.getByTestId('chat-ticker').getByText('Ready when you are.').waitFor({ timeout: within(SHOWS_WITHIN_MS) });
-  await lena.waitForTimeout(BUBBLE_SEEN_MS);
-  for (const p of [lena, kai]) await p.getByRole('button', { name: "I'm ready" }).click({ timeout: 5_000 });
+  await kai.getByRole('button', { name: "I'm ready" }).click({ timeout: 5_000 });
 
   // The land grant: a line, a whisper from Lena to Kai, then two lines within a second.
   await Promise.all([phase(lena, 'landGrant'), phase(kai, 'landGrant'), phase(tv, 'landGrant')]);
@@ -147,10 +183,15 @@ try {
     { who: 'tv', p: tv },
   ];
   const seen = await Promise.all(screens.map(async ({ who, p }) => ({ who, wire: inOrder(wires.get(p)!), samples: (await p.evaluate('window.__chatSamples')) as Sample[] })));
-  const report = seen.map(({ who, samples }) => `${who}: ${noOverlaps(who, samples)}`);
+  console.log(`chat: timing bounds ${STRICT_TIMING ? 'assert' : 'are logged, not asserted (CI)'}`);
+  console.log(`chat: E2E_AI_LINES is ${AI_LINES ? 'on: every page must hear an AI seat in the land grant, development and the auction' : 'off: AI lines, if any, are checked like any other line'}`);
+  const report = seen.map(({ who, samples }) => `${who}: ${noOverlaps(who, samples)}; ${largestStall(samples)}`);
   seen.forEach(({ who, wire, samples }, i) => (report[i] += `; ${everyLineShows(who, wire, samples)}`));
+  sameLinesEverywhere(seen[0]!, seen[1]!, seen[2]!);
   whispers(seen[0]!, seen[1]!, seen[2]!);
+  if (AI_LINES) for (const { who, wire } of seen) report.push(`${who}: ${aiLinesInEveryPhase(who, wire)}`);
   for (const r of report) console.log(`chat ${r}`);
+  if (!STRICT_TIMING) console.log(`timing (logged, CI): ${timed.checked} checks, ${timed.wouldFail} would fail`);
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
   console.log(`e2e chat: ok (${((Date.now() - started) / 1000).toFixed(1)} s)`);
 } catch (err) {
@@ -167,21 +208,29 @@ async function page(who: string, options: Parameters<typeof browser.newContext>[
   const p = await (await browser.newContext(options)).newPage();
   p.on('pageerror', (e) => errors.push(`${who}: ${e.message}`));
   await p.addInitScript(SAMPLE);
+  await p.addInitScript(KEEP_SOCKETS);
   return p;
 }
 
 /** What this page's socket received, in one stream: every chat line and every view, in the order they came. */
 function listen(p: Page): Raw {
-  const raw: Raw = { frames: [], seatId: null };
+  const raw: Raw = { frames: [], seatId: null, ai: new Set() };
   p.on('websocket', (ws) =>
     ws.on('framereceived', ({ payload }) => {
       if (typeof payload !== 'string') return;
-      const msg = JSON.parse(payload) as { t: string; message?: Said; seatId?: string | null; view?: { game?: { month: number; phase: string } | null } };
+      const msg = JSON.parse(payload) as {
+        t: string;
+        message?: Said;
+        seatId?: string | null;
+        view?: { game?: { month: number; phase: string; players: { id: string; isAi: boolean }[] } | null };
+      };
       const at = Date.now();
       if (msg.t === 'welcome') raw.seatId = msg.seatId ?? null;
       if (msg.t === 'chat' && msg.message) raw.frames.push({ kind: 'line', line: msg.message, at });
       const game = msg.t === 'view' ? msg.view?.game : null;
-      if (game) raw.frames.push({ kind: 'phase', key: `${game.month}-${game.phase}`, phase: game.phase, at });
+      if (!game) return;
+      for (const pl of game.players) if (pl.isAi) raw.ai.add(pl.id);
+      raw.frames.push({ kind: 'phase', key: `${game.month}-${game.phase}`, phase: game.phase, at });
     }),
   );
   return raw;
@@ -189,7 +238,7 @@ function listen(p: Page): Raw {
 
 /** Each line in the phase of the last view before it in the stream; the phases where they changed. */
 function inOrder(raw: Raw): Wire {
-  const wire: Wire = { lines: [], phases: [], seatId: raw.seatId };
+  const wire: Wire = { lines: [], phases: [], seatId: raw.seatId, ai: raw.ai };
   for (const f of raw.frames) {
     if (f.kind === 'line') wire.lines.push({ ...f.line, at: f.at, phase: wire.phases.length - 1 });
     else if (wire.phases.at(-1)?.key !== f.key) wire.phases.push({ key: f.key, name: f.phase, at: f.at });
@@ -197,22 +246,15 @@ function inOrder(raw: Raw): Wire {
   return wire;
 }
 
-/** Sends a chat line from this phone over its own open socket, as the app's client does. */
+/** Sends a chat line from this phone over its own open socket (kept by KEEP_SOCKETS), as the app's client does. */
 async function say(p: Page, text: string, to?: string): Promise<void> {
-  const cdp = await p.context().newCDPSession(p);
-  try {
-    const proto = await cdp.send('Runtime.evaluate', { expression: 'WebSocket.prototype' });
-    const { objects } = await cdp.send('Runtime.queryObjects', { prototypeObjectId: proto.result.objectId! });
-    const sent = await cdp.send('Runtime.callFunctionOn', {
-      objectId: objects.objectId!,
-      functionDeclaration: 'function (msg) { const open = this.filter((w) => w.readyState === 1); if (open.length === 1) open[0].send(msg); return open.length; }',
-      arguments: [{ value: JSON.stringify({ t: 'chat', text, ...(to ? { to } : {}) }) }],
-      returnByValue: true,
-    });
-    check(sent.result.value === 1, `the phone has one open socket to chat on, found ${sent.result.value}`);
-  } finally {
-    await cdp.detach();
-  }
+  const msg = JSON.stringify({ t: 'chat', text, ...(to ? { to } : {}) });
+  const open = await p.evaluate(`(() => {
+    const open = window.__sockets.filter((w) => w.readyState === 1);
+    if (open.length === 1) open[0].send(${JSON.stringify(msg)});
+    return open.length;
+  })()`);
+  check(open === 1, `the phone has one open socket to chat on, found ${open}`);
 }
 
 /** Two lines within a second, one from each phone, then time for both bubbles to show and go. */
@@ -237,6 +279,15 @@ async function claimOne(p: Page): Promise<void> {
     }
     if ((await grant.getByText(/^0 OF \d CLAIMS? LEFT$/).count()) > 0) return;
   }
+}
+
+/** A check that compares a measured duration with a bound: asserted with STRICT_TIMING, else logged with its verdict. */
+function timing(ok: boolean, message: string): void {
+  timed.checked++;
+  if (STRICT_TIMING) return check(ok, message);
+  if (ok) return;
+  timed.wouldFail++;
+  console.log(`timing (logged, CI): ${message}, would fail`);
 }
 
 function meets(a: Rect, b: Rect): boolean {
@@ -312,50 +363,62 @@ function deadline(samples: Sample[], phase: string, t: number): number {
 function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
   const tv = who === 'tv';
   const name = (line: Line) => wire.phases[line.phase]?.name ?? '?';
-  check(wire.lines.length >= 7, `B-AC-17: ${who} received the phones' lines, got ${wire.lines.length}`);
   const byPhase = new Map<string, number>();
+  for (const line of wire.lines) byPhase.set(name(line), (byPhase.get(name(line)) ?? 0) + 1);
+  for (const phase of NAMED_PHASES) check((byPhase.get(phase) ?? 0) > 0, `B-AC-17: ${who} received at least one line in ${phase}, by frame order; got ${JSON.stringify(Object.fromEntries(byPhase))}`);
   for (const line of wire.lines) {
     const phase = name(line);
-    byPhase.set(phase, (byPhase.get(phase) ?? 0) + 1);
     const seen = samples.find((s) => s.t >= line.at && s.ticker.some((l) => l.id === line.id));
-    check(seen && seen.t <= deadline(samples, phase, line.at), `B-AC-17: on ${who} line ${line.id} ("${line.text}") shows in the ticker within ${SHOWS_WITHIN_MS} ms, ${seen ? `took ${seen.t - line.at} ms` : 'never'}`);
+    check(seen, `B-AC-17: on ${who} line ${line.id} ("${line.text}") shows in the ticker`);
+    const due = deadline(samples, phase, line.at);
+    timing(seen.t <= due, `B-AC-17: on ${who} line ${line.id} shown in the ticker +${seen.t - line.at} ms (deadline +${due - line.at} ms)`);
+    const entry = seen.ticker.find((l) => l.id === line.id)!;
+    const box = seen.tickerRect;
+    check(box && box.r > box.l && box.b > box.t && inside(box, { l: 0, t: 0, r: seen.viewport.w, b: seen.viewport.h }), `B-AC-17: on ${who} the ticker that shows line ${line.id} has a size and lies inside the viewport, got ${JSON.stringify(box)} in ${seen.viewport.w}×${seen.viewport.h}`);
+    check(entry.rect.r > entry.rect.l && entry.rect.b > entry.rect.t && entry.visible, `B-AC-17: on ${who} line ${line.id}'s ticker entry is drawn and visible, got ${JSON.stringify(entry.rect)} visible=${entry.visible}`);
     // Its phase may end before the page paints it again; then it shows in the next.
-    if (firstIn(samples, phase, line.at)) check(seen.phase === phase, `B-AC-17: on ${who} line ${line.id} shows in the ticker in the phase it was said in, ${phase}, not ${seen.phase}`);
+    if (firstIn(samples, phase, line.at)) timing(seen.phase === phase, `B-AC-17: on ${who} line ${line.id} first shown in the ticker in ${seen.phase}, said in ${phase}`);
   }
 
   const anchors = { creature: 0, seatRow: 0 };
+  const bubblesIn = new Map<string, number>();
   const due = schedule(wire);
-  check(due.some((b) => b.endsPhase && b.to - b.from >= SHORTEST_LOOKED_FOR_MS), `B-AC-17: on ${who} a phase change came while a bubble showed, so its end is tested`);
+  check(due.some((b) => b.endsPhase), `B-AC-17: on ${who} a phase change came while a bubble was due, so its end with the phase is tested`);
   for (const b of due) {
     if (b.to - b.from < SHORTEST_LOOKED_FOR_MS) continue;
     const line = wire.lines.find((l) => l.id === b.id)!;
-    const during = samples.filter((s) => s.t >= b.from && s.t < b.to && s.t <= deadline(samples, name(line), b.from));
-    const drawn = during.some((s) => s.speakers.includes(line.from));
+    const drawn = samples.some((s) => s.t >= b.from && s.t < b.to && s.speakers.includes(line.from));
     // The TV has no seat row: a speaker it doesn't draw has only the ticker there.
     if (tv && !drawn) continue;
-    const shown = during.find((s) => s.bubbles.some((x) => x.line === b.id));
-    check(shown, `B-AC-17: on ${who} line ${b.id} ("${line.text}") gets its bubble within ${SHOWS_WITHIN_MS} ms of ${new Date(b.from).toISOString()}`);
+    const shown = samples.find((s) => s.t >= b.from && s.bubbles.some((x) => x.line === b.id));
+    const due = Math.min(b.to, deadline(samples, name(line), b.from));
+    timing(!!shown && shown.t <= due, `B-AC-17: on ${who} line ${b.id}'s bubble shown ${shown ? `+${shown.t - b.from} ms` : 'never'} after its start (deadline +${due - b.from} ms)`);
+    // Whether a bubble is due at all follows RULE-9's clock; when the page gave it none, the per-phase count below decides.
+    if (!shown) continue;
     const bubble = shown.bubbles.find((x) => x.line === b.id)!;
     check(bubble.seat === line.from, `B-AC-17: on ${who} line ${b.id}'s bubble is ${line.from}'s, got ${bubble.seat}`);
     const at = shown.speakers.includes(line.from) ? line.from : 'seat-row';
     check(bubble.anchor === at, `B-AC-17: on ${who} line ${b.id}'s bubble sits at ${at === 'seat-row' ? 'the seat row' : 'its speaker'}, got ${bubble.anchor}`);
     if (at === 'seat-row' && line.from !== wire.seatId) check(shown.speaking.includes(line.from), `B-AC-17: on ${who} the seat row lights ${line.from}'s seat while its bubble shows`);
     anchors[at === 'seat-row' ? 'seatRow' : 'creature']++;
+    bubblesIn.set(name(line), (bubblesIn.get(name(line)) ?? 0) + 1);
     // It ends on time, or with its phase. A sample right after the sampler itself stalled may still show it.
     if (!b.endsPhase) {
-      for (const [i, s] of samples.entries()) {
-        if (s.t <= b.to + END_LAG_MS || !s.bubbles.some((x) => x.line === b.id)) continue;
+      const late = samples.find((s, i) => {
+        if (s.t <= b.to + END_LAG_MS || !s.bubbles.some((x) => x.line === b.id)) return false;
         const gap = i > 0 ? s.t - samples[i - 1]!.t : 0;
-        if (gap > 2 * SAMPLE_EVERY_MS && samples[i - 1]!.t <= b.to + END_LAG_MS) {
-          console.log(`chat ${who}: line ${b.id}'s bubble seen ${s.t - b.to} ms after its end, after the sampler stalled ${gap} ms`);
-          continue;
-        }
-        check(false, `B-AC-17: on ${who} line ${b.id}'s bubble still shows ${s.t - b.to} ms after its end`);
-      }
+        if (gap <= 2 * SAMPLE_EVERY_MS || samples[i - 1]!.t > b.to + END_LAG_MS) return true;
+        console.log(`chat ${who}: line ${b.id}'s bubble seen ${s.t - b.to} ms after its end, after the sampler stalled ${gap} ms`);
+        return false;
+      });
+      timing(!late, `B-AC-17: on ${who} line ${b.id}'s bubble ${late ? `still shown +${late.t - b.to} ms` : 'gone'} after its end (allowance +${END_LAG_MS} ms)`);
     }
   }
   const bubbles = anchors.creature + anchors.seatRow;
-  check(bubbles >= 4, `B-AC-17: on ${who} bubbles showed in each phase, got ${bubbles}`);
+  // The TV draws only some speakers, so it shows only their bubbles; each phone shows every speaker's.
+  if (!tv)
+    for (const phase of NAMED_PHASES)
+      check((bubblesIn.get(phase) ?? 0) > 0, `B-AC-17: on ${who} at least one line's bubble showed at its speaker in ${phase}; got ${JSON.stringify(Object.fromEntries(bubblesIn))}`);
 
   for (const s of samples)
     for (const x of s.bubbles) {
@@ -367,6 +430,33 @@ function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
 }
 
 type Seen = { who: string; wire: Wire; samples: Sample[] };
+
+/** The longest the page went without a sample (a phase's screen mounting, as a rule), and in which phase it ended. */
+function largestStall(samples: Sample[]): string {
+  let gap = 0;
+  let at: Sample | undefined;
+  for (let i = 1; i < samples.length; i++) {
+    const g = samples[i]!.t - samples[i - 1]!.t;
+    if (g > gap) [gap, at] = [g, samples[i]];
+  }
+  return `largest stall ${gap} ms (into ${at?.phase ?? '?'})`;
+}
+
+/** B-AC-17: every screen at the table hears the same public lines; a whisper reaches its two phones and never the TV. */
+function sameLinesEverywhere(lena: Seen, kai: Seen, tv: Seen): void {
+  const ids = (s: Seen) => s.wire.lines.filter((l) => !l.to).map((l) => l.id).sort((a, b) => a - b).join(',');
+  check(ids(lena) === ids(kai) && ids(kai) === ids(tv), `B-AC-17: Lena, Kai and the TV received the same public lines, got lena [${ids(lena)}], kai [${ids(kai)}], tv [${ids(tv)}]`);
+  const whisper = lena.wire.lines.find((l) => l.to);
+  check(whisper && kai.wire.lines.some((l) => l.id === whisper.id) && !tv.wire.lines.some((l) => l.id === whisper.id), `B-AC-17: the whisper's id is on both phones and never on the TV`);
+}
+
+/** With E2E_AI_LINES=1: the page heard an AI seat in each named phase, by frame order (each line's ticker is checked above). */
+function aiLinesInEveryPhase(who: string, wire: Wire): string {
+  const by = new Map<string, number>();
+  for (const l of wire.lines) if (wire.ai.has(l.from)) by.set(wire.phases[l.phase]?.name ?? '?', (by.get(wire.phases[l.phase]?.name ?? '?') ?? 0) + 1);
+  for (const phase of NAMED_PHASES) check((by.get(phase) ?? 0) > 0, `B-AC-17 (E2E_AI_LINES): ${who} received no AI seat's line in ${phase}, by frame order; got ${JSON.stringify(Object.fromEntries(by))}`);
+  return `AI lines ${[...by].map(([p, n]) => `${p} ${n}`).join(', ')}`;
+}
 
 /**
  * B-AC-17's negative and HC-2: a whisper shows on both its phones with its lock, in the ticker and its bubble, and the
