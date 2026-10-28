@@ -145,11 +145,14 @@ function worthPartsOf(state: GameState, playerId: string): ScorePartsView {
   return parts;
 }
 
-/** At the month end (upkeep, or game over after the last): whether that upkeep's store ran short of nothing. Null otherwise. */
+/**
+ * At the month end (upkeep, or game over after the last): whether that upkeep fed the colonists. They go short when
+ * the store runs out or its price is beyond their wages, both in the engine's colonistsHungry. Null otherwise.
+ */
 function colonistsFedAt(state: GameState): boolean | null {
   if (state.phase !== 'upkeep' && state.phase !== 'gameOver') return null;
   const report = state.history.at(-1);
-  return report && report.month === state.month ? report.shortages.length === 0 : null;
+  return report && report.month === state.month ? !report.colonistsHungry : null;
 }
 
 /** A player's Worth before the Collapse cut while the air is in Collapse (scoreParts' total plus its cut); otherwise null. */
@@ -213,13 +216,13 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private cancels: (() => void)[] = [];
   private news: string[] = [];
   private phaseEndsAt: number | null = null;
-  /** This month's production length in real ms, as its timer was given: the show stretches over it through upkeep. */
+  /** This month's production length in real ms, as its timer was given: the production show stretches over it. */
   private productionMs = 0;
   /**
    * Each month's end as the views showed it, by month: every player's worth and the air level, recorded once when its
    * upkeep starts. The next month's views serve it as lastWorth and lastAir, so a change is shown against shown.
    */
-  private readonly monthEnds = new Map<number, { worth: Map<string, number>; air: number }>();
+  private readonly monthEnds = new Map<number, { worth: Map<string, number>; air: MuleView['air'] }>();
   /** The month's condition per player, as development last showed it; served through the month end. */
   private monthCondition: { month: number; byId: Map<string, PlayerView['condition']> } | null = null;
   /** The AI players: strategist, decider and hands, keyed by seat id. */
@@ -656,7 +659,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private recordMonthEnd(): void {
     const state = this.requireState();
     if (this.monthEnds.has(state.month)) return;
-    this.monthEnds.set(state.month, { worth: new Map(this.seats.map((s) => [s.id, score(state, s.id)])), air: Math.round(state.air) });
+    this.monthEnds.set(state.month, { worth: new Map(this.seats.map((s) => [s.id, score(state, s.id)])), air: { level: Math.round(state.air), band: airBand(state.air).name } });
   }
 
   /** How hunger and sickness slow this player's colonist now (PlayerView.condition). */
