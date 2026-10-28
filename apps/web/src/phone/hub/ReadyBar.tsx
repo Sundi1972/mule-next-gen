@@ -1,5 +1,96 @@
-import type { ReactNode } from 'react';
+import type { PlayerView } from '@mule/protocol';
+import { Button, cx, PlayerMark } from '@mule/ui';
+import { useState } from 'react';
+import { toSlot } from '../../game/derive';
+import { useClient } from '../../net/react';
+import { usePhoneGame } from '../game';
+import { connectedIn, namesOf, planningProper, press, readyFooter, viewerFirst, type Press, type Seat } from './ready';
 
-export function ReadyBar(): ReactNode {
-  throw new Error('NotImplemented: ReadyBar');
+/** The ready count, where the clock used to be: planning has none. */
+export function ReadyCount({ players, tv = false }: { players: readonly PlayerView[]; tv?: boolean }) {
+  const ready = players.filter((p) => p.isAi || p.ready).length;
+  return (
+    <span
+      className={cx('flex shrink-0 items-center gap-1.5 rounded-chip border border-holo-line bg-holo-soft font-mono font-bold text-holo', tv ? 'h-14 px-5 text-3xl' : 'h-8 px-2.5 text-sm @min-[1100px]/shell:h-11 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-2xl')}
+      data-testid="ready-count"
+    >
+      {ready} / {players.length} READY
+    </span>
+  );
+}
+
+/** The names still planning, each with its creature, and an away mark for a dropped phone. */
+export function WaitingFor({ seats, me, tv = false }: { seats: readonly Seat[]; me: string | null; tv?: boolean }) {
+  return (
+    <span className={cx('flex flex-wrap items-center gap-x-2 gap-y-1', tv ? 'text-3xl' : 'text-sm @min-[1100px]/shell:text-lg')} data-testid="waiting-for">
+      <span className="text-ink-2">Waiting for</span>
+      {viewerFirst(seats, me).map((s) => (
+        <span key={s.id} className="flex items-center gap-1 font-semibold" data-testid={`waiting-${s.id}`}>
+          <PlayerMark slot={toSlot(s.slot)} size={tv ? 30 : 14} glow={!s.away} />
+          {s.id === me ? 'you' : s.name}
+          {s.away && <span className={cx('rounded-chip border border-warn/60 font-mono font-bold text-warn', tv ? 'px-2 text-lg' : 'px-1 text-[10px] @min-[1100px]/shell:text-xs')}>AWAY</span>}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/**
+ * The planning footer on every phone and laptop. Before you're ready: who is still planning, then I'm ready. Once
+ * you are, as the server has it: who you're waiting for. The host, once ready and while anyone is still planning,
+ * can continue without them, after one confirming tap.
+ */
+export function ReadyBar() {
+  const client = useClient();
+  const { table, view, self } = usePhoneGame();
+  const [confirm, setConfirm] = useState(false);
+  const footer = readyFooter({ me: self.id, players: view.players, hostId: table.hostId, connected: connectedIn(table.seats), planningProper: planningProper(view), confirm });
+  const on = (pressed: Press) => () => {
+    const next = press(confirm, pressed);
+    setConfirm(next.confirm);
+    if (next.intent) client.intent(next.intent);
+  };
+
+  if (!footer.ready)
+    return (
+      <>
+        {footer.waiting.length > 0 && <WaitingFor seats={footer.waiting} me={self.id} />}
+        <Button size="lg" className="w-full @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" onClick={on('ready')} data-testid="ready">
+          I'm ready
+        </Button>
+      </>
+    );
+
+  const others = footer.waiting;
+  return (
+    <>
+      <span className="flex items-center gap-1.5 font-display text-base font-semibold text-holo @min-[1100px]/shell:text-xl" data-testid="you-are-ready">
+        <svg aria-hidden viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M5 12.5l4.5 4.5L19 7" />
+        </svg>
+        You're ready
+      </span>
+      {others.length > 0 ? <WaitingFor seats={others} me={self.id} /> : <span className="text-sm text-ink-2">Everyone is ready. The land grant starts.</span>}
+      {footer.host === 'continue' && (
+        <Button size="md" variant="outline" className="w-full" onClick={on('continue')} data-testid="continue">
+          Continue without {others.length === 1 ? others[0]!.name : 'them'}
+        </Button>
+      )}
+      {footer.host === 'confirm' && (
+        <div className="flex flex-col gap-2 rounded-panel border border-warn/60 bg-panel p-2.5 @min-[1100px]/shell:p-4" role="alertdialog" aria-label="Continue without them?" data-testid="continue-confirm">
+          <p className="text-sm @min-[1100px]/shell:text-base">
+            End planning for everyone now? {namesOf(others, null)} stop{others.length === 1 ? 's' : ''} where they are, and the land grant starts.
+          </p>
+          <div className="flex gap-2">
+            <Button size="md" className="flex-1" onClick={on('continue-now')} data-testid="continue-now">
+              Continue now
+            </Button>
+            <Button size="md" variant="ghost" className="flex-1" onClick={on('keep-waiting')} data-testid="keep-waiting">
+              Keep waiting
+            </Button>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
