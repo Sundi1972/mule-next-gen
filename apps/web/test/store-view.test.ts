@@ -1,5 +1,5 @@
 import { DEV_WALK } from '@mule/engine';
-import { PaceList, SharedClock, StoreInterior, type Condition } from '@mule/ui';
+import { PaceList, SharedClock, StoreInterior, TimeBar, type Condition } from '@mule/ui';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -36,8 +36,7 @@ describe('the store at a glance', () => {
 
   it('B-AC-9: a hungry player is told what she ate and her pace, never less time', () => {
     const text = textFrom(renderToStaticMarkup(createElement(FillCard, { condition: HUNGRY, rule: DEV_WALK, food: { ate: 2, need: 5 } })), 'fill-card');
-    expect(text).toContain('one clock for everyone');
-    expect(text).toContain('You eat 2 of the 5 Food you need.');
+    expect(text).toMatch(/^ One clock for everyone · 50 s You eat 2 of the 5 Food you need\./);
     expect(text).toContain('Hungry: 52% pace');
     expect(text).not.toMatch(/less time|time bar/);
   });
@@ -66,20 +65,49 @@ describe('the store at a glance', () => {
     expect(fed.slice(fed.indexOf(tagOf(fed, 'visitor-lena')))).not.toMatch(/style="width:/);
   });
 
-  it('T-AC-12: the clock is one for everyone, and the TV lists each pace and why', () => {
+  it('T-AC-12: the clock is one for everyone, and the TV lists each pace and why on the roster rows', () => {
     expect(textFrom(renderToStaticMarkup(createElement(SharedClock, { seconds: 31, total: 50 })), 'shared-clock')).toMatch(/^ Everyone(&#x27;|')s time · one clock 31s/);
+    expect(textFrom(renderToStaticMarkup(createElement(SharedClock, { seconds: 31, total: 50, size: 'tv' })), 'shared-clock')).toMatch(/^ Everyone(&#x27;|')s time 31s/);
     const list = renderToStaticMarkup(
       createElement(PaceList, {
         rule: DEV_WALK,
+        columns: 1,
         rows: [
-          { id: 'lena', name: 'Lena', slot: 0, condition: HUNGRY },
-          { id: 'kai', name: 'Kai', slot: 1, condition: FED },
+          { id: 'lena', name: 'Lena', slot: 0, condition: HUNGRY, note: 'BUILDING' },
+          { id: 'kai', name: 'The Good Neighbour', slot: 1, condition: FED, note: 'PUB', done: true },
         ],
       }),
     );
-    expect(textFrom(list, 'pace-lena')).toMatch(/^ Lena 52%/);
+    expect(tagOf(list, 'pace-list')).toMatch(/^<ul[^>]*grid-cols-1/);
+    // Each row stays a roster row: an li with the player's mark, the full name, the pace and what they are doing.
+    expect(tagOf(list, 'pace-lena')).toMatch(/^<li/);
+    expect(textFrom(list, 'pace-lena')).toMatch(/^ Lena 52% BUILDING/);
+    expect(list.slice(list.indexOf(tagOf(list, 'pace-lena')))).toMatch(/^<li[^>]*>\s*<span role="img" data-slot="0"/);
     expect(tagOf(list, 'condition-lena')).toContain('data-hunger="2"');
-    expect(textFrom(list, 'pace-kai')).toMatch(/^ Kai 100%/);
+    expect(textFrom(list, 'pace-kai')).toMatch(/^ The Good Neighbour 100% PUB/);
+    expect(tagOf(list, 'pace-kai')).toContain('opacity-50');
     expect(list).not.toContain('data-testid="condition-kai"');
+  });
+
+  it("T-AC-12: the one clock is big, and turns alert red and pulses in its last 10 s, not at 11; the auction's bar keeps its tones", () => {
+    const clock = (seconds: number, size: 'phone' | 'tv') => renderToStaticMarkup(createElement(SharedClock, { seconds, total: 50, size }));
+    const fill = (html: string) => html.match(/<i class="([^"]*)"/)![1]!;
+    const number = (html: string) => html.match(/<span[^>]*class="([^"]*)"[^>]*>\d+s<\/span>/)![1]!;
+    for (const size of ['phone', 'tv'] as const) {
+      const urgent = clock(10, size);
+      const calm = clock(11, size);
+      expect(fill(urgent)).toMatch(/\bbg-alert\b.*motion-safe:animate-pulse|motion-safe:animate-pulse.*\bbg-alert\b/);
+      expect(number(urgent)).toMatch(/\btext-alert\b.*motion-safe:animate-pulse|motion-safe:animate-pulse.*\btext-alert\b/);
+      expect(fill(calm)).not.toMatch(/bg-alert|animate-pulse|bg-rise/);
+      expect(number(calm)).not.toMatch(/text-alert|animate-pulse|text-rise/);
+    }
+    // On the TV a 24 px bar beside 48 px seconds; in a rail 18 px seconds, 24 px from a laptop up.
+    expect(clock(30, 'tv')).toMatch(/class="[^"]*\bh-6\b[^"]*"/);
+    expect(number(clock(30, 'tv'))).toContain('text-5xl');
+    expect(number(clock(30, 'phone'))).toMatch(/\btext-lg\b.*@min-\[1100px\]\/shell:text-2xl/);
+    // The auction's bar is unchanged: at 10 s of 50 it is red by its share and says Hurry.
+    const auction = renderToStaticMarkup(createElement(TimeBar, { seconds: 10, total: 50 }));
+    expect(fill(auction)).toContain('bg-rise');
+    expect(auction).toContain('Hurry');
   });
 });
