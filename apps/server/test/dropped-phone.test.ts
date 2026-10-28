@@ -187,10 +187,11 @@ describe('a dropped phone in the land grant', () => {
     expect(after.me!.claimsLeft).toBe(GAME.claimsPerGrant - 2);
   });
 
-  it('FM-grant-reload negative: the only human presses Ready in the land grant: it still ends at once', () => {
+  it('FM-grant-reload negative: the only human presses Ready in the land grant: Done with land, it ends once the AI is done too, before the pass does', () => {
     const passed = playGrant((game) => game.handle('s1', { type: 'ready' }));
-    expect(passed.lasted).toBe(0);
-    expect(passed.lit).toEqual([]);
+    const idle = playGrant(() => {});
     expect(passed.next).not.toBe('landGrant');
+    expect(passed.plots.s1).toBe(0);
+    expect(passed.lasted, 'the grant waits for the AI, not for the pass').toBeLessThan(idle.lasted);
   });
 });
