@@ -12,9 +12,9 @@ export interface LandscapeJob {
   terrain: (Terrain | undefined)[];
 }
 
-/** What the page sends the landscape worker, and what comes back. */
+/** What the page sends the landscape worker, and what comes back; `incapable` when the worker can never paint. */
 export type PainterRequest = { id: number; job: LandscapeJob };
-export type PainterReply = { id: number; blob: Blob } | { id: number; error: string };
+export type PainterReply = { id: number; blob: Blob } | { id: number; error: string; incapable: boolean };
 
 export function landscapeInput(job: LandscapeJob): LandscapeInput {
   return { ...job, terrainAt: (x, y) => job.terrain[y * job.width + x] };

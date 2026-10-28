@@ -20,6 +20,8 @@ export interface LandscapeProps {
  */
 export function Landscape({ width, height, terrain, theme, seed = 7, className }: LandscapeProps) {
   const [url, setUrl] = useState<string | null>(null);
+  // Callers build the terrain afresh on every render; the same map must not ask again.
+  const map = terrain.join(',');
 
   useEffect(() => {
     const { screen, innerWidth, innerHeight, devicePixelRatio } = window;
@@ -30,7 +32,7 @@ export function Landscape({ width, height, terrain, theme, seed = 7, className }
       { width: known ? screen.width : innerWidth, height: known ? screen.height : innerHeight, dpr: devicePixelRatio },
     );
     return requestLandscape({ width, height, pxPerTile, theme, seed, terrain }, setUrl);
-  }, [width, height, theme, seed, terrain]);
+  }, [width, height, theme, seed, map]);
 
   return (
     <div aria-hidden className={className}>

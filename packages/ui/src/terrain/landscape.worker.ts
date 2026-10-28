@@ -8,14 +8,18 @@ import { landscapeInput, type PainterReply, type PainterRequest } from './landsc
 const scope = self as unknown as { onmessage: ((e: MessageEvent<PainterRequest>) => void) | null; postMessage(reply: PainterReply): void };
 
 scope.onmessage = async ({ data: { id, job } }) => {
+  const ctx = typeof OffscreenCanvas === 'undefined' ? null : new OffscreenCanvas(1, 1).getContext('2d');
+  if (!ctx) {
+    scope.postMessage({ id, error: 'no 2D OffscreenCanvas in a worker', incapable: true });
+    return;
+  }
   try {
     const img = renderLandscape(landscapeInput(job));
-    const canvas = new OffscreenCanvas(img.width, img.height);
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('no 2D OffscreenCanvas');
+    ctx.canvas.width = img.width;
+    ctx.canvas.height = img.height;
     ctx.putImageData(img, 0, 0);
-    scope.postMessage({ id, blob: await canvas.convertToBlob({ type: 'image/png' }) });
+    scope.postMessage({ id, blob: await ctx.canvas.convertToBlob({ type: 'image/png' }) });
   } catch (err) {
-    scope.postMessage({ id, error: err instanceof Error ? err.message : String(err) });
+    scope.postMessage({ id, error: err instanceof Error ? err.message : String(err), incapable: false });
   }
 };

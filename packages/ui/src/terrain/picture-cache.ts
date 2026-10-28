@@ -1,10 +1,11 @@
 /**
- * Painted landscapes by key, oldest first. Every picture a screen still shows is kept; of the rest, the oldest are
- * released once the cache holds more than `limit`, so a long session's pictures don't pile up in memory.
+ * Painted landscapes by key, oldest first: up to `limit` pictures in all, releasing the oldest first, and never
+ * one a screen still shows, so a long session's pictures don't pile up in memory.
  */
 export class PictureCache {
   private readonly urls = new Map<string, string>();
   private readonly holds = new Map<string, number>();
+  private trimQueued = false;
 
   constructor(
     readonly limit: number,
@@ -34,11 +35,17 @@ export class PictureCache {
     this.holds.set(key, (this.holds.get(key) ?? 0) + 1);
   }
 
+  /** A screen stops showing `key`. Trimmed at the end of the turn: a re-rendered screen lets go and holds again in one. */
   letGo(key: string): void {
     const n = (this.holds.get(key) ?? 0) - 1;
     if (n > 0) this.holds.set(key, n);
     else this.holds.delete(key);
-    this.trim();
+    if (this.trimQueued) return;
+    this.trimQueued = true;
+    queueMicrotask(() => {
+      this.trimQueued = false;
+      this.trim();
+    });
   }
 
   private trim(): void {

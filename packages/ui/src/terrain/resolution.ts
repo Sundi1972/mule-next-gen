@@ -9,7 +9,7 @@ export interface DeviceScreen {
 const STEP = 32;
 const MIN_PX_PER_TILE = 24;
 const MAX_PX_PER_TILE = 180;
-/** Denser screens get a 3× picture, as before: more pixels than that no one sees on a map. */
+/** Denser screens get a 3× picture: more pixels than that no one sees on a map. */
 const MAX_DPR = 3;
 
 /**

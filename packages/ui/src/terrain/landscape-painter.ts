@@ -2,7 +2,7 @@ import { renderLandscape } from './landscape';
 import { landscapeInput, type LandscapeJob, type PainterReply, type PainterRequest } from './landscape-job';
 import { PictureCache } from './picture-cache';
 
-/** Pictures kept besides the ones on screen: one session needs one per theme, so a few cover a theme switch. */
+/** Up to 3 pictures in all, never releasing one on screen: a session needs one per theme, so 3 cover a theme switch. */
 const KEEP = 3;
 const cache = new PictureCache(KEEP, (url) => {
   if (url.startsWith('blob:')) URL.revokeObjectURL(url);
@@ -73,9 +73,9 @@ async function paint(job: LandscapeJob): Promise<string> {
   if (worker) {
     try {
       return await inWorker(worker, job);
-    } catch {
-      // The worker can't paint here (no 2D OffscreenCanvas, say): paint on this thread from now on.
-      dropWorker();
+    } catch (err) {
+      // One failed job (memory pressure, say) keeps the worker; a worker that can't paint at all is given up.
+      if (err instanceof WorkerGone) dropWorker();
     }
   }
   return onThisThread(job);
@@ -86,16 +86,32 @@ function markPaint(job: LandscapeJob, path: 'worker' | 'sync'): void {
   performance.mark('landscape-paint', { detail: { pxPerTile: job.pxPerTile, path } });
 }
 
-/** For a browser without workers or OffscreenCanvas: holds this thread for the whole paint. */
-function onThisThread(job: LandscapeJob): string {
+/**
+ * For a browser without workers or OffscreenCanvas: the paint holds this thread, the PNG encoding need not, since
+ * `toBlob` encodes in the background where the browser can.
+ */
+function onThisThread(job: LandscapeJob): Promise<string> {
   markPaint(job, 'sync');
   const img = renderLandscape(landscapeInput(job));
   const canvas = document.createElement('canvas');
   canvas.width = img.width;
   canvas.height = img.height;
   canvas.getContext('2d')?.putImageData(img, 0, 0);
-  return canvas.toDataURL('image/png');
+  return new Promise((resolve, reject) =>
+    canvas.toBlob((blob) => (blob ? resolve(URL.createObjectURL(blob)) : reject(new Error('the canvas gave no PNG'))), 'image/png'),
+  );
 }
+
+/** The worker can't paint for this page at all: it has no 2D OffscreenCanvas, it crashed, or it stopped answering. */
+class WorkerGone extends Error {}
+
+/**
+ * How long a worker may take over one picture before it counts as hung. The largest picture, a 19×11 map at
+ * 180 px a plot (6.8 million pixels), takes about 4 s on a 2024 laptop; a phone four to six times slower takes
+ * 16-24 s. Giving up on a working worker repaints on the main thread, the freeze itself, so the bound stays clear
+ * of that; a hung worker costs a map its picture for at most this long, once a page.
+ */
+const WORKER_TIMEOUT_MS = 30_000;
 
 /** One worker for the page, made when the first picture is wanted; `null` once the page can't have one. */
 let worker: Worker | null | undefined;
@@ -104,9 +120,7 @@ const replies = new Map<number, { resolve(url: string): void; reject(err: Error)
 
 function landscapeWorker(): Worker | null {
   if (worker !== undefined) return worker;
-  // Tests set this to take the main-thread path in a browser that has workers.
-  const forced = (globalThis as { __landscapeSync?: unknown }).__landscapeSync === true;
-  if (forced || typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined') return (worker = null);
+  if (typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined') return (worker = null);
   try {
     worker = new Worker(new URL('./landscape.worker.ts', import.meta.url), { type: 'module' });
   } catch {
@@ -114,15 +128,12 @@ function landscapeWorker(): Worker | null {
   }
   worker.onmessage = ({ data }: MessageEvent<PainterReply>) => {
     const reply = replies.get(data.id);
-    replies.delete(data.id);
     if ('blob' in data) reply?.resolve(URL.createObjectURL(data.blob));
-    else reply?.reject(new Error(data.error));
+    else reply?.reject(data.incapable ? new WorkerGone(data.error) : new Error(data.error));
   };
   worker.onerror = (e) => {
     e.preventDefault();
-    for (const reply of replies.values()) reply.reject(new Error(`landscape worker: ${e.message}`));
-    replies.clear();
-    dropWorker();
+    for (const reply of [...replies.values()]) reply.reject(new WorkerGone(`landscape worker: ${e.message}`));
   };
   return worker;
 }
@@ -130,12 +141,19 @@ function landscapeWorker(): Worker | null {
 function dropWorker(): void {
   worker?.terminate();
   worker = null;
+  for (const reply of [...replies.values()]) reply.reject(new WorkerGone('landscape worker dropped'));
 }
 
 function inWorker(w: Worker, job: LandscapeJob): Promise<string> {
   const id = ++lastId;
   return new Promise((resolve, reject) => {
-    replies.set(id, { resolve, reject });
+    const settle = (fn: () => void) => {
+      clearTimeout(timeout);
+      replies.delete(id);
+      fn();
+    };
+    const timeout = setTimeout(() => settle(() => reject(new WorkerGone(`no picture from the worker in ${WORKER_TIMEOUT_MS / 1000} s`))), WORKER_TIMEOUT_MS);
+    replies.set(id, { resolve: (url) => settle(() => resolve(url)), reject: (err) => settle(() => reject(err)) });
     markPaint(job, 'worker');
     w.postMessage({ id, job } satisfies PainterRequest);
   });
