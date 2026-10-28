@@ -1,4 +1,4 @@
-import type { Outfit, GrownGood, Good, MinedGood, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
+import type { Outfit, GrownGood, Good, MinedGood, Office, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
 
 /**
  * Every balancing number lives here, so playtests and the simulator can tune
@@ -382,6 +382,9 @@ export type FloorGood = 'food' | 'water' | 'energy' | 'smithore';
 /** The 11 land terrains other than the river: the ones with a target share. */
 export type ShareTerrain = Exclude<LandTerrain, 'river'>;
 
+/** The special fields the generator places; a meteor crater only forms in play. */
+export type PlacedSpecialKind = Exclude<SpecialKind, 'meteorCrater'>;
+
 /**
  * What every map must meet (the map rules), read by the checker, the
  * generator and the map gallery. Size bands are sizeBand's. Counts are good
@@ -466,7 +469,7 @@ export const MAP = {
       geyser: ['volcanic', 'tundra', 'ice'],
       oasis: ['desert'],
       relic: ['plains', 'forest', 'hills', 'desert', 'tundra', 'mountains', 'swamp', 'volcanic', 'crater', 'ice'],
-    } satisfies Record<SpecialKind, ShareTerrain[]>,
+    } satisfies Record<PlacedSpecialKind, ShareTerrain[]>,
     maxPerKind: 2,
     minKinds: 3,
     /** Fewest steps between two special fields. */
@@ -496,6 +499,8 @@ export const MAP = {
     /** What ruins pay their first owner, once, by the salvage drawn with the map. */
     salvage: { alloy: 2, electronics: 1 },
   },
+  /** A meteor crater, formed in play: its Crystite rating (the top of the mined scale), and no production bonus. */
+  meteorCrater: { crystite: 4 },
   /** Tuning for the layout stages (map-layout.ts): how the generator meets the rules above, not rules themselves. */
   layout: {
     /** The budget never gives a terrain more than this share, so jitter can't take plains near maxTerrainShare. */
@@ -592,23 +597,26 @@ export const TAX = {
 };
 
 /**
- * Colony politics: the election of a Governor and a Sheriff, the vote weight,
- * the Governor's sales tax and the offices' pay. Times are in milliseconds of
- * game time, stepped like the land auction.
+ * Colony politics: the election of the offices in POLITICS.offices, the vote weight,
+ * the Governor's sales tax and the offices' pay. No decision has a clock; only
+ * the reveal ceremony does, in milliseconds of game time, stepped like the land auction.
  */
 export const POLITICS = {
   /** Months whose planning phase opens with an election; a term runs until the next one. */
   electionMonths: [1, 4, 7, 10],
+  /** The offices elected, in the order the ceremony reveals them; the Sheriff returns with slice 4's powers. */
+  offices: ['governor'] as Office[],
   /** A Governor who has served this many terms in a row may not run for Governor again until someone else has held it. */
   maxGovernorTermsInRow: 2,
-  /** Players declare for Governor or Sheriff. */
-  nominateMs: 20_000,
-  /** Players cast their secret ballots. */
-  ballotMs: 20_000,
-  /** The reveal: a countdown, then the result on every screen. */
-  revealMs: 6_000,
-  /** The countdown part of the reveal, before the result shows. */
-  revealCountdownMs: 3_000,
+  /** The reveal ceremony, per office. Placeholders until WS1 and Heiko set them. */
+  ceremony: {
+    /** The office, each candidate and their promise. */
+    introMs: 3_000,
+    /** Each candidate's bar grows to their weighted votes; skipped with fewer than two candidates. */
+    barsMs: 4_000,
+    /** The winner, how they won, and the congratulations. */
+    winnerMs: 5_000,
+  },
   weight: {
     /** Votes every player has, before the parts below. */
     base: 1,
@@ -638,8 +646,10 @@ export const POLITICS = {
   termScore: 1200,
   /** How Classic AI seats run, vote and set the tax (VoteHand). Placeholders until the sim balances them. */
   ai: {
-    /** Ms a seat waits before acting in a nominate or ballot stage, drawn per stage: a human's pause, well inside the stage's clock. */
+    /** Ms a seat waits before acting in announce or the ballot, drawn per stage: a human's pause. */
     actMs: [800, 2_500] as [number, number],
+    /** A seat decides whether to run in the first planning phase at most this many months before an election month; in month 1, at the last call. */
+    declareLeadMonths: 1,
     /** Chance per election that a persona runs for Governor. */
     runGovernor: { trader: 0.5, cautious: 0.3, aggressive: 0.8, saboteur: 0.6 } satisfies Record<AiPersonaId, number>,
     /** Chance it runs for Sheriff when it does not run for Governor. */
@@ -648,7 +658,7 @@ export const POLITICS = {
     taxTarget: { trader: 5, cautious: 4, aggressive: 8, saboteur: 10 } satisfies Record<AiPersonaId, number>,
     /** Whole percent a Governor adds when the colony fund is low. */
     taxFundBump: 2,
-    /** The fund is low under this many months of both offices' pay. */
+    /** The fund is low under this many months of the elected offices' pay. */
     fundMonths: 3,
   },
 };

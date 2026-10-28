@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { PlayerMark } from './PlayerMark';
+import type { CreatureWrap } from './species';
 import { TimeBar } from './TimeBar';
 import { cx, SLOT_COLOR, type Slot } from './tokens';
 
@@ -378,9 +379,10 @@ export interface PaceRow {
 
 /**
  * The TV's list: how fast each colonist walks this month, and why. In one column each row has room for the full name,
- * and can stand as the development roster.
+ * and can stand as the development roster. `wrapMark` lets a screen anchor something at a row's mark, such as the
+ * table chat's bubble on the TV.
  */
-export function PaceList({ rows, rule, columns = 2 }: { rows: PaceRow[]; rule: PaceRule; columns?: 1 | 2 }) {
+export function PaceList({ rows, rule, columns = 2, wrapMark = (_, mark) => mark }: { rows: PaceRow[]; rule: PaceRule; columns?: 1 | 2; wrapMark?: CreatureWrap }) {
   const wide = columns === 1;
   return (
     <div className="flex flex-col gap-1.5">
@@ -391,7 +393,7 @@ export function PaceList({ rows, rule, columns = 2 }: { rows: PaceRow[]; rule: P
           const alarm = r.condition && (hungerLevel(r.condition, rule) === 3 || r.condition.sick);
           return (
             <li key={r.id} className={cx('flex items-center gap-2', r.done && 'opacity-50')} data-testid={`pace-${r.id}`}>
-              <PlayerMark slot={r.slot} size={wide ? 20 : 18} glow={wide && !r.done} />
+              {wrapMark(r.id, <PlayerMark slot={r.slot} size={wide ? 20 : 18} glow={wide && !r.done} />)}
               <span className={cx('min-w-0 flex-1 truncate font-semibold', wide ? 'font-display text-base' : 'text-sm')}>{r.name}</span>
               <div className={cx('relative h-2 shrink-0 overflow-hidden rounded-full bg-raised', wide ? 'w-20' : 'w-12')}>
                 <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: pct(pace), background: SLOT_COLOR[r.slot] }} />

@@ -42,7 +42,7 @@ export function Offices() {
 function useElectionDesks(stage: string | null, governor: boolean): void {
   const { openDesk } = useHub();
   useEffect(() => {
-    if (stage === 'nominate' || stage === 'ballot' || stage === 'reveal') openDesk('council');
+    if (stage === 'announce' || stage === 'ballot' || stage === 'ceremony') openDesk('council');
     else if (stage === 'over' && governor) openDesk('governor');
     // Only a new stage or a new office moves the rail; openDesk is a new function on every render.
   }, [stage, governor]);

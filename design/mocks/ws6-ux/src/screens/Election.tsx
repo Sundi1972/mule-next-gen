@@ -33,8 +33,8 @@ const HOW: Record<How, (r: Race) => string> = {
 };
 
 const RACES: Race[] = [
-  { office: 'Governor', cands: [{ id: 'ossa', promise: 'No land tax', votes: 4 }, { id: 'kai', promise: 'Cleanup squad from month 5', votes: 5 }], winner: 'kai', how: 'votes' },
-  { office: 'Sheriff', cands: [{ id: 'brix', promise: 'Guards on every factory', votes: 4 }, { id: 'lena', promise: 'I will catch the saboteur', votes: 4 }], winner: 'lena', how: 'baron', baron: 'ossa' },
+  { office: 'Governor', cands: [{ id: 'ossa', promise: 'Tax no higher than 3%', votes: 4 }, { id: 'kai', promise: 'Lower the tax', votes: 5 }], winner: 'kai', how: 'votes' },
+  { office: 'Sheriff', cands: [{ id: 'brix', promise: '', votes: 4 }, { id: 'lena', promise: '', votes: 4 }], winner: 'lena', how: 'baron', baron: 'ossa' },
 ];
 
 const P = Object.fromEntries(VIEW.players.map((p, i) => [p.id, { ...p, slot: i as Slot }]));
@@ -80,7 +80,7 @@ export function TvElection({ revealed = false }: { revealed?: boolean }) {
                     <div className="flex min-w-0 flex-1 flex-col gap-1">
                       <span className="flex items-baseline gap-3">
                         <span className="font-display text-2xl font-semibold">{p.name}</span>
-                        <span className="truncate text-lg text-ink-2">“{c.promise}”</span>
+                        {c.promise && <span className="truncate text-lg text-ink-2">“{c.promise}”</span>}
                       </span>
                       <span className="flex gap-1.5" aria-label={`${c.votes} votes`}>
                         {Array.from({ length: c.votes }, (_, i) => (
@@ -104,7 +104,7 @@ export function TvElection({ revealed = false }: { revealed?: boolean }) {
               </span>
             </section>
           ))}
-          <p className="col-span-2 text-center text-xl text-ink-2">Each block is one vote. Who voted for whom stays secret. The new Governor sets the tax from next month.</p>
+          <p className="col-span-2 text-center text-xl text-ink-2">Each block is one vote. Who voted for whom stays secret.</p>
         </div>
       )}
     </div>
@@ -131,7 +131,7 @@ export function PhoneElectionResult() {
             </span>
           );
         })}
-        <span className="rounded-control bg-holo-soft px-3 py-2 text-sm">You are the Sheriff until month 7. Your desk opens in the next planning phase.</span>
+        <span className="rounded-control bg-holo-soft px-3 py-2 text-sm">You are the Sheriff until month 7.</span>
       </div>
     </div>
   );
