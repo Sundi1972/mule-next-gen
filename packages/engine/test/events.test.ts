@@ -464,6 +464,53 @@ describe('the roller', () => {
       expect(rollPhase(ready(3), 'production')).toEqual([]);
     });
   });
+
+  /**
+   * Four players' farms at the first month events may roll: p2's one Food plot, a p3 Food plot joined to it, and far
+   * off two Food plots each for p0 and p1 and one more for p3. p2 is the richest by cash plus land, p3 the poorest.
+   */
+  const farms = () => {
+    const state = createGame({ seed: 4, players: [0, 1, 2, 3].map((i) => ({ id: `p${i}`, name: `P${i}`, isAi: false })) });
+    state.month = EVENTS.firstMonth;
+    const land = (t: Tile) => t.terrain !== 'store';
+    const near = (t: Tile) => neighbours(state.tiles, state.width, t);
+    const p2Food = state.tiles.find((t) => land(t) && near(t).filter(land).length === 4)!;
+    const joined = near(p2Food)[0]!;
+    const around = [p2Food, ...near(p2Food)];
+    const far = state.tiles.filter((t) => land(t) && around.every((c) => Math.max(Math.abs(c.x - t.x), Math.abs(c.y - t.y)) >= 3));
+    const farmers: [Tile, string][] = [[p2Food, 'p2'], [joined, 'p3'], [far[0]!, 'p0'], [far[1]!, 'p0'], [far[2]!, 'p1'], [far[3]!, 'p1'], [far[4]!, 'p3']];
+    for (const [t, owner] of farmers) Object.assign(t, { owner, outfit: 'food' });
+    [1_000, 1_000, 10_000, 0].forEach((money, i) => (state.players[i]!.money = money));
+    return { state, p2Food, joined };
+  };
+  /** Each event's key, whose it is, and who owns the plot it starts on. */
+  const whose = (state: GameState, events: MonthEvent[]) => events.map((e) => [e.key, e.player, state.tiles[e.plots[0]!.index]!.owner]);
+
+  it("EM-T-AC-4: a personal event starts on its own player's plots, and the richest and poorest read their rows' points", () => {
+    withEveryRowAt(0, () => {
+      // Only the rank's points lift a row above 0: the richest's bad rows, the poorest's good one.
+      for (const key of ['pestSwarm', 'wildfire'] as const) reset(EVENTS.player[key], { phases: { production: 0 }, wealth: { richest: 1 }, cap: 1 });
+      reset(EVENTS.player.bumperHarvest, { phases: { production: 0 }, wealth: { poorest: 1 }, cap: 1 });
+      const { state, p2Food, joined } = farms();
+      const fired = rollPhase(state, 'production');
+      expect(whose(state, fired)).toEqual([
+        ['pestSwarm', 'p2', 'p2'],
+        ['wildfire', 'p2', 'p2'],
+        ['bumperHarvest', 'p3', 'p3'],
+      ]);
+      // The spread is today's: the swarm crosses onto p3's joined Food, the fire stays on its owner's.
+      const hit = (key: EventKey) => fired.find((e) => e.key === key)!.plots.map((p) => state.tiles[p.index]!);
+      expect(hit('pestSwarm')).toContain(joined);
+      expect(hit('wildfire')).toEqual([p2Food]);
+
+      // Negative case: p1 works only Energy, so even certain rows fire it no pest swarm or wildfire, nor one elsewhere.
+      for (const key of PERSONAL) reset(EVENTS.player[key], { phases: { production: 1 }, cap: 1 });
+      const { state: dry } = farms();
+      for (const t of dry.tiles) if (t.owner === 'p1') t.outfit = 'energy';
+      const all = (p: string) => PERSONAL.map((key) => [key, p, p]);
+      expect(whose(dry, rollPhase(dry, 'production'))).toEqual([...all('p0'), ['bumperHarvest', 'p1', 'p1'], ...all('p2'), ...all('p3')]);
+    });
+  });
 });
 
 describe('what-if copies', () => {
