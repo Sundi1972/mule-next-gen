@@ -204,6 +204,35 @@ export function wantsPlot(plan: LandPlan, obs: GameState, index: number, ahead: 
   return lit.utility >= (rivals[0]?.utility ?? 0) * STRATEGIST.grantShare;
 }
 
+/**
+ * Whether the seat would press for any plot still ahead of the light (`ahead`: the pass's order from the lit plot on),
+ * each weighed as wantsPlot weighs it when lit, against the plots ahead of it then. False means it is done with land.
+ * It walks the pass backwards, keeping the best few ranks seen, so one call is linear in the plots ahead.
+ */
+export function wantsAnyAhead(plan: LandPlan, obs: GameState, ahead: readonly number[], mind: Mind): boolean {
+  const idle = obs.tiles.filter((t) => t.owner === mind.me && !t.outfit).length;
+  if (idle >= mind.level.mulesPerMonth && me(obs, mind).money < (idle + 1) * mulePriceFor(obs, mind.me)) return false;
+  const room = GAME.claimsPerGrant - me(obs, mind).claimsThisGrant + STRATEGIST.grantSpare;
+  if (room <= 0) return false;
+  const rankOf = new Map(plan.ranking.map((s, rank) => [s.index, rank]));
+  // The ranks, best first, of the `room` best plots later in the pass than the one being weighed.
+  const later: number[] = [];
+  for (let k = ahead.length - 1; k >= 0; k--) {
+    const index = ahead[k]!;
+    const tile = obs.tiles[index];
+    const rank = rankOf.get(index);
+    if (tile?.owner !== null || tile.terrain === 'store' || rank === undefined) continue;
+    const lit = plan.ranking[rank]!;
+    const withinRoom = later.length < room || later[room - 1]! > rank;
+    const best = plan.ranking[Math.min(rank, later[0] ?? rank)]!;
+    if (lit.value > 0 && withinRoom && lit.utility >= best.utility * STRATEGIST.grantShare) return true;
+    const at = later.findIndex((r) => r > rank);
+    later.splice(at === -1 ? later.length : at, 0, rank);
+    later.length = Math.min(later.length, room);
+  }
+  return false;
+}
+
 // --- Values for lot bids ----------------------------------------------------
 
 /**

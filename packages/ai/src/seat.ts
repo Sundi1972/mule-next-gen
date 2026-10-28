@@ -5,7 +5,7 @@ import type { Decider, TableTalk } from './decider.js';
 import { AuctionHand, type AuctionDebug } from './hands/auction.js';
 import { DevelopHand, type DevWalking } from './hands/develop.js';
 import { PERSONAS } from './personas.js';
-import { landDecision, wantsPlot, type LandPlan } from './strategist.js';
+import { landDecision, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
 import { situation } from './summary.js';
 import type { Mind } from './value.js';
 
@@ -88,15 +88,32 @@ export class AiSeat {
     const grant = state.grant;
     if (state.phase !== 'landGrant' || !grant) return null;
     const me = state.players.find((p) => p.id === this.id)!;
-    if (me.claimsThisGrant >= GAME.claimsPerGrant) return null;
-    if (!this.land || this.landMonth !== state.month) this.planMonth(state);
-    const plan = this.brain.resolveNow(this.land!, state).action;
+    if (me.claimsThisGrant >= GAME.claimsPerGrant || me.doneWithLand) return null;
+    const plan = this.landPlan(state);
     const index = grant.order[grant.step];
     if (index === undefined) return null;
     const obs = observe(state, this.id);
     if (!wantsPlot(plan, obs, index, grant.order.slice(grant.step), this.mind)) return null;
     if (this.rng.next() < this.mind.level.missChance) return null;
     return this.rng.int(...this.mind.level.reactMs) + this.rng.int(...AI_HANDS.grant.choiceMs);
+  }
+
+  /**
+   * Done with land: true when the seat has claims left and wants no plot still ahead of the light, by the same rule
+   * as onLit. A seat whose claims are used, or that is done already, has nothing to press.
+   */
+  passesGrant(state: GameState): boolean {
+    const grant = state.grant;
+    if (state.phase !== 'landGrant' || !grant) return false;
+    const me = state.players.find((p) => p.id === this.id)!;
+    if (me.claimsThisGrant >= GAME.claimsPerGrant || me.doneWithLand) return false;
+    return !wantsAnyAhead(this.landPlan(state), observe(state, this.id), grant.order.slice(grant.step), this.mind);
+  }
+
+  /** This month's land plan, as its hands read it: planned once a month, settled now. */
+  private landPlan(state: GameState): LandPlan {
+    if (!this.land || this.landMonth !== state.month) this.planMonth(state);
+    return this.brain.resolveNow(this.land!, state).action;
   }
 
   /**
