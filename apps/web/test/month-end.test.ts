@@ -122,9 +122,9 @@ const client = {
   intent: () => {},
 } as unknown as TableClient;
 
-/** A screen as Heiko's phone draws it, at a table with a TV (`boards` 1) or without. */
-function onPhone(game: MuleView, screen: () => ReactElement, boards = 1): string {
-  const table = { code: 'MULE', status: 'playing', hostId: 's1', seats: [], boards, game } as TableView<MuleView>;
+/** A screen as Heiko's phone draws it, at a table with a TV (`boards` 1) or without; Heiko hosts unless `hostId` says otherwise. */
+function onPhone(game: MuleView, screen: () => ReactElement, boards = 1, hostId = 's1'): string {
+  const table = { code: 'MULE', status: 'playing', hostId, seats: [], boards, game } as TableView<MuleView>;
   const value = { table, view: game, me: game.me!, self: game.players[0]!, slot: 0 as const };
   return renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value, children: createElement(screen) }) }));
 }
@@ -216,7 +216,19 @@ describe('B-AC-12 (WS4, month end): the league table and the colony, on the phon
   });
 
   it('B-AC-13 (WS4, month end): the phone moves on with "On to month 5", which is Ready', () => {
-    expect(text(element(phone, 'actions'))).toContain('On to month 5');
+    expect(said(phone, 'ready')).toBe('On to month 5');
+    expect(has(phone, 'continue')).toBe(false);
+  });
+
+  it("B-AC-13 (WS4, month end): once on, the host's phone names who the table waits for and offers Continue; a phone that isn't the host's never does", () => {
+    const on = view({ players: PLAYERS.map((p) => (p.id === 's1' ? { ...p, ready: true } : p)) });
+    const host = onPhone(on, Results);
+    expect(said(host, 'ready')).toBe('Waiting for the others');
+    expect(said(host, 'waiting-for')).toBe('Waiting for Mia Kai');
+    expect(said(host, 'continue')).toBe('Continue without them');
+    const guest = onPhone(on, Results, 1, 's2');
+    expect(said(guest, 'waiting-for')).toBe('Waiting for Mia Kai');
+    expect(has(guest, 'continue')).toBe(false);
   });
 });
 
