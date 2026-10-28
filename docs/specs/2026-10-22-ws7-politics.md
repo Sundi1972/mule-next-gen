@@ -799,8 +799,9 @@ did       Heiko: planning has no clock. The election keeps its own stage clocks;
           can no longer end while an election is open: Ready is Done for the stage, and
           checkAllReady waits while the election runs. AM-1's close-at-once stays as the
           engine guard for a game or sim that leaves planning another way. The host's
-          Continue, during an open election, counts as Done for the stage and never ends
-          planning.
+          Continue exists for planning proper only: while the election is open it is refused
+          (RuleError) and changes nothing, since away seats are already Done on every
+          election tick (WS3's continuePlanning).
 because   G-4 / P-1: Heiko's play-test; the election's timing is unchanged
 goal      P-1 — still met
 folded    C9 tomorrow; politics.test.ts row FM-planning-untimed (WS3's ee5318f)
