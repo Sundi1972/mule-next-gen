@@ -19,9 +19,6 @@ const LOTS_MINIMUM = 250;
 
 // --- CT-3 hooks, called by smoke.ts --------------------------------------------
 
-/** The smoke's phone started the room, so it holds the first seat. */
-const SMOKE_PHONE_SLOT = 0;
-
 /** What listedSale put up, for month 2's landAuction to follow. */
 let smokeListing: string | null = null;
 
@@ -29,7 +26,11 @@ let smokeListing: string | null = null;
 export const listedSale: NonNullable<AuctionSteps['listedSale']> = async ({ phone, check }) => {
   const planning = phone.locator('[data-phase=planning]');
   await planning.getByTestId('tool-list').click({ timeout: PRESS_MS });
-  smokeListing = await listPlot(phone, SMOKE_PHONE_SLOT, 0);
+  // The phone's colour slot, 0-based, as its header mark draws it: the plot labels name owners by it.
+  const mark = await phone.getByTestId('guide').locator('header [role=img][data-slot]').first().getAttribute('data-slot', { timeout: PRESS_MS }).catch(() => null);
+  const slot = Number.parseInt(mark ?? '', 10);
+  check(Number.isInteger(slot), `the smoke phone's header names its colour slot, got ${mark}`);
+  smokeListing = await listPlot(phone, slot, 0);
   if (smokeListing === null) {
     check(false, "the smoke's phone owns a plot to list");
   } else {

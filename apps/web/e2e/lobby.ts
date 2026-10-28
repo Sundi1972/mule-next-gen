@@ -2,13 +2,12 @@
  * The phone lobby against the real server. B-AC-6: the host kicks a phone and an AI, a player leaves, and the host
  * closes the table. B-AC-7 (lobby): a player and the host each move their seat to another device with a one-time
  * link. Every removed phone lands on the start screen with the reason. B-AC-13: the "make your colonist" lobby at a
- * phone's and a laptop's size. B-AC-8: a picked colour follows the player into the game. Run with
- * `pnpm --filter @mule/web e2e`.
+ * phone's and a laptop's size. B-AC-8 (lobby): a phone takes an AI's colour and the other phone is refused it; smoke.ts
+ * plays a picked colour into the game. Run with `pnpm --filter @mule/web e2e`.
  */
 import { COLOUR_NAME, SPECIES, type Slot } from '@mule/ui';
 import type { BrowserContextOptions, Locator, Page } from 'playwright';
-import { PHASE_MS } from '../../server/src/mule-game.js';
-import { check, checkLink, claimAPlot, EXPIRED, gone, launch, MOVED, onStartScreen, PHONE, qrLink, seatToken, shows, SHOWN_MS, startServer, TV } from './harness';
+import { check, checkLink, EXPIRED, gone, launch, MOVED, onStartScreen, PHONE, qrLink, seatToken, shows, SHOWN_MS, startServer, TV } from './harness';
 
 /** Longer than the client's first reconnect pause, so a phone that tried to come back would be seen. */
 const STAYS_GONE_MS = 1_500;
@@ -22,10 +21,6 @@ const WIDE_RAIL_PX = 400;
 const NARROWED_SHELL_PX = 1000;
 /** The hero's width in the wide layout; the phone layout's is far narrower. */
 const WIDE_HERO_PX = 360;
-const PHASE_SCALE = 0.1;
-const within = (ms: number) => ms * PHASE_SCALE + 3_000;
-/** A land auction, when the month has one, runs on its own clock: PHASE_MS has no entry for it. */
-const LAND_AUCTION_ALLOWANCE_MS = 20_000;
 /** Just past a move code's 2 minutes (RULE-6). */
 const PAST_HANDOFF_EXPIRY = '02:01';
 
@@ -38,8 +33,6 @@ const HOST_IDS = ['host-tools', 'host-to-phone', 'close-room', 'add-ai', 'start-
 
 const started = Date.now();
 const { server, base } = await startServer();
-// B-AC-8 plays on into the land grant, so its table runs a fast clock.
-const fast = await startServer({ phaseScale: PHASE_SCALE });
 const browser = await launch();
 const errors: string[] = [];
 /** Failed checks that need the room to take a colour (RULE-7): collected, so the checks after them still run. */
@@ -48,7 +41,7 @@ try {
   await kickLeaveAndClose();
   await colonistLobby(PHONE, '844x390', false);
   await colonistLobby(LAPTOP, '1440x900', true);
-  await colourIntoTheGame();
+  await colourInTheLobby();
   check(colourRoomReds.length === 0, `the room takes picked colours:\n  ${colourRoomReds.join('\n  ')}`);
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
   console.log(`e2e lobby: ok (${((Date.now() - started) / 1000).toFixed(1)} s)`);
@@ -60,7 +53,6 @@ try {
 } finally {
   await browser.close();
   await server.close();
-  await fast.server.close();
 }
 process.exit(0);
 
@@ -327,14 +319,14 @@ async function colonistLobby(size: BrowserContextOptions, label: string, wide: b
   await heiko.context().close();
 }
 
-/** B-AC-8: two phones and an AI; phone 1 takes the AI's colour, phone 2 cannot, and the game draws phone 1 in it. */
-async function colourIntoTheGame(): Promise<void> {
+/** B-AC-8 (lobby): two phones and an AI; phone 1 takes the AI's colour, phone 2 cannot, and the TV lobby draws phone 1 in it. */
+async function colourInTheLobby(): Promise<void> {
   const heiko = await phone('heiko B-AC-8');
-  const code = await hostRoom(heiko, fast.base);
-  const mia = await joinRoom(await phone('mia B-AC-8'), fast.base, code, 'Mia');
+  const code = await hostRoom(heiko, base);
+  const mia = await joinRoom(await phone('mia B-AC-8'), base, code, 'Mia');
   const tv = await (await browser.newContext(TV)).newPage();
   tv.on('pageerror', (e) => errors.push(`tv B-AC-8: ${e.message}`));
-  await tv.goto(`${fast.base}/table?room=${code}`);
+  await tv.goto(`${base}/table?room=${code}`);
   // AIs fill colours 2..5; removing the first three leaves one AI on Rose, a colour no seat's position would give.
   for (let i = 0; i < 4; i++) await heiko.getByTestId('add-ai').click();
   await rail(heiko).nth(5).waitFor({ timeout: SHOWN_MS });
@@ -366,25 +358,14 @@ async function colourIntoTheGame(): Promise<void> {
 
   const inRose = `[data-slot="${rose}"]`;
   colourRoom(await shows(heikoOn(tv.locator('li')).locator(inRose)), `B-AC-8: the TV lobby draws Heiko's mark in ${COLOUR_NAME[rose]}`);
-
-  await heiko.getByTestId('start-game').click();
-  const roster = heikoOn(tv.locator('[data-phase=planning] li, [data-phase=landGrant] li'));
-  colourRoom(await shows(roster.locator(inRose)), `B-AC-8: the TV's game roster draws Heiko in ${COLOUR_NAME[rose]}`);
-  const grant = heiko.locator('[data-phase=landGrant]');
-  await grant.waitFor({ timeout: within(PHASE_MS.planning) });
-  await claimAPlot(heiko, within(PHASE_MS.landGrant), 'B-AC-8: phone 1 claims a plot in the land grant');
-  const development = tv.locator('[data-phase=development]');
-  await development.waitFor({ timeout: within(PHASE_MS.landGrant + PHASE_MS.development) + LAND_AUCTION_ALLOWANCE_MS });
-  colourRoom(await shows(heikoOn(development.locator('li')).locator(inRose)), `B-AC-8: the TV's development roster draws Heiko in ${COLOUR_NAME[rose]}`);
-  colourRoom(await shows(development.locator(`[aria-label*="owned by"] ${inRose}`).first()), `B-AC-8: the TV map draws Heiko's plot in ${COLOUR_NAME[rose]}`);
   await heiko.context().close();
   await mia.context().close();
   await tv.context().close();
 }
 
-/** Heiko's row among these: the colour is read from `data-slot` on his PlayerMark. */
+/** Heiko's row among these rows that carry a mark: the colour is read from `data-slot` on his PlayerMark. */
 function heikoOn(rows: Locator): Locator {
-  return rows.filter({ hasText: 'Heiko' }).first();
+  return rows.filter({ has: rows.page().locator('[role=img][data-slot]'), hasText: 'Heiko' }).first();
 }
 
 function colourRoom(cond: boolean, message: string): void {

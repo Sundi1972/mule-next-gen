@@ -7,11 +7,11 @@ import { existsSync } from 'node:fs';
 import { WALK } from '@mule/engine';
 import { errors as playwrightErrors, type BrowserContext, type Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
-import { check, claimAPlot, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
+import { check, claimAPlot, headerSlot, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
 import { planningIsTheHub } from './hub-steps';
 import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
 import { fedPlayerFillsAFullHoloBar, hungryPlayerSeesAShortOrangeBar, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
-import { doubleTapZoomsToYourLand, moveDialogOpensInProduction, moveDialogOutlivedThePhase, noZoomBeforeYourFirstPlot, theSeatMovesToAnotherDevice, watchIntents, zoomButtonOnceYouOwnAPlot } from './table-steps';
+import { doubleTapZoomsToYourLand, moveDialogOpensInProduction, moveDialogOutlivedThePhase, noZoomBeforeYourFirstPlot, thePhonePicksRose, theSeatMovesToAnotherDevice, theTvDrawsRose, watchIntents, zoomButtonOnceYouOwnAPlot } from './table-steps';
 
 /** Loaded by a path held in a variable, so tsc never resolves a file that may not exist yet. */
 async function loadAuctionSteps(): Promise<AuctionSteps> {
@@ -94,6 +94,7 @@ try {
   const tvLobbySeats = tv.locator('li');
   await tvLobbySeats.nth(0).getByRole('img', { name: 'Mollox' }).waitFor({ timeout: 3_000 });
   check((await tvLobbySeats.nth(1).getByRole('img', { name: 'Bramblet' }).count()) === 1, 'B-AC-1: the TV lobby shows the first AI as a Bramblet');
+  await thePhonePicksRose(ctx);
 
   await phone.getByRole('button', { name: 'Start game' }).click();
 
@@ -104,6 +105,7 @@ try {
   await tvGame.locator('li').filter({ hasText: 'Heiko' }).getByRole('img', { name: 'Mollox' }).first().waitFor({ timeout: 3_000 });
   check((await tvGame.getByRole('img', { name: 'Zipwing' }).count()) === 0, 'B-AC-1: nobody in the TV game plays the seat-1 default, Zipwing');
   check((await tvGame.getByRole('img', { name: 'Bramblet' }).count()) >= 1, 'B-AC-1: the TV game still shows the first AI as a Bramblet');
+  await theTvDrawsRose(ctx, 'planning');
 
   // Month 1.
   await phone.getByRole('button', { name: "I'm ready" }).click();
@@ -132,6 +134,7 @@ try {
   console.log(`store hall fills the stage: ${await theLedMuleLightsUp(phone, server, code)}`);
   await checkOwnsAPlot(phone);
   console.log(`zoom: ${await doubleTapZoomsToYourLand(ctx, phoneIntents)}`);
+  await theTvDrawsRose(ctx, 'development');
   await goToThePub(phone);
   // B-AC-6 and B-AC-8, from what both screens drew of month 1's show.
   await phone.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
@@ -214,8 +217,8 @@ async function checkOwnsAPlot(phone: Page): Promise<void> {
   const dev = phone.locator('[data-phase=development]');
   await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: within(PHASE_MS.landGrant + PHASE_MS.development) });
   await dev.getByRole('button', { name: /, free\b/ }).first().waitFor({ timeout: 3_000 });
-  // The host sits in seat 1, and the map names each plot's owner by seat.
-  const mine = dev.getByRole('button', { name: /owned by player 1\b/ });
+  // The map names each plot's owner by colour slot, counted from 1.
+  const mine = dev.getByRole('button', { name: new RegExp(`owned by player ${(await headerSlot(phone, 'T-AC-1')) + 1}\\b`) });
   const plots = await mine.count();
   check(plots >= 1, `T-AC-1: the phone owns a plot before month 2; its map shows ${plots} plots in its colour`);
   await mine.first().click({ timeout: PRESS_MS });

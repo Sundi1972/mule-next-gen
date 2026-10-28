@@ -132,6 +132,15 @@ export function gone(locator: Locator): Promise<boolean> {
   );
 }
 
+/** The colour slot a page plays in, from the mark on its game shell's header; fails under `tag` without one. */
+export async function headerSlot(page: Page, tag: string): Promise<number> {
+  const mark = page.getByTestId('guide').locator('header [role=img][data-slot]').first();
+  const raw = await mark.getAttribute('data-slot', { timeout: SHOWN_MS }).catch(() => null);
+  const slot = Number.parseInt(raw ?? '', 10);
+  check(Number.isInteger(slot), `${tag}: the phone's header names its colour slot, got ${raw}`);
+  return slot;
+}
+
 /** The start screen: the name field, and no table. */
 export async function onStartScreen(page: Page): Promise<boolean> {
   return (await shows(page.getByPlaceholder('Heiko'))) && (await page.getByText("You're at the table").count()) === 0;

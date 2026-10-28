@@ -1,8 +1,9 @@
-/** WS4's steps in smoke.ts's whole game: map zoom (B-AC-2, T-AC-9) and the move to another device (B-AC-7, B-AC-13). */
+/** WS4's steps in smoke.ts's whole game: a picked colour (B-AC-8), map zoom (B-AC-2, T-AC-9) and the move to another device (B-AC-7, B-AC-13). */
 import { GOODS, type GameState, type Stock } from '@mule/engine';
 import type { MuleView, ServerEnvelope, TableView } from '@mule/protocol';
 import type { Locator, Page } from 'playwright';
-import { check, checkLink, EXPIRED, gone, MOVED, onStartScreen, PHONE, qrLink, seatToken, shows, type GameStepContext } from './harness';
+import { COLOUR_NAME, type Slot } from '@mule/ui';
+import { check, checkLink, EXPIRED, gone, headerSlot, MOVED, onStartScreen, PHONE, qrLink, seatToken, shows, SHOWN_MS, type GameStepContext } from './harness';
 
 /** B-AC-2: a zoomed plot is at least this wide, a thumb's width. */
 const MIN_PLOT_PX = 44;
@@ -24,6 +25,43 @@ export function watchIntents(page: Page): () => number {
     }),
   );
   return () => intents;
+}
+
+/** B-AC-8: the colour smoke's phone picks. Free at a three-seat table, and no seat's default there. */
+const ROSE = 5 as Slot;
+
+/** B-AC-8, in the lobby: the phone picks Rose; held, the TV lobby draws its mark in Rose. */
+export async function thePhonePicksRose(ctx: GameStepContext): Promise<void> {
+  const { phone, tv } = ctx;
+  const chip = phone.getByTestId(`colour-${ROSE}`);
+  check(await chip.isEnabled({ timeout: SHOWN_MS }), `B-AC-8: ${COLOUR_NAME[ROSE]} is free for the phone to pick`);
+  await chip.click();
+  check(await shows(phone.locator(`[data-testid=colour-${ROSE}][aria-pressed=true]`)), `B-AC-8: the phone picks ${COLOUR_NAME[ROSE]}`);
+  const name = ((await phone.getByTestId('hero-name').textContent()) ?? '').trim();
+  await ctx.held(() => checkRoster(tv.locator('li'), name, `B-AC-8: the TV lobby draws ${name}'s mark in ${COLOUR_NAME[ROSE]}`));
+}
+
+/** B-AC-8, held: the TV's roster in `phase` draws the phone's player in Rose; in development the TV map draws every plot of theirs in Rose too. */
+export async function theTvDrawsRose(ctx: GameStepContext, phase: 'planning' | 'development'): Promise<void> {
+  await ctx.held(async () => {
+    const { phone, tv } = ctx;
+    const { name } = await playingAs(phone);
+    const screen = tv.locator(`[data-phase=${phase}]`);
+    check(await shows(screen), `B-AC-8: the TV shows ${phase}`);
+    await checkRoster(screen.locator('li'), name, `B-AC-8: the TV's ${phase} roster draws ${name} in ${COLOUR_NAME[ROSE]}`);
+    if (phase !== 'development') return;
+    const { state } = gameOf(ctx);
+    const seat = state.players.find((p) => p.name === name);
+    check(seat, `B-AC-8: ${name} plays in the game`);
+    const plots = state.tiles.filter((t) => t.owner === seat.id).length;
+    const drawn = await tvPlotsIn(tv, ROSE);
+    check(plots > 0 && drawn.length === plots && drawn.every((s) => s === String(ROSE)), `B-AC-8: the TV map draws ${name}'s ${plots} plots in ${COLOUR_NAME[ROSE]}, got [${drawn.join(', ')}]`);
+  });
+}
+
+async function checkRoster(rows: Locator, name: string, message: string): Promise<void> {
+  const slots = await rosterSlots(rows, name);
+  check(slots.length > 0 && slots.every((s) => s === String(ROSE)), `${message}, got slots [${slots.join(', ')}]`);
 }
 
 /** B-AC-2 (negative), held, in the land grant before the phone's first claim: no zoom button, and a double-tap changes no plot. */
@@ -68,7 +106,7 @@ export async function doubleTapZoomsToYourLand(ctx: GameStepContext, intents: ()
   await dev.getByTestId('map-viewport').waitFor({ timeout: PRESS_MS });
   const { width, height } = mapOf(ctx);
   const cells = width * height;
-  const mine = ownedBy(await slotOf(phone, 'B-AC-2'));
+  const mine = ownedBy(await headerSlot(phone, 'B-AC-2'));
   const own = dev.getByTestId('map-viewport').getByRole('button', { name: mine });
   const labels = await plots(dev).evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''));
   const index = labels.findIndex((label) => mine.test(label));
@@ -147,9 +185,7 @@ export async function theSeatMovesToAnotherDevice(ctx: GameStepContext, second: 
     check(has.goods === before.goods, `B-AC-7 (in game): the second device has ${was.name}'s goods, ${before.goods}, got ${has.goods}`);
 
     const plots = before.plots;
-    const drawn = await tv
-      .locator('[data-phase] [aria-label*="owned by"]')
-      .evaluateAll((els, source) => els.filter((e) => new RegExp(source).test(e.getAttribute('aria-label') ?? '')).map((e) => e.querySelector('[data-slot]')?.getAttribute('data-slot') ?? 'none'), ownedBy(Number(was.slot)).source);
+    const drawn = await tvPlotsIn(tv, Number(was.slot));
     check(plots > 0 && drawn.length === plots && drawn.every((s) => s === was.slot), `B-AC-7 (in game): the TV still draws ${was.name}'s ${plots} plots in slot ${was.slot}, got [${drawn.join(', ')}]`);
 
     check(await shows(first.getByText(MOVED)), `B-AC-7 (in game): the first device shows "${MOVED}"`);
@@ -289,11 +325,18 @@ function turnLeft(ctx: GameStepContext): string {
   return `${((ends - now) / 1_000).toFixed(2)} s of the development turn left`;
 }
 
-/** The colour slot the page plays in, from the mark on its game shell's header. */
-async function slotOf(page: Page, tag: string): Promise<number> {
-  const slot = Number(await page.getByTestId('guide').locator('header [role=img][data-slot]').first().getAttribute('data-slot', { timeout: PRESS_MS }));
-  check(Number.isInteger(slot), `${tag}: the phone's header names its colour slot, got ${slot}`);
-  return slot;
+/** The colour slots drawn on the TV map's plots whose label names this colour slot as the owner. */
+function tvPlotsIn(tv: Page, slot: number): Promise<string[]> {
+  return tv
+    .locator('[data-phase] [aria-label*="owned by"]')
+    .evaluateAll((els, source) => els.filter((e) => new RegExp(source).test(e.getAttribute('aria-label') ?? '')).map((e) => e.querySelector('[data-slot]')?.getAttribute('data-slot') ?? 'none'), ownedBy(slot).source);
+}
+
+/** The colour slots the marks on `name`'s rows draw, among the rows that carry a mark. */
+async function rosterSlots(rows: Locator, name: string): Promise<string[]> {
+  const mine = rows.filter({ has: rows.page().locator('[role=img][data-slot]'), hasText: name });
+  await mine.first().waitFor({ timeout: SHOWN_MS }).catch(() => undefined);
+  return mine.evaluateAll((els) => els.map((e) => e.querySelector('[role=img][data-slot]')?.getAttribute('data-slot') ?? 'none'));
 }
 
 /** Every plot on the map, row by row: each is labelled with its terrain; player marks are images. */
