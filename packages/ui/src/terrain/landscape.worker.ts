@@ -8,7 +8,12 @@ import { landscapeInput, type PainterReply, type PainterRequest } from './landsc
 const scope = self as unknown as { onmessage: ((e: MessageEvent<PainterRequest>) => void) | null; postMessage(reply: PainterReply): void };
 
 scope.onmessage = async ({ data: { id, job } }) => {
-  const ctx = typeof OffscreenCanvas === 'undefined' ? null : new OffscreenCanvas(1, 1).getContext('2d');
+  let ctx: OffscreenCanvasRenderingContext2D | null = null;
+  try {
+    ctx = typeof OffscreenCanvas === 'undefined' ? null : new OffscreenCanvas(1, 1).getContext('2d');
+  } catch {
+    // Some browsers throw rather than answer null; either way this worker can never paint.
+  }
   if (!ctx) {
     scope.postMessage({ id, error: 'no 2D OffscreenCanvas in a worker', incapable: true });
     return;

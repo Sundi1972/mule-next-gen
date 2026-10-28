@@ -106,10 +106,10 @@ function onThisThread(job: LandscapeJob): Promise<string> {
 class WorkerGone extends Error {}
 
 /**
- * How long a worker may take over one picture before it counts as hung. The largest picture, a 19×11 map at
- * 180 px a plot (6.8 million pixels), takes about 4 s on a 2024 laptop; a phone four to six times slower takes
- * 16-24 s. Giving up on a working worker repaints on the main thread, the freeze itself, so the bound stays clear
- * of that; a hung worker costs a map its picture for at most this long, once a page.
+ * How long a worker may take over one picture, while the page shows, before it counts as hung. The largest
+ * picture, a 19×11 map at 180 px a plot (6.8 million pixels), takes about 4 s on a 2024 laptop; a phone four to
+ * six times slower takes 16-24 s. Giving up on a working worker repaints on the main thread, the freeze itself,
+ * so the bound stays clear of that; a hung worker costs a map its picture for this long, once a page.
  */
 const WORKER_TIMEOUT_MS = 30_000;
 
@@ -131,9 +131,10 @@ function landscapeWorker(): Worker | null {
     if ('blob' in data) reply?.resolve(URL.createObjectURL(data.blob));
     else reply?.reject(data.incapable ? new WorkerGone(data.error) : new Error(data.error));
   };
+  // A worker that errors is gone, with a job in hand or between jobs.
   worker.onerror = (e) => {
     e.preventDefault();
-    for (const reply of [...replies.values()]) reply.reject(new WorkerGone(`landscape worker: ${e.message}`));
+    dropWorker();
   };
   return worker;
 }
@@ -147,13 +148,23 @@ function dropWorker(): void {
 function inWorker(w: Worker, job: LandscapeJob): Promise<string> {
   const id = ++lastId;
   return new Promise((resolve, reject) => {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    // The wait runs only while the page shows, and starts over when it comes back: a phone locked mid-paint may
+    // have paused its worker, and giving up on it would repaint on the main thread.
+    const arm = () => {
+      clearTimeout(timeout);
+      timeout = document.hidden ? undefined : setTimeout(() => (document.hidden ? arm() : settle(giveUp)), WORKER_TIMEOUT_MS);
+    };
+    const giveUp = () => reject(new WorkerGone(`no picture from the worker in ${WORKER_TIMEOUT_MS / 1000} s`));
     const settle = (fn: () => void) => {
       clearTimeout(timeout);
+      document.removeEventListener('visibilitychange', arm);
       replies.delete(id);
       fn();
     };
-    const timeout = setTimeout(() => settle(() => reject(new WorkerGone(`no picture from the worker in ${WORKER_TIMEOUT_MS / 1000} s`))), WORKER_TIMEOUT_MS);
     replies.set(id, { resolve: (url) => settle(() => resolve(url)), reject: (err) => settle(() => reject(err)) });
+    document.addEventListener('visibilitychange', arm);
+    arm();
     markPaint(job, 'worker');
     w.postMessage({ id, job } satisfies PainterRequest);
   });
