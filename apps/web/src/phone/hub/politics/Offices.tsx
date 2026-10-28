@@ -1,40 +1,56 @@
-import { useEffect } from 'react';
+import { POLITICS, type Office } from '@mule/engine';
+import { Fragment, useEffect } from 'react';
 import { usePhoneGame } from '../../game';
 import { useHub } from '../Hub';
 import { Who } from './parts';
+import { OFFICE_NAME } from './words';
 
-/** Who holds which office, the Land Baron and the next election, across the top of planning. */
+/** Who holds which office until when, and the next election, as one line on the hub; it opens the election's desks. */
 export function Offices() {
   const { view, self } = usePhoneGame();
-  const politics = view.politics!;
-  const { governor, sheriff, baron, term, next, election } = politics;
+  const { governor, election } = view.politics!;
   useElectionDesks(election?.stage ?? null, governor === self.id);
-  const open = election !== null && election.stage !== 'over';
-  const note = open ? `ELECTION NOW${next ? ` · NEXT M${next}` : ''}` : next ? `NEXT ELECTION M${next}` : null;
-  const terms = term ? `M${term[0]}–${term[1]}` : '';
-  const plots = view.players.find((p) => p.id === baron)?.plots ?? 0;
+  return <OfficesLine />;
+}
+
+/** The offices line alone: "Governor: Kai, until month 6 · Next election: month 7". */
+export function OfficesLine() {
+  const { view } = usePhoneGame();
+  const politics = view.politics!;
+  const held = POLITICS.offices.flatMap((office) => {
+    const id = politics[office];
+    return id ? [{ office, id }] : [];
+  });
+  // Until the result is out the server still sends the old term, which ended last month.
+  const open = politics.election !== null && politics.election.stage !== 'over';
+  const until = open ? null : (politics.term?.[1] ?? null);
+  const election = open ? 'Election: this month' : politics.next !== null ? `Next election: month ${politics.next}` : null;
+  if (held.length === 0 && election === null) return null;
   return (
-    <div
-      className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-control border border-holo-line bg-panel px-2 py-1 text-xs @min-[1100px]/shell:gap-x-5 @min-[1100px]/shell:px-3 @min-[1100px]/shell:py-1.5 @min-[1100px]/shell:text-sm"
-      data-testid="offices"
-    >
-      {governor && (
-        <span>
-          Governor <Who view={view} id={governor} size={14} /> <span className="font-mono text-ink-3">{terms}</span>
-        </span>
+    <p className="flex flex-wrap items-center gap-x-1 text-[11px] text-ink-2 @min-[1100px]/shell:gap-x-1.5 @min-[1100px]/shell:text-sm" data-testid="roadmap-offices">
+      {held.map(({ office, id }, i) => (
+        <Fragment key={office}>
+          {i > 0 && ' · '}
+          <OfficeHolder office={office} id={id} until={until} />
+        </Fragment>
+      ))}
+      {election !== null && (
+        <>
+          {held.length > 0 && ' · '}
+          <span data-testid="next-election">{election}</span>
+        </>
       )}
-      {sheriff && (
-        <span>
-          Sheriff <Who view={view} id={sheriff} size={14} /> <span className="font-mono text-ink-3">{terms}</span>
-        </span>
-      )}
-      {baron && (
-        <span>
-          Land Baron <Who view={view} id={baron} size={14} /> <span className="font-mono text-ink-3">{plots} PLOTS</span>
-        </span>
-      )}
-      {note && <span className="ml-auto font-mono text-ink-3">{note}</span>}
-    </div>
+    </p>
+  );
+}
+
+function OfficeHolder({ office, id, until }: { office: Office; id: string; until: number | null }) {
+  const { view } = usePhoneGame();
+  return (
+    <span data-testid={`office-${office}`}>
+      {OFFICE_NAME[office]}: <Who view={view} id={id} size={12} />
+      {until !== null && `, until month ${until}`}
+    </span>
   );
 }
 

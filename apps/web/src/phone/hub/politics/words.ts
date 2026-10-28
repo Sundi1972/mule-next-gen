@@ -46,11 +46,6 @@ export function howWon(office: Office, how: ElectionHow, baron: string | null): 
   }
 }
 
-/** A change in percentage points: "+3", "-2", "±0". */
-export function change(points: number): string {
-  return points === 0 ? '±0' : points > 0 ? `+${points}` : `${points}`;
-}
-
 /** The last month of a term that ends before the next election, or with the game. */
 export function termEnd(next: number | null, maxMonths: number): number {
   return next === null ? maxMonths : next - 1;
