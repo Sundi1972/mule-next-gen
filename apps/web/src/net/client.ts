@@ -23,6 +23,8 @@ const PING_EVERY_MS = 15_000;
 const MAX_BACKOFF_MS = 5_000;
 const MAX_CHAT = 80;
 const TOAST_MS = 3_500;
+/** Milliseconds after which an unanswered move-code request counts as lost: the room drops messages over its rate limit without a reply. */
+export const HANDOFF_LOST_MS = 5_000;
 
 export type Status = 'idle' | 'connecting' | 'open' | 'reconnecting';
 
@@ -74,6 +76,8 @@ export interface ClientOptions {
   socket: SocketFactory;
   storage?: KeyValueStore | null;
   now?: () => number;
+  /** A clock the device can't change (performance.now()), to tell its clock jumping from time passing. */
+  monotonic?: () => number;
   setTimeout?: (fn: () => void, ms: number) => unknown;
   clearTimeout?: (handle: unknown) => void;
 }

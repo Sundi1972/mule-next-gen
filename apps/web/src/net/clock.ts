@@ -1,3 +1,6 @@
+/** Milliseconds the device clock may move apart from the monotonic clock between two samples before it counts as a jump. */
+export const CLOCK_JUMP_MS = 1_000;
+
 /**
  * Estimates the difference between the server's clock and this screen's,
  * from ping/pong round trips. The sample with the shortest round trip wins:

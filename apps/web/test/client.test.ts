@@ -1,7 +1,7 @@
 import type { MuleView, ServerEnvelope, TableView } from '@mule/protocol';
 import { describe, expect, it } from 'vitest';
-import { createRoom, socketUrl, TableClient, type SocketLike } from '../src/net/client';
-import { ClockSync } from '../src/net/clock';
+import { createRoom, HANDOFF_LOST_MS, socketUrl, TableClient, type SocketLike } from '../src/net/client';
+import { CLOCK_JUMP_MS, ClockSync } from '../src/net/clock';
 import { loadSeat, saveSeat, type KeyValueStore } from '../src/net/seat';
 
 class FakeSocket implements SocketLike {
@@ -12,7 +12,8 @@ class FakeSocket implements SocketLike {
   onclose: ((ev: unknown) => void) | null = null;
   onerror: ((ev: unknown) => void) | null = null;
   send(data: string) {
-    this.sent.push(JSON.parse(data));
+    // A closed WebSocket discards what is sent on it.
+    if (this.readyState !== 3) this.sent.push(JSON.parse(data));
   }
   close() {
     this.readyState = 3;
@@ -35,10 +36,14 @@ function memoryStore(): KeyValueStore & { data: Map<string, string> } {
   return { data, getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v), removeItem: (k) => void data.delete(k) };
 }
 
-/** A client with a fake socket, a manual clock and manual timers. */
+/**
+ * A client with a fake socket, manual timers and two manual clocks: the device clock (`now`, which `setNow` can
+ * jump) and the monotonic clock the timers run on. `advance` moves both.
+ */
 function setup(storage = memoryStore()) {
   const sockets: FakeSocket[] = [];
   let now = 1_000;
+  let mono = 0;
   let timers: { at: number; fn: () => void; id: number }[] = [];
   let nextTimer = 1;
   const client = new TableClient({
@@ -50,8 +55,9 @@ function setup(storage = memoryStore()) {
     },
     storage,
     now: () => now,
+    monotonic: () => mono,
     setTimeout: (fn, ms) => {
-      const t = { at: now + ms, fn, id: nextTimer++ };
+      const t = { at: mono + ms, fn, id: nextTimer++ };
       timers.push(t);
       return t.id;
     },
@@ -61,14 +67,15 @@ function setup(storage = memoryStore()) {
   });
   const advance = (ms: number) => {
     now += ms;
-    for (let due = timers.filter((t) => t.at <= now); due.length > 0; due = timers.filter((t) => t.at <= now)) {
+    mono += ms;
+    for (let due = timers.filter((t) => t.at <= mono); due.length > 0; due = timers.filter((t) => t.at <= mono)) {
       for (const t of due) {
         timers = timers.filter((x) => x !== t);
         t.fn();
       }
     }
   };
-  return { client, sockets, storage, advance, setNow: (n: number) => (now = n), last: () => sockets.at(-1)! };
+  return { client, sockets, storage, advance, setNow: (n: number) => (now = n), now: () => now, mono: () => mono, last: () => sockets.at(-1)! };
 }
 
 const lobbyView = (code: string): TableView<MuleView> => ({ code, status: 'lobby', hostId: 's1', seats: [], boards: 0, game: null });
@@ -183,7 +190,7 @@ describe('TableClient', () => {
     expect(client.getState().chat).toHaveLength(1);
   });
 
-  it('B-AC-6: leaving tells the room, then forgets the seat and disconnects', () => {
+  it('FM-16: leaving tells the room, then forgets the seat and disconnects', () => {
     const { client, last, storage } = setup();
     client.join('KRTX', 'Heiko');
     last().open();
@@ -207,7 +214,7 @@ describe('TableClient', () => {
     expect(last().sent.at(-1)).toEqual({ t: 'color', color: 3 });
   });
 
-  it('B-AC-6: leaving before the socket opens sends nothing, and still forgets the seat', () => {
+  it('FM-17: leaving before the socket opens sends nothing, and still forgets the seat', () => {
     const storage = memoryStore();
     saveSeat(storage, { code: 'KRTX', token: 'secret', name: 'Heiko' });
     const { client, last } = setup(storage);
@@ -225,7 +232,7 @@ describe('TableClient', () => {
     { reason: 'closed', role: 'player', message: 'The host closed the table' },
     { reason: 'moved', role: 'player', message: "You're playing on another device now" },
     { reason: 'closed', role: 'board', message: 'The host closed the table' },
-  ] as const)('B-AC-6: removed $reason on a $role → a phone forgets its seat (a board keeps the one saved beside it), the start screen gives the reason, and nothing reconnects', ({ reason, role, message }) => {
+  ] as const)('FM-18: removed $reason on a $role → a phone forgets its seat (a board keeps the one saved beside it), the start screen gives the reason, and nothing reconnects', ({ reason, role, message }) => {
     const storage = memoryStore();
     const seat = { code: 'KRTX', token: 'secret', name: 'Heiko' };
     saveSeat(storage, seat);
@@ -460,6 +467,129 @@ describe('TableClient', () => {
       expect(loadSeat(storage)).toBeNull();
     },
   );
+
+  it.each([
+    { row: 'another room', join: (c: TableClient) => c.join('BBBB', 'Mia'), welcome: { code: 'BBBB', seatId: 's1', seatToken: 'b-token' }, asks: true },
+    { row: 'another seat of this room', join: (c: TableClient) => c.join('KRTX', 'Mia'), welcome: { code: 'KRTX', seatId: 's4', seatToken: 'reseated' }, asks: true },
+    { row: 'the same room and seat', join: (c: TableClient) => c.join('KRTX', 'Mia'), welcome: { code: 'KRTX', seatId: 's2', seatToken: 'secret' }, asks: false },
+  ])('FM-14: a welcome on the same connection to $row, with a move code shown, drops that code and asks the room for a new one: $asks', ({ join, welcome, asks }) => {
+    const t = seated();
+    t.client.handoff();
+    t.last().deliver({ t: 'handoffCode', code: 'old', expiresAt: 999_999 });
+    const sent = t.last().sent.length;
+
+    join(t.client);
+    t.last().deliver({ t: 'welcome', role: 'player', ...welcome });
+
+    expect(t.client.getState().handoffCode?.code ?? null).toBe(asks ? null : 'old');
+    expect(t.last().sent.slice(sent).filter((m) => m.t === 'handoff')).toEqual(asks ? [{ t: 'handoff' }] : []);
+    if (asks) {
+      t.last().deliver({ t: 'handoffCode', code: 'new', expiresAt: 999_999 });
+      expect(t.client.getState().handoffCode?.code).toBe('new');
+    }
+  });
+
+  it.each([
+    { row: 'it sent a token that is still saved', saved: { code: 'KRTX', token: 'stale', name: 'Mia' }, savedSince: null, kept: null },
+    {
+      row: 'it sent a token, and another tab saved its own since',
+      saved: { code: 'KRTX', token: 'stale', name: 'Mia' },
+      savedSince: { code: 'KRTX', token: 'other-tab', name: 'Lena' },
+      kept: { code: 'KRTX', token: 'other-tab', name: 'Lena' },
+    },
+    {
+      row: 'it joined by code, and another tab saved a seat for this room since',
+      saved: null,
+      savedSince: { code: 'KRTX', token: 'other-tab', name: 'Lena' },
+      kept: { code: 'KRTX', token: 'other-tab', name: 'Lena' },
+    },
+  ])('FM-15: a refused join forgets the saved seat only while it holds the token that join sent: $row', ({ saved, savedSince, kept }) => {
+    const storage = memoryStore();
+    if (saved) saveSeat(storage, saved);
+    const { client, last } = setup(storage);
+    client.join('KRTX', 'Mia');
+    last().open();
+    expect(last().sent[0]).toEqual({ t: 'join', code: 'KRTX', name: 'Mia', ...(saved ? { seatToken: saved.token } : {}) });
+    if (savedSince) saveSeat(storage, savedSince);
+
+    last().deliver({ t: 'error', message: 'The game has already started' });
+
+    expect(client.getState().status).toBe('idle');
+    expect(loadSeat(storage)).toEqual(kept);
+  });
+
+  it.each([
+    {
+      row: 'is never answered counts as lost after HANDOFF_LOST_MS, so a code asked for then shows',
+      act: (t: ReturnType<typeof seated>) => (t.client.handoff(), t.advance(HANDOFF_LOST_MS), t.client.handoff()),
+      replies: ['live'],
+      shows: 'live',
+    },
+    {
+      row: 'is never answered still holds a later code back 1 ms before that',
+      act: (t: ReturnType<typeof seated>) => (t.client.handoff(), t.advance(HANDOFF_LOST_MS - 1), t.client.handoff()),
+      replies: ['live'],
+      shows: null,
+    },
+    {
+      row: 'is answered in time is never counted lost later, so of two asked within one round trip only the newest shows',
+      act: (t: ReturnType<typeof seated>) => {
+        t.client.handoff();
+        t.last().deliver({ t: 'handoffCode', code: 'first', expiresAt: 999_999 });
+        t.advance(HANDOFF_LOST_MS - 1);
+        t.client.handoff();
+        t.client.handoff();
+        t.advance(1);
+      },
+      replies: ['dead', 'live'],
+      shows: 'live',
+    },
+  ])('FM-19: a move-code request that $row', ({ act, replies, shows }) => {
+    const t = seated();
+    act(t);
+
+    for (const code of replies.slice(0, -1)) {
+      t.last().deliver({ t: 'handoffCode', code, expiresAt: 999_999 });
+      expect(t.client.getState().handoffCode).toBeNull();
+    }
+    t.last().deliver({ t: 'handoffCode', code: replies.at(-1)!, expiresAt: 999_999 });
+    expect(t.client.getState().handoffCode?.code ?? null).toBe(shows);
+  });
+
+  it.each([
+    { row: 'jumps 2 minutes ahead', jump: 120_000, offset: -70_000, resyncs: true, liveFor: 120_000 },
+    { row: 'jumps 2 minutes back', jump: -120_000, offset: 170_000, resyncs: true, liveFor: 120_000 },
+    { row: 'moves 1 ms more than CLOCK_JUMP_MS from the monotonic clock', jump: CLOCK_JUMP_MS + 1, offset: 50_000 - (CLOCK_JUMP_MS + 1), resyncs: true, liveFor: 120_000 },
+    { row: 'keeps time with the monotonic clock', jump: 0, offset: 50_000, resyncs: false, liveFor: 120_000 },
+    { row: 'moves CLOCK_JUMP_MS from the monotonic clock', jump: CLOCK_JUMP_MS, offset: 50_000, resyncs: false, liveFor: 120_000 - CLOCK_JUMP_MS },
+  ])('FM-20: when the device clock $row, the next pong re-syncs the clock ($resyncs), and a move code asked for then stays live for $liveFor ms of server time', ({ jump, offset, resyncs, liveFor }) => {
+    const t = seated();
+    const start = t.mono();
+    const server = () => 51_000 + t.mono() - start;
+    // The server's clock runs 50 s ahead; this round trip took no time, so it stays the best sample.
+    t.last().deliver({ t: 'pong', clientTime: t.now(), serverTime: server() });
+    expect(t.client.getState().clockOffset).toBe(50_000);
+    t.advance(10_000);
+
+    t.setNow(t.now() + jump);
+    t.advance(5_000);
+    const ping = t.last().sent.filter((m) => m.t === 'ping').at(-1)!;
+    t.advance(20);
+    t.last().deliver({ t: 'pong', clientTime: ping.clientTime as number, serverTime: server() - 10 });
+
+    expect(t.client.getState().clockOffset).toBe(offset);
+    const pings = () => t.last().sent.filter((m) => m.t === 'ping').length;
+    const before = pings();
+    t.advance(450);
+    expect(pings() - before).toBe(resyncs ? 4 : 0);
+
+    t.client.handoff();
+    t.last().deliver({ t: 'handoffCode', code: 'fresh', expiresAt: server() + 120_000 });
+    t.advance(liveFor - 1);
+    expect(t.client.getState().handoffCode).toMatchObject({ code: 'fresh', expired: false });
+    t.advance(1);
+    expect(t.client.getState().handoffCode).toMatchObject({ code: 'fresh', expired: true });
+  });
 });
 
 describe('ClockSync', () => {
