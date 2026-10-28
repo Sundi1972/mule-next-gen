@@ -43,7 +43,7 @@ All three goals trace to Mission G-4: "The table plays politics: players make an
 
 ### Decisions with this §0 (ruled by Heiko, 2026-10-22: all three as recommended)
 
-- **D1 · Slice order.** Recommended: (1) elections, Governor and sales tax, vote weight and the Land Baron; (2) the council and its laws; (3) deal cards and reputation; (4) sabotage and the Sheriff; (5) the budget lines, the overrule vote and the inquiry. Votes come first because deal cards are mostly about votes, and the election reveal is the most visible table moment. The alternative is the spawn doc's order (diplomacy first), which builds deal cards before there is a vote to promise.
+- **D1 · Slice order.** Recommended: (1) elections, Governor and sales tax, vote weight and the Land Baron; (2) the council and its laws; (3) deal cards and reputation; (4) sabotage and the Sheriff; (5) the budget lines, the overrule vote and the inquiry. Votes come first because deal cards are mostly about votes, and the election reveal is the most visible table moment. The alternative is the spawn doc's order (diplomacy first), which builds deal cards before there is a vote to promise. *(AM-13, 2026-10-28: slice 5 also has the Governor spend the fund on community projects; prestige objects come later; the colony's success score is WS6's.)*
 - **D2 · Laws in v1.** Recommended: the six laws that only move money or block an action: export tax, land tax, pollution tax, emission cap, sabotage ban, and (from slice 4) the Sheriff's fines under it. The other six wait for the systems named in the non-goals. Alternative: all twelve, which puts named edits into WS1's store and WS3's auction now and roughly doubles slice 2.
 - **D3 · Balance.** Taxes, fines, pay and Welfare move money, so each slice that touches money ships with sim rows on both seed sets and needs Heiko's OK, with WS1 measuring. Recommended: politics is a host option, on by default (as sabotage is), so the sim and Beginner mode can run with it off.
 
@@ -747,6 +747,31 @@ because   fairness: a seat number must not decide offices; no RNG, so the rule s
           explainable and replays from seed + actions
 goal      P-1 — still met
 folded    RULE-3 text; T-AC-2's row-6 and appointment tests; WS1 re-measures terms by seat
+```
+
+```
+AM-13 · 2026-10-28 · Heiko (via PM) · planning direction for slices 2+
+
+target    §0 D1 slice 5 (budget), later slices; no slice-1 change
+did       Heiko: the colony budget is a separate pot filled from taxes, fines and the like;
+          the Governor spends it on community projects; the colony's success is measured by
+          how wealthy the colony is and how good its environment is, and later by prestige
+          (the colony can buy prestige objects). Slice 1 already keeps the fund apart (design
+          01; taxes pay into treasury.money, office pay comes out of it). Folded into the
+          later slices:
+          - slice 5 (budget lines) gains the Governor spending the fund on community
+            projects: design 03's colony projects and design 05's five budget lines;
+          - a later slice adds prestige objects the colony buys (not in the design yet:
+            needs its own design and Heiko's approval);
+          - the colony's success score at game end is WS6's design. The fund records today:
+            balance (treasury.money), taxes paid per player (treasury.paid) and the
+            month-end balance in each MonthReport (colonyFund, beside air). Slice 5 adds a
+            per-month ledger in the MonthReport: money in by source (sales tax, later the
+            other taxes, fines, donations) and money out by line (office pay, each budget
+            line, projects), so the score can read wealth, spending and projects built.
+because   G-4: the colony, not only each player, has something to win or lose
+goal      P-1 — still met; slice 5's scope grows by projects, the colony score is WS6's
+folded    D1 note below; slice 2+ planning
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
