@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, AI_LEVELS, AI_PERSONAS, createGame, EVENTS, GAME, GOODS, mulePriceFor, observe, STRATEGIST, type GameState } from '@mule/engine';
+import { advancePhase, AI_LEVELS, AI_PERSONAS, createGame, EVENTS, GAME, GOODS, mulePriceFor, observe, STRATEGIST, walkSeconds, type GameState } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
 import { AiSeat } from '../src/seat.js';
 import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, tradeDecision, wantsPlot } from '../src/strategist.js';
@@ -115,6 +115,33 @@ describe('cash reserve', () => {
     const careful: Mind = { ...traderMind, persona: { ...AI_PERSONAS.trader, reserve: 20 } };
     expect(waterVeto((a) => a.cost + a.keepBack - Math.ceil(a.net) - 1, careful)).toMatch(/kept for upkeep/);
     expect(waterVeto((a) => a.cost - 1)).not.toBeNull();
+  });
+});
+
+describe('walking', () => {
+  it('T-AC-19: a walk-aware seat vetoes a MULE whose walk to the corral and on to the plot is longer than its time left', () => {
+    // ai0, rich and fed, holds one idle plot well away from the store and stands in the store.
+    const state = developmentWithWater(40);
+    const store = state.tiles.find((t) => t.terrain === 'store')!;
+    const far = state.tiles.find((t) => !t.owner && t.terrain !== 'store' && Math.abs(t.x - store.x) + Math.abs(t.y - store.y) >= 4)!;
+    far.owner = 'ai0';
+    const me = state.players[0]!;
+    me.money = 5_000;
+    me.stock.food = 20;
+    const index = state.tiles.indexOf(far);
+    const taps = 4;
+    const walk = walkSeconds(state, 'ai0', 'store', 'corral') + walkSeconds(state, 'ai0', 'corral', index);
+    const farm = (left?: number) =>
+      developDecision(observe(state, 'ai0'), traderMind, 0, left === undefined ? undefined : { at: 'store', left, taps }).all.find(
+        (c) => c.key === `install:food:${index}`,
+      )!;
+    expect(walk).toBeGreaterThan(2);
+    // Without a walk the farm is live, as today.
+    expect(farm().veto).toBeNull();
+    // A moment short of the walk and the taps: vetoed, and the walk is named.
+    expect(farm(walk + taps - 0.1).veto).toMatch(/walk/);
+    // Time enough: live.
+    expect(farm(walk + taps + 0.1).veto).toBeNull();
   });
 });
 

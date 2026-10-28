@@ -7,8 +7,10 @@
  *   pnpm sim -- --games 100 --players 4 --level trader
  *   pnpm sim -- --persona cautious     (every seat the same persona; default: they rotate)
  *   pnpm sim -- --politics off         (no offices, elections or Governor's tax; default: on, as at real tables)
+ *   pnpm sim -- --set SPECIES_PERK.zipwingSpeed=1.5   (a config number for this run; repeatable; the header lists them)
  */
-import { AI_LEVELS, AI_PERSONAS, colonyFailed, GOOD_CONFIG, GOODS, score, type AiLevelId, type AiPersonaId } from '@mule/engine';
+import * as engine from '@mule/engine';
+import { AI_LEVELS, AI_PERSONAS, colonyFailed, GOOD_CONFIG, GOODS, score, type AiLevelId, type AiPersonaId, type GameState } from '@mule/engine';
 import { simSeats } from './lineup.js';
 import { playGame } from './play.js';
 
@@ -22,13 +24,35 @@ function argText(name: string): string | null {
   return i >= 0 ? (process.argv[i + 1] ?? null) : null;
 }
 
+/**
+ * Sets each `BLOCK.key=value` on the engine's config before the games, so a sweep edits no file; returns them for
+ * the report's header. A path that names no number in config is refused.
+ */
+export function applySets(sets: readonly string[]): string[] {
+  for (const set of sets) {
+    const [path = '', text = ''] = set.split('=');
+    const keys = path.split('.');
+    const key = keys.pop()!;
+    const block = keys.reduce<unknown>((at, k) => (at as Record<string, unknown> | undefined)?.[k], engine) as Record<string, unknown> | undefined;
+    const value = Number(text);
+    if (keys.length === 0 || typeof block?.[key] !== 'number' || text.trim() === '' || !Number.isFinite(value)) {
+      throw new Error(`--set ${set}: ${path} names no number in config, or ${text} is not one`);
+    }
+    block[key] = value;
+  }
+  return [...sets];
+}
+
 const pct = (n: number, of: number) => `${((n / Math.max(1, of)) * 100).toFixed(0)}%`;
+/** A player hungry this many months in a row is in the hunger spiral the report counts (Heiko's question). */
+const SPIRAL_MONTHS = 3; // literal-ok: the report's definition of the spiral, not a game rule
 const quantile = (values: number[], q: number) => {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] ?? 0;
 };
 
 function main() {
+  const overrides = applySets(process.argv.flatMap((a, i) => (a === '--set' ? [process.argv[i + 1] ?? ''] : [])));
   const games = arg('games', 100);
   const players = arg('players', 4);
   const first = arg('seed', 1);
@@ -36,6 +60,11 @@ function main() {
   const persona = argText('persona') as AiPersonaId | null;
   if (!(level in AI_LEVELS)) throw new Error(`Unknown level ${level}; use ${Object.keys(AI_LEVELS).join(', ')}`);
   if (persona && !(persona in AI_PERSONAS)) throw new Error(`Unknown persona ${persona}; use ${Object.keys(AI_PERSONAS).join(', ')}`);
+  // `--walking off` plays the game as it was before walking cost development time.
+  const walking = argText('walking') !== 'off';
+  let mulesLost = 0;
+  let playerGames = 0;
+  let spirals = 0;
   const byPersona: Record<string, number> = {};
   const prices = Object.fromEntries(GOODS.map((g) => [g, [] as number[]]));
   const mulePrices: number[] = [];
@@ -69,7 +98,22 @@ function main() {
 
   for (let seed = first; seed < first + games; seed++) {
     const specs = simSeats(players, level, seed, persona);
-    const { state, broke, auction: a, lots: l } = playGame(seed, specs, { politics, onPhase });
+    // Who starts each development hungry, for the spiral: a player hungry SPIRAL_MONTHS months running.
+    const hungryRun = new Map<string, { run: number; spiral: boolean }>();
+    const onEachPhase = (s: GameState) => {
+      onPhase(s);
+      if (s.phase !== 'development') return;
+      for (const p of s.players) {
+        const h = hungryRun.get(p.id) ?? { run: 0, spiral: false };
+        h.run = p.hungry ? h.run + 1 : 0;
+        h.spiral ||= h.run >= SPIRAL_MONTHS;
+        hungryRun.set(p.id, h);
+      }
+    };
+    const { state, broke, auction: a, lots: l, mulesLost: lost } = playGame(seed, specs, { politics, walking, onPhase: onEachPhase });
+    mulesLost += lost;
+    playerGames += state.players.length;
+    spirals += [...hungryRun.values()].filter((h) => h.spiral).length;
     pol.taxPaid += Object.values(state.treasury.paid).reduce((n, x) => n + x, 0);
     pol.terms += Object.values(state.politics?.terms ?? {}).reduce((n, x) => n + x, 0);
     for (const k of ['between', 'store', 'ship', 'ms'] as const) auction[k] += a[k];
@@ -103,6 +147,7 @@ function main() {
   const check = (ok: boolean) => (ok ? 'ok  ' : 'MISS');
   const muleMedian = quantile(mulePrices, 0.5);
   const mule90 = quantile(mulePrices, 0.9);
+  if (overrides.length > 0) console.log(`config: ${overrides.join(' ')}`);
   console.log(`${games} games (seeds ${first} to ${first + games - 1}), ${players} strategist seats at ${level}, ${(months / games).toFixed(1)} months on average\n`);
   console.log(`${check(muleMedian >= 150 && muleMedian <= 300)} MULE price median ${muleMedian} (target 150 to 300)`);
   console.log(`${check(mule90 < 500)} MULE price 90th percentile ${mule90} (target under 500)`);
@@ -114,6 +159,8 @@ function main() {
   console.log(`${check(minFund >= 0)} Lowest colony fund ${minFund} (target 0 or more)`);
   console.log(`${check(collapsed / games <= 0.1)} Ended in Collapse: ${pct(collapsed, games)} (target 10% or less)`);
   console.log(`     Store capital: lowest ${minCapital} (no check: the store never runs out of money)`);
+  console.log(`     MULEs lost to the clock: ${(mulesLost / games).toFixed(1)} a game (walking ${walking ? 'on' : 'off'}; no check)`);
+  console.log(`     Players hungry ${SPIRAL_MONTHS} or more months running: ${pct(spirals, playerGames)} (no check)`);
   console.log(`     Wins by species:${Object.entries(wins).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
   console.log(`     Wins by persona: ${Object.entries(byPersona).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
   console.log(
