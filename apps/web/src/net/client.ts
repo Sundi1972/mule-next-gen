@@ -32,6 +32,7 @@ const REMOVED: Record<RemovedReason, string> = {
   kicked: 'The host removed you from the table',
   closed: 'The host closed the table',
   moved: "You're playing on another device now",
+  error: 'Something went wrong and the table had to stop. Start a new game to play again.',
 };
 
 export interface Toast {
@@ -58,10 +59,15 @@ export interface ClientState {
   notice: string | null;
   /** Milliseconds to add to Date.now() for the server's clock. */
   clockOffset: number;
+  /** The one-time code that moves this seat to another device: null while none has arrived since it was asked for. */
+  handoffCode: HandoffCode | null;
 }
 
-/** Where the client wants to be: at a seat, or watching as a board. */
-type Target = { kind: 'player'; code: string; name: string } | { kind: 'board'; code: string };
+/** `expiresAt` is server time. An expired code stays until a new one is asked for or the dialog closes. */
+export type HandoffCode = Omit<Extract<ServerEnvelope<MuleView>, { t: 'handoffCode' }>, 't'> & { expired: boolean };
+
+/** Where the client wants to be: at a seat (moved here by a handoff code, or not), or watching as a board. */
+type Target = { kind: 'player'; code: string; name: string; handoff?: string } | { kind: 'board'; code: string };
 
 export interface ClientOptions {
   url: string;
@@ -78,7 +84,7 @@ export interface ClientOptions {
  * reload or a dropped connection, and reconnects with a growing pause.
  */
 export class TableClient {
-  private state: ClientState = { status: 'idle', role: null, code: null, seatId: null, view: null, chat: [], emotes: [], toasts: [], notice: null, clockOffset: 0 };
+  private state: ClientState = { status: 'idle', role: null, code: null, seatId: null, view: null, chat: [], emotes: [], toasts: [], notice: null, clockOffset: 0, handoffCode: null };
   private readonly listeners = new Set<() => void>();
   private readonly clock = new ClockSync();
   private socket: SocketLike | null = null;
@@ -88,6 +94,9 @@ export class TableClient {
   private attempts = 0;
   private retry: unknown = null;
   private pinger: unknown = null;
+  private handoffExpiry: unknown = null;
+  /** True while the move dialog is open. */
+  private handoffWanted = false;
   private nextId = 1;
   private readonly now: () => number;
   private readonly later: (fn: () => void, ms: number) => unknown;
@@ -127,9 +136,12 @@ export class TableClient {
 
   // --- Where to be ------------------------------------------------------------
 
-  /** Take a seat at the table with this code, or the saved seat back if it is for this table. */
-  join(code: string, name: string): void {
-    this.goTo({ kind: 'player', code: code.trim().toUpperCase(), name });
+  /**
+   * Take a seat at the table with this code, or the saved seat back if it is for this table.
+   * With a handoff code from another device's link, take that device's seat instead.
+   */
+  join(code: string, name: string, handoff?: string): void {
+    this.goTo({ kind: 'player', code: code.trim().toUpperCase(), name, ...(handoff ? { handoff } : {}) });
   }
 
   /** Connect as a big screen. */
@@ -148,6 +160,7 @@ export class TableClient {
   private letGo(notice: string | null): void {
     this.target = null;
     this.stopTimers();
+    this.closeHandoff();
     const s = this.socket;
     this.socket = null;
     s?.close();
@@ -214,6 +227,10 @@ export class TableClient {
       this.raw({ t: 'board', code: target.code });
       return;
     }
+    if (target.handoff !== undefined) {
+      this.raw({ t: 'join', code: target.code, name: target.name, handoff: target.handoff });
+      return;
+    }
     const saved = loadSeat(this.storage);
     const token = saved && saved.code === target.code ? saved.token : undefined;
     this.raw({ t: 'join', code: target.code, name: target.name || saved?.name || '', ...(token ? { seatToken: token } : {}) });
@@ -251,12 +268,18 @@ export class TableClient {
         this.attempts = 0;
         if (msg.role === 'player' && msg.seatToken && this.target?.kind === 'player') {
           saveSeat(this.storage, { code: msg.code, token: msg.seatToken, name: this.target.name });
+          // A handoff code is spent once it lands; a reconnect comes back with the new token.
+          if (this.target.handoff !== undefined) this.target = { kind: 'player', code: this.target.code, name: this.target.name };
         }
         this.set({ role: msg.role, code: msg.code, seatId: msg.seatId });
         return;
       }
       case 'view':
+        this.learnName(msg.view);
         this.set({ view: msg.view });
+        return;
+      case 'handoffCode':
+        if (this.handoffWanted) this.setHandoff({ code: msg.code, expiresAt: msg.expiresAt });
         return;
       case 'chat': {
         if (this.state.chat.some((c) => c.id === msg.message.id)) return;
@@ -273,10 +296,13 @@ export class TableClient {
         this.clock.add(msg.clientTime, msg.serverTime, this.now());
         if (this.clock.offset !== this.state.clockOffset) this.set({ clockOffset: this.clock.offset });
         return;
-      case 'error':
-        if (this.joining) this.joinFailed();
-        this.toast(msg.message);
+      case 'error': {
+        // A refused link ("That link has expired") stays on the start screen; a toast would be gone before it is read.
+        const byLink = this.joining && this.target?.kind === 'player' && this.target.handoff !== undefined;
+        if (this.joining) this.joinFailed(byLink ? msg.message : null);
+        if (!byLink) this.toast(msg.message);
         return;
+      }
       case 'removed':
         // A board never holds a seat; the one saved here belongs to a phone tab in the same browser.
         if (this.state.role === 'player') clearSeat(this.storage);
@@ -285,18 +311,47 @@ export class TableClient {
     }
   }
 
-  /** The room turned this screen away: a stale seat token, an unknown code, a full or started table. */
-  private joinFailed(): void {
+  /** The room turned this screen away: a stale seat token or link, an unknown code, a full or started table. */
+  private joinFailed(notice: string | null): void {
     this.joining = false;
     const target = this.target;
     const saved = loadSeat(this.storage);
-    if (target && saved && saved.code === target.code) clearSeat(this.storage);
+    // A refused link says nothing about the token this browser saved.
+    const byLink = target?.kind === 'player' && target.handoff !== undefined;
+    if (target && !byLink && saved && saved.code === target.code) clearSeat(this.storage);
     this.target = null;
     const s = this.socket;
     this.socket = null;
     this.stopTimers();
     s?.close();
-    this.set({ status: 'idle', role: null, code: null, seatId: null, view: null });
+    this.set({ status: 'idle', role: null, code: null, seatId: null, view: null, ...(notice !== null ? { notice } : {}) });
+  }
+
+  /** A seat taken by a handoff code learns its name from the room, so the saved seat carries it. */
+  private learnName(view: TableView<MuleView>): void {
+    const target = this.target;
+    if (target?.kind !== 'player' || target.name) return;
+    const name = view.seats.find((s) => s.id === this.state.seatId)?.name;
+    if (!name) return;
+    this.target = { ...target, name };
+    const saved = loadSeat(this.storage);
+    if (saved && saved.code === target.code) saveSeat(this.storage, { ...saved, name });
+  }
+
+  /** Shows a handoff code, marked expired when its time is up; null drops it. Only the newest code has a pending expiry. */
+  private setHandoff(issued: Omit<HandoffCode, 'expired'> | null): void {
+    if (this.handoffExpiry !== null) this.cancel(this.handoffExpiry);
+    this.handoffExpiry = null;
+    if (!issued) {
+      if (this.state.handoffCode !== null) this.set({ handoffCode: null });
+      return;
+    }
+    const code = { ...issued, expired: false };
+    this.handoffExpiry = this.later(() => {
+      this.handoffExpiry = null;
+      this.set({ handoffCode: { ...code, expired: true } });
+    }, Math.max(0, code.expiresAt - this.serverNow()));
+    this.set({ handoffCode: code });
   }
 
   toast(message: string): void {
@@ -332,6 +387,11 @@ export class TableClient {
     this.send({ t: 'pick', pick: species });
   }
 
+  /** Takes a colour for this seat, in the lobby. */
+  color(colour: number): void {
+    this.send({ t: 'color', color: colour });
+  }
+
   start(): void {
     this.send({ t: 'start' });
   }
@@ -344,6 +404,20 @@ export class TableClient {
   /** The host ends the table for everyone, in the lobby. */
   closeTable(): void {
     this.send({ t: 'close' });
+  }
+
+  /** Asks the room for a one-time code that moves this seat to another device; it arrives as `handoffCode`. */
+  handoff(): void {
+    // The room kills the previous code when it issues the next one, so it must not show meanwhile.
+    this.setHandoff(null);
+    this.handoffWanted = true;
+    this.send({ t: 'handoff' });
+  }
+
+  /** The move dialog closed: forget the code, and one still on its way. Nothing is sent; the room lets an unused code expire. */
+  closeHandoff(): void {
+    this.handoffWanted = false;
+    this.setHandoff(null);
   }
 
   private send(msg: ClientEnvelope<MuleIntent>): void {

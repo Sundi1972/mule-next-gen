@@ -78,6 +78,17 @@
   --color-g-electronics: #22d3ee;
   --color-g-medicine: #fb7185;
 
+  /*
+   * Special fields: each wears the colour of the good it pays, so the colour teaches the effect. Aliases, so there is
+   * one palette and both themes follow. The relic pays no good of its own and borrows Energy's gold, the hue furthest
+   * from the other four. Shape, not colour, tells the kinds apart; the colour only helps.
+   */
+  --color-s-ruins: var(--color-g-alloy);
+  --color-s-crystalCavern: var(--color-g-crystite);
+  --color-s-geyser: var(--color-g-water);
+  --color-s-oasis: var(--color-g-food);
+  --color-s-relic: var(--color-g-energy);
+
   /* The MULE character's metal: its body, its outline and joints, its belly plate; its empty pod, dark in both themes. */
   --color-mule-metal: #c9d3df;
   --color-mule-shade: #2c3a49;

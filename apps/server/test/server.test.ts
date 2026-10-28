@@ -73,6 +73,16 @@ describe('game server', () => {
     expect((await phone.waitFor('error', (m) => m.message !== 'Bad message')).message).toBe('No game with that code');
   });
 
+  it('FM-kick-no-seat: rejects a kick that names no seat', async () => {
+    const { ws } = await start();
+    const phone = await screen(ws);
+    phone.send({ t: 'kick' });
+    expect((await phone.waitFor('error')).message).toBe('Bad message');
+    // A well-formed kick gets past the parse, so the line above is the parse's doing.
+    phone.send({ t: 'kick', seatId: 's1' });
+    expect((await phone.waitFor('error', (m) => m.message !== 'Bad message')).message).toBe('Join a game first');
+  });
+
   it('gives a dropped phone its seat back', async () => {
     const { http, ws } = await start();
     const { code } = (await (await fetch(`${http}/rooms`, { method: 'POST' })).json()) as { code: string };

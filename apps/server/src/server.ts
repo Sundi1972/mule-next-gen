@@ -42,6 +42,8 @@ export function createMuleServer(
     emotes: EMOTES,
     picks: SPECIES,
     isUserError: (err) => err instanceof RuleError || err instanceof TableError,
+    // The room has already ended itself; only the stack is logged, never what the players sent.
+    onError: (err) => console.error(`game error: ${err instanceof Error ? err.stack : String(err)}`),
   });
   const staticDir = options.staticDir && existsSync(options.staticDir) ? resolve(options.staticDir) : null;
 
@@ -147,13 +149,16 @@ function parse(text: string): ClientEnvelope<MuleIntent> | null {
   const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
   switch (m.t) {
     case 'join':
-      return str(m.code) && str(m.name) && (m.seatToken === undefined || str(m.seatToken)) ? (m as ClientEnvelope<MuleIntent>) : null;
+      return str(m.code) && str(m.name) && (m.seatToken === undefined || str(m.seatToken)) && (m.handoff === undefined || str(m.handoff))
+        ? (m as ClientEnvelope<MuleIntent>)
+        : null;
     case 'board':
       return str(m.code) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'addAi':
     case 'start':
     case 'close':
     case 'leave':
+    case 'handoff':
       return m as ClientEnvelope<MuleIntent>;
     case 'kick':
       return str(m.seatId) ? (m as ClientEnvelope<MuleIntent>) : null;
@@ -163,6 +168,8 @@ function parse(text: string): ClientEnvelope<MuleIntent> | null {
       return str(m.emote) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'pick':
       return str(m.pick) ? (m as ClientEnvelope<MuleIntent>) : null;
+    case 'color':
+      return num(m.color) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'ping':
       return num(m.clientTime) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'intent':

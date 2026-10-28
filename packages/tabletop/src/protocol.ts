@@ -6,8 +6,8 @@
 
 /** What a phone or a board sends. */
 export type ClientEnvelope<Intent> =
-  /** Take a seat, or take your old seat back with its token. */
-  | { t: 'join'; code: string; name: string; seatToken?: string }
+  /** Take a seat, take your old seat back with its token, or move a seat here with a handoff code. */
+  | { t: 'join'; code: string; name: string; seatToken?: string; handoff?: string }
   /** Connect a shared screen. It gets only the public view and has no controls. */
   | { t: 'board'; code: string }
   | { t: 'addAi' }
@@ -18,8 +18,12 @@ export type ClientEnvelope<Intent> =
   | { t: 'close' }
   /** Give up your seat in the lobby; after Start, only this screen lets go. */
   | { t: 'leave' }
+  /** Ask for a one-time code that moves this seat to another device. */
+  | { t: 'handoff' }
   /** Make this seat's one choice from the game's list, in the lobby. */
   | { t: 'pick'; pick: string }
+  /** Take this colour index for the seat, in the lobby. */
+  | { t: 'color'; color: number }
   | { t: 'intent'; intent: Intent }
   | { t: 'chat'; text: string; to?: string }
   | { t: 'emote'; emote: string }
@@ -33,8 +37,10 @@ export type ServerEnvelope<GameView> =
   | { t: 'emote'; from: string; emote: string }
   | { t: 'pong'; clientTime: number; serverTime: number }
   | { t: 'error'; message: string }
+  /** For this screen only: joining with `code` before `expiresAt` moves this seat to that device, once. */
+  | { t: 'handoffCode'; code: string; expiresAt: number }
   /** This screen no longer holds a seat or watches the room; the room refuses what it sends next. */
-  | { t: 'removed'; reason: 'kicked' | 'closed' | 'moved' };
+  | { t: 'removed'; reason: 'kicked' | 'closed' | 'moved' | 'error' };
 
 export interface ChatMessage {
   id: number;
@@ -50,6 +56,8 @@ export interface SeatView {
   name: string;
   isAi: boolean;
   connected: boolean;
+  /** The seat's colour index, unique at the table. */
+  color: number;
   /** The seat's choice from the game's list; absent until it has chosen. */
   pick?: string;
 }

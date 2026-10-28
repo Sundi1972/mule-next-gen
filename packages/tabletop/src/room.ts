@@ -3,6 +3,9 @@ import type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from './p
 /** A rule a player broke: shown to them, never a crash. */
 export class TableError extends Error {}
 
+/** How long a handoff code can move its seat to another device. See RULE-6. */
+const HANDOFF_TTL_MS = 2 * 60_000;
+
 export interface Connection<GameView> {
   send(msg: ServerEnvelope<GameView>): void;
 }
@@ -11,6 +14,8 @@ export interface SeatInfo {
   id: string;
   name: string;
   isAi: boolean;
+  /** The seat's colour index, unique at the table. */
+  color: number;
   /** Absent means not chosen: the game applies its own default. */
   pick?: string;
 }
@@ -33,6 +38,8 @@ export interface Game<Intent, GameView> {
   viewFor(seatId: string | null): GameView;
   /** A player's phone dropped or came back. The game may let AI play their routine moves meanwhile. */
   connectionChanged?(seatId: string, connected: boolean): void;
+  /** The seat's screen was replaced by another device; drop any input the old screen was holding. Not a disconnect. */
+  seatMoved?(seatId: string): void;
   dispose?(): void;
 }
 
@@ -40,6 +47,7 @@ export interface RoomOptions<Intent, GameView> {
   code: string;
   createGame(ctx: GameContext): Game<Intent, GameView>;
   minSeats?: number;
+  /** Also the number of colours (0..maxSeats−1), so a game with a fixed palette keeps it within the palette (6 for M.U.L.E.). */
   maxSeats?: number;
   aiNames?: string[];
   emotes?: readonly string[];
@@ -51,21 +59,25 @@ export interface RoomOptions<Intent, GameView> {
   isUserError?(err: unknown): boolean;
   now?(): number;
   newToken?(): string;
-  /** Called once the host has closed the room and it is disposed. */
+  /** Called once the room has ended, closed by the host or stopped by a game error, and is disposed. */
   onClose?(): void;
+  /** Hears a game error that ended the room, for logging. The players are only told the table stopped. */
+  onError?(err: unknown): void;
 }
 
 interface Seat<View> extends SeatInfo {
   token: string | null;
   conn: Connection<View> | null;
+  /** The seat's one live handoff code; a newer one replaces it, and it goes with the seat. */
+  handoff: { code: string; expiresAt: number } | null;
 }
 
 /**
  * One table: seats for players (human or AI), any number of boards, and the
  * game they play. Human seats have a secret token, so a phone that drops can
- * take its seat back. The host is the first connected human, and hosting
- * moves on when the host leaves. Before Start the host may kick a seat or close the room,
- * and a player may give up their seat.
+ * take its seat back, and a one-time handoff code moves a seat to another device.
+ * The host is the first connected human, and hosting moves on when the host leaves.
+ * Before Start the host may kick a seat or close the room, and a player may give up their seat.
  */
 export class Room<Intent, View> {
   readonly code: string;
@@ -76,6 +88,7 @@ export class Room<Intent, View> {
   private readonly picks: readonly string[] | undefined;
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private started = false;
+  private endedBy: 'closed' | 'error' | null = null;
   private nextSeat = 1;
   private chatId = 0;
   private broadcastQueued = false;
@@ -93,13 +106,21 @@ export class Room<Intent, View> {
       now: options.now ?? Date.now,
       newToken: options.newToken ?? (() => crypto.randomUUID()),
       onClose: options.onClose ?? (() => {}),
+      onError: options.onError ?? (() => {}),
     };
     this.game = options.createGame({
       now: this.opts.now,
       schedule: (ms, fn) => {
         const timer = setTimeout(() => {
           this.timers.delete(timer);
-          fn();
+          if (this.endedBy) return;
+          // A throw here would be uncaught and take the whole server down with this one table.
+          try {
+            fn();
+          } catch (err) {
+            this.opts.onError(err);
+            this.fail();
+          }
         }, ms);
         this.timers.add(timer);
         return () => {
@@ -123,10 +144,17 @@ export class Room<Intent, View> {
 
   /** Handles one message from a screen. `from` is null until the screen has joined. */
   receive(conn: Connection<View>, from: { seatId: string | null }, msg: ClientEnvelope<Intent>): void {
+    // A failed game must never see another message. A closed room has no game running and still refuses screens out loud.
+    if (this.endedBy === 'error') return;
     try {
       this.apply(conn, from, msg);
     } catch (err) {
-      if (!this.opts.isUserError(err)) throw err;
+      if (!this.opts.isUserError(err)) {
+        // A bug ends this table only; its state can no longer be trusted, and every other table plays on.
+        this.opts.onError(err);
+        this.fail();
+        return;
+      }
       conn.send({ t: 'error', message: (err as Error).message });
     }
   }
@@ -137,7 +165,7 @@ export class Room<Intent, View> {
       return;
     }
     if (msg.t === 'join') {
-      from.seatId = this.join(conn, msg.name, msg.seatToken);
+      from.seatId = this.join(conn, msg.name, msg.seatToken, msg.handoff);
       return;
     }
     if (msg.t === 'board') {
@@ -146,12 +174,15 @@ export class Room<Intent, View> {
       this.broadcast();
       return;
     }
-    const seatId = from.seatId;
-    if (!seatId || !this.seats.some((s) => s.id === seatId)) {
-      // A kicked or closed-out screen still carries its old seat id. Ids are never reused, so it can't land on another seat.
+    const seat = this.seats.find((s) => s.id === from.seatId);
+    if (!seat || seat.conn !== conn) {
+      // A kicked, closed-out or superseded screen still carries its old seat id. Ids are never reused, so it can't land on another seat.
       from.seatId = null;
+      // A screen another device took the seat from lets go of itself only. See AM-18.
+      if (seat && msg.t === 'leave') return;
       throw new TableError('Join the game first');
     }
+    const seatId = seat.id;
     switch (msg.t) {
       case 'addAi':
         this.requireHost(seatId);
@@ -165,7 +196,7 @@ export class Room<Intent, View> {
         if (this.started) throw new TableError('The game has already started');
         if (this.seats.length < this.opts.minSeats) throw new TableError(`At least ${this.opts.minSeats} players are needed`);
         this.started = true;
-        this.game.start(this.seats.map(({ id, name, isAi, pick }) => ({ id, name, isAi, ...(pick !== undefined ? { pick } : {}) })));
+        this.game.start(this.seats.map(({ id, name, isAi, color, pick }) => ({ id, name, isAi, color, ...(pick !== undefined ? { pick } : {}) })));
         this.broadcast();
         return;
       case 'kick':
@@ -176,10 +207,18 @@ export class Room<Intent, View> {
         this.close(seatId);
         return;
       case 'leave':
-        this.leave(conn, from, seatId);
+        this.leave(conn, from, seat);
+        return;
+      case 'handoff':
+        seat.handoff = { code: this.opts.newToken(), expiresAt: this.opts.now() + HANDOFF_TTL_MS };
+        conn.send({ t: 'handoffCode', ...seat.handoff });
         return;
       case 'pick':
         this.pick(seatId, msg.pick);
+        this.broadcast();
+        return;
+      case 'color':
+        this.paint(seatId, msg.color);
         this.broadcast();
         return;
       case 'intent':
@@ -197,7 +236,14 @@ export class Room<Intent, View> {
     }
   }
 
-  private join(conn: Connection<View>, name: string, token?: string): string {
+  private join(conn: Connection<View>, name: string, token?: string, handoff?: string): string {
+    const seat = handoff !== undefined ? this.moveHere(conn, handoff) : this.seatFor(conn, name, token);
+    conn.send({ t: 'welcome', code: this.code, role: 'player', seatId: seat.id, seatToken: seat.token });
+    this.broadcast();
+    return seat.id;
+  }
+
+  private seatFor(conn: Connection<View>, name: string, token?: string): Seat<View> {
     const back = token ? this.seats.find((s) => s.token === token) : undefined;
     let seat: Seat<View>;
     if (back) {
@@ -210,9 +256,24 @@ export class Room<Intent, View> {
       seat = this.addSeat(name.trim().slice(0, 16) || 'Player', false);
       seat.conn = conn;
     }
-    conn.send({ t: 'welcome', code: this.code, role: 'player', seatId: seat.id, seatToken: seat.token });
-    this.broadcast();
-    return seat.id;
+    return seat;
+  }
+
+  /** A live handoff code moves its seat here, once: the old screen is told and let go, and the seat gets a new token. See RULE-6. */
+  private moveHere(conn: Connection<View>, code: string): Seat<View> {
+    const now = this.opts.now();
+    const seat = this.seats.find((s) => s.handoff?.code === code && now < s.handoff.expiresAt);
+    if (!seat) throw new TableError('That link has expired');
+    seat.handoff = null;
+    const old = seat.conn;
+    seat.conn = conn;
+    seat.token = this.opts.newToken();
+    if (!old) this.game.connectionChanged?.(seat.id, true);
+    else if (old !== conn) {
+      old.send({ t: 'removed', reason: 'moved' });
+      this.game.seatMoved?.(seat.id);
+    }
+    return seat;
   }
 
   /** A screen's connection closed. */
@@ -229,9 +290,17 @@ export class Room<Intent, View> {
   }
 
   private addSeat(name: string, isAi: boolean): Seat<View> {
-    const seat: Seat<View> = { id: `s${this.nextSeat++}`, name, isAi, token: isAi ? null : this.opts.newToken(), conn: null };
+    const seat: Seat<View> = { id: `s${this.nextSeat++}`, name, isAi, color: this.lowestFreeColour(), token: isAi ? null : this.opts.newToken(), conn: null, handoff: null };
     this.seats.push(seat);
     return seat;
+  }
+
+  /** See RULE-7. Defined while a seat is free, since the palette has one colour per seat. */
+  private lowestFreeColour(): number {
+    const held = new Set(this.seats.map((s) => s.color));
+    let colour = 0;
+    while (held.has(colour)) colour++;
+    return colour;
   }
 
   private nextAiName(): string {
@@ -252,6 +321,18 @@ export class Room<Intent, View> {
     if (seat) seat.pick = pick;
   }
 
+  /** A human seat takes a colour before Start; an AI holding it moves to the lowest free one. See RULE-7. */
+  private paint(seatId: string, colour: number): void {
+    if (this.started) throw new TableError('The game has already started');
+    if (!Number.isInteger(colour) || colour < 0 || colour >= this.opts.maxSeats) throw new TableError('Unknown colour');
+    const seat = this.seats.find((s) => s.id === seatId)!;
+    const holder = this.seats.find((s) => s.color === colour && s !== seat);
+    if (holder && !holder.isAi) throw new TableError('That colour is taken');
+    seat.color = colour;
+    // Chosen once the sender let go of its own, so a full table still has one free.
+    if (holder) holder.color = this.lowestFreeColour();
+  }
+
   /** The host removes a seat, and its token with it, before Start. See RULE-5. */
   private kick(by: string, target: string): void {
     this.requireHost(by);
@@ -264,14 +345,8 @@ export class Room<Intent, View> {
   }
 
   /** In the lobby the sender's seat goes, token and all; after Start only this screen lets go and the seat waits, away. See RULE-5. */
-  private leave(conn: Connection<View>, from: { seatId: string | null }, seatId: string): void {
-    const seat = this.seats.find((s) => s.id === seatId);
-    // A screen another device took the seat from lets go of itself only.
-    if (seat?.conn !== conn) {
-      from.seatId = null;
-      return;
-    }
-    if (!this.started && seatId === this.hostId) throw new TableError('Close the table instead');
+  private leave(conn: Connection<View>, from: { seatId: string | null }, seat: Seat<View>): void {
+    if (!this.started && seat.id === this.hostId) throw new TableError('Close the table instead');
     from.seatId = null;
     if (this.started) {
       this.disconnect(conn);
@@ -285,10 +360,26 @@ export class Room<Intent, View> {
   private close(by: string): void {
     this.requireHost(by);
     if (this.started) throw new TableError('The game has already started');
-    this.everyone((c) => c.send({ t: 'removed', reason: 'closed' }));
+    this.end('closed');
+  }
+
+  /** Stops the room after a game error: every screen is told and let go, then the room is disposed. */
+  fail(): void {
+    this.end('error');
+  }
+
+  private end(reason: 'closed' | 'error'): void {
+    if (this.endedBy) return;
+    this.endedBy = reason;
+    this.everyone((c) => c.send({ t: 'removed', reason }));
     this.seats.length = 0;
     this.boards.clear();
-    this.dispose();
+    // The timers are already cleared when the game's own dispose runs; a throw there must still let the registry drop the room.
+    try {
+      this.dispose();
+    } catch (err) {
+      this.opts.onError(err);
+    }
     this.opts.onClose();
   }
 
@@ -336,6 +427,7 @@ export class Room<Intent, View> {
         name: s.name,
         isAi: s.isAi,
         connected: s.isAi || s.conn !== null,
+        color: s.color,
         ...(s.pick !== undefined ? { pick: s.pick } : {}),
       })),
       boards: this.boards.size,
