@@ -6,6 +6,7 @@ import { guideOf } from './guide';
 import { useGameKeys, useTunables, useWorld } from './loop';
 import { HALL } from './sim';
 import { NOTE } from './notes';
+import { ScrambleBanner } from './ScrambleLayer';
 import { ActionButton, conditionOf, GroundChip, Joystick, LeadChip, meOf, Money, OverCard, ruleOf, secondsLeft, YourStage } from './views';
 
 /** The portrait phone: 390 × 844, the size the e2e harness holds a phone upright at. */
@@ -135,6 +136,12 @@ export function PhoneLandscape() {
   const targetPx = g?.space === 'map' && me.space === 'map' ? onFrame({ x: g.at.x + 0.5, y: g.at.y + 0.5 }, 'map') : null;
   const fade = (r: Rect) => near(r, mePx, cell * 0.8) || near(r, targetPx, cell * 0.5);
   const stickFaded = fade(STICK_RECT);
+  const bannerRect: Rect =
+    me.space === 'hall'
+      ? { x0: hallX + hallW * 0.09, x1: hallX + hallW * 0.91, y0: L.h * 0.405, y1: L.h * 0.585 }
+      : { x0: STICK_RECT.x1 + 8, x1: BUTTON_RECT.x0 - 8, y0: L.h - cell * 1.45, y1: L.h - 4 };
+  // The box it may use; the banner itself is only as big as its words, centred in it.
+  const bannerAt = { left: bannerRect.x0, width: bannerRect.x1 - bannerRect.x0, top: bannerRect.y0, height: bannerRect.y1 - bannerRect.y0 };
   const buttonFaded = fade(BUTTON_RECT);
   return (
     <div
@@ -150,7 +157,7 @@ export function PhoneLandscape() {
       data-my-plots={world.tiles.filter((t) => t.owner === me.id).map((t) => `${t.x},${t.y}`).join(' ')}
     >
       <div className="absolute inset-y-0" style={{ left: L.side, width: L.mapW }} data-testid="phone-stage">
-        <YourStage width={L.mapW} height={L.h} density="phone" guide />
+        <YourStage width={L.mapW} height={L.h} density="phone" guide banner={false} />
         <OverCard />
       </div>
       {/* The status, in the side room either side of the map: nothing of it lies over the map. */}
@@ -180,6 +187,12 @@ export function PhoneLandscape() {
           <IntentMarker note={NOTE.A3} at="tl" />
         </span>
         <YourPace condition={condition} rule={ruleOf(tun)} food={{ ate: tun.seats[me.id]!.food, need }} />
+      </div>
+      {/* The scramble's banner, placed so it covers nothing you must reach: on the map along the bottom row between the
+          stick and the button (no store and none of your plots there); in the hall across the walkway, between the
+          shops and the corral and between the two doors. It fades while you walk under it. */}
+      <div className="pointer-events-none absolute z-20 flex items-center justify-center" style={bannerAt} data-testid="scramble-banner-box">
+        <ScrambleBanner world={world} me={me} tun={tun} at={{ position: 'static', maxWidth: '100%' }} faded={near(bannerRect, mePx, cell * 0.4)} />
       </div>
       {/* The controls, over the map's bottom corners. */}
       <span

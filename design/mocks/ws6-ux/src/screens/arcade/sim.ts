@@ -162,7 +162,7 @@ export const DEFAULT_TUNABLES: Tunables = {
   storeMules: 6,
   outfit: { food: MULE.outfitCost.food, energy: MULE.outfitCost.energy, smithore: MULE.outfitCost.smithore, crystite: MULE.outfitCost.crystite },
   botThinkSeconds: 0.5,
-  // Pending the PM's word: on, so a slow bot (Kai, sick) is not lured past the pub's closing by a glint.
+  // PM ruling 29 Oct; a design note for the real AI hands (WS1's execution layer owns the rule).
   botsSpareTime: true,
   seats: {
     lena: { food: 3, need: 3, sick: false, money: 300 },

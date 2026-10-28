@@ -67,12 +67,12 @@ export function spawnScramble(w0: World, e: WorldEvent, tun: Tunables): World {
   return { ...w, scramble, scrambled: true, log: say(w, { name: 'The corral' }, `scramble: ${plural(w.storeMules)} left`), beats: beat(w, 'scramble', scrambleCall(w.storeMules), 'alert') };
 }
 
-function end(w: World, how: NonNullable<Scramble['over']>): World {
+function end(w: World, how: NonNullable<Scramble['over']>, last?: string): World {
   const s = w.scramble!;
   const leftOut = how === 'empty' ? s.needers.filter((id) => !s.got.includes(id) && !w.colonists.find((c) => c.id === id)!.mule) : [];
   const names = leftOut.map((id) => w.colonists.find((c) => c.id === id)!.name);
   let beats = w.beats;
-  if (how === 'empty') beats = beat({ ...w, beats }, 'scramble', 'The corral is empty', 'warn');
+  if (how === 'empty') beats = beat({ ...w, beats }, 'scramble', last ? `${last} got the last one: the corral is empty` : 'The corral is empty', 'warn');
   if (names.length) beats = beat({ ...w, beats }, 'scramble', `No MULE this turn for ${names.join(', ')}`, 'warn');
   if (how === 'time') beats = beat({ ...w, beats }, 'scramble', `The scramble is over: ${plural(w.storeMules)} left`, 'ok');
   return { ...w, beats, scramble: { ...s, over: how, endedAt: w.t, leftOut }, log: say(w, { name: 'The scramble' }, `ended (${how})${names.length ? `; no MULE for ${names.join(', ')}` : ''}`) };
@@ -82,8 +82,10 @@ function end(w: World, how: NonNullable<Scramble['over']>): World {
 export function afterSale(w: World, c: Colonist, tun: Tunables): World {
   if (live(w)) {
     const s = w.scramble!;
-    const next = { ...w, scramble: { ...s, got: [...s.got, c.id] }, beats: beat(w, c.id, `${c.name} got one: ${w.storeMules} left`, 'ok') };
-    return next.storeMules <= 0 ? end(next, 'empty') : next;
+    const next = { ...w, scramble: { ...s, got: [...s.got, c.id] } };
+    // The last sale and the empty corral are one line, so a burst of beats at the end never hides who got it.
+    if (next.storeMules <= 0) return end(next, 'empty', c.name);
+    return { ...next, beats: beat(w, c.id, `${c.name} got one: ${w.storeMules} left`, 'ok') };
   }
   if (tun.scramble.on && !w.scrambled && w.storeMules > 0 && w.storeMules <= tun.scramble.mulesLeft && !w.queue.some((e) => e.kind === 'scramble'))
     return { ...w, queue: [...w.queue, { atMs: w.t, kind: 'scramble' as const }].sort((a, b) => a.atMs - b.atMs) };

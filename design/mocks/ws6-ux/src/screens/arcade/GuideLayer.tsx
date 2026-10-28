@@ -51,7 +51,9 @@ export function GuideInHall({ world, me, tun, lit }: { world: World; me: Colonis
               style={{ left: `${b.x0}%`, top: `${b.y0}%`, width: `${b.x1 - b.x0}%`, height: `${b.y1 - b.y0}%` }}
               data-testid={`guide-room-${r}`}
             >
-              <span className="absolute bottom-1 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-holo px-1.5 font-mono text-[10px] font-bold leading-4 text-on-holo shadow-glow">{g.label}</span>
+              {/* The corral's and the pub's captions sit at their foot, so their label goes near the top, below the
+                  scramble's count badge. */}
+              <span className={cx('absolute left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-holo px-1.5 font-mono text-[10px] font-bold leading-4 text-on-holo shadow-glow', b.y0 > 50 ? 'top-6' : 'bottom-1')}>{g.label}</span>
             </span>
           );
         })}

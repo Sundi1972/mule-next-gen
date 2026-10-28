@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { cx } from '@mule/ui';
 import { EdgePointer } from './GlintLayer';
 import { live, needsMule } from './scramble';
@@ -63,7 +64,11 @@ export function ScramblePointer({ world, me, cell, off, width, height }: { world
  * Your screen's banner: the call while it runs; then how it ended for you, in plain words. Left out is no MULE this
  * turn, nothing worse: the pub pays for the time left.
  */
-export function ScrambleBanner({ world, me, tun }: { world: World; me: Colonist; tun: Tunables }) {
+/**
+ * `at`, the landscape phone's: a box of its own instead of the stage's bottom edge, so the banner never lies over the
+ * corral, the store or your plots; `faded` while you walk under it.
+ */
+export function ScrambleBanner({ world, me, tun, at, faded = false }: { world: World; me: Colonist; tun: Tunables; at?: CSSProperties; faded?: boolean }) {
   const s = world.scramble;
   if (!s) return null;
   const mine = s.got.includes(me.id);
@@ -81,11 +86,15 @@ export function ScrambleBanner({ world, me, tun }: { world: World; me: Colonist;
   return (
     <span
       className={cx(
-        'pointer-events-none absolute inset-x-2 bottom-2 z-20 rounded-chip border-2 bg-panel/95 px-2 py-1 text-center font-display text-sm font-bold leading-tight shadow-chip',
+        'pointer-events-none absolute z-20 rounded-chip border-2 bg-panel/95 px-2 py-1 text-center font-display text-sm font-bold leading-tight shadow-chip transition-opacity duration-200',
+        at ? null : 'inset-x-2 bottom-2',
+        faded && 'opacity-25',
         tone === 'alert' ? 'border-alert text-alert' : tone === 'ok' ? 'border-ok text-ok' : 'border-warn text-warn',
       )}
       data-testid="scramble-banner"
       data-tone={tone}
+      data-faded={faded || undefined}
+      style={at}
     >
       {text}
     </span>

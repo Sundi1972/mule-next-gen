@@ -82,7 +82,7 @@ export const ARCADE_NOTES: IntentNoteData[] = [
     'A9',
     9,
     'The corral scramble',
-    'When a sale leaves the corral with its last MULEs (2 by default), every screen calls it: “2 MULEs left! Race to the corral”. The TV lights the corral with its count and draws a line from everyone who still needs a MULE; each phone shows a banner over its whole map; inside, the corral pulses. Buying is the usual BUY MULE: first there, first served. Each sale is told (“Kai got one: 1 left”), then “The corral is empty” and who has none this turn: nothing worse than that, and the pub pays for the time left. Bots who need one race too, if near enough to care.',
+    'When a sale leaves the corral with its last MULEs (2 by default), every screen calls it: “2 MULEs left! Race to the corral”. The TV lights the corral with its count and draws a line from everyone who still needs a MULE; each phone shows a banner over its whole map; inside, the corral pulses. Buying is the usual BUY MULE: first there, first served. Each sale is told (“Kai got one: 1 left”), the last as “Brix got the last one: the corral is empty”, then who has none this turn: nothing worse than that, and the pub pays for the time left. Bots who need one race too, if near enough to care.',
     'Three arcade moments, 5–15 s each, tunables for every reward and cost: wolves (run or fight), the glint race, the corral scramble.',
     'Today a sold-out corral is just a greyed counter: nobody sees the last MULEs going, so there is no race for them.',
   ),

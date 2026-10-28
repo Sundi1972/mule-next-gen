@@ -100,7 +100,9 @@ function TvBeats() {
             : `${c.name} fights the wolves · ${e.strikes}/${tun.wolves.strikesToWin} strikes · ${e.bites}/${tun.wolves.bitesToLose} bites`;
       return { key: `live-${c.id}`, text, tone: e.kind === 'fight' ? 'warn' : 'alert' };
     }),
-    ...recent.slice(-2).map((b) => ({ key: `${b.id}-${b.t}`, text: b.text, tone: b.tone })),
+    // Three, so a sale just before the scramble's end still reads.
+    // Two beats can share an instant (the last MULE sold, and who it leaves out), so the text joins the key.
+    ...recent.slice(-3).map((b) => ({ key: `${b.id}-${b.t}-${b.text}`, text: b.text, tone: b.tone })),
   ];
   if (lines.length === 0) return null;
   return (
