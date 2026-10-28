@@ -160,17 +160,16 @@ export type PlayerEventKey = keyof typeof EVENTS.player;
 
 /**
  * The chance a player event fires for this player at the start of this phase: the phase's chance, plus the air band's
- * bonus, plus pollutionShare x the player's share of the colony's pollution last month, never above the cap; 0 in a
- * phase the event doesn't list.
+ * bonus, plus perPoint for each air point the player's plots caused last month (at most max), never above the cap; 0
+ * in a phase the event doesn't list.
  */
 export function playerEventChance(state: GameState, key: PlayerEventKey, phase: Phase, id: string): number {
   const row = EVENTS.player[key];
   const inPhase = (row.phases as Partial<Record<Phase, number>>)[phase];
   if (inPhase === undefined) return 0;
-  const by = state.history.at(-1)?.pollutionBy ?? {};
-  const total = Object.values(by).reduce((n, v) => n + v, 0);
-  const share = total > 0 ? (by[id] ?? 0) / total : 0;
-  return Math.min(row.cap, inPhase + row.air[airBand(state.air).name] + row.pollutionShare * share);
+  const caused = state.history.at(-1)?.pollutionBy?.[id] ?? 0;
+  const polluter = Math.min(row.pollution.max, row.pollution.perPoint * caused);
+  return Math.min(row.cap, inPhase + row.air[airBand(state.air).name] + polluter);
 }
 
 /**
