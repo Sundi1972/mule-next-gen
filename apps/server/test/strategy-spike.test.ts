@@ -144,7 +144,7 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:strategy-spike', () => {
     const fits = Math.floor((cap - worst) / usd) + 1;
     expect(fits).toBeGreaterThan(2);
     expect(fits).toBeLessThan(40);
-    const { report, lines } = run(briefs(40, chars), 0, async () => reply(billed));
+    const { report, lines } = run(briefs(40, chars), 0, async () => reply(billed), cap);
     const r = await report;
     expect(r.stopped).toBe('cap');
     expect(r.made).toBe(fits);
@@ -275,8 +275,8 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:strategy-spike', () => {
     const haikuMs = [1_000, 2_000, 9_000];
     const { report } = run(list, 2, async (role, b) => {
       if (role === 'sonnet') {
-        // Agrees on brief 0's plan and kind; on brief 1 picks plan B and the specialist.
-        return b.index === 0 ? reply({ output: 500 }, answer(), 6_000, 400) : reply({ output: 500 }, answer({ planPick: 'B', strategy: { kind: 'specialist' } }), 7_000, 400);
+        // Agrees with Haiku on brief 0's plan and kind; on brief 1 picks plan B and the specialist.
+        return b.index === 0 ? reply({ output: 500 }, answer({ strategy: { kind: 'monopolist', monopolyTarget: 'food' } }), 6_000, 400) : reply({ output: 500 }, answer({ planPick: 'B', strategy: { kind: 'specialist' } }), 7_000, 400);
       }
       // Haiku: brief 0 answers a monopolist on a rookie seat (valid, out of bounds).
       const text = b.index === 0 ? answer({ strategy: { kind: 'monopolist', monopolyTarget: 'food' } }) : answer();
@@ -341,8 +341,12 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:strategy-spike', () => {
       for (const p of b.plans) expect(user).toContain(`${p.id}. ${p.label} — ${p.rationale}`);
       expect(user).toMatch(b.corners ? /may aim to corner/ : /never aims for a monopoly/);
     }
-    // The pair briefs (the first four) are spread over the game, not bunched in its first months.
-    expect(Math.max(...list.slice(0, 4).map((b) => b.month))).toBeGreaterThan(6);
+    // The pair briefs (the first four) are spread over the game, not bunched in its first months, one per seat, so
+    // Sonnet answers the Rookie seat too.
+    const pairs = list.slice(0, 4);
+    expect(Math.max(...pairs.map((b) => b.month))).toBeGreaterThan(6);
+    expect(new Set(pairs.map((b) => b.seat)).size).toBe(4);
+    expect(pairs.some((b) => b.level === 'rookie')).toBe(true);
   }, 60_000); // two strategist games
 
   it('S-A1: with the key unset, main calls nothing, builds the briefs, prints their sizes and exits 0', async () => {

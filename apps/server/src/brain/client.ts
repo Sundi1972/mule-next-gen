@@ -59,7 +59,8 @@ export function billUnknown(reply: HaikuReply | null, failure: unknown): boolean
   return !(failure instanceof CallFailed) || failure.status === null;
 }
 
-function fail(e: unknown, ms: number, waitMs: number, aborted: boolean): CallFailed {
+/** A failed SDK call as a CallFailed: timeout, auth (401/403), an answered status, or no answer. */
+export function fail(e: unknown, ms: number, waitMs: number, aborted: boolean): CallFailed {
   // Our own abort is checked first: an abort during the body read surfaces as a raw DOMException, not an SDK error.
   if (aborted || e instanceof Anthropic.APIConnectionTimeoutError || e instanceof Anthropic.APIUserAbortError) {
     return new CallFailed(`model call timed out (wait ${waitMs} ms)`, 'timeout', false, ms);

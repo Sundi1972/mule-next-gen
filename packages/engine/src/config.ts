@@ -1028,8 +1028,29 @@ export const BRAIN = {
   gameBudgetUsd: 1.0,
   /** Hard ceiling, in US dollars, for the latency spike command. */
   spikeCapUsd: 0.05,
-  /** US dollars per million tokens. */
+  /** US dollars per million tokens, for `model` (Haiku 5.5). */
   pricesPerMTok: { input: 0.1, cacheRead: 0.01, cacheWrite: 0.125, output: 0.5 },
+  /** US dollars per million tokens for Sonnet 5.5: cache reads 0.1x input, 5-minute cache writes 1.25x. Spike S-A1 only. */
+  sonnetPricesPerMTok: { input: 2, cacheRead: 0.2, cacheWrite: 2.5, output: 10 },
+  /**
+   * Spike S-A1 (WS2 spec A §7), brain:strategy-spike: Haiku 5.5 with adaptive thinking against Sonnet 5.5 writing a
+   * seat's strategy. `models.haiku` is priced at pricesPerMTok, `models.sonnet` at sonnetPricesPerMTok.
+   */
+  strategySpike: {
+    /** Hard ceiling for one run, in US dollars; the --max-usd flag may only lower it. */
+    capUsd: 0.1,
+    models: { haiku: 'claude-haiku-5-5', sonnet: 'claude-sonnet-5-5' },
+    /** output_config.effort for both models: Haiku 5.5's default, one below Sonnet 5.5's. */
+    effort: 'medium',
+    /** Reply cap per call, in tokens, thinking included. */
+    maxTokens: 3_000,
+    /** How long one call may take before it counts as a timeout, in ms. */
+    timeoutMs: 30_000,
+    /** Longest strategy reason, in characters. */
+    reasonChars: 140,
+    /** Strategy calls one seat makes in a game, as the cost projection assumes. */
+    callsPerSeatGame: 24,
+  },
   /** Reply cap, in tokens. */
   maxTokens: 200,
   /**
