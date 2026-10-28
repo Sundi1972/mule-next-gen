@@ -7,7 +7,7 @@ import { existsSync } from 'node:fs';
 import { WALK } from '@mule/engine';
 import { errors as playwrightErrors, type BrowserContext, type Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
-import { check, claimAPlot, headerSlot, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
+import { check, CLAIM_MS, claimAPlot, doneWithLand, headerSlot, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
 import { planningIsTheHub } from './hub-steps';
 import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
@@ -40,8 +40,12 @@ const AUCTION_STAGE_MS = within(WALK.goodMs / WALK.tradeClockRate);
 const PRESS_MS = 2_000;
 /** How long the phone has to find Ready and press its way out of planning, which has no clock and waits for it. */
 const READY_MS = 7_500;
+/** Once the land grant is over: its land auction, when one runs, and development's first frame. */
+const PAST_THE_GRANT_MS = 9_000;
 /** The auction offers at most 9 goods of 3 stages each; more Done presses than that means it is not moving on. */
 const MAX_AUCTION_PRESSES = 40;
+/** The phone held upright. */
+const UPRIGHT = { width: 390, height: 844 };
 /** The host sits in seat 1. */
 const HOST_WALKER = 'walker-s1';
 /** The phone's score lines at game over that add up; a Collapse line, when there is one, is taken off them. */
@@ -120,7 +124,7 @@ try {
   check(await claim.isVisible(), 'CLAIM button visible');
   await tv.getByTestId('tv-phase').filter({ hasText: 'Land grant' }).waitFor({ timeout: 3_000 });
   await noZoomBeforeYourFirstPlot(ctx);
-  await claimAPlot(phone, within(PHASE_MS.landGrant), 'AM-7: the phone claims a plot in the month-1 land grant');
+  await claimAPlot(phone, CLAIM_MS, 'AM-7: the phone claims a plot in the month-1 land grant');
   await zoomButtonOnceYouOwnAPlot(ctx, phoneIntents);
 
   // Reload: the phone takes its seat back by itself.
@@ -132,7 +136,7 @@ try {
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 1);
   // B-AC-10 and B-AC-9's fed case as development starts; the phone buys a MULE through the start-of-turn card.
-  await storeIsOneHallWithTwoRows(phone, within(PHASE_MS.landGrant));
+  await storeIsOneHallWithTwoRows(phone, PAST_THE_GRANT_MS);
   // B-AC-15 and B-AC-16: the store says what to do next, and the MULE is a character.
   await theCorralGlowsWithNoMule(phone, server, code);
   await fedPlayerSeesNoHunger(phone, server, code);
@@ -168,7 +172,7 @@ try {
   await readyIfStillPlanning(phone);
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 2);
-  await hungryPlayerSeesHerPace(phone, server, code, within(PHASE_MS.landGrant));
+  await hungryPlayerSeesHerPace(phone, server, code, PAST_THE_GRANT_MS);
   await goToThePub(phone);
   const moveLink = await moveDialogOpensInProduction(ctx, within(PHASE_MS.development));
   // B-AC-6, B-AC-7 and B-AC-8: month 2's show, with the seed's event.
@@ -185,6 +189,7 @@ try {
   check(rows.some((r) => r.includes('Heiko (you)')), `the human is on the final scores: ${rows.join(' | ')}`);
   await tv.getByTestId('tv-phase').filter({ hasText: 'Game over' }).waitFor({ timeout: 5_000 });
   await checkTheScoresAddUp(phone, tv);
+  console.log(`turned upright and back: ${await turnUprightAndBack(phone)}`);
 
   const phases = seen.map((s) => s.phase);
   check(isSubsequence(EXPECTED_PHASES, phases), `phone showed every phase of months 1 and 2 in order: ${phases.join(' > ')}`);
@@ -224,7 +229,7 @@ async function readyIfStillPlanning(phone: Page): Promise<void> {
 /** Development: walk out to the map and tap a plot in your colour; the phone calls it yours. */
 async function checkOwnsAPlot(phone: Page): Promise<void> {
   const dev = phone.locator('[data-phase=development]');
-  await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: within(PHASE_MS.landGrant + PHASE_MS.development) });
+  await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: within(PHASE_MS.development) });
   await dev.getByRole('button', { name: /, free\b/ }).first().waitFor({ timeout: 3_000 });
   // The map names each plot's owner by colour slot, counted from 1.
   const mine = dev.getByRole('button', { name: new RegExp(`owned by player ${(await headerSlot(phone, 'T-AC-1')) + 1}\\b`) });
@@ -239,9 +244,23 @@ async function checkOwnsAPlot(phone: Page): Promise<void> {
   }
 }
 
-/** Waits until the phone has moved past planning and the land grant. */
+/** B-AC-11: held upright the phone shows the turn prompt and not the game; turned back, the same screen again. */
+async function turnUprightAndBack(phone: Page): Promise<string> {
+  const started = Date.now();
+  const game = phone.locator('[data-phase]').first();
+  const phase = await game.getAttribute('data-phase', { timeout: PRESS_MS });
+  await phone.setViewportSize(UPRIGHT);
+  await phone.getByTestId('turn-sideways').waitFor({ timeout: PRESS_MS });
+  check(!(await game.isVisible()), `B-AC-11: held upright the phone shows turn-sideways, not the ${phase} screen`);
+  await phone.setViewportSize(PHONE.viewport);
+  await phone.locator(`[data-phase=${phase}]`).waitFor({ timeout: PRESS_MS });
+  check(!(await phone.getByTestId('turn-sideways').isVisible()), `B-AC-11: turned back, the phone shows ${phase} again, not turn-sideways`);
+  return `${phase} again in ${Date.now() - started} ms`;
+}
+
+/** Done with land: the phone presses Ready in the land grant and waits until it has moved past planning and the grant. */
 async function pastTheLandGrant(phone: Page): Promise<void> {
-  await phone.locator('[data-phase]:not([data-phase=planning]):not([data-phase=landGrant])').waitFor({ timeout: READY_MS + within(PHASE_MS.landGrant) });
+  await doneWithLand(phone);
 }
 
 /** Development: walk into the pub, which ends the human's turn. */
@@ -249,7 +268,7 @@ async function goToThePub(phone: Page): Promise<void> {
   await phone
     .locator('[data-phase=development]')
     .getByRole('button', { name: 'Go to the pub and end your turn' })
-    .click({ timeout: within(PHASE_MS.landGrant + PHASE_MS.development) });
+    .click({ timeout: within(PHASE_MS.development) });
 }
 
 /**

@@ -15,6 +15,7 @@ import {
   fitFilter,
   GAME,
   grantDone,
+  grantPass,
   installMule,
   litPlot,
   lotDone,
@@ -168,7 +169,8 @@ function applyRule(state: GameState, id: string, action: AiAction, clock?: DevCl
         setSalesTax(state, id, action.percent);
         break;
       case 'done':
-        if (state.phase === 'landAuction') lotDone(state, id, action.done);
+        if (state.phase === 'landGrant') grantPass(state, id);
+        else if (state.phase === 'landAuction') lotDone(state, id, action.done);
         else if (state.phase === 'planning' && state.politics?.election) electionDone(state, id, action.done);
         else auctionDone(state, id, action.done);
         break;
@@ -267,6 +269,9 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
       case 'landGrant': {
         // literal-ok: a runaway guard on the grant's steps, not a game clock
         for (let steps = 0; !grantDone(state) && steps < 2_000; steps++) {
+          // As on the server: from the light's first move on, a seat that wants nothing ahead presses Done with land.
+          if (steps > 0) for (const s of seats) if (s.passesGrant(state)) applyAction(state, s.id, { type: 'done', done: true });
+          if (grantDone(state)) break;
           const lit = litPlot(state);
           if (lit) {
             const bids = seats

@@ -12,6 +12,7 @@ import {
   factoryFit,
   fitFilter,
   grantDone,
+  grantPass,
   litPlot,
   mulePrice,
   mulePriceFor,
@@ -103,6 +104,24 @@ describe('species perks', () => {
 });
 
 describe('land grant', () => {
+  it('Done with land: grantPass marks the player done, twice changes nothing, and is refused outside the grant', () => {
+    const state = newGame();
+    expect(() => grantPass(state, 'p0')).toThrow(RuleError);
+    toPhase(state, 'landGrant');
+    for (const p of state.players.slice(1)) grantPass(state, p.id);
+    expect(grantDone(state), 'p0 has claims left and is not done').toBe(false);
+    grantPass(state, 'p0');
+    grantPass(state, 'p0');
+    expect(state.players.map((p) => p.doneWithLand)).toEqual([true, true, true, true]);
+    expect(grantDone(state)).toBe(true);
+    const lit = litPlot(state)!;
+    expect(() => claimPlot(state, 'p0', lit.x, lit.y), 'done means no more claims this month').toThrow(RuleError);
+    toPhase(state, 'development');
+    expect(() => grantPass(state, 'p0')).toThrow(RuleError);
+    toPhase(state, 'landGrant');
+    expect(state.players.every((p) => !p.doneWithLand), 'the next grant starts with nobody done').toBe(true);
+  });
+
   it('INV-grant-lit: free plots light one at a time and only the lit plot can be claimed', () => {
     const a = newGame();
     const b = newGame();
@@ -129,7 +148,7 @@ describe('land grant', () => {
     expect(grantDone(state)).toBe(true);
   });
 
-  it('INV-grant-order: the light steps through free plots in reading order, the same order every sweep, skipping owned plots', () => {
+  it('INV-grant-order: the light steps once through the free plots in reading order, skipping owned plots, and then the grant is done', () => {
     const state = newGame();
     const owned = [state.tiles[1]!, state.tiles[state.width + 3]!];
     for (const t of owned) t.owner = 'p3';
@@ -149,11 +168,12 @@ describe('land grant', () => {
     }
     expect(firstSweep).toEqual(free);
 
-    const secondSweep: Tile[] = [];
-    for (let tile = litPlot(state); tile && state.grant!.sweep === 1; tile = advanceGrant(state)) secondSweep.push(tile);
-    expect(secondSweep).toEqual(free.filter((t) => t !== claimed));
+    // The grant is one pass (PR-F): after it, the grant is done and the light lights nothing more.
+    expect(claimed).not.toBeNull();
+    expect(grantDone(state)).toBe(true);
+    expect(advanceGrant(state)).toBeNull();
 
-    for (const lit of [...firstSweep, ...secondSweep]) {
+    for (const lit of firstSweep) {
       expect(lit).not.toBe(store);
       expect(owned).not.toContain(lit);
     }

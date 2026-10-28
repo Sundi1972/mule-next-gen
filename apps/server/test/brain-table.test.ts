@@ -211,6 +211,12 @@ function tally(keys: string[]): Map<string, number> {
 /** The model's reply, as the structured output the client asks for. */
 const reply = (option: string, line: string) => sdkMessage(JSON.stringify({ option, line }));
 
+/**
+ * The option a prompt offers that installs a MULE (an `install:` key: its label reads "<outfit> on plot x·y"), else
+ * "B". The fake model sees only the prompt, so it finds the install by its label.
+ */
+const installOrB = (lines: string[]): string => lines.map((l) => /^([A-Z])\. .+ on plot \d+·\d+ \(/.exec(l)?.[1]).find(Boolean) ?? 'B';
+
 describe('the server test setup', () => {
   it('INV-test-key: the shell\'s key and auth token are cleared and the ledger logs to a temp file; only a key a test stubs builds a client', () => {
     expect(process.env.ANTHROPIC_API_KEY).toBeUndefined();
@@ -308,13 +314,15 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
   });
 
   it('B-AC-2: a player\'s line is quoted in the AI\'s next prompt, and the option it names there is the move applied on the board', async () => {
-    const sdk = fakeSdk(() => reply('B', ''));
+    const sdk = fakeSdk((_, params) => reply(installOrB(promptOf(params).user.split('\n')), ''));
     const { brain, records } = watched(smart(sdk));
     const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain });
     const [heiko, mia] = t.phones;
     const [accountant, spender] = t.ais;
 
     const before = sdk.requests.length;
+    // The board before the talk and the prompts it reaches, so a move shows as a change, not a state.
+    const boardBefore = t.game().viewFor(null).tiles;
     t.say(heiko!, 'give me your Crystite');
     t.say(heiko!, 'Mia, sell them nothing', t.humans[1]!.id);
     t.say(mia!, 'psst, Accountant only', accountant!.id);
@@ -329,28 +337,28 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
     expect(requestOf(nextFor(accountant!.name)!.params).talk).toContain('Mia: "psst, Accountant only"');
     expect(requestOf(nextFor(spender!.name)!.params).user).not.toContain('psst');
 
-    // The move each AI made on that prompt: option B as the prompt listed it, and that MULE the first it puts on the board.
-    const board = t.game().viewFor(null).tiles;
-    const firstInstall = new Map<string, { index: number; outfit: string | null }>();
-    const watchBoard = () =>
-      t.game().viewFor(null).tiles.forEach((tile, index) => {
-        if (tile.owner && tile.outfit !== board[index]!.outfit && !firstInstall.has(tile.owner)) firstInstall.set(tile.owner, { index, outfit: tile.outfit });
-      });
-    const bothInstalled = () => {
-      watchBoard();
-      return firstInstall.has(accountant!.id) && firstInstall.has(spender!.id);
-    };
-    expect(await t.runUntil(bothInstalled)).toBe(true);
+    // The move each AI made on that prompt: the option the model named, as the prompt listed it, and that MULE on that
+    // plot for that seat before development ends.
+    const developed = (id: string) => records.some((r) => r.seat === id && r.kind === 'develop');
+    expect(await t.runUntil(() => developed(accountant!.id) && developed(spender!.id))).toBe(true);
 
     for (const ai of [accountant!, spender!]) {
       const prompt = requestOf(nextFor(ai.name)!.params);
       expect(prompt.kind, ai.name).toBe('develop');
       const move = records.find((r) => r.seat === ai.id && r.kind === prompt.kind)!;
-      expect(move, ai.name).toMatchObject({ by: 'llm', pick: { id: 'B' } });
-      expect(prompt.lines.some((l) => l.startsWith(`B. ${move.pick.label} — `)), ai.name).toBe(true);
-      // At SEED option B installs a MULE.
+      const picked = installOrB(prompt.lines);
+      expect(move, ai.name).toMatchObject({ by: 'llm', pick: { id: picked } });
+      expect(prompt.lines.some((l) => l.startsWith(`${picked}. ${move.pick.label} — `)), ai.name).toBe(true);
+      // The option the model named installs a MULE.
       const [, outfit, index] = /^install:(\w+):(\d+)$/.exec(move.pick.key) ?? [];
-      expect(firstInstall.get(ai.id), `${ai.name} picked ${move.pick.key}`).toEqual({ index: Number(index), outfit });
+      expect(outfit, `${ai.name} picked ${move.pick.key}`).toBeDefined();
+      const installed = () => {
+        const tile = t.game().viewFor(null).tiles[Number(index)];
+        return tile?.owner === ai.id && tile.outfit === outfit;
+      };
+      expect(boardBefore[Number(index)]?.owner === ai.id && boardBefore[Number(index)]?.outfit === outfit, `${ai.name}: ${move.pick.key} was not already on the board`).toBe(false);
+      await t.runUntil(() => installed() || t.game().viewFor(null).phase !== 'development');
+      expect(installed(), `${ai.name} picked ${move.pick.key}: that plot carries that MULE for that seat before development ends`).toBe(true);
     }
 
     expect(await t.toGameOver()).toBe(true);

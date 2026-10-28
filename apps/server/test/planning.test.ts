@@ -3,7 +3,7 @@ import { PHASES, RuleError, WALK } from '@mule/engine';
 import type { MuleView, ServerEnvelope } from '@mule/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
-import { MuleGame, PHASE_MS } from '../src/mule-game.js';
+import { MuleGame } from '../src/mule-game.js';
 import { createMuleServer, type MuleServer } from '../src/server.js';
 import { fakeContext, readyAll, seats } from './fake-context.js';
 
@@ -175,11 +175,11 @@ describe('FM-planning-all-ready: planning ends when every human is Ready, connec
 
 describe("FM-planning-host-continue: the host's Continue ends planning proper; nothing else ends it early", () => {
   it('FM-planning-host-continue: with one human Ready and the other not, Continue starts the land grant, where nobody is Ready yet', () => {
-    const { game, ctx } = started();
+    const { game } = started();
     game.handle('s1', { type: 'ready' });
     game.handle('s1', { type: 'continue' });
     expect(phase(game)).toBe('landGrant');
-    expect(game.viewFor(null).phaseEndsAt).toBe(ctx.now() + PHASE_MS.landGrant);
+    expect(game.viewFor(null).phaseEndsAt, 'the land grant has no clock (PR-F)').toBeNull();
     for (const screen of screens(game)) expect(screen.players.map((p) => p.ready), "planning's Ready is not carried into the land grant").toEqual([false, false, false]);
   });
 
