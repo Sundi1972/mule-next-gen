@@ -1,5 +1,5 @@
 // The event show: the Living weather gallery's engine (design/mocks/ws8-events), wave 1. Names stay clear of
-// ProductionMap's (ShowEvent, hitAt, landed, EventKind, SHOW, EventCard).
+// ProductionMap's (landed, EventKind, SHOW, EventCard), which plays its events through this module.
 export * from './types';
 export {
   EVENT_BEAT,

@@ -102,10 +102,10 @@ export function Swarm({ ev, seg }: { ev: ShowEventView; seg: EventSegment }) {
 }
 
 /** Something that floats above a plot: rises from it, then sits on the plot's top edge, centred. `rise` is a CSS length. */
-export function OnPlot({ x, y, children, rise = '0px', className }: { x: number; y: number; children: ReactNode; rise?: string; className?: string }) {
+export function OnPlot({ x, y, children, rise = '0px', className, testId }: { x: number; y: number; children: ReactNode; rise?: string; className?: string; testId?: string }) {
   const { cell } = useShow();
   return (
-    <div className="absolute" style={cell(x, y)}>
+    <div className="absolute" style={cell(x, y)} {...(testId ? { 'data-testid': testId } : {})}>
       <span className={cx('absolute -top-[16%] left-1/2 z-[8] flex -translate-x-1/2 justify-center', className)} style={{ transform: `translateY(calc(-1 * ${rise}))` }}>
         {children}
       </span>

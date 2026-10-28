@@ -67,7 +67,7 @@ const BumperHarvest: Scene = ({ ev, seg, size }) => {
       {(u > 1.4 || reduced) && (
         <At p={{ x: plot.x + 0.45, y: plot.y - 0.5 }} w={0.7}>
           <span className="flex justify-center">
-            <span className="rotate-[-12deg] rounded-[4px] border-2 border-ok bg-panel px-1 font-display font-bold text-ok shadow-chip animate-[ev-stamp_0.35s_ease-out]" style={{ fontSize: px(size, 16) }}>
+            <span data-testid="bumper-stamp" className="rotate-[-12deg] rounded-[4px] border-2 border-ok bg-panel px-1 font-display font-bold text-ok shadow-chip animate-[ev-stamp_0.35s_ease-out]" style={{ fontSize: px(size, 16) }}>
               ×2
             </span>
           </span>
