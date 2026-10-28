@@ -419,7 +419,7 @@ Code-only; no existing state to reach. Games in progress pick up the new lengths
 | T-AC-2 (serves B-AC-1) | The production view lists every event of the month in fired order with phase, weight and playMs | `apps/server/test/events-view.test.ts` on `MuleGame`'s view | a month with no events lists none | C3 |
 | T-AC-3 (serves B-AC-1) | RULE-2: a plot's units add every event's delta in order, never below 0; landed/harvest match | ProductionMap's exported `finalUnits`/`landed` and the rendered bars | a plot no event reached keeps `made` | C5 |
 | T-AC-4 (serves B-AC-1) | At a time inside event i's segment the map shows event i (`data-event`), and the goods fly only after the last | rendered ProductionMap | quiet month: timeline as today | C5 |
-| T-AC-5 (serves B-AC-2) | RULE-3's four rows, at 844×390 and at 667×375 (AM-1) | rendered phone Production (boards 0/1, reduced on/off, a tap) | — | C7 |
+| T-AC-5 (serves B-AC-2) | RULE-3's four rows, inside the shell at 844×390, 667×375 and 844 with a 47 px safe area (AM-1, AM-2) | rendered phone Production (boards 0/1, reduced on/off, a tap) | — | C7 |
 | T-AC-6 (serves B-AC-1, B-AC-2) | The screens keep the gallery's data-testids for the views they graft (render gate against the mock) | `review-loop/render-gate.mjs`, mock vs build | — | C4, C6, C7 |
 | T-AC-7 (serves B-AC-3) | RULE-4 row 3: an AI hand's press during the auction's show is not applied; a human's bid gets RuleError | `MuleGame` with a fake context | after the hold, the same press applies | C9 |
 | T-AC-8 (serves B-AC-3) | RULE-4: five events hold only `capMs`; planning is not held | `MuleGame` clocks | — | C9 |
@@ -468,6 +468,26 @@ because   the small landscape size (667×375) was never checked; G-2: a player a
 goal      G-2 (unchanged)
 folded    C7 tomorrow + ux (scaffold 522ebac4) · R-3 rewritten · T-AC-5 runs at both sizes · the shell's frame is
           coordinated with WS6 (its rail width sets the map box)
+```
+
+```
+AM-2 · 2026-10-28 · lead · before PR-1 (WS6's answer on the shell's frame; trunk e9fdc6b)
+
+target    §1 C7, C10 (phone), §6 T-AC-5, §7 R-3
+said      the show fills "the shell's map box"; sizes not pinned; the gallery's rail is 268 px
+did       the frame is the approved shell (WS6's C15, PR-7), read in code: the rail is `--rail: clamp(232px, 31vw,
+          300px)` (apps/web/src/index.css), 400 px from a 1 100 px shell (phone/Shell.tsx); the stage
+          (`main[data-testid=stage]`) takes the rest, padded 10 px. So the show's box is about 562×370 at 844×390
+          (rail 261.6) and about 415×355 at 667×375 (rail 232, not the gallery's 268: more map than the gallery
+          showed). A notched phone held sideways loses about 47 px of stage width to the safe area. No header crosses
+          the stage: phase, clock and money sit at the top of the rail. The light card and the result go in the rail
+          (the shell's `rail` prop); the skip hint at the rail's foot; the whole stage is the tap target. Outside
+          production the overlay mounts in ShellLayer beside EmoteBubbles and keeps clear of the rail with `--rail`,
+          as the emotes do.
+because   G-2: the show must fit the phones the game runs on, in the shell they run in
+goal      G-2 (unchanged)
+folded    T-AC-5 runs in the shell at 844×390 and 667×375 (and 844 with a 47 px safe area); R-3: the gallery's 268 px
+          rail was the tighter case, so its 667 check stands
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
