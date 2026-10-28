@@ -19,6 +19,7 @@ import { PhoneStore, TvDevelop } from './screens/Store';
 import { HoloMap, type MapTile } from '@mule/ui';
 import { mapTiles } from '../../../../apps/web/src/game/derive';
 import { PlotMap, type PlotLook } from './proposed/PlotMap';
+import { TvPlanning } from './proposed/PlanningReady';
 import { H, W } from './fixture';
 
 const DECISIONS = [
@@ -35,6 +36,7 @@ const DECISIONS = [
   'One clock for everyone (Heiko 2026-10-28): development is the same 50 s for all, on the TV and every phone. Hunger and sickness slow your WALK instead of shortening your time; no screen shows a player’s own countdown.',
   'How you feel shows on your colonist wherever it walks in development, in one family of chips: hunger as a bowl at three levels (peckish, hungry, starving; the bowl shows how much you ate), sickness as a pink cross, both at once when both. Pace (Heiko): 100% fed down to 20% with no Food, halved when sick, so 10% at worst. The waddle slows with it. “Hungry: 60% pace”, “Starving and sick: 10% pace”; press and hold your tag for the rule in Heiko’s words.',
   'Redesign (Heiko, 2026-10-22): every player screen is a stage (what you act on) and a guide rail that opens with “Now”, the next step and why; from a phone held sideways to a laptop, using the space.',
+  'Plots you can read from the couch (Heiko chose A, bold plots): a thick border and a strong tint in the owner’s colour, a corner tab with the owner’s creature, what is installed as a big icon, the selected plot ringed and pinned.',
   'Development on a laptop: the store above the map (Heiko chose A), so walking out of the door lands you on the map; the next room glows and says TAP.',
 ];
 
@@ -189,6 +191,23 @@ const PLAN_STATES = [
   { id: 'plan-drone', title: 'Geo drone mode on the map', mode: 'drone' as const },
 ];
 
+/**
+ * Planning without a clock (AM-16). Month 4: Ossa is an AI (always ready); Brix and Kai are people still planning,
+ * and Kai's phone has dropped (locked), so Kai is away but still holds planning. Lena per state.
+ */
+const WAIT_STATES: { id: string; title: string; ready: boolean; confirm: boolean; hostId: string }[] = [
+  { id: 'plan-wait', title: 'Before you press Ready: who is still planning', ready: false, confirm: false, hostId: 'lena' },
+  { id: 'plan-wait-ready', title: 'You are ready, not the host: waiting for the rest', ready: true, confirm: false, hostId: 'brix' },
+  { id: 'plan-wait-host', title: 'You are the host and ready: Continue without them', ready: true, confirm: false, hostId: 'lena' },
+  { id: 'plan-wait-confirm', title: 'The host confirms: end planning for everyone', ready: true, confirm: true, hostId: 'lena' },
+];
+const AWAY = ['kai'];
+const waitView = (lenaReady: boolean) => ({
+  ...VIEW,
+  month: 4,
+  players: VIEW.players.map((p) => (p.id === 'kai' ? { ...p, isAi: false, ready: false } : p.id === 'lena' ? { ...p, ready: lenaReady } : p)),
+});
+
 const HUB_STATES: { id: string; title: string; desk: Desk; office: Office; election?: Election | 'done' }[] = [
   { id: 'hub', title: 'This month, the colony desk', desk: 'colony', office: 'none' },
   { id: 'hub-nominate', title: 'Election 1: who runs', desk: 'council', office: 'none', election: 'nominate' },
@@ -271,6 +290,32 @@ export default function App() {
             <PhoneElectionResult />
           </Game>
         </PhoneFrame>
+      </Page>
+    );
+
+  const wait = WAIT_STATES.find((s) => s.id === hash);
+  if (wait)
+    return (
+      <Page title={`Planning without a clock · ${wait.title}`}>
+        <Links states={WAIT_STATES} current={hash} />
+        <p className="max-w-[900px] text-sm text-ink-2">
+          Planning has no clock (Heiko). It ends when every person is Ready, or when the host continues without the rest, from the host's own phone or laptop, never the TV. The header shows how many are ready where the clock was. Ossa is an AI, always ready. Brix and Kai are still planning; Kai's phone is locked, so Kai is marked away but is still waited for. Lena's laptop first ({wait.hostId === 'lena' ? 'Lena is the host' : 'Brix is the host'}), then Brix's phone, then the TV. Press I'm ready to try it.
+        </p>
+        <LaptopFrame>
+          <Game view={waitView(wait.ready)} hostId={wait.hostId} away={AWAY}>
+            <PlanningHub key={`${hash}-l`} desk="colony" office="none" election="done" ready={wait.ready} confirm={wait.confirm} />
+          </Game>
+        </LaptopFrame>
+        <PhoneFrame>
+          <Game view={waitView(wait.ready)} seat="brix" hostId={wait.hostId} away={AWAY}>
+            <PlanningHub key={`${hash}-p`} desk="colony" office="none" election="done" />
+          </Game>
+        </PhoneFrame>
+        <TvFrame>
+          <Board view={waitView(wait.ready)}>
+            <TvPlanning view={waitView(wait.ready)} hostId={wait.hostId} away={AWAY} />
+          </Board>
+        </TvFrame>
       </Page>
     );
 
@@ -453,7 +498,11 @@ export default function App() {
 
   return (
     <div className="min-h-full bg-table p-8 text-ink" data-testid="index">
-      <h2 className="label-caps">For approval 2026-10-28 · plots you can read from the couch (Heiko's playtest)</h2>
+      <h2 className="label-caps">For approval 2026-10-28 · planning without a clock (Heiko's playtest)</h2>
+      <div className="mt-2 flex flex-col gap-2" data-testid="wait-links">
+        <Links states={WAIT_STATES} />
+      </div>
+      <h2 className="label-caps mt-6">Chosen 2026-10-28 · plots you can read from the couch (Heiko chose A)</h2>
       <div className="mt-2 flex flex-col gap-2">
         <Links states={[{ id: 'plots', title: 'Who owns a plot, what is on it, which one you selected: today, A and B (TV and phone)' }]} />
       </div>

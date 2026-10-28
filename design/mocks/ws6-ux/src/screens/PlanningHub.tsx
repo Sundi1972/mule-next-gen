@@ -4,6 +4,7 @@ import { mapTiles, plotName } from '../../../../../apps/web/src/game/derive';
 import { MapFit } from '../../../../../apps/web/src/phone/Shell';
 import { H, VIEW, W } from '../fixture';
 import { GameShell, useWide, type Now } from '../proposed/GameShell';
+import { ReadyBar, ReadyCount, readyNow, useWaiting } from '../proposed/PlanningReady';
 import type { CodeState } from '../proposed/HandoffCode';
 import { MarketStrip, News, ThisMonth } from './PlanningBrief';
 
@@ -703,6 +704,8 @@ export function PlanningHub({
   tool: startTool = 'look',
   election = 'ballot',
   handoff = false,
+  ready: startReady = false,
+  confirm = false,
 }: {
   desk?: Desk;
   office?: Office;
@@ -710,12 +713,18 @@ export function PlanningHub({
   election?: Election | 'done';
   /** Mock only: open with the in-game hand-off dialog (#game-handoff), its code in that state. */
   handoff?: boolean | CodeState;
+  /** Mock only: open already Ready (#hub-ready), or with the host's Continue confirmation open (#hub-continue). */
+  ready?: boolean;
+  confirm?: boolean;
 }) {
+  const [ready, setReady] = useState(startReady);
+  const { players, others, isHost } = useWaiting(ready);
   const [desk, setDesk] = useState<Desk>(start);
   const [tool, setTool] = useState<Tool>(startTool);
   const desks = DESKS.filter((d) => !d.office || d.office === office);
-  const now: Now =
-    election === 'nominate' || election === 'promise'
+  const now: Now = ready
+    ? readyNow(others, isHost)
+    : election === 'nominate' || election === 'promise'
       ? { step: 1, of: 3, title: "Run for an office, or press I'm ready", detail: 'Election month: Governor and Sheriff. A Governor candidate promises something about the tax. Then the secret ballot, then the result on every screen at once.' }
       : election === 'ballot'
         ? { step: 2, of: 3, title: 'Cast your secret vote', detail: 'One vote per office, or abstain; your vote weighs 2. Then everything below is yours until you press Ready.' }
@@ -739,7 +748,7 @@ export function PlanningHub({
   return (
     <GameShell
       phase="Planning"
-      seconds={74}
+      status={<ReadyCount players={players} />}
       now={now}
       handoff={handoff}
       rail={
@@ -776,11 +785,7 @@ export function PlanningHub({
           </div>
         </>
       }
-      footer={
-        <Button size="lg" className="w-full @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" data-testid="ready">
-          I'm ready
-        </Button>
-      }
+      footer={<ReadyBar ready={ready} onReady={() => setReady(true)} confirm={confirm} />}
     >
       <HubStage tools={tools.filter((t) => t.show)} tool={tool} setTool={setTool} tiles={tiles} office={office} after={election === 'done'} setDesk={setDesk} />
     </GameShell>

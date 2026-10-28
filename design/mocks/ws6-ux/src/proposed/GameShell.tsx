@@ -64,6 +64,7 @@ export function NowCard({ now }: { now: Now }) {
 export function GameShell({
   phase,
   seconds,
+  status,
   now,
   rail,
   footer,
@@ -73,6 +74,8 @@ export function GameShell({
 }: {
   phase: string;
   seconds?: number | undefined;
+  /** Shown where the clock goes when the phase has none (planning's ready count, AM-16). */
+  status?: ReactNode;
   now: Now;
   rail?: ReactNode;
   footer?: ReactNode;
@@ -111,7 +114,7 @@ export function GameShell({
                 </span>
                 <span className="truncate font-display text-lg font-semibold leading-tight @min-[1100px]/shell:text-2xl">{phase}</span>
               </div>
-              {seconds !== undefined && <Timer seconds={seconds} className="@min-[1100px]/shell:h-11 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-2xl" />}
+              {seconds !== undefined ? <Timer seconds={seconds} className="@min-[1100px]/shell:h-11 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-2xl" /> : status}
             </div>
             <div className="flex items-center gap-2">
               <PlayerMark slot={slot} species={self.species} size={12} label={`You, ${SPECIES_NAME[self.species]}`} />

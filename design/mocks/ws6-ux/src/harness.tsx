@@ -16,10 +16,11 @@ const client = {
 } as unknown as TableClient;
 
 /** The real app's providers around a fixture view, as one seat's phone sees it (Lena's by default). */
-export function Game({ view = VIEW, seat = 'lena', children }: { view?: MuleView; seat?: string; children: ReactNode }) {
+export function Game({ view = VIEW, seat = 'lena', hostId = 'lena', away = [], children }: { view?: MuleView; seat?: string; hostId?: string; away?: string[]; children: ReactNode }) {
   const self = view.players.find((p) => p.id === seat)!;
   const slot = view.players.findIndex((p) => p.id === seat) as Slot;
-  const table = { code: 'MULE', status: 'playing' as const, hostId: 'lena', seats: [], boards: 1, game: view };
+  const seats = view.players.map((p) => ({ id: p.id, name: p.name, isAi: p.isAi, connected: p.isAi || !away.includes(p.id), color: p.slot }));
+  const table = { code: 'MULE', status: 'playing' as const, hostId, seats, boards: 1, game: view };
   return (
     <ClientProvider client={client}>
       <SeatSpeciesProvider value={seatSpecies(view)}>
