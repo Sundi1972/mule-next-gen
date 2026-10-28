@@ -5,7 +5,7 @@ import { mapTiles, plotName } from '../../../../../apps/web/src/game/derive';
 import { MapFit } from '../../../../../apps/web/src/phone/Shell';
 import { H, ME, VIEW, W } from '../fixture';
 import { GameShell, useWide, type Now } from '../proposed/GameShell';
-import { DEV_WALK_STAND_IN, hungerLevel, paceLine, paceOf, SharedClock, useCondition, YourPace } from '../proposed/Condition';
+import { DEV_WALK_STAND_IN, hungerLevel, paceLine, paceOf, SharedClock, sickReason, useCondition, YourPace } from '../proposed/Condition';
 import { Hall, HallWalker, SPOT, walkSeconds, type Spot, type Visitor } from '../proposed/Hall';
 import { OTHERS } from './Store';
 
@@ -316,6 +316,12 @@ function FillCard({ t, cond }: { t: number; cond: ReturnType<typeof useCondition
         <span className="font-display text-lg font-semibold leading-tight @min-[1100px]/shell:text-3xl">
           {hungerLevel(cond) > 0 ? `You eat ${cond.ate} of the ${cond.need} Food you need.` : `You eat the ${cond.need} Food you need.`}
         </span>
+        {/* Sickness is rolled as development starts (Heiko 2026-10-28) and slows this same turn: the card announces it. */}
+        {cond.sick && (
+          <span className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: 'var(--color-g-medicine)' }} data-testid="sick-strikes">
+            ✚ {sickReason(cond)} It strikes now and slows you this turn.
+          </span>
+        )}
         <div className="relative h-3 overflow-hidden rounded-full bg-raised @min-[1100px]/shell:h-4" data-testid="pace-gauge">
           <div className={cx('absolute inset-y-0 left-0 rounded-full', short ? 'bg-warn' : 'bg-holo')} style={{ width: `${share * pace * 100}%` }} />
           {short && <div className="absolute inset-y-0 right-0 border-l-2 border-dashed border-ink-3" />}
