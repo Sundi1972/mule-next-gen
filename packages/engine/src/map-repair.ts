@@ -29,7 +29,9 @@ export class Grid {
   readonly next: number[][];
   /** Every plot but the store: what AM-4 covers. */
   readonly land: number[];
-  /** For a free plot, the land plots within Smithore reach of it; empty for other plots. */
+  /** For every plot, the land plots within Smithore reach of it. */
+  readonly reach: ReachTable;
+  /** As `reach`, for a free plot; empty for other plots. */
   readonly within: ReachTable;
   private readonly mark: number[];
   private stamp = 0;
@@ -47,9 +49,9 @@ export class Grid {
       return around.filter((j) => j >= 0 && isFree[j]);
     });
     // Land is every plot but the one store, so the shared table for this size holds exactly these lists.
-    const table = reachTable(width, height, terrain.indexOf('store'), reach);
+    this.reach = reachTable(width, height, terrain.indexOf('store'), reach);
     const none: readonly number[] = [];
-    this.within = terrain.map((_, i) => (isFree[i] ? table[i]! : none));
+    this.within = terrain.map((_, i) => (isFree[i] ? this.reach[i]! : none));
     this.mark = Array(terrain.length).fill(0);
   }
 

@@ -138,6 +138,10 @@ interface Region {
 class Plan {
   readonly owner: number[];
   private readonly reachedBy: number[];
+  /** Per free plot, `gain`'s answer, lowered as each land plot is first reached. */
+  private readonly unreached: number[];
+  private readonly seen: number[];
+  private stamp = 0;
 
   constructor(
     readonly grid: Grid,
@@ -145,30 +149,51 @@ class Plan {
   ) {
     this.owner = Array(grid.next.length).fill(-1);
     this.reachedBy = Array(grid.next.length).fill(0);
+    this.unreached = grid.within.map((w) => w.length);
+    this.seen = Array(grid.next.length).fill(0);
   }
 
   own(r: number, i: number): void {
     this.owner[i] = r;
     this.regions[r]!.cells.push(i);
-    if (isMining(this.regions[r]!.terrain)) for (const l of this.grid.within[i]!) this.reachedBy[l]!++;
+    if (!isMining(this.regions[r]!.terrain)) return;
+    for (const l of this.grid.within[i]!) {
+      // Reach is symmetric: the plots that count l among theirs are the plots l reaches.
+      if (this.reachedBy[l]!++ === 0) for (const p of this.grid.reach[l]!) this.unreached[p]!--;
+    }
   }
 
   /** Land plots a mining plot at `i` would bring within reach that none reaches yet. */
   gain(i: number): number {
-    return this.grid.within[i]!.filter((l) => this.reachedBy[l] === 0).length;
+    return this.unreached[i]!;
   }
 
   /** True when plot `i` touches another region of `r`'s terrain: taking it would merge the two into one. */
   touchesTwin(i: number, r: number): boolean {
     const terrain = this.regions[r]!.terrain;
-    return this.grid.next[i]!.some((j) => {
+    for (const j of this.grid.next[i]!) {
       const other = this.owner[j]!;
-      return other >= 0 && other !== r && this.regions[other]!.terrain === terrain;
-    });
+      if (other >= 0 && other !== r && this.regions[other]!.terrain === terrain) return true;
+    }
+    return false;
   }
 
   quotaLeft(r: number): number {
     return this.regions[r]!.quota - this.regions[r]!.cells.length;
+  }
+
+  /** The free plots `r` could grow into, in the order its plots' neighbours first name them. */
+  frontier(r: number): number[] {
+    const stamp = ++this.stamp;
+    const out: number[] = [];
+    for (const c of this.regions[r]!.cells) {
+      for (const i of this.grid.next[c]!) {
+        if (this.seen[i] === stamp) continue;
+        this.seen[i] = stamp;
+        if (this.owner[i] === -1 && !this.touchesTwin(i, r)) out.push(i);
+      }
+    }
+    return out;
   }
 }
 
@@ -220,19 +245,24 @@ function seedRegions(plan: Plan, rng: Rng): void {
   for (const r of [...mining, ...order.filter((r) => !mining.includes(r))]) {
     const terrain = regions[r]!.terrain;
     const twin = toTwin.get(terrain) ?? Array(owner.length).fill(twinSpacing);
+    const mines = isMining(terrain);
     let best = -1;
     let bestScore = -Infinity;
     for (const i of grid.free) {
       if (owner[i]! >= 0 || plan.touchesTwin(i, r)) continue;
       const spacing = twin[i]! + crowdWeight * toAny[i]!;
-      const score = (isMining(terrain) ? reachWeight * plan.gain(i) : 0) + spacing + rng.next();
-      if (score > bestScore) [best, bestScore] = [i, score];
+      const score = (mines ? reachWeight * plan.gain(i) : 0) + spacing + rng.next();
+      if (score > bestScore) {
+        best = i;
+        bestScore = score;
+      }
     }
     if (best < 0) continue;
     plan.own(r, best);
     for (const i of grid.free) {
-      toAny[i] = Math.min(toAny[i]!, grid.steps(best, i));
-      twin[i] = Math.min(twin[i]!, grid.steps(best, i));
+      const steps = grid.steps(best, i);
+      if (steps < toAny[i]!) toAny[i] = steps;
+      if (steps < twin[i]!) twin[i] = steps;
     }
     toTwin.set(terrain, twin);
   }
@@ -248,13 +278,14 @@ function growTogether(plan: Plan, rng: Rng): void {
   let growing = [...regions.keys()].filter((r) => regions[r]!.cells.length > 0 && plan.quotaLeft(r) > 0);
   for (let pass = 0; pass < grid.free.length * MAP.layout.growPasses && growing.length > 0; pass++) {
     const r = growing[rng.weighted(growing.map((g) => plan.quotaLeft(g)))]!;
-    const region = regions[r]!;
-    const around = new Set(region.cells.flatMap((c) => grid.next[c]!));
-    const frontier = [...around].filter((i) => owner[i] === -1 && !plan.touchesTwin(i, r));
+    const mines = isMining(regions[r]!.terrain);
+    const frontier = plan.frontier(r);
     if (frontier.length > 0) {
       const weights = frontier.map((i) => {
-        const compact = grid.next[i]!.filter((j) => owner[j] === r).length ** MAP.layout.compactPower;
-        return isMining(region.terrain) ? compact * (1 + plan.gain(i)) : compact;
+        let touching = 0;
+        for (const j of grid.next[i]!) if (owner[j] === r) touching++;
+        const compact = touching ** MAP.layout.compactPower;
+        return mines ? compact * (1 + plan.gain(i)) : compact;
       });
       plan.own(r, frontier[rng.weighted(weights)]!);
     }
