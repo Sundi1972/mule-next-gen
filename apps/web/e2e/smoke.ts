@@ -4,14 +4,16 @@
  * Run with `pnpm --filter @mule/web e2e`; replay a red run's map with `MULE_E2E_SEED=<seed>`.
  */
 import { existsSync } from 'node:fs';
-import { WALK } from '@mule/engine';
+import { POLITICS, WALK } from '@mule/engine';
 import { errors as playwrightErrors, type BrowserContext, type Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
-import { check, claimAPlot, launch, PHONE, startServer, TV, type AuctionSteps } from './harness';
+import { check, claimAPlot, headerSlot, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
 import { planningIsTheHub } from './hub-steps';
 import { readyThroughTheElection } from './politics-steps';
-import { checkTheShow, watchShow } from './production-steps';
+import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
 import { fedPlayerFillsAFullHoloBar, hungryPlayerSeesAShortOrangeBar, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
+import { specialFieldsShowTheirGlyphs } from './special-steps';
+import { doneThroughTheElection, doubleTapZoomsToYourLand, moveDialogOpensInProduction, moveDialogOutlivedThePhase, noZoomBeforeYourFirstPlot, thePhonePicksRose, theSeatMovesToAnotherDevice, theTvDrawsRose, watchIntents, zoomButtonOnceYouOwnAPlot } from './table-steps';
 
 /** Loaded by a path held in a variable, so tsc never resolves a file that may not exist yet. */
 async function loadAuctionSteps(): Promise<AuctionSteps> {
@@ -49,14 +51,12 @@ const SEED = seedFrom(process.env.MULE_E2E_SEED);
 const steps = await loadAuctionSteps();
 const { server, base } = await startServer({ maxMonths: 2, phaseScale: PHASE_SCALE, seed: () => SEED });
 const browser = await launch();
-let seen: Shown[] = [];
+/** Every phase the player's devices showed: the phone, and from the move on the second device. */
+const seen: Shown[] = [];
 const errors: string[] = [];
 try {
-  const phoneContext = await browser.newContext(PHONE);
-  seen = await recordPhases(phoneContext);
-  const phone = await phoneContext.newPage();
-  phone.on('pageerror', (e) => errors.push(`phone: ${e.message}`));
-  const phoneShow = await watchShow(phone);
+  let { page: phone, show: phoneShow } = await newPhone('phone');
+  const phoneIntents = watchIntents(phone);
 
   await phone.goto(base);
   await phone.getByPlaceholder('Heiko').fill('Heiko');
@@ -74,6 +74,7 @@ try {
   const tvShow = await watchShow(tv);
   await tv.goto(`${base}/table?room=${code}`);
   await tv.getByTestId('room-code').waitFor();
+  let ctx: GameStepContext = { phone, tv, check, server, code, held: (step) => held(server, code, step) };
 
   await phone.getByRole('button', { name: 'Add AI player' }).click();
   await phone.getByRole('button', { name: 'Add AI player' }).click();
@@ -95,6 +96,7 @@ try {
   const tvLobbySeats = tv.locator('li');
   await tvLobbySeats.nth(0).getByRole('img', { name: 'Mollox' }).waitFor({ timeout: 3_000 });
   check((await tvLobbySeats.nth(1).getByRole('img', { name: 'Bramblet' }).count()) === 1, 'B-AC-1: the TV lobby shows the first AI as a Bramblet');
+  await thePhonePicksRose(ctx);
 
   await phone.getByRole('button', { name: 'Start game' }).click();
 
@@ -106,13 +108,18 @@ try {
   check((await tvGame.getByRole('img', { name: 'Zipwing' }).count()) === 0, 'B-AC-1: nobody in the TV game plays the seat-1 default, Zipwing');
   check((await tvGame.getByRole('img', { name: 'Bramblet' }).count()) >= 1, 'B-AC-1: the TV game still shows the first AI as a Bramblet');
 
-  // Month 1.
+  // Month 1: the election, then planning's steps, then Ready.
+  console.log(`election: ${await doneThroughTheElection(ctx, within(POLITICS.nominateMs + POLITICS.ballotMs + POLITICS.revealMs))}`);
+  await theTvDrawsRose(ctx, 'planning');
+  await specialFieldsShowTheirGlyphs(ctx);
   await readyThroughTheElection(phone, within(PHASE_MS.planning));
   const claim = phone.getByRole('button', { name: /CLAIM/ });
   await claim.waitFor({ timeout: 5_000 });
   check(await claim.isVisible(), 'CLAIM button visible');
   await tv.getByTestId('tv-phase').filter({ hasText: 'Land grant' }).waitFor({ timeout: 3_000 });
+  await noZoomBeforeYourFirstPlot(ctx);
   await claimAPlot(phone, within(PHASE_MS.landGrant), 'AM-7: the phone claims a plot in the month-1 land grant');
+  await zoomButtonOnceYouOwnAPlot(ctx, phoneIntents);
 
   // Reload: the phone takes its seat back by itself.
   await phone.reload();
@@ -130,6 +137,8 @@ try {
   await outfittersOpenWithAnEmptyMule(phone);
   console.log(`store hall fills the stage: ${await theLedMuleLightsUp(phone, server, code)}`);
   await checkOwnsAPlot(phone);
+  console.log(`zoom: ${await doubleTapZoomsToYourLand(ctx, phoneIntents)}`);
+  await theTvDrawsRose(ctx, 'development');
   await goToThePub(phone);
   // B-AC-6 and B-AC-8, from what both screens drew of month 1's show.
   await phone.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
@@ -146,13 +155,20 @@ try {
   makeHungry(server, code);
   // B-AC-14: planning is the hub, its needs read from that seed; with B-AC-12's planning part.
   console.log(`hub: ${await planningIsTheHub(phone, server, code)}`);
+  // B-AC-7 (in game): the player moves to a second device, which plays the rest of the game.
+  const second = await newPhone('second device');
+  console.log(`move: ${await theSeatMovesToAnotherDevice(ctx, second.page)}`);
+  ({ page: phone, show: phoneShow } = second);
+  ctx = { ...ctx, phone };
   await readyIfStillPlanning(phone);
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 2);
   await hungryPlayerSeesAShortOrangeBar(phone, within(PHASE_MS.landGrant));
   await goToThePub(phone);
+  const moveLink = await moveDialogOpensInProduction(ctx, within(PHASE_MS.development));
   // B-AC-6, B-AC-7 and B-AC-8: month 2's show, with the seed's event.
   await phone.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
+  await moveDialogOutlivedThePhase(ctx, moveLink);
   console.log(`production show, month 2: ${await checkTheShow({ tv: tvShow, phone: phoneShow, event: SEED === SHOW_SEED })}`);
   await pressDoneThroughTheAuction(phone);
 
@@ -205,8 +221,8 @@ async function checkOwnsAPlot(phone: Page): Promise<void> {
   const dev = phone.locator('[data-phase=development]');
   await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: within(PHASE_MS.landGrant + PHASE_MS.development) });
   await dev.getByRole('button', { name: /, free\b/ }).first().waitFor({ timeout: 3_000 });
-  // The host sits in seat 1, and the map names each plot's owner by seat.
-  const mine = dev.getByRole('button', { name: /owned by player 1\b/ });
+  // The map names each plot's owner by colour slot, counted from 1.
+  const mine = dev.getByRole('button', { name: new RegExp(`owned by player ${(await headerSlot(phone, 'T-AC-1')) + 1}\\b`) });
   const plots = await mine.count();
   check(plots >= 1, `T-AC-1: the phone owns a plot before month 2; its map shows ${plots} plots in its colour`);
   await mine.first().click({ timeout: PRESS_MS });
@@ -367,12 +383,21 @@ function readNumber(text: string | null, what: string): number {
 
 type Shown = { phase: string; at: number };
 
+/** A phone on its own browser context, played sideways: its phases recorded into `seen`, its shows watched, its page errors kept. */
+async function newPhone(who: string): Promise<{ page: Page; show: ShowWatch }> {
+  const context = await browser.newContext(PHONE);
+  await recordPhases(context);
+  const page = await context.newPage();
+  page.on('pageerror', (e) => errors.push(`${who}: ${e.message}`));
+  return { page, show: await watchShow(page) };
+}
+
 /**
- * Every phase the phone puts on screen, in order, with when it appeared. Kept
- * on the test's side, so a reload doesn't lose what was seen before it.
+ * Adds every phase the context's pages put on screen to `seen`, in order, with when it appeared. Kept on the test's
+ * side, so a reload doesn't lose what was seen before it. A device that steps aside shows no phase, so two devices
+ * add one timeline.
  */
-async function recordPhases(context: BrowserContext): Promise<Shown[]> {
-  const seen: Shown[] = [];
+async function recordPhases(context: BrowserContext): Promise<void> {
   await context.exposeBinding('__phaseShown', (_source, phase: string) => {
     if (seen.at(-1)?.phase !== phase) seen.push({ phase, at: Date.now() });
   });
@@ -386,7 +411,6 @@ async function recordPhases(context: BrowserContext): Promise<Shown[]> {
       if (phase) window.__phaseShown(phase);
     }).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-phase'] });
   }`);
-  return seen;
 }
 
 /** Each phase with how long it stayed on screen, e.g. "planning 1.2s, landGrant 5.9s". */
