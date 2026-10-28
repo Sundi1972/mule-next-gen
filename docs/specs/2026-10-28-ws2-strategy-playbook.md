@@ -1,6 +1,6 @@
 # WS2 · Spec A: Claude writes the strategy and the playbook
 
-**Status:** DRAFT (§1–§6), 2026-10-28. Goal gate passed (Heiko, "Yes, as recommended"); approach and class ruled by the
+**Status:** DRAFT (§0–§9; §1–§9 brought current 29 Oct: schema v1, option B, S-A1), 2026-10-28. Goal gate passed (Heiko, "Yes, as recommended"); approach and class ruled by the
 PM the same day (recommended approach widened to Heiko's two layers; class **Programme**). G-A's proof below is
 restated for the two layers and **approved by Heiko** ("Yes, all eight", 29 Oct). Prompt and tool design: HOLD lifted (PM, 29 Oct):
 Heiko chose option B, a generated manual (C8) and live tools (C9); the MCP server is parked. Build waits for WS1's step 2 (playbook
@@ -62,9 +62,11 @@ HC-5  All AI seats of a game together stay within BRAIN.gameBudgetUsd; a seat pa
       playbook quietly.                                                                source: AM-19 · fatal
 HC-6  packages/ai stays pure (no I/O, no Date.now, no Math.random); the model sits behind a port.
                                                                                        source: CLAUDE.md · fatal
+HC-7  Table talk follows the strategy and never lies about game facts or rules.        source: Heiko, 28 Oct · fatal
 HC-8  A Rookie seat never attempts a monopoly: the validator clamps its monopolyTarget to null and any edit that
       would corner a good.                                                            source: Heiko, 29 Oct · fatal
-HC-7  Table talk follows the strategy and never lies about game facts or rules.        source: Heiko, 28 Oct · fatal
+HC-9  Every model round trip, tool rounds included, is checked against the seat's share before it is sent and
+      ledgered after; a tool handler itself never calls the model or the network.     source: AM-19, PM 29 Oct · fatal
 ```
 
 ## §1 · Solution Design `[handoff]`
@@ -75,21 +77,33 @@ today        situation(obs, mind) gives five lines · anchors: packages/ai/src/s
              verified_by: read
 tomorrow     MUST build, from the seat's observation only (HC-3): plot ownership and what each player makes; prices
              and store stock with a 3-month trend; the export wishlist; the seat's strategy and its last outcomes
-             (PhaseOutcome, schema v0); the engine's draft playbook and its 3-4 engine plans with their numbers; the
-             persona card; recent table talk (quoted, as today). Deterministic, so it caches.
+             (PhaseOutcome, playbook v1); the engine's draft playbook and its 3-4 engine plans with their numbers; the
+             persona card; recent table talk (quoted, as today). Deterministic, so it caches. The rules live in C8's
+             manual (system block), not here: the brief carries only this seat's moment.
 seam         packages/ai/src/llm/brief.ts (new) — beside prompt.ts, pure
+reuse        neighbours: summary.ts::situation (five lines; stays for the move prompts until C7) and the S-A1 brief in
+             apps/server/src/brain/strategy-spike.ts::collectBriefs (situation + prices + landDecision's plans). brief.ts
+             grows the latter's shape into packages/ai, pure; situation() is beaten because it has no ownership,
+             trends, wishlist or outcomes and cannot grow them without changing every move prompt.
 senior       junior would: stuff the whole GameState into the prompt · senior does: a bounded, ordered digest from
              observe(), with the stable part first so the prompt cache holds; each section capped in config
 mechanism    sprout
-depends_on   WS1 schema + engine plans (data, stubbable on schema v0)
+depends_on   WS1 playbook v1 types + engine plans (data, stubbable on the frozen v1 types)
 
 C2 · ADDED · the playbook writer: Claude's strategy and playbook edits through the port
 today        LlmDecider picks one option letter · anchors: packages/ai/src/llm/decider.ts::LlmDecider   verified_by: read
 tomorrow     MUST send C1's brief with a structured-output schema of {strategy?, edits[{path,to,reason}], line?};
              MUST return the validator's result (accepted edits, rejected with why); never throws to the game.
+             MUST check what the schema cannot carry before the validator sees it: string lengths (the API's schema
+             takes no maxLength, S-A1) and option ids this brief offered; a failure is one cause code (the S-A1 codes,
+             strategy-spike.ts::judgeReply), ledgered, never the reply text.
 seam         packages/ai/src/llm/writer.ts (new) — a second consumer of the Complete port
+reuse        neighbours: llm/decider.ts::LlmDecider + llm/reply.ts::parseReply (one letter from a fixed list) and the
+             S-A1 judge. The writer reuses parseReply's rule (nothing off the list is accepted) and the judge's cause
+             codes; LlmDecider is beaten because it returns one option, not a strategy plus field edits.
 senior       junior would: parse free text into a playbook · senior does: JSON schema output, edits only, validated by
-             WS1's validatePlan; the engine draft stands for every rejected or missing edit
+             WS1's validatePlan; the engine draft stands for every rejected or missing edit; 4 of 20 S-A1 replies
+             failed on exactly the checks the schema cannot carry, so those checks are the writer's, not the model's
 mechanism    sprout
 depends_on   C1; WS1 validatePlan (contract, stubbable)
 
@@ -99,8 +113,13 @@ today        thinking: { type: 'disabled' } for every call · anchors: apps/serv
 tomorrow     MUST send adaptive thinking with a config effort for 'strategy' and 'playbook' calls; moves keep thinking
              off. The model, effort and wait per kind come from config (BRAIN), never from constants or the hands;
              default Haiku 5.5, effort medium (S-A1); §7's model rule may move the strategy call to Sonnet.
-pin          INV-HC3 and the client tests keep passing for moves.
-mechanism    in_place
+seam         apps/server/src/brain/client.ts — the one file that imports the SDK (§9 guard). The S-A1 port
+             strategy-spike.ts::createStrategyComplete already sends thinking {type:'adaptive'}, output_config.effort and
+             the json_schema format; C3 moves that port into client.ts, keyed by call kind, and the spike imports it back.
+senior       junior would: a second client file for strategy calls · senior does: one client, the per-kind settings in
+             BRAIN, the S-A1 code promoted rather than rewritten
+pin          INV-HC3 and the client tests keep passing for moves; strategy-spike.test.ts keeps passing on the moved port.
+mechanism    in_place (client.ts) + extract (from strategy-spike.ts)
 
 C4 · ADDED · when the brain asks, and when a playbook takes effect
 today        the brain asks per move inside the phase (seat.ts::planMonth, hands/develop.ts, hands/auction.ts)
@@ -109,24 +128,29 @@ tomorrow     MUST ask for the next month's strategy + land-grant edits as upkeep
              the development and auction edits in the slack before each (production show, waiting for others); and at
              once on a WS1 re-plan trigger. A reply that lands before its phase starts takes effect; a later one is
              recorded as late and dropped. The engine playbook takes effect otherwise, by 'engine'.
-seam         apps/server/src/brain/strategist.ts (new) driven from MuleGame's phase changes (a named edit in WS3's
-             mule-game.ts, one touch point) and from playGameAsync's hooks in the trial
+seam         apps/server/src/brain/playbooks.ts (new; not "strategist", which names packages/ai/src/strategist.ts)
+             driven from MuleGame's phase changes (a named edit in WS3's mule-game.ts, one touch point) and from
+             playGameAsync's hooks (packages/ai/src/play.ts::playGameAsync) in the trial
+reuse        neighbours: apps/server/src/brain/index.ts::createBrain (its `busy` set is INV-one-in-flight, one open call per
+             seat across deciders) and its budget check; playbooks.ts asks through the same brain so both hold for
+             strategy calls too, rather than a second in-flight guard.
 senior       junior would: await the model in nextPhase · senior does: fire-and-forget with a deadline at the phase
              start; the phase opens on time with whatever playbook is in effect
 mechanism    sprout + one named edit
 depends_on   C2; WS3 phase hooks; WS1 triggers
 
 C5 · ADDED · the record: each playbook that takes effect is appended to WS3's game record
-tomorrow     MUST append {type:'playbook', seat, month, phase, playbook} (schema v0) when it takes effect; replay
-             reads it and makes no call.
+tomorrow     MUST append a PlaybookEntry {type:'playbook', at, seq, seat, month, phase, playbook} (playbook v1,
+             packages/engine/src/record.ts, WS3) when it takes effect; replay reads it and makes no call.
 seam         WS3's record API (contract)
 mechanism    sprout
 depends_on   C4; WS3 record (data, not stubbable for the replay AC)
 
 C6 · MODIFIED · ledger, budget and trial know the new kinds
 today        kinds land | develop | trade (ledger.ts, cli.ts::KINDS, trial-report.ts, spike.ts)   verified_by: read
-tomorrow     MUST log 'strategy' and 'playbook' calls with their usage; the trial report gets a row per kind and the
-             UBER-AC-A measures (edit share, late share, the tournament result, cost per game).
+tomorrow     MUST log 'strategy' and 'playbook' calls with their usage, one line per model round trip (tool rounds
+             included, with the round number and cause code); the trial report gets a row per kind and the UBER-AC-A
+             measures (edit share, late share, tool rounds per call, the tournament result, cost per game).
 mechanism    in_place
 
 C7 · REMOVED · per-move model decisions in real-time phases
@@ -154,6 +178,9 @@ tomorrow     MUST render, from WS1's move descriptors plus config only: each pha
 seam         packages/ai/src/llm/manual.ts (new) — pure; prompt.ts and the writer's system block both read it
 senior       junior would: write a longer PRIMER by hand · senior does: render from the descriptors and config, so
              a rule change cannot leave it stale; the coverage test (WS1) fails before the manual can miss a move
+reuse        neighbours: llm/prompt.ts::PRIMER (hand-written phases) and the S-A1 primer in strategy-spike.ts (PRIMER's
+             phases + scoreParts in words). Both are beaten because they are prose a rule change leaves stale; manual.ts
+             takes over the system block for strategy and playbook calls, and PRIMER stays for move prompts until C7.
 mechanism    sprout
 pin          the moves' system text stays byte-stable per persona (cache), held by a snapshot of the manual for the
              default config; a config change moves the snapshot, never a hand edit.
@@ -165,16 +192,22 @@ today        no tools: the client sends one message and reads one JSON reply
              · anchors: apps/server/src/brain/client.ts::createHaikuComplete   verified_by: read
 tomorrow     MUST offer, in-process via Claude API tool use, in strategy and playbook calls only: legalMoves (now, with
              prices), worth (my scoreParts breakdown), standings (every seat's public Worth), whatIf (a keyless engine
-             sim of a playbook over one month). Each answers from the seat's observation (HC-3) and costs no money.
-             Each tool round trip is ledgered and counted inside the seat's share of the game budget (AM-19); at most
-             BRAIN.toolRounds round trips per call; tools never run inside a real-time phase (HC-1).
+             sim of a playbook over one month). Each handler answers from the seat's observation (HC-3), in process,
+             with no model or network call; the model round trip that carries a tool result is what costs, and it is
+             checked and ledgered like any call (HC-9, RULE-A4). At most BRAIN.toolRounds round trips per call; tools
+             never run inside a real-time phase (HC-1).
 seam         packages/ai/src/llm/tools.ts (new, pure definitions + handlers over the observation); the loop in
              apps/server/src/brain/client.ts (the one place that talks to the API)
 senior       junior would: hand the model the raw state, or loop on tools without a cap · senior does: MCP-shaped
              definitions (name, description, JSON schema) so a real MCP server later is a wrapper; a round cap and
              the budget check before every round; whatIf reuses the engine sim, never a second rules copy
+reuse        neighbours: no model tool use exists in the repo (a search for tool_use across packages and apps finds
+             only the web map tools, which are UI); legalMoves reads WS1's descriptors, worth and standings call
+             engine/src/game.ts::scoreParts, and whatIf drives packages/ai/src/play.ts's engine loop on a copy of the
+             observation, so no rule is restated.
 mechanism    sprout (tools.ts) + in_place (client loop)
-depends_on   C8 (the move descriptors); WS1 descriptors; the engine sim entry for one month (WS1, contract)
+depends_on   C3 (the client); C8 (the move descriptors); WS1 descriptors; the engine sim entry for one month (WS1,
+             contract)
 ```
 
 ## §2 · The Logic `[handoff]`
@@ -217,6 +250,20 @@ owner    the bound lives in validatePlan (WS1, §3); C2's writer also leaves 'mo
 examples → §6: Rookie + edit monopolyTarget 'smithore' → rejected, null · Trader + same edit → accepted
 ```
 
+```
+RULE-A4 · The tool loop inside one strategy or playbook call (C9)     shape: decision table, evaluated per round
+inputs   stop: tool_use | end_turn | max_tokens | refusal · round: 1..BRAIN.toolRounds · shareLeft: the next round's
+         worst case fits the seat's share (true | false) · deadline: the phase start not yet passed (true | false)
+first match wins
+  1  deadline = false                     stop; the reply is late (RULE-A1 row 2); no further round
+  2  stop ≠ tool_use                      stop; the reply goes to the writer (C2) as it is
+  3  round = BRAIN.toolRounds             one last round with tools withheld, asking for the answer now
+  4  shareLeft = false                    stop; the engine playbook plays (RULE-A1 row 1); ledgered 'budget'
+  5  otherwise                            run the handlers in process, send their results, next round
+unknown  a tool handler that throws answers {is_error: true} with a code, never the exception text; the loop goes on.
+examples → §6: round cap 3 → at most 4 round trips · share runs out in round 2 → engine playbook · late → dropped
+```
+
 ## §3 · Contracts & Data Models `[handoff]`
 - **Playbook schema** (ADDED, owned by WS1, frozen with WS3 and WS2): v0.2 at
   `.handover/ws2-findings/playbook-schema-v0.md`, settled by WS3 on 29 Oct: `LandGrantPlay.pressShare: { start; end }` (a
@@ -231,8 +278,15 @@ examples → §6: Rookie + edit monopolyTarget 'smithore' → rejected, null · 
   feed PhaseOutcome; the replay ignores them. The append and replay API is WS3's, before its freeze.
 - **`validatePlan(state, seat, draft, edits) → { playbook, rejected }`** (ADDED, WS1): bounds per field.
 - **Writer reply** (ADDED, WS2, C2): JSON schema `{ strategy?: Strategy, edits: {path, to, reason}[], line?: string }`.
-- **Game record entry** (ADDED, WS3): `{ type: 'playbook', at, seat, month, phase, playbook }`; the record holds every
-  applied action with its game-time stamp, one list per game, saved at game end (PM, 28 Oct).
+- **Game record entry** (ADDED, WS3): `PlaybookEntry { type: 'playbook', at, seq, seat, month, phase, playbook }` (v1;
+  `at` game ms, `seq` the order among timer firings); the record holds every applied action with its game-time stamp,
+  one list per game, saved at game end (PM, 28 Oct).
+- **Move descriptors** (ADDED, WS1, consumed by C8 and C9): each AiAction in `packages/ai/src/actions.ts` gains
+  {what it does, when it is legal, what it costs, when it is smart}, the rule text written by its rule owner. WS2
+  stubs on a descriptor type until WS1's lands; the shape is WS1's to propose.
+- **Tool definitions** (ADDED, WS2, C9): MCP-shaped `{ name, description, input_schema }` for legalMoves, worth,
+  standings, whatIf, in `packages/ai/src/llm/tools.ts`; results are JSON from the seat's observation only. A later MCP
+  server wraps these definitions unchanged.
 
 ## §4 · Failure & Ops `[handoff]`
 | Question | Answer |
@@ -241,6 +295,9 @@ examples → §6: Rookie + edit monopolyTarget 'smithore' → rejected, null · 
 | Retries | none (HC-3 of the brain spec stays); a trigger may ask again later |
 | Idempotency | one playbook per seat per phase; the first to take effect wins; replay reads the record (C5) |
 | Races | a reply racing the phase start: the phase start wins (RULE-A1 unknown) |
+| Tool handler throws | RULE-A4 unknown: `is_error` with a code; the loop continues; ledgered (C9) |
+| Tool loop runs long | RULE-A4 rows 1, 3, 4: the deadline, the round cap and the share each stop it (C9) |
+| whatIf is slow | it simulates one month keyless in process, capped by a BRAIN tick limit, answering `is_error` past it (C9) |
 | When broken | every game still plays on engine playbooks (C7 pin, B-AC-3) |
 | Operator view | ledger kinds strategy/playbook; trial report rows; dev view shows the playbook and its edits |
 
@@ -257,6 +314,10 @@ Code-only; no existing state to reach. The record starts with WS3's build.
 | T-AC-A3 | No call is open inside a real-time phase that the phase waits on: phases start on time with a fake model that never answers. | phase start times | — | C4 C7 |
 | T-AC-A5 (HC-8) | RULE-A3 rows 1-3: a Rookie seat's edits that would corner are rejected or clamped; the same edits on a Trader seat pass. | validated playbook, `rejected` | Trader → accepted | C2 |
 | T-AC-A4 | Ledger and trial rows for strategy and playbook calls; cost per game within gameBudgetUsd. | ledger file, trial report | — | C6 |
+| T-AC-A6 | Strategy and playbook calls send adaptive thinking with BRAIN's model and effort for their kind; move calls keep thinking off and Haiku. | the SDK request a fake records | a move call with thinking → red | C3 |
+| T-AC-A7 | The manual is rendered from the descriptors and config only: changing one config number (GAME.plotScore) changes the manual's text; the default config's manual is byte-identical run to run; every AiAction appears in it. | manual text | a move missing from the descriptors → WS1's coverage test red | C8 |
+| T-AC-A8 | RULE-A4 rows 1-5: at most BRAIN.toolRounds + 1 round trips; a share that runs out mid-loop stops it; a throwing handler answers is_error and the loop goes on; every round trip has its ledger line. | the fake SDK's requests, ledger lines | a handler's error text in a request → red | C9 C6 |
+| T-AC-A9 (HC-3) | No tool result carries another seat's goods or unanalysed ground; whatIf leaves the live game state unchanged. | tool results; state before and after | a rival's stock in worth's answer → red | C9 |
 
 ## §7 · Risks & Spikes `[review-only]`
 - **S-A1 (spike, APPROVED by Heiko 29 Oct, ~$0.10, cost from the ledger):** Haiku 5.5 + adaptive thinking vs Sonnet 5.5 on the same 20 briefs:
@@ -281,10 +342,27 @@ Code-only; no existing state to reach. The record starts with WS3's build.
   on Haiku unless the same test says otherwise for them.
 - **R-A1:** slack windows shorter than the model at fast tables. Mitigation: RULE-A1 row 2; the trial measures the
   late share.
-- **R-A2:** the schema freezes late. Mitigation: C1-C2 stub on schema v0; C4-C5 wait.
+- **R-A2:** the schema freezes late. Closed 29 Oct: v1 frozen (WS1, WS3, WS2); C1-C2 stub on the v1 types until
+  WS1's step 2 lands them in packages/engine/src/playbook.ts.
+- **R-A3:** the manual and tool rounds make the brief several times S-A1's ~2.5k tokens, so latency and cost move.
+  Mitigation: the system block is cached; the paired re-run (S-A1 model rule) measures both before the model choice
+  is final; RULE-A4 caps rounds.
+- **R-A4:** WS1's descriptors and coverage test land after WS2 wants to build C8. Mitigation: C8 renders from a
+  descriptor type stubbed in WS2's tests; the coverage test is WS1's and gates C8's merge, not its start.
+- **Landmine (memory, "Configurable balance"):** every number in C1-C9 (caps per section, toolRounds, the whatIf tick
+  limit, efforts) is a named BRAIN value. Mitigation: the settings guard holds it.
 
 ## §8 · Amendments `[review-only]`
-(none yet)
+- **AM-A1 · 29 Oct · Heiko via PM:** G-A restated for two layers, approved ("Yes, all eight").
+- **AM-A2 · 29 Oct · Heiko via PM:** Rookie never tries a monopoly → HC-8, RULE-A3, T-AC-A5.
+- **AM-A3 · 29 Oct · PM, WS1, WS3:** playbook v1 frozen (pressShare {start, end}; PlanningPlay.list later, AM-20;
+  types in engine/src/playbook.ts and record.ts) → §3, C1, C5.
+- **AM-A4 · 29 Oct · Heiko via PM (option B):** a generated manual and live tools; the MCP server parked → C8, C9,
+  RULE-A4, HC-9, T-AC-A7..A9, §9. G-A's line restated again, awaiting Heiko (§0 held).
+- **AM-A5 · 28-29 Oct · S-A1 measured, PM:** Haiku 5.5 adaptive, effort medium is the default; model per kind in
+  BRAIN; the capability-first re-run rule → C3, §7. The spike's cause codes → C2.
+- **AM-A6 · 29 Oct · lead:** C4's seam renamed playbooks.ts (no clash with packages/ai's strategist.ts); C3 promotes
+  the S-A1 port instead of a second client. Cost note for §0 (held): C8 and C9 add about 2 PRs, so about 5 in all.
 
 ## §9 · Ownership Boundaries `[handoff]`
 - Sole owner of Claude's brief, writer and their prompts: `packages/ai/src/llm/` (WS2). The playbook schema and its
@@ -295,3 +373,5 @@ Code-only; no existing state to reach. The record starts with WS3's build.
   WS1 owns the coverage test: every MuleIntent in packages/protocol has an AI move or sits on a short reviewed
   exclusion list. WS2 owns the manual's rendering (C8) and the tools (C9), and reads the descriptors only.
   Settled at the schema freeze with WS1 and WS3 (PM, 29 Oct).
+- The tools (`packages/ai/src/llm/tools.ts`) and the manual (`llm/manual.ts`): WS2. The SDK stays imported by
+  `apps/server/src/brain/client.ts` only (the existing §9 guard test); the tool loop lives there.
