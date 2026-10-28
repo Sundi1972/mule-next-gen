@@ -362,6 +362,9 @@ export type FloorGood = 'food' | 'water' | 'energy' | 'smithore';
 /** The 11 land terrains other than the river: the ones with a target share. */
 export type ShareTerrain = Exclude<LandTerrain, 'river'>;
 
+/** The special fields the generator places; a meteor crater only forms in play. */
+export type PlacedSpecialKind = Exclude<SpecialKind, 'meteorCrater'>;
+
 /**
  * What every map must meet (the map rules), read by the checker, the
  * generator and the map gallery. Size bands are sizeBand's. Counts are good
@@ -446,7 +449,7 @@ export const MAP = {
       geyser: ['volcanic', 'tundra', 'ice'],
       oasis: ['desert'],
       relic: ['plains', 'forest', 'hills', 'desert', 'tundra', 'mountains', 'swamp', 'volcanic', 'crater', 'ice'],
-    } satisfies Record<SpecialKind, ShareTerrain[]>,
+    } satisfies Record<PlacedSpecialKind, ShareTerrain[]>,
     maxPerKind: 2,
     minKinds: 3,
     /** Fewest steps between two special fields. */
@@ -476,6 +479,8 @@ export const MAP = {
     /** What ruins pay their first owner, once, by the salvage drawn with the map. */
     salvage: { alloy: 2, electronics: 1 },
   },
+  /** A meteor crater, formed in play: its Crystite rating (the top of the mined scale), and no production bonus. */
+  meteorCrater: { crystite: 4 },
   /** Tuning for the layout stages (map-layout.ts): how the generator meets the rules above, not rules themselves. */
   layout: {
     /** The budget never gives a terrain more than this share, so jitter can't take plains near maxTerrainShare. */

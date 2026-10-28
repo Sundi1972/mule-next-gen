@@ -358,7 +358,7 @@ describe('a meteor crater, formed in play', () => {
     const state = colony();
     const store = state.tiles.find((t) => t.terrain === 'store')!;
     const before = structuredClone(state);
-    const refused = [[store.x, store.y], [-1, 0], [state.width, 0], [0, -1], [0, state.height], [1.5, 0]] as const;
+    const refused = [[store.x, store.y], [-1, 0], [state.width, 0], [0, -1], [0, state.height], [0.5, 0.5]] as const;
     for (const [x, y] of refused) expect(() => formMeteorCrater(state, x, y), `${x},${y}`).toThrow(RuleError);
     expect(state).toEqual(before);
   });

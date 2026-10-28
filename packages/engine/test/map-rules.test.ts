@@ -156,6 +156,11 @@ const cases: Case[] = [
   }),
   row('P1', 'ruins touching the store', MID, (m) => withSpecials(m, [[3, 1, null], [7, 3, field('ruins')]]), { mentions: 'store', at: [{ x: 7, y: 3 }] }),
   row('P1', 'ruins with no salvage', MID, (m) => withSpecials(m, [[3, 1, { kind: 'ruins' }]]), { mentions: 'salvage', at: [{ x: 3, y: 1 }] }),
+  row('P1', 'a meteor crater in place of the ruins', MID, (m) => withSpecials(m, [[3, 1, field('meteorCrater')]]), {
+    mentions: 'in play',
+    detail: 'meteorCrater at (3,1) forms only in play, never with the map',
+    at: [{ x: 3, y: 1 }],
+  }),
   row('P1', 'large: the crystal cavern moved to a crater rated Crystite 0', LARGE, (m) => withSpecials(m, [[2, 8, null], [6, 10, field('crystalCavern')]]), {
     detail: 'crystalCavern at (6,10) has crystite 0, at least 1 needed',
     mentions: 'crystite 0',
