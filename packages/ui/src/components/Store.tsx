@@ -69,11 +69,14 @@ function spotFor(leading: Leading): Spot {
 const inRow = (x0: number, x1: number): CSSProperties => ({ left: `${x0}%`, width: `${x1 - x0}%`, top: 0, height: '100%' });
 const band = (b: { y0: number; y1: number }): CSSProperties => ({ top: `${b.y0}%`, height: `${b.y1 - b.y0}%` });
 
-/** Type and creature sizes: the phone's, the big screen's side panel, and the shell's wide layout. */
+/**
+ * Type and creature sizes: the phone's, the big screen's side panel, and the shell's wide layout. The phone's type is
+ * never under 10 px, and its doors and fitting bays are at least 32 px wide on a 667 px phone (B-AC-11).
+ */
 const SIZES = {
-  phone: { lock: 'py-px text-[7px]', name: 'text-[11px]', price: 'text-[10px]', small: 'text-[8px]', icon: 20, fit: 16, mule: 30, creature: 28, led: 32, sign: 'h-5 w-5', chimney: 'h-3 w-3', caps: 'text-[8px]!', door: 'text-base', doorNote: 'text-[7px]' },
-  tv: { lock: 'py-0.5 text-[10px]', name: 'text-sm', price: 'text-sm', small: 'text-xs', icon: 30, fit: 22, mule: 44, creature: 40, led: 44, sign: 'h-7 w-7', chimney: 'h-4 w-4', caps: 'text-xs!', door: 'text-xl', doorNote: 'text-[10px]' },
-  wide: { lock: 'py-0.5 text-[11px]', name: 'text-lg', price: 'text-base', small: 'text-sm', icon: 40, fit: 30, mule: 84, creature: 52, led: 60, sign: 'h-10 w-10', chimney: 'h-5 w-5', caps: 'text-xs!', door: 'text-3xl', doorNote: 'text-xs' },
+  phone: { lock: 'px-0.5 py-px text-[10px]', name: 'text-[11px]', price: 'text-[10px]', small: 'text-[10px]', icon: 20, iconPad: 'p-1', fit: 16, fits: 'gap-0.5 p-0.5', mule: 30, creature: 28, led: 32, sign: 'h-5 w-5', chimney: 'h-3 w-3', caps: 'text-[10px]!', door: 'text-base', doorBox: 'min-w-8', doorNote: 'text-[10px]' },
+  tv: { lock: 'px-1 py-0.5 text-[10px]', name: 'text-sm', price: 'text-sm', small: 'text-xs', icon: 30, iconPad: 'p-1.5', fit: 22, fits: 'gap-1 p-1', mule: 44, creature: 40, led: 44, sign: 'h-7 w-7', chimney: 'h-4 w-4', caps: 'text-xs!', door: 'text-xl', doorBox: '', doorNote: 'text-[10px]' },
+  wide: { lock: 'px-1 py-0.5 text-[11px]', name: 'text-lg', price: 'text-base', small: 'text-sm', icon: 40, iconPad: 'p-1.5', fit: 30, fits: 'gap-1 p-1', mule: 84, creature: 52, led: 60, sign: 'h-10 w-10', chimney: 'h-5 w-5', caps: 'text-xs!', door: 'text-3xl', doorBox: '', doorNote: 'text-xs' },
 };
 type Sizes = (typeof SIZES)[keyof typeof SIZES];
 
@@ -153,12 +156,12 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onSho
           >
             <Awning color={`var(--color-g-${g})`} />
             <span className="flex flex-1 flex-col items-center justify-center gap-0.5 px-1">
-              <span className="grid place-items-center rounded-full p-1.5" style={{ background: `color-mix(in srgb, var(--color-g-${g}) 18%, transparent)`, boxShadow: `0 0 18px color-mix(in srgb, var(--color-g-${g}) 35%, transparent)` }}>
+              <span className={cx('grid place-items-center rounded-full', z.iconPad)} style={{ background: `color-mix(in srgb, var(--color-g-${g}) 18%, transparent)`, boxShadow: `0 0 18px color-mix(in srgb, var(--color-g-${g}) 35%, transparent)` }}>
                 <GoodIcon good={g} size={z.icon} />
               </span>
               <span className={cx('font-display font-semibold leading-tight', z.name)}>{GOOD_NAME[g]}</span>
               {cost(g) && (
-                <span data-num className={cx(price, 'rounded-chip bg-void/50 px-1.5 text-ink')}>
+                <span data-num className={cx(price, 'whitespace-nowrap rounded-chip bg-void/50 px-1.5 text-ink')}>
                   {cost(g)}
                 </span>
               )}
@@ -178,7 +181,7 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onSho
             </svg>
             <span className={cx('label-caps', z.caps)}>The works · factory fits</span>
           </span>
-          <span className="grid flex-1 grid-cols-3 gap-1 p-1">
+          <span className={cx('grid flex-1 grid-cols-3', z.fits)}>
             {FACTORY_GOODS.map((g) => (
               <button
                 key={g}
@@ -322,7 +325,7 @@ function Room({
         </span>
       )}
       {disabled && lock && (
-        <span className={cx('shrink-0 bg-void/60 px-1 font-mono uppercase leading-tight text-ink-2', z.lock)} data-lock>
+        <span className={cx('shrink-0 bg-void/60 font-mono uppercase leading-tight text-ink-2', z.lock)} data-lock>
           {lock}
         </span>
       )}
@@ -349,6 +352,7 @@ function Door({ side, onTap, next, z }: { side: 'L' | 'R'; onTap: (() => void) |
       {...(onTap ? { type: 'button' as const, onClick: onTap } : {})}
       className={cx(
         'absolute flex w-[7%] flex-col items-center justify-center gap-1 rounded-panel border-2 border-dashed border-holo-line bg-void/60 text-holo enabled:hover:bg-holo-soft',
+        z.doorBox,
         side === 'L' ? 'left-[0.6%]' : 'right-[0.6%]',
         next && 'z-[1] border-solid border-holo bg-holo-soft animate-[store-beckon_1.6s_ease-in-out_infinite]',
       )}
