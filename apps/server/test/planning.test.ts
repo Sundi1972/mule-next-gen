@@ -12,9 +12,11 @@ const TEN_MINUTES = 600_000;
 /** An election month's longest run on its own clocks, nominate to reveal, with room to spare. */
 const ELECTION_BOUND_MS = 120_000;
 
-function started(options: { phaseScale?: number; politics?: boolean } = {}) {
-  const fake = fakeContext();
-  const game = new MuleGame(fake.ctx, 7, options);
+/** Seed 7 with the three standard seats, in planning; Heiko (s1) hosts unless `host` names another seat or none. */
+function started(options: { phaseScale?: number; politics?: boolean; host?: string | null } = {}) {
+  const { host, ...gameOptions } = options;
+  const fake = fakeContext({ host });
+  const game = new MuleGame(fake.ctx, 7, gameOptions);
   game.start(seats);
   return { game, ...fake };
 }
@@ -192,12 +194,13 @@ describe("FM-planning-host-continue: the host's Continue ends planning proper; n
       if (!stages.has(election().stage)) {
         stages.add(election().stage);
         refusedUnchanged(game, () => game.continuePlanning(), `Continue at the election's ${election().stage} stage`);
+        refusedUnchanged(game, () => game.handle('s1', { type: 'continue' }), `the host's Continue at the election's ${election().stage} stage`);
       }
       advance(WALK.tickMs);
     }
     expect([...stages], 'every stage was tried').toEqual(['nominate', 'ballot', 'reveal']);
     expect(election().stage).toBe('over');
-    game.continuePlanning();
+    game.handle('s1', { type: 'continue' });
     expect(phase(game)).toBe('landGrant');
   });
 
@@ -209,20 +212,37 @@ describe("FM-planning-host-continue: the host's Continue ends planning proper; n
       if (phase(game) !== 'planning' && !tried.includes(phase(game))) {
         tried.push(phase(game));
         refusedUnchanged(game, () => game.continuePlanning(), `Continue in ${phase(game)}`);
+        refusedUnchanged(game, () => game.handle('s1', { type: 'continue' }), `the host's Continue in ${phase(game)}`);
       }
       advance(100);
     }
     expect(tried).toEqual(expect.arrayContaining(['landGrant', 'development', 'production', 'auction', 'upkeep']));
   });
 
-  it("FM-planning-host-continue: until Continue's source is wired, a continue from any seat is refused and nothing changes", () => {
+  it("FM-planning-host-continue: a non-host's Continue is refused and nothing changes; the host's ends planning with nobody Ready", () => {
     const { game } = started();
-    game.handle('s1', { type: 'ready' });
-    for (const seat of seats) {
+    for (const seat of seats.filter((x) => x.id !== 's1')) {
       const before = screens(game);
       expect(() => game.handle(seat.id, { type: 'continue' }), seat.name).toThrow(new RuleError('Only the host can continue'));
       expect(screens(game), `${seat.name}: nothing changes`).toEqual(before);
     }
+    expect(phase(game)).toBe('planning');
+    game.handle('s1', { type: 'continue' });
+    expect(phase(game)).toBe('landGrant');
+  });
+
+  it("FM-planning-host-continue: while Heiko's phone is locked, hosting passes to Mia: his Continue is refused, hers ends planning", () => {
+    const { game, setHost } = started();
+    game.connectionChanged('s1', false);
+    setHost('s2');
+    refusedUnchanged(game, () => game.handle('s1', { type: 'continue' }), "Heiko's Continue, no longer the host");
+    game.handle('s2', { type: 'continue' });
+    expect(phase(game)).toBe('landGrant');
+  });
+
+  it('FM-planning-host-continue: with no host, no seat can continue', () => {
+    const { game } = started({ host: null });
+    for (const seat of seats) refusedUnchanged(game, () => game.handle(seat.id, { type: 'continue' }), seat.name);
     expect(phase(game)).toBe('planning');
   });
 });
@@ -234,27 +254,41 @@ describe('FM-planning-host-continue over the wire', () => {
     running = null;
   });
 
-  it("FM-planning-host-continue: a phone's continue passes the wire and reaches the game, which refuses it", async () => {
-    running = createMuleServer({ seed: () => 42 });
+  it("FM-planning-host-continue: over the wire, Mia's Continue is refused and Heiko's, the host's, opens the land grant on every phone", async () => {
+    running = createMuleServer({ seed: () => 42, politics: false });
     await new Promise<void>((r) => running!.server.listen(0, r));
     const { port } = running.server.address() as AddressInfo;
     const { code } = (await (await fetch(`http://localhost:${port}/rooms`, { method: 'POST' })).json()) as { code: string };
-    const socket = new WebSocket(`ws://localhost:${port}/ws`);
-    const inbox: ServerEnvelope<MuleView>[] = [];
-    socket.on('message', (d) => inbox.push(JSON.parse(d.toString())));
-    await new Promise((r) => socket.once('open', r));
-    const send = (msg: object) => socket.send(JSON.stringify(msg));
-    send({ t: 'join', code, name: 'Heiko' });
-    send({ t: 'addAi' });
-    send({ t: 'start' });
-    for (let i = 0; i < 200 && !inbox.some((m) => m.t === 'view' && m.view.game?.phase === 'planning'); i++) await new Promise((r) => setTimeout(r, 10));
-    send({ t: 'intent', intent: { type: 'continue' } });
-    let error: string | null = null;
-    for (let i = 0; i < 200 && !error; i++) {
-      const e = inbox.find((m) => m.t === 'error') as Extract<ServerEnvelope<MuleView>, { t: 'error' }> | undefined;
-      error = e?.message ?? null;
-      if (!error) await new Promise((r) => setTimeout(r, 10));
-    }
-    expect(error).toBe('Only the host can continue');
+    const phone = async (name: string) => {
+      const socket = new WebSocket(`ws://localhost:${port}/ws`);
+      const inbox: ServerEnvelope<MuleView>[] = [];
+      socket.on('message', (d) => inbox.push(JSON.parse(d.toString())));
+      await new Promise((r) => socket.once('open', r));
+      const send = (msg: object) => socket.send(JSON.stringify(msg));
+      send({ t: 'join', code, name });
+      const phaseSeen = () => (inbox.filter((m) => m.t === 'view').at(-1) as Extract<ServerEnvelope<MuleView>, { t: 'view' }> | undefined)?.view.game?.phase;
+      const error = () => (inbox.filter((m) => m.t === 'error').at(-1) as Extract<ServerEnvelope<MuleView>, { t: 'error' }> | undefined)?.message;
+      const seated = () => inbox.some((m) => m.t === 'welcome');
+      return { send, phaseSeen, error, seated };
+    };
+    const until = async (done: () => boolean) => {
+      for (let i = 0; i < 300 && !done(); i++) await new Promise((r) => setTimeout(r, 10));
+    };
+    const heiko = await phone('Heiko');
+    const mia = await phone('Mia');
+    await until(() => heiko.seated() && mia.seated());
+    heiko.send({ t: 'start' });
+    await until(() => heiko.phaseSeen() === 'planning' && mia.phaseSeen() === 'planning');
+    expect(mia.phaseSeen()).toBe('planning');
+
+    mia.send({ t: 'intent', intent: { type: 'continue' } });
+    await until(() => mia.error() !== undefined);
+    expect(mia.error()).toBe('Only the host can continue');
+    expect(heiko.phaseSeen(), "Mia's Continue changed nothing").toBe('planning');
+
+    heiko.send({ t: 'intent', intent: { type: 'continue' } });
+    await until(() => heiko.phaseSeen() === 'landGrant' && mia.phaseSeen() === 'landGrant');
+    expect([heiko.phaseSeen(), mia.phaseSeen()]).toEqual(['landGrant', 'landGrant']);
+    expect(heiko.error(), 'the host was never refused').toBeUndefined();
   });
 });
