@@ -373,7 +373,7 @@ No spike needed.
 
 Note for slice 2a: its council was designed "built like the election", with clocks. To follow this
 ruling, I propose the Governor proposes a law at any time in planning, and the next month's planning
-opens with the law ballot (untimed, closes when everyone has voted, host's Continue for absent players),
+opens with the law ballot (untimed, closes when everyone has voted, host's Continue for every player not Done),
 then a short clocked reveal. CONFIRMED by the PM (2026-10-28; Heiko may overrule): folded as slice 2a's AM-1 (C40, RULE-40,
 RULE-41, HC-43, §3, B-AC-43).
 
