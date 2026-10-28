@@ -66,7 +66,8 @@ Times are the server's ms, like `phaseEndsAt`. `MyView.devEndsAt` keeps its name
 - **`may_edit`:**
   - `apps/server/src/mule-game.ts`, the development section, `viewFor` and `scheduleAiDevelop`;
   - `packages/protocol/src/index.ts`, `PlayerView.colonist` only;
-  - `packages/engine/src/config.ts`, the `PHASES` block only (remove `developmentGraceMs`);
+  - `packages/engine/src/config.ts`, the `PHASES` block only (remove `developmentGraceMs`; Task 6: `planningMs` becomes `number | null`, null);
+  - Task 6: `mule-game.ts`'s planning start, `checkAllReady` and `handle` (Continue); the protocol's intent union (Continue, once the PM rules);
   - `apps/server/test/**`. New `dev-walking.test.ts`, plus timing fixtures in WS3's server tests.
 - **Named edits, each told to its owner with its SHA:**
   - `apps/server/test/phase-scale.test.ts` T-AC-2 (WS4);
@@ -199,9 +200,51 @@ These are fixture changes only. Each changed assertion must still assert its own
 - [ ] **Step 5.2: the `store-steps.ts` named edit** (see Authority). Then run the web build and `MULE_E2E_SEED=1 pnpm --filter @mule/web e2e:core`.
 - [ ] **Step 5.3:** commit `test(server): fixtures walk to arrival on the one clock`. Commit the store-steps edit separately, so its owner reviews one hunk.
 
+### Task 6: planning has no clock (Heiko, playtest of 2026-10-28, via the PM)
+
+The ruling, as the PM relayed it: "the planning phase should not be time bound, give people enough time to plan".
+- Planning ends only when every player is Ready, with AI seats ready on their own as now.
+- The host can end it with Continue when a player is absent.
+- There is no countdown.
+
+The PM put it in this PR because it changes the same `PHASE_MS` table. WS6 builds the screens: "waiting for N players" and the host's Continue.
+
+**No spec ID exists yet.** Tests are named with plan-level IDs: FM-planning-untimed, FM-planning-all-ready and FM-planning-host-continue. They are renamed if WS6 mints spec IDs.
+
+**Facts this task rests on** (read at 1a945b1):
+- **Dropped phones are already excused.** `checkAllReady` excuses away seats in every phase but the land grant, so "a player is absent" only needs Continue for a player who is connected but idle.
+- **The election keeps its own stage clocks** (`scheduleElectionTick`). Planning proper starts when it ends; that start then waits for Ready instead of starting a timer.
+- **The game can't tell who the host is.** `GameContext` offers only `now`, `schedule` and `changed`.
+- **A board (the TV) can't send intents:** `room.ts::apply` refuses it with "Join the game first". Either way of placing Continue needs a named edit in WS4's `packages/tabletop`, which is why Step 6.4 waits for the PM.
+
+- [ ] **Step 6.0: bring #107 into the branch.** Merge `origin/ws3-auctions`. Lane minus trunk is exactly #107's `PHASES` block and its `literal-ok` markers, plus two WS3 plan docs. The PM agreed they reach trunk with this change.
+  - Resolve `PHASE_MS.development` to this branch's version, with no grace.
+  - Delete `PHASES.developmentGraceMs` (Task 2's Step 2.2, on the block that actually holds it).
+- [ ] **Step 6.1: RED rows** in a new `apps/server/test/planning.test.ts`, at server altitude on the fake clock:
+  - **FM-planning-untimed:** after the clock runs far past the old 45 s (and at phaseScale 0.1), the phase is still `planning`, and the public `phaseEndsAt` is null. In an election month the election still steps on its own clocks, and planning proper then waits.
+  - **FM-planning-all-ready:**
+    - one human Ready → still planning;
+    - the last connected human Ready → the land grant starts;
+    - a dropped phone doesn't hold it;
+    - AI seats never hold it.
+- [ ] **Step 6.2: implement.**
+  - `PHASES.planningMs: number | null = null`, documented as "null: planning waits for every player's Ready or the host's Continue; a number restores a timer".
+  - Planning starts no timer while it's null; after the election, the same.
+  - Commit: `feat(server): planning has no clock; it ends when every player is Ready`.
+- [ ] **Step 6.3: tests that waited out planning.** `advance(PHASE_MS.planning)` and `within(PHASE_MS.planning)` no longer compile.
+  - Add `fake-context.ts::readyAll(game)`, and replace each wait with it, or with the phone pressing Ready in the e2e.
+  - Each other lane's file gets its own commit, as a named edit: broadcast, handoff and dropped-phone (WS4); politics.test.ts (WS7); store-view.test.ts (WS6); smoke.ts and specials.ts (WS4); politics.ts (WS7).
+  - WS3's own: mule-game.test.ts, auction-units.test.ts and auction-steps.ts.
+- [ ] **Step 6.4 (waits for the PM's ruling on where Continue lives): FM-planning-host-continue.**
+  - RED first: the host's Continue ends planning with players not yet Ready; a non-host's Continue is refused with a `RuleError`, and nothing changes.
+  - Then the intent and the `packages/tabletop` named edit the ruling picks:
+    - **(A)** the host's phone sends a game intent, and `GameContext.hostId()` lets the game check it;
+    - **(B)** the TV sends it, through a board message that the room passes to the game.
+
 ### PR merge gate
 
 - [ ] T-AC-7, B-AC-11 (server half), the §4 race, FM-one-clock, FM-scaled-clock, FM-pub-late and "AI seats walk too" are green, named so, and each RED commit comes first.
+- [ ] Task 6: FM-planning-untimed, FM-planning-all-ready and FM-planning-host-continue are green, each RED first. Each named edit of Step 6.3 and 6.4 has its owner's SHA.
 - [ ] `pnpm typecheck` · `pnpm test` · `MULE_TIER2=1 pnpm --filter @mule/server exec vitest run test/land-auction-sim.test.ts` are green.
 - [ ] The web build, then `MULE_E2E_SEED=1 pnpm --filter @mule/web e2e:core` and `pnpm --filter @mule/web e2e:regression`, are green. This PR lands on trunk, so Tier 2 runs.
 - [ ] `trace-check` over the branch is PASS.
