@@ -34,10 +34,13 @@ const OFFICES: Office[] = ['governor', 'sheriff'];
 /** RULE-10: a Governor run carries a promise; tests about something else hold the tax. */
 const HOLD: TaxPromise = { kind: 'hold' };
 
-function newGame(options: { politics?: boolean; seats?: string[] } = {}): GameState {
+function newGame(options: { politics?: boolean; seats?: string[]; seed?: number } = {}): GameState {
   const seats = options.seats ?? SEATS;
-  return createGame({ seed: 7, players: seats.map((id) => ({ id, name: id, isAi: false })), politics: options.politics });
+  return createGame({ seed: options.seed ?? 7, players: seats.map((id) => ({ id, name: id, isAi: false })), politics: options.politics });
 }
+
+/** AM-12's round starts at seat (seed + k) mod n: with 4 seats, seed 8 starts month 1 at the first seat. */
+const ROUND_SEED = 8;
 
 function politicsOf(state: GameState): Politics {
   expect(state.politics).not.toBeNull();
@@ -536,8 +539,8 @@ describe('RULE-3: tally and winner', () => {
     { month: 4, plots: { lena: 2, brix: 1 }, winner: 'lena' },
     { month: 1, plots: { lena: 2, brix: 2 }, winner: 'lena' },
     { month: 4, plots: { lena: 2, brix: 2 }, winner: 'brix' },
-  ])('B-AC-4, T-AC-2 RULE-3 row 6 (AM-12): a tie the Baron\'s ballot does not break goes to the most plots, then round the table from seat k mod n: month $month → $winner', ({ month, plots, winner }) => {
-    const state = newGame();
+  ])('B-AC-4, T-AC-2 RULE-3 row 6 (AM-12): a tie the Baron\'s ballot does not break goes to the most plots, then round the table from seat (seed + k) mod n: month $month → $winner', ({ month, plots, winner }) => {
+    const state = newGame({ seed: ROUND_SEED });
     give(state, 'ossa', 3);
     give(state, 'lena', plots.lena);
     give(state, 'brix', plots.brix);
@@ -569,7 +572,7 @@ describe('RULE-3: tally and winner', () => {
     { month: 4, governor: 'brix', sheriff: 'ossa' },
     { month: 10, governor: 'ai1', sheriff: 'lena' },
   ])('T-AC-2 RULE-3 row 1/2 (AM-12): nobody runs and money is equal → the appointed Governor and Sheriff go round the table: month $month → $governor, $sheriff', ({ month, governor, sheriff }) => {
-    const state = newGame();
+    const state = newGame({ seed: ROUND_SEED });
     toMonth(state, month);
     setMoney(state, { lena: 1000, brix: 1000, ossa: 1000, ai1: 1000 });
 
@@ -581,7 +584,7 @@ describe('RULE-3: tally and winner', () => {
   });
 
   it('T-AC-2 RULE-3 rows 2, 6 (AM-12) property: over the 4 elections of a 4-seat game where every tie is total, each seat wins the tieRule Governor once and the appointed Sheriff once', () => {
-    const state = newGame();
+    const state = newGame({ seed: ROUND_SEED });
     const won = { governor: [] as string[], sheriff: [] as string[] };
     for (const month of POLITICS.electionMonths) {
       toMonth(state, month);
@@ -599,6 +602,25 @@ describe('RULE-3: tally and winner', () => {
 
     expect(won.governor).toEqual(['lena', 'brix', 'ossa', 'ai1']);
     expect(won.sheriff).toEqual(['brix', 'ossa', 'ai1', 'lena']);
+  });
+
+  // Most ties come in month 1, when nobody owns land and money is equal: the round must move between games, not only between elections.
+  it('T-AC-2 RULE-3 rows 2, 6 (AM-12) property: over 4 games in a row, month 1\'s total ties give each seat the tieRule Governor once and the appointed Sheriff once', () => {
+    const won = { governor: [] as string[], sheriff: [] as string[] };
+    for (let seed = ROUND_SEED; seed < ROUND_SEED + SEATS.length; seed++) {
+      const state = newGame({ seed });
+      setMoney(state, { lena: 1000, brix: 1000, ossa: 1000, ai1: 1000 });
+      for (const id of SEATS) runFor(state, id, 'governor', HOLD);
+      runOutClock(state);
+      const result = runOutClock(state)!;
+      expect(result.governor.how).toBe('tieRule');
+      expect(result.sheriff.how).toBe('appointed');
+      won.governor.push(result.governor.winner);
+      won.sheriff.push(result.sheriff.winner);
+    }
+
+    expect([...won.governor].sort()).toEqual([...SEATS].sort());
+    expect([...won.sheriff].sort()).toEqual([...SEATS].sort());
   });
 
   it('T-AC-2 invariant: one player never holds both offices and the fund never goes below 0, over 150 seeded games of random candidacies, ballots, Done presses and AM-1 closes', () => {
