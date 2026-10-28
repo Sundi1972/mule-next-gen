@@ -734,11 +734,13 @@ describe('TableClient', () => {
     const pings = () => t.last().sent.filter((m) => m.t === 'ping');
     /** The room answers a ping that left `rtt` ms ago, halfway through the round trip. */
     const pong = (rtt: number, clientTime = t.now() - rtt) => t.last().deliver({ t: 'pong', clientTime, serverTime: server() - rtt / 2 });
-    /** The room answers the phone's latest ping 20 ms after it left. */
+    /** The room answers the phone's latest ping 20 ms after it left. Returns what the phone sent as it took the pong. */
     const answerLatest = () => {
       const clientTime = pings().at(-1)!.clientTime as number;
       t.advance(20);
+      const sent = t.last().sent.length;
       pong(20, clientTime);
+      return t.last().sent.slice(sent);
     };
     /** The phone's next ping straddles the jump: its pong notices it and shifts the clock. */
     const notice = () => {
@@ -785,7 +787,9 @@ describe('TableClient', () => {
       inFlight(t);
       t.advance(20);
       t.last().deliver({ t: 'handoffCode', code: 'fresh', expiresAt });
-      shown(t);
+      // Re-timing sends nothing, not even a ping, so the phone takes the round trip that measures the clock in silence.
+      const sentOnMeasuring = shown(t);
+      expect(sentOnMeasuring).toEqual([]);
 
       t.advance(100);
       let heard = 0;
