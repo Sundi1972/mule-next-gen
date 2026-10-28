@@ -57,8 +57,9 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Four games put every persona in every seat once (simSeats rotates by seed): a crash guard, not a balance check.
       - name: Balancing simulator smoke run
-        run: pnpm sim -- --games 20 --players 4
+        run: pnpm sim -- --games 4 --players 4
 
   # Tier 2: the regression e2e beyond the whole game. New checks go in as steps of an existing game, not new files.
   e2e-regression:
