@@ -367,6 +367,19 @@ describe('the election runs first in planning', () => {
     expect(election(g.game).waitingFor).toEqual(['brix', 'ossa']);
   });
 
+  it("T-AC-64: the host's Continue counts only humans Done, the host among them, and names only the others; an AI seat still acts after its own pause", () => {
+    const g = started();
+    expect(election(g.game).stage).toBe('announce');
+    g.game.handle('lena', { type: 'continue' });
+    expect([...election(g.game).done].sort(), 'every human, the host too; never the AI seat').toEqual(['brix', 'lena', 'ossa']);
+    expect(g.game.viewFor(null).news[0], 'the host is not named').toBe('Lena continued without Brix and Ossa.');
+    g.advance(WALK.tickMs);
+    expect(election(g.game).stage, 'the last call waits for the AI seat').toBe('announce');
+
+    aiPause(g);
+    expect(election(g.game).stage, 'the AI seat pressed Done itself, after its pause').not.toBe('announce');
+  });
+
   it('T-AC-64: a Done the player pressed stands when their phone drops and comes back; the server never presses one', () => {
     const g = started({ phaseScale: 0.1 });
     g.game.handle('lena', { type: 'ready' });
