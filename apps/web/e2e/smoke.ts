@@ -11,6 +11,7 @@ import { check, claimAPlot, headerSlot, held, launch, PHONE, startServer, TV, ty
 import { planningIsTheHub } from './hub-steps';
 import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
 import { fedPlayerFillsAFullHoloBar, hungryPlayerSeesAShortOrangeBar, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
+import { specialFieldsShowTheirGlyphs } from './special-steps';
 import { doubleTapZoomsToYourLand, moveDialogOpensInProduction, moveDialogOutlivedThePhase, noZoomBeforeYourFirstPlot, thePhonePicksRose, theSeatMovesToAnotherDevice, theTvDrawsRose, watchIntents, zoomButtonOnceYouOwnAPlot } from './table-steps';
 
 /** Loaded by a path held in a variable, so tsc never resolves a file that may not exist yet. */
@@ -108,6 +109,7 @@ try {
   await theTvDrawsRose(ctx, 'planning');
 
   // Month 1.
+  await specialFieldsShowTheirGlyphs(ctx);
   await phone.getByRole('button', { name: "I'm ready" }).click();
   const claim = phone.getByRole('button', { name: /CLAIM/ });
   await claim.waitFor({ timeout: 5_000 });
