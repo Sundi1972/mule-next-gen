@@ -9,6 +9,7 @@ import {
   EVENTS,
   GAME,
   GOODS,
+  GROWN_BASE,
   neighbours,
   planEvent,
   playerEventChance,
@@ -149,6 +150,23 @@ function colonyForEvents(seed: number): GameState {
   return state;
 }
 
+const rows = (): EventRow[] => [...Object.values(EVENTS.colony), ...Object.values(EVENTS.player)];
+/** Gives a row exactly these fields, dropping any others it had. */
+const reset = (row: EventRow, fields: EventRow) => {
+  for (const key of Object.keys(row) as (keyof EventRow)[]) delete (row as Partial<EventRow>)[key];
+  Object.assign(row, fields);
+};
+/** Runs `body` with every event row at `chance` in production, capped at 1, with no raises or lowers; then puts the rows back. */
+const withEveryRowAt = (chance: number, body: () => void) => {
+  const saved = rows().map((row) => ({ ...row }));
+  for (const row of rows()) reset(row, { phases: { production: chance }, cap: 1 });
+  try {
+    body();
+  } finally {
+    rows().forEach((row, i) => reset(row, saved[i]!));
+  }
+};
+
 describe('events in production', () => {
   it('T-AC-3: each event changes exactly the plots it hits, by RULE-3, and the report says so', () => {
     for (const key of Object.keys(EVENTS.weights) as EventKey[]) {
@@ -183,6 +201,84 @@ describe('events in production', () => {
         expect([key, seen > 0]).toEqual([key, true]);
       });
     }
+  });
+});
+
+describe('several events in one production', () => {
+  /** Plays a production from development, and returns the month report it files. */
+  const produce = (state: GameState) => {
+    state.phase = 'development';
+    advancePhase(state);
+    return state.history.at(-1)!;
+  };
+  /** At the first month events may roll, p0's lone farm: no special, trait, pollution or neighbour, Energy and Water to spare. */
+  const loneFarm = () => {
+    const state = createGame({ seed: 4, players: [0, 1, 2, 3].map((i) => ({ id: `p${i}`, name: `P${i}`, isAi: false })) });
+    state.month = EVENTS.firstMonth;
+    for (const t of state.tiles) delete t.special;
+    const farm = state.tiles.find((t) => t.terrain !== 'store')!;
+    Object.assign(farm, { owner: 'p0', outfit: 'food', traits: [], pollution: 0 });
+    farm.ground.food = 1 - GROWN_BASE;
+    Object.assign(state.players[0]!.stock, { energy: 10, water: 10 });
+    return { state, farm: state.tiles.indexOf(farm) };
+  };
+  const lineOf = (report: MonthReport, tile: number) => report.lines!.find((l) => l.tile === tile)!;
+
+  it('EM-T-AC-3: two events on one plot both apply in order, never below 0, and an excluded pair keeps one', () => {
+    // Every pair the excludes name, and every key a row follows, is a row: a misspelt key would never fire.
+    const named = [...EVENTS.excludes.flat(), ...rows().flatMap((row) => Object.keys(row.follows ?? {}))];
+    expect(named.length).toBeGreaterThan(0);
+    expect(named.filter((key) => !Object.hasOwn(EVENTS.colony, key) && !Object.hasOwn(EVENTS.player, key))).toEqual([]);
+
+    withEveryRowAt(0, () => {
+      const calm = loneFarm();
+      expect(lineOf(produce(calm.state), calm.farm).made).toBe(1);
+
+      // A drought, then acid rain, on the farm that makes 1: each works on what the one before left.
+      EVENTS.colony.drought.phases = { production: 1 };
+      EVENTS.colony.acidRain.phases = { production: 1 };
+      const { state, farm } = loneFarm();
+      const report = produce(state);
+      expect(report.events!.map((e) => [e.key, e.plots.map((p) => [p.index, p.delta])])).toEqual([
+        ['drought', [[farm, -1]]],
+        ['acidRain', [[farm, 0]]],
+      ]);
+      const line = lineOf(report, farm);
+      expect(line.made).toBe(0);
+      expect(line.parts.filter((p) => p.why === 'event')).toEqual([
+        { why: 'event', delta: -1, event: 'drought' },
+        { why: 'event', delta: 0, event: 'acidRain' },
+      ]);
+      expect(line.parts.reduce((n, p) => n + p.delta, 0)).toBe(line.made);
+    });
+
+    withEveryRowAt(0, () => {
+      // A drought and a flood both certain, and a wildfire only during a drought: the pair's dice keep one.
+      EVENTS.colony.drought.phases = { production: 1 };
+      EVENTS.colony.flood.phases = { production: 1 };
+      reset(EVENTS.player.wildfire, { phases: { production: 0 }, follows: { drought: { points: 1, thisPhase: true } }, cap: 1 });
+      const month = (seed: number) => {
+        const state = colonyForEvents(3);
+        state.month = EVENTS.firstMonth;
+        state.seed = seed;
+        return produce(state);
+      };
+      const keepers = new Set<EventKey>();
+      for (let seed = 1; seed <= 20; seed++) {
+        const report = month(seed);
+        const keys = report.events!.map((e) => e.key);
+        const pair = keys.filter((key) => key === 'drought' || key === 'flood');
+        expect([seed, pair.length]).toEqual([seed, 1]);
+        keepers.add(pair[0]!);
+        // The dropped one never fired: no line shows it, and it raises no wildfire.
+        const shown = new Set(report.lines!.flatMap((l) => l.parts.flatMap((p) => p.event ?? [])));
+        expect([seed, [...shown].sort()]).toEqual([seed, [...new Set(keys)].sort()]);
+        expect([seed, keys.includes('wildfire')]).toEqual([seed, pair[0] === 'drought']);
+        expect(month(seed).events).toEqual(report.events);
+      }
+      // Kept by the dice, not by the table's order.
+      expect([...keepers].sort()).toEqual(['drought', 'flood']);
+    });
   });
 });
 
@@ -346,23 +442,7 @@ describe('the event table', () => {
 });
 
 describe('the roller', () => {
-  const rows = (): EventRow[] => [...Object.values(EVENTS.colony), ...Object.values(EVENTS.player)];
   const PERSONAL = ['pestSwarm', 'wildfire', 'bumperHarvest'] as const;
-  /** Gives a row exactly these fields, dropping any others it had. */
-  const reset = (row: EventRow, fields: EventRow) => {
-    for (const key of Object.keys(row) as (keyof EventRow)[]) delete (row as Partial<EventRow>)[key];
-    Object.assign(row, fields);
-  };
-  /** Runs `body` with every event row at `chance` in production, capped at 1, with no raises or lowers; then puts the rows back. */
-  const withEveryRowAt = (chance: number, body: () => void) => {
-    const saved = rows().map((row) => ({ ...row }));
-    for (const row of rows()) reset(row, { phases: { production: chance }, cap: 1 });
-    try {
-      body();
-    } finally {
-      rows().forEach((row, i) => reset(row, saved[i]!));
-    }
-  };
   /** colonyForEvents(seed) at the first month events may roll. */
   const ready = (seed: number) => {
     const state = colonyForEvents(seed);
