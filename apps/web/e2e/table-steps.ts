@@ -20,8 +20,8 @@ const READY = '[data-testid=handoff-qr][data-state=ready]';
 
 export type Plot = { x: number; y: number };
 type Box = { x: number; y: number; width: number; height: number };
-/** A plot as drawn: its x-y, its label, its box on screen and every mark inside it with a test id. */
-type DrawnPlot = { at: string; label: string; box: Box; marks: { id: string; box: Box; visible: boolean }[] };
+/** A plot as drawn: its x-y, its label, its box on screen, its map's box (the clip) and every mark inside it with a test id. */
+type DrawnPlot = { at: string; label: string; box: Box; map: Box; marks: { id: string; box: Box; visible: boolean }[] };
 type Game = { state: GameState; devEndsAt: Map<string, number>; phaseEndsAt: number | null; ctx: { now(): number } };
 
 /** T-AC-9: counts the intents a page sends on its game sockets. Attach before the page loads, as watchShow. */
@@ -342,7 +342,9 @@ export async function checkPlotLook(map: Locator, where: string, want: { install
   check(out.every((d) => d > 0), `${id}: the selected ring reaches outside plot ${at} on every side, by ${out.map(px).join(', ')} (left, top, right, bottom)`);
   const pins = sel.marks.filter((m) => m.id === 'selected-pin');
   check(pins.length === 1 && pins[0]!.visible && pins[0]!.box.width > 0 && pins[0]!.box.height > 0, `${id}: the selected plot ${at} shows its pin`);
-  return `${read}; ${at} selected, its ring ${px(Math.min(...out))} or more outside`;
+  // Read, not checked: the map clips at its edge, so a pin over the top row is drawn but not seen.
+  const seen = Math.round(onScreen(pins[0]!.box, sel.map) * 100);
+  return `${read}; ${at} selected, its ring ${px(Math.min(...out))} or more outside, ${seen}% of its pin inside the map`;
 }
 
 /** Every plot on the map with its marks, in one read. */
@@ -351,10 +353,12 @@ async function drawnPlots(map: Locator): Promise<DrawnPlot[]> {
   return map.evaluate((root) =>
     [...root.querySelectorAll('[data-testid^="map-plot-"]')].map((p) => {
       const r = p.getBoundingClientRect();
+      const c = (p.closest('.shadow-map') ?? p).getBoundingClientRect();
       return {
         at: (p.getAttribute('data-testid') ?? '').slice('map-plot-'.length),
         label: p.getAttribute('aria-label') ?? '',
         box: { x: r.x, y: r.y, width: r.width, height: r.height },
+        map: { x: c.x, y: c.y, width: c.width, height: c.height },
         marks: [...p.querySelectorAll('[data-testid]')].map((m) => {
           const b = m.getBoundingClientRect();
           return { id: m.getAttribute('data-testid') ?? '', box: { x: b.x, y: b.y, width: b.width, height: b.height }, visible: m.checkVisibility({ opacityProperty: true, visibilityProperty: true }) };
@@ -366,6 +370,13 @@ async function drawnPlots(map: Locator): Promise<DrawnPlot[]> {
 
 function shares(list: number[]): string {
   return list.map((s) => s.toFixed(2)).join(', ');
+}
+
+/** The share of `b`'s area inside `clip`. */
+function onScreen(b: Box, clip: Box): number {
+  const w = Math.max(0, Math.min(b.x + b.width, clip.x + clip.width) - Math.max(b.x, clip.x));
+  const h = Math.max(0, Math.min(b.y + b.height, clip.y + clip.height) - Math.max(b.y, clip.y));
+  return (w * h) / (b.width * b.height);
 }
 
 /** A seat's plot count and its goods, written out good by good so two stocks compare as text. */
