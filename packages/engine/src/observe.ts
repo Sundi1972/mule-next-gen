@@ -20,7 +20,7 @@ import { GOODS, type GameState, type Stock, type Tile } from './types.js';
  * - other players' stock: the colony's holdings that the market's cover
  *   implies, shared evenly among them, except the good on the auction's status
  *   screen, whose rows are public;
- * - other players' analyses, drone orders, MULE in tow, hunger and sickness;
+ * - other players' analyses, drone orders and MULE in tow (their hunger and sickness are public, Heiko's ruling);
  * - the seed, the land grant's coming order and the unannounced ship's
  *   wishlist, which would let a reader see the future;
  * - other players' rows in the history (what they had and made);
@@ -60,7 +60,7 @@ export function observe(state: GameState, playerId: string): GameState {
         const row = status.status.find((r) => r.id === p.id);
         if (row) stock[status.good!] = row.now;
       }
-      Object.assign(p, { analysed: [], droneOrder: [], carriedMule: null, hungry: false, sick: false, stock });
+      Object.assign(p, { analysed: [], droneOrder: [], carriedMule: null, stock });
     });
   }
 
