@@ -210,7 +210,7 @@ export function DeskTabs({ desks, active, first = null, onPick }: { desks: DeskS
           aria-selected={active === id}
           onClick={() => onPick(id)}
           className={cx(
-            'relative flex min-w-0 flex-auto flex-col items-center whitespace-nowrap rounded-control border px-0.5 py-0.5 text-[10px] font-semibold leading-tight @min-[1100px]/shell:gap-0.5 @min-[1100px]/shell:py-2 @min-[1100px]/shell:text-xs',
+            'relative flex min-w-8 flex-auto flex-col items-center whitespace-nowrap rounded-control border px-0.5 py-0.5 text-[10px] font-semibold leading-tight @min-[1100px]/shell:gap-0.5 @min-[1100px]/shell:py-2 @min-[1100px]/shell:text-xs',
             active === id ? 'border-holo bg-holo-soft text-holo' : 'border-holo-line text-ink-2',
             first === id && active !== id && 'border-warn/60',
           )}
