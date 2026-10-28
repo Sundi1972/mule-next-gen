@@ -8,6 +8,7 @@ import {
   claimPlot,
   createGame,
   DEVELOPMENT,
+  EVENTS,
   factoryFit,
   fitFilter,
   grantDone,
@@ -161,9 +162,11 @@ describe('land grant', () => {
 
 describe('development', () => {
   it('T-AC-23: a hungry or sick player gets the full development time, marked hungry or sick', () => {
-    // Smoggy air. Each seat [Food, Medicine]: fed and cured; neither; hungry but cured; fed but sick.
+    // Everyone's sickness roll comes up. Each seat [Food, Medicine]: fed and cured; neither; hungry but cured; fed but sick.
     const state = newGame();
-    state.air = 40;
+    const sickness = EVENTS.player.sickness;
+    const saved = { ...sickness };
+    Object.assign(sickness, { phases: { development: 1 }, cap: 1 });
     const supplies: [number, number][] = [
       [10, 1],
       [0, 0],
@@ -171,7 +174,11 @@ describe('development', () => {
       [10, 0],
     ];
     supplies.forEach(([food, medicine], i) => Object.assign(state.players[i]!.stock, { food, medicine }));
-    toPhase(state, 'development');
+    try {
+      toPhase(state, 'development');
+    } finally {
+      Object.assign(sickness, saved);
+    }
     expect(state.players.map((p) => p.devSeconds)).toEqual(state.players.map(() => DEVELOPMENT.fullSeconds));
     expect(state.players.map((p) => [p.hungry, p.sick])).toEqual([
       [false, false],

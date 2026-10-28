@@ -13,6 +13,7 @@ import {
   needsOf,
   outfitCostFor,
   pace,
+  playerEventChance,
   POLLUTION,
   rawOutput,
   RECIPES,
@@ -266,8 +267,9 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
     }
   } else if (good === 'medicine' && need > 0) {
     block = Math.ceil(need / keepRate);
-    // A Medicine keeps the month's walking at full pace where the air sickens.
-    use = monthWalkSeconds(obs, mind) * (1 / DEV_WALK.sickPace - 1) * sec;
+    // A Medicine cures the sickness it may roll at development start, keeping the month's walking at full pace.
+    const sick = playerEventChance(obs, 'sickness', 'development', me);
+    use = sick * monthWalkSeconds(obs, mind) * (1 / DEV_WALK.sickPace - 1) * sec;
   }
   // Factory inputs: a factory's run is worth its output, shared over its inputs.
   for (const t of mine) {

@@ -1,5 +1,6 @@
 import { EVENTS, GAME } from './config.js';
 import { neighbours } from './map.js';
+import { airBand } from './pollution.js';
 import { createRng } from './rng.js';
 import { RAW_GOODS, type EventKey, type EventKind, type GameState, type Good, type MonthEvent, type Phase, type Tile } from './types.js';
 
@@ -157,12 +158,38 @@ function spread(state: GameState, start: Tile, joins: (t: Tile) => boolean, max:
 /** A player event's key: a row of EVENTS.player. */
 export type PlayerEventKey = keyof typeof EVENTS.player;
 
-/** The chance a player event fires for this player at the start of this phase: 0 where it doesn't roll. */
+/**
+ * The chance a player event fires for this player at the start of this phase: the phase's chance, plus the air band's
+ * bonus, plus pollutionShare x the player's share of the colony's pollution last month, never above the cap; 0 in a
+ * phase the event doesn't list.
+ */
 export function playerEventChance(state: GameState, key: PlayerEventKey, phase: Phase, id: string): number {
-  throw new Error('NotImplemented: playerEventChance');
+  const row = EVENTS.player[key];
+  const inPhase = (row.phases as Partial<Record<Phase, number>>)[phase];
+  if (inPhase === undefined) return 0;
+  const by = state.history.at(-1)?.pollutionBy ?? {};
+  const total = Object.values(by).reduce((n, v) => n + v, 0);
+  const share = total > 0 ? (by[id] ?? 0) / total : 0;
+  return Math.min(row.cap, inPhase + row.air[airBand(state.air).name] + row.pollutionShare * share);
 }
 
-/** Whether a player event fires for this player at the start of this phase: a seeded roll, never on a what-if copy. */
+/**
+ * Whether a player event fires for this player at the start of this phase: a roll seeded from the game, the month,
+ * the event, the phase and the player, so a game replays exactly; never on a what-if copy.
+ */
 export function rollPlayerEvent(state: GameState, key: PlayerEventKey, phase: Phase, id: string): boolean {
-  throw new Error('NotImplemented: rollPlayerEvent');
+  if (state.whatIf) return false;
+  const chance = playerEventChance(state, key, phase, id);
+  if (chance <= 0) return false;
+  return createRng(seedOf(state.seed, state.month, key, phase, id)).chance(chance);
+}
+
+/** A seed from a game's seed, its month and some names: FNV-1a over them. */
+function seedOf(seed: number, month: number, ...names: string[]): number {
+  let h = 2_166_136_261; // literal-ok: FNV-1a offset basis
+  for (const part of [String(seed), String(month), ...names]) {
+    for (let i = 0; i < part.length; i++) h = Math.imul(h ^ part.charCodeAt(i), 16_777_619); // literal-ok: FNV-1a prime
+    h = Math.imul(h ^ 0, 16_777_619); // literal-ok: FNV-1a prime, a separator between parts
+  }
+  return h >>> 0;
 }
