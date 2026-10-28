@@ -110,6 +110,84 @@ export interface RepairState {
   cap: number;
 }
 
+/** A repair under way: the state, and the tally that every recolouring goes through. */
+interface Repairing extends RepairState {
+  tally: Tally;
+}
+
+const CODE = new Map<Terrain | null, number>(SHARE_TERRAINS.map((t, k) => [t, k]));
+const MINING_CODE = SHARE_TERRAINS.map(isMining);
+
+/**
+ * What `measure` reads, kept current as plots are recoloured instead of recounted
+ * per candidate move: each terrain's count, and how many mining plots reach each land plot.
+ */
+class Tally {
+  readonly have: Int32Array;
+  uncovered = 0;
+  private readonly code: Int8Array;
+  private readonly reached: Int32Array;
+  private readonly seen: Int32Array;
+  private readonly queue: Int32Array;
+  private stamp = 0;
+
+  constructor(private readonly s: RepairState) {
+    const size = s.terrain.length;
+    this.have = new Int32Array(SHARE_TERRAINS.length);
+    this.code = new Int8Array(size).fill(-1);
+    this.reached = new Int32Array(size);
+    this.seen = new Int32Array(size);
+    this.queue = new Int32Array(size);
+    for (const i of s.grid.free) {
+      const k = CODE.get(s.terrain[i]!)!;
+      this.code[i] = k;
+      this.have[k]!++;
+      if (MINING_CODE[k]) for (const l of s.grid.within[i]!) this.reached[l]!++;
+    }
+    for (const l of s.grid.land) if (this.reached[l] === 0) this.uncovered++;
+  }
+
+  set(i: number, t: Terrain | null): void {
+    const from = this.code[i]!;
+    const to = CODE.get(t)!;
+    this.s.terrain[i] = t;
+    if (from === to) return;
+    this.code[i] = to;
+    this.have[from]!--;
+    this.have[to]!++;
+    if (MINING_CODE[from] === MINING_CODE[to]) return;
+    if (MINING_CODE[to]) {
+      for (const l of this.s.grid.within[i]!) if (this.reached[l]!++ === 0) this.uncovered--;
+    } else {
+      for (const l of this.s.grid.within[i]!) if (--this.reached[l]! === 0) this.uncovered++;
+    }
+  }
+
+  /** S4 and S5's share of `bad`: each same-terrain patch's plots short of minRegion or over the cap. */
+  patchPenalty(): number {
+    const { free, next } = this.s.grid;
+    const { code, seen, queue } = this;
+    const stamp = ++this.stamp;
+    let bad = 0;
+    for (const start of free) {
+      if (seen[start] === stamp) continue;
+      const k = code[start];
+      seen[start] = stamp;
+      queue[0] = start;
+      let size = 1;
+      for (let q = 0; q < size; q++) {
+        for (const j of next[queue[q]!]!) {
+          if (seen[j] === stamp || code[j] !== k) continue;
+          seen[j] = stamp;
+          queue[size++] = j;
+        }
+      }
+      bad += Math.max(0, MAP.minRegion - size) + Math.max(0, size - this.s.cap);
+    }
+    return bad;
+  }
+}
+
 interface Move {
   cells: number[];
   to: ShareTerrain;
@@ -129,8 +207,9 @@ interface Score {
  * the best short run that helps; failing that, a few no-worse and then worse
  * moves off plots not touched lately. The best layout seen is what is left.
  */
-export function repairLayout(s: RepairState, rng: Rng): void {
+export function repairLayout(state: RepairState, rng: Rng): void {
   const { repairMoves, sidewaysMoves, worseMoves, tabu } = MAP.layout;
+  const s: Repairing = { ...state, tally: new Tally(state) };
   let current = measure(s).bad;
   let best = { bad: current, terrain: [...s.terrain] };
   const work = { evaluations: MAP.layout.lookaheadEvaluations };
@@ -150,7 +229,7 @@ export function repairLayout(s: RepairState, rng: Rng): void {
       chosen = [rng.pick(fresh.moves)];
     }
     for (const m of chosen) {
-      apply(s.terrain, m);
+      apply(s, m);
       recent.push(...m.cells);
     }
     recent.splice(0, Math.max(0, recent.length - tabu));
@@ -165,43 +244,39 @@ export function repairLayout(s: RepairState, rng: Rng): void {
  * over the cap, outside a share band, minRegion more for a terrain gone
  * altogether, and land plots with no mining terrain in reach. Zero means the
  * layout meets them all. `drift` is how far the counts are from the budget.
- * Pass `uncovered` when the move left the mining plots as they were.
  */
-function measure(s: RepairState, uncovered?: number): Score {
-  const have = countTerrains(s.grid, s.terrain);
-  let bad = uncovered ?? s.grid.uncovered(s.terrain).length;
-  for (const p of patchesOf(s.grid, s.terrain)) bad += Math.max(0, MAP.minRegion - p.length) + Math.max(0, p.length - s.cap);
+function measure(s: Repairing): Score {
+  const { have } = s.tally;
+  let bad = s.tally.uncovered + s.tally.patchPenalty();
   let drift = 0;
-  for (const t of SHARE_TERRAINS) {
+  SHARE_TERRAINS.forEach((t, k) => {
     const { lo, hi } = s.bands[t];
-    bad += Math.max(0, lo - have[t]) + Math.max(0, have[t] - hi) + (have[t] === 0 ? MAP.minRegion : 0);
-    drift += Math.abs(have[t] - s.budget[t]);
-  }
+    bad += Math.max(0, lo - have[k]!) + Math.max(0, have[k]! - hi) + (have[k] === 0 ? MAP.minRegion : 0);
+    drift += Math.abs(have[k]! - s.budget[t]);
+  });
   return { bad, drift };
 }
 
 /** Applies the move and returns what it overwrote, for `undo`. */
-function apply(terrain: Cells, move: Move): Cells {
-  const before = move.cells.map((i) => terrain[i]!);
-  for (const i of move.cells) terrain[i] = move.to;
+function apply(s: Repairing, move: Move): Cells {
+  const before = move.cells.map((i) => s.terrain[i]!);
+  for (const i of move.cells) s.tally.set(i, move.to);
   return before;
 }
 
-function undo(terrain: Cells, move: Move, before: Cells): void {
-  move.cells.forEach((i, k) => (terrain[i] = before[k]!));
+function undo(s: Repairing, move: Move, before: Cells): void {
+  move.cells.forEach((i, k) => s.tally.set(i, before[k]!));
 }
 
 /** The moves that leave the layout least bad, ties broken by least drift from the budget. */
-function bestMoves(s: RepairState, candidates: Move[]): { moves: Move[]; bad: number } {
-  const coverage = s.grid.uncovered(s.terrain).length;
+function bestMoves(s: Repairing, candidates: Move[]): { moves: Move[]; bad: number } {
   let moves: Move[] = [];
   let bad = Infinity;
   let drift = Infinity;
   for (const m of candidates) {
-    const touchesMining = isMining(m.to) || m.cells.some((i) => isMining(s.terrain[i]));
-    const before = apply(s.terrain, m);
-    const after = measure(s, touchesMining ? undefined : coverage);
-    undo(s.terrain, m, before);
+    const before = apply(s, m);
+    const after = measure(s);
+    undo(s, m, before);
     if (after.bad < bad || (after.bad === bad && after.drift < drift)) [moves, bad, drift] = [[m], after.bad, after.drift];
     else if (after.bad === bad && after.drift === drift) moves.push(m);
   }
@@ -214,20 +289,20 @@ function bestMoves(s: RepairState, candidates: Move[]): { moves: Move[]; bad: nu
  * the least-bad runs so far by one move, up to MAP.layout.lookahead moves deep.
  * Spends from `work`, and gives up when it runs out.
  */
-function bestRun(s: RepairState, current: number, rng: Rng, work: { evaluations: number }): Move[] | null {
+function bestRun(s: Repairing, current: number, rng: Rng, work: { evaluations: number }): Move[] | null {
   const { lookahead, beamWidth } = MAP.layout;
   let beam: Move[][] = [[]];
   for (let depth = 1; depth <= lookahead; depth++) {
     const next: { run: Move[]; score: Score }[] = [];
     for (const run of beam) {
-      const befores = run.map((m) => apply(s.terrain, m));
+      const befores = run.map((m) => apply(s, m));
       for (const m of [...candidateMoves(s, rng), ...carveMoves(s, rng, specksAndShortfalls(s))]) {
         if (work.evaluations-- <= 0) break;
-        const before = apply(s.terrain, m);
+        const before = apply(s, m);
         next.push({ run: [...run, m], score: measure(s) });
-        undo(s.terrain, m, before);
+        undo(s, m, before);
       }
-      for (let k = run.length - 1; k >= 0; k--) undo(s.terrain, run[k]!, befores[k]!);
+      for (let k = run.length - 1; k >= 0; k--) undo(s, run[k]!, befores[k]!);
     }
     if (next.length === 0) return null;
     // Shuffled first, so the stable sort breaks ties by rng.
