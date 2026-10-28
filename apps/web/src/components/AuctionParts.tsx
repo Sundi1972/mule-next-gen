@@ -1,4 +1,4 @@
-import { COLONY_SELLER, SHIP_ID, STORE_ID, WALK, type AuctionRole, type AuctionSide, type Good } from '@mule/engine';
+import { COLONY_SELLER, SHIP_ID, STORE_ID, type AuctionRole, type AuctionSide, type Good } from '@mule/engine';
 import type { AuctionView, DealView, LandAuctionView, ListingView, MuleView } from '@mule/protocol';
 import { Creature, cx, GOOD_NAME, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
 import type { ReactNode } from 'react';
@@ -45,8 +45,9 @@ function pricesOn(auction: AuctionView, side: 'seller' | 'buyer', without?: stri
     return list.sort((a, b) => a.price - b.price);
   }
   const list: Offer[] = auction.walkers.filter((w) => w.id !== without && w.side === 'buyer').map((w) => ({ id: w.id, price: w.price }));
-  if (auction.storeBuys !== null) list.push({ id: STORE_ID, price: auction.storeBuys });
+  // The ship before the store: on a tie the sort keeps it first, and the engine sells to the ship.
   if (auction.shipPays !== null) list.push({ id: SHIP_ID, price: auction.shipPays });
+  if (auction.storeBuys !== null) list.push({ id: STORE_ID, price: auction.storeBuys });
   return list.sort((a, b) => b.price - a.price);
 }
 
@@ -119,11 +120,14 @@ export function toggleSide(current: AuctionSide | undefined, tapped: AuctionRole
   return current === tapped ? 'pass' : tapped;
 }
 
-/** What the store charges and pays for the good up now, and how many it will sell, beside the status table. */
-export function StoreBox({ auction, tv = false }: { auction: AuctionView; tv?: boolean }) {
+/**
+ * On the TV, beside the status table: what the store charges and pays for the good up now, and how many it will sell.
+ * Only the TV draws it (a phone says it from your side, MyStoreLine); `tv` is accepted for the audit mock, which passes it.
+ */
+export function StoreBox({ auction }: { auction: AuctionView; tv?: true }) {
   const stock = auction.storeForSale;
   return (
-    <dl className={cx('grid grid-cols-3 gap-px overflow-hidden rounded-panel border border-holo-line bg-holo-line font-mono', tv ? 'text-2xl' : 'text-sm')} data-testid="status-store">
+    <dl className="grid grid-cols-3 gap-px overflow-hidden rounded-panel border border-holo-line bg-holo-line font-mono text-2xl" data-testid="status-store">
       {(
         [
           ['STORE SELLS', auction.storeSells ?? 'out', 'text-rise'],
@@ -131,8 +135,8 @@ export function StoreBox({ auction, tv = false }: { auction: AuctionView; tv?: b
           ['IN STOCK', stock, stock === 0 ? 'text-alert' : 'text-ink'],
         ] as const
       ).map(([label, value, tone]) => (
-        <div key={label} className={cx('flex flex-col bg-panel', tv ? 'p-3' : 'px-2 py-1')}>
-          <dt className={cx('label-caps', tv ? 'text-sm!' : 'text-[10px]!')}>{label}</dt>
+        <div key={label} className="flex flex-col bg-panel p-3">
+          <dt className="label-caps text-sm!">{label}</dt>
           <dd data-num className={cx('font-bold', tone)}>
             {value}
           </dd>
@@ -246,23 +250,27 @@ export interface ShipWant {
   wants: number;
   /** What the ship pays for its first unit. */
   pays: number;
-  /** The good before it in the auction's order. */
-  after: Good;
+  /** The good that comes up just before it, or null for the good up now. */
+  after: Good | null;
 }
 
-/** What the ship in port still wants of the goods yet to come, in the auction's order. Nothing while it is only announced. */
-export function shipWants(view: Pick<MuleView, 'ship' | 'market'>, auction: Pick<AuctionView, 'next'>): ShipWant[] {
+/**
+ * What the ship in port still wants of the good up now and the goods yet to come, in the order they come up. Nothing
+ * while it is only announced. The good up now is priced from the auction, the rest from the market.
+ */
+export function shipWants(view: Pick<MuleView, 'ship' | 'market'>, auction: Pick<AuctionView, 'good' | 'next' | 'shipPays'>): ShipWant[] {
   const wants = view.ship.inPort ? view.ship.wants : null;
   if (!wants) return [];
-  return WALK.order.flatMap((good, i): ShipWant[] => {
+  const order = [auction.good, ...auction.next];
+  return order.flatMap((good, i): ShipWant[] => {
     const n = wants[good] ?? 0;
-    const pays = view.market.find((r) => r.good === good)?.shipPays ?? null;
-    const after = WALK.order[i - 1];
-    return n > 0 && pays !== null && after && auction.next.includes(good) ? [{ good, wants: n, pays, after }] : [];
+    const market = view.market.find((r) => r.good === good)?.shipPays ?? null;
+    const pays = i === 0 ? (auction.shipPays ?? market) : market;
+    return n > 0 && pays !== null ? [{ good, wants: n, pays, after: i === 0 ? null : order[i - 1]! }] : [];
   });
 }
 
-/** "The ship wants 24 Crystite this month", when that good comes up, and on a phone what you have of it. */
+/** "The ship wants 24 Crystite this month", when that good comes up (or that it is up now), and on a phone what you have of it. */
 export function ShipWants({ want, have, tv = false }: { want: ShipWant; have?: number; tv?: boolean }) {
   const name = GOOD_NAME[want.good];
   return (
@@ -274,10 +282,10 @@ export function ShipWants({ want, have, tv = false }: { want: ShipWant; have?: n
       data-testid="ship-wants"
     >
       <strong className="font-semibold text-warn">
-        The ship wants {want.wants} {name} this month.
+        The ship wants {want.wants} {name} this month{want.after === null ? ':' : '.'}
       </strong>
       <span className="text-ink-2">
-        {name} comes up after {GOOD_NAME[want.after]}: the ship pays {want.pays} cr for the first.{have === undefined ? '' : ` You have ${have}.`}
+        {want.after === null ? 'it pays' : `${name} comes up after ${GOOD_NAME[want.after]}: the ship pays`} {want.pays} cr for the first.{have === undefined ? '' : ` You have ${have}.`}
       </span>
     </p>
   );
