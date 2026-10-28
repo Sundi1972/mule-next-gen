@@ -1051,3 +1051,26 @@ export const AI_HANDS = {
     choiceMs: [150, 300] as [number, number],
   },
 };
+
+/**
+ * The balance targets `pnpm sim` checks, from the design doc's Economy model tab, each named for its check. Shares are
+ * of months or of games, as the check says; the report prints the targets from here.
+ */
+export const SIM_TARGETS = {
+  /** MULE price median: from min to max credits. */
+  muleMedian: { min: 150, max: 300 },
+  /** MULE price 90th percentile: under this many credits. */
+  mule90th: 500,
+  /** Corral sold out: in under this share of months. */
+  corralSoldOut: 0.1,
+  /** Food above `factor` times its reference price: in this share of games, from min to max. */
+  foodSpike: { factor: 3, min: 0.1, max: 0.5 },
+  /** Colonists short of Food or Water: in under this share of months. */
+  colonistsShort: 0.15,
+  /** Owned plots developed at the end: this share or more. */
+  developed: 0.7,
+  /** No game has an AI broke, under `below` credits with idle land, for `months` months in a row. */
+  broke: { below: 100, months: 3 },
+  /** Ended in Collapse: in this share of games or fewer. */
+  collapsed: 0.1,
+};

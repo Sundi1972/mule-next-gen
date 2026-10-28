@@ -18,6 +18,7 @@ import {
   installMule,
   litPlot,
   lotDone,
+  MS_PER_SECOND,
   outfitMule,
   RuleError,
   runFor,
@@ -25,6 +26,7 @@ import {
   setSalesTax,
   setWalk,
   SHIP_ID,
+  SIM_TARGETS,
   stepAuction,
   stepElection,
   stepLandAuction,
@@ -60,7 +62,7 @@ export interface SeatSpec {
 export interface PlayedGame {
   state: GameState;
   seats: AiSeat[];
-  /** Per month, the ids of players who were broke (under 100 credits) with idle land. */
+  /** Per month, the ids of players who were broke (under SIM_TARGETS.broke.below credits) with idle land. */
   broke: string[][];
   /** Units traded at the live auction: between players, with the store (both ways) and to the ship; and its game-time in ms. */
   auction: { between: number; store: number; ship: number; ms: number };
@@ -71,7 +73,8 @@ export interface PlayedGame {
   decisions: number;
 }
 
-const rot =(i: number, k: number, n = 6) => (((i - k) % n) + n) % n;
+/** Seat i's place when the order is rotated by k; the period is the most seats a game has. */
+const rot = (i: number, k: number, n = GAME.maxPlayers) => (((i - k) % n) + n) % n;
 
 /**
  * A seat's development clock: seconds left, and, when the game walks, where it stands (or is walking to) and, while it
@@ -198,6 +201,7 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
         name: `AI ${i + 1}`,
         persona: s.persona,
         level: s.level,
+        // literal-ok: hash constants (primes) that give each seat its own seed from the game's
         seed: (seed * 7_919 + i * 104_729 + 17) >>> 0,
         onDecision: (r) => {
           decisions++;
@@ -207,17 +211,19 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
   );
   const broke: string[][] = [];
   const auction = { between: 0, store: 0, ship: 0, ms: 0 };
-  const lotHands = seats.map((s) => new LotHand(s.mind, createRng((s.options.seed ^ 0xc2b2ae35) >>> 0)));
-  const voteHands = seats.map((s) => new VoteHand(s.mind, createRng((s.options.seed ^ 0x165667b1) >>> 0)));
+  const lotHands = seats.map((s) => new LotHand(s.mind, createRng((s.options.seed ^ 0xc2b2ae35) >>> 0))); // literal-ok: a hash salt for the lot hand's rng stream
+  const voteHands = seats.map((s) => new VoteHand(s.mind, createRng((s.options.seed ^ 0x165667b1) >>> 0))); // literal-ok: a hash salt for the vote hand's rng stream
   const lots = { sold: 0, unsold: 0, colonyOffered: 0, colonySold: 0, stalled: 0 };
   let mulesLost = 0;
   let guard = 0;
+  // literal-ok: a runaway guard on phase steps, far above a game's twelve months of seven phases
   while (state.phase !== 'gameOver' && guard++ < 500) {
     switch (state.phase) {
       case 'planning': {
         // The election comes first: hands act before each step, with the same dt, until it is over;
         // one more tick lets the Governor set the tax (every month, with or without an election).
         const vote = (i: number) => voteHands[i]!.tick(state, WALK.tickMs, (a) => applyAction(state, seats[i]!.id, a));
+        // literal-ok: a runaway guard on the election's ticks, not a game clock
         for (let ticks = 0; state.politics?.election && state.politics.election.stage !== 'over' && ticks < 100_000; ticks++) {
           seats.forEach((_, i) => vote(i));
           stepElection(state, WALK.tickMs);
@@ -227,6 +233,7 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
         break;
       }
       case 'landGrant': {
+        // literal-ok: a runaway guard on the grant's steps, not a game clock
         for (let steps = 0; !grantDone(state) && steps < 2_000; steps++) {
           const lit = litPlot(state);
           if (lit) {
@@ -244,7 +251,10 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
         // Everyone starts the month in the store.
         const startAt: DevPlace | undefined = options.walking === false ? undefined : 'store';
         const clocks = new Map(state.players.map((p): [string, DevClock] => [p.id, { left: p.devSeconds, at: startAt }]));
-        for (let t = 0; t < 120_000; t += DEV_TICK_MS) {
+        // The loop ends when every clock has run out; the cap only bounds it, at the longest clock plus one tick (the
+        // clocks count down in floating point, so the last tick can land one late), so it never cuts development short.
+        const capMs = Math.max(...state.players.map((p) => p.devSeconds)) * MS_PER_SECOND + DEV_TICK_MS;
+        for (let t = 0; t < capMs; t += DEV_TICK_MS) {
           const active = seats.filter((s) => !state.players.find((p) => p.id === s.id)!.doneDeveloping && clocks.get(s.id)!.left > 0);
           if (active.length === 0) break;
           // Rotate who acts first in a tick, so nobody always reaches the corral first.
@@ -256,7 +266,7 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
             const act: Act = (a) => applyAction(state, s.id, a, clock);
             arrive(state, s.id, clock);
             s.developTick(state, DEV_TICK_MS, clock.left, act, clock.at === undefined ? undefined : { at: clock.at, busy: !!clock.busy });
-            clock.left -= DEV_TICK_MS / 1_000;
+            clock.left -= DEV_TICK_MS / MS_PER_SECOND;
           }
         }
         // The clock has run out: a walk that arrives on its last tick still counts, and a colonist on its way to the
@@ -271,6 +281,7 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
         break;
       }
       case 'auction': {
+        // literal-ok: a runaway guard on the goods auction's ticks, not a game clock
         for (let ticks = 0; state.auction && state.auction.stage !== 'over' && ticks < 100_000; ticks++) {
           for (const s of seats) s.auctionTick(state, WALK.tickMs, (a) => applyAction(state, s.id, a));
           for (const t of stepAuction(state, WALK.tickMs)) {
@@ -283,6 +294,7 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
         break;
       }
       case 'landAuction': {
+        // literal-ok: a runaway guard on the land auction's ticks (a cut-off one counts as stalled), not a game clock
         for (let ticks = 0; state.landAuction && state.landAuction.stage !== 'over' && ticks < 100_000; ticks++) {
           seats.forEach((s, i) => lotHands[i]!.tick(state, WALK.tickMs, (a) => applyAction(state, s.id, a)));
           const lot = state.landAuction.lot;
@@ -298,7 +310,7 @@ export function playGame(seed: number, specs: SeatSpec[], options: PlayOptions =
         break;
       }
       case 'upkeep':
-        broke.push(state.players.filter((p) => p.money < 100 && state.tiles.some((t) => t.owner === p.id && !t.outfit)).map((p) => p.id));
+        broke.push(state.players.filter((p) => p.money < SIM_TARGETS.broke.below && state.tiles.some((t) => t.owner === p.id && !t.outfit)).map((p) => p.id));
         break;
     }
     options.onPhase?.(state);
