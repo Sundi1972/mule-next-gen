@@ -22,7 +22,7 @@ export const walkers: SeatInfo[] = [
  * land grant, returned as `plot`.
  */
 export function toDevelopment(options: { players?: SeatInfo[]; phaseScale?: number; claimer?: string; prepare?: (state: GameState) => void } = {}) {
-  const fake = fakeContext();
+  const fake = fakeContext({ table: options.players ?? seats });
   const game = new MuleGame(fake.ctx, 7, options.phaseScale === undefined ? undefined : { phaseScale: options.phaseScale });
   game.start(options.players ?? seats);
   // The game keeps its engine state private; a test reaches it to arrange its ground truth.
@@ -54,12 +54,20 @@ export function readyAll(game: MuleGame): void {
   }
 }
 
+/** The first human seat of a table: who hosts it while every phone is connected. */
+export function firstHuman(table: { id: string; isAi: boolean }[]): string | null {
+  return table.find((s) => !s.isAi)?.id ?? null;
+}
+
 /**
  * A game context with a manual clock. `waits` is the wait each scheduled timer
  * was given; `onChanged` is called with the clock's time on every `changed()`.
+ * The host is `table`'s first human seat (`seats` by default) unless `host` names
+ * another or none; `setHost` passes hosting on, as the room does when a phone drops.
  */
-export function fakeContext(options: { onChanged?: (at: number) => void } = {}) {
+export function fakeContext(options: { onChanged?: (at: number) => void; table?: { id: string; isAi: boolean }[]; host?: string | null } = {}) {
   let now = 0;
+  let host = options.host === undefined ? firstHuman(options.table ?? seats) : options.host;
   const waits: number[] = [];
   const timers: { at: number; fn: () => void }[] = [];
   const ctx: GameContext = {
@@ -74,6 +82,7 @@ export function fakeContext(options: { onChanged?: (at: number) => void } = {}) 
       };
     },
     changed: () => options.onChanged?.(now),
+    hostId: () => host,
   };
   const advance = (ms: number) => {
     now += ms;
@@ -90,7 +99,10 @@ export function fakeContext(options: { onChanged?: (at: number) => void } = {}) 
   const hold = (ms: number) => {
     now += ms;
   };
-  return { ctx, advance, hold, waits };
+  const setHost = (id: string | null) => {
+    host = id;
+  };
+  return { ctx, advance, hold, waits, setHost };
 }
 
 /**
