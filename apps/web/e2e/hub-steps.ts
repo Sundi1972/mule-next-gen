@@ -193,6 +193,9 @@ export async function hostContinuesWithout({ host, ready, left, tv, server, code
     check(named === (p === left ? 'you' : left.name), `B-AC-19: ${p.name}'s phone names ${p === left ? 'her as "you"' : left.name} as still planning, got "${named}"`);
     const readyNamed = (await waiting.getByTestId(`waiting-${hostId}`).count()) + (await waiting.getByTestId(`waiting-${readyId}`).count());
     check(readyNamed === 0, `B-AC-19: ${p.name}'s phone waits for nobody who is Ready, got "${await waiting.innerText()}"`);
+    if (p === left) continue;
+    const now = (await planning(p).getByTestId('now-title').innerText()).trim();
+    check(now.includes(left.name), `B-AC-19: once Ready, ${p.name}'s Now names ${left.name} as who the table waits for, got "${now}"`);
   }
   const board = tv.locator('[data-phase=planning]');
   const tvWaiting = board.getByTestId('tv-waiting');
