@@ -239,11 +239,12 @@ export async function theCorralGlowsWithNoMule(phone: Page, server: MuleServer, 
   check(r.led.length === 0, `B-AC-16: with no MULE in tow your colonist leads none, got ${r.led.length}`);
 }
 
-/** The seat's colour slot: its place at the table, as the phones count it (derive.ts slotOf). */
+/** The seat's colour slot: the colour it chose in the lobby, the room seat's colour % 6, as derive.ts slotOf reads it. */
 function seatSlot(server: MuleServer, code: string, seat: string): number {
-  const i = gameOf(server, code).state.players.findIndex((p) => p.id === seat);
-  check(i >= 0, `seat ${seat} in the game`);
-  return i % 6;
+  const seats = (gameOf(server, code) as unknown as { seats: { id: string; color: number }[] }).seats;
+  const s = seats.find((q) => q.id === seat);
+  check(s, `seat ${seat} in the game`);
+  return s.color % 6;
 }
 
 /** The engine's raw good with the largest shortfall for the seat this month, or null with none short (RULE-7 row 3). */
