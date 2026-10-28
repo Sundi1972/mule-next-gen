@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { createRng, generateMap, type GameMap } from '../src/index.js';
 
 const TILE_KEYS = ['x', 'y', 'terrain', 'peaks', 'ground', 'traits', 'owner', 'outfit', 'pollution', 'filter', 'runMonths'];
+/** Seeds per player count the deep-equal check runs: 10 in CI, 50 with MULE_FULL=1. The fingerprint is the guard. */
+const DEEP_SEEDS = process.env.MULE_FULL === '1' ? 50 : 10;
 
 // A change that alters any generated map updates this in the same commit and says why in its message.
 const FINGERPRINT = 'fb80007841308441955903f9d8d4425332ff7ca72aa4e699e854c33bb361d907';
@@ -23,7 +25,7 @@ function mapLine(map: GameMap): string {
 describe('map determinism', () => {
   it('T-AC-3: the same rng seed gives a deep-equal map', () => {
     for (let players = 2; players <= 6; players++) {
-      for (let seed = 1; seed <= 50; seed++) {
+      for (let seed = 1; seed <= DEEP_SEEDS; seed++) {
         const first = generateMap(players, createRng(seed));
         const second = generateMap(players, createRng(seed));
         expect(second, `seed ${seed}, ${players} players`).toEqual(first);

@@ -15,10 +15,13 @@ import {
 
 // One player count per size band: 3 and 6 players get the same map size, so they would repeat 2's and 5's layouts.
 const BANDS = [2, 4, 5];
-const SEEDS = 500;
+// Seeds per band: 50 in CI, 500 with MULE_FULL=1, plus the regression seeds below. Every map CI deals is also checked
+// against S1-S8 by B-AC-3 in map-quality.test.ts.
+const FULL = process.env.MULE_FULL === '1';
+const SEEDS = FULL ? 500 : 50;
 /**
- * Seeds whose layout once broke a rule, checked by name on top of the sweep: 28670 (S5) and 45216 (S4) from review,
- * 3475 and 9530 (AM-4) that only the repair's lookahead fixes.
+ * Seeds whose layout once broke a rule, checked by name on top of the sweep (and in CI): 28670 (S5) and 45216 (S4)
+ * from review, 3475 and 9530 (AM-4) that only the repair's lookahead fixes.
  */
 const REGRESSIONS: Record<number, number[]> = { 2: [28670, 3475, 9530], 4: [45216], 5: [] };
 const TIMEOUT = 30_000;
@@ -115,7 +118,8 @@ describe('map layout stages', () => {
       seen.get(players)!.add(bends);
       return [...(bends > fewest + 1 ? [`${bends} bends, at most ${fewest + 1} wanted`] : []), ...joinRows(map)];
     });
-    for (const players of BANDS) {
+    // Both bend counts turning up is a property of the sweep (MULE_FULL).
+    for (const players of FULL ? BANDS : []) {
       const fewest = MAP.bends[sizeBand(players)];
       const values = [...seen.get(players)!].sort((a, b) => a - b);
       if (values.join() !== `${fewest},${fewest + 1}`) broken.push(`${players}p: bends seen ${values.join(', ')}, want both ${fewest} and ${fewest + 1}`);
