@@ -898,7 +898,7 @@ export const EVENTS = {
     cometPass: { phases: { production: 0.05 }, cap: 0.9 },
     flood: { phases: { production: 0.05 }, follows: { drought: { points: 0.1, lastMonth: true } }, cap: 0.9 },
     volcanicAsh: { phases: { production: 0.04 }, cap: 0.9 },
-  },
+  } satisfies Record<string, import('./events.js').EventRow>,
   player: {
     /**
      * Sickness, at development start: the colonist walks at DEV_WALK.sickPace this turn unless it holds a Medicine,
@@ -919,7 +919,7 @@ export const EVENTS = {
       cap: 0.9,
     },
     bumperHarvest: { phases: { production: 0.015 }, wealth: { poorest: 0.015, richest: -0.01 }, cap: 0.9 },
-  },
+  } satisfies Record<string, import('./events.js').EventRow>,
   /** Pairs that never fire together in one phase: if both roll, the seeded dice keep one. */
   excludes: [
     ['drought', 'flood'],
