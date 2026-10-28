@@ -8,6 +8,7 @@ import {
   claimPlot,
   createGame,
   DEVELOPMENT,
+  EVENTS,
   factoryFit,
   fitFilter,
   grantDone,
@@ -160,25 +161,33 @@ describe('land grant', () => {
 });
 
 describe('development', () => {
-  it('gives the full time with enough Food and less without', () => {
+  it('T-AC-23: a hungry or sick player gets the full development time, marked hungry or sick', () => {
+    // Everyone's sickness roll comes up. Each seat [Food, Medicine]: fed and cured; neither; hungry but cured; fed but sick.
     const state = newGame();
-    state.players[0]!.stock.food = 10;
-    state.players[1]!.stock.food = 0;
-    toPhase(state, 'development');
-    expect(state.players[0]!.devSeconds).toBe(DEVELOPMENT.fullSeconds);
-    expect(state.players[1]!.devSeconds).toBe(DEVELOPMENT.minSeconds);
-    expect(state.players[1]!.hungry).toBe(true);
-  });
-
-  it('costs sick colonists time in dirty air unless they take a Medicine', () => {
-    const state = newGame();
-    state.air = 40;
-    state.players[0]!.stock.medicine = 1;
-    toPhase(state, 'development');
-    expect(state.players[0]!.devSeconds).toBe(DEVELOPMENT.fullSeconds);
-    expect(state.players[0]!.stock.medicine).toBe(0);
-    expect(state.players[1]!.devSeconds).toBe(DEVELOPMENT.fullSeconds - 5);
-    expect(state.players[1]!.sick).toBe(true);
+    const sickness = EVENTS.player.sickness;
+    const saved = { ...sickness };
+    Object.assign(sickness, { phases: { development: 1 }, cap: 1 });
+    const supplies: [number, number][] = [
+      [10, 1],
+      [0, 0],
+      [0, 1],
+      [10, 0],
+    ];
+    supplies.forEach(([food, medicine], i) => Object.assign(state.players[i]!.stock, { food, medicine }));
+    try {
+      toPhase(state, 'development');
+    } finally {
+      Object.assign(sickness, saved);
+    }
+    expect(state.players.map((p) => p.devSeconds)).toEqual(state.players.map(() => DEVELOPMENT.fullSeconds));
+    expect(state.players.map((p) => [p.hungry, p.sick])).toEqual([
+      [false, false],
+      [true, true],
+      [true, false],
+      [false, true],
+    ]);
+    // A Medicine is taken where the air sickens.
+    expect(state.players.map((p) => p.stock.medicine)).toEqual([0, 0, 0, 0]);
   });
 
   it('pays more at the pub with more time left, and ends the turn', () => {

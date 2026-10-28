@@ -1,11 +1,13 @@
 import type { MuleView } from '@mule/protocol';
-import { Button, cx } from '@mule/ui';
+import { cx } from '@mule/ui';
 import { createContext, useContext, useState } from 'react';
 import { PHASE_NAME, secondsUntil } from '../../game/derive';
-import { useClient, useServerNow } from '../../net/react';
+import { useServerNow } from '../../net/react';
 import { usePhoneGame } from '../game';
 import { PhoneShell, useWide, type Now } from '../Shell';
 import { needRows, planNow } from './needs';
+import { connectedIn, readyNowIn, stillPlanning } from './ready';
+import { ReadyBar, ReadyCount } from './ReadyBar';
 import { drawnSlots, type AgendaSlot, type DeskSlot, type HubSeat, type HubSlots, type MapToolSlot } from './slots';
 
 /** The hub's open desk and map tool, for any slot's components to read and change. */
@@ -34,8 +36,7 @@ function shipNote(view: Pick<MuleView, 'month' | 'ship'>): string {
 
 /** Planning: the month's hub, from the slots it is given. */
 export function Hub({ slots }: { slots: HubSlots }) {
-  const client = useClient();
-  const { view, me, self } = usePhoneGame();
+  const { table, view, me, self } = usePhoneGame();
   const serverNow = useServerNow();
   const seat: HubSeat = { view, me, self };
   const drawn = drawnSlots(slots, seat);
@@ -58,8 +59,11 @@ export function Hub({ slots }: { slots: HubSlots }) {
       if (opens) setDesk(opens);
     },
   };
-  const now: Now = drawn.nows.reduce<Now | null>((n, give) => n ?? give(seat), null) ?? planNow(needRows(me.monthNeeds, me.stock, view.tiles.filter((t) => t.owner === me.id)));
-  const waiting = view.players.filter((p) => !p.isAi && !p.ready && p.id !== self.id).length;
+  const others = stillPlanning(view.players, connectedIn(table.seats)).filter((s) => s.id !== self.id);
+  const now: Now =
+    readyNowIn(view, self.ready, others, table.hostId === self.id) ??
+    drawn.nows.reduce<Now | null>((n, give) => n ?? give(seat), null) ??
+    planNow(needRows(me.monthNeeds, me.stock, view.tiles.filter((t) => t.owner === me.id)));
   const Panel = tool?.Panel;
   const Action = tool?.Action;
   const Body = desk?.Body;
@@ -69,6 +73,7 @@ export function Hub({ slots }: { slots: HubSlots }) {
       <PhoneShell
         phase={PHASE_NAME.planning}
         seconds={secondsUntil(view.phaseEndsAt, serverNow)}
+        status={<ReadyCount players={view.players} />}
         now={now}
         fill
         rail={
@@ -85,9 +90,7 @@ export function Hub({ slots }: { slots: HubSlots }) {
         footer={
           <>
             {Action && <Action />}
-            <Button size="lg" variant={self.ready ? 'outline' : 'holo'} className="w-full px-2 @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" disabled={self.ready} onClick={() => client.intent({ type: 'ready' })} data-testid="ready">
-              {self.ready ? `Ready · waiting for ${waiting} other${waiting === 1 ? '' : 's'}` : "I'm ready"}
-            </Button>
+            <ReadyBar />
           </>
         }
       >
