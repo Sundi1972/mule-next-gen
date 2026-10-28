@@ -17,12 +17,14 @@ export interface SocketLike {
 export type SocketFactory = (url: string) => SocketLike;
 
 const OPEN = 1;
-/** Pings sent right after connecting, to sync the clock quickly, then one every PING_EVERY_MS. */
+/** Pings sent right after connecting or a device clock jump, the first at once, to sync the clock quickly; otherwise one every PING_EVERY_MS. */
 const FIRST_PINGS = 4;
 const PING_EVERY_MS = 15_000;
 const MAX_BACKOFF_MS = 5_000;
 const MAX_CHAT = 80;
 const TOAST_MS = 3_500;
+/** Milliseconds after which an unanswered move-code request counts as lost: the room drops messages over its rate limit without a reply. */
+export const HANDOFF_LOST_MS = 5_000;
 
 export type Status = 'idle' | 'connecting' | 'open' | 'reconnecting';
 
@@ -57,7 +59,7 @@ export interface ClientState {
   toasts: Toast[];
   /** Why the room sent this screen back to the start; shown there until it joins again. */
   notice: string | null;
-  /** Milliseconds to add to Date.now() for the server's clock. */
+  /** Milliseconds to add to Date.now() for the server's clock, as of the last pong; serverNow() also follows a jump noticed since. */
   clockOffset: number;
   /** The one-time code that moves this seat to another device: null while none has arrived since it was asked for. */
   handoffCode: HandoffCode | null;
@@ -74,6 +76,8 @@ export interface ClientOptions {
   socket: SocketFactory;
   storage?: KeyValueStore | null;
   now?: () => number;
+  /** A clock the device can't change (performance.now()), to tell its clock jumping from time passing. */
+  monotonic?: () => number;
   setTimeout?: (fn: () => void, ms: number) => unknown;
   clearTimeout?: (handle: unknown) => void;
 }
@@ -86,7 +90,7 @@ export interface ClientOptions {
 export class TableClient {
   private state: ClientState = { status: 'idle', role: null, code: null, seatId: null, view: null, chat: [], emotes: [], toasts: [], notice: null, clockOffset: 0, handoffCode: null };
   private readonly listeners = new Set<() => void>();
-  private readonly clock = new ClockSync();
+  private readonly clock: ClockSync;
   private socket: SocketLike | null = null;
   private target: Target | null = null;
   /** True between sending a join or board message and its welcome. */
@@ -97,18 +101,23 @@ export class TableClient {
   private handoffExpiry: unknown = null;
   /** True while the move dialog is open. */
   private handoffWanted = false;
-  /** `handoff` requests sent and not answered yet; only the reply to the newest carries a live code. */
-  private handoffsPending = 0;
+  /** A lost-request timer per `handoff` request sent and not answered yet, oldest first; only the reply to the newest carries a live code. */
+  private handoffsPending: unknown[] = [];
   /** The seat token this screen last saved. */
   private seatToken: string | null = null;
+  /** The seat token the last join sent; null for a join by code or by link. */
+  private joinToken: string | null = null;
   private nextId = 1;
   private readonly now: () => number;
+  private readonly monotonic: () => number;
   private readonly later: (fn: () => void, ms: number) => unknown;
   private readonly cancel: (handle: unknown) => void;
   private readonly storage: KeyValueStore | null;
 
   constructor(private readonly opts: ClientOptions) {
     this.now = opts.now ?? Date.now;
+    this.monotonic = opts.monotonic ?? (() => performance.now());
+    this.clock = new ClockSync(undefined, { monotonic: this.monotonic, onJump: () => this.burstOfPings() });
     this.later = opts.setTimeout ?? ((fn, ms) => setTimeout(fn, ms));
     this.cancel = opts.clearTimeout ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
     this.storage = opts.storage ?? null;
@@ -128,7 +137,7 @@ export class TableClient {
     for (const fn of this.listeners) fn();
   }
 
-  /** The server's time now, by the synced clock. */
+  /** The server's time now, by the synced clock. A device clock jump noticed here sends the burst of pings. */
   serverNow(): number {
     return this.clock.serverNow(this.now());
   }
@@ -185,7 +194,8 @@ export class TableClient {
     const socket = this.opts.socket(this.opts.url);
     this.socket = socket;
     // A new socket has no request in flight. Not in onclose: it returns early after leave, removed or a refused join.
-    this.handoffsPending = 0;
+    for (const timer of this.handoffsPending) this.cancel(timer);
+    this.handoffsPending = [];
     socket.onopen = () => {
       if (this.socket !== socket) return;
       this.set({ status: 'open' });
@@ -229,6 +239,7 @@ export class TableClient {
     const target = this.target;
     if (!target) return;
     this.joining = true;
+    this.joinToken = null;
     if (target.kind === 'board') {
       this.raw({ t: 'board', code: target.code });
       return;
@@ -239,11 +250,12 @@ export class TableClient {
     }
     const saved = loadSeat(this.storage);
     const token = saved && saved.code === target.code ? saved.token : undefined;
+    this.joinToken = token ?? null;
     this.raw({ t: 'join', code: target.code, name: target.name || saved?.name || '', ...(token ? { seatToken: token } : {}) });
   }
 
   private startPings(): void {
-    for (let i = 0; i < FIRST_PINGS; i++) this.later(() => this.ping(), i * 150);
+    this.burstOfPings();
     const loop = () => {
       this.pinger = this.later(() => {
         this.ping();
@@ -251,6 +263,11 @@ export class TableClient {
       }, PING_EVERY_MS);
     };
     loop();
+  }
+
+  private burstOfPings(): void {
+    this.ping();
+    for (let i = 1; i < FIRST_PINGS; i++) this.later(() => this.ping(), i * 150);
   }
 
   private ping(): void {
@@ -278,9 +295,11 @@ export class TableClient {
           // A handoff code is spent once it lands; a reconnect comes back with the new token.
           if (this.target.handoff !== undefined) this.target = { kind: 'player', code: this.target.code, name: this.target.name };
         }
+        // A code shown or on its way moves the seat this screen held, not the one it holds now.
+        if (msg.code !== this.state.code || msg.seatId !== this.state.seatId) this.setHandoff(null);
         this.set({ role: msg.role, code: msg.code, seatId: msg.seatId });
         // A code asked for while away was never sent. A welcome on the same socket keeps any request in flight.
-        if (this.handoffWanted && this.handoffsPending === 0 && this.state.handoffCode === null) this.askForHandoff();
+        this.askAgainIfWanted();
         return;
       }
       case 'view':
@@ -288,8 +307,9 @@ export class TableClient {
         this.set({ view: msg.view });
         return;
       case 'handoffCode':
-        if (this.handoffsPending > 0) this.handoffsPending--;
-        if (this.handoffWanted && this.handoffsPending === 0) this.setHandoff({ code: msg.code, expiresAt: msg.expiresAt });
+        // The room answers in order, so this is the reply to the oldest request still pending.
+        if (this.handoffsPending.length > 0) this.cancel(this.handoffsPending.shift());
+        if (this.handoffWanted && this.handoffsPending.length === 0) this.setHandoff({ code: msg.code, expiresAt: msg.expiresAt });
         return;
       case 'chat': {
         if (this.state.chat.some((c) => c.id === msg.message.id)) return;
@@ -315,7 +335,7 @@ export class TableClient {
       }
       case 'removed':
         // A board never holds a seat; the one saved here belongs to a phone tab in the same browser.
-        if (this.state.role === 'player') this.forgetOwnSeat();
+        if (this.state.role === 'player') this.forgetSeat(this.seatToken);
         this.letGo(REMOVED[msg.reason]);
         return;
     }
@@ -324,11 +344,8 @@ export class TableClient {
   /** The room turned this screen away: a stale seat token or link, an unknown code, a full or started table. */
   private joinFailed(notice: string | null): void {
     this.joining = false;
-    const target = this.target;
-    const saved = loadSeat(this.storage);
-    // A refused link says nothing about the token this browser saved.
-    const byLink = target?.kind === 'player' && target.handoff !== undefined;
-    if (target && !byLink && saved && saved.code === target.code) clearSeat(this.storage);
+    // A join by code or by link sent no token, so its refusal says nothing about the seat saved here.
+    if (this.joinToken !== null) this.forgetSeat(this.joinToken);
     this.target = null;
     const s = this.socket;
     this.socket = null;
@@ -337,9 +354,9 @@ export class TableClient {
     this.set({ status: 'idle', role: null, code: null, seatId: null, view: null, ...(notice !== null ? { notice } : {}) });
   }
 
-  /** Clears the saved seat while it is still this screen's: another tab of the browser may have saved its own since. */
-  private forgetOwnSeat(): void {
-    if (loadSeat(this.storage)?.token === this.seatToken) clearSeat(this.storage);
+  /** Clears the saved seat while it still holds `token`: another tab of the browser may have saved its own since. */
+  private forgetSeat(token: string | null): void {
+    if (loadSeat(this.storage)?.token === token) clearSeat(this.storage);
   }
 
   /** A seat taken by a handoff code learns its name from the room, so the saved seat carries it. */
@@ -430,7 +447,21 @@ export class TableClient {
   }
 
   private askForHandoff(): void {
-    if (this.send({ t: 'handoff' })) this.handoffsPending++;
+    // A jump noticed by this read pings ahead of the request, so the code is timed by a fresh round trip.
+    this.serverNow();
+    if (!this.send({ t: 'handoff' })) return;
+    // Timers fire in the order they were set, so this one finds its own request at the front: older ones were answered or lost.
+    this.handoffsPending.push(
+      this.later(() => {
+        this.handoffsPending.shift();
+        this.askAgainIfWanted();
+      }, HANDOFF_LOST_MS),
+    );
+  }
+
+  /** Asks for a code if the open dialog shows none and none is on its way. A closed connection waits for the welcome. */
+  private askAgainIfWanted(): void {
+    if (this.socket?.readyState === OPEN && this.handoffWanted && this.handoffsPending.length === 0 && this.state.handoffCode === null) this.askForHandoff();
   }
 
   /** The move dialog closed: forget the code, and one still on its way. Nothing is sent; the room lets an unused code expire. */
