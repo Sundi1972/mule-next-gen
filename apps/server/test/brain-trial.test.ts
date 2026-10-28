@@ -15,14 +15,17 @@ import { fakeSdk, KEY, neverAnswers, requestOf, sdkMessage, worstUsdOfRequest, t
 const sdk = vi.hoisted((): SdkModuleFake => ({ built: [], create: null }));
 vi.mock('@anthropic-ai/sdk', async (original) => (await import('./brain-fakes.js')).fakeSdkModule(original, sdk));
 
-/** When armed, the engine's observe throws once, for seat ai2 in month 2's planning: after the Smart seats ai0 and ai1 have asked for land. */
+/**
+ * When armed, the engine's observe throws once, for seat ai2 in month 2's planning, the first time a Smart seat's call
+ * is open: the month's election observes ai2 before the land asks, so the phase alone would throw with none open.
+ */
 const crash = vi.hoisted(() => ({ armed: false, thrown: false, open: (): number => 0, openAtThrow: 0 }));
 vi.mock('@mule/engine', async (importOriginal) => {
   const real = await importOriginal<typeof import('@mule/engine')>();
   return {
     ...real,
     observe: (state: Parameters<typeof real.observe>[0], id: string) => {
-      if (crash.armed && id === 'ai2' && state.month === 2 && state.phase === 'planning') {
+      if (crash.armed && id === 'ai2' && state.month === 2 && state.phase === 'planning' && crash.open() > 0) {
         crash.armed = false;
         crash.thrown = true;
         crash.openAtThrow = crash.open();
