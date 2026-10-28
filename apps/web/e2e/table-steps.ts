@@ -14,7 +14,7 @@ const READY = '[data-testid=handoff-qr][data-state=ready]';
 
 type Plot = { x: number; y: number };
 type Box = { x: number; y: number; width: number; height: number };
-type Game = { state: GameState; devEndsAt: Map<string, number>; phaseEndsAt: number | null; ctx: { now(): number } };
+type Game = { state: GameState; devEndsAt: number | null; phaseEndsAt: number | null; ctx: { now(): number } };
 
 /** T-AC-9: counts the intents a page sends on its game sockets. Attach before the page loads, as watchShow. */
 export function watchIntents(page: Page): () => number {
@@ -358,11 +358,11 @@ function mapOf(ctx: GameStepContext): { width: number; height: number } {
   return { width, height };
 }
 
-/** Seconds left of the phone's development turn: its own clock or the phase's, whichever ends first. */
+/** Seconds left of the phone's development turn: the one development clock. */
 function turnLeft(ctx: GameStepContext): string {
   const game = gameOf(ctx);
   const now = game.ctx.now();
-  const ends = Math.min(game.devEndsAt.get('s1') ?? now, game.phaseEndsAt ?? now);
+  const ends = game.devEndsAt ?? now;
   return `${((ends - now) / 1_000).toFixed(2)} s of the development turn left`;
 }
 

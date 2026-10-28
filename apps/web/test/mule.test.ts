@@ -83,7 +83,7 @@ describe('the MULE as a character (C19)', () => {
   });
 
   it('B-AC-16: the MULE you lead is empty, then lit with its good, and wears your colour', () => {
-    const me = { id: 'lena', slot: 0 as const, time: 1 };
+    const me = { id: 'lena', slot: 0 as const };
     const empty = mulesIn(element(store({ me: { ...me, leading: 'empty' } }), 'visitor-lena'));
     expect(empty).toHaveLength(1);
     expect(empty[0]).toContain('data-good="empty"');

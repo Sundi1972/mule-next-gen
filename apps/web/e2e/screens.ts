@@ -10,7 +10,7 @@ import { join, resolve } from 'node:path';
 import type { Page } from 'playwright';
 import { launch, PHONE, PHONE_WIDE, startServer, TV } from './harness';
 import { pressOnward, watchShow } from './production-steps';
-import { fedPlayerFillsAFullHoloBar, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows } from './store-steps';
+import { fedPlayerSeesNoHunger, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows } from './store-steps';
 
 const out = resolve(process.argv[2] ?? 'screens');
 mkdirSync(out, { recursive: true });
@@ -94,7 +94,7 @@ try {
   await phase(phone, 'development');
   await storeIsOneHallWithTwoRows(phone);
   // Buys the MULE through the corral while the start-of-turn card still shows.
-  await fedPlayerFillsAFullHoloBar(phone);
+  await fedPlayerSeesNoHunger(phone, server, code);
   await phoneShot(phone, '4-store');
   await shot(tv, 'tv-4-develop');
   await outfittersOpenWithAnEmptyMule(phone);
