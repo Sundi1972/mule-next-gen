@@ -10,7 +10,7 @@ import { Room, TableError, type ClientEnvelope, type Connection, type GameContex
 import type { BrainService } from '../src/brain/index.js';
 import { chatter } from '../src/brain/chat.js';
 import type { HaikuSdk } from '../src/brain/client.js';
-import { AI_NAMES, MuleGame } from '../src/mule-game.js';
+import { AI_NAMES, MuleGame, type Notice } from '../src/mule-game.js';
 import { createMuleServer, type MuleServer } from '../src/server.js';
 import { fakeSdk, KEY, sdkMessage } from './brain-fakes.js';
 import { createRecordedGame, stateHash, type Recorder } from '../src/record.js';
@@ -58,6 +58,8 @@ vi.mock('../src/brain/client.js', async (original) => ({
 
 const CODE = 'RECRD';
 const SEED = 10;
+/** Three months, so the export ship calls, and a lot sells to a player at the land auction: found by a seed sweep. */
+const NOTICE_GAME = { seed: 4, maxMonths: 3 };
 /** Game time per step of the fake clock; every timer due in a step runs, with promises settled between them. */
 const STEP_MS = 100;
 const PLANNING_READY_MS = 3_000;
@@ -124,6 +126,9 @@ interface TableOptions {
   dir?: string;
   /** Fetches views and pongs at extra moments, as joins and pings do. */
   extraViews?: boolean;
+  /** Default SEED and GAME_OPTIONS' month count. */
+  seed?: number;
+  maxMonths?: number;
 }
 
 let rooms: Room<MuleIntent, MuleView>[];
@@ -146,12 +151,16 @@ afterEach(() => {
 function table(options: TableOptions = {}) {
   let recorder: Recorder | null = null;
   let unrecordedHash: string | null = null;
+  let game: MuleGame | null = null;
   const brain = stubBrain('s3');
+  const seed = options.seed ?? SEED;
+  const gameOptions = { ...GAME_OPTIONS, maxMonths: options.maxMonths ?? GAME_OPTIONS.maxMonths };
   const createGame = (ctx: GameContext) => {
     if (options.record === false) {
-      return new MuleGame(ctx, SEED, { ...GAME_OPTIONS, brain, onGameOver: (state) => (unrecordedHash = stateHash(state)) });
+      game = new MuleGame(ctx, seed, { ...gameOptions, brain, onGameOver: (state) => (unrecordedHash = stateHash(state)) });
+      return game;
     }
-    const made = createRecordedGame({ ctx, seed: SEED, options: GAME_OPTIONS, brain, dir: options.dir ?? null });
+    const made = createRecordedGame({ ctx, seed, options: gameOptions, brain, dir: options.dir ?? null });
     recorder = made.recorder;
     return made.game;
   };
@@ -241,6 +250,8 @@ function table(options: TableOptions = {}) {
     phones,
     send,
     recorder: () => recorder!,
+    /** The unrecorded game itself, built with `record: false`. */
+    game: () => game!,
     unrecordedHash: () => unrecordedHash,
     finished,
     /** Plays to game over, then lets the record be written. */
@@ -584,5 +595,50 @@ describe.runIf(FULL)('playbooks in the record', { timeout: 60_000 }, () => {
     const entry = altered.events.filter((e) => e.type === 'playbook')[1]!;
     if (entry.type === 'playbook') entry.playbook.strategy.cashFloor += 1;
     await expect(replay(altered)).rejects.toMatchObject({ name: 'ReplayDiverged', seq: entry.seq });
+  });
+});
+
+
+describe.runIf(FULL)('notices in the record', { timeout: 120_000 }, () => {
+  const factOf = (e: MuleRecord['events'][number]): Notice | null => {
+    if (e.type !== 'notice') return null;
+    const { type: _type, at: _at, seq: _seq, ...notice } = e;
+    return notice;
+  };
+
+  it('T-AC-10: claims, declarations, trades (the ship included) and lot sales appear as notices, phaseNotices() holds them with recording off, and a replay without them is identical', async () => {
+    const { record } = await recordedGame(NOTICE_GAME);
+    const notices = record.events.map(factOf).filter((n) => n !== null);
+    const phaseOf = { claim: 'landGrant', declare: 'auction', trade: 'auction', sale: 'landAuction' } as const;
+    for (const n of notices) expect(n.phase, `a ${n.kind} settles in its phase`).toBe(phaseOf[n.kind]);
+    expect(notices.some((n) => n.kind === 'claim' && n.seat === 's1'), "the human's claim").toBe(true);
+    expect(notices.some((n) => n.kind === 'claim' && n.seat !== 's1'), "an AI seat's claim").toBe(true);
+    expect(notices.some((n) => n.kind === 'declare' && n.side === 'pass')).toBe(true);
+    expect(notices.some((n) => n.kind === 'declare' && n.side !== 'pass')).toBe(true);
+    expect(notices.some((n) => n.kind === 'trade' && n.buyer === 'ship' && n.month === 3), 'a sale to the export ship').toBe(true);
+    expect(notices.some((n) => n.kind === 'trade' && n.buyer !== 'ship' && n.buyer !== 'store' && n.seller !== 'store'), 'a trade between players').toBe(true);
+    expect(notices.some((n) => n.kind === 'sale' && n.buyer !== 'store'), 'a lot sold to a player').toBe(true);
+    record.events.forEach((e, i) => {
+      if (e.type !== 'notice') return;
+      const step = record.events.slice(0, i).filter(isStep).at(-1)!;
+      expect({ at: e.at, seq: e.seq }).toEqual({ at: step.at, seq: step.seq });
+    });
+
+    const withoutNotices = fileCopy(record);
+    withoutNotices.events = withoutNotices.events.filter((e) => e.type !== 'notice');
+    expect((await replay(withoutNotices)).identical).toBe(true);
+
+    vi.useFakeTimers();
+    const kept: Notice[] = [];
+    const phases = MuleGame.prototype as unknown as { enterPhase(this: MuleGame): void };
+    const enterPhase = phases.enterPhase;
+    vi.spyOn(phases, 'enterPhase').mockImplementation(function (this: MuleGame) {
+      kept.push(...this.phaseNotices());
+      enterPhase.call(this);
+      expect(this.phaseNotices(), 'a new phase opens with none').toEqual([]);
+    });
+    const off = table({ ...NOTICE_GAME, record: false });
+    expect(await off.toGameOver()).toBe(true);
+    expect(kept).toEqual(notices);
   });
 });
