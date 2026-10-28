@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { GAME, LOTS, TAX, WALK, type Good } from '@mule/engine';
 import type { AuctionView, MuleView } from '@mule/protocol';
 import { errors as playwrightErrors, type Browser, type Page } from 'playwright';
-import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
+import { GRANT_PASS_MAX_MS, GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, headerSlot, launch, PHONE, startServer, TV, type AuctionSteps } from './harness';
 import { hostContinuesWithout } from './hub-steps';
@@ -134,7 +134,7 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   // Month 1: everyone claims (Brix and Lena list theirs in month 2), so the grant ends early. Nothing is listed, so only the colony's lot can follow.
   await everyone(phones, (p) => readyInPlanning(p.page));
   await everyone(phones, (p) => claimPlots(p.page));
-  await brix.page.locator('[data-phase]:not([data-phase=landGrant])').waitFor({ timeout: within(SCALE, PHASE_MS.landGrant) });
+  await brix.page.locator('[data-phase]:not([data-phase=landGrant])').waitFor({ timeout: GRANT_WAIT_MS });
   if ((await brix.page.locator('[data-phase=landAuction]').count()) > 0) await followTheColonyLot(phones, tv, 1, truth);
   await everyone(phones, (p) => goToThePub(p.page));
   const screens = [...phones.map((p) => ({ name: `${p.name}'s phone`, page: p.page })), { name: 'the TV', page: tv }];
@@ -181,7 +181,7 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   await everyone(phones, (p) => claimPlots(p.page));
 
   // Brix's lot 1: Lena stops low, Ossa holds Up past her and is still holding when the bell rings. The colony's lot may come up before it.
-  await everyone(phones, (p) => p.page.locator('[data-phase=landAuction]').waitFor({ timeout: within(SCALE, PHASE_MS.landGrant) }));
+  await everyone(phones, (p) => p.page.locator('[data-phase=landAuction]').waitFor({ timeout: GRANT_WAIT_MS }));
   const opening = await lotUp(brix.page, within(SCALE, LOTS.introMs));
   if (opening?.seller.includes(COLONY_NAME)) await followTheColonyLot(phones, tv, 2, truth);
   await brix.page.getByTestId('seller-wait').or(brix.page.getByTestId('seller-note')).waitFor({ timeout: within(SCALE, LOTS.resultMs + LOTS.introMs) });
@@ -753,6 +753,9 @@ async function nextLotFrom(page: Page, seller: string): Promise<void> {
 /** How long the last phone's Ready takes to land and the next screen to show; planning has no clock. */
 const READY_LANDS_MS = 3_000;
 
+/** A budget for the land grant: one pass of its light, which phaseScale never shortens, plus room for the browser and the network. */
+const GRANT_WAIT_MS = GRANT_PASS_MAX_MS + 3_000;
+
 /** A budget for a phase of `ms` game time at this scale, plus room for the browser and the network. */
 function within(scale: number, ms: number): number {
   return ms * scale + 3_000;
@@ -789,7 +792,7 @@ async function claimPlots(page: Page): Promise<void> {
   await claim.waitFor({ timeout: READY_LANDS_MS });
   for (let tries = 0; ; tries++) {
     check(tries < 40, 'the land grant let this phone claim its plots');
-    await claim.or(over).first().waitFor({ timeout: within(SCALE, PHASE_MS.landGrant) });
+    await claim.or(over).first().waitFor({ timeout: GRANT_WAIT_MS });
     if (await over.count()) return;
     try {
       const left = Number(/(\d+) OF/.exec(await claim.innerText({ timeout: PRESS_MS }))?.[1]);
@@ -806,7 +809,7 @@ async function goToThePub(page: Page): Promise<void> {
   await page
     .locator('[data-phase=development]')
     .getByRole('button', { name: 'Go to the pub and end your turn' })
-    .click({ timeout: within(SCALE, PHASE_MS.landGrant) });
+    .click({ timeout: GRANT_WAIT_MS });
 }
 
 /** The goods auction: press Done at every stage it shows until the phone leaves the auction. */

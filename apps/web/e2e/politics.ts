@@ -9,7 +9,7 @@ import type { MuleIntent, MuleView } from '@mule/protocol';
 import { errors as playwrightErrors, type Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
-import { check, held, launch, PHONE, startServer, TV } from './harness';
+import { check, CLAIM_MS, doneWithLand, held, launch, PHONE, startServer, TV } from './harness';
 import { ELECTION_WAIT_MS, PRESS_MS } from './politics-steps';
 
 const SCALE = 0.25;
@@ -216,8 +216,9 @@ async function main(): Promise<void> {
     // On to the auction: ready, claim, the pub.
     await everyone(phones, (p) => p.page.getByTestId('ready').click({ timeout: PRESS_MS }));
     await everyone(phones, (p) => claimPlots(p.page));
+    await everyone(phones, (p) => doneWithLand(p.page));
     await everyone(phones, (p) => goToThePub(p.page));
-    await lena.page.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.landGrant + PHASE_MS.development + PHASE_MS.production) });
+    await lena.page.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
 
     // Lena holds one unit of a good the store buys for 100 cr or more, seeded as the auction opens and before that good
     // comes up, so 7%, 8% and 9% (and the old rate) each take a different tax from the sale.
@@ -385,7 +386,7 @@ async function claimPlots(page: Page): Promise<void> {
   const over = page.locator('[data-phase]:not([data-phase=planning]):not([data-phase=landGrant])');
   for (let tries = 0; ; tries++) {
     check(tries < 40, 'the land grant let this phone claim its plots');
-    await claim.or(over).first().waitFor({ timeout: READY_LANDS_MS + within(PHASE_MS.landGrant) });
+    await claim.or(over).first().waitFor({ timeout: READY_LANDS_MS + CLAIM_MS });
     if (await over.count()) return;
     try {
       const left = Number(/(\d+) OF/.exec(await claim.innerText({ timeout: PRESS_MS }))?.[1]);
@@ -399,7 +400,7 @@ async function claimPlots(page: Page): Promise<void> {
 }
 
 async function goToThePub(page: Page): Promise<void> {
-  await page.locator('[data-phase=development]').getByRole('button', { name: 'Go to the pub and end your turn' }).click({ timeout: within(PHASE_MS.landGrant + PHASE_MS.development) });
+  await page.locator('[data-phase=development]').getByRole('button', { name: 'Go to the pub and end your turn' }).click({ timeout: within(PHASE_MS.development) });
 }
 
 /** Presses and holds Up or Down once the button is enabled. */
