@@ -179,6 +179,7 @@ describe('events in production', () => {
             if (s.month < 2) return expect(event).toBeUndefined();
             if (!event) return;
             expect(event.key).toBe(key);
+            for (const e of report.events ?? []) expect([e.key, e.phase]).toEqual([e.key, 'production']);
             seen++;
             const hit = new Map(event.plots.map((p) => [p.index, p]));
             for (const line of report.lines ?? []) {
