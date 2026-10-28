@@ -84,9 +84,12 @@ function eventSummary(ev: ShowEvent): string {
   if (ev.key === 'colonyPlot') return 'One free plot goes to auction after the grant';
   if (h?.pending) return `Every ${h.good ? GOOD_NAME[h.good] : ''} plot makes 20% in production, unless the Governor pays`;
   if (ev.plots.length) {
-    const total = ev.plots.reduce((n, p) => n + p.delta, 0);
-    const good = h?.good;
-    return `${ev.player ? `${name(ev.player)}: ` : ''}${signed(total)} ${good ? GOOD_NAME[good] : ''} on ${plots(good, ev.plots.length)}`;
+    // Each good's figure apart: a drought on farms and wells is "−6 Food, −4 Water on 10 plots".
+    const change = new Map<Good | undefined, number>();
+    for (const p of ev.plots) change.set(p.good, (change.get(p.good) ?? 0) + p.delta);
+    const figures = [...change].map(([good, n]) => (good ? `${signed(n)} ${GOOD_NAME[good]}` : signed(n))).join(', ');
+    const [only] = change.keys();
+    return `${ev.player ? `${name(ev.player)}: ` : ''}${figures} on ${plots(change.size === 1 ? only : undefined, ev.plots.length)}`;
   }
   const fx = ev.effects ?? [];
   const players = fx.filter((f) => f.on !== 'colony' && f.on !== 'store');

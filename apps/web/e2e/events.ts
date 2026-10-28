@@ -245,8 +245,9 @@ function checkLogLine(text: string, ev: ProductionView['events'][number], view: 
     const was = per.get(goodAt(h.x, h.y)) ?? { sum: 0, plots: 0 };
     per.set(goodAt(h.x, h.y), { sum: was.sum + h.delta, plots: was.plots + 1 });
   }
-  const holds = [...per].map(([g, v]) => `${signed(v.sum)} ${g ? GOOD_NAME[g] : '?'} on ${v.plots}`).join(', ');
-  const stated = [...text.matchAll(/([−+]\d+) (\S+) on (\d+)/g)].map(([, n, good, plots]) => `${n} ${good} on ${plots}`).join(', ');
+  const holds = `${[...per].map(([g, v]) => `${signed(v.sum)} ${g ? GOOD_NAME[g] : '?'}`).join(', ')} on ${ev.hits.length}`;
+  // "Drought −2 Food, −2 Water on 4 plots": each good's figure, then the plots they fell on.
+  const stated = `${[...text.matchAll(/([−+]\d+) ([A-Z][\w ]*?)(?=,| on )/g)].map(([, n, good]) => `${n} ${good}`).join(', ')} on ${/ on (\d+) /.exec(text)?.[1]}`;
   check(stated === holds, `B-AC-1: the TV log says "${text}" for ${ev.key}; the view holds ${holds}`);
   if (ev.scope === 'personal') {
     const owner = view.lines.find((l) => l.x === ev.origin.x && l.y === ev.origin.y)?.owner;
