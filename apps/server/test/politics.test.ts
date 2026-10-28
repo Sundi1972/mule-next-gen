@@ -807,9 +807,11 @@ describe('AI seats in the election', () => {
     const noBaron = [...aiTable.filter((s) => s.id !== 'baron'), { id: 'nbr', name: 'The Good Neighbour', isAi: true, color: 2 }];
     const governors = new Set<string>();
     for (const [seats, seed] of [aiTable, noBaron].flatMap((t) => [1, 2, 3].map((seed) => [t, seed] as const))) {
-      // What each broadcast carried: when, and the tax a screen would draw.
-      const sent: { at: number; tax: number }[] = [];
-      const g: Started = started({ seed, seats, phaseScale: 0.1, onChanged: (at) => sent.push({ at, tax: g.game.viewFor(null).politics!.tax.percent }) });
+      // What each broadcast carried: when, and in planning (where the Governor sets it) the tax a screen would draw. A whole
+      // view on every broadcast of the month would cost seconds on a CI runner.
+      const sent: { at: number; tax: number | null }[] = [];
+      const taxOnScreen = () => (engineOf(g.game).phase === 'planning' ? g.game.viewFor(null).politics!.tax.percent : null);
+      const g: Started = started({ seed, seats, phaseScale: 0.1, onChanged: (at) => sent.push({ at, tax: taxOnScreen() }) });
       // Lena is too poor to be appointed and never runs, so an AI seat governs; the fund is full.
       setMoney(g.game, Object.fromEntries(seats.map((s) => [s.id, s.isAi ? 1_000 : 0])));
       engineOf(g.game).treasury.money = 10_000;
