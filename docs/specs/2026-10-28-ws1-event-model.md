@@ -360,6 +360,27 @@ goal      G-1 (unchanged); wave 2's rows carry the new effects, its sim report s
           it breaks goes to Heiko as options
 ```
 
+```
+AM-5 · 2026-10-29 · the event payload agreed with WS8 (primary reviewer), for the approved gallery
+        (Heiko, 29 Oct: "Living weather" is the design to build)
+
+target    §3 MonthEvent (Task 2's contract)
+did       wave 1 needs nothing new: the contract at ws1-events-roller 605749d is what the gallery builds against.
+          One field goes: MonthEvent.when ('afterProduction'). Screens read `phase`; when to show an event inside its
+          phase is display timing, the show's (EVENT_SHOW in config.ts, WS8's block by PM ruling). Its readers are its
+          definition (types.ts, WS3's file: a named edit) and buildEvent's value (events.ts); nothing else.
+          Cavern collapse (AM-3) needs no new field: the key and plots[0] (Crystite, delta 0).
+          Wave 2 adds, each with the row that needs it, as a named contract change WS8 reviews:
+          effects?: { on: player id | 'store' | 'colony'; what; delta; pct?; good?; turns? }[] for changes off the map
+          (pirate raid, store fire, tax and grant, the festival, the strikes), in fired order with AM-2's stacking;
+          plots[].becomes? ('crater' | 'plain' | 'idle'); plots[].muleLost?; plots[].pending? (the general strike).
+          WS8's working types: design/mocks/ws8-events/src/events.ts on origin/ws8-events.
+          The production show's files are WS6's; WS8 builds the event segment into them as named edits WS6 reviews,
+          and owns packages/ui/src/events/**. Contract hunks go to WS8, with WS6 copied.
+because   WS8, 29 Oct: "for wave 1 the contract at 605749d is enough"; `when` duplicates `phase`.
+goal      G-1 unchanged
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 No ownership change: events.ts and EVENTS remain WS1's. Named edits: `specials.ts` (WS5, C4), any phase hook in

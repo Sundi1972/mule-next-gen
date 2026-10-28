@@ -240,6 +240,16 @@ its start plot (HC-4; that mutant survives today).
       drought has not fired, so it never raises wildfire (lead's ruling at Task 4's review). EM-T-AC-3 asserts it.
 - [ ] **Step 4: Run `pnpm typecheck && pnpm test`; expect exit 0.** **Step 5: Commit** red then green.
 
+### Task 6a: `MonthEvent.when` goes — the contract per spec §8 AM-5 (WS8, 29 Oct)
+
+**Depends on:** Task 6 · **Files:** Modify: `packages/engine/src/types.ts::MonthEvent` (named edit, WS3 reviews),
+`events.ts::buildEvent`; any test literal that sets `when` (grep `packages/` and `apps/`; another lane's test gets a
+named edit its owner OKs)
+
+- [ ] Remove `when` from `MonthEvent` and from `buildEvent`; typecheck finds every reader (AM-5 names two)
+- [ ] `pnpm typecheck && pnpm test` exit 0; send the hunk to WS8 (primary reviewer) and WS3 (types.ts), WS6 copied;
+      tell WS8 the real report carries several events (Task 6), so the gallery grafts onto it
+
 ### Task 7: The month report and the sim count every event — C5
 
 **Depends on:** Task 6, and the balance plan's PENDING clean-up merged (it cleans `sim.ts`; `ws1-events` takes it in
