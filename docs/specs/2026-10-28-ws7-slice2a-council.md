@@ -67,10 +67,11 @@ with (G-5).**
 
 ## §0.1 · Decision Record `[review-only]`
 
-**Chosen: the council is a second clocked vote at the start of planning, after the election, built
-like the election.** A stage machine (propose → ballot → reveal → over) in `politics.ts`, weighted with
-slice 1's `voteWeight`, stepped by the same server tick and sim loop; while either vote is open, Ready
-means Done for the stage and the host's Continue is refused (AM-15). Four laws take effect at three
+**Chosen (AM-1, untimed like the election, AM-18): the Governor proposes at any time in planning, and
+the next month's planning opens with the law ballot, after the election.** The ballot is untimed and
+closes when everyone is Done; the host's Continue moves past absent players; a short presentation
+clock reveals the result. Built in `politics.ts` beside the election, weighted with slice 1's
+`voteWeight`, stepped by the same server tick and sim loop through one "votes open" seam. Four laws take effect at three
 seams: the auction's ship sale (export tax), upkeep (land and pollution tax) and the outfitter
 (emission cap). About 4 WS7 PRs + 1 WS1 PR.
 
@@ -103,8 +104,9 @@ HC-41  packages/engine stays pure. The AI's council draws use their own seeded s
        pass.                                     source: CLAUDE.md, replay           breach: fatal
 HC-42  politics:false behaves exactly as today: no council, no laws, no law tax; WS1's politics-off
        sim rows stay byte-identical.             source: politics spec HC            breach: fatal
-HC-43  The colony's votes never end planning: while the election or the council is open, Ready is
-       Done for the stage and the host's Continue is refused.   source: AM-15        breach: fatal
+HC-43  No decision has a clock (AM-18): while the election or the law ballot is open, Ready is Done
+       for the stage and only the host's Continue moves past absent players; a reveal is refused
+       Continue and runs on its presentation clock.          source: AM-15, AM-18    breach: fatal
 HC-44  Every law tax enters the fund through G-5's colony.ts fundIn; nothing else writes
        treasury.money.                           source: G-5 spec §9                 breach: fatal
 HC-45  Edits outside WS7's paths are the named edits in §1 only, recorded in SEAMS before the PR.
@@ -116,7 +118,7 @@ HC-46  No screen before WS6's slice-2a mock is approved by Heiko; the mock is th
 ## §1 · Solution Design `[handoff]`
 
 ```
-C40 · ADDED · the council: a law vote runs at the start of planning, after the election, on its own clocks
+C40 · ADDED · the council: the Governor proposes any time in planning; the next planning opens with the law ballot
 
 today        no council. Planning opens with the election in election months (stage machine
              nominate → ballot → reveal → over); planning proper follows it.
@@ -124,11 +126,12 @@ today        no council. Planning opens with the election in election months (st
              ::closeElection, ::voteWeight; packages/engine/src/types.ts::Politics, ::Election;
              packages/engine/src/game.ts::advancePhase
              verified_by: read
-tomorrow     MUST open a council each planning phase in which a Governor sits, once the election
-             (if any) is over, and step it propose → ballot → reveal → over (RULE-40). MUST accept
-             one proposal (enact a law at a setting, change a law's setting, or repeal) from the
-             Governor only (RULE-41), weighted yes/no ballots from every player, and fix the result
-             at ballot close (RULE-42); the law takes effect when the reveal ends. MUST export one
+tomorrow     MUST accept one pending proposal (enact a law at a setting, change a law's setting, or
+             repeal) from the Governor at any time in planning while no vote is open, replaceable or
+             withdrawn until the next planning opens (RULE-41). MUST open the law ballot when the
+             next planning opens, after the election, if the proposer still governs; it closes when
+             every player is Done, then a short reveal (RULE-40). MUST fix the result at ballot
+             close (RULE-42); the law takes effect when the reveal ends. MUST export one
              "votes open" view of both votes (votesOpen, votesDone, stepVotes, closeVotes) so the
              server and the sim handle the election and the council through one seam.
 logic        → §2 RULE-40, RULE-41, RULE-42 · evaluated at each step and intent · weights bind at
@@ -137,8 +140,8 @@ seam         packages/engine/src/politics.ts — the sole writer of state.politi
              politics spec); the council reuses its edit() copy-on-write and voteWeight
 senior       junior would: a second stage machine in the server, or a council.ts beside politics.ts
              writing state.politics · senior does: one more machine in politics.ts with the
-             election's shape, and a votes-open facade so the server's ready/away/Continue code
-             changes in one place; AM-1's close-at-once covers the council too
+             election's untimed shape (AM-18), and a votes-open facade so the server's
+             ready/away/Continue code changes in one place; AM-1's close-at-once covers it too
 mechanism    sprout (new functions in politics.ts) + in_place (openPlanning, takeOffice opens the
              council; game.ts advancePhase calls closeVotes for closeElection: WS3 named edit)
 call sites   openPlanning: game.ts::createGame, ::advancePhase. closeElection: game.ts::advancePhase
@@ -238,7 +241,7 @@ C44 · MODIFIED · the AI Governor proposes, and every AI seat votes on laws
 today        VoteHand runs, votes and sets the tax, keyed on the election's stage; one rng stream.
              anchors: packages/ai/src/hands/vote.ts::VoteHand
              verified_by: read
-tomorrow     MUST, as Governor in the propose stage, propose the law that costs the leader most
+tomorrow     MUST, as Governor in planning proper (once a month), propose the law that costs the leader most
              against itself, or repeal one, or pass (RULE-46); MUST vote on every law ballot
              (RULE-46); council draws come from a second seeded stream (HC-41).
 logic        → §2 RULE-46 · after the seeded pause, once per stage, then Done
@@ -334,27 +337,26 @@ atomicity    none
 ## §2 · The Logic `[handoff]`
 
 ```
-RULE-40 · The council's stages                                  shape: state machine
+RULE-40 · The law ballot (AM-1: untimed, AM-18)                 shape: state machine
 
-opens     when planning opens without an election, or when the election's reveal ends; only if
-          politics is on and a Governor sits. Otherwise council = null for the month.
-stages    propose (POLITICS.council.proposeMs) → ballot (ballotMs) → reveal (revealMs) → over
+proposal  pending from the moment the Governor proposes (RULE-41) until the next planning opens;
+          public, with RULE-45's preview, all that time. A new Governor drops the old one's.
+opens     when the next planning opens, after the election (if any) is over, if a proposal is
+          pending and its proposer still governs; politics on. Otherwise council = null.
+stages    ballot (untimed) → reveal (POLITICS.council.revealMs, presentation only) → over
 
   from      event                                        to
-  propose   the Governor proposes (RULE-41 valid)         ballot (clock reset; the Governor's ballot
-                                                          starts as yes)
-  propose   the Governor presses Done, or the clock ends   over (no law this month)
-  ballot    every player Done, or the clock ends          reveal (RULE-42 fixes the result)
+  ballot    every player Done (a cast ballot is Done),   reveal (RULE-42 fixes the result; the
+            or the host's Continue                       humans not Done abstain, named in the news)
   reveal    the clock ends                                over (a passed law takes effect)
-  any open  the game leaves planning (AM-1's case)         ballot: tally now, then take effect;
-                                                          propose: no law; reveal: take effect
+  any open  the game leaves planning (AM-1's case)         ballot: tally now; reveal: take effect
 
-Done      'ready' while the council is open is Done for the stage (HC-43); in propose only the
-          Governor's Done counts. Away seats are marked Done every tick (server).
-continue  the host's Continue while votesOpen is refused, as during the election; the council ends
-          on its own clocks within proposeMs + ballotMs + revealMs at most.
-examples  month 2, Governor Lena proposes land tax 10 → ballot → reveal → in force ·
-          month 4: election, then Kai (new Governor) proposes · Governor presses Done → no law
+Done      'ready' while the ballot is open is Done for it; the Governor's ballot starts as yes.
+away      not Done by being away (HC-43); the host's Continue moves past them.
+continue  refused in the reveal ("The result is being announced").
+examples  month 2: Lena (Governor) proposes land tax 10 → month 3 planning opens with its ballot →
+          all vote → reveal → in force · month 3: Lena proposes, month 4's election makes Kai
+          Governor → the proposal is dropped · Leo's phone drops in the ballot → the host continues
 ```
 
 ```
@@ -367,7 +369,7 @@ inputs    actor (Governor | other) · stage (propose | other) · kind (enact | r
           retry: state.politics.failed[kind:law] = month it failed | none
 first match wins
   #   when                                                     then
-  1   stage ≠ propose                                          refuse "No law can be proposed now"
+  1   a vote is open (election or law ballot), or not planning refuse "Propose once the votes are over"
   2   actor ≠ Governor                                         refuse "Only the Governor proposes a law"
   3   law not a key of POLITICS.laws                           refuse "That law is not in the colony's book"
   4   failed[kind:law] = m and month ≤ m + retryMonths         refuse "That proposal failed in month m; it can come back in month m+retryMonths+1"
@@ -379,7 +381,8 @@ first match wins
   10  enact, count < maxInForce                                valid
   11  enact, count = maxInForce, replaces in force             valid
   12  otherwise                                                refuse "Three laws are in force: pick the one this replaces"
-unknown   failed has no entry → never failed (no retry wait). No Governor → no council (RULE-40).
+unknown   failed has no entry → never failed (no retry wait). No Governor → no proposal.
+pending   a valid proposal replaces the pending one; propose(null) withdraws it.
 examples  land tax 10 at 0 laws → valid · land tax 15 → row 7 · repeal of a law not in force → row 5 ·
           a fourth law without replaces → row 12 · land tax failed in month 2, proposed in month 4
           with retryMonths 2 → row 4 ("can come back in month 5")
@@ -448,7 +451,7 @@ repeal          the same numbers as savings
 ```
 RULE-46 · The AI's council acts                                  shape: decision table
 
-propose (the AI Governor, once, after a seeded pause from the council stream)
+propose (the AI Governor, once a month in planning proper, after a seeded pause from the council stream)
   candidates  enact each law not in force at its middle setting and not waiting (RULE-41 row 4),
               plus repeal each law in force; leader = the other player with the highest score()
   gain(c)     cost(leader) − cost(self) for enact; cost(self) − cost(leader) for repeal (RULE-45)
@@ -478,17 +481,18 @@ RULE-47 · Who sees what of the council                           shape: decisio
 
 - **Engine (ADDED, not breaking; C40):** `type LawId = 'exportTax' | 'landTax' | 'pollutionTax' |
   'emissionCap'`; `type LawProposal = { kind: 'enact'; law: LawId; setting: number; replaces?: LawId }
-  | { kind: 'repeal'; law: LawId }`; `interface Council { stage: 'propose' | 'ballot' | 'reveal' |
-  'over'; clockMs: number; proposal: LawProposal | null; ballots: Record<string, boolean>; done:
+  | { kind: 'repeal'; law: LawId }`; `interface Council { stage: 'ballot' | 'reveal' |
+  'over'; clockMs: number /* the reveal's only */; proposal: LawProposal; ballots: Record<string, boolean>; done:
   string[]; result: { passed: boolean; yes: number; no: number; tie: boolean } | null }`; `Politics`
-  gains `council: Council | null`, `laws: Partial<Record<LawId, { setting: number; since: number }>>`,
+  gains `proposal: { by: string; month: number; proposal: LawProposal } | null` (pending),
+  `council: Council | null`, `laws: Partial<Record<LawId, { setting: number; since: number }>>`,
   `failed: Record<string, number>` (key `kind:law`). `types.ts` is WS3's: named edit.
 - **Fund sources (MODIFIED, G-5 C20's union):** + `'exportTax' | 'landTax' | 'pollutionTax'`.
 - **Protocol (ADDED, not breaking; C45; WS3 named edits):** intents `{ type: 'propose'; proposal:
   LawProposal }` and `{ type: 'voteLaw'; yes: boolean }`; the politics view gains `council` (RULE-47
   shape, ballots replaced by `myBallot`) and `laws`, `retry`; the board's key allow-list gains them.
   Example: `{ type: 'propose', proposal: { kind: 'enact', law: 'landTax', setting: 10 } }`.
-- **Config (ADDED; HC-40):** `POLITICS.council = { proposeMs, ballotMs, revealMs, maxInForce: 3,
+- **Config (ADDED; HC-40):** `POLITICS.council = { revealMs /* presentation */, maxInForce: 3,
   retryMonths: 2 }`; `POLITICS.laws = { exportTax: { settings: [10, 20, 30] /* % of a ship sale */ },
   landTax: { settings: [5, 10, 20] /* cr a plot a month */ }, pollutionTax: { settings: [10, 20, 40]
   /* cr an air point */ }, emissionCap: { settings: [40, 50, 60] /* air level */, blocks: ['rareEarth',
@@ -513,7 +517,7 @@ Code-only; no existing state to reach: games live in server memory and the sim i
 | B-AC-40 | Given Lena is Governor in month 2 with two phones and AI seats · When she proposes a land tax of 10 · Then every phone shows its own cost before voting, the ballots close, and every screen shows the totals and the law in force at the same moment | C40, C43, C45, C46 | the phones and the TV (a step in e2e/politics.ts, UBER-AC-9) |
 | B-AC-41 | Given a land tax of 10 in force · When the month ends · Then each owner pays 10 a plot (what they have, at most) into the fund and the report shows the land tax income | C41 | players' money and the report's ledger (engine test; e2e step) |
 | B-AC-42 | Given an emission cap of 50 and air 55 · When a player outfits a Rare earth MULE · Then it is refused with the cap's message and their money is unchanged; at air 50 it is allowed | C42 | the RuleError message and player state (engine test) |
-| B-AC-43 | Given an open law ballot · When the host presses Continue · Then it is refused and nothing changes; a phone's Ready is Done for the stage | C45 | server state (server test) |
+| B-AC-43 | Given an open law ballot · When a human has not voted · Then nothing closes, however long; the host's Continue closes it and the news names them; in the reveal Continue is refused | C45 | server state and news (server test) |
 | T-AC-40 (serves B-AC-40) | each RULE-41 row's verdict and message | C40 | engine |
 | T-AC-41 (serves B-AC-40) | each RULE-42 row; ties go to the Governor's ballot | C40 | engine |
 | T-AC-42 (serves B-AC-41) | a ship sale pays sales + export tax; a store sale pays sales tax only (RULE-43 rows 1-2) | C41 | the seller's money after the auction trade |
@@ -535,8 +539,8 @@ treasury.money but colony.ts.
 
 - **AI seats never pass a law, so UBER-AC-8 fails.** Mitigation: RULE-46 makes the AI Governor
   propose when it gains; WS1 tunes POLITICS.ai.council in its PR (T-AC-47 is the gate).
-- **Election months get long** (election + council). Mitigation: every stage ends early when all are
-  Done, and the propose stage ends at the Governor's Done.
+- **Election months get long** (election + law ballot). Mitigation: both ballots end the moment
+  everyone is Done; only the reveals are clocked, and briefly.
 - **The AI loops on a refused outfit.** Mitigation: outfitBlocked shared with the strategist's
   outfit loop (C42, T-AC-48).
 - **Seeded draws shift WS1's rows.** Mitigation: HC-41's own council stream (T-AC-45).
@@ -544,7 +548,20 @@ No spike needed.
 
 ## §8 · Amendments `[review-only]`
 
-None yet.
+```
+AM-1 · 2026-10-28 · PM (confirming the untimed election's §8 note; Heiko may overrule) · before build
+
+target    §0.1 chosen, §0.2 HC-43, §1 C40, §2 RULE-40, RULE-41 row 1, §3, §6 B-AC-43
+said      a clocked council at planning open: propose (clock) → ballot (clock) → reveal
+did       Heiko's "not time bound" (AM-18) applied to law votes: the Governor proposes at any time
+          in planning (pending, public, replaceable); the next planning opens with the law ballot,
+          after the election, untimed (closes when everyone is Done; the host's Continue for absent
+          players), then a short presentation reveal. proposeMs and ballotMs leave POLITICS.council.
+because   S2-1: the table votes laws only if everyone can take part; the same reason as AM-18
+goal      S2-1 — still met; a month for diplomacy on each proposal
+folded    §0.1, HC-43, C40, RULE-40, RULE-41, §3, B-AC-43; RULE-46's propose rows now run in
+          planning proper (once a month, after the seeded pause), not in a propose stage
+```
 
 ## §9 · Ownership Boundaries `[handoff]`
 
