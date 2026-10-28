@@ -1,4 +1,5 @@
 import { advancePhase, COLONY_SELLER, createGame, type GameState } from '@mule/engine';
+import type { MuleIntent } from '@mule/protocol';
 import type { GameContext, SeatInfo } from '@tabletop/core';
 import { MuleGame } from '../src/mule-game.js';
 
@@ -71,6 +72,19 @@ export function fakeContext(options: { onChanged?: (at: number) => void } = {}) 
     }
   };
   return { ctx, advance, waits };
+}
+
+/**
+ * A development tap that lets the fake clock run until the colonist has got there and finished any assay, so the
+ * move has applied when it returns, as it had when moves were instant.
+ */
+export function tapThere(game: MuleGame, fake: { ctx: GameContext; advance: (ms: number) => void }, seatId: string, intent: MuleIntent): void {
+  game.handle(seatId, intent);
+  const colonist = () => game.viewFor(null).players.find((p) => p.id === seatId)?.colonist;
+  const walk = colonist()?.walk;
+  if (walk) fake.advance(walk.arrivesAt - fake.ctx.now());
+  const assay = colonist()?.assayUntil;
+  if (assay) fake.advance(assay - fake.ctx.now());
 }
 
 /** The first seed whose month-1 roll brings a colony lot for these seats, found by playing the engine, never by mocking its RNG. */

@@ -1,21 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { toDevelopment as reachDevelopment } from './fake-context.js';
+import { tapThere, toDevelopment as reachDevelopment } from './fake-context.js';
 
 /** Month 1 into development with Heiko (s1) owning the first plot that lit up in the grant. */
 function toDevelopment() {
-  const { game, advance, plot } = reachDevelopment({ claimer: 's1' });
+  const { game, advance, ctx, plot } = reachDevelopment({ claimer: 's1' });
   expect(plot).not.toBeNull();
-  return { game, advance, plot: plot! };
+  return { game, advance, fake: { ctx, advance }, plot: plot! };
 }
 
 describe("MyView.installedThisTurn: the store's Now line after a reload", () => {
   it('FM-reload-install: true on the installer\'s own view after an install and on a fresh view after a reload, never on another seat\'s, and false again when their next development turn starts', () => {
-    const { game, advance, plot } = toDevelopment();
+    const { game, advance, fake, plot } = toDevelopment();
     expect(game.viewFor('s1').me!.installedThisTurn).toBe(false);
-    game.handle('s1', { type: 'buyMule' });
-    game.handle('s1', { type: 'outfit', outfit: 'food' });
+    tapThere(game, fake, 's1', { type: 'buyMule' });
+    tapThere(game, fake, 's1', { type: 'outfit', outfit: 'food' });
     expect(game.viewFor('s1').me!.installedThisTurn, 'an outfitted MULE still in hand is not installed').toBe(false);
     game.handle('s1', { type: 'install', ...plot });
+    expect(game.viewFor('s1').me!.installedThisTurn, 'walking it to the plot, nothing is installed yet').toBe(false);
+    const walk = game.viewFor(null).players.find((p) => p.id === 's1')!.colonist!.walk!;
+    advance(walk.arrivesAt - fake.ctx.now());
 
     expect(game.viewFor('s1').me!.installedThisTurn).toBe(true);
     game.connectionChanged('s1', false);
@@ -35,12 +38,12 @@ describe("MyView.installedThisTurn: the store's Now line after a reload", () => 
   });
 
   it('FM-reload-install: a second MULE bought and outfitted after the install leaves it true, and it holds through production and the next planning until that month\'s development starts', () => {
-    const { game, advance, plot } = toDevelopment();
-    game.handle('s1', { type: 'buyMule' });
-    game.handle('s1', { type: 'outfit', outfit: 'food' });
-    game.handle('s1', { type: 'install', ...plot });
-    game.handle('s1', { type: 'buyMule' });
-    game.handle('s1', { type: 'outfit', outfit: 'energy' });
+    const { game, advance, fake, plot } = toDevelopment();
+    tapThere(game, fake, 's1', { type: 'buyMule' });
+    tapThere(game, fake, 's1', { type: 'outfit', outfit: 'food' });
+    tapThere(game, fake, 's1', { type: 'install', ...plot });
+    tapThere(game, fake, 's1', { type: 'buyMule' });
+    tapThere(game, fake, 's1', { type: 'outfit', outfit: 'energy' });
     expect(game.viewFor('s1').me).toMatchObject({ carriedMule: 'energy', installedThisTurn: true });
 
     // The flag as s1's phone saw it on entering each phase, keyed "month phase".

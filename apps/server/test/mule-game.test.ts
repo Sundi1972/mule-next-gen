@@ -105,7 +105,7 @@ describe('MuleGame', () => {
     expect(game.viewFor('s1').lit).not.toEqual(first);
   });
 
-  it('gives each player their own development clock, shortened by analyses and ended by the pub', () => {
+  it("FM-one-clock: an assay keeps the colonist busy and never shortens the clock; its ground is the analyser's alone; the pub pays and ends only that turn; the clock ends development", () => {
     const { ctx, advance } = fakeContext();
     const game = new MuleGame(ctx, 7);
     game.start(seats);
@@ -116,21 +116,21 @@ describe('MuleGame', () => {
     const ends = view.me!.devEndsAt!;
     const plot = view.tiles.find((t) => t.terrain !== 'store')!;
     game.handle('s1', { type: 'analyse', x: plot.x, y: plot.y });
+    advance(game.viewFor(null).players.find((p) => p.id === 's1')!.colonist!.walk!.arrivesAt - ctx.now());
     const after = game.viewFor('s1');
-    expect(after.me!.devEndsAt).toBeLessThan(ends);
+    expect(after.me!.devEndsAt).toBe(ends);
     expect(after.tiles.find((t) => t.x === plot.x && t.y === plot.y)!.ground).toBeDefined();
     expect(game.viewFor('s2').tiles.find((t) => t.x === plot.x && t.y === plot.y)!.ground).toBeUndefined();
+    expect(() => game.handle('s1', { type: 'analyse', x: plot.x, y: plot.y })).toThrow('Still assaying');
     // Mia goes to the pub for cash while she still has time.
     const money = after.players.find((p) => p.id === 's2')!.money;
     game.handle('s2', { type: 'pub' });
     expect(game.viewFor('s2').players.find((p) => p.id === 's2')!.money).toBeGreaterThan(money);
     expect(() => game.handle('s2', { type: 'buyMule' })).toThrow('pub');
-    // Heiko burns his time on analyses until it is up, which ends development.
-    expect(() => {
-      for (let i = 0; i < 20; i++) game.handle('s1', { type: 'analyse', x: plot.x, y: plot.y });
-    }).toThrow('time is up');
-    // The AI player finishes its own turn at a human's pace, then the phase ends.
-    for (let i = 0; i < 120 && game.viewFor('s1').phase === 'development'; i++) advance(1_000);
+    // Heiko stands on his plot until the one clock runs out, which ends development.
+    advance(ends - 1 - ctx.now());
+    expect(game.viewFor('s1').phase).toBe('development');
+    advance(1);
     expect(game.viewFor('s1').phase).toBe('production');
   });
 

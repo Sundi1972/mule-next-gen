@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { GAME, POLLUTION, score, type GameState } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { MuleGame } from '../src/mule-game.js';
-import { fakeContext, seats } from './fake-context.js';
+import { fakeContext, seats, tapThere } from './fake-context.js';
 
 /** A one-month game where s1 claims the first lit plot and installs a food MULE on it, played to game over. */
 function playedOut() {
@@ -18,9 +18,9 @@ function playedOut() {
   const lit = game.viewFor('s1').lit!;
   game.handle('s1', { type: 'claim', x: lit.x, y: lit.y });
   while (game.viewFor(null).phase !== 'development') step();
-  game.handle('s1', { type: 'buyMule' });
-  game.handle('s1', { type: 'outfit', outfit: 'food' });
-  game.handle('s1', { type: 'install', x: lit.x, y: lit.y });
+  tapThere(game, { ctx, advance }, 's1', { type: 'buyMule' });
+  tapThere(game, { ctx, advance }, 's1', { type: 'outfit', outfit: 'food' });
+  tapThere(game, { ctx, advance }, 's1', { type: 'install', x: lit.x, y: lit.y });
   for (let n = 0; n < 100_000 && !game.viewFor(null).finished; n++) step();
   expect(game.viewFor(null).finished).toBe(true);
   const state = (game as unknown as { state: GameState }).state;

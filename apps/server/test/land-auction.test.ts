@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { COLONY_SELLER, GAME, LOTS, RuleError, TAX, WALK, type GameState } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
-import { colonySeed } from './fake-context.js';
+import { colonySeed, tapThere } from './fake-context.js';
 
 /** A context with a manual clock, so phase timers and the auction tick run instantly. */
 function fakeContext() {
@@ -75,11 +75,11 @@ function toMonth2Planning(opts: { mule?: boolean; phaseScale?: number } = {}) {
   note();
   expect(game.viewFor(null).phase).toBe('development');
   if (opts.mule) {
-    game.handle('b', { type: 'buyMule' });
-    game.handle('b', { type: 'outfit', outfit: 'food' });
-    game.handle('b', { type: 'install', ...plots.b![0]! });
+    tapThere(game, { ctx, advance }, 'b', { type: 'buyMule' });
+    tapThere(game, { ctx, advance }, 'b', { type: 'outfit', outfit: 'food' });
+    tapThere(game, { ctx, advance }, 'b', { type: 'install', ...plots.b![0]! });
   }
-  for (const id of humans) game.handle(id, { type: 'pub' });
+  for (const id of humans) tapThere(game, { ctx, advance }, id, { type: 'pub' });
   note();
   while (game.viewFor(null).phase === 'production') advance(1_000);
   note();
