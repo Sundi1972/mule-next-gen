@@ -35,7 +35,7 @@ const SETTLE_MS = 2 * BRAIN.landTimeoutMs;
 interface Screen {
   conn: Connection<MuleView>;
   from: { seatId: string | null };
-  chat: Array<ChatMessage & { month: number; phase: string }>;
+  chat: Array<ChatMessage & { month: number; phase: string; showing: string }>;
 }
 
 interface TableOptions {
@@ -95,12 +95,15 @@ function table(options: TableOptions) {
     return { month: view?.month ?? 0, phase: view?.phase ?? 'lobby' };
   };
   const screen = (): Screen => {
+    // The phase of the last view this screen received: what it is showing when a chat frame arrives.
+    let showing = 'lobby';
     const s: Screen = {
       from: { seatId: null },
       chat: [],
       conn: {
         send: (msg: ServerEnvelope<MuleView>) => {
-          if (msg.t === 'chat') s.chat.push({ ...msg.message, ...when() });
+          if (msg.t === 'view') showing = msg.view.game?.phase ?? showing;
+          if (msg.t === 'chat') s.chat.push({ ...msg.message, ...when(), showing });
         },
       },
     };
@@ -217,6 +220,37 @@ describe('the brain at the table', () => {
     expect(land).toMatchObject({ by: 'llm', line: 'Mine.', pick: { id: 'B', key: optionB.key, label: optionB.label } });
 
     for (const s of t.screens) expect(s.chat.filter((m) => m.from === baron.id).map((m) => m.text)).toEqual(['Mine.']);
+  });
+
+  it('B-AC-1 (AM-14): every screen receives an AI\'s line after the view of the phase it was said in, the land grant\'s first plot included', async () => {
+    // Each line said, with the phase of the decision that said it: not the game's phase when the line is delivered.
+    const said: { seat: string; phase: string }[] = [];
+    const classic = createBrain({ gameId: 'g-order', env: {} });
+    const brain: BrainService = {
+      ...classic,
+      chatter: (seat, say) => {
+        let deciding: DecisionRecord | null = null;
+        const onDecision = classic.chatter(seat, (line) => {
+          said.push({ seat: seat.id, phase: deciding!.phase });
+          say(line);
+        });
+        return (record) => {
+          deciding = record;
+          onDecision(record);
+          deciding = null;
+        };
+      },
+    };
+    const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain, phaseScale: 1 });
+    expect(await t.toGameOver()).toBe(true);
+
+    expect(said.some((l) => l.phase === 'landGrant')).toBe(true);
+    for (const s of t.screens) {
+      for (const ai of t.ais) {
+        const shown = s.chat.filter((m) => m.from === ai.id).map((m) => m.showing);
+        expect(shown).toEqual(said.filter((l) => l.seat === ai.id).map((l) => l.phase));
+      }
+    }
   });
 
   it('B-AC-1: a fake model naming "F" plays the top pick and shows a template line, not its own', async () => {
