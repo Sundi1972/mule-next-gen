@@ -119,7 +119,7 @@ export function PlotMap({
               {...(onTile ? { type: 'button' as const, onClick: () => onTile(t as MapTile) } : {})}
               aria-label={label}
               className={cx('relative flex items-center justify-center transition-opacity', faded && 'opacity-45', onTile && 'cursor-pointer', isSelected && 'z-[6]')}
-              data-testid={`plot-${t.x}-${t.y}`}
+              data-testid={`map-plot-${t.x}-${t.y}`}
               {...(isSelected ? { 'data-selected': true } : {})}
             >
               {color && look === 'A' && (
