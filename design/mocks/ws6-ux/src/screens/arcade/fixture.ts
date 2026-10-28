@@ -25,7 +25,10 @@ export const ARCADE_TILES: TileView[] = BASE.tiles.map((t) => {
 // plot 10·8, not on it: it is a lake, and a lake is impassable.
 const START: Record<string, { x: number; y: number }> = { lena: { x: 2, y: 6 }, ossa: { x: 12, y: 4 }, brix: { x: 9, y: 2 }, kai: { x: 8, y: 7 } };
 
-export const SEATS: Seat[] = PLAYERS.map((p) => ({ id: p.id, name: p.name, slot: p.slot as Seat['slot'], species: p.species, bot: p.id !== 'lena', start: START[p.id]! }));
+/** Each bot's fighting level; Lena's is the autopilot's. */
+const LEVEL: Record<string, Seat['level']> = { lena: 'regular', ossa: 'veteran', brix: 'regular', kai: 'rookie' };
+
+export const SEATS: Seat[] = PLAYERS.map((p) => ({ id: p.id, name: p.name, slot: p.slot as Seat['slot'], species: p.species, bot: p.id !== 'lena', level: LEVEL[p.id]!, start: START[p.id]! }));
 export const ME = 'lena';
 export const ARCADE_VIEW = BASE;
 
@@ -35,6 +38,13 @@ export const newWorld = (tun: Tunables, seed = SEED): World => initWorld(seed, S
 /** The tunables' test track: one tile of each land with room to walk right across it, for feeling (and measuring) a speed. */
 /** #arcade-wolves: Lena starts here, on forest at 5·2, a plot from the plains and off the map's edge. */
 export const WOLF_START = { x: 4, y: 1 };
+
+/**
+ * #arcade-glint: Lena on the plains at 3·7, the glint on the plains at 8·7 (5 tiles east, across the river), and Ossa
+ * on the mountain at 13·6, about 5 tiles on its other side. Measured headless at Heiko's half speed: Lena gets there in
+ * 3.7 s if she sets off at once, Ossa in 4.6 s, so she wins if she reacts within about 0.7 s; both well inside the 8 s.
+ */
+export const GLINT_RACE = { lena: { x: 2, y: 6 }, at: { x: 7, y: 6 }, bot: 'ossa', botAt: { x: 12, y: 5 } };
 
 export const TRACK: Partial<Record<WalkTerrain, { x: number; y: number }>> = {
   plains: { x: 2, y: 7 },

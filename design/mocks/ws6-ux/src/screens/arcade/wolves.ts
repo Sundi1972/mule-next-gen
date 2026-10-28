@@ -234,7 +234,7 @@ export function stepEncounter(w0: World, c0: Colonist, input: Input, dtMs: numbe
       const [d, w2] = draw(w1);
       w = w2;
       const pick = ready[Math.floor(u * ready.length)]![1];
-      wolves = wolves.map((wf, i) => (i === pick ? { ...wf, state: 'tell', until: t + W.warnSeconds * 1000, target: { x: c.x, y: c.y }, dodge: d < W.botDodge } : wf));
+      wolves = wolves.map((wf, i) => (i === pick ? { ...wf, state: 'tell', until: t + W.warnSeconds * 1000, target: { x: c.x, y: c.y }, dodge: d < W.levels[c.level].dodge } : wf));
       nextLunge = t + W.lungeEverySeconds * 1000;
     }
   }
@@ -321,6 +321,10 @@ export function botWolfInput(w: World, c: Colonist, tun: Tunables): Input {
     const n = Math.hypot(side.x, side.y) || 1;
     return { dir: { x: side.x / n, y: side.y / n }, action: false };
   }
-  if (strikeTarget(c) >= 0 && w.t >= e.recoverUntil) return { dir: { x: 0, y: 0 }, action: true };
+  // It strikes at a wolf that stands open, once its level's reaction time has passed: a rookie's often comes too late.
+  const i = strikeTarget(c);
+  const wf = i >= 0 ? e.wolves[i]! : null;
+  const openFor = wf && wf.state === 'open' ? OPEN_MS - (wf.until - w.t) : -1;
+  if (wf && openFor >= tun.wolves.levels[c.level].strikeDelaySeconds * 1000 && w.t >= e.recoverUntil) return { dir: { x: 0, y: 0 }, action: true };
   return IDLE;
 }

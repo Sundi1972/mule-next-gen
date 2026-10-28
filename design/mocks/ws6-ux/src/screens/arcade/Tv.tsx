@@ -7,7 +7,8 @@ import { ARCADE_VIEW } from './fixture';
 import { useGameKeys, useTunables, useWorld } from './loop';
 import { NOTE } from './notes';
 import { conditionOf, HallStage, MapStage, ruleOf, secondsLeft } from './views';
-import type { Colonist } from './sim';
+import { plotLabel } from './glint';
+import type { Colonist, World } from './sim';
 
 /** A frame at a design size, scaled to fit the page; pointer maths reads the drawn box, so a scaled frame still plays. */
 export function ScaledFrame({ width, height, scale, testid, children }: { width: number; height: number; scale: number; testid: string; children: ReactNode }) {
@@ -22,7 +23,7 @@ export function ScaledFrame({ width, height, scale, testid, children }: { width:
   );
 }
 
-const doing = (c: Colonist) => (c.encounter ? (c.encounter.kind === 'fight' ? 'FIGHT' : c.encounter.kind === 'chase' ? 'RUN' : 'WOLVES') : c.done ? 'PUB' : c.space === 'hall' ? (c.mule ? 'OUTFIT' : 'STORE') : c.mule?.good ? '→ PLOT' : c.installs > 0 ? '→ PUB' : '→ STORE');
+const doing = (c: Colonist, w: World) => (w.glint?.racers.includes(c.id) && !c.encounter && !c.done ? 'GLINT' : c.encounter ? (c.encounter.kind === 'fight' ? 'FIGHT' : c.encounter.kind === 'chase' ? 'RUN' : 'WOLVES') : c.done ? 'PUB' : c.space === 'hall' ? (c.mule ? 'OUTFIT' : 'STORE') : c.mule?.good ? '→ PLOT' : c.installs > 0 ? '→ PUB' : '→ STORE');
 
 /**
  * The big screen (1280 × 720): the whole colony with every colonist walking live, named; the store's hall beside it
@@ -31,7 +32,7 @@ const doing = (c: Colonist) => (c.encounter ? (c.encounter.kind === 'fight' ? 'F
 export function TvArcade() {
   const world = useWorld();
   const tun = useTunables();
-  const rows: PaceRow[] = world.colonists.map((c) => ({ id: c.id, name: c.name, slot: c.slot, condition: conditionOf(c, tun), note: doing(c), done: c.done }));
+  const rows: PaceRow[] = world.colonists.map((c) => ({ id: c.id, name: c.name, slot: c.slot, condition: conditionOf(c, tun), note: doing(c, world), done: c.done }));
   return (
     <Board view={ARCADE_VIEW}>
       <div className="flex h-[720px] w-[1280px] flex-col gap-3 bg-table px-10 py-6 text-ink" data-testid="tv-game">
@@ -81,8 +82,10 @@ function TvBeats() {
   const world = useWorld();
   const tun = useTunables();
   const live = world.colonists.filter((c) => c.encounter);
-  const recent = world.beats.filter((b) => world.t - b.t < BEAT_MS && !live.some((c) => c.id === b.id) && !b.text.startsWith('Wolves!'));
+  const recent = world.beats.filter((b) => world.t - b.t < BEAT_MS && !live.some((c) => c.id === b.id) && !b.text.startsWith('Wolves!') && !b.text.startsWith('A Crystite glint'));
+  const g = world.glint;
   const lines = [
+    ...(g ? [{ key: 'glint', text: `A Crystite glint at ${plotLabel(g)}! First there wins · ${Math.ceil(Math.max(0, g.until - world.t) / 1000)} s`, tone: 'glint' }] : []),
     ...live.map((c) => {
       const e = c.encounter!;
       const text =
@@ -103,7 +106,7 @@ function TvBeats() {
           key={l.key}
           className={cx(
             'rounded-panel border-2 bg-panel/95 px-4 py-1.5 font-display text-xl font-bold shadow-glow',
-            l.tone === 'alert' ? 'border-alert text-alert' : l.tone === 'ok' ? 'border-ok text-ok' : 'border-warn text-warn',
+            l.tone === 'alert' ? 'border-alert text-alert' : l.tone === 'ok' ? 'border-ok text-ok' : l.tone === 'glint' ? 'border-g-crystite text-ink' : 'border-warn text-warn',
           )}
           data-testid="tv-beat"
         >

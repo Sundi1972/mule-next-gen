@@ -4,7 +4,7 @@ import { IntentMarker } from '../../proposed/IntentNote';
 import { SEATS, TRACK } from './fixture';
 import { useArcade, useTunables, useWorld } from './loop';
 import { NOTE } from './notes';
-import { ARCADE_OUTFITS, DEFAULT_TUNABLES, mulePrice, speedOf, type Tunables, type WalkTerrain } from './sim';
+import { ARCADE_OUTFITS, BOT_LEVELS, DEFAULT_TUNABLES, mulePrice, speedOf, type BotLevel, type Tunables, type WalkTerrain } from './sim';
 import { meOf } from './views';
 
 /**
@@ -29,28 +29,32 @@ interface Row {
   options?: { value: string; label: string }[];
   /** Heiko's question this row answers, in plain words, shown above it. */
   ask?: string;
+  /** Heiko's answer, once he has given one: shown beside the question. */
+  answer?: string;
 }
 
 const num = (key: string, label: string, get: (t: Tunables) => number, set: (t: Tunables, v: number) => Tunables, min: number, max: number, step: number, unit?: string, restart?: boolean): Row => ({
   key, label, get, set: (t, v) => set(t, Number(v)), min, max, step, ...(unit ? { unit } : {}), ...(restart ? { restart } : {}),
 });
 const flag = (key: string, label: string, get: (t: Tunables) => boolean, set: (t: Tunables, v: boolean) => Tunables): Row => ({ key, label, get, set: (t, v) => set(t, !!v) });
-const asks = (ask: string, row: Row): Row => ({ ...row, ask });
+const asks = (ask: string, row: Row, answer?: string): Row => ({ ...row, ask, ...(answer ? { answer } : {}) });
 
 const TERRAINS = (Object.keys(DEFAULT_TUNABLES.terrain) as WalkTerrain[]).filter((k) => k !== 'lake');
 const NAME: Record<string, string> = { food: 'Food', energy: 'Energy', smithore: 'Smithore', crystite: 'Crystite' };
 const Q = (t: Tunables, patch: Partial<Tunables['questions']>): Tunables => ({ ...t, questions: { ...t.questions, ...patch } });
 const WV = (t: Tunables, patch: Partial<Tunables['wolves']>): Tunables => ({ ...t, wolves: { ...t.wolves, ...patch } });
+const GL = (t: Tunables, patch: Partial<Tunables['glint']>): Tunables => ({ ...t, glint: { ...t.glint, ...patch } });
+const LEVEL_NAME: Record<BotLevel, string> = { rookie: 'Rookie bot', regular: 'Regular bot', veteran: 'Veteran bot' };
 const wolf = (key: keyof Tunables['wolves'], label: string, min: number, max: number, step: number, unit?: string) =>
   num(`wolves-${key}`, label, (t) => t.wolves[key] as number, (t, v) => WV(t, { [key]: v }), min, max, step, unit);
 
-const GROUPS: { title: string; note?: string; open?: boolean; wolves?: boolean; rows: Row[] }[] = [
+const GROUPS: { title: string; note?: string; open?: boolean; wolves?: boolean; glint?: boolean; rows: Row[] }[] = [
   {
     title: 'Heiko’s questions',
     note: 'Your six questions from slice 1, each a switch: flip one and play.',
     open: true,
     rows: [
-      asks('Does leading a MULE slow you?', num('leadPace', 'Leading a MULE', (t) => t.leadPace, (t, v) => ({ ...t, leadPace: v }), 0.3, 1, 0.05, '× speed')),
+      asks('Does leading a MULE slow you?', num('leadPace', 'Leading a MULE', (t) => t.leadPace, (t, v) => ({ ...t, leadPace: v }), 0.3, 1, 0.05, '× speed'), 'Heiko: 90%'),
       asks('Mountains: slower, or impassable?', flag('mountainsImpassable', 'Mountains impassable', (t) => t.questions.mountainsImpassable, (t, v) => Q(t, { mountainsImpassable: v }))),
       asks('Lakes: wade across, or install from the shore?', {
         key: 'lakeMode',
@@ -95,7 +99,37 @@ const GROUPS: { title: string; note?: string; open?: boolean; wolves?: boolean; 
       wolf('boltSpeed', 'Lose: MULE bolts this fast', 0.5, 8, 0.1, 'tiles/s'),
       wolf('stunSeconds', 'Lose, no MULE: stunned', 0, 10, 0.5, 's'),
       wolf('botFightShare', 'Bots that fight', 0, 1, 0.05, 'share'),
-      wolf('botDodge', 'Bots dodge a lunge', 0, 1, 0.05, 'chance'),
+      wolf('botWolfLandShare', 'Bot legs through wolf land', 0, 1, 0.05, 'share'),
+      ...BOT_LEVELS.flatMap((lv) => [
+        num(`level-${lv}-dodge`, `${LEVEL_NAME[lv]}: dodges a lunge`, (t) => t.wolves.levels[lv].dodge, (t, v) => WV(t, { levels: { ...t.wolves.levels, [lv]: { ...t.wolves.levels[lv], dodge: v } } }), 0, 1, 0.05, 'chance'),
+        num(`level-${lv}-strike`, `${LEVEL_NAME[lv]}: strikes after`, (t) => t.wolves.levels[lv].strikeDelaySeconds, (t, v) => WV(t, { levels: { ...t.wolves.levels, [lv]: { ...t.wolves.levels[lv], strikeDelaySeconds: v } } }), 0, 1.5, 0.05, 's'),
+      ]),
+    ],
+  },
+  {
+    title: 'Glint race (slice 3)',
+    note: 'A Crystite sparkle lights a tile for a few seconds on every screen; the first colonist to set foot on it wins.',
+    open: true,
+    glint: true,
+    rows: [
+      flag('glint-on', 'Glint on', (t) => t.glint.on, (t, v) => GL(t, { on: v })),
+      num('glint-meanGapSeconds', 'Mean gap between glints', (t) => t.glint.meanGapSeconds, (t, v) => GL(t, { meanGapSeconds: v }), 3, 120, 1, 's'),
+      num('glint-showSeconds', 'Shows for', (t) => t.glint.showSeconds, (t, v) => GL(t, { showSeconds: v }), 2, 20, 0.5, 's'),
+      flag('glint-onOwnedPlots', 'May light owned plots', (t) => t.glint.onOwnedPlots, (t, v) => GL(t, { onOwnedPlots: v })),
+      {
+        key: 'glint-prize',
+        label: 'Prize',
+        get: (t) => t.glint.prize,
+        set: (t, v) => GL(t, { prize: v === 'credits' ? 'credits' : 'crystite' }),
+        options: [
+          { value: 'crystite', label: 'Crystite units' },
+          { value: 'credits', label: 'credits' },
+        ],
+      },
+      num('glint-crystite', 'Prize: Crystite units', (t) => t.glint.crystite, (t, v) => GL(t, { crystite: v }), 0, 5, 1),
+      num('glint-credits', 'Prize: credits', (t) => t.glint.credits, (t, v) => GL(t, { credits: v }), 0, 300, 5, 'cr'),
+      num('glint-botShare', 'Bots that race', (t) => t.glint.botShare, (t, v) => GL(t, { botShare: v }), 0, 1, 0.05, 'share'),
+      num('glint-botCare', 'Bots race only within', (t) => t.glint.botCare, (t, v) => GL(t, { botCare: v }), 0, 16, 0.5, 'tiles'),
     ],
   },
   {
@@ -138,11 +172,9 @@ const GROUPS: { title: string; note?: string; open?: boolean; wolves?: boolean; 
     ]),
   },
   {
-    title: 'Later slices: events on the world (0 = off)',
-    note: 'Each will be a seeded event in the world’s queue, as the wolves are; not built yet, so a queued one is only logged. Acts on Play again.',
+    title: 'Slice 4: the corral scramble (0 = off)',
+    note: 'It will be a seeded event in the world’s queue, as the wolves and the glint are; not built yet, so a queued one is only logged. Acts on Play again.',
     rows: [
-      num('glint-perMinute', 'Glint: per minute', (t) => t.events.glint.perMinute, (t, v) => ({ ...t, events: { ...t.events, glint: { ...t.events.glint, perMinute: v } } }), 0, 6, 0.5, '/min', true),
-      num('glint-reward', 'Glint: Crystite find', (t) => t.events.glint.reward, (t, v) => ({ ...t, events: { ...t.events, glint: { ...t.events.glint, reward: v } } }), 0, 300, 5, 'cr', true),
       num('scramble-perMinute', 'Corral scramble: per minute', (t) => t.events.scramble.perMinute, (t, v) => ({ ...t, events: { ...t.events, scramble: { ...t.events.scramble, perMinute: v } } }), 0, 6, 0.5, '/min', true),
       num('scramble-mulesLeft', 'Corral scramble: at MULEs left', (t) => t.events.scramble.mulesLeft, (t, v) => ({ ...t, events: { ...t.events, scramble: { ...t.events.scramble, mulesLeft: v } } }), 0, 6, 1, '', true),
     ],
@@ -195,9 +227,30 @@ function RowInput({ row }: { row: Row }) {
   if (!row.ask) return line;
   return (
     <div className="mt-1 flex flex-col gap-0.5" data-testid={`question-${row.key}`}>
-      <span className="text-sm font-semibold text-ink">{row.ask}</span>
+      <span className="text-sm font-semibold text-ink">
+        {row.ask}
+        {row.answer && (
+          <span className="ml-1.5 rounded-chip bg-ok/15 px-1 font-mono text-xs font-bold text-ok" data-testid={`answer-${row.key}`}>
+            {row.answer}
+          </span>
+        )}
+      </span>
       {line}
     </div>
+  );
+}
+
+/** Lights a glint at once, on a tile the seed picks; the bots decide by their share whether to race. */
+function CallGlint() {
+  const arcade = useArcade();
+  const world = useWorld();
+  return (
+    <span className="relative self-start">
+      <Button size="md" variant="outline" disabled={!!world.glint || world.over} onClick={() => arcade.callGlint()} data-testid="call-glint">
+        {world.glint ? 'A glint is lit' : 'Call a glint now'}
+      </Button>
+      <IntentMarker note={NOTE.A8} at="tr" />
+    </span>
   );
 }
 
@@ -287,6 +340,7 @@ export function TunablesPanel({ className, autopilot = false }: { className?: st
           <div className="mt-1.5 flex flex-col gap-1">
             {g.note && <p className="text-xs text-ink-3">{g.note}</p>}
             {g.wolves && <CallWolves />}
+            {g.glint && <CallGlint />}
             {g.rows.map((r) => (
               <RowInput key={r.key} row={r} />
             ))}

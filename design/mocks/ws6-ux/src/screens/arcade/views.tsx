@@ -5,6 +5,7 @@ import { mapTiles } from '../../../../../../apps/web/src/game/derive';
 import { ARCADE_VIEW, ME } from './fixture';
 import { useArcade, useTunables, useWorld } from './loop';
 import { HALL, looseOf, mulePrice, paceOf, pubPayout, reachOf, ROOMS, speedOf, type Colonist, type Reach, type Space, type Tunables, type World } from './sim';
+import { GlintOnMap, GlintPointer, GlintSightlines, GlintStrip, GlintTurn } from './GlintLayer';
 import { WolfCallout, WolfMarks, WolvesOnMap } from './WolfLayer';
 
 /** The DS's condition, from the sim's pace: what the colonist tags and the pace lines read. */
@@ -69,6 +70,7 @@ function Walkers({ world, space, cell, density, names, own }: { world: World; sp
                   style={c.moving ? { animationDuration: `${waddleSeconds(Math.max(0.1, pace.ground * pace.pace.total))}s` } : undefined}
                 >
                   <PlayerMark slot={c.slot} species={c.species} size={size} glow={mine} label={c.name} className="block" />
+                  {names && <GlintTurn world={world} c={c} size={size} />}
                   <ConditionTag id={c.id} condition={conditionOf(c, tun)} rule={rule} size={density} />
                 </span>
                 {names && (
@@ -173,10 +175,13 @@ export function MapStage({ width, height, across, density, interactive = false, 
             data-testid="me-ring"
           />
         )}
+        <GlintOnMap world={world} cell={cell} />
+        {names && <GlintSightlines world={world} />}
         {/* Wolves first: a colonist's callout (run or fight?) draws over its pack. */}
         <WolvesOnMap world={world} cell={cell} />
         <Walkers world={world} space="map" cell={cell} density={density} names={names} own={interactive} />
       </div>
+      {follow && interactive && <GlintPointer world={world} me={me} cell={cell} off={off} width={width} height={viewH} />}
     </div>
   );
 }
@@ -234,9 +239,10 @@ export function YourStage({ width, height, across, density, ringed }: { width: n
   return (
     <div className="relative flex items-center justify-center overflow-hidden rounded-panel" style={{ width, height }} data-testid="your-stage" data-space={me.space} data-sim-ms={world.t.toFixed(0)}>
       {me.space === 'hall' ? (
-        <div className="flex flex-col items-center gap-1">
+        <>
           <HallStage width={hallW} density={density} interactive />
-        </div>
+          <GlintStrip world={world} me={me} />
+        </>
       ) : (
         <MapStage width={width} height={height} {...(across !== undefined ? { across } : {})} density={density} interactive ringed={ringed} />
       )}
@@ -377,9 +383,19 @@ export function LeadChip({ className }: { className?: string }) {
 
 export function Money({ className }: { className?: string }) {
   const world = useWorld();
+  const me = meOf(world);
   return (
-    <span data-num className={cx('font-mono font-bold text-ink', className)} data-testid="money">
-      {meOf(world).money} cr
+    <span className={cx('flex items-center gap-2', className)}>
+      {me.crystite > 0 && (
+        // The glint's prize: Crystite carried, shown beside the money.
+        <span data-num className="inline-flex items-center gap-0.5 rounded-chip border border-g-crystite px-1 font-mono text-sm font-bold text-ink" data-testid="crystite" data-units={me.crystite}>
+          <GoodIcon good="crystite" size={14} />
+          {me.crystite}
+        </span>
+      )}
+      <span data-num className="font-mono font-bold text-ink" data-testid="money">
+        {me.money} cr
+      </span>
     </span>
   );
 }

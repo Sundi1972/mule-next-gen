@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from 'react';
-import { ME, newWorld, TRACK, WOLF_START } from './fixture';
-import { callWolves, DEFAULT_TUNABLES, setBot, step, teleport, type Input, type P, type Space, type Tunables, type WalkTerrain, type World } from './sim';
+import { GLINT_RACE, ME, newWorld, TRACK, WOLF_START } from './fixture';
+import { callGlint, callWolves, DEFAULT_TUNABLES, setBot, step, teleport, type Input, type P, type Space, type Tunables, type WalkTerrain, type World } from './sim';
 
 /** How a page's turn starts: as the table has it, or (#arcade-wolves) Lena on forest with a pack due in about 2 s. */
-export type Scenario = 'table' | 'wolves';
+export type Scenario = 'table' | 'wolves' | 'glint';
 const WOLVES_DUE_MS = 2000;
 
 /**
@@ -43,11 +43,25 @@ export class Arcade {
 
   private fresh(): World {
     const w = newWorld(this.tunables);
+    if (this.scenario === 'glint') {
+      // Lena on the plains, a bot as far on the glint's other side, the glint in about 2 s; no pack for 15 s to spoil it.
+      const r = GLINT_RACE;
+      const placed = teleport(teleport(w, ME, { x: r.lena.x + 0.5, y: r.lena.y + 0.5 }, this.tunables), r.bot, { x: r.botAt.x + 0.5, y: r.botAt.y + 0.5 }, this.tunables);
+      // The racing bot waits where it is till the glint lights, so the two start as far from it.
+      const calm = { ...placed, colonists: placed.colonists.map((c) => ({ ...c, wolvesAfter: 15_000, waitUntil: c.id === r.bot ? WOLVES_DUE_MS : 0 })) };
+      return callGlint(calm, WOLVES_DUE_MS, r.at, [r.bot]);
+    }
     if (this.scenario !== 'wolves') return w;
     const placed = teleport(w, ME, { x: WOLF_START.x + 0.5, y: WOLF_START.y + 0.5 }, this.tunables);
     // No chance pack before the called one, so it is always the 2 s one Heiko meets.
     const held = { ...placed, colonists: placed.colonists.map((c) => (c.id === ME ? { ...c, wolvesAfter: WOLVES_DUE_MS + 1 } : c)) };
     return callWolves(held, ME, WOLVES_DUE_MS);
+  }
+
+  /** The tunables' "Call a glint now": a glint at once, on the seed's tile, with the bots' share racing. */
+  callGlint() {
+    this.world = callGlint(this.world, 0);
+    this.emit();
   }
 
   /** The tunables' "Call the wolves now": a pack for Lena at once, wherever she is on the map. */
