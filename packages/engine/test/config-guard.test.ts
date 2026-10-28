@@ -36,8 +36,6 @@ const PENDING = new Set<string>([
   // WS7.
   'packages/ai/src/hands/vote.ts',
   'packages/engine/src/politics.ts',
-  // No lane owns it yet: the generator's constants want markers.
-  'packages/engine/src/rng.ts',
 ]);
 /** A literal that is not balance says why, on its line or the line above. */
 const MARKER = /\/\/ literal-ok: (.{10,})/;
