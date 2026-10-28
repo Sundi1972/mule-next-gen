@@ -23,6 +23,7 @@ import { TvPlanning } from './proposed/PlanningReady';
 import { IntentNotes, IntentNotesProvider } from './proposed/IntentNote';
 import { HUB_NOTES, HubAudit } from './screens/audit/HubAudit';
 import { ELECTION_LINKS, ElectionAuditPage, electionRoute } from './screens/audit/ElectionAuditPage';
+import { MONTHEND_STATES, MonthEndAuditPage } from './screens/audit/MonthEndAudit';
 import { H, W } from './fixture';
 
 const DECISIONS = [
@@ -313,6 +314,9 @@ export default function App() {
       </Page>
     );
 
+  const monthEnd = MONTHEND_STATES.find((s) => s.id === hash);
+  if (monthEnd) return <MonthEndAuditPage key={monthEnd.id} state={monthEnd} />;
+
   if (hash === 'game-handoff' || hash === 'game-handoff-expired')
     return (
       <Page title="Mid-game: move to your phone (WS4's hand-off, any game screen)">
@@ -556,11 +560,12 @@ export default function App() {
     <div className="min-h-full bg-table p-8 text-ink" data-testid="index">
       <h2 className="label-caps">For approval · UX audit</h2>
       <p className="mt-1 max-w-3xl text-sm text-ink-2">
-        The priority-1 screens, redesigned from the UX audit (docs/research/2026-10-28-ws6-ux-audit.md): every change numbered on the screen, with the player intent it serves and why. The planning hub first; the election, development and the goods auction follow.
+        The priority-1 screens, redesigned from the UX audit (docs/research/2026-10-28-ws6-ux-audit.md): every change numbered on the screen, with the player intent it serves and why. The planning hub first, then the election and the new month-end league table; development and the goods auction follow.
       </p>
       <div className="mt-2 flex flex-col gap-2" data-testid="audit-links">
         <Links states={AUDIT_STATES} />
         <Links states={ELECTION_LINKS} />
+        <Links states={MONTHEND_STATES} />
       </div>
       <h2 className="label-caps mt-6">For approval 2026-10-28 · planning without a clock (Heiko's playtest)</h2>
       <div className="mt-2 flex flex-col gap-2" data-testid="wait-links">

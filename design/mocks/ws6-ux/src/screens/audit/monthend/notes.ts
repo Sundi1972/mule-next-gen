@@ -1,0 +1,104 @@
+import { GAME, POLITICS } from '@mule/engine';
+import type { IntentNoteData } from '../../../proposed/IntentNote';
+import { collapseCutWords, MOOD_SCALE } from '../../../proposed/worth';
+
+/**
+ * The month-end screen's changes, as the review page explains them (IntentNotes). Intent 1 and 2 are Heiko's own
+ * words of 2026-10-28: "which player is leading" and "how the colony is doing".
+ */
+export const MONTHEND_NOTES = {
+  M1: {
+    id: 'M1',
+    n: 1,
+    title: 'A league table by Worth',
+    what: `After the goods auction, a month-end screen: every player ranked by Worth, one number in credits (rank, creature, name, Worth). Worth is cash, goods at the store's posted price, land at ${GAME.plotScore} cr a plot, installed MULEs at the store's MULE price and ${POLITICS.termScore} cr a term in office: the same number every month and at the game's end, so the table shows who would win today.`,
+    serves: '1',
+    intent: 'which player is leading',
+    why: 'Heiko asked 2026-10-28: “at the end of the month after the auction round we must show the current league table and colony statistics”, and agreed the Worth model. Today’s TV month-end ranks by money alone (“Standings · money”): land and MULEs count for nothing, so the leader it shows is often not the one who wins.',
+    open: 'How long it stays. Today the month’s end (upkeep) lasts 8 s, then planning opens: too short to read a table across the room. Hold it until everyone taps “On to month 6”, as planning now waits for Ready?',
+  },
+  M2: {
+    id: 'M2',
+    n: 2,
+    title: 'The leader called out',
+    what: 'Above the table, the leader and the lead over second place: “Ossa leads by 210 cr”. On your phone it adds where you stand: “You’re 2nd, 210 behind”. When two share first: “Ossa and Lena are level”.',
+    serves: '1',
+    intent: 'which player is leading',
+    why: 'Heiko asked 2026-10-28 for “which player is leading”; the model he agreed names the leader and the lead (“Ossa leads by 210 cr”).',
+  },
+  M3: {
+    id: 'M3',
+    n: 3,
+    title: 'The change since last month',
+    what: 'Beside each Worth, how far it moved since last month’s end: ↑ +120 in green, ↓ −40 in red, ± 0 in grey. The number shown now against the number shown then.',
+    serves: '1',
+    intent: 'which player is leading',
+    why: 'The model he agreed: “by Worth, with the change since last month (↑ +120 / ↓ −40)”. A table alone says who leads, not who is catching up.',
+  },
+  M4: {
+    id: 'M4',
+    n: 4,
+    title: 'Your worth, line by line',
+    what: 'On your phone only: cash · goods · land · MULEs · offices, each with what it counts (7 plots × 300), and a greyed “Donations · comes with G-5” line. The lines add up to your Worth in the table.',
+    serves: '1',
+    intent: 'which player is leading',
+    why: `The model he agreed: “Your own phone shows your breakdown: cash · goods · land · MULEs · offices”, with colony donations counting 1:1 once G-5 builds them (DONATION_WORTH, WS1 sets it).`,
+  },
+  M5: {
+    id: 'M5',
+    n: 5,
+    title: 'Totals only for the others',
+    what: 'On the TV and on everyone else’s row: the total, never which goods they hold. Only you see your own lines (the eye: “Only you”).',
+    serves: '1',
+    intent: 'which player is leading',
+    why: 'The model he agreed: “others see only each player’s total, never which goods they hold”. The view already keeps that line at game over (scores carry parts on your own row only).',
+    open: 'Cash, plots, MULEs and terms are public, so a total gives away what someone’s goods are worth together, though never which goods. As agreed, or is that too much?',
+  },
+  M6: {
+    id: 'M6',
+    n: 6,
+    title: 'How the colony is doing',
+    what: 'A panel of its own, apart from the players’ Worth: the air and its trend against last month (“↑ better than month 4 (25)”), and the colony fund: its balance, what came in (the sales tax) and what went out (the Governor’s pay).',
+    serves: '2',
+    intent: 'how the colony is doing',
+    why: 'Heiko asked 2026-10-28 for “how the colony is doing”; the model he agreed keeps the colony apart from player Worth. Today’s month-end shows colonists and Food cover only; the fund is in the planning hub’s Colony desk, and the air has no trend anywhere.',
+  },
+  M7: {
+    id: 'M7',
+    n: 7,
+    title: 'Who went hungry',
+    what: 'Every month, whether anyone went hungry: “Nobody went hungry” in green, or “Kai went hungry: ate 1 of 3 Food” in red; and whether the colonists were fed.',
+    serves: '2',
+    intent: 'how the colony is doing',
+    why: 'The model he agreed: “whether anyone went hungry this month”.',
+    open: 'A rule change: another player’s hunger is private today (the engine’s observe.ts hides it from other phones and the TV); this makes each player’s hunger public at the month’s end, as the model asks. WS3 adds it to the view. Agreed?',
+  },
+  M8: {
+    id: 'M8',
+    n: 8,
+    title: 'Prestige, mood and the colony score: greyed',
+    what: `Three greyed slots, Prestige, Mood and Colony score, each “comes with G-5”. The score’s slot says how it will add up: (colony wealth + air + prestige) × mood, ${MOOD_SCALE.unrest} in unrest to ${MOOD_SCALE.thriving} thriving (MOOD_SCALE, WS1 sets it).`,
+    serves: '2',
+    intent: 'how the colony is doing',
+    why: 'The model he agreed: the colony score is colony wealth + air + prestige, scaled by mood, shown every month; until G-5 lands, greyed slots that say so. Drawn now, the panel keeps its shape when they fill.',
+  },
+  M9: {
+    id: 'M9',
+    n: 9,
+    title: 'No TV: the phone carries it all',
+    what: 'With no TV at the table, the phone’s stage holds the league table and the colony panel one above the other, the rail your worth; at 844 × 390 none of it scrolls. With a TV, the colony stays on the TV and the phone keeps room for your lines.',
+    serves: '1 and 2',
+    intent: 'which player is leading · how the colony is doing',
+    why: 'The model he agreed: “phone-only (no TV: the phone carries the whole table)”.',
+  },
+  M10: {
+    id: 'M10',
+    n: 10,
+    title: 'Collapse: your score if the game ended now',
+    what: `While the air is in Collapse, every Worth shows the cut, ${collapseCutWords()} off cash, goods, land and MULEs, offices whole, under “If the game ended now”. A red line says why; a column keeps each uncut number, and your phone shows the cut as its own line.`,
+    serves: '1 and 2',
+    intent: 'which player is leading · how the colony is doing',
+    why: 'The model he agreed: “While the air is in Collapse, Worth shows the fifth cut on everything except offices, labelled ‘your score if the game ended now’”. It is the engine’s own rule at game end (POLLUTION.collapseScore), so the table shows what the air is costing.',
+    open: 'The month the air falls into Collapse, every change reads ↓ 600 to 900, mostly the cut. Keep it so (one rule: the number shown against the number shown last month), or measure the change before the cut?',
+  },
+} satisfies Record<string, IntentNoteData>;
