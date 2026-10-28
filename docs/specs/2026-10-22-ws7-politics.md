@@ -890,6 +890,16 @@ goal      P-1 — still met
 folded    C7 tomorrow, RULE-7 score
 ```
 
+```
+AM-21 · 2026-10-29 · Heiko approved WS6's election mock · Cast, the field closes, one show clock
+
+target    the untimed election's RULE-60..64 (docs/specs/2026-10-28-ws7-untimed-election.md §8 AM-21)
+did       Recorded there in full: Cast my vote is the ballot's Done; the field closes as an election
+          month opens, except month 1; the ceremony's length follows the tally on one show clock;
+          the Governor's promise holds for the term; the Continue's news names its stage.
+goal      P-1 — still met
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: politics state

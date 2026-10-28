@@ -214,8 +214,11 @@ tomorrow     MUST render WS6's approved mock: a candidacy card in every month's 
              the ballot listing whom it waits for, and the ceremony on the TV, plus a phone-only version
              when no TV is connected. Until the mock is approved, C60-C64's PR keeps today's desks
              working on the new stage names (announce in place of nominate), with no new layout.
-ux           WS6's election mock (E-1 to E-9 plus the ceremony) · GRAFT TARGET: Council.tsx,
-             TvElection.tsx, the hub's candidacy card
+ux           WS6's election mock, approved by Heiko 2026-10-29, ws6-ux 23697e5b:
+             design/mocks/ws6-ux/src/screens/audit/{ElectionAudit,ElectionReveal}.tsx · routes
+             #audit-election, -announce, -ballot, -reveal, -governor · GRAFT TARGET: hub/politics/**,
+             TvElection.tsx; the stage slot, desk tabs and ReadyBar words as named edits in WS6's
+             files (AM-21). Month 1's announce takes the Council desk's RunForOffice block (AM-21).
 mechanism    fill_scaffold
 depends_on   C64, WS6's approved mock
 ```
@@ -233,6 +236,36 @@ seam         WS1's play.ts (named edit if the loop needs one); WS1's rows
 depends_on   C61, C63
 ```
 
+```
+C68 · ADDED · the Governor's promise holds for the term (AM-21, E-7)
+
+today        the promise lives on the Election and is dropped with it when the next one opens.
+             anchors: packages/engine/src/politics.ts::takeOffice, types.ts::Politics
+             verified_by: read
+tomorrow     MUST copy the winning Governor's promise to Politics when they take office and keep it
+             until the next Governor does (none when appointed or unopposed without one). Every
+             screen shows it beside the tax, kept or broken (the tax ≤ a cap, < the start for
+             lower, = the start for hold).
+seam         politics.ts (takeOffice); types.ts and protocol (WS3 named edits)
+mechanism    in_place
+pin          RULE-6's tax tests unchanged: the promise binds nobody, it is shown
+depends_on   C62
+```
+
+```
+C69 · MODIFIED · the host's Continue says which stage it moved past (AM-21, E-10)
+
+today        one news line in every stage: "Lena continued without Kai".
+             anchors: apps/server/src/mule-game.ts::MuleGame continuePlanning
+             verified_by: read
+tomorrow     MUST say "Lena opened the ballot without Kai" in announce, "Lena closed the ballot
+             without Kai" in the ballot, and "Lena continued without Kai" in planning proper.
+seam         mule-game.ts (WS3 named edit)
+mechanism    in_place
+pin          T-AC-64's server rows, restated with the new words
+depends_on   C64
+```
+
 **Reuse check (C62, the only ADDED change):** `git grep -nE 'resultShown|revealCountdown|countdown'
 apps packages` → `apps/server/src/politics-view.ts::resultShown` and `apps/web/src/phone/hub/politics/words.ts`'s
 revealCountdown: today's single reveal, which the ceremony replaces rather than sits beside.
@@ -247,7 +280,10 @@ inputs    phase · the election's stage (none | announce | ballot | ceremony | o
 first match wins
   #   when                                                then
   1   phase ≠ planning                                    refuse "You can run for office in planning"
-  2   stage ∈ { ballot, ceremony }                        refuse "Candidates are closed until the result"
+  2   stage ∈ { ballot, ceremony }, or stage = announce   refuse "Candidates are closed until the result"
+      and month > 1 (AM-21: the field closes as an
+      election month opens; month 1 has no earlier planning,
+      so its announce is the time to run)
   3   office = governor and governorTermsInRow ≥ 2         refuse "Two Governor terms in a row"
   4   runs for the other office                           switch (the promise goes with Governor only)
   5   otherwise                                           runs; a Governor run carries a promise (RULE-10)
@@ -256,7 +292,9 @@ lasts     from declaration until the next ballot opens; then it is the election'
           list is empty again.
 examples  month 2 Ossa runs for Governor promising 8% → listed on every screen until month 4 ·
           month 3 she changes to 7% → the month 4 announcement shows 7% · month 4 ballot open →
-          "Candidates are closed until the result"
+          "Candidates are closed until the result" · month 1 announce: Lena runs → on the ballot
+          (T-AC-66) · month 4 announce: Lena runs → "Candidates are closed until the result", and
+          no Run button (T-AC-67)
 ```
 
 ```
@@ -268,11 +306,14 @@ RULE-61 · An election month                      (replaces RULE-1's stages)   s
              humans not Done become Done)                        offices with < 2 candidates
                                                                  have no ballot
   ballot     no office has 2+ candidates                         ceremony at once
-  ballot     every player Done (a ballot covering every          ceremony: results fixed
-             contested office is Done), or the host's Continue   (RULE-3 + AM-17)
+  ballot     every player Done (they pressed Cast my vote;       ceremony: results fixed
+             picking alone is not Done, AM-21), or the host's    (RULE-3 + AM-17)
+             Continue
   ceremony   the last office's winner step ends (RULE-62)        over: winners take office
   any open   the game leaves planning (AM-1)                     close at once, as AM-1
-Done        'ready' in announce or ballot is Done for the stage; an AI is Done after it acts.
+Done        'ready' in announce ("Ready to vote") or ballot ("Cast my vote") is Done for the stage;
+            an AI is Done after it acts (VoteHand's 'done' is its Cast). A pick after Cast still
+            counts until the ballot closes.
 away        not Done by being away (HC-64); the host's Continue moves past them.
 continue    refused in the ceremony ("The result is being announced").
 examples    all four Done in announce → ballot · Leo's phone drops in the ballot → it waits; the
@@ -281,14 +322,20 @@ examples    all four Done in announce → ballot · Leo's phone drops in the bal
 ```
 
 ```
-RULE-62 · The ceremony                                                        shape: sequence
+RULE-62 · The ceremony                                    (AM-21: one show clock)   shape: formula
 
-for each office in POLITICS.offices, in order:
-  intro   (POLITICS.ceremony.introMs)   the office, each candidate and their promise
-  bars    (barsMs; skipped with < 2 candidates)  each candidate's bar grows to their weighted votes
-  winner  (winnerMs)   the winner, how (votes | unopposed | appointed | baron | land | lot), a
-                       celebration and congratulations
-then over. A Governor-only POLITICS.offices runs one office; nothing else changes.
+one show clock, from 0 when the ballot closes, in game ms; every screen draws the same moment.
+per office, in POLITICS.offices order, from t0 (first office: POLITICS.ceremony.leadMs):
+  title     = t0                                   the office and what it does
+  cands     = title + titleMs                      candidates pop in, in seat order (never ranked)
+  bars      = cands + candidateMs × candidates + barsLeadMs
+  blocksEnd = bars + blockMs × Σ weighted votes    one block at a time, interleaved
+  tie       = blocksEnd + tieLeadMs  when how ∈ { baron, land, lot }, else none
+  winner    = tie + tieMs  or  blocksEnd + winnerLeadMs     the winner, how, the celebration
+  end       = winner + winnerMs                    → next office's t0
+total = last end + summaryMs, the whole result held. Then over: winners take office.
+An office with no ballot (0 or 1 candidates) has no blocks; its beats still run.
+constants: POLITICS.ceremony, one per name above, from WS6's approved mock (ElectionReveal.tsx).
 ```
 
 ```
@@ -298,9 +345,10 @@ RULE-63 · VoteHand's election acts                (replaces RULE-8's timing)  s
   1   planning, an election in POLITICS.ai.declareLeadMonths       decide candidacy once this cycle
       months, not decided this cycle                              (runGovernor / runSheriff chances,
                                                                    as RULE-8)
-  2   announce, not decided this cycle                             decide now (month 1)
-  3   announce, runs for Governor                                  refresh the promise (RULE-10 AI row)
-                                                                   then Done
+  2   announce in month 1, not decided this cycle                  decide now (AM-21: only month 1's
+                                                                   announce takes a run)
+  3   announce in month 1, runs for Governor                       refresh the promise (RULE-10 AI row)
+  3b  announce                                                     Done (after any row 2-3 act)
   4   ballot open, after a seeded pause from POLITICS.ai.actMs     vote (RULE-8's choice) then Done
 ```
 
@@ -311,8 +359,10 @@ RULE-64 · Who sees what of the election          (replaces RULE-9's election ro
   candidates and promises (Politics and Election) every screen, any time
   a ballot                                        its voter only; never anyone else
   who is Done in announce / ballot                every screen ("waiting for Leo")
-  an office's totals                              every screen, from that office's bars step
-  an office's winner and how                      every screen, from that office's winner step
+  an office's totals                              every screen, from that office's bars beat (RULE-62)
+  an office's winner and how                      every screen, from that office's winner beat
+  the Governor's promise for the term (C68)       every screen, while the term lasts
+  my tax paid and my reputation (E-5)             my phone only
 ```
 
 ## §3 · Contracts & Data Models `[handoff]`
@@ -326,6 +376,11 @@ RULE-64 · Who sees what of the election          (replaces RULE-9's election ro
 - **Config (MODIFIED; HC-61):** POLITICS loses nominateMs, ballotMs, revealMs and revealCountdownMs. It gains
   `offices: ['governor', 'sheriff']`, `ceremony: { introMs, barsMs, winnerMs }` and
   `ai.declareLeadMonths`.
+- **AM-21 (MODIFIED; WS3 named edits):** `Politics` gains `promise: TaxPromise | null` (the Governor's,
+  for the term). `Election.ceremony` becomes `{ elapsedMs: number; totalMs: number } | null`, one show
+  clock (RULE-62); the view sends `{ seconds, total }` and the offices whose beats it has reached.
+  `MyView.politics` gains `paid` (tax paid, cr) and `reputation`. POLITICS.ceremony's three clocks become
+  RULE-62's named beats.
 - **Protocol (MODIFIED; WS3 named edits):** the politics view gains `candidates` and `promises`; the
   election view swaps `seconds/total` for `ceremony` and adds `waitingFor` (RULE-64). The run intent
   is unchanged. The board's key allow-list follows.
@@ -354,6 +409,12 @@ Code-only; games live in server memory.
 | T-AC-63 (serves B-AC-63) | RULE-63's rows; AI-only games still fill every office (UBER-AC-1) | C63 | ai |
 | T-AC-64 (serves B-AC-61) | away seats are not Done; Continue is refused in the ceremony | C64 | server |
 | T-AC-65 (serves all) | politics off unchanged; WS1's rows re-measured, all checks pass | C67 | `pnpm sim` |
+| T-AC-66 (serves B-AC-63) | month 1's announce takes a run, and that candidate is on the ballot | C60 | engine, and the phone's Run in announce (render) |
+| T-AC-67 (serves B-AC-60) | from month 4, announce refuses a run and shows no Run button | C60, C66 | engine; render |
+| T-AC-68 (serves B-AC-61) | picking alone is not Done; Cast my vote is; an AI-only ballot closes by itself | C61, C63 | engine; ai |
+| T-AC-69 (serves B-AC-62) | each office's beats follow RULE-62's formula from the tally; totals and winner reach the view only at their beats | C62, C64 | engine; server views |
+| T-AC-70 (serves B-AC-63) | the Governor's promise holds for the term on every screen, with kept or broken | C68 | engine; server view; render |
+| T-AC-71 (serves B-AC-61) | the host's Continue news names the stage it moved past | C69 | server |
 
 negative cases: a run in development (RULE-60 row 1); a run while the ballot is open (row 2);
 Continue in the ceremony. Invariant: no stage of a decision ends on a clock.
@@ -376,6 +437,25 @@ ruling, I propose the Governor proposes a law at any time in planning, and the n
 opens with the law ballot (untimed, closes when everyone has voted, host's Continue for every player not Done),
 then a short clocked reveal. CONFIRMED by the PM (2026-10-28; Heiko may overrule): folded as slice 2a's AM-1 (C40, RULE-40,
 RULE-41, HC-43, §3, B-AC-43).
+
+```
+AM-21 · 2026-10-29 · Heiko approved WS6's election mock (ws6-ux 23697e5b); PM rulings (a)-(c), month 1 (A)
+
+target    RULE-60 row 2, RULE-61 ballot Done, RULE-62, RULE-63 rows 2-3, RULE-64; C66 ux; C68, C69 added; §3; §6
+said      AM-18: announce is a last call to run; a full ballot is Done; the ceremony steps
+          intro/bars/winner on fixed clocks; the promise ends with the election
+did       Follow the mock: (a) Cast my vote is the ballot's Done, picking alone is not; (b) the
+          field closes as an election month opens, except month 1, whose announce is the time to
+          run (no earlier planning; composed from the approved RunForOffice block, WS6 reviews);
+          (c) one show clock, each office's length from its tally (RULE-62's formula, constants
+          named in POLITICS.ceremony); E-7 the promise holds for the term; E-10 the Continue's news
+          names its stage; E-5 my tax paid and reputation on my phone. Ties read "decided by lot"
+          (AM-17; WS6 fixed the mock in 23697e5b).
+because   P-1: Heiko approved the mock: "Yes, all as recommended"; "all ux audit changes are approved"
+goal      P-1 — still met; UBER-AC-2 keeps month 1's run (B-AC-63)
+folded    RULE-60, RULE-61, RULE-62, RULE-63, RULE-64, C63, C66, C68, C69, §3, T-AC-66..71; `pnpm sim` before and
+          after (E-7 and (b) change the AI's field), WS1 reviews
+```
 
 ## §9 · Ownership Boundaries `[handoff]`
 

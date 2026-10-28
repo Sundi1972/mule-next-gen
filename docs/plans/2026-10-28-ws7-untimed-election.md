@@ -51,7 +51,7 @@ The goal id is the politics spec's P-1; plan-check's `G-n` pattern does not matc
 |----|------------|-------|--------------|--------------------|--------------------|-------------------|
 | PR-1 ✅ | `ws7-untimed` | Tasks 1.1-1.9 (C65, C60, C61, C62, C63, C64; WS1's play.ts loop) | B-AC-60, B-AC-61, B-AC-62, T-AC-60..64 | §3 engine and protocol shapes | — | Yes, rename only (today's desks on the new stage names) |
 | PR-2 (WS1) | `ws1-untimed-rows` | Task 2.1 (C67) | T-AC-65 | — | PR-1 | No |
-| PR-3 | `ws7-ceremony` | Tasks 3.1-3.3 (C66) | B-AC-63 | — | PR-1's view; WS6's approved mock | Yes |
+| PR-3 | `ws7-ceremony` | Tasks 3.0-3.8 (C60-C64 per AM-21, C66, C68, C69) | B-AC-63, T-AC-66..71 | AM-21's §3 shapes | PR-1's view; WS6's approved mock (23697e5b) | Yes |
 
 **Waves:** 1 = PR-1 (atomic: every consumer of the stage names changes at once, C65's atomicity). 2 = PR-2 and PR-3 in parallel (disjoint files: WS1's rows vs WS7's desks), PR-3 only once WS6's mock is approved.
 
@@ -63,7 +63,7 @@ The goal id is the politics spec's P-1; plan-check's `G-n` pattern does not matc
 |---|---|---|---|
 | PR-1 | `packages/engine/src/politics.ts`, the POLITICS block, `packages/ai/src/hands/vote.ts`, `apps/server/src/politics-view.ts`, `apps/web/src/phone/hub/politics/*` (stage names only), `apps/web/src/table/TvElection.tsx` (stage names only), `apps/web/e2e/politics*.ts`, their tests. Named edits (SEAMS first): WS3 `packages/engine/src/types.ts`, `packages/protocol/src/index.ts`, `apps/server/src/mule-game.ts` (tick, continuePlanning), `apps/server/test/planning.test.ts` (Continue in the election); WS1 `packages/ai/src/play.ts` (the loop), `packages/engine/test/observe.test.ts` (the stage name); the other lanes' e2e only if `readyThroughTheElection` cannot keep their calls working | — | slice 2a's files; WS1's sim report (PR-2) |
 | PR-2 | WS1's sim report and rows | — | the engine, server and web |
-| PR-3 | `apps/web/src/phone/hub/politics/*`, `apps/web/src/table/TvElection.tsx`, `apps/web/test/politics-desks.test.ts`, `apps/web/e2e/politics.ts` | WS6's approved election mock (wire data and handlers only) | engine, server, protocol |
+| PR-3 | `apps/web/src/phone/hub/politics/**`, `apps/web/src/table/TvElection.tsx`, `apps/web/test/politics-*.test.ts`, `apps/web/e2e/politics*.ts`, `packages/engine/src/politics.ts` + the POLITICS block + tests, `apps/server/src/politics-view.ts` + `apps/server/test/politics.test.ts`, `packages/ai/src/hands/vote.ts` + tests. Named edits (PM ruling 2026-10-29): WS6 `hub/slots.ts`, `hub/Hub.tsx`, `hub/ReadyBar.tsx`, `hub/ready.ts`; WS3 `packages/engine/src/types.ts`, `packages/protocol/src/index.ts`, `apps/server/src/mule-game.ts` (continuePlanning news); WS4 `apps/web/src/table/TableApp.tsx` (one route line, only if needed, confirm first) | WS6's approved election mock (wire data and handlers only; drop every IntentMarker) | anything else; WS1's sim rows |
 
 ### Contention
 
@@ -169,28 +169,57 @@ The goal id is the politics spec's P-1; plan-check's `G-n` pattern does not matc
 - [ ] **Step 1: WS1 runs `pnpm sim` on all three seed sets and records the politics rows, and the checks pass (`T-AC-65`). Any tuning goes through POLITICS.ai with `pnpm sim --set`.**
 - [ ] **Step 2: Commit and PR with the before/after table.**
 
-## PR-3 · the ceremony screens (`ws7-ceremony`)
+## PR-3 · the election screens, stages 2 to 5 (`ws7-ceremony`)
 
-**Status: pending, until Heiko approves WS6's election mock (ws6-ux 7c0c466).** Folds in PR-1's review Minors 4 and 6.
+**Status: in progress.** Heiko approved WS6's election mock 2026-10-29 (ws6-ux **23697e5b**, not ceedd23f); PM rulings (a), (b), (c) and month 1 (A) recorded as spec AM-21. Folds in PR-1's review Minors 4 and 6.
 
-**Base:** the lane at a commit that contains WS6's approved election mock (HC: no screen before the mock).
+**Base:** `ws7-politics` at bb72b8e (trunk 6d30b69 + #170). The mock is the binding scaffold: never design a screen; a state it does not cover goes to the PM (WS6 decides).
 
-### Task 3.1: C66 — the candidacy card, the announcement and "waiting for"
+**Gates for every screen task:** fits at 667×375 and 844×390 (as #170 measured); WS6 reviews fidelity on the SHA; the announce card's 15 px overflow is the mock's bug, not copied.
 
-- [ ] **Step 1: Write failing render tests in `apps/web/test/politics-desks.test.ts` from the mock's testids. Then run them (FAIL), fill the scaffold (fill_scaffold), run them again (PASS) and commit `feat(C66): run any month, the announcement and the ballot's waiting list`.**
+### Task 3.0: the contract (AM-21 §3) — freeze point
 
-### Task 3.2: C66 — the ceremony on the TV and the phone-only version
+- [ ] **Step 1: WS3 named edits in `types.ts` and protocol: `Politics.promise`, `Election.ceremony = { elapsedMs, totalMs }`, `MyView.politics.paid/.reputation`, the view's ceremony `{ seconds, total }` and offices reached. POLITICS.ceremony becomes RULE-62's named beats. `pnpm typecheck` lists the consumers. Commit per lane file.**
 
-- [ ] **Step 1: Write a failing render test: the intro, bars and winner steps per office, and the phone-only version when no TV is connected. Then run it (FAIL), fill the scaffold, run it again (PASS) and commit `feat(C66): the reveal ceremony`.**
+### Task 3.1: the engine (RULE-60 row 2, RULE-61, RULE-62, C68)
 
-### Task 3.3: B-AC-63 — the politics e2e step
+- [ ] **Step 1: Failing tests in `packages/engine/test/politics.test.ts`: `T-AC-66` (month 1 announce run is on the ballot), `T-AC-67` (month 4 announce refuses), `T-AC-68` (a full ballot without Cast is not Done; Cast is), `T-AC-69` (beats from the tally, a tie beat for land/lot/baron), `T-AC-70` (the promise holds for the term). Restate T-AC-60/61/62 rows the rulings change.**
+- [ ] **Step 2: Implement in `politics.ts` (canRun, isElectionDone, stepCeremony + a pure `ceremonyBeats`, and C68 in takeOffice). Run engine tests; commit.**
 
-- [ ] **Step 1: Restate UBER-AC-2's step in `apps/web/e2e/politics.ts` (no new file) as `B-AC-63`. Both humans run, nothing closes until the last phone votes, every screen shows the Governor's ceremony (Governor only, AM-19: one office), and the next sale is taxed at the new Governor's rate. The test owns its stack.**
-- [ ] **Step 2: Run `pnpm --filter @mule/web exec tsx e2e/politics.ts`; expected PASS. Commit `test(B-AC-63): the untimed election and its ceremony`.**
+### Task 3.2: the AI (RULE-63 rows 2-3b)
+
+- [ ] **Step 1: `T-AC-68` (ai): an AI-only ballot closes by itself; VoteHand acts in announce only in month 1. `packages/ai/test/vote-hand.test.ts`, `play-politics.test.ts` (UBER-AC-1). Implement in `hands/vote.ts`; commit.**
+
+### Task 3.3: the server (RULE-64, C69)
+
+- [ ] **Step 1: Failing server tests: `T-AC-69` (totals and winner reach the views at their beats), `T-AC-70` (every view carries the promise), `T-AC-71` (the Continue's news per stage), restating B-AC-62's step rows. Implement `politics-view.ts`; C69 as the WS3 named edit in `mule-game.ts` continuePlanning; commit per file.**
+
+### Task 3.4: the hub frame (WS6 named edits)
+
+- [ ] **Step 1: `hub/slots.ts` + `Hub.tsx`: a stage slot (election day's card takes the stage, phase title "Election day"), an agenda door that opens the promise sheet, desk tabs on one row with an office's desk first, Now folded on the Governor's phone. `ReadyBar.tsx` + `ready.ts`: per-stage words, the two confirm texts, "Still waiting for" (planning too), canReady, the "VOTED" label. Tests in `planning-ready.test.ts` (WS6's) extended by named edit; commit per file, WS6 reviews.**
+
+### Task 3.5: C66 — the phone (routes #audit-election, -announce, -ballot, -governor)
+
+- [ ] **Step 1: Failing render tests in `apps/web/test/politics-desks.test.ts` from the mock's testids, including T-AC-66/67 (Run in month 1's announce only) and T-AC-70 (the promise line, kept or broken). Fill the scaffold in `hub/politics/**` (Council's RunForOffice, PromiseSheet, Field, the DayCard for announce and ballot, the VotesCard, ResultList, Governor desk, Offices strip and line, words). Commit.**
+
+### Task 3.6: C66 — the reveal, TV and phone (route #audit-election-reveal)
+
+- [ ] **Step 1: Failing render tests: the beats at RULE-62's times (title, candidates, bars, tie, winner, summary), the phone beside a TV never ahead of it, the phone with no TV carrying the ceremony. Fill `TvElection.tsx` (announce, ballot, reveal) and the phone's reveal in `hub/politics/`. Confirm whether TableApp routes announce and ballot to TvElection; a named edit only if it does not. Commit.**
+
+### Task 3.7: B-AC-63 — the politics e2e step
+
+- [ ] **Step 1: Restate UBER-AC-2's step in `apps/web/e2e/politics.ts` as `B-AC-63`: both humans run in month 1's announce, each phone casts, nothing closes until the last Cast, every screen shows the Governor's ceremony, the promise stays beside the tax, and the next sale is taxed at the new Governor's rate. `politics-steps.ts`'s `readyThroughTheElection` presses Cast. Measure each election screen at 667×375 and 844×390. Run politics.ts and politics-tie.ts; Tier 2 locally. Commit.**
+
+### Task 3.8: the sim, before and after (T-AC-65)
+
+- [ ] **Step 1: `pnpm sim` politics on, seed sets 1 / 101 / 201 × 100 games, before (bb72b8e) and after; politics off byte-identical; no check regresses. The table goes to WS1 for review and to the PM.**
 
 ### PR-3 merge gate
 
-- [ ] B-AC-63 green in a real browser; the render gate against WS6's mock; Tier 2 green locally; CI green.
+- [ ] Every AC in PR-3's row green, named after its id; failing-test commits first.
+- [ ] B-AC-63 green in a real browser; WS6's fidelity review on the SHA; every election screen fits at 667×375 and 844×390.
+- [ ] Named edits each in their own commit, reviewed by their owner (WS6, WS3, WS4 if any).
+- [ ] `pnpm sim` before/after reviewed by WS1; typecheck 0; `pnpm test` green; Tier 2 green locally; CI green; code review clean.
 
 ## Pre-implementation checklist
 
@@ -198,6 +227,6 @@ The goal id is the politics spec's P-1; plan-check's `G-n` pattern does not matc
 - [x] #130 merged into trunk; #135 (AM-17) in `ws7-politics`
 - [x] SEAMS records PR-1's named edits (WS3, WS1) before it opens
 - [x] Base `ws7-politics` green, measured at the pre-flight (last: afb2daf, typecheck 0 · engine 264 · ai 59 · server 153 · web 156 · #130's CI 4/4)
-- [ ] WS6's election mock approved by Heiko (for PR-3 only)
+- [x] WS6's election mock approved by Heiko (for PR-3 only): 2026-10-29, ws6-ux 23697e5b
 - [x] No spike
 - [ ] Effort: PR-1 is large (one atomic contract change), PR-2 small (WS1), PR-3 medium
