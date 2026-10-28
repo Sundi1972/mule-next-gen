@@ -20,6 +20,7 @@ function fakeContext() {
       };
     },
     changed: () => {},
+    hostId: () => 'b',
   };
   const advance = (ms: number) => {
     now += ms;

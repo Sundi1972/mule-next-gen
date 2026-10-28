@@ -33,6 +33,7 @@ function toFirstStatus() {
       };
     },
     changed: () => {},
+    hostId: () => 's1',
   };
   const advance = (ms: number) => {
     now += ms;
