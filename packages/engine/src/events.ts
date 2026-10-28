@@ -1,7 +1,7 @@
 import { EVENTS, GAME } from './config.js';
 import { neighbours } from './map.js';
 import { createRng } from './rng.js';
-import { RAW_GOODS, type EventKey, type EventKind, type GameState, type Good, type MonthEvent, type Tile } from './types.js';
+import { RAW_GOODS, type EventKey, type EventKind, type GameState, type Good, type MonthEvent, type Phase, type Tile } from './types.js';
 
 type Rng = ReturnType<typeof createRng>;
 type Direction = NonNullable<MonthEvent['direction']>;
@@ -152,4 +152,17 @@ function spread(state: GameState, start: Tile, joins: (t: Tile) => boolean, max:
     }
   }
   return out;
+}
+
+/** A player event's key: a row of EVENTS.player. */
+export type PlayerEventKey = keyof typeof EVENTS.player;
+
+/** The chance a player event fires for this player at the start of this phase: 0 where it doesn't roll. */
+export function playerEventChance(state: GameState, key: PlayerEventKey, phase: Phase, id: string): number {
+  throw new Error('NotImplemented: playerEventChance');
+}
+
+/** Whether a player event fires for this player at the start of this phase: a seeded roll, never on a what-if copy. */
+export function rollPlayerEvent(state: GameState, key: PlayerEventKey, phase: Phase, id: string): boolean {
+  throw new Error('NotImplemented: rollPlayerEvent');
 }

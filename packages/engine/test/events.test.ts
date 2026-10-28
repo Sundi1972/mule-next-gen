@@ -9,6 +9,8 @@ import {
   GOODS,
   neighbours,
   planEvent,
+  playerEventChance,
+  rollPlayerEvent,
   type EventKey,
   type GameState,
   type MonthEvent,
@@ -196,6 +198,80 @@ describe('events in production', () => {
         expect([key, seen > 0]).toEqual([key, true]);
       });
     }
+  });
+});
+
+describe('player events', () => {
+  const sickness = EVENTS.player.sickness;
+  /** Four players, the air at `air`, and last month's report crediting each with these pollution points. */
+  const colony = (air: number, pollutionBy: number[] = [0, 0, 0, 0], seed = 7) => {
+    const state = createGame({ seed, players: [0, 1, 2, 3].map((i) => ({ id: `p${i}`, name: `P${i}`, isAi: false })) });
+    state.air = air;
+    state.history.push({ month: 1, pollutionBy: Object.fromEntries(pollutionBy.map((n, i) => [`p${i}`, n])) } as MonthReport);
+    return state;
+  };
+  const chance = (state: GameState, id: string) => playerEventChance(state, 'sickness', 'development', id);
+  /** Runs `body` with the sickness row changed, then puts it back. */
+  const withSickness = (change: Partial<typeof sickness>, body: () => void) => {
+    const saved = { ...sickness };
+    Object.assign(sickness, change);
+    try {
+      body();
+    } finally {
+      Object.assign(sickness, saved);
+    }
+  };
+
+  it('T-AC-24: sickness is a seeded roll per player at development start, likelier in bad air and for a big polluter, cured by a Medicine', () => {
+    const base = sickness.phases.development;
+    const bands: [number, number][] = [
+      [0, 0],
+      [30, sickness.air.smoggy],
+      [60, sickness.air.toxic],
+      [80, sickness.air.collapse],
+    ];
+    // By the air band, for a player who caused none of last month's pollution.
+    for (const [air, bonus] of bands) expect(chance(colony(air, [6, 3, 3, 0]), 'p3'), `air ${air}`).toBeCloseTo(base + bonus, 9);
+    // By the player's own share of it: half, a quarter, none.
+    const polluted = colony(0, [6, 3, 3, 0]);
+    expect(chance(polluted, 'p0')).toBeCloseTo(base + sickness.pollutionShare * 0.5, 9);
+    expect(chance(polluted, 'p1')).toBeCloseTo(base + sickness.pollutionShare * 0.25, 9);
+    // Never above the cap: the only polluter in Collapse.
+    expect(base + sickness.air.collapse + sickness.pollutionShare).toBeGreaterThan(sickness.cap);
+    expect(chance(colony(80, [12, 0, 0, 0]), 'p0')).toBeCloseTo(sickness.cap, 9);
+    // No roll in another phase, and none on a what-if copy.
+    expect(playerEventChance(colony(80), 'sickness', 'production', 'p0')).toBe(0);
+    expect(rollPlayerEvent(cloneForSim(colony(80, [12, 0, 0, 0])), 'sickness', 'development', 'p0')).toBe(false);
+
+    // Seeded: the same game rolls the same, and over many games about as often as the chance says.
+    const rolls = (seed: number) => [0, 1, 2, 3].map((i) => rollPlayerEvent(colony(30, [0, 0, 0, 0], seed), 'sickness', 'development', `p${i}`));
+    expect(rolls(11)).toEqual(rolls(11));
+    let sick = 0;
+    for (let seed = 1; seed <= 250; seed++) sick += rolls(seed).filter(Boolean).length;
+    expect(sick / 1_000).toBeGreaterThan(base + sickness.air.smoggy - 0.05);
+    expect(sick / 1_000).toBeLessThan(base + sickness.air.smoggy + 0.05);
+
+    // At development start: certain sickness makes a player without Medicine sick; one with a Medicine takes it.
+    const start = (body: (state: GameState) => void) => {
+      const state = colony(0);
+      state.players[0]!.stock.medicine = 1;
+      state.players[1]!.stock.medicine = 0;
+      while (state.phase !== 'development') advancePhase(state);
+      body(state);
+    };
+    withSickness({ phases: { development: 1 }, cap: 1 }, () =>
+      start((state) => {
+        expect([state.players[0]!.sick, state.players[0]!.stock.medicine]).toEqual([false, 0]);
+        expect(state.players[1]!.sick).toBe(true);
+      }),
+    );
+    // With no chance nobody falls sick, and nobody uses a Medicine.
+    withSickness({ phases: { development: 0 } }, () =>
+      start((state) => {
+        expect(state.players.map((p) => p.sick)).toEqual([false, false, false, false]);
+        expect(state.players[0]!.stock.medicine).toBe(1);
+      }),
+    );
   });
 });
 

@@ -783,6 +783,23 @@ export const EVENTS = {
   wildfire: { loss: 1 },
   /** How many times its usual output the bumper plot makes. */
   bumperHarvest: { factor: 2 },
+  /**
+   * Player events (Heiko's event model): each rolls per player at the start of each phase it lists, with that
+   * phase's chance plus its modifiers, never above cap. Several can fire in a month.
+   */
+  player: {
+    /**
+     * Sickness, at development start: the colonist walks at DEV_WALK.sickPace this turn unless it holds a Medicine,
+     * which it then takes. Likelier in dirty air (by band) and for a big polluter: pollutionShare x the player's share
+     * of the colony's pollution last month. Starting numbers, for Heiko.
+     */
+    sickness: {
+      phases: { development: 0.05 },
+      air: { clean: 0, smoggy: 0.15, toxic: 0.3, collapse: 0.5 },
+      pollutionShare: 0.4,
+      cap: 0.9,
+    },
+  },
 };
 
 export const STRATEGIST = {
