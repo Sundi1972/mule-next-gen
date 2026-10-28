@@ -57,7 +57,7 @@ wave-2 rows land (freeze point: the payload agreed with WS1 on 29 Oct).
 ### PR-1 authority
 
 - `may_edit`: `packages/ui/src/events/**`, `packages/engine/src/config.ts` (the EVENT_SHOW block only),
-  `apps/server/test/events-view.test.ts`, `apps/web/test/events-*.test.tsx`, `packages/ui/test/events*.test.ts`
+  `apps/server/test/events-view.test.ts`, `apps/web/test/events-*.test.tsx`, `packages/ui/test/events*.test.ts`, `apps/web/e2e/events.ts`
 - `may_edit` (named edits, owner reviews): `apps/server/src/mule-game.ts::startPhaseTimer`, `::productionView` (WS3);
   `packages/protocol/src/index.ts::ProductionEventView` (WS3); `packages/ui/src/components/ProductionMap.tsx` (WS6);
   `apps/server/test/production-view.test.ts` fixtures (WS6); `packages/ui/src/index.ts` export line,
@@ -66,7 +66,7 @@ wave-2 rows land (freeze point: the payload agreed with WS1 on 29 Oct).
   gallery's composition is binding: wire data and timing, never change composition, route or tokens)
 - `must_not_edit`: every other config block; `packages/engine/**` except the EVENT_SHOW block (HC-2; WS1, WS3, WS5);
   `apps/web/src/table/TableApp.tsx`, `apps/web/src/phone/PhoneApp.tsx` (PR-2's lines); `design/mocks/**` (the approved
-  scaffold, read only); `apps/web/e2e/**` (WS4's; Task 6's e2e step is a named edit awaiting the PM)
+  scaffold, read only); `apps/web/e2e/**` except `events.ts` (WS4's harness and runner: named edits only)
 
 ### PR-2 authority
 
@@ -203,9 +203,9 @@ Standing authority line, in every handoff:
 - [ ] **Step 2: `T-AC-9`:** `pnpm sim -- --games 4 --players 4` on `ws8-events` and on this branch; `diff` the outputs → identical
 - [ ] **Step 3: Front to back (`B-AC-1`, `B-AC-2`):** a Playwright step that starts a seeded game whose production
   fires two events and asserts the TV's `data-event` sequence and the phone-alone skip. The test command owns its stack
-  (the existing e2e harness, `apps/web/e2e/harness.ts`). `apps/web/e2e/**` is WS4's: the step file is a named edit the
-  PM rules before this step (asked with the plan); until then it runs locally only. Lean CI: not added to a CI tier
-  unless the PM says so.
+  (the existing e2e harness, `apps/web/e2e/harness.ts`). The step file is `apps/web/e2e/events.ts`, WS8's (PM
+  ruling); an edit to WS4's harness or runner files is a named edit WS4 reviews. CI tier: local only; a regression-tier
+  step only if proposed with its runtime and it proves UBER-AC-1 cheaply (lean CI).
 - [ ] **Step 4 (R-3):** screenshots at 844×390 and 1280×720 of a two-event production, reviewed by WS8 against the gallery
 - [ ] **Step 5: Commit**
 
@@ -291,6 +291,6 @@ Before suggesting merge of `ws8-show-pr1` into `ws8-events`:
 - [x] Base `ws8-events` @ `bb15a2b` green (measured 29 Oct, after `pnpm install --frozen-lockfile` for the trunk's new
       `@anthropic-ai/sdk`): typecheck 0 · ui 46 · tabletop 148 · engine 266 (+1 skipped) · ai 113 (+9) · web 224 ·
       server 216 (+24) · test exit 0
-- [ ] The PM's ruling on the e2e step file in `apps/web/e2e/**` (WS4's)
+- [x] The PM's ruling on the e2e step: `apps/web/e2e/events.ts` is WS8's; local only
 - [x] No spike: the gallery is the measured prototype (spec §7)
 - [x] Effort: PR-1 about 2 agent-days, PR-2 1-2 (spec §0)

@@ -452,7 +452,8 @@ Invariant (every test): a screen never shows a figure the month report does not 
 ### Ownership: the event show
 - Sole owner: WS8 — `packages/ui/src/events/**` (+ `events.css`), `apps/web/src/events/**`, the `EVENT_SHOW` block in
   `packages/engine/src/config.ts`, `apps/server/test/events-view.test.ts` (WS3 reviews), `apps/web/test/events-*.test.tsx`,
-  `packages/ui/test/events*.test.ts`, this spec and its plan (PM ruling, 29 Oct).
+  `packages/ui/test/events*.test.ts`, `apps/web/e2e/events.ts` (the browser step; local tier), this spec and its plan (PM
+  rulings).
 - Read contract: the view (`ProductionEventView` → `EventView`, `MuleView.events`); `EVENT_SHOW` read by the server only.
 - Write contract: named edits only, each reviewed by its owner on WS8's SHAs — WS4: `packages/ui/src/index.ts` (export),
   `packages/ui/src/theme.css` (@import), `apps/web/src/table/TableApp.tsx`, `apps/web/src/phone/PhoneApp.tsx` (one line
