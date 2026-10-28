@@ -1,5 +1,6 @@
 import { MAP, mapSize, sizeBand, type ShareTerrain, type SizeBand } from './config.js';
 import { Grid, isMining, repairLayout, SHARE_TERRAINS, countTerrains, groups, type Band, type Budget, type Cells } from './map-repair.js';
+import { EPS } from './grid.js';
 import { dominantCap, regionCap, shareBand } from './map-rules.js';
 import type { Rng } from './rng.js';
 import type { Terrain } from './types.js';
@@ -28,8 +29,7 @@ export interface Sketch {
   terrain: Cells;
 }
 
-// A share exactly on the budget's cap must not lose a plot to float rounding.
-const EPS = 1e-9;
+const middle = (n: number) => Math.floor(n / 2); // literal-ok: the middle index of a row or column
 
 /** Lays out a map's river, terrain shares and regions (spec RULE-2 stages 1-3). Pure: every choice comes from `rng`. */
 export function layoutMap(players: number, rng: Rng): Layout {
@@ -43,13 +43,13 @@ export function placeRiver(players: number, rng: Rng): Sketch {
   const band = sizeBand(players);
   const { width, height } = mapSize(players);
   const terrain: Cells = Array(width * height).fill(null);
-  const midX = Math.floor(width / 2);
-  const midY = Math.floor(height / 2);
+  const midX = middle(width);
+  const midY = middle(height);
   terrain[midY * width + midX] = 'store';
 
   // Transition y joins row y to row y + 1. The two beside the store's row never shift, so the river stays beside the store.
   const transitions = [...Array(height - 1).keys()].filter((y) => y !== midY - 1 && y !== midY);
-  const bends = MAP.bends[band] + rng.int(0, 1);
+  const bends = MAP.bends[band] + rng.int(MAP.layout.extraBends.min, MAP.layout.extraBends.max);
   const shifts = new Set(rng.shuffle(transitions).slice(0, bends));
   const lo = MAP.riverMargin;
   const hi = width - 1 - MAP.riverMargin;
@@ -77,7 +77,7 @@ export function budgetTerrain(freeLand: number, rng: Rng): Budget {
   const bands = shareBands(freeLand);
   // The cap keeps a jittered plains share under S3 even if the shares or the jitter grow.
   const shares = SHARE_TERRAINS.map((t) => {
-    const jittered = MAP.shares[t] * (1 + MAP.jitter * (2 * rng.next() - 1));
+    const jittered = MAP.shares[t] * (1 + MAP.jitter * (2 * rng.next() - 1)); // literal-ok: spreads rng.next() over -1 to 1
     return Math.min(MAP.layout.shareCap, jittered);
   });
   const total = shares.reduce((a, b) => a + b, 0);
@@ -182,6 +182,7 @@ function clamp(n: number, band: Band): number {
 
 /** The plot counts S1-S3 allow each terrain on this much free land. */
 function shareBands(freeLand: number): Record<ShareTerrain, Band> {
+  // A share exactly on the budget's cap must not lose a plot to float rounding.
   const top = Math.min(Math.floor(MAP.layout.shareCap * freeLand + EPS), dominantCap(freeLand));
   return Object.fromEntries(
     SHARE_TERRAINS.map((t) => {
@@ -209,13 +210,13 @@ function splitBudget(budget: Budget, cap: number): Region[] {
  */
 function seedRegions(plan: Plan, rng: Rng): void {
   const { grid, regions, owner } = plan;
-  const { twinSpacing, seedSpacing } = MAP.layout;
+  const { twinSpacing, seedSpacing, crowdWeight } = MAP.layout;
   const toAny: number[] = Array(owner.length).fill(seedSpacing);
   const toTwin = new Map<ShareTerrain, number[]>();
   const order = rng.shuffle([...regions.keys()]);
   const mining = order.filter((r) => isMining(regions[r]!.terrain));
   // Reach gained outranks any spacing: spacing scores at most this much.
-  const reachWeight = twinSpacing + 2 * seedSpacing + 1;
+  const reachWeight = twinSpacing + crowdWeight * seedSpacing + 1;
   for (const r of [...mining, ...order.filter((r) => !mining.includes(r))]) {
     const terrain = regions[r]!.terrain;
     const twin = toTwin.get(terrain) ?? Array(owner.length).fill(twinSpacing);
@@ -223,8 +224,7 @@ function seedRegions(plan: Plan, rng: Rng): void {
     let bestScore = -Infinity;
     for (const i of grid.free) {
       if (owner[i]! >= 0 || plan.touchesTwin(i, r)) continue;
-      // Spacing from every seed counts double: a crowded seed is the one that ends up boxed in.
-      const spacing = twin[i]! + 2 * toAny[i]!;
+      const spacing = twin[i]! + crowdWeight * toAny[i]!;
       const score = (isMining(terrain) ? reachWeight * plan.gain(i) : 0) + spacing + rng.next();
       if (score > bestScore) [best, bestScore] = [i, score];
     }
@@ -253,7 +253,7 @@ function growTogether(plan: Plan, rng: Rng): void {
     const frontier = [...around].filter((i) => owner[i] === -1 && !plan.touchesTwin(i, r));
     if (frontier.length > 0) {
       const weights = frontier.map((i) => {
-        const compact = grid.next[i]!.filter((j) => owner[j] === r).length ** 2;
+        const compact = grid.next[i]!.filter((j) => owner[j] === r).length ** MAP.layout.compactPower;
         return isMining(region.terrain) ? compact * (1 + plan.gain(i)) : compact;
       });
       plan.own(r, frontier[rng.weighted(weights)]!);
@@ -285,7 +285,7 @@ function plantPockets(plan: Plan, budget: Budget, cap: number, rng: Rng): boolea
         continue;
       }
       // Seed where the pocket is roomiest, so the new region has space to reach its quota.
-      const roominess = open.map((i) => 1 + grid.next[i]!.filter((j) => owner[j] === -1).length ** 2);
+      const roominess = open.map((i) => 1 + grid.next[i]!.filter((j) => owner[j] === -1).length ** MAP.layout.roomPower);
       plan.own(r, open[rng.weighted(roominess)]!);
       planned[terrain] += quota;
       planted = true;

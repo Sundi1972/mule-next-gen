@@ -79,14 +79,16 @@ export const RECIPES: Record<ProcessedGood, { inputs: Partial<Stock>; output: nu
 export const GROWN_BASE = 2;
 export const GROWN_MIN = 1;
 
-/** Chance of each grown-good rating from -2 to +3, by how the terrain suits the good. */
+/** Chance of each grown-good rating from GROWN_ODDS_MIN up (today -2 to +3), by how the terrain suits the good. */
 export const GROWN_ODDS = {
   good: [0, 0.05, 0.15, 0.3, 0.3, 0.2],
   neutral: [0.05, 0.2, 0.4, 0.25, 0.1, 0],
   poor: [0.3, 0.35, 0.25, 0.1, 0, 0],
 } as const;
+/** The grown-good rating GROWN_ODDS' first chance is for; each later chance is one rating higher. */
+export const GROWN_ODDS_MIN = -2;
 
-/** Chance of each mineral deposit rating from 0 to 4. */
+/** Chance of each mineral deposit rating from MINERAL_ODDS_MIN up (today 0 to 4). */
 export const MINERAL_ODDS = {
   none: [1, 0, 0, 0, 0],
   low: [0.7, 0.2, 0.1, 0, 0],
@@ -94,6 +96,13 @@ export const MINERAL_ODDS = {
   high: [0.05, 0.15, 0.3, 0.3, 0.2],
   veryHigh: [0.02, 0.08, 0.15, 0.4, 0.35],
 } as const;
+/** The deposit rating MINERAL_ODDS' first chance is for; each later chance is one rating higher. */
+export const MINERAL_ODDS_MIN = 0;
+
+/** The rating each chance in an odds row stands for: `lowest` for the first, one higher for each after it. */
+export function ratingsOf(odds: readonly number[], lowest: number): number[] {
+  return odds.map((_, i) => lowest + i);
+}
 
 type LandTerrain = Exclude<Terrain, 'store'>;
 
@@ -430,9 +439,13 @@ export const MAP = {
   placeHonesty: 0.1,
   /**
    * Crystite and Rare earth come in rings: a peak plot rated `high`, the plots
-   * one step from it `medium`, two steps `low`, and 0 beyond.
+   * `steps.medium` steps from it `medium`, `steps.low` steps `low`, and 0 elsewhere.
    */
-  peak: { high: 4, medium: 3, low: { min: 1, max: 2 }, count: { min: 3, max: 4 } },
+  peak: { high: 4, medium: 3, low: { min: 1, max: 2 }, count: { min: 3, max: 4 }, steps: { medium: 1, low: 2 } },
+  /** Hidden hazard traits: a land plot draws its trait count evenly from this list (a repeat weights a count), then that many traits, a duplicate adding none. */
+  traits: { counts: [0, 0, 0, 1, 1, 2] },
+  /** Peaks drawn on a mountain plot, evenly from min to max. For the picture only: yield comes from the ground. */
+  mountainPeaks: { min: 1, max: 3 },
   /** Chance a map has one scarce good. Read by the generator and the map-quality test, not the checker. */
   scarceChance: 0.25,
   /** Special fields on each map. */
@@ -482,9 +495,17 @@ export const MAP = {
     shareCap: 0.3,
     /** Plots a region aims for: each terrain's count is split into regions about this size. */
     avgRegion: 6,
+    /** River bends beyond MAP.bends, drawn evenly from min to max. */
+    extraBends: { min: 0, max: 1 },
     /** A region's seed scores its distance to seeds of its own terrain up to this many steps, and to any seed up to seedSpacing. */
     twinSpacing: 8,
     seedSpacing: 4,
+    /** Distance to any seed scores this many times distance to a twin's seed: a crowded seed is the one that ends up boxed in. */
+    crowdWeight: 2,
+    /** A growing region weights a free neighbour by how many of its plots touch it, to this power: higher grows rounder regions. */
+    compactPower: 2,
+    /** A pocket's new region seeds on a plot weighted 1 plus its free neighbours to this power: higher seeds deeper in the pocket. */
+    roomPower: 2,
     /** Growth steps, per free plot, before the regions stop growing. */
     growPasses: 4,
     /** Rounds of planting new regions in pockets the first growth left. */
@@ -506,6 +527,8 @@ export const MAP = {
     lookaheadEvaluations: 20000,
     /** Edge plots of each big patch tried as the start of a carved region. */
     carveStarts: 3,
+    /** A patch is big enough to carve from at this many times minRegion; under 2, what is left could be a speck. */
+    carveFrom: 2,
   },
   /** Tuning for the ground stages (map-ground.ts): how the generator meets the rules above, not rules themselves. */
   ground: {
