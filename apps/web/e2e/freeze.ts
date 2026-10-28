@@ -1,10 +1,12 @@
 /**
- * FM-FREEZE-1, measured in a real browser. LOCAL ONLY (tier 3): not in the `e2e` script and not in CI. Run with
+ * The phase-change freeze, measured in a real browser. LOCAL ONLY (tier 3): not in the `e2e` script and not in
+ * CI. Run with
  *
  *   pnpm --filter @mule/web build && pnpm --filter @mule/web exec tsx e2e/freeze.ts
  *
- * A one-month game on seed 93, played on the worker path and on the forced main-thread path
- * (`window.__landscapeSync`), on a 1440×900 laptop at 2× with the TV joined, then on an 844×390 phone at 2×.
+ * A one-month game on seed 93, played on the worker path and on the main-thread path (forced by taking
+ * OffscreenCanvas away, as an older browser lacks it), on a 1440×900 laptop at 2× with the TV joined, then on an
+ * 844×390 phone at 2×.
  * Each page counts its landscape paints itself (pictures put on a main-thread canvas, jobs posted to a worker) and
  * fails unless the whole month shows one picture, painted at game start: the hub, land grant, development and
  * production share it.
@@ -36,7 +38,8 @@ const PRESS_MS = 2_000;
  */
 function probe(sync: boolean) {
   const w = window as unknown as Record<string, unknown> & { __frames: Frame[]; __paints: Paint[] };
-  if (sync) w.__landscapeSync = true;
+  // An older browser: no OffscreenCanvas, so the page paints on its own thread.
+  if (sync) delete w.OffscreenCanvas;
   w.__frames = [];
   w.__paints = [];
   (function tick(now: number) {
