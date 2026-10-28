@@ -890,6 +890,11 @@ export const EVENTS = {
     cometPass: { phases: { production: 0.08 }, cap: 0.9 },
     flood: { phases: { production: 0.08 }, follows: { drought: { points: 0.1, lastMonth: true } }, cap: 0.9 },
     volcanicAsh: { phases: { production: 0.064 }, cap: 0.9 },
+    /**
+     * Rolls once for each crystal cavern plot that produced Crystite this month, after production's output, never at
+     * the phase start; a collapse leaves a plain plot.
+     */
+    cavernCollapse: { phases: { production: 0.06 }, perPlot: true, cap: 0.9 },
   } satisfies Record<string, import('./events.js').EventRow>,
   player: {
     /**

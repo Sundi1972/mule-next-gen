@@ -104,7 +104,13 @@ const RULE_3: Record<EventKey, (before: number, first: boolean) => number> = {
   pestSwarm: (b) => Math.floor(b * 0.5),
   wildfire: (b, first) => (first ? 0 : b - 1),
   bumperHarvest: (b) => b * 2,
+  cavernCollapse: (b) => b,
 };
+
+/** The row an event key names, in EVENTS.colony or EVENTS.player. */
+const tableRow = (key: string): EventRow | undefined => ({ ...EVENTS.colony, ...EVENTS.player } as Record<string, EventRow>)[key];
+/** RULE_3's keys whose rows rollPhase rolls at the phase start; a per-plot row rolls after output instead. */
+const drawnKeys = () => (Object.keys(RULE_3) as EventKey[]).filter((key) => !tableRow(key)?.perPlot);
 
 /** A developed colony that also has Food on a river and a working plot next to a volcano or mountain. */
 function colonyForEvents(seed: number): GameState {
@@ -124,13 +130,13 @@ const reset = (row: EventRow, fields: EventRow) => {
   Object.assign(row, fields);
 };
 /**
- * Runs `body` with every event row at `chance` in production, capped at 1, with no raises or lowers, and the excluded
- * pairs as configured unless `excludes` is false; then puts the rows and the pairs back.
+ * Runs `body` with every event row at `chance` in production, capped at 1, with no raises or lowers (a per-plot row
+ * stays per plot), and the excluded pairs as configured unless `excludes` is false; then puts the rows and the pairs back.
  */
 const withEveryRowAt = (chance: number, body: () => void, { excludes = true } = {}) => {
   const saved = rows().map((row) => ({ ...row }));
   const pairs = [...EVENTS.excludes];
-  for (const row of rows()) reset(row, { phases: { production: chance }, cap: 1 });
+  for (const row of rows()) reset(row, { phases: { production: chance }, cap: 1, ...(row.perPlot && { perPlot: row.perPlot }) });
   if (!excludes) EVENTS.excludes.length = 0;
   try {
     body();
@@ -150,7 +156,7 @@ describe('events in production', () => {
   };
 
   it('T-AC-3: each event changes exactly the plots it hits, by RULE-3, and the report says so', () => {
-    for (const key of Object.keys(RULE_3) as EventKey[]) {
+    for (const key of drawnKeys()) {
       withEveryRowAt(0, () => {
         forceOnly(key);
         let seen = 0;
@@ -186,13 +192,14 @@ describe('events in production', () => {
   });
 });
 
+/** Plays a production from development, and returns the month report it files. */
+const produce = (state: GameState) => {
+  state.phase = 'development';
+  advancePhase(state);
+  return state.history.at(-1)!;
+};
+
 describe('several events in one production', () => {
-  /** Plays a production from development, and returns the month report it files. */
-  const produce = (state: GameState) => {
-    state.phase = 'development';
-    advancePhase(state);
-    return state.history.at(-1)!;
-  };
   /**
    * At the first month events may roll, p0's lone farm growing `grown`: no special, trait, pollution or neighbour, and
    * Energy to spare. p0 holds `water` Water; at 0 it is short, and the farm halves.
@@ -209,24 +216,31 @@ describe('several events in one production', () => {
   };
   const lineOf = (report: MonthReport, tile: number) => report.lines!.find((l) => l.tile === tile)!;
 
-  it('EM-T-AC-3: two events on one plot both apply in order, never below 0, and an excluded pair keeps one', () => {
+  const colonyRows: Record<string, EventRow> = EVENTS.colony;
+
+  it("EM-T-AC-3: the table holds what the roller relies on: rows it rolls, colony-row pairs, one phase a row", () => {
     // Every pair the excludes name, and every key a row follows, is a row: a misspelt key would never fire.
     const named = [...EVENTS.excludes.flat(), ...rows().flatMap((row) => Object.keys(row.follows ?? {}))];
     expect(named.length).toBeGreaterThan(0);
     expect(named.filter((key) => !Object.hasOwn(EVENTS.colony, key) && !Object.hasOwn(EVENTS.player, key))).toEqual([]);
-    // ...and a row rollPhase rolls: one that makes a MonthEvent, which sickness does not.
-    const rolled = (table: object) => Object.keys(table).filter((key) => Object.hasOwn(RULE_3, key));
+    // ...and a row rollPhase rolls at the phase start: sickness makes no MonthEvent, and the cavern rolls per plot after output.
+    const rolled = (table: object) => Object.keys(table).filter((key) => (drawnKeys() as string[]).includes(key));
+    expect(rolled(EVENTS.colony)).not.toContain('cavernCollapse');
     expect(named.filter((key) => ![...rolled(EVENTS.colony), ...rolled(EVENTS.player)].includes(key))).toEqual([]);
     // rollPhase resolves the excludes after the colony rows and before the player rows: a player-row pair would never
     // resolve, and a colony row following a member this phase would read one the dice may yet drop.
     const excluded = EVENTS.excludes.flat();
     expect(excluded.filter((key) => !rolled(EVENTS.colony).includes(key))).toEqual([]);
-    const colonyRows: Record<string, EventRow> = EVENTS.colony;
     const readsThisPhase = Object.entries(colonyRows).flatMap(([key, row]) =>
       Object.entries(row.follows ?? {}).flatMap(([follows, f]) => (f.thisPhase && excluded.includes(follows) ? [[key, follows]] : [])),
     );
     expect(readsThisPhase).toEqual([]);
+    // A row rolls once a month only while it lists one phase (RULE-2 step 5 holds by construction).
+    const table: Record<string, EventRow> = { ...EVENTS.colony, ...EVENTS.player };
+    expect(Object.entries(table).flatMap(([key, row]) => (Object.keys(row.phases).length === 1 ? [] : [key]))).toEqual([]);
+  });
 
+  it('EM-T-AC-3: two events on one plot both apply in order, never below 0, and an excluded pair keeps one', () => {
     withEveryRowAt(0, () => {
       const calm = loneFarm();
       expect(lineOf(produce(calm.state), calm.farm).made).toBe(1);
@@ -236,9 +250,9 @@ describe('several events in one production', () => {
       EVENTS.colony.acidRain.phases = { production: 1 };
       const { state, farm } = loneFarm();
       const report = produce(state);
-      expect(report.events!.map((e) => [e.key, e.plots.map((p) => [p.index, p.delta])])).toEqual([
-        ['drought', [[farm, -1]]],
-        ['acidRain', [[farm, 0]]],
+      expect(report.events!.map((e) => [e.key, e.phase, e.plots.map((p) => [p.index, p.delta])])).toEqual([
+        ['drought', 'production', [[farm, -1]]],
+        ['acidRain', 'production', [[farm, 0]]],
       ]);
       const line = lineOf(report, farm);
       expect(line.made).toBe(0);
@@ -320,13 +334,15 @@ describe('several events in one production', () => {
           expect([alone, seeds.map((seed) => listed(seed))]).toEqual([alone, seeds.map(() => [alone])]);
         }
 
-        // The pair's dice are not the first member's own: where it fires alone at 0.5, a certain partner still lets either be kept.
-        row(pair[0]).phases = { production: 0.5 };
-        row(pair[1]).phases = { production: 0 };
-        const firesAlone = seeds.filter((seed) => listed(seed).length > 0);
-        expect([pair, firesAlone.length > 0]).toEqual([pair, true]);
-        row(pair[1]).phases = { production: 1 };
-        expect([pair, new Set(firesAlone.flatMap((seed) => listed(seed)))]).toEqual([pair, both]);
+        // The pair's dice are neither member's own: where one fires alone at 0.5, a certain partner still lets either be kept.
+        for (const [alone, partner] of [pair, [pair[1], pair[0]]] satisfies [string, string][]) {
+          row(alone).phases = { production: 0.5 };
+          row(partner).phases = { production: 0 };
+          const firesAlone = seeds.filter((seed) => listed(seed).length > 0);
+          expect([alone, firesAlone.length > 0]).toEqual([alone, true]);
+          row(partner).phases = { production: 1 };
+          expect([alone, new Set(firesAlone.flatMap((seed) => listed(seed)))]).toEqual([alone, both]);
+        }
       });
     }
   });
@@ -628,6 +644,76 @@ describe('the roller', () => {
       for (const t of dry.tiles) if (t.owner === 'p1') t.outfit = 'energy';
       const all = (p: string) => PERSONAL.map((key) => [key, p, p]);
       expect(whose(dry, rollPhase(dry, 'production'))).toEqual([...all('p0'), ['bumperHarvest', 'p1', 'p1'], ...all('p2'), ...all('p3')]);
+    });
+  });
+});
+
+describe('cavern collapse', () => {
+  /**
+   * At `month`, crystal caverns and no other special field: p0 and p1 each mine one for Crystite, p2 mines one on
+   * Crystite 0 and p3 farms one, which a drought reaches. Every seat has Energy and Water to spare.
+   */
+  const caverns = (month: number) => {
+    const state = createGame({ seed: 4, players: [0, 1, 2, 3].map((i) => ({ id: `p${i}`, name: `P${i}`, isAi: false })) });
+    state.month = month;
+    for (const t of state.tiles) delete t.special;
+    const land = state.tiles.filter((t) => t.terrain !== 'store');
+    const plots: [string, Outfit, number][] = [['p0', 'crystite', 3], ['p1', 'crystite', 3], ['p2', 'crystite', 0], ['p3', 'food', 3]];
+    const [one, two, empty, farmed] = plots.map(([owner, outfit, crystite], i) => {
+      const tile = land[i * 6]!;
+      Object.assign(tile, { owner, outfit, traits: [], pollution: 0, special: { kind: 'crystalCavern' } });
+      tile.ground.crystite = crystite;
+      return state.tiles.indexOf(tile);
+    }) as [number, number, number, number];
+    for (const p of state.players) Object.assign(p.stock, { energy: 10, water: 10 });
+    return { state, mined: [one, two], empty, farmed };
+  };
+  const kindAt = (state: GameState, index: number) => state.tiles[index]!.special?.kind;
+  const linesOf = (report: MonthReport, at: number[]) => at.map((index) => report.lines!.find((l) => l.tile === index)!);
+
+  it("EM-T-AC-5: cavern collapse rolls on its row, with today's effect", () => {
+    withEveryRowAt(0, () => {
+      const calm = caverns(EVENTS.firstMonth);
+      const calmReport = produce(calm.state);
+      expect([...calm.mined, calm.empty, calm.farmed].map((i) => kindAt(calm.state, i))).toEqual(Array(4).fill('crystalCavern'));
+      expect(calmReport.events).toEqual([]);
+
+      EVENTS.colony.cavernCollapse.phases = { production: 1 };
+      EVENTS.colony.drought.phases = { production: 1 };
+      for (const month of [1, EVENTS.firstMonth]) {
+        const { state, mined, empty, farmed } = caverns(month);
+        const report = produce(state);
+        expect([month, mined.map((i) => kindAt(state, i))]).toEqual([month, [undefined, undefined]]);
+        expect([month, [empty, farmed].map((i) => kindAt(state, i))]).toEqual([month, ['crystalCavern', 'crystalCavern']]);
+        expect(linesOf(report, [empty])[0]!.made).toBe(0);
+        // This month's Crystite is already made: the mined caverns' lines are the ones they make at 0.
+        expect(linesOf(report, mined)).toEqual(linesOf(calmReport, calm.mined));
+
+        const output = month < EVENTS.firstMonth ? [] : ['drought'];
+        expect(report.events!.map((e) => e.key)).toEqual([...output, 'cavernCollapse', 'cavernCollapse']);
+        expect(report.events!.slice(output.length)).toEqual(
+          mined.map((index) => {
+            const tile = state.tiles[index]!;
+            return {
+              key: 'cavernCollapse',
+              kind: 'quake',
+              title: expect.stringMatching(/^\S+( \S+){1,3}$/),
+              line: expect.stringMatching(/^[^.\d]+\.$/),
+              scope: 'personal',
+              origin: { x: tile.x, y: tile.y },
+              plots: [{ index, order: 0, good: 'crystite', delta: 0 }],
+              player: tile.owner,
+              sign: 'bad',
+              phase: 'production',
+            };
+          }),
+        );
+      }
+
+      const { state, mined } = caverns(EVENTS.firstMonth);
+      const whatIf = cloneForSim(state);
+      expect(produce(whatIf).events).toEqual([]);
+      expect(mined.map((i) => kindAt(whatIf, i))).toEqual(['crystalCavern', 'crystalCavern']);
     });
   });
 });

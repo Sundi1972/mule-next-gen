@@ -139,6 +139,8 @@ export interface EventRow {
   wealth?: { richest?: number; poorest?: number };
   /** By event key: points when that event fired in a window the row names; once, if it fired in both. */
   follows?: Record<string, { points: number; thisPhase?: boolean; lastMonth?: boolean }>;
+  /** Rolls once per plot its caller names, after production's output; rollPhase never rolls it. */
+  perPlot?: true;
   cap: number;
 }
 
