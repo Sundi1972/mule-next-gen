@@ -381,6 +381,34 @@ because   WS8, 29 Oct: "for wave 1 the contract at 605749d is enough"; `when` du
 goal      G-1 unchanged
 ```
 
+```
+AM-6 · 2026-10-29 · Heiko's ruling on R-2 (via the PM): "b"
+
+target    §2 wave 1's rows (the production bases) · UBER-AC-1 · R-2, R-3
+said      the catalogue's production bases (dust storm, drought, solar flare, comet pass, flood 5%; volcanic ash 4%;
+          acid rain 1%; pest swarm, wildfire, bumper harvest 1.5% a player); UBER-AC-1 ~1.0 a month clean, ~2.0 Smoggy.
+did       every production base ×1.6, the catalogue's relative odds kept: dust storm, drought, solar flare, comet pass,
+          flood 8%; volcanic ash 6.4%; acid rain 1.6%; pest swarm, wildfire, bumper harvest 2.4% a player. Raises,
+          lowers, follows, caps and excludes are unchanged; sickness stays at 3% (Heiko's catalogue ruling (2)).
+          Measured (Task 8; roller against its base b3774fa, 40 games a cell, seeds 1, 101, 201, politics on and off;
+          the only check that ever misses is "Colonists short of Food or Water", under 15%):
+
+          option                                  events a month clean / Smoggy / Toxic    shortage, six cells (mean)
+          base today                              -                                        9 16 15 23 14 13 (15.0)
+          A  the catalogue                        0.66-0.73 / 1.79-1.86 / 2.47-2.54        14 16 21 19 13 13 (16.0)
+          B  every production base x1.6  CHOSEN   0.93-1.01 / 2.02-2.15 / 2.71-2.83        10 15 23 21 15 19 (17.2)
+          C  x1.6 on the four that can't lower    0.79-0.82 / 1.88-1.99 / 2.56-2.68        12 15 21 18 13 14 (15.5)
+             Food or Water (dust, flare, comet, bumper)
+          C' the same four x2.4                   0.95-0.99 / 2.04-2.15 / 2.72-2.85        14 13 19 17 11 10 (14.0)
+
+          UBER-AC-1 passes with B. R-2: under B the shortage check moves from ok to MISS in two cells (seed 201,
+          politics on 14→15%, off 13→19%); Heiko accepts it: food supply is its own follow-up, and the check already
+          misses in half the cells before the event model. R-3: Toxic air at 2.7-2.8 a month, reported, not tuned.
+because   Heiko, via the PM: "b". The liveliness he asked for, with his catalogue's relative odds; the shortage pressure
+          is a food-supply question, not an event one.
+goal      G-1 (unchanged); UBER-AC-1 met
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 No ownership change: events.ts and EVENTS remain WS1's. Named edits: `specials.ts` (WS5, C4), any phase hook in

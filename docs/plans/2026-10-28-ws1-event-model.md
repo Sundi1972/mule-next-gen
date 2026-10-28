@@ -283,13 +283,19 @@ before this task, so the two never edit sim.ts at once) · **ACs verified:** UBE
 
 **Depends on:** Task 7 · **ACs verified:** UBER-AC-1
 
-- [ ] **Step 1: Run three sets × politics off and on, 40 games a cell** (`pnpm sim -- --games 40 --seed {1,101,201} [--politics off]`),
+- [x] **Step 1: Run three sets × politics off and on, 40 games a cell** (`pnpm sim -- --games 40 --seed {1,101,201} [--politics off]`),
       plus `--air smoggy` and `--air toxic` on each set.
-- [ ] **Step 2: Compare.** UBER-AC-1 passes when clean air averages about 1.0 a month and forced Smoggy about 2.0. The
+- [x] **Step 2: Compare.** UBER-AC-1 passes when clean air averages about 1.0 a month and forced Smoggy about 2.0. The
       references are R-1's measured spread (0.78-0.92; 1.89) and today's 45-46% of months.
-- [ ] **Step 3: R-2.** A check that moves from ok to MISS goes to the PM as options for Heiko, before the PR is marked ready.
+- [x] **Step 3: R-2.** A check that moves from ok to MISS goes to the PM as options for Heiko, before the PR is marked ready.
       R-3 (Toxic at about 2.5) is reported, not tuned.
-- [ ] **Step 4: Record the rows** in the PR body and in spec §8 (a new amendment's "because").
+- [x] **Step 4: Record the rows** in the PR body and in spec §8 (a new amendment's "because").
+      Done 29 Oct: measured against the roller's base b3774fa (not trunk, which had moved: #139, #151, #152 touch
+      specials, game and config). A, the catalogue: 0.7 / 1.8 a month, no check moved. Options B, C and C′ measured at
+      the PM's ask; Heiko ruled "b": every production base ×1.6, his relative odds kept (spec §8 AM-6, with the
+      table). 5d5ec4d sets the rows; they reproduce the measured --set run line for line from the checks on; every
+      package green. UBER-AC-1 met: 0.93-1.01 clean, 2.02-2.15 Smoggy. R-2: the shortage check flips in two cells,
+      accepted (food supply is its own follow-up, in the balance plan). R-3: Toxic 2.7-2.8, reported.
 
 ### PR-1 merge gate
 
