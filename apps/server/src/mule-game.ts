@@ -367,9 +367,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.checkDevelopmentOver();
   }
 
-  /** True when no colonist is walking or assaying, so ending development drops no move. */
+  /** True when no colonist is walking, so ending development drops no move; an assay applied on arrival, so it holds nothing. */
   private colonistsSettled(): boolean {
-    return [...this.colonists.values()].every((c) => c.walk === null && c.assayUntil === null);
+    return [...this.colonists.values()].every((c) => c.walk === null);
   }
 
   /**
