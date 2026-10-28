@@ -1,9 +1,11 @@
 import { cx, PlayerMark, SPECIES_NAME, Timer } from '@mule/ui';
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { flushSync } from 'react-dom';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { fmt } from '../game/derive';
+import { useEscape } from './dialog';
 import { usePhoneGame } from './game';
+import { MoveToPhone } from './MoveToPhone';
 
 /**
  * From this width of the shell the layout is "wide" (laptop and up). One number, shared by the container query
@@ -21,6 +23,12 @@ export const useWide = () => useContext(Wide);
  * clear of the rail at the rail's real width: `--rail` there is the rail's width at both sizes.
  */
 export const ShellLayer = createContext<ReactNode>(null);
+
+/**
+ * Opens the move-to-phone dialog, which is held above the per-phase screens so it stays open, with its code, as the
+ * phase moves on. `button` is the current shell's move-to-phone, for focus to return to.
+ */
+export const MoveToPhoneOpener = createContext<{ open: () => void; button: RefObject<HTMLButtonElement> } | null>(null);
 
 /** What the player does next, at the top of the rail. */
 export interface Now {
@@ -114,6 +122,7 @@ export function PhoneShell({
   const { view, self, slot } = usePhoneGame();
   const [root, wide] = useWideRef<HTMLDivElement>();
   const layer = useContext(ShellLayer);
+  const move = useContext(MoveToPhoneOpener);
   return (
     <Wide.Provider value={wide}>
       <div ref={root} className="h-full @container/shell">
@@ -142,6 +151,22 @@ export function PhoneShell({
                 <PlayerMark slot={slot} species={self.species} size={12} label={`You, ${SPECIES_NAME[self.species]}`} />
                 <span className="min-w-0 truncate text-sm font-semibold @min-[1100px]/shell:text-base">{self.name}</span>
                 <ThemeToggle className="ml-1 shrink-0" />
+                {move && (
+                  <button
+                    ref={move.button}
+                    type="button"
+                    onClick={move.open}
+                    className="flex h-7 shrink-0 items-center gap-1 rounded-chip border border-holo-line px-1.5 text-xs text-holo hover:border-holo @min-[1100px]/shell:h-8 @min-[1100px]/shell:px-2.5 @min-[1100px]/shell:text-sm"
+                    aria-label="Move to my phone"
+                    data-testid="move-to-phone"
+                  >
+                    <svg aria-hidden viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                      <rect x={7} y={2.5} width={10} height={19} rx={2} />
+                      <path d="M11 18.5h2" />
+                    </svg>
+                    <span className="hidden @min-[1100px]/shell:inline">To my phone</span>
+                  </button>
+                )}
                 <span data-num className="ml-auto shrink-0 font-mono text-sm font-bold text-ink @min-[1100px]/shell:text-lg" data-testid="money">
                   {fmt(self.money)} cr
                 </span>
@@ -164,6 +189,33 @@ export function PhoneShell({
         </div>
       </div>
     </Wide.Provider>
+  );
+}
+
+/**
+ * Mid-game, the move of this seat to another device, over the whole game screen. Escape closes it, as Done does.
+ * It sits outside the screen's shell, so it is a `shell` container itself.
+ */
+export function MoveDialog({ room, name, onClose }: { room: string; name: string; onClose: () => void }) {
+  const titleId = useId();
+  useEscape(onClose);
+  return (
+    // The container has no padding: a query measures the content box, so padding here would make it go wide late.
+    <div className="absolute inset-0 z-40 @container/shell">
+      <div className="grid h-full place-items-center bg-void/70 p-4" role="dialog" aria-modal aria-labelledby={titleId} data-testid="host-dialog">
+        <div className="flex max-w-[560px] flex-col gap-3 rounded-sheet border-2 border-holo bg-panel p-4 shadow-glow @min-[1100px]/shell:max-w-[720px] @min-[1100px]/shell:gap-5 @min-[1100px]/shell:p-8">
+          <MoveToPhone
+            titleId={titleId}
+            title="Move to your phone"
+            room={room}
+            who={name}
+            what=", mid-game, with your money, goods and plots. This screen then steps aside. The code works once, for 2 minutes; the game doesn't pause."
+            doneTestId="handoff-done"
+            onDone={onClose}
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 
