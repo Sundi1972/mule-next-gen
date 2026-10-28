@@ -1,6 +1,6 @@
 import { MAP, mapSize, sizeBand, type ShareTerrain, type SizeBand } from './config.js';
 import { Grid, isMining, repairLayout, SHARE_TERRAINS, countTerrains, groups, type Band, type Budget, type Cells } from './map-repair.js';
-import { regionCap, shareBand } from './map-rules.js';
+import { dominantCap, regionCap, shareBand } from './map-rules.js';
 import type { Rng } from './rng.js';
 import type { Terrain } from './types.js';
 
@@ -28,7 +28,7 @@ export interface Sketch {
   terrain: Cells;
 }
 
-// A share exactly on S3's ceiling must not lose a plot to float rounding.
+// A share exactly on the budget's cap must not lose a plot to float rounding.
 const EPS = 1e-9;
 
 /** Lays out a map's river, terrain shares and regions (spec RULE-2 stages 1-3). Pure: every choice comes from `rng`. */
@@ -182,7 +182,7 @@ function clamp(n: number, band: Band): number {
 
 /** The plot counts S1-S3 allow each terrain on this much free land. */
 function shareBands(freeLand: number): Record<ShareTerrain, Band> {
-  const top = Math.floor(Math.min(MAP.layout.shareCap, MAP.maxTerrainShare) * freeLand + EPS);
+  const top = Math.min(Math.floor(MAP.layout.shareCap * freeLand + EPS), dominantCap(freeLand));
   return Object.fromEntries(
     SHARE_TERRAINS.map((t) => {
       const band = shareBand(t, freeLand);

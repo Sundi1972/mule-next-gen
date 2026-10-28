@@ -6,7 +6,10 @@ import { describe, expect, it } from 'vitest';
 const SEEDS = [101, 102, 103, 104];
 const PLAYERS = 4;
 
-describe('T-AC-7: the simulator plays the land auction', () => {
+/** Tier 2 (lean CI): four whole sim games, run beside the sim smoke on PRs into trunk, and by `pnpm test:full`. */
+const TIER2 = process.env.MULE_TIER2 === '1' || process.env.MULE_FULL === '1';
+
+describe.runIf(TIER2)('T-AC-7: the simulator plays the land auction', () => {
   it('T-AC-7: the simulator plays the land auction (every game ends, colony lots near colonyPlotChance of months with free land, some sold, one count per bell)', () => {
     const total = { sold: 0, unsold: 0, colonyOffered: 0, colonySold: 0, stalled: 0 };
     let months = 0;

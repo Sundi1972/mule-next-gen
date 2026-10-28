@@ -195,29 +195,30 @@ describe('AI seats at the land auction', () => {
       }
     }
     // Two long ticks, then a short one: a leader that stood through a long tick may finish its walk on the short one.
-    for (const seed of SEEDS)
-      for (const money of [SHORT, {}, flushMoney()]) {
-        const { state, hands } = landAuction(seed, { money, keepBack: money === SHORT });
-        for (const s of play(state, hands, [300, 300, 37]).samples) expect(s.price, `seed ${seed}, ${s.id} on ${s.lot.id}`).toBeLessThanOrEqual(Math.max(s.limit, s.lo));
-      }
+    // The short table only: its limits are the ones in reach, and the long-tick rows below cover the rest.
+    for (const seed of SEEDS) {
+      const { state, hands } = landAuction(seed, { money: SHORT, keepBack: true, bare: ['a3'], glut: true });
+      for (const s of play(state, hands, [300, 300, 37]).samples) expect(s.price, `seed ${seed}, ${s.id} on ${s.lot.id}`).toBeLessThanOrEqual(Math.max(s.limit, s.lo));
+    }
     expect(reserveCapped, 'in some short run an AI bid a plot up to money − reserve').toBeGreaterThan(0);
     expect(roomCapped, 'in some short run an AI bid a plot up to plotRoom').toBeGreaterThan(0);
     expect(valueCapped, 'in every flush run some AI bid a MULE up to its value').toBe(SEEDS.length);
-    // It replays thirty auctions tick by tick: half a second here, but over the 5 s default on CI's shared runner while every package's suite runs at once.
+    // It replays eighteen auctions tick by tick: well under a second here, but over the 5 s default on CI's shared runner while every package's suite runs at once.
   }, 30_000);
 
   it('B-AC-7: an AI whose money − reserve is under the minimum never moves, and presses Done', () => {
     for (const seed of [3, 7, 11]) {
-      // a2 holds no idle plot, so plotRoom keeps back one MULE and the reserve, the larger, is what stops it.
-      const probe = landAuction(seed, { bare: ['a2'], glut: true });
-      const mind = probe.seats[1]!.mind;
+      // a3 (cautious, the largest reserve) holds no idle plot, so plotRoom keeps back one MULE and the reserve, the
+      // larger, is what stops it.
+      const probe = landAuction(seed, { bare: ['a3'], glut: true });
+      const mind = probe.seats[2]!.mind;
       const reserve = cashReserve(observe(probe.state, mind.me), mind);
-      const mule = mulePriceFor(probe.state, 'a2');
+      const mule = mulePriceFor(probe.state, 'a3');
       expect(reserve, `seed ${seed}`).toBeGreaterThan(mule);
       // A buyer by the engine's rule (money ≥ minimum) with a MULE to spare, but short once it keeps its reserve.
       const money = PLOT_MIN + mule + Math.floor((reserve - mule) / 2);
-      const { state, hands } = landAuction(seed, { money: { a2: money }, bare: ['a2'], glut: true });
-      const mine = play(state, hands).samples.filter((s) => s.id === 'a2' && s.lot.item.kind === 'plot');
+      const { state, hands } = landAuction(seed, { money: { a3: money }, bare: ['a3'], glut: true });
+      const mine = play(state, hands).samples.filter((s) => s.id === 'a3' && s.lot.item.kind === 'plot');
       expect(mine.length).toBeGreaterThan(0);
       for (const s of mine) {
         expect(s.room).toBeGreaterThanOrEqual(PLOT_MIN);
