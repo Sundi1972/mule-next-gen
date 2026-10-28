@@ -511,6 +511,16 @@ describe('the reveal (C66, RULE-62, B-AC-62)', () => {
     expect(textOf(won, 'companion-governor-s1')).toBe('You3ELECTED');
     expect(textOf(won, 'companion-governor')).toContain('Won on votes, 3 to 1.');
     expect(textOf(won, 'companion-mine')).toBe('Congratulations, Governor Lena!You set the sales tax next. You promised no higher than 8%.');
+    const tie = onPhone(inCeremony(TIED, beatAt(TIED, 'tie', 0.5)), ElectionDay, 1);
+    expect(inCeremony(TIED, beatAt(TIED, 'tie', 0.5)).politics!.election!.result.governor?.winner, 'the server sends the winner at the tie beat').toBe('s2');
+    for (const id of ['s1', 's2']) expect(tagOf(tie, `companion-governor-${id}`), `companion-governor-${id} at the tie beat`).toBeUndefined();
+    expect(textOf(tie, 'companion-governor')).toBe('Governoron the TV now…');
+  });
+
+  it('B-AC-62 (phone beside a TV): with no office after it, a named winner brings no "Next office on the TV"', () => {
+    const html = onPhone(inCeremony(TIED, beatAt(TIED, 'winner', 0.5)), ElectionDay, 1);
+    expect(textOf(html, 'companion-governor-s2')).toBe('Ossa2ELECTED');
+    expect(textOf(html, 'companion-wait')).not.toContain('Next office on the TV');
   });
 
   it("B-AC-62 (phone, no TV): the phone carries the TV's ceremony itself, beat for beat", () => {
