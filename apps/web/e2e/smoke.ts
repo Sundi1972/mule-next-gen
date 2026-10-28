@@ -11,7 +11,7 @@ import { check, claimAPlot, headerSlot, held, launch, PHONE, startServer, TV, ty
 import { planningIsTheHub } from './hub-steps';
 import { readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
-import { fedPlayerFillsAFullHoloBar, hungryPlayerSeesAShortOrangeBar, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
+import { fedPlayerSeesNoHunger, hungryPlayerSeesHerPace, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
 import { specialFieldsShowTheirGlyphs } from './special-steps';
 import { doneThroughTheElection, doubleTapZoomsToYourLand, moveDialogOpensInProduction, moveDialogOutlivedThePhase, noZoomBeforeYourFirstPlot, thePhonePicksRose, theSeatMovesToAnotherDevice, theTvDrawsRose, watchIntents, zoomButtonOnceYouOwnAPlot } from './table-steps';
 
@@ -133,7 +133,7 @@ try {
   await storeIsOneHallWithTwoRows(phone, within(PHASE_MS.landGrant));
   // B-AC-15 and B-AC-16: the store says what to do next, and the MULE is a character.
   await theCorralGlowsWithNoMule(phone, server, code);
-  await fedPlayerFillsAFullHoloBar(phone);
+  await fedPlayerSeesNoHunger(phone, server, code);
   await outfittersOpenWithAnEmptyMule(phone);
   console.log(`store hall fills the stage: ${await theLedMuleLightsUp(phone, server, code)}`);
   await checkOwnsAPlot(phone);
@@ -163,7 +163,7 @@ try {
   await readyIfStillPlanning(phone);
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 2);
-  await hungryPlayerSeesAShortOrangeBar(phone, within(PHASE_MS.landGrant));
+  await hungryPlayerSeesHerPace(phone, server, code, within(PHASE_MS.landGrant));
   await goToThePub(phone);
   const moveLink = await moveDialogOpensInProduction(ctx, within(PHASE_MS.development));
   // B-AC-6, B-AC-7 and B-AC-8: month 2's show, with the seed's event.

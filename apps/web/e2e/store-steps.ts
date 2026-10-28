@@ -1,5 +1,5 @@
 /** The development store's checks, run as development starts by smoke.ts (scaled clocks) and screens.ts (real time). */
-import { DEVELOPMENT, monthNeeds, type GameState } from '@mule/engine';
+import { DEV_WALK, foodShare, hungerPace, monthNeeds, needsOf, sickPace, type GameState } from '@mule/engine';
 import type { Page } from 'playwright';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, PHONE } from './harness';
@@ -14,32 +14,7 @@ const LAPTOP = { width: 1440, height: 900 };
 /** Wall-clock seconds of development the store's walk-through needs; smoke's scaled clock gives a fed seat only 5. */
 const STORE_WALK_SECONDS = 30;
 
-type CardShown = { text: string; label: string; barWidth: number; bar: string; token: string };
-
-/** What the start-of-turn card shows, once its bar has its target width; `tone` names the colour token it should wear. */
-async function cardShown(phone: Page, tone: 'holo' | 'warn'): Promise<CardShown> {
-  const handle = await phone.waitForFunction(
-    (token) => {
-      const card = document.querySelector<HTMLElement>('[data-testid=fill-card]');
-      const label = card?.querySelector('[data-num]');
-      // The label sits right under the bar's track.
-      const bar = label?.previousElementSibling?.firstElementChild as HTMLElement | null | undefined;
-      const barWidth = parseFloat(bar?.style.width ?? '');
-      if (!card || !label || !bar || !(barWidth > 0)) return null;
-      const probe = document.createElement('span');
-      probe.style.color = `var(--color-${token})`;
-      document.body.append(probe);
-      const tokenColour = getComputedStyle(probe).color;
-      probe.remove();
-      return { text: card.innerText, label: label.textContent ?? '', barWidth, bar: getComputedStyle(bar).backgroundColor, token: tokenColour };
-    },
-    tone,
-    { timeout: 2_000 },
-  );
-  return (await handle.jsonValue()) as CardShown;
-}
-
-/** The label the card shows from its first frame, before the bar has filled. */
+/** The pace line the start-of-turn card shows from its first frame. */
 async function firstLabel(phone: Page, timeout: number): Promise<string> {
   const card = phone.getByTestId('fill-card');
   await card.waitFor({ timeout });
@@ -69,27 +44,53 @@ export function makeHungry(server: MuleServer, code: string, seat = 's1'): void 
   seeded.broadcast();
 }
 
-/** B-AC-9: a hungry player sees 2 of 5 Food and an orange bar at her devSeconds. Call as development starts after makeHungry. */
-export async function hungryPlayerSeesAShortOrangeBar(phone: Page, timeout = 3_000): Promise<void> {
-  const label = await firstLabel(phone, timeout);
-  check(label === '29 s of 50: short of Food, so less time', `B-AC-9: from its first frame the card states the hungry player's 29 s, got "${label}"`);
-  const shown = await cardShown(phone, 'warn');
-  check(shown.text.includes('You eat 2 Food of the 5 you need and fill up your time bar.'), `B-AC-9: the card says she ate 2 of the 5 she needs, got "${shown.text}"`);
-  check(Math.abs(shown.barWidth - (29 / DEVELOPMENT.fullSeconds) * 100) < 0.5, `B-AC-9: the bar fills to 29 s of 50, got ${shown.barWidth}%`);
-  check(shown.bar === shown.token, `B-AC-9: a hungry player's bar is the warn colour, bar ${shown.bar}, warn ${shown.token}`);
+/** What the engine says of the seat this month: the Food it ate and needs, the share it went without, and its pace in %. */
+function seatCondition(server: MuleServer, code: string, seat: string) {
+  const state = gameOf(server, code).state;
+  const p = state.players.find((q) => q.id === seat);
+  check(p, `seat ${seat} in the game`);
+  const need = needsOf(state, seat).food;
+  return { ate: Math.min(p.stock.food, need), need, missing: 1 - foodShare(state, seat), sick: p.sick, pace: Math.round(hungerPace(state, seat) * sickPace(state, seat) * 100) };
+}
+
+/** The condition tag on the seat's colonist in the store, or null when it wears none. */
+async function tagOn(phone: Page, seat: string): Promise<{ hunger: string | null; sick: string | null } | null> {
+  const tag = phone.getByTestId(`visitor-${seat}`).getByTestId(`condition-${seat}`);
+  if ((await tag.count()) === 0) return null;
+  return { hunger: await tag.getAttribute('data-hunger'), sick: await tag.getAttribute('data-sick') };
 }
 
 /**
- * B-AC-9 (negative case): a fed player's bar is full and holo-coloured, and the card never costs time:
- * a tap on the corral while it shows buys the MULE and ends the card. Call as development starts, with no MULE in tow.
+ * B-AC-9: a hungry player's start card says what she ate and, from its first frame, her pace at her hunger level;
+ * her colonist wears the hunger tag at that level. Call as development starts after makeHungry.
  */
-export async function fedPlayerFillsAFullHoloBar(phone: Page, timeout = 3_000): Promise<void> {
+export async function hungryPlayerSeesHerPace(phone: Page, server: MuleServer, code: string, timeout = 3_000, seat = 's1'): Promise<void> {
   const label = await firstLabel(phone, timeout);
-  check(label === `${DEVELOPMENT.fullSeconds} s: full time`, `B-AC-9: from its first frame the card states a fed player's full ${DEVELOPMENT.fullSeconds} s, got "${label}"`);
-  const shown = await cardShown(phone, 'holo');
-  check(/You eat \d+ Food and fill up your time bar/.test(shown.text) && !/you need/.test(shown.text), `B-AC-9: a fed player is told they ate and fill up, got "${shown.text}"`);
-  check(Math.abs(shown.barWidth - 100) < 0.5, `B-AC-9: a fed player's bar fills the track, got ${shown.barWidth}%`);
-  check(shown.bar === shown.token, `B-AC-9: a fed player's bar is the holo colour, bar ${shown.bar}, holo ${shown.token}`);
+  const c = seatCondition(server, code, seat);
+  const { hungryFrom, starvingFrom } = DEV_WALK.hungerLevels;
+  check(c.missing >= hungryFrom && c.missing < starvingFrom && !c.sick, `B-AC-9: makeHungry leaves ${seat} hungry and well, missing ${c.missing} of its Food, sick ${c.sick}`);
+  check(label === `Hungry: ${c.pace}% pace`, `B-AC-9: from its first frame the card states the hungry player's pace, "Hungry: ${c.pace}% pace", got "${label}"`);
+  const text = (await phone.getByTestId('fill-card').innerText()).replace(/\s+/g, ' ');
+  check(text.includes(`You eat ${c.ate} of the ${c.need} Food you need.`), `B-AC-9: the card says she ate ${c.ate} of the ${c.need} she needs, got "${text}"`);
+  const tag = await tagOn(phone, seat);
+  check(tag?.hunger === '2' && tag.sick === null, `B-AC-9: her colonist wears the hunger tag at level 2, hungry, got ${JSON.stringify(tag)}`);
+}
+
+/**
+ * B-AC-9 (negative case): a fed player is told she ate the Food she needs, and neither her card nor her colonist
+ * shows hunger; a sickness the seed rolled shows as the sick cross and its pace. The card never costs time: a tap on
+ * the corral while it shows buys the MULE and ends the card. Call as development starts, with no MULE in tow.
+ */
+export async function fedPlayerSeesNoHunger(phone: Page, server: MuleServer, code: string, timeout = 3_000, seat = 's1'): Promise<void> {
+  const label = await firstLabel(phone, timeout);
+  const c = seatCondition(server, code, seat);
+  check(c.missing === 0, `B-AC-9: ${seat} is fed this month, missing ${c.missing} of its Food`);
+  const want = c.sick ? `Sick: ${c.pace}% pace` : 'Fed: full pace';
+  check(label === want, `B-AC-9: from its first frame the card states a fed player's pace, "${want}", got "${label}"`);
+  const text = (await phone.getByTestId('fill-card').innerText()).replace(/\s+/g, ' ');
+  check(text.includes(`You eat the ${c.need} Food you need.`), `B-AC-9: a fed player is told she ate the ${c.need} Food she needs, got "${text}"`);
+  const tag = await tagOn(phone, seat);
+  check(c.sick ? tag?.hunger === '0' && tag.sick === 'true' : tag === null, `B-AC-9: a fed player's colonist wears ${c.sick ? 'only the sick cross' : 'no tag'}, got ${JSON.stringify(tag)}`);
 
   // A raw pointer tap at the corral's centre; the page notes whether the card was up when it landed.
   const corral = await phone.locator('[data-shop=corral]').boundingBox();

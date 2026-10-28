@@ -71,6 +71,16 @@ export interface PlayerView {
   ready: boolean;
   /** True once they went to the pub this development phase. */
   doneDeveloping: boolean;
+  /** How hunger and sickness slow this colonist, during development; null otherwise. Public: every screen shows it. */
+  condition: {
+    /** 0..1 of the month's Food held (engine foodShare). */
+    foodShare: number;
+    sick: boolean;
+    /** Why it is sick (engine playerEventReason): the air, its own pollution, or plain chance; null when well. */
+    sickBecause: 'air' | 'pollution' | 'chance' | null;
+    /** hunger × sickness, 1 is normal; species is not in it (engine pace() adds it). */
+    conditionPace: number;
+  } | null;
 }
 
 export interface MyView {
