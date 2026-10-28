@@ -78,7 +78,7 @@ import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import { createBrain, type BrainService } from './brain/index.js';
 import { colonistView, dueArrivals, placeName, walkTarget, type Colonist, type DevIntent } from './dev-walking.js';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
-import { myPoliticsView, officeNews, politicsView } from './politics-view.js';
+import { ceremonyNews, myPoliticsView, politicsView } from './politics-view.js';
 
 /**
  * The longest each phase lasts, in milliseconds, from the engine's PHASES.
@@ -652,7 +652,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /**
    * Steps the election every WALK.tickMs until it is over: the AI vote hands act
    * first, then the election steps, with the same dt; each office makes the news
-   * at its winner step. When it ends, planning proper opens, timed only when
+   * at its winner beat. When it ends, planning proper opens, timed only when
    * PHASES.planningMs is a number.
    */
   private scheduleElectionTick(last: number): void {
@@ -664,10 +664,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         // A stalled server loop must not skip a stage.
         const dt = Math.min(Math.max(0, now - last), WALK.tickMs * 3) / this.phaseScale;
         this.tickVoteHands(dt);
-        const before = state.politics!.election!.ceremony;
+        const before = state.politics!.election!.ceremony?.elapsedMs ?? -1;
         stepElection(state, dt);
-        const { ceremony, result } = state.politics!.election!;
-        if (ceremony?.step === 'winner' && (before?.step !== 'winner' || before.office !== ceremony.office)) this.addNews(officeNews(ceremony.office, result!, (id) => this.nameOf(id)));
+        for (const line of ceremonyNews(state, before, (id) => this.nameOf(id))) this.addNews(line);
         if (this.electionOpen()) this.scheduleElectionTick(now);
         else {
           this.startPhaseTimer('planning');
