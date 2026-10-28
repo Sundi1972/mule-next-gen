@@ -379,9 +379,9 @@ export interface PaceRow {
 
 /**
  * The TV's list: how fast each colonist walks this month, and why. In one column each row has room for the full name,
- * and can stand as the development roster.
+ * and can stand as the development roster. `wrapMark` lets a screen anchor something at a row's mark, such as the
+ * table chat's bubble on the TV.
  */
-/** `wrapMark` lets a screen anchor something at a row's mark, such as the table chat's bubble on the TV. */
 export function PaceList({ rows, rule, columns = 2, wrapMark = (_, mark) => mark }: { rows: PaceRow[]; rule: PaceRule; columns?: 1 | 2; wrapMark?: CreatureWrap }) {
   const wide = columns === 1;
   return (
