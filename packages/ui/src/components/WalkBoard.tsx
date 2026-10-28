@@ -207,7 +207,7 @@ export function WalkBoard({
             <div key={l.key} className={cx('absolute inset-x-0 border-t border-dashed opacity-80', l.tone)} style={{ top: `${pct(l.price)}%` }} data-testid={`limit-${l.key}`}>
               <span
                 data-num
-                className={cx('absolute right-0 z-20 flex -translate-y-1/2 flex-col items-end rounded-sm bg-void px-1 text-right font-mono font-bold leading-tight', tv ? 'text-base' : 'text-[9px]')}
+                className={cx('absolute right-0 z-20 flex -translate-y-1/2 flex-col items-end rounded-sm bg-void px-1 text-right font-mono font-bold leading-tight', tv ? 'text-base' : 'text-[10px]')}
                 style={{ width: gutter }}
               >
                 <span className="font-normal opacity-80">{l.who}</span>
@@ -362,7 +362,7 @@ function Walker({ w, left, top, size, tv, me, trading, wrap = (_, c) => c }: { w
           <span
             data-num
             data-testid={`units-${w.id}`}
-            className={cx('absolute top-full mt-0.5 whitespace-nowrap rounded-sm bg-void/90 px-1 font-mono font-bold leading-none text-ink', tv ? 'text-base' : 'text-[9px]')}
+            className={cx('absolute top-full mt-0.5 whitespace-nowrap rounded-sm bg-void/90 px-1 font-mono font-bold leading-none text-ink', tv ? 'text-base' : 'text-[10px]')}
           >
             {w.units}
             {w.surplus !== undefined && (
@@ -379,7 +379,7 @@ function Walker({ w, left, top, size, tv, me, trading, wrap = (_, c) => c }: { w
           seller ? 'border-rise/60 text-rise' : 'border-fall/60 text-fall',
         )}
       >
-        <span className={cx('font-normal text-ink-3', tv ? 'text-xs' : 'text-[8px]')}>{seller ? 'ASK' : 'BID'}</span>
+        <span className={cx('font-normal text-ink-3', tv ? 'text-xs' : 'text-[10px]')}>{seller ? 'ASK' : 'BID'}</span>
         {w.price}
       </span>
     </div>
