@@ -7,6 +7,7 @@ import {
   RAW_GOODS,
   rawOutputParts,
   runProduction,
+  type EventRow,
   type GameState,
   type SpecialField,
   type Species,
@@ -180,7 +181,8 @@ describe('RULE-6: cavern collapse', () => {
     Object.assign(state, { seed, month }, whatIf ? { whatIf: true } : {});
     const run = runProduction(state);
     return {
-      event: run.events.length > 0,
+      // A month has an event when an output event fired; a collapse is the cavern's own, not another event.
+      event: run.events.some((e) => e.key !== 'cavernCollapse'),
       caverns: caverns.map((at) => {
         const made = madeOn(run, state, state.tiles[at]!);
         return { made, produced: (made ?? 0) > 0, collapsed: state.tiles[at]!.special === undefined };
@@ -196,8 +198,9 @@ describe('RULE-6: cavern collapse', () => {
 
   // Thousands of production runs, to measure the rate; past vitest's 5 s default on a CI runner.
   it('T-AC-6: a cavern’s collapse is the same on replay, and comes about 6 times in 100', () => {
-    // About half the months have an event, one draw a month: volcanic ash at 0.5, every other production row at 0.
-    const rows = [...Object.values(EVENTS.colony), ...Object.values(EVENTS.player)].filter((row) => 'production' in row.phases);
+    // About half the months have an event, one draw a month: volcanic ash at 0.5, every other row production's start
+    // rolls at 0. A per-plot row, the cavern's own, keeps its odds.
+    const rows = [...Object.values(EVENTS.colony), ...Object.values(EVENTS.player)].filter((row: EventRow) => 'production' in row.phases && !row.perPlot);
     const saved = rows.map((row) => ({ ...row }));
     const reset = (row: object, fields: object) => {
       for (const key of Object.keys(row)) delete (row as Record<string, unknown>)[key];
