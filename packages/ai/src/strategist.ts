@@ -204,12 +204,22 @@ export function wantsPlot(plan: LandPlan, obs: GameState, index: number, sweep: 
 /**
  * What a plot is worth to the seat, in credits: the best gain it sees from
  * developing it (never below nothing) plus what the plot adds to the score.
- * The most the seat bids for it at a lot.
+ * The most the seat bids for it at a lot, within plotRoom.
  */
 export function plotValue(obs: GameState, mind: Mind, index: number): number {
   const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
   const best = Math.max(0, ...plotGains(obs, o, obs.tiles[index]!, mind).values());
   return Math.round(best + GAME.plotScore);
+}
+
+/**
+ * The most the seat pays for a plot at a lot and still has the price of a
+ * MULE for it and for each idle plot it already holds: land it can't
+ * develop earns nothing. Never below 0.
+ */
+export function plotRoom(obs: GameState, mind: Mind): number {
+  const idle = obs.tiles.filter((t) => t.owner === mind.me && !t.outfit).length;
+  return Math.max(0, Math.round(me(obs, mind).money - (idle + 1) * mulePriceFor(obs, mind.me)));
 }
 
 /**

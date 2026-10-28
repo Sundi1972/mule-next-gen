@@ -154,6 +154,7 @@ const PLAN_STATES = [
 const HUB_STATES: { id: string; title: string; desk: Desk; office: Office; election?: Election | 'done' }[] = [
   { id: 'hub', title: 'This month, the colony desk', desk: 'colony', office: 'none' },
   { id: 'hub-nominate', title: 'Election 1: who runs', desk: 'council', office: 'none', election: 'nominate' },
+  { id: 'hub-promise', title: 'Election 1: run for Governor, pick your promise', desk: 'council', office: 'none', election: 'promise' },
   { id: 'hub-council', title: 'Election 2: the secret ballot', desk: 'council', office: 'none' },
   { id: 'hub-talk', title: 'Talk: a whisper with a deal card', desk: 'talk', office: 'none' },
   { id: 'hub-market', title: 'Market: sell a plot or MULE', desk: 'market', office: 'none' },

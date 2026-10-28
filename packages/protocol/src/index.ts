@@ -90,6 +90,8 @@ export interface MyView {
   outfitCosts: Record<Outfit, number>;
   /** Free plots chosen for the geo drone this month. */
   droneOrder: { x: number; y: number }[];
+  /** True once this player has installed a MULE in this development turn, and until their next one starts. */
+  installedThisTurn: boolean;
 }
 
 /** A player on the auction board. */

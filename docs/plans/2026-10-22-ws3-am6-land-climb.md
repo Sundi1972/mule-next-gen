@@ -38,6 +38,7 @@
   The real code matches the emulation behind Heiko's decision on all 419 lots.
 - **WS1 signed off the sim before/after.** Seed 101's store-capital MISS is retired by the unlimited-store ruling, and every other change is noise or an improvement.
 - **Gates on 3243366, measured by WS3:** typecheck 0; tabletop 96, ui 8, engine 181, ai 14, web 81, server 65.
+- **DELIVERED.** Sub-PR #69 is in the lane (9f9521e), synced with trunk 48ccf5a at 26ab54e. Heiko said "Yes, once green", and lane PR #71 merged to trunk as a4e743b.
 
 ## The PR
 
@@ -107,6 +108,6 @@
 - [x] T-AC-8, B-AC-9 and B-AC-3's strengthened case are green and AC-named, and the RED commit comes first
 - [x] T-AC-9 measured: the probe meets its four bars, and WS1 has the sim before/after and has signed it off
 - [x] `walk.ts` and the goods auction are untouched, and their tests are green unchanged
-- [ ] `pnpm typecheck` · `pnpm test` · `pnpm --filter @mule/web e2e` · `tsx e2e/auction-steps.ts` are green (CI runs all of them)
+- [x] `pnpm typecheck` · `pnpm test` · `pnpm --filter @mule/web e2e` · `tsx e2e/auction-steps.ts` are green (CI runs all of them)
 - [x] A code review with a mutation sweep on lots.ts's new branches has come back clean
-- [ ] The PM has the sub-PR link and the measurements; the lane PR waits for Heiko's OK
+- [x] The PM has the sub-PR link and the measurements; the lane PR waits for Heiko's OK

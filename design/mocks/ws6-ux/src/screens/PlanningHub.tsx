@@ -315,10 +315,80 @@ function VoteWeights() {
   );
 }
 
-export type Election = 'nominate' | 'ballot';
+export type Election = 'nominate' | 'promise' | 'ballot';
+
+/** The colony's tax this month, for the promise picker's starting cap. */
+const TAX_NOW: number = 5;
+const TAX_MAX = 15;
+
+/** WS7 C12 / RULE-10 (Heiko: "Tax promises now"): a Governor candidate picks one; a Sheriff makes none until slice 4. */
+type Promise = { kind: 'cap'; n: number } | { kind: 'lower' } | { kind: 'hold' };
+const promiseText = (p: Promise) => (p.kind === 'cap' ? `Tax no higher than ${p.n}%` : p.kind === 'lower' ? 'Lower the tax' : 'Hold the tax');
+
+/**
+ * Running for Governor asks for a promise first: one of three, no free text. The cap starts at today's tax; "Lower"
+ * can't be promised at 0 %. Nothing is sent until "Run with this promise".
+ */
+function PromisePicker({ onRun, onCancel }: { onRun: (p: Promise) => void; onCancel: () => void }) {
+  const [kind, setKind] = useState<Promise['kind'] | null>(null);
+  const [n, setN] = useState(TAX_NOW);
+  const chosen: Promise | null = kind === 'cap' ? { kind, n } : kind ? { kind } : null;
+  const chip = (k: Promise['kind'], label: ReactNode, testid: string, disabled?: string) => (
+    <label
+      className={cx(
+        'flex min-h-11 cursor-pointer items-center gap-2 rounded-control border px-2 py-1 text-sm',
+        kind === k ? 'border-holo bg-holo-soft' : 'border-holo-line',
+        disabled && 'cursor-not-allowed opacity-50',
+      )}
+      data-testid={testid}
+    >
+      <input type="radio" name="promise" checked={kind === k} disabled={!!disabled} onChange={() => setKind(k)} className="accent-[var(--color-holo)]" />
+      <span className="flex min-w-0 flex-1 flex-col">
+        {label}
+        {disabled && <span className="text-[11px] text-ink-3">{disabled}</span>}
+      </span>
+    </label>
+  );
+  return (
+    <div className="flex flex-col gap-1.5 rounded-panel border border-holo bg-panel p-2" role="radiogroup" aria-label="Your promise as Governor" data-testid="promise-pick">
+      <span className="text-sm font-semibold">Your promise as Governor</span>
+      <span className="text-xs text-ink-2">Everyone sees it on the ballot and the TV. Tax today: {TAX_NOW}%.</span>
+      {chip(
+        'cap',
+        <span className="flex flex-wrap items-center gap-1.5">
+          Tax no higher than
+          <span className="inline-flex items-center rounded-control border border-holo-line" onClick={() => setKind('cap')}>
+            <button type="button" aria-label="Lower the cap" disabled={n <= 0} onClick={() => setN((x) => Math.max(0, x - 1))} className="grid size-9 place-items-center text-holo disabled:opacity-40" data-testid="promise-cap-minus">
+              −
+            </button>
+            <span data-num className="w-9 text-center font-mono font-bold" data-testid="promise-cap-value">
+              {n}%
+            </span>
+            <button type="button" aria-label="Raise the cap" disabled={n >= TAX_MAX} onClick={() => setN((x) => Math.min(TAX_MAX, x + 1))} className="grid size-9 place-items-center text-holo disabled:opacity-40" data-testid="promise-cap-plus">
+              +
+            </button>
+          </span>
+        </span>,
+        'promise-cap',
+      )}
+      {chip('lower', 'Lower the tax', 'promise-lower', TAX_NOW === 0 ? 'The tax is already 0 %.' : undefined)}
+      {chip('hold', 'Hold the tax', 'promise-hold')}
+      <div className="grid grid-cols-[1fr_auto] gap-1.5">
+        <Button size="md" disabled={!chosen} onClick={() => chosen && onRun(chosen)} data-testid="promise-run">
+          {chosen ? `Run, promising “${promiseText(chosen)}”` : 'Pick a promise to run'}
+        </Button>
+        <Button size="md" variant="ghost" onClick={onCancel} data-testid="promise-cancel">
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 function CouncilDesk({ election }: { election: Election }) {
-  const [running, setRunning] = useState<'governor' | 'sheriff' | null>('sheriff');
+  const [running, setRunning] = useState<'governor' | 'sheriff' | null>(election === 'promise' ? null : 'sheriff');
+  const [picking, setPicking] = useState(election === 'promise');
+  const [promise, setPromise] = useState<Promise | null>(null);
   const [gov, setGov] = useState<string | null>('kai');
   const [sheriff, setSheriff] = useState<string | null>(null);
   const [law, setLaw] = useState<'yes' | 'no' | null>(null);
@@ -331,7 +401,8 @@ function CouncilDesk({ election }: { election: Election }) {
           {c.id ? (
             <span className="flex flex-col">
               <Who id={c.id} />
-              <span className="text-xs text-ink-2">“{c.promise}”</span>
+              {/* A Sheriff makes no promise yet (slice 4): no line, not an empty quote. */}
+              {c.promise && <span className="text-xs text-ink-2" data-testid={`promise-${c.id}`}>“{c.promise}”</span>}
             </span>
           ) : (
             <span className="text-ink-2">Abstain</span>
@@ -343,28 +414,37 @@ function CouncilDesk({ election }: { election: Election }) {
   const voted = ['ossa', 'kai', 'brix'];
   return (
     <>
-      <Section title={election === 'nominate' ? 'Election · who runs' : 'Election · secret ballot'} badge={<Soon slice={1} />} testid="election">
+      <Section title={election !== 'ballot' ? 'Election · who runs' : 'Election · secret ballot'} badge={<Soon slice={1} />} testid="election">
         <span className="flex items-center justify-between rounded-control bg-holo-soft px-2 py-1 font-mono text-[10px] font-bold text-holo @min-[1100px]/shell:text-xs" data-testid="election-stage">
-          {election === 'nominate' ? '1 NOMINATE · 2 BALLOT · 3 REVEAL' : '1 NOMINATE ✓ · 2 BALLOT · 3 REVEAL'}
+          {election !== 'ballot' ? '1 NOMINATE · 2 BALLOT · 3 REVEAL' : '1 NOMINATE ✓ · 2 BALLOT · 3 REVEAL'}
           <span data-num>0:14</span>
         </span>
-        {election === 'nominate' ? (
+        {election !== 'ballot' ? (
           <>
             <div className="grid grid-cols-2 gap-1.5" data-testid="run">
               {/* Running for the other office switches your candidacy (WS7: one office per election). */}
-              <Button size="md" variant={running === 'governor' ? 'holo' : 'outline'} onClick={() => setRunning('governor')} data-testid="run-governor">
+              {/* Governor asks for a promise first; Sheriff stays one tap. */}
+              <Button size="md" variant={running === 'governor' ? 'holo' : 'outline'} onClick={() => setPicking(true)} data-testid="run-governor">
                 {running === 'sheriff' ? 'Run for Governor instead' : 'Run for Governor'}
               </Button>
-              <Button size="md" variant={running === 'sheriff' ? 'holo' : 'outline'} onClick={() => setRunning('sheriff')} data-testid="run-sheriff">
+              <Button size="md" variant={running === 'sheriff' ? 'holo' : 'outline'} onClick={() => (setRunning('sheriff'), setPromise(null), setPicking(false))} data-testid="run-sheriff">
                 {running === 'governor' ? 'Run for Sheriff instead' : 'Run for Sheriff'}
               </Button>
             </div>
             <span className="text-xs text-ink-3" data-testid="cannot-run">
               When you can't run, the button says why: “Candidates are closed” or “Two Governor terms in a row”.
             </span>
-            {running && (
-              <span className="flex items-center justify-between gap-2 text-xs text-ink-2 @min-[1100px]/shell:text-sm">
-                You run for {running === 'sheriff' ? 'Sheriff' : 'Governor'}; one office at a time.
+            {picking && (
+              <PromisePicker
+                onRun={(p) => (setRunning('governor'), setPromise(p), setPicking(false))}
+                onCancel={() => setPicking(false)}
+              />
+            )}
+            {running && !picking && (
+              <span className="flex items-center justify-between gap-2 text-xs text-ink-2 @min-[1100px]/shell:text-sm" data-testid="running">
+                {running === 'governor' && promise
+                  ? `You run for Governor, promising “${promiseText(promise)}”; one office at a time.`
+                  : `You run for ${running === 'sheriff' ? 'Sheriff' : 'Governor'}; one office at a time.`}
                 <button type="button" className="text-holo underline" onClick={() => setRunning(null)} data-testid="withdraw">
                   Withdraw
                 </button>
@@ -373,6 +453,11 @@ function CouncilDesk({ election }: { election: Election }) {
             <ul className="flex flex-col gap-1 text-sm" data-testid="candidates">
               <li>
                 Governor: <Who id="ossa" size={14} />, <Who id="kai" size={14} />
+                {running === 'governor' && (
+                  <>
+                    , <Who id="lena" size={14} />
+                  </>
+                )}
               </li>
               <li>
                 Sheriff: <Who id="brix" size={14} />
@@ -387,8 +472,8 @@ function CouncilDesk({ election }: { election: Election }) {
           </>
         ) : (
           <>
-            <Ballot title="Governor" cands={[{ id: 'ossa', promise: 'No land tax' }, { id: 'kai', promise: 'Cleanup squad from month 5' }]} pick={gov} onPick={setGov} />
-            <Ballot title="Sheriff" cands={[{ id: 'brix', promise: 'Guards on every factory' }, { id: 'lena', promise: 'I will catch the saboteur' }]} pick={sheriff} onPick={setSheriff} />
+            <Ballot title="Governor" cands={[{ id: 'ossa', promise: 'Tax no higher than 3%' }, { id: 'kai', promise: 'Lower the tax' }]} pick={gov} onPick={setGov} />
+            <Ballot title="Sheriff" cands={[{ id: 'brix', promise: '' }, { id: 'lena', promise: '' }]} pick={sheriff} onPick={setSheriff} />
             <span className="flex items-center gap-1.5 text-xs text-ink-2 @min-[1100px]/shell:text-sm" data-testid="voted">
               Voted: {voted.map((id) => <Who key={id} id={id} size={14} />)} · 3 of 4. Never shown: for whom.
             </span>
@@ -630,8 +715,8 @@ export function PlanningHub({
   const [tool, setTool] = useState<Tool>(startTool);
   const desks = DESKS.filter((d) => !d.office || d.office === office);
   const now: Now =
-    election === 'nominate'
-      ? { step: 1, of: 3, title: 'Run for an office, or press Done', detail: 'Election month: Governor and Sheriff. Then the secret ballot, then the result on every screen at once.' }
+    election === 'nominate' || election === 'promise'
+      ? { step: 1, of: 3, title: "Run for an office, or press I'm ready", detail: 'Election month: Governor and Sheriff. A Governor candidate promises something about the tax. Then the secret ballot, then the result on every screen at once.' }
       : election === 'ballot'
         ? { step: 2, of: 3, title: 'Cast your secret vote', detail: 'One vote per office, or abstain; your vote weighs 2. Then everything below is yours until you press Ready.' }
         : office === 'governor'
