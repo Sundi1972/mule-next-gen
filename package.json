@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "pnpm --parallel --filter @mule/server --filter @mule/web dev",
     "test": "pnpm -r test",
+    "test:full": "MULE_FULL=1 pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "sim": "pnpm --filter @mule/ai sim",
     "e2e": "pnpm --filter @mule/web e2e"

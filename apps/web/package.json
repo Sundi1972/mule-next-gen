@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "e2e": "vite build && tsx e2e/smoke.ts && tsx e2e/shell.ts && tsx e2e/zoom.ts && tsx e2e/lobby.ts && tsx e2e/specials.ts && tsx e2e/politics.ts",
+    "e2e": "vite build && pnpm run e2e:core && pnpm run e2e:regression",
+    "e2e:core": "tsx e2e/smoke.ts",
+    "e2e:regression": "tsx e2e/shell.ts && tsx e2e/zoom.ts && tsx e2e/lobby.ts && tsx e2e/specials.ts && tsx e2e/auction-steps.ts && tsx e2e/politics.ts",
     "screens": "vite build && tsx e2e/screens.ts"
   },
   "dependencies": {
