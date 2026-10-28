@@ -29,6 +29,9 @@ function inTheGrant(table = humans) {
   return { game, freePlots, ...fake };
 }
 
+/** The lit plot's tile index, read from the engine: a whole view on every millisecond would be slow. */
+const litPlotOf = (state: GameState) => state.grant!.order[state.grant!.step];
+
 describe('the land grant is one pass with no clock', () => {
   it('the land grant shows no countdown: phaseEndsAt is null on the phone and on the TV', () => {
     const { game } = inTheGrant();
@@ -101,12 +104,12 @@ describe('the land grant is one pass with no clock', () => {
       if (heikoDone) g.game.handle('s1', { type: 'ready' });
       const doneAt = g.ctx.now();
       const left = state.grant!.order.length - state.grant!.step;
-      const lit = new Set<string>();
-      const step = heikoDone ? PHASES.grantFastForwardMs : GRANT_TICK_MS;
-      for (let i = 0; i < 10_000 && state.phase === 'landGrant'; i++) {
-        const at = g.game.viewFor(null).lit;
-        if (at) lit.add(`${at.x},${at.y}`);
-        g.advance(step);
+      const lit = new Set<number>();
+      // One millisecond at a time, so the presses' timers fire in the order of their reaction times, as on a real clock.
+      for (let i = 0; i < 1_000_000 && state.phase === 'landGrant'; i++) {
+        const at = state.grant && litPlotOf(state);
+        if (at) lit.add(at);
+        g.advance(1);
       }
       const owned = Object.fromEntries(ais.map((id) => [id, state.tiles.flatMap((t, i) => (t.owner === id ? [i] : [])).sort((a, b) => a - b)]));
       return { owned, lasted: g.ctx.now() - doneAt, left, lit: lit.size };

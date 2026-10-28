@@ -202,6 +202,13 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private productionMs = 0;
   /** The AI players: strategist, decider and hands, keyed by seat id. */
   private readonly ai = new Map<string, AiSeat>();
+  /**
+   * The land grant's timers for the lit plot: the light's next move and the AI seats' pending presses, each press with
+   * its reaction time. Entering fast-forward cancels them and resolves the pending presses at once.
+   */
+  private grantTimers: { cancelTick: (() => void) | null; presses: { seat: AiSeat; ms: number; cancel: () => void }[] } = { cancelTick: null, presses: [] };
+  /** True once every human has used their claims or is done with land: the AI presses resolve at once. */
+  private fastForward = false;
   /** Each AI player's hand at the land auction, keyed by seat id. */
   private readonly lotHands = new Map<string, LotHand>();
   /** Each AI player's hand in politics: runs, votes and governs, keyed by seat id. */
@@ -275,6 +282,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         if (state.phase === 'landGrant') {
           grantPass(state, seatId);
           if (grantDone(state)) this.nextPhase();
+          else this.maybeFastForward();
           return;
         }
         this.ready.add(seatId);
@@ -286,6 +294,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       case 'claim':
         claimPlot(state, seatId, intent.x, intent.y);
         if (grantDone(state)) this.nextPhase();
+        else this.maybeFastForward();
         return;
       case 'buyMule':
       case 'outfit':
@@ -593,6 +602,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
     if (state.phase === 'planning') this.startPlanning();
     if (state.phase === 'landGrant') {
+      this.fastForward = false;
+      this.grantTimers = { cancelTick: null, presses: [] };
       this.aiGrantBids();
       this.scheduleGrantTick();
     }
@@ -668,24 +679,81 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     for (const [id, hand] of this.voteHands) hand.tick(state, dt, (action) => this.aiAct(id, action));
   }
 
-  /** The land grant's light moves on every tick; each new plot gets the AI players' bids. */
+  /**
+   * The land grant's light moves on every tick; each new plot gets the AI players' bids. In fast-forward it moves on
+   * after PHASES.grantFastForwardMs, and the bids resolve at once.
+   */
   private scheduleGrantTick(): void {
     const state = this.requireState();
-    this.cancels.push(
-      this.ctx.schedule(GRANT_TICK_MS, () => {
-        if (state.phase !== 'landGrant') return;
-        advanceGrant(state);
-        // An AI seat that wants nothing still ahead of the light presses Done with land, as a phone's Ready.
-        for (const seat of this.ai.values()) if (seat.passesGrant(state)) this.aiAct(seat.id, { type: 'done', done: true });
-        // The pass ends when the last plot's tick does, so the light never comes back round to the first.
-        if (grantDone(state)) this.nextPhase();
-        else {
-          this.aiGrantBids();
-          this.scheduleGrantTick();
-        }
-        this.ctx.changed();
-      }),
-    );
+    const cancel = this.ctx.schedule(this.fastForward ? PHASES.grantFastForwardMs : GRANT_TICK_MS, () => {
+      if (state.phase !== 'landGrant') return;
+      advanceGrant(state);
+      // An AI seat that wants nothing still ahead of the light presses Done with land, as a phone's Ready.
+      for (const seat of this.ai.values()) if (seat.passesGrant(state)) this.aiAct(seat.id, { type: 'done', done: true });
+      // The pass ends when the last plot's tick does, so the light never comes back round to the first.
+      if (grantDone(state)) this.nextPhase();
+      else if (this.fastForward || this.humansDoneWithLand()) {
+        this.fastForward = true;
+        this.resolveGrantBids(this.litBids());
+      } else {
+        this.aiGrantBids();
+        this.scheduleGrantTick();
+      }
+      this.ctx.changed();
+    });
+    this.grantTimers.cancelTick = cancel;
+    this.cancels.push(cancel);
+  }
+
+  /** Every human seat has used its claims or is done with land. A dropped phone is neither. */
+  private humansDoneWithLand(): boolean {
+    const state = this.requireState();
+    return this.seats.every((s) => {
+      if (s.isAi) return true;
+      const p = state.players.find((q) => q.id === s.id);
+      return !!p && (p.doneWithLand || p.claimsThisGrant >= GAME.claimsPerGrant);
+    });
+  }
+
+  /**
+   * Called after a human's claim or Ready in the land grant: once every human is done, the grant fast-forwards. The
+   * lit plot's pending AI presses resolve at once, in the order their timers would have fired, and the light moves on
+   * after the display step; no press timer is left to fire.
+   */
+  private maybeFastForward(): void {
+    if (this.fastForward || !this.humansDoneWithLand()) return;
+    this.fastForward = true;
+    const pending = this.grantTimers.presses.map(({ seat, ms, cancel }) => {
+      cancel();
+      return { seat, ms };
+    });
+    this.grantTimers.cancelTick?.();
+    this.resolveGrantBids(pending);
+  }
+
+  /** The AI seats' presses on the plot just lit: each seat that wants it, with its reaction time inside the tick. */
+  private litBids(): { seat: AiSeat; ms: number }[] {
+    const state = this.requireState();
+    const bids: { seat: AiSeat; ms: number }[] = [];
+    for (const seat of this.ai.values()) {
+      const ms = seat.onLit(state);
+      if (ms !== null && ms < GRANT_TICK_MS) bids.push({ seat, ms });
+    }
+    return bids;
+  }
+
+  /**
+   * Fast-forward: the presses on the lit plot apply at once, quickest first (seat order on a tie, as their timers
+   * would fire), and the first claim that lands wins, as in the sim. Then the light moves on after the display step.
+   */
+  private resolveGrantBids(bids: { seat: AiSeat; ms: number }[]): void {
+    const state = this.requireState();
+    this.grantTimers = { cancelTick: null, presses: [] };
+    const lit = litPlot(state);
+    if (lit) for (const { seat } of [...bids].sort((a, b) => a.ms - b.ms)) if (this.aiAct(seat.id, { type: 'claim', x: lit.x, y: lit.y })) break;
+    if (grantDone(state)) this.nextPhase();
+    else this.scheduleGrantTick();
+    this.ctx.changed();
   }
 
   /**
@@ -699,18 +767,23 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const lit = litPlot(state);
     if (!lit) return;
     const step = state.grant?.step;
-    for (const seat of this.ai.values()) {
-      const ms = seat.onLit(state);
-      if (ms === null || ms >= GRANT_TICK_MS) continue;
-      this.cancels.push(
-        this.ctx.schedule(ms, () => {
+    const presses: { seat: AiSeat; ms: number; cancel: () => void }[] = [];
+    for (const { seat, ms } of this.litBids()) {
+      const press = {
+        seat,
+        ms,
+        cancel: this.ctx.schedule(ms, () => {
+          presses.splice(presses.indexOf(press), 1);
           if (state.phase !== 'landGrant' || state.grant?.step !== step) return;
           if (!this.aiAct(seat.id, { type: 'claim', x: lit.x, y: lit.y })) return;
           if (grantDone(state)) this.nextPhase();
           this.ctx.changed();
         }),
-      );
+      };
+      presses.push(press);
+      this.cancels.push(press.cancel);
     }
+    this.grantTimers.presses = presses;
   }
 
   /** One clock for every seat, DEVELOPMENT.fullSeconds long: hunger and sickness slow the walk, never the clock. */
