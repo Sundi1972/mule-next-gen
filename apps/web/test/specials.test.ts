@@ -48,10 +48,11 @@ describe('B-AC-9: the special-field badge on the map (variant A)', () => {
 
   it("draws the owner's mark above every badge, so a neighbour's overhang never covers it", () => {
     const html = map();
-    const mark = html.match(/<span role="img" data-slot="0"[^>]*>/)?.[0];
-    expect(mark).toBeDefined();
+    // The mark's layer is the one its holder, the owner's tab, takes: the opening tag right before the mark's.
+    const holder = html.match(/(<[a-z]+[^>]*>)<span role="img" data-slot="0"/)?.[1] ?? '';
+    expect(holder).toContain('data-testid="owner-0-1"');
     const z = (tagHtml: string) => Number(tagHtml.match(/z-\[(\d+)\]/)?.[1] ?? 0);
-    expect(z(mark!)).toBeGreaterThan(z(tag(html, 'special-glyph-0-0')!));
+    expect(z(holder)).toBeGreaterThan(z(tag(html, 'special-glyph-0-0')!));
   });
 
   it('keeps its layers inside the map: the root isolates, so a badge never paints over what sits on top of the map', () => {

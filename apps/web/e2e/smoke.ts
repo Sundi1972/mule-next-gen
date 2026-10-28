@@ -13,7 +13,7 @@ import { readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
 import { fedPlayerFillsAFullHoloBar, hungryPlayerSeesAShortOrangeBar, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
 import { specialFieldsShowTheirGlyphs } from './special-steps';
-import { doneThroughTheElection, doubleTapZoomsToYourLand, moveDialogOpensInProduction, moveDialogOutlivedThePhase, noZoomBeforeYourFirstPlot, thePhonePicksRose, theSeatMovesToAnotherDevice, theTvDrawsRose, watchIntents, zoomButtonOnceYouOwnAPlot } from './table-steps';
+import { doneThroughTheElection, doubleTapZoomsToYourLand, moveDialogOpensInProduction, moveDialogOutlivedThePhase, noZoomBeforeYourFirstPlot, thePhonePicksRose, thePhoneShowsItsSelectedPlot, theSeatMovesToAnotherDevice, theTvDrawsRose, theTvShowsWhoOwnsEachPlot, watchIntents, zoomButtonOnceYouOwnAPlot } from './table-steps';
 
 /** Loaded by a path held in a variable, so tsc never resolves a file that may not exist yet. */
 async function loadAuctionSteps(): Promise<AuctionSteps> {
@@ -137,8 +137,11 @@ try {
   await outfittersOpenWithAnEmptyMule(phone);
   console.log(`store hall fills the stage: ${await theLedMuleLightsUp(phone, server, code)}`);
   await checkOwnsAPlot(phone);
+  // B-AC-9 (WS4, plot look A): with a plot of its own selected and its MULE installed, then the TV's map.
+  console.log(`plots, phone: ${await thePhoneShowsItsSelectedPlot(ctx)}`);
   console.log(`zoom: ${await doubleTapZoomsToYourLand(ctx, phoneIntents)}`);
   await theTvDrawsRose(ctx, 'development');
+  console.log(`plots, TV: ${await theTvShowsWhoOwnsEachPlot(ctx)}`);
   await goToThePub(phone);
   // B-AC-6 and B-AC-8, from what both screens drew of month 1's show.
   await phone.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });

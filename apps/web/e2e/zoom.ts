@@ -1,10 +1,13 @@
-/** Local only, never in CI (lean CI rule 6, a wall-clock check): T-AC-9, one tap on the development map selects at once. */
+/**
+ * Local only, never in CI (lean CI rule 6, a wall-clock check): T-AC-9, one tap on the development map selects at once.
+ * Then B-AC-9 (WS4, plot look A) on the zoomed phone: the plot's marks keep their shares of the zoomed plot.
+ */
 import { mapSize } from '@mule/engine';
 import type { Locator, Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
 import { check, claimAPlot, launch, PHONE, startServer } from './harness';
 import { readyThroughTheElection } from './politics-steps';
-import { watchIntents } from './table-steps';
+import { checkPlotLook, watchIntents, type Plot } from './table-steps';
 
 const PHASE_SCALE = 0.5;
 const within = (ms: number) => ms * PHASE_SCALE + 3_000;
@@ -47,6 +50,7 @@ try {
   const whole = await widths(dev.getByRole('button', { name: OWN }));
   check(whole.length > 0, 'T-AC-9: development shows the plot claimed');
   await checkASingleTapSelectsAtOnce(phone, dev, whole, intents);
+  console.log(`plots, zoomed: ${await checkZoomedPlotLook(phone, dev)}`);
 
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
   console.log(`e2e zoom: ok (seed ${SEED})`);
@@ -92,6 +96,37 @@ async function checkASingleTapSelectsAtOnce(phone: Page, dev: Locator, whole: nu
   check(intents() === sent, `T-AC-9: a single tap sends no intent, sent ${intents() - sent}`);
   const now = await widths(dev.getByRole('button', { name: OWN }));
   check(now.every((w, i) => Math.abs(w - whole[i]!) < 0.5), `T-AC-9: a single tap doesn't zoom, plots ${whole.join(', ')} → ${now.join(', ')}`);
+}
+
+/**
+ * B-AC-9 (WS4, plot look A) on the zoomed phone: a double-tap on your plot zooms to your land and selects it, and its
+ * marks are the same shares of the zoomed plot on screen as on the whole map, not scaled twice. Again after a store
+ * trip, which mounts the map already zoomed.
+ */
+async function checkZoomedPlotLook(phone: Page, dev: Locator): Promise<string> {
+  const labels = await plots(dev).evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''));
+  const index = labels.findIndex((label) => OWN.test(label));
+  check(index >= 0, 'B-AC-9 (WS4, plot look A, zoomed phone): the phone owns a plot to double-tap');
+  const target: Plot = { x: index % MAP_W, y: Math.floor(index / MAP_W) };
+  const box = await plots(dev).nth(index).boundingBox({ timeout: 2_000 });
+  check(box, 'B-AC-9 (WS4, plot look A, zoomed phone): the plot to double-tap is on screen');
+  await phone.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+  await phone.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+  await zoomedIn(dev);
+  const zoomed = await checkPlotLook(dev.getByTestId('dev-map'), 'zoomed phone', { installed: false, selected: target });
+
+  await dev.getByRole('button', { name: 'Store', exact: true }).tap({ timeout: 2_000 });
+  await dev.getByRole('button', { name: 'Walk out to the map' }).tap({ timeout: 2_000 });
+  await zoomedIn(dev);
+  const mounted = await checkPlotLook(dev.getByTestId('dev-map'), 'zoomed phone, mounted zoomed after a store trip', { installed: false, selected: target });
+  return `${zoomed}. ${mounted}`;
+}
+
+/** Waits for the map to show zoomed and finish easing in. */
+async function zoomedIn(dev: Locator): Promise<void> {
+  const map = dev.locator('[data-testid=map][data-zoomed=yes]');
+  await map.waitFor({ timeout: 2_000 });
+  await map.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)), undefined, { timeout: 2_000 });
 }
 
 /** Every plot on the map, row by row: each is labelled with its terrain; player marks are images. */
