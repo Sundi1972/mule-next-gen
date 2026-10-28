@@ -63,7 +63,10 @@
 - Each trim kills the same mutants as before.
 - WS3's Tier 1 unit time: about 15 s → 7.5 s locally.
 - auction-steps.ts stays one Tier 2 game.
-- Owed: trim auction-steps.ts:439's three declare-text alternatives once WS4's FU-17 (#96) is on trunk.
+- #101 merged to trunk at 7fe5d0e (Heiko: "Yes, merge").
+- Owed:
+  - trim auction-steps.ts:439's three declare-text alternatives once WS4's FU-17 (#96) is on trunk;
+  - #107 (the `PHASES` block and the `literal-ok` markers) is in the lane at fd9a556 and goes to trunk with the WS6-C13 batch.
 
 ## PR-A: engine and server (`ws3-fu-a` from `ws3-auctions`)
 

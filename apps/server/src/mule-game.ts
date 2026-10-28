@@ -35,6 +35,7 @@ import {
   orderGeoDrone,
   outfitCostFor,
   outfitMule,
+  PHASES,
   RuleError,
   runFor,
   score,
@@ -74,19 +75,17 @@ import { boardRange, landAuctionView, listingView, lotNews } from './land-auctio
 import { electionNews, myPoliticsView, politicsView, resultShown } from './politics-view.js';
 
 /**
- * The longest each phase lasts, in milliseconds. Phases also end early when
- * every connected player is ready; the land grant ends when the claims are
- * used, development when everyone is out of time or at the pub. The auction
- * has no fixed length: it runs good by good on its own clocks (WALK in the
- * engine's config), stepped by the server every WALK.tickMs. The land
- * auction runs the same way, lot by lot on its own clocks (LOTS).
+ * The longest each phase lasts, in milliseconds, from the engine's PHASES. The
+ * auction has no entry: it runs good by good on its own clocks (WALK), stepped
+ * by the server every WALK.tickMs. The land auction runs the same way, lot by
+ * lot on its own clocks (LOTS).
  */
 export const PHASE_MS: Record<Exclude<Phase, 'gameOver' | 'auction' | 'landAuction'>, number> = {
-  planning: 45_000,
-  landGrant: 60_000,
+  planning: PHASES.planningMs,
+  landGrant: PHASES.landGrantMs,
   development: DEVELOPMENT.fullSeconds * 1_000,
-  production: 15_000,
-  upkeep: 8_000,
+  production: PHASES.productionMs,
+  upkeep: PHASES.upkeepMs,
 };
 
 /** How long each free plot stays lit in the land grant. */
