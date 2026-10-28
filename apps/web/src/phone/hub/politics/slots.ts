@@ -5,7 +5,7 @@ import { CouncilDesk } from './Council';
 import { ballotComplete, contested, ElectionDay, ElectionDayRail } from './ElectionDay';
 import { GovernorDesk } from './Governor';
 import { Offices } from './Offices';
-import { listNames, namer, officeNames, promiseWords, termEnd, youPromised } from './words';
+import { listNames, namer, officeNames, promiseBase, promiseWords, termEnd, youPromised } from './words';
 
 /* The politics entries in HUB_SLOTS (../today.tsx). Each is drawn only while the table plays politics. */
 
@@ -111,7 +111,7 @@ export function electionNow({ view, self }: HubSeat): Now | null {
       return { step: 3, of: 3, title: 'The ballot is closed', detail: 'The reveal starts on the TV and every phone.' };
     case 'over': {
       if (politics.governor !== self.id || !politics.term) return null;
-      const promise = politics.promise ? ` ${youPromised(politics.promise, politics.tax.start)}` : '';
+      const promise = politics.promise ? ` ${youPromised(politics.promise, promiseBase(politics))}` : '';
       return { title: 'Set the sales tax', detail: `Then plan your month. You are the new Governor, until month ${termEnd(politics.next, view.maxMonths)}.${promise}` };
     }
   }

@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { fmt } from '../../../game/derive';
 import { useClient } from '../../../net/react';
 import { usePhoneGame } from '../../game';
-import { promiseKept, promisedWords } from './words';
+import { promiseBase, promiseKept, promisedWords } from './words';
 
 /** The Governor's desk: the sales tax, within the bounds the server gives for this month, with the promise in view (E-7). */
 export function GovernorDesk() {
@@ -27,7 +27,7 @@ function SalesTax({ politics }: { politics: PoliticsView }) {
   const [tax, setTax] = useState(percent);
   const [sent, setSent] = useState<number | null>(null);
   const promise = politics.promise;
-  const breaks = promise !== null && !promiseKept(promise, politics.tax, tax);
+  const breaks = promise !== null && !promiseKept(promise, politics, tax);
   const state = setState(tax, sent, politics.tax);
   const done = state === 'done';
   return (
@@ -36,7 +36,7 @@ function SalesTax({ politics }: { politics: PoliticsView }) {
         <span className="label-caps mr-1.5 text-[10px]! @min-[1100px]/shell:text-xs!">Sales tax</span>
         {promise && (
           <>
-            You promised: <strong className="font-semibold">{promisedWords(promise, start)}</strong>
+            You promised: <strong className="font-semibold">{promisedWords(promise, promiseBase(politics))}</strong>
           </>
         )}
       </p>

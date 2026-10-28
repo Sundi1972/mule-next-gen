@@ -639,8 +639,8 @@ describe("the new Governor's promise (C68, E-7)", () => {
     ['hold, kept', HOLD, 5, 5, 5, 'Governor: Lena, until month 6 · promised keep it at 5% · tax 5%, kept · Next election: month 7'],
     ['lowered from 5% in month 4, still kept in month 5', LOWER, 4, 4, 5, 'Governor: Lena, until month 6 · promised lower it · tax 4%, kept · Next election: month 7', 5],
     ['raised from 5% in month 4, still broken in month 5', HOLD, 7, 7, 5, 'Governor: Lena, until month 6 · promised keep it at 5% · tax 7%, promise broken · Next election: month 7', 5],
-  ])("T-AC-70: every phone's offices line keeps the Governor's promise beside the tax, kept or broken (%s)", (_, promise, percent, start, month, line, from = null) => {
-    expect(textOf(onPhone(term(promise, percent, start, month, from), OfficesLine), 'roadmap-offices')).toBe(line);
+  ])("T-AC-70: every phone's offices line keeps the Governor's promise beside the tax, kept or broken (%s)", (_, promise, percent, start, month, line, from) => {
+    expect(textOf(onPhone(term(promise, percent, start, month, from ?? null), OfficesLine), 'roadmap-offices')).toBe(line);
   });
 
   it("T-AC-70: an appointed Governor made no promise: the line has no promise part", () => {

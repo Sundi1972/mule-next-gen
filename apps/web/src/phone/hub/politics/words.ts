@@ -43,10 +43,15 @@ export function youPromised(p: TaxPromise, tax: number): string {
   return `You promised ${p.kind === 'cap' ? '' : 'to '}${promisedWords(p, tax)}.`;
 }
 
-/** Whether the tax keeps the Governor's promise (C68): at most a cap, under the month's start for lower, at it for hold. */
-export function promiseKept(p: TaxPromise, tax: PoliticsView['tax'], percent = tax.percent): boolean {
+/** The tax a Governor's lower or hold is judged against: the tax when the term began, else the month's start. */
+export function promiseBase(politics: Pick<PoliticsView, 'tax' | 'promiseFrom'>): number {
+  return politics.promiseFrom ?? politics.tax.start;
+}
+
+/** Whether the tax keeps the Governor's promise (C68): at most a cap, under the term's start for lower, at it for hold. */
+export function promiseKept(p: TaxPromise, politics: Pick<PoliticsView, 'tax' | 'promiseFrom'>, percent = politics.tax.percent): boolean {
   if (p.kind === 'cap') return percent <= p.percent;
-  return p.kind === 'lower' ? percent < tax.start : percent === tax.start;
+  return p.kind === 'lower' ? percent < promiseBase(politics) : percent === promiseBase(politics);
 }
 
 /** A player's name by id, from the view's players. */
