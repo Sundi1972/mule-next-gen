@@ -102,6 +102,23 @@ export function EventRailTail({ me, current }: { me: string; current: EventSegme
 }
 
 /**
+ * With a TV in the room, the rail beside the phone's map, on the TV's clock: the light card, never the weather. The
+ * card names the event as it is announced and buzzes, says what it did to you as it settles, and the last card
+ * stays up after the last event, so the phone still says what happened to you.
+ */
+export function EventTvPhoneRail({ me }: { me: string }) {
+  const { s, t } = useShow();
+  const { seg: now, stage } = eventStageAt(s, t);
+  const seg = now ?? (stage === 'outro' ? (s.segments.at(-1) ?? null) : null);
+  return (
+    <>
+      {seg ? <EventPhoneCard seg={seg} me={me} at={t >= seg.settleAt - 0.2 ? 'you' : 'news'} buzz={t - seg.announceAt < 1.2} /> : <EventWaiting />}
+      <EventRailTail me={me} current={seg} />
+    </>
+  );
+}
+
+/**
  * With no TV in the room, the rail beside the phone's own show: what is playing, then what it did to you, the skip
  * hint (when the map can be tapped), and the phase's earlier events.
  */

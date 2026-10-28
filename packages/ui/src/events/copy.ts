@@ -38,6 +38,19 @@ export function introLine(count: number, phase: ShowPhase): string {
 /** A segment's title: its event's. */
 export const segTitle = (seg: EventSegment) => seg.events[0]!.title;
 
+/** What one event did, for the TV's log: "−11 Energy on 6 plants", "Lena: −4 Food on 2 farms". */
+export function eventSummary(ev: ShowEventView, cast: ShowCast): string {
+  const h = ev.hits[0];
+  if (!h) return '';
+  const total = ev.hits.reduce((n, p) => n + p.delta, 0);
+  const good = cast.goodAt(h.x, h.y);
+  const player = cast.playerOf(ev);
+  return `${player ? `${cast.name(player)}: ` : ''}${signed(total)} ${good ? GOOD_NAME[good] : ''} on ${plots(good, ev.hits.length)}`;
+}
+
+/** The whole segment's effect, for the TV's log. */
+export const eventSegmentSummary = (seg: EventSegment, cast: ShowCast) => seg.events.map((e) => eventSummary(e, cast)).join(' · ');
+
 /** The phone's second line when an event hit you: what it means, in the event's own words. */
 const YOU: Partial<Record<ShowEventKey, (ev: ShowEventView) => string>> = {
   wildfire: () => 'One farm burned out; the farms joined to it make 1 less. This month only.',

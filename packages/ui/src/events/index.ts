@@ -23,5 +23,5 @@ export { EventShow, eventCast, type EventShowProps, type ShowCast } from './fram
 export { EventLivingMap, type EventLivingMapProps } from './map';
 export { useEventLivingView } from './living';
 export { EventGlyph, EVENT_ACCENT, EventSignBadge, EventDeltaChip, EventBuzz } from './glyphs';
-export { EventPhoneCard, EventRailTail, EventWaiting, EventNowPlaying, EventSoloRail } from './phone';
-export { eventMissLine, eventSegLabel, eventWhoLine, eventYouSummary, type EventYouSummary } from './copy';
+export { EventPhoneCard, EventRailTail, EventWaiting, EventNowPlaying, EventSoloRail, EventTvPhoneRail } from './phone';
+export { eventMissLine, eventSegLabel, eventSegmentSummary, eventSummary, eventWhoLine, eventYouSummary, type EventYouSummary } from './copy';
