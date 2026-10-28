@@ -260,6 +260,12 @@ Code-only; no existing state to reach.
   implied ~2.0; almost all of the excess is sickness (1.79 of the 2.50). Not a blocker: Toxic never happens in
   today's AI games. Mitigation: retune in wave-1 tuning once colonies can reach Toxic air, by lowering
   `EVENTS.player.sickness.air.toxic`, Heiko's call.
+- **R-4 · "Last month" in a phase after production (wave 2).** `events.ts`'s influences read last month as the
+  newest report, `state.history.at(-1)`, as sickness always has. That is right for development and production, but
+  production files this month's report, so a wave-2 row rolled in auction or upkeep would read this month's as "last
+  month". Wave 1 has no such row. Mitigation: the first wave-2 row after production reads the newest report with
+  `month < state.month`, and moves T-AC-24's fixture (which files a month-1 report while the state is in month 1)
+  with it. Found at Task 3's review, 28 Oct.
 
 ## §8 · Amendments `[review-only]`
 

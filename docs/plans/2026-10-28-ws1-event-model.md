@@ -75,8 +75,8 @@ PR-2 is a named edit in WS5's file and block, with WS5 as its reviewer.
 - `may_edit`: `packages/engine/src/{events,production}.ts`, the `EVENTS` block of `packages/engine/src/config.ts`,
   `packages/engine/test/events.test.ts`, `packages/ai/src/sim.ts` (report lines only, not the checks),
   `packages/ai/test/balance.test.ts` (T-AC-7's forcing only), `docs/specs/2026-10-21-ws1-events.md` (its amendment),
-  this spec and this plan, and `packages/engine/test/config-guard.test.ts` (the PENDING list only: Task 6 takes
-  `events.ts` and `production.ts` off it).
+  this spec and this plan, and `packages/engine/test/config-guard.test.ts` (the PENDING list only: Task 3's fix takes
+  `events.ts` off it, Task 6 `production.ts`).
 - Named edit, WS3 reviews: `packages/engine/src/types.ts::MonthEvent` (`phase`).
 - `must_not_edit`: `packages/engine/src/game.ts` (WS3's; wave 1 needs no edit there), `packages/engine/src/specials.ts`
   and the `EFFECT` block (WS5's, PR-2's named edit), `apps/server/**` and `apps/web/**` (WS3's view and WS6's screens,
@@ -157,6 +157,12 @@ reviews the types.ts hunk.
       0.5%; bumper harvest poorest 3%, richest 0.5%; wildfire richest during a drought 5.5%; sickness clean with 5
       points 18%; Collapse with 20 points 93→90%; a forced row summing below 0 → 0; a phase the row doesn't list → 0.
       Stub `eventChance` with `throw new Error('NotImplemented: eventChance')`.
+      Amended at Task 3's review (28 Oct): the rows are test-local `EventRow`s shaped like the catalogue's, with these
+      same values and expected literals, so a retune in config never turns EM-T-AC-1 red (G-1: a retune is one row
+      edit; no change detector). Three more rows: a tie for the poorest goes to the first seat; a wildfire-like row
+      the month after a drought (lastMonth only); a flood-like row two months after a drought reads nothing. The real
+      rows' match to the catalogue is a review check; `satisfies EventRow` makes a misspelt row field a type error.
+      `events.ts` comes off the guard's PENDING list in this task's fix (four markers), so HC-1 is enforced from here.
 - [ ] **Step 3: Run it; expect FAIL** with `NotImplemented: eventChance`.
 - [ ] **Step 4: Implement C1's chance** per RULE-1. The ranks read cash plus land at `GAME.plotScore` a plot; a tie goes to
       the first in seat order. Sickness's `playerEventChance` reads the same function.
@@ -208,9 +214,12 @@ reviews the types.ts hunk.
       event, in order. Remove `planEvent`, `EVENTS.chance` and `EVENTS.weights`. Delete the events spec's two `T-AC-2`
       tests: never twice in a row is superseded, and the what-if case is EM-T-AC-2's. Re-force its `T-AC-3` test (each
       key, one at a time) and the `T-AC-7` outlook test in balance.test.ts through the rows (all at 1 against all at
-      0), with the assertions unchanged (HC-4 pin). Take `events.ts` and `production.ts` off the guard's PENDING list:
-      with `planEvent` gone, each remaining literal moves into `EVENTS` or is marked `// literal-ok: <reason>` (the
-      balance plan's PENDING clean-up, 28 Oct, left these two to this task).
+      0), with the assertions unchanged (HC-4 pin). Take `production.ts` off the guard's PENDING list: each literal
+      moves into a config block or is marked `// literal-ok: <reason>` (the balance plan's PENDING clean-up, 28 Oct,
+      left it to this task; `events.ts` came off in Task 3's fix). Rewrite the top-of-`EVENTS` docstring, which still
+      describes planEvent's one event a month. Make `excludes` and every row's `follows` keys name real rows: the
+      EM-T-AC-3 test that first reads `excludes` also asserts each excludes member and each follows key is a key of
+      `EVENTS.colony` or `EVENTS.player` (a misspelt key would otherwise never fire).
 - [ ] **Step 4: Run `pnpm typecheck && pnpm test`; expect exit 0.** **Step 5: Commit** red then green.
 
 ### Task 7: The month report and the sim count every event — C5
