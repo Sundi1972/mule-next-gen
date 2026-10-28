@@ -188,6 +188,12 @@ describe('RULE-6: cavern collapse', () => {
     };
   }
 
+  /**
+   * Seeds the rate is measured on, 10 months each: 200 in CI, 400 with MULE_FULL=1. At 200, each event bucket holds
+   * about 1,700 mined caverns, so its ±30% band still reaches over 3 standard deviations either side of 6%.
+   */
+  const RATE_SEEDS = process.env.MULE_FULL === '1' ? 400 : 200;
+
   // Thousands of production runs, to measure the rate; past vitest's 5 s default on a CI runner.
   it('T-AC-6: a cavern’s collapse is the same on replay, and comes about 6 times in 100', () => {
     const { base, caverns } = cavernGame();
@@ -197,7 +203,7 @@ describe('RULE-6: cavern collapse', () => {
     const byEvent = { with: { produced: 0, collapsed: 0 }, without: { produced: 0, collapsed: 0 } };
     // Months where both caverns produced and only one collapsed.
     let apart = 0;
-    for (let seed = 1; seed <= 400; seed++) {
+    for (let seed = 1; seed <= RATE_SEEDS; seed++) {
       for (let month = 1; month <= 10; month++) {
         const first = produceAt(base, caverns, seed, month);
         expect(produceAt(base, caverns, seed, month), `seed ${seed}, month ${month}`).toEqual(first);
@@ -223,13 +229,14 @@ describe('RULE-6: cavern collapse', () => {
         }
       }
     }
-    expect(produced).toBeGreaterThan(6_000);
+    // The sample is big enough: over 15 mined caverns a seed (6,000 at 400 seeds), over 5 a seed in each bucket below.
+    expect(produced).toBeGreaterThan(15 * RATE_SEEDS);
     const rate = collapsed / produced;
     expect(rate).toBeGreaterThan(0.06 * 0.7);
     expect(rate).toBeLessThan(0.06 * 1.3);
     // The collapse draw is apart from the event draw, so it comes as often in a month with an event as in one without.
     for (const [when, { produced: n, collapsed: c }] of Object.entries(byEvent)) {
-      expect(n, `months ${when} an event`).toBeGreaterThan(2_000);
+      expect(n, `months ${when} an event`).toBeGreaterThan(5 * RATE_SEEDS);
       expect(c / n, `months ${when} an event`).toBeGreaterThan(0.06 * 0.7);
       expect(c / n, `months ${when} an event`).toBeLessThan(0.06 * 1.3);
     }
