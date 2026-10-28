@@ -210,7 +210,6 @@ export function Auction() {
           shipPays={auction.shipPays}
           storeStock={auction.storeForSale}
           marks={{ ask: true, bid: true }}
-          stage="walk"
           meId={me.id}
           {...(onBoard ? { onDir: (d: -1 | 0 | 1) => walk(stepDir(d)) } : {})}
           className="min-h-0 flex-1"

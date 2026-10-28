@@ -1,9 +1,10 @@
-import { POLLUTION } from '@mule/engine';
+import { POLLUTION, TERRAIN_ODDS as ENGINE_ODDS } from '@mule/engine';
 import type { MuleView, PlayerView, TileView } from '@mule/protocol';
+import { GOOD_NAME, type Good } from '@mule/ui';
 import { describe, expect, it } from 'vitest';
-import { colonyVerdict, groundPips, mapTiles, seatSpecies, secondsUntil, slotOf, standings } from '../src/game/derive';
+import { colonyVerdict, groundPips, mapTiles, seatSpecies, secondsUntil, slotOf, standings, TERRAIN_ODDS } from '../src/game/derive';
 
-const p = (id: string, money: number, slot: number): PlayerView => ({ id, name: id, isAi: false, color: '', slot, species: 'zipwing', money, plots: 0, ready: false, doneDeveloping: false });
+const p = (id: string, money: number, slot: number): PlayerView => ({ id, name: id, isAi: false, color: '', slot, species: 'zipwing', money, plots: 0, ready: false, doneDeveloping: false, condition: null, colonist: null });
 const tile = (x: number, y: number, extra: Partial<TileView> = {}): TileView => ({ x, y, terrain: 'plains', peaks: 0, owner: null, outfit: null, pollution: 0, filter: false, ...extra });
 
 function view(extra: Partial<MuleView> = {}): MuleView {
@@ -93,5 +94,36 @@ describe('reading the view', () => {
     }
     // The copy says "a fifth" in words; a new collapseScore has to change the copy with it.
     expect(1 - POLLUTION.collapseScore).toBeCloseTo(0.2, 10);
+  });
+});
+
+const SMITHORE_PHRASE = {
+  none: 'No Smithore.',
+  low: 'Little Smithore.',
+  medium: 'Some Smithore.',
+  high: 'Good odds of Smithore.',
+  veryHigh: 'Very good odds of Smithore.',
+} as const;
+
+/** The good names in the sentence that starts with `lead`, e.g. "Often good for Food, Water and Energy." */
+function namesAfter(sentences: string[], lead: string): string[] {
+  const s = sentences.find((x) => x.startsWith(lead));
+  return s ? s.slice(lead.length, -1).split(/, | and /) : [];
+}
+
+describe('the terrain hint', () => {
+  it.each(Object.entries(ENGINE_ODDS))("INV-1: every terrain hint says exactly what the engine's TERRAIN_ODDS says (%s)", (terrain, odds) => {
+    const hint = TERRAIN_ODDS[terrain as keyof typeof TERRAIN_ODDS] ?? '';
+    const sentences = hint.match(/[^.]+\./g)?.map((x) => x.trim()) ?? [];
+    const rated = (level: 'good' | 'poor') => Object.entries(odds.grown).filter(([, l]) => l === level).map(([g]) => GOOD_NAME[g as Good]);
+    const good = rated('good');
+    const poor = rated('poor');
+
+    expect(namesAfter(sentences, 'Often good for ').sort()).toEqual([...good].sort());
+    expect(namesAfter(sentences, 'Poor for ').sort()).toEqual([...poor].sort());
+    expect(sentences).toContain(SMITHORE_PHRASE[odds.mined.smithore]);
+    expect(sentences).toHaveLength((good.length ? 1 : 0) + (poor.length ? 1 : 0) + 1);
+    const listed = new Set([...good, ...poor, GOOD_NAME.smithore]);
+    for (const name of Object.values(GOOD_NAME).filter((n) => !listed.has(n))) expect(hint).not.toContain(name);
   });
 });

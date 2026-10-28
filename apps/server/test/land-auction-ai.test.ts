@@ -23,7 +23,7 @@ import {
 import { AiSeat, Brain, cashReserve, LotHand, muleValue, overtakeTarget, plotRoom, plotValue, type Act, type Mind } from '@mule/ai';
 import type { MuleView } from '@mule/protocol';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
-import { fakeContext } from './fake-context.js';
+import { fakeContext, tapThere } from './fake-context.js';
 
 const SELLER = 'h';
 const AIS: { id: string; name: string; persona: AiPersonaId }[] = [
@@ -370,7 +370,8 @@ type Plot = { x: number; y: number };
  * MULE to the first, then goes to the pub and stays Done in the auction.
  * The game stops in month 2's planning.
  */
-function toMonth2Planning(game: MuleGame, advance: (ms: number) => void): Plot[] {
+function toMonth2Planning(game: MuleGame, fake: Parameters<typeof tapThere>[1]): Plot[] {
+  const { advance } = fake;
   const phase = () => game.viewFor(null).phase;
   game.handle(SELLER, { type: 'ready' });
   const plots: Plot[] = [];
@@ -384,9 +385,9 @@ function toMonth2Planning(game: MuleGame, advance: (ms: number) => void): Plot[]
   }
   expect(plots).toHaveLength(2);
   expect(phase()).toBe('development');
-  game.handle(SELLER, { type: 'buyMule' });
-  game.handle(SELLER, { type: 'outfit', outfit: 'food' });
-  game.handle(SELLER, { type: 'install', ...plots[0]! });
+  tapThere(game, fake, SELLER, { type: 'buyMule' });
+  tapThere(game, fake, SELLER, { type: 'outfit', outfit: 'food' });
+  tapThere(game, fake, SELLER, { type: 'install', ...plots[0]! });
   game.handle(SELLER, { type: 'pub' });
   for (let i = 0; i < 1_000 && phase() !== 'auction'; i++) advance(1_000);
   for (let i = 0; i < 10_000 && phase() === 'auction'; i++) {
@@ -430,7 +431,7 @@ describe('AI seats at the land auction, on the server', () => {
     const { ctx, advance } = fakeContext();
     const game = new MuleGame(ctx, 5);
     game.start(TABLE);
-    const plots = toMonth2Planning(game, advance);
+    const plots = toMonth2Planning(game, { ctx, advance });
     game.handle(SELLER, { type: 'list', item: { kind: 'plot', ...plots[1]! }, minimum: PLOT_MIN, unsold: 'keep' });
     game.handle(SELLER, { type: 'list', item: { kind: 'mule', ...plots[0]! }, minimum: MULE_LOT_MIN, unsold: 'keep' });
     game.handle(SELLER, { type: 'ready' });

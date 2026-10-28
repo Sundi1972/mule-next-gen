@@ -3,8 +3,15 @@ import type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from './p
 /** A rule a player broke: shown to them, never a crash. */
 export class TableError extends Error {}
 
-/** How long a handoff code can move its seat to another device. See RULE-6. */
-const HANDOFF_TTL_MS = 2 * 60_000;
+/** The room's own limits that change play, in one place to tune. */
+const ROOM_LIMITS = {
+  /** How long a move code can move its seat to another device, in ms. See RULE-6. */
+  handoffCodeMs: 2 * 60_000,
+  /** The longest chat line the room passes on, in characters; the rest is cut. */
+  chatChars: 280,
+  /** The longest player name a seat keeps, in characters; the rest is cut. */
+  nameChars: 16,
+} as const;
 
 export interface Connection<GameView> {
   send(msg: ServerEnvelope<GameView>): void;
@@ -34,6 +41,11 @@ export interface GameContext {
    * not let it throw: from a timer, a throw is unhandled.
    */
   say?(from: string, text: string, to?: string): void;
+  /**
+   * The seat that hosts the table: the first connected human, passing to the next while the host is disconnected and
+   * back when they return; the first human seat if none is connected; null with no human seated.
+   */
+  hostId(): string | null;
 }
 
 /** The part a game supplies. The room does everything else. */
@@ -79,14 +91,15 @@ export interface RoomOptions<Intent, GameView> {
 }
 
 /**
- * A typed name on one line, at most 16 code points, with no control characters, line or paragraph separators, or bidi
- * overrides and isolates: a line break in a name would forge a line in an AI's prompt, and a bidi control would make
- * it read differently from how it is stored. Other format characters stay, so a ZWJ emoji survives. NFC, not NFKC,
- * so a name shows as typed. Capping by code point never splits an emoji's surrogate pair. See B-AC-5.
+ * A typed name on one line, at most ROOM_LIMITS.nameChars code points, with no control characters, line or paragraph
+ * separators, or bidi overrides and isolates: a line break in a name would forge a line in an AI's prompt, and a bidi
+ * control would make it read differently from how it is stored. Other format characters stay, so a ZWJ emoji
+ * survives. NFC, not NFKC, so a name shows as typed. Capping by code point never splits an emoji's surrogate pair.
+ * See B-AC-5.
  */
 function cleanName(name: string): string {
   const oneLine = name.normalize('NFC').replace(/[\p{Cc}\p{Zl}\p{Zp}\u202A-\u202E\u2066-\u2069]/gu, '').trim();
-  return Array.from(oneLine).slice(0, 16).join('').trim();
+  return Array.from(oneLine).slice(0, ROOM_LIMITS.nameChars).join('').trim();
 }
 
 interface Seat<View> extends SeatInfo {
@@ -152,6 +165,7 @@ export class Room<Intent, View> {
       },
       changed: () => this.broadcast(),
       say: (from, text, to) => void this.deliver(from, text, to),
+      hostId: () => this.hostId,
     });
   }
 
@@ -187,11 +201,14 @@ export class Room<Intent, View> {
       conn.send({ t: 'pong', clientTime: msg.clientTime, serverTime: this.opts.now() });
       return;
     }
+    // A connection is a board or a seat, never both. See FM-12.
     if (msg.t === 'join') {
+      if (this.boards.has(conn)) throw new TableError('This screen is already the table');
       from.seatId = this.join(conn, msg.name, msg.seatToken, msg.handoff);
       return;
     }
     if (msg.t === 'board') {
+      if (this.seats.some((s) => s.conn === conn)) throw new TableError('This screen already has a seat');
       this.boards.add(conn);
       conn.send({ t: 'welcome', code: this.code, role: 'board', seatId: null, seatToken: null });
       this.broadcast();
@@ -233,7 +250,7 @@ export class Room<Intent, View> {
         this.leave(conn, from, seat);
         return;
       case 'handoff':
-        seat.handoff = { code: this.opts.newToken(), expiresAt: this.opts.now() + HANDOFF_TTL_MS };
+        seat.handoff = { code: this.opts.newToken(), expiresAt: this.opts.now() + ROOM_LIMITS.handoffCodeMs };
         conn.send({ t: 'handoffCode', ...seat.handoff });
         return;
       case 'pick':
@@ -268,17 +285,14 @@ export class Room<Intent, View> {
 
   private seatFor(conn: Connection<View>, name: string, token?: string): Seat<View> {
     const back = token ? this.seats.find((s) => s.token === token) : undefined;
-    let seat: Seat<View>;
-    if (back) {
-      seat = back;
-      back.conn = conn;
-      this.game.connectionChanged?.(seat.id, true);
-    } else {
+    if (!back) {
       if (this.started) throw new TableError('This game has already started');
       if (this.seats.length >= this.opts.maxSeats) throw new TableError('The table is full');
-      seat = this.addSeat(cleanName(name) || 'Player', false);
-      seat.conn = conn;
     }
+    const seat = back ?? this.addSeat(cleanName(name) || 'Player', false);
+    this.letGoOfOtherSeats(conn, seat);
+    seat.conn = conn;
+    if (back) this.game.connectionChanged?.(seat.id, true);
     return seat;
   }
 
@@ -289,6 +303,7 @@ export class Room<Intent, View> {
     if (!seat) throw new TableError('That link has expired');
     seat.handoff = null;
     const old = seat.conn;
+    this.letGoOfOtherSeats(conn, seat);
     seat.conn = conn;
     seat.token = this.opts.newToken();
     if (!old) this.game.connectionChanged?.(seat.id, true);
@@ -299,17 +314,23 @@ export class Room<Intent, View> {
     return seat;
   }
 
-  /** A screen's connection closed. */
+  /** A screen's connection closed: it stops being a board and lets go of its seat. */
   disconnect(conn: Connection<View>): void {
-    if (this.boards.delete(conn)) {
-      this.broadcast();
-      return;
-    }
+    const wasBoard = this.boards.delete(conn);
+    // Checked even for a board, so no path leaves a seat on a closed socket.
     const seat = this.seats.find((s) => s.conn === conn);
-    if (!seat) return;
+    if (seat) this.detach(seat);
+    if (wasBoard || seat) this.broadcast();
+  }
+
+  /** A connection holds one seat: one that joins another lets go of the seat it held, as a disconnect would. See FM-3. */
+  private letGoOfOtherSeats(conn: Connection<View>, joining: Seat<View>): void {
+    for (const seat of this.seats) if (seat !== joining && seat.conn === conn) this.detach(seat);
+  }
+
+  private detach(seat: Seat<View>): void {
     seat.conn = null;
     if (this.started) this.game.connectionChanged?.(seat.id, false);
-    this.broadcast();
   }
 
   private addSeat(name: string, isAi: boolean): Seat<View> {
@@ -426,7 +447,7 @@ export class Room<Intent, View> {
     // Checked before moderation, so an unknown seat throws whatever the text.
     if (!this.seats.some((s) => s.id === from)) throw new TableError('Nobody by that name at the table');
     if (to && !this.seats.some((s) => s.id === to)) throw new TableError('Nobody by that name at the table');
-    const clean = this.opts.moderate(text.trim().slice(0, 280));
+    const clean = this.opts.moderate(text.trim().slice(0, ROOM_LIMITS.chatChars));
     if (!clean) return null;
     const message: ChatMessage = { id: ++this.chatId, from, text: clean, at: this.opts.now(), ...(to ? { to } : {}) };
     if (to) {

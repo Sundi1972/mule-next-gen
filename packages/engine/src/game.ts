@@ -2,6 +2,7 @@ import { endAuction, startAuction } from './auction.js';
 import { RuleError } from './errors.js';
 import { DEFAULT_SPECIES, DEVELOPMENT, GAME, GOOD_CONFIG, MULE, POLLUTION, SPECIES_PERK, START, TAX, UPKEEP } from './config.js';
 import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './economy.js';
+import { rollPlayerEvent } from './events.js';
 import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
 import { generateMap, tileIndex } from './map.js';
 import { airBand } from './pollution.js';
@@ -187,25 +188,21 @@ function developer(state: GameState, playerId: string): Player {
 }
 
 /**
- * Sets each player's development time. Food buys time: enough for the month
- * gives the full time, and it shrinks with the shortfall. In dirty air
- * colonists get sick and lose more time, unless they take a Medicine.
+ * Starts development: one clock, the same full time for every player. A
+ * player short of the month's Food is hungry. Each player rolls for
+ * sickness (events.ts, likelier in dirty air and for a big polluter); a
+ * Medicine cures it, and is used up. Hunger and sickness slow the walk
+ * (dev-walk.ts).
  */
 function startDevelopment(state: GameState): void {
-  const penalty = airBand(state.air).devPenalty;
   for (const p of state.players) {
-    const share = Math.min(1, p.stock.food / Math.max(1, needsOf(state, p.id).food));
-    p.hungry = share < 1;
-    let seconds = DEVELOPMENT.minSeconds + (DEVELOPMENT.fullSeconds - DEVELOPMENT.minSeconds) * share;
+    p.hungry = p.stock.food < Math.max(1, needsOf(state, p.id).food);
     p.sick = false;
-    if (penalty > 0) {
+    if (rollPlayerEvent(state, 'sickness', 'development', p.id)) {
       if (p.stock.medicine >= 1) p.stock.medicine--;
-      else {
-        p.sick = true;
-        seconds -= penalty;
-      }
+      else p.sick = true;
     }
-    p.devSeconds = Math.max(DEVELOPMENT.floorSeconds, Math.round(seconds));
+    p.devSeconds = DEVELOPMENT.fullSeconds;
     p.doneDeveloping = false;
     p.installedThisTurn = false;
   }

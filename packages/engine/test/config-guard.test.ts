@@ -13,6 +13,7 @@ const SCANNED = ['packages/engine/src', 'packages/ai/src'];
  */
 const PENDING = new Set<string>([
   // WS1: cleaned once #109 has merged, which rewrites most of them.
+  'packages/ai/src/hands/auction.ts',
   'packages/ai/src/outlook.ts',
   'packages/ai/src/play.ts',
   'packages/ai/src/seat.ts',
@@ -24,15 +25,6 @@ const PENDING = new Set<string>([
   'packages/engine/src/events.ts',
   'packages/engine/src/observe.ts',
   'packages/engine/src/production.ts',
-  // WS3: marked on ws3-auctions (#107); off when that reaches this branch.
-  'packages/ai/src/hands/auction.ts',
-  'packages/ai/src/hands/lot.ts',
-  'packages/engine/src/auction.ts',
-  'packages/engine/src/lots.ts',
-  'packages/engine/src/walk.ts',
-  // WS7.
-  'packages/ai/src/hands/vote.ts',
-  'packages/engine/src/politics.ts',
 ]);
 /** A literal that is not balance says why, on its line or the line above. */
 const MARKER = /\/\/ literal-ok: (.{10,})/;
