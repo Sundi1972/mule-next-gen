@@ -70,6 +70,16 @@ export interface Tile {
   filter: boolean;
   /** Months in a row this plot's current outfit has run. Factories gain from experience. */
   runMonths: number;
+  /** A special field on this plot, placed with the map; absent on most plots. */
+  special?: SpecialField;
+}
+
+export type SpecialKind = 'ruins' | 'crystalCavern' | 'geyser' | 'oasis' | 'relic';
+
+export interface SpecialField {
+  kind: SpecialKind;
+  /** Ruins only: the good its salvage pays, drawn when the map is made. */
+  salvage?: 'alloy' | 'electronics';
 }
 
 export interface Player {
@@ -92,6 +102,8 @@ export interface Player {
   sick: boolean;
   /** True once the player has gone to the pub: their development turn is over. */
   doneDeveloping: boolean;
+  /** True once the player has installed a MULE in this development turn, so a reloaded phone still knows. */
+  installedThisTurn: boolean;
   /** Indices of tiles whose ground this player has analysed. Private to them. */
   analysed: number[];
   /** Free plots chosen for a geo drone this planning phase, analysed when the land grant starts. */
@@ -230,7 +242,7 @@ export interface ProductionLine {
   made: number;
   /** What made up the output, in order; the deltas sum to `made`. */
   parts: {
-    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'noEnergy' | 'noWater' | 'event' | 'factory';
+    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'noEnergy' | 'noWater' | 'event' | 'factory' | 'special';
     delta: number;
     event?: EventKey;
   }[];
@@ -393,4 +405,10 @@ export interface LandAuction extends WalkBoard {
   /** This lot's place in the month's line-up, from 1, and the line-up's length. */
   number: number;
   count: number;
+  /** True once this lot's leading bid has passed hi and the walk sped up. */
+  fast: boolean;
+  /** Ms the soft close has put back on this lot's walk clock. */
+  addedMs: number;
+  /** The last buyer to lead this lot, kept while nobody reaches the minimum, so only a change of hands counts as an overtake. */
+  leaderId: string | null;
 }

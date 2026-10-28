@@ -1,4 +1,4 @@
-import type { AuctionSide, EventKey, EventKind, Good, Ground, MonthEvent, Outfit, Phase, ScoreParts, SkipReason, Species, StatusRow, Stock, Terrain, TileTrait } from '@mule/engine';
+import type { AuctionSide, EventKey, EventKind, Good, Ground, MonthEvent, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, Terrain, TileTrait } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -48,6 +48,8 @@ export interface TileView {
   ground?: Ground;
   /** Only for the plot's owner or a player who analysed it: its hazard traits. */
   traits?: TileTrait[];
+  /** The plot's special field, while it lasts. Public: every viewer, phone and TV, sees it; only the ground is private. */
+  special?: SpecialField;
 }
 
 export interface PlayerView {
@@ -88,6 +90,8 @@ export interface MyView {
   outfitCosts: Record<Outfit, number>;
   /** Free plots chosen for the geo drone this month. */
   droneOrder: { x: number; y: number }[];
+  /** True once this player has installed a MULE in this development turn, and until their next one starts. */
+  installedThisTurn: boolean;
 }
 
 /** A player on the auction board. */

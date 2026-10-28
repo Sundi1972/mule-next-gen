@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { advancePhase, AI_LEVELS, AI_PERSONAS, createGame, EVENTS, GAME, GOODS, mulePriceFor, observe, STRATEGIST, type GameState } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
 import { AiSeat } from '../src/seat.js';
-import { developDecision, goodPlan, landDecision, muleValue, plotValue, tradeDecision, wantsPlot } from '../src/strategist.js';
+import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, tradeDecision, wantsPlot } from '../src/strategist.js';
 import { cashReserve, installGain, type Mind } from '../src/value.js';
 
 const fourSeats = (seed: number) => createGame({ seed, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI${i}`, isAi: true })) });
@@ -59,6 +59,31 @@ describe('land claims off reading order', () => {
     // Tied plots: two salts order them differently, so seats don't all reach for the same first rows.
     const order = (salt: number) => landDecision(obs, mind(salt)).all[0]!.action.ranking.map((s) => s.index);
     expect(order(1)).not.toEqual(order(2));
+  });
+});
+
+/** Month 1's land grant on seed 3, ai0 already fed by its own Food and Energy plots, Smithore posted at `smithore`. */
+function grantWithFarms(smithore: number): GameState {
+  const state = fourSeats(3);
+  while (state.phase !== 'landGrant') advancePhase(state);
+  state.store.posted.smithore = smithore;
+  const [food, energy] = state.tiles.filter((t) => !t.owner && t.terrain === 'plains');
+  Object.assign(food!, { owner: 'ai0', outfit: 'food' });
+  Object.assign(energy!, { owner: 'ai0', outfit: 'energy' });
+  return state;
+}
+
+describe('land plans by worth', () => {
+  it('T-AC-14: a land plan worth a quarter of the best is not offered to the decider; plans close in worth still are', () => {
+    // Smithore at 400: two mountain mines are worth about 6,400, the best two farms about 1,700.
+    const rich = landDecision(observe(grantWithFarms(400), 'ai0'), traderMind);
+    const best = Math.max(...rich.all.map((c) => c.value));
+    expect(best).toBeGreaterThan(3 * Math.min(...rich.all.filter((c) => c.action.focus === 'grown').map((c) => c.value)));
+    for (const option of rich.options) expect(option.value).toBeGreaterThan(best / 2);
+    // Negative case: at month 1's own Smithore price the farm plan is worth about 70% of the mines, and stays on offer.
+    const even = landDecision(observe(grantWithFarms(31), 'ai0'), traderMind);
+    const top = Math.max(...even.all.map((c) => c.value));
+    expect(even.options.some((c) => c.value < top && c.value > top / 2)).toBe(true);
   });
 });
 
@@ -143,6 +168,38 @@ describe('values for lot bids (WS3 caps AI bids at these)', () => {
       expect(Number.isFinite(v)).toBe(true);
       expect(v).toBeGreaterThanOrEqual(GAME.plotScore);
     }
+  });
+
+  it('T-AC-15: a seat bids for a lot plot only what leaves the cash to develop it and its idle plots', () => {
+    const state = developmentWithWater(36);
+    const index = state.tiles.findIndex((t) => !t.owner && t.terrain === 'river');
+    const [a, b] = state.tiles.filter((t, i) => !t.owner && t.terrain !== 'store' && i !== index);
+    a!.owner = 'ai0';
+    b!.owner = 'ai0';
+    const mule = mulePriceFor(state, 'ai0');
+    // The lot hand bids up to the lower of the two (and its cash reserve).
+    const bidWith = (money: number) => {
+      state.players[0]!.money = money;
+      const obs = observe(state, 'ai0');
+      return Math.min(plotValue(obs, traderMind, index), plotRoom(obs, traderMind));
+    };
+    // Rich, it bids the plot's worth; with 1,000 cr and 2 idle plots, no more than 1,000 less 3 MULEs.
+    const worth = bidWith(100_000);
+    expect(worth).toBeGreaterThan(1000 - 3 * mule);
+    expect(bidWith(1000)).toBe(1000 - 3 * mule);
+    // With less than 3 MULEs' price on hand it bids nothing.
+    expect(bidWith(3 * mule - 1)).toBe(0);
+  });
+
+  it('INV-WS5-1: the AI values a geyser plot above the same plot without it', () => {
+    // The colony is out of Water, so a Water plot pays; a geyser adds to it (spec RULE-6).
+    const state = developmentWithWater(0);
+    const index = state.tiles.findIndex((t) => !t.owner && !t.special && ['tundra', 'volcanic', 'ice'].includes(t.terrain));
+    expect(index).toBeGreaterThanOrEqual(0);
+    const plain = plotValue(observe(state, 'ai0'), traderMind, index);
+    state.tiles[index]!.special = { kind: 'geyser' };
+    const geyser = plotValue(observe(state, 'ai0'), traderMind, index);
+    expect(geyser).toBeGreaterThan(plain);
   });
 
   it('INV-WS3-2: a MULE is worth nothing without idle land, and at least the store price with a profitable use', () => {

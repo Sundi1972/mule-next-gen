@@ -1,6 +1,7 @@
 import {
   advanceGrant,
   advancePhase,
+  AI_HANDS,
   airBand,
   allPrices,
   analysePlot,
@@ -81,12 +82,12 @@ export const PHASE_MS: Record<Exclude<Phase, 'gameOver' | 'auction' | 'landAucti
 };
 
 /** How long each free plot stays lit in the land grant. */
-export const GRANT_TICK_MS = 650;
+export const GRANT_TICK_MS = GAME.grantTickMs;
 
 export const AI_NAMES = ['The Accountant', 'The Baron', 'The Grudge', 'The Gambler', 'The Good Neighbour'];
 
 /** How often AI hands act during development. */
-export const AI_DEV_TICK_MS = 100;
+export const AI_DEV_TICK_MS = AI_HANDS.devTickMs;
 
 /** The level AI seats play at until the lobby lets the host choose. */
 export const DEFAULT_AI_LEVEL: AiLevelId = 'trader';
@@ -303,10 +304,24 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.checkAllReady();
   }
 
+  /** Stops the seat's auction walk: the old screen can't release it and the new one never pressed it. A move is neither Done nor a drop. */
+  seatMoved(seatId: string): void {
+    const state = this.state;
+    if (!state || this.ai.has(seatId)) return;
+    try {
+      if (state.phase === 'landAuction') setLotWalk(state, seatId, 0);
+      else if (state.phase === 'auction') setWalk(state, seatId, 0);
+    } catch (err) {
+      if (!(err instanceof RuleError)) throw err;
+    }
+  }
+
   private checkAllReady(): void {
-    const waiting = this.seats.filter((s) => !s.isAi && !this.away.has(s.id) && !this.ready.has(s.id) && !this.doneDeveloping(s.id));
-    // The auctions end on their own, good by good and lot by lot.
     const phase = this.state?.phase;
+    // A phone that drops in the land grant just doesn't claim; a reload must not end the grant for everyone.
+    const excused = (id: string) => this.away.has(id) && phase !== 'landGrant';
+    const waiting = this.seats.filter((s) => !s.isAi && !excused(s.id) && !this.ready.has(s.id) && !this.doneDeveloping(s.id));
+    // The auctions end on their own, good by good and lot by lot.
     if (phase && phase !== 'gameOver' && phase !== 'auction' && phase !== 'landAuction' && waiting.length === 0) this.nextPhase();
   }
 
@@ -518,7 +533,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           try {
             const ai = this.ai.get(seat.id);
             if (ai) ai.auctionTick(state, dt, (a) => this.aiAct(seat.id, a));
-            else if (this.away.has(seat.id)) auctionDone(state, seat.id);
+            else if (this.away.has(seat.id)) this.sitOut(seat.id);
           } catch (err) {
             if (!(err instanceof RuleError)) throw err;
           }
@@ -534,6 +549,24 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         this.ctx.changed();
       }),
     );
+  }
+
+  /**
+   * A dropped phone sits the rest of the good out, on the status screen and
+   * in the walk: off the board, it can't walk on its own or stand on a line
+   * for the store or a player to trade with. Back online during the walk, the
+   * side picker lets it rejoin.
+   */
+  private sitOut(seatId: string): void {
+    const state = this.requireState();
+    // Passing also stops the walker: it leaves the board.
+    try {
+      declareRole(state, seatId, 'pass');
+    } catch (err) {
+      if (!(err instanceof RuleError)) throw err;
+    }
+    // Last, because passing during the walk takes a Done back.
+    auctionDone(state, seatId);
   }
 
   /** Steps the land auction every WALK.tickMs until its last lot is over; the AI hands move first, with the same dt. */
@@ -641,6 +674,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           outfit: t.outfit,
           pollution: t.pollution,
           filter: t.filter,
+          // A special field is public: every viewer sees it, the TV too. Only the ground stays private.
+          ...(t.special ? { special: { kind: t.special.kind, ...(t.special.salvage ? { salvage: t.special.salvage } : {}) } } : {}),
           ...(analysed ? { ground: t.ground } : {}),
           ...(analysed || (me && t.owner === me.id) ? { traits: t.traits } : {}),
         };
@@ -678,6 +713,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
             mulePrice: mulePriceFor(state, me.id),
             outfitCosts: Object.fromEntries(outfits.map((o) => [o, outfitCostFor(state, me.id, o)])) as Record<Outfit, number>,
             droneOrder: me.droneOrder.map((i) => ({ x: i % state.width, y: Math.floor(i / state.width) })),
+            installedThisTurn: me.installedThisTurn,
           }
         : null,
       market: GOODS.map((good) => {

@@ -1,4 +1,4 @@
-import { bestPrices, type BoardWalker } from '@mule/ui';
+import { bestPrices, type BoardWalker } from '../src/index';
 import { describe, expect, it } from 'vitest';
 
 const walker = (id: string, side: BoardWalker['side'], at: number, extra: Partial<BoardWalker> = {}): BoardWalker => ({

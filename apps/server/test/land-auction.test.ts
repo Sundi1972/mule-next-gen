@@ -1,8 +1,9 @@
 import type { GameContext } from '@tabletop/core';
 import { describe, expect, it } from 'vitest';
-import { advancePhase, COLONY_SELLER, createGame, GAME, LOTS, RuleError, TAX, WALK, type GameState } from '@mule/engine';
+import { COLONY_SELLER, GAME, LOTS, RuleError, TAX, WALK, type GameState } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
+import { colonySeed } from './fake-context.js';
 
 /** A context with a manual clock, so phase timers and the auction tick run instantly. */
 function fakeContext() {
@@ -288,6 +289,49 @@ describe('land auction on the server', () => {
     }
   });
 
+  it('B-AC-9: Ossa and Lena walk a 200 lot past 400: every seat sees the climb go twice as fast, a lead change with under 2 s left puts 2 s back on every clock; a lot with one bidder runs its 12 s', () => {
+    const { game, advance, plots } = toMonth2Planning();
+    for (const plot of plots.b!) game.handle('b', { type: 'list', item: { kind: 'plot', ...plot }, minimum: 200, unsold: 'keep' });
+    toLandAuction(game, advance);
+    skipIntro(game, advance);
+    const views = () => [...humans, null].map((id) => game.viewFor(id).landAuction!);
+    // The board runs from 140 to 400, crossed in 6 s.
+    const base = (400 - 140) / 6;
+    for (const v of views()) expect(v.speed).toBeCloseTo(base);
+
+    const ossa = walkUpTo(game, advance, 'o', 401);
+    for (const v of views()) expect(v.speed).toBeCloseTo(2 * base);
+
+    walkUpTo(game, advance, 'l', ossa - 20);
+    expect(game.viewFor(null).landAuction!.leader!.id).toBe('o');
+    while (game.viewFor(null).landAuction!.seconds > 1.6) advance(WALK.tickMs);
+    game.handle('l', { type: 'walk', dir: 'up' });
+    for (let i = 0; i < 10 && game.viewFor(null).landAuction!.leader!.id === 'o'; i++) {
+      const left = game.viewFor(null).landAuction!.seconds;
+      advance(WALK.tickMs);
+      if (game.viewFor(null).landAuction!.leader!.id === 'l') expect(left).toBeLessThan(2);
+    }
+    game.handle('l', { type: 'walk', dir: 'stop' });
+    for (const v of views()) {
+      expect(v.leader!.id).toBe('l');
+      expect(v.seconds).toBeCloseTo(2);
+      expect(v.speed).toBeCloseTo(2 * base);
+    }
+    for (let i = 0; i < 100 && game.viewFor(null).landAuction!.stage === 'walk'; i++) advance(WALK.tickMs);
+    expect(game.viewFor('b').landAuction!.result).toMatchObject({ kind: 'sold', buyer: 'l' });
+
+    // Lot 2: Ossa climbs alone from the first tick to the bell, past the top, and the bell rings on the 12 s clock.
+    for (let i = 0; i < 100 && game.viewFor(null).landAuction!.stage === 'result'; i++) advance(WALK.tickMs);
+    skipIntro(game, advance);
+    expect(game.viewFor(null).landAuction!.number).toBe(2);
+    for (const v of views()) expect(v.speed).toBeCloseTo(base);
+    game.handle('o', { type: 'walk', dir: 'up' });
+    let ticks = 0;
+    for (; ticks < 1_000 && game.viewFor(null).landAuction!.stage === 'walk'; ticks++) advance(WALK.tickMs);
+    expect(ticks).toBe(LOTS.walkMs / WALK.tickMs);
+    expect(game.viewFor('b').landAuction!.result).toMatchObject({ kind: 'sold', buyer: 'o' });
+  });
+
   it('B-AC-4: a MULE won at the land auction is in the winner\'s hand when development starts, the seller\'s plot has none, and it runs off if not installed', () => {
     const { game, advance, plots } = toMonth2Planning({ mule: true });
     const plot = plots.b![0]!;
@@ -364,7 +408,7 @@ describe('land auction on the server', () => {
   });
 
   it('B-AC-8: a colony lot comes up first, every seat can bid, sale → store capital', () => {
-    const seed = colonySeed();
+    const seed = colonySeed(seats);
     const { ctx, advance } = fakeContext();
     const game = new MuleGame(ctx, seed);
     game.start(seats);
@@ -395,17 +439,6 @@ describe('land auction on the server', () => {
     expect(after.news[0]).toBe(`Ossa bought plot ${at(lot.item)} from the colony for ${bid}.`);
   });
 });
-
-/** The first seed whose month-1 roll brings a colony lot, found by playing the engine, never by mocking its RNG. */
-function colonySeed(): number {
-  for (let seed = 1; seed < 1_000; seed++) {
-    const state = createGame({ seed, players: seats });
-    while (state.phase !== 'landGrant') advancePhase(state);
-    advancePhase(state);
-    if (state.landAuction?.lot?.seller === COLONY_SELLER) return seed;
-  }
-  throw new Error('no colony seed under 1000');
-}
 
 // The view carries no store capital, so it is read from the game's own state.
 const storeCapital = (game: MuleGame) => (game as unknown as { state: GameState }).state.store.capital;

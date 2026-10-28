@@ -3,6 +3,7 @@ import type { AuctionView, DealView, LandAuctionView, ListingView, MuleView } fr
 import { bestPrices, Creature, cx, GOOD_NAME, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
 import { plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
 import { GroundCard } from '../phone/ground';
+import { SpecialLine } from './SpecialLine';
 
 /** The auction's walkers as the board draws them, in seat order, with their units and the surplus over this month's need. */
 export function boardWalkers(view: MuleView, auction: AuctionView): BoardWalker[] {
@@ -227,8 +228,18 @@ export function LotCard({ view, lot, compact = false }: { view: MuleView; lot: L
         {lot.item.kind === 'mule' ? lotWhat(view, lot) : t ? TERRAIN_NAME[t.terrain] : ''}
         <span className="font-mono text-sm text-ink-3">{plotName(lot.item.x, lot.item.y)}</span>
       </span>
+      {!compact && lot.item.kind === 'plot' && <SpecialLine special={t?.special} />}
       {lot.item.kind === 'plot' && <span className="text-xs text-ink-2" data-testid="lot-what">{lotWhat(view, lot)}</span>}
-      {!compact && lot.item.kind === 'plot' && t && (t.ground ? <GroundCard ground={t.ground} /> : <span className="text-xs text-ink-3">{TERRAIN_ODDS[t.terrain]}</span>)}
+      {!compact &&
+        lot.item.kind === 'plot' &&
+        t &&
+        (t.ground ? (
+          <GroundCard ground={t.ground} />
+        ) : (
+          <span className="text-xs text-ink-3" data-testid="terrain-hint">
+            {TERRAIN_ODDS[t.terrain]}
+          </span>
+        ))}
       <div className="grid grid-cols-2 gap-2 border-t border-holo-faint pt-1 font-mono text-[10px] text-ink-3">
         <span className="flex flex-col" data-testid="lot-minimum">
           MINIMUM<strong data-num className="text-sm text-ink">{lot.minimum} cr</strong>

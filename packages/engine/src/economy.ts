@@ -1,4 +1,4 @@
-import { EXPORT_DEMAND, EXPORT_SHIP, GAME, GOOD_CONFIG, MULE, POLLUTION, PRICE, UPKEEP } from './config.js';
+import { EXPORT_DEMAND, EXPORT_SHIP, GAME, GOOD_CONFIG, MULE, POLLUTION, PRICE, RECIPES, UPKEEP } from './config.js';
 import { airBand } from './pollution.js';
 import { energyUseOf, needsOf } from './production.js';
 import { createRng } from './rng.js';
@@ -38,13 +38,13 @@ export function monthlyDemand(state: GameState): Stock {
   const own = playersUse(state);
   demand.food = own.food + colonistDemand(state, 'food', colonistUnits);
   demand.water = own.water + colonistDemand(state, 'water', colonistUnits);
-  demand.energy = own.energy + colonistDemand(state, 'energy', colonistUnits / 2);
+  demand.energy = own.energy + colonistDemand(state, 'energy', colonistUnits * UPKEEP.colonistEnergyShare);
   // Sick colonists in dirty air need more Medicine.
-  demand.medicine = colonistDemand(state, 'medicine', (state.colonists / 50) * (sick ? POLLUTION.sickMedicineDemand : 1));
+  demand.medicine = colonistDemand(state, 'medicine', (state.colonists / UPKEEP.colonistsPerMedicine) * (sick ? POLLUTION.sickMedicineDemand : 1));
   const factories = (good: Good) => state.tiles.filter((t) => t.outfit === good).length;
   // The store builds a MULE from Smithore for every plot that will want one;
   // smelters need Smithore too, and Electronics works need Alloy.
-  demand.smithore = factories('alloy') * 2 + mulesWanted(state) * MULE.smithorePerMule;
+  demand.smithore = factories('alloy') * (RECIPES.alloy.inputs.smithore ?? 0) + mulesWanted(state) * MULE.smithorePerMule;
   demand.alloy = factories('electronics');
   demand.rareEarth = factories('electronics');
   // Crystite is a pure off-world luxury: only the export ship wants it.
