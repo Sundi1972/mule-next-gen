@@ -29,6 +29,9 @@ const AHEAD_MS = 300;
 /** Each event's own story element on a map that plays it. */
 const STORY_MARK: Partial<Record<EventKey, string>> = { dustStorm: 'front-dustStorm', drought: 'front-drought', acidRain: 'front-acidRain', pestSwarm: 'swarm-', wildfire: 'fire-' };
 
+/** Lines the AI seats post when they have not said three yet: the ticker's most, as in a real game. */
+const CHATTER = ['Money is for spending on MULEs.', 'Quietly building.', 'Better safe than sorry: keep the cash.'];
+
 const started = Date.now();
 const { server, base } = await startServer({ maxMonths: MONTH + 1, phaseScale: PHASE_SCALE, politics: false, seed: () => SEED });
 const browser = await launch();
@@ -85,6 +88,7 @@ async function theTvPlaysEachStory(browser: Browser): Promise<string> {
     const lines = await logged.evaluateAll((els) => els.map((el) => (el as HTMLElement).innerText.replace(/\s+/g, ' ')));
     for (const [i, ev] of view.events.entries()) checkLogLine(lines[i] ?? '', ev, view, tvShow.view()!.players);
     await checkColonyChips(tv, view);
+    await theTvFitsWithChat(tv, code, tvShow.view()!.players);
     checkStories((await tvShow.recording())?.layers ?? [], order, 'the TV');
     check(!((await phoneShow.recording())?.layers ?? []).some((l) => l.startsWith('event:')), 'B-AC-2 negative: with a TV the phone never played an event on its map');
     return `the TV played ${order.join(' then ')} over ${view.lines.length} working plots, logging "${lines.join('" and "')}"; the colony bar holds the view's figures; the phone kept the light card`;
@@ -233,6 +237,34 @@ function checkStories(layers: string[], order: EventKey[], who: string): void {
   }
 }
 
+/** With three chat lines under the TV's header, the map ends at or above the colony bar, and both sit inside the stage. */
+async function theTvFitsWithChat(tv: Page, code: string, players: MuleView['players']): Promise<void> {
+  const ticker = tv.locator('[data-testid=chat-ticker] [data-testid^=chat-line-]');
+  const room = server.registry.get(code) as unknown as { deliver(from: string, text: string): unknown };
+  const ais = players.filter((p) => p.isAi);
+  for (let i = await ticker.count(); i < CHATTER.length; i++) room.deliver(ais[i % ais.length]!.id, CHATTER[i]!);
+  await ticker.nth(CHATTER.length - 1).waitFor({ timeout: SHOWN_MS });
+  const box = async (selector: string) => {
+    const b = await tv.locator(selector).first().boundingBox();
+    check(b, `F4: the TV draws ${selector}`);
+    return b;
+  };
+  const stage = await box('[data-phase=production]');
+  const map = await box('[data-phase=production] [data-testid=map-show]');
+  const bar = await box('[data-testid=colony-bar]');
+  const inside = (b: typeof stage) => b.x >= stage.x - 0.5 && b.y >= stage.y - 0.5 && b.x + b.width <= stage.x + stage.width + 0.5 && b.y + b.height <= stage.y + stage.height + 0.5;
+  const at = (b: typeof stage) => `${Math.round(b.y)}..${Math.round(b.y + b.height)}`;
+  check(map.y + map.height <= bar.y + 0.5, `F4: with three chat lines the map (${at(map)}) ends at or above the colony bar (${at(bar)})`);
+  check(inside(map) && inside(bar), `F4: the map (${at(map)}) and the colony bar (${at(bar)}) sit inside the stage (${at(stage)})`);
+}
+
+/** What the log calls the plots: by their one good's kind, "plots" when the goods mix. */
+function plotNoun(good: Good | undefined, n: number): string {
+  const kind: Partial<Record<Good, [string, string]>> = { food: ['farm', 'farms'], water: ['well', 'wells'], energy: ['plant', 'plants'], smithore: ['mine', 'mines'], crystite: ['mine', 'mines'] };
+  const [one, many] = (good && kind[good]) ?? ['plot', 'plots'];
+  return n === 1 ? one : many;
+}
+
 function signed(n: number): string {
   return `${n < 0 ? '−' : '+'}${Math.abs(n)}`;
 }
@@ -240,15 +272,18 @@ function signed(n: number): string {
 /** B-AC-1: a log line states what the view holds for its event: per good, the sum and the plots; a personal event's player. */
 function checkLogLine(text: string, ev: ProductionView['events'][number], view: ProductionView, players: MuleView['players']): void {
   const goodAt = (x: number, y: number) => view.lines.find((l) => l.x === x && l.y === y)?.good;
-  const per = new Map<Good | undefined, { sum: number; plots: number }>();
-  for (const h of ev.hits) {
-    const was = per.get(goodAt(h.x, h.y)) ?? { sum: 0, plots: 0 };
-    per.set(goodAt(h.x, h.y), { sum: was.sum + h.delta, plots: was.plots + 1 });
-  }
-  const holds = `${[...per].map(([g, v]) => `${signed(v.sum)} ${g ? GOOD_NAME[g] : '?'}`).join(', ')} on ${ev.hits.length}`;
-  // "Drought −2 Food, −2 Water on 4 plots": each good's figure, then the plots they fell on.
-  const stated = `${[...text.matchAll(/([−+]\d+) ([A-Z][\w ]*?)(?=,| on )/g)].map(([, n, good]) => `${n} ${good}`).join(', ')} on ${/ on (\d+) /.exec(text)?.[1]}`;
-  check(stated === holds, `B-AC-1: the TV log says "${text}" for ${ev.key}; the view holds ${holds}`);
+  // A hit that changed nothing is no loss: in no figure and no plot count.
+  const counted = ev.hits.filter((h) => h.delta !== 0);
+  const per = new Map<Good | undefined, number>();
+  for (const h of counted) per.set(goodAt(h.x, h.y), (per.get(goodAt(h.x, h.y)) ?? 0) + h.delta);
+  const [only] = per.keys();
+  const noun = plotNoun(per.size === 1 ? only : undefined, counted.length);
+  const holds = counted.length ? `${[...per].map(([g, n]) => `${signed(n)} ${g ? GOOD_NAME[g] : '?'}`).join(', ')} on ${counted.length} ${noun}` : '';
+  // "Drought −2 Food, −2 Water on 4 plots": each good's figure, then the plots they fell on, named by kind.
+  const figures = [...text.matchAll(/([−+]\d+) ([A-Z][\w ]*?)(?=,| on )/g)].map(([, n, good]) => `${n} ${good}`);
+  const on = / on (\d+ \w+)/.exec(text)?.[1];
+  const stated = figures.length ? `${figures.join(', ')} on ${on}` : '';
+  check(stated === holds, `B-AC-1: the TV log says "${text}" for ${ev.key}; the view holds "${holds}"`);
   if (ev.scope === 'personal') {
     const owner = view.lines.find((l) => l.x === ev.origin.x && l.y === ev.origin.y)?.owner;
     const name = players.find((p) => p.id === owner)?.name;
