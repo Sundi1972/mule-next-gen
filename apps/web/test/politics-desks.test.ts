@@ -50,6 +50,7 @@ const politics = (extra: Partial<PoliticsView> = {}): PoliticsView => ({
   candidates: { governor: [], sheriff: [] },
   promises: {},
   promise: null,
+  promiseFrom: null,
   election: election(),
   ...extra,
 });
@@ -625,19 +626,21 @@ describe('the TV on election day (C66, E-2, E-5)', () => {
 });
 
 describe("the new Governor's promise (C68, E-7)", () => {
-  /** Month `month`, Lena Governor since month 4 on `promise`, the tax at `percent` from this month's `start`. */
-  const term = (promise: TaxPromise | null, percent: number, start: number, month = 4) =>
-    view(politics({ governor: 's1', term: [4, 6], next: 7, promise, tax: { percent, start, low: 0, high: 10 }, election: month === 4 ? election({ stage: 'over' }) : null }), me(), { month });
+  /** Month `month`, Lena Governor since month 4 on `promise` from a tax of `from`, the tax at `percent` from this month's `start`. */
+  const term = (promise: TaxPromise | null, percent: number, start: number, month = 4, from: number | null = null) =>
+    view(politics({ governor: 's1', term: [4, 6], next: 7, promise, promiseFrom: from, tax: { percent, start, low: 0, high: 10 }, election: month === 4 ? election({ stage: 'over' }) : null }), me(), { month });
 
-  it.each<[string, TaxPromise, number, number, number, string]>([
+  it.each<[string, TaxPromise, number, number, number, string, number?]>([
     ['a cap kept', CAP_4, 4, 5, 4, 'Governor: Lena, until month 6 · promised up to 4% · tax 4%, kept · Next election: month 7'],
     ['a cap not yet set', CAP_4, 5, 5, 4, 'Governor: Lena, until month 6 · promised up to 4% · tax still 5% · Next election: month 7'],
     ['a cap broken', CAP_4, 6, 5, 4, 'Governor: Lena, until month 6 · promised up to 4% · tax 6%, promise broken · Next election: month 7'],
     ['a cap broken a month on', CAP_4, 5, 5, 5, 'Governor: Lena, until month 6 · promised up to 4% · tax 5%, promise broken · Next election: month 7'],
     ['lower, kept', LOWER, 4, 5, 4, 'Governor: Lena, until month 6 · promised lower it · tax 4%, kept · Next election: month 7'],
     ['hold, kept', HOLD, 5, 5, 5, 'Governor: Lena, until month 6 · promised keep it at 5% · tax 5%, kept · Next election: month 7'],
-  ])("T-AC-70: every phone's offices line keeps the Governor's promise beside the tax, kept or broken (%s)", (_, promise, percent, start, month, line) => {
-    expect(textOf(onPhone(term(promise, percent, start, month), OfficesLine), 'roadmap-offices')).toBe(line);
+    ['lowered from 5% in month 4, still kept in month 5', LOWER, 4, 4, 5, 'Governor: Lena, until month 6 · promised lower it · tax 4%, kept · Next election: month 7', 5],
+    ['raised from 5% in month 4, still broken in month 5', HOLD, 7, 7, 5, 'Governor: Lena, until month 6 · promised keep it at 5% · tax 7%, promise broken · Next election: month 7', 5],
+  ])("T-AC-70: every phone's offices line keeps the Governor's promise beside the tax, kept or broken (%s)", (_, promise, percent, start, month, line, from = null) => {
+    expect(textOf(onPhone(term(promise, percent, start, month, from), OfficesLine), 'roadmap-offices')).toBe(line);
   });
 
   it("T-AC-70: an appointed Governor made no promise: the line has no promise part", () => {
@@ -655,6 +658,12 @@ describe("the new Governor's promise (C68, E-7)", () => {
     const set = onPhone(term(CAP_4, 4, 5), GovernorDesk);
     expect(textOf(set, 'gov-done')).toBe('Done: 4% from now on.');
     expect(disabled(set, 'tax-confirm')).toBe(true);
+  });
+
+  it("T-AC-70, E-7: a month on, the Governor's desk judges keep it against the tax when the term began, not the month's start", () => {
+    const html = onPhone(term(HOLD, 7, 7, 5, 5), GovernorDesk);
+    expect(textOf(html, 'gov-promise')).toBe('Sales taxYou promised: keep it at 5%');
+    expect(textOf(html, 'gov-breaks')).toBe('7%: this breaks your promise.');
   });
 
   it.each<[string, number, number | null, { percent: number; start: number }, ReturnType<typeof setState>]>([

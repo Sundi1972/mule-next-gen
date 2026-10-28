@@ -1000,6 +1000,31 @@ describe("C68: the Governor's promise holds for the term", () => {
     expect(politicsOf(state).promise, 'an appointed Governor promised nothing').toBeNull();
   });
 
+  it("T-AC-70: the tax when the Governor took office, in whole percent, is Politics' for the term, whatever the tax does; the next Governor's replaces it", () => {
+    const state = newGame({ seed: ROUND_SEED });
+    expect(politicsOf(state).promiseFrom).toBeNull();
+    runFor(state, 'lena', 'governor', CAP_8);
+    runFor(state, 'brix', 'governor', HOLD);
+    everyoneDone(state);
+    castVote(state, 'ossa', 'governor', 'lena');
+    everyoneCasts(state);
+    state.treasury.salesTax = 0.07;
+    expect(politicsOf(state).promiseFrom, 'not before the winner takes office').toBeNull();
+    throughCeremony(state);
+    expect(politicsOf(state).promiseFrom).toBe(7);
+
+    setSalesTax(state, 'lena', taxBounds(state).low);
+    toMonth(state, 3);
+    expect(politicsOf(state).promiseFrom, 'held for the term').toBe(7);
+
+    toMonth(state, 4);
+    everyoneDone(state);
+    everyoneDone(state);
+    state.treasury.salesTax = 0.03;
+    throughCeremony(state);
+    expect(politicsOf(state).promiseFrom, "the next Governor's term").toBe(3);
+  });
+
   it("T-AC-70: an unopposed Governor's promise holds; so does one seated by AM-1's close", () => {
     const state = newGame();
     runFor(state, 'ossa', 'governor', { kind: 'lower' });
