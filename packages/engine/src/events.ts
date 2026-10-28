@@ -109,7 +109,6 @@ export function buildEvent(state: GameState, key: EventKey, rng: Rng, player?: s
     plots: hit.map((t, order) => ({ index: index.get(t)!, order, good: t.outfit as Good, delta: 0 })),
     ...(owner ? { player: owner } : {}),
     sign: shape.sign,
-    when: 'afterProduction',
     phase: 'production',
   };
 }
