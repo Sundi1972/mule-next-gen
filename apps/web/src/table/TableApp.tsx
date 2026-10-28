@@ -205,7 +205,8 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
     const hostCanContinue = !!host && (host.ready || host.isAi) && planningProper(game);
     side = (
       <>
-        {waiting.length > 0 ? (
+        {/* This branch also draws an auction or land auction for the moment before its data arrives; Ready means Done there. */}
+        {phase !== 'planning' ? null : waiting.length > 0 ? (
           <div className="flex flex-col gap-3 rounded-panel border-2 border-holo bg-holo-soft p-5 shadow-glow" data-testid="tv-waiting">
             <WaitingFor seats={waiting} me={null} tv />
             {hostCanContinue && <span className="text-lg text-ink-2">{host.name}, the host, can continue without them.</span>}
@@ -229,19 +230,23 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
               </li>
             ))}
         </ul>
-        <ul className="mt-auto flex flex-col gap-2" data-testid="tv-ready-list">
-          {game.players.map((p) => {
-            const isAway = !p.isAi && !connected(p.id);
-            const state = p.isAi ? 'AI · READY' : p.ready ? 'READY' : isAway ? 'AWAY · PLANNING' : 'PLANNING';
-            return (
-              <li key={p.id} className={cx('flex items-center gap-3', (p.isAi || p.ready) && 'opacity-60')}>
-                <PlayerMark slot={toSlot(p.slot)} size={22} glow={!(p.isAi || p.ready)} />
-                <span className="flex-1 truncate font-display text-xl font-semibold">{p.name}</span>
-                <span className={cx('font-mono text-sm', isAway ? 'text-warn' : p.ready || p.isAi ? 'text-ink-3' : 'text-holo')}>{state}</span>
-              </li>
-            );
-          })}
-        </ul>
+        {phase !== 'planning' ? (
+          <Players game={game} className="mt-auto" right={(p) => <span className="font-mono text-sm text-ink-3">{p.isAi ? 'AI' : p.ready ? 'READY' : '…'}</span>} />
+        ) : (
+          <ul className="mt-auto flex flex-col gap-2" data-testid="tv-ready-list">
+            {game.players.map((p) => {
+              const isAway = !p.isAi && !connected(p.id);
+              const state = p.isAi ? 'AI · READY' : p.ready ? 'READY' : isAway ? 'AWAY · PLANNING' : 'PLANNING';
+              return (
+                <li key={p.id} className={cx('flex items-center gap-3', (p.isAi || p.ready) && 'opacity-60')}>
+                  <PlayerMark slot={toSlot(p.slot)} size={22} glow={!(p.isAi || p.ready)} />
+                  <span className="flex-1 truncate font-display text-xl font-semibold">{p.name}</span>
+                  <span className={cx('font-mono text-sm', isAway ? 'text-warn' : p.ready || p.isAi ? 'text-ink-3' : 'text-holo')}>{state}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </>
     );
   }
