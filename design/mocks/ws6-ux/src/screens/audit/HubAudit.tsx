@@ -19,8 +19,10 @@ import { CouncilDesk, DESKS, EyeOff, Glyph, ICON, MarketDesk, OnlyYouLook, PLAYE
  * proposal changes is drawn here. Each change carries a numbered IntentMarker; the review page lists, per number, the
  * intent it serves and why (HUB_NOTES, below).
  *
- * Month 4 after the election, Lena holds no office: Kai is the new Governor (Governor only, Heiko 2026-10-28). Every rule number comes
- * from @mule/engine's config (the drone's fee and plots, the offices' pay, the election months, a plot's score).
+ * Month 4 after the election, Lena holds no office: Ossa, Governor in months 1–3, won again on a promise of up to 4% and
+ * set the tax at 4% (Governor only, Heiko 2026-10-28). #audit-hub-election is the same month while its vote is still
+ * open. Every rule number comes from @mule/engine's config (the drone's fee and plots, the offices' pay, the election
+ * months, a plot's score).
  *
  * GRAFT TARGET: apps/web/src/phone/hub/ (Hub.tsx's stage and rail, today.tsx's agenda and drone slots, tools.tsx's
  * DroneRail and DroneAction) and apps/web/src/phone/Shell.tsx's header. Drop every IntentMarker.
@@ -83,7 +85,7 @@ export const HUB_NOTES = {
     id: 'H6',
     n: 6,
     title: 'Plain words',
-    what: '“Governor: Kai, until month 6”, “Next election: month 7”, “Export ship in month 6: it buys the colony’s leftovers”. No codes left on this screen.',
+    what: '“Governor: Ossa, until month 6”, “Next election: month 7”, “Export ship in month 6: it buys the colony’s leftovers”. No codes left on this screen.',
     serves: '1 (cross-cutting)',
     intent: 'Find out what I should do this month',
     why: '“M1–3”, “NEXT ELECTION M4” and “EXPORT SHIP IN MONTH 3” are codes: which ship, and why should I care?',
@@ -97,6 +99,26 @@ export const HUB_NOTES = {
     serves: '1 and 2 (cross-cutting)',
     intent: 'Find out what I should do this month · Enough Food and Energy next month',
     why: 'At 844 × 390 the open Now card left the desk tab row half cut off at the bottom of the rail.',
+  },
+  H8: {
+    id: 'H8',
+    n: 8,
+    title: 'The offices line as WS7 built it',
+    what: 'The roadmap’s offices line reads as the product does (Offices.tsx): “Governor: Ossa, until month 6 · promised up to 4% · tax 4%, kept · Next election: month 7”, the promise and whether the tax keeps it beside the name (E-7). While an election is open: “Governor: Ossa · Election: this month”. No Land Baron here (it is in the Colony desk’s facts) and no “Run for office”.',
+    serves: '9 and 1',
+    intent: 'Check whether the Governor kept their promise · Find out what I should do this month',
+    why: 'WS7 built the line from the election mock’s E-7 and the hub’s H-6 together (PR #183), and WS6 ruled that build is the spec: the hub mock still showed the line without the promise.',
+    differs: 'kept is green, “tax still 5%” amber and “promise broken” red, as on the election’s Governor screen; while the vote is open the line has no “until”: the old term ended last month, and the result names the next.',
+  },
+  H9: {
+    id: 'H9',
+    n: 9,
+    title: 'H-7 beside the table chat',
+    what: 'The table chat now sits in the rail’s header here too, as in the product (the seat row and the ticker). Folded, the Now card keeps to one line: a long title truncates, its whole one tap away, and the fold button is 32 px. In an ordinary month it opens folded once read; one tap reopens it, one folds it.',
+    serves: '1 and 2 (cross-cutting)',
+    intent: 'Find out what I should do this month · Enough Food and Energy next month',
+    why: 'With the chat in the header, the folded title wrapped to two lines at 844 × 390 and put the desk tabs 2.5 px under the footer; one line puts them 15 px clear at 844 and 24 px at 667 × 375. The fold button was 28 px.',
+    differs: 'WS7’s hub folds the card only when a desk asks first; H-7 folds it in an ordinary month too, once read (WS6 ruling).',
   },
 } satisfies Record<string, IntentNoteData>;
 
@@ -117,23 +139,44 @@ const STEPS: { id: string; label: string; show: boolean }[] = [
 
 const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th'}`;
 
-/** This story's office terms, for Worth: Ossa governed months 1–3, Kai from month 4. */
-const HUB_TERMS: Record<string, number> = { ossa: 1, kai: 1 };
+/** This story's office terms, for Worth: Ossa governed months 1–3, and again from month 4. */
+const HUB_TERMS: Record<string, number> = { ossa: 2 };
 
 /** The standings by Worth, the one number Heiko agreed (2026-10-28); proposed/worth.ts mirrors the engine's score. */
 const standings = (view: MuleView) => league(view, null, HUB_TERMS);
 
-/** After this month's election: who holds what, until when, and when the next vote is. */
-function offices(month: number) {
+/** Ossa's promise for the term, and the tax she set this month (the view's treasury). */
+const PROMISE_CAP = 4;
+
+/**
+ * Who holds what, until when, and when the next vote is: after this month's election, or while its vote is open (the
+ * old term ends with it, so no "until", and the next election is this one). The words are WS7's Offices.tsx.
+ */
+function offices(month: number, open = false) {
   const next = POLITICS.electionMonths.find((m) => m > month);
-  return { governor: 'kai', until: next ? next - 1 : null, next: next ?? null };
+  return { governor: 'ossa', until: open ? null : next ? next - 1 : null, election: open ? 'Election: this month' : next ? `Next election: month ${next}` : null };
+}
+
+/** E-7 beside the Governor's name: the promise, and whether this month's tax keeps it. Not while the vote is open. */
+function TermPromise({ tax }: { tax: number }) {
+  const kept = tax <= PROMISE_CAP;
+  return (
+    <>
+      {' · '}promised up to {PROMISE_CAP}% ·{' '}
+      <strong className={cx('font-semibold', kept ? 'text-ok' : 'text-alert')} data-testid="promise-status">
+        {kept ? `tax ${tax}%, kept` : `tax ${tax}%, promise broken`}
+      </strong>
+    </>
+  );
 }
 
 // --- H-1 · the month roadmap ------------------------------------------------------------------
 
-function Roadmap({ month, ready }: { month: number; ready: boolean }) {
+function Roadmap({ month, ready, election }: { month: number; ready: boolean; election: boolean }) {
   const steps = STEPS.filter((s) => s.show);
-  const o = offices(month);
+  const o = offices(month, election);
+  const { view } = usePhoneGame();
+  const tax = Math.round(view.treasury.salesTax * 100);
   return (
     <section
       className="relative flex flex-col gap-1 rounded-panel border border-holo-line bg-panel px-2 py-1.5 @min-[1100px]/shell:gap-2 @min-[1100px]/shell:px-4 @min-[1100px]/shell:py-3"
@@ -172,13 +215,16 @@ function Roadmap({ month, ready }: { month: number; ready: boolean }) {
         )}
       </p>
       <p className="relative flex flex-wrap items-center gap-x-1 text-[11px] text-ink-2 @min-[1100px]/shell:gap-x-1.5 @min-[1100px]/shell:text-sm" data-testid="roadmap-offices">
-        <span data-testid="office-governor">
+        <span className="relative" data-testid="office-governor">
           Governor: <Who id={o.governor} size={12} />
-          {o.until && `, until month ${o.until}`}
+          {o.until !== null && `, until month ${o.until}`}
+          {!election && <TermPromise tax={tax} />}
+          <IntentMarker note={N.H8} part="offices" at="left" />
         </span>
-        {o.next && (
+        {o.election !== null && (
           <>
-            · <span data-testid="next-election">Next election: month {o.next}</span>
+            {' · '}
+            <span data-testid="next-election">{o.election}</span>
           </>
         )}
         <IntentMarker note={N.H6} part="offices" at="tr" />
@@ -540,6 +586,7 @@ export function HubAudit({
   tool: startTool = 'look',
   picked: startPicked = [],
   standings: startStandings = false,
+  election = false,
 }: {
   desk?: Desk;
   tool?: Tool;
@@ -547,6 +594,8 @@ export function HubAudit({
   picked?: { x: number; y: number }[];
   /** Mock only: open with the standings sheet showing (#audit-hub-standings). */
   standings?: boolean;
+  /** Mock only: this month's election is still open (#audit-hub-election): the offices line as it reads then. */
+  election?: boolean;
 }) {
   const { view } = usePhoneGame();
   const [ready, setReady] = useState(false);
@@ -558,7 +607,12 @@ export function HubAudit({
   const [sheet, setSheet] = useState(startStandings);
   const desks = DESKS.filter((d) => !d.office);
   const standing = useStanding(() => setSheet(true));
-  const now: Now = ready ? readyNow(others, isHost) : { title: 'Plan your month, then press Ready', detail: `Next is the land grant. ${PLAYER[offices(view.month).governor]!.name}, the new Governor, is setting the tax.` };
+  const governor = PLAYER[offices(view.month).governor]!.name;
+  const now: Now = ready
+    ? readyNow(others, isHost)
+    : election
+      ? { title: 'Plan your month, then press Ready', detail: `This month’s election is still open: ${governor} is Governor until its result. Next is the land grant.` }
+      : { title: 'Plan your month, then press Ready', detail: `Next is the land grant. ${governor} is Governor again and set the sales tax at ${Math.round(view.treasury.salesTax * 100)}%.` };
 
   const openNeeds = (el: Element) => {
     setDesk('colony');
@@ -597,7 +651,12 @@ export function HubAudit({
           status={<ReadyCount players={players} />}
           now={now}
           foldNow
-          nowMark={<IntentMarker note={N.H7} part="now" />}
+          nowMark={
+            <>
+              <IntentMarker note={N.H7} part="now" />
+              <IntentMarker note={N.H9} part="now" at="br" />
+            </>
+          }
           standing={standing}
           rail={
             <>
@@ -641,7 +700,7 @@ export function HubAudit({
           }
         >
           <div className="flex min-h-0 flex-1 flex-col gap-2 @min-[1100px]/shell:gap-4">
-            <Roadmap month={view.month} ready={ready} />
+            <Roadmap month={view.month} ready={ready} election={election} />
             <NeedsStrip onOpen={openNeeds} />
             <Agenda sent={sent} onDesk={setDesk} onTool={setTool} />
             <ToolsAndMap tools={tools.filter((t) => t.show)} tool={tool} setTool={setTool} hint={hint[tool]} tiles={tiles} onTile={onTile} selected={selected} />

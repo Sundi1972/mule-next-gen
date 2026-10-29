@@ -224,14 +224,14 @@ export function SeatRow({ anchored = [] }: { anchored?: string[] }) {
 }
 
 /** The last few lines, newest first fading in. */
-export function Ticker({ size = 'phone' }: { size?: 'phone' | 'tv' }) {
+export function Ticker({ size = 'phone', lines: keep }: { size?: 'phone' | 'tv'; /** Off unless given: the phone keeps 2, the TV 3. */ lines?: number }) {
   const chat = useChat();
   const lines = chat?.ticker ?? [];
   const tv = size === 'tv';
   return (
     <ul className={cx('flex flex-col overflow-hidden', tv ? 'gap-1' : 'gap-0.5')} data-testid="chat-ticker" aria-label="Table chat" aria-live="polite">
       {lines
-        .slice(tv ? -3 : -2)
+        .slice(-(keep ?? (tv ? 3 : 2)))
         .reverse()
         .map((l, i) => {
           const p = P[l.from]!;

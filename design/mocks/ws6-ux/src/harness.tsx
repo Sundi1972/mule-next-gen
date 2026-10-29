@@ -68,6 +68,8 @@ export function PhoneFrame({ children }: { children: ReactNode }) {
         className={`${SMALL_PHONE ? 'h-[375px] w-[667px] [--rail:clamp(232px,31cqw,300px)]' : 'h-[390px] w-[844px]'} overflow-hidden rounded-sheet border border-holo-line shadow-map`}
         data-testid="phone-frame"
         data-phone={SMALL_PHONE ? '667' : '844'}
+        // 375 px is a short screen to the product (its `short:` variant, max-height 380 px): GameShell packs its rail.
+        {...(SMALL_PHONE ? { 'data-short': '' } : {})}
       >
         {children}
       </div>
