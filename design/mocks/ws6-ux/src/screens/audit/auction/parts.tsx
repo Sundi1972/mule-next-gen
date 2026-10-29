@@ -35,8 +35,8 @@ function Name({ slot, name, size }: { slot: Slot; name: string; size: number }) 
   const species = useSeatSpecies(slot);
   return (
     <span className="flex min-w-0 items-center gap-1.5">
-      <Creature species={species} color={SLOT_COLOR[slot]} size={size} />
-      <span className="truncate font-display font-semibold">{name}</span>
+      <Creature species={species} color={SLOT_COLOR[slot]} size={size} className="shrink-0" />
+      <span className="min-w-0 truncate font-display font-semibold">{name}</span>
     </span>
   );
 }
@@ -44,21 +44,43 @@ function Name({ slot, name, size }: { slot: Slot; name: string; size: number }) 
 /**
  * A fork of AuctionParts' StatusTable with G-8's words: "Goes bad" for Spoils and "Spare" for Surplus, and a short
  * player's spare written "short 2" (it was "-2 short"). Everything else is today's table.
+ *
+ * `table-fixed`, the player column taking the rest (WS6, 2026-10-29: a real build measured the table 419 px in a 399 px
+ * panel at 667 × 375, the mock 480 in 395, with "The Accountant" and a row reading "short 2"). Each number column holds
+ * its header in at most two lines ("Goes / bad") and its longest value; a long name truncates, its whole name is its
+ * title. At 667 the player column keeps about 90 px, enough for "You", "Kai" and "The Acc…".
  */
+const STATUS_COLS: { key: string; phone: string; tv: string }[] = [
+  { key: 'had', phone: 'w-9 @min-[1100px]/shell:w-20', tv: 'w-20' },
+  { key: 'used', phone: 'w-10 @min-[1100px]/shell:w-20', tv: 'w-20' },
+  { key: 'made', phone: 'w-10 @min-[1100px]/shell:w-20', tv: 'w-20' },
+  { key: 'now', phone: 'w-9 @min-[1100px]/shell:w-20', tv: 'w-20' },
+  { key: 'needs', phone: 'w-11 @min-[1100px]/shell:w-20', tv: 'w-20' },
+  { key: 'goes-bad', phone: 'w-10 @min-[1100px]/shell:w-20', tv: 'w-20' },
+  { key: 'spare', phone: 'w-16 @min-[1100px]/shell:w-28', tv: 'w-32' },
+];
+
 export function PlainStatusTable({ view, auction, meId, tv = false }: { view: MuleView; auction: AuctionView; meId?: string; tv?: boolean }) {
-  const cell = tv ? 'px-3 py-2 text-2xl' : 'px-1.5 py-1 text-sm @min-[1100px]/shell:px-3 @min-[1100px]/shell:py-2 @min-[1100px]/shell:text-xl';
-  const head = cx('label-caps text-right font-medium', tv ? 'px-3 pb-2 text-sm!' : 'px-1.5 pb-1 text-[10px]! @min-[1100px]/shell:px-3 @min-[1100px]/shell:text-xs!');
+  const pad = tv ? 'px-3' : 'px-1 @min-[1100px]/shell:px-3';
+  const cell = cx(pad, tv ? 'py-2 text-2xl' : 'py-1 text-sm @min-[1100px]/shell:py-2 @min-[1100px]/shell:text-xl');
+  const head = cx('label-caps align-bottom text-right font-medium', pad, tv ? 'pb-2 text-sm!' : 'pb-1 text-[10px]! @min-[1100px]/shell:text-xs!');
   return (
-    <table className="w-full" data-testid="status-table">
+    <table className="w-full table-fixed" data-testid="status-table">
+      <colgroup>
+        <col />
+        {STATUS_COLS.map((c) => (
+          <col key={c.key} className={tv ? c.tv : c.phone} />
+        ))}
+      </colgroup>
       <thead>
         <tr>
-          <th className={cx(head, 'text-left')}>Player</th>
+          <th className={cx(head, 'text-left', tv ? 'px-3' : 'px-1.5 @min-[1100px]/shell:px-3')}>Player</th>
           <th className={head}>Had</th>
           <th className={head}>Used</th>
           <th className={head}>Made</th>
           <th className={head}>Now</th>
           <th className={head}>Needs</th>
-          <th className={cx(head, 'whitespace-nowrap')} data-testid="head-goes-bad">
+          <th className={head} data-testid="head-goes-bad">
             Goes bad
           </th>
           <th className={cx(head, 'relative')} data-testid="head-spare">
@@ -70,11 +92,12 @@ export function PlainStatusTable({ view, auction, meId, tv = false }: { view: Mu
       <tbody data-num className="font-mono">
         {auction.status.map((r) => {
           const slot = slotOf(view, r.id) ?? 0;
-          const name = r.id === meId ? 'You' : (view.players.find((p) => p.id === r.id)?.name ?? r.id);
+          const full = view.players.find((p) => p.id === r.id)?.name ?? r.id;
+          const name = r.id === meId ? 'You' : full;
           const spare = r.now - r.need;
           return (
             <tr key={r.id} className={cx('border-t border-holo-faint', r.id === meId && 'bg-holo-soft')} data-testid={`status-${r.id}`}>
-              <td className={cx(cell, 'text-left')} style={{ maxWidth: tv ? 300 : 150 }}>
+              <td className={cx(cell, 'overflow-hidden text-left', !tv && 'px-1.5')} title={full}>
                 <Name slot={slot} name={name} size={tv ? 34 : 18} />
               </td>
               <td className={cx(cell, 'text-right text-ink-2')}>{r.had}</td>
@@ -493,12 +516,24 @@ export function ReceiptCard({ r, mark = true }: { r: Receipt; mark?: boolean }) 
 // --- G-6 · the ship ------------------------------------------------------------------------------------------
 
 /** On every status screen while the ship is in port: what it wants, and when that good comes up. */
-export function ShipWants({ good, wants, pays, have, after, tv = false }: { good: Good; wants: number; pays: number; have: number; /** The good before it in the auction's order. */ after: Good; tv?: boolean }) {
+/** The ship's other wanted goods, in a sentence: one with its count, several by name. */
+const alsoWords = (also: readonly { good: Good; wants: number }[]) =>
+  also.length === 0
+    ? ''
+    : also.length === 1
+      ? ` It also wants ${also[0]!.wants} ${GOOD_NAME[also[0]!.good]}.`
+      : ` It also wants ${also.slice(0, -1).map((a) => GOOD_NAME[a.good]).join(', ')} and ${GOOD_NAME[also[also.length - 1]!.good]}.`;
+
+/**
+ * One panel however many goods the ship wants: the first it wants from this good on, and the rest in one sentence, so
+ * the store's box and the board keep their room (WS6 ruling on #182, 2026-10-29).
+ */
+export function ShipWants({ good, wants, pays, have, after, also = [], tv = false }: { good: Good; wants: number; pays: number; have: number; /** The good before it in the auction's order. */ after: Good; /** The other goods the ship wants this month, in the auction's order. */ also?: readonly { good: Good; wants: number }[]; tv?: boolean }) {
   return (
     <p
       className={cx(
         'relative flex flex-wrap items-baseline gap-x-1.5 rounded-panel border border-warn/60 bg-panel',
-        tv ? 'px-5 py-3 text-2xl' : 'px-2.5 py-1.5 text-xs leading-snug @min-[1100px]/shell:px-4 @min-[1100px]/shell:py-3 @min-[1100px]/shell:text-lg',
+        tv ? 'px-5 py-2 text-xl' : 'px-2.5 py-1.5 text-xs leading-snug @min-[1100px]/shell:px-4 @min-[1100px]/shell:py-3 @min-[1100px]/shell:text-lg',
       )}
       data-testid="ship-wants"
     >
@@ -507,6 +542,7 @@ export function ShipWants({ good, wants, pays, have, after, tv = false }: { good
       </strong>
       <span className="text-ink-2">
         {GOOD_NAME[good]} comes up after {GOOD_NAME[after]}: the ship pays {pays} cr for the first.{tv ? '' : ` You have ${have}.`}
+        {alsoWords(also)}
       </span>
       <Mark note={N.G6} part={tv ? 'tv-status' : 'status'} at={tv ? 'tr-in' : 'tr'} />
     </p>

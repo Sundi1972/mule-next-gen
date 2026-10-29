@@ -2,7 +2,7 @@ import { DEV_WALK, DEVELOPMENT } from '@mule/engine';
 import type { DealView, MuleView, TableView } from '@mule/protocol';
 import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PaceList, PlayerMark, SeatSpeciesProvider, SharedClock, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard } from '@mule/ui';
 import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
-import { boardWalkers, dealLine, LineReadout, newestFirst, SIDE_WORD, skippedLine, StatusTable, StoreBox, type DealRow } from '../components/AuctionParts';
+import { boardWalkers, dealLine, newestFirst, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, StoreBox, TvReadout, type DealRow } from '../components/AuctionParts';
 import { useEffect, useState, type ReactNode } from 'react';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
@@ -13,6 +13,7 @@ import { useClient, useClientState, useServerNow } from '../net/react';
 import { connectedIn, hostMayContinue, readyRows, stillPlanning } from '../phone/hub/ready';
 import { ReadyCount, WaitingFor } from '../phone/hub/ReadyBar';
 import { TvElection } from './TvElection';
+import { TvGovernorPromise } from './TvGovernorPromise';
 import { TvLandAuction } from './TvLandAuction';
 import { TvProduction } from './TvProduction';
 
@@ -122,7 +123,7 @@ function TvLobby({ table }: { table: TableView<MuleView> }) {
   );
 }
 
-export function TvHeader({ game, title, seconds }: { game: MuleView; title: string; seconds?: number | undefined }) {
+export function TvHeader({ game, title, seconds, extra }: { game: MuleView; title: string; seconds?: number | undefined; extra?: ReactNode }) {
   return (
     <>
       <header className="flex items-end justify-between gap-6">
@@ -135,6 +136,7 @@ export function TvHeader({ game, title, seconds }: { game: MuleView; title: stri
           </h1>
         </div>
         <div className="flex items-center gap-4">
+          {extra}
           <ThemeToggle />
           <AirGauge level={game.air.level} band={game.air.band} tv />
           {seconds !== undefined && <Timer seconds={seconds} className="h-14! px-5! text-3xl!" />}
@@ -160,7 +162,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   }
 
   if (phase === 'production' && game.production) return <TvProduction game={game} production={game.production} />;
-  if (phase === 'planning' && game.politics?.election?.stage === 'ceremony') return <TvElection game={game} />;
+  if (phase === 'planning' && game.politics?.election && game.politics.election.stage !== 'over') return <TvElection table={table} game={game} />;
 
   let side: ReactNode;
   if (phase === 'landGrant')
@@ -277,11 +279,12 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
 
   return (
     <SeatSpeciesProvider value={seatSpecies(game)}>
-      <div className="flex h-[720px] w-[1280px] flex-col gap-5 bg-table p-10 text-ink" data-phase={phase} data-testid={phase === 'planning' ? 'tv-planning' : undefined}>
+      <div className={cx('flex h-[720px] w-[1280px] flex-col bg-table text-ink', phase === 'planning' ? 'gap-4 px-10 py-6' : 'gap-5 p-10')} data-phase={phase} data-testid={phase === 'planning' ? 'tv-planning' : undefined}>
         {phase === 'planning' ? (
           <div className="flex items-start gap-4">
             <div className="min-w-0 flex-1">
               <TvHeader game={game} title={PHASE_NAME[phase]} seconds={secondsUntil(game.phaseEndsAt, now)} />
+              <TvGovernorPromise game={game} />
             </div>
             <ReadyCount players={game.players} tv />
           </div>
@@ -378,23 +381,42 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
   const deals = useNewestFirst(auction.deals);
   const status = auction.stage === 'status';
   const stageName = status ? 'Buy or sell?' : auction.slowed ? 'Trading · clock slowed' : 'Walk';
+  const ship = shipWants(game, auction);
   return (
-    <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-8 text-ink" data-phase="auction">
+    <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-8 text-ink" data-phase="auction" data-testid={status ? 'tv-status' : 'tv-walk'}>
       <TvHeader game={game} title={`Auction · ${GOOD_NAME[auction.good]}`} />
       <div className="flex min-h-0 flex-1 gap-6">
         <div className={cx('flex min-w-0 flex-1 flex-col', status ? 'gap-3' : 'gap-2')}>
-          <TimeBar size="tv" seconds={auction.seconds} total={auction.total} slowed={auction.slowed} />
-          {skipped && (
-            <p className="font-mono text-base text-ink-3" data-testid="skipped">
-              {skipped}
-            </p>
+          {status ? (
+            // On the status stage the skipped words share the time bar's row, so the ship panel keeps its room.
+            <div className="flex shrink-0 items-center gap-4">
+              <TimeBar size="tv" seconds={auction.seconds} total={auction.total} slowed={auction.slowed} className="min-w-0 flex-1" />
+              {skipped && (
+                <p className="min-w-0 max-w-[45%] truncate font-mono text-base text-ink-3" data-testid="skipped">
+                  {skipped}
+                </p>
+              )}
+            </div>
+          ) : (
+            <>
+              <TimeBar size="tv" seconds={auction.seconds} total={auction.total} slowed={auction.slowed} />
+              {skipped && (
+                <p className="font-mono text-base text-ink-3" data-testid="skipped">
+                  {skipped}
+                </p>
+              )}
+            </>
           )}
           {status ? (
             <>
               <div className="rounded-panel border border-holo-line bg-panel px-5 py-4">
                 <StatusTable view={game} auction={auction} tv />
               </div>
-              <StoreBox auction={auction} tv />
+              {/* The store box never gives up its prices to the ship panel or the chat ticker. */}
+              <div className="shrink-0">
+                <StoreBox auction={auction} tv />
+              </div>
+              {ship && <ShipWants want={ship.first} also={ship.also} tv />}
             </>
           ) : (
             <WalkBoard
@@ -406,6 +428,7 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
               storeBuys={auction.storeBuys}
               storeSells={auction.storeSells}
               shipPays={auction.shipPays}
+              {...(auction.shipPays !== null ? { shipCaption: `The ship buys ${GOOD_NAME[auction.good]} at ${auction.shipPays}` } : {})}
               storeStock={stock}
               marks={{ ask: true, bid: true }}
               wrapCreature={tvSpeakerAt}
@@ -440,7 +463,7 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
             </ul>
           ) : (
             <div className="shrink-0 rounded-panel border border-holo-line bg-panel p-3">
-              <LineReadout walkers={walkers} trading={auction.deals.length > 0} tv />
+              <TvReadout view={game} auction={auction} />
             </div>
           )}
           {!status && (
@@ -460,7 +483,11 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
             </dl>
           )}
           {auction.shipPays !== null && (
-            <p className="rounded-control border border-warn/60 px-3 py-2 font-mono text-lg text-warn">Export ship pays {auction.shipPays}</p>
+            <p className="rounded-control border border-warn/60 px-3 py-2 text-lg leading-snug text-warn" data-testid="tv-ship">
+              <strong className="font-semibold">
+                The ship buys {GOOD_NAME[auction.good]} at {auction.shipPays}
+              </strong>
+            </p>
           )}
           {/* Each row is one line. A row that doesn't fit below the others wraps into a second column, which the clip hides. */}
           <ul className="flex min-h-0 flex-1 flex-col flex-wrap gap-2 overflow-hidden">

@@ -86,8 +86,9 @@ export async function launch(): Promise<Browser> {
   }
 }
 
-/** The phone is played sideways. 844x390 is a small phone on its side; PHONE_WIDE is a large one. */
+/** The phone is played sideways. 844x390 is a phone on its side, PHONE_SMALL an iPhone SE on its side, PHONE_WIDE a large one. */
 export const PHONE = { viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
+export const PHONE_SMALL = { ...PHONE, viewport: { width: 667, height: 375 } };
 export const PHONE_WIDE = { width: 932, height: 430 };
 export const TV = { viewport: { width: 1920, height: 1080 } };
 

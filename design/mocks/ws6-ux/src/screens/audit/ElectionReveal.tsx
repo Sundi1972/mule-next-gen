@@ -57,7 +57,7 @@ export function timeline(offices: readonly Office[]) {
     const cands0 = title + 1.8;
     const bars = cands0 + cands.length * 0.5 + 0.5;
     const blocksEnd = bars + order.length * BLOCK;
-    const tie = race.how === 'tieRule' || race.how === 'baron' ? blocksEnd + 0.4 : null;
+    const tie = race.how === 'land' || race.how === 'lot' || race.how === 'baron' ? blocksEnd + 0.4 : null;
     const winner = tie !== null ? tie + 2.6 : blocksEnd + 0.7;
     const end = winner + 3.8;
     t = end;
