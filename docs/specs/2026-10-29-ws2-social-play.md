@@ -12,8 +12,9 @@ Heiko withdrew. Builds after spec A's PR-1 (`docs/specs/2026-10-28-ws2-strategy-
   them, what it wants from them, how to win them. Then it sends up to 3 messages, to the table or as whispers.
 - AIs court each other too: an AI's whisper to another AI is read by that AI at its next monthly think, and can change
   its stance or its vote.
-- Whisper an AI and it answers in the same phase, in character. **Until WS3 confirms the replay side, that answer is
-  words only:** what you say to it changes what it does only at its next monthly think, not in the reply itself.
+- Whisper an AI and it answers in the same phase, in character. **At first that answer is words only:** what you say
+  changes what it does at its next monthly think. WS3 has confirmed the replay side (29 Oct); once the record gains a
+  `heard` marker (WS3's AM-4), a reply may also change the AI's stance or vote toward you on the spot (B-2b).
 - In election months each AI decides whether to run, campaigns, asks for votes, and votes by its own reasoning.
   "Vote for me and I'll cut taxes" can move its vote, if it judges that serves its strategy. Only the Governor is
   elected until WS7's slice 4 brings back the Sheriff.
@@ -113,10 +114,12 @@ HC-B2  A player can mute an AI, by Heiko's approved mock (ws6-ux 29b792c2, mute.
        phone; the host's mute does not clear the TV; an offer already on the phone stays until Ready.
                                                                                  source: Heiko, 29 Oct · fatal
 HC-B3  An AI action comes only from public state, the record's notices, WS7's card rules, or Claude's RECORDED
-       reasoning (a writer reply the record replays). Claude's recorded reasoning may read chat. Keyless or
-       unrecorded logic never reads chat, a talker reply, chat counters or a talk spend. A whisper reply is words
-       only: it changes no state and no playbook. PENDING WS3's confirmation that a recorded call reading chat replays
-       (asked 29 Oct); until it lands, no change that relies on it merges.      source: PM, WS3 review · fatal
+       reasoning (a writer reply the record replays). Claude's recorded reasoning may read chat, on two conditions
+       (WS3, 29 Oct): (i) whether a recorded call opens, and in which step, never depends on chat text: it opens at a
+       phase change, upkeep, a notice, a state condition, or (with WS3's AM-4) a `heard` step that carries who spoke
+       to whom and no words; (ii) everything the call changes in play flows through its recorded reply. Keyless or
+       unrecorded logic never reads chat, a talker reply, chat counters or a talk spend. An unrecorded whisper reply
+       (B-2) is words only.                                     source: PM; WS3's answer, 29 Oct · fatal
 HC-B4  All AI seats of a game together stay within BRAIN.gameBudgetUsd; at 5 AI seats the total is tested to stay at
        or below it (RULE-B5). A reply never takes the money a seat needs for its next strategy call (RULE-B3).
                                                                                  source: Heiko via PM, 29 Oct · fatal
@@ -240,6 +243,10 @@ tomorrow     MUST answer a whisper addressed to the AI within the phase, by RULE
              `BrainService.talkerFor(seat)` on BRAIN.social.replyModel (Sonnet 5.5; Haiku by RULE-A5), the reply checked
              by the fact guard; MUST change no state and no playbook (HC-B3); MUST never throw (no reply, refusal,
              timeout → a persona line from packages/ai/src/personas.ts::lines, or nothing).
+             With WS3's AM-4 (a `heard` step {from, to}, no text): MUST let a reply be a recorded writer call (kind
+             'playbook', RecordedWrite unchanged, its words beside the reply as C3's messages are) that opens in that
+             step, whose edits (a stance, a note, a politics value) take effect through validatePlan; whether it opens
+             reads only from, to, timing, caps and state, never the words (HC-B3 (i)).
 seam         packages/ai/src/social/talker.ts (new) and apps/server/src/brain/index.ts::BrainService (talkerFor)
 reuse        spec A's writer port shape (writerFor: never throws, wait bound, RULE-A5 inside the port, AM-A14);
              S-B1's reply mode (measured $0.0024 on Sonnet); personas.ts lines for the keyless fallback.
@@ -376,7 +383,11 @@ example  5 Smart seats, a fake model billing at S-B1's measured option-(1) price
   null; cause?: string }>`, never throws; null for Classic, with the key unset, and in the replay's brain.
 - **`mute` intent** (ADDED, protocol, C9): `{ type: 'mute'; seat: PlayerId; muted: boolean }` in
   `packages/protocol/src/index.ts::MuleIntent`; recorded as an intent by WS3's recorder.
-- **WS3's record** (consumed, frozen, no amendment): writer replies replay as recorded (AM-1); chat is not stored.
+- **WS3's record** (consumed): writer replies replay as recorded (AM-1); chat text is not stored. The playbook's new
+  optional fields (`politics`, `offers`) reach the record only inside recorded playbooks (PlaybookEntry), additively.
+- **`heard` record event** (ADDED, WS3's AM-4, with WS1, WS2 and WS3 OKs; C7's recorded replies): a whisper or table
+  line reaching an AI seat opens a step carrying `{ from, to }`, never the words; the replay calls
+  `game.heard(from, '', to)`. RULE-5 restated: the record holds who spoke to whom, never what.
 - **WS7's cards and reputation** (consumed, slice 3); **WS6's mute control and card screens** (consumed).
 
 ## §4 · Failure & Ops `[handoff]`
@@ -405,6 +416,7 @@ Code-only; no existing state to reach. The mute starts unset for every player.
 | T-AC-B1 (B-AC-B1) | RULE-B1 rows 1-6 with its examples. | messages sent or dropped | — | C4 |
 | T-AC-B2 (HC-B1) | RULE-B2: a false declared price → dropped; a number with no declared fact → dropped; "I'll vote for you" → sent; a prose-only false claim → sent (R-B1, pinned). | sent or dropped; ledger cause | a true declared price → sent | C4 C7 |
 | T-AC-B3 (HC-B3) | A game with social reasoning and replies, replayed from its record with the key unset, reproduces every playbook, vote and score; a reply's call changes no state hash. | WS3's replay result; state hashes | — | C3 C7 C8 |
+| T-AC-B8 (HC-B3) | A game with recorded replies, replayed with every heard text blanked, comes out identical: every playbook, vote and score. | WS3's replay result | a reply call that opens on a word in the text → red | C7 C8 |
 | T-AC-B4 (HC-B4) | RULE-B5's example: 5 Smart seats, fake model at S-B1's option-(1) prices, 12 months: the total ≤ BRAIN.gameBudgetUsd; late calls on Haiku; RULE-B3's reserve holds. | ledger totals and models | the same at 4 seats → all Sonnet | C7 C11 |
 | T-AC-B5 (HC-B5) | No prompt carries another seat's goods or unanalysed ground, or a whisper between two other players. | prompt text | a planted rival stock → red | C1 C2 C7 |
 | T-AC-B6 (B-AC-B3) | RULE-B4 rows 1-5; validatePlan clamps an illegal politics edit. | VoteHand's intents; the clamped playbook | no politics play → keyless rule, unchanged | C6 |
@@ -413,10 +425,8 @@ Code-only; no existing state to reach. The mute starts unset for every player.
 ## §7 · Risks & Spikes `[review-only]`
 - **R-B1 (accepted, pinned):** a false claim in prose with no number and no declared fact ("the store is out of
   food") is not caught. Mitigation: the prompt requires every fact declared; T-AC-B2 pins the case.
-- **R-B2 · WS3's answer may say a recorded call that read chat does not replay** (asked 29 Oct). Then HC-B3 falls back
-  to v1's rule for chat (no action may follow chat) and G-B3/G-B4's "talk an AI into it" goes back to Heiko.
-  Mitigation: HC-B3 blocks every merge that relies on it until WS3 answers; B-1's design does not change either way
-  (its edits are recorded writer replies).
+- **R-B2 · resolved 29 Oct:** WS3 confirmed a recorded writer call that read chat replays, on HC-B3's two
+  conditions (AM-B2).
 - **R-B3 · the paired tournament costs money.** UBER-AC-B3 and B5 need it: about 8 seeds × 2 arms, roughly $7.6 for
   the social arm at 4 AI seats plus $3.3 for the off arm, about $11. Mitigation: B-6's paid runs go to the PM with the
   cost stated first; a smaller first pass (4 seeds, about $5.5) shows direction before the full run.
@@ -435,6 +445,14 @@ Code-only; no existing state to reach. The mute starts unset for every player.
 ## §8 · Amendments `[review-only]`
 - **AM-B1 · 29 Oct · lead, at plan time:** §6 had no AC for C10 (courting with WS7's cards); B-AC-B7 added, lifted
   from v1's card AC and UBER-AC-B2's card part. Goal G-B2/G-B3 unchanged.
+- **AM-B2 · 29 Oct · lead, on WS3's answer:** HC-B3's narrowing is confirmed: a recorded writer call whose brief quotes
+  chat replays keylessly, provided (i) whether and where it opens never depends on chat text and (ii) every effect
+  flows through its recorded reply. HC-B3 rewritten with both; R-B2 resolved; B-1's and B-4's HC-B3 gates are met.
+  Goals unchanged.
+- **AM-B3 · 29 Oct · lead, on WS3's answer:** WS3 prefers a `heard` step to an AI seat carrying `{ from, to }` and no
+  words (its AM-4, needing WS1, WS2 and WS3 OKs), so a whisper reply can itself be a recorded call that acts. C7
+  gains recorded replies (B-2b, after B-2's words-only replies); §3 gains the `heard` event; T-AC-B8 (replay with
+  blanked heard text is identical) added. Goal G-B3 ("influence") and G-B4 served sooner; no goal changes.
 
 ## §9 · Ownership Boundaries `[handoff]`
 - **Sole owner of AI social reasoning, its memory and its messages: WS2**: `packages/ai/src/social/`, the social parts

@@ -5,7 +5,7 @@
 **Spec class:** Programme (chosen by Heiko, 29 Oct).
 
 **SPEC APPROVED** (Heiko, "Yes, approve it", via the PM, 29 Oct, at 2486382). Standing orders from the PM: spec A's PR-1
-lands first; every merge that relies on HC-B3's narrowing stays blocked until WS3 answers (asked 29 Oct); the paired
+lands first; HC-B3's narrowing is confirmed by WS3 (29 Oct, spec AM-B2), so B-1 and B-4 no longer wait on it; the paired
 tournament (B-6) goes to the PM with its exact cost before it runs, and Heiko clears the money.
 
 ## Goals — lifted from spec §0. Reference, do not restate.
@@ -82,7 +82,8 @@ runs low.
 | `PlanningPlay.offers` and WS7's card intent and AI answer rule | WS1 (types), WS7 (cards, slice 3) | not built | B-5 C10 | unit tests stub WS7's card API; B-AC-B7 needs the real one |
 | MuleGame forwards AI lines to the other AIs (C5); `mute` intent (C9) | WS3 (named edits) | not asked yet | B-1 C5, B-3 C9 | no |
 | record.ts passes `talkerFor`; replay.ts returns null (C8) | WS3 (named edits) | not asked yet | B-2 C8 | no |
-| WS3's answer: a recorded writer call that read chat replays (HC-B3) | WS3 | asked 29 Oct, open | B-1 and B-4 merges | **no merge relies on it until answered** |
+| WS3's answer: a recorded writer call that read chat replays (HC-B3) | WS3 | **answered yes 29 Oct**, on HC-B3's conditions (i) and (ii) (spec AM-B2) | B-1, B-4 | met |
+| `heard` record event `{ from, to }`, no words (WS3's AM-4) | WS3 (record), WS1 and WS2 OK | WS3 drafts AM-4 from spec B §3 | B-2b C7 | no: the replay test needs the real step |
 | The mute control on mock ws6-ux 29b792c2 (mute.html) | WS6 | mock approved by Heiko 29 Oct | B-3 B-AC-B4 | the server half builds without it |
 | WS6's card screens | WS6 | not built | B-5 B-AC-B7 | no |
 
@@ -95,7 +96,8 @@ B-4 (G-B4, G-B5).
 | PR | Sub-branch | Scope (tasks / changes) | ACs verified | Contracts produced | Contracts consumed | Frontend touched? |
 |----|------------|-------------------------|--------------|--------------------|--------------------|-------------------|
 | B-1 | `ws2-b2-pr1-social` | Tasks 1.1-1.7 (C1, C2, C3 stances and notes and messages, C4, C5, RULE-B5) | B-AC-B1, B-AC-B2, B-AC-B5, T-AC-B1, T-AC-B2 (messages), T-AC-B3 (writer), T-AC-B4, T-AC-B5, T-AC-B7 | the writer reply's `messages`; stance and note edits | spec A PR-1, WS1 clamps, WS3 C5 edit, WS3's HC-B3 answer | No |
-| B-2 | `ws2-b2-pr2-replies` | Tasks 2.1-2.3 (C7, C8, RULE-B3) | B-AC-B6, T-AC-B2 (replies), T-AC-B3 (replies) | `BrainService.talkerFor` | B-1; WS3 C8 edits | No |
+| B-2 | `ws2-b2-pr2-replies` | Tasks 2.1-2.3 (C7 words-only, C8, RULE-B3) | B-AC-B6, T-AC-B2 (replies), T-AC-B3 (replies) | `BrainService.talkerFor` | B-1; WS3 C8 edits | No |
+| B-2b | `ws2-b2-pr2b-recorded-replies` | Tasks 2b.1-2b.2 (C7 recorded replies) | T-AC-B8 | replies as recorded writer calls | B-2; WS3's AM-4 `heard` step | No |
 | B-3 | `ws2-b2-pr3-mute` | Tasks 3.1-3.2 (C9) | B-AC-B4 | the `mute` intent | WS6's control on 29b792c2; WS3 C9 edits | Yes (WS6's control; driven front to back) |
 | B-4 | `ws2-b2-pr4-politics` | Tasks 4.1-4.3 (C6, C3 politics edits, RULE-B4) | B-AC-B3, T-AC-B6 | `Playbook.politics` edits | WS1 type + clamps, WS7 VoteHand edit, WS3's HC-B3 answer | No |
 | B-5 | `ws2-b2-pr5-cards` | Tasks 5.1-5.2 (C10) | B-AC-B7 | card proposals as planning edits | WS7 slice 3, WS6 card screens, WS1 `offers` | Yes (WS6's card screens; driven front to back) |
@@ -110,6 +112,7 @@ Every handoff carries this line verbatim:
 | PR | may_edit | may_edit_content | must_not_edit |
 |---|---|---|---|
 | B-1 | `packages/ai/src/social/` (new: memory.ts, facts.ts, index.ts), `packages/ai/src/llm/brief.ts`, `packages/ai/src/llm/writer.ts`, `packages/ai/src/index.ts` (exports), `apps/server/src/brain/playbooks.ts` (message delivery after take-effect), their tests | `packages/engine/src/config.ts` BRAIN block (`BRAIN.social`, named edit, WS1 OKs); `apps/server/src/mule-game.ts` one touch point beside `heard` (C5, named edit, WS3 OKs) | `apps/server/src/record.ts`, `replay.ts` (B-2), `packages/protocol/` (B-3), `packages/engine/src/playbook.ts` (WS1), `packages/ai/src/hands/` (WS1, WS7), `apps/web/` (WS6), `apps/server/src/brain/client.ts` (spec A PR-3) |
+| B-2b | `packages/ai/src/social/talker.ts`, `apps/server/src/brain/index.ts` (a reply as a writer call), their tests | `apps/server/src/record.ts` and `replay.ts` only as WS3's AM-4 lands them (WS3's code) | `brief.ts`, `writer.ts` (B-4) |
 | B-2 | `packages/ai/src/social/talker.ts` (new), `apps/server/src/brain/index.ts` (`talkerFor`), `apps/server/src/brain/ledger.ts` (kind 'talk'), their tests | `apps/server/src/record.ts` and `replay.ts` (C8, named edits WS3 reviews on the SHA); `config.ts` BRAIN.social reply values | `brief.ts`, `writer.ts` (B-1, B-4), `packages/protocol/` (B-3), `apps/web/` |
 | B-3 | the mute check in `apps/server/src/brain/playbooks.ts` and in the talker's caller, their tests; `apps/web/e2e/mute.ts` (new; drives WS6's control, never edits it) | `packages/protocol/src/index.ts::MuleIntent` and `mule-game.ts` intent handling (named edits, WS3 reviews) | `apps/web/src/` (WS6 builds the control from mock 29b792c2) |
 | B-4 | `packages/ai/src/llm/writer.ts` (politics edits), `packages/ai/src/llm/brief.ts` (election part of the social section), their tests | `packages/ai/src/hands/vote.ts` (named edit, WS7 reviews); `packages/engine/src/playbook.ts` (WS1 writes or reviews the optional `politics` type) | WS1's validatePlan body (WS1 writes the clamps); `apps/web/` |
@@ -130,11 +133,12 @@ Every handoff carries this line verbatim:
 ### Waves
 
 - **Wave 1: B-1**, after spec A PR-1 merges. Tasks 1.2, 1.3 and 1.4 run in parallel: disjoint new files (memory.ts,
-  facts.ts) and brief.ts, all reading the config Task 1.1 freezes. Its merge also waits for WS3's HC-B3 answer.
-- **Wave 2: B-2**, after B-1. Words only, so it does not wait on the HC-B3 answer.
+  facts.ts) and brief.ts, all reading the config Task 1.1 freezes.
+- **Wave 2: B-2**, after B-1: replies, words only. **Then B-2b** when WS3's AM-4 (`heard` step) lands: a reply may
+  act through its recorded reply.
 - **Wave 3: B-3**, when WS6's control on mock 29b792c2 lands. **Then the G-B1..G-B3 milestone PR to
   feat/strategist**, with Heiko's OK through the PM.
-- **Wave 4: B-4**, when WS1's `politics` type and clamps and WS7's VoteHand OK land (and WS3's HC-B3 answer). **Then
+- **Wave 4: B-4**, when WS1's `politics` type and clamps and WS7's VoteHand OK land. **Then
   the G-B4/G-B5 milestone PR.**
 - **Wave 5: B-5**, when WS7's slice 3 and WS6's card screens land.
 - **Wave 6: B-6**, after B-1..B-4 (B-5 optional for the tournament), with the PM's clearance and the exact cost stated.
@@ -252,7 +256,7 @@ Every handoff carries this line verbatim:
 - [ ] The writer reply's `messages` is exercised from the consumer side (MuleGame through a fake SDK in brain-social.test.ts), not only in packages/ai's tests
 - [ ] `pnpm typecheck && pnpm test` exit 0; `MULE_FULL=1` brain-trial, brain-spike, brain-budget, strategy-spike, social-spike, play-hooks green; config-guard green; sims byte-identical to trunk (`pnpm -s sim -- --games 40 --seed 1|101`, with and without `--walking off`)
 - [ ] WS1's OK on the BRAIN hunk and its real clamps for stances and rivalReads; WS3's OK on the C5 touch point
-- [ ] **WS3's HC-B3 answer received and it confirms a recorded writer call that read chat replays** (else stop: R-B2, back to Heiko)
+- [ ] HC-B3's two conditions hold (WS3, 29 Oct): the monthly call opens at upkeep, never on chat; every play effect flows through the recorded reply (the replay test in T-AC-B3 (writer) shows it)
 - [ ] No new `@ts-ignore` / `eslint-disable` without a reason on the line
 - [ ] CI green (check, e2e) on the head; then merge into ws2-brain under the lane rule
 - [ ] Heiko's table: the PM offers a playtest at the lane rig (social reasoning and messages, no mute yet)
@@ -307,6 +311,37 @@ Every handoff carries this line verbatim:
 - [ ] B-AC-B6, T-AC-B2 (replies), T-AC-B3 (replies) green, named after their IDs, failing-test commits first
 - [ ] `pnpm typecheck && pnpm test` exit 0; `MULE_FULL=1` suites green; config-guard green; sims byte-identical to trunk
 - [ ] WS3's review of the record.ts and replay.ts edits on the SHA; WS1's OK on the BRAIN hunk
+- [ ] CI green (check, e2e); merge into ws2-brain under the lane rule
+
+---
+
+## Phase P2b — replies that act (B-2b)
+
+### Task 2b.1: a reply as a recorded call — C7 (recorded replies)
+
+**Phase:** P2b · **Depends on:** B-2 merged; WS3's AM-4 (`heard` step) on feat/strategist and synced into ws2-brain · **ACs verified:** T-AC-B8
+**Spec sections consumed:** §1 C7, §3 `heard` event, §0.2 HC-B3 (i), (ii)
+
+**Files:**
+- Modify: `packages/ai/src/social/talker.ts`, `apps/server/src/brain/index.ts` (a reply goes through the writer port, kind 'playbook'; its words beside the reply, unrecorded)
+- Test: `apps/server/test/brain-writer-record.test.ts` (extend)
+
+- [ ] **Step 1: Write the failing test `T-AC-B8: a game with recorded replies, replayed with every heard text blanked, comes out identical: every playbook, vote and score`** — Altitude: promise (WS3's replay result). Positive control: make the reply call open only when the whisper contains "vote", watch it go red, restore. Negative case: a reply whose edits validatePlan refuses changes nothing.
+- [ ] **Step 2: Run it** → FAIL
+- [ ] **Step 3: Implement C7's recorded replies per spec §1 C7** — whether the call opens reads only from, to, timing, caps (RULE-B3) and state; its stance, note or politics edits take effect through validatePlan; RecordedWrite unchanged.
+- [ ] **Step 4: Run the server suite and WS3's record and replay tests** → PASS; commit `feat(server): a reply may change the AI's stance or vote through its recorded reply (spec B C7, T-AC-B8)`
+
+### Task 2b.2: the table sees it act — C7
+
+**Phase:** P2b · **Depends on:** 2b.1 · **ACs verified:** B-AC-B6 (extended)
+- [ ] **Step 1: Extend `B-AC-B6`** with a recorded-reply case: a human whispers "back me for Governor and I'll sell you food at 25"; the AI's reply may set its vote for that human in the playbook (its recorded reason names the offer), and the game state outside the playbook is unchanged until the ballot.
+- [ ] **Step 2: Run** → PASS; commit `test(server): a whisper can move an AI's vote through its recorded reply (spec B C7, B-AC-B6)`
+
+### B-2b merge gate
+
+- [ ] T-AC-B8 green, positive-controlled; B-AC-B6 extended and green; failing-test commits first
+- [ ] `pnpm typecheck && pnpm test` exit 0; `MULE_FULL=1` suites green; sims byte-identical to trunk
+- [ ] WS3's AM-4 merged on feat/strategist and synced; WS3's review of any record-side touch on the SHA
 - [ ] CI green (check, e2e); merge into ws2-brain under the lane rule
 
 ---
@@ -381,7 +416,7 @@ Every handoff carries this line verbatim:
 
 - [ ] B-AC-B3, T-AC-B6 green, named after their IDs, failing-test commits first
 - [ ] `pnpm typecheck && pnpm test` exit 0; `MULE_FULL=1` suites green; config-guard green; sims byte-identical to trunk with Classic seats
-- [ ] WS1's OK on the `politics` type and clamps; WS7's review of vote.ts on the SHA; **WS3's HC-B3 answer confirms** (votes follow reasoning that read chat)
+- [ ] WS1's OK on the `politics` type and clamps; WS7's review of vote.ts on the SHA; HC-B3's conditions hold for the politics edits
 - [ ] CI green (check, e2e); merge into ws2-brain under the lane rule
 - [ ] **G-B4/G-B5 milestone:** the PM asks Heiko for the OK to take ws2-brain to feat/strategist
 
@@ -439,7 +474,8 @@ Every handoff carries this line verbatim:
 |---|---|---|---|
 | WS1 | validatePlan clamps `/strategy/stances/<p>` and `/rivalReads/<p>`; BRAIN.social hunks | B-1 | before B-1 merges |
 | WS1 | optional `Playbook.politics` type and its clamps (canRun, candidates, taxBounds); later `PlanningPlay.offers` | B-4, B-5 | before B-4 / B-5 |
-| WS3 | the HC-B3 answer (a recorded writer call that read chat replays) | B-1, B-4 merges | open since 29 Oct |
+| WS3 | the HC-B3 answer | B-1, B-4 | **answered yes, 29 Oct** |
+| WS3 | AM-4: the `heard` record event `{ from, to }` (RULE-1 row, RULE-5 restated), OK'd by WS1, WS2, WS3 | B-2b | WS3 drafts from spec B §3 |
 | WS3 | mule-game.ts: AI lines to the other AIs (C5); whispers to the talker (B-2); the mute intent and protocol (C9); card-intent touch point (C10) | B-1, B-2, B-3, B-5 | per PR, reviewed on the SHA |
 | WS3 | record.ts `talkerFor` passthrough; replay.ts `talkerFor: () => null` | B-2 | reviewed on the SHA |
 | WS6 | the mute control from mock ws6-ux 29b792c2; the card screens | B-3, B-5 | when built |
@@ -450,7 +486,8 @@ Every handoff carries this line verbatim:
 ## Pre-implementation checklist
 
 - [x] Spec approved by Heiko (2486382); AM-B1 recorded at plan time
-- [ ] Upstream: spec A PR-1 merged (B-1); WS1 clamps (B-1); WS3's HC-B3 answer (B-1, B-4 merges); WS6 mute control (B-3); WS1 + WS7 politics (B-4); WS7 slice 3 + WS6 card screens (B-5)
+- [ ] Upstream: spec A PR-1 merged (B-1); WS1 clamps (B-1); WS3's AM-4 `heard` step (B-2b); WS6 mute control (B-3); WS1 + WS7 politics (B-4); WS7 slice 3 + WS6 card screens (B-5)
+- [x] WS3's HC-B3 answer: yes, on two conditions (spec AM-B2)
 - [x] Branch policy: sub-PRs into ws2-brain; milestones to feat/strategist with Heiko's OK through the PM
 - [ ] Base `ws2-brain` green at B-1's start, measured: typecheck 0 · tests per package · `MULE_FULL=1` suites · config-guard · sims byte-identical to trunk ← run and paste the numbers at B-1's pre-flight
 - [x] Provider access: the PM's test key, loaded only inside a cleared paid command (B-6)
