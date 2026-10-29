@@ -1148,6 +1148,21 @@ export const BRAIN = {
     /** Strategy calls one seat makes in a game, as the cost projection assumes. */
     callsPerSeatGame: 24,
   },
+  /**
+   * brain:social-spike: what a Smart seat's social reasoning (relationships, aims, messages, campaign) costs on Haiku 5.5
+   * and Sonnet 5.5, folded into the strategy call, as its own call, and as a reply to one whisper. Priced as strategySpike.
+   */
+  socialSpike: {
+    /** Hard ceiling for one run, in US dollars; the --max-usd flag may only lower it. */
+    capUsd: 0.1,
+    models: { haiku: 'claude-haiku-5-5', sonnet: 'claude-sonnet-5-5' },
+    /** output_config.effort for both models, as strategySpike. */
+    effort: 'medium',
+    /** Reply cap per call and mode, in tokens, thinking included. */
+    maxTokens: { folded: 3_000, separate: 2_000, reply: 600 },
+    /** How long one call of each mode may take before it counts as a timeout, in ms. */
+    timeoutMs: { folded: 30_000, separate: 30_000, reply: 15_000 },
+  },
   /** Reply cap, in tokens. */
   maxTokens: 200,
   /**
