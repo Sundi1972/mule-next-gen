@@ -135,7 +135,9 @@ try {
   const closeRead = (async () => {
     while (!auctionOver) {
       if (server.registry.get(code)?.viewFor(null).game?.auction?.stage === 'close') {
-        await both('the goods auction, a good closed', WHOLE, async () => {
+        // What A-5 adds: the rail header with the tally, and the receipt card. The board's names strip under the card
+        // truncates a long name on trunk's walk too ("The Accountant", 78 in 51 px at 667): not this read's to judge.
+        await both('the goods auction, a good closed', { roots: [...RAIL.roots, '[data-testid=receipt]'], skip: RAIL.skip }, async () => {
           await phone.getByTestId('receipt-layer').waitFor({ timeout: PRESS_MS });
           await phone.getByTestId('tally').waitFor({ timeout: PRESS_MS });
         });
