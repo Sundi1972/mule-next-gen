@@ -33,7 +33,8 @@ describe("MyView.installedThisTurn: the store's Now line after a reload", () => 
     }
 
     for (let i = 0; i < 10_000 && !(game.viewFor(null).phase === 'development' && game.viewFor(null).month === 2); i++) {
-      if (game.viewFor(null).phase === 'planning') readyAll(game);
+      // Planning and the month end have no clock (C20).
+      if (game.viewFor(null).phase === 'planning' || game.viewFor(null).phase === 'upkeep') readyAll(game);
       advance(100);
     }
     expect(game.viewFor(null)).toMatchObject({ phase: 'development', month: 2 });
@@ -52,7 +53,8 @@ describe("MyView.installedThisTurn: the store's Now line after a reload", () => 
     // The flag as s1's phone saw it on entering each phase, keyed "month phase".
     const seen = new Map<string, boolean>();
     for (let i = 0; i < 10_000 && !(game.viewFor(null).phase === 'development' && game.viewFor(null).month === 2); i++) {
-      if (game.viewFor(null).phase === 'planning') readyAll(game);
+      // Planning and the month end have no clock (C20).
+      if (game.viewFor(null).phase === 'planning' || game.viewFor(null).phase === 'upkeep') readyAll(game);
       advance(100);
       const { month, phase, me } = game.viewFor('s1');
       if (!seen.has(`${month} ${phase}`)) seen.set(`${month} ${phase}`, me!.installedThisTurn);

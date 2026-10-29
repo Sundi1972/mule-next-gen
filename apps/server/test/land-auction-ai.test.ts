@@ -22,7 +22,7 @@ import {
 } from '@mule/engine';
 import { AiSeat, Brain, cashReserve, LotHand, muleValue, overtakeTarget, plotRoom, plotValue, type Act, type Mind } from '@mule/ai';
 import type { MuleView } from '@mule/protocol';
-import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
+import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
 import { fakeContext, tapThere } from './fake-context.js';
 
 const SELLER = 'h';
@@ -394,7 +394,8 @@ function toMonth2Planning(game: MuleGame, fake: Parameters<typeof tapThere>[1]):
     game.handle(SELLER, { type: 'ready' });
     advance(WALK.tickMs);
   }
-  advance(PHASE_MS.upkeep);
+  // The month end has no clock: it holds until the seller, the only human, moves on (C20).
+  game.handle(SELLER, { type: 'ready' });
   expect(phase()).toBe('planning');
   expect(game.viewFor(null).month).toBe(2);
   return plots;
