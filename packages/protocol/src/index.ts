@@ -308,10 +308,11 @@ export interface WalkerView {
   /** The house line they stand at ('store' or 'ship'), or null: there nothing trades until they choose how many (A-6). */
   line?: string | null;
   /**
-   * What they chose at that line: units to trade, units moved so far and their price before tax. A finished choice
+   * What they chose at that line: units to trade, units moved so far, and what those cost or brought in after the
+   * sales tax. A finished choice
    * (traded = units) stays until they walk off the line, so the phone can say what was traded. Null before choosing.
    */
-  order?: { house: string; units: number; traded: number; gross: number } | null;
+  order?: { house: string; units: number; traded: number; cr: number } | null;
 }
 
 /** Units changing hands right now: between two players, or with the store or the ship ('store', 'ship'). */
