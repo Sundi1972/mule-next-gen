@@ -6,15 +6,15 @@ import { DEV_STEER, WOLVES } from '../config.js';
 import { pace } from '../dev-walk.js';
 import { tileAt } from '../grid.js';
 import type { GameState, Outfit, Tile } from '../types.js';
-import { HALL, HALL_DOORS, type HallDoor, type HallPlan, type HallPoint, type HallRect } from './hall.js';
+import { HALL, HALL_DOORS, type HallDoor, type HallPlan } from './hall.js';
 import { terrainShare } from './speed.js';
 
 export type Space = 'map' | 'hall';
 
 /** A point on the map, in tiles. */
 export interface FloorPoint {
-  x: number;
-  y: number;
+  readonly x: number;
+  readonly y: number;
 }
 
 export interface FloorConfig {
@@ -31,47 +31,47 @@ export interface FloorInput {
   act: boolean;
 }
 
-export const IDLE_INPUT: FloorInput = { x: 0, y: 0, act: false };
+export const IDLE_INPUT: Readonly<FloorInput> = { x: 0, y: 0, act: false };
 
 /** A MULE on its lead, walking behind its colonist. */
 export interface FloorLead {
   /** What it is outfitted for; null while empty. */
-  good: Outfit | null;
-  x: number;
-  y: number;
+  readonly good: Outfit | null;
+  readonly x: number;
+  readonly y: number;
 }
 
 /** A wolf encounter's stage. */
 export interface FloorEncounter {
-  stage: 'choose' | 'chase' | 'fight';
+  readonly stage: 'choose' | 'chase' | 'fight';
 }
 
 export interface FloorColonist {
   /** The seat's player id. */
-  id: string;
-  space: Space;
+  readonly id: string;
+  readonly space: Space;
   /** In tiles on the map; in the hall plan's units in the hall. */
-  x: number;
-  y: number;
-  facing: 'left' | 'right';
+  readonly x: number;
+  readonly y: number;
+  readonly facing: 'left' | 'right';
   /** It moved on the last tick. */
-  moving: boolean;
+  readonly moving: boolean;
   /** Whether there is one, and its good, follow the player's carriedMule; the floor keeps where it walks. */
-  lead: FloorLead | null;
+  readonly lead: FloorLead | null;
   /** dev-walk.ts's pace when development started: hunger × sickness × the Zipwing's perk. */
-  pace: number;
+  readonly pace: number;
   /** An AI seat's colonist. */
-  bot: boolean;
-  bitten: boolean;
-  encounter: FloorEncounter | null;
-  pelts: number;
+  readonly bot: boolean;
+  readonly bitten: boolean;
+  readonly encounter: FloorEncounter | null;
+  readonly pelts: number;
 }
 
 export interface DevFloor {
   /** Ticks stepped since development started. */
-  tick: number;
+  readonly tick: number;
   /** In seat order. */
-  colonists: readonly FloorColonist[];
+  readonly colonists: readonly FloorColonist[];
 }
 
 const HALF = 0.5; // literal-ok: geometry, the middle of a side, not balance
@@ -87,12 +87,14 @@ export function storeOf(state: GameState): Tile {
 
 /** Where a colonist stands on the map just outside one of the store's doors, at the middle of that side. */
 export function doorOutside(state: GameState, door: HallDoor, cfg: FloorConfig): FloorPoint {
-  const store = storeOf(state);
+  return mouthOf(storeOf(state), door, cfg);
+}
+
+/** doorOutside, for the store's tile already found. */
+export function mouthOf(store: Tile, door: HallDoor, cfg: FloorConfig): FloorPoint {
   const body = cfg.steer.bodyTiles;
   return { x: door === 'doorL' ? store.x - body : store.x + 1 + body, y: store.y + HALF };
 }
-
-export const middleOf = (r: HallRect): HallPoint => ({ x: r.x0 + (r.x1 - r.x0) * HALF, y: r.y0 + (r.y1 - r.y0) * HALF });
 
 /** A MULE for the player's carriedMule, standing where its old one stood or else at its colonist; none without one. */
 export function leadFor(state: GameState, c: Pick<FloorColonist, 'id' | 'x' | 'y' | 'lead'>): FloorLead | null {
@@ -103,9 +105,9 @@ export function leadFor(state: GameState, c: Pick<FloorColonist, 'id' | 'x' | 'y
 }
 
 /** The door a colonist uses onto the map: `door`, or the other one when the ground outside `door` is blocked. */
-export function openDoor(state: GameState, door: HallDoor, cfg: FloorConfig): HallDoor {
+export function openDoor(state: GameState, store: Tile, door: HallDoor, cfg: FloorConfig): HallDoor {
   const open = (d: HallDoor) => {
-    const at = doorOutside(state, d, cfg);
+    const at = mouthOf(store, d, cfg);
     const tile = tileAt(state.tiles, state.width, Math.floor(at.x), Math.floor(at.y));
     return tile !== undefined && terrainShare(tile.terrain, cfg) > 0;
   };
@@ -115,11 +117,12 @@ export function openDoor(state: GameState, door: HallDoor, cfg: FloorConfig): Ha
 
 /** The floor at development start: each colonist outside a store door, the seats taking the open doors in turn. */
 export function buildFloor(state: GameState, cfg: FloorConfig): DevFloor {
+  const store = storeOf(state);
   return {
     tick: 0,
     colonists: state.players.map((p, seat): FloorColonist => {
-      const door = openDoor(state, HALL_DOORS[seat % HALL_DOORS.length]!, cfg);
-      const at = doorOutside(state, door, cfg);
+      const door = openDoor(state, store, HALL_DOORS[seat % HALL_DOORS.length]!, cfg);
+      const at = mouthOf(store, door, cfg);
       return {
         id: p.id,
         space: 'map',

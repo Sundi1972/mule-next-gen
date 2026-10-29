@@ -7,16 +7,16 @@ import { PERCENT } from '../units.js';
  */
 
 export interface HallPoint {
-  x: number;
-  y: number;
+  readonly x: number;
+  readonly y: number;
 }
 
 /** A box on the hall's floor; y runs down. */
 export interface HallRect {
-  x0: number;
-  y0: number;
-  x1: number;
-  y1: number;
+  readonly x0: number;
+  readonly y0: number;
+  readonly x1: number;
+  readonly y1: number;
 }
 
 /** The shopfronts along the back wall, left to right: an outfitter for each raw good. */
@@ -32,16 +32,16 @@ export type HallPlace = HallRoom | HallDoor;
 
 export interface HallPlan {
   /** Width and height in hall units. */
-  w: number;
-  h: number;
+  readonly w: number;
+  readonly h: number;
   /** Each room's walls as the hall draws them; standing inside one is being at it. */
-  rooms: Record<HallRoom, HallRect>;
+  readonly rooms: Readonly<Record<HallRoom, HallRect>>;
   /** Each airlock's frame; standing inside one is being at a door. */
-  doors: Record<HallDoor, HallRect>;
+  readonly doors: Readonly<Record<HallDoor, HallRect>>;
   /** Where a colonist stands for a place: on the walkway before a room's middle, or just inside a door. */
-  spots: Record<HallPlace, HallPoint>;
+  readonly spots: Readonly<Record<HallPlace, HallPoint>>;
   /** Where a colonist's feet may stand: the walkway, the doorways and every room, a body's width off the walls. */
-  floor: HallRect[];
+  readonly floor: readonly HallRect[];
 }
 
 const SIZE = { w: 16, h: 12 }; // literal-ok: hall units, the arcade mock's 4:3 floor (its sim.ts HALL)

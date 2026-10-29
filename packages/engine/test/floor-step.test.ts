@@ -8,6 +8,7 @@ import {
   HALL,
   pathTo,
   placeAt,
+  RuleError,
   speedOf,
   stepFloor,
   type DevFloor,
@@ -194,6 +195,11 @@ describe('the dev floor: the step', () => {
     const wet = waded.floors.map((f, i) => misplaced(waded.state, f, waded.floors[i - 1]));
     expect(wet[0]!.length, 'in the lake at the start').toBe(2);
     expect(wet.slice(1_000 / DEV_STEER.tickMs).flat(), 'out of it within a second, for good').toEqual([]);
+
+    // Every runner steps at the one tick: any other length is its caller's bug, not a rule refused.
+    const halfTick = () => stepFloor(first.floors[0]!, first.state, {}, DEV_STEER.tickMs / 2, floorConfig(HALL));
+    expect(halfTick).toThrow(Error);
+    expect(halfTick).not.toThrow(RuleError);
 
     // One input changed at one tick: 'a', standing still in the corner, steps right once.
     const changed = inputs.map((tick, t) => (t === 700 ? { ...tick, a: go(1, 0) } : tick));

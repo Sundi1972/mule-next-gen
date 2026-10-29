@@ -1,26 +1,35 @@
 import { tileAt } from '../grid.js';
 import type { GameState, Tile } from '../types.js';
 import { MS_PER_SECOND } from '../units.js';
-import { doorOutside, IDLE_INPUT, leadFor, middleOf, openDoor, storeOf, type DevFloor, type FloorColonist, type FloorConfig, type FloorInput, type FloorPoint } from './floor.js';
+import { IDLE_INPUT, leadFor, mouthOf, openDoor, storeOf, type DevFloor, type FloorColonist, type FloorConfig, type FloorInput, type FloorPoint } from './floor.js';
 import { HALL_DOORS, isOpenFloor, placeAt, type HallDoor, type HallPlan } from './hall.js';
 import { reachOf } from './reach.js';
 import { speedOf, terrainShare } from './speed.js';
 
+/** What one step reads: the game, the config, and the store's tile, found once. */
+interface Step {
+  readonly state: GameState;
+  readonly cfg: FloorConfig;
+  readonly store: Tile;
+}
+
 /**
  * One tick of the floor: every colonist moved by its seat's input, at RULE-2's speed, or through a door when its press
  * reached ENTER or LEAVE on this floor. Pure: a new floor, the old one and the game untouched. A seat with no input
- * stands still.
+ * stands still. Throws an Error for a dtMs other than cfg.steer.tickMs: every runner steps at the one tick.
  */
 export function stepFloor(floor: DevFloor, state: GameState, inputs: Readonly<Record<string, FloorInput>>, dtMs: number, cfg: FloorConfig): DevFloor {
+  if (dtMs !== cfg.steer.tickMs) throw new Error(`stepFloor steps ${cfg.steer.tickMs} ms at a time, not ${dtMs}`);
+  const ctx: Step = { state, cfg, store: storeOf(state) };
   return {
     tick: floor.tick + 1,
     colonists: floor.colonists.map((c) => {
       const input = inputs[c.id] ?? IDLE_INPUT;
       const reach = input.act ? reachOf(floor, state, c.id, cfg) : null;
-      const led = withLead(c, state);
+      const led = withLead(c, ctx.state);
       if (reach?.kind === 'enter') return follow({ ...enterHall(led, reach.door, cfg.hall), moving: true }, cfg);
-      if (reach?.kind === 'leave') return follow({ ...leaveHall(led, reach.door, state, cfg), moving: true }, cfg);
-      return stepColonist(led, state, input, dtMs, cfg);
+      if (reach?.kind === 'leave') return follow({ ...leaveHall(led, reach.door, ctx), moving: true }, cfg);
+      return stepColonist(led, input, dtMs, ctx);
     }),
   };
 }
@@ -31,7 +40,8 @@ function withLead(c: FloorColonist, state: GameState): FloorColonist {
   return lead?.good === c.lead?.good && !lead === !c.lead ? c : { ...c, lead };
 }
 
-function stepColonist(c: FloorColonist, state: GameState, input: FloorInput, dtMs: number, cfg: FloorConfig): FloorColonist {
+function stepColonist(c: FloorColonist, input: FloorInput, dtMs: number, ctx: Step): FloorColonist {
+  const { state, cfg } = ctx;
   const length = Math.hypot(input.x, input.y);
   if (length === 0) return c.moving ? { ...c, moving: false } : c;
   // A stick pushed past full walks at full speed: diagonals are no faster.
@@ -40,7 +50,7 @@ function stepColonist(c: FloorColonist, state: GameState, input: FloorInput, dtM
   const dx = input.x * scale * step;
   const dy = input.y * scale * step;
   const facing = input.x > 0 ? 'right' : input.x < 0 ? 'left' : c.facing;
-  const moved = c.space === 'map' ? mapMove({ ...c, facing }, dx, dy, state, cfg) : hallMove({ ...c, facing }, dx, dy, state, cfg);
+  const moved = c.space === 'map' ? mapMove({ ...c, facing }, dx, dy, ctx) : hallMove({ ...c, facing }, dx, dy, ctx);
   return follow({ ...moved, moving: moved.space !== c.space || moved.x !== c.x || moved.y !== c.y }, cfg);
 }
 
@@ -57,9 +67,9 @@ function underfoot(state: GameState, body: number, p: FloorPoint): (Tile | undef
  * Whether a colonist standing at `from` may step to (x, y): clear of the store's walls, and every tile its body
  * touches on the map and open. Land under it at `from` never blocks it, so one on land it may not enter walks off it.
  */
-function passable(state: GameState, cfg: FloorConfig, from: FloorPoint, x: number, y: number): boolean {
+function passable({ state, cfg, store }: Step, from: FloorPoint, x: number, y: number): boolean {
   const body = cfg.steer.bodyTiles;
-  if (inStore(storeOf(state), body, x, y)) return false;
+  if (inStore(store, body, x, y)) return false;
   const standing = underfoot(state, body, from);
   return underfoot(state, body, { x, y }).every(
     // Touching the store's tile is its walls' business, judged above.
@@ -68,21 +78,21 @@ function passable(state: GameState, cfg: FloorConfig, from: FloorPoint, x: numbe
 }
 
 /** On the map: each axis on its own, so a blocked step slides along the free one; into a door, into the hall. */
-function mapMove(c: FloorColonist, dx: number, dy: number, state: GameState, cfg: FloorConfig): FloorColonist {
-  const store = storeOf(state);
+function mapMove(c: FloorColonist, dx: number, dy: number, ctx: Step): FloorColonist {
+  const { cfg, store } = ctx;
   const body = cfg.steer.bodyTiles;
   let { x, y } = c;
   if (inStore(store, body, x + dx, y)) {
     const door: HallDoor | null = x <= store.x - body && dx > 0 ? 'doorL' : x >= store.x + 1 + body && dx < 0 ? 'doorR' : null;
-    const doorY = doorOutside(state, 'doorL', cfg).y;
+    const doorY = mouthOf(store, 'doorL', cfg).y;
     if (door && Math.abs(y - doorY) <= cfg.steer.doorHalfTiles) return enterHall(c, door, cfg.hall);
     // Pushing straight into the store's side slides you along it onto the door, so the door is easy to find.
     if (door && dy === 0) {
       const slide = Math.max(-Math.abs(dx), Math.min(Math.abs(dx), doorY - y));
-      if (passable(state, cfg, c, x, y + slide)) y += slide;
+      if (passable(ctx, c, x, y + slide)) y += slide;
     }
-  } else if (passable(state, cfg, c, x + dx, y)) x += dx;
-  if (passable(state, cfg, c, x, y + dy)) y += dy;
+  } else if (passable(ctx, c, x + dx, y)) x += dx;
+  if (passable(ctx, c, x, y + dy)) y += dy;
   return { ...c, x, y };
 }
 
@@ -90,8 +100,8 @@ function mapMove(c: FloorColonist, dx: number, dy: number, state: GameState, cfg
  * In the hall: walls are wherever the plan has no floor; out through a door's outer side, onto the map. A step is
  * walked in pieces each shorter than the plan's thinnest wall, so no speed carries a colonist over one.
  */
-function hallMove(c: FloorColonist, dx: number, dy: number, state: GameState, cfg: FloorConfig): FloorColonist {
-  const { hall } = cfg;
+function hallMove(c: FloorColonist, dx: number, dy: number, ctx: Step): FloorColonist {
+  const { hall } = ctx.cfg;
   const pieces = Math.floor(Math.hypot(dx, dy) / thinnestWall(hall)) + 1;
   const [px, py] = [dx / pieces, dy / pieces];
   let { x, y } = c;
@@ -100,7 +110,7 @@ function hallMove(c: FloorColonist, dx: number, dy: number, state: GameState, cf
     for (const door of HALL_DOORS) {
       const frame = hall.doors[door];
       const out = door === 'doorL' ? x + px < frame.x0 : x + px > frame.x1;
-      if (out && at === door) return leaveHall(c, door, state, cfg);
+      if (out && at === door) return leaveHall(c, door, ctx);
     }
     if (isOpenFloor({ x: x + px, y }, hall)) x += px;
     if (isOpenFloor({ x, y: y + py }, hall)) y += py;
@@ -120,16 +130,16 @@ function thinnestWall(hall: HallPlan): number {
   return thinnest;
 }
 
-/** In at a door, facing into the hall; a MULE on the lead comes through with its colonist. */
+/** In at a door's spot, facing into the hall; a MULE on the lead comes through with its colonist. */
 function enterHall(c: FloorColonist, door: HallDoor, hall: HallPlan): FloorColonist {
-  const at = middleOf(hall.doors[door]);
-  return { ...c, space: 'hall', ...at, facing: door === 'doorL' ? 'right' : 'left', lead: c.lead && { ...c.lead, ...at } };
+  const { x, y } = hall.spots[door];
+  return { ...c, space: 'hall', x, y, facing: door === 'doorL' ? 'right' : 'left', lead: c.lead && { ...c.lead, x, y } };
 }
 
 /** Out onto the map at a door, or at the other one when the ground outside it is blocked. */
-function leaveHall(c: FloorColonist, door: HallDoor, state: GameState, cfg: FloorConfig): FloorColonist {
-  const out = openDoor(state, door, cfg);
-  const at = doorOutside(state, out, cfg);
+function leaveHall(c: FloorColonist, door: HallDoor, { state, cfg, store }: Step): FloorColonist {
+  const out = openDoor(state, store, door, cfg);
+  const at = mouthOf(store, out, cfg);
   return { ...c, space: 'map', ...at, facing: out === 'doorL' ? 'left' : 'right', lead: c.lead && { ...c.lead, ...at } };
 }
 
