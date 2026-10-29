@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { foodShare, needsOf, player, POLLUTION, RuleError, scoreParts, type GameState } from '@mule/engine';
 import type { MuleView, PlayerView } from '@mule/protocol';
 import { MuleGame } from '../src/mule-game.js';
-import { fakeContext, readyAll, seats } from './fake-context.js';
+import { fakeContext, pressThroughSidePick, readyAll, seats } from './fake-context.js';
 
 /** Two phones and the board: every kind of viewer. */
 const VIEWERS = ['s1', 's2', null] as const;
@@ -71,6 +71,8 @@ function playThreeMonths(options: { dearFoodIn?: number } = {}): { ends: MonthEn
       game.handle('s1', { type: 'claim', ...lit });
       claimedIn = state.month;
     }
+    // A good's side pick has no clock (A-7): the humans press Ready there.
+    pressThroughSidePick(game);
     advance(100);
   }
   expect(game.viewFor(null).finished, 'the game reached game over').toBe(true);
@@ -153,6 +155,7 @@ function toMonthEnd(options: { emptyStore?: boolean; dearFood?: boolean } = {}) 
     }
     // Food on the shelf at a price no colonist's wage reaches.
     if (options.dearFood && state.phase === 'auction') state.store.posted.food = DEAR_FOOD;
+    pressThroughSidePick(game);
     fake.advance(100);
   }
   expect(game.viewFor(null).phase).toBe('upkeep');
