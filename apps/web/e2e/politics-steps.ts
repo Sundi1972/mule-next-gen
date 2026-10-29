@@ -2,7 +2,7 @@
  * Steps shared by the e2e scripts on a table that plays politics. Scripts import these; only scripts run.
  */
 import { ceremonyBeats, GAME, POLITICS, type ElectionResult } from '@mule/engine';
-import { errors as playwrightErrors, type Page } from 'playwright';
+import { errors as playwrightErrors, type Locator, type Page } from 'playwright';
 
 /** How long a press may take to land. */
 export const PRESS_MS = 2_000;
@@ -30,10 +30,27 @@ export const ELECTION_WAIT_MS = (() => {
  * and zoom.ts, whose phones only want to get to the land grant.
  */
 export async function readyThroughTheElection(phone: Page, timeout: number): Promise<void> {
+  await pressUntil(phone, phone.locator('[data-phase]:not([data-phase=planning])'), timeout);
+}
+
+/**
+ * Month 1's election, pressed through as readyThroughTheElection does, stopping once planning proper shows its desks:
+ * for a script that does something in planning (at the Talk desk, say) before it is ready.
+ */
+export async function voteThroughTheElection(phone: Page, timeout: number): Promise<void> {
+  const deadline = Date.now() + timeout;
+  const desks = phone.locator('[data-phase=planning] [data-testid=desks]');
+  // Stop pressing once the reveal starts: I'm ready during it would end planning as the ceremony does.
+  const reveal = phone.locator('[data-testid=phone-reveal-tv], [data-testid=phone-reveal-solo]');
+  await pressUntil(phone, desks.or(reveal), timeout);
+  await desks.waitFor({ timeout: Math.max(1, deadline - Date.now()) });
+}
+
+/** Presses through the election until `over` shows. */
+async function pressUntil(phone: Page, over: Locator, timeout: number): Promise<void> {
   const ready = phone.locator('[data-phase=planning] [data-testid=ready]:not([disabled])');
   // Cast my vote waits for a pick on every ballot paper.
   const abstain = phone.locator('[data-testid=ballot-card] [data-testid$="-abstain"] input:not(:checked)');
-  const over = phone.locator('[data-phase]:not([data-phase=planning])');
   const deadline = Date.now() + timeout;
   for (;;) {
     await ready.or(abstain).or(over).first().waitFor({ timeout: Math.max(1, deadline - Date.now()) });

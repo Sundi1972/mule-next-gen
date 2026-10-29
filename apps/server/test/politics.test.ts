@@ -225,6 +225,17 @@ function doneWithLand(game: MuleGame) {
   for (const p of state.players) if (state.phase === 'landGrant' && !p.isAi && !p.doneWithLand) game.handle(p.id, { type: 'ready' });
 }
 
+/** Plays on to upkeep, past phases these tests don't watch: a plot a step in the land grant, a second a step while M.U.L.E.s are placed and produce. */
+function toUpkeep(g: Started) {
+  for (let ms = 0; ms < 600_000 && engineOf(g.game).phase !== 'upkeep'; ) {
+    doneWithLand(g.game);
+    const { phase } = engineOf(g.game);
+    const step = phase === 'landGrant' ? GRANT_TICK_MS : phase === 'development' || phase === 'production' ? 1_000 : WALK.tickMs;
+    g.advance(step);
+    ms += step;
+  }
+}
+
 /**
  * Plays on in 100 ms steps until `done`; nothing in planning has a clock, so every human is Ready (Done in announce and
  * the ballot) whenever planning waits, and Done with land in the land grant, which has none either.
@@ -934,7 +945,9 @@ describe('AI seats in the election', () => {
     // Without the Baron at the table, another persona takes office.
     const noBaron = [...aiTable.filter((s) => s.id !== 'baron'), { id: 'nbr', name: 'The Good Neighbour', isAi: true, color: 2 }];
     const governors = new Set<string>();
-    for (const [seats, seed] of [aiTable, noBaron].flatMap((t) => [1, 2, 3].map((seed) => [t, seed] as const))) {
+    // One seed for each persona that comes to govern: The Baron, The Good Neighbour, The Grudge.
+    const runs = [[aiTable, 1], [noBaron, 1], [noBaron, 2]] as const;
+    for (const [seats, seed] of runs) {
       // What each broadcast carried: when, and in planning (where the Governor sets it) the tax a screen would draw. A whole
       // view on every broadcast of the month would cost seconds on a CI runner.
       const sent: { at: number; tax: number | null }[] = [];
@@ -966,10 +979,7 @@ describe('AI seats in the election', () => {
 
       // The fund runs dry before month 2, which has no election: the Governor steers again, with the bump.
       // The engine's phase and month, not viewFor's: these run on every step of the clock.
-      for (let ms = 0; ms < 600_000 && engineOf(g.game).phase !== 'upkeep'; ms += WALK.tickMs) {
-        doneWithLand(g.game);
-        g.advance(WALK.tickMs);
-      }
+      toUpkeep(g);
       engineOf(g.game).treasury.money = 0;
       for (let ms = 0; ms < 600_000 && engineOf(g.game).month === 1; ms += WALK.tickMs) g.advance(WALK.tickMs);
       expect(g.game.viewFor(null).phase).toBe('planning');
@@ -995,10 +1005,7 @@ describe('AI seats in the election', () => {
     expect(g.game.viewFor(null).politics!.tax.percent, "month 1: The Baron's 8% landed first").toBe(8);
 
     // Month 2 has no election; the fund ran dry, so The Baron steers to 8 + 2.
-    for (let ms = 0; ms < 600_000 && engineOf(g.game).phase !== 'upkeep'; ms += WALK.tickMs) {
-      doneWithLand(g.game);
-      g.advance(WALK.tickMs);
-    }
+    toUpkeep(g);
     engineOf(g.game).treasury.money = 0;
     for (let ms = 0; ms < 600_000 && engineOf(g.game).month === 1; ms += WALK.tickMs) g.advance(WALK.tickMs);
     expect(g.game.viewFor(null).phase).toBe('planning');

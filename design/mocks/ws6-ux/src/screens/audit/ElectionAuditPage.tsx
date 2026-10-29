@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Board, Game, LaptopFrame, PhoneFrame, TvFrame } from '../../harness';
 import { ChatProvider, useChatSim } from '../../proposed/Chat';
 import { IntentNotes, IntentNotesProvider, type IntentNoteData } from '../../proposed/IntentNote';
+import { TickerRuleSwitch } from '../../proposed/TickerRule';
 import { AnyMonth, Announce, ANY_MONTH, AWAY, Ballot, ELECTION_MONTH, ELECTION_NOTES, electionView, NewGovernor, OFFICES, TvAnnounce, TvBallot } from './ElectionAudit';
 import { beatLabel, PhoneRevealSolo, PhoneRevealWithTv, revealStills, timeline, TvReveal, useRevealClock } from './ElectionReveal';
 
@@ -198,6 +199,7 @@ export function ElectionAuditPage({ hash }: { hash: string }) {
       <p className="max-w-[900px] text-sm text-ink-2" data-testid="election-intro">
         {INTRO[route.main]} Each number on a screen marks one change; the notes beside say which player intent it serves and why it was made.
       </p>
+      {route.main === 'audit-election-governor' && <TickerRuleSwitch />}
       <IntentNotesProvider>
         <div className="flex flex-wrap items-start gap-6">
           <div className="flex min-w-0 flex-col gap-4">{frames}</div>
