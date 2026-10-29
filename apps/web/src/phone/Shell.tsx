@@ -141,7 +141,7 @@ export function PhoneShell({
             {children}
           </main>
           <aside className="flex w-(--rail) shrink-0 flex-col border-l border-holo-faint bg-void/40" data-testid="guide">
-            <header className="flex flex-col gap-1 border-b border-holo-faint px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] @min-[1100px]/shell:gap-2 @min-[1100px]/shell:px-5 @min-[1100px]/shell:pb-4 @min-[1100px]/shell:pt-[max(1rem,env(safe-area-inset-top))]">
+            <header className="flex flex-col gap-1 border-b border-holo-faint px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] short:gap-0.5 short:pb-1 short:pt-[max(0.25rem,env(safe-area-inset-top))] @min-[1100px]/shell:gap-2 @min-[1100px]/shell:px-5 @min-[1100px]/shell:pb-4 @min-[1100px]/shell:pt-[max(1rem,env(safe-area-inset-top))]">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 flex-col">
                   <span className="label-caps text-[10px]! @min-[1100px]/shell:text-xs!">
@@ -151,16 +151,18 @@ export function PhoneShell({
                 </div>
                 {seconds !== undefined ? <Timer seconds={seconds} className="@min-[1100px]/shell:h-11 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-2xl" /> : status}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 @min-[1100px]/shell:gap-2">
                 <PlayerMark slot={slot} species={self.species} size={12} label={`You, ${SPECIES_NAME[self.species]}`} />
-                <span className="min-w-0 truncate text-sm font-semibold @min-[1100px]/shell:text-base">{self.name}</span>
-                <ThemeToggle className="ml-1 shrink-0" />
+                <span className="min-w-0 truncate text-sm font-semibold @min-[1100px]/shell:text-base" data-testid="self-name">
+                  {self.name}
+                </span>
+                <ThemeToggle iconUntilWide className="shrink-0 @min-[1100px]/shell:ml-1" />
                 {move && (
                   <button
                     ref={move.button}
                     type="button"
                     onClick={move.open}
-                    className="flex h-7 shrink-0 items-center gap-1 rounded-chip border border-holo-line px-1.5 text-xs text-holo hover:border-holo @min-[1100px]/shell:h-8 @min-[1100px]/shell:px-2.5 @min-[1100px]/shell:text-sm"
+                    className="flex size-8 shrink-0 items-center justify-center gap-1 rounded-chip border border-holo-line text-xs text-holo hover:border-holo @min-[1100px]/shell:w-auto @min-[1100px]/shell:px-2.5 @min-[1100px]/shell:text-sm"
                     aria-label="Move to my phone"
                     data-testid="move-to-phone"
                   >
@@ -177,13 +179,13 @@ export function PhoneShell({
               </div>
               <TableChat />
             </header>
-            <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 *:shrink-0 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4">
+            <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 *:shrink-0 short:gap-2 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4">
               {now && <NowCard now={now} />}
               {rail}
             </div>
             {footer && (
               <div
-                className="flex flex-col gap-2 border-t border-holo-faint bg-void/60 px-3 pb-[max(0.625rem,env(safe-area-inset-bottom))] pt-2.5 @min-[1100px]/shell:gap-3 @min-[1100px]/shell:px-5 @min-[1100px]/shell:pb-[max(1rem,env(safe-area-inset-bottom))] @min-[1100px]/shell:pt-4"
+                className="flex flex-col gap-2 border-t border-holo-faint bg-void/60 px-3 pb-[max(0.625rem,env(safe-area-inset-bottom))] pt-2.5 short:gap-1.5 short:pb-[max(0.375rem,env(safe-area-inset-bottom))] short:pt-1.5 @min-[1100px]/shell:gap-3 @min-[1100px]/shell:px-5 @min-[1100px]/shell:pb-[max(1rem,env(safe-area-inset-bottom))] @min-[1100px]/shell:pt-4"
                 data-testid="actions"
               >
                 {footer}

@@ -44,6 +44,8 @@ const READY_MS = 7_500;
 const PAST_THE_GRANT_MS = 9_000;
 /** The auction offers at most 9 goods of 3 stages each; more Done presses than that means it is not moving on. */
 const MAX_AUCTION_PRESSES = 40;
+/** The phone held upright. */
+const UPRIGHT = { width: 390, height: 844 };
 /** The host sits in seat 1. */
 const HOST_WALKER = 'walker-s1';
 /** The phone's score lines at game over that add up; a Collapse line, when there is one, is taken off them. */
@@ -188,6 +190,7 @@ try {
   check(rows.some((r) => r.includes('Heiko (you)')), `the human is on the final scores: ${rows.join(' | ')}`);
   await tv.getByTestId('tv-phase').filter({ hasText: 'Game over' }).waitFor({ timeout: 5_000 });
   await checkTheScoresAddUp(phone, tv);
+  console.log(`turned upright and back: ${await turnUprightAndBack(phone)}`);
 
   const phases = seen.map((s) => s.phase);
   check(isSubsequence(EXPECTED_PHASES, phases), `phone showed every phase of months 1 and 2 in order: ${phases.join(' > ')}`);
@@ -240,6 +243,20 @@ async function checkOwnsAPlot(phone: Page): Promise<void> {
     if (err instanceof playwrightErrors.TimeoutError) check(false, 'T-AC-1: the phone calls the plot in its colour YOURS');
     throw err;
   }
+}
+
+/** B-AC-11: held upright the phone shows the turn prompt and not the game; turned back, the same screen again. */
+async function turnUprightAndBack(phone: Page): Promise<string> {
+  const started = Date.now();
+  const game = phone.locator('[data-phase]').first();
+  const phase = await game.getAttribute('data-phase', { timeout: PRESS_MS });
+  await phone.setViewportSize(UPRIGHT);
+  await phone.getByTestId('turn-sideways').waitFor({ timeout: PRESS_MS });
+  check(!(await game.isVisible()), `B-AC-11: held upright the phone shows turn-sideways, not the ${phase} screen`);
+  await phone.setViewportSize(PHONE.viewport);
+  await phone.locator(`[data-phase=${phase}]`).waitFor({ timeout: PRESS_MS });
+  check(!(await phone.getByTestId('turn-sideways').isVisible()), `B-AC-11: turned back, the phone shows ${phase} again, not turn-sideways`);
+  return `${phase} again in ${Date.now() - started} ms`;
 }
 
 /** Done with land: the phone presses Ready in the land grant and waits until it has moved past planning and the grant. */
