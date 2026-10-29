@@ -268,7 +268,8 @@ first match wins
   6  an async decide settles (resolve or reject)           new step 'answer' { seat, call, choice | error }
   7  ctx.now() / ctx.hostId() outside viewFor              value appended to the OPEN step's reads / hosts
   8  notice / playbook                                     event appended after the open step, same at and seq
-  9  Game.heard                                            passed through, nothing recorded (RULE-5)
+  9  Game.heard(from, text, to?)                           new step 'heard' { from, to? }; the text is never
+                                                           recorded (RULE-5, AM-4)
   10 Game.viewFor                                          passed through; reads inside it untaped (RULE-3)
 
 the open step  a step stays open from its call until the next step opens. Microtasks that run after its synchronous
@@ -339,12 +340,16 @@ unknown          a promise still open at game over leaves no answer step. That's
 ```
 
 ```
-RULE-5 · Player chat is not an input to play                       shape: invariant (existing, pinned)
+RULE-5 · Who spoke to whom is an input; what they said never is     shape: invariant (AM-4)
 
-`MuleGame.heard` → `AiSeat.hear` → `Brain.hear` → `DecisionContext.tableTalk`, which only the LLM decider reads
-(TopPickDecider ignores it). In replay every smart seat's decider is the recorded one, so table talk can't change
-an outcome, and `heard` is not recorded (the §0 non-goal). Pinned by T-AC-1: the test game includes player chat,
-and the replay has none.
+A delivered line to the AI seats (`Game.heard`) is recorded as a step `{ from, to? }`, **without its text** (the §0
+non-goal "storing chat text" holds). The replay calls `game.heard(from, '', to)`. So:
+  - a brain call may open because a line arrived (from whom, to whom, when), and it replays identically;
+  - nothing in play, and no call's opening, may depend on the words. Words reach an outcome only through a recorded
+    reply (RULE-4), which the replay serves without reading the prompt.
+Pinned by T-AC-12 here (a game with chat replays identical, and the file holds no chat text). Spec B's T-AC-B8 is
+the brain side: a replay with every heard text blanked is identical, positive-controlled by a reply that opens on a
+word.
 ```
 
 ```
@@ -361,6 +366,7 @@ RULE-6 · Replay, step by step                                     shape: sequen
      intent     game.handle(); throw vs record.refused must agree (message equal) → else ReplayDiverged
      connection game.connectionChanged()
      moved      game.seatMoved()
+     heard      game.heard(from, '', to)   (the text was never recorded; AM-4)
      answer     settle that call's promise with the recorded choice, write reply or error (by seat, call and kind)
      notice, playbook  skipped
    after each step: flush microtasks, check the tape was consumed, and check the step's brain calls (move and writer) match
@@ -412,6 +418,7 @@ export type RecordEvent<Intent> =
   | (RecordStep & { type: 'intent'; seat: PlayerId; intent: Intent; refused?: string })
   | (RecordStep & { type: 'connection'; seat: PlayerId; connected: boolean })
   | (RecordStep & { type: 'moved'; seat: PlayerId })
+  | (RecordStep & { type: 'heard'; from: PlayerId; to?: PlayerId })   // AM-4: who to whom, never the words
   | (RecordStep & { type: 'answer'; seat: PlayerId; call: number; kind: CallKind; choice?: RecordedChoice; write?: RecordedWrite; error?: string })
   | NoticeEntry
   | PlaybookEntry;
@@ -495,6 +502,7 @@ already git-ignored.
 | **T-AC-8** | RULE-2 row 3: an unwritable recordDir at game over → one console.error, and the room still shows game over and stays reachable | room view, log spy | C4 |
 | **T-AC-9** | A refused intent is recorded with its message, and the replay refuses it with the same message | record + replay | C2, C3 |
 | **T-AC-10** | Claims, declarations, trades (a sale to the ship included) and lot sales appear as `notice` events with month and phase, and `phaseNotices()` holds the same notices with recording off. A replay of the record with every notice removed is still identical | record, `phaseNotices()`, `replay()` | C6 |
+| **T-AC-12** | AM-4: a game whose humans chat publicly and whisper to an AI records one `heard` step per delivered line, with `from` and `to` and no text. The file holds none of the chat's words, and `replay` is identical | record file + `replay()` | C2, C3 |
 | **T-AC-11** | `recordPlaybook` entries come out in call order with their step's at and seq. The replay skips them as inputs, but each replayed playbook must equal its recorded entry, or ReplayDiverged (AM-1) | record + `replay()` | C7 |
 
 All T-ACs are server tests (`apps/server/test/record.test.ts`). Only T-AC-1 belongs in Tier 1 CI (lean CI); the rest
@@ -549,6 +557,25 @@ stay local.
     a view that reads the clock.
   - (4) §4: the game-over write ran outside the guard, where a throw would end the whole server process. It now runs
     inside the guard, and FM-REC-1 covers it.
+
+- **AM-4 (2026-10-29, WS2's spec B v2, social Claude; needs WS1, WS2 and WS3 OKs):** `heard` becomes a recorded
+  input, without its words.
+  - **Why:** Heiko vetoed spec B's first design. He wants Claude to react when it's whispered to, so a brain call may
+    open because a line arrived. That trigger must replay, so it must be recorded.
+  - **§3:** RecordEvent gains `{ type: 'heard'; from; to? }` (a step). No new reply fields and no new CallKind:
+    social replies are writer calls of kind 'playbook', and what plays goes in as playbook edits, e.g.
+    `/strategy/stances/<player>`, `/rivalReads/<player>` (WS2's check).
+  - **Rules:** RULE-1 row 9, RULE-5 and RULE-6 are restated above.
+  - **The §0 non-goal "storing chat text" holds.** The record has who spoke to whom and when, never what.
+  - **Versioning:** still `v: 1`. The addition is additive: an older record has no `heard` steps, and before AM-4
+    `heard` changed nothing in play.
+  - **Build:** a small WS3 PR. `wrap` opens a step in `heard`, with reads taped like any step, and the replay calls
+    `game.heard(from, '', to)`. T-AC-12 covers it. It lands before WS2's B-2b, which records social replies.
+  - **Spec B HC-B3 carries the two conditions:** (i) whether and where a recorded call opens never depends on chat
+    text; (ii) every effect flows through the recorded reply.
+  - **Playbook fields WS1 may add** (`Playbook.politics?`, `PlanningPlay.offers?`) reach the record only inside
+    PlaybookEntry, additively. The T-AC-11 stableJson comparison is unaffected, because absent fields serialise as
+    absent.
 
 ## §9 · Ownership Boundaries `[handoff]`
 
