@@ -58,8 +58,8 @@ function PhoneEventShow({ view }: { view: MuleView }) {
   if (!show) return null;
   const { held } = show;
   const t = solo ? show.t + ahead : show.t;
-  // Skipped past the last result: the show is over for this phone.
-  if (t >= show.end) return null;
+  // Alone, skipped past the last result while the phase is held: the light card until endsAt, not a clockless screen.
+  const light = !solo || t >= show.end;
   if (!held && (!solo || collapsed))
     return (
       <EventShow events={show.events} introMs={show.introMs} t={t} mode={solo ? 'solo' : 'tv'} reduced={reduced} width={view.width} height={view.height} tiles={tiles} players={players}>
@@ -76,9 +76,9 @@ function PhoneEventShow({ view }: { view: MuleView }) {
       </EventShow>
     );
   return (
-    <EventShow events={show.events} introMs={show.introMs} t={t} mode={solo ? 'solo' : 'tv'} reduced={reduced} width={view.width} height={view.height} tiles={tiles} players={players}>
+    <EventShow events={show.events} introMs={show.introMs} t={t} mode={light ? 'tv' : 'solo'} reduced={reduced} width={view.width} height={view.height} tiles={tiles} players={players}>
       {/* While the server holds the phase, both cover its screen for the whole show: the gallery's PhoneSolo and PhoneShow. */}
-      <div className="absolute inset-0 z-40 flex gap-2 bg-table p-2 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] text-ink" data-testid="phone-event-overlay" data-mode={solo ? 'solo' : 'light'} data-event-phase={view.phase}>
+      <div className="absolute inset-0 z-40 flex gap-2 bg-table p-2 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] text-ink" data-testid="phone-event-overlay" data-mode={light ? 'light' : 'solo'} data-event-phase={view.phase}>
         {!solo && <AnnounceBuzz />}
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex items-center gap-2 px-1">
@@ -92,13 +92,13 @@ function PhoneEventShow({ view }: { view: MuleView }) {
           <div className="flex min-h-0 flex-1 items-center justify-center [container-type:size]">
             <div style={{ width: `min(100cqw, calc(100cqh * ${view.width} / ${view.height}))` }}>
               {/* Alone the map plays the show and is the tap target; with a TV it only marks yours (the light card does the rest). */}
-              <EventLivingMap size="phone" focusSlot={slot} light={!solo} {...(solo ? { onSkip: (to: number) => (held ? setAhead((a) => a + to - t) : setCollapsed(true)) } : {})} />
+              <EventLivingMap size="phone" focusSlot={slot} light={light} {...(!light ? { onSkip: (to: number) => (held ? setAhead((a) => a + to - t) : setCollapsed(true)) } : {})} />
             </div>
           </div>
         </div>
         <aside className="relative flex w-(--rail) shrink-0 flex-col gap-2 rounded-panel border border-holo-line bg-panel p-2.5" data-testid="phone-event-rail">
-          {solo ? <EventSoloRail me={me.id} /> : <EventTvPhoneRail me={me.id} />}
-          {solo && <EventSkipHint className="mt-auto self-end" />}
+          {light ? <EventTvPhoneRail me={me.id} /> : <EventSoloRail me={me.id} />}
+          {!light && <EventSkipHint className="mt-auto self-end" />}
         </aside>
       </div>
     </EventShow>
