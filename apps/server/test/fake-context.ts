@@ -60,6 +60,9 @@ export function readyAll(game: MuleGame): void {
  * that seat moves on for them instead (Ready, then Continue). Anywhere else it does nothing. Returns whether it pressed.
  */
 export function pressThroughSidePick(game: MuleGame, how: { host: string } | 'ready' = 'ready'): boolean {
+  // Read from the engine first: this runs on every step, and building a view each time is what costs.
+  const state = (game as unknown as { state: GameState | null }).state;
+  if (state?.phase !== 'auction' || state.auction?.stage !== 'status') return false;
   const view = game.viewFor(null);
   const a = view.auction;
   if (view.phase !== 'auction' || a?.stage !== 'status') return false;
