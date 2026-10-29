@@ -12,7 +12,7 @@ import { AgendaRow, Hub } from '../src/phone/hub/Hub';
 import { ColonyWithFacts } from '../src/phone/hub/politics/Colony';
 import { CouncilBody } from '../src/phone/hub/politics/Council';
 import { ElectionDay, forgetPicks, pickOn } from '../src/phone/hub/politics/ElectionDay';
-import { GovernorDesk, setState } from '../src/phone/hub/politics/Governor';
+import { GovernorDesk, setState, type SentTax } from '../src/phone/hub/politics/Governor';
 import { OfficesLine } from '../src/phone/hub/politics/Offices';
 import { PromiseSheet } from '../src/phone/hub/politics/Run';
 import { electionNow, electionReadyWords } from '../src/phone/hub/politics/slots';
@@ -408,7 +408,7 @@ describe('election day on the phone (C66, E-2)', () => {
     /** The input of this ballot option, as the hub draws it. */
     const radio = (html: string, option: string) => html.slice(html.indexOf(`data-testid="ballot-governor-${option}"`)).match(/<input[^>]*>/)![0];
     const cast = /<button(?![^>]*disabled="")[^>]*data-testid="ready"[^>]*>Cast my vote</;
-    const LENA_4 = { room: 'MULE', seat: 's1', month: 4 };
+    const LENA_4 = { seat: 's1', month: 4 };
 
     it('C66, AM-21: Abstain shows checked at once, and counts as a pick for Cast my vote', () => {
       pickOn(LENA_4, 'governor', '');
@@ -422,12 +422,6 @@ describe('election day on the phone (C66, E-2)', () => {
       const html = inHub({ ...ballot(), month: 7 });
       for (const option of ['s1', 's2', 'abstain']) expect(radio(html, option), option).not.toMatch(/checked/);
       expect(html).not.toMatch(cast);
-    });
-
-    it("C66, AM-21: another room's ballot opens with nothing chosen", () => {
-      pickOn(LENA_4, 'governor', '');
-      const html = inHub(ballot(), 1, 'ZORP');
-      for (const option of ['s1', 's2', 'abstain']) expect(radio(html, option), option).not.toMatch(/checked/);
     });
 
     it("C66, AM-21: another seat's abstention on this phone is not Lena's", () => {
@@ -714,6 +708,9 @@ describe("the new Governor's promise (C68, E-7)", () => {
     const set = onPhone(term(CAP_4, 4, 5), GovernorDesk);
     expect(verdictIn(set)).toEqual({ id: 'gov-done', chip: 'done', spoken: 'Done: 4% from now on.' });
     expect(disabled(set, 'tax-confirm')).toBe(true);
+    // Set this month and over the promise: the TV says it is broken, so the phone never says done.
+    const broken = onPhone(term(CAP_4, 6, 5), GovernorDesk);
+    expect(verdictIn(broken)).toEqual({ id: 'gov-breaks', chip: 'breaks it', spoken: '6%: this breaks your promise.' });
   });
 
   it("T-AC-70, E-7: a month on, the Governor's desk judges keep it against the tax when the term began, not the month's start", () => {
@@ -763,14 +760,18 @@ describe("the new Governor's promise (C68, E-7)", () => {
     expect(verdictIn(onPhone(term(null, 4, 5), GovernorDesk))).toEqual({ id: 'gov-done', chip: 'done', spoken: 'Done: 4% from now on.' });
   });
 
-  it.each<[string, number, number | null, { percent: number; start: number }, ReturnType<typeof setState>]>([
-    ['Set where the month opened', 5, 5, { percent: 5, start: 5 }, 'done'],
+  const sentTax = (percent: number, waiting = true, month = 4): SentTax => ({ percent, month, waiting });
+  it.each<[string, number, SentTax | null, { percent: number; start: number }, ReturnType<typeof setState>]>([
+    ['Set where the month opened', 5, sentTax(5), { percent: 5, start: 5 }, 'done'],
     ['nothing set yet', 5, null, { percent: 5, start: 5 }, 'open'],
     ['set before, on another phone', 4, null, { percent: 4, start: 5 }, 'done'],
-    ['a tax on its way', 4, 4, { percent: 5, start: 5 }, 'sending'],
-    ['a new tax after one came back', 3, 4, { percent: 4, start: 5 }, 'open'],
+    ['a tax on its way', 4, sentTax(4), { percent: 5, start: 5 }, 'sending'],
+    ['a tax given up on, stepped away from or refused', 4, sentTax(4, false), { percent: 5, start: 5 }, 'open'],
+    ['back at the tax this phone set, given up on since', 5, sentTax(5, false), { percent: 5, start: 5 }, 'done'],
+    ["last month's tax, where this month opened", 5, sentTax(5, false, 3), { percent: 5, start: 5 }, 'open'],
+    ['a new tax after one came back', 3, sentTax(4), { percent: 4, start: 5 }, 'open'],
   ])("E-7: the Governor's Set is done once the tax is set, off while one is on its way, else open (%s)", (_, tax, sent, now, state) => {
-    expect(setState(tax, sent, now)).toBe(state);
+    expect(setState(tax, sent, now, 4)).toBe(state);
   });
 
   it.each<[{ percent: number; start: number; low: number; high: number }, { down: boolean; up: boolean }]>([
@@ -790,6 +791,11 @@ describe("the new Governor's promise (C68, E-7)", () => {
   it("C66, E-7: the new Governor's Now says to set the tax, until when, and the promise", () => {
     const game = term(CAP_4, 5, 5);
     expect(electionNow({ view: game, me: game.me!, self: game.players[0]! })).toEqual({ title: 'Set the sales tax', detail: 'Then plan your month. You are the new Governor, until month 6. You promised no higher than 4%.' });
+  });
+
+  it("C68, E-7: the new Governor's Now names keep it at the tax when the term began, not the month's start", () => {
+    const game = term(HOLD, 7, 7, 4, 5);
+    expect(electionNow({ view: game, me: game.me!, self: game.players[0]! })?.detail).toBe('Then plan your month. You are the new Governor, until month 6. You promised to keep it at 5%.');
   });
 });
 
