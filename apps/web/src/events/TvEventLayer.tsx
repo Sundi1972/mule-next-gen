@@ -1,5 +1,5 @@
 import type { MuleView } from '@mule/protocol';
-import { createContext, useContext, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import {
   Creature,
   cx,
@@ -21,11 +21,6 @@ import { fmt, PHASE_NAME, seatSpecies, slotOf } from '../game/derive';
 import { TvHeader } from '../table/TableApp';
 import { useOverlayOn, useOverlayShow } from './overlay';
 
-const InLayer = createContext(false);
-
-/** Whether this screen is already inside the TV's event layer: TvGame's one mount line asks, so it wraps itself once. */
-export const useInTvEventLayer = () => useContext(InLayer);
-
 /**
  * The TV's event layer (C10): the phase screen as it is, and, while the server clock is inside the phase's show, the
  * gallery's TV show over it (TvB: the header's pips, the living map, the log, the colony bar). Never in production,
@@ -34,16 +29,14 @@ export const useInTvEventLayer = () => useContext(InLayer);
 export function TvEventLayer({ game, children }: { game: MuleView; children: ReactNode }) {
   const on = useOverlayOn(game);
   return (
-    <InLayer.Provider value>
-      <div className="relative h-[720px] w-[1280px]">
-        {children}
-        {on && (
-          <EventBoundary>
-            <TvEventOverlay game={game} />
-          </EventBoundary>
-        )}
-      </div>
-    </InLayer.Provider>
+    <div className="relative h-[720px] w-[1280px]">
+      {children}
+      {on && (
+        <EventBoundary>
+          <TvEventOverlay game={game} />
+        </EventBoundary>
+      )}
+    </div>
   );
 }
 
