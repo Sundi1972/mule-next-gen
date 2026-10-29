@@ -10,7 +10,7 @@ import type { TableClient } from '../src/net/client';
 /**
  * C10 and C11's display, at promise altitude: what the TV and each phone show while a phase's events play over its
  * screen, rendered through the apps' own screens (TableApp, PhoneApp) from a view as the server sends it (the lead's
- * contract: MuleView.events, MuleView.eventShow { startsAt, showMs, introMs, endsAt }).
+ * contract: MuleView.events, MuleView.eventShow { startsAt, showMs, introMs, endsAt, held }).
  */
 
 // The fake document has no dataset (the map's theme reads the page's) and no layout (the shell measures).
@@ -46,6 +46,21 @@ const sick = (player: string, name: string): Sick =>
   }) as unknown as Sick;
 const SICK = [sick(LENA, 'Lena'), sick(BRIX, 'Brix')];
 const SHOW_MS = EVENT_SHOW.introMs + EVENT_SHOW.rollCallMs;
+/** A pest swarm the auction fired on Lena's plot, playing as long as the roll call so the timings above hold. */
+const AUCTION_EVENT = {
+  key: 'pestSwarm',
+  kind: 'pests',
+  title: 'Pest swarm',
+  line: 'Pests strip a farm.',
+  sign: 'bad',
+  scope: 'personal',
+  player: LENA,
+  origin: { x: 1, y: 1 },
+  hits: [{ x: 1, y: 1, order: 0, delta: -1 }],
+  phase: 'auction',
+  weight: 'spotlight',
+  playMs: EVENT_SHOW.rollCallMs,
+} as unknown as EventView;
 
 /** Show seconds (full pace) of the roll call's result, by its beats: the intro, then announce, play, settle. */
 const INTRO_S = EVENT_SHOW.introMs / 1000;
@@ -65,11 +80,12 @@ const STOCK = { food: 3, water: 2, energy: 2, smithore: 0, crystite: 0, rareEart
 
 /**
  * The view at show second `t` (full pace): the server's clock is `t × SCALE` past the show's start. `events: []` is a
- * quiet phase; production carries its own show and the overlay must stay out of it.
+ * quiet phase; production carries its own show and the overlay must stay out of it. `held`: the server holds the
+ * phase's clocks for the show.
  */
-function viewAt(t: number, { phase = 'development' as MuleView['phase'], events = SICK as EventView[], endsAt = true } = {}): MuleView {
+function viewAt(t: number, { phase = 'development' as MuleView['phase'], events = SICK as EventView[], held = true } = {}): MuleView {
   const startsAt = NOW - t * 1000 * SCALE;
-  const show = events.length ? { startsAt, showMs: SHOW_MS, introMs: EVENT_SHOW.introMs, ...(endsAt ? { endsAt: startsAt + Math.round(SHOW_MS * SCALE) } : {}) } : null;
+  const show = events.length ? { startsAt, showMs: SHOW_MS, introMs: EVENT_SHOW.introMs, endsAt: startsAt + Math.round(SHOW_MS * SCALE), held } : null;
   return {
     finished: false,
     month: 5,
@@ -97,7 +113,7 @@ function viewAt(t: number, { phase = 'development' as MuleView['phase'], events 
     listings: [],
     lotSlots: { used: 0, max: 0 },
     landAuction: null,
-    production: phase === 'production' ? { lines: [], events: [], lengthMs: 15_000, introMs: 0 } : null,
+    production: phase === 'production' || phase === 'upkeep' ? { lines: [], events: [], lengthMs: 15_000, introMs: 0 } : null,
     events,
     eventShow: show,
     politics: null,
@@ -182,6 +198,8 @@ afterEach(() => {
 /** Mounts in the fake DOM, where effects and taps run, with the device's prefers-reduced-motion set to `reduced`. */
 async function mount(el: ReturnType<typeof createElement>, reduced = false) {
   Object.assign(window, { matchMedia: (q: string) => ({ media: q, matches: reduced && q === '(prefers-reduced-motion: reduce)', addEventListener() {}, removeEventListener() {} }) });
+  // The fake window has no timers; the auction screen ticks on one.
+  Object.assign(window, { setInterval: () => 0, clearInterval: () => undefined });
   const doc = document as unknown as { createElementNS?: (ns: string, tag: string) => FakeElement };
   doc.createElementNS ??= (_ns, t) => document.createElement(t);
   vi.stubGlobal('MutationObserver', class { observe() {} disconnect() {} });
@@ -260,7 +278,7 @@ describe('B-AC-4 (C10): a phase’s events play over its screen on the phone', (
   });
 
   it('B-AC-4: planning is never held (RULE-4 c): with a TV the light card floats and the planning screen stays usable; alone the show plays, and a tap leaves the light card', async () => {
-    const planning = viewAt(ROLL_S, { phase: 'planning', events: SICK.map((e) => ({ ...e, phase: 'planning' })) as EventView[] });
+    const planning = viewAt(ROLL_S, { phase: 'planning', events: SICK.map((e) => ({ ...e, phase: 'planning' })) as EventView[], held: false });
     // With a TV: the card floats over the planning screen, taps go through, no map of its own.
     const tv = await render(await phone(OSSA, 1, planning));
     expect(tag(tv, 'phone-event-overlay')).toContain('data-mode="light"');
@@ -279,6 +297,34 @@ describe('B-AC-4 (C10): a phase’s events play over its screen on the phone', (
     expect(inside(m.html(), 'phone-event-overlay')).not.toContain('data-testid="event-map"');
   });
 
+  it('B-AC-4: the server, not the phase, says whether the show covers: an upkeep event the server does not hold floats over the month end', async () => {
+    const upkeep = viewAt(ROLL_S, { phase: 'upkeep', events: [AUCTION_EVENT].map((e) => ({ ...e, phase: 'upkeep' })) as EventView[], held: false });
+    const tv = await render(await phone(OSSA, 1, upkeep));
+    expect(tag(tv, 'phone-event-overlay')).toContain('data-event-phase="upkeep"');
+    expect(tag(tv, 'phone-event-overlay')).toContain('pointer-events-none');
+    expect(tag(tv, 'phone-event-overlay')).not.toMatch(/absolute inset-0/);
+    expect(tv).toContain('data-testid="game-shell"');
+    const m = await mount(await phone(OSSA, 0, upkeep));
+    m.tap();
+    expect(tag(m.html(), 'phone-event-overlay')).toContain('pointer-events-none');
+    expect(tag(m.html(), 'phone-event-overlay')).not.toMatch(/absolute inset-0/);
+  });
+
+  it('B-AC-4: an auction event the server holds the auction for: alone the phone plays it and covers; with a board the light card covers', async () => {
+    const auction = viewAt(ROLL_S + 1, { phase: 'auction', events: [AUCTION_EVENT], held: true });
+    const solo = await render(await phone(OSSA, 0, auction));
+    expect(tag(solo, 'phone-event-overlay')).toContain('data-event-phase="auction"');
+    expect(tag(solo, 'phone-event-overlay')).toContain('data-mode="solo"');
+    expect(tag(solo, 'phone-event-overlay')).toMatch(/class="absolute inset-0 z-40 /);
+    expect(inside(solo, 'phone-event-overlay')).toContain('data-testid="event-map"');
+    expect(inside(solo, 'phone-event-overlay')).toContain('data-testid="skip"');
+    const tv = await render(await phone(OSSA, 1, auction));
+    expect(tag(tv, 'phone-event-overlay')).toContain('data-mode="light"');
+    expect(tag(tv, 'phone-event-overlay')).toMatch(/class="absolute inset-0 z-40 /);
+    expect(inside(tv, 'phone-event-overlay')).toContain('data-testid="phone-card"');
+    expect(inside(tv, 'phone-event-overlay')).not.toContain('data-testid="skip"');
+  });
+
   it('B-AC-4: nothing over production (its screen plays its own show), nor in a quiet phase, nor outside the show', async () => {
     for (const boards of [0, 1]) {
       expect(await render(await phone(OSSA, boards, viewAt(ROLL_S, { phase: 'production' })))).not.toContain('phone-event-overlay');
@@ -291,12 +337,7 @@ describe('B-AC-4 (C10): a phase’s events play over its screen on the phone', (
   });
 
   it('B-AC-4: the server clock runs at the table’s pace: the show at t full-pace seconds is t × scale ms past startsAt', async () => {
-    // Just inside the end at the table's pace; without endsAt (an older server) the show runs at full pace.
     expect(await render(await phone(OSSA, 0, viewAt(SHOW_MS / 1000 - 0.05)))).toContain('phone-event-overlay');
-    const late = viewAt(0);
-    const noEnd = { ...late, eventShow: { ...late.eventShow!, startsAt: NOW - (SHOW_MS - 100) } } as MuleView;
-    delete (noEnd.eventShow as { endsAt?: number }).endsAt;
-    expect(await render(await phone(OSSA, 0, noEnd))).toContain('phone-event-overlay');
   });
 });
 

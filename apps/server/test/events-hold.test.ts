@@ -232,7 +232,7 @@ describe('T-AC-7, T-AC-8: an auction that fired events opens only when their sho
     const { game, ctx, advance, enteredAt } = toPhase('auction', ['pestSwarm'], { pestSwarm: 'auction' });
     const ticks = countTicks(game, 'auctionTick');
     const show = game.viewFor(null).eventShow!;
-    expect(show).toEqual({ startsAt: enteredAt, showMs: 7_000, introMs: 1_800, endsAt: enteredAt + 7_000 });
+    expect(show).toEqual({ startsAt: enteredAt, showMs: 7_000, introMs: 1_800, endsAt: enteredAt + 7_000, held: true });
     expectHeld(() => game.handle('s1', { type: 'declare', side: 'pass' }));
     advance(show.endsAt - 1 - ctx.now());
     expectHeld(() => game.handle('s1', { type: 'declare', side: 'pass' }));
@@ -289,9 +289,19 @@ describe('T-AC-8: an untimed phase and a phase without events are not held (RULE
     advance(1);
     const view: MuleView = game.viewFor(null);
     expect({ month: view.month, phase: view.phase }).toEqual({ month: 2, phase: 'planning' });
-    expect(view.eventShow).toMatchObject({ showMs: 8_800 });
+    expect(view.eventShow).toMatchObject({ showMs: 8_800, held: false });
     readyAll(game);
     expect(game.viewFor(null).phase).not.toBe('planning');
+  });
+
+  it('T-AC-8: the view says whether the server holds the phase for its show: development\'s roll call is held, the month end (no clock) is not', () => {
+    const sick = sickAt(['s1']);
+    expect(sick.game.viewFor(null).eventShow).toMatchObject({ held: true });
+    expectHeld(() => sick.game.handle('s2', { type: 'buyMule' }));
+    nobodyRollsSick();
+    const { game } = toPhase('upkeep', ['drought'], { drought: 'upkeep' });
+    expect(game.viewFor(null).eventShow).toMatchObject({ showMs: 8_800, held: false });
+    game.handle('s1', { type: 'ready' });
   });
 });
 
@@ -299,6 +309,6 @@ describe('T-AC-10: eventShow.endsAt is where the show ends on the server clock, 
   it.each([1, 0.1])('T-AC-10: at phaseScale %s, an auction show of 7 000 ms ends at startsAt + 7 000 × scale', (scale) => {
     nobodyRollsSick();
     const { game, enteredAt } = toPhase('auction', ['pestSwarm'], { pestSwarm: 'auction' }, scale);
-    expect(game.viewFor(null).eventShow).toEqual({ startsAt: enteredAt, showMs: 7_000, introMs: 1_800, endsAt: enteredAt + Math.round(7_000 * scale) });
+    expect(game.viewFor(null).eventShow).toEqual({ startsAt: enteredAt, showMs: 7_000, introMs: 1_800, endsAt: enteredAt + Math.round(7_000 * scale), held: true });
   });
 });
