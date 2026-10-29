@@ -42,7 +42,10 @@ export interface GaitInput {
   terrain: number;
   /** Leading a MULE: the wire's `lead` is non-null. */
   lead: boolean;
-  /** Bitten and not yet healed: the wire's ColonistView.bitten (the engine's FloorColonist.bitten). */
+  /**
+   * Bitten and not yet healed: from the wire's `ColonistView.bitten` (the engine's FloorColonist.bitten), sent only
+   * while true, so an absent field is false (`view.bitten ?? false`).
+   */
   bitten: boolean;
   /** The balance's pace while leading a MULE and while bitten (RULE-2, RULE-4), from the engine's config. */
   leadPace: number;
