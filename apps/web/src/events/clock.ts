@@ -17,6 +17,8 @@ export interface OverlayShow {
   t: number;
   /** Where the show ends on that clock: the server's showMs. */
   end: number;
+  /** The server holds the phase's clocks for the show: the overlay covers its screen. */
+  held: boolean;
 }
 
 /**
@@ -31,5 +33,5 @@ export function overlayShowAt(view: MuleView, now: number): OverlayShow | null {
   // Until the server sends endsAt, the show runs at full pace on the server's clock.
   const endsAt = show.endsAt ?? show.startsAt + show.showMs;
   if (!(endsAt > show.startsAt) || now < show.startsAt || now >= endsAt) return null;
-  return { events, introMs: show.introMs, t: ((now - show.startsAt) * show.showMs) / (endsAt - show.startsAt) / 1000, end: show.showMs / 1000 };
+  return { events, introMs: show.introMs, t: ((now - show.startsAt) * show.showMs) / (endsAt - show.startsAt) / 1000, end: show.showMs / 1000, held: show.held };
 }

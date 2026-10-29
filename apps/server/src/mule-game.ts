@@ -808,8 +808,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       return;
     }
 
-    // RULE-4: a timed phase whose events fired starts every clock, the AI hands' too, once their show is over.
-    const holdMs = holdsForEvents(state.phase) ? this.realMs(eventShow(phaseEvents(state, state.phase)).showMs / 1_000) : 0;
+    const holdMs = this.holdMs(state);
     if (holdMs <= 0) {
       this.startPhase(state);
       return;
@@ -825,6 +824,11 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         this.ctx.changed();
       }),
     );
+  }
+
+  /** RULE-4: how long a timed phase whose events fired holds every clock, the AI hands' too: its show, at the table's pace. */
+  private holdMs(state: GameState): number {
+    return holdsForEvents(state.phase) ? this.realMs(eventShow(phaseEvents(state, state.phase)).showMs / 1_000) : 0;
   }
 
   /** Starts the phase just entered: its clocks, its AI hands and its news. */
@@ -1457,7 +1461,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     if (fired.length === 0) return { events: [], eventShow: null };
     const { showMs, introMs } = eventShow(fired);
     const startsAt = this.phaseEnteredAt + (state.phase === 'production' ? this.realMs(PRODUCTION_SHOW_AT_MS / 1_000) : 0);
-    return { events: eventViews(state, fired), eventShow: { startsAt, showMs, introMs, endsAt: startsAt + this.realMs(showMs / 1_000) } };
+    const endsAt = startsAt + this.realMs(showMs / 1_000);
+    return { events: eventViews(state, fired), eventShow: { startsAt, showMs, introMs, endsAt, held: this.holdMs(state) > 0 } };
   }
 
   /** The auction board as every screen draws it. Public, as in the original: everyone sees everyone walk. */

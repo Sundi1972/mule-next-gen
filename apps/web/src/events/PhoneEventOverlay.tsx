@@ -49,14 +49,14 @@ function PhoneEventShow({ view }: { view: MuleView }) {
   // A skip is this phone's alone: it moves its show ahead of the server's clock, never the clock. With a TV in the
   // room the phone is back on the TV's clock.
   const [ahead, setAhead] = useState(0);
-  // Planning is never held (RULE-4 c): people act while its show plays, so its screen must stay usable. Alone, the
-  // gallery's PhoneSolo covers it until the first tap, which collapses the show to the floating light card.
+  // A phase the server does not hold (RULE-4) stays usable while its show plays. Alone, the gallery's PhoneSolo
+  // covers it until the first tap, which collapses the show to the floating light card.
   const [collapsed, setCollapsed] = useState(false);
-  const held = view.phase !== 'planning';
   const reduced = useEventReducedMotion();
   const tiles = useMemo(() => mapTiles(view), [view]);
   const players = useMemo<ShowPlayer[]>(() => view.players.map((p) => ({ id: p.id, slot: (slotOf(view, p.id) ?? 0) as Slot, name: p.name })), [view]);
   if (!show) return null;
+  const { held } = show;
   const t = solo ? show.t + ahead : show.t;
   // Skipped past the last result: the show is over for this phone.
   if (t >= show.end) return null;

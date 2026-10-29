@@ -470,6 +470,8 @@ export interface EventShowView {
   introMs: number;
   /** Epoch ms on the server's clock when the show ends: startsAt plus showMs at the table's pace. */
   endsAt: number;
+  /** Whether the server holds the phase's clocks until endsAt: then nobody can act and the show covers the screen. */
+  held: boolean;
 }
 
 /** What every plot made this month and what the month's event did: never anything a player holds. */
