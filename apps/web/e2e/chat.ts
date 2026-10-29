@@ -5,7 +5,7 @@
  * gives it one. Run with `pnpm --filter @mule/web e2e`. With E2E_AI_LINES=1 every page must also receive an AI seat's
  * line in the land grant, development and the auction (for a branch whose AI players talk).
  */
-import { LOTS, WALK } from '@mule/engine';
+import { AI_HANDS, LOTS } from '@mule/engine';
 import type { Page } from 'playwright';
 import { GRANT_PASS_MAX_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import { check, launch, PHONE, startServer, TV } from './harness';
@@ -59,7 +59,8 @@ const REACH = {
   // The land grant has no clock: one pass over the free plots at most.
   development: within(GRANT_PASS_MAX_MS + LAND_AUCTION_MS),
   auction: within(PHASE_MS.development + PHASE_MS.production),
-  walk: within(WALK.statusMs),
+  // The side pick has no clock (A-7): once both phones press Ready it waits only for the AI's decision.
+  walk: within(AI_HANDS.auction.decideWaitMs),
 };
 
 type Said = { id: number; from: string; to?: string; text: string };
@@ -192,6 +193,7 @@ try {
 
   // The auction: two lines within a second while the TV draws the walk.
   await Promise.all([phase(lena, 'auction'), phase(kai, 'auction')]);
+  for (const p of [lena, kai]) await p.locator('[data-phase=auction]').getByRole('button', { name: 'Ready', exact: true }).click({ timeout: 5_000 });
   await tv.locator('[data-phase=auction] [data-testid=walk-board]').waitFor({ timeout: REACH.walk });
   await lena.waitForTimeout(PHASE_SETTLES_MS);
   await burst(lena, kai, 'auction');
