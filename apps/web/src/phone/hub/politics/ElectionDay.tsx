@@ -108,6 +108,10 @@ function Ballot({ election }: { election: ElectionView }) {
   usePicks();
   useEffect(() => forgetPicks, []);
   const mine: BallotOf = { seat: me.id, month: view.month };
+  const offices = contested(election.candidates);
+  useEffect(() => {
+    for (const o of offices) serverShows(mine, o, me.politics?.ballot[o]);
+  });
   return (
     <DayCard at={2} testid="ballot-card">
       <span className="flex flex-wrap items-center gap-x-1.5 text-xs @min-[1100px]/shell:text-lg" data-testid="voted">
@@ -120,7 +124,7 @@ function Ballot({ election }: { election: ElectionView }) {
         </span>
       </span>
       <div className="grid grid-cols-2 gap-2 @min-[1100px]/shell:gap-6">
-        {contested(election.candidates).map((o) => (
+        {offices.map((o) => (
           <BallotPaper
             key={o}
             office={o}
@@ -200,9 +204,10 @@ const EXTRAS = [
 ] as const;
 
 /*
- * This phone's picks on the open ballot, '' for Abstain. A pick shows at once, while the vote travels; the server's
- * shows instead once it is not one this phone's pick was made over (a vote changed on another device). The server's
- * view can't tell an abstention from no pick: only this phone knows, for the ballot and for Cast my vote.
+ * This phone's picks on the open ballot, '' for Abstain. While its votes travel the latest pick shows: the server's
+ * answers to the earlier ones come back first and never replace it. Only a pick this phone didn't send in that time
+ * (a vote changed on another device) shows the server's instead. The server's view can't tell an abstention from no
+ * pick: only this phone knows, for the ballot and for Cast my vote.
  * The picks are a seat's in a month, not a room's: the ready bar has no room code. Closing the ballot forgets them,
  * which keeps another room's ballot from opening with them.
  */
@@ -210,10 +215,15 @@ export interface BallotOf {
   seat: string;
   month: number;
 }
-/** A pick, and the server's picks it was made over ('' for none), so their return from the server doesn't undo it. */
 interface HeldPick {
+  /** The latest pick. */
   id: string;
-  over: Set<string>;
+  /** The picks sent since the server last showed this phone's latest, in order; empty once it has. */
+  sent: string[];
+  /** How many of `sent` the server has answered so far. */
+  answered: number;
+  /** The server's pick as this phone last saw it ('' for none). */
+  seen: string;
 }
 let held: { ballot: BallotOf; picks: Map<Office, HeldPick> } | null = null;
 const listeners = new Set<() => void>();
@@ -224,33 +234,56 @@ function changed(): void {
   for (const l of listeners) l();
 }
 
-/** Records this phone's pick for an office, made over the server's pick `server`; a pick on another ballot forgets the one before. */
+const sameBallot = (a: BallotOf, b: BallotOf) => a.seat === b.seat && a.month === b.month;
+const heldPick = (ballot: BallotOf, office: Office) => (held && sameBallot(held.ballot, ballot) ? held.picks.get(office) : undefined);
+
+/** Records this phone's pick for an office over the server's pick `server`; a pick on another ballot forgets the one before. */
 export function pickOn(ballot: BallotOf, office: Office, id: string, server?: string): void {
   if (!held || !sameBallot(held.ballot, ballot)) held = { ballot, picks: new Map() };
   const before = held.picks.get(office);
-  const at = server ?? '';
-  // Picked again before the server confirmed the last pick: its answer to that one is no newer than this.
-  const over = before && (before.id === at || before.over.has(at)) ? new Set([...before.over, before.id]) : new Set([at]);
-  held.picks.set(office, { id, over });
+  if (before && before.sent.length > 0) held.picks.set(office, { ...before, id, sent: [...before.sent, id] });
+  else held.picks.set(office, { id, sent: [id], answered: 0, seen: server ?? '' });
   changed();
+}
+
+/**
+ * Where a new server pick falls among this phone's votes on the way: the index of the one it answers, the last when it
+ * shows the latest pick; -1 when it answers none of them, a vote from elsewhere. Unchanged, it answers nothing new.
+ */
+function answerTo(pick: HeldPick, at: string): number | 'unchanged' {
+  if (at === pick.seen) return 'unchanged';
+  // The server applies the votes in order, so an answer is never to one before the last answered.
+  return pick.sent.indexOf(at, pick.answered);
+}
+
+/** The pick the ballot shows for an office, given the server's: this phone's, unless the server's is newer; undefined for none. */
+function shownPick(ballot: BallotOf, office: Office, server: string | undefined): string | undefined {
+  const mine = heldPick(ballot, office);
+  const at = server ?? '';
+  if (!mine) return server;
+  if (mine.sent.length === 0) return mine.id === at ? mine.id : server;
+  return answerTo(mine, at) === -1 ? server : mine.id;
+}
+
+/** Takes in the server's pick once drawn: an answer to this phone's votes moves past them; a vote from elsewhere ends them. */
+function serverShows(ballot: BallotOf, office: Office, server: string | undefined): void {
+  const mine = heldPick(ballot, office);
+  if (!mine || mine.sent.length === 0) return;
+  const at = server ?? '';
+  const answer = answerTo(mine, at);
+  if (answer === 'unchanged') return;
+  if (answer === -1) {
+    held!.picks.delete(office);
+    return;
+  }
+  const last = answer === mine.sent.length - 1;
+  held!.picks.set(office, last ? { ...mine, sent: [], answered: 0, seen: at } : { ...mine, answered: answer + 1, seen: at });
 }
 
 /** Forgets every pick; the ballot does this when it closes, so the next one opens empty. */
 export function forgetPicks(): void {
   held = null;
   changed();
-}
-
-const sameBallot = (a: BallotOf, b: BallotOf) => a.seat === b.seat && a.month === b.month;
-
-/** The pick the ballot shows for an office, given the server's: this phone's, unless the server's is newer; undefined for none. */
-function shownPick(ballot: BallotOf, office: Office, server: string | undefined): string | undefined {
-  const mine = held && sameBallot(held.ballot, ballot) ? held.picks.get(office) : undefined;
-  const at = server ?? '';
-  if (!mine) return server;
-  // Once the server holds this pick, any later change there is newer than it.
-  if (mine.id === at) mine.over.clear();
-  return mine.id === at || mine.over.has(at) ? mine.id : server;
 }
 
 function usePicks(): void {
