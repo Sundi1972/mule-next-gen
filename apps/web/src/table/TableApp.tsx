@@ -376,6 +376,8 @@ function useNewestFirst(deals: DealView[]): DealRow[] {
 export function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game: MuleView; auction: NonNullable<MuleView['auction']> }) {
   useAuctionSound(auction);
   const skipped = skippedLine(auction);
+  // The status line names the skipped goods only, no reasons, so it fits its one line (WS6 ruling on #204).
+  const skippedGoods = auction.skipped.length > 0 ? `Skipped: ${auction.skipped.map((s) => GOOD_NAME[s.good]).join(', ')}` : null;
   const walkers = boardWalkers(game, auction);
   const stock = auction.storeForSale;
   const deals = useNewestFirst(auction.deals);
@@ -393,9 +395,9 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
             // On the status stage the skipped words share the time bar's row, so the ship panel keeps its room.
             <div className="flex shrink-0 items-center gap-4">
               <TimeBar size="tv" seconds={auction.seconds} total={auction.total} slowed={auction.slowed} className="min-w-0 flex-1" />
-              {skipped && (
+              {skippedGoods && (
                 <p className="min-w-0 max-w-[45%] truncate font-mono text-base text-ink-3" data-testid="skipped">
-                  {skipped}
+                  {skippedGoods}
                 </p>
               )}
             </div>
