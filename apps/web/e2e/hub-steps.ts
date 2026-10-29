@@ -64,6 +64,13 @@ export async function planningIsTheHub(phone: Page, server: MuleServer, code: st
   await planning.getByTestId('desk-colony').click({ timeout });
   const verdict = (g: Good) => (have[g] >= need[g] ? 'OK' : `SHORT ${need[g] - have[g]}`);
   await planning.getByTestId('need-food').filter({ hasText: verdict('food') }).waitFor({ timeout });
+  // An office holder's hub opens on the office's desk, which asks first, and folds Now to its title (E-9, E-11): with
+  // the Colony desk open, Now is opened again to be read whole.
+  const folded = planning.locator('button[data-testid=now]');
+  if (await folded.count()) {
+    await folded.click({ timeout });
+    await planning.getByTestId('now-fold').waitFor({ timeout });
+  }
 
   const held = OFFICE_DESKS.filter((o) => state.politics?.[o] === SEAT && BUILT_OFFICE_DESKS.includes(o));
   const narrow = await read(phone);
@@ -80,8 +87,15 @@ export async function planningIsTheHub(phone: Page, server: MuleServer, code: st
   }
   check(need.food - have.food === 3, `B-AC-14: the seeded shortfall is Food 2 of 5, got ${have.food} of ${need.food}`);
   check(need.smithore === 0 && !rows.includes('smithore'), `B-AC-14 (negative): with no mine or factory she needs no Smithore and has no row for it, got rows ${rows.join(', ')}`);
-  check(narrow.nowTitle === 'Plan your month, then press Ready', `B-AC-14 (RULE-8): Now says "Plan your month, then press Ready", got "${narrow.nowTitle}"`);
-  check(/land grant/.test(narrow.nowDetail) && /Food/.test(narrow.nowDetail), `B-AC-14 (RULE-8): Now names the land grant as next and the short Food, got "${narrow.nowDetail}"`);
+  // A Governor elected this month is first told to set the tax (C66, E-7); everyone else plans (RULE-8).
+  const newGovernor = state.politics?.governor === SEAT && state.politics.election?.stage === 'over';
+  if (newGovernor) {
+    check(narrow.nowTitle === 'Set the sales tax', `C66 (E-7): the new Governor's Now says "Set the sales tax", got "${narrow.nowTitle}"`);
+    check(/Then plan your month\. You are the new Governor/.test(narrow.nowDetail), `C66 (E-7): the new Governor's Now says to plan the month next, got "${narrow.nowDetail}"`);
+  } else {
+    check(narrow.nowTitle === 'Plan your month, then press Ready', `B-AC-14 (RULE-8): Now says "Plan your month, then press Ready", got "${narrow.nowTitle}"`);
+    check(/land grant/.test(narrow.nowDetail) && /Food/.test(narrow.nowDetail), `B-AC-14 (RULE-8): Now names the land grant as next and the short Food, got "${narrow.nowDetail}"`);
+  }
 
   let wide: Shown;
   try {
@@ -134,7 +148,8 @@ async function read(phone: Page): Promise<Shown> {
       tools: [...(screen?.querySelectorAll('[data-testid=map-tools] [data-testid^="tool-"]') ?? [])].map((t) => t.getAttribute('data-testid')!.slice('tool-'.length)),
       needs: [...(guide?.querySelectorAll('[data-testid^="need-"]') ?? [])].map((n) => ({ good: n.getAttribute('data-testid')!.slice('need-'.length), text: (n as HTMLElement).innerText })),
       thisMonthInColony: !!guide?.querySelector('[data-testid=desk-body-colony] [data-testid=this-month]'),
-      nowFirst: !!body && body.firstElementChild === guide?.querySelector('[data-testid=now]'),
+      // Now first: the card itself, or the card a folding Now wraps with its fold button (E-9).
+      nowFirst: !!body?.firstElementChild && !!guide?.querySelector('[data-testid=now]') && body.firstElementChild.contains(guide.querySelector('[data-testid=now]')),
       nowTitle: guide?.querySelector('[data-testid=now-title]')?.textContent ?? '',
       nowDetail: (guide?.querySelector('[data-testid=now]') as HTMLElement | null)?.innerText ?? '',
       reviewLabels: (shell?.innerText ?? '').split('\n').filter((l) => /\bSOON\b|\bSLICE\b|\bWS7\b/.test(l)),
