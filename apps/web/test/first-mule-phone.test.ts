@@ -13,12 +13,15 @@ import { startClockQuestion } from '../src/phone/Develop';
 
 const LENA = 's1';
 const OSSA = 's2';
+const KAI = 's3';
+/** Lena and Ossa, and Kai for a table where two are still to come. */
+const TABLE = [...walkers, { id: KAI, name: 'Kai', isAi: false, color: 2 }];
 
 /** Month 1's development on the real server: `owners` (Lena, the host, and Ossa by default) each own a plot next to the store, no MULE yet. */
-function firstMonth(owners: string[] = [LENA, OSSA]) {
+function firstMonth(owners: string[] = [LENA, OSSA], players = walkers) {
   const plots: Record<string, number> = {};
   const g = toDevelopment({
-    players: walkers,
+    players,
     firstMonthWaits: true,
     prepare: (state: GameState) => {
       const store = state.tiles.find((t) => t.terrain === 'store')!;
@@ -47,7 +50,7 @@ function phone(game: MuleGame, now: number, seat: string, sent: unknown[] = []):
     serverNow: () => now,
     intent: (i: unknown) => sent.push(i),
   } as unknown as TableClient;
-  const table = { code: 'MULE', status: 'playing', hostId: LENA, boards: 1, seats: walkers.map((s) => ({ id: s.id, name: s.name, isAi: s.isAi, connected: true, color: s.color })), game: view } as TableView<MuleView>;
+  const table = { code: 'MULE', status: 'playing', hostId: LENA, boards: 1, seats: TABLE.map((s) => ({ id: s.id, name: s.name, isAi: s.isAi, connected: true, color: s.color })), game: view } as TableView<MuleView>;
   const self = view.players.find((p) => p.id === seat)!;
   const value = { table, view, me: view.me!, self, slot: 0 as const };
   return renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value, children: createElement(Develop) }) }));
@@ -138,5 +141,18 @@ describe('A-1: a seat with no plot is in from the start, and waits', () => {
     expect(text(html)).not.toContain('Your MULE is in');
     expect(html).not.toMatch(/<button[^>]*data-shop="corral"(?![^>]*disabled="")[^>]*>/);
     expect(html).toMatch(/<button(?![^>]*disabled="")[^>]*aria-label="Go to the pub and end your turn"/);
+  });
+});
+
+describe('A-1: with two or more still to come, the wait names the first and counts the rest', () => {
+  it('A-1: "Your MULE is in · waiting for Ossa +1" when Ossa and Kai are still to come', () => {
+    const { game, ctx, installFirst } = firstMonth([LENA, OSSA, KAI], TABLE);
+    installFirst(LENA);
+    expect(text(phone(game, ctx.now(), LENA))).toContain('Your MULE is in · waiting for Ossa +1');
+  });
+
+  it('A-1: "No plot this month · waiting for Ossa +1" for a plotless seat', () => {
+    const { game, ctx } = firstMonth([OSSA, KAI], TABLE);
+    expect(text(phone(game, ctx.now(), LENA))).toContain('No plot this month · waiting for Ossa +1');
   });
 });

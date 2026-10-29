@@ -34,8 +34,8 @@ const rows = (html: string) => [...html.matchAll(/<li[^>]*>(.*?)<\/li>/g)].map((
 describe("A-1: month 1's development clock waits for every first MULE (the TV and the host)", () => {
   it("A-1: the TV lists every seat's first MULE as in or still to come, in seat order, under the mock's words", () => {
     const html = renderToStaticMarkup(createElement(FirstMules, { game: firstMonth(['lena', 'brix']) }));
-    expect(text(html)).toMatch(/^First MULEs in/);
-    expect(rows(html)).toEqual(['Lena still to come', 'Ossa ✓ in', 'Brix still to come', 'Kai ✓ in']);
+    expect(text(html)).toMatch(/^First MULEs in the clock starts when all are in/);
+    expect(rows(html)).toEqual(['Lena still to come', 'Ossa MULE in ✓', 'Brix still to come', 'Kai MULE in ✓']);
   });
 
   it('A-1: while it waits the TV clock stands full and says what starts it', () => {

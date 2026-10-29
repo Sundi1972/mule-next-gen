@@ -99,7 +99,7 @@ try {
     for (const size of SIZES) {
       await page.setViewportSize(size);
       const tag = `${size.width}×${size.height}`;
-      if (shots) await shot(page, `wait-${size.width}x${size.height}`);
+      if (shots) await shot(page, `wait-${size.width}x${size.height}${who.startsWith('Mia') ? '-two-to-come' : ''}`);
       const guide = await page.getByTestId('now').evaluate((now) => {
         const detail = now.querySelector('#first-month-wait')!.parentElement!;
         const lines = Math.round(detail.getBoundingClientRect().height / parseFloat(getComputedStyle(detail).lineHeight));
@@ -112,8 +112,7 @@ try {
       });
       check(guide.over <= 0, `A-1: ${who}, ${tag}: the guide doesn't overflow, ${guide.over} px`);
       check(guide.hidden <= 0.5, `A-1: ${who}, ${tag}: the wait's detail shows in full in the rail without scrolling, ${guide.hidden.toFixed(1)} px out of view`);
-      // WS6's 2 lines hold for one name; with two ("Heiko and Kai") the 667 title runs longer, measured and reported.
-      if (!waitingFor.includes(' and ')) check(guide.titleLines <= 2, `A-1: ${who}, ${tag}: the wait's title wraps to 2 lines at most, got ${guide.titleLines}`);
+      check(guide.titleLines <= 2, `A-1: ${who}, ${tag}: the wait's title wraps to 2 lines at most, got ${guide.titleLines}`);
       if (size === PHONE_SMALL.viewport) check(guide.lines <= 2, `A-1: ${who}, 667: the wait's detail keeps to 2 lines at ${guide.width} px, got ${guide.lines}`);
       measures.push(`${who} ${size.width}: guide ${guide.width} px wide, title ${guide.titleLines} line(s), detail ${guide.lines} line(s), in view`);
     }
@@ -121,12 +120,12 @@ try {
   };
 
   await installFirst(mia, 's2');
-  await waitsOnceIn(mia, 'Mia, not the host', 'Heiko and Kai', false);
+  await waitsOnceIn(mia, 'Mia, not the host', 'Heiko +1', true);
   await none(mia, "a non-host's phone, its own MULE in");
   await installFirst(heiko, 's1');
   await waitsOnceIn(heiko, 'Heiko, the host', 'Kai', true);
   check(game.devEndsAt === null, "A-1: the clock still waits for Kai's first MULE");
-  await tv.getByTestId('tv-first-mule-s1').getByText('✓ in').waitFor({ timeout: PRESS_MS });
+  await tv.getByTestId('tv-first-mule-s1').getByText('MULE in ✓').waitFor({ timeout: PRESS_MS });
   await none(mia, "a non-host's phone, with the host's MULE in");
   await none(tv, 'the TV, with the host in');
   check((await button(heiko).innerText()).trim() === 'Start the clock without Kai', `A-1: the host's button names Kai, got "${await button(heiko).innerText()}"`);

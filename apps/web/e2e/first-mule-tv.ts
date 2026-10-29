@@ -31,35 +31,52 @@ try {
   await doneWithLand(phone);
   await tv.getByTestId('tv-first-mules').waitFor({ timeout: 60_000 });
   // Let the AIs get their first MULEs in, so the list shows both states.
-  await tv.getByTestId('tv-first-mules').getByText('✓ in').first().waitFor({ timeout: 30_000 });
+  await tv.getByTestId('tv-first-mules').getByText('MULE in ✓').first().waitFor({ timeout: 30_000 });
 
   // Raw rects from the page (no helper functions inside evaluate: tsx would name them), worked out here.
   const raw = await tv.evaluate(() => {
-    const label = [...document.querySelectorAll('span')].find((s) => s.textContent === 'In the store now');
-    const pick = [
-      document.querySelector('[data-phase=development]'),
-      document.querySelector('[data-testid=tv-first-mules]'),
-      label?.nextElementSibling ?? null,
-      document.querySelector('[data-phase=development] [data-testid=store-hall]'),
-      document.querySelector('[data-phase=development] [data-testid=holo-map]'),
-    ];
+    const frame = document.querySelector('[data-phase=development]')!;
+    const hall = frame.querySelector('[data-testid=store-hall]');
+    const list = frame.querySelector('[data-testid=tv-first-mules]');
+    const map = frame.querySelector('[data-testid=holo-map]');
+    const at = [frame, list, hall, map].map((e) => (e ? { top: e.getBoundingClientRect().top, bottom: e.getBoundingClientRect().bottom, width: e.getBoundingClientRect().width } : null));
     return {
-      rects: pick.map((e) => (e ? { top: e.getBoundingClientRect().top, bottom: e.getBoundingClientRect().bottom, width: e.getBoundingClientRect().width } : null)),
-      seats: document.querySelectorAll('[data-testid=tv-first-mules] li').length,
+      at,
+      rows: [...frame.querySelectorAll('[data-testid=tv-first-mules] li')].map((li) => {
+        const name = li.querySelector('span.truncate');
+        const r = li.getBoundingClientRect();
+        return { top: r.top, bottom: r.bottom, name: name?.textContent ?? '', cut: (name?.scrollWidth ?? 0) > (name?.clientWidth ?? 0) };
+      }),
+      // The lowest edge of anything drawn inside the store, its prices among them.
+      hallInner: hall ? Math.max(...[...hall.querySelectorAll('*')].map((e) => e.getBoundingClientRect().bottom)) : null,
+      paceList: frame.querySelectorAll('[data-testid=pace-list]').length,
+      label: frame.querySelector('[data-testid=tv-clock-label]')?.textContent ?? null,
     };
   });
-  const [frame, list, storeBoxR, storeR, mapR] = [0, 1, 2, 3, 4].map((k) => raw.rects[k] ?? null);
+  const [frame, listR, hallR, mapR] = [0, 1, 2, 3].map((k) => raw.at[k] ?? null);
   check(frame, 'the TV draws development');
   const scale = frame.width / 1280;
   // In the 1280×720 canvas's own pixels, from its top.
   const y = (v: number) => Math.round((v - frame.top) / scale);
-  const span = (r: (typeof raw.rects)[number] | undefined) => (r ? { top: y(r.top), bottom: y(r.bottom), height: Math.round((r.bottom - r.top) / scale) } : null);
-  const m = { scale: Math.round(scale * 1000) / 1000, seats: raw.seats, list: span(list), storeBox: span(storeBoxR), storeHall: span(storeR), map: span(mapR), frameBottom: y(frame.bottom) };
+  const span = (r: { top: number; bottom: number } | null | undefined) => (r ? { top: y(r.top), bottom: y(r.bottom), height: Math.round((r.bottom - r.top) / scale) } : null);
+  const m = {
+    scale: Math.round(scale * 1000) / 1000,
+    list: span(listR),
+    rows: raw.rows.map((r) => ({ name: r.name, ...span(r)!, cut: r.cut })),
+    storeHall: span(hallR),
+    storeInnerBottom: raw.hallInner === null ? null : y(raw.hallInner),
+    map: span(mapR),
+    paceListShown: raw.paceList > 0,
+    label: raw.label,
+    frameBottom: y(frame.bottom),
+  };
   await tv.screenshot({ path: `${process.env.MULE_SHOTS ?? '.'}/tv-6seats.png` });
   console.log(`TV, six seats, the clock waiting: ${JSON.stringify(m)}`);
-  check(m.seats === 6, `A-1: the list has six seats, got ${m.seats}`);
-  // The store box is drawn 240 px tall (TableApp's h-[240px]); the hall inside it is the store.
-  check(m.storeBox && m.storeHall && m.storeBox.height >= 239.5 && m.storeHall.height >= 239.5 && m.storeBox.bottom <= m.frameBottom, `A-1: the store is whole, 240 px, inside the frame: ${JSON.stringify(m)}`);
+  check(m.rows.length === 6, `A-1: the list has six seats, got ${m.rows.length}`);
+  check(m.rows.every((r) => r.bottom <= m.frameBottom && r.height <= 36), `A-1: all six rows show, each on one line: ${JSON.stringify(m.rows)}`);
+  check(!m.paceListShown, "A-1: while the clock waits, the list takes the pace list's place");
+  // The store box is drawn 240 px tall (TableApp's h-[240px]); the hall fills it.
+  check(m.storeHall && m.storeHall.height >= 239 && m.storeHall.bottom <= m.frameBottom && m.storeInnerBottom !== null && m.storeInnerBottom <= m.storeHall.bottom + 1, `A-1: the store keeps its 240 px, prices whole, inside the frame: ${JSON.stringify(m)}`);
   check(m.map && m.map.bottom <= m.frameBottom, `A-1: the map is whole inside the frame: ${JSON.stringify(m)}`);
   console.log('e2e first MULE, TV at six seats: ok');
 } finally {
