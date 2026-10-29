@@ -123,6 +123,8 @@ export interface ColonistView {
   pelts?: number;
   /** The moment it is in, if any. */
   encounter?: 'choose' | 'chase' | 'fight' | null;
+  /** true while the colonist limps from a wolf bite; absent means not bitten */
+  bitten?: boolean;
 }
 
 /** Out on the map, or inside the store's hall. */
