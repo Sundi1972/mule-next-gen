@@ -241,6 +241,9 @@ function playStep(game: MuleGame, script: Script, event: StepEvent, seats: SeatI
       case 'moved':
         game.seatMoved(event.seat);
         return;
+      case 'heard':
+        game.heard(event.from, '', event.to);
+        return;
       case 'answer':
         script.answer(event);
         return;
