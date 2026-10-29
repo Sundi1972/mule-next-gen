@@ -59,7 +59,16 @@ describe('the hall plan', () => {
       for (const other of HALL_PLACES) if (other !== place) expect(overlaps(b, boxOf(other)), `${place} and ${other} overlap`).toBe(false);
       const spot = HALL.spots[place];
       expect(isOpenFloor(spot), `${place}'s spot is open floor`).toBe(true);
-      if (!isDoor(place)) expect(b.x0 < spot.x && spot.x < b.x1, `${place}'s spot stands before it`).toBe(true);
+      if (isDoor(place)) expect(b.y0 < spot.y && spot.y < b.y1, `${place}'s spot stands inside its airlock`).toBe(true);
+      else {
+        expect(b.x0 < spot.x && spot.x < b.x1, `${place}'s spot stands before it, across`).toBe(true);
+        // The shopfronts face down onto the walkway below their row; the front row and the bays face up, onto it from below.
+        const shopfront = (HALL_OUTFITTERS as readonly HallPlace[]).includes(place);
+        expect(shopfront ? spot.y > b.y1 : spot.y < b.y0, `${place}'s spot stands before it, on its side of the row`).toBe(true);
+        // One row of spots a row: a bay stands where the front row's rooms stand, not at the shopfronts' walkway.
+        const mate = shopfront ? HALL_OUTFITTERS[0]! : 'pub';
+        expect(spot.y, `${place}'s spot stands on its row's line`).toBeCloseTo(HALL.spots[mate].y, 9);
+      }
     }
     const works = HALL.rooms.works;
     const offBay: HallPoint[] = [];
