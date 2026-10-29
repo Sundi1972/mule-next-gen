@@ -162,7 +162,7 @@ try {
   const air = setAir(code, collapseAir());
   await end.getByTestId('collapse-banner').waitFor({ timeout: PRESS_MS });
   await monthEnd('month end, Collapse');
-  console.log(`  C20, your Worth in Collapse: ${await railFits(phone, { key: 'worth-total', scrolls: true, stage: '[data-testid^=league-row-]', stageText: 'You' })}`);
+  console.log(`  C20, your Worth in Collapse: ${await held(server, code, () => railFits(phone, { key: 'worth-total', scrolls: true, stage: '[data-testid^=league-row-][data-mine]' }))}`);
   await tv.context().close();
   await end.getByTestId('phone-only-monthend').waitFor({ timeout: PRESS_MS });
   await monthEnd('month end, Collapse, no TV');
@@ -177,7 +177,7 @@ try {
   const over = phone.locator('[data-phase=gameOver]');
   await playToTheEnd(code, over);
   await monthEnd('game over');
-  console.log(`  C20, the final standings: ${await railFits(phone, { key: 'scores' })}`);
+  console.log(`  C20, the final standings: ${await held(server, code, () => railFits(phone, { key: 'scores' }))}`);
   await tv.context().close();
   await over.getByTestId('phone-only-gameover').waitFor({ timeout: PRESS_MS });
   await monthEnd('game over, no TV');
