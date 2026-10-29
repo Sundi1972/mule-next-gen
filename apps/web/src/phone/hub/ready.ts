@@ -111,8 +111,17 @@ export const SIDE_PICK_WORDS = {
   moveOn: (others: readonly Seat[]) => `Move on for ${others.length === 1 ? others[0]!.name : 'them'}`,
   /** The confirm's question. */
   title: (others: readonly Seat[]) => `Move on without ${namesOf(others, null)}?`,
-  /** After the seats' sides in the confirm: `given` when every side is the one the numbers give. */
-  tail: (given: boolean) => `${given ? 'That is the side the numbers give' : 'Each starts on the side shown'}; the walk starts for everyone.`,
+  /**
+   * After the seats' sides in the confirm, for `of` seats of which `away` are away (an away seat sits the walk out):
+   * every one away, the walk starts without them; some away, the others start on the side shown; none away, `given`
+   * when every side is the one the numbers give.
+   */
+  tail: (given: boolean, away = 0, of = 1) =>
+    away >= of
+      ? 'The walk starts without them.'
+      : away > 0
+        ? 'The others start on the side shown; the walk starts.'
+        : `${given ? 'That is the side the numbers give' : 'Each starts on the side shown'}; the walk starts for everyone.`,
   now: 'Move on',
   keep: 'Keep waiting',
   /** Once nobody is left. */
