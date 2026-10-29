@@ -783,6 +783,11 @@ describe("the new Governor's promise (C68, E-7)", () => {
     const game = term(CAP_4, 5, 5);
     expect(electionNow({ view: game, me: game.me!, self: game.players[0]! })).toEqual({ title: 'Set the sales tax', detail: 'Then plan your month. You are the new Governor, until month 6. You promised no higher than 4%.' });
   });
+
+  it("C68, E-7: the new Governor's Now names keep it at the tax when the term began, not the month's start", () => {
+    const game = term(HOLD, 7, 7, 4, 5);
+    expect(electionNow({ view: game, me: game.me!, self: game.players[0]! })?.detail).toBe('Then plan your month. You are the new Governor, until month 6. You promised to keep it at 5%.');
+  });
 });
 
 describe('the hub door (E-1)', () => {
