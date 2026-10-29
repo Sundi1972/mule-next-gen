@@ -2,7 +2,7 @@ import type { GameContext } from '@tabletop/core';
 import { describe, expect, it } from 'vitest';
 import { COLONY_SELLER, GAME, LOTS, RuleError, TAX, WALK, type GameState } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
-import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
+import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
 import { colonySeed, tapThere } from './fake-context.js';
 
 /** A context with a manual clock, so phase timers and the auction tick run instantly. */
@@ -89,7 +89,8 @@ function toMonth2Planning(opts: { mule?: boolean; phaseScale?: number } = {}) {
     advance(WALK.tickMs);
   }
   note();
-  advance(PHASE_MS.upkeep);
+  // The month end has no clock: it holds until every human moves on (C20).
+  for (const id of humans) game.handle(id, { type: 'ready' });
   note();
   expect(game.viewFor(null).phase).toBe('planning');
   expect(game.viewFor(null).month).toBe(2);
