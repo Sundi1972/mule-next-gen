@@ -21,7 +21,8 @@ type Inputs = Readonly<Record<string, FloorInput>>;
  * One tick of the floor: every colonist moved by its seat's input, at RULE-2's speed, or through a door when its press
  * reached ENTER or LEAVE on this floor. Pure: a new floor, the old one and the game untouched. A seat with no input
  * stands still. Throws an Error, its caller's bug, for a dtMs other than cfg.steer.tickMs (every runner steps at the one
- * tick), or for a floorSeconds the hall has no finite speed for (a step there would never end).
+ * tick), or for a floorSeconds the hall has no finite speed for, or a step in the hall that is not finite (a pace or
+ * lead factor of Infinity): either would never end.
  */
 export function stepFloor(floor: DevFloor, state: GameState, inputs: Inputs, dtMs: number, cfg: FloorConfig): DevFloor {
   if (dtMs !== cfg.steer.tickMs) throw new Error(`stepFloor steps ${cfg.steer.tickMs} ms at a time, not ${dtMs}`);
@@ -125,6 +126,7 @@ function mapMove(c: FloorColonist, dx: number, dy: number, ctx: Step): FloorColo
 function hallMove(c: FloorColonist, dx: number, dy: number, ctx: Step): FloorColonist {
   const { hall } = ctx.cfg;
   const pieces = Math.floor(Math.hypot(dx, dy) / ctx.wall) + 1;
+  if (!Number.isFinite(pieces)) throw new Error(`stepFloor cannot walk a step of ${Math.hypot(dx, dy)} hall units in the hall`);
   const [px, py] = [dx / pieces, dy / pieces];
   let { x, y } = c;
   for (let i = 0; i < pieces; i++) {

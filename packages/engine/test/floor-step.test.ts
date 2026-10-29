@@ -288,6 +288,12 @@ describe('the dev floor: the step', () => {
       expect(step(inHall), `floorSeconds ${floorSeconds}, walking in the hall`).toThrow(Error);
     }
 
+    // So is a pace that makes a step in the hall infinite (a Zipwing perk, a lead factor): it throws, it does not hang.
+    const unbounded = { ...inHall, colonists: inHall.colonists.map((c) => (c.id === 'a' ? { ...c, pace: Infinity } : c)) };
+    const endless = () => stepFloor(unbounded, first.state, { a: go(1, 0) }, DEV_STEER.tickMs, floorConfig(HALL));
+    expect(endless, 'a pace of Infinity, walking in the hall').toThrow(Error);
+    expect(endless, 'a pace of Infinity, walking in the hall').not.toThrow(RuleError);
+
     // One input changed at one tick: 'a', standing still in the corner, steps right once.
     const changed = inputs.map((tick, t) => (t === 700 ? { ...tick, a: go(1, 0) } : tick));
     const nudged = play(SEED, changed).floors.at(-1)!;
