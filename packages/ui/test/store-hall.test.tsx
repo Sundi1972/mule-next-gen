@@ -98,7 +98,25 @@ describe('C2: the store hall draws the engine’s one plan', () => {
     expect(bay('medicine').left).toBeCloseTo(27, 2);
     for (const b of BAYS) expect(bay(b).width).toBeCloseTo(9, 2);
     expectBox(door('L'), { left: 0.6, top: 30, width: 7, height: 40 }, 'the left airlock as approved');
+    // Each airlock is held from its own side, so the phone's minimum width grows it inwards, never off the hall.
+    const html = hall();
+    const anchors = (d: 'L' | 'R') => Object.keys(pctStyle(tagWith(html, `data-testid="door-${d}"`))).filter((k) => k === 'left' || k === 'right');
+    expect(anchors('L'), 'door-L is held from the left').toEqual(['left']);
+    expect(anchors('R'), 'door-R is held from the right').toEqual(['right']);
     expectBox(door('R'), { left: 92.4, top: 30, width: 7, height: 40 }, 'the right airlock as approved');
+  });
+
+  it.each([
+    // The grid's old gaps, split between the bays' body and each bay's column: gap-0.5 p-0.5 on the phone (2 px edges
+    // and gaps), gap-1 p-1 on the TV and the wide shell (4 px).
+    ['phone', 'p-px', {}],
+    ['tv', 'p-0.5', { tv: true }],
+    ['wide', 'p-0.5', { wide: true }],
+  ] as const)('C2: on the %s the bays keep the works’ gaps (body and column each %s)', (_, pad, size) => {
+    const html = hall(size);
+    const body = html.match(/<span class="flex flex-1 ([^"]*)"><span class="relative flex-1">/);
+    expect(body?.[1], 'the bays’ body under the works’ label').toBe(pad);
+    for (const b of BAYS) expect(tagWith(html, `data-bay="${b}"`)).toMatch(new RegExp(`class="[^"]*(^|\\s)${pad.replace('.', '\\.')}(\\s|")`));
   });
 
   it('C2: a visitor with no position stands at its place’s spot; with x, y it stands there', () => {
@@ -162,8 +180,13 @@ describe('AM-16: the hall walks with the gait', () => {
     expect(walker(hall({ me: lena(true, 12) })).creature).toContain('data-facing="left"');
     expect(walker(hall({ me: lena(true, 2) })).creature).toContain('data-facing="right"');
 
-    // Standing, nothing walks: no walk motion, the MULE idle, no stride, no waddle.
+    // Standing, nothing walks: the creature breathes in its idle motion on the gait's idle cycle, facing its way, and
+    // the MULE stands; no walk, no stride, no waddle. The wrappers stay mounted, so a start or stop never remounts it.
     const idle = walker(hall({ me: lena(false) }));
+    expect(idle.creature, 'the standing creature keeps its motion wrappers').toBeDefined();
+    expect(idle.creature).toContain('data-motion="idle"');
+    expect(Number(idle.creature!.match(/--cycle:([\d.]+)s/)?.[1])).toBeCloseTo(cycleSeconds({ ...gait, moving: false }), 3);
+    expect(walker(hall({ me: lena(false, 12) })).creature).toContain('data-facing="left"');
     expect(idle.visitor).not.toContain('data-motion="walk"');
     expect(idle.mule).toContain('data-mule-state="idle"');
     expect(idle.strides).toEqual([]);
