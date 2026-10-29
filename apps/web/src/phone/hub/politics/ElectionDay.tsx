@@ -210,6 +210,7 @@ const EXTRAS = [
  * pick: only this phone knows, for the ballot and for Cast my vote.
  * The picks are a seat's in a month, not a room's: the ready bar has no room code. Closing the ballot forgets them,
  * which keeps another room's ballot from opening with them.
+ * Votes the server batches into one view can leave a later change elsewhere hidden, until numbered answers exist.
  */
 export interface BallotOf {
   seat: string;

@@ -304,24 +304,16 @@ describe('the secret ballot, mounted (C66, AM-21)', () => {
     expect(shown(), 'the answer to Abstain').toEqual(['abstain']);
   });
 
-  it("C66, AM-21: one view answering several of this phone's votes at once ends the wait: a change elsewhere after it shows (s1 held, then s2 and back to s1)", () => {
+  it("C66, AM-21: another seat's vote, a view with this phone's votes still on the way, never lets an earlier answer replace the latest", () => {
     mount(ballot({ governor: 's1' }), ElectionDay);
     pick('s2');
     pick('s1');
     rerender(ballot({ governor: 's1' }), ElectionDay);
-    expect(shown(), 'the answer to both').toEqual(['s1']);
+    expect(shown(), "Ossa's vote").toEqual(['s1']);
     rerender(ballot({ governor: 's2' }), ElectionDay);
-    expect(shown(), 'a change elsewhere').toEqual(['s2']);
-  });
-
-  it("C66, AM-21: one view answering several of this phone's votes at once ends the wait: a change elsewhere after it shows (s1, then Abstain)", () => {
-    mount(ballot(), ElectionDay);
-    pick('s1');
-    pick('abstain');
-    rerender(ballot(), ElectionDay);
-    expect(shown(), 'the answer to both').toEqual(['abstain']);
+    expect(shown(), 'the answer to s2').toEqual(['s1']);
     rerender(ballot({ governor: 's1' }), ElectionDay);
-    expect(shown(), 'a change elsewhere').toEqual(['s1']);
+    expect(shown(), 'the answer to s1').toEqual(['s1']);
   });
 });
 
