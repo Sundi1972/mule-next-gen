@@ -41,6 +41,7 @@ export function Develop() {
   const [selected, setSelected] = useState<{ x: number; y: number } | null>(null);
   // Kept here, not in the map, so the zoom survives a trip into the store.
   const [zoomed, setZoomed] = useState(false);
+  const [confirmStart, setConfirmStart] = useState(false);
   const tile = selected ? tileAt(view, selected.x, selected.y) : undefined;
   const outfitted = carry !== null && carry !== 'empty';
   // RULE-7's "installed this turn": an outfitted MULE in tow becomes none only by installing it. Worked out while
@@ -101,8 +102,14 @@ export function Develop() {
   const installedAny = installed || me.installedThisTurn;
   // Month 1 with the clock running and no first MULE of yours in on a plot of yours: the host started it without you.
   const passed = view.month === 1 && DEV_WALK.month1WaitsForFirstMule && !waiting && me.devEndsAt !== null && !installedAny && view.tiles.some((t) => t.owner === me.id);
+  // Once in, you wait: a seat already in may only end its turn until the clock starts.
+  const youWait = waiting && !view.clockWaitsFor!.includes(me.id);
   const guide = waiting
-    ? { ...ruled, now: waitingNow(ruled.now, carry, installedAny, view.storeMules, view.clockWaitsFor!, me.id, view.players) }
+    ? {
+        ...ruled,
+        ...(youWait ? { next: [], locks: { ...ruled.locks, corral: '' } } : {}),
+        now: waitingNow(ruled.now, carry, installedAny || youWait, view.storeMules, view.clockWaitsFor!, me.id, view.players),
+      }
     : passed
       ? { ...ruled, now: { ...ruled.now, detail: 'The host started the clock: your month is running.' } }
       : ruled;
@@ -187,7 +194,14 @@ export function Develop() {
               )}
               <Traits traits={tile.traits} />
               {mine && (
-                <Button size="md" variant="outline" className="px-2 text-xs" disabled={tile.filter || me.stock.alloy < DEVELOPMENT.filterAlloy} onClick={() => client.intent({ type: 'filter', x: tile.x, y: tile.y })}>
+                <Button
+                  size="md"
+                  variant="outline"
+                  className="px-2 text-xs"
+                  disabled={youWait || tile.filter || me.stock.alloy < DEVELOPMENT.filterAlloy}
+                  onClick={() => client.intent({ type: 'filter', x: tile.x, y: tile.y })}
+                  {...(youWait ? WAIT_HINT : {})}
+                >
                   {tile.filter ? 'Filter fitted' : `Fit a filter · ${DEVELOPMENT.filterAlloy} Alloy (have ${me.stock.alloy})`}
                 </Button>
               )}
@@ -199,7 +213,7 @@ export function Develop() {
       }
       footer={
         <>
-          {passing.length > 0 && <StartTheClock passing={passing} />}
+          {passing.length > 0 && <StartTheClock passing={passing} confirm={confirmStart} setConfirm={setConfirmStart} />}
           {place === 'store' ? (
           <>
             <Button size="md" variant={outfitted ? 'holo' : 'outline'} className="w-full @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" onClick={walkOut}>
@@ -209,9 +223,16 @@ export function Develop() {
           </>
         ) : (
           <>
-            {tile && (
+            {/* While the host's confirm is open it takes this row's room, so the footer stays in a phone's frame. */}
+            {tile && !confirmStart && (
               <div className="grid grid-cols-2 gap-2">
-                <Button size="md" className="whitespace-nowrap px-2" disabled={!outfitted || !mine} onClick={() => client.intent({ type: 'install', x: tile.x, y: tile.y })}>
+                <Button
+                  size="md"
+                  className="whitespace-nowrap px-2"
+                  disabled={youWait || !outfitted || !mine}
+                  onClick={() => client.intent({ type: 'install', x: tile.x, y: tile.y })}
+                  {...(youWait ? WAIT_HINT : {})}
+                >
                   {outfitted && mine && tile.outfit ? 'Replace MULE' : 'Install here'}
                 </Button>
                 <Button
@@ -219,8 +240,9 @@ export function Develop() {
                   variant="outline"
                   className="whitespace-nowrap px-2"
                   aria-label={tile.ground ? 'Analysed' : `Geo analysis, ${DEVELOPMENT.analysisSeconds} seconds`}
-                  disabled={!!tile.ground}
+                  disabled={youWait || !!tile.ground}
                   onClick={() => client.intent({ type: 'analyse', x: tile.x, y: tile.y })}
+                  {...(youWait ? WAIT_HINT : {})}
                 >
                   {tile.ground ? 'Analysed' : `Analyse · ${DEVELOPMENT.analysisSeconds} s`}
                 </Button>
@@ -361,15 +383,20 @@ export function FillCard({ condition, rule, food }: { condition: Condition; rule
   );
 }
 
-/** Your turn is over: at the pub, or out of time. The others keep building. */
 /** The Now card while month 1's clock waits: no rush before your first MULE; once it is in, whose are still to come. */
 function waitingNow(now: Now, carry: Outfit | 'empty' | null, installed: boolean, mulesLeft: number, waitsFor: readonly string[], me: string, players: readonly PlayerView[]): Now {
   if (carry !== null) return now;
   // Row 1 or 2 with MULEs left: the start card's "the clock starts for everyone" isn't so while it waits.
   if (!installed) return now.step === 1 && mulesLeft > 0 ? { step: 1, of: 3, title: 'Buy a MULE at the corral', detail: 'Your first month: no rush. The clock starts when your first MULE is in.' } : now;
   const still = waitsFor.filter((id) => id !== me).map((id) => players.find((p) => p.id === id)?.name ?? id);
-  return { title: 'Your MULE is in', detail: still.length ? `The clock starts when every first MULE is in: ${still.join(' and ')} still to come.` : 'Every first MULE is in: the clock starts now.' };
+  return { title: `Your MULE is in · waiting for ${andList(still)}`, detail: <span id={WAIT_DETAIL_ID}>{YOU_WAIT}</span> };
 }
+
+/** Once in, you wait: the guide's words, and the id the dimmed controls point at for them. */
+const YOU_WAIT = 'Buying, installing and analysing start with the clock. The pub is open.';
+const WAIT_DETAIL_ID = 'first-month-wait';
+/** Why a control a seat already in may not use is dimmed while month 1's clock waits. */
+const WAIT_HINT = { title: "Waiting for the others' first MULEs", 'aria-describedby': WAIT_DETAIL_ID } as const;
 
 /** The host's confirm, before the waiting clock starts without the players still to come. */
 export function startClockQuestion(names: readonly string[]): string {
@@ -380,9 +407,8 @@ export function startClockQuestion(names: readonly string[]): string {
 const andList = (names: readonly string[]) => (names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`);
 
 /** The host's way past anyone still to come in month 1's wait: planning's Continue, one confirming tap. */
-function StartTheClock({ passing }: { passing: readonly string[] }) {
+function StartTheClock({ passing, confirm, setConfirm }: { passing: readonly string[]; confirm: boolean; setConfirm: (open: boolean) => void }) {
   const client = useClient();
-  const [confirm, setConfirm] = useState(false);
   const on = (pressed: Press) => () => {
     const next = press(confirm, pressed);
     setConfirm(next.confirm);
@@ -434,6 +460,7 @@ function ClockWaits({ seconds, mineIn }: { seconds: number; mineIn: boolean }) {
   );
 }
 
+/** Your turn is over: at the pub, or out of time. The others keep building. */
 function Done({ pub }: { pub: boolean }) {
   const { view, self } = usePhoneGame();
   const won = view.news.find((n) => n.startsWith(`${self.name} went to the pub`));
