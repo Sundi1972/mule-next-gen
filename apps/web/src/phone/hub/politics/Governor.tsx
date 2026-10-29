@@ -41,6 +41,11 @@ function SalesTax({ politics }: { politics: PoliticsView }) {
   const state = setState(tax, sent, politics.tax);
   const done = state === 'done';
   const verdict = verdictOf(tax, breaks, done, promise !== null);
+  // A step forgets the tax on its way: one that never comes back (a lost intent, a RuleError) must not keep Set off.
+  const step = (to: number) => {
+    setTax(to);
+    setSent(null);
+  };
   return (
     <section className="flex flex-col gap-0.5 @min-[1100px]/shell:gap-2" data-testid="gov-tax">
       <p className="truncate text-xs @min-[1100px]/shell:text-base" data-testid="gov-promise">
@@ -52,7 +57,7 @@ function SalesTax({ politics }: { politics: PoliticsView }) {
         )}
       </p>
       <div className="flex items-center gap-1 @min-[1100px]/shell:gap-1.5" data-testid="governor-tax-row">
-        <Button size="md" variant="outline" className="h-10! w-10 shrink-0 px-0 @min-[1100px]/shell:h-11! @min-[1100px]/shell:w-11" aria-label="One point lower" disabled={tax <= low} onClick={() => setTax(Math.max(low, tax - 1))} data-testid="tax-down">
+        <Button size="md" variant="outline" className="h-10! w-10 shrink-0 px-0 @min-[1100px]/shell:h-11! @min-[1100px]/shell:w-11" aria-label="One point lower" disabled={tax <= low} onClick={() => step(Math.max(low, tax - 1))} data-testid="tax-down">
           −
         </Button>
         <span className="flex h-10 w-14 shrink-0 flex-col items-center justify-center gap-0.5 @min-[1100px]/shell:h-11 @min-[1100px]/shell:w-24">
@@ -68,7 +73,7 @@ function SalesTax({ politics }: { politics: PoliticsView }) {
             </span>
           )}
         </span>
-        <Button size="md" variant="outline" className="h-10! w-10 shrink-0 px-0 @min-[1100px]/shell:h-11! @min-[1100px]/shell:w-11" aria-label="One point higher" disabled={tax >= high} onClick={() => setTax(Math.min(high, tax + 1))} data-testid="tax-up">
+        <Button size="md" variant="outline" className="h-10! w-10 shrink-0 px-0 @min-[1100px]/shell:h-11! @min-[1100px]/shell:w-11" aria-label="One point higher" disabled={tax >= high} onClick={() => step(Math.min(high, tax + 1))} data-testid="tax-up">
           +
         </Button>
         <Button
