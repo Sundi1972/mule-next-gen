@@ -76,6 +76,8 @@ describe('a dropped phone in the goods auction', () => {
     expect(walker().at, 'back at the bottom edge').toBeLessThanOrEqual(game.viewFor(null).auction!.lo);
     game.handle('s2', { type: 'walk', dir: 'up' });
     for (let i = 0; i < 2_000 && game.viewFor(null).auction?.good === good && holdings(game, good).stock === before.stock; i++) {
+      // At the store's line nothing trades until the phone says how many (A-6).
+      if (walker().line && !walker().order) game.handle('s2', { type: 'lineTrade', units: 1 });
       advance(WALK.tickMs);
       expect(walker(), `tick ${i} after rejoining`).toMatchObject({ side: 'buyer', done: false });
     }
