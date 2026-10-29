@@ -35,6 +35,7 @@ export type RecordEvent<Intent> =
   | (RecordStep & { type: 'intent'; seat: PlayerId; intent: Intent; refused?: string })
   | (RecordStep & { type: 'connection'; seat: PlayerId; connected: boolean })
   | (RecordStep & { type: 'moved'; seat: PlayerId })
+  | (RecordStep & { type: 'heard'; from: PlayerId; to?: PlayerId })   // who spoke to whom, never the words
   | (RecordStep & { type: 'answer'; seat: PlayerId; call: number; kind: CallKind; choice?: RecordedChoice; write?: RecordedWrite; error?: string })
   | NoticeEntry
   | PlaybookEntry;
