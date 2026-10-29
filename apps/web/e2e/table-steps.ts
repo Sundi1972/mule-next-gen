@@ -85,6 +85,8 @@ export async function doneThroughTheElection(ctx: GameStepContext, timeout: numb
     await ctx.held(async () => {
       const now = gameOf(ctx).state.politics?.election;
       if (now?.stage !== stage || (stage !== 'announce' && stage !== 'ballot') || now.done.includes(seat.id)) return;
+      // Cast my vote waits for a pick on every ballot paper: abstain.
+      for (const box of await ctx.phone.locator('[data-testid=ballot-card] [data-testid$="-abstain"] input').all()) await box.check({ timeout: PRESS_MS });
       await ready.click({ timeout: PRESS_MS });
       await until(() => gameOf(ctx).state.politics?.election?.done.includes(seat.id) === true, `T-AC-1: the server counts ${name} Done in the ${stage} stage`);
     });

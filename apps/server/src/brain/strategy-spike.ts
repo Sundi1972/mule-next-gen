@@ -668,8 +668,11 @@ export function renderReport(r: StrategyReport): string[] {
   ]);
   const verdicts = r.models.map((m) => {
     const timeouts = m.timeouts === 0 ? '' : `; ${m.timeouts} timed out at ${S.timeoutMs} ms and are not in it`;
-    if (m.p90 === null) return `${m.model}: no answered calls, so no p90 against the ${PHASES.upkeepMs} ms upkeep window${timeouts}.`;
-    return `${m.model}: p90 ${Math.round(m.p90)} ms is ${m.p90 < PHASES.upkeepMs ? 'under' : 'over'} the ${PHASES.upkeepMs} ms upkeep window${timeouts}.`;
+    const window = PHASES.upkeepMs;
+    if (m.p90 === null) return `${m.model}: no answered calls, so no p90${timeouts}.`;
+    // The month end has no clock when PHASES.upkeepMs is null: then there is no window to judge the p90 against.
+    if (window === null) return `${m.model}: p90 ${Math.round(m.p90)} ms; the month end has no clock to judge it against${timeouts}.`;
+    return `${m.model}: p90 ${Math.round(m.p90)} ms is ${m.p90 < window ? 'under' : 'over'} the ${window} ms upkeep window${timeouts}.`;
   });
   return [
     ...totals,

@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 import type { PhoneGame } from '../game';
 import type { Now } from '../Shell';
+import type { ReadyWords } from './ready';
 
 /**
  * The hub's slots (C17). Planning is the hub for the month: the stage holds banners, "This month" (the agenda: each
@@ -37,6 +38,14 @@ export interface DeskSlot extends Shown {
   Badge?: ComponentType;
   /** The map tool to switch to when the desk opens. */
   tool?: string;
+  /** Comes first, opens as it starts asking, and folds Now to its title (E-9), such as an office's desk for its holder. */
+  first?(seat: HubSeat): boolean;
+}
+
+/** A door into a desk. The desk reads `focus` with useHub(), such as to open its sheet. */
+export interface DeskDoor {
+  desk: string;
+  focus?: string;
 }
 
 /** A door in "This month": opens a desk or switches the map's tool. */
@@ -48,7 +57,7 @@ export interface AgendaSlot extends Shown {
   locked?: boolean;
   /** The one that matters most this month, drawn strong. */
   lead?(seat: HubSeat): boolean;
-  opens: { desk: string } | { tool: string };
+  opens: DeskDoor | { tool: string };
 }
 
 /** A mode of the colony map: what a tap does, with its panel and action while it is on. */
@@ -74,6 +83,22 @@ export interface BannerSlot extends Shown {
   Body: ComponentType;
 }
 
+/** A situation that takes the stage while it shows, such as election day. */
+export interface StageSlot extends Shown {
+  id: string;
+  /** The shell's phase title while it shows; omitted, planning's. */
+  phase?(seat: HubSeat): string;
+  Body: ComponentType;
+  /** In the rail under Now while it shows, in place of the desks. */
+  Rail?: ComponentType;
+}
+
+/** The ready bar's words in a situation, whether its button is live, and what its count counts (VOTED). */
+export interface ReadyBarWords extends ReadyWords {
+  canReady?: boolean;
+  label?: string;
+}
+
 export interface HubSlots {
   banners: BannerSlot[];
   /** Under the map, from 1100 px only (on a phone they live in a desk), such as the store's prices. */
@@ -83,14 +108,46 @@ export interface HubSlots {
   desks: DeskSlot[];
   /** The first that gives a Now wins, such as an election's step; with none, RULE-8's "Plan your month". */
   nows: ((seat: HubSeat) => Now | null)[];
+  /** The first shown takes the stage (on a phone all of it, from 1100 px above the map) and the rail under Now. */
+  stage?: StageSlot[];
+  /** The first that gives words wins; with none, planning's. */
+  readyWords?: ((seat: HubSeat) => ReadyBarWords | null)[];
 }
 
 const shown = <T extends Shown>(slots: readonly T[], seat: HubSeat): T[] => slots.filter((s) => s.show?.(seat) ?? true);
 
-/** What the hub draws for this seat: the slots present whose show() says yes, and the doors to those. */
+/** The first answer any of them gives this seat. */
+export const firstGiven = <T>(gives: readonly ((seat: HubSeat) => T | null)[], seat: HubSeat): T | null => gives.reduce<T | null>((t, give) => t ?? give(seat), null);
+
+/** What the hub draws for this seat: the slots present whose show() says yes, a desk that asks first first, and the doors to those. */
 export function drawnSlots(slots: HubSlots, seat: HubSeat): HubSlots {
-  const desks = shown(slots.desks, seat);
+  const asks = (d: DeskSlot) => d.first?.(seat) ?? false;
+  const all = shown(slots.desks, seat);
+  const desks = [...all.filter(asks), ...all.filter((d) => !asks(d))];
   const tools = shown(slots.tools, seat);
   const agenda = shown(slots.agenda, seat).filter(({ opens }) => ('desk' in opens ? desks.some((d) => d.id === opens.desk) : tools.some((t) => t.id === opens.tool)));
-  return { banners: shown(slots.banners, seat), beneath: shown(slots.beneath, seat), agenda, tools, desks, nows: slots.nows };
+  const stage = shown(slots.stage ?? [], seat).slice(0, 1);
+  return { banners: shown(slots.banners, seat), beneath: shown(slots.beneath, seat), agenda, tools, desks, nows: slots.nows, stage, readyWords: slots.readyWords ?? [] };
+}
+
+/** Where the hub is: the open desk and map tool, the focus the desk was opened with, and the desk that last asked first. */
+export interface HubPlace {
+  desk: string;
+  tool: string;
+  focus: string | null;
+  first: string | null;
+}
+
+/** The place after a door, tab or tool: a desk brings its map tool, a tool its desk, and only a door's focus is kept. */
+export function goTo(place: HubPlace, to: AgendaSlot['opens'], drawn: HubSlots): HubPlace {
+  if ('desk' in to) return { ...place, desk: to.desk, tool: drawn.desks.find((d) => d.id === to.desk)?.tool ?? place.tool, focus: to.focus ?? null };
+  return { ...place, tool: to.tool, desk: drawn.tools.find((t) => t.id === to.tool)?.desk ?? place.desk, focus: null };
+}
+
+/** The place once a desk starts asking to come first: it opens, once, so a tab away from it stays. Unchanged, the same object. */
+export function settle(place: HubPlace, drawn: HubSlots, seat: HubSeat): HubPlace {
+  const head = drawn.desks[0];
+  const first = head?.first?.(seat) ? head.id : null;
+  if (first === place.first) return place;
+  return first ? { ...goTo(place, { desk: first }, drawn), first } : { ...place, first };
 }

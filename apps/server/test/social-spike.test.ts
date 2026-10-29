@@ -145,9 +145,10 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:social-spike', () => {
     for (const c of calls) {
       const text = `${c.prompt.system}\n${c.prompt.user}\n${JSON.stringify(c.prompt.schema)}`;
       for (const n of rivalNumbers) expect(text, `${c.mode} call ${c.n}`).not.toContain(n);
-      // The rivals are there by name, so the prompt is about them.
-      const rival = c.point.view.players.find((p) => p.id !== c.point.brief.seat)!;
-      expect(text).toContain(rival.name);
+      // The rivals are there by name, so the prompt is about them: every rival in a social section, the whisperer in a reply.
+      const rivals = c.point.view.players.filter((p) => p.id !== c.point.brief.seat).map((p) => p.name);
+      const named = rivals.filter((name) => text.includes(name));
+      expect(named, `${c.mode} call ${c.n}`).toEqual(c.mode === 'reply' ? [expect.any(String)] : rivals);
       if (c.mode !== 'reply') expect(text).toContain('77123');
     }
   }, 30_000);

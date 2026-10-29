@@ -32,6 +32,8 @@ const STEP_MS = 500;
  * model well under its usual latency.
  */
 const PLANNING_READY_MS = 3_000;
+/** How long the players read the month end before they all tap "On to month N": as long as its clock ran before C20. */
+const MONTH_END_READ_MS = 8_000;
 /** Longer than any game these tests play (≤ 2 months, phaseScale ≤ 1). */
 const GAME_LIMIT_MS = 30 * 60_000;
 /** Twice the longest a model call may wait (land's timeout), so a call still open at finish has settled. */
@@ -148,6 +150,18 @@ function table(options: TableOptions) {
     for (const phone of phones) if (game?.viewFor(null).phase === 'planning') send(phone, { t: 'intent', intent: { type: 'ready' } });
   };
   readies.push(readyInPlanning);
+  /** The month end has no clock either (C20): once the table has read it for MONTH_END_READ_MS, every phone moves on. */
+  let monthEndFor = 0;
+  const readyAtMonthEnd = () => {
+    if (game?.viewFor(null).phase !== 'upkeep') {
+      monthEndFor = 0;
+      return;
+    }
+    monthEndFor += STEP_MS;
+    if (monthEndFor < MONTH_END_READ_MS) return;
+    for (const phone of phones) if (game?.viewFor(null).phase === 'upkeep') send(phone, { t: 'intent', intent: { type: 'ready' } });
+  };
+  readies.push(readyAtMonthEnd);
   /** Runs the fake clock until `done`, or the game's end; false if `done` never held. */
   const runUntil = async (done: () => boolean, limitMs = GAME_LIMIT_MS) => {
     for (let t = 0; t < limitMs && !done(); t += STEP_MS) {
@@ -455,7 +469,7 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
   });
 
   it('INV-heard: heard from an unknown speaker, or to an unknown seat, does not throw, before or after start; an AI\'s own line goes to the other AIs only', async () => {
-    const lobby = new MuleGame({ now: () => 0, schedule: () => () => {}, changed: () => {}, hostId: () => null }, SEED, { brain: createBrain({ gameId: 'g-lobby', env: {} }) });
+    const lobby = new MuleGame({ now: () => 0, schedule: () => () => {}, changed: () => {}, frame: () => {}, hostId: () => null }, SEED, { brain: createBrain({ gameId: 'g-lobby', env: {} }) });
     expect(() => lobby.heard?.('s9', 'hello')).not.toThrow();
 
     const sdk = fakeSdk(() => reply('A', ''));

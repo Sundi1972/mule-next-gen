@@ -96,10 +96,11 @@ export function PlanningBrief({ mode: start = 'look' }: { mode?: Mode }) {
       }
     >
       <div className="flex min-h-0 flex-1 flex-col gap-2 @min-[1100px]/shell:gap-4">
-        <div className="flex items-center gap-2">
+        {/* Labels never wrap: on a phone too narrow for both groups on one line, the map modes drop under the tabs. */}
+        <div className="flex flex-wrap items-center gap-2">
           <div role="tablist" aria-label="Show" className="flex gap-1 rounded-control border border-holo-line bg-void p-1 @min-[1100px]/shell:hidden">
             {(['map', 'market', 'talk'] as const).map((t) => (
-              <button key={t} role="tab" type="button" aria-selected={tab === t} onClick={() => setTab(t)} className={cx('h-7 rounded-[8px] px-2.5 text-[12px] font-semibold', tab === t ? 'bg-holo-soft text-holo' : 'text-ink-2')}>
+              <button key={t} role="tab" type="button" aria-selected={tab === t} onClick={() => setTab(t)} className={cx('h-7 whitespace-nowrap rounded-[8px] px-2.5 text-[12px] font-semibold', tab === t ? 'bg-holo-soft text-holo' : 'text-ink-2')}>
                 {t === 'map' ? 'Map' : t === 'market' ? 'Market' : 'News & chat'}
               </button>
             ))}
@@ -112,7 +113,7 @@ export function PlanningBrief({ mode: start = 'look' }: { mode?: Mode }) {
                 type="button"
                 aria-pressed={mode === m}
                 onClick={() => setMode(m)}
-                className={cx('h-7 rounded-[8px] px-2.5 text-[12px] font-semibold @min-[1100px]/shell:h-9 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-sm', mode === m ? 'bg-holo-soft text-holo' : 'text-ink-2')}
+                className={cx('h-7 whitespace-nowrap rounded-[8px] px-2.5 text-[12px] font-semibold @min-[1100px]/shell:h-9 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-sm', mode === m ? 'bg-holo-soft text-holo' : 'text-ink-2')}
                 data-testid={`mode-${m}`}
               >
                 {m === 'look' ? 'Look' : 'Geo drone · 40 cr'}

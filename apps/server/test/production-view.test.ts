@@ -50,7 +50,7 @@ function knownMonth(state: GameState) {
     origin: { x: 6, y: 0 },
     plots: [{ index: plant, order: 0, good: 'energy', delta: -2 }],
     sign: 'bad',
-    when: 'afterProduction',
+    phase: 'production',
   };
   const storm: MonthEvent = {
     key: 'dustStorm',
@@ -62,7 +62,7 @@ function knownMonth(state: GameState) {
     direction: 'e',
     plots: [{ index: farm, order: 0, good: 'food', delta: -1 }],
     sign: 'bad',
-    when: 'afterProduction',
+    phase: 'production',
   };
   const report = state.history.at(-1)!;
   report.lines = lines;
@@ -96,6 +96,9 @@ describe('the production view', () => {
             scope: 'local',
             origin: { x: 6, y: 0 },
             hits: [{ x: 5, y: 0, order: 0, delta: -2 }],
+            phase: 'production',
+            weight: 'headline',
+            playMs: 7_000,
           },
           {
             key: 'dustStorm',
@@ -107,9 +110,13 @@ describe('the production view', () => {
             origin: { x: state.width - 1, y: 1 },
             from: 'e',
             hits: [{ x: 3, y: 1, order: 0, delta: -1 }],
+            phase: 'production',
+            weight: 'headline',
+            playMs: 7_000,
           },
         ],
         lengthMs: 15_000,
+        introMs: 1_800,
       });
       expect(Object.keys(view.production!.events[0]!)).not.toContain('from');
       expect(keysOf(view.production)).not.toContainEqual(expect.stringMatching(/before|stock/i));
