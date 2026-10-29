@@ -164,6 +164,8 @@ describe('A-1: month 1’s development clock waits for every first MULE', () => 
         state.tiles[plotNearStore(state, 0)]!.owner = OSSA;
         readyAll(game);
       }
+      // The month end waits for every Ready too.
+      if (game.viewFor(null).phase === 'upkeep') readyAll(game);
       if (!(state.month === 2 && game.viewFor(null).phase === 'development')) advance(100);
     }
     expect(state.month).toBe(2);
@@ -187,7 +189,7 @@ describe('A-1: games with AI seats still finish month 1 (WS1’s stall seeds)', 
     let devMs = 0;
     for (let i = 0; i < 20_000 && game.viewFor(null).month === 1; i++) {
       const phase = game.viewFor(null).phase;
-      if (phase === 'planning' || phase === 'landGrant') readyAll(game);
+      if (phase === 'planning' || phase === 'landGrant' || phase === 'upkeep') readyAll(game);
       if (phase === 'development' && devFrom === null) devFrom = fake.ctx.now();
       if (phase !== 'development' && devFrom !== null && devMs === 0) devMs = fake.ctx.now() - devFrom;
       fake.advance(100);
@@ -205,7 +207,7 @@ describe('A-1: games with AI seats still finish month 1 (WS1’s stall seeds)', 
     for (let i = 0; i < 20_000 && game.viewFor(null).phase !== 'development'; i++) {
       const phase = game.viewFor(null).phase;
       if (phase === 'planning' && !state.tiles.some((t) => t.owner === 'h')) state.tiles[plotNearStore(state, 0)]!.owner = 'h';
-      if (phase === 'planning' || phase === 'landGrant') readyAll(game);
+      if (phase === 'planning' || phase === 'landGrant' || phase === 'upkeep') readyAll(game);
       fake.advance(100);
     }
     expect(state.tiles.some((t) => t.owner === 'h'), 'Hal owns a plot, so the clock waits for him').toBe(true);

@@ -15,6 +15,8 @@ const seat = (id: string, name: string, slot: number): PlayerView => ({
   species: 'zipwing',
   money: 1_000,
   worth: 0,
+  lastWorth: null,
+  worthBeforeCut: null,
   plots: 2,
   ready: false,
   doneDeveloping: false,
