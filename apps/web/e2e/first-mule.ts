@@ -83,6 +83,7 @@ try {
   check(await dev(heiko).getByRole('button', { name: 'Go to the pub and end your turn' }).isEnabled(), 'A-1: once in, the pub is open');
   for (const size of [PHONE.viewport, PHONE_SMALL.viewport]) {
     await heiko.setViewportSize(size);
+    await shot(heiko, `wait-${size.width}x${size.height}`);
     const guide = await heiko.getByTestId('now').evaluate((now) => {
       const detail = now.querySelector('#first-month-wait')!.parentElement!;
       const lines = Math.round(detail.getBoundingClientRect().height / parseFloat(getComputedStyle(detail).lineHeight));
@@ -112,6 +113,7 @@ try {
     const question = (await confirm.locator('p').innerText()).trim();
     check(question === "Start the month's clock now? Mia has no MULE in yet, and loses no time until now.", `A-1: ${tag}: the confirm's words, got "${question}"`);
     await fits(heiko, confirm, tag, 'the confirm card');
+    await shot(heiko, `confirm-${size.width}x${size.height}`);
     for (const id of ['continue-now', 'keep-waiting']) await fits(heiko, heiko.getByTestId(id), tag, id);
     const low = await heiko.evaluate(() =>
       [...document.querySelectorAll('[data-testid=actions] button')]
@@ -150,6 +152,8 @@ async function fits(page: Page, el: Locator, tag: string, what: string): Promise
   const vp = page.viewportSize()!;
   check(box.height >= 32, `A-1: ${tag}: ${what} is a tap of at least 32 px, got ${box.height.toFixed(1)}`);
   check(box.x >= -0.5 && box.y >= -0.5 && box.x + box.width <= vp.width + 0.5 && box.y + box.height <= vp.height + 0.5, `A-1: ${tag}: ${what} sits in the frame`);
+  const spill = await el.evaluate((e) => Math.max(e.scrollHeight - e.clientHeight, e.scrollWidth - e.clientWidth));
+  check(spill <= 1, `A-1: ${tag}: ${what}'s own content stays inside it, out by ${spill} px`);
   const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   check(over <= 0, `A-1: ${tag}: nothing overflows the page sideways, ${over} px`);
 }
@@ -161,6 +165,12 @@ async function dimmedOnPlot(page: Page): Promise<{ text: string; disabled: boole
       .filter((b) => /^(Install here|Replace MULE|Analyse|Analysed|Fit a filter|Filter fitted)/.test((b.textContent ?? '').trim()))
       .map((b) => ({ text: (b.textContent ?? '').trim(), disabled: b.disabled, title: b.getAttribute('title'), describedBy: b.getAttribute('aria-describedby') })),
   );
+}
+
+/** With MULE_SHOTS set, saves the page there as <name>.png, for a reviewer's eye. */
+async function shot(page: Page, name: string): Promise<void> {
+  const dir = process.env.MULE_SHOTS;
+  if (dir) await page.screenshot({ path: `${dir}/${name}.png` });
 }
 
 async function height(el: Locator): Promise<string> {
