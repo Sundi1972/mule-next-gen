@@ -223,15 +223,14 @@ export function Develop() {
           </>
         ) : (
           <>
-            {/* While the host's confirm is open it takes this row's room, so the footer stays in a phone's frame. */}
-            {tile && !confirmStart && (
+            {/* Once in, you wait: no plot row until the clock starts (both would be dim), so the guide keeps its room. */}
+            {tile && !youWait && (
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   size="md"
                   className="whitespace-nowrap px-2"
-                  disabled={youWait || !outfitted || !mine}
+                  disabled={!outfitted || !mine}
                   onClick={() => client.intent({ type: 'install', x: tile.x, y: tile.y })}
-                  {...(youWait ? WAIT_HINT : {})}
                 >
                   {outfitted && mine && tile.outfit ? 'Replace MULE' : 'Install here'}
                 </Button>
@@ -240,9 +239,8 @@ export function Develop() {
                   variant="outline"
                   className="whitespace-nowrap px-2"
                   aria-label={tile.ground ? 'Analysed' : `Geo analysis, ${DEVELOPMENT.analysisSeconds} seconds`}
-                  disabled={youWait || !!tile.ground}
+                  disabled={!!tile.ground}
                   onClick={() => client.intent({ type: 'analyse', x: tile.x, y: tile.y })}
-                  {...(youWait ? WAIT_HINT : {})}
                 >
                   {tile.ground ? 'Analysed' : `Analyse · ${DEVELOPMENT.analysisSeconds} s`}
                 </Button>
