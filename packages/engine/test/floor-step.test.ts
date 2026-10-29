@@ -238,7 +238,7 @@ describe('the dev floor: the step', () => {
     expect(short, 'stopped short of the wall it was held into').toEqual([]);
   });
 
-  it('RULE-9, serving B-AC-1: the path goes round a lake, takes plains over mountains when equally short, and reaches a lake plot at its shore', () => {
+  it('C9, serving B-AC-1: a terrain-weighted path goes round a lake, takes plains over mountains when equally short, and reaches a lake plot at its shore', () => {
     // From beside the store's door, 2·3, to a plot at 7·3, a lake between them: round it above or below, nine steps either way.
     const across = (above: string, below: string) => ['~~~~~~~~~', above, '....~....', '.S..~....', '....~....', below, '~~~~~~~~~'];
     const cfg = floorConfig(HALL);
