@@ -151,3 +151,7 @@ export function settle(place: HubPlace, drawn: HubSlots, seat: HubSeat): HubPlac
   if (first === place.first) return place;
   return first ? { ...goTo(place, { desk: first }, drawn), first } : { ...place, first };
 }
+
+export function deskAsks(_place: HubPlace): boolean {
+  throw new Error('NotImplemented: desk-asks');
+}

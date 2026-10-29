@@ -306,3 +306,115 @@ export async function sixSeatsOnTheTv({ browser, base, server }: { browser: Brow
     await tv.context().close();
   }
 }
+
+/** E-11's sizes: a small phone on its side, and a smaller one. */
+export const GOV_SIZES = [
+  { width: 844, height: 390 },
+  { width: 667, height: 375 },
+] as const;
+/** E-11: at 844 × 390 the tax row and its verdict end at least this far above the footer (the PM's measured floor). */
+const GOV_MARGIN_844 = 6;
+/** Every desk tab, on the smaller phone: at least this wide and tall. */
+const TAB_MIN = 32;
+
+/** One read of the Governor's rail: where the row and verdict end against the footer, and what the rail folded. */
+type GovFit = {
+  footerTop: number;
+  rowBottom: number;
+  verdictBottom: number;
+  verdict: string;
+  railScroll: number;
+  seatRow: boolean;
+  ticker: number;
+  names: boolean;
+  nowFolded: boolean;
+  desk: string | null;
+  tabs: { id: string; w: number; h: number; clipped: boolean }[];
+};
+
+/** Reads the rail after a paint, in one pass. Kept a string: tsx would wrap named functions in a helper the page lacks. */
+const READ_GOV = `(async () => {
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const g = document.querySelector('[data-phase=planning] [data-testid=guide]');
+  const box = (sel) => g?.querySelector(sel)?.getBoundingClientRect() ?? null;
+  const footer = box('[data-testid=actions]');
+  const row = box('[data-testid=governor-tax-row]');
+  const verdict = box('[data-testid=governor-verdict]');
+  const tabs = [...(g?.querySelectorAll('[data-testid=desks] [role=tab]') ?? [])].map((t) => {
+    const r = t.getBoundingClientRect();
+    return { id: t.dataset.testid, w: r.width, h: r.height, clipped: t.scrollWidth > t.clientWidth + 0.5 };
+  });
+  return {
+    footerTop: footer?.top ?? NaN,
+    rowBottom: row?.bottom ?? NaN,
+    verdictBottom: verdict?.bottom ?? NaN,
+    verdict: g?.querySelector('[data-testid=governor-verdict] [aria-hidden]')?.textContent ?? '',
+    railScroll: g?.querySelector('header + div')?.scrollTop ?? -1,
+    seatRow: !!g?.querySelector('header [data-testid=seat-row]'),
+    ticker: g?.querySelectorAll('header [data-testid=chat-ticker] li').length ?? 0,
+    names: !!g?.querySelector('[data-testid=actions] [data-testid=waiting-for]'),
+    nowFolded: g?.querySelector('[data-testid=now]')?.tagName === 'BUTTON',
+    desk: g?.querySelector('[data-testid=desks] [aria-selected=true]')?.dataset.testid ?? null,
+    tabs,
+  };
+})()`;
+
+/**
+ * E-11 (C66, the Governor's desk beside the table chat): Lena, the sitting Governor, plans at `size` with the chat's
+ * seat row and a two-line ticker in the rail's header, and Ossa still planning. With her desk open the tax row and its
+ * verdict end above the footer, without the rail scrolling, as the desk opens over her promise, after −, and after Set
+ * (at 844 × 390 by at least GOV_MARGIN_844); meanwhile the footer folds its "Waiting for" names and the ticker keeps its
+ * newest line, the seat row staying. Picking another desk brings both back. Every desk tab is at least TAB_MIN square,
+ * its label whole. Clicks are DOM clicks, so the page never scrolls the rail to reach a button: what is measured is
+ * what shows untouched. With MULE_SHOTS set to a directory, it saves the screen as the desk opens and after Set there.
+ * Returns the numbers, to log.
+ */
+export async function governorDeskFits(lena: Page, size: { width: number; height: number }, timeout = 3_000): Promise<string> {
+  const at = `${size.width}×${size.height}`;
+  await lena.setViewportSize(size);
+  const guide = lena.locator('[data-phase=planning] [data-testid=guide]');
+  await guide.getByTestId('governor-tax-row').waitFor({ timeout });
+  const read = () => lena.evaluate(READ_GOV) as Promise<GovFit>;
+  const click = (id: string) => guide.getByTestId(id).evaluate((el: HTMLElement) => el.click());
+  const floor = size.width === GOV_SIZES[0].width ? GOV_MARGIN_844 : 0;
+  const seen: string[] = [];
+  const fits = (f: GovFit, state: string, verdict: string) => {
+    check(f.desk === 'desk-governor', `E-11 at ${at} (${state}): the Governor's desk is open, got ${f.desk}`);
+    check(f.seatRow, `E-11 at ${at} (${state}): the chat's seat row stays in the rail's header`);
+    check(f.nowFolded, `E-11 at ${at} (${state}): the Now card is folded to its title (E-9)`);
+    check(f.verdict === verdict, `E-11 at ${at} (${state}): the verdict reads "${verdict}", got "${f.verdict}"`);
+    check(f.railScroll === 0, `E-11 at ${at} (${state}): the rail did not scroll, got scrollTop ${f.railScroll}`);
+    const row = f.footerTop - f.rowBottom;
+    const chip = f.footerTop - f.verdictBottom;
+    seen.push(`${state}: row ${f.rowBottom.toFixed(1)}, verdict ${f.verdictBottom.toFixed(1)}, footer ${f.footerTop.toFixed(1)} (${row.toFixed(1)} / ${chip.toFixed(1)} px clear)`);
+    check(row >= floor && chip >= floor, `E-11 at ${at} (${state}): the tax row and its verdict end at least ${floor} px above the footer, got row ${f.rowBottom.toFixed(1)} and verdict ${f.verdictBottom.toFixed(1)} against footer ${f.footerTop.toFixed(1)}`);
+    check(!f.names, `E-11 at ${at} (${state}): the footer folds its "Waiting for" names while the Governor's desk is open`);
+    check(f.ticker === 1, `E-11 at ${at} (${state}): the ticker keeps its newest line while the Governor's desk is open, got ${f.ticker}`);
+  };
+
+  const shots = process.env.MULE_SHOTS;
+  const shot = (name: string) => (shots ? lena.screenshot({ path: join(shots, `e-11-${size.width}-${name}.png`) }).then(() => {}) : Promise.resolve());
+  const opened = await read();
+  await shot('opens');
+  fits(opened, 'as it opens', 'breaks it');
+  if (size.width === GOV_SIZES[1].width) {
+    const small = opened.tabs.filter((t) => t.w < TAB_MIN - 0.01 || t.h < TAB_MIN - 0.01 || t.clipped);
+    check(opened.tabs.length >= 5 && small.length === 0, `E-11 at ${at}: every desk tab is at least ${TAB_MIN}×${TAB_MIN} with its label whole, got ${opened.tabs.map((t) => `${t.id} ${t.w.toFixed(1)}×${t.h.toFixed(1)}${t.clipped ? ' clipped' : ''}`).join(', ')}`);
+    seen.push(`tabs ${opened.tabs.map((t) => `${t.w.toFixed(1)}×${t.h.toFixed(1)}`).join(', ')}`);
+  }
+  await click('tax-down');
+  await guide.getByTestId('gov-within').waitFor({ timeout });
+  fits(await read(), 'after −', 'within');
+  await click('tax-confirm');
+  await guide.getByTestId('gov-done').waitFor({ timeout });
+  await shot('set');
+  fits(await read(), 'after Set', 'done');
+
+  // Another desk: the names and the ticker's two lines come back.
+  await guide.getByTestId('desk-colony').click({ timeout });
+  await guide.getByTestId('desk-body-colony').waitFor({ timeout });
+  const away = await read();
+  check(away.names, `E-11 at ${at} (negative): with the Colony desk open the footer names who is still planning again`);
+  check(away.ticker === 2, `E-11 at ${at} (negative): with the Colony desk open the ticker keeps its two lines again, got ${away.ticker}`);
+  return `${at}: ${seen.join('; ')}; another desk unfolds both`;
+}
