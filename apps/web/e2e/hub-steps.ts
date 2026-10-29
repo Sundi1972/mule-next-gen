@@ -3,13 +3,14 @@
  * store-steps' makeHungry seated the human at 2 Food against a need of 5 (nine farms, which also burn Energy).
  * Quick by design: planning is about 4.5 s at the smoke's phase scale, and listedSale has used part of it.
  * B-AC-19 (AM-16), the host's Continue, is run by auction-steps.ts in its month-2 planning; its six-seat TV case
- * (sixSeatsOnTheTv) by shell.ts, in a room of its own.
+ * (sixSeatsOnTheTv) by shell.ts, in a room of its own; so is E-11's Governor's desk beside the table chat
+ * (governorsDeskFits), a room per phone size.
  */
 import { join } from 'node:path';
-import { GOODS, monthNeeds, type GameState, type Good } from '@mule/engine';
+import { GOODS, monthNeeds, type GameState, type Good, type TaxPromise } from '@mule/engine';
 import type { Browser, Page } from 'playwright';
 import type { MuleServer } from '../../server/src/server.js';
-import { check, PHONE, TV } from './harness';
+import { check, held as holding, PHONE, TV } from './harness';
 import { ELECTION_WAIT_MS } from './politics-steps';
 import { LAPTOP } from './shell-steps';
 
@@ -323,7 +324,7 @@ export async function sixSeatsOnTheTv({ browser, base, server }: { browser: Brow
 }
 
 /** E-11's sizes: a small phone on its side, and a smaller one. */
-export const GOV_SIZES = [
+const GOV_SIZES = [
   { width: 844, height: 390 },
   { width: 667, height: 375 },
 ] as const;
@@ -342,6 +343,7 @@ type GovFit = {
   seatRow: boolean;
   ticker: number;
   names: boolean;
+  spoken: boolean;
   nowFolded: boolean;
   desk: string | null;
   tabs: { id: string; w: number; h: number; clipped: boolean }[];
@@ -372,7 +374,9 @@ const READ_GOV = `(async () => {
     railScroll: g?.querySelector('header + div')?.scrollTop ?? -1,
     seatRow: !!g?.querySelector('header [data-testid=seat-row]'),
     ticker: g?.querySelectorAll('header [data-testid=chat-ticker] li').length ?? 0,
-    names: !!g?.querySelector('[data-testid=actions] [data-testid=waiting-for]'),
+    // Shown, not just in the markup: folded, the names stay for a screen reader only.
+    names: (() => { const w = g?.querySelector('[data-testid=actions] [data-testid=waiting-for]'); return !!w && !w.closest('.sr-only') && w.getBoundingClientRect().height > 1; })(),
+    spoken: !!g?.querySelector('[data-testid=actions] [data-testid=waiting-for]'),
     nowFolded: g?.querySelector('[data-testid=now]')?.tagName === 'BUTTON',
     desk: g?.querySelector('[data-testid=desks] [aria-selected=true]')?.dataset.testid ?? null,
     tabs,
@@ -389,7 +393,7 @@ const READ_GOV = `(async () => {
  * what shows untouched. With MULE_SHOTS set to a directory, it saves the screen as the desk opens and after Set there.
  * Returns the numbers, to log.
  */
-export async function governorDeskFits(lena: Page, size: { width: number; height: number }, timeout = 3_000): Promise<string> {
+async function governorDeskFits(lena: Page, size: { width: number; height: number }, timeout = 3_000): Promise<string> {
   const at = `${size.width}×${size.height}`;
   await lena.setViewportSize(size);
   const guide = lena.locator('[data-phase=planning] [data-testid=guide]');
@@ -409,6 +413,7 @@ export async function governorDeskFits(lena: Page, size: { width: number; height
     seen.push(`${state}: row ${f.rowBottom.toFixed(1)}, verdict ${f.verdictBottom.toFixed(1)}, footer ${f.footerTop.toFixed(1)} (${row.toFixed(1)} / ${chip.toFixed(1)} px clear)`);
     check(row >= floor && chip >= floor, `E-11 at ${at} (${state}): the tax row and its verdict end at least ${floor} px above the footer, got row ${f.rowBottom.toFixed(1)} and verdict ${f.verdictBottom.toFixed(1)} against footer ${f.footerTop.toFixed(1)}`);
     check(!f.names, `E-11 at ${at} (${state}): the footer folds its "Waiting for" names while the Governor's desk is open`);
+    check(f.spoken, `E-11 at ${at} (${state}): folded, the "Waiting for" names stay for a screen reader`);
     check(f.ticker === 1, `E-11 at ${at} (${state}): the ticker keeps its newest line while the Governor's desk is open, got ${f.ticker}`);
   };
 
@@ -446,4 +451,93 @@ export async function governorDeskFits(lena: Page, size: { width: number; height
   check(away.names, `E-11 at ${at} (negative): with the Colony desk open the footer names who is still planning again`);
   check(away.ticker === 2, `E-11 at ${at} (negative): with the Colony desk open the ticker keeps its two lines again, got ${away.ticker}`);
   return `${at}: ${seen.join('; ')}; another desk unfolds both`;
+}
+
+/** E-11's fixture: Lena's promise of up to 4%, under the month's 5%, so the desk opens on "breaks it" and − brings it within. */
+const GOV_PROMISE: TaxPromise = { kind: 'cap', percent: 4 };
+const GOV_TAX = 0.05;
+/** Two lines from Ossa, so the ticker holds two. */
+const GOV_LINES = ['Anyone selling Smithore this month?', 'Lena, keep that tax low!'];
+
+/** Test fixture: the month's election set aside, `lena` seated as Governor on GOV_PROMISE at GOV_TAX, told to every screen. */
+function seatGovernor(room: unknown, lena: string): void {
+  const { game, broadcast } = room as { game: { state: GameState }; broadcast(): void };
+  const { state } = game;
+  const p = state.politics;
+  check(p && state.phase === 'planning', `E-11: the room plays politics and is in planning, got ${state.phase}`);
+  p.election = null;
+  p.candidates = { governor: [], sheriff: [] };
+  p.promises = {};
+  p.governor = lena;
+  p.governorRun = { id: lena, terms: 1 };
+  p.terms = { ...p.terms, [lena]: 1 };
+  p.termStart = state.month;
+  p.promise = GOV_PROMISE;
+  state.treasury.salesTax = GOV_TAX;
+  p.taxAtStart = GOV_TAX;
+  p.promiseFrom = Math.round(GOV_TAX * 100);
+  broadcast.call(room);
+}
+
+/**
+ * E-11 (C66): the Governor's desk fits beside the table chat, at each of GOV_SIZES in a room of its own on `server`:
+ * Lena and Ossa with two AI seats, so the header reads 2 / 4 READY and the footer waits for both. Month 1's election
+ * is set aside and Lena seated as Governor (seatGovernor); Ossa says two lines. The game clock is held throughout, so
+ * nothing scheduled moves the phase on. No page or console error on either phone. Returns the numbers, to log.
+ */
+export async function governorsDeskFits({ browser, base, server }: { browser: Browser; base: string; server: MuleServer }, timeout = 5_000): Promise<string> {
+  const seen: string[] = [];
+  for (const size of GOV_SIZES) {
+    const errors: string[] = [];
+    const open = async (name: string) => {
+      const page = await (await browser.newContext(PHONE)).newPage();
+      page.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
+      page.on('console', (m) => {
+        if (m.type() === 'error') errors.push(`${name} console: ${m.text()}`);
+      });
+      return page;
+    };
+    const lena = await open('Lena');
+    const ossa = await open('Ossa');
+    try {
+      await lena.goto(base);
+      await lena.getByPlaceholder('Heiko').fill('Lena');
+      await lena.getByRole('button', { name: 'Start a new game' }).click();
+      await lena.getByText("You're at the table").waitFor({ timeout });
+      const code = (await lena.getByTestId('room-code').textContent())?.trim() ?? '';
+      await ossa.goto(`${base}/?room=${code}`);
+      await ossa.getByPlaceholder('Heiko').fill('Ossa');
+      await ossa.getByRole('button', { name: `Join game ${code}` }).click();
+      await ossa.getByText("You're at the table").waitFor({ timeout });
+      for (const n of [2, 3]) {
+        await lena.getByRole('button', { name: 'Add AI player' }).click();
+        await lena.locator('[data-testid=seats] li').nth(n).waitFor({ timeout });
+      }
+      await lena.getByRole('button', { name: 'Start game' }).click();
+      await Promise.all([lena, ossa].map((p) => p.locator('[data-phase=planning]').waitFor({ timeout })));
+      const room = server.registry.get(code);
+      check(room, `a room ${code} on the server`);
+      const idOf = (name: string) => {
+        const id = room.viewFor(null).seats.find((s) => s.name === name)?.id;
+        check(id, `${name} has a seat`);
+        return id;
+      };
+      const [lenaId, ossaId] = [idOf('Lena'), idOf('Ossa')];
+      await holding(server, code, async () => {
+        seatGovernor(room, lenaId);
+        const guide = lena.locator('[data-phase=planning] [data-testid=guide]');
+        await guide.getByTestId('desk-governor').waitFor({ timeout });
+        await guide.getByTestId('ready-count').filter({ hasText: '2 / 4 READY' }).waitFor({ timeout });
+        const chat = room as unknown as { chat: (from: string, text: string) => void };
+        for (const line of GOV_LINES) chat.chat(ossaId, line);
+        await guide.getByTestId('chat-ticker').getByText(GOV_LINES[1]!).waitFor({ timeout });
+        seen.push(await governorDeskFits(lena, size));
+      });
+      check(errors.length === 0, `E-11 at ${size.width}×${size.height}: no page or console error, got ${errors.join('; ')}`);
+    } finally {
+      await lena.context().close();
+      await ossa.context().close();
+    }
+  }
+  return seen.join(' | ');
 }

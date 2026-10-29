@@ -5,6 +5,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { TableClient } from '../src/net/client';
+import { TableChat, TickerLines } from '../src/chat/Chat';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
 import { Hub } from '../src/phone/hub/Hub';
@@ -105,24 +106,33 @@ const SAID: ChatMessage[] = [
 const RENDERED: HubSlots = { ...HUB_SLOTS, tools: [], desks: HUB_SLOTS.desks.filter((d) => d.id !== 'talk') };
 
 /** Lena's planning hub, with the table chat in the rail's header, as the game draws it. */
-function lenasHub(game: MuleView): string {
-  const client = {
+function clientFor(game: MuleView): TableClient {
+  return {
     subscribe: () => () => {},
     getState: () => ({ status: 'open', role: 'player', code: 'MULE', seatId: 's1', view: { game }, chat: SAID, emotes: [], toasts: [], clockOffset: 0 }),
     serverNow: () => 0,
     intent: () => {},
   } as unknown as TableClient;
+}
+
+function lenasHub(game: MuleView): string {
+  const client = clientFor(game);
   const table: TableView<MuleView> = { code: 'MULE', status: 'playing', hostId: 's1', boards: 0, game, seats: PLAYERS.map((p) => ({ id: p.id, name: p.name, isAi: p.isAi, connected: true, color: p.slot })) };
   const value = { table, view: game, me: game.me!, self: PLAYERS[0]!, slot: 0 as Slot };
   const hub = createElement(Hub, { slots: RENDERED });
   return renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value, children: hub }) })).replaceAll('<!-- -->', '');
 }
 
-/** What the rail shows: the open desk, the footer's names, the seat row, and the ticker's lines by id, newest first. */
+/**
+ * What the rail shows: the open desk, the footer's names (shown, and in the markup at all, which a screen reader reads
+ * even when they are visually folded), the seat row, and the ticker's lines by id, newest first.
+ */
 function rail(html: string) {
+  const spoken = html.includes('data-testid="waiting-for"');
   return {
     desk: /aria-selected="true"[^>]*data-testid="desk-([a-z]+)"/.exec(html)?.[1] ?? null,
-    names: html.includes('data-testid="waiting-for"'),
+    names: spoken && !/class="sr-only"[^>]*><span[^>]*data-testid="waiting-for"/.test(html),
+    spoken,
     seatRow: html.includes('data-testid="seat-row"'),
     ticker: [...html.matchAll(/data-testid="chat-line-(\d+)"/g)].map((m) => Number(m[1])),
   };
@@ -130,11 +140,20 @@ function rail(html: string) {
 
 describe('the Governor desk folds (E-11)', () => {
   it.each<[string, MuleView, ReturnType<typeof rail>]>([
-    ['Lena governs: her desk opens first, the names fold, the ticker keeps its newest line', month(true), { desk: 'governor', names: false, seatRow: true, ticker: [2] }],
-    ['after Set (4% from 5%), the desk stays open and still folded', month(true, 4, 5), { desk: 'governor', names: false, seatRow: true, ticker: [2] }],
-    ['Ossa governs: Lena has no Governor desk, the names and both lines show', month(false), { desk: 'colony', names: true, seatRow: true, ticker: [2, 1] }],
+    ['Lena governs: her desk opens first, the names fold, the ticker keeps its newest line', month(true), { desk: 'governor', names: false, spoken: true, seatRow: true, ticker: [2] }],
+    ['after Set (4% from 5%), the desk stays open and still folded', month(true, 4, 5), { desk: 'governor', names: false, spoken: true, seatRow: true, ticker: [2] }],
+    ['Ossa governs: Lena has no Governor desk, the names and both lines show', month(false), { desk: 'colony', names: true, spoken: true, seatRow: true, ticker: [2, 1] }],
   ])('E-11: %s', (_, game, shows) => {
     expect(rail(lenasHub(game))).toEqual(shows);
+  });
+
+  it.each<[string, number | null, number[]]>([
+    ['asks for one', 1, [2]],
+    ['asks for none', 0, [2]],
+    ['asks for nothing', null, [2, 1]],
+  ])('E-11: the ticker keeps at least its newest line whatever a screen asks (%s)', (_, asked, lines) => {
+    const html = renderToStaticMarkup(createElement(ClientProvider, { client: clientFor(month(true)), children: createElement(TickerLines.Provider, { value: asked, children: createElement(TableChat) }) }));
+    expect(rail(html).ticker).toEqual(lines);
   });
 
   it('E-11: the fold holds while the desk that asked first is open: another desk unfolds, back to it folds again', () => {
@@ -145,9 +164,12 @@ describe('the Governor desk folds (E-11)', () => {
     const colony = goTo(opens, { desk: 'colony' }, drawn);
     const back = goTo(colony, { desk: 'governor' }, drawn);
     const door = goTo(colony, { desk: 'governor', focus: 'tax' }, drawn);
-    expect([opens, colony, back, door].map(deskAsks)).toEqual([true, false, true, true]);
+    expect([opens, colony, back, door].map((p) => deskAsks(p, p.desk))).toEqual([true, false, true, true]);
+    // It follows the desk the hub draws: a place still naming the asking desk, with another drawn, does not fold.
+    expect(deskAsks(opens, 'colony')).toBe(false);
     // Nobody asks first (Ossa governs): nothing folds, whatever is open.
     const ossas: HubSeat = { view: month(false), me: game.me!, self: PLAYERS[0]! };
-    expect(deskAsks(settle({ desk: 'colony', tool: 'look', focus: null, first: null }, drawnSlots(HUB_SLOTS, ossas), ossas))).toBe(false);
+    const plain = settle({ desk: 'colony', tool: 'look', focus: null, first: null }, drawnSlots(HUB_SLOTS, ossas), ossas);
+    expect(deskAsks(plain, plain.desk)).toBe(false);
   });
 });
