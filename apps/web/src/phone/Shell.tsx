@@ -184,7 +184,7 @@ export function PhoneShell({
             <header className="flex flex-col gap-1 border-b border-holo-faint px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] short:gap-0.5 short:pb-1 short:pt-[max(0.25rem,env(safe-area-inset-top))] @min-[1100px]/shell:gap-2 @min-[1100px]/shell:px-5 @min-[1100px]/shell:pb-4 @min-[1100px]/shell:pt-[max(1rem,env(safe-area-inset-top))]">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 flex-col">
-                  <span className="label-caps text-[10px]! @min-[1100px]/shell:text-xs!">
+                  <span className="label-caps text-[10px]! @min-[1100px]/shell:text-xs!" data-testid="month">
                     Month {view.month} / {view.maxMonths}
                   </span>
                   <span className="truncate font-display text-lg font-semibold leading-tight @min-[1100px]/shell:text-2xl">{phase}</span>
