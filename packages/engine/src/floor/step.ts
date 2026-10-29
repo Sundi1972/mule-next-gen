@@ -1,3 +1,4 @@
+import { GAME } from '../config.js';
 import { tileAt } from '../grid.js';
 import type { GameState, Tile } from '../types.js';
 import { MS_PER_SECOND } from '../units.js';
@@ -49,6 +50,20 @@ export function stepFloor(floor: DevFloor, state: GameState, inputs: Inputs, dtM
  */
 export function doorPresses(floor: DevFloor, state: GameState, inputs: Inputs, cfg: FloorConfig): ReadonlySet<string> {
   return new Set(floor.colonists.filter((c) => doorMove(floor, state, c.id, inputs[c.id] ?? IDLE_INPUT, cfg)).map((c) => c.id));
+}
+
+/**
+ * The seats in the order their presses apply on this floor, the stepped one: seat order, the first seat rotating each
+ * tick over the most seats a game has, as play.ts's rot does. Throws an Error for a seat not on the floor.
+ */
+export function pressOrder(floor: DevFloor, seatIds: readonly string[]): string[] {
+  const n = GAME.maxPlayers;
+  const place = (id: string) => {
+    const seat = floor.colonists.findIndex((c) => c.id === id);
+    if (seat < 0) throw new Error(`No colonist on the floor for ${id}`);
+    return (((seat - floor.tick) % n) + n) % n;
+  };
+  return seatIds.map((id) => ({ id, at: place(id) })).sort((a, b) => a.at - b.at).map((s) => s.id);
 }
 
 /** The ENTER or LEAVE a seat's press reaches on this floor, or null when it presses nothing or reaches something else. */

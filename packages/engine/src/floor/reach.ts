@@ -3,8 +3,8 @@
  *
  * A tick runs in RULE-1's order in the server and the sim alike (HC-4). First stepFloor steps the floor, taking each
  * colonist whose press reached ENTER or LEAVE through its door. Then every other seat that pressed since the last tick
- * has applyReach run, with its reach at the stepped position and the game as the seats before it left it, in seat order
- * with the first seat rotating each tick. doorPresses names the presses the step spent, which are not applied again.
+ * has applyReach run, in pressOrder on the stepped floor, with its reach at the stepped position, on the game and the
+ * floor the seats before it left. doorPresses names the presses the step spent, which are not applied again.
  */
 import { DEVELOPMENT } from '../config.js';
 import { RuleError } from '../errors.js';
