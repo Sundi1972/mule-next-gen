@@ -459,10 +459,7 @@ function StandingsSheet({ onClose }: { onClose: () => void }) {
                 </span>
                 <span data-num className="font-mono">{fmt(p.office)}</span>
               </span>
-              <span className={cx(line, 'text-ink-3')}>
-                <span>Donations · comes with G-5</span>
-                <span>—</span>
-              </span>
+              {/* Donations get a line once G-5 builds them; no placeholder before that (WS6, 2026-10-29). */}
               <span className={cx(line, 'mt-0.5 border-t border-holo-faint pt-0.5 font-semibold')}>
                 <span>Your worth</span>
                 <span data-num className="font-mono font-bold">{fmt(mine.total)}</span>
