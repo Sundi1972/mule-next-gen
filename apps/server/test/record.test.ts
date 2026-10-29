@@ -244,6 +244,7 @@ function table(options: TableOptions = {}) {
   /** The goods, by month, whose status screen and walk the market has played. */
   const declared = new Set<string>();
   const walked = new Set<string>();
+  const chose = new Set<string>();
   let elapsed = 0;
   const market = () => {
     const [heiko, mia] = phones as [Screen, Screen];
@@ -275,6 +276,12 @@ function table(options: TableOptions = {}) {
       walked.add(key);
       if (food) send(heiko, { t: 'intent', intent: { type: 'walk', dir: 'up' } });
       if (miaSells) send(mia, { t: 'intent', intent: { type: 'walk', dir: 'down' } });
+    }
+    // At a house's line nothing trades until the seat says how many (A-6): Mia sells all she holds there, once a good.
+    const miaThere = auction.walkers.find((w) => w.id === 's2');
+    if (auction.stage === 'walk' && miaThere?.side === 'seller' && miaThere.line && !miaThere.order && !chose.has(key)) {
+      chose.add(key);
+      send(mia, { t: 'intent', intent: { type: 'lineTrade', units: miaThere.units } });
     }
   };
   const script = () => {
@@ -734,6 +741,7 @@ describe.runIf(FULL)('notices in the record', { timeout: 120_000 }, () => {
     expect(notices.some((n) => n.kind === 'trade' && n.buyer === 'ship' && n.month === GAME.exportShipEvery), 'a sale to the export ship').toBe(true);
     expect(notices.some((n) => n.kind === 'trade' && n.buyer !== 'ship' && n.buyer !== 'store' && n.seller !== 'store'), 'a trade between players').toBe(true);
     expect(notices.some((n) => n.kind === 'sale' && n.buyer !== 'store'), 'a lot sold to a player').toBe(true);
+    expect(record.events.some((e) => e.type === 'intent' && e.intent.type === 'lineTrade' && e.refused === undefined), "a phone's choice at a house line (A-6), replayed below").toBe(true);
     record.events.forEach((e, i) => {
       if (e.type !== 'notice') return;
       const step = record.events.slice(0, i).filter(isStep).at(-1)!;
