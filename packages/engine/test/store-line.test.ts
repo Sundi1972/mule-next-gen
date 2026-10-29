@@ -95,7 +95,7 @@ describe('A-6 G-1: at a house line you choose how many', () => {
     expect(trades).toHaveLength(2);
     expect(trades.every((t) => t.seller === 'store' && t.buyer === 'p1' && t.price === a(state).storeSell)).toBe(true);
     expect(state.players[1]!.stock.food).toBe(2);
-    expect(walker(state, 'p1').order).toMatchObject({ house: 'store', units: 2, traded: 2, gross: 2 * a(state).storeSell });
+    expect(walker(state, 'p1').order).toMatchObject({ house: 'store', units: 2, traded: 2, cr: 2 * a(state).storeSell });
   });
 
   it('B-AC: selling 3 to the store sells exactly 3 and keeps the rest', () => {
@@ -105,6 +105,10 @@ describe('A-6 G-1: at a house line you choose how many', () => {
     expect(trades).toHaveLength(3);
     expect(trades.every((t) => t.buyer === 'store' && t.seller === 'p0')).toBe(true);
     expect(state.players[0]!.stock.smithore).toBe(7);
+    // What the seller got, after the sales tax on each unit.
+    const net = trades.reduce((n, t) => n + t.price - Math.round(t.price * state.treasury.salesTax), 0);
+    expect(walker(state, 'p0').order).toMatchObject({ units: 3, traded: 3, cr: net });
+    expect(net).toBeLessThan(trades.reduce((n, t) => n + t.price, 0));
   });
 
   it('B-AC: touching ▲ or ▼ while units move stops them at once', () => {

@@ -98,7 +98,7 @@ export function chooseAtLine(board: WalkBoard, market: WalkMarket, playerId: str
   const most = w.side === 'buyer' ? Math.floor(market.money(w.id) / line.price) : market.units(w.id);
   if (most < 1) throw new RuleError(w.side === 'buyer' ? 'You can’t pay for one' : 'You have none to sell');
   w.dir = 0;
-  w.order = { house: line.house, units: Math.min(units, most), traded: 0, gross: 0 };
+  w.order = { house: line.house, units: Math.min(units, most), traded: 0, cr: 0 };
   return w.order;
 }
 
@@ -270,6 +270,8 @@ export function stepBoard(board: WalkBoard, market: WalkMarket, dt: number): Sal
       }
       d.progress -= due;
       Object.assign(d, unit);
+      const player = houses.has(unit.buyer) ? unit.seller : houses.has(unit.seller) ? unit.buyer : null;
+      const purse = player === null ? 0 : market.money(player);
       market.trade(unit.buyer, unit.seller, unit.price);
       if (!houses.has(unit.buyer) && !houses.has(unit.seller)) {
         board.between.units++;
@@ -277,10 +279,11 @@ export function stepBoard(board: WalkBoard, market: WalkMarket, dt: number): Sal
       } else {
         const turn = houses.has(unit.buyer) ? `${unit.buyer}:${unit.seller}` : `${unit.seller}:${unit.buyer}`;
         board.turns[turn] = (board.turns[turn] ?? 0) + 1;
-        const order = board.walkers.find((w) => w.id === (houses.has(unit.buyer) ? unit.seller : unit.buyer))?.order;
+        const order = board.walkers.find((w) => w.id === player)?.order;
         if (order) {
           order.traded++;
-          order.gross += unit.price;
+          // What the units cost, or brought in after the sales tax: the change in the player's money.
+          order.cr += Math.abs(market.money(player!) - purse);
         }
       }
       d.units++;

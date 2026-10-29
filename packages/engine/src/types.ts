@@ -392,9 +392,9 @@ export interface Walker {
 export interface LineOrder {
   house: string;
   units: number;
-  /** Units moved so far, and their price before tax. */
+  /** Units moved so far, and what they cost the buyer, or brought the seller after the sales tax. */
   traded: number;
-  gross: number;
+  cr: number;
 }
 
 /** A buyer and a seller, either of them perhaps a house (the store, the ship), exchanging units right now. */
