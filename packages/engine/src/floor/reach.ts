@@ -124,12 +124,12 @@ const install: Row = ({ state, cfg, colonist: c, player: p, tile }) => {
   return plot && { kind: 'install', enabled: true, good, plot: at(plot), fromShore: plot !== tile, replaces: plot.outfit };
 };
 
-// Row 11's "no MULE" is the one led, not the plot's: a plot with a MULE on it can be analysed too.
+/** Any plot, owned or free, with or without a MULE, led or on it: as analysePlot allows. */
 const analyse: Row = ({ state, player: p, tile }) =>
-  tile?.owner === p.id && !p.carriedMule && !hasAnalysed(p, state, tile) ? { kind: 'analyse', enabled: true, plot: at(tile) } : null;
+  tile && tile.terrain !== 'store' && !hasAnalysed(p, state, tile) ? { kind: 'analyse', enabled: true, plot: at(tile) } : null;
 
 const filter: Row = ({ player: p, tile }) =>
-  tile?.owner === p.id && tile.outfit && !tile.filter && p.stock.alloy >= DEVELOPMENT.filterAlloy
+  tile?.owner === p.id && !tile.filter && p.stock.alloy >= DEVELOPMENT.filterAlloy
     ? { kind: 'filter', enabled: true, plot: at(tile), alloy: DEVELOPMENT.filterAlloy }
     : null;
 
