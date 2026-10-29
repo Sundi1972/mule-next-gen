@@ -79,8 +79,8 @@ describe("A-1: the phone while month 1's development clock waits", () => {
     expect(text(html)).toContain('Your MULE is in · waiting for Ossa');
     expect(text(html)).toContain('Buying, installing and analysing start with the clock. The pub is open.');
     // Once in, you wait: the corral is shut, the pub open.
-    expect(html).not.toMatch(/<button[^>]*data-shop="corral"(?![^>]*disabled)[^>]*>/);
-    expect(html).toMatch(/<button(?![^>]*disabled)[^>]*aria-label="Go to the pub and end your turn"/);
+    expect(html).not.toMatch(/<button[^>]*data-shop="corral"(?![^>]*disabled="")[^>]*>/);
+    expect(html).toMatch(/<button(?![^>]*disabled="")[^>]*aria-label="Go to the pub and end your turn"/);
     expect(text(html)).toContain('The clock starts when every first MULE is in');
     expect(text(html)).not.toContain('Time is up');
   });
