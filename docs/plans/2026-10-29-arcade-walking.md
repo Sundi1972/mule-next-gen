@@ -402,7 +402,8 @@ the tick, checkDevelopmentOver).
 
 - [ ] **Step 1: Write the failing case `T-AC-1: a seeded AI-only game ends in the same state in the sim and on the
   server`** (HC-4; the sim's twin of T-AC-27). Altitude: contract (server against sim).
-- [ ] **Step 2: Implement C10 per spec §1 C10** (the report lines of §4: installs, pub times).
+- [ ] **Step 2: Implement C10 per spec §1 C10** (the report lines of §4: installs, pub times), and report spec §7
+  W-2: pub reach and payout lost per seat at `floorSeconds` 3 against 2, 40 games, sent to the PM for Heiko.
 - [ ] **Step 3: Run T-AC-1 and T-AC-5.** Expected: PASS.
 - [ ] **Step 4: Commit** `feat(ai): C10 the sim plays the same floor (verifies T-AC-1, T-AC-5)`.
 

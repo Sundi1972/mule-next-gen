@@ -706,6 +706,12 @@ inside a wall; money and stock change only through game.ts rules; development en
   no file-level ruling). Mitigation: C11 retires it for a new owned folder; the PM rules.
 - **R-4 · SEAMS.md is not on trunk** (untracked in the main checkout). Ownership claims here come from that file.
   Mitigation: the PM's ruling on the file list below is the record.
+- **W-2 · The 3 s store floor and the pub (watch item, WS1's PR-4 measures).** In the mock's sim at floorSeconds 3
+  (Heiko: "3 is fine"), bot turns that reach the pub fell from 60/60 to 38/60 over 20 seeded turns, and Kai's from
+  20/20 to 0/20; installs stayed at 80. Nobody loses a MULE; slow colonists lose the pub payout, since four store
+  crossings no longer fit the 50 s clock. Ruled (a), the PM, 29 Oct: keep 3 s; PR-4's sim on the real AI measures pub
+  reach and payout lost at 3 s against 2 s, and if it shows the same, Heiko picks a 2 s floor or more development time
+  with those numbers. The mock's bots are a stand-in; the real AI hands plan routes better.
 - **W-1 · The record's size (watch item, WS3 measures).** The 50 ms tick roughly triples the development steps in
   WS3's game record, about 0.5 MB more per 12-month game in memory (WS3's estimate). WS3 measures it once the tick
   exists; tickMs is config if it needs to come down.
