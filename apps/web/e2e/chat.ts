@@ -77,6 +77,8 @@ type Sample = {
   phase: string | null;
   ticker: { id: number; text: string; rect: Rect; visible: boolean }[];
   tickerRect: Rect | null;
+  /** Where the content of the scroll the ticker is in ends, when it is in one: a phone's rail (C20), scrolled or not. */
+  tickerReach: number | null;
   viewport: { w: number; h: number };
   bubbles: Bubble[];
   speakers: string[];
@@ -105,6 +107,7 @@ const SAMPLE = `{
           visible: li.checkVisibility ? li.checkVisibility({ visibilityProperty: true }) : true,
         })),
         tickerRect: rect(document.querySelector('[data-testid=chat-ticker]')),
+        tickerReach: (() => { const sc = document.querySelector('[data-testid=chat-ticker]')?.closest('.overflow-y-auto'); return sc ? sc.getBoundingClientRect().top - sc.scrollTop + sc.scrollHeight : null; })(),
         viewport: { w: window.innerWidth, h: window.innerHeight },
         bubbles: [...document.querySelectorAll('[data-testid^=chat-bubble-]')].map((b) => ({
           seat: b.getAttribute('data-testid').slice(12),
@@ -407,7 +410,9 @@ function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
     timing(seen.t <= due, `B-AC-17: on ${who} line ${line.id} shown in the ticker +${seen.t - line.at} ms (deadline +${due - line.at} ms)`);
     const entry = seen.ticker.find((l) => l.id === line.id)!;
     const box = seen.tickerRect;
-    check(box && box.r > box.l && box.b > box.t && inside(box, { l: 0, t: 0, r: seen.viewport.w, b: seen.viewport.h }), `B-AC-17: on ${who} the ticker that shows line ${line.id} has a size and lies inside the viewport, got ${JSON.stringify(box)} in ${seen.viewport.w}×${seen.viewport.h}`);
+    // On a phone the ticker follows the rail's content in its scroll (C20): inside the viewport, or one scroll away in that rail.
+    const reach = Math.max(seen.viewport.h, seen.tickerReach ?? 0);
+    check(box && box.r > box.l && box.b > box.t && inside(box, { l: 0, t: 0, r: seen.viewport.w, b: reach }), `B-AC-17: on ${who} the ticker that shows line ${line.id} has a size and lies inside the viewport or the rail's scroll, got ${JSON.stringify(box)} in ${seen.viewport.w}×${seen.viewport.h} (the scroll's content ends at ${seen.tickerReach})`);
     check(entry.rect.r > entry.rect.l && entry.rect.b > entry.rect.t && entry.visible, `B-AC-17: on ${who} line ${line.id}'s ticker entry is drawn and visible, got ${JSON.stringify(entry.rect)} visible=${entry.visible}`);
     // Its phase may end before the page paints it again; then it shows in the next.
     if (firstIn(samples, phase, line.at)) timing(seen.phase === phase, `B-AC-17: on ${who} line ${line.id} first shown in the ticker in ${seen.phase}, said in ${phase}`);
