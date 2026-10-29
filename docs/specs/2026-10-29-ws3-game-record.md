@@ -561,7 +561,7 @@ stay local.
   - (4) §4: the game-over write ran outside the guard, where a throw would end the whole server process. It now runs
     inside the guard, and FM-REC-1 covers it.
 
-- **AM-4 (2026-10-29, WS2's spec B v2, social Claude; needs WS1, WS2 and WS3 OKs):** `heard` becomes a recorded
+- **AM-4 (2026-10-29, WS2's spec B v2, social Claude; AGREED: WS2 and WS1 OK'd it at a25de0c4, along with WS3):** `heard` becomes a recorded
   input, without its words.
   - **Why:** Heiko vetoed spec B's first design. He wants Claude to react when it's whispered to, so a brain call may
     open because a line arrived. That trigger must replay, so it must be recorded.
