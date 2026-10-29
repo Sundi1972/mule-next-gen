@@ -162,6 +162,21 @@ describe('A-5 the receipt words, from hand-built views (the review fix round)', 
   });
 });
 
+describe("the TV's status line (WS6 ruling on #204)", () => {
+  it('B-AC-A5-12: the status line lists only the skipped goods, on one truncated line, with no reasons', () => {
+    const view = toClose().game.viewFor(null);
+    const skipped: NonNullable<MuleView['auction']>['skipped'] = [
+      { good: 'rareEarth', reason: 'nobody has any' },
+      { good: 'alloy', reason: 'nobody buys' },
+      { good: 'electronics', reason: 'nobody trading' },
+    ];
+    const html = tvScreen({ ...view, auction: { ...view.auction!, stage: 'status', skipped } });
+    expect(html).toContain('data-testid="tv-status"');
+    expect(textOf(html, 'skipped')).toBe('Skipped: Rare earth, Alloy, Electronics');
+    expect(html).toMatch(/<p class="[^"]*\btruncate\b[^"]*" data-testid="skipped"/);
+  });
+});
+
 describe('A-5 the receipt on the phone (#audit-auction-receipt)', () => {
   it('B-AC-A5-1: the seller reads what it sold, for what after tax, with the tax spelled out', () => {
     const { game } = toClose();
