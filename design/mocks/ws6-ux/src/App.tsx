@@ -613,6 +613,17 @@ export default function App() {
       <div className="mt-2 flex flex-col gap-2" data-testid="arcade-links">
         <Links states={[{ id: ARCADE_CONTENTS, title: 'Arcade walking: contents' }, ...ARCADE_ROUTES]} />
       </div>
+      <h2 className="label-caps mt-6">For approval 2026-10-29 · characters in motion</h2>
+      <p className="mt-1 max-w-3xl text-sm text-ink-2">
+        Heiko: the characters are very static when they move. A walk cycle, an idle, facing, pace that shows, the wolves moment (run, bitten, fight) and the MULE in step, for all six species, in two variants side by side: A bobs and waddles the whole creature, B swings each species' feet like the MULE's legs. Playable, with its phone cost measured.
+      </p>
+      <ul className="mt-2 flex flex-col gap-1 text-sm" data-testid="motion-links">
+        <li>
+          <a href="/motion.html" className="text-holo underline" data-testid="link-motion">
+            Characters in motion · A bob and waddle, B feet
+          </a>
+        </li>
+      </ul>
       <h2 className="label-caps mt-6">For approval 2026-10-29 · the land grant on a phone, muting an AI</h2>
       <p className="mt-1 max-w-3xl text-sm text-ink-2">
         Two pages of their own. The land grant's compact footer (CLAIM and Ready side by side, Waiting for on one line): the rail window that shows the lit plot goes from 20 px to about 120 px on a phone. Muting an AI on your phone: one tap on its seat, its whispers, lines and offers stop on your phone; the TV and its play are unchanged.
