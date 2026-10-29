@@ -252,7 +252,14 @@ export const START = {
   colonists: 100,
   storeMules: 10,
   storeCapital: 4000,
-  storeStock: { food: 30, water: 36, energy: 16, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 4 } satisfies Stock,
+  /**
+   * Little enough Water that the AI's outlook (STRATEGIST.horizon, outlook.ts) sees the store run dry from month 1 and
+   * prices Water at what colonists pay, so the seats build wells early. A few units more put the dry month past the
+   * outlook, and the colonists go short later in the game. When this, START.colonists, UPKEEP.colonistGrowth or the
+   * outlook changes, re-run `pnpm sim -- --games 40 --seed N --politics on|off` for seeds 1, 101 and 201 and read
+   * "Colonists short of Food or Water".
+   */
+  storeStock: { food: 30, water: 20, energy: 16, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 4 } satisfies Stock,
 };
 
 export const MULE = {

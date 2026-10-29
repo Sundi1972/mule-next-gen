@@ -6,14 +6,16 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { GAME, LOTS, TAX, WALK, type Good } from '@mule/engine';
+import { EXPORT_DEMAND, GAME, goodsMarket, LOTS, TAX, WALK, type Good } from '@mule/engine';
 import type { AuctionView, MuleView } from '@mule/protocol';
+import { GOOD_NAME } from '@mule/ui';
 import { errors as playwrightErrors, type Browser, type Page } from 'playwright';
-import { GRANT_PASS_MAX_MS, GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
+import { AI_NAMES, GRANT_PASS_MAX_MS, GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
-import { check, headerSlot, launch, PHONE, startServer, TV, type AuctionSteps } from './harness';
+import { check, headerSlot, held, launch, PHONE, PHONE_SMALL, startServer, TV, type AuctionSteps } from './harness';
 import { hostContinuesWithout } from './hub-steps';
 import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
+import { AUDIT_JS, MIN_TEXT, type AuditRead } from './small-phone-audit';
 
 const PRESS_MS = 2_000;
 /** Once the month's last good has closed, how long a phone has to show the month end's "On to month N". */
@@ -132,8 +134,10 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   await brix.page.getByRole('button', { name: 'Start game' }).click();
   console.log(`✓ three phones and a TV at table ${code}`);
   const truth = serverTruth(server, code);
+  shipInPortThisMonth(server, code);
 
   // Month 1: everyone claims (Brix and Lena list theirs in month 2), so the grant ends early. Nothing is listed, so only the colony's lot can follow.
+  await fillTheTvTicker(lena.page, tv);
   await everyone(phones, (p) => readyInPlanning(p.page));
   await everyone(phones, (p) => claimPlots(p.page));
   await brix.page.locator('[data-phase]:not([data-phase=landGrant])').waitFor({ timeout: GRANT_WAIT_MS });
@@ -145,7 +149,10 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   let onServer: string[] = [];
   try {
     await readTheGoodsWalk({ seller: brix, buyer: lena, stayer: ossa }, tv, truth);
+    const shipGood = readTheShipGoodsOwnStatus(phones, tv, truth);
+    shipGood.catch(() => undefined);
     await holdUpIntoTheNextGood(truth, ossa, [brix, lena]);
+    await shipGood;
   } finally {
     // Stopped on a failure too: left running, it would throw once the room closes and bury the real error.
     onServer = serverStages();
@@ -305,7 +312,14 @@ async function followTheColonyLot(phones: Phone[], tv: Page, month: number, trut
 type Screen = { name: string; page: Page; seat?: Phone };
 
 /** The server's own views: the public one every TV gets, and each seat's private one, whose stock is the engine's. */
-type Truth = { board: () => MuleView; idOf: (p: Phone) => string; stockOf: (p: Phone, good: Good) => number };
+type Truth = {
+  board: () => MuleView;
+  idOf: (p: Phone) => string;
+  stockOf: (p: Phone, good: Good) => number;
+  held: <T>(step: () => Promise<T>) => Promise<T>;
+  /** The houses that buy the good up now, in the order the engine sells to them when they pay the same. */
+  houseOrder: () => string[];
+};
 
 function serverTruth(server: MuleServer, code: string): Truth {
   const room = () => {
@@ -325,6 +339,11 @@ function serverTruth(server: MuleServer, code: string): Truth {
   };
   return {
     board: () => game(null),
+    held: (step) => held(server, code, step),
+    houseOrder: () => {
+      const state = (room() as unknown as { game: { state: Parameters<typeof goodsMarket>[0] } }).game.state;
+      return goodsMarket(state).houseBuys.map((h) => h.id);
+    },
     idOf,
     stockOf: (p, good) => {
       const me = game(idOf(p)).me;
@@ -378,7 +397,7 @@ const readTags = () => ({
   bid: document.querySelector('[data-testid=tag-bid]')?.textContent ?? null,
   gap: document.querySelector('[data-testid=gap-label]')?.textContent ?? null,
 });
-const readReadout = () => [...document.querySelectorAll('[data-testid=line-readout] dd')].slice(0, 2).map((dd) => dd.textContent);
+const readReadout = () => [...document.querySelectorAll('[data-testid=tv-readout] dd')].slice(0, 2).map((dd) => dd.textContent);
 const readUnits = () =>
   Object.fromEntries(
     [...document.querySelectorAll<HTMLElement>('[data-testid^="units-"]')]
@@ -547,6 +566,10 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
   await everyone(phones, (p) => untilShows({ name: `${p.name}'s phone`, page: p.page }, readPicker, { side: 'seller', sellOff: false }, 'B-AC-4: a player with some to spare opens the status screen on Sell'));
   await tapSide(truth, buyer, 'buyer', 'buyer', `B-AC-4: ${buyer.name} taps Buy from Sell and buys`);
   console.log(`✓ B-AC-4 (WS6): with ${opened.good} to spare, all three phones open ${opened.good}'s status screen on Sell, as the server holds them; ${buyer.name}'s tap on Buy makes her a buyer`);
+  await truth.held(async () => {
+    await readTheStatusWords(phones, tv, truth);
+    await smallPhoneReads(buyer, 'status');
+  });
 
   const walking = { ask: 1, bid: 1, gap: 1 };
   await Promise.all(screens.map((s) => untilShows(s, readLines, walking, 'B-AC-1: the lowest-ask and highest-bid lines and the gap during the walk', within(SCALE, WALK.statusMs))));
@@ -560,16 +583,18 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
   const ask = a.walkers.filter((w) => w.side === 'seller' && (w.units ?? 1) > 0).sort((x, y) => x.at - y.at)[0];
   const bid = a.walkers.filter((w) => w.side === 'buyer').sort((x, y) => y.at - x.at)[0];
   check(ask && bid && ask.id === sellerId && bid.id === buyerId, `${seller.name} holds the lowest ask and ${buyer.name} the highest bid, got ${ask?.id} and ${bid?.id}`);
-  await Promise.all(
-    screens.map((s) => {
-      const who = (id: string) => (s.seat && truth.idOf(s.seat) === id ? 'You' : name(id));
-      return untilShows(s, readReadout, [`${ask.price} · ${who(ask.id)}`, `${bid.price} · ${who(bid.id)}`], 'B-AC-1: the readout names who holds each line');
-    }),
-  );
+  const tvAsk = bestOffer(a, 'seller', name, truth.houseOrder());
+  const tvBid = bestOffer(a, 'buyer', name, truth.houseOrder());
+  await untilShows(theTv, readReadout, [`${tvAsk.price} · ${tvAsk.who}`, `${tvBid.price} · ${tvBid.who}`], "B-AC-1, G-4: the TV's readout names who holds each line, the store and the ship counted");
+  check(await tv.getByTestId('tv-walk').isVisible(), "the TV's walk stage carries tv-walk");
+  await truth.held(async () => {
+    await readTheWalkWords(phones, truth, name);
+    await smallPhoneReads(buyer, 'walk');
+  });
   const tags = { ask: String(ask.price), bid: String(bid.price), gap: `${ask.price - bid.price} APART` };
   await Promise.all(screens.map((s) => untilShows(s, readTags, tags, "B-AC-1: the lines sit at the server's lowest ask and highest bid, with the gap between them")));
   console.log(
-    `✓ B-AC-1 (WS6): ${a.good} walk, the red line tagged ${ask.price} and the green ${bid.price}, "${tags.gap}", on three phones and the TV; the readout names ${seller.name} and ${buyer.name}, "You" on their own phones`,
+    `✓ B-AC-1 (WS6): ${a.good} walk, the red line tagged ${ask.price} and the green ${bid.price}, "${tags.gap}", on three phones and the TV; the TV's readout names ${tvAsk.who} and ${tvBid.who}`,
   );
 
   const storeShows = async (forSale: number, sells: number | null) => {
@@ -609,6 +634,307 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
   const moved = (id: string) => `${name(id)} ${before[id]} → ${after[id]}`;
   console.log(`✓ B-AC-2 (WS6): after ${traded.units} units traded, ${moved(sellerId)} and ${moved(buyerId)} on three phones and the TV${zero ? ', a surplus of 0 drawn "(0)"' : ''}`);
 }
+
+/** The best price a walker on `side` can meet, the store and the ship counted, and who holds it, as the TV names them. */
+function bestOffer(a: AuctionView, side: 'seller' | 'buyer', name: (id: string) => string, houses: string[], without?: string): { price: number; who: string; id: string } {
+  const named = (id: string) => (id === 'store' ? 'the store' : id === 'ship' ? 'the ship' : name(id));
+  const housePays: Record<string, number | null> = { store: a.storeBuys, ship: a.shipPays };
+  const list =
+    side === 'seller'
+      ? [
+          ...a.walkers.filter((w) => w.side === 'seller' && w.units > 0 && w.id !== without).map((w) => ({ id: w.id, price: w.price })),
+          ...(a.storeSells !== null && a.storeForSale > 0 ? [{ id: 'store', price: a.storeSells }] : []),
+        ].sort((x, y) => x.price - y.price)
+      : [
+          ...a.walkers.filter((w) => w.side === 'buyer' && w.id !== without).map((w) => ({ id: w.id, price: w.price })),
+          // In the engine's order, so a stable sort leaves a tie with the house it sells to.
+          ...houses.flatMap((id) => (housePays[id] == null ? [] : [{ id, price: housePays[id]! }])),
+        ].sort((x, y) => y.price - x.price);
+  const best = list[0];
+  check(best, `someone stands on the ${side} side of ${a.good}`);
+  return { ...best, who: named(best.id) };
+}
+
+/** The store's prices as a player can use them: "You can buy from the store at 30 · sell to it at 24". */
+function storeFromYourSide(a: AuctionView): string {
+  const sells = a.storeSells !== null && a.storeForSale > 0;
+  const buy = sells ? `You can buy from the store at ${a.storeSells}` : 'The store has none to sell';
+  const sell = a.storeBuys !== null ? `${sells ? 'sell to it' : 'you can sell to it'} at ${a.storeBuys}` : 'it isn’t buying';
+  return `${buy} · ${sell}`;
+}
+
+const readText = (page: Page, testid: string) => page.getByTestId(testid).first().innerText({ timeout: PRESS_MS }).then((t) => t.replace(/\s+/g, ' ').trim());
+
+/**
+ * G-8, G-4 and G-6 on the status screen, held still: the table in plain words, the store's prices from your side on
+ * every phone, and, with the ship in port, what it wants on every phone and the TV.
+ */
+async function readTheStatusWords(phones: Phone[], tv: Page, truth: Truth): Promise<void> {
+  const view = truth.board();
+  const a = view.auction;
+  check(a?.stage === 'status', `the status screen is up, got ${a?.stage}`);
+  const store = `${storeFromYourSide(a)}${a.storeForSale > 0 ? ` · it has ${a.storeForSale} for sale` : ''}`;
+  const wants = view.ship.wants;
+  check(view.ship.inPort && wants, 'G-6 needs the ship in port this month (the fixture brings it in)');
+  const order = [a.good, ...a.next];
+  const wanted = order.filter((g) => (wants[g] ?? 0) > 0);
+  check(wanted.length > 1 && wanted[0] !== a.good, `G-6 needs two or more wanted goods still to come after ${a.good}, wants ${JSON.stringify(wants)}`);
+  const head = wanted[0]!;
+  const pays = view.market.find((r) => r.good === head)?.shipPays;
+  const shipText = `The ship wants ${wants[head]} ${GOOD_NAME[head]} this month. ${GOOD_NAME[head]} comes up after ${GOOD_NAME[order[order.indexOf(head) - 1]!]}: the ship pays ${pays} cr for the first.`;
+  const also = alsoSentence(wanted.slice(1).map((g) => ({ good: g, wants: wants[g]! })));
+  const tidy = (all: string[]) => all.map((t) => t.replace(/\s+/g, ' ').trim());
+  for (const p of phones) {
+    const page = p.page;
+    // The heads are drawn in capitals: read as shown, any case.
+    const heads = (await page.getByTestId('status-table').locator('th').allInnerTexts()).map((t) => t.trim().toLowerCase());
+    check(heads.includes('goes bad') && heads.includes('spare') && !heads.some((t) => /spoils|surplus/.test(t)), `G-8: ${p.name}'s status table says "Goes bad" and "Spare", got ${JSON.stringify(heads)}`);
+    const mine = await readText(page, 'my-store');
+    check(mine === store, `G-4: ${p.name}'s status screen says the store's prices from your side: want "${store}", got "${mine}"`);
+    const ships = tidy(await page.getByTestId('ship-wants').allInnerTexts());
+    const want = [`${shipText} You have ${truth.stockOf(p, head)}.${also}`];
+    check(JSON.stringify(ships) === JSON.stringify(want), `G-6: ${p.name}'s status screen has one ship panel saying what it wants: want ${JSON.stringify(want)}, got ${JSON.stringify(ships)}`);
+  }
+  check(await tv.getByTestId('tv-status').isVisible(), "the TV's status stage carries tv-status");
+  const onTv = tidy(await tv.getByTestId('ship-wants').allInnerTexts());
+  check(JSON.stringify(onTv) === JSON.stringify([`${shipText}${also}`]), `G-6: the TV's status screen has one ship panel: want ${JSON.stringify([`${shipText}${also}`])}, got ${JSON.stringify(onTv)}`);
+  await checkTvStatusRoom(tv, a.good, false);
+  console.log(`✓ G-8, G-4, G-6: ${a.good}'s status screen says "Goes bad" and "Spare" and "${store}" on three phones; one ship panel, "${shipText}${also}", on the phones and the TV`);
+}
+
+/** Lines said at the table in month 1's planning, so the TV's header ticker shows its full three through the auction. */
+const TABLE_TALK = ['Anyone need Water? Cheap today.', 'Smithore is going to spike, I hear.', 'The ship is in: hold your Crystite.'];
+
+/** Says TABLE_TALK from `phone`'s Talk desk, then waits until the TV's ticker shows three lines. */
+async function fillTheTvTicker(phone: Page, tv: Page): Promise<void> {
+  const planning = phone.locator('[data-phase=planning]');
+  await planning.waitFor({ timeout: PRESS_MS * 5 });
+  await planning.getByTestId('desk-talk').click({ timeout: PRESS_MS });
+  for (const line of TABLE_TALK) {
+    await planning.getByPlaceholder('Say something to everyone').fill(line);
+    await planning.getByRole('button', { name: 'Send' }).click({ timeout: PRESS_MS });
+    await tv.getByTestId('chat-ticker').getByText(line).waitFor({ timeout: PRESS_MS });
+  }
+  const lines = await tv.locator('[data-testid=chat-ticker] [data-testid^=chat-line-]').count();
+  check(lines === 3, `the TV's chat ticker shows three lines, got ${lines}`);
+}
+
+/**
+ * The TV's status stage at 1920×1080 with its chat ticker full: the store box keeps its prices, the ship panel ends
+ * inside the screen and the TV's frame with its words whole, and a skipped line sits in the time bar's row, on one line.
+ */
+async function checkTvStatusRoom(tv: Page, good: Good, skipped: boolean): Promise<void> {
+  const room = (await tv.evaluate(`(() => {
+    const box = (id) => { const el = document.querySelector('[data-testid=' + id + ']'); if (!el) return null; const b = el.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, right: b.right, height: b.height, full: el.scrollHeight <= el.clientHeight + 1 }; };
+    const store = document.querySelector('[data-testid=status-store]').getBoundingClientRect();
+    const prices = [...document.querySelectorAll('[data-testid=status-store] dd')].map((dd) => dd.getBoundingClientRect());
+    const skip = document.querySelector('[data-testid=tv-status] [data-testid=skipped]');
+    const cs = skip && getComputedStyle(skip);
+    return {
+      store: { ...box('status-store'), pricesShown: prices.length === 3 && prices.every((p) => p.height > 0 && p.top >= store.top - 0.5 && p.bottom <= store.bottom + 0.5) },
+      ship: box('ship-wants'),
+      frame: box('tv-status'),
+      bar: box('time-bar'),
+      skipped: skip ? { ...box('skipped'), oneLine: cs.whiteSpace === 'nowrap' && cs.textOverflow === 'ellipsis', lineHeight: parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5 } : null,
+      ticker: document.querySelectorAll('[data-testid=chat-ticker] [data-testid^=chat-line-]').length,
+      w: window.innerWidth,
+      h: window.innerHeight,
+    };
+  })()`)) as {
+    store: { height: number; full: boolean; pricesShown: boolean };
+    ship: { top: number; bottom: number; left: number; right: number; full: boolean };
+    frame: { bottom: number };
+    bar: { top: number; bottom: number; right: number };
+    skipped: { top: number; bottom: number; left: number; height: number; oneLine: boolean; lineHeight: number } | null;
+    ticker: number;
+    w: number;
+    h: number;
+  };
+  const where = room.skipped ? `; skipped words y ${room.skipped.top.toFixed(0)}–${room.skipped.bottom.toFixed(0)}, the time bar y ${room.bar.top.toFixed(0)}–${room.bar.bottom.toFixed(0)}` : '';
+  console.log(
+    `  TV on ${GOOD_NAME[good]} at ${room.w}×${room.h}, ${room.ticker} chat lines in the ticker: store box ${room.store.height.toFixed(1)} px tall${room.store.full && room.store.pricesShown ? ', prices whole' : ', prices cut'}; ship panel y ${room.ship.top.toFixed(0)}–${room.ship.bottom.toFixed(0)} (the TV's frame ends at ${room.frame.bottom.toFixed(0)}), x ${room.ship.left.toFixed(0)}–${room.ship.right.toFixed(0)}${where}`,
+  );
+  check(room.ticker === 3, `G-6 is read with the TV's chat ticker full: 3 lines, got ${room.ticker}`);
+  check(room.store.full && room.store.pricesShown && room.store.height >= TV_STORE_MIN, `G-6: the TV's store box keeps its prices beside the ship panel and a full ticker: ${room.store.height} px, prices ${room.store.pricesShown && room.store.full ? 'whole' : 'cut'}`);
+  check(
+    room.ship.top >= 0 && room.ship.left >= 0 && room.ship.bottom <= Math.min(room.h, room.frame.bottom + 0.5) && room.ship.right <= room.w && room.ship.full,
+    `G-6: on ${GOOD_NAME[good]} the TV's ship panel ends inside the ${room.w}×${room.h} screen and the TV's frame: y ${room.ship.top}–${room.ship.bottom}, frame to ${room.frame.bottom}, its words ${room.ship.full ? 'whole' : 'cut'}`,
+  );
+  if (!skipped) return;
+  const s = room.skipped;
+  check(s, `on ${GOOD_NAME[good]} the TV's status stage says which goods were skipped`);
+  const mid = (s.top + s.bottom) / 2;
+  check(
+    mid >= room.bar.top && mid <= room.bar.bottom && s.left >= room.bar.right - 0.5,
+    `on ${GOOD_NAME[good]} the TV's skipped words sit in the time bar's row, to its right: y ${s.top}–${s.bottom} beside the bar's ${room.bar.top}–${room.bar.bottom}, x from ${s.left} after the bar's ${room.bar.right}`,
+  );
+  check(s.oneLine && s.height <= s.lineHeight * 1.5, `on ${GOOD_NAME[good]} the TV's skipped words take one line, cut with an ellipsis: ${s.height} px for a ${s.lineHeight} px line, ${s.oneLine ? 'nowrap with an ellipsis' : 'wrapping'}`);
+}
+
+/** The TV's store box on the status stage: a label, a number and its padding, about 78 px; a squeezed box is a few px. */
+const TV_STORE_MIN = 60;
+
+/** The ship's other wanted goods in one sentence, as the status screen says it: one with its count, several by name. */
+function alsoSentence(also: { good: Good; wants: number }[]): string {
+  if (also.length === 0) return '';
+  if (also.length === 1) return ` It also wants ${also[0]!.wants} ${GOOD_NAME[also[0]!.good]}.`;
+  return ` It also wants ${also.slice(0, -1).map((x) => GOOD_NAME[x.good]).join(', ')} and ${GOOD_NAME[also.at(-1)!.good]}.`;
+}
+
+/**
+ * G-6 on the wanted good's own status screen: watches month 1's goods after the first; the first wanted good to open
+ * its status screen is held still and read on every phone and the TV. Fails if the auction ends without one.
+ */
+async function readTheShipGoodsOwnStatus(phones: Phone[], tv: Page, truth: Truth): Promise<void> {
+  const from = truth.board().auction?.good;
+  for (;;) {
+    const view = truth.board();
+    const a = view.auction;
+    check(a, `G-6: a good the ship wants opens its status screen in month 1 (the wishlist is ${JSON.stringify(view.ship.wants)})`);
+    const wants = view.ship.inPort ? (view.ship.wants?.[a.good] ?? 0) : 0;
+    if (a.good !== from && a.stage === 'status' && wants > 0) {
+      await truth.held(async () => {
+        const held = truth.board().auction!;
+        const pays = held.shipPays ?? view.market.find((r) => r.good === held.good)?.shipPays;
+        const line = `The ship wants ${wants} ${GOOD_NAME[held.good]} this month: it pays ${pays} cr for the first.`;
+        const also = alsoSentence(held.next.filter((g) => (view.ship.wants?.[g] ?? 0) > 0).map((g) => ({ good: g, wants: view.ship.wants![g]! })));
+        const panel = async (page: Page) => {
+          const all = await page.getByTestId('ship-wants').allInnerTexts();
+          check(all.length === 1, `G-6: one ship panel on ${GOOD_NAME[held.good]}'s own status screen, got ${all.length}`);
+          return all[0]!.replace(/\s+/g, ' ').trim();
+        };
+        await Promise.all([...phones.map((p) => p.page), tv].map((page) => page.getByTestId('ship-wants').first().waitFor({ timeout: PRESS_MS })));
+        for (const p of phones) {
+          const got = await panel(p.page);
+          const want = `${line} You have ${truth.stockOf(p, held.good)}.${also}`;
+          check(got === want, `G-6: on ${GOOD_NAME[held.good]}'s own status screen ${p.name}'s phone says "${want}", got "${got}"`);
+        }
+        const onTv = await panel(tv);
+        check(onTv === `${line}${also}`, `G-6: on ${GOOD_NAME[held.good]}'s own status screen the TV says "${line}${also}", got "${onTv}"`);
+        check(held.skipped.length > 0, `G-6 reads ${GOOD_NAME[held.good]}'s own status screen with a skipped good above it, got none skipped`);
+        await checkTvStatusRoom(tv, held.good, true);
+        console.log(`✓ G-6: on ${GOOD_NAME[held.good]}'s own status screen, "${line}" on three phones (with what each has) and the TV`);
+      });
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 5));
+  }
+}
+
+/**
+ * G-2, G-3 and G-4 on the walk, held still: the walk buttons say Hold, the hint names the price to walk to and who
+ * stands there, and over the board the store's prices from your side.
+ */
+async function readTheWalkWords(phones: Phone[], truth: Truth, name: (id: string) => string): Promise<void> {
+  const a = truth.board().auction;
+  check(a?.stage === 'walk', `the walk is up, got ${a?.stage}`);
+  const store = storeFromYourSide(a);
+  for (const p of phones) {
+    const id = truth.idOf(p);
+    const side = a.walkers.find((w) => w.id === id)?.side;
+    check(side === 'buyer' || side === 'seller', `${p.name} walks, got ${side}`);
+    const page = p.page;
+    const holds = [await readText(page, 'hold-up'), await readText(page, 'hold-down')];
+    check(holds[0] === 'Hold ▲ to walk up' && holds[1] === 'Hold ▼ to walk down', `G-2: ${p.name}'s walk buttons say Hold, got ${JSON.stringify(holds)}`);
+    const how = await readText(page, 'hint-how');
+    const wantHow = side === 'buyer' ? 'Hold ▲ to walk up.' : 'Hold ▼ to walk down.';
+    check(how === wantHow, `G-2: ${p.name}'s hint says "${wantHow}", got "${how}"`);
+    // A buyer meets the cheapest seller, a seller the best payer: from where this player stands, never themselves.
+    const best = bestOffer(a, side === 'buyer' ? 'seller' : 'buyer', name, truth.houseOrder(), id);
+    const line = await readText(page, 'hint-line');
+    const where = best.id === 'store' ? 'the store' : best.id === 'ship' ? 'the ship' : `${best.who}’s ${side === 'buyer' ? 'ask' : 'bid'}`;
+    const names = line.startsWith(side === 'buyer' ? 'Walk up' : 'Walk down') && line.includes(where) && new RegExp(`\\b${best.price}\\b`).test(line);
+    check(names, `G-3: ${p.name}'s hint names ${where} at ${best.price}, got "${line}"`);
+    const said = await readText(page, 'store-words');
+    check(said === store, `G-4: over ${p.name}'s board, "${store}", got "${said}"`);
+    check((await page.getByTestId('tv-readout').count()) === 0, `G-4: ${p.name}'s phone has no LOWEST ASK readout, the hint says it`);
+    console.log(`  ${p.name}: "${line}" / "${how}"`);
+  }
+  console.log(`✓ G-2, G-3, G-4: on three phones the walk buttons say Hold, each hint names its line, and "${store}" over the board`);
+}
+
+/**
+ * The goods auction on the small landscape phone (667×375) and the base one (844×390), held still: the status table
+ * fits its space, and no text in the stage or the rail is under MIN_TEXT px. Prints every read; leaves the phone at PHONE.
+ */
+async function smallPhoneReads(p: Phone, stage: 'status' | 'walk'): Promise<void> {
+  const scope = { roots: ['[data-testid=stage]', '[data-testid=rail]', '[data-testid=actions]'], skip: ['[data-testid=table-chat]'] };
+  for (const size of [PHONE_SMALL.viewport, PHONE.viewport]) {
+    await p.page.setViewportSize(size);
+    await p.page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    // The cast's names are short; every other player is read under the longest AI name, as a game with AIs shows it.
+    await p.page.evaluate(`(${LONG_NAMES_ON})(${JSON.stringify(LONGEST_AI)})`);
+    try {
+      const read = (await p.page.evaluate(`(${AUDIT_JS})(${JSON.stringify(scope)})`)) as AuditRead;
+      const small = read.fails.filter((f) => /: text [\d.]+ px /.test(f));
+      // A long name in the names strip ends in an ellipsis by design; NAMES_ONE_LINE reads it.
+      const cut = read.fails.filter((f) => /(walk-names|limit-|units-|walker-)/.test(f) && !/^walk-names span "[^"]*": truncated /.test(f));
+      const at = `${size.width}×${size.height}`;
+      console.log(`  ${stage} at ${at}: ${read.fails.length ? read.fails.join('; ') : 'nothing broken'}`);
+      check(small.length === 0, `the goods auction's ${stage} at ${at} has text under ${MIN_TEXT} px: ${small.join('; ')}`);
+      check(cut.length === 0, `the goods auction's ${stage} at ${at}: the board shows every label whole: ${cut.join('; ')}`);
+      if (stage === 'status') {
+        const fit = await p.page.getByTestId('status-table').evaluate((t) => {
+          const box = t.parentElement!;
+          return { table: Math.round(t.getBoundingClientRect().width), space: box.clientWidth, scrolls: box.scrollWidth > box.clientWidth + 1 };
+        });
+        console.log(`  status table at ${at}: ${fit.table} px wide in ${fit.space} px${fit.scrolls ? ', scrolls sideways' : ''}`);
+        check(!fit.scrolls && fit.table <= fit.space + 1, `the status table fits its space at ${at}: ${fit.table} px in ${fit.space}`);
+      } else {
+        const names = (await p.page.evaluate(NAMES_ONE_LINE)) as string[];
+        console.log(`  names strip at ${at}: ${names.length ? names.join('; ') : 'every name on one line, a long one ending in an ellipsis'}`);
+        check(names.length === 0, `the board's names strip at ${at}: one line each, an ellipsis where cut, never clipped mid-word: ${names.join('; ')}`);
+        const overlaps = (await p.page.evaluate(BOARD_LABEL_OVERLAPS)) as string[];
+        console.log(`  board labels at ${at}: ${overlaps.length ? overlaps.join('; ') : 'none overlap'}`);
+        check(overlaps.length === 0, `the board's labels at ${at} don't overlap: ${overlaps.join('; ')}`);
+      }
+    } finally {
+      await p.page.evaluate(LONG_NAMES_OFF);
+    }
+  }
+  await p.page.setViewportSize(PHONE.viewport);
+}
+
+const LONGEST_AI = AI_NAMES.reduce((a, b) => (b.length > a.length ? b : a));
+
+/** In the page: writes `name` over every other player's name in the status table and the board's names strip, keeping what was there. */
+const LONG_NAMES_ON = `(name) => {
+  const els = [...document.querySelectorAll('[data-testid=status-table] tbody td:first-child span.truncate, [data-testid=walk-names] > span > span:nth-child(2)')].filter((el) => el.textContent !== 'You');
+  window.namesWere = els.map((el) => [el, el.textContent]);
+  for (const el of els) el.textContent = name;
+}`;
+const LONG_NAMES_OFF = `(() => { for (const [el, text] of window.namesWere || []) el.textContent = text; window.namesWere = []; })()`;
+
+/** In the page: each name in the board's names strip that takes two lines, or is cut without an ellipsis. */
+const NAMES_ONE_LINE = `(() => {
+  const out = [];
+  for (const el of document.querySelectorAll('[data-testid=walk-names] > span > span:nth-child(2)')) {
+    const cs = getComputedStyle(el);
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const tops = new Set([...range.getClientRects()].filter((r) => r.width > 0.5).map((r) => Math.round(r.top)));
+    if (tops.size > 1) out.push('"' + el.textContent + '" takes ' + tops.size + ' lines');
+    if (el.scrollWidth > el.clientWidth + 1 && (cs.textOverflow !== 'ellipsis' || cs.whiteSpace !== 'nowrap')) out.push('"' + el.textContent + '" is clipped without an ellipsis');
+  }
+  return out;
+})()`;
+
+/** In the page: every pair of the board's labels (store lines, units, ASK/BID tags) whose boxes overlap, named. */
+const BOARD_LABEL_OVERLAPS = `(() => {
+  const labels = [
+    ...[...document.querySelectorAll('[data-testid^=limit-] > span')].map((el) => [el.parentElement.dataset.testid, el]),
+    ...[...document.querySelectorAll('[data-testid^=units-]')].map((el) => [el.dataset.testid, el]),
+    ...[...document.querySelectorAll('[data-testid^=walker-] > span:last-child')].map((el) => [el.parentElement.dataset.testid + ' price', el]),
+  ].map(([id, el]) => [id, el.getBoundingClientRect()]);
+  const out = [];
+  for (let i = 0; i < labels.length; i++)
+    for (let j = i + 1; j < labels.length; j++) {
+      const [a, x] = labels[i], [b, y] = labels[j];
+      const w = Math.min(x.right, y.right) - Math.max(x.left, y.left), h = Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top);
+      if (w > 0.5 && h > 0.5) out.push(a + ' over ' + b + ' (' + w.toFixed(1) + '×' + h.toFixed(1) + ' px)');
+    }
+  return out;
+})()`;
 
 /**
  * FU-1, front to back: with the walk of the good up now running, `holder` holds ArrowUp, presses Done with
@@ -977,6 +1303,21 @@ async function keepEvidence(browser: Browser, seed: number): Promise<void> {
     }),
   );
   console.error(`screenshots: ${dir}`);
+}
+
+/**
+ * Test fixture: the export ship calls this month, so month 1's status screens have it in port. Its wishlist takes
+ * Smithore too, the raw good most likely to come up in month 1, so a wanted good's own status screen is reached.
+ */
+function shipInPortThisMonth(server: MuleServer, code: string): void {
+  type Ship = { arrives: number; goods: Good[]; hold: Partial<Record<Good, number>> };
+  const room = server.registry.get(code) as unknown as { game: { state: { month: number; players: unknown[]; ship: Ship }; ctx: { changed(): void } } } | undefined;
+  check(room, `room ${code} is on the server`);
+  const { state } = room.game;
+  state.ship.arrives = state.month;
+  if (!state.ship.goods.includes('smithore')) state.ship.goods.push('smithore');
+  state.ship.hold.smithore ??= Math.ceil((EXPORT_DEMAND.smithore ?? 0) * state.players.length * GAME.exportShipEvery);
+  room.game.ctx.changed();
 }
 
 /** The game's seed: MULE_E2E_SEED when set, a fresh random one otherwise. */
