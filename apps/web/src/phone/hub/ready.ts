@@ -75,9 +75,13 @@ export function planningProper(view: Pick<MuleView, 'phase' | 'politics'>): bool
   return view.phase === 'planning' && !(election && election.stage !== 'over');
 }
 
-/** When the server takes the host's Continue: planning proper, or the election's announce or ballot; never its ceremony. */
-export function hostMayContinue(view: Pick<MuleView, 'phase' | 'politics'>): boolean {
+/**
+ * When the server takes the host's Continue: planning proper, or the election's announce or ballot, never its
+ * ceremony; and month 1's development while its clock waits for the first MULEs.
+ */
+export function hostMayContinue(view: Pick<MuleView, 'phase' | 'politics' | 'clockWaitsFor'>): boolean {
   const stage = view.politics?.election?.stage;
+  if (view.phase === 'development') return !!view.clockWaitsFor;
   return planningProper(view) || (view.phase === 'planning' && (stage === 'announce' || stage === 'ballot'));
 }
 
