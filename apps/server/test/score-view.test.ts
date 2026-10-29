@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { GAME, POLLUTION, score, type GameState } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { MuleGame } from '../src/mule-game.js';
-import { fakeContext, pressThroughSidePick, readyAll, seats, tapThere } from './fake-context.js';
+import { fakeContext, readyAll, seats, tapThere } from './fake-context.js';
 
 /** A one-month game where s1 claims the first lit plot and installs a food MULE on it, played to game over. */
 function playedOut() {
@@ -12,8 +12,6 @@ function playedOut() {
   const before: MuleView[] = [];
   const step = () => {
     before.push(game.viewFor('s1'), game.viewFor(null));
-    // A good's side pick has no clock (A-7): the humans press Ready there.
-    pressThroughSidePick(game);
     advance(100);
   };
   readyAll(game);
