@@ -26,7 +26,7 @@ export {
 } from './timing';
 export { EVENT_CATALOGUE, EVENT_ENTRY, type EventEntry, type EventMotion } from './catalogue';
 export { EventBoundary } from './boundary';
-export { EventShow, eventCast, type EventShowProps, type ShowCast } from './frame';
+export { EventShow, eventCast, useShow as useEventShow, useEnclosingEventShow, type EventShowProps, type ShowCast, type ShowFrame } from './frame';
 export { EventLivingMap, type EventLivingMapProps } from './map';
 export { useEventLivingView } from './living';
 export { EventGlyph, EVENT_ACCENT, EventSignBadge, EventDeltaChip, EventBuzz } from './glyphs';

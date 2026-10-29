@@ -120,12 +120,15 @@ export function EventTvPhoneRail({ me }: { me: string }) {
 
 /**
  * On a phone alone, what a tap on the map does now: skip to the event's result while it plays, or, from a result,
- * go to the next event. Pure, so a screen can place it outside the show (the product's shell: by its actions).
+ * go to the next event; nothing while no event is on. Inside <EventShow>; the screen places it (by its actions).
  */
-export function EventSkipHint({ playing, className }: { playing: boolean; className?: string }) {
+export function EventSkipHint({ className }: { className?: string }) {
+  const { s, t } = useShow();
+  const { seg } = eventStageAt(s, t);
+  if (!seg) return null;
   return (
     <span className={cx('rounded-chip bg-void/75 px-1.5 py-0.5 font-mono text-[10px] text-ink-2', className)} data-testid="skip-hint">
-      {playing ? 'tap the map to skip ›' : 'tap the map: next ›'}
+      {isPlaying(seg, t) ? 'tap the map to skip ›' : 'tap the map: next ›'}
     </span>
   );
 }

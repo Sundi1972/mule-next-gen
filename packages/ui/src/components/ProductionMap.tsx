@@ -1,6 +1,18 @@
 import { createContext, useContext, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
-import { EventBoundary, EventLivingMap, EventShow, eventSegments, plotStrikes, plotUnitsAt, type EventShowProps, type ShowEventView, type ShowMode, type ShowPlayer } from '../events';
-import { useShow } from '../events/frame';
+import {
+  EventBoundary,
+  EventLivingMap,
+  EventShow,
+  eventSegments,
+  plotStrikes,
+  plotUnitsAt,
+  useEnclosingEventShow,
+  useEventShow,
+  type EventShowProps,
+  type ShowEventView,
+  type ShowMode,
+  type ShowPlayer,
+} from '../events';
 import { GoodIcon } from './GoodIcon';
 import { HoloMap, type MapTile } from './HoloMap';
 import { cx, SLOT_COLOR, type Good, type Slot } from './tokens';
@@ -207,8 +219,10 @@ export interface ProductionMapProps {
 /** How long before the goods fly the bars leave the map's camera frame, so they can fly past its edge. */
 const HANDOFF = 0.2;
 
+/** Inside an <EventShow>, the map's events play that show's script; alone, it plays its own from these props. */
 export function ProductionMap({ width, height, tiles, production, t, slots, players, only, tv = false, reduced = false, mode = 'tv', light = false, onSkip, className }: ProductionMapProps) {
   const map = useRef<HTMLDivElement>(null);
+  const enclosing = useEnclosingEventShow();
   const { events } = production;
   const flyStart = flyAt(0, production);
   const geom = useTargets(map, t, flyStart);
@@ -234,23 +248,28 @@ export function ProductionMap({ width, height, tiles, production, t, slots, play
   // so they leave it just before they fly.
   const framed = events.length > 0 && t < flyStart - HANDOFF;
 
+  const show = (
+    <>
+      {/* A show that throws leaves the plain map and its bars, drawn from the view (§4). */}
+      <EventBoundary
+        fallback={
+          <>
+            <HoloMap width={width} height={height} tiles={tiles} density={tv ? 'tv' : 'phone'} hideGround {...(focus !== undefined ? { focusSlot: focus } : {})} className="w-full" />
+            {framed && <div className="pointer-events-none absolute inset-0">{bars}</div>}
+          </>
+        }
+      >
+        <EventLivingMap size={tv ? 'tv' : 'phone'} light={light} {...(focus !== undefined ? { focusSlot: focus } : {})} {...(framed ? { bars } : {})} {...(onSkip ? { onSkip } : {})} />
+      </EventBoundary>
+      {!framed && <div className="pointer-events-none absolute inset-0">{bars}</div>}
+    </>
+  );
+
   return (
     <div ref={map} className={cx('relative', className)} data-testid="map-show">
-      {/* The bars render inside the show, so they read the very script the module draws the events with. */}
-      <EventShow {...productionShowProps(production, t, { reduced, mode, players: cast, tiles, width, height })}>
-        {/* A show that throws leaves the plain map and its bars, drawn from the view (§4). */}
-        <EventBoundary
-          fallback={
-            <>
-              <HoloMap width={width} height={height} tiles={tiles} density={tv ? 'tv' : 'phone'} hideGround {...(focus !== undefined ? { focusSlot: focus } : {})} className="w-full" />
-              {framed && <div className="pointer-events-none absolute inset-0">{bars}</div>}
-            </>
-          }
-        >
-          <EventLivingMap size={tv ? 'tv' : 'phone'} light={light} {...(focus !== undefined ? { focusSlot: focus } : {})} {...(framed ? { bars } : {})} {...(onSkip ? { onSkip } : {})} />
-        </EventBoundary>
-        {!framed && <div className="pointer-events-none absolute inset-0">{bars}</div>}
-      </EventShow>
+      {/* The bars render inside the show, so they read the very script the module draws the events with: the screen's,
+          when the screen plays one around the map, so the whole screen plays one script. */}
+      {enclosing ? show : <EventShow {...productionShowProps(production, t, { reduced, mode, players: cast, tiles, width, height })}>{show}</EventShow>}
     </div>
   );
 }
@@ -274,7 +293,7 @@ function PlotBars({
   target: { x: number; y: number } | undefined;
   size: { w: number; h: number } | undefined;
 }) {
-  const { s, reduced, grid } = useShow();
+  const { s, reduced, grid } = useEventShow();
   const strikes = plotStrikes(s.segments, line, reduced, grid);
   const filled = t >= fillAt(index);
   // Once the bars have grown in, they stop animating: moving them out of the map's frame must not grow them again.

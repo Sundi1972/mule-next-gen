@@ -60,6 +60,11 @@ export function useShow(): ShowFrame {
   return f;
 }
 
+/** The enclosing <EventShow>'s frame, or null outside one: for a part that brings its own show only when alone. */
+export function useEnclosingEventShow(): ShowFrame | null {
+  return useContext(FrameContext);
+}
+
 export interface EventShowProps {
   /** The phase's events, in the order they fired. */
   events: ShowEventView[];
