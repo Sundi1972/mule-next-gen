@@ -128,10 +128,33 @@ try {
   await both('the goods auction', RAIL);
   const done = auction.getByRole('button', { name: /^(Ready|Done with .+)$/ });
   const over = phone.locator('[data-phase=gameOver]');
-  for (let i = 0; i < 40 && !(await over.count()); i++) {
-    await done.or(over).first().waitFor({ timeout: 30_000 });
-    await done.click({ timeout: PRESS_MS }).catch(() => undefined);
+  // A-5: the first good that closes is read whole, its receipt over the board and the month's total under the money.
+  // The close stage is a few server ticks long at this scale, so the server's own view is watched and the room held.
+  let readClose = false;
+  let auctionOver = false;
+  const closeRead = (async () => {
+    while (!auctionOver) {
+      if (server.registry.get(code)?.viewFor(null).game?.auction?.stage === 'close') {
+        await both('the goods auction, a good closed', WHOLE, async () => {
+          await phone.getByTestId('receipt-layer').waitFor({ timeout: PRESS_MS });
+          await phone.getByTestId('tally').waitFor({ timeout: PRESS_MS });
+        });
+        readClose = true;
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 5));
+    }
+  })();
+  try {
+    for (let i = 0; i < 40 && !(await over.count()); i++) {
+      await done.or(over).first().waitFor({ timeout: 30_000 });
+      await done.click({ timeout: PRESS_MS }).catch(() => undefined);
+    }
+  } finally {
+    auctionOver = true;
+    await closeRead;
   }
+  check(readClose, 'A-5: the auction reached a close stage with its receipt and the tally, read at both sizes');
   await over.waitFor({ timeout: 30_000 });
   await both('game over', WHOLE);
 
