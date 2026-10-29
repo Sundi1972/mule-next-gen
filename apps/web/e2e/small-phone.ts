@@ -265,6 +265,18 @@ async function monthOnOneLine(phone: Page, code: string): Promise<void> {
           range.selectNodeContents(el);
           return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
         });
+        const room = await label.evaluate((el) => {
+          const row = el.parentElement!.parentElement!;
+          const chip = row.querySelector('[data-testid=ready-count]')!;
+          const probe = el.cloneNode(true) as HTMLElement;
+          probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap';
+          el.parentElement!.append(probe);
+          const need = probe.getBoundingClientRect().width;
+          probe.remove();
+          const [w, col, c] = [row, el.parentElement!, chip].map((e) => e.getBoundingClientRect().width.toFixed(1));
+          return `row ${w}, label column ${col}, label needs ${need.toFixed(1)}, chip ${c} ("${chip.textContent}"), phase "${el.nextElementSibling?.textContent}"`;
+        });
+        console.log(`  C19 at ${size.width}×${size.height}: ${room}`);
         check(lines === 1, `C19 at ${size.width}×${size.height}: "Month 10 / 12" stays on one line beside the ready count, got ${lines} lines`);
       }
       await phone.setViewportSize(PHONE_SMALL.viewport);
