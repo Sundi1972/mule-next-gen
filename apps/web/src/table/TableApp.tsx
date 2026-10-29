@@ -378,8 +378,9 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
   const deals = useNewestFirst(auction.deals);
   const status = auction.stage === 'status';
   const stageName = status ? 'Buy or sell?' : auction.slowed ? 'Trading · clock slowed' : 'Walk';
+  const ship = shipWants(game, auction);
   return (
-    <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-8 text-ink" data-phase="auction">
+    <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-8 text-ink" data-phase="auction" data-testid={status ? 'tv-status' : 'tv-walk'}>
       <TvHeader game={game} title={`Auction · ${GOOD_NAME[auction.good]}`} />
       <div className="flex min-h-0 flex-1 gap-6">
         <div className={cx('flex min-w-0 flex-1 flex-col', status ? 'gap-3' : 'gap-2')}>
@@ -395,9 +396,7 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
                 <StatusTable view={game} auction={auction} tv />
               </div>
               <StoreBox auction={auction} tv />
-              {shipWants(game, auction).map((w) => (
-                <ShipWants key={w.good} want={w} tv />
-              ))}
+              {ship && <ShipWants want={ship.first} also={ship.also} tv />}
             </>
           ) : (
             <WalkBoard
