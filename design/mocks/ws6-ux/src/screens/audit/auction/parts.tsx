@@ -493,12 +493,24 @@ export function ReceiptCard({ r, mark = true }: { r: Receipt; mark?: boolean }) 
 // --- G-6 · the ship ------------------------------------------------------------------------------------------
 
 /** On every status screen while the ship is in port: what it wants, and when that good comes up. */
-export function ShipWants({ good, wants, pays, have, after, tv = false }: { good: Good; wants: number; pays: number; have: number; /** The good before it in the auction's order. */ after: Good; tv?: boolean }) {
+/** The ship's other wanted goods, in a sentence: one with its count, several by name. */
+const alsoWords = (also: readonly { good: Good; wants: number }[]) =>
+  also.length === 0
+    ? ''
+    : also.length === 1
+      ? ` It also wants ${also[0]!.wants} ${GOOD_NAME[also[0]!.good]}.`
+      : ` It also wants ${also.slice(0, -1).map((a) => GOOD_NAME[a.good]).join(', ')} and ${GOOD_NAME[also[also.length - 1]!.good]}.`;
+
+/**
+ * One panel however many goods the ship wants: the first it wants from this good on, and the rest in one sentence, so
+ * the store's box and the board keep their room (WS6 ruling on #182, 2026-10-29).
+ */
+export function ShipWants({ good, wants, pays, have, after, also = [], tv = false }: { good: Good; wants: number; pays: number; have: number; /** The good before it in the auction's order. */ after: Good; /** The other goods the ship wants this month, in the auction's order. */ also?: readonly { good: Good; wants: number }[]; tv?: boolean }) {
   return (
     <p
       className={cx(
         'relative flex flex-wrap items-baseline gap-x-1.5 rounded-panel border border-warn/60 bg-panel',
-        tv ? 'px-5 py-3 text-2xl' : 'px-2.5 py-1.5 text-xs leading-snug @min-[1100px]/shell:px-4 @min-[1100px]/shell:py-3 @min-[1100px]/shell:text-lg',
+        tv ? 'px-5 py-2 text-xl' : 'px-2.5 py-1.5 text-xs leading-snug @min-[1100px]/shell:px-4 @min-[1100px]/shell:py-3 @min-[1100px]/shell:text-lg',
       )}
       data-testid="ship-wants"
     >
@@ -507,6 +519,7 @@ export function ShipWants({ good, wants, pays, have, after, tv = false }: { good
       </strong>
       <span className="text-ink-2">
         {GOOD_NAME[good]} comes up after {GOOD_NAME[after]}: the ship pays {pays} cr for the first.{tv ? '' : ` You have ${have}.`}
+        {alsoWords(also)}
       </span>
       <Mark note={N.G6} part={tv ? 'tv-status' : 'status'} at={tv ? 'tr-in' : 'tr'} />
     </p>

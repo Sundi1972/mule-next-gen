@@ -59,7 +59,7 @@ vi.mock('../src/brain/client.js', async (original) => ({
 const CODE = 'RECRD';
 const SEED = 10;
 /** Three months, so the export ship calls, and a lot sells to a player at the land auction: found by a seed sweep. */
-const NOTICE_GAME = { seed: 4, maxMonths: 3 };
+const NOTICE_GAME = { seed: 2, maxMonths: 3 };
 /** Game time per step of the fake clock; every timer due in a step runs, with promises settled between them. */
 const STEP_MS = 100;
 const PLANNING_READY_MS = 3_000;
