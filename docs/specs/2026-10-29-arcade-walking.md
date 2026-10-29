@@ -748,7 +748,9 @@ inside a wall; money and stock change only through game.ts rules; development en
   `cycle={cycleSeconds(g)}` and `facing`, and the led `Mule`'s `cycle` set to the same stride, with the hall's
   GaitInput `{ moving, encounter: null, pace: condition?.conditionPace ?? 1, terrain: 1, lead: !!leading,
   bitten: false, leadPace: DEV_STEER.leadPace, bittenPace: WOLVES.bittenPace, lungeSeconds: WOLVES.lungeEverySeconds }`.
-  The `store-waddle` keyframe and `waddleSeconds` go from Store.tsx; reduced motion is Creature's own (theme.css).
+  Store.tsx stops using the `store-waddle` keyframe and `waddleSeconds` in PR-5; the keyframe (theme.css) and
+  `waddleSeconds` (Condition.tsx, with its test) go in PR-6, once the mock no longer uses them. Reduced motion is
+  Creature's own (theme.css).
 - **AM-15 (2026-10-29, WS4's questions at arcade PR-2, ruled by WS6).** C8's three contract points, all option (a):
   (1) the steer exemption is a generic optional `Game.quiet?(intent)` the room honours, implemented by MuleGame, not a
   `'steer'` string in room.ts; a seat whose reach words change gets its view from the game itself (AM-11). (2) A

@@ -448,6 +448,8 @@ props first, and Tasks 6.3 and 6.5 pass the frame's `moving`, `facing`, `encount
 gait. The branch is based on a commit that contains both scaffolds: trunk once ws6-ux's docs-and-mocks milestone
 merges (asked of the PM, 2026-10-29).
 
+**Carried into PR-6, B-AC-11 (WS7's #226, 2026-10-29):** the scaffold's phone text at `text-[9px]` builds at `text-[10px]`, B-AC-11's floor; check each against its row at 667.
+
 **Carried into PR-6 from PR-5 (#224, AM-16):** once the arcade screens move to #195's motion, remove `@keyframes store-waddle` from theme.css (PR-5 kept it only for the mock's HallStage) and `waddleSeconds` if nothing else uses it.
 
 **Carried into PR-6 from A-1 (#200), 2026-10-29:** the TV's development screen with six seats and a three-line ticker
