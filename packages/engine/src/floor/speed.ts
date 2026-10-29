@@ -18,13 +18,18 @@ export function doorToCorral(hall: HallPlan): number {
   return Math.hypot(corral.x - doorL.x, corral.y - doorL.y);
 }
 
+/** Hall units a second at full pace: the door-to-corral walk in floorSeconds. */
+export function hallSpeed(cfg: FloorConfig): number {
+  return doorToCorral(cfg.hall) / cfg.steer.floorSeconds;
+}
+
 /**
  * How fast a colonist walks where it stands: tiles a second on the map, hall units a second in the hall, where the
  * door-to-corral walk takes floorSeconds at full pace and neither a bite nor an AI seat slows it.
  */
 export function speedOf(c: FloorColonist, state: GameState, cfg: FloorConfig): number {
   const lead = c.lead ? cfg.steer.leadPace : 1;
-  if (c.space === 'hall') return (doorToCorral(cfg.hall) / cfg.steer.floorSeconds) * c.pace * lead;
+  if (c.space === 'hall') return hallSpeed(cfg) * c.pace * lead;
   const terrain = tileAt(state.tiles, state.width, Math.floor(c.x), Math.floor(c.y))!.terrain;
   // On land it may not enter, a colonist still walks at the land's listed speed, or 1 if it has none, to get off it.
   const ground = terrainShare(terrain, cfg) || (terrain === 'store' ? 0 : cfg.steer.terrain[terrain]) || 1;

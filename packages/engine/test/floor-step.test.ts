@@ -200,6 +200,15 @@ describe('the dev floor: the step', () => {
     const halfTick = () => stepFloor(first.floors[0]!, first.state, {}, DEV_STEER.tickMs / 2, floorConfig(HALL));
     expect(halfTick).toThrow(Error);
     expect(halfTick).not.toThrow(RuleError);
+    // So is a floorSeconds the hall has no finite speed for: refused before a step in the hall could hang on it.
+    const inHall = first.floors.find((f) => f.colonists[0]!.space === 'hall')!;
+    for (const floorSeconds of [0, -1, Number.NaN]) {
+      const cfg = { ...floorConfig(HALL), steer: { ...DEV_STEER, floorSeconds } };
+      const step = (floor: DevFloor) => () => stepFloor(floor, first.state, { a: go(1, 0) }, DEV_STEER.tickMs, cfg);
+      expect(step(first.floors[0]!), `floorSeconds ${floorSeconds}`).toThrow(Error);
+      expect(step(first.floors[0]!), `floorSeconds ${floorSeconds}`).not.toThrow(RuleError);
+      expect(step(inHall), `floorSeconds ${floorSeconds}, walking in the hall`).toThrow(Error);
+    }
 
     // One input changed at one tick: 'a', standing still in the corner, steps right once.
     const changed = inputs.map((tick, t) => (t === 700 ? { ...tick, a: go(1, 0) } : tick));

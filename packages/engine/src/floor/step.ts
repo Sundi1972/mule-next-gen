@@ -4,7 +4,7 @@ import { MS_PER_SECOND } from '../units.js';
 import { IDLE_INPUT, leadFor, mouthOf, openDoor, storeOf, type DevFloor, type FloorColonist, type FloorConfig, type FloorInput, type FloorPoint } from './floor.js';
 import { HALL_DOORS, isOpenFloor, placeAt, type HallDoor, type HallPlan } from './hall.js';
 import { reachOf, type Reach } from './reach.js';
-import { speedOf, terrainShare } from './speed.js';
+import { hallSpeed, speedOf, terrainShare } from './speed.js';
 
 /** What one step reads: the game, the config, and what it finds once for every colonist. */
 interface Step {
@@ -20,10 +20,13 @@ type Inputs = Readonly<Record<string, FloorInput>>;
 /**
  * One tick of the floor: every colonist moved by its seat's input, at RULE-2's speed, or through a door when its press
  * reached ENTER or LEAVE on this floor. Pure: a new floor, the old one and the game untouched. A seat with no input
- * stands still. Throws an Error for a dtMs other than cfg.steer.tickMs: every runner steps at the one tick.
+ * stands still. Throws an Error, its caller's bug, for a dtMs other than cfg.steer.tickMs (every runner steps at the one
+ * tick), or for a floorSeconds the hall has no finite speed for (a step there would never end).
  */
 export function stepFloor(floor: DevFloor, state: GameState, inputs: Inputs, dtMs: number, cfg: FloorConfig): DevFloor {
   if (dtMs !== cfg.steer.tickMs) throw new Error(`stepFloor steps ${cfg.steer.tickMs} ms at a time, not ${dtMs}`);
+  const { floorSeconds } = cfg.steer;
+  if (floorSeconds <= 0 || !Number.isFinite(hallSpeed(cfg))) throw new Error(`stepFloor needs a positive floorSeconds the hall has a finite speed for, not ${floorSeconds}`);
   const ctx: Step = { state, cfg, store: storeOf(state), wall: thinnestWall(cfg.hall) };
   return {
     tick: floor.tick + 1,
