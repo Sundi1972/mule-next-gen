@@ -55,6 +55,12 @@ function walker(state: GameState, id: string) {
   return a(state).walkers.find((w) => w.id === id)!;
 }
 
+/** Steps through a good's close stage (A-5), to whatever comes up next. */
+function throughClose(state: GameState) {
+  expect(a(state).stage).toBe('close');
+  for (let t = 0; t < WALK.closeMs; t += TICK) stepAuction(state, TICK);
+}
+
 /** Steps for `ms` while the same good is up, collecting the trades. */
 function run(state: GameState, ms: number): Trade[] {
   const good = a(state).good;
@@ -206,7 +212,7 @@ describe('the live auction: goods one at a time', () => {
       stepAuction(state, TICK);
       stages.add(a(state).stage);
     }
-    expect([...stages].sort()).toEqual(['over', 'status', 'walk']);
+    expect([...stages].sort()).toEqual(['close', 'over', 'status', 'walk']);
   });
 
   it('T-AC-3: everyone pressing Done on the status screen goes straight to the walk', () => {
@@ -269,10 +275,12 @@ describe('the live auction: goods one at a time', () => {
     startAuction(state, ['food', 'water']);
     toWalk(state);
     for (let t = 0; t < WALK.goodMs; t += TICK) stepAuction(state, TICK);
+    throughClose(state);
     expect(a(state)).toMatchObject({ good: 'water', stage: 'status' });
     toWalk(state);
     for (const p of state.players) auctionDone(state, p.id);
     stepAuction(state, TICK);
+    throughClose(state);
     expect(a(state).stage).toBe('over');
   });
 });
@@ -379,7 +387,7 @@ describe('the walk', () => {
     expect(a(state).stage).toBe('walk');
     auctionDone(state, 'p3');
     stepAuction(state, TICK);
-    expect(a(state).stage).toBe('over');
+    expect(a(state).stage).toBe('close');
   });
 });
 
@@ -488,7 +496,7 @@ describe('changing sides and ending early', () => {
     // Done counts only the players still on the board.
     for (const id of ['p0', 'p1', 'p3']) auctionDone(state, id);
     stepAuction(state, TICK);
-    expect(a(state).stage).toBe('over');
+    expect(a(state).stage).toBe('close');
   });
 
   it('ends a good at once when the sellers are sold out and the store has none', () => {
@@ -502,6 +510,8 @@ describe('changing sides and ending early', () => {
     walker(state, 'p1').price = 50;
     const trades = run(state, 5_000);
     expect(trades).toHaveLength(2);
+    expect(a(state)).toMatchObject({ good: 'energy', stage: 'close' });
+    throughClose(state);
     expect(a(state).good).toBe('food');
   });
 
@@ -518,6 +528,110 @@ describe('changing sides and ending early', () => {
     walker(state, 'p0').price = 50;
     walker(state, 'p1').price = 50;
     expect(run(state, 5_000)).toHaveLength(2);
+    expect(a(state).stage).toBe('close');
+  });
+});
+
+describe('A-5 the close stage: a receipt after each good (G-5)', () => {
+  /** p0 sells Water to p1; Crystite, which nobody holds and the store has none of, is skipped; then Food comes up: p0 holds some. */
+  function closedWater() {
+    const state = newGame();
+    state.players[0]!.stock.water = 10;
+    state.players[1]!.stock.water = 3;
+    state.players[0]!.stock.food = 5;
+    state.store.stock.crystite = 0;
+    startAuction(state, ['water', 'crystite', 'food']);
+    a(state).storeBudget = 50;
+    toWalk(state, { p1: 'buyer' });
+    walker(state, 'p0').price = 95;
+    walker(state, 'p1').price = 95;
+    expect(run(state, WALK.tradeStartMs)).toHaveLength(1);
+    for (const p of state.players) auctionDone(state, p.id);
+    stepAuction(state, TICK);
+    return state;
+  }
+
+  const snapshot = (state: GameState) =>
+    JSON.stringify({ players: state.players.map((p) => [p.money, p.stock]), fund: state.treasury.money, capital: state.store.capital, store: state.store.stock });
+
+  it('T-AC-A5-1: after a good closes, the auction sits in a close stage for WALK.closeMs, then the next good comes up', () => {
+    const state = closedWater();
+    expect(a(state)).toMatchObject({ stage: 'close', good: 'water', clockMs: WALK.closeMs, upNext: 'food' });
+    expect(WALK.closeMs).toBe(2_500);
+    for (let t = TICK; t < WALK.closeMs; t += TICK) {
+      expect(stepAuction(state, TICK)).toEqual([]);
+      expect(a(state)).toMatchObject({ stage: 'close', good: 'water' });
+    }
+    stepAuction(state, TICK);
+    // upNext named the good that really came up: past Crystite, which nobody could trade.
+    expect(a(state)).toMatchObject({ stage: 'status', good: 'food', skipped: [{ good: 'crystite', reason: 'nobody has any' }] });
+  });
+
+  it('T-AC-A5-2: no money, stock, fund or store capital moves during the close stage, and nobody can walk or switch sides', () => {
+    const state = closedWater();
+    const before = snapshot(state);
+    // The pair still stood matched at the bell: the close stage drops the deal, so no bar is drawn and nothing trades.
+    expect(a(state).deals).toEqual([]);
+    walker(state, 'p0').price = 95;
+    walker(state, 'p1').price = 95;
+    expect(() => setWalk(state, 'p1', 1)).toThrow(RuleError);
+    expect(() => declareRole(state, 'p2', 'buyer')).toThrow(RuleError);
+    for (let t = TICK; t < WALK.closeMs; t += TICK) {
+      stepAuction(state, TICK);
+      // No deal forms in the close stage, so the server's view never calls its clock slowed (mule-game.ts auctionView).
+      expect(a(state).deals).toEqual([]);
+    }
+    expect(a(state).stage).toBe('close');
+    expect(snapshot(state)).toBe(before);
+  });
+
+  it("T-AC-A5-3: each seat's receipt for the closed good: units, prices, the tax on a sale, and who with; and the month's running total", () => {
+    const state = closedWater();
+    const tax = Math.round(95 * state.treasury.salesTax);
+    expect(tax).toBeGreaterThan(0);
+    expect(a(state).receipts.p1).toEqual({ bought: { units: 1, gross: 95, tax: 0, prices: [95], with: ['p0'] }, sold: { units: 0, gross: 0, tax: 0, prices: [], with: [] } });
+    expect(a(state).receipts.p0).toEqual({ bought: { units: 0, gross: 0, tax: 0, prices: [], with: [] }, sold: { units: 1, gross: 95, tax, prices: [95], with: ['p1'] } });
+    expect(a(state).receipts.p2).toBeUndefined();
+    expect(a(state).tally).toEqual({ p1: -95, p0: 95 - tax });
+    // The next good starts a new receipt; the month's total carries on.
+    for (let t = 0; t < WALK.closeMs; t += TICK) stepAuction(state, TICK);
+    expect(a(state).good).toBe('food');
+    expect(a(state).receipts).toEqual({});
+    expect(a(state).tally).toEqual({ p1: -95, p0: 95 - tax });
+    // Next month's auction starts its total from nothing.
+    endAuction(state);
+    state.month++;
+    startAuction(state, ['food']);
+    expect(a(state).good).toBe('food');
+    expect(a(state).tally).toEqual({});
+  });
+
+  it('T-AC-A5-4: the last good closes too, with nothing up next, and then the auction is over', () => {
+    const state = newGame();
+    state.players[0]!.stock.water = 10;
+    startAuction(state, ['water']);
+    toWalk(state, { p1: 'buyer' });
+    for (const p of state.players) auctionDone(state, p.id);
+    stepAuction(state, TICK);
+    expect(a(state)).toMatchObject({ stage: 'close', good: 'water', upNext: null });
+    for (let t = 0; t < WALK.closeMs; t += TICK) stepAuction(state, TICK);
     expect(a(state).stage).toBe('over');
+  });
+
+  it('T-AC-A5-5: a good skipped at the end of its status screen has no close stage', () => {
+    const state = newGame();
+    state.players[0]!.stock.food = 6;
+    state.players[0]!.stock.water = 5;
+    startAuction(state, ['food', 'water']);
+    endStatus(state, Object.fromEntries(state.players.map((p) => [p.id, 'pass'])));
+    expect(a(state)).toMatchObject({ stage: 'status', good: 'water' });
+  });
+
+  it('T-AC-A5-6: ending the auction early from a close stage drifts the closed good once', () => {
+    const state = closedWater();
+    const ref = state.store.refPrice.water;
+    endAuction(state);
+    expect(a(state).stage).toBe('over');
+    expect(state.store.refPrice.water).toBe(ref);
   });
 });

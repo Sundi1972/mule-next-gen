@@ -438,14 +438,37 @@ export interface StatusRow {
 /** Why a good was skipped without a screen of its own. */
 export type SkipReason = 'nobody has any' | 'nobody buys' | 'nobody trading';
 
-/** The live goods auction: goods one at a time, each with a status screen and then a walk. */
+/** One side of a seat's receipt for a good: the units, each unit's price, the sales tax on a sale, and who with. */
+export interface ReceiptSide {
+  units: number;
+  /** Before tax. */
+  gross: number;
+  tax: number;
+  prices: number[];
+  /** Counterparties in the order first traded with: player ids, 'store' or 'ship'. */
+  with: string[];
+}
+
+/** What one seat bought and sold of the good that is up (UX audit G-5). */
+export interface GoodReceipt {
+  bought: ReceiptSide;
+  sold: ReceiptSide;
+}
+
+/** The live goods auction: goods one at a time, each with a status screen, a walk and a close stage with the receipts. */
 export interface LiveAuction extends WalkBoard {
-  /** The status screen's or the walk's clock, by stage. */
+  /** The status screen's, the walk's or the close stage's clock, by stage. */
   clockMs: number;
   /** Goods still to come after the current one. */
   queue: Good[];
   good: Good | null;
-  stage: 'status' | 'walk' | 'over';
+  stage: 'status' | 'walk' | 'close' | 'over';
+  /** In the close stage: the good that comes up next, or null when the auction ends after this one. */
+  upNext: Good | null;
+  /** Each seat that traded this good: what it bought and sold. Reset when the next good comes up. */
+  receipts: Record<string, GoodReceipt>;
+  /** Each seat's net credits from this month's auction so far: sales after tax less purchases. */
+  tally: Record<string, number>;
   /** Store prices for this good, fixed when it comes up. Whether the store trades at them depends on its stock and budget. */
   storeBuy: number;
   storeSell: number;

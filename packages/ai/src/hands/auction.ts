@@ -66,7 +66,8 @@ export class AuctionHand {
 
   tick(state: GameState, dt: number, act: Act): void {
     const a = state.auction;
-    if (state.phase !== 'auction' || !a || !a.good || a.stage === 'over') return;
+    // The close stage after a good (A-5) is the receipt on screen: nothing to decide, walk or press.
+    if (state.phase !== 'auction' || !a || !a.good || a.stage === 'over' || a.stage === 'close') return;
     const mind = this.brain.mind;
     const key = `${state.month}:${a.good}`;
     if (key !== this.key) this.reset(key);

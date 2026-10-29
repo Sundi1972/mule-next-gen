@@ -153,9 +153,12 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   let onServer: string[] = [];
   try {
     await readTheGoodsWalk({ seller: brix, buyer: lena, stayer: ossa }, tv, truth);
+    const receipt = readTheReceipt({ seller: brix, buyer: lena }, tv, truth);
+    receipt.catch(() => undefined);
     const shipGood = readTheShipGoodsOwnStatus(phones, tv, truth);
     shipGood.catch(() => undefined);
     await holdUpIntoTheNextGood(truth, ossa, [brix, lena]);
+    await receipt;
     await shipGood;
   } finally {
     // Stopped on a failure too: left running, it would throw once the room closes and bury the real error.
@@ -320,6 +323,8 @@ type Truth = {
   board: () => MuleView;
   idOf: (p: Phone) => string;
   stockOf: (p: Phone, good: Good) => number;
+  /** The seat's own auction view: the board's, plus its receipt and month's total (A-5). */
+  auctionOf: (p: Phone) => AuctionView | null;
   held: <T>(step: () => Promise<T>) => Promise<T>;
   /** The houses that buy the good up now, in the order the engine sells to them when they pay the same. */
   houseOrder: () => string[];
@@ -349,6 +354,7 @@ function serverTruth(server: MuleServer, code: string): Truth {
       return goodsMarket(state).houseBuys.map((h) => h.id);
     },
     idOf,
+    auctionOf: (p) => game(idOf(p)).auction,
     stockOf: (p, good) => {
       const me = game(idOf(p)).me;
       check(me, `${p.name}'s view carries their own stock`);
@@ -462,6 +468,8 @@ const stageShown = () => {
     }
   }
   if (root.querySelector('[data-testid=status-table]')) return `${good}:status`;
+  // A-5: the close stage, a phone's receipt over the still board or the TV's data-stage.
+  if (root.matches('[data-stage=close]') || root.querySelector('[data-testid=receipt-layer], [data-stage=close]')) return `${good}:close`;
   if (root.querySelector('[data-testid=walk-board]')) return `${good}:walk`;
   return null;
 };
@@ -501,8 +509,9 @@ function checkStages(who: string, seen: string[]): void {
   seen.forEach((entry, i) => {
     const [good, stage] = entry.split(':');
     check(stage !== 'declare', `UBER-AC-1: ${who} never shows a stage called declare, got ${all}`);
-    check(stage === 'status' || stage === 'walk', `UBER-AC-1: ${who} shows only status and walk, got "${entry}" in ${all}`);
+    check(stage === 'status' || stage === 'walk' || stage === 'close', `UBER-AC-1: ${who} shows only status, walk and close, got "${entry}" in ${all}`);
     if (stage === 'walk') check(seen[i - 1] === `${good}:status`, `UBER-AC-1: on ${who} the ${good} walk comes straight after its status screen, got ${all}`);
+    if (stage === 'close') check(seen[i - 1] === `${good}:walk`, `A-5: on ${who} the ${good} close stage comes straight after its walk, got ${all}`);
   });
   const food = seen.indexOf('food:status');
   check(food >= 0 && seen[food + 1] === 'food:walk', `UBER-AC-1: on ${who} Food's status screen is followed by its walk, got ${all}`);
@@ -637,6 +646,50 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
   const zero = Object.values(after).some((l) => l.endsWith(' (0)'));
   const moved = (id: string) => `${name(id)} ${before[id]} → ${after[id]}`;
   console.log(`✓ B-AC-2 (WS6): after ${traded.units} units traded, ${moved(sellerId)} and ${moved(buyerId)} on three phones and the TV${zero ? ', a surplus of 0 drawn "(0)"' : ''}`);
+}
+
+const fmtCr = (n: number) => Math.round(n).toLocaleString('en');
+const signedCr = (n: number) => (n > 0 ? `+${fmtCr(n)}` : n < 0 ? `−${fmtCr(-n)}` : '±0');
+
+/**
+ * A-5 (UX audit G-5, mock #audit-auction-receipt): when the good walked in readTheGoodsWalk closes, the seller's phone
+ * shows "Food: you sold N for X cr" with the sales tax spelled out, the buyer's "you bought", each header the month's
+ * total from the server, and the TV the close stage, with no seat's receipt on it. Read with the room held, since the
+ * close stage lasts WALK.closeMs of game time.
+ */
+async function readTheReceipt(cast: { seller: Phone; buyer: Phone }, tv: Page, truth: Truth): Promise<void> {
+  const { seller, buyer } = cast;
+  const walked = truth.board().auction;
+  check(walked?.stage === 'walk', `A-5 starts on a walk, got ${walked?.stage}`);
+  const good = walked.good;
+  await untilServer(truth, tv, (a) => a.good === good && a.stage === 'close', `A-5: ${GOOD_NAME[good]}'s walk ends in the close stage`, within(SCALE, WALK.goodMs + WALK.statusMs));
+  await truth.held(async () => {
+    const sold = truth.auctionOf(seller)!.receipt!.sold;
+    const bought = truth.auctionOf(buyer)!.receipt!.bought;
+    check(sold.units > 0 && bought.units > 0, `A-5 needs ${seller.name} to have sold and ${buyer.name} to have bought, got ${sold.units} and ${bought.units}`);
+    const net = sold.gross - sold.tax;
+    const text = async (p: Page, id: string) => (await p.getByTestId(id).first().innerText({ timeout: PRESS_MS })).replace(/\s+/g, ' ').trim();
+    const sellerTitle = await text(seller.page, 'receipt-title-sold');
+    check(sellerTitle === `${GOOD_NAME[good]}: you sold ${sold.units} for ${fmtCr(net)} cr`, `A-5: ${seller.name}'s receipt says what he sold after tax, got "${sellerTitle}"`);
+    const tax = await text(seller.page, 'receipt-tax');
+    const taxWords = `${fmtCr(sold.gross)} cr, less ${fmtCr(sold.tax)} cr sales tax: ${fmtCr(net)} The tax goes to the colony fund.`;
+    check(tax === taxWords, `A-5: ${seller.name}'s receipt spells out the tax, "${taxWords}", got "${tax}"`);
+    const buyerTitle = await text(buyer.page, 'receipt-title-bought');
+    check(buyerTitle === `${GOOD_NAME[good]}: you bought ${bought.units} for ${fmtCr(bought.gross)} cr`, `A-5: ${buyer.name}'s receipt says what she bought, got "${buyerTitle}"`);
+    check((await buyer.page.getByTestId('receipt-tax').count()) === 0, `A-5: ${buyer.name}'s purchase has no tax line`);
+    for (const p of [seller, buyer]) {
+      // The words and the number sit side by side in a flex row: innerText may or may not put a space between them.
+      const tally = (await text(p.page, 'receipt-tally')).replace(/^This month: ?/, 'This month: ');
+      const want = `This month: ${signedCr(truth.auctionOf(p)!.tally!)} cr`;
+      check(tally === want, `A-5: ${p.name}'s receipt ends with the month's total "${want}", got "${tally}"`);
+      check((await p.page.locator('[data-testid=guide] > header').getByText(/this month/i).count()) === 0, `A-5: ${p.name}'s header shows the money only`);
+    }
+    await tv.locator('[data-phase=auction][data-stage=close]').waitFor({ timeout: PRESS_MS });
+    const stage = await text(tv, 'tv-stage');
+    check(stage === 'Closed', `A-5: the TV names the close stage, got "${stage}"`);
+    check((await tv.getByTestId('receipt').count()) === 0, "A-5: the TV shows no seat's receipt");
+    console.log(`✓ A-5: ${GOOD_NAME[good]} closed: "${sellerTitle}" with "${tax}" on ${seller.name}'s phone, "${buyerTitle}" on ${buyer.name}'s, the month's totals on both receipts, and "Closed" on the TV`);
+  });
 }
 
 /** The best price a walker on `side` can meet, the store and the ship counted, and who holds it, as the TV names them. */

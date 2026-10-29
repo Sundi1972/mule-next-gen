@@ -29,6 +29,9 @@ function auction(over: Partial<AuctionView>): AuctionView {
     units: 0,
     status: [],
     skipped: [],
+    upNext: null,
+    receipt: null,
+    tally: null,
     ...over,
   };
 }
