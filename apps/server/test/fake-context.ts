@@ -109,6 +109,7 @@ export function fakeContext(options: { onChanged?: (at: number) => void; table?:
       };
     },
     changed: () => options.onChanged?.(now),
+    frame: () => {},
     hostId: () => host,
   };
   const advance = (ms: number) => {

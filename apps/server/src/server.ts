@@ -11,6 +11,8 @@ import { createRecordedGame } from './record.js';
 const MAX_MESSAGE_BYTES = 4_096;
 /** Messages per second a screen may send before it is told to slow down. */
 const RATE_LIMIT = 20;
+/** Unsent bytes a socket may hold before its frames are skipped: room for three ~19 kB views, yet only ~5 s of 600 B frames. */
+const FRAME_BACKLOG_BYTES = 64 * 1024;
 const IDLE_ROOM_MS = 30 * 60_000;
 
 const TYPES: Record<string, string> = {
@@ -106,6 +108,7 @@ function attach(socket: WebSocket, registry: RoomRegistry<MuleIntent, MuleView>)
     send: (msg) => {
       if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(msg));
     },
+    behind: () => socket.bufferedAmount > FRAME_BACKLOG_BYTES,
   };
   const from = { seatId: null as string | null };
   let room: Room<MuleIntent, MuleView> | undefined;

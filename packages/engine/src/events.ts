@@ -2,7 +2,7 @@ import { EVENTS, GAME } from './config.js';
 import { neighbours } from './grid.js';
 import { airBand, type AirBand } from './pollution.js';
 import { createRng } from './rng.js';
-import { RAW_GOODS, type EventKey, type EventKind, type GameState, type Good, type MonthEvent, type Phase, type Player, type Tile } from './types.js';
+import { RAW_GOODS, type EventKey, type EventKind, type GameState, type Good, type MonthEvent, type Phase, type Player, type SpecialKind, type Tile } from './types.js';
 
 type Rng = ReturnType<typeof createRng>;
 type Direction = NonNullable<MonthEvent['direction']>;
@@ -91,7 +91,7 @@ export function buildEvent(state: GameState, key: EventKey, rng: Rng, player?: s
     origin = { x: start.x, y: start.y };
     hit =
       key === 'pestSwarm'
-        ? spread(state, start, (t) => t.outfit === 'food' && t.owner !== null, EVENTS.pestSwarm.maxPlots)
+        ? spread(state, start, (t) => t.outfit === 'food' && t.owner === start.owner, EVENTS.pestSwarm.maxPlots)
         : key === 'wildfire'
           ? spread(state, start, (t) => t.outfit === 'food' && t.owner === start.owner, Infinity)
           : [start];
@@ -101,10 +101,20 @@ export function buildEvent(state: GameState, key: EventKey, rng: Rng, player?: s
   return toEvent(state, key, origin, hit, direction, player);
 }
 
+/**
+ * What a per-plot row's event turns its plot into. The special is gone by the time the event is built (settleSpecials
+ * deletes it), so the event carries it for the screens to show until the hit lands.
+ */
+const BECOMES: Partial<Record<EventKey, { was: SpecialKind; becomes: 'plain' }>> = {
+  cavernCollapse: { was: 'crystalCavern', becomes: 'plain' },
+};
+
 /** A per-plot row's event on the plot it fired for: that plot alone, for its owner, its output already made (delta 0). */
 export function plotEvent(state: GameState, key: EventKey, index: number): MonthEvent {
   const tile = state.tiles[index]!;
-  return toEvent(state, key, { x: tile.x, y: tile.y }, [tile], undefined, tile.owner ?? undefined);
+  const event = toEvent(state, key, { x: tile.x, y: tile.y }, [tile], undefined, tile.owner ?? undefined);
+  const change = BECOMES[key];
+  return change ? { ...event, plots: event.plots.map((p) => ({ ...p, ...change })) } : event;
 }
 
 function toEvent(state: GameState, key: EventKey, origin: MonthEvent['origin'], hit: Tile[], direction?: Direction, player?: string): MonthEvent {
