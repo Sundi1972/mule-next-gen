@@ -506,7 +506,7 @@ export function PhoneRevealWithTv({ offices, t }: { offices: readonly Office[]; 
                       <span data-num className="font-mono font-bold">
                         {x.votes}
                       </span>
-                      {x.id === b.race.winner && <span className="rounded-chip bg-holo px-1 font-mono text-[9px] font-bold leading-4 text-on-holo">ELECTED</span>}
+                      {x.id === b.race.winner && <span className="rounded-chip bg-holo px-1 font-mono text-[10px] font-bold leading-4 text-on-holo">ELECTED</span>}
                     </span>
                   ))}
                 {known && <span className={cx('text-[11px] leading-snug', b.race.how === 'votes' ? 'text-ink-2' : 'text-warn')}>{howWords(b.race, ME)}</span>}
