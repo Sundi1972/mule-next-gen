@@ -9,6 +9,7 @@
     "start": "tsx src/index.ts",
     "brain:spike": "tsx src/brain/spike.ts",
     "brain:trial": "tsx src/brain/trial.ts",
+    "replay": "tsx src/replay-cli.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

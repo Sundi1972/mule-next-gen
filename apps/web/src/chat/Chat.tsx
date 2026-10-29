@@ -78,7 +78,7 @@ function Bubble({ line, seat, me, size = 'phone', left = false }: { line: ChatMe
       data-line={line.id}
       role="status"
     >
-      {whisper && <span className="mr-1 font-mono text-[9px] font-bold text-holo">🔒 TO {to}</span>}
+      {whisper && <span className="mr-1 font-mono text-[10px] font-bold text-holo">🔒 TO {to}</span>}
       {line.text}
       {/* The tail still points at the speaker when the bubble has slid. */}
       <span
@@ -129,19 +129,22 @@ function SeatRow() {
   const speaker = fallback ? seats.get(fallback.from) : undefined;
   return (
     <>
-      <div className="flex items-center gap-2 @min-[1100px]/shell:gap-3" data-testid="seat-row">
+      {/* Five others fit the narrowest rail on one line: a long name gives way (its whole name is its title), the creatures never do. */}
+      <div className="flex min-w-0 items-center gap-1 @min-[1100px]/shell:gap-3" data-testid="seat-row">
         {[...seats.values()]
           .filter(({ player }) => player.id !== me)
           .map(({ player, slot }) => (
             <span
               key={player.id}
-              className={cx('inline-flex flex-col items-center rounded-control px-0.5 transition-shadow', fallback?.from === player.id && 'ring-2')}
+              className={cx('inline-flex min-w-6 flex-col items-center rounded-control px-0.5 transition-shadow', fallback?.from === player.id && 'ring-2')}
               style={fallback?.from === player.id ? { ['--tw-ring-color' as string]: SLOT_COLOR[slot] } : undefined}
               data-testid={`seat-${player.id}`}
               data-speaking={fallback?.from === player.id || undefined}
             >
               <Creature species={player.species} color={SLOT_COLOR[slot]} size={20} />
-              <span className="font-mono text-[9px] text-ink-3 @min-[1100px]/shell:text-[10px]">{player.name}</span>
+              <span className="max-w-full truncate font-mono text-[10px] text-ink-3" title={player.name}>
+                {player.name}
+              </span>
             </span>
           ))}
       </div>

@@ -18,6 +18,9 @@ import { HandoffCode, useHandoffCode, type CodeState } from './HandoffCode';
  * behaves the same in the mock frames and in the app. Under 1100 px it is
  * today's phone layout; from 1100 px the rail widens, the type grows, and the
  * stage may hold two things at once instead of stretching one.
+ *
+ * On a short screen (the product's `short:`, a small phone on its side) the header, the rail and the footer pack
+ * their padding tighter, as PhoneShell does on trunk; the mock's small frame stands for it with `phone-short:`.
  */
 
 /** From this width of the shell the layout is "wide" (laptop and up). One number, shared by CSS and code. */
@@ -46,7 +49,7 @@ function FoldingNowCard({ now, mark }: { now: Now; mark?: ReactNode }) {
     return (
       <div className="relative">
         <NowCard now={now} />
-        <button type="button" onClick={() => setOpen(false)} aria-expanded aria-label="Fold the Now card" className="absolute right-1.5 top-1.5 grid size-7 place-items-center rounded-chip text-holo hover:bg-holo-soft" data-testid="now-fold">
+        <button type="button" onClick={() => setOpen(false)} aria-expanded aria-label="Fold the Now card" className="absolute right-1.5 top-1.5 grid size-8 place-items-center rounded-chip text-holo hover:bg-holo-soft" data-testid="now-fold">
           <svg aria-hidden viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
             <path d="M6 15l6-6 6 6" />
           </svg>
@@ -64,7 +67,8 @@ function FoldingNowCard({ now, mark }: { now: Now; mark?: ReactNode }) {
         data-testid="now"
       >
         <span className="label-caps shrink-0 text-[10px]! @min-[1100px]/shell:text-xs!">Now</span>
-        <span className="min-w-0 flex-1 font-display text-sm font-semibold leading-tight @min-[1100px]/shell:text-lg" data-testid="now-title">
+        {/* Folded it is one line: a long title truncates (its whole is one tap away), so the rail below keeps its room. */}
+        <span className="min-w-0 flex-1 truncate font-display text-sm font-semibold leading-tight @min-[1100px]/shell:text-lg" data-testid="now-title">
           {now.title}
         </span>
         <svg aria-hidden viewBox="0 0 24 24" width={14} height={14} className="shrink-0 text-holo" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
@@ -114,6 +118,7 @@ export function GameShell({
   standing,
   foldNow = false,
   nowMark,
+  chatLines,
   children,
 }: {
   phase: string;
@@ -136,6 +141,8 @@ export function GameShell({
   foldNow?: boolean;
   /** Mock only: drawn over the Now card, the audit's numbered marker. */
   nowMark?: ReactNode;
+  /** Off unless given: how many of the table chat's last lines the header's ticker keeps (2 on a phone). */
+  chatLines?: number;
   children: ReactNode;
 }) {
   const chat = useChat();
@@ -159,7 +166,7 @@ export function GameShell({
           {children}
         </main>
         <aside className="flex w-(--rail) shrink-0 flex-col border-l border-holo-faint bg-void/40 @min-[1100px]/shell:w-[400px]" data-testid="guide">
-          <header className="flex flex-col gap-1 border-b border-holo-faint px-3 pb-2 pt-2 @min-[1100px]/shell:gap-2 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4">
+          <header className="flex flex-col gap-1 border-b border-holo-faint px-3 pb-2 pt-2 phone-short:gap-0.5 phone-short:pb-1 phone-short:pt-1 @min-[1100px]/shell:gap-2 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 flex-col">
                 <span className="label-caps text-[10px]! @min-[1100px]/shell:text-xs!">
@@ -217,16 +224,16 @@ export function GameShell({
             {chat && (
               <div className="relative flex flex-col gap-1 border-t border-holo-faint pt-1.5 @min-[1100px]/shell:gap-2 @min-[1100px]/shell:pt-2.5" data-testid="table-chat">
                 <SeatRow anchored={anchored} />
-                <Ticker />
+                <Ticker {...(chatLines !== undefined ? { lines: chatLines } : {})} />
               </div>
             )}
           </header>
-          <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 *:shrink-0 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4">
+          <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 *:shrink-0 phone-short:gap-2 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4">
             {foldNow ? <FoldingNowCard key={now.title} now={now} mark={nowMark} /> : <NowCard now={now} />}
             {rail}
           </div>
           {footer && (
-            <div className="flex flex-col gap-2 border-t border-holo-faint bg-void/60 px-3 pb-2.5 pt-2.5 @min-[1100px]/shell:gap-3 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4" data-testid="actions">
+            <div className="flex flex-col gap-2 border-t border-holo-faint bg-void/60 px-3 pb-2.5 pt-2.5 phone-short:gap-1.5 phone-short:pb-1.5 phone-short:pt-1.5 @min-[1100px]/shell:gap-3 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4" data-testid="actions">
               {footer}
             </div>
           )}
