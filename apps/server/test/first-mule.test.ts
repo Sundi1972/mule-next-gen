@@ -121,6 +121,39 @@ describe('A-1: month 1’s development clock waits for every first MULE', () => 
     expect(() => game.handle(LENA, { type: 'continue' })).toThrow(RuleError);
   });
 
+  it("A-1: once in, you wait: Lena's MULE is in and Ossa's still to come, so her buy, install, analyse and filter are refused, her money and the corral unchanged", () => {
+    const { game, installFirst } = firstMonth([LENA, OSSA]);
+    installFirst(LENA);
+    const before = game.viewFor(LENA);
+    const money = before.players.find((p) => p.id === LENA)!.money;
+    const plot = before.tiles.find((t) => t.owner === LENA)!;
+    for (const intent of [{ type: 'buyMule' }, { type: 'install', x: plot.x, y: plot.y }, { type: 'analyse', x: plot.x, y: plot.y }, { type: 'filter', x: plot.x, y: plot.y }] as const)
+      expect(() => game.handle(LENA, intent), intent.type).toThrow(new RuleError("Waiting for the others' first MULEs"));
+    const after = game.viewFor(LENA);
+    expect(after.players.find((p) => p.id === LENA)!.money).toBe(money);
+    expect(after.storeMules).toBe(before.storeMules);
+    expect(after.players.find((p) => p.id === LENA)!.colonist?.walk ?? null, 'a refused tap sets no walk off').toBeNull();
+    expect(after.clockWaitsFor).toEqual([OSSA]);
+  });
+
+  it('A-1: once in, you wait, but the pub is open', () => {
+    const g = firstMonth([LENA, OSSA]);
+    g.installFirst(LENA);
+    tapThere(g.game, g, LENA, { type: 'pub' });
+    expect(g.game.viewFor(LENA).players.find((p) => p.id === LENA)!.doneDeveloping).toBe(true);
+  });
+
+  it('A-1 (negative): a seat not yet in buys its first MULE as ever while another seat waits', () => {
+    const { game, installFirst, ctx, advance } = firstMonth([LENA, OSSA]);
+    installFirst(LENA);
+    const corral = game.viewFor(null).storeMules;
+    game.handle(OSSA, { type: 'buyMule' });
+    const walk = game.viewFor(null).players.find((p) => p.id === OSSA)!.colonist!.walk!;
+    advance(walk.arrivesAt - ctx.now());
+    expect(game.viewFor(OSSA).me!.carriedMule).toBe('empty');
+    expect(game.viewFor(null).storeMules).toBe(corral - 1);
+  });
+
   it('A-1: month 2 is unchanged: the clock starts at once, whoever has no MULE yet', () => {
     const { game, ctx, state, advance } = firstMonth([]);
     for (const id of [LENA, OSSA]) game.handle(id, { type: 'pub' });
@@ -162,5 +195,32 @@ describe('A-1: games with AI seats still finish month 1 (WS1’s stall seeds)', 
     expect(game.viewFor(null).month, 'month 1 ended').toBe(2);
     expect(devMs, 'development ran its full clock').toBeGreaterThanOrEqual(FULL_MS);
     expect(devMs, 'the wait and the full clock, never a stall').toBeLessThanOrEqual(2 * FULL_MS);
+  });
+
+  it('A-1: once in, an AI waits or goes to the pub while a human holds the clock; nothing it does changes the table, and the host can still start the clock', () => {
+    const fake = fakeContext({ table });
+    const game = new MuleGame(fake.ctx, 103, { politics: true });
+    game.start(table);
+    const state = (game as unknown as { state: GameState }).state;
+    for (let i = 0; i < 20_000 && game.viewFor(null).phase !== 'development'; i++) {
+      const phase = game.viewFor(null).phase;
+      if (phase === 'planning' && !state.tiles.some((t) => t.owner === 'h')) state.tiles[plotNearStore(state, 0)]!.owner = 'h';
+      if (phase === 'planning' || phase === 'landGrant') readyAll(game);
+      fake.advance(100);
+    }
+    expect(state.tiles.some((t) => t.owner === 'h'), 'Hal owns a plot, so the clock waits for him').toBe(true);
+    for (let t = 0; t < 4 * FULL_MS; t += 100) fake.advance(100);
+    expect(game.viewFor(null).clockWaitsFor, 'four clocks on, only idle Hal is still to come').toEqual(['h']);
+    const settled = game.viewFor(null);
+    for (let t = 0; t < FULL_MS; t += 100) fake.advance(100);
+    const later = game.viewFor(null);
+    for (const p of later.players.filter((q) => q.isAi)) {
+      const was = settled.players.find((q) => q.id === p.id)!;
+      expect({ money: p.money, walking: p.colonist?.walk ?? null }, `${p.name} waits once in`).toEqual({ money: was.money, walking: null });
+    }
+    expect(later.storeMules).toBe(settled.storeMules);
+    game.handle('h', { type: 'continue' });
+    for (let i = 0; i < 20_000 && game.viewFor(null).phase === 'development'; i++) fake.advance(100);
+    expect(game.viewFor(null).phase).toBe('production');
   });
 });
