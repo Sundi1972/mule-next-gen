@@ -728,6 +728,8 @@ describe("the new Governor's promise (C68, E-7)", () => {
     expect(order.every((at) => at >= 0), `every part in the row: ${order.join(', ')}`).toBe(true);
     expect(order).toEqual([...order].sort((a, b) => a - b));
     expect(tagOf(html, 'governor-verdict'), 'the verdict is announced as it changes').toMatch(/role="status"/);
+    // WS6 on #190: 40 px controls on a phone keep the row above the footer at 844; 44 px from 1100 px.
+    for (const id of ['tax-down', 'tax-up', 'tax-confirm']) expect(tagOf(html, id), id).toMatch(/\bh-10! .*@min-\[1100px\]\/shell:h-11!/);
   });
 
   it.each<[string, TaxPromise, number, number, boolean]>([

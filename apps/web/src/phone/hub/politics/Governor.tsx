@@ -52,10 +52,10 @@ function SalesTax({ politics }: { politics: PoliticsView }) {
         )}
       </p>
       <div className="flex items-center gap-1 @min-[1100px]/shell:gap-1.5" data-testid="governor-tax-row">
-        <Button size="md" variant="outline" className="w-10 shrink-0 px-0 @min-[1100px]/shell:w-11" aria-label="One point lower" disabled={tax <= low} onClick={() => setTax(Math.max(low, tax - 1))} data-testid="tax-down">
+        <Button size="md" variant="outline" className="h-10! w-10 shrink-0 px-0 @min-[1100px]/shell:h-11! @min-[1100px]/shell:w-11" aria-label="One point lower" disabled={tax <= low} onClick={() => setTax(Math.max(low, tax - 1))} data-testid="tax-down">
           −
         </Button>
-        <span className="flex h-11 w-14 shrink-0 flex-col items-center justify-center gap-0.5 @min-[1100px]/shell:w-24">
+        <span className="flex h-10 w-14 shrink-0 flex-col items-center justify-center gap-0.5 @min-[1100px]/shell:h-11 @min-[1100px]/shell:w-24">
           <span data-num className={cx('font-mono text-xl font-bold leading-none @min-[1100px]/shell:text-3xl', breaks && 'text-alert')} data-testid="tax-value">
             {tax}%
           </span>
@@ -68,13 +68,13 @@ function SalesTax({ politics }: { politics: PoliticsView }) {
             </span>
           )}
         </span>
-        <Button size="md" variant="outline" className="w-10 shrink-0 px-0 @min-[1100px]/shell:w-11" aria-label="One point higher" disabled={tax >= high} onClick={() => setTax(Math.min(high, tax + 1))} data-testid="tax-up">
+        <Button size="md" variant="outline" className="h-10! w-10 shrink-0 px-0 @min-[1100px]/shell:h-11! @min-[1100px]/shell:w-11" aria-label="One point higher" disabled={tax >= high} onClick={() => setTax(Math.min(high, tax + 1))} data-testid="tax-up">
           +
         </Button>
         <Button
           size="md"
           variant={breaks ? 'danger' : 'holo'}
-          className="min-w-0 flex-1 whitespace-nowrap px-1.5 @min-[1100px]/shell:px-2"
+          className="h-10! min-w-0 flex-1 whitespace-nowrap px-1.5 @min-[1100px]/shell:h-11! @min-[1100px]/shell:px-2"
           disabled={state !== 'open'}
           onClick={() => {
             client.intent({ type: 'setTax', percent: tax });

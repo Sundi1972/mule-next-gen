@@ -102,7 +102,7 @@ function checkHub(f: Shown, at: string, held: readonly string[]): void {
   check(f.thisMonthInColony, `B-AC-14: at ${at} the Colony desk holds "This month you need"`);
   const foreign = f.desks.filter((d) => (OFFICE_DESKS as readonly string[]).includes(d) && !held.includes(d));
   check(foreign.length === 0, `B-AC-14 (negative): a player sees no desk of an office they do not hold, got ${foreign.join(', ')}`);
-  const expected = [...TODAYS_DESKS, ...held];
+  const expected = [...held, ...TODAYS_DESKS];
   check(JSON.stringify(f.desks) === JSON.stringify(expected), `B-AC-14: at ${at} the desks drawn are exactly ${expected.join(', ')}, got ${f.desks.join(', ')}`);
   check(JSON.stringify(f.tools) === JSON.stringify(TODAYS_TOOLS), `B-AC-14: at ${at} the map tools drawn are exactly ${TODAYS_TOOLS.join(', ')}, got ${f.tools.join(', ')}`);
   check(f.reviewLabels.length === 0, `C17: unbuilt slots are not drawn, and no SOON or slice label shows; got ${f.reviewLabels.join(' | ')}`);

@@ -206,6 +206,12 @@ async function main(): Promise<void> {
     check((await taxValue.innerText()).trim() === `${start}%`, `B-AC-63: the tax desk opens at the colony's ${start}%, got "${await taxValue.innerText()}"`);
     await lena.page.getByTestId('gov-promise').filter({ hasText: `You promised: no higher than ${LENA_CAP}%` }).waitFor({ timeout: PRESS_MS });
     check((await ossa.page.getByTestId('desk-governor').count()) === 0, 'B-AC-63 (negative): Ossa, not Governor, has no Governor desk');
+    // E-9: a human holding an office gets its desk first, on one row; everyone else's tabs are today's. CI's pinned
+    // whole-game seed never makes a human Governor, so this is where the office-first order is guarded on every run.
+    const tabs = async (page: Page) => page.locator('[data-testid=desks] [role=tab]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
+    const lenaTabs = await tabs(lena.page);
+    check(lenaTabs[0] === 'desk-governor' && lenaTabs.filter((t) => t === 'desk-governor').length === 1, `E-9: the Governor's desk is Lena's first tab, got ${lenaTabs.join(', ')}`);
+    check(JSON.stringify(lenaTabs.slice(1)) === JSON.stringify(await tabs(ossa.page)), `E-9: after it, Lena's tabs are Ossa's, got ${lenaTabs.join(', ')}`);
     await ossa.page.getByTestId('result-how-governor').waitFor({ timeout: PRESS_MS });
     // T-AC-70: the promise stands beside the tax on every phone.
     await everyone(phones, (p) => p.page.getByTestId('office-governor').filter({ hasText: `promised up to ${LENA_CAP}%` }).getByTestId('promise-status').filter({ hasText: `tax ${start}%, kept` }).waitFor({ timeout: PRESS_MS }));
