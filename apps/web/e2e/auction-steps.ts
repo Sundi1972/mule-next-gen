@@ -15,6 +15,7 @@ import type { MuleServer } from '../../server/src/server.js';
 import { check, headerSlot, held, launch, PHONE, PHONE_SMALL, startServer, TV, type AuctionSteps } from './harness';
 import { hostContinuesWithout } from './hub-steps';
 import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
+import { railFits } from './shell-steps';
 import { AUDIT_JS, MIN_TEXT, type AuditRead } from './small-phone-audit';
 
 const PRESS_MS = 2_000;
@@ -590,6 +591,7 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
   await truth.held(async () => {
     await readTheWalkWords(phones, truth, name);
     await smallPhoneReads(buyer, 'walk');
+    console.log(`✓ C20, the walk's hint above the footer: ${await railFits(buyer.page, { key: 'hint' })}`);
   });
   const tags = { ask: String(ask.price), bid: String(bid.price), gap: `${ask.price - bid.price} APART` };
   await Promise.all(screens.map((s) => untilShows(s, readTags, tags, "B-AC-1: the lines sit at the server's lowest ask and highest bid, with the gap between them")));
