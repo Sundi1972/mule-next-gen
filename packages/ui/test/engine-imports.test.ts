@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -31,30 +32,56 @@ interface Use {
   name: string;
 }
 
-/**
- * The names a source imports or re-exports from the engine. A clause holds no quote or semicolon, so the match never
- * runs back over an earlier import. A deep path into the engine counts as `*`: it reaches past the package's front door.
- */
-function engineNames(source: string, _file: string): string[] {
-  const names: string[] = [];
-  const statement = /\b(?:import|export)\s+(?:type\s+)?([^;'"]*?)\s*from\s*['"](@mule\/engine(?:\/[^'"]*)?)['"]/g;
-  for (const [, clause, spec] of source.matchAll(statement)) {
-    if (spec !== ENGINE || clause!.includes('*')) {
-      names.push('*');
-      continue;
-    }
-    const brace = clause!.indexOf('{');
-    const head = (brace < 0 ? clause! : clause!.slice(0, brace)).replace(/,\s*$/, '').trim();
-    if (head) names.push('default');
-    if (brace >= 0) {
-      const inner = clause!.slice(brace + 1, clause!.lastIndexOf('}'));
-      for (const part of inner.split(',')) {
-        const name = part.trim().replace(/^type\s+/, '').split(/\s+as\s+/)[0]!.trim();
-        if (name) names.push(name);
-      }
-    }
+/** The engine package on disk: a relative path that lands in it reaches past the front door as surely as a deep one. */
+const ENGINE_DIR = resolve(SRC, '../../engine');
+
+/** How a module specifier in `file` reaches the engine: by its front door, past it, or not at all. */
+function reachOfSpecifier(spec: string, file: string): 'front' | 'deep' | 'none' {
+  if (spec === ENGINE) return 'front';
+  if (spec.startsWith(`${ENGINE}/`)) return 'deep';
+  if (!spec.startsWith('.')) return 'none';
+  const rel = relative(ENGINE_DIR, resolve(dirname(file), spec));
+  return rel.startsWith('..') || isAbsolute(rel) ? 'none' : 'deep';
+}
+
+/** The names an import or export clause takes from the front door: `default`, `*` for a namespace, or each name. */
+function clauseNames(node: ts.ImportDeclaration | ts.ExportDeclaration): string[] {
+  if (ts.isExportDeclaration(node)) {
+    const clause = node.exportClause;
+    if (!clause || ts.isNamespaceExport(clause)) return ['*'];
+    return clause.elements.map((e) => (e.propertyName ?? e.name).text);
   }
-  for (const _ of source.matchAll(/\bimport\(\s*['"]@mule\/engine(?:\/[^'"]*)?['"]\s*\)/g)) names.push('*');
+  const clause = node.importClause;
+  if (!clause) return [];
+  const names = clause.name ? ['default'] : [];
+  const bound = clause.namedBindings;
+  if (bound && ts.isNamespaceImport(bound)) names.push('*');
+  if (bound && ts.isNamedImports(bound)) names.push(...bound.elements.map((e) => (e.propertyName ?? e.name).text));
+  return names;
+}
+
+/**
+ * The names a source imports or re-exports from the engine, read by TypeScript's own parser, so comments, line breaks
+ * and quote styles cannot hide one. Past the front door (a deep package path, a relative path into the engine, an
+ * `import x = require()` or a dynamic import) counts as `*`.
+ */
+function engineNames(source: string, file: string): string[] {
+  const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, false, file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const names: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteralLike(node.moduleSpecifier)) {
+      const reach = reachOfSpecifier(node.moduleSpecifier.text, file);
+      if (reach === 'front') names.push(...clauseNames(node));
+      if (reach === 'deep') names.push('*');
+    } else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference) && ts.isStringLiteralLike(node.moduleReference.expression)) {
+      if (reachOfSpecifier(node.moduleReference.expression.text, file) !== 'none') names.push('*');
+    } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+      const [arg] = node.arguments;
+      if (arg && ts.isStringLiteralLike(arg) && reachOfSpecifier(arg.text, file) !== 'none') names.push('*');
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
   return names;
 }
 
