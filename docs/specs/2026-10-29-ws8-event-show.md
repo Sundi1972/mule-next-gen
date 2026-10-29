@@ -723,5 +723,7 @@ folded    §3 EventView/EventShowView entries
   `apps/web/src/phone/PhoneApp.tsx` (the overlay mount, C10; one line each); WS3: `packages/protocol/src/index.ts`,
   `apps/server/src/mule-game.ts`; WS6: `ProductionMap.tsx`, `TvProduction.tsx`, `phone/Production.tsx`,
   `apps/server/test/production-view.test.ts` (fixtures), `apps/web/test/production-show.test.ts` (AM-6/AM-7),
-  `apps/web/e2e/production-steps.ts` (PM ruling A, B-AC-7 per event). WS8 owns `design/mocks/ws8-events` (AM-11).
+  `apps/web/e2e/production-steps.ts` (PM ruling A, B-AC-7 per event); WS3 also: `apps/server/test/land-auction.test.ts`
+  (one helper line that waits out a roll call, AM-14). WS8 owns `design/mocks/ws8-events` (AM-11) and
+  `apps/server/test/events-hold.test.ts` (WS3 reviews).
 - Enforcement: `.handover/SEAMS.md` (PM-owned) and owner review on every PR; no CODEOWNERS (debt, §7 R-6).

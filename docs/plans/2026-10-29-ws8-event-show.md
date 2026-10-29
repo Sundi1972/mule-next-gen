@@ -247,44 +247,61 @@ Before suggesting merge of `ws8-show-pr1` into `ws8-events`:
 
 ## Phase P2 · PR-2 (every phase, wave 2) — starts when WS1's wave-2 rows land
 
-### Task 9: The events of every phase in the view — C8
+**Scope as built (29 Oct, lead; spec AM-13/AM-14):** WS1's event model reached the trunk (#210) with several
+production events a month and sickness as the one event outside production; its wave-2 rows (pirate raid, store fire,
+effects[]) did not. So PR-2 builds C8–C11 for sickness and C12 for the cavern collapse only. Task 13's other stories,
+B-AC-3 and the auction-phase front-to-back step move to **PR-3** (starts when WS1's wave-2 rows land).
+
+### Task 8a: The re-graft (R-1) and the zero-total guard · ✅ merged 59e5db30
+- [x] T-AC-1/T-AC-2 on real engine months, no injection (seed 26: comet + pest swarm; one event; quiet)
+- [x] `eventShow` gives 0 ms shares when every event plays 0 ms (WS3's review nit), RED first
+
+### Task 8b: The PR-1 boundary review's minors · ✅ merged aaceacf1
+- [x] M-1 dead EventCard/EventKind; M-2 module surface; M-3 one playing rule (SETTLE_MARGIN 0.2); M-4 one show per
+  screen; M-9 comments; M-10 `short`, `phaseNoun`; cards split out; e2e/events.ts through trunk's untimed month end
+
+### Task 8c: The cavern collapse story — C12 (the one non-wave-1 row on the trunk) · ✅ merged e2f10b1d, d77edbf7
+- [x] T-AC-4 covers every key incl. cavernCollapse; HC-6; the jolt, window, landing, reveal and phone shake pinned
+- [ ] The "CAVED IN" chip and the badge until landing: wait for WS1's `was`/`becomes` (71decb6d) on the trunk
+
+### Task 9: The events of every phase in the view — C8 · ✅ merged fafd339d
 
 **Depends on:** PR-1 merged; WS1 wave-2 payload · **ACs verified:** T-AC-10 · **Spec sections consumed:** §1 C8, §3
 
-- [ ] **Step 1: Write the failing test `T-AC-10: the view carries the phase's events with startsAt and effects`** — contract, `events-view.test.ts`; negative: a phase with no events → empty
-- [ ] **Step 2: Run** → FAIL
-- [ ] **Step 3: Implement C8 per spec §1 C8 and §3.** Mechanism: extract_interface. Files: `packages/protocol/src/index.ts`, `apps/server/src/mule-game.ts`.
-- [ ] **Step 4: Run** server tests → PASS · **Step 5: Commit** red then green; send WS3 the hunks
+- [x] **Step 1: Write the failing test `T-AC-10: the view carries the phase's events with startsAt and effects`** — contract, `events-view.test.ts`; negative: a phase with no events → empty
+- [x] **Step 2: Run** → FAIL
+- [x] **Step 3: Implement C8 per spec §1 C8 and §3.** Mechanism: extract_interface. Files: `packages/protocol/src/index.ts`, `apps/server/src/mule-game.ts`.
+- [x] **Step 4: Run** server tests → PASS · **Step 5: Commit** red then green; send WS3 the hunks
 
-### Task 10: The hold — C9
+### Task 10: The hold — C9 · ✅ merged cadaeabd, 82888455
 
 **Depends on:** Task 9 · **ACs verified:** T-AC-7, T-AC-8, T-AC-9 · **Spec sections consumed:** §1 C9, §2 RULE-4, §0.2 HC-4
 
-- [ ] **Step 1: Write the failing tests `T-AC-7: an AI press during the auction's show is not applied; a human bid gets RuleError` and `T-AC-8: five events hold only capMs; planning is not held`**
+- [x] **Step 1: Write the failing tests `T-AC-7: an AI press during the auction's show is not applied; a human bid gets RuleError` and `T-AC-8: five events hold only capMs; planning is not held`**
   Altitude: promise — `MuleGame` with the fake context, advancing its clock. Negative: after the hold the same press applies.
-- [ ] **Step 2: Run** → FAIL
-- [ ] **Step 3: Implement C9 per spec §1 C9 and §2 RULE-4.** Mechanism: wrap. Path: `apps/server/src/mule-game.ts::enterPhase`.
-- [ ] **Step 4: Run** server tests → PASS (mule-game.test.ts, phase-scale.test.ts unchanged); re-run T-AC-9 (sim byte-identical)
-- [ ] **Step 5: Commit** red then green; send WS3 the hunk
+- [x] **Step 2: Run** → FAIL
+- [x] **Step 3: Implement C9 per spec §1 C9 and §2 RULE-4.** Mechanism: wrap. Path: `apps/server/src/mule-game.ts::enterPhase`.
+- [x] **Step 4: Run** server tests → PASS (mule-game.test.ts, phase-scale.test.ts unchanged); re-run T-AC-9 (sim byte-identical)
+- [x] **Step 5: Commit** red then green; send WS3 the hunk
 
-### Task 11: The overlays — C10
+### Task 11: The overlays — C10 · ✅ merged b5138530, 82888455, 36cd2a01
 
 **Depends on:** Task 9 · **ACs verified:** B-AC-3 (with Task 13), B-AC-4 · **Spec sections consumed:** §1 C10, §2 RULE-3
 
-- [ ] **Step 1: Write the failing test `B-AC-4: alone, the phone plays an auction-phase event; with a board, the light card`** — rendered PhoneApp with a fixture view
-- [ ] **Step 2: Run** → FAIL
-- [ ] **Step 3: Implement C10 per spec §1 C10.** Create `apps/web/src/events/**`; one line in `TableApp.tsx::TvGame`, one in `PhoneApp.tsx` beside `EmoteBubbles` (`ShellLayer`).
-- [ ] **Step 4: Run** web tests → PASS · **Step 5: Commit**; send WS4 the two lines
+- [x] **Step 1: Write the failing test `B-AC-4: alone, the phone plays an auction-phase event; with a board, the light card`** — rendered PhoneApp with a fixture view
+- [x] **Step 2: Run** → FAIL
+- [x] **Step 3: Implement C10 per spec §1 C10.** Create `apps/web/src/events/**`; one line in `TableApp.tsx::TvGame`, one in `PhoneApp.tsx` beside `EmoteBubbles` (`ShellLayer`).
+- [x] **Step 4: Run** web tests → PASS · **Step 5: Commit**; send WS4 the two lines
 
-### Task 12: Sickness in the roll call — C11
+### Task 12: Sickness in the roll call — C11 · ✅ merged cadaeabd, b5138530
 
 **Depends on:** Tasks 9, 11 · **ACs verified:** T-AC-10 (the sick bulletin case)
 
-- [ ] **Step 1: Extend `T-AC-10` with a development case: a player who fell sick is listed as a bulletin with its reason**, and RULE-1's roll call: one sick player plays rollCallMs (4 000); two share it (2 000 each) and production's or the hold's length counts it once → run → FAIL (kills the bulletin mutants the Task 1 review found surviving)
-- [ ] **Step 2: Implement C11 per spec §1 C11.** Pin: `phone/Develop.tsx`'s sick status line untouched.
-- [ ] **Step 3: Run** → PASS · **Step 4: Commit**
+- [x] **Step 1: Extend `T-AC-10` with a development case: a player who fell sick is listed as a bulletin with its reason**, and RULE-1's roll call: one sick player plays rollCallMs (4 000); two share it (2 000 each) and production's or the hold's length counts it once → run → FAIL (kills the bulletin mutants the Task 1 review found surviving)
+- [x] **Step 2: Implement C11 per spec §1 C11.** Pin: `phone/Develop.tsx`'s sick status line untouched.
+- [x] **Step 3: Run** → PASS · **Step 4: Commit**
 
-### Task 13: The wave-2 stories — C12
+### Task 13: The wave-2 stories — C12 · → PR-3 (cavernCollapse done in Task 8c)
 
 **Depends on:** each WS1 wave-2 row as it lands; Task 11 · **ACs verified:** B-AC-3
 
@@ -296,10 +313,15 @@ Before suggesting merge of `ws8-show-pr1` into `ws8-events`:
 
 ### Gate: End of Phase P2 (PR-2 merge gate)
 
-- [ ] B-AC-3, B-AC-4, T-AC-7, T-AC-8, T-AC-10 green, AC-named, red before green; T-AC-9 still identical
-- [ ] Front-to-back step for an auction-phase event (same e2e ruling as Task 6)
+- [ ] B-AC-4, T-AC-7, T-AC-8, T-AC-10 green, AC-named; T-AC-9 still identical (B-AC-3 → PR-3)
+- [ ] Red before green, with recorded exceptions (the boundary review's I-2): 0279fbf9, b745d6aa and the fix
+      commits 1d6bb249, 46226777, dca8ef06, 36cd2a01, 792f2947 carry tests and code together; each task's review
+      ran a mutation sweep instead (T10: 19/23 killed; T11 positive controls; 8c 9/9)
+- [ ] Front-to-back step for development's sickness roll call (e2e/events.ts; the auction-phase step → PR-3)
 - [ ] `pnpm typecheck` 0 · `pnpm test` 0 · CI green
-- [ ] Owner OKs: WS3 (view, hold), WS4 (two mount lines), WS6 (none expected)
+- [ ] Owner OKs: WS3 (mule-game.ts view/hold, protocol, land-auction.test.ts helper line, events-hold.test.ts),
+      WS4 (two mount lines), WS6 (8b's ProductionMap.tsx, phone/Production.tsx, production-show.test.ts)
+- [ ] Heiko's goal check via the PM: a sick player's roll call on the TV and phones; the cavern collapse
 
 <!-- plan-check: no-task UBER-AC-1 UBER-AC-2 — goal proofs, run after ship by the PM; B-AC-1/B-AC-2 and Task 6 Step 3 carry them in tests -->
 <!-- plan-check: no-task B-AC-7 — WS6's AC (its production show), retired into this spec's T-AC-4 by AM-6; not ours to test -->
