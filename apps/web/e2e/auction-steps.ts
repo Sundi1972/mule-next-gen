@@ -57,11 +57,13 @@ export const landAuction: NonNullable<AuctionSteps['landAuction']> = async ({ ph
   const rang = (kind: string) => kind === 'kept' || kind === 'sold';
   for (let n = 1; n <= LOTS.maxLotsPerMonth; n++) {
     // Waits for lot n itself, not for lot n-1's result to hide: a lot nobody bids on is over in well under a second at smoke's scale.
-    const lot = await lotUp(phone, within(0.1, LOTS.resultMs + LOTS.introMs), n);
+    // The TV waits for lot n too, so its result read below is lot n's and not the last lot's.
+    const [lot] = await Promise.all([lotUp(phone, within(0.1, LOTS.resultMs + LOTS.introMs), n), lotUp(tv, within(0.1, LOTS.resultMs + LOTS.introMs), n)]);
     if (!lot) {
       check(listing === null, `month ${month}: the phone's listing ${listing} came up before the land auction ended`);
       return;
     }
+    check(lot.number === n, `month ${month}: the phone shows lot ${n}, got lot ${lot.number} of ${lot.count}`);
     const colony = lot.seller.includes(COLONY_NAME);
     check(colony || listing !== null, `month ${month}: with nothing listed only the colony sells, got a lot from "${lot.seller}"`);
     if (colony) check(lot.number === 1, `B-AC-8: the colony's lot is first in line, got lot ${lot.number} of ${lot.count}`);
