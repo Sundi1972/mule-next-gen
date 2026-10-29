@@ -346,7 +346,10 @@ A delivered line to the AI seats (`Game.heard`) is recorded as a step `{ from, t
 non-goal "storing chat text" holds). The replay calls `game.heard(from, '', to)`. So:
   - a brain call may open because a line arrived (from whom, to whom, when), and it replays identically;
   - nothing in play, and no call's opening, may depend on the words. Words reach an outcome only through a recorded
-    reply (RULE-4), which the replay serves without reading the prompt.
+    reply (RULE-4), which the replay serves without reading the prompt;
+  - a line an AI seat sent, forwarded inside the game (spec B's C5), is not a heard step and may open no call: the
+    room never calls `Game.heard` for it, and its words come from an unrecorded part of a reply, so the replay would
+    never regenerate it (WS2's review of AM-4; mirrored in spec B AM-B4).
 Pinned by T-AC-12 here (a game with chat replays identical, and the file holds no chat text). Spec B's T-AC-B8 is
 the brain side: a replay with every heard text blanked is identical, positive-controlled by a reply that opens on a
 word.
