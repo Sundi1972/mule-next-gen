@@ -1,6 +1,6 @@
-import { DEV_WALK, DEVELOPMENT, UPKEEP, type Good } from '@mule/engine';
-import type { TileView } from '@mule/protocol';
-import { AirGauge, Button, cx, GOOD_NAME, GoodIcon, hungerLevel, HoloMap, MuleIcon, paceLine, PlayerMark, SharedClock, sickReason, StoreInterior, TERRAIN_NAME, YourPace, ZoomMap, type Condition, type FoodEaten, type PaceRule, type Shop } from '@mule/ui';
+import { DEV_WALK, DEVELOPMENT, UPKEEP, type Good, type Outfit } from '@mule/engine';
+import type { PlayerView, TileView } from '@mule/protocol';
+import { AirGauge, Button, cx, GOOD_NAME, GoodIcon, hungerLevel, HoloMap, MuleIcon, paceLine, PlayerMark, SharedClock, sickReason, StoreInterior, TERRAIN_NAME, TimeBar, YourPace, ZoomMap, type Condition, type FoodEaten, type PaceRule, type Shop } from '@mule/ui';
 import { useEffect, useState } from 'react';
 import { mapTiles, PHASE_NAME, plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
 import { speakerAt } from '../chat/Chat';
@@ -9,7 +9,7 @@ import { useClient, useServerNow } from '../net/react';
 import { usePhoneGame } from './game';
 import { GroundCard, Traits } from './ground';
 import { nearest, nextStep, openShops } from './next-step';
-import { MapFit, PhoneShell, useWide } from './Shell';
+import { MapFit, PhoneShell, useWide, type Now } from './Shell';
 
 const OUTFIT_NAME = (o: TileView['outfit']) => (o === null ? '' : o === 'greenBelt' ? 'Green belt' : GOOD_NAME[o]);
 
@@ -27,7 +27,9 @@ export function Develop() {
   const client = useClient();
   const { view, me, self, slot } = usePhoneGame();
   const now = useServerNow(200);
-  const seconds = me.devEndsAt === null ? 0 : Math.max(0, (me.devEndsAt - now) / 1000);
+  // Month 1's clock waits, full, for every first MULE: the turn is not over.
+  const waiting = !!view.clockWaitsFor;
+  const seconds = waiting ? me.devSeconds : me.devEndsAt === null ? 0 : Math.max(0, (me.devEndsAt - now) / 1000);
   const carry = me.carriedMule;
   const [place, setPlace] = useState<'store' | 'map'>('store');
   const [cardDismissed, setCardDismissed] = useState(false);
@@ -79,7 +81,7 @@ export function Develop() {
   const free = tile && tile.owner === null && tile.terrain !== 'store';
   const owner = tile?.owner ? view.players.find((p) => p.id === tile.owner) : undefined;
 
-  const guide = nextStep({
+  const ruled = nextStep({
     filling,
     carry,
     place,
@@ -95,6 +97,7 @@ export function Develop() {
     mulesLeft: view.storeMules,
     pubPayout,
   });
+  const guide = waiting ? { ...ruled, now: waitingNow(ruled.now, carry, installed || me.installedThisTurn, view.storeMules, view.clockWaitsFor!, me.id, view.players) } : ruled;
 
   const tiles = mapTiles(view);
   // The payout shows where the button has the row to itself: in the store. On the map it shares the row with Store.
@@ -107,7 +110,8 @@ export function Develop() {
   return (
     <PhoneShell
       phase={PHASE_NAME.development}
-      seconds={seconds}
+      seconds={waiting ? undefined : seconds}
+      status={waiting ? <ClockWaitsChip seconds={me.devSeconds} /> : undefined}
       now={guide.now}
       fill
       rail={
@@ -115,7 +119,11 @@ export function Develop() {
           {/* The clock right after Now, your pace on its label under 1100 px; the header's timer is the one always in view. */}
           {place === 'store' && (
             <>
-              <SharedClock seconds={seconds} total={Math.max(me.devSeconds, 1)} pace={paceLine(condition, DEV_WALK, food)} />
+              {waiting ? (
+                <ClockWaits seconds={me.devSeconds} mineIn={!view.clockWaitsFor!.includes(me.id)} />
+              ) : (
+                <SharedClock seconds={seconds} total={Math.max(me.devSeconds, 1)} pace={paceLine(condition, DEV_WALK, food)} />
+              )}
               <div className="hidden @min-[1100px]/shell:block">
                 <YourPace condition={condition} rule={DEV_WALK} food={food} />
               </div>
@@ -340,6 +348,40 @@ export function FillCard({ condition, rule, food }: { condition: Condition; rule
 }
 
 /** Your turn is over: at the pub, or out of time. The others keep building. */
+/** The Now card while month 1's clock waits: no rush before your first MULE; once it is in, whose are still to come. */
+function waitingNow(now: Now, carry: Outfit | 'empty' | null, installed: boolean, mulesLeft: number, waitsFor: readonly string[], me: string, players: readonly PlayerView[]): Now {
+  if (carry !== null) return now;
+  // Row 1 or 2 with MULEs left: the start card's "the clock starts for everyone" isn't so while it waits.
+  if (!installed) return now.step === 1 && mulesLeft > 0 ? { step: 1, of: 3, title: 'Buy a MULE at the corral', detail: 'Your first month: no rush. The clock starts when your first MULE is in.' } : now;
+  const still = waitsFor.filter((id) => id !== me).map((id) => players.find((p) => p.id === id)?.name ?? id);
+  return { title: 'Your MULE is in', detail: still.length ? `The clock starts when every first MULE is in: ${still.join(' and ')} still to come.` : 'Every first MULE is in: the clock starts now.' };
+}
+
+/** Where the header's timer goes while month 1's clock waits: paused at its full time. */
+function ClockWaitsChip({ seconds }: { seconds: number }) {
+  return (
+    <span className="relative inline-flex h-8 items-center gap-1 rounded-chip border border-dashed border-holo-line px-2 font-mono text-xs font-bold text-holo @min-[1100px]/shell:h-11 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-lg" data-testid="clock-waits">
+      <svg aria-hidden viewBox="0 0 24 24" width={12} height={12} fill="currentColor">
+        <rect x={6} y={5} width={4} height={14} rx={1} />
+        <rect x={14} y={5} width={4} height={14} rx={1} />
+      </svg>
+      0:{seconds}
+    </span>
+  );
+}
+
+/** Everyone's clock while it waits: the bar stands full and the label says what starts it. */
+function ClockWaits({ seconds, mineIn }: { seconds: number; mineIn: boolean }) {
+  return (
+    <div className="flex items-center gap-2 @min-[1100px]/shell:gap-4" data-testid="shared-clock">
+      <span className="shrink-0 whitespace-nowrap text-[11px] font-semibold text-holo @min-[1100px]/shell:text-base" data-testid="clock-label">
+        {mineIn ? 'The clock starts when every first MULE is in' : 'The clock starts when your first MULE is in'}
+      </span>
+      <TimeBar seconds={seconds} total={seconds} size="phone-clock" className="min-w-0 flex-1" />
+    </div>
+  );
+}
+
 function Done({ pub }: { pub: boolean }) {
   const { view, self } = usePhoneGame();
   const won = view.news.find((n) => n.startsWith(`${self.name} went to the pub`));
