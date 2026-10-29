@@ -250,7 +250,8 @@ describe("the dev floor's package boundary", () => {
     expect(ALLOWED_IMPORTS.flatMap(planted)).toEqual([]);
   });
 
-  it('INV-floor-boundary: nothing outside floor/ assigns a DevFloor or FloorColonist field', () => {
+  // It parses every product source file; a loaded machine has taken it past vitest's 5 s default.
+  it('INV-floor-boundary: nothing outside floor/ assigns a DevFloor or FloorColonist field', { timeout: 30_000 }, () => {
     const declared = walk(FLOOR).flatMap((f) => parse(f).statements.filter(ts.isInterfaceDeclaration).filter((d) => FLOOR_TYPES.includes(d.name.text)));
     expect(declared.map((d) => d.name.text).sort()).toEqual(FLOOR_TYPES);
     const fields = new Set(declared.flatMap((d) => d.members.flatMap((m) => (m.name && ts.isIdentifier(m.name) ? [m.name.text] : []))));

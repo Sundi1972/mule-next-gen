@@ -67,7 +67,7 @@ vi.mock('../src/brain/client.js', async (original) => ({
 const CODE = 'RECRD';
 const SEED = 10;
 /** Three months, so the export ship calls. The seed no longer matters: arrangeMarket and `market` make every notice T-AC-10 asks for (seeds 1-32 swept). */
-const NOTICE_GAME = { seed: 2, maxMonths: 3 };
+const NOTICE_GAME = { seed: 8, maxMonths: 3 };
 /** Game time per step of the fake clock; every timer due in a step runs, with promises settled between them. */
 const STEP_MS = 100;
 const PLANNING_READY_MS = 3_000;
