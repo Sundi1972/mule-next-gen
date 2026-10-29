@@ -19,13 +19,15 @@ import { PhoneStore, TvDevelop } from './screens/Store';
 import { HoloMap, type MapTile } from '@mule/ui';
 import { mapTiles } from '../../../../apps/web/src/game/derive';
 import { PlotMap, type PlotLook } from './proposed/PlotMap';
-import { TvPlanning } from './proposed/PlanningReady';
+import { TV_PROMISE_NOTE, TvPlanning, type TvGovernor } from './proposed/PlanningReady';
 import { IntentNotes, IntentNotesProvider } from './proposed/IntentNote';
 import { HUB_NOTES, HubAudit } from './screens/audit/HubAudit';
 import { ELECTION_LINKS, ElectionAuditPage, electionRoute } from './screens/audit/ElectionAuditPage';
 import { MONTHEND_STATES, MonthEndAuditPage } from './screens/audit/MonthEndAudit';
 import { AUCTION_STATES as AUCTION_AUDIT_STATES, AuctionAuditBody } from './screens/audit/AuctionAudit';
 import { AUDIT_DEV_ROUTES, AuditDevPage, DEV_PREFIX, DevAuditContents } from './screens/audit/DevAuditPage';
+import { RailProductionPage } from './screens/audit/RailProduction';
+import { ARCADE_CONTENTS, ARCADE_ROUTES, ArcadePage } from './screens/arcade/ArcadeApp';
 
 /** The development audit: its contents, then each state, prefixed (#walk is the goods auction's own route). */
 const AUDIT_DEV_LINKS = [
@@ -210,16 +212,24 @@ const PLAN_STATES = [
  * Planning without a clock (AM-16). Month 4: Ossa is an AI (always ready); Brix and Kai are people still planning,
  * and Kai's phone has dropped (locked), so Kai is away but still holds planning. Lena per state.
  */
-const WAIT_STATES: { id: string; title: string; ready: boolean; confirm: boolean; hostId: string }[] = [
+const WAIT_STATES: { id: string; title: string; ready: boolean; confirm: boolean; hostId: string; governor?: 'kept' | 'broken' | 'none' }[] = [
   { id: 'plan-wait', title: 'Before you press Ready: who is still planning', ready: false, confirm: false, hostId: 'lena' },
+  { id: 'plan-wait-broken', title: 'The TV: the Governor broke the promise', ready: false, confirm: false, hostId: 'lena', governor: 'broken' },
+  { id: 'plan-wait-no-governor', title: 'The TV: nobody is Governor yet', ready: false, confirm: false, hostId: 'lena', governor: 'none' },
   { id: 'plan-wait-ready', title: 'You are ready, not the host: waiting for the rest', ready: true, confirm: false, hostId: 'brix' },
   { id: 'plan-wait-host', title: 'You are the host and ready: Continue without them', ready: true, confirm: false, hostId: 'lena' },
   { id: 'plan-wait-confirm', title: 'The host confirms: end planning for everyone', ready: true, confirm: true, hostId: 'lena' },
 ];
 const AWAY = ['kai'];
-const waitView = (lenaReady: boolean) => ({
+/**
+ * The TV's Governor line per state (T-1): Ossa holds the tax to a promise of up to 4%; kept at 4%, broken at 6%, and
+ * no line with no Governor. The view's tax follows, so every frame on the page says the same tax.
+ */
+const WAIT_GOVERNOR: Record<'kept' | 'broken' | 'none', TvGovernor | null> = { kept: { id: 'ossa', cap: 4, tax: 4 }, broken: { id: 'ossa', cap: 4, tax: 6 }, none: null };
+const waitView = (lenaReady: boolean, governor: TvGovernor | null = WAIT_GOVERNOR.kept) => ({
   ...VIEW,
   month: 4,
+  treasury: { ...VIEW.treasury, salesTax: (governor?.tax ?? 5) / 100 },
   players: VIEW.players.map((p) => (p.id === 'kai' ? { ...p, isAi: false, ready: false } : p.id === 'lena' ? { ...p, ready: lenaReady } : p)),
 });
 
@@ -236,37 +246,45 @@ const HUB_STATES: { id: string; title: string; desk: Desk; office: Office; elect
 ];
 
 /** For approval (2026-10-28): the UX audit's proposals, one mock per changed screen, each change numbered with its intent and reason. */
-const AUDIT_STATES: { id: string; title: string; tool?: 'drone'; picked?: { x: number; y: number }[]; standings?: boolean }[] = [
-  { id: 'audit-hub', title: 'Planning hub: all seven changes' },
+const AUDIT_STATES: { id: string; title: string; tool?: 'drone'; picked?: { x: number; y: number }[]; standings?: boolean; election?: boolean }[] = [
+  { id: 'audit-hub', title: 'Planning hub: all the changes' },
   { id: 'audit-hub-drone', title: 'Geo drone open, 1 of 2 plots picked', tool: 'drone', picked: [{ x: 9, y: 4 }] },
   { id: 'audit-hub-standings', title: 'Standings open', standings: true },
+  { id: 'audit-hub-election', title: 'The offices line while the vote is open', election: true },
 ];
 
+/** The hub's month 4: Ossa, Governor again, set the tax at 4%, keeping her promise of up to 4% (H-8). */
+const HUB_VIEW = { ...VIEW, month: 4, treasury: { ...VIEW.treasury, salesTax: 0.04 } };
+
 function AuditHubPage({ state }: { state: (typeof AUDIT_STATES)[number] }) {
-  const props = { ...(state.tool ? { tool: state.tool } : {}), ...(state.picked ? { picked: state.picked } : {}), ...(state.standings ? { standings: true } : {}) };
+  const props = { ...(state.tool ? { tool: state.tool } : {}), ...(state.picked ? { picked: state.picked } : {}), ...(state.standings ? { standings: true } : {}), ...(state.election ? { election: true } : {}) };
+  // The table talks on every screen (C20): the seat row and the ticker in the rail's header, as the product has them.
+  const chat = useChatSim(0, 'lena');
   return (
     <Page title={`For approval · UX audit · ${state.title}`}>
       <Links states={AUDIT_STATES} current={state.id} />
       <p className="max-w-[900px] text-sm text-ink-2">
-        The planning hub redesigned from the UX audit (a newcomer of 14 playing it for real). Month 4, just after the election: Kai is the new Governor (Governor only, as Heiko ruled), and Lena (you) holds no office. The phone held sideways (844 × 390) first, then the laptop (1440 × 900). Each number on a screen marks one change; the notes beside say which player intent it serves and why it was made. It all works: tap the needs strip, the drone and free plots on the map, “2nd of 4”, the folded Now card.
+        The planning hub redesigned from the UX audit (a newcomer of 14 playing it for real). Month 4, just after the election: Ossa is Governor again, on a promise of up to 4%, and set the tax at 4% (Governor only, as Heiko ruled); Lena (you) holds no office.{state.election ? ' Here the vote is still open, so the offices line reads as it does until the result.' : ''} The table chat runs in the rail’s header, as in the product. Open with ?phone=667 for the small phone. The phone held sideways (844 × 390) first, then the laptop (1440 × 900). Each number on a screen marks one change; the notes beside say which player intent it serves and why it was made. It all works: tap the needs strip, the drone and free plots on the map, “2nd of 4”, the folded Now card.
       </p>
       <IntentNotesProvider>
         <div className="flex flex-wrap items-start gap-6">
-          <div className="flex min-w-0 flex-col gap-4">
-            <PhoneFrame>
-              <Game view={{ ...VIEW, month: 4 }}>
-                <HubAudit key={`${state.id}-p`} {...props} />
-              </Game>
-            </PhoneFrame>
-            <LaptopFrame>
-              <Game view={{ ...VIEW, month: 4 }}>
-                <HubAudit key={`${state.id}-l`} {...props} />
-              </Game>
-            </LaptopFrame>
-          </div>
+          <ChatProvider value={chat}>
+            <div className="flex min-w-0 flex-col gap-4">
+              <PhoneFrame>
+                <Game view={HUB_VIEW}>
+                  <HubAudit key={`${state.id}-p`} {...props} />
+                </Game>
+              </PhoneFrame>
+              <LaptopFrame>
+                <Game view={HUB_VIEW}>
+                  <HubAudit key={`${state.id}-l`} {...props} />
+                </Game>
+              </LaptopFrame>
+            </div>
+          </ChatProvider>
           <IntentNotes
             className="w-[420px] max-w-full"
-            title="Seven changes, and why"
+            title="Nine changes, and why"
             intro="One card per change. Hover one and its numbers light up on both screens. “Serves intent” quotes the player intent from the audit; “Why” is what the audit found."
             notes={Object.values(HUB_NOTES)}
           />
@@ -325,6 +343,7 @@ export default function App() {
       </Page>
     );
 
+  if (hash === ARCADE_CONTENTS || ARCADE_ROUTES.some((r) => r.id === hash)) return <ArcadePage route={hash} />;
   if (hash === 'audit-dev') return <DevAuditContents />;
   const devAudit = AUDIT_DEV_ROUTES.find((r) => `${DEV_PREFIX}${r.id}` === hash);
   if (devAudit) return <AuditDevPage key={hash} state={devAudit} />;
@@ -378,6 +397,7 @@ export default function App() {
     );
 
   const wait = WAIT_STATES.find((s) => s.id === hash);
+  const gov = WAIT_GOVERNOR[wait?.governor ?? 'kept'];
   if (wait)
     return (
       <Page title={`Planning without a clock · ${wait.title}`}>
@@ -386,20 +406,25 @@ export default function App() {
           Planning has no clock (Heiko). It ends when every person is Ready, or when the host continues without the rest, from the host's own phone or laptop, never the TV. The header shows how many are ready where the clock was. Ossa is an AI, always ready. Brix and Kai are still planning; Kai's phone is locked, so Kai is marked away but is still waited for. Lena's laptop first ({wait.hostId === 'lena' ? 'Lena is the host' : 'Brix is the host'}), then Brix's phone, then the TV. Press I'm ready to try it.
         </p>
         <LaptopFrame>
-          <Game view={waitView(wait.ready)} hostId={wait.hostId} away={AWAY}>
+          <Game view={waitView(wait.ready, gov)} hostId={wait.hostId} away={AWAY}>
             <PlanningHub key={`${hash}-l`} desk="colony" office="none" election="done" ready={wait.ready} confirm={wait.confirm} />
           </Game>
         </LaptopFrame>
         <PhoneFrame>
-          <Game view={waitView(wait.ready)} seat="brix" hostId={wait.hostId} away={AWAY}>
+          <Game view={waitView(wait.ready, gov)} seat="brix" hostId={wait.hostId} away={AWAY}>
             <PlanningHub key={`${hash}-p`} desk="colony" office="none" election="done" />
           </Game>
         </PhoneFrame>
-        <TvFrame>
-          <Board view={waitView(wait.ready)}>
-            <TvPlanning view={waitView(wait.ready)} hostId={wait.hostId} away={AWAY} />
-          </Board>
-        </TvFrame>
+        <IntentNotesProvider>
+          <div className="flex flex-wrap items-start gap-6">
+            <TvFrame>
+              <Board view={waitView(wait.ready, gov)}>
+                <TvPlanning view={waitView(wait.ready, gov)} hostId={wait.hostId} away={AWAY} governor={gov} />
+              </Board>
+            </TvFrame>
+            <IntentNotes className="w-[420px] max-w-full" title="For Heiko’s approval: one change on the TV" intro="The PM’s proposal; hover the card and its number lights up on the TV." notes={[TV_PROMISE_NOTE]} />
+          </div>
+        </IntentNotesProvider>
       </Page>
     );
 
@@ -492,6 +517,12 @@ export default function App() {
 
   if (hash === 'walk') return <Page title="Goods auction · the walk, playable · phone and TV"><PlayableWalk /></Page>;
   if (hash === 'production') return <Page title="Production show · TV and phone"><PlayableShow /></Page>;
+  if (hash === 'rail-production')
+    return (
+      <Page title="For Heiko · rail chat · production on a phone alone (a stand-in)">
+        <RailProductionPage />
+      </Page>
+    );
 
   const a = AUCTION_STATES.find((s) => s.id === hash);
   if (a)
@@ -582,7 +613,56 @@ export default function App() {
 
   return (
     <div className="min-h-full bg-table p-8 text-ink" data-testid="index">
-      <h2 className="label-caps">For approval · UX audit</h2>
+      <h2 className="label-caps">To play · arcade walking in development (Heiko, 2026-10-29)</h2>
+      <p className="mt-1 max-w-3xl text-sm text-ink-2">
+        Steer your colonist yourself: arrow keys and SPACE, or the mouse; on a phone held sideways a joystick and one button over the whole map. Store, corral, outfitter, out with the MULE on its lead, your plot, install. Slices 1 to 4 (wolves, the glint, the scramble), and the addendum from the development audit (V-2, V-3, V-5, V-6, V-7, AM-2); every phone route also plays at 667 × 375. Every speed is a tunable.
+      </p>
+      <div className="mt-2 flex flex-col gap-2" data-testid="arcade-links">
+        <Links states={[{ id: ARCADE_CONTENTS, title: 'Arcade walking: contents' }, ...ARCADE_ROUTES]} />
+      </div>
+      <h2 className="label-caps mt-6">For Heiko 2026-10-29 · one rail-chat rule: a one-line ticker on phones</h2>
+      <p className="mt-1 max-w-3xl text-sm text-ink-2">
+        On a phone the rail’s table chat (the seat row and a 2-line ticker) pushed the rail’s key line under the footer on four screens. One rule instead of a fold per screen: below 1100 px the ticker keeps only its newest line; bubbles still pop, the whole chat is on the Talk desk and the TV. Each page has a switch, Today against One-line ticker; also at ?phone=667.
+      </p>
+      <div className="mt-2 flex flex-col gap-2" data-testid="rail-links">
+        <Links
+          states={[
+            { id: 'audit-election-governor', title: 'The Governor desk' },
+            { id: 'audit-auction-walk', title: 'The goods auction’s walk' },
+            { id: 'rail-production', title: 'Production, a phone alone (a stand-in)' },
+            { id: 'monthend', title: 'Month end' },
+            { id: 'monthend-gameover', title: 'Game over' },
+          ]}
+        />
+      </div>
+      <h2 className="label-caps mt-6">For approval 2026-10-29 · characters in motion</h2>
+      <p className="mt-1 max-w-3xl text-sm text-ink-2">
+        Heiko: the characters are very static when they move. A walk cycle, an idle, facing, pace that shows, the wolves moment (run, bitten, fight) and the MULE in step, for all six species, in two variants side by side: A bobs and waddles the whole creature, B swings each species' feet like the MULE's legs. Playable, with its phone cost measured.
+      </p>
+      <ul className="mt-2 flex flex-col gap-1 text-sm" data-testid="motion-links">
+        <li>
+          <a href="/motion.html" className="text-holo underline" data-testid="link-motion">
+            Characters in motion · A bob and waddle, B feet
+          </a>
+        </li>
+      </ul>
+      <h2 className="label-caps mt-6">For approval 2026-10-29 · the land grant on a phone, muting an AI</h2>
+      <p className="mt-1 max-w-3xl text-sm text-ink-2">
+        Two pages of their own. The land grant's compact footer (CLAIM and Ready side by side, Waiting for on one line): the rail window that shows the lit plot goes from 20 px to about 120 px on a phone. Muting an AI on your phone: one tap on its seat, its whispers, lines and offers stop on your phone; the TV and its play are unchanged.
+      </p>
+      <ul className="mt-2 flex flex-col gap-1 text-sm" data-testid="page-links">
+        <li>
+          <a href="/grant.html" className="text-holo underline" data-testid="link-grant">
+            The land grant · a compact footer
+          </a>
+        </li>
+        <li>
+          <a href="/mute.html" className="text-holo underline" data-testid="link-mute">
+            Mute an AI on your phone
+          </a>
+        </li>
+      </ul>
+      <h2 className="label-caps mt-6">For approval · UX audit</h2>
       <p className="mt-1 max-w-3xl text-sm text-ink-2">
         The priority-1 screens, redesigned from the UX audit (docs/research/2026-10-28-ws6-ux-audit.md): every change numbered on the screen, with the player intent it serves and why. The planning hub first, then the election, the new month-end league table, the goods auction and development.
       </p>
