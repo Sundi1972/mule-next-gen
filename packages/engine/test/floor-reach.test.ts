@@ -747,7 +747,9 @@ describe('the dev floor: the action button', () => {
     expect(hasAnalysed(a(state), state, tileOf(state, 7, 4))).toBe(true);
     expect(reachWords(reachNow(analysed, state))).toEqual(ASSAYING);
     let assayed = analysed;
-    while (assayed.tick < analysed.colonists[0]!.assayUntilTick!) assayed = stepFloor(assayed, state, {}, DEV_STEER.tickMs, cfg);
+    // Steps the hold's length, not "until it clears": a tick that stops advancing then fails here instead of hanging.
+    const holdTicks = analysed.colonists[0]!.assayUntilTick! - analysed.tick;
+    for (let i = 0; i < holdTicks; i++) assayed = stepFloor(assayed, state, {}, DEV_STEER.tickMs, cfg);
     expect(reachWords(reachNow(assayed, state))).toEqual(words('FIT FILTER', `${DEVELOPMENT.filterAlloy} Alloy`));
     const filtered = press(assayed);
     expect(tileOf(state, 7, 4).filter).toBe(true);
@@ -763,7 +765,8 @@ describe('the dev floor: the action button', () => {
     expect(offered.sort()).toEqual(Object.keys(MULE.outfitCost).sort());
   });
 
-  it("INV-reach-parity: over seeded games, an enabled reach is a press game.ts allows, a dim one game.ts refuses, and a press changes nothing but its own seat's", () => {
+  // About 1 s alone; a loaded machine (a root `pnpm test` beside a sim) has taken it past vitest's 5 s default.
+  it("INV-reach-parity: over seeded games, an enabled reach is a press game.ts allows, a dim one game.ts refuses, and a press changes nothing but its own seat's", { timeout: 30_000 }, () => {
     const seen = new Set<string>();
     for (let game = 0; game < PARITY_GAMES; game++) {
       const rng = createRng(PARITY_SEED + game);
