@@ -297,7 +297,7 @@ export function ShipWants({ want, also = [], have, tv = false }: { want: ShipWan
     <p
       className={cx(
         'flex flex-wrap items-baseline gap-x-1.5 rounded-panel border border-warn/60 bg-panel',
-        tv ? 'px-5 py-3 text-2xl' : 'px-2.5 py-1.5 text-xs leading-snug @min-[1100px]/shell:px-4 @min-[1100px]/shell:py-3 @min-[1100px]/shell:text-lg',
+        tv ? 'px-5 py-2 text-xl' : 'px-2.5 py-1.5 text-xs leading-snug @min-[1100px]/shell:px-4 @min-[1100px]/shell:py-3 @min-[1100px]/shell:text-lg',
       )}
       data-testid="ship-wants"
     >
