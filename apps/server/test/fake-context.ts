@@ -68,7 +68,8 @@ export function pressThroughSidePick(game: MuleGame, how: { host: string } | 're
   if (how === 'ready') for (const p of idle) game.handle(p.id, { type: 'ready' });
   else {
     game.handle(how.host, { type: 'ready' });
-    game.handle(how.host, { type: 'continue' });
+    // With the host the only one idle, its Ready was enough: there is nobody to move on for.
+    if (idle.some((p) => p.id !== how.host)) game.handle(how.host, { type: 'continue' });
   }
   return true;
 }
