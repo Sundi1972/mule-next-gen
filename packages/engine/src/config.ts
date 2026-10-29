@@ -338,6 +338,8 @@ export const DEV_STEER = {
   lakeMode: 'shore' as LakeMode,
   /** Share of full speed in a lake when lakeMode is 'wade'. */
   wading: 0.3,
+  /** In shore mode, a colonist reaches a lake plot nearer than this to its edge, in tiles (RULE-3 row 10; the mock's). */
+  shoreReachTiles: 0.45,
   /** Mountains block like a lake instead of slowing. */
   mountainsImpassable: false as boolean,
   /** Others' plots may be walked across; false makes them block like a lake. */

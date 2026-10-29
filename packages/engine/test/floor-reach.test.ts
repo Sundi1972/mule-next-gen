@@ -257,6 +257,22 @@ const TABLE: Row[] = [
     press: { game: (_, now) => expect(tileOf(now, 5, 1).outfit).toBe('water') },
   },
   {
+    row: '10, a lake plot from its shore, across a corner',
+    at: () => ({ space: 'map', x: 4.8, y: 2.2 }),
+    game: (s) => void (a(s).carriedMule = 'water'),
+    reach: () => ({ kind: 'install', enabled: true, good: 'water', plot: { x: 5, y: 1 }, fromShore: true, replaces: false }),
+    words: () => words('INSTALL · WATER', 'from the shore'),
+    press: { game: (_, now) => expect(tileOf(now, 5, 1).outfit).toBe('water') },
+  },
+  {
+    row: "10, a lake plot just beyond the shore's reach: not offered",
+    at: () => ({ space: 'map', x: 5 - DEV_STEER.shoreReachTiles - 0.01, y: 1.5 }),
+    game: (s) => void (a(s).carriedMule = 'water'),
+    reach: () => ({ kind: 'none', enabled: false, hint: 'plot' }),
+    words: () => words('TO YOUR PLOT', null, false),
+    press: 'nothing',
+  },
+  {
     row: '10 over 12: on an own plot with a MULE, Alloy held, leading a fitted MULE',
     at: () => onTile(7, 4),
     game: (s) => void Object.assign(a(s), { carriedMule: 'energy', stock: { ...a(s).stock, alloy: DEVELOPMENT.filterAlloy } }),

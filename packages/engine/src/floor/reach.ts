@@ -9,7 +9,7 @@
 import { DEVELOPMENT } from '../config.js';
 import { RuleError } from '../errors.js';
 import { analysePlot, buyMule, fitFilter, hasAnalysed, installMule, mulePriceFor, outfitCostFor, outfitMule, player, visitPub } from '../game.js';
-import { neighbours, tileAt } from '../grid.js';
+import { tileAt } from '../grid.js';
 import type { GameState, Outfit, Player, Tile } from '../types.js';
 import { doorOutside, floorConfig, type DevFloor, type FloorColonist, type FloorConfig, type FloorPoint } from './floor.js';
 import { HALL_DOORS, HALL_OUTFITTERS, placeAt, type HallDoor, type HallPlace } from './hall.js';
@@ -68,10 +68,17 @@ const isDoor = (place: HallPlace | null): place is HallDoor => place === 'doorL'
 const at = (tile: Tile): FloorPoint => ({ x: tile.x, y: tile.y });
 const shortBy = (p: Player, price: number): ReachRefusal | null => (p.money < price ? { kind: 'money', short: price - p.money } : null);
 
-/** In shore mode a lake plot is worked from the land beside it: the seat's own lake plot next to its tile, nearest its feet. */
-function shorePlot(state: GameState, c: FloorColonist, tile: Tile, seat: string): Tile | null {
+const AROUND = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]] as const;
+
+/**
+ * In shore mode a lake plot is worked from the land beside it: of the seat's own lake plots among the eight around its
+ * tile, the nearest its feet, if nearer than DEV_STEER.shoreReachTiles to the plot's edge.
+ */
+function shorePlot(state: GameState, cfg: FloorConfig, c: FloorColonist, tile: Tile, seat: string): Tile | null {
   const gap = (t: Tile) => Math.hypot(Math.max(t.x - c.x, 0, c.x - t.x - 1), Math.max(t.y - c.y, 0, c.y - t.y - 1));
-  const lakes = neighbours(state.tiles, state.width, tile).filter((t) => t.terrain === 'lake' && t.owner === seat);
+  const lakes = AROUND.map(([dx, dy]) => tileAt(state.tiles, state.width, tile.x + dx, tile.y + dy)).filter(
+    (t): t is Tile => t?.terrain === 'lake' && t.owner === seat && gap(t) < cfg.steer.shoreReachTiles,
+  );
   return lakes.reduce<Tile | null>((best, t) => (best && gap(best) <= gap(t) ? best : t), null);
 }
 
@@ -108,7 +115,7 @@ const leave: Row = ({ player: p, place }) => (isDoor(place) ? { kind: 'leave', e
 const install: Row = ({ state, cfg, colonist: c, player: p, tile }) => {
   const good = p.carriedMule;
   if (!tile || !good || good === 'empty') return null;
-  const plot = tile.owner === p.id ? tile : cfg.steer.lakeMode === 'shore' ? shorePlot(state, c, tile, p.id) : null;
+  const plot = tile.owner === p.id ? tile : cfg.steer.lakeMode === 'shore' ? shorePlot(state, cfg, c, tile, p.id) : null;
   return plot && { kind: 'install', enabled: true, good, plot: at(plot), fromShore: plot !== tile, replaces: plot.outfit !== null };
 };
 
