@@ -1,28 +1,38 @@
 import { describe, expect, it } from 'vitest';
 import {
   advancePhase,
+  analysePlot,
   analysisSeconds,
   applyReach,
   boxOf,
   buildFloor,
+  buyMule,
   createGame,
+  createRng,
   DEV_STEER,
   DEVELOPMENT,
   doorOutside,
   doorPresses,
+  fitFilter,
   floorConfig,
   HALL,
+  HALL_DOORS,
   HALL_PLACES,
   hasAnalysed,
+  installMule,
   MULE,
   mulePrice,
   mulePriceFor,
   outfitCostFor,
+  outfitMule,
+  placeAt,
   pressOrder,
   reachOf,
   reachWords,
   RuleError,
+  SPECIES,
   stepFloor,
+  visitPub,
   WOLVES,
   type DevFloor,
   type FloorColonist,
@@ -30,9 +40,13 @@ import {
   type FloorInput,
   type GameState,
   type HallPlace,
+  type Outfit,
+  type Player,
   type Press,
   type Reach,
+  type ReachKind,
   type ReachWords,
+  type Rng,
   type Terrain,
 } from '../src/index.js';
 
@@ -531,6 +545,153 @@ const TABLE: Row[] = [
   },
 ];
 
+const PARITY_SEED = 186;
+const PARITY_GAMES = 12;
+const PARITY_TURNS = 25;
+const PARITY_SEATS = ['a', 'b', 'c', 'd'] as const;
+/** Every reach the parity test must draw, so a change to its generator cannot leave it proving nothing. */
+const PARITY_COVERS = [
+  ...['enter', 'sell', 'buy', 'outfit', 'leave', 'install', 'analyse', 'filter', 'pub'],
+  ...['buy dim', 'outfit dim', 'none over', 'none done', 'none assaying'],
+];
+const OUTFITS = Object.keys(MULE.outfitCost) as Outfit[];
+const isOutfit = (place: HallPlace | null): place is HallPlace & Outfit => (OUTFITS as (string | null)[]).includes(place);
+
+type Rule = (state: GameState, id: string) => unknown;
+
+/** game.ts's refusal of a rule, applied to a copy of the game: its message, or null when it allows it. */
+function refusal(state: GameState, id: string, rule: Rule): string | null {
+  try {
+    rule(structuredClone(state), id);
+    return null;
+  } catch (e) {
+    if (e instanceof RuleError) return e.message;
+    throw e;
+  }
+}
+
+/** The game.ts rule a reach presses; null for a door move, SELL (no rule yet) and none. */
+function ruleOf(reach: Reach, secondsLeft: number): Rule | null {
+  switch (reach.kind) {
+    case 'buy':
+      return (s, id) => buyMule(s, id);
+    case 'outfit':
+      return (s, id) => outfitMule(s, id, reach.good);
+    case 'install':
+      return (s, id) => installMule(s, id, reach.plot.x, reach.plot.y);
+    case 'analyse':
+      return (s, id) => analysePlot(s, id, reach.plot.x, reach.plot.y);
+    case 'filter':
+      return (s, id) => fitFilter(s, id, reach.plot.x, reach.plot.y);
+    case 'pub':
+      return (s, id) => visitPub(s, id, secondsLeft);
+    default:
+      return null;
+  }
+}
+
+/** What a reach's press is aimed at, to match it with a rule tried at the same spot. */
+function targetOf(reach: Reach): string {
+  if (reach.kind === 'outfit') return reach.good;
+  return 'plot' in reach ? `${reach.plot.x},${reach.plot.y}` : '';
+}
+
+/** Every rule a press could mean where the colonist stands, by the place or the tile under it, not by its reach. */
+function rulesAt(state: GameState, c: FloorColonist, config: FloorConfig, secondsLeft: number): { kind: ReachKind; target: string; rule: Rule }[] {
+  if (c.space === 'hall') {
+    const place = placeAt(c, config.hall);
+    if (place === 'corral') return [{ kind: 'buy', target: '', rule: (s, id) => buyMule(s, id) }];
+    if (place === 'pub') return [{ kind: 'pub', target: '', rule: (s, id) => visitPub(s, id, secondsLeft) }];
+    return isOutfit(place) ? [{ kind: 'outfit', target: place, rule: (s, id) => outfitMule(s, id, place) }] : [];
+  }
+  const [x, y] = [Math.floor(c.x), Math.floor(c.y)];
+  if (x < 0 || y < 0 || x >= state.width || y >= state.height) return [];
+  const target = `${x},${y}`;
+  return [
+    { kind: 'install', target, rule: (s, id) => installMule(s, id, x, y) },
+    { kind: 'analyse', target, rule: (s, id) => analysePlot(s, id, x, y) },
+    { kind: 'filter', target, rule: (s, id) => fitFilter(s, id, x, y) },
+  ];
+}
+
+/** Everything that is another seat's: its player, its plots and its colonist. */
+const othersOf = (state: GameState, floor: DevFloor, seat: string) => ({
+  players: state.players.filter((p) => p.id !== seat),
+  tiles: state.tiles.filter((t) => t.owner !== seat),
+  colonists: floor.colonists.filter((c) => c.id !== seat),
+});
+
+/** Everything that is this seat's: its player, its plots and its colonist. */
+const ownOf = (state: GameState, floor: DevFloor, seat: string) => ({
+  player: state.players.find((p) => p.id === seat),
+  tiles: state.tiles.filter((t) => t.owner === seat),
+  colonist: floor.colonists.find((c) => c.id === seat),
+});
+
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const v of Object.values(value)) deepFreeze(v);
+  }
+  return value;
+}
+
+/**
+ * Where a colonist stands in a drawn turn: at a place in the hall, the corral likelier, or anywhere on its floor; at a
+ * store door's mouth; or anywhere on the map.
+ */
+function spotFor(rng: Rng, state: GameState, config: FloorConfig): Pick<FloorColonist, 'space' | 'x' | 'y'> {
+  const within = (x0: number, x1: number) => x0 + (x1 - x0) * rng.next();
+  const roll = rng.next();
+  if (roll < 0.4) {
+    const box = boxOf(rng.pick<HallPlace>([...HALL_PLACES, 'corral', 'corral']), config.hall);
+    return { space: 'hall', x: within(box.x0, box.x1), y: within(box.y0, box.y1) };
+  }
+  if (roll < 0.5) {
+    const box = rng.pick(config.hall.floor);
+    return { space: 'hall', x: within(box.x0, box.x1), y: within(box.y0, box.y1) };
+  }
+  if (roll < 0.6) {
+    const mouth = doorOutside(state, rng.pick(HALL_DOORS), config);
+    return { space: 'map', x: mouth.x + within(-0.2, 0.2), y: mouth.y + within(-0.2, 0.2) };
+  }
+  const tile = rng.pick(state.tiles);
+  return { space: 'map', x: tile.x + rng.next(), y: tile.y + rng.next() };
+}
+
+/**
+ * A development turn drawn from the game: plots owned, fitted and filtered at random, each seat's money, MULE, Alloy,
+ * analyses and turn at random, the corral full, short or empty, sometimes past development, and each colonist
+ * somewhere, some carrying pelts, some assaying. The game and the floor are frozen.
+ */
+function randomTurn(rng: Rng, base: GameState): { state: GameState; floor: DevFloor; config: FloorConfig; secondsLeft: number } {
+  const state = structuredClone(base);
+  for (const t of state.tiles.filter((tile) => tile.terrain !== 'store')) {
+    t.owner = rng.chance(0.35) ? rng.pick(PARITY_SEATS) : null;
+    t.outfit = t.owner && rng.chance(0.5) ? rng.pick(OUTFITS) : null;
+    t.filter = t.owner !== null && rng.chance(0.3);
+  }
+  for (const p of state.players) {
+    p.money = rng.pick([0, 10, 40, 80, 120, 300, 1_000]);
+    p.carriedMule = rng.pick<Player['carriedMule']>([null, 'empty', rng.pick(OUTFITS)]);
+    p.stock.alloy = rng.pick([0, 0, 1, 3]);
+    p.doneDeveloping = rng.chance(0.1);
+    p.analysed = state.tiles.filter(() => rng.chance(0.2)).map((t) => t.y * state.width + t.x);
+  }
+  state.store.mules = rng.pick([0, 1, 5]);
+  if (rng.chance(0.05)) state.phase = 'production';
+  const config = rng.chance(0.5) ? cfg : { ...cfg, steer: { ...DEV_STEER, lakeMode: 'wade' as const } };
+  const built = buildFloor(state, config);
+  const tick = rng.int(0, 999);
+  const colonists = built.colonists.map((c) => ({
+    ...c,
+    ...spotFor(rng, state, config),
+    pelts: rng.chance(0.1) ? rng.int(1, 3) : 0,
+    assayUntilTick: rng.chance(0.1) ? tick + rng.int(1, 5) : null,
+  }));
+  return { state: deepFreeze(state), floor: deepFreeze({ tick, colonists }), config, secondsLeft: rng.int(0, 50) };
+}
+
 describe('the dev floor: the action button', () => {
   it("T-AC-3: Reach per RULE-3's table, one row each", () => {
     for (const r of TABLE) {
@@ -601,4 +762,48 @@ describe('the dev floor: the action button', () => {
     });
     expect(offered.sort()).toEqual(Object.keys(MULE.outfitCost).sort());
   });
+
+  it("INV-reach-parity: over seeded games, an enabled reach is a press game.ts allows, a dim one game.ts refuses, and a press changes nothing but its own seat's", () => {
+    const seen = new Set<string>();
+    for (let game = 0; game < PARITY_GAMES; game++) {
+      const rng = createRng(PARITY_SEED + game);
+      const base = createGame({ seed: rng.int(1, 99_999), players: PARITY_SEATS.map((id) => ({ id, name: id, isAi: rng.chance(0.5), species: rng.pick(SPECIES) })) });
+      while (base.phase !== 'development') advancePhase(base);
+      for (let turn = 0; turn < PARITY_TURNS; turn++) {
+        const { state, floor, config, secondsLeft } = randomTurn(rng, base);
+        for (const seat of PARITY_SEATS) {
+          const reach = reachOf(floor, state, seat, config, { secondsLeft });
+          const c = floor.colonists.find((x) => x.id === seat)!;
+          const why = `game ${game} turn ${turn}, ${seat} at ${c.space} ${c.x.toFixed(2)},${c.y.toFixed(2)}: ${JSON.stringify(reach)}`;
+          seen.add(reach.kind === 'none' ? `none ${reach.hint}` : reach.enabled ? reach.kind : `${reach.kind} dim`);
+
+          const rule = ruleOf(reach, secondsLeft);
+          if (rule) expect(refusal(state, seat, rule) === null, `${why}: game.ts ${reach.enabled ? 'refuses' : 'allows'} it`).toBe(reach.enabled);
+          for (const at of rulesAt(state, c, config, secondsLeft)) {
+            const offered = reach.enabled && reach.kind === at.kind && targetOf(reach) === at.target;
+            if (offered) expect(refusal(state, seat, at.rule), `${why}: game.ts refuses ${at.kind} ${at.target}`).toBeNull();
+          }
+
+          if (reach.kind === 'sell') continue;
+          const after = structuredClone(state);
+          const press = applyReach(after, floor, seat, secondsLeft, config);
+          if (!reach.enabled) {
+            expect(after, `${why}: a dim press changed the game`).toEqual(state);
+            expect(press.floor, `${why}: a dim press changed the floor`).toBe(floor);
+            continue;
+          }
+          expect(othersOf(after, press.floor, seat), `${why}: another seat's changed`).toEqual(othersOf(state, floor, seat));
+          if (reach.kind === 'enter' || reach.kind === 'leave') {
+            // A door move is stepFloor's: the press spends it there, moving this colonist through.
+            const act = { [seat]: { ...IDLE, act: true } };
+            expect([doorPresses(floor, state, act, config).has(seat), press.floor, after], why).toEqual([true, floor, state]);
+            expect(stepFloor(floor, state, act, DEV_STEER.tickMs, config).colonists.find((x) => x.id === seat)!.space, why).not.toBe(c.space);
+          } else expect(ownOf(after, press.floor, seat), `${why}: the press changed nothing of its own`).not.toEqual(ownOf(state, floor, seat));
+        }
+      }
+    }
+    const missing = PARITY_COVERS.filter((k) => !seen.has(k));
+    expect(missing, 'reaches the generator never drew').toEqual([]);
+  });
 });
+
