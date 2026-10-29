@@ -1,4 +1,4 @@
-import { emptyStock, type Outfit, type Stock } from '@mule/engine';
+import { emptyStock, GAME, type Outfit, type Stock } from '@mule/engine';
 import { describe, expect, it } from 'vitest';
 import { needRows, planNow } from '../src/phone/hub/needs';
 
@@ -34,13 +34,15 @@ describe("planning's This month you need (RULE-8)", () => {
     expect(rows.find((r) => r.good === 'smithore')).toMatchObject({ have: 2, need: 2, short: 0 });
   });
 
-  it('B-AC-14: Now says to plan and press Ready, names the land grant next, and lists the SHORT goods or says she has what she needs', () => {
+  it('B-AC-14, H-1: Now says to plan and press Ready, names the land grant next with its claims from config, and lists the SHORT goods or says she has what she needs', () => {
     // Energy is burned by the farm and the mine (UPKEEP.energyUse) and the Alloy factory (its recipe), not the power plant.
     const rows = needRows(stock({ food: 3, water: 2, energy: 5 }), stock({ food: 1, water: 2, energy: 3 }), plots('food', 'energy', 'smithore', 'alloy'));
     expect(rows.find((r) => r.good === 'energy')).toMatchObject({ short: 2, why: 'a farm, a mine and a factory' });
     const short = planNow(rows);
     expect(short.title).toBe('Plan your month, then press Ready');
-    expect(short.detail).toMatch(/land grant/);
+    // The land grant's claims are config's, the same number the roadmap's next line gives.
+    expect(short.detail).toMatch(new RegExp(`^Next is the land grant: up to ${GAME.claimsPerGrant} free plots each\\. `));
+    expect(short.detail).not.toMatch(/one free plot/);
     expect(short.detail).toMatch(/short of Food and Energy/);
     const fine = planNow(needRows(stock({ food: 3, water: 2 }), stock({ food: 3, water: 2 }), plots()));
     expect(fine.detail).toMatch(/land grant/);

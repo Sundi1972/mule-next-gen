@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
+import { collapseCutWords } from '../src/game/month-end';
 import { Planning } from '../src/phone/Planning';
 import { roadmapSteps } from '../src/phone/hub/month-steps';
 import { standingOf } from '../src/phone/hub/standing';
@@ -236,6 +237,23 @@ describe('the planning hub, rendered (UX audit)', () => {
     expect(textOf(ossas, 'standings-mine')).toContain('Your worth5,600');
     // No good is named anywhere in the sheet: the goods line is a value, not what is held.
     expect(textOf(ossas, 'standings-sheet')).not.toMatch(/Food|Energy|Water|Smithore|Crystite/);
+  });
+
+  it('H-4: in Collapse your lines carry the cut, and they add up to your Worth', () => {
+    // Before the cut: 1,000 + 600 + 900 + 300 = 2,800; the fifth off it, 560, leaves 2,240.
+    const cut: MyView['worthParts'] = { ...LENAS_PARTS, cut: 560 };
+    const players = PLAYERS.map((p) => (p.id === 's1' ? { ...p, worth: 2_240, worthBeforeCut: 2_800 } : p));
+    const sheet = onPhone(month4({ players, air: { level: 97, band: 'collapse' } }, myView('s1', { worthParts: cut })), () => createElement(StandingsSheet, { onClose: () => {} }));
+    const mine = element(sheet, 'standings-mine');
+    const lines = [...mine.matchAll(/<span class="flex justify-between gap-3[^"]*"><span>(.*?)<\/span><span[^>]*>(.*?)<\/span><\/span>/g)].map((m) => [plain(m[1]!), plain(m[2]!)] as const);
+    const labels = lines.map(([label]) => label);
+    expect(labels).toEqual(['Cash', 'Goods · 6 units', `Land · 3 × ${GAME.plotScore}`, 'MULEs · 2 × 150', `Collapse cut · ${collapseCutWords()}`, `Offices · 0 × ${POLITICS.termScore}, cut too`, 'Your worth']);
+    const cr = (s: string) => (s.startsWith('−') ? -1 : 1) * Number(s.replace(/[^0-9]/g, ''));
+    const parts = lines.slice(0, -1).map(([, v]) => cr(v));
+    expect(parts).toEqual([1_000, 600, 900, 300, -560, 0]);
+    expect(element(mine, 'standings-cut')).toMatch(/text-alert/);
+    expect(parts.reduce((a, b) => a + b, 0)).toBe(cr(lines.at(-1)![1]));
+    expect(cr(lines.at(-1)![1])).toBe(2_240);
   });
 
   it("H-6: the ship's line is plain words, and no code is left on this screen", () => {
