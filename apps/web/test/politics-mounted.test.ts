@@ -2,8 +2,7 @@ import { document, FakeElement } from './fake-dom';
 import type { TaxPromise } from '@mule/engine';
 import type { ElectionView, MuleView, MyView, PlayerView, PoliticsView, TableView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
-import { createElement, type ComponentType } from 'react';
-import { flushSync } from 'react-dom';
+import { act, createElement, type ComponentType } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -23,6 +22,8 @@ let forgetPicks: typeof import('../src/phone/hub/politics/ElectionDay').forgetPi
 let GovernorDesk: typeof import('../src/phone/hub/politics/Governor').GovernorDesk;
 
 beforeAll(async () => {
+  // act renders each tap and view, and runs the effects it sets off, before the test reads the screen.
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   // react-dom/client, imported after the fake DOM, mounts into it; the screens come after both.
   ({ ClientProvider } = await import('../src/net/react'));
   ({ PhoneGameProvider } = await import('../src/phone/game'));
@@ -145,7 +146,7 @@ const client = {
 /** The server refuses something, and the phone toasts why, as the client does with a RuleError. */
 function refused(message: string): void {
   const id = (state.toasts.at(-1)?.id ?? 0) + 1;
-  flushSync(() => {
+  act(() => {
     state = { ...state, toasts: [...state.toasts, { id, message }] };
     for (const watch of watchers) watch();
   });
@@ -171,16 +172,17 @@ function mount(view: MuleView, screen: ComponentType, code = 'MULE'): void {
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host as unknown as HTMLElement);
-  flushSync(() => root!.render(onPhone(view, screen, code)));
+  act(() => root!.render(onPhone(view, screen, code)));
 }
 
 /** Draws the mounted screen again from a new view, as a broadcast does. */
 function rerender(view: MuleView, screen: ComponentType): void {
-  flushSync(() => root!.render(onPhone(view, screen)));
+  act(() => root!.render(onPhone(view, screen)));
 }
 
 function unmount(): void {
-  root?.unmount();
+  const r = root;
+  if (r) act(() => r.unmount());
   root = null;
 }
 
@@ -215,10 +217,10 @@ function handlers(el: FakeElement): Record<string, () => void> {
   return (el as unknown as Record<string, Record<string, () => void>>)[key!]!;
 }
 
-const tap = (testid: string) => flushSync(() => handlers(byTestid(testid)).onClick!());
+const tap = (testid: string) => act(() => handlers(byTestid(testid)).onClick!());
 
 /** Lena picks a ballot option, a candidate's id or 'abstain'. */
-const pick = (option: string) => flushSync(() => handlers(radio(option)).onChange!());
+const pick = (option: string) => act(() => handlers(radio(option)).onChange!());
 const radio = (option: string) => byTestid(`ballot-governor-${option}`).findAll('input')[0]!;
 const checked = (option: string) => (radio(option) as unknown as { checked?: boolean }).checked === true;
 
