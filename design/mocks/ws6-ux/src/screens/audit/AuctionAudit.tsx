@@ -421,7 +421,7 @@ export function StatusAudit({ s }: { s: Scenario }) {
               Move on without {waiting.map((w) => w.name).join(' and ')}?
             </h2>
             <p className="text-sm text-ink-2 @min-[1100px]/shell:text-lg">
-              {defaultSideWords('Kai', s.good, kai.now, kai.need)} That is the side the numbers give; the walk starts for everyone.
+              {AWAY.includes('kai') ? `Kai is away and sits ${GOOD_NAME[s.good]} out. The walk starts without them.` : `${defaultSideWords('Kai', s.good, kai.now, kai.need)} That is the side the numbers give; the walk starts for everyone.`}
             </p>
             <div className="flex gap-2">
               <Button

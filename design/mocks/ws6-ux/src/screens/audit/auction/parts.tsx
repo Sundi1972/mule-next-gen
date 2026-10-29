@@ -585,7 +585,7 @@ export function PickedCount({ picked, of, tv = false, mark = true }: { picked: n
     <span
       className={cx(
         'relative flex shrink-0 items-center gap-1.5 rounded-chip border border-holo-line bg-holo-soft font-mono font-bold text-holo',
-        tv ? 'h-14 px-5 text-3xl' : 'h-8 px-2.5 text-sm @min-[1100px]/shell:h-11 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-2xl',
+        tv ? 'h-8 px-4 text-2xl leading-none' : 'h-8 px-2.5 text-sm @min-[1100px]/shell:h-11 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-2xl',
       )}
       data-testid="picked-count"
     >
