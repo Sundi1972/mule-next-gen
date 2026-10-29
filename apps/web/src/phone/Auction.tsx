@@ -280,7 +280,7 @@ export function sideWords(auction: AuctionView, seat: Seat, good: AuctionView['g
 }
 
 /** The host's one confirming tap before moving on for the seats still picking. */
-function MoveOn({ auction, seats, onNow, onKeep }: { auction: AuctionView; seats: readonly Seat[]; onNow: () => void; onKeep: () => void }) {
+export function MoveOn({ auction, seats, onNow, onKeep }: { auction: AuctionView; seats: readonly Seat[]; onNow: () => void; onKeep: () => void }) {
   const words = seats.map((s) => sideWords(auction, s, auction.good));
   return (
     <div className="fixed inset-0 z-40 grid place-items-center bg-void/70 p-3" role="dialog" aria-modal aria-labelledby="move-on-title" data-testid="move-on-dialog">
@@ -289,7 +289,7 @@ function MoveOn({ auction, seats, onNow, onKeep }: { auction: AuctionView; seats
           {SIDE_PICK_WORDS.title(seats)}
         </h2>
         <p className="text-sm text-ink-2 @min-[1100px]/shell:text-lg" data-testid="move-on-words">
-          {words.map((w) => w.line).join(' ')} {SIDE_PICK_WORDS.tail(words.every((w) => w.given))}
+          {words.map((w) => w.line).join(' ')} {SIDE_PICK_WORDS.tail(words.every((w) => w.given), seats.filter((s) => s.away).length, seats.length)}
         </p>
         <div className="flex gap-2">
           <Button size="md" className="flex-1" onClick={onNow} data-testid="move-on-now">
