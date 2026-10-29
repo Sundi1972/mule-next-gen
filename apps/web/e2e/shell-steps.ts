@@ -291,24 +291,60 @@ type RailRead = {
   seatRow: 'header' | 'under' | null;
   seatAfterKey: boolean;
   seats: { w: number; h: number }[];
+  /** With `scrolls`: the key's box with the rail scrolled to its end, and the rail body's visible box then. */
+  reached: { top: number; bottom: number; boxTop: number; boxBottom: number } | null;
+  /** With `stage`: the element's box at the stage's top, and the box it is clipped to (the stage and each scroller in it). */
+  stage: { top: number; bottom: number; clipTop: number; clipBottom: number } | null;
 };
 
 /** Reads the phone's rail after a paint, scrolled to its top. A string: tsx would wrap named functions in a helper the page lacks. */
-const READ_RAIL = (key: string) => `(async () => {
+const READ_RAIL = (key: string, scrolls: boolean, stageSel: string | null, stageText: string | null) => `(async () => {
+  const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
   const g = document.querySelector('[data-phase] [data-testid=guide]');
   const body = g?.querySelector('header + div');
   const el = g?.querySelector('[data-testid=${JSON.stringify(key).slice(1, -1)}]');
   if (!g || !body || !el) return null;
   const scrolled = body.scrollTop;
   body.scrollTop = 0;
-  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const stageEl = document.querySelector('[data-phase] [data-testid=stage]');
+  const inStage = ${JSON.stringify(stageSel)} ? [...(stageEl?.querySelectorAll(${JSON.stringify(stageSel)}) ?? [])].find((e) => e.textContent.includes(${JSON.stringify(stageText ?? '')})) : null;
+  if (stageEl) stageEl.scrollTop = 0;
+  await frame();
   const footer = g.querySelector('[data-testid=actions]');
   const row = g.querySelector('[data-testid=seat-row]');
   // A key drawn with display: contents (the month end's Worth total) has no box of its own: its content's is read.
   const range = document.createRange();
   range.selectNodeContents(el);
-  const box = getComputedStyle(el).display === 'contents' ? range.getBoundingClientRect() : el.getBoundingClientRect();
+  const boxOf = () => (getComputedStyle(el).display === 'contents' ? range.getBoundingClientRect() : el.getBoundingClientRect());
+  const box = boxOf();
+  let stage = null;
+  if (inStage) {
+    const r = inStage.getBoundingClientRect();
+    let clipTop = -Infinity, clipBottom = Infinity;
+    for (let a = inStage.parentElement; a; a = a.parentElement) {
+      const cs = getComputedStyle(a);
+      if (a === stageEl || cs.overflowY !== 'visible' || cs.overflowX !== 'visible') {
+        const c = a.getBoundingClientRect();
+        clipTop = Math.max(clipTop, c.top);
+        clipBottom = Math.min(clipBottom, c.bottom);
+      }
+      if (a === stageEl) break;
+    }
+    stage = { top: r.top, bottom: r.bottom, clipTop, clipBottom };
+  }
+  let reached = null;
+  if (${scrolls}) {
+    body.scrollTop = body.scrollHeight;
+    await frame();
+    const k = boxOf();
+    const v = body.getBoundingClientRect();
+    reached = { top: k.top, bottom: k.bottom, boxTop: v.top, boxBottom: v.bottom };
+    body.scrollTop = 0;
+    await frame();
+  }
   return {
+    reached,
+    stage,
     keyBottom: box.bottom,
     ref: footer ? 'footer top' : 'rail bottom',
     refY: footer ? footer.getBoundingClientRect().top : body.getBoundingClientRect().bottom,
@@ -325,13 +361,30 @@ const READ_RAIL = (key: string) => `(async () => {
  * chat follows the rail's own content, in the same scroll, so the screen's key element shows above the footer. At
  * 844×390 and 667×375 (or `sizes`), with the seat row and a two-line ticker present: `key`, the screen's key element in
  * the rail, ends at least `clear[width]` px (default 0) above the footer's top, or the rail's bottom on a screen with no
- * footer, with the rail scrolled to its top; the seat row is in the rail's body under that content, not its header; and
- * each seat is at least SEAT_MIN_PX tall. When the ticker holds fewer than two lines the page says RAIL_TALK first,
+ * footer, with the rail scrolled to its top. With `scrolls`, `key` may scroll instead: scrolled to the rail's end, it
+ * shows whole in the rail, never clipped away. With `stage`, that element (a selector in the stage, such as your own
+ * league row: the first match holding `stageText`) shows whole at the stage's top, inside the stage and every scroller
+ * around it. The seat row is in the
+ * rail's body under `key`, not its header; and each seat is at least SEAT_MIN_PX tall. When the ticker holds fewer than two lines the page says RAIL_TALK first,
  * over its own socket. Leaves the viewport as it found it. Returns the numbers, to log.
  */
 export async function railFits(
   page: Page,
-  { key, clear = {}, sizes = RAIL_SIZES }: { key: string; clear?: Partial<Record<number, number>>; sizes?: readonly { width: number; height: number }[] },
+  {
+    key,
+    clear = {},
+    sizes = RAIL_SIZES,
+    scrolls = false,
+    stage = null,
+    stageText = null,
+  }: {
+    key: string;
+    clear?: Partial<Record<number, number>>;
+    sizes?: readonly { width: number; height: number }[];
+    scrolls?: boolean;
+    stage?: string | null;
+    stageText?: string | null;
+  },
   timeout = 3_000,
 ): Promise<string> {
   const was = page.viewportSize();
@@ -347,14 +400,28 @@ export async function railFits(
       const at = `${size.width}×${size.height}`;
       await page.setViewportSize(size);
       await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
-      const r = (await page.evaluate(READ_RAIL(key))) as RailRead | null;
+      const r = (await page.evaluate(READ_RAIL(key, scrolls, stage, stageText))) as RailRead | null;
       check(r, `C20 at ${at}: the phone's rail holds ${key}`);
       const clears = r.refY - r.keyBottom;
       const floor = clear[size.width] ?? 0;
       const seats = r.seats.map((s) => `${s.w.toFixed(1)}×${s.h.toFixed(1)}`).join(' ');
-      seen.push(`${at}: ${key} ${r.keyBottom.toFixed(1)} vs ${r.ref} ${r.refY.toFixed(1)}, ${clears >= 0 ? '+' : '−'}${Math.abs(clears).toFixed(1)}; ticker ${r.ticker}; seat row ${r.seatRow}; seats ${seats}`);
+      const signed = (n: number) => `${n >= 0 ? '+' : '−'}${Math.abs(n).toFixed(1)}`;
+      const st = r.stage;
+      const reach = r.reached;
+      seen.push(
+        [
+          `${at}: ${st ? `${stage} ${st.top.toFixed(1)}–${st.bottom.toFixed(1)} in the stage's ${st.clipTop.toFixed(1)}–${st.clipBottom.toFixed(1)}, ${signed(st.clipBottom - st.bottom)}; ` : ''}${key} ${r.keyBottom.toFixed(1)} vs ${r.ref} ${r.refY.toFixed(1)}, ${signed(clears)}`,
+          ...(reach ? [`scrolled to the rail's end ${key} ${reach.top.toFixed(1)}–${reach.bottom.toFixed(1)} in ${reach.boxTop.toFixed(1)}–${reach.boxBottom.toFixed(1)}`] : []),
+          `ticker ${r.ticker}`,
+          `seat row ${r.seatRow}`,
+          `seats ${seats}`,
+        ].join('; '),
+      );
       check(r.ticker === 2, `C20 at ${at}: the ticker shows its two lines, got ${r.ticker}`);
-      check(clears >= floor - 0.01, `C20 at ${at}: ${key} ends at least ${floor} px above the ${r.ref}, got ${key} at ${r.keyBottom.toFixed(1)} against ${r.refY.toFixed(1)} (${clears.toFixed(1)} px)`);
+      if (stage) check(st && st.top >= st.clipTop - 0.5 && st.bottom <= st.clipBottom + 0.5, `C20 at ${at}: ${stage} shows whole in the stage, got ${st ? `${st.top.toFixed(1)}–${st.bottom.toFixed(1)} in ${st.clipTop.toFixed(1)}–${st.clipBottom.toFixed(1)}` : 'none'}`);
+      if (scrolls)
+        check(reach && reach.top >= reach.boxTop - 0.5 && reach.bottom <= reach.boxBottom + 0.5, `C20 at ${at}: scrolled to the rail's end, ${key} shows whole in the rail, got ${reach ? `${reach.top.toFixed(1)}–${reach.bottom.toFixed(1)} in ${reach.boxTop.toFixed(1)}–${reach.boxBottom.toFixed(1)}` : 'no read'}`);
+      else check(clears >= floor - 0.01, `C20 at ${at}: ${key} ends at least ${floor} px above the ${r.ref}, got ${key} at ${r.keyBottom.toFixed(1)} against ${r.refY.toFixed(1)} (${clears.toFixed(1)} px)`);
       check(r.seatRow === 'under' && r.seatAfterKey, `C20 at ${at}: the seat row is in the rail's body under ${key}, got ${r.seatRow}${r.seatAfterKey ? '' : ', not after it'}`);
       check(r.seats.length > 0 && r.seats.every((s) => s.h >= SEAT_MIN_PX - 0.01), `C20 at ${at}: each seat in the seat row is at least ${SEAT_MIN_PX} px tall, got ${seats}`);
     }
