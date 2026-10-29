@@ -78,3 +78,10 @@ export function planNow(rows: readonly NeedRow[]): Now & { detail: string } {
     detail: `Next is the land grant: one free plot each. ${short.length > 0 ? `You're short of ${and(short)}: a plot for it, or buy it at the auction.` : 'You have what you need this month.'}`,
   };
 }
+
+/** The stage's needs strip: Food, Energy and Water, in that order, those she needs this month; the rest is the Colony desk's. */
+const STRIP: Good[] = ['food', 'energy', 'water'];
+
+export function stripRows(rows: readonly NeedRow[]): NeedRow[] {
+  return STRIP.flatMap((g) => rows.filter((r) => r.good === g));
+}

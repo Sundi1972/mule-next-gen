@@ -4,11 +4,15 @@ import { createContext, useContext, useState, type ReactNode } from 'react';
 import { PHASE_NAME, secondsUntil } from '../../game/derive';
 import { useServerNow } from '../../net/react';
 import { usePhoneGame } from '../game';
-import { NowCard, PhoneShell, useWide, type Now } from '../Shell';
+import { PhoneShell, useWide, type Now } from '../Shell';
 import { needRows, planNow } from './needs';
+import { NeedsStrip } from './NeedsStrip';
+import { EyeOff, OnlyYou } from './OnlyYou';
 import { connectedIn, readyNowIn, stillPlanning } from './ready';
 import { ReadyBar, ReadyCount } from './ReadyBar';
+import { Roadmap } from './Roadmap';
 import { drawnSlots, firstGiven, goTo, settle, type AgendaSlot, type DeskSlot, type HubPlace, type HubSeat, type HubSlots, type MapToolSlot, type StageSlot } from './slots';
+import { StandingsSheet, useStanding } from './Standings';
 
 /** The hub's open desk and map tool, for any slot's components to read and change. */
 export interface HubNav {
@@ -32,10 +36,9 @@ export function useHub(): HubNav {
   return nav;
 }
 
-/** The export ship, in a few words, for the head of "This month". */
-function shipNote(view: Pick<MuleView, 'month' | 'ship'>): string {
-  if (view.ship.inPort) return 'EXPORT SHIP IN PORT';
-  return view.ship.arrives === view.month + 1 ? 'EXPORT SHIP NEXT MONTH' : `EXPORT SHIP IN MONTH ${view.ship.arrives}`;
+/** The export ship and what it is for, in plain words, at the head of "This month". */
+function shipLine(view: Pick<MuleView, 'ship'>): string {
+  return `Export ship in month ${view.ship.arrives}: it buys the colony’s leftovers`;
 }
 
 /** Planning: the month's hub, from the slots it is given. */
@@ -66,7 +69,10 @@ export function Hub({ slots }: { slots: HubSlots }) {
     planNow(needRows(me.monthNeeds, me.stock, view.tiles.filter((t) => t.owner === me.id)));
   const stage = drawn.stage?.[0];
   const bar = firstGiven(drawn.readyWords ?? [], seat);
-  const fold = !stage && place.first !== null;
+  // While a desk asks first, it and its tabs sit closer, so the desk keeps its room (E-9, E-11).
+  const asked = !stage && place.first !== null;
+  const [sheet, setSheet] = useState(false);
+  const standing = useStanding(() => setSheet(true));
   const Panel = tool?.Panel;
   // The tools are off the stage while a situation holds it, so their action leaves the footer.
   const Action = stage ? undefined : tool?.Action;
@@ -79,16 +85,18 @@ export function Hub({ slots }: { slots: HubSlots }) {
         phase={stage?.phase?.(seat) ?? PHASE_NAME.planning}
         seconds={secondsUntil(view.phaseEndsAt, serverNow)}
         status={<ReadyCount players={view.players} label={bar?.label} />}
-        now={fold ? undefined : now}
+        now={now}
+        // Once read, Now folds to its title in any month; a situation on the stage keeps it whole.
+        foldNow={!stage}
+        standing={standing}
         fill
         rail={
           stage ? (
             StageRail && <StageRail />
           ) : (
             <>
-              {fold && <FoldingNowCard key={now.title} now={now} />}
               {Panel && <Panel />}
-              <DeskGroup tight={fold}>
+              <DeskGroup tight={asked}>
                 <DeskTabs desks={drawn.desks} active={nav.desk} first={place.first} onPick={nav.openDesk} />
                 {Body && (
                   <div className="flex flex-col gap-2.5 @min-[1100px]/shell:gap-4" data-testid={`desk-body-${nav.desk}`}>
@@ -107,24 +115,37 @@ export function Hub({ slots }: { slots: HubSlots }) {
         }
       >
         {stage ? <SituationStage stage={stage} tool={tool} /> : <HubStage drawn={drawn} seat={seat} tool={tool} nav={nav} go={go} />}
+        {sheet && <StandingsSheet onClose={() => setSheet(false)} />}
       </PhoneShell>
     </Nav.Provider>
   );
 }
 
-/** The stage: banners, This month, the map's tools, the map, and from 1100 px what sits under it. */
+/**
+ * The stage: the month's roadmap with its lines, what you need this month, banners, This month, the map with its tools,
+ * and from 1100 px what sits under it.
+ */
 function HubStage({ drawn, seat, tool, nav, go }: { drawn: HubSlots; seat: HubSeat; tool: MapToolSlot | undefined; nav: HubNav; go(to: AgendaSlot['opens']): void }) {
   const wide = useWide();
   const ToolMap = tool?.Map;
+  const openNeeds = (el: Element) => {
+    nav.openDesk('colony');
+    // The full list sits in the Colony desk: bring it into the rail's view once the desk is drawn.
+    requestAnimationFrame(() => el.closest('[data-testid="game-shell"]')?.querySelector('[data-testid="this-month"]')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+  };
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 @min-[1100px]/shell:gap-4">
+      <Roadmap lines={drawn.lines ?? []} />
+      <NeedsStrip onOpen={openNeeds} />
       {drawn.banners.map(({ id, Body }) => (
         <Body key={id} />
       ))}
-      <AgendaRow items={drawn.agenda} seat={seat} note={shipNote(seat.view)} onOpen={go} />
-      <MapTools tools={drawn.tools} active={nav.tool} onPick={nav.pickTool} hint={wide && tool ? tool.hint(seat) : null} />
-      <div className="flex min-h-0 flex-1 flex-col" data-testid="hub-map">
-        {ToolMap && <ToolMap />}
+      <AgendaRow items={drawn.agenda} seat={seat} note={shipLine(seat.view)} onOpen={go} />
+      <div className="flex min-h-0 flex-1 gap-2 @min-[1100px]/shell:flex-col @min-[1100px]/shell:gap-4" data-testid="tools-and-map">
+        <MapTools tools={drawn.tools} active={nav.tool} onPick={nav.pickTool} hint={wide && tool ? tool.hint(seat) : null} />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="hub-map">
+          {ToolMap && <ToolMap />}
+        </div>
       </div>
       {drawn.beneath.map(({ id, Body }) => (
         <div key={id} className="hidden @min-[1100px]/shell:block">
@@ -158,54 +179,11 @@ function DeskGroup({ tight, children }: { tight: boolean; children: ReactNode })
   return <div className={cx('flex flex-col @min-[1100px]/shell:gap-4', tight ? 'gap-1' : 'gap-2.5')}>{children}</div>;
 }
 
-/** Now folded to its title, one tap from the whole card. A new title remounts it folded, showing the new title. */
-function FoldingNowCard({ now }: { now: Now }) {
-  const [open, setOpen] = useState(false);
-  if (open)
-    return (
-      <div className="relative">
-        <NowCard now={now} />
-        <button type="button" onClick={() => setOpen(false)} aria-expanded aria-label="Fold the Now card" className="absolute right-1.5 top-1.5 grid size-8 place-items-center rounded-chip text-holo hover:bg-holo-soft" data-testid="now-fold">
-          <Glyph d="M6 15l6-6 6 6" size={14} />
-        </button>
-      </div>
-    );
-  return (
-    <button
-      type="button"
-      onClick={() => setOpen(true)}
-      aria-expanded={false}
-      className={cx('flex w-full items-center gap-2 rounded-panel border-2 px-2.5 py-1.5 text-left @min-[1100px]/shell:px-4 @min-[1100px]/shell:py-2.5', now.warn ? 'border-warn bg-warn/10' : 'border-holo bg-holo-soft')}
-      data-testid="now"
-    >
-      <span className="label-caps shrink-0 text-[10px]! @min-[1100px]/shell:text-xs!">Now</span>
-      {/* Folded it is one line: a long title truncates (its whole is one tap away), so the rail below keeps its room (H-9). */}
-      <span className="min-w-0 flex-1 truncate font-display text-sm font-semibold leading-tight @min-[1100px]/shell:text-lg" data-testid="now-title">
-        {now.title}
-      </span>
-      <Glyph d="M6 9l6 6 6-6" size={14} />
-      <span className="sr-only">Tap to read it again</span>
-    </button>
-  );
-}
-
 function Glyph({ d, size = 18, className }: { d: string; size?: number; className?: string }) {
   return (
     <svg aria-hidden viewBox="0 0 24 24" width={size} height={size} className={className} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
       <path d={d} />
     </svg>
-  );
-}
-
-/** Only you see what this leads to. */
-export function Lock({ size = 10 }: { size?: number }) {
-  return (
-    <span role="img" className="inline-flex items-center rounded-chip bg-holo-soft px-1 leading-4 text-holo" aria-label="Only you see this">
-      <svg aria-hidden viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth={2.4}>
-        <rect x={5} y={11} width={14} height={10} rx={2} />
-        <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-      </svg>
-    </span>
   );
 }
 
@@ -234,8 +212,8 @@ export function DeskTabs({ desks, active, first = null, onPick }: { desks: DeskS
           <Glyph d={icon} size={14} className="@min-[1100px]/shell:size-4" />
           {label}
           {locked && (
-            <span className="absolute left-1 top-1">
-              <Lock size={9} />
+            <span className="absolute left-1 top-1 text-holo" role="img" aria-label="Only you see this">
+              <EyeOff size={9} strokeWidth={2.6} />
             </span>
           )}
           {Badge && <Badge />}
@@ -245,12 +223,17 @@ export function DeskTabs({ desks, active, first = null, onPick }: { desks: DeskS
   );
 }
 
-/** "This month": everything the month allows, each a door into its desk or tool. */
+/** "This month": everything the month allows, each a door into its desk or tool; `note` is the export ship's line. */
 export function AgendaRow({ items, seat, note, onOpen }: { items: AgendaSlot[]; seat: HubSeat; note: string; onOpen(opens: AgendaSlot['opens']): void }) {
   return (
-    <section className="flex shrink-0 flex-col gap-1.5" data-testid="agenda">
-      <span className="label-caps flex items-center justify-between gap-2 @min-[1100px]/shell:text-sm!">
-        This month · month {seat.view.month} <span className="font-mono text-[10px] text-ink-3 @min-[1100px]/shell:text-xs">{note}</span>
+    <section className="flex shrink-0 flex-col gap-1" data-testid="agenda">
+      <span className="flex items-baseline justify-between gap-2">
+        <span className="label-caps shrink-0 text-[10px]! @min-[1100px]/shell:text-sm!">This month</span>
+        {note && (
+          <span className="min-w-0 truncate text-[10px] text-ink-2 @min-[1100px]/shell:text-sm" data-testid="ship-line">
+            {note}
+          </span>
+        )}
       </span>
       <div className="flex gap-1.5 overflow-x-auto pb-1 @min-[1100px]/shell:grid @min-[1100px]/shell:grid-flow-col @min-[1100px]/shell:grid-cols-[repeat(auto-fit,minmax(0,1fr))] @min-[1100px]/shell:gap-2 @min-[1100px]/shell:overflow-visible">
         {items.map((it) => (
@@ -264,9 +247,9 @@ export function AgendaRow({ items, seat, note, onOpen }: { items: AgendaSlot[]; 
             )}
             data-testid={`agenda-${it.key}`}
           >
-            <span className="flex w-full items-center gap-1">
+            <span className="flex w-full flex-wrap items-center gap-x-1">
               <span className="truncate text-xs font-semibold @min-[1100px]/shell:text-base">{it.title(seat)}</span>
-              {it.locked && <Lock />}
+              {it.locked && <OnlyYou />}
             </span>
             <span className="truncate text-[10px] text-ink-2 @min-[1100px]/shell:text-sm">{it.sub(seat)}</span>
           </button>
@@ -276,10 +259,19 @@ export function AgendaRow({ items, seat, note, onOpen }: { items: AgendaSlot[]; 
   );
 }
 
-/** The map's tools; on a laptop, the open one's hint beside them. */
+/**
+ * The map's tools. On a phone they stand beside the map, in the room its shape leaves: a column of four 32 px tools, a
+ * fifth starting a second column, and on a small phone two to a column, in narrower columns. On a laptop they sit in a
+ * row above it, with the open tool's hint.
+ */
 export function MapTools({ tools, active, onPick, hint }: { tools: MapToolSlot[]; active: string; onPick(id: string): void; hint: string | null }) {
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-1" role="toolbar" aria-label="Map tools" data-testid="map-tools">
+    <div
+      className="grid shrink-0 grid-flow-col grid-rows-[repeat(4,auto)] content-start justify-start gap-1 @max-3xl/shell:auto-cols-[--spacing(22)] @max-3xl/shell:grid-rows-[repeat(2,auto)] @min-[1100px]/shell:flex @min-[1100px]/shell:flex-row @min-[1100px]/shell:flex-wrap @min-[1100px]/shell:items-center"
+      role="toolbar"
+      aria-label="Map tools"
+      data-testid="map-tools"
+    >
       {tools.map((t) => (
         <button
           key={t.id}
@@ -287,13 +279,13 @@ export function MapTools({ tools, active, onPick, hint }: { tools: MapToolSlot[]
           aria-pressed={active === t.id}
           onClick={() => onPick(t.id)}
           className={cx(
-            'flex h-7 items-center gap-1 rounded-control border px-2 text-[11px] font-semibold @min-[1100px]/shell:h-9 @min-[1100px]/shell:px-3 @min-[1100px]/shell:text-sm',
+            'relative flex min-h-8 shrink-0 items-center gap-1 rounded-control border px-2 text-[11px] font-semibold @max-3xl/shell:flex-wrap @max-3xl/shell:py-0.5 @max-3xl/shell:text-left @max-3xl/shell:leading-tight @min-[1100px]/shell:h-9 @min-[1100px]/shell:px-3 @min-[1100px]/shell:text-sm',
             active === t.id ? 'border-holo bg-holo-soft text-holo' : 'border-holo-line text-ink-2',
           )}
           data-testid={`tool-${t.id}`}
         >
           {t.label}
-          {t.locked && <Lock />}
+          {t.locked && <OnlyYou text={t.locked === 'icon' ? '' : 'Only you'} />}
         </button>
       ))}
       {hint && <span className="ml-2 text-sm text-ink-2">{hint}</span>}

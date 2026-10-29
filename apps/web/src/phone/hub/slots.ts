@@ -4,14 +4,15 @@ import type { Now } from '../Shell';
 import type { ReadyWords } from './ready';
 
 /**
- * The hub's slots (C17). Planning is the hub for the month: the stage holds banners, "This month" (the agenda: each
- * item a door into a desk or a map tool), the map tools and the colony map; the rail holds Now, the open tool's
- * panel, the desks and the open desk's body. The hub draws only the entries present in its HubSlots, and of those
- * only the ones whose `show(seat)` says yes (omitted: always); an agenda item whose door is not drawn is not drawn.
+ * The hub's slots (C17). Planning is the hub for the month: the stage holds the month's roadmap and the lines under
+ * it, what you need this month, banners, "This month" (the agenda: each item a door into a desk or a map tool), the
+ * map tools and the colony map; the rail holds Now, the open tool's panel, the desks and the open desk's body. The
+ * hub draws only the entries present in its HubSlots, and of those only the ones whose `show(seat)` says yes
+ * (omitted: always); an agenda item whose door is not drawn is not drawn.
  *
  * Today's entries are in ./today.tsx (HUB_SLOTS). WS7 adds its own to those lists, in the order they should show:
  * the Council, Secret, Governor's and Sheriff's desks (an office desk's `show` asks whether this seat holds the
- * office), their agenda items, map tools such as Guard and Target, the offices strip as a banner, and a Now for
+ * office), their agenda items, map tools such as Guard and Target, the offices line under the roadmap, and a Now for
  * the election's steps. An entry keeps its own state in its components (they may use hooks, and read or change
  * the open desk and tool with useHub() from ./Hub.tsx); `show` and the agenda's texts are plain functions of the
  * seat, called on every render.
@@ -31,7 +32,7 @@ export interface DeskSlot extends Shown {
   label: string;
   /** A 24×24 stroked SVG path. */
   icon: string;
-  /** Only you see what is in it: a lock on the tab. */
+  /** Only you see what is in it: the eye-slash on the tab. */
   locked?: boolean;
   Body: ComponentType;
   /** Drawn on the tab, such as unread messages. */
@@ -53,7 +54,7 @@ export interface AgendaSlot extends Shown {
   key: string;
   title(seat: HubSeat): string;
   sub(seat: HubSeat): string;
-  /** Only you see what it leads to: a lock. */
+  /** Only you see what it leads to: the eye-slash and "Only you". */
   locked?: boolean;
   /** The one that matters most this month, drawn strong. */
   lead?(seat: HubSeat): boolean;
@@ -64,8 +65,9 @@ export interface AgendaSlot extends Shown {
 export interface MapToolSlot extends Shown {
   id: string;
   label: string;
-  locked?: boolean;
-  /** One line on what a tap does; shown beside the tools on a laptop. */
+  /** Only you see what it shows: the eye-slash with "Only you", or the eye-slash alone. */
+  locked?: boolean | 'icon';
+  /** One line on what a tap does; shown beside the tools on a laptop. Empty when its Panel says it in the rail. */
   hint(seat: HubSeat): string;
   /** The map while the tool is on. */
   Map: ComponentType;
@@ -77,7 +79,7 @@ export interface MapToolSlot extends Shown {
   desk?: string;
 }
 
-/** A strip across the stage, such as the offices above This month. */
+/** A strip across the stage, or a line under the month's roadmap, such as the offices. */
 export interface BannerSlot extends Shown {
   id: string;
   Body: ComponentType;
@@ -101,6 +103,8 @@ export interface ReadyBarWords extends ReadyWords {
 
 export interface HubSlots {
   banners: BannerSlot[];
+  /** Folded in under the month's roadmap, such as the offices line. */
+  lines?: BannerSlot[];
   /** Under the map, from 1100 px only (on a phone they live in a desk), such as the store's prices. */
   beneath: BannerSlot[];
   agenda: AgendaSlot[];
@@ -127,7 +131,7 @@ export function drawnSlots(slots: HubSlots, seat: HubSeat): HubSlots {
   const tools = shown(slots.tools, seat);
   const agenda = shown(slots.agenda, seat).filter(({ opens }) => ('desk' in opens ? desks.some((d) => d.id === opens.desk) : tools.some((t) => t.id === opens.tool)));
   const stage = shown(slots.stage ?? [], seat).slice(0, 1);
-  return { banners: shown(slots.banners, seat), beneath: shown(slots.beneath, seat), agenda, tools, desks, nows: slots.nows, stage, readyWords: slots.readyWords ?? [] };
+  return { banners: shown(slots.banners, seat), lines: shown(slots.lines ?? [], seat), beneath: shown(slots.beneath, seat), agenda, tools, desks, nows: slots.nows, stage, readyWords: slots.readyWords ?? [] };
 }
 
 /** Where the hub is: the open desk and map tool, the focus the desk was opened with, and the desk that last asked first. */

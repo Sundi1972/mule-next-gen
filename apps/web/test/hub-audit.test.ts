@@ -1,14 +1,14 @@
-import { DEVELOPMENT, GAME, type TaxPromise } from '@mule/engine';
+import { DEVELOPMENT, GAME, POLITICS, type TaxPromise } from '@mule/engine';
 import type { ListingView, MuleView, MyView, PlayerView, PoliticsView, TableView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
 import { createElement, type ComponentType } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
 import { Planning } from '../src/phone/Planning';
-import { roadmapSteps } from '../src/phone/hub/roadmap';
+import { roadmapSteps } from '../src/phone/hub/month-steps';
 import { standingOf } from '../src/phone/hub/standing';
 import { StandingsSheet } from '../src/phone/hub/Standings';
 import { aMuleView, aPlayer } from './fixtures/views';
@@ -85,10 +85,16 @@ function month4(extra: Partial<MuleView> = {}, me: MyView = myView('s1')): MuleV
   return aMuleView({ month: 4, players: PLAYERS, me, mulePrice: 150, treasury: { money: 0, salesTax: 0.04 }, politics: POLITICS_4, ...extra });
 }
 
+let state: unknown;
+// The planning screen reads the table chat and the hub's shared state through useClientState, whose store has no
+// server snapshot to render from.
+vi.mock('../src/net/react', async (actual) => ({ ...(await actual<typeof import('../src/net/react')>()), useClientState: () => state }));
+
 function clientFor(game: MuleView, seatId: string): TableClient {
+  state = { status: 'open', role: 'player', code: 'MULE', seatId, view: { game }, chat: [], emotes: [], toasts: [], clockOffset: 0 };
   return {
     subscribe: () => () => {},
-    getState: () => ({ status: 'open', role: 'player', code: 'MULE', seatId, view: { game }, chat: [], emotes: [], toasts: [], clockOffset: 0 }),
+    getState: () => state,
     serverNow: () => 0,
     intent: () => {},
   } as unknown as TableClient;
@@ -119,7 +125,9 @@ function element(html: string, testid: string): string {
   }
   return html.slice(from);
 }
-const textOf = (html: string, testid: string) => element(html, testid).replace(/<[^>]+>/g, '');
+/** Markup's text as the player reads it: tags stripped, the escaped characters back. */
+const plain = (html: string) => html.replace(/<[^>]+>/g, '').replaceAll('&#x27;', "'").replaceAll('&quot;', '"').replaceAll('&amp;', '&');
+const textOf = (html: string, testid: string) => plain(element(html, testid));
 const has = (html: string, testid: string) => html.includes(`data-testid="${testid}"`);
 
 describe("the month's steps (H-1)", () => {
@@ -207,7 +215,7 @@ describe('the planning hub, rendered (UX audit)', () => {
     expect(standing).toMatch(/^<button/);
     expect(textOf(standing, 'money')).toBe('1,000 cr');
     expect(textOf(standing, 'standing-rank')).toBe('2nd of 4');
-    expect(standing).toMatch(/aria-label="1,000 cr\. You're 2nd of 4\. Open the standings\."/);
+    expect(standing.replaceAll('&#x27;', "'")).toMatch(/aria-label="1,000 cr\. You're 2nd of 4\. Open the standings\."/);
     expect(textOf(hub(month4(), 's2'), 'standing-rank'), "Ossa's phone").toBe('1st of 4');
   });
 
@@ -217,11 +225,11 @@ describe('the planning hub, rendered (UX audit)', () => {
     expect(rows).toEqual(['s2', 's1', 's4', 's3']);
     expect(textOf(sheet, 'standing-s2')).toBe('1Ossa5,600 cr');
     expect(textOf(sheet, 'standing-s1')).toBe('2You (Lena)2,800 cr');
-    expect(textOf(sheet, 'standings-mine')).toBe(`Your worthOnly youCash1,000Goods · 6 units600Land · 3 × ${GAME.plotScore}900MULEs · 2 × 150300Offices · 0 × 1,2000Your worth2,800`);
+    expect(textOf(sheet, 'standings-mine')).toBe(`Your worthOnly youCash1,000Goods · 6 units600Land · 3 × ${GAME.plotScore}900MULEs · 2 × 150300Offices · 0 × ${POLITICS.termScore}0Your worth2,800`);
   });
 
   it("H-4 (negative): another player's phone shows your Worth as one number and their own lines, never yours; nobody's goods show", () => {
-    const ossas = onPhone(month4({}, myView('s2')), () => createElement(StandingsSheet, { onClose: () => {} }), 's2');
+    const ossas = onPhone(month4({}, myView('s2', { stock: NO_GOODS })), () => createElement(StandingsSheet, { onClose: () => {} }), 's2');
     expect(textOf(ossas, 'standing-s1')).toBe('2Lena2,800 cr');
     expect(textOf(ossas, 'standings-mine')).toContain('Cash4,000');
     expect(textOf(ossas, 'standings-mine')).not.toContain('6 units');

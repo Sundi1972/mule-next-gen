@@ -3,11 +3,12 @@ import { ChatBadge, MarketDesk, MarketStrip, TalkDesk } from './desks';
 import { ColonyWithFacts } from './politics/Colony';
 import { COUNCIL_DESK, ELECTION_AGENDA, ELECTION_DAY_STAGE, electionNow, electionReadyWords, GOVERNOR_AGENDA, GOVERNOR_DESK, OFFICES_BANNER } from './politics/slots';
 import type { HubSlots } from './slots';
-import { DroneAction, DroneMap, DroneRail, ListAction, LookMap, LookPanel, SellPlotMap } from './tools';
+import { DroneMap, DronePanel, DroneSend, ListAction, LookMap, LookPanel, SellPlotMap } from './tools';
 
 /** The hub's parts that exist today (C17). WS7 adds its politics to these lists; see ./slots.ts. */
 export const HUB_SLOTS: HubSlots = {
-  banners: [OFFICES_BANNER],
+  banners: [],
+  lines: [OFFICES_BANNER],
   beneath: [{ id: 'market-strip', Body: MarketStrip }],
   agenda: [
     ELECTION_AGENDA,
@@ -27,10 +28,11 @@ export const HUB_SLOTS: HubSlots = {
       id: 'drone',
       label: 'Geo drone',
       locked: true,
-      hint: () => `Tap up to ${DEVELOPMENT.dronePlots} free plots: the drone reads their ground for ${DEVELOPMENT.droneFee} cr. Only you see the result.`,
+      // Its hint is its panel's, in the rail, on every screen.
+      hint: () => '',
       Map: DroneMap,
-      Panel: DroneRail,
-      Action: DroneAction,
+      Panel: DronePanel,
+      Action: DroneSend,
     },
     { id: 'list', label: 'Sell a plot', hint: () => 'Tap a plot of yours (or one with your MULE) to put it up for the auction.', Map: SellPlotMap, Action: ListAction, desk: 'market' },
   ],
