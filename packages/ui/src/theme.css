@@ -8,6 +8,8 @@
  * Import once, after `@import "tailwindcss";`. Load the fonts (Space Grotesk, Inter, JetBrains Mono) with a <link> in the page head.
  */
 
+@import "./events/events.css";
+
 @theme static {
   /* Surfaces, darkest first. */
   --color-void: #03060b;
