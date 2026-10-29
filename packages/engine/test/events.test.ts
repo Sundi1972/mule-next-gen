@@ -628,6 +628,8 @@ describe('the roller', () => {
       const hit = (key: EventKey) => fired.find((e) => e.key === key)!.plots.map((p) => state.tiles[p.index]!);
       expect(hit('pestSwarm')).toContain(joined);
       expect(hit('wildfire')).toEqual([p2Food]);
+      // Only a collapse changes what a plot is: these events' plots say nothing of was or becomes.
+      expect(fired.flatMap((e) => e.plots).filter((p) => 'was' in p || 'becomes' in p)).toEqual([]);
       // The start is drawn among the roller's own plots: over 20 seeds p3's bumper harvest starts on both of p3's.
       const starts = new Set(
         Array.from({ length: 20 }, (_, seed) => {
