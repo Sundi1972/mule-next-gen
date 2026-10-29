@@ -220,7 +220,7 @@ export function replays(seen: number, count: number, reduced: boolean): boolean 
 function useOneShot(count: number, ms: number, plays: [RefObject<HTMLSpanElement | null>, Keyframe[]][]) {
   const seen = useRef(count);
   useEffect(() => {
-    const play = replays(seen.current, count, window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    const play = replays(seen.current, count, window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false);
     seen.current = count;
     if (!play) return;
     for (const [ref, frames] of plays) ref.current?.animate(frames, { duration: ms, easing: 'ease-out' });
