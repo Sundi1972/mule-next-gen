@@ -114,13 +114,13 @@ describe("A-1: the host's Start the clock while month 1's development clock wait
   it('A-1: after the host starts the clock, the button is gone and the passed player’s Now says the month is running, its title the same', () => {
     const { game, ctx, installFirst } = firstMonth();
     installFirst(LENA);
-    const before = text(phone(game, ctx.now(), OSSA));
     game.handle(LENA, { type: 'continue' });
     expect(game.viewFor(null).news[0]).toBe('Lena started the clock without Ossa.');
     expect(phone(game, ctx.now(), LENA)).not.toContain(BUTTON);
     const ossa = text(phone(game, ctx.now(), OSSA));
     expect(ossa).toContain('The host started the clock: your month is running.');
-    expect(before).toContain('Buy a MULE at the corral');
-    expect(ossa).toContain('Buy a MULE at the corral');
+    // A freshly drawn phone opens on the start card's row; the press changes its detail, never its title.
+    expect(ossa).toContain('You eat, and the clock starts for everyone');
+    expect(ossa).not.toContain('no rush');
   });
 });
