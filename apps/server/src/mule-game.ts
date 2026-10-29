@@ -369,8 +369,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         return;
       case 'continue': {
         if (seatId !== this.ctx.hostId()) throw new RuleError('Only the host can continue');
-        const left = state.phase === 'development' ? this.continueDevelopment(seatId) : this.continuePlanning(seatId);
-        if (left.length > 0) this.addNews(`${this.nameOf(seatId)} continued without ${andList(left)}.`);
+        const inDevelopment = state.phase === 'development';
+        const left = inDevelopment ? this.continueDevelopment(seatId) : this.continuePlanning(seatId);
+        if (left.length > 0) this.addNews(`${this.nameOf(seatId)} ${inDevelopment ? 'started the clock' : 'continued'} without ${andList(left)}.`);
         return;
       }
     }
