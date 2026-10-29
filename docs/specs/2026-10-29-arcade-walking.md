@@ -510,8 +510,10 @@ RULE-3 · What a press does (Reach)                               shape: decisio
                                                                 V-4's words; AM-9); the same outfit as the plot's:
                                                                 SWAP · same outfit, nothing gained (the plot keeps
                                                                 its run; AM-10)
- 11  on the map on an own plot, leading no MULE, not analysed  ANALYSE (a plot with a MULE installed too; AM-9)
- 12  on an own plot with a MULE and no filter, Alloy held     FIT FILTER
+ 11  on the map on any plot but the store, not analysed by    ANALYSE (owned or free: scouting, as analysePlot
+     you (row 10 wins on your own plot with a fitted MULE)    allows; a plot with a MULE too; AM-9, AM-12)
+ 12  on an own plot with no filter, Alloy held (a MULE or     FIT FILTER (as fitFilter allows; AM-12)
+     not)
  11a on an own plot with a MULE, leading none                 TAKE MULE (it follows on its lead; the plot makes
                                                               nothing until a MULE is installed again; AM-2;
                                                               after 11 and 12, so analysing and the filter stay
@@ -678,7 +680,7 @@ C14.
 | T-AC-1 (serves B-AC-1, B-AC-2) | Given a seed and a per-tick input script · When stepFloor runs twice · Then the floors are identical; and the server's floor after a scripted turn equals the sim's (HC-4) | engine unit + server test | a changed input at one tick changes the result | C1, C6, C10 |
 | T-AC-2 (serves G-2) | speeds per RULE-2's examples (plains 1.5625, mountains 0.625, swamp 0.78, leading 1.41, bitten 0.78 tiles/s) | engine unit | lake 0 blocks | C1, C5 |
 | T-AC-3 (serves B-AC-1) | Reach per RULE-3's table, one row each | engine unit | money short → disabled, not hidden | C3 |
-| T-AC-4 (serves B-AC-2) | Given the tick · Then one frame per tick reaches every connection, frames are dropped not queued for a slow one, full views go only on change | server + tabletop test | no full view on a tick where nothing changed | C6, C8 |
+| T-AC-4 (serves B-AC-2) | Given the tick · Then one frame per tick reaches every connection, frames are dropped not queued for a slow one, full views go only on change, or to one seat when its reach's words change (AM-11) | server + tabletop test | no full view on a tick where nothing changed and no seat's reach words changed | C6, C8 |
 | T-AC-5 (serves G-2, RULE-8) | In 20 seeded AI-only turns at the defaults every AI colonist reaches the pub within 50 s, and a bot races in most glints | sim (`pnpm sim` report) | with botsSpareTime off, Kai misses turns | C9, C10 |
 | T-AC-6 (serves B-AC-5) | Wolves: the rookie wins ≈ 1 in 4 over 60 seeded fights; a forest run escapes ≈ 13 of 20 | engine headless | — | C4, C9 |
 | T-AC-7 (serves B-AC-6) | Glint timing per RULE-5 (none in the first 6 s, 8 s shown, the first onto it wins) | engine unit | a non-racing colonist on the tile wins too | C4 |
@@ -723,6 +725,17 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-12 (2026-10-29, WS3's F6 on #186, ruled by WS6).** Reach must not refuse what game.ts allows where the spot
+  is unambiguous (AM-10's principle). RULE-3 row 11: ANALYSE on any plot but the store, owned or free, that you haven't
+  analysed (scouting stays in the game; leading a MULE doesn't stop it; on your own plot with a fitted MULE row 10's
+  INSTALL still comes first). Row 12: FIT FILTER on your own plot with no filter and Alloy held, with or without a MULE.
+  Re-outfitting stays PR-7's (row 8a). WS1 changes reach.ts's two rows with a T-AC-3 case each, red first.
+- **AM-11 (2026-10-29, WS3's question for PR-3, ruled by WS6).** `MyView.reach` changes with position while GameState
+  doesn't (into the corral: BUY MULE; the pub's payout every second). The server sends a seat its full view when that
+  seat's `reachWords` change, compared per seat each tick (option a; no protocol change, reach stays server-side, only
+  that seat gets a view). Rejected: reach on every frame (bytes to every connection 20 times a second); reach computed
+  on the phone (it has the view, not the GameState). T-AC-4's negative case gains "and no seat's reach words changed".
+  The button may trail the phone's predicted position by a round trip; the press is judged by the server either way.
 - **AM-10 (2026-10-29, WS1's question at PR-1 #186, ruled by WS6).** RULE-3 row 10: leading a MULE onto your plot
   whose MULE has the same outfit, `installMule` keeps the plot's run months, so "your Energy MULE runs away" would
   promise a change that doesn't happen; the press only spends the MULE you lead. The words become "SWAP · same outfit,
