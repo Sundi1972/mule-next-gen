@@ -1,12 +1,13 @@
 /**
  * B-AC-1 and B-AC-2 front to back: two rooms play against the real server, one with a TV and one phone alone, and
- * month 2's production fires two events. Local tier. Run after `vite build`: `pnpm --filter @mule/web exec tsx e2e/events.ts`.
+ * month 2's production fires two events. B-AC-4 and T-AC-10's display: as month 2's development starts the human seat
+ * falls sick, and its roll call holds the phase, played by the TV (the phone keeps the light card) or the phone alone. Local tier. Run after `vite build`: `pnpm --filter @mule/web exec tsx e2e/events.ts`.
  * MULE_E2E_EVENTS picks the pair (default the spec's drought then pest swarm); MULE_E2E_SHOTS=<dir> saves screenshots.
  */
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { buildEvent, createRng, eventOutput, type EventKey, type GameState, type MonthEvent, type MonthReport } from '@mule/engine';
-import type { MuleView, ProductionView } from '@mule/protocol';
+import { buildEvent, createRng, eventOutput, EVENTS, type EventKey, type GameState, type MonthEvent, type MonthReport } from '@mule/engine';
+import type { EventView, MuleView, ProductionView, ServerEnvelope, TableView } from '@mule/protocol';
 import { eventScript, finalUnits, GOOD_NAME, SHOW, showEnd, type Good } from '@mule/ui';
 import { errors as playwrightErrors, type Browser, type Page } from 'playwright';
 import { check, held, launch, PHONE, startServer, TV } from './harness';
@@ -27,7 +28,10 @@ const PLAY_MS = 6 * 60_000;
 /** A click lands this much before the show would have got there by itself, or the click did not cause the jump. */
 const AHEAD_MS = 300;
 /** Each event's own story element on a map that plays it. */
-const STORY_MARK: Partial<Record<EventKey, string>> = { dustStorm: 'front-dustStorm', drought: 'front-drought', acidRain: 'front-acidRain', pestSwarm: 'swarm-', wildfire: 'fire-' };
+const STORY_MARK: Partial<Record<EventView['key'], string>> = { dustStorm: 'front-dustStorm', drought: 'front-drought', acidRain: 'front-acidRain', pestSwarm: 'swarm-', wildfire: 'fire-' };
+
+/** The development control the sickness step clicks at and presses: in the store, where development opens. */
+const PUB = 'Go to the pub and end your turn';
 
 /** Lines the AI seats post when they have not said three yet: the ticker's most, as in a real game. */
 const CHATTER = ['Money is for spending on MULEs.', 'Quietly building.', 'Better safe than sorry: keep the cash.'];
@@ -45,12 +49,21 @@ const browser = await launch();
 const errors: string[] = [];
 /** Why a room's production could not fire the pair, for the check that reads the view. */
 const unfired: string[] = [];
+/** What each room's sickness step saw, printed with the B-AC lines. */
+const sickness: string[] = [];
+/** The latest game view each phone received, any phase. */
+const games = new WeakMap<Page, MuleView>();
+/** Every message each phone sent, from its show watch. */
+const watchedSent = new WeakMap<Page, () => unknown[]>();
+/** Where each phone last saw the pub's control on its development screen. */
+const pubAt = new WeakMap<Page, { x: number; y: number }>();
 try {
   if (SHOTS) mkdirSync(SHOTS, { recursive: true });
   const [withTv, alone] = await Promise.all([theTvPlaysEachStory(browser), thePhoneAlonePlaysAndSkips(browser)]);
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
   console.log(`B-AC-1: ${withTv}`);
   console.log(`B-AC-2: ${alone}`);
+  for (const line of sickness) console.log(`B-AC-4/T-AC-10: ${line}`);
   console.log(`e2e events: ok (seed ${SEED}, month ${MONTH}, ${FIRED.join(' then ')}, ${seconds()} s)`);
 } catch (err) {
   console.error(`e2e events: FAILED (seed ${SEED}, month ${MONTH}, ${FIRED.join(' then ')}, ${seconds()} s)`);
@@ -75,7 +88,7 @@ async function theTvPlaysEachStory(browser: Browser): Promise<string> {
   const tvShow = await watchShow(tv);
   await tv.goto(`${base}/table?room=${code}`);
   await tv.getByTestId('room-code').waitFor();
-  await startAndReachProduction(phone, code, 'tv room');
+  await startAndReachProduction(phone, code, 'tv room', tv);
 
   const view = await productionOn(tvShow, 'tv room');
   const order = view.events.map((e) => e.key);
@@ -241,6 +254,8 @@ async function openRoom(browser: Browser, tag: string): Promise<{ phone: Page; c
   const phone = await (await browser.newContext(PHONE)).newPage();
   phone.on('pageerror', (e) => errors.push(`${tag}: ${e.message}`));
   const watch = await watchShow(phone);
+  watchGame(phone);
+  watchedSent.set(phone, watch.sent);
   await phone.goto(base);
   await phone.getByPlaceholder('Heiko').fill('Heiko');
   await phone.getByRole('button', { name: 'Start a new game' }).click();
@@ -254,13 +269,21 @@ async function openRoom(browser: Browser, tag: string): Promise<{ phone: Page; c
   return { phone, code, watch };
 }
 
-/** Starts the game and plays the phone through to MONTH's production, which fires FIRED. */
-async function startAndReachProduction(phone: Page, code: string, tag: string): Promise<void> {
+/** Starts the game and plays the phone through to MONTH's production, which fires FIRED; MONTH's development starts with the phone's seat sick. */
+async function startAndReachProduction(phone: Page, code: string, tag: string, tv?: Page): Promise<void> {
   await phone.getByRole('button', { name: 'Start game' }).click();
   await phone.locator('[data-phase]').waitFor({ timeout: SHOWN_MS });
   const game = () => (server.registry.get(code) as unknown as { game: { state: GameState } }).game.state;
+  const me = game().players.find((p) => !p.isAi)!.id;
+  // The step starts the moment the hold does: a roll call holds development for a few seconds only.
+  let step: Promise<string> | null = null;
+  sickOnNextDevelopment(code, me, () => {
+    step = theRollCallHolds(phone, tv, code, me, tag);
+    step.catch(() => {});
+  });
   const deadline = Date.now() + PLAY_MS;
   let armed = false;
+  let told = false;
   for (;;) {
     const { month, phase } = game();
     check(Date.now() < deadline, `${tag}: month ${MONTH}'s production within ${PLAY_MS} ms, still in month ${month}'s ${phase}`);
@@ -270,24 +293,182 @@ async function startAndReachProduction(phone: Page, code: string, tag: string): 
       fireOnNextProduction(game(), FIRED, tag);
       armed = true;
     }
+    if (month === MONTH && phase === 'development' && !told) {
+      check(step, `${tag}: month ${MONTH}'s development started with ${me} sick`);
+      sickness.push(`${tag}: ${await (step as Promise<string>)}`);
+      told = true;
+    }
     await act(phone, phase);
   }
   check(armed, `${tag}: month ${MONTH}'s production was armed in its development`);
+  check(told, `${tag}: the sickness step ran in month ${MONTH}'s development`);
   await phone.locator('[data-phase=production]').waitFor({ timeout: SHOWN_MS });
 }
 
-/** The phone's part in `phase`, one step: Ready, a claim, the pub, Done. A control not there yet is no failure. */
+/** The phone's part in `phase`, one step: Ready, a claim, the pub, Done, on to the next month. A control not there yet is no failure. */
 async function act(phone: Page, phase: string): Promise<void> {
   const press = (name: string | RegExp) => phone.locator(`[data-phase=${phase}]`).getByRole('button', { name }).first().click({ timeout: PRESS_MS });
   try {
     if (phase === 'planning') await press("I'm ready");
     else if (phase === 'landGrant') await press(/CLAIM/);
-    else if (phase === 'development') await press('Go to the pub and end your turn');
+    else if (phase === 'development') {
+      // Where the pub's control sits on the development screen, for the sickness step's click under the overlay.
+      const box = await phone.locator('[data-phase=development]').getByRole('button', { name: PUB }).first().boundingBox({ timeout: PRESS_MS });
+      if (box) pubAt.set(phone, { x: box.x + box.width / 2, y: box.y + box.height / 2 });
+      await press(PUB);
+    }
     else if (phase === 'auction') await press(/^(Ready|Done with .+)$/);
+    // The month end has no clock: it waits for the phone's "On to month N", as month-end-steps.ts presses it.
+    else if (phase === 'upkeep') await phone.locator('[data-phase=upkeep]').getByTestId('ready').click({ timeout: PRESS_MS });
     else await phone.waitForTimeout(PRESS_MS);
   } catch (err) {
     if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
   }
+}
+
+/** Keeps the latest game view `page` receives. Attach before the page loads. */
+function watchGame(page: Page): void {
+  page.on('websocket', (ws) =>
+    ws.on('framereceived', ({ payload }) => {
+      if (typeof payload !== 'string') return;
+      const msg = JSON.parse(payload) as ServerEnvelope<MuleView>;
+      const game = msg.t === 'view' ? (msg.view as TableView<MuleView>).game : null;
+      if (game) games.set(page, game);
+    }),
+  );
+}
+
+/** The latest view `page` received that `ok` accepts, polled. */
+async function viewWith(page: Page, ok: (v: MuleView) => boolean, promise: string): Promise<MuleView> {
+  for (let i = 0; i < SHOWN_MS / 50; i++) {
+    const v = games.get(page);
+    if (v && ok(v)) return v;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  const v = games.get(page);
+  check(v && ok(v), promise);
+  return v;
+}
+
+/**
+ * Makes `seat` sick in MONTH's development roll, on the engine's own flag: the engine rolls sickness as it starts
+ * development (advancePhase), then the server reads Player.sick as it enters the phase, for the phase's events and its
+ * hold. The flag is set between the two, as if the roll had hit and no Medicine cured it; the view is the server's own.
+ * `entered` runs once the server has entered that development.
+ */
+function sickOnNextDevelopment(code: string, seat: string, entered: () => void): void {
+  const game = (server.registry.get(code) as unknown as { game: { state: GameState; enterPhase(): void } }).game;
+  const enter = game.enterPhase.bind(game);
+  game.enterPhase = () => {
+    const state = game.state;
+    if (state.phase !== 'development' || state.month !== MONTH) return enter();
+    game.enterPhase = enter;
+    state.players.find((p) => p.id === seat)!.sick = true;
+    enter();
+    entered();
+  };
+}
+
+/**
+ * B-AC-4 and T-AC-10's display: development opens on the sick seat's roll call, which holds the phase until the
+ * view's endsAt. With a TV, the TV plays it and the phone's light card covers the screen: a real click where the pub's
+ * control sits sends nothing; after endsAt one press of it applies. Alone, the phone plays the roll call itself and a
+ * click on its map skips it; after endsAt the development screen is there.
+ */
+async function theRollCallHolds(phone: Page, tv: Page | undefined, code: string, me: string, tag: string): Promise<string> {
+  const state = () => (server.registry.get(code) as unknown as { game: { state: GameState } }).game.state;
+  const sent = () => watchedSent.get(phone)?.() ?? [];
+  const intentsFrom = (n: number) => sent().slice(n).filter((m) => (m as { t?: string }).t === 'intent') as { intent: { type: string } }[];
+  // The fill card's sick line, if it shows at any time from here on.
+  await phone.evaluate(() => {
+    const w = window as unknown as { __sickSeen?: string };
+    new MutationObserver(() => {
+      w.__sickSeen ??= document.querySelector('[data-testid^=sick-st]')?.textContent ?? undefined;
+    }).observe(document.body, { subtree: true, childList: true });
+  });
+  const overlay = phone.locator(`[data-testid=phone-event-overlay][data-mode=${tv ? 'light' : 'solo'}][data-event-phase=development]`);
+  await overlay.waitFor({ timeout: SHOWN_MS });
+  const view = await viewWith(phone, (v) => v.phase === 'development' && (v.events?.length ?? 0) > 0, `${tag}: the phone received development's events`);
+  const endsAt = (view.eventShow as { endsAt?: number } | null)?.endsAt;
+  check(endsAt, `${tag}: development's view carries the show's endsAt`);
+  const sick = (view.events ?? []).filter((e) => e.key === 'sickness').map((e) => e.player);
+  const sickOnServer = state().players.filter((p) => p.sick).map((p) => p.id);
+  check(sick.includes(me), `B-AC-4 (${tag}): the view's development events tell ${me} fell sick, got ${sick.join()}`);
+  check(JSON.stringify(sick) === JSON.stringify(sickOnServer), `B-AC-4 (${tag}): the view's sick ${sick.join()} are the server's ${sickOnServer.join()}`);
+  const name = view.players.find((p) => p.id === me)!.name;
+
+  // The roll call, on the screen that plays it: one, naming exactly the view's sick seats.
+  const stage = tv ? tv.locator('[data-testid=tv-event-overlay][data-event-phase=development]') : overlay;
+  await stage.waitFor({ timeout: SHOWN_MS });
+  const rollCall = stage.getByTestId('roll-call');
+  await rollCall.first().waitFor({ timeout: SHOWN_MS });
+  check((await rollCall.count()) === 1, `T-AC-10 (${tag}): one roll call, got ${await rollCall.count()}`);
+  const named = await rollCall.locator('[data-roll]').evaluateAll((els) => els.map((el) => el.getAttribute('data-roll')));
+  check(JSON.stringify(named) === JSON.stringify(sick), `T-AC-10 (${tag}): the roll call names ${named.join()}, the view's sick ${sick.join()}`);
+  const label = (await rollCall.getAttribute('aria-label')) ?? '';
+  check(label.includes(name), `T-AC-10 (${tag}): the roll call names ${name}: "${label}"`);
+  await shoot(phone, `phone-844x390-${tv ? 'withtv' : 'alone'}-sick`);
+  if (tv) await shoot(tv, 'tv-1920x1080-sick');
+
+  // While the server holds the phase, the phone's overlay covers its whole screen.
+  const viewport = phone.viewportSize()!;
+  const box = await overlay.boundingBox();
+  check(box && box.x <= 0.5 && box.y <= 0.5 && box.width >= viewport.width - 0.5 && box.height >= viewport.height - 0.5, `B-AC-4 (${tag}): the phone's overlay covers its screen, ${JSON.stringify(box)}`);
+  const sentBefore = sent().length;
+  let during: string;
+  if (tv) {
+    // A real click where the pub's control sits on the development screen: the light card takes it.
+    const at = pubAt.get(phone);
+    check(at, `${tag}: the phone's pub control was seen in an earlier development`);
+    const covered = await phone.evaluate(({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest('[data-testid=phone-event-overlay]')), at);
+    check(covered, `B-AC-4 (${tag}): the light card is what lies where the pub's control sits`);
+    await phone.mouse.click(at.x, at.y);
+    const before = endsAt - Date.now();
+    check(before > 0, `B-AC-4 (${tag}): the click landed during the hold, ${before} ms before endsAt`);
+    during = `a click where the pub's control sits landed on the light card ${before} ms before endsAt`;
+  } else {
+    // Alone, a real click on the map skips: to the roll call's result, then out, ahead of the server's clock.
+    // The map moves while it plays, so the click goes to where the tap target is, by the mouse.
+    let clicks = 0;
+    while (clicks < 3 && (await overlay.count()) > 0) {
+      const map = await overlay.getByTestId('skip').boundingBox();
+      if (!map) break;
+      await phone.mouse.click(map.x + map.width / 2, map.y + map.height / 2);
+      clicks++;
+      // Each click moves the show on at once; give the page a moment to draw it before the next.
+      const out = await overlay.waitFor({ state: 'detached', timeout: AHEAD_MS }).then(
+        () => true,
+        () => false,
+      );
+      if (out) break;
+    }
+    await overlay.waitFor({ state: 'detached', timeout: SHOWN_MS });
+    const ahead = endsAt - Date.now();
+    check(ahead > AHEAD_MS, `B-AC-2/B-AC-4 (${tag}): ${clicks} click(s) on the map skipped the roll call ${ahead} ms before endsAt`);
+    during = `${clicks} click(s) on the map skipped the roll call ${ahead} ms before endsAt`;
+  }
+
+  // After endsAt the overlay is gone and the development screen is there.
+  const pub = phone.locator('[data-phase=development]').getByRole('button', { name: PUB }).first();
+  await overlay.waitFor({ state: 'detached', timeout: Math.max(0, endsAt - Date.now()) + SHOWN_MS });
+  await pub.waitFor({ timeout: Math.max(0, endsAt - Date.now()) + SHOWN_MS });
+  const late = Date.now() - endsAt;
+  check(late >= -AHEAD_MS, `B-AC-4 (${tag}): the development screen came back ${-late} ms before endsAt`);
+  check(intentsFrom(sentBefore).length === 0, `B-AC-4 (${tag}): the phone sent nothing during the hold, sent ${JSON.stringify(intentsFrom(sentBefore))}`);
+  check(!state().players.find((p) => p.id === me)!.doneDeveloping, `B-AC-4 (${tag}): nothing applied during the hold`);
+  let after = 'the development screen is there';
+  if (tv) {
+    const seen = sent().length;
+    await pub.click({ timeout: SHOWN_MS });
+    for (let i = 0; i < SHOWN_MS / 50 && !state().players.find((p) => p.id === me)!.doneDeveloping; i++) await new Promise((r) => setTimeout(r, 50));
+    const pressed = intentsFrom(seen).map((m) => m.intent.type);
+    check(JSON.stringify(pressed) === '["pub"]', `B-AC-4 (${tag}): one press sent one pub intent, sent ${pressed.join()}`);
+    check(state().players.find((p) => p.id === me)!.doneDeveloping, `B-AC-4 (${tag}): one press of the pub applied on the server`);
+    after = 'one press of the pub applied';
+  }
+  const sickLine = await phone.evaluate(() => (window as unknown as { __sickSeen?: string }).__sickSeen ?? null);
+  const line = sickLine ? `the sick line showed ("${sickLine.trim()}")` : 'the sick line (sick-st*) never showed';
+  return `${name} fell sick, the roll call names ${named.join(', ')}; ${tv ? 'the TV played it, the phone kept the light card' : 'the phone alone played it'}; ${during}; ${late} ms after endsAt ${after}; ${line}`;
 }
 
 /**
@@ -306,7 +487,9 @@ function eventsOn(state: GameState, report: MonthReport, keys: EventKey[], tag: 
   const before = new Map((report.lines ?? []).map((l) => [l.tile, l.made - l.parts.reduce((n, p) => n + (p.why === 'event' ? p.delta : 0), 0)]));
   const events: MonthEvent[] = [];
   for (const [i, key] of keys.entries()) {
-    const ev = buildEvent(state, key, createRng(SEED + i));
+    // A player row's event lands on one seat's own plots, tried in seat order as rollPhase rolls them.
+    const ev =
+      key in EVENTS.player ? (state.players.map((p) => buildEvent(state, key, createRng(SEED + i), p.id)).find((e) => e !== null) ?? null) : buildEvent(state, key, createRng(SEED + i));
     if (!ev) {
       unfired.push(`${tag}: month ${MONTH} has no plot a ${key} could hit (seed ${SEED})`);
       return null;
@@ -333,7 +516,7 @@ async function productionOn(watch: ShowWatch, tag: string): Promise<ProductionVi
 }
 
 /** Each event played its own story on the map, in fired order. */
-function checkStories(layers: string[], order: EventKey[], who: string): void {
+function checkStories(layers: string[], order: EventView['key'][], who: string): void {
   const played = layers.filter((l) => l.startsWith('event:')).map((l) => l.slice(6));
   check(JSON.stringify(played) === JSON.stringify(order), `${who} played ${played.join(', ')}, fired ${order.join(', ')}`);
   for (const key of order) {

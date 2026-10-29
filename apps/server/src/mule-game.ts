@@ -72,6 +72,7 @@ import {
   WALK,
   walkSeconds,
   type GameState,
+  type EventWeight,
   type Good,
   type MonthEvent,
   type NoticeEntry,
@@ -81,7 +82,7 @@ import {
   type Trade,
 } from '@mule/engine';
 import { AiSeat, LotHand, personaFor, VoteHand, type AiAction } from '@mule/ai';
-import { PLAYER_COLORS, type MuleIntent, type MuleView, type PlayerView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
+import { PLAYER_COLORS, type EventView, type MuleIntent, type MuleView, type PlayerView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import { createBrain, type BrainService } from './brain/index.js';
 import { colonistView, dueArrivals, placeName, walkTarget, type Colonist, type DevIntent } from './dev-walking.js';
@@ -178,22 +179,129 @@ function worthBeforeCutOf(state: GameState, playerId: string): number | null {
  * When the cap bites the intro keeps its length and the events' shares are cut in proportion. Production's length and
  * the view's lengths all come from here, so they cannot disagree.
  */
-function eventShow(events: readonly MonthEvent[]) {
+function eventShow(events: readonly ShownEvent[]) {
   const introMs = events.length > 0 ? EVENT_SHOW.introMs : 0;
-  const weights = events.map((e) => EVENT_SHOW.weight[e.key] ?? 'headline');
+  const weights = events.map(weightOf);
   const bulletins = weights.filter((w) => w === 'bulletin').length;
   const plays = weights.map((w) => (w === 'bulletin' ? EVENT_SHOW.rollCallMs / bulletins : EVENT_SHOW.playMs[w]));
   const total = plays.reduce((sum, ms) => sum + ms, 0);
   const showMs = Math.min(EVENT_SHOW.capMs, introMs + Math.round(total));
   const sharedMs = showMs - introMs;
   // Each share runs from where the last one ended, rounded on the running total, so intro and shares add up to showMs.
+  // A config whose events all play 0 ms leaves nothing to share: each gets 0, not 0 / 0.
+  const sharedUpTo = (playedMs: number) => (total > 0 ? Math.round((playedMs * sharedMs) / total) : 0);
   let played = 0;
   const shares = weights.map((weight, i) => {
-    const from = Math.round((played * sharedMs) / total);
+    const from = sharedUpTo(played);
     played += plays[i]!;
-    return { weight, playMs: Math.round((played * sharedMs) / total) - from };
+    return { weight, playMs: sharedUpTo(played) - from };
   });
   return { showMs, introMs, shares };
+}
+
+/**
+ * Whether a phase waits for its events' show before its clocks start (RULE-4): the phases with a clock of their own.
+ * Planning is never held (rule (c)); production plays its show inside a longer phase instead (RULE-1); the month end
+ * only when PHASE_MS gives it a clock.
+ */
+function holdsForEvents(phase: Phase): boolean {
+  switch (phase) {
+    case 'landGrant':
+    case 'landAuction':
+    case 'development':
+    case 'auction':
+      return true;
+    case 'upkeep':
+      return PHASE_MS.upkeep !== null;
+    default:
+      return false;
+  }
+}
+
+/** Where production's map starts its event show, in ms into the phase at full pace: the client's SHOW.eventAt (4.8 s). */
+const PRODUCTION_SHOW_AT_MS = 4_800;
+
+/** A player who fell sick at development's start, told as a bulletin in its roll call (C11). */
+interface SickBulletin {
+  key: 'sickness';
+  player: string;
+}
+
+/** What a phase's show plays: the month's events of that phase, and in development its sick players. */
+type ShownEvent = MonthEvent | SickBulletin;
+
+/** How big an event's story is on the TV: sickness is a bulletin; a month event's key missing from the table, a headline. */
+function weightOf(e: ShownEvent): EventWeight {
+  return e.key === 'sickness' ? 'bulletin' : (EVENT_SHOW.weight[e.key] ?? 'headline');
+}
+
+/**
+ * The events a phase fired this month, in fired order: what its show plays and what its length counts (RULE-1). They
+ * are this month's report's events of that phase (a report from an earlier month holds none), then in development the
+ * players who fell sick at its start: no report exists before production.
+ */
+function phaseEvents(state: GameState, phase: Phase): ShownEvent[] {
+  const report = state.history.at(-1);
+  const fired = report && report.month === state.month ? (report.events ?? []).filter((e) => e.phase === phase) : [];
+  return [...fired, ...sickBulletins(state, phase)];
+}
+
+/**
+ * The players who fell sick at this development's start, in seat order. The engine clears every player's sick flag
+ * before it rolls sickness at development's start, so during development the flag is true exactly for this roll's sick:
+ * a player sick last month is not, and the flag survives a resume because it is game state, not a change seen here.
+ */
+function sickBulletins(state: GameState, phase: Phase): SickBulletin[] {
+  if (phase !== 'development' || state.phase !== 'development') return [];
+  return state.players.filter((p) => p.sick).map((p) => ({ key: 'sickness', player: p.id }));
+}
+
+/** Why a player fell sick, as the bulletin's line ends: playerEventReason's influence that raised the chance most. */
+const SICK_BECAUSE = { air: 'the air is bad', pollution: 'their plots foul the air', chance: 'bad luck' } as const;
+
+/** Fired events as every screen shows them, with each one's weight and share of the show. */
+function eventViews(state: GameState, events: readonly ShownEvent[]): EventView[] {
+  const { shares } = eventShow(events);
+  return events.map((e, i) => ({ ...(e.key === 'sickness' ? sickView(state, e) : monthEventView(state, e)), ...shares[i]! }));
+}
+
+/** A month event as every screen shows it, before its share of the show. */
+function monthEventView(state: GameState, e: MonthEvent): Omit<EventView, 'weight' | 'playMs'> {
+  const at = (index: number) => ({ x: index % state.width, y: Math.floor(index / state.width) });
+  return {
+    key: e.key,
+    kind: e.kind,
+    title: e.title,
+    line: e.line,
+    sign: e.sign,
+    scope: e.scope,
+    origin: { ...e.origin },
+    ...(e.direction ? { from: e.direction } : {}),
+    ...(e.player ? { player: e.player } : {}),
+    hits: e.plots.map((p) => ({ ...at(p.index), order: p.order, delta: p.delta })),
+    phase: e.phase,
+  };
+}
+
+/**
+ * A sick player's bulletin, before its share of the roll call. It hits no plot; it starts where the player's colonist
+ * starts development, the store's tile ({ x: 0, y: 0 } on a map without a store, which no game makes).
+ */
+function sickView(state: GameState, { player }: SickBulletin): Omit<EventView, 'weight' | 'playMs'> {
+  const name = state.players.find((p) => p.id === player)!.name;
+  const store = state.tiles.find((t) => t.terrain === 'store');
+  return {
+    key: 'sickness',
+    kind: 'sickness',
+    title: 'Sickness',
+    line: `${name} fell sick: ${SICK_BECAUSE[playerEventReason(state, 'sickness', 'development', player)]}.`,
+    sign: 'bad',
+    scope: 'personal',
+    origin: store ? { x: store.x, y: store.y } : { x: 0, y: 0 },
+    player,
+    hits: [],
+    phase: 'development',
+  };
 }
 
 /**
@@ -219,21 +327,8 @@ function productionView(state: GameState, lengthMs: number): ProductionView | nu
         .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
         .slice(0, MAX_BADGES),
     }));
-  const { shares, introMs } = eventShow(report.events ?? []);
-  const events = (report.events ?? []).map((e, i) => ({
-    key: e.key,
-    kind: e.kind,
-    title: e.title,
-    line: e.line,
-    sign: e.sign,
-    scope: e.scope,
-    origin: { ...e.origin },
-    ...(e.direction ? { from: e.direction } : {}),
-    hits: e.plots.map((p) => ({ ...at(p.index), order: p.order, delta: p.delta })),
-    phase: 'production' as const,
-    ...shares[i]!,
-  }));
-  return { lines, events, lengthMs, introMs };
+  const fired = phaseEvents(state, 'production');
+  return { lines, events: eventViews(state, fired), lengthMs, introMs: eventShow(fired).introMs };
 }
 
 /**
@@ -270,6 +365,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private cancels: (() => void)[] = [];
   private news: string[] = [];
   private phaseEndsAt: number | null = null;
+  /** When the current phase was entered, epoch ms: its event show is timed from here. */
+  private phaseEnteredAt = 0;
+  /** While a timed phase's events play (RULE-4), the server time its clocks start; null when no show holds the phase. */
+  private heldUntil: number | null = null;
   /** This month's production length in real ms, as its timer was given: the production show stretches over it. */
   private productionMs = 0;
   /**
@@ -357,6 +456,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   handle(seatId: string, intent: MuleIntent): void {
     const state = this.requireState();
+    if (this.heldUntil !== null) throw new RuleError('The event is still playing');
     switch (intent.type) {
       case 'ready':
         // During the election, ready is Done for the stage; it never ends planning.
@@ -642,6 +742,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   }
 
   private checkAllReady(): void {
+    // A phase held for its events has not started: nobody can be done with it yet.
+    if (this.heldUntil !== null) return;
     // The election waits for every player's Done, or the host's Continue; a dropped phone holds it.
     if (this.electionOpen()) return;
     const phase = this.state?.phase;
@@ -744,6 +846,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   private enterPhase(): void {
     const state = this.requireState();
+    this.phaseEnteredAt = this.ctx.now();
+    this.heldUntil = null;
     for (const cancel of this.cancels) cancel();
     this.cancels = [];
     this.ready.clear();
@@ -758,6 +862,33 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       return;
     }
 
+    const holdMs = this.holdMs(state);
+    if (holdMs <= 0) {
+      this.startPhase(state);
+      return;
+    }
+    this.phaseEndsAt = null;
+    this.heldUntil = this.ctx.now() + holdMs;
+    this.cancels.push(
+      this.ctx.schedule(holdMs, () => {
+        this.heldUntil = null;
+        this.startPhase(state);
+        // A phone that dropped during the show was not counted then: count it now that the phase runs.
+        this.checkAllReady();
+        this.ctx.changed();
+      }),
+    );
+  }
+
+  /** RULE-4: how long a timed phase whose events fired holds every clock, the AI hands' too: its show, at the table's pace. */
+  private holdMs(state: GameState): number {
+    return holdsForEvents(state.phase) ? this.realMs(eventShow(phaseEvents(state, state.phase)).showMs / 1_000) : 0;
+  }
+
+  /** Starts the phase just entered: its clocks, its AI hands and its news. */
+  private startPhase(state: GameState): void {
+    // Game over has no clocks; enterPhase finished it before any hold.
+    if (state.phase === 'gameOver') return;
     if (state.phase === 'auction') {
       this.phaseEndsAt = null;
       this.dealsInGood = [];
@@ -830,7 +961,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /** Ends the phase when its PHASE_MS runs out; a phase whose PHASE_MS is null has no clock and waits for Ready. */
   private startPhaseTimer(phase: keyof typeof PHASE_MS): void {
     // Production stretches past its own event window to play every event of the month (RULE-1).
-    const extraMs = phase === 'production' ? Math.max(0, eventShow(this.requireState().history.at(-1)?.events ?? []).showMs - EVENT_SHOW.productionWindowMs) : 0;
+    const extraMs = phase === 'production' ? Math.max(0, eventShow(phaseEvents(this.requireState(), 'production')).showMs - EVENT_SHOW.productionWindowMs) : 0;
     const base = PHASE_MS[phase];
     const length = base === null ? null : base + extraMs;
     this.phaseEndsAt = null;
@@ -880,6 +1011,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         for (const line of ceremonyNews(state, before, (id) => this.nameOf(id))) this.addNews(line);
         if (this.electionOpen()) this.scheduleElectionTick(now);
         else {
+          // Planning proper opens now: its show, were it to fire one, starts here and not at the election's start.
+          this.phaseEnteredAt = now;
           this.startPhaseTimer('planning');
           this.startPlanning();
         }
@@ -1372,9 +1505,24 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       lotSlots: { used: state.listings.length, max: LOTS.maxLotsPerMonth },
       landAuction: landAuctionView(state),
       production: state.phase === 'production' || state.phase === 'upkeep' ? productionView(state, this.productionMs) : null,
+      ...this.eventsView(state),
       politics: politicsView(state),
       ...(this.clockWaits ? { clockWaitsFor: this.seatsNotIn().map((s) => s.id) } : {}),
     };
+  }
+
+  /**
+   * The current phase's events and when they play. The show starts where production's map plays it, 4.8 s into the
+   * phase at the table's pace; in any other phase as the phase opens (RULE-4: its clocks wait for the show).
+   */
+  private eventsView(state: GameState): Required<Pick<MuleView, 'events' | 'eventShow'>> {
+    // Planning's show plays over planning proper, which opens after the election (its entry is restamped then).
+    const fired = this.electionOpen() ? [] : phaseEvents(state, state.phase);
+    if (fired.length === 0) return { events: [], eventShow: null };
+    const { showMs, introMs } = eventShow(fired);
+    const startsAt = this.phaseEnteredAt + (state.phase === 'production' ? this.realMs(PRODUCTION_SHOW_AT_MS / 1_000) : 0);
+    const endsAt = startsAt + this.realMs(showMs / 1_000);
+    return { events: eventViews(state, fired), eventShow: { startsAt, showMs, introMs, endsAt, held: this.holdMs(state) > 0 } };
   }
 
   /** The auction board as every screen draws it. Public, as in the original: everyone sees everyone walk. */

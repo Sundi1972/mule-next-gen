@@ -1,8 +1,10 @@
+import { PlayerMark } from '../components/PlayerMark';
 import { cx } from '../components/tokens';
-import { eventMissLine, eventSegLabel, segTitle, eventWhoLine, eventYouSummary } from './copy';
+import { eventMissLine, eventSegLabel, phaseNoun, segTitle, eventWhoLine, eventYouSummary } from './copy';
 import { signLook, useShow } from './frame';
 import { EventBuzz, EventSignBadge } from './glyphs';
-import { eventStageAt, type EventSegment } from './timing';
+import { EventSickTag } from './rollcall';
+import { eventStageAt, isBuzzing, isPlaying, isRollCall, type EventSegment } from './timing';
 
 /**
  * The phone's rail through a phase, inside <EventShow>; the screen's shell places it. One small card at a time
@@ -17,14 +19,23 @@ export function EventPhoneCard({ seg, me, at, buzz = false }: { seg: EventSegmen
   const { cast } = useShow();
   const ev = seg.events[0]!;
   const you = eventYouSummary(seg, me, cast);
+  const roll = isRollCall(seg);
   const sign = signLook(ev.sign);
-  const mixed = sign === 'neutral';
+  const mixed = sign === 'neutral' || seg.events.some((e) => e.sign !== ev.sign);
   const tone = mixed ? 'border-holo bg-holo-soft' : sign === 'good' ? 'border-ok bg-holo-soft' : 'border-alert bg-alert-bg';
   const ink = mixed ? 'text-holo!' : sign === 'good' ? 'text-ok!' : 'text-alert-ink!';
   return (
     <div key={`${seg.n}-${at}`} className={cx('flex flex-col gap-1.5 rounded-panel border-2 p-2.5 animate-[ev-drop_0.3s_ease-out]', tone)} data-testid="phone-card" data-at={at} data-event={ev.key}>
       <div className="flex items-center gap-2">
-        <EventSignBadge ev={ev} size={40} />
+        {roll && seg.events.length > 1 ? (
+          <span className="flex -space-x-2">
+            {seg.events.map((e, i) => (
+              <EventSignBadge key={i} ev={e} size={30} />
+            ))}
+          </span>
+        ) : (
+          <EventSignBadge ev={ev} size={40} />
+        )}
         <span className="flex min-w-0 flex-col">
           <span className={cx('label-caps whitespace-nowrap text-[10px]! max-[700px]:tracking-[0.06em]', ink)}>{eventSegLabel(seg)}</span>
           <span className="font-display text-lg font-bold leading-tight">{segTitle(seg)}</span>
@@ -33,16 +44,33 @@ export function EventPhoneCard({ seg, me, at, buzz = false }: { seg: EventSegmen
           <EventBuzz on={buzz} />
         </span>
       </div>
-      {at === 'news' && (
-        <span className="text-xs leading-snug text-ink-2">
-          {eventWhoLine(ev, cast)}. {ev.line}
-        </span>
-      )}
+      {at === 'news' &&
+        (roll ? (
+          <ul className="flex flex-col gap-0.5 text-xs leading-snug text-ink-2">
+            {seg.events.map((e, i) => {
+              const id = cast.playerOf(e) ?? '';
+              const slot = cast.slotOf(id);
+              return (
+                <li key={i} className="flex items-center gap-1">
+                  {slot !== undefined && <PlayerMark slot={slot} size={12} />}
+                  <span className={cx(id === me && 'font-bold text-ink')}>{id === me ? 'You' : cast.name(id)}</span>: {e.title.toLowerCase()}
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <span className="text-xs leading-snug text-ink-2">
+            {eventWhoLine(ev, cast)}. {ev.line}
+          </span>
+        ))}
       {at === 'news' && ev.weight === 'headline' && <span className="w-fit rounded-chip bg-holo px-1.5 py-0.5 font-mono text-[10px] font-bold text-on-holo">LOOK AT THE TV ▸</span>}
       {at === 'you' &&
         (you ? (
           <div className="flex flex-col gap-1 animate-[ev-pop_0.3s_ease-out]" data-testid="phone-you">
-            <span className={cx('flex items-center gap-1.5 font-display text-base font-bold', sign === 'good' ? 'text-ok' : 'text-alert-ink')}>{you.headline}</span>
+            <span className={cx('flex items-center gap-1.5 font-display text-base font-bold', sign === 'good' ? 'text-ok' : 'text-alert-ink')}>
+              {you.sick && <EventSickTag size="phone" />}
+              {you.headline}
+            </span>
             <span className="text-xs leading-snug text-ink-2 max-[700px]:truncate" title={you.detail}>{you.detail}</span>
           </div>
         ) : (
@@ -57,8 +85,7 @@ export function EventPhoneCard({ seg, me, at, buzz = false }: { seg: EventSegmen
 /** Before the first event, and after the last when nothing stays up. */
 export function EventWaiting() {
   const { s, t } = useShow();
-  const period = s.phase === 'development' ? 'turn' : 'month';
-  return <span className="label-caps">{t < s.intro ? (s.segments.length ? `${s.events.length} event${s.events.length > 1 ? 's' : ''} this ${period}` : 'A quiet month') : 'That’s everything'}</span>;
+  return <span className="label-caps">{t < s.intro ? (s.segments.length ? `${s.events.length} event${s.events.length > 1 ? 's' : ''} this ${phaseNoun(s.phase)}` : 'A quiet month') : 'That’s everything'}</span>;
 }
 
 /** On a phone alone, while the weather plays on the map: a small "now" line, so the rail doesn't repeat the card. */
@@ -93,7 +120,7 @@ export function EventRailTail({ me, current }: { me: string; current: EventSegme
           <div key={g.n} className="flex items-center gap-2 rounded-control bg-raised px-2 py-1">
             <EventSignBadge ev={g.events[0]!} size={22} />
             <span className="min-w-0 flex-1 truncate text-xs font-semibold">{segTitle(g)}</span>
-            <span className={cx('text-xs', you ? (good ? 'font-bold text-ok' : 'font-bold text-alert-ink') : 'text-ink-3')}>{you ? you.headline.replace(' for you', '') : 'not you'}</span>
+            <span className={cx('text-xs', you ? (good ? 'font-bold text-ok' : 'font-bold text-alert-ink') : 'text-ink-3')}>{you ? you.short : 'not you'}</span>
           </div>
         );
       })}
@@ -112,7 +139,7 @@ export function EventTvPhoneRail({ me }: { me: string }) {
   const seg = now ?? (stage === 'outro' ? (s.segments.at(-1) ?? null) : null);
   return (
     <>
-      {seg ? <EventPhoneCard seg={seg} me={me} at={t >= seg.settleAt - 0.2 ? 'you' : 'news'} buzz={t - seg.announceAt < 1.2} /> : <EventWaiting />}
+      {seg ? <EventPhoneCard seg={seg} me={me} at={isPlaying(seg, t) ? 'news' : 'you'} buzz={isBuzzing(seg, t)} /> : <EventWaiting />}
       <EventRailTail me={me} current={seg} />
     </>
   );
@@ -120,12 +147,15 @@ export function EventTvPhoneRail({ me }: { me: string }) {
 
 /**
  * On a phone alone, what a tap on the map does now: skip to the event's result while it plays, or, from a result,
- * go to the next event. Pure, so a screen can place it outside the show (the product's shell: by its actions).
+ * go to the next event; nothing while no event is on. Inside <EventShow>; the screen places it (by its actions).
  */
-export function EventSkipHint({ playing, className }: { playing: boolean; className?: string }) {
+export function EventSkipHint({ className }: { className?: string }) {
+  const { s, t } = useShow();
+  const { seg } = eventStageAt(s, t);
+  if (!seg) return null;
   return (
     <span className={cx('rounded-chip bg-void/75 px-1.5 py-0.5 font-mono text-[10px] text-ink-2', className)} data-testid="skip-hint">
-      {playing ? 'tap the map to skip ›' : 'tap the map: next ›'}
+      {isPlaying(seg, t) ? 'tap the map to skip ›' : 'tap the map: next ›'}
     </span>
   );
 }
@@ -140,7 +170,7 @@ export function EventSoloRail({ me }: { me: string }) {
   const shown = seg ?? (stage === 'outro' ? (s.segments.at(-1) ?? null) : null);
   return (
     <>
-      {!shown ? <EventWaiting /> : t < shown.settleAt - 0.2 ? <EventNowPlaying seg={shown} buzz={t - shown.announceAt < 1.2} /> : <EventPhoneCard seg={shown} me={me} at="you" />}
+      {!shown ? <EventWaiting /> : isPlaying(shown, t) ? <EventNowPlaying seg={shown} buzz={isBuzzing(shown, t)} /> : <EventPhoneCard seg={shown} me={me} at="you" />}
       <EventRailTail me={me} current={shown} />
     </>
   );

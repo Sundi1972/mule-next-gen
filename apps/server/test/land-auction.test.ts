@@ -76,6 +76,8 @@ function toMonth2Planning(opts: { mule?: boolean; phaseScale?: number } = {}) {
   }
   note();
   expect(game.viewFor(null).phase).toBe('development');
+  // A seat that fell sick plays the roll call first, and nobody acts until it ends.
+  advance(Math.max(0, (game.viewFor(null).eventShow?.endsAt ?? 0) - ctx.now()));
   if (opts.mule) {
     tapThere(game, { ctx, advance }, 'b', { type: 'buyMule' });
     tapThere(game, { ctx, advance }, 'b', { type: 'outfit', outfit: 'food' });

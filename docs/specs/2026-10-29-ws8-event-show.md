@@ -388,8 +388,9 @@ examples → §6: an AI press during the auction's show is refused · five event
 - **ProductionEventView** (`packages/protocol/src/index.ts`) · MODIFIED · not breaking (fields added) · C3. Adds
   `phase: Phase`, `weight`, `playMs: number`. Example: `{ key: 'drought', …, phase: 'production', weight: 'headline',
   playMs: 6400, hits: [...] }`.
-- **EventView, MuleView.events** · ADDED · not breaking · C8 (PR-2). ProductionEventView becomes EventView; adds
-  `startsAt` (server ms the show starts), and from WS1's wave 2 `effects?`, `hits[].becomes?`, `hits[].muleLost?`,
+- **EventView, MuleView.events, MuleView.eventShow** · ADDED · not breaking · C8 (PR-2; AM-13). ProductionEventView
+  becomes EventView (the old name stays as an alias); `MuleView.events?: EventView[]` (the phase's, fired order, [] when
+  none) and `MuleView.eventShow?: { startsAt, showMs, introMs } | null` (null when none fired), and from WS1's wave 2 `effects?`, `hits[].becomes?`, `hits[].muleLost?`,
   `hits[].pending?` (shapes agreed with WS1, 29 Oct, as in the gallery's `events.ts::Effect` and `Hit`).
 - **MonthEvent.when** · REMOVED by WS1 (its named edit; screens read `phase`). Not ours; listed so nothing reads it.
 
@@ -665,6 +666,50 @@ goal      G-1, G-2 (unchanged)
 folded    none
 ```
 
+```
+AM-13 · 2026-10-29 · lead rulings, PR-2 Task 9 (C8's contract as built)
+
+target    §1 C8 · §3
+said      EventView adds `startsAt`
+did       the show's timing is one per phase, so it lives beside the list, not on each event: MuleView.eventShow =
+          { startsAt, showMs, introMs } | null. startsAt is the server time the show's intro starts (production: the
+          phase's entry + 4 800 ms × phaseScale, where the client's production timeline starts the events; any other
+          phase: its entry). showMs and introMs are full-pace values like playMs. MuleView.events and eventShow are
+          optional on the type (the server always sends them; required would edit 7 other lanes' fixtures). The
+          4 800 ms offset is a server constant mirroring the client's SHOW.eventAt until the client reads eventShow;
+          then it moves into EVENT_SHOW and both sides import it.
+          Carried to later tasks: the election hands planning proper on without enterPhase, so a planning event's
+          startsAt would be the election's start (C9 decides whether the hand-off restamps it); phaseEvents reads
+          this month's report, which exists only from production on, so an event fired before production (C11's
+          sickness, wave-2 rows) needs its own source in that builder.
+because   one timing per show; no edits forced on other lanes
+goal      G-1 (unchanged)
+folded    §3 EventView entry
+```
+
+```
+AM-14 · 2026-10-29 · lead rulings, PR-2 Tasks 10–12 (the hold, the overlays, sickness)
+
+target    §1 C9, C10, C11 · §3
+said      the view carries startsAt; sickness is told from Player.sick; the overlays play over any phase
+did       contract: EventShowView gains endsAt (server ms = startsAt + showMs × phaseScale; the client has no
+          phaseScale and maps show time by it); EventView gains player? (a personal event's player, a sick bulletin's
+          seat); EventView.key/kind widen by 'sickness'. A sick seat is one bulletin EventView in development's events
+          (seat order, after any development MonthEvent): title "Sickness", line "<Name> fell sick: <reason>." from
+          playerEventReason, origin the store, hits [], weight bulletin; all bulletins share ONE rollCallMs (running-
+          total rounding) and play as ONE roll-call segment. Player.sick during development means "fell sick in this
+          development's roll" (the engine resets it first).
+          The hold (RULE-4) wraps enterPhase: a held phase starts every clock after endsAt; handle() refuses every
+          intent ("The event is still playing"); a dropped phone is counted once the hold ends; the hold timer is
+          cancelled with the phase. While the election runs, planning's events are not served.
+          The phone overlay covers the screen only while the server holds the phase; in planning (never held) it
+          floats the light card with a TV, and alone the first tap collapses the show to that card. The overlays mark
+          their phase as data-event-phase, never data-phase (other steps find the phase screen by [data-phase]).
+because   HC-3 (the client computes no length) · RULE-4 (c) planning stays usable · other lanes' e2e selectors
+goal      G-1, G-2 (unchanged)
+folded    §3 EventView/EventShowView entries
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: the event show
@@ -678,5 +723,7 @@ folded    none
   `apps/web/src/phone/PhoneApp.tsx` (the overlay mount, C10; one line each); WS3: `packages/protocol/src/index.ts`,
   `apps/server/src/mule-game.ts`; WS6: `ProductionMap.tsx`, `TvProduction.tsx`, `phone/Production.tsx`,
   `apps/server/test/production-view.test.ts` (fixtures), `apps/web/test/production-show.test.ts` (AM-6/AM-7),
-  `apps/web/e2e/production-steps.ts` (PM ruling A, B-AC-7 per event). WS8 owns `design/mocks/ws8-events` (AM-11).
+  `apps/web/e2e/production-steps.ts` (PM ruling A, B-AC-7 per event); WS3 also: `apps/server/test/land-auction.test.ts`
+  (one helper line that waits out a roll call, AM-14). WS8 owns `design/mocks/ws8-events` (AM-11) and
+  `apps/server/test/events-hold.test.ts` (WS3 reviews).
 - Enforcement: `.handover/SEAMS.md` (PM-owned) and owner review on every PR; no CODEOWNERS (debt, §7 R-6).

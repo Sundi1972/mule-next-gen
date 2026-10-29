@@ -72,6 +72,16 @@ const playing = (html: string) => [...html.matchAll(/data-event="([^"]+)"/g)].ma
 /** The events' chips on one plot, in the order they are drawn. */
 const chips = (html: string, x: number, y: number) => [...html.matchAll(new RegExp(`data-testid="mark-${x}-${y}"[^]*?data-delta="(-?\\d+)"`, 'g'))].map((m) => Number(m[1]));
 const camera = (html: string) => /<div[^>]*style="[^"]*transform[^"]*"[^>]*data-testid="event-map"/.test(html);
+/** The map's own transform: the camera's, the jolt's, or both. */
+const mapTransform = (html: string) => /<div[^>]*style="[^"]*transform:([^;"]*)[^"]*"[^>]*data-testid="event-map"/.exec(html)?.[1] ?? '';
+/** The jolt's shake, in cqw: the camera moves in % of the map, so a translate in cqw is the shake, with a camera or without. */
+const shakeOf = (html: string) => {
+  const m = /translate\((-?[\d.e+-]+)cqw, (-?[\d.e+-]+)cqw\)/.exec(mapTransform(html));
+  return m ? { x: Number(m[1]), y: Number(m[2]) } : null;
+};
+const jolted = (html: string) => shakeOf(html) !== null;
+/** The camera flown in: its zoom, whether or not the jolt shakes it. */
+const zoomed = (html: string) => mapTransform(html).includes('scale(');
 /** Show seconds from a to b, every `step`. */
 const frames = (a: number, b: number, step = 0.1) => Array.from({ length: Math.floor((b - a) / step) }, (_, i) => a + (i + 0.5) * step);
 
@@ -190,9 +200,9 @@ describe('the production show plays every event of the month', () => {
     expect(bumper.some((t) => camera(render(all, t, { reduced: true })))).toBe(false);
   });
 
-  it('T-AC-4: each wave-1 key plays its own story inside its segment, and no other key’s', () => {
-    // The cavern collapse has its key and catalogue row; its story is still to come (PR-2), so it is not listed here.
-    const OWN: Record<Exclude<ShowEventKey, 'cavernCollapse'>, RegExp> = {
+  it('T-AC-4: each key plays its own story inside its segment, and no other key’s', () => {
+    // Every key production fires; sickness is development's, and its roll call is events-overlay's and the UI's roll-call test.
+    const OWN: Record<Exclude<ShowEventKey, 'sickness'>, RegExp> = {
       dustStorm: /data-testid="front-dustStorm"/,
       drought: /data-testid="front-drought"/,
       acidRain: /data-testid="front-acidRain"/,
@@ -203,6 +213,7 @@ describe('the production show plays every event of the month', () => {
       pestSwarm: /data-testid="swarm-1-0"/,
       wildfire: /data-testid="fire-1-0"/,
       bumperHarvest: /data-testid="bumper-stamp"/,
+      cavernCollapse: /data-testid="cave-in-1-0"/,
     };
     const keys = Object.keys(OWN) as (keyof typeof OWN)[];
     for (const k of keys) {
@@ -214,7 +225,53 @@ describe('the production show plays every event of the month', () => {
         `${k} draws its own story`,
       ).toBe(true);
       for (const other of keys.filter((o) => o !== k)) expect(shown.some((html) => OWN[other].test(html)), `${k} draws ${other}'s story`).toBe(false);
+      // Only the cavern collapse jolts the camera.
+      if (k !== 'cavernCollapse') expect(shown.some(jolted), `${k} never jolts`).toBe(false);
     }
+
+    // The cavern collapse's story: the cavern rumbles and cracks, rocks fall in, the camera jolts, dust rises.
+    const caveIn = viewOf(month.lines, [fired('cavernCollapse', 4000, [[1, 0, 0]])]);
+    const story = frames(EVENT_AT + INTRO, EVENT_AT + INTRO + 4, 0.05);
+    const moving = story.map((t) => render(caveIn, t));
+    expect(moving.some((html) => html.includes('data-testid="cave-in-rock"')), 'rocks fall in').toBe(true);
+    expect(moving.some((html) => html.includes('data-testid="cave-in-dust"')), 'dust rises').toBe(true);
+    expect(moving.some((html) => jolted(html)), 'the camera jolts').toBe(true);
+    // Its timing, from the script: u seconds into the story are playAt + u × pace on the show's clock.
+    const seg = eventSegments(caveIn, EVENT_AT, 'tv')[0]!;
+    const at = (u: number) => seg.playAt + u * seg.pace;
+    // The jolt: 1.7 s into the story, for 0.6 s, never before.
+    const jolt = at(1.7);
+    for (const [t, on] of [
+      [jolt - 0.05, false],
+      [jolt + 0.05, true],
+      [jolt + 0.55, true],
+      [jolt + 0.65, false],
+    ] as const)
+      expect(jolted(render(caveIn, t)), `jolted at jolt ${(t - jolt).toFixed(2)}`).toBe(on);
+    // On the phone the shake is the gallery's smaller one: 2.5 and 1.5 of its 540 px map, against 5 and 3 of the TV's 820.
+    const tvShake = shakeOf(render(caveIn, jolt + 0.05))!;
+    const phoneShake = shakeOf(render(caveIn, jolt + 0.05, { tv: false }))!;
+    expect(Math.abs(tvShake.x)).toBeGreaterThan(0.01);
+    expect(phoneShake.x / tvShake.x).toBeCloseTo(2.5 / 5.4 / (5 / 8.2), 6);
+    expect(phoneShake.y / tvShake.y).toBeCloseTo(1.5 / 5.4 / (3 / 8.2), 6);
+    // The story's window: nothing before it starts, the cavern from its first moment, the dust to its last, nothing after.
+    const caveTestid = /data-testid="cave-in-/;
+    expect(render(caveIn, at(-0.05)), 'before the story').not.toMatch(caveTestid);
+    expect(render(caveIn, at(0.05)), 'the cavern, as the story starts').toContain('data-testid="cave-in-1-0"');
+    expect(render(caveIn, at(3.55)), 'the dust, as the story ends').toContain('data-testid="cave-in-dust"');
+    expect(render(caveIn, at(3.65)), 'after the story').not.toMatch(caveTestid);
+    // Its change lands 1.9 s in (a real loss, so the plot's chip shows it), and the camera pulls back from 2.9 s.
+    const loss = viewOf(month.lines, [fired('cavernCollapse', 4000, [[1, 0, -1]])]);
+    expect(render(loss, at(1.9) - 0.05), 'not landed yet').not.toContain('data-testid="mark-1-0"');
+    expect(render(loss, at(1.9) + 0.05), 'landed').toContain('data-testid="mark-1-0"');
+    expect(zoomed(render(caveIn, at(2.9) - 0.25)), 'the camera is in before the reveal').toBe(true);
+    expect(zoomed(render(caveIn, at(2.9) + 0.65)), 'and back out after it').toBe(false);
+    // HC-6: with reduced motion no rumble, no falling rocks, no jolt and no camera; the dust still shows where it caved in.
+    const still = story.map((t) => render(caveIn, t, { reduced: true }));
+    expect(still.some((html) => html.includes('data-testid="cave-in-1-0"')), 'reduced: no rumbling cavern').toBe(false);
+    expect(still.some((html) => html.includes('data-testid="cave-in-rock"')), 'reduced: no falling rocks').toBe(false);
+    expect(still.some((html) => camera(html)), 'reduced: no camera, no jolt').toBe(false);
+    expect(still.some((html) => html.includes('data-testid="cave-in-dust"')), 'reduced: the dust shows').toBe(true);
   });
 
   it("T-AC-4: a quiet month's timeline is unchanged: the goods fly at 9.6 and the show ends at 15", () => {
