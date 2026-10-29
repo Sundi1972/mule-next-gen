@@ -3,7 +3,7 @@ import { signLook, type ShowCast } from './frame';
 import type { EventSegment } from './timing';
 import type { ShowEventKey, ShowEventView, ShowPhase } from './types';
 
-/** The show's words, the gallery's own (copy.ts at de9d6b7), for the wave-1 events. */
+/** The show's words, the gallery's own (design/mocks/ws8-events src/copy.ts). */
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const KIND_OF_PLOT: Partial<Record<Good, [string, string]>> = { energy: ['plant', 'plants'], food: ['farm', 'farms'], water: ['well', 'wells'], smithore: ['mine', 'mines'], crystite: ['mine', 'mines'] };

@@ -1,8 +1,8 @@
 import type { ShowEventKey } from './types';
 
 /**
- * The wave-1 events of Heiko's catalogue (the "M.U.L.E. Event Catalogue" Claude Doc, 28 Oct 2026), as the show draws
- * them: how each one moves, and what it looks like in words. Display data only; the rules are the engine's.
+ * The events of the M.U.L.E. Event Catalogue as the show draws them: how each one moves, and what it looks like in
+ * words. Display data only; the rules are the engine's.
  */
 
 /**

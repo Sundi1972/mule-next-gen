@@ -10,7 +10,7 @@ import { eventHitAt, eventLanded, eventStageAt, eventFrontAt, type EventSegment 
 import type { ShowEventKey, ShowEventView, ShowSize } from './types';
 
 /**
- * Living weather, Heiko's pick (28 Oct): one engine for the TV and for a phone with no TV in the room. The map dims,
+ * Living weather: one engine for the TV and for a phone with no TV in the room. The map dims,
  * a title card names the event, flies to where it starts and becomes it; hit plots throw up what they lost. Every
  * layer is a pure function of the show clock. Sizes are shares of the map box's width (cqw: the box is a container),
  * so the show fits whatever box the screen gives it. On a phone: no blur, only transform and opacity change.
