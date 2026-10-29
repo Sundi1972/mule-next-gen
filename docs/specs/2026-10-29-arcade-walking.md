@@ -728,6 +728,15 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-14 (2026-10-29, WS3's questions at PR-7 #206, ruled by WS6).** (1) RULE-3 row 8a's RE-OUTFIT is for a MULE
+  **taken off a plot** (row 11a) only; a MULE bought and outfitted this turn is not offered it (its outfit was chosen
+  seconds ago), and game.ts's `outfitMule` refuses a fitted MULE while `DEV_STEER.on`, so Reach and the rule agree
+  (AM-10/AM-12's principle holds). (2) A taken MULE that was re-outfitted and goes back to its plot at the clock's end
+  (AM-2's "nothing lost") keeps its old outfit, and **the re-outfit fee is not refunded**: "nothing lost" protects the
+  MULE and the plot, not a choice the player paid for. (3) **A taken MULE that bolts and is never caught goes back to
+  its plot at the clock's end**, like one still on its lead: it is the player's installed property, and losing it to a
+  wolf scare would make TAKE a trap. UBER-AC-3's "a bolted MULE caught or lost to the clock" applies to a MULE bought
+  this turn; a taken one is never lost. PR-7 adds a test for each.
 - **AM-13 (2026-10-29, WS3's spike S-1 on trunk 1bed1701, recorded by WS6).** **20 Hz stands** (`DEV_STEER.tickMs`
   50): loopback latency p50 26 ms, p95 49 ms; over Wi-Fi estimated p50 36–86 ms, p95 60–110 ms (not measured). The
   frame is 420–606 B with today's field names and positions rounded to 2 decimals (804 B unrounded), so 42–61 kB/s to
