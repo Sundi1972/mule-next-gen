@@ -241,3 +241,30 @@ describe('the secret ballot, mounted (C66, AM-21)', () => {
     expect(checked('s2')).toBe(false);
   });
 });
+
+describe("the Governor's Set, mounted (E-7)", () => {
+  const off = (testid: string) => byTestid(testid).getAttribute('disabled') !== null;
+
+  it("E-7: Set is off while the tax it sent is on its way", () => {
+    mount(governing(), GovernorDesk);
+    tap('tax-down');
+    tap('tax-confirm');
+    expect(sent).toEqual([{ type: 'setTax', percent: 4 }]);
+    expect(byTestid('tax-confirm').textContent).toBe('Set 4%');
+    expect(off('tax-confirm')).toBe(true);
+  });
+
+  it('E-7: a tax that never came back can be sent again: stepping away and back opens Set', () => {
+    mount(governing(), GovernorDesk);
+    tap('tax-down');
+    tap('tax-confirm');
+    tap('tax-up');
+    tap('tax-down');
+    expect(off('tax-confirm')).toBe(false);
+    tap('tax-confirm');
+    expect(sent).toEqual([
+      { type: 'setTax', percent: 4 },
+      { type: 'setTax', percent: 4 },
+    ]);
+  });
+});
