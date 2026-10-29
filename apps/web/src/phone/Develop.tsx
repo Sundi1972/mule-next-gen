@@ -387,9 +387,12 @@ function waitingNow(now: Now, carry: Outfit | 'empty' | null, installed: boolean
   // Row 1 or 2 with MULEs left: the start card's "the clock starts for everyone" isn't so while it waits.
   if (!installed) return now.step === 1 && mulesLeft > 0 ? { step: 1, of: 3, title: 'Buy a MULE at the corral', detail: 'Your first month: no rush. The clock starts when your first MULE is in.' } : now;
   const still = waitsFor.filter((id) => id !== me).map((id) => players.find((p) => p.id === id)?.name ?? id);
-  if (plotless) return { title: `No plot this month · waiting for ${andList(still)}`, detail: <span id={WAIT_DETAIL_ID}>The clock starts when every first MULE is in.</span> };
-  return { title: `Your MULE is in · waiting for ${andList(still)}`, detail: <span id={WAIT_DETAIL_ID}>{YOU_WAIT}</span> };
+  if (plotless) return { title: `No plot this month · waiting for ${firstPlus(still)}`, detail: <span id={WAIT_DETAIL_ID}>The clock starts when every first MULE is in.</span> };
+  return { title: `Your MULE is in · waiting for ${firstPlus(still)}`, detail: <span id={WAIT_DETAIL_ID}>{YOU_WAIT}</span> };
 }
+
+/** "Kai", "Kai +1", "Kai +2": the first still to come and how many more, so the title keeps to two lines. */
+const firstPlus = (names: readonly string[]) => `${names[0] ?? ''}${names.length > 1 ? ` +${names.length - 1}` : ''}`;
 
 /** Once in, you wait: the guide's words, and the id the dimmed controls point at for them. */
 const YOU_WAIT = 'Buying, installing and analysing wait for the clock.';
