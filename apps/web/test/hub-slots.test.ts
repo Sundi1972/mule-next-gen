@@ -63,12 +63,12 @@ describe('the hub slots (C17)', () => {
 /** A client with nothing said and a still clock: enough for the whole hub to render. */
 const client = { subscribe: () => () => {}, getState: () => ({ chat: [], view: null, seatId: 's1' }), serverNow: () => 0, intent: () => {} } as unknown as TableClient;
 const NO_GOODS = Object.fromEntries(GOODS.map((g) => [g, 0])) as MyView['stock'];
-const player = (id: string, name: string, slot: number): PlayerView => ({ ...self, id, name, slot, isAi: false, ready: false, species: 'mollox' });
+const player = (id: string, name: string, slot: number): PlayerView => ({ ...self, id, name, slot, isAi: false, ready: false, species: 'mollox', worth: 0 });
 const PLAYERS = [player('s1', 'Lena', 0), player('s9', 'Ossa', 1)];
 
 /** The whole hub, as `id` sees it in month 4's planning, from these slots. */
 function hub(frame: HubSlots, id = 's1'): string {
-  const view = { phase: 'planning', month: 4, maxMonths: 12, players: PLAYERS, tiles: [], ship: { inPort: false, arrives: 6 }, phaseEndsAt: null, politics: null } as unknown as MuleView;
+  const view = { phase: 'planning', month: 4, maxMonths: 12, players: PLAYERS, tiles: [], listings: [], air: { level: 0, band: 'clean' }, ship: { inPort: false, arrives: 6 }, phaseEndsAt: null, politics: null } as unknown as MuleView;
   const me = { id, monthNeeds: NO_GOODS, stock: NO_GOODS } as MyView;
   const table = { code: 'ABCD', status: 'playing', hostId: 's1', boards: 1, seats: [], game: null } as TableView<MuleView>;
   const game = createElement(PhoneGameProvider, { value: { table, view, me, self: PLAYERS.find((p) => p.id === id)!, slot: 0 as Slot }, children: createElement(Hub, { slots: frame }) });
@@ -139,7 +139,7 @@ describe('the hub frame for a situation (C66)', () => {
     expect(plain).toMatch(/data-testid="ready-count"[^>]*>0 \/ 2 READY</);
   });
 
-  it("C66 (frame): a desk that asks to come first is drawn first and opens first, and the Now card folds to its title (E-9); for anyone else it keeps its place and Now stays open", () => {
+  it("C66 (frame): a desk that asks to come first is drawn first and opens first, and the Now card folds to its title (E-9); for anyone else it keeps its place, and Now folds as in any month (H-7)", () => {
     expect(drawnSlots(frame(), seat('s9')).desks.map((d) => d.id)).toEqual(['governor', 'colony', 'market']);
     expect(drawnSlots(frame(), seat('s1')).desks.map((d) => d.id), 'in its place').toEqual(['colony', 'governor', 'market']);
 
@@ -153,7 +153,7 @@ describe('the hub frame for a situation (C66)', () => {
 
     const lena = hub(frame(), 's1');
     expect(lena).toMatch(/aria-selected="true"[^>]*data-testid="desk-colony"/);
-    expect(lena).toMatch(/<section[^>]*data-testid="now"/);
+    expect(lena, 'H-7: folded too, once read, with no desk asking first').toMatch(/<button[^>]*aria-expanded="false"[^>]*data-testid="now"/);
   });
 
   it('C66 (frame): a desk that comes to ask first mid-phase opens once; a tab away from it then stays', () => {

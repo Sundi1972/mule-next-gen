@@ -129,7 +129,7 @@ export function MarketDesk() {
   );
 }
 
-/** The store's prices and stock in one row of goods: what buying or selling would cost. */
+/** The store's prices and stock in one row of goods: what buying or selling would cost. The ship is This month's line. */
 export function MarketStrip() {
   const { view } = usePhoneGame();
   return (
@@ -137,7 +137,7 @@ export function MarketStrip() {
       <span className="label-caps flex justify-between gap-2 @min-[1100px]/shell:text-xs!">
         Store prices{' '}
         <span>
-          MULE {view.mulePrice} cr · {view.storeMules} left · export ship {view.ship.inPort ? 'in port' : `in month ${view.ship.arrives}`}
+          MULE {view.mulePrice} cr · {view.storeMules} left
         </span>
       </span>
       <div className="grid grid-cols-3 gap-1 @min-[1100px]/shell:grid-cols-5 @min-[1100px]/shell:gap-2">

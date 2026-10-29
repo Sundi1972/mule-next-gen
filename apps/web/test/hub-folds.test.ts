@@ -116,15 +116,18 @@ function rail(html: string) {
     names: html.includes('data-testid="waiting-for"') && !/class="sr-only"[^>]*><span[^>]*data-testid="waiting-for"/.test(html),
     seatRow: row < 0 ? null : row < header ? 'header' : desk >= 0 && row > desk ? 'under the desk' : 'elsewhere',
     ticker: [...html.matchAll(/data-testid="chat-line-(\d+)"/g)].map((m) => Number(m[1])),
+    /** The Now card: folded to its title (a button), or whole. */
+    now: /<button[^>]*data-testid="now"/.test(html) ? 'folded' : /<section[^>]*data-testid="now"/.test(html) ? 'whole' : null,
   };
 }
 
 describe('the Governor desk beside the chat, which follows the rail on a phone (E-11, C20)', () => {
   it.each<[string, MuleView, ReturnType<typeof rail>]>([
-    ['Lena governs: her desk opens first; the names and both lines show, the seat row under the desk', month(true), { desk: 'governor', names: true, seatRow: 'under the desk', ticker: [2, 1] }],
-    ['after Set (4% from 5%), the desk stays open and nothing folds', month(true, 4, 5), { desk: 'governor', names: true, seatRow: 'under the desk', ticker: [2, 1] }],
-    ['Ossa governs: Lena has no Governor desk, the names and both lines show', month(false), { desk: 'colony', names: true, seatRow: 'under the desk', ticker: [2, 1] }],
-  ])('E-11: %s', (_, game, shows) => {
+    ['Lena governs: her desk opens first; the names and both lines show, the seat row under the desk', month(true), { desk: 'governor', names: true, seatRow: 'under the desk', ticker: [2, 1], now: 'folded' }],
+    ['after Set (4% from 5%), the desk stays open and nothing folds', month(true, 4, 5), { desk: 'governor', names: true, seatRow: 'under the desk', ticker: [2, 1], now: 'folded' }],
+    // H-7: in an ordinary month, with no desk asking first, Now folds too.
+    ['Ossa governs: Lena has no Governor desk, the names and both lines show, and Now is folded all the same', month(false), { desk: 'colony', names: true, seatRow: 'under the desk', ticker: [2, 1], now: 'folded' }],
+  ])('E-11, H-7: %s', (_, game, shows) => {
     expect(rail(lenasHub(game))).toEqual(shows);
   });
 });

@@ -88,6 +88,32 @@ export async function planningIsTheHub(phone: Page, server: MuleServer, code: st
   }
   check(need.food - have.food === 3, `B-AC-14: the seeded shortfall is Food 2 of 5, got ${have.food} of ${need.food}`);
   check(need.smithore === 0 && !rows.includes('smithore'), `B-AC-14 (negative): with no mine or factory she needs no Smithore and has no row for it, got rows ${rows.join(', ')}`);
+  // The UX audit's hub (H-1…H-7), on the phone held sideways: the roadmap, the needs strip, the rank, the ship's line.
+  const audit = await readAudit(phone);
+  const lot = state.listings.length > 0;
+  const steps = ['plan', 'grant', ...(lot ? ['land'] : []), 'develop', 'produce', 'auction'];
+  check(JSON.stringify(audit.steps) === JSON.stringify(steps), `H-1: the roadmap's steps are ${steps.join(', ')} (${state.listings.length} lots listed), got ${audit.steps.join(', ')}`);
+  check(audit.lit === 'plan', `H-1: the roadmap lights Plan, got ${audit.lit}`);
+  check(/^Now: .*Next: /.test(audit.now), `H-1: the roadmap says what to do now and what comes next, got "${audit.now}"`);
+  check(audit.offices === (state.politics !== null), `H-1: the offices line sits under the roadmap while the table plays politics (${state.politics !== null}), got ${audit.offices}`);
+  check(audit.food.includes(`${have.food} of ${need.food}`) && audit.food.includes(`short ${need.food - have.food}`) && audit.foodRed, `H-2: the needs strip says Food ${have.food} of ${need.food}, short ${need.food - have.food}, in red, got "${audit.food}" (red ${audit.foodRed})`);
+  const worths = (room.viewFor(null).game?.players ?? []).map((p) => ({ id: p.id, worth: p.worth }));
+  const mine = worths.find((p) => p.id === SEAT)?.worth ?? NaN;
+  const place = 1 + worths.filter((p) => p.worth > mine).length;
+  const label = `${place}${['th', 'st', 'nd', 'rd'][place] ?? 'th'} of ${worths.length}`;
+  check(audit.rank === label, `H-4: under the money the header says "${label}" by Worth (${worths.map((p) => `${p.id} ${p.worth}`).join(', ')}), got "${audit.rank}"`);
+  check(audit.ship === `Export ship in month ${state.ship.arrives}: it buys the colony’s leftovers`, `H-6: This month names the ship in plain words, got "${audit.ship}"`);
+  check(audit.tools === 'beside', `H-7: at ${PHONE.viewport.width} px the map's tools stand beside the map, got ${audit.tools}`);
+  // H-4: a tap on the rank opens the standings, every player's Worth and your own lines; Close shuts them.
+  await planning.getByTestId('standing').click({ timeout });
+  const sheet = planning.getByTestId('standings-sheet');
+  await sheet.waitFor({ timeout });
+  const listed = await sheet.locator('[data-testid^="standing-s"]').count();
+  check(listed === worths.length, `H-4: the standings list every player, ${worths.length}, got ${listed}`);
+  check((await sheet.getByTestId('standings-mine').count()) === 1, 'H-4: the standings show your own Worth line by line');
+  await sheet.getByTestId('standings-close').click({ timeout });
+  await sheet.waitFor({ state: 'detached', timeout });
+
   // A Governor elected this month is first told to set the tax (C66, E-7); everyone else plans (RULE-8).
   const newGovernor = state.politics?.governor === SEAT && state.politics.election?.stage === 'over';
   if (newGovernor) {
@@ -99,15 +125,18 @@ export async function planningIsTheHub(phone: Page, server: MuleServer, code: st
   }
 
   let wide: Shown;
+  let wideTools: Audit['tools'] = 'elsewhere';
   try {
     await phone.setViewportSize(LAPTOP);
     wide = await read(phone);
+    wideTools = (await readAudit(phone)).tools;
   } finally {
     await phone.setViewportSize(PHONE.viewport);
   }
   checkHub(wide, `${LAPTOP.width}×${LAPTOP.height}`, held);
   check(wide.onStage.marketStrip, `B-AC-14: at ${LAPTOP.width} px the store's prices sit under the map, on the stage`);
-  return `desks ${narrow.desks.join(', ')} (office desks held: ${held.join(', ') || 'none'}); needs ${narrow.needs.map((n) => `${n.good} ${verdict(n.good as Good)}`).join(', ')}; now first at 844 and 1440; stage filled ${(narrow.fill * 100).toFixed(0)}% / ${(wide.fill * 100).toFixed(0)}%`;
+  check(wideTools === 'above', `H-7: at ${LAPTOP.width} px the map's tools sit above the map, got ${wideTools}`);
+  return `roadmap ${audit.steps.join(' > ')}; strip "${audit.food}"; ${audit.rank}; tools beside the map at 844, above at 1440; desks ${narrow.desks.join(', ')} (office desks held: ${held.join(', ') || 'none'}); needs ${narrow.needs.map((n) => `${n.good} ${verdict(n.good as Good)}`).join(', ')}; now first at 844 and 1440; stage filled ${(narrow.fill * 100).toFixed(0)}% / ${(wide.fill * 100).toFixed(0)}%`;
 }
 
 function checkHub(f: Shown, at: string, held: readonly string[]): void {
@@ -158,6 +187,45 @@ async function read(phone: Page): Promise<Shown> {
     };
   });
 }
+
+/** The UX audit's parts of the hub, as the player sees them. */
+type Audit = {
+  steps: string[];
+  lit: string | null;
+  now: string;
+  /** WS7's offices line, inside the roadmap. */
+  offices: boolean;
+  food: string;
+  foodRed: boolean;
+  rank: string;
+  ship: string;
+  /** Where the map's tools stand against the map: beside it, above it, or neither. */
+  tools: 'beside' | 'above' | 'elsewhere';
+};
+
+/** One read of the audit's parts, after a paint. Kept a string: tsx would wrap named functions in a helper the page lacks. */
+const READ_AUDIT = `(async () => {
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const s = document.querySelector('[data-phase=planning]');
+  const text = (sel) => s?.querySelector(sel)?.innerText?.trim() ?? '';
+  const roadmap = s?.querySelector('[data-testid=roadmap]');
+  const food = s?.querySelector('[data-testid=needs-strip] [data-testid=strip-food]');
+  const tools = s?.querySelector('[data-testid=map-tools]')?.getBoundingClientRect();
+  const map = s?.querySelector('[data-testid=hub-map]')?.getBoundingClientRect();
+  return {
+    steps: [...(roadmap?.querySelectorAll('[data-testid^="step-"]') ?? [])].map((li) => li.dataset.testid.slice('step-'.length)),
+    lit: roadmap?.querySelector('[aria-current=step]')?.dataset.testid?.slice('step-'.length) ?? null,
+    now: text('[data-testid=roadmap-now]'),
+    offices: !!roadmap?.querySelector('[data-testid=roadmap-offices]'),
+    food: food?.innerText?.replace(/\\s+/g, ' ').trim() ?? '',
+    foodRed: !!food?.classList.contains('text-alert'),
+    rank: text('[data-testid=standing-rank]'),
+    ship: text('[data-testid=ship-line]'),
+    tools: !tools || !map ? 'elsewhere' : tools.right <= map.left + 0.5 && tools.top < map.bottom ? 'beside' : tools.bottom <= map.top + 0.5 ? 'above' : 'elsewhere',
+  };
+})()`;
+
+const readAudit = (phone: Page) => phone.evaluate(READ_AUDIT) as Promise<Audit>;
 
 /** A phone at the table, as the e2e scripts hold it. */
 type Seated = { page: Page; name: string };

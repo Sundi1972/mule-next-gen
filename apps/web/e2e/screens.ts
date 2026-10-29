@@ -10,6 +10,7 @@ import { join, resolve } from 'node:path';
 import type { Page } from 'playwright';
 import { launch, PHONE, PHONE_WIDE, startServer, TV } from './harness';
 import { pressOnward, watchShow } from './production-steps';
+import { voteThroughTheElection } from './politics-steps';
 import { fedPlayerSeesNoHunger, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows } from './store-steps';
 
 const out = resolve(process.argv[2] ?? 'screens');
@@ -62,6 +63,9 @@ try {
   // Planning: colony, drone, chat.
   await phone.getByRole('button', { name: 'Start game' }).click();
   await phase(phone, 'planning');
+  // Month 1's planning opens on its election: vote through it to the hub's desks and tools.
+  await phoneShot(phone, '2-election');
+  await voteThroughTheElection(phone, 120_000);
   await phoneShot(phone, '2-planning');
   await phone.getByTestId('tool-drone').click();
   const free = phone.getByRole('button', { name: /, free/ });
@@ -104,6 +108,8 @@ try {
   await phoneShot(phone, '4-map');
   await phone.getByRole('button', { name: /Install here|Replace MULE/ }).click();
   await phone.getByText('No MULE').first().waitFor();
+  // Month 1's clock waits for every first MULE; the plot row and its analysis come back once it runs.
+  await phone.getByTestId('now-title').filter({ hasText: 'MULE installed. What next?' }).waitFor({ timeout: 30_000 });
   // The plot may already be analysed: the drone's picks can be the plots the grant gave us.
   const analyse = phone.getByRole('button', { name: /Geo analysis/ });
   if ((await analyse.count()) > 0) await analyse.click();

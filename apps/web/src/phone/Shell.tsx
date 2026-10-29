@@ -145,6 +145,7 @@ export function PhoneShell({
   rail,
   footer,
   fill = false,
+  standing,
   children,
 }: {
   phase: string;
@@ -161,6 +162,8 @@ export function PhoneShell({
   footer?: ReactNode;
   /** The content fills the main area without scrolling, as the map does. */
   fill?: boolean;
+  /** Under the money: where you stand against the others ("2nd of 4"); with the money, a tap opens the standings. */
+  standing?: { label: string; aria: string; onOpen: () => void } | undefined;
   children: ReactNode;
 }) {
   const { view, self, slot } = usePhoneGame();
@@ -213,9 +216,30 @@ export function PhoneShell({
                     <span className="hidden @min-[1100px]/shell:inline">To my phone</span>
                   </button>
                 )}
-                <span data-num className="ml-auto shrink-0 font-mono text-sm font-bold text-ink @min-[1100px]/shell:text-lg" data-testid="money">
-                  {fmt(self.money)} cr
-                </span>
+                {standing ? (
+                  <button
+                    type="button"
+                    onClick={standing.onOpen}
+                    aria-haspopup="dialog"
+                    aria-label={`${fmt(self.money)} cr. ${standing.aria}`}
+                    className="relative -my-1 ml-auto flex shrink-0 flex-col items-end rounded-chip px-1 py-0.5 hover:bg-holo-soft"
+                    data-testid="standing"
+                  >
+                    <span data-num className="font-mono text-sm font-bold leading-tight text-ink @min-[1100px]/shell:text-lg" data-testid="money">
+                      {fmt(self.money)} cr
+                    </span>
+                    <span className="flex items-center gap-0.5 text-[10px] font-semibold leading-tight text-holo @min-[1100px]/shell:text-sm" data-testid="standing-rank">
+                      {standing.label}
+                      <svg aria-hidden viewBox="0 0 24 24" width={10} height={10} fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 6l6 6-6 6" />
+                      </svg>
+                    </span>
+                  </button>
+                ) : (
+                  <span data-num className="ml-auto shrink-0 font-mono text-sm font-bold text-ink @min-[1100px]/shell:text-lg" data-testid="money">
+                    {fmt(self.money)} cr
+                  </span>
+                )}
               </div>
               {/* The table chat (C20): in the header from WIDE_PX; on a phone it follows the rail's content, its bubble here. */}
               {wide ? <TableChat /> : <FallbackBubble />}
