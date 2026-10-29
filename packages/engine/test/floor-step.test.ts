@@ -295,7 +295,7 @@ describe('the dev floor: the step', () => {
     expect(nudged).not.toEqual(first.floors.at(-1));
   });
 
-  it("INV-walls: a colonist held for a second into an outfitter's side wall stays in that outfitter, at floorSeconds 3 and at 0.5", () => {
+  it("INV-walls: a colonist held into any wall between two floor boxes that don't touch stays on its own side, at floorSeconds 3 and 0.5", () => {
     const state = game(SEED);
     const walls = hallWalls();
     // The thinnest wall, the left doorway's floor to the works', sets the bound on a step's pieces: it is among them.
