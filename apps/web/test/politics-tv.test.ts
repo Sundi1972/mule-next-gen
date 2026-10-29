@@ -7,7 +7,7 @@ import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { TableApp } from '../src/table/TableApp';
 
-const player = (id: string, name: string, slot: number): PlayerView => ({ id, name, isAi: false, color: '', species: 'zipwing', money: 1000, worth: 0, plots: 0, ready: false, doneDeveloping: false, condition: null, colonist: null, slot });
+const player = (id: string, name: string, slot: number): PlayerView => ({ id, name, isAi: false, color: '', species: 'zipwing', money: 1000, worth: 0, lastWorth: null, worthBeforeCut: null, plots: 0, ready: false, doneDeveloping: false, condition: null, colonist: null, slot });
 const PLAYERS = [player('s1', 'Lena', 0), player('s2', 'Ossa', 1), player('s3', 'Kai', 2)];
 
 const politics = (extra: Partial<PoliticsView>): PoliticsView => ({
@@ -45,6 +45,8 @@ const game = (p: PoliticsView | null, month: number): MuleView => ({
   mulePrice: 0,
   colonists: 0,
   air: { level: 22, band: 'clean' },
+  lastAir: null,
+  colonistsFed: null,
   ship: { arrives: 3, inPort: false, wants: null },
   treasury: { money: 0, salesTax: (p?.tax.percent ?? 5) / 100 },
   news: [],

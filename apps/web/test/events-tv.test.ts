@@ -25,7 +25,7 @@ const EVENT_AT = 4.8;
 /** A plot's bars have all grown in by then; the goods fly one step apart. */
 const FLY_STEP = 0.09;
 
-const player = (id: string, name: string, slot: number): PlayerView => ({ id, name, isAi: false, color: '', species: 'zipwing', money: 1000, worth: 0, plots: 0, ready: false, doneDeveloping: false, condition: null, colonist: null, slot });
+const player = (id: string, name: string, slot: number): PlayerView => ({ id, name, isAi: false, color: '', species: 'zipwing', money: 1000, worth: 0, lastWorth: null, worthBeforeCut: null, plots: 0, ready: false, doneDeveloping: false, condition: null, colonist: null, slot });
 const PLAYERS = [player('s1', 'Lena', 0), player('s2', 'Ossa', 1)];
 
 /** Lena farms (1, 0) and (4, 0); Ossa farms (2, 2), runs a plant at (5, 2) and a well at (0, 2), which only the wet drought reaches. */
@@ -100,6 +100,8 @@ function view(production: ProductionView, phaseEndsAt: number): MuleView {
     finished: false,
     month: 3,
     maxMonths: 12,
+    lastAir: null,
+    colonistsFed: null,
     phase: 'production',
     phaseEndsAt,
     width: W,

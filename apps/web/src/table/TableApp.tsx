@@ -1,13 +1,15 @@
-import { DEV_WALK, DEVELOPMENT } from '@mule/engine';
+import { DEV_WALK, DEVELOPMENT, GAME, POLITICS } from '@mule/engine';
 import type { DealView, MuleView, TableView } from '@mule/protocol';
 import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PaceList, PlayerMark, SeatSpeciesProvider, SharedClock, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard } from '@mule/ui';
 import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
 import { boardWalkers, dealLine, newestFirst, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, StoreBox, TvReadout, type DealRow } from '../components/AuctionParts';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
 import { ThemeToggle } from '../components/ThemeToggle';
-import { colonyVerdict, fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, plotName, seatSpecies, secondsUntil, slotOf, standings, tileAt, toSlot } from '../game/derive';
+import { fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, plotName, seatSpecies, secondsUntil, slotOf, standings, tileAt, toSlot } from '../game/derive';
+import { inCollapse } from '../game/month-end';
 import { useAuctionSound } from '../game/sound';
 import { useClient, useClientState, useServerNow } from '../net/react';
 import { connectedIn, hostMayContinue, readyRows, stillPlanning } from '../phone/hub/ready';
@@ -162,6 +164,12 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   }
 
   if (phase === 'production' && game.production) return <TvProduction game={game} production={game.production} />;
+  if (phase === 'upkeep')
+    return (
+      <SeatSpeciesProvider value={seatSpecies(game)}>
+        <TvMonthEnd game={game} />
+      </SeatSpeciesProvider>
+    );
   if (phase === 'planning' && game.politics?.election && game.politics.election.stage !== 'over') return <TvElection table={table} game={game} />;
 
   let side: ReactNode;
@@ -202,7 +210,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         </div>
       </>
     );
-  else if (phase === 'production' || phase === 'upkeep') side = <MonthEnd game={game} />;
+  else if (phase === 'production') side = <HarvestSide game={game} />;
   else {
     const connected = connectedIn(table.seats);
     const waiting = stillPlanning(game.players, connected);
@@ -512,7 +520,8 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
   );
 }
 
-function MonthEnd({ game }: { game: MuleView }) {
+/** Beside the map in the moment before the production show's data arrives: the news, the colony and the standings. */
+function HarvestSide({ game }: { game: MuleView }) {
   const food = game.market.find((r) => r.good === 'food');
   return (
     <>
@@ -536,50 +545,99 @@ function MonthEnd({ game }: { game: MuleView }) {
   );
 }
 
-/** The big screen at the end: everyone's total, readable from across the room. Totals only: goods are private. */
-export function TvGameOver({ game }: { game: MuleView }) {
-  const ranks = standings(game);
-  const winner = ranks[0];
-  const v = colonyVerdict(game.air);
+const useBeforePaint = typeof document === 'undefined' ? useEffect : useLayoutEffect;
+
+/**
+ * Its content at full size when it fits, scaled down as a whole when it doesn't, and back up when room returns: the
+ * month end's table and colony keep the mock's proportions on the TV when the chat ticker is up or more players sit
+ * at the table. While it fits, the content stretches to fill the box.
+ */
+function FitHeight({ className, children }: { className?: string; children: ReactNode }) {
+  const box = useRef<HTMLDivElement>(null);
+  const inner = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  useBeforePaint(() => {
+    const fit = () => {
+      const b = box.current;
+      const i = inner.current;
+      if (!b || !i) return;
+      // The content's own height, without the stretch: the stretch follows the scale, so measuring through it would
+      // keep a shrunk scale from ever growing back.
+      const stretch = i.style.minHeight;
+      i.style.minHeight = '0px';
+      const natural = i.offsetHeight;
+      i.style.minHeight = stretch;
+      if (natural === 0) return;
+      const next = Math.min(1, b.clientHeight / natural);
+      setScale((s) => (Math.abs(s - next) < 0.005 ? s : next));
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    if (box.current) ro.observe(box.current);
+    if (inner.current) ro.observe(inner.current);
+    return () => ro.disconnect();
+  }, []);
   return (
-    <div className="flex h-[720px] w-[1280px] flex-col gap-6 bg-table p-10 text-ink" data-phase={game.phase}>
-      <TvHeader game={game} title={PHASE_NAME.gameOver} />
-
-      <div className="grid min-h-0 flex-1 grid-cols-[2fr_3fr] gap-8">
-        <div className="flex flex-col items-center justify-center gap-3 rounded-panel border-2 border-holo bg-holo-soft p-6 text-center shadow-glow" data-testid="tv-winner">
-          <span className="label-caps text-lg!">The colony goes to</span>
-          {winner && <PlayerMark slot={winner.slot} size={140} />}
-          <span className="font-display text-6xl font-semibold">{winner?.player.name}</span>
-          <span data-num className="font-mono text-3xl text-ink-2">
-            {fmt(winner?.value ?? 0)}
-          </span>
-        </div>
-
-        <ol className="flex flex-col justify-center gap-3" data-testid="tv-scores">
-          {ranks.map((r, i) => (
-            <li key={r.player.id} className={cx('flex items-center gap-5 rounded-panel px-5 py-2', i === 0 ? 'bg-holo-soft' : 'bg-panel')}>
-              <span data-num className="w-8 font-mono text-3xl text-ink-3">
-                {i + 1}
-              </span>
-              <PlayerMark slot={r.slot} size={44} />
-              <span className="flex-1 font-display text-4xl font-semibold">{r.player.name}</span>
-              <span data-num className="font-mono text-4xl font-bold">
-                {fmt(r.value)}
-              </span>
-            </li>
-          ))}
-        </ol>
-      </div>
-
-      <div className={cx('flex items-center gap-4 rounded-panel border-2 px-6 py-4', v.failed ? 'border-alert bg-alert-bg' : 'border-ok/40 bg-ok/5')} data-testid="tv-verdict">
-        <span className={cx('font-display text-3xl font-semibold', v.failed ? 'text-alert-ink' : 'text-ok')}>{v.title}</span>
-        <span className="text-2xl text-ink-2">{v.line}</span>
+    <div ref={box} className={cx('min-h-0 overflow-hidden', className)} data-fit={scale.toFixed(3)}>
+      <div ref={inner} className="flex flex-col" style={{ transform: `scale(${scale})`, transformOrigin: '0 0', width: `${100 / scale}%`, minHeight: `${100 / scale}%` }}>
+        {children}
       </div>
     </div>
   );
 }
 
-/** The month-end standings beside the map, best first. */
+/**
+ * The big screen at the month's end (C20, WS6's approved mock): the league table by Worth with the lead and each
+ * change since last month, and how the colony is doing. Public: totals only, each player's own lines are on their
+ * phone (HC-4). It stays up until everyone moves on, and counts who has, as planning does.
+ */
+export function TvMonthEnd({ game }: { game: MuleView }) {
+  return (
+    <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table p-10 text-ink" data-phase={game.phase} data-testid="tv-monthend">
+      <div className="flex items-start gap-4">
+        <div className="min-w-0 flex-1">
+          <TvHeader game={game} title="End of the month" />
+        </div>
+        <ReadyCount players={game.players} tv />
+      </div>
+      {inCollapse(game) && <CollapseBanner density="tv" />}
+      <FitHeight className="flex-1">
+        <div className="grid flex-1 grid-cols-[minmax(0,7fr)_minmax(0,5fr)] gap-6">
+          <LeagueTable view={game} density="tv" />
+          <ColonyPanel view={game} density="tv" />
+        </div>
+      </FitHeight>
+      <p className="text-lg leading-snug text-ink-2" data-testid="worth-rule">
+        Worth: cash + goods at the store’s price + land at {GAME.plotScore} cr a plot + MULEs at {game.mulePrice} cr + {POLITICS.termScore} cr a term in office. Each player’s own lines are on their phone.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * The big screen at the end, in credits (C20): the winner called out beside the final table by Worth, the colony's
+ * report and verdict across the bottom. Totals only: goods are private.
+ */
+export function TvGameOver({ game }: { game: MuleView }) {
+  return (
+    <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table p-10 text-ink" data-phase={game.phase} data-testid="tv-gameover">
+      <TvHeader game={game} title={PHASE_NAME.gameOver} />
+      <FitHeight className="flex-1">
+        <div className="flex flex-1 flex-col gap-4">
+          <div className="grid flex-1 grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-6">
+            <WinnerCard view={game} density="tv" />
+            <div className="flex flex-col" data-testid="tv-scores">
+              <LeagueTable view={game} density="tv" final />
+            </div>
+          </div>
+          <ColonyPanel view={game} density="tv" layout="row" verdict />
+        </div>
+      </FitHeight>
+    </div>
+  );
+}
+
+/** The standings beside the map while the harvest comes in, best first. */
 export function TvStandings({ game }: { game: MuleView }) {
   return (
     <div className="flex flex-col gap-2 rounded-panel border border-holo-line bg-panel p-4" data-testid="tv-standings">

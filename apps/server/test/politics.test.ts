@@ -244,6 +244,8 @@ function playUntil(g: Started, done: () => boolean, boundMs: number) {
   for (let ms = 0; ms < boundMs && !done(); ms += 100) {
     const view = g.game.viewFor(null);
     if (view.phase === 'planning' && view.politics?.election?.stage !== 'ceremony') readyAll(g.game);
+    // The month end has no clock either: everyone moves on (C20).
+    if (view.phase === 'upkeep') readyAll(g.game);
     doneWithLand(g.game);
     g.advance(100);
   }
@@ -981,6 +983,8 @@ describe('AI seats in the election', () => {
       // The engine's phase and month, not viewFor's: these run on every step of the clock.
       toUpkeep(g);
       engineOf(g.game).treasury.money = 0;
+      // The month end holds until everyone moves on (C20).
+      readyAll(g.game);
       for (let ms = 0; ms < 600_000 && engineOf(g.game).month === 1; ms += WALK.tickMs) g.advance(WALK.tickMs);
       expect(g.game.viewFor(null).phase).toBe('planning');
       expect(g.game.viewFor(null).politics!.election, 'month 2 has no election').toBeNull();
@@ -1007,6 +1011,8 @@ describe('AI seats in the election', () => {
     // Month 2 has no election; the fund ran dry, so The Baron steers to 8 + 2.
     toUpkeep(g);
     engineOf(g.game).treasury.money = 0;
+    // The month end holds until Lena, the only human, moves on (C20).
+    g.game.handle('lena', { type: 'ready' });
     for (let ms = 0; ms < 600_000 && engineOf(g.game).month === 1; ms += WALK.tickMs) g.advance(WALK.tickMs);
     expect(g.game.viewFor(null).phase).toBe('planning');
     g.game.handle('lena', { type: 'ready' });
