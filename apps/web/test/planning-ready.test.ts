@@ -89,7 +89,7 @@ describe('planning without a clock: who is still planning, and the host', () => 
     expect(readyRows(six.filter((p) => !p.isAi).concat(person('s5', 'Ada', 5), person('s6', 'Ben', 6)), () => true).map(line), 'five people and no AI: nothing folds').toEqual(['Brix ready', 'Lena', 'Ossa', 'Ada', 'Ben']);
   });
 
-  it("T-AC-13, B-AC-61: Continue is offered only to table.hostId, once Ready, in planning proper or the election's announce and ballot, while someone else is still planning; never to anyone else, nor in the ceremony", () => {
+  it("T-AC-13, B-AC-61: Continue is offered only to table.hostId, once Ready, in planning proper, the election's announce and ballot, or the month end, while someone else is still planning or not yet on; never to anyone else, nor in the ceremony", () => {
     type Row = { why: string; me: string; ready: { brix?: boolean; lena?: boolean; ossa?: boolean }; hostId?: string | null; stage?: Parameters<typeof planning>[0]; phase?: MuleView['phase']; confirm?: boolean; host: 'none' | 'continue' | 'confirm' };
     const rows: Row[] = [
       { why: 'the host, Ready, in planning proper, two still planning', me: BRIX, ready: { brix: true }, host: 'continue' },

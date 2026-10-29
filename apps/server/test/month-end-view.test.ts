@@ -8,9 +8,14 @@ import { fakeContext, readyAll, seats } from './fake-context.js';
 const VIEWERS = ['s1', 's2', null] as const;
 /** A posted Food price far beyond what the colonists' wages pay (UPKEEP.colonistBudget). */
 const DEAR_FOOD = 10_000;
+/** The air set in each month's goods auction, after production cleans it: smoggy in month 1, toxic in month 2 (POLLUTION.bands). */
+const AIR_IN: Record<number, number> = { 1: band('smoggy'), 2: band('toxic') };
 /** Ten minutes: far longer than any phase clock, so a phase still up after it has none. */
 const LONG_WAIT_MS = 600_000;
 
+function band(name: string): number {
+  return POLLUTION.bands.find((b) => b.name === name)!.from;
+}
 const stateOf = (game: MuleGame) => (game as unknown as { state: GameState }).state;
 const worthIn = (view: MuleView) => Object.fromEntries(view.players.map((p) => [p.id, p.worth]));
 const lastWorthIn = (view: MuleView) => Object.fromEntries(view.players.map((p) => [p.id, p.lastWorth]));
@@ -34,7 +39,7 @@ interface MonthEnd {
  * first plot lit in each land grant, so the players' worths differ. In month 2's planning s1 is left one Food, short of
  * what its household eats, so the month's condition says hungry.
  */
-function playThreeMonths(): { ends: MonthEnd[]; over: MuleView; state: GameState } {
+function playThreeMonths(options: { dearFoodIn?: number } = {}): { ends: MonthEnd[]; over: MuleView; state: GameState } {
   const { ctx, advance } = fakeContext();
   const game = new MuleGame(ctx, 7, { maxMonths: 3, phaseScale: 0.1 });
   game.start(seats);
@@ -43,10 +48,18 @@ function playThreeMonths(): { ends: MonthEnd[]; over: MuleView; state: GameState
   let developed: MonthEnd['developed'] = {};
   let claimedIn = 0;
   let starvedIn = 0;
+  let airedIn = 0;
   for (let n = 0; n < 100_000 && !game.viewFor(null).finished; n++) {
     if (state.phase === 'planning' && state.month === 2 && starvedIn !== 2) {
       player(state, 's1').stock.food = 1;
       starvedIn = 2;
+    }
+    // Food on the shelf at a price no colonist's wage reaches, in that month's goods auction.
+    if (state.phase === 'auction' && state.month === options.dearFoodIn) state.store.posted.food = DEAR_FOOD;
+    // Each month's air in its own band, so a month end showing the live air, or one band for all, can't match.
+    if (state.phase === 'auction' && AIR_IN[state.month] !== undefined && airedIn !== state.month) {
+      state.air = AIR_IN[state.month]!;
+      airedIn = state.month;
     }
     if (state.phase === 'development') developed = conditionsIn(game.viewFor(null));
     if (state.phase === 'upkeep' && ends.at(-1)?.month !== state.month) {
@@ -69,6 +82,8 @@ describe('Month end: last month against this one (C20)', () => {
     const { ends, over } = playThreeMonths();
     expect(ends.map((e) => e.month), 'months 1 and 2 end in upkeep; month 3 ends in game over').toEqual([1, 2]);
     const [first, second] = ends as [MonthEnd, MonthEnd];
+    expect(first.views.get(null)!.air.band, 'precondition: month 1 ends in smog, not the clean air a default would give').toBe('smoggy');
+    expect(second.views.get(null)!.air.band, 'precondition: the air changed band over month 2').toBe('toxic');
     for (const viewer of VIEWERS) {
       const who = viewer ?? 'the board';
       const one = first.views.get(viewer)!;
@@ -187,7 +202,7 @@ describe('Month end holds until everyone moves on (C20, Q4)', () => {
   });
 });
 
-describe('Before the cut, from the view (C20, fix F1)', () => {
+describe('Before the cut, from the view (C20)', () => {
   it("T-AC-15: in Collapse every player's worthBeforeCut is scoreParts' total before the cut, exactly; outside Collapse it is null", () => {
     const { game } = toMonthEnd();
     const state = stateOf(game);
@@ -210,7 +225,7 @@ describe('Before the cut, from the view (C20, fix F1)', () => {
   });
 });
 
-describe('Colonists fed or short (C20, fix F3)', () => {
+describe('Colonists fed or short (C20)', () => {
   const shortages = (game: MuleGame) => stateOf(game).history.at(-1)!.shortages;
   const wentShort = (game: MuleGame) => stateOf(game).history.at(-1)!.colonistsHungry;
 
@@ -235,10 +250,17 @@ describe('Colonists fed or short (C20, fix F3)', () => {
     for (const viewer of VIEWERS) expect(dear.game.viewFor(viewer).colonistsFed, viewer ?? 'the board').toBe(false);
   });
 
-  it("T-AC-15: at game over colonistsFed is the last upkeep's", () => {
-    const { over, state } = playThreeMonths();
-    const last = state.history.at(-1)!;
-    expect(last.month, 'the last report is the last month').toBe(over.month);
-    expect(over.colonistsFed).toBe(!last.colonistsHungry);
+  it("T-AC-15: at game over colonistsFed is the last upkeep's: true when that month fed the colonists, false when they couldn't afford Food", () => {
+    const fed = playThreeMonths();
+    const fedLast = fed.state.history.at(-1)!;
+    expect(fedLast.month, 'the last report is the last month').toBe(fed.over.month);
+    expect(fedLast.colonistsHungry, 'precondition: the last month fed the colonists').toBe(false);
+    expect(fed.over.colonistsFed).toBe(true);
+
+    const short = playThreeMonths({ dearFoodIn: 3 });
+    const shortLast = short.state.history.at(-1)!;
+    expect(shortLast.month).toBe(short.over.month);
+    expect(shortLast.colonistsHungry, 'precondition: the last month the colonists could not afford Food').toBe(true);
+    expect(short.over.colonistsFed).toBe(false);
   });
 });

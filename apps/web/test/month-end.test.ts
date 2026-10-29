@@ -246,10 +246,19 @@ describe('B-AC-12 (WS4, month end): the league table and the colony, on the phon
     expect(has(tv, 'hungry-short-s3')).toBe(false);
   });
 
-  it('B-AC-11 (WS4, month end): in the final standings under 1100 px your row reads just "You"; your name shows from 1100 px', () => {
+  it('B-AC-11 (WS4, month end): in the final standings under 1100 px your row reads just "You"; your name shows from 1100 px; a month end reads "You (name)" in full', () => {
     const over = onPhone(OVER, GameOver);
     expect(said(over, `you-name-${OVER.me!.id}`)).toBe('You');
     expect(element(over, `you-full-${OVER.me!.id}`)).toMatch(/class="[^"]*\bhidden\b[^"]*@min-\[1100px\]\/shell:inline/);
+    const alone = onPhone(view(), Results, 0);
+    expect(has(alone, 'you-name-s1'), 'the month end with no TV is not the final standings: no short "You"').toBe(false);
+    expect(said(alone, 'name-s1')).toBe('You (Heiko)');
+  });
+
+  it('B-AC-11 (WS4, month end): a league name cut short by its column keeps the whole name as its tooltip, on every screen', () => {
+    for (const html of [phone, tv, onPhone(view(), Results, 0), onPhone(OVER, GameOver), onTv(OVER, TvGameOver)]) {
+      expect(element(html, 'league-row-s2')).toContain('title="Mia"');
+    }
   });
 
   it('B-AC-12 (WS4, month end): no screen shows a line that is not built yet: no fund in and out, no G-5 slots, no Donations', () => {
