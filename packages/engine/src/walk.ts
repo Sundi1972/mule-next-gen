@@ -1,5 +1,6 @@
 import { WALK } from './config.js';
-import type { AuctionSide, Deal, Walker, WalkBoard } from './types.js';
+import { RuleError } from './errors.js';
+import type { AuctionSide, Deal, LineOrder, Walker, WalkBoard } from './types.js';
 import { MS_PER_SECOND } from './units.js';
 
 /**
@@ -11,6 +12,11 @@ import { MS_PER_SECOND } from './units.js';
  * price, which buyers can't walk past), ones that buy (the store, the
  * export ship), and a floor sellers can't walk under (the store's buying
  * price, or a seller's minimum at the land auction).
+ *
+ * At a house's line nothing trades until the player chooses how many
+ * (chooseAtLine); the house then trades exactly that many and stops, and
+ * touching Up or Down stops it at once (A-6, the UX audit's G-1). Players
+ * still trade with each other for as long as they stay matched.
  *
  * The board knows nothing of goods or plots: a WalkMarket says who holds
  * what, who can pay and where the lines are, and moves each unit. The step
@@ -58,6 +64,69 @@ const rounded = (w: Walker) => Math.round(w.price);
 const activeBuyer = (m: WalkMarket, w: Walker) => w.side === 'buyer' && m.money(w.id) >= Math.max(1, rounded(w));
 const activeSeller = (m: WalkMarket, w: Walker) => w.side === 'seller' && m.units(w.id) > 0;
 
+/** The lowest ask a buyer walking up meets, and the highest bid a seller walking down meets. */
+const minAsk = (board: WalkBoard, m: WalkMarket) => Math.min(Infinity, ...board.walkers.filter((w) => activeSeller(m, w)).map((w) => w.price));
+const maxBid = (board: WalkBoard, m: WalkMarket) => Math.max(-Infinity, ...board.walkers.filter((w) => activeBuyer(m, w)).map((w) => w.price));
+
+/** Units of a house's turns the walker still wants: their choice at its line, while it runs. */
+const wants = (w: Walker, house: string) => (w.order?.house === house ? w.order.units - w.order.traded : 0);
+
+/**
+ * The house line a walker stands at, if any: a buyer at or over the house's selling line, a seller at or under a
+ * buying house's price (the one that pays most, as stepBoard serves them).
+ */
+export function houseLineAt(market: WalkMarket, w: Walker): { house: string; price: number } | null {
+  if (w.side === 'buyer') {
+    const price = market.houseSells?.price() ?? null;
+    return market.houseSells && price !== null && rounded(w) >= price ? { house: market.houseSells.id, price } : null;
+  }
+  if (w.side !== 'seller') return null;
+  const paying = market.houseBuys.map((h) => ({ house: h.id, price: h.price() })).filter((x): x is { house: string; price: number } => x.price !== null);
+  return paying.filter((x) => rounded(w) <= x.price).sort((x, y) => y.price - x.price)[0] ?? null;
+}
+
+/**
+ * At a house's line: trade this many units with it, then stop. More than the player can pay for or holds is clamped
+ * to that; a house that runs out first just stops. The walker stands still while the units move.
+ */
+export function chooseAtLine(board: WalkBoard, market: WalkMarket, playerId: string, units: number): LineOrder {
+  if (!Number.isInteger(units) || units < 1) throw new RuleError('Choose at least one unit');
+  const w = board.walkers.find((x) => x.id === playerId);
+  if (!w || w.side === 'pass') throw new RuleError('You passed on this good');
+  const line = houseLineAt(market, w);
+  if (!line) throw new RuleError('Walk to the store’s line first');
+  const most = w.side === 'buyer' ? Math.floor(market.money(w.id) / line.price) : market.units(w.id);
+  if (most < 1) throw new RuleError(w.side === 'buyer' ? 'You can’t pay for one' : 'You have none to sell');
+  w.dir = 0;
+  w.order = { house: line.house, units: Math.min(units, most), traded: 0, gross: 0 };
+  return w.order;
+}
+
+/** Touching Up or Down stops a choice's units at once; a finished choice stays to be read until the walker moves off the line. */
+export function stopAtLine(w: Walker): void {
+  if (w.order) w.order.units = w.order.traded;
+}
+
+/**
+ * One tap (G-2): one price step up or down from the walker's rounded price, within the same limits as walking (the
+ * house lines, meeting the other side), and standing still after. It stops a choice's units like a press does.
+ */
+export function stepWalker(board: WalkBoard, market: WalkMarket, playerId: string, dir: -1 | 1): void {
+  const w = board.walkers.find((x) => x.id === playerId);
+  if (!w || w.side === 'pass') throw new RuleError('You passed on this good');
+  stopAtLine(w);
+  w.dir = 0;
+  const before = rounded(w);
+  const to = before + dir;
+  if (w.side === 'buyer') {
+    const sellLine = market.houseSells?.price() ?? null;
+    w.price = dir > 0 ? Math.max(w.price, Math.min(to, sellLine ?? Infinity, minAsk(board, market))) : Math.max(0, to);
+  } else {
+    w.price = dir < 0 ? Math.min(w.price, Math.max(to, market.floor() ?? 1, maxBid(board, market), 1)) : to;
+  }
+  if (rounded(w) !== before) w.since = board.elapsed;
+}
+
 /**
  * Puts a player on a side. Sellers start at the top of the board and buyers
  * at the bottom, beyond anyone on the other side, so taking or switching
@@ -70,6 +139,7 @@ export function takeSide(board: WalkBoard, market: WalkMarket, playerId: string,
   w.side = side;
   w.dir = 0;
   w.since = board.elapsed;
+  delete w.order;
   if (side === 'seller') w.price = Math.max(board.hi, ...others.filter((x) => activeBuyer(market, x)).map((x) => rounded(x) + 1));
   if (side === 'buyer') w.price = Math.max(0, Math.min(board.lo, ...others.filter((x) => activeSeller(market, x)).map((x) => rounded(x) - 1)));
 }
@@ -98,22 +168,29 @@ export function stepBoard(board: WalkBoard, market: WalkMarket, dt: number): Sal
   const step = (board.speed * dt) / MS_PER_SECOND;
 
   // Walk. Buyers first, then sellers; nobody walks through an active walker of the other side: they meet.
-  const minAsk = () => Math.min(Infinity, ...board.walkers.filter((w) => activeSeller(market, w)).map((w) => w.price));
-  const maxBid = () => Math.max(-Infinity, ...board.walkers.filter((w) => activeBuyer(market, w)).map((w) => w.price));
   for (const w of board.walkers) {
     if (w.side !== 'buyer' || w.dir === 0) continue;
     const before = rounded(w);
-    if (w.dir > 0) w.price = Math.max(w.price, Math.min(w.price + step, sellLine ?? Infinity, minAsk()));
+    if (w.dir > 0) w.price = Math.max(w.price, Math.min(w.price + step, sellLine ?? Infinity, minAsk(board, market)));
     else w.price = Math.max(0, w.price - step);
     if (rounded(w) !== before) w.since = board.elapsed;
   }
   for (const w of board.walkers) {
     if (w.side !== 'seller' || w.dir === 0) continue;
     const before = rounded(w);
-    if (w.dir < 0) w.price = Math.min(w.price, Math.max(w.price - step, floor ?? 1, maxBid(), 1));
+    if (w.dir < 0) w.price = Math.min(w.price, Math.max(w.price - step, floor ?? 1, maxBid(board, market), 1));
     else w.price += step;
     if (rounded(w) !== before) w.since = board.elapsed;
   }
+  // A seller whose choice is still running stands on the line as it moves: the ship pays a little less for each
+  // further unit. Never under the floor; there the store pays more, and the choice ends below.
+  for (const w of board.walkers) {
+    if (w.side !== 'seller' || !w.order || wants(w, w.order.house) <= 0) continue;
+    const price = market.houseBuys.find((h) => h.id === w.order!.house)?.price() ?? null;
+    if (price !== null && rounded(w) > price) w.price = Math.max(price, floor ?? 1);
+  }
+  // A choice made at a line goes once the walker is off it, or the line itself has gone.
+  for (const w of board.walkers) if (w.order && houseLineAt(market, w)?.house !== w.order.house) delete w.order;
 
   // Who trades with whom. The best pair of players first: the highest bid
   // that reaches the lowest ask, at the seller's ask.
@@ -131,7 +208,8 @@ export function stepBoard(board: WalkBoard, market: WalkMarket, dt: number): Sal
       busy.add(buyer.id).add(bestSeller.id);
     }
   }
-  // Houses hand units out in turns: one per player per round, whoever is first in line first, then whoever got there first.
+  // Houses hand units out in turns: one per player per round, whoever is first in line first, then whoever got there
+  // first; and only to a player who chose how many at its line, until that many have moved.
   const nextInTurn = (house: string, list: Walker[]) =>
     [...list].sort(
       (x, y) =>
@@ -141,7 +219,7 @@ export function stepBoard(board: WalkBoard, market: WalkMarket, dt: number): Sal
     )[0];
   const seller = market.houseSells;
   if (seller && sellLine !== null) {
-    const atLine = buyers.filter((b) => !busy.has(b.id) && rounded(b) >= sellLine && market.money(b.id) >= sellLine);
+    const atLine = buyers.filter((b) => !busy.has(b.id) && rounded(b) >= sellLine && market.money(b.id) >= sellLine && wants(b, seller.id) > 0);
     const next = nextInTurn(seller.id, atLine);
     if (next) wanted.push({ buyer: next.id, seller: seller.id, price: sellLine, queue: atLine });
   }
@@ -149,7 +227,7 @@ export function stepBoard(board: WalkBoard, market: WalkMarket, dt: number): Sal
   const paying = market.houseBuys.map((h) => ({ h, price: h.price() })).filter((x): x is { h: HouseLine; price: number } => x.price !== null);
   const houseOf = (w: Walker) => paying.filter((x) => rounded(w) <= x.price).sort((x, y) => y.price - x.price)[0]?.h.id ?? null;
   for (const { h, price } of paying) {
-    const atLine = sellers.filter((s) => !busy.has(s.id) && houseOf(s) === h.id);
+    const atLine = sellers.filter((s) => !busy.has(s.id) && houseOf(s) === h.id && wants(s, h.id) > 0);
     const next = nextInTurn(h.id, atLine);
     if (next) wanted.push({ buyer: h.id, seller: next.id, price, queue: atLine });
   }
@@ -172,12 +250,12 @@ export function stepBoard(board: WalkBoard, market: WalkMarket, dt: number): Sal
     if (seller && d.seller === seller.id) {
       const price = seller.price();
       if (price === null) return null;
-      const next = nextInTurn(d.seller, queues.get(d)!.filter((b) => market.money(b.id) >= price));
+      const next = nextInTurn(d.seller, queues.get(d)!.filter((b) => market.money(b.id) >= price && wants(b, d.seller) > 0));
       return next ? { buyer: next.id, seller: d.seller, price } : null;
     }
     const price = market.houseBuys.find((h) => h.id === d.buyer)?.price() ?? null;
     if (price === null) return null;
-    const next = nextInTurn(d.buyer, queues.get(d)!.filter((s) => market.units(s.id) > 0 && rounded(s) <= price));
+    const next = nextInTurn(d.buyer, queues.get(d)!.filter((s) => market.units(s.id) > 0 && rounded(s) <= price && wants(s, d.buyer) > 0));
     return next ? { buyer: d.buyer, seller: next.id, price } : null;
   };
 
@@ -199,6 +277,11 @@ export function stepBoard(board: WalkBoard, market: WalkMarket, dt: number): Sal
       } else {
         const turn = houses.has(unit.buyer) ? `${unit.buyer}:${unit.seller}` : `${unit.seller}:${unit.buyer}`;
         board.turns[turn] = (board.turns[turn] ?? 0) + 1;
+        const order = board.walkers.find((w) => w.id === (houses.has(unit.buyer) ? unit.seller : unit.buyer))?.order;
+        if (order) {
+          order.traded++;
+          order.gross += unit.price;
+        }
       }
       d.units++;
       board.units++;

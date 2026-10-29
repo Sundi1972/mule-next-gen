@@ -5,6 +5,8 @@ import {
   createGame,
   declareRole,
   endAuction,
+  lineOf,
+  lineTrade,
   monthlyDemand,
   PRICE,
   RuleError,
@@ -53,6 +55,21 @@ function toWalk(state: GameState, roles: Record<string, AuctionSide> = {}) {
 
 function walker(state: GameState, id: string) {
   return a(state).walkers.find((w) => w.id === id)!;
+}
+
+/**
+ * Steps for `ms` while the same good is up, the given players walking toward the other side; one that reaches a
+ * house's line stops there and chooses `units` (A-6, G-1: nothing trades at a house's line until then).
+ */
+function walkToLines(state: GameState, ids: string[], units: number, ms: number): Trade[] {
+  const good = a(state).good;
+  const trades: Trade[] = [];
+  for (const id of ids) setWalk(state, id, walker(state, id).side === 'seller' ? -1 : 1);
+  for (let t = 0; t < ms && a(state).good === good && a(state).stage === 'walk'; t += TICK) {
+    for (const id of ids) if (lineOf(state, id) && !walker(state, id).order) lineTrade(state, id, units);
+    trades.push(...stepAuction(state, TICK));
+  }
+  return trades;
 }
 
 /** Steps for `ms` while the same good is up, collecting the trades. */
@@ -245,7 +262,13 @@ describe('the live auction: goods one at a time', () => {
         const { stage, good } = a(state);
         if (stage === 'status' && good === 'food') declareRole(state, 'p2', 'pass');
         if (stage === 'status' && good === 'water') declareRole(state, 'p1', 'pass');
-        if (stage === 'walk') for (const w of a(state).walkers) if (w.side !== 'pass') setWalk(state, w.id, w.side === 'seller' ? -1 : 1);
+        // At a house's line each says how many once (A-6); elsewhere they walk on.
+        if (stage === 'walk')
+          for (const w of a(state).walkers) {
+            if (w.side === 'pass') continue;
+            if (!lineOf(state, w.id)) setWalk(state, w.id, w.side === 'seller' ? -1 : 1);
+            else if (!w.order) lineTrade(state, w.id, 3);
+          }
         trades.push(...stepAuction(state, TICK));
         stages.push(`${a(state).good}:${a(state).stage}`);
       }
@@ -390,8 +413,7 @@ describe('the store and the ship on the board', () => {
     state.store.stock.food = reserve + 3;
     startAuction(state, ['food']);
     toWalk(state, { p3: 'pass' });
-    for (const id of ['p0', 'p1', 'p2']) setWalk(state, id, 1);
-    const trades = run(state, 10_000);
+    const trades = walkToLines(state, ['p0', 'p1', 'p2'], 5, 10_000);
     expect(trades.map((t) => t.buyer)).toEqual(['p2', 'p0', 'p1']);
     expect(trades.every((t) => t.seller === 'store' && t.price === a(state).storeSell)).toBe(true);
     expect(state.store.stock.food).toBe(reserve);
@@ -403,8 +425,7 @@ describe('the store and the ship on the board', () => {
     state.store.stock.food = reserve + 2;
     startAuction(state, ['food']);
     toWalk(state);
-    for (const p of state.players) setWalk(state, p.id, 1);
-    expect(run(state, 10_000)).toHaveLength(2);
+    expect(walkToLines(state, ['p0', 'p1', 'p2', 'p3'], 5, 10_000)).toHaveLength(2);
     expect(state.store.stock.food).toBe(reserve);
   });
 
@@ -428,12 +449,13 @@ describe('the store and the ship on the board', () => {
     startAuction(state, ['smithore']);
     a(state).storeBudget = 4;
     toWalk(state, { p1: 'buyer', p2: 'buyer' });
-    setWalk(state, 'p0', -1);
-    const trades = run(state, 15_000);
+    const trades = walkToLines(state, ['p0'], 10, 8_000);
     const store = trades.filter((t) => t.buyer === 'store');
     expect(store).toHaveLength(4);
     expect(store.every((t) => t.price === a(state).storeBuy)).toBe(true);
     // Then the seller walks on down to the buyers waiting at the bottom.
+    setWalk(state, 'p0', -1);
+    trades.push(...run(state, 7_000));
     expect(trades.slice(4).every((t) => t.seller === 'p0' && t.buyer !== 'store' && t.price < a(state).storeBuy)).toBe(true);
     expect(trades.length).toBeGreaterThan(4);
   });
@@ -445,8 +467,7 @@ describe('the store and the ship on the board', () => {
     state.players[0]!.stock.crystite = 5;
     startAuction(state, ['crystite']);
     toWalk(state);
-    setWalk(state, 'p0', -1);
-    const trades = run(state, 15_000).filter((t) => t.buyer === 'ship');
+    const trades = walkToLines(state, ['p0'], 5, 15_000).filter((t) => t.buyer === 'ship');
     expect(trades).toHaveLength(3);
     expect(trades[1]!.price).toBeLessThan(trades[0]!.price);
     expect(state.ship.hold.crystite).toBe(0);

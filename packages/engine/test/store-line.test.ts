@@ -54,12 +54,11 @@ function run(state: GameState, ms: number): Trade[] {
 }
 
 /** p1 buys Food from the store, which has plenty; everyone else passes. p1 is walked up to the store's line and lets go. */
-function buyerAtStore(money = 1_000): GameState {
+function buyerAtStore(): GameState {
   const state = newGame();
   state.store.stock.food = 200;
   startAuction(state, ['food']);
   toWalk(state, { p0: 'pass', p1: 'buyer', p2: 'pass', p3: 'pass' });
-  state.players[1]!.money = money;
   setWalk(state, 'p1', 1);
   for (let i = 0; i < 400 && Math.round(walker(state, 'p1').price) < a(state).storeSell; i++) stepAuction(state, TICK);
   setWalk(state, 'p1', 0);
@@ -169,11 +168,13 @@ describe('A-6 G-1: at a house line you choose how many', () => {
 
 describe('A-6 G-1 negatives: refused with a RuleError, or clamped to what you can pay or hold', () => {
   it('a count above what you can pay is clamped to what you can pay for', () => {
-    const state = buyerAtStore(250); // the store sells at 110: two units
+    const state = buyerAtStore();
+    const price = a(state).storeSell;
+    state.players[1]!.money = 2 * price + 30; // two units
     lineTrade(state, 'p1', 9);
     expect(walker(state, 'p1').order?.units).toBe(2);
     expect(run(state, 20_000)).toHaveLength(2);
-    expect(state.players[1]!.money).toBe(250 - 2 * 110);
+    expect(state.players[1]!.money).toBe(30);
   });
 
   it('a count above your stock is clamped to what you hold', () => {
@@ -189,11 +190,14 @@ describe('A-6 G-1 negatives: refused with a RuleError, or clamped to what you ca
     state.store.stock.food = reserve + 2;
     lineTrade(state, 'p1', 5);
     expect(run(state, 20_000)).toHaveLength(2);
-    expect(walker(state, 'p1').order).toBeUndefined();
+    expect(state.players[1]!.stock.food).toBe(2);
+    expect(state.store.stock.food).toBe(reserve);
   });
 
   it('refuses when you cannot pay for one, or hold none', () => {
-    expect(() => lineTrade(buyerAtStore(50), 'p1', 1)).toThrow(RuleError);
+    const state = buyerAtStore();
+    state.players[1]!.money = a(state).storeSell - 1;
+    expect(() => lineTrade(state, 'p1', 1)).toThrow(RuleError);
   });
 
   it('refuses a count that is not a whole number of at least 1', () => {
@@ -295,8 +299,10 @@ describe('A-6 property: at a house line exactly min(chosen, affordable) units tr
       return s % n;
     };
     for (let c = 0; c < 60; c++) {
-      const money = 110 + next(1_200);
-      const state = buyerAtStore(money);
+      const state = buyerAtStore();
+      const price = a(state).storeSell;
+      const money = price + next(1_200);
+      state.players[1]!.money = money;
       const chosen = 1 + next(15);
       lineTrade(state, 'p1', chosen);
       const trades: Trade[] = [];
@@ -305,7 +311,7 @@ describe('A-6 property: at a house line exactly min(chosen, affordable) units tr
         trades.push(...stepAuction(state, dt));
         t += dt;
       }
-      expect(trades.length, `case ${c}: chose ${chosen} with ${money} cr`).toBe(Math.min(chosen, Math.floor(money / 110)));
+      expect(trades.length, `case ${c}: chose ${chosen} with ${money} cr`).toBe(Math.min(chosen, Math.floor(money / price)));
     }
   });
 });

@@ -3,7 +3,7 @@ import { colonyPrice, driftReference, monthlyDemand, shelfShort, shipInPort, shi
 import { RuleError } from './errors.js';
 import { monthNeeds } from './production.js';
 import type { AuctionSide, GameState, Good, LiveAuction, SkipReason, StatusRow } from './types.js';
-import { stepBoard, takeSide, tradePossible, type WalkMarket } from './walk.js';
+import { chooseAtLine, houseLineAt, stepBoard, stepWalker, stopAtLine, takeSide, tradePossible, type WalkMarket } from './walk.js';
 
 /**
  * The goods auction, played live as in the original M.U.L.E. Goods come up
@@ -257,6 +257,30 @@ export function setWalk(state: GameState, playerId: string, dir: -1 | 0 | 1): vo
   const w = a.walkers.find((x) => x.id === playerId);
   if (!w || w.side === 'pass') throw new RuleError('You passed on this good');
   w.dir = dir;
+  // Touching Up or Down, or letting go, stops a choice made at a house's line (G-1).
+  stopAtLine(w);
+}
+
+/** At the store's or the ship's line during the walk: trade this many units with it, then stop (A-6, G-1). */
+export function lineTrade(state: GameState, playerId: string, units: number): void {
+  const a = live(state);
+  if (a.stage !== 'walk') throw new RuleError('Not walking yet');
+  chooseAtLine(a, goodsMarket(state), playerId, units);
+}
+
+/** One tap on Up or Down during the walk: one price step (G-2). */
+export function stepWalk(state: GameState, playerId: string, dir: -1 | 1): void {
+  const a = live(state);
+  if (a.stage !== 'walk') throw new RuleError('Not walking yet');
+  stepWalker(a, goodsMarket(state), playerId, dir);
+}
+
+/** The house line a player stands at during the walk ('store' or 'ship', and its price), or null. */
+export function lineOf(state: GameState, playerId: string): { house: string; price: number } | null {
+  const a = state.auction;
+  const w = a?.walkers.find((x) => x.id === playerId);
+  if (state.phase !== 'auction' || a?.stage !== 'walk' || !a.good || !w) return null;
+  return houseLineAt(goodsMarket(state), w);
 }
 
 /** Done with this stage, or not done after all. */
