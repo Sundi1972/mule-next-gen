@@ -10,6 +10,7 @@ import { PhoneGameProvider } from '../src/phone/game';
 import { Hub } from '../src/phone/hub/Hub';
 import type { HubSlots } from '../src/phone/hub/slots';
 import { HUB_SLOTS } from '../src/phone/hub/today';
+import { aMuleView, aPlayer } from './fixtures/views';
 
 /**
  * E-11 (UX audit) under C20's rule on a phone (Heiko's "(c) chat at the bottom", WS6's mock 529bc7f8 ?ticker=under):
@@ -19,7 +20,7 @@ import { HUB_SLOTS } from '../src/phone/hub/today';
  * where the desk is measured against the footer at 844 and 667, is hub-steps.ts's governorsDeskFits.
  */
 
-const player = (id: string, name: string, slot: number, isAi = false): PlayerView => ({ id, name, isAi, color: '', species: 'zipwing', money: 1000, worth: 0, lastWorth: null, worthBeforeCut: null, plots: 0, ready: false, doneDeveloping: false, condition: null, colonist: null, slot });
+const player = (id: string, name: string, slot: number, isAi = false): PlayerView => aPlayer({ id, name, slot, isAi });
 /** Lena and Ossa still planning, two AI seats ready: 2 / 4 READY. */
 const PLAYERS = [player('s1', 'Lena', 0), player('s2', 'Ossa', 1), player('s3', 'Kai', 2, true), player('s4', 'Brix', 3, true)];
 const stock = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0, alloy: 0, electronics: 0, medicine: 0 };
@@ -63,36 +64,13 @@ function month(governor: boolean, percent = 5, start = 5): MuleView {
     droneOrder: [],
     politics: { running: null, ballot: {}, canRun: { governor: true, sheriff: true }, paid: 0, reputation: 50 },
   };
-  return {
-    finished: false,
+  return aMuleView({
     month: 4,
-    maxMonths: 12,
-    phase: 'planning',
-    phaseEndsAt: null,
-    width: 1,
-    height: 1,
-    tiles: [],
-    lit: null,
     players: PLAYERS,
     me,
-    market: [],
-    storeMules: 0,
-    mulePrice: 0,
-    colonists: 0,
-    air: { level: 22, band: 'clean' },
-    lastAir: null,
-    colonistsFed: null,
-    ship: { arrives: 6, inPort: false, wants: null },
     treasury: { money: 0, salesTax: percent / 100 },
-    news: [],
-    scores: null,
-    auction: null,
-    listings: [],
-    lotSlots: { used: 0, max: 4 },
-    landAuction: null,
-    production: null,
     politics,
-  };
+  });
 }
 
 /** Ossa has said two things: the ticker's usual two lines. */

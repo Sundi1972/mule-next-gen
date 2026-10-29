@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { memo, useId } from 'react';
 import { PUPIL } from './Creature';
 import { GoodIcon } from './GoodIcon';
 import { SLOT_COLOR, type Good, type Slot } from './tokens';
@@ -16,16 +16,19 @@ const EYE_WHITE = 'var(--color-eye-white)';
  * the good's colour with the good's glyph once outfitted. A saddle cloth in its owner's colour says whose it is; a
  * store MULE has none.
  *
- * States: idle (breathes, blinks), walk (legs swing in pairs), installed (kneels, the pod pulses as it works).
+ * States: idle (breathes, blinks), walk (legs swing in pairs, on `cycle` when it has one), installed (kneels, the pod
+ * pulses as it works).
  * MuleIcon stays as the glyph in text and chips. Colours come from the --color-mule-* tokens; the keyframes mule-*
- * hold still under reduced motion (theme.css).
+ * hold still under reduced motion (theme.css). Memoised: a board re-rendering at 20 Hz does not redraw an unchanged
+ * MULE.
  */
-export function Mule({
+export const Mule = memo(function Mule({
   size = 48,
   state = 'idle',
   good = null,
   owner,
   facing = 'right',
+  cycle,
   className,
 }: {
   size?: number;
@@ -35,6 +38,8 @@ export function Mule({
   /** The owner's seat; its colour is the saddle cloth's and the antenna tips'. Omit for a store MULE. */
   owner?: Slot | undefined;
   facing?: 'left' | 'right';
+  /** Seconds per stride walking: the colonist's on the lead (gait.ts::cycleSeconds). Unusable ones keep the 0.5 s. */
+  cycle?: number;
   className?: string | undefined;
 }) {
   const id = useId().replace(/:/g, '');
@@ -58,6 +63,8 @@ export function Mule({
       </>
     );
   const swing = (reverse: boolean) => (walk ? (reverse ? 'animate-[mule-step_0.5s_ease-in-out_infinite_reverse]' : 'animate-[mule-step_0.5s_ease-in-out_infinite]') : undefined);
+  // On a lead the stride is the colonist's; alone it is the classes' own 0.5 s.
+  const stride = walk && cycle !== undefined && Number.isFinite(cycle) && cycle > 0 ? { animationDuration: `${cycle}s` } : undefined;
   return (
     <svg
       viewBox="0 0 48 40"
@@ -77,13 +84,13 @@ export function Mule({
       </defs>
       <ellipse cx={22} cy={kneel ? 34.5 : 38} rx={15} ry={1.7} fill={PUPIL} opacity={0.18} />
       <g transform={facing === 'left' ? 'translate(48 0) scale(-1 1)' : undefined}>
-        <g className={kneel ? undefined : walk ? 'animate-[mule-bob_0.5s_ease-in-out_infinite]' : 'animate-[mule-breathe_2.6s_ease-in-out_infinite]'} style={{ transformOrigin: '22px 30px' }}>
+        <g className={kneel ? undefined : walk ? 'animate-[mule-bob_0.5s_ease-in-out_infinite]' : 'animate-[mule-breathe_2.6s_step-end_infinite]'} style={{ transformOrigin: '22px 30px', ...stride }}>
           <g transform={kneel ? 'translate(0 3)' : undefined}>
             {/* Back legs behind the body, front pair in front, each pair swinging opposite when it walks. */}
-            <g className={swing(false)} style={{ transformOrigin: '12px 26px' }}>
+            <g className={swing(false)} style={{ transformOrigin: '12px 26px', ...stride }}>
               {leg(11, true)}
             </g>
-            <g className={swing(true)} style={{ transformOrigin: '29px 26px' }}>
+            <g className={swing(true)} style={{ transformOrigin: '29px 26px', ...stride }}>
               {leg(29, false)}
             </g>
             {/* The tail: a short cable with a plug. */}
@@ -119,10 +126,10 @@ export function Mule({
               <path d="M18.6 11 Q20.5 10 22.4 11" stroke={EYE_WHITE} strokeOpacity={0.5} strokeWidth={0.7} fill="none" />
             )}
             {/* Front legs, in front of the body. */}
-            <g className={swing(true)} style={{ transformOrigin: '15px 26px' }}>
+            <g className={swing(true)} style={{ transformOrigin: '15px 26px', ...stride }}>
               {leg(15, true)}
             </g>
-            <g className={swing(false)} style={{ transformOrigin: '32px 26px' }}>
+            <g className={swing(false)} style={{ transformOrigin: '32px 26px', ...stride }}>
               {leg(32, false)}
             </g>
             {/* The neck, ribbed like a hose, up to the head. */}
@@ -151,4 +158,4 @@ export function Mule({
       </g>
     </svg>
   );
-}
+});
