@@ -14,8 +14,11 @@ export interface Usage {
 
 export const NO_USAGE: Readonly<Usage> = Object.freeze({ input: 0, cached_read: 0, cache_write: 0, output: 0 });
 
-/** 'fallback' is a write call's usable reply from the fallback model, sent because its kind's model did not fit the budget. */
-export type Outcome = RejectOutcome | 'llm' | 'fallback' | 'refused' | 'timeout' | 'error' | 'budget';
+/**
+ * 'fallback' is a write call's usable reply from the fallback model, sent because its kind's model did not fit the budget.
+ * 'late' is a second line for a write call whose reply came after its phase started: no usage, never played.
+ */
+export type Outcome = RejectOutcome | 'llm' | 'fallback' | 'refused' | 'timeout' | 'error' | 'budget' | 'late';
 
 /** What a call was for: a move (land, develop, trade), or writing a seat's strategy or playbook. */
 export type LedgerKind = DecisionKind | WriteKind;
@@ -155,8 +158,8 @@ export function createLedger(opts: { path?: string; clock?: () => Date } = {}): 
         games.set(call.game, seats);
         const total = seats.get(call.seat) ?? { calls: 0, usd: 0 };
         seats.set(call.seat, total);
-        // A budget refusal is a line, not a model call.
-        if (call.outcome !== 'budget') total.calls += 1;
+        // A budget refusal and a late reply are lines, not model calls.
+        if (call.outcome !== 'budget' && call.outcome !== 'late') total.calls += 1;
         total.usd += cost;
       }
       const line: CallLine = {

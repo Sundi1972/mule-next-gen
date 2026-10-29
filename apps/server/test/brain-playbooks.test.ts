@@ -19,8 +19,14 @@ const PLAYERS = [
 ];
 const USED = { input: 900, output: 120 };
 
-/** The fake model's reply: plan B's ranking, and the line it says. */
-const TAKE_B = JSON.stringify({ edits: [{ path: '/landGrant/ranked', to: 'B', reason: 'B is mine.' }], line: 'Mine.' });
+/** The fake model's reply: plan A's ranking, one claim where the engine drafts two, and the line it says. */
+const EDITS = JSON.stringify({
+  edits: [
+    { path: '/landGrant/ranked', to: 'A', reason: 'A is mine.' },
+    { path: '/landGrant/claims', to: 1, reason: 'Save money.' },
+  ],
+  line: 'Mine.',
+});
 /** Every edit out of bounds, or refused by the writer before validation. */
 const ALL_REFUSED = JSON.stringify({
   edits: [
@@ -84,31 +90,32 @@ describe('RULE-A1: which playbook takes effect at the land grant', () => {
     const keyless = await month1({ brain: createBrain({ gameId: 'g-keyless', env: {}, logPath: ledgerPath() }), grantAtMs: 2_000 });
     expect(keyless.now).toEqual({ ...keyless.engine, by: 'engine' });
 
-    const sdk = answersAt(1_000, TAKE_B);
+    const sdk = answersAt(1_000, EDITS);
     const broke = await month1({ brain: smartOn(sdk, 1e-9), grantAtMs: 2_000 });
     expect(sdk.calls).toBe(0);
     expect(broke.now).toEqual({ ...broke.engine, by: 'engine' });
     expect(callLines().map((l) => [l.kind, l.outcome])).toEqual([['strategy', 'budget']]);
 
-    const unused = answersAt(1_000, TAKE_B);
+    const unused = answersAt(1_000, EDITS);
     const none = await month1({ brain: smartOn(unused), source: null, grantAtMs: 2_000 });
     expect(unused.calls).toBe(0);
     expect(none.now).toBeNull();
   });
 
   it('T-AC-A1: row 4, a reply 1 s before the land grant: the draft with its accepted edits plays, by llm', async () => {
-    const sdk = answersAt(1_000, TAKE_B);
+    const sdk = answersAt(1_000, EDITS);
     const { now, inEffectAtStart, engine } = await month1({ brain: smartOn(sdk), grantAtMs: 2_000 });
 
     expect(sdk.calls).toBe(1);
     expect(sdk.requests[0]!.params.model).toBe(BRAIN.writeCalls.strategy.model);
     // No land-grant start time is known when it asks, so the call waits its kind's full timeout.
     expect(sdk.requests[0]!.options.timeout).toBe(BRAIN.writeCalls.strategy.timeoutMs);
-    const planB = planInBrief(sdk.requests[0]!.params, 'B');
-    expect(planB.length).toBeGreaterThan(0);
+    const planA = planInBrief(sdk.requests[0]!.params, 'A');
+    expect(planA.length).toBeGreaterThan(0);
+    expect(engine?.landGrant?.claims).toBe(2);
     expect(inEffectAtStart?.by).toBe('llm');
-    expect(inEffectAtStart?.landGrant?.ranked.slice(0, planB.length)).toEqual(planB);
-    expect(inEffectAtStart?.landGrant?.ranked).not.toEqual(engine?.landGrant?.ranked);
+    expect(inEffectAtStart?.landGrant?.ranked.slice(0, planA.length)).toEqual(planA);
+    expect(inEffectAtStart?.landGrant?.claims).toBe(1);
     expect(inEffectAtStart?.landGrant?.pressShare).toEqual(ENGINE_PRESS);
     expect(inEffectAtStart?.rejected).toEqual([]);
     expect(now).toEqual(inEffectAtStart);
@@ -116,7 +123,7 @@ describe('RULE-A1: which playbook takes effect at the land grant', () => {
   });
 
   it('T-AC-A1: row 2, a reply 0.2 s after the land grant started is never played: the engine playbook stays, and the reply is ledgered late with no usage', async () => {
-    const sdk = answersAt(1_200, TAKE_B);
+    const sdk = answersAt(1_200, EDITS);
     const { now, inEffectAtStart, engine, brain } = await month1({ brain: smartOn(sdk), grantAtMs: 1_000 });
 
     expect(sdk.calls).toBe(1);
@@ -155,7 +162,7 @@ describe('RULE-A1: which playbook takes effect at the land grant', () => {
       throw new Error('validator fault');
     };
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    const sdk = answersAt(500, TAKE_B);
+    const sdk = answersAt(500, EDITS);
     const { now, engine } = await month1({ brain: smartOn(sdk), source: stubSource(throwing), grantAtMs: 2_000 });
     expect(now).toEqual({ ...engine, by: 'engine' });
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining('validator fault'));

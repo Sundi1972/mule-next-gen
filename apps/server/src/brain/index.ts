@@ -26,12 +26,18 @@ export interface BrainService {
 
 export type { WriteAsk };
 
+/** A write call as the game asks it: the writer's ask, and whether its reply has come too late to take effect. */
+export interface PlaybookAsk extends WriteAsk {
+  /** True once the phase the reply serves has started: a reply that comes then gets a second ledger line, 'late'. */
+  late?: () => boolean;
+}
+
 /**
  * A seat's strategy and playbook writer. `write` never throws: every failure is the reply's cause. A busy seat, a game
  * that is over, a wait that is not above 0, or a budget no model fits returns cause 'no_reply' without a model call.
  */
 export interface PlaybookWriter {
-  write(kind: WriteKind, ask: WriteAsk): Promise<WriterReply>;
+  write(kind: WriteKind, ask: PlaybookAsk): Promise<WriterReply>;
 }
 
 /** The brain as its owner holds it: the game's contract, plus the spend a run caps on. */
@@ -240,6 +246,7 @@ export function createBrain(options: BrainOptions): MeteredBrain {
             const outcome = writeOutcomeOf(slot.reply, failure, written);
             line(kind, model, outcome === 'llm' && model !== call.model ? 'fallback' : outcome, slot.reply?.usage ?? NO_USAGE, ms);
             if (billUnknown(slot.reply, failure) && !finished) budget.countUnknownBill(gameId, seat.id, slot.worstUsd);
+            if (slot.reply && ask.late?.()) line(kind, model, 'late', NO_USAGE, 0);
           }
         }
         return written;

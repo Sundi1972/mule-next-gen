@@ -84,6 +84,7 @@ import { AiSeat, LotHand, personaFor, VoteHand, type AiAction } from '@mule/ai';
 import { PLAYER_COLORS, type MuleIntent, type MuleView, type PlayerView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import { createBrain, type BrainService } from './brain/index.js';
+import { ENGINE_SOURCE, Playbooks, type PlaybookSource } from './brain/playbooks.js';
 import { colonistView, dueArrivals, placeName, walkTarget, type Colonist, type DevIntent } from './dev-walking.js';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
 import { ceremonyNews, myPoliticsView, politicsView } from './politics-view.js';
@@ -301,6 +302,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private notices: Notice[] = [];
   /** Where whoever builds a seat's playbook hands the final one; a no-op unless the game is recorded or replayed. */
   protected readonly recordPlaybook: (entry: PlaybookNote) => void;
+  /** The AI seats' land-grant playbooks: asked for at game start and as each upkeep opens, in effect at the land grant. */
+  private playbooks: Playbooks | null = null;
 
   constructor(
     private readonly ctx: GameContext,
@@ -316,6 +319,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       /** Hears each notice as it settles. */
       notice?: (notice: Notice) => void;
       recordPlaybook?: (entry: PlaybookNote) => void;
+      /** The engine's playbook drafts and validator; ENGINE_SOURCE unless a test sets one. */
+      playbookSource?: PlaybookSource | null;
     } = {},
   ) {
     this.phaseScale = options.phaseScale ?? 1;
@@ -351,6 +356,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       this.lotHands.set(s.id, new LotHand(seat.mind, createRng((seat.options.seed ^ 0xc2b2ae35) >>> 0)));
       this.voteHands.set(s.id, new VoteHand(seat.mind, createRng((seat.options.seed ^ 0x165667b1) >>> 0)));
     });
+    const source = this.options.playbookSource === undefined ? ENGINE_SOURCE : this.options.playbookSource;
+    this.playbooks = new Playbooks({ brain: this.brain, source, seats: [...this.ai.values()] });
+    this.playbooks.ask(this.state, this.state.month);
     this.news = ['Welcome to the colony. Talk tactics, then grab land.'];
     this.enterPhase();
   }
@@ -786,6 +794,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
     if (state.phase === 'planning') this.startPlanning();
     if (state.phase === 'landGrant') {
+      this.playbooks?.takeEffect(state);
       this.fastForward = false;
       this.grantTimers = { cancelTick: null, presses: [] };
       this.aiGrantBids();
@@ -793,6 +802,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     }
     if (state.phase === 'production') this.reportProduction();
     if (state.phase === 'upkeep') {
+      this.playbooks?.ask(state, state.month + 1);
       this.recordMonthEnd();
       // AI seats are on at once: the month end waits only for people.
       for (const s of this.seats) if (s.isAi) this.ready.add(s.id);
