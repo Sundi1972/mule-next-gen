@@ -317,11 +317,6 @@ export const DEV_WALK = {
    * WS6's thresholds, in the variant-B mock Heiko approved 2026-10-28 (design/mocks/ws6-ux at bb4bc11).
    */
   hungerLevels: { hungryFrom: 0.3, starvingFrom: 0.7 },
-  /**
-   * In month 1 the one clock stands full until every seat is in: its first MULE installed, no plot, its turn ended, or
-   * away; the host's Continue starts it past the rest (Heiko's Q3, arcade AM-6).
-   */
-  month1WaitsForFirstMule: true,
 };
 
 /** Every land but the store's own tile, which no colonist walks on. */
