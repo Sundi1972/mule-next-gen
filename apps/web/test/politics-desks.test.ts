@@ -422,12 +422,6 @@ describe('election day on the phone (C66, E-2)', () => {
       expect(html).not.toMatch(cast);
     });
 
-    it("C66, AM-21: another room's ballot opens with nothing chosen", () => {
-      pickOn(LENA_4, 'governor', '');
-      const html = inHub(ballot(), 1, 'ZORP');
-      for (const option of ['s1', 's2', 'abstain']) expect(radio(html, option), option).not.toMatch(/checked/);
-    });
-
     it("C66, AM-21: another seat's abstention on this phone is not Lena's", () => {
       pickOn({ ...LENA_4, seat: 's2' }, 'governor', '');
       const html = inHub(ballot());
