@@ -416,13 +416,17 @@ describe('RULE-3 for the overlay (T-AC-5 style): boards 0/1 × reduced, and a ta
     });
   }
 
-  it('T-AC-5: alone, a tap skips to the result, a second leaves the show and the development screen is back', async () => {
+  it('B-AC-4: alone in a held phase, a tap skips to the result; a second, past the last result, leaves the light card covering until endsAt', async () => {
     const m = await mount(await phone(OSSA, 0, viewAt(ROLL_S)));
     expect(inside(m.html(), 'phone-event-overlay')).toContain('data-testid="phone-now"');
     m.tap();
     expect(inside(m.html(), 'phone-event-overlay')).toContain('data-testid="phone-miss"');
     m.tap();
-    expect(m.html()).not.toContain('phone-event-overlay');
+    // The phase's clocks have not started: its screen has nothing to show yet, so the light card stays over it.
+    expect(tag(m.html(), 'phone-event-overlay')).toContain('data-mode="light"');
+    expect(tag(m.html(), 'phone-event-overlay')).toMatch(/class="absolute inset-0 z-40 /);
+    expect(inside(m.html(), 'phone-event-overlay')).toContain('data-testid="phone-card"');
+    expect(inside(m.html(), 'phone-event-overlay')).not.toContain('data-testid="skip"');
     expect(m.html()).toContain('data-testid="game-shell"');
   });
 
