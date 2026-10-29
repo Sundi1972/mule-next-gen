@@ -24,7 +24,7 @@ export type ShowPhase = 'planning' | 'landGrant' | 'landAuction' | 'development'
 export type ShowWeight = 'headline' | 'spotlight' | 'bulletin';
 
 /**
- * One event as the server sends it (the protocol's ProductionEventView, structurally: @mule/ui does not import the
+ * One event as the server sends it (the protocol's EventView, structurally: @mule/ui does not import the
  * protocol). `playMs` is how long its segment of the show lasts; the show never computes a length of its own.
  */
 export interface ShowEventView {

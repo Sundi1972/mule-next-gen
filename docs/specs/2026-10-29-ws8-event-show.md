@@ -388,8 +388,9 @@ examples → §6: an AI press during the auction's show is refused · five event
 - **ProductionEventView** (`packages/protocol/src/index.ts`) · MODIFIED · not breaking (fields added) · C3. Adds
   `phase: Phase`, `weight`, `playMs: number`. Example: `{ key: 'drought', …, phase: 'production', weight: 'headline',
   playMs: 6400, hits: [...] }`.
-- **EventView, MuleView.events** · ADDED · not breaking · C8 (PR-2). ProductionEventView becomes EventView; adds
-  `startsAt` (server ms the show starts), and from WS1's wave 2 `effects?`, `hits[].becomes?`, `hits[].muleLost?`,
+- **EventView, MuleView.events, MuleView.eventShow** · ADDED · not breaking · C8 (PR-2; AM-13). ProductionEventView
+  becomes EventView (the old name stays as an alias); `MuleView.events?: EventView[]` (the phase's, fired order, [] when
+  none) and `MuleView.eventShow?: { startsAt, showMs, introMs } | null` (null when none fired), and from WS1's wave 2 `effects?`, `hits[].becomes?`, `hits[].muleLost?`,
   `hits[].pending?` (shapes agreed with WS1, 29 Oct, as in the gallery's `events.ts::Effect` and `Hit`).
 - **MonthEvent.when** · REMOVED by WS1 (its named edit; screens read `phase`). Not ours; listed so nothing reads it.
 
@@ -663,6 +664,27 @@ did       render-gate.mjs over 40 pairs (TV 1280×720; phone alone and with a TV
 because   T-AC-6 needs its evidence at the gate, not only in a run log
 goal      G-1, G-2 (unchanged)
 folded    none
+```
+
+```
+AM-13 · 2026-10-29 · lead rulings, PR-2 Task 9 (C8's contract as built)
+
+target    §1 C8 · §3
+said      EventView adds `startsAt`
+did       the show's timing is one per phase, so it lives beside the list, not on each event: MuleView.eventShow =
+          { startsAt, showMs, introMs } | null. startsAt is the server time the show's intro starts (production: the
+          phase's entry + 4 800 ms × phaseScale, where the client's production timeline starts the events; any other
+          phase: its entry). showMs and introMs are full-pace values like playMs. MuleView.events and eventShow are
+          optional on the type (the server always sends them; required would edit 7 other lanes' fixtures). The
+          4 800 ms offset is a server constant mirroring the client's SHOW.eventAt until the client reads eventShow;
+          then it moves into EVENT_SHOW and both sides import it.
+          Carried to later tasks: the election hands planning proper on without enterPhase, so a planning event's
+          startsAt would be the election's start (C9 decides whether the hand-off restamps it); phaseEvents reads
+          this month's report, which exists only from production on, so an event fired before production (C11's
+          sickness, wave-2 rows) needs its own source in that builder.
+because   one timing per show; no edits forced on other lanes
+goal      G-1 (unchanged)
+folded    §3 EventView entry
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
