@@ -126,12 +126,12 @@ export function LeagueTable({ view, density, selfId, final = false }: { view: Mu
                   {r.rank}
                 </td>
                 <td className={s.cell}>
-                  <span className={cx('flex min-w-0 items-center', tv ? 'gap-3' : 'gap-1.5')}>
+                  <span className={cx('flex min-w-0 items-center', tv ? 'gap-3' : 'gap-1.5')} title={r.player.name}>
                     <PlayerMark slot={r.slot} species={r.player.species} size={s.mark} label={r.player.name} />
                     <span className={cx('truncate font-display font-semibold', s.name)} data-testid={`name-${r.player.id}`}>
                       {!mine ? (
                         r.player.name
-                      ) : density === 'compact' ? (
+                      ) : final && !tv ? (
                         // The rail's final standings are narrow on a phone: your row's highlight and creature say who it is.
                         <>
                           <span data-testid={`you-name-${r.player.id}`}>You</span>
