@@ -177,7 +177,8 @@ The standing line, verbatim, in every handoff:
 |---|---|---|
 | `packages/engine/src/config.ts` | PR-1, PR-8, PR-11 | **serialised**: PR-1 adds the blocks; PR-8 the moments' values; PR-11 one line |
 | `packages/engine/src/floor/reach.ts` | PR-1, PR-8 | **serialised**: rows 5–14 in PR-1, rows 1–4, 8a, 11a in PR-8 |
-| `packages/ai/src/hands/develop.ts` | PR-4, PR-8 | **serialised** (waves 2 and 4) |
+| `packages/ai/src/hands/develop.ts` | PR-4, PR-8, WS1's AI step 2 PR-3 | **serialised**: PR-4 first (taps → steering), then PR-8. Step 2's PR-3 (it splits the hand into a route source and a runner) rebases onto whichever has merged (PM ruling, 29 Oct) |
+| `packages/ai/src/seat.ts`, `strategist.ts`, `play.ts`, `sim.ts` | PR-4, WS1's AI step 2 PR-1 to PR-4 | **serialised**: PR-4 lands first; step 2's PRs rebase onto it (PM ruling, 29 Oct). Step 2 doesn't edit `value.ts`; after PR-4, step 2's replay test runs with `DEV_STEER.on` both ways |
 | `apps/web/src/phone/arcade/**`, `TvDevelop.tsx` | PR-6, PR-9 | **serialised** (waves 3 and 4) |
 | `apps/web/e2e/store-steps.ts` | PR-6, PR-9, PR-10 (WS6) | **serialised**, one owner (WS6) |
 | `apps/web/e2e/harness.ts` | PR-5, PR-10 (WS4) | **serialised**, one owner (WS4) |
@@ -447,6 +448,14 @@ props first, and Tasks 6.3 and 6.5 pass the frame's `moving`, `facing`, `encount
 gait. The branch is based on a commit that contains both scaffolds: trunk once ws6-ux's docs-and-mocks milestone
 merges (asked of the PM, 2026-10-29).
 
+**Carried into PR-6, B-AC-11 (WS7's #226, 2026-10-29):** the scaffold's phone text at `text-[9px]` builds at `text-[10px]`, B-AC-11's floor; check each against its row at 667.
+
+**Carried into PR-6 from PR-5 (#224, AM-16):** once the arcade screens move to #195's motion, remove `@keyframes store-waddle` from theme.css (PR-5 kept it only for the mock's HallStage) and `waddleSeconds` if nothing else uses it.
+
+**Carried into PR-6 from A-1 (#200), 2026-10-29:** the TV's development screen with six seats and a three-line ticker
+is about 100 px short (the store hall squeezes to 104 px with the clock running); TvDevelop sizes the hall for six
+seats. The host's "started the clock" news becomes a TV beat there.
+
 **Ready to start, 2026-10-29:** Task 6.2 when PR-1 (#186) merges (prediction steps the floor); Task 6.1's steps when
 PR-5's harness steering exists; Tasks 6.3 and 6.5 after PR-3, PR-5 and the motion PR.
 
@@ -710,7 +719,11 @@ promise. WS4's part first (harness.ts is shared), then the others at once.
 |---|---|---|---|---|
 | PR-0 · the wire's types | #176 | WS3 | `5a7fb2c7` | WS6 OK at 5a7fb2c7 (typecheck 0). **Merged at ddb14a0** |
 | S-2 · steering feel | — | WS6 | — | **Done** (`docs/research/2026-10-29-arcade-s2-feel.md`): Heiko "tested phone sterring ok", the hall "3 is fine". Spec AM-7: `steer` carries its `tick`, the server buffers inputs by tick; `floorSeconds` 3. AM-8: the frame goes through WS3's recorder and replay |
-| PR-1 · the dev floor | — | WS1 | — | **In build**, with AM-9's rulings applied (every outfit; 8b works by bay; 8c the Green belt; row 10 SWAP; rows 11 ANALYSE, 12 FIT FILTER, 11a TAKE; `pubPayoutFor`; start positions outside the store doors). WS6 reviews on its SHA |
+| PR-1 · the dev floor | #186 | WS1 | — | **Merged into trunk.** Owner OKs 758f7f53, 7c3e5865, 47baa619; the rulings it raised are AM-10 and AM-12 |
+| S-1 · the frame's cost | — | WS3 | — | **Done**: spec AM-13 (20 Hz; frames 420–606 B, rounded to 2 decimals; a steer sends no full view; the tick compares state) |
+| PR-2 · the frame channel | — | WS4 | — | **Rulings given** before dispatch: spec AM-15 (`Game.quiet?`, `Connection.behind?` via `bufferedAmount > FRAME_BACKLOG_BYTES`, rounding in dev-steer.ts); builds against ws6-ux until milestone 6 lands |
+| PR-7 · payouts, re-outfit | #206 | WS3 | — | **Rulings given**: spec AM-14 (re-outfit only a MULE taken off a plot, no refund, a bolted taken MULE goes home) |
+| PR-6 · the screens | — | WS6 | — | Waiting on PR-2, PR-3, PR-5. Carry-overs from A-1 already in the plan (1768a024): the six-seat TV store hall (about 100 px short), the "started the clock" TV beat. Contention rows for WS1's AI step 2 at 3471dba7 |
 
 ## Risk-mitigation milestones (spec §7)
 

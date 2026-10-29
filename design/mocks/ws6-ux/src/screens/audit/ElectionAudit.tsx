@@ -771,7 +771,7 @@ export function Announce({ ready: startReady = false }: { ready?: boolean }) {
     : { step: 1, of: 3, title, detail: 'Read who runs and on what promise, then tap Ready to vote. No clock: the ballot opens once everyone is ready.' };
   return (
     <GameShell
-      phase="Election day"
+      phase="Election"
       status={<ReadyCount players={players} />}
       now={now}
       footer={<WaitFooter ready={ready} onReady={() => setReady(true)} planningProper words={ANNOUNCE_WORDS} onContinue={() => (window.location.hash = 'audit-election-ballot')} />}
@@ -897,7 +897,7 @@ export function Ballot({ voted: startVoted = false }: { voted?: boolean }) {
       : { step: 2, of: 3, title: 'Vote in secret', detail: 'Pick one, or abstain, then Cast my vote. Nobody sees whom you chose. No clock: it closes once everyone has voted.' };
   return (
     <GameShell
-      phase="Election day"
+      phase="Election"
       status={<ReadyCount players={players} label="VOTED" />}
       now={now}
       footer={closed ? undefined : <WaitFooter ready={cast} onReady={() => setCast(true)} canReady={complete} planningProper words={BALLOT_WORDS} onContinue={() => setClosed(true)} />}
@@ -1061,7 +1061,7 @@ export function ResultList({ me = ME, compact = false }: { me?: string | null; c
                 <span data-num className="font-mono font-bold">
                   {t.votes} vote{t.votes === 1 ? '' : 's'}
                 </span>
-                {t.id === r.winner && <span className="rounded-chip bg-holo px-1 font-mono text-[9px] font-bold leading-4 text-on-holo @min-[1100px]/shell:text-xs">ELECTED</span>}
+                {t.id === r.winner && <span className="rounded-chip bg-holo px-1 font-mono text-[10px] font-bold leading-4 text-on-holo @min-[1100px]/shell:text-xs">ELECTED</span>}
               </span>
             ))}
             {!compact && (
@@ -1141,7 +1141,7 @@ function GovernorDesk({ tax, setTax, set, onSet }: { tax: number; setTax: (n: nu
           <span data-num className={cx('font-mono text-xl font-bold leading-none @min-[1100px]/shell:text-3xl', breaks && 'text-alert')} data-testid="tax-value">
             {tax}%
           </span>
-          <span className={cx('whitespace-nowrap rounded-chip border px-1 font-mono text-[9px] font-bold uppercase leading-3 @min-[1100px]/shell:text-xs @min-[1100px]/shell:leading-4', verdict.tone)} role="status" aria-live="polite" data-testid="governor-verdict">
+          <span className={cx('whitespace-nowrap rounded-chip border px-1 font-mono text-[10px] font-bold uppercase leading-3 @min-[1100px]/shell:text-xs @min-[1100px]/shell:leading-4', verdict.tone)} role="status" aria-live="polite" data-testid="governor-verdict">
             <span aria-hidden data-testid={verdict.id}>
               {verdict.chip}
             </span>

@@ -170,7 +170,7 @@ mechanism    extract_interface (the drawing's SPOT becomes the engine's plan) + 
 call sites   Store.tsx::StoreInterior (Develop.tsx today; C11's hall stage tomorrow; TableApp's TV store)
 pin          the store hall's look (Heiko-approved, WS6 PR-4/PR-10): store-steps.ts::storeIsOneHallWithTwoRows,
              store-view.test.ts B-AC-10 / T-AC-12 keep passing
-ux           design/mocks/ws6-ux/src/screens/arcade/views.tsx::HallStage at ceedd23f · GRAFT TARGET: Store.tsx (named edit)
+ux           design/mocks/ws6-ux/src/screens/arcade/views.tsx::HallStage at d30ae057 (AM-16) · GRAFT TARGET: Store.tsx (named edit)
 depends_on   —
 ```
 
@@ -287,6 +287,14 @@ tomorrow     MUST: the room's Game may emit a transient frame to everyone (`ctx.
              MUST (AM-8): WS3's recorder and replay pass `frame` through: recording, to the room; on replay, a no-op
                (record.ts, replay.ts, two lines, WS3's, WS6 reviewing), or a recorded game loses its frames silently.
                Test row: a recorded game's frames still reach a client.
+             MUST (AM-13, S-1): a `steer` intent sends no full view, or 4 phones × 10 steers a second make 40 full
+               views a second (~3.7 MB/s). Frame positions are rounded to 2 decimals on the wire.
+             MUST (AM-15): the room stays game-agnostic. Game gains an optional `quiet?(intent): boolean`; the room
+               skips `broadcast()` after an intent it returns true for (MuleGame: `type === 'steer'`, WS3, PR-3).
+               Connection gains an optional `behind?(): boolean`; the room skips that connection's frame while it is
+               true, never a full view (server.ts: `socket.bufferedAmount > FRAME_BACKLOG_BYTES`, a named server
+               config value; a WS3 named edit in PR-2). The rounding happens where the DevFrame is built (WS3's
+               dev-steer.ts, PR-3); the room passes `payload` through untouched.
 seam         packages/tabletop/src/room.ts (+ protocol.ts message type)
 senior       junior would: put positions in viewFor and broadcast it 20×/s. senior does: a frame of ~200 bytes per
              tick, full views stay event-driven (S-1 measures both).
@@ -638,7 +646,7 @@ unknown      no frame for > DEV_STEER.staleMs (1000) → the phone shows "reconn
 
 Example frame (4 seats, one beat): `{"t":"frame","payload":{"tick":412,"at":20600,"colonists":[{"id":"s1","x":5.42,
 "y":3.08,"space":"map","facing":"right","moving":true,"lead":null}, …],"beats":["2 MULEs left! Race to the
-corral"]}}` — about 200–300 bytes; at 20 frames a second to 5 connections ≈ 30 kB/s on the table's Wi-Fi (S-1
+corral"]}}` — 420–606 bytes with positions rounded to 2 decimals (S-1, AM-13; 804 unrounded); at 20 frames a second to 5 connections ≈ 42–61 kB/s on the table's Wi-Fi (S-1
 measures it).
 
 ## §4 · Failure & Ops `[handoff]`
@@ -680,7 +688,7 @@ C14.
 | T-AC-1 (serves B-AC-1, B-AC-2) | Given a seed and a per-tick input script · When stepFloor runs twice · Then the floors are identical; and the server's floor after a scripted turn equals the sim's (HC-4) | engine unit + server test | a changed input at one tick changes the result | C1, C6, C10 |
 | T-AC-2 (serves G-2) | speeds per RULE-2's examples (plains 1.5625, mountains 0.625, swamp 0.78, leading 1.41, bitten 0.78 tiles/s) | engine unit | lake 0 blocks | C1, C5 |
 | T-AC-3 (serves B-AC-1) | Reach per RULE-3's table, one row each | engine unit | money short → disabled, not hidden | C3 |
-| T-AC-4 (serves B-AC-2) | Given the tick · Then one frame per tick reaches every connection, frames are dropped not queued for a slow one, full views go only on change, or to one seat when its reach's words change (AM-11) | server + tabletop test | no full view on a tick where nothing changed and no seat's reach words changed | C6, C8 |
+| T-AC-4 (serves B-AC-2) | Given the tick · Then one frame per tick reaches every connection, frames are dropped not queued for a slow one, full views go only on change, or to one seat when its reach's words change (AM-11) | server + tabletop test | no full view on a tick where nothing changed and no seat's reach words changed; a steer sends no full view (AM-13) | C6, C8 |
 | T-AC-5 (serves G-2, RULE-8) | In 20 seeded AI-only turns at the defaults every AI colonist reaches the pub within 50 s, and a bot races in most glints | sim (`pnpm sim` report) | with botsSpareTime off, Kai misses turns | C9, C10 |
 | T-AC-6 (serves B-AC-5) | Wolves: the rookie wins ≈ 1 in 4 over 60 seeded fights; a forest run escapes ≈ 13 of 20 | engine headless | — | C4, C9 |
 | T-AC-7 (serves B-AC-6) | Glint timing per RULE-5 (none in the first 6 s, 8 s shown, the first onto it wins) | engine unit | a non-racing colonist on the tile wins too | C4 |
@@ -725,6 +733,50 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-17 (2026-10-29, WS4's question at arcade PR-5, ruled by WS6).** `@mule/ui` gains `"@mule/engine":
+  "workspace:*"` so `StoreInterior` reads `HALL` from `floor/hall.ts` where it draws (C2's one plan), and the hall's
+  GaitInput takes `DEV_STEER.leadPace` and `WOLVES` directly. Safe because the engine is pure TypeScript with no
+  dependencies and never imports `@mule/ui` (no cycle). **The design system takes data from the engine, never rules:**
+  it may import config blocks, the hall plan and types, never a rule function (`stepFloor`, `reachOf`, game.ts). A
+  test in `packages/ui/test` lists the names `src/**` imports from `@mule/engine` and fails on any outside an
+  allow-list, positive-controlled. Rejected: StoreInterior taking the plan as a prop, because every caller (four mocks
+  among them) would pass it or the prop would need a default, a second copy of the geometry C2 forbids.
+- **AM-16 (2026-10-29, WS4's question at arcade PR-5, ruled by WS6).** C2's scaffold is HallStage at **d30ae057**
+  (the addendum Heiko approved with all the mocks; the plan's PR-6 pin), not ceedd23f. HallStage predates the motion
+  PR (#195, 1090e0d9) and still draws the CSS store waddle: graft its composition, never its motion. The walker's
+  motion is #195's, from `packages/ui/src/components/motion/gait.ts`: `Creature`'s `motion={motionOf(g)}`,
+  `cycle={cycleSeconds(g)}` and `facing`, and the led `Mule`'s `cycle` set to the same stride, with the hall's
+  GaitInput `{ moving, encounter: null, pace: condition?.conditionPace ?? 1, terrain: 1, lead: !!leading,
+  bitten: false, leadPace: DEV_STEER.leadPace, bittenPace: WOLVES.bittenPace, lungeSeconds: WOLVES.lungeEverySeconds }`.
+  Store.tsx stops using the `store-waddle` keyframe and `waddleSeconds` in PR-5; the keyframe (theme.css) and
+  `waddleSeconds` (Condition.tsx, with its test) go in PR-6, once the mock no longer uses them. Reduced motion is
+  Creature's own (theme.css).
+- **AM-15 (2026-10-29, WS4's questions at arcade PR-2, ruled by WS6).** C8's three contract points, all option (a):
+  (1) the steer exemption is a generic optional `Game.quiet?(intent)` the room honours, implemented by MuleGame, not a
+  `'steer'` string in room.ts; a seat whose reach words change gets its view from the game itself (AM-11). (2) A
+  connection is "behind" by an optional `Connection.behind?()`, which server.ts's adapter answers from the socket's
+  `bufferedAmount` against a named `FRAME_BACKLOG_BYTES`; no client acknowledgement. Without `behind`, frames always
+  go. (3) Rounding to 2 decimals is the DevFrame builder's (dev-steer.ts), never the room's. Noted: server.ts's
+  `RATE_LIMIT` (20 messages a second a socket) fits `DEV_STEER.steerMaxPerSecond` 10 plus pings and taps; a faster
+  steer would need it raised (WS3's number).
+- **AM-14 (2026-10-29, WS3's questions at PR-7 #206, ruled by WS6).** (1) RULE-3 row 8a's RE-OUTFIT is for a MULE
+  **taken off a plot** (row 11a) only; a MULE bought and outfitted this turn is not offered it (its outfit was chosen
+  seconds ago), and game.ts's `outfitMule` refuses a fitted MULE while `DEV_STEER.on`, so Reach and the rule agree
+  (AM-10/AM-12's principle holds). (2) A taken MULE that was re-outfitted and goes back to its plot at the clock's end
+  (AM-2's "nothing lost") keeps its old outfit, and **the re-outfit fee is not refunded**: "nothing lost" protects the
+  MULE and the plot, not a choice the player paid for. (3) **A taken MULE that bolts and is never caught goes back to
+  its plot at the clock's end**, like one still on its lead: it is the player's installed property, and losing it to a
+  wolf scare would make TAKE a trap. UBER-AC-3's "a bolted MULE caught or lost to the clock" applies to a MULE bought
+  this turn; a taken one is never lost. PR-7 adds a test for each.
+- **AM-13 (2026-10-29, WS3's spike S-1 on trunk 1bed1701, recorded by WS6).** **20 Hz stands** (`DEV_STEER.tickMs`
+  50): loopback latency p50 26 ms, p95 49 ms; over Wi-Fi estimated p50 36–86 ms, p95 60–110 ms (not measured). The
+  frame is 420–606 B with today's field names and positions rounded to 2 decimals (804 B unrounded), so 42–61 kB/s to
+  5 clients; delta coding not needed. A development full view is ~18.7 kB per phone (tiles 73%), ~92 kB per change to
+  the table. Two corrections to C8 and C6: (1) a `steer` intent must not trigger the room's full-view broadcast
+  (`room.ts` `case 'intent'`, a WS4 named edit), and `server.ts` `isIntent` accepts `steer` (WS3, PR-3); (2) full views
+  go only on change: today's development calls `ctx.changed()` every 100 ms in `scheduleAiDevelop` regardless; PR-3's
+  tick compares state instead. T-AC-4's negative case gains "a steer sends no full view". Later, if views need
+  slimming: tiles only on change, or permessage-deflate (~8× smaller).
 - **AM-12 (2026-10-29, WS3's F6 on #186, ruled by WS6).** Reach must not refuse what game.ts allows where the spot
   is unambiguous (AM-10's principle). RULE-3 row 11: ANALYSE on any plot but the store, owned or free, that you haven't
   analysed (scouting stays in the game; leading a MULE doesn't stop it; on your own plot with a fitted MULE row 10's
