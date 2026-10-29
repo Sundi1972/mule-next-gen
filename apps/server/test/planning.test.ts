@@ -1,5 +1,6 @@
 import type { AddressInfo } from 'node:net';
-import { PHASES, RuleError, WALK } from '@mule/engine';
+import { GOOD_NAME } from '@mule/ai';
+import { PHASES, RuleError, WALK, type Good } from '@mule/engine';
 import type { MuleView, ServerEnvelope } from '@mule/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
@@ -236,7 +237,7 @@ describe("FM-planning-host-continue: the host's Continue ends planning proper; n
         if (sidePick === null) {
           sidePick = auction.good;
           game.handle('s1', { type: 'continue' });
-          expect(news(game)[0]).toBe(`Heiko started the ${sidePick} walk without Mia.`);
+          expect(news(game)[0]).toBe(`Heiko started the ${GOOD_NAME[sidePick as Good]} walk without Mia.`);
         } else pressThroughSidePick(game);
       } else if (phase(game) !== 'planning' && !tried.includes(phase(game))) {
         tried.push(phase(game));

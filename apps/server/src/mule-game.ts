@@ -66,6 +66,7 @@ import {
   storeQuotes,
   storeSellLine,
   tileIndex,
+  tradePossible,
   unlist as unlistLot,
   visitPub,
   WALK,
@@ -79,7 +80,7 @@ import {
   type PlaybookEntry,
   type Trade,
 } from '@mule/engine';
-import { AiSeat, LotHand, personaFor, VoteHand, type AiAction } from '@mule/ai';
+import { AiSeat, GOOD_NAME, LotHand, personaFor, VoteHand, type AiAction } from '@mule/ai';
 import { PLAYER_COLORS, type MuleIntent, type MuleView, type PlayerView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import { createBrain, type BrainService } from './brain/index.js';
@@ -456,7 +457,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       const left = this.seats.filter((s) => !s.isAi && s.id !== hostId && !a.done.includes(s.id)).map((s) => s.name);
       // AIs too: one still deciding declares its side once the walk has begun, as it would after a slow decision.
       for (const s of this.seats) auctionDone(state, s.id);
-      goneOn(`started the ${a.good} walk`, left);
+      // With nobody able to trade there is no walk: the good is skipped on the next tick.
+      const walks = tradePossible(a, goodsMarket(state));
+      goneOn(walks ? `started the ${GOOD_NAME[a.good]} walk` : `moved on from ${GOOD_NAME[a.good]}`, left);
       return;
     }
     if (state.phase !== 'planning' && state.phase !== 'upkeep') throw new RuleError('Continue ends planning, a side pick or the month end only');

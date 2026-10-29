@@ -1,6 +1,7 @@
 import type { GameContext } from '@tabletop/core';
 import { describe, expect, it } from 'vitest';
-import { AI_HANDS, RuleError, WALK, type GameState } from '@mule/engine';
+import { AI_HANDS, declareRole, RuleError, WALK, type GameState } from '@mule/engine';
+import { GOOD_NAME } from '@mule/ai';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
 import { readyAll } from './fake-context.js';
 
@@ -239,9 +240,26 @@ describe('MuleGame', () => {
       const first = good(game)!;
       game.handle('s1', { type: 'ready' });
       game.handle('s1', { type: 'continue' });
-      expect(game.viewFor(null).news[0]).toBe(`Heiko started the ${first} walk without Mia.`);
+      expect(game.viewFor(null).news[0]).toBe(`Heiko started the ${GOOD_NAME[first]} walk without Mia.`);
+      // Before any tick: every walker is Done, the AI's too, so nothing is left to wait for.
+      expect(game.viewFor(null).auction!.walkers.map((w) => [w.id, w.done])).toEqual([
+        ['s1', true],
+        ['s2', true],
+        ['s3', true],
+      ]);
       advance(WALK.tickMs);
       expect(stage(game) !== 'status' || good(game) !== first).toBe(true);
+    });
+
+    it("B-AC-A7-3 (F5): a Continue at a side pick where nobody can trade says it moved on, not that a walk started", () => {
+      const { game } = toAuction();
+      const first = good(game)!;
+      // Everyone passes: there is nobody to walk for.
+      for (const id of ['s1', 's2']) game.handle(id, { type: 'declare', side: 'pass' });
+      const state = (game as unknown as { state: GameState }).state;
+      declareRole(state, 's3', 'pass');
+      game.handle('s1', { type: 'continue' });
+      expect(game.viewFor(null).news[0]).toBe(`Heiko moved on from ${GOOD_NAME[first]} without Mia.`);
     });
 
     it('B-AC-A7-3: a Continue with nobody left to wait for names nobody', () => {
@@ -282,7 +300,7 @@ describe('MuleGame', () => {
       expect(held.stage).toBe('status');
       expect(held.walkers.find((w) => w.id === 's2')).toMatchObject({ side, done: false });
       game.handle('s1', { type: 'continue' });
-      expect(game.viewFor(null).news[0]).toBe(`Heiko started the ${first} walk without Mia.`);
+      expect(game.viewFor(null).news[0]).toBe(`Heiko started the ${GOOD_NAME[first]} walk without Mia.`);
       advance(WALK.tickMs);
       expect(stage(game) !== 'status' || good(game) !== first).toBe(true);
     });
