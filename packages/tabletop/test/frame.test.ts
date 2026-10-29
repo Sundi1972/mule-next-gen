@@ -77,7 +77,9 @@ async function table(options: { quiet?: boolean } = {}) {
 describe('the frame channel', () => {
   it('T-AC-4: one frame per tick reaches every connection', async () => {
     const { ctx, screens } = await table();
-    const ticks = [{ tick: 1, colonists: [{ id: 's1', x: 5.42, y: 3.08 }] }, { tick: 2, colonists: [{ id: 's1', x: 5.5, y: 3.08 }] }];
+    // Positions the room would change if it rounded, trimmed or tagged anything.
+    const ticks = [{ tick: 1, colonists: [{ id: 's1', x: 5.4237, y: 3.0801 }] }, { tick: 2, colonists: [{ id: 's1', x: 5.5, y: 3.08 }] }];
+    const built = structuredClone(ticks);
     for (const payload of ticks) ctx.frame(payload);
     for (const screen of screens) {
       expect(screen.frames(), 'each seat and the board, one per tick, in order').toHaveLength(2);
@@ -85,6 +87,7 @@ describe('the frame channel', () => {
       expect(screen.frames()[0]).toBe(ticks[0]);
       expect(screen.frames()[1]).toBe(ticks[1]);
     }
+    expect(ticks, 'nor changed in place: rounding is the builder\'s').toEqual(built);
     await flush();
     for (const screen of screens) expect(screen.kinds(), 'a frame is not a change: no full view follows it').toEqual(['frame', 'frame']);
   });
