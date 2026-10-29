@@ -629,6 +629,21 @@ describe('the TV on election day (C66, E-2, E-5)', () => {
     });
   });
 
+  it('E-2: the TV holds every seat as a candidate on its frame: past two the rows shrink, and no name or headline wraps', () => {
+    /** The opening tag of the first element inside `testid`'s that has this text. */
+    const holder = (html: string, testid: string, text: string) => html.slice(html.indexOf(`data-testid="${testid}"`)).match(new RegExp(`<span[^>]*>${text}<`))![0];
+    const field = (ids: string[]) => onTv(view(politics({ next: 7, candidates: { governor: ids }, promises: {}, election: election({ waitingFor: ['s3'] }) }), me(), { month: 4 }));
+    expect(holder(field(['s1', 's2']), 'tv-field-governor-s2', 'Ossa')).toMatch(/text-5xl/);
+    const five = field(SEATS);
+    expect(holder(five, 'tv-field-governor-s5', 'Pip')).toMatch(/whitespace-nowrap[^"]*text-2xl|text-2xl[^"]*whitespace-nowrap/);
+    expect(holder(five, 'tv-vote-on-phone', 'Vote on your phone')).toMatch(/whitespace-nowrap/);
+
+    const all: ElectionResult = { governor: { winner: 's1', how: 'votes', tallies: SEATS.map((id, i) => ({ id, votes: 5 - i })) } };
+    expect(holder(onTv(inCeremony(WON, beatAt(WON, 'winner', 1))), 'reveal-row-governor-s2', 'Ossa')).toMatch(/text-5xl/);
+    expect(holder(onTv(inCeremony(all, beatAt(all, 'winner', 1))), 'reveal-row-governor-s5', 'Pip')).toMatch(/whitespace-nowrap[^"]*text-xl/);
+    expect(holder(onTv(inCeremony(all, beatAt(all, 'end', 0.2))), 'summary-governor-s5', 'Pip')).toMatch(/whitespace-nowrap/);
+  });
+
   it('T-AC-62: by default the TV names one office: no Sheriff anywhere', () => {
     expect(POLITICS.offices).toEqual(['governor']);
     const tv = onTv(inCeremony(WON, beatAt(WON, 'winner', 1)));
