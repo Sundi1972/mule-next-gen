@@ -175,11 +175,12 @@ function SeatRow({ bubble = true }: { bubble?: boolean }) {
 /**
  * The fallback bubble on its own, for a rail whose seat row is under its content (a phone): it opens to the left of the
  * guide, level with this zero-height anchor at the foot of the rail's header, so it shows while the seat row is
- * scrolled away.
+ * scrolled away. Its negative margin takes back the header's gap above it (gap-1, short: gap-0.5), so it costs the
+ * rail nothing.
  */
 export function FallbackBubble() {
   const said = useFallback();
-  return <div className="relative h-0">{said && <FallbackAt {...said} />}</div>;
+  return <div className="relative -mt-1 h-0 short:-mt-0.5">{said && <FallbackAt {...said} />}</div>;
 }
 
 /** The last few lines, newest first: the phone keeps 2, the TV 3. */
