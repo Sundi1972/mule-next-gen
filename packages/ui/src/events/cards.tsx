@@ -5,7 +5,8 @@ import { signLook, useShow } from './frame';
 import { ramp } from './fx';
 import { EventSignBadge } from './glyphs';
 import { cq, useEventLivingView } from './living';
-import type { EventSegment } from './timing';
+import { RollCall } from './rollcall';
+import { isRollCall, type EventSegment } from './timing';
 import type { ShowSize } from './types';
 
 /** The cards over the map, outside its camera: the phase's intro card and each event's title card. */
@@ -26,12 +27,12 @@ export function IntroCard({ size }: { size: ShowSize }) {
     <div className="absolute inset-0 z-20 flex items-center justify-center" style={{ opacity: 1 - out }} data-testid="intro-card">
       <div className={cx('flex flex-col items-center rounded-sheet text-center animate-[ev-pop_0.45s_ease-out]', size === 'tv' ? 'gap-4 px-10 py-8' : 'gap-2 px-6 py-4')} style={BACKDROP}>
         <span className={cx('label-caps', z.label)}>{`This ${phaseNoun(s.phase)}`}</span>
-        <span className={cx('font-display font-bold', z.intro)}>{introLine(s.segments.length, s.phase)}</span>
+        <span className={cx('font-display font-bold', z.intro)}>{introLine(s.segments.length, s.phase, s.events)}</span>
         <span className={cx('flex', size === 'tv' ? 'gap-4' : 'gap-2')}>
           {s.segments.map((g) => (
             <span key={g.n} className="flex -space-x-3 animate-[ev-pop_0.4s_ease-out_both]" style={{ animationDelay: `${0.25 + g.n * 0.18}s` }}>
               {g.events.map((e, i) => (
-                <EventSignBadge key={i} ev={e} size={z.introBadge} />
+                <EventSignBadge key={i} ev={e} size={isRollCall(g) && g.events.length > 1 ? z.introBadge * 0.7 : z.introBadge} />
               ))}
             </span>
           ))}
@@ -77,13 +78,14 @@ export function TitleCard({ seg, size }: { seg: EventSegment; size: ShowSize }) 
   );
 }
 
-/** Everything that goes over the map: the intro and the title card. */
+/** Everything that goes over the map: the intro, the title card, and the roll call (never a title card of its own). */
 export function Overlays({ size }: { size: ShowSize }) {
   const { stage, seg, quiet } = useEventLivingView();
   return (
     <>
       {!quiet && stage === 'intro' && <IntroCard size={size} />}
-      {seg && stage === 'announce' && <TitleCard seg={seg} size={size} />}
+      {seg && stage === 'announce' && !isRollCall(seg) && <TitleCard seg={seg} size={size} />}
+      <RollCall size={size} />
     </>
   );
 }

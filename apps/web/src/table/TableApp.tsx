@@ -14,6 +14,7 @@ import { useAuctionSound } from '../game/sound';
 import { useClient, useClientState, useServerNow } from '../net/react';
 import { connectedIn, hostMayContinue, readyRows, stillPlanning } from '../phone/hub/ready';
 import { ReadyCount, WaitingFor } from '../phone/hub/ReadyBar';
+import { TvEventLayer, useInTvEventLayer } from '../events/TvEventLayer';
 import { TvElection } from './TvElection';
 import { TvGovernorPromise } from './TvGovernorPromise';
 import { TvLandAuction } from './TvLandAuction';
@@ -150,6 +151,7 @@ export function TvHeader({ game, title, seconds, extra }: { game: MuleView; titl
 }
 
 function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView }) {
+  if (!useInTvEventLayer()) return <TvEventLayer game={game}><TvGame table={table} game={game} /></TvEventLayer>;
   const now = useServerNow(200);
   const tiles = mapTiles(game);
   const lit = game.lit ? tileAt(game, game.lit.x, game.lit.y) : undefined;

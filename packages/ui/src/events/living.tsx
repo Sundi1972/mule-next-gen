@@ -4,7 +4,7 @@ import { EVENT_ENTRY, STORY } from './catalogue';
 import { signLook, useShow, type ShowFrame } from './frame';
 import { band, clamp, Dim, EDGE, OnPlot, ramp, Spotlight, Swarm, Trail } from './fx';
 import { accent, EventDeltaChip, EventGlyph } from './glyphs';
-import { eventHitAt, eventLanded, eventStageAt, eventFrontAt, type EventSegment } from './timing';
+import { eventHitAt, eventLanded, eventStageAt, eventFrontAt, isRollCall, type EventSegment } from './timing';
 import type { ShowEventKey, ShowEventView, ShowSize } from './types';
 
 /**
@@ -31,7 +31,8 @@ export const cardAt = (seg: EventSegment) => seg.playAt + (STORY[seg.events[0]!.
 /** The map's state at `t`: the segment, how dim it is, whose land is in the spotlight, and the camera. */
 export function livingAt({ s, t, reduced, grid, cast }: ShowFrame, size: ShowSize = 'tv') {
   const { stage, seg } = eventStageAt(s, t);
-  const quiet = s.segments.length === 0;
+  // A phase of only bulletins is as quiet as one with none: no intro card and no dim, only its roll call.
+  const quiet = s.segments.every(isRollCall);
   const ev = seg?.events[0];
   const player = ev && ev.weight === 'spotlight' ? cast.playerOf(ev) : undefined;
   const spot = player && seg ? ramp(t, seg.playAt - 0.5, 0.5) * (1 - ramp(t, seg.endAt - 0.5, 0.5)) : 0;
@@ -40,7 +41,7 @@ export function livingAt({ s, t, reduced, grid, cast }: ShowFrame, size: ShowSiz
   // A story's jolt shakes the camera for a moment, never with reduced motion.
   const jolt = s.segments.flatMap((g) => g.events.flatMap((e) => (STORY[e.key]?.jolt !== undefined ? [g.playAt + STORY[e.key]!.jolt! * g.pace] : []))).find((at) => t >= at && t < at + 0.6);
   const shake = jolt !== undefined && !reduced ? `translate(${Math.sin(t * 80) * cq(size, 5, 2.5) * (1 - (t - jolt) / 0.6)}cqw, ${Math.cos(t * 63) * cq(size, 3, 1.5)}cqw)` : undefined;
-  const dim = quiet ? 0 : stage === 'intro' ? ramp(t, s.start, 0.3) : seg && stage === 'announce' ? ramp(t, seg.announceAt, 0.3) * (1 - ramp(t, seg.playAt - 0.5, 0.5)) : 0;
+  const dim = quiet ? 0 : stage === 'intro' ? ramp(t, s.start, 0.3) : seg && !isRollCall(seg) && stage === 'announce' ? ramp(t, seg.announceAt, 0.3) * (1 - ramp(t, seg.playAt - 0.5, 0.5)) : 0;
   // The camera flies in to where the story happens while it plays, and pulls back after its reveal. Never without motion.
   const place = ev && seg && !reduced ? storyPlace(ev) : null;
   const lens = place && seg ? ease(ramp(t, seg.playAt - 0.3, 0.8)) * (1 - ease(ramp(t, cardAt(seg) - 0.2, 0.8))) : 0;

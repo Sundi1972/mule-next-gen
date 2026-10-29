@@ -12,7 +12,8 @@ export type EventMotion =
   | 'sweep' // a front crosses the map from an edge, plot by plot (dust, drought, acid rain, flare, comet)
   | 'spread' // from one plot to the plots joined to it (pests, fire)
   | 'source' // out from a map feature (the river's flood, the volcano's ash)
-  | 'plot'; // on one plot, no travel (bumper harvest, cavern collapse)
+  | 'plot' // on one plot, no travel (bumper harvest, cavern collapse)
+  | 'colonists'; // on the colonists at the store (sickness)
 
 export interface EventEntry {
   key: ShowEventKey;
@@ -34,6 +35,7 @@ export const EVENT_ENTRY: { [K in ShowEventKey]: EventEntry & { key: K } } = {
   wildfire: { key: 'wildfire', motion: 'spread', look: 'One farm flares up and burns out; embers drift onto the farms joined to it.' },
   bumperHarvest: { key: 'bumperHarvest', motion: 'plot', look: 'One plot glows and its bars double.' },
   cavernCollapse: { key: 'cavernCollapse', motion: 'plot', look: 'The cavern badge cracks and sinks; dust puffs up and the plot is plain.' },
+  sickness: { key: 'sickness', motion: 'colonists', look: 'The sick tag pops onto the colonist and their slot; one roll call names everyone sick.' },
 };
 
 /**

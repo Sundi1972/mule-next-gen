@@ -3,6 +3,7 @@ import { GoodIcon } from '../components/GoodIcon';
 import { cx } from '../components/tokens';
 import { useShow } from './frame';
 import { clamp } from './fx';
+import { Sneeze } from './rollcall';
 import type { EventSegment } from './timing';
 import type { ShowEventKey, ShowEventView, ShowSize } from './types';
 
@@ -132,6 +133,7 @@ const CavernCollapse: Scene = ({ ev, seg }) => {
 const SCENE: Partial<Record<ShowEventKey, Scene>> = {
   bumperHarvest: BumperHarvest,
   cavernCollapse: CavernCollapse,
+  sickness: Sneeze,
 };
 
 /** Each segment's story over the map, from when it starts to play. */
