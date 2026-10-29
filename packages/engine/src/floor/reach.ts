@@ -257,7 +257,7 @@ export function reachWords(reach: Reach): ReachWords {
     case 'leave':
       return say('LEAVE', reach.leading ? 'with your MULE' : 'to the colony');
     case 'install': {
-      const notes = [reach.fromShore && 'from the shore', reach.replaces && `your ${inWords(reach.replaces)} MULE runs away`].filter((n) => n);
+      const notes = [reach.fromShore && 'from the shore', reach.replaces && (reach.replaces === reach.good ? 'same outfit, nothing gained' : `your ${inWords(reach.replaces)} MULE runs away`)].filter((n) => n);
       return say(reach.replaces ? 'SWAP' : `INSTALL · ${NAME[reach.good]}`, notes.join(' · ') || null);
     }
     case 'analyse':
