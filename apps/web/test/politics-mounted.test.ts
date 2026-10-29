@@ -240,6 +240,42 @@ describe('the secret ballot, mounted (C66, AM-21)', () => {
     expect(checked('s1')).toBe(true);
     expect(checked('s2')).toBe(false);
   });
+
+  /** The option the ballot shows checked, or none. */
+  const shown = () => ['s1', 's2', 'abstain'].filter(checked);
+
+  it("C66, AM-21: while this phone's votes travel, the server's answers to the earlier ones never replace the latest (s1 held, then s2 and back to s1)", () => {
+    mount(ballot({ governor: 's1' }), ElectionDay);
+    pick('s2');
+    pick('s1');
+    rerender(ballot({ governor: 's2' }), ElectionDay);
+    expect(shown(), 'the answer to s2').toEqual(['s1']);
+    rerender(ballot({ governor: 's1' }), ElectionDay);
+    expect(shown(), 'the answer to s1').toEqual(['s1']);
+  });
+
+  it("C66, AM-21: while this phone's votes travel, the server's answers to the earlier ones never replace the latest (s1, s2, s1); a change elsewhere after the last shows", () => {
+    mount(ballot(), ElectionDay);
+    pick('s1');
+    pick('s2');
+    pick('s1');
+    for (const answer of ['s1', 's2', 's1']) {
+      rerender(ballot({ governor: answer }), ElectionDay);
+      expect(shown(), `the answer ${answer}`).toEqual(['s1']);
+    }
+    rerender(ballot({ governor: 's2' }), ElectionDay);
+    expect(shown(), 'a change elsewhere').toEqual(['s2']);
+  });
+
+  it("C66, AM-21: while this phone's votes travel, the server's answers to the earlier ones never replace the latest (s1, then Abstain)", () => {
+    mount(ballot(), ElectionDay);
+    pick('s1');
+    pick('abstain');
+    rerender(ballot({ governor: 's1' }), ElectionDay);
+    expect(shown(), 'the answer to s1').toEqual(['abstain']);
+    rerender(ballot(), ElectionDay);
+    expect(shown(), 'the answer to Abstain').toEqual(['abstain']);
+  });
 });
 
 describe("the Governor's Set, mounted (E-7)", () => {
