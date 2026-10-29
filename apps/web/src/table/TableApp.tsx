@@ -1,6 +1,6 @@
 import { DEV_WALK, DEVELOPMENT } from '@mule/engine';
 import type { DealView, MuleView, TableView } from '@mule/protocol';
-import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PaceList, PlayerMark, SeatSpeciesProvider, SharedClock, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard } from '@mule/ui';
+import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PaceList, PlayerMark, SeatSpeciesProvider, SharedClock, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard, type CreatureWrap } from '@mule/ui';
 import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
 import { boardWalkers, dealLine, newestFirst, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, StoreBox, TvReadout, type DealRow } from '../components/AuctionParts';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -186,23 +186,22 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   else if (phase === 'development')
     side = (
       <>
-        {game.clockWaitsFor && (
-          <>
-            <FirstMules game={game} />
-            <span className="label-caps text-base!">In the store now</span>
-          </>
-        )}
         <div className="h-[240px]">
           <StoreInterior mules={game.storeMules} mulePrice={game.mulePrice} prices={{}} tv />
         </div>
-        {/* The roster's rows carry each colonist's pace: one column, so every name shows in full. */}
+        {/* The roster's rows carry each colonist's pace: one column, so every name shows in full. While month 1's
+            clock waits, whose first MULE is in takes its place, row for row. */}
         <div className="mt-auto">
-          <PaceList
-            rule={DEV_WALK}
-            columns={1}
-            wrapMark={tvSpeakerAt}
-            rows={game.players.map((p) => ({ id: p.id, name: p.name, slot: toSlot(p.slot), condition: p.condition, note: p.doneDeveloping ? 'PUB' : 'BUILDING', done: p.doneDeveloping }))}
-          />
+          {game.clockWaitsFor ? (
+            <FirstMules game={game} wrapMark={tvSpeakerAt} />
+          ) : (
+            <PaceList
+              rule={DEV_WALK}
+              columns={1}
+              wrapMark={tvSpeakerAt}
+              rows={game.players.map((p) => ({ id: p.id, name: p.name, slot: toSlot(p.slot), condition: p.condition, note: p.doneDeveloping ? 'PUB' : 'BUILDING', done: p.doneDeveloping }))}
+            />
+          )}
         </div>
       </>
     );
@@ -324,20 +323,23 @@ export function ClockWaits() {
   );
 }
 
-/** Whose first MULE month 1's clock still waits for, every seat in seat order. */
-export function FirstMules({ game }: { game: MuleView }) {
+/** Whose first MULE month 1's clock still waits for, every seat in seat order, drawn as the pace list draws its rows. */
+export function FirstMules({ game, wrapMark = (_, mark) => mark }: { game: MuleView; wrapMark?: CreatureWrap }) {
   const waiting = game.clockWaitsFor ?? [];
   return (
-    <div className="flex flex-col gap-3">
-      <span className="label-caps text-base!">First MULEs in</span>
-      <ul className="grid grid-cols-2 gap-x-4 gap-y-1.5" data-testid="tv-first-mules">
+    <div className="flex flex-col gap-1.5">
+      <span className="flex flex-col">
+        <span className="label-caps">First MULEs in</span>
+        <span className="label-caps text-[10px]! text-ink-3">the clock starts when all are in</span>
+      </span>
+      <ul className="grid grid-cols-1 gap-y-1.5" data-testid="tv-first-mules">
         {game.players.map((p) => {
           const isIn = !waiting.includes(p.id);
           return (
-            <li key={p.id} className="flex items-center gap-2 text-lg" data-testid={`tv-first-mule-${p.id}`}>
-              <PlayerMark slot={toSlot(p.slot)} size={18} glow={false} />
-              <span className="flex-1 font-semibold">{p.name}</span>
-              <span className={cx('font-mono text-base font-bold', isIn ? 'text-ok' : 'text-ink-3')}>{isIn ? '✓ in' : 'still to come'}</span>
+            <li key={p.id} className="flex items-center gap-2" data-testid={`tv-first-mule-${p.id}`}>
+              {wrapMark(p.id, <PlayerMark slot={toSlot(p.slot)} size={20} glow={!isIn} />)}
+              <span className="min-w-0 flex-1 truncate font-display text-base font-semibold">{p.name}</span>
+              <span className={cx('shrink-0 font-mono text-sm font-bold', isIn ? 'text-ok' : 'text-ink-3')}>{isIn ? 'MULE in ✓' : 'still to come'}</span>
             </li>
           );
         })}
