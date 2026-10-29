@@ -242,7 +242,9 @@ describe('the dev floor: the step', () => {
     );
     expect(new Set(entries.map((e) => e.c.id)), 'in through a door').toEqual(new Set(['a', 'b', 'd']));
     for (const { tick, c, was } of entries) {
-      expect(placeAt(c, HALL), `tick ${tick} ${c.id}: in at the door on its side`).toBe(was.x < store.x ? 'doorL' : 'doorR');
+      const door = was.x < store.x ? 'doorL' : 'doorR';
+      expect(placeAt(c, HALL), `tick ${tick} ${c.id}: in at the door on its side`).toBe(door);
+      expect({ x: c.x, y: c.y }, `tick ${tick} ${c.id}: in at its door's spot`).toEqual(HALL.spots[door]);
       expect(Math.abs(was.y - (store.y + 0.5)), `tick ${tick} ${c.id}: in from the door's height`).toBeLessThanOrEqual(DEV_STEER.doorHalfTiles);
       if (c.lead) expect([c.lead.x, c.lead.y], `tick ${tick} ${c.id}: its MULE through the door with it`).toEqual([c.x, c.y]);
     }
