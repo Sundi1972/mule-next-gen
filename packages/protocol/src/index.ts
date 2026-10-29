@@ -342,6 +342,8 @@ export interface AuctionView {
   storeForSale: number;
   /** What the export ship pays for the next unit, while it is in port and wants this good. */
   shipPays: number | null;
+  /** What it pays for each of the units it still wants, next first (it pays a little less for each): the phone's "Sell 2 for 230 cr" at its line (A-6). */
+  shipQuote?: number[];
   /** The board's price range: it grows when a walker goes past it. */
   lo: number;
   hi: number;
