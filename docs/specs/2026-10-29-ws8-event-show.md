@@ -632,6 +632,39 @@ goal      G-2 (unchanged)
 folded    §1 C7 ux: skip hint in the actions footer
 ```
 
+```
+AM-11 · 2026-10-29 · lead ruling, PR-1 Task 6 (the approved gallery's log copy)
+
+target    §1 C4, C6 · the binding scaffold design/mocks/ws8-events
+said      the gallery is the design; the build takes its copy
+did       the gallery's TV log put every hit under the first hit's good ("Drought −10 Water on 10 wells" for six
+          farms and four wells), a figure no report holds. The build and the gallery's src/copy.ts now give each
+          good its own figure ("−6 Food, −4 Water on 10 plots"; the one kind's noun, or "plots" when kinds mix), and
+          a hit that changed nothing is no loss. Composition, layout and tokens are unchanged. Heiko and the PM told
+          (29 Oct); Heiko's goal check on 7ffcce59 saw the new copy ("Looks good").
+because   B-AC-1: a screen never shows a figure the report does not hold
+goal      G-1 (unchanged)
+folded    §9: WS8 owns design/mocks/ws8-events
+```
+
+```
+AM-12 · 2026-10-29 · gate record, PR-1 T-AC-6 (render gate, mock vs build)
+
+target    §6 T-AC-6
+said      every mock data-testid is present in the build, positive-controlled
+did       render-gate.mjs over 40 pairs (TV 1280×720; phone alone and with a TV at 844×390 and 667×375; eight
+          moments each: intro, each event's announce/play/settle, outro), mock = the gallery's TvB / PhoneSolo /
+          PhoneShow, build = TvProduction / phone Production on the gallery's fixture colony. Every mock testid is
+          present except three named, accepted differences: `bars-x-y` is the build's `plot-x-y` (one-to-one in
+          every capture); `plot-map-A` and `phone-lena` are the gallery's own frame roots (the build's are WS6's
+          `holo-map` / `game-shell`); `title-card` centres through an inner wrapper (display flex→block, same
+          look). All leaf texts match. AM-9's pips (TvHeader) and AM-10's skip hint (the actions footer) are present.
+          Positive control: `title-card` renamed in living.tsx → `[MISSING] title-card`; restored → baseline.
+because   T-AC-6 needs its evidence at the gate, not only in a run log
+goal      G-1, G-2 (unchanged)
+folded    none
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: the event show
@@ -641,6 +674,9 @@ folded    §1 C7 ux: skip hint in the actions footer
   rulings).
 - Read contract: the view (`ProductionEventView` → `EventView`, `MuleView.events`); `EVENT_SHOW` read by the server only.
 - Write contract: named edits only, each reviewed by its owner on WS8's SHAs — WS4: `packages/ui/src/index.ts` (export),
-  `packages/ui/src/theme.css` (@import), X  each); WS3: `packages/protocol/src/index.ts`, `apps/server/src/mule-game.ts`; WS6: `ProductionMap.tsx`,
-  `TvProduction.tsx`, `phone/Production.tsx`, `apps/server/test/production-view.test.ts`.
+  `packages/ui/src/theme.css` (@import), `apps/web/src/table/TableApp.tsx` (TvHeader `extra`, AM-9; the overlay mount, C10),
+  `apps/web/src/phone/PhoneApp.tsx` (the overlay mount, C10; one line each); WS3: `packages/protocol/src/index.ts`,
+  `apps/server/src/mule-game.ts`; WS6: `ProductionMap.tsx`, `TvProduction.tsx`, `phone/Production.tsx`,
+  `apps/server/test/production-view.test.ts` (fixtures), `apps/web/test/production-show.test.ts` (AM-6/AM-7),
+  `apps/web/e2e/production-steps.ts` (PM ruling A, B-AC-7 per event). WS8 owns `design/mocks/ws8-events` (AM-11).
 - Enforcement: `.handover/SEAMS.md` (PM-owned) and owner review on every PR; no CODEOWNERS (debt, §7 R-6).

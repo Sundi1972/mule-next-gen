@@ -61,12 +61,14 @@ wave-2 rows land (freeze point: the payload agreed with WS1 on 29 Oct).
 - `may_edit` (named edits, owner reviews): `apps/server/src/mule-game.ts::startPhaseTimer`, `::productionView` (WS3);
   `packages/protocol/src/index.ts::ProductionEventView` (WS3); `packages/ui/src/components/ProductionMap.tsx` (WS6);
   `apps/server/test/production-view.test.ts` fixtures (WS6); `packages/ui/src/index.ts` export line,
-  `packages/ui/src/theme.css` @import line (WS4)
+  `packages/ui/src/theme.css` @import line (WS4); since ruled: `apps/web/src/table/TableApp.tsx::TvHeader` `extra` (WS4, AM-9),
+  `apps/web/test/production-show.test.ts` (WS6, AM-6/AM-7), `apps/web/e2e/production-steps.ts` (WS6, PM ruling A),
+  `design/mocks/ws8-events/src/copy.ts` log copy (WS8, AM-11)
 - `may_edit_content`: `apps/web/src/table/TvProduction.tsx`, `apps/web/src/phone/Production.tsx` (WS6's files; the
   gallery's composition is binding: wire data and timing, never change composition, route or tokens)
 - `must_not_edit`: every other config block; `packages/engine/**` except the EVENT_SHOW block (HC-2; WS1, WS3, WS5);
-  `apps/web/src/table/TableApp.tsx`, `apps/web/src/phone/PhoneApp.tsx` (PR-2's lines); `design/mocks/**` (the approved
-  scaffold, read only); `apps/web/e2e/**` except `events.ts` (WS4's harness and runner: named edits only)
+  `apps/web/src/table/TableApp.tsx` beyond TvHeader `extra`, `apps/web/src/phone/PhoneApp.tsx` (PR-2's lines);
+  `design/mocks/**` beyond AM-11 (the approved scaffold, read only); `apps/web/e2e/**` except `events.ts` (WS4's harness and runner: named edits only)
 
 ### PR-2 authority
 
