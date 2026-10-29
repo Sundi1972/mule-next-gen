@@ -22,6 +22,9 @@ export interface FloorConfig {
   wolves: Pick<typeof WOLVES, 'bittenPace' | 'peltPrice'>;
   /** Its door-to-corral walk takes steer.floorSeconds at full pace. */
   hall: HallPlan;
+  /** What the pub pays a seat with secondsLeft of development left, for the button's words; null shows no payout. */
+  // The server and the sim pass game.ts's pubPayoutFor.
+  pubPayout: ((state: GameState, id: string, secondsLeft: number) => number) | null;
 }
 
 /** One seat's input for a tick: the stick, each axis -1 to 1, and whether the button was pressed since the last tick. */
@@ -76,9 +79,9 @@ export interface DevFloor {
 
 const HALF = 0.5; // literal-ok: geometry, the middle of a side, not balance
 
-/** The live config objects, so a sim run's --set reaches the floor, and the store's hall. */
+/** The live config objects, so a sim run's --set reaches the floor, the store's hall, and no pub payout. */
 export function floorConfig(hall: HallPlan = HALL): FloorConfig {
-  return { steer: DEV_STEER, wolves: WOLVES, hall };
+  return { steer: DEV_STEER, wolves: WOLVES, hall, pubPayout: null };
 }
 
 export function storeOf(state: GameState): Tile {

@@ -22,6 +22,7 @@ import {
   WOLVES,
   type DevFloor,
   type FloorColonist,
+  type FloorConfig,
   type FloorInput,
   type GameState,
   type HallPlace,
@@ -56,6 +57,9 @@ const RICH = 1_000;
 const SECONDS_LEFT = 30;
 const IDLE: FloorInput = { x: 0, y: 0, act: false };
 const cfg = floorConfig(HALL);
+/** A stand-in for game.ts's pubPayoutFor: it shows the seat, the month and the time left reached it. */
+const stubPayout: NonNullable<FloorConfig['pubPayout']> = (state, id, secondsLeft) => (id === 'a' ? 100 * state.month + secondsLeft : 0);
+const paying: FloorConfig = { ...cfg, pubPayout: stubPayout };
 
 const tileOf = (state: GameState, x: number, y: number) => state.tiles[y * state.width + x]!;
 const onTile = (x: number, y: number): Partial<FloorColonist> => ({ space: 'map', x: x + 0.5, y: y + 0.5 });
@@ -80,6 +84,8 @@ interface Row {
   at: (state: GameState) => Partial<FloorColonist>;
   /** The stick held with the press; still when not given. */
   stick?: FloorInput;
+  /** The floor's config; `cfg` when not given. */
+  cfg?: FloorConfig;
   game?: (state: GameState) => void;
   reach: (state: GameState) => Reach;
   words: (state: GameState) => ReachWords;
@@ -107,7 +113,7 @@ function world(row: Row): { state: GameState; floor: DevFloor } {
   Object.assign(a(state), { money: RICH, carriedMule: null, analysed: [] });
   a(state).stock.alloy = 0;
   row.game?.(state);
-  const built = buildFloor(state, cfg);
+  const built = buildFloor(state, row.cfg ?? cfg);
   return { state, floor: { ...built, colonists: built.colonists.map((c) => (c.id === 'a' ? { ...c, ...row.at(state) } : c)) } };
 }
 
@@ -115,12 +121,15 @@ function world(row: Row): { state: GameState; floor: DevFloor } {
  * One tick as the server and the sim run it (RULE-1): the step, then each press the step did not spend, at the stepped
  * position. What each applied press did.
  */
-function tick(state: GameState, floor: DevFloor, inputs: Record<string, FloorInput>): { floor: DevFloor; presses: Press[] } {
-  const spent = doorPresses(floor, state, inputs, cfg);
-  const stepped = stepFloor(floor, state, inputs, DEV_STEER.tickMs, cfg);
+function tick(state: GameState, floor: DevFloor, inputs: Record<string, FloorInput>, config = cfg): { floor: DevFloor; presses: Press[] } {
+  const spent = doorPresses(floor, state, inputs, config);
+  const stepped = stepFloor(floor, state, inputs, DEV_STEER.tickMs, config);
   const pressing = Object.keys(inputs).filter((seat) => inputs[seat]!.act && !spent.has(seat));
-  return { floor: stepped, presses: pressing.map((seat) => applyReach(state, stepped, seat, SECONDS_LEFT, cfg)) };
+  return { floor: stepped, presses: pressing.map((seat) => applyReach(state, stepped, seat, SECONDS_LEFT, config)) };
 }
+
+/** What the button would do for 'a' now, with the turn's time left, as the server asks it each tick. */
+const reachNow = (floor: DevFloor, state: GameState, config = cfg) => reachOf(floor, state, 'a', config, { secondsLeft: SECONDS_LEFT });
 
 /** 'a' walked by `stick` until it is through a door. */
 function throughTheDoor(state: GameState, floor: DevFloor, stick: FloorInput): FloorColonist {
@@ -324,9 +333,23 @@ const TABLE: Row[] = [
     },
   },
   {
-    row: '13 PUB · END TURN: in the hall at the pub',
+    row: '13 PUB · END TURN: in the hall at the pub, with the payout pubPayoutFor gives',
     at: () => inHall('pub'),
-    reach: () => ({ kind: 'pub', enabled: true }),
+    cfg: paying,
+    reach: (s) => ({ kind: 'pub', enabled: true, payout: stubPayout(s, 'a', SECONDS_LEFT) }),
+    words: (s) => words('PUB · END TURN', `+${stubPayout(s, 'a', SECONDS_LEFT)} cr`),
+    press: {
+      game: (was, now, press) => {
+        expect(press.payout).toBeGreaterThan(0);
+        expect(a(now).money - a(was).money).toBe(press.payout);
+        expect(a(now).doneDeveloping).toBe(true);
+      },
+    },
+  },
+  {
+    row: '13, with no payout function: the words show no payout',
+    at: () => inHall('pub'),
+    reach: () => ({ kind: 'pub', enabled: true, payout: null }),
     words: () => words('PUB · END TURN'),
     press: {
       game: (was, now, press) => {
@@ -350,14 +373,15 @@ describe('the dev floor: the action button', () => {
     for (const r of TABLE) {
       const { state, floor } = world(r);
       const was = structuredClone(state);
-      const reach = reachOf(floor, state, 'a', cfg);
+      const config = r.cfg ?? cfg;
+      const reach = reachNow(floor, state, config);
       expect(reach, r.row).toEqual(r.reach(was));
       expect(reachWords(reach), r.row).toEqual(r.words(was));
 
       // The press in a tick: the step first, then the press where the step left the colonist.
       const stick = r.stick ?? IDLE;
-      const walked = stepFloor(floor, state, { a: stick }, DEV_STEER.tickMs, cfg).colonists[0]!;
-      const pressed = () => tick(state, floor, { a: { ...stick, act: true } });
+      const walked = stepFloor(floor, state, { a: stick }, DEV_STEER.tickMs, config).colonists[0]!;
+      const pressed = () => tick(state, floor, { a: { ...stick, act: true } }, config);
       if (typeof r.press === 'object' && 'refused' in r.press) {
         expect(pressed, r.row).toThrow(RuleError);
         expect(pressed, r.row).toThrow(r.press.refused);
@@ -381,9 +405,9 @@ describe('the dev floor: the action button', () => {
 
       if (r.row.startsWith('13')) {
         // After the pub the turn is over: the button dims and a second press changes nothing.
-        expect(reachWords(reachOf(stepped, state, 'a', cfg))).toEqual(words('IN THE PUB', 'turn over', false));
+        expect(reachWords(reachNow(stepped, state, config))).toEqual(words('IN THE PUB', 'turn over', false));
         const done = structuredClone(state);
-        tick(state, stepped, { a: { ...IDLE, act: true } });
+        tick(state, stepped, { a: { ...IDLE, act: true } }, config);
         expect(state).toEqual(done);
       }
     }

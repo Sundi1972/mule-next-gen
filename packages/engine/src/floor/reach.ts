@@ -30,7 +30,7 @@ export type Reach =
   | { kind: 'install'; enabled: true; good: Outfit; plot: FloorPoint; fromShore: boolean; replaces: boolean }
   | { kind: 'analyse'; enabled: true; plot: FloorPoint }
   | { kind: 'filter'; enabled: true; plot: FloorPoint; alloy: number }
-  | { kind: 'pub'; enabled: true }
+  | { kind: 'pub'; enabled: true; payout: number | null }
   | { kind: 'none'; enabled: false; hint: ReachHint };
 
 export type ReachKind = Reach['kind'];
@@ -60,6 +60,7 @@ interface Standing {
   place: HallPlace | null;
   /** On the map: the tile under its feet. */
   tile: Tile | null;
+  secondsLeft: number | undefined;
 }
 
 type Row = (s: Standing) => Reach | null;
@@ -127,7 +128,11 @@ const filter: Row = ({ player: p, tile }) =>
     ? { kind: 'filter', enabled: true, plot: at(tile), alloy: DEVELOPMENT.filterAlloy }
     : null;
 
-const pub: Row = ({ place }) => (place === 'pub' ? { kind: 'pub', enabled: true } : null);
+const pub: Row = ({ state, cfg, player: p, place, secondsLeft }) => {
+  if (place !== 'pub') return null;
+  const payout = cfg.pubPayout && secondsLeft !== undefined ? cfg.pubPayout(state, p.id, secondsLeft) : null;
+  return { kind: 'pub', enabled: true, payout };
+};
 
 /** RULE-3's rows 5 to 13 in its order: the first that holds is the reach, and row 14 is none. */
 const ROWS: readonly Row[] = [enter, sell, buy, outfit, leave, install, analyse, filter, pub];
@@ -141,8 +146,11 @@ function hintFor({ state, colonist: c, player: p }: Standing): ReachHint {
   return hall ? 'door' : 'plot';
 }
 
-/** What a press would do now for this seat's colonist. Throws RuleError for a seat not in the game. */
-export function reachOf(floor: DevFloor, state: GameState, seat: string, cfg: FloorConfig = floorConfig()): Reach {
+/**
+ * What a press would do now for this seat's colonist; `secondsLeft` of development prices the pub's payout, and
+ * without it the pub reach carries none. Throws RuleError for a seat not in the game.
+ */
+export function reachOf(floor: DevFloor, state: GameState, seat: string, cfg: FloorConfig = floorConfig(), { secondsLeft }: { secondsLeft?: number } = {}): Reach {
   const p = player(state, seat);
   // Every rule refuses outside development and after the pub, so the button must not offer one.
   if (state.phase !== 'development') return dim('over');
@@ -156,6 +164,7 @@ export function reachOf(floor: DevFloor, state: GameState, seat: string, cfg: Fl
     player: p,
     place: colonist.space === 'hall' ? placeAt(colonist, cfg.hall) : null,
     tile: colonist.space === 'map' ? (tileAt(state.tiles, state.width, Math.floor(colonist.x), Math.floor(colonist.y)) ?? null) : null,
+    secondsLeft,
   };
   for (const row of ROWS) {
     const reach = row(s);
@@ -169,7 +178,7 @@ export function reachOf(floor: DevFloor, state: GameState, seat: string, cfg: Fl
  * ENTER, LEAVE and a dim reach change nothing here; stepFloor makes the door moves. Throws RuleError for SELL.
  */
 export function applyReach(state: GameState, floor: DevFloor, seat: string, secondsLeft: number, cfg: FloorConfig = floorConfig()): Press {
-  const reach = reachOf(floor, state, seat, cfg);
+  const reach = reachOf(floor, state, seat, cfg, { secondsLeft });
   const press: Press = { reach, seconds: null, payout: null };
   if (!reach.enabled) return press;
   switch (reach.kind) {
@@ -248,7 +257,7 @@ export function reachWords(reach: Reach): ReachWords {
     case 'filter':
       return say('FIT FILTER', `${reach.alloy} Alloy`);
     case 'pub':
-      return say('PUB · END TURN');
+      return say('PUB · END TURN', reach.payout === null ? null : `+${credits(reach.payout)}`);
     case 'none':
       return say(...HINT[reach.hint]);
   }
