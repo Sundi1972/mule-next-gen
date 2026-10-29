@@ -533,13 +533,14 @@ describe('changing sides and ending early', () => {
 });
 
 describe('A-5 the close stage: a receipt after each good (G-5)', () => {
-  /** p0 sells Water to p1, then Food comes up: p0 holds some. */
+  /** p0 sells Water to p1; Crystite, which nobody holds and the store has none of, is skipped; then Food comes up: p0 holds some. */
   function closedWater() {
     const state = newGame();
     state.players[0]!.stock.water = 10;
     state.players[1]!.stock.water = 3;
     state.players[0]!.stock.food = 5;
-    startAuction(state, ['water', 'food']);
+    state.store.stock.crystite = 0;
+    startAuction(state, ['water', 'crystite', 'food']);
     a(state).storeBudget = 50;
     toWalk(state, { p1: 'buyer' });
     walker(state, 'p0').price = 95;
@@ -562,12 +563,15 @@ describe('A-5 the close stage: a receipt after each good (G-5)', () => {
       expect(a(state)).toMatchObject({ stage: 'close', good: 'water' });
     }
     stepAuction(state, TICK);
-    expect(a(state)).toMatchObject({ stage: 'status', good: 'food' });
+    // upNext named the good that really came up: past Crystite, which nobody could trade.
+    expect(a(state)).toMatchObject({ stage: 'status', good: 'food', skipped: [{ good: 'crystite', reason: 'nobody has any' }] });
   });
 
   it('T-AC-A5-2: no money, stock, fund or store capital moves during the close stage, and nobody can walk or switch sides', () => {
     const state = closedWater();
     const before = snapshot(state);
+    // The pair still stood matched at the bell: the close stage drops the deal, so no bar is drawn and nothing trades.
+    expect(a(state).deals).toEqual([]);
     walker(state, 'p0').price = 95;
     walker(state, 'p1').price = 95;
     expect(() => setWalk(state, 'p1', 1)).toThrow(RuleError);
@@ -590,6 +594,12 @@ describe('A-5 the close stage: a receipt after each good (G-5)', () => {
     expect(a(state).good).toBe('food');
     expect(a(state).receipts).toEqual({});
     expect(a(state).tally).toEqual({ p1: -95, p0: 95 - tax });
+    // Next month's auction starts its total from nothing.
+    endAuction(state);
+    state.month++;
+    startAuction(state, ['food']);
+    expect(a(state).good).toBe('food');
+    expect(a(state).tally).toEqual({});
   });
 
   it('T-AC-A5-4: the last good closes too, with nothing up next, and then the auction is over', () => {
