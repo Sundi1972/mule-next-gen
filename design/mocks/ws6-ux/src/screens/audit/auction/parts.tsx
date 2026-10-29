@@ -466,21 +466,8 @@ export interface Receipt {
 
 const signed = (n: number) => (n > 0 ? `+${fmt(n)}` : n < 0 ? `−${fmt(-n)}` : '±0');
 
-/** Under the money in the header: the month's running total from the auction. */
-export function Tally({ total, mark = false }: { total: number; mark?: boolean }) {
-  return (
-    <span className="relative flex items-baseline gap-1 text-[10px] leading-tight text-ink-2 @min-[1100px]/shell:text-sm" data-testid="tally" aria-label={`This month's auction so far: ${signed(total)} cr`}>
-      this month
-      <strong data-num className={cx('font-mono font-bold', total < 0 ? 'text-ink' : total > 0 ? 'text-ok' : 'text-ink-3')}>
-        {signed(total)} cr
-      </strong>
-      {mark && <Mark note={N.G5} part="tally" at="left" />}
-    </span>
-  );
-}
-
 /** When a good closes: what you did with it, the tax spelled out on a sale, and where you now stand. */
-export function ReceiptCard({ r, mark = true }: { r: Receipt; mark?: boolean }) {
+export function ReceiptCard({ r, tally, mark = true }: { r: Receipt; /** The month's running total from the auction, on the card (not the header: it squeezed the name). */ tally?: number; mark?: boolean }) {
   const net = r.gross - r.tax;
   const each = r.prices.every((p) => p === r.prices[0]) ? `${r.units} × ${r.prices[0]} cr` : r.prices.map((p) => `${p}`).join(' + ') + ' cr';
   const ok = r.have >= r.need;
@@ -499,7 +486,7 @@ export function ReceiptCard({ r, mark = true }: { r: Receipt; mark?: boolean }) 
       )}
       {r.kind === 'sold' && (
         <span className="rounded-control border border-holo-line px-2 py-1 text-sm @min-[1100px]/shell:px-3 @min-[1100px]/shell:py-2 @min-[1100px]/shell:text-xl" data-testid="receipt-tax">
-          <strong data-num className="font-mono">{fmt(r.gross)} cr</strong>, less {Math.round(r.rate * 100)}% sales tax: <strong data-num className="font-mono">{fmt(net)}</strong>
+          <strong data-num className="font-mono">{fmt(r.gross)} cr</strong>, less {fmt(r.tax)} cr sales tax: <strong data-num className="font-mono">{fmt(net)}</strong>
           <span className="block text-[11px] text-ink-2 @min-[1100px]/shell:text-base">The tax goes to the colony fund.</span>
         </span>
       )}
@@ -507,6 +494,14 @@ export function ReceiptCard({ r, mark = true }: { r: Receipt; mark?: boolean }) 
         You have {unitsOf(r.have, r.good)}{r.need > 0 ? `, you need ${r.need}` : ''}
         {r.need > 0 ? (ok ? ' ✓' : `: short ${r.need - r.have}`) : ''}
       </span>
+      {tally !== undefined && (
+        <span className="text-xs text-ink-2 @min-[1100px]/shell:text-lg" data-testid="tally">
+          This month:{' '}
+          <strong data-num className={cx('font-mono font-bold', tally < 0 ? 'text-alert' : tally > 0 ? 'text-ok' : 'text-ink-3')}>
+            {signed(tally)} cr
+          </strong>
+        </span>
+      )}
       <span className="border-t border-holo-faint pt-1.5 text-xs text-ink-2 @min-[1100px]/shell:pt-3 @min-[1100px]/shell:text-lg">Next: {GOOD_NAME[r.next]}, buy or sell?</span>
       {mark && <Mark note={N.G5} part="receipt" at="tl" />}
     </section>

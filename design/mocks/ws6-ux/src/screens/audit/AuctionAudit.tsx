@@ -32,7 +32,6 @@ import {
   ShipWants,
   Shown,
   StepHold,
-  Tally,
   WaitingToPick,
   walkHint,
   type LineAsk,
@@ -219,7 +218,7 @@ function receiptOf(s: Scenario, sim: Sim): Receipt {
 }
 
 /** The walk on a phone or a laptop (the shell sizes from its own width). */
-export function WalkAudit({ s, start = 'walk', markTally = false }: { s: Scenario; start?: Start; markTally?: boolean }) {
+export function WalkAudit({ s, start = 'walk' }: { s: Scenario; start?: Start }) {
   const { sim, line, toward, hold, step, drag, amount, go, confirm, close } = useWalk(s, start);
   const view = VIEW2;
   const good = GOOD_NAME[s.good];
@@ -292,7 +291,7 @@ export function WalkAudit({ s, start = 'walk', markTally = false }: { s: Scenari
   );
 
   return (
-    <AuctionShell phase={`${good} auction`} fill money={sim.money} tally={<Tally total={sim.tally} mark={markTally} />} rail={rail} footer={footer}>
+    <AuctionShell phase={`${good} auction`} fill money={sim.money} rail={rail} footer={footer}>
       <TimeBar seconds={s.seconds} total={WALK.goodMs / 1000} slowed={sim.moment === 'trading'} className="mb-1.5 @min-[1100px]/shell:mb-3" />
       <BoardKey auction={auction} side={s.side} />
       <div className="relative flex min-h-0 flex-1 flex-col" data-testid="board-wrap">
@@ -313,7 +312,7 @@ export function WalkAudit({ s, start = 'walk', markTally = false }: { s: Scenari
         {s.shipPays !== null && <ShipCaption good={s.good} price={s.shipPays} lo={s.lo} hi={s.hi} />}
         {closed && (
           <div className="absolute inset-0 grid place-items-center p-2" data-testid="receipt-layer">
-            <ReceiptCard r={r} />
+            <ReceiptCard r={r} tally={sim.tally} />
           </div>
         )}
       </div>
@@ -350,7 +349,6 @@ export function StatusAudit({ s }: { s: Scenario }) {
     <AuctionShell
       phase={`${GOOD_NAME[s.good]} · buy or sell?`}
       money={s.money}
-      tally={<Tally total={s.tally} />}
       rail={
         <>
           <div className="flex items-center justify-between rounded-control border border-holo-faint bg-panel px-2.5 py-1.5 @min-[1100px]/shell:px-4 @min-[1100px]/shell:py-3">
@@ -748,15 +746,15 @@ function Frames({ state }: { state: AuctionState }) {
         <>
           <Caption>Phone · Food closes: she bought 2</Caption>
           <Phone>
-            <WalkAudit key="receipt-food-p" s={FOOD} start="closed" markTally />
+            <WalkAudit key="receipt-food-p" s={FOOD} start="closed" />
           </Phone>
           <Caption>Phone · Water closes: she sold 1, the tax spelled out</Caption>
           <Phone>
-            <WalkAudit key="receipt-water-p" s={WATER} start="closed" markTally />
+            <WalkAudit key="receipt-water-p" s={WATER} start="closed" />
           </Phone>
           <Caption>Laptop · Water</Caption>
           <Laptop>
-            <WalkAudit key="receipt-water-l" s={WATER} start="closed" markTally />
+            <WalkAudit key="receipt-water-l" s={WATER} start="closed" />
           </Laptop>
         </>
       );
