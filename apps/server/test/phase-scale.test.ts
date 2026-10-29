@@ -98,8 +98,8 @@ describe('phaseScale and maxMonths', () => {
     expect(waits).toContainEqual(expect.closeTo(view.me!.devSeconds * msPerSecond, 6));
   });
 
-  // A-7 RETARGETED, for WS4 to rule: these rows measured the status screen's 8 s clock, which A-7 removes. The first
-  // now measures the same scaling on the walk's clock; the second says the side pick has no clock at any phaseScale.
+  // The walk's clock is the auction's one clock since the side pick lost its own (A-7): the first row measures the
+  // scaling there; the second says the side pick has no clock at any phaseScale.
   it.each([[undefined], [1], [0.1]])('T-AC-2: with phaseScale %s the auction walk clock runs tick / phaseScale, clamped for a stall before scaling', (phaseScale) => {
     const opts = phaseScale === undefined ? undefined : { phaseScale };
     const scale = phaseScale ?? 1;
