@@ -1,4 +1,4 @@
-import type { EventKey, GameState, MonthEvent, MonthReport } from '@mule/engine';
+import { EVENT_SHOW, type EventKey, type GameState, type MonthEvent, type MonthReport } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { describe, expect, it } from 'vitest';
 import { MuleGame } from '../src/mule-game.js';
@@ -112,6 +112,20 @@ describe('the event show: production lasts long enough for every event, and the 
     const uneven = playMonth([...five, 'pestSwarm']).production;
     expect(uneven.events.map((e) => e.playMs)).toEqual([4_910, 4_911, 4_910, 4_911, 4_910, 3_648]);
     expect(uneven.introMs + uneven.events.reduce((sum, e) => sum + e.playMs, 0)).toBe(30_000);
+  });
+
+  it('T-AC-1: with headlines tuned to 0 ms, a lone dust storm plays 0 ms after its intro and production keeps its 15 000 ms', () => {
+    const headlineMs = EVENT_SHOW.playMs.headline;
+    EVENT_SHOW.playMs.headline = 0;
+    try {
+      const { production, length } = playMonth(['dustStorm']);
+      expect(production.events.map((e) => e.playMs)).toEqual([0]);
+      expect(production.introMs).toBe(1_800);
+      expect(length('production')).toBe(15_000);
+      expect(production.lengthMs).toBe(15_000);
+    } finally {
+      EVENT_SHOW.playMs.headline = headlineMs;
+    }
   });
 
   it('T-AC-2: a quiet month lists no events and plays no intro', () => {
