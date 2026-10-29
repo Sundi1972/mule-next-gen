@@ -4,7 +4,7 @@ import { AirGauge, airBandStyle, cx, GoodIcon, PlayerMark } from '@mule/ui';
 import type { ReactNode } from 'react';
 import { colonyVerdict, fmt, toSlot } from '../../../../../../../apps/web/src/game/derive';
 import { IntentMarker } from '../../../proposed/IntentNote';
-import { collapseCutWords, colonyReport, COLONY_SCORE_PARTS, inCollapse, league, MOOD_SCALE, worthOf, type League, type MonthFacts } from '../../../proposed/worth';
+import { collapseCutWords, colonyReport, inCollapse, league, worthOf, type League, type MonthFacts } from '../../../proposed/worth';
 import { Private } from '../../PlanningHub';
 import { MONTHEND_NOTES as N } from './notes';
 
@@ -19,6 +19,9 @@ import { MONTHEND_NOTES as N } from './notes';
  */
 
 export type Density = 'tv' | 'phone' | 'compact';
+
+/** The colony panel names at most this many who went hungry, then one line: "+N more went hungry". */
+export const HUNGRY_LINES = 2;
 
 export const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th'}`;
 
@@ -70,10 +73,16 @@ export function ChangeTag({ change, className, testid }: { change: number | null
 
 // --- The league table ---------------------------------------------------------------------------------
 
-const SIZE: Record<Density, { pad: string; head: string; rank: string; mark: number; name: string; worth: string; side: string; cell: string; callMark: number; call: string }> = {
-  tv: { pad: 'gap-3 p-5', head: 'text-sm!', rank: 'w-12 text-3xl', mark: 40, name: 'text-3xl', worth: 'text-4xl', side: 'text-2xl', cell: 'px-3 py-2', callMark: 48, call: 'text-4xl' },
-  phone: { pad: 'gap-2 p-3', head: 'text-[10px]!', rank: 'w-6 text-sm', mark: 22, name: 'text-base', worth: 'text-lg', side: 'text-sm', cell: 'px-1.5 py-1.5', callMark: 24, call: 'text-lg' },
-  compact: { pad: 'gap-1 px-2.5 py-1.5', head: 'text-[10px]!', rank: 'w-5 text-xs', mark: 16, name: 'text-sm', worth: 'text-base', side: 'text-xs', cell: 'px-1.5 py-0.5', callMark: 18, call: 'text-sm' },
+/**
+ * `col`: the fixed columns' widths (rank, Worth, before the cut, the change). The table is `table-fixed` and the name
+ * column takes the rest, so a long name truncates and the numbers never leave the panel (a real build, 2026-10-29: "The
+ * Accountant" and a 16-character name pushed Collapse's columns 40 to 180 px out of their panel). Each width holds its
+ * longest number ("↓ −1,007", "5,643") and its header in at most two lines.
+ */
+const SIZE: Record<Density, { pad: string; head: string; rank: string; mark: number; name: string; worth: string; side: string; cell: string; callMark: number; call: string; col: [string, string, string, string] }> = {
+  tv: { pad: 'gap-3 p-5', head: 'text-sm!', rank: 'text-3xl', mark: 40, name: 'text-3xl', worth: 'text-4xl', side: 'text-2xl', cell: 'px-3 py-2', callMark: 48, call: 'text-4xl', col: ['w-12', 'w-36', 'w-24', 'w-36'] },
+  phone: { pad: 'gap-2 p-3', head: 'text-[10px]!', rank: 'text-sm', mark: 22, name: 'text-base', worth: 'text-lg', side: 'text-sm', cell: 'px-1.5 py-1.5', callMark: 24, call: 'text-lg', col: ['w-6', 'w-20', 'w-16', 'w-20'] },
+  compact: { pad: 'gap-1 px-2.5 py-1.5', head: 'text-[10px]!', rank: 'text-xs', mark: 16, name: 'text-sm', worth: 'text-base', side: 'text-xs', cell: 'px-1.5 py-0.5', callMark: 18, call: 'text-sm', col: ['w-5', 'w-20', 'w-16', 'w-20'] },
 };
 
 /**
@@ -84,15 +93,17 @@ export function LeagueTable({ view, facts, density, selfId, final = false }: { v
   const lg = league(view, facts.lastWorth);
   const collapse = inCollapse(view);
   const tv = density === 'tv';
-  const s = final && tv ? { ...SIZE.tv, mark: 36, cell: 'px-3 py-1.5' } : SIZE[density];
+  // The TV's rows pack tighter at game over and in Collapse (its headers take two lines), so all four rows show.
+  const s = (final || collapse) && tv ? { ...SIZE.tv, mark: 36, cell: 'px-3 py-1.5' } : SIZE[density];
   const words = leaderWords(view, lg, selfId);
   const top = lg.rows[0];
-  // The phone's headers stay on one line (short words); the TV's may wrap, so a Collapse column never squeezes the colony.
-  const th = cx('label-caps align-bottom font-normal', !tv && 'whitespace-nowrap', s.head);
+  // A header wraps inside its fixed column (at most two lines), so a Collapse column never squeezes the name.
+  const th = cx('label-caps align-bottom font-normal', s.head);
   return (
     <section className={cx('relative flex min-h-0 flex-col rounded-panel border border-holo-line bg-panel', s.pad)} aria-label="League table" data-testid="league">
       <header className="flex items-baseline justify-between gap-2">
-        <h2 className={cx('label-caps', s.head)}>{final ? 'Final standings · by Worth' : `League table · month ${view.month}`}</h2>
+        <h2 className={cx('label-caps', s.head)}>{/* In a small phone's rail "· by Worth" wrapped to a second line; the Worth column says it there. */}
+          {final ? (tv ? 'Final standings · by Worth' : 'Final standings') : `League table · month ${view.month}`}</h2>
         {tv && <span className="text-lg text-ink-3">Worth, in credits</span>}
       </header>
 
@@ -114,7 +125,14 @@ export function LeagueTable({ view, facts, density, selfId, final = false }: { v
         </div>
       )}
 
-      <table className="w-full border-collapse text-left" data-testid="league-table">
+      <table className="w-full table-fixed border-collapse text-left" data-testid="league-table">
+        <colgroup>
+          <col className={s.col[0]} />
+          <col />
+          <col className={s.col[1]} />
+          {collapse && <col className={s.col[2]} />}
+          {!final && <col className={s.col[3]} />}
+        </colgroup>
         <thead>
           <tr>
             <th className={cx(th, s.cell)}>#</th>
@@ -145,11 +163,12 @@ export function LeagueTable({ view, facts, density, selfId, final = false }: { v
                 <td data-num className={cx('font-mono text-ink-3', s.rank, s.cell)} data-testid={`rank-${r.player.id}`}>
                   {r.rank}
                 </td>
-                <td className={s.cell}>
-                  <span className={cx('flex min-w-0 items-center', tv ? 'gap-3' : 'gap-1.5')}>
+                <td className={cx(s.cell, 'overflow-hidden')}>
+                  <span className={cx('flex min-w-0 items-center', tv ? 'gap-3' : 'gap-1.5')} title={r.player.name}>
                     <PlayerMark slot={r.slot} species={r.player.species} size={s.mark} label={r.player.name} />
-                    <span className={cx('truncate font-display font-semibold', s.name)} data-testid={`name-${r.player.id}`}>
-                      {mine ? `You (${r.player.name})` : r.player.name}
+                    <span className={cx('min-w-0 truncate font-display font-semibold', s.name)} data-testid={`name-${r.player.id}`}>
+                      {/* In the rail's final standings below 1100 px, your row reads just "You" (WS6, 2026-10-29). */}
+                      {mine ? (final && !tv ? <>You<span className="hidden @min-[1100px]/shell:inline"> ({r.player.name})</span></> : `You (${r.player.name})`) : r.player.name}
                     </span>
                   </span>
                 </td>
@@ -270,38 +289,10 @@ function Block({ label, children, testid, tv, mark, className }: { label: string
   );
 }
 
-/** A slot G-5 fills: greyed, and saying so. */
-function G5Slot({ id, label, sub, tv, line = false }: { id: string; label: string; sub?: string; tv: boolean; line?: boolean }) {
-  const chip = <span className={cx('shrink-0 whitespace-nowrap font-mono font-bold uppercase tracking-wide', tv ? 'text-[10px]' : 'text-[9px]')}>comes with G-5</span>;
-  if (!tv || line)
-    return (
-      <div
-        // Too narrow for the label and the chip side by side (a small phone), the chip goes under the label.
-        className={cx('flex min-w-0 flex-wrap items-baseline justify-between rounded-control border border-dashed border-holo-line text-ink-3', tv ? 'gap-2 px-3 py-1' : 'gap-x-1 px-1.5 py-0.5')}
-        aria-label={`${label}: comes with G-5`}
-        data-testid={`g5-${id}`}
-      >
-        <span className={cx('truncate font-display font-semibold', tv ? 'text-base' : 'text-[11px]')}>{label}</span>
-        {chip}
-      </div>
-    );
-  return (
-    <div className="flex min-w-0 flex-col gap-0.5 rounded-control border border-dashed border-holo-line px-3 py-1.5 text-ink-3" aria-label={`${label}: comes with G-5`} data-testid={`g5-${id}`}>
-      <span className="flex items-baseline justify-between gap-1 font-display text-base font-semibold">
-        {label}
-        <span data-num className="font-mono">
-          —
-        </span>
-      </span>
-      {sub && <span className="text-sm leading-snug">{sub}</span>}
-      {chip}
-    </div>
-  );
-}
-
 /**
- * How the colony is doing, apart from the players: the air and its trend, the fund's month, who went hungry, G-5's
- * slots. At game over (`verdict`) it heads with the colony's verdict; `row` lays it out in one band across the TV.
+ * How the colony is doing, apart from the players: the air and its trend, the fund's month, who went hungry. Prestige,
+ * mood and the colony score join it when G-5 produces them (MONTHEND_NOTES.M8); until then nothing holds their place.
+ * At game over (`verdict`) it heads with the colony's verdict; `row` lays it out in one band across the TV.
  */
 export function ColonyPanel({ view, facts, density, layout = 'stack', verdict = false }: { view: MuleView; facts: MonthFacts; density: Exclude<Density, 'phone'>; layout?: 'stack' | 'row'; verdict?: boolean }) {
   const r = colonyReport(view, facts);
@@ -328,7 +319,7 @@ export function ColonyPanel({ view, facts, density, layout = 'stack', verdict = 
           </>
         )}
       </header>
-      <div className={cx('grid', row ? 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.1fr)] gap-x-6' : tv ? 'grid-cols-2 gap-x-6 gap-y-3' : 'grid-cols-3 gap-2')}>
+      <div className={cx('grid', row ? 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)] gap-x-6' : tv ? 'grid-cols-2 gap-x-6 gap-y-3' : 'grid-cols-3 gap-2')}>
         <Block label="Air" testid="colony-air" tv={tv}>
           <span className="flex flex-wrap items-baseline gap-x-2">
             <span data-num className={cx('font-mono font-bold', big)} data-testid="air-level">
@@ -374,8 +365,24 @@ export function ColonyPanel({ view, facts, density, layout = 'stack', verdict = 
               ✓ Nobody went hungry
             </span>
           ) : (
-            r.hungry.map((h) => {
+            r.hungry.slice(0, HUNGRY_LINES).map((h) => {
               const p = view.players.find((x) => x.id === h.id)!;
+              // Below 1100 px (WS6, 2026-10-29): "The Acc…: ate 2 of 5 [Food]", one line; only the name truncates, the numbers
+              // never do. The whole sentence is its title.
+              if (!tv)
+                return (
+                  <span key={h.id} className="flex min-w-0 items-center gap-1 text-[11px] font-semibold leading-tight text-alert" title={`${p.name} went hungry: ate ${h.ate} of ${h.need} Food`} data-testid={`hungry-${h.id}`}>
+                    <PlayerMark slot={toSlot(p.slot)} species={p.species} size={12} label={p.name} />
+                    <span className="min-w-0 truncate" data-testid={`hungry-name-${h.id}`}>
+                      {p.name}
+                    </span>
+                    <span className="-ml-1 flex shrink-0 items-center gap-0.5" data-testid={`hungry-ate-${h.id}`}>
+                      : ate {h.ate} of {h.need}
+                      <GoodIcon good="food" size={11} />
+                      <span className="sr-only">Food</span>
+                    </span>
+                  </span>
+                );
               return (
                 <span key={h.id} className={cx('flex items-start font-semibold text-alert', tv ? 'gap-2 text-2xl leading-snug' : 'gap-1 text-[11px] leading-tight')} data-testid={`hungry-${h.id}`}>
                   <span className={tv ? 'pt-1' : ''}>
@@ -388,28 +395,17 @@ export function ColonyPanel({ view, facts, density, layout = 'stack', verdict = 
               );
             })
           )}
+          {r.hungry.length > HUNGRY_LINES && (
+            <span className={cx('font-semibold text-alert', tv ? 'text-2xl leading-snug' : 'text-[11px] leading-tight')} data-testid="hungry-more">
+              +{r.hungry.length - HUNGRY_LINES} more went hungry
+            </span>
+          )}
           <span className={cx(line, r.colonistsFed ? 'text-ink-2' : 'text-alert')} data-testid="colonists">
             {r.colonistsFed ? 'Colonists fed' : 'Colonists went short'} · {fmt(r.colonists)}
           </span>
           </span>
         </Block>
-        {row && (
-          <div className="relative flex min-w-0 flex-col gap-1.5" data-testid="g5-slots">
-            <G5Slot id="prestige" label="Prestige" tv line />
-            <G5Slot id="mood" label="Mood" tv line />
-            <G5Slot id="score" label="Colony score" tv line />
-            <IntentMarker note={N.M8} />
-          </div>
-        )}
       </div>
-      {!row && (
-      <div className={cx('relative mt-auto grid', tv ? 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.6fr)] gap-3' : 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.25fr)] gap-1.5')} data-testid="g5-slots">
-        <G5Slot id="prestige" label="Prestige" tv={tv} />
-        <G5Slot id="mood" label="Mood" sub={`${MOOD_SCALE.unrest}× to ${MOOD_SCALE.thriving}×`} tv={tv} />
-        <G5Slot id="score" label="Colony score" sub={`(${COLONY_SCORE_PARTS.join(' + ')}) × mood.`} tv={tv} />
-        <IntentMarker note={N.M8} />
-      </div>
-      )}
       <IntentMarker note={N.M6} />
     </section>
   );
@@ -422,6 +418,7 @@ export function YourWorth({ view, density }: { view: MuleView; density: Exclude<
   const w = worthOf(view, view.me!.id);
   const p = w.parts!;
   const collapse = inCollapse(view);
+  // Donations get a line once G-5 builds them (p.donations is 0 until then); no placeholder line before that.
   const rows: { key: string; label: string; cr: number | null; tone?: string; grey?: boolean }[] = [
     { key: 'cash', label: 'Cash', cr: p.money },
     { key: 'goods', label: `Goods · ${p.units} units`, cr: p.goods },
@@ -429,7 +426,6 @@ export function YourWorth({ view, density }: { view: MuleView; density: Exclude<
     { key: 'mules', label: `MULEs · ${p.mules} × ${view.mulePrice}`, cr: p.muleValue },
     ...(collapse ? [{ key: 'cut', label: `Collapse cut · ${collapseCutWords()}`, cr: -p.cut, tone: 'text-alert' }] : []),
     { key: 'offices', label: `Offices · ${p.terms} ${p.terms === 1 ? 'term' : 'terms'} × ${POLITICS.termScore}${collapse ? ', cut too' : ''}`, cr: p.office },
-    { key: 'donations', label: 'Donations', cr: null, grey: true },
   ];
   const tight = density === 'compact' || collapse;
   const sum = p.money + p.goods + p.land + p.muleValue - p.cut + p.office + p.donations;
@@ -446,7 +442,6 @@ export function YourWorth({ view, density }: { view: MuleView; density: Exclude<
             {/* A line too long for a small phone's column wraps under itself rather than losing its end. */}
             <dt className={cx('min-w-0', r.grey ? '' : 'text-ink-2')}>
               {r.label}
-              {r.grey && <span className="ml-1 font-mono text-[9px] font-bold uppercase tracking-wide">comes with G-5</span>}
             </dt>
             <dd data-num className={cx('text-right font-mono font-semibold', r.tone)} data-testid={`worth-cr-${r.key}`}>
               {r.cr === null ? '—' : r.cr < 0 ? `−${fmt(-r.cr)}` : fmt(r.cr)}
