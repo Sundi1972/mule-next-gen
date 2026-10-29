@@ -13,6 +13,7 @@ import {
   walkSeconds,
   type AiLevelConfig,
   type AiLevelId,
+  type EventRow,
   type GameState,
 } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
@@ -449,9 +450,16 @@ describe('cornering', () => {
 
 describe('production events and the outlook', () => {
   it('T-AC-7: a seat’s outlook forecasts the same with events on as off: it never sees next month’s event', () => {
+    /** Gives an event row exactly these fields, dropping any others it had. */
+    const reset = (row: object, fields: object) => {
+      for (const key of Object.keys(row)) delete (row as Record<string, unknown>)[key];
+      Object.assign(row, fields);
+    };
+    /** The outlook with every event row that rolls in production at exactly `chance`, nothing raising or lowering it. */
     const forecast = (seed: number, chance: number) => {
-      const saved = EVENTS.chance;
-      EVENTS.chance = chance;
+      const rows: EventRow[] = [...Object.values(EVENTS.colony), ...Object.values(EVENTS.player)].filter((row) => 'production' in row.phases);
+      const saved = rows.map((row) => ({ ...row }));
+      for (const row of rows) reset(row, { phases: { production: chance }, cap: 1, ...(row.perPlot && { perPlot: row.perPlot }) });
       try {
         const state = fourSeats(seed);
         while (state.phase !== 'development') advancePhase(state);
@@ -460,7 +468,7 @@ describe('production events and the outlook', () => {
         const o = outlook(observe(state, 'ai0'), 'ai0', { lookAhead: true });
         return GOODS.map((g) => [o.price(g), o.later(g)]);
       } finally {
-        EVENTS.chance = saved;
+        rows.forEach((row, i) => reset(row, saved[i]!));
       }
     };
     for (let seed = 1; seed <= 6; seed++) expect(forecast(seed, 1)).toEqual(forecast(seed, 0));
