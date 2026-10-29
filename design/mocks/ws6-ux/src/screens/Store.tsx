@@ -97,11 +97,11 @@ function Booth({
     >
       {children}
       {next && !disabled && (
-        <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-full bg-holo px-1.5 font-mono text-[9px] font-bold leading-4 text-on-holo shadow-glow" data-testid="tap-here">
+        <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-full bg-holo px-1.5 font-mono text-[10px] font-bold leading-4 text-on-holo shadow-glow" data-testid="tap-here">
           TAP
         </span>
       )}
-      {disabled && lockNote && <span className={cx('mt-0.5 font-mono uppercase leading-tight text-ink-3', tv ? 'text-[10px]' : 'text-[7px]')}>{lockNote}</span>}
+      {disabled && lockNote && <span className="mt-0.5 font-mono text-[10px] uppercase leading-tight text-ink-3">{lockNote}</span>}
     </Tag>
   );
 }
@@ -155,10 +155,15 @@ export function StoreHall({
           </Booth>
         ))}
       </div>
-      <div className="absolute inset-x-1.5 bottom-1.5 grid h-[36%] grid-cols-12 gap-1.5" data-testid="row-services">
+      {/*
+        Twelve columns; the doors stay at least 32 px wide and the green belt wide enough for "Green" on a small phone
+        (667 × 375), as the product's hall (packages/ui Store.tsx, WS4's #174), with narrower gaps there so the corral
+        keeps its five MULEs and the works its 32 px fits. From 844 every column is wider anyway.
+      */}
+      <div className="absolute inset-x-1.5 bottom-1.5 grid h-[36%] grid-cols-[minmax(--spacing(8),1fr)_repeat(4,minmax(0,1fr))_minmax(--spacing(9),1fr)_repeat(5,minmax(0,1fr))_minmax(--spacing(8),1fr)] gap-1.5 @max-3xl/shell:gap-1" data-testid="row-services">
         <Door side="L" onTap={tap('doorL')} tv={tv} next={nx('doorL')} />
         <Booth testid="booth-works" className="col-span-4 px-1" disabled={!can('works')} next={nx('works')} lockNote={locks?.works} tv={tv}>
-          <span className={cx('label-caps', tv ? 'text-xs!' : 'text-[8px]!')}>Works · factory fits</span>
+          <span className={cx('label-caps', tv ? 'text-xs!' : 'text-[10px]!')}>Works · factory fits</span>
           <span className="grid w-full grid-cols-3 gap-1">
             {FACTORIES.map((f) => (
               <button
@@ -200,7 +205,7 @@ export function StoreHall({
           <span data-num className={price}>
             ≈{pubPayout} cr
           </span>
-          <span className={cx('text-ink-3', tv ? 'text-xs' : 'text-[8px]')}>ends your turn</span>
+          <span className={cx('text-ink-3', tv ? 'text-xs' : 'text-[10px]')}>ends your turn</span>
         </Booth>
         <Door side="R" onTap={tap('doorR')} tv={tv} next={nx('doorR')} />
       </div>
@@ -225,7 +230,7 @@ function Door({ side, onTap, tv, next = false }: { side: 'L' | 'R'; onTap: (() =
       aria-label="Out to the map"
     >
       <span className={cx('font-display font-bold', tv ? 'text-xl' : 'text-sm')}>{side === 'L' ? '←' : '→'}</span>
-      <span className={cx('font-mono leading-tight', tv ? 'text-[10px]' : 'text-[7px]')}>MAP</span>
+      <span className="font-mono text-[10px] leading-tight">MAP</span>
     </Tag>
   );
 }
