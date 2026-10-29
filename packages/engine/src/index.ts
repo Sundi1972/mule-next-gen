@@ -9,6 +9,25 @@ export * from './events.js';
 export * from './economy.js';
 export * from './walk.js';
 export * from './dev-walk.js';
+export {
+  buildFloor,
+  doorOutside,
+  floorConfig,
+  IDLE_INPUT,
+  type DevFloor,
+  type FloorColonist,
+  type FloorConfig,
+  type FloorEncounter,
+  type FloorInput,
+  type FloorLead,
+  type FloorPoint,
+  type Space,
+} from './floor/floor.js';
+export { pathTo, type MapPath } from './floor/path.js';
+export { applyReach, reachOf, reachWords, type Press, type Reach, type ReachHint, type ReachKind, type ReachRefusal, type ReachWords } from './floor/reach.js';
+export { speedOf, terrainShare } from './floor/speed.js';
+export { doorPresses, pressOrder, stepFloor } from './floor/step.js';
+export * from './floor/hall.js';
 export * from './auction.js';
 export * from './lots.js';
 export * from './upkeep.js';
