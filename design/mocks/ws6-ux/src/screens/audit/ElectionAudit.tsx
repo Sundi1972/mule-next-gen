@@ -771,7 +771,7 @@ export function Announce({ ready: startReady = false }: { ready?: boolean }) {
     : { step: 1, of: 3, title, detail: 'Read who runs and on what promise, then tap Ready to vote. No clock: the ballot opens once everyone is ready.' };
   return (
     <GameShell
-      phase="Election day"
+      phase="Election"
       status={<ReadyCount players={players} />}
       now={now}
       footer={<WaitFooter ready={ready} onReady={() => setReady(true)} planningProper words={ANNOUNCE_WORDS} onContinue={() => (window.location.hash = 'audit-election-ballot')} />}
@@ -897,7 +897,7 @@ export function Ballot({ voted: startVoted = false }: { voted?: boolean }) {
       : { step: 2, of: 3, title: 'Vote in secret', detail: 'Pick one, or abstain, then Cast my vote. Nobody sees whom you chose. No clock: it closes once everyone has voted.' };
   return (
     <GameShell
-      phase="Election day"
+      phase="Election"
       status={<ReadyCount players={players} label="VOTED" />}
       now={now}
       footer={closed ? undefined : <WaitFooter ready={cast} onReady={() => setCast(true)} canReady={complete} planningProper words={BALLOT_WORDS} onContinue={() => setClosed(true)} />}
