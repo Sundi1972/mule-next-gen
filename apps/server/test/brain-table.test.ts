@@ -552,9 +552,10 @@ async function recordedToMonth2(recordPlaybook = true) {
     ...(recordPlaybook ? { recordPlaybook: (e) => recorder.playbook(e) } : {}),
     playbookSource: source,
   });
-  recorder.wrap(game).start(THREE);
-  await runTable(game, fake, (v) => v.month === 2 && v.phase !== 'planning');
-  game.dispose();
+  const hosted = recorder.wrap(game);
+  hosted.start(THREE);
+  await runTable(hosted, fake, (v) => v.month === 2 && v.phase !== 'planning');
+  hosted.dispose?.();
   const ai = THREE.find((s) => s.isAi)!.id;
   return { record: recorder.record, writes: sdk.requests.filter((r) => isWrite(r.params)), drafts, ai };
 }

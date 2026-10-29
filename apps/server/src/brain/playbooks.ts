@@ -97,12 +97,15 @@ export class Playbooks {
       const ask = this.asks.get(seat.id);
       const asked = ask?.month === state.month ? ask : null;
       if (asked) asked.started = true;
+      let playbook: Playbook;
       try {
-        const draft = source.draft(state, seat.id).playbook;
-        this.playing.set(`${seat.id}/${state.month}`, this.decide(state, seat.id, draft, asked?.written ?? null, source.validate));
+        playbook = this.decide(state, seat.id, source.draft(state, seat.id).playbook, asked?.written ?? null, source.validate);
       } catch (err) {
         console.error(`playbooks: seat ${seat.id} has no draft for month ${state.month}: ${messageOf(err)}`);
+        continue;
       }
+      this.playing.set(`${seat.id}/${state.month}`, playbook);
+      if (this.writers.has(seat.id)) this.options.record?.({ seat: seat.id, month: state.month, phase: 'landGrant', playbook });
     }
   }
 

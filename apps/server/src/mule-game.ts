@@ -357,7 +357,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       this.voteHands.set(s.id, new VoteHand(seat.mind, createRng((seat.options.seed ^ 0x165667b1) >>> 0)));
     });
     const source = this.options.playbookSource === undefined ? ENGINE_SOURCE : this.options.playbookSource;
-    this.playbooks = new Playbooks({ brain: this.brain, source, seats: [...this.ai.values()] });
+    this.playbooks = new Playbooks({ brain: this.brain, source, seats: [...this.ai.values()], record: this.recordPlaybook });
     this.playbooks.ask(this.state, this.state.month);
     this.news = ['Welcome to the colony. Talk tactics, then grab land.'];
     this.enterPhase();
