@@ -125,7 +125,7 @@ function TvLobby({ table }: { table: TableView<MuleView> }) {
   );
 }
 
-export function TvHeader({ game, title, seconds }: { game: MuleView; title: string; seconds?: number | undefined }) {
+export function TvHeader({ game, title, seconds, extra }: { game: MuleView; title: string; seconds?: number | undefined; extra?: ReactNode }) {
   return (
     <>
       <header className="flex items-end justify-between gap-6">
@@ -138,6 +138,7 @@ export function TvHeader({ game, title, seconds }: { game: MuleView; title: stri
           </h1>
         </div>
         <div className="flex items-center gap-4">
+          {extra}
           <ThemeToggle />
           <AirGauge level={game.air.level} band={game.air.band} tv />
           {seconds !== undefined && <Timer seconds={seconds} className="h-14! px-5! text-3xl!" />}
