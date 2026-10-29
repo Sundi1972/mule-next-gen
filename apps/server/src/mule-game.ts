@@ -28,9 +28,11 @@ import {
   grantDone,
   grantPass,
   hasAnalysed,
+  houseLineAt,
   hungerPace,
   installMule,
   isElectionDone,
+  lineTrade,
   list as listLot,
   litPlot,
   lotDone,
@@ -62,6 +64,7 @@ import {
   stepAuction,
   stepElection,
   stepLandAuction,
+  stepWalk,
   storeBuyLine,
   storeForSale,
   storeQuotes,
@@ -413,6 +416,14 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         if (intent.dir !== 'stop') auctionDone(state, seatId, false);
         return;
       }
+      case 'walkStep':
+        stepWalk(state, seatId, intent.dir === 'up' ? 1 : -1);
+        auctionDone(state, seatId, false);
+        return;
+      case 'lineTrade':
+        lineTrade(state, seatId, intent.units);
+        auctionDone(state, seatId, false);
+        return;
       case 'list':
         listLot(state, seatId, intent);
         return;
@@ -1406,6 +1417,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         dir: w.dir,
         done: a.done.includes(w.id),
         units: market.units(w.id),
+        line: a.stage === 'walk' ? (houseLineAt(market, w)?.house ?? null) : null,
+        order: w.order ? { ...w.order } : null,
       })),
       deals: a.deals.map(({ buyer, seller, price, units }) => ({ buyer, seller, price, units })),
       units: a.units,
