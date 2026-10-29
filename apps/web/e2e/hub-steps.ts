@@ -342,7 +342,12 @@ const READ_GOV = `(async () => {
   const verdict = box('[data-testid=governor-verdict]');
   const tabs = [...(g?.querySelectorAll('[data-testid=desks] [role=tab]') ?? [])].map((t) => {
     const r = t.getBoundingClientRect();
-    return { id: t.dataset.testid, w: r.width, h: r.height, clipped: t.scrollWidth > t.clientWidth + 0.5 };
+    // The label is the tab's own text: whole when its box sits inside the tab's (a badge may overhang by design).
+    const label = document.createRange();
+    const text = [...t.childNodes].find((n) => n.nodeType === 3 && n.textContent.trim());
+    if (text) label.selectNodeContents(text);
+    const l = text ? label.getBoundingClientRect() : r;
+    return { id: t.dataset.testid, w: r.width, h: r.height, clipped: l.left < r.left - 0.5 || l.right > r.right + 0.5 };
   });
   return {
     footerTop: footer?.top ?? NaN,
@@ -396,12 +401,13 @@ export async function governorDeskFits(lena: Page, size: { width: number; height
   const shot = (name: string) => (shots ? lena.screenshot({ path: join(shots, `e-11-${size.width}-${name}.png`) }).then(() => {}) : Promise.resolve());
   const opened = await read();
   await shot('opens');
-  fits(opened, 'as it opens', 'breaks it');
   if (size.width === GOV_SIZES[1].width) {
+    const tabs = opened.tabs.map((t) => `${t.id.slice('desk-'.length)} ${t.w.toFixed(1)}×${t.h.toFixed(1)}${t.clipped ? ' clipped' : ''}`).join(', ');
     const small = opened.tabs.filter((t) => t.w < TAB_MIN - 0.01 || t.h < TAB_MIN - 0.01 || t.clipped);
-    check(opened.tabs.length >= 5 && small.length === 0, `E-11 at ${at}: every desk tab is at least ${TAB_MIN}×${TAB_MIN} with its label whole, got ${opened.tabs.map((t) => `${t.id} ${t.w.toFixed(1)}×${t.h.toFixed(1)}${t.clipped ? ' clipped' : ''}`).join(', ')}`);
-    seen.push(`tabs ${opened.tabs.map((t) => `${t.w.toFixed(1)}×${t.h.toFixed(1)}`).join(', ')}`);
+    check(opened.tabs.length >= 5 && small.length === 0, `E-11 at ${at}: every desk tab is at least ${TAB_MIN}×${TAB_MIN} with its label whole, got ${tabs}`);
+    seen.push(`tabs ${tabs}`);
   }
+  fits(opened, 'as it opens', 'breaks it');
   await click('tax-down');
   await guide.getByTestId('gov-within').waitFor({ timeout });
   fits(await read(), 'after −', 'within');
