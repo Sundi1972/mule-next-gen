@@ -430,10 +430,13 @@ export interface ProductionLineView {
   parts: { why: ProductionReason; delta: number }[];
 }
 
+/** What an event on screen is: one of the engine's month events, or a player falling sick at development's start. */
+export type ShowEventKey = EventKey | 'sickness';
+
 /** One event as every screen shows it, whichever phase fired it: production's map and every other phase's show. */
 export interface EventView {
-  key: EventKey;
-  kind: EventKind;
+  key: ShowEventKey;
+  kind: EventKind | 'sickness';
   title: string;
   line: string;
   sign: MonthEvent['sign'];
@@ -442,6 +445,8 @@ export interface EventView {
   origin: { x: number; y: number };
   /** For a colony sweep, the map edge it blows in from. */
   from?: 'n' | 'e' | 's' | 'w';
+  /** Whose event it is: a personal event's player, or the player who fell sick. */
+  player?: string;
   /** The plots it hit, in the order it reached them, and how many units each gained or lost. */
   hits: { x: number; y: number; order: number; delta: number }[];
   /** The phase whose show plays it. */
@@ -463,6 +468,8 @@ export interface EventShowView {
   showMs: number;
   /** How long the intro plays before the first event, in ms at full pace. */
   introMs: number;
+  /** Epoch ms on the server's clock when the show ends: startsAt plus showMs at the table's pace. */
+  endsAt: number;
 }
 
 /** What every plot made this month and what the month's event did: never anything a player holds. */
