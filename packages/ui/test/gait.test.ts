@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { cycleSeconds, limpLatch, motionOf, type Encounter, type GaitInput } from '../src/index';
+import { cycleSeconds, motionOf, type Encounter, type GaitInput } from '../src/index';
 
-/** A fed colonist on the plains, walking alone; the spec's lead and bitten paces (arcade-walking RULE-2, RULE-4). */
-const walker: GaitInput = { moving: true, encounter: null, pace: 1, terrain: 1, lead: false, limp: false, leadPace: 0.9, bittenPace: 0.5 };
+/** A fed colonist on the plains, walking alone; the spec's lead and bitten paces and the wolf's lunge (RULE-2, -4, -7). */
+const walker: GaitInput = { moving: true, encounter: null, pace: 1, terrain: 1, lead: false, bitten: false, leadPace: 0.9, bittenPace: 0.5, lungeSeconds: 1.6 };
 
 describe('the gait, from what the wire carries', () => {
   it.each([
@@ -16,8 +16,8 @@ describe('the gait, from what the wire carries', () => {
     [true, 'choose', false, 'walk'],
     [true, null, false, 'walk'],
     [true, null, true, 'hurt'],
-  ] as const)('M-1: moving %s, encounter %s, bitten %s → %s', (moving, encounter, limp, motion) => {
-    expect(motionOf({ moving, encounter: encounter as Encounter, limp })).toBe(motion);
+  ] as const)('M-1: moving %s, encounter %s, bitten %s → %s', (moving, encounter, bitten, motion) => {
+    expect(motionOf({ moving, encounter: encounter as Encounter, bitten })).toBe(motion);
   });
 
   it.each([
@@ -31,24 +31,12 @@ describe('the gait, from what the wire carries', () => {
     ['leading a MULE: 0.5 / 0.9', { lead: true }, 0.5 / 0.9],
     ['running from wolves: 0.6 of the walk', { encounter: 'chase' }, 0.3],
     ['running at half pace', { encounter: 'chase', pace: 0.5 }, 0.6],
-    ['bitten: half speed and 1.3× the stride', { limp: true }, 1.3],
+    ['bitten: half speed and 1.3× the stride', { bitten: true }, 1.3],
     ['standing breathes on the MULE’s rhythm, whatever the pace', { moving: false, pace: 0.3 }, 2.6],
     ['the fight jabs on the wolf’s lunge, whatever the pace', { encounter: 'fight', pace: 0.3 }, 1.6],
+    ['the fight’s rhythm is the lunge the caller passes, not a copy', { encounter: 'fight', lungeSeconds: 1.2 }, 1.2],
+    ['a pace that is not a number strides at full speed, never NaN', { pace: Number.NaN }, 0.5],
   ] as [string, Partial<GaitInput>, number][])('M-2: %s', (_, change, seconds) => {
     expect(cycleSeconds({ ...walker, ...change })).toBeCloseTo(seconds, 6);
-  });
-
-  it.each([
-    // prev (limp, encounter, speed) → now (encounter, speed, healed) → limping
-    ['caught: the chase ends and the speed falls by half', [false, 'chase', 1], [null, 0.5, false], true],
-    ['got away: the chase ends at the same speed', [false, 'chase', 1], [null, 1, false], false],
-    ['the chase ends at exactly 0.8 of the speed: not a bite', [false, 'chase', 1], [null, 0.8, false], false],
-    ['the chase ends just under 0.8 of the speed: a bite', [false, 'chase', 1], [null, 0.79, false], true],
-    ['a fight that ends with the speed falling is not a chase: no latch', [false, 'fight', 1], [null, 0.5, false], false],
-    ['still limping while nothing heals it', [true, null, 0.5], [null, 0.5, false], true],
-    ['healed at the store or an own plot', [true, null, 0.5], [null, 1, true], false],
-    ['caught and healed in the same frame: healed wins', [false, 'chase', 1], [null, 0.5, true], false],
-  ] as [string, [boolean, Encounter, number], [Encounter, number, boolean], boolean][])('M-3: %s', (_, [limp, encounter, speed], [nowEnc, nowSpeed, healed], limping) => {
-    expect(limpLatch({ limp, encounter, speed }, { encounter: nowEnc, speed: nowSpeed, healed })).toBe(limping);
   });
 });

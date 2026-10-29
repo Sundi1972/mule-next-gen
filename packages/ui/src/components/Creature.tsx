@@ -204,6 +204,10 @@ const SWIPE: Keyframe[] = [
 const FLINCH_MS = 450;
 const STRIKE_MS = 380;
 
+export function replays(_seen: number, _count: number, _reduced: boolean): boolean {
+  throw new Error('NotImplemented: replays');
+}
+
 /** Plays the frames on each wrapper once whenever `count` moves on (not on mount), and never under reduced motion. */
 function useOneShot(count: number, ms: number, plays: [RefObject<HTMLSpanElement | null>, Keyframe[]][]) {
   const seen = useRef(count);
