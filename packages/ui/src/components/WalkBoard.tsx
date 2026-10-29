@@ -296,8 +296,7 @@ export function WalkBoard({
               className={cx('flex min-w-0 flex-1 items-center justify-center gap-1 px-0.5 font-display font-semibold', tv ? 'text-lg' : 'text-[10px]', w.side === 'pass' ? 'text-ink-3' : 'text-ink')}
             >
               <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: SLOT_COLOR[w.slot] }} />
-              {/* On a phone a long name takes a second line rather than losing its end. */}
-              <span className={tv ? 'truncate' : 'line-clamp-2 text-center leading-[1.1]'}>{w.id === meId ? 'You' : w.name}</span>
+              <span className="truncate">{w.id === meId ? 'You' : w.name}</span>
               {w.side === 'pass' && <span className="shrink-0 font-mono text-ink-3">· PASS</span>}
               {w.done && w.side !== 'pass' && <span className="shrink-0 font-mono text-ok">✓</span>}
             </span>
