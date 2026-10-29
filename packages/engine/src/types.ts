@@ -247,7 +247,16 @@ export interface MonthEvent {
   /** For a colony sweep, the map edge it comes in from. */
   direction?: 'n' | 'e' | 's' | 'w';
   /** Each plot hit, in the order the event reached it, and how much its output changed. */
-  plots: { index: number; order: number; good: Good; delta: number }[];
+  plots: {
+    index: number;
+    order: number;
+    good: Good;
+    delta: number;
+    /** The special field the plot had before the event, when the event removes it (a cavern collapse). */
+    was?: SpecialKind;
+    /** What the plot is after the event, when the event changes what it is ('plain': its special is gone). */
+    becomes?: 'plain';
+  }[];
   /** For a personal event, the player whose land it started on. */
   player?: string;
   sign: 'good' | 'bad' | 'mixed';
