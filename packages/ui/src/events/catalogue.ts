@@ -33,6 +33,7 @@ export const EVENT_ENTRY: { [K in ShowEventKey]: EventEntry & { key: K } } = {
   pestSwarm: { key: 'pestSwarm', motion: 'spread', look: 'A swarm crawls from farm to farm across the player’s joined Food plots.' },
   wildfire: { key: 'wildfire', motion: 'spread', look: 'One farm flares up and burns out; embers drift onto the farms joined to it.' },
   bumperHarvest: { key: 'bumperHarvest', motion: 'plot', look: 'One plot glows and its bars double.' },
+  cavernCollapse: { key: 'cavernCollapse', motion: 'plot', look: 'The cavern badge cracks and sinks; dust puffs up and the plot is plain.' },
 };
 
 export const EVENT_CATALOGUE: EventEntry[] = Object.values(EVENT_ENTRY);
