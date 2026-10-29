@@ -1,7 +1,7 @@
 import type { AuctionView } from '@mule/protocol';
 import { Button, cx, GOOD_NAME, GoodTag, TimeBar, WalkBoard } from '@mule/ui';
 import { useState } from 'react';
-import { BoardKey, boardWalkers, dealLine, Hint, MyStoreLine, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, toggleSide, walkHint } from '../components/AuctionParts';
+import { BoardKey, boardWalkers, dealLine, Hint, MyStoreLine, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, toggleSide, WaitingToPick, walkHint } from '../components/AuctionParts';
 import { speakerAt } from '../chat/Chat';
 import { PHASE_NAME } from '../game/derive';
 import { useAuctionSound } from '../game/sound';
@@ -9,7 +9,7 @@ import type { MouseEvent, PointerEvent } from 'react';
 import { useClient } from '../net/react';
 import { usePhoneGame } from './game';
 import { connectedIn, pickedIn, SIDE_PICK_WORDS, stillPicking, type Seat } from './hub/ready';
-import { ReadyCount, WaitingFor } from './hub/ReadyBar';
+import { ReadyCount } from './hub/ReadyBar';
 import { PhoneShell } from './Shell';
 import { stepDir, useWalkIntent } from './useWalkIntent';
 
@@ -259,16 +259,6 @@ export function Auction() {
         />
       </div>
     </PhoneShell>
-  );
-}
-
-/** "Waiting for Kai to pick": planning's names line, each with its creature and an AWAY mark for a dropped phone. */
-export function WaitingToPick({ seats, tv = false }: { seats: readonly Seat[]; tv?: boolean }) {
-  return (
-    <span className={cx('flex flex-wrap items-center gap-x-1.5 gap-y-1', tv ? 'text-3xl' : 'text-sm @min-[1100px]/shell:text-lg')} data-testid="waiting-to-pick" aria-label={`Waiting for ${seats.map((s) => s.name).join(' and ')} to pick`}>
-      <WaitingFor seats={seats} me={null} tv={tv} />
-      <span className="text-ink-2">to pick</span>
-    </span>
   );
 }
 
