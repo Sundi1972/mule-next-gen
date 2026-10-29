@@ -143,9 +143,9 @@ tomorrow     apps/server/src/record.ts::Recorder. It MUST:
              (1) wrap the GameContext. `schedule` numbers each timer in call order, and its callback opens a
                  `fire` step; `now()` and `hostId()` append what they return to the open step's `reads` and
                  `hosts`, except while a `viewFor` runs (RULE-3). It never alters a value (HC-3).
-             (2) wrap the Game. `start`, `handle`, `connectionChanged` and `seatMoved` each open a step and record
-                 their input; `handle` also records a refusal's message and rethrows. `heard` is passed through
-                 unrecorded (RULE-5).
+             (2) wrap the Game. `start`, `handle`, `connectionChanged`, `seatMoved` and `heard` each open a step
+                 and record their input; `handle` also records a refusal's message and rethrows. A `heard` step
+                 keeps who spoke to whom and never the words (RULE-5, AM-4).
              (3) wrap the BrainService. `deciderFor` notes which seats are smart, and each decider's `decide`
                  call is numbered per seat, with its outcome recorded per RULE-4.
 logic        → RULE-1, RULE-2, RULE-3, RULE-4, RULE-5
@@ -579,6 +579,9 @@ stay local.
   - **Playbook fields WS1 may add** (`Playbook.politics?`, `PlanningPlay.offers?`) reach the record only inside
     PlaybookEntry, additively. The T-AC-11 stableJson comparison is unaffected, because absent fields serialise as
     absent.
+  - **Follow-on (2026-10-29, #194 review):** §1 C2 (2) still said `heard` passes through unrecorded. It is now
+    restated as a step, matching RULE-1 row 9 and RULE-5. T-AC-12 also pins the replay's `heard` calls exactly, so a
+    replay that drops or garbles them goes red.
 
 ## §9 · Ownership Boundaries `[handoff]`
 
