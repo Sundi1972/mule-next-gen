@@ -186,6 +186,12 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   else if (phase === 'development')
     side = (
       <>
+        {game.clockWaitsFor && (
+          <>
+            <FirstMules game={game} />
+            <span className="label-caps text-base!">In the store now</span>
+          </>
+        )}
         <div className="h-[240px]">
           <StoreInterior mules={game.storeMules} mulePrice={game.mulePrice} prices={{}} tv />
         </div>
@@ -288,7 +294,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         ) : (
           <TvHeader game={game} title={PHASE_NAME[phase]} seconds={secondsUntil(game.phaseEndsAt, now)} />
         )}
-        {phase === 'development' && <SharedClock seconds={secondsUntil(game.phaseEndsAt, now) ?? 0} total={DEVELOPMENT.fullSeconds} size="tv" />}
+        {phase === 'development' && (game.clockWaitsFor ? <ClockWaits /> : <SharedClock seconds={secondsUntil(game.phaseEndsAt, now) ?? 0} total={DEVELOPMENT.fullSeconds} size="tv" />)}
         <div className="flex min-h-0 flex-1 gap-6">
           <div className="flex w-[700px] shrink-0 flex-col gap-3">
             <HoloMap width={game.width} height={game.height} tiles={tiles} cursor={game.lit} density="tv" hideGround className="w-full" />
@@ -303,6 +309,40 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         </div>
       </div>
     </SeatSpeciesProvider>
+  );
+}
+
+/** Month 1's clock while it waits for the first MULEs: the bar stands full and the label says what starts it. */
+export function ClockWaits() {
+  return (
+    <div className="flex items-center gap-4" data-testid="tv-clock">
+      <span className="shrink-0 font-display text-xl font-semibold text-holo" data-testid="tv-clock-label">
+        First month: the clock starts when every first MULE is in
+      </span>
+      <TimeBar seconds={DEVELOPMENT.fullSeconds} total={DEVELOPMENT.fullSeconds} size="tv" className="min-w-0 flex-1" />
+    </div>
+  );
+}
+
+/** Whose first MULE month 1's clock still waits for, every seat in seat order. */
+export function FirstMules({ game }: { game: MuleView }) {
+  const waiting = game.clockWaitsFor ?? [];
+  return (
+    <div className="flex flex-col gap-3">
+      <span className="label-caps text-base!">First MULEs in</span>
+      <ul className="grid grid-cols-2 gap-x-4 gap-y-1.5" data-testid="tv-first-mules">
+        {game.players.map((p) => {
+          const isIn = !waiting.includes(p.id);
+          return (
+            <li key={p.id} className="flex items-center gap-2 text-lg" data-testid={`tv-first-mule-${p.id}`}>
+              <PlayerMark slot={toSlot(p.slot)} size={18} glow={false} />
+              <span className="flex-1 font-semibold">{p.name}</span>
+              <span className={cx('font-mono text-base font-bold', isIn ? 'text-ok' : 'text-ink-3')}>{isIn ? '✓ in' : 'still to come'}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
