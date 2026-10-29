@@ -3,7 +3,7 @@ import type { DealView, MuleView, TableView } from '@mule/protocol';
 import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PaceList, PlayerMark, SeatSpeciesProvider, SharedClock, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard, type CreatureWrap } from '@mule/ui';
 import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
 import { boardWalkers, dealLine, newestFirst, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, StoreBox, TvReadout, type DealRow } from '../components/AuctionParts';
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
@@ -250,12 +250,24 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
               if (row.kind === 'ais')
                 return (
                   <li key="ais" className="flex items-center gap-3 opacity-60" data-testid="tv-ready-ais" data-count={row.seats.length}>
+                    {/* The place column stays, empty, so the row lines up; each AI's place follows its name. */}
+                    <span aria-hidden className="w-9 shrink-0" />
                     <span className="flex shrink-0 -space-x-1.5">
                       {row.seats.map((s) => (
                         <PlayerMark key={s.id} slot={toSlot(s.slot)} size={22} />
                       ))}
                     </span>
-                    <span className="flex-1 truncate font-display text-xl font-semibold">{row.seats.map((s) => s.name).join(', ')}</span>
+                    <span className="flex-1 truncate font-display text-xl font-semibold">
+                      {row.seats.map((s, i) => (
+                        <Fragment key={s.id}>
+                          {i > 0 && ', '}
+                          {s.name}{' '}
+                          <span data-num className="font-mono text-sm font-normal text-ink-3" data-testid={`tv-rank-${s.id}`}>
+                            {ordinal(places.get(s.id) ?? game.players.length)}
+                          </span>
+                        </Fragment>
+                      ))}
+                    </span>
                     <span className="font-mono text-sm text-ink-3">{row.seats.length} AI · READY</span>
                   </li>
                 );
