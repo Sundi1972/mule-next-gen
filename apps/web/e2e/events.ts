@@ -6,7 +6,7 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildEvent, createRng, eventOutput, EVENTS, type EventKey, type GameState, type MonthEvent, type MonthReport } from '@mule/engine';
-import type { MuleView, ProductionView } from '@mule/protocol';
+import type { EventView, MuleView, ProductionView } from '@mule/protocol';
 import { eventScript, finalUnits, GOOD_NAME, SHOW, showEnd, type Good } from '@mule/ui';
 import { errors as playwrightErrors, type Browser, type Page } from 'playwright';
 import { check, held, launch, PHONE, startServer, TV } from './harness';
@@ -27,7 +27,7 @@ const PLAY_MS = 6 * 60_000;
 /** A click lands this much before the show would have got there by itself, or the click did not cause the jump. */
 const AHEAD_MS = 300;
 /** Each event's own story element on a map that plays it. */
-const STORY_MARK: Partial<Record<EventKey, string>> = { dustStorm: 'front-dustStorm', drought: 'front-drought', acidRain: 'front-acidRain', pestSwarm: 'swarm-', wildfire: 'fire-' };
+const STORY_MARK: Partial<Record<EventView['key'], string>> = { dustStorm: 'front-dustStorm', drought: 'front-drought', acidRain: 'front-acidRain', pestSwarm: 'swarm-', wildfire: 'fire-' };
 
 /** Lines the AI seats post when they have not said three yet: the ticker's most, as in a real game. */
 const CHATTER = ['Money is for spending on MULEs.', 'Quietly building.', 'Better safe than sorry: keep the cash.'];
@@ -337,7 +337,7 @@ async function productionOn(watch: ShowWatch, tag: string): Promise<ProductionVi
 }
 
 /** Each event played its own story on the map, in fired order. */
-function checkStories(layers: string[], order: EventKey[], who: string): void {
+function checkStories(layers: string[], order: EventView['key'][], who: string): void {
   const played = layers.filter((l) => l.startsWith('event:')).map((l) => l.slice(6));
   check(JSON.stringify(played) === JSON.stringify(order), `${who} played ${played.join(', ')}, fired ${order.join(', ')}`);
   for (const key of order) {
