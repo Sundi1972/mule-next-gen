@@ -232,8 +232,14 @@ describe('the event show: production lasts long enough for every event, and the 
   });
 });
 
-/** Where the production show's intro starts, in ms into the phase at full pace: the client's SHOW.eventAt, 4.8 s. */
-const PRODUCTION_SHOW_AT = 4_800;
+/**
+ * Where the production show's intro starts, in ms into the phase at full pace: the client's own SHOW.eventAt, read at
+ * run time so the server's start and the client's timeline cannot drift apart. The path is a variable so the server's
+ * typecheck does not compile the client's JSX.
+ */
+const CLIENT_TIMELINE: string = '../../../packages/ui/src/components/ProductionMap.tsx';
+const { SHOW } = (await import(CLIENT_TIMELINE)) as { SHOW: { eventAt: number } };
+const PRODUCTION_SHOW_AT = SHOW.eventAt * 1000;
 
 describe('T-AC-10: the view carries the current phase\'s events, when their show starts and how long it plays', () => {
   let month: ReturnType<typeof playRealMonths>;
