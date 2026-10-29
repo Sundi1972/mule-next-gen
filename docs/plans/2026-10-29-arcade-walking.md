@@ -715,7 +715,11 @@ promise. WS4's part first (harness.ts is shared), then the others at once.
 |---|---|---|---|---|
 | PR-0 · the wire's types | #176 | WS3 | `5a7fb2c7` | WS6 OK at 5a7fb2c7 (typecheck 0). **Merged at ddb14a0** |
 | S-2 · steering feel | — | WS6 | — | **Done** (`docs/research/2026-10-29-arcade-s2-feel.md`): Heiko "tested phone sterring ok", the hall "3 is fine". Spec AM-7: `steer` carries its `tick`, the server buffers inputs by tick; `floorSeconds` 3. AM-8: the frame goes through WS3's recorder and replay |
-| PR-1 · the dev floor | — | WS1 | — | **In build**, with AM-9's rulings applied (every outfit; 8b works by bay; 8c the Green belt; row 10 SWAP; rows 11 ANALYSE, 12 FIT FILTER, 11a TAKE; `pubPayoutFor`; start positions outside the store doors). WS6 reviews on its SHA |
+| PR-1 · the dev floor | #186 | WS1 | — | **Merged into trunk.** Owner OKs 758f7f53, 7c3e5865, 47baa619; the rulings it raised are AM-10 and AM-12 |
+| S-1 · the frame's cost | — | WS3 | — | **Done**: spec AM-13 (20 Hz; frames 420–606 B, rounded to 2 decimals; a steer sends no full view; the tick compares state) |
+| PR-2 · the frame channel | — | WS4 | — | **Rulings given** before dispatch: spec AM-15 (`Game.quiet?`, `Connection.behind?` via `bufferedAmount > FRAME_BACKLOG_BYTES`, rounding in dev-steer.ts); builds against ws6-ux until milestone 6 lands |
+| PR-7 · payouts, re-outfit | #206 | WS3 | — | **Rulings given**: spec AM-14 (re-outfit only a MULE taken off a plot, no refund, a bolted taken MULE goes home) |
+| PR-6 · the screens | — | WS6 | — | Waiting on PR-2, PR-3, PR-5. Carry-overs from A-1 already in the plan (1768a024): the six-seat TV store hall (about 100 px short), the "started the clock" TV beat. Contention rows for WS1's AI step 2 at 3471dba7 |
 
 ## Risk-mitigation milestones (spec §7)
 
