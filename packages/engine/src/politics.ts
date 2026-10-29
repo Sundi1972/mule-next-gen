@@ -23,7 +23,7 @@ function noCandidates(): Record<Office, string[]> {
 
 /** Politics as it stands before the first planning phase: no offices, no Baron, nobody running. */
 export function newPolitics(): Politics {
-  return { governor: null, sheriff: null, termStart: 1, terms: {}, governorRun: null, baron: null, taxAtStart: 0, candidates: noCandidates(), promises: {}, promise: null, election: null };
+  return { governor: null, sheriff: null, termStart: 1, terms: {}, governorRun: null, baron: null, taxAtStart: 0, candidates: noCandidates(), promises: {}, promise: null, promiseFrom: null, election: null };
 }
 
 /** A what-if copy may share politics, so every write copies it first. */
@@ -347,6 +347,7 @@ function takeOffice(state: GameState, politics: Politics): void {
   if (governor === undefined) return;
   // The promise holds for the term; an appointed Governor made none.
   politics.promise = result.governor!.how === 'appointed' ? null : (election.promises[governor] ?? null);
+  politics.promiseFrom = Math.round(state.treasury.salesTax * PERCENT);
   const run = politics.governorRun;
   politics.governorRun = { id: governor, terms: run?.id === governor ? run.terms + 1 : 1 };
 }

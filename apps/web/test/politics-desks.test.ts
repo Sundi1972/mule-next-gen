@@ -11,11 +11,12 @@ import { ColonyDesk } from '../src/phone/hub/desks';
 import { AgendaRow, Hub } from '../src/phone/hub/Hub';
 import { ColonyWithFacts } from '../src/phone/hub/politics/Colony';
 import { CouncilBody } from '../src/phone/hub/politics/Council';
-import { ElectionDay } from '../src/phone/hub/politics/ElectionDay';
-import { GovernorDesk } from '../src/phone/hub/politics/Governor';
+import { ElectionDay, forgetPicks, pickOn } from '../src/phone/hub/politics/ElectionDay';
+import { GovernorDesk, setState } from '../src/phone/hub/politics/Governor';
 import { OfficesLine } from '../src/phone/hub/politics/Offices';
 import { PromiseSheet } from '../src/phone/hub/politics/Run';
 import { electionNow, electionReadyWords } from '../src/phone/hub/politics/slots';
+import { howWords } from '../src/phone/hub/politics/words';
 import { HUB_SLOTS } from '../src/phone/hub/today';
 import { TvElection } from '../src/table/TvElection';
 import { drawnSlots } from '../src/phone/hub/slots';
@@ -50,6 +51,7 @@ const politics = (extra: Partial<PoliticsView> = {}): PoliticsView => ({
   candidates: { governor: [], sheriff: [] },
   promises: {},
   promise: null,
+  promiseFrom: null,
   election: election(),
   ...extra,
 });
@@ -115,8 +117,8 @@ const client = {
 } as unknown as TableClient;
 
 /** The room around a game: Lena hosts; `boards` big screens; `away` seats dropped. */
-const tableOf = (game: MuleView, boards = 1, away: string[] = []): TableView<MuleView> => ({
-  code: 'MULE',
+const tableOf = (game: MuleView, boards = 1, away: string[] = [], code = 'MULE'): TableView<MuleView> => ({
+  code,
   status: 'playing',
   hostId: 's1',
   seats: PLAYERS.map((p) => ({ id: p.id, name: p.name, isAi: p.isAi, connected: !away.includes(p.id), color: p.slot })),
@@ -124,16 +126,16 @@ const tableOf = (game: MuleView, boards = 1, away: string[] = []): TableView<Mul
   game,
 });
 
-/** A component as Lena's phone draws it, from this view. */
-function onPhone(game: MuleView, desk: () => ReactElement | null, boards = 1): string {
-  const value = { table: tableOf(game, boards), view: game, me: game.me!, self: game.players[0]!, slot: 0 as Slot };
+/** A component as Lena's phone draws it, from this view, in room `code`. */
+function onPhone(game: MuleView, desk: () => ReactElement | null, boards = 1, code = 'MULE'): string {
+  const value = { table: tableOf(game, boards, [], code), view: game, me: game.me!, self: game.players[0]!, slot: 0 as Slot };
   return renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value, children: createElement(desk) }) })).replaceAll('<!-- -->', '');
 }
 
 /** Lena's whole planning hub, as the game draws it. */
-function inHub(game: MuleView, boards = 1): string {
+function inHub(game: MuleView, boards = 1, code = 'MULE'): string {
   const hub = () => createElement(Hub, { slots: HUB_SLOTS });
-  return onPhone(game, hub, boards);
+  return onPhone(game, hub, boards, code);
 }
 
 function onTv(game: MuleView, away: string[] = []): string {
@@ -204,18 +206,25 @@ function ceremony(result: ElectionResult, seconds: number): Pick<ElectionView, '
   return { ceremony: { seconds, total: beats.total / 1000, reached }, result: shown };
 }
 
-/** When `beat` of the first office starts, in show seconds, plus `after`. */
-function beatAt(result: ElectionResult, beat: Exclude<CeremonyBeat, 'tie'> | 'tie', after = 0.01): number {
-  const at = ceremonyBeats(SEATS, result).offices[0]!.at[beat];
+/** When `beat` of `office` (the first, unless named) starts, in show seconds, plus `after`. */
+function beatAt(result: ElectionResult, beat: CeremonyBeat, after = 0.01, office?: Office): number {
+  const offices = ceremonyBeats(SEATS, result).offices;
+  const at = (offices.find((o) => o.office === office) ?? offices[0]!).at[beat];
   return at! / 1000 + after;
 }
 
 const WON: ElectionResult = { governor: { winner: 's1', how: 'votes', tallies: [{ id: 's1', votes: 3 }, { id: 's2', votes: 1 }] } };
 const TIED: ElectionResult = { governor: { winner: 's2', how: 'land', tallies: [{ id: 's1', votes: 2 }, { id: 's2', votes: 2 }] } };
+/** Both offices: Ossa wins Governor from Lena, Kai wins Sheriff from Brix. */
+const BOTH: ElectionResult = {
+  governor: { winner: 's2', how: 'votes', tallies: [{ id: 's2', votes: 3 }, { id: 's1', votes: 1 }] },
+  sheriff: { winner: 's3', how: 'votes', tallies: [{ id: 's3', votes: 3 }, { id: 's4', votes: 2 }] },
+};
 
 /** Month 4's ceremony at `seconds`, Lena and Ossa on the stage, Lena running up to 8% and Ossa holding. */
 function inCeremony(result: ElectionResult, seconds: number, extra: Partial<PoliticsView> = {}): MuleView {
-  const e = election({ stage: 'ceremony', candidates: { governor: ['s1', 's2'] }, promises: { s1: CAP_8, s2: HOLD }, ...ceremony(result, seconds) });
+  const candidates = Object.fromEntries(Object.entries(result).map(([office, race]) => [office, race!.tallies.map((t) => t.id).sort()]));
+  const e = election({ stage: 'ceremony', candidates, promises: { s1: CAP_8, s2: HOLD }, ...ceremony(result, seconds) });
   return view(politics({ election: e, pay: { governor: 50 }, next: 7, ...extra }), me(), { month: 4 });
 }
 
@@ -274,6 +283,16 @@ describe('the Council desk (C66, E-1, E-6)', () => {
     expect(textOf(html, 'council-result')).toMatch(/^Election results · month 4/);
     expect(textOf(html, 'result-how-governor')).toBe(line);
     for (const t of race!.tallies) expect(textOf(html, `result-governor-${t.id}`)).toBe(`${t.id === 's1' ? 'You' : 'Ossa'}${t.votes} vote${t.votes === 1 ? '' : 's'}${t.id === race!.winner ? 'ELECTED' : ''}`);
+  });
+
+  it.each<[ElectionHow, string | null]>([
+    ['baron', 's3'],
+    ['land', null],
+    ['land', 's3'],
+    ['lot', null],
+  ])('E-6: a tie of one vote each says "1 vote each" (%s, Land Baron %s)', (how, baron) => {
+    const race = { winner: 's2', how, tallies: [{ id: 's1', votes: 1 }, { id: 's2', votes: 1 }] };
+    expect(howWords(race, 's1', view(politics({ baron })))).toMatch(/^A tie, 1 vote each[.,]/);
   });
 });
 
@@ -377,6 +396,62 @@ describe('election day on the phone (C66, E-2)', () => {
     expect(picked.slice(picked.indexOf('data-testid="ballot-governor-s2"')).match(/<input[^>]*>/)![0]).toMatch(/checked/);
   });
 
+  describe("this phone's picks, shown before the server's view comes back", () => {
+    afterEach(() => forgetPicks());
+
+    /** The input of this ballot option, as the hub draws it. */
+    const radio = (html: string, option: string) => html.slice(html.indexOf(`data-testid="ballot-governor-${option}"`)).match(/<input[^>]*>/)![0];
+    const cast = /<button(?![^>]*disabled="")[^>]*data-testid="ready"[^>]*>Cast my vote</;
+    const LENA_4 = { room: 'MULE', seat: 's1', month: 4 };
+
+    it('C66, AM-21: Abstain shows checked at once, and counts as a pick for Cast my vote', () => {
+      pickOn(LENA_4, 'governor', '');
+      const html = inHub(ballot());
+      expect(radio(html, 'abstain')).toMatch(/checked/);
+      expect(html).toMatch(cast);
+    });
+
+    it("C66, AM-21: the next election's ballot opens with nothing chosen and Cast my vote off", () => {
+      pickOn(LENA_4, 'governor', '');
+      const html = inHub({ ...ballot(), month: 7 });
+      for (const option of ['s1', 's2', 'abstain']) expect(radio(html, option), option).not.toMatch(/checked/);
+      expect(html).not.toMatch(cast);
+    });
+
+    it("C66, AM-21: another room's ballot opens with nothing chosen", () => {
+      pickOn(LENA_4, 'governor', '');
+      const html = inHub(ballot(), 1, 'ZORP');
+      for (const option of ['s1', 's2', 'abstain']) expect(radio(html, option), option).not.toMatch(/checked/);
+    });
+
+    it("C66, AM-21: another seat's abstention on this phone is not Lena's", () => {
+      pickOn({ ...LENA_4, seat: 's2' }, 'governor', '');
+      const html = inHub(ballot());
+      expect(radio(html, 'abstain')).not.toMatch(/checked/);
+      expect(html).not.toMatch(cast);
+    });
+
+    it("C66, AM-21: the server's ballot wins over this phone's pick for that office", () => {
+      pickOn(LENA_4, 'governor', 's1');
+      const html = inHub(ballot({ governor: 's2' }));
+      expect(radio(html, 's2')).toMatch(/checked/);
+      expect(radio(html, 's1')).not.toMatch(/checked/);
+    });
+  });
+
+  describe('with both offices', () => {
+    bothOffices();
+    const both = (mine: Partial<Record<Office, string>>) => ballot(mine, { election: election({ stage: 'ballot', candidates: { governor: ['s1', 's2'], sheriff: ['s3', 's4'] }, promises: { s1: CAP_8, s2: HOLD }, done: [], waitingFor: SEATS }) });
+
+    it('C66, AM-21: two ballot papers, and Cast my vote needs a pick on both', () => {
+      const one = inHub(both({ governor: 's2' }));
+      expect(textOf(one, 'day-title')).toBe('Election day: Governor and Sheriff');
+      expect(textOf(one, 'ballot-sheriff-s3')).toBe('Kai');
+      expect(one).toMatch(/<button[^>]*disabled=""[^>]*data-testid="ready"[^>]*>Cast my vote</);
+      expect(inHub(both({ governor: 's2', sheriff: 's3' }))).toMatch(/<button(?![^>]*disabled="")[^>]*data-testid="ready"[^>]*>Cast my vote</);
+    });
+  });
+
   it('C66, E-5: your votes in words: how many, why, and your own numbers', () => {
     const weights = politics().weights.map((w) => (w.id === 's1' ? { ...w, votes: 1 } : w));
     const html = inHub(ballot({}, { weights }));
@@ -443,6 +518,20 @@ describe('the reveal (C66, RULE-62, B-AC-62)', () => {
     expect(textOf(html, 'reveal-row-governor-s2')).not.toContain('ELECTED');
   });
 
+  it('B-AC-62: with reduced motion the winner\'s row stays still: no glow pulsing', () => {
+    const moving = onTv(inCeremony(WON, beatAt(WON, 'winner', 1)));
+    expect(tagOf(moving, 'reveal-row-governor-s1')).toMatch(/animate-pulse-glow/);
+    const saved = globalThis.matchMedia;
+    globalThis.matchMedia = ((query: string) => ({ matches: query === '(prefers-reduced-motion: reduce)' })) as typeof matchMedia;
+    try {
+      const still = onTv(inCeremony(WON, beatAt(WON, 'winner', 1)));
+      expect(tagOf(still, 'reveal-row-governor-s1')).toMatch(/ring-holo/);
+      expect(tagOf(still, 'reveal-row-governor-s1')).not.toMatch(/animate-pulse-glow/);
+    } finally {
+      globalThis.matchMedia = saved;
+    }
+  });
+
   it('C66, E-6: a tie is stamped at its beat and said by the rule that broke it, before the winner is congratulated', () => {
     const players = PLAYERS.map((p) => (p.id === 's1' ? { ...p, plots: 5 } : p.id === 's2' ? { ...p, plots: 7 } : p));
     const game = { ...inCeremony(TIED, beatAt(TIED, 'tie', 1.5)), players };
@@ -468,6 +557,29 @@ describe('the reveal (C66, RULE-62, B-AC-62)', () => {
     expect(textOf(won, 'companion-governor-s1')).toBe('You3ELECTED');
     expect(textOf(won, 'companion-governor')).toContain('Won on votes, 3 to 1.');
     expect(textOf(won, 'companion-mine')).toBe('Congratulations, Governor Lena!You set the sales tax next. You promised no higher than 8%.');
+    const tie = onPhone(inCeremony(TIED, beatAt(TIED, 'tie', 0.5)), ElectionDay, 1);
+    expect(inCeremony(TIED, beatAt(TIED, 'tie', 0.5)).politics!.election!.result.governor?.winner, 'the server sends the winner at the tie beat').toBe('s2');
+    for (const id of ['s1', 's2']) expect(tagOf(tie, `companion-governor-${id}`), `companion-governor-${id} at the tie beat`).toBeUndefined();
+    expect(textOf(tie, 'companion-governor')).toBe('Governoron the TV now…');
+  });
+
+  it('B-AC-62 (phone beside a TV): with no office after it, a named winner brings no "Next office on the TV"', () => {
+    const html = onPhone(inCeremony(TIED, beatAt(TIED, 'winner', 0.5)), ElectionDay, 1);
+    expect(textOf(html, 'companion-governor-s2')).toBe('Ossa2ELECTED');
+    expect(textOf(html, 'companion-wait')).not.toContain('Next office on the TV');
+  });
+
+  describe('with both offices', () => {
+    bothOffices();
+
+    it("C66: once the Governor is named the TV hands over to the Sheriff, and the phone beside it says the next office is on", () => {
+      const between = beatAt(BOTH, 'winner', 1, 'governor');
+      expect(textOf(onPhone(inCeremony(BOTH, between), ElectionDay, 1), 'companion-wait')).toContain('Next office on the TV');
+      const sheriff = onTv(inCeremony(BOTH, beatAt(BOTH, 'title', 1, 'sheriff')));
+      expect(textOf(sheriff, 'reveal-title')).toBe('And next, the colony’s newSheriff2 candidates');
+      expect(textOf(sheriff, 'reveal-progress')).toBe('Governor: Ossa ✓Sheriff: now');
+      expect(textOf(onPhone(inCeremony(BOTH, beatAt(BOTH, 'bars', 1, 'sheriff')), ElectionDay, 1), 'companion-wait')).toContain('The votes are being counted on the TV');
+    });
   });
 
   it("B-AC-62 (phone, no TV): the phone carries the TV's ceremony itself, beat for beat", () => {
@@ -505,6 +617,33 @@ describe('the TV on election day (C66, E-2, E-5)', () => {
     expect(textOf(html, 'tv-ballot-governor')).toContain("Ossakeep it at 5%");
   });
 
+  describe('with both offices', () => {
+    bothOffices();
+
+    it('C66, E-6: the summary holds both races, each with its tallies', () => {
+      const html = onTv(inCeremony(BOTH, beatAt(BOTH, 'end', 0.2, 'sheriff')));
+      expect(textOf(html, 'reveal-summary')).toMatch(/^The colony’s new officers/);
+      expect(textOf(html, 'summary-governor-s2')).toBe('Ossa3');
+      expect(textOf(html, 'summary-sheriff-s3')).toBe('Kai3');
+      expect(textOf(html, 'summary-sheriff-s4')).toBe('Brix2');
+    });
+  });
+
+  it('E-2: the TV holds every seat as a candidate on its frame: past two the rows shrink, and no name or headline wraps', () => {
+    /** The opening tag of the first element inside `testid`'s that has this text. */
+    const holder = (html: string, testid: string, text: string) => html.slice(html.indexOf(`data-testid="${testid}"`)).match(new RegExp(`<span[^>]*>${text}<`))![0];
+    const field = (ids: string[]) => onTv(view(politics({ next: 7, candidates: { governor: ids }, promises: {}, election: election({ waitingFor: ['s3'] }) }), me(), { month: 4 }));
+    expect(holder(field(['s1', 's2']), 'tv-field-governor-s2', 'Ossa')).toMatch(/text-5xl/);
+    const five = field(SEATS);
+    expect(holder(five, 'tv-field-governor-s5', 'Pip')).toMatch(/whitespace-nowrap[^"]*text-2xl|text-2xl[^"]*whitespace-nowrap/);
+    expect(holder(five, 'tv-vote-on-phone', 'Vote on your phone')).toMatch(/whitespace-nowrap/);
+
+    const all: ElectionResult = { governor: { winner: 's1', how: 'votes', tallies: SEATS.map((id, i) => ({ id, votes: 5 - i })) } };
+    expect(holder(onTv(inCeremony(WON, beatAt(WON, 'winner', 1))), 'reveal-row-governor-s2', 'Ossa')).toMatch(/text-5xl/);
+    expect(holder(onTv(inCeremony(all, beatAt(all, 'winner', 1))), 'reveal-row-governor-s5', 'Pip')).toMatch(/whitespace-nowrap[^"]*text-xl/);
+    expect(holder(onTv(inCeremony(all, beatAt(all, 'end', 0.2))), 'summary-governor-s5', 'Pip')).toMatch(/whitespace-nowrap/);
+  });
+
   it('T-AC-62: by default the TV names one office: no Sheriff anywhere', () => {
     expect(POLITICS.offices).toEqual(['governor']);
     const tv = onTv(inCeremony(WON, beatAt(WON, 'winner', 1)));
@@ -513,26 +652,28 @@ describe('the TV on election day (C66, E-2, E-5)', () => {
 });
 
 describe("the new Governor's promise (C68, E-7)", () => {
-  /** Month `month`, Lena Governor since month 4 on `promise`, the tax at `percent` from this month's `start`. */
-  const term = (promise: TaxPromise | null, percent: number, start: number, month = 4) =>
-    view(politics({ governor: 's1', term: [4, 6], next: 7, promise, tax: { percent, start, low: 0, high: 10 }, election: month === 4 ? election({ stage: 'over' }) : null }), me(), { month });
+  /** Month `month`, Lena Governor since month 4 on `promise` from a tax of `from`, the tax at `percent` from this month's `start`. */
+  const term = (promise: TaxPromise | null, percent: number, start: number, month = 4, from: number | null = null) =>
+    view(politics({ governor: 's1', term: [4, 6], next: 7, promise, promiseFrom: from, tax: { percent, start, low: 0, high: 10 }, election: month === 4 ? election({ stage: 'over' }) : null }), me(), { month });
 
-  it.each<[string, TaxPromise, number, number, number, string]>([
+  it.each<[string, TaxPromise, number, number, number, string, number?]>([
     ['a cap kept', CAP_4, 4, 5, 4, 'Governor: Lena, until month 6 · promised up to 4% · tax 4%, kept · Next election: month 7'],
     ['a cap not yet set', CAP_4, 5, 5, 4, 'Governor: Lena, until month 6 · promised up to 4% · tax still 5% · Next election: month 7'],
     ['a cap broken', CAP_4, 6, 5, 4, 'Governor: Lena, until month 6 · promised up to 4% · tax 6%, promise broken · Next election: month 7'],
     ['a cap broken a month on', CAP_4, 5, 5, 5, 'Governor: Lena, until month 6 · promised up to 4% · tax 5%, promise broken · Next election: month 7'],
     ['lower, kept', LOWER, 4, 5, 4, 'Governor: Lena, until month 6 · promised lower it · tax 4%, kept · Next election: month 7'],
     ['hold, kept', HOLD, 5, 5, 5, 'Governor: Lena, until month 6 · promised keep it at 5% · tax 5%, kept · Next election: month 7'],
-  ])("T-AC-70: every phone's offices line keeps the Governor's promise beside the tax, kept or broken (%s)", (_, promise, percent, start, month, line) => {
-    expect(textOf(onPhone(term(promise, percent, start, month), OfficesLine), 'roadmap-offices')).toBe(line);
+    ['lowered from 5% in month 4, still kept in month 5', LOWER, 4, 4, 5, 'Governor: Lena, until month 6 · promised lower it · tax 4%, kept · Next election: month 7', 5],
+    ['raised from 5% in month 4, still broken in month 5', HOLD, 7, 7, 5, 'Governor: Lena, until month 6 · promised keep it at 5% · tax 7%, promise broken · Next election: month 7', 5],
+  ])("T-AC-70: every phone's offices line keeps the Governor's promise beside the tax, kept or broken (%s)", (_, promise, percent, start, month, line, from) => {
+    expect(textOf(onPhone(term(promise, percent, start, month, from ?? null), OfficesLine), 'roadmap-offices')).toBe(line);
   });
 
   it("T-AC-70: an appointed Governor made no promise: the line has no promise part", () => {
     expect(textOf(onPhone(term(null, 5, 5), OfficesLine), 'roadmap-offices')).toBe('Governor: Lena, until month 6 · Next election: month 7');
   });
 
-  it("T-AC-70, E-7: the Governor's desk keeps the promise above the tax; past it, it says so", () => {
+  it("T-AC-70, E-7: the Governor's desk keeps the promise in view under the tax; past it, it says so", () => {
     const over = onPhone(term(CAP_4, 5, 5), GovernorDesk);
     expect(textOf(over, 'gov-promise')).toBe('Sales taxYou promised: no higher than 4%');
     expect(textOf(over, 'gov-breaks')).toBe('5%: this breaks your promise.');
@@ -543,6 +684,22 @@ describe("the new Governor's promise (C68, E-7)", () => {
     const set = onPhone(term(CAP_4, 4, 5), GovernorDesk);
     expect(textOf(set, 'gov-done')).toBe('Done: 4% from now on.');
     expect(disabled(set, 'tax-confirm')).toBe(true);
+  });
+
+  it("T-AC-70, E-7: a month on, the Governor's desk judges keep it against the tax when the term began, not the month's start", () => {
+    const html = onPhone(term(HOLD, 7, 7, 5, 5), GovernorDesk);
+    expect(textOf(html, 'gov-promise')).toBe('Sales taxYou promised: keep it at 5%');
+    expect(textOf(html, 'gov-breaks')).toBe('7%: this breaks your promise.');
+  });
+
+  it.each<[string, number, number | null, { percent: number; start: number }, ReturnType<typeof setState>]>([
+    ['Set where the month opened', 5, 5, { percent: 5, start: 5 }, 'done'],
+    ['nothing set yet', 5, null, { percent: 5, start: 5 }, 'open'],
+    ['set before, on another phone', 4, null, { percent: 4, start: 5 }, 'done'],
+    ['a tax on its way', 4, 4, { percent: 5, start: 5 }, 'sending'],
+    ['a new tax after one came back', 3, 4, { percent: 4, start: 5 }, 'open'],
+  ])("E-7: the Governor's Set is done once the tax is set, off while one is on its way, else open (%s)", (_, tax, sent, now, state) => {
+    expect(setState(tax, sent, now)).toBe(state);
   });
 
   it.each<[{ percent: number; start: number; low: number; high: number }, { down: boolean; up: boolean }]>([

@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { fmt } from '../../../game/derive';
 import { useClient } from '../../../net/react';
 import { usePhoneGame } from '../../game';
-import { promiseKept, promisedWords } from './words';
+import { promiseBase, promiseKept, promisedWords } from './words';
 
 /** The Governor's desk: the sales tax, within the bounds the server gives for this month, with the promise in view (E-7). */
 export function GovernorDesk() {
@@ -14,25 +14,25 @@ export function GovernorDesk() {
   return <SalesTax politics={view.politics} />;
 }
 
+/** Where the desk's Set stands: the tax set this month, a tax on its way to the server, or open. */
+export function setState(tax: number, sent: number | null, { percent, start }: Pick<PoliticsView['tax'], 'percent' | 'start'>): 'done' | 'sending' | 'open' {
+  // Set this month: by this phone, or before, when the tax has moved from where the month opened.
+  if (tax === percent && (sent === percent || percent !== start)) return 'done';
+  return sent === tax ? 'sending' : 'open';
+}
+
 function SalesTax({ politics }: { politics: PoliticsView }) {
   const client = useClient();
   const { percent, start, low, high } = politics.tax;
   const [tax, setTax] = useState(percent);
   const [sent, setSent] = useState<number | null>(null);
   const promise = politics.promise;
-  const breaks = promise !== null && !promiseKept(promise, politics.tax, tax);
-  // Set this month: by this phone, or before, when the tax has moved from where the month opened.
-  const done = tax === percent && (sent === percent || percent !== start);
+  const breaks = promise !== null && !promiseKept(promise, politics, tax);
+  const state = setState(tax, sent, politics.tax);
+  const done = state === 'done';
   return (
     <section className="flex flex-col gap-1 @min-[1100px]/shell:gap-2" data-testid="gov-tax">
-      <p className="text-xs @min-[1100px]/shell:text-base" data-testid="gov-promise">
-        <span className="label-caps mr-1.5 text-[10px]! @min-[1100px]/shell:text-xs!">Sales tax</span>
-        {promise && (
-          <>
-            You promised: <strong className="font-semibold">{promisedWords(promise, start)}</strong>
-          </>
-        )}
-      </p>
+      {/* The tax row and its verdict first, so it stays above the rail's footer on a small phone (E-9). */}
       <div className="flex items-center gap-1.5">
         <Button size="md" variant="outline" className="w-11 shrink-0 px-0" aria-label="One point lower" disabled={tax <= low} onClick={() => setTax(Math.max(low, tax - 1))} data-testid="tax-down">
           −
@@ -46,7 +46,7 @@ function SalesTax({ politics }: { politics: PoliticsView }) {
         <Button
           size="md"
           className="min-w-0 flex-1 whitespace-nowrap px-2"
-          disabled={done}
+          disabled={state !== 'open'}
           onClick={() => {
             client.intent({ type: 'setTax', percent: tax });
             setSent(tax);
@@ -71,6 +71,14 @@ function SalesTax({ politics }: { politics: PoliticsView }) {
           </p>
         )
       )}
+      <p className="text-xs @min-[1100px]/shell:text-base" data-testid="gov-promise">
+        <span className="label-caps mr-1.5 text-[10px]! @min-[1100px]/shell:text-xs!">Sales tax</span>
+        {promise && (
+          <>
+            You promised: <strong className="font-semibold">{promisedWords(promise, promiseBase(politics))}</strong>
+          </>
+        )}
+      </p>
       <p className="text-[11px] leading-snug text-ink-3 @min-[1100px]/shell:text-sm">
         This month {low}–{high}%, from last month’s {start}%. The tax fills the colony fund ({fmt(politics.fund)} cr), which pays you {POLITICS.pay.governor} cr a month. Everyone sees your tax beside your promise.
       </p>

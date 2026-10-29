@@ -96,6 +96,7 @@ export function politicsView(state: GameState): PoliticsView | null {
     candidates: perOffice((office) => [...p.candidates[office]]),
     promises: structuredClone(p.promises),
     promise: p.promise && { ...p.promise },
+    promiseFrom: p.promiseFrom,
     election: electionView(state),
   };
 }

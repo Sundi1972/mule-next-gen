@@ -1,8 +1,7 @@
 import { ceremonyBeats, POLITICS, type CeremonyBeat, type Office } from '@mule/engine';
 import type { MuleView, OfficeReveal } from '@mule/protocol';
-import { Button, Creature, cx, SLOT_COLOR } from '@mule/ui';
+import { Button, Creature, cx } from '@mule/ui';
 import { useEffect, useState, type CSSProperties } from 'react';
-import { slotOf } from '../../../game/derive';
 import { usePhoneGame } from '../../game';
 import { useHub } from '../Hub';
 import { colorOf, Steps } from './parts';
@@ -19,7 +18,7 @@ const BLOCK = C.blockMs / 1_000;
 const GLIDE = 'transition-[transform,opacity] duration-100 ease-linear motion-reduce:transition-none';
 
 /** One office on the stage: who stands on it, its vote blocks in order, when each beat starts, and what the clock has revealed. */
-export interface OfficeShow {
+interface OfficeShow {
   office: Office;
   /** In seat order, never ranked. */
   candidates: string[];
@@ -39,7 +38,7 @@ export interface Show {
 }
 
 const BEATS: readonly CeremonyBeat[] = ['title', 'candidates', 'bars', 'tie', 'winner', 'end'];
-export const beatIs = (s: OfficeShow, from: CeremonyBeat) => BEATS.indexOf(s.beat) >= BEATS.indexOf(from);
+const beatIs = (s: OfficeShow, from: CeremonyBeat) => BEATS.indexOf(s.beat) >= BEATS.indexOf(from);
 
 /** The ceremony as this view stands in it, or null outside it. */
 export function showOf(view: Pick<MuleView, 'players' | 'politics'>): Show | null {
@@ -64,11 +63,11 @@ export function showOf(view: Pick<MuleView, 'players' | 'politics'>): Show | nul
 }
 
 /** The office on the stage now, or null once every office has had its turn. */
-export const currentOffice = (show: Show) => (show.offices.length < POLITICS.offices.length ? show.offices.at(-1) : show.offices.find((o) => o.beat !== 'end')) ?? null;
+const currentOffice = (show: Show) => (show.offices.length < POLITICS.offices.length ? show.offices.at(-1) : show.offices.find((o) => o.beat !== 'end')) ?? null;
 
 const raceOf = (s: OfficeShow): Race | null => (s.reveal?.winner && s.reveal.how ? { winner: s.reveal.winner, how: s.reveal.how, tallies: s.reveal.tallies } : null);
 
-export function useReducedMotion(): boolean {
+function useReducedMotion(): boolean {
   const [reduced, setReduced] = useState(() => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
   useEffect(() => {
     if (typeof matchMedia !== 'function') return;
@@ -110,7 +109,7 @@ const BURSTS = [
 ];
 
 /** Confetti from the winner's row and three fireworks above it. `k` scales it: 1 on the TV. */
-export function Celebration({ dt, color, k, n }: { dt: number; color: string; k: number; n: number }) {
+function Celebration({ dt, color, k, n }: { dt: number; color: string; k: number; n: number }) {
   if (dt < 0 || dt > 3.6) return null;
   const colors = [color, 'var(--color-holo)', 'var(--color-ok)', 'var(--color-warn)', 'var(--color-g-crystite)', 'var(--color-g-energy)'];
   const G = 1500 * k;
@@ -152,13 +151,19 @@ export function Celebration({ dt, color, k, n }: { dt: number; color: string; k:
 // --- One office's ceremony, on the TV or a phone ------------------------------------------------------------------------
 
 type Size = 'tv' | 'phone';
+/** The TV holds up to six candidates on its 1280×720 frame: past two, the rows, avatars and gaps shrink with the count. */
 const SZ = {
   tv: { title: 'text-9xl', head: 'text-5xl', job: 'text-3xl', creature: 88, name: 'text-5xl', promise: 'text-2xl', block: 'h-12 w-16', count: 'text-7xl', chip: 'px-3 py-1 text-xl', congrats: 'text-6xl', how: 'text-2xl', stamp: 'text-8xl', row: 'gap-6 px-5 py-3', rows: 'gap-4 px-5', k: 1, n: 90 },
+  tv4: { title: 'text-9xl', head: 'text-4xl', job: 'text-2xl', creature: 52, name: 'text-3xl', promise: 'text-xl', block: 'h-9 w-12', count: 'text-5xl', chip: 'px-2.5 py-0.5 text-lg', congrats: 'text-5xl', how: 'text-xl', stamp: 'text-7xl', row: 'gap-5 px-5 py-1', rows: 'gap-3 px-5', k: 1, n: 90 },
+  tv6: { title: 'text-9xl', head: 'text-3xl', job: 'text-xl', creature: 40, name: 'text-xl', promise: 'text-sm', block: 'h-6 w-9', count: 'text-4xl', chip: 'px-2 text-base', congrats: 'text-4xl', how: 'text-lg', stamp: 'text-6xl', row: 'gap-4 px-4 py-0.5', rows: 'gap-1.5 px-5', k: 1, n: 90 },
   phone: { title: 'text-6xl', head: 'text-2xl', job: 'text-sm', creature: 40, name: 'text-xl', promise: 'text-xs', block: 'h-6 w-8', count: 'text-3xl', chip: 'px-1.5 text-xs', congrats: 'text-2xl', how: 'text-xs', stamp: 'text-5xl', row: 'gap-3 px-2.5 py-1.5', rows: 'gap-2 px-3', k: 0.5, n: 50 },
 } as const;
 
+/** How full the TV's stage is: the mock's sizes up to two candidates, then four, then six. */
+const tvFill = (n: number) => (n <= 2 ? 'tv' : n <= 4 ? 'tv4' : 'tv6');
+
 function OfficeStage({ game, s: b, t, size, me, reduced, first }: { game: MuleView; s: OfficeShow; t: number; size: Size; me: string | null; reduced: boolean; first: boolean }) {
-  const z = SZ[size];
+  const z = SZ[size === 'tv' ? tvFill(b.candidates.length) : size];
   const office = OFFICE_NAME[b.office];
   const tax = game.politics!.tax.percent;
   const promises = game.politics!.election!.promises;
@@ -206,7 +211,7 @@ function OfficeStage({ game, s: b, t, size, me, reduced, first }: { game: MuleVi
             return (
               <div
                 key={id}
-                className={cx('relative flex items-center rounded-panel border', z.row, GLIDE, win ? 'border-holo bg-holo-soft ring-2 ring-holo animate-pulse-glow' : 'border-holo-line bg-panel')}
+                className={cx('relative flex items-center rounded-panel border', z.row, GLIDE, win ? cx('border-holo bg-holo-soft ring-2 ring-holo', !reduced && 'animate-pulse-glow') : 'border-holo-line bg-panel')}
                 style={{ opacity: Math.min(1, pop) * (lost ? 0.45 : 1), transform: `scale(${(0.6 + 0.4 * pop) * (win && !reduced ? 1 + 0.02 * ease(ramp(t, b.at.winner, 0.4)) : 1)})` }}
                 data-testid={`reveal-row-${b.office}-${id}`}
               >
@@ -262,6 +267,12 @@ function OfficeStage({ game, s: b, t, size, me, reduced, first }: { game: MuleVi
   );
 }
 
+const SUMMARY = {
+  tv: { gap: 'gap-5', title: 'text-4xl', card: 'gap-4 px-8 py-6', creature: 88, head: 'text-5xl', line: 'text-3xl', block: 'h-10 w-14', blockGap: 'gap-1.5', how: 'text-2xl', baron: 'text-2xl', next: 'text-xl', rows: 'gap-y-4' },
+  tv4: { gap: 'gap-3', title: 'text-3xl', card: 'gap-2 px-8 py-4', creature: 56, head: 'text-4xl', line: 'text-2xl', block: 'h-7 w-10', blockGap: 'gap-1', how: 'text-xl', baron: 'text-xl', next: 'text-lg', rows: 'gap-y-2' },
+  tv6: { gap: 'gap-2', title: 'text-2xl', card: 'gap-1 px-6 py-3', creature: 40, head: 'text-3xl', line: 'text-xl', block: 'h-5 w-8', blockGap: 'gap-1', how: 'text-lg', baron: 'text-lg', next: 'text-base', rows: 'gap-y-1' },
+} as const;
+
 /** The whole result when the ceremony ends (E-6), with the Land Baron named (E-8). */
 function Summary({ game, show, size, me }: { game: MuleView; show: Show; size: Size; me: string | null }) {
   const tv = size === 'tv';
@@ -272,38 +283,44 @@ function Summary({ game, show, size, me }: { game: MuleView; show: Show; size: S
     return race ? [{ office: s.office, race }] : [];
   });
   const governor = races.find((r) => r.office === 'governor')?.race.winner;
+  const z = SUMMARY[tvFill(Math.max(0, ...races.map((r) => r.race.tallies.length)))];
   return (
-    <div className={cx('absolute inset-0 flex flex-col', tv ? 'gap-5' : 'gap-2', GLIDE)} style={{ opacity: ramp(show.t, show.summary, 0.5) }} data-testid="reveal-summary">
-      <span className={cx('font-display font-semibold', tv ? 'text-4xl' : 'text-lg')}>The colony’s new {races.length > 1 ? 'officers' : (OFFICE_NAME[races[0]?.office ?? 'governor'])}</span>
+    <div className={cx('absolute inset-0 flex flex-col', tv ? z.gap : 'gap-2', GLIDE)} style={{ opacity: ramp(show.t, show.summary, 0.5) }} data-testid="reveal-summary">
+      <span className={cx('font-display font-semibold', tv ? z.title : 'text-lg')}>The colony’s new {races.length > 1 ? 'officers' : (OFFICE_NAME[races[0]?.office ?? 'governor'])}</span>
       <div className={cx('grid', tv ? 'gap-6' : 'gap-2', races.length > 1 ? 'grid-cols-2' : 'grid-cols-1')}>
         {races.map(({ office, race }) => {
           const w = game.players.find((p) => p.id === race.winner);
           return (
-            <section key={office} className={cx('flex flex-col rounded-panel border border-holo bg-panel shadow-glow', tv ? 'gap-4 px-8 py-6' : 'gap-1 p-2')} data-testid={`summary-${office}`}>
+            <section key={office} className={cx('flex flex-col rounded-panel border border-holo bg-panel shadow-glow', tv ? z.card : 'gap-1 p-2')} data-testid={`summary-${office}`}>
               <span className="flex items-center gap-3">
-                {w && <Creature species={w.species} color={colorOf(game, w.id)} size={tv ? 88 : 30} />}
-                <span className={cx('font-display font-semibold', tv ? 'text-5xl' : 'text-base')}>
+                {w && <Creature species={w.species} color={colorOf(game, w.id)} size={tv ? z.creature : 30} />}
+                <span className={cx('font-display font-semibold', tv ? z.head : 'text-base')}>
                   {OFFICE_NAME[office]} {race.winner === me ? `${name(race.winner)} (you)` : name(race.winner)}
                 </span>
               </span>
-              {race.tallies.map((x) => (
-                <span key={x.id} className={cx('flex items-center gap-2', tv ? 'text-3xl' : 'text-xs')} data-testid={`summary-${office}-${x.id}`}>
-                  <span className={cx('shrink-0 font-semibold', tv ? 'w-40' : 'w-12')}>{x.id === me ? 'You' : name(x.id)}</span>
-                  <Blocks n={x.votes} color={colorOf(game, x.id)} className={tv ? 'h-10 w-14' : 'h-3 w-4'} gap={tv ? 'gap-1.5' : 'gap-1'} />
-                  <span data-num className="font-mono font-bold">
-                    {x.votes}
+              {/* On the TV one column of names, as wide as the longest, so no name wraps and the blocks line up. */}
+              <span className={cx(tv ? cx('grid grid-cols-[max-content_1fr] items-center gap-x-2', z.rows, z.line) : 'flex flex-col gap-1 text-xs')}>
+                {race.tallies.map((x) => (
+                  <span key={x.id} className={tv ? 'contents' : 'flex items-center gap-2'} data-testid={`summary-${office}-${x.id}`}>
+                    <span className={cx('font-semibold', tv ? 'min-w-40 whitespace-nowrap' : 'w-12 shrink-0')}>{x.id === me ? 'You' : name(x.id)}</span>
+                    <span className="flex items-center gap-2">
+                      <Blocks n={x.votes} color={colorOf(game, x.id)} className={tv ? z.block : 'h-3 w-4'} gap={tv ? z.blockGap : 'gap-1'} />
+                      <span data-num className="font-mono font-bold">
+                        {x.votes}
+                      </span>
+                    </span>
                   </span>
-                </span>
-              ))}
-              <span className={cx(race.how === 'votes' ? 'text-ink-2' : 'text-warn', tv ? 'text-2xl' : 'text-[11px] leading-snug')}>{howWords(race, me, game)}</span>
+                ))}
+              </span>
+              <span className={cx(race.how === 'votes' ? 'text-ink-2' : 'text-warn', tv ? z.how : 'text-[11px] leading-snug')}>{howWords(race, me, game)}</span>
             </section>
           );
         })}
       </div>
-      <p className={cx('self-start', tv ? 'text-2xl' : 'text-[11px] leading-snug')} data-testid="summary-baron">
+      <p className={cx('self-start', tv ? z.baron : 'text-[11px] leading-snug')} data-testid="summary-baron">
         <strong className="font-semibold">{baron.head}.</strong> <span className="text-ink-2">{baron.rule}</span>
       </p>
-      {governor && <p className={cx('text-ink-2', tv ? 'text-xl' : 'text-[11px]')}>Who voted for whom stays secret. Next: Governor {name(governor)} sets the sales tax.</p>}
+      {governor && <p className={cx('text-ink-2', tv ? z.next : 'text-[11px]')}>Who voted for whom stays secret. Next: Governor {name(governor)} sets the sales tax.</p>}
     </div>
   );
 }
@@ -391,7 +408,8 @@ export function PhoneRevealWithTv({ show }: { show: Show }) {
   const name = namer(view);
   const known = (s: OfficeShow | undefined) => (s && beatIs(s, 'winner') ? raceOf(s) : null);
   const mineWon = show.offices.find((s) => known(s)?.winner === me.id);
-  const first = show.offices[0];
+  const latest = show.offices.at(-1);
+  const nextOffice = known(latest) !== null && latest!.office !== POLITICS.offices.at(-1);
   const over = show.t >= show.summary && show.offices.length === POLITICS.offices.length;
   const baron = baronWords(view, view.politics!.baron, me.id);
   const promise = view.politics!.election!.promises[me.id];
@@ -442,7 +460,7 @@ export function PhoneRevealWithTv({ show }: { show: Show }) {
         <div className="relative flex min-w-0 flex-col justify-center gap-2">
           {mineWon ? (
             <div className="relative flex flex-col items-center gap-2 overflow-hidden rounded-sheet border-2 border-holo bg-holo-soft p-3 text-center shadow-glow" data-testid="companion-mine">
-              <Creature species={me.species} color={SLOT_COLOR[slotOf(view, me.id) ?? 0]} size={56} />
+              <Creature species={me.species} color={colorOf(view, me.id)} size={56} />
               <span className="font-display text-xl font-bold leading-tight">
                 Congratulations, {OFFICE_NAME[mineWon.office]} {name(me.id)}!
               </span>
@@ -452,7 +470,7 @@ export function PhoneRevealWithTv({ show }: { show: Show }) {
             </div>
           ) : (
             <div className="flex flex-col items-center gap-2 rounded-sheet border border-holo-line bg-panel p-3 text-center" data-testid="companion-wait">
-              <span className="font-display text-base font-semibold">{!first || !known(first) ? 'The votes are being counted on the TV' : 'Next office on the TV'}</span>
+              <span className="font-display text-base font-semibold">{nextOffice ? 'Next office on the TV' : 'The votes are being counted on the TV'}</span>
               <span className="text-xs text-ink-2">Your phone shows each result once the TV has named the winner, so nobody’s screen gives it away.</span>
             </div>
           )}

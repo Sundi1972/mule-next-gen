@@ -811,7 +811,8 @@ describe('the politics view', () => {
     untilStage(g, 'ceremony');
     for (const view of screens(g.game)) expect(view.politics!.promise, 'not before Lena takes office').toBeNull();
     untilStage(g, 'over');
-    for (const view of screens(g.game)) expect(view.politics).toMatchObject({ governor: 'lena', promise: CAP_8 });
+    for (const view of screens(g.game)) expect(view.politics).toMatchObject({ governor: 'lena', promise: CAP_8, promiseFrom: 5 });
+    g.game.handle('lena', { type: 'setTax', percent: 7 });
 
     const state = engineOf(g.game);
     state.treasury.paid = { lena: 123, brix: 456 };
@@ -824,7 +825,7 @@ describe('the politics view', () => {
     // The next term's candidacy leaves this term's promise alone.
     playUntil(g, () => g.game.viewFor(null).month === 3, 1_200_000);
     g.game.handle('lena', { type: 'run', office: 'governor', promise: { kind: 'lower' } });
-    for (const view of screens(g.game)) expect(view.politics, 'month 3').toMatchObject({ governor: 'lena', promise: CAP_8 });
+    for (const view of screens(g.game)) expect(view.politics, 'month 3').toMatchObject({ governor: 'lena', promise: CAP_8, promiseFrom: 5, tax: { start: 7 } });
   });
 
   it("T-AC-71: the host's Continue news names the stage it moved past: opened the ballot in announce, closed it in the ballot, continued in planning proper", () => {
@@ -1053,7 +1054,7 @@ const NEW_FIELD = 'a new board field: check it against HC-4 (secret ballots stay
 function expectBoardKeys(board: MuleView) {
   const politics = board.politics!;
   expect(board.me).toBeNull();
-  expect(keysOf(politics), NEW_FIELD).toEqual(['baron', 'candidates', 'election', 'fund', 'governor', 'next', 'pay', 'promise', 'promises', 'sheriff', 'tax', 'term', 'weights']);
+  expect(keysOf(politics), NEW_FIELD).toEqual(['baron', 'candidates', 'election', 'fund', 'governor', 'next', 'pay', 'promise', 'promiseFrom', 'promises', 'sheriff', 'tax', 'term', 'weights']);
   expect(keysOf(politics.tax), NEW_FIELD).toEqual(['high', 'low', 'percent', 'start']);
   expect(keysOf(politics.pay), NEW_FIELD).toEqual(['governor', 'sheriff']);
   for (const w of politics.weights) {

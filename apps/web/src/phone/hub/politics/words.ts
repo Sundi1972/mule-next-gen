@@ -43,10 +43,15 @@ export function youPromised(p: TaxPromise, tax: number): string {
   return `You promised ${p.kind === 'cap' ? '' : 'to '}${promisedWords(p, tax)}.`;
 }
 
-/** Whether the tax keeps the Governor's promise (C68): at most a cap, under the month's start for lower, at it for hold. */
-export function promiseKept(p: TaxPromise, tax: PoliticsView['tax'], percent = tax.percent): boolean {
+/** The tax a Governor's lower or hold is judged against: the tax when the term began, else the month's start. */
+export function promiseBase(politics: Pick<PoliticsView, 'tax' | 'promiseFrom'>): number {
+  return politics.promiseFrom ?? politics.tax.start;
+}
+
+/** Whether the tax keeps the Governor's promise (C68): at most a cap, under the term's start for lower, at it for hold. */
+export function promiseKept(p: TaxPromise, politics: Pick<PoliticsView, 'tax' | 'promiseFrom'>, percent = politics.tax.percent): boolean {
   if (p.kind === 'cap') return percent <= p.percent;
-  return p.kind === 'lower' ? percent < tax.start : percent === tax.start;
+  return p.kind === 'lower' ? percent < promiseBase(politics) : percent === promiseBase(politics);
 }
 
 /** A player's name by id, from the view's players. */
@@ -54,7 +59,7 @@ export function namer(view: Pick<MuleView, 'players'>): (id: string) => string {
   return (id) => view.players.find((p) => p.id === id)?.name ?? id;
 }
 
-export const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** "Kai", "Ossa and Kai", "you, Ossa and Kai": the viewer is "you" and comes first. */
 export function listNames(ids: readonly string[], me: string | null, name: (id: string) => string): string {
@@ -77,16 +82,17 @@ export function howWords(r: Race, me: string | null, view: Room): string {
   if (r.how === 'appointed') return 'Nobody ran, so the richest player is appointed.';
   if (r.how === 'unopposed' || !a || !b) return 'Elected unopposed: nobody ran against them.';
   if (r.how === 'votes') return `Won on votes, ${a.votes} to ${b.votes}.`;
-  if (r.how === 'baron') return `A tie, ${a.votes} votes each, broken by the Land Baron's vote.`;
+  const each = `${a.votes} ${a.votes === 1 ? 'vote' : 'votes'} each`;
+  if (r.how === 'baron') return `A tie, ${each}, broken by the Land Baron's vote.`;
   const name = namer(view);
   const who = (id: string) => (id === me ? 'you' : name(id));
   const won = r.winner === me;
-  if (r.how === 'lot') return `A tie, ${a.votes} votes each, and the same plots, so it was decided by lot: ${who(r.winner)} ${won ? 'win' : 'wins'}.`;
+  if (r.how === 'lot') return `A tie, ${each}, and the same plots, so it was decided by lot: ${who(r.winner)} ${won ? 'win' : 'wins'}.`;
   const plots = (id: string) => view.players.find((p) => p.id === id)?.plots ?? 0;
   const loser = r.tallies.find((t) => t.id !== r.winner)!.id;
   const most = `the most plots wins: ${who(r.winner)} ${won ? 'have' : 'has'} ${plots(r.winner)}, ${who(loser)} ${plots(loser)}.`;
   // A Land Baron who voted for neither of the tied is no tie-break, and "nobody is Land Baron" would be false.
-  return view.politics?.baron ? `A tie, ${a.votes} votes each, so ${most}` : `A tie, ${a.votes} votes each. Nobody is Land Baron to break it, so ${most}`;
+  return view.politics?.baron ? `A tie, ${each}, so ${most}` : `A tie, ${each}. Nobody is Land Baron to break it, so ${most}`;
 }
 
 /** E-8: the Land Baron named, or who shares the most plots when nobody holds them alone. */

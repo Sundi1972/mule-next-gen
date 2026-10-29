@@ -5,7 +5,7 @@ import { Fragment, useEffect } from 'react';
 import { usePhoneGame } from '../../game';
 import { useHub } from '../Hub';
 import { Who } from './parts';
-import { OFFICE_NAME, promiseKept, promiseWords } from './words';
+import { OFFICE_NAME, promiseBase, promiseKept, promiseWords } from './words';
 
 /** Who holds which office until when, and the next election, as one line on the hub; it opens the election's desks. */
 export function Offices() {
@@ -59,14 +59,15 @@ function OfficeHolder({ office, id, until }: { office: Office; id: string; until
 
 /** E-7: the Governor's promise for the term beside the tax, kept or broken; "still" while the new Governor has yet to set it. */
 function TermPromise({ view }: { view: MuleView }) {
-  const { promise, tax, term } = view.politics!;
+  const politics = view.politics!;
+  const { promise, tax, term } = politics;
   if (!promise) return null;
-  const kept = promiseKept(promise, tax);
+  const kept = promiseKept(promise, politics);
   const fresh = term?.[0] === view.month && tax.percent === tax.start;
   const status = kept ? { text: `tax ${tax.percent}%, kept`, tone: 'text-ok' } : fresh ? { text: `tax still ${tax.percent}%`, tone: 'text-warn' } : { text: `tax ${tax.percent}%, promise broken`, tone: 'text-alert' };
   return (
     <>
-      {' · '}promised {promiseWords(promise, tax.start, false)} ·{' '}
+      {' · '}promised {promiseWords(promise, promiseBase(politics), false)} ·{' '}
       <strong className={cx('font-semibold', status.tone)} data-testid="promise-status">
         {status.text}
       </strong>
