@@ -214,6 +214,8 @@ function table(options: TableOptions = {}) {
   let refusedSent = false;
   let hostContinued = false;
   let dropAt: number | null = null;
+  let sidePickDropAt: number | null = null;
+  let miaAway = false;
   let elapsed = 0;
   const script = () => {
     const [heiko, mia] = phones as [Screen, Screen];
@@ -235,11 +237,25 @@ function table(options: TableOptions = {}) {
     if (phase === 'upkeep') for (const phone of phones) send(phone, { t: 'intent', intent: { type: 'ready' } });
     // A good's side pick has no clock either (A-7): once read, every phone not yet Done presses Ready there.
     const pick = view().auction;
+    // A-7, review F7: at the first side pick Mia's phone drops, Heiko moves on for her while she is away, and she
+    // rejoins later; the replay must hold through it.
+    if (phase === 'auction' && pick?.stage === 'status' && sidePickDropAt === null) {
+      sidePickDropAt = elapsed;
+      miaAway = true;
+      room.disconnect(mia.conn);
+      send(heiko, { t: 'intent', intent: { type: 'ready' } });
+      send(heiko, { t: 'intent', intent: { type: 'continue' } });
+    }
+    if (sidePickDropAt !== null && miaAway && elapsed === sidePickDropAt + 20 * STEP_MS) {
+      miaAway = false;
+      mia.from.seatId = null;
+      send(mia, { t: 'join', code: CODE, name: 'Mia', seatToken: mia.token! });
+    }
     if (phase === 'auction' && pick?.stage === 'status') {
       // Each good's side pick is read afresh: the next can open the moment the last closes.
       if (pick.good !== sidePickOf) [sidePickOf, sidePickFor] = [pick.good, 0];
       sidePickFor += STEP_MS;
-      if (sidePickFor >= SIDE_PICK_READ_MS) for (const phone of phones) if (!pick.walkers.find((w) => w.id === phone.from.seatId)?.done) send(phone, { t: 'intent', intent: { type: 'ready' } });
+      if (sidePickFor >= SIDE_PICK_READ_MS) for (const phone of phones) if (!(phone === mia && miaAway) && !pick.walkers.find((w) => w.id === phone.from.seatId)?.done) send(phone, { t: 'intent', intent: { type: 'ready' } });
     } else sidePickFor = 0;
     const lit = view().lit;
     if (phase === 'landGrant' && lit && !claimed) {
@@ -312,6 +328,14 @@ describe('the game record', { timeout: 60_000 }, () => {
     expect(steps.some((e) => e.type === 'answer' && e.choice), 'an answer arrived as its own step').toBe(true);
     expect(steps.some((e) => e.type === 'answer' && e.error === 'busy'), 'a call was rejected busy').toBe(true);
     expect(steps.some((e) => e.type === 'intent' && e.seat === 's1' && e.intent.type === 'continue' && !e.refused && e.hosts?.length)).toBe(true);
+    // A-7, review F7: Heiko's Continue at a side pick, while Mia's phone is away, was taken; she came back after.
+    const accepted = steps.filter((e) => e.type === 'intent' && e.seat === 's1' && e.intent.type === 'continue' && !e.refused);
+    expect(accepted.length, "the host's Continue in planning and at a side pick").toBeGreaterThanOrEqual(2);
+    const sidePick = accepted.at(-1)!;
+    const drops = steps.filter((e) => e.type === 'connection' && !e.connected && e.seq < sidePick.seq);
+    const backs = steps.filter((e) => e.type === 'connection' && e.connected && e.seq > sidePick.seq);
+    expect(drops.length, "Mia's phone dropped before the side pick's Continue").toBeGreaterThanOrEqual(2);
+    expect(backs.length, 'and came back after it').toBeGreaterThanOrEqual(1);
     expect(steps.some((e) => e.type === 'connection' && !e.connected)).toBe(true);
     expect(steps.some((e) => e.type === 'connection' && e.connected)).toBe(true);
     expect(steps.some((e) => e.type === 'intent' && e.intent.type === 'claim' && !e.refused)).toBe(true);
@@ -630,7 +654,8 @@ describe.runIf(FULL)('playbooks in the record', { timeout: 60_000 }, () => {
       expect(step).toMatchObject({ type: 'intent', seat: e.seat, intent: { type: 'ready' }, at: e.at, seq: e.seq });
     });
 
-    const last = record.events.filter(isStep).at(-1)!;
+    // The live recorder's last step: after game over it may still log AI chat output, which the file need not hold.
+    const last = t.recorder().record.events.filter(isStep).at(-1)!;
     t.recorder().playbook({ seat: 's3', month: 1, phase: 'month', playbook: playbookOf('s3', 0) });
     expect(t.recorder().record.events.at(-1), 'between steps, the last step stamps it').toMatchObject({ type: 'playbook', seat: 's3', at: last.at, seq: last.seq });
 
