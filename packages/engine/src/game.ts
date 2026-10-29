@@ -1,6 +1,6 @@
 import { endAuction, startAuction } from './auction.js';
 import { RuleError } from './errors.js';
-import { DEFAULT_SPECIES, DEVELOPMENT, GAME, GLINT, GOOD_CONFIG, mapSize, MULE, POLLUTION, SPECIES_PERK, START, TAX, UPKEEP, WOLVES } from './config.js';
+import { DEFAULT_SPECIES, DEV_STEER, DEVELOPMENT, GAME, GLINT, GOOD_CONFIG, mapSize, MULE, POLLUTION, SPECIES_PERK, START, TAX, UPKEEP, WOLVES } from './config.js';
 import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './economy.js';
 import { rollPlayerEvent } from './events.js';
 import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
@@ -268,9 +268,58 @@ export function installMule(state: GameState, playerId: string, x: number, y: nu
   if (tile.owner !== playerId) throw new RuleError('Not your plot');
   // Installing over an existing MULE replaces it; the old one runs away, as in the original.
   if (tile.outfit !== p.carriedMule) tile.runMonths = 0;
+  // A MULE taken off this plot and put back unchanged keeps the plot's run (AM-2: nothing lost).
+  const taken = p.takenMule;
+  if (taken && taken.x === x && taken.y === y && taken.outfit === p.carriedMule) tile.runMonths = taken.runMonths;
   tile.outfit = p.carriedMule;
   p.carriedMule = null;
+  delete p.takenMule;
   p.installedThisTurn = true;
+}
+
+// --- Re-outfitting (arcade spec AM-2): take a MULE off a plot, fit it for another good, install it again --------
+
+/** Takes the MULE off one of your plots onto your lead: the plot makes nothing until a MULE is installed on it again. */
+export function takeMule(state: GameState, playerId: string, x: number, y: number): void {
+  const p = developer(state, playerId);
+  if (p.carriedMule) throw new RuleError('Already leading a MULE');
+  const tile = plotAt(state, x, y);
+  if (tile.owner !== playerId) throw new RuleError('Not your plot');
+  if (!tile.outfit) throw new RuleError('No MULE on this plot');
+  p.takenMule = { x, y, outfit: tile.outfit, runMonths: tile.runMonths };
+  p.carriedMule = tile.outfit;
+  tile.outfit = null;
+  tile.runMonths = 0;
+}
+
+/** What this player pays to re-outfit a MULE for `outfit`: DEV_STEER.reoutfitCost of the outfitter's price. */
+export function reoutfitCostFor(state: GameState, playerId: string, outfit: Outfit): number {
+  return Math.round(outfitCostFor(state, playerId, outfit) * DEV_STEER.reoutfitCost);
+}
+
+/** Fits a MULE already outfitted for one good for another, at an outfitter. The same good is refused. */
+export function reoutfitMule(state: GameState, playerId: string, outfit: Outfit): void {
+  const p = developer(state, playerId);
+  if (!p.carriedMule) throw new RuleError('No MULE to re-outfit');
+  if (p.carriedMule === 'empty') throw new RuleError('This MULE is not outfitted yet: outfit it');
+  requireLed(p);
+  if (p.carriedMule === outfit) throw new RuleError('The MULE is already outfitted for that');
+  const cost = reoutfitCostFor(state, playerId, outfit);
+  if (p.money < cost) throw new RuleError('Not enough money');
+  p.money -= cost;
+  state.store.capital += cost;
+  p.carriedMule = outfit;
+}
+
+/** The turn ends with a taken MULE still carried: it goes back to its plot with the outfit and run it had there. */
+function returnTakenMule(state: GameState, p: Player): void {
+  const taken = p.takenMule;
+  if (!taken) return;
+  const tile = plotAt(state, taken.x, taken.y);
+  tile.outfit = taken.outfit;
+  tile.runMonths = taken.runMonths;
+  p.carriedMule = null;
+  delete p.takenMule;
 }
 
 // --- Development's moments (arcade spec C4): the floor's wolves and glint pay out through these -------------
@@ -362,13 +411,15 @@ export function pubPayoutFor(state: GameState, playerId: string, secondsLeft: nu
 
 /**
  * The pub ends your development turn and pays cash: more the more time you
- * have left, and more later in the game. A MULE you were leading runs off.
+ * have left, and more later in the game. A MULE you were leading runs off,
+ * but one taken off your plot goes back to it (AM-2).
  * The server says how many seconds the player had left. Returns the payout.
  */
 export function visitPub(state: GameState, playerId: string, secondsLeft: number): number {
   const p = developer(state, playerId);
   const payout = pubPayoutFor(state, playerId, secondsLeft);
   p.money += payout;
+  returnTakenMule(state, p);
   p.carriedMule = null;
   delete p.muleBolted;
   p.doneDeveloping = true;
@@ -413,8 +464,9 @@ export function advancePhase(state: GameState): void {
     startDevelopment(state);
   }
   if (next === 'production') {
-    // A MULE nobody installed runs away at the end of development.
+    // A MULE nobody installed runs away at the end of development; one taken off a plot goes back to it (AM-2).
     for (const p of state.players) {
+      returnTakenMule(state, p);
       p.carriedMule = null;
       delete p.muleBolted;
     }

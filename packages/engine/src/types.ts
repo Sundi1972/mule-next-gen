@@ -96,6 +96,11 @@ export interface Player {
    * again only once caught. Absent means false.
    */
   muleBolted?: boolean;
+  /**
+   * The plot the carried MULE was taken off this turn (arcade AM-2), with the outfit and run it had there: if the turn
+   * ends with it still carried, it goes back. Absent when the carried MULE was not taken off a plot.
+   */
+  takenMule?: { x: number; y: number; outfit: Outfit; runMonths: number };
   reputation: number;
   /** Plots claimed in the current land grant. */
   claimsThisGrant: number;
