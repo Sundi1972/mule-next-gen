@@ -10,6 +10,8 @@ export type AuditScope = {
   skip: string[];
   /** Controls whose taps are not counted, as `selector`s; see the step that passes them for why. */
   tapsNotCounted?: string[];
+  /** Text ruled to truncate, as `selector`s: its truncation is reported in `ruled`, not failed; see the step for why. */
+  truncates?: string[];
 };
 
 export type AuditRead = {
@@ -19,6 +21,8 @@ export type AuditRead = {
   railWindow: number | null;
   /** The name in the rail header: its text, and whether it shows whole. */
   name: { text: string; whole: boolean } | null;
+  /** Each truncation the scope's `truncates` allowed. */
+  ruled: string[];
 };
 
 export const MIN_TAP = 32;
@@ -48,6 +52,8 @@ export const AUDIT_JS = String.raw`(scope) => {
   const srOnly = (el) => !!el.closest('.sr-only');
   const all = roots.flatMap((r) => [r, ...r.querySelectorAll('*')]).filter((el, i, a) => a.indexOf(el) === i && inScope(el) && !srOnly(el) && shown(el));
   const fails = [];
+  const ruled = [];
+  const truncates = scope.truncates || [];
 
   const INTERACTIVE = 'button,a[href],input:not([type=hidden]),select,textarea,summary,[role=button],[role=radio],[role=tab],[role=checkbox],[role=switch],[role=slider],[tabindex]:not([tabindex="-1"])';
   const notCounted = scope.tapsNotCounted || [];
@@ -66,7 +72,7 @@ export const AUDIT_JS = String.raw`(scope) => {
   for (const el of all) {
     if (el.ownerSVGElement) continue;
     const cs = getComputedStyle(el);
-    if (cs.textOverflow === 'ellipsis' && el.scrollWidth > el.clientWidth + 1) fails.push(id(el) + ': truncated "' + short(el.textContent) + '", ' + el.scrollWidth + ' in ' + el.clientWidth + ' px');
+    if (cs.textOverflow === 'ellipsis' && el.scrollWidth > el.clientWidth + 1) (truncates.some((s) => el.matches(s)) ? ruled : fails).push(id(el) + ': truncated "' + short(el.textContent) + '", ' + el.scrollWidth + ' in ' + el.clientWidth + ' px');
     else {
       const hx = cs.overflowX === 'hidden' || cs.overflowX === 'clip';
       const hy = cs.overflowY === 'hidden' || cs.overflowY === 'clip';
@@ -134,5 +140,44 @@ export const AUDIT_JS = String.raw`(scope) => {
     fails,
     railWindow: body ? r1(body.getBoundingClientRect().height) : null,
     name: nameEl ? { text: nameEl.textContent, whole: nameEl.scrollWidth <= nameEl.clientWidth } : null,
+    ruled,
   };
+}`;
+
+/**
+ * The in-page read of C20's month end and game over at the current viewport (WS6's fidelity review at 667×375): the
+ * league table and the final standings stay inside their panel with no sideways scroll, the folded Now card's title is
+ * one line, game over stays inside the stage, and no line of your Worth is cut. Returns one line per break.
+ */
+export const MONTH_END_JS = String.raw`() => {
+  const r1 = (n) => Math.round(n * 10) / 10;
+  const shown = (el) => { const b = el.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
+  const fails = [];
+  for (const league of [...document.querySelectorAll('[data-testid=league]')].filter(shown)) {
+    const where = league.closest('[data-testid=scores]') ? 'the final standings' : 'the league table';
+    const panel = league.getBoundingClientRect();
+    const out = Math.max(...[...league.querySelectorAll('th,td')].map((c) => c.getBoundingClientRect().right)) - panel.right;
+    if (out > 0.5) fails.push(where + ' runs ' + r1(out) + ' px past its panel');
+    for (let a = league.parentElement; a && a !== document.body; a = a.parentElement) {
+      if (a.scrollWidth > a.clientWidth + 1 && getComputedStyle(a).overflowX !== 'visible') fails.push(where + ' scrolls sideways in ' + (a.getAttribute('data-testid') || a.tagName.toLowerCase()) + ', ' + a.scrollWidth + ' in ' + a.clientWidth + ' px');
+    }
+  }
+  const title = document.querySelector('[data-testid=now-title]');
+  if (title && shown(title)) {
+    const cs = getComputedStyle(title);
+    const h = title.getBoundingClientRect().height;
+    if (h > parseFloat(cs.lineHeight) * 1.5) fails.push('the Now title takes ' + r1(h) + ' px, more than one ' + cs.lineHeight + ' line');
+  }
+  const over = document.querySelector('[data-testid=phone-gameover], [data-testid=phone-only-gameover]');
+  if (over) {
+    const stage = over.closest('[data-testid=stage]').getBoundingClientRect();
+    const parts = [over, ...over.querySelectorAll('*')].filter(shown).map((e) => e.getBoundingClientRect());
+    const right = Math.max(...parts.map((b) => b.right)) - stage.right;
+    const bottom = Math.max(...parts.map((b) => b.bottom)) - stage.bottom;
+    if (right > 0.5 || bottom > 0.5) fails.push('game over runs past the stage: ' + r1(right) + ' px right, ' + r1(bottom) + ' px down');
+  }
+  for (const dt of [...document.querySelectorAll('[data-testid=your-worth] dt')].filter(shown)) {
+    if (dt.scrollWidth > dt.clientWidth + 1) fails.push('your Worth line "' + dt.textContent + '" is cut, ' + dt.scrollWidth + ' in ' + dt.clientWidth + ' px');
+  }
+  return fails;
 }`;
