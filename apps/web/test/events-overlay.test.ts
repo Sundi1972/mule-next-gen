@@ -140,10 +140,10 @@ function client(state: object): TableClient {
 }
 const base = { status: 'playing', chat: [], emotes: [], toasts: [], notice: null, clockOffset: 0, handoffCode: null, code: 'ABCD' };
 
-async function phone(me: string, boards: number, view: MuleView) {
+async function phone(me: string, boards: number, view: MuleView, my: Partial<MyView> = {}) {
   const { PhoneApp } = await import('../src/phone/PhoneApp');
   const { ClientProvider } = await import('../src/net/react');
-  const game = { ...view, me: mine(me) };
+  const game = { ...view, me: { ...mine(me), ...my } };
   return createElement(ClientProvider, { client: client({ ...base, role: 'player', seatId: me, view: table(game, boards) }), children: createElement(PhoneApp, { room: 'ABCD' }) });
 }
 async function tv(view: MuleView) {
@@ -237,14 +237,26 @@ describe('B-AC-4 (C10): a phase’s events play over its screen on the phone', (
     expect(inside(html, 'phone-event-overlay')).toContain('data-testid="skip"');
   });
 
-  it('B-AC-4: with a board, the light card over the screen: no map of its own, the screen still usable', async () => {
-    const html = await render(await phone(OSSA, 1, viewAt(ROLL_S)));
-    const overlay = tag(html, 'phone-event-overlay');
-    expect(overlay).toContain('data-mode="light"');
-    expect(overlay).toContain('pointer-events-none');
-    expect(inside(html, 'phone-event-overlay')).toContain('data-testid="phone-card"');
-    expect(inside(html, 'phone-event-overlay')).not.toContain('data-testid="event-map"');
-    expect(inside(html, 'phone-event-overlay')).not.toContain('data-testid="skip"');
+  it('B-AC-4: with a board, the light card: the gallery’s PhoneShow over the screen, its map never playing the event', async () => {
+    const html = await render(await phone(LENA, 1, viewAt(RESULT_S)));
+    const over = inside(html, 'phone-event-overlay');
+    expect(tag(html, 'phone-event-overlay')).toContain('data-mode="light"');
+    expect(over).toContain('data-testid="phone-card"');
+    // Its own map only marks its own: no weather, no roll call, no tap target; its own colonist carries its sick tag.
+    expect(over).toContain('data-testid="event-map"');
+    expect(over).not.toContain('data-testid="roll-call"');
+    expect(over).not.toContain('data-testid="skip"');
+    expect(over.match(/data-testid="colonist-[^"]+"/g)).toEqual(['data-testid="colonist-s1"']);
+    expect(inside(over, 'colonist-s1')).toContain('sick-tag');
+  });
+
+  it('B-AC-4: through development’s hold (no clocks yet) the overlay covers the whole screen, with a TV and alone', async () => {
+    for (const boards of [0, 1]) {
+      const held = { ...viewAt(ROLL_S), phaseEndsAt: null } as MuleView;
+      const html = await render(await phone(OSSA, boards, held, { devEndsAt: null }));
+      expect(tag(html, 'phone-event-overlay'), `boards ${boards}`).toMatch(/class="absolute inset-0 z-40 /);
+      expect(tag(html, 'phone-event-overlay'), `boards ${boards}`).not.toContain('pointer-events-none');
+    }
   });
 
   it('B-AC-4: nothing over production (its screen plays its own show), nor in a quiet phase, nor outside the show', async () => {
@@ -326,8 +338,8 @@ describe('T-AC-10 display / C11: two sick players play in ONE roll call, on the 
 
 describe('RULE-3 for the overlay (T-AC-5 style): boards 0/1 × reduced, and a tap', () => {
   const rows = [
-    { boards: 1, reduced: false, mode: 'light', map: false },
-    { boards: 1, reduced: true, mode: 'light', map: false },
+    { boards: 1, reduced: false, mode: 'light', map: true },
+    { boards: 1, reduced: true, mode: 'light', map: true },
     { boards: 0, reduced: false, mode: 'solo', map: true },
     { boards: 0, reduced: true, mode: 'solo', map: true },
   ];

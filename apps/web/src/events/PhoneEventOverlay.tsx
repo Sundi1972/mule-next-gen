@@ -28,8 +28,9 @@ const BUZZ_MS = 200;
 /**
  * The phone's event overlay (C10), drawn in the shell's layer over whatever phase screen is up. It plays while the
  * server clock is inside the phase's show, never in production (its screen plays its own). RULE-3: with a TV in the
- * room, the light card over the screen and a buzz, the screen still usable under it; alone, the phone plays the show
- * itself over the screen, and a tap on its map skips to the result, then to the next event, then out.
+ * room, the gallery's PhoneShow (its own plots marked, the light card, a buzz); alone, its PhoneSolo: the phone plays the
+ * show itself, and a tap on its map skips to the result, then to the next event, then out. Either covers the screen
+ * for the whole show: a timed phase's clocks wait for it (RULE-4), so the screen under it has nothing to show yet.
  */
 export function PhoneEventOverlay({ view }: { view: MuleView }) {
   const now = useServerNow(IDLE_MS);
@@ -57,39 +58,30 @@ function PhoneEventShow({ view }: { view: MuleView }) {
   if (t >= show.end) return null;
   return (
     <EventShow events={show.events} introMs={show.introMs} t={t} mode={solo ? 'solo' : 'tv'} reduced={reduced} width={view.width} height={view.height} tiles={tiles} players={players}>
-      {solo ? (
-        <div className="absolute inset-0 z-40 flex gap-2 bg-table p-2 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] text-ink" data-testid="phone-event-overlay" data-mode="solo" data-phase={view.phase}>
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <div className="flex items-center gap-2 px-1">
-              <span className="font-display text-sm font-bold">{PHASE_NAME[view.phase]}</span>
-              <span className="label-caps text-[10px]!">Month {view.month}</span>
-              <span className="ml-auto flex items-center gap-1 text-xs text-ink-2">
-                <PlayerMark slot={slot} size={14} />
-                {self.name}
-              </span>
-            </div>
-            <div className="flex min-h-0 flex-1 items-center justify-center [container-type:size]">
-              <div style={{ width: `min(100cqw, calc(100cqh * ${view.width} / ${view.height}))` }}>
-                <EventLivingMap size="phone" focusSlot={slot} onSkip={(to) => setAhead((a) => a + to - t)} />
-              </div>
+      {/* Both cover the phase's screen for the whole show: the gallery's PhoneSolo and PhoneShow, a phone held sideways. */}
+      <div className="absolute inset-0 z-40 flex gap-2 bg-table p-2 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] text-ink" data-testid="phone-event-overlay" data-mode={solo ? 'solo' : 'light'} data-phase={view.phase}>
+        {!solo && <AnnounceBuzz />}
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <div className="flex items-center gap-2 px-1">
+            <span className="font-display text-sm font-bold">{PHASE_NAME[view.phase]}</span>
+            <span className="label-caps text-[10px]!">Month {view.month}</span>
+            <span className="ml-auto flex items-center gap-1 text-xs text-ink-2">
+              <PlayerMark slot={slot} size={14} />
+              {self.name}
+            </span>
+          </div>
+          <div className="flex min-h-0 flex-1 items-center justify-center [container-type:size]">
+            <div style={{ width: `min(100cqw, calc(100cqh * ${view.width} / ${view.height}))` }}>
+              {/* Alone the map plays the show and is the tap target; with a TV it only marks yours (the light card does the rest). */}
+              <EventLivingMap size="phone" focusSlot={slot} light={!solo} {...(solo ? { onSkip: (to: number) => setAhead((a) => a + to - t) } : {})} />
             </div>
           </div>
-          <aside className="relative flex w-(--rail) shrink-0 flex-col gap-2 rounded-panel border border-holo-line bg-panel p-2.5" data-testid="phone-event-rail">
-            <EventSoloRail me={me.id} />
-            <EventSkipHint className="mt-auto self-end" />
-          </aside>
         </div>
-      ) : (
-        <div
-          className="pointer-events-none absolute bottom-3 right-[calc(var(--rail)+0.75rem+env(safe-area-inset-right))] z-40 flex w-[268px] flex-col gap-2 rounded-panel border border-holo-line bg-panel/95 p-2.5 text-ink shadow-chip"
-          data-testid="phone-event-overlay"
-          data-mode="light"
-          data-phase={view.phase}
-        >
-          <AnnounceBuzz />
-          <EventTvPhoneRail me={me.id} />
-        </div>
-      )}
+        <aside className="relative flex w-(--rail) shrink-0 flex-col gap-2 rounded-panel border border-holo-line bg-panel p-2.5" data-testid="phone-event-rail">
+          {solo ? <EventSoloRail me={me.id} /> : <EventTvPhoneRail me={me.id} />}
+          {solo && <EventSkipHint className="mt-auto self-end" />}
+        </aside>
+      </div>
     </EventShow>
   );
 }
