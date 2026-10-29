@@ -285,12 +285,17 @@ export type DevAction = { kind: 'install'; index: number; outfit: Outfit } | { k
  * without leaving the reserve, no factory it can't feed, nothing when the
  * corral is empty or the month's MULEs are used.
  */
-/** A walk-aware seat's development clock: where it is, the seconds it has left, and the seconds its taps for one MULE take. */
-export interface DevWalk {
-  at: DevPlace;
-  left: number;
-  taps: number;
-}
+/**
+ * A walk-aware seat's development clock: the seconds it has left and the seconds its taps for one MULE take, and where
+ * it is (where the game walks, DEV_WALK), or, where the game steers (the arcade floor), the floor's own estimate.
+ */
+export type DevWalk = { left: number; taps: number } & ({ at: DevPlace; floor?: undefined } | { floor: FloorLegs; at?: undefined });
+
+/**
+ * On the arcade floor, at RULE-2's speed: the seconds from where the colonist stands to the corral, the outfitter and
+ * out to plot `index` (`there`), and from the plot back to the pub (`pub`).
+ */
+export type FloorLegs = (index: number, outfit: Outfit) => { there: number; pub: number };
 
 export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, walk?: DevWalk): Shortlist<DevAction> {
   const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
@@ -310,8 +315,12 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
   for (const tile of idle) {
     const index = tileIndex(obs.width, tile.x, tile.y);
     // A walk-aware seat walks to the corral, then out to the plot; the seconds are worth what its time is.
-    const walking = walk ? walkSeconds(obs, mind.me, walk.at, 'corral') + walkSeconds(obs, mind.me, 'corral', index) : 0;
+    const walked = walk?.at !== undefined ? walkSeconds(obs, mind.me, walk.at, 'corral') + walkSeconds(obs, mind.me, 'corral', index) : 0;
     for (const outfit of OUTFITS) {
+      // On the floor the walk depends on the outfitter too, and the pub must still be reached on the clock after it.
+      const legs = walk?.floor?.(index, outfit);
+      const walking = legs ? legs.there : walked;
+      const back = legs ? legs.pub : 0;
       const install = installGain(obs, o, tile, outfit, mind);
       const { cost, net } = install;
       const gain = install.gain - walking * secondValue(obs, mind.me);
@@ -323,7 +332,7 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
       let veto: string | null = null;
       if (obs.store.mules <= 0) veto = 'the corral is empty';
       else if (mulesSoFar >= mind.level.mulesPerMonth) veto = `already led ${mulesSoFar} MULEs out this month`;
-      else if (walk && walking + walk.taps > walk.left) veto = `the walk takes ${Math.round(walking + walk.taps)} s, ${Math.round(walk.left)} s left`;
+      else if (walk && walking + back + walk.taps > walk.left) veto = `the walk takes ${Math.round(walking + back + walk.taps)} s, ${Math.round(walk.left)} s left`;
       else if (cashAfter < 0) veto = `it costs ${cr(cost)}, more than the ${cr(p.money)} on hand`;
       // What the MULE makes arrives before the auction the reserve is kept for, so it counts toward it.
       else if (cashAfter + Math.max(0, net) < keepBack) veto = `it would leave ${cr(cashAfter)}, under the ${cr(keepBack)} kept for upkeep`;
