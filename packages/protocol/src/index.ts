@@ -430,8 +430,8 @@ export interface ProductionLineView {
   parts: { why: ProductionReason; delta: number }[];
 }
 
-/** The month's event as the map shows it. */
-export interface ProductionEventView {
+/** One event as every screen shows it, whichever phase fired it: production's map and every other phase's show. */
+export interface EventView {
   key: EventKey;
   kind: EventKind;
   title: string;
@@ -452,11 +452,24 @@ export interface ProductionEventView {
   playMs: number;
 }
 
+/** Production's name for EventView, from before every phase had a show. */
+export type ProductionEventView = EventView;
+
+/** When the current phase's event show plays (RULE-1): its intro, then each event's playMs in fired order. */
+export interface EventShowView {
+  /** Epoch ms on the server's clock when the intro starts: in production, where its map plays it; otherwise as the phase opens. */
+  startsAt: number;
+  /** The whole show, intro included, in ms at full pace like playMs: never more than the cap. */
+  showMs: number;
+  /** How long the intro plays before the first event, in ms at full pace. */
+  introMs: number;
+}
+
 /** What every plot made this month and what the month's event did: never anything a player holds. */
 export interface ProductionView {
   /** In reading order: row by row, left to right. */
   lines: ProductionLineView[];
-  events: ProductionEventView[];
+  events: EventView[];
   /** How long the production phase was scheduled to run, in ms; the show's timeline stretches over it. */
   lengthMs: number;
   /** How long the phase's intro plays before the first event, in ms: 0 in a quiet month. */
@@ -507,6 +520,10 @@ export interface MuleView {
   landAuction: LandAuctionView | null;
   /** The month's production show, during production and upkeep. */
   production: ProductionView | null;
+  /** The events the current phase fired, in fired order; empty when it fired none. Optional only for older fixtures: the server always sends it. */
+  events?: EventView[];
+  /** When those events play; null when there are none. Optional only for older fixtures: the server always sends it. */
+  eventShow?: EventShowView | null;
   /** Offices, tax, vote weights and the election; null when the game plays without politics. */
   politics: PoliticsView | null;
 }
