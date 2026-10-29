@@ -591,6 +591,22 @@ export default function App() {
       <div className="mt-2 flex flex-col gap-2" data-testid="arcade-links">
         <Links states={[{ id: ARCADE_CONTENTS, title: 'Arcade walking: contents' }, ...ARCADE_ROUTES]} />
       </div>
+      <h2 className="label-caps mt-6">For approval 2026-10-29 · the land grant on a phone, muting an AI</h2>
+      <p className="mt-1 max-w-3xl text-sm text-ink-2">
+        Two pages of their own. The land grant's compact footer (CLAIM and Ready side by side, Waiting for on one line): the rail window that shows the lit plot goes from 20 px to about 120 px on a phone. Muting an AI on your phone: one tap on its seat, its whispers, lines and offers stop on your phone; the TV and its play are unchanged.
+      </p>
+      <ul className="mt-2 flex flex-col gap-1 text-sm" data-testid="page-links">
+        <li>
+          <a href="/grant.html" className="text-holo underline" data-testid="link-grant">
+            The land grant · a compact footer
+          </a>
+        </li>
+        <li>
+          <a href="/mute.html" className="text-holo underline" data-testid="link-mute">
+            Mute an AI on your phone
+          </a>
+        </li>
+      </ul>
       <h2 className="label-caps mt-6">For approval · UX audit</h2>
       <p className="mt-1 max-w-3xl text-sm text-ink-2">
         The priority-1 screens, redesigned from the UX audit (docs/research/2026-10-28-ws6-ux-audit.md): every change numbered on the screen, with the player intent it serves and why. The planning hub first, then the election, the new month-end league table, the goods auction and development.
