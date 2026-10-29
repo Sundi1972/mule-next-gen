@@ -1,5 +1,5 @@
 import type { MuleView } from '@mule/protocol';
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import {
   Creature,
   cx,
@@ -14,19 +14,12 @@ import {
   SLOT_COLOR,
   useEnclosingEventShow,
   useEventLivingView,
-  useEventReducedMotion,
   useSeatSpecies,
-  type ShowPlayer,
   type Slot,
 } from '@mule/ui';
-import { fmt, mapTiles, PHASE_NAME, seatSpecies, slotOf } from '../game/derive';
-import { useServerNow } from '../net/react';
+import { fmt, PHASE_NAME, seatSpecies, slotOf } from '../game/derive';
 import { TvHeader } from '../table/TableApp';
-import { overlayShowAt } from './clock';
-
-/** How often the TV looks at the server clock: between shows only to see one start; while one plays, every frame. */
-const IDLE_MS = 200;
-const FRAME_MS = 33;
+import { useOverlayOn, useOverlayShow } from './overlay';
 
 const InLayer = createContext(false);
 
@@ -39,8 +32,7 @@ export const useInTvEventLayer = () => useContext(InLayer);
  * which plays its own. If the show throws it goes away and the screen under it still renders (EventBoundary).
  */
 export function TvEventLayer({ game, children }: { game: MuleView; children: ReactNode }) {
-  const now = useServerNow(IDLE_MS);
-  const on = overlayShowAt(game, now) !== null;
+  const on = useOverlayOn(game);
   return (
     <InLayer.Provider value>
       <div className="relative h-[720px] w-[1280px]">
@@ -56,16 +48,13 @@ export function TvEventLayer({ game, children }: { game: MuleView; children: Rea
 }
 
 /** The show over the phase screen, on the server's clock. */
-export function TvEventOverlay({ game }: { game: MuleView }) {
-  const show = overlayShowAt(game, useServerNow(FRAME_MS));
-  const reduced = useEventReducedMotion();
-  const tiles = useMemo(() => mapTiles(game), [game]);
-  const players = useMemo<ShowPlayer[]>(() => game.players.map((p) => ({ id: p.id, slot: (slotOf(game, p.id) ?? 0) as Slot, name: p.name })), [game]);
+function TvEventOverlay({ game }: { game: MuleView }) {
+  const { show, stage } = useOverlayShow(game);
   if (!show) return null;
   return (
     <SeatSpeciesProvider value={seatSpecies(game)}>
     <div className="absolute inset-0 z-40 flex flex-col gap-4 bg-table px-10 py-6 text-ink" data-testid="tv-event-overlay" data-event-phase={game.phase}>
-      <EventShow events={show.events} introMs={show.introMs} t={show.t} mode="tv" reduced={reduced} width={game.width} height={game.height} tiles={tiles} players={players}>
+      <EventShow events={show.events} introMs={show.introMs} t={show.t} mode="tv" {...stage}>
         <TvHeader game={game} title={PHASE_NAME[game.phase]} extra={<EventPips />} />
         <div className="flex min-h-0 flex-1 gap-6 [container-type:size]">
           <div className="shrink-0 self-start" style={{ width: `min(820px, calc(100cqh * ${game.width} / ${game.height}))` }}>

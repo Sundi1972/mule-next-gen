@@ -1,5 +1,6 @@
 import { GOOD_NAME, type Good } from '../components/tokens';
 import { signLook, type ShowCast } from './frame';
+import { sickBecause } from './sick';
 import type { EventSegment } from './timing';
 import type { ShowEventKey, ShowEventView, ShowPhase } from './types';
 
@@ -21,8 +22,6 @@ const names = (evs: ShowEventView[], cast: ShowCast) => {
   const all = evs.map((e) => cast.name(cast.playerOf(e) ?? ''));
   return all.length > 1 ? `${all.slice(0, -1).join(', ')} and ${all.at(-1)}` : (all[0] ?? '');
 };
-/** Why a sick player fell sick, from the server's line ("Lena fell sick: the air is Smoggy."), or null. */
-const sickBecause = (ev: ShowEventView) => ev.line.match(/fell sick: (.+?)\.?$/)?.[1] ?? null;
 
 /** Who a segment is about: a roll call names everyone in it. */
 export function eventSegWho(seg: EventSegment, cast: ShowCast): string {
@@ -106,7 +105,7 @@ export interface EventYouSummary {
 function youFor(ev: ShowEventView, id: string, cast: ShowCast): EventYouSummary | null {
   if (ev.key === 'sickness') {
     if (cast.playerOf(ev) !== id) return null;
-    const why = sickBecause(ev);
+    const why = sickBecause(ev.line);
     return { headline: 'You’re sick', short: 'sick', detail: `You walk at half pace this turn.${why ? ` Why: ${why}.` : ''}`, change: {}, sick: true };
   }
   const detail = YOU[ev.key]?.(ev);

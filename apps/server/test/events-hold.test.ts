@@ -1,6 +1,8 @@
 import { DEVELOPMENT, EVENT_SHOW, EVENTS, RuleError, WALK, type EventKey, type GameState, type MonthEvent, type MonthReport, type Phase } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+// The client's own reading of a sick line: the reason crosses the seam as prose, so the two must agree.
+import { sickBecause } from '../../../packages/ui/src/events/sick.js';
 import { AI_DEV_TICK_MS, MuleGame } from '../src/mule-game.js';
 import { fakeContext, readyAll, seats, toDevelopment } from './fake-context.js';
 
@@ -124,6 +126,13 @@ describe('T-AC-10: development lists the players who fell sick at its start as b
     expect(line((state) => state.history.push({ month: 0, events: [], before: {}, produced: {}, pollutionBy: { s2: 20 } } as unknown as MonthReport))).toBe('Mia fell sick: their plots foul the air.');
   });
 
+  it('T-AC-10: the phone reads each reason back out of the server\'s line, as the sick player\'s "Why:"', () => {
+    const why = (prepare: (state: GameState) => void) => sickBecause(sickAt(['s2'], { prepare }).game.viewFor(null).events![0]!.line);
+    expect(why(() => {})).toBe('bad luck');
+    expect(why((state) => (state.air = 40))).toBe('the air is bad');
+    expect(why((state) => state.history.push({ month: 0, events: [], before: {}, produced: {}, pollutionBy: { s2: 20 } } as unknown as MonthReport))).toBe('their plots foul the air');
+  });
+
   it('T-AC-10: a player still sick from before is not listed: not after development, and not in a development where nobody fell sick', () => {
     const { game, state, advance } = sickAt(['s1']);
     expect(game.viewFor(null).events).toHaveLength(1);
@@ -232,7 +241,7 @@ describe('T-AC-7, T-AC-8: an auction that fired events opens only when their sho
     const { game, ctx, advance, enteredAt } = toPhase('auction', ['pestSwarm'], { pestSwarm: 'auction' });
     const ticks = countTicks(game, 'auctionTick');
     const show = game.viewFor(null).eventShow!;
-    expect(show).toEqual({ startsAt: enteredAt, showMs: 7_000, introMs: 1_800, endsAt: enteredAt + 7_000 });
+    expect(show).toEqual({ startsAt: enteredAt, showMs: 7_000, introMs: 1_800, endsAt: enteredAt + 7_000, held: true });
     expectHeld(() => game.handle('s1', { type: 'declare', side: 'pass' }));
     advance(show.endsAt - 1 - ctx.now());
     expectHeld(() => game.handle('s1', { type: 'declare', side: 'pass' }));
@@ -289,9 +298,19 @@ describe('T-AC-8: an untimed phase and a phase without events are not held (RULE
     advance(1);
     const view: MuleView = game.viewFor(null);
     expect({ month: view.month, phase: view.phase }).toEqual({ month: 2, phase: 'planning' });
-    expect(view.eventShow).toMatchObject({ showMs: 8_800 });
+    expect(view.eventShow).toMatchObject({ showMs: 8_800, held: false });
     readyAll(game);
     expect(game.viewFor(null).phase).not.toBe('planning');
+  });
+
+  it('T-AC-8: the view says whether the server holds the phase for its show: development\'s roll call is held, the month end (no clock) is not', () => {
+    const sick = sickAt(['s1']);
+    expect(sick.game.viewFor(null).eventShow).toMatchObject({ held: true });
+    expectHeld(() => sick.game.handle('s2', { type: 'buyMule' }));
+    nobodyRollsSick();
+    const { game } = toPhase('upkeep', ['drought'], { drought: 'upkeep' });
+    expect(game.viewFor(null).eventShow).toMatchObject({ showMs: 8_800, held: false });
+    game.handle('s1', { type: 'ready' });
   });
 });
 
@@ -299,6 +318,6 @@ describe('T-AC-10: eventShow.endsAt is where the show ends on the server clock, 
   it.each([1, 0.1])('T-AC-10: at phaseScale %s, an auction show of 7 000 ms ends at startsAt + 7 000 × scale', (scale) => {
     nobodyRollsSick();
     const { game, enteredAt } = toPhase('auction', ['pestSwarm'], { pestSwarm: 'auction' }, scale);
-    expect(game.viewFor(null).eventShow).toEqual({ startsAt: enteredAt, showMs: 7_000, introMs: 1_800, endsAt: enteredAt + Math.round(7_000 * scale) });
+    expect(game.viewFor(null).eventShow).toEqual({ startsAt: enteredAt, showMs: 7_000, introMs: 1_800, endsAt: enteredAt + Math.round(7_000 * scale), held: true });
   });
 });
