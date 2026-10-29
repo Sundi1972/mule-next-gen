@@ -9,6 +9,9 @@ import { Board, Game, LaptopFrame, PhoneFrame, TABLE, TvFrame } from '../../harn
 import { IntentNotes, IntentNotesProvider, type IntentNoteData } from '../../proposed/IntentNote';
 import { AuctionShell } from './auction/AuctionShell';
 import { auctionOf, AWAY, CRYSTITE, FOOD, HOST, SALES_TAX, SHIP, shipPrice, VIEW2, WATER, type Scenario } from './auction/fixture';
+
+/** In a real game the ship often wants several goods: the status screens show how the rest read (one sentence). */
+const SHIP_ALSO = [{ good: 'rareEarth' as const, wants: 6 }];
 import { AUCTION_NOTES, type AuctionNoteId } from './auction/notes';
 import {
   defaultSideWords,
@@ -409,7 +412,7 @@ export function StatusAudit({ s }: { s: Scenario }) {
           <PlainStatusTable view={view} auction={auction} meId="lena" />
         </div>
         <MyStoreLine auction={auction} />
-        <ShipWants good={SHIP.good} wants={SHIP.wants} pays={SHIP.pays} have={VIEW2.me!.stock[SHIP.good]} after={WALK.order[crystite - 1]!} />
+        <ShipWants good={SHIP.good} wants={SHIP.wants} pays={SHIP.pays} have={VIEW2.me!.stock[SHIP.good]} after={WALK.order[crystite - 1]!} also={SHIP_ALSO} />
       </div>
       {asking && (
         <div className="absolute inset-0 z-40 grid place-items-center bg-void/70 p-3" role="dialog" aria-modal aria-labelledby="move-on-title" data-testid="move-on-dialog">
@@ -470,7 +473,7 @@ export function TvStatusAudit({ s }: { s: Scenario }) {
               <PlainStatusTable view={view} auction={auction} tv />
             </div>
             <StoreBox auction={auction} tv />
-            <ShipWants good={SHIP.good} wants={SHIP.wants} pays={SHIP.pays} have={0} after={WALK.order[crystite - 1]!} tv />
+            <ShipWants good={SHIP.good} wants={SHIP.wants} pays={SHIP.pays} have={0} after={WALK.order[crystite - 1]!} also={SHIP_ALSO} tv />
           </div>
           <div className="flex w-[300px] shrink-0 flex-col gap-4">
             <div className="flex flex-col gap-1 rounded-panel border-2 border-holo bg-holo-soft p-4 shadow-glow">
@@ -534,7 +537,7 @@ function TvReadout({ auction }: { auction: AuctionView }) {
       <dt className="text-fall">HIGHEST BID</dt>
       <dd data-num className={cx('font-bold', bid?.id === 'ship' ? 'text-warn' : 'text-fall')}>{bid ? `${bid.price} · ${name(bid.id)}` : '—'}</dd>
       <dt className="text-ink-3">GAP</dt>
-      <dd data-num className="font-bold text-ink">{ask && bid ? `${ask.price - bid.price} apart` : '—'}</dd>
+      <dd data-num className="font-bold text-ink">{ask && bid ? (ask.price > bid.price ? `${ask.price - bid.price} apart` : 'they meet') : '—'}</dd>
       <Mark note={N.G6} part="tv-readout" at="tr" />
     </dl>
   );

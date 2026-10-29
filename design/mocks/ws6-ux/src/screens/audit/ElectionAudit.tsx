@@ -135,6 +135,17 @@ export const ELECTION_NOTES = {
     why: 'An absent player would otherwise stall the month three times; the same button in the same place reads as one habit (WS3).',
     elsewhere: 'planning’s approved footer says “Waiting for” once you are ready; for the three to read alike it says “Still waiting for” there too (WS3’s file, one word).',
   },
+  E11: {
+    id: 'E11',
+    n: 11,
+    title: 'The desk fits beside the table chat',
+    what: 'The table chat sits in the rail’s header, as the product has it: the seat row (the one-tap mute switch, never hidden) and the ticker. The desk is one compact block: the promise on one line, then the row, whose readout carries the verdict as a chip under the number (“breaks it”, “within”, “done”; the whole sentence for a screen reader), and Set turns red when it would break the promise. This month’s range and what the tax pays sit one tap away, behind “Why 0–10%?” under the row. While the Governor’s desk is open the rail gives it the room: the footer’s “Waiting for” names fold (the header’s ready count says it in brief) and the ticker keeps its newest line. Six tabs keep 32 px each on a small phone. Try it: tap −, then Set, then “Why”.',
+    serves: '8',
+    intent: 'As Governor, change the tax rate',
+    why: 'With the chat in the header (81 px), the rail’s window was 81.5 px tall at 667 × 375 and 111.5 px at 844 × 390, and the folded Now card and the tabs alone take 86: the tax row ended 95 px under the footer at 667 and 49 px at 844, its verdict 115 and 69. Now both end above it: the row 13 px (667) and 6 px (844) clear of the footer.',
+    differs: 'the ideas inside the desk (one block, the verdict inline as a chip, Set in its colour, a tap-to-open why) are all here, but they win back about 40 px and the small phone needed 95, so while the desk is open the rail also folds two things said elsewhere. The small phone packs its padding as the product’s `short:` does (C19). The fold ends when you pick another desk.',
+    elsewhere: 'the graft is WS7’s: Governor.tsx’s block, and the hub (Hub.tsx) telling ReadyBar.tsx to fold its names and the header’s TableChat to keep one line while the Governor’s desk is open.',
+  },
 } satisfies Record<string, IntentNoteData>;
 
 const N = ELECTION_NOTES;
@@ -212,7 +223,7 @@ export interface Race {
  * plots among the tied wins (the engine's decide()): Lena's 7 against Kai's 5.
  */
 export const RESULT: Partial<Record<Office, Race>> = {
-  governor: { office: 'governor', tallies: [{ id: 'lena', votes: 3 }, { id: 'kai', votes: 3 }], winner: 'lena', how: 'tieRule' },
+  governor: { office: 'governor', tallies: [{ id: 'lena', votes: 3 }, { id: 'kai', votes: 3 }], winner: 'lena', how: 'land' },
 };
 
 /** A view for one route: four people, the month, who has pressed Ready. */
@@ -247,10 +258,10 @@ export function howWords(r: Race, me: string | null): string {
   const loser = r.tallies.find((t) => t.id !== r.winner)!;
   const w = seat(r.winner);
   const l = seat(loser.id);
-  if (r.how === 'baron') return `A tie, ${a.votes} votes each, broken by the Land Baron's vote.`;
-  return w.plots === l.plots
-    ? `A tie, ${a.votes} votes each, and the same plots, so seat order decided: this election it starts at ${nameOf(r.winner, me)}.`
-    : `A tie, ${a.votes} votes each. Nobody is Land Baron to break it, so the most plots wins: ${nameOf(r.winner, me)} ${r.winner === me ? 'have' : 'has'} ${w.plots}, ${nameOf(loser.id, me)} ${l.plots}.`;
+  if (r.how === 'baron') return `A tie, ${a.votes} ${a.votes === 1 ? 'vote' : 'votes'} each, broken by the Land Baron's vote.`;
+  return r.how === 'lot'
+    ? `A tie, ${a.votes} ${a.votes === 1 ? 'vote' : 'votes'} each, and the same plots, so it was decided by lot: ${nameOf(r.winner, me)} ${r.winner === me ? 'win' : 'wins'}.`
+    : `A tie, ${a.votes} ${a.votes === 1 ? 'vote' : 'votes'} each. Nobody is Land Baron to break it, so the most plots wins: ${nameOf(r.winner, me)} ${r.winner === me ? 'have' : 'has'} ${w.plots}, ${nameOf(loser.id, me)} ${l.plots}.`;
 }
 
 /** E-8: who shares the most plots, when nobody holds them alone. */
@@ -573,7 +584,9 @@ const PLAIN_DESKS = DESKS.filter((d) => !d.office);
 /** One row of desk tabs (H-7), an office's own desk first when you hold it (E-9). */
 function DeskTabs({ desks, desk, setDesk, mark }: { desks: Desk[]; desk: Desk; setDesk: (d: Desk) => void; mark?: ReactNode }) {
   return (
-    <div role="tablist" aria-label="Desks" className="relative flex gap-1" data-testid="desks">
+    // Six tabs on one row, each at least 32 px wide, even in a small phone's 232 px rail: closer, no side padding, and
+    // the words a size smaller there, so "Governor" and "Council" keep every letter.
+    <div role="tablist" aria-label="Desks" className="relative flex gap-0.5 @max-3xl/shell:gap-px @min-[1100px]/shell:gap-1" data-testid="desks">
       {desks.map((id) => {
         const d = DESKS.find((x) => x.id === id)!;
         return (
@@ -584,7 +597,7 @@ function DeskTabs({ desks, desk, setDesk, mark }: { desks: Desk[]; desk: Desk; s
             aria-selected={desk === id}
             onClick={() => setDesk(id)}
             className={cx(
-              'relative flex min-w-0 flex-auto flex-col items-center whitespace-nowrap rounded-control border px-0.5 py-0.5 text-[10px] font-semibold leading-tight @min-[1100px]/shell:gap-0.5 @min-[1100px]/shell:py-2 @min-[1100px]/shell:text-xs',
+              'relative flex min-h-8 min-w-8 flex-auto flex-col justify-center items-center whitespace-nowrap rounded-control border px-0 py-0.5 text-[10px] font-semibold leading-tight @max-3xl/shell:text-[9px] @max-3xl/shell:tracking-tight @min-[1100px]/shell:px-0.5 @min-[1100px]/shell:gap-0.5 @min-[1100px]/shell:py-2 @min-[1100px]/shell:text-xs',
               desk === id ? 'border-holo bg-holo-soft text-holo' : 'border-holo-line text-ink-2',
               d.office && desk !== id && 'border-warn/60',
             )}
@@ -1092,47 +1105,68 @@ function OfficesLine({ set }: { set: number | null }) {
   );
 }
 
-/** The Governor's tax, with the promise in view (E-7). */
+/** The verdict on the tax shown, in the row's readout: short in the chip, whole for a screen reader (E-7, E-11). */
+function verdictOf(tax: number, set: number | null): { id: 'gov-breaks' | 'gov-done' | 'gov-within'; chip: string; words: string; tone: string } {
+  if (tax > LENA_CAP) return { id: 'gov-breaks', chip: 'breaks it', words: `${tax}%: this breaks your promise.`, tone: 'border-alert text-alert' };
+  if (set !== null && set === tax) return { id: 'gov-done', chip: 'done', words: `Done: ${tax}% from now on.`, tone: 'border-ok text-ok' };
+  return { id: 'gov-within', chip: 'within', words: 'Within your promise. Set it to make it count.', tone: 'border-holo-line text-ink-2' };
+}
+
+/**
+ * The Governor's tax, with the promise in view (E-7), as one compact block (E-11): the promise on one line, then the
+ * row, whose readout carries the verdict as a chip under the number, and Set takes the verdict's colour. What the
+ * range and the fund are is one tap away, under the row, so the row and its verdict stay above the footer on a
+ * phone with the table chat in the rail's header.
+ */
 function GovernorDesk({ tax, setTax, set, onSet }: { tax: number; setTax: (n: number) => void; set: number | null; onSet: () => void }) {
   const breaks = tax > LENA_CAP;
   const done = set !== null && set === tax;
+  const verdict = verdictOf(tax, set);
+  const [why, setWhy] = useState(false);
   const { view } = usePhoneGame();
   return (
-    <section className="relative flex flex-col gap-1 @min-[1100px]/shell:gap-2" data-testid="gov-tax">
-      <p className="text-xs @min-[1100px]/shell:text-base" data-testid="gov-promise">
-        <span className="label-caps mr-1.5 text-[10px]! @min-[1100px]/shell:text-xs!">Sales tax</span>
+    <section className="relative flex flex-col gap-0.5 @min-[1100px]/shell:gap-2" data-testid="gov-tax">
+      <p className="truncate text-xs @min-[1100px]/shell:text-base" data-testid="gov-promise">
+        <span className="label-caps mr-1.5 text-[10px]! @max-3xl/shell:hidden @min-[1100px]/shell:text-xs!">Sales tax</span>
         You promised: <strong className="font-semibold">no higher than {LENA_CAP}%</strong>
       </p>
-      <div className="flex items-center gap-1.5">
-        <Button size="md" variant="outline" className="w-11 shrink-0 px-0" aria-label="One point lower" disabled={tax <= TAX_LOW} onClick={() => setTax(Math.max(TAX_LOW, tax - 1))} data-testid="tax-down">
+      <div className="relative flex items-center gap-1 @min-[1100px]/shell:gap-1.5" data-testid="governor-tax-row">
+        <Button size="md" variant="outline" className="w-10 shrink-0 px-0 @min-[1100px]/shell:w-11" aria-label="One point lower" disabled={tax <= TAX_LOW} onClick={() => setTax(Math.max(TAX_LOW, tax - 1))} data-testid="tax-down">
           −
         </Button>
-        <span data-num className={cx('w-14 shrink-0 text-center font-mono text-2xl font-bold @min-[1100px]/shell:w-20 @min-[1100px]/shell:text-4xl', breaks && 'text-alert')} data-testid="tax-value">
-          {tax}%
+        <span className="flex h-11 w-14 shrink-0 flex-col items-center justify-center gap-0.5 @min-[1100px]/shell:w-24">
+          <span data-num className={cx('font-mono text-xl font-bold leading-none @min-[1100px]/shell:text-3xl', breaks && 'text-alert')} data-testid="tax-value">
+            {tax}%
+          </span>
+          <span className={cx('whitespace-nowrap rounded-chip border px-1 font-mono text-[9px] font-bold uppercase leading-3 @min-[1100px]/shell:text-xs @min-[1100px]/shell:leading-4', verdict.tone)} role="status" aria-live="polite" data-testid="governor-verdict">
+            <span aria-hidden data-testid={verdict.id}>
+              {verdict.chip}
+            </span>
+            <span className="sr-only">{verdict.words}</span>
+          </span>
         </span>
-        <Button size="md" variant="outline" className="w-11 shrink-0 px-0" aria-label="One point higher" disabled={tax >= TAX_HIGH} onClick={() => setTax(Math.min(TAX_HIGH, tax + 1))} data-testid="tax-up">
+        <Button size="md" variant="outline" className="w-10 shrink-0 px-0 @min-[1100px]/shell:w-11" aria-label="One point higher" disabled={tax >= TAX_HIGH} onClick={() => setTax(Math.min(TAX_HIGH, tax + 1))} data-testid="tax-up">
           +
         </Button>
-        <Button size="md" className="min-w-0 flex-1 whitespace-nowrap px-2" disabled={done} onClick={onSet} data-testid="tax-confirm">
+        <Button size="md" variant={breaks ? 'danger' : 'holo'} className="min-w-0 flex-1 whitespace-nowrap px-1.5 @min-[1100px]/shell:px-2" disabled={done} onClick={onSet} data-testid="tax-confirm">
           Set {tax}%
         </Button>
+        <IntentMarker note={N.E11} part="row" at="tr" />
       </div>
-      {breaks ? (
-        <p className="text-xs font-semibold text-alert @min-[1100px]/shell:text-base" data-testid="gov-breaks">
-          {tax}%: this breaks your promise.
-        </p>
-      ) : done ? (
-        <p className="text-xs font-semibold text-ok @min-[1100px]/shell:text-base" data-testid="gov-done">
-          Done: {tax}% from now on.
-        </p>
-      ) : (
-        <p className="text-xs text-ink-2 @min-[1100px]/shell:text-base" data-testid="gov-within">
-          Within your promise. Set it to make it count.
+      <span className="flex flex-wrap items-center gap-x-2">
+        {done && <span className="text-[11px] font-semibold text-ok @min-[1100px]/shell:text-sm">Done: {tax}% from now on.</span>}
+        <button type="button" onClick={() => setWhy((w) => !w)} aria-expanded={why} className="flex min-h-8 items-center gap-1 text-[11px] font-semibold text-holo @min-[1100px]/shell:text-sm" data-testid="governor-why">
+          Why {TAX_LOW}–{TAX_HIGH}%?
+          <svg aria-hidden viewBox="0 0 24 24" width={10} height={10} className={cx('transition-transform', why && 'rotate-90')} fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 6l6 6-6 6" />
+          </svg>
+        </button>
+      </span>
+      {why && (
+        <p className="text-[11px] leading-snug text-ink-3 @min-[1100px]/shell:text-sm" data-testid="governor-why-text">
+          This month {TAX_LOW}–{TAX_HIGH}%, from last month’s {TAX}%. The tax fills the colony fund ({view.treasury.money} cr), which pays you {POLITICS.pay.governor} cr a month. Everyone sees your tax beside your promise.
         </p>
       )}
-      <p className="text-[11px] leading-snug text-ink-3 @min-[1100px]/shell:text-sm">
-        This month {TAX_LOW}–{TAX_HIGH}%, from last month’s {TAX}%. The tax fills the colony fund ({view.treasury.money} cr), which pays you {POLITICS.pay.governor} cr a month. Everyone sees your tax beside your promise.
-      </p>
       <IntentMarker note={N.E7} part="desk" at="tr" />
     </section>
   );
@@ -1149,6 +1183,8 @@ export function NewGovernor({ set: startSet = null, ready: startReady = false }:
   const [tax, setTax] = useState(startSet ?? TAX);
   const [set, setSet] = useState<number | null>(startSet);
   const desks: Desk[] = ['governor', ...PLAIN_DESKS.map((d) => d.id)];
+  // While the Governor's desk is open the rail gives it the room (E-11): the footer's names fold, the ticker keeps its newest line.
+  const asking = desk === 'governor';
   const now: Now = { title: 'Set the sales tax', detail: `Then plan your month. You are the new Governor, until month ${nextElection(ELECTION_MONTH)! - 1}. You promised no higher than ${LENA_CAP}%.` };
   const body =
     desk === 'governor' ? (
@@ -1181,15 +1217,19 @@ export function NewGovernor({ set: startSet = null, ready: startReady = false }:
           now={now}
           foldNow
           nowMark={<IntentMarker note={N.E9} part="now" />}
+          {...(asking ? { chatLines: 1 } : {})}
           rail={
             <>
-              <DeskTabs desks={desks} desk={desk} setDesk={setDesk} mark={<IntentMarker note={N.E9} part="desks" at="tr" />} />
-              <div className="flex flex-col gap-2.5 @min-[1100px]/shell:gap-4" data-testid={`desk-body-${desk}`}>
-                {body}
+              {/* The tabs and the desk they open as one group, closer than the rail's gap on a phone (E-11). */}
+              <div className="flex flex-col gap-1 @min-[1100px]/shell:gap-4">
+                <DeskTabs desks={desks} desk={desk} setDesk={setDesk} mark={<IntentMarker note={N.E9} part="desks" at="tr" />} />
+                <div className="flex flex-col gap-2.5 @min-[1100px]/shell:gap-4" data-testid={`desk-body-${desk}`}>
+                  {body}
+                </div>
               </div>
             </>
           }
-          footer={<WaitFooter ready={ready} onReady={() => setReady(true)} planningProper words={PLAN_WORDS} />}
+          footer={<WaitFooter ready={ready} onReady={() => setReady(true)} planningProper words={PLAN_WORDS} names={!asking} />}
         >
           <div className="flex min-h-0 flex-1 flex-col gap-2 @min-[1100px]/shell:gap-4">
             <OfficesLine set={set} />

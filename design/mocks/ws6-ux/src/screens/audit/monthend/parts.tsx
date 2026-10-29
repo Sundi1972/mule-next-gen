@@ -186,7 +186,7 @@ export function LeagueTable({ view, facts, density, selfId, final = false }: { v
  * The winner card. On the TV: the winner called out, "Ossa wins with a Worth of 5,643 cr". On your phone: your final
  * place and your Worth as the card's number ("Worth 5,433 cr"), the winner's line under it. Today's card said points.
  */
-export function WinnerCard({ view, facts, density, selfId }: { view: MuleView; facts: MonthFacts; density: Density; selfId?: string }) {
+export function WinnerCard({ view, facts, density, selfId, className }: { view: MuleView; facts: MonthFacts; density: Density; selfId?: string; className?: string }) {
   const lg = league(view, facts.lastWorth);
   const top = lg.rows[0];
   if (!top) return null;
@@ -208,7 +208,7 @@ export function WinnerCard({ view, facts, density, selfId }: { view: MuleView; f
   const compact = density === 'compact';
   return (
     <div
-      className={cx('relative flex flex-col items-center justify-center gap-1 rounded-panel border-2 p-2.5 text-center', won ? 'border-holo bg-holo-soft shadow-glow' : 'border-holo-line bg-panel', !compact && 'flex-1')}
+      className={cx('relative flex flex-col items-center justify-center gap-1 rounded-panel border-2 p-2.5 text-center', won ? 'border-holo bg-holo-soft shadow-glow' : 'border-holo-line bg-panel', !compact && 'flex-1', className)}
       data-testid="winner"
     >
       <span className="label-caps text-[10px]!" data-testid="my-place">
@@ -231,10 +231,10 @@ export function WinnerCard({ view, facts, density, selfId }: { view: MuleView; f
 }
 
 /** The colony's verdict on a phone beside the TV, as today's game-over draws it: passed or failed, the air, the rule. */
-export function PhoneVerdict({ view }: { view: MuleView }) {
+export function PhoneVerdict({ view, className }: { view: MuleView; className?: string }) {
   const v = colonyVerdict(view.air);
   return (
-    <div className={cx('flex flex-col gap-1.5 rounded-panel border p-2.5', v.failed ? 'border-alert bg-alert-bg' : 'border-holo-line bg-panel')} data-testid="verdict">
+    <div className={cx('flex flex-col gap-1.5 rounded-panel border p-2.5', v.failed ? 'border-alert bg-alert-bg' : 'border-holo-line bg-panel', className)} data-testid="verdict">
       <span className={cx('font-display text-base font-semibold', v.failed ? 'text-alert-ink' : 'text-ok')}>{v.title}</span>
       <AirGauge level={view.air.level} band={view.air.band} />
       <span className="text-xs leading-snug text-ink-2">{v.line} The colony’s report is on the TV.</span>
@@ -276,7 +276,8 @@ function G5Slot({ id, label, sub, tv, line = false }: { id: string; label: strin
   if (!tv || line)
     return (
       <div
-        className={cx('flex min-w-0 items-baseline justify-between rounded-control border border-dashed border-holo-line text-ink-3', tv ? 'gap-2 px-3 py-1' : 'gap-1 px-1.5 py-0.5')}
+        // Too narrow for the label and the chip side by side (a small phone), the chip goes under the label.
+        className={cx('flex min-w-0 flex-wrap items-baseline justify-between rounded-control border border-dashed border-holo-line text-ink-3', tv ? 'gap-2 px-3 py-1' : 'gap-x-1 px-1.5 py-0.5')}
         aria-label={`${label}: comes with G-5`}
         data-testid={`g5-${id}`}
       >
@@ -442,7 +443,8 @@ export function YourWorth({ view, density }: { view: MuleView; density: Exclude<
       <dl className={cx('grid grid-cols-[minmax(0,1fr)_auto] gap-x-2', tight ? 'gap-y-0 text-[11px] leading-4' : 'gap-y-0.5 text-xs')}>
         {rows.map((r) => (
           <div key={r.key} className={cx('contents', r.grey && 'text-ink-3')} data-testid={`worth-line-${r.key}`}>
-            <dt className={cx('truncate', r.grey ? '' : 'text-ink-2')}>
+            {/* A line too long for a small phone's column wraps under itself rather than losing its end. */}
+            <dt className={cx('min-w-0', r.grey ? '' : 'text-ink-2')}>
               {r.label}
               {r.grey && <span className="ml-1 font-mono text-[9px] font-bold uppercase tracking-wide">comes with G-5</span>}
             </dt>

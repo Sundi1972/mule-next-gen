@@ -110,10 +110,11 @@ function PhoneGameEnd({ facts, tv }: { facts: MonthFacts; tv: boolean }) {
         }
       >
         <div className={cx('relative flex min-h-0 flex-1 flex-col', tv ? 'gap-2.5' : 'gap-1.5')} data-testid={tv ? 'phone-gameover' : 'phone-only-gameover'}>
-          <div className={cx('grid min-h-0 grid-cols-[minmax(0,5fr)_minmax(0,6fr)]', tv ? 'flex-1 gap-2.5' : 'gap-1.5')}>
-            <div className={cx('flex min-h-0 flex-col', tv ? 'gap-2.5' : 'gap-1.5')}>
-              <WinnerCard view={view} facts={facts} density={density} selfId={self.id} />
-              {tv && <PhoneVerdict view={view} />}
+          {/* A small phone has no height for the card and the verdict in one column: the verdict moves under your lines. */}
+          <div className={cx('grid min-h-0 grid-cols-[minmax(0,5fr)_minmax(0,6fr)]', tv ? 'flex-1 gap-2.5 @max-3xl/shell:grid-cols-[minmax(0,4fr)_minmax(0,7fr)] @max-3xl/shell:grid-rows-[auto_minmax(0,1fr)]' : 'gap-1.5')}>
+            <div className={cx('flex min-h-0 flex-col', tv ? 'gap-2.5 @max-3xl/shell:contents' : 'gap-1.5')}>
+              <WinnerCard view={view} facts={facts} density={density} selfId={self.id} {...(tv ? { className: '@max-3xl/shell:row-span-2' } : {})} />
+              {tv && <PhoneVerdict view={view} className="@max-3xl/shell:col-start-2 @max-3xl/shell:row-start-2" />}
             </div>
             <YourWorth view={view} density={density} />
           </div>
