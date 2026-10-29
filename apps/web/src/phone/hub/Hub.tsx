@@ -1,6 +1,6 @@
 import type { MuleView } from '@mule/protocol';
 import { cx } from '@mule/ui';
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 import { PHASE_NAME, secondsUntil } from '../../game/derive';
 import { useServerNow } from '../../net/react';
 import { usePhoneGame } from '../game';
@@ -88,12 +88,14 @@ export function Hub({ slots }: { slots: HubSlots }) {
             <>
               {fold && <FoldingNowCard key={now.title} now={now} />}
               {Panel && <Panel />}
-              <DeskTabs desks={drawn.desks} active={nav.desk} first={place.first} onPick={nav.openDesk} />
-              {Body && (
-                <div className="flex flex-col gap-2.5 @min-[1100px]/shell:gap-4" data-testid={`desk-body-${nav.desk}`}>
-                  <Body />
-                </div>
-              )}
+              <DeskGroup tight={fold}>
+                <DeskTabs desks={drawn.desks} active={nav.desk} first={place.first} onPick={nav.openDesk} />
+                {Body && (
+                  <div className="flex flex-col gap-2.5 @min-[1100px]/shell:gap-4" data-testid={`desk-body-${nav.desk}`}>
+                    <Body />
+                  </div>
+                )}
+              </DeskGroup>
             </>
           )
         }
@@ -148,6 +150,14 @@ function SituationStage({ stage: { Body }, tool }: { stage: StageSlot; tool: Map
   );
 }
 
+/**
+ * The desk tabs and the open desk, as one group. While a desk asks first (E-9, E-11) they sit closer than the rail's gap
+ * on a phone, so the desk keeps its room; otherwise at the rail's own gap, as in any month.
+ */
+function DeskGroup({ tight, children }: { tight: boolean; children: ReactNode }) {
+  return <div className={cx('flex flex-col @min-[1100px]/shell:gap-4', tight ? 'gap-1' : 'gap-2.5')}>{children}</div>;
+}
+
 /** Now folded to its title, one tap from the whole card. A new title remounts it folded, showing the new title. */
 function FoldingNowCard({ now }: { now: Now }) {
   const [open, setOpen] = useState(false);
@@ -169,7 +179,8 @@ function FoldingNowCard({ now }: { now: Now }) {
       data-testid="now"
     >
       <span className="label-caps shrink-0 text-[10px]! @min-[1100px]/shell:text-xs!">Now</span>
-      <span className="min-w-0 flex-1 font-display text-sm font-semibold leading-tight @min-[1100px]/shell:text-lg" data-testid="now-title">
+      {/* Folded it is one line: a long title truncates (its whole is one tap away), so the rail below keeps its room (H-9). */}
+      <span className="min-w-0 flex-1 truncate font-display text-sm font-semibold leading-tight @min-[1100px]/shell:text-lg" data-testid="now-title">
         {now.title}
       </span>
       <Glyph d="M6 9l6 6 6-6" size={14} />
@@ -198,10 +209,14 @@ export function Lock({ size = 10 }: { size?: number }) {
   );
 }
 
-/** The desks' tabs, on one row. `first` is the desk that asked to come first: amber-edged while another is open. */
+/**
+ * The desks' tabs, on one row. `first` is the desk that asked to come first: amber-edged while another is open. Six
+ * keep at least 32 px each in a small phone's 232 px rail: 1 px apart, no side padding, and the words a size smaller
+ * there, so "Governor" and "Council" keep every letter (E-11).
+ */
 export function DeskTabs({ desks, active, first = null, onPick }: { desks: DeskSlot[]; active: string; first?: string | null; onPick(id: string): void }) {
   return (
-    <div role="tablist" aria-label="Desks" className="flex gap-1" data-testid="desks">
+    <div role="tablist" aria-label="Desks" className="flex gap-0.5 @max-3xl/shell:gap-px @min-[1100px]/shell:gap-1" data-testid="desks">
       {desks.map(({ id, label, icon, locked, Badge }) => (
         <button
           key={id}
@@ -210,7 +225,7 @@ export function DeskTabs({ desks, active, first = null, onPick }: { desks: DeskS
           aria-selected={active === id}
           onClick={() => onPick(id)}
           className={cx(
-            'relative flex min-w-8 flex-auto flex-col items-center whitespace-nowrap rounded-control border px-0.5 py-0.5 text-[10px] font-semibold leading-tight @min-[1100px]/shell:gap-0.5 @min-[1100px]/shell:py-2 @min-[1100px]/shell:text-xs',
+            'relative flex min-h-8 min-w-8 flex-auto flex-col items-center justify-center whitespace-nowrap rounded-control border px-0 py-0.5 text-[10px] font-semibold leading-tight @max-3xl/shell:text-[9px] @max-3xl/shell:tracking-tight @min-[1100px]/shell:gap-0.5 @min-[1100px]/shell:px-0.5 @min-[1100px]/shell:py-2 @min-[1100px]/shell:text-xs',
             active === id ? 'border-holo bg-holo-soft text-holo' : 'border-holo-line text-ink-2',
             first === id && active !== id && 'border-warn/60',
           )}

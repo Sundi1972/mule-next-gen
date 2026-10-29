@@ -91,6 +91,10 @@ export async function shellFillsTheStage(phone: Page, timeout = 5_000): Promise<
     const wide = await read(phone);
     checkFrame(wide, `a ${LAPTOP.width} px window`, LAPTOP.width, WIDE_RAIL_PX, 'true');
     log.push(`${LAPTOP.width}: stage ${wide.stage.toFixed(1)} + rail ${wide.guide.toFixed(1)}`);
+    // C20: from WIDE_PX nothing changes, the table chat stays in the rail's header, none of it in the rail's body.
+    const chat = (await phone.evaluate(CHAT_PLACE)) as Record<'header' | 'body', { seatRow: boolean; ticker: boolean }>;
+    check(chat.header.seatRow && chat.header.ticker && !chat.body.seatRow && !chat.body.ticker, `C20: at ${LAPTOP.width} px the seat row and the ticker are in the rail's header and not its body, got ${JSON.stringify(chat)}`);
+    log.push(`chat in the header`);
 
     // I-4: the emotes float left of the 400 px rail.
     await emote(phone);
@@ -184,6 +188,11 @@ export async function shellFillsTheStage(phone: Page, timeout = 5_000): Promise<
  * come from the connection holding the seat.
  */
 async function emote(phone: Page): Promise<void> {
+  await send(phone, { t: 'emote', emote: 'Ha!' });
+}
+
+/** Sends `msg` over the page's one open socket, as the app's client would; found through the DevTools protocol. */
+async function send(phone: Page, msg: object): Promise<void> {
   const cdp = await phone.context().newCDPSession(phone);
   try {
     const proto = await cdp.send('Runtime.evaluate', { expression: 'WebSocket.prototype' });
@@ -191,10 +200,10 @@ async function emote(phone: Page): Promise<void> {
     const sent = await cdp.send('Runtime.callFunctionOn', {
       objectId: objects.objectId!,
       functionDeclaration: 'function (msg) { const open = this.filter((w) => w.readyState === 1); if (open.length === 1) open[0].send(msg); return open.length; }',
-      arguments: [{ value: JSON.stringify({ t: 'emote', emote: 'Ha!' }) }],
+      arguments: [{ value: JSON.stringify(msg) }],
       returnByValue: true,
     });
-    check(sent.result.value === 1, `the phone has one open socket to send its emote on, found ${sent.result.value}`);
+    check(sent.result.value === 1, `the phone has one open socket to send on, found ${sent.result.value}`);
   } finally {
     await cdp.detach();
   }
@@ -267,4 +276,190 @@ async function read(phone: Page, box?: number | null): Promise<Frame> {
     if (f) return f;
     check(attempt < 2, 'B-AC-12: a game screen with the shell to measure');
   }
+}
+
+/** Where the table chat is in the phone's rail: its header, its body (`header + div`), by structure. A string, as READ_RAIL is. */
+const CHAT_PLACE = `(() => {
+  const g = document.querySelector('[data-phase] [data-testid=guide]');
+  const at = (box) => ({ seatRow: !!box?.querySelector('[data-testid=seat-row]'), ticker: !!box?.querySelector('[data-testid=chat-ticker]') });
+  return { header: at(g?.querySelector('header')), body: at(g?.querySelector('header + div')) };
+})()`;
+
+/** C20 on a phone: the two phone sizes the rail is measured at. */
+const RAIL_SIZES = [PHONE.viewport, PHONE_SMALL.viewport] as const;
+/** The tap floor a seat in the seat row keeps (spec B's M1 puts the mute on it). */
+const SEAT_MIN_PX = 32;
+/** Two lines said at the table, when the screen's ticker has fewer: the phone's ticker at its full two. */
+const RAIL_TALK = ['Anyone need Water? Cheap today.', 'Smithore is going to spike, I hear.'];
+
+/** One read of the phone's rail at one size, in one pass. */
+type RailRead = {
+  keyBottom: number;
+  ref: 'footer top' | 'rail bottom';
+  refY: number;
+  scrolled: number;
+  ticker: number;
+  seatRow: 'header' | 'under' | null;
+  seatAfterKey: boolean;
+  seats: { w: number; h: number }[];
+  /** The rail body's computed overflow-y and its box, for a real scroll at its middle. */
+  overflowY: string;
+  body: { x: number; y: number; scrollHeight: number };
+  /** With `stage`: the element's box at the stage's top, and the box it is clipped to (the stage and each scroller in it). */
+  stage: { top: number; bottom: number; clipTop: number; clipBottom: number } | null;
+};
+
+/** Reads the phone's rail after a paint, scrolled to its top. A string: tsx would wrap named functions in a helper the page lacks. */
+const READ_RAIL = (key: string, stageSel: string | null) => `(async () => {
+  const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const g = document.querySelector('[data-phase] [data-testid=guide]');
+  const body = g?.querySelector('header + div');
+  const el = g?.querySelector('[data-testid=${JSON.stringify(key).slice(1, -1)}]');
+  if (!g || !body || !el) return null;
+  const scrolled = body.scrollTop;
+  body.scrollTop = 0;
+  const stageEl = document.querySelector('[data-phase] [data-testid=stage]');
+  const inStage = ${JSON.stringify(stageSel)} ? stageEl?.querySelector(${JSON.stringify(stageSel)}) : null;
+  if (stageEl) stageEl.scrollTop = 0;
+  await frame();
+  const footer = g.querySelector('[data-testid=actions]');
+  const row = g.querySelector('[data-testid=seat-row]');
+  // A key drawn with display: contents (the month end's Worth total) has no box of its own: its content's is read.
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const boxOf = () => (getComputedStyle(el).display === 'contents' ? range.getBoundingClientRect() : el.getBoundingClientRect());
+  const box = boxOf();
+  let stage = null;
+  if (inStage) {
+    const r = inStage.getBoundingClientRect();
+    let clipTop = -Infinity, clipBottom = Infinity;
+    for (let a = inStage.parentElement; a; a = a.parentElement) {
+      const cs = getComputedStyle(a);
+      if (a === stageEl || cs.overflowY !== 'visible' || cs.overflowX !== 'visible') {
+        const c = a.getBoundingClientRect();
+        clipTop = Math.max(clipTop, c.top);
+        clipBottom = Math.min(clipBottom, c.bottom);
+      }
+      if (a === stageEl) break;
+    }
+    stage = { top: r.top, bottom: r.bottom, clipTop, clipBottom };
+  }
+  const b = body.getBoundingClientRect();
+  return {
+    overflowY: getComputedStyle(body).overflowY,
+    body: { x: b.left + b.width / 2, y: b.top + b.height / 2, scrollHeight: body.scrollHeight },
+    stage,
+    keyBottom: box.bottom,
+    ref: footer ? 'footer top' : 'rail bottom',
+    refY: footer ? footer.getBoundingClientRect().top : body.getBoundingClientRect().bottom,
+    scrolled,
+    ticker: [...g.querySelectorAll('[data-testid=chat-ticker] li')].filter((li) => li.getBoundingClientRect().height > 0).length,
+    seatRow: !row ? null : row.closest('header') ? 'header' : body.contains(row) ? 'under' : null,
+    seatAfterKey: !!row && !!(el.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING) && !el.contains(row),
+    seats: [...(row?.querySelectorAll('[data-testid^=seat-]') ?? [])].map((s) => ({ w: s.getBoundingClientRect().width, h: s.getBoundingClientRect().height })),
+  };
+})()`;
+
+/** After a real scroll of the rail: where `key` is, the rail body's visible box, and how far it scrolled. */
+type Reached = { top: number; bottom: number; boxTop: number; boxBottom: number; scrollTop: number };
+
+/**
+ * After a real scroll of the rail: `key`'s box and the rail body's visible box, then the rail back at its top. A
+ * display: contents key is read by its content, as READ_RAIL does.
+ */
+const READ_REACHED = (key: string) => `(async () => {
+  const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  await frame();
+  const g = document.querySelector('[data-phase] [data-testid=guide]');
+  const body = g?.querySelector('header + div');
+  const el = g?.querySelector('[data-testid=${JSON.stringify(key).slice(1, -1)}]');
+  if (!body || !el) return null;
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const k = getComputedStyle(el).display === 'contents' ? range.getBoundingClientRect() : el.getBoundingClientRect();
+  const v = body.getBoundingClientRect();
+  const out = { top: k.top, bottom: k.bottom, boxTop: v.top, boxBottom: v.bottom, scrollTop: body.scrollTop };
+  body.scrollTop = 0;
+  await frame();
+  return out;
+})()`;
+
+/**
+ * C20's rule on a phone (Heiko's "(c) chat at the bottom", WS6's mock 529bc7f8 ?ticker=under): below 1100 px the table
+ * chat follows the rail's own content, in the same scroll, so the screen's key element shows above the footer. At
+ * 844×390 and 667×375 (or `sizes`), with the seat row and a two-line ticker present: `key`, the screen's key element in
+ * the rail, ends at least `clear[width]` px (default 0) above the footer's top, or the rail's bottom on a screen with no
+ * footer, with the rail scrolled to its top. With `scrolls`, `key` may scroll instead: the rail's body scrolls
+ * (overflow-y auto or scroll), and after a real wheel scroll to its end `key` shows whole in it, never clipped away.
+ * With `stage`, that element (a selector in the stage, such as your own league row, `[data-mine]`) shows whole at the
+ * stage's top, inside the stage and every scroller around it. The seat row is in the rail's body under `key`, not its
+ * header; and each seat is at least SEAT_MIN_PX tall. When the ticker holds fewer than two lines the page says
+ * RAIL_TALK first, over its own socket. Leaves the viewport as it found it. Returns the numbers, to log.
+ */
+export async function railFits(
+  page: Page,
+  {
+    key,
+    clear = {},
+    sizes = RAIL_SIZES,
+    scrolls = false,
+    stage = null,
+  }: {
+    key: string;
+    clear?: Partial<Record<number, number>>;
+    sizes?: readonly { width: number; height: number }[];
+    scrolls?: boolean;
+    stage?: string | null;
+  },
+  timeout = 3_000,
+): Promise<string> {
+  const was = page.viewportSize();
+  const guide = page.locator('[data-phase] [data-testid=guide]');
+  await guide.getByTestId(key).first().waitFor({ timeout });
+  const lines = () => guide.locator('[data-testid=chat-ticker] li').count();
+  if ((await lines()) < 2) for (const text of RAIL_TALK) await send(page, { t: 'chat', text });
+  // Waited for, not asserted here: each size's read checks the ticker by name.
+  await page.waitForFunction(() => document.querySelectorAll('[data-phase] [data-testid=guide] [data-testid=chat-ticker] li').length >= 2, null, { timeout }).catch(() => undefined);
+  const seen: string[] = [];
+  try {
+    for (const size of sizes) {
+      const at = `${size.width}×${size.height}`;
+      await page.setViewportSize(size);
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+      const r = (await page.evaluate(READ_RAIL(key, stage))) as RailRead | null;
+      check(r, `C20 at ${at}: the phone's rail holds ${key}`);
+      const clears = r.refY - r.keyBottom;
+      const floor = clear[size.width] ?? 0;
+      const seats = r.seats.map((s) => `${s.w.toFixed(1)}×${s.h.toFixed(1)}`).join(' ');
+      const signed = (n: number) => `${n >= 0 ? '+' : '−'}${Math.abs(n).toFixed(1)}`;
+      const st = r.stage;
+      let reach: Reached | null = null;
+      if (scrolls) {
+        check(r.overflowY === 'auto' || r.overflowY === 'scroll', `C20 at ${at}: the rail's body scrolls, got overflow-y ${r.overflowY}`);
+        // A real scroll, as a thumb's: the wheel at the rail's middle, past its whole height.
+        await page.mouse.move(r.body.x, r.body.y);
+        await page.mouse.wheel(0, r.body.scrollHeight + 100);
+        reach = (await page.evaluate(READ_REACHED(key))) as Reached | null;
+      }
+      seen.push(
+        [
+          `${at}: ${st ? `${stage} ${st.top.toFixed(1)}–${st.bottom.toFixed(1)} in the stage's ${st.clipTop.toFixed(1)}–${st.clipBottom.toFixed(1)}, ${signed(st.clipBottom - st.bottom)}; ` : ''}${key} ${r.keyBottom.toFixed(1)} vs ${r.ref} ${r.refY.toFixed(1)}, ${signed(clears)}`,
+          ...(reach ? [`wheeled ${reach.scrollTop.toFixed(0)} px to the rail's end, ${key} ${reach.top.toFixed(1)}–${reach.bottom.toFixed(1)} in ${reach.boxTop.toFixed(1)}–${reach.boxBottom.toFixed(1)}`] : []),
+          `ticker ${r.ticker}`,
+          `seat row ${r.seatRow}`,
+          `seats ${seats}`,
+        ].join('; '),
+      );
+      check(r.ticker === 2, `C20 at ${at}: the ticker shows its two lines, got ${r.ticker}`);
+      if (stage) check(st && st.top >= st.clipTop - 0.5 && st.bottom <= st.clipBottom + 0.5, `C20 at ${at}: ${stage} shows whole in the stage, got ${st ? `${st.top.toFixed(1)}–${st.bottom.toFixed(1)} in ${st.clipTop.toFixed(1)}–${st.clipBottom.toFixed(1)}` : 'none'}`);
+      if (scrolls)
+        check(reach && reach.top >= reach.boxTop - 0.5 && reach.bottom <= reach.boxBottom + 0.5, `C20 at ${at}: scrolled to the rail's end, ${key} shows whole in the rail, got ${reach ? `${reach.top.toFixed(1)}–${reach.bottom.toFixed(1)} in ${reach.boxTop.toFixed(1)}–${reach.boxBottom.toFixed(1)}` : 'no read'}`);
+      else check(clears >= floor - 0.01, `C20 at ${at}: ${key} ends at least ${floor} px above the ${r.ref}, got ${key} at ${r.keyBottom.toFixed(1)} against ${r.refY.toFixed(1)} (${clears.toFixed(1)} px)`);
+      check(r.seatRow === 'under' && r.seatAfterKey, `C20 at ${at}: the seat row is in the rail's body under ${key}, got ${r.seatRow}${r.seatAfterKey ? '' : ', not after it'}`);
+      check(r.seats.length > 0 && r.seats.every((s) => s.h >= SEAT_MIN_PX - 0.01), `C20 at ${at}: each seat in the seat row is at least ${SEAT_MIN_PX} px tall, got ${seats}`);
+    }
+  } finally {
+    if (was) await page.setViewportSize(was);
+  }
+  return seen.join(' | ');
 }

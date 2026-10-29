@@ -77,6 +77,11 @@ type Sample = {
   phase: string | null;
   ticker: { id: number; text: string; rect: Rect; visible: boolean }[];
   tickerRect: Rect | null;
+  /**
+   * When the ticker is in the rail's body (`header + div`, a phone under C20): where that body's scroll content ends,
+   * scrolled or not, and whether the chat is the body's last child. Null in the header or on the TV.
+   */
+  tickerReach: { end: number; last: boolean } | null;
   viewport: { w: number; h: number };
   bubbles: Bubble[];
   speakers: string[];
@@ -105,12 +110,18 @@ const SAMPLE = `{
           visible: li.checkVisibility ? li.checkVisibility({ visibilityProperty: true }) : true,
         })),
         tickerRect: rect(document.querySelector('[data-testid=chat-ticker]')),
+        tickerReach: (() => {
+          const t = document.querySelector('[data-testid=chat-ticker]');
+          const body = t?.closest('[data-testid=guide]')?.querySelector('header + div');
+          if (!body || !body.contains(t)) return null;
+          return { end: body.getBoundingClientRect().top - body.scrollTop + body.scrollHeight, last: !!body.lastElementChild?.contains(t) };
+        })(),
         viewport: { w: window.innerWidth, h: window.innerHeight },
         bubbles: [...document.querySelectorAll('[data-testid^=chat-bubble-]')].map((b) => ({
           seat: b.getAttribute('data-testid').slice(12),
           line: Number(b.getAttribute('data-line')),
           text: b.textContent,
-          anchor: b.closest('[data-speaker]')?.getAttribute('data-speaker') ?? (b.closest('[data-testid=table-chat]') ? 'seat-row' : null),
+          anchor: b.closest('[data-speaker]')?.getAttribute('data-speaker') ?? (b.closest('[data-testid=table-chat], [data-fallback]') ? 'seat-row' : null),
           rect: rect(b),
         })),
         speakers: [...document.querySelectorAll('[data-speaker]')].map((s) => s.getAttribute('data-speaker')),
@@ -407,7 +418,10 @@ function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
     timing(seen.t <= due, `B-AC-17: on ${who} line ${line.id} shown in the ticker +${seen.t - line.at} ms (deadline +${due - line.at} ms)`);
     const entry = seen.ticker.find((l) => l.id === line.id)!;
     const box = seen.tickerRect;
-    check(box && box.r > box.l && box.b > box.t && inside(box, { l: 0, t: 0, r: seen.viewport.w, b: seen.viewport.h }), `B-AC-17: on ${who} the ticker that shows line ${line.id} has a size and lies inside the viewport, got ${JSON.stringify(box)} in ${seen.viewport.w}×${seen.viewport.h}`);
+    // On a phone the ticker follows the rail's content in its scroll (C20): inside the viewport, or one scroll away in that rail.
+    const reach = Math.max(seen.viewport.h, seen.tickerReach?.end ?? 0);
+    if (seen.tickerReach) check(seen.tickerReach.last, `B-AC-17: on ${who} a ticker in the rail's body is its last part (C20), got it before other content`);
+    check(box && box.r > box.l && box.b > box.t && inside(box, { l: 0, t: 0, r: seen.viewport.w, b: reach }), `B-AC-17: on ${who} the ticker that shows line ${line.id} has a size and lies inside the viewport or the rail's scroll, got ${JSON.stringify(box)} in ${seen.viewport.w}×${seen.viewport.h} (the rail body's content ends at ${seen.tickerReach?.end})`);
     check(entry.rect.r > entry.rect.l && entry.rect.b > entry.rect.t && entry.visible, `B-AC-17: on ${who} line ${line.id}'s ticker entry is drawn and visible, got ${JSON.stringify(entry.rect)} visible=${entry.visible}`);
     // Its phase may end before the page paints it again; then it shows in the next.
     if (firstIn(samples, phase, line.at)) timing(seen.phase === phase, `B-AC-17: on ${who} line ${line.id} first shown in the ticker in ${seen.phase}, said in ${phase}`);
