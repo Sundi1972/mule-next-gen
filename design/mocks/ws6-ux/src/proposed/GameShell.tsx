@@ -3,7 +3,8 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { ThemeToggle } from '../../../../../apps/web/src/components/ThemeToggle';
 import { fmt } from '../../../../../apps/web/src/game/derive';
 import { usePhoneGame } from '../../../../../apps/web/src/phone/game';
-import { SeatRow, Ticker, useChat } from './Chat';
+import { FallbackBubble, SeatRow, Ticker, useChat } from './Chat';
+import { useTickerRule } from './TickerRule';
 import { HandoffCode, useHandoffCode, type CodeState } from './HandoffCode';
 
 /**
@@ -125,7 +126,8 @@ export function GameShell({
   seconds?: number | undefined;
   /** Shown where the clock goes when the phase has none (planning's ready count, AM-16). */
   status?: ReactNode;
-  now: Now;
+  /** Optional, as on trunk's PhoneShell: a screen that gives no next step (production) opens its rail with its own content. */
+  now?: Now;
   rail?: ReactNode;
   footer?: ReactNode;
   /** Mock only: open with the hand-off dialog showing (#game-handoff), its code in that state. */
@@ -146,6 +148,7 @@ export function GameShell({
   children: ReactNode;
 }) {
   const chat = useChat();
+  const rule = useTickerRule();
   const { view, self, slot } = usePhoneGame();
   const [handoff, setHandoff] = useState(!!handoffOpen);
   const code = useHandoffCode(typeof handoffOpen === 'string' ? handoffOpen : 'ready');
@@ -158,6 +161,8 @@ export function GameShell({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+  // The rail-chat proposal (TickerRule.tsx): on a phone the table chat follows the rail's content, not above it.
+  const chatUnder = !!chat && rule === 'under' && !wide;
   return (
     <Wide.Provider value={wide}>
     <div ref={root} className="h-full @container/shell">
@@ -221,16 +226,27 @@ export function GameShell({
               )}
             </div>
             {/* Live table chat (C20): everyone's seat, the bubble's fallback anchor, and the last lines. */}
-            {chat && (
+            {chat && !chatUnder && (
               <div className="relative flex flex-col gap-1 border-t border-holo-faint pt-1.5 @min-[1100px]/shell:gap-2 @min-[1100px]/shell:pt-2.5" data-testid="table-chat">
                 <SeatRow anchored={anchored} />
                 <Ticker {...(chatLines !== undefined ? { lines: chatLines } : {})} />
               </div>
             )}
+            {chatUnder && (
+              <div className="relative h-0">
+                <FallbackBubble anchored={anchored} />
+              </div>
+            )}
           </header>
           <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 *:shrink-0 phone-short:gap-2 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4">
-            {foldNow ? <FoldingNowCard key={now.title} now={now} mark={nowMark} /> : <NowCard now={now} />}
+            {now && (foldNow ? <FoldingNowCard key={now.title} now={now} mark={nowMark} /> : <NowCard now={now} />)}
             {rail}
+            {chatUnder && (
+              <div className="flex flex-col gap-1 border-t border-holo-faint pt-1.5" data-testid="table-chat">
+                <SeatRow anchored={anchored} bubble={false} />
+                <Ticker />
+              </div>
+            )}
           </div>
           {footer && (
             <div className="flex flex-col gap-2 border-t border-holo-faint bg-void/60 px-3 pb-2.5 pt-2.5 phone-short:gap-1.5 phone-short:pb-1.5 phone-short:pt-1.5 @min-[1100px]/shell:gap-3 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4" data-testid="actions">
