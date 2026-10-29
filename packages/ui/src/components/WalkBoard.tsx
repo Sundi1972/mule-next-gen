@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { Creature } from './Creature';
+import { boardGait, GAIT, type BoardTrack, type Motion } from './motion/gait';
 import { useSeatSpecies, type CreatureWrap } from './species';
 import { cx, SLOT_COLOR, type Slot } from './tokens';
 
@@ -75,6 +76,7 @@ export function WalkBoard({
   storeBuys,
   storeSells,
   shipPays,
+  shipCaption,
   lines: extra = [],
   marks,
   storeStock,
@@ -91,6 +93,8 @@ export function WalkBoard({
   storeBuys: number | null;
   storeSells: number | null;
   shipPays: number | null;
+  /** Words on the ship's line, just under it: "The ship buys Crystite at 120". */
+  shipCaption?: string;
   /** More price lines, drawn like the store's: a seller's minimum at the land auction. */
   lines?: { id: string; label: string; price: number }[];
   /** The lowest-ask and highest-bid lines, drawn during the walk while no units change hands. */
@@ -194,7 +198,7 @@ export function WalkBoard({
             <span
               data-num
               data-testid="store-sold-out"
-              className={cx('absolute right-0 top-0 z-20 rounded-sm bg-void px-1 text-right font-mono font-bold leading-tight text-rise', tv ? 'text-base' : 'text-[9px]')}
+              className={cx('absolute right-0 top-0 z-20 rounded-sm bg-void px-1 text-right font-mono font-bold leading-tight text-rise', tv ? 'text-base' : 'text-[10px]')}
               style={{ width: gutter }}
             >
               <span className="block font-normal opacity-80">STORE</span>SOLD OUT
@@ -204,7 +208,7 @@ export function WalkBoard({
             <div key={l.key} className={cx('absolute inset-x-0 border-t border-dashed opacity-80', l.tone)} style={{ top: `${pct(l.price)}%` }} data-testid={`limit-${l.key}`}>
               <span
                 data-num
-                className={cx('absolute right-0 z-20 flex -translate-y-1/2 flex-col items-end rounded-sm bg-void px-1 text-right font-mono font-bold leading-tight', tv ? 'text-base' : 'text-[9px]')}
+                className={cx('absolute right-0 z-20 flex -translate-y-1/2 flex-col items-end rounded-sm bg-void px-1 text-right font-mono font-bold leading-tight', tv ? 'text-base' : 'text-[10px]')}
                 style={{ width: gutter }}
               >
                 <span className="font-normal opacity-80">{l.who}</span>
@@ -212,6 +216,19 @@ export function WalkBoard({
               </span>
             </div>
           ))}
+          {shipCaption && shipPays !== null && (
+            <span
+              className={cx(
+                // Under the line, against the gutter: sellers walk down from above, so the room under it is clear.
+                'pointer-events-none absolute z-20 whitespace-nowrap rounded-chip border border-warn/70 bg-void/90 font-display font-semibold text-warn',
+                tv ? 'mt-1.5 px-2.5 py-0.5 text-xl' : 'mt-1 px-1.5 text-[11px] @min-[1100px]/shell:text-base',
+              )}
+              style={{ top: `${pct(shipPays)}%`, right: `calc(${gutter}px + ${tv ? 0.5 : 0.25}rem)` }}
+              data-testid="ship-caption"
+            >
+              {shipCaption}
+            </span>
+          )}
 
           {askLine && <MovingLine testid="line-ask" top={pct(askLine.at)} width={x(1)} tone="seller" />}
           {bidLine && <MovingLine testid="line-bid" top={pct(bidLine.at)} width={x(1)} tone="buyer" />}
@@ -324,47 +341,68 @@ function AxisTag({ top, price, tone, tv, testid }: { top: number; price: number;
   );
 }
 
+/** Walks while the walker's price moves, stands while it holds (boardGait); wakes once to stand when the price stops. */
+function useBoardMotion(at: number): Motion {
+  const track = useRef<BoardTrack | null>(null);
+  const [, wake] = useState(0);
+  const now = performance.now();
+  const { track: next, motion } = boardGait(track.current, at, now);
+  useEffect(() => {
+    track.current = next;
+    if (motion !== 'walk' || next.movedAt === null) return;
+    const t = setTimeout(() => wake((n) => n + 1), GAIT.boardHoldMs - (now - next.movedAt) + 1);
+    return () => clearTimeout(t);
+  });
+  return motion;
+}
+
+/**
+ * One walker: a full-height column at its x, moved to its price by a transform (the compositor glides it, no layout),
+ * carrying the creature, its units and its price. Up and down have no facing, so the creature faces right.
+ */
 function Walker({ w, left, top, size, tv, me, trading, wrap = (_, c) => c }: { w: BoardWalker; left: string; top: number; size: number; tv: boolean; me: boolean; trading: boolean; wrap?: CreatureWrap | undefined }) {
   const species = useSeatSpecies(w.slot);
   const seller = w.side === 'seller';
+  const motion = useBoardMotion(w.at);
   return (
-    <div
-      className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 transition-[top] duration-100 ease-linear"
-      style={{ left, top: `${top}%` }}
-      data-testid={`walker-${w.id}`}
-      data-side={w.side}
-    >
-      <span className="relative flex flex-col items-center">
-        {wrap(
-          w.id,
-          <span className={cx('relative rounded-full', trading && 'animate-pulse-glow', me && 'ring-2 ring-holo ring-offset-2 ring-offset-void')}>
-            <Creature species={species} color={SLOT_COLOR[w.slot]} size={size} />
-          </span>,
-        )}
-        {w.units !== undefined && (
-          <span
-            data-num
-            data-testid={`units-${w.id}`}
-            className={cx('absolute top-full mt-0.5 whitespace-nowrap rounded-sm bg-void/90 px-1 font-mono font-bold leading-none text-ink', tv ? 'text-base' : 'text-[9px]')}
-          >
-            {w.units}
-            {w.surplus !== undefined && (
-              <span className={cx('font-normal', w.surplus < 0 ? 'text-alert' : w.surplus > 0 ? 'text-ok' : 'text-ink-3')}> ({w.surplus > 0 ? '+' : ''}{w.surplus})</span>
-            )}
-          </span>
-        )}
-      </span>
-      <span
-        data-num
-        className={cx(
-          'flex flex-col items-start rounded-control border bg-void/90 px-1 font-mono font-bold leading-none',
-          tv ? 'py-1 text-xl' : 'py-0.5 text-[11px]',
-          seller ? 'border-rise/60 text-rise' : 'border-fall/60 text-fall',
-        )}
+    <div className="absolute inset-y-0 w-0 transition-transform duration-100 ease-linear" style={{ left, transform: `translateY(${top}%)` }}>
+      <div
+        className="absolute left-0 top-0 flex w-max -translate-x-1/2 -translate-y-1/2 items-center gap-1"
+        data-testid={`walker-${w.id}`}
+        data-side={w.side}
       >
-        <span className={cx('font-normal text-ink-3', tv ? 'text-xs' : 'text-[8px]')}>{seller ? 'ASK' : 'BID'}</span>
-        {w.price}
-      </span>
+        <span className="relative flex flex-col items-center">
+          {wrap(
+            w.id,
+            <span className={cx('relative rounded-full', trading && 'animate-pulse-glow', me && 'ring-2 ring-holo ring-offset-2 ring-offset-void')}>
+              <Creature species={species} color={SLOT_COLOR[w.slot]} size={size} motion={motion} cycle={motion === 'walk' ? GAIT.fullCycle : GAIT.idleCycle} shadow={false} />
+            </span>,
+          )}
+          {w.units !== undefined && (
+            <span
+              data-num
+              data-testid={`units-${w.id}`}
+              className={cx('absolute top-full mt-0.5 whitespace-nowrap rounded-sm bg-void/90 px-1 font-mono font-bold leading-none text-ink', tv ? 'text-base' : 'text-[10px]')}
+            >
+              {w.units}
+              {w.surplus !== undefined && (
+                <span className={cx('font-normal', w.surplus < 0 ? 'text-alert' : w.surplus > 0 ? 'text-ok' : 'text-ink-3')}> ({w.surplus > 0 ? '+' : ''}{w.surplus})</span>
+              )}
+            </span>
+          )}
+        </span>
+        <span
+          data-num
+          className={cx(
+            'flex flex-col items-start rounded-control border bg-void/90 px-1 font-mono font-bold leading-none',
+            tv ? 'py-1 text-xl' : 'py-0.5 text-[11px]',
+            seller ? 'border-rise/60 text-rise' : 'border-fall/60 text-fall',
+          )}
+        >
+          <span className={cx('font-normal text-ink-3', tv ? 'text-xs' : 'text-[10px]')}>{seller ? 'ASK' : 'BID'}</span>
+          {w.price}
+        </span>
+      </div>
     </div>
   );
 }

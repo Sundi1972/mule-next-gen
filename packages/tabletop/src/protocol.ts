@@ -29,12 +29,14 @@ export type ClientEnvelope<Intent> =
   | { t: 'emote'; emote: string }
   | { t: 'ping'; clientTime: number };
 
-/** What the room sends to one screen. */
-export type ServerEnvelope<GameView> =
+/** What the room sends to one screen. `Frame` is the game's own transient frame, opaque to the room like `GameView`. */
+export type ServerEnvelope<GameView, Frame = unknown> =
   | { t: 'welcome'; code: string; role: 'player' | 'board'; seatId: string | null; seatToken: string | null }
   | { t: 'view'; view: TableView<GameView> }
   | { t: 'chat'; message: ChatMessage }
   | { t: 'emote'; from: string; emote: string }
+  /** The game's light per-tick frame, beside its full view. A screen that is behind misses frames; they are never resent. */
+  | { t: 'frame'; payload: Frame }
   | { t: 'pong'; clientTime: number; serverTime: number }
   | { t: 'error'; message: string }
   /** For this screen only: joining with `code` before `expiresAt` moves this seat to that device, once. */

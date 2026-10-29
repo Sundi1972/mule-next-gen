@@ -61,6 +61,7 @@ class Script {
         return () => void this.timers.delete(timer);
       },
       changed: () => {},
+      frame: () => {},
       say: () => {},
     };
     const smart = new Set(record.seats.filter((s) => s.smart).map((s) => s.id));
@@ -243,6 +244,9 @@ function playStep(game: MuleGame, script: Script, event: StepEvent, seats: SeatI
         return;
       case 'moved':
         game.seatMoved(event.seat);
+        return;
+      case 'heard':
+        game.heard(event.from, '', event.to);
         return;
       case 'answer':
         script.answer(event);

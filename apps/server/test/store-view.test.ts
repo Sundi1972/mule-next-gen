@@ -1,7 +1,7 @@
 import { airBand, DEV_WALK, DEVELOPMENT, foodShare, hungerPace, needsOf, POLLUTION, sickPace, type GameState } from '@mule/engine';
 import { describe, expect, it } from 'vitest';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
-import { fakeContext, readyAll, seats } from './fake-context.js';
+import { clockRunsInMonth1, fakeContext, readyAll, seats } from './fake-context.js';
 
 /** Nine working farms give a crew of nine, so s1 needs 5 Food a month. */
 const FARMS = 9;
@@ -29,6 +29,9 @@ function hungryWithAnEmptyCorral() {
 }
 
 describe('the store view at the start of development', () => {
+  // The clock as such, met in month 1: it runs from the start, as in any later month.
+  clockRunsInMonth1();
+
   it("B-AC-9 / B-AC-10: a hungry seat and an empty corral reach the phone's view", () => {
     const { game, state } = hungryWithAnEmptyCorral();
     expect(needsOf(state, 's1').food).toBe(5);
@@ -40,9 +43,9 @@ describe('the store view at the start of development', () => {
     expect(view.storeMules).toBe(0);
   });
 
-  it("B-AC-9: every screen sees each seat's condition during development only: its hunger × sickness pace, species aside, and why it is sick", () => {
+  it("B-AC-9: every screen sees each seat's condition in development, never in planning or production (the month end keeps it, C20): its hunger × sickness pace, species aside, and why it is sick", () => {
     const { game, state, planning, ctx, advance } = hungryWithAnEmptyCorral();
-    const want = { foodShare: foodShare(state, 's1'), sick: false, sickBecause: null, conditionPace: hungerPace(state, 's1') };
+    const want = { foodShare: foodShare(state, 's1'), foodNeed: needsOf(state, 's1').food, sick: false, sickBecause: null, conditionPace: hungerPace(state, 's1') };
     expect(want.conditionPace).toBeCloseTo(0.52);
     for (const viewer of ['s1', 's2', null]) expect(game.viewFor(viewer).players.find((p) => p.id === 's1')!.condition).toEqual(want);
     expect(game.viewFor('s1').me!.hungry).toBe(true);

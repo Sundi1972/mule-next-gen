@@ -4,7 +4,7 @@
  * uses PhoneShell, so the step holds if the phase moves on under it.
  */
 import { errors as playwrightErrors, type Page } from 'playwright';
-import { check, PHONE } from './harness';
+import { check, PHONE, PHONE_SMALL } from './harness';
 
 /** Heiko's laptop. */
 export const LAPTOP = { width: 1440, height: 900 };
@@ -71,7 +71,7 @@ const RECORD_PAINTS = `{
 }`;
 
 /**
- * B-AC-12: the shell fills the stage at 1440×900 and 844×390, switching on its own width at exactly 1100 px, with
+ * B-AC-12: the shell fills the stage at 1440×900, 844×390 and 667×375, switching on its own width at exactly 1100 px, with
  * useWide equal to the container query in every painted frame and the emotes clear of the rail at every size.
  * Reloads the phone once, at 1440×900, so a shell mounts wide, and does that last: a reload by the only human ends the
  * phase, and the steps after this one wait on the phases that follow. Leaves the phone at 844×390 with no notch, as
@@ -112,9 +112,24 @@ export async function shellFillsTheStage(phone: Page, timeout = 5_000): Promise<
   const vw = PHONE.viewport.width;
   const narrow = await read(phone);
   checkFrame(narrow, `a ${vw} px window`, vw, narrowRail(vw), 'false');
+  await noPageScroll(phone, PHONE.viewport);
   log.push(`${vw}: stage ${narrow.stage.toFixed(1)} + rail ${narrow.guide.toFixed(1)}`);
   await emote(phone);
   log.push(`emotes ${await emotesClear(phone, vw)}`);
+
+  // The small phone: the rail at its floor, the stage the rest, the emotes clear of the rail, nothing past the window.
+  const sw = PHONE_SMALL.viewport.width;
+  try {
+    await phone.setViewportSize(PHONE_SMALL.viewport);
+    const small = await read(phone);
+    checkFrame(small, `a ${sw} px window`, sw, narrowRail(sw), 'false');
+    await noPageScroll(phone, PHONE_SMALL.viewport);
+    log.push(`${sw}: stage ${small.stage.toFixed(1)} + rail ${small.guide.toFixed(1)}`);
+    await emote(phone);
+    log.push(`emotes ${await emotesClear(phone, sw)}`);
+  } finally {
+    await phone.setViewportSize(PHONE.viewport);
+  }
 
   // A notch on the right: the rail and the emotes move in by the inset together.
   const cdp = await phone.context().newCDPSession(phone);
@@ -151,8 +166,9 @@ export async function shellFillsTheStage(phone: Page, timeout = 5_000): Promise<
   const wideMounts = paints.filter((p) => p.at === 'mount' && p.box >= WIDE_PX).length;
   const resizes = paints.filter((p) => p.at === 'resize').length;
   check(wideMounts >= 1, `B-AC-12 (I-1): a shell mounted at ${LAPTOP.width} px was recorded, got ${wideMounts}`);
-  // To 1440, to 1099, to 1100, back to 1440, to 844, then to 844 again after the reload.
-  check(resizes >= 5, `B-AC-12 (I-1): every resize of the shell was recorded before paint, got ${resizes}`);
+  // At least the seven size changes (to 1440, 1099, 1100, back to 1440, to 844, to 667, back to 844); each observer's
+  // first read and the move to 1440 before the reload come on top. The frames themselves are checked one by one above.
+  check(resizes >= 7, `B-AC-12 (I-1): every resize of the shell was recorded before paint, got ${resizes}`);
   log.push(`painted frames checked ${paints.length} (${wideMounts} wide mounts, ${resizes} resizes)`);
 
   // `now`: no screen gives one yet, so this logs that rather than pass on nothing; the render test proves its place.
@@ -192,6 +208,12 @@ async function emotesClear(phone: Page, vw: number, label = String(vw)): Promise
   const gap = f.guideLeft - f.emotesRight;
   check(gap > 0, `B-AC-12 (I-4): at ${label} the emotes end ${gap.toFixed(1)} px left of the rail (inside it when negative)`);
   return `${label}: right edge ${f.emotesRight.toFixed(1)}, rail left ${f.guideLeft.toFixed(1)}, gap ${gap.toFixed(1)} px`;
+}
+
+/** The page never scrolls, either way: the shell fits the window whatever the rail holds. */
+async function noPageScroll(phone: Page, size: { width: number; height: number }): Promise<void> {
+  const scroll = await phone.evaluate(() => ({ x: document.documentElement.scrollWidth, y: document.documentElement.scrollHeight }));
+  check(scroll.x <= size.width && scroll.y <= size.height, `B-AC-12: at ${size.width}×${size.height} the page does not scroll, got ${scroll.x}×${scroll.y}`);
 }
 
 function checkFrame(f: Frame, at: string, box: number, rail: number, wide: 'true' | 'false'): void {

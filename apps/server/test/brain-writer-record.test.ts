@@ -78,7 +78,7 @@ vi.mock('../src/brain/client.js', async (original) => ({
   },
 }));
 
-const ctx: GameContext = { now: () => 1_000, hostId: () => null, schedule: () => () => {}, changed: () => {} };
+const ctx: GameContext = { now: () => 1_000, hostId: () => null, schedule: () => () => {}, changed: () => {}, frame: () => {} };
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 let dir: string;

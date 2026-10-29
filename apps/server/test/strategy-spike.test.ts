@@ -296,12 +296,10 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:strategy-spike', () => {
     const text = lines.join('\n');
     expect(text).toMatch(/quality here means valid, within bounds and agreeing with Sonnet/i);
     expect(text).toMatch(/no validator exists yet/i);
-    expect(text).toContain(`${PHASES.upkeepMs} ms`);
-    // Haiku's p90 (9 s) is over the 8 s upkeep window; Sonnet's (7 s) is under.
-    expect(9_000).toBeGreaterThan(PHASES.upkeepMs);
-    expect(7_000).toBeLessThan(PHASES.upkeepMs);
-    expect(lines).toContainEqual(expect.stringMatching(new RegExp(`^${S.models.haiku}: p90 9000 ms is over`)));
-    expect(lines).toContainEqual(expect.stringMatching(new RegExp(`^${S.models.sonnet}: p90 7000 ms is under`)));
+    // The month end has no clock (PHASES.upkeepMs is null), so each p90 is reported without a window.
+    expect(PHASES.upkeepMs).toBeNull();
+    expect(lines).toContainEqual(expect.stringMatching(new RegExp(`^${S.models.haiku}: p90 9000 ms; the month end has no clock`)));
+    expect(lines).toContainEqual(expect.stringMatching(new RegExp(`^${S.models.sonnet}: p90 7000 ms; the month end has no clock`)));
     expect(lines).toContainEqual(expect.stringMatching(/^plan pick agreement\s+1 of 2$/));
     expect(lines).toContainEqual(expect.stringMatching(/^strategy kind agreement\s+1 of 2$/));
   });
