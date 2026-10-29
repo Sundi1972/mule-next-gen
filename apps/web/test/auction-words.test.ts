@@ -83,11 +83,11 @@ describe('G-3: the hint names the line to walk to, and who stands there', () => 
 describe('G-2: "Hold" said in the hint', () => {
   it('a buyer holds ▲ to walk up', () => {
     const a = auction({ storeSells: 30, storeForSale: 4, walkers: [walker('lena', 'buyer', 12)] });
-    expect(walkHint(view, a, 'lena', 1).how).toBe('Hold ▲ to walk up.');
+    expect(walkHint(view, a, 'lena', 1).how).toBe('Hold ▲ to walk up; a tap moves 1 cr.');
   });
   it('a seller holds ▼ to walk down', () => {
     const a = auction({ storeBuys: 8, walkers: [walker('lena', 'seller', 40)] });
-    expect(walkHint(view, a, 'lena', 3).how).toBe('Hold ▼ to walk down.');
+    expect(walkHint(view, a, 'lena', 3).how).toBe('Hold ▼ to walk down; a tap moves 1 cr.');
   });
 });
 

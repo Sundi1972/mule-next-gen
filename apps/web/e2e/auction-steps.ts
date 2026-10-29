@@ -18,6 +18,10 @@ import { ELECTION_WAIT_MS, readyThroughTheElection, voteThroughTheElection } fro
 import { AUDIT_JS, MIN_TEXT, type AuditRead } from './small-phone-audit';
 
 const PRESS_MS = 2_000;
+/** After a tap, how long the walker must stand still to show it was one step (A-6, G-2). */
+const TAP_SETTLE_MS = 600;
+/** How long the buyer stands at the store's line, let go, to show nothing trades there by itself (A-6, G-1). */
+const LINE_STAND_MS = 1_500;
 /** Once the month's last good has closed, how long a phone has to show the month end's "On to month N". */
 const MONTH_END_MS = 10_000;
 /** The minimum the Sell form starts at, which listPlot leaves unchanged. */
@@ -546,6 +550,55 @@ async function walkUntil(truth: Truth, p: Phone, dir: 'up' | 'down', until: (a: 
   await untilServer(truth, p.page, (a) => a.walkers.find((w) => w.id === id)?.dir === 0, `${p.name} stands once ${dir} is let go`);
 }
 
+/** G-2 (A-6): a quick tap on Hold moves the walker exactly one price step, and it stands still after. */
+async function tapOneStep(truth: Truth, p: Phone, dir: 'up' | 'down'): Promise<void> {
+  const id = truth.idOf(p);
+  const price = () => truth.board().auction?.walkers.find((w) => w.id === id)?.price ?? NaN;
+  const before = price();
+  await p.page.locator(`[data-testid=hold-${dir}]:not([disabled])`).click();
+  const want = before + (dir === 'up' ? 1 : -1);
+  await untilServer(truth, p.page, (a) => a.walkers.find((w) => w.id === id)?.price === want, `G-2: one tap on ${dir} moves ${p.name} from ${before} to ${want}, got ${price()}`);
+  // Held still a while: a tap is a step, not a walk.
+  await p.page.waitForTimeout(TAP_SETTLE_MS);
+  const after = truth.board().auction?.walkers.find((w) => w.id === id);
+  check(after?.price === want && after.dir === 0, `G-2: after the tap ${p.name} stands at ${want}, got ${after?.price} walking ${after?.dir}`);
+  console.log(`✓ G-2 (A-6): one tap on ${dir} moves ${p.name} from ${before} to ${want}, and she stands there`);
+}
+
+/**
+ * G-1 (A-6), at the store's selling line: the phone asks "Buy how many?" and nothing trades until it is answered; the
+ * buyer raises the amount to what the store will sell, taps "Buy N for X cr", and exactly that many move.
+ */
+async function buyAtTheStoreLine(truth: Truth, p: Phone, timeout: number): Promise<void> {
+  const id = truth.idOf(p);
+  const page = p.page;
+  await page.getByTestId('line-question').waitFor({ timeout: PRESS_MS });
+  const asked = await readText(page, 'line-question');
+  check(asked.startsWith('Buy how many?'), `G-1: at the store's line ${p.name}'s phone asks "Buy how many?", got "${asked}"`);
+  const at = truth.board().auction!;
+  // Letting go at the line trades nothing: the store's count holds while she stands there.
+  await page.waitForTimeout(LINE_STAND_MS);
+  const still = truth.board().auction!;
+  check(
+    still.storeForSale === at.storeForSale && !still.deals.some((d) => d.seller === 'store' && d.buyer === id),
+    `G-1: standing at the store's line, ${p.name} buys nothing until she says how many: the store went ${at.storeForSale} → ${still.storeForSale}`,
+  );
+  const want = at.storeForSale;
+  const amount = async () => Number(await readText(page, 'amount'));
+  for (let i = 0; i < want && (await amount()) < want; i++) await page.getByTestId('amount-more').click();
+  const n = await amount();
+  check(n === want, `G-1: ${p.name} raises the amount to the store's ${want}, got ${n}`);
+  const go = await readText(page, 'line-go');
+  const label = `Buy ${n} for ${(n * at.storeSells!).toLocaleString('en')} cr`;
+  check(go === label, `G-1: the footer offers "${label}", got "${go}"`);
+  await page.getByTestId('line-go').click();
+  const done = await untilServer(truth, page, (a) => a.walkers.find((w) => w.id === id)?.order?.traded === n && a.deals.length === 0, `G-1: ${p.name}'s ${n} units move`, timeout);
+  check(done.storeForSale === 0, `B-AC-3: ${p.name} buys the store out, ${done.storeForSale} left`);
+  const said = await readText(page, 'line-hint');
+  check(said.startsWith(`You bought ${n} `), `G-1: the rail says what she bought, got "${said}"`);
+  console.log(`✓ G-1 (A-6): at the store's line "${asked.split('?')[0]}?" and nothing traded while ${p.name} stood there; "${label}" bought exactly ${n}: "${said}"`);
+}
+
 /**
  * Month 1's first good, played so every step lands on a known price: on the status screen the buyer
  * switches from Sell to Buy; in the walk the stayer steps up out of the way, the buyer walks up to the
@@ -617,10 +670,13 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
   await Promise.all(screens.map((s) => untilShows(s, readUnits, before, 'B-AC-2: units and surplus under the creatures before the trade')));
   console.log(`✓ HC-2 (WS6): the TV draws one units label per walker, each equal to their ${a.good} stock, ${JSON.stringify(before)}`);
 
-  // The buyer stops at the store's selling line, under every ask, and buys the store out from there.
+  // G-2 (A-6): one tap on Up is one price step.
+  await tapOneStep(truth, buyer, 'up');
+  // The buyer stops at the store's selling line, under every ask, and lets go: nothing trades until she says how many
+  // (G-1, A-6). She chooses what the store will sell and buys it out from there.
   const tradeBudget = within(SCALE, WALK.goodMs);
-  await walkUntil(truth, buyer, 'up', (x) => x.deals.some((d) => d.seller === 'store' && d.buyer === buyerId), `B-AC-3: ${buyer.name} walks up to the store's line and buys`);
-  await untilServer(truth, buyer.page, (x) => x.storeForSale === 0 && x.deals.length === 0, `B-AC-3: ${buyer.name} buys the store out`, tradeBudget);
+  await walkUntil(truth, buyer, 'up', (x) => x.walkers.find((w) => w.id === buyerId)?.line === 'store', `B-AC-3: ${buyer.name} walks up to the store's line`);
+  await buyAtTheStoreLine(truth, buyer, tradeBudget);
   await storeShows(0, null);
 
   const giveWay = Promise.all(screens.map((s) => linesGiveWayToTheTrade(s, tradeBudget)));
@@ -841,7 +897,7 @@ async function readTheWalkWords(phones: Phone[], truth: Truth, name: (id: string
     const holds = [await readText(page, 'hold-up'), await readText(page, 'hold-down')];
     check(holds[0] === 'Hold ▲ to walk up' && holds[1] === 'Hold ▼ to walk down', `G-2: ${p.name}'s walk buttons say Hold, got ${JSON.stringify(holds)}`);
     const how = await readText(page, 'hint-how');
-    const wantHow = side === 'buyer' ? 'Hold ▲ to walk up.' : 'Hold ▼ to walk down.';
+    const wantHow = side === 'buyer' ? 'Hold ▲ to walk up; a tap moves 1 cr.' : 'Hold ▼ to walk down; a tap moves 1 cr.';
     check(how === wantHow, `G-2: ${p.name}'s hint says "${wantHow}", got "${how}"`);
     // A buyer meets the cheapest seller, a seller the best payer: from where this player stands, never themselves.
     const best = bestOffer(a, side === 'buyer' ? 'seller' : 'buyer', name, truth.houseOrder(), id);

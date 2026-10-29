@@ -28,9 +28,11 @@ import {
   grantDone,
   grantPass,
   hasAnalysed,
+  houseLineAt,
   hungerPace,
   installMule,
   isElectionDone,
+  lineTrade,
   list as listLot,
   litPlot,
   lotDone,
@@ -62,6 +64,7 @@ import {
   stepAuction,
   stepElection,
   stepLandAuction,
+  stepWalk,
   storeBuyLine,
   storeForSale,
   storeQuotes,
@@ -252,6 +255,19 @@ export type Notice = Without<NoticeEntry, 'type' | 'at' | 'seq'>;
 export type PlaybookNote = Omit<PlaybookEntry, 'type' | 'at' | 'seq'>;
 
 /** M.U.L.E. as a game hosted by a @tabletop/core room. */
+/** What the export ship pays for each unit of the good it still wants, next first; empty while it doesn't buy it (A-6). */
+function shipQuote(state: GameState, good: Good): number[] {
+  if (shipLine(state) === null) return [];
+  const bought = state.ship.bought[good] ?? 0;
+  const prices: number[] = [];
+  for (let k = 0; k < (state.ship.hold[good] ?? 0); k++) {
+    const price = shipPrice({ ...state, ship: { ...state.ship, bought: { ...state.ship.bought, [good]: bought + k } } }, good);
+    if (price === null) break;
+    prices.push(price);
+  }
+  return prices;
+}
+
 export class MuleGame implements Game<MuleIntent, MuleView> {
   private state: GameState | null = null;
   private seats: SeatInfo[] = [];
@@ -413,6 +429,14 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         if (intent.dir !== 'stop') auctionDone(state, seatId, false);
         return;
       }
+      case 'walkStep':
+        stepWalk(state, seatId, intent.dir === 'up' ? 1 : -1);
+        auctionDone(state, seatId, false);
+        return;
+      case 'lineTrade':
+        lineTrade(state, seatId, intent.units);
+        auctionDone(state, seatId, false);
+        return;
       case 'list':
         listLot(state, seatId, intent);
         return;
@@ -1085,6 +1109,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           if (state.phase === 'landAuction') setLotWalk(state, seatId, action.dir);
           else setWalk(state, seatId, action.dir);
           break;
+        case 'lineTrade':
+          // As walking: the hands keep their own Done, the same as in the simulator.
+          lineTrade(state, seatId, action.units);
+          break;
         case 'done':
           if (this.electionOpen()) electionDone(state, seatId, action.done);
           else if (state.phase === 'landGrant') grantPass(state, seatId);
@@ -1396,6 +1424,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       storeSells: storeSellLine(state),
       storeForSale: storeForSale(state, a.good),
       shipPays: shipLine(state),
+      shipQuote: shipQuote(state, a.good),
       ...boardRange(a.lo, a.hi, [...prices, ...lines]),
       speed: a.speed,
       walkers: a.walkers.map((w) => ({
@@ -1406,6 +1435,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         dir: w.dir,
         done: a.done.includes(w.id),
         units: market.units(w.id),
+        line: a.stage === 'walk' ? (houseLineAt(market, w)?.house ?? null) : null,
+        order: w.order ? { ...w.order } : null,
       })),
       deals: a.deals.map(({ buyer, seller, price, units }) => ({ buyer, seller, price, units })),
       units: a.units,

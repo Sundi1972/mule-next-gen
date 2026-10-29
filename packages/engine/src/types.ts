@@ -381,6 +381,20 @@ export interface Walker {
   dir: -1 | 0 | 1;
   /** Board time (ms into the walk) when their rounded price last changed: who got there first. */
   since: number;
+  /** At a house's line: how many units they chose to trade with it (A-6, UX audit G-1). Absent until they choose. */
+  order?: LineOrder;
+}
+
+/**
+ * A choice made at a house's line (the store's, the ship's): nothing trades with a house until it is made, and it
+ * stops at `units`. A finished one stays until the walker moves, so the phone can say what was traded.
+ */
+export interface LineOrder {
+  house: string;
+  units: number;
+  /** Units moved so far, and what they cost the buyer, or brought the seller after the sales tax. */
+  traded: number;
+  cr: number;
 }
 
 /** A buyer and a seller, either of them perhaps a house (the store, the ship), exchanging units right now. */

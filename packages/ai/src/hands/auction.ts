@@ -1,4 +1,4 @@
-import { AI_HANDS, MS_PER_SECOND, observe, shipLine, storeBuyLine, storeSellLine, type GameState, type Good, type Rng, type Walker } from '@mule/engine';
+import { AI_HANDS, lineOf, MS_PER_SECOND, observe, shipLine, storeBuyLine, storeSellLine, type GameState, type Good, type Rng, type Walker } from '@mule/engine';
 import type { Act } from '../actions.js';
 import type { Brain, Pending } from '../brain.js';
 import { goodPlan, tradeDecision, type GoodPlan, type TradeAction } from '../strategist.js';
@@ -20,6 +20,10 @@ import { beforeTax } from '../value.js';
  * little inside the limit, so there is no fixed habit to read. A buyer's
  * limit is what one more unit is worth to it; a seller's floor is what the
  * unit it would give up is worth. Both follow its stock as units trade.
+ *
+ * At the store's or the ship's line nothing trades until the seat says how
+ * many (A-6): standing there, it chooses the units it still wants at that
+ * price, and stands still while they move; then it chooses again, or walks off.
  */
 export interface AuctionDebug {
   good: Good;
@@ -47,6 +51,8 @@ export class AuctionHand {
   private dir: -1 | 0 | 1 = 0;
   private doneFlag = false;
   private startMoney = 0;
+  /** The line, price, stock and money it last chose at: a refused or finished choice isn't asked again until one changes. */
+  private lineTried: string | null = null;
 
   constructor(
     private readonly brain: Brain,
@@ -107,6 +113,7 @@ export class AuctionHand {
       this.aim(state, w);
     }
     this.steer(state, w, dt, act);
+    this.chooseAtLine(state, w, act);
   }
 
   private reset(key: string): void {
@@ -127,6 +134,7 @@ export class AuctionHand {
     this.dir = 0;
     this.doneFlag = false;
     this.startMoney = 0;
+    this.lineTried = null;
   }
 
   /** Picks where to stand, from what it sees on the board now. */
@@ -193,9 +201,47 @@ export class AuctionHand {
     this.doneFlag = finished || (this.target >= ceiling && a.deals.every((d) => d.buyer !== me.id));
   }
 
+  /** Standing at a house's line with no choice running, it says how many units it still wants there. */
+  private chooseAtLine(state: GameState, w: Walker, act: Act): void {
+    const line = lineOf(state, w.id);
+    if (!line || this.dir !== 0 || w.dir !== 0 || running(w)) return;
+    const me = state.players.find((p) => p.id === this.brain.mind.me)!;
+    const units = this.unitsAt(state, w.side, line.price);
+    const key = `${line.house}:${line.price}:${me.stock[state.auction!.good!]}:${me.money}`;
+    if (units < 1 || key === this.lineTried) return;
+    this.lineTried = key;
+    act({ type: 'lineTrade', units });
+  }
+
+  /** The units it would trade one by one at this price, by the same limits `aim` walks to: a buyer's value and purse, a seller's floor. */
+  private unitsAt(state: GameState, side: Walker['side'], price: number): number {
+    const good = state.auction!.good!;
+    const plan = this.plan!;
+    const trade = this.trade!;
+    const me = state.players.find((p) => p.id === this.brain.mind.me)!;
+    let units = 0;
+    if (side === 'seller' && trade.side === 'seller') {
+      for (let h = me.stock[good]; h > trade.keep && h > 0; h--, units++) {
+        const floor = Math.ceil(beforeTax(state, plan.values.keep[h - 1] ?? 0));
+        if (!Number.isFinite(floor) || floor > price) break;
+      }
+      return units;
+    }
+    if (side !== 'buyer' || trade.side !== 'buyer') return 0;
+    for (let h = me.stock[good], money = me.money; h < trade.upTo; h++, units++, money -= price) {
+      const budgetLeft = Math.max(0, plan.budget - (this.startMoney - money));
+      const essential = h < plan.values.block && (good === 'food' || good === 'energy');
+      const cap = essential ? money : Math.min(money, budgetLeft);
+      if (Math.floor(Math.min(plan.values.buy[h] ?? 0, cap)) < price) break;
+    }
+    return units;
+  }
+
   /** Holds up or down until the rounded price is on the target, a step at most past it, so it never wobbles. */
   private steer(state: GameState, w: Walker, dt: number, act: Act): void {
     const a = state.auction!;
+    // While its choice at a line runs it stands still: walking would stop the units it chose.
+    if (running(w)) return;
     const target = this.target!;
     const step = (a.speed * dt) / MS_PER_SECOND;
     const p = Math.round(w.price);
@@ -209,3 +255,6 @@ export class AuctionHand {
     if (done !== a.done.includes(w.id)) act({ type: 'done', done });
   }
 }
+
+/** A choice made at a house's line that still has units to move. */
+const running = (w: Walker) => w.order !== undefined && w.order.traded < w.order.units;

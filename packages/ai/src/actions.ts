@@ -15,6 +15,8 @@ export type AiAction =
   | { type: 'pub' }
   | { type: 'declare'; side: AuctionSide }
   | { type: 'walk'; dir: -1 | 0 | 1 }
+  /** At the store's or the ship's line in the goods walk: trade this many units with it, then stop (A-6). */
+  | { type: 'lineTrade'; units: number }
   /** Run for an office; null withdraws. A Governor run carries a promise (RULE-10). */
   | { type: 'run'; office: Office | null; promise?: TaxPromise }
   /** A secret ballot for a contested office; null clears it. */

@@ -1,8 +1,8 @@
 import { COLONY_SELLER, SHIP_ID, STORE_ID, type AuctionRole, type AuctionSide, type Good } from '@mule/engine';
-import type { AuctionView, DealView, LandAuctionView, ListingView, MuleView } from '@mule/protocol';
-import { Creature, cx, GOOD_NAME, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
+import type { AuctionView, DealView, LandAuctionView, ListingView, MuleView, WalkerView } from '@mule/protocol';
+import { Button, Creature, cx, GOOD_NAME, GoodIcon, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
 import type { ReactNode } from 'react';
-import { plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
+import { fmt, plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
 import { GroundCard } from '../phone/ground';
 import { SpecialLine } from './SpecialLine';
 
@@ -203,7 +203,7 @@ export function walkHint(view: MuleView, auction: AuctionView, meId: string, hav
   const good = GOOD_NAME[auction.good];
   if (side === 'pass') return { line: `You sit ${good} out.`, how: null };
   if (side === 'seller' && have === 0) return { line: 'You’ve sold all you have.', how: null };
-  const how = side === 'buyer' ? 'Hold ▲ to walk up.' : 'Hold ▼ to walk down.';
+  const how = side === 'buyer' ? 'Hold ▲ to walk up; a tap moves 1 cr.' : 'Hold ▼ to walk down; a tap moves 1 cr.';
   const list = pricesOn(auction, side === 'buyer' ? 'seller' : 'buyer', meId);
   const best = list[0];
   if (!best) return { line: side === 'buyer' ? `Nobody is selling ${good} now.` : `Nobody is buying ${good} now.`, how };
@@ -222,13 +222,13 @@ export function walkHint(view: MuleView, auction: AuctionView, meId: string, hav
   return { line: `Walk down to ${name(best)}’s bid at ${best.price}.`, how };
 }
 
-/** The hint's box: `lit` while your units change hands. */
-export function Hint({ line, how, tone = 'quiet', testid = 'hint' }: { line: ReactNode; how?: string | null; tone?: 'quiet' | 'lit'; testid?: string }) {
+/** The hint's box: `lit` while your units change hands, `ok` once a choice at a line is done. */
+export function Hint({ line, how, tone = 'quiet', testid = 'hint' }: { line: ReactNode; how?: string | null; tone?: 'quiet' | 'lit' | 'ok'; testid?: string }) {
   return (
     <div
       className={cx(
         'flex flex-col gap-0.5 rounded-control border px-2.5 py-1.5 text-xs leading-snug @min-[1100px]/shell:gap-1 @min-[1100px]/shell:px-4 @min-[1100px]/shell:py-3 @min-[1100px]/shell:text-base',
-        tone === 'lit' ? 'border-holo bg-holo-soft text-ink' : 'border-holo-faint text-ink',
+        tone === 'lit' ? 'border-holo bg-holo-soft text-ink' : tone === 'ok' ? 'border-ok/60 bg-panel text-ink' : 'border-holo-faint text-ink',
       )}
       data-testid={testid}
     >
@@ -478,5 +478,173 @@ export function LeaderBox({ view, lot, meId, className }: { view: MuleView; lot:
     >
       {line.text}
     </div>
+  );
+}
+
+// --- A-6 · at a house's line you choose how many (UX audit G-1; mock #audit-auction-store-line) ------------------
+
+/**
+ * Where this phone's walker stands, as the engine says: walking; at a house's line with nothing chosen (the question);
+ * trading the units it chose; or done with them, until it walks off the line.
+ */
+export type LineMoment =
+  | { kind: 'walk' }
+  | { kind: 'line'; house: string }
+  | { kind: 'trading' | 'done'; house: string; units: number; traded: number; cr: number };
+
+export function lineMoment(mine: Pick<WalkerView, 'side' | 'line' | 'order'> | undefined): LineMoment {
+  if (!mine || mine.side === 'pass') return { kind: 'walk' };
+  if (mine.order) return { kind: mine.order.traded < mine.order.units ? 'trading' : 'done', ...mine.order };
+  return mine.line ? { kind: 'line', house: mine.line } : { kind: 'walk' };
+}
+
+/** The question at the line: how many, set against what you need (buying) or your spare (selling). */
+export interface LineAsk {
+  side: 'buyer' | 'seller';
+  /** 'store' or 'ship'. */
+  house: string;
+  good: Good;
+  amount: number;
+  /** Buying: what you still need. Selling: your spare. */
+  aim: number;
+  max: number;
+  /** The total for `amount` units, before any tax. */
+  total: number;
+  have: number;
+  need: number;
+}
+
+/** A unit's price at the line, the k-th from now: the store's is the same for each, the ship pays a little less each time. */
+function linePrice(auction: Pick<AuctionView, 'storeSells' | 'storeBuys' | 'shipQuote'>, side: 'buyer' | 'seller', house: string, k: number): number {
+  if (side === 'buyer') return auction.storeSells ?? 0;
+  if (house === SHIP_ID) return auction.shipQuote?.[k] ?? auction.shipQuote?.at(-1) ?? 0;
+  return auction.storeBuys ?? 0;
+}
+
+/**
+ * The aim the amount starts at and the most you can choose: a buyer what it still needs, up to what the store has and
+ * you can pay for; a seller its spare, up to what you hold (and, at the ship, what it still wants).
+ */
+export function lineLimits(
+  auction: Pick<AuctionView, 'storeSells' | 'storeBuys' | 'storeForSale' | 'shipQuote'>,
+  side: 'buyer' | 'seller',
+  house: string,
+  have: number,
+  need: number,
+  money: number,
+): { aim: number; max: number } {
+  if (side === 'buyer') {
+    const price = linePrice(auction, side, house, 0);
+    return { aim: Math.max(0, need - have), max: Math.max(1, Math.min(auction.storeForSale, price > 0 ? Math.floor(money / price) : 0)) };
+  }
+  return { aim: have - need, max: Math.max(1, house === SHIP_ID ? Math.min(have, auction.shipQuote?.length ?? have) : have) };
+}
+
+/** The amount the question opens at: what you need, or your spare, kept between 1 and the most you can choose. */
+export const startAmount = (aim: number, max: number) => Math.max(1, Math.min(max, aim));
+
+export function lineAsk(
+  auction: Pick<AuctionView, 'good' | 'storeSells' | 'storeBuys' | 'storeForSale' | 'shipQuote'>,
+  side: 'buyer' | 'seller',
+  house: string,
+  amount: number,
+  have: number,
+  need: number,
+  money: number,
+): LineAsk {
+  const { aim, max } = lineLimits(auction, side, house, have, need, money);
+  const n = Math.min(max, Math.max(1, amount));
+  const total = Array.from({ length: n }, (_, k) => linePrice(auction, side, house, k)).reduce((a, b) => a + b, 0);
+  return { side, house, good: auction.good, amount: n, aim, max, total, have, need };
+}
+
+/** Selling more than your spare asks first ("This sells Water you need next month"). */
+export const sellAsksFirst = (ask: LineAsk) => ask.side === 'seller' && ask.amount > ask.aim;
+
+const houseName = (house: string) => (house === SHIP_ID ? 'the ship' : 'the store');
+
+/** Under the amount: how it stands against what you need, or your spare. */
+export function aimWords(a: LineAsk): string {
+  if (a.side === 'buyer') {
+    if (a.amount === a.aim) return 'what you need';
+    return a.amount > a.aim ? `${a.amount - a.aim} more than you need` : `${a.aim - a.amount} short of what you need`;
+  }
+  if (a.aim <= 0) return 'you need all you have';
+  if (a.amount === a.aim) return a.aim === 1 ? 'your spare one' : 'your spare';
+  return a.amount > a.aim ? `${a.amount - a.aim} more than your spare` : `you keep ${a.aim - a.amount} spare`;
+}
+
+/** The rail while your choice's units move, and once they are done (the mock's trading and done hints). */
+export function lineHint(m: Extract<LineMoment, { kind: 'trading' | 'done' }>, side: 'buyer' | 'seller', good: Good, have: number, need: number): { line: string; how: string } {
+  if (m.kind === 'trading') return { line: `${side === 'buyer' ? 'Buying from' : 'Selling to'} ${houseName(m.house)}: ${m.traded} of ${m.units}…`, how: 'Press ▲ or ▼ to stop.' };
+  const name = GOOD_NAME[good];
+  return {
+    line: m.traded === 0 ? 'Stopped: nothing traded.' : `You ${side === 'buyer' ? 'bought' : 'sold'} ${m.traded} ${name} for ${fmt(m.cr)} cr.`,
+    how: `You have ${have}${need > 0 ? ` of the ${need} you need` : ''}. Tap Done with ${name} when you’re finished.`,
+  };
+}
+
+/**
+ * The question at the line, in the rail; the Buy or Sell button is in the footer, in thumb reach. It carries what you
+ * have and need, so the good's card steps aside for it and − and + get full 44 px targets on a phone.
+ */
+export function LineQuestion({ ask, onAmount }: { ask: LineAsk; onAmount: (n: number) => void }) {
+  const step = (d: -1 | 1) => onAmount(Math.min(ask.max, Math.max(1, ask.amount + d)));
+  const stepper = 'grid size-11 place-items-center rounded-control border border-holo-line bg-panel font-mono text-xl font-bold text-holo hover:border-holo disabled:opacity-35 @min-[1100px]/shell:size-14 @min-[1100px]/shell:text-3xl';
+  const stand = ask.side === 'buyer' ? `you have ${ask.have} of ${ask.need}` : ask.need > 0 ? `you have ${ask.have}, you need ${ask.need}` : `you have ${ask.have}, you need none`;
+  return (
+    <section className="relative flex flex-col gap-1 rounded-control border-2 border-holo bg-holo-soft px-2.5 py-1.5 @min-[1100px]/shell:gap-2 @min-[1100px]/shell:px-4 @min-[1100px]/shell:py-3" aria-label={`${ask.side === 'buyer' ? 'Buy' : 'Sell'} how many?`} data-testid="line-question">
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-1.5 font-display text-sm font-semibold leading-tight @min-[1100px]/shell:gap-2.5 @min-[1100px]/shell:text-xl">
+          <GoodIcon good={ask.good} size={16} />
+          {ask.side === 'buyer' ? 'Buy how many?' : `Sell how many to ${houseName(ask.house)}?`}
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5 @min-[1100px]/shell:gap-2.5">
+          <button type="button" className={stepper} onClick={() => step(-1)} disabled={ask.amount <= 1} aria-label="One less" data-testid="amount-less">
+            −
+          </button>
+          <span data-num className="w-6 text-center font-mono text-xl font-bold @min-[1100px]/shell:w-9 @min-[1100px]/shell:text-3xl" data-testid="amount">
+            {ask.amount}
+          </span>
+          <button type="button" className={stepper} onClick={() => step(1)} disabled={ask.amount >= ask.max} aria-label="One more" data-testid="amount-more">
+            +
+          </button>
+        </span>
+      </div>
+      <span className="text-[11px] leading-snug text-ink-2 @min-[1100px]/shell:text-base" data-testid="amount-aim">
+        <strong className="font-semibold text-ink">{ask.amount}</strong> is {aimWords(ask)}: {stand}. Nothing trades until you tap {ask.side === 'buyer' ? 'Buy' : 'Sell'}.
+      </span>
+    </section>
+  );
+}
+
+/** Selling below your spare asks first: "This sells Water you need next month". */
+export function SellConfirm({ ask, onYes, onNo }: { ask: LineAsk; onYes: () => void; onNo: () => void }) {
+  return (
+    <section className="relative flex flex-col gap-1.5 rounded-control border-2 border-warn bg-warn/10 px-2.5 py-1.5 @min-[1100px]/shell:gap-2.5 @min-[1100px]/shell:px-4 @min-[1100px]/shell:py-3" role="alertdialog" aria-labelledby="sell-confirm-title" data-testid="sell-confirm">
+      <span id="sell-confirm-title" className="font-display text-sm font-semibold leading-tight text-warn @min-[1100px]/shell:text-xl">
+        This sells {GOOD_NAME[ask.good]} you need next month
+      </span>
+      <span className="text-[11px] leading-snug text-ink-2 @min-[1100px]/shell:text-base">
+        You’d keep {ask.have - ask.amount} of the {ask.need} you need.
+      </span>
+      <span className="grid grid-cols-2 gap-1.5 @min-[1100px]/shell:gap-2.5">
+        <button type="button" onClick={onYes} className="h-11 rounded-control border border-warn px-1 font-display text-sm font-semibold text-warn hover:bg-warn/10 @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" data-testid="sell-anyway">
+          Sell {ask.amount} anyway
+        </button>
+        <Button size="md" className="px-1 @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" onClick={onNo} data-testid="sell-spare">
+          {ask.aim > 0 ? `Sell just ${ask.aim}` : 'Keep them'}
+        </Button>
+      </span>
+    </section>
+  );
+}
+
+/** The footer's action at the line: "Buy 2 for 60 cr". */
+export function LineAction({ ask, onGo }: { ask: LineAsk; onGo: () => void }) {
+  return (
+    <Button size="lg" className="relative h-12! w-full whitespace-nowrap px-2 text-base! @min-[1100px]/shell:h-20! @min-[1100px]/shell:text-xl!" onClick={onGo} data-testid="line-go">
+      {ask.side === 'buyer' ? 'Buy' : 'Sell'} {ask.amount} for {fmt(ask.total)} cr
+    </Button>
   );
 }

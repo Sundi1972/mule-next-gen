@@ -57,9 +57,11 @@ const NEW_FIELD = 'a new board field: check it against HC-2';
 /** Every field the board's auction carries is one of these, so no other good's stock can ride along. */
 function expectBoardKeys(auction: NonNullable<MuleView['auction']>) {
   expect(keysOf(auction), NEW_FIELD).toEqual(
-    ['deals', 'good', 'hi', 'lo', 'next', 'seconds', 'shipPays', 'skipped', 'slowed', 'speed', 'stage', 'status', 'storeBuys', 'storeForSale', 'storeSells', 'total', 'units', 'walkers'],
+    // A-6: shipQuote is the ship's prices for the good up, no stock.
+    ['deals', 'good', 'hi', 'lo', 'next', 'seconds', 'shipPays', 'shipQuote', 'skipped', 'slowed', 'speed', 'stage', 'status', 'storeBuys', 'storeForSale', 'storeSells', 'total', 'units', 'walkers'],
   );
-  for (const w of auction.walkers) expect(keysOf(w), NEW_FIELD).toEqual(['at', 'dir', 'done', 'id', 'price', 'side', 'units']);
+  // A-6: `line` names a house ('store', 'ship') and `order` holds units of the good that is up: no other good's stock.
+  for (const w of auction.walkers) expect(keysOf(w), NEW_FIELD).toEqual(['at', 'dir', 'done', 'id', 'line', 'order', 'price', 'side', 'units']);
   for (const r of auction.status) expect(keysOf(r), NEW_FIELD).toEqual(['had', 'id', 'made', 'need', 'now', 'spoils', 'used']);
   for (const d of auction.deals) expect(keysOf(d), NEW_FIELD).toEqual(['buyer', 'price', 'seller', 'units']);
   for (const k of auction.skipped) expect(keysOf(k), NEW_FIELD).toEqual(['good', 'reason']);
