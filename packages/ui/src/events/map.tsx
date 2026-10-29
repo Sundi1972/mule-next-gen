@@ -36,7 +36,7 @@ export interface EventLivingMapProps {
 export function EventLivingMap({ size, focusSlot, bars, over, onSkip, light = false, className }: EventLivingMapProps) {
   const frame = useShow();
   const { tiles, grid, t, reduced, s } = frame;
-  const living = livingAt(frame);
+  const living = livingAt(frame, size);
   const seg = light ? null : living.seg;
   const view = light ? undefined : living.view;
   // The painted map renders once; only the layers redraw as the clock runs.

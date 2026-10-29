@@ -191,6 +191,10 @@ const REASON_BADGE: Record<ShowReason, { text: (d: number) => string; tone: (d: 
   noEnergy: { text: () => '½', tone: () => 'bg-alert text-white', icon: 'energy' },
 };
 
+/**
+ * The show props (`players`, `reduced`, `mode`) feed only the map's own show: inside an enclosing <EventShow> they are
+ * ignored, and the enclosing show's script, players, motion and pace play instead.
+ */
 export interface ProductionMapProps {
   width: number;
   height: number;
