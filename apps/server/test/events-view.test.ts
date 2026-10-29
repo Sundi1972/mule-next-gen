@@ -106,7 +106,7 @@ describe('the event show on real engine months: the view plays exactly what the 
 
   it('T-AC-1, T-AC-2: a real month firing comet pass and pest swarm runs production 24 200 ms, each event its own share', () => {
     const { report, production, length } = month(TWO_EVENT_MONTH);
-    expect(report.events.map(({ key, scope }) => ({ key, scope }))).toEqual([
+    expect(report.events?.map(({ key, scope }) => ({ key, scope }))).toEqual([
       { key: 'cometPass', scope: 'colony' },
       { key: 'pestSwarm', scope: 'personal' },
     ]);
@@ -123,7 +123,7 @@ describe('the event show on real engine months: the view plays exactly what the 
 
   it('T-AC-1, T-AC-2: a real month firing only a solar flare runs production 19 000 ms, the flare a 7 000 ms headline', () => {
     const { report, production, length } = month(ONE_EVENT_MONTH);
-    expect(report.events.map((e) => e.key)).toEqual(['solarFlare']);
+    expect(report.events?.map((e) => e.key)).toEqual(['solarFlare']);
     expect(production.events.map(({ key, weight, playMs }) => ({ key, weight, playMs }))).toEqual([{ key: 'solarFlare', weight: 'headline', playMs: 7_000 }]);
     expect(production.introMs).toBe(1_800);
     expect(length).toBe(19_000);
