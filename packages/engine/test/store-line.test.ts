@@ -198,6 +198,27 @@ describe('A-6 G-1 negatives: refused with a RuleError, or clamped to what you ca
     expect(state.store.stock.food).toBe(reserve);
   });
 
+  it('when the store sells out mid-choice the choice ends there and still says what moved, until the walker walks on', () => {
+    const state = newGame();
+    const reserve = state.colonists / 20;
+    state.store.stock.food = reserve + 2;
+    // p0 sells Food too, far up the board, so the good goes on once the store is out.
+    state.players[0]!.stock.food = 5;
+    startAuction(state, ['food']);
+    toWalk(state, { p0: 'seller', p1: 'buyer', p2: 'pass', p3: 'pass' });
+    walker(state, 'p0').price = 10_000;
+    setWalk(state, 'p1', 1);
+    for (let i = 0; i < 400 && lineOf(state, 'p1') === null; i++) stepAuction(state, TICK);
+    setWalk(state, 'p1', 0);
+    a(state).clockMs = 600_000;
+    lineTrade(state, 'p1', 5);
+    expect(run(state, 10_000)).toHaveLength(2);
+    expect(walker(state, 'p1').order).toMatchObject({ house: 'store', units: 2, traded: 2 });
+    setWalk(state, 'p1', -1);
+    stepAuction(state, TICK);
+    expect(walker(state, 'p1').order).toBeUndefined();
+  });
+
   it('refuses when you cannot pay for one, or hold none', () => {
     const state = buyerAtStore();
     state.players[1]!.money = a(state).storeSell - 1;
