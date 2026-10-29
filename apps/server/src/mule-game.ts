@@ -1096,6 +1096,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           if (state.phase === 'landAuction') setLotWalk(state, seatId, action.dir);
           else setWalk(state, seatId, action.dir);
           break;
+        case 'lineTrade':
+          // As walking: the hands keep their own Done, the same as in the simulator.
+          lineTrade(state, seatId, action.units);
+          break;
         case 'done':
           if (this.electionOpen()) electionDone(state, seatId, action.done);
           else if (state.phase === 'landGrant') grantPass(state, seatId);
