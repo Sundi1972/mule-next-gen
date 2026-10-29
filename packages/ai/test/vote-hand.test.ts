@@ -128,7 +128,7 @@ function playElection(state: GameState, hands: VoteHand[]) {
 function finishElection(state: GameState): void {
   for (let i = 0; i < 100 && electionOf(state).stage !== 'over'; i++) {
     for (const id of state.players.map((p) => p.id)) electionDone(state, id);
-    stepElection(state, electionOf(state).ceremony?.clockMs ?? 0);
+    stepElection(state, electionOf(state).ceremony?.totalMs ?? 0);
   }
   expect(electionOf(state).stage).toBe('over');
 }
@@ -279,22 +279,25 @@ describe('RULE-8: who runs', () => {
     expect(sent).toEqual([...want, { type: 'done', done: true }]);
   });
 
-  it('RULE-8: a term-limited seat never runs for Governor', () => {
+  it('RULE-8: a term-limited seat never runs for Governor: declaring ahead of its third election, it runs for Sheriff', () => {
     const state = newGame();
+    // The field for an election after month 1 is declared in the planning phase before it.
+    const toEve = () => {
+      const next = POLITICS.electionMonths.find((m) => m > state.month)!;
+      while (state.phase !== 'planning' || state.month !== next - 1) advancePhase(state);
+    };
     for (let term = 0; term < POLITICS.maxGovernorTermsInRow; term++) {
       runFor(state, 'ai2', 'governor', HOLD);
+      if (term > 0) while (state.phase !== 'planning' || !state.politics!.election) advancePhase(state);
       finishElection(state);
-      const next = POLITICS.electionMonths.find((m) => m > state.month)!;
-      while (state.phase !== 'planning' || state.month !== next) advancePhase(state);
+      toEve();
     }
     expect(canRun(state, 'ai2').governor).toBe('termLimit');
 
     const sent = announce(state, mindOf('ai2', 'aggressive'), drawsOf([0, 0]));
 
-    expect(sent).toEqual([
-      { type: 'run', office: 'sheriff' },
-      { type: 'done', done: true },
-    ]);
+    // As the sitting Governor it also sets the tax; its run is the Sheriff's.
+    expect(sent.filter((a) => a.type === 'run')).toEqual([{ type: 'run', office: 'sheriff' }]);
   });
 
   it('RULE-8: after planning ends (AM-1) the hand sends nothing in any later phase', () => {
@@ -353,21 +356,58 @@ describe('RULE-63: a seat declares ahead of the election', () => {
     expect(state.politics!.candidates.governor).toEqual(running);
   });
 
-  it('T-AC-63 row 3: a seat that declared for Governor ahead refreshes its promise against the tax at the last call, keeping its place in the list, then is Done', () => {
+  it("T-AC-63 rows 3, 3b (AM-21): from month 4 the announce takes no run, so a seat that declared ahead keeps the promise it declared with and only presses Done", () => {
     const state = newGame();
     const hand = new VoteHand(mindOf('ai2', 'aggressive'), drawsOf([0]));
     toMonth(state, 4 - POLITICS.ai.declareLeadMonths);
     runFor(state, 'ai1', 'governor', HOLD);
     expect(planTick(state, hand)).toEqual([{ type: 'run', office: 'governor', promise: { kind: 'cap', percent: 8 } }]);
     toMonth(state, 4);
-    // The tax reached the aggressive target, 8%, since the seat declared: its cap becomes a hold.
+    // The tax reached the aggressive target, 8%, since the seat declared; the field is closed, so it says nothing.
     state.treasury.salesTax = 0.08;
 
-    expect(planTick(state, hand)).toEqual([
-      { type: 'run', office: 'governor', promise: { kind: 'hold' } },
-      { type: 'done', done: true },
-    ]);
-    expect(state.politics).toMatchObject({ candidates: { governor: ['ai1', 'ai2'] }, promises: { ai1: HOLD, ai2: { kind: 'hold' } } });
+    expect(planTick(state, hand)).toEqual([{ type: 'done', done: true }]);
+    expect(state.politics).toMatchObject({ candidates: { governor: ['ai1', 'ai2'] }, promises: { ai1: HOLD, ai2: { kind: 'cap', percent: 8 } } });
+  });
+
+  it.each([4, 7, 10])('T-AC-63 row 3b (AM-21): a seat that never declared sends only Done in month %i\'s announce, and draws nothing', (month) => {
+    const state = newGame();
+    toMonth(state, month);
+    expect(electionOf(state).stage).toBe('announce');
+    // drawsOf([]) throws on any draw: the pause is drawn on a seeded stream of its own.
+    const hand = new VoteHand(mindOf('ai2', 'aggressive'), drawsOf([]));
+
+    expect(planTick(state, hand)).toEqual([{ type: 'done', done: true }]);
+  });
+});
+
+describe('T-AC-68 (ai): Cast is Done, and every seat casts', () => {
+  bothOffices();
+
+  it('T-AC-68 (ai): an AI-only ballot closes by itself: in month 4 the seats that declared ahead are on the ballot, each casts after its votes within its longest pause, and the election ends with no clock', () => {
+    let ballots = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const state = newGame(seed);
+      const hands = classicHands(seed);
+      const refused: AiAction[] = [];
+      playElection(state, hands);
+      while (state.phase !== 'planning' || state.month !== 4) {
+        if (state.phase === 'planning') for (const h of hands) h.tick(state, PAUSE_MS, engineAct(state, h.mind.me, refused));
+        advancePhase(state);
+      }
+      const { refused: refusedIn4, ends } = playElection(state, hands);
+
+      expect([...refused, ...refusedIn4]).toEqual([]);
+      expect(electionOf(state).stage).toBe('over');
+      const ballot = ends.find((e) => e.stage === 'ballot');
+      if (!ballot) continue;
+      ballots++;
+      expect(ballot.everyoneDone).toBe(true);
+      expect(ballot.msIn).toBeLessThanOrEqual(PAUSE_MS);
+      for (const office of contestedOffices(ballot.candidates))
+        for (const id of SEATS) expect(ballot.candidates[office]).toContain(ballot.ballots[id]?.[office]);
+    }
+    expect(ballots, 'some seed holds a contested ballot in month 4').toBeGreaterThan(0);
   });
 });
 

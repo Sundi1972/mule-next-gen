@@ -36,10 +36,11 @@ export function nextTax(current: number, target: number, fund: number, bounds: {
 /**
  * The politics hand of a Classic seat: runs for office, votes and, as
  * Governor, sets the tax (WS7 spec RULE-8, RULE-63). It decides its candidacy
- * once per election cycle, ahead of the election or at the last call. In
- * announce and the ballot it acts once after a seeded pause and presses Done;
- * elsewhere in planning it acts at once. A refused move is not retried. It
- * times itself on the public phase, month and stage, and decides from observe().
+ * once per election cycle, ahead of the election, or at month 1's last call,
+ * the only announce that takes a run. In announce and the ballot it acts once
+ * after a seeded pause and presses Done, its Cast in the ballot; elsewhere in
+ * planning it acts at once. A refused move is not retried. It times itself on
+ * the public phase, month and stage, and decides from observe().
  */
 export class VoteHand {
   /** month:stage of the stage it last saw. */
@@ -75,8 +76,10 @@ export class VoteHand {
       this.declareAhead(obs, act);
       return;
     }
-    if (stage === 'announce') this.lastCall(obs, act);
-    else this.vote(obs, obs.politics!.election!, act);
+    // Only month 1's announce takes a run; a later one closed the field as the month opened, so the seat only waits.
+    if (stage === 'announce') {
+      if (canRun(obs, this.mind.me).governor !== 'closed') this.lastCall(obs, act);
+    } else this.vote(obs, obs.politics!.election!, act);
     act({ type: 'done', done: true });
   }
 
@@ -91,7 +94,7 @@ export class VoteHand {
     this.decide(obs, next, act);
   }
 
-  /** RULE-63 rows 2 and 3: decide now if it has not, else refresh a Governor promise against the tax now. */
+  /** RULE-63 rows 2 and 3, month 1's announce: decide now if it has not, else refresh a Governor promise against the tax now. */
   private lastCall(obs: GameState, act: Act): void {
     if (this.decidedFor !== obs.month) return this.decide(obs, obs.month, act);
     const politics = obs.politics!;
