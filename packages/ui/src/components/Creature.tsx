@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { Facing, Motion } from './motion/gait';
 import type { Species } from './species';
 
 /** The creatures' pupil and line ink, shared with the MULE. */
@@ -118,7 +119,23 @@ function parts(species: Species, body: string, shade: string, light: string): Re
   }
 }
 
-export function Creature({ species, color, size = 32, className }: { species: Species; color: string; size?: number; className?: string }) {
+export function Creature({
+  species,
+  color,
+  size = 32,
+  className,
+}: {
+  species: Species;
+  color: string;
+  size?: number;
+  className?: string;
+  motion?: Motion;
+  facing?: Facing;
+  cycle?: number;
+  flinch?: number;
+  strike?: number;
+  shadow?: boolean;
+}) {
   const shade = `color-mix(in srgb, ${color} 62%, black)`;
   const light = `color-mix(in srgb, ${color} 45%, white)`;
   return (

@@ -35,6 +35,7 @@ export function Mule({
   /** The owner's seat; its colour is the saddle cloth's and the antenna tips'. Omit for a store MULE. */
   owner?: Slot | undefined;
   facing?: 'left' | 'right';
+  cycle?: number;
   className?: string | undefined;
 }) {
   const id = useId().replace(/:/g, '');
