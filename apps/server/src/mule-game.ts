@@ -6,6 +6,7 @@ import {
   allPrices,
   analysePlot,
   auctionDone,
+  ballotAhead,
   buyMule,
   castVote,
   claimPlot,
@@ -15,6 +16,7 @@ import {
   declareRole,
   electionDone,
   DEV_STEER,
+  EVENT_SHOW,
   DEVELOPMENT,
   fitFilter,
   foodShare,
@@ -70,6 +72,7 @@ import {
   walkSeconds,
   type GameState,
   type Good,
+  type MonthEvent,
   type NoticeEntry,
   type Outfit,
   type Phase,
@@ -82,7 +85,7 @@ import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import { createBrain, type BrainService } from './brain/index.js';
 import { colonistView, dueArrivals, placeName, walkTarget, type Colonist, type DevIntent } from './dev-walking.js';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
-import { myPoliticsView, officeNews, politicsView } from './politics-view.js';
+import { ceremonyNews, myPoliticsView, politicsView } from './politics-view.js';
 
 /**
  * The longest each phase lasts, in milliseconds, from the engine's PHASES.
@@ -151,6 +154,30 @@ function worthPartsOf(state: GameState, playerId: string): ScorePartsView {
 }
 
 /**
+ * How long a phase's events play on the TV (RULE-1): the intro, then each event, never past the cap in all. Returns
+ * the show's length, the intro's, and each event's weight and share in fired order. Bulletins share one roll call.
+ * When the cap bites the intro keeps its length and the events' shares are cut in proportion. Production's length and
+ * the view's lengths all come from here, so they cannot disagree.
+ */
+function eventShow(events: readonly MonthEvent[]) {
+  const introMs = events.length > 0 ? EVENT_SHOW.introMs : 0;
+  const weights = events.map((e) => EVENT_SHOW.weight[e.key] ?? 'headline');
+  const bulletins = weights.filter((w) => w === 'bulletin').length;
+  const plays = weights.map((w) => (w === 'bulletin' ? EVENT_SHOW.rollCallMs / bulletins : EVENT_SHOW.playMs[w]));
+  const total = plays.reduce((sum, ms) => sum + ms, 0);
+  const showMs = Math.min(EVENT_SHOW.capMs, introMs + Math.round(total));
+  const sharedMs = showMs - introMs;
+  // Each share runs from where the last one ended, rounded on the running total, so intro and shares add up to showMs.
+  let played = 0;
+  const shares = weights.map((weight, i) => {
+    const from = Math.round((played * sharedMs) / total);
+    played += plays[i]!;
+    return { weight, playMs: Math.round((played * sharedMs) / total) - from };
+  });
+  return { showMs, introMs, shares };
+}
+
+/**
  * The month's production as every screen may see it: each working plot with
  * what it made before the event and its biggest reasons, and the event's hits.
  * Built field by field from the report, so the stock players held never
@@ -173,7 +200,8 @@ function productionView(state: GameState, lengthMs: number): ProductionView | nu
         .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
         .slice(0, MAX_BADGES),
     }));
-  const events = (report.events ?? []).map((e) => ({
+  const { shares, introMs } = eventShow(report.events ?? []);
+  const events = (report.events ?? []).map((e, i) => ({
     key: e.key,
     kind: e.kind,
     title: e.title,
@@ -183,8 +211,10 @@ function productionView(state: GameState, lengthMs: number): ProductionView | nu
     origin: { ...e.origin },
     ...(e.direction ? { from: e.direction } : {}),
     hits: e.plots.map((p) => ({ ...at(p.index), order: p.order, delta: p.delta })),
+    phase: 'production' as const,
+    ...shares[i]!,
   }));
-  return { lines, events, lengthMs };
+  return { lines, events, lengthMs, introMs };
 }
 
 /**
@@ -372,9 +402,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         return;
       case 'continue': {
         if (seatId !== this.ctx.hostId()) throw new RuleError('Only the host can continue');
-        const inDevelopment = state.phase === 'development';
-        const left = inDevelopment ? this.continueDevelopment(seatId) : this.continuePlanning(seatId);
-        if (left.length > 0) this.addNews(`${this.nameOf(seatId)} ${inDevelopment ? 'started the clock' : 'continued'} without ${andList(left)}.`);
+        if (state.phase === 'development') this.continueDevelopment(seatId);
+        else this.continuePlanning(seatId);
         return;
       }
     }
@@ -382,31 +411,37 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   /**
    * The host's Continue. In the election's announce or ballot every human not Done becomes Done, abstaining; refused in
-   * its ceremony. Otherwise it ends planning proper with players not yet Ready. Returns the names of the others it went
-   * on without. The caller must have checked the seat is the host.
+   * its ceremony. Otherwise it ends planning proper with players not yet Ready. The news names the others it went on
+   * without and the stage it moved past. The caller must have checked the seat is the host.
    */
-  private continuePlanning(hostId: string): string[] {
+  private continuePlanning(hostId: string): void {
     const state = this.requireState();
+    const goneOn = (did: string, left: string[]) => {
+      if (left.length > 0) this.addNews(`${this.nameOf(hostId)} ${did} without ${andList(left)}.`);
+    };
     if (this.electionOpen()) {
-      if (state.politics!.election!.stage === 'ceremony') throw new RuleError('The result is being announced');
+      const { stage } = state.politics!.election!;
+      if (stage === 'ceremony') throw new RuleError('The result is being announced');
       const waiting = this.seats.filter((s) => !s.isAi && !isElectionDone(state, s.id));
       for (const s of waiting) electionDone(state, s.id);
-      return waiting.filter((s) => s.id !== hostId).map((s) => s.name);
+      const did = stage === 'ballot' ? 'closed the ballot' : ballotAhead(state) ? 'opened the ballot' : 'continued';
+      goneOn(did, waiting.filter((s) => s.id !== hostId).map((s) => s.name));
+      return;
     }
     if (state.phase !== 'planning') throw new RuleError('Continue ends planning only');
     const left = this.seats.filter((s) => !s.isAi && s.id !== hostId && !this.ready.has(s.id)).map((s) => s.name);
     this.nextPhase();
-    return left;
+    goneOn('continued', left);
   }
 
-  /** The host's Continue while month 1's clock waits: starts it. Returns the names of the others not yet in. */
-  private continueDevelopment(hostId: string): string[] {
+  /** The host's Continue while month 1's clock waits: starts it, and the news names the others not yet in. */
+  private continueDevelopment(hostId: string): void {
     if (!this.clockWaits) throw new RuleError('The clock is already running');
     const left = this.seatsNotIn()
       .filter((s) => s.id !== hostId)
       .map((s) => s.name);
     this.startClock();
-    return left;
+    if (left.length > 0) this.addNews(`${this.nameOf(hostId)} started the clock without ${andList(left)}.`);
   }
 
   /**
@@ -731,7 +766,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   /** Ends the phase when its PHASE_MS runs out; a phase whose PHASE_MS is null has no clock and waits for Ready. */
   private startPhaseTimer(phase: keyof typeof PHASE_MS): void {
-    const length = PHASE_MS[phase];
+    // Production stretches past its own event window to play every event of the month (RULE-1).
+    const extraMs = phase === 'production' ? Math.max(0, eventShow(this.requireState().history.at(-1)?.events ?? []).showMs - EVENT_SHOW.productionWindowMs) : 0;
+    const base = PHASE_MS[phase];
+    const length = base === null ? null : base + extraMs;
     this.phaseEndsAt = null;
     if (length === null) return;
     const ms = length * this.phaseScale;
@@ -762,7 +800,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /**
    * Steps the election every WALK.tickMs until it is over: the AI vote hands act
    * first, then the election steps, with the same dt; each office makes the news
-   * at its winner step. When it ends, planning proper opens, timed only when
+   * at its winner beat. When it ends, planning proper opens, timed only when
    * PHASES.planningMs is a number.
    */
   private scheduleElectionTick(last: number): void {
@@ -774,10 +812,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         // A stalled server loop must not skip a stage.
         const dt = Math.min(Math.max(0, now - last), WALK.tickMs * 3) / this.phaseScale;
         this.tickVoteHands(dt);
-        const before = state.politics!.election!.ceremony;
+        const before = state.politics!.election!.ceremony?.elapsedMs ?? -1;
         stepElection(state, dt);
-        const { ceremony, result } = state.politics!.election!;
-        if (ceremony?.step === 'winner' && (before?.step !== 'winner' || before.office !== ceremony.office)) this.addNews(officeNews(ceremony.office, result!, (id) => this.nameOf(id)));
+        for (const line of ceremonyNews(state, before, (id) => this.nameOf(id))) this.addNews(line);
         if (this.electionOpen()) this.scheduleElectionTick(now);
         else {
           this.startPhaseTimer('planning');

@@ -10,6 +10,7 @@ import { GOODS, monthNeeds, type GameState, type Good } from '@mule/engine';
 import type { Browser, Page } from 'playwright';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, PHONE, TV } from './harness';
+import { ELECTION_WAIT_MS } from './politics-steps';
 import { LAPTOP } from './shell-steps';
 
 /** The human sits in seat 1. */
@@ -101,7 +102,7 @@ function checkHub(f: Shown, at: string, held: readonly string[]): void {
   check(f.thisMonthInColony, `B-AC-14: at ${at} the Colony desk holds "This month you need"`);
   const foreign = f.desks.filter((d) => (OFFICE_DESKS as readonly string[]).includes(d) && !held.includes(d));
   check(foreign.length === 0, `B-AC-14 (negative): a player sees no desk of an office they do not hold, got ${foreign.join(', ')}`);
-  const expected = [...TODAYS_DESKS, ...held];
+  const expected = [...held, ...TODAYS_DESKS];
   check(JSON.stringify(f.desks) === JSON.stringify(expected), `B-AC-14: at ${at} the desks drawn are exactly ${expected.join(', ')}, got ${f.desks.join(', ')}`);
   check(JSON.stringify(f.tools) === JSON.stringify(TODAYS_TOOLS), `B-AC-14: at ${at} the map tools drawn are exactly ${TODAYS_TOOLS.join(', ')}, got ${f.tools.join(', ')}`);
   check(f.reviewLabels.length === 0, `C17: unbuilt slots are not drawn, and no SOON or slice label shows; got ${f.reviewLabels.join(' | ')}`);
@@ -263,6 +264,15 @@ export async function sixSeatsOnTheTv({ browser, base, server }: { browser: Brow
     await phone.getByRole('button', { name: 'Start game' }).click();
     await tv.goto(`${base}/table?room=${code}`);
     const board = tv.locator('[data-phase=planning]');
+    // Election day holds the TV until it is over: Mia is Ready to vote, then abstains and casts if there is a ballot.
+    const step = phone.locator('[data-testid=ready]:not([disabled])').filter({ hasText: /Ready to vote|Cast my vote/ });
+    const abstain = phone.locator('[data-testid=ballot-card] [data-testid$="-abstain"] input:not(:checked)');
+    for (const deadline = Date.now() + ELECTION_WAIT_MS + timeout; !(await board.getByTestId('tv-ready-list').isVisible()); ) {
+      check(Date.now() < deadline, 'B-AC-19 (six seats): election day ends and the TV shows planning');
+      for (const box of await abstain.all()) await box.check({ timeout });
+      if (await step.isVisible()) await step.click({ timeout }).catch(() => {});
+      await phone.waitForTimeout(100);
+    }
     await board.getByTestId('tv-ready-list').waitFor({ timeout });
     busyNews(server.registry.get(code));
     const newest = board.getByTestId('tv-news').locator('li').first();

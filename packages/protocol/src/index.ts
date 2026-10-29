@@ -1,4 +1,4 @@
-import type { AuctionSide, CanRun, CeremonyStep, DevPlace, Election, EventKey, EventKind, Good, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
+import type { AuctionSide, CanRun, CeremonyBeat, DevPlace, Election, EventKey, EventKind, EventWeight, Good, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -196,32 +196,47 @@ export interface MyView {
   worthParts: ScorePartsView;
 }
 
-/** Only on the owner's phone: their candidacy, their secret ballot, and whether they may run now for each elected office. */
+/** Only on the owner's phone: their candidacy, their secret ballot, whether they may run now for each elected office, and what weighs their vote. */
 export interface MyPoliticsView {
   running: Office | null;
   ballot: Partial<Record<Office, string>>;
   canRun: Partial<Record<Office, CanRun>>;
+  /** Sales tax this player has paid over the game, in credits. */
+  paid: number;
+  reputation: number;
 }
 
-/** One office's result as far as the ceremony has shown it: the totals from its bars step, the winner and how from its winner step. */
+/** One office's result as far as the ceremony has shown it: the totals from its bars beat, the winner and how from its winner beat. */
 export type OfficeReveal = Pick<OfficeResult, 'tallies'> & Partial<Pick<OfficeResult, 'winner' | 'how'>>;
+
+/** The ceremony's one show clock, in game seconds, the same on every screen. */
+export interface CeremonyView {
+  seconds: number;
+  /** The whole show, every office and the summary after the last. */
+  total: number;
+  /**
+   * Per office the show has reached, the latest beat it has reached and when that beat began, in show seconds. An
+   * office is absent until its title beat; nothing later than the show clock is sent.
+   */
+  reached: Partial<Record<Office, { beat: CeremonyBeat; at: number }>>;
+}
 
 /** This month's election as every screen sees it: who runs and who has voted, never for whom. */
 export interface ElectionView {
   stage: Election['stage'];
-  /** The office the ceremony shows and its step, with the step's clock in game seconds; null outside the ceremony. */
-  ceremony: { office: Office; step: CeremonyStep; seconds: number; total: number } | null;
+  /** The show clock and how far each office has got; null outside the ceremony. */
+  ceremony: CeremonyView | null;
   /** Per elected office; empty until the ballot opens: until then the candidacy is Politics'. */
   candidates: Partial<Record<Office, string[]>>;
   /** Each Governor candidate's tax promise, public like the candidacy. */
   promises: Record<string, TaxPromise>;
   /** Players with a ballot in, never for whom. */
   voted: string[];
-  /** Players who are Done in announce or the ballot: they pressed Done, or their ballot covers every contested office. */
+  /** Players who are Done in announce or the ballot: they pressed Ready, or Cast my vote. Picking alone is not Done. */
   done: string[];
   /** Players announce or the ballot still waits for; empty from the ceremony on. */
   waitingFor: string[];
-  /** The offices the ceremony has reached, every screen in the same step. */
+  /** Each office's result as far as the ceremony has reached it, every screen at the same beat. */
   result: Partial<Record<Office, OfficeReveal>>;
 }
 
@@ -247,6 +262,10 @@ export interface PoliticsView {
   candidates: Partial<Record<Office, string[]>>;
   /** Each Governor candidate's tax promise, public like the candidacy. */
   promises: Record<string, TaxPromise>;
+  /** The sitting Governor's promise, held for the term; null when they were appointed or nobody holds office. */
+  promise: TaxPromise | null;
+  /** The sales tax in whole percent when the sitting Governor's term began, for judging lower and hold; null before anyone governs. */
+  promiseFrom: number | null;
   /** This month's election, or null in a month without one. */
   election: ElectionView | null;
 }
@@ -407,6 +426,12 @@ export interface ProductionEventView {
   from?: 'n' | 'e' | 's' | 'w';
   /** The plots it hit, in the order it reached them, and how many units each gained or lost. */
   hits: { x: number; y: number; order: number; delta: number }[];
+  /** The phase whose show plays it. */
+  phase: Phase;
+  /** How big its story is on the TV. */
+  weight: EventWeight;
+  /** How long the show plays it, in ms at full pace; the client never computes this itself. */
+  playMs: number;
 }
 
 /** What every plot made this month and what the month's event did: never anything a player holds. */
@@ -416,6 +441,8 @@ export interface ProductionView {
   events: ProductionEventView[];
   /** How long the production phase was scheduled to run, in ms; the show's timeline stretches over it. */
   lengthMs: number;
+  /** How long the phase's intro plays before the first event, in ms: 0 in a quiet month. */
+  introMs: number;
 }
 
 /** One screen's view of the game: a player's private view, or the public one for a board. */

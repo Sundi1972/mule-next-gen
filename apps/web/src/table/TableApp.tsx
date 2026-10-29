@@ -13,6 +13,7 @@ import { useClient, useClientState, useServerNow } from '../net/react';
 import { connectedIn, hostMayContinue, readyRows, stillPlanning } from '../phone/hub/ready';
 import { ReadyCount, WaitingFor } from '../phone/hub/ReadyBar';
 import { TvElection } from './TvElection';
+import { TvGovernorPromise } from './TvGovernorPromise';
 import { TvLandAuction } from './TvLandAuction';
 import { TvProduction } from './TvProduction';
 
@@ -122,7 +123,7 @@ function TvLobby({ table }: { table: TableView<MuleView> }) {
   );
 }
 
-export function TvHeader({ game, title, seconds }: { game: MuleView; title: string; seconds?: number | undefined }) {
+export function TvHeader({ game, title, seconds, extra }: { game: MuleView; title: string; seconds?: number | undefined; extra?: ReactNode }) {
   return (
     <>
       <header className="flex items-end justify-between gap-6">
@@ -135,6 +136,7 @@ export function TvHeader({ game, title, seconds }: { game: MuleView; title: stri
           </h1>
         </div>
         <div className="flex items-center gap-4">
+          {extra}
           <ThemeToggle />
           <AirGauge level={game.air.level} band={game.air.band} tv />
           {seconds !== undefined && <Timer seconds={seconds} className="h-14! px-5! text-3xl!" />}
@@ -160,7 +162,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   }
 
   if (phase === 'production' && game.production) return <TvProduction game={game} production={game.production} />;
-  if (phase === 'planning' && game.politics?.election?.stage === 'ceremony') return <TvElection game={game} />;
+  if (phase === 'planning' && game.politics?.election && game.politics.election.stage !== 'over') return <TvElection table={table} game={game} />;
 
   let side: ReactNode;
   if (phase === 'landGrant')
@@ -282,11 +284,12 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
 
   return (
     <SeatSpeciesProvider value={seatSpecies(game)}>
-      <div className="flex h-[720px] w-[1280px] flex-col gap-5 bg-table p-10 text-ink" data-phase={phase} data-testid={phase === 'planning' ? 'tv-planning' : undefined}>
+      <div className={cx('flex h-[720px] w-[1280px] flex-col bg-table text-ink', phase === 'planning' ? 'gap-4 px-10 py-6' : 'gap-5 p-10')} data-phase={phase} data-testid={phase === 'planning' ? 'tv-planning' : undefined}>
         {phase === 'planning' ? (
           <div className="flex items-start gap-4">
             <div className="min-w-0 flex-1">
               <TvHeader game={game} title={PHASE_NAME[phase]} seconds={secondsUntil(game.phaseEndsAt, now)} />
+              <TvGovernorPromise game={game} />
             </div>
             <ReadyCount players={game.players} tv />
           </div>

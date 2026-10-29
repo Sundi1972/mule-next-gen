@@ -1,4 +1,4 @@
-import type { Outfit, GrownGood, Good, MinedGood, Office, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
+import type { Outfit, EventKey, GrownGood, Good, MinedGood, Office, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
 
 /**
  * Every balancing number lives here, so playtests and the simulator can tune
@@ -759,14 +759,31 @@ export const POLITICS = {
   offices: ['governor'] as Office[],
   /** A Governor who has served this many terms in a row may not run for Governor again until someone else has held it. */
   maxGovernorTermsInRow: 2,
-  /** The reveal ceremony, per office. Placeholders until WS1 and Heiko set them. */
+  /**
+   * The reveal ceremony's beats on its one show clock, from WS6's approved mock (ElectionReveal.tsx). Each office
+   * in turn: its title, its candidates, its vote blocks one at a time, a tie if one was broken, then its winner.
+   */
   ceremony: {
-    /** The office, each candidate and their promise. */
-    introMs: 3_000,
-    /** Each candidate's bar grows to their weighted votes; skipped with fewer than two candidates. */
-    barsMs: 4_000,
-    /** The winner, how they won, and the congratulations. */
-    winnerMs: 5_000,
+    /** Before the first office's title. */
+    leadMs: 300,
+    /** The office's title, before its candidates. */
+    titleMs: 1_800,
+    /** Each candidate popping in, in seat order. */
+    candidateMs: 500,
+    /** After the last candidate, before the first vote block. */
+    barsLeadMs: 500,
+    /** Each vote block, one per weighted vote, interleaved across the candidates. */
+    blockMs: 550,
+    /** After the last block, before a tie is stamped. */
+    tieLeadMs: 400,
+    /** The tie and the rule that broke it, before the winner. */
+    tieMs: 2_600,
+    /** After the last block, before the winner, when there was no tie. */
+    winnerLeadMs: 700,
+    /** The winner and the congratulations, before the next office. */
+    winnerMs: 3_800,
+    /** The whole result held after the last office, before the winners take office. */
+    summaryMs: 1_500,
   },
   weight: {
     /** Votes every player has, before the parts below. */
@@ -920,6 +937,36 @@ export const PHASES = {
   productionMs: 15_000,
   /** Upkeep: colonists eat and goods spoil. */
   upkeepMs: 8_000,
+};
+
+/** How big an event's story is on the TV: a headline, a spotlight, or one line of a shared roll call. */
+export type EventWeight = 'headline' | 'spotlight' | 'bulletin';
+
+/** How long the production show plays each month event, and how far production stretches to fit them. */
+export const EVENT_SHOW = {
+  /** How big each event's story is on the TV; a key missing here plays as a headline. */
+  weight: {
+    dustStorm: 'headline',
+    drought: 'headline',
+    acidRain: 'headline',
+    solarFlare: 'headline',
+    cometPass: 'headline',
+    flood: 'headline',
+    volcanicAsh: 'headline',
+    pestSwarm: 'spotlight',
+    wildfire: 'spotlight',
+    bumperHarvest: 'spotlight',
+  } as Partial<Record<EventKey, EventWeight>>,
+  /** How long one headline or spotlight plays, in ms. */
+  playMs: { headline: 7_000, spotlight: 5_200 },
+  /** How long the intro (the phase's opening card of what fired) plays before the first event, in ms; none in a quiet month. */
+  introMs: 1_800,
+  /** How long the one roll call that every bulletin of a phase shares plays, in ms. */
+  rollCallMs: 4_000,
+  /** The event window production's 15 s show already has; only time beyond it lengthens production. */
+  productionWindowMs: 4_800,
+  /** The most the events of one phase may play in all, in ms; past it each is cut in proportion. */
+  capMs: 30_000,
 };
 
 /**
