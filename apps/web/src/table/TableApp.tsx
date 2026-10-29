@@ -12,7 +12,8 @@ import { fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, plotName, seatSpecies, sec
 import { inCollapse } from '../game/month-end';
 import { useAuctionSound } from '../game/sound';
 import { useClient, useClientState, useServerNow } from '../net/react';
-import { connectedIn, hostMayContinue, readyRows, stillPlanning } from '../phone/hub/ready';
+import { connectedIn, hostMayContinue, pickedIn, readyRows, SIDE_PICK_WORDS, stillPicking, stillPlanning } from '../phone/hub/ready';
+import { WaitingToPick } from '../phone/Auction';
 import { ReadyCount, WaitingFor } from '../phone/hub/ReadyBar';
 import { TvElection } from './TvElection';
 import { TvGovernorPromise } from './TvGovernorPromise';
@@ -390,15 +391,23 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
   const status = auction.stage === 'status';
   const stageName = status ? 'Buy or sell?' : auction.slowed ? 'Trading · clock slowed' : 'Walk';
   const ship = shipWants(game, auction);
+  // The side pick has no clock (A-7): who has picked, who is still picking, and the host who can move on for them.
+  const connected = connectedIn(table.seats);
+  const waiting = status ? stillPicking(game, connected) : [];
+  const host = game.players.find((p) => p.id === table.hostId);
+  const picked = game.players.map((p) => ({ ...p, ready: pickedIn(game, p.id) }));
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-8 text-ink" data-phase="auction" data-testid={status ? 'tv-status' : 'tv-walk'}>
       <TvHeader game={game} title={`Auction · ${GOOD_NAME[auction.good]}`} />
       <div className="flex min-h-0 flex-1 gap-6">
         <div className={cx('flex min-w-0 flex-1 flex-col', status ? 'gap-3' : 'gap-2')}>
           {status ? (
-            // On the status stage the skipped words share the time bar's row, so the ship panel keeps its room.
-            <div className="flex shrink-0 items-center gap-4">
-              <TimeBar size="tv" seconds={auction.seconds} total={auction.total} slowed={auction.slowed} className="min-w-0 flex-1" />
+            // On the status stage the skipped words share the picked count's row, so the ship panel keeps its room.
+            <div className="flex shrink-0 items-center gap-4" data-testid="tv-pick-bar">
+              <ReadyCount players={picked} label="PICKED" tv />
+              <span className="min-w-0 flex-1 text-2xl text-ink-2">
+                <strong className="font-semibold text-ink">No clock:</strong> {SIDE_PICK_WORDS.noClock}
+              </span>
               {skipped && (
                 <p className="min-w-0 max-w-[45%] truncate font-mono text-base text-ink-3" data-testid="skipped">
                   {skipped}
@@ -458,12 +467,14 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
             <ul className="flex flex-col gap-2" data-testid="tv-picked">
               {game.players.map((p) => {
                 const s = auction.walkers.find((w) => w.id === p.id)?.side;
+                const done = p.isAi || pickedIn(game, p.id);
+                const away = !connected(p.id);
                 return (
-                  <li key={p.id} className="flex items-center gap-3">
-                    <PlayerMark slot={slotOf(game, p.id) ?? 0} size={22} />
+                  <li key={p.id} className="flex items-center gap-3" data-testid={`tv-picked-${p.id}`}>
+                    <PlayerMark slot={slotOf(game, p.id) ?? 0} size={22} glow={!done} />
                     <span className="flex-1 truncate font-display text-xl font-semibold">{p.name}</span>
-                    <span className={cx('font-mono text-lg font-bold', s === 'seller' ? 'text-rise' : s === 'buyer' ? 'text-fall' : 'text-ink-3')}>
-                      {s === undefined ? '…' : SIDE_WORD[s].toUpperCase()}
+                    <span className={cx('font-mono text-lg font-bold', !done ? (away ? 'text-warn' : 'text-holo') : s === 'seller' ? 'text-rise' : s === 'buyer' ? 'text-fall' : 'text-ink-3')}>
+                      {!done ? (away ? 'AWAY · PICKING' : 'PICKING') : `${SIDE_WORD[s ?? 'pass'].toUpperCase()} ✓`}
                     </span>
                   </li>
                 );
@@ -472,6 +483,12 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
           ) : (
             <div className="shrink-0 rounded-panel border border-holo-line bg-panel p-3">
               <TvReadout view={game} auction={auction} />
+            </div>
+          )}
+          {waiting.length > 0 && (
+            <div className="flex flex-col gap-2 rounded-panel border-2 border-holo bg-holo-soft p-4 shadow-glow" data-testid="tv-waiting">
+              <WaitingToPick seats={waiting} tv />
+              {host && <span className="text-lg text-ink-2">{host.name}, the host, can move on for them.</span>}
             </div>
           )}
           {!status && (
@@ -507,7 +524,7 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
           </ul>
           <p className={cx('mt-auto text-base leading-snug text-ink-2', auction.deals.length > 0 && 'hidden')}>
             {status
-              ? 'Your side is picked for you from what you have and need. Change it on your phone before the bell.'
+              ? `Pick your side on your phone. No clock: ${SIDE_PICK_WORDS.noClock}`
               : 'Sellers push the red line down, buyers push the green line up. When the two lines meet, the goods change hands.'}
           </p>
           <span className="truncate font-mono text-sm text-ink-3">
