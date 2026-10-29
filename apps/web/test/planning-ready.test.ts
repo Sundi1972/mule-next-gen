@@ -90,7 +90,7 @@ describe('planning without a clock: who is still planning, and the host', () => 
   });
 
   it("T-AC-13, B-AC-61: Continue is offered only to table.hostId, once Ready, in planning proper or the election's announce and ballot, while someone else is still planning; never to anyone else, nor in the ceremony", () => {
-    type Row = { why: string; me: string; ready: { brix?: boolean; lena?: boolean; ossa?: boolean }; hostId?: string | null; stage?: Parameters<typeof planning>[0]; confirm?: boolean; host: 'none' | 'continue' | 'confirm' };
+    type Row = { why: string; me: string; ready: { brix?: boolean; lena?: boolean; ossa?: boolean }; hostId?: string | null; stage?: Parameters<typeof planning>[0]; phase?: MuleView['phase']; confirm?: boolean; host: 'none' | 'continue' | 'confirm' };
     const rows: Row[] = [
       { why: 'the host, Ready, in planning proper, two still planning', me: BRIX, ready: { brix: true }, host: 'continue' },
       { why: 'the host after one tap on Continue', me: BRIX, ready: { brix: true }, confirm: true, host: 'confirm' },
@@ -106,11 +106,12 @@ describe('planning without a clock: who is still planning, and the host', () => 
       { why: 'B-AC-61: the host during the ceremony', me: BRIX, ready: { brix: true }, stage: 'ceremony', host: 'none' },
       { why: 'every person Ready, the AI left: nobody to continue without', me: BRIX, ready: { brix: true, lena: true, ossa: true }, host: 'none' },
       { why: 'a room with no host', me: BRIX, ready: { brix: true }, hostId: null, host: 'none' },
+      { why: 'C20: the host, on to the next month at the month end (upkeep), two still reading the table', me: BRIX, ready: { brix: true }, phase: 'upkeep', host: 'continue' },
     ];
     for (const row of rows) {
       const all = players(row.ready);
       const t = table(all, row.hostId === undefined ? BRIX : row.hostId);
-      const footer = readyFooter({ me: row.me, players: all, hostId: t.hostId, connected: connectedIn(t.seats), mayContinue: hostMayContinue(planning(row.stage ?? null)), confirm: row.confirm ?? false });
+      const footer = readyFooter({ me: row.me, players: all, hostId: t.hostId, connected: connectedIn(t.seats), mayContinue: hostMayContinue(planning(row.stage ?? null, row.phase)), confirm: row.confirm ?? false });
       expect(footer.host, row.why).toBe(row.host);
     }
 

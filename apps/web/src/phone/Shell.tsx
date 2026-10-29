@@ -96,7 +96,7 @@ function FoldingNowCard({ now }: { now: Now }) {
       data-testid="now"
     >
       <span className="label-caps shrink-0 text-[10px]! @min-[1100px]/shell:text-xs!">Now</span>
-      <span className="min-w-0 flex-1 font-display text-sm font-semibold leading-tight @min-[1100px]/shell:text-lg" data-testid="now-title">
+      <span className="min-w-0 flex-1 truncate font-display text-sm font-semibold leading-tight @min-[1100px]/shell:text-lg" data-testid="now-title">
         {now.title}
       </span>
       <svg aria-hidden viewBox="0 0 24 24" width={14} height={14} className="shrink-0 text-holo" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">

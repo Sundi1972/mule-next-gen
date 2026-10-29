@@ -562,12 +562,17 @@ function FitHeight({ className, children }: { className?: string; children: Reac
 /**
  * The big screen at the month's end (C20, WS6's approved mock): the league table by Worth with the lead and each
  * change since last month, and how the colony is doing. Public: totals only, each player's own lines are on their
- * phone (HC-4). It stays up until everyone moves on.
+ * phone (HC-4). It stays up until everyone moves on, and counts who has, as planning does.
  */
 export function TvMonthEnd({ game }: { game: MuleView }) {
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table p-10 text-ink" data-phase={game.phase} data-testid="tv-monthend">
-      <TvHeader game={game} title="End of the month" />
+      <div className="flex items-start gap-4">
+        <div className="min-w-0 flex-1">
+          <TvHeader game={game} title="End of the month" />
+        </div>
+        <ReadyCount players={game.players} tv />
+      </div>
       {inCollapse(game) && <CollapseBanner density="tv" />}
       <FitHeight className="flex-1">
         <div className="grid flex-1 grid-cols-[minmax(0,7fr)_minmax(0,5fr)] gap-6">

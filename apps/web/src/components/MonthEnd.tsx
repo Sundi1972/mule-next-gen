@@ -38,10 +38,26 @@ export function ChangeTag({ change, className, testid }: { change: number | null
 
 // --- The league table ---------------------------------------------------------------------------------
 
-const SIZE: Record<Density, { pad: string; head: string; rank: string; mark: number; name: string; worth: string; side: string; cell: string; callMark: number; call: string }> = {
-  tv: { pad: 'gap-3 p-5', head: 'text-sm!', rank: 'w-12 text-3xl', mark: 40, name: 'text-3xl', worth: 'text-4xl', side: 'text-2xl', cell: 'px-3 py-2', callMark: 48, call: 'text-4xl' },
-  phone: { pad: 'gap-2 p-3', head: 'text-[10px]!', rank: 'w-6 text-sm', mark: 22, name: 'text-base', worth: 'text-lg', side: 'text-sm', cell: 'px-1.5 py-1.5', callMark: 24, call: 'text-lg' },
-  compact: { pad: 'gap-1 px-2.5 py-1.5', head: 'text-[10px]!', rank: 'w-5 text-xs', mark: 16, name: 'text-sm', worth: 'text-base', side: 'text-xs', cell: 'px-1.5 py-0.5', callMark: 18, call: 'text-sm' },
+type Size = { pad: string; head: string; rank: string; mark: number; name: string; worth: string; side: string; cell: string; callMark: number; call: string; cols: Cols };
+/**
+ * The number columns' widths, padding included, each sized for its largest number ("12,345", "↓ −12,345"); the name
+ * column takes the rest. A header wider than its column wraps between words.
+ */
+type Cols = { rank: string; worth: string; uncut: string; change: string };
+
+const SIZE: Record<Density, Size> = {
+  tv: {
+    pad: 'gap-3 p-5', head: 'text-sm!', rank: 'text-3xl', mark: 40, name: 'text-3xl', worth: 'text-4xl', side: 'text-2xl', cell: 'px-3 py-2', callMark: 48, call: 'text-4xl',
+    cols: { rank: 'w-12', worth: 'w-[10rem]', uncut: 'w-[7rem]', change: 'w-[10rem]' },
+  },
+  phone: {
+    pad: 'gap-2 p-3', head: 'text-[10px]!', rank: 'text-sm', mark: 22, name: 'text-base', worth: 'text-lg', side: 'text-sm', cell: 'px-1.5 py-1.5', callMark: 24, call: 'text-lg',
+    cols: { rank: 'w-6', worth: 'w-[5rem]', uncut: 'w-[4rem]', change: 'w-[5.5rem]' },
+  },
+  compact: {
+    pad: 'gap-1 px-2.5 py-1.5', head: 'text-[10px]!', rank: 'text-xs', mark: 16, name: 'text-sm', worth: 'text-base', side: 'text-xs', cell: 'px-1.5 py-0.5', callMark: 18, call: 'text-sm',
+    cols: { rank: 'w-5', worth: 'w-[4.5rem]', uncut: 'w-[3.5rem]', change: 'w-[5rem]' },
+  },
 };
 
 /**
@@ -57,8 +73,7 @@ export function LeagueTable({ view, density, selfId, final = false }: { view: Mu
   const s = final && tv ? { ...SIZE.tv, mark: 36, cell: 'px-3 py-1.5' } : SIZE[density];
   const words = leaderWords(view, lg, selfId);
   const top = lg.rows[0];
-  // The phone's headers stay on one line (short words); the TV's may wrap, so a Collapse column never squeezes the colony.
-  const th = cx('label-caps align-bottom font-normal', !tv && 'whitespace-nowrap', s.head);
+  const th = cx('label-caps align-bottom font-normal', s.head);
   return (
     <section className={cx('relative flex min-h-0 flex-col rounded-panel border border-holo-line bg-panel', s.pad)} aria-label="League table" data-testid="league">
       <header className="flex items-baseline justify-between gap-2">
@@ -80,21 +95,22 @@ export function LeagueTable({ view, density, selfId, final = false }: { view: Mu
         </div>
       )}
 
-      <table className="w-full border-collapse text-left" data-testid="league-table">
+      {/* Fixed layout: a truncating name can't widen its column, so the numbers stay inside the panel. */}
+      <table className="w-full table-fixed border-collapse text-left" data-testid="league-table">
         <thead>
           <tr>
-            <th className={cx(th, s.cell)}>#</th>
+            <th className={cx(th, s.cell, s.cols.rank)}>#</th>
             <th className={cx(th, s.cell)}>Player</th>
-            <th className={cx(th, s.cell, 'text-right')} data-testid="worth-head">
+            <th className={cx(th, s.cell, s.cols.worth, 'text-right')} data-testid="worth-head">
               {collapse ? (tv ? 'If the game ended now' : 'If it ended now') : 'Worth'}
             </th>
             {collapse && (
-              <th className={cx(th, s.cell, 'text-right')} data-testid="uncut-head">
+              <th className={cx(th, s.cell, s.cols.uncut, 'text-right')} data-testid="uncut-head">
                 Before the cut
               </th>
             )}
             {changes && (
-              <th className={cx(th, s.cell, 'text-right')} data-testid="change-head">
+              <th className={cx(th, s.cell, s.cols.change, 'text-right')} data-testid="change-head">
                 Since month {view.month - 1}
               </th>
             )}
@@ -149,7 +165,7 @@ export function LeagueTable({ view, density, selfId, final = false }: { view: Mu
  * The winner card. On the TV: "Ossa wins with a Worth of 5,643 cr". On your phone: your place and your Worth as the
  * card's number, the winner's line under it. In credits, never points.
  */
-export function WinnerCard({ view, density, selfId }: { view: MuleView; density: Density; selfId?: string }) {
+export function WinnerCard({ view, density, selfId, className }: { view: MuleView; density: Density; selfId?: string; className?: string }) {
   const lg = league(view);
   const top = lg.rows[0];
   if (!top) return null;
@@ -169,7 +185,7 @@ export function WinnerCard({ view, density, selfId }: { view: MuleView; density:
   const compact = density === 'compact';
   return (
     <div
-      className={cx('relative flex flex-col items-center justify-center gap-1 rounded-panel border-2 p-2.5 text-center', won ? 'border-holo bg-holo-soft shadow-glow' : 'border-holo-line bg-panel', !compact && 'flex-1')}
+      className={cx('relative flex flex-col items-center justify-center gap-1 rounded-panel border-2 p-2.5 text-center', won ? 'border-holo bg-holo-soft shadow-glow' : 'border-holo-line bg-panel', !compact && 'flex-1', className)}
       data-testid="winner"
     >
       <span className="contents" data-testid="my-rank">
@@ -192,10 +208,10 @@ export function WinnerCard({ view, density, selfId }: { view: MuleView; density:
 }
 
 /** The colony's verdict on a phone beside the TV, as game over draws it: passed or failed, the air, the rule. */
-export function PhoneVerdict({ view }: { view: MuleView }) {
+export function PhoneVerdict({ view, className }: { view: MuleView; className?: string }) {
   const v = colonyVerdict(view.air);
   return (
-    <div className={cx('flex flex-col gap-1.5 rounded-panel border p-2.5', v.failed ? 'border-alert bg-alert-bg' : 'border-holo-line bg-panel')} data-testid="verdict">
+    <div className={cx('flex flex-col gap-1.5 rounded-panel border p-2.5', v.failed ? 'border-alert bg-alert-bg' : 'border-holo-line bg-panel', className)} data-testid="verdict">
       <span className={cx('font-display text-base font-semibold', v.failed ? 'text-alert-ink' : 'text-ok')}>{v.title}</span>
       <AirGauge level={view.air.level} band={view.air.band} />
       <span className="text-xs leading-snug text-ink-2">{v.line} The colony’s report is on the TV.</span>
@@ -227,41 +243,12 @@ function Block({ label, children, testid, tv, className }: { label: string; chil
   );
 }
 
-/** A line or slot that comes later: greyed, and saying so. */
-function Later({ testid, label, sub, when, tv, line = false }: { testid: string; label: string; sub?: string; when: string; tv: boolean; line?: boolean }) {
-  const chip = <span className={cx('shrink-0 whitespace-nowrap font-mono font-bold uppercase tracking-wide', tv ? 'text-[10px]' : 'text-[9px]')}>{when}</span>;
-  if (!tv || line)
-    return (
-      <div
-        className={cx('flex min-w-0 items-baseline justify-between rounded-control border border-dashed border-holo-line text-ink-3', tv ? 'gap-2 px-3 py-1' : 'gap-1 px-1.5 py-0.5')}
-        aria-label={`${label}: ${when}`}
-        data-testid={testid}
-      >
-        <span className={cx('truncate font-display font-semibold', tv ? 'text-base' : 'text-[11px]')}>{label}</span>
-        {chip}
-      </div>
-    );
-  return (
-    <div className="flex min-w-0 flex-col gap-0.5 rounded-control border border-dashed border-holo-line px-3 py-1.5 text-ink-3" aria-label={`${label}: ${when}`} data-testid={testid}>
-      <span className="flex items-baseline justify-between gap-1 font-display text-base font-semibold">
-        {label}
-        <span data-num className="font-mono">
-          —
-        </span>
-      </span>
-      {sub && <span className="text-sm leading-snug">{sub}</span>}
-      {chip}
-    </div>
-  );
-}
-
-const G5 = 'comes with G-5';
-/** The fund's in and out by source are WS7's colony fund month; until it is on trunk the lines are greyed. */
-const FUND_MONTH = 'comes with the colony fund’s month';
+/** The phone with no TV names this many of the hungry; the rest are counted in one line. */
+const HUNGRY_LINES_COMPACT = 2;
 
 /**
- * How the colony is doing, apart from the players: the air against last month, the colony fund, who went hungry, and
- * G-5's slots. At game over (`verdict`) it heads with the colony's verdict; `row` lays it out in one band across the TV.
+ * How the colony is doing, apart from the players: the air against last month, the colony fund's balance and who went
+ * hungry. At game over (`verdict`) it heads with the colony's verdict; `row` lays it out in one band across the TV.
  */
 export function ColonyPanel({ view, density, layout = 'stack', verdict = false }: { view: MuleView; density: Exclude<Density, 'phone'>; layout?: 'stack' | 'row'; verdict?: boolean }) {
   const r = colonyReport(view);
@@ -273,6 +260,8 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false }
   const big = tv ? 'text-3xl' : 'text-base';
   const line = tv ? 'text-lg leading-snug' : 'text-[11px] leading-tight';
   const trend = r.air.trend;
+  const shownHungry = tv ? r.hungry : r.hungry.slice(0, HUNGRY_LINES_COMPACT);
+  const moreHungry = r.hungry.length - shownHungry.length;
   return (
     <section className={cx('relative flex min-h-0 flex-col rounded-panel border border-holo-line bg-panel', tv ? 'gap-3 p-5' : 'gap-1 px-2.5 py-1.5')} aria-label="How the colony is doing" data-testid="colony-panel">
       <header className={cx('flex flex-wrap items-baseline', tv ? 'gap-x-4' : 'gap-x-2')} {...(verdict ? { 'data-testid': 'tv-verdict' } : {})}>
@@ -288,7 +277,7 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false }
           </>
         )}
       </header>
-      <div className={cx('grid', row ? 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.1fr)] gap-x-6' : tv ? 'grid-cols-2 gap-x-6 gap-y-3' : 'grid-cols-3 gap-2')}>
+      <div className={cx('grid', row ? 'grid-cols-3 gap-x-6' : tv ? 'grid-cols-2 gap-x-6 gap-y-3' : 'grid-cols-3 gap-2')}>
         <Block label="Air" testid="colony-air" tv={tv}>
           <span className="flex flex-wrap items-baseline gap-x-2">
             <span data-num className={cx('font-mono font-bold', big)} data-testid="air-level">
@@ -308,9 +297,6 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false }
           <span data-num className={cx('font-mono font-bold', big)} data-testid="fund-balance">
             {fmt(r.fund.balance)} cr
           </span>
-          <span className={cx(line, 'text-ink-3')} data-testid="fund-month">
-            In and out by source: {FUND_MONTH}
-          </span>
         </Block>
         <Block label="Hunger" testid="colony-hungry" tv={tv} {...(tv && !row ? { className: 'col-span-2 border-t border-holo-faint pt-3' } : {})}>
           <span className={cx('flex', tv && !row ? 'flex-wrap items-baseline gap-x-5 gap-y-1' : 'flex-col')}>
@@ -319,7 +305,7 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false }
                 ✓ Nobody went hungry
               </span>
             ) : (
-              r.hungry.map((h) => {
+              shownHungry.map((h) => {
                 const p = view.players.find((x) => x.id === h.id)!;
                 return (
                   <span key={h.id} className={cx('flex items-start font-semibold text-alert', tv ? 'gap-2 text-2xl leading-snug' : 'gap-1 text-[11px] leading-tight')} data-testid={`hungry-${h.id}`}>
@@ -333,26 +319,17 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false }
                 );
               })
             )}
+            {moreHungry > 0 && (
+              <span className="text-[11px] font-semibold leading-tight text-alert" data-testid="hungry-more">
+                +{moreHungry} more went hungry
+              </span>
+            )}
             <span className={cx(line, r.colonistsFed === false ? 'text-alert' : 'text-ink-2')} data-testid="colonists">
               {r.colonistsFed === null ? 'Colonists' : r.colonistsFed ? 'Colonists fed' : 'Colonists went short'} · {fmt(r.colonists)}
             </span>
           </span>
         </Block>
-        {row && (
-          <div className="relative flex min-w-0 flex-col gap-1.5" data-testid="g5-slots">
-            <Later testid="g5-prestige" label="Prestige" when={G5} tv line />
-            <Later testid="g5-mood" label="Mood" when={G5} tv line />
-            <Later testid="g5-score" label="Colony score" when={G5} tv line />
-          </div>
-        )}
       </div>
-      {!row && (
-        <div className={cx('relative mt-auto grid', tv ? 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.6fr)] gap-3' : 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.25fr)] gap-1.5')} data-testid="g5-slots">
-          <Later testid="g5-prestige" label="Prestige" when={G5} tv={tv} />
-          <Later testid="g5-mood" label="Mood" when={G5} tv={tv} />
-          <Later testid="g5-score" label="Colony score" sub="(colony wealth + air + prestige) × mood." when={G5} tv={tv} />
-        </div>
-      )}
     </section>
   );
 }
@@ -396,14 +373,13 @@ export function YourWorth({ view, density }: { view: MuleView; density: Exclude<
   const collapse = inCollapse(view);
   // At game over the lines keep the breakdown's testids (part-*), so the final score is read as before.
   const over = view.finished;
-  const rows: { key: string; old: string | null; label: string; cr: number | null; tone?: string; grey?: boolean }[] = [
+  const rows: { key: string; old: string | null; label: string; cr: number; tone?: string }[] = [
     { key: 'cash', old: 'part-money', label: 'Cash', cr: p.money },
     { key: 'goods', old: 'part-goods', label: `Goods · ${p.units} units`, cr: p.goods },
     { key: 'land', old: 'part-land', label: `Land · ${p.plots} × ${GAME.plotScore}`, cr: p.land },
     { key: 'mules', old: 'part-mules', label: `MULEs · ${p.mules} × ${view.mulePrice}`, cr: p.muleValue },
     ...(collapse ? [{ key: 'cut', old: 'part-collapse', label: `Collapse cut · ${collapseCutWords()}`, cr: -p.cut, tone: 'text-alert' }] : []),
     { key: 'offices', old: 'part-office', label: `Offices · ${p.terms} ${p.terms === 1 ? 'term' : 'terms'} × ${POLITICS.termScore}${collapse ? ', cut too' : ''}`, cr: p.office },
-    { key: 'donations', old: null, label: 'Donations', cr: null, grey: true },
   ];
   const tight = density === 'compact' || collapse;
   return (
@@ -415,12 +391,9 @@ export function YourWorth({ view, density }: { view: MuleView; density: Exclude<
       <dl className={cx('grid grid-cols-[minmax(0,1fr)_auto] gap-x-2', tight ? 'gap-y-0 text-[11px] leading-4' : 'gap-y-0.5 text-xs')} {...(over ? { 'data-testid': 'breakdown' } : {})}>
         {rows.map((r) => (
           <Ids key={r.key} ids={[`worth-line-${r.key}`, over ? r.old : null]}>
-            <dt className={cx('truncate', r.grey ? 'text-ink-3' : 'text-ink-2')}>
-              {r.label}
-              {r.grey && <span className="ml-1 font-mono text-[9px] font-bold uppercase tracking-wide">{G5}</span>}
-            </dt>
-            <dd data-num className={cx('text-right font-mono font-semibold', r.tone, r.grey && 'text-ink-3')} data-testid={`worth-cr-${r.key}`}>
-              {r.cr === null ? '—' : r.cr < 0 ? `−${fmt(-r.cr)}` : fmt(r.cr)}
+            <dt className="min-w-0 text-ink-2">{r.label}</dt>
+            <dd data-num className={cx('text-right font-mono font-semibold', r.tone)} data-testid={`worth-cr-${r.key}`}>
+              {r.cr < 0 ? `−${fmt(-r.cr)}` : fmt(r.cr)}
             </dd>
           </Ids>
         ))}
