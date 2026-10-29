@@ -289,13 +289,18 @@ async function colonistLobby(size: BrowserContextOptions, label: string, wide: b
   const expired = await shows(moveDialog.locator('[data-testid=handoff-qr][data-state=expired]'));
   const said = expired && (await shows(moveDialog.getByText('This code has expired.')));
   if (!said) {
-    // Seen once on CI and never locally: say what the dialog held, so the next failure names its cause.
-    const state = await moveDialog.getByTestId('handoff-qr').getAttribute('data-state').catch(() => 'none');
-    const pageNow = await lena.evaluate(() => Date.now());
-    console.error(
-      `B-AC-13 (handoff, ${label}) at the failure: code ${state}; ${await lena.getByRole('dialog').count()} dialog(s); ` +
-        `${await lena.getByText('This code has expired.').count()} "expired" text(s); page clock ${pageNow - Date.now()} ms past real time`,
-    );
+    // Seen once on CI and never locally: say what the dialog held, so the next failure names its cause. The read is
+    // bounded, and never takes the place of the check's own message below.
+    try {
+      const state = await moveDialog.getByTestId('handoff-qr').getAttribute('data-state', { timeout: SHOWN_MS }).catch(() => 'none');
+      const pageNow = await lena.evaluate(() => Date.now());
+      console.error(
+        `B-AC-13 (handoff, ${label}) at the failure: code ${state}; ${await lena.getByRole('dialog').count()} dialog(s); ` +
+          `${await lena.getByText('This code has expired.').count()} "expired" text(s); page clock ${pageNow - Date.now()} ms past real time`,
+      );
+    } catch (err) {
+      console.error(`B-AC-13 (handoff, ${label}) at the failure: no diagnostics (${String(err).split('\n')[0]})`);
+    }
   }
   check(said, `B-AC-13 (handoff, ${label}): after 2 minutes the dialog says "This code has expired."`);
   // Back to real time, so the next code's 2 minutes are counted against the room's clock and not 2 minutes ahead of it.
