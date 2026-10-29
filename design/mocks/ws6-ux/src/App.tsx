@@ -26,6 +26,7 @@ import { ELECTION_LINKS, ElectionAuditPage, electionRoute } from './screens/audi
 import { MONTHEND_STATES, MonthEndAuditPage } from './screens/audit/MonthEndAudit';
 import { AUCTION_STATES as AUCTION_AUDIT_STATES, AuctionAuditBody } from './screens/audit/AuctionAudit';
 import { AUDIT_DEV_ROUTES, AuditDevPage, DEV_PREFIX, DevAuditContents } from './screens/audit/DevAuditPage';
+import { RailProductionPage } from './screens/audit/RailProduction';
 import { ARCADE_CONTENTS, ARCADE_ROUTES, ArcadePage } from './screens/arcade/ArcadeApp';
 
 /** The development audit: its contents, then each state, prefixed (#walk is the goods auction's own route). */
@@ -516,6 +517,12 @@ export default function App() {
 
   if (hash === 'walk') return <Page title="Goods auction · the walk, playable · phone and TV"><PlayableWalk /></Page>;
   if (hash === 'production') return <Page title="Production show · TV and phone"><PlayableShow /></Page>;
+  if (hash === 'rail-production')
+    return (
+      <Page title="For Heiko · rail chat · production on a phone alone (a stand-in)">
+        <RailProductionPage />
+      </Page>
+    );
 
   const a = AUCTION_STATES.find((s) => s.id === hash);
   if (a)
@@ -612,6 +619,21 @@ export default function App() {
       </p>
       <div className="mt-2 flex flex-col gap-2" data-testid="arcade-links">
         <Links states={[{ id: ARCADE_CONTENTS, title: 'Arcade walking: contents' }, ...ARCADE_ROUTES]} />
+      </div>
+      <h2 className="label-caps mt-6">For Heiko 2026-10-29 · one rail-chat rule: a one-line ticker on phones</h2>
+      <p className="mt-1 max-w-3xl text-sm text-ink-2">
+        On a phone the rail’s table chat (the seat row and a 2-line ticker) pushed the rail’s key line under the footer on four screens. One rule instead of a fold per screen: below 1100 px the ticker keeps only its newest line; bubbles still pop, the whole chat is on the Talk desk and the TV. Each page has a switch, Today against One-line ticker; also at ?phone=667.
+      </p>
+      <div className="mt-2 flex flex-col gap-2" data-testid="rail-links">
+        <Links
+          states={[
+            { id: 'audit-election-governor', title: 'The Governor desk' },
+            { id: 'audit-auction-walk', title: 'The goods auction’s walk' },
+            { id: 'rail-production', title: 'Production, a phone alone (a stand-in)' },
+            { id: 'monthend', title: 'Month end' },
+            { id: 'monthend-gameover', title: 'Game over' },
+          ]}
+        />
       </div>
       <h2 className="label-caps mt-6">For approval 2026-10-29 · characters in motion</h2>
       <p className="mt-1 max-w-3xl text-sm text-ink-2">

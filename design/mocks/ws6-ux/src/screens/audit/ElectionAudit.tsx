@@ -10,6 +10,7 @@ import { H, VIEW, W } from '../../fixture';
 import { GameShell, useWide, type Now } from '../../proposed/GameShell';
 import { IntentMarker, type IntentNoteData } from '../../proposed/IntentNote';
 import { PLANNING_WORDS, ReadyBar, ReadyCount, useWaiting, type ReadyWords } from '../../proposed/PlanningReady';
+import { useTickerRule } from '../../proposed/TickerRule';
 import { MarketStrip, News, PlainWords, ThisMonth } from '../PlanningBrief';
 import { DESKS, EyeOff, Glyph, ICON, MarketDesk, OnlyYouLook, Private, SecretDesk, Section, Soon, TalkDesk, type Desk } from '../PlanningHub';
 
@@ -1126,15 +1127,17 @@ function GovernorDesk({ tax, setTax, set, onSet }: { tax: number; setTax: (n: nu
   const { view } = usePhoneGame();
   return (
     <section className="relative flex flex-col gap-0.5 @min-[1100px]/shell:gap-2" data-testid="gov-tax">
+      {/* Below 1100 px no "Sales tax" label (WS6, 2026-10-29): a real 844 phone's rail is 261.6 px, and the label pushed the promise into truncation. */}
       <p className="truncate text-xs @min-[1100px]/shell:text-base" data-testid="gov-promise">
-        <span className="label-caps mr-1.5 text-[10px]! @max-3xl/shell:hidden @min-[1100px]/shell:text-xs!">Sales tax</span>
+        <span className="label-caps mr-1.5 hidden text-xs! @min-[1100px]/shell:inline">Sales tax</span>
         You promised: <strong className="font-semibold">no higher than {LENA_CAP}%</strong>
       </p>
+      {/* The row's controls are 40 px below 1100 px (WS6, 2026-10-29): trunk's phone header grew 5.5 px for 32 px taps; this gives 4 px back. DS-GAP: Button's md is 44 px. */}
       <div className="relative flex items-center gap-1 @min-[1100px]/shell:gap-1.5" data-testid="governor-tax-row">
-        <Button size="md" variant="outline" className="w-10 shrink-0 px-0 @min-[1100px]/shell:w-11" aria-label="One point lower" disabled={tax <= TAX_LOW} onClick={() => setTax(Math.max(TAX_LOW, tax - 1))} data-testid="tax-down">
+        <Button size="md" variant="outline" className="h-10! w-10 shrink-0 px-0 @min-[1100px]/shell:h-11! @min-[1100px]/shell:w-11" aria-label="One point lower" disabled={tax <= TAX_LOW} onClick={() => setTax(Math.max(TAX_LOW, tax - 1))} data-testid="tax-down">
           −
         </Button>
-        <span className="flex h-11 w-14 shrink-0 flex-col items-center justify-center gap-0.5 @min-[1100px]/shell:w-24">
+        <span className="flex h-10 w-14 shrink-0 flex-col items-center justify-center gap-0.5 @min-[1100px]/shell:h-11 @min-[1100px]/shell:w-24">
           <span data-num className={cx('font-mono text-xl font-bold leading-none @min-[1100px]/shell:text-3xl', breaks && 'text-alert')} data-testid="tax-value">
             {tax}%
           </span>
@@ -1145,10 +1148,10 @@ function GovernorDesk({ tax, setTax, set, onSet }: { tax: number; setTax: (n: nu
             <span className="sr-only">{verdict.words}</span>
           </span>
         </span>
-        <Button size="md" variant="outline" className="w-10 shrink-0 px-0 @min-[1100px]/shell:w-11" aria-label="One point higher" disabled={tax >= TAX_HIGH} onClick={() => setTax(Math.min(TAX_HIGH, tax + 1))} data-testid="tax-up">
+        <Button size="md" variant="outline" className="h-10! w-10 shrink-0 px-0 @min-[1100px]/shell:h-11! @min-[1100px]/shell:w-11" aria-label="One point higher" disabled={tax >= TAX_HIGH} onClick={() => setTax(Math.min(TAX_HIGH, tax + 1))} data-testid="tax-up">
           +
         </Button>
-        <Button size="md" variant={breaks ? 'danger' : 'holo'} className="min-w-0 flex-1 whitespace-nowrap px-1.5 @min-[1100px]/shell:px-2" disabled={done} onClick={onSet} data-testid="tax-confirm">
+        <Button size="md" variant={breaks ? 'danger' : 'holo'} className="h-10! min-w-0 flex-1 whitespace-nowrap px-1.5 @min-[1100px]/shell:h-11! @min-[1100px]/shell:px-2" disabled={done} onClick={onSet} data-testid="tax-confirm">
           Set {tax}%
         </Button>
         <IntentMarker note={N.E11} part="row" at="tr" />
@@ -1184,7 +1187,9 @@ export function NewGovernor({ set: startSet = null, ready: startReady = false }:
   const [set, setSet] = useState<number | null>(startSet);
   const desks: Desk[] = ['governor', ...PLAIN_DESKS.map((d) => d.id)];
   // While the Governor's desk is open the rail gives it the room (E-11): the footer's names fold, the ticker keeps its newest line.
+  // Under the rail-chat proposal (TickerRule.tsx) the chat follows the rail on a phone, so the desk needs neither fold.
   const asking = desk === 'governor';
+  const rule = useTickerRule();
   const now: Now = { title: 'Set the sales tax', detail: `Then plan your month. You are the new Governor, until month ${nextElection(ELECTION_MONTH)! - 1}. You promised no higher than ${LENA_CAP}%.` };
   const body =
     desk === 'governor' ? (
@@ -1217,7 +1222,7 @@ export function NewGovernor({ set: startSet = null, ready: startReady = false }:
           now={now}
           foldNow
           nowMark={<IntentMarker note={N.E9} part="now" />}
-          {...(asking ? { chatLines: 1 } : {})}
+          {...(asking && rule === 'today' ? { chatLines: 1 } : {})}
           rail={
             <>
               {/* The tabs and the desk they open as one group, closer than the rail's gap on a phone (E-11). */}
@@ -1229,7 +1234,7 @@ export function NewGovernor({ set: startSet = null, ready: startReady = false }:
               </div>
             </>
           }
-          footer={<WaitFooter ready={ready} onReady={() => setReady(true)} planningProper words={PLAN_WORDS} names={!asking} />}
+          footer={<WaitFooter ready={ready} onReady={() => setReady(true)} planningProper words={PLAN_WORDS} names={!asking || rule === 'under'} />}
         >
           <div className="flex min-h-0 flex-1 flex-col gap-2 @min-[1100px]/shell:gap-4">
             <OfficesLine set={set} />
