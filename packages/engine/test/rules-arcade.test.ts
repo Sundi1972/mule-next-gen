@@ -11,6 +11,7 @@ import {
   catchMule,
   createGame,
   DEV_STEER,
+  endLead,
   GLINT,
   installMule,
   outfitCostFor,
@@ -301,6 +302,20 @@ describe('AM-2: take a MULE off a plot and re-outfit it at the store', () => {
     expect(p0(state).carriedMule).toBeNull();
     expect(p0(state).muleBolted ?? false).toBe(false);
     expect(p0(state).takenMule ?? null).toBeNull();
+  });
+
+  it('AM-2: endLead, the pub’s and the clock’s cleanup, sends a taken MULE home and clears the lead', () => {
+    const state = developing();
+    plot(state, 0, 0, 'p0', 'food').runMonths = 3;
+    takeMule(state, 'p0', 0, 0);
+    boltMule(state, 'p0');
+    endLead(state, 'p0');
+    expect(state.tiles[0]!.outfit).toBe('food');
+    expect(state.tiles[0]!.runMonths).toBe(3);
+    expect(p0(state).carriedMule).toBeNull();
+    expect(p0(state).takenMule ?? null).toBeNull();
+    expect(p0(state).takenRuns ?? null).toBeNull();
+    expect(p0(state).muleBolted ?? false).toBe(false);
   });
 
   it('AM-2: going to the pub ends the turn too, so a taken MULE goes back to its plot', () => {

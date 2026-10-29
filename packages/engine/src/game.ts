@@ -330,6 +330,19 @@ function returnTakenMule(state: GameState, p: Player): void {
   delete p.takenMule;
 }
 
+/**
+ * A player's development turn is over, at the pub or by the clock: a MULE taken off a plot goes home (bolted or not,
+ * AM-14), any other carried MULE runs off, and the turn's bolt and taken runs are forgotten. No phase check, so the
+ * clock's end can call it after the phase has moved on.
+ */
+export function endLead(state: GameState, playerId: string): void {
+  const p = player(state, playerId);
+  returnTakenMule(state, p);
+  p.carriedMule = null;
+  delete p.muleBolted;
+  delete p.takenRuns;
+}
+
 // --- Development's moments (arcade spec C4): the floor's wolves and glint pay out through these -------------
 
 /** Sells pelts at the store, which pays WOLVES.peltPrice each from its capital. Returns the credits paid. */
@@ -427,9 +440,7 @@ export function visitPub(state: GameState, playerId: string, secondsLeft: number
   const p = developer(state, playerId);
   const payout = pubPayoutFor(state, playerId, secondsLeft);
   p.money += payout;
-  returnTakenMule(state, p);
-  p.carriedMule = null;
-  delete p.muleBolted;
+  endLead(state, playerId);
   p.doneDeveloping = true;
   return payout;
 }
@@ -473,12 +484,7 @@ export function advancePhase(state: GameState): void {
   }
   if (next === 'production') {
     // A MULE nobody installed runs away at the end of development; one taken off a plot goes back to it (AM-2).
-    for (const p of state.players) {
-      returnTakenMule(state, p);
-      p.carriedMule = null;
-      delete p.takenRuns;
-      delete p.muleBolted;
-    }
+    for (const p of state.players) endLead(state, p.id);
     const price = mulePrice(state);
     const soldOut = state.store.mules === 0;
     // MULEs get dearer each month the corral sells out, and cheaper when they are left over.
