@@ -9,11 +9,12 @@ import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, plotName, seatSpecies, secondsUntil, slotOf, standings, tileAt, toSlot } from '../game/derive';
-import { inCollapse } from '../game/month-end';
+import { inCollapse, ordinal } from '../game/month-end';
 import { useAuctionSound } from '../game/sound';
 import { useClient, useClientState, useServerNow } from '../net/react';
 import { connectedIn, hostMayContinue, readyRows, stillPlanning } from '../phone/hub/ready';
 import { ReadyCount, WaitingFor } from '../phone/hub/ReadyBar';
+import { placesOf } from '../phone/hub/standing';
 import { TvElection } from './TvElection';
 import { TvGovernorPromise } from './TvGovernorPromise';
 import { TvLandAuction } from './TvLandAuction';
@@ -222,6 +223,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
     const host = game.players.find((p) => p.id === table.hostId);
     // The host's Continue goes on without the others in planning proper and the election's announce and ballot; never in its ceremony.
     const hostCanContinue = !!host && (host.ready || host.isAi) && hostMayContinue(game);
+    const places = placesOf(game);
     side = (
       <>
         {/* This branch also draws an auction or land auction for the moment before its data arrives; Ready means Done there. */}
@@ -262,6 +264,10 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
               const state = s.isAi ? 'AI · READY' : s.ready ? 'READY' : isAway ? 'AWAY · PLANNING' : 'PLANNING';
               return (
                 <li key={s.id} className={cx('flex items-center gap-3', (s.isAi || s.ready) && 'opacity-60')}>
+                  {/* Their place by Worth, the number everyone sees. */}
+                  <span data-num className="w-9 shrink-0 font-mono text-sm text-ink-3" data-testid={`tv-rank-${s.id}`}>
+                    {ordinal(places.get(s.id) ?? game.players.length)}
+                  </span>
                   <PlayerMark slot={toSlot(s.slot)} size={22} glow={!(s.isAi || s.ready)} />
                   <span className="flex-1 truncate font-display text-xl font-semibold">{s.name}</span>
                   <span className={cx('font-mono text-sm', isAway ? 'text-warn' : s.ready || s.isAi ? 'text-ink-3' : 'text-holo')}>{state}</span>
