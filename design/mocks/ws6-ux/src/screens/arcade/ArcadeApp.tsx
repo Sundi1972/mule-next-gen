@@ -110,6 +110,7 @@ const ADDENDUM = [
   { id: 'V-6', route: 'arcade-pace', line: 'your pace, and why, in the side room; a tap says what to do next month.' },
   { id: 'V-7', route: 'arcade-broke', line: 'with 66 cr the corral is not ringed; the ring and the banner box say what you can do instead.' },
   { id: 'AM-2', route: 'arcade-reoutfit', line: 'TAKE MULE off your plot, RE-OUTFIT it at another outfitter, and the ring brings it to the best free plot.' },
+  { id: 'AM-9', route: 'arcade-plots', line: 'every outfit opens in the hall (six shopfronts, the works’ three bays, the Green belt); leading a MULE onto your plot that has one: SWAP, the old one runs away; on your plot ANALYSE, then FIT FILTER, then TAKE MULE.' },
 ];
 
 /** The four slices, one line each. */
@@ -155,7 +156,7 @@ function Page({ title, intro, children }: { title: string; intro?: ReactNode; ch
 const Notes = ({ className }: { className?: string }) => (
   <IntentNotes
     title="What changed and why"
-    intro="Sixteen changes from today’s tap-to-walk development, numbered on the screens (⑦ slice 2’s wolves, ⑧ slice 3’s glint, ⑨ slice 4’s scramble, ⑩ the landscape phone, ⑪ to ⑯ the addendum from the development audit). Hover a note to light its number."
+    intro="Seventeen changes from today’s tap-to-walk development, numbered on the screens (⑦ slice 2’s wolves, ⑧ slice 3’s glint, ⑨ slice 4’s scramble, ⑩ the landscape phone, ⑪ to ⑯ the addendum from the development audit, ⑰ every outfit and the swap). Hover a note to light its number."
     notes={ARCADE_NOTES}
     {...(className ? { className } : {})}
   />

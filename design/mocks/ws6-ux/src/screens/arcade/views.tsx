@@ -194,8 +194,7 @@ export function MapStage({ width, height, across, density, interactive = false, 
 
 // --- The store hall ---------------------------------------------------------------------------------
 
-const OPEN = ['corral', 'pub', 'food', 'energy', 'smithore', 'crystite'] as const;
-const LOCKS = { water: 'closed', rareEarth: 'closed', works: 'closed', greenBelt: 'closed' };
+// AM-9: every room of the store is open (the six shopfronts, the works' three bays, the Green belt, the corral, the pub).
 const SHORT: Partial<Record<Reach['kind'], string>> = { buy: 'BUY', outfit: 'OUTFIT', pub: 'PUB', leave: 'LEAVE' };
 
 /** The store hall as a stage: the approved StoreInterior at 4:3, everyone inside walking over it. */
@@ -217,8 +216,6 @@ export function HallStage({ width, density, store = density, interactive = false
         mulePrice={mulePrice(tun)}
         pubPayout={pubPayout(world, tun)}
         prices={{ ...tun.outfit }}
-        open={[...OPEN]}
-        locks={LOCKS}
         tv={store === 'tv'}
         wide={store === 'wide'}
       />
@@ -390,7 +387,7 @@ export function LeadChip({ className }: { className?: string }) {
     <span className={cx('inline-flex min-w-0 items-center gap-1.5 rounded-chip border px-2 py-0.5 text-sm', bolted ? 'border-alert text-alert' : 'border-holo-faint text-ink-2', className)} data-testid="lead-chip" data-lead={m ? (m.good ?? 'empty') : bolted ? 'bolted' : 'none'}>
       <MuleIcon size={16} className={m ? 'text-holo' : bolted ? 'text-alert' : 'text-ink-3'} />
       <span className="truncate">{bolted ? 'MULE bolted!' : !m ? 'No MULE' : m.good ? 'MULE on lead' : 'Empty MULE'}</span>
-      {m?.good && <GoodIcon good={m.good} size={14} />}
+      {m?.good && m.good !== 'greenBelt' && <GoodIcon good={m.good} size={14} />}
     </span>
   );
 }

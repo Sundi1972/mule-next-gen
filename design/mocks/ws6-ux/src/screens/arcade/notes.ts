@@ -149,6 +149,15 @@ export const ARCADE_NOTES: IntentNoteData[] = [
     'Heiko’s Q2 “yes” (AM-2, via the PM): the audit mock only drew “Or re-outfit it at the store” dashed, as a rule that did not exist; now it is RULE-3 rows 8a and 11a.',
     { serves: 'audit 10' },
   ),
+  n(
+    'A17',
+    17,
+    'Every outfit in the store, and the swap (AM-9)',
+    'All six shopfronts are open, Water and Rare earth too; the works has three fitting bays, Alloy, Electronics and Medicine, each its own spot, so where you stand picks the good; and the Green belt. Leading a fitted MULE onto a plot of yours that has one, the button says SWAP · your Energy MULE runs away: the new one goes in and the old one runs off, nobody’s to catch. On your own plot the button’s order is ANALYSE (not yet analysed, a MULE on it or not), then FIT FILTER (Alloy held), then TAKE MULE; the next is the line above it.',
+    'Choose what each MULE makes · Change what a MULE makes, or move it to another plot.',
+    'AM-9 (WS1’s readings, ruled by WS6): today’s game sells every outfit and swaps a MULE in over another; slice 1 kept four outfitters open only as a simplification, and its dimmed “PLOT HAS A MULE” was not a ruling.',
+    { serves: 'audit 2 and 10' },
+  ),
 ];
 
-export const NOTE = Object.fromEntries(ARCADE_NOTES.map((x) => [x.id, x])) as Record<'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'A6' | 'A7' | 'A8' | 'A9' | 'A10' | 'A11' | 'A12' | 'A13' | 'A14' | 'A15' | 'A16', IntentNoteData>;
+export const NOTE = Object.fromEntries(ARCADE_NOTES.map((x) => [x.id, x])) as Record<'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'A6' | 'A7' | 'A8' | 'A9' | 'A10' | 'A11' | 'A12' | 'A13' | 'A14' | 'A15' | 'A16' | 'A17', IntentNoteData>;

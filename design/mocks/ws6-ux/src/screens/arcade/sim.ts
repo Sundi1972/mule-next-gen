@@ -22,7 +22,13 @@ export interface P {
 }
 export type WalkTerrain = Exclude<Terrain, 'store'>;
 /** The four outfitters slice 1 opens (Heiko's loop); Water, Rare earth and the works stay shut. */
-export const ARCADE_OUTFITS = ['food', 'energy', 'smithore', 'crystite'] as const;
+/**
+ * Every outfit the store sells (AM-9): the six shopfronts, the works' three fitting bays, the Green belt. Slice 1 opened
+ * four only as a simplification.
+ */
+export const ARCADE_OUTFITS = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine', 'greenBelt'] as const;
+/** What the bots pick from: slice 1's four, so their turns (and the measured numbers) stay as they were. */
+export const BOT_PLANS = ['food', 'energy', 'smithore', 'crystite'] as const;
 export type ArcadeOutfit = (typeof ARCADE_OUTFITS)[number];
 export type LakeMode = 'wade' | 'shore';
 /** A bot's skill in a wolf fight. */
@@ -164,7 +170,7 @@ export const DEFAULT_TUNABLES: Tunables = {
   // 120 + 19 = 139 cr, the development audit's month-2 MULE.
   smithorePrice: 19,
   storeMules: 6,
-  outfit: { food: MULE.outfitCost.food, energy: MULE.outfitCost.energy, smithore: MULE.outfitCost.smithore, crystite: MULE.outfitCost.crystite },
+  outfit: Object.fromEntries(ARCADE_OUTFITS.map((g) => [g, MULE.outfitCost[g]])) as Record<ArcadeOutfit, number>,
   botThinkSeconds: 0.5,
   // PM ruling 29 Oct; a design note for the real AI hands (WS1's execution layer owns the rule).
   botsSpareTime: true,
@@ -404,7 +410,7 @@ export function initWorld(seed: number, seats: Seat[], tiles: TileView[], size: 
       id: s.id, name: s.name, slot: s.slot, species: s.species, bot: s.bot, level: s.level,
       space: 'map', x: s.start.x + 0.5, y: s.start.y + 0.5, facing: 'right', moving: false, mule: null,
       money: tun.seats[s.id]?.money ?? 0, done: false, installs: 0,
-      plan: ARCADE_OUTFITS[Math.floor(u * ARCADE_OUTFITS.length)]!, botWait: 0, trail: [],
+      plan: BOT_PLANS[Math.floor(u * BOT_PLANS.length)]!, botWait: 0, trail: [],
       pelts: 0, bitten: false, stunnedUntil: 0, wolvesAfter: 0, encounter: null, crystite: 0, analysing: null, leg: '', legWolf: false, legVia: null, waitUntil: 0,
     };
   });
@@ -465,16 +471,20 @@ const COL = (X1 - X0) / 6;
 const SHOP_ORDER = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth'] as const;
 const BOTTOM = { works: [9, 36], greenBelt: [37, 46], corral: [47, 73], pub: [74, 91] } as const;
 
-export type HallRoom = (typeof SHOP_ORDER)[number] | keyof typeof BOTTOM | 'doorL' | 'doorR';
+/** The works' three fitting bays (AM-9, RULE-3 row 8b), thirds of the works as StoreInterior draws them: where you stand picks the good. */
+const BAYS = { alloy: [9, 18], electronics: [18, 27], medicine: [27, 36] } as const;
+export type HallRoom = (typeof SHOP_ORDER)[number] | keyof typeof BAYS | keyof typeof BOTTOM | 'doorL' | 'doorR';
 
 /** Each room's box in % of the hall, as StoreInterior draws it. */
 export const ROOMS: Record<HallRoom, Rect> = {
   ...(Object.fromEntries(SHOP_ORDER.map((g, i) => [g, { x0: X0 + COL * i + 0.4, x1: X0 + COL * (i + 1) - 0.4, y0: TOP.y0, y1: TOP.y1 }])) as Record<(typeof SHOP_ORDER)[number], Rect>),
+  // The bays before the works, so a point in a bay is that bay, never "the works".
+  ...(Object.fromEntries(Object.entries(BAYS).map(([k, [x0, x1]]) => [k, { x0, x1, y0: BOT.y0, y1: BOT.y1 }])) as Record<keyof typeof BAYS, Rect>),
   ...(Object.fromEntries(Object.entries(BOTTOM).map(([k, [x0, x1]]) => [k, { x0, x1, y0: BOT.y0, y1: BOT.y1 }])) as Record<keyof typeof BOTTOM, Rect>),
   doorL: { x0: 0.6, x1: 7.6, y0: 30, y1: 70 },
   doorR: { x0: 92.4, x1: 99.4, y0: 30, y1: 70 },
 };
-export const OPEN_ROOMS: HallRoom[] = ['food', 'energy', 'smithore', 'crystite', 'corral', 'pub', 'doorL', 'doorR'];
+export const OPEN_ROOMS: HallRoom[] = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine', 'greenBelt', 'corral', 'pub', 'doorL', 'doorR'];
 
 /** The body's clearance from walls, in % of the hall. */
 const MX = 1.5;
@@ -663,7 +673,7 @@ const leaveHall = (w: World, c: Colonist, side: 'L' | 'R', tun: Tunables) => arr
 
 // --- What the action button does -----------------------------------------------------------------
 
-export type ReachKind = 'enter' | 'buy' | 'outfit' | 'leave' | 'install' | 'pub' | 'sell' | 'catch' | 'fight' | 'strike' | 'grab' | 'analyse' | 'take' | 'filter' | 'none';
+export type ReachKind = 'enter' | 'buy' | 'outfit' | 'leave' | 'install' | 'pub' | 'sell' | 'catch' | 'fight' | 'strike' | 'grab' | 'analyse' | 'take' | 'filter' | 'swap' | 'none';
 export interface Reach {
   kind: ReachKind;
   /** The button's words, e.g. "BUY MULE"; with `detail`, e.g. "139 cr". */
@@ -680,7 +690,13 @@ export interface Reach {
   why?: string;
 }
 
-const NAME: Record<ArcadeOutfit, string> = { food: 'FOOD', energy: 'ENERGY', smithore: 'SMITHORE', crystite: 'CRYSTITE' };
+const NAME: Record<ArcadeOutfit, string> = { food: 'FOOD', water: 'WATER', energy: 'ENERGY', smithore: 'SMITHORE', crystite: 'CRYSTITE', rareEarth: 'RARE EARTH', alloy: 'ALLOY', electronics: 'ELECTRONICS', medicine: 'MEDICINE', greenBelt: 'GREEN BELT' };
+/** A good in a sentence: "your Energy MULE runs away" (V-4's words). */
+export const GOOD_WORD: Record<ArcadeOutfit, string> = { food: 'Food', water: 'Water', energy: 'Energy', smithore: 'Smithore', crystite: 'Crystite', rareEarth: 'Rare earth', alloy: 'Alloy', electronics: 'Electronics', medicine: 'Medicine', greenBelt: 'Green belt' };
+/** Alloy held: none in this mock, so FIT FILTER (RULE-3 row 12) is never live here; V-5 says where it comes from. */
+const ALLOY_HELD = 0;
+/** How far a swapped-out MULE runs before it is gone. */
+const RUNAWAY_TILES = 3;
 export const pubPayout = (w: World, tun: Tunables) => {
   const left = Math.max(0, tun.devSeconds * 1000 - w.t) / (tun.devSeconds * 1000);
   return Math.round(DEVELOPMENT.pub.base + (DEVELOPMENT.pub.start + w.month * DEVELOPMENT.pub.perMonth) * left);
@@ -762,19 +778,32 @@ export function reachOf(w: World, c: Colonist, tun: Tunables): Reach {
   const mine = t && t.owner === c.id;
   const shore = c.mule?.good ? shorePlot(w, c, tun) : null;
   if (shore) return { kind: 'install', verb: `INSTALL · ${NAME[c.mule!.good!]}`, detail: 'from the shore', enabled: true, target: { space: 'map', tile: { x: shore.x, y: shore.y } }, outfit: c.mule!.good! };
-  if (mine && t.outfit && c.mule?.good) return { kind: 'none', verb: 'PLOT HAS A MULE', detail: 'try a free plot', enabled: false };
-  // RULE-3 row 11, V-3: a plot of yours nobody has analysed can be, in DEVELOPMENT.analysisSeconds.
-  const analyse: Reach | null = mine && !t.ground && !t.outfit ? { kind: 'analyse', verb: 'ANALYSE', detail: `${tun.analyseSeconds} s`, enabled: true, target: { space: 'map', tile: { x: t.x, y: t.y } } } : null;
-  // V-3: INSTALL stays the button; ANALYSE first is the second choice, on the line above it.
-  if (mine && c.mule?.good) return { kind: 'install', verb: `INSTALL · ${NAME[c.mule.good]}`, enabled: true, target: { space: 'map', tile: { x: t.x, y: t.y } }, outfit: c.mule.good, ...(analyse ? { alt: analyse } : {}) };
-  if (mine && c.mule) return { kind: 'none', verb: 'OUTFIT IT FIRST', detail: 'in the store', enabled: false };
-  // AM-2 (RULE-3 row 11a): your MULE on its plot comes off on its lead; V-5's filter is the second choice, and says
-  // where its Alloy comes from (none is held in this mock).
-  if (mine && t.outfit && !c.mule && (ARCADE_OUTFITS as readonly string[]).includes(t.outfit)) {
-    const filter: Reach = { kind: 'filter', verb: 'FIT FILTER', detail: 'needs 1 Alloy', why: 'Needs 1 Alloy: buy it at the auction, or make it with a factory MULE at the Works', enabled: false };
-    return { kind: 'take', verb: `TAKE MULE · ${NAME[t.outfit as ArcadeOutfit]}`, detail: 'it follows on its lead', enabled: true, target: { space: 'map', tile: { x: t.x, y: t.y } }, alt: filter };
+  const here = t ? { space: 'map' as const, tile: { x: t.x, y: t.y } } : undefined;
+  // RULE-3 row 11, V-3: a plot of yours nobody has analysed can be (AM-9: one with a MULE on it too), in
+  // DEVELOPMENT.analysisSeconds.
+  const analyse: Reach | null = mine && !t.ground ? { kind: 'analyse', verb: 'ANALYSE', detail: `${tun.analyseSeconds} s`, enabled: true, target: here! } : null;
+  if (mine && c.mule?.good) {
+    // Row 10. AM-9: on a plot of yours that has a MULE, today's rule, a swap: the old MULE runs away (V-4's words).
+    // V-3: ANALYSE first is the second choice, on the line above the button.
+    const alt = analyse ? { alt: analyse } : {};
+    if (t.outfit) return { kind: 'swap', verb: 'SWAP', detail: `your ${GOOD_WORD[t.outfit as ArcadeOutfit] ?? t.outfit} MULE runs away`, enabled: true, target: here!, outfit: c.mule.good, ...alt };
+    return { kind: 'install', verb: `INSTALL · ${NAME[c.mule.good]}`, enabled: true, target: here!, outfit: c.mule.good, ...alt };
   }
-  if (mine && !c.mule && analyse) return analyse;
+  if (mine && c.mule) return { kind: 'none', verb: 'OUTFIT IT FIRST', detail: 'in the store', enabled: false };
+  if (mine && !c.mule) {
+    // AM-9's order, first match wins: ANALYSE (not yet analysed), FIT FILTER (Alloy held, no filter yet), TAKE MULE
+    // (AM-2, row 11a: it comes off on its lead). The next one is the second choice on the line above the button; with
+    // no Alloy the filter is V-5's dimmed line, saying where its Alloy comes from.
+    const take: Reach | null = t.outfit ? { kind: 'take', verb: `TAKE MULE · ${NAME[t.outfit as ArcadeOutfit] ?? t.outfit.toUpperCase()}`, detail: 'it follows on its lead', enabled: true, target: here! } : null;
+    const filter: Reach | null = t.outfit
+      ? ALLOY_HELD > 0
+        ? { kind: 'filter', verb: 'FIT FILTER', detail: '1 Alloy', enabled: true, target: here! }
+        : { kind: 'filter', verb: 'FIT FILTER', detail: 'needs 1 Alloy', why: 'Needs 1 Alloy: buy it at the auction, or make it with a factory MULE at the Works', enabled: false }
+      : null;
+    if (analyse) return take ? { ...analyse, alt: take } : analyse;
+    if (filter?.enabled) return take ? { ...filter, alt: take } : filter;
+    if (take) return filter ? { ...take, alt: filter } : take;
+  }
   if (c.mule?.good) return { kind: 'none', verb: 'TO YOUR PLOT', detail: t?.owner ? 'not yours' : undefined, enabled: false };
   if (!c.mule && w.storeMules <= 0) return { kind: 'none', verb: 'NO MULES LEFT', detail: 'the pub pays now', enabled: false };
   if (c.installs > 0 && !c.mule) return { kind: 'none', verb: 'TO THE STORE', detail: 'MULE or pub', enabled: false };
@@ -812,6 +841,19 @@ function act(w: World, c: Colonist, tun: Tunables, r: Reach | undefined = reachO
       const tiles = w.tiles.map((t) => (t.x === at.x && t.y === at.y ? { ...t, outfit: null } : t));
       const mule: Lead = { good, x: at.x + 0.5, y: at.y + 0.5, facing: c.facing, paid: 0, taken: true };
       return { w: { ...w, tiles, log: say(w, c, `took the ${NAME[good]} MULE off ${at.x + 1}·${at.y + 1}`), beats: beat(w, c.id, `${c.name} took a MULE off a plot to re-outfit it`, 'ok') }, c: { ...c, mule, trail: [{ x: mule.x, y: mule.y }, { x: c.x, y: c.y }] } };
+    }
+    case 'swap': {
+      // Today's rule: the new MULE goes in, the old one runs away off the plot and is gone (it is nobody's to catch).
+      const at = r.target && 'tile' in r.target ? r.target.tile : { x: Math.floor(c.x), y: Math.floor(c.y) };
+      const old = tileAt(w, at.x, at.y)!.outfit as ArcadeOutfit;
+      const tiles = w.tiles.map((t) => (t.x === at.x && t.y === at.y ? { ...t, outfit: c.mule!.good } : t));
+      const away = { x: at.x + 0.5 - c.x, y: at.y + 0.5 - c.y };
+      const n = Math.hypot(away.x, away.y) || 1;
+      const runaway: Loose = { owner: `runaway-${c.id}-${w.t}`, slot: c.slot, good: old, paid: 0, x: at.x + 0.5, y: at.y + 0.5, dir: n > 0.01 ? { x: away.x / n, y: away.y / n } : { x: 1, y: 0 }, left: RUNAWAY_TILES, facing: away.x >= 0 ? 'right' : 'left' };
+      return {
+        w: { ...w, tiles, loose: [...w.loose, runaway], log: say(w, c, `swapped ${NAME[c.mule!.good!]} in on ${at.x + 1}·${at.y + 1}; the ${NAME[old]} MULE ran away`), beats: beat(w, c.id, `${c.name}'s ${GOOD_WORD[old]} MULE ran away`, 'warn') },
+        c: { ...c, mule: null, installs: c.installs + 1 },
+      };
     }
     case 'install': {
       const at = r.target && 'tile' in r.target ? r.target.tile : { x: Math.floor(c.x), y: Math.floor(c.y) };
@@ -919,10 +961,10 @@ export function botGoal(w: World, c: Colonist, tun: Tunables): Goal {
   const plot = freePlotsOf(w, c.id)[0];
   const side = (x: number): 'L' | 'R' => (x < w.store.x + 0.5 ? 'L' : 'R');
   const pub: Goal = c.space === 'hall' ? { kind: 'room', room: 'pub' } : { kind: 'store' };
-  const affordable = ARCADE_OUTFITS.filter((g) => tun.outfit[g] <= c.money);
+  const affordable = BOT_PLANS.filter((g) => tun.outfit[g] <= c.money);
   if (c.installs > 0 || !plot) return pub;
   if (!c.mule) {
-    if (w.storeMules <= 0 || c.money < mulePrice(tun) + Math.min(...ARCADE_OUTFITS.map((g) => tun.outfit[g]))) return pub;
+    if (w.storeMules <= 0 || c.money < mulePrice(tun) + Math.min(...BOT_PLANS.map((g) => tun.outfit[g]))) return pub;
     return c.space === 'hall' ? { kind: 'room', room: 'corral' } : { kind: 'store' };
   }
   if (!c.mule.good) {

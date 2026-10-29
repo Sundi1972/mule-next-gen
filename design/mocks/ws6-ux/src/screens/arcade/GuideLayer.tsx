@@ -1,7 +1,10 @@
 import { cx, SLOT_COLOR } from '@mule/ui';
 import { suits } from '../audit/dev/fixture';
 import { guideOf, plotName } from './guide';
-import { ARCADE_OUTFITS, ROOMS, type Colonist, type HallRoom, type Tunables, type World } from './sim';
+import { ROOMS, type Colonist, type HallRoom, type Tunables, type World } from './sim';
+
+/** The six shopfronts, along the hall's top row: the raw goods a plot's ground can suit. */
+const SHOPFRONTS = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth'] as const;
 
 /**
  * The phone's "go here next" ring (A-10, RULE-9): a pulsing ring on the store, your plot, the plot to analyse or your
@@ -84,7 +87,7 @@ export function PlotsByOutfitter({ world, me }: { world: World; me: Colonist }) 
   const mine = world.tiles.filter((t) => t.owner === me.id);
   return (
     <div className="pointer-events-none absolute inset-0 z-[5]" data-testid="plots-by-outfitter">
-      {ARCADE_OUTFITS.map((good) => {
+      {SHOPFRONTS.map((good) => {
         const b = ROOMS[good];
         const fit = mine.filter((t) => suits(t).includes(good));
         return (

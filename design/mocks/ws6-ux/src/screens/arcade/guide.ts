@@ -23,6 +23,10 @@ export type Guide =
   | { space: 'hall'; rooms: HallRoom[]; labels: Partial<Record<HallRoom, string>>; dim: HallRoom[]; note?: string }
   | null;
 
+/** The works' bays and the Green belt are narrow: their ring says FIT. */
+const NARROW: readonly string[] = ['alloy', 'electronics', 'medicine', 'greenBelt'];
+const fitLabel = (g: string, word: string) => (NARROW.includes(g) ? (word === 'RE-OUTFIT' ? 'RE-FIT' : 'FIT') : word);
+
 /** The plot as the game names it: 4·1 is x 3, y 0. */
 export const plotName = (p: P) => `${p.x + 1}·${p.y + 1}`;
 
@@ -40,7 +44,8 @@ export function unanalysed(w: World, c: Colonist, tun: Tunables): P[] {
 /** V-2: the best of your free plots for a good, from where you are (the store, inside). */
 export function bestPlot(w: World, c: Colonist, good: ArcadeOutfit): P | null {
   const from = c.space === 'map' ? { x: c.x - 0.5, y: c.y - 0.5 } : w.store;
-  const best = bestFreePlot({ ...ARCADE_VIEW, tiles: w.tiles }, good, from);
+  // A Green belt suits every plot alike, as a factory does: ranked as one (the nearer wins).
+  const best = bestFreePlot({ ...ARCADE_VIEW, tiles: w.tiles }, good === 'greenBelt' ? 'alloy' : good, from);
   return best ? { x: best.plot.x, y: best.plot.y } : null;
 }
 
@@ -71,11 +76,11 @@ export function guideOf(w: World, c: Colonist, tun: Tunables): Guide {
     const first = plots[0];
     return { space: 'map', spots: [...(first ? [{ what: 'analyse' as const, at: first, label: `ANALYSE · ${plotName(first)}` }] : []), store('PUB')], note };
   }
-  if (!m.good) return hall ? { space: 'hall', rooms: affordable.length ? [...affordable] : ['pub'], labels: Object.fromEntries(affordable.map((g) => [g, 'OUTFITTER'])), dim: [] } : { space: 'map', spots: [store('OUTFITTER')] };
+  if (!m.good) return hall ? { space: 'hall', rooms: affordable.length ? [...affordable] : ['pub'], labels: Object.fromEntries(affordable.map((g) => [g, fitLabel(g, 'OUTFITTER')])), dim: [] } : { space: 'map', spots: [store('OUTFITTER')] };
   if (m.taken) {
     // AM-2: the other outfitters re-outfit it; its own good's is dimmed, it makes that already.
     const others = affordable.filter((g) => g !== m.good);
-    return hall ? { space: 'hall', rooms: others.length ? [...others] : ['pub'], labels: Object.fromEntries(others.map((g) => [g, 'RE-OUTFIT'])), dim: [m.good] } : { space: 'map', spots: [store('RE-OUTFIT')] };
+    return hall ? { space: 'hall', rooms: others.length ? [...others] : ['pub'], labels: Object.fromEntries(others.map((g) => [g, fitLabel(g, 'RE-OUTFIT')])), dim: [m.good] } : { space: 'map', spots: [store('RE-OUTFIT')] };
   }
   const plot = bestPlot(w, c, m.good);
   if (!plot) return pub;

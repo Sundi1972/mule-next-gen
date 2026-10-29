@@ -146,7 +146,7 @@ export function PhoneLandscape({ size = 844 }: { size?: PhoneSize }) {
   const choosing = me.space === 'hall' && !!me.mule && (!me.mule.good || !!me.mule.taken);
   const markers = (
     <span className="flex flex-wrap gap-x-3 gap-y-2 pl-1 pt-1">
-      {[NOTE.A10, NOTE.A7, NOTE.A8, NOTE.A9].map((n) => (
+      {[NOTE.A10, NOTE.A7, NOTE.A8, NOTE.A9, NOTE.A17].map((n) => (
         <span key={n.id} className="relative block size-3">
           <IntentMarker note={n} at="tl" />
         </span>
@@ -199,7 +199,7 @@ export function PhoneLandscape({ size = 844 }: { size?: PhoneSize }) {
             <IntentMarker note={NOTE.A3} at="tl" />
           </span>
           <PaceLine world={world} me={me} tun={tun} short={choosing || L.small} />
-          {choosing && <PlotsLegend world={world} me={me} />}
+          {choosing && <PlotsLegend world={world} me={me} short={L.small} />}
         </div>
       )}
       {bar && (

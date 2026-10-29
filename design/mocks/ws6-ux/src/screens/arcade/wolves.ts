@@ -284,7 +284,8 @@ export function stepBolts(w0: World, dtMs: number, tun: Tunables): World {
     }
     return { ...m, ...next, left: m.left - s, facing: m.dir.x >= 0 ? ('right' as const) : ('left' as const) };
   });
-  return { ...w, loose };
+  // A MULE that ran away from a swap (AM-9) is nobody's to catch: gone when its run ends.
+  return { ...w, loose: loose.filter((m) => !(m.owner.startsWith('runaway-') && m.left <= 0)) };
 }
 
 /** At the turn's end a bolting MULE stops where it is. */

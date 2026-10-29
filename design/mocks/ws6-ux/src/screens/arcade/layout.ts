@@ -8,8 +8,9 @@ import { HALL } from './sim';
  * - The map fits by height (15 × 9). At 844 the side room either side (98 px) holds the status; at 667 it is 22 px,
  *   under SIDE_MIN, so the status lies over the map's top edge in a bar (spec C11), in the widest run of row 0 with no
  *   plot of yours and no target on it.
- * - The hall fills the height; at 667 it moves left so the pub ends before the button and the left door above the
- *   stick (the stick and the button are smaller there, 104 and 150 × 80).
+ * - The hall fills the height at 844. At 667 (the stick and the button smaller there, 104 and 150 × 80) it is sized
+ *   and placed so the works' first bay (9 % across) starts right of the stick and the pub (91 %) ends left of the
+ *   button, now that every room is open (AM-9); the left door then ends above the stick.
  * - The stick and the button lie over the bottom corners; the second choice (V-3, V-5) is a line above the button.
  */
 export type PhoneSize = 844 | 667;
@@ -68,17 +69,21 @@ export function phoneLayout(size: PhoneSize, space: 'map' | 'hall', cols = 15, r
       banner: { x: bx0, y: f.h - cell * 1.45, w: button.x - 8 - bx0, h: cell * 1.45 - 4 },
     };
   }
-  const hallW = (f.h * HALL.w) / HALL.h;
-  // The pub's right edge is 91% across the hall: it must end before the button.
-  const x = small ? Math.min((f.w - hallW) / 2, button.x - 2 - 0.91 * hallW) : (f.w - hallW) / 2;
+  const fullW = (f.h * HALL.w) / HALL.h;
+  const from = stick.x + stick.w + 2;
+  const to = button.x - 2;
+  const hallW = small ? Math.min(fullW, (to - from) / 0.82) : fullW;
+  const hallH = (hallW * HALL.h) / HALL.w;
+  const x = small ? from - 0.09 * hallW : (f.w - hallW) / 2;
+  const y = (f.h - hallH) / 2;
   return {
     ...base,
-    stage: { x, y: 0, w: hallW, h: f.h },
+    stage: { x, y, w: hallW, h: hallH },
     cell: hallW / HALL.w,
     mode: 'side',
     left: { x: 0, y: 0, w: x, h: stick.y - 6 },
     right: { x: x + hallW, y: 0, w: f.w - x - hallW, h: button.y - 6 },
-    banner: { x: x + 0.09 * hallW, y: 0.405 * f.h, w: 0.82 * hallW, h: 0.18 * f.h },
+    banner: { x: x + 0.09 * hallW, y: y + 0.405 * hallH, w: 0.82 * hallW, h: 0.18 * hallH },
   };
 }
 

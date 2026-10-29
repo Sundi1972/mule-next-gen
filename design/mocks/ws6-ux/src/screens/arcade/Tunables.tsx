@@ -42,7 +42,7 @@ const flag = (key: string, label: string, get: (t: Tunables) => boolean, set: (t
 const asks = (ask: string, row: Row, answer?: string): Row => ({ ...row, ask, ...(answer ? { answer } : {}) });
 
 const TERRAINS = (Object.keys(DEFAULT_TUNABLES.terrain) as WalkTerrain[]).filter((k) => k !== 'lake');
-const NAME: Record<string, string> = { food: 'Food', energy: 'Energy', smithore: 'Smithore', crystite: 'Crystite' };
+const NAME: Record<string, string> = { food: 'Food', water: 'Water', energy: 'Energy', smithore: 'Smithore', crystite: 'Crystite', rareEarth: 'Rare earth', alloy: 'Alloy', electronics: 'Electronics', medicine: 'Medicine', greenBelt: 'Green belt' };
 const Q = (t: Tunables, patch: Partial<Tunables['questions']>): Tunables => ({ ...t, questions: { ...t.questions, ...patch } });
 const WV = (t: Tunables, patch: Partial<Tunables['wolves']>): Tunables => ({ ...t, wolves: { ...t.wolves, ...patch } });
 const GL = (t: Tunables, patch: Partial<Tunables['glint']>): Tunables => ({ ...t, glint: { ...t.glint, ...patch } });

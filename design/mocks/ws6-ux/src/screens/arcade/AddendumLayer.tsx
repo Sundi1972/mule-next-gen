@@ -1,7 +1,7 @@
 import { cx, GOOD_NAME } from '@mule/ui';
 import { useState, type CSSProperties } from 'react';
 import { IntentMarker } from '../../proposed/IntentNote';
-import { bestHere, pips, plotTitle, RAW, suitsLine } from '../audit/dev/fixture';
+import { bestHere, pips, plotTitle, RAW, suits, suitsLine } from '../audit/dev/fixture';
 import { guideOf, plotName } from './guide';
 import { useArcade } from './loop';
 import { NOTE } from './notes';
@@ -13,7 +13,8 @@ import { secondsLeft } from './views';
  * language: the button and its second line, the ring, the side room and the banner box. No menus, no tap-to-walk.
  */
 
-const GOOD = GOOD_NAME as Record<string, string>;
+// Every outfit in words, the Green belt too (it is not a good).
+const GOOD = { ...(GOOD_NAME as Record<string, string>), greenBelt: 'Green belt' } as Record<string, string>;
 const dots = (n: number) => '●'.repeat(n) + '○'.repeat(4 - n);
 
 // --- V-6 · your pace, and why ---------------------------------------------------------------------
@@ -136,7 +137,7 @@ export function PlotCard({ world, me, tun, at }: { world: World; me: Colonist; t
 // --- V-2 · your plots, and what each suits, while you choose ---------------------------------------
 
 /** The side room, in the store while you choose: each plot of yours, what it suits, and what stands on it. */
-export function PlotsLegend({ world, me }: { world: World; me: Colonist }) {
+export function PlotsLegend({ world, me, short = false }: { world: World; me: Colonist; short?: boolean }) {
   if (me.space !== 'hall' || !me.mule || (me.mule.good && !me.mule.taken)) return null;
   const mine = world.tiles.filter((t) => t.owner === me.id);
   return (
@@ -144,8 +145,10 @@ export function PlotsLegend({ world, me }: { world: World; me: Colonist }) {
       <span className="label-caps text-[9px]!">Your plots</span>
       {mine.map((t) => (
         <span key={`${t.x},${t.y}`} className={cx(t.outfit ? 'text-ink-3' : 'text-ink')} data-testid={`legend-${t.x}-${t.y}`}>
-          <b className="font-semibold">{plotTitle(t)}</b> · {suitsLine(t)}
-          {t.outfit ? ` · ${GOOD[t.outfit]} MULE` : ''}
+          <b className="font-semibold">{plotTitle(t)}</b>
+          {/* The small phone's narrow column: the suits in a word or two. */}
+          {short ? `: ${t.ground ? `best ${GOOD[bestHere(t.ground)]}` : suits(t).length ? suits(t).map((g) => GOOD[g]).join(', ') : 'analyse it'}` : ` · ${suitsLine(t)}`}
+          {t.outfit ? ` · ${short ? 'MULE' : `${GOOD[t.outfit]} MULE`}` : ''}
         </span>
       ))}
       <IntentMarker note={NOTE.A11} at="tr-in" />
