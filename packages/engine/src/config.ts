@@ -1,4 +1,4 @@
-import type { Outfit, GrownGood, Good, MinedGood, Office, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
+import type { Outfit, EventKey, GrownGood, Good, MinedGood, Office, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
 
 /**
  * Every balancing number lives here, so playtests and the simulator can tune
@@ -937,6 +937,36 @@ export const PHASES = {
   productionMs: 15_000,
   /** Upkeep: colonists eat and goods spoil. */
   upkeepMs: 8_000,
+};
+
+/** How big an event's story is on the TV: a headline, a spotlight, or one line of a shared roll call. */
+export type EventWeight = 'headline' | 'spotlight' | 'bulletin';
+
+/** How long the production show plays each month event, and how far production stretches to fit them. */
+export const EVENT_SHOW = {
+  /** How big each event's story is on the TV; a key missing here plays as a headline. */
+  weight: {
+    dustStorm: 'headline',
+    drought: 'headline',
+    acidRain: 'headline',
+    solarFlare: 'headline',
+    cometPass: 'headline',
+    flood: 'headline',
+    volcanicAsh: 'headline',
+    pestSwarm: 'spotlight',
+    wildfire: 'spotlight',
+    bumperHarvest: 'spotlight',
+  } as Partial<Record<EventKey, EventWeight>>,
+  /** How long one headline or spotlight plays, in ms. */
+  playMs: { headline: 7_000, spotlight: 5_200 },
+  /** How long the intro (the phase's opening card of what fired) plays before the first event, in ms; none in a quiet month. */
+  introMs: 1_800,
+  /** How long the one roll call that every bulletin of a phase shares plays, in ms. */
+  rollCallMs: 4_000,
+  /** The event window production's 15 s show already has; only time beyond it lengthens production. */
+  productionWindowMs: 4_800,
+  /** The most the events of one phase may play in all, in ms; past it each is cut in proportion. */
+  capMs: 30_000,
 };
 
 /**
