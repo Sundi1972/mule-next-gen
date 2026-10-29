@@ -1,4 +1,4 @@
-import { DEV_WALK, DEVELOPMENT, UPKEEP, type Good, type Outfit } from '@mule/engine';
+import { DEV_STEER, DEV_WALK, DEVELOPMENT, UPKEEP, type Good, type Outfit } from '@mule/engine';
 import type { PlayerView, TileView } from '@mule/protocol';
 import { AirGauge, Button, cx, GOOD_NAME, GoodIcon, hungerLevel, HoloMap, MuleIcon, paceLine, PlayerMark, SharedClock, sickReason, StoreInterior, TERRAIN_NAME, TimeBar, YourPace, ZoomMap, type Condition, type FoodEaten, type PaceRule, type Shop } from '@mule/ui';
 import { useEffect, useState } from 'react';
@@ -101,7 +101,7 @@ export function Develop() {
   });
   const installedAny = installed || me.installedThisTurn;
   // Month 1 with the clock running and no first MULE of yours in on a plot of yours: the host started it without you.
-  const passed = view.month === 1 && DEV_WALK.month1WaitsForFirstMule && !waiting && me.devEndsAt !== null && !installedAny && view.tiles.some((t) => t.owner === me.id);
+  const passed = view.month === 1 && DEV_STEER.month1WaitsForFirstMule && !waiting && me.devEndsAt !== null && !installedAny && view.tiles.some((t) => t.owner === me.id);
   // Once in, you wait: a seat already in may only end its turn until the clock starts.
   const youWait = waiting && !view.clockWaitsFor!.includes(me.id);
   const guide = waiting
