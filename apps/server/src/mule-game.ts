@@ -15,6 +15,7 @@ import {
   createRng,
   declareRole,
   electionDone,
+  EVENT_SHOW,
   DEVELOPMENT,
   fitFilter,
   foodShare,
@@ -70,6 +71,7 @@ import {
   walkSeconds,
   type GameState,
   type Good,
+  type MonthEvent,
   type NoticeEntry,
   type Outfit,
   type Phase,
@@ -166,6 +168,30 @@ function worthBeforeCutOf(state: GameState, playerId: string): number | null {
 }
 
 /**
+ * How long a phase's events play on the TV (RULE-1): the intro, then each event, never past the cap in all. Returns
+ * the show's length, the intro's, and each event's weight and share in fired order. Bulletins share one roll call.
+ * When the cap bites the intro keeps its length and the events' shares are cut in proportion. Production's length and
+ * the view's lengths all come from here, so they cannot disagree.
+ */
+function eventShow(events: readonly MonthEvent[]) {
+  const introMs = events.length > 0 ? EVENT_SHOW.introMs : 0;
+  const weights = events.map((e) => EVENT_SHOW.weight[e.key] ?? 'headline');
+  const bulletins = weights.filter((w) => w === 'bulletin').length;
+  const plays = weights.map((w) => (w === 'bulletin' ? EVENT_SHOW.rollCallMs / bulletins : EVENT_SHOW.playMs[w]));
+  const total = plays.reduce((sum, ms) => sum + ms, 0);
+  const showMs = Math.min(EVENT_SHOW.capMs, introMs + Math.round(total));
+  const sharedMs = showMs - introMs;
+  // Each share runs from where the last one ended, rounded on the running total, so intro and shares add up to showMs.
+  let played = 0;
+  const shares = weights.map((weight, i) => {
+    const from = Math.round((played * sharedMs) / total);
+    played += plays[i]!;
+    return { weight, playMs: Math.round((played * sharedMs) / total) - from };
+  });
+  return { showMs, introMs, shares };
+}
+
+/**
  * The month's production as every screen may see it: each working plot with
  * what it made before the event and its biggest reasons, and the event's hits.
  * Built field by field from the report, so the stock players held never
@@ -188,7 +214,8 @@ function productionView(state: GameState, lengthMs: number): ProductionView | nu
         .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
         .slice(0, MAX_BADGES),
     }));
-  const events = (report.events ?? []).map((e) => ({
+  const { shares, introMs } = eventShow(report.events ?? []);
+  const events = (report.events ?? []).map((e, i) => ({
     key: e.key,
     kind: e.kind,
     title: e.title,
@@ -198,8 +225,10 @@ function productionView(state: GameState, lengthMs: number): ProductionView | nu
     origin: { ...e.origin },
     ...(e.direction ? { from: e.direction } : {}),
     hits: e.plots.map((p) => ({ ...at(p.index), order: p.order, delta: p.delta })),
+    phase: 'production' as const,
+    ...shares[i]!,
   }));
-  return { lines, events, lengthMs };
+  return { lines, events, lengthMs, introMs };
 }
 
 /**
@@ -740,7 +769,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   /** Ends the phase when its PHASE_MS runs out; a phase whose PHASE_MS is null has no clock and waits for Ready. */
   private startPhaseTimer(phase: keyof typeof PHASE_MS): void {
-    const length = PHASE_MS[phase];
+    // Production stretches past its own event window to play every event of the month (RULE-1).
+    const extraMs = phase === 'production' ? Math.max(0, eventShow(this.requireState().history.at(-1)?.events ?? []).showMs - EVENT_SHOW.productionWindowMs) : 0;
+    const base = PHASE_MS[phase];
+    const length = base === null ? null : base + extraMs;
     this.phaseEndsAt = null;
     if (length === null) return;
     const ms = length * this.phaseScale;
