@@ -29,7 +29,7 @@ export const cardAt = (seg: EventSegment) => seg.playAt + (STORY[seg.events[0]!.
 // --- What the show does to the whole map --------------------------------------------------------------------------
 
 /** The map's state at `t`: the segment, how dim it is, whose land is in the spotlight, and the camera. */
-export function livingAt({ s, t, reduced, grid, cast }: ShowFrame) {
+export function livingAt({ s, t, reduced, grid, cast }: ShowFrame, size: ShowSize = 'tv') {
   const { stage, seg } = eventStageAt(s, t);
   const quiet = s.segments.length === 0;
   const ev = seg?.events[0];
@@ -37,6 +37,9 @@ export function livingAt({ s, t, reduced, grid, cast }: ShowFrame) {
   const spot = player && seg ? ramp(t, seg.playAt - 0.5, 0.5) * (1 - ramp(t, seg.endAt - 0.5, 0.5)) : 0;
   // The map dims under the intro and each title card, and clears as the card flies off.
   const story = ev ? STORY[ev.key] : undefined;
+  // A story's jolt shakes the camera for a moment, never with reduced motion.
+  const jolt = s.segments.flatMap((g) => g.events.flatMap((e) => (STORY[e.key]?.jolt !== undefined ? [g.playAt + STORY[e.key]!.jolt! * g.pace] : []))).find((at) => t >= at && t < at + 0.6);
+  const shake = jolt !== undefined && !reduced ? `translate(${Math.sin(t * 80) * cq(size, 5, 2.5) * (1 - (t - jolt) / 0.6)}cqw, ${Math.cos(t * 63) * cq(size, 3, 1.5)}cqw)` : undefined;
   const dim = quiet ? 0 : stage === 'intro' ? ramp(t, s.start, 0.3) : seg && stage === 'announce' ? ramp(t, seg.announceAt, 0.3) * (1 - ramp(t, seg.playAt - 0.5, 0.5)) : 0;
   // The camera flies in to where the story happens while it plays, and pulls back after its reveal. Never without motion.
   const place = ev && seg && !reduced ? storyPlace(ev) : null;
@@ -52,7 +55,8 @@ export function livingAt({ s, t, reduced, grid, cast }: ShowFrame) {
     const edge = (v: number) => Math.max(-(k - 1) * 50, Math.min((k - 1) * 50, v));
     return `translate(${edge(p.x * (1 - e - k))}%, ${edge(p.y * (1 - e - k))}%) scale(${k})`;
   })();
-  return { stage, seg, dim, player, spot, quiet, view: camera, place, lens };
+  const view = [camera, shake].filter(Boolean).join(' ') || undefined;
+  return { stage, seg, dim, player, spot, quiet, view, place, lens };
 }
 
 /** The same, for a layer inside <EventShow>; the caller reads it to glow the spotlit player's slot. */

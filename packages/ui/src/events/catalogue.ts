@@ -12,7 +12,7 @@ export type EventMotion =
   | 'sweep' // a front crosses the map from an edge, plot by plot (dust, drought, acid rain, flare, comet)
   | 'spread' // from one plot to the plots joined to it (pests, fire)
   | 'source' // out from a map feature (the river's flood, the volcano's ash)
-  | 'plot'; // on one plot, no travel (bumper harvest)
+  | 'plot'; // on one plot, no travel (bumper harvest, cavern collapse)
 
 export interface EventEntry {
   key: ShowEventKey;
@@ -52,9 +52,12 @@ export interface StoryTime {
   step?: number;
   /** Seconds into the play when the camera pulls back. */
   reveal: number;
+  /** Seconds into the play when the ground jolts: the camera shakes for a moment. */
+  jolt?: number;
 }
 
 export const STORY: Partial<Record<ShowEventKey, StoryTime>> = {
   // Spotlight: the camera goes to the plot.
   bumperHarvest: { length: 3.2, focus: 'origin', zoom: 2, lands: 1.4, reveal: 2.5 },
+  cavernCollapse: { length: 3.6, focus: 'origin', zoom: 2, lands: 1.9, reveal: 2.9, jolt: 1.7 },
 };
