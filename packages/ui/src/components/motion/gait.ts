@@ -85,3 +85,13 @@ export function cycleSeconds(g: GaitInput): number {
   // A pace that is not a number (missing on the wire) strides at full speed rather than freezing the loop.
   return Number.isFinite(raw) ? Math.min(GAIT.maxCycle, Math.max(GAIT.minCycle, raw)) : GAIT.fullCycle;
 }
+
+/** A walk-board walker's price at its last render, and when that price last moved. */
+export interface BoardTrack {
+  at: number;
+  movedAt: number | null;
+}
+
+export function boardGait(_prev: BoardTrack | null, _at: number, _now: number): { track: BoardTrack; motion: Motion } {
+  throw new Error('NotImplemented: boardGait');
+}

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { Creature, Mule, replays, SPECIES } from '../src/index';
+import { Creature, Mule, replays, SPECIES, WalkBoard, type BoardWalker } from '../src/index';
 
 const CYAN = '#38e1ff';
 
@@ -120,5 +120,31 @@ describe('the MULE in motion', () => {
     // The held steps sample the old ease: many stops, each held, between rest and the full breath.
     const stops = block(THEME, /@keyframes mule-breathe\s*\{/).match(/[\d.]+%/g) ?? [];
     expect(stops.length).toBeGreaterThanOrEqual(8);
+  });
+});
+
+describe('the walk board’s walkers in motion', () => {
+  const walkers: BoardWalker[] = [
+    { id: 'ann', name: 'Ann', slot: 0, side: 'seller', price: 80, at: 80 },
+    { id: 'bo', name: 'Bo', slot: 1, side: 'buyer', price: 20, at: 20 },
+  ];
+  const board = () =>
+    renderToStaticMarkup(<WalkBoard lo={0} hi={100} walkers={walkers} deals={[]} storeBuys={null} storeSells={null} shipPays={null} meId="ann" />);
+
+  it('M-10: a walker moves by a transform of its column, never by `top`, and stands breathing until its price moves', () => {
+    const html = board();
+    for (const [id, y] of [['ann', 20], ['bo', 80]] as const) {
+      // The column that carries it: positioned by left only, moved by translateY (a share of the board's height).
+      const track = html.match(new RegExp(`<div[^>]*style="([^"]*)"[^>]*><div[^>]*data-testid="walker-${id}"`))?.[1] ?? '';
+      expect(track).toContain(`transform:translateY(${y}%)`);
+      expect(track).not.toMatch(/(^|;)top:/);
+      const walker = html.match(new RegExp(`<div[^>]*data-testid="walker-${id}"[^>]*>`))?.[0] ?? '';
+      expect(walker).not.toMatch(/style="[^"]*top:/);
+    }
+    // Its creature stands in the motion wrappers (no ground shadow on the board), breathing on the MULE's rhythm.
+    const ann = html.slice(html.indexOf('data-testid="walker-ann"'));
+    expect(ann.match(/<span[^>]*class="cm [^"]*"[^>]*>/)?.[0]).toMatch(/data-motion="idle"/);
+    expect(ann.match(/<span[^>]*class="cm [^"]*"[^>]*>/)?.[0]).toContain('--cycle:2.600s');
+    expect(html).not.toContain('cm-shadow');
   });
 });
