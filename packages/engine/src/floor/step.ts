@@ -3,7 +3,7 @@ import type { GameState, Tile } from '../types.js';
 import { MS_PER_SECOND } from '../units.js';
 import { IDLE_INPUT, leadFor, mouthOf, openDoor, storeOf, type DevFloor, type FloorColonist, type FloorConfig, type FloorInput, type FloorPoint } from './floor.js';
 import { HALL_DOORS, isOpenFloor, placeAt, type HallDoor, type HallPlan } from './hall.js';
-import { reachOf } from './reach.js';
+import { reachOf, type Reach } from './reach.js';
 import { speedOf, terrainShare } from './speed.js';
 
 /** What one step reads: the game, the config, and the store's tile, found once. */
@@ -13,25 +13,42 @@ interface Step {
   readonly store: Tile;
 }
 
+type Inputs = Readonly<Record<string, FloorInput>>;
+
 /**
  * One tick of the floor: every colonist moved by its seat's input, at RULE-2's speed, or through a door when its press
  * reached ENTER or LEAVE on this floor. Pure: a new floor, the old one and the game untouched. A seat with no input
  * stands still. Throws an Error for a dtMs other than cfg.steer.tickMs: every runner steps at the one tick.
  */
-export function stepFloor(floor: DevFloor, state: GameState, inputs: Readonly<Record<string, FloorInput>>, dtMs: number, cfg: FloorConfig): DevFloor {
+export function stepFloor(floor: DevFloor, state: GameState, inputs: Inputs, dtMs: number, cfg: FloorConfig): DevFloor {
   if (dtMs !== cfg.steer.tickMs) throw new Error(`stepFloor steps ${cfg.steer.tickMs} ms at a time, not ${dtMs}`);
   const ctx: Step = { state, cfg, store: storeOf(state) };
   return {
     tick: floor.tick + 1,
     colonists: floor.colonists.map((c) => {
       const input = inputs[c.id] ?? IDLE_INPUT;
-      const reach = input.act ? reachOf(floor, state, c.id, cfg) : null;
+      const reach = doorMove(floor, state, c.id, input, cfg);
       const led = withLead(c, ctx.state);
       if (reach?.kind === 'enter') return follow({ ...enterHall(led, reach.door, cfg.hall), moving: true }, cfg);
       if (reach?.kind === 'leave') return follow({ ...leaveHall(led, reach.door, ctx), moving: true }, cfg);
       return stepColonist(led, input, dtMs, ctx);
     }),
   };
+}
+
+/**
+ * The seats whose press stepFloor spends on a door move from this floor, given what stepFloor was given. A press does
+ * one thing: after the step, apply every other press at the stepped position (RULE-1), and not these.
+ */
+export function doorPresses(floor: DevFloor, state: GameState, inputs: Inputs, cfg: FloorConfig): ReadonlySet<string> {
+  return new Set(floor.colonists.filter((c) => doorMove(floor, state, c.id, inputs[c.id] ?? IDLE_INPUT, cfg)).map((c) => c.id));
+}
+
+/** The ENTER or LEAVE a seat's press reaches on this floor, or null when it presses nothing or reaches something else. */
+function doorMove(floor: DevFloor, state: GameState, seat: string, input: FloorInput, cfg: FloorConfig): Extract<Reach, { kind: 'enter' | 'leave' }> | null {
+  if (!input.act) return null;
+  const reach = reachOf(floor, state, seat, cfg);
+  return reach.kind === 'enter' || reach.kind === 'leave' ? reach : null;
 }
 
 /** The colonist with its lead as the game has it now: a MULE bought, outfitted or installed since the last tick. */

@@ -1,10 +1,10 @@
 /**
  * The action button (spec C3): what one press does where a colonist stands, the button's words, and the press.
  *
- * A tick runs in this order in the server and the sim alike (HC-4). First, each seat that pressed since the last tick
- * has applyReach run, in seat order (the first seat rotating each tick, RULE-1), with its reach on the pre-tick floor
- * and the game as the seats before it left it. Then stepFloor steps that same pre-tick floor, taking each colonist
- * whose press reached ENTER or LEAVE through its door.
+ * A tick runs in RULE-1's order in the server and the sim alike (HC-4). First stepFloor steps the floor, taking each
+ * colonist whose press reached ENTER or LEAVE through its door. Then every other seat that pressed since the last tick
+ * has applyReach run, with its reach at the stepped position and the game as the seats before it left it, in seat order
+ * with the first seat rotating each tick. doorPresses names the presses the step spent, which are not applied again.
  */
 import { DEVELOPMENT } from '../config.js';
 import { RuleError } from '../errors.js';

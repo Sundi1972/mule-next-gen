@@ -8,6 +8,7 @@ import {
   DEV_STEER,
   DEVELOPMENT,
   doorOutside,
+  doorPresses,
   floorConfig,
   HALL,
   hasAnalysed,
@@ -53,7 +54,7 @@ const A_PLOTS = [
 const SEED = 31;
 const RICH = 1_000;
 const SECONDS_LEFT = 30;
-const PRESS: FloorInput = { x: 0, y: 0, act: true };
+const IDLE: FloorInput = { x: 0, y: 0, act: false };
 const cfg = floorConfig(HALL);
 
 const tileOf = (state: GameState, x: number, y: number) => state.tiles[y * state.width + x]!;
@@ -77,6 +78,8 @@ type Outcome =
 interface Row {
   row: string;
   at: (state: GameState) => Partial<FloorColonist>;
+  /** The stick held with the press; still when not given. */
+  stick?: FloorInput;
   game?: (state: GameState) => void;
   reach: (state: GameState) => Reach;
   words: (state: GameState) => ReachWords;
@@ -108,6 +111,17 @@ function world(row: Row): { state: GameState; floor: DevFloor } {
   return { state, floor: { ...built, colonists: built.colonists.map((c) => (c.id === 'a' ? { ...c, ...row.at(state) } : c)) } };
 }
 
+/**
+ * One tick as the server and the sim run it (RULE-1): the step, then each press the step did not spend, at the stepped
+ * position. What each applied press did.
+ */
+function tick(state: GameState, floor: DevFloor, inputs: Record<string, FloorInput>): { floor: DevFloor; presses: Press[] } {
+  const spent = doorPresses(floor, state, inputs, cfg);
+  const stepped = stepFloor(floor, state, inputs, DEV_STEER.tickMs, cfg);
+  const pressing = Object.keys(inputs).filter((seat) => inputs[seat]!.act && !spent.has(seat));
+  return { floor: stepped, presses: pressing.map((seat) => applyReach(state, stepped, seat, SECONDS_LEFT, cfg)) };
+}
+
 /** 'a' walked by `stick` until it is through a door. */
 function throughTheDoor(state: GameState, floor: DevFloor, stick: FloorInput): FloorColonist {
   let f = floor;
@@ -122,6 +136,13 @@ const TABLE: Row[] = [
   {
     row: '5 ENTER: on the map at the store door',
     at: (s) => ({ space: 'map', ...doorOutside(s, 'doorL', cfg) }),
+    reach: () => ({ kind: 'enter', enabled: true, door: 'doorL' }),
+    words: () => words('ENTER STORE'),
+    press: { door: { x: 1, y: 0, act: false } },
+  },
+  {
+    row: '5 over 6: at the door, carrying pelts: the press goes in, and does nothing more',
+    at: (s) => ({ space: 'map', ...doorOutside(s, 'doorL', cfg), pelts: 2 }),
     reach: () => ({ kind: 'enter', enabled: true, door: 'doorL' }),
     words: () => words('ENTER STORE'),
     press: { door: { x: 1, y: 0, act: false } },
@@ -152,6 +173,20 @@ const TABLE: Row[] = [
         expect(a(now).carriedMule).toBe('empty');
         expect(a(was).money - a(now).money).toBe(mulePriceFor(was, 'a'));
         expect(was.store.mules - now.store.mules).toBe(1);
+      },
+    },
+  },
+  {
+    row: '7 at the stepped position: walking into the corral with the press buys',
+    at: () => ({ space: 'hall', x: HALL.spots.corral.x, y: HALL.rooms.corral.y0 - 0.1 }),
+    stick: { x: 0, y: 1, act: false },
+    reach: () => ({ kind: 'none', enabled: false, hint: 'corral' }),
+    words: () => words('TO THE CORRAL', null, false),
+    press: {
+      game: (was, now, press) => {
+        expect(press.reach.kind).toBe('buy');
+        expect(a(now).carriedMule).toBe('empty');
+        expect(a(was).money - a(now).money).toBe(mulePriceFor(was, 'a'));
       },
     },
   },
@@ -303,34 +338,36 @@ describe('the dev floor: the action button', () => {
       expect(reach, r.row).toEqual(r.reach(was));
       expect(reachWords(reach), r.row).toEqual(r.words(was));
 
-      const before = floor.colonists[0]!;
-      const pressed = () => applyReach(state, floor, 'a', SECONDS_LEFT, cfg);
+      // The press in a tick: the step first, then the press where the step left the colonist.
+      const stick = r.stick ?? IDLE;
+      const walked = stepFloor(floor, state, { a: stick }, DEV_STEER.tickMs, cfg).colonists[0]!;
+      const pressed = () => tick(state, floor, { a: { ...stick, act: true } });
       if (typeof r.press === 'object' && 'refused' in r.press) {
         expect(pressed, r.row).toThrow(RuleError);
         expect(pressed, r.row).toThrow(r.press.refused);
-      } else {
-        const press = pressed();
-        expect(press.reach, r.row).toEqual(reach);
-        if (typeof r.press === 'object' && 'game' in r.press) r.press.game(was, state, press);
-        else expect(state, `${r.row}: the press leaves the game as it was`).toEqual(was);
+        continue;
       }
-
-      // The same press reaches the step, on the floor it was pressed on.
-      const stepped = stepFloor(floor, state, { a: PRESS }, DEV_STEER.tickMs, cfg).colonists[0]!;
+      const { floor: stepped, presses } = pressed();
+      const me = stepped.colonists[0]!;
       if (typeof r.press === 'object' && 'door' in r.press) {
-        expect(stepped.space, `${r.row}: through the door`).not.toBe(before.space);
-        expect(stepped, `${r.row}: as walking through it`).toEqual(throughTheDoor(state, floor, r.press.door));
-      } else if (typeof r.press === 'object' && 'game' in r.press) {
-        expect([stepped.space, stepped.x, stepped.y], `${r.row}: stays where it pressed`).toEqual([before.space, before.x, before.y]);
-      } else {
-        expect(stepped, `${r.row}: the floor as it was`).toEqual(before);
+        expect(me.space, `${r.row}: through the door`).not.toBe(floor.colonists[0]!.space);
+        expect(me, `${r.row}: as walking through it`).toEqual(throughTheDoor(state, floor, r.press.door));
+        expect(presses, `${r.row}: the press spent on the door`).toEqual([]);
+        expect(state, `${r.row}: the game as it was`).toEqual(was);
+        continue;
       }
+      expect([me.space, me.x, me.y], `${r.row}: where its stick took it`).toEqual([walked.space, walked.x, walked.y]);
+      expect(presses.length, `${r.row}: one press`).toBe(1);
+      const press = presses[0]!;
+      if (!r.stick) expect(press.reach, r.row).toEqual(reach);
+      if (typeof r.press === 'object' && 'game' in r.press) r.press.game(was, state, press);
+      else expect(state, `${r.row}: the press leaves the game as it was`).toEqual(was);
 
       if (r.row.startsWith('13')) {
         // After the pub the turn is over: the button dims and a second press changes nothing.
-        expect(reachWords(reachOf(floor, state, 'a', cfg))).toEqual(words('IN THE PUB', 'turn over', false));
+        expect(reachWords(reachOf(stepped, state, 'a', cfg))).toEqual(words('IN THE PUB', 'turn over', false));
         const done = structuredClone(state);
-        applyReach(state, floor, 'a', SECONDS_LEFT, cfg);
+        tick(state, stepped, { a: { ...IDLE, act: true } });
         expect(state).toEqual(done);
       }
     }
