@@ -65,6 +65,7 @@ feat/strategist with Heiko's OK through the PM.
 |----|------------|-------------------------|--------------|--------------------|--------------------|-------------------|
 | PR-1 | `ws3-record-pr1` | Tasks 1–6 (C1, C2, C3, C4, C5) | B-AC-1 (goal check), T-AC-1..T-AC-9 | `GameRecord`, `RecordEvent`, `RecordStep`, `RecordedChoice`, `NoticeEntry`, `PlaybookEntry` types (spec §3) | `Playbook` (engine `playbook.ts`, frozen v1) | No |
 | PR-2 | `ws3-record-pr2` | Tasks 7–8 (C6, C7) | T-AC-10, T-AC-11 | the `notice` and `recordPlaybook` options on MuleGame | PR-1's types and Recorder | No |
+| PR-3 | `ws3-record-heard` (from trunk) | Task 9 (AM-4) | T-AC-12, T-AC-1 strengthened | the `heard` variant of `RecordEvent` (spec §3, AM-4) | the Recorder on trunk | No |
 
 **Per-PR authority:**
 
@@ -293,13 +294,60 @@ sale to the ship. AI claims share one `claim()` path. A seat's side is noticed a
 
 ---
 
+## Phase P3: PR-3, the heard step (AM-4)
+
+**PR #194 into feat/strategist, open.** Branch `ws3-record-heard` is cut from trunk, because the lane PR #178 already merged.
+**It must land before WS2's B-2b**, which reacts to whispers. AM-4 is agreed by WS1, WS2 and WS3 (spec §8). Merging needs
+Heiko's OK through the PM.
+
+### Task 9: heard steps: AM-4
+
+**ACs verified:** T-AC-12, T-AC-1. **Spec sections consumed:** §8 AM-4, §2 RULE-1 row 9, RULE-5, RULE-6, §3 `heard`.
+
+- [x] **Step 1: Write `T-AC-12`** (red a994552a).
+  - Altitude: contract, a real Room, and the stringified record file.
+  - A public line and a whisper give one heard step each: `{from}` and `{from, to}`. No heard step has a field for words.
+  - None of the chat's words appear in the file. The replay is identical.
+  - Strengthen T-AC-1 (Tier 1) so it records two heard steps and still replays identical.
+- [x] **Step 2: Implement AM-4** (03520d58):
+  - `wrap().heard` opens its step through the guarded `begin()`;
+  - the replay plays `game.heard(from, '', to)`;
+  - the engine's `RecordEvent` gains the variant.
+- [x] **Step 3: Positive control.**
+  - Write the text into the heard step: the field check goes red.
+  - With the field check skipped, the word search goes red on its own.
+  - Restore.
+
+### PR-3 merge gate
+
+- [x] T-AC-12 is green, named, and red first. T-AC-1 is strengthened and green.
+- [x] `pnpm typecheck` is clean. `record.test.ts` under `MULE_FULL=1` is 20/20. config-guard is 2/2.
+- [x] Root `pnpm test` is green: server 235 (42 skipped), engine 281, web 257, ai 125, ui 46, tabletop 148.
+- [ ] The independent review is clean, and its verdict is in the #194 body.
+- [ ] Heiko's OK through the PM. Then WS2 is told B-2b can build on it.
+
+## Still to come (planned, in order)
+
+- **WS2's named edits in WS3's record files**, made in WS2's PRs and reviewed on their SHAs:
+  - the writerFor wrap (WS2's a9709756, OK'd: writerFor is non-null exactly when deciderFor is, spec A AM-A15);
+  - the talkerFor coupling (B-2): a pass-through in `record.ts` and null in `replay.ts`, not through `call()`.
+- **R-2, the crashed-game record** (Heiko approved): the file is written with `ended: 'error'`, and the replay
+  reproduces the throw. This comes after A-1. It is a red test first, then the build, then its own PR.
+- **A balance-independent T-AC-10 fixture**, after WS1's #180 lands. T-AC-10 hangs on balance today:
+  - the seed was moved from 4 to 2 when #180 changed it;
+  - its script gives no Ready at the month end, which #185 now requires.
+
+  The fixture builds its lot and its ship sale from the state rather than from a seed that happens to make them.
+  #185's interim line (Ready at upkeep) is a named edit and lands with #185.
+- **B-AC-1 is still open:** Heiko's real keyed game, then the keyless replay. The PM sets it up. Never report it from a test run.
+
+---
+
 ## Risks from spec §7
 
 - **R-1 (memory per room):** measure it in PR-1. Task 6 Step 2 also prints the file size of T-AC-1's game, and the
   lead records it in the ledger.
-- **R-2 (a crashed game leaves no file):** not built here. Heiko's ruling is pending through the PM. If he says yes, it
-  becomes a PR-3 task: write with `ended: 'error'`, and the replay reproduces the throw. This plan gains that task by
-  amendment.
+- **R-2 (a crashed game leaves no file):** Heiko approved building it. It is planned under "Still to come", after A-1.
 - **R-3 (Node microtask order):** covered by T-AC-1's positive control (Task 4 Step 4).
 - **R-4 (viewFor purity):** covered by T-AC-6 (Task 3).
 
