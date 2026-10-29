@@ -36,7 +36,7 @@ const DEV_MAP: AuditScope = { roots: [...RAIL.roots, '[data-testid=dev-map]'], s
  * folded Now card's title is one line (M-4), and a league table's name gives way so its numbers stay in the panel
  * (D-1/D-2).
  */
-const MONTH_END: AuditScope = { ...WHOLE, truncates: ['[data-testid=now-title]', '[data-testid^=name-]', '[data-testid^=hungry-short-]'] };
+const MONTH_END: AuditScope = { ...WHOLE, truncates: ['[data-testid=now-title]', '[data-testid^=name-]', '[data-testid^=hungry-name-]'] };
 
 type Read = { screen: string; small: AuditRead; base: AuditRead; c20?: { small: string[]; base: string[] } };
 /** The screens whose rail is the game shell's, with your name in its header: every phase, not the lobby. */

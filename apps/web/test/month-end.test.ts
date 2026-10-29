@@ -229,7 +229,8 @@ describe('B-AC-12 (WS4, month end): the league table and the colony, on the phon
     expect(has(phone, 'colony-panel')).toBe(false);
     const alone = onPhone(view(), Results, 0);
     expect(has(alone, 'phone-only-monthend')).toBe(true);
-    expect(said(alone, 'hungry-short-s3')).toBe(`Kai: ate 1 of ${KAI_NEED} Food`);
+    expect(said(alone, `hungry-name-s3`)).toBe(`Kai`);
+    expect(said(alone, `hungry-ate-s3`)).toBe(`: ate 1 of ${KAI_NEED}`);
     expect(said(alone, 'hungry-full-s3')).toBe(`Kai went hungry: ate 1 of ${KAI_NEED} Food`);
     expect(element(alone, 'hungry-short-s3')).toContain(`title="Kai went hungry: ate 1 of ${KAI_NEED} Food"`);
     expect(said(alone, 'air-trend')).toBe('↓ worse than month 3 (27 · Clean)');
@@ -237,7 +238,10 @@ describe('B-AC-12 (WS4, month end): the league table and the colony, on the phon
 
   it('B-AC-11 (WS4, month end): under 1100 px a phone’s hunger line is the short form on one line, the full sentence only from 1100 px; the TV keeps the sentence', () => {
     const alone = onPhone(view(), Results, 0);
-    expect(element(alone, 'hungry-short-s3')).toMatch(/class="[^"]*\btruncate\b[^"]*@min-\[1100px\]\/shell:hidden/);
+    expect(element(alone, 'hungry-short-s3')).toMatch(/class="[^"]*@min-\[1100px\]\/shell:hidden/);
+    expect(element(alone, 'hungry-name-s3')).toMatch(/class="[^"]*\bmin-w-0\b[^"]*\btruncate\b/);
+    expect(element(alone, 'hungry-ate-s3')).toMatch(/class="[^"]*\bshrink-0\b[^"]*\bwhitespace-nowrap\b/);
+    expect(element(alone, 'hungry-ate-s3')).not.toMatch(/\btruncate\b/);
     expect(element(alone, 'hungry-full-s3')).toMatch(/class="[^"]*\bhidden\b[^"]*@min-\[1100px\]\/shell:inline/);
     expect(has(tv, 'hungry-short-s3')).toBe(false);
   });
