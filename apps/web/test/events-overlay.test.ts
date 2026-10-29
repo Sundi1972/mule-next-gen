@@ -226,7 +226,7 @@ function outer(node: FakeElement): string {
 }
 
 describe('B-AC-4 (C10): a phase’s events play over its screen on the phone', () => {
-  it('alone, the phone plays development’s sickness itself over the development screen', async () => {
+  it('B-AC-4: alone, the phone plays development’s sickness itself over the development screen', async () => {
     const html = await render(await phone(OSSA, 0, viewAt(ROLL_S)));
     expect(tag(html, 'phone-event-overlay')).toContain('data-mode="solo"');
     expect(tag(html, 'phone-event-overlay')).toContain('data-phase="development"');
@@ -237,7 +237,7 @@ describe('B-AC-4 (C10): a phase’s events play over its screen on the phone', (
     expect(inside(html, 'phone-event-overlay')).toContain('data-testid="skip"');
   });
 
-  it('with a board, the light card over the screen: no map of its own, the screen still usable', async () => {
+  it('B-AC-4: with a board, the light card over the screen: no map of its own, the screen still usable', async () => {
     const html = await render(await phone(OSSA, 1, viewAt(ROLL_S)));
     const overlay = tag(html, 'phone-event-overlay');
     expect(overlay).toContain('data-mode="light"');
@@ -247,7 +247,7 @@ describe('B-AC-4 (C10): a phase’s events play over its screen on the phone', (
     expect(inside(html, 'phone-event-overlay')).not.toContain('data-testid="skip"');
   });
 
-  it('nothing over production (its screen plays its own show), nor in a quiet phase, nor outside the show', async () => {
+  it('B-AC-4: nothing over production (its screen plays its own show), nor in a quiet phase, nor outside the show', async () => {
     for (const boards of [0, 1]) {
       expect(await render(await phone(OSSA, boards, viewAt(ROLL_S, { phase: 'production' })))).not.toContain('phone-event-overlay');
       expect(await render(await phone(OSSA, boards, viewAt(ROLL_S, { events: [] })))).not.toContain('phone-event-overlay');
@@ -258,7 +258,7 @@ describe('B-AC-4 (C10): a phase’s events play over its screen on the phone', (
     expect(await render(await tv(viewAt(ROLL_S, { phase: 'production' })))).not.toContain('tv-event-overlay');
   });
 
-  it('the server clock runs at the table’s pace: the show at t full-pace seconds is t × scale ms past startsAt', async () => {
+  it('B-AC-4: the server clock runs at the table’s pace: the show at t full-pace seconds is t × scale ms past startsAt', async () => {
     // Just inside the end at the table's pace; without endsAt (an older server) the show runs at full pace.
     expect(await render(await phone(OSSA, 0, viewAt(SHOW_MS / 1000 - 0.05)))).toContain('phone-event-overlay');
     const late = viewAt(0);
@@ -269,7 +269,7 @@ describe('B-AC-4 (C10): a phase’s events play over its screen on the phone', (
 });
 
 describe('T-AC-10 display / C11: two sick players play in ONE roll call, on the TV and each phone', () => {
-  it('the TV plays the show over development: one roll call names each sick player once; their colonists and slots carry the sick tag', async () => {
+  it('T-AC-10: the TV plays the show over development: one roll call names each sick player once; their colonists and slots carry the sick tag', async () => {
     const html = await render(await tv(viewAt(RESULT_S)));
     expect(tag(html, 'tv-event-overlay')).toContain('data-phase="development"');
     // The development screen is still under it.
@@ -290,7 +290,7 @@ describe('T-AC-10 display / C11: two sick players play in ONE roll call, on the 
     expect(count(inside(over, 'pips'), 'data-pip=')).toBe(1);
   });
 
-  it('each phone, with a TV: the sick say it is them, the well name both, once each', async () => {
+  it('T-AC-10: each phone, with a TV: the sick say it is them, the well name both, once each', async () => {
     for (const [id, says] of [
       [LENA, 'You’re sick'],
       [BRIX, 'You’re sick'],
@@ -305,7 +305,7 @@ describe('T-AC-10 display / C11: two sick players play in ONE roll call, on the 
     expect(count(news, '>Brix<')).toBe(1);
   });
 
-  it('each phone alone: one roll call over its own map', async () => {
+  it('T-AC-10: each phone alone: one roll call over its own map', async () => {
     for (const id of [LENA, OSSA, BRIX]) {
       const over = inside(await render(await phone(id, 0, viewAt(RESULT_S))), 'phone-event-overlay');
       expect(count(over, 'data-testid="roll-call"'), id).toBe(1);
@@ -315,7 +315,7 @@ describe('T-AC-10 display / C11: two sick players play in ONE roll call, on the 
     }
   });
 
-  it('the sick status line on the sick player’s development screen is unchanged, under the overlay', async () => {
+  it('T-AC-10: the sick status line on the sick player’s development screen is unchanged, under the overlay', async () => {
     for (const boards of [0, 1]) {
       const html = await render(await phone(LENA, boards, viewAt(ROLL_S)));
       expect(html).toContain('data-testid="sick-strikes"');
@@ -332,7 +332,7 @@ describe('RULE-3 for the overlay (T-AC-5 style): boards 0/1 × reduced, and a ta
     { boards: 0, reduced: true, mode: 'solo', map: true },
   ];
   for (const row of rows) {
-    it(`boards ${row.boards}, reduced ${row.reduced}: ${row.mode}`, async () => {
+    it(`T-AC-5: boards ${row.boards}, reduced ${row.reduced}: ${row.mode}`, async () => {
       const { html } = await mount(await phone(OSSA, row.boards, viewAt(ROLL_S + 0.6)), row.reduced);
       const over = inside(html(), 'phone-event-overlay');
       expect(tag(html(), 'phone-event-overlay')).toContain(`data-mode="${row.mode}"`);
@@ -341,7 +341,7 @@ describe('RULE-3 for the overlay (T-AC-5 style): boards 0/1 × reduced, and a ta
     });
   }
 
-  it('alone, a tap skips to the result, a second leaves the show and the development screen is back', async () => {
+  it('T-AC-5: alone, a tap skips to the result, a second leaves the show and the development screen is back', async () => {
     const m = await mount(await phone(OSSA, 0, viewAt(ROLL_S)));
     expect(inside(m.html(), 'phone-event-overlay')).toContain('data-testid="phone-now"');
     m.tap();
@@ -351,7 +351,7 @@ describe('RULE-3 for the overlay (T-AC-5 style): boards 0/1 × reduced, and a ta
     expect(m.html()).toContain('data-testid="game-shell"');
   });
 
-  it('with a TV the phone buzzes as the roll call is announced; alone it does not', async () => {
+  it('T-AC-5: with a TV the phone buzzes as the roll call is announced; alone it does not', async () => {
     const vibrate = vi.fn();
     vi.stubGlobal('navigator', { vibrate });
     await mount(await phone(OSSA, 1, viewAt(ROLL_S)));
@@ -363,7 +363,7 @@ describe('RULE-3 for the overlay (T-AC-5 style): boards 0/1 × reduced, and a ta
 });
 
 describe('HC-6: reduced motion on the overlays: no motion, the result still shown', () => {
-  it('the TV and a phone alone: no sneeze, no animation, no camera; the roll call and the tags are there', async () => {
+  it('T-AC-5 (HC-6): the TV and a phone alone: no sneeze, no animation, no camera; the roll call and the tags are there', async () => {
     const t = INTRO_S + (SHOW_MS / 1000 - INTRO_S) / 2;
     for (const el of [await tv(viewAt(t)), await phone(OSSA, 0, viewAt(t)), await phone(LENA, 1, viewAt(t))]) {
       const { html } = await mount(el, true);

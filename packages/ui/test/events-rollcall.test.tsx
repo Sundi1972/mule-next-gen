@@ -38,11 +38,11 @@ const headline: ShowEventView = { ...anyone, key: 'dustStorm', kind: 'storm', ti
 const two = [sick('lena', 'Lena', 2000), sick('brix', 'Brix', 2000)];
 
 describe('C11 · the roll call: every sick player in one segment (RULE-1)', () => {
-  it('sickness is in the catalogue, moving on the colonists', () => {
+  it('T-AC-10: sickness is in the catalogue, moving on the colonists', () => {
     expect(EVENT_ENTRY.sickness.motion).toBe('colonists');
   });
 
-  it('two sick players make ONE segment, as long as their shares together', () => {
+  it('T-AC-10: two sick players make ONE segment, as long as their shares together', () => {
     const s = eventScript({ events: two, introMs: 1800 }, 0, 'tv');
     expect(s.segments).toHaveLength(1);
     expect(s.segments[0]!.events.map((e) => e.player)).toEqual(['lena', 'brix']);
@@ -51,7 +51,7 @@ describe('C11 · the roll call: every sick player in one segment (RULE-1)', () =
     expect(s.end).toBeCloseTo(5.8);
   });
 
-  it('the roll call closes the phase: a bulletin fired before a headline still plays after it', () => {
+  it('T-AC-10: the roll call closes the phase: a bulletin fired before a headline still plays after it', () => {
     const s = eventScript({ events: [sick('lena', 'Lena', 2000), headline, sick('brix', 'Brix', 2000)], introMs: 1800 }, 0, 'tv');
     expect(s.segments.map((g) => g.events.map((e) => e.key))).toEqual([['dustStorm'], ['sickness', 'sickness']]);
     expect(s.segments.map((g) => [g.n, g.count])).toEqual([
@@ -65,7 +65,7 @@ describe('C11 · the roll call: every sick player in one segment (RULE-1)', () =
   const show = (child: ReturnType<typeof h>, t: number, mode: 'tv' | 'solo' = 'tv', reduced = false) =>
     renderToStaticMarkup(h(EventShow, { events: two, introMs: 1800, t, mode, reduced, width: W, height: H, tiles, players, children: child }));
 
-  it('the TV names each sick player once, in one roll call, with the sick tag on each colonist', () => {
+  it('T-AC-10: the TV names each sick player once, in one roll call, with the sick tag on each colonist', () => {
     const s = eventScript({ events: two, introMs: 1800 }, 0, 'tv');
     const t = s.segments[0]!.settleAt + 0.01;
     const html = show(h(EventLivingMap, { size: 'tv' }), t);
@@ -81,7 +81,7 @@ describe('C11 · the roll call: every sick player in one segment (RULE-1)', () =
     expect(html.match(/data-testid="sick-tag"/g)).toHaveLength(2);
   });
 
-  it('a phase of only bulletins never interrupts: no intro card and no dim, its roll call up from the start', () => {
+  it('T-AC-10: a phase of only bulletins never interrupts: no intro card and no dim, its roll call up from the start', () => {
     const html = show(h(EventLivingMap, { size: 'tv' }), 0.9);
     expect(html).not.toContain('data-testid="intro-card"');
     expect(html).not.toContain('data-testid="title-card"');
@@ -89,14 +89,14 @@ describe('C11 · the roll call: every sick player in one segment (RULE-1)', () =
     expect(html).not.toContain('class="absolute inset-0 bg-void"');
   });
 
-  it('the TV log says the roll call in one line', () => {
+  it('T-AC-10: the TV log says the roll call in one line', () => {
     const s = eventScript({ events: two, introMs: 1800 }, 0, 'tv');
     const html = show(h(EventTvLog), s.end - 0.01);
     expect(html).toContain('Sickness ×2');
     expect(html).toContain('Lena and Brix walk at half pace');
   });
 
-  it('a sick player’s phone says it is them; a well one says who is sick', () => {
+  it('T-AC-10: a sick player’s phone says it is them; a well one says who is sick', () => {
     const s = eventScript({ events: two, introMs: 1800 }, 0, 'tv');
     const at = s.segments[0]!.settleAt + 0.01;
     const lena = show(h(EventTvPhoneRail, { me: 'lena' }), at);
@@ -112,7 +112,7 @@ describe('C11 · the roll call: every sick player in one segment (RULE-1)', () =
     expect(news.match(/>Brix</g)).toHaveLength(1);
   });
 
-  it('HC-6: with reduced motion the roll call shows, the tags are on, and nothing sneezes or travels', () => {
+  it('T-AC-10 (HC-6): with reduced motion the roll call shows, the tags are on, and nothing sneezes or travels', () => {
     const s = eventScript({ events: two, introMs: 1800 }, 0, 'solo');
     const g = s.segments[0]!;
     for (const t of [g.playAt + 0.05, (g.playAt + g.settleAt) / 2, g.settleAt + 0.01]) {
@@ -127,7 +127,7 @@ describe('C11 · the roll call: every sick player in one segment (RULE-1)', () =
     expect(solo).toContain('You’re sick');
   });
 
-  it('without reduced motion the colonist sneezes as its sickness lands', () => {
+  it('T-AC-10 (HC-6): without reduced motion the colonist sneezes as its sickness lands', () => {
     const s = eventScript({ events: two, introMs: 1800 }, 0, 'tv');
     const g = s.segments[0]!;
     const frames = Array.from({ length: 40 }, (_, i) => g.playAt + ((g.settleAt - g.playAt) * i) / 40);
