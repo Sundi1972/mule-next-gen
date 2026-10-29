@@ -639,8 +639,6 @@ export const MAP = {
   specialEffect: {
     /** Extra Crystite from a crystal cavern mined for Crystite. */
     crystalCavern: 4,
-    /** Chance a cavern that produced Crystite this month collapses into a plain plot. */
-    collapseChance: 0.06,
     /** Extra Water or Energy from a geyser outfitted for either. */
     geyser: 2,
     /** Extra Food from an oasis farm. */
@@ -935,8 +933,11 @@ export const PHASES = {
   grantFastForwardMs: GAME.grantTickMs / 8,
   /** Production: the show of what each plot made. */
   productionMs: 15_000,
-  /** Upkeep: colonists eat and goods spoil. */
-  upkeepMs: 8_000,
+  /**
+   * Upkeep, the month end: colonists eat and goods spoil, and the table reads the league table. null: it waits for
+   * every player's Ready ("On to month N") or the host's Continue; a number restores a timer.
+   */
+  upkeepMs: null as number | null,
 };
 
 /** How big an event's story is on the TV: a headline, a spotlight, or one line of a shared roll call. */
@@ -956,6 +957,7 @@ export const EVENT_SHOW = {
     pestSwarm: 'spotlight',
     wildfire: 'spotlight',
     bumperHarvest: 'spotlight',
+    cavernCollapse: 'spotlight',
   } as Partial<Record<EventKey, EventWeight>>,
   /** How long one headline or spotlight plays, in ms. */
   playMs: { headline: 7_000, spotlight: 5_200 },
@@ -1020,8 +1022,9 @@ export interface AiLevelConfig {
   mulesPerMonth: number;
   /** Chance it misses a plot it wanted in the land grant. */
   missChance: number;
-  /** Allowed to corner goods and to act on spite. Rookie never does. */
+  /** Allowed to corner a good (a monopoly try). Rookie never does. */
   corners: boolean;
+  /** Allowed to act on spite against the leader. Rookie never does. */
   sabotage: boolean;
 }
 
@@ -1069,31 +1072,13 @@ export const AI_LEVELS = {
 
 export type AiLevelId = keyof typeof AI_LEVELS;
 
-/** Numbers the strategist's considerations use. */
 /**
- * Production events: at most one a month, rolled at production from the seed.
- * Each event's numbers sit under its key; the weights decide which event fires
- * among those that would hit at least one plot.
+ * Events: each row of the table below rolls on its own seeded dice, so several can fire in one phase and their effects
+ * stack on the same plots. Each event's effect numbers sit under its key.
  */
 export const EVENTS = {
-  /** Chance that a month has an event at all. */
-  chance: 0.5,
   /** No event before this month: there is nothing developed to hit. */
   firstMonth: 2,
-  /** Chance a bad personal event starts on the leader's land, a good one on the trailing player's; otherwise anyone's. */
-  targetBias: 0.5,
-  weights: {
-    dustStorm: 1,
-    drought: 1,
-    acidRain: 1,
-    solarFlare: 1,
-    cometPass: 1,
-    flood: 1,
-    volcanicAsh: 1,
-    pestSwarm: 1,
-    wildfire: 1,
-    bumperHarvest: 1,
-  },
   /** Share of an Energy plot's output a dust storm takes. */
   dustStorm: { cut: 0.5 },
   /** Food and Water each Food and Water plot loses in a drought. */
@@ -1113,9 +1098,25 @@ export const EVENTS = {
   /** How many times its usual output the bumper plot makes. */
   bumperHarvest: { factor: 2 },
   /**
-   * Player events (Heiko's event model): each rolls per player at the start of each phase it lists, with that
-   * phase's chance plus its modifiers, never above cap. Several can fire in a month.
+   * The event table (Heiko's event model): one row per event, its fields an EventRow (events.ts), every number a
+   * share. A row rolls at the start of each phase it lists, or, with perPlot, once per plot its caller names after
+   * production's output: that phase's chance plus its raises, minus its lowers, never below 0 or above its cap. Colony
+   * rows roll once for the colony, first; player rows once a player.
    */
+  colony: {
+    dustStorm: { phases: { production: 0.08 }, cap: 0.9 },
+    drought: { phases: { production: 0.08 }, air: { toxic: 0.02, collapse: 0.04 }, cap: 0.9 },
+    acidRain: { phases: { production: 0.016 }, air: { smoggy: 0.04, toxic: 0.08, collapse: 0.12 }, cap: 0.9 },
+    solarFlare: { phases: { production: 0.08 }, cap: 0.9 },
+    cometPass: { phases: { production: 0.08 }, cap: 0.9 },
+    flood: { phases: { production: 0.08 }, follows: { drought: { points: 0.1, lastMonth: true } }, cap: 0.9 },
+    volcanicAsh: { phases: { production: 0.064 }, cap: 0.9 },
+    /**
+     * Rolls once for each crystal cavern plot that produced Crystite this month, after production's output, never at
+     * the phase start; a collapse leaves a plain plot.
+     */
+    cavernCollapse: { phases: { production: 0.06 }, perPlot: true, cap: 0.9 },
+  } satisfies Record<string, import('./events.js').EventRow>,
   player: {
     /**
      * Sickness, at development start: the colonist walks at DEV_WALK.sickPace this turn unless it holds a Medicine,
@@ -1128,9 +1129,23 @@ export const EVENTS = {
       pollution: { perPoint: 0.03, max: 0.4 },
       cap: 0.9,
     },
-  },
+    pestSwarm: { phases: { production: 0.024 }, wealth: { richest: 0.01, poorest: -0.01 }, cap: 0.9 },
+    wildfire: {
+      phases: { production: 0.024 },
+      wealth: { richest: 0.01 },
+      follows: { drought: { points: 0.03, thisPhase: true, lastMonth: true } },
+      cap: 0.9,
+    },
+    bumperHarvest: { phases: { production: 0.024 }, wealth: { poorest: 0.015, richest: -0.01 }, cap: 0.9 },
+  } satisfies Record<string, import('./events.js').EventRow>,
+  /** Pairs that never fire together in one phase: if both roll, the seeded dice keep one. */
+  excludes: [
+    ['drought', 'flood'],
+    ['dustStorm', 'solarFlare'],
+  ] satisfies [string, string][],
 };
 
+/** Numbers the strategist's considerations use. */
 export const STRATEGIST = {
   /** Months of output it counts a MULE as earning, at most. */
   horizon: 6,
@@ -1287,8 +1302,9 @@ export const AI_HANDS = {
 };
 
 /**
- * The balance targets `pnpm sim` checks, from the design doc's Economy model tab, each named for its check. Shares are
- * of months or of games, as the check says; the report prints the targets from here.
+ * The balance targets `pnpm sim` checks, from the design doc's Economy model tab, each named for its check, and the
+ * assumptions it measures under, which no check reads. Shares are of months or of games, as the check says; the report
+ * prints the targets from here.
  */
 export const SIM_TARGETS = {
   /** MULE price median: from min to max credits. */
@@ -1307,6 +1323,11 @@ export const SIM_TARGETS = {
   broke: { below: 100, months: 3 },
   /** Ended in Collapse: in this share of games or fewer. */
   collapsed: 0.1,
+  /**
+   * `--air <band>` also counts each month's events as if every player's plots had caused this many air points last
+   * month (spec C5's measuring assumption). Measure only: no check reads it, and the games play on unforced.
+   */
+  forcedAirPoints: 5,
 };
 
 /** The language model that decides for Smart AI seats, and its limits. */

@@ -4,11 +4,12 @@
  * Run with `pnpm --filter @mule/web e2e`; replay a red run's map with `MULE_E2E_SEED=<seed>`.
  */
 import { existsSync } from 'node:fs';
-import { WALK } from '@mule/engine';
+import { EVENTS, WALK } from '@mule/engine';
 import { errors as playwrightErrors, type BrowserContext, type Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
 import { check, CLAIM_MS, claimAPlot, doneWithLand, headerSlot, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
 import { planningIsTheHub } from './hub-steps';
+import { gameOverIsInCredits, theLeagueTableAtTheMonthEnd, theMonthEndHoldsForThePhone } from './month-end-steps';
 import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
 import { fedPlayerSeesNoHunger, hungryPlayerSeesHerPace, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
@@ -51,9 +52,14 @@ const HOST_WALKER = 'walker-s1';
 /** The phone's score lines at game over that add up; a Collapse line, when there is one, is taken off them. */
 const PART_LINES = ['money', 'goods', 'land', 'mules'] as const;
 
-/** Month 2 of this seed rolls a production event: a run with MULE_E2E_SEED=1 checks the event's show (B-AC-7). */
+/** A run with MULE_E2E_SEED=1 checks month 2's event show (B-AC-7). */
 const SHOW_SEED = 1;
 const SEED = seedFrom(process.env.MULE_E2E_SEED);
+// Every event rolls on its own row's dice, so no seed promises one: this run makes an event in month 2 certain. The
+// dust storm's row rolls at 100%, its cap included (it needs only an Energy plot, which month 1 builds; should a solar
+// flare fire too, the pair's dice keep one of the two), and the row is put back when the game ends.
+const dustStorm = { ...EVENTS.colony.dustStorm };
+if (SEED === SHOW_SEED) Object.assign(EVENTS.colony.dustStorm, { phases: { production: 1 }, cap: 1 });
 const steps = await loadAuctionSteps();
 const { server, base } = await startServer({ maxMonths: 2, phaseScale: PHASE_SCALE, seed: () => SEED });
 const browser = await launch();
@@ -159,8 +165,11 @@ try {
   });
   check(measured, 'FM-2: the month-1 auction reached a walk to measure');
 
+  // B-AC-12 at month 1's end, the one a two-month game has; then it holds until the phone moves on (B-AC-13).
+  console.log(`league table: ${await theLeagueTableAtTheMonthEnd(ctx)}`);
+  console.log(`month end: ${(await theMonthEndHoldsForThePhone(ctx, 1)).line}`);
+
   // Month 2.
-  await phone.locator('[data-phase=planning]').waitFor({ timeout: within(PHASE_MS.upkeep) });
   await steps.listedSale?.({ phone, tv, check });
   makeHungry(server, code);
   // B-AC-14: planning is the hub, its needs read from that seed; with B-AC-12's planning part.
@@ -176,7 +185,7 @@ try {
   await hungryPlayerSeesHerPace(phone, server, code, PAST_THE_GRANT_MS);
   await goToThePub(phone);
   const moveLink = await moveDialogOpensInProduction(ctx, within(PHASE_MS.development));
-  // B-AC-6, B-AC-7 and B-AC-8: month 2's show, with the seed's event.
+  // B-AC-6, B-AC-7 and B-AC-8: month 2's show, with the run's certain event.
   await phone.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
   await moveDialogOutlivedThePhase(ctx, moveLink);
   console.log(`production show, month 2: ${await checkTheShow({ tv: tvShow, phone: phoneShow, event: SEED === SHOW_SEED })}`);
@@ -185,11 +194,12 @@ try {
   // Game over.
   const scores = phone.locator('[data-phase=gameOver] [data-testid=scores]');
   await scores.waitFor({ timeout: 5_000 });
-  const rows = await scores.locator('li').allTextContents();
+  const rows = await scores.locator('tbody tr').allTextContents();
   check(rows.length === 3, `final scores for all three seats, got ${rows.length}`);
-  check(rows.some((r) => r.includes('Heiko (you)')), `the human is on the final scores: ${rows.join(' | ')}`);
+  check(rows.some((r) => r.includes('You (Heiko)')), `the human is on the final scores: ${rows.join(' | ')}`);
   await tv.getByTestId('tv-phase').filter({ hasText: 'Game over' }).waitFor({ timeout: 5_000 });
   await checkTheScoresAddUp(phone, tv);
+  console.log(`game over: ${await gameOverIsInCredits(phone, tv)}`);
   console.log(`turned upright and back: ${await turnUprightAndBack(phone)}`);
 
   const phases = seen.map((s) => s.phase);
@@ -203,6 +213,7 @@ try {
   if (errors.length > 0) console.error(`page errors: ${errors.join('; ')}`);
   throw err;
 } finally {
+  Object.assign(EVENTS.colony.dustStorm, dustStorm);
   await browser.close();
   await server.close();
 }
@@ -362,7 +373,7 @@ async function checkTheScoresAddUp(phone: Page, tv: Page): Promise<void> {
     if ((part === 'collapse' || part === 'office') && rows === 0) return 0;
     check(rows === 1, `B-AC-3: the phone shows one part-${part} line, got ${rows}`);
     // The office line is shown with a plus sign.
-    const shown = (await row.locator('td').last().textContent())?.replace(/^\s*\+/, '') ?? null;
+    const shown = (await row.locator('[data-num]').last().textContent())?.replace(/^\s*\+/, '') ?? null;
     return readNumber(shown, `the phone's part-${part}`);
   };
   const parts = Object.fromEntries(await Promise.all(PART_LINES.map(async (p) => [p, await line(p)] as const)));
@@ -375,9 +386,9 @@ async function checkTheScoresAddUp(phone: Page, tv: Page): Promise<void> {
   check(sum === total, `B-AC-3: the phone's lines ${PART_LINES.map((p) => `${p} ${parts[p]}`).join(' + ')} + office ${office} − collapse ${cut} = ${sum}, but its final score reads ${total}`);
 
   await tvEnd.getByTestId('tv-scores').waitFor({ timeout: 5_000 });
-  const hostRow = tvEnd.getByTestId('tv-scores').locator('li').filter({ has: tv.getByText('Heiko', { exact: true }) });
-  check((await hostRow.count()) === 1, 'B-AC-3: the TV lists the host once in its final scores');
-  const onTv = readNumber(await hostRow.locator('[data-num]').last().textContent(), "the host's TV score");
+  const hostRow = tvEnd.getByTestId('tv-scores').getByTestId('league-row-s1');
+  check((await hostRow.count()) === 1 && (await hostRow.getByText('Heiko', { exact: true }).count()) === 1, 'B-AC-3: the TV lists the host once in its final scores');
+  const onTv = readNumber(await hostRow.getByTestId('worth-s1').textContent(), "the host's TV score");
   check(onTv === total, `B-AC-3: the phone's final score ${total} is the host's score on the TV, ${onTv}`);
 
   // The band as the TV's air gauge names it, which everyone in the room reads.

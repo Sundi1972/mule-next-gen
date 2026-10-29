@@ -19,6 +19,8 @@ const row = (id: string, name: string, slot: number, money: number, worth: numbe
   species: 'zipwing',
   money,
   worth,
+  lastWorth: null,
+  worthBeforeCut: null,
   plots: 0,
   ready: false,
   doneDeveloping: false,
@@ -72,6 +74,8 @@ function view(extra: Partial<MuleView> = {}): MuleView {
     mulePrice: 150,
     colonists: 0,
     air: { level: 12, band: 'clean' },
+    lastAir: null,
+    colonistsFed: null,
     ship: { arrives: 6, inPort: false, wants: null },
     treasury: { money: 0, salesTax: 0.05 },
     news: [],
@@ -119,10 +123,17 @@ const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '
 
 /** Each list item's text, top to bottom. */
 const rows = (html: string, testid: string) => [...element(html, testid).matchAll(/<li[^>]*>(.*?)<\/li>/g)].map((m) => text(m[1]!));
+/** Each table row's text in the element carrying this data-testid, header rows aside, top to bottom. */
+const tableRows = (html: string, testid: string) => {
+  const from = html.search(new RegExp(`data-testid="${testid}"`));
+  const body = html.slice(from, html.indexOf('</tbody>', from));
+  return [...body.slice(body.indexOf('<tbody')).matchAll(/<tr[^>]*>(.*?)<\/tr>/g)].map((m) => text(m[1]!));
+};
 
 describe('B-AC-10 (WS4, Worth): who is leading, in credits, every month', () => {
   it("B-AC-10 (WS4, Worth): the phone's Results list the Worth leader first, the cash leader second, labelled worth", () => {
-    const html = onPhone(view(), Results);
+    // At the harvest; the month end's league table is C20's (month-end.test.ts).
+    const html = onPhone(view({ phase: 'production' }), Results);
     expect(rows(html, 'standings')).toEqual(['1 Mia 5,200', '2 You 3,400', '3 Kai 2,100']);
     expect(text(html)).toContain('Standings BY WORTH');
     expect(text(html)).not.toContain('BY MONEY');
@@ -139,13 +150,14 @@ describe('B-AC-10 (WS4, Worth): who is leading, in credits, every month', () => 
     const final = [...OVER.scores!].sort((a, b) => b.score - a.score).map((s) => ({ name: PLAYERS.find((p) => p.id === s.id)!.name, score: fmt(s.score) }));
     expect(final.map((f) => f.name), 'the cash leader is not the winner').toEqual(['Mia', 'Heiko', 'Kai']);
 
+    // In credits since C20: the final standings are the league table, ranked as before.
     const phone = onPhone(OVER, GameOver);
-    expect(rows(phone, 'scores')).toEqual(final.map((f, i) => `${i + 1} ${f.name}${f.name === 'Heiko' ? ' (you)' : ''} ${f.score}`));
-    expect(text(element(phone, 'winner'))).toContain(`Mia ${final[0]!.score} points`);
+    expect(tableRows(phone, 'scores')).toEqual(final.map((f, i) => `${i + 1} ${f.name === 'Heiko' ? 'You (Heiko)' : f.name} ${f.score}`));
+    expect(text(element(phone, 'winner'))).toContain(`Mia wins with a Worth of ${final[0]!.score} cr`);
 
     // The TV's header carries the table chat's ticker, which reads its client (C20).
-    const tv = renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(TvGameOver, { game: OVER }) }));
-    expect(rows(tv, 'tv-scores')).toEqual(final.map((f, i) => `${i + 1} ${f.name} ${f.score}`));
-    expect(text(element(tv, 'tv-winner'))).toBe(`The colony goes to Mia ${final[0]!.score}`);
+    const tv = renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(TvGameOver, { game: { ...OVER, me: null } }) }));
+    expect(tableRows(tv, 'tv-scores')).toEqual(final.map((f, i) => `${i + 1} ${f.name} ${f.score}`));
+    expect(text(element(tv, 'tv-winner'))).toBe(`The colony goes to Mia wins with a Worth of ${final[0]!.score} cr`);
   });
 });

@@ -10,6 +10,7 @@ import {
   buyMule,
   castVote,
   claimPlot,
+  colonyFailed,
   cover,
   createGame,
   createRng,
@@ -79,7 +80,7 @@ import {
   type Trade,
 } from '@mule/engine';
 import { AiSeat, LotHand, personaFor, VoteHand, type AiAction } from '@mule/ai';
-import { PLAYER_COLORS, type MuleIntent, type MuleView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
+import { PLAYER_COLORS, type MuleIntent, type MuleView, type PlayerView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import { createBrain, type BrainService } from './brain/index.js';
 import { colonistView, dueArrivals, placeName, walkTarget, type Colonist, type DevIntent } from './dev-walking.js';
@@ -91,12 +92,13 @@ import { ceremonyNews, myPoliticsView, politicsView } from './politics-view.js';
  * Each is read from the config when asked, so a value set at runtime times the
  * next phase that starts. Planning's is null: it has no clock and waits for
  * every player's Ready. The land grant's is null too: it ends after one pass of
- * its light, or once every claim is used. The auction has no entry: it runs good by good on its
+ * its light, or once every claim is used. Upkeep's, the month end, is null: like planning it waits for every
+ * player's Ready ("On to month N") or the host's Continue. The auction has no entry: it runs good by good on its
  * own clocks (WALK), stepped by the server every WALK.tickMs. The land auction
  * runs the same way, lot by lot on its own clocks (LOTS).
  */
-export const PHASE_MS: { readonly planning: number | null; readonly landGrant: number | null } & Readonly<
-  Record<Exclude<Phase, 'gameOver' | 'auction' | 'landAuction' | 'planning' | 'landGrant'>, number>
+export const PHASE_MS: { readonly planning: number | null; readonly landGrant: number | null; readonly upkeep: number | null } & Readonly<
+  Record<Exclude<Phase, 'gameOver' | 'auction' | 'landAuction' | 'planning' | 'landGrant' | 'upkeep'>, number>
 > = {
   get planning() {
     return PHASES.planningMs;
@@ -147,6 +149,23 @@ function andList(names: string[]): string {
 function worthPartsOf(state: GameState, playerId: string): ScorePartsView {
   const { total: _total, ...parts } = scoreParts(state, playerId);
   return parts;
+}
+
+/**
+ * At the month end (upkeep, or game over after the last): whether that upkeep fed the colonists. They go short when
+ * the store runs out or its price is beyond their wages, both in the engine's colonistsHungry. Null otherwise.
+ */
+function colonistsFedAt(state: GameState): boolean | null {
+  if (state.phase !== 'upkeep' && state.phase !== 'gameOver') return null;
+  const report = state.history.at(-1);
+  return report && report.month === state.month ? !report.colonistsHungry : null;
+}
+
+/** A player's Worth before the Collapse cut while the air is in Collapse (scoreParts' total plus its cut); otherwise null. */
+function worthBeforeCutOf(state: GameState, playerId: string): number | null {
+  if (!colonyFailed(state)) return null;
+  const { total, cut } = scoreParts(state, playerId);
+  return total + cut;
 }
 
 /**
@@ -245,8 +264,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private cancels: (() => void)[] = [];
   private news: string[] = [];
   private phaseEndsAt: number | null = null;
-  /** This month's production length in real ms, as its timer was given: the show stretches over it through upkeep. */
+  /** This month's production length in real ms, as its timer was given: the production show stretches over it. */
   private productionMs = 0;
+  /**
+   * Each month's end as the views showed it, by month: every player's worth and the air level, recorded once when its
+   * upkeep starts. The next month's views serve it as lastWorth and lastAir, so a change is shown against shown.
+   */
+  private readonly monthEnds = new Map<number, { worth: Map<string, number>; air: MuleView['air'] }>();
+  /** The month's condition per player, as development last showed it; served through the month end. */
+  private monthCondition: { month: number; byId: Map<string, PlayerView['condition']> } | null = null;
   /** The AI players: strategist, decider and hands, keyed by seat id. */
   private readonly ai = new Map<string, AiSeat>();
   /**
@@ -296,6 +322,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.seats = seats.map((s) => ({ ...s }));
     this.state = createGame({ seed: this.seed, players: seats.map(({ id, name, isAi, pick }) => ({ id, name, isAi, ...(isSpecies(pick) ? { species: pick } : {}) })), maxMonths: this.options.maxMonths, politics: this.options.politics ?? false });
     this.ai.clear();
+    this.monthEnds.clear();
+    this.monthCondition = null;
     this.lotHands.clear();
     this.voteHands.clear();
     seats.forEach((s, i) => {
@@ -403,8 +431,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   /**
    * The host's Continue. In the election's announce or ballot every human not Done becomes Done, abstaining; refused in
-   * its ceremony. Otherwise it ends planning proper with players not yet Ready. The news names the others it went on
-   * without and the stage it moved past. The caller must have checked the seat is the host.
+   * its ceremony. Otherwise it ends planning proper, or the month end (upkeep), with players not yet Ready. The news
+   * names the others it went on without and the stage it moved past. The caller must have checked the seat is the host.
    */
   private continuePlanning(hostId: string): void {
     const state = this.requireState();
@@ -420,7 +448,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       goneOn(did, waiting.filter((s) => s.id !== hostId).map((s) => s.name));
       return;
     }
-    if (state.phase !== 'planning') throw new RuleError('Continue ends planning only');
+    if (state.phase !== 'planning' && state.phase !== 'upkeep') throw new RuleError('Continue ends planning or the month end only');
     const left = this.seats.filter((s) => !s.isAi && s.id !== hostId && !this.ready.has(s.id)).map((s) => s.name);
     this.nextPhase();
     goneOn('continued', left);
@@ -529,6 +557,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private finishDevelopment(): void {
     this.settleArrivals();
     for (const s of this.seats) if (this.colonists.get(s.id)?.walk?.then.type === 'pub') this.arrive(s.id);
+    const state = this.requireState();
+    this.monthCondition = { month: state.month, byId: new Map(this.seats.map((s) => [s.id, this.conditionOf(state, s.id)])) };
     this.colonists.clear();
     this.devEndsAt = null;
   }
@@ -589,8 +619,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     // The land grant ends only through grantDone: every seat's claims used or Done with land, or the pass over. A phone
     // that drops in the grant just doesn't claim and is not Done; a reload must not end the grant for everyone.
     if (phase === 'landGrant') return;
-    // In planning a dropped phone may be a player who locked it to think: planning waits for their Ready.
-    const excused = (id: string) => this.away.has(id) && phase !== 'planning';
+    // In planning and at the month end a dropped phone may be a player who locked it to think or read: both wait for
+    // their Ready, or the host's Continue.
+    const excused = (id: string) => this.away.has(id) && phase !== 'planning' && phase !== 'upkeep';
     const waiting = this.seats.filter((s) => !s.isAi && !excused(s.id) && !this.ready.has(s.id) && !this.doneDeveloping(s.id));
     // The auctions end on their own, good by good and lot by lot.
     if (!phase || phase === 'gameOver' || phase === 'auction' || phase === 'landAuction') return;
@@ -707,7 +738,39 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       this.scheduleGrantTick();
     }
     if (state.phase === 'production') this.reportProduction();
-    if (state.phase === 'upkeep') this.reportUpkeep();
+    if (state.phase === 'upkeep') {
+      this.recordMonthEnd();
+      // AI seats are on at once: the month end waits only for people.
+      for (const s of this.seats) if (s.isAi) this.ready.add(s.id);
+      this.reportUpkeep();
+    }
+  }
+
+  /** Records this month's end as the views show it: every player's worth and the air level, once. */
+  private recordMonthEnd(): void {
+    const state = this.requireState();
+    if (this.monthEnds.has(state.month)) return;
+    this.monthEnds.set(state.month, { worth: new Map(this.seats.map((s) => [s.id, score(state, s.id)])), air: { level: Math.round(state.air), band: airBand(state.air).name } });
+  }
+
+  /** How hunger and sickness slow this player's colonist now (PlayerView.condition). */
+  private conditionOf(state: GameState, id: string): NonNullable<PlayerView['condition']> {
+    const p = state.players.find((q) => q.id === id)!;
+    return {
+      foodShare: foodShare(state, id),
+      foodNeed: needsOf(state, id).food,
+      sick: p.sick,
+      sickBecause: p.sick ? playerEventReason(state, 'sickness', 'development', id) : null,
+      conditionPace: hungerPace(state, id) * sickPace(state, id),
+    };
+  }
+
+  /** A player's condition in this view: live in development, the month's at its end, otherwise none. */
+  private conditionIn(state: GameState, id: string): PlayerView['condition'] {
+    if (state.phase === 'development') return this.conditionOf(state, id);
+    const kept = this.monthCondition;
+    if ((state.phase === 'upkeep' || state.phase === 'gameOver') && kept?.month === state.month) return kept.byId.get(id) ?? null;
+    return null;
   }
 
   /** Ends the phase when its PHASE_MS runs out; a phase whose PHASE_MS is null has no clock and waits for Ready. */
@@ -1141,6 +1204,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     };
     const isReady = (id: string) =>
       this.electionOpen() ? isElectionDone(state, id) : state.phase === 'landGrant' ? doneWithLand(id) : this.ready.has(id);
+    const lastEnd = this.monthEnds.get(state.month - 1) ?? null;
     return {
       finished: state.phase === 'gameOver',
       month: state.month,
@@ -1178,19 +1242,13 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           species: p.species,
           money: p.money,
           worth: score(state, s.id),
+          lastWorth: lastEnd?.worth.get(s.id) ?? null,
+          worthBeforeCut: worthBeforeCutOf(state, s.id),
           plots: state.tiles.filter((t) => t.owner === s.id).length,
           ready: isReady(s.id),
           doneDeveloping: p.doneDeveloping,
           colonist: colonistView(this.colonists.get(s.id), state.phase),
-          condition:
-            state.phase === 'development'
-              ? {
-                  foodShare: foodShare(state, s.id),
-                  sick: p.sick,
-                  sickBecause: p.sick ? playerEventReason(state, 'sickness', 'development', s.id) : null,
-                  conditionPace: hungerPace(state, s.id) * sickPace(state, s.id),
-                }
-              : null,
+          condition: this.conditionIn(state, s.id),
         };
       }),
       me: me
@@ -1233,6 +1291,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       mulePrice: mulePrice(state),
       colonists: state.colonists,
       air: { level: Math.round(state.air), band },
+      lastAir: lastEnd?.air ?? null,
+      colonistsFed: colonistsFedAt(state),
       ship: {
         arrives: state.ship.arrives,
         inPort: shipInPort(state),
