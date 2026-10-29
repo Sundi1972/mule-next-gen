@@ -1,4 +1,4 @@
-import type { RawGood } from '../types.js';
+import type { ProcessedGood, RawGood } from '../types.js';
 import { PERCENT } from '../units.js';
 
 /**
@@ -23,19 +23,27 @@ export interface HallRect {
 export const HALL_OUTFITTERS = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth'] as const satisfies readonly RawGood[];
 const FRONT_ROW = ['works', 'greenBelt', 'corral', 'pub'] as const;
 export const HALL_ROOMS = [...HALL_OUTFITTERS, ...FRONT_ROW] as const;
+/** The works' fitting bays, left to right as Store.tsx draws them: a factory good each. */
+export const HALL_BAYS = ['alloy', 'electronics', 'medicine'] as const satisfies readonly ProcessedGood[];
 /** The airlocks on the store's left and right faces: each is the way out to the map and the way in on its side. */
 export const HALL_DOORS = ['doorL', 'doorR'] as const;
 
 export type HallRoom = (typeof HALL_ROOMS)[number];
+export type HallBay = (typeof HALL_BAYS)[number];
 export type HallDoor = (typeof HALL_DOORS)[number];
-export type HallPlace = HallRoom | HallDoor;
+/** Where a colonist can be: a door, a room, or in the works one of its bays. */
+export type HallPlace = HallDoor | Exclude<HallRoom, 'works'> | HallBay;
+/** Every place, the doors first: a door, a room or a bay, in the order placeAt finds them. */
+export const HALL_PLACES = [...HALL_DOORS, ...HALL_OUTFITTERS, ...HALL_BAYS, 'greenBelt', 'corral', 'pub'] as const satisfies readonly HallPlace[];
 
 export interface HallPlan {
   /** Width and height in hall units. */
   readonly w: number;
   readonly h: number;
-  /** Each room's walls as the hall draws them; standing inside one is being at it. */
+  /** Each room's walls as the hall draws them; standing inside one is being at it, but in the works at a bay. */
   readonly rooms: Readonly<Record<HallRoom, HallRect>>;
+  /** The works split across into its bays, with no walls between them; standing inside one is being at it. */
+  readonly bays: Readonly<Record<HallBay, HallRect>>;
   /** Each airlock's frame; standing inside one is being at a door. */
   readonly doors: Readonly<Record<HallDoor, HallRect>>;
   /** Where a colonist stands for a place: on the walkway before a room's middle, or just inside a door. */
@@ -64,6 +72,7 @@ const DOORWAY_X: Record<HallDoor, [number, number]> = { doorL: [0.2, 8], doorR: 
 const OVERLAP = 1;
 
 const COL = (SHOPFRONTS.x1 - SHOPFRONTS.x0) / HALL_OUTFITTERS.length;
+const BAY = (FRONT.works[1] - FRONT.works[0]) / HALL_BAYS.length;
 const middle = (a: number, b: number) => (a + b) / 2; // literal-ok: halfway between two edges
 
 const shopfrontsPct = HALL_OUTFITTERS.map((good, i) => ({
@@ -71,11 +80,13 @@ const shopfrontsPct = HALL_OUTFITTERS.map((good, i) => ({
   box: { x0: SHOPFRONTS.x0 + COL * i + SHOPFRONTS.gap, x1: SHOPFRONTS.x0 + COL * (i + 1) - SHOPFRONTS.gap, ...TOP },
 }));
 const frontRowPct = FRONT_ROW.map((room) => ({ place: room, box: { x0: FRONT[room][0], x1: FRONT[room][1], ...BOT } }));
+// Store.tsx's works: a three-column grid across the room.
+const baysPct = HALL_BAYS.map((good, i) => ({ place: good, box: { x0: FRONT.works[0] + BAY * i, x1: FRONT.works[0] + BAY * (i + 1), ...BOT } }));
 const doorsPct = HALL_DOORS.map((door) => ({ place: door, box: { x0: AIRLOCK[door][0], x1: AIRLOCK[door][1], ...AIRLOCK_Y } }));
 
 const spotsPct = [
   ...shopfrontsPct.map(({ place, box }) => ({ place, at: { x: middle(box.x0, box.x1), y: SPOT_Y.shopfronts } })),
-  ...frontRowPct.map(({ place, box }) => ({ place, at: { x: middle(box.x0, box.x1), y: SPOT_Y.front } })),
+  ...[...frontRowPct.filter(({ place }) => place !== 'works'), ...baysPct].map(({ place, box }) => ({ place, at: { x: middle(box.x0, box.x1), y: SPOT_Y.front } })),
   ...HALL_DOORS.map((door) => ({ place: door, at: { x: DOOR_SPOT_X[door], y: SPOT_Y.doors } })),
 ];
 
@@ -90,12 +101,13 @@ const floorPct: HallRect[] = [
 const ux = (pct: number) => (pct / PERCENT) * SIZE.w;
 const uy = (pct: number) => (pct / PERCENT) * SIZE.h;
 const toUnits = (r: HallRect): HallRect => ({ x0: ux(r.x0), y0: uy(r.y0), x1: ux(r.x1), y1: uy(r.y1) });
-const boxes = <K extends HallPlace>(rows: { place: K; box: HallRect }[]) => rows.map(({ place, box }) => [place, toUnits(box)] as const);
+const boxes = <K extends string>(rows: { place: K; box: HallRect }[]) => rows.map(({ place, box }) => [place, toUnits(box)] as const);
 
 /** The store's hall. */
 export const HALL: HallPlan = {
   ...SIZE,
   rooms: Object.fromEntries([...boxes(shopfrontsPct), ...boxes(frontRowPct)]) as Record<HallRoom, HallRect>,
+  bays: Object.fromEntries(boxes(baysPct)) as Record<HallBay, HallRect>,
   doors: Object.fromEntries(boxes(doorsPct)) as Record<HallDoor, HallRect>,
   spots: Object.fromEntries(spotsPct.map(({ place, at }) => [place, { x: ux(at.x), y: uy(at.y) }])) as Record<HallPlace, HallPoint>,
   floor: floorPct.map(toUnits),
@@ -103,11 +115,17 @@ export const HALL: HallPlan = {
 
 const contains = (r: HallRect, p: HallPoint) => p.x >= r.x0 && p.x <= r.x1 && p.y >= r.y0 && p.y <= r.y1;
 
-/** The room or door p stands in, or null on the walkway. */
+const isBay = (place: HallPlace): place is HallBay => (HALL_BAYS as readonly HallPlace[]).includes(place);
+
+/** The box standing inside which is being at `place`: a door's frame, a bay, or a room's walls. */
+export function boxOf(place: HallPlace, plan: HallPlan = HALL): HallRect {
+  if (place === 'doorL' || place === 'doorR') return plan.doors[place];
+  return isBay(place) ? plan.bays[place] : plan.rooms[place];
+}
+
+/** The place p stands at, or null on the walkway. */
 export function placeAt(p: HallPoint, plan: HallPlan = HALL): HallPlace | null {
-  for (const door of HALL_DOORS) if (contains(plan.doors[door], p)) return door;
-  for (const room of HALL_ROOMS) if (contains(plan.rooms[room], p)) return room;
-  return null;
+  return HALL_PLACES.find((place) => contains(boxOf(place, plan), p)) ?? null;
 }
 
 /** Whether a colonist's feet may stand at p. */

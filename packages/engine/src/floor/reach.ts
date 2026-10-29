@@ -12,7 +12,7 @@ import { analysePlot, buyMule, fitFilter, hasAnalysed, installMule, mulePriceFor
 import { tileAt } from '../grid.js';
 import type { GameState, Outfit, Player, Tile } from '../types.js';
 import { doorOutside, floorConfig, type DevFloor, type FloorColonist, type FloorConfig, type FloorPoint } from './floor.js';
-import { HALL_DOORS, HALL_OUTFITTERS, placeAt, type HallDoor, type HallPlace } from './hall.js';
+import { HALL_BAYS, HALL_DOORS, HALL_OUTFITTERS, placeAt, type HallDoor, type HallPlace } from './hall.js';
 
 /** Why a row's press is refused: money short by `short` credits, or the corral empty. */
 export type ReachRefusal = { kind: 'money'; short: number } | { kind: 'soldOut' };
@@ -103,8 +103,11 @@ const buy: Row = ({ state, player: p, place }) => {
   return { kind: 'buy', enabled: !why, price, why };
 };
 
+/** The places that outfit a MULE, each for its own good: the shopfronts, the works' bays and the Green belt. */
+const OUTFITTERS = [...HALL_OUTFITTERS, ...HALL_BAYS, 'greenBelt'] as const satisfies readonly (Outfit & HallPlace)[];
+
 const outfit: Row = ({ state, player: p, place }) => {
-  const good = HALL_OUTFITTERS.find((g) => g === place);
+  const good = OUTFITTERS.find((g) => g === place);
   if (!good || p.carriedMule !== 'empty') return null;
   const cost = outfitCostFor(state, p.id, good);
   const why = shortBy(p, cost);

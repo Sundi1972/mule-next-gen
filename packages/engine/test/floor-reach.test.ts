@@ -3,6 +3,7 @@ import {
   advancePhase,
   analysisSeconds,
   applyReach,
+  boxOf,
   buildFloor,
   createGame,
   DEV_STEER,
@@ -11,7 +12,9 @@ import {
   doorPresses,
   floorConfig,
   HALL,
+  HALL_PLACES,
   hasAnalysed,
+  MULE,
   mulePrice,
   mulePriceFor,
   outfitCostFor,
@@ -63,10 +66,16 @@ const paying: FloorConfig = { ...cfg, pubPayout: stubPayout };
 
 const tileOf = (state: GameState, x: number, y: number) => state.tiles[y * state.width + x]!;
 const onTile = (x: number, y: number): Partial<FloorColonist> => ({ space: 'map', x: x + 0.5, y: y + 0.5 });
-/** Standing in the middle of a room or a door's frame: being at it. */
+/** Standing in the middle of a place's box: being at it. */
 const inHall = (place: HallPlace): Partial<FloorColonist> => {
-  const box = place === 'doorL' || place === 'doorR' ? HALL.doors[place] : HALL.rooms[place];
+  const box = boxOf(place);
   return { space: 'hall', x: (box.x0 + box.x1) / 2, y: (box.y0 + box.y1) / 2 };
+};
+/** Standing in the middle of the works' left, middle or right third: Store.tsx's Alloy, Electronics and Medicine bays. */
+const inWorksBay = (third: 0 | 1 | 2): Partial<FloorColonist> => {
+  const works = HALL.rooms.works;
+  const width = (works.x1 - works.x0) / 3;
+  return { space: 'hall', x: works.x0 + width * (third + 0.5), y: (works.y0 + works.y1) / 2 };
 };
 const words = (verb: string, detail: string | null = null, enabled = true): ReachWords => ({ verb, detail, enabled });
 const a = (state: GameState) => state.players[0]!;
@@ -93,7 +102,7 @@ interface Row {
 }
 
 /** A development turn on MAP: 'a' a Gearling, so its prices are not the store's list price, placed where `row` says. */
-function world(row: Row): { state: GameState; floor: DevFloor } {
+function world(row: Pick<Row, 'at' | 'game' | 'cfg'>): { state: GameState; floor: DevFloor } {
   const state = createGame({
     seed: SEED,
     players: [
@@ -235,6 +244,42 @@ const TABLE: Row[] = [
     reach: (s) => ({ kind: 'outfit', enabled: false, good: 'energy', cost: outfitCostFor(s, 'a', 'energy'), why: { kind: 'money', short: 3 } }),
     words: (s) => words('OUTFIT · ENERGY', `${outfitCostFor(s, 'a', 'energy')} cr · 3 short`, false),
     press: 'nothing',
+  },
+  ...(['alloy', 'electronics', 'medicine'] as const).map(
+    (good, third): Row => ({
+      row: `8b OUTFIT: at the works' ${['left', 'middle', 'right'][third]} fitting bay, an unfitted MULE, money: ${good}`,
+      at: () => inWorksBay(third as 0 | 1 | 2),
+      game: (s) => void (a(s).carriedMule = 'empty'),
+      reach: (s) => ({ kind: 'outfit', enabled: true, good, cost: outfitCostFor(s, 'a', good), why: null }),
+      words: (s) => words(`OUTFIT · ${good.toUpperCase()}`, `${outfitCostFor(s, 'a', good)} cr`),
+      press: {
+        game: (was, now) => {
+          expect(a(now).carriedMule).toBe(good);
+          expect(a(was).money - a(now).money).toBe(outfitCostFor(was, 'a', good));
+        },
+      },
+    }),
+  ),
+  {
+    row: '8b, money short: disabled, with the shortfall',
+    at: () => inWorksBay(1),
+    game: (s) => void Object.assign(a(s), { carriedMule: 'empty', money: outfitCostFor(s, 'a', 'electronics') - 5 }),
+    reach: (s) => ({ kind: 'outfit', enabled: false, good: 'electronics', cost: outfitCostFor(s, 'a', 'electronics'), why: { kind: 'money', short: 5 } }),
+    words: (s) => words('OUTFIT · ELECTRONICS', `${outfitCostFor(s, 'a', 'electronics')} cr · 5 short`, false),
+    press: 'nothing',
+  },
+  {
+    row: '8c OUTFIT: at the Green belt, an unfitted MULE, money',
+    at: () => inHall('greenBelt'),
+    game: (s) => void (a(s).carriedMule = 'empty'),
+    reach: (s) => ({ kind: 'outfit', enabled: true, good: 'greenBelt', cost: outfitCostFor(s, 'a', 'greenBelt'), why: null }),
+    words: (s) => words('OUTFIT · GREEN BELT', `${outfitCostFor(s, 'a', 'greenBelt')} cr`),
+    press: {
+      game: (was, now) => {
+        expect(a(now).carriedMule).toBe('greenBelt');
+        expect(a(was).money - a(now).money).toBe(outfitCostFor(was, 'a', 'greenBelt'));
+      },
+    },
   },
   {
     row: '9 LEAVE: in the hall at a door',
@@ -411,5 +456,14 @@ describe('the dev floor: the action button', () => {
         expect(state).toEqual(done);
       }
     }
+  });
+
+  it('T-AC-3: every outfit the game sells is offered at exactly one place in the hall', () => {
+    const offered = HALL_PLACES.flatMap((place) => {
+      const { state, floor } = world({ at: () => inHall(place), game: (s) => void (a(s).carriedMule = 'empty') });
+      const reach = reachNow(floor, state);
+      return reach.kind === 'outfit' ? [reach.good] : [];
+    });
+    expect(offered.sort()).toEqual(Object.keys(MULE.outfitCost).sort());
   });
 });
