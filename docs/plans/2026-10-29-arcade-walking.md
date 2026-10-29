@@ -447,6 +447,10 @@ props first, and Tasks 6.3 and 6.5 pass the frame's `moving`, `facing`, `encount
 gait. The branch is based on a commit that contains both scaffolds: trunk once ws6-ux's docs-and-mocks milestone
 merges (asked of the PM, 2026-10-29).
 
+**Carried into PR-6 from A-1 (#200), 2026-10-29:** the TV's development screen with six seats and a three-line ticker
+is about 100 px short (the store hall squeezes to 104 px with the clock running); TvDevelop sizes the hall for six
+seats. The host's "started the clock" news becomes a TV beat there.
+
 **Ready to start, 2026-10-29:** Task 6.2 when PR-1 (#186) merges (prediction steps the floor); Task 6.1's steps when
 PR-5's harness steering exists; Tasks 6.3 and 6.5 after PR-3, PR-5 and the motion PR.
 
