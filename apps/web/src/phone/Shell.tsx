@@ -176,20 +176,12 @@ export function PhoneShell({
                     <span className="hidden @min-[1100px]/shell:inline">To my phone</span>
                   </button>
                 )}
-                {tally ? (
-                  // The money and, under it, the month's running total (G-5).
-                  <span className="ml-auto flex shrink-0 flex-col items-end">
-                    <span data-num className="font-mono text-sm font-bold leading-tight text-ink @min-[1100px]/shell:text-lg" data-testid="money">
-                      {fmt(self.money)} cr
-                    </span>
-                    {tally}
-                  </span>
-                ) : (
-                  <span data-num className="ml-auto shrink-0 font-mono text-sm font-bold text-ink @min-[1100px]/shell:text-lg" data-testid="money">
-                    {fmt(self.money)} cr
-                  </span>
-                )}
+                <span data-num className="ml-auto shrink-0 font-mono text-sm font-bold text-ink @min-[1100px]/shell:text-lg" data-testid="money">
+                  {fmt(self.money)} cr
+                </span>
               </div>
+              {/* Under the money, the month's running total (G-5): a line of its own, so it never narrows the name beside the money. */}
+              {tally && <div className="flex justify-end">{tally}</div>}
               <TableChat />
             </header>
             <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 *:shrink-0 short:gap-2 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4">
