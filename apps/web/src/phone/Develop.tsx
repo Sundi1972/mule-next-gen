@@ -8,6 +8,7 @@ import { SpecialLine } from '../components/SpecialLine';
 import { useClient, useServerNow } from '../net/react';
 import { usePhoneGame } from './game';
 import { GroundCard, Traits } from './ground';
+import { press, type Press } from './hub/ready';
 import { nearest, nextStep, openShops } from './next-step';
 import { MapFit, PhoneShell, useWide, type Now } from './Shell';
 
@@ -25,7 +26,7 @@ const WELL: Condition = { foodShare: 1, sick: false, sickBecause: null, conditio
  */
 export function Develop() {
   const client = useClient();
-  const { view, me, self, slot } = usePhoneGame();
+  const { table, view, me, self, slot } = usePhoneGame();
   const now = useServerNow(200);
   // Month 1's clock waits, full, for every first MULE: the turn is not over.
   const waiting = !!view.clockWaitsFor;
@@ -97,7 +98,17 @@ export function Develop() {
     mulesLeft: view.storeMules,
     pubPayout,
   });
-  const guide = waiting ? { ...ruled, now: waitingNow(ruled.now, carry, installed || me.installedThisTurn, view.storeMules, view.clockWaitsFor!, me.id, view.players) } : ruled;
+  const installedAny = installed || me.installedThisTurn;
+  // Month 1 with the clock running and no first MULE of yours in on a plot of yours: the host started it without you.
+  const passed = view.month === 1 && DEV_WALK.month1WaitsForFirstMule && !waiting && me.devEndsAt !== null && !installedAny && view.tiles.some((t) => t.owner === me.id);
+  const guide = waiting
+    ? { ...ruled, now: waitingNow(ruled.now, carry, installedAny, view.storeMules, view.clockWaitsFor!, me.id, view.players) }
+    : passed
+      ? { ...ruled, now: { ...ruled.now, detail: 'The host started the clock: your month is running.' } }
+      : ruled;
+  // The host, once its own first MULE is in, may start the waiting clock without the rest.
+  const passing =
+    waiting && self.id === table.hostId && !view.clockWaitsFor!.includes(me.id) ? view.players.filter((p) => view.clockWaitsFor!.includes(p.id)).map((p) => p.name) : [];
 
   const tiles = mapTiles(view);
   // The payout shows where the button has the row to itself: in the store. On the map it shares the row with Store.
@@ -187,7 +198,9 @@ export function Develop() {
         </>
       }
       footer={
-        place === 'store' ? (
+        <>
+          {passing.length > 0 && <StartTheClock passing={passing} />}
+          {place === 'store' ? (
           <>
             <Button size="md" variant={outfitted ? 'holo' : 'outline'} className="w-full @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" onClick={walkOut}>
               Walk out to the map
@@ -220,7 +233,8 @@ export function Develop() {
               {pub(false)}
             </div>
           </>
-        )
+          )}
+        </>
       }
     >
       {/* One place at a time, at every size (AM-8): in the store the hall fills the stage; out of the door, the colony. */}
@@ -355,6 +369,44 @@ function waitingNow(now: Now, carry: Outfit | 'empty' | null, installed: boolean
   if (!installed) return now.step === 1 && mulesLeft > 0 ? { step: 1, of: 3, title: 'Buy a MULE at the corral', detail: 'Your first month: no rush. The clock starts when your first MULE is in.' } : now;
   const still = waitsFor.filter((id) => id !== me).map((id) => players.find((p) => p.id === id)?.name ?? id);
   return { title: 'Your MULE is in', detail: still.length ? `The clock starts when every first MULE is in: ${still.join(' and ')} still to come.` : 'Every first MULE is in: the clock starts now.' };
+}
+
+/** The host's confirm, before the waiting clock starts without the players still to come. */
+export function startClockQuestion(names: readonly string[]): string {
+  const one = names.length === 1;
+  return `Start the month's clock now? ${andList(names)} ${one ? 'has' : 'have'} no MULE in yet, and ${one ? 'loses' : 'lose'} no time until now.`;
+}
+
+const andList = (names: readonly string[]) => (names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`);
+
+/** The host's way past anyone still to come in month 1's wait: planning's Continue, one confirming tap. */
+function StartTheClock({ passing }: { passing: readonly string[] }) {
+  const client = useClient();
+  const [confirm, setConfirm] = useState(false);
+  const on = (pressed: Press) => () => {
+    const next = press(confirm, pressed);
+    setConfirm(next.confirm);
+    if (next.intent) client.intent(next.intent);
+  };
+  if (!confirm)
+    return (
+      <Button size="md" variant="outline" className="w-full" onClick={on('continue')} data-testid="continue">
+        Start the clock without {passing.length === 1 ? passing[0] : 'them'}
+      </Button>
+    );
+  return (
+    <div className="flex flex-col gap-2 rounded-panel border border-warn/60 bg-panel p-2.5 @min-[1100px]/shell:p-4" role="alertdialog" aria-label="Start the clock without them?" data-testid="continue-confirm">
+      <p className="text-sm @min-[1100px]/shell:text-base">{startClockQuestion(passing)}</p>
+      <div className="flex gap-2">
+        <Button size="md" className="flex-1" onClick={on('continue-now')} data-testid="continue-now">
+          Start the clock
+        </Button>
+        <Button size="md" variant="ghost" className="flex-1" onClick={on('keep-waiting')} data-testid="keep-waiting">
+          Keep waiting
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 /** Where the header's timer goes while month 1's clock waits: paused at its full time. */
