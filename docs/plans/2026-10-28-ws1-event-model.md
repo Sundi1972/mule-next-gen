@@ -416,11 +416,14 @@ Done 29 Oct. PR-2 is #168, `ws1-events-cavern` 28e67a1 into `ws1-events`, merged
 
 - [x] #109 merged into `feat/strategist`; `ws1-events` synced with it (merged, not rebased, so the task SHAs hold):
       trunk b3774fa at 946ab96, typecheck 0 and the suite green
-- [ ] **The events gallery is built** (Heiko, 29 Oct: "Living weather" approved as the design to build; WS8 writes the
+- [x] **The events gallery is built** (superseded, see its last line) (Heiko, 29 Oct: "Living weather" approved as the design to build; WS8 writes the
       build spec and names its files): merged into `feat/strategist`, or merges with this branch. The phone and TV show
       every event of a phase, and the view (WS3's `mule-game.ts`) carries `phase`. The event payloads are agreed with
       WS8 against Task 2's contract (`MonthEvent`, several a phase in the order fired; AM-2's delta-0 plots; AM-3's
       collapse); any field the gallery needs beyond it is a named change to that contract. The PM routes it.
+      Superseded (PM, 29 Oct): the lane PR opens once trunk is merged in, with the owner OKs and the combined sim
+      numbers, and the PM merges it on pr-ready under Heiko's standing authorization. The gallery is WS8's and reaches
+      the table on its own PRs; the view already carries `phase` (d54da79d).
 - [x] `ws1-events` synced with today's trunk (aae54c4 or later: #151's meteor crater, #164's playbook types, #166's
       one-pass grant). WS5 named the conflicts to expect, all text: specials.ts (imports, `formMeteorCrater`,
       `PlacedSpecialKind`), config.ts (`MAP.meteorCrater` beside `specialEffect`), the map-gallery mock (a `meteorCrater`
@@ -433,8 +436,14 @@ Done 29 Oct. PR-2 is #168, `ws1-events-cavern` 28e67a1 into `ws1-events`, merged
       Rows re-run on 208b568, six cells: every check ok but "Colonists short of Food or Water", 13 / 11 / 18 / 20 / 24 /
       16% (mean 17.0%, 4 of 6 miss; seeds 201 worst); events 0.96 a month clean, so UBER-AC-1 holds. Into the balance
       plan's food-supply item.
-- [ ] PR-1's and PR-2's rows in the PR body; R-2's options settled by Heiko if any check moved
-- [ ] Heiko's OK through the PM
+- [x] `ws1-events` synced with trunk again for the lane PR: `ws1-events-sync2`, trunk 1090e0d9 at 6deeeb56 (clean),
+      then 4e148bae at d064ec58 (one conflict, balance.test.ts's import list, both sides kept). Two named edits: WS8's
+      events-view fixture `when` → `phase` (d54da79d, WS8 OK), WS3's T-AC-10 notice seed 2 → 8 (2c1bdef1, WS3 OK).
+- [x] PR-1's and PR-2's rows in the PR body; R-2's options settled by Heiko if any check moved
+      Settled: food supply, ruled A (Heiko, 29 Oct; #180, 20 starting Water). With the event rows on and 20 Water
+      (d54da79d, six cells, 40 games): every one of the nine checks ok in every cell; the shortage 8 / 6 / 8 / 8 / 8 /
+      9% (mean 7.8%); production events in 51-54% of months.
+- [x] Heiko's OK through the PM: his standing authorization for lane PRs into `feat/strategist` (PM, 29 Oct)
 
 ## Pre-implementation checklist
 
