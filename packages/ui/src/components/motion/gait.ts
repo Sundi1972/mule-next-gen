@@ -28,6 +28,8 @@ export const GAIT = {
   idleCycle: 2.6,
   /** The slowest share of full speed a stride is computed from, so a stopped pace never divides by zero. */
   minSpeedShare: 0.01,
+  /** A walk-board walker keeps walking this long after its price last moved, so the 10 Hz steps read as one walk. */
+  boardHoldMs: 300,
 } as const;
 
 export interface GaitInput {
@@ -92,6 +94,11 @@ export interface BoardTrack {
   movedAt: number | null;
 }
 
-export function boardGait(_prev: BoardTrack | null, _at: number, _now: number): { track: BoardTrack; motion: Motion } {
-  throw new Error('NotImplemented: boardGait');
+/**
+ * A walk-board walker's gait from its price between renders (`now` in ms): it walks while its price moved within
+ * GAIT.boardHoldMs and stands once the price holds. The first render has nothing to compare, so it stands.
+ */
+export function boardGait(prev: BoardTrack | null, at: number, now: number): { track: BoardTrack; motion: Motion } {
+  const movedAt = prev === null ? null : at !== prev.at ? now : prev.movedAt;
+  return { track: { at, movedAt }, motion: movedAt !== null && now - movedAt < GAIT.boardHoldMs ? 'walk' : 'idle' };
 }
