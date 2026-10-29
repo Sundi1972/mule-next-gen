@@ -97,7 +97,7 @@ describe('T-AC-10: development lists the players who fell sick at its start as b
     expect(view.eventShow).toMatchObject({ showMs: EVENT_SHOW.introMs + EVENT_SHOW.rollCallMs, introMs: EVENT_SHOW.introMs });
   });
 
-  it('T-AC-10: two sick players share the one roll call, 2 000 ms each in seat order; the show counts the roll call once', () => {
+  it('T-AC-10: two or three sick players share the one roll call in seat order, rounded on the running total; the show counts it once', () => {
     const { game } = sickAt(['s2', 's1']);
     const view = game.viewFor(null);
     expect(view.events!.map(({ player, weight, playMs }) => ({ player, weight, playMs }))).toEqual([
@@ -105,6 +105,15 @@ describe('T-AC-10: development lists the players who fell sick at its start as b
       { player: 's2', weight: 'bulletin', playMs: 2_000 },
     ]);
     expect(view.eventShow).toMatchObject({ showMs: 5_800, introMs: 1_800 });
+    // 4 000 / 3 rounded on the running total: 1 333, 2 667, 4 000.
+    const three = sickAt(['s3', 's1', 's2']).game.viewFor(null);
+    expect(three.events!.map(({ player, playMs }) => ({ player, playMs }))).toEqual([
+      { player: 's1', playMs: 1_333 },
+      { player: 's2', playMs: 1_334 },
+      { player: 's3', playMs: 1_333 },
+    ]);
+    expect(three.events!.reduce((sum, e) => sum + e.playMs, 0)).toBe(EVENT_SHOW.rollCallMs);
+    expect(three.eventShow).toMatchObject({ showMs: 5_800, introMs: 1_800 });
   });
 
   it('T-AC-10: the line says why: bad air, the player\'s own pollution, or bad luck', () => {
@@ -157,12 +166,27 @@ describe('T-AC-7: nobody acts while a timed phase\'s events play; the same press
     expect(ticks()).toBeGreaterThan(0);
   });
 
-  it('T-AC-7: a dropped phone during the roll call does not end development before it starts', () => {
-    const { game, advance } = sickAt(['s1']);
+  it('T-AC-7: phones dropped during the roll call do not end development before it starts, and are not forgotten when it does', () => {
+    const { game, ctx, advance } = sickAt(['s1']);
+    const { endsAt } = game.viewFor(null).eventShow!;
     game.connectionChanged('s1', false);
     game.connectionChanged('s2', false);
     advance(100);
     expect(game.viewFor(null).phase).toBe('development');
+    // Every human is away when the show ends: nobody is waited for, so development ends then, not on its full clock.
+    advance(endsAt - ctx.now());
+    expect(game.viewFor(null).phase).not.toBe('development');
+  });
+
+  it('T-AC-7: a game disposed during the roll call starts nothing when the show would have ended', () => {
+    const { game, ctx, advance } = sickAt(['s1']);
+    const ticks = countTicks(game, 'developTick');
+    let changed = 0;
+    ctx.changed = () => changed++;
+    const { endsAt } = game.viewFor(null).eventShow!;
+    game.dispose();
+    advance(endsAt - ctx.now() + AI_DEV_TICK_MS * 3);
+    expect({ ticks: ticks(), phaseEndsAt: game.viewFor(null).phaseEndsAt, changed }).toEqual({ ticks: 0, phaseEndsAt: null, changed: 0 });
   });
 
   it('T-AC-7: at phaseScale 0.1 the hold lasts the show at the table\'s pace; showMs stays at full pace', () => {

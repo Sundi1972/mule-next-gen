@@ -820,6 +820,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       this.ctx.schedule(holdMs, () => {
         this.heldUntil = null;
         this.startPhase(state);
+        // A phone that dropped during the show was not counted then: count it now that the phase runs.
+        this.checkAllReady();
         this.ctx.changed();
       }),
     );
@@ -1450,7 +1452,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
    * phase at the table's pace; in any other phase as the phase opens (RULE-4: its clocks wait for the show).
    */
   private eventsView(state: GameState): Required<Pick<MuleView, 'events' | 'eventShow'>> {
-    const fired = phaseEvents(state, state.phase);
+    // Planning's show plays over planning proper, which opens after the election (its entry is restamped then).
+    const fired = this.electionOpen() ? [] : phaseEvents(state, state.phase);
     if (fired.length === 0) return { events: [], eventShow: null };
     const { showMs, introMs } = eventShow(fired);
     const startsAt = this.phaseEnteredAt + (state.phase === 'production' ? this.realMs(PRODUCTION_SHOW_AT_MS / 1_000) : 0);
