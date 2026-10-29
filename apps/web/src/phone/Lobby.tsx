@@ -17,7 +17,7 @@ function Header() {
       <span className="font-display text-base font-bold">
         M.U.L.E. <span className="text-holo">Next Gen</span>
       </span>
-      <ThemeToggle />
+      <ThemeToggle iconUntilWide />
     </div>
   );
 }
@@ -103,9 +103,13 @@ export function Entry({ initialCode }: { initialCode: string }) {
   );
 }
 
-/** Sideways, clear of the notch and the home bar. */
+/** Sideways, clear of the notch and the home bar. A `shell` container, so the header sizes as the game's does. */
 function Frame({ children }: { children: ReactNode }) {
-  return <div className="flex h-full flex-col bg-table pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] text-ink">{children}</div>;
+  return (
+    <div className="h-full @container/shell">
+      <div className="flex h-full flex-col bg-table pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] text-ink">{children}</div>
+    </div>
+  );
 }
 
 /** A seat as the lobby draws it: its species (picked or the default) and its colour. */
@@ -203,7 +207,7 @@ export function Lobby() {
               M.U.L.E. <span className="text-holo">Next Gen</span>
             </span>
             <span className="ml-auto font-mono text-xs text-ink-3 @min-[1100px]/shell:text-sm">ROOM {view.code}</span>
-            <ThemeToggle />
+            <ThemeToggle iconUntilWide />
           </header>
           <div className="flex min-h-0 flex-1 gap-3 @min-[1100px]/shell:gap-8">
             <ColonistHero seat={mine} />
@@ -238,17 +242,17 @@ export function Lobby() {
             </section>
             {!joinFirst && joinCard}
             {!host && (
-              <button type="button" className="text-left text-sm text-holo underline-offset-2 hover:underline" onClick={(e) => ask('handoff', e.currentTarget)} data-testid="move-to-phone">
+              <button type="button" className="min-h-8 text-left text-sm text-holo underline-offset-2 hover:underline" onClick={(e) => ask('handoff', e.currentTarget)} data-testid="move-to-phone">
                 Playing on a laptop? Move to my phone…
               </button>
             )}
             {host && (
               <section className="flex flex-col gap-1 border-t border-holo-faint pt-2 @min-[1100px]/shell:pt-3" data-testid="host-tools">
                 <span className="label-caps @min-[1100px]/shell:text-xs!">You host this table</span>
-                <button type="button" className="text-left text-sm text-holo underline-offset-2 hover:underline" onClick={(e) => ask('handoff', e.currentTarget)} data-testid="host-to-phone">
+                <button type="button" className="min-h-8 text-left text-sm text-holo underline-offset-2 hover:underline" onClick={(e) => ask('handoff', e.currentTarget)} data-testid="host-to-phone">
                   Move the host to my phone…
                 </button>
-                <button type="button" className="text-left text-sm text-alert underline-offset-2 hover:underline" onClick={(e) => ask('close', e.currentTarget)} data-testid="close-room">
+                <button type="button" className="min-h-8 text-left text-sm text-alert underline-offset-2 hover:underline" onClick={(e) => ask('close', e.currentTarget)} data-testid="close-room">
                   Close the room…
                 </button>
               </section>
@@ -324,30 +328,35 @@ function Picker({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-/** The six species, each with its perk visible on a laptop, drawn in your colour. */
+/**
+ * The six species, each with its perk visible on a laptop, drawn in your colour. Six across when the picker has room
+ * for every name whole, three across otherwise.
+ */
 function SpeciesPick({ me, onPick }: { me: Colonist; onPick: (sp: Species) => void }) {
   return (
-    <div className="grid grid-cols-6 gap-1 @min-[1100px]/shell:grid-cols-3 @min-[1100px]/shell:gap-3" data-testid="species-pick">
-      {SPECIES.map((sp) => (
-        <button
-          key={sp}
-          type="button"
-          aria-pressed={sp === me.species}
-          onClick={() => onPick(sp)}
-          className={cx(
-            'flex flex-col items-center gap-0.5 rounded-control border bg-panel px-1 py-1 text-center @min-[1100px]/shell:flex-row @min-[1100px]/shell:items-start @min-[1100px]/shell:gap-3 @min-[1100px]/shell:p-3 @min-[1100px]/shell:text-left',
-            sp === me.species ? 'border-2 border-holo bg-holo-soft shadow-glow' : 'border-holo-line hover:border-holo',
-          )}
-          data-testid={`species-${sp}`}
-        >
-          <Creature species={sp} color={SLOT_COLOR[me.slot]} size={30} className="@min-[1100px]/shell:hidden" />
-          <Creature species={sp} color={SLOT_COLOR[me.slot]} size={56} className="hidden shrink-0 @min-[1100px]/shell:block" />
-          <span className="flex min-w-0 flex-col gap-0.5">
-            <span className="text-[11px] font-semibold @min-[1100px]/shell:font-display @min-[1100px]/shell:text-lg">{SPECIES_NAME[sp]}</span>
-            <span className="hidden text-sm leading-snug text-ink-2 @min-[1100px]/shell:block">{SPECIES_PERK[sp]}</span>
-          </span>
-        </button>
-      ))}
+    <div className="@container/species">
+      <div className="grid grid-cols-3 gap-1 @min-[340px]/species:grid-cols-6 @min-[1100px]/shell:grid-cols-3 @min-[1100px]/shell:gap-3" data-testid="species-pick">
+        {SPECIES.map((sp) => (
+          <button
+            key={sp}
+            type="button"
+            aria-pressed={sp === me.species}
+            onClick={() => onPick(sp)}
+            className={cx(
+              'flex flex-col items-center gap-0.5 rounded-control border bg-panel px-1 py-1 text-center @min-[1100px]/shell:flex-row @min-[1100px]/shell:items-start @min-[1100px]/shell:gap-3 @min-[1100px]/shell:p-3 @min-[1100px]/shell:text-left',
+              sp === me.species ? 'border-2 border-holo bg-holo-soft shadow-glow' : 'border-holo-line hover:border-holo',
+            )}
+            data-testid={`species-${sp}`}
+          >
+            <Creature species={sp} color={SLOT_COLOR[me.slot]} size={30} className="@min-[1100px]/shell:hidden" />
+            <Creature species={sp} color={SLOT_COLOR[me.slot]} size={56} className="hidden shrink-0 @min-[1100px]/shell:block" />
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="text-[11px] font-semibold @min-[1100px]/shell:font-display @min-[1100px]/shell:text-lg">{SPECIES_NAME[sp]}</span>
+              <span className="hidden text-sm leading-snug text-ink-2 @min-[1100px]/shell:block">{SPECIES_PERK[sp]}</span>
+            </span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -369,7 +378,7 @@ function ColourPick({ seats, me, onPick }: { seats: Colonist[]; me: Colonist; on
             disabled={locked}
             onClick={() => onPick(c)}
             className={cx(
-              'flex items-center gap-1.5 rounded-full border py-0.5 pl-0.5 pr-2 @min-[1100px]/shell:gap-2 @min-[1100px]/shell:py-1 @min-[1100px]/shell:pl-1 @min-[1100px]/shell:pr-3',
+              'flex min-h-8 items-center gap-1.5 rounded-full border py-0.5 pl-0.5 pr-2 @min-[1100px]/shell:gap-2 @min-[1100px]/shell:py-1 @min-[1100px]/shell:pl-1 @min-[1100px]/shell:pr-3',
               mine ? 'border-2 border-holo bg-holo-soft' : locked ? 'border-holo-faint opacity-60' : 'border-holo-line hover:border-holo',
             )}
             data-testid={`colour-${c}`}
@@ -397,7 +406,7 @@ function SeatRow({ seat, me, host, onKick }: { seat: Colonist; me: boolean; host
       <span role="img" aria-label={SPECIES_NAME[seat.species]} className="shrink-0">
         <Creature species={seat.species} color={SLOT_COLOR[seat.slot]} size={22} />
       </span>
-      <span className="min-w-0 flex-1 truncate text-sm font-semibold @min-[1100px]/shell:text-base">
+      <span className="min-w-0 flex-1 text-sm font-semibold break-words @min-[1100px]/shell:text-base">
         {seat.name}
         {me && ' (you)'}
       </span>
@@ -405,7 +414,7 @@ function SeatRow({ seat, me, host, onKick }: { seat: Colonist; me: boolean; host
       {onKick && (
         <button
           type="button"
-          className="grid size-7 place-items-center rounded-control text-ink-3 hover:bg-alert/10 hover:text-alert"
+          className="grid size-8 place-items-center rounded-control text-ink-3 hover:bg-alert/10 hover:text-alert"
           aria-label={`Remove ${seat.name}`}
           onClick={onKick}
           data-testid={`kick-${seat.id}`}
