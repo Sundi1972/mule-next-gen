@@ -6,11 +6,13 @@ import { HALL_DOORS, isOpenFloor, placeAt, type HallDoor, type HallPlan } from '
 import { reachOf, type Reach } from './reach.js';
 import { speedOf, terrainShare } from './speed.js';
 
-/** What one step reads: the game, the config, and the store's tile, found once. */
+/** What one step reads: the game, the config, and what it finds once for every colonist. */
 interface Step {
   readonly state: GameState;
   readonly cfg: FloorConfig;
   readonly store: Tile;
+  /** The hall plan's thinnest wall: no piece of a step in the hall is as long. */
+  readonly wall: number;
 }
 
 type Inputs = Readonly<Record<string, FloorInput>>;
@@ -22,13 +24,13 @@ type Inputs = Readonly<Record<string, FloorInput>>;
  */
 export function stepFloor(floor: DevFloor, state: GameState, inputs: Inputs, dtMs: number, cfg: FloorConfig): DevFloor {
   if (dtMs !== cfg.steer.tickMs) throw new Error(`stepFloor steps ${cfg.steer.tickMs} ms at a time, not ${dtMs}`);
-  const ctx: Step = { state, cfg, store: storeOf(state) };
+  const ctx: Step = { state, cfg, store: storeOf(state), wall: thinnestWall(cfg.hall) };
   return {
     tick: floor.tick + 1,
     colonists: floor.colonists.map((c) => {
       const input = inputs[c.id] ?? IDLE_INPUT;
       const reach = doorMove(floor, state, c.id, input, cfg);
-      const led = withLead(c, ctx.state);
+      const led = withLead(c, state);
       if (reach?.kind === 'enter') return follow({ ...enterHall(led, reach.door, cfg.hall), moving: true }, cfg);
       if (reach?.kind === 'leave') return follow({ ...leaveHall(led, reach.door, ctx), moving: true }, cfg);
       return stepColonist(led, input, dtMs, ctx);
@@ -119,7 +121,7 @@ function mapMove(c: FloorColonist, dx: number, dy: number, ctx: Step): FloorColo
  */
 function hallMove(c: FloorColonist, dx: number, dy: number, ctx: Step): FloorColonist {
   const { hall } = ctx.cfg;
-  const pieces = Math.floor(Math.hypot(dx, dy) / thinnestWall(hall)) + 1;
+  const pieces = Math.floor(Math.hypot(dx, dy) / ctx.wall) + 1;
   const [px, py] = [dx / pieces, dy / pieces];
   let { x, y } = c;
   for (let i = 0; i < pieces; i++) {
