@@ -18,13 +18,14 @@ import {
   POLLUTION,
   PROCESSED_GOODS,
   RAW_GOODS,
+  score,
   UPKEEP,
   type AiLevelId,
   type AiPersonaId,
   type Good,
   type GameState,
 } from '@mule/engine';
-import { GOOD_NAME, landDecision, OPTION_IDS, PERSONAS, playGame, simSeats, situation, toOptions, type ShortOption } from '@mule/ai';
+import { GOOD_NAME, landDecision, OPTION_IDS, PERSONAS, playGame, simSeats, situation, toOptions, type Mind, type ShortOption } from '@mule/ai';
 import { alreadyRanToday, AUTH_STOPPED, claimLedger, day, dayLedgerPath, nearest, numberFlags, resolveDeps, runAsScript, table, type MainDeps, type StopReason } from './cli.js';
 import { billUnknown, CallFailed, createAnthropicSdk, fail, type HaikuReply, type HaikuSdk } from './client.js';
 import { API_KEY_ENV, apiKeyFrom } from './index.js';
@@ -75,10 +76,16 @@ export const STRATEGY_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-export interface StrategyPrompt {
-  /** The rules primer: identical for every brief, so the API can cache it. */
+/** A spike prompt: system and user text and the reply's JSON schema. */
+export interface SpikePrompt {
   system: string;
   user: string;
+  schema: object;
+}
+
+export interface StrategyPrompt extends SpikePrompt {
+  /** The rules primer: identical for every brief, so the API can cache it. */
+  system: string;
   schema: typeof STRATEGY_SCHEMA;
 }
 
@@ -107,7 +114,7 @@ const pctOf = (share: number) => `${Math.round(share * 100)}%`; // literal-ok: a
  * A stand-in for the generated manual (spec A C8): the phases as llm/prompt.ts's PRIMER gives them, how the game is
  * won as engine/src/game.ts::scoreParts computes it, and what the strategy fields mean.
  */
-const SYSTEM = `You play one seat in a colony trading game in the spirit of M.U.L.E.: a few players share a young colony and each tries to end with the highest score. You write your seat's strategy for the rest of the game, in character.
+export const STRATEGY_SYSTEM = `You play one seat in a colony trading game in the spirit of M.U.L.E.: a few players share a young colony and each tries to end with the highest score. You write your seat's strategy for the rest of the game, in character.
 
 How a month goes:
 - Planning. Everyone looks at the colony's stores, prices and plots, and decides what to aim for. This is when you write your strategy.
@@ -134,7 +141,8 @@ You also pick one of this month's land plans by its letter (planPick); the engin
 
 Reply with JSON only, in the shape the schema gives.`;
 
-function userText(b: Omit<Brief, 'prompt' | 'index'>, view: GameState, summary: string): string {
+/** The strategy prompt's user text for a seat's brief, from its view and situation summary. */
+export function strategyUserText(b: Omit<Brief, 'prompt' | 'index'>, view: GameState, summary: string): string {
   const prices = allPrices(view);
   const bound = b.corners
     ? 'Your level may aim to corner a good.'
@@ -160,6 +168,15 @@ interface Point {
   seat: string;
   month: number;
   view: GameState;
+  worth: Record<string, number>;
+}
+
+/** A brief with what it was built from: the seat's view, its mind, and every player's public worth at that moment. */
+export interface BriefPoint {
+  brief: Brief;
+  view: GameState;
+  mind: Mind;
+  worth: Record<string, number>;
 }
 
 /** The order to take `n` of `len` items evenly spread, as indexes. */
@@ -172,6 +189,11 @@ const spread = (len: number, n: number): number[] => Array.from({ length: Math.m
  * as far as they go, one per seat.
  */
 export function collectBriefs(seed: number, count: number, sonnet: number): Brief[] {
+  return collectBriefPoints(seed, count, sonnet).map((p) => p.brief);
+}
+
+/** collectBriefs, each brief with its view, mind and the players' public worth. */
+export function collectBriefPoints(seed: number, count: number, sonnet: number): BriefPoint[] {
   const personas = simSeats(LEVEL_MIX.length, 'trader', seed).map((s) => s.persona);
   const specs = LEVEL_MIX.map((level, i) => ({ level, persona: personas[i]! }));
   const points: Point[] = [];
@@ -179,7 +201,8 @@ export function collectBriefs(seed: number, count: number, sonnet: number): Brie
     onPhase: (state) => {
       // Planning's hands have run: each seat planned its month from exactly this state.
       if (state.phase !== 'planning') return;
-      for (const p of state.players) points.push({ seat: p.id, month: state.month, view: observe(state, p.id) });
+      const worth = Object.fromEntries(state.players.map((p) => [p.id, score(state, p.id)]));
+      for (const p of state.players) points.push({ seat: p.id, month: state.month, view: observe(state, p.id), worth });
     },
   });
   const minds = new Map(played.seats.map((s) => [s.id, s.mind]));
@@ -216,12 +239,13 @@ export function collectBriefs(seed: number, count: number, sonnet: number): Brie
       money: me.money,
       plans,
     };
-    return { index, ...base, prompt: { system: SYSTEM, user: userText(base, pt.view, situation(pt.view, mind)), schema: STRATEGY_SCHEMA } };
+    const brief = { index, ...base, prompt: { system: STRATEGY_SYSTEM, user: strategyUserText(base, pt.view, situation(pt.view, mind)), schema: STRATEGY_SCHEMA } };
+    return { brief, view: pt.view, mind, worth: pt.worth };
   });
 }
 
 /** Characters the model reads for a prompt: system, user and the schema's JSON. */
-export const briefChars = (p: StrategyPrompt): number => p.system.length + p.user.length + JSON.stringify(p.schema).length;
+export const briefChars = (p: SpikePrompt): number => p.system.length + p.user.length + JSON.stringify(p.schema).length;
 
 const pricesOf = (role: ModelRole) => (role === 'haiku' ? BRAIN.pricesPerMTok : BRAIN.sonnetPricesPerMTok);
 
@@ -233,17 +257,17 @@ export function usdAt(role: ModelRole, u: Usage): number {
 
 /**
  * The most a call can cost: the whole prompt at BRAIN.charsPerToken, priced at the dearer of input and cache write
- * (the first call of a model writes the cache), and a full reply of S.maxTokens at the output price.
+ * (the first call of a model writes the cache), and a full reply of maxTokens at the output price.
  */
-export function worstCaseUsd(role: ModelRole, prompt: StrategyPrompt): number {
+export function worstCaseUsd(role: ModelRole, prompt: SpikePrompt, maxTokens: number = S.maxTokens): number {
   const p = pricesOf(role);
   const tokens = Math.ceil(briefChars(prompt) / BRAIN.charsPerToken);
-  return (tokens * Math.max(p.input, p.cacheWrite) + S.maxTokens * p.output) / PER_MILLION;
+  return (tokens * Math.max(p.input, p.cacheWrite) + maxTokens * p.output) / PER_MILLION;
 }
 
-/** A flag may lower the cap, never raise it. An unusable flag gives 0, so nothing is called. */
-export function capFor(flagMaxUsd: number): number {
-  return Number.isFinite(flagMaxUsd) && flagMaxUsd > 0 ? Math.min(flagMaxUsd, S.capUsd) : 0;
+/** A flag may lower the cap below the ceiling, never raise it. An unusable flag gives 0, so nothing is called. */
+export function capFor(flagMaxUsd: number, ceilingUsd: number = S.capUsd): number {
+  return Number.isFinite(flagMaxUsd) && flagMaxUsd > 0 ? Math.min(flagMaxUsd, ceilingUsd) : 0;
 }
 
 export interface StrategyReply extends HaikuReply {
@@ -258,28 +282,39 @@ type SdkMessage = Awaited<ReturnType<HaikuSdk['messages']['create']>>;
 
 const count = (n: number | null | undefined): number => n ?? 0;
 
-/** The port over both models: adaptive thinking, the effort, the schema; one try, no retries, never past S.timeoutMs. */
-export function createStrategyComplete(sdk: HaikuSdk, now: () => number = () => performance.now()): StrategyComplete {
-  return async (role, prompt) => {
+/** What one spike call asks of the API besides the prompt. */
+export interface SpikeCallSettings {
+  model: string;
+  effort: NonNullable<NonNullable<Parameters<HaikuSdk['messages']['create']>[0]['output_config']>['effort']>;
+  maxTokens: number;
+  timeoutMs: number;
+}
+
+export type SpikeCall = (prompt: SpikePrompt, settings: SpikeCallSettings) => Promise<StrategyReply>;
+
+/** The port over both models: adaptive thinking, the effort, the schema; one try, no retries, never past timeoutMs. */
+export function createSpikeCall(sdk: HaikuSdk, now: () => number = () => performance.now()): SpikeCall {
+  return async (prompt, settings) => {
+    const { timeoutMs } = settings;
     const start = now();
     // The SDK's timeout stops at the response headers; this abort bounds the body read too.
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), S.timeoutMs);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     let res: SdkMessage;
     try {
       res = await sdk.messages.create(
         {
-          model: S.models[role],
-          max_tokens: S.maxTokens,
+          model: settings.model,
+          max_tokens: settings.maxTokens,
           thinking: { type: 'adaptive' },
           system: [{ type: 'text', text: prompt.system, cache_control: { type: 'ephemeral' } }],
           messages: [{ role: 'user', content: prompt.user }],
-          output_config: { effort: S.effort, format: { type: 'json_schema', schema: JSON.parse(JSON.stringify(prompt.schema)) } },
+          output_config: { effort: settings.effort, format: { type: 'json_schema', schema: JSON.parse(JSON.stringify(prompt.schema)) } },
         },
-        { timeout: S.timeoutMs, maxRetries: 0, signal: controller.signal },
+        { timeout: timeoutMs, maxRetries: 0, signal: controller.signal },
       );
     } catch (e) {
-      throw fail(e, now() - start, S.timeoutMs, controller.signal.aborted);
+      throw fail(e, now() - start, timeoutMs, controller.signal.aborted);
     } finally {
       clearTimeout(timer);
     }
@@ -293,6 +328,12 @@ export function createStrategyComplete(sdk: HaikuSdk, now: () => number = () => 
       usage: { input: count(u.input_tokens), cached_read: count(u.cache_read_input_tokens), cache_write: count(u.cache_creation_input_tokens), output: count(u.output_tokens) },
     };
   };
+}
+
+/** The strategy port: createSpikeCall at BRAIN.strategySpike's model, effort, reply cap and timeout. */
+export function createStrategyComplete(sdk: HaikuSdk, now: () => number = () => performance.now()): StrategyComplete {
+  const call = createSpikeCall(sdk, now);
+  return (role, prompt) => call(prompt, { model: S.models[role], effort: S.effort, maxTokens: S.maxTokens, timeoutMs: S.timeoutMs });
 }
 
 export interface Verdict {

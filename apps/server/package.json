@@ -8,6 +8,7 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "brain:spike": "tsx src/brain/spike.ts",
+    "brain:social-spike": "tsx src/brain/social-spike.ts",
     "brain:strategy-spike": "tsx src/brain/strategy-spike.ts",
     "brain:trial": "tsx src/brain/trial.ts",
     "replay": "tsx src/replay-cli.ts",
