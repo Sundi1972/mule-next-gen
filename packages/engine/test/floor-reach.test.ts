@@ -401,12 +401,12 @@ const TABLE: Row[] = [
     press: { game: (_, now) => expect(tileOf(now, 2, 1).outfit).toBe('food') },
   },
   {
-    row: '10 SWAP for the same outfit: nothing gained, said so',
+    row: '10 SWAP for the same outfit: nothing gained, said so, and the plot keeps its run',
     at: () => onTile(7, 4),
-    game: (s) => void (a(s).carriedMule = 'smithore'),
+    game: (s) => void ((tileOf(s, 7, 4).runMonths = 4), (a(s).carriedMule = 'smithore')),
     reach: () => ({ kind: 'install', enabled: true, good: 'smithore', plot: { x: 7, y: 4 }, fromShore: false, replaces: 'smithore' }),
     words: () => words('SWAP', 'same outfit, nothing gained'),
-    press: { game: (_, now) => expect(tileOf(now, 7, 4).outfit).toBe('smithore') },
+    press: { game: (was, now) => expect([tileOf(now, 7, 4).outfit, tileOf(now, 7, 4).runMonths]).toEqual(['smithore', tileOf(was, 7, 4).runMonths]) },
   },
   {
     row: '10 SWAP for the same outfit, from the shore: the shore first, then nothing gained',
