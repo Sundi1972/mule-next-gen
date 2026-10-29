@@ -223,12 +223,30 @@ describe('development', () => {
   it('quotes the pub payout without changing the game, and pays exactly that', () => {
     const state = newGame();
     toPhase(state, 'development');
-    for (const [id, left] of [['p0', 50], ['p1', 5], ['p2', 0], ['p3', 999]] as const) {
-      const money = state.players.find((p) => p.id === id)!.money;
+    // 33 of 50 seconds pays a fraction, so a quote that rounds differently from the pay shows.
+    for (const [id, left] of [['p0', 50], ['p1', 5], ['p2', 0], ['p3', 33]] as const) {
+      const before = structuredClone(state);
       const quote = pubPayoutFor(state, id, left);
-      expect(state.players.find((p) => p.id === id)!.money, `${id}: a quote pays nothing`).toBe(money);
+      expect(state, `${id}: a quote changes nothing`).toEqual(before);
       expect(visitPub(state, id, left), `${id}: the pub pays the quote`).toBe(quote);
     }
+  });
+
+  it('pays the pub by the formula: base, plus the month-scaled part by the share of time left', () => {
+    const state = newGame();
+    toPhase(state, 'development');
+    const { base, start, perMonth } = DEVELOPMENT.pub;
+    const devSeconds = state.players.find((p) => p.id === 'p0')!.devSeconds;
+    expect(visitPub(state, 'p0', 33)).toBe(Math.round(base + (start + state.month * perMonth) * (33 / devSeconds)));
+  });
+
+  it('gives no pub quote to a player who has been to the pub, or outside development', () => {
+    const state = newGame();
+    toPhase(state, 'development');
+    visitPub(state, 'p0', 10);
+    expect(() => pubPayoutFor(state, 'p0', 10), 'after the pub').toThrow(RuleError);
+    toPhase(state, 'production');
+    expect(() => pubPayoutFor(state, 'p1', 10), 'outside development').toThrow(RuleError);
   });
 
   it('builds a green belt as a cheap outfit', () => {
