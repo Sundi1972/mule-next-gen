@@ -624,9 +624,11 @@ describe('the roller', () => {
         ['wildfire', 'p2', 'p2'],
         ['bumperHarvest', 'p3', 'p3'],
       ]);
-      // The spread: the swarm crosses onto p3's joined Food, the fire stays on its owner's.
+      // The spread: the swarm and the fire stay on their owner's Food, so p3's joined Food plot is spared (the catalogue:
+      // "One player's Food plots").
       const hit = (key: EventKey) => fired.find((e) => e.key === key)!.plots.map((p) => state.tiles[p.index]!);
-      expect(hit('pestSwarm')).toContain(joined);
+      expect(hit('pestSwarm')).toEqual([p2Food]);
+      expect(hit('pestSwarm')).not.toContain(joined);
       expect(hit('wildfire')).toEqual([p2Food]);
       // The start is drawn among the roller's own plots: over 20 seeds p3's bumper harvest starts on both of p3's.
       const starts = new Set(

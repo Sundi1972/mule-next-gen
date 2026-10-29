@@ -91,7 +91,7 @@ export function buildEvent(state: GameState, key: EventKey, rng: Rng, player?: s
     origin = { x: start.x, y: start.y };
     hit =
       key === 'pestSwarm'
-        ? spread(state, start, (t) => t.outfit === 'food' && t.owner !== null, EVENTS.pestSwarm.maxPlots)
+        ? spread(state, start, (t) => t.outfit === 'food' && t.owner === start.owner, EVENTS.pestSwarm.maxPlots)
         : key === 'wildfire'
           ? spread(state, start, (t) => t.outfit === 'food' && t.owner === start.owner, Infinity)
           : [start];
