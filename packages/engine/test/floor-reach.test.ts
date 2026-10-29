@@ -324,7 +324,7 @@ const TABLE: Row[] = [
   {
     row: "10, a lake plot just beyond the shore's reach: not offered",
     at: () => ({ space: 'map', x: 5 - DEV_STEER.shoreReachTiles - 0.01, y: 1.5 }),
-    game: (s) => void (a(s).carriedMule = 'water'),
+    game: (s) => void Object.assign(a(s), { carriedMule: 'water', analysed: [1 * s.width + 4] }),
     reach: () => ({ kind: 'none', enabled: false, hint: 'plot' }),
     words: () => words('TO YOUR PLOT', null, false),
     press: 'nothing',
@@ -379,6 +379,19 @@ const TABLE: Row[] = [
     },
   },
   {
+    row: '11 ANALYSE: on a free plot, leading a MULE: scouting',
+    at: () => onTile(6, 0),
+    game: (s) => void (a(s).carriedMule = 'food'),
+    reach: () => ({ kind: 'analyse', enabled: true, plot: { x: 6, y: 0 } }),
+    words: () => words('ANALYSE'),
+    press: {
+      game: (_, now) => {
+        expect(hasAnalysed(a(now), now, tileOf(now, 6, 0))).toBe(true);
+        expect([tileOf(now, 6, 0).owner, a(now).carriedMule]).toEqual([null, 'food']);
+      },
+    },
+  },
+  {
     row: '11 over 12: on an own plot with a MULE, Alloy held, no MULE, not analysed',
     at: () => onTile(7, 4),
     game: (s) => void (a(s).stock.alloy = DEVELOPMENT.filterAlloy),
@@ -400,6 +413,19 @@ const TABLE: Row[] = [
     press: {
       game: (was, now) => {
         expect(tileOf(now, 7, 4).filter).toBe(true);
+        expect(a(was).stock.alloy - a(now).stock.alloy).toBe(DEVELOPMENT.filterAlloy);
+      },
+    },
+  },
+  {
+    row: '12 FIT FILTER: on an own plot with no MULE, Alloy held, analysed',
+    at: () => onTile(2, 4),
+    game: (s) => void Object.assign(a(s), { analysed: [4 * s.width + 2], stock: { ...a(s).stock, alloy: DEVELOPMENT.filterAlloy } }),
+    reach: () => ({ kind: 'filter', enabled: true, plot: { x: 2, y: 4 }, alloy: DEVELOPMENT.filterAlloy }),
+    words: () => words('FIT FILTER', `${DEVELOPMENT.filterAlloy} Alloy`),
+    press: {
+      game: (was, now) => {
+        expect([tileOf(now, 2, 4).filter, tileOf(now, 2, 4).outfit]).toEqual([true, null]);
         expect(a(was).stock.alloy - a(now).stock.alloy).toBe(DEVELOPMENT.filterAlloy);
       },
     },
@@ -446,8 +472,9 @@ const TABLE: Row[] = [
     },
   },
   {
-    row: '14 none: on the map, nothing in reach',
+    row: '14 none: on the map on a plot already analysed, nothing in reach',
     at: () => onTile(0, 0),
+    game: (s) => void (a(s).analysed = [0]),
     reach: () => ({ kind: 'none', enabled: false, hint: 'store' }),
     words: () => words('TO THE STORE', null, false),
     press: 'nothing',
