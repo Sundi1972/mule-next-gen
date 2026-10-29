@@ -259,7 +259,9 @@ today        one news line in every stage: "Lena continued without Kai".
              anchors: apps/server/src/mule-game.ts::MuleGame continuePlanning
              verified_by: read
 tomorrow     MUST say "Lena opened the ballot without Kai" in announce, "Lena closed the ballot
-             without Kai" in the ballot, and "Lena continued without Kai" in planning proper.
+             without Kai" in the ballot, and "Lena continued without Kai" in planning proper. In an
+             announce with no contested office there is no ballot to open, so it says "continued"
+             (PM ruling 2026-10-29).
 seam         mule-game.ts (WS3 named edit)
 mechanism    in_place
 pin          T-AC-64's server rows, restated with the new words
@@ -360,7 +362,12 @@ RULE-64 · Who sees what of the election          (replaces RULE-9's election ro
   a ballot                                        its voter only; never anyone else
   who is Done in announce / ballot                every screen ("waiting for Leo")
   an office's totals                              every screen, from that office's bars beat (RULE-62)
-  an office's winner and how                      every screen, from that office's winner beat
+  an office's winner and how                      every screen, from that office's winner beat; in a
+                                                  tie (baron | land | lot), from its tie beat, where
+                                                  the mock names the rule that broke it (AM-21)
+  the news line naming the winner                 at the winner beat, tie or not
+  the show's total length                         every screen from the ballot's close; it shows a tie
+                                                  is coming 2.3 s early (accepted, AM-21)
   the Governor's promise for the term (C68)       every screen, while the term lasts
   my tax paid and my reputation (E-5)             my phone only
 ```
@@ -413,7 +420,7 @@ Code-only; games live in server memory.
 | T-AC-67 (serves B-AC-60) | from month 4, announce refuses a run and shows no Run button | C60, C66 | engine; render |
 | T-AC-68 (serves B-AC-61) | picking alone is not Done; Cast my vote is; an AI-only ballot closes by itself | C61, C63 | engine; ai |
 | T-AC-69 (serves B-AC-62) | each office's beats follow RULE-62's formula from the tally; totals and winner reach the view only at their beats | C62, C64 | engine; server views |
-| T-AC-70 (serves B-AC-63) | the Governor's promise holds for the term on every screen, with kept or broken | C68 | engine; server view; render |
+| T-AC-70 (serves B-AC-63) | the Governor's promise holds for the term on every phone and the Governor's desk, with kept or broken (the TV: follow-up, AM-21 note) | C68 | engine; server view; render |
 | T-AC-71 (serves B-AC-61) | the host's Continue news names the stage it moved past | C69 | server |
 
 negative cases: a run in development (RULE-60 row 1); a run while the ballot is open (row 2);
@@ -449,12 +456,17 @@ did       Follow the mock: (a) Cast my vote is the ballot's Done, picking alone 
           run (no earlier planning; composed from the approved RunForOffice block, WS6 reviews);
           (c) one show clock, each office's length from its tally (RULE-62's formula, constants
           named in POLITICS.ceremony); E-7 the promise holds for the term; E-10 the Continue's news
-          names its stage; E-5 my tax paid and reputation on my phone. Ties read "decided by lot"
+          names its stage; E-5 my tax paid and reputation on my phone. In a tie the winner and rule
+          reach the views at the tie beat, as the mock stamps them (RULE-64); the news stays at the
+          winner beat. Ties read "decided by lot"
           (AM-17; WS6 fixed the mock in 23697e5b).
 because   P-1: Heiko approved the mock: "Yes, all as recommended"; "all ux audit changes are approved"
 goal      P-1 — still met; UBER-AC-2 keeps month 1's run (B-AC-63)
 folded    RULE-60, RULE-61, RULE-62, RULE-63, RULE-64, C63, C66, C68, C69, §3, T-AC-66..71; `pnpm sim` before and
           after (E-7 and (b) change the AI's field), WS1 reviews
+note      PM 2026-10-29: T-AC-70 is proven on the phones and the Governor's desk only. No mock draws
+          the promise on the TV's planning screen (WS4's TableApp); WS6 designs a TV state, and it lands
+          as its own small PR with a one-line WS4 named edit. PR-3 does not wait for it.
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`

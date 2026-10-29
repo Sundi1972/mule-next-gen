@@ -4,20 +4,24 @@ import { createContext, useContext, useState } from 'react';
 import { PHASE_NAME, secondsUntil } from '../../game/derive';
 import { useServerNow } from '../../net/react';
 import { usePhoneGame } from '../game';
-import { PhoneShell, useWide, type Now } from '../Shell';
+import { NowCard, PhoneShell, useWide, type Now } from '../Shell';
 import { needRows, planNow } from './needs';
 import { connectedIn, readyNowIn, stillPlanning } from './ready';
 import { ReadyBar, ReadyCount } from './ReadyBar';
-import { drawnSlots, type AgendaSlot, type DeskSlot, type HubSeat, type HubSlots, type MapToolSlot } from './slots';
+import { drawnSlots, firstGiven, goTo, settle, type AgendaSlot, type DeskSlot, type HubPlace, type HubSeat, type HubSlots, type MapToolSlot, type StageSlot } from './slots';
 
 /** The hub's open desk and map tool, for any slot's components to read and change. */
 export interface HubNav {
   desk: string;
   tool: string;
-  /** Opens a desk, and the map tool it names. */
-  openDesk(id: string): void;
+  /** What the open desk was opened to show, from a door's `focus`; null once taken, or after a tab or tool. */
+  focus: string | null;
+  /** Opens a desk, with a focus for it, and the map tool it names. */
+  openDesk(id: string, focus?: string): void;
   /** Switches the map's tool, and opens the desk it names. */
   pickTool(id: string): void;
+  /** The desk has shown its focus: a later door with the same focus shows it again. */
+  takeFocus(): void;
 }
 
 const Nav = createContext<HubNav | null>(null);
@@ -40,68 +44,74 @@ export function Hub({ slots }: { slots: HubSlots }) {
   const serverNow = useServerNow();
   const seat: HubSeat = { view, me, self };
   const drawn = drawnSlots(slots, seat);
-  const [deskId, setDesk] = useState(drawn.desks[0]?.id ?? '');
-  const [toolId, setTool] = useState(drawn.tools[0]?.id ?? '');
+  const [held, setPlace] = useState<HubPlace>(() => settle({ desk: drawn.desks[0]?.id ?? '', tool: drawn.tools[0]?.id ?? '', focus: null, first: null }, drawn, seat));
+  const place = settle(held, drawn, seat);
+  if (place !== held) setPlace(place);
   // A slot that stops showing (an office handed on) gives way to the first one drawn.
-  const desk = drawn.desks.find((d) => d.id === deskId) ?? drawn.desks[0];
-  const tool = drawn.tools.find((t) => t.id === toolId) ?? drawn.tools[0];
+  const desk = drawn.desks.find((d) => d.id === place.desk) ?? drawn.desks[0];
+  const tool = drawn.tools.find((t) => t.id === place.tool) ?? drawn.tools[0];
+  const go = (to: AgendaSlot['opens']) => setPlace((p) => goTo(p, to, drawn));
   const nav: HubNav = {
     desk: desk?.id ?? '',
     tool: tool?.id ?? '',
-    openDesk: (id) => {
-      setDesk(id);
-      const opens = drawn.desks.find((d) => d.id === id)?.tool;
-      if (opens) setTool(opens);
-    },
-    pickTool: (id) => {
-      setTool(id);
-      const opens = drawn.tools.find((t) => t.id === id)?.desk;
-      if (opens) setDesk(opens);
-    },
+    focus: place.focus,
+    openDesk: (id, focus) => go(focus === undefined ? { desk: id } : { desk: id, focus }),
+    pickTool: (id) => go({ tool: id }),
+    takeFocus: () => setPlace((p) => ({ ...p, focus: null })),
   };
   const others = stillPlanning(view.players, connectedIn(table.seats)).filter((s) => s.id !== self.id);
   const now: Now =
     readyNowIn(view, self.ready, others, table.hostId === self.id) ??
-    drawn.nows.reduce<Now | null>((n, give) => n ?? give(seat), null) ??
+    firstGiven(drawn.nows, seat) ??
     planNow(needRows(me.monthNeeds, me.stock, view.tiles.filter((t) => t.owner === me.id)));
+  const stage = drawn.stage?.[0];
+  const bar = firstGiven(drawn.readyWords ?? [], seat);
+  const fold = !stage && place.first !== null;
   const Panel = tool?.Panel;
-  const Action = tool?.Action;
+  // The tools are off the stage while a situation holds it, so their action leaves the footer.
+  const Action = stage ? undefined : tool?.Action;
   const Body = desk?.Body;
+  const StageRail = stage?.Rail;
 
   return (
     <Nav.Provider value={nav}>
       <PhoneShell
-        phase={PHASE_NAME.planning}
+        phase={stage?.phase?.(seat) ?? PHASE_NAME.planning}
         seconds={secondsUntil(view.phaseEndsAt, serverNow)}
-        status={<ReadyCount players={view.players} />}
-        now={now}
+        status={<ReadyCount players={view.players} label={bar?.label} />}
+        now={fold ? undefined : now}
         fill
         rail={
-          <>
-            {Panel && <Panel />}
-            <DeskTabs desks={drawn.desks} active={nav.desk} onPick={nav.openDesk} />
-            {Body && (
-              <div className="flex flex-col gap-2.5 @min-[1100px]/shell:gap-4" data-testid={`desk-body-${nav.desk}`}>
-                <Body />
-              </div>
-            )}
-          </>
+          stage ? (
+            StageRail && <StageRail />
+          ) : (
+            <>
+              {fold && <FoldingNowCard key={now.title} now={now} />}
+              {Panel && <Panel />}
+              <DeskTabs desks={drawn.desks} active={nav.desk} first={place.first} onPick={nav.openDesk} />
+              {Body && (
+                <div className="flex flex-col gap-2.5 @min-[1100px]/shell:gap-4" data-testid={`desk-body-${nav.desk}`}>
+                  <Body />
+                </div>
+              )}
+            </>
+          )
         }
         footer={
           <>
             {Action && <Action />}
-            <ReadyBar />
+            <ReadyBar words={bar ?? undefined} canReady={bar?.canReady} />
           </>
         }
       >
-        <HubStage drawn={drawn} seat={seat} tool={tool} nav={nav} />
+        {stage ? <SituationStage stage={stage} tool={tool} /> : <HubStage drawn={drawn} seat={seat} tool={tool} nav={nav} go={go} />}
       </PhoneShell>
     </Nav.Provider>
   );
 }
 
 /** The stage: banners, This month, the map's tools, the map, and from 1100 px what sits under it. */
-function HubStage({ drawn, seat, tool, nav }: { drawn: HubSlots; seat: HubSeat; tool: MapToolSlot | undefined; nav: HubNav }) {
+function HubStage({ drawn, seat, tool, nav, go }: { drawn: HubSlots; seat: HubSeat; tool: MapToolSlot | undefined; nav: HubNav; go(to: AgendaSlot['opens']): void }) {
   const wide = useWide();
   const ToolMap = tool?.Map;
   return (
@@ -109,7 +119,7 @@ function HubStage({ drawn, seat, tool, nav }: { drawn: HubSlots; seat: HubSeat; 
       {drawn.banners.map(({ id, Body }) => (
         <Body key={id} />
       ))}
-      <AgendaRow items={drawn.agenda} seat={seat} note={shipNote(seat.view)} onOpen={(opens) => ('desk' in opens ? nav.openDesk(opens.desk) : nav.pickTool(opens.tool))} />
+      <AgendaRow items={drawn.agenda} seat={seat} note={shipNote(seat.view)} onOpen={go} />
       <MapTools tools={drawn.tools} active={nav.tool} onPick={nav.pickTool} hint={wide && tool ? tool.hint(seat) : null} />
       <div className="flex min-h-0 flex-1 flex-col" data-testid="hub-map">
         {ToolMap && <ToolMap />}
@@ -123,9 +133,54 @@ function HubStage({ drawn, seat, tool, nav }: { drawn: HubSlots; seat: HubSeat; 
   );
 }
 
-function Glyph({ d, size = 18 }: { d: string; size?: number }) {
+/** A situation on the stage, such as election day; from 1100 px the open tool's map stays under it. */
+function SituationStage({ stage: { Body }, tool }: { stage: StageSlot; tool: MapToolSlot | undefined }) {
+  const ToolMap = useWide() ? tool?.Map : undefined;
   return (
-    <svg aria-hidden viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto @min-[1100px]/shell:gap-4 @min-[1100px]/shell:overflow-visible" data-testid="hub-situation">
+      <Body />
+      {ToolMap && (
+        <div className="flex min-h-0 flex-1 flex-col" data-testid="hub-map">
+          <ToolMap />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Now folded to its title, one tap from the whole card. A new title remounts it folded, showing the new title. */
+function FoldingNowCard({ now }: { now: Now }) {
+  const [open, setOpen] = useState(false);
+  if (open)
+    return (
+      <div className="relative">
+        <NowCard now={now} />
+        <button type="button" onClick={() => setOpen(false)} aria-expanded aria-label="Fold the Now card" className="absolute right-1.5 top-1.5 grid size-8 place-items-center rounded-chip text-holo hover:bg-holo-soft" data-testid="now-fold">
+          <Glyph d="M6 15l6-6 6 6" size={14} />
+        </button>
+      </div>
+    );
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      aria-expanded={false}
+      className={cx('flex w-full items-center gap-2 rounded-panel border-2 px-2.5 py-1.5 text-left @min-[1100px]/shell:px-4 @min-[1100px]/shell:py-2.5', now.warn ? 'border-warn bg-warn/10' : 'border-holo bg-holo-soft')}
+      data-testid="now"
+    >
+      <span className="label-caps shrink-0 text-[10px]! @min-[1100px]/shell:text-xs!">Now</span>
+      <span className="min-w-0 flex-1 font-display text-sm font-semibold leading-tight @min-[1100px]/shell:text-lg" data-testid="now-title">
+        {now.title}
+      </span>
+      <Glyph d="M6 9l6 6 6-6" size={14} />
+      <span className="sr-only">Tap to read it again</span>
+    </button>
+  );
+}
+
+function Glyph({ d, size = 18, className }: { d: string; size?: number; className?: string }) {
+  return (
+    <svg aria-hidden viewBox="0 0 24 24" width={size} height={size} className={className} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
       <path d={d} />
     </svg>
   );
@@ -143,10 +198,10 @@ export function Lock({ size = 10 }: { size?: number }) {
   );
 }
 
-/** The desks' tabs, at most four to a row. */
-export function DeskTabs({ desks, active, onPick }: { desks: DeskSlot[]; active: string; onPick(id: string): void }) {
+/** The desks' tabs, on one row. `first` is the desk that asked to come first: amber-edged while another is open. */
+export function DeskTabs({ desks, active, first = null, onPick }: { desks: DeskSlot[]; active: string; first?: string | null; onPick(id: string): void }) {
   return (
-    <div role="tablist" aria-label="Desks" className="grid gap-1" style={{ gridTemplateColumns: `repeat(${Math.min(4, Math.max(1, desks.length))}, minmax(0, 1fr))` }} data-testid="desks">
+    <div role="tablist" aria-label="Desks" className="flex gap-1" data-testid="desks">
       {desks.map(({ id, label, icon, locked, Badge }) => (
         <button
           key={id}
@@ -155,12 +210,13 @@ export function DeskTabs({ desks, active, onPick }: { desks: DeskSlot[]; active:
           aria-selected={active === id}
           onClick={() => onPick(id)}
           className={cx(
-            'relative flex flex-col items-center gap-0.5 rounded-control border px-0.5 py-1 text-[10px] font-semibold @min-[1100px]/shell:py-2 @min-[1100px]/shell:text-xs',
+            'relative flex min-w-8 flex-auto flex-col items-center whitespace-nowrap rounded-control border px-0.5 py-0.5 text-[10px] font-semibold leading-tight @min-[1100px]/shell:gap-0.5 @min-[1100px]/shell:py-2 @min-[1100px]/shell:text-xs',
             active === id ? 'border-holo bg-holo-soft text-holo' : 'border-holo-line text-ink-2',
+            first === id && active !== id && 'border-warn/60',
           )}
           data-testid={`desk-${id}`}
         >
-          <Glyph d={icon} size={16} />
+          <Glyph d={icon} size={14} className="@min-[1100px]/shell:size-4" />
           {label}
           {locked && (
             <span className="absolute left-1 top-1">
