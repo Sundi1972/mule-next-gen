@@ -1,4 +1,4 @@
-import type { AuctionSide, Good, Ground, Outfit, Phase, SkipReason, Species, StatusRow, Stock, Terrain, TileTrait } from '@mule/engine';
+import type { AuctionSide, CanRun, CeremonyBeat, DevPlace, Election, EventKey, EventKind, EventWeight, Good, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -24,8 +24,27 @@ export type MuleIntent =
   | { type: 'pub' }
   /** Auction: buy, sell or pass on the good that is up. During the walk a switch jumps you to the new side's start edge. */
   | { type: 'declare'; side: AuctionSide }
-  /** Auction, during the walk: hold up, hold down, or let go. */
-  | { type: 'walk'; dir: 'up' | 'down' | 'stop' };
+  /** Auction, during the walk: hold up, hold down, or let go. The land auction's walk uses it too. */
+  | { type: 'walk'; dir: 'up' | 'down' | 'stop' }
+  /** Planning: put a plot, or the MULE on one, up for the land auction, with a minimum and what happens if nobody bids it. */
+  | { type: 'list'; item: { kind: 'plot' | 'mule'; x: number; y: number }; minimum: number; unsold: 'store' | 'keep' }
+  /** Planning: take one of your listings back. */
+  | { type: 'unlist'; id: string }
+  /** Planning, until the election's ballot opens: run for an office (moving any candidacy for the other one); null withdraws. A Governor run needs a promise (RULE-10). */
+  | { type: 'run'; office: Office | null; promise?: TaxPromise }
+  /** Election, ballot: cast or change your secret vote for a contested office; null clears it. */
+  | { type: 'vote'; office: Office; candidate: string | null }
+  /** Planning, after the election: the Governor sets the sales tax in whole percent. */
+  | { type: 'setTax'; percent: number }
+  /** Planning: the host ends planning with players not yet Ready; in the election's announce or ballot, it goes on without players not Done. */
+  | { type: 'continue' }
+  /**
+   * Development: the stick's direction, sent on change. Each component is in [-1, 1] in steps of 1/8, and the vector's
+   * length is at most 1. `tick` is the development tick the phone applied it at, when the phone predicts.
+   */
+  | { type: 'steer'; x: number; y: number; tick?: number }
+  /** Development: the one button; it does what the player's `reach` says. */
+  | { type: 'act' };
 
 export const EMOTES = ['Deal?', 'Nice!', 'Traitor!', 'Ha!', 'Help!'] as const;
 export type Emote = (typeof EMOTES)[number];
@@ -44,6 +63,8 @@ export interface TileView {
   ground?: Ground;
   /** Only for the plot's owner or a player who analysed it: its hazard traits. */
   traits?: TileTrait[];
+  /** The plot's special field, while it lasts. Public: every viewer, phone and TV, sees it; only the ground is private. */
+  special?: SpecialField;
 }
 
 export interface PlayerView {
@@ -51,16 +72,119 @@ export interface PlayerView {
   name: string;
   isAi: boolean;
   color: string;
+  /** The player's colour index, the one their seat chose in the lobby. */
+  slot: number;
   species: Species;
   money: number;
+  /**
+   * Worth: the player's score if the game ended now (engine scoreParts().total), in credits, in any phase.
+   * Public in every view, the TV's too. Only the total: its parts go to the player's own `me.worthParts` and nowhere else.
+   */
+  worth: number;
+  /**
+   * The `worth` this player's row showed at last month's end (upkeep), recorded then and never recomputed, so the
+   * change since last month is the number shown now against the number shown then. Null in month 1.
+   */
+  lastWorth: number | null;
+  /**
+   * While the air is in Collapse, this player's Worth before the cut (scoreParts' total plus its cut: money + goods +
+   * land + muleValue + office, rounded as scoreParts rounds); null outside Collapse. Public like `worth`, a total only.
+   */
+  worthBeforeCut: number | null;
   plots: number;
   ready: boolean;
   /** True once they went to the pub this development phase. */
   doneDeveloping: boolean;
+  /** Where their colonist is in development, public like every place; null outside development. */
+  colonist: ColonistView | null;
+  /**
+   * How hunger and sickness slow this colonist: live during development, then kept as the month's through its end
+   * (upkeep, and game over after the last month), where the month end names who went hungry. Null otherwise. Public:
+   * every screen shows it.
+   */
+  condition: {
+    /** 0..1 of the month's Food held (engine foodShare). */
+    foodShare: number;
+    /** The month's Food need of this player's household (engine needsOf), so a screen can say "ate n of m". */
+    foodNeed: number;
+    sick: boolean;
+    /** Why it is sick (engine playerEventReason): the air, its own pollution, or plain chance; null when well. */
+    sickBecause: 'air' | 'pollution' | 'chance' | null;
+    /** hunger × sickness, 1 is normal; species is not in it (engine pace() adds it). */
+    conditionPace: number;
+  } | null;
+}
+
+/** A colonist in development. Times are the server's epoch ms, like phaseEndsAt. */
+export interface ColonistView {
+  /** Where it stands, or where it is walking to. */
+  at: DevPlace;
+  walk: { from: DevPlace; startedAt: number; arrivesAt: number } | null;
+  /** While it stands on a plot for a geo analysis: when the analysis is done. */
+  assayUntil: number | null;
+  /**
+   * Steered development: where it stands, absent until the server steers. In map tiles when `space` is 'map', in the
+   * hall plan's units (`HALL.w` × `HALL.h`) when it is 'hall'.
+   */
+  x?: number;
+  y?: number;
+  space?: ColonistSpace;
+  facing?: 'left' | 'right';
+  moving?: boolean;
+  /** The MULE on its lead, outfitted or not, and where it trots. */
+  lead?: ColonistLead | null;
+  /** How fast it walks, 1 is normal. */
+  pace?: number;
+  /** Wolf pelts it carries to sell at the store. */
+  pelts?: number;
+  /** The moment it is in, if any. */
+  encounter?: 'choose' | 'chase' | 'fight' | null;
+  /** true while the colonist limps from a wolf bite; absent means not bitten */
+  bitten?: boolean;
+}
+
+/** Out on the map, or inside the store's hall. */
+export type ColonistSpace = 'map' | 'hall';
+
+/** The MULE on its lead. `x` and `y` are in the same units as its colonist's: map tiles, or hall-plan units in the hall. */
+export interface ColonistLead {
+  good: Outfit | null;
+  x: number;
+  y: number;
+}
+
+/** What the one button does where the player stands: its words, a detail such as a price, and whether it works. */
+export interface ReachView {
+  verb: string;
+  detail: string | null;
+  enabled: boolean;
+}
+
+/** One development tick's positions for every screen, sent beside the full view. */
+export interface DevFrame {
+  tick: number;
+  /** ms since development started, at this tick. */
+  at: number;
+  /** Each colonist's position: map tiles when `space` is 'map', the hall plan's units (`HALL.w` × `HALL.h`) when 'hall'. */
+  colonists: {
+    id: string;
+    x: number;
+    y: number;
+    space: ColonistSpace;
+    facing: 'left' | 'right';
+    moving: boolean;
+    lead: ColonistLead | null;
+  }[];
+  /** The moments' lines everyone sees this tick. */
+  beats: string[];
 }
 
 export interface MyView {
   id: string;
+  /** Steered development: what this player's button does now; absent until the server steers. */
+  reach?: ReachView;
+  /** Steered development: the moments' lines for this player. */
+  banners?: string[];
   species: Species;
   stock: Stock;
   carriedMule: Outfit | 'empty' | null;
@@ -69,9 +193,11 @@ export interface MyView {
   sick: boolean;
   /** Food and Water this player's household and crew need each month. */
   needs: { food: number; water: number };
-  /** Epoch ms when this player's development time runs out, during development. */
+  /** What this player needs of each good this month: the engine's monthNeeds. */
+  monthNeeds: Stock;
+  /** Epoch ms when the one development clock runs out, the same for every seat; null outside development. */
   devEndsAt: number | null;
-  /** Seconds of development time this player got this month, before analyses. */
+  /** Seconds of development time this player got this month. */
   devSeconds: number;
   /** What this player's plots made in the latest production, or null before the first harvest. */
   produced: Stock | null;
@@ -80,6 +206,86 @@ export interface MyView {
   outfitCosts: Record<Outfit, number>;
   /** Free plots chosen for the geo drone this month. */
   droneOrder: { x: number; y: number }[];
+  /** This player's own side of the election; null when the game plays without politics. */
+  politics: MyPoliticsView | null;
+  /** True once this player has installed a MULE in this development turn, and until their next one starts. */
+  installedThisTurn: boolean;
+  /** This player's own Worth line by line, the Collapse cut included. Private: no other view carries anyone's parts. */
+  worthParts: ScorePartsView;
+}
+
+/** Only on the owner's phone: their candidacy, their secret ballot, whether they may run now for each elected office, and what weighs their vote. */
+export interface MyPoliticsView {
+  running: Office | null;
+  ballot: Partial<Record<Office, string>>;
+  canRun: Partial<Record<Office, CanRun>>;
+  /** Sales tax this player has paid over the game, in credits. */
+  paid: number;
+  reputation: number;
+}
+
+/** One office's result as far as the ceremony has shown it: the totals from its bars beat, the winner and how from its winner beat. */
+export type OfficeReveal = Pick<OfficeResult, 'tallies'> & Partial<Pick<OfficeResult, 'winner' | 'how'>>;
+
+/** The ceremony's one show clock, in game seconds, the same on every screen. */
+export interface CeremonyView {
+  seconds: number;
+  /** The whole show, every office and the summary after the last. */
+  total: number;
+  /**
+   * Per office the show has reached, the latest beat it has reached and when that beat began, in show seconds. An
+   * office is absent until its title beat; nothing later than the show clock is sent.
+   */
+  reached: Partial<Record<Office, { beat: CeremonyBeat; at: number }>>;
+}
+
+/** This month's election as every screen sees it: who runs and who has voted, never for whom. */
+export interface ElectionView {
+  stage: Election['stage'];
+  /** The show clock and how far each office has got; null outside the ceremony. */
+  ceremony: CeremonyView | null;
+  /** Per elected office; empty until the ballot opens: until then the candidacy is Politics'. */
+  candidates: Partial<Record<Office, string[]>>;
+  /** Each Governor candidate's tax promise, public like the candidacy. */
+  promises: Record<string, TaxPromise>;
+  /** Players with a ballot in, never for whom. */
+  voted: string[];
+  /** Players who are Done in announce or the ballot: they pressed Ready, or Cast my vote. Picking alone is not Done. */
+  done: string[];
+  /** Players announce or the ballot still waits for; empty from the ceremony on. */
+  waitingFor: string[];
+  /** Each office's result as far as the ceremony has reached it, every screen at the same beat. */
+  result: Partial<Record<Office, OfficeReveal>>;
+}
+
+/** The colony's offices, tax and vote weights, public on every screen. */
+export interface PoliticsView {
+  governor: string | null;
+  sheriff: string | null;
+  /** The months the sitting officeholders serve, or null before anyone holds office. */
+  term: [number, number] | null;
+  /** The next election's month, or null when the game ends first. */
+  next: number | null;
+  /** The Land Baron, fixed when planning opened. */
+  baron: string | null;
+  /** The sales tax in whole percent: now, when the month's planning opened, and the range the Governor may set. */
+  tax: { percent: number; start: number; low: number; high: number };
+  /** The colony fund the offices are paid from. */
+  fund: number;
+  /** What each elected office is paid at upkeep, as far as the fund reaches. */
+  pay: Partial<Record<Office, number>>;
+  /** Every player's votes, part by part. */
+  weights: { id: string; votes: number; parts: VoteWeight['parts'] }[];
+  /** Who runs for each elected office in the next election, until its ballot opens. */
+  candidates: Partial<Record<Office, string[]>>;
+  /** Each Governor candidate's tax promise, public like the candidacy. */
+  promises: Record<string, TaxPromise>;
+  /** The sitting Governor's promise, held for the term; null when they were appointed or nobody holds office. */
+  promise: TaxPromise | null;
+  /** The sales tax in whole percent when the sitting Governor's term began, for judging lower and hold; null before anyone governs. */
+  promiseFrom: number | null;
+  /** This month's election, or null in a month without one. */
+  election: ElectionView | null;
 }
 
 /** A player on the auction board. */
@@ -93,6 +299,8 @@ export interface WalkerView {
   at: number;
   dir: -1 | 0 | 1;
   done: boolean;
+  /** Their stock of the good up now, live as units trade; public like the status table. */
+  units: number;
 }
 
 /** Units changing hands right now: between two players, or with the store or the ship ('store', 'ship'). */
@@ -106,7 +314,7 @@ export interface DealView {
 /** The live goods auction, on every screen. */
 export interface AuctionView {
   good: Good;
-  stage: 'status' | 'declare' | 'walk';
+  stage: 'status' | 'walk';
   /** Seconds left on the stage's clock. It runs slower while units change hands. */
   seconds: number;
   /** The stage's full time in seconds, for the draining time bar. */
@@ -118,6 +326,8 @@ export interface AuctionView {
   /** What the store pays and charges, or null while it doesn't trade at that line. */
   storeBuys: number | null;
   storeSells: number | null;
+  /** Units the store will sell of this good: its stock less the colonists' Food and Water reserve. */
+  storeForSale: number;
   /** What the export ship pays for the next unit, while it is in port and wants this good. */
   shipPays: number | null;
   /** The board's price range: it grows when a walker goes past it. */
@@ -133,6 +343,48 @@ export interface AuctionView {
   status: StatusRow[];
   /** Goods skipped since the last one that came up, and why, for one line on screen. */
   skipped: { good: Good; reason: SkipReason }[];
+}
+
+/** What is for sale: a plot (with whatever stands on it), or the MULE off one of the seller's plots. */
+export type LotItemView = { kind: 'plot'; x: number; y: number } | { kind: 'mule'; x: number; y: number; outfit: Outfit };
+
+/** One listing, public from the moment it is made in planning. */
+export interface ListingView {
+  id: string;
+  /** A player's id, or 'colony' for a plot the colony puts up. */
+  seller: string;
+  item: LotItemView;
+  minimum: number;
+  /** If nobody bids the minimum: the store buys it at `storePays`, or the seller keeps it. */
+  unsold: 'store' | 'keep';
+  storePays: number;
+}
+
+/** A buyer on a lot's board. Everyone but the seller, if they can pay the minimum (and, for a MULE, has no MULE in hand). */
+export interface LotWalkerView extends Omit<WalkerView, 'units'> {
+  /** Why a player stands aside, for the names along the bottom. */
+  aside?: 'money' | 'mule';
+}
+
+export type LotResultView = { kind: 'sold'; buyer: string; price: number } | { kind: 'store'; price: number } | { kind: 'kept' };
+
+/** The land auction while it runs: one lot at a time. */
+export interface LandAuctionView {
+  lot: ListingView;
+  stage: 'intro' | 'walk' | 'result';
+  seconds: number;
+  total: number;
+  /** This lot's place in the month's line-up, from 1. */
+  number: number;
+  count: number;
+  lo: number;
+  hi: number;
+  speed: number;
+  walkers: LotWalkerView[];
+  /** The highest bid at or above the minimum, and who holds it: what wins at the bell. */
+  leader: { id: string; bid: number } | null;
+  result: LotResultView | null;
+  next: ListingView[];
 }
 
 export interface MarketRow {
@@ -160,6 +412,57 @@ export interface ShipView {
   wants: Partial<Record<Good, number>> | null;
 }
 
+/** A player's own score, line by line, as only their phone receives it: `me.worthParts`, and their `scores` entry at game over. */
+export type ScorePartsView = Omit<ScoreParts, 'total'>;
+
+/** A reason a plot made more or less than its ground gives, as a badge on the map. */
+export type ProductionReason = 'cluster' | 'species' | 'trait' | 'pollution' | 'noEnergy' | 'noWater';
+
+/** One working plot in the month's production show. Public, like the auction's status table. */
+export interface ProductionLineView {
+  x: number;
+  y: number;
+  owner: string;
+  good: Good;
+  /** Units the plot made before the month's event; an event hit adds its delta on top. */
+  made: number;
+  /** Its badges: at most two reasons, biggest change first. */
+  parts: { why: ProductionReason; delta: number }[];
+}
+
+/** The month's event as the map shows it. */
+export interface ProductionEventView {
+  key: EventKey;
+  kind: EventKind;
+  title: string;
+  line: string;
+  sign: MonthEvent['sign'];
+  scope: MonthEvent['scope'];
+  /** Where it starts: a colony sweep's edge point, otherwise its first plot or its source. */
+  origin: { x: number; y: number };
+  /** For a colony sweep, the map edge it blows in from. */
+  from?: 'n' | 'e' | 's' | 'w';
+  /** The plots it hit, in the order it reached them, and how many units each gained or lost. */
+  hits: { x: number; y: number; order: number; delta: number }[];
+  /** The phase whose show plays it. */
+  phase: Phase;
+  /** How big its story is on the TV. */
+  weight: EventWeight;
+  /** How long the show plays it, in ms at full pace; the client never computes this itself. */
+  playMs: number;
+}
+
+/** What every plot made this month and what the month's event did: never anything a player holds. */
+export interface ProductionView {
+  /** In reading order: row by row, left to right. */
+  lines: ProductionLineView[];
+  events: ProductionEventView[];
+  /** How long the production phase was scheduled to run, in ms; the show's timeline stretches over it. */
+  lengthMs: number;
+  /** How long the phase's intro plays before the first event, in ms: 0 in a quiet month. */
+  introMs: number;
+}
+
 /** One screen's view of the game: a player's private view, or the public one for a board. */
 export interface MuleView {
   finished: boolean;
@@ -181,13 +484,36 @@ export interface MuleView {
   colonists: number;
   /** Colony air gauge 0 to 100 and its band. */
   air: { level: number; band: 'clean' | 'smoggy' | 'toxic' | 'collapse' };
+  /** The air at last month's end (upkeep), level and band as `air` showed them then; null in month 1. */
+  lastAir: MuleView['air'] | null;
+  /**
+   * At the month end (upkeep, and game over after the last): true when that upkeep fed the colonists, false when they
+   * went short, because the store ran out or its price was beyond their wages (the engine's colonistsHungry). Null otherwise.
+   */
+  colonistsFed: boolean | null;
   ship: ShipView;
   /** The colony fund and the sales tax rate. */
   treasury: { money: number; salesTax: number };
   news: string[];
-  scores: { id: string; score: number }[] | null;
+  /** At game over; `parts` only on the viewer's own entry, never in the board view (goods are private). */
+  scores: { id: string; score: number; parts?: ScorePartsView }[] | null;
   /** The live goods auction while it runs. */
   auction: AuctionView | null;
+  /** This month's lots for the land auction, in line-up order. */
+  listings: ListingView[];
+  /** The month's lot slots: LOTS.maxLotsPerMonth, and how many are taken. */
+  lotSlots: { used: number; max: number };
+  /** The live land auction while it runs. */
+  landAuction: LandAuctionView | null;
+  /** The month's production show, during production and upkeep. */
+  production: ProductionView | null;
+  /** Offices, tax, vote weights and the election; null when the game plays without politics. */
+  politics: PoliticsView | null;
+  /**
+   * While month 1's development clock stands full: the seats it still waits for, whose first MULE is still to come, in
+   * seat order. Absent once it runs, and in every other phase and month.
+   */
+  clockWaitsFor?: string[];
 }
 
 export const PLAYER_COLORS = ['#e4572e', '#3a86ff', '#2bb673', '#f2a541', '#9b5de5', '#00b4d8'];

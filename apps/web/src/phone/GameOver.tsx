@@ -1,55 +1,59 @@
-import { Button, Panel, PlayerMark } from '@mule/ui';
-import { fmt, PHASE_NAME, standings } from '../game/derive';
+import { Button, cx } from '@mule/ui';
+import { ColonyPanel, LeagueTable, PhoneVerdict, WinnerCard, YourWorth } from '../components/MonthEnd';
+import { PHASE_NAME } from '../game/derive';
+import { league, ordinal, winnerWords } from '../game/month-end';
 import { useClient } from '../net/react';
 import { usePhoneGame } from './game';
-import { NewsPanel } from './parts';
-import { PhoneShell } from './Shell';
+import { PhoneShell, type Now } from './Shell';
 
-/** The end: final scores, best first. */
+/**
+ * The end of the game, in credits (C20, WS6's approved mock): your place and your Worth beside your own lines, the
+ * colony's verdict, and the final standings by Worth in the rail. The big screen shows only totals, since goods are
+ * private. With no TV at the table, the colony's report takes the verdict's place under both.
+ */
 export function GameOver() {
   const client = useClient();
-  const { view, self } = usePhoneGame();
-  const ranking = standings(view);
-  const winner = ranking[0];
-  const mine = ranking.findIndex((r) => r.player.id === self.id) + 1;
+  const { table, view, self } = usePhoneGame();
+  const tv = table.boards > 0;
+  const lg = league(view);
+  const mine = lg.rows.find((r) => r.player.id === self.id)!;
+  const won = mine.rank === 1 && lg.leader?.level.length === 1;
+  const now: Now = {
+    // One line in the rail: the card beside says the rest ("You finished 2nd of 4").
+    title: won ? 'Game over: you win' : `Game over: ${ordinal(mine.rank)} of ${view.players.length}`,
+    detail: `${winnerWords(view, lg)}.`,
+  };
+  const density = tv ? 'phone' : 'compact';
   return (
     <PhoneShell
       phase={PHASE_NAME.gameOver}
-      rail={<NewsPanel news={view.news} />}
+      now={now}
+      foldNow
+      rail={
+        <div data-testid="scores">
+          <LeagueTable view={view} density="compact" selfId={self.id} final />
+        </div>
+      }
       footer={
-        <Button size="lg" variant="outline" className="w-full" onClick={() => client.leave()}>
+        <Button size="md" variant="outline" className="w-full" data-testid="leave" onClick={() => client.leave()}>
           Leave the table
         </Button>
       }
     >
-      <div className="grid grid-cols-2 items-start gap-2.5">
-        <div className="flex flex-col items-center gap-2 rounded-panel border-2 border-holo bg-holo-soft p-4 text-center shadow-glow">
-          <span className="label-caps">{winner?.player.id === self.id ? 'You win the colony!' : 'The colony goes to'}</span>
-          {winner && <PlayerMark slot={winner.slot} size={48} />}
-          <span className="font-display text-2xl font-semibold">{winner?.player.name}</span>
-          <span data-num className="font-mono text-base text-ink-2">
-            {fmt(winner?.value ?? 0)} points
-          </span>
+      <div className={cx('relative flex min-h-0 flex-1 flex-col', tv ? 'h-full gap-2.5' : 'gap-1.5')} data-testid={tv ? 'phone-gameover' : 'phone-only-gameover'}>
+        {/* A small phone has no height for the card and the verdict in one column: the verdict moves under your lines. */}
+        <div className={cx('grid min-h-0 grid-cols-[minmax(0,5fr)_minmax(0,6fr)]', tv ? 'flex-1 gap-2.5 @max-3xl/shell:grid-cols-[minmax(0,4fr)_minmax(0,7fr)] @max-3xl/shell:grid-rows-[auto_minmax(0,1fr)]' : 'gap-1.5')}>
+          <div className={cx('flex min-h-0 flex-col', tv ? 'gap-2.5 @max-3xl/shell:contents' : 'gap-1.5')}>
+            <WinnerCard view={view} density={density} selfId={self.id} {...(tv ? { className: '@max-3xl/shell:row-span-2' } : {})} />
+            {tv && <PhoneVerdict view={view} className="@max-3xl/shell:col-start-2 @max-3xl/shell:row-start-2" />}
+          </div>
+          <YourWorth view={view} density={density} />
         </div>
-        <Panel title="Final scores" aside={`YOU ARE #${mine}`} className="p-3">
-          <ol className="flex flex-col gap-2" data-testid="scores">
-            {ranking.map((r, i) => (
-              <li key={r.player.id} className="flex items-center gap-2.5">
-                <span data-num className="w-4 font-mono text-sm text-ink-3">
-                  {i + 1}
-                </span>
-                <PlayerMark slot={r.slot} size={16} />
-                <span className="min-w-0 flex-1 truncate font-semibold">
-                  {r.player.name}
-                  {r.player.id === self.id && ' (you)'}
-                </span>
-                <span data-num className="font-mono font-bold">
-                  {fmt(r.value)}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </Panel>
+        {!tv && (
+          <div className="relative" data-testid="phone-only-colony">
+            <ColonyPanel view={view} density="compact" verdict />
+          </div>
+        )}
       </div>
     </PhoneShell>
   );

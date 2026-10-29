@@ -21,11 +21,19 @@ const client = new TableClient({
 const params = new URLSearchParams(window.location.search);
 const room = (params.get('room') ?? '').trim().toUpperCase();
 const isTable = window.location.pathname.replace(/\/+$/, '') === '/table';
+// A handoff code works once: off the address bar before anything renders, so it is never bookmarked, shared or reloaded.
+const handoff = params.get('handoff') ?? '';
+if (params.has('handoff')) {
+  params.delete('handoff');
+  const search = params.toString();
+  window.history.replaceState(window.history.state, '', `${window.location.pathname}${search ? `?${search}` : ''}${window.location.hash}`);
+}
+if (handoff && room && !isTable) client.join(room, '', handoff);
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ClientProvider client={client}>
-      {isTable ? <TableApp room={room} /> : <PhoneApp room={room} />}
+      {isTable ? <TableApp room={room} /> : <PhoneApp room={room} moving={Boolean(handoff && room)} />}
       <Toasts />
       <ConnectionBar />
     </ClientProvider>

@@ -8,13 +8,16 @@ import {
   claimPlot,
   createGame,
   DEVELOPMENT,
+  EVENTS,
   factoryFit,
   fitFilter,
   grantDone,
+  grantPass,
   litPlot,
   mulePrice,
   mulePriceFor,
   outfitMule,
+  pubPayoutFor,
   rawOutput,
   runPollution,
   RuleError,
@@ -102,7 +105,25 @@ describe('species perks', () => {
 });
 
 describe('land grant', () => {
-  it('lights free plots in a seeded random order and only the lit plot can be claimed', () => {
+  it('Done with land: grantPass marks the player done, twice changes nothing, and is refused outside the grant', () => {
+    const state = newGame();
+    expect(() => grantPass(state, 'p0')).toThrow(RuleError);
+    toPhase(state, 'landGrant');
+    for (const p of state.players.slice(1)) grantPass(state, p.id);
+    expect(grantDone(state), 'p0 has claims left and is not done').toBe(false);
+    grantPass(state, 'p0');
+    grantPass(state, 'p0');
+    expect(state.players.map((p) => p.doneWithLand)).toEqual([true, true, true, true]);
+    expect(grantDone(state)).toBe(true);
+    const lit = litPlot(state)!;
+    expect(() => claimPlot(state, 'p0', lit.x, lit.y), 'done means no more claims this month').toThrow(RuleError);
+    toPhase(state, 'development');
+    expect(() => grantPass(state, 'p0')).toThrow(RuleError);
+    toPhase(state, 'landGrant');
+    expect(state.players.every((p) => !p.doneWithLand), 'the next grant starts with nobody done').toBe(true);
+  });
+
+  it('INV-grant-lit: free plots light one at a time and only the lit plot can be claimed', () => {
     const a = newGame();
     const b = newGame();
     toPhase(a, 'landGrant');
@@ -116,43 +137,78 @@ describe('land grant', () => {
     expect(() => claimPlot(a, 'p1', lit.x, lit.y)).toThrow(RuleError);
     const next = advanceGrant(a)!;
     expect(next.owner).toBeNull();
-    // The order is not just left to right.
-    const xs = a.grant!.order.slice(0, 10).map((i) => i % a.width);
-    expect([...xs].sort((m, n) => m - n)).not.toEqual(xs);
   });
 
-  it('starts a fresh sweep after every free plot has lit, and ends when claims are used', () => {
+  it('INV-grant-sweep: a new sweep starts after every free plot has lit, and the grant ends when claims are used', () => {
     const state = newGame();
     toPhase(state, 'landGrant');
     const first = [...state.grant!.order];
     for (let i = 0; i < first.length; i++) advanceGrant(state);
     expect(state.grant!.sweep).toBe(1);
-    expect(state.grant!.order).not.toEqual(first);
     for (const p of state.players) p.claimsThisGrant = 2;
     expect(grantDone(state)).toBe(true);
+  });
+
+  it('INV-grant-order: the light steps once through the free plots in reading order, skipping owned plots, and then the grant is done', () => {
+    const state = newGame();
+    const owned = [state.tiles[1]!, state.tiles[state.width + 3]!];
+    for (const t of owned) t.owner = 'p3';
+    const store = state.tiles.find((t) => t.terrain === 'store')!;
+    toPhase(state, 'landGrant');
+    const inReadingOrder = (tiles: Tile[]) => [...tiles].sort((a, b) => a.y - b.y || a.x - b.x);
+    const free = inReadingOrder(state.tiles.filter((t) => t.owner === null && t.terrain !== 'store'));
+
+    const firstSweep: Tile[] = [];
+    let claimed: Tile | null = null;
+    for (let tile = litPlot(state); tile && state.grant!.sweep === 0; tile = advanceGrant(state)) {
+      firstSweep.push(tile);
+      if (firstSweep.length === 3) {
+        claimPlot(state, 'p0', tile.x, tile.y);
+        claimed = tile;
+      }
+    }
+    expect(firstSweep).toEqual(free);
+
+    // The grant is one pass (PR-F): after it, the grant is done and the light lights nothing more.
+    expect(claimed).not.toBeNull();
+    expect(grantDone(state)).toBe(true);
+    expect(advanceGrant(state)).toBeNull();
+
+    for (const lit of firstSweep) {
+      expect(lit).not.toBe(store);
+      expect(owned).not.toContain(lit);
+    }
   });
 });
 
 describe('development', () => {
-  it('gives the full time with enough Food and less without', () => {
+  it('T-AC-23: a hungry or sick player gets the full development time, marked hungry or sick', () => {
+    // Everyone's sickness roll comes up. Each seat [Food, Medicine]: fed and cured; neither; hungry but cured; fed but sick.
     const state = newGame();
-    state.players[0]!.stock.food = 10;
-    state.players[1]!.stock.food = 0;
-    toPhase(state, 'development');
-    expect(state.players[0]!.devSeconds).toBe(DEVELOPMENT.fullSeconds);
-    expect(state.players[1]!.devSeconds).toBe(DEVELOPMENT.minSeconds);
-    expect(state.players[1]!.hungry).toBe(true);
-  });
-
-  it('costs sick colonists time in dirty air unless they take a Medicine', () => {
-    const state = newGame();
-    state.air = 40;
-    state.players[0]!.stock.medicine = 1;
-    toPhase(state, 'development');
-    expect(state.players[0]!.devSeconds).toBe(DEVELOPMENT.fullSeconds);
-    expect(state.players[0]!.stock.medicine).toBe(0);
-    expect(state.players[1]!.devSeconds).toBe(DEVELOPMENT.fullSeconds - 5);
-    expect(state.players[1]!.sick).toBe(true);
+    const sickness = EVENTS.player.sickness;
+    const saved = { ...sickness };
+    Object.assign(sickness, { phases: { development: 1 }, cap: 1 });
+    const supplies: [number, number][] = [
+      [10, 1],
+      [0, 0],
+      [0, 1],
+      [10, 0],
+    ];
+    supplies.forEach(([food, medicine], i) => Object.assign(state.players[i]!.stock, { food, medicine }));
+    try {
+      toPhase(state, 'development');
+    } finally {
+      Object.assign(sickness, saved);
+    }
+    expect(state.players.map((p) => p.devSeconds)).toEqual(state.players.map(() => DEVELOPMENT.fullSeconds));
+    expect(state.players.map((p) => [p.hungry, p.sick])).toEqual([
+      [false, false],
+      [true, true],
+      [true, false],
+      [false, true],
+    ]);
+    // A Medicine is taken where the air sickens.
+    expect(state.players.map((p) => p.stock.medicine)).toEqual([0, 0, 0, 0]);
   });
 
   it('pays more at the pub with more time left, and ends the turn', () => {
@@ -162,6 +218,35 @@ describe('development', () => {
     const late = visitPub(state, 'p1', 5);
     expect(early).toBeGreaterThan(late);
     expect(() => buyMule(state, 'p0')).toThrow(RuleError);
+  });
+
+  it('quotes the pub payout without changing the game, and pays exactly that', () => {
+    const state = newGame();
+    toPhase(state, 'development');
+    // 33 of 50 seconds pays a fraction, so a quote that rounds differently from the pay shows.
+    for (const [id, left] of [['p0', 50], ['p1', 5], ['p2', 0], ['p3', 33]] as const) {
+      const before = structuredClone(state);
+      const quote = pubPayoutFor(state, id, left);
+      expect(state, `${id}: a quote changes nothing`).toEqual(before);
+      expect(visitPub(state, id, left), `${id}: the pub pays the quote`).toBe(quote);
+    }
+  });
+
+  it('pays the pub by the formula: base, plus the month-scaled part by the share of time left', () => {
+    const state = newGame();
+    toPhase(state, 'development');
+    const { base, start, perMonth } = DEVELOPMENT.pub;
+    const devSeconds = state.players.find((p) => p.id === 'p0')!.devSeconds;
+    expect(visitPub(state, 'p0', 33)).toBe(Math.round(base + (start + state.month * perMonth) * (33 / devSeconds)));
+  });
+
+  it('gives no pub quote to a player who has been to the pub, or outside development', () => {
+    const state = newGame();
+    toPhase(state, 'development');
+    visitPub(state, 'p0', 10);
+    expect(() => pubPayoutFor(state, 'p0', 10), 'after the pub').toThrow(RuleError);
+    toPhase(state, 'production');
+    expect(() => pubPayoutFor(state, 'p1', 10), 'outside development').toThrow(RuleError);
   });
 
   it('builds a green belt as a cheap outfit', () => {

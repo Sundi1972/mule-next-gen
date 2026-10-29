@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  advanceGrant,
   advancePhase,
+  GAME,
+  grantDone,
   postPrices,
   storeQuotes,
   buyMule,
@@ -21,7 +24,6 @@ import {
   type Good,
   type Tile,
 } from '../src/index.js';
-import { playAiGame } from '../src/sim.js';
 
 const players = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${i}`, name: `P${i}`, isAi: false }));
 
@@ -176,6 +178,20 @@ describe('production', () => {
   });
 });
 
+describe('land grant', () => {
+  it('FM-grant-stall: a land grant where nobody presses ends after GAME.grantSweeps sweeps', () => {
+    const state = createGame({ seed: 4, players: players(4) });
+    while (state.phase !== 'landGrant') advancePhase(state);
+    let steps = 0;
+    while (!grantDone(state) && steps++ < 10_000) advanceGrant(state);
+    expect(grantDone(state)).toBe(true);
+    expect(state.grant!.sweep).toBe(GAME.grantSweeps);
+    // Free land is left and nobody claimed: the sweep limit ended it, not the land or the claims.
+    expect(state.tiles.some((t) => t.terrain !== 'store' && !t.owner)).toBe(true);
+    expect(state.players.every((p) => p.claimsThisGrant === 0)).toBe(true);
+  });
+});
+
 describe('month flow', () => {
   it('lets a player claim, buy, outfit and install a MULE', () => {
     const state = newGame();
@@ -200,19 +216,5 @@ describe('month flow', () => {
     expect(isGameOver(state)).toBe(false);
     state.month = 7;
     expect(isGameOver(state)).toBe(true);
-  });
-});
-
-describe('simulator', () => {
-  it('plays a full AI game without the colony going broke', () => {
-    const state = playAiGame(7, 4);
-    expect(state.phase).toBe('gameOver');
-    expect(state.store.capital).toBeGreaterThan(0);
-    for (const report of state.history) {
-      for (const price of Object.values(report.prices)) {
-        expect(price).toBeGreaterThan(0);
-        expect(Number.isFinite(price)).toBe(true);
-      }
-    }
   });
 });

@@ -1,0 +1,785 @@
+import { useState, type ReactNode } from 'react';
+import { LAND_LEAD, LAND_UNDER, LAND_WALK, SMITHORE_MID, SMITHORE_SOLD_OUT, SMITHORE_START, SMITHORE_STATUS, SMITHORE_TRADE, TRADE_MOVED, VIEW } from './fixture';
+import { Board, Game, LaptopFrame, PhoneFrame, TvFrame, useHash } from './harness';
+import { DevelopTurn, type Start } from './screens/DevelopTurn';
+import { LobbyColonist, type LobbyState } from './screens/LobbyColonist';
+import { PlanningBrief } from './screens/PlanningBrief';
+import { MuleSheet } from './screens/MuleSheet';
+import { PlanningHub, type Desk, type Election, type Office } from './screens/PlanningHub';
+import { PhoneElectionResult, TvElection } from './screens/Election';
+import { ChatProvider, useChatSim } from './proposed/Chat';
+import { ConditionProvider, ConditionVariant, FED, type Condition } from './proposed/Condition';
+import { TvChat } from './screens/ChatDemo';
+import { EVENTS, type EventKind } from './production';
+import { PhoneGoodsWalk, TvGoodsWalk, useWalkSim } from './screens/GoodsAuction';
+import { PhoneLandLine, TvLandLine } from './screens/LandLine';
+import { PhoneProduction, ShowControls, TvProduction, useShow } from './screens/Production';
+import { PhoneStatusDeclare, TvStatusDeclare } from './screens/StatusDeclare';
+import { PhoneStore, TvDevelop } from './screens/Store';
+import { HoloMap, type MapTile } from '@mule/ui';
+import { mapTiles } from '../../../../apps/web/src/game/derive';
+import { PlotMap, type PlotLook } from './proposed/PlotMap';
+import { TV_PROMISE_NOTE, TvPlanning, type TvGovernor } from './proposed/PlanningReady';
+import { IntentNotes, IntentNotesProvider } from './proposed/IntentNote';
+import { HUB_NOTES, HubAudit } from './screens/audit/HubAudit';
+import { ELECTION_LINKS, ElectionAuditPage, electionRoute } from './screens/audit/ElectionAuditPage';
+import { MONTHEND_STATES, MonthEndAuditPage } from './screens/audit/MonthEndAudit';
+import { AUCTION_STATES as AUCTION_AUDIT_STATES, AuctionAuditBody } from './screens/audit/AuctionAudit';
+import { AUDIT_DEV_ROUTES, AuditDevPage, DEV_PREFIX, DevAuditContents } from './screens/audit/DevAuditPage';
+import { RailProductionPage } from './screens/audit/RailProduction';
+import { ARCADE_CONTENTS, ARCADE_ROUTES, ArcadePage } from './screens/arcade/ArcadeApp';
+
+/** The development audit: its contents, then each state, prefixed (#walk is the goods auction's own route). */
+const AUDIT_DEV_LINKS = [
+  { id: 'audit-dev', title: 'Development: the eight changes' },
+  ...AUDIT_DEV_ROUTES.map((r) => ({ id: `${DEV_PREFIX}${r.id}`, title: `Development: ${r.title}` })),
+];
+
+/** The goods auction's audit states, prefixed: #status and #walk are the approved auction screens' own routes. */
+const AUDIT_AUCTION_STATES = AUCTION_AUDIT_STATES.map((s) => ({ id: `audit-auction-${s.id}`, title: `Goods auction: ${s.title}`, state: s.id }));
+import { H, W } from './fixture';
+
+const DECISIONS = [
+  'Concepts from the original, never its art or layout: every screen here is our holo-table style on @mule/ui.',
+  'Goods auction (Heiko chose variant A, plain lines): two moving lines, the lowest ask (red, pushed down by sellers) and the highest bid (green, pushed up by buyers), the gap labelled. When they meet they become the glowing trade bar.',
+  'Units and surplus under every creature ("12 (+8)"); the store’s stock on its selling line, or SOLD OUT with no ceiling.',
+  'The store and ship lines stay but go thinner: they are limits, not moves.',
+  'Buy or Sell is picked on the status screen (R2): one stage per good fewer. Your side starts where the numbers point (short → Buy, surplus → Sell: spec AM-1); tap to change it. The status table shows on the TV (Heiko’s exemption from “the TV never shows stock”).',
+  'Land auction: buyers only, so one line: the highest bid, naming who wins at the bell.',
+  'Production (R3, ~15 s): plots fill with one bar per unit in the owner’s colour, badges say why (+1 cluster, ½ no Water…), the event plays over the map in its own way, then the goods fly home: TV into the public colony bar, phone into your private 9-goods strip.',
+  'What each plot made is public (as in the original and our status screen); what you hold stays on your phone.',
+  'Store (D1, Heiko): one hall, two rows. Top: the six outfitters, crops left, mines right. Bottom: the works (three factory fits), green belt, MULE corral, pub, with a door to the map at each end.',
+  'Tap to walk (R1): tap a room and your creature walks there; time keeps running, so walking costs time. Heiko’s speeds (2026-10-28): 0.4 s a step on the map, along rows and columns, 1 s across the store, a Zipwing at pace 1.5.',
+  'One clock for everyone (Heiko 2026-10-28): development is the same 50 s for all, on the TV and every phone. Hunger and sickness slow your WALK instead of shortening your time; no screen shows a player’s own countdown.',
+  'How you feel shows on your colonist wherever it walks in development, in one family of chips: hunger as a bowl at three levels (peckish, hungry, starving; the bowl shows how much you ate), sickness as a pink cross, both at once when both. Pace (Heiko): 100% fed down to 20% with no Food, halved when sick, so 10% at worst. The waddle slows with it. “Hungry: 60% pace”, “Starving and sick: 10% pace”; press and hold your tag for the rule in Heiko’s words.',
+  'Redesign (Heiko, 2026-10-22): every player screen is a stage (what you act on) and a guide rail that opens with “Now”, the next step and why; from a phone held sideways to a laptop, using the space.',
+  'Plots you can read from the couch (Heiko chose A, bold plots): a thick border and a strong tint in the owner’s colour, a corner tab with the owner’s creature, what is installed as a big icon, the selected plot ringed and pinned.',
+  'Development on a laptop: the store above the map (Heiko chose A), so walking out of the door lands you on the map; the next room glows and says TAP.',
+];
+
+const STORE_STATES = [
+  { id: 'store', title: 'Fed: full pace' },
+  { id: 'store-hungry', title: 'Short of Food: slower, same clock' },
+  { id: 'store-soldout', title: 'Corral sold out' },
+];
+
+/** The seats' condition this month (fixture): Ossa is sick, Brix a little short of Food, Kai fed; Lena per state. */
+const LENA = {
+  fed: { ate: 10, need: 10, sick: false },
+  peckish: { ate: 8, need: 10, sick: false },
+  hungry: { ate: 5, need: 10, sick: false },
+  starving: { ate: 2, need: 10, sick: false },
+  sick: { ate: 10, need: 10, sick: true, because: { kind: 'air' } },
+  hungrySick: { ate: 5, need: 10, sick: true, because: { kind: 'air' } },
+  worst: { ate: 0, need: 10, sick: true, because: { kind: 'polluter', what: 'smelters' } },
+} satisfies Record<string, Condition>;
+const conditions = (lena: Condition): Record<string, Condition> => ({ lena, ossa: { ate: 10, need: 10, sick: true, because: { kind: 'polluter', what: 'smelters' } }, brix: { ate: 8, need: 10, sick: false }, kai: FED });
+
+/** Lena's condition and the marker variant, around a screen. */
+function Feeling({ lena, variant = 'B', children }: { lena: Condition; variant?: 'A' | 'B'; children: ReactNode }) {
+  return (
+    <ConditionProvider value={conditions(lena)}>
+      <ConditionVariant value={variant}>{children}</ConditionVariant>
+    </ConditionProvider>
+  );
+}
+
+const AUCTION_STATES = [
+  { id: 'auction-start', title: 'The bell: lines far apart', a: SMITHORE_START },
+  { id: 'auction-mid', title: 'Mid-walk: 9 apart', a: SMITHORE_MID },
+  { id: 'auction-trade', title: 'Lines met: trading', a: SMITHORE_TRADE, moved: TRADE_MOVED },
+  { id: 'auction-soldout', title: 'Store sold out', a: SMITHORE_SOLD_OUT },
+];
+
+const LAND_STATES = [
+  { id: 'land-under', title: 'Nobody at the minimum yet', lot: LAND_UNDER },
+  { id: 'land-walk', title: 'Ossa leads', lot: LAND_WALK },
+  { id: 'land-lead', title: 'You lead', lot: LAND_LEAD },
+];
+
+function Page({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="min-h-full bg-table p-8 text-ink">
+      <a href="#" className="font-mono text-xs text-holo underline" data-testid="back">
+        ← index
+      </a>
+      <h1 className="mb-4 mt-2 font-display text-2xl font-semibold">{title}</h1>
+      <div className="flex flex-col gap-4">{children}</div>
+    </div>
+  );
+}
+
+function Links({ states, current }: { states: { id: string; title: string }[]; current?: string }) {
+  return (
+    <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+      {states.map((s) => (
+        <li key={s.id}>
+          <a href={`#${s.id}`} className={s.id === current ? 'text-ink' : 'text-holo underline'} data-testid={`link-${s.id}`}>
+            {s.title}
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** The walk, playable: hold Up or Down (or drag on the board) as Lena, a buyer. */
+function PlayableWalk() {
+  const sim = useWalkSim(SMITHORE_START);
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-4">
+        <button type="button" className="font-mono text-xs text-holo underline" onClick={sim.restart} data-testid="restart-walk">
+          play the walk again
+        </button>
+      </div>
+      <PhoneFrame>
+        <Game>
+          <PhoneGoodsWalk view={VIEW} auction={sim.auction} moved={sim.moved} onWalk={sim.walk} />
+        </Game>
+      </PhoneFrame>
+      <p className="max-w-[844px] text-sm text-ink-2">You are Lena, short 2 Smithore. Hold Up (or drag on the board): Brix and Ossa walk their asks down, Kai bids up. Watch the two lines close; when they meet the units move one at a time.</p>
+      <TvFrame>
+        <Board>
+          <TvGoodsWalk view={VIEW} auction={sim.auction} moved={sim.moved} />
+        </Board>
+      </TvFrame>
+    </>
+  );
+}
+
+function PlayableShow() {
+  const [kind, setKind] = useState<EventKind | 'none'>('storm');
+  const show = useShow();
+  const ev = kind === 'none' ? null : EVENTS[kind];
+  return (
+    <>
+      <ShowControls show={show} kind={kind} onKind={setKind} />
+      <TvFrame>
+        <Board>
+          <TvProduction t={show.t} ev={ev} />
+        </Board>
+      </TvFrame>
+      <p className="max-w-[960px] text-sm text-ink-2">
+        The big screen first. 0–4 s the plots fill in reading order with their badges; 4–9.5 s the event card and the event over the map; from 9.6 s the goods fly into each player's slot. Pick another event above; scrub to stop on any moment.
+      </p>
+      <PhoneFrame>
+        <Game>
+          <PhoneProduction t={show.t} ev={ev} />
+        </Game>
+      </PhoneFrame>
+      <p className="max-w-[844px] text-sm text-ink-2">Lena's phone at the same moment: only her plots fill, and her harvest flies into her private strip of nine goods under the map.</p>
+    </>
+  );
+}
+
+const DEV_STATES: { id: string; title: string; start: Start; lena?: keyof typeof LENA; variant?: 'A' | 'B' }[] = [
+  { id: 'dev', title: 'Start of the turn: buy a MULE', start: 'start' },
+  { id: 'dev-outfitted', title: 'MULE outfitted: walk out', start: 'outfitted' },
+  { id: 'dev-map', title: 'On the map: to your plot', start: 'map' },
+  { id: 'dev-installed', title: 'Installed: what next', start: 'installed' },
+];
+
+/** For Heiko's approval (2026-10-28): one clock, and how hunger and sickness show. */
+const FEEL_STATES: { id: string; title: string; start: Start; lena: keyof typeof LENA; variant: 'A' | 'B' }[] = [
+  { id: 'dev-hungry-a', title: 'A · Hungry, 5 of 10 Food: the tag only (60%)', start: 'start', lena: 'hungry', variant: 'A' },
+  { id: 'dev-hungry', title: 'B · Hungry, 5 of 10: tag and thought bubble (60%)', start: 'start', lena: 'hungry', variant: 'B' },
+  { id: 'dev-peckish', title: 'B · Peckish, 8 of 10 (84%)', start: 'start', lena: 'peckish', variant: 'B' },
+  { id: 'dev-starving', title: 'B · Starving, 2 of 10 (36%)', start: 'start', lena: 'starving', variant: 'B' },
+  { id: 'dev-sick', title: 'B · Sick, fed (50%)', start: 'start', lena: 'sick', variant: 'B' },
+  { id: 'dev-hungry-sick', title: 'B · Hungry and sick, 5 of 10 (30%)', start: 'start', lena: 'hungrySick', variant: 'B' },
+  { id: 'dev-worst', title: 'B · Starving and sick, no Food: on the map at 10%', start: 'map', lena: 'worst', variant: 'B' },
+  { id: 'dev-hungry-map', title: 'B · Hungry on the map: the slow walk (60%)', start: 'map', lena: 'hungry', variant: 'B' },
+];
+
+const LOBBY_STATES: { id: string; title: string; state: LobbyState }[] = [
+  { id: 'lobby', title: 'A player: make your colonist', state: 'guest' },
+  { id: 'lobby-host', title: 'The host', state: 'host' },
+  { id: 'lobby-away', title: 'Host: a phone has lost its connection', state: 'away' },
+  { id: 'lobby-kick', title: 'Host: remove a player', state: 'kick' },
+  { id: 'lobby-handoff', title: 'Host: move the host to my phone', state: 'handoff' },
+  { id: 'lobby-handoff-waiting', title: 'Hand-off: making the code', state: 'handoff-waiting' },
+  { id: 'lobby-handoff-expired', title: 'Hand-off: the code expired', state: 'handoff-expired' },
+  { id: 'lobby-close', title: 'Host: close the room', state: 'close' },
+];
+
+const PLAN_STATES = [
+  { id: 'plan', title: 'The briefing: map, needs, prices', mode: 'look' as const },
+  { id: 'plan-drone', title: 'Geo drone mode on the map', mode: 'drone' as const },
+];
+
+/**
+ * Planning without a clock (AM-16). Month 4: Ossa is an AI (always ready); Brix and Kai are people still planning,
+ * and Kai's phone has dropped (locked), so Kai is away but still holds planning. Lena per state.
+ */
+const WAIT_STATES: { id: string; title: string; ready: boolean; confirm: boolean; hostId: string; governor?: 'kept' | 'broken' | 'none' }[] = [
+  { id: 'plan-wait', title: 'Before you press Ready: who is still planning', ready: false, confirm: false, hostId: 'lena' },
+  { id: 'plan-wait-broken', title: 'The TV: the Governor broke the promise', ready: false, confirm: false, hostId: 'lena', governor: 'broken' },
+  { id: 'plan-wait-no-governor', title: 'The TV: nobody is Governor yet', ready: false, confirm: false, hostId: 'lena', governor: 'none' },
+  { id: 'plan-wait-ready', title: 'You are ready, not the host: waiting for the rest', ready: true, confirm: false, hostId: 'brix' },
+  { id: 'plan-wait-host', title: 'You are the host and ready: Continue without them', ready: true, confirm: false, hostId: 'lena' },
+  { id: 'plan-wait-confirm', title: 'The host confirms: end planning for everyone', ready: true, confirm: true, hostId: 'lena' },
+];
+const AWAY = ['kai'];
+/**
+ * The TV's Governor line per state (T-1): Ossa holds the tax to a promise of up to 4%; kept at 4%, broken at 6%, and
+ * no line with no Governor. The view's tax follows, so every frame on the page says the same tax.
+ */
+const WAIT_GOVERNOR: Record<'kept' | 'broken' | 'none', TvGovernor | null> = { kept: { id: 'ossa', cap: 4, tax: 4 }, broken: { id: 'ossa', cap: 4, tax: 6 }, none: null };
+const waitView = (lenaReady: boolean, governor: TvGovernor | null = WAIT_GOVERNOR.kept) => ({
+  ...VIEW,
+  month: 4,
+  treasury: { ...VIEW.treasury, salesTax: (governor?.tax ?? 5) / 100 },
+  players: VIEW.players.map((p) => (p.id === 'kai' ? { ...p, isAi: false, ready: false } : p.id === 'lena' ? { ...p, ready: lenaReady } : p)),
+});
+
+const HUB_STATES: { id: string; title: string; desk: Desk; office: Office; election?: Election | 'done' }[] = [
+  { id: 'hub', title: 'This month, the colony desk', desk: 'colony', office: 'none' },
+  { id: 'hub-nominate', title: 'Election 1: who runs', desk: 'council', office: 'none', election: 'nominate' },
+  { id: 'hub-promise', title: 'Election 1: run for Governor, pick your promise', desk: 'council', office: 'none', election: 'promise' },
+  { id: 'hub-council', title: 'Election 2: the secret ballot', desk: 'council', office: 'none' },
+  { id: 'hub-talk', title: 'Talk: a whisper with a deal card', desk: 'talk', office: 'none' },
+  { id: 'hub-market', title: 'Market: sell a plot or MULE', desk: 'market', office: 'none' },
+  { id: 'hub-secret', title: 'Secret: a sabotage order', desk: 'secret', office: 'none' },
+  { id: 'hub-governor', title: "As Governor, after the election: the tax", desk: 'governor', office: 'governor', election: 'done' },
+  { id: 'hub-sheriff', title: "As Sheriff: the Sheriff's desk", desk: 'sheriff', office: 'sheriff' },
+];
+
+/** For approval (2026-10-28): the UX audit's proposals, one mock per changed screen, each change numbered with its intent and reason. */
+const AUDIT_STATES: { id: string; title: string; tool?: 'drone'; picked?: { x: number; y: number }[]; standings?: boolean; election?: boolean }[] = [
+  { id: 'audit-hub', title: 'Planning hub: all the changes' },
+  { id: 'audit-hub-drone', title: 'Geo drone open, 1 of 2 plots picked', tool: 'drone', picked: [{ x: 9, y: 4 }] },
+  { id: 'audit-hub-standings', title: 'Standings open', standings: true },
+  { id: 'audit-hub-election', title: 'The offices line while the vote is open', election: true },
+];
+
+/** The hub's month 4: Ossa, Governor again, set the tax at 4%, keeping her promise of up to 4% (H-8). */
+const HUB_VIEW = { ...VIEW, month: 4, treasury: { ...VIEW.treasury, salesTax: 0.04 } };
+
+function AuditHubPage({ state }: { state: (typeof AUDIT_STATES)[number] }) {
+  const props = { ...(state.tool ? { tool: state.tool } : {}), ...(state.picked ? { picked: state.picked } : {}), ...(state.standings ? { standings: true } : {}), ...(state.election ? { election: true } : {}) };
+  // The table talks on every screen (C20): the seat row and the ticker in the rail's header, as the product has them.
+  const chat = useChatSim(0, 'lena');
+  return (
+    <Page title={`For approval · UX audit · ${state.title}`}>
+      <Links states={AUDIT_STATES} current={state.id} />
+      <p className="max-w-[900px] text-sm text-ink-2">
+        The planning hub redesigned from the UX audit (a newcomer of 14 playing it for real). Month 4, just after the election: Ossa is Governor again, on a promise of up to 4%, and set the tax at 4% (Governor only, as Heiko ruled); Lena (you) holds no office.{state.election ? ' Here the vote is still open, so the offices line reads as it does until the result.' : ''} The table chat runs in the rail’s header, as in the product. Open with ?phone=667 for the small phone. The phone held sideways (844 × 390) first, then the laptop (1440 × 900). Each number on a screen marks one change; the notes beside say which player intent it serves and why it was made. It all works: tap the needs strip, the drone and free plots on the map, “2nd of 4”, the folded Now card.
+      </p>
+      <IntentNotesProvider>
+        <div className="flex flex-wrap items-start gap-6">
+          <ChatProvider value={chat}>
+            <div className="flex min-w-0 flex-col gap-4">
+              <PhoneFrame>
+                <Game view={HUB_VIEW}>
+                  <HubAudit key={`${state.id}-p`} {...props} />
+                </Game>
+              </PhoneFrame>
+              <LaptopFrame>
+                <Game view={HUB_VIEW}>
+                  <HubAudit key={`${state.id}-l`} {...props} />
+                </Game>
+              </LaptopFrame>
+            </div>
+          </ChatProvider>
+          <IntentNotes
+            className="w-[420px] max-w-full"
+            title="Nine changes, and why"
+            intro="One card per change. Hover one and its numbers light up on both screens. “Serves intent” quotes the player intent from the audit; “Why” is what the audit found."
+            notes={Object.values(HUB_NOTES)}
+          />
+        </div>
+      </IntentNotesProvider>
+    </Page>
+  );
+}
+
+/** One table talking, seen from Lena's laptop, Lena's phone and the TV at once. */
+function ChatPage() {
+  const lena = useChatSim(0, 'lena');
+  const tv = useChatSim(0, 'tv');
+  return (
+    <Page title="Live table chat · every screen, every phase">
+      <p className="max-w-[900px] text-sm text-ink-2">
+        Lines arrive in a rhythm with some only a second apart. One bubble at a time per screen, in a queue: each shows at least 2 s, and a line that would wait over 4 s is left to the ticker, so bubbles never cover each other or the ticker. The bubble pops at the speaker's creature where the screen draws one (the store hall, the TV's map), staying inside the stage; otherwise it opens left of the guide and the speaker's seat lights up. The third line is Ossa's whisper to Lena: it shows only on Lena's screens, with a lock, never on the TV.
+      </p>
+      <ChatProvider value={lena}>
+        <LaptopFrame>
+          <Game view={{ ...VIEW, month: 4 }}>
+            <PlanningHub key="chat-l" desk="colony" office="none" election="done" />
+          </Game>
+        </LaptopFrame>
+        <PhoneFrame>
+          <Game>
+            <DevelopTurn key="chat-p" start="outfitted" />
+          </Game>
+        </PhoneFrame>
+      </ChatProvider>
+      <ChatProvider value={tv}>
+        <TvFrame>
+          <Board>
+            <TvChat />
+          </Board>
+        </TvFrame>
+      </ChatProvider>
+    </Page>
+  );
+}
+
+export default function App() {
+  const hash = useHash();
+
+  if (hash === 'chat') return <ChatPage />;
+
+  const audit = AUDIT_STATES.find((s) => s.id === hash);
+  if (audit) return <AuditHubPage state={audit} />;
+
+  const election = electionRoute(hash);
+  if (election)
+    return (
+      <Page title={`For approval · UX audit · ${election.title}`}>
+        <Links states={ELECTION_LINKS} current={election.main} />
+        <ElectionAuditPage key={hash} hash={hash} />
+      </Page>
+    );
+
+  if (hash === ARCADE_CONTENTS || ARCADE_ROUTES.some((r) => r.id === hash)) return <ArcadePage route={hash} />;
+  if (hash === 'audit-dev') return <DevAuditContents />;
+  const devAudit = AUDIT_DEV_ROUTES.find((r) => `${DEV_PREFIX}${r.id}` === hash);
+  if (devAudit) return <AuditDevPage key={hash} state={devAudit} />;
+
+  const auction = AUDIT_AUCTION_STATES.find((s) => s.id === hash);
+  if (auction)
+    return (
+      <Page title={`For approval · UX audit · ${auction.title}`}>
+        <Links states={AUDIT_AUCTION_STATES} current={hash} />
+        <AuctionAuditBody key={hash} state={auction.state} />
+      </Page>
+    );
+
+  const monthEnd = MONTHEND_STATES.find((s) => s.id === hash);
+  if (monthEnd) return <MonthEndAuditPage key={monthEnd.id} state={monthEnd} />;
+
+  if (hash === 'game-handoff' || hash === 'game-handoff-expired')
+    return (
+      <Page title="Mid-game: move to your phone (WS4's hand-off, any game screen)">
+        <p className="max-w-[900px] text-sm text-ink-2">
+          The phone button sits in the guide's header beside the theme toggle on every game screen: an icon on a phone, “To my phone” on a laptop. It opens the same dialog as the lobby's, over the whole screen; the game keeps running.
+        </p>
+        <LaptopFrame>
+          <Game view={{ ...VIEW, month: 4 }}>
+            <PlanningHub key={`${hash}-l`} desk="colony" office="none" election="done" handoff={hash === 'game-handoff-expired' ? 'expired' : true} />
+          </Game>
+        </LaptopFrame>
+        <PhoneFrame>
+          <Game view={{ ...VIEW, month: 4 }}>
+            <PlanningHub key="gh-p" desk="colony" office="none" election="done" />
+          </Game>
+        </PhoneFrame>
+      </Page>
+    );
+
+  if (hash === 'tv-election' || hash === 'tv-election-result')
+    return (
+      <Page title={`The ballot reveal · ${hash === 'tv-election' ? 'countdown, then the result' : 'the result'} (WS7 slice 1)`}>
+        <Links states={[{ id: 'tv-election', title: 'Countdown, then reveal' }, { id: 'tv-election-result', title: 'The result' }]} current={hash} />
+        <TvFrame>
+          <Board>
+            <TvElection key={hash} revealed={hash === 'tv-election-result'} />
+          </Board>
+        </TvFrame>
+        <PhoneFrame>
+          <Game>
+            <PhoneElectionResult />
+          </Game>
+        </PhoneFrame>
+      </Page>
+    );
+
+  const wait = WAIT_STATES.find((s) => s.id === hash);
+  const gov = WAIT_GOVERNOR[wait?.governor ?? 'kept'];
+  if (wait)
+    return (
+      <Page title={`Planning without a clock · ${wait.title}`}>
+        <Links states={WAIT_STATES} current={hash} />
+        <p className="max-w-[900px] text-sm text-ink-2">
+          Planning has no clock (Heiko). It ends when every person is Ready, or when the host continues without the rest, from the host's own phone or laptop, never the TV. The header shows how many are ready where the clock was. Ossa is an AI, always ready. Brix and Kai are still planning; Kai's phone is locked, so Kai is marked away but is still waited for. Lena's laptop first ({wait.hostId === 'lena' ? 'Lena is the host' : 'Brix is the host'}), then Brix's phone, then the TV. Press I'm ready to try it.
+        </p>
+        <LaptopFrame>
+          <Game view={waitView(wait.ready, gov)} hostId={wait.hostId} away={AWAY}>
+            <PlanningHub key={`${hash}-l`} desk="colony" office="none" election="done" ready={wait.ready} confirm={wait.confirm} />
+          </Game>
+        </LaptopFrame>
+        <PhoneFrame>
+          <Game view={waitView(wait.ready, gov)} seat="brix" hostId={wait.hostId} away={AWAY}>
+            <PlanningHub key={`${hash}-p`} desk="colony" office="none" election="done" />
+          </Game>
+        </PhoneFrame>
+        <IntentNotesProvider>
+          <div className="flex flex-wrap items-start gap-6">
+            <TvFrame>
+              <Board view={waitView(wait.ready, gov)}>
+                <TvPlanning view={waitView(wait.ready, gov)} hostId={wait.hostId} away={AWAY} governor={gov} />
+              </Board>
+            </TvFrame>
+            <IntentNotes className="w-[420px] max-w-full" title="For Heiko’s approval: one change on the TV" intro="The PM’s proposal; hover the card and its number lights up on the TV." notes={[TV_PROMISE_NOTE]} />
+          </div>
+        </IntentNotesProvider>
+      </Page>
+    );
+
+  const hub = HUB_STATES.find((s) => s.id === hash);
+  if (hub)
+    return (
+      <Page title={`Planning, the hub · ${hub.title}`}>
+        <Links states={HUB_STATES} current={hash} />
+        <p className="max-w-[900px] text-sm text-ink-2">
+          Month 4, an election month. Everything the month allows sits in “This month” and in the desks; SOON marks what WS7 builds; the lock marks what only you see. Laptop (1440 × 900), then the phone held sideways.
+        </p>
+        <LaptopFrame>
+          <Game view={{ ...VIEW, month: 4 }}>
+            <PlanningHub key={`${hash}-l`} desk={hub.desk} office={hub.office} {...(hub.election ? { election: hub.election } : {})} />
+          </Game>
+        </LaptopFrame>
+        <PhoneFrame>
+          <Game view={{ ...VIEW, month: 4 }}>
+            <PlanningHub key={`${hash}-p`} desk={hub.desk} office={hub.office} {...(hub.election ? { election: hub.election } : {})} />
+          </Game>
+        </PhoneFrame>
+      </Page>
+    );
+
+  if (hash === 'mule')
+    return (
+      <Page title="The MULE · a cute mechanical dromedary (AM-8)">
+        <MuleSheet />
+      </Page>
+    );
+
+  const plan = PLAN_STATES.find((s) => s.id === hash);
+  if (plan)
+    return (
+      <Page title={`Planning, redesigned · ${plan.title}`}>
+        <Links states={PLAN_STATES} current={hash} />
+        <LaptopFrame>
+          <Game>
+            <PlanningBrief key={`${hash}-l`} mode={plan.mode} />
+          </Game>
+        </LaptopFrame>
+        <PhoneFrame>
+          <Game>
+            <PlanningBrief key={`${hash}-p`} mode={plan.mode} />
+          </Game>
+        </PhoneFrame>
+      </Page>
+    );
+
+  const lobby = LOBBY_STATES.find((s) => s.id === hash);
+  if (lobby)
+    return (
+      <Page title={`Lobby, redesigned · ${lobby.title}`}>
+        <Links states={LOBBY_STATES} current={hash} />
+        <p className="max-w-[900px] text-sm text-ink-2">Playable: pick a species and a colour; a colour someone has is marked with their creature. Laptop window (1440 × 900) first, then the phone held sideways.</p>
+        <LaptopFrame>
+          <LobbyColonist key={`${hash}-l`} state={lobby.state} />
+        </LaptopFrame>
+        <PhoneFrame>
+          <LobbyColonist key={`${hash}-p`} state={lobby.state} />
+        </PhoneFrame>
+      </Page>
+    );
+
+  const feel = FEEL_STATES.find((s) => s.id === hash);
+  const dev = feel ?? DEV_STATES.find((s) => s.id === hash);
+  if (dev)
+    return (
+      <Page title={`Development${feel ? ' · one clock, how you feel' : ', redesigned'} · ${dev.title}`}>
+        <Links states={feel ? FEEL_STATES : DEV_STATES} current={hash} />
+        <p className="max-w-[900px] text-sm text-ink-2">
+          {feel
+            ? 'Playable. One clock for everyone; Lena is short of Food or sick, so her Zipwing walks slower (Heiko: 100% fed down to 20% with no Food, halved when sick): watch the tag at her shoulder and her slower waddle; press and hold her tag for the rule. Ossa (sick) and Brix (peckish) carry theirs in the store. In B, a thought bubble says how she feels and her pace when the clock starts and when she sets off. Tap a room to walk.'
+            : 'Playable. The rail always opens with "Now": the one next step and why. The room for it glows and says TAP; rooms you can\'t use yet say why. Your Zipwing walks (and waddles) from room to room and out of the door; the clock never stops. Laptop window (1440 × 900) first, then the phone held sideways.'}
+        </p>
+        <Feeling lena={LENA[dev.lena ?? 'fed']} variant={dev.variant ?? 'B'}>
+          <LaptopFrame>
+            <Game>
+              <DevelopTurn key={`${hash}-l`} start={dev.start} />
+            </Game>
+          </LaptopFrame>
+          <PhoneFrame>
+            <Game>
+              <DevelopTurn key={`${hash}-p`} start={dev.start} />
+            </Game>
+          </PhoneFrame>
+        </Feeling>
+      </Page>
+    );
+
+  if (hash === 'walk') return <Page title="Goods auction · the walk, playable · phone and TV"><PlayableWalk /></Page>;
+  if (hash === 'production') return <Page title="Production show · TV and phone"><PlayableShow /></Page>;
+  if (hash === 'rail-production')
+    return (
+      <Page title="For Heiko · rail chat · production on a phone alone (a stand-in)">
+        <RailProductionPage />
+      </Page>
+    );
+
+  const a = AUCTION_STATES.find((s) => s.id === hash);
+  if (a)
+    return (
+      <Page title={`Goods auction · ${a.title}`}>
+        <Links states={AUCTION_STATES} current={hash} />
+        <PhoneFrame>
+          <Game>
+            <PhoneGoodsWalk view={VIEW} auction={a.a} {...(a.moved ? { moved: a.moved } : {})} />
+          </Game>
+        </PhoneFrame>
+        <TvFrame>
+          <Board>
+            <TvGoodsWalk view={VIEW} auction={a.a} {...(a.moved ? { moved: a.moved } : {})} />
+          </Board>
+        </TvFrame>
+      </Page>
+    );
+
+  const store = STORE_STATES.find((st) => st.id === hash);
+  if (store)
+    return (
+      <Page title={`Store · ${store.title}`}>
+        <Links states={STORE_STATES} current={hash} />
+        <PhoneFrame>
+          <Game>
+            <Feeling lena={LENA[hash === 'store-hungry' ? 'hungry' : 'fed']}>
+              <PhoneStore key={hash} mules={hash === 'store-soldout' ? 0 : 5} />
+            </Feeling>
+          </Game>
+        </PhoneFrame>
+        <p className="max-w-[844px] text-sm text-ink-2">
+          The first 2 s: you eat, and the card says your pace; the clock is everyone's. Then tap the corral, an outfitter (or a fit at the works), and a door: your Zipwing walks each leg while the clock runs. Ossa, Brix and Kai are in the store too. Reload the page to start the turn again.
+        </p>
+      </Page>
+    );
+
+  if (hash === 'plots') return <PlotsPage />;
+
+  if (hash === 'tv-develop')
+    return (
+      <Page title="Development on the big screen · everyone walking">
+        <TvFrame>
+          <Board>
+            <Feeling lena={LENA.hungrySick}>
+              <TvDevelop />
+            </Feeling>
+          </Board>
+        </TvFrame>
+        <p className="max-w-[960px] text-sm text-ink-2">One clock across the top for everyone. Ossa (sick, 50%) leads an Energy MULE out to a far plot, Kai (fed) walks to the lakes, Brix (peckish, 84%) goes into the store; Lena, hungry and sick (30%), is in the store. The list says who walks slower this month, and why.</p>
+      </Page>
+    );
+
+  if (hash === 'status')
+    return (
+      <Page title="Before each good · status and Buy / Sell on one screen (R2)">
+        <PhoneFrame>
+          <Game>
+            <PhoneStatusDeclare view={VIEW} auction={SMITHORE_STATUS} />
+          </Game>
+        </PhoneFrame>
+        <p className="max-w-[844px] text-sm text-ink-2">Lena is short, so she starts as a buyer; tap Buy again to pass. She has no Smithore, so Sell is off.</p>
+        <TvFrame>
+          <Board>
+            <TvStatusDeclare view={VIEW} auction={SMITHORE_STATUS} />
+          </Board>
+        </TvFrame>
+      </Page>
+    );
+
+  const land = LAND_STATES.find((s) => s.id === hash);
+  if (land)
+    return (
+      <Page title={`Land auction · ${land.title}`}>
+        <Links states={LAND_STATES} current={hash} />
+        <PhoneFrame>
+          <Game>
+            <PhoneLandLine view={VIEW} lot={land.lot} />
+          </Game>
+        </PhoneFrame>
+        <TvFrame>
+          <Board>
+            <TvLandLine view={VIEW} lot={land.lot} />
+          </Board>
+        </TvFrame>
+      </Page>
+    );
+
+  return (
+    <div className="min-h-full bg-table p-8 text-ink" data-testid="index">
+      <h2 className="label-caps">To play · arcade walking in development (Heiko, 2026-10-29)</h2>
+      <p className="mt-1 max-w-3xl text-sm text-ink-2">
+        Steer your colonist yourself: arrow keys and SPACE, or the mouse; on a phone held sideways a joystick and one button over the whole map. Store, corral, outfitter, out with the MULE on its lead, your plot, install. Slices 1 to 4 (wolves, the glint, the scramble), and the addendum from the development audit (V-2, V-3, V-5, V-6, V-7, AM-2); every phone route also plays at 667 × 375. Every speed is a tunable.
+      </p>
+      <div className="mt-2 flex flex-col gap-2" data-testid="arcade-links">
+        <Links states={[{ id: ARCADE_CONTENTS, title: 'Arcade walking: contents' }, ...ARCADE_ROUTES]} />
+      </div>
+      <h2 className="label-caps mt-6">For Heiko 2026-10-29 · one rail-chat rule: a one-line ticker on phones</h2>
+      <p className="mt-1 max-w-3xl text-sm text-ink-2">
+        On a phone the rail’s table chat (the seat row and a 2-line ticker) pushed the rail’s key line under the footer on four screens. One rule instead of a fold per screen: below 1100 px the ticker keeps only its newest line; bubbles still pop, the whole chat is on the Talk desk and the TV. Each page has a switch, Today against One-line ticker; also at ?phone=667.
+      </p>
+      <div className="mt-2 flex flex-col gap-2" data-testid="rail-links">
+        <Links
+          states={[
+            { id: 'audit-election-governor', title: 'The Governor desk' },
+            { id: 'audit-auction-walk', title: 'The goods auction’s walk' },
+            { id: 'rail-production', title: 'Production, a phone alone (a stand-in)' },
+            { id: 'monthend', title: 'Month end' },
+            { id: 'monthend-gameover', title: 'Game over' },
+          ]}
+        />
+      </div>
+      <h2 className="label-caps mt-6">For approval 2026-10-29 · characters in motion</h2>
+      <p className="mt-1 max-w-3xl text-sm text-ink-2">
+        Heiko: the characters are very static when they move. A walk cycle, an idle, facing, pace that shows, the wolves moment (run, bitten, fight) and the MULE in step, for all six species, in two variants side by side: A bobs and waddles the whole creature, B swings each species' feet like the MULE's legs. Playable, with its phone cost measured.
+      </p>
+      <ul className="mt-2 flex flex-col gap-1 text-sm" data-testid="motion-links">
+        <li>
+          <a href="/motion.html" className="text-holo underline" data-testid="link-motion">
+            Characters in motion · A bob and waddle, B feet
+          </a>
+        </li>
+      </ul>
+      <h2 className="label-caps mt-6">For approval 2026-10-29 · the land grant on a phone, muting an AI</h2>
+      <p className="mt-1 max-w-3xl text-sm text-ink-2">
+        Two pages of their own. The land grant's compact footer (CLAIM and Ready side by side, Waiting for on one line): the rail window that shows the lit plot goes from 20 px to about 120 px on a phone. Muting an AI on your phone: one tap on its seat, its whispers, lines and offers stop on your phone; the TV and its play are unchanged.
+      </p>
+      <ul className="mt-2 flex flex-col gap-1 text-sm" data-testid="page-links">
+        <li>
+          <a href="/grant.html" className="text-holo underline" data-testid="link-grant">
+            The land grant · a compact footer
+          </a>
+        </li>
+        <li>
+          <a href="/mute.html" className="text-holo underline" data-testid="link-mute">
+            Mute an AI on your phone
+          </a>
+        </li>
+      </ul>
+      <h2 className="label-caps mt-6">For approval · UX audit</h2>
+      <p className="mt-1 max-w-3xl text-sm text-ink-2">
+        The priority-1 screens, redesigned from the UX audit (docs/research/2026-10-28-ws6-ux-audit.md): every change numbered on the screen, with the player intent it serves and why. The planning hub first, then the election, the new month-end league table, the goods auction and development.
+      </p>
+      <div className="mt-2 flex flex-col gap-2" data-testid="audit-links">
+        <Links states={AUDIT_STATES} />
+        <Links states={ELECTION_LINKS} />
+        <Links states={MONTHEND_STATES} />
+        <Links states={AUDIT_AUCTION_STATES} />
+        <Links states={AUDIT_DEV_LINKS} />
+      </div>
+      <h2 className="label-caps mt-6">For approval 2026-10-28 · planning without a clock (Heiko's playtest)</h2>
+      <div className="mt-2 flex flex-col gap-2" data-testid="wait-links">
+        <Links states={WAIT_STATES} />
+      </div>
+      <h2 className="label-caps mt-6">Chosen 2026-10-28 · plots you can read from the couch (Heiko chose A)</h2>
+      <div className="mt-2 flex flex-col gap-2">
+        <Links states={[{ id: 'plots', title: 'Who owns a plot, what is on it, which one you selected: today, A and B (TV and phone)' }]} />
+      </div>
+      <h1 className="font-display text-3xl font-semibold">WS6 · UX & gameplay · mocks</h1>
+      <p className="mt-1 max-w-3xl text-sm text-ink-2">
+        What we take from the original M.U.L.E., as concepts on our own screens. Analysis: docs/research/2026-10-21-ws6-original-vs-ours.md. Fixture: month 5, four players; Lena holds the phone, Ossa and Kai are AI.
+      </p>
+      <h2 className="label-caps mt-6">Decided</h2>
+      <ul className="mt-2 flex max-w-3xl list-disc flex-col gap-1 pl-5 text-sm text-ink-2" data-testid="decisions">
+        {DECISIONS.map((d) => (
+          <li key={d}>{d}</li>
+        ))}
+      </ul>
+      <h2 className="label-caps mt-8">Start here</h2>
+      <ul className="mt-2 flex flex-col gap-1">
+        <li>
+          <a href="#production" className="font-display text-lg font-semibold text-holo underline" data-testid="link-production">
+            The production show, with three animated events (TV and phone)
+          </a>
+        </li>
+        <li>
+          <a href="#walk" className="font-display text-lg font-semibold text-holo underline" data-testid="link-walk">
+            The goods auction walk, playable (phone and TV)
+          </a>
+        </li>
+      </ul>
+      <h2 className="label-caps mt-8">For approval 2026-10-28 · one clock, hunger and sickness (Heiko)</h2>
+      <div className="mt-2 flex flex-col gap-2" data-testid="feel-links">
+        <Links states={[...FEEL_STATES, { id: 'tv-develop', title: 'Big screen: one clock, everyone at their pace' }]} />
+      </div>
+      <h2 className="label-caps mt-8">Redesign 2026-10-22 · phone and laptop (Heiko's points)</h2>
+      <div className="mt-2 flex flex-col gap-2">
+        <Links states={[{ id: 'mule', title: 'The MULE: model sheet' }, { id: 'game-handoff', title: 'Mid-game: move to your phone' }, { id: 'game-handoff-expired', title: 'Mid-game hand-off: the code expired' }, { id: 'chat', title: 'Live table chat (phones and TV)' }]} />
+        <Links states={HUB_STATES} />
+        <Links states={[{ id: 'tv-election', title: 'Election: the ballot reveal (TV and phone)' }]} />
+        <Links states={LOBBY_STATES} />
+        <Links states={PLAN_STATES} />
+        <Links states={DEV_STATES} />
+      </div>
+      <h2 className="label-caps mt-8">Goods auction · every state</h2>
+      <div className="mt-2">
+        <Links states={AUCTION_STATES} />
+      </div>
+      <h2 className="label-caps mt-8">Before each good</h2>
+      <div className="mt-2">
+        <Links states={[{ id: 'status', title: 'Status with Buy / Sell (R2)' }]} />
+      </div>
+      <h2 className="label-caps mt-8">Land auction · the highest-bid line</h2>
+      <div className="mt-2">
+        <Links states={LAND_STATES} />
+      </div>
+      <h2 className="label-caps mt-8">Store and development (D1, R1)</h2>
+      <div className="mt-2">
+        <Links states={[...STORE_STATES, { id: 'tv-develop', title: 'Big screen: everyone walking' }]} />
+      </div>
+    </div>
+  );
+}
+
+/** The fixture's map with three special fields, one hanging into Lena's plot, to show the owner's mark stays on top. */
+const PLOT_TILES: MapTile[] = mapTiles(VIEW).map((t) =>
+  t.x === 5 && t.y === 4 ? { ...t, special: { kind: 'ruins', salvage: 'alloy' } } : t.x === 12 && t.y === 5 ? { ...t, special: { kind: 'crystalCavern' } } : t.x === 9 && t.y === 3 ? { ...t, special: { kind: 'oasis' } } : t,
+);
+/** Lena's Energy plant, selected. */
+const PLOT_SELECTED = { x: 6, y: 5 };
+
+function PlotsPage() {
+  // Tap any plot on any map to select it on all of them: try a corner, an edge, and another player's plot on the phone.
+  const [sel, setSel] = useState(PLOT_SELECTED);
+  const pick = (t: MapTile) => setSel({ x: t.x, y: t.y });
+  const looks: { look: PlotLook | 'today'; title: string; note: string }[] = [
+    { look: 'today', title: 'Today', note: 'A thin outline at 16% tint, a 7–12 px owner mark, a 10–20 px icon; the selection is a 2 px ring.' },
+    { look: 'A', title: 'A · bold plots (recommended)', note: 'Every owned plot: a thick border and a 30% tint in its owner’s colour, and a corner tab with the owner’s creature, big enough to tell the shapes apart without colour. Installed: a large icon on a disc ringed in the good’s colour. Selected: a double ring with a breathing glow and an arrow pin, drawn inside the plot on the map’s edge (the pin below on the top row), never faded.' },
+    { look: 'B', title: 'B · territories', note: 'A thick border only round the edge of each player’s land, so a holding reads as one shape, and a hatch unique to each player inside, which tells owners apart without colour. Same installed icon and selection as A.' },
+  ];
+  return (
+    <Page title="Plots you can read from the couch · who owns it, what's on it, which you selected">
+      <p className="max-w-[1000px] text-sm text-ink-2">
+        Heiko’s playtest: “the plot that I selected must be clearer visible. it is hard to see which plot belongs to which player and what is on them.” The same map three ways, Lena’s Energy plant (6·5) selected, a ruins field hanging into it, an oasis and a crystal cavern. TV at its real width first, then the phone. Tap any plot to select it everywhere: a corner or an edge keeps its ring and pin inside the map, and another player's faded plot keeps its selection bright. I recommend A: each plot reads on its own from across the room, the creature tab works without colour, and the painted land stays calm; B’s hatch is the stronger colour-blind cue but makes the land busy.
+      </p>
+      {looks.map((l) => (
+        <section key={l.look} className="flex flex-col gap-2" data-testid={`look-${l.look}`}>
+          <h2 className="font-display text-xl font-semibold">{l.title}</h2>
+          <p className="max-w-[1000px] text-sm text-ink-2">{l.note}</p>
+          <div className="flex flex-wrap items-start gap-6">
+            <div className="w-[760px] rounded-panel bg-table p-3" data-testid={`tv-${l.look}`}>
+              {l.look === 'today' ? (
+                <HoloMap width={W} height={H} tiles={PLOT_TILES} density="tv" hideGround selected={sel} onTile={pick} />
+              ) : (
+                <PlotMap look={l.look} width={W} height={H} tiles={PLOT_TILES} density="tv" selected={sel} onTile={pick} />
+              )}
+            </div>
+            <div className="w-[420px] rounded-panel bg-table p-2" data-testid={`phone-${l.look}`}>
+              {l.look === 'today' ? (
+                <HoloMap width={W} height={H} tiles={PLOT_TILES} selected={sel} focusSlot={0} onTile={pick} />
+              ) : (
+                <PlotMap look={l.look} width={W} height={H} tiles={PLOT_TILES} selected={sel} focusSlot={0} onTile={pick} />
+              )}
+            </div>
+          </div>
+        </section>
+      ))}
+    </Page>
+  );
+}
