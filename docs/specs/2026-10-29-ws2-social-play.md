@@ -246,7 +246,9 @@ tomorrow     MUST answer a whisper addressed to the AI within the phase, by RULE
              With WS3's AM-4 (a `heard` step {from, to}, no text): MUST let a reply be a recorded writer call (kind
              'playbook', RecordedWrite unchanged, its words beside the reply as C3's messages are) that opens in that
              step, whose edits (a stance, a note, a politics value) take effect through validatePlan; whether it opens
-             reads only from, to, timing, caps and state, never the words (HC-B3 (i)).
+             reads only from, to, timing, caps and state, never the words (HC-B3 (i)). It opens only on a
+             room-delivered `heard` step (a human's line); a line an AI sent, forwarded inside the game by C5, opens
+             no recorded call: its words came from an unrecorded part of a reply, so a replay never regenerates it.
 seam         packages/ai/src/social/talker.ts (new) and apps/server/src/brain/index.ts::BrainService (talkerFor)
 reuse        spec A's writer port shape (writerFor: never throws, wait bound, RULE-A5 inside the port, AM-A14);
              S-B1's reply mode (measured $0.0024 on Sonnet); personas.ts lines for the keyless fallback.
@@ -416,7 +418,7 @@ Code-only; no existing state to reach. The mute starts unset for every player.
 | T-AC-B1 (B-AC-B1) | RULE-B1 rows 1-6 with its examples. | messages sent or dropped | — | C4 |
 | T-AC-B2 (HC-B1) | RULE-B2: a false declared price → dropped; a number with no declared fact → dropped; "I'll vote for you" → sent; a prose-only false claim → sent (R-B1, pinned). | sent or dropped; ledger cause | a true declared price → sent | C4 C7 |
 | T-AC-B3 (HC-B3) | A game with social reasoning and replies, replayed from its record with the key unset, reproduces every playbook, vote and score; a reply's call changes no state hash. | WS3's replay result; state hashes | — | C3 C7 C8 |
-| T-AC-B8 (HC-B3) | A game with recorded replies, replayed with every heard text blanked, comes out identical: every playbook, vote and score. | WS3's replay result | a reply call that opens on a word in the text → red | C7 C8 |
+| T-AC-B8 (HC-B3) | A game with recorded replies, replayed with every heard text blanked, comes out identical: every playbook, vote and score. | WS3's replay result | a reply call that opens on a word in the text → red; an AI's whisper to another AI opens no recorded call | C7 C8 |
 | T-AC-B4 (HC-B4) | RULE-B5's example: 5 Smart seats, fake model at S-B1's option-(1) prices, 12 months: the total ≤ BRAIN.gameBudgetUsd; late calls on Haiku; RULE-B3's reserve holds. | ledger totals and models | the same at 4 seats → all Sonnet | C7 C11 |
 | T-AC-B5 (HC-B5) | No prompt carries another seat's goods or unanalysed ground, or a whisper between two other players. | prompt text | a planted rival stock → red | C1 C2 C7 |
 | T-AC-B6 (B-AC-B3) | RULE-B4 rows 1-5; validatePlan clamps an illegal politics edit. | VoteHand's intents; the clamped playbook | no politics play → keyless rule, unchanged | C6 |
@@ -453,6 +455,10 @@ Code-only; no existing state to reach. The mute starts unset for every player.
   words (its AM-4, needing WS1, WS2 and WS3 OKs), so a whisper reply can itself be a recorded call that acts. C7
   gains recorded replies (B-2b, after B-2's words-only replies); §3 gains the `heard` event; T-AC-B8 (replay with
   blanked heard text is identical) added. Goal G-B3 ("influence") and G-B4 served sooner; no goal changes.
+- **AM-B4 · 29 Oct · lead, on reviewing WS3's AM-4 (OK'd at ws3-auctions a25de0c4):** a recorded reply opens only on a
+  room-delivered `heard` step; an AI's line forwarded by C5 is never a heard step and opens no recorded call (its words
+  are unrecorded, so a replay could not re-open it). AI 2 still reads AI 1's message at its next monthly call
+  (B-AC-B5). C7 and T-AC-B8's negative case carry it. Goals unchanged.
 
 ## §9 · Ownership Boundaries `[handoff]`
 - **Sole owner of AI social reasoning, its memory and its messages: WS2**: `packages/ai/src/social/`, the social parts

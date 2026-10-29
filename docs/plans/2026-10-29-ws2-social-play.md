@@ -326,7 +326,7 @@ Every handoff carries this line verbatim:
 - Modify: `packages/ai/src/social/talker.ts`, `apps/server/src/brain/index.ts` (a reply goes through the writer port, kind 'playbook'; its words beside the reply, unrecorded)
 - Test: `apps/server/test/brain-writer-record.test.ts` (extend)
 
-- [ ] **Step 1: Write the failing test `T-AC-B8: a game with recorded replies, replayed with every heard text blanked, comes out identical: every playbook, vote and score`** — Altitude: promise (WS3's replay result). Positive control: make the reply call open only when the whisper contains "vote", watch it go red, restore. Negative case: a reply whose edits validatePlan refuses changes nothing.
+- [ ] **Step 1: Write the failing test `T-AC-B8: a game with recorded replies, replayed with every heard text blanked, comes out identical: every playbook, vote and score`** — Altitude: promise (WS3's replay result). Positive control: make the reply call open only when the whisper contains "vote", watch it go red, restore. Negative cases: a reply whose edits validatePlan refuses changes nothing; an AI's whisper to another AI opens no recorded call (spec AM-B4).
 - [ ] **Step 2: Run it** → FAIL
 - [ ] **Step 3: Implement C7's recorded replies per spec §1 C7** — whether the call opens reads only from, to, timing, caps (RULE-B3) and state; its stance, note or politics edits take effect through validatePlan; RecordedWrite unchanged.
 - [ ] **Step 4: Run the server suite and WS3's record and replay tests** → PASS; commit `feat(server): a reply may change the AI's stance or vote through its recorded reply (spec B C7, T-AC-B8)`
@@ -475,7 +475,7 @@ Every handoff carries this line verbatim:
 | WS1 | validatePlan clamps `/strategy/stances/<p>` and `/rivalReads/<p>`; BRAIN.social hunks | B-1 | before B-1 merges |
 | WS1 | optional `Playbook.politics` type and its clamps (canRun, candidates, taxBounds); later `PlanningPlay.offers` | B-4, B-5 | before B-4 / B-5 |
 | WS3 | the HC-B3 answer | B-1, B-4 | **answered yes, 29 Oct** |
-| WS3 | AM-4: the `heard` record event `{ from, to }` (RULE-1 row, RULE-5 restated), OK'd by WS1, WS2, WS3 | B-2b | WS3 drafts from spec B §3 |
+| WS3 | AM-4: the `heard` record event `{ from, to }` (RULE-1 row 9, RULE-5, RULE-6, T-AC-12), OK'd by WS1, WS2, WS3 | B-2b | written at ws3-auctions a25de0c4; **WS2 OK'd**; WS1's OK pending |
 | WS3 | mule-game.ts: AI lines to the other AIs (C5); whispers to the talker (B-2); the mute intent and protocol (C9); card-intent touch point (C10) | B-1, B-2, B-3, B-5 | per PR, reviewed on the SHA |
 | WS3 | record.ts `talkerFor` passthrough; replay.ts `talkerFor: () => null` | B-2 | reviewed on the SHA |
 | WS6 | the mute control from mock ws6-ux 29b792c2; the card screens | B-3, B-5 | when built |
