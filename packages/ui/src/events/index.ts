@@ -13,6 +13,7 @@ export {
   eventSegments,
   eventStageAt,
   eventSkipTo,
+  isPlaying,
   eventFrontAt,
   EVENT_FRONT,
   type EventScript,

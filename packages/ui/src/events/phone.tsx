@@ -2,7 +2,7 @@ import { cx } from '../components/tokens';
 import { eventMissLine, eventSegLabel, segTitle, eventWhoLine, eventYouSummary } from './copy';
 import { signLook, useShow } from './frame';
 import { EventBuzz, EventSignBadge } from './glyphs';
-import { eventStageAt, type EventSegment } from './timing';
+import { eventStageAt, isBuzzing, isPlaying, type EventSegment } from './timing';
 
 /**
  * The phone's rail through a phase, inside <EventShow>; the screen's shell places it. One small card at a time
@@ -112,7 +112,7 @@ export function EventTvPhoneRail({ me }: { me: string }) {
   const seg = now ?? (stage === 'outro' ? (s.segments.at(-1) ?? null) : null);
   return (
     <>
-      {seg ? <EventPhoneCard seg={seg} me={me} at={t >= seg.settleAt - 0.2 ? 'you' : 'news'} buzz={t - seg.announceAt < 1.2} /> : <EventWaiting />}
+      {seg ? <EventPhoneCard seg={seg} me={me} at={isPlaying(seg, t) ? 'news' : 'you'} buzz={isBuzzing(seg, t)} /> : <EventWaiting />}
       <EventRailTail me={me} current={seg} />
     </>
   );
@@ -140,7 +140,7 @@ export function EventSoloRail({ me }: { me: string }) {
   const shown = seg ?? (stage === 'outro' ? (s.segments.at(-1) ?? null) : null);
   return (
     <>
-      {!shown ? <EventWaiting /> : t < shown.settleAt - 0.2 ? <EventNowPlaying seg={shown} buzz={t - shown.announceAt < 1.2} /> : <EventPhoneCard seg={shown} me={me} at="you" />}
+      {!shown ? <EventWaiting /> : isPlaying(shown, t) ? <EventNowPlaying seg={shown} buzz={isBuzzing(shown, t)} /> : <EventPhoneCard seg={shown} me={me} at="you" />}
       <EventRailTail me={me} current={shown} />
     </>
   );

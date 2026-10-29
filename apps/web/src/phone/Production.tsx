@@ -16,6 +16,7 @@ import {
   GOOD_NAME,
   GoodIcon,
   harvest,
+  isPlaying,
   landed,
   landing,
   ProductionMap,
@@ -106,7 +107,7 @@ export function Production({ production }: { production: ProductionView }) {
       footer={
         <>
           {/* Alone, what a tap on the map does now, by the screen's actions (AM-2: the rail's foot). */}
-          {skipTo !== null && <EventSkipHint playing={skipTo === playingNow?.settleAt} className="self-end" />}
+          {skipTo !== null && <EventSkipHint playing={playingNow !== null && isPlaying(playingNow, t)} className="self-end" />}
           <Button size="lg" variant={self.ready ? 'outline' : 'holo'} className="w-full px-2" disabled={self.ready} onClick={() => client.intent({ type: 'ready' })}>
             {self.ready ? 'Waiting for the others' : 'On to the auction'}
           </Button>
