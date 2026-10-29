@@ -262,7 +262,17 @@ describe('the dev floor: the step', () => {
     const waded = play(SEED, inputs, LAKE_MAP, { ...floorConfig(HALL), steer: { ...DEV_STEER, lakeMode: 'wade' } });
     const wet = waded.floors.map((f, i) => misplaced(waded.state, f, waded.floors[i - 1]));
     expect(wet[0]!.length, 'in the lake at the start').toBe(2);
-    expect(wet.slice(1_000 / DEV_STEER.tickMs).flat(), 'out of it within a second, for good').toEqual([]);
+    expect(wet.slice(2_000 / DEV_STEER.tickMs).flat(), 'out of it within two seconds, for good').toEqual([]);
+    // Held down from the door onto the plains, 'a' walks out on its own feet: half a tile at 1.25 × the lake's wading 0.3
+    // × its 1.25, then the 0.18 of its body at the plains' 1, off it after 25 ticks.
+    let held = waded.floors[0]!;
+    for (let t = 0; t < 2_000 / DEV_STEER.tickMs; t++) {
+      const next = stepFloor(held, waded.state, { a: go(0, 1) }, DEV_STEER.tickMs, floorConfig(HALL));
+      expect(next.colonists[0]!.y, `tick ${next.tick}: 'a' walks down while it wades out`).toBeGreaterThan(held.colonists[0]!.y);
+      held = next;
+    }
+    expect(misplaced(waded.state, { ...held, colonists: held.colonists.slice(0, 1) }), "'a' out of it onto the plains").toEqual([]);
+    expect(held.colonists[0]!.space, "'a' out of it onto the plains").toBe('map');
 
     // Every runner steps at the one tick: any other length is its caller's bug, not a rule refused.
     const halfTick = () => stepFloor(first.floors[0]!, first.state, {}, DEV_STEER.tickMs / 2, floorConfig(HALL));

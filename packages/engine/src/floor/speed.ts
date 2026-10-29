@@ -12,6 +12,12 @@ export function terrainShare(terrain: Terrain, cfg: FloorConfig): number {
   return steer.terrain[terrain];
 }
 
+/** A land's share as the config lists it, whatever the switches say: a lake's is its wading share. The store has none. */
+function listedShare(terrain: Terrain, { steer }: FloorConfig): number {
+  if (terrain === 'store') return 0;
+  return terrain === 'lake' ? steer.wading : steer.terrain[terrain];
+}
+
 /** The walk floorSeconds times, in hall units: from the left door's spot to the corral's, as the arcade mock measures it. */
 export function doorToCorral(hall: HallPlan): number {
   const { doorL, corral } = hall.spots;
@@ -32,7 +38,7 @@ export function speedOf(c: FloorColonist, state: GameState, cfg: FloorConfig): n
   if (c.space === 'hall') return hallSpeed(cfg) * c.pace * lead;
   const terrain = tileAt(state.tiles, state.width, Math.floor(c.x), Math.floor(c.y))!.terrain;
   // On land it may not enter, a colonist still walks at the land's listed speed, or 1 if it has none, to get off it.
-  const ground = terrainShare(terrain, cfg) || (terrain === 'store' ? 0 : cfg.steer.terrain[terrain]) || 1;
+  const ground = terrainShare(terrain, cfg) || listedShare(terrain, cfg) || 1;
   const bitten = c.bitten ? cfg.wolves.bittenPace : 1;
   const bot = c.bot ? cfg.steer.botSpeed : 1;
   return cfg.steer.mapTilesPerSecond * ground * c.pace * lead * bitten * bot;

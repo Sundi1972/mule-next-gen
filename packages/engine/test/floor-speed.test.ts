@@ -67,7 +67,7 @@ describe('the dev floor: speed', () => {
       ['swamp', 'zip', onTile(2, 0), {}, 0.78, 2],
       ['leading a MULE on plains', 'zip', { ...onTile(0, 1), ...leading }, {}, 1.41, 2],
       ['bitten, on plains', 'zip', { ...onTile(0, 1), bitten: true }, {}, 0.78, 2],
-      ['standing on a lake worked from its shore: 1, to get off it', 'zip', onTile(3, 0), {}, 1.5625, 9],
+      ['standing on a lake worked from its shore: its listed wading 0.3, to get off it', 'zip', onTile(3, 0), {}, 0.46875, 9],
       ['a lake, waded', 'zip', onTile(3, 0), { lakeMode: 'wade' }, 0.47, 2],
       ['standing on mountains made impassable: their 0.4, to get off them', 'zip', onTile(1, 0), { mountainsImpassable: true }, 0.625, 9],
       ['an AI Bramblet on plains, bots at 0.8', 'bot', onTile(0, 1), { botSpeed: 0.8 }, 1, 9],
