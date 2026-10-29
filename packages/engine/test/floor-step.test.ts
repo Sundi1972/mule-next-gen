@@ -14,6 +14,8 @@ import {
   type DevFloor,
   type FloorInput,
   type GameState,
+  type HallPoint,
+  type HallRect,
   type Terrain,
 } from '../src/index.js';
 
@@ -149,6 +151,70 @@ function misplaced(state: GameState, floor: DevFloor, before?: DevFloor): string
 /** Every tick's misplaced colonists in a played turn. */
 const wrong = (run: { state: GameState; floors: DevFloor[] }) => run.floors.flatMap((f, i) => misplaced(run.state, f, run.floors[i - 1]));
 
+const TICKS_A_SECOND = 1_000 / DEV_STEER.tickMs;
+
+type Axis = 'x' | 'y';
+const crossAxis = (axis: Axis): Axis => (axis === 'x' ? 'y' : 'x');
+const extent = (r: HallRect, axis: Axis): [number, number] => (axis === 'x' ? [r.x0, r.x1] : [r.y0, r.y1]);
+const gapBetween = (a: HallRect, b: HallRect) => Math.hypot(Math.max(0, b.x0 - a.x1, a.x0 - b.x1), Math.max(0, b.y0 - a.y1, a.y0 - b.y1));
+
+/** The narrowest gap between two of the hall's floor boxes that do not touch. */
+const thinnestGap = () => Math.min(...HALL.floor.flatMap((a, i) => HALL.floor.slice(i + 1).map((b) => gapBetween(a, b)).filter((g) => g > 0)));
+
+/** The hall's floor along `axis` at `line` across it, as the stretches a colonist walks without leaving the floor. */
+function stretches(axis: Axis, line: number): [number, number][] {
+  const spans = HALL.floor
+    .filter((r) => extent(r, crossAxis(axis))[0] <= line && line <= extent(r, crossAxis(axis))[1])
+    .map((r) => extent(r, axis))
+    .sort(([a], [b]) => a - b);
+  const out: [number, number][] = [];
+  for (const [a, b] of spans) {
+    const last = out.at(-1);
+    if (last && a <= last[1]) last[1] = Math.max(last[1], b);
+    else out.push([a, b]);
+  }
+  return out;
+}
+
+/** A wall to hold a colonist into: walking along `axis` at `line`, on the stretch of floor `from`, pushed `way`. */
+interface HeldWall {
+  axis: Axis;
+  line: number;
+  from: [number, number];
+  way: -1 | 1;
+  width: number;
+}
+
+/**
+ * Every wall between two of the hall's floor boxes that do not touch, once from each side: on the lines through the
+ * band the two share (its edges and its middle), each gap between the stretches of floor that hold them.
+ */
+function hallWalls(): HeldWall[] {
+  const found = new Map<string, HeldWall>();
+  HALL.floor.forEach((a, i) => {
+    for (const b of HALL.floor.slice(i + 1)) {
+      if (gapBetween(a, b) === 0) continue;
+      for (const axis of ['x', 'y'] as const) {
+        const lo = Math.max(extent(a, crossAxis(axis))[0], extent(b, crossAxis(axis))[0]);
+        const hi = Math.min(extent(a, crossAxis(axis))[1], extent(b, crossAxis(axis))[1]);
+        if (lo > hi) continue;
+        for (const line of [lo, (lo + hi) / 2, hi]) {
+          const along = stretches(axis, line);
+          const holding = (r: HallRect) => along.findIndex(([s0, s1]) => s0 <= extent(r, axis)[0] && extent(r, axis)[1] <= s1);
+          const [first, last] = [holding(a), holding(b)].sort((p, q) => p - q) as [number, number];
+          for (let k = first; k < last; k++) {
+            const [left, right] = [along[k]!, along[k + 1]!];
+            const width = right[0] - left[1];
+            found.set(`${axis} ${line} ${left} 1`, { axis, line, from: left, way: 1, width });
+            found.set(`${axis} ${line} ${right} -1`, { axis, line, from: right, way: -1, width });
+          }
+        }
+      }
+    }
+  });
+  return [...found.values()];
+}
+
 describe('the dev floor: the step', () => {
   it('T-AC-1: a seed and a per-tick input script step to identical floors', () => {
     const inputs = script(SEED);
@@ -219,31 +285,37 @@ describe('the dev floor: the step', () => {
 
   it("INV-walls: a colonist held for a second into an outfitter's side wall stays in that outfitter, at floorSeconds 3 and at 0.5", () => {
     const state = game(SEED);
-    const room = HALL.rooms.water;
-    const y = (room.y0 + room.y1) / 2;
+    const walls = hallWalls();
+    // The thinnest wall, the left doorway's floor to the works', sets the bound on a step's pieces: it is among them.
+    expect(Math.min(...walls.map((w) => w.width)), 'the thinnest wall held into').toBeCloseTo(thinnestGap(), 9);
+    const water = HALL.floor.find((r) => placeAt({ x: (r.x0 + r.x1) / 2, y: (r.y0 + r.y1) / 2 }, HALL) === 'water')!;
+    expect(walls.some((w) => w.axis === 'x' && w.from[0] === water.x0 && w.from[1] === water.x1), "the water outfitter's side walls held into").toBe(true);
     const escaped: string[] = [];
     const short: string[] = [];
     for (const floorSeconds of [3, 0.5]) {
       const cfg = { ...floorConfig(HALL), steer: { ...DEV_STEER, floorSeconds } };
       const built = buildFloor(state, cfg);
-      // From every point across the room's floor, held left and held right.
-      for (let x = room.x0; x <= room.x1; x += 0.05) {
-        const box = HALL.floor.find((r) => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1);
-        if (!box) continue;
-        for (const way of [-1, 1]) {
-          let floor: DevFloor = { ...built, colonists: built.colonists.map((c) => (c.id === 'a' ? { ...c, space: 'hall', x, y } : c)) };
-          const walk = (speedOf(floor.colonists[0]!, state, cfg) * DEV_STEER.tickMs) / 1_000;
-          for (let t = 0; t < 1_000 / DEV_STEER.tickMs; t++) {
-            floor = stepFloor(floor, state, { a: go(way, 0) }, DEV_STEER.tickMs, cfg);
+      const at = (p: HallPoint): DevFloor => ({ ...built, colonists: built.colonists.map((c) => (c.id === 'a' ? { ...c, space: 'hall', ...p } : c)) });
+      const walk = (speedOf(at(HALL.spots.doorL).colonists[0]!, state, cfg) * DEV_STEER.tickMs) / 1_000;
+      for (const { axis, line, from: [lo, hi], way } of walls) {
+        const wall = way > 0 ? hi : lo;
+        const point = (along: number): HallPoint => (axis === 'x' ? { x: along, y: line } : { x: line, y: along });
+        // From every point on its stretch of floor within half a second's walk of the wall, held into it.
+        for (let d = 0; d <= Math.min(hi - lo, (walk * TICKS_A_SECOND) / 2); d += 0.05) {
+          const start = wall - way * d;
+          const where = `${floorSeconds} s, along ${axis} at ${line.toFixed(2)}, from ${start.toFixed(2)} held ${way}`;
+          let floor = at(point(start));
+          for (let t = 0; t < TICKS_A_SECOND; t++) {
+            floor = stepFloor(floor, state, { a: axis === 'x' ? go(way, 0) : go(0, way) }, DEV_STEER.tickMs, cfg);
             const a = floor.colonists[0]!;
-            if (placeAt(a, HALL) !== 'water') escaped.push(`${floorSeconds} s, from ${x.toFixed(2)} held ${way}: at tick ${t} in ${placeAt(a, HALL)}`);
+            const off = a.space !== 'hall' || a[axis] < lo || a[axis] > hi || a[crossAxis(axis)] !== line;
+            if (off) escaped.push(`${where}: at tick ${t} at ${a.space} ${a.x.toFixed(2)},${a.y.toFixed(2)}`);
           }
-          const wall = way < 0 ? box.x0 : box.x1;
-          if (Math.abs(floor.colonists[0]!.x - wall) >= walk) short.push(`${floorSeconds} s, from ${x.toFixed(2)} held ${way}: ended at ${floor.colonists[0]!.x.toFixed(2)}`);
+          if (Math.abs(floor.colonists[0]![axis] - wall) >= walk) short.push(`${where}: ended at ${floor.colonists[0]![axis].toFixed(2)}`);
         }
       }
     }
-    expect(escaped, 'through a wall, out of the outfitter').toEqual([]);
+    expect(escaped, 'through a wall, off its stretch of floor').toEqual([]);
     expect(short, 'stopped short of the wall it was held into').toEqual([]);
   });
 
