@@ -1,4 +1,4 @@
-import type { AuctionSide, CanRun, CeremonyStep, DevPlace, Election, EventKey, EventKind, Good, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
+import type { AuctionSide, CanRun, CeremonyStep, DevPlace, Election, EventKey, EventKind, EventWeight, Good, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -343,6 +343,12 @@ export interface ProductionEventView {
   from?: 'n' | 'e' | 's' | 'w';
   /** The plots it hit, in the order it reached them, and how many units each gained or lost. */
   hits: { x: number; y: number; order: number; delta: number }[];
+  /** The phase whose show plays it. */
+  phase: Phase;
+  /** How big its story is on the TV. */
+  weight: EventWeight;
+  /** How long the show plays it, in ms at full pace; the client never computes this itself. */
+  playMs: number;
 }
 
 /** What every plot made this month and what the month's event did: never anything a player holds. */
@@ -352,6 +358,8 @@ export interface ProductionView {
   events: ProductionEventView[];
   /** How long the production phase was scheduled to run, in ms; the show's timeline stretches over it. */
   lengthMs: number;
+  /** How long the phase's intro plays before the first event, in ms: 0 in a quiet month. */
+  introMs: number;
 }
 
 /** One screen's view of the game: a player's private view, or the public one for a board. */

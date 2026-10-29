@@ -111,7 +111,7 @@ today        the production phase lasts PHASES.productionMs × phaseScale whatev
              anchors: apps/server/src/mule-game.ts::startPhaseTimer, apps/server/src/mule-game.ts::PHASE_MS,
              packages/engine/src/config.ts::PHASES (productionMs 15 000)    verified_by: read
 tomorrow     MUST: production lasts its base length plus the events' extra time (RULE-1), never more than the cap.
-             MUST: a quiet month, and a month whose events fit the existing 4.8 s window, last exactly as today.
+             MUST: a quiet month lasts exactly as today (AM-4: every wave-1 event plays longer than the 4.8 s window).
 logic        → §2 RULE-1 · evaluated_at: entering production (runProduction has already run in advancePhase, so
              the month report holds the events) · writes: phaseEndsAt, productionMs
 seam         mule-game.ts::startPhaseTimer — the one place production's length is set (productionMs feeds the view)
@@ -120,7 +120,7 @@ senior       junior would: raise PHASES.productionMs for everyone · senior does
 mechanism    in_place
 call sites   startPhaseTimer ← enterPhase, and the election tick when planning opens after an election (mule-game.ts,
              both with phase planning there; only enterPhase reaches production)
-pin          apps/server/test/production-view.test.ts and apps/server/test/phase-scale.test.ts stay green unchanged
+pin          apps/server/test/phase-scale.test.ts stays green unchanged; production-view.test.ts stays green with only C3's fixture fields added
 depends_on   C1 (data)
 atomicity    ships with C3: the view's lengthMs and playMs must come from the same computation
 ```
@@ -183,8 +183,8 @@ senior       junior would: loop the old EventLayer · senior does: one timeline 
 mechanism    in_place
 call sites   ProductionMap ← TvProduction, phone Production; finalUnits/landed/harvest/landing ← TvProduction,
              phone Production, ProductionMap's PlotBars; showTime ← TvProduction, phone Production
-pin          a quiet month's frames (no events): apps/web/test/production-show.test.ts and the e2e production
-             step stay green unchanged
+pin          apps/web/test/production-show.test.ts stays green with only AM-6's named edit (WS6's per-kind
+             B-AC-7 retired into T-AC-4); the e2e production step stays green
 depends_on   C3 (contract), C4
 atomicity    ships with C6 and C7: they read the same timeline
 ```
@@ -317,10 +317,11 @@ inputs
   weight(e)  EVENT_SHOW.weight[e.key]; a key missing from the table plays as a headline
   play(e)    EVENT_SHOW.playMs[weight(e)]   (bulletins of one phase share ONE roll call: EVENT_SHOW.rollCallMs)
   cap        EVENT_SHOW.capMs
+  introMs    EVENT_SHOW.introMs (1 800) when any event fired, else 0: the phase's opening card of what fired (AM-5)
   window     EVENT_SHOW.productionWindowMs = 4 800 (SHOW.flyStart − SHOW.eventAt, today's event window)
 
 formula
-  showMs      = min(cap, Σ play(e) over headlines and spotlights + (rollCallMs if any bulletin))
+  showMs      = min(cap, (introMs if any event) + Σ play(e) over headlines and spotlights + (rollCallMs if any bulletin))   (AM-5)
   production  = (PHASES.productionMs + max(0, showMs − window)) × phaseScale
   each event's playMs in the view = its share of showMs (play(e), cut in proportion when the cap bites)
 
@@ -329,7 +330,7 @@ unknown
   a key with no weight → a headline: an event must never play shorter than its story because the table forgot it.
 
 examples                                                     → §6
-  no events → 15 000 ms · one dust storm (≤ window) → 15 000 ms
+  no events → 15 000 ms · one dust storm → 15 000 + (1 800 + 7 000 − 4 800) = 19 000 ms (AM-4, AM-5)
   drought + pest swarm → 15 000 + (their sum − 4 800) · five headlines → capped at cap
 ```
 
@@ -415,7 +416,7 @@ Code-only; no existing state to reach. Games in progress pick up the new lengths
 | B-AC-2 (G-2) | Given no board is connected, when production plays, then each event plays on the phone's own map, a tap skips to the result, and the result says what it did to you | phone Production rendered with boards 0 | with boards 1 the phone shows only the light card | C7 |
 | B-AC-3 (G-1, PR-2) | Given a goods auction month where pirates raid, when the auction opens, then the TV plays the pirate ship before trading opens and nobody can bid until it ends | the TV overlay and the server's refusal of a bid | an auction with no event opens at once | C8, C9, C10, C12 |
 | B-AC-4 (G-2, PR-2) | Given no board, when a store fire fires in the auction, then the phone plays the store fire itself; with a board, the light card | phone overlay | — | C10, C12 |
-| T-AC-1 (serves B-AC-1) | RULE-1's examples: no events and one dust storm → 15 000 ms; drought + pest swarm → 15 000 + (sum − 4 800); five headlines → the cap; × phaseScale | `MuleGame`'s view: `phaseEndsAt − now` and `production.lengthMs` | a phase other than production is not lengthened by this rule | C1, C2 |
+| T-AC-1 (serves B-AC-1) | RULE-1's examples: no events → 15 000 ms; one dust storm → 19 000 ms; drought + pest swarm → 15 000 + (1 800 + sum − 4 800); five headlines → the cap; × phaseScale | `MuleGame`'s view: `phaseEndsAt − now` and `production.lengthMs` | a phase other than production is not lengthened by this rule | C1, C2 |
 | T-AC-2 (serves B-AC-1) | The production view lists every event of the month in fired order with phase, weight and playMs | `apps/server/test/events-view.test.ts` on `MuleGame`'s view | a month with no events lists none | C3 |
 | T-AC-3 (serves B-AC-1) | RULE-2: a plot's units add every event's delta in order, never below 0; landed/harvest match | ProductionMap's exported `finalUnits`/`landed` and the rendered bars | a plot no event reached keeps `made` | C5 |
 | T-AC-4 (serves B-AC-1) | At a time inside event i's segment the map shows event i (`data-event`), and the goods fly only after the last | rendered ProductionMap | quiet month: timeline as today | C5 |
@@ -490,16 +491,192 @@ folded    T-AC-5 runs in the shell at 844×390 and 667×375 (and 844 with a 47 p
           rail was the tighter case, so its 667 check stands
 ```
 
+```
+AM-3 · 2026-10-28 · lead · PR-1 Task 1 (codebase drift: the trunk base, ws8-show-pr1 @ 979875a2)
+
+target    §1 C3, §6 T-AC-1/T-AC-2, §7 R-1
+said      C3 copies MonthEvent.phase into the view; the report holds several events a phase
+did       on the trunk base MonthEvent has no `phase` (it still has `when: 'afterProduction'`), and runProduction
+          returns at most one event (packages/engine/src/production.ts, `events: event ? [event] : []`); WS1's
+          contract (phase, several events) is on ws1-events, not yet in the trunk. So PR-1's view sets `phase` from
+          the phase it shows (production), and T-AC-1/T-AC-2 arrange several events by setting the pushed month
+          report's events in the test (a seed cannot produce two today). The graft onto WS1's real report (R-1)
+          happens when ws1-events reaches the trunk: then the view reads MonthEvent.phase and T-AC-1/2 re-run on a
+          real two-event month.
+because   G-1: the TV must play every event the report holds; PR-1 cannot wait for WS1's merge, and must not merge
+          WS1's unmerged branch into ours
+goal      G-1 (unchanged)
+folded    C3 reads as above for PR-1; R-1's graft stays a PR-1 merge-gate line (already in the plan)
+```
+
+```
+AM-4 · 2026-10-28 · lead · PR-1 Task 1 (a false example, found by the implementer)
+
+target    §2 RULE-1 examples, §1 C2 tomorrow, §6 T-AC-1
+said      "one dust storm (≤ window) → 15 000 ms"; "a month whose events fit the 4.8 s window lasts as today"
+did       the formula stands; the example was wrong: a headline plays 7 000 ms (C1's values), longer than the 4 800 ms
+          window, so one dust storm gives 17 200 ms. No wave-1 event fits the window (headline 7 000, spotlight 5 200),
+          so only a quiet month lasts exactly as today. That is what Heiko approved ("production grows only in months
+          with events; quiet months unchanged").
+because   G-1: each event plays its whole story; shrinking stories to fit the old window would cut them
+goal      G-1 (unchanged)
+folded    RULE-1 example, C2 tomorrow and T-AC-1 now say 17 200 for one dust storm
+```
+
+```
+AM-5 · 2026-10-28 · PM ruling (the intro), at PR-1's first review gate
+
+target    §1 C1, C3, C4, C5 · §2 RULE-1 · §3 EVENT_SHOW and ProductionView · §6 T-AC-1, T-AC-4
+said      the intro (the phase's roll call of what fired) had no length of its own; the module folded it into the
+          first event's segment, so the first story's motion played about 20% faster than a later one of the same
+          weight
+did       the server sends the intro too: EVENT_SHOW.introMs = 1 800 (the gallery's BEAT.intro); ProductionView gains
+          `introMs` (1 800 when any event fired, 0 in a quiet month), a named edit in WS3's protocol. RULE-1:
+          showMs = min(capMs, (introMs if any event) + Σ play(e) + (rollCallMs if any bulletin)); production and
+          the client's event window use that showMs. The module plays the intro in its own slot before the first
+          segment and no longer counts it in k, so equal weights play at equal motion speed. New example: one dust
+          storm → 15 000 + (1 800 + 7 000 − 4 800) = 19 000 ms.
+because   Heiko approved the gallery's pacing; a first event 20% fast drifts from it (PM: restores what he approved)
+goal      G-1 (unchanged)
+folded    plan Task 3b (after Task 3: it shares ProductionMap's timeline); T-AC-1's values gain the intro;
+          T-AC-4 gains "first and later events of equal weight play at equal motion speed (pace)"
+```
+
+```
+AM-6 · 2026-10-28 · PM ruling (A), at PR-1 Task 3 (a false pin, found by the implementer)
+
+target    §1 C5 pin · §6 T-AC-4 · WS6's B-AC-7 (apps/web/test/production-show.test.ts)
+said      C5's pin: "a quiet month's frames: apps/web/test/production-show.test.ts … stay green unchanged"
+did       that file holds no quiet-month test; it holds WS6's B-AC-7 ("each of the nine event kinds plays its own
+          animation") on the old per-kind layer, and frames that assume the fixed 4.8 s window. C5 replaces that layer
+          with the gallery's, keyed by event (Heiko's approved design). Ruled: a named edit of that file, WS6
+          reviewing: the per-kind assertions retire; B-AC-7's promise is restated as "each wave-1 event key plays its
+          own story" and proven by T-AC-4 asserting each key's own story element, positive-controlled by swapping one
+          key's story for another's (red shown before anything retires) and by the render gate in Task 6; the "every
+          hit has landed before the goods fly" frames stay, moved to the end of the event window and computed from
+          playMs; every other assertion stays unedited. WS6 gives its OK on the SHA and marks its B-AC-7 superseded by
+          this spec's T-AC-4.
+because   G-1: each event plays its own story; the old per-kind look is what the gallery replaces
+goal      G-1 (unchanged)
+folded    C5 pin: production-show.test.ts stays green with only this named edit; T-AC-4 strengthened as above
+```
+
+```
+AM-7 · 2026-10-28 · PM ruling (A), at PR-1 Task 3's review
+
+target    §1 C5 · §6 T-AC-3 · apps/web/test/production-show.test.ts (WS6's)
+said      (unstated) WS6's net hit-x-y badge stayed on the bars beside the module's per-event chips
+did       the bars show no event badge; each event's own chip (data-delta at the plot) carries the figure, as in the
+          gallery (stage.tsx OutputBars has none). Two figures that can disagree (a net badge that vanishes when events
+          cancel, beside chips reading −2 and +1) are not acceptable. Named edits, WS6 reviewing: the badge removal in
+          ProductionMap.tsx; AM-6's kept frames in production-show.test.ts switch from hit-x-y to the per-event
+          chip, still at the window end and computed from playMs. Positive control: a chip with the wrong delta goes red.
+because   HC-1 and G-1: each event shows what it did, as approved
+goal      G-1 (unchanged)
+folded    T-AC-3 asserts the per-event chips in fired order
+```
+
+```
+AM-8 · 2026-10-28 · PM ruling (A), PR-1 (a phone alone: what "shorter" means)
+
+target    §0 UBER-AC-2 (reading, not wording) · §1 C7 · §2 RULE-3 · §6 B-AC-2, T-AC-5
+said      a phone alone plays each event "shorter, tap to skip"
+did       one phase length for everyone, from the server (HC-3): the server cannot see whether a TV is connected
+          (tabletop's GameContext has no board count). A phone alone plays the gallery's solo beats at the solo pace
+          inside the same segments, so its show is shorter; then it holds on "what it did to you" until the phase
+          ends; a tap jumps straight to the result. "Shorter" means the phone's show, not the phase. Parked as a PR-2
+          option (B): a truly shorter phase without a TV (GameContext `boards`, WS4; a solo length in mule-game, WS3;
+          a solo pace in EVENT_SHOW). The PM tells Heiko, since this narrows how UBER-AC-2 reads; B un-parks only if
+          he wants solo phases shorter in wall time.
+because   G-2 within HC-3: the phone alone gets the full show, shorter, without a clock the server does not own
+goal      G-2 (unchanged)
+folded    RULE-3 row 4: the solo show plays, then the result holds to the phase's end; T-AC-5 asserts the hold
+```
+
+AM-8 correction (2026-10-28, lead, Task 5's review): the solo show is not shorter in wall time. Each segment's
+beats stretch to fill the server's playMs in either mode (HC-3: the client computes no length), so the solo beat
+changes the proportions only (quicker cards, 75% motion within the segment). A phone alone gets a shorter show only
+by tapping: a tap jumps to the result and then to the next event. "Shorter" in UBER-AC-2 therefore reads as "the
+player can cut it short". The PM is told; the parked option (B) is the only route to a shorter wall-time show.
+
+```
+AM-9 · 2026-10-28 · PM ruling (A), PR-1 Task 4 (the TV's pips)
+
+target    §1 C6 · §9 (a new WS4 named edit)
+said      C6 composes the gallery's TV parts in TvProduction's right-hand column
+did       the gallery puts the event pips at the right of the TV header (headerExtra); TvHeader is WS4's
+          (apps/web/src/table/TableApp.tsx). A named edit, WS4 reviewing: TvHeader gains one optional
+          `extra?: ReactNode` in its right cluster; existing callers pass nothing and render as today; TvProduction
+          passes the pips. A render check proves the pips sit in the header and the log opens the rail (at the TV's
+          1280×720 frame; the phone sizes do not apply to the TV screen).
+because   HC-1: the approved layout
+goal      G-1 (unchanged)
+folded    §9 WS4 named edits gain TableApp.tsx::TvHeader `extra`
+```
+
+```
+AM-10 · 2026-10-29 · lead rulings, PR-1 Task 5 review (the phone)
+
+target    §1 C7
+said      the phone's map is light with a TV; the skip hint sits at the rail's foot; a tap skips the event
+did       (c) light is an explicit prop: Production decides `light={!solo}` and passes it ProductionMap → EventLivingMap
+              (default false), instead of inferring it from size and mode, so a future caller (C10) cannot blank a
+              map by accident.
+          (d) the skip hint is `EventSkipHint`, rendered in the shell's existing `footer` slot beside the action
+              button (Shell.tsx unedited): at 667×375 the rail's foot lands mid-rail. The render gate reports this
+              placement as an intended difference from the gallery.
+          (e) skipping jumps the whole show, fly-home included; with a TV there is no skip, and a skip offset
+              never outlives a TV joining (the phone returns to the server's clock).
+because   HC-1 (approved layout, readable at 667) · HC-3 (one clock with a TV)
+goal      G-2 (unchanged)
+folded    §1 C7 ux: skip hint in the actions footer
+```
+
+```
+AM-11 · 2026-10-29 · lead ruling, PR-1 Task 6 (the approved gallery's log copy)
+
+target    §1 C4, C6 · the binding scaffold design/mocks/ws8-events
+said      the gallery is the design; the build takes its copy
+did       the gallery's TV log put every hit under the first hit's good ("Drought −10 Water on 10 wells" for six
+          farms and four wells), a figure no report holds. The build and the gallery's src/copy.ts now give each
+          good its own figure ("−6 Food, −4 Water on 10 plots"; the one kind's noun, or "plots" when kinds mix), and
+          a hit that changed nothing is no loss. Composition, layout and tokens are unchanged. Heiko and the PM told
+          (29 Oct); Heiko's goal check on 7ffcce59 saw the new copy ("Looks good").
+because   B-AC-1: a screen never shows a figure the report does not hold
+goal      G-1 (unchanged)
+folded    §9: WS8 owns design/mocks/ws8-events
+```
+
+```
+AM-12 · 2026-10-29 · gate record, PR-1 T-AC-6 (render gate, mock vs build)
+
+target    §6 T-AC-6
+said      every mock data-testid is present in the build, positive-controlled
+did       render-gate.mjs over 40 pairs (TV 1280×720; phone alone and with a TV at 844×390 and 667×375; eight
+          moments each: intro, each event's announce/play/settle, outro), mock = the gallery's TvB / PhoneSolo /
+          PhoneShow, build = TvProduction / phone Production on the gallery's fixture colony. Every mock testid is
+          present except three named, accepted differences: `bars-x-y` is the build's `plot-x-y` (one-to-one in
+          every capture); `plot-map-A` and `phone-lena` are the gallery's own frame roots (the build's are WS6's
+          `holo-map` / `game-shell`); `title-card` centres through an inner wrapper (display flex→block, same
+          look). All leaf texts match. AM-9's pips (TvHeader) and AM-10's skip hint (the actions footer) are present.
+          Positive control: `title-card` renamed in living.tsx → `[MISSING] title-card`; restored → baseline.
+because   T-AC-6 needs its evidence at the gate, not only in a run log
+goal      G-1, G-2 (unchanged)
+folded    none
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: the event show
 - Sole owner: WS8 — `packages/ui/src/events/**` (+ `events.css`), `apps/web/src/events/**`, the `EVENT_SHOW` block in
-  `packages/engine/src/config.ts`, `apps/server/test/events-view.test.ts` (WS3 reviews), `apps/web/test/events-*.test.tsx`,
+  `packages/engine/src/config.ts`, `apps/server/test/events-view.test.ts` (WS3 reviews), `apps/web/test/events-*.test.ts`,
   `packages/ui/test/events*.test.ts`, `apps/web/e2e/events.ts` (the browser step; local tier), this spec and its plan (PM
   rulings).
 - Read contract: the view (`ProductionEventView` → `EventView`, `MuleView.events`); `EVENT_SHOW` read by the server only.
 - Write contract: named edits only, each reviewed by its owner on WS8's SHAs — WS4: `packages/ui/src/index.ts` (export),
-  `packages/ui/src/theme.css` (@import), `apps/web/src/table/TableApp.tsx`, `apps/web/src/phone/PhoneApp.tsx` (one line
-  each); WS3: `packages/protocol/src/index.ts`, `apps/server/src/mule-game.ts`; WS6: `ProductionMap.tsx`,
-  `TvProduction.tsx`, `phone/Production.tsx`, `apps/server/test/production-view.test.ts`.
+  `packages/ui/src/theme.css` (@import), `apps/web/src/table/TableApp.tsx` (TvHeader `extra`, AM-9; the overlay mount, C10),
+  `apps/web/src/phone/PhoneApp.tsx` (the overlay mount, C10; one line each); WS3: `packages/protocol/src/index.ts`,
+  `apps/server/src/mule-game.ts`; WS6: `ProductionMap.tsx`, `TvProduction.tsx`, `phone/Production.tsx`,
+  `apps/server/test/production-view.test.ts` (fixtures), `apps/web/test/production-show.test.ts` (AM-6/AM-7),
+  `apps/web/e2e/production-steps.ts` (PM ruling A, B-AC-7 per event). WS8 owns `design/mocks/ws8-events` (AM-11).
 - Enforcement: `.handover/SEAMS.md` (PM-owned) and owner review on every PR; no CODEOWNERS (debt, §7 R-6).

@@ -57,9 +57,9 @@ const RECORDER = `{
       const id = plot.dataset.testid.slice(5);
       const seen = (rec.plots[id] ??= plotSeen());
       const bars = [...plot.querySelectorAll('[data-bar=unit]')];
-      const hit = plot.querySelector('[data-testid^=hit-]');
+      const hit = map.querySelector('[data-testid="mark-' + id + '"] [data-delta]');
       const reasons = [...plot.querySelectorAll('[data-badge=reason]')];
-      if (hit) { seen.struckOnce = true; seen.struck.push(bars.length); add(seen.hits, hit.textContent); }
+      if (hit) { seen.struckOnce = true; seen.struck.push(bars.length); add(seen.hits, hit.dataset.delta); }
       else if (!seen.struckOnce) seen.pre = Math.max(seen.pre, bars.length);
       if (bars[0]) add(seen.colours, getComputedStyle(bars[0]).backgroundColor);
       for (const r of reasons) add(seen.reasons, r.textContent);
@@ -177,16 +177,16 @@ export async function checkTheShow({ tv, phone, event = false }: { tv: ShowWatch
     if (l.parts[0]) check(seen.reasons.includes(badgeText(l.parts[0])), `B-AC-6: plot ${id} never showed "${badgeText(l.parts[0])}", saw ${seen.reasons.join()}`);
     // B-AC-7: the event's badge is its delta, on the plots it hit and nowhere else, and the bars change by it.
     if (struck) {
-      check(seen.hits.join() === signed(hit.delta), `B-AC-7: plot ${id} was badged "${seen.hits.join()}" for ${hit.delta}`);
+      check(seen.hits.join() === String(hit.delta), `B-AC-7: plot ${id} was badged "${seen.hits.join()}" for ${hit.delta}`);
       const want = Math.min(after(production, l), 8);
       check(seen.struck.length > 0 && seen.struck.every((n) => n === want), `B-AC-7: plot ${id} showed ${seen.struck.join()} bars after the hit, not ${want}`);
     } else check(seen.hits.length === 0, `B-AC-7: plot ${id} was not hit but was badged "${seen.hits.join()}"`);
   }
   if (ev) {
-    check(seenTv.layers.includes(`event:${ev.kind}`), `B-AC-7: the TV played the ${ev.kind} layer, saw ${seenTv.layers.join()}`);
-    const own: Partial<Record<string, string>> = { storm: 'storm-front', quake: 'quake-hit', comet: 'comet', blight: 'blight-', flood: 'flood-', fire: 'fire-' };
-    const mark = own[ev.kind];
-    if (mark) check(seenTv.layers.some((id) => id.startsWith(mark)), `B-AC-7: the ${ev.kind} layer drew ${mark}, saw ${seenTv.layers.join()}`);
+    check(seenTv.layers.includes(`event:${ev.key}`), `B-AC-7: the TV played the ${ev.key} story, saw ${seenTv.layers.join()}`);
+    const own: Partial<Record<string, string>> = { dustStorm: 'front-dustStorm', drought: 'front-drought', acidRain: 'front-acidRain', solarFlare: 'front-solarFlare', cometPass: 'comet', flood: 'flood-', volcanicAsh: 'ash-', pestSwarm: 'swarm-', wildfire: 'fire-', bumperHarvest: 'bumper-stamp' };
+    const mark = own[ev.key];
+    if (mark) check(seenTv.layers.some((id) => id.startsWith(mark)), `B-AC-7: the ${ev.key} story drew ${mark}, saw ${seenTv.layers.join()}`);
   }
 
   // The phone: only its own plots, one badge each, the event's when it was hit.
