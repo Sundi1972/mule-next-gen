@@ -76,13 +76,14 @@ export function planningProper(view: Pick<MuleView, 'phase' | 'politics'>): bool
 }
 
 /**
- * When the server takes the host's Continue: planning proper, or the election's announce or ballot, never its
- * ceremony; and month 1's development while its clock waits for the first MULEs.
+ * When the server takes the host's Continue: planning proper, the election's announce or ballot (never its ceremony),
+ * the month end (upkeep), which also waits for every Ready; and month 1's development while its clock waits for the
+ * first MULEs.
  */
 export function hostMayContinue(view: Pick<MuleView, 'phase' | 'politics' | 'clockWaitsFor'>): boolean {
   const stage = view.politics?.election?.stage;
   if (view.phase === 'development') return !!view.clockWaitsFor;
-  return planningProper(view) || (view.phase === 'planning' && (stage === 'announce' || stage === 'ballot'));
+  return planningProper(view) || (view.phase === 'planning' && (stage === 'announce' || stage === 'ballot')) || view.phase === 'upkeep';
 }
 
 /** What the ready bar says. Every situation that waits for people uses the one bar in its own words (E-10). */
