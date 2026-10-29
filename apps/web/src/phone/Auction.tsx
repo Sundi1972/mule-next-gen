@@ -26,7 +26,7 @@ import {
 import { speakerAt } from '../chat/Chat';
 import { PHASE_NAME } from '../game/derive';
 import { useAuctionSound } from '../game/sound';
-import { useRef, useState, type MouseEvent, type PointerEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
 import { useClient } from '../net/react';
 import { usePhoneGame } from './game';
 import { PhoneShell } from './Shell';
@@ -328,6 +328,16 @@ function WalkHold({ dir, disabled, onHold, onStep }: { dir: 'up' | 'down'; disab
   const timer = useRef<number | null>(null);
   const holding = useRef(false);
   const down = useRef<number | null>(null);
+  const release = useRef(onHold);
+  release.current = onHold;
+  // At a house's line this button gives way to "Buy N for X cr" under the finger: going away while held lets go.
+  useEffect(
+    () => () => {
+      if (timer.current !== null) window.clearTimeout(timer.current);
+      if (holding.current) release.current(false);
+    },
+    [],
+  );
   const end = (stamp: number) => {
     if (down.current === null) return;
     const tap = stamp - down.current < TAP_MS;
