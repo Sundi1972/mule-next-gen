@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import { configSnapshot, RuleError, stableJson, type GameRecord, type Playbook, type PlaybookEntry } from '@mule/engine';
+import { AI_HANDS, configSnapshot, RuleError, stableJson, type GameRecord, type Playbook, type PlaybookEntry } from '@mule/engine';
 import type { Decider } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { Room, TableError, type ClientEnvelope, type Connection, type GameContext, type ServerEnvelope } from '@tabletop/core';
@@ -63,6 +63,11 @@ const NOTICE_GAME = { seed: 8, maxMonths: 3 };
 /** Game time per step of the fake clock; every timer due in a step runs, with promises settled between them. */
 const STEP_MS = 100;
 const PLANNING_READY_MS = 3_000;
+/**
+ * A good's side pick has no clock (A-7): the phones read it this long, past the AI seats' decision wait, before pressing
+ * Ready, so the AIs decide and speak there as they did under the old 8 s clock, not in the tick that ends the game.
+ */
+const SIDE_PICK_READ_MS = AI_HANDS.auction.decideWaitMs + 500;
 const GAME_LIMIT_MS = 30 * 60_000;
 /**
  * How the Claude stand-in answers each call, in turn: after a delay in ms (some land within a tick, some many ticks
@@ -203,6 +208,8 @@ function table(options: TableOptions = {}) {
   const view = () => room.viewFor(null).game!;
   const finished = () => room.viewFor(null).game?.finished ?? false;
   let planningFor = 0;
+  let sidePickFor = 0;
+  let sidePickOf = '';
   let claimed = false;
   let refusedSent = false;
   let hostContinued = false;
@@ -226,8 +233,14 @@ function table(options: TableOptions = {}) {
       if (planningFor >= PLANNING_READY_MS) for (const phone of phones) if (view().phase === 'planning') send(phone, { t: 'intent', intent: { type: 'ready' } });
     } else planningFor = 0;
     if (phase === 'upkeep') for (const phone of phones) send(phone, { t: 'intent', intent: { type: 'ready' } });
-    // A good's side pick has no clock either (A-7): every phone presses Ready there.
-    if (phase === 'auction' && view().auction?.stage === 'status') for (const phone of phones) send(phone, { t: 'intent', intent: { type: 'ready' } });
+    // A good's side pick has no clock either (A-7): once read, every phone not yet Done presses Ready there.
+    const pick = view().auction;
+    if (phase === 'auction' && pick?.stage === 'status') {
+      // Each good's side pick is read afresh: the next can open the moment the last closes.
+      if (pick.good !== sidePickOf) [sidePickOf, sidePickFor] = [pick.good, 0];
+      sidePickFor += STEP_MS;
+      if (sidePickFor >= SIDE_PICK_READ_MS) for (const phone of phones) if (!pick.walkers.find((w) => w.id === phone.from.seatId)?.done) send(phone, { t: 'intent', intent: { type: 'ready' } });
+    } else sidePickFor = 0;
     const lit = view().lit;
     if (phase === 'landGrant' && lit && !claimed) {
       claimed = true;
