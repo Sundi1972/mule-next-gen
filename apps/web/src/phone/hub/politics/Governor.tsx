@@ -1,7 +1,7 @@
 import { POLITICS } from '@mule/engine';
 import type { PoliticsView } from '@mule/protocol';
 import { Button, cx } from '@mule/ui';
-import { useId, useState } from 'react';
+import { useEffect, useId, useState, useSyncExternalStore } from 'react';
 import { fmt } from '../../../game/derive';
 import { useClient } from '../../../net/react';
 import { usePhoneGame } from '../../game';
@@ -14,11 +14,26 @@ export function GovernorDesk() {
   return <SalesTax politics={view.politics} />;
 }
 
-/** Where the desk's Set stands: the tax set this month, a tax on its way to the server, or open. */
-export function setState(tax: number, sent: number | null, { percent, start }: Pick<PoliticsView['tax'], 'percent' | 'start'>): 'done' | 'sending' | 'open' {
-  // Set this month: by this phone, or before, when the tax has moved from where the month opened.
-  if (tax === percent && (sent === percent || percent !== start)) return 'done';
-  return sent === tax ? 'sending' : 'open';
+/** The last tax this phone sent: in which month, and whether Set still waits for it. */
+export interface SentTax {
+  percent: number;
+  month: number;
+  waiting: boolean;
+}
+
+/** Where the desk's Set stands in `month`: the tax set this month, a tax on its way to the server, or open. */
+export function setState(tax: number, sent: SentTax | null, { percent, start }: Pick<PoliticsView['tax'], 'percent' | 'start'>, month: number): 'done' | 'sending' | 'open' {
+  // Set this month: by this phone, its last tax now the tax, or before, when the tax has moved from where the month opened.
+  const setHere = sent !== null && sent.month === month && sent.percent === percent;
+  if (tax === percent && (setHere || percent !== start)) return 'done';
+  return sent?.waiting && sent.percent === tax ? 'sending' : 'open';
+}
+
+/** The id of the newest toast on the phone, -1 for none: a refusal from the server arrives as one. */
+function useNewestToast(): number {
+  const client = useClient();
+  const newest = () => client.getState().toasts.at(-1)?.id ?? -1;
+  return useSyncExternalStore(client.subscribe, newest, newest);
 }
 
 /** The verdict on the tax shown: short in the chip, whole for a screen reader. Null with no promise until the tax is set. */
@@ -31,21 +46,27 @@ function verdictOf(tax: number, breaks: boolean, done: boolean, promised: boolea
 /** One compact block: the promise on one line, the row with the verdict under the number, and the rules behind "Why". */
 function SalesTax({ politics }: { politics: PoliticsView }) {
   const client = useClient();
+  const { view } = usePhoneGame();
   const { percent, start, low, high } = politics.tax;
   const [tax, setTax] = useState(percent);
-  const [sent, setSent] = useState<number | null>(null);
+  const [sent, setSent] = useState<(SentTax & { toast: number }) | null>(null);
+  const newestToast = useNewestToast();
   const [why, setWhy] = useState(false);
   const whyId = useId();
   const promise = politics.promise;
   const breaks = promise !== null && !promiseKept(promise, politics, tax);
-  const state = setState(tax, sent, politics.tax);
+  const state = setState(tax, sent, politics.tax, view.month);
   const done = state === 'done';
   const verdict = verdictOf(tax, breaks, done, promise !== null);
-  // A step forgets the tax on its way: one that never comes back (a lost intent, a RuleError) must not keep Set off.
+  // A tax that never comes back must not keep Set off: a step or a refusal stops the wait for it.
+  const giveUp = () => setSent((s) => s && { ...s, waiting: false });
   const step = (to: number) => {
     setTax(to);
-    setSent(null);
+    giveUp();
   };
+  useEffect(() => {
+    if (sent?.waiting && newestToast > sent.toast) giveUp();
+  }, [sent, newestToast]);
   return (
     <section className="flex flex-col gap-0.5 @min-[1100px]/shell:gap-2" data-testid="gov-tax">
       <p className="truncate text-xs @min-[1100px]/shell:text-base" data-testid="gov-promise">
@@ -83,7 +104,7 @@ function SalesTax({ politics }: { politics: PoliticsView }) {
           disabled={state !== 'open'}
           onClick={() => {
             client.intent({ type: 'setTax', percent: tax });
-            setSent(tax);
+            setSent({ percent: tax, month: view.month, waiting: true, toast: newestToast });
           }}
           data-testid="tax-confirm"
         >

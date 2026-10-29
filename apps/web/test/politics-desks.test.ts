@@ -12,7 +12,7 @@ import { AgendaRow, Hub } from '../src/phone/hub/Hub';
 import { ColonyWithFacts } from '../src/phone/hub/politics/Colony';
 import { CouncilBody } from '../src/phone/hub/politics/Council';
 import { ElectionDay, forgetPicks, pickOn } from '../src/phone/hub/politics/ElectionDay';
-import { GovernorDesk, setState } from '../src/phone/hub/politics/Governor';
+import { GovernorDesk, setState, type SentTax } from '../src/phone/hub/politics/Governor';
 import { OfficesLine } from '../src/phone/hub/politics/Offices';
 import { PromiseSheet } from '../src/phone/hub/politics/Run';
 import { electionNow, electionReadyWords } from '../src/phone/hub/politics/slots';
@@ -758,14 +758,18 @@ describe("the new Governor's promise (C68, E-7)", () => {
     expect(verdictIn(onPhone(term(null, 4, 5), GovernorDesk))).toEqual({ id: 'gov-done', chip: 'done', spoken: 'Done: 4% from now on.' });
   });
 
-  it.each<[string, number, number | null, { percent: number; start: number }, ReturnType<typeof setState>]>([
-    ['Set where the month opened', 5, 5, { percent: 5, start: 5 }, 'done'],
+  const sentTax = (percent: number, waiting = true, month = 4): SentTax => ({ percent, month, waiting });
+  it.each<[string, number, SentTax | null, { percent: number; start: number }, ReturnType<typeof setState>]>([
+    ['Set where the month opened', 5, sentTax(5), { percent: 5, start: 5 }, 'done'],
     ['nothing set yet', 5, null, { percent: 5, start: 5 }, 'open'],
     ['set before, on another phone', 4, null, { percent: 4, start: 5 }, 'done'],
-    ['a tax on its way', 4, 4, { percent: 5, start: 5 }, 'sending'],
-    ['a new tax after one came back', 3, 4, { percent: 4, start: 5 }, 'open'],
+    ['a tax on its way', 4, sentTax(4), { percent: 5, start: 5 }, 'sending'],
+    ['a tax given up on, stepped away from or refused', 4, sentTax(4, false), { percent: 5, start: 5 }, 'open'],
+    ['back at the tax this phone set, given up on since', 5, sentTax(5, false), { percent: 5, start: 5 }, 'done'],
+    ["last month's tax, where this month opened", 5, sentTax(5, false, 3), { percent: 5, start: 5 }, 'open'],
+    ['a new tax after one came back', 3, sentTax(4), { percent: 4, start: 5 }, 'open'],
   ])("E-7: the Governor's Set is done once the tax is set, off while one is on its way, else open (%s)", (_, tax, sent, now, state) => {
-    expect(setState(tax, sent, now)).toBe(state);
+    expect(setState(tax, sent, now, 4)).toBe(state);
   });
 
   it.each<[{ percent: number; start: number; low: number; high: number }, { down: boolean; up: boolean }]>([
