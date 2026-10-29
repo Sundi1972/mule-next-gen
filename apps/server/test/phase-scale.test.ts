@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PHASES, WALK } from '@mule/engine';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
-import { fakeContext, readyAll, seats } from './fake-context.js';
+import { clockRunsInMonth1, fakeContext, readyAll, seats } from './fake-context.js';
 
 type Options = ConstructorParameters<typeof MuleGame>[2];
 
@@ -41,6 +41,9 @@ function toAuction(options?: Options) {
 }
 
 describe('phaseScale and maxMonths', () => {
+  // The clock as such, met in month 1: it runs from the start, as in any later month.
+  clockRunsInMonth1();
+
   it('T-AC-2: with no options, production waits its full PHASES.productionMs and the game runs 12 months', () => {
     const { game, waits, advance, ctx } = toProduction();
     expect(waits).toContain(PHASES.productionMs);

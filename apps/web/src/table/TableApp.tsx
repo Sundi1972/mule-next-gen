@@ -1,6 +1,6 @@
 import { DEV_WALK, DEVELOPMENT, GAME, POLITICS } from '@mule/engine';
 import type { DealView, MuleView, TableView } from '@mule/protocol';
-import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PaceList, PlayerMark, SeatSpeciesProvider, SharedClock, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard } from '@mule/ui';
+import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PaceList, PlayerMark, SeatSpeciesProvider, SharedClock, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard, type CreatureWrap } from '@mule/ui';
 import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
 import { boardWalkers, dealLine, newestFirst, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, StoreBox, TvReadout, type DealRow } from '../components/AuctionParts';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
@@ -199,14 +199,19 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         <div className="h-[240px]">
           <StoreInterior mules={game.storeMules} mulePrice={game.mulePrice} prices={{}} tv />
         </div>
-        {/* The roster's rows carry each colonist's pace: one column, so every name shows in full. */}
+        {/* The roster's rows carry each colonist's pace: one column, so every name shows in full. While month 1's
+            clock waits, whose first MULE is in takes its place, row for row. */}
         <div className="mt-auto">
-          <PaceList
-            rule={DEV_WALK}
-            columns={1}
-            wrapMark={tvSpeakerAt}
-            rows={game.players.map((p) => ({ id: p.id, name: p.name, slot: toSlot(p.slot), condition: p.condition, note: p.doneDeveloping ? 'PUB' : 'BUILDING', done: p.doneDeveloping }))}
-          />
+          {game.clockWaitsFor ? (
+            <FirstMules game={game} wrapMark={tvSpeakerAt} />
+          ) : (
+            <PaceList
+              rule={DEV_WALK}
+              columns={1}
+              wrapMark={tvSpeakerAt}
+              rows={game.players.map((p) => ({ id: p.id, name: p.name, slot: toSlot(p.slot), condition: p.condition, note: p.doneDeveloping ? 'PUB' : 'BUILDING', done: p.doneDeveloping }))}
+            />
+          )}
         </div>
       </>
     );
@@ -299,7 +304,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         ) : (
           <TvHeader game={game} title={PHASE_NAME[phase]} seconds={secondsUntil(game.phaseEndsAt, now)} />
         )}
-        {phase === 'development' && <SharedClock seconds={secondsUntil(game.phaseEndsAt, now) ?? 0} total={DEVELOPMENT.fullSeconds} size="tv" />}
+        {phase === 'development' && (game.clockWaitsFor ? <ClockWaits /> : <SharedClock seconds={secondsUntil(game.phaseEndsAt, now) ?? 0} total={DEVELOPMENT.fullSeconds} size="tv" />)}
         <div className="flex min-h-0 flex-1 gap-6">
           <div className="flex w-[700px] shrink-0 flex-col gap-3">
             <HoloMap width={game.width} height={game.height} tiles={tiles} cursor={game.lit} density="tv" hideGround className="w-full" />
@@ -314,6 +319,43 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         </div>
       </div>
     </SeatSpeciesProvider>
+  );
+}
+
+/** Month 1's clock while it waits for the first MULEs: the bar stands full and the label says what starts it. */
+export function ClockWaits() {
+  return (
+    <div className="flex items-center gap-4" data-testid="tv-clock">
+      <span className="shrink-0 font-display text-xl font-semibold text-holo" data-testid="tv-clock-label">
+        First month: the clock starts when every first MULE is in
+      </span>
+      <TimeBar seconds={DEVELOPMENT.fullSeconds} total={DEVELOPMENT.fullSeconds} size="tv" className="min-w-0 flex-1" />
+    </div>
+  );
+}
+
+/** Whose first MULE month 1's clock still waits for, every seat in seat order, drawn as the pace list draws its rows. */
+export function FirstMules({ game, wrapMark = (_, mark) => mark }: { game: MuleView; wrapMark?: CreatureWrap }) {
+  const waiting = game.clockWaitsFor ?? [];
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="flex flex-col">
+        <span className="label-caps">First MULEs in</span>
+        <span className="label-caps text-[10px]! text-ink-3">the clock starts when all are in</span>
+      </span>
+      <ul className="grid grid-cols-1 gap-y-1.5" data-testid="tv-first-mules">
+        {game.players.map((p) => {
+          const isIn = !waiting.includes(p.id);
+          return (
+            <li key={p.id} className="flex items-center gap-2" data-testid={`tv-first-mule-${p.id}`}>
+              {wrapMark(p.id, <PlayerMark slot={toSlot(p.slot)} size={20} glow={!isIn} />)}
+              <span className="min-w-0 flex-1 truncate font-display text-base font-semibold">{p.name}</span>
+              <span className={cx('shrink-0 font-mono text-sm font-bold', isIn ? 'text-ok' : 'text-ink-3')}>{isIn ? 'MULE in ✓' : 'still to come'}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
