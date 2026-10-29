@@ -406,7 +406,7 @@ describe('election day on the phone (C66, E-2)', () => {
     /** The input of this ballot option, as the hub draws it. */
     const radio = (html: string, option: string) => html.slice(html.indexOf(`data-testid="ballot-governor-${option}"`)).match(/<input[^>]*>/)![0];
     const cast = /<button(?![^>]*disabled="")[^>]*data-testid="ready"[^>]*>Cast my vote</;
-    const LENA_4 = { room: 'MULE', seat: 's1', month: 4 };
+    const LENA_4 = { seat: 's1', month: 4 };
 
     it('C66, AM-21: Abstain shows checked at once, and counts as a pick for Cast my vote', () => {
       pickOn(LENA_4, 'governor', '');
