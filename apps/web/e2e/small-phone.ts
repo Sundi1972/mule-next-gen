@@ -106,6 +106,8 @@ try {
   await doneThroughTheElection(ctx, PHASE_SCALE * ELECTION_WAIT_MS + 10_000);
   // Planning proper, the hub after the ballot: its header, desks and footer, read before the phone is ready.
   await voteThroughTheElection(phone, SHOWN_MS);
+  // The audit skips a root that matches nothing, so each is checked here: a renamed one would leave the read quiet.
+  for (const root of HUB.roots) check((await phone.locator(root).count()) > 0, `B-AC-11: planning, the hub shows ${root}`);
   await both('planning, the hub', HUB);
   await readyThroughTheElection(phone, SHOWN_MS);
   await phone.locator('[data-phase=landGrant]').waitFor({ timeout: SHOWN_MS });
@@ -235,12 +237,15 @@ function giveDevelopment(code: string): void {
  * would (first-mule.ts reads that card at both sizes), then development gets its long clock back.
  */
 async function startMonthOnesClock(phone: Page, code: string): Promise<void> {
-  const start = phone.getByTestId('continue');
-  const waits = await start.waitFor({ timeout: PRESS_MS }).then(() => true, () => false);
-  if (!waits) return;
-  await start.click({ timeout: PRESS_MS });
-  await phone.getByTestId('continue-now').click({ timeout: PRESS_MS });
-  await phone.getByTestId('clock-waits').waitFor({ state: 'hidden', timeout: PRESS_MS });
+  // The server says whether the clock still waits; if every AI is already in, it has started on its own.
+  const room = server.registry.get(code) as unknown as { game: { clockWaits: boolean } };
+  if (room.game.clockWaits) {
+    await phone.getByTestId('continue').click({ timeout: PRESS_MS });
+    await phone.getByTestId('continue-now').click({ timeout: PRESS_MS });
+    await phone.getByTestId('clock-waits').waitFor({ state: 'hidden', timeout: PRESS_MS });
+    check(!room.game.clockWaits, "A-1: the host's Start the clock starts month 1's clock");
+  }
+  // Starting the clock, by the host or by the last first MULE, set the phase's own short clock: the long one comes back.
   giveDevelopment(code);
 }
 
