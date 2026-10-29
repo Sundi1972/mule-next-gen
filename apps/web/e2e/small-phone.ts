@@ -162,7 +162,7 @@ try {
   const air = setAir(code, collapseAir());
   await end.getByTestId('collapse-banner').waitFor({ timeout: PRESS_MS });
   await monthEnd('month end, Collapse');
-  console.log(`  C20, the Worth total in Collapse: ${await railFits(phone, { key: 'worth-total' })}`);
+  console.log(`  C20, your Worth in Collapse: ${await railFits(phone, { key: 'worth-total', scrolls: true, stage: '[data-testid^=league-row-]', stageText: 'You' })}`);
   await tv.context().close();
   await end.getByTestId('phone-only-monthend').waitFor({ timeout: PRESS_MS });
   await monthEnd('month end, Collapse, no TV');
