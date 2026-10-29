@@ -451,16 +451,17 @@ describe('a broken show never takes the TV screen under it down (§4)', () => {
 
   it("B-AC-1 (§4): while the broken event plays and after it settles, the TV's map, the plots' bars and the colony bar still render", () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    const root = createRoot(host as unknown as HTMLElement);
-    mounted.add(() => {
-      root.unmount();
-      document.body.removeChild(host);
-    });
-    const byTestId = (id: string) => [...host.findAll('div'), ...host.findAll('span')].find((el) => el.getAttribute('data-testid') === id);
-    // Through the announcement, the story and the settle (when the log takes it), before the goods are measured to fly.
+    // Through the announcement, the story (the rail's card) and the settle (the log's entry), before the goods are
+    // measured to fly. Each moment is a fresh mount: the screen reads the server's clock once as it mounts.
     for (const t of [droughtAt + 0.3, droughtAt + 1.5, seg!.playAt + 1, seg!.settleAt + 0.1]) {
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      const root = createRoot(host as unknown as HTMLElement);
+      mounted.add(() => {
+        root.unmount();
+        document.body.removeChild(host);
+      });
+      const byTestId = (id: string) => [...host.findAll('div'), ...host.findAll('span')].find((el) => el.getAttribute('data-testid') === id);
       flushSync(() => root.render(screen(month([broken]), t)));
       expect(byTestId('holo-map'), `the map at ${t}`).toBeDefined();
       expect(byTestId('plot-1-0')?.findAll('span').some((b) => b.getAttribute('data-bar') === 'unit'), `Lena's plot at ${t}`).toBe(true);

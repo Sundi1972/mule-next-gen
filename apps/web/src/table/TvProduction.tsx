@@ -3,6 +3,7 @@ import { useMemo, type ReactNode } from 'react';
 import {
   Creature,
   cx,
+  EventBoundary,
   EventColonyChips,
   EventPips,
   EventShow,
@@ -50,7 +51,11 @@ export function TvProduction({ game, production }: { game: MuleView; production:
               <ProductionMap width={game.width} height={game.height} tiles={tiles} production={production} t={t} slots={slots} players={players} reduced={reduced} mode="tv" tv className="w-full" />
             </div>
             <div className="flex min-w-0 flex-1 flex-col gap-4" data-testid="rail">
-              {t >= SHOW.cardAt && <EventTvLog />}
+              {t >= SHOW.cardAt && (
+                <EventBoundary>
+                  <EventTvLog />
+                </EventBoundary>
+              )}
               {(quiet || t < SHOW.cardAt) && (
                 <>
                   <span className="label-caps text-base!">Why each plot made what it made</span>

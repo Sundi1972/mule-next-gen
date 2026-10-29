@@ -1,8 +1,8 @@
 import { createContext, useContext, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
-import { EventLivingMap, EventShow, eventSegments, plotStrikes, plotUnitsAt, type EventShowProps, type ShowEventView, type ShowMode, type ShowPlayer } from '../events';
+import { EventBoundary, EventLivingMap, EventShow, eventSegments, plotStrikes, plotUnitsAt, type EventShowProps, type ShowEventView, type ShowMode, type ShowPlayer } from '../events';
 import { useShow } from '../events/frame';
 import { GoodIcon } from './GoodIcon';
-import type { MapTile } from './HoloMap';
+import { HoloMap, type MapTile } from './HoloMap';
 import { cx, SLOT_COLOR, type Good, type Slot } from './tokens';
 
 /**
@@ -240,7 +240,17 @@ export function ProductionMap({ width, height, tiles, production, t, slots, play
     <div ref={map} className={cx('relative', className)} data-testid="map-show">
       {/* The bars render inside the show, so they read the very script the module draws the events with. */}
       <EventShow {...productionShowProps(production, t, { reduced, mode, players: cast, tiles, width, height })}>
-        <EventLivingMap size={tv ? 'tv' : 'phone'} light={light} {...(focus !== undefined ? { focusSlot: focus } : {})} {...(framed ? { bars } : {})} {...(onSkip ? { onSkip } : {})} />
+        {/* A show that throws leaves the plain map and its bars, drawn from the view (§4). */}
+        <EventBoundary
+          fallback={
+            <>
+              <HoloMap width={width} height={height} tiles={tiles} density={tv ? 'tv' : 'phone'} hideGround {...(focus !== undefined ? { focusSlot: focus } : {})} className="w-full" />
+              {framed && <div className="pointer-events-none absolute inset-0">{bars}</div>}
+            </>
+          }
+        >
+          <EventLivingMap size={tv ? 'tv' : 'phone'} light={light} {...(focus !== undefined ? { focusSlot: focus } : {})} {...(framed ? { bars } : {})} {...(onSkip ? { onSkip } : {})} />
+        </EventBoundary>
         {!framed && <div className="pointer-events-none absolute inset-0">{bars}</div>}
       </EventShow>
     </div>
