@@ -959,6 +959,7 @@ export const EVENT_SHOW = {
     pestSwarm: 'spotlight',
     wildfire: 'spotlight',
     bumperHarvest: 'spotlight',
+    cavernCollapse: 'spotlight',
   } as Partial<Record<EventKey, EventWeight>>,
   /** How long one headline or spotlight plays, in ms. */
   playMs: { headline: 7_000, spotlight: 5_200 },
