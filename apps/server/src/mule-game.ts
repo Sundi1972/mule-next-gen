@@ -136,6 +136,9 @@ function isSpecies(pick: string | undefined): pick is Species {
 const BADGE_REASONS: readonly ProductionReason[] = ['cluster', 'species', 'trait', 'pollution', 'noEnergy', 'noWater'];
 const MAX_BADGES = 2;
 
+/** What a seat already in may not do while month 1's clock waits; the pub stays open. */
+const WAIT_REFUSES: ReadonlySet<DevIntent['type']> = new Set(['buyMule', 'install', 'analyse', 'filter']);
+
 /** Names in reading order: "A", "A and B", "A, B and C". */
 function andList(names: string[]): string {
   return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
@@ -420,6 +423,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     if (state.players.find((p) => p.id === seatId)?.doneDeveloping) throw new RuleError('Your turn is over: you went to the pub');
     if (colonist.walk) throw new RuleError('Still walking');
     if (colonist.assayUntil !== null) throw new RuleError('Still assaying');
+    // Once in, you wait: the time before month 1's clock is for first MULEs only.
+    if (this.clockWaits && WAIT_REFUSES.has(intent.type) && this.isIn(seatId)) throw new RuleError("Waiting for the others' first MULEs");
     const to = walkTarget(state, intent);
     if (to === null) {
       this.act(seatId, intent, now);
