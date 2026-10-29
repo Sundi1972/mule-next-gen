@@ -94,6 +94,17 @@ describe('A-6 at the server: choose how many at the line, and a tap is one step'
     expect(mine(game).price).toBe(from);
   });
 
+  it("the view quotes the ship's price for each unit it still wants, next first, so the phone can total a sale", () => {
+    const { game, state, good } = toWalk();
+    expect(game.viewFor('s2').auction!.shipQuote).toEqual([]);
+    state.ship = { arrives: state.month, goods: [good], hold: { [good]: 3 }, bought: {} };
+    state.store.offWorld[good] = 200;
+    const auction = game.viewFor('s2').auction!;
+    expect(auction.shipQuote).toHaveLength(3);
+    expect(auction.shipQuote![0]).toBe(auction.shipPays);
+    expect(auction.shipQuote![2]).toBeLessThan(auction.shipQuote![0]!);
+  });
+
   it('refuses a lineTrade away from a line with the rules\' message, and changes nothing', () => {
     const { game } = toWalk();
     expect(() => game.handle('s2', { type: 'lineTrade', units: 1 })).toThrow(RuleError);

@@ -255,6 +255,19 @@ export type Notice = Without<NoticeEntry, 'type' | 'at' | 'seq'>;
 export type PlaybookNote = Omit<PlaybookEntry, 'type' | 'at' | 'seq'>;
 
 /** M.U.L.E. as a game hosted by a @tabletop/core room. */
+/** What the export ship pays for each unit of the good it still wants, next first; empty while it doesn't buy it (A-6). */
+function shipQuote(state: GameState, good: Good): number[] {
+  if (shipLine(state) === null) return [];
+  const bought = state.ship.bought[good] ?? 0;
+  const prices: number[] = [];
+  for (let k = 0; k < (state.ship.hold[good] ?? 0); k++) {
+    const price = shipPrice({ ...state, ship: { ...state.ship, bought: { ...state.ship.bought, [good]: bought + k } } }, good);
+    if (price === null) break;
+    prices.push(price);
+  }
+  return prices;
+}
+
 export class MuleGame implements Game<MuleIntent, MuleView> {
   private state: GameState | null = null;
   private seats: SeatInfo[] = [];
@@ -1411,6 +1424,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       storeSells: storeSellLine(state),
       storeForSale: storeForSale(state, a.good),
       shipPays: shipLine(state),
+      shipQuote: shipQuote(state, a.good),
       ...boardRange(a.lo, a.hi, [...prices, ...lines]),
       speed: a.speed,
       walkers: a.walkers.map((w) => ({
