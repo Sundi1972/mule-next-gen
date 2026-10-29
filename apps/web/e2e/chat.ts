@@ -110,7 +110,7 @@ const SAMPLE = `{
           seat: b.getAttribute('data-testid').slice(12),
           line: Number(b.getAttribute('data-line')),
           text: b.textContent,
-          anchor: b.closest('[data-speaker]')?.getAttribute('data-speaker') ?? (b.closest('[data-testid=table-chat]') ? 'seat-row' : null),
+          anchor: b.closest('[data-speaker]')?.getAttribute('data-speaker') ?? (b.closest('[data-testid=table-chat], [data-fallback]') ? 'seat-row' : null),
           rect: rect(b),
         })),
         speakers: [...document.querySelectorAll('[data-speaker]')].map((s) => s.getAttribute('data-speaker')),
