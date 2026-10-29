@@ -231,7 +231,7 @@ export function Auction() {
         />
         {closed && auction.receipt && (
           <div className="absolute inset-0 grid place-items-center p-2" data-testid="receipt-layer">
-            <ReceiptCard view={view} good={good} receipt={auction.receipt} have={have} need={need} next={auction.upNext} rate={view.treasury.salesTax} />
+            <ReceiptCard view={view} good={good} receipt={auction.receipt} have={have} need={need} next={auction.upNext} />
           </div>
         )}
       </div>
@@ -260,6 +260,11 @@ function who(view: MuleView, id: string): string {
   return view.players.find((p) => p.id === id)?.name ?? id;
 }
 
+/** "Mia", "Mia and the store", "Mia, the store and the ship", as the server's news words a list. */
+function andList(names: string[]): string {
+  return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
+
 /**
  * When a good closes: what you did with it, the tax spelled out on a sale, and where you now stand (G-5), as the
  * #audit-auction-receipt mock draws it. A seat that both bought and sold in one good gets a line for each.
@@ -271,7 +276,6 @@ export function ReceiptCard({
   have,
   need,
   next,
-  rate,
 }: {
   view: MuleView;
   good: Good;
@@ -279,7 +283,6 @@ export function ReceiptCard({
   have: number;
   need: number;
   next: Good | null;
-  rate: number;
 }) {
   const name = GOOD_NAME[good];
   const sides = (['bought', 'sold'] as const).filter((k) => receipt[k].units > 0);
@@ -294,7 +297,7 @@ export function ReceiptCard({
         <GoodTag good={good} name className="normal-case" /> · closed
       </span>
       {sides.length === 0 && (
-        <h2 className="font-display text-xl font-semibold leading-tight @min-[1100px]/shell:text-4xl" data-testid="receipt-title">
+        <h2 className="font-display text-xl font-semibold leading-tight @min-[1100px]/shell:text-4xl" data-testid="receipt-title-none">
           {`${name}: you didn’t trade`}
         </h2>
       )}
@@ -304,15 +307,16 @@ export function ReceiptCard({
         const each = r.prices.every((p) => p === r.prices[0]) ? `${r.units} × ${r.prices[0]} cr` : r.prices.map((p) => `${p}`).join(' + ') + ' cr';
         return (
           <div key={kind} className="contents">
-            <h2 className="font-display text-xl font-semibold leading-tight @min-[1100px]/shell:text-4xl" data-testid="receipt-title">
+            <h2 className="font-display text-xl font-semibold leading-tight @min-[1100px]/shell:text-4xl" data-testid={`receipt-title-${kind}`}>
               {`${name}: you ${kind} ${r.units} for ${fmt(kind === 'sold' ? net : r.gross)} cr`}
             </h2>
             <span data-num className="font-mono text-xs text-ink-2 @min-[1100px]/shell:text-lg" data-testid="receipt-each">
-              {each} {kind === 'bought' ? 'from' : 'to'} {r.with.map((id) => who(view, id)).join(' and ')}
+              {each} {kind === 'bought' ? 'from' : 'to'} {andList(r.with.map((id) => who(view, id)))}
             </span>
             {kind === 'sold' && (
               <span className="rounded-control border border-holo-line px-2 py-1 text-sm @min-[1100px]/shell:px-3 @min-[1100px]/shell:py-2 @min-[1100px]/shell:text-xl" data-testid="receipt-tax">
-                <strong data-num className="font-mono">{fmt(r.gross)} cr</strong>, less {Math.round(rate * 100)}% sales tax: <strong data-num className="font-mono">{fmt(net)}</strong>
+                {/* The tax the engine took, rounded unit by unit, so the sentence adds up (a rate would not: 10% of 570 is not 60). */}
+                <strong data-num className="font-mono">{fmt(r.gross)} cr</strong>, less {fmt(r.tax)} cr sales tax: <strong data-num className="font-mono">{fmt(net)}</strong>
                 <span className="block text-[11px] text-ink-2 @min-[1100px]/shell:text-base">The tax goes to the colony fund.</span>
               </span>
             )}
