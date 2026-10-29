@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { MuleGame } from '../src/mule-game.js';
 import { createMuleServer, type MuleServer } from '../src/server.js';
-import { fakeContext, readyAll, seats } from './fake-context.js';
+import { fakeContext, pressThroughSidePick, readyAll, seats } from './fake-context.js';
 
 /** Far past any planning clock there ever was: no table plans this long by accident. */
 const TEN_MINUTES = 600_000;
@@ -222,20 +222,30 @@ describe("FM-planning-host-continue: the host's Continue ends planning proper; n
     expect(phase(game)).toBe('landGrant');
   });
 
-  it('FM-planning-host-continue: in every phase after planning but the month end, the land grant and development among them, Continue is refused and nothing changes', () => {
+  it("FM-planning-host-continue: in every phase after planning but the month end and a good's side pick, the land grant, development and the auction's walk among them, Continue is refused and nothing changes", () => {
     const { game, advance } = started();
     readyAll(game);
     const tried: string[] = [];
+    let sidePick: string | null = null;
     for (let i = 0; i < 30_000 && !(game.viewFor(null).month === 2 && phase(game) === 'planning'); i++) {
+      const auction = game.viewFor(null).auction;
       // The month end takes the host's Continue as planning does (C20, B-AC-13 in month-end-view.test.ts); here it is passed with every Ready.
       if (phase(game) === 'upkeep') readyAll(game);
-      else if (phase(game) !== 'planning' && !tried.includes(phase(game))) {
+      // A good's side pick takes it too (A-7): the first one is moved on by the host, the rest with every Ready.
+      else if (phase(game) === 'auction' && auction?.stage === 'status') {
+        if (sidePick === null) {
+          sidePick = auction.good;
+          game.handle('s1', { type: 'continue' });
+          expect(news(game)[0]).toBe(`Heiko started the ${sidePick} walk without Mia.`);
+        } else pressThroughSidePick(game);
+      } else if (phase(game) !== 'planning' && !tried.includes(phase(game))) {
         tried.push(phase(game));
         refusedUnchanged(game, () => game.handle('s1', { type: 'continue' }), `the host's Continue in ${phase(game)}`);
       }
       advance(100);
     }
     expect(tried).toEqual(expect.arrayContaining(['landGrant', 'development', 'production', 'auction']));
+    expect(sidePick, "the host's Continue moved a side pick on").not.toBeNull();
   });
 
   it("FM-planning-host-continue: a non-host's Continue is refused and nothing changes; the host's ends planning with nobody Ready, and the news names who was left waiting", () => {
