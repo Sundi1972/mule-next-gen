@@ -159,8 +159,8 @@ function SeatRow() {
 
 /**
  * How many of its last lines the guide's ticker keeps, when a screen asks for fewer than the phone's usual two to give
- * the rail the room, such as the hub while the Governor's desk is open (E-11). The seat row never folds, and a new line
- * still pops its bubble.
+ * the rail the room, such as the hub while the Governor's desk is open (E-11). It keeps at least the newest line; the
+ * seat row never folds, and a new line still pops its bubble.
  */
 export const TickerLines = createContext<number | null>(null);
 
@@ -174,7 +174,7 @@ function Ticker({ size = 'phone' }: { size?: 'phone' | 'tv' }) {
   return (
     <ul className={cx('flex flex-col overflow-hidden', tv ? 'gap-1' : 'gap-0.5')} data-testid="chat-ticker" aria-label="Table chat" aria-live="polite">
       {said
-        .slice(tv ? -3 : -(asked ?? 2))
+        .slice(tv ? -3 : -Math.max(1, asked ?? 2))
         .reverse()
         .map((l, i) => {
           const { player, slot } = seats.get(l.from)!;

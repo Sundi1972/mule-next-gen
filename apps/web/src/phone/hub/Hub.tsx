@@ -71,7 +71,7 @@ export function Hub({ slots }: { slots: HubSlots }) {
   // While the desk that asked first is open, such as the Governor's tax, the rail gives it the room (E-11): the footer
   // folds its names (the header's ready count says it in brief) and the chat ticker keeps its newest line. Picking
   // another desk brings both back; Set does not, so the "done" stays in view.
-  const asking = !stage && deskAsks(place);
+  const asking = !stage && deskAsks(place, desk?.id);
   const Panel = tool?.Panel;
   // The tools are off the stage while a situation holds it, so their action leaves the footer.
   const Action = stage ? undefined : tool?.Action;
