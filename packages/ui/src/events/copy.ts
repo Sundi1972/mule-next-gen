@@ -64,6 +64,7 @@ export const eventSegmentSummary = (seg: EventSegment, cast: ShowCast) => seg.ev
 const YOU: Partial<Record<ShowEventKey, (ev: ShowEventView) => string>> = {
   wildfire: () => 'One farm burned out; the farms joined to it make 1 less. This month only.',
   bumperHarvest: () => 'One plot of yours makes double this month.',
+  cavernCollapse: () => 'Your crystal cavern caved in: it’s a plain plot now, with no cavern Crystite.',
 };
 
 export interface EventYouSummary {
