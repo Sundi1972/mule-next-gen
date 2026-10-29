@@ -15,7 +15,7 @@ function event(key: EventKey): MonthEvent {
     origin: { x: 0, y: 0 },
     plots: [{ index: 0, order: 0, good: 'food', delta: -1 }],
     sign: 'bad',
-    when: 'afterProduction',
+    phase: 'production',
   };
 }
 
