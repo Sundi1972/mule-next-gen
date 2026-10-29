@@ -96,6 +96,16 @@ export function eventScript(show: ShowTimeline, start = 0, mode: ShowMode = 'tv'
   };
 }
 
+/** How long before its settle an event counts as done: its result comes up as the motion ends. */
+const SETTLE_MARGIN = 0.2;
+/** How long the phone buzzes after an event is announced, in seconds. */
+const BUZZ_FOR = 1.2;
+
+/** Whether the segment's event is still playing at `t`: the map, the rails and the skip hint all ask this. */
+export const isPlaying = (seg: EventSegment, t: number) => t < seg.settleAt - SETTLE_MARGIN;
+/** Whether the phone buzzes for the segment's announcement at `t`. */
+export const isBuzzing = (seg: EventSegment, t: number) => t - seg.announceAt < BUZZ_FOR;
+
 export type EventStage = 'before' | 'intro' | 'announce' | 'play' | 'settle' | 'outro';
 
 export function eventStageAt(s: EventScript, t: number): { stage: EventStage; seg: EventSegment | null } {
@@ -113,7 +123,7 @@ export function eventStageAt(s: EventScript, t: number): { stage: EventStage; se
 export function eventSkipTo(s: EventScript, t: number): number | null {
   const { seg } = eventStageAt(s, t);
   if (!seg) return null;
-  return t < seg.settleAt - 0.05 ? seg.settleAt : seg.endAt;
+  return isPlaying(seg, t) ? seg.settleAt : seg.endAt;
 }
 
 /** How far a colony sweep has to travel to reach a plot: 0 at its edge, 1 at the far one. */

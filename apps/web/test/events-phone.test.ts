@@ -312,6 +312,11 @@ describe('the phone plays the show alone (C7)', () => {
     const hint = (html: string) => text(inside(html, 'actions'), 'skip-hint');
     expect(hint(await render(0, DUST_AT + 0.5))).toContain('tap the map to skip');
     expect(hint(await render(0, DUST_AT + 2.6))).toContain('tap the map: next');
+    // The hint and the rail agree on every frame: "skip" exactly while the rail still shows the event playing.
+    for (const t of frames(DUST_AT, EVENTS_END, 0.05)) {
+      const html = await render(0, t);
+      expect(hint(html).includes('to skip'), `the hint says skip at ${t.toFixed(3)} iff the rail has no result yet`).toBe(card(html) === null);
+    }
     for (const [boards, t] of [
       [0, INTRO_AT + 0.2],
       [0, EVENTS_END + 0.5],

@@ -1,8 +1,8 @@
 import { cx } from '../components/tokens';
-import { eventMissLine, eventSegLabel, segTitle, eventWhoLine, eventYouSummary } from './copy';
+import { eventMissLine, eventSegLabel, phaseNoun, segTitle, eventWhoLine, eventYouSummary } from './copy';
 import { signLook, useShow } from './frame';
 import { EventBuzz, EventSignBadge } from './glyphs';
-import { eventStageAt, type EventSegment } from './timing';
+import { eventStageAt, isBuzzing, isPlaying, type EventSegment } from './timing';
 
 /**
  * The phone's rail through a phase, inside <EventShow>; the screen's shell places it. One small card at a time
@@ -57,8 +57,7 @@ export function EventPhoneCard({ seg, me, at, buzz = false }: { seg: EventSegmen
 /** Before the first event, and after the last when nothing stays up. */
 export function EventWaiting() {
   const { s, t } = useShow();
-  const period = s.phase === 'development' ? 'turn' : 'month';
-  return <span className="label-caps">{t < s.intro ? (s.segments.length ? `${s.events.length} event${s.events.length > 1 ? 's' : ''} this ${period}` : 'A quiet month') : 'That’s everything'}</span>;
+  return <span className="label-caps">{t < s.intro ? (s.segments.length ? `${s.events.length} event${s.events.length > 1 ? 's' : ''} this ${phaseNoun(s.phase)}` : 'A quiet month') : 'That’s everything'}</span>;
 }
 
 /** On a phone alone, while the weather plays on the map: a small "now" line, so the rail doesn't repeat the card. */
@@ -93,7 +92,7 @@ export function EventRailTail({ me, current }: { me: string; current: EventSegme
           <div key={g.n} className="flex items-center gap-2 rounded-control bg-raised px-2 py-1">
             <EventSignBadge ev={g.events[0]!} size={22} />
             <span className="min-w-0 flex-1 truncate text-xs font-semibold">{segTitle(g)}</span>
-            <span className={cx('text-xs', you ? (good ? 'font-bold text-ok' : 'font-bold text-alert-ink') : 'text-ink-3')}>{you ? you.headline.replace(' for you', '') : 'not you'}</span>
+            <span className={cx('text-xs', you ? (good ? 'font-bold text-ok' : 'font-bold text-alert-ink') : 'text-ink-3')}>{you ? you.short : 'not you'}</span>
           </div>
         );
       })}
@@ -112,7 +111,7 @@ export function EventTvPhoneRail({ me }: { me: string }) {
   const seg = now ?? (stage === 'outro' ? (s.segments.at(-1) ?? null) : null);
   return (
     <>
-      {seg ? <EventPhoneCard seg={seg} me={me} at={t >= seg.settleAt - 0.2 ? 'you' : 'news'} buzz={t - seg.announceAt < 1.2} /> : <EventWaiting />}
+      {seg ? <EventPhoneCard seg={seg} me={me} at={isPlaying(seg, t) ? 'news' : 'you'} buzz={isBuzzing(seg, t)} /> : <EventWaiting />}
       <EventRailTail me={me} current={seg} />
     </>
   );
@@ -120,12 +119,15 @@ export function EventTvPhoneRail({ me }: { me: string }) {
 
 /**
  * On a phone alone, what a tap on the map does now: skip to the event's result while it plays, or, from a result,
- * go to the next event. Pure, so a screen can place it outside the show (the product's shell: by its actions).
+ * go to the next event; nothing while no event is on. Inside <EventShow>; the screen places it (by its actions).
  */
-export function EventSkipHint({ playing, className }: { playing: boolean; className?: string }) {
+export function EventSkipHint({ className }: { className?: string }) {
+  const { s, t } = useShow();
+  const { seg } = eventStageAt(s, t);
+  if (!seg) return null;
   return (
     <span className={cx('rounded-chip bg-void/75 px-1.5 py-0.5 font-mono text-[10px] text-ink-2', className)} data-testid="skip-hint">
-      {playing ? 'tap the map to skip ›' : 'tap the map: next ›'}
+      {isPlaying(seg, t) ? 'tap the map to skip ›' : 'tap the map: next ›'}
     </span>
   );
 }
@@ -140,7 +142,7 @@ export function EventSoloRail({ me }: { me: string }) {
   const shown = seg ?? (stage === 'outro' ? (s.segments.at(-1) ?? null) : null);
   return (
     <>
-      {!shown ? <EventWaiting /> : t < shown.settleAt - 0.2 ? <EventNowPlaying seg={shown} buzz={t - shown.announceAt < 1.2} /> : <EventPhoneCard seg={shown} me={me} at="you" />}
+      {!shown ? <EventWaiting /> : isPlaying(shown, t) ? <EventNowPlaying seg={shown} buzz={isBuzzing(shown, t)} /> : <EventPhoneCard seg={shown} me={me} at="you" />}
       <EventRailTail me={me} current={shown} />
     </>
   );

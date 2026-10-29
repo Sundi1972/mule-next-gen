@@ -1,6 +1,6 @@
 import type { Slot } from '../components/tokens';
 
-/** The wave-1 events: the engine's EventKey union (packages/engine/src/types.ts), every one fired in production. */
+/** The events the show draws: the engine's EventKey union (packages/engine/src/types.ts). */
 export type ShowEventKey =
   | 'dustStorm'
   | 'drought'

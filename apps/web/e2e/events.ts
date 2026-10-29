@@ -5,7 +5,7 @@
  */
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { buildEvent, createRng, eventOutput, type EventKey, type GameState, type MonthEvent, type MonthReport } from '@mule/engine';
+import { buildEvent, createRng, eventOutput, EVENTS, type EventKey, type GameState, type MonthEvent, type MonthReport } from '@mule/engine';
 import type { MuleView, ProductionView } from '@mule/protocol';
 import { eventScript, finalUnits, GOOD_NAME, SHOW, showEnd, type Good } from '@mule/ui';
 import { errors as playwrightErrors, type Browser, type Page } from 'playwright';
@@ -276,7 +276,7 @@ async function startAndReachProduction(phone: Page, code: string, tag: string): 
   await phone.locator('[data-phase=production]').waitFor({ timeout: SHOWN_MS });
 }
 
-/** The phone's part in `phase`, one step: Ready, a claim, the pub, Done. A control not there yet is no failure. */
+/** The phone's part in `phase`, one step: Ready, a claim, the pub, Done, on to the next month. A control not there yet is no failure. */
 async function act(phone: Page, phase: string): Promise<void> {
   const press = (name: string | RegExp) => phone.locator(`[data-phase=${phase}]`).getByRole('button', { name }).first().click({ timeout: PRESS_MS });
   try {
@@ -284,6 +284,8 @@ async function act(phone: Page, phase: string): Promise<void> {
     else if (phase === 'landGrant') await press(/CLAIM/);
     else if (phase === 'development') await press('Go to the pub and end your turn');
     else if (phase === 'auction') await press(/^(Ready|Done with .+)$/);
+    // The month end has no clock: it waits for the phone's "On to month N", as month-end-steps.ts presses it.
+    else if (phase === 'upkeep') await phone.locator('[data-phase=upkeep]').getByTestId('ready').click({ timeout: PRESS_MS });
     else await phone.waitForTimeout(PRESS_MS);
   } catch (err) {
     if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
@@ -306,7 +308,9 @@ function eventsOn(state: GameState, report: MonthReport, keys: EventKey[], tag: 
   const before = new Map((report.lines ?? []).map((l) => [l.tile, l.made - l.parts.reduce((n, p) => n + (p.why === 'event' ? p.delta : 0), 0)]));
   const events: MonthEvent[] = [];
   for (const [i, key] of keys.entries()) {
-    const ev = buildEvent(state, key, createRng(SEED + i));
+    // A player row's event lands on one seat's own plots, tried in seat order as rollPhase rolls them.
+    const ev =
+      key in EVENTS.player ? (state.players.map((p) => buildEvent(state, key, createRng(SEED + i), p.id)).find((e) => e !== null) ?? null) : buildEvent(state, key, createRng(SEED + i));
     if (!ev) {
       unfired.push(`${tag}: month ${MONTH} has no plot a ${key} could hit (seed ${SEED})`);
       return null;
