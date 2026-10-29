@@ -349,6 +349,22 @@ const TABLE: Row[] = [
     press: { game: (_, now) => expect(tileOf(now, 2, 1).outfit).toBe('food') },
   },
   {
+    row: '10 SWAP for the same outfit: nothing gained, said so',
+    at: () => onTile(7, 4),
+    game: (s) => void (a(s).carriedMule = 'smithore'),
+    reach: () => ({ kind: 'install', enabled: true, good: 'smithore', plot: { x: 7, y: 4 }, fromShore: false, replaces: 'smithore' }),
+    words: () => words('SWAP', 'same outfit, nothing gained'),
+    press: { game: (_, now) => expect(tileOf(now, 7, 4).outfit).toBe('smithore') },
+  },
+  {
+    row: '10 SWAP for the same outfit, from the shore: the shore first, then nothing gained',
+    at: () => ({ space: 'map', x: 4.75, y: 1.5 }),
+    game: (s) => void ((tileOf(s, 5, 1).outfit = 'water'), (a(s).carriedMule = 'water')),
+    reach: () => ({ kind: 'install', enabled: true, good: 'water', plot: { x: 5, y: 1 }, fromShore: true, replaces: 'water' }),
+    words: () => words('SWAP', 'from the shore · same outfit, nothing gained'),
+    press: { game: (_, now) => expect(tileOf(now, 5, 1).outfit).toBe('water') },
+  },
+  {
     row: '11 ANALYSE: on an own plot, no MULE, not analysed',
     at: () => onTile(2, 4),
     reach: () => ({ kind: 'analyse', enabled: true, plot: { x: 2, y: 4 } }),
