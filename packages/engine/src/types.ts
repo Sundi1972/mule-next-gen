@@ -350,7 +350,7 @@ export interface Politics {
   promises: Record<string, TaxPromise>;
   /** The sitting Governor's promise, held for the term; null when they were appointed. */
   promise: TaxPromise | null;
-  /** The sales tax in whole percent when the sitting Governor's term began: what lower and hold are judged against. */
+  /** The sales tax in whole percent when the sitting Governor's term began: what lower and hold are judged against; null before anyone governs. */
   promiseFrom: number | null;
   /** This month's election, live or just finished; null in a month without one. */
   election: Election | null;
