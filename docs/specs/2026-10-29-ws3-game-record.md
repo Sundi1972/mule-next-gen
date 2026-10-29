@@ -523,7 +523,7 @@ stay local.
   next timer callback, which holds in Node: microtasks drain between macrotasks. T-AC-1's positive control is the
   check. No spike needed.
 - **R-4, viewFor purity.** RULE-3 relies on views never mutating state. T-AC-6 proves the clock exclusion with a view forced to read the clock (AM-3); view purity itself rests on review.
-- **R-5, per-seat AI levels.** WS1's `validatorFor(level)` (spec A step 2) closes over a seat's AI level, but
+- **R-5, per-seat AI levels.** WS1's `validatorFor({ mind, seed })` (spec A step 2, its §7 R-7) closes over a seat's AI level, but
   `GameRecord.seats` records no level. Every AI seat sits at `DEFAULT_AI_LEVEL` today, so a replay builds the same
   validator. If seats ever get other levels, the record must carry each seat's level: a §3 amendment, made then and
   agreed with WS1 and WS2. Raised by WS1, 2026-10-29.
