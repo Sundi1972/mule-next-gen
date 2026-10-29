@@ -49,6 +49,10 @@ function PhoneEventShow({ view }: { view: MuleView }) {
   // A skip is this phone's alone: it moves its show ahead of the server's clock, never the clock. With a TV in the
   // room the phone is back on the TV's clock.
   const [ahead, setAhead] = useState(0);
+  // Planning is never held (RULE-4 c): people act while its show plays, so its screen must stay usable. Alone, the
+  // gallery's PhoneSolo covers it until the first tap, which collapses the show to the floating light card.
+  const [collapsed, setCollapsed] = useState(false);
+  const held = view.phase !== 'planning';
   const reduced = useEventReducedMotion();
   const tiles = useMemo(() => mapTiles(view), [view]);
   const players = useMemo<ShowPlayer[]>(() => view.players.map((p) => ({ id: p.id, slot: (slotOf(view, p.id) ?? 0) as Slot, name: p.name })), [view]);
@@ -56,9 +60,24 @@ function PhoneEventShow({ view }: { view: MuleView }) {
   const t = solo ? show.t + ahead : show.t;
   // Skipped past the last result: the show is over for this phone.
   if (t >= show.end) return null;
+  if (!held && (!solo || collapsed))
+    return (
+      <EventShow events={show.events} introMs={show.introMs} t={t} mode={solo ? 'solo' : 'tv'} reduced={reduced} width={view.width} height={view.height} tiles={tiles} players={players}>
+        {/* The gallery's PhoneShow card, floating left of the rail; taps go through to the planning screen. */}
+        <div
+          className="pointer-events-none absolute bottom-3 right-[calc(var(--rail)+0.75rem+env(safe-area-inset-right))] z-40 flex w-[268px] flex-col gap-2 rounded-panel border border-holo-line bg-panel/95 p-2.5 text-ink shadow-chip"
+          data-testid="phone-event-overlay"
+          data-mode="light"
+          data-phase={view.phase}
+        >
+          {!solo && <AnnounceBuzz />}
+          <EventTvPhoneRail me={me.id} />
+        </div>
+      </EventShow>
+    );
   return (
     <EventShow events={show.events} introMs={show.introMs} t={t} mode={solo ? 'solo' : 'tv'} reduced={reduced} width={view.width} height={view.height} tiles={tiles} players={players}>
-      {/* Both cover the phase's screen for the whole show: the gallery's PhoneSolo and PhoneShow, a phone held sideways. */}
+      {/* While the server holds the phase, both cover its screen for the whole show: the gallery's PhoneSolo and PhoneShow. */}
       <div className="absolute inset-0 z-40 flex gap-2 bg-table p-2 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] text-ink" data-testid="phone-event-overlay" data-mode={solo ? 'solo' : 'light'} data-phase={view.phase}>
         {!solo && <AnnounceBuzz />}
         <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -73,7 +92,7 @@ function PhoneEventShow({ view }: { view: MuleView }) {
           <div className="flex min-h-0 flex-1 items-center justify-center [container-type:size]">
             <div style={{ width: `min(100cqw, calc(100cqh * ${view.width} / ${view.height}))` }}>
               {/* Alone the map plays the show and is the tap target; with a TV it only marks yours (the light card does the rest). */}
-              <EventLivingMap size="phone" focusSlot={slot} light={!solo} {...(solo ? { onSkip: (to: number) => setAhead((a) => a + to - t) } : {})} />
+              <EventLivingMap size="phone" focusSlot={slot} light={!solo} {...(solo ? { onSkip: (to: number) => (held ? setAhead((a) => a + to - t) : setCollapsed(true)) } : {})} />
             </div>
           </div>
         </div>

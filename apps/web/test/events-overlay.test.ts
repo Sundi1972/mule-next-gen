@@ -259,6 +259,26 @@ describe('B-AC-4 (C10): a phase’s events play over its screen on the phone', (
     }
   });
 
+  it('B-AC-4: planning is never held (RULE-4 c): with a TV the light card floats and the planning screen stays usable; alone the show plays, and a tap leaves the light card', async () => {
+    const planning = viewAt(ROLL_S, { phase: 'planning', events: SICK.map((e) => ({ ...e, phase: 'planning' })) as EventView[] });
+    // With a TV: the card floats over the planning screen, taps go through, no map of its own.
+    const tv = await render(await phone(OSSA, 1, planning));
+    expect(tag(tv, 'phone-event-overlay')).toContain('data-mode="light"');
+    expect(tag(tv, 'phone-event-overlay')).toContain('pointer-events-none');
+    expect(tag(tv, 'phone-event-overlay')).not.toMatch(/absolute inset-0/);
+    expect(inside(tv, 'phone-event-overlay')).toContain('data-testid="phone-card"');
+    expect(inside(tv, 'phone-event-overlay')).not.toContain('data-testid="event-map"');
+    expect(tv).toContain('data-testid="game-shell"');
+    // Alone: the gallery's PhoneSolo plays over the screen; the first tap collapses it to the floating light card.
+    const m = await mount(await phone(OSSA, 0, planning));
+    expect(tag(m.html(), 'phone-event-overlay')).toMatch(/class="absolute inset-0 z-40 /);
+    m.tap();
+    expect(tag(m.html(), 'phone-event-overlay')).toContain('pointer-events-none');
+    expect(tag(m.html(), 'phone-event-overlay')).not.toMatch(/absolute inset-0/);
+    expect(inside(m.html(), 'phone-event-overlay')).toContain('data-testid="phone-card"');
+    expect(inside(m.html(), 'phone-event-overlay')).not.toContain('data-testid="event-map"');
+  });
+
   it('B-AC-4: nothing over production (its screen plays its own show), nor in a quiet phase, nor outside the show', async () => {
     for (const boards of [0, 1]) {
       expect(await render(await phone(OSSA, boards, viewAt(ROLL_S, { phase: 'production' })))).not.toContain('phone-event-overlay');
