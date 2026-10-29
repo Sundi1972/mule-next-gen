@@ -54,6 +54,33 @@ export function readyAll(game: MuleGame): void {
   }
 }
 
+/**
+ * A good's side pick, the auction's status screen, has no clock (A-7): it waits for every Done or the host's Continue.
+ * At a status screen with a human not yet Done, every such human presses Ready, as their phones would; with `host`,
+ * that seat moves on for them instead (Ready, then Continue). Anywhere else it does nothing. Returns whether it pressed.
+ */
+export function pressThroughSidePick(game: MuleGame, how: { host: string } | 'ready' = 'ready'): boolean {
+  const view = game.viewFor(null);
+  const a = view.auction;
+  if (view.phase !== 'auction' || a?.stage !== 'status') return false;
+  const idle = view.players.filter((p) => !p.isAi && !a.walkers.find((w) => w.id === p.id)?.done);
+  if (idle.length === 0) return false;
+  if (how === 'ready') for (const p of idle) game.handle(p.id, { type: 'ready' });
+  else {
+    game.handle(how.host, { type: 'ready' });
+    game.handle(how.host, { type: 'continue' });
+  }
+  return true;
+}
+
+/** `advance`, pressing through any side pick first (pressThroughSidePick), for a test that plays through the auction idly. */
+export function throughSidePicks(game: MuleGame, advance: (ms: number) => void, how: { host: string } | 'ready' = 'ready'): (ms: number) => void {
+  return (ms) => {
+    pressThroughSidePick(game, how);
+    advance(ms);
+  };
+}
+
 /** The first human seat of a table: who hosts it while every phone is connected. */
 export function firstHuman(table: { id: string; isAi: boolean }[]): string | null {
   return table.find((s) => !s.isAi)?.id ?? null;
