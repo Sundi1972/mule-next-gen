@@ -696,6 +696,14 @@ promise. WS4's part first (harness.ts is shared), then the others at once.
   over apps and packages: none outside history)
 - [ ] typecheck, test, e2e, sim, CI green; WS1, WS3, WS4 reviewed their parts; Heiko's OK via the PM
 
+## Execution ledger
+
+| PR | GitHub | Owner | HEAD | State (2026-10-29) |
+|---|---|---|---|---|
+| PR-0 · the wire's types | #176 | WS3 | `5a7fb2c7` | WS6 OK at 5a7fb2c7 (typecheck 0). **Merged at ddb14a0** |
+| S-2 · steering feel | — | WS6 | — | **Done** (`docs/research/2026-10-29-arcade-s2-feel.md`): Heiko "tested phone sterring ok", the hall "3 is fine". Spec AM-7: `steer` carries its `tick`, the server buffers inputs by tick; `floorSeconds` 3. AM-8: the frame goes through WS3's recorder and replay |
+| PR-1 · the dev floor | — | WS1 | — | **In build**, with AM-9's rulings applied (every outfit; 8b works by bay; 8c the Green belt; row 10 SWAP; rows 11 ANALYSE, 12 FIT FILTER, 11a TAKE; `pubPayoutFor`; start positions outside the store doors). WS6 reviews on its SHA |
+
 ## Risk-mitigation milestones (spec §7)
 
 - **R-1 (the rate limit):** T-AC-9's flood case in PR-3, Task 3.3.
