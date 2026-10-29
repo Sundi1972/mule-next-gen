@@ -1,6 +1,6 @@
 import type { ChatMessage, PlayerView } from '@mule/protocol';
 import { Creature, cx, SLOT_COLOR, type CreatureWrap, type Slot } from '@mule/ui';
-import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { createContext, useContext, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { toSlot } from '../game/derive';
 import { useClient } from '../net/react';
 import { useAnchor, useTableChat } from './store';
@@ -157,16 +157,24 @@ function SeatRow() {
   );
 }
 
-/** The last few lines, newest first: the phone keeps 2, the TV 3. */
+/**
+ * How many of its last lines the guide's ticker keeps, when a screen asks for fewer than the phone's usual two to give
+ * the rail the room, such as the hub while the Governor's desk is open (E-11). It keeps at least the newest line; the
+ * seat row never folds, and a new line still pops its bubble.
+ */
+export const TickerLines = createContext<number | null>(null);
+
+/** The last few lines, newest first: the phone keeps 2 (or what TickerLines asks), the TV 3. */
 function Ticker({ size = 'phone' }: { size?: 'phone' | 'tv' }) {
   const { lines } = useTableChat();
   const { seats } = useSeats();
+  const asked = useContext(TickerLines);
   const tv = size === 'tv';
   const said = lines.filter((l) => seats.has(l.from));
   return (
     <ul className={cx('flex flex-col overflow-hidden', tv ? 'gap-1' : 'gap-0.5')} data-testid="chat-ticker" aria-label="Table chat" aria-live="polite">
       {said
-        .slice(tv ? -3 : -2)
+        .slice(tv ? -3 : -Math.max(1, asked ?? 2))
         .reverse()
         .map((l, i) => {
           const { player, slot } = seats.get(l.from)!;
