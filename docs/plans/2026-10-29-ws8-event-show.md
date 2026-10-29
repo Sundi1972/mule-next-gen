@@ -230,14 +230,18 @@ Standing authority line, in every handoff:
 
 Before suggesting merge of `ws8-show-pr1` into `ws8-events`:
 
-- [ ] B-AC-1, B-AC-2, T-AC-1..6, T-AC-9 green; tests named after their AC IDs; each failing-test commit precedes its passing commit
-- [ ] ProductionEventView exercised on the consumer side (Tasks 3-5 render from it)
-- [ ] Front-to-back step green locally (Task 6 Step 3)
-- [ ] `pnpm typecheck` 0 · `pnpm test` 0 · CI green on the PR
-- [ ] No new `@ts-ignore` / `eslint-disable` without a reason on the same line
-- [ ] Owner OKs on our SHAs: WS3 (mule-game.ts, protocol, events-view.test.ts), WS6 (ProductionMap, TvProduction, Production, production-view fixtures), WS4 (packages/ui additions, index.ts, theme.css)
-- [ ] Re-graft onto WS1's real report once Task 6 of its plan lands (spec §7 R-1): T-AC-1/T-AC-2 re-run on a real two-event month
+- [x] B-AC-1, B-AC-2, T-AC-1..6, T-AC-9 green; tests named after their AC IDs; each failing-test commit precedes its passing commit
+- [x] ProductionEventView exercised on the consumer side (Tasks 3-5 render from it)
+- [x] Front-to-back step green locally (Task 6 Step 3)
+- [x] `pnpm typecheck` 0 · `pnpm test` 0 · CI green on the PR
+- [x] No new `@ts-ignore` / `eslint-disable` without a reason on the same line
+- [x] Owner OKs on our SHAs: WS3 (mule-game.ts, protocol, events-view.test.ts), WS6 (ProductionMap, TvProduction, Production, production-view fixtures), WS4 (packages/ui additions, index.ts, theme.css)
+- [ ] DEFERRED (ws1-events not on the trunk yet; PR-2's first task): Re-graft onto WS1's real report once Task 6 of its plan lands (spec §7 R-1): T-AC-1/T-AC-2 re-run on a real two-event month
 - [ ] Then WS1's table gate can tick "the phone and TV show every event of a phase"; ws8-events → feat/strategist only with Heiko's OK via the PM
+
+---
+
+**PR-1 gate record (29 Oct):** head 2bd4214e. CI check ✓ e2e ✓. Local: every package typechecks; ui 62, web 276, server 241, engine 280, tabletop 148, ai 120; `e2e/events.ts` seed 1 ok (126 s) incl. T-AC-5 at 844, 667, 844+47; sim byte-identical (T-AC-9); render gate AM-12 (T-AC-6). Heiko's goal check "Looks good" on 7ffcce59. Owner OKs: WS3 7ffcce59; WS4 edf75f1f, 2bd4214e; WS6 dddd25c0, 06ce37f7, 2bd4214e. Boundary review Approved with minors; I-1..I-5 closed (25ae2abb, 2bd4214e); M-1..M-10 and WS3's `eventShow` total>0 guard go to PR-2's first task. Red-before-green exceptions: 7badcde7, 5004bcbc, 8e01caea (boundary review M-8).
 
 ---
 
