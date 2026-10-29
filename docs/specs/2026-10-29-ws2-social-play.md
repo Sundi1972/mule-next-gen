@@ -401,6 +401,7 @@ Code-only; no existing state to reach. The mute starts unset for every player.
 | B-AC-B4 (HC-B2) | Given a human mutes an AI from the rail switch / When the game goes on / Then that AI's whispers, replies and card offers stop on that phone and its public lines are hidden there; the TV and other phones still show its public lines. | the player's phone (browser, front to back) and server delivery | the host's mute does not clear the TV | C9 |
 | B-AC-B5 (G-B1, AI to AI) | Given two Smart AIs / When AI 1 whispers AI 2 a request / Then AI 2's next monthly brief quotes it, and a whisper between two humans never reaches either AI. | AI 2's next brief | the humans' whisper → absent | C5 |
 | B-AC-B6 (G-B2) | Given a human whispers an AI "will you vote for me?" / When the phase is open / Then the AI answers in the same phase, in character, and nothing in the game state or playbooks changes. | delivered chat; state and playbook hashes before and after | a third whisper in the phase → no reply | C7 |
+| B-AC-B7 (G-B2, G-B3) | Given an AI whose recorded playbook proposes a pact card to a player / When planning opens / Then the card reaches that player's phone through WS7's card intent with its message, one tap accepts it, both phones list the pact, and the replay reproduces it. | both phones; WS7's card list; WS3's replay | a muted AI's offer → not sent; no proposal in the playbook → no card | C10 |
 | T-AC-B1 (B-AC-B1) | RULE-B1 rows 1-6 with its examples. | messages sent or dropped | — | C4 |
 | T-AC-B2 (HC-B1) | RULE-B2: a false declared price → dropped; a number with no declared fact → dropped; "I'll vote for you" → sent; a prose-only false claim → sent (R-B1, pinned). | sent or dropped; ledger cause | a true declared price → sent | C4 C7 |
 | T-AC-B3 (HC-B3) | A game with social reasoning and replies, replayed from its record with the key unset, reproduces every playbook, vote and score; a reply's call changes no state hash. | WS3's replay result; state hashes | — | C3 C7 C8 |
@@ -432,7 +433,8 @@ Code-only; no existing state to reach. The mute starts unset for every player.
 - **Spike:** S-B1 done (measured, $0.05704). No further spike; B-6's paid runs are the measurement.
 
 ## §8 · Amendments `[review-only]`
-(none yet)
+- **AM-B1 · 29 Oct · lead, at plan time:** §6 had no AC for C10 (courting with WS7's cards); B-AC-B7 added, lifted
+  from v1's card AC and UBER-AC-B2's card part. Goal G-B2/G-B3 unchanged.
 
 ## §9 · Ownership Boundaries `[handoff]`
 - **Sole owner of AI social reasoning, its memory and its messages: WS2**: `packages/ai/src/social/`, the social parts
