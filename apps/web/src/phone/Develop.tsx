@@ -425,10 +425,11 @@ function StartTheClock({ passing, confirm, setConfirm }: { passing: readonly str
     <div className="flex flex-col gap-2 rounded-panel border border-warn/60 bg-panel p-2.5 @min-[1100px]/shell:p-4" role="alertdialog" aria-label="Start the clock without them?" data-testid="continue-confirm">
       <p className="text-sm @min-[1100px]/shell:text-base">{startClockQuestion(passing)}</p>
       <div className="flex gap-2">
-        <Button size="md" className="flex-1" onClick={on('continue-now')} data-testid="continue-now">
+        {/* Two words a line at most: on a 667 phone the rail is too narrow for "Start the clock" on one. */}
+        <Button size="md" className="flex-1 px-2 text-xs leading-tight @min-[1100px]/shell:text-base" onClick={on('continue-now')} data-testid="continue-now">
           Start the clock
         </Button>
-        <Button size="md" variant="ghost" className="flex-1" onClick={on('keep-waiting')} data-testid="keep-waiting">
+        <Button size="md" variant="ghost" className="flex-1 px-2 text-xs leading-tight @min-[1100px]/shell:text-base" onClick={on('keep-waiting')} data-testid="keep-waiting">
           Keep waiting
         </Button>
       </div>
