@@ -75,7 +75,8 @@ export interface EventYouSummary {
 /** What one event did to one player, or null when it passed them by. */
 function youFor(ev: ShowEventView, id: string, cast: ShowCast): EventYouSummary | null {
   const detail = YOU[ev.key]?.(ev);
-  const mine = ev.hits.filter((h) => cast.ownerAt(h.x, h.y) === id);
+  // As in eventSummary, a hit that changed nothing is no loss: a player only it reached was missed.
+  const mine = ev.hits.filter((h) => h.delta !== 0 && cast.ownerAt(h.x, h.y) === id);
   if (mine.length === 0) return null;
   const change: Partial<Record<Good, number>> = {};
   for (const h of mine) {
