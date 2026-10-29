@@ -22,7 +22,8 @@ const sick = (player: string, name: string, playMs: number): ShowEventView => ({
   key: 'sickness',
   kind: 'sickness',
   title: 'Sickness',
-  line: `${name} fell sick: the air is Smoggy.`,
+  // The server's wording, verbatim (sickView).
+  line: `${name} fell sick: the air is bad.`,
   sign: 'bad',
   scope: 'personal',
   player,
@@ -102,7 +103,7 @@ describe('C11 · the roll call: every sick player in one segment (RULE-1)', () =
     const lena = show(h(EventTvPhoneRail, { me: 'lena' }), at);
     expect(lena).toContain('data-testid="phone-you"');
     expect(lena).toContain('You’re sick');
-    expect(lena).toContain('You walk at half pace this turn. Why: the air is Smoggy.');
+    expect(lena).toContain('You walk at half pace this turn. Why: the air is bad.');
     const ossa = show(h(EventTvPhoneRail, { me: 'ossa' }), at);
     expect(ossa).toContain('data-testid="phone-miss"');
     expect(ossa).toContain('You’re well. Lena and Brix walk at half pace.');

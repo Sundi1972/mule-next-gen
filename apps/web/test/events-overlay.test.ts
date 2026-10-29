@@ -34,7 +34,8 @@ const sick = (player: string, name: string): Sick =>
     key: 'sickness',
     kind: 'sickness',
     title: 'Sickness',
-    line: `${name} fell sick: the air is Smoggy.`,
+    // The server's wording, verbatim (sickView): the phone parses its reason out of it.
+    line: `${name} fell sick: the air is bad.`,
     sign: 'bad',
     scope: 'personal',
     player,
@@ -366,8 +367,8 @@ describe('T-AC-10 display / C11: two sick players play in ONE roll call, on the 
 
   it('T-AC-10: each phone, with a TV: the sick say it is them, the well name both, once each', async () => {
     for (const [id, says] of [
-      [LENA, 'You’re sick'],
-      [BRIX, 'You’re sick'],
+      [LENA, 'You walk at half pace this turn. Why: the air is bad.'],
+      [BRIX, 'You walk at half pace this turn. Why: the air is bad.'],
       [OSSA, 'You’re well. Lena and Brix walk at half pace.'],
     ] as const) {
       const card = inside(await render(await phone(id, 1, viewAt(RESULT_S))), 'phone-event-overlay');

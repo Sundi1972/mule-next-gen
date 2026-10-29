@@ -1,6 +1,8 @@
 import { DEVELOPMENT, EVENT_SHOW, EVENTS, RuleError, WALK, type EventKey, type GameState, type MonthEvent, type MonthReport, type Phase } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+// The client's own reading of a sick line: the reason crosses the seam as prose, so the two must agree.
+import { sickBecause } from '../../../packages/ui/src/events/sick.js';
 import { AI_DEV_TICK_MS, MuleGame } from '../src/mule-game.js';
 import { fakeContext, readyAll, seats, toDevelopment } from './fake-context.js';
 
@@ -122,6 +124,13 @@ describe('T-AC-10: development lists the players who fell sick at its start as b
     expect(line((state) => (state.air = 40))).toBe('Mia fell sick: the air is bad.');
     // Last month's report says how much air Mia's plots fouled; this month has no report of its own yet.
     expect(line((state) => state.history.push({ month: 0, events: [], before: {}, produced: {}, pollutionBy: { s2: 20 } } as unknown as MonthReport))).toBe('Mia fell sick: their plots foul the air.');
+  });
+
+  it('T-AC-10: the phone reads each reason back out of the server\'s line, as the sick player\'s "Why:"', () => {
+    const why = (prepare: (state: GameState) => void) => sickBecause(sickAt(['s2'], { prepare }).game.viewFor(null).events![0]!.line);
+    expect(why(() => {})).toBe('bad luck');
+    expect(why((state) => (state.air = 40))).toBe('the air is bad');
+    expect(why((state) => state.history.push({ month: 0, events: [], before: {}, produced: {}, pollutionBy: { s2: 20 } } as unknown as MonthReport))).toBe('their plots foul the air');
   });
 
   it('T-AC-10: a player still sick from before is not listed: not after development, and not in a development where nobody fell sick', () => {
