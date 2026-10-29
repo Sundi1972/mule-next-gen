@@ -1,6 +1,6 @@
 import { PlayerMark } from '../components/PlayerMark';
 import { cx } from '../components/tokens';
-import { eventMissLine, eventSegWho, eventSegLabel, phaseNoun, segTitle, eventWhoLine, eventYouSummary } from './copy';
+import { eventMissLine, eventSegLabel, phaseNoun, segTitle, eventWhoLine, eventYouSummary } from './copy';
 import { signLook, useShow } from './frame';
 import { EventBuzz, EventSignBadge } from './glyphs';
 import { EventSickTag } from './rollcall';
@@ -98,7 +98,7 @@ export function EventNowPlaying({ seg, buzz }: { seg: EventSegment; buzz: boolea
       <span className="flex min-w-0 flex-col">
         <span className="label-caps whitespace-nowrap text-[10px]!">{eventSegLabel(seg)}</span>
         <span className="font-display text-base font-bold leading-tight">{segTitle(seg)}</span>
-        <span className="truncate text-[11px] text-ink-2">{eventSegWho(seg, cast)}</span>
+        <span className="truncate text-[11px] text-ink-2">{eventWhoLine(ev, cast)}</span>
       </span>
       <span className="ml-auto">
         <EventBuzz on={buzz} />

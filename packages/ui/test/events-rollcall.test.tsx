@@ -81,6 +81,14 @@ describe('C11 · the roll call: every sick player in one segment (RULE-1)', () =
     expect(html.match(/data-testid="sick-tag"/g)).toHaveLength(2);
   });
 
+  it('a phase of only bulletins never interrupts: no intro card and no dim, its roll call up from the start', () => {
+    const html = show(h(EventLivingMap, { size: 'tv' }), 0.9);
+    expect(html).not.toContain('data-testid="intro-card"');
+    expect(html).not.toContain('data-testid="title-card"');
+    expect(html).toContain('data-testid="roll-call"');
+    expect(html).not.toContain('class="absolute inset-0 bg-void"');
+  });
+
   it('the TV log says the roll call in one line', () => {
     const s = eventScript({ events: two, introMs: 1800 }, 0, 'tv');
     const html = show(h(EventTvLog), s.end - 0.01);

@@ -32,7 +32,7 @@ export function IntroCard({ size }: { size: ShowSize }) {
           {s.segments.map((g) => (
             <span key={g.n} className="flex -space-x-3 animate-[ev-pop_0.4s_ease-out_both]" style={{ animationDelay: `${0.25 + g.n * 0.18}s` }}>
               {g.events.map((e, i) => (
-                <EventSignBadge key={i} ev={e} size={z.introBadge} />
+                <EventSignBadge key={i} ev={e} size={isRollCall(g) && g.events.length > 1 ? z.introBadge * 0.7 : z.introBadge} />
               ))}
             </span>
           ))}
