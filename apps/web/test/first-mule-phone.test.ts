@@ -72,12 +72,15 @@ describe("A-1: the phone while month 1's development clock waits", () => {
     expect(text(html)).toContain(`≈${base + start + perMonth} cr`);
   });
 
-  it('A-1: once your MULE is in and another is still to come: "Your MULE is in", and the label waits for every first MULE', () => {
+  it('A-1: once your MULE is in and another is still to come, you wait: "Your MULE is in · waiting for Ossa", the corral shut and the pub open', () => {
     const { game, ctx, installFirst } = firstMonth();
     installFirst(LENA);
     const html = phone(game, ctx.now(), LENA);
-    expect(text(html)).toContain('Your MULE is in');
-    expect(text(html)).toContain('The clock starts when every first MULE is in: Ossa still to come.');
+    expect(text(html)).toContain('Your MULE is in · waiting for Ossa');
+    expect(text(html)).toContain('Buying, installing and analysing start with the clock. The pub is open.');
+    // Once in, you wait: the corral is shut, the pub open.
+    expect(html).not.toMatch(/<button[^>]*data-shop="corral"(?![^>]*disabled)[^>]*>/);
+    expect(html).toMatch(/<button(?![^>]*disabled)[^>]*aria-label="Go to the pub and end your turn"/);
     expect(text(html)).toContain('The clock starts when every first MULE is in');
     expect(text(html)).not.toContain('Time is up');
   });
