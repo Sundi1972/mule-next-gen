@@ -1,7 +1,6 @@
 import type { MuleView } from '@mule/protocol';
 import { cx } from '@mule/ui';
 import { createContext, useContext, useState, type ReactNode } from 'react';
-import { TickerLines } from '../../chat/Chat';
 import { PHASE_NAME, secondsUntil } from '../../game/derive';
 import { useServerNow } from '../../net/react';
 import { usePhoneGame } from '../game';
@@ -9,7 +8,7 @@ import { NowCard, PhoneShell, useWide, type Now } from '../Shell';
 import { needRows, planNow } from './needs';
 import { connectedIn, readyNowIn, stillPlanning } from './ready';
 import { ReadyBar, ReadyCount } from './ReadyBar';
-import { deskAsks, drawnSlots, firstGiven, goTo, settle, type AgendaSlot, type DeskSlot, type HubPlace, type HubSeat, type HubSlots, type MapToolSlot, type StageSlot } from './slots';
+import { drawnSlots, firstGiven, goTo, settle, type AgendaSlot, type DeskSlot, type HubPlace, type HubSeat, type HubSlots, type MapToolSlot, type StageSlot } from './slots';
 
 /** The hub's open desk and map tool, for any slot's components to read and change. */
 export interface HubNav {
@@ -68,10 +67,6 @@ export function Hub({ slots }: { slots: HubSlots }) {
   const stage = drawn.stage?.[0];
   const bar = firstGiven(drawn.readyWords ?? [], seat);
   const fold = !stage && place.first !== null;
-  // While the desk that asked first is open, such as the Governor's tax, the rail gives it the room (E-11): the footer
-  // folds its names (the header's ready count says it in brief) and the chat ticker keeps its newest line. Picking
-  // another desk brings both back; Set does not, so the "done" stays in view.
-  const asking = !stage && deskAsks(place, desk?.id);
   const Panel = tool?.Panel;
   // The tools are off the stage while a situation holds it, so their action leaves the footer.
   const Action = stage ? undefined : tool?.Action;
@@ -80,41 +75,39 @@ export function Hub({ slots }: { slots: HubSlots }) {
 
   return (
     <Nav.Provider value={nav}>
-      <TickerLines.Provider value={asking ? 1 : null}>
-        <PhoneShell
-          phase={stage?.phase?.(seat) ?? PHASE_NAME.planning}
-          seconds={secondsUntil(view.phaseEndsAt, serverNow)}
-          status={<ReadyCount players={view.players} label={bar?.label} />}
-          now={fold ? undefined : now}
-          fill
-          rail={
-            stage ? (
-              StageRail && <StageRail />
-            ) : (
-              <>
-                {fold && <FoldingNowCard key={now.title} now={now} />}
-                {Panel && <Panel />}
-                <DeskGroup tight={fold}>
-                  <DeskTabs desks={drawn.desks} active={nav.desk} first={place.first} onPick={nav.openDesk} />
-                  {Body && (
-                    <div className="flex flex-col gap-2.5 @min-[1100px]/shell:gap-4" data-testid={`desk-body-${nav.desk}`}>
-                      <Body />
-                    </div>
-                  )}
-                </DeskGroup>
-              </>
-            )
-          }
-          footer={
+      <PhoneShell
+        phase={stage?.phase?.(seat) ?? PHASE_NAME.planning}
+        seconds={secondsUntil(view.phaseEndsAt, serverNow)}
+        status={<ReadyCount players={view.players} label={bar?.label} />}
+        now={fold ? undefined : now}
+        fill
+        rail={
+          stage ? (
+            StageRail && <StageRail />
+          ) : (
             <>
-              {Action && <Action />}
-              <ReadyBar words={bar ?? undefined} canReady={bar?.canReady} names={!asking} />
+              {fold && <FoldingNowCard key={now.title} now={now} />}
+              {Panel && <Panel />}
+              <DeskGroup tight={fold}>
+                <DeskTabs desks={drawn.desks} active={nav.desk} first={place.first} onPick={nav.openDesk} />
+                {Body && (
+                  <div className="flex flex-col gap-2.5 @min-[1100px]/shell:gap-4" data-testid={`desk-body-${nav.desk}`}>
+                    <Body />
+                  </div>
+                )}
+              </DeskGroup>
             </>
-          }
-        >
-          {stage ? <SituationStage stage={stage} tool={tool} /> : <HubStage drawn={drawn} seat={seat} tool={tool} nav={nav} go={go} />}
-        </PhoneShell>
-      </TickerLines.Provider>
+          )
+        }
+        footer={
+          <>
+            {Action && <Action />}
+            <ReadyBar words={bar ?? undefined} canReady={bar?.canReady} />
+          </>
+        }
+      >
+        {stage ? <SituationStage stage={stage} tool={tool} /> : <HubStage drawn={drawn} seat={seat} tool={tool} nav={nav} go={go} />}
+      </PhoneShell>
     </Nav.Provider>
   );
 }

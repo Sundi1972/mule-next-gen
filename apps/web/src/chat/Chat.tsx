@@ -1,6 +1,6 @@
 import type { ChatMessage, PlayerView } from '@mule/protocol';
 import { Creature, cx, SLOT_COLOR, type CreatureWrap, type Slot } from '@mule/ui';
-import { createContext, useContext, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { toSlot } from '../game/derive';
 import { useClient } from '../net/react';
 import { useAnchor, useTableChat } from './store';
@@ -9,6 +9,8 @@ import { useAnchor, useTableChat } from './store';
  * Live table chat on every screen (spec C20): a line pops a speech bubble at its speaker and joins a short ticker.
  * The bubble sits at the speaker's creature when the screen draws one (a Speaker), otherwise at the speaker's place
  * in the guide's seat row. One bubble at a time per screen (RULE-9, the store), so bubbles never cover each other.
+ * On a phone (the shell under 1100 px) the seat row and the ticker follow the rail's own content, in the same scroll
+ * (Heiko's "chat at the bottom"): the bubble for a speaker the screen doesn't draw then opens at the rail's top.
  */
 
 type Seat = { player: PlayerView; slot: Slot };
@@ -117,16 +119,33 @@ export const tvSpeakerAt: CreatureWrap = (id, creature) => (
   </Speaker>
 );
 
-/**
- * Everyone else at the table, in the guide: the fallback anchor for a speaker the screen doesn't draw. Its parent must
- * be positioned and span the guide's width: the fallback bubble opens to the LEFT of the guide, level with the row,
- * over the stage, so it never covers the ticker below the row. The speaking seat lights up.
- */
-function SeatRow() {
+/** The line whose bubble shows now when the screen draws no creature for its speaker, and that speaker's seat. */
+function useFallback(): { line: ChatMessage; seat: Seat; me: string | null } | null {
   const { showing, anchors } = useTableChat();
   const { seats, me } = useSeats();
-  const fallback = showing && !anchors.has(showing.from) ? showing : null;
-  const speaker = fallback ? seats.get(fallback.from) : undefined;
+  const seat = showing && !anchors.has(showing.from) ? seats.get(showing.from) : undefined;
+  return showing && seat ? { line: showing, seat, me } : null;
+}
+
+/** The bubble for a speaker the screen doesn't draw: to the LEFT of the guide, level with its parent's top, over the stage. */
+function FallbackAt({ line, seat, me }: { line: ChatMessage; seat: Seat; me: string | null }) {
+  return (
+    <span className="pointer-events-none absolute right-full top-0 mr-3 h-[34px] @min-[1100px]/shell:mr-5" data-fallback>
+      <Bubble line={line} seat={seat} me={me} left />
+    </span>
+  );
+}
+
+/**
+ * Everyone else at the table, in the guide: the fallback anchor for a speaker the screen doesn't draw. With `bubble`,
+ * its parent must be positioned and span the guide's width: the fallback bubble opens to the LEFT of the guide, level
+ * with the row, over the stage, so it never covers the ticker below the row. Without it, the rail places that bubble
+ * itself (FallbackBubble). The speaking seat lights up.
+ */
+function SeatRow({ bubble = true }: { bubble?: boolean }) {
+  const { seats, me } = useSeats();
+  const said = useFallback();
+  const fallback = said?.line ?? null;
   return (
     <>
       {/* Five others fit the narrowest rail on one line: a long name gives way (its whole name is its title), the creatures never do. */}
@@ -148,33 +167,31 @@ function SeatRow() {
             </span>
           ))}
       </div>
-      {fallback && speaker && (
-        <span className="pointer-events-none absolute right-full top-0 mr-3 h-[34px] @min-[1100px]/shell:mr-5" data-fallback>
-          <Bubble line={fallback} seat={speaker} me={me} left />
-        </span>
-      )}
+      {bubble && said && <FallbackAt {...said} />}
     </>
   );
 }
 
 /**
- * How many of its last lines the guide's ticker keeps, when a screen asks for fewer than the phone's usual two to give
- * the rail the room, such as the hub while the Governor's desk is open (E-11). It keeps at least the newest line; the
- * seat row never folds, and a new line still pops its bubble.
+ * The fallback bubble on its own, for a rail whose seat row is under its content (a phone): it opens to the left of the
+ * guide, level with this zero-height anchor at the foot of the rail's header, so it shows while the seat row is
+ * scrolled away.
  */
-export const TickerLines = createContext<number | null>(null);
+export function FallbackBubble() {
+  const said = useFallback();
+  return <div className="relative h-0">{said && <FallbackAt {...said} />}</div>;
+}
 
-/** The last few lines, newest first: the phone keeps 2 (or what TickerLines asks), the TV 3. */
+/** The last few lines, newest first: the phone keeps 2, the TV 3. */
 function Ticker({ size = 'phone' }: { size?: 'phone' | 'tv' }) {
   const { lines } = useTableChat();
   const { seats } = useSeats();
-  const asked = useContext(TickerLines);
   const tv = size === 'tv';
   const said = lines.filter((l) => seats.has(l.from));
   return (
     <ul className={cx('flex flex-col overflow-hidden', tv ? 'gap-1' : 'gap-0.5')} data-testid="chat-ticker" aria-label="Table chat" aria-live="polite">
       {said
-        .slice(tv ? -3 : -Math.max(1, asked ?? 2))
+        .slice(tv ? -3 : -2)
         .reverse()
         .map((l, i) => {
           const { player, slot } = seats.get(l.from)!;
@@ -197,8 +214,18 @@ function Ticker({ size = 'phone' }: { size?: 'phone' | 'tv' }) {
   );
 }
 
-/** The guide's chat block: everyone's seat, the bubble's fallback anchor, and the last lines. */
-export function TableChat() {
+/**
+ * The guide's chat block: everyone's seat, the bubble's fallback anchor, and the last lines. `under`: the block that
+ * follows the rail's content on a phone, its fallback bubble placed by FallbackBubble at the rail's top instead.
+ */
+export function TableChat({ under = false }: { under?: boolean }) {
+  if (under)
+    return (
+      <div className="flex flex-col gap-1 border-t border-holo-faint pt-1.5" data-testid="table-chat">
+        <SeatRow bubble={false} />
+        <Ticker />
+      </div>
+    );
   return (
     <div className="relative flex flex-col gap-1 border-t border-holo-faint pt-1.5 @min-[1100px]/shell:gap-2 @min-[1100px]/shell:pt-2.5" data-testid="table-chat">
       <SeatRow />
