@@ -96,6 +96,8 @@ interface Row {
   /** The floor's config; `cfg` when not given. */
   cfg?: FloorConfig;
   game?: (state: GameState) => void;
+  /** Reach is asked without the turn's time left, as a caller that has none would: the pub has no payout to show. */
+  unasked?: boolean;
   reach: (state: GameState) => Reach;
   words: (state: GameState) => ReachWords;
   press: Outcome;
