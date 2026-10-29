@@ -11,7 +11,8 @@ export type ShowEventKey =
   | 'volcanicAsh'
   | 'pestSwarm'
   | 'wildfire'
-  | 'bumperHarvest';
+  | 'bumperHarvest'
+  | 'cavernCollapse';
 
 /** The engine's phases (packages/engine/src/types.ts Phase), so the protocol's views fit without a cast. */
 export type ShowPhase = 'planning' | 'landGrant' | 'landAuction' | 'development' | 'production' | 'auction' | 'upkeep' | 'gameOver';

@@ -959,6 +959,7 @@ export const EVENT_SHOW = {
     pestSwarm: 'spotlight',
     wildfire: 'spotlight',
     bumperHarvest: 'spotlight',
+    cavernCollapse: 'spotlight',
   } as Partial<Record<EventKey, EventWeight>>,
   /** How long one headline or spotlight plays, in ms. */
   playMs: { headline: 7_000, spotlight: 5_200 },
@@ -1023,8 +1024,9 @@ export interface AiLevelConfig {
   mulesPerMonth: number;
   /** Chance it misses a plot it wanted in the land grant. */
   missChance: number;
-  /** Allowed to corner goods and to act on spite. Rookie never does. */
+  /** Allowed to corner a good (a monopoly try). Rookie never does. */
   corners: boolean;
+  /** Allowed to act on spite against the leader. Rookie never does. */
   sabotage: boolean;
 }
 
