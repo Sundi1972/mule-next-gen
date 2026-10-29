@@ -70,10 +70,10 @@ describe('A-6 at the server: choose how many at the line, and a tap is one step'
     const before = state.store.stock[good];
     const price = game.viewFor('s2').auction!.storeSells!;
     game.handle('s2', { type: 'lineTrade', units: 2 });
-    expect(mine(game).order).toEqual({ house: 'store', units: 2, traded: 0, gross: 0 });
+    expect(mine(game).order).toEqual({ house: 'store', units: 2, traded: 0, cr: 0 });
     ticks(advance, 4_000);
     expect(state.store.stock[good]).toBe(before - 2);
-    expect(mine(game).order).toEqual({ house: 'store', units: 2, traded: 2, gross: 2 * price });
+    expect(mine(game).order).toEqual({ house: 'store', units: 2, traded: 2, cr: 2 * price });
   });
 
   it('a lineTrade takes back a Done, as walking does', () => {
