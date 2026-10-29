@@ -384,11 +384,25 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
       <TvHeader game={game} title={`Auction · ${GOOD_NAME[auction.good]}`} />
       <div className="flex min-h-0 flex-1 gap-6">
         <div className={cx('flex min-w-0 flex-1 flex-col', status ? 'gap-3' : 'gap-2')}>
-          <TimeBar size="tv" seconds={auction.seconds} total={auction.total} slowed={auction.slowed} />
-          {skipped && (
-            <p className="font-mono text-base text-ink-3" data-testid="skipped">
-              {skipped}
-            </p>
+          {status ? (
+            // On the status stage the skipped words share the time bar's row, so the ship panel keeps its room.
+            <div className="flex shrink-0 items-center gap-4">
+              <TimeBar size="tv" seconds={auction.seconds} total={auction.total} slowed={auction.slowed} className="min-w-0 flex-1" />
+              {skipped && (
+                <p className="min-w-0 max-w-[45%] truncate font-mono text-base text-ink-3" data-testid="skipped">
+                  {skipped}
+                </p>
+              )}
+            </div>
+          ) : (
+            <>
+              <TimeBar size="tv" seconds={auction.seconds} total={auction.total} slowed={auction.slowed} />
+              {skipped && (
+                <p className="font-mono text-base text-ink-3" data-testid="skipped">
+                  {skipped}
+                </p>
+              )}
+            </>
           )}
           {status ? (
             <>
