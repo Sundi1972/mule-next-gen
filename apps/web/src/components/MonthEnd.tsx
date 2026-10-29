@@ -129,7 +129,19 @@ export function LeagueTable({ view, density, selfId, final = false }: { view: Mu
                   <span className={cx('flex min-w-0 items-center', tv ? 'gap-3' : 'gap-1.5')}>
                     <PlayerMark slot={r.slot} species={r.player.species} size={s.mark} label={r.player.name} />
                     <span className={cx('truncate font-display font-semibold', s.name)} data-testid={`name-${r.player.id}`}>
-                      {mine ? `You (${r.player.name})` : r.player.name}
+                      {!mine ? (
+                        r.player.name
+                      ) : density === 'compact' ? (
+                        // The rail's final standings are narrow on a phone: your row's highlight and creature say who it is.
+                        <>
+                          <span data-testid={`you-name-${r.player.id}`}>You</span>
+                          <span className="hidden @min-[1100px]/shell:inline" data-testid={`you-full-${r.player.id}`}>
+                            {` (${r.player.name})`}
+                          </span>
+                        </>
+                      ) : (
+                        `You (${r.player.name})`
+                      )}
                     </span>
                   </span>
                 </td>
@@ -307,13 +319,28 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false }
             ) : (
               shownHungry.map((h) => {
                 const p = view.players.find((x) => x.id === h.id)!;
+                const full = `${p.name} went hungry: ate ${h.ate} of ${h.need} Food`;
+                if (!tv) {
+                  // On a phone: one short line, the full sentence on hover and from 1100 px.
+                  return (
+                    <span key={h.id} className="flex min-w-0 items-center gap-1 text-[11px] font-semibold leading-tight text-alert" data-testid={`hungry-${h.id}`}>
+                      <PlayerMark slot={toSlot(p.slot)} species={p.species} size={12} label={p.name} />
+                      <span className="min-w-0 truncate @min-[1100px]/shell:hidden" title={full} data-testid={`hungry-short-${h.id}`}>
+                        {p.name}: ate {h.ate} of {h.need} Food
+                      </span>
+                      <span className="hidden @min-[1100px]/shell:inline" data-testid={`hungry-full-${h.id}`}>
+                        {full}
+                      </span>
+                    </span>
+                  );
+                }
                 return (
-                  <span key={h.id} className={cx('flex items-start font-semibold text-alert', tv ? 'gap-2 text-2xl leading-snug' : 'gap-1 text-[11px] leading-tight')} data-testid={`hungry-${h.id}`}>
-                    <span className={tv ? 'pt-1' : ''}>
-                      <PlayerMark slot={toSlot(p.slot)} species={p.species} size={tv ? 26 : 12} label={p.name} />
+                  <span key={h.id} className="flex items-start gap-2 text-2xl font-semibold leading-snug text-alert" data-testid={`hungry-${h.id}`}>
+                    <span className="pt-1">
+                      <PlayerMark slot={toSlot(p.slot)} species={p.species} size={26} label={p.name} />
                     </span>
                     <span>
-                      {p.name} went hungry: ate {h.ate} of {h.need} <GoodIcon good="food" size={tv ? 20 : 11} className="inline align-[-0.1em]" /> Food
+                      {p.name} went hungry: ate {h.ate} of {h.need} <GoodIcon good="food" size={20} className="inline align-[-0.1em]" /> Food
                     </span>
                   </span>
                 );
