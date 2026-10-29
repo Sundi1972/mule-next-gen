@@ -364,7 +364,8 @@ describe('FM-one-clock: one development clock for every seat', () => {
     expect(game.viewFor(null).phase).toBe('production');
 
     for (let i = 0; i < 20_000 && !(game.viewFor(null).month === 2 && game.viewFor(null).phase === 'development'); i++) {
-      if (game.viewFor(null).phase === 'planning') {
+      // Planning and the month end have no clock: s1 comes back and moves on (C20).
+      if (game.viewFor(null).phase === 'planning' || game.viewFor(null).phase === 'upkeep') {
         game.connectionChanged('s1', true);
         readyAll(game);
       }
