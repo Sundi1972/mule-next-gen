@@ -144,7 +144,9 @@ type Box = { top: number; bottom: number; left: number; right: number; width: nu
 interface RailBoxes {
   label: (Box & { lineHeight: number }) | null;
   card: Box | null;
+  /** The earlier event's line once scrolled into view, and the rail's scroll body that holds it. */
   tail: Box | null;
+  scrollBody: Box | null;
   actions: Box | null;
   hint: (Box & { inActions: boolean; visible: boolean }) | null;
   map: Box | null;
@@ -153,8 +155,9 @@ interface RailBoxes {
 
 /**
  * T-AC-5 at every phone size, on the last event's result, with the earlier event's line under it and the skip hint
- * by the actions: the card's label is one line; the card and the line sit above the actions; the hint is inside the
- * actions and visible; the map stays clear of the rail. The page's time is paused and the room held, so the one
+ * by the actions: the card's label is one line and the card sits above the actions; the line may be below the fold
+ * (the shell's rail carries chat lines above the show) but its scroll body brings it into view, never under the
+ * actions; the hint is inside the actions and visible; the map stays clear of the rail. The page's time is paused and the room held, so the one
  * moment stands while the same page is resized (the result is up for well under a second before the hint goes).
  */
 async function theRailFitsEachPhone(phone: Page, code: string, earlier: { key: string; title: string }): Promise<string> {
@@ -175,8 +178,11 @@ async function theRailFitsEachPhone(phone: Page, code: string, earlier: { key: s
         check(b.label.height < 1.5 * b.label.lineHeight, `${at}: the card's label is one line, ${b.label.height} px for a ${b.label.lineHeight} px line`);
         check(b.card && b.actions, `${at}: the card and the actions are on the page`);
         check(b.card.bottom <= b.actions.top + 0.5, `${at}: the card ends above the actions (card ${b.card.bottom}, actions ${b.actions.top})`);
-        check(b.tail, `${at}: the earlier event's line is in the rail`);
-        check(b.tail.bottom <= b.actions.top + 0.5, `${at}: the earlier event's line ends above the actions (line ${b.tail.bottom}, actions ${b.actions.top})`);
+        check(b.tail && b.scrollBody, `${at}: the earlier event's line is in the rail's scroll body`);
+        check(
+          b.tail.bottom <= b.actions.top + 0.5 && b.tail.top >= b.scrollBody.top - 0.5,
+          `${at}: scrolled into view, the earlier event's line sits in the scroll body above the actions (line ${b.tail.top}..${b.tail.bottom}, body from ${b.scrollBody.top}, actions ${b.actions.top})`,
+        );
         check(b.hint, `${at}: the skip hint is on the page`);
         check(b.hint.inActions, `${at}: the skip hint sits in the actions`);
         check(b.hint.visible && b.hint.top >= b.actions.top - 0.5 && b.hint.bottom <= b.actions.bottom + 0.5 && b.hint.right <= size.viewport.width, `${at}: the skip hint is visible inside the actions`);
@@ -190,7 +196,7 @@ async function theRailFitsEachPhone(phone: Page, code: string, earlier: { key: s
       await cdp.detach();
       await phone.setViewportSize(PHONE.viewport);
     }
-    return `the result card, the ${earlier.key} line and the skip hint fit the rail at ${seen.join(', ')}`;
+    return `the result card and the skip hint fit, and the ${earlier.key} line scrolls into view, at ${seen.join(', ')}`;
   });
 }
 
@@ -209,10 +215,19 @@ function railBoxes(phone: Page, earlier: string): Promise<RailBoxes> {
     const [cardBox, labelBox, railBox, tailBox, actionsBox, hintBox, mapBox] = [card, label, rail, tail, actions, hint, map].map((el) => (el ? (el.getBoundingClientRect().toJSON() as Box) : null));
     const style = label ? getComputedStyle(label) : null;
     const lineHeight = style ? (style.lineHeight === 'normal' ? 1.2 * parseFloat(style.fontSize) : parseFloat(style.lineHeight)) : 0;
+    // Everything else is read where it stands; then the line is scrolled into view in the body that holds it (the
+    // body is the rail's child it sits in), read, and the body scrolled back.
+    const scrollBody = [...(rail?.children ?? [])].find((c) => tail && c.contains(tail)) ?? null;
+    const scrolledFrom = scrollBody?.scrollTop ?? 0;
+    tail?.scrollIntoView({ block: 'nearest' });
+    const scrolledTail = tail ? (tail.getBoundingClientRect().toJSON() as Box) : null;
+    const scrollBodyBox = scrollBody ? (scrollBody.getBoundingClientRect().toJSON() as Box) : null;
+    if (scrollBody) scrollBody.scrollTop = scrolledFrom;
     return {
       label: labelBox ? { ...labelBox, lineHeight } : null,
       card: cardBox ?? null,
-      tail: tailBox ?? null,
+      tail: tailBox ? scrolledTail : null,
+      scrollBody: scrollBodyBox,
       actions: actionsBox ?? null,
       hint: hint && hintBox ? { ...hintBox, inActions: Boolean(actions?.contains(hint)), visible: hintBox.width > 0 && hintBox.height > 0 && getComputedStyle(hint).visibility !== 'hidden' } : null,
       map: mapBox ?? null,
