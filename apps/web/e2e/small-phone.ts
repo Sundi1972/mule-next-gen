@@ -97,6 +97,7 @@ try {
 
   const ctx = { phone, tv, check, server, code, held: <T>(step: () => Promise<T>) => held(server, code, step) };
   await both('planning, the election', RAIL);
+  await monthOnOneLine(phone, code);
   await doneThroughTheElection(ctx, PHASE_SCALE * ELECTION_WAIT_MS + 10_000);
   await readyThroughTheElection(phone, SHOWN_MS);
   await phone.locator('[data-phase=landGrant]').waitFor({ timeout: SHOWN_MS });
@@ -243,6 +244,56 @@ function setAir(code: string, air: number): number {
   room.game.state.air = air;
   room.broadcast();
   return was;
+}
+
+/**
+ * The rail header's month label stays on one line beside the ready count at both phone sizes, read at the widest the
+ * game prints ("Month 10 / 12"): the room is held, the month and length set for one view, then put back.
+ */
+async function monthOnOneLine(phone: Page, code: string): Promise<void> {
+  const room = server.registry.get(code) as unknown as { game: { state: { month: number; maxMonths: number } }; broadcast(): void };
+  const { state } = room.game;
+  await held(server, code, async () => {
+    const was = { month: state.month, maxMonths: state.maxMonths };
+    Object.assign(state, { month: 10, maxMonths: 12 });
+    room.broadcast();
+    try {
+      const label = phone.getByTestId('month');
+      await label.filter({ hasText: 'Month 10 / 12' }).waitFor({ timeout: PRESS_MS });
+      check(await phone.getByTestId('ready-count').isVisible(), 'C19: the ready count shows beside the month label');
+      for (const size of [PHONE_SMALL.viewport, PHONE.viewport]) {
+        await phone.setViewportSize(size);
+        // The label's own text: its line boxes, and how far right it reaches against the chip beside it.
+        const read = await label.evaluate((el) => {
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          const boxes = [...range.getClientRects()];
+          const row = el.parentElement!.parentElement!;
+          const chip = row.querySelector('[data-testid=ready-count]')!;
+          const probe = el.cloneNode(true) as HTMLElement;
+          probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap';
+          el.parentElement!.append(probe);
+          const need = probe.getBoundingClientRect().width;
+          probe.remove();
+          const [w, col, c] = [row, el.parentElement!, chip].map((e) => e.getBoundingClientRect().width.toFixed(1));
+          return {
+            lines: new Set(boxes.map((r) => Math.round(r.top))).size,
+            textRight: Math.max(...boxes.map((r) => r.right)),
+            chipLeft: chip.getBoundingClientRect().left,
+            widths: `row ${w}, label column ${col}, label needs ${need.toFixed(1)}, chip ${c} ("${chip.textContent}"), phase "${el.nextElementSibling?.textContent}"`,
+          };
+        });
+        const at = `${size.width}×${size.height}`;
+        console.log(`  C19 at ${at}: ${read.widths}`);
+        check(read.lines === 1, `C19 at ${at}: "Month 10 / 12" stays on one line beside the ready count, got ${read.lines} lines`);
+        check(read.textRight <= read.chipLeft, `C19 at ${at}: "Month 10 / 12" ends before the ready count, ${read.textRight.toFixed(1)} past ${read.chipLeft.toFixed(1)}`);
+      }
+    } finally {
+      await phone.setViewportSize(PHONE_SMALL.viewport);
+      Object.assign(state, was);
+      room.broadcast();
+    }
+  });
 }
 
 /** Test fixture: the phone's seat plays month 2 through the server, Ready at each stop and off to the pub in development. */

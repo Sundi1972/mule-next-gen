@@ -624,10 +624,14 @@ describe('the roller', () => {
         ['wildfire', 'p2', 'p2'],
         ['bumperHarvest', 'p3', 'p3'],
       ]);
-      // The spread: the swarm crosses onto p3's joined Food, the fire stays on its owner's.
+      // The spread: the swarm and the fire stay on their owner's Food, so p3's joined Food plot is spared (the catalogue:
+      // "One player's Food plots").
       const hit = (key: EventKey) => fired.find((e) => e.key === key)!.plots.map((p) => state.tiles[p.index]!);
-      expect(hit('pestSwarm')).toContain(joined);
+      expect(hit('pestSwarm')).toEqual([p2Food]);
+      expect(hit('pestSwarm')).not.toContain(joined);
       expect(hit('wildfire')).toEqual([p2Food]);
+      // Only a collapse changes what a plot is: these events' plots say nothing of was or becomes.
+      expect(fired.flatMap((e) => e.plots).filter((p) => 'was' in p || 'becomes' in p)).toEqual([]);
       // The start is drawn among the roller's own plots: over 20 seeds p3's bumper harvest starts on both of p3's.
       const starts = new Set(
         Array.from({ length: 20 }, (_, seed) => {
@@ -703,7 +707,8 @@ describe('cavern collapse', () => {
               line: expect.stringMatching(/^[^.\d]+\.$/),
               scope: 'personal',
               origin: { x: tile.x, y: tile.y },
-              plots: [{ index, order: 0, good: 'crystite', delta: 0 }],
+              // The plot was a cavern and becomes plain: the screens keep the badge until the hit lands.
+              plots: [{ index, order: 0, good: 'crystite', delta: 0, was: 'crystalCavern', becomes: 'plain' }],
               player: tile.owner,
               sign: 'bad',
               phase: 'production',

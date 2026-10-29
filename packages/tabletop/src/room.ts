@@ -15,6 +15,11 @@ const ROOM_LIMITS = {
 
 export interface Connection<GameView> {
   send(msg: ServerEnvelope<GameView>): void;
+  /**
+   * True while this screen has not taken what it was already sent. The room then skips its frames, since a late
+   * frame is worth nothing once a newer one exists; views and everything else still go. Absent: never behind.
+   */
+  behind?(): boolean;
 }
 
 export interface SeatInfo {
@@ -35,6 +40,12 @@ export interface GameContext {
   /** Tell every screen that the game's view changed. */
   changed(): void;
   /**
+   * Sends `payload` as it is to every screen at once, as a light frame beside the full view, for positions that move
+   * every tick. Not batched with views, never queued: a screen that is behind misses it. Returns nothing, so the game
+   * learns nothing from it and a record need not tape it.
+   */
+  frame(payload: unknown): void;
+  /**
    * Posts a chat line as seat `from`. The line follows a player's trim, cap, moderation and whisper rules, but the
    * game's `heard` never receives it.
    * Throws TableError for an unknown `from` or `to`. It runs outside the room's error handling, so the caller must
@@ -53,6 +64,11 @@ export interface Game<Intent, GameView> {
   start(seats: SeatInfo[]): void;
   /** Applies one player's move. Throws a user error for an illegal move. */
   handle(seatId: string, intent: Intent): void;
+  /**
+   * True for a move that changes no screen's view by itself, such as steering streamed in frames: the room then sends
+   * no views after it. The game can still call `changed()` from `handle`. Absent: every move is followed by views.
+   */
+  quiet?(intent: Intent): boolean;
   /** What one seat may see, or with `null` what everyone may see (the big screen). */
   viewFor(seatId: string | null): GameView;
   /** A player's phone dropped or came back. The game may let AI play their routine moves meanwhile. */
@@ -164,6 +180,7 @@ export class Room<Intent, View> {
         };
       },
       changed: () => this.broadcast(),
+      frame: (payload) => this.frame(payload),
       say: (from, text, to) => void this.deliver(from, text, to),
       hostId: () => this.hostId,
     });
@@ -264,7 +281,7 @@ export class Room<Intent, View> {
       case 'intent':
         if (!this.started) throw new TableError('The game has not started');
         this.game.handle(seatId, msg.intent);
-        this.broadcast();
+        if (!this.game.quiet?.(msg.intent)) this.broadcast();
         return;
       case 'chat':
         this.chat(seatId, msg.text, msg.to);
@@ -462,6 +479,13 @@ export class Room<Intent, View> {
   private everyone(fn: (conn: Connection<View>) => void): void {
     for (const seat of this.seats) if (seat.conn) fn(seat.conn);
     for (const board of this.boards) fn(board);
+  }
+
+  /** Sends one frame to every screen that is keeping up, now: a late frame is stale, so it is skipped, never held. */
+  private frame(payload: unknown): void {
+    this.everyone((c) => {
+      if (!c.behind?.()) c.send({ t: 'frame', payload });
+    });
   }
 
   /** Sends every screen its own view. Several changes in one tick go out as one update. */
