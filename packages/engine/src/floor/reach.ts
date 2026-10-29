@@ -11,14 +11,15 @@ import { RuleError } from '../errors.js';
 import { analysePlot, buyMule, fitFilter, hasAnalysed, installMule, mulePriceFor, outfitCostFor, outfitMule, player, visitPub } from '../game.js';
 import { tileAt } from '../grid.js';
 import type { GameState, Outfit, Player, Tile } from '../types.js';
-import { doorOutside, floorConfig, type DevFloor, type FloorColonist, type FloorConfig, type FloorPoint } from './floor.js';
+import { MS_PER_SECOND } from '../units.js';
+import { doorOutside, floorConfig, isAssaying, type DevFloor, type FloorColonist, type FloorConfig, type FloorPoint } from './floor.js';
 import { HALL_BAYS, HALL_DOORS, HALL_OUTFITTERS, placeAt, type HallDoor, type HallPlace } from './hall.js';
 
 /** Why a row's press is refused: money short by `short` credits, or the corral empty. */
 export type ReachRefusal = { kind: 'money'; short: number } | { kind: 'soldOut' };
 
-/** Where a dim button points when nothing is in reach, or why the seat has nothing left to press. */
-export type ReachHint = 'over' | 'done' | 'corral' | 'outfitter' | 'door' | 'store' | 'outfitFirst' | 'plot' | 'noMules';
+/** Where a dim button points when nothing is in reach, or why the seat has nothing to press now. */
+export type ReachHint = 'over' | 'done' | 'assaying' | 'corral' | 'outfitter' | 'door' | 'store' | 'outfitFirst' | 'plot' | 'noMules';
 
 /** The one thing a press does now (RULE-3), with what its words and its press need. */
 export type Reach =
@@ -43,13 +44,15 @@ export interface ReachWords {
   enabled: boolean;
 }
 
-/** What a press did: the reach it pressed, and what its rule returned. */
+/** What a press did: the reach it pressed, what its rule returned, and the floor after it. */
 export interface Press {
   reach: Reach;
   /** ANALYSE: the seconds analysePlot says the analysis took. */
   seconds: number | null;
   /** PUB: what visitPub paid. */
   payout: number | null;
+  /** ANALYSE: a new floor, the seat's colonist assaying for `seconds`. Every other press: the floor pressed on. */
+  floor: DevFloor;
 }
 
 interface Standing {
@@ -163,6 +166,7 @@ export function reachOf(floor: DevFloor, state: GameState, seat: string, cfg: Fl
   if (p.doneDeveloping) return dim('done');
   const colonist = floor.colonists.find((c) => c.id === seat);
   if (!colonist) throw new Error(`No colonist on the floor for ${seat}`);
+  if (isAssaying(colonist, floor.tick)) return dim('assaying');
   const s: Standing = {
     state,
     cfg,
@@ -185,7 +189,7 @@ export function reachOf(floor: DevFloor, state: GameState, seat: string, cfg: Fl
  */
 export function applyReach(state: GameState, floor: DevFloor, seat: string, secondsLeft: number, cfg: FloorConfig = floorConfig()): Press {
   const reach = reachOf(floor, state, seat, cfg, { secondsLeft });
-  const press: Press = { reach, seconds: null, payout: null };
+  const press: Press = { reach, seconds: null, payout: null, floor };
   if (!reach.enabled) return press;
   switch (reach.kind) {
     case 'sell':
@@ -199,8 +203,10 @@ export function applyReach(state: GameState, floor: DevFloor, seat: string, seco
     case 'install':
       installMule(state, seat, reach.plot.x, reach.plot.y);
       return press;
-    case 'analyse':
-      return { ...press, seconds: analysePlot(state, seat, reach.plot.x, reach.plot.y) };
+    case 'analyse': {
+      const seconds = analysePlot(state, seat, reach.plot.x, reach.plot.y);
+      return { ...press, seconds, floor: assay(floor, seat, seconds, cfg) };
+    }
     case 'filter':
       fitFilter(state, seat, reach.plot.x, reach.plot.y);
       return press;
@@ -210,6 +216,13 @@ export function applyReach(state: GameState, floor: DevFloor, seat: string, seco
     case 'leave':
       return press;
   }
+}
+
+/** The floor with the seat's colonist assaying for `seconds`, in whole ticks. */
+function assay(floor: DevFloor, seat: string, seconds: number, cfg: FloorConfig): DevFloor {
+  const ticks = Math.ceil((seconds * MS_PER_SECOND) / cfg.steer.tickMs);
+  const assayUntilTick = ticks > 0 ? floor.tick + ticks : null;
+  return { ...floor, colonists: floor.colonists.map((c) => (c.id === seat ? { ...c, assayUntilTick } : c)) };
 }
 
 const NAME: Record<Outfit, string> = {
@@ -228,6 +241,7 @@ const NAME: Record<Outfit, string> = {
 const HINT: Record<ReachHint, readonly [string, string | null]> = {
   over: ['DEVELOPMENT OVER', null],
   done: ['IN THE PUB', 'turn over'],
+  assaying: ['ASSAYING', null],
   corral: ['TO THE CORRAL', null],
   outfitter: ['TO AN OUTFITTER', null],
   door: ['TO A DOOR', null],

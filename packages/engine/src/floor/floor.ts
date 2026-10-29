@@ -68,7 +68,14 @@ export interface FloorColonist {
   readonly bitten: boolean;
   readonly encounter: FloorEncounter | null;
   readonly pelts: number;
+  /**
+   * Assaying a plot while the floor's tick is below it: stepFloor holds the colonist still and reachOf offers nothing.
+   * The hold is the analysis's time cost, so the server must not also take its seconds off the seat's clock.
+   */
+  readonly assayUntilTick: number | null;
 }
+
+export const isAssaying = (c: FloorColonist, tick: number): boolean => c.assayUntilTick !== null && tick < c.assayUntilTick;
 
 export interface DevFloor {
   /** Ticks stepped since development started. */
@@ -138,6 +145,7 @@ export function buildFloor(state: GameState, cfg: FloorConfig): DevFloor {
         bitten: false,
         encounter: null,
         pelts: 0,
+        assayUntilTick: null,
       };
     }),
   };
