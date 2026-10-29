@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import { PlayerMark } from '../components/PlayerMark';
 import { cx, type Slot } from '../components/tokens';
 import { EVENT_ENTRY, STORY } from './catalogue';
-import { introLine, eventSegLabel, eventWhoLine } from './copy';
+import { introLine, eventSegLabel, eventWhoLine, phaseNoun } from './copy';
 import { signLook, useShow, type ShowFrame } from './frame';
 import { band, clamp, Dim, EDGE, OnPlot, ramp, Spotlight, Swarm, Trail } from './fx';
 import { accent, EventDeltaChip, EventGlyph, EventSignBadge } from './glyphs';
@@ -343,7 +343,7 @@ export function IntroCard({ size }: { size: ShowSize }) {
   return (
     <div className="absolute inset-0 z-20 flex items-center justify-center" style={{ opacity: 1 - out }} data-testid="intro-card">
       <div className={cx('flex flex-col items-center rounded-sheet text-center animate-[ev-pop_0.45s_ease-out]', size === 'tv' ? 'gap-4 px-10 py-8' : 'gap-2 px-6 py-4')} style={BACKDROP}>
-        <span className={cx('label-caps', z.label)}>{s.phase === 'development' ? 'This turn' : 'This month'}</span>
+        <span className={cx('label-caps', z.label)}>{`This ${phaseNoun(s.phase)}`}</span>
         <span className={cx('font-display font-bold', z.intro)}>{introLine(s.segments.length, s.phase)}</span>
         <span className={cx('flex', size === 'tv' ? 'gap-4' : 'gap-2')}>
           {s.segments.map((g) => (

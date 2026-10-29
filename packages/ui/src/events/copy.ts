@@ -12,7 +12,8 @@ const plots = (good: Good | undefined, n: number) => {
   return plural(n, one, many);
 };
 const signed = (n: number) => `${n < 0 ? '−' : '+'}${Math.abs(n)}`;
-const period = (phase: ShowPhase) => (phase === 'development' ? 'turn' : 'month');
+/** What a phase's stretch of time is called: a development turn, otherwise a month. */
+export const phaseNoun = (phase: ShowPhase) => (phase === 'development' ? 'turn' : 'month');
 
 /** Who an event is about, in words, for its announcement. */
 export function eventWhoLine(ev: ShowEventView, cast: ShowCast): string {
@@ -32,7 +33,7 @@ export function eventSegLabel(seg: EventSegment): string {
 
 /** What the phase's intro says: "3 things happen this month". */
 export function introLine(count: number, phase: ShowPhase): string {
-  return count === 1 ? `Something happens this ${period(phase)}` : `${count} things happen this ${period(phase)}`;
+  return count === 1 ? `Something happens this ${phaseNoun(phase)}` : `${count} things happen this ${phaseNoun(phase)}`;
 }
 
 /** A segment's title: its event's. */
@@ -68,7 +69,10 @@ const YOU: Partial<Record<ShowEventKey, (ev: ShowEventView) => string>> = {
 };
 
 export interface EventYouSummary {
+  /** "−2 Energy for you". */
   headline: string;
+  /** The same figures without "for you": "−2 Energy", for the rail's one-line list. */
+  short: string;
   detail: string;
   change: Partial<Record<Good, number>>;
 }
@@ -85,9 +89,10 @@ function youFor(ev: ShowEventView, id: string, cast: ShowCast): EventYouSummary 
     if (g) change[g] = (change[g] ?? 0) + h.delta;
   }
   const first = mine[0] ? cast.goodAt(mine[0].x, mine[0].y) : undefined;
-  const words = (Object.entries(change) as [Good, number][]).map(([g, n]) => `${signed(n)} ${GOOD_NAME[g]}`);
+  const short = (Object.entries(change) as [Good, number][]).map(([g, n]) => `${signed(n)} ${GOOD_NAME[g]}`).join(', ');
   return {
-    headline: `${words.join(', ')} for you`,
+    headline: `${short} for you`,
+    short,
     detail: detail ?? `On ${plots(mine.every((p) => cast.goodAt(p.x, p.y) === first) ? first : undefined, mine.length)} of yours, this month only.`,
     change,
   };

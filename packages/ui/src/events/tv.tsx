@@ -1,6 +1,6 @@
 import type { Good } from '../components/tokens';
 import { cx } from '../components/tokens';
-import { eventSegmentSummary, eventWhoLine, segTitle } from './copy';
+import { eventSegmentSummary, eventWhoLine, phaseNoun, segTitle } from './copy';
 import { signLook, useShow } from './frame';
 import { EventDeltaChip, EventSignBadge } from './glyphs';
 import { eventStageAt, plotUnitsAt, type EventScript, type EventSegment, type ShowGrid, type ShowPlot } from './timing';
@@ -39,7 +39,7 @@ export function EventTvLog() {
   const done = s.segments.filter((g) => t >= g.settleAt);
   return (
     <div className="flex flex-col gap-3" data-testid="log">
-      <span className="label-caps text-base!">This {s.phase === 'development' ? 'turn' : 'month'}</span>
+      <span className="label-caps text-base!">This {phaseNoun(s.phase)}</span>
       {seg && t >= seg.playAt && t < seg.settleAt && <NowCard seg={seg} />}
       {done.map((g) => (
         <div key={g.n} className="flex items-center gap-3 rounded-panel border border-holo-line bg-panel p-3 animate-[ev-drop_0.35s_ease-out]" data-log={g.events[0]!.key}>

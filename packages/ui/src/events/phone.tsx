@@ -1,5 +1,5 @@
 import { cx } from '../components/tokens';
-import { eventMissLine, eventSegLabel, segTitle, eventWhoLine, eventYouSummary } from './copy';
+import { eventMissLine, eventSegLabel, phaseNoun, segTitle, eventWhoLine, eventYouSummary } from './copy';
 import { signLook, useShow } from './frame';
 import { EventBuzz, EventSignBadge } from './glyphs';
 import { eventStageAt, isBuzzing, isPlaying, type EventSegment } from './timing';
@@ -57,8 +57,7 @@ export function EventPhoneCard({ seg, me, at, buzz = false }: { seg: EventSegmen
 /** Before the first event, and after the last when nothing stays up. */
 export function EventWaiting() {
   const { s, t } = useShow();
-  const period = s.phase === 'development' ? 'turn' : 'month';
-  return <span className="label-caps">{t < s.intro ? (s.segments.length ? `${s.events.length} event${s.events.length > 1 ? 's' : ''} this ${period}` : 'A quiet month') : 'That’s everything'}</span>;
+  return <span className="label-caps">{t < s.intro ? (s.segments.length ? `${s.events.length} event${s.events.length > 1 ? 's' : ''} this ${phaseNoun(s.phase)}` : 'A quiet month') : 'That’s everything'}</span>;
 }
 
 /** On a phone alone, while the weather plays on the map: a small "now" line, so the rail doesn't repeat the card. */
@@ -93,7 +92,7 @@ export function EventRailTail({ me, current }: { me: string; current: EventSegme
           <div key={g.n} className="flex items-center gap-2 rounded-control bg-raised px-2 py-1">
             <EventSignBadge ev={g.events[0]!} size={22} />
             <span className="min-w-0 flex-1 truncate text-xs font-semibold">{segTitle(g)}</span>
-            <span className={cx('text-xs', you ? (good ? 'font-bold text-ok' : 'font-bold text-alert-ink') : 'text-ink-3')}>{you ? you.headline.replace(' for you', '') : 'not you'}</span>
+            <span className={cx('text-xs', you ? (good ? 'font-bold text-ok' : 'font-bold text-alert-ink') : 'text-ink-3')}>{you ? you.short : 'not you'}</span>
           </div>
         );
       })}
