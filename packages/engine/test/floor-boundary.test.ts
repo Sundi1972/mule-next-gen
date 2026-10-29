@@ -8,8 +8,8 @@ const ROOT = fileURLToPath(new URL('../../..', import.meta.url));
 const FLOOR = 'packages/engine/src/floor';
 /** What the floor must never import, by package name or by path from the repo's root. */
 const OFF_LIMITS = ['apps', 'packages/ai', 'packages/protocol', '@mule/ai', '@mule/server', '@mule/web', '@mule/protocol'];
-/** Everywhere a floor could be written from, outside floor/ itself. */
-const SCANNED = ['packages', 'apps', 'design/mocks'];
+/** The product code a floor could be written from, outside floor/ itself. design/'s mocks are not product code. */
+const SCANNED = ['packages', 'apps'];
 const TEST_DIRS = new Set(['test', 'tests', 'e2e', '__tests__']);
 const TEST_FILE = /\.(test|spec)\.[cm]?tsx?$/;
 /** The types whose fields only floor/ writes: the floor, its colonists, and the lead and encounter a colonist holds. */
@@ -258,7 +258,7 @@ describe("the dev floor's package boundary", () => {
     const files = SCANNED.flatMap((dir) => walk(dir, (name, path) => path === FLOOR || TEST_DIRS.has(name) || TEST_FILE.test(name)));
     // A walk that missed a root would pass anything written there.
     for (const dir of SCANNED) expect(files.some((f) => f.startsWith(`${dir}/`)), dir).toBe(true);
-    expect(files.length).toBeGreaterThan(200);
+    expect(files.length).toBeGreaterThan(150);
     const writes = files.flatMap((f) => floorWrites(f, read(f), fields));
     expect(writes, 'only floor/ writes the floor: step it with stepFloor').toEqual([]);
 
