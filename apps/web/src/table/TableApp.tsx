@@ -404,7 +404,7 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
             // On the status stage the skipped words share the picked count's row, so the ship panel keeps its room.
             <div className="flex shrink-0 items-center gap-4" data-testid="tv-pick-bar">
               {/* The time bar's height, not ReadyCount's TV chip: a taller row pushes the ship panel off the screen. */}
-              <span className="flex h-8 shrink-0 items-center rounded-chip border border-holo-line bg-holo-soft px-4 font-mono text-2xl font-bold text-holo" data-testid="ready-count">
+              <span className="flex h-8 shrink-0 items-center rounded-chip border border-holo-line bg-holo-soft px-4 font-mono text-2xl font-bold leading-none text-holo" data-testid="ready-count">
                 {picked.filter((p) => p.isAi || p.ready).length} / {picked.length} PICKED
               </span>
               <span className="min-w-0 flex-1 truncate text-2xl text-ink-2">
