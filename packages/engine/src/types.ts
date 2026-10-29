@@ -82,6 +82,14 @@ export interface SpecialField {
   salvage?: 'alloy' | 'electronics';
 }
 
+/** Where a MULE was taken off a plot, and the outfit and run it had there. Never changed in place (cloneForSim shares it). */
+export interface TakenMule {
+  readonly x: number;
+  readonly y: number;
+  readonly outfit: Outfit;
+  readonly runMonths: number;
+}
+
 export interface Player {
   id: string;
   name: string;
@@ -100,7 +108,12 @@ export interface Player {
    * The plot the carried MULE was taken off this turn (arcade AM-2), with the outfit and run it had there: if the turn
    * ends with it still carried, it goes back. Absent when the carried MULE was not taken off a plot.
    */
-  takenMule?: { x: number; y: number; outfit: Outfit; runMonths: number };
+  takenMule?: TakenMule;
+  /**
+   * Each plot a MULE was taken off this turn, with the outfit and run it had before the first take: a MULE with that
+   * outfit installed there again, by any route, gets the run back (AM-2, review F3). Cleared when development ends.
+   */
+  takenRuns?: readonly TakenMule[];
   reputation: number;
   /** Plots claimed in the current land grant. */
   claimsThisGrant: number;

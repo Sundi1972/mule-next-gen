@@ -253,6 +253,8 @@ export function outfitMule(state: GameState, playerId: string, outfit: Outfit): 
   const p = developer(state, playerId);
   if (!p.carriedMule) throw new RuleError('No MULE to outfit');
   requireLed(p);
+  // With the arcade on, a fitted MULE changes good only by RE-OUTFIT (AM-2), never by a full-price re-fit.
+  if (DEV_STEER.on && p.carriedMule !== 'empty') throw new RuleError('This MULE is outfitted: re-outfit it');
   const cost = outfitCostFor(state, playerId, outfit);
   if (p.money < cost) throw new RuleError('Not enough money');
   p.money -= cost;
@@ -268,9 +270,10 @@ export function installMule(state: GameState, playerId: string, x: number, y: nu
   if (tile.owner !== playerId) throw new RuleError('Not your plot');
   // Installing over an existing MULE replaces it; the old one runs away, as in the original.
   if (tile.outfit !== p.carriedMule) tile.runMonths = 0;
-  // A MULE taken off this plot and put back unchanged keeps the plot's run (AM-2: nothing lost).
-  const taken = p.takenMule;
-  if (taken && taken.x === x && taken.y === y && taken.outfit === p.carriedMule) tile.runMonths = taken.runMonths;
+  // A MULE taken off this plot this turn and put back with the same outfit, by any route, keeps the plot's run
+  // from before the first take (AM-2: nothing lost; review F3: nor wiped by a hop through another plot).
+  const before = p.takenRuns?.find((r) => r.x === x && r.y === y);
+  if (before && before.outfit === p.carriedMule) tile.runMonths = before.runMonths;
   tile.outfit = p.carriedMule;
   p.carriedMule = null;
   delete p.takenMule;
@@ -287,9 +290,10 @@ export function takeMule(state: GameState, playerId: string, x: number, y: numbe
   if (tile.owner !== playerId) throw new RuleError('Not your plot');
   if (!tile.outfit) throw new RuleError('No MULE on this plot');
   p.takenMule = { x, y, outfit: tile.outfit, runMonths: tile.runMonths };
+  if (!p.takenRuns?.some((r) => r.x === x && r.y === y)) p.takenRuns = [...(p.takenRuns ?? []), p.takenMule];
   p.carriedMule = tile.outfit;
+  // The plot's run is left as it was: every way a MULE lands on it again sets the run (installMule, returnTakenMule).
   tile.outfit = null;
-  tile.runMonths = 0;
 }
 
 /** What this player pays to re-outfit a MULE for `outfit`: DEV_STEER.reoutfitCost of the outfitter's price. */
@@ -297,11 +301,15 @@ export function reoutfitCostFor(state: GameState, playerId: string, outfit: Outf
   return Math.round(outfitCostFor(state, playerId, outfit) * DEV_STEER.reoutfitCost);
 }
 
-/** Fits a MULE already outfitted for one good for another, at an outfitter. The same good is refused. */
+/**
+ * Fits a MULE taken off a plot this turn for another good, at an outfitter. The same good is refused, and so is a MULE
+ * bought this turn (AM-14): its outfit is chosen once, at OUTFIT.
+ */
 export function reoutfitMule(state: GameState, playerId: string, outfit: Outfit): void {
   const p = developer(state, playerId);
   if (!p.carriedMule) throw new RuleError('No MULE to re-outfit');
   if (p.carriedMule === 'empty') throw new RuleError('This MULE is not outfitted yet: outfit it');
+  if (!p.takenMule) throw new RuleError('Only a MULE taken off a plot can be re-outfitted');
   requireLed(p);
   if (p.carriedMule === outfit) throw new RuleError('The MULE is already outfitted for that');
   const cost = reoutfitCostFor(state, playerId, outfit);
@@ -468,6 +476,7 @@ export function advancePhase(state: GameState): void {
     for (const p of state.players) {
       returnTakenMule(state, p);
       p.carriedMule = null;
+      delete p.takenRuns;
       delete p.muleBolted;
     }
     const price = mulePrice(state);

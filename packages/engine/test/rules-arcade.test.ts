@@ -248,9 +248,11 @@ describe('AM-2: take a MULE off a plot and re-outfit it at the store', () => {
 
     // With the arcade on, OUTFIT is for an empty MULE only: a fitted one is re-outfitted, at its price, never re-fitted.
     DEV_STEER.on = true;
+    const unfitted = structuredClone(state);
     expect(() => outfitMule(state, 'p0', 'water')).toThrow(new RuleError('This MULE is outfitted: re-outfit it'));
     expect(() => outfitMule(state, 'p0', 'food')).toThrow(RuleError);
-    expect(state).toEqual(before);
+    expect(() => outfitMule(state, 'p3', 'water')).toThrow(RuleError); // bought and fitted this turn: refused too
+    expect(state).toEqual(unfitted);
     outfitMule(state, 'p1', 'water'); // an empty MULE still outfits
     expect(state.players[1]!.carriedMule).toBe('water');
   });
