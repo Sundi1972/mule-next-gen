@@ -138,7 +138,8 @@ function tick(state: GameState, floor: DevFloor, inputs: Record<string, FloorInp
 }
 
 /** What the button would do for 'a' now, with the turn's time left, as the server asks it each tick. */
-const reachNow = (floor: DevFloor, state: GameState, config = cfg) => reachOf(floor, state, 'a', config, { secondsLeft: SECONDS_LEFT });
+const reachNow = (floor: DevFloor, state: GameState, config = cfg, asked = true) =>
+  reachOf(floor, state, 'a', config, asked ? { secondsLeft: SECONDS_LEFT } : {});
 
 /** 'a' walked by `stick` until it is through a door. */
 function throughTheDoor(state: GameState, floor: DevFloor, stick: FloorInput): FloorColonist {
@@ -413,6 +414,20 @@ const TABLE: Row[] = [
     },
   },
   {
+    row: '13, with a payout function but no time left asked: the words show no payout',
+    at: () => inHall('pub'),
+    cfg: paying,
+    unasked: true,
+    reach: () => ({ kind: 'pub', enabled: true, payout: null }),
+    words: () => words('PUB · END TURN'),
+    press: {
+      game: (was, now, press) => {
+        expect(press.payout).toBeGreaterThan(0);
+        expect(a(now).money - a(was).money).toBe(press.payout);
+      },
+    },
+  },
+  {
     row: '14 none: on the map, nothing in reach',
     at: () => onTile(0, 0),
     reach: () => ({ kind: 'none', enabled: false, hint: 'store' }),
@@ -427,7 +442,7 @@ describe('the dev floor: the action button', () => {
       const { state, floor } = world(r);
       const was = structuredClone(state);
       const config = r.cfg ?? cfg;
-      const reach = reachNow(floor, state, config);
+      const reach = reachNow(floor, state, config, !r.unasked);
       expect(reach, r.row).toEqual(r.reach(was));
       expect(reachWords(reach), r.row).toEqual(r.words(was));
 
@@ -452,7 +467,7 @@ describe('the dev floor: the action button', () => {
       expect([me.space, me.x, me.y], `${r.row}: where its stick took it`).toEqual([walked.space, walked.x, walked.y]);
       expect(presses.length, `${r.row}: one press`).toBe(1);
       const press = presses[0]!;
-      if (!r.stick) expect(press.reach, r.row).toEqual(reach);
+      if (!r.stick && !r.unasked) expect(press.reach, r.row).toEqual(reach);
       if (typeof r.press === 'object' && 'game' in r.press) r.press.game(was, state, press);
       else expect(state, `${r.row}: the press leaves the game as it was`).toEqual(was);
 
