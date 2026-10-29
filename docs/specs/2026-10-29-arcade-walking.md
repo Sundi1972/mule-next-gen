@@ -507,7 +507,9 @@ RULE-3 · What a press does (Reach)                               shape: decisio
  10  on the map on an own plot, leading a fitted MULE         INSTALL · good (or a lake plot from its shore,
                                                                 per cfg lakeMode); on a plot that has a MULE:
                                                                 SWAP · your <good> MULE runs away (today's rule,
-                                                                V-4's words; AM-9)
+                                                                V-4's words; AM-9); the same outfit as the plot's:
+                                                                SWAP · same outfit, nothing gained (the plot keeps
+                                                                its run; AM-10)
  11  on the map on an own plot, leading no MULE, not analysed  ANALYSE (a plot with a MULE installed too; AM-9)
  12  on an own plot with a MULE and no filter, Alloy held     FIT FILTER
  11a on an own plot with a MULE, leading none                 TAKE MULE (it follows on its lead; the plot makes
@@ -721,6 +723,11 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-10 (2026-10-29, WS1's question at PR-1 #186, ruled by WS6).** RULE-3 row 10: leading a MULE onto your plot
+  whose MULE has the same outfit, `installMule` keeps the plot's run months, so "your Energy MULE runs away" would
+  promise a change that doesn't happen; the press only spends the MULE you lead. The words become "SWAP · same outfit,
+  nothing gained". The press stays enabled (the rule allows it; Reach never offers what the server refuses, and never
+  refuses what it allows).
 - **AM-9 (2026-10-29, WS1's readings at PR-1 Task 1.5, ruled by WS6).** RULE-3: row 8 is all six shopfronts; new
   rows 8b (each of the works' three fitting bays is its own place, so where you stand picks Alloy, Electronics or
   Medicine) and 8c (the Green belt): a spec gap, since today's game sells all of them and the mock's slice 1 opened
