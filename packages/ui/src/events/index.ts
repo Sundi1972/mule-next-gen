@@ -24,6 +24,7 @@ export {
   type ShowGrid,
 } from './timing';
 export { EVENT_CATALOGUE, EVENT_ENTRY, type EventEntry, type EventMotion } from './catalogue';
+export { EventBoundary } from './boundary';
 export { EventShow, eventCast, type EventShowProps, type ShowCast } from './frame';
 export { EventLivingMap, type EventLivingMapProps } from './map';
 export { useEventLivingView } from './living';

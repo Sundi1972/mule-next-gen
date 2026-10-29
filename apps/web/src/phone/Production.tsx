@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Button,
   cx,
+  EventBoundary,
   EventShow,
   EventSkipHint,
   EventSoloRail,
@@ -78,9 +79,11 @@ export function Production({ production }: { production: ProductionView }) {
           {production.events.length === 0 ? (
             <span className="label-caps">Your plots are working</span>
           ) : (
-            <EventShow {...productionShowProps(production, t, { reduced, mode, players, tiles, width: view.width, height: view.height })}>
-              {solo ? <EventSoloRail me={me.id} /> : <EventTvPhoneRail me={me.id} />}
-            </EventShow>
+            <EventBoundary>
+              <EventShow {...productionShowProps(production, t, { reduced, mode, players, tiles, width: view.width, height: view.height })}>
+                {solo ? <EventSoloRail me={me.id} /> : <EventTvPhoneRail me={me.id} />}
+              </EventShow>
+            </EventBoundary>
           )}
           {showingHarvest && (
             <ul className="flex flex-col gap-1" data-testid="harvest">

@@ -165,7 +165,7 @@ afterEach(() => {
  * `reduced`. A tap calls the skip button's React onClick, found on the rendered element; the real click on a real
  * page is Task 6's browser test.
  */
-async function mount(boards: number, t: number, { reduced = false } = {}) {
+async function mount(boards: number, t: number, { reduced = false, month = production }: { reduced?: boolean; month?: ProductionView } = {}) {
   Object.assign(window, { matchMedia: (q: string) => ({ media: q, matches: reduced && q === '(prefers-reduced-motion: reduce)', addEventListener() {}, removeEventListener() {} }) });
   const doc = document as unknown as { createElementNS?: (ns: string, tag: string) => FakeElement };
   doc.createElementNS ??= (_ns, tag) => document.createElement(tag);
@@ -174,7 +174,7 @@ async function mount(boards: number, t: number, { reduced = false } = {}) {
   document.body.appendChild(host);
   const root = createRoot(host as unknown as HTMLElement);
   const show = async (b: number, at: number) => {
-    const el = await screen(b, at);
+    const el = await screen(b, at, month);
     flushSync(() => root.render(el));
   };
   await show(boards, t);
@@ -261,6 +261,17 @@ describe('the phone plays the show alone (C7)', () => {
     expect(text(you, 'phone-you')).toMatch(/[−-]2 Energy for you/);
     expect(card(await render(1, BUMPER_AT - 0.1))).toEqual({ event: 'drought', at: 'you' });
     expect(text(await render(1, BUMPER_AT - 0.1), 'phone-miss')).toContain('Your plots are clear of it.');
+    // A hit that changed nothing is no loss: a drought that reaches Lena's plant with a delta of 0 still misses her,
+    // in the rail's line for it once the next event plays, and on its own card.
+    const grazed = monthOf([events[0]!, { ...events[1]!, hits: [...events[1]!.hits, { x: 1, y: 0, order: 1, delta: 0 }] }, events[2]!]);
+    const words = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    const later = words(await render(1, BUMPER_AT + 0.5, grazed));
+    expect(later, "the drought's line in the rail").toMatch(/Drought not you/);
+    expect(later, 'no +0 anywhere').not.toMatch(/[+−-]0\b/);
+    const grazedCard = await render(1, BUMPER_AT - 0.1, grazed);
+    expect(card(grazedCard)).toEqual({ event: 'drought', at: 'you' });
+    expect(text(grazedCard, 'phone-miss'), 'a zero hit: the miss card').toContain('Your plots are clear of it.');
+    expect(grazedCard, 'a zero hit: no figure for you').not.toContain('data-testid="phone-you"');
     // With a TV the phone's map plays no weather, no title card, no camera, and marks only Lena's own plots.
     for (const t of [...frames(DUST_AT, DUST_AT + 3, 0.5), ...frames(BUMPER_AT, EVENTS_END, 0.25)]) {
       const html = await render(1, t);
@@ -374,5 +385,33 @@ describe('the phone plays the show alone (C7)', () => {
     }
     expect(playing(await render(0, DUST_AT + 0.3))).toBe('dustStorm');
     expect(card(await render(1, DUST_AT + 0.3))?.event).toBe('dustStorm');
+  });
+});
+
+describe('a broken show never takes the screen under it down (§4)', () => {
+  // A drought the view sent as a personal event without its origin (cast past the type): its title card and its rail
+  // card throw as they name whose it is. Everything the screen computes from the view itself still works.
+  const broken = { ...events[1]!, scope: 'personal', origin: undefined } as unknown as ProductionEventView;
+  const month = monthOf([events[0]!, broken, events[2]!]);
+
+  it("B-AC-2 (§4): while the broken event plays, the phone's map, Lena's plot, the stock strip, the harvest and the actions still render, alone and with a TV", async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    for (const boards of [0, 1]) {
+      const phone = await mount(boards, DROUGHT_AT - 0.2, { month });
+      for (const t of frames(DROUGHT_AT, BUMPER_AT + 1, 0.5)) {
+        await phone.rerender(boards, t);
+        const html = phone.html();
+        expect(html, `boards ${boards}, the map at ${t}`).toContain('data-testid="holo-map"');
+        expect(inside(html, 'plot-1-0'), `boards ${boards}, Lena's plot at ${t}`).toContain('data-bar="unit"');
+        expect(html, `boards ${boards}, the stock strip at ${t}`).toContain('data-testid="stock-strip"');
+        expect(text(html, 'actions'), `boards ${boards}, the actions at ${t}`).toContain('On to the auction');
+        if (boards === 1) expect(text(html, 'harvest'), `with a TV, the harvest at ${t}`).toContain('+3');
+      }
+      // The broken show is logged, and the screen goes on to the harvest at the phase's end.
+      await phone.rerender(boards, END);
+      expect(text(phone.html(), 'harvest'), `boards ${boards}, at the phase end`).toContain('+3');
+    }
+    expect(errors.mock.calls.some((c) => String(c[0]).includes('event show')), 'the boundary logs what broke').toBe(true);
+    errors.mockRestore();
   });
 });

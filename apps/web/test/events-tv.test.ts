@@ -7,7 +7,7 @@ import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { TvProduction } from '../src/table/TvProduction';
@@ -434,5 +434,40 @@ describe("HC-6 on the TV: the device's reduced-motion setting reaches the map", 
 
     // A browser with no matchMedia plays the show with motion, and does not break.
     expect(byTestId(mount(harvest, span[0]!, null), 'event-map-box')?.getAttribute('data-reduced')).toBe('false');
+  });
+});
+
+describe('a broken show never takes the TV screen under it down (§4)', () => {
+  const mounted = new Set<() => void>();
+  afterEach(() => {
+    for (const unmount of mounted) unmount();
+    mounted.clear();
+  });
+  // A drought the view sent as a personal event without its origin (cast past the type): its title card, its rail
+  // card and its log entry throw as they name whose it is. Everything the screen computes from the view still works.
+  const broken = { ...drought, scope: 'personal', origin: undefined } as unknown as ProductionEventView;
+  const droughtAt = EVENT_AT + EVENT_SHOW.introMs / 1000;
+  const [seg] = eventSegments({ events: [broken], introMs: EVENT_SHOW.introMs }, EVENT_AT);
+
+  it("B-AC-1 (§4): while the broken event plays and after it settles, the TV's map, the plots' bars and the colony bar still render", () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    // Through the announcement, the story (the rail's card) and the settle (the log's entry), before the goods are
+    // measured to fly. Each moment is a fresh mount: the screen reads the server's clock once as it mounts.
+    for (const t of [droughtAt + 0.3, droughtAt + 1.5, seg!.playAt + 1, seg!.settleAt + 0.1]) {
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      const root = createRoot(host as unknown as HTMLElement);
+      mounted.add(() => {
+        root.unmount();
+        document.body.removeChild(host);
+      });
+      const byTestId = (id: string) => [...host.findAll('div'), ...host.findAll('span')].find((el) => el.getAttribute('data-testid') === id);
+      flushSync(() => root.render(screen(month([broken]), t)));
+      expect(byTestId('holo-map'), `the map at ${t}`).toBeDefined();
+      expect(byTestId('plot-1-0')?.findAll('span').some((b) => b.getAttribute('data-bar') === 'unit'), `Lena's plot at ${t}`).toBe(true);
+      for (const id of ['s1', 's2']) expect(byTestId(`slot-${id}`), `the colony bar's ${id} at ${t}`).toBeDefined();
+    }
+    expect(errors.mock.calls.some((c) => String(c[0]).includes('event show')), 'the boundary logs what broke').toBe(true);
+    errors.mockRestore();
   });
 });
