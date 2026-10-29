@@ -6,7 +6,9 @@ import { boardWalkers, StoreBox } from '../../../../../../apps/web/src/component
 import { slotOf } from '../../../../../../apps/web/src/game/derive';
 import { TvHeader } from '../../../../../../apps/web/src/table/TableApp';
 import { Board, Game, LaptopFrame, PhoneFrame, TABLE, TvFrame } from '../../harness';
+import { ChatProvider, useChatSim } from '../../proposed/Chat';
 import { IntentNotes, IntentNotesProvider, type IntentNoteData } from '../../proposed/IntentNote';
+import { TickerRuleSwitch } from '../../proposed/TickerRule';
 import { AuctionShell } from './auction/AuctionShell';
 import { auctionOf, AWAY, CRYSTITE, FOOD, HOST, SALES_TAX, SHIP, shipPrice, VIEW2, WATER, type Scenario } from './auction/fixture';
 
@@ -661,11 +663,14 @@ const INTRO: Record<AuctionState, ReactNode> = {
 export function AuctionAuditBody({ state }: { state: AuctionState }) {
   const def = AUCTION_STATES.find((s) => s.id === state)!;
   const notes: IntentNoteData[] = def.marks.map((m) => N[m]);
+  // The table talks on every screen (C20): the seat row and the ticker in the rail's header, as the hub's rail has them.
+  const chat = useChatSim(0, 'lena');
   return (
-    <>
+    <ChatProvider value={chat}>
       <p className="max-w-[900px] text-sm text-ink-2" data-testid="audit-intro">
-        {INTRO[state]}
+        {INTRO[state]} The table chat runs in the rail’s header, as in the product.
       </p>
+      <TickerRuleSwitch />
       <Shown.Provider value={new Set(def.marks)}>
         <IntentNotesProvider>
           <div className="flex flex-wrap items-start gap-6">
@@ -681,7 +686,7 @@ export function AuctionAuditBody({ state }: { state: AuctionState }) {
           </div>
         </IntentNotesProvider>
       </Shown.Provider>
-    </>
+    </ChatProvider>
   );
 }
 
