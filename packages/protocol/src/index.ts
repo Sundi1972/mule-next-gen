@@ -1,4 +1,4 @@
-import type { AuctionSide, CanRun, CeremonyStep, DevPlace, Election, EventKey, EventKind, EventWeight, Good, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
+import type { AuctionSide, CanRun, CeremonyBeat, DevPlace, Election, EventKey, EventKind, EventWeight, Good, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -81,16 +81,32 @@ export interface PlayerView {
    * Public in every view, the TV's too. Only the total: its parts go to the player's own `me.worthParts` and nowhere else.
    */
   worth: number;
+  /**
+   * The `worth` this player's row showed at last month's end (upkeep), recorded then and never recomputed, so the
+   * change since last month is the number shown now against the number shown then. Null in month 1.
+   */
+  lastWorth: number | null;
+  /**
+   * While the air is in Collapse, this player's Worth before the cut (scoreParts' total plus its cut: money + goods +
+   * land + muleValue + office, rounded as scoreParts rounds); null outside Collapse. Public like `worth`, a total only.
+   */
+  worthBeforeCut: number | null;
   plots: number;
   ready: boolean;
   /** True once they went to the pub this development phase. */
   doneDeveloping: boolean;
   /** Where their colonist is in development, public like every place; null outside development. */
   colonist: ColonistView | null;
-  /** How hunger and sickness slow this colonist, during development; null otherwise. Public: every screen shows it. */
+  /**
+   * How hunger and sickness slow this colonist: live during development, then kept as the month's through its end
+   * (upkeep, and game over after the last month), where the month end names who went hungry. Null otherwise. Public:
+   * every screen shows it.
+   */
   condition: {
     /** 0..1 of the month's Food held (engine foodShare). */
     foodShare: number;
+    /** The month's Food need of this player's household (engine needsOf), so a screen can say "ate n of m". */
+    foodNeed: number;
     sick: boolean;
     /** Why it is sick (engine playerEventReason): the air, its own pollution, or plain chance; null when well. */
     sickBecause: 'air' | 'pollution' | 'chance' | null;
@@ -123,6 +139,8 @@ export interface ColonistView {
   pelts?: number;
   /** The moment it is in, if any. */
   encounter?: 'choose' | 'chase' | 'fight' | null;
+  /** true while the colonist limps from a wolf bite; absent means not bitten */
+  bitten?: boolean;
 }
 
 /** Out on the map, or inside the store's hall. */
@@ -196,32 +214,47 @@ export interface MyView {
   worthParts: ScorePartsView;
 }
 
-/** Only on the owner's phone: their candidacy, their secret ballot, and whether they may run now for each elected office. */
+/** Only on the owner's phone: their candidacy, their secret ballot, whether they may run now for each elected office, and what weighs their vote. */
 export interface MyPoliticsView {
   running: Office | null;
   ballot: Partial<Record<Office, string>>;
   canRun: Partial<Record<Office, CanRun>>;
+  /** Sales tax this player has paid over the game, in credits. */
+  paid: number;
+  reputation: number;
 }
 
-/** One office's result as far as the ceremony has shown it: the totals from its bars step, the winner and how from its winner step. */
+/** One office's result as far as the ceremony has shown it: the totals from its bars beat, the winner and how from its winner beat. */
 export type OfficeReveal = Pick<OfficeResult, 'tallies'> & Partial<Pick<OfficeResult, 'winner' | 'how'>>;
+
+/** The ceremony's one show clock, in game seconds, the same on every screen. */
+export interface CeremonyView {
+  seconds: number;
+  /** The whole show, every office and the summary after the last. */
+  total: number;
+  /**
+   * Per office the show has reached, the latest beat it has reached and when that beat began, in show seconds. An
+   * office is absent until its title beat; nothing later than the show clock is sent.
+   */
+  reached: Partial<Record<Office, { beat: CeremonyBeat; at: number }>>;
+}
 
 /** This month's election as every screen sees it: who runs and who has voted, never for whom. */
 export interface ElectionView {
   stage: Election['stage'];
-  /** The office the ceremony shows and its step, with the step's clock in game seconds; null outside the ceremony. */
-  ceremony: { office: Office; step: CeremonyStep; seconds: number; total: number } | null;
+  /** The show clock and how far each office has got; null outside the ceremony. */
+  ceremony: CeremonyView | null;
   /** Per elected office; empty until the ballot opens: until then the candidacy is Politics'. */
   candidates: Partial<Record<Office, string[]>>;
   /** Each Governor candidate's tax promise, public like the candidacy. */
   promises: Record<string, TaxPromise>;
   /** Players with a ballot in, never for whom. */
   voted: string[];
-  /** Players who are Done in announce or the ballot: they pressed Done, or their ballot covers every contested office. */
+  /** Players who are Done in announce or the ballot: they pressed Ready, or Cast my vote. Picking alone is not Done. */
   done: string[];
   /** Players announce or the ballot still waits for; empty from the ceremony on. */
   waitingFor: string[];
-  /** The offices the ceremony has reached, every screen in the same step. */
+  /** Each office's result as far as the ceremony has reached it, every screen at the same beat. */
   result: Partial<Record<Office, OfficeReveal>>;
 }
 
@@ -247,6 +280,10 @@ export interface PoliticsView {
   candidates: Partial<Record<Office, string[]>>;
   /** Each Governor candidate's tax promise, public like the candidacy. */
   promises: Record<string, TaxPromise>;
+  /** The sitting Governor's promise, held for the term; null when they were appointed or nobody holds office. */
+  promise: TaxPromise | null;
+  /** The sales tax in whole percent when the sitting Governor's term began, for judging lower and hold; null before anyone governs. */
+  promiseFrom: number | null;
   /** This month's election, or null in a month without one. */
   election: ElectionView | null;
 }
@@ -447,6 +484,13 @@ export interface MuleView {
   colonists: number;
   /** Colony air gauge 0 to 100 and its band. */
   air: { level: number; band: 'clean' | 'smoggy' | 'toxic' | 'collapse' };
+  /** The air at last month's end (upkeep), level and band as `air` showed them then; null in month 1. */
+  lastAir: MuleView['air'] | null;
+  /**
+   * At the month end (upkeep, and game over after the last): true when that upkeep fed the colonists, false when they
+   * went short, because the store ran out or its price was beyond their wages (the engine's colonistsHungry). Null otherwise.
+   */
+  colonistsFed: boolean | null;
   ship: ShipView;
   /** The colony fund and the sales tax rate. */
   treasury: { money: number; salesTax: number };

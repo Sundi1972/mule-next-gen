@@ -187,7 +187,7 @@ export interface MonthReport {
   colonyFund: number;
   /** Colonists short of Food or Water this month. */
   colonistsHungry: boolean;
-  /** The production events that fired this month (none in most months). Absent in older reports. */
+  /** The production events that fired this month, in the order they fired. Absent in older reports. */
   events?: MonthEvent[];
   /** Events announced ahead of time. Absent in older reports. */
   warnings?: EventWarning[];
@@ -205,7 +205,8 @@ export type EventKey =
   | 'volcanicAsh'
   | 'pestSwarm'
   | 'wildfire'
-  | 'bumperHarvest';
+  | 'bumperHarvest'
+  | 'cavernCollapse';
 
 /** How the screens animate an event; several events share a kind. */
 export type EventKind = 'storm' | 'drought' | 'flare' | 'comet' | 'flood' | 'quake' | 'blight' | 'fire' | 'bounty';
@@ -227,7 +228,8 @@ export interface MonthEvent {
   /** For a personal event, the player whose land it started on. */
   player?: string;
   sign: 'good' | 'bad' | 'mixed';
-  when: 'afterProduction';
+  /** The phase whose roll produced this event. */
+  phase: Phase;
 }
 
 export interface EventWarning {
@@ -289,8 +291,11 @@ export type Office = 'governor' | 'sheriff';
 /** Why an office went to its winner, as the ceremony shows it. */
 export type ElectionHow = 'votes' | 'unopposed' | 'appointed' | 'baron' | 'land' | 'lot';
 
-/** Whether a player may run for an office now, or why not. Running for the other office is no refusal: it moves the candidacy. 'notElected': the office is not in POLITICS.offices. */
-export type CanRun = true | 'closed' | 'termLimit' | 'notElected';
+/**
+ * Whether a player may run for an office now, or why not. Running for the other office is no refusal: it moves the
+ * candidacy. 'notPlanning': outside the planning phase. 'notElected': the office is not in POLITICS.offices.
+ */
+export type CanRun = true | 'notPlanning' | 'closed' | 'termLimit' | 'notElected';
 
 /** A Governor candidate's tax promise, in whole percent for a cap. See WS7 spec RULE-10. */
 export type TaxPromise = { kind: 'cap'; percent: number } | { kind: 'lower' } | { kind: 'hold' };
@@ -305,14 +310,17 @@ export interface OfficeResult {
 /** One entry per office elected, keyed by POLITICS.offices. */
 export type ElectionResult = Partial<Record<Office, OfficeResult>>;
 
-/** What the ceremony shows of one office: the office and its candidates, then their bars, then the winner. */
-export type CeremonyStep = 'intro' | 'bars' | 'winner';
+/**
+ * The beats of one office in the ceremony, in the order they come: the office's title, its candidates popping in,
+ * the vote blocks growing, a tie stamped (only when one was broken), the winner, and the office's end.
+ */
+export type CeremonyBeat = 'title' | 'candidates' | 'bars' | 'tie' | 'winner' | 'end';
 
 /** One election, announce → ballot → ceremony → over, inside a planning phase. Only the ceremony runs on a clock. */
 export interface Election {
   stage: 'announce' | 'ballot' | 'ceremony' | 'over';
-  /** The office the ceremony is showing, its step and the ms left in that step; null outside the ceremony. */
-  ceremony: { office: Office; step: CeremonyStep; clockMs: number } | null;
+  /** The ceremony's one show clock, from 0 when the ballot closes, and its whole length; null outside the ceremony. */
+  ceremony: { elapsedMs: number; totalMs: number } | null;
   /** Copied from Politics when the ballot opens; empty until then. */
   candidates: Record<Office, string[]>;
   /** Each Governor candidate's promise, copied with the candidacy. */
@@ -342,6 +350,10 @@ export interface Politics {
   candidates: Record<Office, string[]>;
   /** Each Governor candidate's promise, public like the candidacy and dropped with it. */
   promises: Record<string, TaxPromise>;
+  /** The sitting Governor's promise, held for the term; null when they were appointed. */
+  promise: TaxPromise | null;
+  /** The sales tax in whole percent when the sitting Governor's term began: what lower and hold are judged against; null before anyone governs. */
+  promiseFrom: number | null;
   /** This month's election, live or just finished; null in a month without one. */
   election: Election | null;
 }

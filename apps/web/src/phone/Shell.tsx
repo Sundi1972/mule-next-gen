@@ -70,6 +70,43 @@ export function NowCard({ now }: { now: Now }) {
   );
 }
 
+/**
+ * The Now card that folds once read (WS6's month-end mock, UX audit H-7): folded it is one line, its title, and a tap
+ * opens it. A new step opens it again (the title changing re-mounts it), so nothing new is missed.
+ */
+function FoldingNowCard({ now }: { now: Now }) {
+  const [open, setOpen] = useState(false);
+  if (open)
+    return (
+      <div className="relative">
+        <NowCard now={now} />
+        <button type="button" onClick={() => setOpen(false)} aria-expanded aria-label="Fold the Now card" className="absolute right-1.5 top-1.5 grid size-8 place-items-center rounded-chip text-holo hover:bg-holo-soft" data-testid="now-fold">
+          <svg aria-hidden viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M6 15l6-6 6 6" />
+          </svg>
+        </button>
+      </div>
+    );
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      aria-expanded={false}
+      className={cx('flex min-h-8 w-full items-center gap-2 rounded-panel border-2 px-2.5 py-1.5 text-left @min-[1100px]/shell:px-4 @min-[1100px]/shell:py-2.5', now.warn ? 'border-warn bg-warn/10' : 'border-holo bg-holo-soft')}
+      data-testid="now"
+    >
+      <span className="label-caps shrink-0 text-[10px]! @min-[1100px]/shell:text-xs!">Now</span>
+      <span className="min-w-0 flex-1 truncate font-display text-sm font-semibold leading-tight @min-[1100px]/shell:text-lg" data-testid="now-title">
+        {now.title}
+      </span>
+      <svg aria-hidden viewBox="0 0 24 24" width={14} height={14} className="shrink-0 text-holo" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 9l6 6 6-6" />
+      </svg>
+      <span className="sr-only">Tap to read it again</span>
+    </button>
+  );
+}
+
 /** Before paint in the browser; the server renderer (and the node tests) has nothing to measure and no paint. */
 const useBeforePaint = typeof document === 'undefined' ? useEffect : useLayoutEffect;
 
@@ -104,6 +141,7 @@ export function PhoneShell({
   seconds,
   status,
   now,
+  foldNow = false,
   rail,
   footer,
   fill = false,
@@ -115,6 +153,8 @@ export function PhoneShell({
   status?: ReactNode;
   /** The one next step, first in the rail. Screens without it draw no Now card. */
   now?: Now | undefined;
+  /** The Now card folds to its title once read, for a screen whose rail carries more than it (the month end). */
+  foldNow?: boolean;
   /** Controls and details for the side rail; scrolls if it runs long. */
   rail?: ReactNode;
   /** The main action, pinned to the bottom of the rail. */
@@ -180,7 +220,7 @@ export function PhoneShell({
               <TableChat />
             </header>
             <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 *:shrink-0 short:gap-2 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4">
-              {now && <NowCard now={now} />}
+              {now && (foldNow ? <FoldingNowCard key={now.title} now={now} /> : <NowCard now={now} />)}
               {rail}
             </div>
             {footer && (

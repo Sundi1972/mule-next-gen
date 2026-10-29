@@ -75,19 +75,47 @@ export function planningProper(view: Pick<MuleView, 'phase' | 'politics'>): bool
   return view.phase === 'planning' && !(election && election.stage !== 'over');
 }
 
-/** When the server takes the host's Continue: planning proper, or the election's announce or ballot; never its ceremony. */
+/**
+ * When the server takes the host's Continue: planning proper, the election's announce or ballot (never its ceremony),
+ * and the month end (upkeep), which also waits for every Ready.
+ */
 export function hostMayContinue(view: Pick<MuleView, 'phase' | 'politics'>): boolean {
   const stage = view.politics?.election?.stage;
-  return planningProper(view) || (view.phase === 'planning' && (stage === 'announce' || stage === 'ballot'));
+  return planningProper(view) || (view.phase === 'planning' && (stage === 'announce' || stage === 'ballot')) || view.phase === 'upkeep';
 }
 
-/** The host's confirm before Continue is sent: what it does to the players not yet Ready, at this election stage. */
-export function continueQuestion(stage: ElectionView['stage'] | null | undefined, others: readonly Seat[]): string {
-  const names = namesOf(others, null);
-  const one = others.length === 1;
-  if (stage === 'announce') return `Go on without ${names}? The candidates close as they are.`;
-  if (stage === 'ballot') return `Go on without ${names}? ${names} ${one ? "doesn't" : "don't"} vote this time.`;
-  return `End planning for everyone now? ${names} stop${one ? 's' : ''} where they are, and the land grant starts.`;
+/** What the ready bar says. Every situation that waits for people uses the one bar in its own words (E-10). */
+export interface ReadyWords {
+  /** The button, before you're done. */
+  ready: string;
+  /** Once you are. */
+  done: string;
+  /** Once you are, before the names still to come. */
+  waiting: string;
+  /** Once nobody is left. */
+  all: string;
+  /** The host's confirm before Continue, given the names left and how many. */
+  confirm(names: string, n: number): string;
+}
+
+export const PLANNING_WORDS: ReadyWords = {
+  ready: "I'm ready",
+  done: "You're ready",
+  waiting: 'Still waiting for',
+  all: 'Everyone is ready. The land grant starts.',
+  confirm: (names, n) => `End planning for everyone now? ${names} stop${n === 1 ? 's' : ''} where they are, and the land grant starts.`,
+};
+
+/** Planning's words at this election stage, for when no slot gives the stage its own: the confirm says what Continue does there. */
+export function stageWords(stage: ElectionView['stage'] | null | undefined): ReadyWords {
+  if (stage === 'announce') return { ...PLANNING_WORDS, confirm: (names) => `Go on without ${names}? The candidates close as they are.` };
+  if (stage === 'ballot') return { ...PLANNING_WORDS, confirm: (names, n) => `Go on without ${names}? ${names} ${n === 1 ? "doesn't" : "don't"} vote this time.` };
+  return PLANNING_WORDS;
+}
+
+/** The host's confirm before Continue is sent: what it does to the players not yet Ready. */
+export function continueQuestion(words: ReadyWords, others: readonly Seat[]): string {
+  return words.confirm(namesOf(others, null), others.length);
 }
 
 export interface FooterIn {
