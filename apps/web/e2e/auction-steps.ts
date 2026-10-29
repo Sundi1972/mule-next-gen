@@ -694,35 +694,7 @@ async function readTheStatusWords(phones: Phone[], tv: Page, truth: Truth): Prom
   check(await tv.getByTestId('tv-status').isVisible(), "the TV's status stage carries tv-status");
   const onTv = tidy(await tv.getByTestId('ship-wants').allInnerTexts());
   check(JSON.stringify(onTv) === JSON.stringify([`${shipText}${also}`]), `G-6: the TV's status screen has one ship panel: want ${JSON.stringify([`${shipText}${also}`])}, got ${JSON.stringify(onTv)}`);
-  const room = (await tv.evaluate(`(() => {
-    const box = (id) => { const el = document.querySelector('[data-testid=' + id + ']'); const b = el.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, right: b.right, height: b.height, full: el.scrollHeight <= el.clientHeight + 1 }; };
-    const store = document.querySelector('[data-testid=status-store]').getBoundingClientRect();
-    const prices = [...document.querySelectorAll('[data-testid=status-store] dd')].map((dd) => dd.getBoundingClientRect());
-    return {
-      store: { ...box('status-store'), pricesShown: prices.length === 3 && prices.every((p) => p.height > 0 && p.top >= store.top - 0.5 && p.bottom <= store.bottom + 0.5) },
-      ship: box('ship-wants'),
-      frame: box('tv-status'),
-      ticker: document.querySelectorAll('[data-testid=chat-ticker] [data-testid^=chat-line-]').length,
-      w: window.innerWidth,
-      h: window.innerHeight,
-    };
-  })()`)) as {
-    store: { height: number; full: boolean; pricesShown: boolean };
-    ship: { top: number; bottom: number; left: number; right: number; full: boolean };
-    frame: { bottom: number };
-    ticker: number;
-    w: number;
-    h: number;
-  };
-  console.log(
-    `  TV at ${room.w}×${room.h}, ${room.ticker} chat lines in the ticker: store box ${room.store.height.toFixed(1)} px tall${room.store.full && room.store.pricesShown ? ', prices whole' : ', prices cut'}; ship panel y ${room.ship.top.toFixed(0)}–${room.ship.bottom.toFixed(0)} (the TV's frame ends at ${room.frame.bottom.toFixed(0)}), x ${room.ship.left.toFixed(0)}–${room.ship.right.toFixed(0)}`,
-  );
-  check(room.ticker === 3, `G-6 is read with the TV's chat ticker full: 3 lines, got ${room.ticker}`);
-  check(room.store.full && room.store.pricesShown && room.store.height >= TV_STORE_MIN, `G-6: the TV's store box keeps its prices beside the ship panel and a full ticker: ${room.store.height} px, prices ${room.store.pricesShown && room.store.full ? 'whole' : 'cut'}`);
-  check(
-    room.ship.top >= 0 && room.ship.left >= 0 && room.ship.bottom <= Math.min(room.h, room.frame.bottom + 0.5) && room.ship.right <= room.w && room.ship.full,
-    `G-6: the TV's ship panel ends inside the ${room.w}×${room.h} screen and the TV's frame: y ${room.ship.top}–${room.ship.bottom}, frame to ${room.frame.bottom}, its words ${room.ship.full ? 'whole' : 'cut'}`,
-  );
+  await checkTvStatusRoom(tv, a.good, false);
   console.log(`✓ G-8, G-4, G-6: ${a.good}'s status screen says "Goes bad" and "Spare" and "${store}" on three phones; one ship panel, "${shipText}${also}", on the phones and the TV`);
 }
 
@@ -741,6 +713,58 @@ async function fillTheTvTicker(phone: Page, tv: Page): Promise<void> {
   }
   const lines = await tv.locator('[data-testid=chat-ticker] [data-testid^=chat-line-]').count();
   check(lines === 3, `the TV's chat ticker shows three lines, got ${lines}`);
+}
+
+/**
+ * The TV's status stage at 1920×1080 with its chat ticker full: the store box keeps its prices, the ship panel ends
+ * inside the screen and the TV's frame with its words whole, and a skipped line sits in the time bar's row, on one line.
+ */
+async function checkTvStatusRoom(tv: Page, good: Good, skipped: boolean): Promise<void> {
+  const room = (await tv.evaluate(`(() => {
+    const box = (id) => { const el = document.querySelector('[data-testid=' + id + ']'); if (!el) return null; const b = el.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, right: b.right, height: b.height, full: el.scrollHeight <= el.clientHeight + 1 }; };
+    const store = document.querySelector('[data-testid=status-store]').getBoundingClientRect();
+    const prices = [...document.querySelectorAll('[data-testid=status-store] dd')].map((dd) => dd.getBoundingClientRect());
+    const skip = document.querySelector('[data-testid=tv-status] [data-testid=skipped]');
+    const cs = skip && getComputedStyle(skip);
+    return {
+      store: { ...box('status-store'), pricesShown: prices.length === 3 && prices.every((p) => p.height > 0 && p.top >= store.top - 0.5 && p.bottom <= store.bottom + 0.5) },
+      ship: box('ship-wants'),
+      frame: box('tv-status'),
+      bar: box('time-bar'),
+      skipped: skip ? { ...box('skipped'), oneLine: cs.whiteSpace === 'nowrap' && cs.textOverflow === 'ellipsis', lineHeight: parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5 } : null,
+      ticker: document.querySelectorAll('[data-testid=chat-ticker] [data-testid^=chat-line-]').length,
+      w: window.innerWidth,
+      h: window.innerHeight,
+    };
+  })()`)) as {
+    store: { height: number; full: boolean; pricesShown: boolean };
+    ship: { top: number; bottom: number; left: number; right: number; full: boolean };
+    frame: { bottom: number };
+    bar: { top: number; bottom: number; right: number };
+    skipped: { top: number; bottom: number; left: number; height: number; oneLine: boolean; lineHeight: number } | null;
+    ticker: number;
+    w: number;
+    h: number;
+  };
+  const where = room.skipped ? `; skipped words y ${room.skipped.top.toFixed(0)}–${room.skipped.bottom.toFixed(0)}, the time bar y ${room.bar.top.toFixed(0)}–${room.bar.bottom.toFixed(0)}` : '';
+  console.log(
+    `  TV on ${GOOD_NAME[good]} at ${room.w}×${room.h}, ${room.ticker} chat lines in the ticker: store box ${room.store.height.toFixed(1)} px tall${room.store.full && room.store.pricesShown ? ', prices whole' : ', prices cut'}; ship panel y ${room.ship.top.toFixed(0)}–${room.ship.bottom.toFixed(0)} (the TV's frame ends at ${room.frame.bottom.toFixed(0)}), x ${room.ship.left.toFixed(0)}–${room.ship.right.toFixed(0)}${where}`,
+  );
+  check(room.ticker === 3, `G-6 is read with the TV's chat ticker full: 3 lines, got ${room.ticker}`);
+  check(room.store.full && room.store.pricesShown && room.store.height >= TV_STORE_MIN, `G-6: the TV's store box keeps its prices beside the ship panel and a full ticker: ${room.store.height} px, prices ${room.store.pricesShown && room.store.full ? 'whole' : 'cut'}`);
+  check(
+    room.ship.top >= 0 && room.ship.left >= 0 && room.ship.bottom <= Math.min(room.h, room.frame.bottom + 0.5) && room.ship.right <= room.w && room.ship.full,
+    `G-6: on ${GOOD_NAME[good]} the TV's ship panel ends inside the ${room.w}×${room.h} screen and the TV's frame: y ${room.ship.top}–${room.ship.bottom}, frame to ${room.frame.bottom}, its words ${room.ship.full ? 'whole' : 'cut'}`,
+  );
+  if (!skipped) return;
+  const s = room.skipped;
+  check(s, `on ${GOOD_NAME[good]} the TV's status stage says which goods were skipped`);
+  const mid = (s.top + s.bottom) / 2;
+  check(
+    mid >= room.bar.top && mid <= room.bar.bottom && s.left >= room.bar.right - 0.5,
+    `on ${GOOD_NAME[good]} the TV's skipped words sit in the time bar's row, to its right: y ${s.top}–${s.bottom} beside the bar's ${room.bar.top}–${room.bar.bottom}, x from ${s.left} after the bar's ${room.bar.right}`,
+  );
+  check(s.oneLine && s.height <= s.lineHeight * 1.5, `on ${GOOD_NAME[good]} the TV's skipped words take one line, cut with an ellipsis: ${s.height} px for a ${s.lineHeight} px line, ${s.oneLine ? 'nowrap with an ellipsis' : 'wrapping'}`);
 }
 
 /** The TV's store box on the status stage: a label, a number and its padding, about 78 px; a squeezed box is a few px. */
@@ -783,6 +807,8 @@ async function readTheShipGoodsOwnStatus(phones: Phone[], tv: Page, truth: Truth
         }
         const onTv = await panel(tv);
         check(onTv === `${line}${also}`, `G-6: on ${GOOD_NAME[held.good]}'s own status screen the TV says "${line}${also}", got "${onTv}"`);
+        check(held.skipped.length > 0, `G-6 reads ${GOOD_NAME[held.good]}'s own status screen with a skipped good above it, got none skipped`);
+        await checkTvStatusRoom(tv, held.good, true);
         console.log(`✓ G-6: on ${GOOD_NAME[held.good]}'s own status screen, "${line}" on three phones (with what each has) and the TV`);
       });
       return;
