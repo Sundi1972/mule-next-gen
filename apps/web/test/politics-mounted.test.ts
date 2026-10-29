@@ -258,6 +258,14 @@ describe('the secret ballot, mounted (C66, AM-21)', () => {
     rerender(ballot({ governor: 's1' }), ElectionDay);
     expect(checked('s1')).toBe(true);
     expect(checked('s2')).toBe(false);
+    unmount();
+    // Changed elsewhere before the server answered, then back to where it was when this phone picked.
+    mount(ballot({ governor: 's1' }), ElectionDay);
+    pick('s2');
+    rerender(ballot(), ElectionDay);
+    rerender(ballot({ governor: 's1' }), ElectionDay);
+    expect(checked('s1'), 'back where it was').toBe(true);
+    expect(checked('s2')).toBe(false);
   });
 
   /** The option the ballot shows checked, or none. */
@@ -294,6 +302,26 @@ describe('the secret ballot, mounted (C66, AM-21)', () => {
     expect(shown(), 'the answer to s1').toEqual(['abstain']);
     rerender(ballot(), ElectionDay);
     expect(shown(), 'the answer to Abstain').toEqual(['abstain']);
+  });
+
+  it("C66, AM-21: one view answering several of this phone's votes at once ends the wait: a change elsewhere after it shows (s1 held, then s2 and back to s1)", () => {
+    mount(ballot({ governor: 's1' }), ElectionDay);
+    pick('s2');
+    pick('s1');
+    rerender(ballot({ governor: 's1' }), ElectionDay);
+    expect(shown(), 'the answer to both').toEqual(['s1']);
+    rerender(ballot({ governor: 's2' }), ElectionDay);
+    expect(shown(), 'a change elsewhere').toEqual(['s2']);
+  });
+
+  it("C66, AM-21: one view answering several of this phone's votes at once ends the wait: a change elsewhere after it shows (s1, then Abstain)", () => {
+    mount(ballot(), ElectionDay);
+    pick('s1');
+    pick('abstain');
+    rerender(ballot(), ElectionDay);
+    expect(shown(), 'the answer to both').toEqual(['abstain']);
+    rerender(ballot({ governor: 's1' }), ElectionDay);
+    expect(shown(), 'a change elsewhere').toEqual(['s1']);
   });
 });
 
