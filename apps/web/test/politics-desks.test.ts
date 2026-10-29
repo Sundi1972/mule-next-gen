@@ -147,6 +147,16 @@ const tagOf = (html: string, testid: string) => html.match(new RegExp(`<[a-z]+[^
 
 /** The text inside the element carrying this data-testid, tags stripped, up to its own closing tag. */
 function textOf(html: string, testid: string): string {
+  return htmlOf(html, testid)
+    .replace(/<[^>]+>/g, '')
+    .replace(/&#x27;|&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** The markup inside the element carrying this data-testid, up to its own closing tag. */
+function htmlOf(html: string, testid: string): string {
   const open = tagOf(html, testid);
   expect(open, `an element with data-testid="${testid}"`).toBeDefined();
   const tag = /^<([a-z][a-z0-9]*)/.exec(open!)![1]!;
@@ -159,13 +169,7 @@ function textOf(html: string, testid: string): string {
     depth += m[1] ? -1 : 1;
     end = m.index;
   }
-  return html
-    .slice(from, end)
-    .replace(/<[^>]+>/g, '')
-    .replace(/&#x27;|&#39;/g, "'")
-    .replace(/&amp;/g, '&')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return html.slice(from, end);
 }
 
 const disabled = (html: string, testid: string) => /\sdisabled=""/.test(tagOf(html, testid) ?? '');
@@ -679,23 +683,78 @@ describe("the new Governor's promise (C68, E-7)", () => {
     expect(textOf(onPhone(term(null, 5, 5), OfficesLine), 'roadmap-offices')).toBe('Governor: Lena, until month 6 · Next election: month 7');
   });
 
+  /** The verdict in the tax row's readout: which one, the chip's word, and the sentence a screen reader says. */
+  function verdictIn(html: string): { id: string; chip: string; spoken: string } {
+    const inner = htmlOf(html, 'governor-verdict');
+    return {
+      id: /data-testid="(gov-[a-z]+)"/.exec(inner)?.[1] ?? '',
+      chip: /<span aria-hidden="true">([^<]*)<\/span>/.exec(inner)?.[1] ?? '',
+      spoken: /<span class="sr-only">([^<]*)<\/span>/.exec(inner)?.[1] ?? '',
+    };
+  }
+
+  /** Where each testid starts in `html`, -1 when absent. */
+  const positions = (html: string, ids: string[]) => ids.map((id) => html.indexOf(`data-testid="${id}"`));
+
   it("T-AC-70, E-7: the Governor's desk keeps the promise above the tax; past it, it says so", () => {
     const over = onPhone(term(CAP_4, 5, 5), GovernorDesk);
     expect(textOf(over, 'gov-promise')).toBe('Sales taxYou promised: no higher than 4%');
-    expect(textOf(over, 'gov-breaks')).toBe('5%: this breaks your promise.');
+    const [promise, row] = positions(over, ['gov-promise', 'governor-tax-row']);
+    expect(promise, 'the promise before the row').toBeGreaterThanOrEqual(0);
+    expect(promise).toBeLessThan(row!);
+    expect(verdictIn(over)).toEqual({ id: 'gov-breaks', chip: 'breaks it', spoken: '5%: this breaks your promise.' });
     expect(tagOf(over, 'tax-value')).toMatch(/text-alert/);
     expect(textOf(over, 'tax-confirm')).toBe('Set 5%');
     const within = onPhone(term(CAP_4, 3, 3), GovernorDesk);
-    expect(textOf(within, 'gov-within')).toBe('Within your promise. Set it to make it count.');
+    expect(verdictIn(within)).toEqual({ id: 'gov-within', chip: 'within', spoken: 'Within your promise. Set it to make it count.' });
     const set = onPhone(term(CAP_4, 4, 5), GovernorDesk);
-    expect(textOf(set, 'gov-done')).toBe('Done: 4% from now on.');
+    expect(verdictIn(set)).toEqual({ id: 'gov-done', chip: 'done', spoken: 'Done: 4% from now on.' });
     expect(disabled(set, 'tax-confirm')).toBe(true);
   });
 
   it("T-AC-70, E-7: a month on, the Governor's desk judges keep it against the tax when the term began, not the month's start", () => {
     const html = onPhone(term(HOLD, 7, 7, 5, 5), GovernorDesk);
     expect(textOf(html, 'gov-promise')).toBe('Sales taxYou promised: keep it at 5%');
-    expect(textOf(html, 'gov-breaks')).toBe('7%: this breaks your promise.');
+    expect(verdictIn(html)).toEqual({ id: 'gov-breaks', chip: 'breaks it', spoken: '7%: this breaks your promise.' });
+  });
+
+  it('C66, E-7: the desk is one block: the promise on one line, then the row of −, the tax with its verdict under it, + and Set', () => {
+    const html = onPhone(term(CAP_4, 5, 5), GovernorDesk);
+    expect(tagOf(html, 'gov-promise'), 'the promise keeps to one line').toMatch(/\btruncate\b/);
+    const row = htmlOf(html, 'governor-tax-row');
+    const order = positions(row, ['tax-down', 'tax-value', 'governor-verdict', 'tax-up', 'tax-confirm']);
+    expect(order.every((at) => at >= 0), `every part in the row: ${order.join(', ')}`).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(tagOf(html, 'governor-verdict'), 'the verdict is announced as it changes').toMatch(/role="status"/);
+  });
+
+  it.each<[string, TaxPromise, number, number, boolean]>([
+    ['over the promise', CAP_4, 5, 5, true],
+    ['within it', CAP_4, 3, 3, false],
+    ['set this month', CAP_4, 4, 5, false],
+  ])('C66, E-7: Set takes the danger colour only when it would break the promise (%s)', (_, promise, percent, start, danger) => {
+    const html = onPhone(term(promise, percent, start), GovernorDesk);
+    expect(/\bbg-alert-bg\b/.test(tagOf(html, 'tax-confirm') ?? ''), 'Set in the danger colour').toBe(danger);
+  });
+
+  it('C66, E-7: "Why 0–10%?" holds this month\'s range and what the tax pays, folded until it is tapped', () => {
+    const html = onPhone(term(CAP_4, 5, 5), GovernorDesk);
+    expect(textOf(html, 'governor-why')).toBe('Why 0–10%?');
+    const why = tagOf(html, 'governor-why')!;
+    expect(why).toMatch(/aria-expanded="false"/);
+    const controls = /aria-controls="([^"]+)"/.exec(why)?.[1];
+    const text = tagOf(html, 'governor-why-text');
+    expect(text, 'the explanation is the one Why opens').toContain(`id="${controls}"`);
+    expect(text, 'folded until tapped').toMatch(/\shidden=""/);
+    expect(textOf(html, 'governor-why-text')).toBe('This month 0–10%, from last month’s 5%. The tax fills the colony fund (0 cr), which pays you 50 cr a month. Everyone sees your tax beside your promise.');
+  });
+
+  it("C66, E-7: an appointed Governor promised nothing: no promise to judge, so no verdict until the tax is set", () => {
+    const open = onPhone(term(null, 5, 5), GovernorDesk);
+    expect(textOf(open, 'gov-promise')).toBe('Sales tax');
+    expect(tagOf(open, 'governor-verdict')).toBeUndefined();
+    expect(/\bbg-alert-bg\b/.test(tagOf(open, 'tax-confirm') ?? '')).toBe(false);
+    expect(verdictIn(onPhone(term(null, 4, 5), GovernorDesk))).toEqual({ id: 'gov-done', chip: 'done', spoken: 'Done: 4% from now on.' });
   });
 
   it.each<[string, number, number | null, { percent: number; start: number }, ReturnType<typeof setState>]>([
@@ -718,7 +777,8 @@ describe("the new Governor's promise (C68, E-7)", () => {
     expect(textOf(html, 'tax-value')).toBe(`${tax.percent}%`);
     expect(disabled(html, 'tax-down'), 'tax-down disabled').toBe(stopped.down);
     expect(disabled(html, 'tax-up'), 'tax-up disabled').toBe(stopped.up);
-    expect(textOf(html, 'gov-tax')).toContain(`This month ${tax.low}–${tax.high}%, from last month’s ${tax.start}%. The tax fills the colony fund (840 cr), which pays you 50 cr a month.`);
+    expect(textOf(html, 'governor-why')).toBe(`Why ${tax.low}–${tax.high}%?`);
+    expect(textOf(html, 'governor-why-text')).toContain(`This month ${tax.low}–${tax.high}%, from last month’s ${tax.start}%. The tax fills the colony fund (840 cr), which pays you 50 cr a month.`);
   });
 
   it("C66, E-7: the new Governor's Now says to set the tax, until when, and the promise", () => {
