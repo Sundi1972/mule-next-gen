@@ -12,6 +12,7 @@ import {
   hasAnalysed,
   pathTo,
   placeAt,
+  pressOrder,
   RuleError,
   speedOf,
   stepFloor,
@@ -112,13 +113,13 @@ function deepFreeze<T>(value: T): T {
 }
 
 /**
- * One tick as RULE-1 runs it: the step, then each press the step did not spend, at the stepped position. The game is
- * frozen, so the presses apply to a copy of it; the step writes to neither.
+ * One tick as RULE-1 runs it: the step, then each press the step did not spend, at the stepped position in pressOrder.
+ * The game is frozen, so the presses apply to a copy of it; the step writes to neither.
  */
 function tick(state: GameState, floor: DevFloor, inputs: Record<string, FloorInput>, cfg: FloorConfig): { state: GameState; floor: DevFloor } {
   const spent = doorPresses(floor, state, inputs, cfg);
   const stepped = stepFloor(floor, state, inputs, DEV_STEER.tickMs, cfg);
-  const pressing = Object.keys(inputs).filter((seat) => inputs[seat]!.act && !spent.has(seat));
+  const pressing = pressOrder(stepped, Object.keys(inputs).filter((seat) => inputs[seat]!.act && !spent.has(seat)));
   if (pressing.length === 0) return { state, floor: stepped };
   const next = structuredClone(state);
   const pressed = pressing.reduce((f, seat) => applyReach(next, f, seat, SECONDS_LEFT, cfg).floor, stepped);
@@ -245,6 +246,18 @@ describe('the dev floor: the step', () => {
     const again = play(SEED, script(SEED));
     expect(again.floors).toEqual(first.floors);
     expect(again.state).toEqual(first.state);
+
+    // The presses' order: seat order, the first seat rotating each tick over the most seats a game has (play.ts's rot).
+    const order = (tick: number, seats = ['a', 'b', 'c', 'd']) => pressOrder({ ...first.floors[0]!, tick }, seats);
+    expect([0, 1, 2, 3, 4].map((t) => order(t)), 'four seats at ticks 0 to 4').toEqual([
+      ['a', 'b', 'c', 'd'],
+      ['b', 'c', 'd', 'a'],
+      ['c', 'd', 'a', 'b'],
+      ['d', 'a', 'b', 'c'],
+      ['a', 'b', 'c', 'd'],
+    ]);
+    expect(order(1, ['a', 'c']), 'two of them, by their places in seat order').toEqual(['c', 'a']);
+    expect(() => order(0, ['z']), 'a seat not on the floor').toThrow(Error);
 
     // 'a''s one press, walking down: ANALYSE, holding it where it stands for the analysis's ticks, the stick held down.
     const pressed = ANALYSE_AT + 1;

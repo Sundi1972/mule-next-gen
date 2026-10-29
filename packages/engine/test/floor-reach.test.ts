@@ -18,6 +18,7 @@ import {
   mulePrice,
   mulePriceFor,
   outfitCostFor,
+  pressOrder,
   reachOf,
   reachWords,
   RuleError,
@@ -130,12 +131,13 @@ function world(row: Pick<Row, 'at' | 'game' | 'cfg'>): { state: GameState; floor
 
 /**
  * One tick as the server and the sim run it (RULE-1): the step, then each press the step did not spend, at the stepped
- * position, each on the floor the one before it left. The stepped floor, the floor after the presses, and each press.
+ * position in pressOrder, each on the floor the one before it left. The stepped floor, the floor after the presses,
+ * and each press.
  */
 function tick(state: GameState, floor: DevFloor, inputs: Record<string, FloorInput>, config = cfg): { stepped: DevFloor; floor: DevFloor; presses: Press[] } {
   const spent = doorPresses(floor, state, inputs, config);
   const stepped = stepFloor(floor, state, inputs, DEV_STEER.tickMs, config);
-  const pressing = Object.keys(inputs).filter((seat) => inputs[seat]!.act && !spent.has(seat));
+  const pressing = pressOrder(stepped, Object.keys(inputs).filter((seat) => inputs[seat]!.act && !spent.has(seat)));
   const presses: Press[] = [];
   const after = pressing.reduce((f, seat) => {
     const press = applyReach(state, f, seat, SECONDS_LEFT, config);
