@@ -72,6 +72,18 @@ try {
   };
   await tv.screenshot({ path: `${process.env.MULE_SHOTS ?? '.'}/tv-6seats.png` });
   console.log(`TV, six seats, the clock waiting: ${JSON.stringify(m)}`);
+  // The same table once the host starts the clock: the pace list back, the screen as it was before A-1, for comparison.
+  const room = server.registry.get(code) as unknown as { game: { handle(seat: string, intent: { type: 'continue' }): void; ctx: { changed(): void } } };
+  room.game.handle('s1', { type: 'continue' });
+  room.game.ctx.changed();
+  await tv.getByTestId('pace-list').waitFor({ timeout: PRESS_MS * 3 });
+  const running = await tv.evaluate(() => {
+    const frame = document.querySelector('[data-phase=development]')!.getBoundingClientRect();
+    const hall = document.querySelector('[data-phase=development] [data-testid=store-hall]')!.getBoundingClientRect();
+    const scale = frame.width / 1280;
+    return { storeHall: { top: Math.round((hall.top - frame.top) / scale), height: Math.round(hall.height / scale) } };
+  });
+  console.log(`TV, six seats, the clock running (the pace list, as before A-1): ${JSON.stringify(running)}`);
   check(m.rows.length === 6, `A-1: the list has six seats, got ${m.rows.length}`);
   check(m.rows.every((r) => r.bottom <= m.frameBottom && r.height <= 36), `A-1: all six rows show, each on one line: ${JSON.stringify(m.rows)}`);
   check(!m.paceListShown, "A-1: while the clock waits, the list takes the pace list's place");
