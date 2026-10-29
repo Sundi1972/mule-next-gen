@@ -747,7 +747,7 @@ describe('the dev floor: the action button', () => {
     expect(hasAnalysed(a(state), state, tileOf(state, 7, 4))).toBe(true);
     expect(reachWords(reachNow(analysed, state))).toEqual(ASSAYING);
     let assayed = analysed;
-    while (assayed.colonists[0]!.assayUntilTick !== null) assayed = stepFloor(assayed, state, {}, DEV_STEER.tickMs, cfg);
+    while (assayed.tick < analysed.colonists[0]!.assayUntilTick!) assayed = stepFloor(assayed, state, {}, DEV_STEER.tickMs, cfg);
     expect(reachWords(reachNow(assayed, state))).toEqual(words('FIT FILTER', `${DEVELOPMENT.filterAlloy} Alloy`));
     const filtered = press(assayed);
     expect(tileOf(state, 7, 4).filter).toBe(true);
