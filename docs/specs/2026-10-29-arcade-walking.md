@@ -287,6 +287,9 @@ tomorrow     MUST: the room's Game may emit a transient frame to everyone (`ctx.
              MUST (AM-8): WS3's recorder and replay pass `frame` through: recording, to the room; on replay, a no-op
                (record.ts, replay.ts, two lines, WS3's, WS6 reviewing), or a recorded game loses its frames silently.
                Test row: a recorded game's frames still reach a client.
+             MUST (AM-13, S-1): a `steer` intent sends no full view: the room's `case 'intent'` → `broadcast()` exempts
+               steer (a WS4 named edit in room.ts), or 4 phones × 10 steers a second make 40 full views a second
+               (~3.7 MB/s). Frame positions are rounded to 2 decimals on the wire.
 seam         packages/tabletop/src/room.ts (+ protocol.ts message type)
 senior       junior would: put positions in viewFor and broadcast it 20×/s. senior does: a frame of ~200 bytes per
              tick, full views stay event-driven (S-1 measures both).
@@ -638,7 +641,7 @@ unknown      no frame for > DEV_STEER.staleMs (1000) → the phone shows "reconn
 
 Example frame (4 seats, one beat): `{"t":"frame","payload":{"tick":412,"at":20600,"colonists":[{"id":"s1","x":5.42,
 "y":3.08,"space":"map","facing":"right","moving":true,"lead":null}, …],"beats":["2 MULEs left! Race to the
-corral"]}}` — about 200–300 bytes; at 20 frames a second to 5 connections ≈ 30 kB/s on the table's Wi-Fi (S-1
+corral"]}}` — 420–606 bytes with positions rounded to 2 decimals (S-1, AM-13; 804 unrounded); at 20 frames a second to 5 connections ≈ 42–61 kB/s on the table's Wi-Fi (S-1
 measures it).
 
 ## §4 · Failure & Ops `[handoff]`
@@ -680,7 +683,7 @@ C14.
 | T-AC-1 (serves B-AC-1, B-AC-2) | Given a seed and a per-tick input script · When stepFloor runs twice · Then the floors are identical; and the server's floor after a scripted turn equals the sim's (HC-4) | engine unit + server test | a changed input at one tick changes the result | C1, C6, C10 |
 | T-AC-2 (serves G-2) | speeds per RULE-2's examples (plains 1.5625, mountains 0.625, swamp 0.78, leading 1.41, bitten 0.78 tiles/s) | engine unit | lake 0 blocks | C1, C5 |
 | T-AC-3 (serves B-AC-1) | Reach per RULE-3's table, one row each | engine unit | money short → disabled, not hidden | C3 |
-| T-AC-4 (serves B-AC-2) | Given the tick · Then one frame per tick reaches every connection, frames are dropped not queued for a slow one, full views go only on change, or to one seat when its reach's words change (AM-11) | server + tabletop test | no full view on a tick where nothing changed and no seat's reach words changed | C6, C8 |
+| T-AC-4 (serves B-AC-2) | Given the tick · Then one frame per tick reaches every connection, frames are dropped not queued for a slow one, full views go only on change, or to one seat when its reach's words change (AM-11) | server + tabletop test | no full view on a tick where nothing changed and no seat's reach words changed; a steer sends no full view (AM-13) | C6, C8 |
 | T-AC-5 (serves G-2, RULE-8) | In 20 seeded AI-only turns at the defaults every AI colonist reaches the pub within 50 s, and a bot races in most glints | sim (`pnpm sim` report) | with botsSpareTime off, Kai misses turns | C9, C10 |
 | T-AC-6 (serves B-AC-5) | Wolves: the rookie wins ≈ 1 in 4 over 60 seeded fights; a forest run escapes ≈ 13 of 20 | engine headless | — | C4, C9 |
 | T-AC-7 (serves B-AC-6) | Glint timing per RULE-5 (none in the first 6 s, 8 s shown, the first onto it wins) | engine unit | a non-racing colonist on the tile wins too | C4 |
@@ -725,6 +728,15 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-13 (2026-10-29, WS3's spike S-1 on trunk 1bed1701, recorded by WS6).** **20 Hz stands** (`DEV_STEER.tickMs`
+  50): loopback latency p50 26 ms, p95 49 ms; over Wi-Fi estimated p50 36–86 ms, p95 60–110 ms (not measured). The
+  frame is 420–606 B with today's field names and positions rounded to 2 decimals (804 B unrounded), so 42–61 kB/s to
+  5 clients; delta coding not needed. A development full view is ~18.7 kB per phone (tiles 73%), ~92 kB per change to
+  the table. Two corrections to C8 and C6: (1) a `steer` intent must not trigger the room's full-view broadcast
+  (`room.ts` `case 'intent'`, a WS4 named edit), and `server.ts` `isIntent` accepts `steer` (WS3, PR-3); (2) full views
+  go only on change: today's development calls `ctx.changed()` every 100 ms in `scheduleAiDevelop` regardless; PR-3's
+  tick compares state instead. T-AC-4's negative case gains "a steer sends no full view". Later, if views need
+  slimming: tiles only on change, or permessage-deflate (~8× smaller).
 - **AM-12 (2026-10-29, WS3's F6 on #186, ruled by WS6).** Reach must not refuse what game.ts allows where the spot
   is unambiguous (AM-10's principle). RULE-3 row 11: ANALYSE on any plot but the store, owned or free, that you haven't
   analysed (scouting stays in the game; leading a MULE doesn't stop it; on your own plot with a fitted MULE row 10's
