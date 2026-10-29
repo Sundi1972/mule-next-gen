@@ -2,13 +2,17 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BRAIN, RuleError } from '@mule/engine';
+import { BRAIN, RuleError, type Playbook } from '@mule/engine';
 import { personaFor, type DecisionRecord } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { Room, TableError, type ChatMessage, type ClientEnvelope, type Connection, type GameContext, type ServerEnvelope } from '@tabletop/core';
 import { createBrain, type BrainService } from '../src/brain/index.js';
+import type { PlaybookSource } from '../src/brain/playbooks.js';
 import { AI_NAMES, MuleGame } from '../src/mule-game.js';
-import { fakeSdk, KEY, promptOf, readLedger, requestOf, sdkMessage, type FakeSdk, type SdkModuleFake } from './brain-fakes.js';
+import { Recorder } from '../src/record.js';
+import { fakeSdk, KEY, promptOf, readLedger, requestOf, sdkMessage, type FakeSdk, type SdkModuleFake, type SdkParams } from './brain-fakes.js';
+import { fakeContext, seats as THREE } from './fake-context.js';
+import { ENGINE_PRESS, runTable, stubSource } from './playbook-fakes.js';
 
 /** The SDK module's constructor: records its options and builds nothing, so no network and no credential chain. */
 const sdkModule = vi.hoisted((): SdkModuleFake => ({ built: [], create: null }));
@@ -502,6 +506,93 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
     const games = readLedger(ledger).filter((l) => l.type === 'game');
     expect(games).toHaveLength(2);
     expect(new Set(games.map((l) => l.game)).size).toBe(2);
+  });
+});
+
+/** Whether a request is a writer call: its user text is a land brief. */
+const isWrite = (params: SdkParams) => promptOf(params).user.includes('What you may change:');
+
+/** The plots and values plan `id` names in a land brief, in order. */
+function planInBrief(params: SdkParams, id: string): { plot: number; value: number }[] {
+  const line = promptOf(params).user.split('\n').find((l) => l.startsWith(`${id}. `));
+  if (!line) throw new Error(`the brief offers no plan ${id}`);
+  return [...line.slice(line.lastIndexOf('): ') + 3).matchAll(/plot (\d+) \((-?\d+) cr\)/g)].map((m) => ({ plot: Number(m[1]), value: Number(m[2]) }));
+}
+
+/** An edit no validator accepts: the press share must fall, 0 ≤ end ≤ start ≤ 1. */
+const RISING_PRESS = { start: 0.2, end: 0.7 };
+
+/**
+ * A recorded table of two people and The Big Spender at SEED, on the game's clock, played to month 2's land grant. The
+ * fake model takes plan B in every land brief and sends a press share out of bounds; every move gets option A. Returns
+ * the record, the writer requests, and the engine's draft for each land grant.
+ */
+async function recordedToMonth2(recordPlaybook = true) {
+  const sdk = fakeSdk((_n, params) =>
+    isWrite(params)
+      ? sdkMessage(JSON.stringify({ edits: [{ path: '/landGrant/ranked', to: 'B', reason: 'B is mine.' }, { path: '/landGrant/pressShare', to: RISING_PRESS, reason: 'Late rush.' }], line: '' }))
+      : reply('A', ''),
+  );
+  const stub = stubSource();
+  const drafts: { month: number; seat: string; playbook: Playbook }[] = [];
+  const source: PlaybookSource = {
+    draft(state, seat) {
+      const made = stub.draft(state, seat);
+      if (state.phase === 'landGrant') drafts.push({ month: state.month, seat, playbook: structuredClone(made.playbook) });
+      return made;
+    },
+    validate: stub.validate,
+  };
+  const fake = fakeContext({ table: THREE });
+  const recorder = new Recorder(fake.ctx, SEED, { maxMonths: 3, politics: false }, smart(sdk), null);
+  const game = new MuleGame(recorder.ctx, SEED, {
+    maxMonths: 3,
+    brain: recorder.brain,
+    notice: (n) => recorder.notice(n),
+    ...(recordPlaybook ? { recordPlaybook: (e) => recorder.playbook(e) } : {}),
+    playbookSource: source,
+  });
+  recorder.wrap(game).start(THREE);
+  await runTable(game, fake, (v) => v.month === 2 && v.phase !== 'planning');
+  game.dispose();
+  const ai = THREE.find((s) => s.isAi)!.id;
+  return { record: recorder.record, writes: sdk.requests.filter((r) => isWrite(r.params)), drafts, ai };
+}
+
+describe('Claude plans the land grant', { timeout: 30_000 }, () => {
+  it("B-AC-A1 (record): a fake model's edited land ranking is in the record as the month-2 playbook by 'llm'; an out-of-bounds edit leaves the engine's value and is listed in rejected", async () => {
+    const { record, writes, drafts, ai } = await recordedToMonth2();
+
+    // Asked at game start for month 1 and as month 1's upkeep opened for month 2; both replies came before the grant.
+    expect(writes).toHaveLength(2);
+    const planB = planInBrief(writes[1]!.params, 'B');
+    const engine = drafts.find((d) => d.month === 2 && d.seat === ai)!.playbook;
+    // At SEED plan B's first plot is not the engine's: the seat would claim another plot first.
+    expect(planB[0]!.plot).not.toBe(engine.landGrant!.ranked[0]!.plot);
+
+    const month2 = record.events.filter((e) => e.type === 'playbook' && e.month === 2);
+    expect(month2).toHaveLength(1);
+    const entry = month2[0]!;
+    if (entry.type !== 'playbook') throw new Error('not a playbook entry');
+    expect(entry).toMatchObject({ seat: ai, month: 2, phase: 'landGrant' });
+    expect(entry.playbook.by).toBe('llm');
+    expect(entry.playbook.landGrant!.ranked.slice(0, planB.length)).toEqual(planB);
+    expect(entry.playbook.landGrant!.pressShare).toEqual(ENGINE_PRESS);
+    expect(entry.playbook.rejected).toEqual([{ path: '/landGrant/pressShare', to: RISING_PRESS, why: 'out of bounds' }]);
+    // Stamped in the step that opened month 2's land grant: the last Ready of planning.
+    const step = record.events.find((e) => e.type !== 'notice' && e.type !== 'playbook' && e.seq === entry.seq);
+    expect(step?.type).toBe('intent');
+  });
+
+  // At SEED The Big Spender's plan B starts on another plot than the engine's ranking, so its first claim tells them apart.
+  it.skip("B-AC-A1 (claim): the seat claims by the edited ranking in month 2 — needs the land-grant execution layer that plays LandGrantPlay.ranked (WS1/WS3, not on trunk at 84c5a66) and WS1's real validatePlan/draft", async () => {
+    const { record, writes, drafts, ai } = await recordedToMonth2();
+    const planB = planInBrief(writes[1]!.params, 'B');
+    const engine = drafts.find((d) => d.month === 2 && d.seat === ai)!.playbook;
+    const claims = record.events.filter((e) => e.type === 'notice' && e.kind === 'claim' && e.month === 2 && e.seat === ai);
+    const first = claims[0];
+    expect(first?.type === 'notice' && first.kind === 'claim' && first.plot).toBe(planB[0]!.plot);
+    expect(planB[0]!.plot).not.toBe(engine.landGrant!.ranked[0]!.plot);
   });
 });
 
