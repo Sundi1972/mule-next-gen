@@ -9,6 +9,7 @@ import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { Develop } from '../src/phone/Develop';
 import { PhoneGameProvider } from '../src/phone/game';
+import { startClockQuestion } from '../src/phone/Develop';
 
 const LENA = 's1';
 const OSSA = 's2';
@@ -89,5 +90,37 @@ describe("A-1: the phone while month 1's development clock waits", () => {
     expect(html).not.toContain('data-testid="clock-waits"');
     expect(text(html)).not.toContain('The clock starts when');
     expect(text(html)).not.toContain('Time is up');
+  });
+});
+
+describe("A-1: the host's Start the clock while month 1's development clock waits", () => {
+  const BUTTON = 'data-testid="continue"';
+
+  it('A-1: the host sees "Start the clock without Ossa" once the host’s own first MULE is in and Ossa’s is still to come', () => {
+    const { game, ctx, installFirst } = firstMonth();
+    expect(phone(game, ctx.now(), LENA), "before the host's own MULE is in").not.toContain(BUTTON);
+    installFirst(LENA);
+    const host = phone(game, ctx.now(), LENA);
+    expect(host).toContain(BUTTON);
+    expect(text(host)).toContain('Start the clock without Ossa');
+    expect(phone(game, ctx.now(), OSSA), 'never on a non-host phone').not.toContain(BUTTON);
+  });
+
+  it('A-1: the confirm asks in the agreed words, for one and for two', () => {
+    expect(startClockQuestion(['Kai'])).toBe("Start the month's clock now? Kai has no MULE in yet, and loses no time until now.");
+    expect(startClockQuestion(['Kai', 'Ossa'])).toBe("Start the month's clock now? Kai and Ossa have no MULE in yet, and lose no time until now.");
+  });
+
+  it('A-1: after the host starts the clock, the button is gone and the passed player’s Now says the month is running, its title the same', () => {
+    const { game, ctx, installFirst } = firstMonth();
+    installFirst(LENA);
+    const before = text(phone(game, ctx.now(), OSSA));
+    game.handle(LENA, { type: 'continue' });
+    expect(game.viewFor(null).news[0]).toBe('Lena started the clock without Ossa.');
+    expect(phone(game, ctx.now(), LENA)).not.toContain(BUTTON);
+    const ossa = text(phone(game, ctx.now(), OSSA));
+    expect(ossa).toContain('The host started the clock: your month is running.');
+    expect(before).toContain('Buy a MULE at the corral');
+    expect(ossa).toContain('Buy a MULE at the corral');
   });
 });

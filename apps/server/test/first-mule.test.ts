@@ -110,7 +110,7 @@ describe('A-1: month 1’s development clock waits for every first MULE', () => 
     const view = game.viewFor(OSSA);
     expect(view.me!.devEndsAt).toBe(ctx.now() + FULL_MS);
     expect(view.clockWaitsFor).toBeUndefined();
-    expect(view.news[0]).toBe('Lena continued without Ossa.');
+    expect(view.news[0]).toBe('Lena started the clock without Ossa.');
   });
 
   it('A-1: a Continue from anyone but the host throws a RuleError, and once the clock runs the host’s does too', () => {
