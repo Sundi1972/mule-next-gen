@@ -494,6 +494,7 @@ export function ReceiptCard({ r, tally, mark = true }: { r: Receipt; /** The mon
         You have {unitsOf(r.have, r.good)}{r.need > 0 ? `, you need ${r.need}` : ''}
         {r.need > 0 ? (ok ? ' ✓' : `: short ${r.need - r.have}`) : ''}
       </span>
+      <span className="border-t border-holo-faint pt-1.5 text-xs text-ink-2 @min-[1100px]/shell:pt-3 @min-[1100px]/shell:text-lg">Next: {GOOD_NAME[r.next]}, buy or sell?</span>
       {tally !== undefined && (
         <span className="text-xs text-ink-2 @min-[1100px]/shell:text-lg" data-testid="tally">
           This month:{' '}
@@ -502,7 +503,6 @@ export function ReceiptCard({ r, tally, mark = true }: { r: Receipt; /** The mon
           </strong>
         </span>
       )}
-      <span className="border-t border-holo-faint pt-1.5 text-xs text-ink-2 @min-[1100px]/shell:pt-3 @min-[1100px]/shell:text-lg">Next: {GOOD_NAME[r.next]}, buy or sell?</span>
       {mark && <Mark note={N.G5} part="receipt" at="tl" />}
     </section>
   );
