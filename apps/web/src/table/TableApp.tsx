@@ -227,7 +227,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
           <News news={game.news} />
         </div>
         {phase !== 'planning' ? (
-          <Players game={game} className="mt-auto" right={(p) => <span className="font-mono text-sm text-ink-3">{p.isAi ? 'AI' : p.ready ? 'READY' : '…'}</span>} />
+          <Players game={game} className="mt-auto" right={(p) => <span className="font-mono text-sm text-ink-3">{p.ready ? (p.isAi ? 'AI · READY' : 'READY') : p.isAi ? 'AI' : '…'}</span>} />
         ) : (
           <ul className="mt-auto flex shrink-0 flex-col gap-2" data-testid="tv-ready-list">
             {readyRows(game.players, connected).map((row) => {
