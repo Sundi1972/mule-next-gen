@@ -1,7 +1,7 @@
 import { cx, PlayerMark, SPECIES_NAME, Timer } from '@mule/ui';
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { flushSync } from 'react-dom';
-import { TableChat } from '../chat/Chat';
+import { FallbackBubble, TableChat } from '../chat/Chat';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { fmt } from '../game/derive';
 import { useEscape } from './dialog';
@@ -217,11 +217,13 @@ export function PhoneShell({
                   {fmt(self.money)} cr
                 </span>
               </div>
-              <TableChat />
+              {/* The table chat (C20): in the header from WIDE_PX; on a phone it follows the rail's content, its bubble here. */}
+              {wide ? <TableChat /> : <FallbackBubble />}
             </header>
             <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 *:shrink-0 short:gap-2 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4">
               {now && (foldNow ? <FoldingNowCard key={now.title} now={now} /> : <NowCard now={now} />)}
               {rail}
+              {!wide && <TableChat under />}
             </div>
             {footer && (
               <div
