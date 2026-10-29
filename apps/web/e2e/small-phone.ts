@@ -10,6 +10,8 @@ import { AUDIT_JS, type AuditRead, type AuditScope } from './small-phone-audit';
 import { doneThroughTheElection } from './table-steps';
 
 const PHASE_SCALE = 0.1;
+/** A laptop, for the A-5 close read's third size. */
+const LAPTOP = { width: 1440, height: 900 };
 const PRESS_MS = 2_000;
 /** Development's one clock runs on wall time, held or not: enough for two MULEs and every read. */
 const DEV_MS = 120_000;
@@ -135,11 +137,25 @@ try {
   const closeRead = (async () => {
     while (!auctionOver) {
       if (server.registry.get(code)?.viewFor(null).game?.auction?.stage === 'close') {
-        // What A-5 adds: the rail header with the tally, and the receipt card. The board's names strip under the card
-        // truncates a long name on trunk's walk too ("The Accountant", 78 in 51 px at 667): not this read's to judge.
-        await both('the goods auction, a good closed', { roots: [...RAIL.roots, '[data-testid=receipt]'], skip: RAIL.skip }, async () => {
+        // What A-5 adds: the receipt card, its last line the month's total, and the rail header beside it, which must
+        // keep a four-digit balance and the player's name whole (WS6 ruling on #204). The board's names strip under the
+        // card truncates a long name on trunk's walk too ("The Accountant", 78 in 51 px at 667): not this read's to judge.
+        const scope: AuditScope = { roots: [...RAIL.roots, '[data-testid=receipt]'], skip: RAIL.skip };
+        const prep = async () => {
           await phone.getByTestId('receipt-layer').waitFor({ timeout: PRESS_MS });
-          await phone.getByTestId('tally').waitFor({ timeout: PRESS_MS });
+          await phone.getByTestId('receipt-tally').waitFor({ timeout: PRESS_MS });
+        };
+        await held(server, code, async () => {
+          const money = (await phone.getByTestId('money').innerText()).trim();
+          check(/^\d,\d{3} cr$/.test(money), `A-5: the close is read with a four-digit balance, got "${money}"`);
+          const small = await readAt(phone, PHONE_SMALL.viewport, scope, prep);
+          const wide = await readAt(phone, PHONE.viewport, scope, prep);
+          const laptop = await readAt(phone, LAPTOP, scope, prep);
+          await phone.setViewportSize(PHONE_SMALL.viewport);
+          reads.push({ screen: 'the goods auction, a good closed', small, base: wide });
+          for (const f of laptop.fails) check(false, `B-AC-11: the goods auction, a good closed at 1440×900: ${f}`);
+          check(laptop.name?.text === NAME && laptop.name.whole, `A-5: at 1440×900 the rail header shows ${NAME} whole beside ${money}, got "${laptop.name?.text}"`);
+          console.log(`  the goods auction, a good closed: ${money}, ${NAME} whole at 1440×900 too`);
         });
         readClose = true;
         return;
