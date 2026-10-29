@@ -57,9 +57,10 @@ const RECORDER = `{
       const id = plot.dataset.testid.slice(5);
       const seen = (rec.plots[id] ??= plotSeen());
       const bars = [...plot.querySelectorAll('[data-bar=unit]')];
-      const hit = map.querySelector('[data-testid="mark-' + id + '"] [data-delta]');
+      // One chip per hit that landed, in fired order, each staying up to the end of the show.
+      const chips = [...map.querySelectorAll('[data-testid="mark-' + id + '"] [data-delta]')];
       const reasons = [...plot.querySelectorAll('[data-badge=reason]')];
-      if (hit) { seen.struckOnce = true; seen.struck.push(bars.length); add(seen.hits, hit.dataset.delta); }
+      if (chips.length) { seen.struckOnce = true; seen.struck.push(bars.length); for (const c of chips) add(seen.hits, c.dataset.delta); }
       else if (!seen.struckOnce) seen.pre = Math.max(seen.pre, bars.length);
       if (bars[0]) add(seen.colours, getComputedStyle(bars[0]).backgroundColor);
       for (const r of reasons) add(seen.reasons, r.textContent);
@@ -134,6 +135,15 @@ function unitsAfterEach(production: ProductionView, l: ProductionView['lines'][n
   return hitsOn(production, l).map((h) => (units = Math.max(0, units + h.delta)));
 }
 const after = (production: ProductionView, l: ProductionView['lines'][number]) => unitsAfterEach(production, l).at(-1) ?? l.made;
+/** Whether every sampled count is one of `steps`, never going back to an earlier one. */
+function inOrder(sampled: readonly number[], steps: readonly number[]): boolean {
+  let i = 0;
+  for (const n of sampled) {
+    while (i < steps.length && steps[i] !== n) i++;
+    if (i === steps.length) return false;
+  }
+  return true;
+}
 const signed = (n: number) => (n > 0 ? `+${n}` : `−${-n}`);
 
 /** The text of a reason badge, as the map draws it. */
@@ -187,7 +197,7 @@ export async function checkTheShow({ tv, phone, event = false }: { tv: ShowWatch
       // Between two hits the bars stand at the first one's result; after the last, at the plot's final count.
       const steps = unitsAfterEach(production, l).map((n) => Math.min(n, 8));
       const want = steps.at(-1)!;
-      check(seen.struck.length > 0 && seen.struck.every((n) => steps.includes(n)) && seen.struck.at(-1) === want, `B-AC-7: plot ${id} showed ${seen.struck.join()} bars after the hits, not ${steps.join()}`);
+      check(seen.struck.length > 0 && inOrder(seen.struck, steps) && seen.struck.at(-1) === want, `B-AC-7: plot ${id} showed ${seen.struck.join()} bars after the hits, not ${steps.join()}`);
     } else check(seen.hits.length === 0, `B-AC-7: plot ${id} was not hit but was badged "${seen.hits.join()}"`);
   }
   const own: Partial<Record<string, string>> = { dustStorm: 'front-dustStorm', drought: 'front-drought', acidRain: 'front-acidRain', solarFlare: 'front-solarFlare', cometPass: 'comet', flood: 'flood-', volcanicAsh: 'ash-', pestSwarm: 'swarm-', wildfire: 'fire-', bumperHarvest: 'bumper-stamp' };
