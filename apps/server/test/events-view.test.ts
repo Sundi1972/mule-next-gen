@@ -243,7 +243,7 @@ describe('T-AC-10: the view carries the current phase\'s events, when their show
 
   it('T-AC-10: the view carries the phase\'s events with startsAt and showMs: a real comet pass and pest swarm, as production lists them', () => {
     const { view, at, production } = month(TWO_EVENT_MONTH);
-    expect(view.events.map(({ key, phase, weight, playMs }) => ({ key, phase, weight, playMs }))).toEqual([
+    expect(view.events!.map(({ key, phase, weight, playMs }) => ({ key, phase, weight, playMs }))).toEqual([
       { key: 'cometPass', phase: 'production', weight: 'headline', playMs: 7_000 },
       { key: 'pestSwarm', phase: 'production', weight: 'spotlight', playMs: 5_200 },
     ]);
@@ -257,7 +257,7 @@ describe('T-AC-10: the view carries the current phase\'s events, when their show
   it('T-AC-10: the view carries the phase\'s events with startsAt and showMs: a real lone solar flare', () => {
     const { view, at, production } = month(ONE_EVENT_MONTH);
     expect(view.events).toEqual(production.events);
-    expect(view.events.map((e) => e.key)).toEqual(['solarFlare']);
+    expect(view.events!.map((e) => e.key)).toEqual(['solarFlare']);
     expect(view.eventShow).toEqual({ startsAt: at + PRODUCTION_SHOW_AT, showMs: 8_800, introMs: 1_800 });
   });
 
@@ -271,20 +271,20 @@ describe('T-AC-10: the view carries the current phase\'s events, when their show
     const { seen } = playMonth(['drought', 'pestSwarm'], 0.1);
     const { view, at } = seen('production');
     expect(view.eventShow).toEqual({ startsAt: at + PRODUCTION_SHOW_AT * 0.1, showMs: 14_000, introMs: 1_800 });
-    expect(view.events.map((e) => e.playMs)).toEqual([7_000, 5_200]);
+    expect(view.events!.map((e) => e.playMs)).toEqual([7_000, 5_200]);
   });
 
   it('T-AC-10: when the cap bites, showMs is the cap and the intro and the shares add up to it', () => {
     const { seen } = playMonth(['dustStorm', 'drought', 'acidRain', 'solarFlare', 'flood']);
     const { view } = seen('production');
     expect(view.eventShow!.showMs).toBe(EVENT_SHOW.capMs);
-    expect(view.eventShow!.introMs + view.events.reduce((sum, e) => sum + e.playMs, 0)).toBe(EVENT_SHOW.capMs);
+    expect(view.eventShow!.introMs + view.events!.reduce((sum, e) => sum + e.playMs, 0)).toBe(EVENT_SHOW.capMs);
   });
 
   it('T-AC-10: a phase with no events carries none: production\'s events reach neither the phases before it nor the auction or the month end', () => {
     const { seen } = playMonth(['dustStorm']);
     expect(seen('production').view.events).toHaveLength(1);
-    for (const phase of ['planning', 'landGrant', 'development', 'auction', 'upkeep']) {
+    for (const phase of ['landGrant', 'development', 'auction', 'upkeep']) {
       expect({ phase, events: seen(phase).view.events, show: seen(phase).view.eventShow }).toEqual({ phase, events: [], show: null });
     }
   });
@@ -292,24 +292,44 @@ describe('T-AC-10: the view carries the current phase\'s events, when their show
   it('T-AC-10: an event the auction fired is the auction\'s: listed when the auction opens, its show starting then, and not production\'s', () => {
     const { seen, length } = playMonth(['drought', 'pestSwarm'], 1, { pestSwarm: 'auction' });
     const production = seen('production').view;
-    expect(production.events.map(({ key, phase }) => ({ key, phase }))).toEqual([{ key: 'drought', phase: 'production' }]);
+    expect(production.events!.map(({ key, phase }) => ({ key, phase }))).toEqual([{ key: 'drought', phase: 'production' }]);
     expect(production.production!.events).toEqual(production.events);
     // Production stretches for its own drought only: 15 000 + (1 800 + 7 000 − 4 800).
     expect(length('production')).toBe(19_000);
     const auction = seen('auction');
-    expect(auction.view.events.map(({ key, phase, weight, playMs }) => ({ key, phase, weight, playMs }))).toEqual([
+    expect(auction.view.events!.map(({ key, phase, weight, playMs }) => ({ key, phase, weight, playMs }))).toEqual([
       { key: 'pestSwarm', phase: 'auction', weight: 'spotlight', playMs: 5_200 },
     ]);
     expect(auction.view.eventShow).toEqual({ startsAt: auction.at, showMs: 7_000, introMs: 1_800 });
   });
 
+  it('T-AC-10: last month\'s report lends next month nothing: an event filed for planning in month 1 is not month 2\'s planning', () => {
+    let game: MuleGame | null = null;
+    const fake = fakeContext({});
+    game = new MuleGame(fake.ctx, 7);
+    game.start(seats);
+    const state = (game as unknown as { state: GameState }).state;
+    const push = state.history.push.bind(state.history);
+    state.history.push = (...reports: MonthReport[]) => push(...reports.map((r) => ({ ...r, events: [event('drought', 'planning')] })));
+    readyAll(game);
+    for (let i = 0; i < 100_000 && game.viewFor(null).month < 2; i++) {
+      if (game.viewFor(null).phase === 'upkeep') readyAll(game);
+      fake.advance(100);
+    }
+    const view = game.viewFor(null);
+    expect({ month: view.month, phase: view.phase }).toEqual({ month: 2, phase: 'planning' });
+    expect(state.history.at(-1)!.events!.map((e) => e.phase)).toEqual(['planning']);
+    expect(view.events).toEqual([]);
+    expect(view.eventShow).toBeNull();
+  });
+
   it('T-AC-10: the protocol\'s view fits the show\'s own shapes without a cast', () => {
     const { view } = month(TWO_EVENT_MONTH);
     // Compile-time contract: if EventView and the show's ShowEventView disagree, typecheck fails here.
-    const one: EventView = view.events[0]!;
+    const one: EventView = view.events![0]!;
     const shown: ShowEventView = one;
-    const listed: ShowEventView[] = view.events;
-    const timeline: ShowTimeline = { events: view.events, introMs: view.eventShow!.introMs };
+    const listed: ShowEventView[] = view.events!;
+    const timeline: ShowTimeline = { events: view.events!, introMs: view.eventShow!.introMs };
     expect(shown.key).toBe('cometPass');
     expect(listed).toHaveLength(2);
     expect(timeline.events).toBe(view.events);

@@ -80,7 +80,7 @@ import {
   type Trade,
 } from '@mule/engine';
 import { AiSeat, LotHand, personaFor, VoteHand, type AiAction } from '@mule/ai';
-import { PLAYER_COLORS, type MuleIntent, type MuleView, type PlayerView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
+import { PLAYER_COLORS, type EventView, type MuleIntent, type MuleView, type PlayerView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import { createBrain, type BrainService } from './brain/index.js';
 import { colonistView, dueArrivals, placeName, walkTarget, type Colonist, type DevIntent } from './dev-walking.js';
@@ -194,6 +194,39 @@ function eventShow(events: readonly MonthEvent[]) {
   return { showMs, introMs, shares };
 }
 
+/** Where production's map starts its event show, in ms into the phase at full pace: the client's SHOW.eventAt (4.8 s). */
+const PRODUCTION_SHOW_AT_MS = 4_800;
+
+/**
+ * The events a phase fired this month, in fired order: what its show plays and what its length counts (RULE-1). They
+ * are this month's report's events of that phase; a report from an earlier month holds none. C11 adds development's
+ * sick bulletins here.
+ */
+function phaseEvents(state: GameState, phase: Phase): MonthEvent[] {
+  const report = state.history.at(-1);
+  if (!report || report.month !== state.month) return [];
+  return (report.events ?? []).filter((e) => e.phase === phase);
+}
+
+/** Fired events as every screen shows them, with each one's weight and share of the show. */
+function eventViews(state: GameState, events: readonly MonthEvent[]): EventView[] {
+  const at = (index: number) => ({ x: index % state.width, y: Math.floor(index / state.width) });
+  const { shares } = eventShow(events);
+  return events.map((e, i) => ({
+    key: e.key,
+    kind: e.kind,
+    title: e.title,
+    line: e.line,
+    sign: e.sign,
+    scope: e.scope,
+    origin: { ...e.origin },
+    ...(e.direction ? { from: e.direction } : {}),
+    hits: e.plots.map((p) => ({ ...at(p.index), order: p.order, delta: p.delta })),
+    phase: e.phase,
+    ...shares[i]!,
+  }));
+}
+
 /**
  * The month's production as every screen may see it: each working plot with
  * what it made before the event and its biggest reasons, and the event's hits.
@@ -217,21 +250,8 @@ function productionView(state: GameState, lengthMs: number): ProductionView | nu
         .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
         .slice(0, MAX_BADGES),
     }));
-  const { shares, introMs } = eventShow(report.events ?? []);
-  const events = (report.events ?? []).map((e, i) => ({
-    key: e.key,
-    kind: e.kind,
-    title: e.title,
-    line: e.line,
-    sign: e.sign,
-    scope: e.scope,
-    origin: { ...e.origin },
-    ...(e.direction ? { from: e.direction } : {}),
-    hits: e.plots.map((p) => ({ ...at(p.index), order: p.order, delta: p.delta })),
-    phase: 'production' as const,
-    ...shares[i]!,
-  }));
-  return { lines, events, lengthMs, introMs };
+  const fired = phaseEvents(state, 'production');
+  return { lines, events: eventViews(state, fired), lengthMs, introMs: eventShow(fired).introMs };
 }
 
 /**
@@ -266,6 +286,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private cancels: (() => void)[] = [];
   private news: string[] = [];
   private phaseEndsAt: number | null = null;
+  /** When the current phase was entered, epoch ms: its event show is timed from here. */
+  private phaseEnteredAt = 0;
   /** This month's production length in real ms, as its timer was given: the production show stretches over it. */
   private productionMs = 0;
   /**
@@ -692,6 +714,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   private enterPhase(): void {
     const state = this.requireState();
+    this.phaseEnteredAt = this.ctx.now();
     for (const cancel of this.cancels) cancel();
     this.cancels = [];
     this.ready.clear();
@@ -778,7 +801,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /** Ends the phase when its PHASE_MS runs out; a phase whose PHASE_MS is null has no clock and waits for Ready. */
   private startPhaseTimer(phase: keyof typeof PHASE_MS): void {
     // Production stretches past its own event window to play every event of the month (RULE-1).
-    const extraMs = phase === 'production' ? Math.max(0, eventShow(this.requireState().history.at(-1)?.events ?? []).showMs - EVENT_SHOW.productionWindowMs) : 0;
+    const extraMs = phase === 'production' ? Math.max(0, eventShow(phaseEvents(this.requireState(), 'production')).showMs - EVENT_SHOW.productionWindowMs) : 0;
     const base = PHASE_MS[phase];
     const length = base === null ? null : base + extraMs;
     this.phaseEndsAt = null;
@@ -1315,8 +1338,21 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       lotSlots: { used: state.listings.length, max: LOTS.maxLotsPerMonth },
       landAuction: landAuctionView(state),
       production: state.phase === 'production' || state.phase === 'upkeep' ? productionView(state, this.productionMs) : null,
+      ...this.eventsView(state),
       politics: politicsView(state),
     };
+  }
+
+  /**
+   * The current phase's events and when they play. The show starts where production's map plays it, 4.8 s into the
+   * phase at the table's pace; in any other phase as the phase opens (RULE-4: its clocks wait for the show).
+   */
+  private eventsView(state: GameState): Required<Pick<MuleView, 'events' | 'eventShow'>> {
+    const fired = phaseEvents(state, state.phase);
+    if (fired.length === 0) return { events: [], eventShow: null };
+    const { showMs, introMs } = eventShow(fired);
+    const startsAt = this.phaseEnteredAt + (state.phase === 'production' ? this.realMs(PRODUCTION_SHOW_AT_MS / 1_000) : 0);
+    return { events: eventViews(state, fired), eventShow: { startsAt, showMs, introMs } };
   }
 
   /** The auction board as every screen draws it. Public, as in the original: everyone sees everyone walk. */
