@@ -157,7 +157,7 @@ function gameOf(server: MuleServer, code: string): Game {
   const room = server.registry.get(code);
   check(room, `a room ${code} on the server`);
   const game = (room as unknown as { game: Game }).game;
-  check(typeof game?.ctx?.now === 'function' && typeof game.ctx.changed === 'function' && typeof game.devEndsAt === 'number', 'the room game still exposes ctx and devEndsAt');
+  check(typeof game?.ctx?.now === 'function' && typeof game.ctx.changed === 'function' && (typeof game.devEndsAt === 'number' || game.devEndsAt === null), 'the room game still exposes ctx and devEndsAt');
   return game;
 }
 
@@ -169,6 +169,8 @@ function gameOf(server: MuleServer, code: string): Game {
 function giveStoreTime(server: MuleServer, code: string, seat: string): void {
   const game = gameOf(server, code);
   check(game.state.phase === 'development', `the store walk-through for ${seat} starts in development, not ${game.state.phase}`);
+  // Month 1's clock waits, full, until every first MULE is in: no time to give yet.
+  if (game.devEndsAt === null) return;
   game.devEndsAt = game.ctx.now() + STORE_WALK_SECONDS * 1_000;
   // Send every phone the new clock now, rather than at the next AI tick.
   game.ctx.changed();

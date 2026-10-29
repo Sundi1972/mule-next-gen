@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import { AI_HANDS, configSnapshot, RuleError, stableJson, type GameRecord, type Playbook, type PlaybookEntry } from '@mule/engine';
+import { AI_HANDS, configSnapshot, GAME, RuleError, stableJson, type GameRecord, type GameState, type Playbook, type PlaybookEntry } from '@mule/engine';
 import type { Decider } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { Room, TableError, type ClientEnvelope, type Connection, type GameContext, type ServerEnvelope } from '@tabletop/core';
@@ -24,6 +24,12 @@ const spies = vi.hoisted(() => ({
   viewReadsClock: false,
   /** The playbook a game writes after accepting an intent, as a playbook builder would; null writes none. */
   playbookFor: null as ((seat: string, intent: MuleIntent) => PlaybookNote | null) | null,
+  /**
+   * Sets up the game state as each phase opens, before the game's own opening runs; the replay's game runs it too. It
+   * runs after the engine has entered the phase (production is already applied), so that month's history snapshot
+   * predates the arrangement.
+   */
+  arrange: null as ((state: GameState) => void) | null,
 }));
 vi.mock('../src/mule-game.js', async (original) => {
   const real = await original<typeof import('../src/mule-game.js')>();
@@ -45,6 +51,12 @@ vi.mock('../src/mule-game.js', async (original) => {
       return super.viewFor(seatId);
     }
   }
+  type Phases = { enterPhase(this: InstanceType<typeof real.MuleGame>): void };
+  const enterPhase = (real.MuleGame.prototype as unknown as Phases).enterPhase;
+  (CountedMuleGame.prototype as unknown as Phases).enterPhase = function () {
+    spies.arrange?.((this as unknown as { state: GameState }).state);
+    enterPhase.call(this);
+  };
   return { ...real, MuleGame: CountedMuleGame };
 });
 vi.mock('../src/brain/client.js', async (original) => ({
@@ -58,8 +70,8 @@ vi.mock('../src/brain/client.js', async (original) => ({
 
 const CODE = 'RECRD';
 const SEED = 10;
-/** Three months, so the export ship calls, and a lot sells to a player at the land auction: found by a seed sweep. */
-const NOTICE_GAME = { seed: 8, maxMonths: 3 };
+/** Up to the export ship's first call (month 2 at least, for the lot). The seed no longer matters: arrangeMarket and `market` make every notice T-AC-10 asks for (seeds 1-32 swept). */
+const NOTICE_GAME = { seed: 8, maxMonths: Math.max(2, GAME.exportShipEvery) };
 /** Game time per step of the fake clock; every timer due in a step runs, with promises settled between them. */
 const STEP_MS = 100;
 const PLANNING_READY_MS = 3_000;
@@ -75,6 +87,21 @@ const GAME_LIMIT_MS = 30 * 60_000;
  */
 const ANSWERS: readonly (number | 'busy')[] = [40, 'busy', 1_300, 260, 3_100, 90, 700];
 const GAME_OPTIONS = { maxMonths: 1, politics: true };
+/** Units of a good T-AC-10's market hands Mia to spare as each production opens. */
+const SPARE = 20;
+/**
+ * T-AC-10's market, set from state as each month's production opens, so every notice it asks for happens by
+ * construction, whatever the seed, the prices or the month the ship calls: Heiko (s1) has no food and Mia (s2) has food and the export
+ * ship's first good to spare. The script does the rest (`market` in TableOptions).
+ */
+const arrangeMarket = (state: GameState) => {
+  if (state.phase !== 'production') return;
+  const heiko = state.players.find((p) => p.id === 's1')!;
+  const mia = state.players.find((p) => p.id === 's2')!;
+  heiko.stock.food = 0;
+  mia.stock.food += SPARE;
+  mia.stock[state.ship.goods[0]!] += SPARE;
+};
 /** The rows beyond T-AC-1 run locally only (MULE_FULL=1, `pnpm test:full`); each plays one or two whole games. */
 const FULL = process.env.MULE_FULL === '1';
 /** What the script says: a public line from s1 and a whisper from s2 to the Smart seat, in words no record holds otherwise. */
@@ -140,6 +167,12 @@ interface TableOptions {
   /** Default SEED and GAME_OPTIONS' month count. */
   seed?: number;
   maxMonths?: number;
+  /**
+   * The phones trade, for T-AC-10, with `arrangeMarket` on: in month 2's planning Heiko lists his plot at a minimum
+   * of 1, and at its lot Mia bids up to the minimum. In the auction Heiko passes every good but food; Mia sells food to
+   * Heiko, who walks up to buy it, and sells any good the ship wants down to its line.
+   */
+  market?: boolean;
 }
 
 let rooms: Room<MuleIntent, MuleView>[];
@@ -216,7 +249,43 @@ function table(options: TableOptions = {}) {
   let dropAt: number | null = null;
   let sidePickDropAt: number | null = null;
   let miaAway = false;
+  let listed = false;
+  /** The goods, by month, whose status screen and walk the market has played. */
+  const declared = new Set<string>();
+  const walked = new Set<string>();
   let elapsed = 0;
+  const market = () => {
+    const [heiko, mia] = phones as [Screen, Screen];
+    const v = view();
+    if (v.phase === 'planning' && v.month === 2 && !listed) {
+      const plot = v.tiles.find((t) => t.owner === 's1');
+      if (plot) {
+        listed = true;
+        send(heiko, { t: 'intent', intent: { type: 'list', item: { kind: 'plot', x: plot.x, y: plot.y }, minimum: 1, unsold: 'store' } });
+      }
+    }
+    const lot = v.landAuction;
+    if (v.phase === 'landAuction' && lot?.stage === 'walk' && lot.lot.seller === 's1') {
+      const bidder = lot.walkers.find((w) => w.id === 's2' && w.side === 'buyer');
+      if (bidder && bidder.price < lot.lot.minimum && bidder.dir === 0) send(mia, { t: 'intent', intent: { type: 'walk', dir: 'up' } });
+      if (bidder && bidder.price >= lot.lot.minimum && bidder.dir !== 0) send(mia, { t: 'intent', intent: { type: 'walk', dir: 'stop' } });
+    }
+    const auction = v.auction;
+    if (v.phase !== 'auction' || !auction) return;
+    const key = `${v.month}:${auction.good}`;
+    const food = auction.good === 'food';
+    const miaSells = (food || auction.shipPays !== null) && (auction.walkers.find((w) => w.id === 's2')?.units ?? 0) > 0;
+    if (auction.stage === 'status' && !declared.has(key)) {
+      declared.add(key);
+      send(heiko, { t: 'intent', intent: { type: 'declare', side: food ? 'buyer' : 'pass' } });
+      if (miaSells) send(mia, { t: 'intent', intent: { type: 'declare', side: 'seller' } });
+    }
+    if (auction.stage === 'walk' && !walked.has(key)) {
+      walked.add(key);
+      if (food) send(heiko, { t: 'intent', intent: { type: 'walk', dir: 'up' } });
+      if (miaSells) send(mia, { t: 'intent', intent: { type: 'walk', dir: 'down' } });
+    }
+  };
   const script = () => {
     const [heiko, mia] = phones as [Screen, Screen];
     const phase = view().phase;
@@ -262,6 +331,8 @@ function table(options: TableOptions = {}) {
       claimed = true;
       send(heiko, { t: 'intent', intent: { type: 'claim', x: lit.x, y: lit.y } });
     }
+    // Heiko never installs on his plot: as host he starts month 1's waiting development clock once Mia is back (A-1).
+    if (phase === 'development' && view().clockWaitsFor && dropAt !== null && elapsed > dropAt + 20 * STEP_MS) send(heiko, { t: 'intent', intent: { type: 'continue' } });
     if (phase === 'development' && dropAt === null) {
       dropAt = elapsed;
       room.disconnect(mia.conn);
@@ -274,6 +345,7 @@ function table(options: TableOptions = {}) {
       room.viewFor('s1');
       send(tv, { t: 'ping', clientTime: elapsed });
     }
+    if (options.market) market();
   };
   const runUntil = async (done: () => boolean, limitMs = GAME_LIMIT_MS) => {
     for (; elapsed < limitMs && !done(); elapsed += STEP_MS) {
@@ -678,6 +750,12 @@ describe.runIf(FULL)('playbooks in the record', { timeout: 60_000 }, () => {
 
 
 describe.runIf(FULL)('notices in the record', { timeout: 120_000 }, () => {
+  beforeEach(() => {
+    spies.arrange = arrangeMarket;
+  });
+  afterEach(() => {
+    spies.arrange = null;
+  });
   const factOf = (e: MuleRecord['events'][number]): Notice | null => {
     if (e.type !== 'notice') return null;
     const { type: _type, at: _at, seq: _seq, ...notice } = e;
@@ -685,15 +763,15 @@ describe.runIf(FULL)('notices in the record', { timeout: 120_000 }, () => {
   };
 
   it('T-AC-10: claims, declarations, trades (the ship included) and lot sales appear as notices, phaseNotices() holds them with recording off, and a replay without them is identical', async () => {
-    const { record } = await recordedGame(NOTICE_GAME);
+    const { record } = await recordedGame({ ...NOTICE_GAME, market: true });
     const notices = record.events.map(factOf).filter((n) => n !== null);
     const phaseOf = { claim: 'landGrant', declare: 'auction', trade: 'auction', sale: 'landAuction' } as const;
     for (const n of notices) expect(n.phase, `a ${n.kind} settles in its phase`).toBe(phaseOf[n.kind]);
     expect(notices.some((n) => n.kind === 'claim' && n.seat === 's1'), "the human's claim").toBe(true);
     expect(notices.some((n) => n.kind === 'claim' && n.seat !== 's1'), "an AI seat's claim").toBe(true);
-    expect(notices.some((n) => n.kind === 'declare' && n.side === 'pass')).toBe(true);
-    expect(notices.some((n) => n.kind === 'declare' && n.side !== 'pass')).toBe(true);
-    expect(notices.some((n) => n.kind === 'trade' && n.buyer === 'ship' && n.month === 3), 'a sale to the export ship').toBe(true);
+    expect(notices.some((n) => n.kind === 'declare' && n.side === 'pass'), 'a seat passing on a good').toBe(true);
+    expect(notices.some((n) => n.kind === 'declare' && n.side !== 'pass'), 'a seat buying or selling a good').toBe(true);
+    expect(notices.some((n) => n.kind === 'trade' && n.buyer === 'ship' && n.month === GAME.exportShipEvery), 'a sale to the export ship').toBe(true);
     expect(notices.some((n) => n.kind === 'trade' && n.buyer !== 'ship' && n.buyer !== 'store' && n.seller !== 'store'), 'a trade between players').toBe(true);
     expect(notices.some((n) => n.kind === 'sale' && n.buyer !== 'store'), 'a lot sold to a player').toBe(true);
     record.events.forEach((e, i) => {
@@ -715,7 +793,7 @@ describe.runIf(FULL)('notices in the record', { timeout: 120_000 }, () => {
       enterPhase.call(this);
       expect(this.phaseNotices(), 'a new phase opens with none').toEqual([]);
     });
-    const off = table({ ...NOTICE_GAME, record: false });
+    const off = table({ ...NOTICE_GAME, market: true, record: false });
     expect(await off.toGameOver()).toBe(true);
     expect(kept).toEqual(notices);
   });

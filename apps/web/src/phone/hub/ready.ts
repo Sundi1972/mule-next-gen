@@ -80,10 +80,12 @@ type WithAuction = { auction?: Pick<AuctionView, 'stage'> | null };
 
 /**
  * When the server takes the host's Continue: planning proper, the election's announce or ballot (never its ceremony),
- * the month end (upkeep), which also waits for every Ready, and a good's side pick (A-7), never its walk.
+ * the month end (upkeep), which also waits for every Ready; month 1's development while its clock waits for the first
+ * MULEs; and a good's side pick (A-7), never its walk.
  */
-export function hostMayContinue(view: Pick<MuleView, 'phase' | 'politics'> & WithAuction): boolean {
+export function hostMayContinue(view: Pick<MuleView, 'phase' | 'politics' | 'clockWaitsFor'> & WithAuction): boolean {
   const stage = view.politics?.election?.stage;
+  if (view.phase === 'development') return !!view.clockWaitsFor;
   return planningProper(view) || (view.phase === 'planning' && (stage === 'announce' || stage === 'ballot')) || view.phase === 'upkeep' || sidePick(view);
 }
 
