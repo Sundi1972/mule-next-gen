@@ -1,7 +1,7 @@
 import { DEVELOPMENT } from '@mule/engine';
 import { ChatBadge, MarketDesk, MarketStrip, TalkDesk } from './desks';
 import { ColonyWithFacts } from './politics/Colony';
-import { COUNCIL_DESK, ELECTION_AGENDA, electionNow, GOVERNOR_AGENDA, GOVERNOR_DESK, OFFICES_BANNER } from './politics/slots';
+import { COUNCIL_DESK, ELECTION_AGENDA, ELECTION_DAY_STAGE, electionNow, electionReadyWords, GOVERNOR_AGENDA, GOVERNOR_DESK, OFFICES_BANNER } from './politics/slots';
 import type { HubSlots } from './slots';
 import { DroneAction, DroneMap, DroneRail, ListAction, LookMap, LookPanel, SellPlotMap } from './tools';
 
@@ -42,4 +42,6 @@ export const HUB_SLOTS: HubSlots = {
     GOVERNOR_DESK,
   ],
   nows: [electionNow],
+  stage: [ELECTION_DAY_STAGE],
+  readyWords: [electionReadyWords],
 };
