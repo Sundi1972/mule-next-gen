@@ -425,7 +425,17 @@ describe.runIf(FULL)('chat in the record', { timeout: 60_000 }, () => {
     for (const line of [CHAT.public.text, CHAT.whisper.text]) expect(text).not.toContain(line);
     for (const word of CHAT_WORDS) expect(text, `the record holds the chat word "${word}"`).not.toContain(word);
 
-    expect((await replay(record)).identical).toBe(true);
+    // A heard line changes nothing in play yet, so an identical replay alone can't show the replay heard it (RULE-6).
+    const heardInReplay = vi.spyOn(MuleGame.prototype, 'heard');
+    try {
+      expect((await replay(record)).identical).toBe(true);
+      expect(heardInReplay.mock.calls, 'the replay hears each line, from whom to whom, with no words').toEqual([
+        [CHAT.public.from, '', undefined],
+        [CHAT.whisper.from, '', CHAT.whisper.to],
+      ]);
+    } finally {
+      heardInReplay.mockRestore();
+    }
   });
 });
 
