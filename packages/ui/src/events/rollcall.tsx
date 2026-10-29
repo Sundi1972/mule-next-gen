@@ -5,7 +5,7 @@ import { eventSegWho, segTitle } from './copy';
 import { useShow, type ShowFrame } from './frame';
 import { clamp, ramp } from './fx';
 import { EventSignBadge } from './glyphs';
-import { At, px } from './stories';
+import { At, px } from './place';
 import { eventHitAt, isRollCall, type EventSegment } from './timing';
 import type { ShowEventKey, ShowEventView, ShowSize } from './types';
 
