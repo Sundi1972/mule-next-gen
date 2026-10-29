@@ -86,7 +86,7 @@ function SalesTax({ politics }: { politics: PoliticsView }) {
             {tax}%
           </span>
           {verdict && (
-            <span className={cx('whitespace-nowrap rounded-chip border px-1 font-mono text-[9px] font-bold uppercase leading-3 @min-[1100px]/shell:text-xs @min-[1100px]/shell:leading-4', verdict.tone)} role="status" aria-live="polite" data-testid="governor-verdict">
+            <span className={cx('whitespace-nowrap rounded-chip border px-1 font-mono text-[10px] font-bold uppercase leading-3 @min-[1100px]/shell:text-xs @min-[1100px]/shell:leading-4', verdict.tone)} role="status" aria-live="polite" data-testid="governor-verdict">
               <span data-testid={verdict.id}>
                 <span aria-hidden="true">{verdict.chip}</span>
                 <span className="sr-only">{verdict.words}</span>
