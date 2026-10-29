@@ -12,3 +12,15 @@ export function grantFooter(players: readonly PlayerView[], me: string, connecte
     .map((p): Seat => ({ id: p.id, name: p.name, isAi: p.isAi, ready: p.ready, slot: p.slot, away: !p.isAi && !connected(p.id) }));
   return { ready: !!players.find((p) => p.id === me)?.ready, waiting };
 }
+
+/** At most this many names on the compact footer's one waiting line; the rest are "+N". */
+export const NAMES_SHOWN = 2;
+
+/**
+ * The compact footer's waiting line, which never wraps: the shorter names first and whole, so the most fit, the last
+ * one shown truncating, and how many more as "+N" (0: none).
+ */
+export function waitingLine<S extends { name: string }>(seats: readonly S[], shown = NAMES_SHOWN): { shown: S[]; more: number } {
+  const first = [...seats].sort((a, b) => a.name.length - b.name.length).slice(0, shown);
+  return { shown: first, more: seats.length - first.length };
+}
