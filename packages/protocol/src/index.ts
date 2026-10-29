@@ -1,4 +1,4 @@
-import type { AuctionSide, CanRun, CeremonyBeat, DevPlace, Election, EventKey, EventKind, EventWeight, Good, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
+import type { AuctionSide, CanRun, CeremonyBeat, DevPlace, Election, EventKey, EventKind, EventWeight, Good, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -296,7 +296,8 @@ export interface DealView {
 /** The live goods auction, on every screen. */
 export interface AuctionView {
   good: Good;
-  stage: 'status' | 'walk';
+  /** The status screen, the walk, then the close stage: the board holds still while each phone shows its receipt (UX audit G-5). */
+  stage: 'status' | 'walk' | 'close';
   /** Seconds left on the stage's clock. It runs slower while units change hands. */
   seconds: number;
   /** The stage's full time in seconds, for the draining time bar. */
@@ -325,6 +326,12 @@ export interface AuctionView {
   status: StatusRow[];
   /** Goods skipped since the last one that came up, and why, for one line on screen. */
   skipped: { good: Good; reason: SkipReason }[];
+  /** In the close stage: the good that comes up next, or null when this was the last. Null in the other stages. */
+  upNext: Good | null;
+  /** Only on a seat's own view, in the close stage: what it bought and sold of this good. Null on a board and in the other stages. */
+  receipt: GoodReceipt | null;
+  /** Only on a seat's own view: its net credits from this month's auction so far. Null on a board. */
+  tally: number | null;
 }
 
 /** What is for sale: a plot (with whatever stands on it), or the MULE off one of the seller's plots. */
