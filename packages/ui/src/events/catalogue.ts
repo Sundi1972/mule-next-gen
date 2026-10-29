@@ -36,8 +36,6 @@ export const EVENT_ENTRY: { [K in ShowEventKey]: EventEntry & { key: K } } = {
   cavernCollapse: { key: 'cavernCollapse', motion: 'plot', look: 'The cavern badge cracks and sinks; dust puffs up and the plot is plain.' },
 };
 
-export const EVENT_CATALOGUE: EventEntry[] = Object.values(EVENT_ENTRY);
-
 /**
  * Each event's own story: where the camera goes and when its change lands. Seconds are proportions of the gallery's
  * play at the TV's pace; the segment's real length is always the server's (playMs).
