@@ -44,7 +44,7 @@ function SalesTax({ politics }: { politics: PoliticsView }) {
   return (
     <section className="flex flex-col gap-0.5 @min-[1100px]/shell:gap-2" data-testid="gov-tax">
       <p className="truncate text-xs @min-[1100px]/shell:text-base" data-testid="gov-promise">
-        <span className="label-caps mr-1.5 text-[10px]! @max-3xl/shell:hidden @min-[1100px]/shell:text-xs!">Sales tax</span>
+        <span className="label-caps mr-1.5 text-[10px]! hidden @min-[1100px]/shell:inline @min-[1100px]/shell:text-xs!">Sales tax</span>
         {promise && (
           <>
             You promised: <strong className="font-semibold">{promisedWords(promise, promiseBase(politics))}</strong>

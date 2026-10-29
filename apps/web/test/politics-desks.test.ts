@@ -699,6 +699,8 @@ describe("the new Governor's promise (C68, E-7)", () => {
   it("T-AC-70, E-7: the Governor's desk keeps the promise above the tax; past it, it says so", () => {
     const over = onPhone(term(CAP_4, 5, 5), GovernorDesk);
     expect(textOf(over, 'gov-promise')).toBe('Sales taxYou promised: no higher than 4%');
+    // WS6 on #190: below 1100 px the label is hidden, so the promise never truncates.
+    expect(over).toMatch(/<span class="[^"]*\bhidden @min-\[1100px\]\/shell:inline[^"]*">Sales tax<\/span>/);
     const [promise, row] = positions(over, ['gov-promise', 'governor-tax-row']);
     expect(promise, 'the promise before the row').toBeGreaterThanOrEqual(0);
     expect(promise).toBeLessThan(row!);
