@@ -126,17 +126,30 @@ const ballotDay = (election: Partial<ElectionView> = {}): ElectionView => ({
 /** Month 4's ballot, Lena and Ossa on it, with Lena's ballot as the server holds it. */
 const ballot = (mine: Partial<Record<'governor', string>> = {}) => game(politics({ election: ballotDay() }), me(mine));
 
-/** Lena Governor since month 4 on a promise of at most 4%, the tax at 5% where the month opened. */
-const governing = () => game(politics({ governor: 's1', term: [4, 6], promise: CAP_4, promiseFrom: 5 }), me());
+/** Lena Governor since month 4 on `promise`, the tax at `percent` from this month's `start`. */
+const governing = (promise: TaxPromise = CAP_4, percent = 5, start = 5) =>
+  game(politics({ governor: 's1', term: [4, 6], promise, promiseFrom: 5, tax: { percent, start, low: 0, high: 10 } }), me());
 
 /** Every intent the phone sent. */
 const sent: unknown[] = [];
+const OPEN = { status: 'open', role: 'player', code: 'MULE', seatId: 's1', view: null, chat: [], emotes: [], toasts: [] as { id: number; message: string }[], clockOffset: 0 };
+let state = OPEN;
+const watchers = new Set<() => void>();
 const client = {
-  subscribe: () => () => {},
-  getState: () => ({ status: 'open', role: 'player', code: 'MULE', seatId: 's1', view: null, chat: [], emotes: [], toasts: [], clockOffset: 0 }),
+  subscribe: (watch: () => void) => (watchers.add(watch), () => watchers.delete(watch)),
+  getState: () => state,
   serverNow: () => 0,
   intent: (intent: unknown) => void sent.push(intent),
 } as unknown as TableClient;
+
+/** The server refuses something, and the phone toasts why, as the client does with a RuleError. */
+function refused(message: string): void {
+  const id = (state.toasts.at(-1)?.id ?? 0) + 1;
+  flushSync(() => {
+    state = { ...state, toasts: [...state.toasts, { id, message }] };
+    for (const watch of watchers) watch();
+  });
+}
 
 const tableOf = (view: MuleView, code: string): TableView<MuleView> => ({
   code,
@@ -175,18 +188,22 @@ afterEach(() => {
   unmount();
   forgetPicks();
   sent.length = 0;
+  state = OPEN;
 });
+
+/** The mounted element carrying this data-testid, if there is one. */
+function findTestid(testid: string, node: FakeElement = host): FakeElement | undefined {
+  if (node.getAttribute('data-testid') === testid) return node;
+  for (const child of node.childNodes) {
+    const hit = child instanceof FakeElement ? findTestid(testid, child) : undefined;
+    if (hit) return hit;
+  }
+  return undefined;
+}
 
 /** The mounted element carrying this data-testid. */
 function byTestid(testid: string, under: FakeElement = host): FakeElement {
-  const found = (function find(node: FakeElement): FakeElement | undefined {
-    if (node.getAttribute('data-testid') === testid) return node;
-    for (const child of node.childNodes) {
-      const hit = child instanceof FakeElement ? find(child) : undefined;
-      if (hit) return hit;
-    }
-    return undefined;
-  })(under);
+  const found = findTestid(testid, under);
   expect(found, `an element with data-testid="${testid}"`).toBeDefined();
   return found!;
 }
@@ -302,5 +319,46 @@ describe("the Governor's Set, mounted (E-7)", () => {
       { type: 'setTax', percent: 4 },
       { type: 'setTax', percent: 4 },
     ]);
+  });
+
+  const CAP_8: TaxPromise = { kind: 'cap', percent: 8 };
+  /** The verdict under the tax: gov-breaks, gov-done or gov-within, or none. */
+  const verdict = () => ['gov-breaks', 'gov-done', 'gov-within'].filter((id) => findTestid(id) !== undefined);
+  const danger = () => /\bbg-alert-bg\b/.test(byTestid('tax-confirm').getAttribute('class') ?? '');
+
+  it('E-7: stepping the tax past the promise says it breaks it and turns Set to danger; stepping back says within', () => {
+    mount(governing(CAP_4, 4, 4), GovernorDesk);
+    expect(verdict()).toEqual(['gov-within']);
+    tap('tax-up');
+    expect(verdict(), 'at 5%').toEqual(['gov-breaks']);
+    expect(danger(), 'Set at 5%').toBe(true);
+    tap('tax-down');
+    expect(verdict(), 'back at 4%').toEqual(['gov-within']);
+    expect(danger(), 'Set back at 4%').toBe(false);
+  });
+
+  it("E-7: stepped back to the tax this phone set, the desk says done, even at the month's start", () => {
+    mount(governing(CAP_8), GovernorDesk);
+    tap('tax-down');
+    tap('tax-confirm');
+    rerender(governing(CAP_8, 4, 5), GovernorDesk);
+    tap('tax-up');
+    tap('tax-confirm');
+    rerender(governing(CAP_8, 5, 5), GovernorDesk);
+    expect(verdict(), 'set back to 5%').toEqual(['gov-done']);
+    tap('tax-down');
+    tap('tax-up');
+    expect(verdict(), 'stepped away and back').toEqual(['gov-done']);
+    expect(off('tax-confirm')).toBe(true);
+  });
+
+  it('E-7: a refused tax opens Set again; a view that comes before the refusal without the tax keeps it off', () => {
+    mount(governing(), GovernorDesk);
+    tap('tax-down');
+    tap('tax-confirm');
+    rerender(governing(), GovernorDesk);
+    expect(off('tax-confirm'), 'a view without the tax').toBe(true);
+    refused('Only the Governor sets the tax');
+    expect(off('tax-confirm'), 'refused').toBe(false);
   });
 });

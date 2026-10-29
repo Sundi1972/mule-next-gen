@@ -706,6 +706,9 @@ describe("the new Governor's promise (C68, E-7)", () => {
     const set = onPhone(term(CAP_4, 4, 5), GovernorDesk);
     expect(verdictIn(set)).toEqual({ id: 'gov-done', chip: 'done', spoken: 'Done: 4% from now on.' });
     expect(disabled(set, 'tax-confirm')).toBe(true);
+    // Set this month and over the promise: the TV says it is broken, so the phone never says done.
+    const broken = onPhone(term(CAP_4, 6, 5), GovernorDesk);
+    expect(verdictIn(broken)).toEqual({ id: 'gov-breaks', chip: 'breaks it', spoken: '6%: this breaks your promise.' });
   });
 
   it("T-AC-70, E-7: a month on, the Governor's desk judges keep it against the tax when the term began, not the month's start", () => {
