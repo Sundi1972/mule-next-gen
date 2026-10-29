@@ -305,9 +305,12 @@ export function fitFilter(state: GameState, playerId: string, x: number, y: numb
   tile.filter = true;
 }
 
-/** What the pub would pay a player with `secondsLeft` of their development time: more the earlier they go. Changes nothing. */
+/**
+ * What the pub would pay a player with `secondsLeft` of their development time: more the earlier they go. Changes
+ * nothing, and refuses whom the pub would refuse.
+ */
 export function pubPayoutFor(state: GameState, playerId: string, secondsLeft: number): number {
-  const p = player(state, playerId);
+  const p = developer(state, playerId);
   const share = Math.min(1, Math.max(0, secondsLeft / p.devSeconds));
   const { base, start, perMonth } = DEVELOPMENT.pub;
   return Math.round(base + (start + state.month * perMonth) * share);
