@@ -35,8 +35,9 @@ export function Develop() {
   const [place, setPlace] = useState<'store' | 'map'>('store');
   const [cardDismissed, setCardDismissed] = useState(false);
   // The turn starts as Develop mounts, unless the server holds development for its event show (RULE-4): then it
-  // starts at the show's end, when the hold lifts and the overlay uncovers the screen. The card runs on wall time,
-  // whatever the server's phase scale.
+  // starts at the show's end, when the hold lifts and the overlay uncovers the screen. The anchor is stable: the server
+  // keeps the held show in the view for the whole phase, and a show only opens with its phase. The card runs on wall
+  // time, whatever the server's phase scale.
   const [mounted] = useState(() => ({ at: now, wall: performance.now() }));
   const show = view.eventShow;
   const devStartedAt = show?.held ? Math.max(mounted.at, show.endsAt) : mounted.at;
