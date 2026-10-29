@@ -261,6 +261,17 @@ describe('the phone plays the show alone (C7)', () => {
     expect(text(you, 'phone-you')).toMatch(/[−-]2 Energy for you/);
     expect(card(await render(1, BUMPER_AT - 0.1))).toEqual({ event: 'drought', at: 'you' });
     expect(text(await render(1, BUMPER_AT - 0.1), 'phone-miss')).toContain('Your plots are clear of it.');
+    // A hit that changed nothing is no loss: a drought that reaches Lena's plant with a delta of 0 still misses her,
+    // in the rail's line for it once the next event plays, and on its own card.
+    const grazed = monthOf([events[0]!, { ...events[1]!, hits: [...events[1]!.hits, { x: 1, y: 0, order: 1, delta: 0 }] }, events[2]!]);
+    const words = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    const later = words(await render(1, BUMPER_AT + 0.5, grazed));
+    expect(later, "the drought's line in the rail").toMatch(/Drought not you/);
+    expect(later, 'no +0 anywhere').not.toMatch(/[+−-]0\b/);
+    const grazedCard = await render(1, BUMPER_AT - 0.1, grazed);
+    expect(card(grazedCard)).toEqual({ event: 'drought', at: 'you' });
+    expect(text(grazedCard, 'phone-miss'), 'a zero hit: the miss card').toContain('Your plots are clear of it.');
+    expect(grazedCard, 'a zero hit: no figure for you').not.toContain('data-testid="phone-you"');
     // With a TV the phone's map plays no weather, no title card, no camera, and marks only Lena's own plots.
     for (const t of [...frames(DUST_AT, DUST_AT + 3, 0.5), ...frames(BUMPER_AT, EVENTS_END, 0.25)]) {
       const html = await render(1, t);
