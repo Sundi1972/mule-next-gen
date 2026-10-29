@@ -13,6 +13,7 @@ import { useClient, useClientState, useServerNow } from '../net/react';
 import { connectedIn, hostMayContinue, readyRows, stillPlanning } from '../phone/hub/ready';
 import { ReadyCount, WaitingFor } from '../phone/hub/ReadyBar';
 import { TvElection } from './TvElection';
+import { TvGovernorPromise } from './TvGovernorPromise';
 import { TvLandAuction } from './TvLandAuction';
 import { TvProduction } from './TvProduction';
 
@@ -282,6 +283,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
           <div className="flex items-start gap-4">
             <div className="min-w-0 flex-1">
               <TvHeader game={game} title={PHASE_NAME[phase]} seconds={secondsUntil(game.phaseEndsAt, now)} />
+              <TvGovernorPromise game={game} />
             </div>
             <ReadyCount players={game.players} tv />
           </div>
