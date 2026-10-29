@@ -3,7 +3,7 @@ import type { MuleView } from '@mule/protocol';
 import type { SeatInfo } from '@tabletop/core';
 import { describe, expect, it } from 'vitest';
 import { MuleGame } from '../src/mule-game.js';
-import { fakeContext, readyAll, tapThere, toDevelopment, walkers } from './fake-context.js';
+import { fakeContext, pressThroughSidePick, readyAll, tapThere, toDevelopment, walkers } from './fake-context.js';
 
 /**
  * A-1 (arcade AM-6, HC-3): in month 1 the one development clock stands full until every seat is in. A present seat is
@@ -166,6 +166,8 @@ describe('A-1: month 1’s development clock waits for every first MULE', () => 
       }
       // The month end waits for every Ready too.
       if (game.viewFor(null).phase === 'upkeep') readyAll(game);
+      // A good's side pick has no clock either (A-7).
+      pressThroughSidePick(game);
       if (!(state.month === 2 && game.viewFor(null).phase === 'development')) advance(100);
     }
     expect(state.month).toBe(2);
@@ -192,6 +194,8 @@ describe('A-1: games with AI seats still finish month 1 (WS1’s stall seeds)', 
       if (phase === 'planning' || phase === 'landGrant' || phase === 'upkeep') readyAll(game);
       if (phase === 'development' && devFrom === null) devFrom = fake.ctx.now();
       if (phase !== 'development' && devFrom !== null && devMs === 0) devMs = fake.ctx.now() - devFrom;
+      // Nor does a good's side pick (A-7): the idle human picks there as in the other phases that wait for him.
+      pressThroughSidePick(game);
       fake.advance(100);
     }
     expect(game.viewFor(null).month, 'month 1 ended').toBe(2);
