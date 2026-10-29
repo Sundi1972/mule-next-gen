@@ -229,8 +229,23 @@ describe('B-AC-12 (WS4, month end): the league table and the colony, on the phon
     expect(has(phone, 'colony-panel')).toBe(false);
     const alone = onPhone(view(), Results, 0);
     expect(has(alone, 'phone-only-monthend')).toBe(true);
-    expect(said(alone, 'hungry-s3')).toBe(`Kai went hungry: ate 1 of ${KAI_NEED} Food`);
+    expect(said(alone, 'hungry-short-s3')).toBe(`Kai: ate 1 of ${KAI_NEED} Food`);
+    expect(said(alone, 'hungry-full-s3')).toBe(`Kai went hungry: ate 1 of ${KAI_NEED} Food`);
+    expect(element(alone, 'hungry-short-s3')).toContain(`title="Kai went hungry: ate 1 of ${KAI_NEED} Food"`);
     expect(said(alone, 'air-trend')).toBe('↓ worse than month 3 (27 · Clean)');
+  });
+
+  it('B-AC-11 (WS4, month end): under 1100 px a phone’s hunger line is the short form on one line, the full sentence only from 1100 px; the TV keeps the sentence', () => {
+    const alone = onPhone(view(), Results, 0);
+    expect(element(alone, 'hungry-short-s3')).toMatch(/class="[^"]*\btruncate\b[^"]*@min-\[1100px\]\/shell:hidden/);
+    expect(element(alone, 'hungry-full-s3')).toMatch(/class="[^"]*\bhidden\b[^"]*@min-\[1100px\]\/shell:inline/);
+    expect(has(tv, 'hungry-short-s3')).toBe(false);
+  });
+
+  it('B-AC-11 (WS4, month end): in the final standings under 1100 px your row reads just "You"; your name shows from 1100 px', () => {
+    const over = onPhone(OVER, GameOver);
+    expect(said(over, `you-name-${OVER.me!.id}`)).toBe('You');
+    expect(element(over, `you-full-${OVER.me!.id}`)).toMatch(/class="[^"]*\bhidden\b[^"]*@min-\[1100px\]\/shell:inline/);
   });
 
   it('B-AC-12 (WS4, month end): no screen shows a line that is not built yet: no fund in and out, no G-5 slots, no Donations', () => {
