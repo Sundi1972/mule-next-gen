@@ -57,11 +57,14 @@ export const landAuction: NonNullable<AuctionSteps['landAuction']> = async ({ ph
   }
   const rang = (kind: string) => kind === 'kept' || kind === 'sold';
   for (let n = 1; n <= LOTS.maxLotsPerMonth; n++) {
-    const lot = await lotUp(phone, within(0.1, LOTS.resultMs + LOTS.introMs));
+    // Waits for lot n itself, not for lot n-1's result to hide: a lot nobody bids on is over in well under a second at smoke's scale.
+    // The TV waits for lot n too, so its result read below is lot n's and not the last lot's.
+    const [lot] = await Promise.all([lotUp(phone, within(0.1, LOTS.resultMs + LOTS.introMs), n), lotUp(tv, within(0.1, LOTS.resultMs + LOTS.introMs), n)]);
     if (!lot) {
       check(listing === null, `month ${month}: the phone's listing ${listing} came up before the land auction ended`);
       return;
     }
+    check(lot.number === n, `month ${month}: the phone shows lot ${n}, got lot ${lot.number} of ${lot.count}`);
     const colony = lot.seller.includes(COLONY_NAME);
     check(colony || listing !== null, `month ${month}: with nothing listed only the colony sells, got a lot from "${lot.seller}"`);
     if (colony) check(lot.number === 1, `B-AC-8: the colony's lot is first in line, got lot ${lot.number} of ${lot.count}`);
@@ -71,7 +74,6 @@ export const landAuction: NonNullable<AuctionSteps['landAuction']> = async ({ ph
     if (colony) console.log(`auction steps: B-AC-8, month ${month} opened with the colony's lot, ${shown.kind}`);
     if (colony && listing === null) check(lot.count === 1, `month ${month}: with nothing listed the colony's lot is the only one, got ${lot.count}`);
     if (!colony || listing === null) return;
-    await Promise.all([phone.getByTestId('result').waitFor({ state: 'hidden', timeout: within(0.1, LOTS.resultMs) }), tv.getByTestId('tv-result').waitFor({ state: 'hidden', timeout: within(0.1, LOTS.resultMs) })]);
   }
   check(false, `month ${month}: the land auction ends within ${LOTS.maxLotsPerMonth} lots`);
 };
@@ -1056,19 +1058,23 @@ const COLONY_NAME = 'The colony';
 
 type LotUp = { number: number; count: number; seller: string };
 
-/** The lot on a phone's or the TV's land auction screen, once its card shows; null once the page has left the land auction. */
-async function lotUp(page: Page, timeout: number): Promise<LotUp | null> {
+/**
+ * Lot `atLeast` or a later one on a phone's or the TV's land auction screen, once its card shows; null once the page has
+ * left the land auction. Polled every frame, and the result stage keeps the header and the card, so a lot already at
+ * its bell is still caught.
+ */
+async function lotUp(page: Page, timeout: number, atLeast = 1): Promise<LotUp | null> {
   const handle = await page.waitForFunction(
-    () => {
+    (min) => {
       const root = document.querySelector('[data-phase]');
       if (!root) return null;
       if (root.getAttribute('data-phase') !== 'landAuction') return { over: true };
       const header = /Land auction · (\d+) of (\d+)/.exec(root.textContent ?? '');
       const card = root.querySelector('[data-testid=lot-seller], [data-testid=tv-lot]');
-      if (!header || !card) return null;
+      if (!header || !card || Number(header[1]) < min) return null;
       return { over: false, number: Number(header[1]), count: Number(header[2]), seller: card.textContent ?? '' };
     },
-    undefined,
+    atLeast,
     { timeout, polling: 'raf' },
   );
   const r = (await handle.jsonValue()) as ({ over: true } | ({ over: false } & LotUp));
