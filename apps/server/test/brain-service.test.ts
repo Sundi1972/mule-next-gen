@@ -659,4 +659,22 @@ describe('the playbook writer port', () => {
     expect(none.sdk.calls).toBe(1);
     expect(move.record.note).not.toBe('decider failed: budget spent');
   });
+
+  it('INV-writer-decider-parity: writerFor is non-null exactly when deciderFor is: Classic, an unset key, a Smart seat, a spent budget, after finish', async () => {
+    const parity = (service: BrainService) => [service.deciderFor(SEAT) !== null, service.writerFor(SEAT) !== null];
+
+    expect(parity(createBrain({ gameId: GAME, env: { [API_KEY_ENV]: '  ' }, logPath: file })), 'Classic: a blank key').toEqual([false, false]);
+    expect(parity(createBrain({ gameId: GAME, env: {}, logPath: file })), 'an unset key').toEqual([false, false]);
+
+    // One call bills the only seat's share, the whole game budget.
+    const sdk = fakeSdk(() => sdkMessage('{"option":"B","line":"Mine."}', { input: inputTokensFor(BRAIN.gameBudgetUsd) }));
+    const service = serviceOn(sdk);
+    expect(parity(service), 'a Smart seat').toEqual([true, true]);
+    await seatOn(service).decide();
+    expect((await seatOn(service).decide()).record.note).toBe('decider failed: budget spent');
+    expect(parity(service), 'a spent budget stays a cause, never a null writer').toEqual([true, true]);
+
+    service.finish();
+    expect(parity(service), 'after finish').toEqual([false, false]);
+  });
 });
