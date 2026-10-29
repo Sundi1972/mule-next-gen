@@ -188,21 +188,22 @@ describe('the live auction: goods one at a time', () => {
     expect(walker(state, 'p2').price).toBe(a(state).hi);
   });
 
-  it('T-AC-3: the status clock\'s end goes straight to the walk, and no step is ever a declare stage', () => {
+  it('T-AC-3 (A-7): the status screen has no clock: it waits for every Done, then goes straight to the walk, and no step is ever a declare stage', () => {
     const state = newGame();
     state.players[0]!.stock.food = 6;
     state.players[0]!.stock.water = 6;
     startAuction(state, ['food', 'water']);
     const stages = new Set<string>([a(state).stage]);
-    let ticks = 0;
-    while (a(state).stage === 'status' && ticks < 1_000) {
-      stepAuction(state, TICK);
-      stages.add(a(state).stage);
-      ticks++;
-    }
-    expect(ticks).toBe(WALK.statusMs / TICK);
+    // A minute of game time, far past the 8 s the screen used to run: nobody pressed Done, so it still waits.
+    for (let t = 0; t < 60_000; t += TICK) stepAuction(state, TICK);
+    expect(WALK.statusMs).toBeNull();
+    expect(a(state)).toMatchObject({ good: 'food', stage: 'status' });
+    const done = () => state.players.forEach((p) => auctionDone(state, p.id));
+    done();
+    stepAuction(state, TICK);
     expect(a(state)).toMatchObject({ good: 'food', stage: 'walk', clockMs: WALK.goodMs, done: [] });
     for (let i = 0; a(state).stage !== 'over' && i < 10_000; i++) {
+      if (a(state).stage === 'status') done();
       stepAuction(state, TICK);
       stages.add(a(state).stage);
     }
@@ -245,6 +246,8 @@ describe('the live auction: goods one at a time', () => {
         const { stage, good } = a(state);
         if (stage === 'status' && good === 'food') declareRole(state, 'p2', 'pass');
         if (stage === 'status' && good === 'water') declareRole(state, 'p1', 'pass');
+        // The status screen has no clock (A-7): everyone presses Done once the sides are picked.
+        if (stage === 'status') for (const p of state.players) auctionDone(state, p.id);
         if (stage === 'walk') for (const w of a(state).walkers) if (w.side !== 'pass') setWalk(state, w.id, w.side === 'seller' ? -1 : 1);
         trades.push(...stepAuction(state, TICK));
         stages.push(`${a(state).good}:${a(state).stage}`);
