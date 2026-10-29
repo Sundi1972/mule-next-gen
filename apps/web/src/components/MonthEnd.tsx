@@ -321,12 +321,17 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false }
                 const p = view.players.find((x) => x.id === h.id)!;
                 const full = `${p.name} went hungry: ate ${h.ate} of ${h.need} Food`;
                 if (!tv) {
-                  // On a phone: one short line, the full sentence on hover and from 1100 px.
+                  // On a phone: one short line, the full sentence from 1100 px. Only the name gives way; the numbers never do.
                   return (
                     <span key={h.id} className="flex min-w-0 items-center gap-1 text-[11px] font-semibold leading-tight text-alert" data-testid={`hungry-${h.id}`}>
                       <PlayerMark slot={toSlot(p.slot)} species={p.species} size={12} label={p.name} />
-                      <span className="min-w-0 truncate @min-[1100px]/shell:hidden" title={full} data-testid={`hungry-short-${h.id}`}>
-                        {p.name}: ate {h.ate} of {h.need} Food
+                      <span className="flex min-w-0 items-center @min-[1100px]/shell:hidden" title={full} data-testid={`hungry-short-${h.id}`}>
+                        <span className="min-w-0 truncate" data-testid={`hungry-name-${h.id}`}>
+                          {p.name}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-0.5 whitespace-nowrap" data-testid={`hungry-ate-${h.id}`}>
+                          : ate {h.ate} of {h.need} <GoodIcon good="food" size={11} />
+                        </span>
                       </span>
                       <span className="hidden @min-[1100px]/shell:inline" data-testid={`hungry-full-${h.id}`}>
                         {full}
