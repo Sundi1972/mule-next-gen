@@ -5,7 +5,7 @@
  * Governor's ceremony; the promise stays beside the tax; the next sale is taxed at the new Governor's rate.
  * Run with `pnpm --filter @mule/web e2e`; replay with `MULE_E2E_SEED=<seed>`.
  */
-import { GAME, POLITICS, storeQuotes, WALK, type GameState, type Good, type TaxPromise } from '@mule/engine';
+import { AI_HANDS, GAME, POLITICS, storeQuotes, WALK, type GameState, type Good, type TaxPromise } from '@mule/engine';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { errors as playwrightErrors, type Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
@@ -239,19 +239,25 @@ async function main(): Promise<void> {
 
     // Lena holds one unit of a good the store buys for 100 cr or more, seeded as the auction opens and before that good
     // comes up, so 7%, 8% and 9% (and the old rate) each take a different tax from the sale.
-    const toAuction = within(WALK.statusMs);
+    // The side pick has no clock (A-7): it waits for every Ready, then the AI's Done within its decision wait.
+    const toAuction = within(AI_HANDS.auction.decideWaitMs);
     await untilServer(lena.page, () => truth.board().auction?.stage === 'status' || null, 'the goods auction opens on a status screen', toAuction);
     const good = aPinningGood(truth, [start, NEW_TAX - 1, NEW_TAX + 1]);
     holdOneUnit(server, code, lenaId, good);
-    const upNext = within(WALK.order.length * (WALK.statusMs + WALK.goodMs / WALK.tradeClockRate));
-    await untilServer(lena.page, () => { const a = truth.board().auction; return (a?.good === good && a.stage === 'status') || null; }, `UBER-AC-2: ${good} comes up at the auction`, upNext);
+    const upNext = within(WALK.order.length * (AI_HANDS.auction.decideWaitMs + WALK.goodMs / WALK.tradeClockRate));
+    // Both phones press Ready at each good's side pick before it; never at its own, where Lena picks Sell first.
+    const isUp = () => { const a = truth.board().auction; return (a?.good === good && a.stage === 'status') || null; };
+    const passing = everyone(phones, (p) => readyAtSidePicksUntil(p.page, () => truth.board().auction?.good === good || truth.board().phase !== 'auction'));
+    await untilServer(lena.page, isUp, `UBER-AC-2: ${good} comes up at the auction`, upNext);
+    await passing;
     // With one to spare she opens on Sell; a second tap on Sell would pass.
     const sideOf = () => truth.board().auction?.walkers.find((w) => w.id === lenaId)?.side;
     if (sideOf() !== 'seller') await lena.page.getByTestId('side-seller').click({ timeout: PRESS_MS });
     await untilServer(lena.page, () => sideOf() === 'seller' || null, `UBER-AC-2: Lena sells ${good}`);
     const before = money(await lena.page.getByTestId('money').innerText());
     const paidBefore = truth.taxPaid(lenaId);
-    await hold(lena.page, 'down', within(WALK.statusMs));
+    await everyone(phones, (p) => p.page.locator('[data-phase=auction]').getByRole('button', { name: 'Ready', exact: true }).click({ timeout: PRESS_MS }));
+    await hold(lena.page, 'down', toAuction);
     await untilServer(lena.page, () => truth.stockOf(lenaId, good) === 0 || null, `UBER-AC-2: Lena sells her one ${good}`, within(WALK.goodMs / WALK.tradeClockRate));
     await lena.page.mouse.up();
     await lena.page.waitForFunction((b) => Number((document.querySelector('[data-testid=money]')?.textContent ?? '').replace(/[^\d-]/g, '')) !== b, before, { timeout: PRESS_MS });
@@ -440,6 +446,26 @@ async function claimPlots(page: Page): Promise<void> {
 
 async function goToThePub(page: Page): Promise<void> {
   await page.locator('[data-phase=development]').getByRole('button', { name: 'Go to the pub and end your turn' }).click({ timeout: within(PHASE_MS.development) });
+}
+
+/**
+ * At each good's side pick, which has no clock (A-7), presses Ready, as the player would, until `stop`; it reads
+ * `stop` right before each press, so it never presses on the side pick it stops at. Presses nothing in the walk.
+ */
+async function readyAtSidePicksUntil(page: Page, stop: () => boolean): Promise<void> {
+  const ready = page.locator('[data-phase=auction]').getByRole('button', { name: 'Ready', exact: true });
+  while (!stop()) {
+    if (await ready.count()) {
+      if (stop()) return;
+      try {
+        await ready.click({ timeout: PRESS_MS });
+      } catch (err) {
+        // The side pick moved on under the press.
+        if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
+      }
+    }
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(r)));
+  }
 }
 
 /** Presses and holds Up or Down once the button is enabled. */
