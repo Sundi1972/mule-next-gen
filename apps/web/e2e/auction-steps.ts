@@ -673,15 +673,16 @@ async function readTheReceipt(cast: { seller: Phone; buyer: Phone }, tv: Page, t
     check((await buyer.page.getByTestId('receipt-tax').count()) === 0, `A-5: ${buyer.name}'s purchase has no tax line`);
     for (const p of [seller, buyer]) {
       // The words and the number sit side by side in a flex row: innerText may or may not put a space between them.
-      const tally = (await text(p.page, 'tally')).replace(/^this month ?/, 'this month ');
-      const want = `this month ${signedCr(truth.auctionOf(p)!.tally!)} cr`;
-      check(tally === want, `A-5: ${p.name}'s header carries the month's total "${want}", got "${tally}"`);
+      const tally = (await text(p.page, 'receipt-tally')).replace(/^This month: ?/, 'This month: ');
+      const want = `This month: ${signedCr(truth.auctionOf(p)!.tally!)} cr`;
+      check(tally === want, `A-5: ${p.name}'s receipt ends with the month's total "${want}", got "${tally}"`);
+      check((await p.page.locator('[data-testid=guide] > header').getByText(/this month/i).count()) === 0, `A-5: ${p.name}'s header shows the money only`);
     }
     await tv.locator('[data-phase=auction][data-stage=close]').waitFor({ timeout: PRESS_MS });
     const stage = await text(tv, 'tv-stage');
     check(stage === 'Closed', `A-5: the TV names the close stage, got "${stage}"`);
     check((await tv.getByTestId('receipt').count()) === 0, "A-5: the TV shows no seat's receipt");
-    console.log(`✓ A-5: ${GOOD_NAME[good]} closed: "${sellerTitle}" with "${tax}" on ${seller.name}'s phone, "${buyerTitle}" on ${buyer.name}'s, the month's totals in both headers, and "Closed" on the TV`);
+    console.log(`✓ A-5: ${GOOD_NAME[good]} closed: "${sellerTitle}" with "${tax}" on ${seller.name}'s phone, "${buyerTitle}" on ${buyer.name}'s, the month's totals on both receipts, and "Closed" on the TV`);
   });
 }
 

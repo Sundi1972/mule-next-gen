@@ -54,7 +54,6 @@ export function Auction() {
 
   const closed = stage === 'close';
   const nextWords = auction.upNext ? `Next: ${GOOD_NAME[auction.upNext]}…` : 'The auction is closing…';
-  const tally = <Tally total={auction.tally ?? 0} />;
   const doneButton = (
     <Button size="md" variant={done ? 'outline' : 'holo'} className="h-10 w-full" disabled={done || closed} data-testid="done" onClick={() => client.intent({ type: 'ready' })}>
       {closed ? nextWords : done ? 'Done · waiting' : stage === 'status' ? 'Ready' : `Done with ${GOOD_NAME[good]}`}
@@ -67,7 +66,6 @@ export function Auction() {
     return (
       <PhoneShell
         phase={`${GOOD_NAME[good]} · buy or sell?`}
-        tally={tally}
         rail={
           <>
             <div className="flex items-center justify-between rounded-control border border-holo-faint bg-panel px-2.5 py-1.5">
@@ -195,7 +193,7 @@ export function Auction() {
   );
 
   return (
-    <PhoneShell phase={`${GOOD_NAME[good]} auction`} fill tally={tally} rail={rail} footer={footer}>
+    <PhoneShell phase={`${GOOD_NAME[good]} auction`} fill rail={rail} footer={footer}>
       <TimeBar seconds={auction.seconds} total={auction.total} slowed={auction.slowed} className="mb-1.5" />
       {skipped && (
         <p className="mb-1.5 shrink-0 truncate font-mono text-[11px] text-ink-3" data-testid="skipped">
@@ -231,7 +229,7 @@ export function Auction() {
         />
         {closed && auction.receipt && (
           <div className="absolute inset-0 grid place-items-center p-2" data-testid="receipt-layer">
-            <ReceiptCard view={view} good={good} receipt={auction.receipt} have={have} need={need} next={auction.upNext} />
+            <ReceiptCard view={view} good={good} receipt={auction.receipt} have={have} need={need} next={auction.upNext} tally={auction.tally ?? 0} />
           </div>
         )}
       </div>
@@ -241,12 +239,15 @@ export function Auction() {
 
 const signed = (n: number) => (n > 0 ? `+${fmt(n)}` : n < 0 ? `−${fmt(-n)}` : '±0');
 
-/** Under the money in the header: the month's running total from the auction (G-5). */
-export function Tally({ total }: { total: number }) {
+/**
+ * The receipt's last line: the month's running total from the auction (G-5), signed, a gain in ok and a loss in alert.
+ * On the card, not in the header, so the player's name keeps its room there (WS6 ruling on #204).
+ */
+function MonthTally({ total }: { total: number }) {
   return (
-    <span className="relative flex items-baseline gap-1 text-[10px] leading-tight text-ink-2 @min-[1100px]/shell:text-sm" data-testid="tally" aria-label={`This month's auction so far: ${signed(total)} cr`}>
-      this month
-      <strong data-num className={cx('font-mono font-bold', total < 0 ? 'text-ink' : total > 0 ? 'text-ok' : 'text-ink-3')}>
+    <span className="flex items-baseline gap-1 text-xs text-ink-2 @min-[1100px]/shell:text-lg" data-testid="receipt-tally" aria-label={`This month's auction so far: ${signed(total)} cr`}>
+      This month:{' '}
+      <strong data-num className={cx('font-mono font-bold', total < 0 ? 'text-alert' : total > 0 ? 'text-ok' : 'text-ink-3')}>
         {signed(total)} cr
       </strong>
     </span>
@@ -276,6 +277,7 @@ export function ReceiptCard({
   have,
   need,
   next,
+  tally,
 }: {
   view: MuleView;
   good: Good;
@@ -283,6 +285,8 @@ export function ReceiptCard({
   have: number;
   need: number;
   next: Good | null;
+  /** The month's running total from the auction, for the card's last line. */
+  tally: number;
 }) {
   const name = GOOD_NAME[good];
   const sides = (['bought', 'sold'] as const).filter((k) => receipt[k].units > 0);
@@ -329,6 +333,7 @@ export function ReceiptCard({
         {need > 0 ? (ok ? ' ✓' : `: short ${need - have}`) : ''}
       </span>
       {next && <span className="border-t border-holo-faint pt-1.5 text-xs text-ink-2 @min-[1100px]/shell:pt-3 @min-[1100px]/shell:text-lg">Next: {GOOD_NAME[next]}, buy or sell?</span>}
+      <MonthTally total={tally} />
     </section>
   );
 }

@@ -137,6 +137,19 @@ describe('A-5 the receipt words, from hand-built views (the review fix round)', 
     expect(textOf(html, 'receipt-tax')).toBeNull();
   });
 
+  it('B-AC-A5-11: the month line is signed and coloured: a gain in ok, a loss in alert; none outside the close stage', () => {
+    const gain = closeWith({ bought: none, sold: side(5, 50, 5, 's2') });
+    const up = phoneScreen({ ...gain, auction: { ...gain.auction!, tally: 225 } }, 's1');
+    expect(textOf(up, 'receipt-tally')).toBe('This month: +225 cr');
+    expect(up).toMatch(/data-testid="receipt-tally"[^>]*>[^<]*<strong[^>]*text-ok/);
+    const down = phoneScreen({ ...gain, auction: { ...gain.auction!, tally: -1060 } }, 's1');
+    expect(textOf(down, 'receipt-tally')).toBe('This month: −1,060 cr');
+    expect(down).toMatch(/data-testid="receipt-tally"[^>]*>[^<]*<strong[^>]*text-alert/);
+    const walking = phoneScreen({ ...gain, auction: { ...gain.auction!, stage: 'walk', receipt: null, tally: 225 } }, 's1');
+    expect(walking).not.toContain('This month');
+    expect(walking).not.toContain('data-testid="tally"');
+  });
+
   it('B-AC-A5-10: after the last good there is no "Next:", and the button says the auction is closing', () => {
     const html = phoneScreen(closeWith({ bought: side(1, 30, 0, 'store'), sold: none }, null), 's1');
     expect(textOf(html, 'receipt')).not.toContain('Next:');
@@ -177,12 +190,18 @@ describe('A-5 the receipt on the phone (#audit-auction-receipt)', () => {
     expect(textOf(html, 'receipt-tax')).toBeNull();
   });
 
-  it("B-AC-A5-3: the header's month total under the money is what the auction did to that money", () => {
+  it("B-AC-A5-3: the receipt's last line is the month's total, what the auction did to that money; the header shows the money only (WS6 ruling on #204)", () => {
     const { game, opened } = toClose();
     for (const id of ['s1', 's2'] as const) {
       const view = game.viewFor(id);
       const money = view.players.find((p) => p.id === id)!.money;
-      expect(textOf(phoneScreen(view, id), 'tally')).toBe(`this month${signed(money - opened[id])} cr`);
+      const html = phoneScreen(view, id);
+      expect(textOf(html, 'receipt-tally')).toBe(`This month: ${signed(money - opened[id])} cr`);
+      // The card's last line.
+      const card = html.slice(html.indexOf('data-testid="receipt"'));
+      expect(card.slice(card.indexOf('data-testid="receipt-tally"')).replace(/<\/(strong|span)>/g, '')).toMatch(/^data-testid="receipt-tally"[^<]*>[^<]*<strong[^>]*>[^<]*<\/section>/);
+      const header = html.slice(html.indexOf('data-testid="guide"'), html.indexOf('data-testid="table-chat"'));
+      expect(header).not.toMatch(/tally|This month/i);
     }
   });
 
