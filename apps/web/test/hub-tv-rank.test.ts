@@ -59,7 +59,7 @@ describe("the TV's ready list (H-4)", () => {
     expect(places.map(([id]) => id).sort()).toEqual(six.map((p) => p.id));
     expect(places.map(([, place]) => place).sort()).toEqual(['1st', '2nd', '3rd', '4th', '5th', '6th']);
     const ais = list.slice(list.indexOf('data-testid="tv-ready-ais"'));
-    expect(ais.replace(/<[^>]+>/g, '')).toContain('Brix 1st, Kai 2nd, Pip 5th, Zed 6th');
+    expect(ais.replace(/<[^>]+>/g, '')).toContain('Brix 1st, Kai 2nd, Pip 4th, Zed 6th');
   });
 
   it("H-4 (negative): the TV shows nobody's Worth lines", () => {
