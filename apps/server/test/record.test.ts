@@ -72,6 +72,12 @@ const ANSWERS: readonly (number | 'busy')[] = [40, 'busy', 1_300, 260, 3_100, 90
 const GAME_OPTIONS = { maxMonths: 1, politics: true };
 /** The rows beyond T-AC-1 run locally only (MULE_FULL=1, `pnpm test:full`); each plays one or two whole games. */
 const FULL = process.env.MULE_FULL === '1';
+/** What the script says: a public line from s1 and a whisper from s2 to the Smart seat, in words no record holds otherwise. */
+const CHAT = {
+  public: { from: 's1', text: 'Quokka keeps the riverbank.' },
+  whisper: { from: 's2', to: 's3', text: 'psst Marzipan, sell me smithore' },
+} as const;
+const CHAT_WORDS = ['Quokka', 'riverbank', 'psst', 'Marzipan'];
 
 type MuleRecord = GameRecord<MuleIntent>;
 type PlaybookNote = Omit<PlaybookEntry, 'type' | 'at' | 'seq'>;
@@ -210,8 +216,8 @@ function table(options: TableOptions = {}) {
       if (!refusedSent) {
         refusedSent = true;
         send(mia, { t: 'intent', intent: { type: 'continue' } });
-        send(heiko, { t: 'chat', text: 'Leave the river to me.' });
-        send(mia, { t: 'chat', text: 'psst, sell me food', to: 's3' });
+        send(heiko, { t: 'chat', text: CHAT.public.text });
+        send(mia, { t: 'chat', text: CHAT.whisper.text, to: CHAT.whisper.to });
       }
       if (planningFor >= PLANNING_READY_MS && !hostContinued) {
         hostContinued = true;
@@ -278,6 +284,10 @@ async function recordedGame(options?: TableOptions): Promise<{ record: MuleRecor
 
 const isStep = (e: MuleRecord['events'][number]) => e.type !== 'notice' && e.type !== 'playbook';
 
+/** The record's heard steps, as who spoke to whom. */
+const heardIn = (record: MuleRecord) =>
+  record.events.flatMap((e) => (e.type === 'heard' ? [e.to === undefined ? { from: e.from } : { from: e.from, to: e.to }] : []));
+
 describe('the game record', { timeout: 60_000 }, () => {
   it('T-AC-1: a recorded game with a late Claude answer and a dropped phone replays identical', async () => {
     const { record, t } = await recordedGame();
@@ -291,6 +301,7 @@ describe('the game record', { timeout: 60_000 }, () => {
     expect(steps.some((e) => e.type === 'intent' && e.intent.type === 'claim' && !e.refused)).toBe(true);
     expect(steps.some((e) => e.type === 'intent' && e.seat === 's2' && e.refused === 'Only the host can continue' && e.hosts?.length)).toBe(true);
     expect(record.seats.filter((s) => s.smart).map((s) => s.id)).toEqual(['s3']);
+    expect(heardIn(record), 'the chat lines are heard steps').toEqual([{ from: CHAT.public.from }, { from: CHAT.whisper.from, to: CHAT.whisper.to }]);
 
     const result = await replay(record);
     expect(result.scores.map((s) => s.replayed)).toEqual(result.scores.map((s) => s.recorded));
@@ -399,6 +410,32 @@ describe.runIf(FULL)('the recorder', { timeout: 60_000 }, () => {
     expect(phone.seen.at(-1)).toBe('pong');
     expect(fs.readdirSync(dir)).toEqual([]);
     expect(errors).toHaveBeenCalled();
+  });
+});
+
+describe.runIf(FULL)('chat in the record', { timeout: 60_000 }, () => {
+  it('T-AC-12: a public line and a whisper to an AI are one heard step each, who to whom, the file holds none of their words, and the replay is identical', async () => {
+    const { record } = await recordedGame();
+    const heard = record.events.filter((e) => e.type === 'heard');
+    const fields = new Set(['type', 'at', 'seq', 'reads', 'hosts', 'decides', 'from', 'to']);
+    for (const step of heard) expect(Object.keys(step).filter((k) => !fields.has(k)), 'a heard step has no field for the words').toEqual([]);
+    expect(heardIn(record)).toEqual([{ from: CHAT.public.from }, { from: CHAT.whisper.from, to: CHAT.whisper.to }]);
+
+    const text = JSON.stringify(record);
+    for (const line of [CHAT.public.text, CHAT.whisper.text]) expect(text).not.toContain(line);
+    for (const word of CHAT_WORDS) expect(text, `the record holds the chat word "${word}"`).not.toContain(word);
+
+    // A heard line changes nothing in play yet, so an identical replay alone can't show the replay heard it (RULE-6).
+    const heardInReplay = vi.spyOn(MuleGame.prototype, 'heard');
+    try {
+      expect((await replay(record)).identical).toBe(true);
+      expect(heardInReplay.mock.calls, 'the replay hears each line, from whom to whom, with no words').toEqual([
+        [CHAT.public.from, '', undefined],
+        [CHAT.whisper.from, '', CHAT.whisper.to],
+      ]);
+    } finally {
+      heardInReplay.mockRestore();
+    }
   });
 });
 
