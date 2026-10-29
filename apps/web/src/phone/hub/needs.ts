@@ -1,4 +1,4 @@
-import { GOODS, isFactory, RECIPES, UPKEEP, type Good, type Outfit, type RawGood, type Stock } from '@mule/engine';
+import { GAME, GOODS, isFactory, RECIPES, UPKEEP, type Good, type Outfit, type RawGood, type Stock } from '@mule/engine';
 import { GOOD_NAME } from '@mule/ui';
 import type { Now } from '../Shell';
 
@@ -70,12 +70,12 @@ export function needRows(need: Stock, stock: Stock, plots: readonly { outfit: Ou
   }));
 }
 
-/** RULE-8's Now: plan, then Ready; the land grant is next; what she's short of, or that she has what she needs. */
+/** RULE-8's Now: plan, then Ready; the land grant is next, with its claims; what she's short of, or that she has what she needs. */
 export function planNow(rows: readonly NeedRow[]): Now & { detail: string } {
   const short = rows.filter((r) => r.short > 0).map((r) => GOOD_NAME[r.good]);
   return {
     title: 'Plan your month, then press Ready',
-    detail: `Next is the land grant: one free plot each. ${short.length > 0 ? `You're short of ${and(short)}: a plot for it, or buy it at the auction.` : 'You have what you need this month.'}`,
+    detail: `Next is the land grant: ${GAME.claimsPerGrant === 1 ? 'one free plot' : `up to ${GAME.claimsPerGrant} free plots`} each. ${short.length > 0 ? `You're short of ${and(short)}: a plot for it, or buy it at the auction.` : 'You have what you need this month.'}`,
   };
 }
 

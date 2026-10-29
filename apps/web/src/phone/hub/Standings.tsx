@@ -1,7 +1,7 @@
 import { GAME, POLITICS } from '@mule/engine';
 import { Button, Creature, cx, SLOT_COLOR } from '@mule/ui';
 import { fmt } from '../../game/derive';
-import { league, yourLines } from '../../game/month-end';
+import { collapseCutWords, inCollapse, league, yourLines } from '../../game/month-end';
 import { useEscape } from '../dialog';
 import { usePhoneGame } from '../game';
 import { OnlyYou } from './OnlyYou';
@@ -24,6 +24,8 @@ export function StandingsSheet({ onClose }: { onClose: () => void }) {
   const { rows } = league(view);
   const mine = rows.find((r) => r.player.id === self.id);
   const p = view.me ? yourLines(view) : null;
+  // In Collapse the cut takes every line, offices too: month end's cut line keeps your lines adding up to your Worth.
+  const collapse = inCollapse(view);
   const line = 'flex justify-between gap-3';
   return (
     <div className="absolute inset-0 z-40 grid place-items-center bg-void/70 p-3" role="dialog" aria-modal aria-labelledby="standings-title" data-testid="standings-sheet">
@@ -101,9 +103,18 @@ export function StandingsSheet({ onClose }: { onClose: () => void }) {
                   {fmt(p.muleValue)}
                 </span>
               </span>
+              {collapse && (
+                <span className={line}>
+                  <span>Collapse cut · {collapseCutWords()}</span>
+                  <span data-num className="font-mono text-alert" data-testid="standings-cut">
+                    −{fmt(p.cut)}
+                  </span>
+                </span>
+              )}
               <span className={line}>
                 <span>
                   Offices · {p.terms} × {POLITICS.termScore}
+                  {collapse && ', cut too'}
                 </span>
                 <span data-num className="font-mono">
                   {fmt(p.office)}
