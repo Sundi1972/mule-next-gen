@@ -733,6 +733,14 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-17 (2026-10-29, WS4's question at arcade PR-5, ruled by WS6).** `@mule/ui` gains `"@mule/engine":
+  "workspace:*"` so `StoreInterior` reads `HALL` from `floor/hall.ts` where it draws (C2's one plan), and the hall's
+  GaitInput takes `DEV_STEER.leadPace` and `WOLVES` directly. Safe because the engine is pure TypeScript with no
+  dependencies and never imports `@mule/ui` (no cycle). **The design system takes data from the engine, never rules:**
+  it may import config blocks, the hall plan and types, never a rule function (`stepFloor`, `reachOf`, game.ts). A
+  test in `packages/ui/test` lists the names `src/**` imports from `@mule/engine` and fails on any outside an
+  allow-list, positive-controlled. Rejected: StoreInterior taking the plan as a prop, because every caller (four mocks
+  among them) would pass it or the prop would need a default, a second copy of the geometry C2 forbids.
 - **AM-16 (2026-10-29, WS4's question at arcade PR-5, ruled by WS6).** C2's scaffold is HallStage at **d30ae057**
   (the addendum Heiko approved with all the mocks; the plan's PR-6 pin), not ceedd23f. HallStage predates the motion
   PR (#195, 1090e0d9) and still draws the CSS store waddle: graft its composition, never its motion. The walker's
