@@ -1,8 +1,9 @@
-import type { AuctionView } from '@mule/protocol';
+import type { Good } from '@mule/engine';
+import type { AuctionView, MuleView } from '@mule/protocol';
 import { Button, cx, GOOD_NAME, GoodTag, TimeBar, WalkBoard } from '@mule/ui';
 import { BoardKey, boardWalkers, dealLine, Hint, MyStoreLine, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, toggleSide, walkHint } from '../components/AuctionParts';
 import { speakerAt } from '../chat/Chat';
-import { PHASE_NAME } from '../game/derive';
+import { fmt, PHASE_NAME } from '../game/derive';
 import { useAuctionSound } from '../game/sound';
 import type { MouseEvent, PointerEvent } from 'react';
 import { useClient } from '../net/react';
@@ -18,7 +19,9 @@ const SIDE_NAME: Record<Side, string> = { buyer: 'Buyer', seller: 'Seller', pass
  * status screen shows what everyone has, beside your side, already picked
  * from what you have and need: tap Buy or Sell to change it. Then you hold
  * Up or Down (or drag on the board) to walk your creature. Your height is
- * your bid or your ask; meet someone and units change hands.
+ * your bid or your ask; meet someone and units change hands. When the walk
+ * ends, the close stage shows your receipt for the good over the still board,
+ * and the header carries the month's running total (UX audit G-5).
  */
 export function Auction() {
   const client = useClient();
@@ -49,9 +52,12 @@ export function Auction() {
   const walkers = boardWalkers(view, auction);
   const declare = (side: Side) => client.intent({ type: 'declare', side });
 
+  const closed = stage === 'close';
+  const nextWords = auction.upNext ? `Next: ${GOOD_NAME[auction.upNext]}…` : 'The auction is closing…';
+  const tally = <Tally total={auction.tally ?? 0} />;
   const doneButton = (
-    <Button size="md" variant={done ? 'outline' : 'holo'} className="h-10 w-full" disabled={done} data-testid="done" onClick={() => client.intent({ type: 'ready' })}>
-      {done ? 'Done · waiting' : stage === 'status' ? 'Ready' : `Done with ${GOOD_NAME[good]}`}
+    <Button size="md" variant={done ? 'outline' : 'holo'} className="h-10 w-full" disabled={done || closed} data-testid="done" onClick={() => client.intent({ type: 'ready' })}>
+      {closed ? nextWords : done ? 'Done · waiting' : stage === 'status' ? 'Ready' : `Done with ${GOOD_NAME[good]}`}
     </Button>
   );
 
@@ -61,6 +67,7 @@ export function Auction() {
     return (
       <PhoneShell
         phase={`${GOOD_NAME[good]} · buy or sell?`}
+        tally={tally}
         rail={
           <>
             <div className="flex items-center justify-between rounded-control border border-holo-faint bg-panel px-2.5 py-1.5">
@@ -166,8 +173,14 @@ export function Auction() {
           </span>
         </div>
       </div>
-      {myDeal ? <Hint tone="lit" line={dealLine(view, myDeal, me.id)} testid="my-deal" /> : <Hint line={hint.line} how={hint.how} />}
-      {sides}
+      {closed ? (
+        <Hint line={`${GOOD_NAME[good]} is closed.`} how={auction.upNext ? `Next: ${GOOD_NAME[auction.upNext]}, buy or sell?` : null} />
+      ) : myDeal ? (
+        <Hint tone="lit" line={dealLine(view, myDeal, me.id)} testid="my-deal" />
+      ) : (
+        <Hint line={hint.line} how={hint.how} />
+      )}
+      {!closed && sides}
     </>
   );
 
@@ -182,7 +195,7 @@ export function Auction() {
   );
 
   return (
-    <PhoneShell phase={`${GOOD_NAME[good]} auction`} fill rail={rail} footer={footer}>
+    <PhoneShell phase={`${GOOD_NAME[good]} auction`} fill tally={tally} rail={rail} footer={footer}>
       <TimeBar seconds={auction.seconds} total={auction.total} slowed={auction.slowed} className="mb-1.5" />
       {skipped && (
         <p className="mb-1.5 shrink-0 truncate font-mono text-[11px] text-ink-3" data-testid="skipped">
@@ -190,7 +203,7 @@ export function Auction() {
         </p>
       )}
       {mine && mine.side !== 'pass' && <BoardKey auction={auction} side={mine.side} />}
-      <div className="flex min-h-0 flex-1 flex-col gap-1.5">
+      <div className="relative flex min-h-0 flex-1 flex-col gap-1.5" data-testid="board-wrap">
         {auction.deals.some((d) => d !== myDeal) && (
           <div className="flex shrink-0 gap-2 overflow-hidden" data-testid="deals">
             {auction.deals.filter((d) => d !== myDeal).map((d) => (
@@ -214,10 +227,105 @@ export function Auction() {
           meId={me.id}
           wrapCreature={speakerAt}
           {...(onBoard ? { onDir: (d: -1 | 0 | 1) => walk(stepDir(d)) } : {})}
-          className="min-h-0 flex-1"
+          className={cx('min-h-0 flex-1', closed && 'opacity-40')}
         />
+        {closed && auction.receipt && (
+          <div className="absolute inset-0 grid place-items-center p-2" data-testid="receipt-layer">
+            <ReceiptCard view={view} good={good} receipt={auction.receipt} have={have} need={need} next={auction.upNext} rate={view.treasury.salesTax} />
+          </div>
+        )}
       </div>
     </PhoneShell>
+  );
+}
+
+const signed = (n: number) => (n > 0 ? `+${fmt(n)}` : n < 0 ? `−${fmt(-n)}` : '±0');
+
+/** Under the money in the header: the month's running total from the auction (G-5). */
+export function Tally({ total }: { total: number }) {
+  return (
+    <span className="relative flex items-baseline gap-1 text-[10px] leading-tight text-ink-2 @min-[1100px]/shell:text-sm" data-testid="tally" aria-label={`This month's auction so far: ${signed(total)} cr`}>
+      this month
+      <strong data-num className={cx('font-mono font-bold', total < 0 ? 'text-ink' : total > 0 ? 'text-ok' : 'text-ink-3')}>
+        {signed(total)} cr
+      </strong>
+    </span>
+  );
+}
+
+/** Who a counterparty is, in a sentence: "the store", "the ship", or the player's name. */
+function who(view: MuleView, id: string): string {
+  if (id === 'store') return 'the store';
+  if (id === 'ship') return 'the ship';
+  return view.players.find((p) => p.id === id)?.name ?? id;
+}
+
+/**
+ * When a good closes: what you did with it, the tax spelled out on a sale, and where you now stand (G-5), as the
+ * #audit-auction-receipt mock draws it. A seat that both bought and sold in one good gets a line for each.
+ */
+export function ReceiptCard({
+  view,
+  good,
+  receipt,
+  have,
+  need,
+  next,
+  rate,
+}: {
+  view: MuleView;
+  good: Good;
+  receipt: NonNullable<AuctionView['receipt']>;
+  have: number;
+  need: number;
+  next: Good | null;
+  rate: number;
+}) {
+  const name = GOOD_NAME[good];
+  const sides = (['bought', 'sold'] as const).filter((k) => receipt[k].units > 0);
+  const ok = have >= need;
+  return (
+    <section
+      className="relative flex w-[min(100%,320px)] flex-col gap-1.5 rounded-sheet border-2 border-holo bg-panel p-3 shadow-glow @min-[1100px]/shell:w-[460px] @min-[1100px]/shell:gap-3 @min-[1100px]/shell:p-6"
+      aria-live="polite"
+      data-testid="receipt"
+    >
+      <span className="label-caps flex items-center gap-1.5 text-[10px]! @min-[1100px]/shell:text-sm!">
+        <GoodTag good={good} name className="normal-case" /> · closed
+      </span>
+      {sides.length === 0 && (
+        <h2 className="font-display text-xl font-semibold leading-tight @min-[1100px]/shell:text-4xl" data-testid="receipt-title">
+          {`${name}: you didn’t trade`}
+        </h2>
+      )}
+      {sides.map((kind) => {
+        const r = receipt[kind];
+        const net = r.gross - r.tax;
+        const each = r.prices.every((p) => p === r.prices[0]) ? `${r.units} × ${r.prices[0]} cr` : r.prices.map((p) => `${p}`).join(' + ') + ' cr';
+        return (
+          <div key={kind} className="contents">
+            <h2 className="font-display text-xl font-semibold leading-tight @min-[1100px]/shell:text-4xl" data-testid="receipt-title">
+              {`${name}: you ${kind} ${r.units} for ${fmt(kind === 'sold' ? net : r.gross)} cr`}
+            </h2>
+            <span data-num className="font-mono text-xs text-ink-2 @min-[1100px]/shell:text-lg" data-testid="receipt-each">
+              {each} {kind === 'bought' ? 'from' : 'to'} {r.with.map((id) => who(view, id)).join(' and ')}
+            </span>
+            {kind === 'sold' && (
+              <span className="rounded-control border border-holo-line px-2 py-1 text-sm @min-[1100px]/shell:px-3 @min-[1100px]/shell:py-2 @min-[1100px]/shell:text-xl" data-testid="receipt-tax">
+                <strong data-num className="font-mono">{fmt(r.gross)} cr</strong>, less {Math.round(rate * 100)}% sales tax: <strong data-num className="font-mono">{fmt(net)}</strong>
+                <span className="block text-[11px] text-ink-2 @min-[1100px]/shell:text-base">The tax goes to the colony fund.</span>
+              </span>
+            )}
+          </div>
+        );
+      })}
+      <span className={cx('text-xs @min-[1100px]/shell:text-lg', ok ? 'text-ok' : 'text-alert')} data-testid="receipt-stand">
+        You have {`${have} ${name}`}
+        {need > 0 ? `, you need ${need}` : ''}
+        {need > 0 ? (ok ? ' ✓' : `: short ${need - have}`) : ''}
+      </span>
+      {next && <span className="border-t border-holo-faint pt-1.5 text-xs text-ink-2 @min-[1100px]/shell:pt-3 @min-[1100px]/shell:text-lg">Next: {GOOD_NAME[next]}, buy or sell?</span>}
+    </section>
   );
 }
 
