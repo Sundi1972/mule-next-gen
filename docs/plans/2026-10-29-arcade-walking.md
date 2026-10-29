@@ -439,8 +439,16 @@ the tick, checkDevelopmentOver).
 
 ## PR-6 · The phone, the laptop and the TV (WS6)
 
-The scaffold is binding: `design/mocks/ws6-ux/src/screens/arcade/` at ceedd23f (HC-6). The branch is based on a
-commit that contains it.
+The scaffold is binding: `design/mocks/ws6-ux/src/screens/arcade/` at **d30ae057** (HC-6; was ceedd23f; the
+addendum V-2/3/5/6/7, the re-outfit, the 667 rows and floorSeconds 3, approved by Heiko with all the mocks,
+2026-10-29). The walkers move per the motion mock `motion.html` at 9544cf5f, variant A (Heiko: "A, bob and waddle"):
+WS6's motion PR (ws6-ux plan, "Characters in motion") gives Creature and Mule their `motion`, `facing` and `cycle`
+props first, and Tasks 6.3 and 6.5 pass the frame's `moving`, `facing`, `encounter` and pace into them; never a second
+gait. The branch is based on a commit that contains both scaffolds: trunk once ws6-ux's docs-and-mocks milestone
+merges (asked of the PM, 2026-10-29).
+
+**Ready to start, 2026-10-29:** Task 6.2 when PR-1 (#186) merges (prediction steps the floor); Task 6.1's steps when
+PR-5's harness steering exists; Tasks 6.3 and 6.5 after PR-3, PR-5 and the motion PR.
 
 ### Task 6.1 — B-AC-1, B-AC-3, B-AC-4, B-AC-8: the failing browser steps
 
