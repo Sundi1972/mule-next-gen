@@ -177,7 +177,8 @@ The standing line, verbatim, in every handoff:
 |---|---|---|
 | `packages/engine/src/config.ts` | PR-1, PR-8, PR-11 | **serialised**: PR-1 adds the blocks; PR-8 the moments' values; PR-11 one line |
 | `packages/engine/src/floor/reach.ts` | PR-1, PR-8 | **serialised**: rows 5–14 in PR-1, rows 1–4, 8a, 11a in PR-8 |
-| `packages/ai/src/hands/develop.ts` | PR-4, PR-8 | **serialised** (waves 2 and 4) |
+| `packages/ai/src/hands/develop.ts` | WS1's AI step 2 PR-3, PR-4, PR-8 | **serialised**: step 2's PR-3 first (it splits the hand into a route source and the runner that taps it, so PR-4 replaces only the runner: taps → steering), then PR-4, then PR-8. Spec `docs/specs/2026-10-29-ws1-ai-step2.md` §7 R-5 (ws1-balance 775008d8) |
+| `packages/ai/src/seat.ts`, `strategist.ts`, `play.ts`, `sim.ts` | WS1's AI step 2 PR-1 to PR-4, PR-4 | **serialised**: step 2's PR-1 to PR-3 land before PR-4 (step 2's PR-3, the hands, is the hard edge); step 2's PR-4 (the plan) is gated by a spike, and whichever of it and PR-4 opens second rebases on the other. Step 2 doesn't edit `value.ts`; after PR-4, step 2's replay test runs with `DEV_STEER.on` both ways |
 | `apps/web/src/phone/arcade/**`, `TvDevelop.tsx` | PR-6, PR-9 | **serialised** (waves 3 and 4) |
 | `apps/web/e2e/store-steps.ts` | PR-6, PR-9, PR-10 (WS6) | **serialised**, one owner (WS6) |
 | `apps/web/e2e/harness.ts` | PR-5, PR-10 (WS4) | **serialised**, one owner (WS4) |
