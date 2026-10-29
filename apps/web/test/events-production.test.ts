@@ -18,7 +18,7 @@ const INTRO = 1.8;
 const FLIGHT = 0.9;
 const FLY_STEP = 0.09;
 
-function fired(key: ShowEventKey, playMs: number, hits: [x: number, y: number, delta: number][]): ProductionEventView {
+function fired(key: ProductionEventView['key'], playMs: number, hits: [x: number, y: number, delta: number][]): ProductionEventView {
   return {
     key,
     kind: 'storm',
@@ -141,7 +141,7 @@ describe('the production show plays every event of the month', () => {
   });
 
   it('T-AC-4: inside each event’s segment the map plays that event, in fired order, and the goods fly only after the last', () => {
-    const keys: ShowEventKey[] = ['dustStorm', 'drought', 'acidRain', 'solarFlare', 'cometPass', 'flood', 'volcanicAsh', 'pestSwarm', 'wildfire', 'bumperHarvest'];
+    const keys: ProductionEventView['key'][] = ['dustStorm', 'drought', 'acidRain', 'solarFlare', 'cometPass', 'flood', 'volcanicAsh', 'pestSwarm', 'wildfire', 'bumperHarvest'];
     const events = keys.map((k) => fired(k, 4000, [[1, 0, -1]]));
     const all = viewOf(month.lines, events);
     // The phase's intro card plays in its own slot (no event yet); then every segment plays from its first moment.
@@ -191,7 +191,8 @@ describe('the production show plays every event of the month', () => {
   });
 
   it('T-AC-4: each wave-1 key plays its own story inside its segment, and no other key’s', () => {
-    const OWN: Record<ShowEventKey, RegExp> = {
+    // The cavern collapse has its key and catalogue row; its story is still to come (PR-2), so it is not listed here.
+    const OWN: Record<Exclude<ShowEventKey, 'cavernCollapse'>, RegExp> = {
       dustStorm: /data-testid="front-dustStorm"/,
       drought: /data-testid="front-drought"/,
       acidRain: /data-testid="front-acidRain"/,
@@ -203,7 +204,7 @@ describe('the production show plays every event of the month', () => {
       wildfire: /data-testid="fire-1-0"/,
       bumperHarvest: /data-testid="bumper-stamp"/,
     };
-    const keys = Object.keys(OWN) as ShowEventKey[];
+    const keys = Object.keys(OWN) as (keyof typeof OWN)[];
     for (const k of keys) {
       const ev = fired(k, 4000, [[1, 0, -1]]);
       const one = viewOf(month.lines, [ev]);

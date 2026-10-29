@@ -97,6 +97,13 @@ const GLYPH: Record<ShowEventKey, () => ReactNode> = {
       <ellipse cx="12" cy="3.8" rx="1.9" ry="3" {...F} />
     </>
   ),
+  cavernCollapse: () => (
+    <>
+      <path {...S} strokeWidth={2.6} d="M3 21.5V13a9 9 0 0 1 18 0v8.5" />
+      <path {...S} strokeWidth={1.7} d="M12.5 4.2 11 8l2.4 2-1.4 3" />
+      <path {...F} d="M6.5 21.5 8 18l2.8.6.6 2.9ZM13 21.5l1.2-2.9 2.8 1.1.6 1.8ZM10.4 16.2l1.3-1.6 1.6 1-.7 1.7Z" />
+    </>
+  ),
 };
 
 export function EventGlyph({ k, size = 24, className }: { k: ShowEventKey; size?: number; className?: string }) {
@@ -119,6 +126,7 @@ export const EVENT_ACCENT: Record<ShowEventKey, string> = {
   pestSwarm: 'var(--color-g-food)',
   wildfire: 'var(--color-g-smithore)',
   bumperHarvest: 'var(--color-g-food)',
+  cavernCollapse: 'var(--color-g-crystite)',
 };
 export const accent = (k: ShowEventKey) => EVENT_ACCENT[k];
 
