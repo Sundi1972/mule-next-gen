@@ -61,8 +61,10 @@ describe('the store at a glance', () => {
     expect(tagOf(hall(SICK), 'condition-lena')).toContain('data-sick="true"');
     const fed = hall(FED);
     expect(fed).not.toContain('data-testid="condition-lena"');
-    // The bar over the head is gone: nothing in the colonist is a width.
-    expect(fed.slice(fed.indexOf(tagOf(fed, 'visitor-lena')))).not.toMatch(/style="width:/);
+    // The bar over the head is gone: nothing in the colonist is a width but the creature's own motion box, which sizes
+    // the drawing it moves (Creature's wrapper, known by its data-motion) and is no bar (AM-16, WS6's ruling b).
+    const widths = fed.slice(fed.indexOf(tagOf(fed, 'visitor-lena'))).match(/<[a-z]+[^>]*style="width:[^>]*>/g) ?? [];
+    expect(widths.filter((tag) => !/\sdata-motion="/.test(tag))).toEqual([]);
   });
 
   it('T-AC-12: the clock is one for everyone, and the TV lists each pace and why on the roster rows', () => {
