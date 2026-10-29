@@ -205,7 +205,6 @@ describe('B-AC-12 (WS4, month end): the league table and the colony, on the phon
     expect(said(tv, 'air-level')).toBe('34');
     expect(said(tv, 'air-trend')).toBe('↓ worse than month 3 (27 · Clean)');
     expect(said(tv, 'fund-balance')).toBe('640 cr');
-    expect(said(tv, 'fund-month')).toContain('comes with the colony fund’s month');
     const fed = onTv(view({ players: PLAYERS.map((p) => ({ ...p, condition: FED })) }), TvMonthEnd);
     expect(said(fed, 'nobody-hungry')).toBe('✓ Nobody went hungry');
   });
@@ -221,7 +220,6 @@ describe('B-AC-12 (WS4, month end): the league table and the colony, on the phon
     const lines = ['cash', 'goods', 'land', 'mules', 'offices'].map((k) => num(said(phone, `worth-cr-${k}`)));
     expect(lines.reduce((a, b) => a + b, 0)).toBe(HEIKO.worth);
     expect(num(said(phone, 'worth-total-cr'))).toBe(HEIKO.worth);
-    expect(said(phone, 'worth-line-donations')).toContain('comes with G-5');
     for (const testid of ['your-worth', 'worth-line-', 'worth-cr-', 'part-']) expect(tv, `the TV carries no ${testid}`).not.toContain(`data-testid="${testid}`);
   });
 
@@ -233,6 +231,33 @@ describe('B-AC-12 (WS4, month end): the league table and the colony, on the phon
     expect(has(alone, 'phone-only-monthend')).toBe(true);
     expect(said(alone, 'hungry-s3')).toBe(`Kai went hungry: ate 1 of ${KAI_NEED} Food`);
     expect(said(alone, 'air-trend')).toBe('↓ worse than month 3 (27 · Clean)');
+  });
+
+  it('B-AC-12 (WS4, month end): no screen shows a line that is not built yet: no fund in and out, no G-5 slots, no Donations', () => {
+    const screens = [phone, tv, onPhone(view(), Results, 0), onPhone(OVER, GameOver), onPhone(OVER, GameOver, 0), onTv(OVER, TvGameOver)];
+    for (const html of screens) {
+      expect(text(html)).not.toMatch(/comes with|Prestige|Mood|Colony score|Donations/);
+      for (const testid of ['fund-month', 'g5-', 'worth-line-donations']) expect(html).not.toContain(`data-testid="${testid}`);
+    }
+    for (const html of [tv, onPhone(view(), Results, 0)]) expect(said(html, 'fund-balance')).toBe('640 cr');
+  });
+
+  it("B-AC-13 (WS4, month end): the TV's month end carries planning's ready count, the AI seats counted on", () => {
+    const on = view({ players: [{ ...HEIKO, ready: true }, MIA, { ...KAI, isAi: true }] });
+    expect(said(onTv(on, TvMonthEnd), 'ready-count')).toBe('2 / 3 READY');
+    expect(has(onTv(on, TvMonthEnd), 'waiting-for')).toBe(false);
+  });
+
+  it('B-AC-12 (WS4, month end): with no TV and four players hungry, the colony names two and counts the rest', () => {
+    const DEV = row('s4', 'Dev', 3, 700, 1_900, 1_800, KAI_SHORT);
+    const starving = view({ players: [...PLAYERS, DEV].map((p) => ({ ...p, condition: KAI_SHORT })) });
+    const alone = onPhone(starving, Results, 0);
+    const lines = [...element(alone, 'colony-hungry').matchAll(/data-testid="hungry-(s\d)"/g)].map((m) => m[1]);
+    expect(lines).toEqual(['s1', 's2']);
+    expect(said(alone, 'hungry-more')).toBe('+2 more went hungry');
+    const tv4 = onTv(starving, TvMonthEnd);
+    expect([...tv4.matchAll(/data-testid="hungry-s\d"/g)]).toHaveLength(4);
+    expect(has(tv4, 'hungry-more')).toBe(false);
   });
 
   it('B-AC-13 (WS4, month end): the phone moves on with "On to month 5", which is Ready', () => {
