@@ -1,6 +1,7 @@
-import { advancePhase, COLONY_SELLER, createGame, type GameState } from '@mule/engine';
+import { advancePhase, COLONY_SELLER, createGame, DEV_WALK, type GameState } from '@mule/engine';
 import type { MuleIntent } from '@mule/protocol';
 import type { GameContext, SeatInfo } from '@tabletop/core';
+import { afterEach, beforeEach } from 'vitest';
 import { MuleGame } from '../src/mule-game.js';
 
 /** The three seats these server tests play with. */
@@ -19,9 +20,35 @@ export const walkers: SeatInfo[] = [
 /**
  * Plays month 1 into development on the fake clock, seed 7. `prepare` runs once while planning is open, to set the
  * state up as a test needs it; then every human is Ready. With `claimer`, that seat claims the first plot lit in the
- * land grant, returned as `plot`.
+ * land grant, returned as `plot`. The clock runs from the start, as in any month after the first, unless
+ * `firstMonthWaits` keeps month 1's rule: then it waits for every first MULE (A-1).
  */
-export function toDevelopment(options: { players?: SeatInfo[]; phaseScale?: number; claimer?: string; prepare?: (state: GameState) => void } = {}) {
+export function toDevelopment(options: { players?: SeatInfo[]; phaseScale?: number; claimer?: string; firstMonthWaits?: boolean; prepare?: (state: GameState) => void } = {}) {
+  const rule = DEV_WALK.month1WaitsForFirstMule;
+  DEV_WALK.month1WaitsForFirstMule = options.firstMonthWaits ?? false;
+  try {
+    return playToDevelopment(options);
+  } finally {
+    DEV_WALK.month1WaitsForFirstMule = rule;
+  }
+}
+
+/**
+ * For a describe block whose tests are about the development clock itself, met in month 1 for convenience: month 1's
+ * clock runs from the start, as it does in every later month, instead of waiting for every first MULE (A-1).
+ */
+export function clockRunsInMonth1(): void {
+  let rule = DEV_WALK.month1WaitsForFirstMule;
+  beforeEach(() => {
+    rule = DEV_WALK.month1WaitsForFirstMule;
+    DEV_WALK.month1WaitsForFirstMule = false;
+  });
+  afterEach(() => {
+    DEV_WALK.month1WaitsForFirstMule = rule;
+  });
+}
+
+function playToDevelopment(options: { players?: SeatInfo[]; phaseScale?: number; claimer?: string; prepare?: (state: GameState) => void }) {
   const fake = fakeContext({ table: options.players ?? seats });
   const game = new MuleGame(fake.ctx, 7, options.phaseScale === undefined ? undefined : { phaseScale: options.phaseScale });
   game.start(options.players ?? seats);

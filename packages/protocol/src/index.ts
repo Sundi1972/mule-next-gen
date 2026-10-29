@@ -457,6 +457,11 @@ export interface MuleView {
   production: ProductionView | null;
   /** Offices, tax, vote weights and the election; null when the game plays without politics. */
   politics: PoliticsView | null;
+  /**
+   * While month 1's development clock stands full: the seats it still waits for, whose first MULE is still to come, in
+   * seat order. Absent once it runs, and in every other phase and month.
+   */
+  clockWaitsFor?: string[];
 }
 
 export const PLAYER_COLORS = ['#e4572e', '#3a86ff', '#2bb673', '#f2a541', '#9b5de5', '#00b4d8'];

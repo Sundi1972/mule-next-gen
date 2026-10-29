@@ -28,6 +28,7 @@ function firstMonth(owners: string[]) {
   const plots: Record<string, number> = {};
   const g = toDevelopment({
     players: walkers,
+    firstMonthWaits: true,
     prepare: (state) => {
       owners.forEach((id, k) => {
         const i = plotNearStore(state, k);

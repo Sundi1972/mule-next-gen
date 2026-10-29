@@ -229,6 +229,8 @@ describe("FM-planning-host-continue: the host's Continue ends planning proper; n
     for (let i = 0; i < 30_000 && !(game.viewFor(null).month === 2 && phase(game) === 'planning'); i++) {
       if (phase(game) !== 'planning' && !tried.includes(phase(game))) {
         tried.push(phase(game));
+        // Month 1's waiting development clock takes the host's Continue (A-1, first-mule.test.ts); once it runs, it is refused.
+        if (game.viewFor(null).clockWaitsFor) game.handle('s1', { type: 'continue' });
         refusedUnchanged(game, () => game.handle('s1', { type: 'continue' }), `the host's Continue in ${phase(game)}`);
       }
       advance(100);

@@ -224,6 +224,8 @@ function table(options: TableOptions = {}) {
       claimed = true;
       send(heiko, { t: 'intent', intent: { type: 'claim', x: lit.x, y: lit.y } });
     }
+    // Heiko never installs on his plot: as host he starts month 1's waiting development clock once Mia is back (A-1).
+    if (phase === 'development' && view().clockWaitsFor && dropAt !== null && elapsed > dropAt + 20 * STEP_MS) send(heiko, { t: 'intent', intent: { type: 'continue' } });
     if (phase === 'development' && dropAt === null) {
       dropAt = elapsed;
       room.disconnect(mia.conn);
