@@ -1,6 +1,6 @@
 import type { AddressInfo } from 'node:net';
 import { GOOD_NAME } from '@mule/ai';
-import { PHASES, RuleError, WALK, type Good } from '@mule/engine';
+import { PHASES, RuleError, WALK, type GameState, type Good } from '@mule/engine';
 import type { MuleView, ServerEnvelope } from '@mule/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
@@ -229,7 +229,8 @@ describe("FM-planning-host-continue: the host's Continue ends planning proper; n
     const tried: string[] = [];
     let sidePick: string | null = null;
     for (let i = 0; i < 30_000 && !(game.viewFor(null).month === 2 && phase(game) === 'planning'); i++) {
-      const auction = game.viewFor(null).auction;
+      // From the engine: a view each step is what costs.
+      const auction = (game as unknown as { state: GameState }).state.auction;
       // The month end takes the host's Continue as planning does (C20, B-AC-13 in month-end-view.test.ts); here it is passed with every Ready.
       if (phase(game) === 'upkeep') readyAll(game);
       // A good's side pick takes it too (A-7): the first one is moved on by the host, the rest with every Ready.
