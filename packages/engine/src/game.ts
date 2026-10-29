@@ -1,6 +1,6 @@
 import { endAuction, startAuction } from './auction.js';
 import { RuleError } from './errors.js';
-import { DEFAULT_SPECIES, DEVELOPMENT, GAME, GOOD_CONFIG, mapSize, MULE, POLLUTION, SPECIES_PERK, START, TAX, UPKEEP } from './config.js';
+import { DEFAULT_SPECIES, DEVELOPMENT, GAME, GLINT, GOOD_CONFIG, mapSize, MULE, POLLUTION, SPECIES_PERK, START, TAX, UPKEEP, WOLVES } from './config.js';
 import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './economy.js';
 import { rollPlayerEvent } from './events.js';
 import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
@@ -252,6 +252,7 @@ export function buyMule(state: GameState, playerId: string): void {
 export function outfitMule(state: GameState, playerId: string, outfit: Outfit): void {
   const p = developer(state, playerId);
   if (!p.carriedMule) throw new RuleError('No MULE to outfit');
+  requireLed(p);
   const cost = outfitCostFor(state, playerId, outfit);
   if (p.money < cost) throw new RuleError('Not enough money');
   p.money -= cost;
@@ -262,6 +263,7 @@ export function outfitMule(state: GameState, playerId: string, outfit: Outfit): 
 export function installMule(state: GameState, playerId: string, x: number, y: number): void {
   const p = developer(state, playerId);
   if (!p.carriedMule || p.carriedMule === 'empty') throw new RuleError('The MULE is not outfitted');
+  requireLed(p);
   const tile = plotAt(state, x, y);
   if (tile.owner !== playerId) throw new RuleError('Not your plot');
   // Installing over an existing MULE replaces it; the old one runs away, as in the original.
@@ -269,6 +271,48 @@ export function installMule(state: GameState, playerId: string, x: number, y: nu
   tile.outfit = p.carriedMule;
   p.carriedMule = null;
   p.installedThisTurn = true;
+}
+
+// --- Development's moments (arcade spec C4): the floor's wolves and glint pay out through these -------------
+
+/** Sells pelts at the store, which pays WOLVES.peltPrice each from its capital. Returns the credits paid. */
+export function sellPelts(state: GameState, playerId: string, pelts: number): number {
+  const p = developer(state, playerId);
+  if (!Number.isInteger(pelts) || pelts < 1) throw new RuleError('No pelts to sell');
+  const price = pelts * WOLVES.peltPrice;
+  p.money += price;
+  state.store.capital -= price;
+  return price;
+}
+
+/** The glint's prize to the first colonist onto it: GLINT.crystite Crystite, or GLINT.credits when GLINT.prize says so. */
+export function awardGlint(state: GameState, playerId: string): { prize: 'crystite' | 'credits'; amount: number } {
+  const p = developer(state, playerId);
+  if (GLINT.prize === 'credits') {
+    p.money += GLINT.credits;
+    return { prize: 'credits', amount: GLINT.credits };
+  }
+  p.stock.crystite += GLINT.crystite;
+  return { prize: 'crystite', amount: GLINT.crystite };
+}
+
+/** A lost wolf fight: the MULE on the player's lead bolts. It stays theirs, and leads again once caught. */
+export function boltMule(state: GameState, playerId: string): void {
+  const p = developer(state, playerId);
+  if (!p.carriedMule) throw new RuleError('No MULE to bolt');
+  if (p.muleBolted) throw new RuleError('Your MULE has already bolted');
+  p.muleBolted = true;
+}
+
+/** Catches the player's bolted MULE, which leads again. */
+export function catchMule(state: GameState, playerId: string): void {
+  const p = developer(state, playerId);
+  if (!p.muleBolted) throw new RuleError('Your MULE has not bolted');
+  delete p.muleBolted;
+}
+
+function requireLed(p: Player): void {
+  if (p.muleBolted) throw new RuleError('Your MULE bolted: catch it first');
 }
 
 /** Seconds a geo analysis takes this player. Mollox dig faster. */
@@ -326,6 +370,7 @@ export function visitPub(state: GameState, playerId: string, secondsLeft: number
   const payout = pubPayoutFor(state, playerId, secondsLeft);
   p.money += payout;
   p.carriedMule = null;
+  delete p.muleBolted;
   p.doneDeveloping = true;
   return payout;
 }
@@ -369,7 +414,10 @@ export function advancePhase(state: GameState): void {
   }
   if (next === 'production') {
     // A MULE nobody installed runs away at the end of development.
-    for (const p of state.players) p.carriedMule = null;
+    for (const p of state.players) {
+      p.carriedMule = null;
+      delete p.muleBolted;
+    }
     const price = mulePrice(state);
     const soldOut = state.store.mules === 0;
     // MULEs get dearer each month the corral sells out, and cheaper when they are left over.

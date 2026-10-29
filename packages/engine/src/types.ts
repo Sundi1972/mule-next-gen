@@ -91,6 +91,11 @@ export interface Player {
   stock: Stock;
   /** MULEs bought but not yet installed, with their outfit if any. */
   carriedMule: Outfit | 'empty' | null;
+  /**
+   * The carried MULE bolted in a lost wolf fight (arcade RULE-4): still this player's, but it outfits and installs
+   * again only once caught. Absent means false.
+   */
+  muleBolted?: boolean;
   reputation: number;
   /** Plots claimed in the current land grant. */
   claimsThisGrant: number;
