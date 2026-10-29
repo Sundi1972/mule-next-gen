@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import { configSnapshot, RuleError, stableJson, type GameRecord, type GameState, type Playbook, type PlaybookEntry } from '@mule/engine';
+import { configSnapshot, GAME, RuleError, stableJson, type GameRecord, type GameState, type Playbook, type PlaybookEntry } from '@mule/engine';
 import type { Decider } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { Room, TableError, type ClientEnvelope, type Connection, type GameContext, type ServerEnvelope } from '@tabletop/core';
@@ -24,7 +24,11 @@ const spies = vi.hoisted(() => ({
   viewReadsClock: false,
   /** The playbook a game writes after accepting an intent, as a playbook builder would; null writes none. */
   playbookFor: null as ((seat: string, intent: MuleIntent) => PlaybookNote | null) | null,
-  /** Sets up the game state as each phase opens, before the game's own opening runs; the replay's game runs it too. */
+  /**
+   * Sets up the game state as each phase opens, before the game's own opening runs; the replay's game runs it too. It
+   * runs after the engine has entered the phase (production is already applied), so that month's history snapshot
+   * predates the arrangement.
+   */
   arrange: null as ((state: GameState) => void) | null,
 }));
 vi.mock('../src/mule-game.js', async (original) => {
@@ -66,8 +70,8 @@ vi.mock('../src/brain/client.js', async (original) => ({
 
 const CODE = 'RECRD';
 const SEED = 10;
-/** Three months, so the export ship calls. The seed no longer matters: arrangeMarket and `market` make every notice T-AC-10 asks for (seeds 1-32 swept). */
-const NOTICE_GAME = { seed: 8, maxMonths: 3 };
+/** Up to the export ship's first call (month 2 at least, for the lot). The seed no longer matters: arrangeMarket and `market` make every notice T-AC-10 asks for (seeds 1-32 swept). */
+const NOTICE_GAME = { seed: 8, maxMonths: Math.max(2, GAME.exportShipEvery) };
 /** Game time per step of the fake clock; every timer due in a step runs, with promises settled between them. */
 const STEP_MS = 100;
 const PLANNING_READY_MS = 3_000;
@@ -78,11 +82,11 @@ const GAME_LIMIT_MS = 30 * 60_000;
  */
 const ANSWERS: readonly (number | 'busy')[] = [40, 'busy', 1_300, 260, 3_100, 90, 700];
 const GAME_OPTIONS = { maxMonths: 1, politics: true };
-/** Units of a good T-AC-10's market hands Mia to spare as each production closes. */
+/** Units of a good T-AC-10's market hands Mia to spare as each production opens. */
 const SPARE = 20;
 /**
- * T-AC-10's market, set from state as each month's production closes, so every notice it asks for happens by
- * construction and no balance change can take one away: Heiko (s1) has no food and Mia (s2) has food and the export
+ * T-AC-10's market, set from state as each month's production opens, so every notice it asks for happens by
+ * construction, whatever the seed, the prices or the month the ship calls: Heiko (s1) has no food and Mia (s2) has food and the export
  * ship's first good to spare. The script does the rest (`market` in TableOptions).
  */
 const arrangeMarket = (state: GameState) => {
@@ -161,7 +165,7 @@ interface TableOptions {
   /**
    * The phones trade, for T-AC-10, with `arrangeMarket` on: in month 2's planning Heiko lists his plot at a minimum
    * of 1, and at its lot Mia bids up to the minimum. In the auction Heiko passes every good but food; Mia sells food to
-   * Heiko, who walks up to buy it, and sells the ship's good down to its line.
+   * Heiko, who walks up to buy it, and sells any good the ship wants down to its line.
    */
   market?: boolean;
 }
@@ -723,9 +727,9 @@ describe.runIf(FULL)('notices in the record', { timeout: 120_000 }, () => {
     for (const n of notices) expect(n.phase, `a ${n.kind} settles in its phase`).toBe(phaseOf[n.kind]);
     expect(notices.some((n) => n.kind === 'claim' && n.seat === 's1'), "the human's claim").toBe(true);
     expect(notices.some((n) => n.kind === 'claim' && n.seat !== 's1'), "an AI seat's claim").toBe(true);
-    expect(notices.some((n) => n.kind === 'declare' && n.side === 'pass')).toBe(true);
-    expect(notices.some((n) => n.kind === 'declare' && n.side !== 'pass')).toBe(true);
-    expect(notices.some((n) => n.kind === 'trade' && n.buyer === 'ship' && n.month === 3), 'a sale to the export ship').toBe(true);
+    expect(notices.some((n) => n.kind === 'declare' && n.side === 'pass'), 'a seat passing on a good').toBe(true);
+    expect(notices.some((n) => n.kind === 'declare' && n.side !== 'pass'), 'a seat buying or selling a good').toBe(true);
+    expect(notices.some((n) => n.kind === 'trade' && n.buyer === 'ship' && n.month === GAME.exportShipEvery), 'a sale to the export ship').toBe(true);
     expect(notices.some((n) => n.kind === 'trade' && n.buyer !== 'ship' && n.buyer !== 'store' && n.seller !== 'store'), 'a trade between players').toBe(true);
     expect(notices.some((n) => n.kind === 'sale' && n.buyer !== 'store'), 'a lot sold to a player').toBe(true);
     record.events.forEach((e, i) => {
