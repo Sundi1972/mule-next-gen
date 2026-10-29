@@ -395,7 +395,10 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
               <div className="rounded-panel border border-holo-line bg-panel px-5 py-4">
                 <StatusTable view={game} auction={auction} tv />
               </div>
-              <StoreBox auction={auction} tv />
+              {/* The store box never gives up its prices to the ship panel or the chat ticker. */}
+              <div className="shrink-0">
+                <StoreBox auction={auction} tv />
+              </div>
               {ship && <ShipWants want={ship.first} also={ship.also} tv />}
             </>
           ) : (
