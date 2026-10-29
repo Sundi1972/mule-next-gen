@@ -1,12 +1,14 @@
 /**
- * B-AC-11: the small landscape phone. One phone plays a one-month game; on each of WS4's surfaces the clock is held
- * and the screen is read box by box at PHONE_SMALL (667×375) and PHONE (844×390).
+ * B-AC-11: the small landscape phone. One phone plays a two-month game; on each of WS4's surfaces the clock is held
+ * and the screen is read box by box at PHONE_SMALL (667×375) and PHONE (844×390). Month 1's end and game over are
+ * read with and without a TV, and the month end in Collapse too (C20).
  * Local tier: `pnpm --filter @mule/web build`, then `pnpm --filter @mule/web e2e:small`.
  */
-import type { Page } from 'playwright';
+import { POLLUTION } from '@mule/engine';
+import type { Locator, Page } from 'playwright';
 import { claimAPlot, CLAIM_MS, check, doneWithLand, held, launch, PHONE, PHONE_SMALL, SHOWN_MS, startServer, TV } from './harness';
 import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
-import { AUDIT_JS, type AuditRead, type AuditScope } from './small-phone-audit';
+import { AUDIT_JS, MONTH_END_JS, type AuditRead, type AuditScope } from './small-phone-audit';
 import { doneThroughTheElection } from './table-steps';
 
 const PHASE_SCALE = 0.1;
@@ -16,6 +18,8 @@ const DEV_MS = 120_000;
 /** Two MULEs and their outfits, whatever the seed deals. */
 const DEV_MONEY = 2_000;
 const NAME = 'Heiko';
+/** A long AI name, so the tables are read with names that must give way. */
+const LONG_NAME = 'The Big Spender';
 
 /** The rail header, less the table chat in it (WS6's: the seat names and chat lines). */
 const RAIL: AuditScope = { roots: ['[data-testid=guide] > header', '[data-testid=now]'], skip: ['[data-testid=table-chat]'] };
@@ -27,13 +31,19 @@ const WHOLE: AuditScope = { roots: ['[data-testid=game-shell]'], skip: ['[data-t
  * the stage, 31.8 px at 667: not counted as taps, since the map's zoom (C11) is what makes them bigger.
  */
 const DEV_MAP: AuditScope = { roots: [...RAIL.roots, '[data-testid=dev-map]'], skip: RAIL.skip, tapsNotCounted: ['[data-testid^=map-plot-]'] };
+/**
+ * Month end and game over: the whole screen. WS6's fidelity rulings make two texts truncate, printed, not failed: the
+ * folded Now card's title is one line (M-4), and a league table's name gives way so its numbers stay in the panel
+ * (D-1/D-2).
+ */
+const MONTH_END: AuditScope = { ...WHOLE, truncates: ['[data-testid=now-title]', '[data-testid^=name-]'] };
 
-type Read = { screen: string; small: AuditRead; base: AuditRead };
+type Read = { screen: string; small: AuditRead; base: AuditRead; c20?: { small: string[]; base: string[] } };
 /** The screens whose rail is the game shell's, with your name in its header: every phase, not the lobby. */
-const GAME_RAIL = /^(planning|land grant|development|production|the goods auction|game over)/;
+const GAME_RAIL = /^(planning|land grant|development|production|the goods auction|month end|game over)/;
 
 const started = Date.now();
-const { server, base } = await startServer({ maxMonths: 1, phaseScale: PHASE_SCALE, seed: () => 1 });
+const { server, base } = await startServer({ maxMonths: 2, phaseScale: PHASE_SCALE, seed: () => 1 });
 const browser = await launch();
 const errors: string[] = [];
 const reads: Read[] = [];
@@ -52,6 +62,15 @@ try {
     };
     await (code ? held(server, code, step) : step());
   };
+  /** `both` with MONTH_END's scope, and C20's own read at each size. */
+  const monthEnd = async (screen: string) => {
+    const c20 = { small: [] as string[], base: [] as string[] };
+    await both(screen, MONTH_END, async () => {
+      const at = phone.viewportSize()?.width === PHONE_SMALL.viewport.width ? c20.small : c20.base;
+      at.push(...((await phone.evaluate(`(${MONTH_END_JS})()`)) as string[]));
+    });
+    reads.at(-1)!.c20 = c20;
+  };
 
   await phone.goto(base);
   await phone.getByPlaceholder(NAME).waitFor();
@@ -60,8 +79,12 @@ try {
   await phone.getByRole('button', { name: 'Start a new game' }).click();
   await phone.getByText("You're at the table").waitFor();
   code = (await phone.getByTestId('room-code').textContent())?.trim() ?? '';
-  const tv = await (await browser.newContext(TV)).newPage();
-  await tv.goto(`${base}/table?room=${code}`);
+  const openTv = async () => {
+    const page = await (await browser.newContext(TV)).newPage();
+    await page.goto(`${base}/table?room=${code}`);
+    return page;
+  };
+  let tv = await openTv();
   await tv.getByTestId('room-code').waitFor();
   await phone.getByRole('button', { name: 'Add AI player' }).click();
   await phone.getByRole('button', { name: 'Add AI player' }).click();
@@ -69,6 +92,7 @@ try {
   await both('lobby, host', { roots: ['[data-testid=lobby]'], skip: [] });
   await phone.getByRole('button', { name: 'Start game' }).click();
   await phone.locator('[data-phase=planning]').waitFor({ timeout: SHOWN_MS });
+  nameAnAi(code, LONG_NAME);
 
   const ctx = { phone, tv, check, server, code, held: <T>(step: () => Promise<T>) => held(server, code, step) };
   await both('planning, the election', RAIL);
@@ -127,13 +151,33 @@ try {
   await auction.waitFor({ timeout: 30_000 });
   await both('the goods auction', RAIL);
   const done = auction.getByRole('button', { name: /^(Ready|Done with .+)$/ });
-  const over = phone.locator('[data-phase=gameOver]');
-  for (let i = 0; i < 40 && !(await over.count()); i++) {
-    await done.or(over).first().waitFor({ timeout: 30_000 });
+  const end = phone.locator('[data-phase=upkeep]');
+  for (let i = 0; i < 40 && !(await end.count()); i++) {
+    await done.or(end).first().waitFor({ timeout: 30_000 });
     await done.click({ timeout: PRESS_MS }).catch(() => undefined);
   }
-  await over.waitFor({ timeout: 30_000 });
-  await both('game over', WHOLE);
+  await end.getByTestId('league').waitFor({ timeout: 30_000 });
+  await monthEnd('month end');
+  const air = setAir(code, collapseAir());
+  await end.getByTestId('collapse-banner').waitFor({ timeout: PRESS_MS });
+  await monthEnd('month end, Collapse');
+  await tv.context().close();
+  await end.getByTestId('phone-only-monthend').waitFor({ timeout: PRESS_MS });
+  await monthEnd('month end, Collapse, no TV');
+  setAir(code, air);
+  await end.getByTestId('collapse-banner').waitFor({ state: 'detached', timeout: PRESS_MS });
+  await monthEnd('month end, no TV');
+  tv = await openTv();
+  await end.getByTestId('phone-monthend').waitFor({ timeout: SHOWN_MS });
+  await end.getByTestId('ready').click({ timeout: PRESS_MS });
+  await phone.locator('[data-phase=planning]').waitFor({ timeout: SHOWN_MS });
+
+  const over = phone.locator('[data-phase=gameOver]');
+  await playToTheEnd(code, over);
+  await monthEnd('game over');
+  await tv.context().close();
+  await over.getByTestId('phone-only-gameover').waitFor({ timeout: PRESS_MS });
+  await monthEnd('game over, no TV');
 
   report(reads);
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
@@ -174,15 +218,58 @@ function giveDevelopment(code: string): void {
   game.ctx.changed();
 }
 
+/** Test fixture: the last AI seat takes `name`. */
+function nameAnAi(code: string, name: string): void {
+  const room = server.registry.get(code) as unknown as { game: { seats: { name: string; isAi: boolean }[] } };
+  const ai = room.game.seats.filter((s) => s.isAi).at(-1);
+  check(ai, 'an AI seat at the table');
+  ai.name = name;
+}
+
+/** The air level just inside Collapse. */
+function collapseAir(): number {
+  const band = POLLUTION.bands.find((b) => b.name === 'collapse');
+  check(band, 'the air has a Collapse band');
+  return band.from + 4;
+}
+
+/** Test fixture: sets the colony's air and shows it on every screen; returns the air it replaced. */
+function setAir(code: string, air: number): number {
+  const room = server.registry.get(code) as unknown as { game: { state: { air: number } }; broadcast(): void };
+  const was = room.game.state.air;
+  room.game.state.air = air;
+  room.broadcast();
+  return was;
+}
+
+/** Test fixture: the phone's seat plays month 2 through the server, Ready at each stop and off to the pub in development. */
+async function playToTheEnd(code: string, over: Locator): Promise<void> {
+  const room = server.registry.get(code) as unknown as { game: { handle(seat: string, intent: object): void; viewFor(seat: null): { phase: string } }; broadcast(): void };
+  const deadline = Date.now() + 60_000;
+  while (!(await over.count())) {
+    check(Date.now() < deadline, 'month 2 reaches game over within a minute');
+    try {
+      room.game.handle('s1', { type: room.game.viewFor(null).phase === 'development' ? 'pub' : 'ready' });
+    } catch {
+      // Refused at a stop that moves on by itself.
+    }
+    room.broadcast();
+    await new Promise((r) => setTimeout(r, 150));
+  }
+}
+
 /**
  * Prints every screen's reads and fails with every broken box, named: B-AC-11 at both sizes, the rail's window at 667
- * no shorter than at 844, and the player's name shown whole in the rail header.
+ * no shorter than at 844, and the player's name shown whole in the rail header; C20's reads of month end and game
+ * over at both sizes. The truncations WS6 ruled are printed.
  */
 function report(all: Read[]): void {
   const fails: string[] = [];
-  for (const { screen, small, base } of all) {
+  for (const { screen, small, base, c20 } of all) {
     console.log(`  ${screen}: rail ${small.railWindow ?? '-'} px at 667×375, ${base.railWindow ?? '-'} px at 844×390`);
-    for (const [size, read] of [['667×375', small], ['844×390', base]] as const) {
+    for (const [size, read, mine] of [['667×375', small, c20?.small], ['844×390', base, c20?.base]] as const) {
+      for (const r of read.ruled) console.log(`    ${size}, ruled to truncate: ${r}`);
+      for (const f of mine ?? []) fails.push(`C20: ${screen} at ${size}: ${f}`);
       for (const f of read.fails) fails.push(`B-AC-11: ${screen} at ${size}: ${f}`);
       if (read.name && !(read.name.text === NAME && read.name.whole)) fails.push(`B-AC-11: ${screen} at ${size}: the rail header shows "${read.name.text}" cut, not ${NAME} whole`);
     }
