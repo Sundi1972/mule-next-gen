@@ -107,7 +107,6 @@ export function PhoneShell({
   rail,
   footer,
   fill = false,
-  tally,
   children,
 }: {
   phase: string;
@@ -122,8 +121,6 @@ export function PhoneShell({
   footer?: ReactNode;
   /** The content fills the main area without scrolling, as the map does. */
   fill?: boolean;
-  /** Under the money: the month's running total from the auction (UX audit G-5). */
-  tally?: ReactNode;
   children: ReactNode;
 }) {
   const { view, self, slot } = usePhoneGame();
@@ -176,19 +173,9 @@ export function PhoneShell({
                     <span className="hidden @min-[1100px]/shell:inline">To my phone</span>
                   </button>
                 )}
-                {tally ? (
-                  // The money and, under it, the month's running total (G-5).
-                  <span className="ml-auto flex shrink-0 flex-col items-end">
-                    <span data-num className="font-mono text-sm font-bold leading-tight text-ink @min-[1100px]/shell:text-lg" data-testid="money">
-                      {fmt(self.money)} cr
-                    </span>
-                    {tally}
-                  </span>
-                ) : (
-                  <span data-num className="ml-auto shrink-0 font-mono text-sm font-bold text-ink @min-[1100px]/shell:text-lg" data-testid="money">
-                    {fmt(self.money)} cr
-                  </span>
-                )}
+                <span data-num className="ml-auto shrink-0 font-mono text-sm font-bold text-ink @min-[1100px]/shell:text-lg" data-testid="money">
+                  {fmt(self.money)} cr
+                </span>
               </div>
               <TableChat />
             </header>
