@@ -1,17 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import {
+  analysisSeconds,
+  applyReach,
   buildFloor,
   createGame,
   createRng,
   DEV_STEER,
+  doorPresses,
   floorConfig,
   HALL,
+  hasAnalysed,
   pathTo,
   placeAt,
   RuleError,
   speedOf,
   stepFloor,
   type DevFloor,
+  type FloorConfig,
   type FloorInput,
   type GameState,
   type HallPoint,
@@ -38,8 +43,11 @@ const LAKE_MAP = MAP.map((row, y) => (y === 3 ? '.s..~S.......' : row));
 const SEED = 29;
 /** A development turn's worth of ticks: 50 s at DEV_STEER.tickMs. */
 const TICKS = 1_000;
+/** The script's one press: 'a', walking down onto the plains left of the store, analyses the plot it is on. */
+const ANALYSE_AT = 405;
+const SECONDS_LEFT = 30;
 
-/** Four seats on the map drawn: 'a' a Zipwing, 'b' leading a MULE, 'c' an AI seat, 'd' a Bramblet. */
+/** Four seats in development on the map drawn: 'a' a Zipwing, 'b' leading a MULE, 'c' an AI seat, 'd' a Bramblet. */
 function game(seed: number, map: readonly string[] = MAP): GameState {
   const state = createGame({
     seed,
@@ -55,6 +63,7 @@ function game(seed: number, map: readonly string[] = MAP): GameState {
   state.height = map.length;
   state.tiles = map.flatMap((row, y) => [...row].map((ch, x) => ({ ...template, x, y, terrain: LAND[ch]!, owner: null, outfit: null })));
   state.players[1]!.carriedMule = 'food';
+  state.phase = 'development';
   return state;
 }
 
@@ -77,8 +86,8 @@ const D_LEGS: [number, FloorInput][] = [
 
 /**
  * 'a' walks right from outside the store's left door, through the hall and out of its right door to the map's edge,
- * back the same way, then down, then stands. 'b' walks B_LEGS and 'd' D_LEGS. Then they and the others wander, from
- * the seed, with sticks past full and in between.
+ * back the same way, then down, pressing at ANALYSE_AT, then stands. 'b' walks B_LEGS and 'd' D_LEGS. Then they and
+ * the others wander, from the seed, with sticks past full and in between.
  */
 function script(seed: number): Script {
   const rng = createRng(seed);
@@ -90,7 +99,7 @@ function script(seed: number): Script {
     const a = t < 200 ? go(1, 0) : t < 400 ? go(-1, 0) : t < 600 ? go(0, 1) : go(0, 0);
     const b = B_LEGS.find(([until]) => t < until)?.[1] ?? held.b!;
     const d = D_LEGS.find(([until]) => t < until)?.[1] ?? held.d!;
-    return { ...held, a, b, d };
+    return { ...held, a: t === ANALYSE_AT ? { ...a, act: true } : a, b, d };
   });
 }
 
@@ -103,19 +112,33 @@ function deepFreeze<T>(value: T): T {
 }
 
 /**
- * Every floor of a turn played from the seed, the game and the inputs frozen so that a write to either throws. The
- * floor is built under `built`, the config it is stepped under unless a test says otherwise.
+ * One tick as RULE-1 runs it: the step, then each press the step did not spend, at the stepped position. The game is
+ * frozen, so the presses apply to a copy of it; the step writes to neither.
+ */
+function tick(state: GameState, floor: DevFloor, inputs: Record<string, FloorInput>, cfg: FloorConfig): { state: GameState; floor: DevFloor } {
+  const spent = doorPresses(floor, state, inputs, cfg);
+  const stepped = stepFloor(floor, state, inputs, DEV_STEER.tickMs, cfg);
+  const pressing = Object.keys(inputs).filter((seat) => inputs[seat]!.act && !spent.has(seat));
+  if (pressing.length === 0) return { state, floor: stepped };
+  const next = structuredClone(state);
+  const pressed = pressing.reduce((f, seat) => applyReach(next, f, seat, SECONDS_LEFT, cfg).floor, stepped);
+  return { state: deepFreeze(next), floor: pressed };
+}
+
+/**
+ * Every floor of a turn played from the seed, and the game at its end, the game and the inputs frozen so that a write
+ * to either throws. The floor is built under `built`, the config it is stepped under unless a test says otherwise.
  */
 function play(seed: number, inputs: Script, map: readonly string[] = MAP, built = floorConfig(HALL)): { state: GameState; floors: DevFloor[] } {
-  const state = game(seed, map);
+  let state = game(seed, map);
   const cfg = floorConfig(HALL);
   let floor = buildFloor(state, built);
   deepFreeze(state);
   deepFreeze(inputs);
   const floors = [deepFreeze(floor)];
-  for (const tick of inputs) {
-    floor = deepFreeze(stepFloor(floor, state, tick, DEV_STEER.tickMs, cfg));
-    floors.push(floor);
+  for (const inputsNow of inputs) {
+    ({ state, floor } = tick(state, floor, inputsNow, cfg));
+    floors.push(deepFreeze(floor));
   }
   return { state, floors };
 }
@@ -221,6 +244,19 @@ describe('the dev floor: the step', () => {
     const first = play(SEED, inputs);
     const again = play(SEED, script(SEED));
     expect(again.floors).toEqual(first.floors);
+    expect(again.state).toEqual(first.state);
+
+    // 'a''s one press, walking down: ANALYSE, holding it where it stands for the analysis's ticks, the stick held down.
+    const pressed = ANALYSE_AT + 1;
+    const assay = Math.ceil((analysisSeconds(first.state, 'a') * 1_000) / DEV_STEER.tickMs);
+    const a = (t: number) => first.floors[t]!.colonists[0]!;
+    const plot = first.state.tiles[Math.floor(a(pressed).y) * first.state.width + Math.floor(a(pressed).x)]!;
+    expect([plot.terrain, plot.owner, hasAnalysed(first.state.players[0]!, first.state, plot)], "'a' analysed the free plains under it").toEqual(['plains', null, true]);
+    expect(a(pressed).assayUntilTick, "'a' assaying").toBe(pressed + assay);
+    const hold = first.floors.slice(pressed + 1, pressed + assay + 1).map((f) => [f.colonists[0]!.x, f.colonists[0]!.y, f.colonists[0]!.moving]);
+    expect(hold, "'a' still while it assays").toEqual(Array(assay).fill([a(pressed).x, a(pressed).y, false]));
+    expect(a(pressed + assay).assayUntilTick, "'a' done assaying").toBeNull();
+    expect(a(pressed + assay + 1).y, "'a' walking down again").toBeGreaterThan(a(pressed).y);
 
     expect(first.floors.map((f) => f.tick), 'a tick a step').toEqual(first.floors.map((_, i) => i));
     expect(wrong(first)).toEqual([]);

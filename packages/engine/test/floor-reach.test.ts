@@ -130,13 +130,47 @@ function world(row: Pick<Row, 'at' | 'game' | 'cfg'>): { state: GameState; floor
 
 /**
  * One tick as the server and the sim run it (RULE-1): the step, then each press the step did not spend, at the stepped
- * position. What each applied press did.
+ * position, each on the floor the one before it left. The stepped floor, the floor after the presses, and each press.
  */
-function tick(state: GameState, floor: DevFloor, inputs: Record<string, FloorInput>, config = cfg): { floor: DevFloor; presses: Press[] } {
+function tick(state: GameState, floor: DevFloor, inputs: Record<string, FloorInput>, config = cfg): { stepped: DevFloor; floor: DevFloor; presses: Press[] } {
   const spent = doorPresses(floor, state, inputs, config);
   const stepped = stepFloor(floor, state, inputs, DEV_STEER.tickMs, config);
   const pressing = Object.keys(inputs).filter((seat) => inputs[seat]!.act && !spent.has(seat));
-  return { floor: stepped, presses: pressing.map((seat) => applyReach(state, stepped, seat, SECONDS_LEFT, config)) };
+  const presses: Press[] = [];
+  const after = pressing.reduce((f, seat) => {
+    const press = applyReach(state, f, seat, SECONDS_LEFT, config);
+    presses.push(press);
+    return press.floor;
+  }, stepped);
+  return { stepped, floor: after, presses };
+}
+
+const ASSAYING = words('ASSAYING', null, false);
+
+/**
+ * After 'a''s ANALYSE press: the floor the press returned holds it where it stands for the analysis's seconds in
+ * ticks, its stick held and its button pressed, the button saying ASSAYING and a press changing nothing; then it walks.
+ */
+function assays(row: string, state: GameState, pressed: DevFloor, press: Press, config: FloorConfig): void {
+  const ticks = Math.ceil((analysisSeconds(state, 'a') * 1_000) / DEV_STEER.tickMs);
+  const start = pressed.colonists[0]!;
+  expect(press.seconds, row).toBe(analysisSeconds(state, 'a'));
+  expect(start.assayUntilTick, `${row}: held for the analysis's ticks`).toBe(pressed.tick + ticks);
+  const game = structuredClone(state);
+  const stick: FloorInput = { x: 1, y: 0, act: true };
+  let floor = pressed;
+  for (let t = 0; t < ticks; t++) {
+    expect(reachWords(reachNow(floor, state, config)), `${row}: tick ${floor.tick}`).toEqual(ASSAYING);
+    expect(applyReach(state, floor, 'a', SECONDS_LEFT, config).floor, `${row}: tick ${floor.tick}, a press`).toBe(floor);
+    floor = stepFloor(floor, state, { a: stick }, DEV_STEER.tickMs, config);
+    const me = floor.colonists[0]!;
+    expect([me.space, me.x, me.y, me.moving], `${row}: tick ${floor.tick}, still`).toEqual([start.space, start.x, start.y, false]);
+  }
+  expect(state, `${row}: the presses while assaying left the game as it was`).toEqual(game);
+  expect(floor.colonists[0]!.assayUntilTick, `${row}: done at tick ${floor.tick}`).toBeNull();
+  expect(reachWords(reachNow(floor, state, config)), `${row}: done`).not.toEqual(ASSAYING);
+  const walked = stepFloor(floor, state, { a: { ...stick, act: false } }, DEV_STEER.tickMs, config).colonists[0]!;
+  expect([walked.x > start.x, walked.moving], `${row}: walking again`).toEqual([true, true]);
 }
 
 /** What the button would do for 'a' now, with the turn's time left, as the server asks it each tick. */
@@ -472,6 +506,20 @@ const TABLE: Row[] = [
     },
   },
   {
+    row: "14 none, assaying, at the store's door: ASSAYING, and the stick and a press do nothing",
+    at: (s) => ({ space: 'map', ...doorOutside(s, 'doorL', cfg), assayUntilTick: 2 }),
+    stick: { x: 1, y: 0, act: false },
+    reach: () => ({ kind: 'none', enabled: false, hint: 'assaying' }),
+    words: () => ASSAYING,
+    press: {
+      game: (was, now, press) => {
+        expect(now).toEqual(was);
+        expect(press.reach).toEqual({ kind: 'none', enabled: false, hint: 'assaying' });
+        expect(press.floor.colonists[0]).toMatchObject({ space: 'map', ...doorOutside(was, 'doorL', cfg), moving: false, assayUntilTick: 2 });
+      },
+    },
+  },
+  {
     row: '14 none: on the map on a plot already analysed, nothing in reach',
     at: () => onTile(0, 0),
     game: (s) => void (a(s).analysed = [0]),
@@ -500,8 +548,8 @@ describe('the dev floor: the action button', () => {
         expect(pressed, r.row).toThrow(r.press.refused);
         continue;
       }
-      const { floor: stepped, presses } = pressed();
-      const me = stepped.colonists[0]!;
+      const { stepped, floor: after, presses } = pressed();
+      const me = after.colonists[0]!;
       if (typeof r.press === 'object' && 'door' in r.press) {
         expect(me.space, `${r.row}: through the door`).not.toBe(floor.colonists[0]!.space);
         expect(me, `${r.row}: as walking through it`).toEqual(throughTheDoor(state, floor, r.press.door));
@@ -515,12 +563,14 @@ describe('the dev floor: the action button', () => {
       if (!r.stick && !r.unasked) expect(press.reach, r.row).toEqual(reach);
       if (typeof r.press === 'object' && 'game' in r.press) r.press.game(was, state, press);
       else expect(state, `${r.row}: the press leaves the game as it was`).toEqual(was);
+      if (press.reach.kind === 'analyse') assays(r.row, state, after, press, config);
+      else expect(press.floor, `${r.row}: the floor as the step left it`).toBe(stepped);
 
       if (r.row.startsWith('13')) {
         // After the pub the turn is over: the button dims and a second press changes nothing.
-        expect(reachWords(reachNow(stepped, state, config))).toEqual(words('IN THE PUB', 'turn over', false));
+        expect(reachWords(reachNow(after, state, config))).toEqual(words('IN THE PUB', 'turn over', false));
         const done = structuredClone(state);
-        tick(state, stepped, { a: { ...IDLE, act: true } }, config);
+        tick(state, after, { a: { ...IDLE, act: true } }, config);
         expect(state).toEqual(done);
       }
     }
@@ -532,8 +582,11 @@ describe('the dev floor: the action button', () => {
     expect(reachWords(reachNow(floor, state))).toEqual(words('ANALYSE'));
     const analysed = press(floor);
     expect(hasAnalysed(a(state), state, tileOf(state, 7, 4))).toBe(true);
-    expect(reachWords(reachNow(analysed, state))).toEqual(words('FIT FILTER', `${DEVELOPMENT.filterAlloy} Alloy`));
-    const filtered = press(analysed);
+    expect(reachWords(reachNow(analysed, state))).toEqual(ASSAYING);
+    let assayed = analysed;
+    while (assayed.colonists[0]!.assayUntilTick !== null) assayed = stepFloor(assayed, state, {}, DEV_STEER.tickMs, cfg);
+    expect(reachWords(reachNow(assayed, state))).toEqual(words('FIT FILTER', `${DEVELOPMENT.filterAlloy} Alloy`));
+    const filtered = press(assayed);
     expect(tileOf(state, 7, 4).filter).toBe(true);
     expect(reachWords(reachNow(filtered, state)), "row 14's hint").toEqual(words('TO THE STORE', null, false));
   });
