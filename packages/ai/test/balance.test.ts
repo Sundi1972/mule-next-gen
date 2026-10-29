@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, AI_LEVELS, AI_PERSONAS, createGame, EVENTS, GAME, GOODS, mulePriceFor, observe, STRATEGIST, walkSeconds, type GameState } from '@mule/engine';
+import {
+  advancePhase,
+  AI_LEVELS,
+  AI_PERSONAS,
+  createGame,
+  EVENTS,
+  GAME,
+  GOODS,
+  mulePriceFor,
+  observe,
+  STRATEGIST,
+  walkSeconds,
+  type AiLevelConfig,
+  type AiLevelId,
+  type EventRow,
+  type GameState,
+} from '@mule/engine';
 import { outlook } from '../src/outlook.js';
 import { AiSeat } from '../src/seat.js';
 import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, tradeDecision, wantsAnyAhead, wantsPlot } from '../src/strategist.js';
@@ -390,11 +406,60 @@ describe('the sales tax', () => {
   });
 });
 
+/** Month 1's auction with Smithore up and scarce: the store holds 2, ai2 and ai3 are 3 short each; ai1 leads but isn't short, so no spite; ai0 holds none. */
+function auctionWithScarceSmithore(): GameState {
+  const state = fourSeats(3);
+  while (state.phase !== 'auction') advancePhase(state);
+  state.store.stock.smithore = 2;
+  state.players[0]!.stock.smithore = 0;
+  state.players[1]!.money = 100_000;
+  const row = (id: string, now: number, need: number) => ({ id, had: now, used: 0, made: 0, now, need, spoils: 0 });
+  Object.assign(state.auction!, { good: 'smithore', stage: 'status', status: [row('ai0', 0, 0), row('ai1', 4, 4), row('ai2', 0, 3), row('ai3', 0, 3)] });
+  return state;
+}
+
+describe('cornering', () => {
+  it('T-AC-28: a Rookie seat never pursues a monopoly', () => {
+    const obs = observe(auctionWithScarceSmithore(), 'ai0');
+    const aggressive = (levelId: AiLevelId, level: Partial<AiLevelConfig> = {}): Mind => ({
+      me: 'ai0',
+      personaId: 'aggressive',
+      persona: AI_PERSONAS.aggressive,
+      levelId,
+      level: { ...AI_LEVELS[levelId], ...level },
+    });
+    const plan = (mind: Mind) => goodPlan(obs, mind, 'smithore');
+    // The same seat with no taste for cornering: what each unit is worth to it plainly.
+    const plainBuy = (mind: Mind) => plan({ ...mind, persona: { ...mind.persona, corner: 0 } }).values.buy;
+
+    const trader = plan(aggressive('trader'));
+    expect(trader.spiteBid).toBe(0);
+    expect(trader.corner.units).toBeGreaterThan(0);
+    expect(trader.values.buy[0]).toBeGreaterThan(plainBuy(aggressive('trader'))[0]!);
+
+    const rookie = plan(aggressive('rookie'));
+    expect(rookie.corner.units).toBe(0);
+    expect(rookie.values.buy).toEqual(plainBuy(aggressive('rookie')));
+
+    // Positive control: the same Rookie seat, allowed to corner, corners here.
+    const cornering = plan(aggressive('rookie', { corners: true }));
+    expect(cornering.corner.units).toBeGreaterThan(0);
+    expect(cornering.values.buy[0]).toBeGreaterThan(rookie.values.buy[0]!);
+  });
+});
+
 describe('production events and the outlook', () => {
   it('T-AC-7: a seat’s outlook forecasts the same with events on as off: it never sees next month’s event', () => {
+    /** Gives an event row exactly these fields, dropping any others it had. */
+    const reset = (row: object, fields: object) => {
+      for (const key of Object.keys(row)) delete (row as Record<string, unknown>)[key];
+      Object.assign(row, fields);
+    };
+    /** The outlook with every event row that rolls in production at exactly `chance`, nothing raising or lowering it. */
     const forecast = (seed: number, chance: number) => {
-      const saved = EVENTS.chance;
-      EVENTS.chance = chance;
+      const rows: EventRow[] = [...Object.values(EVENTS.colony), ...Object.values(EVENTS.player)].filter((row) => 'production' in row.phases);
+      const saved = rows.map((row) => ({ ...row }));
+      for (const row of rows) reset(row, { phases: { production: chance }, cap: 1, ...(row.perPlot && { perPlot: row.perPlot }) });
       try {
         const state = fourSeats(seed);
         while (state.phase !== 'development') advancePhase(state);
@@ -403,7 +468,7 @@ describe('production events and the outlook', () => {
         const o = outlook(observe(state, 'ai0'), 'ai0', { lookAhead: true });
         return GOODS.map((g) => [o.price(g), o.later(g)]);
       } finally {
-        EVENTS.chance = saved;
+        rows.forEach((row, i) => reset(row, saved[i]!));
       }
     };
     for (let seed = 1; seed <= 6; seed++) expect(forecast(seed, 1)).toEqual(forecast(seed, 0));

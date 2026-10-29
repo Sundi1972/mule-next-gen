@@ -86,7 +86,7 @@ export class Recorder {
     this.brain = this.wrapBrain(brain);
   }
 
-  /** The game as the room should host it: every call opens a step, except `heard` and `viewFor`. */
+  /** The game as the room should host it: every call opens a step, except `viewFor`. A heard line keeps no words. */
   wrap(game: Game<MuleIntent, MuleView>): Game<MuleIntent, MuleView> {
     return {
       start: (seats: SeatInfo[]) => {
@@ -116,7 +116,10 @@ export class Recorder {
         this.begin(() => ({ type: 'moved', seat }));
         game.seatMoved?.(seat);
       },
-      heard: (from, text, to) => game.heard?.(from, text, to),
+      heard: (from, text, to) => {
+        this.begin(() => ({ type: 'heard', from, ...(to ? { to } : {}) }));
+        game.heard?.(from, text, to);
+      },
       viewFor: (seat) => {
         this.viewing++;
         try {
@@ -214,6 +217,8 @@ export class Recorder {
         });
       },
       changed: () => inner.changed(),
+      // A frame is output the game learns nothing from, so it passes through untaped.
+      frame: (payload) => inner.frame(payload),
       ...(inner.say ? { say: (from: string, text: string, to?: string) => inner.say!(from, text, to) } : {}),
     };
   }
