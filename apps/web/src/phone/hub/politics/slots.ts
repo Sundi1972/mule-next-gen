@@ -18,7 +18,7 @@ const electionOpen = ({ view }: HubSeat) => {
 export const OFFICES_BANNER: BannerSlot = { id: 'offices', Body: Offices, show: politicsOn };
 
 /** Election day takes the stage from the announcement through the reveal (E-2). */
-export const ELECTION_DAY_STAGE: StageSlot = { id: 'election-day', show: electionOpen, phase: () => 'Election day', Body: ElectionDay, Rail: ElectionDayRail };
+export const ELECTION_DAY_STAGE: StageSlot = { id: 'election-day', show: electionOpen, phase: () => 'Election', Body: ElectionDay, Rail: ElectionDayRail };
 
 /** E-1: running for office, any month an election is still to come; the door asks for a promise, or shows your candidacy. */
 export const ELECTION_AGENDA: AgendaSlot = {
