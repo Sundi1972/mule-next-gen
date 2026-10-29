@@ -6,10 +6,7 @@ export {
   plotUnitsAt,
   eventScript,
   eventSegments,
-  eventGroups,
-  isRollCall as isEventRollCall,
   eventStageAt,
-  eventSkipTo,
   eventFrontAt,
   EVENT_FRONT,
   type EventScript,
@@ -21,9 +18,9 @@ export {
 } from './timing';
 export { EVENT_ENTRY, type EventEntry, type EventMotion } from './catalogue';
 export { EventBoundary } from './boundary';
-export { EventColonists, EventSickTag, RollCall as EventRollCall, sickAt as eventSickAt } from './rollcall';
-export { EventShow, useShow as useEventShow, useEnclosingEventShow, type EventShowProps, type ShowCast, type ShowFrame } from './frame';
-export { EventLivingMap, type EventLivingMapProps } from './map';
+export { EventSickTag, sickAt as eventSickAt } from './rollcall';
+export { EventShow, useShow as useEventShow, useEnclosingEventShow, type EventShowProps } from './frame';
+export { EventLivingMap } from './map';
 export { useEventLivingView } from './living';
 export { EventSoloRail, EventTvPhoneRail, EventSkipHint } from './phone';
 export { useEventReducedMotion } from './motion';
