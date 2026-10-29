@@ -139,6 +139,7 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onSho
       }}
       data-testid="store-hall"
     >
+      {/* The back wall and the walkway are decoration, not floor: where feet may stand is HALL.floor, not these. */}
       {/* The back wall behind the shopfronts. */}
       <div aria-hidden className="absolute inset-x-0 top-0 h-[42%] border-b-2 border-holo-line bg-raised/50" />
       {/* The walkway between the rows. */}
@@ -403,7 +404,8 @@ function standing(me: Visitor): { x: number; y: number } {
 /**
  * Your colonist on the floor, leading your MULE, with its condition at its shoulder (AM-14). It walks with #195's gait
  * (spec AM-16): its stride from its pace and the lead on the hall's flat floor, and its MULE steps on the same stride.
- * Standing, the creature is the still drawing it always was; reduced motion is Creature's and Mule's own.
+ * Standing, it breathes on the gait's idle cycle as it does on the map (WS6's variant A); reduced motion is Creature's
+ * and Mule's own.
  */
 function Colonist({ me, at, paceRule, size, z, wrap = (_, c) => c }: { me: Visitor; at: { x: number; y: number }; paceRule: PaceRule | undefined; size: keyof typeof SIZES; z: Sizes; wrap?: CreatureWrap | undefined }) {
   const species = useSeatSpecies(me.slot);
@@ -429,8 +431,8 @@ function Colonist({ me, at, paceRule, size, z, wrap = (_, c) => c }: { me: Visit
         {wrap(
           me.id,
           <span className="relative rounded-full ring-2 ring-holo ring-offset-1 ring-offset-table">
-          {/* Standing it stays the bare drawing: the motion wrappers' sized box would read as a bar over the head (B-AC-9). */}
-          <Creature species={species} color={SLOT_COLOR[me.slot]} size={z.creature} {...(me.moving ? { motion: motionOf(gait), cycle: stride, facing } : {})} />
+          {/* Always in motion, idle while standing: the wrappers stay mounted, so a start or stop never remounts the drawing. */}
+          <Creature species={species} color={SLOT_COLOR[me.slot]} size={z.creature} motion={motionOf(gait)} cycle={stride} facing={facing} />
           {paceRule && (
             <>
               <ConditionTag id={me.id} condition={condition} rule={paceRule} food={me.food} size={size} explain />
