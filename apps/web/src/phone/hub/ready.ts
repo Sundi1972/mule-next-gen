@@ -1,4 +1,4 @@
-import type { ElectionView, MuleIntent, MuleView, PlayerView, TableView } from '@mule/protocol';
+import type { AuctionView, ElectionView, MuleIntent, MuleView, PlayerView, TableView } from '@mule/protocol';
 
 /** Planning has no clock: who it still waits for, and what the planning footer shows and sends. */
 
@@ -75,16 +75,62 @@ export function planningProper(view: Pick<MuleView, 'phase' | 'politics'>): bool
   return view.phase === 'planning' && !(election && election.stage !== 'over');
 }
 
+/** The view's auction, where it carries one: only the stage matters here. */
+type WithAuction = { auction?: Pick<AuctionView, 'stage'> | null };
+
 /**
  * When the server takes the host's Continue: planning proper, the election's announce or ballot (never its ceremony),
- * the month end (upkeep), which also waits for every Ready; and month 1's development while its clock waits for the
- * first MULEs.
+ * the month end (upkeep), which also waits for every Ready; month 1's development while its clock waits for the first
+ * MULEs; and a good's side pick (A-7), never its walk.
  */
-export function hostMayContinue(view: Pick<MuleView, 'phase' | 'politics' | 'clockWaitsFor'>): boolean {
+export function hostMayContinue(view: Pick<MuleView, 'phase' | 'politics' | 'clockWaitsFor'> & WithAuction): boolean {
   const stage = view.politics?.election?.stage;
   if (view.phase === 'development') return !!view.clockWaitsFor;
-  return planningProper(view) || (view.phase === 'planning' && (stage === 'announce' || stage === 'ballot')) || view.phase === 'upkeep';
+  return planningProper(view) || (view.phase === 'planning' && (stage === 'announce' || stage === 'ballot')) || view.phase === 'upkeep' || sidePick(view);
 }
+
+/** A good's side pick, the auction's status screen: no clock, it waits for every Done or the host's Continue (A-7). */
+export function sidePick(view: Pick<MuleView, 'phase'> & WithAuction): boolean {
+  return view.phase === 'auction' && view.auction?.stage === 'status';
+}
+
+/**
+ * At a good's side pick: every person not yet Done, in seat order, ready meaning Done. An AI picks by itself and counts
+ * as picked. A dropped phone is still waited for, marked away, as in planning: the host can move on for it.
+ */
+export function stillPicking(view: Pick<MuleView, 'players' | 'auction'>, connected: (id: string) => boolean): Seat[] {
+  return view.players.map((p) => ({ ...p, ready: pickedIn(view, p.id) })).filter((p) => !p.isAi && !p.ready).map((p) => seatOf(p, connected));
+}
+
+/** Whether a seat has pressed Done at the side pick, as the server has it. */
+export function pickedIn(view: Pick<MuleView, 'auction'>, id: string): boolean {
+  return !!view.auction?.walkers.find((w) => w.id === id)?.done;
+}
+
+/** The side pick's Continue, in the mock's words (#audit-auction-status): the host moves on for whoever is still picking. */
+export const SIDE_PICK_WORDS = {
+  /** The host's button, once Done, while anyone is still picking. */
+  moveOn: (others: readonly Seat[]) => `Move on for ${others.length === 1 ? others[0]!.name : 'them'}`,
+  /** The confirm's question. */
+  title: (others: readonly Seat[]) => `Move on without ${namesOf(others, null)}?`,
+  /**
+   * After the seats' sides in the confirm, for `of` seats of which `away` are away (an away seat sits the walk out):
+   * every one away, the walk starts without them; some away, the others start on the side shown; none away, `given`
+   * when every side is the one the numbers give.
+   */
+  tail: (given: boolean, away = 0, of = 1) =>
+    away >= of
+      ? 'The walk starts without them.'
+      : away > 0
+        ? 'The others start on the side shown; the walk starts.'
+        : `${given ? 'That is the side the numbers give' : 'Each starts on the side shown'}; the walk starts for everyone.`,
+  now: 'Move on',
+  keep: 'Keep waiting',
+  /** Once nobody is left. */
+  all: 'Everyone has picked: the walk starts.',
+  /** Where the clock was. */
+  noClock: 'the walk starts when everyone has picked.',
+} as const;
 
 /** What the ready bar says. Every situation that waits for people uses the one bar in its own words (E-10). */
 export interface ReadyWords {

@@ -61,21 +61,24 @@ function playToFirstStatus() {
   return { game, advance };
 }
 
-/** The real game on a manual clock, played on into the first good's walk. */
+/** The real game on a manual clock, played on into the first good's walk: the side pick has no clock (A-7), so both humans press Ready. */
 function toFirstWalk() {
   const { game, advance } = playToFirstStatus();
-  for (let i = 0; i < 20_000 && game.viewFor(null).auction?.stage !== 'walk'; i++) advance(WALK.tickMs);
+  for (let i = 0; i < 20_000 && game.viewFor(null).auction?.stage !== 'walk'; i++) {
+    if (game.viewFor(null).auction?.stage === 'status') for (const s of seats) if (!s.isAi) game.handle(s.id, { type: 'ready' });
+    advance(WALK.tickMs);
+  }
   expect(game.viewFor(null).auction?.stage, "the first good's walk comes up").toBe('walk');
   return game;
 }
 
 /** The phone's auction screen for this seat, drawn from the server's view of it. */
-function phoneScreen(view: MuleView, seatId: string): string {
+function phoneScreen(view: MuleView, seatId: string, table = {} as TableView<MuleView>): string {
   const self = view.players.find((p) => p.id === seatId)!;
   // The shell's chat block reads the client too: nothing said yet.
   const client = { intent: () => {}, subscribe: () => () => {}, getState: () => ({ chat: [], view: null, seatId }) } as unknown as TableClient;
   const screen = createElement(Auction);
-  const game = createElement(PhoneGameProvider, { value: { table: {} as TableView<MuleView>, view, me: view.me!, self, slot: self.slot as Slot }, children: screen });
+  const game = createElement(PhoneGameProvider, { value: { table, view, me: view.me!, self, slot: self.slot as Slot }, children: screen });
   return renderToStaticMarkup(createElement(ClientProvider, { client, children: game }));
 }
 
@@ -83,14 +86,23 @@ function phoneScreen(view: MuleView, seatId: string): string {
 const doneButton = (html: string) => html.match(/<button[^>]*data-testid="done"[^>]*>([^<]*)</);
 
 describe("the goods auction's status screen", () => {
-  it('FM-FU1: pressing Ready on a good\'s status screen turns the button to "Done · waiting"', () => {
+  it("FM-FU1 (A-7): pressing Ready on a good's status screen gives the button way to who is still picking, as the mock has it", () => {
     const game = toFirstStatus();
     game.handle('s1', { type: 'ready' });
     const view = game.viewFor('s1');
     expect(view.auction?.stage).toBe('status');
-    const button = doneButton(phoneScreen(view, 's1'));
-    expect(button?.[1]).toBe('Done · waiting');
-    expect(button?.[0]).toContain('disabled=""');
+    const html = phoneScreen(view, 's1');
+    expect(doneButton(html)).toBeNull();
+    expect(textOf(html, 'waiting-to-pick')).toBe('Waiting for Mia to pick');
+    expect(textOf(html, 'move-on'), 'only the host moves on').toBeNull();
+    expect(textOf(html, 'ready-count')).toBe('2 / 3 PICKED');
+  });
+
+  it('FM-FU1 (A-7): the host, once Ready, can move on for the rest: "Move on for Mia"', () => {
+    const game = toFirstStatus();
+    game.handle('s1', { type: 'ready' });
+    const table = { hostId: 's1', seats: [] } as unknown as TableView<MuleView>;
+    expect(textOf(phoneScreen(game.viewFor('s1'), 's1', table), 'move-on')).toBe('Move on for Mia');
   });
 
   it('FM-FU1 (negative): a seat that has not pressed Ready still reads "Ready", and can press it', () => {
@@ -189,7 +201,7 @@ describe("the goods auction's status screen, in plain words", () => {
 
   it("the status screen's words and your numbers carry the mock's test ids", () => {
     const html = phoneScreen(toFirstStatus().viewFor('s1'), 's1');
-    expect(textOf(html, 'status-words')).toMatch(/Pick your side before the bell\.$/);
+    expect(textOf(html, 'status-words')).toMatch(/Pick your side; you can change it until everyone has\.$/);
   });
 
   it('G-6 (negative): with the ship not in port, no word about it', () => {

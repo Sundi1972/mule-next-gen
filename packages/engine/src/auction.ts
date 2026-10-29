@@ -191,7 +191,7 @@ function nextGood(state: GameState, skipped: LiveAuction['skipped']): void {
     Object.assign(a, {
       good,
       stage: 'status',
-      clockMs: WALK.statusMs,
+      clockMs: WALK.statusMs ?? 0,
       elapsed: 0,
       storeBuy,
       storeSell,
@@ -277,9 +277,10 @@ function seedSides(state: GameState): void {
 }
 
 /**
- * Advances the live auction by dt ms of game time. The status screen runs
- * on its own clock and ends early once every player is done; then the walk
- * starts on the sides picked. The walk ends when its clock runs out, when
+ * Advances the live auction by dt ms of game time. The status screen waits
+ * for every player's Done (WALK.statusMs null: no clock; a number restores
+ * one, and the screen then also ends when it runs out); then the walk starts
+ * on the sides picked. The walk ends when its clock runs out, when
  * every player still on the board is done, or when no trade is possible any
  * more. Returns every unit traded in this step.
  */
@@ -290,8 +291,9 @@ export function stepAuction(state: GameState, dt: number): Trade[] {
 
   if (a.stage === 'status') {
     a.ticks++;
-    a.clockMs -= dt;
-    if (a.clockMs > 0 && !state.players.every((p) => a.done.includes(p.id))) return [];
+    const timed = WALK.statusMs !== null;
+    if (timed) a.clockMs -= dt;
+    if ((!timed || a.clockMs > 0) && !state.players.every((p) => a.done.includes(p.id))) return [];
     Object.assign(a, { stage: 'walk', clockMs: WALK.goodMs, done: [], elapsed: 0 } satisfies Partial<LiveAuction>);
     // Everyone passed, or every seller lacks a buyer or every buyer a seller: nothing to walk for.
     if (!tradePossible(a, goodsMarket(state))) finishGood(state, 'nobody trading');

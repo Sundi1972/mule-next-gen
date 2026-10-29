@@ -1,12 +1,15 @@
 import type { AuctionView } from '@mule/protocol';
 import { Button, cx, GOOD_NAME, GoodTag, TimeBar, WalkBoard } from '@mule/ui';
-import { BoardKey, boardWalkers, dealLine, Hint, MyStoreLine, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, toggleSide, walkHint } from '../components/AuctionParts';
+import { useState } from 'react';
+import { BoardKey, boardWalkers, dealLine, Hint, MyStoreLine, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, toggleSide, WaitingToPick, walkHint } from '../components/AuctionParts';
 import { speakerAt } from '../chat/Chat';
 import { PHASE_NAME } from '../game/derive';
 import { useAuctionSound } from '../game/sound';
 import type { MouseEvent, PointerEvent } from 'react';
 import { useClient } from '../net/react';
 import { usePhoneGame } from './game';
+import { connectedIn, pickedIn, SIDE_PICK_WORDS, stillPicking, type Seat } from './hub/ready';
+import { ReadyCount } from './hub/ReadyBar';
 import { PhoneShell } from './Shell';
 import { stepDir, useWalkIntent } from './useWalkIntent';
 
@@ -16,13 +19,16 @@ const SIDE_NAME: Record<Side, string> = { buyer: 'Buyer', seller: 'Seller', pass
 /**
  * The goods auction, the original's walk: goods come up one at a time. A
  * status screen shows what everyone has, beside your side, already picked
- * from what you have and need: tap Buy or Sell to change it. Then you hold
+ * from what you have and need: tap Buy or Sell to change it, then Ready. It
+ * has no clock (A-7): the walk starts once everyone has picked, or when the
+ * host moves on for whoever is still picking. Then you hold
  * Up or Down (or drag on the board) to walk your creature. Your height is
  * your bid or your ask; meet someone and units change hands.
  */
 export function Auction() {
   const client = useClient();
-  const { view, me, self } = usePhoneGame();
+  const { table, view, me, self } = usePhoneGame();
+  const [asking, setAsking] = useState(false);
   const auction = view.auction;
   useAuctionSound(auction);
   const stage = auction?.stage;
@@ -58,6 +64,12 @@ export function Auction() {
   if (stage === 'status') {
     const side = mine?.side;
     const ship = shipWants(view, auction);
+    // A table the room has not listed yet counts every seat as connected.
+    const connected = connectedIn(table.seats ?? []);
+    const waiting = stillPicking(view, connected);
+    const others = waiting.filter((s) => s.id !== me.id);
+    const isHost = table.hostId === me.id;
+    const picked = view.players.map((p) => ({ ...p, ready: pickedIn(view, p.id) }));
     return (
       <PhoneShell
         phase={`${GOOD_NAME[good]} · buy or sell?`}
@@ -70,7 +82,7 @@ export function Auction() {
               </span>
             </div>
             <p className="text-xs leading-snug text-ink-2" data-testid="status-words">
-              {spare < 0 ? `You need ${-spare} more ${GOOD_NAME[good]} this month.` : spare > 0 ? `You have ${spare} more than you need.` : 'You have just what you need.'} Pick your side before the bell.
+              {spare < 0 ? `You need ${-spare} more ${GOOD_NAME[good]} this month.` : spare > 0 ? `You have ${spare} more than you need.` : 'You have just what you need.'} Pick your side; you can change it until everyone has.
             </p>
           </>
         }
@@ -97,14 +109,32 @@ export function Auction() {
                 ))}
               </div>
               <span className="text-center font-mono text-[10px] text-ink-3" data-testid="side-now">
-                {side === 'buyer' || side === 'seller' ? `YOU ${side === 'buyer' ? 'BUY' : 'SELL'} · TAP AGAIN TO PASS` : 'YOU SIT THIS GOOD OUT'}
+                {side === 'buyer' || side === 'seller' ? `✓ YOU ${side === 'buyer' ? 'BUY' : 'SELL'} · TAP AGAIN TO PASS` : '✓ YOU SIT THIS GOOD OUT'}
               </span>
             </div>
-            {doneButton}
+            {/* Ready is the pick; once pressed it gives way to who is still picking, and the host's way on (G-7). */}
+            {!done ? (
+              doneButton
+            ) : (
+              <div className="flex flex-col gap-1.5" data-testid="pick-wait">
+                {others.length > 0 ? <WaitingToPick seats={others} /> : <span className="text-sm font-semibold text-holo @min-[1100px]/shell:text-lg">{SIDE_PICK_WORDS.all}</span>}
+                {isHost && others.length > 0 && (
+                  <Button size="md" variant="outline" className="w-full @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" onClick={() => setAsking(true)} data-testid="move-on">
+                    {SIDE_PICK_WORDS.moveOn(others)}
+                  </Button>
+                )}
+              </div>
+            )}
           </>
         }
       >
-        <TimeBar seconds={auction.seconds} total={auction.total} slowed={auction.slowed} className="mb-1.5" />
+        {/* Where the time bar was: no clock (G-7), the count of who has picked. */}
+        <div className="mb-1.5 flex items-center gap-2 @min-[1100px]/shell:gap-4" data-testid="pick-bar">
+          <ReadyCount players={picked} label="PICKED" />
+          <span className="text-xs leading-snug text-ink-2 @min-[1100px]/shell:text-lg">
+            <strong className="font-semibold text-ink">No clock:</strong> {SIDE_PICK_WORDS.noClock}
+          </span>
+        </div>
         {skipped && (
           <p className="mb-1.5 shrink-0 truncate font-mono text-[11px] text-ink-3" data-testid="skipped">
             {skipped}
@@ -117,6 +147,17 @@ export function Auction() {
           <MyStoreLine auction={auction} />
           {ship && <ShipWants want={ship.first} also={ship.also} have={me.stock[ship.first.good]} />}
         </div>
+        {asking && isHost && others.length > 0 && (
+          <MoveOn
+            auction={auction}
+            seats={others}
+            onNow={() => {
+              setAsking(false);
+              client.intent({ type: 'continue' });
+            }}
+            onKeep={() => setAsking(false)}
+          />
+        )}
       </PhoneShell>
     );
   }
@@ -218,6 +259,48 @@ export function Auction() {
         />
       </div>
     </PhoneShell>
+  );
+}
+
+/**
+ * The side a seat starts the walk on if the host moves on now, in words: "Kai buys Food: 1 of 3, short 2." A dropped
+ * phone sits the walk out, so it says so. `given` is whether it is the side the numbers give (the engine's defaultSide).
+ */
+export function sideWords(auction: AuctionView, seat: Seat, good: AuctionView['good']): { line: string; given: boolean } {
+  const g = GOOD_NAME[good];
+  const row = auction.status.find((r) => r.id === seat.id);
+  const now = row?.now ?? 0;
+  const need = row?.need ?? 0;
+  const side = auction.walkers.find((w) => w.id === seat.id)?.side ?? 'pass';
+  const given = side === (now > need ? 'seller' : now < need ? 'buyer' : 'pass');
+  if (seat.away) return { line: `${seat.name} is away and sits ${g} out.`, given: false };
+  if (side === 'buyer') return { line: now < need ? `${seat.name} buys ${g}: ${now} of ${need}, short ${need - now}.` : `${seat.name} buys ${g}.`, given };
+  if (side === 'seller') return { line: now > need ? `${seat.name} sells ${g}: ${now - need} spare.` : `${seat.name} sells ${g}.`, given };
+  return { line: now === need ? `${seat.name} sits ${g} out: ${now} of ${need}, just enough.` : `${seat.name} sits ${g} out.`, given };
+}
+
+/** The host's one confirming tap before moving on for the seats still picking. */
+export function MoveOn({ auction, seats, onNow, onKeep }: { auction: AuctionView; seats: readonly Seat[]; onNow: () => void; onKeep: () => void }) {
+  const words = seats.map((s) => sideWords(auction, s, auction.good));
+  return (
+    <div className="fixed inset-0 z-40 grid place-items-center bg-void/70 p-3" role="dialog" aria-modal aria-labelledby="move-on-title" data-testid="move-on-dialog">
+      <div className="flex w-full max-w-[420px] flex-col gap-2 rounded-sheet border-2 border-warn bg-panel p-3 shadow-glow @min-[1100px]/shell:max-w-[560px] @min-[1100px]/shell:gap-4 @min-[1100px]/shell:p-6">
+        <h2 id="move-on-title" className="font-display text-lg font-semibold @min-[1100px]/shell:text-3xl">
+          {SIDE_PICK_WORDS.title(seats)}
+        </h2>
+        <p className="text-sm text-ink-2 @min-[1100px]/shell:text-lg" data-testid="move-on-words">
+          {words.map((w) => w.line).join(' ')} {SIDE_PICK_WORDS.tail(words.every((w) => w.given), seats.filter((s) => s.away).length, seats.length)}
+        </p>
+        <div className="flex gap-2">
+          <Button size="md" className="flex-1" onClick={onNow} data-testid="move-on-now">
+            {SIDE_PICK_WORDS.now}
+          </Button>
+          <Button size="md" variant="ghost" className="flex-1" onClick={onKeep} data-testid="keep-waiting">
+            {SIDE_PICK_WORDS.keep}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

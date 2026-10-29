@@ -2,7 +2,7 @@ import type { EventKey, GameState, MonthEvent, MonthReport } from '@mule/engine'
 import type { MuleView } from '@mule/protocol';
 import { describe, expect, it } from 'vitest';
 import { MuleGame } from '../src/mule-game.js';
-import { fakeContext, readyAll, seats } from './fake-context.js';
+import { fakeContext, pressThroughSidePick, readyAll, seats } from './fake-context.js';
 
 /** A month event of `key` that hit one plot; its words and shape don't matter to how long it plays. */
 function event(key: EventKey): MonthEvent {
@@ -40,7 +40,11 @@ function playMonth(keys: EventKey[], phaseScale = 1) {
   const push = state.history.push.bind(state.history);
   state.history.push = (...reports: MonthReport[]) => push(...reports.map((r) => ({ ...r, events: keys.map(event) })));
   readyAll(game);
-  for (let i = 0; i < 100_000 && !first.has('upkeep'); i++) fake.advance(100);
+  // A good's side pick has no clock (A-7): the humans press Ready there.
+  for (let i = 0; i < 100_000 && !first.has('upkeep'); i++) {
+    pressThroughSidePick(game);
+    fake.advance(100);
+  }
   const length = (phase: string) => {
     const seen = first.get(phase);
     if (!seen) throw new Error(`month 1 never showed ${phase}`);

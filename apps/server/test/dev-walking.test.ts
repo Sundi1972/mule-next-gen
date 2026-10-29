@@ -2,7 +2,7 @@ import { AI_HANDS, AI_LEVELS, analysisSeconds, DEVELOPMENT, RuleError, SPECIES_P
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_AI_LEVEL, PHASE_MS, type MuleGame } from '../src/mule-game.js';
-import { readyAll, seats, tapThere, toDevelopment, walkers } from './fake-context.js';
+import { pressThroughSidePick, readyAll, seats, tapThere, toDevelopment, walkers } from './fake-context.js';
 
 const LENA = 's1';
 const OSSA = 's2';
@@ -369,6 +369,8 @@ describe('FM-one-clock: one development clock for every seat', () => {
         game.connectionChanged('s1', true);
         readyAll(game);
       }
+      // A good's side pick has no clock either (A-7): it holds the dropped phone, so s1 picks there too.
+      pressThroughSidePick(game);
       g.advance(100);
     }
     expect(game.viewFor(null)).toMatchObject({ month: 2, phase: 'development' });

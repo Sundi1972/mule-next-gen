@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { GOODS, newPolitics, player, POLITICS, POLLUTION, scoreParts, type GameState, type Phase } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { MuleGame } from '../src/mule-game.js';
-import { fakeContext, readyAll, seats, toDevelopment } from './fake-context.js';
+import { fakeContext, pressThroughSidePick, readyAll, seats, toDevelopment } from './fake-context.js';
 
 /** Two phones and the board: every kind of viewer. */
 const VIEWERS = ['s1', 's2', null] as const;
@@ -36,6 +36,8 @@ function playTwoMonths(look: (game: MuleGame, state: GameState) => void): Set<Ph
       game.handle('s1', { type: 'claim', ...lit });
       claimedIn = state.month;
     }
+    // A good's side pick has no clock (A-7): the humans press Ready there.
+    pressThroughSidePick(game);
     advance(100);
   }
   expect(game.viewFor(null).finished).toBe(true);

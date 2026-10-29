@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readyAll, tapThere, toDevelopment as reachDevelopment } from './fake-context.js';
+import { pressThroughSidePick, readyAll, tapThere, toDevelopment as reachDevelopment } from './fake-context.js';
 
 /** Month 1 into development with Heiko (s1) owning the first plot that lit up in the grant. */
 function toDevelopment() {
@@ -35,6 +35,7 @@ describe("MyView.installedThisTurn: the store's Now line after a reload", () => 
     for (let i = 0; i < 10_000 && !(game.viewFor(null).phase === 'development' && game.viewFor(null).month === 2); i++) {
       // Planning and the month end have no clock (C20).
       if (game.viewFor(null).phase === 'planning' || game.viewFor(null).phase === 'upkeep') readyAll(game);
+      pressThroughSidePick(game);
       advance(100);
     }
     expect(game.viewFor(null)).toMatchObject({ phase: 'development', month: 2 });
@@ -55,6 +56,7 @@ describe("MyView.installedThisTurn: the store's Now line after a reload", () => 
     for (let i = 0; i < 10_000 && !(game.viewFor(null).phase === 'development' && game.viewFor(null).month === 2); i++) {
       // Planning and the month end have no clock (C20).
       if (game.viewFor(null).phase === 'planning' || game.viewFor(null).phase === 'upkeep') readyAll(game);
+      pressThroughSidePick(game);
       advance(100);
       const { month, phase, me } = game.viewFor('s1');
       if (!seen.has(`${month} ${phase}`)) seen.set(`${month} ${phase}`, me!.installedThisTurn);

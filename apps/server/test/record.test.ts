@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import { configSnapshot, GAME, RuleError, stableJson, type GameRecord, type GameState, type Playbook, type PlaybookEntry } from '@mule/engine';
+import { AI_HANDS, configSnapshot, GAME, RuleError, stableJson, type GameRecord, type GameState, type Playbook, type PlaybookEntry } from '@mule/engine';
 import type { Decider } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { Room, TableError, type ClientEnvelope, type Connection, type GameContext, type ServerEnvelope } from '@tabletop/core';
@@ -75,6 +75,11 @@ const NOTICE_GAME = { seed: 8, maxMonths: Math.max(2, GAME.exportShipEvery) };
 /** Game time per step of the fake clock; every timer due in a step runs, with promises settled between them. */
 const STEP_MS = 100;
 const PLANNING_READY_MS = 3_000;
+/**
+ * A good's side pick has no clock (A-7): the phones read it this long, past the AI seats' decision wait, before pressing
+ * Ready, so the AIs decide and speak there as they did under the old 8 s clock, not in the tick that ends the game.
+ */
+const SIDE_PICK_READ_MS = AI_HANDS.auction.decideWaitMs + 500;
 const GAME_LIMIT_MS = 30 * 60_000;
 /**
  * How the Claude stand-in answers each call, in turn: after a delay in ms (some land within a tick, some many ticks
@@ -236,10 +241,14 @@ function table(options: TableOptions = {}) {
   const view = () => room.viewFor(null).game!;
   const finished = () => room.viewFor(null).game?.finished ?? false;
   let planningFor = 0;
+  let sidePickFor = 0;
+  let sidePickOf = '';
   let claimed = false;
   let refusedSent = false;
   let hostContinued = false;
   let dropAt: number | null = null;
+  let sidePickDropAt: number | null = null;
+  let miaAway = false;
   let listed = false;
   /** The goods, by month, whose status screen and walk the market has played. */
   const declared = new Set<string>();
@@ -295,6 +304,28 @@ function table(options: TableOptions = {}) {
       if (planningFor >= PLANNING_READY_MS) for (const phone of phones) if (view().phase === 'planning') send(phone, { t: 'intent', intent: { type: 'ready' } });
     } else planningFor = 0;
     if (phase === 'upkeep') for (const phone of phones) send(phone, { t: 'intent', intent: { type: 'ready' } });
+    // A good's side pick has no clock either (A-7): once read, every phone not yet Done presses Ready there.
+    const pick = view().auction;
+    // A-7, review F7: at the first side pick Mia's phone drops, Heiko moves on for her while she is away, and she
+    // rejoins later; the replay must hold through it.
+    if (phase === 'auction' && pick?.stage === 'status' && sidePickDropAt === null) {
+      sidePickDropAt = elapsed;
+      miaAway = true;
+      room.disconnect(mia.conn);
+      send(heiko, { t: 'intent', intent: { type: 'ready' } });
+      send(heiko, { t: 'intent', intent: { type: 'continue' } });
+    }
+    if (sidePickDropAt !== null && miaAway && elapsed === sidePickDropAt + 20 * STEP_MS) {
+      miaAway = false;
+      mia.from.seatId = null;
+      send(mia, { t: 'join', code: CODE, name: 'Mia', seatToken: mia.token! });
+    }
+    if (phase === 'auction' && pick?.stage === 'status') {
+      // Each good's side pick is read afresh: the next can open the moment the last closes.
+      if (pick.good !== sidePickOf) [sidePickOf, sidePickFor] = [pick.good, 0];
+      sidePickFor += STEP_MS;
+      if (sidePickFor >= SIDE_PICK_READ_MS) for (const phone of phones) if (!(phone === mia && miaAway) && !pick.walkers.find((w) => w.id === phone.from.seatId)?.done) send(phone, { t: 'intent', intent: { type: 'ready' } });
+    } else sidePickFor = 0;
     const lit = view().lit;
     if (phase === 'landGrant' && lit && !claimed) {
       claimed = true;
@@ -369,6 +400,14 @@ describe('the game record', { timeout: 60_000 }, () => {
     expect(steps.some((e) => e.type === 'answer' && e.choice), 'an answer arrived as its own step').toBe(true);
     expect(steps.some((e) => e.type === 'answer' && e.error === 'busy'), 'a call was rejected busy').toBe(true);
     expect(steps.some((e) => e.type === 'intent' && e.seat === 's1' && e.intent.type === 'continue' && !e.refused && e.hosts?.length)).toBe(true);
+    // A-7, review F7: Heiko's Continue at a side pick, while Mia's phone is away, was taken; she came back after.
+    const accepted = steps.filter((e) => e.type === 'intent' && e.seat === 's1' && e.intent.type === 'continue' && !e.refused);
+    expect(accepted.length, "the host's Continue in planning and at a side pick").toBeGreaterThanOrEqual(2);
+    const sidePick = accepted.at(-1)!;
+    const drops = steps.filter((e) => e.type === 'connection' && !e.connected && e.seq < sidePick.seq);
+    const backs = steps.filter((e) => e.type === 'connection' && e.connected && e.seq > sidePick.seq);
+    expect(drops.length, "Mia's phone dropped before the side pick's Continue").toBeGreaterThanOrEqual(2);
+    expect(backs.length, 'and came back after it').toBeGreaterThanOrEqual(1);
     expect(steps.some((e) => e.type === 'connection' && !e.connected)).toBe(true);
     expect(steps.some((e) => e.type === 'connection' && e.connected)).toBe(true);
     expect(steps.some((e) => e.type === 'intent' && e.intent.type === 'claim' && !e.refused)).toBe(true);
@@ -687,7 +726,8 @@ describe.runIf(FULL)('playbooks in the record', { timeout: 60_000 }, () => {
       expect(step).toMatchObject({ type: 'intent', seat: e.seat, intent: { type: 'ready' }, at: e.at, seq: e.seq });
     });
 
-    const last = record.events.filter(isStep).at(-1)!;
+    // The live recorder's last step: after game over it may still log AI chat output, which the file need not hold.
+    const last = t.recorder().record.events.filter(isStep).at(-1)!;
     t.recorder().playbook({ seat: 's3', month: 1, phase: 'month', playbook: playbookOf('s3', 0) });
     expect(t.recorder().record.events.at(-1), 'between steps, the last step stamps it').toMatchObject({ type: 'playbook', seat: 's3', at: last.at, seq: last.seq });
 

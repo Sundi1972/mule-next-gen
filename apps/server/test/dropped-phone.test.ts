@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GAME, WALK, type Good } from '@mule/engine';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
-import { fakeContext, readyAll, seats } from './fake-context.js';
+import { fakeContext, pressThroughSidePick, readyAll, seats } from './fake-context.js';
 
 /** Month 1 to the first good's status screen, nobody pressing anything before it. */
 function toStatus() {
@@ -85,16 +85,21 @@ describe('a dropped phone in the goods auction', () => {
   it.each([
     ['on a side', () => {}],
     ['after passing', (game: MuleGame) => game.handle('s2', { type: 'declare', side: 'pass' })],
-  ])('FM-dropped-status: a phone dropped on the status screen %s passes and counts as Done there and again in the walk; once s1 presses Ready the walk starts on the next tick', (_, before) => {
+  ])('FM-dropped-status (A-7): a phone dropped on the status screen %s is held there, on its side and not Done; once s1, the host, moves on the walk starts on the next tick, and the dropped phone sits it out', (_, before) => {
     const { game, advance, good } = toStatus();
     const s2 = () => game.viewFor(null).auction!.walkers.find((w) => w.id === 's2')!;
     before(game);
+    const side = s2().side;
     game.connectionChanged('s2', false);
     advance(WALK.tickMs);
     expect(game.viewFor(null).auction).toMatchObject({ good, stage: 'status' });
-    expect(s2()).toMatchObject({ side: 'pass', done: true });
+    expect(s2()).toMatchObject({ side, done: false });
 
+    // s1's Ready alone does not end it: the side pick waits for the dropped phone.
     game.handle('s1', { type: 'ready' });
+    advance(WALK.tickMs * 5);
+    expect(game.viewFor(null).auction).toMatchObject({ good, stage: 'status' });
+    game.handle('s1', { type: 'continue' });
     advance(WALK.tickMs);
     expect(game.viewFor(null).auction).toMatchObject({ good, stage: 'walk' });
     // The walk starts with nobody Done, so the next tick marks the dropped phone again.
@@ -103,20 +108,21 @@ describe('a dropped phone in the goods auction', () => {
     expect(s2()).toMatchObject({ side: 'pass', done: true });
   });
 
-  it('FM-dropped-status: a phone dropped in the first good sits out every later good too: each status screen ends on the tick after s1 presses Ready', () => {
+  it('FM-dropped-status (A-7): a phone dropped in the first good sits out every later walk too: each status screen ends on the tick after s1, the host, moves on', () => {
     const { game, advance, good: first } = toStatus();
     game.connectionChanged('s2', false);
-    // Ticks each good spent on its status screen, s1 pressing Ready on every one of them.
+    // Ticks each good spent on its status screen, s1 pressing Ready and moving on for s2 on every one of them.
     const statusTicks = new Map<Good, number>();
     for (let i = 0; i < 5_000 && game.viewFor(null).phase === 'auction'; i++) {
       const a = game.viewFor(null).auction;
       if (a?.stage === 'status') statusTicks.set(a.good, (statusTicks.get(a.good) ?? 0) + 1);
       game.handle('s1', { type: 'ready' });
+      pressThroughSidePick(game, { host: 's1' });
       advance(WALK.tickMs);
     }
     const later = [...statusTicks].filter(([g]) => g !== first);
     expect(later.length, 'goods after the first reached their status screen').toBeGreaterThanOrEqual(3);
-    // Each new good gives every seat a fresh side; that tick's sitOut passes it again, so the status ends at once.
+    // The side pick holds the dropped phone; the host's Continue ends it, so the walk starts on the next tick.
     for (const [g, ticks] of later) expect(ticks, g).toBe(1);
   });
 });

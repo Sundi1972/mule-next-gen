@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { storeForSale, UPKEEP, WALK, type AuctionSide, type GameState, type Good } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
-import { fakeContext, readyAll, seats } from './fake-context.js';
+import { fakeContext, pressThroughSidePick, readyAll, seats } from './fake-context.js';
 
 /** The engine's state behind the game: the source of truth the view must match. */
 const engineOf = (game: MuleGame) => (game as unknown as { state: GameState }).state;
@@ -33,13 +33,16 @@ function walkTogether(game: MuleGame) {
   game.handle('s2', { type: 'walk', dir: 'up' });
 }
 
-/** Plays the first month until the good is up in the auction; nobody presses anything after planning's Ready. */
+/** Plays the first month until the good is up in the auction; after planning's Ready nobody presses anything but Ready at each side pick (A-7). */
 function toGood(good: Good) {
   const { ctx, advance } = fakeContext();
   const game = new MuleGame(ctx, 7);
   game.start(seats);
   readyAll(game);
-  for (let i = 0; i < 20_000 && game.viewFor(null).auction?.good !== good; i++) advance(WALK.tickMs);
+  for (let i = 0; i < 20_000 && game.viewFor(null).auction?.good !== good; i++) {
+    pressThroughSidePick(game);
+    advance(WALK.tickMs);
+  }
   expect(game.viewFor(null).auction?.good, `${good} comes up in the first month's auction`).toBe(good);
   return game;
 }

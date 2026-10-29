@@ -6,7 +6,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { EXPORT_DEMAND, GAME, goodsMarket, LOTS, TAX, WALK, type Good } from '@mule/engine';
+import { AI_HANDS, EXPORT_DEMAND, GAME, goodsMarket, LOTS, TAX, WALK, type Good } from '@mule/engine';
 import type { AuctionView, MuleView } from '@mule/protocol';
 import { GOOD_NAME } from '@mule/ui';
 import { errors as playwrightErrors, type Browser, type Page } from 'playwright';
@@ -440,7 +440,7 @@ async function tapSide(truth: Truth, p: Phone, tap: 'buyer' | 'seller', lands: '
     const open = a?.good === good && a?.stage === 'status';
     check(open, `${what}: the ${good} status screen closed before the tap landed (timing, not B-AC-4)`);
     if (sideOf(a, id) === lands) {
-      console.log(`  ${p.name}'s tap landed with ${a.seconds.toFixed(1)} s of the status clock left (${(a.seconds * SCALE).toFixed(2)} s real)`);
+      console.log(`  ${p.name}'s tap landed on the ${good} side pick, which has no clock (A-7)`);
       break;
     }
     check(Date.now() < deadline, `${what}: the server holds ${lands} for ${p.name}, got ${sideOf(a, id)}`);
@@ -575,8 +575,10 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
     await smallPhoneReads(buyer, 'status');
   });
 
+  // The side pick has no clock (A-7): every phone presses Ready, and the AI presses Done within its decision wait.
+  await everyone(phones, (p) => pressReadyAtTheSidePick(p.page));
   const walking = { ask: 1, bid: 1, gap: 1 };
-  await Promise.all(screens.map((s) => untilShows(s, readLines, walking, 'B-AC-1: the lowest-ask and highest-bid lines and the gap during the walk', within(SCALE, WALK.statusMs))));
+  await Promise.all(screens.map((s) => untilShows(s, readLines, walking, 'B-AC-1: the lowest-ask and highest-bid lines and the gap during the walk', SIDE_PICK_MS)));
   // Both sellers start level at the top. The stayer steps above it, so the lowest ask is the seller's alone and the buyer never meets the stayer.
   const at = (a: AuctionView, id: string) => a.walkers.find((w) => w.id === id)?.at ?? NaN;
   await walkUntil(truth, stayer, 'up', (a) => Math.round(at(a, stayerId)) >= Math.round(at(a, sellerId)) + 2, `B-AC-1: ${stayer.name} walks up over ${seller.name}`);
@@ -725,7 +727,7 @@ async function fillTheTvTicker(phone: Page, tv: Page): Promise<void> {
 
 /**
  * The TV's status stage at 1920×1080 with its chat ticker full: the store box keeps its prices, the ship panel ends
- * inside the screen and the TV's frame with its words whole, and a skipped line sits in the time bar's row, on one line.
+ * inside the screen and the TV's frame with its words whole, and a skipped line sits in the picked count's row, on one line.
  */
 async function checkTvStatusRoom(tv: Page, good: Good, skipped: boolean): Promise<void> {
   const room = (await tv.evaluate(`(() => {
@@ -738,7 +740,8 @@ async function checkTvStatusRoom(tv: Page, good: Good, skipped: boolean): Promis
       store: { ...box('status-store'), pricesShown: prices.length === 3 && prices.every((p) => p.height > 0 && p.top >= store.top - 0.5 && p.bottom <= store.bottom + 0.5) },
       ship: box('ship-wants'),
       frame: box('tv-status'),
-      bar: box('time-bar'),
+      // The side pick has no clock (A-7): the picked count stands where the time bar was.
+      bar: box('ready-count'),
       skipped: skip ? { ...box('skipped'), oneLine: cs.whiteSpace === 'nowrap' && cs.textOverflow === 'ellipsis', lineHeight: parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5 } : null,
       ticker: document.querySelectorAll('[data-testid=chat-ticker] [data-testid^=chat-line-]').length,
       w: window.innerWidth,
@@ -754,7 +757,7 @@ async function checkTvStatusRoom(tv: Page, good: Good, skipped: boolean): Promis
     w: number;
     h: number;
   };
-  const where = room.skipped ? `; skipped words y ${room.skipped.top.toFixed(0)}–${room.skipped.bottom.toFixed(0)}, the time bar y ${room.bar.top.toFixed(0)}–${room.bar.bottom.toFixed(0)}` : '';
+  const where = room.skipped ? `; skipped words y ${room.skipped.top.toFixed(0)}–${room.skipped.bottom.toFixed(0)}, the picked count y ${room.bar.top.toFixed(0)}–${room.bar.bottom.toFixed(0)}` : '';
   console.log(
     `  TV on ${GOOD_NAME[good]} at ${room.w}×${room.h}, ${room.ticker} chat lines in the ticker: store box ${room.store.height.toFixed(1)} px tall${room.store.full && room.store.pricesShown ? ', prices whole' : ', prices cut'}; ship panel y ${room.ship.top.toFixed(0)}–${room.ship.bottom.toFixed(0)} (the TV's frame ends at ${room.frame.bottom.toFixed(0)}), x ${room.ship.left.toFixed(0)}–${room.ship.right.toFixed(0)}${where}`,
   );
@@ -770,7 +773,7 @@ async function checkTvStatusRoom(tv: Page, good: Good, skipped: boolean): Promis
   const mid = (s.top + s.bottom) / 2;
   check(
     mid >= room.bar.top && mid <= room.bar.bottom && s.left >= room.bar.right - 0.5,
-    `on ${GOOD_NAME[good]} the TV's skipped words sit in the time bar's row, to its right: y ${s.top}–${s.bottom} beside the bar's ${room.bar.top}–${room.bar.bottom}, x from ${s.left} after the bar's ${room.bar.right}`,
+    `on ${GOOD_NAME[good]} the TV's skipped words sit in the picked count's row, to its right: y ${s.top}–${s.bottom} beside the count's ${room.bar.top}–${room.bar.bottom}, x from ${s.left} after the count's ${room.bar.right}`,
   );
   check(s.oneLine && s.height <= s.lineHeight * 1.5, `on ${GOOD_NAME[good]} the TV's skipped words take one line, cut with an ellipsis: ${s.height} px for a ${s.lineHeight} px line, ${s.oneLine ? 'nowrap with an ellipsis' : 'wrapping'}`);
 }
@@ -958,7 +961,7 @@ async function holdUpIntoTheNextGood(truth: Truth, holder: Phone, others: Phone[
   rest.catch(() => undefined);
   await holder.page.getByTestId('done').click({ timeout: PRESS_MS });
 
-  const toNext = within(SCALE, WALK.goodMs + WALK.statusMs);
+  const toNext = within(SCALE, WALK.goodMs) + SIDE_PICK_MS;
   for (let n = 0; ; n++) {
     check(n < 10, `FU-1: a good after ${from} has a walk ${holder.name} can join`);
     const status = await untilServer(truth, holder.page, (a) => a.good !== from && a.stage === 'status', `FU-1: a good after ${from} opens its status screen`, toNext);
@@ -968,7 +971,7 @@ async function holdUpIntoTheNextGood(truth: Truth, holder: Phone, others: Phone[
     try {
       await holder.page.locator('[data-phase=auction]').getByRole('button', { name: 'Ready' }).click({ timeout: PRESS_MS });
     } catch (err) {
-      // The status clock closed it under the press; the wait below sees where it went.
+      // The others' Ready closed it under the press; the wait below sees where it went.
       if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
     }
     const next = await untilServer(truth, holder.page, (a) => a.good !== good || a.stage === 'walk', `FU-1: ${good}'s status screen closes`, toNext);
@@ -1094,6 +1097,17 @@ const READY_LANDS_MS = 3_000;
 /** A budget for the land grant: one pass of its light, which phaseScale never shortens, plus room for the browser and the network. */
 const GRANT_WAIT_MS = GRANT_PASS_MAX_MS + 3_000;
 
+/**
+ * The side pick has no clock (A-7): once every phone has pressed Ready it waits only for the AI seats' Done, which
+ * comes within their decision wait.
+ */
+const SIDE_PICK_MS = within(SCALE, AI_HANDS.auction.decideWaitMs);
+
+/** On a good's status screen: presses Ready, the pick, once it is there to press; the button then gives way. */
+async function pressReadyAtTheSidePick(page: Page): Promise<void> {
+  await page.locator('[data-phase=auction]').getByRole('button', { name: 'Ready', exact: true }).click({ timeout: PRESS_MS });
+}
+
 /** A budget for a phase of `ms` game time at this scale, plus room for the browser and the network. */
 function within(scale: number, ms: number): number {
   return ms * scale + 3_000;
@@ -1167,7 +1181,9 @@ async function pressDoneThroughTheAuction(page: Page): Promise<void> {
     try {
       const label = await done.innerText({ timeout: PRESS_MS });
       await done.click({ timeout: PRESS_MS });
-      await page.locator('[data-phase=auction]').getByRole('button', { name: label, exact: true }).waitFor({ state: 'hidden', timeout: within(SCALE, 20_000 * 4) });
+      // A press gives way at once. Ready can stay up, though: the last Ready ends the side pick, and the next good's
+      // (its walk skipped) opens on Ready again (A-7). So this waits only a moment; pressing that Ready next is right.
+      await page.locator('[data-phase=auction]').getByRole('button', { name: label, exact: true }).waitFor({ state: 'hidden', timeout: PRESS_MS });
     } catch (err) {
       // The stage moved on under the press; the wait above decides what comes next.
       if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
