@@ -260,12 +260,11 @@ async function monthOnOneLine(phone: Page, code: string): Promise<void> {
       check(await phone.getByTestId('ready-count').isVisible(), 'C19: the ready count shows beside the month label');
       for (const size of [PHONE_SMALL.viewport, PHONE.viewport]) {
         await phone.setViewportSize(size);
-        const lines = await label.evaluate((el) => {
+        // The label's own text: its line boxes, and how far right it reaches against the chip beside it.
+        const read = await label.evaluate((el) => {
           const range = document.createRange();
           range.selectNodeContents(el);
-          return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
-        });
-        const room = await label.evaluate((el) => {
+          const boxes = [...range.getClientRects()];
           const row = el.parentElement!.parentElement!;
           const chip = row.querySelector('[data-testid=ready-count]')!;
           const probe = el.cloneNode(true) as HTMLElement;
@@ -274,13 +273,20 @@ async function monthOnOneLine(phone: Page, code: string): Promise<void> {
           const need = probe.getBoundingClientRect().width;
           probe.remove();
           const [w, col, c] = [row, el.parentElement!, chip].map((e) => e.getBoundingClientRect().width.toFixed(1));
-          return `row ${w}, label column ${col}, label needs ${need.toFixed(1)}, chip ${c} ("${chip.textContent}"), phase "${el.nextElementSibling?.textContent}"`;
+          return {
+            lines: new Set(boxes.map((r) => Math.round(r.top))).size,
+            textRight: Math.max(...boxes.map((r) => r.right)),
+            chipLeft: chip.getBoundingClientRect().left,
+            widths: `row ${w}, label column ${col}, label needs ${need.toFixed(1)}, chip ${c} ("${chip.textContent}"), phase "${el.nextElementSibling?.textContent}"`,
+          };
         });
-        console.log(`  C19 at ${size.width}×${size.height}: ${room}`);
-        check(lines === 1, `C19 at ${size.width}×${size.height}: "Month 10 / 12" stays on one line beside the ready count, got ${lines} lines`);
+        const at = `${size.width}×${size.height}`;
+        console.log(`  C19 at ${at}: ${read.widths}`);
+        check(read.lines === 1, `C19 at ${at}: "Month 10 / 12" stays on one line beside the ready count, got ${read.lines} lines`);
+        check(read.textRight <= read.chipLeft, `C19 at ${at}: "Month 10 / 12" ends before the ready count, ${read.textRight.toFixed(1)} past ${read.chipLeft.toFixed(1)}`);
       }
-      await phone.setViewportSize(PHONE_SMALL.viewport);
     } finally {
+      await phone.setViewportSize(PHONE_SMALL.viewport);
       Object.assign(state, was);
       room.broadcast();
     }
