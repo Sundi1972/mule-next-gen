@@ -217,6 +217,8 @@ export class Recorder {
         });
       },
       changed: () => inner.changed(),
+      // A frame is output the game learns nothing from, so it passes through untaped.
+      frame: (payload) => inner.frame(payload),
       ...(inner.say ? { say: (from: string, text: string, to?: string) => inner.say!(from, text, to) } : {}),
     };
   }

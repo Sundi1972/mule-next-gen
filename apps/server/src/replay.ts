@@ -61,6 +61,7 @@ class Script {
         return () => void this.timers.delete(timer);
       },
       changed: () => {},
+      frame: () => {},
       say: () => {},
     };
     const smart = new Set(record.seats.filter((s) => s.smart).map((s) => s.id));
