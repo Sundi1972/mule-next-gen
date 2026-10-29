@@ -14,7 +14,7 @@ import {
   createRng,
   declareRole,
   electionDone,
-  DEV_WALK,
+  DEV_STEER,
   DEVELOPMENT,
   fitFilter,
   foodShare,
@@ -912,7 +912,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.phaseEndsAt = null;
     this.endWhenSettled = false;
     for (const s of this.seats) this.colonists.set(s.id, { at: 'store', walk: null, assayUntil: null });
-    this.clockWaits = state.month === 1 && DEV_WALK.month1WaitsForFirstMule;
+    this.clockWaits = state.month === 1 && DEV_STEER.month1WaitsForFirstMule;
     if (this.clockWaits) this.startClockOnceAllIn();
     else this.startClock();
     if (this.ai.size > 0) this.scheduleAiDevelop(state.month, now);

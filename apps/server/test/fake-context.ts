@@ -1,4 +1,4 @@
-import { advancePhase, COLONY_SELLER, createGame, DEV_WALK, type GameState } from '@mule/engine';
+import { advancePhase, COLONY_SELLER, createGame, DEV_STEER, type GameState } from '@mule/engine';
 import type { MuleIntent } from '@mule/protocol';
 import type { GameContext, SeatInfo } from '@tabletop/core';
 import { afterEach, beforeEach } from 'vitest';
@@ -24,12 +24,12 @@ export const walkers: SeatInfo[] = [
  * `firstMonthWaits` keeps month 1's rule: then it waits for every first MULE (A-1).
  */
 export function toDevelopment(options: { players?: SeatInfo[]; phaseScale?: number; claimer?: string; firstMonthWaits?: boolean; prepare?: (state: GameState) => void } = {}) {
-  const rule = DEV_WALK.month1WaitsForFirstMule;
-  DEV_WALK.month1WaitsForFirstMule = options.firstMonthWaits ?? false;
+  const rule = DEV_STEER.month1WaitsForFirstMule;
+  DEV_STEER.month1WaitsForFirstMule = options.firstMonthWaits ?? false;
   try {
     return playToDevelopment(options);
   } finally {
-    DEV_WALK.month1WaitsForFirstMule = rule;
+    DEV_STEER.month1WaitsForFirstMule = rule;
   }
 }
 
@@ -38,13 +38,13 @@ export function toDevelopment(options: { players?: SeatInfo[]; phaseScale?: numb
  * clock runs from the start, as it does in every later month, instead of waiting for every first MULE (A-1).
  */
 export function clockRunsInMonth1(): void {
-  let rule = DEV_WALK.month1WaitsForFirstMule;
+  let rule = DEV_STEER.month1WaitsForFirstMule;
   beforeEach(() => {
-    rule = DEV_WALK.month1WaitsForFirstMule;
-    DEV_WALK.month1WaitsForFirstMule = false;
+    rule = DEV_STEER.month1WaitsForFirstMule;
+    DEV_STEER.month1WaitsForFirstMule = false;
   });
   afterEach(() => {
-    DEV_WALK.month1WaitsForFirstMule = rule;
+    DEV_STEER.month1WaitsForFirstMule = rule;
   });
 }
 
