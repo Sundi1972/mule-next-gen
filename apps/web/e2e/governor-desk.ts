@@ -4,7 +4,7 @@
  * for both. The month's election is set aside and Lena seated as Governor on a promise of up to 4% with the tax at
  * 5%, as a term's first planning opens; Ossa says two lines, so the ticker holds two. The game clock is held
  * throughout, so nothing scheduled moves the phase on.
- * Run with `pnpm --filter @mule/web build && pnpm --filter @mule/web exec tsx e2e/governor-desk.ts`.
+ * Run with `pnpm --filter @mule/web build && pnpm --filter @mule/web exec tsx e2e/governor-desk.ts`; MULE_E2E_SIZE=667 runs one size.
  */
 import type { GameState, TaxPromise } from '@mule/engine';
 import type { Browser, Page } from 'playwright';
@@ -74,7 +74,7 @@ const browser = await launch();
 const errors: string[] = [];
 const servers: MuleServer[] = [];
 try {
-  for (const size of GOV_SIZES) {
+  for (const size of GOV_SIZES.filter((s) => !process.env.MULE_E2E_SIZE || String(s.width) === process.env.MULE_E2E_SIZE)) {
     const { server, base } = await startServer({ maxMonths: 2 });
     servers.push(server);
     const t = await seat(browser, base, errors);

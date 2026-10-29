@@ -406,6 +406,14 @@ export async function governorDeskFits(lena: Page, size: { width: number; height
     const small = opened.tabs.filter((t) => t.w < TAB_MIN - 0.01 || t.h < TAB_MIN - 0.01 || t.clipped);
     check(opened.tabs.length >= 5 && small.length === 0, `E-11 at ${at}: every desk tab is at least ${TAB_MIN}×${TAB_MIN} with its label whole, got ${tabs}`);
     seen.push(`tabs ${tabs}`);
+    // Test fixture: a sixth desk, as an office holder may have (E-11 sizes the row for six). No game draws six today, so
+    // the Council's tab, the longest word, is drawn twice for one read, then taken away.
+    await guide.getByTestId('desk-council').evaluate((t) => t.after(Object.assign(t.cloneNode(true), { id: 'sixth-desk' })));
+    const six = (await read()).tabs;
+    await lena.evaluate(() => document.getElementById('sixth-desk')?.remove());
+    const sixTabs = six.map((t) => `${t.w.toFixed(1)}×${t.h.toFixed(1)}${t.clipped ? ' clipped' : ''}`).join(', ');
+    check(six.length === opened.tabs.length + 1 && six.every((t) => t.w >= TAB_MIN - 0.01 && t.h >= TAB_MIN - 0.01 && !t.clipped), `E-11 at ${at}: six desk tabs each keep at least ${TAB_MIN}×${TAB_MIN} with the label whole, got ${sixTabs}`);
+    seen.push(`six tabs ${sixTabs}`);
   }
   fits(opened, 'as it opens', 'breaks it');
   await click('tax-down');
