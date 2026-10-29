@@ -687,6 +687,29 @@ goal      G-1 (unchanged)
 folded    §3 EventView entry
 ```
 
+```
+AM-14 · 2026-10-29 · lead rulings, PR-2 Tasks 10–12 (the hold, the overlays, sickness)
+
+target    §1 C9, C10, C11 · §3
+said      the view carries startsAt; sickness is told from Player.sick; the overlays play over any phase
+did       contract: EventShowView gains endsAt (server ms = startsAt + showMs × phaseScale; the client has no
+          phaseScale and maps show time by it); EventView gains player? (a personal event's player, a sick bulletin's
+          seat); EventView.key/kind widen by 'sickness'. A sick seat is one bulletin EventView in development's events
+          (seat order, after any development MonthEvent): title "Sickness", line "<Name> fell sick: <reason>." from
+          playerEventReason, origin the store, hits [], weight bulletin; all bulletins share ONE rollCallMs (running-
+          total rounding) and play as ONE roll-call segment. Player.sick during development means "fell sick in this
+          development's roll" (the engine resets it first).
+          The hold (RULE-4) wraps enterPhase: a held phase starts every clock after endsAt; handle() refuses every
+          intent ("The event is still playing"); a dropped phone is counted once the hold ends; the hold timer is
+          cancelled with the phase. While the election runs, planning's events are not served.
+          The phone overlay covers the screen only while the server holds the phase; in planning (never held) it
+          floats the light card with a TV, and alone the first tap collapses the show to that card. The overlays mark
+          their phase as data-event-phase, never data-phase (other steps find the phase screen by [data-phase]).
+because   HC-3 (the client computes no length) · RULE-4 (c) planning stays usable · other lanes' e2e selectors
+goal      G-1, G-2 (unchanged)
+folded    §3 EventView/EventShowView entries
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: the event show
