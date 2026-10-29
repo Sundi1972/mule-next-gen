@@ -21,7 +21,7 @@ import { HUB_SLOTS } from '../src/phone/hub/today';
 import { TvElection } from '../src/table/TvElection';
 import { drawnSlots } from '../src/phone/hub/slots';
 
-const player = (id: string, name: string, slot: number, plots = 0): PlayerView => ({ id, name, isAi: false, color: '', species: 'zipwing', money: 1000, worth: 0, plots, ready: false, doneDeveloping: false, condition: null, colonist: null, slot });
+const player = (id: string, name: string, slot: number, plots = 0): PlayerView => ({ id, name, isAi: false, color: '', species: 'zipwing', money: 1000, worth: 0, lastWorth: null, worthBeforeCut: null, plots, ready: false, doneDeveloping: false, condition: null, colonist: null, slot });
 const PLAYERS = [player('s1', 'Lena', 0), player('s2', 'Ossa', 1), player('s3', 'Kai', 2), player('s4', 'Brix', 3), player('s5', 'Pip', 4)];
 const SEATS = PLAYERS.map((p) => p.id);
 const stock = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0, alloy: 0, electronics: 0, medicine: 0 };
@@ -95,6 +95,8 @@ function view(p: PoliticsView | null, mine = me(), extra: Partial<MuleView> = {}
     mulePrice: 0,
     colonists: 0,
     air: { level: 22, band: 'clean' },
+    lastAir: null,
+    colonistsFed: null,
     ship: { arrives: 3, inPort: false, wants: null },
     treasury: { money: 0, salesTax: 0.05 },
     news: [],

@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, AI_LEVELS, AI_PERSONAS, createGame, EVENTS, GAME, GOODS, mulePriceFor, observe, STRATEGIST, walkSeconds, type EventRow, type GameState } from '@mule/engine';
+import {
+  advancePhase,
+  AI_LEVELS,
+  AI_PERSONAS,
+  createGame,
+  EVENTS,
+  GAME,
+  GOODS,
+  mulePriceFor,
+  observe,
+  STRATEGIST,
+  walkSeconds,
+  type AiLevelConfig,
+  type AiLevelId,
+  type EventRow,
+  type GameState,
+} from '@mule/engine';
 import { outlook } from '../src/outlook.js';
 import { AiSeat } from '../src/seat.js';
 import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, tradeDecision, wantsAnyAhead, wantsPlot } from '../src/strategist.js';
@@ -387,6 +403,48 @@ describe('the sales tax', () => {
     for (const k of own) expect(v15.keep[k]).toBe(v0.keep[k]);
     // Negative case: a unit held for resale next month is taxed when it sells, so it is worth 85%.
     expect(v15.keep[v15.block]).toBeCloseTo(resale0 * 0.85, 6);
+  });
+});
+
+/** Month 1's auction with Smithore up and scarce: the store holds 2, ai2 and ai3 are 3 short each; ai1 leads but isn't short, so no spite; ai0 holds none. */
+function auctionWithScarceSmithore(): GameState {
+  const state = fourSeats(3);
+  while (state.phase !== 'auction') advancePhase(state);
+  state.store.stock.smithore = 2;
+  state.players[0]!.stock.smithore = 0;
+  state.players[1]!.money = 100_000;
+  const row = (id: string, now: number, need: number) => ({ id, had: now, used: 0, made: 0, now, need, spoils: 0 });
+  Object.assign(state.auction!, { good: 'smithore', stage: 'status', status: [row('ai0', 0, 0), row('ai1', 4, 4), row('ai2', 0, 3), row('ai3', 0, 3)] });
+  return state;
+}
+
+describe('cornering', () => {
+  it('T-AC-28: a Rookie seat never pursues a monopoly', () => {
+    const obs = observe(auctionWithScarceSmithore(), 'ai0');
+    const aggressive = (levelId: AiLevelId, level: Partial<AiLevelConfig> = {}): Mind => ({
+      me: 'ai0',
+      personaId: 'aggressive',
+      persona: AI_PERSONAS.aggressive,
+      levelId,
+      level: { ...AI_LEVELS[levelId], ...level },
+    });
+    const plan = (mind: Mind) => goodPlan(obs, mind, 'smithore');
+    // The same seat with no taste for cornering: what each unit is worth to it plainly.
+    const plainBuy = (mind: Mind) => plan({ ...mind, persona: { ...mind.persona, corner: 0 } }).values.buy;
+
+    const trader = plan(aggressive('trader'));
+    expect(trader.spiteBid).toBe(0);
+    expect(trader.corner.units).toBeGreaterThan(0);
+    expect(trader.values.buy[0]).toBeGreaterThan(plainBuy(aggressive('trader'))[0]!);
+
+    const rookie = plan(aggressive('rookie'));
+    expect(rookie.corner.units).toBe(0);
+    expect(rookie.values.buy).toEqual(plainBuy(aggressive('rookie')));
+
+    // Positive control: the same Rookie seat, allowed to corner, corners here.
+    const cornering = plan(aggressive('rookie', { corners: true }));
+    expect(cornering.corner.units).toBeGreaterThan(0);
+    expect(cornering.values.buy[0]).toBeGreaterThan(rookie.values.buy[0]!);
   });
 });
 

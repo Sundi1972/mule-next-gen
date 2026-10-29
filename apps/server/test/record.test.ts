@@ -225,6 +225,7 @@ function table(options: TableOptions = {}) {
       }
       if (planningFor >= PLANNING_READY_MS) for (const phone of phones) if (view().phase === 'planning') send(phone, { t: 'intent', intent: { type: 'ready' } });
     } else planningFor = 0;
+    if (phase === 'upkeep') for (const phone of phones) send(phone, { t: 'intent', intent: { type: 'ready' } });
     const lit = view().lit;
     if (phase === 'landGrant' && lit && !claimed) {
       claimed = true;

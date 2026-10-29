@@ -933,8 +933,11 @@ export const PHASES = {
   grantFastForwardMs: GAME.grantTickMs / 8,
   /** Production: the show of what each plot made. */
   productionMs: 15_000,
-  /** Upkeep: colonists eat and goods spoil. */
-  upkeepMs: 8_000,
+  /**
+   * Upkeep, the month end: colonists eat and goods spoil, and the table reads the league table. null: it waits for
+   * every player's Ready ("On to month N") or the host's Continue; a number restores a timer.
+   */
+  upkeepMs: null as number | null,
 };
 
 /** How big an event's story is on the TV: a headline, a spotlight, or one line of a shared roll call. */
@@ -954,6 +957,7 @@ export const EVENT_SHOW = {
     pestSwarm: 'spotlight',
     wildfire: 'spotlight',
     bumperHarvest: 'spotlight',
+    cavernCollapse: 'spotlight',
   } as Partial<Record<EventKey, EventWeight>>,
   /** How long one headline or spotlight plays, in ms. */
   playMs: { headline: 7_000, spotlight: 5_200 },
@@ -1018,8 +1022,9 @@ export interface AiLevelConfig {
   mulesPerMonth: number;
   /** Chance it misses a plot it wanted in the land grant. */
   missChance: number;
-  /** Allowed to corner goods and to act on spite. Rookie never does. */
+  /** Allowed to corner a good (a monopoly try). Rookie never does. */
   corners: boolean;
+  /** Allowed to act on spite against the leader. Rookie never does. */
   sabotage: boolean;
 }
 

@@ -18,6 +18,8 @@ import { ELECTION_WAIT_MS, readyThroughTheElection, voteThroughTheElection } fro
 import { AUDIT_JS, MIN_TEXT, type AuditRead } from './small-phone-audit';
 
 const PRESS_MS = 2_000;
+/** Once the month's last good has closed, how long a phone has to show the month end's "On to month N". */
+const MONTH_END_MS = 10_000;
 /** The minimum the Sell form starts at, which listPlot leaves unchanged. */
 const LOTS_MINIMUM = 250;
 
@@ -167,9 +169,11 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   console.log(`✓ UBER-AC-1 (WS6): month 1's goods went ${onServer.join(' → ')} on the server, with no declare stage on it, any phone or the TV`);
   console.log('✓ month 1: everyone claimed');
 
+  // Month 1's end has no clock (C20): every phone moves on to month 2.
+  await everyone(phones, (p) => onToTheNextMonth(p.page));
   // Month 2 planning: Brix lists both plots; the others see them in their line-up (B-AC-1).
   const planning = brix.page.locator('[data-phase=planning]');
-  await planning.waitFor({ timeout: within(SCALE, PHASE_MS.upkeep) });
+  await planning.waitFor({ timeout: PRESS_MS });
   await planning.getByTestId('tool-list').click();
   const first = await listPlot(brix.page, brix.slot, 0);
   const second = await listPlot(brix.page, brix.slot, 1);
@@ -1106,7 +1110,12 @@ async function joinRoom(page: Page, base: string, code: string, name: string): P
  * early, but the reveal always runs its clock, so the budget is every stage at full length: a slow runner must not fail here.
  */
 async function readyInPlanning(page: Page): Promise<void> {
-  await readyThroughTheElection(page, within(SCALE, PHASE_MS.upkeep + ELECTION_WAIT_MS) + READY_LANDS_MS);
+  await readyThroughTheElection(page, within(SCALE, ELECTION_WAIT_MS) + READY_LANDS_MS);
+}
+
+/** The month end holds until everyone taps "On to month N", the phone's Ready there (C20). */
+async function onToTheNextMonth(page: Page): Promise<void> {
+  await page.locator('[data-phase=upkeep]').getByTestId('ready').click({ timeout: MONTH_END_MS });
 }
 
 /**

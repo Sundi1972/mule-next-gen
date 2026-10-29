@@ -46,7 +46,8 @@ function playMonth(keys: EventKey[], phaseScale = 1) {
     if (!seen) throw new Error(`month 1 never showed ${phase}`);
     return seen.view.phaseEndsAt! - seen.at;
   };
-  return { production: first.get('production')!.view.production!, length };
+  const endsAt = (phase: string) => first.get(phase)?.view.phaseEndsAt;
+  return { production: first.get('production')!.view.production!, length, endsAt };
 }
 
 describe('the event show: production lasts long enough for every event, and the view says how long each plays', () => {
@@ -79,10 +80,10 @@ describe('the event show: production lasts long enough for every event, and the 
     expect(production.introMs + production.events.reduce((sum, e) => sum + e.playMs, 0)).toBe(30_000);
   });
 
-  it('T-AC-1: after five headlines, upkeep still runs its own 8 000 ms (800 at phaseScale 0.1)', () => {
+  it('T-AC-1: after five headlines, the month end still has no clock: the show never times upkeep (WS4 C20, Q4)', () => {
     const five: EventKey[] = ['dustStorm', 'drought', 'acidRain', 'solarFlare', 'flood'];
-    expect(playMonth(five, 1).length('upkeep')).toBe(8_000);
-    expect(playMonth(five, 0.1).length('upkeep')).toBe(800);
+    expect(playMonth(five, 1).endsAt('upkeep')).toBeNull();
+    expect(playMonth(five, 0.1).endsAt('upkeep')).toBeNull();
   });
 
   it('T-AC-2: drought, pest swarm and bumper harvest are listed in fired order as headline 7 000, spotlight 5 200, spotlight 5 200', () => {
