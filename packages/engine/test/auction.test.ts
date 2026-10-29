@@ -576,7 +576,11 @@ describe('A-5 the close stage: a receipt after each good (G-5)', () => {
     walker(state, 'p1').price = 95;
     expect(() => setWalk(state, 'p1', 1)).toThrow(RuleError);
     expect(() => declareRole(state, 'p2', 'buyer')).toThrow(RuleError);
-    for (let t = TICK; t < WALK.closeMs; t += TICK) stepAuction(state, TICK);
+    for (let t = TICK; t < WALK.closeMs; t += TICK) {
+      stepAuction(state, TICK);
+      // No deal forms in the close stage, so the server's view never calls its clock slowed (mule-game.ts auctionView).
+      expect(a(state).deals).toEqual([]);
+    }
     expect(a(state).stage).toBe('close');
     expect(snapshot(state)).toBe(before);
   });

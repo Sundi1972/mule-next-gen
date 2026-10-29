@@ -40,7 +40,8 @@ describe('A-5 the receipt: the close stage on the view a phone receives', () => 
     const { game, state, good, opened } = toClose();
     const s1 = game.viewFor('s1').auction!;
     const s2 = game.viewFor('s2').auction!;
-    expect(s1).toMatchObject({ stage: 'close', good, total: WALK.closeMs / 1_000 });
+    // The pair still stood matched at the bell: the close stage is never "slowed", so the TV's "Closed" never turns warn.
+    expect(s1).toMatchObject({ stage: 'close', good, total: WALK.closeMs / 1_000, slowed: false, deals: [] });
     const soldUnits = opened.s1!.stock - state.players.find((p) => p.id === 's1')!.stock[good];
     const boughtUnits = state.players.find((p) => p.id === 's2')!.stock[good] - opened.s2!.stock;
     expect(soldUnits, 's1 sold some').toBeGreaterThan(0);
