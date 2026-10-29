@@ -60,11 +60,12 @@ function leadingFood(state: GameState): void {
 const p0 = (state: GameState) => state.players[0]!;
 
 // Config the tests move, put back after each.
-const saved = { peltPrice: WOLVES.peltPrice, prize: GLINT.prize, reoutfitCost: DEV_STEER.reoutfitCost };
+const saved = { peltPrice: WOLVES.peltPrice, prize: GLINT.prize, reoutfitCost: DEV_STEER.reoutfitCost, steerOn: DEV_STEER.on };
 afterEach(() => {
   WOLVES.peltPrice = saved.peltPrice;
   GLINT.prize = saved.prize;
   DEV_STEER.reoutfitCost = saved.reoutfitCost;
+  DEV_STEER.on = saved.steerOn;
 });
 
 describe('C4: the moments pay out in the rules', () => {
@@ -121,14 +122,18 @@ describe('C4: the moments pay out in the rules', () => {
     expect(home.outfit).toBe('food');
   });
 
-  it('RULE-4, C4: a MULE still bolted when the clock ends runs off, like any MULE not installed', () => {
+  it('AM-14, RULE-4, C4: a bought MULE that bolts and is never caught is lost to the clock, like any MULE not installed', () => {
     const state = developing();
+    const home = plot(state, 0, 0, 'p0');
+    const mules = state.store.mules;
     leadingFood(state);
     boltMule(state, 'p0');
     advancePhase(state);
     expect(state.phase).toBe('production');
     expect(p0(state).carriedMule).toBeNull();
     expect(p0(state).muleBolted ?? false).toBe(false);
+    expect(home.outfit).toBeNull();
+    expect(state.store.mules).toBe(mules - 1);
   });
 
   it('HC-7: a refused moment throws RuleError and changes nothing', () => {
@@ -218,7 +223,7 @@ describe('AM-2: take a MULE off a plot and re-outfit it at the store', () => {
     expect(state.players[2]!.money).toBe(money - cost);
   });
 
-  it('AM-2, HC-7: re-outfitting for the same good is refused, and so is an empty MULE, no MULE, or money short', () => {
+  it('AM-2, AM-14, HC-7: re-outfitting for the same good is refused, and so is an empty MULE, a bought one, no MULE, or money short', () => {
     const state = developing();
     plot(state, 0, 0, 'p0', 'food');
     expect(() => reoutfitMule(state, 'p0', 'water')).toThrow(RuleError); // no MULE
@@ -232,21 +237,67 @@ describe('AM-2: take a MULE off a plot and re-outfit it at the store', () => {
 
     buyMule(state, 'p1');
     expect(() => reoutfitMule(state, 'p1', 'water')).toThrow(RuleError); // empty: that is OUTFIT
+
+    // AM-14: RE-OUTFIT is for a MULE taken off a plot only. One bought and outfitted this turn is refused, money kept.
+    buyMule(state, 'p3');
+    outfitMule(state, 'p3', 'food');
+    const bought = state.players[3]!.money;
+    expect(() => reoutfitMule(state, 'p3', 'water')).toThrow(RuleError);
+    expect(state.players[3]!.carriedMule).toBe('food');
+    expect(state.players[3]!.money).toBe(bought);
+
+    // With the arcade on, OUTFIT is for an empty MULE only: a fitted one is re-outfitted, at its price, never re-fitted.
+    DEV_STEER.on = true;
+    expect(() => outfitMule(state, 'p0', 'water')).toThrow(new RuleError('This MULE is outfitted: re-outfit it'));
+    expect(() => outfitMule(state, 'p0', 'food')).toThrow(RuleError);
+    expect(state).toEqual(before);
+    outfitMule(state, 'p1', 'water'); // an empty MULE still outfits
+    expect(state.players[1]!.carriedMule).toBe('water');
   });
 
-  it('AM-2: the clock’s end returns a taken MULE to its plot with its old outfit, nothing lost', () => {
+  it('F1 pin: with the arcade off, OUTFIT re-fits a fitted MULE at full price, as the tap-to-walk phone does today', () => {
+    const state = developing();
+    DEV_STEER.on = false;
+    leadingFood(state);
+    const { money } = p0(state);
+    outfitMule(state, 'p0', 'water');
+    expect(p0(state).carriedMule).toBe('water');
+    expect(p0(state).money).toBe(money - outfitCostFor(state, 'p0', 'water'));
+  });
+
+  it('AM-2, AM-14: the clock’s end returns a taken MULE to its plot with its old outfit, and the re-outfit fee stays paid', () => {
     const state = developing();
     plot(state, 0, 0, 'p0', 'food').runMonths = 3;
     const twin = structuredClone(state);
     takeMule(state, 'p0', 0, 0);
+    const fee = reoutfitCostFor(state, 'p0', 'energy');
     reoutfitMule(state, 'p0', 'energy'); // re-outfitted, and still on its lead at the end
+    const afterFee = p0(state).money;
+    expect(afterFee).toBe(twin.players[0]!.money - fee);
     advancePhase(state);
     advancePhase(twin);
+    // No refund: the return leaves the money where paying the fee put it (production pays both twins alike).
+    expect(p0(state).money).toBe(twin.players[0]!.money - fee);
     expect(state.phase).toBe('production');
     expect(p0(state).carriedMule).toBeNull();
     expect(state.tiles[0]).toEqual(twin.tiles[0]);
     expect(state.tiles[0]!.outfit).toBe('food');
     expect(state.history.at(-1)!.produced.p0).toEqual(twin.history.at(-1)!.produced.p0);
+    expect(p0(state).takenMule ?? null).toBeNull();
+  });
+
+  it('AM-14, RULE-4: a taken MULE that bolts and is never caught goes home at the clock’s end', () => {
+    const state = developing();
+    plot(state, 0, 0, 'p0', 'food').runMonths = 3;
+    const twin = structuredClone(state);
+    takeMule(state, 'p0', 0, 0);
+    boltMule(state, 'p0');
+    advancePhase(state);
+    advancePhase(twin);
+    expect(state.tiles[0]).toEqual(twin.tiles[0]);
+    expect(state.tiles[0]!.outfit).toBe('food');
+    expect(p0(state).carriedMule).toBeNull();
+    expect(p0(state).muleBolted ?? false).toBe(false);
     expect(p0(state).takenMule ?? null).toBeNull();
   });
 
@@ -261,7 +312,7 @@ describe('AM-2: take a MULE off a plot and re-outfit it at the store', () => {
     expect(p0(state).carriedMule).toBeNull();
   });
 
-  it('AM-2: put back on its own plot unchanged, a taken MULE keeps the plot’s run', () => {
+  it('AM-2: put back on its own plot unchanged, a taken MULE keeps the plot’s run, by any route that turn', () => {
     const state = developing();
     const farm = plot(state, 0, 0, 'p0', 'food');
     farm.runMonths = 4;
@@ -270,5 +321,16 @@ describe('AM-2: take a MULE off a plot and re-outfit it at the store', () => {
     expect(farm.outfit).toBe('food');
     expect(farm.runMonths).toBe(4);
     expect(p0(state).takenMule ?? null).toBeNull();
+
+    // F3, the hop: A to an empty own plot B, B back to A. The run is A's, so a hop can't wipe a thin vein's decline.
+    const hop = plot(state, 2, 0, 'p0');
+    takeMule(state, 'p0', 0, 0);
+    installMule(state, 'p0', 2, 0);
+    expect(hop.runMonths).toBe(0);
+    takeMule(state, 'p0', 2, 0);
+    installMule(state, 'p0', 0, 0);
+    expect(farm.outfit).toBe('food');
+    expect(farm.runMonths).toBe(4);
+    expect(hop.outfit).toBeNull();
   });
 });
