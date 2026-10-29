@@ -287,9 +287,14 @@ tomorrow     MUST: the room's Game may emit a transient frame to everyone (`ctx.
              MUST (AM-8): WS3's recorder and replay pass `frame` through: recording, to the room; on replay, a no-op
                (record.ts, replay.ts, two lines, WS3's, WS6 reviewing), or a recorded game loses its frames silently.
                Test row: a recorded game's frames still reach a client.
-             MUST (AM-13, S-1): a `steer` intent sends no full view: the room's `case 'intent'` → `broadcast()` exempts
-               steer (a WS4 named edit in room.ts), or 4 phones × 10 steers a second make 40 full views a second
-               (~3.7 MB/s). Frame positions are rounded to 2 decimals on the wire.
+             MUST (AM-13, S-1): a `steer` intent sends no full view, or 4 phones × 10 steers a second make 40 full
+               views a second (~3.7 MB/s). Frame positions are rounded to 2 decimals on the wire.
+             MUST (AM-15): the room stays game-agnostic. Game gains an optional `quiet?(intent): boolean`; the room
+               skips `broadcast()` after an intent it returns true for (MuleGame: `type === 'steer'`, WS3, PR-3).
+               Connection gains an optional `behind?(): boolean`; the room skips that connection's frame while it is
+               true, never a full view (server.ts: `socket.bufferedAmount > FRAME_BACKLOG_BYTES`, a named server
+               config value; a WS3 named edit in PR-2). The rounding happens where the DevFrame is built (WS3's
+               dev-steer.ts, PR-3); the room passes `payload` through untouched.
 seam         packages/tabletop/src/room.ts (+ protocol.ts message type)
 senior       junior would: put positions in viewFor and broadcast it 20×/s. senior does: a frame of ~200 bytes per
              tick, full views stay event-driven (S-1 measures both).
@@ -728,6 +733,14 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-15 (2026-10-29, WS4's questions at arcade PR-2, ruled by WS6).** C8's three contract points, all option (a):
+  (1) the steer exemption is a generic optional `Game.quiet?(intent)` the room honours, implemented by MuleGame, not a
+  `'steer'` string in room.ts; a seat whose reach words change gets its view from the game itself (AM-11). (2) A
+  connection is "behind" by an optional `Connection.behind?()`, which server.ts's adapter answers from the socket's
+  `bufferedAmount` against a named `FRAME_BACKLOG_BYTES`; no client acknowledgement. Without `behind`, frames always
+  go. (3) Rounding to 2 decimals is the DevFrame builder's (dev-steer.ts), never the room's. Noted: server.ts's
+  `RATE_LIMIT` (20 messages a second a socket) fits `DEV_STEER.steerMaxPerSecond` 10 plus pings and taps; a faster
+  steer would need it raised (WS3's number).
 - **AM-14 (2026-10-29, WS3's questions at PR-7 #206, ruled by WS6).** (1) RULE-3 row 8a's RE-OUTFIT is for a MULE
   **taken off a plot** (row 11a) only; a MULE bought and outfitted this turn is not offered it (its outfit was chosen
   seconds ago), and game.ts's `outfitMule` refuses a fitted MULE while `DEV_STEER.on`, so Reach and the rule agree
