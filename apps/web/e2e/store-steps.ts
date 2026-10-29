@@ -13,6 +13,12 @@ const HUNGRY_FARMS = 9;
 const LAPTOP = { width: 1440, height: 900 };
 /** Wall-clock seconds of development the store's walk-through needs; smoke's scaled clock gives a fed seat only 5. */
 const STORE_WALK_SECONDS = 30;
+/** B-AC-15's row 7 once her MULE is in and the clock runs. */
+const INSTALLED = 'MULE installed. What next?';
+/** A-1: row 7 instead while month 1's clock waits for another seat ("… waiting for X" or "… X +1"). */
+const WAIT_TITLE = 'Your MULE is in · waiting for ';
+/** How long the other seats may take to get their first MULEs in once hers is. */
+const FIRST_MULES_MS = 15_000;
 
 /** The pace line the start-of-turn card shows from its first frame. */
 async function firstLabel(phone: Page, timeout: number): Promise<string> {
@@ -340,20 +346,30 @@ export async function theLedMuleLightsUp(phone: Page, server: MuleServer, code: 
   check(await install.isEnabled(), 'B-AC-15: walked out with an Energy MULE, a plot of hers is selected to install on');
   const title = (await phone.getByTestId('now-title').textContent()) ?? '';
   check(title === 'Install your Energy MULE here', `B-AC-15: on her selected plot Now says install it here, got "${title}"`);
-  // Installed, Now moves on to row 7 in the same frame the MULE leaves her: never back to "Buy a MULE".
+  // Installed, Now moves on to row 7 in the same frame the MULE leaves her: never back to "Buy a MULE". A-1: while
+  // month 1's clock still waits for another seat's first MULE, row 7 is the wait title instead.
   const titles = phone.evaluate(`new Promise((resolve) => {
     const seen = [];
     const read = () => document.querySelector('[data-testid=now-title]')?.textContent ?? '';
     const watch = new MutationObserver(() => {
       seen.push(read());
-      if (seen.at(-1) === 'MULE installed. What next?') { watch.disconnect(); resolve(seen); }
+      if (seen.at(-1) === ${JSON.stringify(INSTALLED)} || seen.at(-1).startsWith(${JSON.stringify(WAIT_TITLE)})) { watch.disconnect(); resolve(seen); }
     });
     watch.observe(document.body, { subtree: true, childList: true, characterData: true });
     setTimeout(() => { watch.disconnect(); resolve(seen); }, 3000);
   })`) as Promise<string[]>;
   await install.click({ timeout: 2_000 });
-  const after = await titles;
-  check(after.at(-1) === 'MULE installed. What next?', `B-AC-15: after installing Now says "MULE installed. What next?", saw ${JSON.stringify(after)}`);
+  let after = await titles;
+  // The server's month-1 clock, read as giveStoreTime reads it: null in development while it waits for a first MULE.
+  const waits = gameOf(server, code).devEndsAt === null;
+  if (waits) check(after.at(-1)?.startsWith(WAIT_TITLE), `B-AC-15 (A-1): after installing while month 1's clock waits, Now says "${WAIT_TITLE}…", saw ${JSON.stringify(after)}`);
+  // Row 7 once the clock runs: at once when she was the last seat in, else once the last first MULE is in. The steps
+  // after this one need the clock running, as they had it before A-1.
+  if (after.at(-1) !== INSTALLED) {
+    await phone.getByTestId('now-title').filter({ hasText: INSTALLED }).waitFor({ timeout: waits ? FIRST_MULES_MS : 2_000 }).catch(() => undefined);
+    after = [...after, (await phone.getByTestId('now-title').textContent()) ?? ''];
+  }
+  check(after.at(-1) === INSTALLED, `B-AC-15: once the clock runs Now says "${INSTALLED}", saw ${JSON.stringify(after)}`);
   check(!after.includes('Buy a MULE at the corral'), `B-AC-15: no frame shows "Buy a MULE" between the install and row 7, saw ${JSON.stringify(after)}`);
   await dev.getByRole('button', { name: 'Store', exact: true }).click({ timeout: 2_000 });
   await phone.getByTestId('store-hall').waitFor({ timeout: 2_000 });
