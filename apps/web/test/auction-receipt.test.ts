@@ -100,6 +100,55 @@ function textOf(html: string, testid: string): string | null {
 const fmt = (n: number) => Math.round(n).toLocaleString('en');
 const signed = (n: number) => (n > 0 ? `+${fmt(n)}` : n < 0 ? `−${fmt(-n)}` : '±0');
 
+type Receipt = NonNullable<NonNullable<MuleView['auction']>['receipt']>;
+const side = (units: number, price: number, tax: number, ...ids: string[]) => ({ units, gross: units * price, tax: units * tax, prices: Array<number>(units).fill(price), with: ids });
+const none = side(0, 0, 0);
+
+/** Heiko's real close-stage view (Mia and The Baron at the table), with the receipt and the good up next set by hand. */
+function closeWith(receipt: Receipt, upNext: MuleView['auction'] extends infer A ? (A extends { upNext: infer U } ? U : never) : never = 'water'): MuleView {
+  const view = toClose().game.viewFor('s1');
+  return { ...view, auction: { ...view.auction!, good: 'food', receipt, upNext } };
+}
+
+describe('A-5 the receipt words, from hand-built views (the review fix round)', () => {
+  it('B-AC-A5-6: 6 sold at 95 says the tax the engine took, 60 cr, not a rate that does not add up', () => {
+    const html = phoneScreen(closeWith({ bought: none, sold: side(6, 95, 10, 's2') }), 's1');
+    expect(textOf(html, 'receipt-title-sold')).toBe('Food: you sold 6 for 510 cr');
+    expect(textOf(html, 'receipt-each')).toBe('6 × 95 cr to Mia');
+    expect(textOf(html, 'receipt-tax')).toBe('570 cr, less 60 cr sales tax: 510The tax goes to the colony fund.');
+  });
+
+  it('B-AC-A5-7: a seat that bought and sold in one good gets a line for each side', () => {
+    const html = phoneScreen(closeWith({ bought: side(2, 30, 0, 'store'), sold: side(1, 40, 4, 's2') }), 's1');
+    expect(textOf(html, 'receipt-title-bought')).toBe('Food: you bought 2 for 60 cr');
+    expect(textOf(html, 'receipt-title-sold')).toBe('Food: you sold 1 for 36 cr');
+    expect(textOf(html, 'receipt-tax')).toBe('40 cr, less 4 cr sales tax: 36The tax goes to the colony fund.');
+  });
+
+  it('B-AC-A5-8: three counterparties are listed "Mia, the store and the ship"', () => {
+    const html = phoneScreen(closeWith({ bought: none, sold: side(3, 50, 5, 's2', 'store', 'ship') }), 's1');
+    expect(textOf(html, 'receipt-each')).toBe('3 × 50 cr to Mia, the store and the ship');
+  });
+
+  it("B-AC-A5-9: a seat that passed reads that it didn't trade", () => {
+    const html = phoneScreen(closeWith({ bought: none, sold: none }), 's1');
+    expect(textOf(html, 'receipt-title-none')).toBe('Food: you didn’t trade');
+    expect(textOf(html, 'receipt-each')).toBeNull();
+    expect(textOf(html, 'receipt-tax')).toBeNull();
+  });
+
+  it('B-AC-A5-10: after the last good there is no "Next:", and the button says the auction is closing', () => {
+    const html = phoneScreen(closeWith({ bought: side(1, 30, 0, 'store'), sold: none }, null), 's1');
+    expect(textOf(html, 'receipt')).not.toContain('Next:');
+    expect(textOf(html, 'hint-how')).toBeNull();
+    expect(textOf(html, 'done')).toBe('The auction is closing…');
+    // Positive check of the same reads with a next good.
+    const next = phoneScreen(closeWith({ bought: side(1, 30, 0, 'store'), sold: none }, 'water'), 's1');
+    expect(textOf(next, 'receipt')).toContain('Next: Water, buy or sell?');
+    expect(textOf(next, 'done')).toBe('Next: Water…');
+  });
+});
+
 describe('A-5 the receipt on the phone (#audit-auction-receipt)', () => {
   it('B-AC-A5-1: the seller reads what it sold, for what after tax, with the tax spelled out', () => {
     const { game } = toClose();
@@ -109,9 +158,10 @@ describe('A-5 the receipt on the phone (#audit-auction-receipt)', () => {
     const net = r.sold.gross - r.sold.tax;
     const html = phoneScreen(view, 's1');
     expect(html).toContain('data-testid="receipt-layer"');
-    expect(textOf(html, 'receipt-title')).toBe(`${good}: you sold ${r.sold.units} for ${fmt(net)} cr`);
-    const rate = Math.round(view.treasury.salesTax * 100);
-    expect(textOf(html, 'receipt-tax')).toBe(`${fmt(r.sold.gross)} cr, less ${rate}% sales tax: ${fmt(net)}The tax goes to the colony fund.`);
+    expect(textOf(html, 'receipt-title-sold')).toBe(`${good}: you sold ${r.sold.units} for ${fmt(net)} cr`);
+    // The tax the engine took, unit by unit: the sentence adds up.
+    expect(textOf(html, 'receipt-tax')).toBe(`${fmt(r.sold.gross)} cr, less ${fmt(r.sold.tax)} cr sales tax: ${fmt(net)}The tax goes to the colony fund.`);
+    expect(textOf(html, 'receipt-title-bought')).toBeNull();
     expect(textOf(html, 'receipt-each')).toMatch(/ to (.* and )?Mia( and .*)?$/);
     const have = view.me!.stock[view.auction!.good];
     expect(textOf(html, 'receipt-stand')).toMatch(new RegExp(`^You have ${have} ${good}`));
@@ -122,7 +172,8 @@ describe('A-5 the receipt on the phone (#audit-auction-receipt)', () => {
     const view = game.viewFor('s2');
     const r = view.auction!.receipt!;
     const html = phoneScreen(view, 's2');
-    expect(textOf(html, 'receipt-title')).toBe(`${GOOD_NAME[view.auction!.good]}: you bought ${r.bought.units} for ${fmt(r.bought.gross)} cr`);
+    expect(textOf(html, 'receipt-title-bought')).toBe(`${GOOD_NAME[view.auction!.good]}: you bought ${r.bought.units} for ${fmt(r.bought.gross)} cr`);
+    expect(textOf(html, 'receipt-title-sold')).toBeNull();
     expect(textOf(html, 'receipt-tax')).toBeNull();
   });
 
