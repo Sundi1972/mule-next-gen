@@ -1,6 +1,6 @@
-import { DEV_WALK, DEVELOPMENT, UPKEEP, type Good } from '@mule/engine';
-import type { TileView } from '@mule/protocol';
-import { AirGauge, Button, cx, GOOD_NAME, GoodIcon, hungerLevel, HoloMap, MuleIcon, paceLine, PlayerMark, SharedClock, sickReason, StoreInterior, TERRAIN_NAME, YourPace, ZoomMap, type Condition, type FoodEaten, type PaceRule, type Shop } from '@mule/ui';
+import { DEV_STEER, DEV_WALK, DEVELOPMENT, UPKEEP, type Good, type Outfit } from '@mule/engine';
+import type { PlayerView, TileView } from '@mule/protocol';
+import { AirGauge, Button, cx, GOOD_NAME, GoodIcon, hungerLevel, HoloMap, MuleIcon, paceLine, PlayerMark, SharedClock, sickReason, StoreInterior, TERRAIN_NAME, TimeBar, YourPace, ZoomMap, type Condition, type FoodEaten, type PaceRule, type Shop } from '@mule/ui';
 import { useEffect, useState } from 'react';
 import { mapTiles, PHASE_NAME, plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
 import { speakerAt } from '../chat/Chat';
@@ -8,8 +8,9 @@ import { SpecialLine } from '../components/SpecialLine';
 import { useClient, useServerNow } from '../net/react';
 import { usePhoneGame } from './game';
 import { GroundCard, Traits } from './ground';
+import { press, type Press } from './hub/ready';
 import { nearest, nextStep, openShops } from './next-step';
-import { MapFit, PhoneShell, useWide } from './Shell';
+import { MapFit, PhoneShell, useWide, type Now } from './Shell';
 
 const OUTFIT_NAME = (o: TileView['outfit']) => (o === null ? '' : o === 'greenBelt' ? 'Green belt' : GOOD_NAME[o]);
 
@@ -25,9 +26,11 @@ const WELL: Condition = { foodShare: 1, sick: false, sickBecause: null, conditio
  */
 export function Develop() {
   const client = useClient();
-  const { view, me, self, slot } = usePhoneGame();
+  const { table, view, me, self, slot } = usePhoneGame();
   const now = useServerNow(200);
-  const seconds = me.devEndsAt === null ? 0 : Math.max(0, (me.devEndsAt - now) / 1000);
+  // Month 1's clock waits, full, for every first MULE: the turn is not over.
+  const waiting = !!view.clockWaitsFor;
+  const seconds = waiting ? me.devSeconds : me.devEndsAt === null ? 0 : Math.max(0, (me.devEndsAt - now) / 1000);
   const carry = me.carriedMule;
   const [place, setPlace] = useState<'store' | 'map'>('store');
   const [cardDismissed, setCardDismissed] = useState(false);
@@ -42,6 +45,7 @@ export function Develop() {
   const [selected, setSelected] = useState<{ x: number; y: number } | null>(null);
   // Kept here, not in the map, so the zoom survives a trip into the store.
   const [zoomed, setZoomed] = useState(false);
+  const [confirmStart, setConfirmStart] = useState(false);
   const tile = selected ? tileAt(view, selected.x, selected.y) : undefined;
   const outfitted = carry !== null && carry !== 'empty';
   // RULE-7's "installed this turn": an outfitted MULE in tow becomes none only by installing it. Worked out while
@@ -83,7 +87,7 @@ export function Develop() {
   const free = tile && tile.owner === null && tile.terrain !== 'store';
   const owner = tile?.owner ? view.players.find((p) => p.id === tile.owner) : undefined;
 
-  const guide = nextStep({
+  const ruled = nextStep({
     filling,
     carry,
     place,
@@ -99,6 +103,23 @@ export function Develop() {
     mulesLeft: view.storeMules,
     pubPayout,
   });
+  const installedAny = installed || me.installedThisTurn;
+  // Month 1 with the clock running and no first MULE of yours in on a plot of yours: the host started it without you.
+  const passed = view.month === 1 && DEV_STEER.month1WaitsForFirstMule && !waiting && me.devEndsAt !== null && !installedAny && view.tiles.some((t) => t.owner === me.id);
+  // Once in, you wait: a seat already in may only end its turn until the clock starts.
+  const youWait = waiting && !view.clockWaitsFor!.includes(me.id);
+  const guide = waiting
+    ? {
+        ...ruled,
+        ...(youWait ? { next: [], locks: { ...ruled.locks, corral: '' } } : {}),
+        now: waitingNow(ruled.now, carry, installedAny || youWait, !view.tiles.some((t) => t.owner === me.id), view.storeMules, view.clockWaitsFor!, me.id, view.players),
+      }
+    : passed
+      ? { ...ruled, now: { ...ruled.now, detail: 'The host started the clock: your month is running.' } }
+      : ruled;
+  // The host, once its own first MULE is in, may start the waiting clock without the rest.
+  const passing =
+    waiting && self.id === table.hostId && !view.clockWaitsFor!.includes(me.id) ? view.players.filter((p) => view.clockWaitsFor!.includes(p.id)).map((p) => p.name) : [];
 
   const tiles = mapTiles(view);
   // The payout shows where the button has the row to itself: in the store. On the map it shares the row with Store.
@@ -111,7 +132,8 @@ export function Develop() {
   return (
     <PhoneShell
       phase={PHASE_NAME.development}
-      seconds={seconds}
+      seconds={waiting ? undefined : seconds}
+      status={waiting ? <ClockWaitsChip seconds={me.devSeconds} /> : undefined}
       now={guide.now}
       fill
       rail={
@@ -119,7 +141,11 @@ export function Develop() {
           {/* The clock right after Now, your pace on its label under 1100 px; the header's timer is the one always in view. */}
           {place === 'store' && (
             <>
-              <SharedClock seconds={seconds} total={Math.max(me.devSeconds, 1)} pace={paceLine(condition, DEV_WALK, food)} />
+              {waiting ? (
+                <ClockWaits seconds={me.devSeconds} mineIn={!view.clockWaitsFor!.includes(me.id)} />
+              ) : (
+                <SharedClock seconds={seconds} total={Math.max(me.devSeconds, 1)} pace={paceLine(condition, DEV_WALK, food)} />
+              )}
               <div className="hidden @min-[1100px]/shell:block">
                 <YourPace condition={condition} rule={DEV_WALK} food={food} />
               </div>
@@ -172,7 +198,14 @@ export function Develop() {
               )}
               <Traits traits={tile.traits} />
               {mine && (
-                <Button size="md" variant="outline" className="px-2 text-xs" disabled={tile.filter || me.stock.alloy < DEVELOPMENT.filterAlloy} onClick={() => client.intent({ type: 'filter', x: tile.x, y: tile.y })}>
+                <Button
+                  size="md"
+                  variant="outline"
+                  className="px-2 text-xs"
+                  disabled={youWait || tile.filter || me.stock.alloy < DEVELOPMENT.filterAlloy}
+                  onClick={() => client.intent({ type: 'filter', x: tile.x, y: tile.y })}
+                  {...(youWait ? WAIT_HINT : {})}
+                >
                   {tile.filter ? 'Filter fitted' : `Fit a filter · ${DEVELOPMENT.filterAlloy} Alloy (have ${me.stock.alloy})`}
                 </Button>
               )}
@@ -183,7 +216,9 @@ export function Develop() {
         </>
       }
       footer={
-        place === 'store' ? (
+        <>
+          {passing.length > 0 && <StartTheClock passing={passing} confirm={confirmStart} setConfirm={setConfirmStart} />}
+          {place === 'store' ? (
           <>
             <Button size="md" variant={outfitted ? 'holo' : 'outline'} className="w-full @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" onClick={walkOut}>
               Walk out to the map
@@ -192,9 +227,15 @@ export function Develop() {
           </>
         ) : (
           <>
-            {tile && (
+            {/* Once in, you wait: no plot row until the clock starts (both would be dim), so the guide keeps its room. */}
+            {tile && !youWait && (
               <div className="grid grid-cols-2 gap-2">
-                <Button size="md" className="whitespace-nowrap px-2" disabled={!outfitted || !mine} onClick={() => client.intent({ type: 'install', x: tile.x, y: tile.y })}>
+                <Button
+                  size="md"
+                  className="whitespace-nowrap px-2"
+                  disabled={!outfitted || !mine}
+                  onClick={() => client.intent({ type: 'install', x: tile.x, y: tile.y })}
+                >
                   {outfitted && mine && tile.outfit ? 'Replace MULE' : 'Install here'}
                 </Button>
                 <Button
@@ -216,7 +257,8 @@ export function Develop() {
               {pub(false)}
             </div>
           </>
-        )
+          )}
+        </>
       }
     >
       {/* One place at a time, at every size (AM-8): in the store the hall fills the stage; out of the door, the colony. */}
@@ -339,6 +381,88 @@ export function FillCard({ condition, rule, food }: { condition: Condition; rule
           {paceLine(condition, rule, food).title}
         </span>
       </div>
+    </div>
+  );
+}
+
+/** The Now card while month 1's clock waits: no rush before your first MULE; once it is in, whose are still to come. */
+function waitingNow(now: Now, carry: Outfit | 'empty' | null, installed: boolean, plotless: boolean, mulesLeft: number, waitsFor: readonly string[], me: string, players: readonly PlayerView[]): Now {
+  if (carry !== null) return now;
+  // Row 1 or 2 with MULEs left: the start card's "the clock starts for everyone" isn't so while it waits.
+  if (!installed) return now.step === 1 && mulesLeft > 0 ? { step: 1, of: 3, title: 'Buy a MULE at the corral', detail: 'Your first month: no rush. The clock starts when your first MULE is in.' } : now;
+  const still = waitsFor.filter((id) => id !== me).map((id) => players.find((p) => p.id === id)?.name ?? id);
+  if (plotless) return { title: `No plot this month · waiting for ${firstPlus(still)}`, detail: <span id={WAIT_DETAIL_ID}>The clock starts when every first MULE is in.</span> };
+  return { title: `Your MULE is in · waiting for ${firstPlus(still)}`, detail: <span id={WAIT_DETAIL_ID}>{YOU_WAIT}</span> };
+}
+
+/** "Kai", "Kai +1", "Kai +2": the first still to come and how many more, so the title keeps to two lines. */
+const firstPlus = (names: readonly string[]) => `${names[0] ?? ''}${names.length > 1 ? ` +${names.length - 1}` : ''}`;
+
+/** Once in, you wait: the guide's words, and the id the dimmed controls point at for them. */
+const YOU_WAIT = 'Buying, installing and analysing wait for the clock.';
+const WAIT_DETAIL_ID = 'first-month-wait';
+/** Why a control a seat already in may not use is dimmed while month 1's clock waits. */
+const WAIT_HINT = { title: "Waiting for the others' first MULEs", 'aria-describedby': WAIT_DETAIL_ID } as const;
+
+/** The host's confirm, before the waiting clock starts without the players still to come. */
+export function startClockQuestion(names: readonly string[]): string {
+  const one = names.length === 1;
+  return `Start the month's clock now? ${andList(names)} ${one ? 'has' : 'have'} no MULE in yet, and ${one ? 'loses' : 'lose'} no time until now.`;
+}
+
+const andList = (names: readonly string[]) => (names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`);
+
+/** The host's way past anyone still to come in month 1's wait: planning's Continue, one confirming tap. */
+function StartTheClock({ passing, confirm, setConfirm }: { passing: readonly string[]; confirm: boolean; setConfirm: (open: boolean) => void }) {
+  const client = useClient();
+  const on = (pressed: Press) => () => {
+    const next = press(confirm, pressed);
+    setConfirm(next.confirm);
+    if (next.intent) client.intent(next.intent);
+  };
+  if (!confirm)
+    return (
+      <Button size="md" variant="outline" className="w-full" onClick={on('continue')} data-testid="continue">
+        Start the clock without {passing.length === 1 ? passing[0] : 'them'}
+      </Button>
+    );
+  return (
+    <div className="flex flex-col gap-2 rounded-panel border border-warn/60 bg-panel p-2.5 @min-[1100px]/shell:p-4" role="alertdialog" aria-label="Start the clock without them?" data-testid="continue-confirm">
+      <p className="text-sm @min-[1100px]/shell:text-base">{startClockQuestion(passing)}</p>
+      <div className="flex gap-2">
+        {/* Two words a line at most: on a 667 phone the rail is too narrow for "Start the clock" on one. */}
+        <Button size="md" className="flex-1 px-2 text-xs leading-tight @min-[1100px]/shell:text-base" onClick={on('continue-now')} data-testid="continue-now">
+          Start the clock
+        </Button>
+        <Button size="md" variant="ghost" className="flex-1 px-2 text-xs leading-tight @min-[1100px]/shell:text-base" onClick={on('keep-waiting')} data-testid="keep-waiting">
+          Keep waiting
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Where the header's timer goes while month 1's clock waits: paused at its full time. */
+function ClockWaitsChip({ seconds }: { seconds: number }) {
+  return (
+    <span className="relative inline-flex h-8 items-center gap-1 rounded-chip border border-dashed border-holo-line px-2 font-mono text-xs font-bold text-holo @min-[1100px]/shell:h-11 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-lg" data-testid="clock-waits">
+      <svg aria-hidden viewBox="0 0 24 24" width={12} height={12} fill="currentColor">
+        <rect x={6} y={5} width={4} height={14} rx={1} />
+        <rect x={14} y={5} width={4} height={14} rx={1} />
+      </svg>
+      0:{seconds}
+    </span>
+  );
+}
+
+/** Everyone's clock while it waits: the bar stands full and the label says what starts it. */
+function ClockWaits({ seconds, mineIn }: { seconds: number; mineIn: boolean }) {
+  return (
+    <div className="flex items-center gap-2 @min-[1100px]/shell:gap-4" data-testid="shared-clock">
+      <span className="shrink-0 whitespace-nowrap text-[11px] font-semibold text-holo @min-[1100px]/shell:text-base" data-testid="clock-label">
+        {mineIn ? 'The clock starts when every first MULE is in' : 'The clock starts when your first MULE is in'}
+      </span>
+      <TimeBar seconds={seconds} total={seconds} size="phone-clock" className="min-w-0 flex-1" />
     </div>
   );
 }

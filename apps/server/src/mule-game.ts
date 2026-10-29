@@ -16,6 +16,7 @@ import {
   createRng,
   declareRole,
   electionDone,
+  DEV_STEER,
   EVENT_SHOW,
   DEVELOPMENT,
   fitFilter,
@@ -140,6 +141,9 @@ function isSpecies(pick: string | undefined): pick is Species {
 /** The reasons a plot's badges may name; its ground, the output floor, a factory's fit and the event never get one. */
 const BADGE_REASONS: readonly ProductionReason[] = ['cluster', 'species', 'trait', 'pollution', 'noEnergy', 'noWater'];
 const MAX_BADGES = 2;
+
+/** What a seat already in may not do while month 1's clock waits; the pub stays open. */
+const WAIT_REFUSES: ReadonlySet<DevIntent['type']> = new Set(['buyMule', 'install', 'analyse', 'filter']);
 
 /** Names in reading order: "A", "A and B", "A, B and C". */
 function andList(names: string[]): string {
@@ -350,8 +354,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private readonly away = new Set<string>();
   /** Trades between players in the good that is up, for the news when it closes. */
   private dealsInGood: Trade[] = [];
-  /** When the one development clock runs out for every seat, epoch ms; null outside development. */
+  /** When the one development clock runs out for every seat, epoch ms; null outside development and while it waits. */
   private devEndsAt: number | null = null;
+  /** Month 1's clock stands full until every seat is in, or the host continues. See A-1. */
+  private clockWaits = false;
   /** Each seat's colonist during development, keyed by seat id. */
   private readonly colonists = new Map<string, Colonist>();
   /** Every human was Ready, away or done while a colonist was still out; development ends once all have arrived. */
@@ -474,6 +480,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           return;
         }
         this.ready.add(seatId);
+        this.startClockOnceAllIn();
         this.checkAllReady();
         return;
       case 'drone':
@@ -523,7 +530,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         return;
       case 'continue': {
         if (seatId !== this.ctx.hostId()) throw new RuleError('Only the host can continue');
-        this.continuePlanning(seatId);
+        if (state.phase === 'development') this.continueDevelopment(seatId);
+        else this.continuePlanning(seatId);
         return;
       }
     }
@@ -554,6 +562,16 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     goneOn('continued', left);
   }
 
+  /** The host's Continue while month 1's clock waits: starts it, and the news names the others not yet in. */
+  private continueDevelopment(hostId: string): void {
+    if (!this.clockWaits) throw new RuleError('The clock is already running');
+    const left = this.seatsNotIn()
+      .filter((s) => s.id !== hostId)
+      .map((s) => s.name);
+    this.startClock();
+    if (left.length > 0) this.addNews(`${this.nameOf(hostId)} started the clock without ${andList(left)}.`);
+  }
+
   /**
    * A development tap names where to go and what to do there: the colonist walks there (walkSeconds) and the move
    * applies on arrival; an outfit applies where it stands. Refused while it walks or assays, and when the walk would
@@ -568,13 +586,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     if (state.players.find((p) => p.id === seatId)?.doneDeveloping) throw new RuleError('Your turn is over: you went to the pub');
     if (colonist.walk) throw new RuleError('Still walking');
     if (colonist.assayUntil !== null) throw new RuleError('Still assaying');
+    // Once in, you wait: the time before month 1's clock is for first MULEs only.
+    if (this.clockWaits && WAIT_REFUSES.has(intent.type) && this.isIn(seatId)) throw new RuleError("Waiting for the others' first MULEs");
     const to = walkTarget(state, intent);
     if (to === null) {
       this.act(seatId, intent, now);
       return;
     }
     const arrivesAt = now + this.realMs(walkSeconds(state, seatId, colonist.at, to));
-    if (arrivesAt > this.devEndsAt! && intent.type !== 'pub') throw new RuleError('Not enough time to walk there');
+    if (arrivesAt > this.clockEndsAt(now) && intent.type !== 'pub') throw new RuleError('Not enough time to walk there');
     colonist.walk = { from: colonist.at, startedAt: now, arrivesAt, then: intent };
     colonist.at = to;
     if (arrivesAt > now) {
@@ -594,6 +614,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   /** Development's two early ends, checked again whenever a colonist arrives or finishes an assay. */
   private checkEarlyEnd(): void {
+    this.startClockOnceAllIn();
     if (this.endWhenSettled) this.checkAllReady();
     this.checkDevelopmentOver();
   }
@@ -661,11 +682,18 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.monthCondition = { month: state.month, byId: new Map(this.seats.map((s) => [s.id, this.conditionOf(state, s.id)])) };
     this.colonists.clear();
     this.devEndsAt = null;
+    this.clockWaits = false;
   }
 
-  /** Game seconds left on the development clock at `at`, epoch ms; 0 outside development. */
+  /** Game seconds left on the development clock at `at`, epoch ms: all of them while it waits; 0 outside development. */
   private secondsLeft(at: number): number {
+    if (this.clockWaits) return DEVELOPMENT.fullSeconds;
     return this.devEndsAt === null ? 0 : this.gameSeconds(this.devEndsAt - at);
+  }
+
+  /** While the clock waits, a walk may take as long as a full clock from when it sets off. */
+  private clockEndsAt(at: number): number {
+    return this.clockWaits ? at + this.realMs(DEVELOPMENT.fullSeconds) : this.devEndsAt!;
   }
 
   /** Real ms that `seconds` of game time last at this table's phaseScale, in whole ms like the server's clock. */
@@ -697,6 +725,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     if (connected) this.away.delete(seatId);
     else this.away.add(seatId);
     // Nobody waits for a phone that dropped.
+    this.startClockOnceAllIn();
     this.checkAllReady();
   }
 
@@ -744,7 +773,32 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const state = this.requireState();
     if (state.phase !== 'development') return false;
     const p = state.players.find((q) => q.id === seatId);
-    return !!p?.doneDeveloping || (this.devEndsAt ?? 0) <= this.ctx.now();
+    return !!p?.doneDeveloping || (this.devEndsAt !== null && this.devEndsAt <= this.ctx.now());
+  }
+
+  /**
+   * Whether a seat counts as in for month 1's clock: away, or present with its first MULE installed, no plot, or its
+   * turn ended at the pub or by Ready. The last two keep a seat that cannot or will not install from holding the table.
+   */
+  private isIn(seatId: string): boolean {
+    const state = this.requireState();
+    if (this.away.has(seatId) || this.ready.has(seatId)) return true;
+    const p = state.players.find((q) => q.id === seatId)!;
+    return p.installedThisTurn || p.doneDeveloping || !state.tiles.some((t) => t.owner === seatId);
+  }
+
+  private seatsNotIn(): SeatInfo[] {
+    return this.seats.filter((s) => !this.isIn(s.id));
+  }
+
+  private startClockOnceAllIn(): void {
+    if (this.clockWaits && this.seatsNotIn().length === 0) this.startClock();
+  }
+
+  private startClock(): void {
+    this.clockWaits = false;
+    this.devEndsAt = this.ctx.now() + this.realMs(DEVELOPMENT.fullSeconds);
+    this.scheduleDevelopmentEnd(this.requireState().month);
   }
 
   /** Development ends once every player, AI included, is at the pub, out of time or away, and no colonist is still out. */
@@ -1080,15 +1134,20 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.grantTimers.presses = presses;
   }
 
-  /** One clock for every seat, DEVELOPMENT.fullSeconds long: hunger and sickness slow the walk, never the clock. */
+  /**
+   * One clock for every seat, DEVELOPMENT.fullSeconds long: hunger and sickness slow the walk, never the clock. In
+   * month 1 it waits until every seat is in; the colonists, the AI and every timer but the clock's run meanwhile.
+   */
   private startDevelopment(): void {
     const state = this.requireState();
     const now = this.ctx.now();
-    this.devEndsAt = now + this.realMs(DEVELOPMENT.fullSeconds);
+    this.devEndsAt = null;
     this.phaseEndsAt = null;
     this.endWhenSettled = false;
     for (const s of this.seats) this.colonists.set(s.id, { at: 'store', walk: null, assayUntil: null });
-    this.scheduleDevelopmentEnd(state.month);
+    this.clockWaits = state.month === 1 && DEV_STEER.month1WaitsForFirstMule;
+    if (this.clockWaits) this.startClockOnceAllIn();
+    else this.startClock();
     if (this.ai.size > 0) this.scheduleAiDevelop(state.month, now);
   }
 
@@ -1448,6 +1507,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       production: state.phase === 'production' || state.phase === 'upkeep' ? productionView(state, this.productionMs) : null,
       ...this.eventsView(state),
       politics: politicsView(state),
+      ...(this.clockWaits ? { clockWaitsFor: this.seatsNotIn().map((s) => s.id) } : {}),
     };
   }
 
