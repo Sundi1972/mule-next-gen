@@ -57,6 +57,7 @@ export function Auction() {
 
   if (stage === 'status') {
     const side = mine?.side;
+    const ship = shipWants(view, auction);
     return (
       <PhoneShell
         phase={`${GOOD_NAME[good]} · buy or sell?`}
@@ -68,7 +69,7 @@ export function Auction() {
                 {spare < 0 ? `${-spare} SHORT` : spare > 0 ? `+${spare} SPARE` : 'EVEN'}
               </span>
             </div>
-            <p className="text-xs leading-snug text-ink-2">
+            <p className="text-xs leading-snug text-ink-2" data-testid="status-words">
               {spare < 0 ? `You need ${-spare} more ${GOOD_NAME[good]} this month.` : spare > 0 ? `You have ${spare} more than you need.` : 'You have just what you need.'} Pick your side before the bell.
             </p>
           </>
@@ -114,9 +115,7 @@ export function Auction() {
             <StatusTable view={view} auction={auction} meId={self.id} />
           </div>
           <MyStoreLine auction={auction} />
-          {shipWants(view, auction).map((w) => (
-            <ShipWants key={w.good} want={w} have={me.stock[w.good]} />
-          ))}
+          {ship && <ShipWants want={ship.first} also={ship.also} have={me.stock[ship.first.good]} />}
         </div>
       </PhoneShell>
     );
@@ -150,7 +149,10 @@ export function Auction() {
         <GoodTag good={good} name />
         <div className="grid grid-cols-3 gap-2.5 font-mono text-[10px] text-ink-3">
           <span className="flex flex-col">
-            HAVE<strong data-num className="text-sm text-ink">{have}</strong>
+            HAVE
+            <strong data-num className="text-sm text-ink" data-testid="have">
+              {have}
+            </strong>
           </span>
           <span className="flex flex-col">
             NEED<strong data-num className="text-sm text-ink">{need}</strong>
@@ -246,16 +248,16 @@ function WalkHold({ dir, disabled, onHold }: { dir: 'up' | 'down'; disabled: boo
       aria-label={`Hold to walk ${dir}`}
       disabled={disabled}
       data-testid={`hold-${dir}`}
-      className="flex h-12 touch-none select-none flex-col items-center justify-center gap-1 rounded-control border-2 border-holo bg-holo-soft font-display text-holo active:bg-holo active:text-on-holo disabled:opacity-35"
+      className="flex h-12 touch-none select-none flex-col items-center justify-center gap-1 rounded-control border-2 border-holo bg-holo-soft font-display text-holo active:bg-holo active:text-on-holo disabled:opacity-35 @min-[1100px]/shell:h-20"
       {...holdHandlers(onHold)}
     >
-      <span className="flex items-center gap-1 text-sm font-semibold leading-none">
+      <span className="flex items-center gap-1 text-sm font-semibold leading-none @min-[1100px]/shell:text-xl">
         Hold{' '}
-        <span aria-hidden className="text-lg leading-none">
+        <span aria-hidden className="text-lg leading-none @min-[1100px]/shell:text-2xl">
           {dir === 'up' ? '▲' : '▼'}
         </span>
       </span>
-      <span className="text-[11px] font-medium leading-none">to walk {dir}</span>
+      <span className="text-[11px] font-medium leading-none @min-[1100px]/shell:text-base">to walk {dir}</span>
     </button>
   );
 }

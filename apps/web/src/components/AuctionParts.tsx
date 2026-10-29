@@ -57,13 +57,13 @@ export function TvReadout({ view, auction }: { view: MuleView; auction: AuctionV
   const bid = pricesOn(auction, 'buyer')[0];
   const trading = auction.deals.length > 0;
   return (
-    <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-2 gap-y-1 font-mono text-lg" data-testid="line-readout">
+    <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-2 gap-y-1 font-mono text-lg" data-testid="tv-readout">
       <dt className="text-rise">LOWEST ASK</dt>
       <dd data-num className="font-bold text-rise">{ask ? `${ask.price} · ${who(view, ask.id)}` : '—'}</dd>
       <dt className="text-fall">HIGHEST BID</dt>
       <dd data-num className={cx('font-bold', bid?.id === SHIP_ID ? 'text-warn' : 'text-fall')}>{bid ? `${bid.price} · ${who(view, bid.id)}` : '—'}</dd>
       <dt className="text-ink-3">GAP</dt>
-      <dd data-num className="font-bold text-ink">{trading ? 'MET: TRADING' : ask && bid ? `${ask.price - bid.price} apart` : '—'}</dd>
+      <dd data-num className="font-bold text-ink">{trading ? 'MET: TRADING' : ask && bid ? (ask.price > bid.price ? `${ask.price - bid.price} apart` : 'they meet') : '—'}</dd>
     </dl>
   );
 }
@@ -255,23 +255,43 @@ export interface ShipWant {
 }
 
 /**
- * What the ship in port still wants of the good up now and the goods yet to come, in the order they come up. Nothing
- * while it is only announced. The good up now is priced from the auction, the rest from the market.
+ * What the ship in port still wants of the good up now and the goods yet to come, in the order they come up: the first
+ * of them, and the rest. Null while it is only announced, or wants none of them. The good up now is priced from the
+ * auction, the rest from the market.
  */
-export function shipWants(view: Pick<MuleView, 'ship' | 'market'>, auction: Pick<AuctionView, 'good' | 'next' | 'shipPays'>): ShipWant[] {
+export function shipWants(
+  view: Pick<MuleView, 'ship' | 'market'>,
+  auction: Pick<AuctionView, 'good' | 'next' | 'shipPays'>,
+): { first: ShipWant; also: { good: Good; wants: number }[] } | null {
   const wants = view.ship.inPort ? view.ship.wants : null;
-  if (!wants) return [];
+  if (!wants) return null;
   const order = [auction.good, ...auction.next];
-  return order.flatMap((good, i): ShipWant[] => {
+  const wanted = order.flatMap((good, i) => {
     const n = wants[good] ?? 0;
     const market = view.market.find((r) => r.good === good)?.shipPays ?? null;
     const pays = i === 0 ? (auction.shipPays ?? market) : market;
-    return n > 0 && pays !== null ? [{ good, wants: n, pays, after: i === 0 ? null : order[i - 1]! }] : [];
+    return n > 0 ? [{ good, wants: n, pays, after: i === 0 ? null : order[i - 1]! }] : [];
   });
+  // The headline needs a price; the rest are named only.
+  const first = wanted.find((w): w is ShipWant => w.pays !== null);
+  return first ? { first, also: wanted.filter((w) => w !== first).map(({ good, wants: n }) => ({ good, wants: n })) } : null;
 }
 
-/** "The ship wants 24 Crystite this month", when that good comes up (or that it is up now), and on a phone what you have of it. */
-export function ShipWants({ want, have, tv = false }: { want: ShipWant; have?: number; tv?: boolean }) {
+/** The ship's other wanted goods in one sentence: one with its count, several by name. */
+function alsoWords(also: readonly { good: Good; wants: number }[]): string {
+  if (also.length === 0) return '';
+  if (also.length === 1) return ` It also wants ${also[0]!.wants} ${GOOD_NAME[also[0]!.good]}.`;
+  return ` It also wants ${also
+    .slice(0, -1)
+    .map((a) => GOOD_NAME[a.good])
+    .join(', ')} and ${GOOD_NAME[also.at(-1)!.good]}.`;
+}
+
+/**
+ * One panel however many goods the ship wants, so the store's box and the board keep their room: "The ship wants 24
+ * Crystite this month", when that good comes up (or that it is up now), on a phone what you have of it, then the rest.
+ */
+export function ShipWants({ want, also = [], have, tv = false }: { want: ShipWant; also?: readonly { good: Good; wants: number }[]; have?: number; tv?: boolean }) {
   const name = GOOD_NAME[want.good];
   return (
     <p
@@ -286,6 +306,7 @@ export function ShipWants({ want, have, tv = false }: { want: ShipWant; have?: n
       </strong>
       <span className="text-ink-2">
         {want.after === null ? 'it pays' : `${name} comes up after ${GOOD_NAME[want.after]}: the ship pays`} {want.pays} cr for the first.{have === undefined ? '' : ` You have ${have}.`}
+        {alsoWords(also)}
       </span>
     </p>
   );
