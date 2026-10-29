@@ -54,6 +54,17 @@ export function promiseKept(p: TaxPromise, politics: Pick<PoliticsView, 'tax' | 
   return p.kind === 'lower' ? percent < promiseBase(politics) : percent === promiseBase(politics);
 }
 
+/** E-7: the term's promise beside the tax, kept or broken; "still" while a new Governor has yet to set it. Null with no promise. */
+export function termPromise(view: Pick<MuleView, 'month'> & { politics: PoliticsView }): { promised: string; status: string; tone: 'text-ok' | 'text-warn' | 'text-alert' } | null {
+  const { politics } = view;
+  const { promise, tax, term } = politics;
+  if (!promise) return null;
+  const promised = promiseWords(promise, promiseBase(politics), false)!;
+  if (promiseKept(promise, politics)) return { promised, status: `tax ${tax.percent}%, kept`, tone: 'text-ok' };
+  const fresh = term?.[0] === view.month && tax.percent === tax.start;
+  return fresh ? { promised, status: `tax still ${tax.percent}%`, tone: 'text-warn' } : { promised, status: `tax ${tax.percent}%, promise broken`, tone: 'text-alert' };
+}
+
 /** A player's name by id, from the view's players. */
 export function namer(view: Pick<MuleView, 'players'>): (id: string) => string {
   return (id) => view.players.find((p) => p.id === id)?.name ?? id;

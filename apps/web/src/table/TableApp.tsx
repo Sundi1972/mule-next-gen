@@ -13,6 +13,7 @@ import { useClient, useClientState, useServerNow } from '../net/react';
 import { connectedIn, hostMayContinue, readyRows, stillPlanning } from '../phone/hub/ready';
 import { ReadyCount, WaitingFor } from '../phone/hub/ReadyBar';
 import { TvElection } from './TvElection';
+import { TvGovernorPromise } from './TvGovernorPromise';
 import { TvLandAuction } from './TvLandAuction';
 import { TvProduction } from './TvProduction';
 
@@ -277,11 +278,12 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
 
   return (
     <SeatSpeciesProvider value={seatSpecies(game)}>
-      <div className="flex h-[720px] w-[1280px] flex-col gap-5 bg-table p-10 text-ink" data-phase={phase} data-testid={phase === 'planning' ? 'tv-planning' : undefined}>
+      <div className={cx('flex h-[720px] w-[1280px] flex-col bg-table text-ink', phase === 'planning' ? 'gap-4 px-10 py-6' : 'gap-5 p-10')} data-phase={phase} data-testid={phase === 'planning' ? 'tv-planning' : undefined}>
         {phase === 'planning' ? (
           <div className="flex items-start gap-4">
             <div className="min-w-0 flex-1">
               <TvHeader game={game} title={PHASE_NAME[phase]} seconds={secondsUntil(game.phaseEndsAt, now)} />
+              <TvGovernorPromise game={game} />
             </div>
             <ReadyCount players={game.players} tv />
           </div>

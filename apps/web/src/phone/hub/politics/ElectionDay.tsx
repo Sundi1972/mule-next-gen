@@ -103,11 +103,15 @@ function Announce() {
 
 /** The untimed secret ballot: pick, or abstain, then Cast my vote; a pick after Cast still counts until it closes. */
 function Ballot({ election }: { election: ElectionView }) {
-  const { table, view, me } = usePhoneGame();
+  const { view, me } = usePhoneGame();
   const client = useClient();
   usePicks();
   useEffect(() => forgetPicks, []);
-  const mine: BallotOf = { room: table.code, seat: me.id, month: view.month };
+  const mine: BallotOf = { seat: me.id, month: view.month };
+  const offices = contested(election.candidates);
+  useEffect(() => {
+    for (const o of offices) serverShows(mine, o, me.politics?.ballot[o]);
+  });
   return (
     <DayCard at={2} testid="ballot-card">
       <span className="flex flex-wrap items-center gap-x-1.5 text-xs @min-[1100px]/shell:text-lg" data-testid="voted">
@@ -120,15 +124,15 @@ function Ballot({ election }: { election: ElectionView }) {
         </span>
       </span>
       <div className="grid grid-cols-2 gap-2 @min-[1100px]/shell:gap-6">
-        {contested(election.candidates).map((o) => (
+        {offices.map((o) => (
           <BallotPaper
             key={o}
             office={o}
             cands={election.candidates[o]!}
             promises={o === 'governor' ? election.promises : {}}
-            pick={me.politics?.ballot[o] ?? pickOf(mine, o)}
+            pick={shownPick(mine, o, me.politics?.ballot[o])}
             onPick={(id) => {
-              pickOn(mine, o, id);
+              pickOn(mine, o, id, me.politics?.ballot[o]);
               client.intent({ type: 'vote', office: o, candidate: id || null });
             }}
           />
@@ -200,16 +204,28 @@ const EXTRAS = [
 ] as const;
 
 /*
- * This phone's picks on the ballot open on it, '' for Abstain, shown at once while the vote travels. An abstention
- * clears the ballot on the server, so its view can't tell it from no pick at all: only this phone knows, for the ballot
- * to show it checked and for Cast my vote (electionReadyWords) to count the office as picked.
+ * This phone's picks on the open ballot, '' for Abstain. While its votes travel the latest pick shows: the server's
+ * answers to the earlier ones come back first and never replace it. Only a pick this phone didn't send in that time
+ * (a vote changed on another device) shows the server's instead. The server's view can't tell an abstention from no
+ * pick: only this phone knows, for the ballot and for Cast my vote.
+ * The picks are a seat's in a month, not a room's: the ready bar has no room code. Closing the ballot forgets them,
+ * which keeps another room's ballot from opening with them.
  */
 export interface BallotOf {
-  room: string;
   seat: string;
   month: number;
 }
-let held: { ballot: BallotOf; picks: Map<Office, string> } | null = null;
+interface HeldPick {
+  /** The latest pick. */
+  id: string;
+  /** The picks sent since the server last showed this phone's latest, in order; empty once it has. */
+  sent: string[];
+  /** How many of `sent` the server has answered so far. */
+  answered: number;
+  /** The server's pick as this phone last saw it ('' for none). */
+  seen: string;
+}
+let held: { ballot: BallotOf; picks: Map<Office, HeldPick> } | null = null;
 const listeners = new Set<() => void>();
 let version = 0;
 
@@ -218,21 +234,57 @@ function changed(): void {
   for (const l of listeners) l();
 }
 
-/** Records this phone's pick for an office; a pick on another ballot forgets the one before. */
-export function pickOn(ballot: BallotOf, office: Office, id: string): void {
+const sameBallot = (a: BallotOf, b: BallotOf) => a.seat === b.seat && a.month === b.month;
+const heldPick = (ballot: BallotOf, office: Office) => (held && sameBallot(held.ballot, ballot) ? held.picks.get(office) : undefined);
+
+/** Records this phone's pick for an office over the server's pick `server`; a pick on another ballot forgets the one before. */
+export function pickOn(ballot: BallotOf, office: Office, id: string, server?: string): void {
   if (!held || !sameBallot(held.ballot, ballot)) held = { ballot, picks: new Map() };
-  held.picks.set(office, id);
+  const before = held.picks.get(office);
+  if (before && before.sent.length > 0) held.picks.set(office, { ...before, id, sent: [...before.sent, id] });
+  else held.picks.set(office, { id, sent: [id], answered: 0, seen: server ?? '' });
   changed();
 }
 
-/** Forgets every pick; the ballot does this when it closes, so the next game's opens empty. */
+/**
+ * Where a new server pick falls among this phone's votes on the way: the index of the one it answers, the last when it
+ * shows the latest pick; -1 when it answers none of them, a vote from elsewhere. Unchanged, it answers nothing new.
+ */
+function answerTo(pick: HeldPick, at: string): number | 'unchanged' {
+  if (at === pick.seen) return 'unchanged';
+  // The server applies the votes in order, so an answer is never to one before the last answered.
+  return pick.sent.indexOf(at, pick.answered);
+}
+
+/** The pick the ballot shows for an office, given the server's: this phone's, unless the server's is newer; undefined for none. */
+function shownPick(ballot: BallotOf, office: Office, server: string | undefined): string | undefined {
+  const mine = heldPick(ballot, office);
+  const at = server ?? '';
+  if (!mine) return server;
+  if (mine.sent.length === 0) return mine.id === at ? mine.id : server;
+  return answerTo(mine, at) === -1 ? server : mine.id;
+}
+
+/** Takes in the server's pick once drawn: an answer to this phone's votes moves past them; a vote from elsewhere ends them. */
+function serverShows(ballot: BallotOf, office: Office, server: string | undefined): void {
+  const mine = heldPick(ballot, office);
+  if (!mine || mine.sent.length === 0) return;
+  const at = server ?? '';
+  const answer = answerTo(mine, at);
+  if (answer === 'unchanged') return;
+  if (answer === -1) {
+    held!.picks.delete(office);
+    return;
+  }
+  const last = answer === mine.sent.length - 1;
+  held!.picks.set(office, last ? { ...mine, sent: [], answered: 0, seen: at } : { ...mine, answered: answer + 1, seen: at });
+}
+
+/** Forgets every pick; the ballot does this when it closes, so the next one opens empty. */
 export function forgetPicks(): void {
   held = null;
   changed();
 }
-
-const sameBallot = (a: BallotOf, b: BallotOf) => a.room === b.room && a.seat === b.seat && a.month === b.month;
-const pickOf = (ballot: BallotOf, office: Office) => (held && sameBallot(held.ballot, ballot) ? held.picks.get(office) : undefined);
 
 function usePicks(): void {
   useSyncExternalStore(
@@ -244,7 +296,6 @@ function usePicks(): void {
 
 /** Whether this seat has a pick, a candidate or Abstain, for every contested office on the ballot. */
 export function ballotComplete({ view, me }: { view: Pick<MuleView, 'month'>; me: Pick<MyView, 'id' | 'politics'> }, election: ElectionView): boolean {
-  // The ready bar has no room code; the picks held are the open ballot's, forgotten when it closes.
-  const mine = (o: Office) => (held && held.ballot.seat === me.id && held.ballot.month === view.month ? held.picks.get(o) : undefined);
-  return contested(election.candidates).every((o) => (me.politics?.ballot[o] ?? mine(o)) !== undefined);
+  const mine: BallotOf = { seat: me.id, month: view.month };
+  return contested(election.candidates).every((o) => shownPick(mine, o, me.politics?.ballot[o]) !== undefined);
 }
