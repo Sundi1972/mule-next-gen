@@ -81,16 +81,32 @@ export interface PlayerView {
    * Public in every view, the TV's too. Only the total: its parts go to the player's own `me.worthParts` and nowhere else.
    */
   worth: number;
+  /**
+   * The `worth` this player's row showed at last month's end (upkeep), recorded then and never recomputed, so the
+   * change since last month is the number shown now against the number shown then. Null in month 1.
+   */
+  lastWorth: number | null;
+  /**
+   * While the air is in Collapse, this player's Worth before the cut (scoreParts' total plus its cut: money + goods +
+   * land + muleValue + office, rounded as scoreParts rounds); null outside Collapse. Public like `worth`, a total only.
+   */
+  worthBeforeCut: number | null;
   plots: number;
   ready: boolean;
   /** True once they went to the pub this development phase. */
   doneDeveloping: boolean;
   /** Where their colonist is in development, public like every place; null outside development. */
   colonist: ColonistView | null;
-  /** How hunger and sickness slow this colonist, during development; null otherwise. Public: every screen shows it. */
+  /**
+   * How hunger and sickness slow this colonist: live during development, then kept as the month's through its end
+   * (upkeep, and game over after the last month), where the month end names who went hungry. Null otherwise. Public:
+   * every screen shows it.
+   */
   condition: {
     /** 0..1 of the month's Food held (engine foodShare). */
     foodShare: number;
+    /** The month's Food need of this player's household (engine needsOf), so a screen can say "ate n of m". */
+    foodNeed: number;
     sick: boolean;
     /** Why it is sick (engine playerEventReason): the air, its own pollution, or plain chance; null when well. */
     sickBecause: 'air' | 'pollution' | 'chance' | null;
@@ -458,6 +474,13 @@ export interface MuleView {
   colonists: number;
   /** Colony air gauge 0 to 100 and its band. */
   air: { level: number; band: 'clean' | 'smoggy' | 'toxic' | 'collapse' };
+  /** The air at last month's end (upkeep), level and band as `air` showed them then; null in month 1. */
+  lastAir: MuleView['air'] | null;
+  /**
+   * At the month end (upkeep, and game over after the last): true when that upkeep fed the colonists, false when they
+   * went short, because the store ran out or its price was beyond their wages (the engine's colonistsHungry). Null otherwise.
+   */
+  colonistsFed: boolean | null;
   ship: ShipView;
   /** The colony fund and the sales tax rate. */
   treasury: { money: number; salesTax: number };

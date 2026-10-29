@@ -791,8 +791,11 @@ export const PHASES = {
   grantFastForwardMs: GAME.grantTickMs / 8,
   /** Production: the show of what each plot made. */
   productionMs: 15_000,
-  /** Upkeep: colonists eat and goods spoil. */
-  upkeepMs: 8_000,
+  /**
+   * Upkeep, the month end: colonists eat and goods spoil, and the table reads the league table. null: it waits for
+   * every player's Ready ("On to month N") or the host's Continue; a number restores a timer.
+   */
+  upkeepMs: null as number | null,
 };
 
 /**

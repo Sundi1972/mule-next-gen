@@ -28,7 +28,7 @@ function playTwoMonths(look: (game: MuleGame, state: GameState) => void): Set<Ph
   for (let n = 0; n < 100_000 && !game.viewFor(null).finished; n++) {
     phases.add(state.phase);
     look(game, state);
-    if (state.phase === 'planning') readyAll(game);
+    if (state.phase === 'planning' || state.phase === 'upkeep') readyAll(game);
     const lit = state.phase === 'landGrant' && claimedIn !== state.month ? game.viewFor('s1').lit : null;
     if (lit) {
       game.handle('s1', { type: 'claim', ...lit });
