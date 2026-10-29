@@ -11,8 +11,6 @@ import { cx, SLOT_COLOR, type Good, type Slot } from './tokens';
  * element marked `data-fly-target=<owner>`. A pure function of the clock `t`.
  */
 
-/** The old per-kind look of an event: kept for the view's `kind`; the show draws by the event's key. */
-export type EventKind = 'storm' | 'drought' | 'flare' | 'comet' | 'flood' | 'quake' | 'blight' | 'fire' | 'bounty';
 export type ShowReason = 'cluster' | 'species' | 'trait' | 'pollution' | 'noEnergy' | 'noWater';
 
 export interface ShowLine {
@@ -58,7 +56,7 @@ export const SHOW = {
 } as const;
 
 /** How long the events play, in seconds: the server's intro and lengths back to back, never shorter than a quiet month's window. */
-export function eventWindow({ events, introMs }: Lengths = QUIET): number {
+function eventWindow({ events, introMs }: Lengths = QUIET): number {
   const ms = events.reduce((n, e) => n + Math.max(0, e.playMs), Math.max(0, introMs));
   return Math.max(SHOW.flyStart - SHOW.eventAt, ms / 1000);
 }
@@ -335,24 +333,6 @@ function PlotBars({
             <span key={`lost-${k}`} data-bar="lost" className={cx('rounded-[2px] bg-ink-3', bar)} style={{ transform: `translateY(${struckAgo * (tv ? 40 : 20)}px)`, opacity: 1 - struckAgo / 0.9 }} />
           ))}
       </span>
-    </div>
-  );
-}
-
-// --- The event card -----------------------------------------------------------------
-
-/** The month's event in words, from when the show calls it up. */
-export function EventCard({ ev, t, tv = false }: { ev: Pick<ShowEventView, 'title' | 'line' | 'sign'> | null; t: number; tv?: boolean }) {
-  if (!ev || t < SHOW.cardAt) return null;
-  const good = ev.sign === 'good';
-  return (
-    <div
-      className={cx('flex flex-col gap-1 rounded-panel border-2 animate-[show-card-in_0.4s_ease-out]', good ? 'border-ok bg-holo-soft shadow-glow' : 'border-alert bg-alert-bg shadow-glow-alert', tv ? 'p-5' : 'px-2.5 py-2')}
-      data-testid="event-card"
-    >
-      <span className={cx('label-caps', good ? 'text-ok!' : 'text-alert-ink!', tv ? 'text-base!' : '')}>{good ? 'Good news' : 'Event'}</span>
-      <span className={cx('font-display font-bold leading-none', good ? 'text-ok' : 'text-alert-ink', tv ? 'text-5xl' : 'text-xl')}>{ev.title}!</span>
-      <span className={cx('leading-snug', tv ? 'text-2xl' : 'text-xs')}>{ev.line}</span>
     </div>
   );
 }
