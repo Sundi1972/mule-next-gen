@@ -108,7 +108,7 @@ export function Develop() {
     ? {
         ...ruled,
         ...(youWait ? { next: [], locks: { ...ruled.locks, corral: '' } } : {}),
-        now: waitingNow(ruled.now, carry, installedAny || youWait, view.storeMules, view.clockWaitsFor!, me.id, view.players),
+        now: waitingNow(ruled.now, carry, installedAny || youWait, !view.tiles.some((t) => t.owner === me.id), view.storeMules, view.clockWaitsFor!, me.id, view.players),
       }
     : passed
       ? { ...ruled, now: { ...ruled.now, detail: 'The host started the clock: your month is running.' } }
@@ -384,16 +384,17 @@ export function FillCard({ condition, rule, food }: { condition: Condition; rule
 }
 
 /** The Now card while month 1's clock waits: no rush before your first MULE; once it is in, whose are still to come. */
-function waitingNow(now: Now, carry: Outfit | 'empty' | null, installed: boolean, mulesLeft: number, waitsFor: readonly string[], me: string, players: readonly PlayerView[]): Now {
+function waitingNow(now: Now, carry: Outfit | 'empty' | null, installed: boolean, plotless: boolean, mulesLeft: number, waitsFor: readonly string[], me: string, players: readonly PlayerView[]): Now {
   if (carry !== null) return now;
   // Row 1 or 2 with MULEs left: the start card's "the clock starts for everyone" isn't so while it waits.
   if (!installed) return now.step === 1 && mulesLeft > 0 ? { step: 1, of: 3, title: 'Buy a MULE at the corral', detail: 'Your first month: no rush. The clock starts when your first MULE is in.' } : now;
   const still = waitsFor.filter((id) => id !== me).map((id) => players.find((p) => p.id === id)?.name ?? id);
+  if (plotless) return { title: `No plot this month · waiting for ${andList(still)}`, detail: <span id={WAIT_DETAIL_ID}>The clock starts when every first MULE is in.</span> };
   return { title: `Your MULE is in · waiting for ${andList(still)}`, detail: <span id={WAIT_DETAIL_ID}>{YOU_WAIT}</span> };
 }
 
 /** Once in, you wait: the guide's words, and the id the dimmed controls point at for them. */
-const YOU_WAIT = 'Buying, installing and analysing start with the clock. The pub is open.';
+const YOU_WAIT = 'Buying, installing and analysing wait for the clock.';
 const WAIT_DETAIL_ID = 'first-month-wait';
 /** Why a control a seat already in may not use is dimmed while month 1's clock waits. */
 const WAIT_HINT = { title: "Waiting for the others' first MULEs", 'aria-describedby': WAIT_DETAIL_ID } as const;
