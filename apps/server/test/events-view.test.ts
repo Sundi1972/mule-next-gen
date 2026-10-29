@@ -65,15 +65,17 @@ const fourSeats = [
   { id: 's3', name: 'The Baron', isAi: true, color: 2 },
   { id: 's4', name: 'Vex', isAi: true, color: 3 },
 ];
-// Found by playing seeds 1-120 through months 1-4 on fourSeats, as playRealMonths does, and reading each production's report.
-// The seats (even their names) and the AIs' play move what fires, so these months hold only for fourSeats.
-const REAL_SEED = 26;
+// Found by playing seeds 1-480 through months 1-5 on fourSeats, as playRealMonths does, reading each production's report,
+// then the seeds whose month fired both stories on to month 10.
+// The seats (even their names) and the AIs' play move what fires, so these months hold only for fourSeats, and only for
+// the AIs and rules of their day: trunk's AI and rules changes (WS3's A-7, WS4's A-1, WS6's #218) moved what seed 26 fired.
+const REAL_SEED = 404;
 /** Production fires a colony comet pass, then a personal pest swarm. */
-const TWO_EVENT_MONTH = 2;
-/** Production fires a colony solar flare and nothing else. */
-const ONE_EVENT_MONTH = 3;
+const TWO_EVENT_MONTH = 4;
+/** Production fires a colony comet pass and nothing else. */
+const ONE_EVENT_MONTH = 5;
 /** Production fires nothing. */
-const QUIET_MONTH = 4;
+const QUIET_MONTH = 6;
 
 /**
  * Plays REAL_SEED on the fake clock through production of `lastMonth`, humans pressing Ready where the game waits and
@@ -106,11 +108,17 @@ function playRealMonths(lastMonth: number) {
   };
 }
 
+/** REAL_SEED's months, played once for every block that reads them: six months on the fake clock take seconds. */
+let realMonths: ReturnType<typeof playRealMonths> | null = null;
+const playedMonths = () => (realMonths ??= playRealMonths(QUIET_MONTH));
+/** Room for six months under a loaded full run, past the 10 s a hook gets by default. */
+const PLAY_MONTHS_MS = 60_000;
+
 describe('the event show on real engine months: the view plays exactly what the month report fired', () => {
   let month: ReturnType<typeof playRealMonths>;
   beforeAll(() => {
-    month = playRealMonths(QUIET_MONTH);
-  });
+    month = playedMonths();
+  }, PLAY_MONTHS_MS);
 
   it('T-AC-1, T-AC-2: a real month firing comet pass and pest swarm runs production 24 200 ms, each event its own share', () => {
     const { report, production, length } = month(TWO_EVENT_MONTH);
@@ -129,10 +137,10 @@ describe('the event show on real engine months: the view plays exactly what the 
     expect(production.introMs + production.events.reduce((sum, e) => sum + e.playMs, 0)).toBe(14_000);
   });
 
-  it('T-AC-1, T-AC-2: a real month firing only a solar flare runs production 19 000 ms, the flare a 7 000 ms headline', () => {
+  it('T-AC-1, T-AC-2: a real month firing only a comet pass runs production 19 000 ms, the comet a 7 000 ms headline', () => {
     const { report, production, length } = month(ONE_EVENT_MONTH);
-    expect(report.events?.map((e) => e.key)).toEqual(['solarFlare']);
-    expect(production.events.map(({ key, weight, playMs }) => ({ key, weight, playMs }))).toEqual([{ key: 'solarFlare', weight: 'headline', playMs: 7_000 }]);
+    expect(report.events?.map((e) => e.key)).toEqual(['cometPass']);
+    expect(production.events.map(({ key, weight, playMs }) => ({ key, weight, playMs }))).toEqual([{ key: 'cometPass', weight: 'headline', playMs: 7_000 }]);
     expect(production.introMs).toBe(1_800);
     expect(length).toBe(19_000);
     expect(production.lengthMs).toBe(19_000);
@@ -244,8 +252,8 @@ const PRODUCTION_SHOW_AT = SHOW.eventAt * 1000;
 describe('T-AC-10: the view carries the current phase\'s events, when their show starts and how long it plays', () => {
   let month: ReturnType<typeof playRealMonths>;
   beforeAll(() => {
-    month = playRealMonths(QUIET_MONTH);
-  });
+    month = playedMonths();
+  }, PLAY_MONTHS_MS);
 
   it('T-AC-10: the view carries the phase\'s events with startsAt and showMs: a real comet pass and pest swarm, as production lists them', () => {
     const { view, at, production } = month(TWO_EVENT_MONTH);
@@ -271,10 +279,10 @@ describe('T-AC-10: the view carries the current phase\'s events, when their show
     expect('player' in view.events![0]!).toBe(false);
   });
 
-  it('T-AC-10: the view carries the phase\'s events with startsAt and showMs: a real lone solar flare', () => {
+  it('T-AC-10: the view carries the phase\'s events with startsAt and showMs: a real lone comet pass', () => {
     const { view, at, production } = month(ONE_EVENT_MONTH);
     expect(view.events).toEqual(production.events);
-    expect(view.events!.map((e) => e.key)).toEqual(['solarFlare']);
+    expect(view.events!.map((e) => e.key)).toEqual(['cometPass']);
     expect(view.eventShow).toEqual({ startsAt: at + PRODUCTION_SHOW_AT, showMs: 8_800, introMs: 1_800, endsAt: at + PRODUCTION_SHOW_AT + 8_800, held: false });
   });
 
