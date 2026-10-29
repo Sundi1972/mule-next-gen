@@ -708,7 +708,7 @@ async function readTheStatusWords(phones: Phone[], tv: Page, truth: Truth): Prom
     };
   })()`)) as {
     store: { height: number; full: boolean; pricesShown: boolean };
-    ship: { top: number; bottom: number; left: number; right: number };
+    ship: { top: number; bottom: number; left: number; right: number; full: boolean };
     frame: { bottom: number };
     ticker: number;
     w: number;
@@ -720,8 +720,8 @@ async function readTheStatusWords(phones: Phone[], tv: Page, truth: Truth): Prom
   check(room.ticker === 3, `G-6 is read with the TV's chat ticker full: 3 lines, got ${room.ticker}`);
   check(room.store.full && room.store.pricesShown && room.store.height >= TV_STORE_MIN, `G-6: the TV's store box keeps its prices beside the ship panel and a full ticker: ${room.store.height} px, prices ${room.store.pricesShown && room.store.full ? 'whole' : 'cut'}`);
   check(
-    room.ship.top >= 0 && room.ship.left >= 0 && room.ship.bottom <= Math.min(room.h, room.frame.bottom + 0.5) && room.ship.right <= room.w,
-    `G-6: the TV's ship panel ends inside the ${room.w}×${room.h} screen and the TV's frame: y ${room.ship.top}–${room.ship.bottom}, frame to ${room.frame.bottom}`,
+    room.ship.top >= 0 && room.ship.left >= 0 && room.ship.bottom <= Math.min(room.h, room.frame.bottom + 0.5) && room.ship.right <= room.w && room.ship.full,
+    `G-6: the TV's ship panel ends inside the ${room.w}×${room.h} screen and the TV's frame: y ${room.ship.top}–${room.ship.bottom}, frame to ${room.frame.bottom}, its words ${room.ship.full ? 'whole' : 'cut'}`,
   );
   console.log(`✓ G-8, G-4, G-6: ${a.good}'s status screen says "Goes bad" and "Spare" and "${store}" on three phones; one ship panel, "${shipText}${also}", on the phones and the TV`);
 }
