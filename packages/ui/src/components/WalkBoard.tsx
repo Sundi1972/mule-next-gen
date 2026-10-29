@@ -75,6 +75,7 @@ export function WalkBoard({
   storeBuys,
   storeSells,
   shipPays,
+  shipCaption,
   lines: extra = [],
   marks,
   storeStock,
@@ -91,6 +92,8 @@ export function WalkBoard({
   storeBuys: number | null;
   storeSells: number | null;
   shipPays: number | null;
+  /** Words on the ship's line, just under it: "The ship buys Crystite at 120". */
+  shipCaption?: string;
   /** More price lines, drawn like the store's: a seller's minimum at the land auction. */
   lines?: { id: string; label: string; price: number }[];
   /** The lowest-ask and highest-bid lines, drawn during the walk while no units change hands. */
@@ -194,7 +197,7 @@ export function WalkBoard({
             <span
               data-num
               data-testid="store-sold-out"
-              className={cx('absolute right-0 top-0 z-20 rounded-sm bg-void px-1 text-right font-mono font-bold leading-tight text-rise', tv ? 'text-base' : 'text-[9px]')}
+              className={cx('absolute right-0 top-0 z-20 rounded-sm bg-void px-1 text-right font-mono font-bold leading-tight text-rise', tv ? 'text-base' : 'text-[10px]')}
               style={{ width: gutter }}
             >
               <span className="block font-normal opacity-80">STORE</span>SOLD OUT
@@ -204,7 +207,7 @@ export function WalkBoard({
             <div key={l.key} className={cx('absolute inset-x-0 border-t border-dashed opacity-80', l.tone)} style={{ top: `${pct(l.price)}%` }} data-testid={`limit-${l.key}`}>
               <span
                 data-num
-                className={cx('absolute right-0 z-20 flex -translate-y-1/2 flex-col items-end rounded-sm bg-void px-1 text-right font-mono font-bold leading-tight', tv ? 'text-base' : 'text-[9px]')}
+                className={cx('absolute right-0 z-20 flex -translate-y-1/2 flex-col items-end rounded-sm bg-void px-1 text-right font-mono font-bold leading-tight', tv ? 'text-base' : 'text-[10px]')}
                 style={{ width: gutter }}
               >
                 <span className="font-normal opacity-80">{l.who}</span>
@@ -212,6 +215,19 @@ export function WalkBoard({
               </span>
             </div>
           ))}
+          {shipCaption && shipPays !== null && (
+            <span
+              className={cx(
+                // Under the line, against the gutter: sellers walk down from above, so the room under it is clear.
+                'pointer-events-none absolute z-20 whitespace-nowrap rounded-chip border border-warn/70 bg-void/90 font-display font-semibold text-warn',
+                tv ? 'mt-1.5 px-2.5 py-0.5 text-xl' : 'mt-1 px-1.5 text-[11px] @min-[1100px]/shell:text-base',
+              )}
+              style={{ top: `${pct(shipPays)}%`, right: `calc(${gutter}px + ${tv ? 0.5 : 0.25}rem)` }}
+              data-testid="ship-caption"
+            >
+              {shipCaption}
+            </span>
+          )}
 
           {askLine && <MovingLine testid="line-ask" top={pct(askLine.at)} width={x(1)} tone="seller" />}
           {bidLine && <MovingLine testid="line-bid" top={pct(bidLine.at)} width={x(1)} tone="buyer" />}
@@ -345,7 +361,7 @@ function Walker({ w, left, top, size, tv, me, trading, wrap = (_, c) => c }: { w
           <span
             data-num
             data-testid={`units-${w.id}`}
-            className={cx('absolute top-full mt-0.5 whitespace-nowrap rounded-sm bg-void/90 px-1 font-mono font-bold leading-none text-ink', tv ? 'text-base' : 'text-[9px]')}
+            className={cx('absolute top-full mt-0.5 whitespace-nowrap rounded-sm bg-void/90 px-1 font-mono font-bold leading-none text-ink', tv ? 'text-base' : 'text-[10px]')}
           >
             {w.units}
             {w.surplus !== undefined && (
@@ -362,7 +378,7 @@ function Walker({ w, left, top, size, tv, me, trading, wrap = (_, c) => c }: { w
           seller ? 'border-rise/60 text-rise' : 'border-fall/60 text-fall',
         )}
       >
-        <span className={cx('font-normal text-ink-3', tv ? 'text-xs' : 'text-[8px]')}>{seller ? 'ASK' : 'BID'}</span>
+        <span className={cx('font-normal text-ink-3', tv ? 'text-xs' : 'text-[10px]')}>{seller ? 'ASK' : 'BID'}</span>
         {w.price}
       </span>
     </div>
