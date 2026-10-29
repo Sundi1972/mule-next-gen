@@ -293,7 +293,7 @@ const TABLE: Row[] = [
     row: '10 INSTALL: on an own plot, leading a fitted MULE',
     at: () => onTile(2, 1),
     game: (s) => void (a(s).carriedMule = 'food'),
-    reach: () => ({ kind: 'install', enabled: true, good: 'food', plot: { x: 2, y: 1 }, fromShore: false, replaces: false }),
+    reach: () => ({ kind: 'install', enabled: true, good: 'food', plot: { x: 2, y: 1 }, fromShore: false, replaces: null }),
     words: () => words('INSTALL · FOOD'),
     press: {
       game: (_, now) => {
@@ -306,7 +306,7 @@ const TABLE: Row[] = [
     row: '10, a lake plot from its shore',
     at: () => ({ space: 'map', x: 4.75, y: 1.5 }),
     game: (s) => void (a(s).carriedMule = 'water'),
-    reach: () => ({ kind: 'install', enabled: true, good: 'water', plot: { x: 5, y: 1 }, fromShore: true, replaces: false }),
+    reach: () => ({ kind: 'install', enabled: true, good: 'water', plot: { x: 5, y: 1 }, fromShore: true, replaces: null }),
     words: () => words('INSTALL · WATER', 'from the shore'),
     press: { game: (_, now) => expect(tileOf(now, 5, 1).outfit).toBe('water') },
   },
@@ -314,7 +314,7 @@ const TABLE: Row[] = [
     row: '10, a lake plot from its shore, across a corner',
     at: () => ({ space: 'map', x: 4.8, y: 2.2 }),
     game: (s) => void (a(s).carriedMule = 'water'),
-    reach: () => ({ kind: 'install', enabled: true, good: 'water', plot: { x: 5, y: 1 }, fromShore: true, replaces: false }),
+    reach: () => ({ kind: 'install', enabled: true, good: 'water', plot: { x: 5, y: 1 }, fromShore: true, replaces: null }),
     words: () => words('INSTALL · WATER', 'from the shore'),
     press: { game: (_, now) => expect(tileOf(now, 5, 1).outfit).toBe('water') },
   },
@@ -327,17 +327,25 @@ const TABLE: Row[] = [
     press: 'nothing',
   },
   {
-    row: '10 over 12: on an own plot with a MULE, Alloy held, leading a fitted MULE',
+    row: '10 SWAP over 12: on an own plot with a Smithore MULE, Alloy held, leading a fitted MULE',
     at: () => onTile(7, 4),
     game: (s) => void Object.assign(a(s), { carriedMule: 'energy', stock: { ...a(s).stock, alloy: DEVELOPMENT.filterAlloy } }),
-    reach: () => ({ kind: 'install', enabled: true, good: 'energy', plot: { x: 7, y: 4 }, fromShore: false, replaces: true }),
-    words: () => words('INSTALL · ENERGY', 'replaces its MULE'),
+    reach: () => ({ kind: 'install', enabled: true, good: 'energy', plot: { x: 7, y: 4 }, fromShore: false, replaces: 'smithore' }),
+    words: () => words('SWAP', 'your Smithore MULE runs away'),
     press: {
       game: (was, now) => {
         expect(tileOf(now, 7, 4).outfit).toBe('energy');
         expect([tileOf(now, 7, 4).filter, a(now).stock.alloy]).toEqual([false, a(was).stock.alloy]);
       },
     },
+  },
+  {
+    row: '10 SWAP: the old MULE named as in a sentence',
+    at: () => onTile(2, 1),
+    game: (s) => void ((tileOf(s, 2, 1).outfit = 'rareEarth'), (a(s).carriedMule = 'food')),
+    reach: () => ({ kind: 'install', enabled: true, good: 'food', plot: { x: 2, y: 1 }, fromShore: false, replaces: 'rareEarth' }),
+    words: () => words('SWAP', 'your Rare earth MULE runs away'),
+    press: { game: (_, now) => expect(tileOf(now, 2, 1).outfit).toBe('food') },
   },
   {
     row: '11 ANALYSE: on an own plot, no MULE, not analysed',

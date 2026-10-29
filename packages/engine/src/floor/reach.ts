@@ -27,7 +27,8 @@ export type Reach =
   | { kind: 'buy'; enabled: boolean; price: number; why: ReachRefusal | null }
   | { kind: 'outfit'; enabled: boolean; good: Outfit; cost: number; why: ReachRefusal | null }
   | { kind: 'leave'; enabled: true; door: HallDoor; leading: boolean }
-  | { kind: 'install'; enabled: true; good: Outfit; plot: FloorPoint; fromShore: boolean; replaces: boolean }
+  /** On a plot that has a MULE, `replaces` is its outfit: installing swaps the new MULE in and the old one runs away. */
+  | { kind: 'install'; enabled: true; good: Outfit; plot: FloorPoint; fromShore: boolean; replaces: Outfit | null }
   | { kind: 'analyse'; enabled: true; plot: FloorPoint }
   | { kind: 'filter'; enabled: true; plot: FloorPoint; alloy: number }
   | { kind: 'pub'; enabled: true; payout: number | null }
@@ -120,7 +121,7 @@ const install: Row = ({ state, cfg, colonist: c, player: p, tile }) => {
   const good = p.carriedMule;
   if (!tile || !good || good === 'empty') return null;
   const plot = tile.owner === p.id ? tile : cfg.steer.lakeMode === 'shore' ? shorePlot(state, cfg, c, tile, p.id) : null;
-  return plot && { kind: 'install', enabled: true, good, plot: at(plot), fromShore: plot !== tile, replaces: plot.outfit !== null };
+  return plot && { kind: 'install', enabled: true, good, plot: at(plot), fromShore: plot !== tile, replaces: plot.outfit };
 };
 
 const analyse: Row = ({ state, player: p, tile }) =>
@@ -234,6 +235,8 @@ const HINT: Record<ReachHint, readonly [string, string | null]> = {
   noMules: ['NO MULES LEFT', 'the pub pays now'],
 };
 
+/** A good inside a sentence: "Rare earth". */
+const inWords = (good: Outfit) => NAME[good].charAt(0) + NAME[good].slice(1).toLowerCase();
 const credits = (n: number) => `${n} cr`;
 const priced = (price: number, why: ReachRefusal | null) => (why?.kind === 'money' ? `${credits(price)} · ${Math.ceil(why.short)} short` : credits(price));
 
@@ -252,8 +255,8 @@ export function reachWords(reach: Reach): ReachWords {
     case 'leave':
       return say('LEAVE', reach.leading ? 'with your MULE' : 'to the colony');
     case 'install': {
-      const notes = [reach.fromShore && 'from the shore', reach.replaces && 'replaces its MULE'].filter((n) => n !== false);
-      return say(`INSTALL · ${NAME[reach.good]}`, notes.join(' · ') || null);
+      const notes = [reach.fromShore && 'from the shore', reach.replaces && `your ${inWords(reach.replaces)} MULE runs away`].filter((n) => n);
+      return say(reach.replaces ? 'SWAP' : `INSTALL · ${NAME[reach.good]}`, notes.join(' · ') || null);
     }
     case 'analyse':
       return say('ANALYSE');
