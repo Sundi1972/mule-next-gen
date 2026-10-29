@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 // The client's own reading of a sick line: the reason crosses the seam as prose, so the two must agree.
 import { sickBecause } from '../../../packages/ui/src/events/sick.js';
 import { AI_DEV_TICK_MS, MuleGame } from '../src/mule-game.js';
-import { fakeContext, readyAll, seats, toDevelopment } from './fake-context.js';
+import { clockRunsInMonth1, fakeContext, readyAll, seats, toDevelopment } from './fake-context.js';
 
 /** A month event of `key` that hit one plot; its words and shape don't matter to how long it plays. */
 function event(key: EventKey, phase: Phase): MonthEvent {
@@ -65,7 +65,7 @@ afterEach(() => {
 });
 
 /** Month 1 into development with the seats in `sick` falling sick and the others cured by a Medicine. */
-function sickAt(sick: string[], options: { phaseScale?: number; prepare?: (state: GameState) => void } = {}) {
+function sickAt(sick: string[], options: { phaseScale?: number; firstMonthWaits?: boolean; claimer?: string; prepare?: (state: GameState) => void } = {}) {
   everyoneRollsSick();
   return toDevelopment({
     ...options,
@@ -155,6 +155,10 @@ describe('T-AC-10: development lists the players who fell sick at its start as b
 });
 
 describe('T-AC-7: nobody acts while a timed phase\'s events play; the same press applies after the hold (C9, RULE-4 row 3)', () => {
+  // These rows read development's own clock, met in month 1: it runs from the hold's end, not waiting for first MULEs
+  // (A-1). toDevelopment's month-1 setting lasts only its own call, and a held development starts its clock after it.
+  clockRunsInMonth1();
+
   it('T-AC-7: during development\'s roll call an AI hand does not tick and a human\'s move is refused; after it both apply', () => {
     const { game, ctx, advance } = sickAt(['s1']);
     const ticks = countTicks(game, 'developTick');
@@ -208,6 +212,24 @@ describe('T-AC-7: nobody acts while a timed phase\'s events play; the same press
     advance(1);
     expect(game.viewFor(null).phaseEndsAt).toBe(show.endsAt + DEVELOPMENT.fullSeconds * 100);
     game.handle('s2', { type: 'buyMule' });
+  });
+});
+
+describe('T-AC-7 with A-1: month 1\'s clock waits for first MULEs only once the roll call is over (RULE-4 row 3)', () => {
+  it('T-AC-7: during the roll call nothing waits and the host cannot start the clock; after it the clock waits for every first MULE', () => {
+    // Mia claims a plot in the grant, so she has a first MULE to install; Heiko holds none, so he is in from the start.
+    const { game, ctx, advance } = sickAt(['s1'], { firstMonthWaits: true, claimer: 's2' });
+    const { endsAt } = game.viewFor(null).eventShow!;
+    expect({ phaseEndsAt: game.viewFor(null).phaseEndsAt, waitsFor: game.viewFor(null).clockWaitsFor }).toEqual({ phaseEndsAt: null, waitsFor: undefined });
+    expectHeld(() => game.handle('s1', { type: 'continue' }));
+    advance(endsAt - ctx.now());
+    // The wait starts when the show ends: the seats with a plot are not in yet, and no clock runs.
+    expect({ phaseEndsAt: game.viewFor(null).phaseEndsAt, waitsFor: game.viewFor(null).clockWaitsFor }).toEqual({ phaseEndsAt: null, waitsFor: ['s2', 's3'] });
+    game.handle('s2', { type: 'buyMule' });
+    expect(game.viewFor(null).players.find((p) => p.id === 's2')!.colonist!.walk).not.toBeNull();
+    // The host's Continue now starts the full clock, from the press.
+    game.handle('s1', { type: 'continue' });
+    expect(game.viewFor(null).phaseEndsAt).toBe(ctx.now() + DEVELOPMENT.fullSeconds * 1_000);
   });
 });
 
@@ -274,6 +296,9 @@ describe('T-AC-7, T-AC-8: an auction that fired events opens only when their sho
 });
 
 describe('T-AC-8: an untimed phase and a phase without events are not held (RULE-4 rows 1, 2)', () => {
+  // Development's own clock, met in month 1: it runs from entry rather than waiting for first MULEs (A-1).
+  clockRunsInMonth1();
+
   it('T-AC-8: development with nobody sick starts at once: its clock runs from entry and a move applies', () => {
     nobodyRollsSick();
     const { game, enteredAt, ctx, advance } = toPhase('development', []);
