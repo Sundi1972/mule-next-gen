@@ -8,6 +8,7 @@ import { POLLUTION } from '@mule/engine';
 import type { Locator, Page } from 'playwright';
 import { claimAPlot, CLAIM_MS, check, doneWithLand, held, launch, PHONE, PHONE_SMALL, SHOWN_MS, startServer, TV } from './harness';
 import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
+import { railFits } from './shell-steps';
 import { AUDIT_JS, MONTH_END_JS, type AuditRead, type AuditScope } from './small-phone-audit';
 import { doneThroughTheElection } from './table-steps';
 
@@ -146,7 +147,7 @@ try {
   await dev.getByRole('button', { name: 'Go to the pub and end your turn' }).click({ timeout: PRESS_MS });
 
   await phone.locator('[data-phase=production]').waitFor({ timeout: 20_000 });
-  await both('production', RAIL);
+  await both('production', RAIL, async () => console.log(`  C20, production's harvest: ${await railFits(phone, { key: 'harvest', sizes: [phone.viewportSize()!] })}`));
   const auction = phone.locator('[data-phase=auction]');
   await auction.waitFor({ timeout: 30_000 });
   await both('the goods auction', RAIL);
@@ -161,6 +162,7 @@ try {
   const air = setAir(code, collapseAir());
   await end.getByTestId('collapse-banner').waitFor({ timeout: PRESS_MS });
   await monthEnd('month end, Collapse');
+  console.log(`  C20, the Worth total in Collapse: ${await railFits(phone, { key: 'worth-total' })}`);
   await tv.context().close();
   await end.getByTestId('phone-only-monthend').waitFor({ timeout: PRESS_MS });
   await monthEnd('month end, Collapse, no TV');
@@ -175,6 +177,7 @@ try {
   const over = phone.locator('[data-phase=gameOver]');
   await playToTheEnd(code, over);
   await monthEnd('game over');
+  console.log(`  C20, the final standings: ${await railFits(phone, { key: 'scores' })}`);
   await tv.context().close();
   await over.getByTestId('phone-only-gameover').waitFor({ timeout: PRESS_MS });
   await monthEnd('game over, no TV');
