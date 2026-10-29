@@ -175,6 +175,22 @@ describe("the goods auction's status screen, in plain words", () => {
     expect(textOf(phoneScreen(view, 's1'), 'ship-wants')).toBe('The ship wants 24 Crystite this month: it pays 120 cr for the first. You have 4.');
   });
 
+  it('G-6: however many goods the ship wants, the status screen has one panel, the rest in one sentence', () => {
+    const view = toFirstStatus().viewFor('s1');
+    view.ship = { arrives: view.month, inPort: true, wants: { water: 3, smithore: 9, crystite: 24, rareEarth: 6 } };
+    view.market = view.market.map((r) => (r.good === 'water' ? { ...r, shipPays: 12 } : r));
+    view.me = { ...view.me!, stock: { ...view.me!.stock, water: 2 } };
+    view.auction = { ...view.auction!, good: 'food', next: ['water', 'energy', 'smithore', 'crystite', 'rareEarth'] };
+    const html = phoneScreen(view, 's1');
+    expect(html.split('data-testid="ship-wants"').length - 1).toBe(1);
+    expect(textOf(html, 'ship-wants')).toBe('The ship wants 3 Water this month. Water comes up after Food: the ship pays 12 cr for the first. You have 2. It also wants Smithore, Crystite and Rare earth.');
+  });
+
+  it("the status screen's words and your numbers carry the mock's test ids", () => {
+    const html = phoneScreen(toFirstStatus().viewFor('s1'), 's1');
+    expect(textOf(html, 'status-words')).toMatch(/Pick your side before the bell\.$/);
+  });
+
   it('G-6 (negative): with the ship not in port, no word about it', () => {
     const view = toFirstStatus().viewFor('s1');
     view.ship = { ...view.ship, inPort: false };
@@ -187,6 +203,16 @@ describe("the goods auction's walk, in plain words", () => {
     const html = phoneScreen(toFirstWalk().viewFor('s1'), 's1');
     expect(textOf(html, 'hold-up')).toBe('Hold ▲ to walk up');
     expect(textOf(html, 'hold-down')).toBe('Hold ▼ to walk down');
+    expect(textOf(html, 'have')).toMatch(/^\d+$/);
+  });
+
+  it('G-2: on a laptop-wide shell the walk buttons grow to 80 px with 20 px and 16 px words, as the mock sizes them', () => {
+    const html = phoneScreen(toFirstWalk().viewFor('s1'), 's1');
+    const button = /<button[^>]*data-testid="hold-up"[^>]*>/.exec(html)![0];
+    expect(button).toContain('h-12');
+    expect(button).toContain('@min-[1100px]/shell:h-20');
+    expect(html).toMatch(/text-sm font-semibold leading-none @min-\[1100px\]\/shell:text-xl/);
+    expect(html).toMatch(/text-\[11px\] font-medium leading-none @min-\[1100px\]\/shell:text-base/);
   });
 
   it('G-3: the hint names a price to walk to, and the old "meet the highest bid" is gone', () => {
@@ -200,7 +226,7 @@ describe("the goods auction's walk, in plain words", () => {
     const html = phoneScreen(withSide(toFirstWalk().viewFor('s1'), 'buyer', { storeSells: 30, storeBuys: 24, storeForSale: 5, shipPays: null }), 's1');
     expect(textOf(html, 'store-words')).toBe('You can buy from the store at 30 · sell to it at 24');
     expect(textOf(html, 'lines-legend')).toBe('Red: what sellers ask Green: what buyers bid Walk your bid up to a red line and you buy.');
-    expect(textOf(html, 'line-readout')).toBeNull();
+    expect(textOf(html, 'tv-readout')).toBeNull();
   });
 
   it('G-6: on a walk with the ship buying, its line says so in words on the board, and the key names it amber', () => {

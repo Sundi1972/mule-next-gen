@@ -392,7 +392,7 @@ const readTags = () => ({
   bid: document.querySelector('[data-testid=tag-bid]')?.textContent ?? null,
   gap: document.querySelector('[data-testid=gap-label]')?.textContent ?? null,
 });
-const readReadout = () => [...document.querySelectorAll('[data-testid=line-readout] dd')].slice(0, 2).map((dd) => dd.textContent);
+const readReadout = () => [...document.querySelectorAll('[data-testid=tv-readout] dd')].slice(0, 2).map((dd) => dd.textContent);
 const readUnits = () =>
   Object.fromEntries(
     [...document.querySelectorAll<HTMLElement>('[data-testid^="units-"]')]
@@ -581,6 +581,7 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
   const tvAsk = bestOffer(a, 'seller', name, truth.houseOrder());
   const tvBid = bestOffer(a, 'buyer', name, truth.houseOrder());
   await untilShows(theTv, readReadout, [`${tvAsk.price} · ${tvAsk.who}`, `${tvBid.price} · ${tvBid.who}`], "B-AC-1, G-4: the TV's readout names who holds each line, the store and the ship counted");
+  check(await tv.getByTestId('tv-walk').isVisible(), "the TV's walk stage carries tv-walk");
   await truth.held(async () => {
     await readTheWalkWords(phones, truth, name);
     await smallPhoneReads(buyer, 'walk');
@@ -671,12 +672,12 @@ async function readTheStatusWords(phones: Phone[], tv: Page, truth: Truth): Prom
   const wants = view.ship.wants;
   check(view.ship.inPort && wants, 'G-6 needs the ship in port this month (the fixture brings it in)');
   const order = [a.good, ...a.next];
-  const wanted = a.next.filter((g) => (wants[g] ?? 0) > 0);
-  check(wanted.length > 0, `G-6 needs a wanted good still to come after ${a.good}, wants ${JSON.stringify(wants)}`);
-  const shipLine = (g: Good) => {
-    const pays = view.market.find((r) => r.good === g)?.shipPays;
-    return `The ship wants ${wants[g]} ${GOOD_NAME[g]} this month. ${GOOD_NAME[g]} comes up after ${GOOD_NAME[order[order.indexOf(g) - 1]!]}: the ship pays ${pays} cr for the first.`;
-  };
+  const wanted = order.filter((g) => (wants[g] ?? 0) > 0);
+  check(wanted.length > 1 && wanted[0] !== a.good, `G-6 needs two or more wanted goods still to come after ${a.good}, wants ${JSON.stringify(wants)}`);
+  const head = wanted[0]!;
+  const pays = view.market.find((r) => r.good === head)?.shipPays;
+  const shipText = `The ship wants ${wants[head]} ${GOOD_NAME[head]} this month. ${GOOD_NAME[head]} comes up after ${GOOD_NAME[order[order.indexOf(head) - 1]!]}: the ship pays ${pays} cr for the first.`;
+  const also = alsoSentence(wanted.slice(1).map((g) => ({ good: g, wants: wants[g]! })));
   const tidy = (all: string[]) => all.map((t) => t.replace(/\s+/g, ' ').trim());
   for (const p of phones) {
     const page = p.page;
@@ -686,12 +687,30 @@ async function readTheStatusWords(phones: Phone[], tv: Page, truth: Truth): Prom
     const mine = await readText(page, 'my-store');
     check(mine === store, `G-4: ${p.name}'s status screen says the store's prices from your side: want "${store}", got "${mine}"`);
     const ships = tidy(await page.getByTestId('ship-wants').allInnerTexts());
-    const want = wanted.map((g) => `${shipLine(g)} You have ${truth.stockOf(p, g)}.`);
-    check(JSON.stringify(ships) === JSON.stringify(want), `G-6: ${p.name}'s status screen says what the ship wants: want ${JSON.stringify(want)}, got ${JSON.stringify(ships)}`);
+    const want = [`${shipText} You have ${truth.stockOf(p, head)}.${also}`];
+    check(JSON.stringify(ships) === JSON.stringify(want), `G-6: ${p.name}'s status screen has one ship panel saying what it wants: want ${JSON.stringify(want)}, got ${JSON.stringify(ships)}`);
   }
+  check(await tv.getByTestId('tv-status').isVisible(), "the TV's status stage carries tv-status");
   const onTv = tidy(await tv.getByTestId('ship-wants').allInnerTexts());
-  check(JSON.stringify(onTv) === JSON.stringify(wanted.map(shipLine)), `G-6: the TV's status screen says what the ship wants: want ${JSON.stringify(wanted.map(shipLine))}, got ${JSON.stringify(onTv)}`);
-  console.log(`✓ G-8, G-4, G-6: ${a.good}'s status screen says "Goes bad" and "Spare" and "${store}" on three phones; "${shipLine(wanted[0]!)}" on the phones and the TV`);
+  check(JSON.stringify(onTv) === JSON.stringify([`${shipText}${also}`]), `G-6: the TV's status screen has one ship panel: want ${JSON.stringify([`${shipText}${also}`])}, got ${JSON.stringify(onTv)}`);
+  const room = (await tv.evaluate(`(() => {
+    const box = (id) => { const el = document.querySelector('[data-testid=' + id + ']'); const b = el.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, right: b.right, height: b.height, full: el.scrollHeight <= el.clientHeight + 1 }; };
+    return { store: box('status-store'), ship: box('ship-wants'), w: window.innerWidth, h: window.innerHeight };
+  })()`)) as { store: { height: number; full: boolean }; ship: { top: number; bottom: number; left: number; right: number }; w: number; h: number };
+  console.log(`  TV at ${room.w}×${room.h}: store box ${room.store.height.toFixed(1)} px tall${room.store.full ? '' : ', cut'}; ship panel y ${room.ship.top.toFixed(0)}–${room.ship.bottom.toFixed(0)}, x ${room.ship.left.toFixed(0)}–${room.ship.right.toFixed(0)}`);
+  check(room.store.full && room.store.height >= TV_STORE_MIN, `G-6: the TV's store box keeps its height beside the ship panel: ${room.store.height} px, its content ${room.store.full ? 'whole' : 'cut'}`);
+  check(room.ship.top >= 0 && room.ship.left >= 0 && room.ship.bottom <= room.h && room.ship.right <= room.w, `G-6: the TV's ship panel is inside the ${room.w}×${room.h} screen: y ${room.ship.top}–${room.ship.bottom}`);
+  console.log(`✓ G-8, G-4, G-6: ${a.good}'s status screen says "Goes bad" and "Spare" and "${store}" on three phones; one ship panel, "${shipText}${also}", on the phones and the TV`);
+}
+
+/** The TV's store box on the status stage: a label, a number and its padding, about 78 px; a squeezed box is a few px. */
+const TV_STORE_MIN = 60;
+
+/** The ship's other wanted goods in one sentence, as the status screen says it: one with its count, several by name. */
+function alsoSentence(also: { good: Good; wants: number }[]): string {
+  if (also.length === 0) return '';
+  if (also.length === 1) return ` It also wants ${also[0]!.wants} ${GOOD_NAME[also[0]!.good]}.`;
+  return ` It also wants ${also.slice(0, -1).map((x) => GOOD_NAME[x.good]).join(', ')} and ${GOOD_NAME[also.at(-1)!.good]}.`;
 }
 
 /**
@@ -710,14 +729,20 @@ async function readTheShipGoodsOwnStatus(phones: Phone[], tv: Page, truth: Truth
         const held = truth.board().auction!;
         const pays = held.shipPays ?? view.market.find((r) => r.good === held.good)?.shipPays;
         const line = `The ship wants ${wants} ${GOOD_NAME[held.good]} this month: it pays ${pays} cr for the first.`;
-        const own = (page: Page) => page.getByTestId('ship-wants').filter({ hasText: `${GOOD_NAME[held.good]} this month:` });
+        const also = alsoSentence(held.next.filter((g) => (view.ship.wants?.[g] ?? 0) > 0).map((g) => ({ good: g, wants: view.ship.wants![g]! })));
+        const panel = async (page: Page) => {
+          const all = await page.getByTestId('ship-wants').allInnerTexts();
+          check(all.length === 1, `G-6: one ship panel on ${GOOD_NAME[held.good]}'s own status screen, got ${all.length}`);
+          return all[0]!.replace(/\s+/g, ' ').trim();
+        };
+        await Promise.all([...phones.map((p) => p.page), tv].map((page) => page.getByTestId('ship-wants').first().waitFor({ timeout: PRESS_MS })));
         for (const p of phones) {
-          const got = (await own(p.page).innerText({ timeout: PRESS_MS })).replace(/\s+/g, ' ').trim();
-          const want = `${line} You have ${truth.stockOf(p, held.good)}.`;
+          const got = await panel(p.page);
+          const want = `${line} You have ${truth.stockOf(p, held.good)}.${also}`;
           check(got === want, `G-6: on ${GOOD_NAME[held.good]}'s own status screen ${p.name}'s phone says "${want}", got "${got}"`);
         }
-        const onTv = (await own(tv).innerText({ timeout: PRESS_MS })).replace(/\s+/g, ' ').trim();
-        check(onTv === line, `G-6: on ${GOOD_NAME[held.good]}'s own status screen the TV says "${line}", got "${onTv}"`);
+        const onTv = await panel(tv);
+        check(onTv === `${line}${also}`, `G-6: on ${GOOD_NAME[held.good]}'s own status screen the TV says "${line}${also}", got "${onTv}"`);
         console.log(`✓ G-6: on ${GOOD_NAME[held.good]}'s own status screen, "${line}" on three phones (with what each has) and the TV`);
       });
       return;
@@ -752,7 +777,7 @@ async function readTheWalkWords(phones: Phone[], truth: Truth, name: (id: string
     check(names, `G-3: ${p.name}'s hint names ${where} at ${best.price}, got "${line}"`);
     const said = await readText(page, 'store-words');
     check(said === store, `G-4: over ${p.name}'s board, "${store}", got "${said}"`);
-    check((await page.getByTestId('line-readout').count()) === 0, `G-4: ${p.name}'s phone has no LOWEST ASK readout, the hint says it`);
+    check((await page.getByTestId('tv-readout').count()) === 0, `G-4: ${p.name}'s phone has no LOWEST ASK readout, the hint says it`);
     console.log(`  ${p.name}: "${line}" / "${how}"`);
   }
   console.log(`✓ G-2, G-3, G-4: on three phones the walk buttons say Hold, each hint names its line, and "${store}" over the board`);
@@ -772,7 +797,8 @@ async function smallPhoneReads(p: Phone, stage: 'status' | 'walk'): Promise<void
     try {
       const read = (await p.page.evaluate(`(${AUDIT_JS})(${JSON.stringify(scope)})`)) as AuditRead;
       const small = read.fails.filter((f) => /: text [\d.]+ px /.test(f));
-      const cut = read.fails.filter((f) => /(walk-names|limit-|units-|walker-)/.test(f));
+      // A long name in the names strip ends in an ellipsis by design; NAMES_ONE_LINE reads it.
+      const cut = read.fails.filter((f) => /(walk-names|limit-|units-|walker-)/.test(f) && !/^walk-names span "[^"]*": truncated /.test(f));
       const at = `${size.width}×${size.height}`;
       console.log(`  ${stage} at ${at}: ${read.fails.length ? read.fails.join('; ') : 'nothing broken'}`);
       check(small.length === 0, `the goods auction's ${stage} at ${at} has text under ${MIN_TEXT} px: ${small.join('; ')}`);
@@ -785,6 +811,9 @@ async function smallPhoneReads(p: Phone, stage: 'status' | 'walk'): Promise<void
         console.log(`  status table at ${at}: ${fit.table} px wide in ${fit.space} px${fit.scrolls ? ', scrolls sideways' : ''}`);
         check(!fit.scrolls && fit.table <= fit.space + 1, `the status table fits its space at ${at}: ${fit.table} px in ${fit.space}`);
       } else {
+        const names = (await p.page.evaluate(NAMES_ONE_LINE)) as string[];
+        console.log(`  names strip at ${at}: ${names.length ? names.join('; ') : 'every name on one line, a long one ending in an ellipsis'}`);
+        check(names.length === 0, `the board's names strip at ${at}: one line each, an ellipsis where cut, never clipped mid-word: ${names.join('; ')}`);
         const overlaps = (await p.page.evaluate(BOARD_LABEL_OVERLAPS)) as string[];
         console.log(`  board labels at ${at}: ${overlaps.length ? overlaps.join('; ') : 'none overlap'}`);
         check(overlaps.length === 0, `the board's labels at ${at} don't overlap: ${overlaps.join('; ')}`);
@@ -805,6 +834,20 @@ const LONG_NAMES_ON = `(name) => {
   for (const el of els) el.textContent = name;
 }`;
 const LONG_NAMES_OFF = `(() => { for (const [el, text] of window.namesWere || []) el.textContent = text; window.namesWere = []; })()`;
+
+/** In the page: each name in the board's names strip that takes two lines, or is cut without an ellipsis. */
+const NAMES_ONE_LINE = `(() => {
+  const out = [];
+  for (const el of document.querySelectorAll('[data-testid=walk-names] > span > span:nth-child(2)')) {
+    const cs = getComputedStyle(el);
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const tops = new Set([...range.getClientRects()].filter((r) => r.width > 0.5).map((r) => Math.round(r.top)));
+    if (tops.size > 1) out.push('"' + el.textContent + '" takes ' + tops.size + ' lines');
+    if (el.scrollWidth > el.clientWidth + 1 && (cs.textOverflow !== 'ellipsis' || cs.whiteSpace !== 'nowrap')) out.push('"' + el.textContent + '" is clipped without an ellipsis');
+  }
+  return out;
+})()`;
 
 /** In the page: every pair of the board's labels (store lines, units, ASK/BID tags) whose boxes overlap, named. */
 const BOARD_LABEL_OVERLAPS = `(() => {

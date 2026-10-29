@@ -1,8 +1,9 @@
+import type { Good } from '@mule/engine';
 import type { AuctionView, MuleView, WalkerView } from '@mule/protocol';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { shipWants, storeWords, TvReadout, walkHint } from '../src/components/AuctionParts';
+import { shipWants, ShipWants, storeWords, TvReadout, walkHint } from '../src/components/AuctionParts';
 
 const view = { players: [{ id: 'lena', name: 'Lena' }, { id: 'acc', name: 'The Accountant' }, { id: 'kai', name: 'Kai' }] } as unknown as MuleView;
 
@@ -90,46 +91,71 @@ describe('G-2: "Hold" said in the hint', () => {
   });
 });
 
-describe('G-6: what the ship in port wants, for the goods still to come', () => {
-  const game = (inPort: boolean) =>
+describe('G-6: what the ship in port wants, in one panel', () => {
+  const game = (inPort: boolean, wants: Partial<Record<Good, number>> = { crystite: 24, alloy: 12, smithore: 0 }) =>
     ({
-      ship: { arrives: 3, inPort, wants: { crystite: 24, alloy: 12, smithore: 0 } },
+      ship: { arrives: 3, inPort, wants },
       market: [
         { good: 'crystite', shipPays: 120 },
         { good: 'alloy', shipPays: 90 },
         { good: 'smithore', shipPays: 40 },
+        { good: 'rareEarth', shipPays: 70 },
+        { good: 'water', shipPays: 12 },
       ],
     }) as unknown as MuleView;
-  it('lists each wanted good still to come, in auction order, with the good before it and its first price', () => {
+  const panel = (view: MuleView, a: AuctionView, have?: number) => {
+    const w = shipWants(view, a);
+    if (!w) return null;
+    const html = renderToStaticMarkup(createElement(ShipWants, { want: w.first, also: w.also, ...(have === undefined ? {} : { have }) }));
+    return { count: html.split('data-testid="ship-wants"').length - 1, text: html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').replace(/ ([.,:])/g, '$1').trim() };
+  };
+
+  it('heads with the first wanted good still to come, with the good really before it and its first price', () => {
     const a = auction({ good: 'food', next: ['water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy'] });
-    expect(shipWants(game(true), a)).toEqual([
-      { good: 'crystite', wants: 24, pays: 120, after: 'smithore' },
-      { good: 'alloy', wants: 12, pays: 90, after: 'rareEarth' },
-    ]);
+    expect(shipWants(game(true), a)).toEqual({ first: { good: 'crystite', wants: 24, pays: 120, after: 'smithore' }, also: [{ good: 'alloy', wants: 12 }] });
   });
   it('says nothing while the ship is only announced, not in port', () => {
-    expect(shipWants(game(false), auction({ next: ['crystite', 'alloy'] }))).toEqual([]);
+    expect(shipWants(game(false), auction({ next: ['crystite', 'alloy'] }))).toBeNull();
   });
   it('leaves out a wanted good that has already come up', () => {
-    expect(shipWants(game(true), auction({ good: 'rareEarth', next: ['alloy'] })).map((w) => w.good)).toEqual(['alloy']);
+    expect(shipWants(game(true), auction({ good: 'rareEarth', next: ['alloy'] }))?.first.good).toBe('alloy');
   });
   it('names the good that really comes up before it: a skipped good is not "before" anything', () => {
     // Smithore was skipped, so Crystite comes up after Energy.
-    const a = auction({ good: 'food', next: ['water', 'energy', 'crystite', 'rareEarth', 'alloy'] });
-    expect(shipWants(game(true), a).map((w) => [w.good, w.after])).toEqual([
-      ['crystite', 'energy'],
-      ['alloy', 'rareEarth'],
-    ]);
+    expect(shipWants(game(true), auction({ good: 'food', next: ['water', 'energy', 'crystite', 'rareEarth', 'alloy'] }))?.first.after).toBe('energy');
   });
   it('the first good still to come is after the good up now', () => {
-    expect(shipWants(game(true), auction({ good: 'energy', next: ['crystite'] }))[0]?.after).toBe('energy');
+    expect(shipWants(game(true), auction({ good: 'energy', next: ['crystite'] }))?.first.after).toBe('energy');
   });
-  it("on the wanted good's own status screen, it is the good up now, at the auction's ship price", () => {
+  it("on the wanted good's own status screen, it heads the panel, at the auction's ship price", () => {
     const a = auction({ good: 'crystite', stage: 'status', shipPays: 118, next: ['rareEarth', 'alloy'] });
-    expect(shipWants(game(true), a)).toEqual([
-      { good: 'crystite', wants: 24, pays: 118, after: null },
-      { good: 'alloy', wants: 12, pays: 90, after: 'rareEarth' },
-    ]);
+    expect(shipWants(game(true), a)).toEqual({ first: { good: 'crystite', wants: 24, pays: 118, after: null }, also: [{ good: 'alloy', wants: 12 }] });
+  });
+
+  it('one good: one panel, no "also"', () => {
+    const p = panel(game(true, { crystite: 24 }), auction({ good: 'food', next: ['smithore', 'crystite'] }), 4);
+    expect(p).toEqual({ count: 1, text: 'The ship wants 24 Crystite this month. Crystite comes up after Smithore: the ship pays 120 cr for the first. You have 4.' });
+  });
+  it('two goods: one panel, the other with its count', () => {
+    const p = panel(game(true, { crystite: 24, rareEarth: 6 }), auction({ good: 'food', next: ['smithore', 'crystite', 'rareEarth'] }), 4);
+    expect(p).toEqual({ count: 1, text: 'The ship wants 24 Crystite this month. Crystite comes up after Smithore: the ship pays 120 cr for the first. You have 4. It also wants 6 Rare earth.' });
+  });
+  it('four goods: one panel, the other three by name in one sentence; the TV leaves out what you have', () => {
+    const p = panel(game(true, { water: 3, smithore: 9, crystite: 24, rareEarth: 6 }), auction({ good: 'food', next: ['water', 'energy', 'smithore', 'crystite', 'rareEarth'] }));
+    expect(p).toEqual({ count: 1, text: 'The ship wants 3 Water this month. Water comes up after Food: the ship pays 12 cr for the first. It also wants Smithore, Crystite and Rare earth.' });
+  });
+});
+
+describe("the TV's gap", () => {
+  it('reads "they meet" when the best ask is not above the best bid, never a negative', () => {
+    const a = auction({ good: 'crystite', storeSells: 100, storeForSale: 3, shipPays: 119, walkers: [walker('lena', 'seller', 150)] });
+    const html = renderToStaticMarkup(createElement(TvReadout, { view, auction: a }));
+    expect(html).toContain('they meet');
+    expect(html).not.toMatch(/-\d+ apart/);
+  });
+  it('reads "N apart" while the ask is above the bid', () => {
+    const a = auction({ storeSells: 30, storeForSale: 3, storeBuys: 24, walkers: [walker('lena', 'buyer', 12)] });
+    expect(renderToStaticMarkup(createElement(TvReadout, { view, auction: a }))).toContain('6 apart');
   });
 });
 
