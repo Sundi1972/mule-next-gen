@@ -130,6 +130,8 @@ function element(html: string, testid: string): string {
 const plain = (html: string) => html.replace(/<[^>]+>/g, '').replaceAll('&#x27;', "'").replaceAll('&quot;', '"').replaceAll('&amp;', '&');
 const textOf = (html: string, testid: string) => plain(element(html, testid));
 const has = (html: string, testid: string) => html.includes(`data-testid="${testid}"`);
+/** "up to 2 free plots", "up to 1 free plot": the grant's claims, as config has them. */
+const CLAIMS = `up to ${GAME.claimsPerGrant} free ${GAME.claimsPerGrant === 1 ? 'plot' : 'plots'}`;
 
 describe("the month's steps (H-1)", () => {
   it('H-1: the month runs plan, land grant, land auction, develop, produce, goods auction, in that order, with a lot up', () => {
@@ -156,7 +158,7 @@ describe('the planning hub, rendered (UX audit)', () => {
     expect(element(roadmap, 'step-plan')).toMatch(/aria-current="step"/);
     expect(roadmap.match(/aria-current="step"/g), 'only this step is lit').toHaveLength(1);
     expect(roadmap).toMatch(/aria-label="Month 4: step 1 of 6, planning"/);
-    expect(textOf(roadmap, 'roadmap-now')).toBe(`Now: look around, scout land if you like, then press Ready. Next: you claim up to ${GAME.claimsPerGrant} free plots.`);
+    expect(textOf(roadmap, 'roadmap-now')).toBe(`Now: look around, scout land if you like, then press Ready. Next: you claim ${CLAIMS}.`);
     // WS7's offices line, its words as it builds them, folded in under the roadmap rather than a banner of its own.
     expect(textOf(roadmap, 'roadmap-offices')).toBe('Governor: Ossa, until month 6 · promised up to 4% · tax 4%, kept · Next election: month 7');
     expect(html.match(/data-testid="roadmap-offices"/g), 'drawn once').toHaveLength(1);
@@ -175,7 +177,7 @@ describe('the planning hub, rendered (UX audit)', () => {
 
   it("H-1: once you're ready the now line says the rest are still planning", () => {
     const ready = PLAYERS.map((p) => (p.id === 's1' ? { ...p, ready: true } : p));
-    expect(textOf(hub(month4({ players: ready })), 'roadmap-now')).toBe(`Now: you're ready; the rest are still planning. Next: the land grant, where you claim up to ${GAME.claimsPerGrant} free plots.`);
+    expect(textOf(hub(month4({ players: ready })), 'roadmap-now')).toBe(`Now: you're ready; the rest are still planning. Next: the land grant, where you claim ${CLAIMS}.`);
   });
 
   it('H-2: the stage says "This month you need" with each of Food, Energy and Water against what you hold, red where short', () => {
@@ -218,6 +220,10 @@ describe('the planning hub, rendered (UX audit)', () => {
     expect(textOf(standing, 'standing-rank')).toBe('2nd of 4');
     expect(standing.replaceAll('&#x27;', "'")).toMatch(/aria-label="1,000 cr\. You're 2nd of 4\. Open the standings\."/);
     expect(textOf(hub(month4(), 's2'), 'standing-rank'), "Ossa's phone").toBe('1st of 4');
+    // A tie: Lena level with Ossa, both lead, on both phones.
+    const level = PLAYERS.map((p) => (p.id === 's1' ? { ...p, worth: 5_600 } : p));
+    expect(textOf(hub(month4({ players: level })), 'standing-rank'), "Lena's phone, level").toBe('1st of 4');
+    expect(textOf(hub(month4({ players: level }, myView('s2')), 's2'), 'standing-rank'), "Ossa's phone, level").toBe('1st of 4');
   });
 
   it("H-4: the standings sheet lists every player's Worth, best first, and your own Worth line by line", () => {
@@ -226,7 +232,8 @@ describe('the planning hub, rendered (UX audit)', () => {
     expect(rows).toEqual(['s2', 's1', 's4', 's3']);
     expect(textOf(sheet, 'standing-s2')).toBe('1Ossa5,600 cr');
     expect(textOf(sheet, 'standing-s1')).toBe('2You (Lena)2,800 cr');
-    expect(textOf(sheet, 'standings-mine')).toBe(`Your worthOnly youCash1,000Goods · 6 units600Land · 3 × ${GAME.plotScore}900MULEs · 2 × 150300Offices · 0 × ${POLITICS.termScore}0Your worth2,800`);
+    expect(textOf(sheet, 'standings-rule'), 'out of Collapse, no cut').not.toContain('cut by');
+    expect(textOf(sheet, 'standings-mine')).toBe(`Your worthOnly youCash1,000Goods · 6 units600Land · 3 × ${GAME.plotScore}900MULEs · 2 × 150300Offices · 0 terms × ${POLITICS.termScore}0Your worth2,800`);
   });
 
   it("H-4 (negative): another player's phone shows your Worth as one number and their own lines, never yours; nobody's goods show", () => {
@@ -247,7 +254,9 @@ describe('the planning hub, rendered (UX audit)', () => {
     const mine = element(sheet, 'standings-mine');
     const lines = [...mine.matchAll(/<span class="flex justify-between gap-3[^"]*"><span>(.*?)<\/span><span[^>]*>(.*?)<\/span><\/span>/g)].map((m) => [plain(m[1]!), plain(m[2]!)] as const);
     const labels = lines.map(([label]) => label);
-    expect(labels).toEqual(['Cash', 'Goods · 6 units', `Land · 3 × ${GAME.plotScore}`, 'MULEs · 2 × 150', `Collapse cut · ${collapseCutWords()}`, `Offices · 0 × ${POLITICS.termScore}, cut too`, 'Your worth']);
+    expect(labels).toEqual(['Cash', 'Goods · 6 units', `Land · 3 × ${GAME.plotScore}`, 'MULEs · 2 × 150', `Collapse cut · ${collapseCutWords()}`, `Offices · 0 terms × ${POLITICS.termScore}, cut too`, 'Your worth']);
+    // The rule says why, in the month end's words.
+    expect(textOf(sheet, 'standings-rule')).toContain(`Every Worth is cut by ${collapseCutWords()}, offices too: the scores if the game ended now.`);
     const cr = (s: string) => (s.startsWith('−') ? -1 : 1) * Number(s.replace(/[^0-9]/g, ''));
     const parts = lines.slice(0, -1).map(([, v]) => cr(v));
     expect(parts).toEqual([1_000, 600, 900, 300, -560, 0]);
@@ -261,6 +270,10 @@ describe('the planning hub, rendered (UX audit)', () => {
     expect(textOf(html, 'ship-line')).toBe('Export ship in month 6: it buys the colony’s leftovers');
     expect(html).not.toMatch(/EXPORT SHIP|export ship in month|· month 4</);
     expect(html).not.toMatch(/\bM\d+–\d+\b|NEXT ELECTION M\d/);
+  });
+
+  it('H-6: while the export ship is in port, the line says so', () => {
+    expect(textOf(hub(month4({ ship: { arrives: 4, inPort: true, wants: null } })), 'ship-line')).toBe('Export ship in port: it buys the colony’s leftovers');
   });
 });
 

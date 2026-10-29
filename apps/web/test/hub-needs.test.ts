@@ -41,7 +41,7 @@ describe("planning's This month you need (RULE-8)", () => {
     const short = planNow(rows);
     expect(short.title).toBe('Plan your month, then press Ready');
     // The land grant's claims are config's, the same number the roadmap's next line gives.
-    expect(short.detail).toMatch(new RegExp(`^Next is the land grant: up to ${GAME.claimsPerGrant} free plots each\\. `));
+    expect(short.detail).toMatch(new RegExp(`^Next is the land grant: up to ${GAME.claimsPerGrant} free ${GAME.claimsPerGrant === 1 ? 'plot' : 'plots'} each\\. `));
     expect(short.detail).not.toMatch(/one free plot/);
     expect(short.detail).toMatch(/short of Food and Energy/);
     const fine = planNow(needRows(stock({ food: 3, water: 2 }), stock({ food: 3, water: 2 }), plots()));
