@@ -170,7 +170,7 @@ mechanism    extract_interface (the drawing's SPOT becomes the engine's plan) + 
 call sites   Store.tsx::StoreInterior (Develop.tsx today; C11's hall stage tomorrow; TableApp's TV store)
 pin          the store hall's look (Heiko-approved, WS6 PR-4/PR-10): store-steps.ts::storeIsOneHallWithTwoRows,
              store-view.test.ts B-AC-10 / T-AC-12 keep passing
-ux           design/mocks/ws6-ux/src/screens/arcade/views.tsx::HallStage at ceedd23f · GRAFT TARGET: Store.tsx (named edit)
+ux           design/mocks/ws6-ux/src/screens/arcade/views.tsx::HallStage at d30ae057 (AM-16) · GRAFT TARGET: Store.tsx (named edit)
 depends_on   —
 ```
 
@@ -733,6 +733,14 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-16 (2026-10-29, WS4's question at arcade PR-5, ruled by WS6).** C2's scaffold is HallStage at **d30ae057**
+  (the addendum Heiko approved with all the mocks; the plan's PR-6 pin), not ceedd23f. HallStage predates the motion
+  PR (#195, 1090e0d9) and still draws the CSS store waddle: graft its composition, never its motion. The walker's
+  motion is #195's, from `packages/ui/src/components/motion/gait.ts`: `Creature`'s `motion={motionOf(g)}`,
+  `cycle={cycleSeconds(g)}` and `facing`, and the led `Mule`'s `cycle` set to the same stride, with the hall's
+  GaitInput `{ moving, encounter: null, pace: condition?.conditionPace ?? 1, terrain: 1, lead: !!leading,
+  bitten: false, leadPace: DEV_STEER.leadPace, bittenPace: WOLVES.bittenPace, lungeSeconds: WOLVES.lungeEverySeconds }`.
+  The `store-waddle` keyframe and `waddleSeconds` go from Store.tsx; reduced motion is Creature's own (theme.css).
 - **AM-15 (2026-10-29, WS4's questions at arcade PR-2, ruled by WS6).** C8's three contract points, all option (a):
   (1) the steer exemption is a generic optional `Game.quiet?(intent)` the room honours, implemented by MuleGame, not a
   `'steer'` string in room.ts; a seat whose reach words change gets its view from the game itself (AM-11). (2) A
