@@ -547,6 +547,12 @@ describe('the reveal (C66, RULE-62, B-AC-62)', () => {
     expect(textOf(html, 'reveal-progress')).toBe('Governor: Lena ✓');
   });
 
+  it('C66, WS6 ruling: once the TV names the last winner, a losing phone beside it says who won, not that the votes are being counted', () => {
+    const lost: ElectionResult = { governor: { winner: 's2', how: 'votes', tallies: [{ id: 's2', votes: 3 }, { id: 's1', votes: 1 }] } };
+    expect(textOf(onPhone(inCeremony(lost, beatAt(lost, 'bars', 1)), ElectionDay, 1), 'companion-wait')).toContain('The votes are being counted on the TV');
+    expect(textOf(onPhone(inCeremony(lost, beatAt(lost, 'winner', 0.5)), ElectionDay, 1), 'companion-wait')).toContain('Ossa is Governor. The TV shows the whole result.');
+  });
+
   it('B-AC-62 (phone beside a TV): it says look up and holds each result until the TV has named the winner, then celebrates your own win', () => {
     const bars = onPhone(inCeremony(WON, beatAt(WON, 'bars', 2)), ElectionDay, 1);
     expect(tagOf(bars, 'phone-reveal-tv')).toBeDefined();
