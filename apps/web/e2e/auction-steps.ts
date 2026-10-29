@@ -14,7 +14,7 @@ import { AI_NAMES, GRANT_PASS_MAX_MS, GRANT_TICK_MS, PHASE_MS } from '../../serv
 import type { MuleServer } from '../../server/src/server.js';
 import { check, headerSlot, held, launch, PHONE, PHONE_SMALL, startServer, TV, type AuctionSteps } from './harness';
 import { hostContinuesWithout } from './hub-steps';
-import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
+import { ELECTION_WAIT_MS, readyThroughTheElection, voteThroughTheElection } from './politics-steps';
 import { AUDIT_JS, MIN_TEXT, type AuditRead } from './small-phone-audit';
 
 const PRESS_MS = 2_000;
@@ -137,6 +137,8 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   shipInPortThisMonth(server, code);
 
   // Month 1: everyone claims (Brix and Lena list theirs in month 2), so the grant ends early. Nothing is listed, so only the colony's lot can follow.
+  // Month 1 opens on election day, which holds the desks until it is over.
+  await everyone(phones, (p) => voteThroughTheElection(p.page, within(SCALE, ELECTION_WAIT_MS) + READY_LANDS_MS));
   await fillTheTvTicker(lena.page, tv);
   await everyone(phones, (p) => readyInPlanning(p.page));
   await everyone(phones, (p) => claimPlots(p.page));

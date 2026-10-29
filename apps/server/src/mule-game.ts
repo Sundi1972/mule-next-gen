@@ -6,6 +6,7 @@ import {
   allPrices,
   analysePlot,
   auctionDone,
+  ballotAhead,
   buyMule,
   castVote,
   claimPlot,
@@ -84,7 +85,7 @@ import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import { createBrain, type BrainService } from './brain/index.js';
 import { colonistView, dueArrivals, placeName, walkTarget, type Colonist, type DevIntent } from './dev-walking.js';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
-import { myPoliticsView, officeNews, politicsView } from './politics-view.js';
+import { ceremonyNews, myPoliticsView, politicsView } from './politics-view.js';
 
 /**
  * The longest each phase lasts, in milliseconds, from the engine's PHASES.
@@ -422,8 +423,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         return;
       case 'continue': {
         if (seatId !== this.ctx.hostId()) throw new RuleError('Only the host can continue');
-        const left = this.continuePlanning(seatId);
-        if (left.length > 0) this.addNews(`${this.nameOf(seatId)} continued without ${andList(left)}.`);
+        this.continuePlanning(seatId);
         return;
       }
     }
@@ -431,21 +431,27 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   /**
    * The host's Continue. In the election's announce or ballot every human not Done becomes Done, abstaining; refused in
-   * its ceremony. Otherwise it ends planning proper, or the month end (upkeep), with players not yet Ready. Returns the
-   * names of the others it went on without. The caller must have checked the seat is the host.
+   * its ceremony. Otherwise it ends planning proper, or the month end (upkeep), with players not yet Ready. The news
+   * names the others it went on without and the stage it moved past. The caller must have checked the seat is the host.
    */
-  private continuePlanning(hostId: string): string[] {
+  private continuePlanning(hostId: string): void {
     const state = this.requireState();
+    const goneOn = (did: string, left: string[]) => {
+      if (left.length > 0) this.addNews(`${this.nameOf(hostId)} ${did} without ${andList(left)}.`);
+    };
     if (this.electionOpen()) {
-      if (state.politics!.election!.stage === 'ceremony') throw new RuleError('The result is being announced');
+      const { stage } = state.politics!.election!;
+      if (stage === 'ceremony') throw new RuleError('The result is being announced');
       const waiting = this.seats.filter((s) => !s.isAi && !isElectionDone(state, s.id));
       for (const s of waiting) electionDone(state, s.id);
-      return waiting.filter((s) => s.id !== hostId).map((s) => s.name);
+      const did = stage === 'ballot' ? 'closed the ballot' : ballotAhead(state) ? 'opened the ballot' : 'continued';
+      goneOn(did, waiting.filter((s) => s.id !== hostId).map((s) => s.name));
+      return;
     }
     if (state.phase !== 'planning' && state.phase !== 'upkeep') throw new RuleError('Continue ends planning or the month end only');
     const left = this.seats.filter((s) => !s.isAi && s.id !== hostId && !this.ready.has(s.id)).map((s) => s.name);
     this.nextPhase();
-    return left;
+    goneOn('continued', left);
   }
 
   /**
@@ -803,7 +809,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /**
    * Steps the election every WALK.tickMs until it is over: the AI vote hands act
    * first, then the election steps, with the same dt; each office makes the news
-   * at its winner step. When it ends, planning proper opens, timed only when
+   * at its winner beat. When it ends, planning proper opens, timed only when
    * PHASES.planningMs is a number.
    */
   private scheduleElectionTick(last: number): void {
@@ -815,10 +821,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         // A stalled server loop must not skip a stage.
         const dt = Math.min(Math.max(0, now - last), WALK.tickMs * 3) / this.phaseScale;
         this.tickVoteHands(dt);
-        const before = state.politics!.election!.ceremony;
+        const before = state.politics!.election!.ceremony?.elapsedMs ?? -1;
         stepElection(state, dt);
-        const { ceremony, result } = state.politics!.election!;
-        if (ceremony?.step === 'winner' && (before?.step !== 'winner' || before.office !== ceremony.office)) this.addNews(officeNews(ceremony.office, result!, (id) => this.nameOf(id)));
+        for (const line of ceremonyNews(state, before, (id) => this.nameOf(id))) this.addNews(line);
         if (this.electionOpen()) this.scheduleElectionTick(now);
         else {
           this.startPhaseTimer('planning');

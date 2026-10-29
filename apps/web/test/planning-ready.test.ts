@@ -6,8 +6,8 @@ import { describe, expect, it } from 'vitest';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
-import { connectedIn, continueQuestion, hostMayContinue, namesOf, planningProper, press, readyFooter, readyNow, readyNowIn, readyRows, stillPlanning, type Press, type ReadyRow } from '../src/phone/hub/ready';
-import { ReadyBar } from '../src/phone/hub/ReadyBar';
+import { connectedIn, continueQuestion, hostMayContinue, namesOf, PLANNING_WORDS, planningProper, press, readyFooter, readyNow, readyNowIn, readyRows, stageWords, stillPlanning, type Press, type ReadyRow, type ReadyWords } from '../src/phone/hub/ready';
+import { ReadyBar, ReadyCount, WaitingFor } from '../src/phone/hub/ReadyBar';
 
 const person = (id: string, name: string, slot: number, ready = false): PlayerView => ({
   id,
@@ -141,11 +141,11 @@ describe('planning without a clock: who is still planning, and the host', () => 
   it("B-AC-61: the host's confirm says what Continue does: in planning proper the land grant starts, in announce the candidates close, in the ballot the absent don't vote", () => {
     const ossa = players().filter((p) => p.id === OSSA).map((p) => ({ ...p, away: true }));
     const two = players().filter((p) => p.id === LENA || p.id === OSSA).map((p) => ({ ...p, away: false }));
-    expect(continueQuestion(null, ossa)).toBe('End planning for everyone now? Ossa stops where they are, and the land grant starts.');
-    expect(continueQuestion('over', two)).toBe('End planning for everyone now? Lena and Ossa stop where they are, and the land grant starts.');
-    expect(continueQuestion('announce', ossa)).toBe('Go on without Ossa? The candidates close as they are.');
-    expect(continueQuestion('ballot', ossa)).toBe("Go on without Ossa? Ossa doesn't vote this time.");
-    expect(continueQuestion('ballot', two)).toBe("Go on without Lena and Ossa? Lena and Ossa don't vote this time.");
+    expect(continueQuestion(stageWords(null), ossa)).toBe('End planning for everyone now? Ossa stops where they are, and the land grant starts.');
+    expect(continueQuestion(stageWords('over'), two)).toBe('End planning for everyone now? Lena and Ossa stop where they are, and the land grant starts.');
+    expect(continueQuestion(stageWords('announce'), ossa)).toBe('Go on without Ossa? The candidates close as they are.');
+    expect(continueQuestion(stageWords('ballot'), ossa)).toBe("Go on without Ossa? Ossa doesn't vote this time.");
+    expect(continueQuestion(stageWords('ballot'), two)).toBe("Go on without Lena and Ossa? Lena and Ossa don't vote this time.");
   });
 
   it('T-AC-13: Ready → Continue → Continue now sends ready, nothing (the confirm opens), then continue; Keep waiting sends nothing and closes the confirm', () => {
@@ -208,5 +208,57 @@ describe('planning without a clock: who is still planning, and the host', () => 
     };
     for (const stage of ['announce', 'ballot'] as const) expect(bar(stage), stage).toMatch(/data-testid="continue"[^>]*>Continue without Ossa</);
     expect(bar('ceremony')).not.toContain('data-testid="continue"');
+  });
+});
+
+/** The planning bar on `seat`'s phone, Brix hosting, Ossa away, with these props. */
+function barOf(seat: string, all: PlayerView[], props: Parameters<typeof ReadyBar>[0] = {}): string {
+  const view = { phase: 'planning', politics: null, players: all, month: 2, maxMonths: 12 } as unknown as MuleView;
+  const self = all.find((p) => p.id === seat)!;
+  const client = { intent: () => {} } as unknown as TableClient;
+  const game = createElement(PhoneGameProvider, { value: { table: table(all, BRIX, [OSSA]), view, me: {} as MyView, self, slot: self.slot as Slot }, children: createElement(ReadyBar, props) });
+  return renderToStaticMarkup(createElement(ClientProvider, { client, children: game })).replaceAll('<!-- -->', '');
+}
+
+const BALLOT: ReadyWords = {
+  ready: 'Cast my vote',
+  done: 'You voted',
+  waiting: 'Still waiting for',
+  all: 'Everyone has voted. The reveal starts.',
+  confirm: (names, n) => `Close the ballot now? ${n} vote${n === 1 ? '' : 's'} won't count: ${names}.`,
+};
+
+describe('the ready bar in every situation that waits for people (C66, E-10)', () => {
+  it('C66 (frame): once Ready, planning\'s own bar reads "Still waiting for", as the election\'s stages do; before Ready, and on the TV, the line stays "Waiting for"', () => {
+    expect(PLANNING_WORDS.waiting).toBe('Still waiting for');
+    expect(barOf(LENA, players({ brix: true, lena: true }))).toMatch(/data-testid="waiting-for"><span[^>]*>Still waiting for</);
+    const before = barOf(OSSA, players());
+    expect(before).toMatch(/data-testid="waiting-for"><span[^>]*>Waiting for</);
+    expect(before).not.toContain('Still waiting for');
+    const tv = renderToStaticMarkup(createElement(WaitingFor, { seats: stillPlanning(players(), () => true), me: null, tv: true }));
+    expect(tv).toMatch(/data-testid="waiting-for"><span[^>]*>Waiting for</);
+    expect(PLANNING_WORDS, 'nothing else of planning changes').toMatchObject({ ready: "I'm ready", done: "You're ready", all: 'Everyone is ready. The land grant starts.' });
+  });
+
+  it("C66 (frame): a situation's words carry the bar: the ready button, the done line, the waiting line, the all-ready line and the host's confirm; the host's Continue reads the same in every situation", () => {
+    expect(barOf(OSSA, players(), { words: BALLOT })).toMatch(/data-testid="ready"[^>]*>Cast my vote</);
+    const host = barOf(BRIX, players({ brix: true, lena: true }), { words: BALLOT });
+    expect(host).toMatch(/data-testid="you-are-ready">.*You voted</);
+    expect(host).toMatch(/data-testid="waiting-for"><span[^>]*>Still waiting for</);
+    expect(host).toMatch(/data-testid="continue"[^>]*>Continue without Ossa</);
+    expect(barOf(BRIX, players({ brix: true, lena: true, ossa: true }), { words: BALLOT })).toContain('Everyone has voted. The reveal starts.');
+    const two = stillPlanning(players(), () => true).filter((s) => s.id !== BRIX);
+    expect(continueQuestion(BALLOT, two)).toBe("Close the ballot now? 2 votes won't count: Lena and Ossa.");
+  });
+
+  it('C66 (frame): canReady false greys the ready button; given true or omitted, it is live', () => {
+    expect(barOf(OSSA, players(), { canReady: false })).toMatch(/<button[^>]*disabled=""[^>]*data-testid="ready"/);
+    for (const props of [{}, { canReady: true }]) expect(barOf(OSSA, players(), props)).toMatch(/<button(?![^>]*disabled="")[^>]*data-testid="ready"/);
+  });
+
+  it('C66 (frame): the ready count counts in the given word, such as the ballot\'s VOTED; omitted, READY', () => {
+    const all = players({ brix: true });
+    expect(renderToStaticMarkup(createElement(ReadyCount, { players: all, label: 'VOTED' })).replaceAll('<!-- -->', '')).toMatch(/>2 \/ 4 VOTED</);
+    expect(renderToStaticMarkup(createElement(ReadyCount, { players: all })).replaceAll('<!-- -->', '')).toMatch(/>2 \/ 4 READY</);
   });
 });

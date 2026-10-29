@@ -211,7 +211,7 @@ describe("FM-planning-host-continue: the host's Continue ends planning proper; n
           expect(election().stage, `${stage} waits for Mia`).toBe(stage);
           game.handle('s1', { type: 'continue' });
           expect(phase(game), `${stage}: Continue does not end planning`).toBe('planning');
-          expect(news(game)[0]).toBe('Heiko continued without Mia.');
+          expect(news(game)[0]).toBe(stage === 'announce' ? 'Heiko opened the ballot without Mia.' : 'Heiko closed the ballot without Mia.');
         }
       }
       advance(WALK.tickMs);

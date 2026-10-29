@@ -1,6 +1,6 @@
 /**
  * Tier 3, local only: in no package.json script and not in CI. The Land Baron breaks a 2–2 Governor tie (RULE-3 row 5)
- * on real screens, so WS6 can render-gate that state: the TV's reveal (#tv-election) and both phones' result. No CI
+ * on real screens, so WS6 can render-gate that state: the TV's reveal (#audit-election-reveal) and both phones' companion. No CI
  * value beyond the engine and server tests that already prove RULE-3 row 5 (B-AC-4).
  * Run with `pnpm --filter @mule/web build && pnpm --filter @mule/web exec tsx e2e/politics-tie.ts`; replay with `MULE_E2E_SEED=<seed>`.
  *
@@ -10,7 +10,7 @@
 import { POLITICS, type GameState } from '@mule/engine';
 import type { Page } from 'playwright';
 import { check, held, launch, PHONE, startServer, TV } from './harness';
-import { PRESS_MS } from './politics-steps';
+import { ELECTION_WAIT_MS, PRESS_MS } from './politics-steps';
 
 const SEED = seedFrom(process.env.MULE_E2E_SEED);
 // Full-length clocks: both phones end announce and the ballot themselves, so only the ceremony runs on its clocks.
@@ -39,7 +39,8 @@ try {
   await tv.getByTestId('room-code').waitFor();
   await lena.getByRole('button', { name: 'Start game' }).click();
   const phones = [lena, ossa];
-  await Promise.all(phones.map((p) => p.locator('[data-phase=planning]').getByTestId('agenda-election').waitFor({ timeout: 5_000 })));
+  // Month 1's announce takes a run from the block under Now (T-AC-66).
+  await Promise.all(phones.map((p) => p.locator('[data-phase=planning]').getByTestId('run-governor').waitFor({ timeout: 5_000 })));
 
   // The server's own truth, as in politics.ts.
   const room = () => {
@@ -63,36 +64,36 @@ try {
     check(votesOf(lenaId) === 2 && votesOf(ossaId) === 2, `Lena and Ossa each weigh 2 votes, got ${JSON.stringify(weights)}`);
     await Promise.all(
       phones.map(async (p) => {
-        await p.locator('[data-phase=planning]').getByTestId('agenda-election').click({ timeout: PRESS_MS });
-        await p.getByTestId('run-governor').click({ timeout: PRESS_MS });
+        await p.locator('[data-phase=planning]').getByTestId('run-governor').click({ timeout: PRESS_MS });
         await p.getByTestId('promise-hold').click({ timeout: PRESS_MS });
         await p.getByTestId('promise-run').click({ timeout: PRESS_MS });
         await p.getByTestId('running').filter({ hasText: 'You run for Governor' }).waitFor({ timeout: PRESS_MS });
       }),
     );
   });
-  await Promise.all(phones.map((p) => p.getByTestId('ready').click({ timeout: PRESS_MS })));
+  await Promise.all(phones.map((p) => p.getByTestId('ready').filter({ hasText: 'Ready to vote' }).click({ timeout: PRESS_MS })));
 
   // The ballot: 2–2, and the Baron's (Ossa's) ballot names Lena.
-  const voteFor = (p: Page, name: string) => p.locator('[data-phase=planning]').getByTestId('election').getByRole('radio', { name: new RegExp(`^${name}\\b`) }).check({ timeout: PRESS_MS * 2 });
-  await Promise.all([voteFor(lena, 'Ossa'), voteFor(ossa, 'Lena')]);
+  const voteFor = (p: Page, id: string) => p.locator('[data-phase=planning]').getByTestId('ballot-card').getByTestId(`ballot-governor-${id}`).locator('input').check({ timeout: PRESS_MS * 2 });
+  await Promise.all([voteFor(lena, ossaId), voteFor(ossa, lenaId)]);
   const ballots = () => state().politics!.election!.ballots;
   for (const deadline = Date.now() + PRESS_MS; ballots()[lenaId]?.governor !== ossaId || ballots()[ossaId]?.governor !== lenaId; ) {
     check(Date.now() < deadline, `the server holds Lena's ballot for Ossa and Ossa's for Lena, got ${JSON.stringify(ballots())}`);
     await new Promise((r) => setTimeout(r, 20));
   }
-  // Both ballots name a candidate for the one contested office, so both phones are Done and the ballot closes.
+  // Picking is not Done (AM-21): both phones press Cast my vote, and the ballot closes.
+  await Promise.all(phones.map((p) => p.getByTestId('ready').filter({ hasText: 'Cast my vote' }).click({ timeout: PRESS_MS })));
 
   // The Governor's winner step, read with the clock held so it stands while every screen is read.
-  await tv.getByTestId('tv-election').getByTestId('how-governor').waitFor({ timeout: POLITICS.ceremony.introMs + POLITICS.ceremony.barsMs + PRESS_MS });
+  await tv.getByTestId('tv-reveal').getByTestId('reveal-how').waitFor({ timeout: ELECTION_WAIT_MS + PRESS_MS });
   await held(server, code, async () => {
     // The approved mock's words for a tie the Baron broke.
-    const tieBroken = `A tie: Ossa, the Land Baron, broke it.`;
-    const how = (await tv.getByTestId('how-governor').innerText()).trim();
+    const tieBroken = "A tie, 2 votes each, broken by the Land Baron's vote.";
+    const how = (await tv.getByTestId('reveal-how').innerText()).trim();
     check(how === tieBroken, `B-AC-4: the TV says the Land Baron broke the tie, "${tieBroken}", got "${how}"`);
     const row = async (id: string) => {
-      const el = tv.getByTestId(`result-governor-${id}`);
-      return { votes: Number(await el.locator('[data-num]').innerText()), elected: (await el.innerText()).includes('ELECTED') };
+      const votes = Number(await tv.getByTestId(`reveal-count-governor-${id}`).innerText());
+      return { votes, elected: (await tv.getByTestId(`reveal-row-governor-${id}`).innerText()).includes('ELECTED') };
     };
     const [l, o] = [await row(lenaId), await row(ossaId)];
     check(l.elected && l.votes === 2 && !o.elected && o.votes === 2, `B-AC-4: the TV elects Lena 2–2 over Ossa, got Lena ${JSON.stringify(l)}, Ossa ${JSON.stringify(o)}`);
@@ -100,9 +101,9 @@ try {
       [lena, 'You'],
       [ossa, 'Lena'],
     ] as const) {
-      const text = await p.getByTestId('phone-election-result').innerText({ timeout: PRESS_MS });
-      const gov = /Governor\s*(.+?)\s*(\d+) votes · ([^.]+\.)/s.exec(text);
-      check(gov && gov[1] === name && gov[2] === '2' && gov[3] === tieBroken, `B-AC-4: ${name === 'You' ? 'Lena' : 'Ossa'}'s phone names ${name} Governor with 2 votes, "${tieBroken}", as the TV does: "${text}"`);
+      const text = await p.getByTestId('companion-governor').evaluate((el) => el.textContent ?? '');
+      const won = await p.getByTestId(`companion-governor-${lenaId}`).evaluate((el) => el.textContent ?? '');
+      check(won === `${name}2ELECTED` && text.endsWith(tieBroken), `B-AC-4: ${name === 'You' ? 'Lena' : 'Ossa'}'s phone names ${name} Governor with 2 votes, "${tieBroken}", as the TV does: "${text}"`);
     }
     const governor = state().politics!.election!.result!.governor!;
     check(governor.winner === lenaId && governor.how === 'baron', `B-AC-4: the server elects Lena by the Baron's ballot, got ${JSON.stringify(governor)}`);
