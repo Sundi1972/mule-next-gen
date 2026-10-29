@@ -19,6 +19,7 @@ function fakeContext() {
       };
     },
     changed: () => {},
+    frame: () => {},
     hostId: () => 's1',
   };
   const advance = (ms: number) => {
