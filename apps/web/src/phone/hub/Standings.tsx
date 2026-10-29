@@ -24,7 +24,7 @@ export function StandingsSheet({ onClose }: { onClose: () => void }) {
   const { rows } = league(view);
   const mine = rows.find((r) => r.player.id === self.id);
   const p = view.me ? yourLines(view) : null;
-  // In Collapse the cut takes every line, offices too: month end's cut line keeps your lines adding up to your Worth.
+  // Your lines as the month end's YourWorth gives them: in Collapse the cut line before the offices, so they add up.
   const collapse = inCollapse(view);
   const line = 'flex justify-between gap-3';
   return (
@@ -113,7 +113,7 @@ export function StandingsSheet({ onClose }: { onClose: () => void }) {
               )}
               <span className={line}>
                 <span>
-                  Offices · {p.terms} × {POLITICS.termScore}
+                  Offices · {p.terms} {p.terms === 1 ? 'term' : 'terms'} × {POLITICS.termScore}
                   {collapse && ', cut too'}
                 </span>
                 <span data-num className="font-mono">
@@ -131,6 +131,7 @@ export function StandingsSheet({ onClose }: { onClose: () => void }) {
         </div>
         <p className="text-xs leading-snug text-ink-2 @min-[1100px]/shell:text-base" data-testid="standings-rule">
           Worth, in credits: cash, goods at the store&apos;s price, land at {GAME.plotScore} cr a plot, MULEs at the store&apos;s price, and {POLITICS.termScore} cr a term in office. Everyone sees each other&apos;s total; nobody sees which goods anyone holds.
+          {collapse && ` Every Worth is cut by ${collapseCutWords()}, offices too: the scores if the game ended now.`}
         </p>
       </div>
     </div>

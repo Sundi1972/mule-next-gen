@@ -1,6 +1,7 @@
-import { GAME, GOODS, isFactory, RECIPES, UPKEEP, type Good, type Outfit, type RawGood, type Stock } from '@mule/engine';
+import { GOODS, isFactory, RECIPES, UPKEEP, type Good, type Outfit, type RawGood, type Stock } from '@mule/engine';
 import { GOOD_NAME } from '@mule/ui';
 import type { Now } from '../Shell';
+import { freePlots } from './month-steps';
 
 /** One line of "This month you need" (RULE-8). */
 export interface NeedRow {
@@ -75,7 +76,7 @@ export function planNow(rows: readonly NeedRow[]): Now & { detail: string } {
   const short = rows.filter((r) => r.short > 0).map((r) => GOOD_NAME[r.good]);
   return {
     title: 'Plan your month, then press Ready',
-    detail: `Next is the land grant: ${GAME.claimsPerGrant === 1 ? 'one free plot' : `up to ${GAME.claimsPerGrant} free plots`} each. ${short.length > 0 ? `You're short of ${and(short)}: a plot for it, or buy it at the auction.` : 'You have what you need this month.'}`,
+    detail: `Next is the land grant: ${freePlots()} each. ${short.length > 0 ? `You're short of ${and(short)}: a plot for it, or buy it at the auction.` : 'You have what you need this month.'}`,
   };
 }
 

@@ -38,7 +38,7 @@ export function useHub(): HubNav {
 
 /** The export ship and what it is for, in plain words, at the head of "This month". */
 function shipLine(view: Pick<MuleView, 'ship'>): string {
-  return `Export ship in month ${view.ship.arrives}: it buys the colony’s leftovers`;
+  return `Export ship ${view.ship.inPort ? 'in port' : `in month ${view.ship.arrives}`}: it buys the colony’s leftovers`;
 }
 
 /** Planning: the month's hub, from the slots it is given. */
@@ -86,7 +86,8 @@ export function Hub({ slots }: { slots: HubSlots }) {
         seconds={secondsUntil(view.phaseEndsAt, serverNow)}
         status={<ReadyCount players={view.players} label={bar?.label} />}
         now={now}
-        // Once read, Now folds to its title in any month; a situation on the stage keeps it whole.
+        // Now is folded to its title from its first render, in any month, and a new title remounts it folded; a tap
+        // opens it. A situation on the stage keeps it whole.
         foldNow={!stage}
         standing={standing}
         fill
@@ -229,11 +230,9 @@ export function AgendaRow({ items, seat, note, onOpen }: { items: AgendaSlot[]; 
     <section className="flex shrink-0 flex-col gap-1" data-testid="agenda">
       <span className="flex items-baseline justify-between gap-2">
         <span className="label-caps shrink-0 text-[10px]! @min-[1100px]/shell:text-sm!">This month</span>
-        {note && (
-          <span className="min-w-0 truncate text-[10px] text-ink-2 @min-[1100px]/shell:text-sm" data-testid="ship-line">
-            {note}
-          </span>
-        )}
+        <span className="min-w-0 truncate text-[10px] text-ink-2 @min-[1100px]/shell:text-sm" data-testid="ship-line">
+          {note}
+        </span>
       </span>
       <div className="flex gap-1.5 overflow-x-auto pb-1 @min-[1100px]/shell:grid @min-[1100px]/shell:grid-flow-col @min-[1100px]/shell:grid-cols-[repeat(auto-fit,minmax(0,1fr))] @min-[1100px]/shell:gap-2 @min-[1100px]/shell:overflow-visible">
         {items.map((it) => (

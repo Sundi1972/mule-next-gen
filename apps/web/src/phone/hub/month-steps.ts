@@ -1,4 +1,8 @@
+import { GAME } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
+
+/** The land grant's claims, as config has them: "up to 2 free plots", "up to 1 free plot". */
+export const freePlots = (n: number = GAME.claimsPerGrant) => `up to ${n} free ${n === 1 ? 'plot' : 'plots'}`;
 
 /** One step of the month, as the roadmap names it. */
 export interface MonthStep {

@@ -1,7 +1,6 @@
-import { GAME } from '@mule/engine';
 import { cx } from '@mule/ui';
 import { usePhoneGame } from '../game';
-import { roadmapSteps } from './month-steps';
+import { freePlots, roadmapSteps } from './month-steps';
 import type { BannerSlot } from './slots';
 
 /**
@@ -40,11 +39,11 @@ export function Roadmap({ lines }: { lines: BannerSlot[] }) {
       <p className="text-[11px] leading-snug @min-[1100px]/shell:text-base" data-testid="roadmap-now">
         {self.ready ? (
           <>
-            <strong className="text-holo">Now:</strong> you're ready; the rest are still planning. <strong>Next:</strong> the land grant, where you claim up to {GAME.claimsPerGrant} free plots.
+            <strong className="text-holo">Now:</strong> you're ready; the rest are still planning. <strong>Next:</strong> the land grant, where you claim {freePlots()}.
           </>
         ) : (
           <>
-            <strong className="text-holo">Now:</strong> look around, scout land if you like, then press Ready. <strong>Next:</strong> you claim up to {GAME.claimsPerGrant} free plots.
+            <strong className="text-holo">Now:</strong> look around, scout land if you like, then press Ready. <strong>Next:</strong> you claim {freePlots()}.
           </>
         )}
       </p>
