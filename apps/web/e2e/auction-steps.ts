@@ -135,6 +135,7 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   shipInPortThisMonth(server, code);
 
   // Month 1: everyone claims (Brix and Lena list theirs in month 2), so the grant ends early. Nothing is listed, so only the colony's lot can follow.
+  await fillTheTvTicker(lena.page, tv);
   await everyone(phones, (p) => readyInPlanning(p.page));
   await everyone(phones, (p) => claimPlots(p.page));
   await brix.page.locator('[data-phase]:not([data-phase=landGrant])').waitFor({ timeout: GRANT_WAIT_MS });
@@ -695,12 +696,51 @@ async function readTheStatusWords(phones: Phone[], tv: Page, truth: Truth): Prom
   check(JSON.stringify(onTv) === JSON.stringify([`${shipText}${also}`]), `G-6: the TV's status screen has one ship panel: want ${JSON.stringify([`${shipText}${also}`])}, got ${JSON.stringify(onTv)}`);
   const room = (await tv.evaluate(`(() => {
     const box = (id) => { const el = document.querySelector('[data-testid=' + id + ']'); const b = el.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, right: b.right, height: b.height, full: el.scrollHeight <= el.clientHeight + 1 }; };
-    return { store: box('status-store'), ship: box('ship-wants'), w: window.innerWidth, h: window.innerHeight };
-  })()`)) as { store: { height: number; full: boolean }; ship: { top: number; bottom: number; left: number; right: number }; w: number; h: number };
-  console.log(`  TV at ${room.w}×${room.h}: store box ${room.store.height.toFixed(1)} px tall${room.store.full ? '' : ', cut'}; ship panel y ${room.ship.top.toFixed(0)}–${room.ship.bottom.toFixed(0)}, x ${room.ship.left.toFixed(0)}–${room.ship.right.toFixed(0)}`);
-  check(room.store.full && room.store.height >= TV_STORE_MIN, `G-6: the TV's store box keeps its height beside the ship panel: ${room.store.height} px, its content ${room.store.full ? 'whole' : 'cut'}`);
-  check(room.ship.top >= 0 && room.ship.left >= 0 && room.ship.bottom <= room.h && room.ship.right <= room.w, `G-6: the TV's ship panel is inside the ${room.w}×${room.h} screen: y ${room.ship.top}–${room.ship.bottom}`);
+    const store = document.querySelector('[data-testid=status-store]').getBoundingClientRect();
+    const prices = [...document.querySelectorAll('[data-testid=status-store] dd')].map((dd) => dd.getBoundingClientRect());
+    return {
+      store: { ...box('status-store'), pricesShown: prices.length === 3 && prices.every((p) => p.height > 0 && p.top >= store.top - 0.5 && p.bottom <= store.bottom + 0.5) },
+      ship: box('ship-wants'),
+      frame: box('tv-status'),
+      ticker: document.querySelectorAll('[data-testid=chat-ticker] [data-testid^=chat-line-]').length,
+      w: window.innerWidth,
+      h: window.innerHeight,
+    };
+  })()`)) as {
+    store: { height: number; full: boolean; pricesShown: boolean };
+    ship: { top: number; bottom: number; left: number; right: number };
+    frame: { bottom: number };
+    ticker: number;
+    w: number;
+    h: number;
+  };
+  console.log(
+    `  TV at ${room.w}×${room.h}, ${room.ticker} chat lines in the ticker: store box ${room.store.height.toFixed(1)} px tall${room.store.full && room.store.pricesShown ? ', prices whole' : ', prices cut'}; ship panel y ${room.ship.top.toFixed(0)}–${room.ship.bottom.toFixed(0)} (the TV's frame ends at ${room.frame.bottom.toFixed(0)}), x ${room.ship.left.toFixed(0)}–${room.ship.right.toFixed(0)}`,
+  );
+  check(room.ticker === 3, `G-6 is read with the TV's chat ticker full: 3 lines, got ${room.ticker}`);
+  check(room.store.full && room.store.pricesShown && room.store.height >= TV_STORE_MIN, `G-6: the TV's store box keeps its prices beside the ship panel and a full ticker: ${room.store.height} px, prices ${room.store.pricesShown && room.store.full ? 'whole' : 'cut'}`);
+  check(
+    room.ship.top >= 0 && room.ship.left >= 0 && room.ship.bottom <= Math.min(room.h, room.frame.bottom + 0.5) && room.ship.right <= room.w,
+    `G-6: the TV's ship panel ends inside the ${room.w}×${room.h} screen and the TV's frame: y ${room.ship.top}–${room.ship.bottom}, frame to ${room.frame.bottom}`,
+  );
   console.log(`✓ G-8, G-4, G-6: ${a.good}'s status screen says "Goes bad" and "Spare" and "${store}" on three phones; one ship panel, "${shipText}${also}", on the phones and the TV`);
+}
+
+/** Lines said at the table in month 1's planning, so the TV's header ticker shows its full three through the auction. */
+const TABLE_TALK = ['Anyone need Water? Cheap today.', 'Smithore is going to spike, I hear.', 'The ship is in: hold your Crystite.'];
+
+/** Says TABLE_TALK from `phone`'s Talk desk, then waits until the TV's ticker shows three lines. */
+async function fillTheTvTicker(phone: Page, tv: Page): Promise<void> {
+  const planning = phone.locator('[data-phase=planning]');
+  await planning.waitFor({ timeout: PRESS_MS * 5 });
+  await planning.getByTestId('desk-talk').click({ timeout: PRESS_MS });
+  for (const line of TABLE_TALK) {
+    await planning.getByPlaceholder('Say something to everyone').fill(line);
+    await planning.getByRole('button', { name: 'Send' }).click({ timeout: PRESS_MS });
+    await tv.getByTestId('chat-ticker').getByText(line).waitFor({ timeout: PRESS_MS });
+  }
+  const lines = await tv.locator('[data-testid=chat-ticker] [data-testid^=chat-line-]').count();
+  check(lines === 3, `the TV's chat ticker shows three lines, got ${lines}`);
 }
 
 /** The TV's store box on the status stage: a label, a number and its padding, about 78 px; a squeezed box is a few px. */
