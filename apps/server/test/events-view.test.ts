@@ -1,6 +1,6 @@
-import type { EventKey, GameState, MonthEvent, MonthReport } from '@mule/engine';
+import { EVENT_SHOW, type EventKey, type GameState, type MonthEvent, type MonthReport } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { MuleGame } from '../src/mule-game.js';
 import { fakeContext, readyAll, seats } from './fake-context.js';
 
@@ -21,8 +21,8 @@ function event(key: EventKey): MonthEvent {
 
 /**
  * Plays month 1 on the fake clock until upkeep, with the production report's events replaced by `keys`' events in that
- * order (a seed fires at most one event today). Returns the first view each phase showed, read the moment the phase
- * was announced, and the clock then: phaseEndsAt − at is the length that phase was given.
+ * order, so a test can name a mix no seed is known to fire. Returns the first view each phase showed, read the moment
+ * the phase was announced, and the clock then: phaseEndsAt − at is the length that phase was given.
  */
 function playMonth(keys: EventKey[], phaseScale = 1) {
   const first = new Map<string, { view: MuleView; at: number }>();
@@ -49,6 +49,95 @@ function playMonth(keys: EventKey[], phaseScale = 1) {
   const endsAt = (phase: string) => first.get(phase)?.view.phaseEndsAt;
   return { production: first.get('production')!.view.production!, length, endsAt };
 }
+
+/** Four seats as the seed search played them: two humans who only press Ready, and two AIs. */
+const fourSeats = [
+  { id: 's1', name: 'Heiko', isAi: false, color: 0 },
+  { id: 's2', name: 'Mia', isAi: false, color: 1 },
+  { id: 's3', name: 'The Baron', isAi: true, color: 2 },
+  { id: 's4', name: 'Vex', isAi: true, color: 3 },
+];
+// Found by playing seeds 1-120 through months 1-4 on fourSeats, as playRealMonths does, and reading each production's report.
+// The seats (even their names) and the AIs' play move what fires, so these months hold only for fourSeats.
+const REAL_SEED = 26;
+/** Production fires a colony comet pass, then a personal pest swarm. */
+const TWO_EVENT_MONTH = 2;
+/** Production fires a colony solar flare and nothing else. */
+const ONE_EVENT_MONTH = 3;
+/** Production fires nothing. */
+const QUIET_MONTH = 4;
+
+/**
+ * Plays REAL_SEED on the fake clock through production of `lastMonth`, humans pressing Ready where the game waits and
+ * nothing else, the engine's reports untouched. Returns, for each month, its production report and the production view
+ * and length the moment production was announced.
+ */
+function playRealMonths(lastMonth: number) {
+  const months = new Map<number, { view: MuleView; at: number; report: MonthReport }>();
+  let game: MuleGame | null = null;
+  const fake = fakeContext({
+    table: fourSeats,
+    onChanged: (at) => {
+      const view = game?.viewFor(null);
+      if (!view || view.phase !== 'production' || months.has(view.month)) return;
+      const state = (game as unknown as { state: GameState }).state;
+      months.set(view.month, { view, at, report: state.history.at(-1)! });
+    },
+  });
+  game = new MuleGame(fake.ctx, REAL_SEED);
+  game.start(fourSeats);
+  for (let i = 0; i < 1_000_000 && !months.has(lastMonth); i++) {
+    const phase = game.viewFor(null).phase;
+    if (phase === 'planning' || phase === 'upkeep') readyAll(game);
+    fake.advance(100);
+  }
+  return (month: number) => {
+    const seen = months.get(month);
+    if (!seen) throw new Error(`seed ${REAL_SEED} never reached production of month ${month}`);
+    return { report: seen.report, production: seen.view.production!, length: seen.view.phaseEndsAt! - seen.at };
+  };
+}
+
+describe('the event show on real engine months: the view plays exactly what the month report fired', () => {
+  let month: ReturnType<typeof playRealMonths>;
+  beforeAll(() => {
+    month = playRealMonths(QUIET_MONTH);
+  });
+
+  it('T-AC-1, T-AC-2: a real month firing comet pass and pest swarm runs production 24 200 ms, each event its own share', () => {
+    const { report, production, length } = month(TWO_EVENT_MONTH);
+    expect(report.events?.map(({ key, scope }) => ({ key, scope }))).toEqual([
+      { key: 'cometPass', scope: 'colony' },
+      { key: 'pestSwarm', scope: 'personal' },
+    ]);
+    expect(production.events.map(({ key, phase, weight, playMs }) => ({ key, phase, weight, playMs }))).toEqual([
+      { key: 'cometPass', phase: 'production', weight: 'headline', playMs: 7_000 },
+      { key: 'pestSwarm', phase: 'production', weight: 'spotlight', playMs: 5_200 },
+    ]);
+    // RULE-1: a 1 800 ms intro and 12 200 ms of stories make a 14 000 ms show, 9 200 past the 4 800 window.
+    expect(production.introMs).toBe(1_800);
+    expect(length).toBe(24_200);
+    expect(production.lengthMs).toBe(length);
+    expect(production.introMs + production.events.reduce((sum, e) => sum + e.playMs, 0)).toBe(14_000);
+  });
+
+  it('T-AC-1, T-AC-2: a real month firing only a solar flare runs production 19 000 ms, the flare a 7 000 ms headline', () => {
+    const { report, production, length } = month(ONE_EVENT_MONTH);
+    expect(report.events?.map((e) => e.key)).toEqual(['solarFlare']);
+    expect(production.events.map(({ key, weight, playMs }) => ({ key, weight, playMs }))).toEqual([{ key: 'solarFlare', weight: 'headline', playMs: 7_000 }]);
+    expect(production.introMs).toBe(1_800);
+    expect(length).toBe(19_000);
+    expect(production.lengthMs).toBe(19_000);
+  });
+
+  it('T-AC-1, T-AC-2: a real quiet month runs production its 15 000 ms and lists no events', () => {
+    const { report, production, length } = month(QUIET_MONTH);
+    expect(report.events).toEqual([]);
+    expect(production.events).toEqual([]);
+    expect(production.introMs).toBe(0);
+    expect(length).toBe(15_000);
+  });
+});
 
 describe('the event show: production lasts long enough for every event, and the view says how long each plays', () => {
   // A lone dust storm plays the 1 800 ms intro and its 7 000 ms, past the 4 800 ms window, so it lasts 19 000 (spec AM-5).
@@ -112,6 +201,20 @@ describe('the event show: production lasts long enough for every event, and the 
     const uneven = playMonth([...five, 'pestSwarm']).production;
     expect(uneven.events.map((e) => e.playMs)).toEqual([4_910, 4_911, 4_910, 4_911, 4_910, 3_648]);
     expect(uneven.introMs + uneven.events.reduce((sum, e) => sum + e.playMs, 0)).toBe(30_000);
+  });
+
+  it('T-AC-1: with headlines tuned to 0 ms, a lone dust storm plays 0 ms after its intro and production keeps its 15 000 ms', () => {
+    const headlineMs = EVENT_SHOW.playMs.headline;
+    EVENT_SHOW.playMs.headline = 0;
+    try {
+      const { production, length } = playMonth(['dustStorm']);
+      expect(production.events.map((e) => e.playMs)).toEqual([0]);
+      expect(production.introMs).toBe(1_800);
+      expect(length('production')).toBe(15_000);
+      expect(production.lengthMs).toBe(15_000);
+    } finally {
+      EVENT_SHOW.playMs.headline = headlineMs;
+    }
   });
 
   it('T-AC-2: a quiet month lists no events and plays no intro', () => {

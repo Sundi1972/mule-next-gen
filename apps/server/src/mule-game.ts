@@ -183,11 +183,13 @@ function eventShow(events: readonly MonthEvent[]) {
   const showMs = Math.min(EVENT_SHOW.capMs, introMs + Math.round(total));
   const sharedMs = showMs - introMs;
   // Each share runs from where the last one ended, rounded on the running total, so intro and shares add up to showMs.
+  // A config whose events all play 0 ms leaves nothing to share: each gets 0, not 0 / 0.
+  const sharedUpTo = (playedMs: number) => (total > 0 ? Math.round((playedMs * sharedMs) / total) : 0);
   let played = 0;
   const shares = weights.map((weight, i) => {
-    const from = Math.round((played * sharedMs) / total);
+    const from = sharedUpTo(played);
     played += plays[i]!;
-    return { weight, playMs: Math.round((played * sharedMs) / total) - from };
+    return { weight, playMs: sharedUpTo(played) - from };
   });
   return { showMs, introMs, shares };
 }
