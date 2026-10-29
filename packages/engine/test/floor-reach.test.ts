@@ -466,6 +466,18 @@ describe('the dev floor: the action button', () => {
     }
   });
 
+  it('T-AC-3: on an own plot with a MULE, Alloy held, not analysed, leading none, the button says ANALYSE, then FIT FILTER, then where to go', () => {
+    const { state, floor } = world({ at: () => onTile(7, 4), game: (s) => void (a(s).stock.alloy = DEVELOPMENT.filterAlloy) });
+    const press = (f: DevFloor) => tick(state, f, { a: { ...IDLE, act: true } }).floor;
+    expect(reachWords(reachNow(floor, state))).toEqual(words('ANALYSE'));
+    const analysed = press(floor);
+    expect(hasAnalysed(a(state), state, tileOf(state, 7, 4))).toBe(true);
+    expect(reachWords(reachNow(analysed, state))).toEqual(words('FIT FILTER', `${DEVELOPMENT.filterAlloy} Alloy`));
+    const filtered = press(analysed);
+    expect(tileOf(state, 7, 4).filter).toBe(true);
+    expect(reachWords(reachNow(filtered, state)), "row 14's hint").toEqual(words('TO THE STORE', null, false));
+  });
+
   it('T-AC-3: every outfit the game sells is offered at exactly one place in the hall', () => {
     const offered = HALL_PLACES.flatMap((place) => {
       const { state, floor } = world({ at: () => inHall(place), game: (s) => void (a(s).carriedMule = 'empty') });

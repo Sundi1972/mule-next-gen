@@ -124,6 +124,7 @@ const install: Row = ({ state, cfg, colonist: c, player: p, tile }) => {
   return plot && { kind: 'install', enabled: true, good, plot: at(plot), fromShore: plot !== tile, replaces: plot.outfit };
 };
 
+// Row 11's "no MULE" is the one led, not the plot's: a plot with a MULE on it can be analysed too.
 const analyse: Row = ({ state, player: p, tile }) =>
   tile?.owner === p.id && !p.carriedMule && !hasAnalysed(p, state, tile) ? { kind: 'analyse', enabled: true, plot: at(tile) } : null;
 
@@ -139,6 +140,7 @@ const pub: Row = ({ state, cfg, player: p, place, secondsLeft }) => {
 };
 
 /** RULE-3's rows 5 to 13 in its order: the first that holds is the reach, and row 14 is none. */
+// Row 11a, TAKE MULE, slots in after filter: any earlier, it would hide ANALYSE and FIT FILTER on a plot with a MULE.
 const ROWS: readonly Row[] = [enter, sell, buy, outfit, leave, install, analyse, filter, pub];
 
 const dim = (hint: ReachHint): Reach => ({ kind: 'none', enabled: false, hint });
