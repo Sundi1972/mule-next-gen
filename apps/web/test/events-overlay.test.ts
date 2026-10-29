@@ -229,7 +229,7 @@ describe('B-AC-4 (C10): a phase’s events play over its screen on the phone', (
   it('B-AC-4: alone, the phone plays development’s sickness itself over the development screen', async () => {
     const html = await render(await phone(OSSA, 0, viewAt(ROLL_S)));
     expect(tag(html, 'phone-event-overlay')).toContain('data-mode="solo"');
-    expect(tag(html, 'phone-event-overlay')).toContain('data-phase="development"');
+    expect(tag(html, 'phone-event-overlay')).toContain('data-event-phase="development"');
     // Over the development screen: the screen is still there under it, and the show plays its own map.
     expect(html).toContain('data-testid="game-shell"');
     expect(inside(html, 'phone-event-overlay')).toContain('data-testid="event-map"');
@@ -303,9 +303,10 @@ describe('B-AC-4 (C10): a phase’s events play over its screen on the phone', (
 describe('T-AC-10 display / C11: two sick players play in ONE roll call, on the TV and each phone', () => {
   it('T-AC-10: the TV plays the show over development: one roll call names each sick player once; their colonists and slots carry the sick tag', async () => {
     const html = await render(await tv(viewAt(RESULT_S)));
-    expect(tag(html, 'tv-event-overlay')).toContain('data-phase="development"');
-    // The development screen is still under it.
-    expect(html).toContain('data-phase="development"');
+    expect(tag(html, 'tv-event-overlay')).toContain('data-event-phase="development"');
+    // The development screen is still under it, and the overlay never claims the phase screen's own attribute
+    // (other lanes' browser steps select the phase screen by [data-phase]).
+    expect(html.match(/ data-phase="/g)?.length).toBe(1);
     const over = inside(html, 'tv-event-overlay');
     expect(count(over, 'data-testid="roll-call"')).toBe(1);
     const roll = inside(over, 'roll-call');

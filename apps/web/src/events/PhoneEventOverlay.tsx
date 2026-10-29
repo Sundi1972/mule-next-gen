@@ -68,7 +68,7 @@ function PhoneEventShow({ view }: { view: MuleView }) {
           className="pointer-events-none absolute bottom-3 right-[calc(var(--rail)+0.75rem+env(safe-area-inset-right))] z-40 flex w-[268px] flex-col gap-2 rounded-panel border border-holo-line bg-panel/95 p-2.5 text-ink shadow-chip"
           data-testid="phone-event-overlay"
           data-mode="light"
-          data-phase={view.phase}
+          data-event-phase={view.phase}
         >
           {!solo && <AnnounceBuzz />}
           <EventTvPhoneRail me={me.id} />
@@ -78,7 +78,7 @@ function PhoneEventShow({ view }: { view: MuleView }) {
   return (
     <EventShow events={show.events} introMs={show.introMs} t={t} mode={solo ? 'solo' : 'tv'} reduced={reduced} width={view.width} height={view.height} tiles={tiles} players={players}>
       {/* While the server holds the phase, both cover its screen for the whole show: the gallery's PhoneSolo and PhoneShow. */}
-      <div className="absolute inset-0 z-40 flex gap-2 bg-table p-2 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] text-ink" data-testid="phone-event-overlay" data-mode={solo ? 'solo' : 'light'} data-phase={view.phase}>
+      <div className="absolute inset-0 z-40 flex gap-2 bg-table p-2 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] text-ink" data-testid="phone-event-overlay" data-mode={solo ? 'solo' : 'light'} data-event-phase={view.phase}>
         {!solo && <AnnounceBuzz />}
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex items-center gap-2 px-1">

@@ -64,7 +64,7 @@ export function TvEventOverlay({ game }: { game: MuleView }) {
   if (!show) return null;
   return (
     <SeatSpeciesProvider value={seatSpecies(game)}>
-    <div className="absolute inset-0 z-40 flex flex-col gap-4 bg-table px-10 py-6 text-ink" data-testid="tv-event-overlay" data-phase={game.phase}>
+    <div className="absolute inset-0 z-40 flex flex-col gap-4 bg-table px-10 py-6 text-ink" data-testid="tv-event-overlay" data-event-phase={game.phase}>
       <EventShow events={show.events} introMs={show.introMs} t={show.t} mode="tv" reduced={reduced} width={game.width} height={game.height} tiles={tiles} players={players}>
         <TvHeader game={game} title={PHASE_NAME[game.phase]} extra={<EventPips />} />
         <div className="flex min-h-0 flex-1 gap-6 [container-type:size]">
