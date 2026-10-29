@@ -210,6 +210,32 @@ describe('the live auction: goods one at a time', () => {
     expect([...stages].sort()).toEqual(['over', 'status', 'walk']);
   });
 
+  it('T-AC-3 (A-7): a number in WALK.statusMs restores the status clock: with nobody Done the walk starts after exactly that time; with everyone Done it ends early', () => {
+    const saved = WALK.statusMs;
+    try {
+      WALK.statusMs = 8_000;
+      const timed = newGame();
+      timed.players[0]!.stock.food = 6;
+      startAuction(timed, ['food']);
+      let ticks = 0;
+      while (a(timed).stage === 'status' && ticks < 1_000) {
+        stepAuction(timed, TICK);
+        ticks++;
+      }
+      expect(ticks).toBe(8_000 / TICK);
+      expect(a(timed)).toMatchObject({ good: 'food', stage: 'walk', clockMs: WALK.goodMs });
+
+      const early = newGame();
+      early.players[0]!.stock.food = 6;
+      startAuction(early, ['food']);
+      for (const p of early.players) auctionDone(early, p.id);
+      stepAuction(early, TICK);
+      expect(a(early)).toMatchObject({ good: 'food', stage: 'walk' });
+    } finally {
+      WALK.statusMs = saved;
+    }
+  });
+
   it('T-AC-3: everyone pressing Done on the status screen goes straight to the walk', () => {
     const state = newGame();
     state.players[0]!.stock.food = 6;
