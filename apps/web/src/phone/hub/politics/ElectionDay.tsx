@@ -1,7 +1,7 @@
 import { POLITICS, type Office, type TaxPromise } from '@mule/engine';
 import type { ElectionView, MuleView, MyView, PoliticsView } from '@mule/protocol';
 import { cx } from '@mule/ui';
-import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useSyncExternalStore, type ReactNode } from 'react';
 import { useClient } from '../../../net/react';
 import { usePhoneGame } from '../../game';
 import { useWide } from '../../Shell';
@@ -109,12 +109,8 @@ function Ballot({ election }: { election: ElectionView }) {
   useEffect(() => forgetPicks, []);
   const mine: BallotOf = { seat: me.id, month: view.month };
   const offices = contested(election.candidates);
-  const drawn = useRef<MuleView | null>(null);
   useEffect(() => {
-    // A tap draws the same view again; only a new one from the server can answer a vote.
-    const fresh = drawn.current !== view;
-    drawn.current = view;
-    for (const o of offices) serverShows(mine, o, me.politics?.ballot[o], fresh);
+    for (const o of offices) serverShows(mine, o, me.politics?.ballot[o]);
   });
   return (
     <DayCard at={2} testid="ballot-card">
@@ -251,14 +247,12 @@ export function pickOn(ballot: BallotOf, office: Office, id: string, server?: st
 }
 
 /**
- * Where a server pick falls among this phone's votes on the way: the index of the one it answers, the last when it
+ * Where a new server pick falls among this phone's votes on the way: the index of the one it answers, the last when it
  * shows the latest pick; -1 when it answers none of them, a vote from elsewhere. Unchanged, it answers nothing new.
- * `fresh` when it came in a new view.
  */
-function answerTo(pick: HeldPick, at: string, fresh = false): number | 'unchanged' {
-  // The server applies the votes in order, so an answer is never to one before the last answered. A new view back at
-  // the pick seen still answers when it shows the latest: the room sends one view for votes that arrive together.
-  if (at === pick.seen && !(fresh && at === pick.id)) return 'unchanged';
+function answerTo(pick: HeldPick, at: string): number | 'unchanged' {
+  if (at === pick.seen) return 'unchanged';
+  // The server applies the votes in order, so an answer is never to one before the last answered.
   return pick.sent.indexOf(at, pick.answered);
 }
 
@@ -272,11 +266,11 @@ function shownPick(ballot: BallotOf, office: Office, server: string | undefined)
 }
 
 /** Takes in the server's pick once drawn: an answer to this phone's votes moves past them; a vote from elsewhere ends them. */
-function serverShows(ballot: BallotOf, office: Office, server: string | undefined, fresh: boolean): void {
+function serverShows(ballot: BallotOf, office: Office, server: string | undefined): void {
   const mine = heldPick(ballot, office);
   if (!mine || mine.sent.length === 0) return;
   const at = server ?? '';
-  const answer = answerTo(mine, at, fresh);
+  const answer = answerTo(mine, at);
   if (answer === 'unchanged') return;
   if (answer === -1) {
     held!.picks.delete(office);
