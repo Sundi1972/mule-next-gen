@@ -6,7 +6,7 @@ import WebSocket from 'ws';
 import { ceremonyBeats, openPlanning, POLITICS, RuleError, WALK, type CeremonyBeat, type GameState, type Office, type TaxPromise } from '@mule/engine';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
 import { createMuleServer, type MuleServer } from '../src/server.js';
-import { fakeContext, readyAll } from './fake-context.js';
+import { fakeContext, readyAll, throughSidePicks } from './fake-context.js';
 
 /** RULE-10: a Governor run carries a promise; tests about something else hold the tax. */
 const HOLD: TaxPromise = { kind: 'hold' };
@@ -197,7 +197,8 @@ function started(options: { phaseScale?: number; seed?: number; seats?: typeof p
   const fake = fakeContext({ onChanged, table: seats });
   const game = new MuleGame(fake.ctx, seed, { politics: true, ...rest });
   game.start(seats);
-  return { game, ...fake };
+  // A good's side pick has no clock (A-7): every step presses Ready there for the humans not yet Done.
+  return { game, ...fake, advance: throughSidePicks(game, fake.advance) };
 }
 type Started = ReturnType<typeof started>;
 
