@@ -94,12 +94,12 @@ Standing authority line, in every handoff:
 
 ## Phase P1 · PR-1 (wave 1, production)
 
-### Task 0: Base and sub-branch
+### Task 0: Base and sub-branch · ✅ base 979875a2
 
-- [ ] **Step 1:** `git switch -c ws8-show-pr1 ws8-events` (ws8-events contains the mock at de9d6b7 and trunk b3774fa)
-- [ ] **Step 2:** if WS6's #139 has merged into `feat/strategist`, merge it in now (spec §7 R-2); run `pnpm typecheck && pnpm test`, expect exit 0
+- [x] **Step 1:** `git switch -c ws8-show-pr1 ws8-events` (ws8-events contains the mock at de9d6b7 and trunk b3774fa)
+- [x] **Step 2:** if WS6's #139 has merged into `feat/strategist`, merge it in now (spec §7 R-2); run `pnpm typecheck && pnpm test`, expect exit 0
 
-### Task 1: The show's lengths and production's length — C1, C2, C3
+### Task 1: The show's lengths and production's length — C1, C2, C3 · ✅ merged fc9ddf09
 
 **Depends on:** — · **ACs verified:** T-AC-1, T-AC-2 · **Spec sections consumed:** §1 C1-C3, §2 RULE-1, §3
 
@@ -110,21 +110,21 @@ Standing authority line, in every handoff:
 - Modify: `apps/server/test/production-view.test.ts` (fixture lines only)
 - Test: `apps/server/test/events-view.test.ts` (new)
 
-- [ ] **Step 1: Write the failing test `T-AC-1: production runs long enough for its events (RULE-1)`**
+- [x] **Step 1: Write the failing test `T-AC-1: production runs long enough for its events (RULE-1)`**
   Altitude: promise — `MuleGame`'s view with the fake context (`apps/server/test/fake-context.ts`): assert
   `phaseEndsAt − now` and `production.lengthMs`. Cases from RULE-1's examples, plus phaseScale 0.1. Report events are
   injected through the month report (the engine's `runProduction` is WS1's; do not edit it). Negative: upkeep's length
   is unchanged.
-- [ ] **Step 2: Write the failing test `T-AC-2: the production view lists every event in fired order with phase, weight and playMs`**
+- [x] **Step 2: Write the failing test `T-AC-2: the production view lists every event in fired order with phase, weight and playMs`**
   Altitude: contract — the view a screen receives. Negative: a quiet month lists none.
-- [ ] **Step 3: Run both; expect FAIL** — `pnpm --filter @mule/server exec vitest run test/events-view.test.ts` → FAIL (EVENT_SHOW not exported)
-- [ ] **Step 4: Implement C1 per spec §1 C1 and §3 EVENT_SHOW.** Mechanism: sprout. Values from the gallery's TV beats
+- [x] **Step 3: Run both; expect FAIL** — `pnpm --filter @mule/server exec vitest run test/events-view.test.ts` → FAIL (EVENT_SHOW not exported)
+- [x] **Step 4: Implement C1 per spec §1 C1 and §3 EVENT_SHOW.** Mechanism: sprout. Values from the gallery's TV beats
   (`design/mocks/ws8-events/src/events.ts::BEAT`, `::playLength`, `src/story.ts::STORY`), in ms; `productionWindowMs: 4_800`.
-- [ ] **Step 5: Implement C2 and C3 per spec §1 C2, C3 and §2 RULE-1.** Mechanism: in_place. Plan-drift corrections: none.
-- [ ] **Step 6: Run** `pnpm --filter @mule/server exec vitest run` → PASS, including `production-view.test.ts` and `phase-scale.test.ts` unchanged except the fixture lines
-- [ ] **Step 7: Commit** — red then green: `test(server): T-AC-1, T-AC-2 …` then `feat(server): C1-C3 events set production's length and reach the view (verifies T-AC-1, T-AC-2)`
+- [x] **Step 5: Implement C2 and C3 per spec §1 C2, C3 and §2 RULE-1.** Mechanism: in_place. Plan-drift corrections: none.
+- [x] **Step 6: Run** `pnpm --filter @mule/server exec vitest run` → PASS, including `production-view.test.ts` and `phase-scale.test.ts` unchanged except the fixture lines
+- [x] **Step 7: Commit** — red then green: `test(server): T-AC-1, T-AC-2 …` then `feat(server): C1-C3 events set production's length and reach the view (verifies T-AC-1, T-AC-2)`
 
-### Task 2: The show module, wave-1 looks — C4
+### Task 2: The show module, wave-1 looks — C4 · ✅ merged d76a2d08
 
 **Depends on:** Task 1 (contract) · **ACs verified:** (T-AC-4, T-AC-6 with Tasks 3-6) · **Spec sections consumed:** §1 C4, §0.2 HC-1, HC-6
 
@@ -133,20 +133,20 @@ Standing authority line, in every handoff:
 - Modify: `packages/ui/src/index.ts` (one export line), `packages/ui/src/theme.css` (one @import line)
 - Test: `packages/ui/test/events-segments.test.ts` (new)
 
-- [ ] **Step 1: Write the failing test `T-AC-4: a segment per event, in fired order, of the view's playMs`**
+- [x] **Step 1: Write the failing test `T-AC-4: a segment per event, in fired order, of the view's playMs`**
   Altitude: unit — the module's pure timing core (many combinations; the rendered check is in Task 3). Negative: no
   events → no segments.
-- [ ] **Step 2: Run** `pnpm --filter @mule/ui exec vitest run test/events-segments.test.ts` → FAIL (module missing)
-- [ ] **Step 3: Implement C4 per spec §1 C4.** Mechanism: fill_scaffold. Graft from `design/mocks/ws8-events/src` at
+- [x] **Step 2: Run** `pnpm --filter @mule/ui exec vitest run test/events-segments.test.ts` → FAIL (module missing)
+- [x] **Step 3: Implement C4 per spec §1 C4.** Mechanism: fill_scaffold. Graft from `design/mocks/ws8-events/src` at
   de9d6b7: `living.tsx`, `events.ts` (timing only), `glyphs.tsx`, `copy.ts`, `catalogue.ts` (display data), `fx.tsx`,
   `phone.tsx`, the wave-1 parts of `scene.tsx`/`stories-plots.tsx` (bumper harvest). Replace: the mock's fixtures
   (`scenarios.ts`, `fixture.ts`), `stage.tsx`'s show context (the caller passes `t`), the borrowed `PlotMap` (use
   `HoloMap`). Keep every `data-testid`. Plan-drift corrections: segment lengths come from the view's `playMs`, never
   from `STORY`/`BEAT` at runtime (HC-3).
-- [ ] **Step 4: Run** the test → PASS; `pnpm --filter @mule/ui typecheck` → 0
-- [ ] **Step 5: Commit** — `test(ui): T-AC-4 …` then `feat(ui): C4 the event show module, wave-1 looks`
+- [x] **Step 4: Run** the test → PASS; `pnpm --filter @mule/ui typecheck` → 0
+- [x] **Step 5: Commit** — `test(ui): T-AC-4 …` then `feat(ui): C4 the event show module, wave-1 looks`
 
-### Task 3: The production show plays every event — C5
+### Task 3: The production show plays every event — C5 · ✅ merged 8048e5a7
 
 **Depends on:** Task 2 · **ACs verified:** T-AC-3, T-AC-4 · **Spec sections consumed:** §1 C5, §2 RULE-1, RULE-2
 
@@ -154,15 +154,15 @@ Standing authority line, in every handoff:
 - Modify: `packages/ui/src/components/ProductionMap.tsx` (`::ProductionMap`, `::finalUnits`, `::landed`, `::SHOW` use, `::showTime`)
 - Test: `apps/web/test/events-production.test.ts` (new)
 
-- [ ] **Step 1: Write the failing tests `T-AC-3: a plot adds every event's delta in order, never below 0` and `T-AC-4: the map shows the event that is playing; the goods fly after the last`**
+- [x] **Step 1: Write the failing tests `T-AC-3: a plot adds every event's delta in order, never below 0` and `T-AC-4: the map shows the event that is playing; the goods fly after the last`**
   Altitude: promise for T-AC-4 (rendered `data-event`, bar counts); unit for T-AC-3's RULE-2 example (1 → 0 → 0).
   Trap: a quiet month must render exactly as today — keep `apps/web/test/production-show.test.ts` unedited and green.
-- [ ] **Step 2: Run** `pnpm --filter @mule/web exec vitest run test/events-production.test.tsx` → FAIL
-- [ ] **Step 3: Implement C5 per spec §1 C5 and §2 RULE-1, RULE-2.** Mechanism: in_place.
-- [ ] **Step 4: Run** `pnpm --filter @mule/web exec vitest run` → PASS (production-show.test.ts unchanged)
-- [ ] **Step 5: Commit** red then green; send WS6 the ProductionMap.tsx hunk for review
+- [x] **Step 2: Run** `pnpm --filter @mule/web exec vitest run test/events-production.test.tsx` → FAIL
+- [x] **Step 3: Implement C5 per spec §1 C5 and §2 RULE-1, RULE-2.** Mechanism: in_place.
+- [x] **Step 4: Run** `pnpm --filter @mule/web exec vitest run` → PASS (production-show.test.ts unchanged)
+- [x] **Step 5: Commit** red then green; send WS6 the ProductionMap.tsx hunk for review
 
-### Task 3b: The intro has its own length — C1, C3, C4, C5 (spec AM-5)
+### Task 3b: The intro has its own length — C1, C3, C4, C5 (spec AM-5) · ✅ merged 990de10c
 
 **Depends on:** Task 3 (shares ProductionMap's timeline) · **ACs verified:** T-AC-1, T-AC-4 · **Spec sections consumed:** §8 AM-5, §2 RULE-1
 
@@ -170,12 +170,12 @@ Standing authority line, in every handoff:
 - Modify: `packages/engine/src/config.ts` (EVENT_SHOW.introMs), `apps/server/src/mule-game.ts::eventShow`, `::productionView`, `packages/protocol/src/index.ts::ProductionView` (introMs), `packages/ui/src/events/timing.ts`, `packages/ui/src/components/ProductionMap.tsx` (the window includes the intro)
 - Test: `apps/server/test/events-view.test.ts`, `packages/ui/test/events-segments.test.ts`
 
-- [ ] **Step 1: Strengthen `T-AC-1` (one dust storm → 19 000 ms; the cap includes the intro; a quiet month still 15 000) and `T-AC-4` (first and later events of equal weight play at equal pace; the intro occupies [start, start + introMs/1000) before the first segment)** → run → FAIL
-- [ ] **Step 2: Implement AM-5 per spec §8 AM-5 and §2 RULE-1.** Mechanism: in_place.
-- [ ] **Step 3: Run** server events-view + production-view + phase-scale, ui vitest, web events-production + production-show → PASS
-- [ ] **Step 4: Commit** red then green; send WS3 the protocol and mule-game hunks, WS6 the ProductionMap hunk
+- [x] **Step 1: Strengthen `T-AC-1` (one dust storm → 19 000 ms; the cap includes the intro; a quiet month still 15 000) and `T-AC-4` (first and later events of equal weight play at equal pace; the intro occupies [start, start + introMs/1000) before the first segment)** → run → FAIL
+- [x] **Step 2: Implement AM-5 per spec §8 AM-5 and §2 RULE-1.** Mechanism: in_place.
+- [x] **Step 3: Run** server events-view + production-view + phase-scale, ui vitest, web events-production + production-show → PASS
+- [x] **Step 4: Commit** red then green; send WS3 the protocol and mule-game hunks, WS6 the ProductionMap hunk
 
-### Task 4: The TV's production screen — C6
+### Task 4: The TV's production screen — C6 · ✅ merged dddd25c0, a218a76d
 
 **Depends on:** Task 3 · **ACs verified:** B-AC-1 · **Spec sections consumed:** §1 C6, §0.2 HC-1
 
@@ -183,15 +183,15 @@ Standing authority line, in every handoff:
 - Modify: `apps/web/src/table/TvProduction.tsx` (`may_edit_content`)
 - Test: `apps/web/test/events-tv.test.ts` (new)
 
-- [ ] **Step 1: Write the failing test `B-AC-1: the TV plays a drought then a pest swarm in order, each card listing the report's figures`**
+- [x] **Step 1: Write the failing test `B-AC-1: the TV plays a drought then a pest swarm in order, each card listing the report's figures`**
   Altitude: promise — rendered TvProduction from a fixture view, read through the gallery's data-testids. Negative: a
   quiet month shows no event card. Invariant: no figure that the fixture report does not hold.
-- [ ] **Step 2: Run** → FAIL
-- [ ] **Step 3: Implement C6 per spec §1 C6.** Mechanism: in_place. Composition from `design/mocks/ws8-events` (#event-dustStorm, #together-tg-storm), unchanged.
-- [ ] **Step 4: Run** `pnpm --filter @mule/web exec vitest run` → PASS
-- [ ] **Step 5: Commit** red then green; send WS6 the hunk
+- [x] **Step 2: Run** → FAIL
+- [x] **Step 3: Implement C6 per spec §1 C6.** Mechanism: in_place. Composition from `design/mocks/ws8-events` (#event-dustStorm, #together-tg-storm), unchanged.
+- [x] **Step 4: Run** `pnpm --filter @mule/web exec vitest run` → PASS
+- [x] **Step 5: Commit** red then green; send WS6 the hunk
 
-### Task 5: The phone plays the show alone — C7
+### Task 5: The phone plays the show alone — C7 · ✅ merged 06ce37f7, 533ab7bd
 
 **Depends on:** Task 3 · **ACs verified:** B-AC-2, T-AC-5 · **Spec sections consumed:** §1 C7, §2 RULE-3, §0.2 HC-6
 
@@ -199,28 +199,30 @@ Standing authority line, in every handoff:
 - Modify: `apps/web/src/phone/Production.tsx` (`may_edit_content`)
 - Test: `apps/web/test/events-phone.test.ts` (new)
 
-- [ ] **Step 1: Write the failing tests `B-AC-2: alone, the phone plays each event and a tap skips to the result` and `T-AC-5: RULE-3's four rows`**
+- [x] **Step 1: Write the failing tests `B-AC-2: alone, the phone plays each event and a tap skips to the result` and `T-AC-5: RULE-3's four rows`**
   Altitude: promise — rendered phone Production under `PhoneGameProvider` with `table.boards` 0 and 1, reduced motion
   on and off (matchMedia stub), a real click on `data-testid="skip"`. Both landscape sizes, 844×390 and 667×375 (spec AM-1). Negative: boards 1 → no map show, card only.
-- [ ] **Step 2: Run** → FAIL
-- [ ] **Step 3: Implement C7 per spec §1 C7 and §2 RULE-3.** Mechanism: in_place. Pin: `data-testid="harvest"` unchanged.
-- [ ] **Step 4: Run** `pnpm --filter @mule/web exec vitest run` → PASS
-- [ ] **Step 5: Commit** red then green; send WS6 the hunk
+- [x] **Step 2: Run** → FAIL
+- [x] **Step 3: Implement C7 per spec §1 C7 and §2 RULE-3.** Mechanism: in_place. Pin: `data-testid="harvest"` unchanged.
+- [x] **Step 4: Run** `pnpm --filter @mule/web exec vitest run` → PASS
+- [x] **Step 5: Commit** red then green; send WS6 the hunk
 
-### Task 6: Proof against the mock and front to back — T-AC-6, T-AC-9, spec §7 R-3
+### Task 6: Proof against the mock and front to back — T-AC-6, T-AC-9, spec §7 R-3 · ✅ merged c2d29277, 7ffcce59
 
 **Depends on:** Tasks 4, 5 · **ACs verified:** T-AC-6, T-AC-9 (and B-AC-1/B-AC-2 front to back)
 
-- [ ] **Step 1: `T-AC-6`:** run `review-loop/render-gate.mjs` (creating-screen-mocks skill) mock vs build for the TV
+- [x] **Step 1: `T-AC-6`:** run `review-loop/render-gate.mjs` (creating-screen-mocks skill) mock vs build for the TV
   and phone production views; expect every mock `data-testid` present. Positive-control it: rename one testid, see red, restore.
-- [ ] **Step 2: `T-AC-9`:** `pnpm sim -- --games 4 --players 4` on `ws8-events` and on this branch; `diff` the outputs → identical
-- [ ] **Step 3: Front to back (`B-AC-1`, `B-AC-2`):** a Playwright step that starts a seeded game whose production
+- [x] **Step 2: `T-AC-9`:** `pnpm sim -- --games 4 --players 4` on `ws8-events` and on this branch; `diff` the outputs → identical
+- [x] **Step 3: Front to back (`B-AC-1`, `B-AC-2`):** a Playwright step that starts a seeded game whose production
   fires two events and asserts the TV's `data-event` sequence and the phone-alone skip. The test command owns its stack
   (the existing e2e harness, `apps/web/e2e/harness.ts`). The step file is `apps/web/e2e/events.ts`, WS8's (PM
   ruling); an edit to WS4's harness or runner files is a named edit WS4 reviews. CI tier: local only; a regression-tier
   step only if proposed with its runtime and it proves UBER-AC-1 cheaply (lean CI).
-- [ ] **Step 4 (R-3):** screenshots at 844×390 and 1280×720 of a two-event production, reviewed by WS8 against the gallery
-- [ ] **Step 5: Commit**
+- [x] **Step 4 (R-3):** screenshots at 844×390 and 1280×720 of a two-event production, reviewed by WS8 against the gallery
+- [x] **Step 5: Commit**
+
+**Built beyond the plan text (each reviewed and merged on ws8-show-pr1):** lazy event glyphs so Node importers of `@mule/ui` load (430df0c5); WS6's `e2e/production-steps.ts` reads each event's own chip and story (AM-6/AM-7, 15c3352f); WS4's TvHeader `extra` for the pips (AM-9, in dddd25c0); the TV map fits with chat lines (in c2d29277).
 
 ### Gate: End of Phase P1 (PR-1 merge gate)
 
