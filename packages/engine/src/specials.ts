@@ -1,9 +1,10 @@
-import { MAP, sizeBand, type PlacedSpecialKind } from './config.js';
+import { EVENTS, MAP, sizeBand, type PlacedSpecialKind } from './config.js';
 import { RuleError } from './errors.js';
+import { eventChance, rowDice } from './events.js';
 import { neighbours, tileAt } from './grid.js';
 import type { GameMap } from './map-rules.js';
 import type { FitLine } from './production.js';
-import { createRng, type Rng } from './rng.js';
+import type { Rng } from './rng.js';
 import type { GameState, ProductionLine, RawGood, SpecialField, SpecialKind, Terrain, Tile } from './types.js';
 
 /**
@@ -161,10 +162,12 @@ export function relicFit(state: GameState, tile: Tile): { bonus: number; line: F
 /**
  * The month's change to special fields, once production has run: ruins with
  * an owner pay their salvage into the owner's stock and become a plain plot;
- * a cavern that produced Crystite this month may collapse into one.
+ * a cavern that produced Crystite this month may collapse into one. Returns
+ * the plots whose cavern collapsed.
  */
-export function settleSpecials(state: GameState, lines: readonly ProductionLine[]): void {
+export function settleSpecials(state: GameState, lines: readonly ProductionLine[]): number[] {
   const mined = new Set(lines.filter((l) => l.good === 'crystite' && l.made > 0).map((l) => l.tile));
+  const collapsed: number[] = [];
   state.tiles.forEach((tile, index) => {
     const special = tile.special;
     if (special?.kind === 'ruins' && special.salvage && tile.owner) {
@@ -172,16 +175,16 @@ export function settleSpecials(state: GameState, lines: readonly ProductionLine[
       delete tile.special;
     } else if (special?.kind === 'crystalCavern' && mined.has(index) && !state.whatIf && collapses(state, index)) {
       delete tile.special;
+      collapsed.push(index);
     }
   });
+  return collapsed;
 }
 
 // A what-if copy has a stand-in seed, so it can't know the real draw and imagines none, like events and colony lots.
 function collapses(state: GameState, index: number): boolean {
-  // Its own RNG from (seed, month, plot): no other draw in the game shifts it.
-  // literal-ok: hash-mixing multipliers that spread (seed, month, plot) over the seed space
-  const rng = createRng((Math.imul(state.seed, 0x9e3779b1) + Math.imul(state.month, 0x85ebca77) + Math.imul(index, 0xc2b2ae3d)) >>> 0);
-  return rng.chance(EFFECT.collapseChance);
+  // The cavern row's own dice for this plot: no other roll in the game shifts it.
+  return rowDice(state, 'cavernCollapse', 'production', String(index)).chance(eventChance(state, EVENTS.colony.cavernCollapse, 'production'));
 }
 
 /**
