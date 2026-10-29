@@ -673,7 +673,7 @@ describe("the new Governor's promise (C68, E-7)", () => {
     expect(textOf(onPhone(term(null, 5, 5), OfficesLine), 'roadmap-offices')).toBe('Governor: Lena, until month 6 · Next election: month 7');
   });
 
-  it("T-AC-70, E-7: the Governor's desk keeps the promise in view under the tax; past it, it says so", () => {
+  it("T-AC-70, E-7: the Governor's desk keeps the promise above the tax; past it, it says so", () => {
     const over = onPhone(term(CAP_4, 5, 5), GovernorDesk);
     expect(textOf(over, 'gov-promise')).toBe('Sales taxYou promised: no higher than 4%');
     expect(textOf(over, 'gov-breaks')).toBe('5%: this breaks your promise.');

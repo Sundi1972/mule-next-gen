@@ -32,7 +32,14 @@ function SalesTax({ politics }: { politics: PoliticsView }) {
   const done = state === 'done';
   return (
     <section className="flex flex-col gap-1 @min-[1100px]/shell:gap-2" data-testid="gov-tax">
-      {/* The tax row and its verdict first, so it stays above the rail's footer on a small phone (E-9). */}
+      <p className="text-xs @min-[1100px]/shell:text-base" data-testid="gov-promise">
+        <span className="label-caps mr-1.5 text-[10px]! @min-[1100px]/shell:text-xs!">Sales tax</span>
+        {promise && (
+          <>
+            You promised: <strong className="font-semibold">{promisedWords(promise, promiseBase(politics))}</strong>
+          </>
+        )}
+      </p>
       <div className="flex items-center gap-1.5">
         <Button size="md" variant="outline" className="w-11 shrink-0 px-0" aria-label="One point lower" disabled={tax <= low} onClick={() => setTax(Math.max(low, tax - 1))} data-testid="tax-down">
           −
@@ -71,14 +78,6 @@ function SalesTax({ politics }: { politics: PoliticsView }) {
           </p>
         )
       )}
-      <p className="text-xs @min-[1100px]/shell:text-base" data-testid="gov-promise">
-        <span className="label-caps mr-1.5 text-[10px]! @min-[1100px]/shell:text-xs!">Sales tax</span>
-        {promise && (
-          <>
-            You promised: <strong className="font-semibold">{promisedWords(promise, promiseBase(politics))}</strong>
-          </>
-        )}
-      </p>
       <p className="text-[11px] leading-snug text-ink-3 @min-[1100px]/shell:text-sm">
         This month {low}–{high}%, from last month’s {start}%. The tax fills the colony fund ({fmt(politics.fund)} cr), which pays you {POLITICS.pay.governor} cr a month. Everyone sees your tax beside your promise.
       </p>
