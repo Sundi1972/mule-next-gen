@@ -410,6 +410,8 @@ export function PhoneRevealWithTv({ show }: { show: Show }) {
   const mineWon = show.offices.find((s) => known(s)?.winner === me.id);
   const latest = show.offices.at(-1);
   const nextOffice = known(latest) !== null && latest!.office !== POLITICS.offices.at(-1);
+  // Once the TV has named the last office's winner there is nothing left to count.
+  const lastNamed = !nextOffice && latest ? known(latest) : null;
   const over = show.t >= show.summary && show.offices.length === POLITICS.offices.length;
   const baron = baronWords(view, view.politics!.baron, me.id);
   const promise = view.politics!.election!.promises[me.id];
@@ -470,7 +472,7 @@ export function PhoneRevealWithTv({ show }: { show: Show }) {
             </div>
           ) : (
             <div className="flex flex-col items-center gap-2 rounded-sheet border border-holo-line bg-panel p-3 text-center" data-testid="companion-wait">
-              <span className="font-display text-base font-semibold">{nextOffice ? 'Next office on the TV' : 'The votes are being counted on the TV'}</span>
+              <span className="font-display text-base font-semibold">{nextOffice ? 'Next office on the TV' : lastNamed ? `${name(lastNamed.winner)} is ${OFFICE_NAME[latest!.office]}. The TV shows the whole result.` : 'The votes are being counted on the TV'}</span>
               <span className="text-xs text-ink-2">Your phone shows each result once the TV has named the winner, so nobody’s screen gives it away.</span>
             </div>
           )}
