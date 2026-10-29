@@ -14,8 +14,8 @@ import { startClockQuestion } from '../src/phone/Develop';
 const LENA = 's1';
 const OSSA = 's2';
 
-/** Month 1's development on the real server: Lena (the host) and Ossa each own a plot next to the store, no MULE yet. */
-function firstMonth() {
+/** Month 1's development on the real server: `owners` (Lena, the host, and Ossa by default) each own a plot next to the store, no MULE yet. */
+function firstMonth(owners: string[] = [LENA, OSSA]) {
   const plots: Record<string, number> = {};
   const g = toDevelopment({
     players: walkers,
@@ -23,7 +23,7 @@ function firstMonth() {
     prepare: (state: GameState) => {
       const store = state.tiles.find((t) => t.terrain === 'store')!;
       const near = state.tiles.filter((t) => t.terrain !== 'store' && t.owner === null && Math.abs(t.x - store.x) + Math.abs(t.y - store.y) <= 2);
-      [LENA, OSSA].forEach((id, k) => {
+      owners.forEach((id, k) => {
         near[k]!.owner = id;
         plots[id] = tileIndex(state.width, near[k]!.x, near[k]!.y);
       });
@@ -77,7 +77,8 @@ describe("A-1: the phone while month 1's development clock waits", () => {
     installFirst(LENA);
     const html = phone(game, ctx.now(), LENA);
     expect(text(html)).toContain('Your MULE is in · waiting for Ossa');
-    expect(text(html)).toContain('Buying, installing and analysing start with the clock. The pub is open.');
+    expect(text(html)).toContain('Buying, installing and analysing wait for the clock.');
+    expect(text(html)).not.toContain('The pub is open');
     // Once in, you wait: the corral is shut, the pub open.
     expect(html).not.toMatch(/<button[^>]*data-shop="corral"(?![^>]*disabled="")[^>]*>/);
     expect(html).toMatch(/<button(?![^>]*disabled="")[^>]*aria-label="Go to the pub and end your turn"/);
@@ -125,5 +126,17 @@ describe("A-1: the host's Start the clock while month 1's development clock wait
     // A freshly drawn phone opens on the start card's row; the press changes its detail, never its title.
     expect(ossa).toContain('You eat, and the clock starts for everyone');
     expect(ossa).not.toContain('no rush');
+  });
+});
+
+describe('A-1: a seat with no plot is in from the start, and waits', () => {
+  it('A-1: with no plot, the Now card says so and names who the clock waits for; the corral is shut and the pub open', () => {
+    const { game, ctx } = firstMonth([OSSA]);
+    const html = phone(game, ctx.now(), LENA);
+    expect(text(html)).toContain('No plot this month · waiting for Ossa');
+    expect(text(html)).toContain('The clock starts when every first MULE is in.');
+    expect(text(html)).not.toContain('Your MULE is in');
+    expect(html).not.toMatch(/<button[^>]*data-shop="corral"(?![^>]*disabled="")[^>]*>/);
+    expect(html).toMatch(/<button(?![^>]*disabled="")[^>]*aria-label="Go to the pub and end your turn"/);
   });
 });

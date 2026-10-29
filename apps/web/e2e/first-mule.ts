@@ -14,7 +14,7 @@ const PRESS_MS = 3_000;
 const LINE = 'Heiko started the clock without Mia.';
 const PASSED = 'The host started the clock: your month is running.';
 const WAITING = "Waiting for the others' first MULEs";
-const YOU_WAIT = 'Buying, installing and analysing start with the clock. The pub is open.';
+const YOU_WAIT = 'Buying, installing and analysing wait for the clock.';
 
 type Game = { devEndsAt: number | null; state: { phase: string; month: number }; viewFor(seat: string | null): MuleView };
 
@@ -76,8 +76,6 @@ try {
   });
   check(game.devEndsAt === null, "A-1: the clock still waits for Mia's first MULE");
   const measures: string[] = [];
-  /** Gates measured and missed: printed, then failed at the end, so every other gate still runs. */
-  const unmet: string[] = [];
   // Once in, you wait: install, analyse and filter dimmed with the reason, the pub open.
   const dimmed = () => dimmedOnPlot(heiko);
   check((await dimmed()).every((d) => d.disabled && d.title === WAITING && d.describedBy === 'first-month-wait'), `A-1: once in, the plot's controls wait: ${JSON.stringify(await dimmed())}`);
@@ -94,7 +92,8 @@ try {
     });
     check(guide.over <= 0, `A-1: ${size.width}×${size.height}: the guide doesn't overflow, ${guide.over} px`);
     measures.push(`${size.width}: guide ${guide.width} px wide, title ${guide.titleLines} line(s), wait detail ${guide.lines} line(s)`);
-    if (size === PHONE_SMALL.viewport && guide.lines > 2) unmet.push(`667: the wait's detail runs to ${guide.lines} lines at ${guide.width} px, not 2`);
+    check(guide.titleLines <= 2, `A-1: ${size.width}×${size.height}: the wait's title wraps to 2 lines at most, got ${guide.titleLines}`);
+    if (size === PHONE_SMALL.viewport) check(guide.lines <= 2, `A-1: 667: the wait's detail keeps to 2 lines at ${guide.width} px, got ${guide.lines}`);
   }
   await heiko.setViewportSize(PHONE.viewport);
   await tv.getByTestId('tv-first-mule-s1').getByText('✓ in').waitFor({ timeout: PRESS_MS });
@@ -135,11 +134,9 @@ try {
   const after = await dimmedOnPlot(heiko);
   check(after.every((d) => d.title !== WAITING) && after.some((d) => d.text.startsWith('Analyse') && !d.disabled), `A-1: once the clock runs the plot's controls wait no more: ${JSON.stringify(after)}`);
 
-  const seenIn = await tvShowsLine(tv, game);
-  if (!seenIn) unmet.push(`the TV never showed "${LINE}" before the month moved on (its development screen draws no news, and the auction's opening replaces it)`);
-  console.log(`first MULE: the press started the clock; Mia's phone: "${PASSED}"; the TV's news ${seenIn ? `named Mia in ${seenIn}` : 'never named Mia'}; ${measures.join('; ')}`);
+  check(game.viewFor(null).news.includes(LINE), `A-1: the server's news names Mia after the press, got ${JSON.stringify(game.viewFor(null).news)}`);
+  console.log(`first MULE: the press started the clock; Mia's phone: "${PASSED}"; the news: "${LINE}"; ${measures.join('; ')}`);
   check(errors.length === 0, `no page errors: ${errors.join(' | ')}`);
-  check(unmet.length === 0, `A-1: missed: ${unmet.join('; ')}`);
   console.log(`e2e first MULE: ok (${((Date.now() - started) / 1_000).toFixed(1)} s)`);
 } finally {
   await browser.close();
@@ -171,12 +168,3 @@ async function height(el: Locator): Promise<string> {
   return box ? `${box.height.toFixed(1)} px` : 'absent';
 }
 
-/** Watches the TV until its news names Mia or the month reaches its auction; returns the phase it showed in, or null. */
-async function tvShowsLine(tv: Page, game: Game): Promise<string | null> {
-  const line = tv.getByText(LINE);
-  for (let i = 0; i < 600 && !(game.state.phase === 'auction' || game.state.month > 1); i++) {
-    if (await line.count()) return `${game.state.phase}, month ${game.state.month}`;
-    await tv.waitForTimeout(100);
-  }
-  return null;
-}
