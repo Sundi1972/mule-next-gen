@@ -369,6 +369,11 @@ export async function theLedMuleLightsUp(phone: Page, server: MuleServer, code: 
     await phone.getByTestId('now-title').filter({ hasText: INSTALLED }).waitFor({ timeout: waits ? FIRST_MULES_MS : 2_000 }).catch(() => undefined);
     after = [...after, (await phone.getByTestId('now-title').textContent()) ?? ''];
   }
+  if (waits) {
+    check(gameOf(server, code).devEndsAt !== null, `A-1: month 1's clock did not start within ${FIRST_MULES_MS / 1_000} s of her MULE going in (devEndsAt still null)`);
+    // giveStoreTime gave nothing while the clock waited: give the walk-through its time now that it runs.
+    giveStoreTime(server, code, seat);
+  }
   check(after.at(-1) === INSTALLED, `B-AC-15: once the clock runs Now says "${INSTALLED}", saw ${JSON.stringify(after)}`);
   check(!after.includes('Buy a MULE at the corral'), `B-AC-15: no frame shows "Buy a MULE" between the install and row 7, saw ${JSON.stringify(after)}`);
   await dev.getByRole('button', { name: 'Store', exact: true }).click({ timeout: 2_000 });
