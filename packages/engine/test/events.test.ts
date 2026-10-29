@@ -703,7 +703,8 @@ describe('cavern collapse', () => {
               line: expect.stringMatching(/^[^.\d]+\.$/),
               scope: 'personal',
               origin: { x: tile.x, y: tile.y },
-              plots: [{ index, order: 0, good: 'crystite', delta: 0 }],
+              // The plot was a cavern and becomes plain: the screens keep the badge until the hit lands.
+              plots: [{ index, order: 0, good: 'crystite', delta: 0, was: 'crystalCavern', becomes: 'plain' }],
               player: tile.owner,
               sign: 'bad',
               phase: 'production',
