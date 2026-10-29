@@ -250,15 +250,26 @@ describe('T-AC-10: the view carries the current phase\'s events, when their show
     // One shape for every phase: production's own list is the same list, field for field.
     expect(view.events).toEqual(production.events);
     // RULE-1: the 1 800 ms intro and 12 200 ms of stories; the intro starts 4.8 s into production, where the client plays it.
-    expect(view.eventShow).toEqual({ startsAt: at + PRODUCTION_SHOW_AT, showMs: 14_000, introMs: 1_800 });
+    expect(view.eventShow).toEqual({ startsAt: at + PRODUCTION_SHOW_AT, showMs: 14_000, introMs: 1_800, endsAt: at + PRODUCTION_SHOW_AT + 14_000 });
     expect(view.eventShow!.startsAt).toBeLessThan(view.phaseEndsAt!);
+  });
+
+  it('T-AC-10: a personal event names the player whose land it started on; a colony event names nobody', () => {
+    const { view, report } = month(TWO_EVENT_MONTH);
+    const swarmOwner = report.events![1]!.player;
+    expect(swarmOwner).toMatch(/^s\d$/);
+    expect(view.events!.map(({ key, scope, player }) => ({ key, scope, player }))).toEqual([
+      { key: 'cometPass', scope: 'colony', player: undefined },
+      { key: 'pestSwarm', scope: 'personal', player: swarmOwner },
+    ]);
+    expect('player' in view.events![0]!).toBe(false);
   });
 
   it('T-AC-10: the view carries the phase\'s events with startsAt and showMs: a real lone solar flare', () => {
     const { view, at, production } = month(ONE_EVENT_MONTH);
     expect(view.events).toEqual(production.events);
     expect(view.events!.map((e) => e.key)).toEqual(['solarFlare']);
-    expect(view.eventShow).toEqual({ startsAt: at + PRODUCTION_SHOW_AT, showMs: 8_800, introMs: 1_800 });
+    expect(view.eventShow).toEqual({ startsAt: at + PRODUCTION_SHOW_AT, showMs: 8_800, introMs: 1_800, endsAt: at + PRODUCTION_SHOW_AT + 8_800 });
   });
 
   it('T-AC-10: a real quiet month carries no events and no show', () => {
@@ -270,7 +281,7 @@ describe('T-AC-10: the view carries the current phase\'s events, when their show
   it('T-AC-10: the show starts on the server clock at the table\'s pace; showMs and playMs stay at full pace', () => {
     const { seen } = playMonth(['drought', 'pestSwarm'], 0.1);
     const { view, at } = seen('production');
-    expect(view.eventShow).toEqual({ startsAt: at + PRODUCTION_SHOW_AT * 0.1, showMs: 14_000, introMs: 1_800 });
+    expect(view.eventShow).toEqual({ startsAt: at + PRODUCTION_SHOW_AT * 0.1, showMs: 14_000, introMs: 1_800, endsAt: at + (PRODUCTION_SHOW_AT + 14_000) * 0.1 });
     expect(view.events!.map((e) => e.playMs)).toEqual([7_000, 5_200]);
   });
 
@@ -300,7 +311,7 @@ describe('T-AC-10: the view carries the current phase\'s events, when their show
     expect(auction.view.events!.map(({ key, phase, weight, playMs }) => ({ key, phase, weight, playMs }))).toEqual([
       { key: 'pestSwarm', phase: 'auction', weight: 'spotlight', playMs: 5_200 },
     ]);
-    expect(auction.view.eventShow).toEqual({ startsAt: auction.at, showMs: 7_000, introMs: 1_800 });
+    expect(auction.view.eventShow).toEqual({ startsAt: auction.at, showMs: 7_000, introMs: 1_800, endsAt: auction.at + 7_000 });
   });
 
   it('T-AC-10: last month\'s report lends next month nothing: an event filed for planning in month 1 is not month 2\'s planning', () => {
