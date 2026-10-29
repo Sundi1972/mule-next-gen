@@ -136,10 +136,13 @@ export interface CreatureProps {
   color: string;
   size?: number;
   className?: string;
-  /** What it does (gait.ts::motionOf). Any motion prop puts the drawing in its motion wrappers; none leaves it still. */
+  /**
+   * What it does (gait.ts::motionOf). Any motion prop puts the drawing in its motion wrappers; none leaves it still, so
+   * toggling the motion props between a value and `undefined` remounts the drawing.
+   */
   motion?: Motion;
   facing?: Facing;
-  /** Seconds per stride, or per breath standing (gait.ts::cycleSeconds). */
+  /** Seconds per stride, or per breath standing (gait.ts::cycleSeconds); a missing, NaN or non-positive one: default. */
   cycle?: number;
   /** Bites taken so far: each new one plays the flinch. */
   flinch?: number;
@@ -160,6 +163,7 @@ export const Creature = memo(function Creature({ species, color, size = 32, clas
     return <Drawing species={species} color={color} size={size} className={className} />;
   }
   const m = motion ?? 'idle';
+  const usable = cycle !== undefined && Number.isFinite(cycle) && cycle > 0;
   return (
     <CreatureInMotion
       species={species}
@@ -168,7 +172,7 @@ export const Creature = memo(function Creature({ species, color, size = 32, clas
       className={className}
       motion={m}
       facing={facing ?? 'right'}
-      cycle={cycle ?? (m === 'idle' ? GAIT.idleCycle : m === 'fight' ? GAIT.fightCycle : GAIT.fullCycle)}
+      cycle={usable ? cycle : m === 'idle' ? GAIT.idleCycle : m === 'fight' ? GAIT.fightCycle : GAIT.fullCycle}
       flinch={flinch ?? 0}
       strike={strike ?? 0}
       shadow={shadow ?? true}
@@ -204,17 +208,21 @@ const SWIPE: Keyframe[] = [
 const FLINCH_MS = 450;
 const STRIKE_MS = 380;
 
-export function replays(_seen: number, _count: number, _reduced: boolean): boolean {
-  throw new Error('NotImplemented: replays');
+/**
+ * Whether a one-shot plays: only when the counter rises past the last count seen (so not on mount, and not when a new
+ * round resets it), and never under reduced motion.
+ */
+export function replays(seen: number, count: number, reduced: boolean): boolean {
+  return count > seen && !reduced;
 }
 
-/** Plays the frames on each wrapper once whenever `count` moves on (not on mount), and never under reduced motion. */
+/** Plays the frames on each wrapper once whenever `count` rises (replays), then remembers the count. */
 function useOneShot(count: number, ms: number, plays: [RefObject<HTMLSpanElement | null>, Keyframe[]][]) {
   const seen = useRef(count);
   useEffect(() => {
-    if (count === seen.current) return;
+    const play = replays(seen.current, count, window.matchMedia('(prefers-reduced-motion: reduce)').matches);
     seen.current = count;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (!play) return;
     for (const [ref, frames] of plays) ref.current?.animate(frames, { duration: ms, easing: 'ease-out' });
     // `plays` holds refs and module constants, so only a new count replays.
   }, [count, ms]);

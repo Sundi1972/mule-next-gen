@@ -38,7 +38,7 @@ export const Mule = memo(function Mule({
   /** The owner's seat; its colour is the saddle cloth's and the antenna tips'. Omit for a store MULE. */
   owner?: Slot | undefined;
   facing?: 'left' | 'right';
-  /** Seconds per stride walking: the colonist's on the lead (gait.ts::cycleSeconds), so they step together. */
+  /** Seconds per stride walking: the colonist's on the lead (gait.ts::cycleSeconds). Unusable ones keep the 0.5 s. */
   cycle?: number;
   className?: string | undefined;
 }) {
@@ -64,7 +64,7 @@ export const Mule = memo(function Mule({
     );
   const swing = (reverse: boolean) => (walk ? (reverse ? 'animate-[mule-step_0.5s_ease-in-out_infinite_reverse]' : 'animate-[mule-step_0.5s_ease-in-out_infinite]') : undefined);
   // On a lead the stride is the colonist's; alone it is the classes' own 0.5 s.
-  const stride = walk && cycle !== undefined ? { animationDuration: `${cycle}s` } : undefined;
+  const stride = walk && cycle !== undefined && Number.isFinite(cycle) && cycle > 0 ? { animationDuration: `${cycle}s` } : undefined;
   return (
     <svg
       viewBox="0 0 48 40"

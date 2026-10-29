@@ -267,9 +267,9 @@
 /* The MULE character: it breathes and blinks standing, bobs and swings its legs walking, its pod pulses at work. */
 /*
  * The breath is held in twelve steps (played step-end): the old ease-in-out curve sampled every 0.22 s. A transform
- * animation on an SVG part relayouts the drawing on every frame its value changes; held, an idle MULE relayouts on a
- * step, about 4.6 times a second, not 60. The largest step is 0.16 of a drawing unit, under 0.3 px at the store's
- * widest MULE.
+ * animation on an SVG part lays the drawing out again and repaints it on every frame its value changes; held, it does
+ * so only on a step (measured with six idle MULEs at 844 x 390, CPU x4: 60 layouts/s before, 7.3 after). The largest
+ * step is 0.16 of a drawing unit, under 0.3 px at the store's widest MULE.
  */
 @keyframes mule-breathe {
   0% { transform: translateY(0) scaleY(1); }
