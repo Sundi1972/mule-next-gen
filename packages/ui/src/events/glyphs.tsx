@@ -104,6 +104,8 @@ const GLYPH: Record<ShowEventKey, () => ReactNode> = {
       <path {...F} d="M6.5 21.5 8 18l2.8.6.6 2.9ZM13 21.5l1.2-2.9 2.8 1.1.6 1.8ZM10.4 16.2l1.3-1.6 1.6 1-.7 1.7Z" />
     </>
   ),
+  // WS6's approved sick cross.
+  sickness: () => <path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6Z" {...F} />,
 };
 
 export function EventGlyph({ k, size = 24, className }: { k: ShowEventKey; size?: number; className?: string }) {
@@ -127,6 +129,7 @@ export const EVENT_ACCENT: Record<ShowEventKey, string> = {
   wildfire: 'var(--color-g-smithore)',
   bumperHarvest: 'var(--color-g-food)',
   cavernCollapse: 'var(--color-g-crystite)',
+  sickness: 'var(--color-g-medicine)',
 };
 export const accent = (k: ShowEventKey) => EVENT_ACCENT[k];
 

@@ -4,6 +4,7 @@ import { cx, type Slot } from '../components/tokens';
 import { useShow } from './frame';
 import { Overlays } from './cards';
 import { livingAt, Marks, Shade, Weather } from './living';
+import { EventColonists } from './rollcall';
 import { Stories } from './stories';
 import { eventSkipTo, isPlaying } from './timing';
 import type { ShowSize } from './types';
@@ -65,6 +66,7 @@ export function EventLivingMap({ size, focusSlot, bars, over, onSkip, light = fa
           <div className="pointer-events-none absolute inset-0 rounded-panel">
             {!light && <Stories size={size} />}
             <Marks size={size} {...(light && focusSlot !== undefined ? { slot: focusSlot } : {})} />
+            <EventColonists size={size} slot={light ? focusSlot : undefined} />
             {over}
           </div>
         </div>

@@ -12,7 +12,9 @@ export type ShowEventKey =
   | 'pestSwarm'
   | 'wildfire'
   | 'bumperHarvest'
-  | 'cavernCollapse';
+  | 'cavernCollapse'
+  // Not an EventKey: development's sick players, each sent as a bulletin (C11; the protocol's EventView widens to match).
+  | 'sickness';
 
 /** The engine's phases (packages/engine/src/types.ts Phase), so the protocol's views fit without a cast. */
 export type ShowPhase = 'planning' | 'landGrant' | 'landAuction' | 'development' | 'production' | 'auction' | 'upkeep' | 'gameOver';
@@ -40,6 +42,8 @@ export interface ShowEventView {
   phase: ShowPhase;
   weight: ShowWeight;
   playMs: number;
+  /** Whose event it is, when it is one player's and on no plot: a sick player (C11). */
+  player?: string;
 }
 
 export type ShowHit = ShowEventView['hits'][number];

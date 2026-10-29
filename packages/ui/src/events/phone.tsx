@@ -1,8 +1,10 @@
+import { PlayerMark } from '../components/PlayerMark';
 import { cx } from '../components/tokens';
-import { eventMissLine, eventSegLabel, phaseNoun, segTitle, eventWhoLine, eventYouSummary } from './copy';
+import { eventMissLine, eventSegWho, eventSegLabel, phaseNoun, segTitle, eventWhoLine, eventYouSummary } from './copy';
 import { signLook, useShow } from './frame';
 import { EventBuzz, EventSignBadge } from './glyphs';
-import { eventStageAt, isBuzzing, isPlaying, type EventSegment } from './timing';
+import { EventSickTag } from './rollcall';
+import { eventStageAt, isBuzzing, isPlaying, isRollCall, type EventSegment } from './timing';
 
 /**
  * The phone's rail through a phase, inside <EventShow>; the screen's shell places it. One small card at a time
@@ -17,14 +19,23 @@ export function EventPhoneCard({ seg, me, at, buzz = false }: { seg: EventSegmen
   const { cast } = useShow();
   const ev = seg.events[0]!;
   const you = eventYouSummary(seg, me, cast);
+  const roll = isRollCall(seg);
   const sign = signLook(ev.sign);
-  const mixed = sign === 'neutral';
+  const mixed = sign === 'neutral' || seg.events.some((e) => e.sign !== ev.sign);
   const tone = mixed ? 'border-holo bg-holo-soft' : sign === 'good' ? 'border-ok bg-holo-soft' : 'border-alert bg-alert-bg';
   const ink = mixed ? 'text-holo!' : sign === 'good' ? 'text-ok!' : 'text-alert-ink!';
   return (
     <div key={`${seg.n}-${at}`} className={cx('flex flex-col gap-1.5 rounded-panel border-2 p-2.5 animate-[ev-drop_0.3s_ease-out]', tone)} data-testid="phone-card" data-at={at} data-event={ev.key}>
       <div className="flex items-center gap-2">
-        <EventSignBadge ev={ev} size={40} />
+        {roll && seg.events.length > 1 ? (
+          <span className="flex -space-x-2">
+            {seg.events.map((e, i) => (
+              <EventSignBadge key={i} ev={e} size={30} />
+            ))}
+          </span>
+        ) : (
+          <EventSignBadge ev={ev} size={40} />
+        )}
         <span className="flex min-w-0 flex-col">
           <span className={cx('label-caps whitespace-nowrap text-[10px]! max-[700px]:tracking-[0.06em]', ink)}>{eventSegLabel(seg)}</span>
           <span className="font-display text-lg font-bold leading-tight">{segTitle(seg)}</span>
@@ -33,16 +44,33 @@ export function EventPhoneCard({ seg, me, at, buzz = false }: { seg: EventSegmen
           <EventBuzz on={buzz} />
         </span>
       </div>
-      {at === 'news' && (
-        <span className="text-xs leading-snug text-ink-2">
-          {eventWhoLine(ev, cast)}. {ev.line}
-        </span>
-      )}
+      {at === 'news' &&
+        (roll ? (
+          <ul className="flex flex-col gap-0.5 text-xs leading-snug text-ink-2">
+            {seg.events.map((e, i) => {
+              const id = cast.playerOf(e) ?? '';
+              const slot = cast.slotOf(id);
+              return (
+                <li key={i} className="flex items-center gap-1">
+                  {slot !== undefined && <PlayerMark slot={slot} size={12} />}
+                  <span className={cx(id === me && 'font-bold text-ink')}>{id === me ? 'You' : cast.name(id)}</span>: {e.title.toLowerCase()}
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <span className="text-xs leading-snug text-ink-2">
+            {eventWhoLine(ev, cast)}. {ev.line}
+          </span>
+        ))}
       {at === 'news' && ev.weight === 'headline' && <span className="w-fit rounded-chip bg-holo px-1.5 py-0.5 font-mono text-[10px] font-bold text-on-holo">LOOK AT THE TV ▸</span>}
       {at === 'you' &&
         (you ? (
           <div className="flex flex-col gap-1 animate-[ev-pop_0.3s_ease-out]" data-testid="phone-you">
-            <span className={cx('flex items-center gap-1.5 font-display text-base font-bold', sign === 'good' ? 'text-ok' : 'text-alert-ink')}>{you.headline}</span>
+            <span className={cx('flex items-center gap-1.5 font-display text-base font-bold', sign === 'good' ? 'text-ok' : 'text-alert-ink')}>
+              {you.sick && <EventSickTag size="phone" />}
+              {you.headline}
+            </span>
             <span className="text-xs leading-snug text-ink-2 max-[700px]:truncate" title={you.detail}>{you.detail}</span>
           </div>
         ) : (
@@ -70,7 +98,7 @@ export function EventNowPlaying({ seg, buzz }: { seg: EventSegment; buzz: boolea
       <span className="flex min-w-0 flex-col">
         <span className="label-caps whitespace-nowrap text-[10px]!">{eventSegLabel(seg)}</span>
         <span className="font-display text-base font-bold leading-tight">{segTitle(seg)}</span>
-        <span className="truncate text-[11px] text-ink-2">{eventWhoLine(ev, cast)}</span>
+        <span className="truncate text-[11px] text-ink-2">{eventSegWho(seg, cast)}</span>
       </span>
       <span className="ml-auto">
         <EventBuzz on={buzz} />

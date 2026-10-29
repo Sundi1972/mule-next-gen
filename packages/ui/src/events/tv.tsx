@@ -1,6 +1,6 @@
 import type { Good } from '../components/tokens';
 import { cx } from '../components/tokens';
-import { eventSegmentSummary, eventWhoLine, phaseNoun, segTitle } from './copy';
+import { eventSegmentSummary, eventSegWho, phaseNoun, segTitle } from './copy';
 import { signLook, useShow } from './frame';
 import { EventDeltaChip, EventSignBadge } from './glyphs';
 import { eventStageAt, plotUnitsAt, type EventScript, type EventSegment, type ShowGrid, type ShowPlot } from './timing';
@@ -66,7 +66,7 @@ function NowCard({ seg }: { seg: EventSegment }) {
       <span className="flex flex-col">
         <span className={cx('label-caps', tone === 'good' ? 'text-ok!' : tone === 'bad' ? 'text-alert-ink!' : 'text-holo!')}>Now</span>
         <span className="font-display text-2xl font-bold leading-tight">{segTitle(seg)}</span>
-        <span className="text-base text-ink-2">{eventWhoLine(ev, cast)}</span>
+        <span className="text-base text-ink-2">{eventSegWho(seg, cast)}</span>
       </span>
     </div>
   );

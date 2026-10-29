@@ -6,6 +6,8 @@ export {
   plotUnitsAt,
   eventScript,
   eventSegments,
+  eventGroups,
+  isRollCall as isEventRollCall,
   eventStageAt,
   eventSkipTo,
   eventFrontAt,
@@ -17,7 +19,9 @@ export {
   type ShowPlot,
   type ShowGrid,
 } from './timing';
+export { EVENT_ENTRY, type EventEntry, type EventMotion } from './catalogue';
 export { EventBoundary } from './boundary';
+export { EventColonists, EventSickTag, RollCall as EventRollCall, sickAt as eventSickAt } from './rollcall';
 export { EventShow, useShow as useEventShow, useEnclosingEventShow, type EventShowProps, type ShowCast, type ShowFrame } from './frame';
 export { EventLivingMap, type EventLivingMapProps } from './map';
 export { useEventLivingView } from './living';

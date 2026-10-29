@@ -11,10 +11,12 @@ import type { ShowEventView, ShowMode, ShowPlayer } from './types';
 export interface ShowCast {
   name(id: string): string;
   slotOf(id: string): Slot | undefined;
+  /** Every seat, in seat order: the colonists at the store. */
+  players: readonly ShowPlayer[];
   /** The id of the player who owns the plot, or null. */
   ownerAt(x: number, y: number): string | null;
   goodAt(x: number, y: number): Good | undefined;
-  /** A personal event's player: the owner of the plot it starts on. */
+  /** A personal event's player: the one it names (a sick player), else the owner of the plot it starts on. */
   playerOf(ev: ShowEventView): string | undefined;
 }
 
@@ -27,11 +29,12 @@ export function eventCast(tiles: MapTile[], players: ShowPlayer[]): ShowCast {
     return slot === null || slot === undefined ? null : (bySlot.get(slot)?.id ?? null);
   };
   return {
+    players,
     name: (id) => byId.get(id)?.name ?? id,
     slotOf: (id) => byId.get(id)?.slot,
     ownerAt,
     goodAt: (x, y) => byXY.get(`${x},${y}`)?.good,
-    playerOf: (ev) => (ev.scope === 'personal' ? (ownerAt(ev.origin.x, ev.origin.y) ?? undefined) : undefined),
+    playerOf: (ev) => ev.player ?? (ev.scope === 'personal' ? (ownerAt(ev.origin.x, ev.origin.y) ?? undefined) : undefined),
   };
 }
 

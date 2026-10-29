@@ -193,7 +193,8 @@ describe('the production show plays every event of the month', () => {
   });
 
   it('T-AC-4: each key plays its own story inside its segment, and no other key’s', () => {
-    const OWN: Record<ShowEventKey, RegExp> = {
+    // Every key production fires; sickness is development's, and its roll call is events-overlay's and the UI's roll-call test.
+    const OWN: Record<Exclude<ShowEventKey, 'sickness'>, RegExp> = {
       dustStorm: /data-testid="front-dustStorm"/,
       drought: /data-testid="front-drought"/,
       acidRain: /data-testid="front-acidRain"/,
