@@ -30,7 +30,7 @@ describe("a Governor's tax promise, checked each month", () => {
     expect(state.colony!.promises).toEqual([{ month: 1, governor: 'lena', kind: promise.kind, kept }]);
   });
 
-  it('T-AC-27: RULE-24 row 1 — an appointed Governor (no promise), no Governor, or politics off records nothing', () => {
+  it('T-AC-27: RULE-24 row 1 — an appointed Governor (no promise), no Governor, an election still open, or politics off records nothing', () => {
     const appointed = governedUnder(null);
     closePlanningAt(appointed, 7);
     expect(appointed.colony!.promises).toEqual([]);
@@ -38,6 +38,12 @@ describe("a Governor's tax promise, checked each month", () => {
     const nobody = governedUnder({ kind: 'hold' }, null);
     advancePhase(nobody);
     expect(nobody.colony!.promises).toEqual([]);
+
+    // An election still open as planning closes: the Governor could not set the tax, so their promise is not judged.
+    const voting = governedUnder({ kind: 'lower' });
+    voting.politics = { ...voting.politics!, election: createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: false })) }).politics!.election };
+    advancePhase(voting);
+    expect(voting.colony!.promises).toEqual([]);
 
     const off = createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: false })), politics: false });
     advancePhase(off);
