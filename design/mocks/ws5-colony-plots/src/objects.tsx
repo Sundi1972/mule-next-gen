@@ -77,48 +77,8 @@ const STAGE_CHIP: Partial<Record<PlotStage, { text: (o: PlotObject) => string; t
 };
 
 /**
- * Variant A, "the object's disc": the object takes the plot's centre on the map's chip disc, where an installed MULE's
- * good would sit. A plot with an object makes nothing, so it never has a good disc to clash with. The ring is the
- * stage's colour, dashed while it is a site; closed and damaged fade. Sized as a share of the plot, as HoloMap's marks.
- */
-export function ObjectDisc({ object, tv, className }: { object: PlotObject; tv: boolean; className?: string }) {
-  const chip = STAGE_CHIP[object.stage];
-  // A reserved site shows only a faint outline of what will stand there; a closed or damaged object fades.
-  const faded = object.stage === 'closed' || object.stage === 'damaged';
-  const staked = object.stage === 'commissioned';
-  return (
-    <span
-      className={cx('relative z-[2] flex aspect-square w-[62%] items-center justify-center rounded-full bg-map-chip shadow-chip', className)}
-      data-testid="plot-object"
-      data-kind={object.kind}
-      data-stage={object.stage}
-    >
-      <span
-        aria-hidden
-        className={cx(
-          'absolute inset-0 rounded-full',
-          tv ? 'border-[3px]' : 'border-2',
-          object.stage === 'building' || staked ? 'border-dashed' : 'border-solid',
-          staked || object.stage === 'standing' ? 'border-holo' : object.stage === 'building' ? 'border-warn' : 'border-alert',
-        )}
-      />
-      <ObjectGlyph kind={object.kind} size="70%" className={cx(STAGE_RING[object.stage].split(' ')[1], faded && 'opacity-45', staked && 'opacity-30')} />
-      {chip && (
-        <span
-          data-num
-          data-testid="plot-object-chip"
-          className={cx('absolute left-[15%] top-[85%] -translate-x-1/2 -translate-y-1/2 rounded-chip px-0.5 font-mono font-bold leading-tight shadow-chip', tv ? 'text-[11px]' : 'text-[10px]', chip.tone)}
-        >
-          {chip.text(object)}
-        </span>
-      )}
-    </span>
-  );
-}
-
-/**
- * Variant B, "the colony's ground": the whole plot is the object's. A stage-coloured inset border over the land, like
- * an owner's plot, and the glyph large across it, no disc. Reads from further away; competes more with the land.
+ * The colony's ground (Heiko approved, 4 Nov): the whole plot is the object's. A stage-coloured inset border over the
+ * land, a dark fill, and the glyph large across it.
  */
 export function ObjectGround({ object, tv, className }: { object: PlotObject; tv: boolean; className?: string }) {
   const chip = STAGE_CHIP[object.stage];
