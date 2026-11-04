@@ -407,6 +407,49 @@ describe("AM-28: the frame carries the moments' state, straight from the floor",
   });
 });
 
+describe("AM-13: a frame's size on the wire, with every moment on at once", () => {
+  // trace-allow: a budget pin, not a behaviour. S-1 measured the frames at 420-606 B with two colonists and no moments;
+  // the worst a moments frame can be (AM-28) is four packs mid-fight at once (RULE-4), measured at 2,219 B here, so
+  // FRAME_CEILING_BYTES (3 KB) leaves about 850 B for fields added later. It prints what it measures.
+  it('AM-13: four packs mid-fight of three crouching wolves, a glint, a scramble that has ended, a stun, a bolted MULE and the tick\'s lines: the frame stays under its ceiling', () => {
+    const FRAME_CEILING_BYTES = 3_072;
+    const base = floorOf(steered().game);
+    // Every number a two-decimal one, the most characters the wire carries for a position.
+    const at = (i: number, k: number) => ({ x: 10.37 + i + k / 7, y: 4.61 + i - k / 9 });
+    const wolf = (i: number, k: number) => ({ ...at(i, k), angle: 2.1, state: 'tell' as const, sinceTick: 1_201, untilTick: 1_213, from: at(i, k + 1), target: at(i, k + 2) });
+    const ids = ['s1', 's2', 's3', 's4'];
+    const colonists = ids.map((id, i) => ({
+      ...base.colonists[0]!,
+      id,
+      space: 'map' as const,
+      ...at(i, 0),
+      moving: true,
+      lead: { good: 'electronics' as const, ...at(i, 3) },
+      encounter: { stage: 'fight' as const, sinceTick: 1_199, centre: at(i, 4), wolves: [0, 1, 2].map((k) => wolf(i, k)), strikes: 2, bites: 2, nextLungeTick: 1_230, recoverUntilTick: 1_204 },
+      ...(i === 2 && { stunnedUntilTick: 1_260 }),
+      ...(i === 3 && { bolt: { dx: 0.6, dy: 0.8, left: 1.5 } }),
+    }));
+    const floor: DevFloor = {
+      ...base,
+      tick: 1_210,
+      colonists,
+      moments: {
+        ...base.moments,
+        glint: { x: 12, y: 4, sinceTick: 1_150, untilTick: 1_310 },
+        scramble: { sinceTick: 1_100, untilTick: 1_400, needers: ids, got: ['s1', 's2'], over: 'empty', leftOut: ['s3', 's4'] },
+        scrambled: true,
+      },
+    };
+    const beats = ['Wolves! Ossa: run or fight?', 'Lena fights the wolves!', 'A Crystite glint at the river plot C4! First there wins', 'The Baron got the last one: the corral is empty', 'No MULE this turn for Ossa, Kai'];
+    const frame = devFrame(floor, beats);
+    expect(frame.moments?.packs).toHaveLength(4);
+    // As the room sends it to a screen: the envelope, as JSON, in bytes.
+    const bytes = Buffer.byteLength(JSON.stringify({ t: 'frame', payload: frame }), 'utf8');
+    console.log(`AM-13: the worst moments frame is ${bytes} B`);
+    expect(bytes).toBeLessThanOrEqual(FRAME_CEILING_BYTES);
+  });
+});
+
 describe('RULE-1: the tick keeps to the clock', () => {
   it('RULE-1: a late timer runs the ticks it missed, at most catchUpTicks, then resyncs and ticks on every tickMs', () => {
     const g = steered();
