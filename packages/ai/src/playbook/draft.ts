@@ -59,6 +59,8 @@ export interface DraftInput {
   land?: LandPick | null;
   /** Plays this strategy instead of drafting one, and drafts the parts under it. */
   strategy?: Strategy;
+  /** The month the playbook is for; unset, the state's month. */
+  month?: number;
 }
 
 const KINDS: Kind[] = ['builder', 'specialist', 'monopolist', 'landBaron', 'politician', 'spoiler'];

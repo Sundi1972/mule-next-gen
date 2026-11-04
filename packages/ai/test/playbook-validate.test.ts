@@ -17,6 +17,7 @@ import { playGame } from '../src/play.js';
 import { draftPlaybook, type DraftPhase } from '../src/playbook/draft.js';
 import { validatorFor, type PlanEdit } from '../src/playbook/validate.js';
 import { AiSeat } from '../src/seat.js';
+import { applySets } from '../src/sim.js';
 import type { Mind } from '../src/value.js';
 
 const PERSONAS_AT_TABLE: AiPersonaId[] = ['cautious', 'aggressive', 'trader', 'saboteur'];
@@ -147,7 +148,8 @@ describe('the validator holds every playbook to RULE-1', () => {
       { plot: p3, value: 120 },
     ], { state: planning2, draft: draftOf(planning2, 'planning', mindOf(2), 102) });
     expect(ranked.plays).toEqual([{ plot: p1, value: 300 }, { plot: p3, value: 120 }]);
-    expect(ranked.why).toMatch(/^clamped to /);
+    // A clamp that drops entries names how many, not the list that plays (a ranking can run to the whole map).
+    expect(ranked.why).toBe('clamped: dropped 3 entries, keeping free plots, each once, at a whole value of 0 or more');
     expect(one('planning', '/landGrant/ranked', [{ plot: f1, value: 1.5 }]).why).toBe('no free plot left to rank');
     // P5, P6, P7.
     expect(one('planning', '/landGrant/pressShare', { start: 1.4, end: 0.9 }).plays).toEqual({ start: 1, end: 0.9 });
@@ -156,7 +158,7 @@ describe('the validator holds every playbook to RULE-1', () => {
     expect(one('planning', '/landGrant/deny', [{ plot: f1, rival: 'ai0', maxCost: 50 }, { plot: f2, rival: 'ai2', maxCost: 50 }, { plot: f1, rival: 'ai1', maxCost: 9 }, { plot: f3, rival: 'ai1', maxCost: -1 }]).plays).toEqual([
       { plot: f1, rival: 'ai0', maxCost: 50 },
     ]);
-    expect(one('planning', '/landGrant/planB', [f1, f1, f2]).plays).toEqual([f1, f2]);
+    expect(one('planning', '/landGrant/planB', [f1, f1, f2])).toMatchObject({ plays: [f1, f2], why: 'clamped: dropped 1 entry, keeping free, distinct plots' });
     expect(one('planning', '/landGrant/pair', [f1, f2])).toMatchObject({ plays: [f1, f2], why: null });
     expect(one('planning', '/landGrant/pair', [f1, f1]).why).toBe('not two free, distinct plots');
 
@@ -200,6 +202,11 @@ describe('the validator holds every playbook to RULE-1', () => {
     const reversed = run('auction', [edit(`/auction/${staple}/hold`, 0), edit(`/auction/${staple}/role`, 'seller')]);
     expect(read(reversed.playbook, `/auction/${staple}/hold`)).toBe(need);
     expect(reversed.rejected).toContainEqual({ path: `/auction/${staple}/hold`, to: 0, why: `clamped to ${need}: next month's need` });
+    // Each accepted edit's `to` is the value that plays, after step 5.
+    expect(reversed.playbook.edits).toEqual([
+      { path: `/auction/${staple}/hold`, from: reversed.draft.auction![staple]!.hold, to: need, reason: 'a test edit' },
+      { path: `/auction/${staple}/role`, from: reversed.draft.auction![staple]!.role, to: 'seller', reason: 'a test edit' },
+    ]);
     expect(one('auction', g('walkAway'), 0).plays).toBe(1);
     const buyer = run('auction', [edit(g('role'), 'buyer'), edit(g('start'), part.walkAway + 40)]);
     expect(read(buyer.playbook, g('start'))).toBe(part.walkAway);
@@ -215,6 +222,12 @@ describe('the validator holds every playbook to RULE-1', () => {
     expect(one('planning', '/strategy/mood', 'sunny').why).toBe('no such field');
     expect(one('planning', '/landGrant', {}).why).toBe('no such field');
     expect(one('planning', 'strategy/kind', 'builder').why).toBe('no such field');
+    // Inside a field: no key its object does not own, a prototype key least of all, and no empty array index.
+    const proto = one('planning', '/strategy/landTarget/__proto__', { plots: 1 });
+    expect(proto.why).toBe('no such field');
+    expect(proto.r.playbook.by).toBe('engine');
+    expect(Object.getPrototypeOf(proto.r.playbook.strategy.landTarget)).toBe(Object.prototype);
+    expect(one('planning', '/landGrant/ranked/', { plot: f1, value: 3 })).toMatchObject({ why: 'no such field', plays: draft.landGrant!.ranked });
 
     // Step 3: an edit to kind re-drafts the phase's parts under the edited strategy; a reason edit does not.
     const handed = { ...run('development', []).draft, development: { route: [{ act: 'pub' as const }], timeBudgetMs: 1000, ifSoldOut: 'pub' as const } };
@@ -306,14 +319,27 @@ describe('the validator never lets an error reach the game', () => {
 
 describe("the engine's own draft passes the gate", () => {
   it('INV-1 (spot): the engine\'s draft with no edits passes unchanged, nothing rejected', () => {
-    for (const phase of ['planning', 'development', 'auction'] as const) {
-      for (let i = 0; i < PERSONAS_AT_TABLE.length; i++) {
-        const mind = mindOf(i);
-        const draft = draftOf(at[phase], phase, mind, 100 + i);
-        const r = validatorFor({ mind, seed: 100 + i })(at[phase], mind.me, draft, []);
-        expect(r.rejected, `${phase} ai${i}`).toEqual([]);
-        expect(stableJson(r.playbook), `${phase} ai${i}`).toBe(stableJson(draft));
+    const passes = (label: string) => {
+      for (const phase of ['planning', 'development', 'auction'] as const) {
+        for (let i = 0; i < PERSONAS_AT_TABLE.length; i++) {
+          const mind = mindOf(i);
+          const draft = draftOf(at[phase], phase, mind, 100 + i);
+          const r = validatorFor({ mind, seed: 100 + i })(at[phase], mind.me, draft, []);
+          expect(r.rejected, `${label} ${phase} ai${i}`).toEqual([]);
+          expect(stableJson(r.playbook), `${label} ${phase} ai${i}`).toBe(stableJson(draft));
+        }
       }
+    };
+    passes('as configured');
+    // A --set sweep that moves a bound moves the draft with it: a route cap below two MULEs and the pub, and a land
+    // baron's target past what the grants can give.
+    const sweep = ['AI_PLANS.bounds.routeSteps=4', `AI_PLANS.landTarget.perMonth.landBaron=${GAME.claimsPerGrant + 1}`];
+    const saved = [`AI_PLANS.bounds.routeSteps=${AI_PLANS.bounds.routeSteps}`, `AI_PLANS.landTarget.perMonth.landBaron=${AI_PLANS.landTarget.perMonth.landBaron}`];
+    applySets(sweep);
+    try {
+      passes('swept');
+    } finally {
+      applySets(saved);
     }
     // No free plot left: the draft ranks nothing, and ranking nothing passes.
     const taken = structuredClone(at.planning);

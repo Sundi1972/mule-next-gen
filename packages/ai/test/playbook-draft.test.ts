@@ -143,6 +143,13 @@ describe('the draft picks a plan kind and writes its strategy', () => {
       const of = (phase: 'planning' | 'development' | 'auction') => draftPlaybook({ state: trader.state, seat: traderMind.me, mind: traderMind, seed, phase }).strategy.kind;
       expect([of('development'), of('auction')], `seed ${seed}`).toEqual([of('planning'), of('planning')]);
     }
+    // A draft stamped for next month (WS2's, once this month's grant has run) draws next month's tie, not this one's.
+    const nextMonth = { ...structuredClone(trader.state), month: trader.state.month + 1 };
+    for (let seed = 0; seed < 20; seed++) {
+      const stamped = draftPlaybook({ state: trader.state, seat: traderMind.me, mind: traderMind, seed, phase: 'planning', month: nextMonth.month });
+      expect(stamped.month).toBe(nextMonth.month);
+      expect(stamped.strategy.kind, `seed ${seed}`).toBe(strategyOf(nextMonth, traderMind, seed).kind);
+    }
 
     const rookie = table('rookie');
     const rookieKinds = rookie.seats.map((s) => strategyOf(rookie.state, s.mind, s.seed));
