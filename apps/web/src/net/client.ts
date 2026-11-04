@@ -22,6 +22,8 @@ const FIRST_PINGS = 4;
 const PING_EVERY_MS = 15_000;
 const MAX_BACKOFF_MS = 5_000;
 const MAX_CHAT = 80;
+/** Round trips kept for roundTripMs, as many as ClockSync keeps samples. */
+const ROUND_TRIPS_KEPT = 8;
 const TOAST_MS = 3_500;
 /** Milliseconds after which an unanswered move-code request counts as lost: the room drops messages over its rate limit without a reply. */
 export const HANDOFF_LOST_MS = 5_000;
@@ -90,6 +92,10 @@ export interface ClientOptions {
 export class TableClient {
   private state: ClientState = { status: 'idle', role: null, code: null, seatId: null, view: null, chat: [], emotes: [], toasts: [], notice: null, clockOffset: 0, handoffCode: null };
   private readonly listeners = new Set<() => void>();
+  /** Who hears the room's frames, outside the state: a frame comes 20 times a second and must not render the app. */
+  private readonly frameListeners = new Set<(payload: unknown, receivedAt: number) => void>();
+  /** The round trips of the latest pongs, newest last, as many as the clock keeps. */
+  private roundTrips: number[] = [];
   private readonly clock: ClockSync;
   private socket: SocketLike | null = null;
   private target: Target | null = null;
@@ -134,6 +140,17 @@ export class TableClient {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
   };
+
+  /** Hears every frame the room sends, with the device time it came at; returns the way to stop. */
+  onFrame = (fn: (payload: unknown, receivedAt: number) => void): (() => void) => {
+    this.frameListeners.add(fn);
+    return () => this.frameListeners.delete(fn);
+  };
+
+  /** The shortest round trip of the latest pongs, in ms; null before the first. */
+  roundTripMs(): number | null {
+    return this.roundTrips.length > 0 ? Math.min(...this.roundTrips) : null;
+  }
 
   private set(patch: Partial<ClientState>): void {
     this.state = { ...this.state, ...patch };
@@ -332,7 +349,13 @@ export class TableClient {
         this.later(() => this.set({ emotes: this.state.emotes.filter((e) => e.id !== emote.id) }), TOAST_MS);
         return;
       }
+      case 'frame': {
+        const at = this.now();
+        for (const fn of this.frameListeners) fn(msg.payload, at);
+        return;
+      }
       case 'pong':
+        this.roundTrips = [...this.roundTrips, this.now() - msg.clientTime].filter((rtt) => rtt >= 0).slice(-ROUND_TRIPS_KEPT);
         this.clock.add(msg.clientTime, msg.serverTime, this.now());
         if (this.clock.offset !== this.state.clockOffset) this.set({ clockOffset: this.clock.offset });
         return;

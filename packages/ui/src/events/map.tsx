@@ -3,7 +3,7 @@ import { HoloMap } from '../components/HoloMap';
 import { cx, type Slot } from '../components/tokens';
 import { useShow } from './frame';
 import { Overlays } from './cards';
-import { livingAt, Marks, Shade, Weather } from './living';
+import { livingAt, Marks, Shade, useLiveTiles, Weather } from './living';
 import { EventColonists } from './rollcall';
 import { Stories } from './stories';
 import { eventSkipTo, isPlaying } from './timing';
@@ -36,7 +36,8 @@ export interface EventLivingMapProps {
  */
 export function EventLivingMap({ size, focusSlot, bars, over, onSkip, light = false, className }: EventLivingMapProps) {
   const frame = useShow();
-  const { tiles, grid, t, reduced, s } = frame;
+  const { grid, t, reduced, s } = frame;
+  const tiles = useLiveTiles(frame);
   const living = livingAt(frame, size);
   const seg = light ? null : living.seg;
   const view = light ? undefined : living.view;

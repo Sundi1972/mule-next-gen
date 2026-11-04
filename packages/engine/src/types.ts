@@ -125,6 +125,8 @@ export interface Player {
   devSeconds: number;
   /** True when sickness cost development time this month (no Medicine to cure it). */
   sick: boolean;
+  /** True when an epidemic made the player sick: next development they are sick again unless they then hold a Medicine. */
+  sickNext: boolean;
   /** True once the player has gone to the pub: their development turn is over. */
   doneDeveloping: boolean;
   /** True once the player has installed a MULE in this development turn, so a reloaded phone still knows. */
@@ -234,10 +236,46 @@ export type EventKey =
   | 'pestSwarm'
   | 'wildfire'
   | 'bumperHarvest'
-  | 'cavernCollapse';
+  | 'cavernCollapse'
+  | 'federationTax'
+  | 'federationGrant'
+  | 'immigrationWave'
+  | 'inheritance'
+  | 'muleTheft'
+  | 'epidemic'
+  | 'coldSnap'
+  | 'meteorStrike'
+  | 'pirateRaid'
+  | 'storeFire'
+  | 'ratsInSilo'
+  | 'crookedAccountant'
+  | 'packageFromHome';
 
 /** How the screens animate an event; several events share a kind. */
-export type EventKind = 'storm' | 'drought' | 'flare' | 'comet' | 'flood' | 'quake' | 'blight' | 'fire' | 'bounty';
+export type EventKind =
+  | 'storm'
+  | 'drought'
+  | 'flare'
+  | 'comet'
+  | 'flood'
+  | 'quake'
+  | 'blight'
+  | 'fire'
+  | 'bounty'
+  | 'ledger'
+  | 'colony'
+  | 'plot'
+  | 'colonists'
+  | 'sweep'
+  | 'strike'
+  | 'store';
+
+/** One change an event made off the map: whose (a player's id, the store or the colony), of what, and by how much. */
+export interface EventEffect {
+  on: string | 'store' | 'colony';
+  what: Good | 'money' | 'mules' | 'colonists' | 'energyNeed';
+  delta: number;
+}
 
 export interface MonthEvent {
   key: EventKey;
@@ -259,14 +297,21 @@ export interface MonthEvent {
     delta: number;
     /** The special field the plot had before the event, when the event removes it (a cavern collapse). */
     was?: SpecialKind;
-    /** What the plot is after the event, when the event changes what it is ('plain': its special is gone). */
-    becomes?: 'plain';
+    /**
+     * What the plot is after the event, when the event changes what it is: 'plain' its special is gone, 'crater' a meteor
+     * made it a crater, 'idle' its MULE was taken.
+     */
+    becomes?: 'plain' | 'crater' | 'idle';
+    /** True when the event destroyed or took the plot's MULE. */
+    muleLost?: true;
   }[];
   /** For a personal event, the player whose land it started on. */
   player?: string;
   sign: 'good' | 'bad' | 'mixed';
   /** The phase whose roll produced this event. */
   phase: Phase;
+  /** What the event changed off the map, in the order it changed it; absent when it changed nothing there. */
+  effects?: EventEffect[];
 }
 
 export interface EventWarning {
@@ -310,6 +355,11 @@ export interface GameState {
   /** Month in which the last free plot was claimed, if it happened. */
   landRanOutMonth: number | null;
   history: MonthReport[];
+  /**
+   * Every event fired this month, in fired order, whatever the phase. A new array when the month opens (a what-if copy
+   * shares the old one and never adds to it).
+   */
+  monthEvents: MonthEvent[];
   /** The live goods auction, while the auction phase runs. */
   auction: LiveAuction | null;
   /** This month's lots, in listing order. Made in planning, cleared when the land auction ends. */
