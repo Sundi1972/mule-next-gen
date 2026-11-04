@@ -741,6 +741,14 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-31 (2026-11-04, PR-10 on #291, by WS6; C11's gap).** With walking on, the phone's and the laptop's development
+  drew no table chat: the tap screen gets it from `phone/Shell.tsx`'s `TableChat`, and the walking screen has no shell,
+  so the ws6-ux spec's B-AC-17 (a line in development shows on both phones and the TV, at the speaker and in the
+  ticker) failed. C11 now also MUSTs the table chat: **the ticker** in the side room under the status at 844 and on the
+  laptop's side panel, and at 667, where the status overlays the map's top edge, one line in that bar; **the bubbles**
+  at each colonist (`Speaker`), on the map and in the hall, as the TV already draws them. The ticker covers 0 px² of
+  the store, your plots and the controls; a bubble sits at its colonist, as the other map-anchored layers do (AM-30).
+  The TV is unchanged: TvDevelop already keeps the ticker and the speakers.
 - **AM-30 (2026-11-04, PR-9's review, ruled by WS6).** (1) **C11's 0 px² binds the layers placed on the screen** (the
   scramble banner, the glint strip, the TV's moment lines): they keep off the store, your plots and the controls,
   measured on the drawn text at 844 and 667, the longest line included. **The layers drawn where a moment happens**
