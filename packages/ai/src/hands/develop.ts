@@ -32,6 +32,7 @@ import {
 import type { Act, AiAction } from '../actions.js';
 import type { Brain, Pending } from '../brain.js';
 import { draftMulePick } from '../playbook/draft.js';
+import type { DevelopmentLog, DevelopmentStepLog } from '../playbook/outcome.js';
 import { floorDevWalk, leading, mapFactor, planSeconds, plotErrandSeconds, pubDoor, pubMargin, pubSeconds, tileMiddle, tripSeconds, type PlanStop } from '../floor-time.js';
 import { analysesWanted, developDecision, filtersWanted, outfitName, plotName, type DevAction, type DevWalk } from '../strategist.js';
 import { situation } from '../summary.js';
@@ -105,20 +106,7 @@ export interface RoutePlay {
 }
 
 /** What became of a route step (RULE-11). A route step absent from the log was not reached. */
-export type StepOutcome = 'done' | 'refused' | 'skipped' | 'replaced' | 'not reached';
-
-/** One step of a played route, as the phase's outcome reads it (C8). No `route` for a step the hand added. */
-export interface DevelopmentStepLog {
-  route?: number;
-  outcome: StepOutcome;
-  note?: string;
-}
-
-/** A played route: its steps in the order they ended, and the development ms the seat used. */
-export interface DevelopmentLog {
-  steps: readonly DevelopmentStepLog[];
-  usedMs: number;
-}
+type StepOutcome = DevelopmentStepLog['outcome'];
 
 /** A step taken this month. On a route, also its index and outcome; `why` then holds RULE-9's note. */
 export interface DevLogEntry {
