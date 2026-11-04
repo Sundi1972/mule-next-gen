@@ -180,7 +180,16 @@ describe('the floor moments: wolves (RULE-4)', () => {
     const { state, floor } = meeting(7, true);
     player(state, 'a').muleBolted = true;
     let f = floor;
-    for (let i = 0; i < ticks(WOLVES.chooseSeconds + WOLVES.fightSeconds + 1) && seat(f, 'a').encounter; i++) f = tick(state, f, { a: IDLE });
+    let lunges = 0;
+    for (let i = 0; i < ticks(WOLVES.chooseSeconds + WOLVES.fightSeconds + 1) && seat(f, 'a').encounter; i++) {
+      f = tick(state, f, { a: IDLE });
+      // AM-28: a wolf's target is where it aims while it crouches and lunges, and none once the lunge is over.
+      for (const w of seat(f, 'a').encounter?.wolves ?? []) {
+        expect(w.target !== null, `tick ${f.tick}: a ${w.state} wolf's target`).toBe(w.state === 'tell' || w.state === 'lunge');
+        if (w.state === 'hurt' || w.state === 'open') lunges++;
+      }
+    }
+    expect(lunges, 'ticks of wolves after a lunge, to check').toBeGreaterThan(0);
     // Standing still is a fight with no dodges: three bites lose it.
     expect(seat(f, 'a').encounter).toBeNull();
     expect(seat(f, 'a').stunnedUntilTick! > f.tick).toBe(true);
@@ -349,7 +358,16 @@ describe('the floor moments: the corral scramble (RULE-6)', () => {
       beats.push(...texts(f.moments.beats));
     }
     expect(beats).toEqual(['The scramble is over: 2 MULEs left']);
-    expect(f.moments.scramble?.over).toBe('time');
+    // AM-28: the needers who went without are named whenever it ends, on its clock too.
+    expect(f.moments.scramble).toMatchObject({ over: 'time', needers: ['b', 'c', 'd'], got: [], leftOut: ['b', 'c', 'd'] });
+
+    // And once every needer has a MULE or is at the pub: B bought one, C and D went to the pub without.
+    const more = corral(3);
+    let g = tick(more.state, more.floor, { a: { ...IDLE, act: true } });
+    g = tick(more.state, g, { b: { ...IDLE, act: true } });
+    for (const id of ['c', 'd']) player(more.state, id).doneDeveloping = true;
+    g = tick(more.state, g, {});
+    expect(g.moments.scramble).toMatchObject({ over: 'everyone', got: ['b'], leftOut: ['c', 'd'] });
   });
 
   it('T-AC-8 negative: no call when no seat needs a MULE, and one scramble a turn', () => {
