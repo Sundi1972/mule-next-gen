@@ -285,7 +285,8 @@ export const MULE = {
 export const DEVELOPMENT = {
   /**
    * Seconds of development, the same for every player: hunger and sickness slow the walk instead (DEV_WALK). 60 (Heiko,
-   * 4 Nov), so a starving colonist has the time to put Food on a plot next to the store.
+   * 4 Nov). With walking on, the clock alone doesn't save a starving colonist: at a fifth of its pace even the
+   * nearest Food errand and the pub take longer than 60 s, which is why DEV_WALK.hungerPaceMin is 0.6.
    */
   fullSeconds: 60,
   /** Seconds a colonist stands on a plot for a geo analysis. */
@@ -302,7 +303,7 @@ export const DEVELOPMENT = {
 /**
  * Walking in development costs time off the one development clock (Heiko's R1, 0.4 s a tile). A walk goes in grid
  * steps on the map, never diagonally; the store and its corral are on the store's tile. A hungry or sick colonist
- * walks slower, and the two multiply: no Food and sick is a tenth of normal pace (Heiko's numbers).
+ * walks slower, and the two multiply: no Food and sick is 0.6 × 0.5 = 0.3 of normal pace (Heiko's numbers).
  * Not WALK, the goods auction's walk.
  */
 export const DEV_WALK = {
@@ -310,8 +311,13 @@ export const DEV_WALK = {
   tileSeconds: 0.4,
   /** Seconds to cross the store floor to the corral, from the door or any other room. */
   floorSeconds: 1,
-  /** Share of its pace a colonist with no Food walks at; it rises linearly to 1 with the share of the month's Food it holds. */
-  hungerPaceMin: 0.2,
+  /**
+   * Share of its pace a colonist with no Food walks at; it rises linearly to 1 with the share of the month's Food it holds.
+   * 0.6 (Heiko, 4 Nov, "Yes, 60%"): the strongest slowdown with which the colony escapes famine with walking on. At 0.2
+   * a starving colonist couldn't reach Food and the pub inside the turn and stayed starving (measured: 58% of months
+   * short of Food or Water; from 0.6, under 15% in every measured cell).
+   */
+  hungerPaceMin: 0.6,
   /** Share of its pace a sick colonist walks at (EVENTS.player.sickness rolled, and no Medicine held). */
   sickPace: 0.5,
   /**
@@ -335,8 +341,8 @@ export type LakeMode = 'shore' | 'wade';
 export const DEV_STEER = {
   /** Steered walking instead of DEV_WALK's tap-to-walk. On since Heiko's OK on the rig (arcade PR-11). */
   on: true as boolean,
-  /** Tiles a second on plains at full pace: half of today's 1 / DEV_WALK.tileSeconds. */
-  mapTilesPerSecond: 1.25,
+  /** Tiles a second on plains at full pace: the tap walk's own pace, 1 / DEV_WALK.tileSeconds (Heiko, 4 Nov; 1.25 was half). */
+  mapTilesPerSecond: 2.5,
   /** Seconds across the store's hall at full pace, door to corral. */
   floorSeconds: 3,
   /** Share of its speed a colonist keeps while it leads a MULE. */
