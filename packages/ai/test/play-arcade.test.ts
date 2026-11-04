@@ -139,6 +139,11 @@ describe('the AI walks the floor, and the sim plays it (arcade C9, C10)', () => 
  * 43% at 20 and 42% at 40, so 20 is the smallest steady one at about a second a game.
  */
 const SIM_GAMES = 20;
+/**
+ * The first case to await the sample plays it: about 58 s here with #259's 60-second turns (39 s at 50 s), so its
+ * cases allow five minutes, as INV-estimate's sample does, for a slower CI machine. A hang still fails, at that bound.
+ */
+const SAMPLE_TIMEOUT_MS = 300_000;
 type SimSample = { moments: FloorMomentCounts[]; turns: DevTurn[] };
 let simSample: Promise<SimSample> | null = null;
 /**
@@ -161,7 +166,7 @@ function simGames(): Promise<SimSample> {
 const simMoments = async () => (await simGames()).moments;
 
 describe("the moments in the sim's games (T-AC-5, AM-22)", () => {
-  it('T-AC-5 (AM-22): a bot races in at least 40% of glints, never one whose detour breaks its errand (RULE-8)', { timeout: 120_000 }, async () => {
+  it('T-AC-5 (AM-22): a bot races in at least 40% of glints, never one whose detour breaks its errand (RULE-8)', { timeout: SAMPLE_TIMEOUT_MS }, async () => {
     const moments = await simMoments();
     const glints = sum(moments, 'glints');
     expect(glints, 'glints lit').toBeGreaterThanOrEqual(100);
@@ -170,7 +175,7 @@ describe("the moments in the sim's games (T-AC-5, AM-22)", () => {
     expect(sum(moments, 'raced') / glints, 'share of glints a bot raced').toBeGreaterThanOrEqual(0.4);
   });
 
-  it("T-AC-5 (AM-26): every AI colonist reaches the pub within the turn, except one a wolf's bite cost the pub, at most 1% of turns", { timeout: 120_000 }, async () => {
+  it("T-AC-5 (AM-26): every AI colonist reaches the pub within the turn, except one a wolf's bite cost the pub, at most 1% of turns", { timeout: SAMPLE_TIMEOUT_MS }, async () => {
     const { turns } = await simGames();
     const missed = turns.filter((t) => t.pubAt === null);
     const excused = missed.filter((t) => t.biteCostPub);
@@ -186,7 +191,7 @@ describe("the moments in the sim's games (T-AC-5, AM-22)", () => {
   // WOLVES.simMonthsWithPack of months. AM-27's binding check is `pnpm sim`'s report, 40 games AI-only on each of seeds
   // 1, 101 and 201 (its 'Months with an AI wolf encounter' line, MISS under that share): 40 games here would cost the
   // file about 30 s more than its budget.
-  it('an AI colonist meets wolves in WOLVES.simMonthsWithPack of months of the sim sample: the legs by wolf land are walked', { timeout: 120_000 }, async () => {
+  it('an AI colonist meets wolves in WOLVES.simMonthsWithPack of months of the sim sample: the legs by wolf land are walked', { timeout: SAMPLE_TIMEOUT_MS }, async () => {
     const moments = await simMoments();
     const met = moments.filter((m) => m.packs > 0).length;
     expect(met / moments.length, `months with an AI wolf encounter: ${met} of ${moments.length}`).toBeGreaterThanOrEqual(WOLVES.simMonthsWithPack);
