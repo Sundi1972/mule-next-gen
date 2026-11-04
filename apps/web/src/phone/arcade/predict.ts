@@ -1,4 +1,4 @@
-import { stepFloor, type FloorColonist, type FloorConfig, type FloorLead, type GameState, type Space } from '@mule/engine';
+import { stepFloor, type FloorColonist, type FloorConfig, type FloorLead, type FloorMoments, type GameState, type Space } from '@mule/engine';
 import type { DevFrame, MuleView, MyView } from '@mule/protocol';
 import { gateSteer, heldBack, unsure, type SteerGate, type Stick } from './steer';
 
@@ -102,10 +102,17 @@ export function markStale(p: Prediction, nowMs: number, cfg: FloorConfig): Predi
 
 const stickAt = (inputs: readonly Input[], tick: number): Stick => inputs.filter((i) => i.tick <= tick).at(-1) ?? { x: 0, y: 0 };
 
+/**
+ * The copy walks alone, with no moments of its own: no glint lit, no scramble called, no pack rolled. Those are the
+ * server's, and its frames carry them (AM-28); the copy predicts the walk only, as it did before the floor had moments.
+ */
+const QUIET: FloorMoments = { glint: null, glintAfterTick: Number.POSITIVE_INFINITY, scramble: null, scrambled: true, beats: [], due: [] };
+const walkOnly = (cfg: FloorConfig): FloorConfig => ({ ...cfg, wolves: { ...cfg.wolves, on: false } });
+
 function stepMe(me: FloorColonist, tick: number, stick: Stick, world: PredictWorld, hold: number | null): FloorColonist {
   // stepFloor holds an assaying colonist still itself, as on the server, and only on steps that start before the hold.
   const held = hold !== null ? { ...me, assayUntilTick: hold } : me;
-  const next = stepFloor({ tick, colonists: [held] }, world.state, { [world.id]: { x: stick.x, y: stick.y, act: false } }, world.cfg.steer.tickMs, world.cfg);
+  const next = stepFloor({ tick, colonists: [held], moments: QUIET }, world.state, { [world.id]: { x: stick.x, y: stick.y, act: false } }, world.cfg.steer.tickMs, walkOnly(world.cfg));
   return next.colonists[0]!;
 }
 

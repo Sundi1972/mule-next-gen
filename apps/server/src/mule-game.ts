@@ -1342,7 +1342,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       else steering.stats.acts++;
       if (press.reach.kind === 'pub' && press.refused === null) this.addNews(`${this.nameOf(press.seat)} went to the pub and won ${press.payout}.`);
     }
-    this.ctx.frame(devFrame(floor));
+    // This tick's lines for the TV: stepFloor starts them fresh each step, then settleMoments' (a glint's payout) and the
+    // presses' follow, so the floor after the presses holds the tick's, in order, and no earlier tick's.
+    this.ctx.frame(devFrame(floor, floor.moments.beats.map((b) => b.text)));
     steering.stats.frames++;
     this.checkEarlyEnd();
     if (this.steering !== steering) return true;

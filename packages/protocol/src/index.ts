@@ -164,6 +164,52 @@ export interface ReachView {
   enabled: boolean;
 }
 
+/** A wolf of a pack on the floor (arcade RULE-4), its position rounded as the colonists' are. */
+export interface FrameWolf {
+  x: number;
+  y: number;
+  /** Circling; crouched to lunge (the warning); lunging; open after a miss; hurt after a strike or a bite. */
+  state: 'prowl' | 'tell' | 'lunge' | 'open' | 'hurt';
+  /** Where it aims, a map position: set while it crouches (tell) and lunges, null otherwise. */
+  target: { x: number; y: number } | null;
+}
+
+/** A pack round a colonist: whose, and the stage of the meeting (the same as that colonist's ColonistView.encounter). */
+export interface FramePack {
+  who: string;
+  stage: 'choose' | 'chase' | 'fight';
+  /** The tick the stage began. */
+  sinceTick: number;
+  /** Where the stage began, a map position: a chase gives up far enough from it, and a fight stays round it. */
+  centre: { x: number; y: number };
+  /** In a fight: the strikes that landed on wolves, and the bites taken. */
+  strikes: number;
+  bites: number;
+  wolves: FrameWolf[];
+}
+
+/**
+ * The moments on the floor this tick (AM-28), straight from the floor's state. Absent from the frame when there is no
+ * pack, no glint, no scramble yet this turn, no bolted MULE and no stunned colonist.
+ */
+export interface FrameMoments {
+  packs: FramePack[];
+  /** The glint lit, by its tile: x and y are the tile's (whole numbers), and it is drawn at the tile's middle (+0.5). */
+  glint: { x: number; y: number; untilTick: number } | null;
+  /**
+   * The turn's corral scramble, from its call to the end of the turn: `over` is null while it runs, then how it ended;
+   * `got` the needers that got a MULE from it, in order; `leftOut` the needers who went without, filled once it is over.
+   */
+  scramble: { untilTick: number; needers: string[]; got: string[]; over: 'empty' | 'time' | 'everyone' | null; leftOut: string[] } | null;
+  /**
+   * The seats whose MULE bolted after a lost fight and is not caught yet, running or standing. The MULE is at that
+   * colonist's `lead`, in map tiles even while its colonist is in the hall.
+   */
+  bolted: string[];
+  /** Colonists stunned by a lost fight: whose, and the tick the stun ends (it is gone from the frame on that tick). */
+  stunned: { who: string; untilTick: number }[];
+}
+
 /** One development tick's positions for every screen, sent beside the full view. */
 export interface DevFrame {
   tick: number;
@@ -181,6 +227,8 @@ export interface DevFrame {
   }[];
   /** The moments' lines everyone sees this tick. */
   beats: string[];
+  /** The moments' state this tick; absent while none is on (AM-28). */
+  moments?: FrameMoments;
 }
 
 export interface MyView {

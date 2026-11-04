@@ -34,7 +34,8 @@ export function hallSpeed(cfg: FloorConfig): number {
  * door-to-corral walk takes floorSeconds at full pace and neither a bite nor an AI seat slows it.
  */
 export function speedOf(c: FloorColonist, state: GameState, cfg: FloorConfig): number {
-  const lead = c.lead ? cfg.steer.leadPace : 1;
+  // A MULE that bolted is not on the lead: it does not slow its colonist.
+  const lead = c.lead && !c.bolt ? cfg.steer.leadPace : 1;
   if (c.space === 'hall') return hallSpeed(cfg) * c.pace * lead;
   const terrain = tileAt(state.tiles, state.width, Math.floor(c.x), Math.floor(c.y))!.terrain;
   // On land it may not enter, a colonist still walks at the land's listed speed, or 1 if it has none, to get off it.
