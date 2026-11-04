@@ -7,11 +7,13 @@
 import { POLLUTION } from '@mule/engine';
 import type { Locator, Page } from 'playwright';
 import { claimAPlot, CLAIM_MS, check, doneWithLand, held, launch, PHONE, PHONE_SMALL, SHOWN_MS, startServer, TV } from './harness';
-import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
+import { ELECTION_WAIT_MS, readyThroughTheElection, voteThroughTheElection } from './politics-steps';
 import { AUDIT_JS, MONTH_END_JS, type AuditRead, type AuditScope } from './small-phone-audit';
 import { doneThroughTheElection } from './table-steps';
 
 const PHASE_SCALE = 0.1;
+/** A laptop, for the A-5 close read's third size. */
+const LAPTOP = { width: 1440, height: 900 };
 const PRESS_MS = 2_000;
 /** Development's one clock runs on wall time, held or not: enough for two MULEs and every read. */
 const DEV_MS = 120_000;
@@ -25,6 +27,12 @@ const LONG_NAME = 'The Big Spender';
 const RAIL: AuditScope = { roots: ['[data-testid=guide] > header', '[data-testid=now]'], skip: ['[data-testid=table-chat]'] };
 /** A WS4 screen: all of it, less the table chat. */
 const WHOLE: AuditScope = { roots: ['[data-testid=game-shell]'], skip: ['[data-testid=table-chat]'] };
+/**
+ * Planning proper, the hub: the rail header (where the standing sits), the desks' tabs and the footer. Not yet the
+ * whole stage: at 667 its map tools are 28 px tall and the ballot's ELECTED tag is 9 px, owned by the hub and politics
+ * work, so the stage joins this read once those meet B-AC-11.
+ */
+const HUB: AuditScope = { roots: [...RAIL.roots, '[data-testid=desks]', '[data-testid=actions]'], skip: RAIL.skip };
 /**
  * Out on the development map: the rail header and the map. The plot card (the rail's body and its footer) is excluded:
  * it retires in arcade C14, so it is measured and printed, not asserted. The plots are the map's own grid, 13 across
@@ -98,6 +106,11 @@ try {
   await both('planning, the election', RAIL);
   await monthOnOneLine(phone, code);
   await doneThroughTheElection(ctx, PHASE_SCALE * ELECTION_WAIT_MS + 10_000);
+  // Planning proper, the hub after the ballot: its header, desks and footer, read before the phone is ready.
+  await voteThroughTheElection(phone, SHOWN_MS);
+  // The audit skips a root that matches nothing, so each is checked here: a renamed one would leave the read quiet.
+  for (const root of HUB.roots) check((await phone.locator(root).count()) > 0, `B-AC-11: planning, the hub shows ${root}`);
+  await both('planning, the hub', HUB);
   await readyThroughTheElection(phone, SHOWN_MS);
   await phone.locator('[data-phase=landGrant]').waitFor({ timeout: SHOWN_MS });
   await both('land grant', RAIL);
@@ -113,6 +126,7 @@ try {
   await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: PRESS_MS });
   await dev.getByRole('button', { name: 'Install here' }).click({ timeout: PRESS_MS });
   await dev.getByText(/Your MULE here makes/).waitFor({ timeout: PRESS_MS });
+  await startMonthOnesClock(phone, code);
   await dev.getByRole('button', { name: 'Store', exact: true }).click({ timeout: PRESS_MS });
   await phone.locator('[data-shop=corral]:not([disabled])').click({ timeout: PRESS_MS });
   await phone.locator('[data-shop=food]:not([disabled])').click({ timeout: PRESS_MS });
@@ -153,10 +167,50 @@ try {
   await both('the goods auction', RAIL);
   const done = auction.getByRole('button', { name: /^(Ready|Done with .+)$/ });
   const end = phone.locator('[data-phase=upkeep]');
-  for (let i = 0; i < 40 && !(await end.count()); i++) {
-    await done.or(end).first().waitFor({ timeout: 30_000 });
-    await done.click({ timeout: PRESS_MS }).catch(() => undefined);
+  // A-5: the first good that closes is read whole, its receipt over the board and the month's total under the money.
+  // The close stage is a few server ticks long at this scale, so the server's own view is watched and the room held.
+  let readClose = false;
+  let auctionOver = false;
+  const closeRead = (async () => {
+    while (!auctionOver) {
+      if (server.registry.get(code)?.viewFor(null).game?.auction?.stage === 'close') {
+        // What A-5 adds: the receipt card, its last line the month's total, and the rail header beside it, which must
+        // keep a four-digit balance and the player's name whole (WS6 ruling on #204). The board's names strip under the
+        // card truncates a long name on trunk's walk too ("The Accountant", 78 in 51 px at 667): not this read's to judge.
+        const scope: AuditScope = { roots: [...RAIL.roots, '[data-testid=receipt]'], skip: RAIL.skip };
+        const prep = async () => {
+          await phone.getByTestId('receipt-layer').waitFor({ timeout: PRESS_MS });
+          await phone.getByTestId('receipt-tally').waitFor({ timeout: PRESS_MS });
+        };
+        await held(server, code, async () => {
+          const money = (await phone.getByTestId('money').innerText()).trim();
+          check(/^\d,\d{3} cr$/.test(money), `A-5: the close is read with a four-digit balance, got "${money}"`);
+          const small = await readAt(phone, PHONE_SMALL.viewport, scope, prep);
+          const wide = await readAt(phone, PHONE.viewport, scope, prep);
+          const laptop = await readAt(phone, LAPTOP, scope, prep);
+          await phone.setViewportSize(PHONE_SMALL.viewport);
+          reads.push({ screen: 'the goods auction, a good closed', small, base: wide });
+          // B-AC-11's tap and fit rules are the phones'; at 1440 only the name is asserted (trunk's theme toggle is a 54×22 tap there).
+          for (const f of laptop.fails) console.log(`  at 1440×900, measured, not asserted: ${f}`);
+          check(laptop.name?.text === NAME && laptop.name.whole, `A-5: at 1440×900 the rail header shows ${NAME} whole beside ${money}, got "${laptop.name?.text}"`);
+          console.log(`  the goods auction, a good closed: ${money}, ${NAME} whole at 1440×900 too`);
+        });
+        readClose = true;
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 5));
+    }
+  })();
+  try {
+    for (let i = 0; i < 40 && !(await end.count()); i++) {
+      await done.or(end).first().waitFor({ timeout: 30_000 });
+      await done.click({ timeout: PRESS_MS }).catch(() => undefined);
+    }
+  } finally {
+    auctionOver = true;
+    await closeRead;
   }
+  check(readClose, 'A-5: the auction reached a close stage with its receipt and the tally, read at both sizes');
   await end.getByTestId('league').waitFor({ timeout: 30_000 });
   await monthEnd('month end');
   const air = setAir(code, collapseAir());
@@ -217,6 +271,24 @@ function giveDevelopment(code: string): void {
   check(me, `${NAME} plays in the game`);
   me.money += DEV_MONEY;
   game.ctx.changed();
+}
+
+/**
+ * Month 1's clock waits for every first MULE (A-1), and a seat already in may only end its turn until it starts, so the
+ * corral stays shut for a second MULE. The phone hosts: it starts the clock for the AIs still buying, as its player
+ * would (first-mule.ts reads that card at both sizes), then development gets its long clock back.
+ */
+async function startMonthOnesClock(phone: Page, code: string): Promise<void> {
+  // The server says whether the clock still waits; if every AI is already in, it has started on its own.
+  const room = server.registry.get(code) as unknown as { game: { clockWaits: boolean } };
+  if (room.game.clockWaits) {
+    await phone.getByTestId('continue').click({ timeout: PRESS_MS });
+    await phone.getByTestId('continue-now').click({ timeout: PRESS_MS });
+    await phone.getByTestId('clock-waits').waitFor({ state: 'hidden', timeout: PRESS_MS });
+    check(!room.game.clockWaits, "A-1: the host's Start the clock starts month 1's clock");
+  }
+  // Starting the clock, by the host or by the last first MULE, set the phase's own short clock: the long one comes back.
+  giveDevelopment(code);
 }
 
 /** Test fixture: the last AI seat takes `name`. */

@@ -841,6 +841,8 @@ export const WALK = {
   statusMs: 8_000,
   /** The walk's clock for one good. */
   goodMs: 20_000,
+  /** The close stage after a good's walk: each phone shows its receipt for the good (UX audit G-5), as the land auction's result does. Display and game time only. */
+  closeMs: 2_500,
   /** While any unit is changing hands the clock runs at this share of its speed, as in the original. */
   tradeClockRate: 0.25,
   /**
