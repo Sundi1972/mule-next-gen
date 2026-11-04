@@ -537,16 +537,17 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
     }
     return drafted.get(key)!;
   };
-  /** What step 5 dropped, or replaced whole with the engine's: nothing under it is checked again. */
-  const settled: string[][] = [];
-  const under = (unit: readonly string[]) => settled.some((g) => g.every((k, n) => unit[n] === k));
+  /** What step 5 dropped, or replaced whole with the engine's, and what plays there instead: nothing under it is checked again. */
+  const settled: { at: string[]; plays: string }[] = [];
+  const settledOver = (unit: readonly string[]) => settled.find(({ at }) => at.every((k, n) => unit[n] === k));
+  const under = (unit: readonly string[]) => settledOver(unit) !== undefined;
   const settle = (unit: string[], v: Verdict) => {
     const value = getAt(pb, unit);
     const reject = (why: string) => rejected.push({ path: pathOf(unit), to: value, why, i: edits.length });
     const drop = (at: string[], why: string) => {
       reject(why);
       dropUnit(pb, at);
-      settled.push(at);
+      settled.push({ at, plays: `${pathOf(at)} is dropped` });
     };
     if (!('refused' in v)) {
       if (same(v.plays, value)) return;
@@ -562,7 +563,7 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
     const named = holder.length < unit.length ? `${pathOf(holder)} plays` : plays === null || typeof plays !== 'object' ? `draft plays ${show(plays)}` : 'draft value plays';
     reject(`${v.refused}; the engine's ${named}`);
     putUnit(pb, holder, structuredClone(plays));
-    settled.push(holder);
+    settled.push({ at: holder, plays: `the engine's ${named}` });
   };
   for (const unit of containersOf(pb)) if (!under(unit) && !isObject(getAt(pb, unit))) settle(unit, refuse('not an object'));
   for (const unit of unitsOf(pb)) {
@@ -571,11 +572,19 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
     settle(unit, 'refused' in verdict ? verdict : verdict.row(getAt(pb, unit), ctx, unit));
   }
 
-  const strip = <T extends { i: number }>(xs: T[]) => xs.sort((a, b) => a.i - b.i).map(({ i: _, ...x }) => x);
-  // Step 6: an accepted edit's `to` is the value that plays. An edit to a field that was dropped, or inside a list a
-  // clamp shortened or lengthened, is clamped only: it stays in rejected and is not listed here.
+  // Step 6: an edit counts as accepted only if its own value plays, and its `to` is that value after step 5. One under a
+  // field step 5 dropped or replaced is rejected instead, naming what plays (replacing its clamp, which no longer
+  // plays either); one inside a list a clamp shortened or lengthened is clamped only.
+  for (const a of accepted) {
+    const over = settledOver(a.at);
+    if (!over) continue;
+    const clamp = rejected.findIndex((r) => r.i === a.i);
+    if (clamp >= 0) rejected.splice(clamp, 1);
+    rejected.push({ path: a.path, to: edits[a.i]!.to, why: over.plays, i: a.i });
+  }
   const stillPlays = ({ at, lists }: (typeof accepted)[number]) =>
-    getAt(pb, at) !== undefined && lists.every(([path, length]) => (getAt(pb, path) as unknown[] | undefined)?.length === length);
+    !under(at) && getAt(pb, at) !== undefined && lists.every(([path, length]) => (getAt(pb, path) as unknown[] | undefined)?.length === length);
+  const strip = <T extends { i: number }>(xs: T[]) => xs.sort((a, b) => a.i - b.i).map(({ i: _, ...x }) => x);
   const outEdits = strip(accepted.filter(stillPlays).map(({ at, lists: _, ...a }) => ({ ...a, to: getAt(pb, at) })));
   const outRejected = strip(rejected);
   pb.by = outEdits.length > 0 ? 'llm' : 'engine';
