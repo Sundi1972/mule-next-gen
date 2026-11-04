@@ -898,7 +898,7 @@ export const COLONY = {
   maxOpen: 1,
   /** Credits the fund keeps back from a project's funding, so next month's office pay is there. */
   reserve: 100,
-  /** The fund buys an object's missing goods from the store at the store's price; off, only donors' goods fund it. Provisional until Heiko confirms it. */
+  /** The fund buys an object's missing goods from the store at the store's price; off, only donors' goods fund it. */
   fundBuysGoods: true,
   /** The Federation's grant into the fund at each upkeep, in credits; flat until a scaling rule is tuned. */
   grant: { perMonth: 150 },
