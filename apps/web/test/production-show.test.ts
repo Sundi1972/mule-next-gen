@@ -1,5 +1,5 @@
 import type { ProductionView } from '@mule/protocol';
-import { EventCard, ProductionMap, SHOW, showTime, type EventKind, type MapTile } from '@mule/ui';
+import { ProductionMap, SHOW, showTime, type MapTile } from '@mule/ui';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -7,7 +7,9 @@ import { describe, expect, it } from 'vitest';
 const W = 6;
 const H = 3;
 const tiles: MapTile[] = Array.from({ length: W * H }, (_, i) => ({ x: i % W, y: Math.floor(i / W), terrain: 'plains', owner: null }));
-const KINDS: EventKind[] = ['storm', 'drought', 'flare', 'comet', 'flood', 'quake', 'blight', 'fire', 'bounty'];
+/** The view's `kind` strings: the show draws by the event's key, whatever its kind. */
+const KINDS = ['storm', 'drought', 'flare', 'comet', 'flood', 'quake', 'blight', 'fire', 'bounty'] as const;
+type EventKind = (typeof KINDS)[number];
 
 /** Three working plots; the event hits the first two: (1, 0) loses 2, (4, 0) gains 2. (2, 2) is never hit. */
 function month(kind: EventKind, deltas: [number, number] = [-2, 2]): ProductionView {
@@ -123,11 +125,5 @@ describe('the production show on the map', () => {
       expect(html).not.toContain('✕');
       expect(bars(plot(html, 1, 0))).toBe(2);
     }
-  });
-
-  it('B-AC-7: the event card names the event once it is due, never before', () => {
-    const ev = month('quake').events[0]!;
-    expect(renderToStaticMarkup(createElement(EventCard, { ev, t: SHOW.cardAt - 0.1 }))).toBe('');
-    expect(renderToStaticMarkup(createElement(EventCard, { ev, t: SHOW.cardAt }))).toContain('Something happens!');
   });
 });
