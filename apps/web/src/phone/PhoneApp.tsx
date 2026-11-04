@@ -1,9 +1,9 @@
-import { DEV_STEER } from '@mule/engine';
 import { SeatSpeciesProvider } from '@mule/ui';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { player, seatSpecies, slotOf } from '../game/derive';
 import { useClient, useClientState } from '../net/react';
 import { ArcadeDevelop } from './arcade/Develop';
+import { steering } from './arcade/route';
 import { Auction } from './Auction';
 import { Develop } from './Develop';
 import { GameOver } from './GameOver';
@@ -62,7 +62,7 @@ function PhoneScreens({ room, moving }: { room: string; moving: boolean }) {
   ) : view.phase === 'landGrant' ? (
     <LandGrant />
   ) : view.phase === 'development' ? (
-    DEV_STEER.on ? <ArcadeDevelop /> : <Develop />
+    steering(view) ? <ArcadeDevelop /> : <Develop />
   ) : view.phase === 'auction' ? (
     <Auction />
   ) : view.phase === 'landAuction' ? (
