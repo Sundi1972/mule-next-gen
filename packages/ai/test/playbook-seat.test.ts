@@ -134,6 +134,15 @@ function countingDecider(asked: string[]): Decider {
 
 const playOf = (t: ReturnType<typeof playTable>) => ({ acts: t.acts, records: stableJson(t.records) });
 
+/** The head of the plan the seat's land hand settled on and played, as its dev view shows it (the top five plots). */
+function playedHead(t: ReturnType<typeof playTable>, seat: string, month: number) {
+  const plan = t.landPlans.find((p) => p.seat === seat && p.month === month)!.plan!;
+  return plan.top.map((p) => ({ label: p.label, value: Math.max(0, Math.round(p.value)) }));
+}
+
+/** A written land part's ranking, as many as the dev view shows, by the plots' names. */
+const headOf = (land: LandGrantPlay, state: GameState) => land.ranked.slice(0, 5).map((r) => ({ label: plotName(state.tiles[r.plot]!), value: r.value }));
+
 describe('the seat drafts, validates and writes its planning playbook (C4, RULE-6, RULE-7)', () => {
   it("B-AC-7: a keyless seat writes its validated planning draft, by 'engine'", () => {
     const t = playTable(3);
@@ -146,9 +155,7 @@ describe('the seat drafts, validates and writes its planning playbook (C4, RULE-
       expect(pb.rejected).toBeUndefined();
       expect(pb.planning).toEqual({});
       // Its ranking is the one the land hand played that month: the settled plan its dev view shows.
-      const played = t.landPlans.find((p) => p.seat === pb.seat && p.month === pb.month)!.plan!;
-      const written = pb.landGrant!.ranked.slice(0, played.top.length).map((r) => ({ label: plotName(t.state.tiles[r.plot]!), value: r.value }));
-      expect(written).toEqual(played.top.map((p) => ({ label: p.label, value: Math.max(0, Math.round(p.value)) })));
+      expect(headOf(pb.landGrant!, t.state)).toEqual(playedHead(t, pb.seat, pb.month));
     }
   });
 
@@ -275,7 +282,10 @@ describe("playbookSource, WS2's PlaybookSource (AM-1)", () => {
     type Seen = { phase: string; state: GameState; playbook: Playbook; land: LandDraft; free: Set<number> };
     const seen: Seen[] = [];
     let source: PlaybookSource | null = null;
+    // A Smart seat whose decider takes the last land plan offered, where the draft's own pick would take the top one.
+    const lastPlan: Decider = { name: 'last', decide: (options) => ({ optionId: options.at(-1)!.id, line: null, by: 'llm' }) };
     const t = playTable(1, {
+      seat: (i) => (i === 2 ? { decider: lastPlan } : {}),
       opening: (state, seats) => {
         source ??= playbookSource(seats);
         const { playbook, land } = source.draft(state, 'ai2');
@@ -283,7 +293,6 @@ describe("playbookSource, WS2's PlaybookSource (AM-1)", () => {
         seen.push({ phase: state.phase, state: structuredClone(state), playbook, land, free });
       },
     });
-    const writtenRanked = t.written.find((pb) => pb.seat === 'ai2' && pb.month === 1)!.landGrant!.ranked;
     const at = (phase: string) => seen.find((s) => s.phase === phase)!;
 
     for (const s of seen) {
@@ -299,8 +308,9 @@ describe("playbookSource, WS2's PlaybookSource (AM-1)", () => {
     expect(at('landGrant').playbook.month).toBe(1);
     expect(at('development').playbook.month).toBe(2);
     expect(at('upkeep').playbook.month).toBe(2);
-    // At the grant it plans the pending pick the land hand plays: the ranking the seat wrote at planning.
-    expect(at('landGrant').playbook.landGrant!.ranked).toEqual(writtenRanked);
+    // At the grant it plans the pending pick the land hand then plays, the decider's, not a pick of its own.
+    expect(headOf(at('landGrant').playbook.landGrant!, t.state)).toEqual(playedHead(t, 'ai2', 1));
+    expect(headOf(at('planning').playbook.landGrant!, t.state)).not.toEqual(playedHead(t, 'ai2', 1));
 
     // An in-bounds edit plays, by 'llm'.
     const grant = at('landGrant');

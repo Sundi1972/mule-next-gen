@@ -24,7 +24,30 @@ export interface SourceSeat {
   validator(): ValidatePlan;
 }
 
-/** The source for one game's AI seats. */
-export function playbookSource(_seats: readonly SourceSeat[]): PlaybookSource {
-  throw new Error('NotImplemented: playbookSource');
+/** Phases of a month whose land grant is still to come; from the land auction on, a draft plans next month's. */
+const BEFORE_GRANT = new Set<GameState['phase']>(['planning', 'landGrant']);
+
+/**
+ * The source for one game's AI seats. Its draft is the seat's planning draft cut to the strategy and the land grant,
+ * stamped with the month of the grant it plans, and drafted from the live state: it ranks the plots free now. An
+ * unknown seat's draft throws; its validate refuses every edit and never throws.
+ */
+export function playbookSource(seats: readonly SourceSeat[]): PlaybookSource {
+  const seatOf = (id: PlayerId) => seats.find((s) => s.id === id);
+  return {
+    draft(state, seat) {
+      const s = seatOf(seat);
+      if (!s) throw new Error(`No AI seat ${seat}`);
+      const month = BEFORE_GRANT.has(state.phase) ? state.month : state.month + 1;
+      const { planning: _, ...planned } = s.draft(state, 'planning', month);
+      const playbook = s.validator()(state, seat, { ...planned, phase: 'landGrant' }, []).playbook;
+      return { playbook, land: { strategy: playbook.strategy, landGrant: playbook.landGrant! } };
+    },
+    validate(state, seat, draft, edits) {
+      const s = seatOf(seat);
+      if (s) return s.validator()(state, seat, draft, edits);
+      const all = Array.isArray(edits) ? edits : [];
+      return { playbook: draft, rejected: all.map((e) => ({ path: e?.path, to: e?.to, why: `no AI seat ${seat}` })) };
+    },
+  };
 }

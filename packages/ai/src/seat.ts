@@ -2,6 +2,7 @@ import {
   AI_HANDS,
   AI_LEVELS,
   AI_PERSONAS,
+  AI_PLANS,
   createRng,
   floorConfig,
   GAME,
@@ -20,7 +21,7 @@ import type { Decider, TableTalk } from './decider.js';
 import { AuctionHand, type AuctionDebug } from './hands/auction.js';
 import { DevelopHand, type DevWalking } from './hands/develop.js';
 import { PERSONAS } from './personas.js';
-import type { DraftPhase, ValidatePlan } from './playbook/index.js';
+import { draftPlaybook, validatorFor, type DraftPhase, type ValidatePlan } from './playbook/index.js';
 import { landDecision, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
 import { situation } from './summary.js';
 import type { Mind } from './value.js';
@@ -67,6 +68,8 @@ export class AiSeat {
   private readonly auction: AuctionHand;
   private land: Pending<LandPlan> | null = null;
   private landMonth = -1;
+  /** Playbooks adopted for the newest month adopted, oldest first. */
+  private adopted: Playbook[] = [];
 
   constructor(readonly options: AiSeatOptions) {
     this.mind = {
@@ -97,21 +100,48 @@ export class AiSeat {
     const obs = observe(state, this.id);
     this.landMonth = state.month;
     this.land = this.brain.ask('land', landDecision(obs, this.mind), obs, Infinity, null, situation(obs, this.mind));
+    if (this.pathFor(state.month, 'planning') === 'own') this.writeDraft(state, 'planning');
+  }
+
+  /** RULE-6: who plays this month's part, first match wins. */
+  private pathFor(month: number, part: 'planning' | 'landGrant' | 'development' | 'auction'): 'today' | 'adopted' | 'own' {
+    if (!AI_PLANS.on || this.options.playbook === false) return 'today';
+    if (this.adopted.some((pb) => pb.month === month && pb[part] !== undefined)) return 'adopted';
+    return this.options.decider ? 'today' : 'own';
+  }
+
+  /** A draft point: drafts, validates and writes. A draft or validator error is logged and the phase plays today's path (HC-9). */
+  private writeDraft(state: GameState, phase: DraftPhase): void {
+    let playbook: Playbook;
+    try {
+      playbook = this.draft(state, phase);
+    } catch (err) {
+      console.error(`AI seat ${this.id}: no ${phase} playbook for month ${state.month}, playing without one: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+    this.options.onPlaybook?.(playbook);
   }
 
   /** The seat's validated draft for a phase. `month` is the month whose land grant it plans. Writes nothing. */
-  draft(_state: GameState, _phase: DraftPhase, _month?: number): Playbook {
-    throw new Error('NotImplemented: AiSeat.draft');
+  draft(state: GameState, phase: DraftPhase, month = state.month): Playbook {
+    // Read, never settled: settling would log the land decision before the grant.
+    const land = this.landMonth === month ? this.land : null;
+    const drafted = { ...draftPlaybook({ state, seat: this.id, mind: this.mind, seed: this.options.seed, phase, land }), month };
+    return this.validator()(state, this.id, drafted, []).playbook;
   }
 
   /** Puts a playbook's parts in effect for its month (RULE-7). */
-  adopt(_playbook: Playbook): void {
-    throw new Error('NotImplemented: AiSeat.adopt');
+  adopt(playbook: Playbook): void {
+    const newest = this.adopted[0]?.month ?? -Infinity;
+    if (playbook.month < newest) return;
+    if (playbook.month > newest) this.adopted = [];
+    this.adopted.push(structuredClone(playbook));
   }
 
   /** The gate this seat's playbooks pass: its mind, its seed and, for the month it holds one, its pending land pick. */
   validator(): ValidatePlan {
-    throw new Error('NotImplemented: AiSeat.validator');
+    return (state, seat, draft, edits) =>
+      validatorFor({ mind: this.mind, seed: this.options.seed, land: this.landMonth === draft.month ? this.land : null })(state, seat, draft, edits);
   }
 
   /**
