@@ -740,6 +740,13 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-25 (2026-11-04, PR-6's render gate and screenshots, ruled by WS6).** (1) **The TV's hall names its rooms
+  only:** outfit prices and the pub's payout are each seat's own (`me.outfitCosts`, the pub's sum from your time
+  left), and the TV has no seat, so it draws no prices where the mock's TV did. (2) **A plot's label stays inside the
+  map:** near an edge it is anchored to the plot's inner side, never clipped ("UR PLOT 1·1" at 844 and 667). (3)
+  **Colonists on one spot fan out:** two or more drawn within 0.3 tiles of each other are offset a little in seat
+  order, so none hides another (at the start two share a door spot); drawing only, the wire and the prediction
+  unchanged.
 - **AM-24 (2026-11-04, PR-6 phase B's findings, ruled by WS6).** (1) **B-AC-2 measured as RULE-10 draws:** others are
   drawn `interpolateMs` (100 ms, two ticks) behind the newest frame, so at the same instant the TV is up to about 0.13
   tiles behind the server. B-AC-2 compares the TV against where the server had each colonist `interpolateMs`
