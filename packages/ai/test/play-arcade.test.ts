@@ -393,10 +393,11 @@ function muleWalks(games: number): Record<Leg, LegTime[]> {
     if (input.act) s.lastAct = t;
     return input;
   });
-  // The estimate is of the errand's walk: this sample plays without the moments (no packs, glints or scrambles, and no
-  // legs sent by wolf land, AM-22), whose time is not the walk's.
-  const saved = { wolves: WOLVES.on, share: WOLVES.botWolfLandShare, glint: GLINT.on, scramble: SCRAMBLE.on };
-  Object.assign(WOLVES, { on: false, botWolfLandShare: 0 });
+  // The estimate is of the errand's walk: this sample plays without the moments (no packs, glints or scrambles), whose
+  // time is not the walk's. With the wolves off no leg goes by wolf land either (AM-22's legs are for the packs): the
+  // share is left as configured, so a leg sent there for nothing shows as a walk off its estimate.
+  const saved = { wolves: WOLVES.on, glint: GLINT.on, scramble: SCRAMBLE.on };
+  WOLVES.on = false;
   GLINT.on = false;
   SCRAMBLE.on = false;
   try {
@@ -421,7 +422,7 @@ function muleWalks(games: number): Record<Leg, LegTime[]> {
     });
   } finally {
     spy.mockRestore();
-    Object.assign(WOLVES, { on: saved.wolves, botWolfLandShare: saved.share });
+    WOLVES.on = saved.wolves;
     GLINT.on = saved.glint;
     SCRAMBLE.on = saved.scramble;
   }

@@ -300,13 +300,13 @@ export class DevelopHand {
    * that adds least to the straight walk, if that detour still fits its errand and the clock (RULE-8). The input that
    * walks there, or null to walk the leg as it is. Never a leg walked leading a MULE: a pack met then is what loses the
    * install (the MULE bolts, or the fight and the bite cost the walk to the plot), so the AI spends its share of wolf-land
-   * legs where a pack costs it least.
+   * legs where a pack costs it least. With the wolves off, none: a leg by wolf land would be a detour for nothing.
    */
   private byWolfLand(view: FloorView, c: FloorColonist, step: DevStep): FloorInput | null {
     const { cfg } = view;
     if (this.leg?.step !== step || this.leg.space !== c.space) {
       this.leg = { step, space: c.space };
-      this.via = c.space === 'map' && !leading(c) && this.rng.next() < cfg.wolves.botWolfLandShare ? this.wolfVia(view, c, step) : null;
+      this.via = cfg.wolves.on && c.space === 'map' && !leading(c) && this.rng.next() < cfg.wolves.botWolfLandShare ? this.wolfVia(view, c, step) : null;
       if (this.via) this.chaser.reset();
     }
     const via = this.via;
