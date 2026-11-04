@@ -4,7 +4,7 @@
  * sideways: each phone screen is saved as phone-land-* at 844x390 and again
  * at 932x430 (-wide), plus one shot of the turn-sideways screen when upright.
  * Then steered development (arcade PR-6), in a room of its own on a flag-on server: two phones and a TV; Heiko's
- * phone on the map, in the store hall at the corral and leading a MULE out of the door, as a laptop at 1440x900 and
+ * phone on the map, in the store hall at the corral (also at 667x375) and leading a MULE out of the door, as a laptop at 1440x900 and
  * as the small phone at 667x375, and the TV during development, each saved as *-arcade-*.
  * Run with `pnpm --filter @mule/web screens [output-dir]`.
  */
@@ -147,7 +147,14 @@ try {
   await shot(tv, 'tv-6-auction-walking');
   // Keep walking until units change hands, then picture the trade.
   // A trade is quick, so both screens are taken the moment units start changing hands.
-  await phone.getByTestId('my-deal').filter({ hasText: /[2-9] units/ }).waitFor({ timeout: 20_000 });
+  const deal = phone.getByTestId('my-deal').filter({ hasText: /[2-9] units/ });
+  const go = phone.getByTestId('line-go');
+  await deal.or(go).first().waitFor({ timeout: 20_000 });
+  // With the store the only buyer, at its line the phone first asks how many (A-6): sell what it offers.
+  if ((await go.count()) > 0) {
+    await go.click();
+    await phone.getByText(/Selling to the store: [1-9] of/).or(phone.getByText(/^You sold/)).first().waitFor({ timeout: 10_000 });
+  }
   await Promise.all([phone.screenshot({ path: join(out, 'phone-land-6-auction-trade.png') }), tv.screenshot({ path: join(out, 'tv-6-auction-trade.png') })]);
   await phone.keyboard.up('ArrowDown');
   await phone.getByRole('button', { name: 'Night' }).click();
@@ -209,6 +216,12 @@ async function arcadeScreens(): Promise<void> {
     await press('BUY MULE');
     await heiko.getByTestId('lead-chip').waitFor({ timeout: 5_000 });
     await phoneShot(heiko, 'arcade-2-hall-corral');
+    // The hall on the small phone too: its works caption and FIT badges are the tightest there.
+    await heiko.setViewportSize(PHONE_SMALL.viewport);
+    await heiko.locator('[data-testid=phone-game][data-size="667"]').waitFor({ timeout: 5_000 });
+    await shot(heiko, 'phone-land-arcade-2-hall-corral-667');
+    await heiko.setViewportSize(PHONE.viewport);
+    await heiko.locator('[data-testid=phone-game][data-size="844"]').waitFor({ timeout: 5_000 });
 
     // Outfitted for Food and led out of the nearer door.
     await steerTo(heiko, server, code, seat, hallPlace('food'));
