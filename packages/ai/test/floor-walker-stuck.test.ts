@@ -68,3 +68,42 @@ describe('the floor walker gives up a step it cannot get any closer to (arcade C
     expect(log.slice(buy + 1).some((s) => s.label === 'Go to the pub'), JSON.stringify(log)).toBe(true);
   });
 });
+
+/**
+ * Month 1's floor of heldDoors' game on the live config, with ai0 on the map just inside the band a body's width round
+ * the store's walls, above it: where a fight's arena edge can leave a colonist (AM-26's month 4, ai0, game 18 of the
+ * sim's sample). The floor stops every step that ends in the band, so from there only a step straight out moves it.
+ */
+function inWallBand(): { state: GameState; cfg: FloorConfig; floor: DevFloor } {
+  const { state } = heldDoors();
+  const cfg = simFloorConfig();
+  const store = state.tiles.find((t) => t.terrain === 'store')!;
+  const body = cfg.steer.bodyTiles;
+  // literal-ok: geometry, how far into the band and along the wall it stands (game 18: 0.018 in, 0.66 along)
+  const at = { x: store.x + 0.66, y: store.y - body + 0.018 };
+  const built = buildFloor(state, cfg);
+  const floor = { ...built, colonists: built.colonists.map((c) => (c.id === ME ? { ...c, space: 'map' as const, ...at } : c)) };
+  return { state, cfg, floor };
+}
+
+describe('the floor walker steps out of the band round the store walls (T-AC-5, AM-26)', () => {
+  it('T-AC-5: put just inside the store wall band, the walker steps out and walks in to the pub, not stuck', () => {
+    const { state, cfg } = inWallBand();
+    let { floor } = inWallBand();
+    const walker = new FloorWalker(ME);
+    const view = () => ({ state, floor, cfg, secondsLeft: 40 });
+    let failed: string | null = null;
+    let offered = false;
+    // literal-ok: a bound on the walk round the store and in to the pub, many times what it takes
+    for (let tick = 0; tick < 600 && failed === null && !offered; tick++) {
+      offered = where(floor).space === 'hall' && reachOf(floor, state, ME, cfg).kind === 'pub';
+      if (offered) break;
+      const run = walker.run(view(), { type: 'pub' }, 0);
+      if (run.kind === 'failed') failed = run.why;
+      if (run.kind !== 'going') break;
+      floor = stepFloor(floor, state, { [ME]: run.input }, cfg.steer.tickMs, cfg);
+    }
+    expect(failed, 'the walk to the pub').toBeNull();
+    expect(offered, 'it reached the pub').toBe(true);
+  });
+});
