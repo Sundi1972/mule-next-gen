@@ -1119,6 +1119,16 @@ async function fightWell(page: Page, server: MuleServer, code: string, seat: str
   return score;
 }
 
+/** Whether Heiko's fight ended by time, as the engine said on his frames: "held them off", not "beat" or "lost". */
+async function heldOff(page: Page, wire: Wire | null, sinceMs: number): Promise<boolean> {
+  const end = Date.now() + 1_000;
+  for (;;) {
+    const said = heardBeats(wire, sinceMs).find((b) => /^Heiko (beat the wolves|held them off|lost the fight)/.test(b));
+    if (said || Date.now() > end) return !!said && said.startsWith('Heiko held them off');
+    await page.waitForTimeout(TICK_MS);
+  }
+}
+
 /**
  * B-AC-5: wolves forced on (a pack certain each tick on wolf land, by setting the in-process server's WOLVES). Mia,
  * on forest, pushes the stick and runs: she is bitten and slowed, or gets away. Heiko presses and fights: he wins pelts
@@ -1213,6 +1223,7 @@ export async function wolvesRunOrFight(t: ArcadeTable): Promise<string> {
       fight.heiko.callouts.some((c) => c.id === 'fight-hud-s1') && fight.tv.callouts.some((c) => c.id === 'fight-hud-s1') && fight.tv.wolves.some((w) => w.who === 's1'),
       `${framesSay(fight.frames)}; his phone drew ${JSON.stringify(fight.heiko.callouts)}; the TV ${JSON.stringify(fight.tv.callouts)} and ${fight.tv.wolves.length} wolves`,
     );
+    const fightFrom = Date.now();
     const score = await fightWell(heiko, server, code, 's1');
     const after = colonistOf(server, code, 's1');
     const fought = `${score.strikes} strikes, ${score.bites} bites, ${score.presses} presses at an open wolf`;
@@ -1238,13 +1249,14 @@ export async function wolvesRunOrFight(t: ArcadeTable): Promise<string> {
       const sold = await playerWhen(heiko, server, code, 's1', (p) => p.money > m0);
       check(sold.money === m0 + after.pelts * WOLVES.peltPrice && colonistOf(server, code, 's1').pelts === 0, `B-AC-5: the pelts sell at the store's door for ${after.pelts * WOLVES.peltPrice} cr, money ${m0} → ${sold.money}`);
       out.push(`Heiko fought and won ${after.pelts} pelts (${fought}), sold for ${sold.money - m0} cr`);
-    } else if (score.bites < WOLVES.bitesToLose - 1) {
-      // Neither side won in fightSeconds: the wolves slink away and nothing is paid.
+    } else if (await heldOff(heiko, wires.heiko, fightFrom)) {
+      // Neither side won in fightSeconds: the wolves slink away and nothing is paid. Told by the engine's own line, not
+      // fightWell's count, which can miss the last bite: 2 bites is either held off or lost.
       check(after.pelts === 0 && after.stunnedUntilTick === undefined, `B-AC-5: held off, Heiko carries no pelts and stands free, got pelts ${after.pelts}, stunned until ${after.stunnedUntilTick}`);
       out.push(`Heiko held them off (${fought})`);
     } else {
       const tick = floorOf(server, code).tick;
-      check((after.stunnedUntilTick ?? 0) > tick, `B-AC-5: a fight lost with no MULE on the lead stuns Heiko, got pelts ${after.pelts}, stunned until ${after.stunnedUntilTick} (${fought})`);
+      check((after.stunnedUntilTick ?? 0) > tick, `B-AC-5: a fight lost with no MULE on the lead stuns Heiko, got pelts ${after.pelts}, stunned until ${after.stunnedUntilTick} (${fought}); his frames' beats ${JSON.stringify(heardBeats(wires.heiko, fightFrom))}`);
       await heiko.waitForTimeout(200);
       const stunned = await readMoments(heiko);
       owe("Heiko's phone says he is stunned", stunned.callouts.some((c) => c.id === 'stunned-s1'), `${framesSay(heardMoments(wires.heiko))}; it drew ${JSON.stringify(stunned.callouts)}`);
