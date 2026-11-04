@@ -741,6 +741,17 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-30 (2026-11-04, PR-9's review, ruled by WS6).** (1) **C11's 0 px² binds the layers placed on the screen** (the
+  scramble banner, the glint strip, the TV's moment lines): they keep off the store, your plots and the controls,
+  measured on the drawn text at 844 and 667, the longest line included. **The layers drawn where a moment happens**
+  (the wolves and their ring, the choice callout, the glint on its tile) sit at their place on the map: a glint on your
+  own plot covers it by definition (`GLINT.onOwnedPlots`), and a pack met near the map's bottom corners can sit under
+  the stick or the button. The laptop's banner along the bottom edge and the glint strip at the hall's top are the
+  mock's own placement. (2) **The TV reads every colonist's encounter stage from the frame's `packs`**, never from the
+  view: in steered development a view is sent only when a human's reach words or the state change, so an AI's
+  encounter would never reach the TV through it. (3) **Later, not in PR-9:** the frame's `beats` carry text only, so
+  the client matches a few beat texts by prefix; carrying each beat's `kind` (WS1's `FloorBeat.kind`) on the wire
+  would remove that coupling.
 - **AM-29 (2026-11-04, PM ruling: one way to stage the scramble; WS5's UBER-AC-3 test and PR-9's B-AC-7).** The
   scramble is staged by setting `START.storeMules` to 3 on the in-process server before it starts (upkeep refills only
   at month end, so month 1's corral holds 3), with the seats needers by the game's own rule (`needsMule`: a free plot
