@@ -345,8 +345,14 @@ Heiko's OK through the PM.
   - Gates: `MULE_FULL=1` record 22/22.
   - Merge gate:
     - [x] T-AC-13 is green, named, and red first.
-    - [ ] One independent review after green CI.
-    - [ ] The PM's merge batch.
+    - [x] One independent review after green CI: APPROVE WITH FIXES at 16cebd0c, fixed at f1a9fbd1:
+      - F1, a test for the 120-character cap;
+      - F2, file paths in the message scrubbed to `<path>`;
+      - F5, a test for a crash on the intent path.
+    - [x] The PM's merge batch: batch 13. Trunk 5745e9f6 was merged in at 5128d560. MERGED 2026-11-04
+      (`gh pr view 246`: 3dafea34).
+  - The edges: F3 (a disconnect after the crash) was fixed by WS4's #271. F4 (`viewFor` throws) is a known edge,
+    named in #246's body.
 - [x] **A balance-independent T-AC-10 fixture: DONE in PR #209** (branch `ws3-record-fixture`; 677e26f1, a trunk
   merge bc3f66bf, fixes df30b355). It has MERGED (`gh pr view 209`: merged 2026-10-29, b1c5906d).
   - The fixture builds its lot and its ship sale from the state, not from a lucky seed. 32/32 seeds pass.
