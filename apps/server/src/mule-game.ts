@@ -906,12 +906,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /**
    * Whether a seat counts as in for month 1's clock: away, or present with its first MULE installed, no plot, or its
    * turn ended at the pub or by Ready. The last two keep a seat that cannot or will not install from holding the table.
+   * So does a seat that cannot get a first MULE (AM-33): it leads none, and the corral is empty or its price is more
+   * than the seat has.
    */
   private isIn(seatId: string): boolean {
     const state = this.requireState();
     if (this.away.has(seatId) || this.ready.has(seatId)) return true;
     const p = state.players.find((q) => q.id === seatId)!;
-    return p.installedThisTurn || p.doneDeveloping || !state.tiles.some((t) => t.owner === seatId);
+    const cannotGetOne = !p.carriedMule && (state.store.mules <= 0 || p.money < mulePriceFor(state, seatId));
+    return p.installedThisTurn || p.doneDeveloping || cannotGetOne || !state.tiles.some((t) => t.owner === seatId);
   }
 
   private seatsNotIn(): SeatInfo[] {
