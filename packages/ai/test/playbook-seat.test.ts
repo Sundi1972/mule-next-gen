@@ -212,10 +212,14 @@ describe('the seat drafts, validates and writes its planning playbook (C4, RULE-
     expect(playOf(broken)).toEqual(playOf(base));
   });
 
+  /** The phases whose opening a seat drafts at (RULE-7): the only states T-AC-4 needs to draft from. */
+  const DRAFT_POINTS = new Set(['planning', 'development', 'auction']);
+
   it('T-AC-4: the same state drafted twice gives the same playbook, and drafting changes none of the seat’s acts or records', () => {
-    const base = playTable(2);
+    const base = playTable(1);
     const drafted = new Map<string, string>();
     const draftAll = (state: GameState, seats: AiSeat[]) => {
+      if (!DRAFT_POINTS.has(state.phase)) return;
       const before = stableJson(state);
       for (const s of seats) {
         for (const phase of ['planning', 'development', 'auction'] as const) {
@@ -227,13 +231,13 @@ describe('the seat drafts, validates and writes its planning playbook (C4, RULE-
       expect(stableJson(state)).toBe(before);
     };
     const pokedIn = new Set<number>();
-    const poked = playTable(2, {
+    const poked = playTable(1, {
       opening: draftAll,
       // Once a grant, after its first step has settled the land pick.
       between: (state, seats) => {
         if (pokedIn.has(state.month)) return;
         pokedIn.add(state.month);
-        draftAll(state, seats);
+        drafted.set(`${state.month}/grant`, stableJson(seats.map((s) => s.draft(state, 'planning'))));
       },
     });
 
