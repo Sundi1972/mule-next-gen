@@ -2,6 +2,8 @@ import {
   canRun,
   ceremonyBeats,
   isElectionDone,
+  LAW_NAME,
+  lawImpact,
   nextElectionMonth,
   PERCENT,
   POLITICS,
@@ -13,7 +15,7 @@ import {
   type GameState,
   type Office,
 } from '@mule/engine';
-import type { CeremonyView, ElectionView, MyPoliticsView, OfficeReveal, PoliticsView } from '@mule/protocol';
+import type { CeremonyView, CouncilView, ElectionView, MyPoliticsView, OfficeReveal, PoliticsView } from '@mule/protocol';
 
 /* Colony politics as the screens and the news see it: pure functions of the game state. A ballot reaches only its owner's view. */
 
@@ -98,7 +100,39 @@ export function politicsView(state: GameState): PoliticsView | null {
     promise: p.promise && { ...p.promise },
     promiseFrom: p.promiseFrom,
     election: electionView(state),
+    proposal: p.proposal && { ...structuredClone(p.proposal), impact: lawImpact(state, p.proposal.proposal) },
+    council: councilView(state),
+    laws: structuredClone(p.laws),
+    retry: Object.fromEntries(Object.entries(p.failed).map(([key, month]) => [key, month + POLITICS.council.retryMonths + 1])),
   };
+}
+
+/** Built field by field: `ballots` is read only for who has voted, never how; the totals only from the reveal. See slice 2a RULE-47. */
+function councilView(state: GameState): CouncilView | null {
+  const c = state.politics?.council;
+  if (!c) return null;
+  return {
+    stage: c.stage,
+    proposal: structuredClone(c.proposal),
+    proposer: c.proposer,
+    impact: lawImpact(state, c.proposal),
+    voted: Object.keys(c.ballots),
+    done: [...c.done],
+    waitingFor: c.stage === 'ballot' ? state.players.filter((p) => !c.done.includes(p.id)).map((p) => p.id) : [],
+    clockMs: c.clockMs,
+    revealMs: POLITICS.council.revealMs,
+    result: c.stage === 'ballot' ? null : c.result && { ...c.result },
+  };
+}
+
+/** The news line as a law ballot's result is revealed: whether it passed, by the weighted totals. */
+export function councilNews(state: GameState): string | null {
+  const c = state.politics?.council;
+  if (!c?.result) return null;
+  const { proposal, result } = c;
+  const what = proposal.kind === 'repeal' ? `Repeal of the ${LAW_NAME[proposal.law].toLowerCase()}` : `${LAW_NAME[proposal.law]} at ${proposal.setting}`;
+  const tie = result.tie ? ', the Governor breaking the tie' : '';
+  return `${what} ${result.passed ? 'passes' : 'fails'}, ${result.yes} votes to ${result.no}${tie}.`;
 }
 
 /** Built field by field: `ballots` is read only for who has voted, never for whom. */
@@ -134,6 +168,7 @@ export function myPoliticsView(state: GameState, playerId: string): MyPoliticsVi
     canRun: perOffice((office) => may[office]),
     paid: state.treasury.paid[playerId] ?? 0,
     reputation: state.players.find((pl) => pl.id === playerId)!.reputation,
+    lawBallot: p.council?.stage === 'ballot' ? (p.council.ballots[playerId] ?? null) : null,
   };
 }
 

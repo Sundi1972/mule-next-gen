@@ -58,6 +58,13 @@ export class VoteHand {
   /** Call before stepElection, with the same (phaseScale-divided) dt. */
   tick(state: GameState, dt: number, act: Act): void {
     if (state.phase !== 'planning' || !state.politics) return;
+    // The law ballot, once the election is over: until the hand votes on laws it abstains, pressing Done at once and
+    // drawing nothing, so the election's seeded stream stays as it was and no ballot waits on an AI seat.
+    const { council, election } = state.politics;
+    if (council?.stage === 'ballot' && (!election || election.stage === 'over')) {
+      if (!council.done.includes(this.mind.me)) act({ type: 'done', done: true });
+      return;
+    }
     const stage: Election['stage'] | 'none' = state.politics.election?.stage ?? 'none';
     const key = `${state.month}:${stage}`;
     if (key !== this.key) {

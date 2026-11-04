@@ -417,6 +417,16 @@ export interface Colony {
   promises: { month: number; governor: string; kind: TaxPromise['kind']; kept: boolean }[];
   /** Prestige that stays whatever happens to the objects, such as a festival's. */
   permanentPrestige: number;
+  /** The gauges as each of the last two months ended, oldest first: what the screens' "this month" change is read from. */
+  monthEnds: ColonyGauges[];
+}
+
+/** The colony's gauges at one moment; happiness is null until the colony has a mood. */
+export interface ColonyGauges {
+  month: number;
+  wealth: number;
+  prestige: number;
+  happiness: number | null;
 }
 
 export type Office = 'governor' | 'sheriff';

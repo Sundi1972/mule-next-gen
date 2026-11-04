@@ -485,12 +485,17 @@ export function proposeLaw(state: GameState, playerId: string, proposal: LawProp
     const { settings } = POLITICS.laws[proposal.law];
     if (!settings.includes(proposal.setting)) throw new RuleError(`${LAW_NAME[proposal.law]} is set to ${inWords(settings)}`);
     if (inForce?.setting === proposal.setting) throw new RuleError('That law is already in force at that setting');
-    const replacing = proposal.replaces !== undefined && politics.laws[proposal.replaces] !== undefined;
+    const replacing = proposal.replaces !== undefined && Object.hasOwn(politics.laws, proposal.replaces);
     if (!inForce && Object.keys(politics.laws).length >= maxInForce && !replacing) {
       throw new RuleError(`${maxInForce} laws are in force: pick the one this replaces`);
     }
   }
-  edit(state).proposal = { by: playerId, month: state.month, proposal };
+  // Only the proposal's own fields are kept: the rest of an intent never reaches the state or the screens.
+  const kept: LawProposal =
+    proposal.kind === 'repeal'
+      ? { kind: 'repeal', law: proposal.law }
+      : { kind: 'enact', law: proposal.law, setting: proposal.setting, ...(proposal.replaces !== undefined ? { replaces: proposal.replaces } : {}) };
+  edit(state).proposal = { by: playerId, month: state.month, proposal: kept };
 }
 
 /** A proposal from an earlier month comes to its ballot, if its proposer still governs; otherwise it is dropped. */
