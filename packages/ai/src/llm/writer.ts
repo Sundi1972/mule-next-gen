@@ -138,12 +138,6 @@ export interface WriteAsk {
   waitMs: number;
 }
 
-export interface WriteRequest extends WriteAsk {
-  /** The live state, for the validator only: the brief has already taken what the model may see. */
-  state: GameState;
-  draft: Playbook;
-}
-
 /** An edit the writer refused before validation, by path when the brief offered it, else null. */
 export interface Refusal {
   path: string | null;
@@ -154,14 +148,6 @@ export interface Refusal {
 export interface WriterReply {
   reply: RecordedWrite;
   refused: Refusal[];
-}
-
-export interface Written {
-  reply: RecordedWrite;
-  /** The edits the writer refused before validation, by path when the brief offered it, else null. */
-  refused: Refusal[];
-  /** What validatePlan made of the draft and the accepted edits: what plays. */
-  result: ReturnType<ValidatePlan>;
 }
 
 const isObject = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
@@ -263,8 +249,31 @@ export async function writeReply(complete: WriteComplete, ask: WriteAsk): Promis
   return { reply: { ...(strategy ? { strategy } : {}), edits: accepted, line: cleanLine(read.line) }, refused };
 }
 
-/** writeReply, then the validator on the draft and the accepted edits: its result is what plays. */
-export async function writePlaybook(complete: WriteComplete, validate: ValidatePlan, request: WriteRequest): Promise<Written> {
-  const { reply, refused } = await writeReply(complete, request);
-  return { reply, refused, result: validate(request.state, request.draft.seat, request.draft, reply.edits) };
+/** What a seat's reply had refused or rejected: kept for its next brief, never played. */
+export interface Feedback {
+  refused: Refusal[];
+  rejected: NonNullable<Playbook['rejected']>;
+}
+
+/**
+ * The playbook that plays from the engine's draft and the reply that came in time, if any: the draft by 'engine' unless
+ * validate accepts at least one of the reply's edits; then validate's playbook, by 'llm'. Validate is never called
+ * without an edit. The feedback is null with no reply. An edit counts as rejected when a rejection names its path (the
+ * writer accepts each path once), however many times. Throws what validate throws.
+ */
+export function playbookFrom(
+  validate: ValidatePlan,
+  state: GameState,
+  draft: Playbook,
+  written: WriterReply | null,
+): { playbook: Playbook; feedback: Feedback | null } {
+  const engine: Playbook = { ...draft, by: 'engine' };
+  if (!written) return { playbook: engine, feedback: null };
+  const { edits } = written.reply;
+  if (edits.length === 0) return { playbook: engine, feedback: { refused: written.refused, rejected: [] } };
+  const result = validate(state, draft.seat, draft, edits);
+  const feedback: Feedback = { refused: written.refused, rejected: result.rejected };
+  const rejected = new Set(result.rejected.map((r) => r.path));
+  if (edits.every((e) => rejected.has(e.path))) return { playbook: engine, feedback };
+  return { playbook: { ...result.playbook, by: 'llm', rejected: result.rejected }, feedback };
 }

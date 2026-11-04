@@ -47,6 +47,11 @@ afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+/** Advances the engine state phase by phase until `phase` opens. */
+function advanceTo(state: GameState, phase: GameState['phase']): void {
+  while (state.phase !== phase) advancePhase(state);
+}
+
 const ledgerPath = () => path.join(dir, 'costs.jsonl');
 const callLines = () => (fs.existsSync(ledgerPath()) ? readLedger(ledgerPath()).filter((l) => l.type === undefined) : []);
 
@@ -95,7 +100,7 @@ async function month1(options: { brain: MeteredBrain; source?: PlaybookSource | 
   playbooks.ask(state, 1);
   let inEffectAtStart: Playbook | null = null;
   setTimeout(() => {
-    while (state.phase !== 'landGrant') advancePhase(state);
+    advanceTo(state, 'landGrant');
     options.justBeforeGrant?.();
     playbooks.takeEffect(state);
     inEffectAtStart = structuredClone(playbooks.playbookFor('p0', 1));
@@ -220,10 +225,10 @@ describe('RULE-A1: which playbook takes effect at the land grant', () => {
     });
 
     // Month 2's reply never comes: month 1's refusals are not this month's, so the seat has none.
-    while (state.phase !== 'upkeep') advancePhase(state);
+    advanceTo(state, 'upkeep');
     playbooks.ask(state, 2);
     await vi.advanceTimersByTimeAsync(0);
-    while (state.phase !== 'landGrant') advancePhase(state);
+    advanceTo(state, 'landGrant');
     playbooks.takeEffect(state);
     expect(sdk.calls).toBe(2);
     expect(playbooks.playbookFor('p0', 2)?.by).toBe('engine');
@@ -286,7 +291,7 @@ describe('RULE-A1: which playbook takes effect at the land grant', () => {
     expect(sdk.calls).toBe(1);
 
     // As MuleGame.enterPhase does: the playbook takes effect, then the seat decides, in one tick.
-    while (state.phase !== 'landGrant') advancePhase(state);
+    advanceTo(state, 'landGrant');
     playbooks.takeEffect(state);
     const atGrant = landAsk();
     expect(sdk.calls, "the decision reached the model in the land grant's tick").toBe(2);
@@ -329,7 +334,9 @@ describe('HC-1: no phase waits for a model', { timeout: 30_000 }, () => {
     expect(starts.at(-1)?.[1]).toBe('gameOver');
     for (const month of [1, 2]) expect(opened(month, 'landGrant')! - opened(month, 'planning')!, `month ${month}'s land grant`).toBe(READ_MS);
     expect(opened(2, 'planning')! - opened(1, 'upkeep')!, "month 2's planning").toBe(READ_MS);
-    // The model was asked at game start and never answered: the seat's one call stayed open all game.
-    expect(silent.requests.map((r) => isWrite(r.params))).toEqual([true]);
+    // The model was asked to write at game start and never answered; month 1's land grant cancelled that call, and the
+    // seat's next decision opened the call that then stayed open all game, so month 2's write found the seat busy.
+    expect(silent.requests.map((r) => isWrite(r.params))).toEqual([true, false]);
+    expect(silent.requests[0]!.options.signal?.aborted).toBe(true);
   });
 });

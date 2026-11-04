@@ -145,16 +145,22 @@ export interface ThinkingReply extends HaikuReply {
   thinking: number | null;
 }
 
-/** The port for thinking calls: adaptive thinking at the call's effort, the schema; one try, no retries, never past its wait. */
+/**
+ * The port for thinking calls: adaptive thinking at the call's effort, the schema; one try, no retries, never past its
+ * wait. The caller's `signal` cancels the request too, as its wait running out does.
+ */
 export function createThinkingComplete(
   sdk: HaikuSdk,
   now: () => number = () => performance.now(),
-): (call: ThinkingCall, prompt: WritePrompt) => Promise<ThinkingReply> {
-  return async (call, prompt) => {
+): (call: ThinkingCall, prompt: WritePrompt, signal?: AbortSignal) => Promise<ThinkingReply> {
+  return async (call, prompt, signal) => {
     const start = now();
     // The SDK's timeout stops at the response headers; this abort bounds the body read too.
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), call.timeoutMs);
+    const cancel = () => controller.abort();
+    if (signal?.aborted) cancel();
+    else signal?.addEventListener('abort', cancel, { once: true });
     let res: Anthropic.Message;
     try {
       res = await sdk.messages.create(
@@ -172,6 +178,7 @@ export function createThinkingComplete(
       throw fail(e, now() - start, call.timeoutMs, controller.signal.aborted);
     } finally {
       clearTimeout(timer);
+      signal?.removeEventListener('abort', cancel);
     }
     const ms = now() - start;
     return {
@@ -196,16 +203,16 @@ export const WRITE_FALLBACK_MODEL: ModelId = BRAIN.writeFallbackModel;
 
 /**
  * The port for strategy and playbook calls: the kind's BRAIN settings, sent to the model the caller names (the kind's
- * own by default), waiting at most `waitMs` when it is below the kind's timeoutMs. It only talks to the API; the
- * caller checks the budget before and ledgers after.
+ * own by default), waiting at most `waitMs` when it is below the kind's timeoutMs, and cancelled by `signal`. It only
+ * talks to the API; the caller checks the budget before and ledgers after.
  */
 export function createWriteComplete(
   sdk: HaikuSdk,
   now?: () => number,
-): (kind: WriteKind, prompt: WritePrompt, model?: ModelId, waitMs?: number) => Promise<ThinkingReply> {
+): (kind: WriteKind, prompt: WritePrompt, model?: ModelId, waitMs?: number, signal?: AbortSignal) => Promise<ThinkingReply> {
   const think = createThinkingComplete(sdk, now);
-  return (kind, prompt, model = WRITE_CALLS[kind].model, waitMs = Infinity) => {
+  return (kind, prompt, model = WRITE_CALLS[kind].model, waitMs = Infinity, signal) => {
     const call = WRITE_CALLS[kind];
-    return think({ ...call, model, timeoutMs: Math.min(waitMs, call.timeoutMs) }, prompt);
+    return think({ ...call, model, timeoutMs: Math.min(waitMs, call.timeoutMs) }, prompt, signal);
   };
 }

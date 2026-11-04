@@ -1,6 +1,6 @@
 /** When a seat's brain asks for its land-grant playbook, and which playbook takes effect when the land grant starts. */
 import type { GameState, Playbook, PlayerId } from '@mule/engine';
-import { landBrief, STRATEGY_SYSTEM, type AiSeat, type LandDraft, type Refusal, type ValidatePlan, type WriterReply } from '@mule/ai';
+import { landBrief, playbookFrom, STRATEGY_SYSTEM, type AiSeat, type Feedback, type LandDraft, type ValidatePlan, type WriterReply } from '@mule/ai';
 import type { PlaybookNote } from '../mule-game.js';
 import { WRITE_CALLS } from './client.js';
 import type { BrainService, PlaybookWriter } from './index.js';
@@ -22,22 +22,18 @@ export interface PlaybooksOptions {
   record?: (note: PlaybookNote) => void;
 }
 
-/** What a seat's last reply had refused or rejected: kept for its next brief, never played. */
-export interface Feedback {
-  refused: Refusal[];
-  rejected: NonNullable<Playbook['rejected']>;
-}
+export type { Feedback };
 
-/** A seat's ask for one month's land grant: the reply once it came in time, and whether that grant has started. */
+/**
+ * A seat's ask for one month's land grant: the draft its brief showed, the reply once it came in time, whether that
+ * grant has started, and the cancel for its call.
+ */
 interface Ask {
   month: number;
+  draft: Playbook;
   written: WriterReply | null;
   started: boolean;
-}
-
-/** How long a write call may wait: its kind's timeout, cut to the time left before its phase when that start is known. */
-export function writeWaitMs(timeoutMs: number, msLeft: number | null): number {
-  return msLeft === null ? timeoutMs : Math.min(timeoutMs, msLeft);
+  controller: AbortController;
 }
 
 const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -63,8 +59,8 @@ export class Playbooks {
 
   /**
    * Asks each Smart seat's writer for its strategy and land-grant edits for `month`'s land grant, and returns at once.
-   * Nothing is asked for a month past the game's last. The land grant's start time is not known yet, so the call waits
-   * its kind's whole timeout; a reply after the grant started is never played.
+   * Nothing is asked for a month past the game's last. The call waits at most its kind's timeout, and the land grant's
+   * start cancels it; a reply after the grant started is never played.
    */
   ask(state: GameState, month: number): void {
     const { source } = this.options;
@@ -73,11 +69,12 @@ export class Playbooks {
       const writer = this.writers.get(seat.id);
       if (!writer) continue;
       try {
-        const brief = landBrief(state, seat.mind, seat.brain.persona, source.draft(state, seat.id).land, seat.brain.heard());
-        const ask: Ask = { month, written: null, started: false };
+        const drafted = source.draft(state, seat.id);
+        const brief = landBrief(state, seat.mind, seat.brain.persona, drafted.land, seat.brain.heard());
+        const ask: Ask = { month, draft: drafted.playbook, written: null, started: false, controller: new AbortController() };
         this.asks.set(seat.id, ask);
-        const waitMs = writeWaitMs(WRITE_CALLS.strategy.timeoutMs, null);
-        writer.write('strategy', { brief, system: STRATEGY_SYSTEM, waitMs, late: () => ask.started }).then(
+        const waitMs = WRITE_CALLS.strategy.timeoutMs;
+        writer.write('strategy', { brief, system: STRATEGY_SYSTEM, waitMs, late: () => ask.started, signal: ask.controller.signal }).then(
           (written) => {
             if (!ask.started) ask.written = written;
           },
@@ -89,21 +86,30 @@ export class Playbooks {
     }
   }
 
-  /** The land grant has started: each seat's playbook for this month takes effect, and later replies for it are late. */
+  /**
+   * The land grant has started: each seat's playbook for this month takes effect, a call still open for it is
+   * cancelled (freeing the seat at once), and later replies for it are late. Each seat's feedback is this month's.
+   */
   takeEffect(state: GameState): void {
     const { source } = this.options;
     if (!source) return;
     for (const seat of this.options.seats) {
       const ask = this.asks.get(seat.id);
       const asked = ask?.month === state.month ? ask : null;
-      if (asked) asked.started = true;
-      let playbook: Playbook;
+      if (asked) {
+        asked.started = true;
+        asked.controller.abort();
+      }
+      this.feedback.delete(seat.id);
+      let now: Playbook;
       try {
-        playbook = this.decide(state, seat.id, source.draft(state, seat.id).playbook, asked?.written ?? null, source.validate);
+        now = source.draft(state, seat.id).playbook;
       } catch (err) {
         console.error(`playbooks: seat ${seat.id} has no draft for month ${state.month}: ${messageOf(err)}`);
         continue;
       }
+      // A reply's edits apply to the draft its brief showed, never to a later one whose plan letters may name other plots.
+      const playbook = asked?.written ? this.decide(state, seat.id, asked.draft, asked.written, source.validate) : this.decide(state, seat.id, now, null, source.validate);
       this.playing.set(`${seat.id}/${state.month}`, playbook);
       if (this.writers.has(seat.id)) this.options.record?.({ seat: seat.id, month: state.month, phase: 'landGrant', playbook });
     }
@@ -114,31 +120,24 @@ export class Playbooks {
     return this.playing.get(`${seat}/${month}`) ?? null;
   }
 
-  /** What the seat's last reply had refused or rejected; null before one came in time. */
+  /** What the seat's reply for this month's land grant had refused or rejected; null when none came in time. */
   feedbackFor(seat: PlayerId): Feedback | null {
     return this.feedback.get(seat) ?? null;
   }
 
   /**
-   * The playbook that takes effect: the engine's draft unless a reply came in time with an edit the validator accepts;
-   * then the validator's playbook, by 'llm'. The writer's refusals never reach the playbook, only the next brief.
+   * The playbook that takes effect, by playbookFrom: `draft` is the one the reply's brief showed when a reply came in
+   * time, else the engine's draft now. A validator that throws leaves the engine's playbook.
    */
   private decide(state: GameState, seat: PlayerId, draft: Playbook, written: WriterReply | null, validate: ValidatePlan): Playbook {
-    const engine: Playbook = { ...draft, by: 'engine' };
-    if (!written) return engine;
-    const { edits } = written.reply;
-    const feedback: Feedback = { refused: written.refused, rejected: [] };
-    this.feedback.set(seat, feedback);
-    if (edits.length === 0) return engine;
-    let result: ReturnType<ValidatePlan>;
+    let made: ReturnType<typeof playbookFrom>;
     try {
-      result = validate(state, seat, draft, edits);
+      made = playbookFrom(validate, state, draft, written);
     } catch (err) {
       console.error(`playbooks: validatePlan failed for seat ${seat}, the engine's playbook plays: ${messageOf(err)}`);
-      return engine;
+      made = { playbook: { ...draft, by: 'engine' }, feedback: written && { refused: written.refused, rejected: [] } };
     }
-    feedback.rejected = result.rejected;
-    if (result.rejected.length >= edits.length) return engine;
-    return { ...result.playbook, by: 'llm', rejected: result.rejected };
+    if (made.feedback) this.feedback.set(seat, made.feedback);
+    return made.playbook;
   }
 }
