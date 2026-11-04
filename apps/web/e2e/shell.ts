@@ -12,7 +12,7 @@
 import { check, launch, PHONE, startServer } from './harness';
 import { governorsDeskFits, sixSeatsOnTheTv } from './hub-steps';
 import { shellFillsTheStage } from './shell-steps';
-import { aDroppedPhoneStops, arcadeTable, laptopKeysAndMouse, phoneFitsAndCoversNothing, theGlintRace, theScramble, theTvDrawsEveryoneLive, thePiecesMeet, theWholeErrandByStickAndButton, wolvesRunOrFight } from './store-steps';
+import { aDroppedPhoneStops, arcadeTable, laptopKeysAndMouse, phoneFitsAndCoversNothing, shortCorral, theGlintRace, theScramble, theTvDrawsEveryoneLive, thePiecesMeet, theWholeErrandByStickAndButton, wolvesRunOrFight } from './store-steps';
 
 const started = Date.now();
 const { server, base } = await startServer({ maxMonths: 1 });
@@ -81,6 +81,7 @@ async function arcade(): Promise<void> {
   };
   await moment('B-AC-5', ['Heiko', 'Mia'], wolvesRunOrFight);
   await moment('B-AC-6', ['Heiko', 'Mia'], theGlintRace);
-  await moment('B-AC-7', ['Heiko', 'Mia', 'Kai', 'Lena'], theScramble);
+  // Month 1's corral starts short, before the room's server makes its game.
+  await shortCorral(() => moment('B-AC-7', ['Heiko', 'Mia', 'Kai', 'Lena'], theScramble));
   check(failed.length === 0, `the moments failed: ${failed.join(', ')}`);
 }
