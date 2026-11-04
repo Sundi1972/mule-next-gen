@@ -21,7 +21,7 @@ import type { Decider, TableTalk } from './decider.js';
 import { AuctionHand, type AuctionDebug } from './hands/auction.js';
 import { DevelopHand, type DevWalking } from './hands/develop.js';
 import { PERSONAS } from './personas.js';
-import { draftPlaybook, validatePlaybook, validatorFor, type DraftPhase, type PartKey, type PlayedPart, type ValidatePlan, type ValidatorProfile } from './playbook/index.js';
+import { adoptInto, DRAFT_PHASE_OF, draftPlaybook, pathFor, validatePlaybook, validatorFor, type DraftPhase, type PartKey, type PlayedPart, type PlayPath, type ValidatePlan, type ValidatorProfile } from './playbook/index.js';
 import { landDecision, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
 import { situation } from './summary.js';
 import type { Mind } from './value.js';
@@ -69,7 +69,7 @@ export class AiSeat {
   private land: Pending<LandPlan> | null = null;
   private landMonth = -1;
   /** Playbooks adopted for the newest month adopted, oldest first. */
-  private adopted: Playbook[] = [];
+  private adopted: readonly Playbook[] = [];
 
   constructor(readonly options: AiSeatOptions) {
     this.mind = {
@@ -101,14 +101,11 @@ export class AiSeat {
     this.landMonth = state.month;
     this.land = this.brain.ask('land', landDecision(obs, this.mind), obs, Infinity, null, situation(obs, this.mind));
     // With no listener the draft would reach nothing: no act reads it (T-AC-4).
-    if (this.options.onPlaybook && this.pathFor(state.month, 'planning') === 'own') this.writeDraft(state, 'planning');
+    if (this.options.onPlaybook && this.playPath(state.month, 'planning').by === 'own') this.writeDraft(state, 'planning');
   }
 
-  /** RULE-6: who plays this month's part, first match wins. */
-  private pathFor(month: number, part: 'planning' | 'landGrant' | 'development' | 'auction'): 'today' | 'adopted' | 'own' {
-    if (!AI_PLANS.on || this.options.playbook === false) return 'today';
-    if (this.adopted.some((pb) => pb.month === month && pb[part] !== undefined)) return 'adopted';
-    return this.options.decider ? 'today' : 'own';
+  private playPath(month: number, key: PartKey): PlayPath {
+    return pathFor({ on: AI_PLANS.on, playbook: this.options.playbook, hasDecider: !!this.options.decider, adopted: this.adopted, month, key });
   }
 
   /** A draft point: drafts, validates and writes. A draft or validator error is logged and the phase plays today's path (HC-9). */
@@ -131,17 +128,28 @@ export class AiSeat {
     return validatePlaybook(this.profileFor(month))(state, this.id, drafted, []).playbook;
   }
 
-  /** RULE-6: what this month's hand plays for `key`; null plays today's path. */
-  part<K extends PartKey>(_state: GameState, _key: K): PlayedPart<K> | null {
-    throw new Error('NotImplemented: seat-part');
+  /**
+   * RULE-6: what this month's hand plays for `key`; null plays today's path, as does a draft or validator error (HC-9,
+   * logged). The seat's own part is drafted from `state`, as `draft` does: it writes nothing and changes no kept state.
+   */
+  part<K extends PartKey>(state: GameState, key: K): PlayedPart<K> | null {
+    const path = this.playPath(state.month, key);
+    if (path.by === 'today') return null;
+    let playbook = path.by === 'adopted' ? path.playbook : null;
+    try {
+      playbook ??= this.draft(state, DRAFT_PHASE_OF[key]);
+    } catch (err) {
+      console.error(`AI seat ${this.id}: no ${key} part for month ${state.month}, playing without one: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
+    const part = playbook[key];
+    // A copy: a hand that changes what it plays changes nothing the seat keeps.
+    return part === undefined ? null : structuredClone({ part: part as NonNullable<Playbook[K]>, strategy: playbook.strategy, by: path.by });
   }
 
   /** Puts a playbook's parts in effect for its month (RULE-7). */
   adopt(playbook: Playbook): void {
-    const newest = this.adopted[0]?.month ?? -Infinity;
-    if (playbook.month < newest) return;
-    if (playbook.month > newest) this.adopted = [];
-    this.adopted.push(structuredClone(playbook));
+    this.adopted = adoptInto(this.adopted, playbook);
   }
 
   /** The gate this seat's playbooks pass: its mind, its seed and, for the month it holds one, its pending land pick. */
