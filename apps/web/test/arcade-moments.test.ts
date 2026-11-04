@@ -9,7 +9,7 @@ import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { LaptopArcade, PhoneLandscape } from '../src/phone/arcade/Develop';
 import { momentsAt, pushFrame, startFrameLog, type DrawnMoments } from '../src/phone/arcade/frames';
-import { bannerBox, FRAMES, overlap, phoneLayout, type Box } from '../src/phone/arcade/layout';
+import { BANNER_CHAR_PX, BANNER_TEXT, bannerBox, FRAMES, overlap, phoneLayout, type Box } from '../src/phone/arcade/layout';
 import { StaticLive, type Live } from '../src/phone/arcade/live';
 import { TV_LINE, tvLinesPlace } from '../src/phone/arcade/moments';
 import { pubPay } from '../src/phone/arcade/seat';
@@ -345,6 +345,21 @@ describe('C11, C12: the moments cover 0 px² of the store, your plots and the co
       expect(b.w).toBeGreaterThanOrEqual(4 * L.cell - 4);
       for (const k of [...plots, STORE].map((p) => tile(L, p))) expect(overlap(b, k)).toBe(0);
       for (const c of [L.stick, L.button]) expect(overlap(b, c)).toBe(0);
+    }
+  });
+
+  it.each([844, 667] as const)('C11: at %i the banner\'s box is tall enough for the left-out line\'s words in its width, and still keeps off the store, your plots and the controls', (size) => {
+    const L = phoneLayout(FRAMES[size], 'map', 15, 9);
+    const words = `The corral is empty: no MULE for you this turn. The pub pays +100 cr now, less the longer you wait.`;
+    const textPx = words.length * BANNER_CHAR_PX;
+    for (const plots of [LENAS_PLOTS, [...LENAS_PLOTS, ...[3, 4, 5, 6].map((x) => ({ x, y: 7 }))]]) {
+      const b = bannerBox(L, 'map', 9, [...plots, STORE], textPx);
+      const lines = Math.ceil((textPx + BANNER_TEXT.padX) / b.w);
+      expect(b.h).toBeGreaterThanOrEqual(lines * BANNER_TEXT.linePx + BANNER_TEXT.padY);
+      for (const k of [...plots, STORE].map((p) => tile(L, p))) expect(overlap(b, k)).toBe(0);
+      for (const c of [L.stick, L.button]) expect(overlap(b, c)).toBe(0);
+      expect(b.y).toBeGreaterThanOrEqual(L.stage.y);
+      expect(b.y + b.h).toBeLessThanOrEqual(L.stage.y + L.stage.h);
     }
   });
 

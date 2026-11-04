@@ -6,10 +6,10 @@ import { useClient } from '../../net/react';
 import { usePhoneGame } from '../game';
 import { WIDE_PX } from '../Shell';
 import { keyDown, keyUp } from './controls';
-import { bannerBox, colonistBox, css, FRAMES, freeRun, overlap, phoneLayout, tileBox, type Box } from './layout';
+import { BANNER_CHAR_PX, bannerBox, colonistBox, css, FRAMES, freeRun, overlap, phoneLayout, tileBox, type Box } from './layout';
 import { PhoneLive, useArcade, useLive } from './live';
 import { CompactClock, GroundChip, GuideNote, LeadChip, Money, OverCard, PaceLine, PlotCard, PlotsLegend, Reconnecting, WaitWords } from './parts';
-import { ScrambleBanner } from './moments';
+import { ScrambleBanner, scrambleWords } from './moments';
 import { arcadeSeat, type ArcadeSeat } from './seat';
 import { SeatProvider, YourStage } from './stages';
 
@@ -183,10 +183,11 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
       ? (CARDS.map((c) => ({ x: L.stage.x + c.x * L.stage.w, y: L.stage.y + c.y * L.stage.h, w: c.w * L.stage.w, h: c.h * L.stage.h })).find((b) => clearOf.every((k) => overlap(b, k) === 0)) ?? null)
       : null;
   // The banner's box keeps off your plots and the store (B-AC-4's measurement, for the moments' banner too).
-  const banner = bannerBox(L, space, view.height, [...myPlots, seat.store]);
-  const bannerFaded = near(banner, mePx, L.cell * 0.4);
   const { moments = null } = useLive();
   const scramble = moments?.scramble ?? null;
+  const words = (scramble ? scrambleWords(seat, scramble)?.text : seat.guide?.note) ?? '';
+  const banner = bannerBox(L, space, view.height, [...myPlots, seat.store], words.length * BANNER_CHAR_PX);
+  const bannerFaded = near(banner, mePx, L.cell * 0.4);
   const choosing = space === 'hall' && me.carriedMule === 'empty';
   const compactLeft = !!L.left && L.left.w < SIDE_ROOM_FULL;
   return (
