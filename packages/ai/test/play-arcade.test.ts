@@ -187,6 +187,18 @@ describe("the moments in the sim's games (T-AC-5, AM-22)", () => {
     expect(turns.every((t) => t.pubAt === null || t.pubAt <= DEVELOPMENT.fullSeconds)).toBe(true);
   });
 
+  it('FM-hurry-margin: no AI colonist buys a MULE it then walks into the pub for want of time, but where a pack met it while it led the MULE', { timeout: SAMPLE_TIMEOUT_MS }, async () => {
+    const { turns } = await simGames();
+    // A MULE bought and not installed is paid for and lost: walked into the pub on its lead, or still on it at the clock.
+    // The AI plans a MULE only with the margin its hurry for the pub keeps, so time never costs one; a pack met on the
+    // way may. A MULE whose outfit or install the floor refused is lost for that, not for time: shown, not judged here.
+    const lost = turns.filter((t) => t.bought > t.installs);
+    const what = (t: DevTurn) => `month ${t.month}, ${t.id}: bought ${t.bought}, installed ${t.installs}`;
+    for (const t of lost.filter((t) => t.muleStepFailed)) console.log(`FM-hurry-margin, not for time: ${what(t)}, an outfit or install refused on the floor`);
+    const unexcused = lost.filter((t) => !t.packLeading && !t.muleStepFailed).map(what);
+    expect(unexcused, `turns that bought a MULE and lost it for want of time (of ${turns.length})`).toEqual([]);
+  });
+
   // trace-allow: a smoke check that the AI's legs by wolf land (RULE-4's AI line, botWolfLandShare) bring packs into
   // WOLVES.simMonthsWithPack of months. AM-27's binding check is `pnpm sim`'s report, 40 games AI-only on each of seeds
   // 1, 101 and 201 (its 'Months with an AI wolf encounter' line, MISS under that share): 40 games here would cost the

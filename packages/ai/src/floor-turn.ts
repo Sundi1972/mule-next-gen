@@ -47,6 +47,12 @@ export interface DevTurn {
   quoted: number | null;
   /** MULEs it installed this turn. */
   installs: number;
+  /** MULEs it bought at the corral this turn: one bought and not installed was paid for and lost (FM-hurry-margin). */
+  bought: number;
+  /** A pack met it while it led a MULE: the one excuse for a MULE bought and not installed (FM-hurry-margin). */
+  packLeading: boolean;
+  /** Its hand gave up an outfit or an install on the floor (the button offered something else): a MULE lost for that, not for time. */
+  muleStepFailed: boolean;
   /**
    * A wolf's bite cost it the pub (T-AC-5's one excuse, AM-26): at the tick the bite landed, its walk to the pub at the
    * bitten pace (floor-time.ts's pubSeconds, the AI's own estimate) was longer than the seconds left, and unbitten not
@@ -163,7 +169,7 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
   const tickSeconds = cfg.steer.tickMs / MS_PER_SECOND;
   let floor: DevFloor = buildFloor(state, cfg);
   const ids = seats.map((s) => s.id);
-  const turns = new Map(ids.map((id): [string, DevTurn] => [id, { month: state.month, id, pubAt: null, payout: null, quoted: null, installs: 0, biteCostPub: false, lakeAnalyses: { failed: 0, noTime: 0 }, refused: 0 }]));
+  const turns = new Map(ids.map((id): [string, DevTurn] => [id, { month: state.month, id, pubAt: null, payout: null, quoted: null, installs: 0, bought: 0, packLeading: false, muleStepFailed: false, biteCostPub: false, lakeAnalyses: { failed: 0, noTime: 0 }, refused: 0 }]));
   let waiting = state.month === 1 && cfg.steer.month1WaitsForFirstMule;
   // Whole ticks, so the clock never drifts in floating point: stood waiting, and run.
   let stood = 0;
@@ -190,7 +196,9 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
     floor = settleMoments(state, stepFloor(floor, state, inputs, cfg.steer.tickMs, cfg));
     countStep(moments, before, floor);
     for (const c of floor.colonists) {
-      const bit = c.bitten && !before.colonists.find((x) => x.id === c.id)!.bitten;
+      const was = before.colonists.find((x) => x.id === c.id)!;
+      if (c.encounter && !was.encounter && c.lead !== null && !done(c.id)) turns.get(c.id)!.packLeading = true;
+      const bit = c.bitten && !was.bitten;
       if (bit && !done(c.id) && biteCostPub(state, cfg, c, left)) turns.get(c.id)!.biteCostPub = true;
     }
     for (const s of seats) {
@@ -216,6 +224,7 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
         const pressed = floor;
         floor = press.floor;
         if (press.reach.kind === 'install') turn.installs++;
+        if (press.reach.kind === 'buy') turn.bought++;
         if (press.reach.kind === 'sell') moments.peltsSold += press.reach.pelts;
         if (press.reach.kind === 'catch') moments.caught++;
         if (press.reach.kind === 'grab') moments.glintsWon++;
@@ -235,7 +244,11 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
     else run++;
     yield;
   }
-  for (const s of seats) turns.get(s.id)!.lakeAnalyses = lakeFailures(state, s.developLog());
+  for (const s of seats) {
+    const turn = turns.get(s.id)!;
+    turn.lakeAnalyses = lakeFailures(state, s.developLog());
+    turn.muleStepFailed = s.developLog().some((e) => !e.ok && (e.action.type === 'outfit' || e.action.type === 'install'));
+  }
   moments.raced = raced.size;
   moments.scrambleRacers = seats.reduce((n, s) => n + s.developScramblesRaced(), 0);
   const waits = state.month === 1 && cfg.steer.month1WaitsForFirstMule;
