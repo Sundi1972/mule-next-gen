@@ -998,7 +998,11 @@ function randomTurn(rng: Rng, base: GameState): { state: GameState; floor: DevFl
   const tick = rng.int(0, 999);
   const colonists = built.colonists.map((c): FloorColonist => {
     const p = state.players.find((x) => x.id === c.id)!;
-    const spot = spotFor(rng, state, config);
+    // Sometimes on a plot of its own with a MULE on it, already analysed: where TAKE MULE is.
+    const fitted = state.tiles.filter((t) => t.owner === p.id && t.outfit && t.terrain !== 'lake');
+    const home = fitted.length > 0 && rng.chance(0.15) ? rng.pick(fitted) : null;
+    if (home) p.analysed = [...p.analysed, home.y * state.width + home.x];
+    const spot = home ? { space: 'map' as const, x: home.x + 0.5, y: home.y + 0.5 } : spotFor(rng, state, config);
     // A MULE led may have been taken off a plot of the seat's this turn; and may have bolted, running or standing near.
     const own = state.tiles.filter((t) => t.owner === p.id && !t.outfit);
     if (p.carriedMule && p.carriedMule !== 'empty' && own.length > 0 && rng.chance(0.5)) {
@@ -1091,7 +1095,7 @@ describe('the dev floor: the action button', () => {
     }
   });
 
-  it('T-AC-3: on an own plot with a MULE, Alloy held, not analysed, leading none, the button says ANALYSE, then FIT FILTER, then where to go', () => {
+  it('T-AC-3: on an own plot with a MULE, Alloy held, not analysed, leading none, the button says ANALYSE, then FIT FILTER, then TAKE MULE (AM-9), then where to go', () => {
     const { state, floor } = world({ at: () => onTile(7, 4), game: (s) => void (a(s).stock.alloy = DEVELOPMENT.filterAlloy) });
     const press = (f: DevFloor) => tick(state, f, { a: { ...IDLE, act: true } }).floor;
     expect(reachWords(reachNow(floor, state))).toEqual(words('ANALYSE'));
@@ -1105,7 +1109,11 @@ describe('the dev floor: the action button', () => {
     expect(reachWords(reachNow(assayed, state))).toEqual(words('FIT FILTER', `${DEVELOPMENT.filterAlloy} Alloy`));
     const filtered = press(assayed);
     expect(tileOf(state, 7, 4).filter).toBe(true);
-    expect(reachWords(reachNow(filtered, state)), "row 14's hint").toEqual(words('TO THE STORE', null, false));
+    expect(reachWords(reachNow(filtered, state))).toEqual(words('TAKE MULE'));
+    const taken = press(filtered);
+    expect([tileOf(state, 7, 4).outfit, a(state).carriedMule]).toEqual([null, 'smithore']);
+    // Leading it, on the plot it came off, now empty: row 10 puts it back.
+    expect(reachWords(reachNow(taken, state))).toEqual(words('INSTALL · SMITHORE'));
   });
 
   it('T-AC-3: with the arcade on, OUTFIT is offered for no fitted MULE at any outfitter, and outfitMule refuses one', () => {

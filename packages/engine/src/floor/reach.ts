@@ -8,7 +8,23 @@
  */
 import { DEVELOPMENT } from '../config.js';
 import { RuleError } from '../errors.js';
-import { analysePlot, buyMule, catchMule, fitFilter, hasAnalysed, installMule, mulePriceFor, outfitCostFor, outfitMule, player, sellPelts, visitPub } from '../game.js';
+import {
+  analysePlot,
+  buyMule,
+  catchMule,
+  fitFilter,
+  hasAnalysed,
+  installMule,
+  mulePriceFor,
+  outfitCostFor,
+  outfitMule,
+  player,
+  reoutfitCostFor,
+  reoutfitMule,
+  sellPelts,
+  takeMule,
+  visitPub,
+} from '../game.js';
 import { tileAt } from '../grid.js';
 import type { GameState, Outfit, Player, Tile } from '../types.js';
 import { MS_PER_SECOND } from '../units.js';
@@ -19,8 +35,8 @@ import { HALL_BAYS, HALL_DOORS, HALL_OUTFITTERS, placeAt, type HallDoor, type Ha
 import { afterSale } from './scramble.js';
 import { strikeTarget } from './wolves.js';
 
-/** Why a row's press is refused: money short by `short` credits, or the corral empty. */
-export type ReachRefusal = { kind: 'money'; short: number } | { kind: 'soldOut' };
+/** Why a row's press is refused: money short by `short` credits, the corral empty, or a re-outfit for the good it has. */
+export type ReachRefusal = { kind: 'money'; short: number } | { kind: 'soldOut' } | { kind: 'sameGood' };
 
 /** Where a dim button points when nothing is in reach, or why the seat has nothing to press now. */
 export type ReachHint = 'over' | 'done' | 'assaying' | 'stunned' | 'run' | 'dodge' | 'catch' | 'corral' | 'outfitter' | 'door' | 'store' | 'outfitFirst' | 'plot' | 'noMules';
@@ -37,11 +53,15 @@ export type Reach =
   | { kind: 'sell'; enabled: true; pelts: number; price: number }
   | { kind: 'buy'; enabled: boolean; price: number; why: ReachRefusal | null }
   | { kind: 'outfit'; enabled: boolean; good: Outfit; cost: number; why: ReachRefusal | null }
+  /** A MULE taken off a plot this turn, fitted for another good here (AM-2); its own good's outfitter dims it. */
+  | { kind: 'reoutfit'; enabled: boolean; good: Outfit; cost: number; why: ReachRefusal | null }
   | { kind: 'leave'; enabled: true; door: HallDoor; leading: boolean }
   /** On a plot that has a MULE, `replaces` is its outfit: installing swaps the new MULE in and the old one runs away. */
   | { kind: 'install'; enabled: true; good: Outfit; plot: FloorPoint; fromShore: boolean; replaces: Outfit | null }
   | { kind: 'analyse'; enabled: true; plot: FloorPoint }
   | { kind: 'filter'; enabled: true; plot: FloorPoint; alloy: number }
+  /** The MULE off a plot of the seat's onto its lead (AM-2): `good`, the plot's outfit. */
+  | { kind: 'take'; enabled: true; plot: FloorPoint; good: Outfit }
   | { kind: 'pub'; enabled: true; payout: number | null }
   | { kind: 'none'; enabled: false; hint: ReachHint };
 
@@ -87,16 +107,21 @@ const shortBy = (p: Player, price: number): ReachRefusal | null => (p.money < pr
 const AROUND = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]] as const;
 
 /**
- * In shore mode a lake plot is worked from the land beside it: of the seat's own lake plots among the eight around its
- * tile, the nearest its feet, if nearer than DEV_STEER.shoreReachTiles to the plot's edge.
+ * In shore mode a lake plot is worked from the land beside it (rows 10, 11, 12 and 11a; AM-18): of the lake plots among
+ * the eight around the colonist's tile that the row would work, the nearest its feet, if nearer than
+ * DEV_STEER.shoreReachTiles to the plot's edge. None in wade mode, where a colonist stands on the lake itself.
  */
-function shorePlot(state: GameState, cfg: FloorConfig, c: FloorColonist, tile: Tile, seat: string): Tile | null {
+function shorePlot({ state, cfg, colonist: c, tile }: Standing, works: (lake: Tile) => boolean): Tile | null {
+  if (!tile || cfg.steer.lakeMode !== 'shore') return null;
   const gap = (t: Tile) => Math.hypot(Math.max(t.x - c.x, 0, c.x - t.x - 1), Math.max(t.y - c.y, 0, c.y - t.y - 1));
   const lakes = AROUND.map(([dx, dy]) => tileAt(state.tiles, state.width, tile.x + dx, tile.y + dy)).filter(
-    (t): t is Tile => t?.terrain === 'lake' && t.owner === seat && gap(t) < cfg.steer.shoreReachTiles,
+    (t): t is Tile => t?.terrain === 'lake' && gap(t) < cfg.steer.shoreReachTiles && works(t),
   );
   return lakes.reduce<Tile | null>((best, t) => (best && gap(best) <= gap(t) ? best : t), null);
 }
+
+/** The plot a row works: the tile underfoot if the row works it, else a lake plot it works from the shore. */
+const plotFor = (s: Standing, works: (t: Tile) => boolean): Tile | null => (s.tile && works(s.tile) ? s.tile : shorePlot(s, works));
 
 /** Rows 1 and 2: wolves met. Choosing, FIGHT; running, nothing to press; fighting, STRIKE at a wolf open, else dodge. */
 const wolves: Row = ({ floor, cfg, colonist: c }) => {
@@ -150,23 +175,45 @@ const outfit: Row = ({ state, player: p, place }) => {
   return { kind: 'outfit', enabled: !why, good, cost, why };
 };
 
+/** Row 8a: at an outfitter, leading a MULE taken off a plot this turn (AM-2; one bought this turn is never, AM-14). */
+const reoutfit: Row = ({ state, player: p, place }) => {
+  const good = OUTFITTERS.find((g) => g === place);
+  if (!good || !p.takenMule || !p.carriedMule || p.carriedMule === 'empty' || p.muleBolted) return null;
+  const cost = reoutfitCostFor(state, p.id, good);
+  if (p.carriedMule === good) return { kind: 'reoutfit', enabled: false, good, cost, why: { kind: 'sameGood' } };
+  const why = shortBy(p, cost);
+  return { kind: 'reoutfit', enabled: !why, good, cost, why };
+};
+
 const leave: Row = ({ player: p, place }) => (isDoor(place) ? { kind: 'leave', enabled: true, door: place, leading: p.carriedMule !== null && !p.muleBolted } : null);
 
-const install: Row = ({ state, cfg, colonist: c, player: p, tile }) => {
+const install: Row = (s) => {
+  const { player: p, tile } = s;
   const good = p.carriedMule;
   if (!tile || !good || good === 'empty' || p.muleBolted) return null;
-  const plot = tile.owner === p.id ? tile : cfg.steer.lakeMode === 'shore' ? shorePlot(state, cfg, c, tile, p.id) : null;
+  const plot = plotFor(s, (t) => t.owner === p.id);
   return plot && { kind: 'install', enabled: true, good, plot: at(plot), fromShore: plot !== tile, replaces: plot.outfit };
 };
 
-/** Any plot, owned or free, with or without a MULE, led or on it: as analysePlot allows. */
-const analyse: Row = ({ state, player: p, tile }) =>
-  tile && tile.terrain !== 'store' && !hasAnalysed(p, state, tile) ? { kind: 'analyse', enabled: true, plot: at(tile) } : null;
+/** Any plot, owned or free, with or without a MULE, led or on it: as analysePlot allows; a lake plot from its shore. */
+const analyse: Row = (s) => {
+  const plot = plotFor(s, (t) => t.terrain !== 'store' && !hasAnalysed(s.player, s.state, t));
+  return plot && { kind: 'analyse', enabled: true, plot: at(plot) };
+};
 
-const filter: Row = ({ player: p, tile }) =>
-  tile?.owner === p.id && !tile.filter && p.stock.alloy >= DEVELOPMENT.filterAlloy
-    ? { kind: 'filter', enabled: true, plot: at(tile), alloy: DEVELOPMENT.filterAlloy }
-    : null;
+/** An own plot with no filter, Alloy held: as fitFilter allows; an own lake plot from its shore. */
+const filter: Row = (s) => {
+  if (s.player.stock.alloy < DEVELOPMENT.filterAlloy) return null;
+  const plot = plotFor(s, (t) => t.owner === s.player.id && !t.filter);
+  return plot && { kind: 'filter', enabled: true, plot: at(plot), alloy: DEVELOPMENT.filterAlloy };
+};
+
+/** Row 11a: an own plot with a MULE, leading none (AM-2); an own lake plot's from its shore (AM-18). */
+const take: Row = (s) => {
+  if (s.player.carriedMule) return null;
+  const plot = plotFor(s, (t) => t.owner === s.player.id && t.outfit !== null);
+  return plot && { kind: 'take', enabled: true, plot: at(plot), good: plot.outfit! };
+};
 
 const pub: Row = ({ state, cfg, player: p, place, secondsLeft }) => {
   if (place !== 'pub') return null;
@@ -175,8 +222,8 @@ const pub: Row = ({ state, cfg, player: p, place, secondsLeft }) => {
 };
 
 /** RULE-3's rows 1 to 13 in its order: the first that holds is the reach, and row 14 is none. */
-// Row 11a, TAKE MULE, slots in after filter: any earlier, it would hide ANALYSE and FIT FILTER on a plot with a MULE.
-const ROWS: readonly Row[] = [wolves, grab, catchIt, enter, sell, buy, outfit, leave, install, analyse, filter, pub];
+// Row 11a, TAKE MULE, comes after filter: any earlier, it would hide ANALYSE and FIT FILTER on a plot with a MULE (AM-9).
+const ROWS: readonly Row[] = [wolves, grab, catchIt, enter, sell, buy, outfit, reoutfit, leave, install, analyse, filter, take, pub];
 
 const dim = (hint: ReachHint): Reach => ({ kind: 'none', enabled: false, hint });
 
@@ -248,6 +295,12 @@ export function applyReach(state: GameState, floor: DevFloor, seat: string, seco
       return { ...press, floor: afterSale(state, floor, seat, cfg) };
     case 'outfit':
       outfitMule(state, seat, reach.good);
+      return press;
+    case 'reoutfit':
+      reoutfitMule(state, seat, reach.good);
+      return press;
+    case 'take':
+      takeMule(state, seat, reach.plot.x, reach.plot.y);
       return press;
     case 'install':
       installMule(state, seat, reach.plot.x, reach.plot.y);
@@ -336,6 +389,10 @@ export function reachWords(reach: Reach): ReachWords {
       return reach.why?.kind === 'soldOut' ? say(...HINT.noMules) : say('BUY MULE', priced(reach.price, reach.why));
     case 'outfit':
       return say(`OUTFIT · ${NAME[reach.good]}`, priced(reach.cost, reach.why));
+    case 'reoutfit':
+      return say(`RE-OUTFIT · ${NAME[reach.good]}`, reach.why?.kind === 'sameGood' ? 'already fitted' : priced(reach.cost, reach.why));
+    case 'take':
+      return say('TAKE MULE');
     case 'leave':
       return say('LEAVE', reach.leading ? 'with your MULE' : 'to the colony');
     case 'install': {
