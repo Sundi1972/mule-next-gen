@@ -17,7 +17,9 @@ import {
   type FloorConfig,
   type GameState,
 } from '@mule/engine';
+import { installable, placePoint } from '../src/floor-time.js';
 import { simFloorConfig } from '../src/floor-turn.js';
+import { FloorWalker, type StepRun } from '../src/hands/floor-walker.js';
 import { AiSeat } from '../src/seat.js';
 
 const ME = 'ai0';
@@ -117,5 +119,42 @@ describe('the floor never refuses a MULE step the AI planned (FM-floor-refusals)
     expect(me.carriedMule, 'no MULE on the lead').toBeNull();
     const ok = (type: string) => log.filter((e) => e.action.type === type && e.ok).length;
     expect(ok('install'), 'MULEs installed, of those bought').toBe(ok('buyMule'));
+  });
+
+  it('FM-floor-lake-stand: a lake plot whose only reachable shore is out of the right-hand door is installed from there, as planned', () => {
+    // A test-local map: the store's column made lake splits the map, so the land out of the left door never reaches the
+    // right half. ai0's lake plot two tiles right of the store has its whole shore on the right half.
+    const state = development(4);
+    const store = state.tiles.find((t) => t.terrain === 'store')!;
+    for (const t of state.tiles) {
+      if (t.x === store.x && t !== store) t.terrain = 'lake';
+      else if (t.x !== store.x && Math.abs(t.x - store.x) <= 4) t.terrain = 'plains';
+    }
+    const lake = tileAt(state.tiles, state.width, store.x + 2, store.y)!;
+    lake.terrain = 'lake';
+    lake.owner = ME;
+    const cfg = quietConfig();
+    const index = state.tiles.indexOf(lake);
+    expect(installable(state, cfg, ME, index), 'the plan counts on a spot to install it from').toBe(true);
+    // In the store at the corral, leading an Energy MULE.
+    state.players.find((p) => p.id === ME)!.carriedMule = 'energy';
+    const at = placePoint('corral', cfg.hall);
+    const built = buildFloor(state, cfg);
+    let floor: DevFloor = { ...built, colonists: built.colonists.map((c) => (c.id === ME ? { ...c, space: 'hall' as const, ...at, lead: { good: 'energy' as const, ...at } } : c)) };
+    const walker = new FloorWalker(ME);
+    const action = { type: 'install' as const, x: lake.x, y: lake.y };
+    let run: StepRun = { kind: 'going', input: { x: 0, y: 0, act: false } };
+    // literal-ok: a bound in ticks, many times the walk
+    for (let i = 0; i < 2_000 && run.kind === 'going'; i++) {
+      run = walker.run({ state, floor, cfg, secondsLeft: 40 }, action, 0);
+      if (run.kind !== 'going') break;
+      const inputs = { [ME]: run.input };
+      const spent = doorPresses(floor, state, inputs, cfg);
+      floor = settleMoments(state, stepFloor(floor, state, inputs, cfg.steer.tickMs, cfg));
+      if (run.input.act && !spent.has(ME)) floor = applyReach(state, floor, ME, 40, cfg).floor;
+    }
+    // The promise: the walk agrees with the plan, and the MULE is on its plot.
+    expect(run).toEqual({ kind: 'ok' });
+    expect(lake.outfit).toBe('energy');
   });
 });
