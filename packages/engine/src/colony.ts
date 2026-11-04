@@ -7,11 +7,12 @@ import { COLONY, GOOD_CONFIG, PRESTIGE } from './config.js';
 import { storeForSale, storeQuotes } from './economy.js';
 import { RuleError } from './errors.js';
 import { PERCENT } from './units.js';
-import type { Colony, FundLedger, FundLine, FundSource, GameState, Good, PrestigeId, Project } from './types.js';
+import { scoreParts } from './game.js';
+import type { Colony, ColonyGauges, FundLedger, FundLine, FundSource, GameState, Good, PrestigeId, Project } from './types.js';
 
 /** The colony at the start of a game played with politics. */
 export function newColony(month: number): Colony {
-  return { ledger: emptyLedger(month), projects: [], promises: [], permanentPrestige: 0 };
+  return { ledger: emptyLedger(month), projects: [], promises: [], permanentPrestige: 0, monthEnds: [] };
 }
 
 function emptyLedger(month: number): FundLedger {
@@ -106,12 +107,33 @@ function governorActs(state: GameState, playerId: string, act: string): Colony {
 
 /** The Governor commissions a prestige object; the fund and donors pay for it from the next upkeep. See G-5 RULE-22. */
 export function commission(state: GameState, playerId: string, id: PrestigeId): void {
-  const colony = governorActs(state, playerId, 'Commission');
-  if (!Object.hasOwn(PRESTIGE, id)) throw new RuleError("The colony can't build that");
-  if (colony.projects.some((p) => p.id === id)) throw new RuleError(`The colony already has a ${PRESTIGE[id].name}`);
-  const open = colony.projects.filter((p) => OPEN.includes(p.stage));
-  if (open.length >= COLONY.maxOpen) throw new RuleError(`The colony is already building the ${PRESTIGE[open[0]!.id].name}`);
+  governorActs(state, playerId, 'Commission');
+  const refused = objectRefusal(state, id);
+  if (refused) throw new RuleError(refused);
   edit(state).projects.push({ id, stage: 'commissioned', funded: { credits: 0, goods: {} }, monthsLeft: null, plot: null, since: state.month, plaque: {} });
+}
+
+/** Why the colony can't take on this object now, whoever asks (RULE-22 rows 4-6), or null. */
+function objectRefusal(state: GameState, id: PrestigeId): string | null {
+  if (!Object.hasOwn(PRESTIGE, id)) return "The colony can't build that";
+  const projects = state.colony!.projects;
+  if (projects.some((p) => p.id === id)) return `The colony already has a ${PRESTIGE[id].name}`;
+  const open = projects.filter((p) => OPEN.includes(p.stage));
+  return open.length >= COLONY.maxOpen ? `The colony is already building the ${PRESTIGE[open[0]!.id].name}` : null;
+}
+
+/** Why the sitting Governor could not commission this object now, or null when they could: every screen's catalogue reads it. */
+export function commissionRefusal(state: GameState, id: PrestigeId): string | null {
+  const governor = state.politics?.governor;
+  if (!state.colony) return "This game plays without the colony's council";
+  if (!governor) return 'The colony has no Governor yet';
+  try {
+    governorActs(state, governor, 'Commission');
+  } catch (err) {
+    if (err instanceof RuleError) return err.message;
+    throw err;
+  }
+  return objectRefusal(state, id);
 }
 
 /** The Governor pays to repair a damaged object from the fund. See G-5 RULE-21. */
@@ -142,6 +164,29 @@ export function runColony(state: GameState): void {
   }
   const open = colony.projects.find((p) => p.stage === 'commissioned');
   if (open) fund(state, colony, open);
+  colony.monthEnds = [...colony.monthEnds, colonyGauges(state)].slice(-2);
+}
+
+/**
+ * The colony's wealth: the fund and every player's money, goods, land and MULEs, as their scores count them, before
+ * the office line and any Collapse cut.
+ */
+export function colonyWealth(state: GameState): number {
+  return state.players.reduce((sum, p) => {
+    const { money, goods, land, muleValue } = scoreParts(state, p.id);
+    return sum + money + goods + land + muleValue;
+  }, state.treasury.money);
+}
+
+/** The colony's gauges now. */
+export function colonyGauges(state: GameState): ColonyGauges {
+  return { month: state.month, wealth: colonyWealth(state), prestige: colonyPrestige(state), happiness: null };
+}
+
+/** Last month's gauges for the "this month" change: the latest month end before this month's, or null in month 1. */
+export function lastGauges(state: GameState): ColonyGauges | null {
+  const before = state.colony?.monthEnds.filter((g) => g.month < state.month) ?? [];
+  return before.at(-1) ?? null;
 }
 
 /** What the fund can spend on a project: everything above the reserve it keeps for office pay. */
