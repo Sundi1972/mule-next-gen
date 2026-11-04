@@ -1,4 +1,4 @@
-import type { AuctionSide, CanRun, CeremonyBeat, DevPlace, Election, EventEffect, EventKey, EventKind, EventWeight, FundLine, FundSource, Good, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, PrestigeId, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
+import type { AuctionSide, CanRun, CeremonyBeat, DevPlace, Election, EventEffect, EventKey, EventKind, EventWeight, FundLine, FundSource, Good, LawId, LawImpact, LawProposal, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, PrestigeId, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -46,6 +46,10 @@ export type MuleIntent =
   | { type: 'donate'; id: PrestigeId; credits: number; goods?: Partial<Record<Good, number>> }
   /** Planning, after the votes: the Governor repairs a damaged object from the fund. */
   | { type: 'repair'; id: PrestigeId }
+  /** Planning, once the votes are over: the Governor puts a law, a new setting or a repeal to the next planning's ballot; null withdraws it. */
+  | { type: 'propose'; proposal: LawProposal | null }
+  /** The law ballot: yes or no; a later vote replaces it until the ballot closes. */
+  | { type: 'voteLaw'; yes: boolean }
   /** Planning: the host ends planning with players not yet Ready; in the election's announce or ballot, it goes on without players not Done. */
   | { type: 'continue' }
   /**
@@ -285,6 +289,23 @@ export interface MyPoliticsView {
   /** Sales tax this player has paid over the game, in credits. */
   paid: number;
   reputation: number;
+  /** Their own vote on the open law ballot, yes or no; null when they have cast none. Never anyone else's. */
+  lawBallot?: boolean | null;
+}
+
+/** The law ballot as every screen sees it: who has voted, never how; the totals only from the reveal. */
+export interface CouncilView {
+  stage: 'ballot' | 'reveal' | 'over';
+  proposal: LawProposal;
+  proposer: string;
+  impact: Record<string, LawImpact>;
+  voted: string[];
+  done: string[];
+  waitingFor: string[];
+  /** Ms of the reveal shown, out of revealMs. */
+  clockMs: number;
+  revealMs: number;
+  result: { passed: boolean; yes: number; no: number; tie: boolean } | null;
 }
 
 /** One office's result as far as the ceremony has shown it: the totals from its bars beat, the winner and how from its winner beat. */
@@ -349,6 +370,14 @@ export interface PoliticsView {
   promiseFrom: number | null;
   /** This month's election, or null in a month without one. */
   election: ElectionView | null;
+  /** The Governor's pending law proposal, public with what it would cost each player, until the next planning's ballot. */
+  proposal?: { by: string; month: number; proposal: LawProposal; impact: Record<string, LawImpact> } | null;
+  /** This month's law ballot; null in a month without one. */
+  council?: CouncilView | null;
+  /** The laws in force, each at its setting since the month it passed. */
+  laws?: Partial<Record<LawId, { setting: number; since: number }>>;
+  /** For each failed proposal (`kind:law`), the first month it may come back. */
+  retry?: Record<string, number>;
 }
 
 /** A player on the auction board. */
