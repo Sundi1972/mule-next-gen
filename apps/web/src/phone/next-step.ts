@@ -12,6 +12,8 @@ export interface DevelopState {
   place: 'store' | 'map';
   /** The plot selected on the map is one of yours: before R1 a tap on a plot is standing at it. */
   atOwnPlot: boolean;
+  /** Your colonist is walking to this plot, where the move it set off for happens on arrival; null when it isn't. */
+  walkingTo?: { x: number; y: number } | null | undefined;
   /** A MULE was installed this turn. */
   installed: boolean;
   /** Development seconds left. */
@@ -133,8 +135,10 @@ export function nextStep(s: DevelopState): NextStep {
     const free = nearest(s.freePlots, s.from);
     // Row 4.
     if (s.place === 'store') return step(3, 'Walk out and install it', `Leave by either door${free ? `: your plot ${plotName(free.x, free.y)} has no MULE yet` : ''}.`, ['doorL', 'doorR']);
+    // Row 6, while the walk to the plot is under way: installing is that walk, and the MULE goes in at its end.
+    if (s.walkingTo) return step(3, `Walking your ${outfitName(s.carry)} MULE to ${plotName(s.walkingTo.x, s.walkingTo.y)}`, 'It goes in when you get there. A MULE works only on a plot you own.');
     // Row 6.
-    if (s.atOwnPlot) return step(3, `Install your ${outfitName(s.carry)} MULE here`, 'Installing is instant. A MULE works only on a plot you own.');
+    if (s.atOwnPlot) return step(3, `Install your ${outfitName(s.carry)} MULE here`, 'Press Install: you walk it over, and it goes in when you get there. A MULE works only on a plot you own.');
     // Row 5, and its unknown: no plot of yours without a MULE.
     if (!free) return step(3, 'Install on a plot of yours', 'Tap a plot of yours on the map. A MULE works only on a plot you own.');
     return step(3, `Walk to your plot ${plotName(free.x, free.y)}`, 'Tap it on the map. A MULE works only on a plot you own.', [], free);
