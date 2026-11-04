@@ -87,7 +87,8 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
       continued = true;
     }
     const left = DEVELOPMENT.fullSeconds - run * tickSeconds;
-    if (left <= 0 || ids.every(done)) break;
+    // AM-19: the tick this step makes, run + 1, runs only while it falls before the clock's end, as on the server.
+    if ((run + 1) * cfg.steer.tickMs >= DEVELOPMENT.fullSeconds * MS_PER_SECOND || ids.every(done)) break;
     const inputs: Record<string, FloorInput> = {};
     for (const s of seats) if (!done(s.id)) inputs[s.id] = s.developSteer(state, floor, left, cfg, waiting && isIn(state, s.id));
     const spent = doorPresses(floor, state, inputs, cfg);
