@@ -237,7 +237,7 @@ function sharedChecks(moves: MoveTable): Shared {
   }
   const shared = new Map<Phase, readonly string[]>();
   for (const [phase, lists] of byPhase) {
-    if (lists.length < 2) continue;
+    if (lists.length <= 1) continue;
     const common = lists[0]!.filter((line) => lists.every((l) => l.includes(line)));
     if (common.length > 0) shared.set(phase, common);
   }
