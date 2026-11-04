@@ -1,4 +1,4 @@
-import type { AuctionSide, CanRun, CeremonyBeat, DevPlace, Election, EventKey, EventKind, EventWeight, Good, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
+import type { AuctionSide, CanRun, CeremonyBeat, DevPlace, Election, EventEffect, EventKey, EventKind, EventWeight, Good, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -26,6 +26,10 @@ export type MuleIntent =
   | { type: 'declare'; side: AuctionSide }
   /** Auction, during the walk: hold up, hold down, or let go. The land auction's walk uses it too. */
   | { type: 'walk'; dir: 'up' | 'down' | 'stop' }
+  /** Goods auction, during the walk: one tap on Up or Down, one price step (A-6, UX audit G-2). */
+  | { type: 'walkStep'; dir: 'up' | 'down' }
+  /** Goods auction, at the store's or the ship's line: trade this many units with it, then stop (A-6, UX audit G-1). */
+  | { type: 'lineTrade'; units: number }
   /** Planning: put a plot, or the MULE on one, up for the land auction, with a minimum and what happens if nobody bids it. */
   | { type: 'list'; item: { kind: 'plot' | 'mule'; x: number; y: number }; minimum: number; unsold: 'store' | 'keep' }
   /** Planning: take one of your listings back. */
@@ -160,6 +164,52 @@ export interface ReachView {
   enabled: boolean;
 }
 
+/** A wolf of a pack on the floor (arcade RULE-4), its position rounded as the colonists' are. */
+export interface FrameWolf {
+  x: number;
+  y: number;
+  /** Circling; crouched to lunge (the warning); lunging; open after a miss; hurt after a strike or a bite. */
+  state: 'prowl' | 'tell' | 'lunge' | 'open' | 'hurt';
+  /** Where it aims, a map position: set while it crouches (tell) and lunges, null otherwise. */
+  target: { x: number; y: number } | null;
+}
+
+/** A pack round a colonist: whose, and the stage of the meeting (the same as that colonist's ColonistView.encounter). */
+export interface FramePack {
+  who: string;
+  stage: 'choose' | 'chase' | 'fight';
+  /** The tick the stage began. */
+  sinceTick: number;
+  /** Where the stage began, a map position: a chase gives up far enough from it, and a fight stays round it. */
+  centre: { x: number; y: number };
+  /** In a fight: the strikes that landed on wolves, and the bites taken. */
+  strikes: number;
+  bites: number;
+  wolves: FrameWolf[];
+}
+
+/**
+ * The moments on the floor this tick (AM-28), straight from the floor's state. Absent from the frame when there is no
+ * pack, no glint, no scramble yet this turn, no bolted MULE and no stunned colonist.
+ */
+export interface FrameMoments {
+  packs: FramePack[];
+  /** The glint lit, by its tile: x and y are the tile's (whole numbers), and it is drawn at the tile's middle (+0.5). */
+  glint: { x: number; y: number; untilTick: number } | null;
+  /**
+   * The turn's corral scramble, from its call to the end of the turn: `over` is null while it runs, then how it ended;
+   * `got` the needers that got a MULE from it, in order; `leftOut` the needers who went without, filled once it is over.
+   */
+  scramble: { untilTick: number; needers: string[]; got: string[]; over: 'empty' | 'time' | 'everyone' | null; leftOut: string[] } | null;
+  /**
+   * The seats whose MULE bolted after a lost fight and is not caught yet, running or standing. The MULE is at that
+   * colonist's `lead`, in map tiles even while its colonist is in the hall.
+   */
+  bolted: string[];
+  /** Colonists stunned by a lost fight: whose, and the tick the stun ends (it is gone from the frame on that tick). */
+  stunned: { who: string; untilTick: number }[];
+}
+
 /** One development tick's positions for every screen, sent beside the full view. */
 export interface DevFrame {
   tick: number;
@@ -177,6 +227,8 @@ export interface DevFrame {
   }[];
   /** The moments' lines everyone sees this tick. */
   beats: string[];
+  /** The moments' state this tick; absent while none is on (AM-28). */
+  moments?: FrameMoments;
 }
 
 export interface MyView {
@@ -206,6 +258,11 @@ export interface MyView {
   outfitCosts: Record<Outfit, number>;
   /** Free plots chosen for the geo drone this month. */
   droneOrder: { x: number; y: number }[];
+  /**
+   * The plots this month's drone surveyed, from the land grant until the month ends: the land grant's rail says
+   * "Your drone: …" while one is lit (H-3). Only on this player's own view; absent reads as none.
+   */
+  droneFound?: { x: number; y: number }[];
   /** This player's own side of the election; null when the game plays without politics. */
   politics: MyPoliticsView | null;
   /** True once this player has installed a MULE in this development turn, and until their next one starts. */
@@ -301,6 +358,14 @@ export interface WalkerView {
   done: boolean;
   /** Their stock of the good up now, live as units trade; public like the status table. */
   units: number;
+  /** The house line they stand at ('store' or 'ship'), or null: there nothing trades until they choose how many (A-6). */
+  line?: string | null;
+  /**
+   * What they chose at that line: units to trade, units moved so far, and what those cost or brought in after the
+   * sales tax. A finished choice
+   * (traded = units) stays until they walk off the line, so the phone can say what was traded. Null before choosing.
+   */
+  order?: { house: string; units: number; traded: number; cr: number } | null;
 }
 
 /** Units changing hands right now: between two players, or with the store or the ship ('store', 'ship'). */
@@ -314,7 +379,8 @@ export interface DealView {
 /** The live goods auction, on every screen. */
 export interface AuctionView {
   good: Good;
-  stage: 'status' | 'walk';
+  /** The status screen, the walk, then the close stage: the board holds still while each phone shows its receipt (UX audit G-5). */
+  stage: 'status' | 'walk' | 'close';
   /** Seconds left on the stage's clock. It runs slower while units change hands. */
   seconds: number;
   /** The stage's full time in seconds, for the draining time bar. */
@@ -330,6 +396,8 @@ export interface AuctionView {
   storeForSale: number;
   /** What the export ship pays for the next unit, while it is in port and wants this good. */
   shipPays: number | null;
+  /** What it pays for each of the units it still wants, next first (it pays a little less for each): the phone's "Sell 2 for 230 cr" at its line (A-6). */
+  shipQuote?: number[];
   /** The board's price range: it grows when a walker goes past it. */
   lo: number;
   hi: number;
@@ -343,6 +411,12 @@ export interface AuctionView {
   status: StatusRow[];
   /** Goods skipped since the last one that came up, and why, for one line on screen. */
   skipped: { good: Good; reason: SkipReason }[];
+  /** In the close stage: the good that comes up next, or null when this was the last. Null in the other stages. */
+  upNext: Good | null;
+  /** Only on a seat's own view, in the close stage: what it bought and sold of this good. Null on a board and in the other stages. */
+  receipt: GoodReceipt | null;
+  /** Only on a seat's own view: its net credits from this month's auction so far. Null on a board. */
+  tally: number | null;
 }
 
 /** What is for sale: a plot (with whatever stands on it), or the MULE off one of the seller's plots. */
@@ -430,10 +504,13 @@ export interface ProductionLineView {
   parts: { why: ProductionReason; delta: number }[];
 }
 
-/** The month's event as the map shows it. */
-export interface ProductionEventView {
-  key: EventKey;
-  kind: EventKind;
+/** What an event on screen is: one of the engine's month events, or a player falling sick at development's start. */
+export type ShowEventKey = EventKey | 'sickness';
+
+/** One event as every screen shows it, whichever phase fired it: production's map and every other phase's show. */
+export interface EventView {
+  key: ShowEventKey;
+  kind: EventKind | 'sickness';
   title: string;
   line: string;
   sign: MonthEvent['sign'];
@@ -442,8 +519,23 @@ export interface ProductionEventView {
   origin: { x: number; y: number };
   /** For a colony sweep, the map edge it blows in from. */
   from?: 'n' | 'e' | 's' | 'w';
+  /** Whose event it is: a personal event's player, or the player who fell sick. */
+  player?: string;
   /** The plots it hit, in the order it reached them, and how many units each gained or lost. */
-  hits: { x: number; y: number; order: number; delta: number }[];
+  hits: {
+    x: number;
+    y: number;
+    order: number;
+    delta: number;
+    /** The special field the plot had until this hit, when the hit removes it: the map keeps its badge until the hit lands. */
+    was?: SpecialField['kind'];
+    /** What the plot is after this hit, when the hit changes what it is: 'plain' (its special field is gone), 'crater', 'idle'. */
+    becomes?: 'plain' | 'crater' | 'idle';
+    /** True when the hit destroyed or took the plot's MULE. */
+    muleLost?: true;
+  }[];
+  /** What it changed off the map, in the order it changed it: a player's (by id), the store's or the colony's. */
+  effects?: EventEffect[];
   /** The phase whose show plays it. */
   phase: Phase;
   /** How big its story is on the TV. */
@@ -452,11 +544,28 @@ export interface ProductionEventView {
   playMs: number;
 }
 
+/** Production's name for EventView, from before every phase had a show. */
+export type ProductionEventView = EventView;
+
+/** When the current phase's event show plays (RULE-1): its intro, then each event's playMs in fired order. */
+export interface EventShowView {
+  /** Epoch ms on the server's clock when the intro starts: in production, where its map plays it; otherwise as the phase opens. */
+  startsAt: number;
+  /** The whole show, intro included, in ms at full pace like playMs: never more than the cap. */
+  showMs: number;
+  /** How long the intro plays before the first event, in ms at full pace. */
+  introMs: number;
+  /** Epoch ms on the server's clock when the show ends: startsAt plus showMs at the table's pace. */
+  endsAt: number;
+  /** Whether the server holds the phase's clocks until endsAt: then nobody can act and the show covers the screen. */
+  held: boolean;
+}
+
 /** What every plot made this month and what the month's event did: never anything a player holds. */
 export interface ProductionView {
   /** In reading order: row by row, left to right. */
   lines: ProductionLineView[];
-  events: ProductionEventView[];
+  events: EventView[];
   /** How long the production phase was scheduled to run, in ms; the show's timeline stretches over it. */
   lengthMs: number;
   /** How long the phase's intro plays before the first event, in ms: 0 in a quiet month. */
@@ -507,6 +616,10 @@ export interface MuleView {
   landAuction: LandAuctionView | null;
   /** The month's production show, during production and upkeep. */
   production: ProductionView | null;
+  /** The events the current phase fired, in fired order; empty when it fired none. Optional only for older fixtures: the server always sends it. */
+  events?: EventView[];
+  /** When those events play; null when there are none. Optional only for older fixtures: the server always sends it. */
+  eventShow?: EventShowView | null;
   /** Offices, tax, vote weights and the election; null when the game plays without politics. */
   politics: PoliticsView | null;
   /**

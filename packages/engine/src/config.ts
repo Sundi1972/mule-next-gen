@@ -1,4 +1,5 @@
 import type { Outfit, EventKey, GrownGood, Good, MinedGood, Office, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
+import type { Strategy } from './playbook.js';
 
 /**
  * Every balancing number lives here, so playtests and the simulator can tune
@@ -282,8 +283,11 @@ export const MULE = {
 };
 
 export const DEVELOPMENT = {
-  /** Seconds of development, the same for every player: hunger and sickness slow the walk instead (DEV_WALK). */
-  fullSeconds: 50,
+  /**
+   * Seconds of development, the same for every player: hunger and sickness slow the walk instead (DEV_WALK). 60 (Heiko,
+   * 4 Nov), so a starving colonist has the time to put Food on a plot next to the store.
+   */
+  fullSeconds: 60,
   /** Seconds a colonist stands on a plot for a geo analysis. */
   analysisSeconds: 8,
   /** The pub pays base + (start + month * perMonth) * share of time left. */
@@ -363,6 +367,14 @@ export const DEV_STEER = {
   botCounterPauseSeconds: 0.5,
   /** An AI colonist joins a glint race or the scramble only if its errand still fits the time left after the detour. */
   botsSpareTime: true as boolean,
+  /** An AI colonist drops its errand for the pub once the clock shows no more than its walk there and this many seconds. */
+  botPubMarginSeconds: 2,
+  /** Ticks an AI colonist may push its stick without moving before it gives that step of its errand up. */
+  botStuckTicks: 20,
+  /** An AI colonist installing on a lake plot from the shore stands this far from the shore tile's middle towards the lake, in tiles. */
+  botShoreTiles: 0.3,
+  /** The sim's stand-in for the host's Continue (AM-3): month 1's waiting clock starts after this many seconds anyway. */
+  simHostContinueSeconds: 120,
   /** Share of what a MULE cost that the pub pays back when its owner walks in leading it. */
   pubLeadRefund: 0,
   /** A re-outfit's price, as a share of the outfitter's price for the new good: 1 is the outfit price. */
@@ -419,10 +431,47 @@ export const WOLVES = {
   /** A lost fight's MULE bolts this many tiles at this many tiles a second. */
   boltTiles: 4,
   boltSpeed: 3.5,
+  /** The lands a pack comes on. */
+  lands: ['forest', 'hills', 'tundra'] as readonly WalkTerrain[],
+  /** Where a pack stands when it comes: this far from its colonist, spread over this arc from one side, in radians. */
+  packRingTiles: 1.6,
+  packArcRadians: 1.9,
+  /** A chase: the wolves set off after this head start, and catch a colonist they come this close to. */
+  headStartSeconds: 0.4,
+  chaseCatchTiles: 0.35,
+  /** A fight: the wolves circle this far from where it began, turning this fast; the colonist stays within arenaTiles of it. */
+  fightRingTiles: 1.3,
+  prowlRadiansPerSecond: 0.7,
+  arenaTiles: 1,
+  /** The fight's first lunge comes this long after it starts. */
+  firstLungeSeconds: 0.9,
+  /** A lunge takes this long to land, and bites a colonist still this close to the spot it aimed at. */
+  lungeSeconds: 0.22,
+  biteTiles: 0.38,
+  /** A wolf that missed stands open this long; one struck, or that has bitten, is out of the fight this long. */
+  openSeconds: 0.9,
+  hurtSeconds: 0.7,
+  /** A strike lands on a wolf this close; a strike at nothing leaves its colonist open this long. */
+  strikeTiles: 0.8,
+  whiffSeconds: 0.45,
+  /** A bolted MULE is caught by its colonist this close to it (arcade RULE-3 row 4). */
+  catchReachTiles: 0.6,
   /** Share of AI colonists that fight rather than run. */
   botFightShare: 0.5,
-  /** Share of an AI colonist's legs that go by wolf land. */
+  /** An AI colonist stands this long before it runs or fights, and dodges a lunge till it is this far beyond its bite. */
+  botChooseSeconds: 0.6,
+  botDodgeMarginTiles: 0.2,
+  /**
+   * Share of an AI colonist's legs, among those it walks with no MULE on the lead, that go by wolf land. A leg leading a
+   * MULE never does (a pack met then costs the install), so the share of all its legs is lower than this.
+   */
   botWolfLandShare: 0.5,
+  /**
+   * The share of development months with at least one AI wolf encounter that `pnpm sim`'s report asks for (AM-27), on
+   * each of seeds 1, 101 and 201 (40 games each, AI-only): UBER-AC-3 needs the table to see an AI colonist meet wolves
+   * on the TV in an ordinary game. Under it the report prints MISS.
+   */
+  simMonthsWithPack: 0.5,
   /** Each level's chance to dodge a lunge, and its delay before it strikes at a wolf that stands open. */
   levels: {
     rookie: { dodge: 0.4, strikeDelaySeconds: 0.5 },
@@ -446,6 +495,8 @@ export const GLINT = {
   /** The prize: this much Crystite, or these credits when prize is 'credits'. */
   crystite: 1,
   credits: 60,
+  /** GRAB THE GLINT reaches it from this far from its tile's middle, in tiles: about a step away (arcade RULE-3 row 3). */
+  grabReach: 1.2,
   /** Share of AI colonists that race, and only for a glint within botCareTiles. */
   botShare: 0.75,
   botCareTiles: 8,
@@ -837,10 +888,16 @@ export const POLITICS = {
 export const WALK = {
   /** The order goods come up in: raw goods first, then processed ones. */
   order: ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine'] as Good[],
-  /** The status screen before each good: what everyone had, used, made and is short of, and where each player picks a side for the walk. */
-  statusMs: 8_000,
+  /**
+   * The status screen before each good: what everyone had, used, made and is short of, and where each player picks a
+   * side for the walk. null: no clock (A-7, G-7), it waits for every player's Done or the host's Continue; a number
+   * restores a timer.
+   */
+  statusMs: null as number | null,
   /** The walk's clock for one good. */
   goodMs: 20_000,
+  /** The close stage after a good's walk: each phone shows its receipt for the good (UX audit G-5), as the land auction's result does. Display and game time only. */
+  closeMs: 2_500,
   /** While any unit is changing hands the clock runs at this share of its speed, as in the original. */
   tradeClockRate: 0.25,
   /**
@@ -958,6 +1015,20 @@ export const EVENT_SHOW = {
     wildfire: 'spotlight',
     bumperHarvest: 'spotlight',
     cavernCollapse: 'spotlight',
+    // Wave 2, as the approved gallery sizes them (design/mocks/ws8-events, catalogue.ts `tier`).
+    federationTax: 'headline',
+    federationGrant: 'headline',
+    immigrationWave: 'headline',
+    inheritance: 'bulletin',
+    muleTheft: 'spotlight',
+    epidemic: 'headline',
+    coldSnap: 'headline',
+    meteorStrike: 'headline',
+    pirateRaid: 'headline',
+    storeFire: 'headline',
+    ratsInSilo: 'bulletin',
+    crookedAccountant: 'bulletin',
+    packageFromHome: 'bulletin',
   } as Partial<Record<EventKey, EventWeight>>,
   /** How long one headline or spotlight plays, in ms. */
   playMs: { headline: 7_000, spotlight: 5_200 },
@@ -1116,7 +1187,24 @@ export const EVENTS = {
      * the phase start; a collapse leaves a plain plot.
      */
     cavernCollapse: { phases: { production: 0.06 }, perPlot: true, cap: 0.9 },
-  } satisfies Record<string, import('./events.js').EventRow>,
+    // Wave 2 (the catalogue's chances; the two production rows x1.6 as every production base, wave-2 spec AM-1).
+    /** Share of each player's cash the Federation takes into the colony fund (floored). */
+    federationTax: { phases: { planning: 0.02 }, share: 0.1, cap: 0.9 },
+    /** Credits the Federation pays each of the `count` poorest players, new money. */
+    federationGrant: { phases: { planning: 0.02 }, amount: 150, count: 2, cap: 0.9 },
+    /** The colonists grow by this share, for good (rounded). */
+    immigrationWave: { phases: { planning: 0.02 }, growth: 0.1, cap: 0.9 },
+    /** Every player without a Medicine is sick this development and the next; one with a Medicine uses it. */
+    epidemic: { phases: { development: 0.005 }, cap: 0.9 },
+    /** Every plot's Energy need is `factor` times this production. */
+    coldSnap: { phases: { production: 0.032 }, factor: 2, cap: 0.9 },
+    /** After production's output, one tile (not the store) becomes a meteor crater and loses its MULE. */
+    meteorStrike: { phases: { production: 0.032 }, afterOutput: true, cap: 0.9 },
+    /** Every player's and the store's Crystite goes to 0 before the auction opens. */
+    pirateRaid: { phases: { auction: 0.01 }, cap: 0.9 },
+    /** The store's stock of every good and its MULEs go to 0 before the auction opens. */
+    storeFire: { phases: { auction: 0.01 }, cap: 0.9 },
+  } satisfies Record<string, import('./events.js').EventRow & import('./events.js').EventParams>,
   player: {
     /**
      * Sickness, at development start: the colonist walks at DEV_WALK.sickPace this turn unless it holds a Medicine,
@@ -1137,7 +1225,17 @@ export const EVENTS = {
       cap: 0.9,
     },
     bumperHarvest: { phases: { production: 0.024 }, wealth: { poorest: 0.015, richest: -0.01 }, cap: 0.9 },
-  } satisfies Record<string, import('./events.js').EventRow>,
+    /** Credits from min (the richest) to max (the poorest), linear in wealth rank (wave-2 AM-1 6a). */
+    inheritance: { phases: { planning: 0.015 }, min: 100, max: 300, cap: 0.9 },
+    /** One installed MULE is taken off one of the player's plots; rolls in development and again at the month end. */
+    muleTheft: { phases: { development: 0.01, upkeep: 0.01 }, cap: 0.9 },
+    /** Share of the player's Food the rats eat (floored); fires only when that is at least 1. */
+    ratsInSilo: { phases: { upkeep: 0.015 }, share: 0.5, cap: 0.9 },
+    /** Share of the player's cash the accountant takes (floored); fires only when that is at least 1. */
+    crookedAccountant: { phases: { upkeep: 0.01 }, share: 0.1, cap: 0.9 },
+    /** Food the package brings. */
+    packageFromHome: { phases: { upkeep: 0.015 }, amount: 3, cap: 0.9 },
+  } satisfies Record<string, import('./events.js').EventRow & import('./events.js').EventParams>,
   /** Pairs that never fire together in one phase: if both roll, the seeded dice keep one. */
   excludes: [
     ['drought', 'flood'],
@@ -1301,6 +1399,66 @@ export const AI_HANDS = {
   grant: {
     /** A go/no-go choice takes this much longer than a bare reaction. */
     choiceMs: [150, 300] as [number, number],
+  },
+};
+
+type PlanKind = Strategy['kind'];
+
+/**
+ * The AI's game plan (playbook.ts): which plan kind a seat drafts, the strategy fields it writes, and the bounds every
+ * playbook is held to, the engine's own draft and Claude's edits alike.
+ */
+export const AI_PLANS = {
+  /** Seats play their playbook; false: every seat plays the phase-by-phase asks, as before playbooks. */
+  on: true,
+  /** How much each persona leans to each plan kind, 0 to 1: the draft picks the eligible kind it leans to most. */
+  leaning: {
+    cautious: { builder: 1, specialist: 0.5, monopolist: 0.2, landBaron: 0.3, politician: 0.4, spoiler: 0 },
+    aggressive: { builder: 0.3, specialist: 0.5, monopolist: 0.6, landBaron: 1, politician: 0.2, spoiler: 0.4 },
+    trader: { builder: 0.3, specialist: 1, monopolist: 1, landBaron: 0.3, politician: 0.2, spoiler: 0 },
+    saboteur: { builder: 0.2, specialist: 0.4, monopolist: 0.5, landBaron: 0.4, politician: 0.3, spoiler: 1 },
+  } satisfies Record<AiPersonaId, Record<PlanKind, number>>,
+  moneyMaker: {
+    /** A good's score sums its install gain over this many of the seat's best plots for it (own idle and free). */
+    plots: 3,
+    /** Each rival plot already making the good cuts its score by this share. */
+    rivalDiscount: 0.15,
+    /** Weight of the "My money-maker" consideration in a development pick. */
+    weight: 1,
+    /** That consideration's score, 0 to 1, for an outfit that makes another good (the money-maker scores 1). */
+    otherScore: 0.8,
+  },
+  monopoly: {
+    /** The goods a seat may try to corner. */
+    goods: ['food', 'energy', 'smithore'] as Good[],
+    /** A good is cornered only while at most this many rival plots make it. */
+    maxRivalPlots: 1,
+    /** And only with at least this many of its own idle or free plots whose best outfit is the good. */
+    minPlots: 2,
+  },
+  landBaron: {
+    /** The land baron is a plan while at least this share of all plots is free. */
+    minFreeShare: 0.3,
+  },
+  landTarget: {
+    /** The plot target is for this many months ahead, at most to the last month. */
+    months: 3,
+    /** Plots a month the target adds, by plan kind; `other` for every kind not named. */
+    perMonth: { landBaron: 2, other: 1 } as Partial<Record<PlanKind, number>> & { other: number },
+  },
+  /** What a playbook may hold: a value outside is clamped or refused. */
+  bounds: {
+    /** Credits a strategy's cash floor may ask, at most. */
+    cashFloorMax: 2000,
+    /** Notes on one rival, at most, and characters a note. */
+    rivalReadNotes: 3,
+    rivalReadChars: 140,
+    /** Notes for later months, at most. */
+    lessons: 5,
+    /** Steps a development route may have, at most. */
+    routeSteps: 24,
+    /** Credits a second of the auction clock a seat may concede, at most. */
+    concedeMaxCrPerS: 50,
   },
 };
 

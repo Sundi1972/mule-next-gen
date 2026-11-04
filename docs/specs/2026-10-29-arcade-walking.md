@@ -170,7 +170,7 @@ mechanism    extract_interface (the drawing's SPOT becomes the engine's plan) + 
 call sites   Store.tsx::StoreInterior (Develop.tsx today; C11's hall stage tomorrow; TableApp's TV store)
 pin          the store hall's look (Heiko-approved, WS6 PR-4/PR-10): store-steps.ts::storeIsOneHallWithTwoRows,
              store-view.test.ts B-AC-10 / T-AC-12 keep passing
-ux           design/mocks/ws6-ux/src/screens/arcade/views.tsx::HallStage at ceedd23f · GRAFT TARGET: Store.tsx (named edit)
+ux           design/mocks/ws6-ux/src/screens/arcade/views.tsx::HallStage at d30ae057 (AM-16) · GRAFT TARGET: Store.tsx (named edit)
 depends_on   —
 ```
 
@@ -287,6 +287,14 @@ tomorrow     MUST: the room's Game may emit a transient frame to everyone (`ctx.
              MUST (AM-8): WS3's recorder and replay pass `frame` through: recording, to the room; on replay, a no-op
                (record.ts, replay.ts, two lines, WS3's, WS6 reviewing), or a recorded game loses its frames silently.
                Test row: a recorded game's frames still reach a client.
+             MUST (AM-13, S-1): a `steer` intent sends no full view, or 4 phones × 10 steers a second make 40 full
+               views a second (~3.7 MB/s). Frame positions are rounded to 2 decimals on the wire.
+             MUST (AM-15): the room stays game-agnostic. Game gains an optional `quiet?(intent): boolean`; the room
+               skips `broadcast()` after an intent it returns true for (MuleGame: `steer` and `act`, AM-21; WS3, PR-3).
+               Connection gains an optional `behind?(): boolean`; the room skips that connection's frame while it is
+               true, never a full view (server.ts: `socket.bufferedAmount > FRAME_BACKLOG_BYTES`, a named server
+               config value; a WS3 named edit in PR-2). The rounding happens where the DevFrame is built (WS3's
+               dev-steer.ts, PR-3); the room passes `payload` through untouched.
 seam         packages/tabletop/src/room.ts (+ protocol.ts message type)
 senior       junior would: put positions in viewFor and broadcast it 20×/s. senior does: a frame of ~200 bytes per
              tick, full views stay event-driven (S-1 measures both).
@@ -449,8 +457,9 @@ every DEV_STEER.tickMs (50 ms) of game time, while phase = development:
   1  inputs ← for each seat: away → IDLE; else its latest steer (latest-wins) and any act pressed since the last tick
   2  ai     ← each AI seat's hand reads (floor, state) and returns an input (C9)
   3  floor  ← stepFloor(floor, state, inputs, tickMs, cfg)      // C1, then C4's moments inside it
-  4  acts   ← for each act: Reach (C3) at the stepped position → apply the game.ts rule; a refused rule throws
-              RuleError to that seat only (HC-7)
+  4  acts   ← for each act: Reach (C3) at the stepped position → apply the game.ts rule; a refused rule is counted
+              and logged for that seat, never thrown: a timer has no channel to one seat, and the button shows the
+              server's Reach words, so a refusal is only ever a race the next view corrects (AM-19)
   5  frame  → ctx.frame(DevFrame)                                // C8, every tick
   6  view   → broadcast full views only if GameState changed (money, stock, plots, done, the moments' outcomes)
   7  end    ← existing: devEndsAt reached, or every seat away-or-done, or everyone Ready (checkAllReady /
@@ -458,6 +467,8 @@ every DEV_STEER.tickMs (50 ms) of game time, while phase = development:
 order        seats in seat order within a tick, rotating the first seat each tick (as play.ts does today), so no seat
              always acts first
 time         game ms = tick × tickMs; the server maps its clock to ticks (phaseScale applies, as realMs does today);
+             the floor steps tick n only while n × tickMs < the turn's length, so the clock's end comes first and a
+             50 s turn steps 999 ticks; the sim and the replay use the same boundary (AM-19);
              a late timer runs the missed ticks, at most DEV_STEER.catchUpTicks, then resyncs (mule-game.ts's
              existing dt clamp, AI_DEV_TICK_MS × 10, is the precedent)
 determinism  (seed, the per-tick inputs) → the same floor and state, in the engine, the sim and the server (HC-4).
@@ -511,10 +522,13 @@ RULE-3 · What a press does (Reach)                               shape: decisio
                                                                 SWAP · same outfit, nothing gained (the plot keeps
                                                                 its run; AM-10)
  11  on the map on any plot but the store, not analysed by    ANALYSE (owned or free: scouting, as analysePlot
-     you (row 10 wins on your own plot with a fitted MULE)    allows; a plot with a MULE too; AM-9, AM-12)
- 12  on an own plot with no filter, Alloy held (a MULE or     FIT FILTER (as fitFilter allows; AM-12)
+     you (row 10 wins on your own plot with a fitted MULE)    allows; a plot with a MULE too; AM-9, AM-12;
+                                                              a lake plot from its shore, as row 10; AM-18)
+ 12  on an own plot with no filter, Alloy held (a MULE or     FIT FILTER (as fitFilter allows; AM-12; a lake
+                                                              plot from its shore, as row 10; AM-18)
      not)
- 11a on an own plot with a MULE, leading none                 TAKE MULE (it follows on its lead; the plot makes
+ 11a on an own plot with a MULE, leading none (a lake plot   TAKE MULE (it follows on its lead; the plot makes
+     from its shore, as row 10; AM-18)
                                                               nothing until a MULE is installed again; AM-2;
                                                               after 11 and 12, so analysing and the filter stay
                                                               reachable: AM-9)
@@ -539,7 +553,8 @@ RULE-4 · Wolves                          shape: state machine per colonist     
                                                      (boltTiles at boltSpeed; CATCH MULE to lead it again),
                                                      no MULE → stunned stunSeconds
 AI           run or fight by WOLVES.botFightShare; dodge chance and strike delay by level (rookie 0.4 / 0.5 s,
-             regular 0.6 / 0.35 s, veteran 0.9 / 0.15 s); a share of bot legs routes through wolf land
+             regular 0.6 / 0.35 s, veteran 0.9 / 0.15 s); a share of bot legs routes through wolf land, unless
+             the AI meets wolves often enough without it (AM-22); a bot may run to the store as its refuge
 unknown      a colonist in the hall → no roll; the clock ends mid-encounter → the encounter ends, nothing paid
 open         pelts not sold by the turn's end are lost (as built) — flagged for Heiko with the second-MULE item
 examples     rookie wins ≈ 1 in 4 (17 of 60 headless) · forest runs escape 13 of 20 (11 of 20 leading a MULE)  → T-AC-6
@@ -638,7 +653,7 @@ unknown      no frame for > DEV_STEER.staleMs (1000) → the phone shows "reconn
 
 Example frame (4 seats, one beat): `{"t":"frame","payload":{"tick":412,"at":20600,"colonists":[{"id":"s1","x":5.42,
 "y":3.08,"space":"map","facing":"right","moving":true,"lead":null}, …],"beats":["2 MULEs left! Race to the
-corral"]}}` — about 200–300 bytes; at 20 frames a second to 5 connections ≈ 30 kB/s on the table's Wi-Fi (S-1
+corral"]}}` — 420–606 bytes with positions rounded to 2 decimals (S-1, AM-13; 804 unrounded); at 20 frames a second to 5 connections ≈ 42–61 kB/s on the table's Wi-Fi (S-1
 measures it).
 
 ## §4 · Failure & Ops `[handoff]`
@@ -646,7 +661,7 @@ measures it).
 | Question | Answer |
 |---|---|
 | A dependency unavailable? | A phone drops: its input zeroes at once (C6), its colonist stands; away seats count as done (existing). The TV drops: nothing in the game waits on it. A late server timer: missed ticks run, capped at catchUpTicks, then resync (RULE-1). |
-| Retry / poison / page? | Steering is latest-wins, never retried; a refused act throws RuleError to that seat only (HC-7); a socket over RATE_LIMIT has its extra messages dropped (existing, server.ts) — the phone sends ≤ 10 steers/s so it never reaches it. Nothing pages. |
+| Retry / poison / page? | Steering is latest-wins, never retried; a refused act inside the tick is counted and logged per seat, not shown (AM-19; a malformed intent is still refused at `handle`); a socket over RATE_LIMIT has its extra messages dropped (existing, server.ts) — the phone sends ≤ 10 steers/s so it never reaches it. Nothing pages. |
 | Idempotency / delivery? | `steer` is a state (the latest wins), so a duplicate is harmless; `act` is applied at most once per tick per seat; frames are fire-and-forget, the next one supersedes; full views are the source of truth for money, stock and plots. |
 | What can race? | Two colonists pressing BUY on the last MULE in one tick: seat order with the rotating first seat (RULE-1) decides, deterministically; two onto a glint tile in one tick: the same. |
 | What still works if this breaks? | Behind DEV_STEER.on = false, today's tap-to-walk until C14; after C14, development still ends on its clock (HC-3) even if the tick misbehaves, because the end timer is independent of the tick. |
@@ -672,7 +687,7 @@ C14.
 | **B-AC-1** (MUST) | Given a development turn on the rig and one phone held sideways with no TV · When the player uses only the stick and the button · Then they reach the store, buy at the corral, outfit, leave with the MULE on its lead, install on their own plot and end at the pub, the button saying each step before it | the phone in a real browser (e2e, the steering step), and the server's GameState (money, the plot's outfit) | a press with nothing in reach changes nothing | C1, C3, C6, C11 |
 | **B-AC-2** (MUST) | Given four seats and the TV · When colonists move · Then the TV draws each where the server has it, within one frame | TV page vs the server's floor in the e2e | an away seat's colonist stands still on the TV | C8, C12 |
 | **B-AC-3** (MUST) | Given a laptop · When the player holds arrow keys and presses SPACE, or holds the mouse on a spot · Then the colonist walks there and the press acts; the page never scrolls | laptop page in the e2e | keys with the page unfocused do nothing | C11 |
-| **B-AC-4** (MUST) | Given a phone at 667×375 and at 844×390 · When the development screen shows the map and the hall · Then nothing overflows its frame and the controls cover 0 px² of the store, own plots and the target | shell.ts measurements | — | C11, C15 |
+| **B-AC-4** (MUST) | Given a phone at 667×375 and at 844×390 · When the development screen shows the map and the hall · Then nothing overflows its frame; the controls and the plot card cover 0 px² of your colonist, the store and the target, and over your own plots the controls are translucent so the plot's marks read through (AM-20) | shell.ts measurements | — | C11, C15 |
 | **B-AC-5** (MUST) | Given a colonist on forest with wolves due · When the player runs or fights · Then the outcomes of RULE-4 land: bitten and slowed, got away, pelts sold at the store, or the MULE bolted and caught | phone + server state in the e2e (wolves forced by a seeded test option) | no wolves in the hall | C4, C11 |
 | **B-AC-6** (MUST) | Given a glint lit · Then every phone and the TV show it at once and the first colonist onto it gets the prize | phones, TV, server stock | after showSeconds it fades and nobody gets it | C4, C11, C12 |
 | **B-AC-7** (MUST) | Given 3 MULEs left and 4 seats needing one · When the first sale leaves 2 · Then the TV and phones call the scramble and the one left out is told, with the pub's payout | TV, phones, server | no call when no seat needs a MULE | C4 |
@@ -680,8 +695,8 @@ C14.
 | T-AC-1 (serves B-AC-1, B-AC-2) | Given a seed and a per-tick input script · When stepFloor runs twice · Then the floors are identical; and the server's floor after a scripted turn equals the sim's (HC-4) | engine unit + server test | a changed input at one tick changes the result | C1, C6, C10 |
 | T-AC-2 (serves G-2) | speeds per RULE-2's examples (plains 1.5625, mountains 0.625, swamp 0.78, leading 1.41, bitten 0.78 tiles/s) | engine unit | lake 0 blocks | C1, C5 |
 | T-AC-3 (serves B-AC-1) | Reach per RULE-3's table, one row each | engine unit | money short → disabled, not hidden | C3 |
-| T-AC-4 (serves B-AC-2) | Given the tick · Then one frame per tick reaches every connection, frames are dropped not queued for a slow one, full views go only on change, or to one seat when its reach's words change (AM-11) | server + tabletop test | no full view on a tick where nothing changed and no seat's reach words changed | C6, C8 |
-| T-AC-5 (serves G-2, RULE-8) | In 20 seeded AI-only turns at the defaults every AI colonist reaches the pub within 50 s, and a bot races in most glints | sim (`pnpm sim` report) | with botsSpareTime off, Kai misses turns | C9, C10 |
+| T-AC-4 (serves B-AC-2) | Given the tick · Then one frame per tick reaches every connection, frames are dropped not queued for a slow one, full views go only on change, or to one seat when its reach's words change (AM-11) | server + tabletop test | no full view on a tick where nothing changed and no seat's reach words changed; a steer sends no full view (AM-13) | C6, C8 |
+| T-AC-5 (serves G-2, RULE-8) | In 20 seeded AI-only turns at the defaults every AI colonist reaches the pub within 50 s, and a bot races in at least 40% of glints, never one whose detour breaks its errand (RULE-8; AM-22) | sim (`pnpm sim` report) | with botsSpareTime off, Kai misses turns | C9, C10 |
 | T-AC-6 (serves B-AC-5) | Wolves: the rookie wins ≈ 1 in 4 over 60 seeded fights; a forest run escapes ≈ 13 of 20 | engine headless | — | C4, C9 |
 | T-AC-7 (serves B-AC-6) | Glint timing per RULE-5 (none in the first 6 s, 8 s shown, the first onto it wins) | engine unit | a non-racing colonist on the tile wins too | C4 |
 | T-AC-8 (serves B-AC-7) | Scramble per RULE-6, the beats in order, the last sale's single line | engine unit | — | C4 |
@@ -725,6 +740,93 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-22 (2026-11-04, WS1's findings at arcade PR-8, ruled by WS6).** (1) **T-AC-5's glints:** with RULE-8 honoured
+  (a bot races only if its errand still fits the clock after the detour, `botsSpareTime`), the real AI races 44–47%
+  of glints (252 of 565 in 40 games; the mock's one-MULE bots 63%), because it plans its MULEs to fill the clock.
+  RULE-8 wins: T-AC-5 asserts a floor of 40%, never a detour that breaks an errand; the share is not tuned up
+  (tuning parked by the PM). (2) **AM-18 on an unanalysed shore:** ANALYSE takes the plot underfoot first, then the
+  lake from its shore, as row 10 does for INSTALL; standing there, two presses analyse both. (3) **RULE-4's
+  `botWolfLandShare`:** not built if the AI meets wolves often enough without it. UBER-AC-3 needs the TV to show the AI
+  in a wolf encounter in an ordinary game, so PR-8's sim reports the months with at least one AI wolf encounter
+  (40 games, AI-only): **at least 60% of months** and the routing share is dropped from config; under it, it is built
+  as specced. The AI's run-to-the-store refuge is an addition, the bot's way of running (RULE-4's RUN).
+- **AM-21 (2026-11-04, #235's review, ruled by WS6).** `act` is quiet too: MuleGame's `quiet` returns true for `steer`
+  and `act`. A press applies only at the next tick (RULE-1), so a full view sent on receipt shows the state before it,
+  and a mashed button sent up to 20 such views a second to every screen, against RULE-1 step 6. The tick's state
+  compare sends the one view the press's effect needs, `assayUntil` included, one tick after the press.
+- **AM-20 (2026-11-04, PR-6 phase A's findings, ruled by WS6).** (1) **B-AC-4 on real maps.** The stick and the button
+  sit at the map's bottom corners, so on a real map they can lie over one of your plots (at 844 column 0 rows 5–8 and
+  columns 13–14 rows 6–8; at 667 columns 0–2 and 11–14 of rows 6–8): "0 px² of own plots" holds only for the
+  fixture. B-AC-4 now asks 0 px² of **your colonist, the store and the target**, with the controls translucent over
+  your other plots (the scaffold's fade when you or the target come near stays). (2) **The plot card** never covers
+  your colonist or the target: when either is under its box (the mock's columns 5–14, rows 1–4), it moves to the
+  map's other half (columns 0–9). (3) **The route follows the server:** the phone and the TV show the arcade screen
+  when the view says the floor is on (its Reach and frames are present), not by the bundle's own `DEV_STEER.on`, so
+  a flag-on server needs no flag-on build. (4) **Month 1's wait:** while the clock waits for every first MULE (A-1),
+  the side room says so in A-1's own words (`waitingNow`), not a full clock and nothing else. (5) **Reconnecting:**
+  the app's ConnectionBar look with "RECONNECTING…" is the stale state RULE-10 asks for. (6) **Deferred, not PR-6:**
+  the second choice on one spot (V-3/V-5's alt button; it needs a second verb in ReachView and the act, a protocol
+  change; installing first and then analysing reaches the same result today), and the chips with no data on the wire
+  (`crystite`, the bolted lead, the TV's "→ PUB", play-again).
+- **AM-19 (2026-11-04, WS3's two gaps at arcade PR-3 #235, ruled by WS6).** (1) RULE-1 step 4's "RuleError to that
+  seat only" cannot come from the tick: a timer has no channel to one seat. A press the game.ts rule refuses inside
+  the tick is counted and logged for that seat, never shown; the button shows the server's Reach words (C3), so a
+  refusal is a race the next view corrects. A malformed intent is still refused at `handle`, as today. §4's row says
+  so. (2) The turn's last tick: the floor steps tick n only while n × tickMs is under the turn's length, so the
+  clock's end fires first and a 50 s turn steps 999 ticks. That boundary is the rule for the server, the sim (PR-4)
+  and the replay alike (HC-4); 50 ms of walking at the bell is not worth a second end condition.
+- **AM-18 (2026-11-04, WS1's finding at arcade PR-4, ruled by WS6).** Nobody stands on a lake (lakeMode 'shore'),
+  so RULE-3's rows that need you on the plot could never reach a lake plot: PR-4's sim with the flag on failed the
+  AI's lake analyses 36 times in 40 games. Rows 11 (ANALYSE), 12 (FIT FILTER) and **11a (TAKE MULE)**, which has the
+  same gap for a MULE installed from the shore, reach a lake plot from its shore exactly as row 10 does: the same
+  spot and `DEV_STEER.shoreReachTiles`, one number for every press. Rejected: "the plot or any tile touching it",
+  a wider second reach that row 10 would not share. The order is unchanged: on your own lake plot's shore with a
+  fitted MULE, INSTALL (row 10) wins (AM-9). Built in `floor/reach.ts` with T-AC-3's rows (WS1, PR-8); the phone's
+  prediction and the AI call the same `reachOf`, so the screens change only by the words the view sends.
+- **AM-17 (2026-10-29, WS4's question at arcade PR-5, ruled by WS6).** `@mule/ui` gains `"@mule/engine":
+  "workspace:*"` so `StoreInterior` reads `HALL` from `floor/hall.ts` where it draws (C2's one plan), and the hall's
+  GaitInput takes `DEV_STEER.leadPace` and `WOLVES` directly. Safe because the engine is pure TypeScript with no
+  dependencies and never imports `@mule/ui` (no cycle). **The design system takes data from the engine, never rules:**
+  it may import config blocks, the hall plan and types, never a rule function (`stepFloor`, `reachOf`, game.ts). A
+  test in `packages/ui/test` lists the names `src/**` imports from `@mule/engine` and fails on any outside an
+  allow-list, positive-controlled. Rejected: StoreInterior taking the plan as a prop, because every caller (four mocks
+  among them) would pass it or the prop would need a default, a second copy of the geometry C2 forbids.
+- **AM-16 (2026-10-29, WS4's question at arcade PR-5, ruled by WS6).** C2's scaffold is HallStage at **d30ae057**
+  (the addendum Heiko approved with all the mocks; the plan's PR-6 pin), not ceedd23f. HallStage predates the motion
+  PR (#195, 1090e0d9) and still draws the CSS store waddle: graft its composition, never its motion. The walker's
+  motion is #195's, from `packages/ui/src/components/motion/gait.ts`: `Creature`'s `motion={motionOf(g)}`,
+  `cycle={cycleSeconds(g)}` and `facing`, and the led `Mule`'s `cycle` set to the same stride, with the hall's
+  GaitInput `{ moving, encounter: null, pace: condition?.conditionPace ?? 1, terrain: 1, lead: !!leading,
+  bitten: false, leadPace: DEV_STEER.leadPace, bittenPace: WOLVES.bittenPace, lungeSeconds: WOLVES.lungeEverySeconds }`.
+  Store.tsx stops using the `store-waddle` keyframe and `waddleSeconds` in PR-5; the keyframe (theme.css) and
+  `waddleSeconds` (Condition.tsx, with its test) go in PR-6, once the mock no longer uses them. Reduced motion is
+  Creature's own (theme.css).
+- **AM-15 (2026-10-29, WS4's questions at arcade PR-2, ruled by WS6).** C8's three contract points, all option (a):
+  (1) the steer exemption is a generic optional `Game.quiet?(intent)` the room honours, implemented by MuleGame, not a
+  `'steer'` string in room.ts; a seat whose reach words change gets its view from the game itself (AM-11). (2) A
+  connection is "behind" by an optional `Connection.behind?()`, which server.ts's adapter answers from the socket's
+  `bufferedAmount` against a named `FRAME_BACKLOG_BYTES`; no client acknowledgement. Without `behind`, frames always
+  go. (3) Rounding to 2 decimals is the DevFrame builder's (dev-steer.ts), never the room's. Noted: server.ts's
+  `RATE_LIMIT` (20 messages a second a socket) fits `DEV_STEER.steerMaxPerSecond` 10 plus pings and taps; a faster
+  steer would need it raised (WS3's number).
+- **AM-14 (2026-10-29, WS3's questions at PR-7 #206, ruled by WS6).** (1) RULE-3 row 8a's RE-OUTFIT is for a MULE
+  **taken off a plot** (row 11a) only; a MULE bought and outfitted this turn is not offered it (its outfit was chosen
+  seconds ago), and game.ts's `outfitMule` refuses a fitted MULE while `DEV_STEER.on`, so Reach and the rule agree
+  (AM-10/AM-12's principle holds). (2) A taken MULE that was re-outfitted and goes back to its plot at the clock's end
+  (AM-2's "nothing lost") keeps its old outfit, and **the re-outfit fee is not refunded**: "nothing lost" protects the
+  MULE and the plot, not a choice the player paid for. (3) **A taken MULE that bolts and is never caught goes back to
+  its plot at the clock's end**, like one still on its lead: it is the player's installed property, and losing it to a
+  wolf scare would make TAKE a trap. UBER-AC-3's "a bolted MULE caught or lost to the clock" applies to a MULE bought
+  this turn; a taken one is never lost. PR-7 adds a test for each.
+- **AM-13 (2026-10-29, WS3's spike S-1 on trunk 1bed1701, recorded by WS6).** **20 Hz stands** (`DEV_STEER.tickMs`
+  50): loopback latency p50 26 ms, p95 49 ms; over Wi-Fi estimated p50 36–86 ms, p95 60–110 ms (not measured). The
+  frame is 420–606 B with today's field names and positions rounded to 2 decimals (804 B unrounded), so 42–61 kB/s to
+  5 clients; delta coding not needed. A development full view is ~18.7 kB per phone (tiles 73%), ~92 kB per change to
+  the table. Two corrections to C8 and C6: (1) a `steer` intent must not trigger the room's full-view broadcast
+  (`room.ts` `case 'intent'`, a WS4 named edit), and `server.ts` `isIntent` accepts `steer` (WS3, PR-3); (2) full views
+  go only on change: today's development calls `ctx.changed()` every 100 ms in `scheduleAiDevelop` regardless; PR-3's
+  tick compares state instead. T-AC-4's negative case gains "a steer sends no full view". Later, if views need
+  slimming: tiles only on change, or permessage-deflate (~8× smaller).
 - **AM-12 (2026-10-29, WS3's F6 on #186, ruled by WS6).** Reach must not refuse what game.ts allows where the spot
   is unambiguous (AM-10's principle). RULE-3 row 11: ANALYSE on any plot but the store, owned or free, that you haven't
   analysed (scouting stays in the game; leading a MULE doesn't stop it; on your own plot with a fitted MULE row 10's

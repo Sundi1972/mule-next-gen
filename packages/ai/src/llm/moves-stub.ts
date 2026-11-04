@@ -35,6 +35,7 @@ export type IntentType =
   | 'pub'
   | 'declare'
   | 'walk'
+  | 'lineTrade'
   | 'list'
   | 'unlist'
   | 'run'
@@ -219,6 +220,24 @@ export const MOVES: MoveTable = {
     ],
     cost: null,
     args: [{ name: 'dir', kind: 'enum', values: ['1', '0', '-1'] }],
+  },
+  lineTrade: {
+    type: 'lineTrade',
+    command: 'lineTrade',
+    phases: ['auction'],
+    does: () =>
+      "At the store's or the ship's line during a good's walk: buys or sells that many units with it at its price, then you stop there.",
+    legalWhen: () => [
+      refused('in the goods auction, a good is up', 'The auction is not running'),
+      refused("the walk has started, after the good's status screen", 'Not walking yet'),
+      refused('a whole number of units, at least 1', 'Choose at least one unit'),
+      refused('you did not pass on this good', 'You passed on this good'),
+      refused("you stand at the store's or the ship's line", 'Walk to the store’s line first'),
+      refused('as a buyer, you can pay for one unit', 'You can’t pay for one'),
+      refused('as a seller, you have one to sell', 'You have none to sell'),
+    ],
+    cost: null,
+    args: [{ name: 'units', kind: 'number' }],
   },
   run: {
     type: 'run',

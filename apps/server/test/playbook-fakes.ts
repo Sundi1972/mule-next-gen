@@ -103,6 +103,10 @@ export async function runTable(game: Pick<Game<MuleIntent, MuleView>, 'viewFor' 
     if ((view.phase === 'planning' || view.phase === 'upkeep') && readFor >= READ_MS) {
       for (const p of view.players) if (!p.isAi && game.viewFor(null).phase === view.phase) game.handle(p.id, { type: 'ready' });
     }
+    // A good's side pick has no clock either (A-7): every person presses Ready there at once, keeping their side.
+    if (view.phase === 'auction' && view.auction?.stage === 'status') {
+      for (const p of view.players) if (!p.isAi && game.viewFor(null).auction?.stage === 'status') game.handle(p.id, { type: 'ready' });
+    }
     fake.advance(STEP_MS);
     await vi.advanceTimersByTimeAsync(0);
   }

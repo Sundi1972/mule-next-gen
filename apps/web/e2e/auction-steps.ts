@@ -6,7 +6,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { EXPORT_DEMAND, GAME, goodsMarket, LOTS, TAX, WALK, type Good } from '@mule/engine';
+import { AI_HANDS, EXPORT_DEMAND, GAME, goodsMarket, LOTS, TAX, WALK, type Good } from '@mule/engine';
 import type { AuctionView, MuleView } from '@mule/protocol';
 import { GOOD_NAME } from '@mule/ui';
 import { errors as playwrightErrors, type Browser, type Page } from 'playwright';
@@ -15,9 +15,14 @@ import type { MuleServer } from '../../server/src/server.js';
 import { check, headerSlot, held, launch, PHONE, PHONE_SMALL, startServer, TV, type AuctionSteps } from './harness';
 import { hostContinuesWithout } from './hub-steps';
 import { ELECTION_WAIT_MS, readyThroughTheElection, voteThroughTheElection } from './politics-steps';
+import { railFits } from './shell-steps';
 import { AUDIT_JS, MIN_TEXT, type AuditRead } from './small-phone-audit';
 
 const PRESS_MS = 2_000;
+/** After a tap, how long the walker must stand still to show it was one step (A-6, G-2). */
+const TAP_SETTLE_MS = 600;
+/** How long the buyer stands at the store's line, let go, to show nothing trades there by itself (A-6, G-1). */
+const LINE_STAND_MS = 1_500;
 /** Once the month's last good has closed, how long a phone has to show the month end's "On to month N". */
 const MONTH_END_MS = 10_000;
 /** The minimum the Sell form starts at, which listPlot leaves unchanged. */
@@ -56,11 +61,14 @@ export const landAuction: NonNullable<AuctionSteps['landAuction']> = async ({ ph
   }
   const rang = (kind: string) => kind === 'kept' || kind === 'sold';
   for (let n = 1; n <= LOTS.maxLotsPerMonth; n++) {
-    const lot = await lotUp(phone, within(0.1, LOTS.resultMs + LOTS.introMs));
+    // Waits for lot n itself, not for lot n-1's result to hide: a lot nobody bids on is over in well under a second at smoke's scale.
+    // The TV waits for lot n too, so its result read below is lot n's and not the last lot's.
+    const [lot] = await Promise.all([lotUp(phone, within(0.1, LOTS.resultMs + LOTS.introMs), n), lotUp(tv, within(0.1, LOTS.resultMs + LOTS.introMs), n)]);
     if (!lot) {
       check(listing === null, `month ${month}: the phone's listing ${listing} came up before the land auction ended`);
       return;
     }
+    check(lot.number === n, `month ${month}: the phone shows lot ${n}, got lot ${lot.number} of ${lot.count}`);
     const colony = lot.seller.includes(COLONY_NAME);
     check(colony || listing !== null, `month ${month}: with nothing listed only the colony sells, got a lot from "${lot.seller}"`);
     if (colony) check(lot.number === 1, `B-AC-8: the colony's lot is first in line, got lot ${lot.number} of ${lot.count}`);
@@ -70,15 +78,19 @@ export const landAuction: NonNullable<AuctionSteps['landAuction']> = async ({ ph
     if (colony) console.log(`auction steps: B-AC-8, month ${month} opened with the colony's lot, ${shown.kind}`);
     if (colony && listing === null) check(lot.count === 1, `month ${month}: with nothing listed the colony's lot is the only one, got ${lot.count}`);
     if (!colony || listing === null) return;
-    await Promise.all([phone.getByTestId('result').waitFor({ state: 'hidden', timeout: within(0.1, LOTS.resultMs) }), tv.getByTestId('tv-result').waitFor({ state: 'hidden', timeout: within(0.1, LOTS.resultMs) })]);
   }
   check(false, `month ${month}: the land auction ends within ${LOTS.maxLotsPerMonth} lots`);
 };
 
 // --- UBER-AC-1, front to back ----------------------------------------------------
 
-/** Fast enough for a quick run, slow enough that a held Up can be let go between two ticks of the board. */
-const SCALE = 0.25;
+/**
+ * Fast enough for a quick run, slow enough that a held Up can be let go between two ticks of the board. Half time,
+ * not a quarter: the food walk carries A-6's purchase at the store line and the player trade after it, and at 0.25 a
+ * local run left 0.14 s of its 20 s, so a slow CI runner reached the close stage first (batch 3, seed 766329798).
+ * At 0.5 that run leaves 8 s.
+ */
+const SCALE = 0.5;
 const SALES_TAX = TAX.salesTax;
 /** Bids the two buyers walk to on lot 1. Several board steps apart, so a release a tick late still leaves the order intact. */
 const LOW_BID = 260;
@@ -151,9 +163,12 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   let onServer: string[] = [];
   try {
     await readTheGoodsWalk({ seller: brix, buyer: lena, stayer: ossa }, tv, truth);
+    const receipt = readTheReceipt({ seller: brix, buyer: lena }, tv, truth);
+    receipt.catch(() => undefined);
     const shipGood = readTheShipGoodsOwnStatus(phones, tv, truth);
     shipGood.catch(() => undefined);
     await holdUpIntoTheNextGood(truth, ossa, [brix, lena]);
+    await receipt;
     await shipGood;
   } finally {
     // Stopped on a failure too: left running, it would throw once the room closes and bury the real error.
@@ -318,6 +333,8 @@ type Truth = {
   board: () => MuleView;
   idOf: (p: Phone) => string;
   stockOf: (p: Phone, good: Good) => number;
+  /** The seat's own auction view: the board's, plus its receipt and month's total (A-5). */
+  auctionOf: (p: Phone) => AuctionView | null;
   held: <T>(step: () => Promise<T>) => Promise<T>;
   /** The houses that buy the good up now, in the order the engine sells to them when they pay the same. */
   houseOrder: () => string[];
@@ -347,6 +364,7 @@ function serverTruth(server: MuleServer, code: string): Truth {
       return goodsMarket(state).houseBuys.map((h) => h.id);
     },
     idOf,
+    auctionOf: (p) => game(idOf(p)).auction,
     stockOf: (p, good) => {
       const me = game(idOf(p)).me;
       check(me, `${p.name}'s view carries their own stock`);
@@ -438,7 +456,7 @@ async function tapSide(truth: Truth, p: Phone, tap: 'buyer' | 'seller', lands: '
     const open = a?.good === good && a?.stage === 'status';
     check(open, `${what}: the ${good} status screen closed before the tap landed (timing, not B-AC-4)`);
     if (sideOf(a, id) === lands) {
-      console.log(`  ${p.name}'s tap landed with ${a.seconds.toFixed(1)} s of the status clock left (${(a.seconds * SCALE).toFixed(2)} s real)`);
+      console.log(`  ${p.name}'s tap landed on the ${good} side pick, which has no clock (A-7)`);
       break;
     }
     check(Date.now() < deadline, `${what}: the server holds ${lands} for ${p.name}, got ${sideOf(a, id)}`);
@@ -460,6 +478,8 @@ const stageShown = () => {
     }
   }
   if (root.querySelector('[data-testid=status-table]')) return `${good}:status`;
+  // A-5: the close stage, a phone's receipt over the still board or the TV's data-stage.
+  if (root.matches('[data-stage=close]') || root.querySelector('[data-testid=receipt-layer], [data-stage=close]')) return `${good}:close`;
   if (root.querySelector('[data-testid=walk-board]')) return `${good}:walk`;
   return null;
 };
@@ -499,8 +519,9 @@ function checkStages(who: string, seen: string[]): void {
   seen.forEach((entry, i) => {
     const [good, stage] = entry.split(':');
     check(stage !== 'declare', `UBER-AC-1: ${who} never shows a stage called declare, got ${all}`);
-    check(stage === 'status' || stage === 'walk', `UBER-AC-1: ${who} shows only status and walk, got "${entry}" in ${all}`);
+    check(stage === 'status' || stage === 'walk' || stage === 'close', `UBER-AC-1: ${who} shows only status, walk and close, got "${entry}" in ${all}`);
     if (stage === 'walk') check(seen[i - 1] === `${good}:status`, `UBER-AC-1: on ${who} the ${good} walk comes straight after its status screen, got ${all}`);
+    if (stage === 'close') check(seen[i - 1] === `${good}:walk`, `A-5: on ${who} the ${good} close stage comes straight after its walk, got ${all}`);
   });
   const food = seen.indexOf('food:status');
   check(food >= 0 && seen[food + 1] === 'food:walk', `UBER-AC-1: on ${who} Food's status screen is followed by its walk, got ${all}`);
@@ -544,6 +565,55 @@ async function walkUntil(truth: Truth, p: Phone, dir: 'up' | 'down', until: (a: 
   await untilServer(truth, p.page, (a) => a.walkers.find((w) => w.id === id)?.dir === 0, `${p.name} stands once ${dir} is let go`);
 }
 
+/** G-2 (A-6): a quick tap on Hold moves the walker exactly one price step, and it stands still after. */
+async function tapOneStep(truth: Truth, p: Phone, dir: 'up' | 'down'): Promise<void> {
+  const id = truth.idOf(p);
+  const price = () => truth.board().auction?.walkers.find((w) => w.id === id)?.price ?? NaN;
+  const before = price();
+  await p.page.locator(`[data-testid=hold-${dir}]:not([disabled])`).click();
+  const want = before + (dir === 'up' ? 1 : -1);
+  await untilServer(truth, p.page, (a) => a.walkers.find((w) => w.id === id)?.price === want, `G-2: one tap on ${dir} moves ${p.name} from ${before} to ${want}, got ${price()}`);
+  // Held still a while: a tap is a step, not a walk.
+  await p.page.waitForTimeout(TAP_SETTLE_MS);
+  const after = truth.board().auction?.walkers.find((w) => w.id === id);
+  check(after?.price === want && after.dir === 0, `G-2: after the tap ${p.name} stands at ${want}, got ${after?.price} walking ${after?.dir}`);
+  console.log(`✓ G-2 (A-6): one tap on ${dir} moves ${p.name} from ${before} to ${want}, and she stands there`);
+}
+
+/**
+ * G-1 (A-6), at the store's selling line: the phone asks "Buy how many?" and nothing trades until it is answered; the
+ * buyer raises the amount to what the store will sell, taps "Buy N for X cr", and exactly that many move.
+ */
+async function buyAtTheStoreLine(truth: Truth, p: Phone, timeout: number): Promise<void> {
+  const id = truth.idOf(p);
+  const page = p.page;
+  await page.getByTestId('line-question').waitFor({ timeout: PRESS_MS });
+  const asked = await readText(page, 'line-question');
+  check(asked.startsWith('Buy how many?'), `G-1: at the store's line ${p.name}'s phone asks "Buy how many?", got "${asked}"`);
+  const at = truth.board().auction!;
+  // Letting go at the line trades nothing: the store's count holds while she stands there.
+  await page.waitForTimeout(LINE_STAND_MS);
+  const still = truth.board().auction!;
+  check(
+    still.storeForSale === at.storeForSale && !still.deals.some((d) => d.seller === 'store' && d.buyer === id),
+    `G-1: standing at the store's line, ${p.name} buys nothing until she says how many: the store went ${at.storeForSale} → ${still.storeForSale}`,
+  );
+  const want = at.storeForSale;
+  const amount = async () => Number(await readText(page, 'amount'));
+  for (let i = 0; i < want && (await amount()) < want; i++) await page.getByTestId('amount-more').click();
+  const n = await amount();
+  check(n === want, `G-1: ${p.name} raises the amount to the store's ${want}, got ${n}`);
+  const go = await readText(page, 'line-go');
+  const label = `Buy ${n} for ${(n * at.storeSells!).toLocaleString('en')} cr`;
+  check(go === label, `G-1: the footer offers "${label}", got "${go}"`);
+  await page.getByTestId('line-go').click();
+  const done = await untilServer(truth, page, (a) => a.walkers.find((w) => w.id === id)?.order?.traded === n && a.deals.length === 0, `G-1: ${p.name}'s ${n} units move`, timeout);
+  check(done.storeForSale === 0, `B-AC-3: ${p.name} buys the store out, ${done.storeForSale} left`);
+  const said = await readText(page, 'line-hint');
+  check(said.startsWith(`You bought ${n} `), `G-1: the rail says what she bought, got "${said}"`);
+  console.log(`✓ G-1 (A-6): at the store's line "${asked.split('?')[0]}?" and nothing traded while ${p.name} stood there; "${label}" bought exactly ${n}: "${said}"`);
+}
+
 /**
  * Month 1's first good, played so every step lands on a known price: on the status screen the buyer
  * switches from Sell to Buy; in the walk the stayer steps up out of the way, the buyer walks up to the
@@ -573,8 +643,10 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
     await smallPhoneReads(buyer, 'status');
   });
 
+  // The side pick has no clock (A-7): every phone presses Ready, and the AI presses Done within its decision wait.
+  await everyone(phones, (p) => pressReadyAtTheSidePick(p.page));
   const walking = { ask: 1, bid: 1, gap: 1 };
-  await Promise.all(screens.map((s) => untilShows(s, readLines, walking, 'B-AC-1: the lowest-ask and highest-bid lines and the gap during the walk', within(SCALE, WALK.statusMs))));
+  await Promise.all(screens.map((s) => untilShows(s, readLines, walking, 'B-AC-1: the lowest-ask and highest-bid lines and the gap during the walk', SIDE_PICK_MS)));
   // Both sellers start level at the top. The stayer steps above it, so the lowest ask is the seller's alone and the buyer never meets the stayer.
   const at = (a: AuctionView, id: string) => a.walkers.find((w) => w.id === id)?.at ?? NaN;
   await walkUntil(truth, stayer, 'up', (a) => Math.round(at(a, stayerId)) >= Math.round(at(a, sellerId)) + 2, `B-AC-1: ${stayer.name} walks up over ${seller.name}`);
@@ -592,6 +664,7 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
   await truth.held(async () => {
     await readTheWalkWords(phones, truth, name);
     await smallPhoneReads(buyer, 'walk');
+    console.log(`✓ C20, the walk's hint above the footer: ${await railFits(buyer.page, { key: 'hint' })}`);
   });
   const tags = { ask: String(ask.price), bid: String(bid.price), gap: `${ask.price - bid.price} APART` };
   await Promise.all(screens.map((s) => untilShows(s, readTags, tags, "B-AC-1: the lines sit at the server's lowest ask and highest bid, with the gap between them")));
@@ -615,10 +688,13 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
   await Promise.all(screens.map((s) => untilShows(s, readUnits, before, 'B-AC-2: units and surplus under the creatures before the trade')));
   console.log(`✓ HC-2 (WS6): the TV draws one units label per walker, each equal to their ${a.good} stock, ${JSON.stringify(before)}`);
 
-  // The buyer stops at the store's selling line, under every ask, and buys the store out from there.
+  // G-2 (A-6): one tap on Up is one price step.
+  await tapOneStep(truth, buyer, 'up');
+  // The buyer stops at the store's selling line, under every ask, and lets go: nothing trades until she says how many
+  // (G-1, A-6). She chooses what the store will sell and buys it out from there.
   const tradeBudget = within(SCALE, WALK.goodMs);
-  await walkUntil(truth, buyer, 'up', (x) => x.deals.some((d) => d.seller === 'store' && d.buyer === buyerId), `B-AC-3: ${buyer.name} walks up to the store's line and buys`);
-  await untilServer(truth, buyer.page, (x) => x.storeForSale === 0 && x.deals.length === 0, `B-AC-3: ${buyer.name} buys the store out`, tradeBudget);
+  await walkUntil(truth, buyer, 'up', (x) => x.walkers.find((w) => w.id === buyerId)?.line === 'store', `B-AC-3: ${buyer.name} walks up to the store's line`);
+  await buyAtTheStoreLine(truth, buyer, tradeBudget);
   await storeShows(0, null);
 
   const giveWay = Promise.all(screens.map((s) => linesGiveWayToTheTrade(s, tradeBudget)));
@@ -635,6 +711,50 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
   const zero = Object.values(after).some((l) => l.endsWith(' (0)'));
   const moved = (id: string) => `${name(id)} ${before[id]} → ${after[id]}`;
   console.log(`✓ B-AC-2 (WS6): after ${traded.units} units traded, ${moved(sellerId)} and ${moved(buyerId)} on three phones and the TV${zero ? ', a surplus of 0 drawn "(0)"' : ''}`);
+}
+
+const fmtCr = (n: number) => Math.round(n).toLocaleString('en');
+const signedCr = (n: number) => (n > 0 ? `+${fmtCr(n)}` : n < 0 ? `−${fmtCr(-n)}` : '±0');
+
+/**
+ * A-5 (UX audit G-5, mock #audit-auction-receipt): when the good walked in readTheGoodsWalk closes, the seller's phone
+ * shows "Food: you sold N for X cr" with the sales tax spelled out, the buyer's "you bought", each header the month's
+ * total from the server, and the TV the close stage, with no seat's receipt on it. Read with the room held, since the
+ * close stage lasts WALK.closeMs of game time.
+ */
+async function readTheReceipt(cast: { seller: Phone; buyer: Phone }, tv: Page, truth: Truth): Promise<void> {
+  const { seller, buyer } = cast;
+  const walked = truth.board().auction;
+  check(walked?.stage === 'walk', `A-5 starts on a walk, got ${walked?.stage}`);
+  const good = walked.good;
+  await untilServer(truth, tv, (a) => a.good === good && a.stage === 'close', `A-5: ${GOOD_NAME[good]}'s walk ends in the close stage`, within(SCALE, WALK.goodMs + (WALK.statusMs ?? 0)));
+  await truth.held(async () => {
+    const sold = truth.auctionOf(seller)!.receipt!.sold;
+    const bought = truth.auctionOf(buyer)!.receipt!.bought;
+    check(sold.units > 0 && bought.units > 0, `A-5 needs ${seller.name} to have sold and ${buyer.name} to have bought, got ${sold.units} and ${bought.units}`);
+    const net = sold.gross - sold.tax;
+    const text = async (p: Page, id: string) => (await p.getByTestId(id).first().innerText({ timeout: PRESS_MS })).replace(/\s+/g, ' ').trim();
+    const sellerTitle = await text(seller.page, 'receipt-title-sold');
+    check(sellerTitle === `${GOOD_NAME[good]}: you sold ${sold.units} for ${fmtCr(net)} cr`, `A-5: ${seller.name}'s receipt says what he sold after tax, got "${sellerTitle}"`);
+    const tax = await text(seller.page, 'receipt-tax');
+    const taxWords = `${fmtCr(sold.gross)} cr, less ${fmtCr(sold.tax)} cr sales tax: ${fmtCr(net)} The tax goes to the colony fund.`;
+    check(tax === taxWords, `A-5: ${seller.name}'s receipt spells out the tax, "${taxWords}", got "${tax}"`);
+    const buyerTitle = await text(buyer.page, 'receipt-title-bought');
+    check(buyerTitle === `${GOOD_NAME[good]}: you bought ${bought.units} for ${fmtCr(bought.gross)} cr`, `A-5: ${buyer.name}'s receipt says what she bought, got "${buyerTitle}"`);
+    check((await buyer.page.getByTestId('receipt-tax').count()) === 0, `A-5: ${buyer.name}'s purchase has no tax line`);
+    for (const p of [seller, buyer]) {
+      // The words and the number sit side by side in a flex row: innerText may or may not put a space between them.
+      const tally = (await text(p.page, 'receipt-tally')).replace(/^This month: ?/, 'This month: ');
+      const want = `This month: ${signedCr(truth.auctionOf(p)!.tally!)} cr`;
+      check(tally === want, `A-5: ${p.name}'s receipt ends with the month's total "${want}", got "${tally}"`);
+      check((await p.page.locator('[data-testid=guide] > header').getByText(/this month/i).count()) === 0, `A-5: ${p.name}'s header shows the money only`);
+    }
+    await tv.locator('[data-phase=auction][data-stage=close]').waitFor({ timeout: PRESS_MS });
+    const stage = await text(tv, 'tv-stage');
+    check(stage === 'Closed', `A-5: the TV names the close stage, got "${stage}"`);
+    check((await tv.getByTestId('receipt').count()) === 0, "A-5: the TV shows no seat's receipt");
+    console.log(`✓ A-5: ${GOOD_NAME[good]} closed: "${sellerTitle}" with "${tax}" on ${seller.name}'s phone, "${buyerTitle}" on ${buyer.name}'s, the month's totals on both receipts, and "Closed" on the TV`);
+  });
 }
 
 /** The best price a walker on `side` can meet, the store and the ship counted, and who holds it, as the TV names them. */
@@ -723,7 +843,7 @@ async function fillTheTvTicker(phone: Page, tv: Page): Promise<void> {
 
 /**
  * The TV's status stage at 1920×1080 with its chat ticker full: the store box keeps its prices, the ship panel ends
- * inside the screen and the TV's frame with its words whole, and a skipped line sits in the time bar's row, on one line.
+ * inside the screen and the TV's frame with its words whole, and a skipped line sits in the picked count's row, on one line.
  */
 async function checkTvStatusRoom(tv: Page, good: Good, skipped: boolean): Promise<void> {
   const room = (await tv.evaluate(`(() => {
@@ -736,7 +856,8 @@ async function checkTvStatusRoom(tv: Page, good: Good, skipped: boolean): Promis
       store: { ...box('status-store'), pricesShown: prices.length === 3 && prices.every((p) => p.height > 0 && p.top >= store.top - 0.5 && p.bottom <= store.bottom + 0.5) },
       ship: box('ship-wants'),
       frame: box('tv-status'),
-      bar: box('time-bar'),
+      // The side pick has no clock (A-7): the picked count stands where the time bar was.
+      bar: box('ready-count'),
       skipped: skip ? { ...box('skipped'), oneLine: cs.whiteSpace === 'nowrap' && cs.textOverflow === 'ellipsis', lineHeight: parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5 } : null,
       ticker: document.querySelectorAll('[data-testid=chat-ticker] [data-testid^=chat-line-]').length,
       w: window.innerWidth,
@@ -752,7 +873,7 @@ async function checkTvStatusRoom(tv: Page, good: Good, skipped: boolean): Promis
     w: number;
     h: number;
   };
-  const where = room.skipped ? `; skipped words y ${room.skipped.top.toFixed(0)}–${room.skipped.bottom.toFixed(0)}, the time bar y ${room.bar.top.toFixed(0)}–${room.bar.bottom.toFixed(0)}` : '';
+  const where = room.skipped ? `; skipped words y ${room.skipped.top.toFixed(0)}–${room.skipped.bottom.toFixed(0)}, the picked count y ${room.bar.top.toFixed(0)}–${room.bar.bottom.toFixed(0)}` : '';
   console.log(
     `  TV on ${GOOD_NAME[good]} at ${room.w}×${room.h}, ${room.ticker} chat lines in the ticker: store box ${room.store.height.toFixed(1)} px tall${room.store.full && room.store.pricesShown ? ', prices whole' : ', prices cut'}; ship panel y ${room.ship.top.toFixed(0)}–${room.ship.bottom.toFixed(0)} (the TV's frame ends at ${room.frame.bottom.toFixed(0)}), x ${room.ship.left.toFixed(0)}–${room.ship.right.toFixed(0)}${where}`,
   );
@@ -768,7 +889,7 @@ async function checkTvStatusRoom(tv: Page, good: Good, skipped: boolean): Promis
   const mid = (s.top + s.bottom) / 2;
   check(
     mid >= room.bar.top && mid <= room.bar.bottom && s.left >= room.bar.right - 0.5,
-    `on ${GOOD_NAME[good]} the TV's skipped words sit in the time bar's row, to its right: y ${s.top}–${s.bottom} beside the bar's ${room.bar.top}–${room.bar.bottom}, x from ${s.left} after the bar's ${room.bar.right}`,
+    `on ${GOOD_NAME[good]} the TV's skipped words sit in the picked count's row, to its right: y ${s.top}–${s.bottom} beside the count's ${room.bar.top}–${room.bar.bottom}, x from ${s.left} after the count's ${room.bar.right}`,
   );
   check(s.oneLine && s.height <= s.lineHeight * 1.5, `on ${GOOD_NAME[good]} the TV's skipped words take one line, cut with an ellipsis: ${s.height} px for a ${s.lineHeight} px line, ${s.oneLine ? 'nowrap with an ellipsis' : 'wrapping'}`);
 }
@@ -839,7 +960,7 @@ async function readTheWalkWords(phones: Phone[], truth: Truth, name: (id: string
     const holds = [await readText(page, 'hold-up'), await readText(page, 'hold-down')];
     check(holds[0] === 'Hold ▲ to walk up' && holds[1] === 'Hold ▼ to walk down', `G-2: ${p.name}'s walk buttons say Hold, got ${JSON.stringify(holds)}`);
     const how = await readText(page, 'hint-how');
-    const wantHow = side === 'buyer' ? 'Hold ▲ to walk up.' : 'Hold ▼ to walk down.';
+    const wantHow = side === 'buyer' ? 'Hold ▲ to walk up; a tap moves 1 cr.' : 'Hold ▼ to walk down; a tap moves 1 cr.';
     check(how === wantHow, `G-2: ${p.name}'s hint says "${wantHow}", got "${how}"`);
     // A buyer meets the cheapest seller, a seller the best payer: from where this player stands, never themselves.
     const best = bestOffer(a, side === 'buyer' ? 'seller' : 'buyer', name, truth.houseOrder(), id);
@@ -956,7 +1077,7 @@ async function holdUpIntoTheNextGood(truth: Truth, holder: Phone, others: Phone[
   rest.catch(() => undefined);
   await holder.page.getByTestId('done').click({ timeout: PRESS_MS });
 
-  const toNext = within(SCALE, WALK.goodMs + WALK.statusMs);
+  const toNext = within(SCALE, WALK.goodMs) + SIDE_PICK_MS;
   for (let n = 0; ; n++) {
     check(n < 10, `FU-1: a good after ${from} has a walk ${holder.name} can join`);
     const status = await untilServer(truth, holder.page, (a) => a.good !== from && a.stage === 'status', `FU-1: a good after ${from} opens its status screen`, toNext);
@@ -966,7 +1087,7 @@ async function holdUpIntoTheNextGood(truth: Truth, holder: Phone, others: Phone[
     try {
       await holder.page.locator('[data-phase=auction]').getByRole('button', { name: 'Ready' }).click({ timeout: PRESS_MS });
     } catch (err) {
-      // The status clock closed it under the press; the wait below sees where it went.
+      // The others' Ready closed it under the press; the wait below sees where it went.
       if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
     }
     const next = await untilServer(truth, holder.page, (a) => a.good !== good || a.stage === 'walk', `FU-1: ${good}'s status screen closes`, toNext);
@@ -1054,19 +1175,23 @@ const COLONY_NAME = 'The colony';
 
 type LotUp = { number: number; count: number; seller: string };
 
-/** The lot on a phone's or the TV's land auction screen, once its card shows; null once the page has left the land auction. */
-async function lotUp(page: Page, timeout: number): Promise<LotUp | null> {
+/**
+ * Lot `atLeast` or a later one on a phone's or the TV's land auction screen, once its card shows; null once the page has
+ * left the land auction. Polled every frame, and the result stage keeps the header and the card, so a lot already at
+ * its bell is still caught.
+ */
+async function lotUp(page: Page, timeout: number, atLeast = 1): Promise<LotUp | null> {
   const handle = await page.waitForFunction(
-    () => {
+    (min) => {
       const root = document.querySelector('[data-phase]');
       if (!root) return null;
       if (root.getAttribute('data-phase') !== 'landAuction') return { over: true };
       const header = /Land auction · (\d+) of (\d+)/.exec(root.textContent ?? '');
       const card = root.querySelector('[data-testid=lot-seller], [data-testid=tv-lot]');
-      if (!header || !card) return null;
+      if (!header || !card || Number(header[1]) < min) return null;
       return { over: false, number: Number(header[1]), count: Number(header[2]), seller: card.textContent ?? '' };
     },
-    undefined,
+    atLeast,
     { timeout, polling: 'raf' },
   );
   const r = (await handle.jsonValue()) as ({ over: true } | ({ over: false } & LotUp));
@@ -1087,6 +1212,17 @@ const READY_LANDS_MS = 3_000;
 
 /** A budget for the land grant: one pass of its light, which phaseScale never shortens, plus room for the browser and the network. */
 const GRANT_WAIT_MS = GRANT_PASS_MAX_MS + 3_000;
+
+/**
+ * The side pick has no clock (A-7): once every phone has pressed Ready it waits only for the AI seats' Done, which
+ * comes within their decision wait.
+ */
+const SIDE_PICK_MS = within(SCALE, AI_HANDS.auction.decideWaitMs);
+
+/** On a good's status screen: presses Ready, the pick, once it is there to press; the button then gives way. */
+async function pressReadyAtTheSidePick(page: Page): Promise<void> {
+  await page.locator('[data-phase=auction]').getByRole('button', { name: 'Ready', exact: true }).click({ timeout: PRESS_MS });
+}
 
 /** A budget for a phase of `ms` game time at this scale, plus room for the browser and the network. */
 function within(scale: number, ms: number): number {
@@ -1161,7 +1297,9 @@ async function pressDoneThroughTheAuction(page: Page): Promise<void> {
     try {
       const label = await done.innerText({ timeout: PRESS_MS });
       await done.click({ timeout: PRESS_MS });
-      await page.locator('[data-phase=auction]').getByRole('button', { name: label, exact: true }).waitFor({ state: 'hidden', timeout: within(SCALE, 20_000 * 4) });
+      // A press gives way at once. Ready can stay up, though: the last Ready ends the side pick, and the next good's
+      // (its walk skipped) opens on Ready again (A-7). So this waits only a moment; pressing that Ready next is right.
+      await page.locator('[data-phase=auction]').getByRole('button', { name: label, exact: true }).waitFor({ state: 'hidden', timeout: PRESS_MS });
     } catch (err) {
       // The stage moved on under the press; the wait above decides what comes next.
       if (!(err instanceof playwrightErrors.TimeoutError)) throw err;

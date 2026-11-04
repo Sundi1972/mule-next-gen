@@ -5,12 +5,8 @@ import { GOOD_NAME, landDecision, outfitName } from '../strategist.js';
 import type { Mind } from '../value.js';
 import { seatBounds } from './manual.js';
 import { optionLine, tableTalkBlock } from './prompt.js';
+import type { LandDraft } from '../playbook/index.js';
 
-/** What the engine drafted for the seat this month, as far as the land brief shows it. */
-export interface LandDraft {
-  strategy: Strategy;
-  landGrant: LandGrantPlay;
-}
 
 /** A land plan the brief offers: its letter, its label, and its full ranking as a LandGrantPlay ranking. */
 export interface OfferedPlan {

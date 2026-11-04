@@ -3,7 +3,8 @@ import { AI_LEVELS, AI_PERSONAS, allPrices, BRAIN, createGame, GOODS, type GameS
 import { PERSONAS } from '../src/personas.js';
 import { GOOD_NAME } from '../src/strategist.js';
 import type { Mind } from '../src/value.js';
-import { landBrief, type LandDraft } from '../src/llm/brief.js';
+import { landBrief } from '../src/llm/brief.js';
+import type { LandDraft } from '../src/playbook/index.js';
 
 /** Stock counts no game reaches, one per seat, so a leak into another seat's brief is unmistakable. */
 const OWN = { p0: 75_319, p1: 97_531, p2: 86_420 } as const;

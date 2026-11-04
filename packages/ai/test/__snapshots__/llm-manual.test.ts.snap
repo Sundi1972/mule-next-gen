@@ -8,9 +8,9 @@ The rules of the colony game you play, generated from the game itself.
 - planning: Everyone reads the colony's stores, prices and plots. Players may send a geo drone over 2 free or listed plots for 60 credits (its results arrive when the land grant starts), and list up to 2 plots or MULEs for the land auction, 4 lots a month from all sellers. In months 1, 4, 7, 10 planning opens with an election for governor: announce, then a secret ballot if an office has two or more candidates, then the result. Planning ends when every player is Ready.
 - the land grant: The light passes over the free plots one at a time in reading order, 650 ms each, 1 pass; the first player to press claims the lit plot, up to 2 claims each. It ends after the pass, when no free land is left, or once every player has used their claims or is Done.
 - the land auction: The listed lots come up one at a time: an intro of 3000 ms, then a walk of 12000 ms where every player but the seller stands as a buyer, unless short of the minimum or leading a MULE when a MULE is up, and walks up to bid. The highest bid at the bell wins; a change of leader in the last 2000 ms sets the clock back to it. An unsold lot is kept, or sold to the store for 67% of the 300 a plot scores and 50% of the MULE price for a MULE, as the seller chose. Each month the colony puts one free plot up with a chance of 10%. With nothing listed it is skipped.
-- development: One clock of 50 s for every player. Each step from one map tile to the next takes 0.4 s; a hungry or sick colonist walks slower. You buy a MULE at the corral, outfit it, and install it on one of your plots; you may analyse ground, fit filters, or end at the pub for cash. Every development move first passes these checks: it is development (else: "Not allowed during <phase>"); your development time has not run out (else: "Your development time is up"); you have not gone to the pub this turn (else: "Your turn is over: you went to the pub"); your colonist is not still walking to the last place you sent it (else: "Still walking"); your colonist is not still assaying a plot (else: "Still assaying").
+- development: One clock of 60 s for every player. Each step from one map tile to the next takes 0.4 s; a hungry or sick colonist walks slower. You buy a MULE at the corral, outfit it, and install it on one of your plots; you may analyse ground, fit filters, or end at the pub for cash. Every development move first passes these checks: it is development (else: "Not allowed during <phase>"); your development time has not run out (else: "Your development time is up"); you have not gone to the pub this turn (else: "Your turn is over: you went to the pub"); your colonist is not still walking to the last place you sent it (else: "Still walking"); your colonist is not still assaying a plot (else: "Still assaying").
 - production: Every plot with a MULE makes its good, more on better ground, plus 1 when a neighbour of yours makes the same good, or 2 in a cluster of 4 or more. A raw plot burns Energy (Food 1, Water 1, Energy 0, Smithore 2, Crystite 2, Rare earth 2) and makes 50% without it; a Food plot also needs Water. A factory turns inputs from your stock into its good (Alloy: 2 Smithore + 2 Energy make 2; Electronics: 1 Rare earth + 1 Alloy + 1 Energy make 1; Medicine: 1 Food + 1 Water + 1 Energy make 2) and makes nothing without them.
-- the goods auction: Goods come up one at a time (Food, Water, Energy, Smithore, Crystite, Rare earth, Alloy, Electronics, Medicine). Each has a status screen of 8000 ms where players pick buyer, seller or pass, then a walk of 20000 ms: buyers walk up, sellers down, and units trade while a buyer and a seller meet. The store buys and sells there too, and every sale pays the sales tax into the colony fund.
+- the goods auction: Goods come up one at a time (Food, Water, Energy, Smithore, Crystite, Rare earth, Alloy, Electronics, Medicine). Each has a status screen where players pick buyer, seller or pass, with no clock: it waits for every player's Done or the host's Continue, then a walk of 20000 ms: buyers walk up, sellers down, and units trade while a buyer and a seller meet. The store buys and sells there too, and every sale pays the sales tax into the colony fund.
 - upkeep: Each player eats 2 Food and drinks 1 Water, plus 1 Food per 4 crew and 1 Water per 6, from their own stock. Your goods spoil (Food 50%, Water 5%, Energy 25%, Medicine 20%, rounded down), and anything above 10 units of a good is lost. Every 3 months an export ship calls, buying the 3 goods on its wishlist, announced one month before.
 The game ends after month 12, or 3 months after the last free plot is claimed.
 
@@ -55,7 +55,7 @@ Cost: free.
 
 ### analyse
 In: development. Args: plot (plot).
-Does: Walks to any plot, owned or free, and analyses its ground: you alone learn its real rating for every good and its hazards. It takes 8 s of your 50 s, a Mollox 50% of that.
+Does: Walks to any plot, owned or free, and analyses its ground: you alone learn its real rating for every good and its hazards. It takes 8 s of your 60 s, a Mollox 50% of that.
 Legal when: the development checks above; in month 1, before the clock starts, you are not already in with your first MULE (else: "Waiting for the others' first MULEs"); it names a plot on the map, not the store (else: "Not a plot"); the walk there ends before the clock does (else: "Not enough time to walk there").
 Cost: yes, as it says under Does.
 
@@ -81,6 +81,12 @@ Cost: free.
 In: the goods auction, the land auction. Args: dir (1 | 0 | -1).
 Does: Moves you on the board during a walk: 1 up, -1 down, 0 stand still. A buyer walks up to bid more, a seller down to ask less, and units trade while a buyer and a seller meet; at the land auction the highest bid at the bell wins the lot.
 Legal when: in the goods auction, a good is up (else: "The auction is not running"); the walk has started, after the good's status screen or the lot's intro (else: "Not walking yet"); in the goods auction, you did not pass on this good (else: "You passed on this good"); at the land auction, you stand as a buyer: not the seller, the minimum in hand, and no MULE in tow when a MULE is up (else: "You can't bid on this lot").
+Cost: free.
+
+### lineTrade
+In: the goods auction. Args: units (number).
+Does: At the store's or the ship's line during a good's walk: buys or sells that many units with it at its price, then you stop there.
+Legal when: in the goods auction, a good is up (else: "The auction is not running"); the walk has started, after the good's status screen (else: "Not walking yet"); a whole number of units, at least 1 (else: "Choose at least one unit"); you did not pass on this good (else: "You passed on this good"); you stand at the store's or the ship's line (else: "Walk to the store’s line first"); as a buyer, you can pay for one unit (else: "You can’t pay for one"); as a seller, you have one to sell (else: "You have none to sell").
 Cost: free.
 
 ### run
@@ -113,7 +119,7 @@ Each line names the move and the playbook field you set to play it.
 - claim (LandGrantPlay.deny): take a plot before a rival does when it is worth more to them than it costs you to hold.
 - done (LandGrantPlay.claims): claim fewer when you cannot pay for a MULE on the plot (120 plus Smithore, then the outfit): a plot without one makes nothing.
 - buyMule (DevelopmentPlay.route): buy early: the corral has a MULE for each plot claimed this month plus 2, and a sold-out corral raises next month's price by 15%.
-- analyse (DevelopmentPlay.route): before outfitting a plot whose ground you do not know; it costs 8 s of 50, so analyse only where the answer changes the outfit.
+- analyse (DevelopmentPlay.route): before outfitting a plot whose ground you do not know; it costs 8 s of 60, so analyse only where the answer changes the outfit.
 - outfit (Strategy.moneyMaker): for the good the colony is short of or the export ship wants (3 goods, every 3 months): a scarce good sells dear.
 - pub (DevelopmentPlay.ifSoldOut): when the corral is out or your route is done: the pub pays more the earlier you go, 20 plus up to 60 + 20 times the month.
 - filter (DevelopmentPlay.route): when the air nears Collapse (80): Collapse multiplies every player's Worth by 0.8, and a filter multiplies a polluting plot's air points by 0.5.

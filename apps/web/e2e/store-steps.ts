@@ -1,8 +1,9 @@
 /** The development store's checks, run as development starts by smoke.ts (scaled clocks) and screens.ts (real time). */
-import { DEV_WALK, foodShare, hungerPace, monthNeeds, needsOf, sickPace, type GameState } from '@mule/engine';
-import type { Page } from 'playwright';
+import { DEV_STEER, DEV_WALK, DEVELOPMENT, foodShare, HALL, isOpenFloor, mulePrice, placeAt, hungerPace, monthNeeds, needsOf, sickPace, type GameState } from '@mule/engine';
+import type { DevFrame } from '@mule/protocol';
+import type { Browser, Page } from 'playwright';
 import type { MuleServer } from '../../server/src/server.js';
-import { check, PHONE } from './harness';
+import { check, CLAIM_MS, claimAPlot, doneWithLand, hallPlace, PHONE, PHONE_SMALL, plotCentre, pressAct, steerTo, throughDoor } from './harness';
 
 const OUTFITTERS = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth'];
 const SERVICES = ['door-L', 'booth-works', 'booth-greenBelt', 'booth-corral', 'booth-pub', 'door-R'];
@@ -13,6 +14,12 @@ const HUNGRY_FARMS = 9;
 const LAPTOP = { width: 1440, height: 900 };
 /** Wall-clock seconds of development the store's walk-through needs; smoke's scaled clock gives a fed seat only 5. */
 const STORE_WALK_SECONDS = 30;
+/** B-AC-15's row 7 once her MULE is in and the clock runs. */
+const INSTALLED = 'MULE installed. What next?';
+/** A-1: row 7 instead while month 1's clock waits for another seat ("… waiting for X" or "… X +1"). */
+const WAIT_TITLE = 'Your MULE is in · waiting for ';
+/** How long the other seats may take to get their first MULEs in once hers is. */
+const FIRST_MULES_MS = 15_000;
 
 /** The pace line the start-of-turn card shows from its first frame. */
 async function firstLabel(phone: Page, timeout: number): Promise<string> {
@@ -340,20 +347,34 @@ export async function theLedMuleLightsUp(phone: Page, server: MuleServer, code: 
   check(await install.isEnabled(), 'B-AC-15: walked out with an Energy MULE, a plot of hers is selected to install on');
   const title = (await phone.getByTestId('now-title').textContent()) ?? '';
   check(title === 'Install your Energy MULE here', `B-AC-15: on her selected plot Now says install it here, got "${title}"`);
-  // Installed, Now moves on to row 7 in the same frame the MULE leaves her: never back to "Buy a MULE".
+  // Installed, Now moves on to row 7 in the same frame the MULE leaves her: never back to "Buy a MULE". A-1: while
+  // month 1's clock still waits for another seat's first MULE, row 7 is the wait title instead.
   const titles = phone.evaluate(`new Promise((resolve) => {
     const seen = [];
     const read = () => document.querySelector('[data-testid=now-title]')?.textContent ?? '';
     const watch = new MutationObserver(() => {
       seen.push(read());
-      if (seen.at(-1) === 'MULE installed. What next?') { watch.disconnect(); resolve(seen); }
+      if (seen.at(-1) === ${JSON.stringify(INSTALLED)} || seen.at(-1).startsWith(${JSON.stringify(WAIT_TITLE)})) { watch.disconnect(); resolve(seen); }
     });
     watch.observe(document.body, { subtree: true, childList: true, characterData: true });
     setTimeout(() => { watch.disconnect(); resolve(seen); }, 3000);
   })`) as Promise<string[]>;
   await install.click({ timeout: 2_000 });
-  const after = await titles;
-  check(after.at(-1) === 'MULE installed. What next?', `B-AC-15: after installing Now says "MULE installed. What next?", saw ${JSON.stringify(after)}`);
+  let after = await titles;
+  // The server's month-1 clock, read as giveStoreTime reads it: null in development while it waits for a first MULE.
+  const waits = gameOf(server, code).devEndsAt === null;
+  if (waits) check(after.at(-1)?.startsWith(WAIT_TITLE), `B-AC-15 (A-1): after installing while month 1's clock waits, Now says "${WAIT_TITLE}…", saw ${JSON.stringify(after)}`);
+  // Row 7 once the clock runs: at once when she was the last seat in, else once the last first MULE is in. The steps
+  // after this one need the clock running, as they had it before A-1.
+  if (after.at(-1) !== INSTALLED) {
+    await phone.getByTestId('now-title').filter({ hasText: INSTALLED }).waitFor({ timeout: waits ? FIRST_MULES_MS : 2_000 }).catch(() => undefined);
+    after = [...after, (await phone.getByTestId('now-title').textContent()) ?? ''];
+  }
+  if (waits) check(gameOf(server, code).devEndsAt !== null, `A-1: month 1's clock did not start within ${FIRST_MULES_MS / 1_000} s of her MULE going in (devEndsAt still null)`);
+  check(after.at(-1) === INSTALLED, `B-AC-15: once the clock runs Now says "${INSTALLED}", saw ${JSON.stringify(after)}`);
+  // The clock runs now, started by the last first MULE, hers or another's; the earlier giveStoreTime gave nothing if it
+  // still waited then. Giving it again only moves the end later (now + STORE_WALK_SECONDS), so give it either way.
+  giveStoreTime(server, code, seat);
   check(!after.includes('Buy a MULE at the corral'), `B-AC-15: no frame shows "Buy a MULE" between the install and row 7, saw ${JSON.stringify(after)}`);
   await dev.getByRole('button', { name: 'Store', exact: true }).click({ timeout: 2_000 });
   await phone.getByTestId('store-hall').waitFor({ timeout: 2_000 });
@@ -380,4 +401,895 @@ async function withNoWater<T>(server: MuleServer, code: string, seat: string, fn
     p.stock.water = kept;
     game.ctx.changed();
   }
+}
+
+// --- Steered development (arcade spec C6, C11, C12): the phones, the laptop and the TV against a flag-on server ------
+
+/** The server's floor, as #235 keeps it: each colonist where the last tick left it. */
+type FloorColonist = { id: string; x: number; y: number; space: 'map' | 'hall' };
+type SteeredGame = Game & {
+  steering: { floor: { tick: number; colonists: FloorColonist[] } } | null;
+  away: Set<string>;
+  startClock(): void;
+};
+
+/** The steered game behind a room; fails unless the server steers its development. */
+function steeredOf(server: MuleServer, code: string): SteeredGame {
+  const game = gameOf(server, code) as SteeredGame;
+  check(game.steering !== undefined && game.away instanceof Set && typeof game.startClock === 'function', 'the room game still exposes steering, away and startClock');
+  return game;
+}
+
+/** Where the server has a seat's colonist now. */
+function onFloor(server: MuleServer, code: string, seat: string): FloorColonist {
+  const steering = steeredOf(server, code).steering;
+  check(steering, `the server steers development for ${seat}`);
+  const c = steering.floor.colonists.find((k) => k.id === seat);
+  check(c, `seat ${seat} has a colonist on the floor`);
+  return { id: c.id, x: c.x, y: c.y, space: c.space };
+}
+
+const where = (c: { x: number; y: number; space: string }) => `${c.space} ${c.x.toFixed(2)},${c.y.toFixed(2)}`;
+
+/** One screen's socket as the e2e hears it: the frames that came, and the steers and presses that went. */
+export interface Wire {
+  frames: { at: number; frame: DevFrame }[];
+  /** `at` is when the e2e heard the send: late by however long the browser took to tell it, so never a spacing. */
+  steers: { at: number; x: number; y: number; tick: number | undefined }[];
+  acts: number[];
+  /** When the page itself sent each steer, by its own Date.now (the gate's clock): the spacing HC-5 promises. */
+  steersSentAt(): Promise<number[]>;
+}
+
+/**
+ * Kept a string, as READ_HALL: stamps every steer intent on the page's own clock as the socket sends it. The e2e hears
+ * framesent only once the browser tells it, so under load two sends 100 ms apart can arrive 80 ms apart.
+ */
+const RECORD_STEERS = `(() => {
+  window.__steersSentAt = [];
+  const send = WebSocket.prototype.send;
+  WebSocket.prototype.send = function (data) {
+    if (typeof data === 'string' && data.includes('"type":"steer"')) window.__steersSentAt.push(Date.now());
+    return send.call(this, data);
+  };
+})()`;
+
+/** Listens on every socket the page opens from now on: call before its first goto. */
+export async function watchWire(page: Page): Promise<Wire> {
+  await page.addInitScript(RECORD_STEERS);
+  const wire: Wire = { frames: [], steers: [], acts: [], steersSentAt: async () => ((await page.evaluate('window.__steersSentAt ?? []')) as number[]) };
+  page.on('websocket', (ws) => {
+    ws.on('framereceived', (f) => {
+      if (typeof f.payload !== 'string' || !f.payload.startsWith('{"t":"frame"')) return;
+      wire.frames.push({ at: Date.now(), frame: (JSON.parse(f.payload) as { payload: DevFrame }).payload });
+    });
+    ws.on('framesent', (f) => {
+      if (typeof f.payload !== 'string') return;
+      const m = JSON.parse(f.payload) as { t: string; intent?: { type: string; x?: number; y?: number; tick?: number } };
+      if (m.t !== 'intent' || !m.intent) return;
+      if (m.intent.type === 'steer') wire.steers.push({ at: Date.now(), x: m.intent.x ?? NaN, y: m.intent.y ?? NaN, tick: m.intent.tick });
+      if (m.intent.type === 'act') wire.acts.push(Date.now());
+    });
+  });
+  return wire;
+}
+
+/** HC-5's spacing: a steer at most every 1000 / steerMaxPerSecond ms, less this for the page's timers and its ms clock. */
+const STEER_JITTER_MS = 5;
+/** The closest two consecutive times, in ms; Infinity with fewer than two. */
+function closestGap(times: number[]): number {
+  return times.slice(1).reduce((least, t, i) => Math.min(least, t - times[i]!), Infinity);
+}
+
+/** A table with steered development: people's phones (a computer seat is never waited for), and a TV or none. */
+export interface ArcadeTable {
+  server: MuleServer;
+  code: string;
+  /** Seat s1, the host. B-AC-3 turns it into a laptop. */
+  heiko: Page;
+  /** Seat s2. */
+  mia: Page;
+  /** Every phone by seat, s1 first: Heiko, Mia and any others. */
+  phones: Page[];
+  tv: Page | null;
+  wires: { heiko: Wire; mia: Wire; tv: Wire | null; phones: Wire[] };
+  /** Where the pages' errors go. */
+  errors: string[];
+}
+
+/** Real ms a frame is due at the server's 20 Hz tick, at phaseScale 1. */
+const TICK_MS = DEV_STEER.tickMs;
+/** Development's start may wait for its event show (RULE-4) before the floor's first tick. */
+const FLOOR_STARTS_MS = 15_000;
+
+/**
+ * People's phones join a game on a server that steers its development (the first hosts), a TV watches unless `tv` is
+ * false, and each claims a plot and is done with land; returns once the floor ticks. `server` must be started with
+ * devSteer and phaseScale 1, so frames come at the tick's own 20 Hz and a stride never overshoots a reach.
+ */
+export async function arcadeTable(
+  browser: Browser,
+  base: string,
+  server: MuleServer,
+  errors: string[],
+  { names = ['Heiko', 'Mia'], tv: withTv = true }: { names?: string[]; tv?: boolean } = {},
+): Promise<ArcadeTable> {
+  check(names.length >= 2, 'arcade: at least two people, so a computer seat is never all there is');
+  const open = async (name: string, options: Parameters<Browser['newContext']>[0]) => {
+    const page = await (await browser.newContext(options)).newPage();
+    page.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
+    return { page, wire: await watchWire(page) };
+  };
+  const host = await open(names[0]!, PHONE);
+  await host.page.goto(base);
+  await host.page.getByPlaceholder('Heiko').fill(names[0]!);
+  await host.page.getByRole('button', { name: 'Start a new game' }).click();
+  await host.page.getByText("You're at the table").waitFor();
+  const code = (await host.page.getByTestId('room-code').textContent())?.trim() ?? '';
+  const phones = [host];
+  for (const name of names.slice(1)) {
+    const p = await open(name, PHONE);
+    await p.page.goto(`${base}/?room=${code}`);
+    await p.page.getByPlaceholder('Heiko').fill(name);
+    await p.page.getByRole('button', { name: `Join game ${code}` }).click();
+    await p.page.getByText("You're at the table").waitFor();
+    phones.push(p);
+  }
+  const tv = withTv ? await open('TV', { viewport: { width: 1920, height: 1080 } }) : null;
+  await tv?.page.goto(`${base}/table?room=${code}`);
+  await host.page.locator('[data-testid=seats] li').nth(names.length - 1).waitFor();
+  await host.page.getByRole('button', { name: 'Start game' }).click();
+  const pages = phones.map((p) => p.page);
+  for (const p of pages) await p.getByTestId('ready').click({ timeout: 10_000 });
+  for (const p of pages) await claimAPlot(p, CLAIM_MS, 'arcade: each phone claims a plot in the month-1 land grant');
+  // All at once: the grant ends when all are done, so one waiting on its own would wait out the light's whole pass.
+  await Promise.all(pages.map((p) => doneWithLand(p)));
+  const game = steeredOf(server, code);
+  const end = Date.now() + FLOOR_STARTS_MS;
+  while (!game.steering && Date.now() < end) await host.page.waitForTimeout(100);
+  check(game.steering, `arcade: the server's floor ticks within ${FLOOR_STARTS_MS / 1_000} s of development (phase ${game.state.phase})`);
+  for (const p of pages) await p.getByTestId('phone-game').waitFor({ timeout: 5_000 });
+  return {
+    server,
+    code,
+    heiko: pages[0]!,
+    mia: pages[1]!,
+    phones: pages,
+    tv: tv?.page ?? null,
+    wires: { heiko: phones[0]!.wire, mia: phones[1]!.wire, tv: tv?.wire ?? null, phones: phones.map((p) => p.wire) },
+    errors,
+  };
+}
+
+/** Kept a string: tsx would wrap named functions in a helper the page lacks. A colonist the TV draws, by seat. */
+/** How old the drawing a TV read finds may be: frames every 50 ms, a read's round trip, and a loaded runner. */
+const TV_FRESH_MS = 250;
+
+const TV_DRAWS = `(() => Object.fromEntries([...document.querySelectorAll('[data-testid^=colonist-]:not([data-testid^=colonist-name])')].map((e) => [e.getAttribute('data-testid').slice(9), { space: e.getAttribute('data-space'), x: Number(e.getAttribute('data-x')), y: Number(e.getAttribute('data-y')), at: e.hasAttribute('data-at') ? Number(e.getAttribute('data-at')) : null }])))()`;
+
+/**
+ * Stops the page's animation frames, as a phone put in a pocket does, and tells the page it is hidden and has lost
+ * focus. The loop's frames wait in a queue until resumeThePage plays them on.
+ */
+const BACKGROUND_THE_PAGE = `(() => {
+  const w = window;
+  if (!w.__loop) {
+    w.__loop = { paused: false, queue: [], raf: w.requestAnimationFrame.bind(w) };
+    w.requestAnimationFrame = (cb) => (w.__loop.paused ? (w.__loop.queue.push(cb), 0) : w.__loop.raf(cb));
+  }
+  w.__loop.paused = true;
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+  Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+  document.dispatchEvent(new Event('visibilitychange'));
+  w.dispatchEvent(new Event('blur'));
+  document.activeElement?.blur?.();
+})()`;
+const RESUME_THE_PAGE = `(() => {
+  const w = window;
+  delete document.visibilityState;
+  delete document.hidden;
+  document.dispatchEvent(new Event('visibilitychange'));
+  w.__loop.paused = false;
+  for (const cb of w.__loop.queue.splice(0)) w.__loop.raf(cb);
+})()`;
+
+/** Holds the keys for `ms`, then lets go of them. */
+async function hold(page: Page, keys: string[], ms: number): Promise<void> {
+  for (const k of keys) await page.keyboard.down(k);
+  await page.waitForTimeout(ms);
+  for (const k of [...keys].reverse()) await page.keyboard.up(k);
+}
+
+/** A colonist that moved less than this between two reads stood still: the wire's 2 decimals, and some. */
+const STILL = 0.02;
+/** A held key for this long walks a colonist this far at the least, on the slowest land it can walk. */
+const HOLD_MS = 1_000;
+const MOVES_AT_LEAST = 0.2;
+/** A stop reaches the server's floor within this: the gate's interval, a tick, and the network. */
+const STOP_MS = 100 + 2 * TICK_MS + 100;
+
+/**
+ * Step 1, the pieces meet (PR-6): the phones show the arcade screen, not today's Develop; frames come at the tick's
+ * 20 Hz; holding an arrow key walks the colonist on the server's floor, never more than steerMaxPerSecond steers a
+ * second, and letting go stops it within STOP_MS, also when the page's frames stop at that moment (a phone pocketed);
+ * the TV draws both colonists where the server has them, and no clock while month 1's waits.
+ */
+export async function thePiecesMeet(t: ArcadeTable): Promise<string> {
+  const { mia, tv, server, code, wires } = t;
+  check(tv, 'step 1: the table has a TV');
+  for (const p of [t.heiko, mia]) {
+    await p.getByTestId('phone-game').waitFor({ timeout: 5_000 });
+    check((await p.getByTestId('joystick').count()) === 1 && (await p.getByTestId('action-button').count()) === 1, 'step 1: the phone shows the arcade stick and action button');
+    check((await p.getByTestId('store-hall').count()) === 0 && (await p.getByTestId('fill-card').count()) === 0, "step 1: the phone shows the arcade screen, not today's Develop");
+  }
+  await tv.getByTestId('tv-game').waitFor({ timeout: 5_000 });
+
+  const f0 = wires.mia.frames.length;
+  const t0 = Date.now();
+  await mia.waitForTimeout(1_000);
+  const perSecond = ((wires.mia.frames.length - f0) * 1_000) / (Date.now() - t0);
+  check(perSecond >= 17 && perSecond <= 23, `step 1: frames come at the tick's 20 Hz, got ${perSecond.toFixed(1)} a second`);
+  const last = wires.mia.frames.at(-1)!.frame;
+  check(last.colonists.some((c) => c.id === 's1') && last.colonists.some((c) => c.id === 's2'), `step 1: a frame carries both colonists, got ${last.colonists.map((c) => c.id).join(', ')}`);
+
+  check(await mia.getByTestId('phone-game').evaluate((el) => el === document.activeElement), 'step 1: the arcade screen has the keys from its first frame');
+  const before = onFloor(server, code, 's2');
+  const s0 = wires.mia.steers.length;
+  await mia.keyboard.down('ArrowRight');
+  await mia.waitForTimeout(HOLD_MS);
+  const held = onFloor(server, code, 's2');
+  await mia.keyboard.up('ArrowRight');
+  const released = Date.now();
+  await mia.waitForTimeout(STOP_MS);
+  const stopped = onFloor(server, code, 's2');
+  await mia.waitForTimeout(500);
+  const later = onFloor(server, code, 's2');
+  check(held.space === before.space && held.x - before.x >= MOVES_AT_LEAST && Math.abs(held.y - before.y) < STILL, `step 1: holding → walks Mia's colonist right on the server, ${where(before)} → ${where(held)}`);
+  check(Math.hypot(later.x - stopped.x, later.y - stopped.y) < STILL, `step 1: letting go stops it on the server within ${STOP_MS} ms, ${where(stopped)} then ${where(later)}`);
+  const sent = wires.mia.steers.slice(s0);
+  check(sent.length >= 2 && sent.at(-1)!.x === 0 && sent.at(-1)!.y === 0 && sent.at(-1)!.at >= released, `step 1: the release goes out as a steer of 0,0, got ${JSON.stringify(sent)}`);
+
+  // Mashing the keys: never more than steerMaxPerSecond a second, and the last change, a release, still arrives.
+  const m0 = wires.mia.steers.length;
+  const p0 = (await wires.mia.steersSentAt()).length;
+  for (let i = 0; i < 30; i++) await hold(mia, [i % 2 ? 'ArrowUp' : 'ArrowDown'], 25);
+  await hold(mia, ['ArrowLeft'], 15);
+  await mia.waitForTimeout(STOP_MS);
+  const mashed = onFloor(server, code, 's2');
+  await mia.waitForTimeout(500);
+  const mashedLater = onFloor(server, code, 's2');
+  const mash = wires.mia.steers.slice(m0);
+  // HC-5 as a spacing on the page's own clock, from the last send before the mash: no two steers closer than a step of
+  // the rate. A count per second would hang on the window's edge: 11 sends 100 ms apart span exactly 1000 ms.
+  const sentAt = (await wires.mia.steersSentAt()).slice(Math.max(0, p0 - 1));
+  const step = 1_000 / DEV_STEER.steerMaxPerSecond;
+  const closest = closestGap(sentAt);
+  check(sentAt.length - (p0 > 0 ? 1 : 0) >= 5, `step 1: mashing sends steers, got ${sentAt.length} page-side stamps`);
+  check(closest >= step - STEER_JITTER_MS, `step 1: mashed keys send at most ${DEV_STEER.steerMaxPerSecond} steers a second: no two closer than ${step} ms, got ${closest} ms (sent at ${sentAt.map((t) => t - sentAt[0]!).join(', ')})`);
+  check(mash.at(-1)?.x === 0 && mash.at(-1)?.y === 0, `step 1: after mashing, the last steer is the release, got ${JSON.stringify(mash.at(-1))}`);
+  check(Math.hypot(mashedLater.x - mashed.x, mashedLater.y - mashed.y) < STILL, `step 1: after mashing the colonist stops on the server, ${where(mashed)} then ${where(mashedLater)}`);
+
+  // Pocketed mid-walk, just after a steer went: the page's frames stop while the gate still holds the release back,
+  // and the stop must still reach the server.
+  await mia.keyboard.down('ArrowLeft');
+  await mia.waitForTimeout(30);
+  await mia.evaluate(BACKGROUND_THE_PAGE);
+  await mia.waitForTimeout(STOP_MS);
+  const pocketed = onFloor(server, code, 's2');
+  await mia.waitForTimeout(500);
+  const pocketedLater = onFloor(server, code, 's2');
+  await mia.evaluate(RESUME_THE_PAGE);
+  await mia.keyboard.up('ArrowLeft');
+  await mia.getByTestId('phone-game').focus();
+  check(Math.hypot(pocketedLater.x - pocketed.x, pocketedLater.y - pocketed.y) < STILL, `step 1: a page put away mid-walk stops its colonist on the server within ${STOP_MS} ms, ${where(pocketed)} then ${where(pocketedLater)}`);
+
+  // The TV draws both where the server has them, both standing, and no clock while month 1's waits.
+  await tv.waitForTimeout(300);
+  const drawn = (await tv.evaluate(TV_DRAWS)) as Record<string, { space: string; x: number; y: number }>;
+  for (const seat of ['s1', 's2']) {
+    const s = onFloor(server, code, seat);
+    const d = drawn[seat];
+    check(d && d.space === s.space && Math.abs(d.x - s.x) < STILL && Math.abs(d.y - s.y) < STILL, `step 1: the TV draws ${seat} where the server has it, ${where(s)}, got ${d ? where(d) : 'nothing'}`);
+  }
+  const game = steeredOf(server, code);
+  if (game.devEndsAt === null) check((await tv.locator('header [role=timer]').count()) === 0, "step 1: while month 1's clock waits the TV's header shows no clock, as the flag-off TV");
+  return `${perSecond.toFixed(1)} frames/s; held → ${where(before)} → ${where(held)}, stopped at ${where(stopped)}; mashing ${closest} ms apart at the closest; the TV drew ${Object.entries(drawn).map(([k, d]) => `${k} ${where(d)}`).join(', ')}`;
+}
+
+/** Test fixture: puts a seat's colonist at `at` on the server's floor, as a teleport; the phone's copy snaps to it. */
+function placeOnFloor(server: MuleServer, code: string, seat: string, at: { space: 'map' | 'hall'; x: number; y: number }): void {
+  const steering = steeredOf(server, code).steering;
+  check(steering, `the server steers development for ${seat}`);
+  steering.floor = { ...steering.floor, colonists: steering.floor.colonists.map((c) => (c.id === seat ? { ...c, ...at, moving: false } : c)) };
+}
+
+/** Waits until the server has the seat's colonist where `ok` wants it; returns the last read. */
+async function floorWhen(page: Page, server: MuleServer, code: string, seat: string, ok: (c: FloorColonist) => boolean, timeout = 2_000): Promise<FloorColonist> {
+  const end = Date.now() + timeout;
+  for (;;) {
+    const c = onFloor(server, code, seat);
+    if (ok(c) || Date.now() > end) return c;
+    await page.waitForTimeout(TICK_MS);
+  }
+}
+
+/** Records, on the window after the game's own handlers, every arrow and SPACE keydown and whether it was kept from the page. */
+const RECORD_KEYS = `(() => {
+  window.__keys = [];
+  window.addEventListener('keydown', (e) => { if (e.key === ' ' || e.key.startsWith('Arrow')) window.__keys.push({ key: e.key, kept: e.defaultPrevented }); });
+})()`;
+/** How far anything on the page has scrolled: the window, and the most any element has. */
+const SCROLLED = `(() => ({ window: window.scrollY + window.scrollX, most: Math.max(0, ...[...document.querySelectorAll('*')].map((e) => e.scrollTop + e.scrollLeft)) }))()`;
+
+const LAPTOP_MS = 800;
+
+/**
+ * B-AC-3: on a laptop, SPACE presses the action button (in at the store's door), the arrow keys walk the colonist and
+ * a mouse held on a spot walks it there, each on the server's floor; no arrow or SPACE scrolls the page. Negative:
+ * with the game unfocused the keys send nothing and the colonist stands. Ends back at 844×390, in the hall.
+ */
+export async function laptopKeysAndMouse(t: ArcadeTable): Promise<string> {
+  const { heiko, server, code, wires } = t;
+  const game = steeredOf(server, code) as SteeredGame & { viewFor(seat: string | null): { me?: { reach?: { verb: string; enabled: boolean } } } };
+  await heiko.setViewportSize(LAPTOP);
+  const laptop = heiko.getByTestId('laptop-game');
+  await laptop.waitFor({ timeout: 2_000 });
+  await heiko.waitForFunction(() => document.querySelector('[data-testid=laptop-game]') === document.activeElement, null, { timeout: 2_000 }).catch(() => undefined);
+  check((await laptop.getAttribute('data-focused')) === 'true', 'B-AC-3: the laptop screen has the keys as it opens');
+  await heiko.evaluate(RECORD_KEYS);
+
+  // SPACE acts: beside the store's door the button says ENTER STORE, and a press takes the colonist into the hall.
+  const start = onFloor(server, code, 's1');
+  const reach = game.viewFor('s1').me?.reach;
+  check(start.space === 'map' && reach?.verb === 'ENTER STORE' && reach.enabled, `B-AC-3: Heiko starts beside the store's door with ENTER STORE lit, got ${where(start)} "${reach?.verb}"`);
+  const a0 = wires.heiko.acts.length;
+  await heiko.keyboard.press(' ');
+  const entered = await floorWhen(heiko, server, code, 's1', (c) => c.space === 'hall');
+  check(wires.heiko.acts.length === a0 + 1, `B-AC-3: one SPACE sends one press, got ${wires.heiko.acts.length - a0}`);
+  check(entered.space === 'hall', `B-AC-3: SPACE presses ENTER STORE and the server has Heiko in the hall, got ${where(entered)}`);
+  await heiko.getByTestId('your-stage').and(heiko.locator('[data-space=hall]')).waitFor({ timeout: 2_000 });
+
+  // The arrow keys walk.
+  const k0 = onFloor(server, code, 's1');
+  await hold(heiko, ['ArrowRight'], LAPTOP_MS);
+  const k1 = await floorWhen(heiko, server, code, 's1', (c) => c.x - k0.x >= MOVES_AT_LEAST);
+  check(k1.x - k0.x >= MOVES_AT_LEAST && Math.abs(k1.y - k0.y) < STILL, `B-AC-3: holding → walks Heiko right in the hall, ${where(k0)} → ${where(k1)}`);
+  await hold(heiko, ['ArrowLeft'], LAPTOP_MS / 2);
+  const k2 = await floorWhen(heiko, server, code, 's1', (c) => k1.x - c.x >= MOVES_AT_LEAST / 2);
+  check(k1.x - k2.x >= MOVES_AT_LEAST / 2, `B-AC-3: holding ← walks Heiko back left, ${where(k1)} → ${where(k2)}`);
+
+  // The mouse held on a spot of the walkway walks there.
+  const walk = HALL.floor[0]!;
+  const spot = { x: HALL.w * 0.75, y: (walk.y0 + walk.y1) / 2 };
+  check(placeAt(spot) === null && isOpenFloor(spot), 'B-AC-3: the mouse spot is open walkway, no room to press');
+  const box = await heiko.getByTestId('hall-stage').boundingBox();
+  check(box, 'B-AC-3: the hall is on the laptop stage');
+  const m0 = await floorWhen(heiko, server, code, 's1', () => false, 2 * TICK_MS);
+  await heiko.mouse.move(box.x + (spot.x / HALL.w) * box.width, box.y + (spot.y / HALL.h) * box.height);
+  await heiko.mouse.down();
+  await heiko.waitForTimeout(LAPTOP_MS);
+  const m1 = onFloor(server, code, 's1');
+  await heiko.mouse.up();
+  const gap = (c: FloorColonist) => Math.hypot(spot.x - c.x, spot.y - c.y);
+  check(m1.space === 'hall' && gap(m0) - gap(m1) >= MOVES_AT_LEAST, `B-AC-3: the mouse held on ${spot.x.toFixed(1)},${spot.y.toFixed(1)} walks Heiko toward it, ${where(m0)} → ${where(m1)}`);
+  await heiko.waitForTimeout(STOP_MS);
+  const m2 = onFloor(server, code, 's1');
+  await heiko.waitForTimeout(300);
+  const m3 = onFloor(server, code, 's1');
+  check(Math.hypot(m3.x - m2.x, m3.y - m2.y) < STILL, `B-AC-3: letting go of the mouse stops Heiko, ${where(m2)} then ${where(m3)}`);
+
+  // Nothing scrolled, and every arrow and SPACE was kept from the page.
+  const keys = (await heiko.evaluate('window.__keys')) as { key: string; kept: boolean }[];
+  const scrolled = (await heiko.evaluate(SCROLLED)) as { window: number; most: number };
+  check(keys.length >= 3 && keys.every((k) => k.kept), `B-AC-3: every arrow and SPACE is kept from the page, got ${JSON.stringify(keys)}`);
+  check(scrolled.window === 0 && scrolled.most === 0, `B-AC-3: the page never scrolls, got ${JSON.stringify(scrolled)}`);
+
+  // Negative: the game unfocused, the keys send nothing and the colonist stands.
+  await laptop.evaluate((el) => el.blur());
+  await heiko.getByTestId('focus-hint').waitFor({ timeout: 1_000 });
+  const n0 = onFloor(server, code, 's1');
+  const [s0, a1] = [wires.heiko.steers.length, wires.heiko.acts.length];
+  await hold(heiko, ['ArrowLeft'], LAPTOP_MS / 2);
+  await heiko.keyboard.press(' ');
+  await heiko.waitForTimeout(STOP_MS);
+  const n1 = onFloor(server, code, 's1');
+  check(wires.heiko.steers.length === s0 && wires.heiko.acts.length === a1, `B-AC-3 (negative): unfocused, the keys send nothing, got ${wires.heiko.steers.length - s0} steers and ${wires.heiko.acts.length - a1} presses`);
+  check(n1.space === n0.space && Math.hypot(n1.x - n0.x, n1.y - n0.y) < STILL, `B-AC-3 (negative): unfocused, Heiko stands, ${where(n0)} then ${where(n1)}`);
+
+  await laptop.focus();
+  await heiko.setViewportSize(PHONE.viewport);
+  await heiko.getByTestId('phone-game').waitFor({ timeout: 2_000 });
+  return `SPACE → ${where(entered)}; → ${where(k0)} → ${where(k1)}; mouse → ${where(m0)} → ${where(m1)}; ${keys.length} keys kept, scrolled 0`;
+}
+
+type Rect = { x: number; y: number; w: number; h: number };
+/** One read of the phone's arcade screen for B-AC-4: its frame, what lies over the map, and what must stay in sight. */
+type FitRead = {
+  frame: Rect;
+  space: string;
+  page: { w: number; h: number; scrollW: number; scrollH: number };
+  boxes: { id: string; r: Rect }[];
+  controls: { id: string; r: Rect; faded: boolean; opacity: number }[];
+  kept: { id: string; r: Rect }[];
+  plots: { id: string; r: Rect }[];
+  cell: number;
+  map: Rect | null;
+};
+
+/** Kept a string, as READ_HALL. `seat` is the phone's own. */
+const readFit = (seat: string) => `(() => {
+  const box = (el) => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; };
+  const game = document.querySelector('[data-testid=phone-game]');
+  const all = (sel) => [...game.querySelectorAll(sel)];
+  const opacity = (el) => { let o = 1; for (let e = el; e && e !== document.body; e = e.parentElement) o *= Number(getComputedStyle(e).opacity); return o; };
+  const space = game.querySelector('[data-testid=your-stage]').getAttribute('data-space');
+  const layer = game.querySelector('[data-testid=walkers-map]')?.parentElement ?? null;
+  const map = layer ? box(layer) : null;
+  const cols = 15, rows = 9;
+  const cell = map ? map.w / Number(game.getAttribute('data-cols') ?? cols) : 0;
+  const tile = (x, y) => ({ x: map.x + x * cell, y: map.y + y * cell, w: cell, h: cell });
+  const kept = [];
+  if (space === 'map') {
+    const me = game.querySelector('[data-testid=colonist-${seat}] [role=img]');
+    if (me) kept.push({ id: 'your colonist', r: box(me) });
+    const [sx, sy] = game.getAttribute('data-store').split(',').map(Number);
+    kept.push({ id: 'the store', r: tile(sx, sy) });
+    for (const g of all('[data-testid=guide-map], [data-testid=guide-map-alt]')) kept.push({ id: 'target ' + g.getAttribute('data-what'), r: box(g) });
+  } else {
+    const me = game.querySelector('[data-testid=visitor-${seat}]');
+    if (me) kept.push({ id: 'your colonist', r: box(me) });
+    for (const g of all('[data-testid=hall-lit]')) kept.push({ id: 'target ' + g.getAttribute('data-room'), r: box(g) });
+  }
+  const plots = space === 'map' ? (game.getAttribute('data-my-plots') || '').split(' ').filter(Boolean).map((k) => { const [x, y] = k.split(',').map(Number); return { id: 'your plot ' + k, r: tile(x, y) }; }) : [];
+  const controls = all('[data-overlay=stick], [data-overlay=button], [data-testid=plot-card]').map((el) => ({ id: el.getAttribute('data-overlay') ?? 'plot card', r: box(el), faded: el.hasAttribute('data-faded'), opacity: opacity(el) }));
+  return {
+    frame: box(game),
+    space,
+    page: { w: innerWidth, h: innerHeight, scrollW: document.documentElement.scrollWidth, scrollH: document.documentElement.scrollHeight },
+    boxes: all('[data-overlay], [data-testid=plot-card], [data-testid=phone-stage], [data-testid=action-verb]').map((el) => ({ id: el.getAttribute('data-overlay') ?? el.getAttribute('data-testid'), r: box(el) })),
+    controls, kept, plots, cell, map,
+  };
+})()`;
+
+const area = (a: Rect, b: Rect) => {
+  const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+  const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+  return w > 0 && h > 0 ? w * h : 0;
+};
+const inside = (r: Rect, f: Rect) => r.x >= f.x - 0.5 && r.y >= f.y - 0.5 && r.x + r.w <= f.x + f.w + 0.5 && r.y + r.h <= f.y + f.h + 0.5;
+/** A control near-clear: the fade when you or the target come near (the scaffold's opacity-25). */
+const FADED_MAX = 0.3;
+
+/** B-AC-4's checks on one read; returns what it found. A faded control may lie over your colonist or the target. */
+function checkFit(r: FitRead, tag: string): string {
+  check(r.page.scrollW <= r.page.w && r.page.scrollH <= r.page.h, `B-AC-4 ${tag}: the page does not overflow, ${r.page.scrollW}×${r.page.scrollH} in ${r.page.w}×${r.page.h}`);
+  for (const b of r.boxes) check(inside(b.r, r.frame), `B-AC-4 ${tag}: ${b.id} stays inside the screen, ${JSON.stringify(b.r)} in ${JSON.stringify(r.frame)}`);
+  check(r.kept.some((k) => k.id === 'your colonist'), `B-AC-4 ${tag}: your colonist is on the screen`);
+  for (const c of r.controls)
+    for (const k of r.kept) {
+      const covered = area(c.r, k.r);
+      if (covered === 0) continue;
+      check(c.id !== 'plot card' && c.faded && c.opacity <= FADED_MAX, `B-AC-4 ${tag}: the ${c.id} covers ${covered.toFixed(0)} px² of ${k.id} and is not faded clear (opacity ${c.opacity.toFixed(2)})`);
+    }
+  const over: string[] = [];
+  for (const c of r.controls.filter((k) => k.id !== 'plot card'))
+    for (const p of r.plots) {
+      if (area(c.r, p.r) === 0) continue;
+      check(c.opacity < 1, `B-AC-4 ${tag}: the ${c.id} lies over ${p.id} and is not translucent (opacity ${c.opacity.toFixed(2)})`);
+      over.push(`${c.id} over ${p.id.slice(10)} at ${c.opacity.toFixed(2)}`);
+    }
+  return over.join(', ');
+}
+
+/** The tiles under a control's box on the map, by column and row. */
+function tilesUnder(r: FitRead, c: Rect): { x: number; y: number }[] {
+  check(r.map, 'B-AC-4: the map is on the stage');
+  const m = r.map;
+  const out: { x: number; y: number }[] = [];
+  for (let x = Math.max(0, Math.floor((c.x - m.x) / r.cell)); x <= Math.min(14, Math.floor((c.x + c.w - m.x - 1) / r.cell)); x++)
+    for (let y = Math.max(0, Math.floor((c.y - m.y) / r.cell)); y <= Math.min(8, Math.floor((c.y + c.h - m.y - 1) / r.cell)); y++) out.push({ x, y });
+  return out;
+}
+
+/**
+ * Test fixture: gives the seat the free plots under each control, so the controls lie over plots of its own, and sends
+ * every screen the view that makes.
+ */
+function givePlotsUnder(server: MuleServer, code: string, seat: string, tiles: { x: number; y: number }[]): string[] {
+  const game = gameOf(server, code);
+  const given: string[] = [];
+  for (const { x, y } of tiles) {
+    const tile = game.state.tiles.find((k) => k.x === x && k.y === y);
+    if (!tile || tile.terrain === 'store' || tile.owner !== null) continue;
+    tile.owner = seat;
+    given.push(`${x},${y}`);
+  }
+  game.ctx.changed();
+  return given;
+}
+
+/**
+ * B-AC-4 (AM-20): at 667×375 and 844×390, on the map and in the hall, nothing overflows the screen; the stick, the
+ * button and the plot card cover 0 px² of your colonist, the store and the target; over your own plots the stick and
+ * the button are translucent. Positive control: your colonist put under the stick, the overlap is measured and the
+ * stick fades clear. Ends at 844×390 in the hall.
+ */
+export async function phoneFitsAndCoversNothing(t: ArcadeTable): Promise<string> {
+  const { mia, server, code } = t;
+  const seat = 's2';
+  const out: string[] = [];
+  const back = onFloor(server, code, seat);
+  for (const [name, size, px] of [['844×390', PHONE.viewport, '844'], ['667×375', PHONE_SMALL.viewport, '667']] as const) {
+    await mia.setViewportSize(size);
+    await mia.locator(`[data-testid=phone-game][data-size="${px}"]`).waitFor({ timeout: 2_000 });
+    placeOnFloor(server, code, seat, back);
+    await mia.locator('[data-testid=your-stage][data-space=map]').waitFor({ timeout: 2_000 });
+    const first = (await mia.evaluate(readFit(seat))) as FitRead;
+    const under = first.controls.filter((c) => c.id !== 'plot card').flatMap((c) => tilesUnder(first, c.r));
+    const given = givePlotsUnder(server, code, seat, under);
+    await mia.waitForFunction((n) => (document.querySelector('[data-testid=phone-game]')?.getAttribute('data-my-plots') ?? '').split(' ').filter(Boolean).length >= n, given.length + 1, { timeout: 2_000 });
+    await mia.waitForTimeout(300);
+    const map = (await mia.evaluate(readFit(seat))) as FitRead;
+    const over = checkFit(map, `${name} on the map`);
+    check(map.plots.length > 1 && over !== '', `B-AC-4 ${name}: the fixture put plots of Mia's under the controls, got [${given.join(' ')}]`);
+
+    // Positive control: her colonist under the stick, the overlap is there and the stick fades clear.
+    const stick = map.controls.find((c) => c.id === 'stick')!;
+    const at = { x: (stick.r.x + stick.r.w / 2 - map.map!.x) / map.cell, y: (stick.r.y + stick.r.h * 0.6 - map.map!.y) / map.cell };
+    placeOnFloor(server, code, seat, { space: 'map', ...at });
+    await mia.locator('[data-overlay=stick][data-faded]').waitFor({ timeout: 2_000 }).catch(() => undefined);
+    await mia.waitForTimeout(300);
+    const under1 = (await mia.evaluate(readFit(seat))) as FitRead;
+    const s1 = under1.controls.find((c) => c.id === 'stick')!;
+    const me1 = under1.kept.find((k) => k.id === 'your colonist')!;
+    check(area(s1.r, me1.r) > 0, `B-AC-4 ${name} (control): Mia's colonist put at ${at.x.toFixed(2)},${at.y.toFixed(2)} lies under the stick`);
+    check(s1.faded && s1.opacity <= FADED_MAX, `B-AC-4 ${name} (control): with Mia under it the stick fades clear, opacity ${s1.opacity.toFixed(2)}`);
+    checkFit(under1, `${name} under the stick`);
+    placeOnFloor(server, code, seat, back);
+
+    // The hall.
+    placeOnFloor(server, code, seat, { space: 'hall', ...HALL.spots.doorR });
+    await mia.locator('[data-testid=your-stage][data-space=hall]').waitFor({ timeout: 2_000 });
+    await mia.waitForTimeout(300);
+    checkFit((await mia.evaluate(readFit(seat))) as FitRead, `${name} in the hall`);
+    out.push(`${name}: ${over}; the stick faded to ${s1.opacity.toFixed(2)} over her`);
+  }
+  await mia.setViewportSize(PHONE.viewport);
+  await mia.locator('[data-testid=phone-game][data-size="844"]').waitFor({ timeout: 2_000 });
+  return out.join('; ');
+}
+
+/** Development's length for B-AC-8, in seconds: room to drop, come back and steer, then the clock runs out. */
+const DROP_TURN_SECONDS = 12;
+/** The turn ends on its clock to within this. */
+const ON_THE_CLOCK_MS = 500;
+
+/**
+ * B-AC-8: Mia's phone drops mid-walk while Heiko stays: the server's frames have her colonist stand, the clock does not
+ * move, she comes back and steers again, and the turn ends on the clock. Starts development's clock (month 1's waits),
+ * DROP_TURN_SECONDS long; ends with development over.
+ */
+export async function aDroppedPhoneStops(t: ArcadeTable): Promise<string> {
+  const { mia, server, code, wires } = t;
+  const seat = 's2';
+  const game = steeredOf(server, code);
+  // Test fixture: month 1's clock starts now and is short, as the host's Start the clock starts it.
+  const full = DEVELOPMENT.fullSeconds;
+  DEVELOPMENT.fullSeconds = DROP_TURN_SECONDS;
+  try {
+    game.startClock();
+  } finally {
+    DEVELOPMENT.fullSeconds = full;
+  }
+  game.ctx.changed();
+  const endsAt = game.devEndsAt;
+  check(endsAt !== null, 'B-AC-8: the clock runs');
+  check(onFloor(server, code, seat).space === 'hall', 'B-AC-8: Mia starts in the hall');
+
+  await mia.getByTestId('phone-game').focus();
+  const still = onFloor(server, code, seat);
+  const w0 = wires.mia.steers.length;
+  await mia.keyboard.down('ArrowLeft');
+  const walking = await floorWhen(mia, server, code, seat, (c) => still.x - c.x >= MOVES_AT_LEAST);
+  check(still.x - walking.x >= MOVES_AT_LEAST, `B-AC-8: Mia is walking when her phone drops, ${where(still)} → ${where(walking)}; sent ${JSON.stringify(wires.mia.steers.slice(w0))}`);
+  // The phone drops mid-walk, its key still held: its page and socket are gone at once.
+  const url = mia.url();
+  const context = mia.context();
+  await mia.close();
+  const away = Date.now();
+  const end = away + 5_000;
+  while (!game.away.has(seat) && Date.now() < end) await t.heiko.waitForTimeout(TICK_MS);
+  check(game.away.has(seat), 'B-AC-8: the server sees Mia drop within 5 s');
+  const awaySeen = Date.now();
+  await t.heiko.waitForTimeout(1_000);
+  check(wires.tv && t.tv, 'B-AC-8: the table has a TV to hear the frames');
+  const frames = wires.tv.frames.filter((f) => f.at > awaySeen + 2 * TICK_MS).map((f) => f.frame.colonists.find((c) => c.id === seat)!);
+  check(frames.length >= 15, `B-AC-8: the TV keeps getting frames while Mia is away, got ${frames.length}`);
+  const spots = new Set(frames.map((c) => `${c.space} ${c.x},${c.y}`));
+  check(spots.size === 1, `B-AC-8: while away her colonist stands in the server's frames, got ${[...spots].join(' | ')}`);
+  check(game.devEndsAt === endsAt, 'B-AC-8: the drop does not move the clock');
+
+  // Back on the same phone: it opens the game again and takes its saved seat.
+  const phone = await context.newPage();
+  phone.on('pageerror', (e) => t.errors.push(`Mia (back): ${e.message}`));
+  t.wires.mia = await watchWire(phone);
+  t.wires.phones[1] = t.wires.mia;
+  t.mia = phone;
+  t.phones[1] = phone;
+  await phone.goto(url);
+  const backBy = Date.now() + 10_000;
+  while (game.away.has(seat) && Date.now() < backBy) await phone.waitForTimeout(TICK_MS);
+  check(!game.away.has(seat), 'B-AC-8: Mia comes back within 10 s');
+  await phone.getByTestId('phone-game').waitFor({ timeout: 5_000 });
+  await phone.waitForFunction(() => document.querySelector('[data-testid=phone-game]') === document.activeElement, null, { timeout: 2_000 }).catch(() => undefined);
+  const mia2 = phone;
+  const r0 = onFloor(server, code, seat);
+  const s0 = t.wires.mia.steers.length;
+  // On along the walkway, away from the door she came in by.
+  await hold(mia2, ['ArrowLeft'], HOLD_MS);
+  const r1 = await floorWhen(mia2, server, code, seat, (c) => r0.x - c.x >= MOVES_AT_LEAST);
+  check(t.wires.mia.steers.length > s0, 'B-AC-8: back, the phone sends steers again');
+  check(r1.space === r0.space && r0.x - r1.x >= MOVES_AT_LEAST, `B-AC-8: back, Mia steers her colonist again, ${where(r0)} → ${where(r1)}`);
+  check(game.devEndsAt === endsAt, 'B-AC-8: coming back does not move the clock');
+
+  const over = Date.now() + DROP_TURN_SECONDS * 1_000 + 5_000;
+  while (game.state.phase === 'development' && Date.now() < over) await mia2.waitForTimeout(TICK_MS);
+  const endedAt = Date.now();
+  check(game.state.phase !== 'development', 'B-AC-8: development ends');
+  check(Math.abs(endedAt - endsAt) <= ON_THE_CLOCK_MS, `B-AC-8: the turn ends on the clock, ${endedAt - endsAt} ms from it`);
+  return `walking at ${where(walking)}, stood in ${frames.length} frames while away; back ${where(r0)} → ${where(r1)}; ended ${endedAt - endsAt} ms from the clock`;
+}
+
+type Player = GameState['players'][number];
+
+/** The seat's player in the server's game. */
+function playerOf(server: MuleServer, code: string, seat: string): Player {
+  const p = gameOf(server, code).state.players.find((q) => q.id === seat);
+  check(p, `seat ${seat} in the game`);
+  return p;
+}
+
+/** The button as the phone shows it, and as the server's view words it. */
+async function buttonSays(phone: Page, server: MuleServer, code: string, seat: string): Promise<{ phone: string; server: string; enabled: boolean; detail: string | null }> {
+  const reach = (gameOf(server, code) as unknown as { viewFor(s: string): { me?: { reach?: { verb: string; detail: string | null; enabled: boolean } } } }).viewFor(seat).me?.reach;
+  check(reach, `${seat}'s view carries its reach`);
+  return { phone: ((await phone.getByTestId('action-verb').textContent()) ?? '').trim(), server: reach.verb, enabled: reach.enabled, detail: reach.detail };
+}
+
+/** Waits until the phone's button says `verb`, the server's view the same; fails with what each said. */
+async function expectButton(phone: Page, server: MuleServer, code: string, seat: string, verb: string, tag: string): Promise<{ detail: string | null }> {
+  const end = Date.now() + 2_000;
+  let said = await buttonSays(phone, server, code, seat);
+  while (!(said.phone === verb && said.server === verb && said.enabled) && Date.now() < end) {
+    await phone.waitForTimeout(TICK_MS);
+    said = await buttonSays(phone, server, code, seat);
+  }
+  check(said.phone === verb && said.server === verb && said.enabled, `${tag}: the button says "${verb}" before the press, got the phone "${said.phone}", the server "${said.server}" (${said.enabled ? 'lit' : 'dim'})`);
+  return { detail: said.detail };
+}
+
+/** Waits until the server's player is as `ok` wants it after a press. */
+async function playerWhen(page: Page, server: MuleServer, code: string, seat: string, ok: (p: Player) => boolean, timeout = 2_000): Promise<Player> {
+  const end = Date.now() + timeout;
+  while (!ok(playerOf(server, code, seat)) && Date.now() < end) await page.waitForTimeout(TICK_MS);
+  return playerOf(server, code, seat);
+}
+
+/** What a press with nothing in reach must leave alone on the server: the seat's money, MULE, stock and plots. */
+function seatSnapshot(server: MuleServer, code: string, seat: string): string {
+  const { state } = gameOf(server, code);
+  const p = playerOf(server, code, seat);
+  return JSON.stringify({ money: p.money, mule: p.carriedMule, stock: p.stock, done: p.doneDeveloping, plots: state.tiles.filter((t) => t.owner === seat).map((t) => [t.x, t.y, t.outfit]) });
+}
+
+/**
+ * UBER-AC-1 and B-AC-1: one phone held sideways at 667×375, played with only the stick and the button (steerTo and
+ * throughDoor `via: 'stick'`, pressAct `via: 'button'`): in through the store's door, buy at the corral, outfit for
+ * Energy, out through a door with the MULE on its lead, install on her own plot, back in and end at the pub, the button
+ * saying each step before it and the server's money and plot after each press, with no TV at the table: a phone alone
+ * plays the whole turn (UBER-AC-1's TV half, every colonist drawn where the server has it, is B-AC-2's). Negative: a
+ * press with nothing in reach changes nothing on the server. Mia stays connected, so a turn is not over when Heiko's is.
+ * Ends with Heiko at the pub.
+ */
+export async function theWholeErrandByStickAndButton(t: ArcadeTable): Promise<string> {
+  const { heiko: phone, server, code } = t;
+  check(t.tv === null, 'UBER-AC-1, B-AC-1: no TV at this table');
+  const seat = 's1';
+  const steps: string[] = [];
+  const stick = { via: 'stick' } as const;
+  await phone.setViewportSize(PHONE_SMALL.viewport);
+  const money = () => playerOf(server, code, seat).money;
+
+  // In through the door with the button.
+  await expectButton(phone, server, code, seat, 'ENTER STORE', 'B-AC-1');
+  await pressAct(phone, { via: 'button' });
+  const inside = await floorWhen(phone, server, code, seat, (c) => c.space === 'hall');
+  check(inside.space === 'hall', `B-AC-1: ENTER STORE takes Heiko into the hall, got ${where(inside)}`);
+  steps.push('in');
+
+  // Negative: on the open walkway the button is dim, and a press changes nothing.
+  const walk = HALL.floor[0]!;
+  const open = { space: 'hall' as const, x: HALL.w * 0.62, y: (walk.y0 + walk.y1) / 2 };
+  check(placeAt(open) === null, 'B-AC-1: the negative press stands on open walkway');
+  await steerTo(phone, server, code, seat, open, stick);
+  const dim = await buttonSays(phone, server, code, seat);
+  check(!dim.enabled, `B-AC-1 (negative): on the walkway nothing is in reach, got "${dim.server}" lit`);
+  const before = seatSnapshot(server, code, seat);
+  const stood = onFloor(server, code, seat);
+  const a0 = t.wires.heiko.acts.length;
+  // The dim button takes no tap, so the press the server must refuse is SPACE's, which still sends the act.
+  await pressAct(phone);
+  await phone.waitForTimeout(STOP_MS);
+  check(seatSnapshot(server, code, seat) === before, `B-AC-1 (negative): a press with nothing in reach changes nothing on the server, ${before} → ${seatSnapshot(server, code, seat)}`);
+  const after = onFloor(server, code, seat);
+  check(after.space === stood.space && Math.hypot(after.x - stood.x, after.y - stood.y) < STILL, `B-AC-1 (negative): and the colonist stands, ${where(stood)} → ${where(after)}`);
+  steps.push(`dim "${dim.phone}" (${t.wires.heiko.acts.length - a0} press sent, nothing changed)`);
+
+  // Buy at the corral.
+  await steerTo(phone, server, code, seat, hallPlace('corral'), stick);
+  await expectButton(phone, server, code, seat, 'BUY MULE', 'B-AC-1');
+  const m0 = money();
+  const price = mulePrice(gameOf(server, code).state);
+  await pressAct(phone, { via: 'button' });
+  const bought = await playerWhen(phone, server, code, seat, (p) => p.carriedMule === 'empty');
+  check(bought.carriedMule === 'empty' && bought.money === m0 - price, `B-AC-1: BUY MULE leads an empty MULE and costs ${price}, money ${m0} → ${bought.money}, MULE ${bought.carriedMule}`);
+  steps.push(`bought ${m0} → ${bought.money}`);
+
+  // Outfit for Energy.
+  await steerTo(phone, server, code, seat, hallPlace('energy'), stick);
+  await expectButton(phone, server, code, seat, 'OUTFIT · ENERGY', 'B-AC-1');
+  const m1 = money();
+  await pressAct(phone, { via: 'button' });
+  const outfitted = await playerWhen(phone, server, code, seat, (p) => p.carriedMule === 'energy');
+  check(outfitted.carriedMule === 'energy' && outfitted.money < m1, `B-AC-1: OUTFIT · Energy outfits the MULE for money, ${m1} → ${outfitted.money}, MULE ${outfitted.carriedMule}`);
+  steps.push(`outfitted ${m1} → ${outfitted.money}`);
+
+  // Out through the door, the MULE on its lead.
+  const plot = gameOf(server, code).state.tiles.find((k) => k.owner === seat && k.terrain !== 'lake');
+  check(plot, 'B-AC-1: Heiko owns a plot on land to install on');
+  const store = gameOf(server, code).state.tiles.find((k) => k.terrain === 'store')!;
+  await throughDoor(phone, server, code, seat, plot.x < store.x ? 'doorL' : 'doorR', stick);
+  const out = onFloor(server, code, seat) as FloorColonist & { lead?: unknown };
+  const lead = (steeredOf(server, code).steering!.floor.colonists.find((c) => c.id === seat) as unknown as { lead: { good: string | null } | null }).lead;
+  check(out.space === 'map' && lead?.good === 'energy', `B-AC-1: out on the map with the Energy MULE on its lead, got ${where(out)}, lead ${JSON.stringify(lead)}`);
+  steps.push(`out at ${where(out)}`);
+
+  // Install on her own plot.
+  await steerTo(phone, server, code, seat, plotCentre(plot.x, plot.y), stick);
+  await expectButton(phone, server, code, seat, 'INSTALL · ENERGY', 'B-AC-1');
+  await pressAct(phone, { via: 'button' });
+  const installed = await playerWhen(phone, server, code, seat, (p) => p.carriedMule === null);
+  const tile = gameOf(server, code).state.tiles.find((k) => k.x === plot.x && k.y === plot.y)!;
+  check(installed.carriedMule === null && tile.outfit === 'energy', `B-AC-1: INSTALL puts the Energy MULE on ${plot.x},${plot.y}, outfit ${tile.outfit}, MULE ${installed.carriedMule}`);
+  steps.push(`installed on ${plot.x},${plot.y}`);
+
+  // Back in and end at the pub.
+  await throughDoor(phone, server, code, seat, undefined, stick);
+  await steerTo(phone, server, code, seat, hallPlace('pub'), stick);
+  const { detail } = await expectButton(phone, server, code, seat, 'PUB · END TURN', 'B-AC-1');
+  const m2 = money();
+  await pressAct(phone, { via: 'button' });
+  const done = await playerWhen(phone, server, code, seat, (p) => p.doneDeveloping);
+  check(done.doneDeveloping && done.money > m2, `B-AC-1: the pub ends Heiko's turn and pays (${detail}), money ${m2} → ${done.money}`);
+  check(gameOf(server, code).state.phase === 'development', "B-AC-1: Mia's turn goes on: development is not over");
+  steps.push(`pub ${m2} → ${done.money}`);
+  return steps.join('; ');
+}
+
+/** Each seat's colonist on the server's floor, by the ms it was read at. */
+type FloorLog = { at: number; tick: number; colonists: Map<string, FloorColonist> }[];
+
+/** Reads the server's floor every few ms while `during` runs: the floor changes once a tick. */
+async function logFloor<T>(server: MuleServer, code: string, during: () => Promise<T>): Promise<{ log: FloorLog; result: T }> {
+  const log: FloorLog = [];
+  const read = () => {
+    const f = steeredOf(server, code).steering?.floor;
+    if (!f || log.at(-1)?.tick === f.tick) return;
+    log.push({ at: Date.now(), tick: f.tick, colonists: new Map(f.colonists.map((c) => [c.id, { id: c.id, x: c.x, y: c.y, space: c.space }])) });
+  };
+  read();
+  const timer = setInterval(read, 2);
+  try {
+    return { log, result: await during() };
+  } finally {
+    clearInterval(timer);
+  }
+}
+
+/** Where the server had a seat at `at`, between the two ticks either side; null outside the log or across a door. */
+function floorAt(log: FloorLog, seat: string, at: number): { x: number; y: number; space: string } | null {
+  const i = log.findIndex((e) => e.at > at);
+  if (i <= 0) return null;
+  const [a, b] = [log[i - 1]!.colonists.get(seat), log[i]!.colonists.get(seat)];
+  if (!a || !b || a.space !== b.space) return null;
+  const k = (at - log[i - 1]!.at) / (log[i]!.at - log[i - 1]!.at);
+  return { space: a.space, x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
+}
+
+/** The farthest a seat's colonist went in one tick of the log: one frame's travel, on the land it walked. */
+function tickTravel(log: FloorLog, seat: string): number {
+  let most = 0;
+  for (let i = 1; i < log.length; i++) {
+    const [a, b] = [log[i - 1]!.colonists.get(seat), log[i]!.colonists.get(seat)];
+    if (a && b && a.space === b.space) most = Math.max(most, Math.hypot(b.x - a.x, b.y - a.y) / (log[i]!.tick - log[i - 1]!.tick));
+  }
+  return most;
+}
+/** The wire's rounding to 2 decimals, on both axes. */
+const WIRE_ROUNDING = 0.01;
+const B_AC_2_MOVES = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
+
+/**
+ * B-AC-2: four seats and the TV; while all four walk, the TV draws each where the server has it, within one tick's
+ * travel of the server's floor at the moment the TV drew it, RULE-10's interpolateMs behind (C12's own lag, not a
+ * frame's). Negative: a seat that drops stands still on the TV.
+ */
+export async function theTvDrawsEveryoneLive(t: ArcadeTable): Promise<string> {
+  const { tv, server, code, phones } = t;
+  check(tv && phones.length === 4, 'B-AC-2: four phones and a TV');
+  await tv.getByTestId('tv-game').waitFor({ timeout: 5_000 });
+  const seats = phones.map((_, i) => `s${i + 1}`);
+  const samples: { readAt: number; drawn: Record<string, { space: string; x: number; y: number; at: number | null }> }[] = [];
+  const { log } = await logFloor(server, code, async () => {
+    for (const [i, p] of phones.entries()) await p.keyboard.down(B_AC_2_MOVES[i]!);
+    const end = Date.now() + 1_500;
+    while (Date.now() < end) {
+      // Each drawn walker says the instant (the machine's Date.now) the TV worked its position out for.
+      const drawn = (await tv.evaluate(TV_DRAWS)) as Record<string, { space: string; x: number; y: number; at: number | null }>;
+      samples.push({ readAt: Date.now(), drawn });
+      await tv.waitForTimeout(30);
+    }
+    for (const [i, p] of phones.entries()) await p.keyboard.up(B_AC_2_MOVES[i]!);
+  });
+  const moved = seats.filter((s) => {
+    const [a, b] = [log[0]!.colonists.get(s)!, log.at(-1)!.colonists.get(s)!];
+    return Math.hypot(b.x - a.x, b.y - a.y) >= MOVES_AT_LEAST;
+  });
+  check(moved.length >= 3, `B-AC-2: at least three of the four colonists walked on the server, got ${moved.join(', ')}`);
+  let compared = 0;
+  const worst: string[] = [];
+  let worstNow = 0;
+  // Judging each drawing at its own instant must not let a TV that stopped drawing pass: every read finds a fresh one.
+  const ages = samples.flatMap((s) => Object.values(s.drawn).flatMap((d) => (d.at === null ? [] : [s.readAt - d.at])));
+  const oldest = Math.max(...ages);
+  check(ages.length > 0 && oldest <= TV_FRESH_MS, `B-AC-2: every TV read finds a drawing at most ${TV_FRESH_MS} ms old, oldest ${oldest} ms`);
+  const instants = new Set(samples.map((s) => s.drawn[moved[0]!]?.at).filter((a) => a !== null && a !== undefined));
+  check(instants.size >= samples.length * 0.75, `B-AC-2: the TV drew anew between reads, ${instants.size} instants in ${samples.length} reads`);
+  for (const seat of moved) {
+    const allowed = tickTravel(log, seat) + WIRE_ROUNDING;
+    let most = 0;
+    for (const s of samples) {
+      const d = s.drawn[seat];
+      if (!d || d.at === null) continue;
+      const then = floorAt(log, seat, d.at - DEV_STEER.interpolateMs);
+      const now = floorAt(log, seat, d.at);
+      if (!then || !now || then.space !== d.space) continue;
+      compared++;
+      most = Math.max(most, Math.hypot(d.x - then.x, d.y - then.y));
+      worstNow = Math.max(worstNow, Math.hypot(d.x - now.x, d.y - now.y));
+    }
+    check(most <= allowed, `B-AC-2: the TV draws ${seat} within one tick's travel (${allowed.toFixed(3)} tiles) of where the server had it interpolateMs before, worst ${most.toFixed(3)}`);
+    worst.push(`${seat} ${most.toFixed(3)}/${allowed.toFixed(3)}`);
+  }
+  check(compared >= samples.length * moved.length * 0.75, `B-AC-2: compared the TV with the server in most samples, ${compared} of ${samples.length * moved.length}`);
+
+  // Negative: Kai drops; his colonist stands still on the TV.
+  const game = steeredOf(server, code);
+  const kai = phones[2]!;
+  await kai.keyboard.down('ArrowDown');
+  await kai.waitForTimeout(300);
+  await kai.close();
+  const end = Date.now() + 5_000;
+  while (!game.away.has('s3') && Date.now() < end) await tv.waitForTimeout(TICK_MS);
+  check(game.away.has('s3'), 'B-AC-2: the server sees Kai drop');
+  await tv.waitForTimeout(DEV_STEER.interpolateMs + 3 * TICK_MS);
+  const stills = new Set<string>();
+  for (let i = 0; i < 10; i++) {
+    const d = ((await tv.evaluate(TV_DRAWS)) as Record<string, { space: string; x: number; y: number }>)['s3'];
+    check(d, 'B-AC-2: the TV still draws Kai while he is away');
+    stills.add(`${d.space} ${d.x.toFixed(3)},${d.y.toFixed(3)}`);
+    await tv.waitForTimeout(100);
+  }
+  check(stills.size === 1, `B-AC-2 (negative): an away seat's colonist stands still on the TV, got ${[...stills].join(' | ')}`);
+  return `${samples.length} TV reads (drawings at most ${oldest} ms old, ${instants.size} instants), ${compared} compared; worst/allowed in tiles, interpolateMs behind: ${worst.join(', ')} (${worstNow.toFixed(3)} at most from the same moment); Kai away stood at ${[...stills][0]}`;
 }

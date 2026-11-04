@@ -80,6 +80,18 @@ export class Brain {
   }
 
   ask<A>(kind: DecisionKind, list: Shortlist<A>, obs: GameState, waitMs: number, topic: string | null, summary: string): Pending<A> {
+    return this.open(kind, list, obs, waitMs, topic, summary, true);
+  }
+
+  /**
+   * The default pick, settled at once without asking the decider: for a decision made inside a step that must be a
+   * pure function of the game, as the arcade floor's tick is (HC-4). It is logged as any other.
+   */
+  pick<A>(kind: DecisionKind, list: Shortlist<A>, obs: GameState, topic: string | null, summary: string): Pending<A> {
+    return this.open(kind, list, obs, 0, topic, summary, false);
+  }
+
+  private open<A>(kind: DecisionKind, list: Shortlist<A>, obs: GameState, waitMs: number, topic: string | null, summary: string, consult: boolean): Pending<A> {
     const id = this.nextId++;
     const options = toOptions(list);
     const context: DecisionContext = {
@@ -96,7 +108,7 @@ export class Brain {
     };
     const fallback = this.top.decide(options, this.persona, context);
     const pending: Pending<A> = { id, kind, topic, list, options, fallback, answer: null, waitedMs: 0, waitMs, settled: null };
-    if (!this.decider || options.length <= 1) {
+    if (!consult || !this.decider || options.length <= 1) {
       pending.answer = fallback;
       return pending;
     }

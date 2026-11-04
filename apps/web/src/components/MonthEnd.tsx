@@ -121,7 +121,7 @@ export function LeagueTable({ view, density, selfId, final = false }: { view: Mu
             const mine = r.player.id === selfId;
             const lit = tv ? r.rank === 1 : mine;
             return (
-              <tr key={r.player.id} className={cx('border-t border-holo-faint', lit && 'bg-holo-soft')} data-testid={`league-row-${r.player.id}`}>
+              <tr key={r.player.id} className={cx('border-t border-holo-faint', lit && 'bg-holo-soft')} data-testid={`league-row-${r.player.id}`} data-mine={mine || undefined}>
                 <td data-num className={cx('font-mono text-ink-3', s.rank, s.cell)} data-testid={`rank-${r.player.id}`}>
                   {r.rank}
                 </td>
