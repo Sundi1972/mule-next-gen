@@ -25,7 +25,7 @@ export function EventPhoneCard({ seg, me, at, buzz = false }: { seg: EventSegmen
   const tone = mixed ? 'border-holo bg-holo-soft' : sign === 'good' ? 'border-ok bg-holo-soft' : 'border-alert bg-alert-bg';
   // The segment's changes off the map: yours as chips under what it did to you; the colony's and the store's when it missed you.
   const mine = seg.events.flatMap((e) => e.effects ?? []);
-  const colony = (ev.effects ?? []).filter((f) => f.on === 'colony' || f.on === 'store');
+  const colony = seg.events.flatMap((e) => e.effects ?? []).filter((f) => f.on === 'colony' || f.on === 'store');
   const ink = mixed ? 'text-holo!' : sign === 'good' ? 'text-ok!' : 'text-alert-ink!';
   return (
     <div key={`${seg.n}-${at}`} className={cx('flex flex-col gap-1.5 rounded-panel border-2 p-2.5 animate-[ev-drop_0.3s_ease-out]', tone)} data-testid="phone-card" data-at={at} data-event={ev.key}>
