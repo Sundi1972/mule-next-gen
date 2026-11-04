@@ -1,6 +1,6 @@
 import { HALL } from '@mule/engine';
 import type { ChatMessage, MuleView, MyView, TileView } from '@mule/protocol';
-import { LiveWalkers, SeatSpeciesProvider, type Slot } from '@mule/ui';
+import { ActionButton, Joystick, LiveWalkers, SeatSpeciesProvider, type Slot } from '@mule/ui';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -53,12 +53,17 @@ const phone = (view: MuleView, now: Live, size: 844 | 667 = 844) => onPhone(view
 
 /** The opening tag of the element with this testid, or null. */
 const tag = (html: string, testid: string) => new RegExp(`<[^>]*data-testid="${testid}"[^>]*>`).exec(html)?.[0] ?? null;
-/** A percentage from an element's inline style, such as its left. */
+/**
+ * A percentage from an element's inline style: its left or top, or for a live walker (C13, moved by transform alone)
+ * the share of its layer its translate moves it by.
+ */
 function pct(html: string, testid: string, prop: 'left' | 'top'): number {
   const t = tag(html, testid);
   const m = t && new RegExp(`${prop}:(-?[\\d.]+)%`).exec(t);
-  if (!m) throw new Error(`no ${prop} on ${testid}`);
-  return Number(m[1]);
+  if (m) return Number(m[1]);
+  const moved = t && /transform:translate\((-?[\d.]+)%, ?(-?[\d.]+)%\)/.exec(t);
+  if (!moved) throw new Error(`no ${prop} on ${testid}`);
+  return Number(prop === 'left' ? moved[1] : moved[2]);
 }
 /** The markup inside the first element with this testid, as far as its closing at the same depth. */
 function inside(html: string, testid: string): string {
@@ -116,6 +121,12 @@ describe('C11: the phone, held sideways', () => {
     expect(pct(inside(hall, 'walkers-hall'), 'colonist-s3', 'left')).toBeCloseTo((8 / HALL.w) * 100, 6);
     // Your own colonist is the store's own visitor, once: not also a walker.
     expect(tag(inside(hall, 'walkers-hall'), 'colonist-s1')).toBeNull();
+    // It faces the way the frame says it heads, as on the map, not the way its half of the hall would have it.
+    expect(inside(hall, 'visitor-s1')).toContain('data-facing="right"');
+    const back = phone(devView(lenasMe({ reach: reach('LEAVE', 'to the colony') })), live(mine(4, 6, { space: 'hall', facing: 'left' })));
+    expect(inside(back, 'visitor-s1')).toContain('data-facing="left"');
+    const kai = phone(devView(), live(mine(4, 6, { space: 'hall' }), FRAMED.filter((c) => c.id !== 's1').map((c) => (c.id === 's3' ? { ...c, facing: 'left' as const } : c))));
+    expect(inside(inside(kai, 'walkers-hall'), 'colonist-s3')).toContain('data-facing="left"');
   });
 
   /** The guide's ring and label: on the map the first ring, in the hall each room's ring. */
@@ -396,6 +407,8 @@ describe('C13: live positions on the map', () => {
     expect(pct(html, 'colonist-s1', 'top')).toBeCloseTo(50, 6);
     expect(pct(html, 'mule-s1', 'left')).toBeCloseTo((5.8 / 15) * 100, 6);
     expect(html).not.toMatch(/transition|duration-/);
+    // Moved by transform alone, from one fixed origin: no left or top to lay out on each frame (#195's lesson).
+    for (const id of ['colonist-s1', 'colonist-s2', 'mule-s1']) expect(tag(html, id)).not.toMatch(/left:|top:/);
     // The walkers move by #195's gait: the creature walks, its MULE in step; the standing one breathes.
     expect(inside(html, 'colonist-s1')).toMatch(/data-motion="walk"/);
     expect(inside(html, 'colonist-s2')).toMatch(/data-motion="idle"/);
@@ -406,5 +419,31 @@ describe('C13: live positions on the map', () => {
     const html = phone(devView(), live(mine(5.5, 4.5, { moving: true })));
     expect(html).not.toContain('duration-700');
     expect(html).not.toContain('store-waddle');
+  });
+});
+
+describe('C11: the controls, as WS4 reviewed them', () => {
+  it('C11: a dim button sends nothing, though Chrome hands a disabled button its pointer events; a lit one presses once', () => {
+    let presses = 0;
+    const press = () => presses++;
+    const fire = (enabled: boolean, altKey = false) => {
+      const button = ActionButton({ verb: 'BUY MULE', detail: '148 cr', enabled, onPress: press });
+      const props = button.props as { onPointerDown(e: object): void; onClick(e: object): void };
+      props.onPointerDown({ altKey, preventDefault: () => {} });
+      props.onClick({ detail: 0 });
+    };
+    fire(false);
+    expect(presses).toBe(0);
+    fire(true, true);
+    expect(presses).toBe(1);
+    fire(true);
+    expect(presses).toBe(3);
+  });
+
+  it('C11: the stick is an application with its label, not a slider with a value that never moves', () => {
+    const html = renderToStaticMarkup(createElement(Joystick, { onStick: () => {} }));
+    expect(tag(html, 'joystick')).toMatch(/role="application"/);
+    expect(tag(html, 'joystick')).toMatch(/aria-label="Joystick: drag to walk"/);
+    expect(html).not.toMatch(/aria-valuenow|role="slider"/);
   });
 });
