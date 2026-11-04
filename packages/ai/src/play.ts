@@ -294,7 +294,7 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
           stepElection(state, WALK.tickMs);
         }
         seats.forEach((_, i) => vote(i));
-        for (const s of seats) s.planMonth(state);
+        for (const s of seats) s.planMonth(state, (a) => applyAction(state, s.id, a));
         break;
       }
       case 'landGrant': {

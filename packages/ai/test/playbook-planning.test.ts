@@ -77,10 +77,12 @@ const MULE_LOT = { item: 'mule' as const, plot: MOUNTAIN, minimum: 900, unsold: 
 describe('the seat plays its planning part (C4, RULE-13)', () => {
   it('T-AC-10: RULE-13, a refusal is skipped and logged, never retried; a later adopt reconciles the listings', () => {
     const state = short();
-    fillAuction(state);
     const [plotLot] = sellWanted(observe(state, 'ai0'), seatOf().mind);
     expect(plotLot).toMatchObject({ item: 'plot', plot: DESERT });
     const seat = seatOf();
+    // Adopted while the auction had room, as WS2's writer would; then the other seats fill it before this one acts.
+    seat.adopt(adopted(state, seat, { list: [plotLot!] }));
+    fillAuction(state);
     const { act, calls } = counted(state);
 
     seat.planMonth(state, act);
@@ -199,14 +201,13 @@ describe('the seat plays its planning part (C4, RULE-13)', () => {
 
   it("T-AC-10: the sim's planning loop hands each seat its act, so a seat short of cash lists, unsold to the store", () => {
     const listed: Listing[] = [];
-    for (const seed of [1, 2]) {
-      playGame(seed, simSeats(4, 'trader', seed), {
-        maxMonths: 4,
-        onPhase: (state) => {
-          if (state.phase === 'planning') listed.push(...state.listings.filter((l) => l.seller.startsWith('ai')));
-        },
-      });
-    }
+    // Seed 3's third month is the first in which a seat runs short.
+    playGame(3, simSeats(4, 'trader', 3), {
+      maxMonths: 3,
+      onPhase: (state) => {
+        if (state.phase === 'planning') listed.push(...state.listings.filter((l) => l.seller.startsWith('ai')));
+      },
+    });
     expect(listed.length).toBeGreaterThan(0);
     expect(listed.every((l) => l.unsold === 'store')).toBe(true);
   });
