@@ -735,10 +735,12 @@ promise. WS4's part first (harness.ts is shared), then the others at once.
   ae5365b1, every flag-on step green (step 1, B-AC-1, B-AC-2, B-AC-3, B-AC-4, B-AC-8); Tasks 6.6 and 6.7 at d2b2facd,
   6b841bd6; round fixes 0b346f27, 0d65ed5a. WS4 OK on its named edits 1f380e76, b3c9b275→00ebfa50, 8018be5c→3ce5cdbe,
   f894c632. Open: shell.ts step 1's steer-rate flake (fix round running); WS7's #263 (UBER-AC-1 naming, 19ad60a8) to
-  merge in after it; CI on the final head; **G-1's goal check (Task 6.8) pending** (the PM or Heiko steers a turn on a
-  server the PR starts, never the rig); one review; retarget to feat/strategist after #224.
+  merge in after it — **both done:** 4dc7f298 (page-clock spacing), #263 merged, head 8ea9cc24, CI green.
+  **G-1 passed (Task 6.8):** Heiko steered a turn on a one-off server on the PR's build (:5341, stopped by PID and cwd):
+  "Feels right". The one review at 8ea9cc24 is running; #224 is still open, so #240's diff carries it until it merges.
 - **PR-8 · #248 (WS1):** AM-22, AM-23 and AM-26 applied (AM-26 supersedes AM-23's excuse).
-- Spec current at 0bf72fd8 (AM-18..26; T-AC-5 reads `DEVELOPMENT.fullSeconds`).
+- **AM-27 (9c4daab3):** PR-8's AI wolf months bar is at least 50% on each of seeds 1, 101, 201 (was 60%).
+- Spec current at 9c4daab3 (AM-18..27; T-AC-5 reads `DEVELOPMENT.fullSeconds`).
 
 ## Risk-mitigation milestones (spec §7)
 
