@@ -1,4 +1,4 @@
-import type { Outfit, EventKey, GrownGood, Good, MinedGood, Office, PrestigeId, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
+import type { Outfit, EventKey, GrownGood, Good, LawId, MinedGood, Office, PrestigeId, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
 
 /**
  * Every balancing number lives here, so playtests and the simulator can tune
@@ -861,6 +861,26 @@ export const POLITICS = {
    */
   termScore: 1200,
   /** How Classic AI seats run, vote and set the tax (VoteHand). Placeholders until the sim balances them. */
+  /** The law ballot. Its only clock is the reveal's, a presentation; the ballot itself waits for every player. */
+  council: {
+    /** Ms the result is shown before a passed law takes effect. */
+    revealMs: 4_000,
+    /** Laws in force at once; a fourth must name the one it replaces. */
+    maxInForce: 3,
+    /** Months a failed proposal waits before it may be put again. */
+    retryMonths: 2,
+  },
+  /** The colony's book of laws, each with its settings. */
+  laws: {
+    /** Per cent of each unit a player sells to the export ship. */
+    exportTax: { settings: [10, 20, 30] },
+    /** Credits a plot owned, at each month end. */
+    landTax: { settings: [5, 10, 20] },
+    /** Credits per point of colony pollution a player caused that month, at its end. */
+    pollutionTax: { settings: [10, 20, 40] },
+    /** The air level above which no new mine or smelter of the listed outfits may be outfitted. */
+    emissionCap: { settings: [40, 50, 60], blocks: ['rareEarth', 'alloy'] as Outfit[] },
+  } satisfies Record<LawId, { settings: number[]; blocks?: Outfit[] }>,
   ai: {
     /** Ms a seat waits before acting in announce or the ballot, drawn per stage: a human's pause. */
     actMs: [800, 2_500] as [number, number],
@@ -876,6 +896,15 @@ export const POLITICS = {
     taxFundBump: 2,
     /** The fund is low under this many months of the elected offices' pay. */
     fundMonths: 3,
+    /** The AI in the council. Placeholders until the sim tunes them. */
+    council: {
+      /** Credits a month a law must cost the leader more than the AI Governor before it proposes it. */
+      minGap: 20,
+      /** Chance an AI Governor proposes its best law in a month it has one, per persona. */
+      proposeChance: { trader: 0.5, cautious: 0.3, aggressive: 0.7, saboteur: 0.6 } satisfies Record<AiPersonaId, number>,
+      /** Credits a month an AI counts for each of its plots an emission cap would stop it re-outfitting. */
+      capPlotCost: 40,
+    },
   },
 };
 

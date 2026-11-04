@@ -24,7 +24,7 @@ function noCandidates(): Record<Office, string[]> {
 
 /** Politics as it stands before the first planning phase: no offices, no Baron, nobody running. */
 export function newPolitics(): Politics {
-  return { governor: null, sheriff: null, termStart: 1, terms: {}, governorRun: null, baron: null, taxAtStart: 0, candidates: noCandidates(), promises: {}, promise: null, promiseFrom: null, election: null };
+  return { governor: null, sheriff: null, termStart: 1, terms: {}, governorRun: null, baron: null, taxAtStart: 0, candidates: noCandidates(), promises: {}, promise: null, promiseFrom: null, election: null, proposal: null, council: null, laws: {}, failed: {} };
 }
 
 /** A what-if copy may share politics, so every write copies it first. */
