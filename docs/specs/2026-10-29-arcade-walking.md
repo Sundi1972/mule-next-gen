@@ -696,7 +696,7 @@ C14.
 | T-AC-2 (serves G-2) | speeds per RULE-2's examples (plains 1.5625, mountains 0.625, swamp 0.78, leading 1.41, bitten 0.78 tiles/s) | engine unit | lake 0 blocks | C1, C5 |
 | T-AC-3 (serves B-AC-1) | Reach per RULE-3's table, one row each | engine unit | money short → disabled, not hidden | C3 |
 | T-AC-4 (serves B-AC-2) | Given the tick · Then one frame per tick reaches every connection, frames are dropped not queued for a slow one, full views go only on change, or to one seat when its reach's words change (AM-11) | server + tabletop test | no full view on a tick where nothing changed and no seat's reach words changed; a steer sends no full view (AM-13) | C6, C8 |
-| T-AC-5 (serves G-2, RULE-8) | In 20 seeded AI-only turns at the defaults every AI colonist reaches the pub within 50 s, except one a wolf encounter holds when the bell rings (RULE-4's `unknown`; AM-23), a bot races in at least 40% of glints, never one whose detour breaks its errand (RULE-8; AM-22), and at least 60% of months see an AI wolf encounter (AM-22) | sim (`pnpm sim` report) | with botsSpareTime off, Kai misses turns | C9, C10 |
+| T-AC-5 (serves G-2, RULE-8) | In 20 seeded AI-only turns at the defaults every AI colonist reaches the pub within 50 s, except one a wolf's bite cost the pub: when the bite landed, its bitten walk to the pub was longer than the time left (AM-26), a bot races in at least 40% of glints, never one whose detour breaks its errand (RULE-8; AM-22), and at least 60% of months see an AI wolf encounter (AM-22) | sim (`pnpm sim` report) | with botsSpareTime off, Kai misses turns | C9, C10 |
 | T-AC-6 (serves B-AC-5) | Wolves: the rookie wins ≈ 1 in 4 over 60 seeded fights; a forest run escapes ≈ 13 of 20 | engine headless | — | C4, C9 |
 | T-AC-7 (serves B-AC-6) | Glint timing per RULE-5 (none in the first 6 s, 8 s shown, the first onto it wins) | engine unit | a non-racing colonist on the tile wins too | C4 |
 | T-AC-8 (serves B-AC-7) | Scramble per RULE-6, the beats in order, the last sale's single line | engine unit | — | C4 |
@@ -740,6 +740,15 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-26 (2026-11-04, WS1's PR-8 #248, ruled by WS6; replaces AM-23's excuse).** AM-23 excused only a colonist an
+  encounter still held at the bell, but none of the 7 late-pack turns was: every encounter had ended before it. One
+  was an AI choice (running through the pack, fixed). The other six are dead ends: the colonist is slower than the
+  pack (0.37–0.96 tiles/s against `chaseSpeed` 1.1), the bite lands mid-chase, and the bitten walk to the pub is then
+  longer than the time left (6.1 s left against 6.2 s, up to 20.9 s against 30.3 s). T-AC-5's excuse is now exactly
+  that, checked at the bite's tick: **when the bite landed, the bitten walk to the pub exceeded the time left.** It is
+  objective and covers 6 of 960 turns (0.6%); any AI choice that misses the pub stays a miss. Keeping the AI off wolf
+  land when a bite would cost the pub was tried and reverted: 7 misses, and wolf months fell under AM-22's 60%.
+  Changing `chaseSpeed` or `bittenPace` instead is a balance call, Heiko's, with tuning parked.
 - **AM-25 (2026-11-04, PR-6's render gate and screenshots, ruled by WS6).** (1) **The TV's hall names its rooms
   only:** outfit prices and the pub's payout are each seat's own (`me.outfitCosts`, the pub's sum from your time
   left), and the TV has no seat, so it draws no prices where the mock's TV did. (2) **A plot's label stays inside the
