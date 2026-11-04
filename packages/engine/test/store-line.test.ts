@@ -388,4 +388,25 @@ describe('A-6 property: at a house line exactly min(chosen, affordable) units tr
       expect(trades.length, `case ${c}: chose ${chosen} with ${money} cr`).toBe(Math.min(chosen, Math.floor(money / price)));
     }
   });
+
+  it('and a seller at the store line sells exactly min(chosen, held), whatever the tick sizes', () => {
+    let s = 11;
+    const next = (n: number) => {
+      s = (s * 1_103_515_245 + 12_345) % 2_147_483_648;
+      return s % n;
+    };
+    for (let c = 0; c < 60; c++) {
+      const held = 1 + next(15);
+      const state = sellerAtStore(held);
+      const chosen = 1 + next(15);
+      lineTrade(state, 'p0', chosen);
+      const trades: Trade[] = [];
+      for (let t = 0; t < 30_000 && a(state).stage === 'walk'; ) {
+        const dt = 10 + next(400);
+        trades.push(...stepAuction(state, dt));
+        t += dt;
+      }
+      expect(trades.filter((x) => x.seller === 'p0' && x.buyer === 'store').length, `case ${c}: chose ${chosen} holding ${held}`).toBe(Math.min(chosen, held));
+    }
+  });
 });
