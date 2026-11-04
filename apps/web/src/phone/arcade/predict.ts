@@ -103,8 +103,8 @@ export function markStale(p: Prediction, nowMs: number, cfg: FloorConfig): Predi
 const stickAt = (inputs: readonly Input[], tick: number): Stick => inputs.filter((i) => i.tick <= tick).at(-1) ?? { x: 0, y: 0 };
 
 function stepMe(me: FloorColonist, tick: number, stick: Stick, world: PredictWorld, hold: number | null): FloorColonist {
-  // stepFloor holds an assaying colonist still itself, as on the server.
-  const held = hold !== null && tick < hold ? { ...me, assayUntilTick: hold } : me;
+  // stepFloor holds an assaying colonist still itself, as on the server, and only on steps that start before the hold.
+  const held = hold !== null ? { ...me, assayUntilTick: hold } : me;
   const next = stepFloor({ tick, colonists: [held] }, world.state, { [world.id]: { x: stick.x, y: stick.y, act: false } }, world.cfg.steer.tickMs, world.cfg);
   return next.colonists[0]!;
 }
