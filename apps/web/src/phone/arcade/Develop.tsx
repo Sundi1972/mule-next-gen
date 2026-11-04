@@ -35,7 +35,8 @@ function useFrameSize(box: RefObject<HTMLDivElement | null>): { w: number; h: nu
   useBeforePaint(() => {
     const el = box.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
-    const measure = () => setSize((s) => (s.w === el.clientWidth && s.h === el.clientHeight ? s : { w: el.clientWidth, h: el.clientHeight }));
+    // A screen not laid out yet (hidden, or 0 wide) keeps the size it had.
+    const measure = () => el.clientWidth > 0 && setSize((s) => (s.w === el.clientWidth && s.h === el.clientHeight ? s : { w: el.clientWidth, h: el.clientHeight }));
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);

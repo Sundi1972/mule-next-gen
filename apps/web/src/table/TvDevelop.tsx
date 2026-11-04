@@ -52,7 +52,8 @@ export function TvArcade({ game }: { game: MuleView }) {
   useBeforePaint(() => {
     const el = box.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
-    const measure = () => setRoom((r) => (r.w === el.clientWidth && r.h === el.clientHeight ? r : { w: el.clientWidth, h: el.clientHeight }));
+    // A box not laid out yet keeps the mock's four-seat size.
+    const measure = () => el.clientWidth > 0 && setRoom((r) => (r.w === el.clientWidth && r.h === el.clientHeight ? r : { w: el.clientWidth, h: el.clientHeight }));
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
