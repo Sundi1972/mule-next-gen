@@ -3,8 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { advancePhase, BRAIN, createGame, observe, type GameState, type Playbook } from '@mule/engine';
-import { AiSeat, candidate, consider, shortlist, type ValidatePlan } from '@mule/ai';
+import { advancePhase, AI_LEVELS, BRAIN, createGame, observe, type GameState, type Playbook } from '@mule/engine';
+import { AiSeat, candidate, consider, defaultManual, seatBounds, shortlist, WRITER_SYSTEM, type ValidatePlan } from '@mule/ai';
 import { createBrain, type BrainService, type MeteredBrain } from '../src/brain/index.js';
 import { MuleGame } from '../src/mule-game.js';
 import { Playbooks, type PlaybookSource } from '../src/brain/playbooks.js';
@@ -356,5 +356,34 @@ describe('HC-1: no phase waits for a model', { timeout: 30_000 }, () => {
     // seat's next decision opened the call that then stayed open all game, so month 2's write found the seat busy.
     expect(silent.requests.map((r) => isWrite(r.params))).toEqual([true, false]);
     expect(silent.requests[0]!.options.signal?.aborted).toBe(true);
+  });
+});
+
+describe("C8: the writer's system block is the manual", () => {
+  it('T-AC-A7: every write sends the manual as its system text, the same bytes for a Trader and a Rookie in every month', async () => {
+    const sdk = answersAt(1_000, EDITS);
+    const state: GameState = createGame({ seed: SEED, players: [...PLAYERS, { id: 'p2', name: 'Bo', isAi: true }] });
+    const seats = [
+      new AiSeat({ id: 'p0', name: 'Ada', persona: 'trader', level: 'trader', seed: 1 }),
+      new AiSeat({ id: 'p2', name: 'Bo', persona: 'trader', level: 'rookie', seed: 2 }),
+    ];
+    const playbooks = new Playbooks({ brain: smartOn(sdk), source: stubSource(), seats });
+    playbooks.ask(state, 1);
+    await vi.advanceTimersByTimeAsync(2_000);
+    advanceTo(state, 'landGrant');
+    playbooks.takeEffect(state);
+    advanceTo(state, 'upkeep');
+    playbooks.ask(state, 2);
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    const systems = sdk.requests.filter((r) => isWrite(r.params)).map((r) => promptOf(r.params).system);
+    expect(systems).toHaveLength(4);
+    expect(new Set(systems).size, 'one byte-stable system block, so it is cached').toBe(1);
+    expect(systems[0]).toBe(WRITER_SYSTEM);
+    expect(systems[0]).toContain(defaultManual());
+    // The Rookie's bound is its own, in its brief, never in the shared block.
+    expect(systems[0]).not.toContain('never aims for a monopoly');
+    const rookieBrief = sdk.requests.map((r) => promptOf(r.params).user).find((u) => u.startsWith('You are Bo.'));
+    expect(rookieBrief).toContain(seatBounds(AI_LEVELS.rookie));
   });
 });
