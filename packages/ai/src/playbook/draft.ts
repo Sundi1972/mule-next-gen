@@ -72,15 +72,15 @@ const REASONS: Record<Kind, string> = {
   spoiler: 'Whoever leads will find every road blocked. I play to bring them down.',
 };
 
-/** A pick's seed: the seat's seed, the month, the phase and the pick's place, hashed (FNV-1a). */
-function seedOf(input: DraftInput, month: number, place: string): number {
+/** A pick's seed: the seat's seed, the month and the pick's key, hashed (FNV-1a). */
+function seedOf(input: DraftInput, month: number, key: string): number {
   let h = 0x811c9dc5; // literal-ok: FNV-1a's offset basis, a hash constant
-  for (const ch of `${input.seed}|${month}|${input.phase}|${place}`) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193); // literal-ok: FNV-1a's prime
+  for (const ch of `${input.seed}|${month}|${key}`) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193); // literal-ok: FNV-1a's prime
   return h >>> 0;
 }
 
-/** One pick among options, as the Classic decider makes it, with a seed of its own. */
-function pick(input: DraftInput, obs: GameState, kind: DecisionKind, place: string, options: ShortOption[]): string {
+/** One pick among options, as the Classic decider makes it, seeded by its key. */
+function pick(input: DraftInput, obs: GameState, kind: DecisionKind, key: string, options: ShortOption[]): string {
   const { mind } = input;
   const context: DecisionContext = {
     kind,
@@ -89,7 +89,7 @@ function pick(input: DraftInput, obs: GameState, kind: DecisionKind, place: stri
     month: obs.month,
     maxMonths: obs.maxMonths,
     summary: '',
-    seed: seedOf(input, obs.month, place),
+    seed: seedOf(input, obs.month, key),
     pickTolerance: mind.level.pickTolerance,
     tableTalk: [],
   };
@@ -99,7 +99,7 @@ function pick(input: DraftInput, obs: GameState, kind: DecisionKind, place: stri
 /** TopPick of a strategist shortlist: the action of the option it draws. */
 function topPick<A>(input: DraftInput, obs: GameState, kind: DecisionKind, place: string, list: Shortlist<A>): A {
   const options = toOptions(list);
-  const id = pick(input, obs, kind, place, options);
+  const id = pick(input, obs, kind, `${input.phase}|${place}`, options);
   return list.options[Math.max(0, options.findIndex((o) => o.id === id))]!.action;
 }
 
@@ -170,6 +170,7 @@ function pickKind(input: DraftInput, obs: GameState, eligible: Record<Kind, bool
   const tied = open.filter((k) => leaning[k] === top).slice(0, OPTION_IDS.length);
   if (tied.length === 1) return tied[0]!;
   const options = tied.map((k, i): ShortOption => ({ id: OPTION_IDS[i]!, key: k, label: k, utility: top, value: 0, rationale: '' }));
+  // No phase in its key: a month's drafts share one kind.
   const id = pick(input, obs, 'land', 'kind', options);
   return tied[options.findIndex((o) => o.id === id)]!;
 }
