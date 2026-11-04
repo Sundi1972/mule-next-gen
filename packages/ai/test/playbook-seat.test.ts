@@ -215,7 +215,7 @@ describe('the seat drafts, validates and writes its planning playbook (C4, RULE-
     }
   });
 
-  // trace-allow: HC-9, the spec's own failure-mode id (spec §4, "Retry, poison, page?"); trace-check reads no HC- ids
+  // trace-allow: HC-9, the spec's own failure-mode id for a draft or validator error (spec §4, "Retry, poison, page?"); trace-check reads no HC- ids
   it('HC-9: a draft or a validator that throws is logged, writes nothing, and the seat plays today’s path', () => {
     const base = playTable(2);
     for (const broke of ['draft', 'validator'] as const) {
