@@ -42,15 +42,22 @@ export interface MuleServer {
  * The game server: an HTTP server for the web client and `POST /rooms`, and a
  * WebSocket endpoint at `/ws` where phones and boards talk to their room.
  * Games play politics unless `politics` is false. With a `recordDir`, each game's record is written there at game over.
+ * With `devSteer`, every game it hosts steers its development (arcade C6), whatever DEV_STEER.on says.
  */
 export function createMuleServer(
-  options: { staticDir?: string; seed?: () => number; maxMonths?: number; phaseScale?: number; politics?: boolean; recordDir?: string | null } = {},
+  options: { staticDir?: string; seed?: () => number; maxMonths?: number; phaseScale?: number; politics?: boolean; recordDir?: string | null; devSteer?: boolean } = {},
 ): MuleServer {
   const seed = options.seed ?? (() => Math.floor(Math.random() * 2 ** 31));
   const recordDir = options.recordDir ?? null;
   const createGame = (ctx: GameContext) => {
     const gameSeed = seed();
-    const gameOptions = { maxMonths: options.maxMonths, phaseScale: options.phaseScale, politics: options.politics ?? true };
+    const gameOptions = {
+      maxMonths: options.maxMonths,
+      phaseScale: options.phaseScale,
+      politics: options.politics ?? true,
+      // Steered development for this server's games only; trunk's DEV_STEER.on stays off (PM ruling).
+      ...(options.devSteer ? { devSteer: true } : {}),
+    };
     if (recordDir === null) return new MuleGame(ctx, gameSeed, gameOptions);
     return createRecordedGame({ ctx, seed: gameSeed, options: gameOptions, dir: recordDir }).game;
   };

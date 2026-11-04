@@ -33,6 +33,8 @@ type NewStep = StepEvent extends infer E ? (E extends StepEvent ? Omit<E, 'at' |
 export interface RecordOptions {
   maxMonths?: number;
   phaseScale?: number;
+  /** The game steered its development; the replay steers it too. */
+  devSteer?: boolean;
   politics: boolean;
 }
 

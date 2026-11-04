@@ -310,6 +310,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   /** Real time per unit of game time: 1 is real time, 0.1 ten times faster. Test-only. */
   private readonly phaseScale: number;
+  /** This game's development is steered (arcade C6): its own option, else DEV_STEER.on, read once when it is built. */
+  private readonly steered: boolean;
   /** Deciders and table chat for the AI seats; Classic when the server has no key. */
   private readonly brain: BrainService;
   /** The open phase's notices; derived facts that rules code never reads. */
@@ -324,6 +326,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     private readonly options: {
       maxMonths?: number;
       phaseScale?: number;
+      /** Steered development for this game only (PM ruling); absent, DEV_STEER.on decides. */
+      devSteer?: boolean;
       politics?: boolean;
       brain?: BrainService;
       /** Called once, as the game ends, with its final state. */
@@ -336,6 +340,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     } = {},
   ) {
     this.phaseScale = options.phaseScale ?? 1;
+    this.steered = options.devSteer ?? DEV_STEER.on;
     if (!(this.phaseScale > 0 && this.phaseScale <= 1)) throw new RangeError(`phaseScale must be in (0, 1], got ${this.phaseScale}`);
     this.brain = options.brain ?? createBrain({ gameId: ledgerGameId(seed, ctx.now()) });
     this.recordPlaybook = options.recordPlaybook ?? (() => {});
@@ -381,10 +386,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const state = this.requireState();
     switch (intent.type) {
       case 'steer':
+        if (!this.steered) throw new RuleError('This game does not steer: tap where to go');
         // Outside a steered development a stick changes nothing: a phone's last steer may land after the phase.
         this.steering?.inputs.steer(seatId, intent.x, intent.y, intent.tick, this.steering.floor.tick, this.steering.cfg);
         return;
       case 'act':
+        if (!this.steered) throw new RuleError('This game does not steer: tap where to go');
         // A press with nothing to do is ignored, as a dim button's is (RULE-1).
         this.steering?.inputs.press(seatId);
         return;
@@ -1045,13 +1052,13 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.devEndsAt = null;
     this.phaseEndsAt = null;
     this.endWhenSettled = false;
-    if (DEV_STEER.on) this.startSteering(state.month);
+    if (this.steered) this.startSteering(state.month);
     else for (const s of this.seats) this.colonists.set(s.id, { at: 'store', walk: null, assayUntil: null });
     this.clockWaits = state.month === 1 && DEV_STEER.month1WaitsForFirstMule;
     if (this.clockWaits) this.startClockOnceAllIn();
     else this.startClock();
     // With the flag on the AI seats stand until they steer (C9, the AI's own PR); today's taps would not walk the floor.
-    if (this.ai.size > 0 && !DEV_STEER.on) this.scheduleAiDevelop(state.month, now);
+    if (this.ai.size > 0 && !this.steered) this.scheduleAiDevelop(state.month, now);
   }
 
   /** Real ms one development tick lasts at this table's phaseScale. */

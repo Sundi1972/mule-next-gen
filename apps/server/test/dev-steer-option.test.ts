@@ -13,7 +13,7 @@ afterEach(async () => {
 });
 
 /** Fast enough that development comes round in a few seconds, slow enough that a tick is still a timer of its own. */
-const PHASE_SCALE = 0.05;
+const PHASE_SCALE = 0.1;
 
 /**
  * A server on seed 42, with or without `devSteer`, and one phone that hosts a game with one AI seat: it presses Ready whenever it
@@ -37,7 +37,8 @@ async function phoneInDevelopment(devSteer: boolean | undefined) {
   send({ t: 'start' });
   const phase = () => inbox.filter((m) => m.t === 'view').at(-1)?.view.game?.phase;
   for (let i = 0; i < 2_000 && phase() !== 'development'; i++) {
-    if (phase() === 'planning' || phase() === 'landGrant') send({ t: 'intent', intent: { type: 'ready' } });
+    // Ten a second at most, under the server's RATE_LIMIT, so the steer that follows is not dropped.
+    if (i % 10 === 0 && (phase() === 'planning' || phase() === 'landGrant')) send({ t: 'intent', intent: { type: 'ready' } });
     await new Promise((r) => setTimeout(r, 10));
   }
   expect(phase(), 'the game reached development').toBe('development');
@@ -64,6 +65,7 @@ describe('createMuleServer({ devSteer }): steering for one game, with DEV_STEER.
     expect(me?.reach, 'its phone has the button').toBeDefined();
 
     expect(plain.inbox.filter((m) => m.t === 'frame'), 'the default game sends no frames').toEqual([]);
+    for (let i = 0; i < 200 && !plain.inbox.some((m) => m.t === 'error'); i++) await plain.settle(10);
     const refused = plain.inbox.filter((m) => m.t === 'error');
     expect(refused.map((m) => (m as { message: string }).message)).toEqual([expect.stringMatching(/steer/i)]);
     expect(plain.phase()).toBe('development');
