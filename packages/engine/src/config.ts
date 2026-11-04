@@ -975,6 +975,20 @@ export const EVENT_SHOW = {
     wildfire: 'spotlight',
     bumperHarvest: 'spotlight',
     cavernCollapse: 'spotlight',
+    // Wave 2, as the approved gallery sizes them (design/mocks/ws8-events, catalogue.ts `tier`).
+    federationTax: 'headline',
+    federationGrant: 'headline',
+    immigrationWave: 'headline',
+    inheritance: 'bulletin',
+    muleTheft: 'spotlight',
+    epidemic: 'headline',
+    coldSnap: 'headline',
+    meteorStrike: 'headline',
+    pirateRaid: 'headline',
+    storeFire: 'headline',
+    ratsInSilo: 'bulletin',
+    crookedAccountant: 'bulletin',
+    packageFromHome: 'bulletin',
   } as Partial<Record<EventKey, EventWeight>>,
   /** How long one headline or spotlight plays, in ms. */
   playMs: { headline: 7_000, spotlight: 5_200 },
@@ -1133,7 +1147,24 @@ export const EVENTS = {
      * the phase start; a collapse leaves a plain plot.
      */
     cavernCollapse: { phases: { production: 0.06 }, perPlot: true, cap: 0.9 },
-  } satisfies Record<string, import('./events.js').EventRow>,
+    // Wave 2 (the catalogue's chances; the two production rows x1.6 as every production base, wave-2 spec AM-1).
+    /** Share of each player's cash the Federation takes into the colony fund (floored). */
+    federationTax: { phases: { planning: 0.02 }, share: 0.1, cap: 0.9 },
+    /** Credits the Federation pays each of the `count` poorest players, new money. */
+    federationGrant: { phases: { planning: 0.02 }, amount: 150, count: 2, cap: 0.9 },
+    /** The colonists grow by this share, for good (rounded). */
+    immigrationWave: { phases: { planning: 0.02 }, growth: 0.1, cap: 0.9 },
+    /** Every player without a Medicine is sick this development and the next; one with a Medicine uses it. */
+    epidemic: { phases: { development: 0.005 }, cap: 0.9 },
+    /** Every plot's Energy need is `factor` times this production. */
+    coldSnap: { phases: { production: 0.032 }, factor: 2, cap: 0.9 },
+    /** After production's output, one tile (not the store) becomes a meteor crater and loses its MULE. */
+    meteorStrike: { phases: { production: 0.032 }, afterOutput: true, cap: 0.9 },
+    /** Every player's and the store's Crystite goes to 0 before the auction opens. */
+    pirateRaid: { phases: { auction: 0.01 }, cap: 0.9 },
+    /** The store's stock of every good and its MULEs go to 0 before the auction opens. */
+    storeFire: { phases: { auction: 0.01 }, cap: 0.9 },
+  } satisfies Record<string, import('./events.js').EventRow & import('./events.js').EventParams>,
   player: {
     /**
      * Sickness, at development start: the colonist walks at DEV_WALK.sickPace this turn unless it holds a Medicine,
@@ -1154,7 +1185,17 @@ export const EVENTS = {
       cap: 0.9,
     },
     bumperHarvest: { phases: { production: 0.024 }, wealth: { poorest: 0.015, richest: -0.01 }, cap: 0.9 },
-  } satisfies Record<string, import('./events.js').EventRow>,
+    /** Credits from min (the richest) to max (the poorest), linear in wealth rank (wave-2 AM-1 6a). */
+    inheritance: { phases: { planning: 0.015 }, min: 100, max: 300, cap: 0.9 },
+    /** One installed MULE is taken off one of the player's plots; rolls in development and again at the month end. */
+    muleTheft: { phases: { development: 0.01, upkeep: 0.01 }, cap: 0.9 },
+    /** Share of the player's Food the rats eat (floored); fires only when that is at least 1. */
+    ratsInSilo: { phases: { upkeep: 0.015 }, share: 0.5, cap: 0.9 },
+    /** Share of the player's cash the accountant takes (floored); fires only when that is at least 1. */
+    crookedAccountant: { phases: { upkeep: 0.01 }, share: 0.1, cap: 0.9 },
+    /** Food the package brings. */
+    packageFromHome: { phases: { upkeep: 0.015 }, amount: 3, cap: 0.9 },
+  } satisfies Record<string, import('./events.js').EventRow & import('./events.js').EventParams>,
   /** Pairs that never fire together in one phase: if both roll, the seeded dice keep one. */
   excludes: [
     ['drought', 'flood'],

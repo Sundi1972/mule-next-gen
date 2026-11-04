@@ -28,6 +28,7 @@ import {
   type AiLevelId,
   type AiPersonaId,
   type AirBand,
+  type EventKey,
   type GameState,
   type MonthReport,
 } from '@mule/engine';
@@ -105,6 +106,23 @@ interface PhaseEvents {
   development: number;
   production: number;
 }
+
+/** The wave-2 events (WS8 wave-2 spec UBER-AC-1): the report gives each one's rate a month and what it moved a game. */
+const WAVE_TWO: readonly EventKey[] = [
+  'federationTax',
+  'federationGrant',
+  'immigrationWave',
+  'inheritance',
+  'muleTheft',
+  'epidemic',
+  'coldSnap',
+  'meteorStrike',
+  'pirateRaid',
+  'storeFire',
+  'ratsInSilo',
+  'crookedAccountant',
+  'packageFromHome',
+];
 
 /** Months with this many events or more share the report's last column. */
 const EVENT_COLUMNS = 4; // literal-ok: the report's last column, 4 or more events a month; presentation only
@@ -209,6 +227,11 @@ function main() {
   let eventMonths = 0;
   let distinctEvents = 0;
   const byEvent: Record<string, number> = {};
+  /** Each wave-2 key's events, and the sum of its effects' deltas by what they moved, over every game. */
+  const wave2 = Object.fromEntries(WAVE_TWO.map((k) => [k, { fired: 0, moved: {} as Record<string, number> }]));
+  /** The month after each store fire: its MULE price and the plots developed at its production; and every month's. */
+  const afterFire = { mulePrices: [] as number[], developed: [] as number[] };
+  const everyDeveloped: number[] = [];
   const wins: Record<string, number> = {};
   const auction = { between: 0, store: 0, ship: 0, ms: 0 };
   const lots = { sold: 0, unsold: 0, colonyOffered: 0, colonySold: 0, stalled: 0 };
@@ -235,8 +258,11 @@ function main() {
     const hungryRun = new Map<string, { run: number; spiral: boolean }>();
     // This month's sickness and forced counts, read once development is played; production completes them.
     let pending: { sickness: number; forced: PhaseEvents | null } | null = null;
+    /** Plots developed as each month's production runs, by month. */
+    const developedAt = new Map<number, number>();
     const onEachPhase = (s: GameState) => {
       onPhase(s);
+      if (s.phase === 'production') developedAt.set(s.month, s.tiles.filter((t) => t.owner && t.outfit).length);
       if (s.phase === 'production' && pending) {
         const events = s.history.at(-1)!.events ?? [];
         monthEvents.push({ development: pending.sickness, production: events.length });
@@ -286,6 +312,19 @@ function main() {
     eventMonths += state.history.filter((h) => (h.events ?? []).length > 0).length;
     distinctEvents += new Set(keys).size;
     for (const k of keys) byEvent[k] = (byEvent[k] ?? 0) + 1;
+    for (const e of state.history.flatMap((h) => h.events ?? [])) {
+      const row = wave2[e.key];
+      if (!row) continue;
+      row.fired++;
+      for (const f of e.effects ?? []) row.moved[f.what] = (row.moved[f.what] ?? 0) + f.delta;
+    }
+    everyDeveloped.push(...developedAt.values());
+    state.history.forEach((h, i) => {
+      const next = state.history[i + 1];
+      if (!next || !(h.events ?? []).some((e) => e.key === 'storeFire')) return;
+      afterFire.mulePrices.push(next.mulePrice);
+      afterFire.developed.push(developedAt.get(next.month) ?? 0);
+    });
     const ranked = state.players.map((p, i) => ({ p, i })).sort((a, b) => score(state, b.p.id) - score(state, a.p.id));
     const winner = ranked[0]!;
     wins[winner.p.species] = (wins[winner.p.species] ?? 0) + 1;
@@ -331,6 +370,18 @@ function main() {
     }`,
   );
   for (const line of eventLines(monthEvents, '', 'no check')) console.log(line);
+  // literal-ok: three decimals for a rate a month, display only
+  const rate = (n: number) => (n / Math.max(1, months)).toFixed(3);
+  for (const key of WAVE_TWO) {
+    const { fired, moved } = wave2[key]!;
+    const perGame = Object.entries(moved).map(([what, d]) => `${what} ${(d / games).toFixed(1)}`);
+    console.log(`     Wave 2 ${key}: ${rate(fired)} a month (${fired} in all); a game: ${perGame.join(', ') || 'nothing off the map'} (no check)`);
+  }
+  // literal-ok: the median, the statistic the line is named for
+  const median = (values: number[]) => quantile(values, 0.5);
+  console.log(
+    `     The month after a store fire (${afterFire.mulePrices.length}): MULE price median ${median(afterFire.mulePrices)} (every month ${muleMedian}), plots developed median ${median(afterFire.developed)} (every month ${median(everyDeveloped)}) (no check)`,
+  );
   if (band) {
     const note = `measure only, as if each player had caused ${SIM_TARGETS.forcedAirPoints} air points last month`;
     for (const line of eventLines(forcedMonthEvents, ` in forced ${band.name} air`, note)) console.log(line);
