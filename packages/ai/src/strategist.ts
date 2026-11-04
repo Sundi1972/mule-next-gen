@@ -6,6 +6,7 @@ import {
   mulePrice,
   mulePriceFor,
   neighbours,
+  outfitBlocked,
   POLLUTION,
   PRICE,
   PROCESSED_GOODS,
@@ -107,7 +108,7 @@ const FOCUS_LABEL: Record<Focus, string> = {
 function plotGains(obs: GameState, o: Outlook, tile: Tile, mind: Mind): Map<Outfit, number> {
   const gains = new Map<Outfit, number>();
   for (const outfit of OUTFITS) {
-    if (outfit === 'greenBelt' || (isFactoryGood(outfit) && !canFeed(obs, mind.me, outfit))) continue;
+    if (outfit === 'greenBelt' || (isFactoryGood(outfit) && !canFeed(obs, mind.me, outfit)) || outfitBlocked(obs, outfit)) continue;
     gains.set(outfit, installGain(obs, o, tile, outfit, mind).gain);
   }
   return gains;
@@ -268,7 +269,7 @@ export function muleValue(obs: GameState, mind: Mind): number {
   for (const tile of obs.tiles) {
     if (tile.owner !== mind.me || tile.outfit) continue;
     for (const outfit of OUTFITS) {
-      if (isFactoryGood(outfit) && !canFeed(obs, mind.me, outfit)) continue;
+      if ((isFactoryGood(outfit) && !canFeed(obs, mind.me, outfit)) || outfitBlocked(obs, outfit)) continue;
       best = Math.max(best, installGain(obs, o, tile, outfit, mind).gain + price);
     }
   }
@@ -317,6 +318,8 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
     // A walk-aware seat walks to the corral, then out to the plot; the seconds are worth what its time is.
     const walked = walk?.at !== undefined ? walkSeconds(obs, mind.me, walk.at, 'corral') + walkSeconds(obs, mind.me, 'corral', index) : 0;
     for (const outfit of OUTFITS) {
+      // The colony's emission cap refuses a capped outfit outright, so it is never planned.
+      if (outfitBlocked(obs, outfit)) continue;
       // On the floor the walk depends on the outfitter too, and the pub must still be reached on the clock after it.
       const legs = walk?.floor?.(index, outfit);
       const walking = legs ? legs.there : walked;

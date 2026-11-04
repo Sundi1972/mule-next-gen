@@ -221,6 +221,8 @@ export interface MonthReport {
   events?: MonthEvent[];
   /** Events announced ahead of time. Absent in older reports. */
   warnings?: EventWarning[];
+  /** The colony fund's money in and out this month; absent when the game plays without politics. */
+  ledger?: FundLedger;
   /** Every working plot's output, part by part. Absent in older reports. */
   lines?: ProductionLine[];
 }
@@ -371,6 +373,50 @@ export interface GameState {
    * Written only by politics.ts, which replaces the object on every write: re-read it, don't hold a reference.
    */
   politics: Politics | null;
+  /**
+   * The colony as a shared project: its fund's ledger and projects; null when the game plays without politics.
+   * Written only by colony.ts, which replaces the object on every write: re-read it, don't hold a reference.
+   */
+  colony: Colony | null;
+}
+
+/** Where money comes into the colony fund from. */
+export type FundSource = 'salesTax' | 'federationTax' | 'exportTax' | 'landTax' | 'pollutionTax' | 'donation' | 'grant';
+/** What the colony fund pays out for. */
+export type FundLine = 'officePay' | 'project' | 'upkeep' | 'repair' | 'strikePay' | 'siteBid';
+
+/** One month's money into and out of the colony fund. */
+export interface FundLedger {
+  month: number;
+  in: Partial<Record<FundSource, number>>;
+  out: Partial<Record<FundLine, number>>;
+}
+
+export type PrestigeId = 'park' | 'hospital' | 'observatory' | 'stadium' | 'spaceport';
+
+/** A prestige object from the moment the Governor commissions it. */
+export interface Project {
+  id: PrestigeId;
+  stage: 'commissioned' | 'building' | 'standing' | 'closed' | 'damaged';
+  funded: { credits: number; goods: Partial<Record<Good, number>> };
+  /** Upkeeps left until it stands; null unless building. */
+  monthsLeft: number | null;
+  /** The tile it stands on, for an object that needs one; null until sited. */
+  plot: number | null;
+  /** The month it was commissioned. */
+  since: number;
+  /** Each donor's credits plus goods at reference price. */
+  plaque: Record<string, number>;
+}
+
+export interface Colony {
+  ledger: FundLedger;
+  /** In commission order. */
+  projects: Project[];
+  /** Each month a sitting Governor's tax promise was kept or broken. */
+  promises: { month: number; governor: string; kind: TaxPromise['kind']; kept: boolean }[];
+  /** Prestige that stays whatever happens to the objects, such as a festival's. */
+  permanentPrestige: number;
 }
 
 export type Office = 'governor' | 'sheriff';
@@ -443,6 +489,32 @@ export interface Politics {
   promiseFrom: number | null;
   /** This month's election, live or just finished; null in a month without one. */
   election: Election | null;
+  /** The Governor's law proposal, public from the moment it is made until the next planning opens its ballot. */
+  proposal: { by: string; month: number; proposal: LawProposal } | null;
+  /** This month's law ballot, live or just finished; null in a month without one. */
+  council: Council | null;
+  /** The laws in force, each at its setting since the month it passed. */
+  laws: Partial<Record<LawId, { setting: number; since: number }>>;
+  /** The month each failed proposal failed, by `kind:law`: it may not come back for POLITICS.council.retryMonths. */
+  failed: Record<string, number>;
+}
+
+export type LawId = 'exportTax' | 'landTax' | 'pollutionTax' | 'emissionCap';
+
+/** Enact a law at a setting (replacing one in force when three already are), or repeal one. */
+export type LawProposal = { kind: 'enact'; law: LawId; setting: number; replaces?: LawId } | { kind: 'repeal'; law: LawId };
+
+/** A law ballot: untimed until every player is Done, then a short reveal on its own clock. */
+export interface Council {
+  stage: 'ballot' | 'reveal' | 'over';
+  /** Ms of the reveal shown so far; 0 until it starts. */
+  clockMs: number;
+  proposal: LawProposal;
+  proposer: string;
+  /** Secret: each voter's yes or no. Only the voter may see their own. */
+  ballots: Record<string, boolean>;
+  done: string[];
+  result: { passed: boolean; yes: number; no: number; tie: boolean } | null;
 }
 
 export type AuctionRole = 'buyer' | 'seller';

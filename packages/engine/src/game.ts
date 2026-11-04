@@ -5,8 +5,9 @@ import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './econo
 import { firePhase, rollPlayerEvent } from './events.js';
 import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
 import { generateMap, tileIndex } from './map.js';
+import { keepPromise, monthLedger, newColony, payGrant, runColony } from './colony.js';
 import { airBand } from './pollution.js';
-import { closeElection, newPolitics, officeScore, openPlanning, payOffices } from './politics.js';
+import { closeVotes, collectLawTaxes, newPolitics, outfitBlocked, officeScore, openPlanning, payOffices } from './politics.js';
 import { needsOf, runProduction } from './production.js';
 import { createRng } from './rng.js';
 import { emptyStock } from './stock.js';
@@ -83,6 +84,7 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
     listings: [],
     landAuction: null,
     politics: options.politics === false ? null : newPolitics(),
+    colony: options.politics === false ? null : newColony(1),
   };
   // The first month's prices start where supply and demand put them.
   for (const good of GOODS) state.store.posted[good] = Math.round(targetPrice(state, good));
@@ -267,6 +269,8 @@ export function outfitMule(state: GameState, playerId: string, outfit: Outfit): 
   // It reads the global flag, not a game's own devSteer; a devSteer game cannot reach it, as the floor offers OUTFIT
   // only for an empty MULE and taps are refused.
   if (DEV_STEER.on && p.carriedMule !== 'empty') throw new RuleError('This MULE is outfitted: re-outfit it');
+  const capped = outfitBlocked(state, outfit);
+  if (capped) throw new RuleError(capped);
   const cost = outfitCostFor(state, playerId, outfit);
   if (p.money < cost) throw new RuleError('Not enough money');
   p.money -= cost;
@@ -324,6 +328,8 @@ export function reoutfitMule(state: GameState, playerId: string, outfit: Outfit)
   if (!p.takenMule) throw new RuleError('Only a MULE taken off a plot can be re-outfitted');
   requireLed(p);
   if (p.carriedMule === outfit) throw new RuleError('The MULE is already outfitted for that');
+  const capped = outfitBlocked(state, outfit);
+  if (capped) throw new RuleError(capped);
   const cost = reoutfitCostFor(state, playerId, outfit);
   if (p.money < cost) throw new RuleError('Not enough money');
   p.money -= cost;
@@ -470,7 +476,10 @@ const ORDER: Phase[] = ['planning', 'landGrant', 'landAuction', 'development', '
  */
 export function advancePhase(state: GameState): void {
   if (state.phase === 'gameOver') return;
-  if (state.phase === 'planning') closeElection(state);
+  if (state.phase === 'planning') {
+    keepPromise(state);
+    closeVotes(state);
+  }
   let next = ORDER[(ORDER.indexOf(state.phase) + 1) % ORDER.length]!;
   if (next === 'landAuction') colonyLot(state);
   if (next === 'landAuction' && state.listings.length === 0) next = 'development';
@@ -539,13 +548,18 @@ export function advancePhase(state: GameState): void {
     state.auction = null;
     firePhase(state, 'upkeep');
     const { shortages, hungry } = runUpkeep(state);
+    collectLawTaxes(state);
+    payGrant(state);
     payOffices(state);
+    runColony(state);
     const report = state.history.at(-1);
     if (report) {
       report.shortages = shortages;
       report.colonistsHungry = hungry;
       report.storeCapital = state.store.capital;
       report.colonyFund = state.treasury.money;
+      const ledger = monthLedger(state);
+      if (ledger) report.ledger = ledger;
       // The month's report keeps every event the month fired, not production's alone; a what-if copy shares the report.
       if (!state.whatIf) report.events = [...state.monthEvents];
     }
