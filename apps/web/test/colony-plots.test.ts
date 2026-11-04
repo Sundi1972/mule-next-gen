@@ -1,5 +1,5 @@
 import { COLONY_SELLER } from '@mule/engine';
-import type { MuleView, TileView } from '@mule/protocol';
+import type { ColonyProjectView, MuleView, TileView } from '@mule/protocol';
 import { HoloMap, type MapTile } from '@mule/ui';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -10,21 +10,18 @@ import { mapTiles } from '../src/game/derive';
  * C33: the colony's objects stand on their plots, on every map. Every map takes its plots from mapTiles and draws them
  * with HoloMap (ProductionMap and the events map wrap it), so these two seams are every map.
  *
- * The contract is the G-5 spec's draft ColonyView (§3, frozen at WS7's wave 2 view task): projects[].plot is a tile
- * index, set when C30 wins the site and never cleared, and C30 makes the plot the colony's (owner COLONY_SELLER).
- * Until the frozen shape lands the view and the map tile are typed here, so the tests compile and fail on behaviour.
+ * The contract is ColonyView (G-5 spec §3, frozen at WS7's wave 2): projects[].plot is a tile index, set when C30 wins
+ * the site and never cleared, and C30 makes the plot the colony's (owner COLONY_SELLER).
  */
-type Stage = 'commissioned' | 'building' | 'standing' | 'closed' | 'damaged';
-type DraftProject = { id: 'park' | 'hospital' | 'observatory' | 'stadium' | 'spaceport'; stage: Stage; buildMonths: number; monthsLeft: number | null; plot: number | null };
-type DrawnObject = { kind: string; stage: Stage; built?: number; buildMonths: number };
-const objectOf = (t: MapTile | undefined) => (t as (MapTile & { object?: DrawnObject }) | undefined)?.object;
+type Project = Pick<ColonyProjectView, 'id' | 'name' | 'stage' | 'buildMonths' | 'monthsLeft' | 'plot'>;
+const objectOf = (t: MapTile | undefined) => t?.object;
 
 const W = 4;
 const H = 2;
 const tile = (i: number, extra: Partial<TileView> = {}): TileView => ({ x: i % W, y: Math.floor(i / W), terrain: 'plains', peaks: 0, owner: null, outfit: null, pollution: 0, filter: false, ...extra });
 
 /** A 4×2 map: a player's plot at 0, the colony's sited plots at 2, 5 and 6, the rest free. */
-function view(projects: DraftProject[]): MuleView {
+function view(projects: Project[]): MuleView {
   const colonyPlots = new Set(projects.flatMap((p) => (p.plot === null ? [] : [p.plot])));
   return {
     width: W,
@@ -35,11 +32,11 @@ function view(projects: DraftProject[]): MuleView {
   } as unknown as MuleView;
 }
 
-const PROJECTS: DraftProject[] = [
-  { id: 'park', stage: 'commissioned', buildMonths: 1, monthsLeft: null, plot: 2 },
-  { id: 'stadium', stage: 'building', buildMonths: 3, monthsLeft: 2, plot: 5 },
-  { id: 'spaceport', stage: 'damaged', buildMonths: 3, monthsLeft: null, plot: 6 },
-  { id: 'hospital', stage: 'standing', buildMonths: 2, monthsLeft: null, plot: null },
+const PROJECTS: Project[] = [
+  { id: 'park', name: 'Park', stage: 'commissioned', buildMonths: 1, monthsLeft: null, plot: 2 },
+  { id: 'stadium', name: 'Stadium', stage: 'building', buildMonths: 3, monthsLeft: 2, plot: 5 },
+  { id: 'spaceport', name: 'Spaceport upgrade', stage: 'damaged', buildMonths: 3, monthsLeft: null, plot: 6 },
+  { id: 'hospital', name: 'Hospital', stage: 'standing', buildMonths: 2, monthsLeft: null, plot: null },
 ];
 
 describe('C33: mapTiles puts each sited object on its plot', () => {
@@ -47,12 +44,12 @@ describe('C33: mapTiles puts each sited object on its plot', () => {
   const at = (i: number) => tiles.find((t) => t.x === i % W && t.y === Math.floor(i / W));
 
   it('reads the plot as a tile index over the map width, at the project stage', () => {
-    expect(objectOf(at(2))).toEqual({ kind: 'park', stage: 'commissioned', buildMonths: 1 });
-    expect(objectOf(at(6))).toEqual({ kind: 'spaceport', stage: 'damaged', buildMonths: 3 });
+    expect(objectOf(at(2))).toEqual({ kind: 'park', name: 'Park', stage: 'commissioned', buildMonths: 1 });
+    expect(objectOf(at(6))).toEqual({ kind: 'spaceport', name: 'Spaceport upgrade', stage: 'damaged', buildMonths: 3 });
   });
 
   it('counts a building site in months built: build months less the months left', () => {
-    expect(objectOf(at(5))).toEqual({ kind: 'stadium', stage: 'building', built: 1, buildMonths: 3 });
+    expect(objectOf(at(5))).toEqual({ kind: 'stadium', name: 'Stadium', stage: 'building', built: 1, buildMonths: 3 });
   });
 
   it("draws the colony's plot as nobody's: no player slot, and an object instead", () => {
