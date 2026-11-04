@@ -519,10 +519,13 @@ RULE-3 · What a press does (Reach)                               shape: decisio
                                                                 SWAP · same outfit, nothing gained (the plot keeps
                                                                 its run; AM-10)
  11  on the map on any plot but the store, not analysed by    ANALYSE (owned or free: scouting, as analysePlot
-     you (row 10 wins on your own plot with a fitted MULE)    allows; a plot with a MULE too; AM-9, AM-12)
- 12  on an own plot with no filter, Alloy held (a MULE or     FIT FILTER (as fitFilter allows; AM-12)
+     you (row 10 wins on your own plot with a fitted MULE)    allows; a plot with a MULE too; AM-9, AM-12;
+                                                              a lake plot from its shore, as row 10; AM-18)
+ 12  on an own plot with no filter, Alloy held (a MULE or     FIT FILTER (as fitFilter allows; AM-12; a lake
+                                                              plot from its shore, as row 10; AM-18)
      not)
- 11a on an own plot with a MULE, leading none                 TAKE MULE (it follows on its lead; the plot makes
+ 11a on an own plot with a MULE, leading none (a lake plot   TAKE MULE (it follows on its lead; the plot makes
+     from its shore, as row 10; AM-18)
                                                               nothing until a MULE is installed again; AM-2;
                                                               after 11 and 12, so analysing and the filter stay
                                                               reachable: AM-9)
@@ -733,6 +736,14 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-18 (2026-11-04, WS1's finding at arcade PR-4, ruled by WS6).** Nobody stands on a lake (lakeMode 'shore'),
+  so RULE-3's rows that need you on the plot could never reach a lake plot: PR-4's sim with the flag on failed the
+  AI's lake analyses 36 times in 40 games. Rows 11 (ANALYSE), 12 (FIT FILTER) and **11a (TAKE MULE)**, which has the
+  same gap for a MULE installed from the shore, reach a lake plot from its shore exactly as row 10 does: the same
+  spot and `DEV_STEER.shoreReachTiles`, one number for every press. Rejected: "the plot or any tile touching it",
+  a wider second reach that row 10 would not share. The order is unchanged: on your own lake plot's shore with a
+  fitted MULE, INSTALL (row 10) wins (AM-9). Built in `floor/reach.ts` with T-AC-3's rows (WS1, PR-8); the phone's
+  prediction and the AI call the same `reachOf`, so the screens change only by the words the view sends.
 - **AM-17 (2026-10-29, WS4's question at arcade PR-5, ruled by WS6).** `@mule/ui` gains `"@mule/engine":
   "workspace:*"` so `StoreInterior` reads `HALL` from `floor/hall.ts` where it draws (C2's one plan), and the hall's
   GaitInput takes `DEV_STEER.leadPace` and `WOLVES` directly. Safe because the engine is pure TypeScript with no
