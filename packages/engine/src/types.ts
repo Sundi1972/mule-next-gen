@@ -356,8 +356,8 @@ export interface GameState {
   landRanOutMonth: number | null;
   history: MonthReport[];
   /**
-   * Every event fired this month, in fired order, whatever the phase. A new array when the month opens (a what-if copy
-   * shares the old one and never adds to it).
+   * Every event fired this month, in fired order, whatever the phase. A new array when the month opens; a what-if copy
+   * gets its own copy (observe.ts::cloneForSim).
    */
   monthEvents: MonthEvent[];
   /** The live goods auction, while the auction phase runs. */
