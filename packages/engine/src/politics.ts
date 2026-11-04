@@ -10,7 +10,7 @@ import { RuleError } from './errors.js';
 import { player } from './game.js';
 import { createRng } from './rng.js';
 import { PERCENT } from './units.js';
-import type { CanRun, CeremonyBeat, Council, Election, ElectionResult, GameState, LawId, LawProposal, Office, OfficeResult, Politics, TaxPromise } from './types.js';
+import type { CanRun, CeremonyBeat, Council, Election, ElectionResult, GameState, LawId, LawProposal, Office, OfficeResult, Outfit, Politics, TaxPromise } from './types.js';
 
 /** Read-only all the way down: an election read before edit() may be shared with a what-if copy. */
 type Shared<T> = { readonly [K in keyof T]: T[K] extends object ? Shared<T[K]> : T[K] };
@@ -636,4 +636,19 @@ export function collectLawTaxes(state: GameState): void {
   if (laws.pollutionTax) {
     for (const p of state.players) lawCharge(state, p.id, 'pollutionTax', Math.round(laws.pollutionTax.setting * (pollutionBy[p.id] ?? 0)));
   }
+}
+
+const CAPPED_NAME: Partial<Record<Outfit, string>> = { rareEarth: 'Rare earth mines', alloy: 'smelters' };
+
+/** The emission cap's level and the air when the cap stops this outfit now; null when it doesn't. See slice 2a RULE-44. */
+export function emissionCapped(state: GameState, outfit: Outfit): { level: number; air: number } | null {
+  const cap = state.politics?.laws.emissionCap;
+  if (!cap || !POLITICS.laws.emissionCap.blocks.includes(outfit) || state.air <= cap.setting) return null;
+  return { level: cap.setting, air: Math.round(state.air) };
+}
+
+/** Why the emission cap refuses outfitting a MULE for this now, or null. */
+export function outfitBlocked(state: GameState, outfit: Outfit): string | null {
+  const capped = emissionCapped(state, outfit);
+  return capped && `The emission cap stops new ${CAPPED_NAME[outfit] ?? outfit} while the air is above ${capped.level} (now ${capped.air})`;
 }
