@@ -73,6 +73,9 @@ async function watch(table: SteeredTable, done: (state: GameState) => boolean, t
   let wasDeveloping = false;
   let developingSince = 0;
   let leftOut: readonly string[] = [];
+  /** Each left-out seat's installed MULEs when the scramble left it out: one more by the turn's end means it got one after all. */
+  const installedWhenLeftOut = new Map<string, number>();
+  const installed = (state: GameState, id: string) => state.tiles.filter((t) => t.owner === id && t.outfit).length;
   const finished = await until(() => {
     const { state, steering } = running();
     if (!state) return false;
@@ -99,13 +102,17 @@ async function watch(table: SteeredTable, done: (state: GameState) => boolean, t
         if (was.muleBolted && !p.muleBolted && p.carriedMule === null) seen.boltLost.add(p.id);
       }
       leftOut = floor.moments.scramble?.leftOut ?? leftOut;
+      for (const id of leftOut) if (!installedWhenLeftOut.has(id)) installedWhenLeftOut.set(id, installed(now, id));
     }
     if (wasDeveloping && !developing && before) {
       // Still loose when the clock ends development: lost to the clock.
       for (const p of before.players) if (p.muleBolted) seen.boltLost.add(p.id);
-      // Left out by the scramble, and still without a MULE as the turn ended.
-      for (const id of leftOut) if (before.players.find((p) => p.id === id)?.carriedMule === null) seen.scrambleLeftOut.add(id);
+      // Left out by the scramble, and still without a MULE as the turn ended: none carried, none installed since.
+      for (const id of leftOut) {
+        if (before.players.find((p) => p.id === id)?.carriedMule === null && installed(before, id) === installedWhenLeftOut.get(id)) seen.scrambleLeftOut.add(id);
+      }
       leftOut = [];
+      installedWhenLeftOut.clear();
     }
     before = now;
     floorBefore = floor;
@@ -123,10 +130,12 @@ const started = Date.now();
 
 // The whole natural game: wolves and the glint, in the state and on the TV.
 {
-  const table = await steeredTable({ seed: SEED, ais: 3, phaseScale: PHASE_SCALE, maxMonths: MONTHS });
-  const stopHost = keepsPlaying(table.host);
+  let table: SteeredTable | null = null;
+  let stopHost = () => {};
   try {
-    const seen = await watch(table, () => table.board.view()?.finished === true, GAME_MS, `the ${MONTHS}-month game`);
+    table = await steeredTable({ seed: SEED, ais: 3, phaseScale: PHASE_SCALE, maxMonths: MONTHS });
+    stopHost = keepsPlaying(table.host);
+    const seen = await watch(table, () => table!.board.view()?.finished === true, GAME_MS, `the ${MONTHS}-month game`);
     const view = table.board.view()!;
     const ais = view.players.filter((p) => p.isAi);
 
@@ -146,29 +155,34 @@ const started = Date.now();
     errors.push(err instanceof Error ? err.message : String(err));
   } finally {
     stopHost();
-    await table.close();
+    await table?.close();
   }
 }
 
 // The scramble, on a corral staged short: month 1's development, in the state and on the TV.
 {
   const storeMules = START.storeMules;
-  START.storeMules = STAGED_MULES;
-  const table = await steeredTable({ seed: SEED, ais: 3, phaseScale: PHASE_SCALE, maxMonths: MONTHS });
-  // The host claims the plot beside the store, so it is a fourth seat that needs a MULE.
-  check(await until(() => (table.board.view()?.tiles.length ?? 0) > 0, 10_000), 'the board was sent no map');
-  const store = table.board.view()!.tiles.find((t) => t.terrain === 'store')!;
-  const plot = { x: store.x - 1, y: store.y };
-  const stopHost = keepsPlaying(table.host, plot);
-  // Month 1's clock waits for every seat's first MULE, and the host will have none: its Continue starts the clock.
-  const startsClock = setInterval(() => {
-    if (table.host.view()?.phase === 'development' && table.host.view()?.phaseEndsAt == null) table.host.intent({ type: 'continue' });
-  }, 500);
+  let table: SteeredTable | null = null;
+  let stopHost = () => {};
+  let startsClock: ReturnType<typeof setInterval> | undefined;
   try {
-    const seen = await watch(table, (state) => state.month > 1 || state.phase === 'auction', GAME_MS, 'month 1 on the staged corral');
-    soft(table.board.view()!.tiles.find((t) => t.x === plot.x && t.y === plot.y)?.owner === table.host.seatId, `scramble: the host did not get the plot beside the store (${plot.x}, ${plot.y}), so only three seats needed a MULE`);
-    const view = table.board.view()!;
-    const beats = table.board.frames.flatMap((f) => f.frame.beats);
+    START.storeMules = STAGED_MULES;
+    const t = await steeredTable({ seed: SEED, ais: 3, phaseScale: PHASE_SCALE, maxMonths: MONTHS });
+    table = t;
+    // The host claims the plot beside the store, so it is a fourth seat that needs a MULE.
+    check(await until(() => (t.board.view()?.tiles.length ?? 0) > 0, 10_000), 'the board was sent no map');
+    const store = t.board.view()!.tiles.find((x) => x.terrain === 'store');
+    check(store, 'the board\'s map has no store');
+    const plot = { x: store.x - 1, y: store.y };
+    stopHost = keepsPlaying(t.host, plot);
+    // Month 1's clock waits for every seat's first MULE, and the host will have none: its Continue starts the clock.
+    startsClock = setInterval(() => {
+      if (t.host.view()?.phase === 'development' && t.host.view()?.phaseEndsAt == null) t.host.intent({ type: 'continue' });
+    }, 500);
+    const seen = await watch(t, (state) => state.month > 1 || state.phase === 'auction', GAME_MS, 'month 1 on the staged corral');
+    soft(t.board.view()!.tiles.find((x) => x.x === plot.x && x.y === plot.y)?.owner === t.host.seatId, `scramble: the host did not get the plot beside the store (${plot.x}, ${plot.y}), so only three seats needed a MULE`);
+    const view = t.board.view()!;
+    const beats = t.board.frames.flatMap((f) => f.frame.beats);
     soft(beats.some((b) => b.endsWith('left! Race to the corral')), `scramble: the TV was sent no call to the corral (the store held ${seen.fewestMules} MULEs at its fewest)`);
     soft(seen.scrambleLeftOut.size > 0, `scramble: no colonist was left without a MULE by it (the store held ${seen.fewestMules} MULEs at its fewest)`);
     soft(beats.some((b) => b.startsWith('No MULE this turn for ')), `scramble: the TV was not told who was left out (${names(view, seen.scrambleLeftOut)} were)`);
@@ -177,7 +191,7 @@ const started = Date.now();
   } finally {
     clearInterval(startsClock);
     stopHost();
-    await table.close();
+    await table?.close();
     START.storeMules = storeMules;
   }
 }
