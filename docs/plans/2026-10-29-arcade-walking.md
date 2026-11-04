@@ -725,6 +725,21 @@ promise. WS4's part first (harness.ts is shared), then the others at once.
 | PR-7 · payouts, re-outfit | #206 | WS3 | — | **Rulings given**: spec AM-14 (re-outfit only a MULE taken off a plot, no refund, a bolted taken MULE goes home) |
 | PR-6 · the screens | — | WS6 | — | Waiting on PR-2, PR-3, PR-5. Carry-overs from A-1 already in the plan (1768a024): the six-seat TV store hall (about 100 px short), the "started the clock" TV beat. Contention rows for WS1's AI step 2 at 3471dba7 |
 
+**State (2026-11-04):**
+
+- **PR-3 · #235:** merged into trunk (f1d7c8b0). Tick convention: input t applies to the step t→t+1.
+- **PR-4 · #228:** in the PM's batch 7.
+- **PR-5 · #224:** still OPEN, WS6 OK given. #251 (WS4's harness steps `steerTo`, `throughDoor`, `pressAct`,
+  `plotCentre`, `hallPlace`, at 12b9e4e0) is tests-only, so no review.
+- **PR-6 · #240 (draft, ws6-arcade-screens, carries #224 and #251):** phase A at 647efa11, 7219c34c; phase B at
+  ae5365b1, every flag-on step green (step 1, B-AC-1, B-AC-2, B-AC-3, B-AC-4, B-AC-8); Tasks 6.6 and 6.7 at d2b2facd,
+  6b841bd6; round fixes 0b346f27, 0d65ed5a. WS4 OK on its named edits 1f380e76, b3c9b275→00ebfa50, 8018be5c→3ce5cdbe,
+  f894c632. Open: shell.ts step 1's steer-rate flake (fix round running); WS7's #263 (UBER-AC-1 naming, 19ad60a8) to
+  merge in after it; CI on the final head; **G-1's goal check (Task 6.8) pending** (the PM or Heiko steers a turn on a
+  server the PR starts, never the rig); one review; retarget to feat/strategist after #224.
+- **PR-8 · #248 (WS1):** AM-22, AM-23 and AM-26 applied (AM-26 supersedes AM-23's excuse).
+- Spec current at 0bf72fd8 (AM-18..26; T-AC-5 reads `DEVELOPMENT.fullSeconds`).
+
 ## Risk-mitigation milestones (spec §7)
 
 - **R-1 (the rate limit):** T-AC-9's flood case in PR-3, Task 3.3.
