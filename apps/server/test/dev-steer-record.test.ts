@@ -92,7 +92,8 @@ describe('the game record with DEV_STEER.on (HC-9, HC-10, C8 Task 2.2)', { timeo
 
   it("Task 2.2: a recorded game's frames reach a client, and a frame adds no step to the record", async () => {
     const { frames, framesInDev, devStart, devEnd, extraFrames, game } = await recordedSteeredGame();
-    expect(framesInDev, 'one frame a tick reached the room, plus the five sent by hand').toBe((devEnd - devStart) / TICK + 5);
+    // The clock's end fires before a tick due the same ms, so the turn's last tick is the one before it.
+    expect(framesInDev, 'one frame a tick reached the room, plus the five sent by hand').toBe((devEnd - devStart) / TICK - 1 + 5);
     expect(frames.filter((f) => f.tick >= 0).map((f) => f.tick)).toEqual(Array.from({ length: framesInDev - 5 }, (_, i) => i + 1));
     expect(extraFrames.after).toBe(extraFrames.before);
     expect(game.quiet?.({ type: 'steer', x: 1, y: 0 }), 'the recorded game is as quiet for a steer as the game').toBe(true);

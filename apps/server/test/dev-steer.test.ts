@@ -91,7 +91,12 @@ function steered(options: { firstMonthWaits?: boolean; ossaHome?: boolean } = {}
   changes.length = 0;
   g.frames.length = 0;
   const homeMiddle: SteerPoint = { space: 'map', x: home.x + 0.5, y: home.y + 0.5 };
-  return { ...g, start, home, homeMiddle, changes, advanceTo: (at: number) => g.advance(at - g.ctx.now()) };
+  // The fake clock fires a timer only once it has jumped past it, so a long jump is a late timer: step a tick at a time,
+  // as a room's timers fire, unless a test means the jump (`jump`).
+  const advance = (ms: number) => {
+    for (let left = ms; left > 0; left -= TICK) g.advance(Math.min(TICK, left));
+  };
+  return { ...g, advance, jump: g.advance, start, home, homeMiddle, changes, advanceTo: (at: number) => advance(at - g.ctx.now()) };
 }
 
 type Steered = ReturnType<typeof steered>;
@@ -186,8 +191,13 @@ describe('T-AC-1 (server part): the server steps the same floor as stepFloor', (
   it('T-AC-1 (negative): one input changed at one tick changes the result', () => {
     const { g, initial, sent, ticks } = scriptedTurn();
     const inputs = inputsByTick(sent, ticks);
-    const at = Math.floor(ticks / 3);
-    inputs[at] = { ...inputs[at]!, [OSSA]: { x: 1, y: 0, act: false } };
+    // The last tick Lena walks, out on the map to her plot: she stands still for it instead. (A tick in the hall would
+    // be undone by her LEAVE, which puts her at the door wherever she stood in it.)
+    const walks = (step: Record<string, FloorInput>) => (step[LENA]!.x !== 0 || step[LENA]!.y !== 0) && !step[LENA]!.act;
+    const at = inputs.length - 1 - [...inputs].reverse().findIndex(walks);
+    expect(at).toBeGreaterThan(0);
+    expect(at).toBeLessThan(inputs.length);
+    inputs[at] = { ...inputs[at]!, [LENA]: IDLE_INPUT };
     expect(floorOf(g.game)).not.toEqual(referenceTurn(initial, inputs, secondsLeft).floor);
   });
 
@@ -276,6 +286,20 @@ describe('T-AC-4 (server part): one frame a tick; full views only on change', ()
   });
 });
 
+describe('RULE-1: the tick keeps to the clock', () => {
+  it('RULE-1: a late timer runs the ticks it missed, at most catchUpTicks, then resyncs and ticks on every tickMs', () => {
+    const g = steered();
+    g.game.handle(OSSA, { type: 'steer', x: 1, y: 0 });
+    g.jump(40 * TICK);
+    expect(floorOf(g.game).tick).toBe(DEV_STEER.catchUpTicks);
+    expect(g.frames).toHaveLength(DEV_STEER.catchUpTicks);
+    g.advance(5 * TICK);
+    expect(floorOf(g.game).tick, 'resynced: one tick every tickMs from there').toBe(DEV_STEER.catchUpTicks + 5);
+    const late = g.game.viewFor(LENA).me!.devEndsAt!;
+    expect(late, 'the clock does not move with the ticks').toBe(g.start + DEVELOPMENT.fullSeconds * 1_000);
+  });
+});
+
 describe('T-AC-9: development never stalls on a phone', () => {
   it('T-AC-9: with Ossa away for the whole turn, development still ends at devEndsAt, and the tick ran every tickMs until then', () => {
     const g = steered();
@@ -353,7 +377,7 @@ describe('the steered view (flag on)', () => {
     };
     bitten(g.game);
     expect(g.game.viewFor(null).players[1]!.colonist!.bitten).toBe(true);
-    g.advance(Math.ceil(((c.assayUntilTick! - floorOf(g.game).tick) * TICK)) + TICK);
+    g.advance((c.assayUntilTick! - floorOf(g.game).tick + 1) * TICK);
     expect(g.game.viewFor(null).players[0]!.colonist!.assayUntil).toBeNull();
   });
 
