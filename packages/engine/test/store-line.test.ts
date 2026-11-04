@@ -219,6 +219,55 @@ describe('A-6 G-1 negatives: refused with a RuleError, or clamped to what you ca
     expect(walker(state, 'p1').order).toBeUndefined();
   });
 
+  it('F1: a choice the seller can no longer fill ends: a player bought her units first, so the phone and the AI are not left waiting', () => {
+    const state = sellerAtStore(3);
+    lineTrade(state, 'p0', 3);
+    // p1, a player, stands at the same price and buys first: players trade before a house serves.
+    declareRole(state, 'p1', 'buyer');
+    walker(state, 'p1').price = walker(state, 'p0').price;
+    run(state, 5_000);
+    expect(state.players[0]!.stock.smithore).toBe(0);
+    expect(walker(state, 'p0').order).toMatchObject({ units: 0, traded: 0 });
+  });
+
+  it('F1: a choice the buyer can no longer pay for ends', () => {
+    const state = buyerAtStore();
+    lineTrade(state, 'p1', 5);
+    let traded = 0;
+    for (let i = 0; i < 400 && traded === 0; i++) traded += stepAuction(state, TICK).length;
+    state.players[1]!.money = a(state).storeSell - 1;
+    // p0 sells Food far up the board, so the good goes on with p1 unable to pay the store.
+    state.players[0]!.stock.food = 5;
+    declareRole(state, 'p0', 'seller');
+    walker(state, 'p0').price = 10_000;
+    run(state, 2_000);
+    expect(walker(state, 'p1').order).toMatchObject({ units: 1, traded: 1 });
+  });
+
+  it("F2: a seller whose choice follows the ship's falling price never slides under a player's bid", () => {
+    const state = newGame();
+    state.ship = { arrives: state.month, goods: ['crystite'], hold: { crystite: 10 }, bought: {} };
+    state.store.offWorld.crystite = state.store.posted.crystite * 2;
+    state.players[0]!.stock.crystite = 10;
+    startAuction(state, ['crystite']);
+    toWalk(state, { p0: 'seller', p1: 'buyer', p2: 'pass', p3: 'pass' });
+    // p1 can pay one unit only, so after it the bid stands but trades no more.
+    walker(state, 'p1').price = 0;
+    setWalk(state, 'p0', -1);
+    for (let i = 0; i < 400 && lineOf(state, 'p0') === null; i++) stepAuction(state, TICK);
+    setWalk(state, 'p0', 0);
+    a(state).clockMs = 600_000;
+    const ship = lineOf(state, 'p0')!.price;
+    walker(state, 'p1').price = ship - 2;
+    state.players[1]!.money = 10_000;
+    lineTrade(state, 'p0', 8);
+    for (let i = 0; i < 300; i++) {
+      stepAuction(state, TICK);
+      if (a(state).stage !== 'walk') break;
+      expect(Math.round(walker(state, 'p0').price), `tick ${i}`).toBeGreaterThanOrEqual(Math.round(walker(state, 'p1').price));
+    }
+  });
+
   it('refuses when you cannot pay for one, or hold none', () => {
     const state = buyerAtStore();
     state.players[1]!.money = a(state).storeSell - 1;

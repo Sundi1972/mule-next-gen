@@ -187,7 +187,8 @@ export function stepBoard(board: WalkBoard, market: WalkMarket, dt: number): Sal
   for (const w of board.walkers) {
     if (w.side !== 'seller' || !w.order || wants(w, w.order.house) <= 0) continue;
     const price = market.houseBuys.find((h) => h.id === w.order!.house)?.price() ?? null;
-    if (price !== null && rounded(w) > price) w.price = Math.max(price, floor ?? 1);
+    // Never through a player's bid either: there the seller meets the buyer, as walking down would (F2).
+    if (price !== null && rounded(w) > price) w.price = Math.max(price, floor ?? 1, maxBid(board, market));
   }
   // A choice made at a line goes once the walker is off it. A line that has gone (the store sold out, the ship full)
   // ends the choice where it stands, kept to be read until the walker walks on.
@@ -199,6 +200,9 @@ export function stepBoard(board: WalkBoard, market: WalkMarket, dt: number): Sal
       stopAtLine(w);
       if (w.dir !== 0) delete w.order;
     } else if (houseLineAt(market, w)?.house !== house) delete w.order;
+    // A choice that can no longer be filled ends where it stands (F1): a player bought the seller's units first, or the
+    // buyer can no longer pay the house's price. Otherwise it would wait on units that never come.
+    else if (wants(w, house) > 0 && (w.side === 'seller' ? market.units(w.id) <= 0 : market.money(w.id) < (market.houseSells?.price() ?? Infinity))) stopAtLine(w);
   }
 
   // Who trades with whom. The best pair of players first: the highest bid
