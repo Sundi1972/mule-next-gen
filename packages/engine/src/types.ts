@@ -489,6 +489,32 @@ export interface Politics {
   promiseFrom: number | null;
   /** This month's election, live or just finished; null in a month without one. */
   election: Election | null;
+  /** The Governor's law proposal, public from the moment it is made until the next planning opens its ballot. */
+  proposal: { by: string; month: number; proposal: LawProposal } | null;
+  /** This month's law ballot, live or just finished; null in a month without one. */
+  council: Council | null;
+  /** The laws in force, each at its setting since the month it passed. */
+  laws: Partial<Record<LawId, { setting: number; since: number }>>;
+  /** The month each failed proposal failed, by `kind:law`: it may not come back for POLITICS.council.retryMonths. */
+  failed: Record<string, number>;
+}
+
+export type LawId = 'exportTax' | 'landTax' | 'pollutionTax' | 'emissionCap';
+
+/** Enact a law at a setting (replacing one in force when three already are), or repeal one. */
+export type LawProposal = { kind: 'enact'; law: LawId; setting: number; replaces?: LawId } | { kind: 'repeal'; law: LawId };
+
+/** A law ballot: untimed until every player is Done, then a short reveal on its own clock. */
+export interface Council {
+  stage: 'ballot' | 'reveal' | 'over';
+  /** Ms of the reveal shown so far; 0 until it starts. */
+  clockMs: number;
+  proposal: LawProposal;
+  proposer: string;
+  /** Secret: each voter's yes or no. Only the voter may see their own. */
+  ballots: Record<string, boolean>;
+  done: string[];
+  result: { passed: boolean; yes: number; no: number; tie: boolean } | null;
 }
 
 export type AuctionRole = 'buyer' | 'seller';
