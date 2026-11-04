@@ -562,6 +562,9 @@ export async function arcadeTable(
 }
 
 /** Kept a string: tsx would wrap named functions in a helper the page lacks. A colonist the TV draws, by seat. */
+/** How old the drawing a TV read finds may be: frames every 50 ms, a read's round trip, and a loaded runner. */
+const TV_FRESH_MS = 250;
+
 const TV_DRAWS = `(() => Object.fromEntries([...document.querySelectorAll('[data-testid^=colonist-]:not([data-testid^=colonist-name])')].map((e) => [e.getAttribute('data-testid').slice(9), { space: e.getAttribute('data-space'), x: Number(e.getAttribute('data-x')), y: Number(e.getAttribute('data-y')), at: e.hasAttribute('data-at') ? Number(e.getAttribute('data-at')) : null }])))()`;
 
 /**
@@ -1226,13 +1229,14 @@ export async function theTvDrawsEveryoneLive(t: ArcadeTable): Promise<string> {
   check(tv && phones.length === 4, 'B-AC-2: four phones and a TV');
   await tv.getByTestId('tv-game').waitFor({ timeout: 5_000 });
   const seats = phones.map((_, i) => `s${i + 1}`);
-  const samples: Record<string, { space: string; x: number; y: number; at: number | null }>[] = [];
+  const samples: { readAt: number; drawn: Record<string, { space: string; x: number; y: number; at: number | null }> }[] = [];
   const { log } = await logFloor(server, code, async () => {
     for (const [i, p] of phones.entries()) await p.keyboard.down(B_AC_2_MOVES[i]!);
     const end = Date.now() + 1_500;
     while (Date.now() < end) {
       // Each drawn walker says the instant (the machine's Date.now) the TV worked its position out for.
-      samples.push((await tv.evaluate(TV_DRAWS)) as Record<string, { space: string; x: number; y: number; at: number | null }>);
+      const drawn = (await tv.evaluate(TV_DRAWS)) as Record<string, { space: string; x: number; y: number; at: number | null }>;
+      samples.push({ readAt: Date.now(), drawn });
       await tv.waitForTimeout(30);
     }
     for (const [i, p] of phones.entries()) await p.keyboard.up(B_AC_2_MOVES[i]!);
@@ -1245,11 +1249,17 @@ export async function theTvDrawsEveryoneLive(t: ArcadeTable): Promise<string> {
   let compared = 0;
   const worst: string[] = [];
   let worstNow = 0;
+  // Judging each drawing at its own instant must not let a TV that stopped drawing pass: every read finds a fresh one.
+  const ages = samples.flatMap((s) => Object.values(s.drawn).flatMap((d) => (d.at === null ? [] : [s.readAt - d.at])));
+  const oldest = Math.max(...ages);
+  check(ages.length > 0 && oldest <= TV_FRESH_MS, `B-AC-2: every TV read finds a drawing at most ${TV_FRESH_MS} ms old, oldest ${oldest} ms`);
+  const instants = new Set(samples.map((s) => s.drawn[moved[0]!]?.at).filter((a) => a !== null && a !== undefined));
+  check(instants.size >= samples.length * 0.75, `B-AC-2: the TV drew anew between reads, ${instants.size} instants in ${samples.length} reads`);
   for (const seat of moved) {
     const allowed = tickTravel(log, seat) + WIRE_ROUNDING;
     let most = 0;
     for (const s of samples) {
-      const d = s[seat];
+      const d = s.drawn[seat];
       if (!d || d.at === null) continue;
       const then = floorAt(log, seat, d.at - DEV_STEER.interpolateMs);
       const now = floorAt(log, seat, d.at);
@@ -1281,5 +1291,5 @@ export async function theTvDrawsEveryoneLive(t: ArcadeTable): Promise<string> {
     await tv.waitForTimeout(100);
   }
   check(stills.size === 1, `B-AC-2 (negative): an away seat's colonist stands still on the TV, got ${[...stills].join(' | ')}`);
-  return `${samples.length} TV reads, ${compared} compared; worst/allowed in tiles, interpolateMs behind: ${worst.join(', ')} (${worstNow.toFixed(3)} at most from the same moment); Kai away stood at ${[...stills][0]}`;
+  return `${samples.length} TV reads (drawings at most ${oldest} ms old, ${instants.size} instants), ${compared} compared; worst/allowed in tiles, interpolateMs behind: ${worst.join(', ')} (${worstNow.toFixed(3)} at most from the same moment); Kai away stood at ${[...stills][0]}`;
 }
