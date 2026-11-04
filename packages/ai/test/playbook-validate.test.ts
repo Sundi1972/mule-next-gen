@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   advancePhase,
   AI_PLANS,
@@ -153,6 +153,13 @@ describe('the validator holds every playbook to RULE-1', () => {
     // A clamp that drops entries names how many, not the list that plays (a ranking can run to the whole map).
     expect(ranked.why).toBe('clamped: dropped 3 entries, keeping free plots, each once, at a whole value of 0 or more');
     expect(one('planning', '/landGrant/ranked', [{ plot: f1, value: 1.5 }]).why).toBe('no free plot left to rank');
+    // An edit inside the list whose entry the clamp drops is clamped only: none of it plays, so it is no accepted edit.
+    const store = at.planning.tiles.findIndex((t) => t.terrain === 'store');
+    const lost = one('planning', '/landGrant/ranked/0/plot', store);
+    expect(lost.r.playbook.landGrant!.ranked).toEqual(draft.landGrant!.ranked.slice(1));
+    expect(lost.r.playbook.edits).toBeUndefined();
+    expect(lost.r.playbook.by).toBe('engine');
+    expect(lost.r.rejected).toEqual([{ path: '/landGrant/ranked/0/plot', to: store, why: 'clamped: dropped 1 entry, keeping free plots, each once, at a whole value of 0 or more' }]);
     // P5, P6, P7.
     expect(one('planning', '/landGrant/pressShare', { start: 1.4, end: 0.9 }).plays).toEqual({ start: 1, end: 0.9 });
     expect(one('planning', '/landGrant/pressShare/end', 0.9).plays).toBe(draft.landGrant!.pressShare.start);
@@ -318,16 +325,21 @@ describe('the level bound', () => {
 });
 
 describe('the validator never lets an error reach the game', () => {
-  it('FM-VAL-1: the validator never throws', () => {
+  it('FM-VAL-1: the validator never throws, and logs its own error with the seat', () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
     const draft = draftOf(at.planning, 'planning', mindOf(2), 102);
     const edits = [edit('/strategy/kind', 'builder'), edit('/strategy/reason', 'Hm.')];
     const r = validatorFor({ mind: mindOf(2), seed: 102 })(at.planning, 'nobody', draft, edits);
     expect(r.playbook).toEqual(draft);
     expect(r.rejected).toEqual(edits.map((e) => ({ path: e.path, to: e.to, why: 'validator error: Unknown player nobody' })));
+    expect(logged).toHaveBeenCalledTimes(1);
+    expect(logged.mock.calls[0]!.join(' ')).toMatch(/nobody.*Unknown player nobody/);
     // Not even on a state that is not a game.
     const broken = validatorFor({ mind: mindOf(2), seed: 102 })({} as GameState, 'ai2', draft, edits);
     expect(broken.playbook).toEqual(draft);
     expect(broken.rejected.map((x) => x.why.startsWith('validator error: '))).toEqual([true, true]);
+    expect(logged).toHaveBeenCalledTimes(2);
+    logged.mockRestore();
   });
 });
 
@@ -345,15 +357,21 @@ describe("the engine's own draft passes the gate", () => {
       }
     };
     passes('as configured');
-    // A --set sweep that moves a bound moves the draft with it: a route cap that leaves room for the pub alone, and a land
-    // baron's target past what the grants can give.
-    const sweep = ['AI_PLANS.bounds.routeSteps=1', `AI_PLANS.landTarget.perMonth.landBaron=${GAME.claimsPerGrant + 1}`];
-    const saved = [`AI_PLANS.bounds.routeSteps=${AI_PLANS.bounds.routeSteps}`, `AI_PLANS.landTarget.perMonth.landBaron=${AI_PLANS.landTarget.perMonth.landBaron}`];
-    applySets(sweep);
-    try {
-      passes('swept');
-    } finally {
-      applySets(saved);
+    // A --set sweep that moves a bound moves the draft with it: a route cap that leaves room for the pub alone, a land
+    // baron's target past what the grants can give, and plots a month that are fractional or below nothing.
+    const sweeps = [
+      ['AI_PLANS.bounds.routeSteps=1', `AI_PLANS.landTarget.perMonth.landBaron=${GAME.claimsPerGrant + 1}`, 'AI_PLANS.landTarget.perMonth.other=0.4'],
+      ['AI_PLANS.landTarget.perMonth.other=-1'],
+    ];
+    const valueAt = (path: string) => path.split('.').slice(1).reduce<unknown>((o, k) => (o as Record<string, unknown>)[k], AI_PLANS);
+    for (const sweep of sweeps) {
+      const saved = sweep.map((set) => `${set.split('=')[0]}=${String(valueAt(set.split('=')[0]!))}`);
+      applySets(sweep);
+      try {
+        passes(`swept ${sweep.join(' ')}`);
+      } finally {
+        applySets(saved);
+      }
     }
     // No free plot left: the draft ranks nothing, and ranking nothing passes.
     const taken = structuredClone(at.planning);
