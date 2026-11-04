@@ -108,6 +108,8 @@ export class Recorder {
           throw err;
         }
       },
+      // The room asks before it sends views after an intent; it is the game's own answer, not an input.
+      quiet: (intent) => game.quiet?.(intent) ?? false,
       connectionChanged: (seat, connected) => {
         this.begin(() => ({ type: 'connection', seat, connected }));
         game.connectionChanged?.(seat, connected);
