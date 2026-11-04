@@ -1240,7 +1240,7 @@ describe('Room: a game error ends only its own table', () => {
     expect(closes()).toBe(1);
   });
 
-  it('a game error ends only its own table: a TableError on hearing a screen went away is nobody\'s to read, so the room plays on', async () => {
+  it('a game error ends only its own table: even a TableError on hearing a screen went away ends the room, since no player\'s move caused it', async () => {
     const { room, heiko, mia, tv, errors, closes } = buggyRoom(undefined, () => {
       throw new TableError('Not now');
     });
@@ -1249,12 +1249,9 @@ describe('Room: a game error ends only its own table', () => {
     expect(() => room.disconnect(heiko)).not.toThrow();
     await flush();
 
-    expect([...mia.inbox, ...tv.inbox].some((m) => m.t === 'removed')).toBe(false);
-    expect(errors).toEqual([]);
-    expect(closes()).toBe(0);
-    room.receive(mia, mia.from, { t: 'intent', intent: { secret: 'fine' } });
-    await flush();
-    expect(tv.last('view')!.view.game).toEqual({ mySecret: null, secretsTold: 1 });
+    for (const screen of [mia, tv]) expect(screen.inbox.at(-1)).toStrictEqual({ t: 'removed', reason: 'error' });
+    expect(closes()).toBe(1);
+    expect((errors as Error[]).map((e) => e.message)).toEqual(['Not now']);
   });
 
   it('a game error ends only its own table: a TableError still goes to the sender only, and the room plays on', async () => {
@@ -1689,8 +1686,10 @@ describe('Room: a disposed room is done with its game', () => {
     room.dispose();
     let ran = false;
 
-    schedule(0, () => void (ran = true));
-    await vi.advanceTimersByTimeAsync(1_000);
+    schedule(60_000, () => void (ran = true));
+    // No timer at all, not one that waits to do nothing: a pending timer would keep the disposed room in memory.
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(60_000);
 
     expect(ran).toBe(false);
     expect(vi.getTimerCount()).toBe(0);

@@ -336,8 +336,8 @@ export class Room<Intent, View> {
 
   /** A screen's connection closed: it stops being a board and lets go of its seat. */
   disconnect(conn: Connection<View>): void {
-    // A leave can arrive after the room is gone, as a closing server's sockets do: the game must not hear it.
-    if (this.endedBy === 'error' || this.disposed) return;
+    // A leave can arrive after the room is disposed (an ended room is disposed too): the game must not hear it.
+    if (this.disposed) return;
     try {
       const wasBoard = this.boards.delete(conn);
       // Checked even for a board, so no path leaves a seat on a closed socket.
@@ -345,9 +345,8 @@ export class Room<Intent, View> {
       if (seat) this.detach(seat);
       if (wasBoard || seat) this.broadcast();
     } catch (err) {
-      // The caller is a socket's close handler: a throw from here would be uncaught. A user error has nobody left to
-      // read it; a bug ends this table, as it does in receive.
-      if (this.opts.isUserError(err)) return;
+      // Usually the caller is a socket's close handler, where a throw would be uncaught. No player's move caused this
+      // one, so even a user error is a bug: it ends this table, as a scheduled callback's throw does.
       this.opts.onError(err);
       this.fail();
     }
@@ -562,6 +561,8 @@ export class Room<Intent, View> {
   }
 
   dispose(): void {
+    // Once is enough: the game's own dispose must not run twice.
+    if (this.disposed) return;
     this.disposed = true;
     for (const t of this.timers) clearTimeout(t);
     this.timers.clear();
