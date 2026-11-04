@@ -230,6 +230,159 @@ describe('B1 (C5): the ledger stories play the gallery’s own, and say what the
   });
 });
 
+// --- B2: the map and colony stories ------------------------------------------------------------------------------
+
+/** The map as the view sends it after the events: the struck and robbed plots stand empty, the crater is there. */
+const after = (changes: Record<string, Partial<MapTile>>): MapTile[] =>
+  tiles.map((tile) => {
+    const c = changes[`${tile.x},${tile.y}`];
+    if (!c) return tile;
+    const { good: _good, ...rest } = tile;
+    return { ...rest, ...c };
+  });
+const THEFT = event('muleTheft', 'development', {
+  title: 'MULE theft',
+  scope: 'personal',
+  player: OSSA,
+  origin: { x: 6, y: 3 },
+  hits: [{ x: 6, y: 3, order: 0, delta: 0, becomes: 'idle', muleLost: true }],
+});
+const ROBBED = after({ '6,3': {} });
+const METEOR = event('meteorStrike', 'production', {
+  title: 'Meteor strike',
+  scope: 'local',
+  player: OSSA,
+  origin: { x: 7, y: 3 },
+  hits: [{ x: 7, y: 3, order: 0, delta: 0, becomes: 'crater', muleLost: true }],
+});
+const CRATERED = after({ '7,3': { special: { kind: 'meteorCrater' } } });
+const COLD = event('coldSnap', 'production', { title: 'Cold snap', line: 'A cold snap: every plot needs 2 times its Energy this month.', effects: [{ on: 'colony', what: 'energyNeed', delta: 100 }] });
+const sickBy = (player: string, name: string): ShowEventView =>
+  ({ key: 'sickness', kind: 'sickness', title: 'Sickness', line: `${name} fell sick: the epidemic.`, sign: 'bad', scope: 'personal', origin: { ...STORE }, player, hits: [], phase: 'development', weight: 'bulletin', playMs: EVENT_SHOW.rollCallMs / 2 }) as ShowEventView;
+/** Brix held a Medicine and is cured; Lena and Ossa fall sick, and the server sends each a sickness bulletin. */
+const EPIDEMIC = event('epidemic', 'development', { title: 'Epidemic', effects: [{ on: BRIX, what: 'medicine', delta: -1 }] });
+const EPIDEMIC_PHASE = [EPIDEMIC, sickBy(LENA, 'Lena'), sickBy(OSSA, 'Ossa')];
+const IMMIGRATION = event('immigrationWave', 'planning', { title: 'Immigration wave', sign: 'good', effects: [{ on: 'colony', what: 'colonists', delta: 12 }] });
+const FIRE = event('storeFire', 'auction', {
+  title: 'Store fire',
+  effects: [
+    { on: 'store', what: 'food', delta: -14 },
+    { on: 'store', what: 'water', delta: -9 },
+    { on: 'store', what: 'energy', delta: -12 },
+    { on: 'store', what: 'smithore', delta: -10 },
+    { on: 'store', what: 'mules', delta: -8 },
+  ],
+});
+const glyphOn = (html: string, x: number, y: number) => has(html, `special-glyph-${x}-${y}`);
+/** The jolt's shake: the map moved in cqw. */
+const shaken = (html: string) => /<div[^>]*style="[^"]*transform:[^"]*cqw[^"]*"[^>]*data-testid="event-map"/.test(html);
+
+describe('B2 (C5): the map and colony stories play the gallery’s own, and change the map as they land', () => {
+  it.each([
+    { ev: THEFT, map: ROBBED, marks: ['theft-thief', 'theft-mule'] },
+    { ev: METEOR, map: CRATERED, marks: ['meteor-streak', 'crater-7-3'] },
+    { ev: COLD, map: tiles, marks: ['front-coldSnap'] },
+    { ev: EPIDEMIC, map: tiles, marks: ['epidemic-haze', `epidemic-sick-${LENA}`, `epidemic-sick-${OSSA}`, `epidemic-shield-${BRIX}`] },
+    { ev: IMMIGRATION, map: tiles, marks: ['migration-shuttle', 'migration-colonist'] },
+    { ev: FIRE, map: tiles, marks: ['store-flames', 'store-storage'] },
+  ])('$ev.key: the TV and a phone alone play its story; a phone with a TV does not', ({ ev, map, marks }) => {
+    const events = ev === EPIDEMIC ? EPIDEMIC_PHASE : [ev];
+    for (const where of ['tv', 'alone'] as const) {
+      const frames = playFrames(events, where, { map });
+      for (const mark of marks) expect(frames.some((html) => has(html, mark)), `${ev.key} on ${where}: ${mark}`).toBe(true);
+    }
+    for (const html of playFrames(events, 'withTv', { map })) for (const mark of marks) expect(has(html, mark), `${ev.key} with a TV: no ${mark}`).toBe(false);
+  });
+
+  it('muleTheft: the plot’s chip says TAKEN once the thief has gone, on every screen', () => {
+    for (const where of ['tv', 'alone', 'withTv'] as const) {
+      const html = result([THEFT], where, { map: ROBBED, me: OSSA });
+      expect(text(inside(html, 'mark-6-3')), where).toContain('TAKEN');
+    }
+    const seg = segOf([THEFT], 'tv');
+    expect(has(screen([THEFT], seg.playAt + 0.2, 'tv', { map: ROBBED }), 'mark-6-3'), 'not before it lands').toBe(false);
+  });
+
+  it('meteorStrike: the crater appears on the map as the meteor lands, not before, and the plot’s chip says LOST', () => {
+    const seg = segOf([METEOR], 'tv');
+    expect(glyphOn(screen([METEOR], seg.playAt + 0.2, 'tv', { map: CRATERED }), 7, 3), 'no crater before impact').toBe(false);
+    expect(glyphOn(screen([METEOR], seg.announceAt + 0.1, 'tv', { map: CRATERED }), 7, 3), 'no crater while announced').toBe(false);
+    const landed = result([METEOR], 'tv', { map: CRATERED });
+    expect(glyphOn(landed, 7, 3), 'the crater after impact').toBe(true);
+    expect(text(inside(landed, 'mark-7-3'))).toContain('LOST');
+    // The ground jolts as it lands.
+    expect(playFrames([METEOR], 'tv', { map: CRATERED }).some(shaken)).toBe(true);
+  });
+
+  it('storeFire: the store’s storage burns shelf by shelf down to 0, the corral too', () => {
+    const shelves = playFrames([FIRE], 'tv')
+      .filter((html) => has(html, 'store-storage'))
+      .map((html) => text(inside(html, 'store-storage')));
+    expect(shelves[0]).toMatch(/Store storage/);
+    expect(shelves[0]).toMatch(/\b14\b/);
+    expect(shelves[0]).toMatch(/\b8\b/);
+    expect(shelves.at(-1)!.replace('Store storage', '')).not.toMatch(/\b[1-9]\d*\b/);
+  });
+
+  it('immigrationWave and storeFire: their result is a card of what changed, the colony’s and the store’s', () => {
+    expect(text(inside(result([IMMIGRATION], 'tv'), 'effects-card'))).toContain('Colonists +12');
+    const fire = text(inside(result([FIRE], 'tv'), 'effects-card'));
+    for (const chip of ['Store −14', 'Store −9', 'Store −12', 'Store −10', '−8 MULEs']) expect(fire).toContain(chip);
+  });
+
+  it.each([
+    { events: [THEFT], map: ROBBED, me: OSSA, headline: 'Your MULE was taken' },
+    { events: [METEOR], map: CRATERED, me: OSSA, headline: 'Your MULE was destroyed' },
+    { events: EPIDEMIC_PHASE, map: tiles, me: LENA, headline: 'You’re sick, 2 turns' },
+    { events: EPIDEMIC_PHASE, map: tiles, me: BRIX, headline: '−1 Medicine for you' },
+  ])('$events.0.key: the phone tells $me what it did to them', ({ events, map, me, headline }) => {
+    for (const where of ['alone', 'withTv'] as const) expect(text(inside(result(events, where, { map, me }), 'phone-you')), where).toContain(headline);
+  });
+
+  it.each([
+    { events: [COLD], line: 'For everyone: every plot needs twice its Energy this month.', chip: 'Energy need +100%' },
+    { events: [IMMIGRATION], line: 'For everyone: more colonists, for good.', chip: 'Colonists +12' },
+    { events: [FIRE], line: 'For everyone: the store lost everything it held', chip: '−8 MULEs' },
+  ])('$events.0.key: the colony’s news reads the same on every phone, with its change', ({ events, line, chip }) => {
+    for (const me of [LENA, BRIX]) {
+      const miss = text(inside(result(events, 'withTv', { me }), 'phone-miss'));
+      expect(miss).toContain(line);
+      expect(miss).toContain(chip);
+    }
+  });
+
+  it('the TV log says what each did', () => {
+    expect(text(inside(result([THEFT], 'tv', { map: ROBBED }), 'log'))).toContain('Ossa’s plot stands idle');
+    expect(text(inside(result([METEOR], 'tv', { map: CRATERED }), 'log'))).toContain('Ossa’s plot lost its MULE · a crater');
+    expect(text(inside(result([COLD], 'tv'), 'log'))).toContain('Energy need +100%');
+  });
+
+  it('HC-6: with reduced motion no camera, no jolt, nothing travels, and each still shows its result', () => {
+    const cases = [
+      { events: [THEFT], map: ROBBED, kept: 'mark-6-3' },
+      { events: [METEOR], map: CRATERED, kept: 'crater-7-3' },
+      { events: [COLD], map: tiles, kept: 'log' },
+      { events: EPIDEMIC_PHASE, map: tiles, kept: `epidemic-sick-${LENA}` },
+      { events: [IMMIGRATION], map: tiles, kept: 'effects-card' },
+      { events: [FIRE], map: tiles, kept: 'effects-card' },
+    ];
+    for (const { events, map, kept } of cases) {
+      for (const where of ['tv', 'alone'] as const) {
+        const frames = playFrames(events, where, { map, reduced: true });
+        const key = events[0]!.key;
+        for (const html of frames) {
+          expect(zoomed(html), `${key} on ${where}: no camera`).toBe(false);
+          expect(shaken(html), `${key} on ${where}: no jolt`).toBe(false);
+          for (const moving of ['meteor-streak', 'front-coldSnap', 'theft-thief', 'migration-colonist', 'epidemic-haze']) expect(has(html, moving), `${key} on ${where}: no ${moving}`).toBe(false);
+        }
+        const settled = [...frames, result(events, where, { map, reduced: true })];
+        expect(settled.some((html) => has(html, kept)), `${key} on ${where}: ${kept}`).toBe(true);
+      }
+    }
+    expect(glyphOn(result([METEOR], 'tv', { map: CRATERED, reduced: true }), 7, 3)).toBe(true);
+  });
+});
+
 /** An effect's chip, as the gallery's EffectChip words it: a held good by its number, money in credits. */
 function chipText(f: Effect): string {
   const n = `${f.delta < 0 ? '−' : '+'}${Math.abs(f.delta)}`;
