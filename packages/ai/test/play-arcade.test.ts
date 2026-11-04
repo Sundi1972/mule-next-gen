@@ -6,14 +6,24 @@ import {
   createGame,
   DEV_STEER,
   DEVELOPMENT,
+  doorPresses,
+  hasAnalysed,
   MS_PER_SECOND,
+  pressOrder,
   pubPayoutFor,
   reachOf,
+  settleMoments,
+  stepFloor,
+  terrainShare,
+  tileAt,
   type AiLevelId,
+  type DevFloor,
   type FloorColonist,
+  type FloorConfig,
   type GameState,
   type Outfit,
 } from '@mule/engine';
+import { FloorWalker, type StepRun } from '../src/hands/floor-walker.js';
 import { muleLegs, placePoint } from '../src/floor-time.js';
 import { playFloorPhase, simFloorConfig } from '../src/floor-turn.js';
 import { ROTATION } from '../src/lineup.js';
@@ -115,6 +125,46 @@ describe('the AI walks the floor, and the sim plays it (arcade C9, C10)', () => 
       DEV_STEER.floorSeconds = saved.floorSeconds;
       DEV_STEER.month1WaitsForFirstMule = saved.waits;
     }
+  });
+});
+
+describe('the AI on a lake plot (AM-18)', () => {
+  /** One tick of the walker's seat as the sim's runs it: its input, the step, the moments, then its press. */
+  function walk(state: GameState, floor: DevFloor, cfg: FloorConfig, walker: FloorWalker, action: Parameters<FloorWalker['run']>[1]): { floor: DevFloor; run: StepRun } {
+    const run = walker.run({ state, floor, cfg, secondsLeft: 40 }, action, 0);
+    if (run.kind !== 'going') return { floor, run };
+    const inputs = { ai0: run.input };
+    const spent = doorPresses(floor, state, inputs, cfg);
+    let next = settleMoments(state, stepFloor(floor, state, inputs, cfg.steer.tickMs, cfg));
+    for (const id of pressOrder(next, run.input.act && !spent.has('ai0') ? ['ai0'] : [])) next = applyReach(state, next, id, 40, cfg).floor;
+    return { floor: next, run };
+  }
+
+  it('AM-18: the AI walks to a lake plot\'s shore and analyses it from there', { timeout: 60_000 }, () => {
+    steered(() => {
+      // No moments: the walk alone.
+      const base = simFloorConfig();
+      const cfg: FloorConfig = { ...base, wolves: { ...base.wolves, on: false }, glint: { ...base.glint, on: false } };
+      let tried = 0;
+      for (let seed = 1; seed <= 12 && tried < 3; seed++) {
+        const state = createGame({ seed, players: LEVELS.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
+        while (state.phase !== 'development') advancePhase(state);
+        const lake = state.tiles.find((t) => t.terrain === 'lake' && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => {
+          const n = tileAt(state.tiles, state.width, t.x + dx!, t.y + dy!);
+          return n !== undefined && n.owner === null && terrainShare(n.terrain, cfg) > 0;
+        }));
+        if (!lake) continue;
+        tried++;
+        let floor = buildFloor(state, cfg);
+        const walker = new FloorWalker('ai0');
+        const action = { type: 'analyse' as const, x: lake.x, y: lake.y };
+        let run: StepRun = { kind: 'going', input: { x: 0, y: 0, act: false } };
+        for (let i = 0; i < 2_000 && run.kind === 'going'; i++) ({ floor, run } = walk(state, floor, cfg, walker, action));
+        expect(run, `seed ${seed}: lake ${lake.x}·${lake.y}`).toEqual({ kind: 'ok' });
+        expect(hasAnalysed(state.players[0]!, state, lake)).toBe(true);
+      }
+      expect(tried, 'maps with a lake plot to try').toBeGreaterThan(0);
+    });
   });
 });
 

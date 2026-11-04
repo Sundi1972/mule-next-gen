@@ -32,10 +32,13 @@ import {
   pressOrder,
   reachOf,
   reachWords,
+  reoutfitCostFor,
+  reoutfitMule,
   RuleError,
   sellPelts,
   SPECIES,
   stepFloor,
+  takeMule,
   visitPub,
   WOLVES,
   type DevFloor,
@@ -231,6 +234,13 @@ const pack = (stage: FloorEncounter['stage'], wolves: FloorWolf[]): FloorEncount
   recoverUntilTick: 0,
 });
 const PROWLING = [wolf(1.2, 4.5), wolf(3.8, 4.5), wolf(2.5, 3.2)];
+
+/** 'a' has taken its Smithore MULE off 7·4 this turn, by game.ts's own takeMule, and leads it. */
+const tookSmithore = (s: GameState) => takeMule(s, 'a', 7, 4);
+/** The shore spot west of 'a''s lake plot at 5·1, within DEV_STEER.shoreReachTiles of it, on land nobody owns. */
+const SHORE = { space: 'map' as const, x: 4.75, y: 1.5 };
+/** 'a' has analysed the land underfoot at the shore, so nothing there comes first. */
+const analysedShore = (s: GameState) => void (a(s).analysed = [1 * s.width + 4]);
 
 const TABLE: Row[] = [
   {
@@ -487,6 +497,49 @@ const TABLE: Row[] = [
     },
   },
   {
+    row: '8a RE-OUTFIT: at an outfitter, leading a MULE taken off a plot fitted for another good, money',
+    at: () => inHall('energy'),
+    game: tookSmithore,
+    reach: (s) => ({ kind: 'reoutfit', enabled: true, good: 'energy', cost: reoutfitCostFor(s, 'a', 'energy'), why: null }),
+    words: (s) => words('RE-OUTFIT · ENERGY', `${reoutfitCostFor(s, 'a', 'energy')} cr`),
+    press: {
+      // Through game.ts's reoutfitMule, at DEV_STEER.reoutfitCost (1: the outfit price).
+      game: (was, now) => {
+        expect(reoutfitCostFor(was, 'a', 'energy')).toBe(outfitCostFor(was, 'a', 'energy') * DEV_STEER.reoutfitCost);
+        expect(a(now).carriedMule).toBe('energy');
+        expect(a(was).money - a(now).money).toBe(reoutfitCostFor(was, 'a', 'energy'));
+        expect(now.store.capital - was.store.capital).toBe(reoutfitCostFor(was, 'a', 'energy'));
+      },
+    },
+  },
+  {
+    row: "8a RE-OUTFIT: at one of the works' bays, the bay's good",
+    at: () => inWorksBay(2),
+    game: tookSmithore,
+    reach: (s) => ({ kind: 'reoutfit', enabled: true, good: 'medicine', cost: reoutfitCostFor(s, 'a', 'medicine'), why: null }),
+    words: (s) => words('RE-OUTFIT · MEDICINE', `${reoutfitCostFor(s, 'a', 'medicine')} cr`),
+    press: { game: (_, now) => expect(a(now).carriedMule).toBe('medicine') },
+  },
+  {
+    row: '8a, money short: disabled, with the shortfall',
+    at: () => inHall('energy'),
+    game: (s) => {
+      tookSmithore(s);
+      a(s).money = reoutfitCostFor(s, 'a', 'energy') - 4;
+    },
+    reach: (s) => ({ kind: 'reoutfit', enabled: false, good: 'energy', cost: reoutfitCostFor(s, 'a', 'energy'), why: { kind: 'money', short: 4 } }),
+    words: (s) => words('RE-OUTFIT · ENERGY', `${reoutfitCostFor(s, 'a', 'energy')} cr · 4 short`, false),
+    press: 'nothing',
+  },
+  {
+    row: "8a, at its own good's outfitter: dimmed (AM-2: re-outfitting for the same good)",
+    at: () => inHall('smithore'),
+    game: tookSmithore,
+    reach: (s) => ({ kind: 'reoutfit', enabled: false, good: 'smithore', cost: reoutfitCostFor(s, 'a', 'smithore'), why: { kind: 'sameGood' } }),
+    words: (s) => words('RE-OUTFIT · SMITHORE', 'already fitted', false),
+    press: 'nothing',
+  },
+  {
     row: '9 LEAVE: in the hall at a door',
     at: () => inHall('doorR'),
     game: (s) => void (a(s).carriedMule = 'energy'),
@@ -633,6 +686,98 @@ const TABLE: Row[] = [
     },
   },
   {
+    row: '11a TAKE MULE: on an own plot with a MULE, analysed, no filter to fit, leading none',
+    at: () => onTile(7, 4),
+    game: (s) => void (a(s).analysed = [4 * s.width + 7]),
+    reach: () => ({ kind: 'take', enabled: true, plot: { x: 7, y: 4 }, good: 'smithore' }),
+    words: () => words('TAKE MULE'),
+    press: {
+      // Through game.ts's takeMule: the plot makes nothing, and the MULE follows on its lead.
+      game: (_, now) => {
+        expect([tileOf(now, 7, 4).outfit, a(now).carriedMule]).toEqual([null, 'smithore']);
+        expect(a(now).takenMule).toMatchObject({ x: 7, y: 4, outfit: 'smithore' });
+      },
+    },
+  },
+  {
+    row: '11a, leading a MULE: no TAKE MULE',
+    at: () => onTile(7, 4),
+    game: (s) => void Object.assign(a(s), { analysed: [4 * s.width + 7], carriedMule: 'empty' }),
+    reach: () => ({ kind: 'none', enabled: false, hint: 'outfitFirst' }),
+    words: () => words('OUTFIT IT FIRST', 'in the store', false),
+    press: 'nothing',
+  },
+  {
+    row: '11 ANALYSE a lake plot from its shore (AM-18), the land underfoot analysed',
+    at: () => SHORE,
+    game: analysedShore,
+    reach: () => ({ kind: 'analyse', enabled: true, plot: { x: 5, y: 1 } }),
+    words: () => words('ANALYSE'),
+    press: { game: (_, now) => expect(hasAnalysed(a(now), now, tileOf(now, 5, 1))).toBe(true) },
+  },
+  {
+    row: '11 ANALYSE a lake plot nobody owns from its shore (AM-18): scouting',
+    at: () => SHORE,
+    game: (s) => {
+      analysedShore(s);
+      tileOf(s, 5, 1).owner = null;
+    },
+    reach: () => ({ kind: 'analyse', enabled: true, plot: { x: 5, y: 1 } }),
+    words: () => words('ANALYSE'),
+    press: { game: (_, now) => expect(hasAnalysed(a(now), now, tileOf(now, 5, 1))).toBe(true) },
+  },
+  {
+    row: '11 over the shore: on land not analysed beside a lake plot not analysed, the land underfoot first',
+    at: () => SHORE,
+    reach: () => ({ kind: 'analyse', enabled: true, plot: { x: 4, y: 1 } }),
+    words: () => words('ANALYSE'),
+    press: { game: (_, now) => expect([hasAnalysed(a(now), now, tileOf(now, 4, 1)), hasAnalysed(a(now), now, tileOf(now, 5, 1))]).toEqual([true, false]) },
+  },
+  {
+    row: "11, a lake plot just beyond the shore's reach: not offered",
+    at: () => ({ space: 'map', x: 5 - DEV_STEER.shoreReachTiles - 0.01, y: 1.5 }),
+    game: analysedShore,
+    reach: () => ({ kind: 'none', enabled: false, hint: 'store' }),
+    words: () => words('TO THE STORE', null, false),
+    press: 'nothing',
+  },
+  {
+    row: '12 FIT FILTER on an own lake plot from its shore (AM-18), Alloy held',
+    at: () => SHORE,
+    game: (s) => void Object.assign(a(s), { analysed: [1 * s.width + 4, 1 * s.width + 5], stock: { ...a(s).stock, alloy: DEVELOPMENT.filterAlloy } }),
+    reach: () => ({ kind: 'filter', enabled: true, plot: { x: 5, y: 1 }, alloy: DEVELOPMENT.filterAlloy }),
+    words: () => words('FIT FILTER', `${DEVELOPMENT.filterAlloy} Alloy`),
+    press: {
+      game: (was, now) => {
+        expect(tileOf(now, 5, 1).filter).toBe(true);
+        expect(a(was).stock.alloy - a(now).stock.alloy).toBe(DEVELOPMENT.filterAlloy);
+      },
+    },
+  },
+  {
+    row: '11a TAKE MULE off an own lake plot from its shore (AM-18), leading none',
+    at: () => SHORE,
+    game: (s) => {
+      a(s).analysed = [1 * s.width + 4, 1 * s.width + 5];
+      tileOf(s, 5, 1).outfit = 'water';
+    },
+    reach: () => ({ kind: 'take', enabled: true, plot: { x: 5, y: 1 }, good: 'water' }),
+    words: () => words('TAKE MULE'),
+    press: { game: (_, now) => expect([tileOf(now, 5, 1).outfit, a(now).carriedMule]).toEqual([null, 'water']) },
+  },
+  {
+    row: "10 over 11 and 11a at a lake's shore (AM-18): an own lake plot with a MULE, not analysed, a fitted MULE in tow: INSTALL",
+    at: () => SHORE,
+    game: (s) => {
+      analysedShore(s);
+      tileOf(s, 5, 1).outfit = 'water';
+      a(s).carriedMule = 'food';
+    },
+    reach: () => ({ kind: 'install', enabled: true, good: 'food', plot: { x: 5, y: 1 }, fromShore: true, replaces: 'water' }),
+    words: () => words('SWAP', 'from the shore · your Water MULE runs away'),
+    press: { game: (_, now) => expect(tileOf(now, 5, 1).outfit).toBe('food') },
+  },
+  {
     row: '13 PUB · END TURN: in the hall at the pub, with the payout pubPayoutFor gives',
     at: () => inHall('pub'),
     cfg: paying,
@@ -703,8 +848,8 @@ const PARITY_TURNS = 25;
 const PARITY_SEATS = ['a', 'b', 'c', 'd'] as const;
 /** Every reach the parity test must draw, so a change to its generator cannot leave it proving nothing. */
 const PARITY_COVERS = [
-  ...['fight', 'strike', 'grab', 'catch', 'enter', 'sell', 'buy', 'outfit', 'leave', 'install', 'analyse', 'filter', 'pub'],
-  ...['buy dim', 'outfit dim', 'none over', 'none done', 'none assaying', 'none dodge', 'none run', 'none stunned', 'none catch'],
+  ...['fight', 'strike', 'grab', 'catch', 'enter', 'sell', 'buy', 'outfit', 'reoutfit', 'leave', 'install', 'analyse', 'filter', 'take', 'pub'],
+  ...['buy dim', 'outfit dim', 'reoutfit dim', 'none over', 'none done', 'none assaying', 'none dodge', 'none run', 'none stunned', 'none catch'],
 ];
 const OUTFITS = Object.keys(MULE.outfitCost) as Outfit[];
 const isOutfit = (place: HallPlace | null): place is HallPlace & Outfit => (OUTFITS as (string | null)[]).includes(place);
@@ -731,6 +876,10 @@ function ruleOf(reach: Reach, secondsLeft: number): Rule | null {
       return (s, id) => awardGlint(s, id);
     case 'catch':
       return (s, id) => catchMule(s, id);
+    case 'reoutfit':
+      return (s, id) => reoutfitMule(s, id, reach.good);
+    case 'take':
+      return (s, id) => takeMule(s, id, reach.plot.x, reach.plot.y);
     case 'buy':
       return (s, id) => buyMule(s, id);
     case 'outfit':
@@ -750,7 +899,7 @@ function ruleOf(reach: Reach, secondsLeft: number): Rule | null {
 
 /** What a reach's press is aimed at, to match it with a rule tried at the same spot. */
 function targetOf(reach: Reach): string {
-  if (reach.kind === 'outfit') return reach.good;
+  if (reach.kind === 'outfit' || reach.kind === 'reoutfit') return reach.good;
   return 'plot' in reach ? `${reach.plot.x},${reach.plot.y}` : '';
 }
 
@@ -760,7 +909,12 @@ function rulesAt(state: GameState, c: FloorColonist, config: FloorConfig, second
     const place = placeAt(c, config.hall);
     if (place === 'corral') return [{ kind: 'buy', target: '', rule: (s, id) => buyMule(s, id) }];
     if (place === 'pub') return [{ kind: 'pub', target: '', rule: (s, id) => visitPub(s, id, secondsLeft) }];
-    return isOutfit(place) ? [{ kind: 'outfit', target: place, rule: (s, id) => outfitMule(s, id, place) }] : [];
+    return isOutfit(place)
+      ? [
+          { kind: 'outfit', target: place, rule: (s, id) => outfitMule(s, id, place) },
+          { kind: 'reoutfit', target: place, rule: (s, id) => reoutfitMule(s, id, place) },
+        ]
+      : [];
   }
   const [x, y] = [Math.floor(c.x), Math.floor(c.y)];
   if (x < 0 || y < 0 || x >= state.width || y >= state.height) return [];
@@ -769,6 +923,7 @@ function rulesAt(state: GameState, c: FloorColonist, config: FloorConfig, second
     { kind: 'install', target, rule: (s, id) => installMule(s, id, x, y) },
     { kind: 'analyse', target, rule: (s, id) => analysePlot(s, id, x, y) },
     { kind: 'filter', target, rule: (s, id) => fitFilter(s, id, x, y) },
+    { kind: 'take', target, rule: (s, id) => takeMule(s, id, x, y) },
   ];
 }
 
@@ -844,7 +999,12 @@ function randomTurn(rng: Rng, base: GameState): { state: GameState; floor: DevFl
   const colonists = built.colonists.map((c): FloorColonist => {
     const p = state.players.find((x) => x.id === c.id)!;
     const spot = spotFor(rng, state, config);
-    // A MULE led may have bolted, running or standing somewhere near.
+    // A MULE led may have been taken off a plot of the seat's this turn; and may have bolted, running or standing near.
+    const own = state.tiles.filter((t) => t.owner === p.id && !t.outfit);
+    if (p.carriedMule && p.carriedMule !== 'empty' && own.length > 0 && rng.chance(0.5)) {
+      const t = rng.pick(own);
+      p.takenMule = { x: t.x, y: t.y, outfit: p.carriedMule, runMonths: 0 };
+    }
     if (p.carriedMule && rng.chance(0.3)) p.muleBolted = true;
     const near = (k: number) => ({ x: Math.min(state.width - 0.01, Math.max(0, spot.x + k * (rng.next() - 0.5))), y: Math.min(state.height - 0.01, Math.max(0, spot.y + k * (rng.next() - 0.5))) });
     const lead = p.carriedMule ? { good: p.carriedMule === 'empty' ? null : p.carriedMule, ...(spot.space === 'map' && p.muleBolted ? near(2) : spot) } : null;
