@@ -49,10 +49,13 @@ export interface DevTurn {
   installs: number;
   /** MULEs it bought at the corral this turn: one bought and not installed was paid for and lost (FM-hurry-margin). */
   bought: number;
-  /** A pack met it while it led a MULE: the one excuse for a MULE bought and not installed (FM-hurry-margin). */
-  packLeading: boolean;
-  /** Its hand gave up an outfit or an install on the floor (the button offered something else): a MULE lost for that, not for time. */
-  muleStepFailed: boolean;
+  /**
+   * Each MULE it bought and did not install, in order, and what met that MULE's own errand, from its purchase to the
+   * install or the next purchase (FM-hurry-margin): `packLeading`, a pack met it while it led this MULE, the one excuse
+   * for a MULE lost; `stepFailed`, its hand gave up this MULE's outfit or install on the floor (the button offered
+   * something else), a MULE lost for that, not for time.
+   */
+  lostMules: { packLeading: boolean; stepFailed: boolean }[];
   /**
    * A wolf's bite cost it the pub (T-AC-5's one excuse, AM-26): at the tick the bite landed, its walk to the pub at the
    * bitten pace (floor-time.ts's pubSeconds, the AI's own estimate) was longer than the seconds left, and unbitten not
@@ -174,7 +177,7 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
   const tickSeconds = cfg.steer.tickMs / MS_PER_SECOND;
   let floor: DevFloor = buildFloor(state, cfg);
   const ids = seats.map((s) => s.id);
-  const turns = new Map(ids.map((id): [string, DevTurn] => [id, { month: state.month, id, pubAt: null, payout: null, quoted: null, installs: 0, bought: 0, packLeading: false, muleStepFailed: false, scoutsCut: 0, biteCostPub: false, lakeAnalyses: { failed: 0, noTime: 0 }, refused: 0 }]));
+  const turns = new Map(ids.map((id): [string, DevTurn] => [id, { month: state.month, id, pubAt: null, payout: null, quoted: null, installs: 0, bought: 0, lostMules: [], scoutsCut: 0, biteCostPub: false, lakeAnalyses: { failed: 0, noTime: 0 }, refused: 0 }]));
   let waiting = state.month === 1 && cfg.steer.month1WaitsForFirstMule;
   // Whole ticks, so the clock never drifts in floating point: stood waiting, and run.
   let stood = 0;
@@ -183,6 +186,9 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
   const done = (id: string) => player(state, id).doneDeveloping;
   const moments = noMoments();
   const raced = new Set<number>();
+  // Each seat's MULEs bought this turn, the last the one whose errand is under way; and how much of its hand's log is read.
+  const mules = new Map(ids.map((id): [string, { installed: boolean; packLeading: boolean; stepFailed: boolean }[]] => [id, []]));
+  const read = new Map(ids.map((id): [string, number] => [id, 0]));
   for (;;) {
     if (waiting && ids.every((id) => isIn(state, id))) waiting = false;
     if (waiting && stood * tickSeconds >= cfg.steer.simHostContinueSeconds) {
@@ -202,7 +208,8 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
     countStep(moments, before, floor);
     for (const c of floor.colonists) {
       const was = before.colonists.find((x) => x.id === c.id)!;
-      if (c.encounter && !was.encounter && c.lead !== null && !done(c.id)) turns.get(c.id)!.packLeading = true;
+      const errand = mules.get(c.id)?.at(-1);
+      if (c.encounter && !was.encounter && c.lead !== null && !done(c.id) && errand) errand.packLeading = true;
       const bit = c.bitten && !was.bitten;
       if (bit && !done(c.id) && biteCostPub(state, cfg, c, left)) turns.get(c.id)!.biteCostPub = true;
     }
@@ -228,8 +235,15 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
         const press = applyReach(state, floor, id, left, cfg);
         const pressed = floor;
         floor = press.floor;
-        if (press.reach.kind === 'install') turn.installs++;
-        if (press.reach.kind === 'buy') turn.bought++;
+        if (press.reach.kind === 'install') {
+          turn.installs++;
+          const errand = mules.get(id)!.at(-1);
+          if (errand) errand.installed = true;
+        }
+        if (press.reach.kind === 'buy') {
+          turn.bought++;
+          mules.get(id)!.push({ installed: false, packLeading: false, stepFailed: false });
+        }
         if (press.reach.kind === 'sell') moments.peltsSold += press.reach.pelts;
         if (press.reach.kind === 'catch') moments.caught++;
         if (press.reach.kind === 'grab') moments.glintsWon++;
@@ -245,6 +259,15 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
         turn.refused++;
       }
     }
+    // An outfit or an install its hand gave up on the floor, logged this tick: the MULE whose errand is under way's.
+    for (const s of seats) {
+      const log = s.developLog();
+      const errand = mules.get(s.id)!.at(-1);
+      for (const e of log.slice(read.get(s.id)!)) {
+        if (errand && !e.ok && !e.why?.startsWith('hurry') && (e.action.type === 'outfit' || e.action.type === 'install')) errand.stepFailed = true;
+      }
+      read.set(s.id, log.length);
+    }
     if (waiting) stood++;
     else run++;
     yield;
@@ -253,7 +276,7 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
     const turn = turns.get(s.id)!;
     turn.lakeAnalyses = lakeFailures(state, s.developLog());
     turn.scoutsCut = s.developLog().filter((e) => e.why === 'hurry' && (e.action.type === 'analyse' || e.action.type === 'filter')).length;
-    turn.muleStepFailed = s.developLog().some((e) => !e.ok && !e.why?.startsWith('hurry') && (e.action.type === 'outfit' || e.action.type === 'install'));
+    turn.lostMules = mules.get(s.id)!.filter((m) => !m.installed).map(({ packLeading, stepFailed }) => ({ packLeading, stepFailed }));
   }
   moments.raced = raced.size;
   moments.scrambleRacers = seats.reduce((n, s) => n + s.developScramblesRaced(), 0);
