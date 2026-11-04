@@ -27,8 +27,8 @@ import {
   WOLVES,
 } from '@mule/engine';
 import { FloorWalker, type StepRun } from '../src/hands/floor-walker.js';
-import { muleLegs, placePoint } from '../src/floor-time.js';
-import { playFloorPhase, simFloorConfig } from '../src/floor-turn.js';
+import { muleLegs, placePoint, pubSeconds } from '../src/floor-time.js';
+import { biteCostPub, playFloorPhase, simFloorConfig } from '../src/floor-turn.js';
 import { ROTATION, simSeats } from '../src/lineup.js';
 import type { FloorMomentCounts } from '../src/floor-turn.js';
 import { playGame, type DevTurn, type SeatSpec } from '../src/play.js';
@@ -254,6 +254,27 @@ describe('the sim referees the floor as the server will (arcade C10)', () => {
     const turns = steeredTurns(12).flat();
     for (const t of turns) expect(t.payout, `month ${t.month} ${t.id}`).toBe(t.quoted);
     expect(turns.every((t) => t.quoted !== null)).toBe(true);
+  });
+
+  it("AM-26: the bite is the excuse only where it cost the pub: the walk there fitted the clock unbitten, and bitten it does not", () => {
+    steered(() => {
+      const state = createGame({ seed: 4, players: LEVELS.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
+      while (state.phase !== 'development') advancePhase(state);
+      const cfg = simFloorConfig();
+      // A colonist bitten out on the map, at the far end of a plot row from the store.
+      const store = state.tiles.find((t) => t.terrain === 'store')!;
+      const far = state.tiles.filter((t) => t.y === store.y && terrainShare(t.terrain, cfg) > 0).reduce((a, b) => (Math.abs(b.x - store.x) > Math.abs(a.x - store.x) ? b : a));
+      const built = buildFloor(state, cfg);
+      const c: FloorColonist = { ...built.colonists[1]!, space: 'map', x: far.x + 0.5, y: far.y + 0.5, lead: null, bitten: true };
+      const unbitten = pubSeconds(state, cfg, { ...c, bitten: false });
+      const bitten = pubSeconds(state, cfg, c);
+      expect(bitten, 'the bite slows the walk to the pub').toBeGreaterThan(unbitten);
+      const between = (unbitten + bitten) / 2; // literal-ok: halfway between the two walks
+      expect(biteCostPub(state, cfg, c, between), 'in time unbitten, late bitten: the bite cost it the pub').toBe(true);
+      expect(biteCostPub(state, cfg, c, bitten + 1), 'in time even bitten: no excuse needed').toBe(false);
+      // Already late by its own choices before the bite: the bite cost it nothing, and the miss is its own.
+      expect(biteCostPub(state, cfg, c, unbitten - 1), 'late even unbitten: not the bite').toBe(false);
+    });
   });
 
   it("AM-19: a turn steps tick n only while n × tickMs is under the clock, so the bell comes first, as on the server", () => {

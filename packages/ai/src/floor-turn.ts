@@ -137,6 +137,14 @@ export function simFloorConfig(): FloorConfig {
   return { ...floorConfig(), pubPayout: pubPayoutFor };
 }
 
+/**
+ * T-AC-5's one excuse (AM-26), for a colonist just bitten with `left` seconds on the clock: the bite cost it the pub,
+ * its walk there at the bitten pace (floor-time.ts's pubSeconds, the AI's own estimate) longer than the time left.
+ */
+export function biteCostPub(state: GameState, cfg: FloorConfig, c: FloorColonist, left: number): boolean {
+  return pubSeconds(state, cfg, c) > left;
+}
+
 /** The analyses of lake plots in a hand's log for the month that failed on the way, and that it dropped for time. */
 function lakeFailures(state: GameState, log: ReturnType<AiSeat['developLog']>): DevTurn['lakeAnalyses'] {
   const lake = (x: number, y: number) => state.tiles[tileIndex(state.width, x, y)]?.terrain === 'lake';
@@ -177,7 +185,7 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
     countStep(moments, before, floor);
     for (const c of floor.colonists) {
       const bit = c.bitten && !before.colonists.find((x) => x.id === c.id)!.bitten;
-      if (bit && !done(c.id) && pubSeconds(state, cfg, c) > left) turns.get(c.id)!.biteCostPub = true;
+      if (bit && !done(c.id) && biteCostPub(state, cfg, c, left)) turns.get(c.id)!.biteCostPub = true;
     }
     for (const s of seats) {
       const racing = s.developRacing();
