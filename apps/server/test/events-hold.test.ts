@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 // The client's own reading of a sick line: the reason crosses the seam as prose, so the two must agree.
 import { sickBecause } from '../../../packages/ui/src/events/sick.js';
 import { AI_DEV_TICK_MS, MuleGame } from '../src/mule-game.js';
-import { clockRunsInMonth1, fakeContext, readyAll, seats, toDevelopment } from './fake-context.js';
+import { clockRunsInMonth1, fakeContext, pressThroughSidePick, readyAll, seats, toDevelopment } from './fake-context.js';
 
 /** A month event of `key` that hit one plot; its words and shape don't matter to how long it plays. */
 function event(key: EventKey, phase: Phase): MonthEvent {
@@ -141,6 +141,7 @@ describe('T-AC-10: development lists the players who fell sick at its start as b
     for (let i = 0; i < 100_000 && !(state.month === 2 && state.phase === 'development'); i++) {
       const phase = game.viewFor(null).phase;
       if (phase === 'planning' || phase === 'upkeep') readyAll(game);
+      pressThroughSidePick(game);
       advance(100);
       // Heiko's sickness stays on his player until the next roll; no later phase of month 1 lists it.
       if (state.month === 1 && state.phase !== 'development') {
@@ -251,7 +252,10 @@ function toPhase(target: Phase, keys: EventKey[], phaseOf: Partial<Record<EventK
   const push = state.history.push.bind(state.history);
   state.history.push = (...reports: MonthReport[]) => push(...reports.map((r) => ({ ...r, events: keys.map((k) => event(k, phaseOf[k] ?? 'production')) })));
   readyAll(game);
-  for (let i = 0; i < 100_000 && enteredAt === null; i++) fake.advance(100);
+  for (let i = 0; i < 100_000 && enteredAt === null; i++) {
+    pressThroughSidePick(game);
+    fake.advance(100);
+  }
   if (enteredAt === null) throw new Error(`month 1 never reached ${target}`);
   return { game, state, enteredAt: enteredAt as number, ...fake };
 }

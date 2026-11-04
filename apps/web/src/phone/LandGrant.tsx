@@ -1,6 +1,7 @@
 import { GAME } from '@mule/engine';
-import { Button, cx, HoloMap, PlayerMark, TERRAIN_NAME, ZoomMap } from '@mule/ui';
-import { mapTiles, PHASE_NAME, plotName, secondsUntil, TERRAIN_ODDS, tileAt, toSlot } from '../game/derive';
+import type { MyView, TileView } from '@mule/protocol';
+import { Button, cx, GOOD_NAME, HoloMap, PlayerMark, TERRAIN_NAME, ZoomMap, type Good } from '@mule/ui';
+import { groundPips, mapTiles, PHASE_NAME, plotName, secondsUntil, TERRAIN_ODDS, tileAt, toSlot } from '../game/derive';
 import { SpecialLine } from '../components/SpecialLine';
 import { useClient, useServerNow } from '../net/react';
 import { GroundCard } from './ground';
@@ -37,6 +38,7 @@ export function LandGrant() {
                   {TERRAIN_NAME[litTile.terrain]} <span className="font-mono text-base text-ink-3">{plotName(litTile.x, litTile.y)}</span>
                 </span>
                 <SpecialLine special={litTile.special} />
+                <DroneFound tile={litTile} me={me} />
                 {ground ? (
                   <GroundCard ground={ground} />
                 ) : (
@@ -72,6 +74,35 @@ export function LandGrant() {
       </MapFit>
     </PhoneShell>
   );
+}
+
+/**
+ * The fewest pips (of 4) the drone line's best good needs to be named "good for". A display threshold, not balance:
+ * groundPips gives Food, Water and Energy a pip even at a raw 0, so a best of 1 is a poor plot, not a good one.
+ */
+const DRONE_GOOD_MIN_PIPS = 2;
+
+/**
+ * "Your drone: 12·5 Desert, good for Energy" while the lit plot is one this player's drone surveyed this month (H-3).
+ * The goods are the analysis's best, on the pips the ground card and the map draw, so the line names what the map marks.
+ * Below DRONE_GOOD_MIN_PIPS it names none and stops at the plot and its terrain.
+ */
+function droneFoundLine(tile: TileView, me: Pick<MyView, 'droneFound'>): string | null {
+  if (!tile.ground || !me.droneFound?.some((p) => p.x === tile.x && p.y === tile.y)) return null;
+  const pips = (Object.entries(tile.ground) as [Good, number][]).map(([g, n]) => [g, groundPips(g, n)] as const);
+  const top = Math.max(0, ...pips.map(([, n]) => n));
+  const best = pips.filter(([, n]) => top >= DRONE_GOOD_MIN_PIPS && n === top).map(([g]) => GOOD_NAME[g]);
+  const where = `Your drone: ${plotName(tile.x, tile.y)} ${TERRAIN_NAME[tile.terrain]}`;
+  return best.length ? `${where}, good for ${best.length > 1 ? `${best.slice(0, -1).join(', ')} and ${best.at(-1)}` : best[0]}` : where;
+}
+
+function DroneFound({ tile, me }: { tile: TileView; me: MyView }) {
+  const line = droneFoundLine(tile, me);
+  return line ? (
+    <span className="text-sm font-semibold text-holo" data-testid="drone-found">
+      {line}
+    </span>
+  ) : null;
 }
 
 interface FooterProps {
