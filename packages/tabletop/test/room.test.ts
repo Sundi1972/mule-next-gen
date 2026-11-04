@@ -1141,8 +1141,11 @@ describe('Room: a connection is a board or a seat, never both (FM-12)', () => {
   });
 });
 
-/** The secrets game with a bug: the secret 'boom' throws a plain Error, as an engine bug would, and so can a tick it schedules. */
-function buggyRoom(tick?: 'throws') {
+/**
+ * The secrets game with a bug: the secret 'boom' throws a plain Error, as an engine bug would, and so can a tick it
+ * schedules, or its hearing that a seat's screen went away (`onLeave`).
+ */
+function buggyRoom(tick?: 'throws', onLeave?: () => void) {
   const errors: unknown[] = [];
   let closed = 0;
   const room = new Room<Intent, View>({
@@ -1160,6 +1163,9 @@ function buggyRoom(tick?: 'throws') {
         handle(seatId, intent) {
           if (intent.secret === 'boom') throw new Error('boom');
           game.handle(seatId, intent);
+        },
+        connectionChanged(_seatId, connected) {
+          if (!connected) onLeave?.();
         },
       };
     },
@@ -1215,6 +1221,37 @@ describe('Room: a game error ends only its own table', () => {
     const before = mia.inbox.length;
     room.receive(mia, mia.from, { t: 'chat', text: 'still here?' });
     expect(mia.inbox).toHaveLength(before);
+  });
+
+  it('a game error ends only its own table: a game that throws on hearing a screen went away ends the room the same way, and the closing socket sees no throw', async () => {
+    const { room, heiko, mia, tv, errors, closes } = buggyRoom(undefined, () => {
+      throw new Error('leave boom');
+    });
+    room.receive(heiko, heiko.from, { t: 'start' });
+
+    expect(() => room.disconnect(heiko)).not.toThrow();
+    await flush();
+
+    for (const screen of [mia, tv]) expect(screen.inbox.at(-1)).toStrictEqual({ t: 'removed', reason: 'error' });
+    expect(closes()).toBe(1);
+    expect(errors).toHaveLength(1);
+    expect((errors[0] as Error).message).toBe('leave boom');
+    expect(() => room.disconnect(mia)).not.toThrow();
+    expect(closes()).toBe(1);
+  });
+
+  it('a game error ends only its own table: even a TableError on hearing a screen went away ends the room, since no player\'s move caused it', async () => {
+    const { room, heiko, mia, tv, errors, closes } = buggyRoom(undefined, () => {
+      throw new TableError('Not now');
+    });
+    room.receive(heiko, heiko.from, { t: 'start' });
+
+    expect(() => room.disconnect(heiko)).not.toThrow();
+    await flush();
+
+    for (const screen of [mia, tv]) expect(screen.inbox.at(-1)).toStrictEqual({ t: 'removed', reason: 'error' });
+    expect(closes()).toBe(1);
+    expect((errors as Error[]).map((e) => e.message)).toEqual(['Not now']);
   });
 
   it('a game error ends only its own table: a TableError still goes to the sender only, and the room plays on', async () => {
@@ -1590,5 +1627,82 @@ describe('Room: a held room runs no game callback until release (FM-11)', () => 
     expect(errors.map((err) => (err as Error).message)).toEqual(['tick boom']);
     expect(closes()).toBe(1);
     expect(fired).toEqual([]);
+  });
+});
+
+/**
+ * A started room whose game, on hearing a screen went away, starts a tick that reschedules itself, as the server's
+ * auction tick does after a leave ends a phase. Counts what the game heard and how often the tick ran.
+ */
+function tickingRoom() {
+  const heard = { changes: [] as [string, boolean][], ticks: 0 };
+  let ctx!: GameContext;
+  const room = new Room<Intent, View>({
+    code: 'KRTX',
+    createGame: (c) => {
+      ctx = c;
+      const tick = () => {
+        heard.ticks++;
+        ctx.schedule(100, tick);
+      };
+      return {
+        ...secretsGame(),
+        connectionChanged: (seatId, connected) => {
+          heard.changes.push([seatId, connected]);
+          if (!connected) ctx.schedule(100, tick);
+        },
+      };
+    },
+    newToken: () => `t${++tokens}`,
+  });
+  const heiko = join(room, 'Heiko');
+  const mia = join(room, 'Mia');
+  room.receive(heiko, heiko.from, { t: 'start' });
+  return { room, heiko, mia, heard, schedule: (ms: number, fn: () => void) => ctx.schedule(ms, fn) };
+}
+
+describe('Room: a disposed room is done with its game', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('a screen that leaves after the room was disposed reaches no game, and no tick starts', async () => {
+    const { room, heiko, heard } = tickingRoom();
+    room.dispose();
+
+    expect(() => room.disconnect(heiko)).not.toThrow();
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(heard.changes).toEqual([]);
+    expect(heard.ticks).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('a callback the game schedules after the room was disposed never runs and holds no timer', async () => {
+    const { room, schedule } = tickingRoom();
+    room.dispose();
+    let ran = false;
+
+    schedule(60_000, () => void (ran = true));
+    // No timer at all, not one that waits to do nothing: a pending timer would keep the disposed room in memory.
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(ran).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('positive control: before dispose, a leave reaches the game and its tick runs', async () => {
+    const { room, heiko, heard } = tickingRoom();
+
+    room.disconnect(heiko);
+    await vi.advanceTimersByTimeAsync(350);
+
+    expect(heard.changes).toEqual([['s1', false]]);
+    expect(heard.ticks).toBe(3);
+    room.dispose();
   });
 });
