@@ -31,9 +31,13 @@ const NEAR_TILES = 0.15;
 const NEAR_HALL = 0.3;
 /** The hall's corridor runs between the top rooms and the bottom ones. */
 const CORRIDOR_Y = HALL.h / 2;
-/** How long W-1 holds the stick on mountains, in game seconds, as UBER-AC-2 says; plains run out sooner here. */
-const HOLD_GAME_S = 2;
-const PLAINS_HOLD_GAME_S = 0.6;
+/**
+ * How far W-1 walks each land, in tiles: what this map has of it in a row from where the hold starts, with room to
+ * spare. The hold lasts that distance at the config's speed, so a faster walk never carries the colonist off the land
+ * it measures.
+ */
+const PLAINS_TILES = 1.2;
+const MOUNTAIN_TILES = 1.4;
 /** Measured speed against the config's: frames land on ticks, and the first and last tick of a hold carry no step. */
 const SPEED_TOLERANCE = 0.15;
 /** W-6's flood: steers a second, for this long. */
@@ -138,7 +142,7 @@ try {
   const expectSpeed = (terrain: Terrain) => DEV_STEER.mapTilesPerSecond * (SHARE[terrain] ?? 0) * pace;
   check(await steerTo(host, 'map', plot.x + ON_PLOT_X, plot.y + 0.5, NEAR_TILES), 'W-1: the host never reached its own plot');
   check(await steerTo(host, 'map', plot.x - INTO_PLAINS_X, plot.y + 0.5, NEAR_TILES), 'W-1: the host never reached the plains');
-  const plains = await hold(-1, PLAINS_HOLD_GAME_S);
+  const plains = await hold(-1, PLAINS_TILES / expectSpeed('plains'));
   const plainsLand = terrainAt(view, plains.to.x, plains.to.y);
   soft(plainsLand === 'plains' && terrainAt(view, plains.from.x, plains.from.y) === 'plains', `W-1: the plains hold ran from ${terrainAt(view, plains.from.x, plains.from.y)} to ${plainsLand}`);
   soft(Math.abs(plains.tilesPerSecond - expectSpeed('plains')) <= expectSpeed('plains') * SPEED_TOLERANCE, `W-1: held on plains it walked ${plains.tilesPerSecond.toFixed(2)} tiles/s, not ${expectSpeed('plains').toFixed(2)}`);
@@ -163,7 +167,7 @@ try {
   check(await steerHall(host, hallRoute(me(host)!, 'doorR'), NEAR_HALL), 'W-1: never reached the right door');
   check(await press(host), 'W-1: LEAVE by the right door changed nothing');
   check(await until(() => me(host)?.space === 'map', 2_000), 'W-1: LEAVE did not take the colonist onto the map');
-  const mountains = await hold(1, HOLD_GAME_S);
+  const mountains = await hold(1, MOUNTAIN_TILES / expectSpeed('mountains'));
   soft(terrainAt(view, mountains.to.x, mountains.to.y) === 'mountains', `W-1: the mountains hold ended on ${terrainAt(view, mountains.to.x, mountains.to.y)}`);
   soft(Math.abs(mountains.tilesPerSecond - expectSpeed('mountains')) <= expectSpeed('mountains') * SPEED_TOLERANCE, `W-1: held on mountains it walked ${mountains.tilesPerSecond.toFixed(2)} tiles/s, not ${expectSpeed('mountains').toFixed(2)}`);
 
