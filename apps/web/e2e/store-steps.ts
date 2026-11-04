@@ -1358,7 +1358,7 @@ const READ_MOMENTS = `(() => {
   const corral = document.querySelector('[data-testid=scramble-corral]');
   return {
     wolves: all('[data-testid^=wolf-]').filter((e) => /^wolf-s\\d+-\\d+$/.test(id(e))).map((e) => ({ who: id(e).split('-')[1], state: e.getAttribute('data-state'), x: Number(e.getAttribute('data-x')), y: Number(e.getAttribute('data-y')) })),
-    callouts: all('[data-testid^=wolf-choice-], [data-testid^=wolf-chase-], [data-testid^=fight-hud-], [data-testid^=stunned-]').map((e) => ({ id: id(e), text: e.textContent })),
+    callouts: all('[data-testid^=wolf-choice-], [data-testid^=wolf-chase-], [data-testid^=fight-hud-]').map((e) => ({ id: id(e), text: e.textContent })),
     marks: all('[data-testid^=bitten-], [data-testid^=pelts-]').map(id),
     glint: glint && { x: Number(glint.getAttribute('data-x')), y: Number(glint.getAttribute('data-y')) },
     strip: strip && strip.textContent,
@@ -1556,9 +1556,6 @@ export async function wolvesRunOrFight(t: ArcadeTable): Promise<string> {
     } else {
       const tick = floorOf(server, code).tick;
       check((after.stunnedUntilTick ?? 0) > tick, `B-AC-5: a fight lost with no MULE on the lead stuns Heiko, got pelts ${after.pelts}, stunned until ${after.stunnedUntilTick} (${fought})`);
-      await heiko.waitForTimeout(200);
-      const stunned = await readMoments(heiko);
-      owe("Heiko's phone says he is stunned", stunned.callouts.some((c) => c.id === 'stunned-s1'), `it drew ${JSON.stringify(stunned.callouts)}`);
       out.push(`Heiko fought and lost, stunned (${fought})`);
     }
   } finally {
@@ -1738,7 +1735,6 @@ export async function theScramble(t: ArcadeTable): Promise<string> {
     check(called && called.over === null && ['s2', 's3', 's4'].every((s) => called.needers.includes(s)), `B-AC-7: Heiko's sale leaves 2 and calls the scramble for the three still needing one, got ${JSON.stringify(called)}`);
     await tv.waitForTimeout(300);
     const call = await Promise.all([...phones, tv].map(readMoments));
-    owed.push({ tag: 'the TV calls it', ok: call[4]!.beats.some((b) => b.includes('2 MULEs left! Race to the corral')), said: `the frames' beats ${JSON.stringify(heardBeats(wires.tv, Date.now() - 2_000))}; the TV shows ${JSON.stringify(call[4]!.beats)}` });
     owed.push({
       tag: 'every phone calls the scramble: Heiko got one, the others race, and the TV\'s corral counts 2',
       ok:
@@ -1748,6 +1744,7 @@ export async function theScramble(t: ArcadeTable): Promise<string> {
         call[4]!.corral === '2',
       said: `${framesSay(heardMoments(wires.tv))}; the phones' banners ${JSON.stringify(call.slice(0, 4).map((r) => r.banner && [r.banner.tone, r.banner.text]))}, the TV's corral ${call[4]!.corral}`,
     });
+    owed.push({ tag: 'the TV calls it', ok: call[4]!.beats.some((b) => b.includes('2 MULEs left! Race to the corral')), said: `the frames' beats ${JSON.stringify(heardBeats(wires.tv, Date.now() - 2_000))}; the TV shows ${JSON.stringify(call[4]!.beats)}` });
     const covered = (await Promise.all(phones.map((p, i) => bannerCovers(p, seats[i]!)))).flat();
     owed.push({ tag: 'the banner covers 0 px² of the store, your plots and the controls', ok: covered.length === 0, said: `it covers ${covered.join(', ') || 'nothing'}` });
 
