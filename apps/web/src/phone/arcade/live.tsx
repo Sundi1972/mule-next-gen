@@ -4,8 +4,8 @@ import { createContext, useContext, useEffect, useMemo, useRef, useSyncExternalS
 import type { TableClient } from '../../net/client';
 import { useClient } from '../../net/react';
 import { startControls, stickOf, type Controls } from './controls';
-import { othersAt, pushFrame, startFrameLog, type Drawn, type FrameLog } from './frames';
-import { advanceTo, markStale, phoneTick, predictWorld, receiveFrame, shownAt, startPrediction, steerFrom, type ColonistBase, type Prediction, type Shown } from './predict';
+import { msPerTick, othersAt, pushFrame, startFrameLog, type Drawn, type FrameLog } from './frames';
+import { advanceTo, assayTick, holdUntil, markStale, phoneTick, predictWorld, receiveFrame, shownAt, startPrediction, steerFrom, type ColonistBase, type Prediction, type Shown } from './predict';
 import { gateSteer, startGate, type SteerGate } from './steer';
 import { usePhoneGame } from '../game';
 
@@ -138,9 +138,10 @@ export function PhoneLive({ children }: { children: ReactNode }) {
   // The copy steps on the map and your MULE: a new world only when either changes, not on every view.
   const world = useMemo(() => predictWorld(view, me, cfg), [view.width, view.height, view.tiles, me.id, me.carriedMule, cfg]);
   const base: ColonistBase = { pace: paceOf(self), bitten: !!self.colonist?.bitten, pelts: self.colonist?.pelts ?? 0 };
-  const state = useRef<{ p: Prediction; log: FrameLog; gate: SteerGate; beats: Beat[] }>({ p: startPrediction(), log: startFrameLog(), gate: startGate(), beats: [] });
-  const ctx = useRef({ world, base, view });
-  ctx.current = { world, base, view };
+  // `assaying`: the assay end (server ms) the copy already holds for, so each view's is applied once.
+  const state = useRef<{ p: Prediction; log: FrameLog; gate: SteerGate; beats: Beat[]; assaying: number | null }>({ p: startPrediction(), log: startFrameLog(), gate: startGate(), beats: [], assaying: null });
+  const ctx = useRef({ world, base, view, self });
+  ctx.current = { world, base, view, self };
   const othersFrom = (log: FrameLog, now: number) => {
     const drawn = othersAt(log, now, cfg.steer);
     drawn.delete(me.id);
@@ -159,7 +160,14 @@ export function PhoneLive({ children }: { children: ReactNode }) {
       const s = state.current;
       const { world } = ctx.current;
       s.p = markStale(s.p, now, cfg);
-      const target = phoneTick(s.p, now, client.roundTripMs() ?? 0, cfg);
+      const rtt = client.roundTripMs() ?? 0;
+      // Your own view says you assay: the copy stands until then, as the server holds you (needs a frame to time it).
+      const until = ctx.current.self.colonist?.assayUntil ?? null;
+      if (until !== s.assaying && (until === null || s.p.frame)) {
+        s.assaying = until;
+        s.p = holdUntil(s.p, until === null ? null : assayTick(s.p, until, now, client.serverNow(), rtt, msPerTick(s.log, cfg.steer.tickMs)));
+      }
+      const target = phoneTick(s.p, now, rtt, cfg);
       if (target !== null) s.p = advanceTo(s.p, target, world);
       const shown = shownAt(s.p, now, cfg);
       const want = stickOf(source.controls, shown);

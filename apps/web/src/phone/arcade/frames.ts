@@ -65,5 +65,10 @@ export function othersAt(log: FrameLog, nowMs: number, cfg: Pick<typeof DEV_STEE
   return drawn;
 }
 
-/** Real ms between the server's ticks. Not built yet: its test first. */
-export const msPerTick = (_log: FrameLog, fallback: number): number => fallback;
+/** Real ms between the server's ticks, from when the kept frames came; `fallback` (DEV_STEER.tickMs) until two have. */
+export function msPerTick(log: FrameLog, fallback: number): number {
+  const first = log.frames[0];
+  const last = log.frames.at(-1);
+  if (!first || !last || last.frame.tick === first.frame.tick) return fallback;
+  return (last.recvMs - first.recvMs) / (last.frame.tick - first.frame.tick);
+}

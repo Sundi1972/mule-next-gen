@@ -60,12 +60,17 @@ export interface Prediction {
   readonly ease: { dx: number; dy: number; fromMs: number } | null;
   /** The newest frame's tick, when it came, and your colonist in it. */
   readonly frame: { tick: number; recvMs: number; me: FramedColonist } | null;
+  /**
+   * Assaying until this tick, as your own view said (ColonistView.assayUntil): the copy stands still on every step that
+   * starts before it, whatever the stick, as the server holds it. Null when not assaying.
+   */
+  readonly hold: number | null;
   /** Frames compared with the copy, corrections eased, snaps, and the furthest apart a compare found them, in tiles. */
   readonly stats: { compared: number; corrected: number; snapped: number; worst: number };
 }
 
 export function startPrediction(): Prediction {
-  return { status: 'waiting', tick: 0, me: null, past: [], inputs: [], ease: null, frame: null, stats: { compared: 0, corrected: 0, snapped: 0, worst: 0 } };
+  return { status: 'waiting', tick: 0, me: null, past: [], inputs: [], ease: null, frame: null, hold: null, stats: { compared: 0, corrected: 0, snapped: 0, worst: 0 } };
 }
 
 /** The wire rounds positions to 2 decimals (spec AM-13): a copy this close on each axis agrees with its frame. */
@@ -92,17 +97,19 @@ export function markStale(p: Prediction, nowMs: number, cfg: FloorConfig): Predi
 
 const stickAt = (inputs: readonly Input[], tick: number): Stick => inputs.filter((i) => i.tick <= tick).at(-1) ?? { x: 0, y: 0 };
 
-function stepMe(me: FloorColonist, tick: number, stick: Stick, world: PredictWorld): FloorColonist {
-  const next = stepFloor({ tick, colonists: [me] }, world.state, { [world.id]: { x: stick.x, y: stick.y, act: false } }, world.cfg.steer.tickMs, world.cfg);
+function stepMe(me: FloorColonist, tick: number, stick: Stick, world: PredictWorld, hold: number | null): FloorColonist {
+  // stepFloor holds an assaying colonist still itself, as on the server.
+  const held = hold !== null && tick < hold ? { ...me, assayUntilTick: hold } : me;
+  const next = stepFloor({ tick, colonists: [held] }, world.state, { [world.id]: { x: stick.x, y: stick.y, act: false } }, world.cfg.steer.tickMs, world.cfg);
   return next.colonists[0]!;
 }
 
 /** The copy stepped on from (tick, me) to `to`, each step with its tick's stick, and the past those steps add. */
-function replay(from: { tick: number; me: FloorColonist }, to: number, inputs: readonly Input[], world: PredictWorld) {
+function replay(from: { tick: number; me: FloorColonist }, to: number, inputs: readonly Input[], world: PredictWorld, hold: number | null) {
   let { tick, me } = from;
   const added: { tick: number; me: FloorColonist }[] = [];
   while (tick < to) {
-    me = stepMe(me, tick, stickAt(inputs, tick), world);
+    me = stepMe(me, tick, stickAt(inputs, tick), world, hold);
     tick++;
     added.push({ tick, me });
   }
@@ -124,7 +131,7 @@ function trim(p: Prediction, cfg: FloorConfig): Prediction {
 export function advanceTo(p: Prediction, tick: number, world: PredictWorld): Prediction {
   if (p.status !== 'live' || !p.me || tick <= p.tick) return p;
   const to = Math.min(tick, p.tick + world.cfg.steer.catchUpTicks);
-  const run = replay({ tick: p.tick, me: p.me }, to, p.inputs, world);
+  const run = replay({ tick: p.tick, me: p.me }, to, p.inputs, world, p.hold);
   return trim({ ...p, tick: run.tick, me: run.me, past: [...p.past, ...run.added] }, world.cfg);
 }
 
@@ -160,12 +167,31 @@ export function receiveFrame(p: Prediction, frame: DevFrame, nowMs: number, worl
   const compared = { ...p.stats, compared: p.stats.compared + 1, worst: Math.max(p.stats.worst, apart) };
   if (Math.abs(mine.x - server.x) <= WIRE_TILES && Math.abs(mine.y - server.y) <= WIRE_TILES && mine.space === server.space) return { ...p, frame: framed, stats: compared };
   const shown = shownAt(p, nowMs, world.cfg)!;
-  const run = replay({ tick: frame.tick, me: { ...fresh, lead: fresh.lead ?? mine.lead } }, p.tick, p.inputs, world);
+  const run = replay({ tick: frame.tick, me: { ...fresh, lead: fresh.lead ?? mine.lead } }, p.tick, p.inputs, world, p.hold);
   const past = [...p.past.filter((e) => e.tick < frame.tick), { tick: frame.tick, me: fresh }, ...run.added];
   const snap = apart > world.cfg.steer.snapTiles || shown.space !== run.me.space;
   const ease = snap ? null : { dx: shown.x - run.me.x, dy: shown.y - run.me.y, fromMs: nowMs };
   const stats = snap ? { ...compared, snapped: compared.snapped + 1 } : { ...compared, corrected: compared.corrected + 1 };
   return trim({ ...p, me: run.me, past, ease, frame: framed, stats }, world.cfg);
+}
+
+/**
+ * The tick the server's clock reaches `assayUntilMs` at (ColonistView.assayUntil, server epoch ms): the server's tick
+ * now, from the newest frame and the half round trip it took, plus the ms still to go at `msPerTick` of real time (the
+ * frames' own pace, which a table's phase scale may set quicker than tickMs). Null before a frame.
+ */
+export function assayTick(p: Prediction, assayUntilMs: number, nowMs: number, serverNowMs: number, rttMs: number, msPerTick: number): number | null {
+  if (!p.frame) return null;
+  return p.frame.tick + Math.ceil((nowMs - p.frame.recvMs + rttMs / 2 + (assayUntilMs - serverNowMs)) / msPerTick);
+}
+
+/**
+ * Your own view says you assay until `tick`: the copy stands from now until then. Steps it took since the press, before
+ * the view came, are the frames' to put right, as any other. A tick the copy has already passed, or null, holds nothing.
+ */
+export function holdUntil(p: Prediction, tick: number | null): Prediction {
+  const hold = tick !== null && tick > p.tick ? tick : null;
+  return hold === p.hold ? p : { ...p, hold };
 }
 
 /** Your colonist as the screen draws it. */
@@ -194,6 +220,3 @@ export function shownAt(p: Prediction, nowMs: number, cfg: FloorConfig): Shown |
   return { x: me.x + dx, y: me.y + dy, space: me.space, facing: me.facing, moving: me.moving, lead: me.lead && { ...me.lead, x: me.lead.x + dx, y: me.lead.y + dy } };
 }
 
-/** Not built yet: the assay's hold (its T-AC-10 case first). */
-export const assayTick = (_p: Prediction, _assayUntilMs: number, _nowMs: number, _serverNowMs: number, _rttMs: number, _msPerTick: number): number | null => null;
-export const holdUntil = (p: Prediction, _tick: number | null): Prediction => p;
