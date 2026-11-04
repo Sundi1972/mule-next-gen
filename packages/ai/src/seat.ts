@@ -131,6 +131,7 @@ export class AiSeat {
   /**
    * RULE-6: what this month's hand plays for `key`; null plays today's path, as does a draft or validator error (HC-9,
    * logged). The seat's own part is drafted from `state`, as `draft` does: it writes nothing and changes no kept state.
+   * That draft costs milliseconds, so a hand reads its part once per phase and keeps it for the phase, never per tick.
    */
   part<K extends PartKey>(state: GameState, key: K): PlayedPart<K> | null {
     const path = this.playPath(state.month, key);
