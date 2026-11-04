@@ -305,21 +305,24 @@ export function ScoreSum({ score, colony, size }: { score: ColonyScore; colony: 
 }
 
 /** The colony's score, big: the total, its verdict and the sum that made it. */
-export function ScoreHero({ colony, score, size }: { colony: ColonyView; score: ColonyScore; size: 'hero' | 'tv' }) {
+/** `failed`: the colony failed (the air's verdict, shown above it), so the score keeps no verdict of its own. */
+export function ScoreHero({ colony, score, size, failed = false }: { colony: ColonyView; score: ColonyScore; size: 'hero' | 'tv'; failed?: boolean }) {
   const v = scoreVerdict(score);
   const hero = size === 'hero';
   return (
     <div className={cx('flex flex-col', hero ? 'gap-4' : 'gap-2')} data-testid="colony-score">
       <span className={cx('flex gap-x-8 gap-y-4', hero ? 'flex-col' : 'flex-row flex-wrap items-end')}>
         <span className="flex items-baseline gap-4">
-          <span data-num className={cx('font-mono font-bold leading-none text-holo', hero ? 'text-8xl' : 'text-6xl')} data-testid="colony-total">
+          <span data-num className={cx('font-mono font-bold leading-none', failed ? 'text-alert-ink' : 'text-holo', hero ? 'text-8xl' : 'text-6xl')} data-testid="colony-total">
             {score.total}
           </span>
           <span className="flex flex-col">
             <span className="label-caps text-sm!">Colony score</span>
-            <span className={cx('font-display font-semibold', v.tone, hero ? 'text-3xl' : 'text-2xl')} data-testid="colony-verdict">
-              {v.title}
-            </span>
+            {!failed && (
+              <span className={cx('font-display font-semibold', v.tone, hero ? 'text-3xl' : 'text-2xl')} data-testid="colony-verdict">
+                {v.title}
+              </span>
+            )}
           </span>
         </span>
         <ScoreSum score={score} colony={colony} size={size} />
@@ -409,7 +412,7 @@ export function ColonyScoreBand({ view, colony }: { view: MuleView; colony: Colo
             </span>
           </span>
         )}
-        {colony.score ? <ScoreHero colony={colony} score={colony.score} size="tv" /> : <ScorePending size="tv" />}
+        {colony.score ? <ScoreHero colony={colony} score={colony.score} size="tv" failed={failed.failed} /> : <ScorePending size="tv" />}
       </div>
       <div className="flex flex-col gap-2">
         <h2 className="label-caps text-base!">Plaques · who gave most</h2>

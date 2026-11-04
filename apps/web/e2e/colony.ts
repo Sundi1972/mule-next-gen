@@ -27,7 +27,11 @@ async function main(): Promise<void> {
   const SEED = seedFrom(process.env.MULE_E2E_SEED);
   // Two months: the last month's upkeep goes straight to game over, so only month 1 has a month end to read.
   const { server, base } = await startServer({ maxMonths: 2, phaseScale: SCALE, seed: () => SEED });
-  const browser = await launch();
+  // A browser that fails to start still closes the server it would have used.
+  const browser = await launch().catch(async (err: unknown) => {
+    await server.close();
+    throw err;
+  });
   const errors: string[] = [];
   const started = Date.now();
   try {
