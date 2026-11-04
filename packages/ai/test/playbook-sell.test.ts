@@ -129,6 +129,8 @@ describe('selling when short of cash (C10, RULE-12)', () => {
     advancePhase(later);
     expect(later.phase).not.toBe('planning');
     expect(draft(later).planning).toEqual({});
+    // Nor does a planning draft stamped for next month, as WS2's is once this month's grant has run.
+    expect(draftPlaybook({ state: short, seat: 'ai0', mind, seed: 100, phase: 'planning', month: short.month + 1 }).planning).toEqual({});
   });
 
   it('T-AC-10 (negative): a seat with money at or over its reserve never lists, whatever it holds', () => {

@@ -183,7 +183,7 @@ function pickKind(input: DraftInput, obs: GameState, eligible: Record<Kind, bool
   return tied[options.findIndex((o) => o.id === id)]!;
 }
 
-/** RULE-5 · planning: what the seat lists when short of cash; nothing outside this month's planning, as lots.ts lists only there. */
+/** What the seat lists in planning when short of cash; nothing outside this month's planning, as lots.ts lists only there (RULE-5). */
 function planningPart(input: DraftInput, obs: GameState): PlanningPlay {
   if (obs.phase !== 'planning' || monthOf(input, obs) !== obs.month) return {};
   const list = sellWanted(obs, input.mind);
@@ -295,6 +295,11 @@ function goodPart(input: DraftInput, obs: GameState, good: Good): GoodPlay {
     bluff: false,
     vsRival: 'undercut1',
   };
+}
+
+/** The planning part a planning draft from `input` carries, alone: the same decision, without the strategy or the land grant. */
+export function draftPlanningPart(input: DraftInput): PlanningPlay {
+  return planningPart(input, observe(input.state, input.seat));
 }
 
 /**

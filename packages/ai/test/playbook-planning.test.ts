@@ -131,6 +131,12 @@ describe('the seat plays its planning part (C4, RULE-13)', () => {
     seatOf({ onPlaybook: (pb) => written.push(pb) }).planMonth(other, counted(other).act);
     expect(listingsOf(other)).toEqual([listingFor(other, plotLot!)]);
     expect(written.map((pb) => pb.planning)).toEqual([{ list: [plotLot] }]);
+
+    // Its planning log is this month's: next month, not short, it holds nothing of the month before.
+    const nextMonth = holding(400, [[DESERT, null], [MOUNTAIN, 'smithore']]);
+    nextMonth.month = state.month + 1;
+    seat.planMonth(nextMonth, counted(nextMonth).act);
+    expect(seat.planningLog()).toEqual([]);
   });
 
   it('T-AC-10: RULE-13 step 4, an adopt later in planning re-runs step 2; once planning has ended the listings stand', () => {
@@ -149,12 +155,26 @@ describe('the seat plays its planning part (C4, RULE-13)', () => {
     expect(listingsOf(state)).toEqual([listingFor(state, MULE_LOT)]);
     expect(calls.slice(1)).toEqual([{ type: 'unlist', id: listingFor(state, plotLot!).id }, listAction(state, MULE_LOT)]);
 
+    // The same lot at another minimum, then with another unsold: each is listed again at the new terms.
+    for (const lot of [{ ...MULE_LOT, minimum: 950 }, { ...MULE_LOT, minimum: 950, unsold: 'keep' as const }]) {
+      const before = calls.length;
+      seat.adopt(adopted(state, seat, { list: [lot] }));
+      expect(calls.slice(before)).toEqual([{ type: 'unlist', id: listingFor(state, lot).id }, listAction(state, lot)]);
+      expect(listingsOf(state)).toEqual([listingFor(state, lot)]);
+    }
+    const repriced = { ...MULE_LOT, minimum: 950, unsold: 'keep' as const };
+
+    // A playbook for next month, adopted during this planning, does not touch this month's listings.
+    seat.adopt({ ...adopted(state, seat, { list: [] }), month: state.month + 1 });
+    expect(calls).toHaveLength(7);
+    expect(listingsOf(state)).toEqual([listingFor(state, repriced)]);
+
     // Planning ends before the next adopt: the listings stand and the seat acts no more.
     advancePhase(state);
     expect(state.phase).toBe('landGrant');
     seat.adopt(adopted(state, seat, { list: [] }));
-    expect(listingsOf(state)).toEqual([listingFor(state, MULE_LOT)]);
-    expect(calls).toHaveLength(3);
+    expect(listingsOf(state)).toEqual([listingFor(state, repriced)]);
+    expect(calls).toHaveLength(7);
   });
 
   it('T-AC-10: RULE-13 step 1, the drone flies once, only when none is ordered', () => {

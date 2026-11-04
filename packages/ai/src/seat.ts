@@ -24,8 +24,8 @@ import type { Decider, TableTalk } from './decider.js';
 import { AuctionHand, type AuctionDebug } from './hands/auction.js';
 import { DevelopHand, type DevWalking } from './hands/develop.js';
 import { PERSONAS } from './personas.js';
-import { adoptInto, DRAFT_PHASE_OF, draftPlaybook, pathFor, validatePlaybook, validatorFor, type DraftPhase, type PartKey, type PlayedPart, type PlayPath, type ValidatePlan, type ValidatorProfile } from './playbook/index.js';
-import { landDecision, sellWanted, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
+import { adoptInto, DRAFT_PHASE_OF, draftPlanningPart, draftPlaybook, pathFor, validatePlaybook, validatorFor, type DraftInput, type DraftPhase, type PartKey, type PlayedPart, type PlayPath, type ValidatePlan, type ValidatorProfile } from './playbook/index.js';
+import { landDecision, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
 import { situation } from './summary.js';
 import type { Mind } from './value.js';
 
@@ -125,10 +125,10 @@ export class AiSeat {
     if (!act) return;
     this.planning = { month: state.month, state, act, refused: new Set() };
     this.planned = [];
-    // On its own path the part is the draft's list, which is sellWanted's: with nothing wanted and nothing of its own
-    // listed yet, it would play nothing, so the seat drafts nothing. Most months; the sim's games are the gain.
+    // On its own path the part is its draft's: with nothing to list and nothing of its own listed yet it would play
+    // nothing, so the seat skips the whole draft and its validation.
     const mine = state.listings.some((l) => l.seller === this.id);
-    if (!mine && this.playPath(state.month, 'planning').by === 'own' && sellWanted(obs, this.mind).length === 0) return;
+    if (!mine && this.playPath(state.month, 'planning').by === 'own' && !draftPlanningPart(this.draftInput(state, 'planning')).list) return;
     const played = this.part(state, 'planning');
     if (!played) return;
     const drone = played.part.drone ?? [];
@@ -181,10 +181,15 @@ export class AiSeat {
 
   /** The seat's validated draft for a phase. `month` is the month whose land grant it plans. Writes nothing; throws on a draft or validator error. */
   draft(state: GameState, phase: DraftPhase, month = state.month): Playbook {
+    const drafted = draftPlaybook(this.draftInput(state, phase, month));
+    return validatePlaybook(this.profileFor(month))(state, this.id, drafted, []).playbook;
+  }
+
+  /** What the seat's drafts are drafted from. */
+  private draftInput(state: GameState, phase: DraftPhase, month = state.month): DraftInput {
     // Read, never settled: settling would log the land decision before the grant.
     const land = this.landMonth === month ? this.land : null;
-    const drafted = draftPlaybook({ state, seat: this.id, mind: this.mind, seed: this.options.seed, phase, land, month });
-    return validatePlaybook(this.profileFor(month))(state, this.id, drafted, []).playbook;
+    return { state, seat: this.id, mind: this.mind, seed: this.options.seed, phase, land, month };
   }
 
   /**
@@ -203,8 +208,9 @@ export class AiSeat {
       return null;
     }
     const part = playbook[key];
-    // A copy: a hand that changes what it plays changes nothing the seat keeps.
-    return part == null ? null : structuredClone({ part: part as NonNullable<Playbook[K]>, strategy: playbook.strategy, by: path.by }); // safe cast: `== null` rules out null and undefined, but TS can't narrow Playbook[K] for a generic K
+    // A copy: a hand that changes what it plays changes nothing the seat keeps. The cast is safe: `== null` rules out
+    // null and undefined, but TS can't narrow Playbook[K] for a generic K.
+    return part == null ? null : structuredClone({ part: part as NonNullable<Playbook[K]>, strategy: playbook.strategy, by: path.by });
   }
 
   /**
