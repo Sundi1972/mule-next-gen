@@ -112,3 +112,12 @@ export function overlap(a: Box, b: Box): number {
 }
 
 export const css = (b: Box) => ({ left: b.x, top: b.y, width: b.w, height: b.h });
+
+/** A plot's box on the stage. */
+export const tileBox = (L: Pick<PhoneLayout, 'stage' | 'cell'>, t: { x: number; y: number }): Box => ({ x: L.stage.x + t.x * L.cell, y: L.stage.y + t.y * L.cell, w: L.cell, h: L.cell });
+
+/** Your colonist's box on the map stage, as the live layer draws it: 0.62 of a plot, standing on its point. */
+export function colonistBox(L: Pick<PhoneLayout, 'stage' | 'cell'>, at: { x: number; y: number }): Box {
+  const size = Math.round(L.cell * 0.62);
+  return { x: L.stage.x + at.x * L.cell - size / 2, y: L.stage.y + at.y * L.cell - 0.85 * size, w: size, h: size };
+}

@@ -244,8 +244,9 @@ describe('C11: it fits the phone (B-AC-4\'s layout half, B-AC-11\'s text floor)'
     // On a plot of hers at 13·3, under columns 5–14: the card moves to 0–9.
     const underIt = phone(devView(lenasMe(), { tiles: owning([{ x: 12, y: 2 }]) }), live(mine(12.5, 2.6)));
     expect(left(underIt, 'plot-card')).toBeCloseTo(cols0to9, 6);
-    // On Plains 4·1 with a Food MULE, the ring on her best free plot, 12·3, under columns 5–14: it moves to 0–9.
-    const target = phone(devView(lenasMe({ carriedMule: 'food' }), { tiles: owning([{ x: 3, y: 0 }, { x: 14, y: 0, outfit: 'food' }, { x: 11, y: 2 }]) }), live(mine(3.5, 0.6)));
+    // On Plains 4·1 (its Energy MULE in) with a Food MULE, the ring on her best free plot, 12·3, under columns 5–14:
+    // the card moves to 0–9.
+    const target = phone(devView(lenasMe({ carriedMule: 'food' }), { tiles: owning([{ x: 3, y: 0, outfit: 'energy' }, { x: 14, y: 0, outfit: 'food' }, { x: 11, y: 2 }]) }), live(mine(3.5, 0.6)));
     expect(text(target, 'guide-label')).toBe('YOUR PLOT 12·3');
     expect(left(target, 'plot-card')).toBeCloseTo(cols0to9, 6);
   });

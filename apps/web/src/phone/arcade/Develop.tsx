@@ -6,7 +6,7 @@ import { useClient } from '../../net/react';
 import { usePhoneGame } from '../game';
 import { WIDE_PX } from '../Shell';
 import { keyDown, keyUp } from './controls';
-import { css, FRAMES, freeRun, phoneLayout, type Box } from './layout';
+import { colonistBox, css, FRAMES, freeRun, overlap, phoneLayout, tileBox, type Box } from './layout';
 import { PhoneLive, useArcade, useLive } from './live';
 import { CompactClock, GroundChip, GuideNote, LeadChip, Money, OverCard, PaceLine, PlotCard, PlotsLegend, Reconnecting } from './parts';
 import { arcadeSeat, type ArcadeSeat } from './seat';
@@ -112,8 +112,14 @@ const near = (r: Box, p: { x: number; y: number } | null, by: number) => !!p && 
 /** Under this a side column drops the month's label and the big clock for a compact one. */
 const SIDE_ROOM_FULL = 90;
 
-/** V-3's card over the map, as the mock places it: rows 1 to 4 of the 15 × 9 map's columns 5 to 14, as shares of the map. */
-const CARD = { x: 4.15 / 15, y: 0.95 / 9, w: 9.7 / 15, h: 3 / 9 };
+/**
+ * V-3's card over the map, as shares of the map: where the mock places it, rows 1 to 4 of the 15 × 9 map's columns 5
+ * to 14; and when your colonist or the target is under that, the map's other half, columns 0 to 9 (spec AM-20).
+ */
+const CARDS = [
+  { x: 4.15 / 15, y: 0.95 / 9, w: 9.7 / 15, h: 3 / 9 },
+  { x: 0.15 / 15, y: 0.95 / 9, w: 9.7 / 15, h: 3 / 9 },
+];
 
 function Button({ seat, small, className }: { seat: ArcadeSeat; small?: boolean; className?: string }) {
   const arcade = useArcade();
@@ -154,7 +160,17 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
     bar = { x: L.stage.x + c0 * L.cell + 3, y: L.stage.y + 2, w: (c1 - c0 + 1) * L.cell - 6, h: L.cell - 6 };
   }
   const barFaded = !!bar && near(bar, mePx, L.cell * 0.5);
-  const card: Box | null = space === 'map' ? { x: L.stage.x + CARD.x * L.stage.w, y: L.stage.y + CARD.y * L.stage.h, w: CARD.w * L.stage.w, h: CARD.h * L.stage.h } : null;
+  // The card covers neither your colonist nor the target (AM-20): the first of its places clear of both, or none.
+  const target = seat.target;
+  const clearOf: Box[] = [
+    ...(seat.mine && space === 'map' ? [colonistBox(L, seat.mine)] : []),
+    ...spots.map((s) => tileBox(L, s.at)),
+    ...(target && 'tile' in target ? [tileBox(L, target.tile)] : target && 'door' in target ? [tileBox(L, seat.store)] : []),
+  ];
+  const card: Box | null =
+    space === 'map'
+      ? (CARDS.map((c) => ({ x: L.stage.x + c.x * L.stage.w, y: L.stage.y + c.y * L.stage.h, w: c.w * L.stage.w, h: c.h * L.stage.h })).find((b) => clearOf.every((k) => overlap(b, k) === 0)) ?? null)
+      : null;
   const bannerFaded = near(L.banner, mePx, L.cell * 0.4);
   const choosing = space === 'hall' && me.carriedMule === 'empty';
   const compactLeft = !!L.left && L.left.w < SIDE_ROOM_FULL;
@@ -222,7 +238,7 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
             </span>
           </div>
         )}
-        <PlotCard seat={seat} now={now} at={card ? { left: card.x, top: card.y, width: card.w, maxHeight: card.h } : {}} />
+        {card && <PlotCard seat={seat} now={now} at={{ left: card.x, top: card.y, width: card.w, maxHeight: card.h }} />}
         {/* The banner box: the guide's note (V-7); on the map along the bottom row between the stick and the button, in
             the hall across the walkway. It fades while you walk under it. */}
         <div className="pointer-events-none absolute z-20 flex items-center justify-center" style={css(L.banner)} data-testid="scramble-banner-box">
