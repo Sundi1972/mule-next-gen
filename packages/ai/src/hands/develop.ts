@@ -110,6 +110,9 @@ export class DevelopHand {
   private detoured = false;
   /** How it plays the pack it meets now: drawn once, when the pack comes. */
   private pack: WolfPlay | null = null;
+  /** Packs met this month, and how many had been met when it set off for the step it walks: a walk a pack met on the way. */
+  private packsMet = 0;
+  private walkPacks = 0;
   /** The glint it last decided on, and the one it races (by the tick each lit). */
   private glintSeen: number | null = null;
   private glintWanted = false;
@@ -213,7 +216,7 @@ export class DevelopHand {
     const holding = colonist.assayUntilTick === null ? 0 : (Math.max(0, colonist.assayUntilTick - floor.tick) * dt) / MS_PER_SECOND;
     // A MULE under way whose rest of errand, to its plot and on to the pub, still fits with the margin in hand is seen
     // through: dropping it for the pub would lose what it cost (FM-hurry-margin).
-    if (!held && !this.toPub && secondsLeft <= holding + pubSeconds(state, cfg, colonist) + this.margin(cfg, colonist) && !this.muleFits(view, colonist, secondsLeft - holding)) this.hurry();
+    if (!held && !this.toPub && secondsLeft <= holding + pubSeconds(state, cfg, colonist) + this.margin(cfg, colonist) && !this.muleFits(view, colonist, secondsLeft - holding)) this.hurry(colonist);
     // Hurrying for the pub, it presses the moment it is there: a pause at the counter could cost it the pub.
     const pauseMs = this.toPub ? 0 : cfg.steer.botCounterPauseSeconds * MS_PER_SECOND * mind.level.devPace;
     // A step done this tick hands over to the next at once, so no tick is spent standing between them.
@@ -237,6 +240,7 @@ export class DevelopHand {
       }
       if (starting) {
         this.walking = step;
+        this.walkPacks = this.packsMet;
         this.walker.reset();
       }
       const via = !held && !this.toPub ? this.byWolfLand(view, colonist, step) : null;
@@ -257,6 +261,7 @@ export class DevelopHand {
     const { state, floor, cfg, secondsLeft } = view;
     const me = this.brain.mind.me;
     if (c.encounter) {
+      if (!this.pack) this.packsMet++;
       this.pack ??= this.playFor(view, c);
       return wolfInput(floor, state, me, cfg, this.pack);
     }
@@ -472,8 +477,17 @@ export class DevelopHand {
     return plotErrandSeconds(state, cfg, c, tileIndex(state.width, a.x, a.y), work) + cfg.steer.botPubMarginSeconds <= secondsLeft;
   }
 
-  /** Out of time: drop the rest of the list and go to the pub. */
-  private hurry(): void {
+  /**
+   * Out of time: drop the rest of the list and go to the pub. A step it was walking to and had not pressed yet it gives
+   * up, logged so a walk the clock cut short shows: 'hurry', or 'hurry after a pack' where a pack met it on the way
+   * (FM-hurry-margin).
+   */
+  private hurry(c: FloorColonist): void {
+    const cut = this.walking;
+    if (cut && !this.walker.pressing() && c.assayUntilTick === null) {
+      const why = this.packsMet > this.walkPacks ? 'hurry after a pack' : 'hurry';
+      this.done.push({ label: cut.label, ok: false, at: this.clock, action: cut.action, why });
+    }
     this.toPub = true;
     this.pending = null;
     this.queue = [];
@@ -558,6 +572,8 @@ export class DevelopHand {
     this.leg = null;
     this.via = null;
     this.pack = null;
+    this.packsMet = 0;
+    this.walkPacks = 0;
     this.glintSeen = null;
     this.glintWanted = false;
     this.racingGlint = null;

@@ -197,6 +197,11 @@ describe("the moments in the sim's games (T-AC-5, AM-22)", () => {
     for (const t of lost.filter((t) => t.muleStepFailed)) console.log(`FM-hurry-margin, not for time: ${what(t)}, an outfit or install refused on the floor`);
     const unexcused = lost.filter((t) => !t.packLeading && !t.muleStepFailed).map(what);
     expect(unexcused, `turns that bought a MULE and lost it for want of time (of ${turns.length})`).toEqual([]);
+    // An analysis or a filter is priced with the same margin: a hungry colonist, whose margin is several times
+    // botPubMarginSeconds, never sets off for one the hurry for the pub then gives up on the way, but where a pack met
+    // it there (scoutsCut counts the others).
+    const cut = turns.filter((t) => t.scoutsCut > 0).map((t) => `month ${t.month}, ${t.id}: ${t.scoutsCut} cut`);
+    expect(cut, `turns whose hurry for the pub cut an analysis or filter walk short (of ${turns.length})`).toEqual([]);
   });
 
   // trace-allow: a smoke check that the AI's legs by wolf land (RULE-4's AI line, botWolfLandShare) bring packs into

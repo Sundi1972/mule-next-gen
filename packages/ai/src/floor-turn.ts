@@ -59,6 +59,11 @@ export interface DevTurn {
    * (biteCostPub).
    */
   biteCostPub: boolean;
+  /**
+   * Analyses and filters it set off for and the hurry for the pub then gave up on the way with no pack met on it: a walk
+   * started without the hurry's margin in hand (FM-hurry-margin).
+   */
+  scoutsCut: number;
   /** Analyses of lake plots its hand gave up on the way (failed), and dropped before setting off as not fitting the clock. */
   lakeAnalyses: { failed: number; noTime: number };
   /** Presses the referee refused this turn (spec §4, as the server's tick counts them): held while month 1's clock waits, or a rule's RuleError. */
@@ -169,7 +174,7 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
   const tickSeconds = cfg.steer.tickMs / MS_PER_SECOND;
   let floor: DevFloor = buildFloor(state, cfg);
   const ids = seats.map((s) => s.id);
-  const turns = new Map(ids.map((id): [string, DevTurn] => [id, { month: state.month, id, pubAt: null, payout: null, quoted: null, installs: 0, bought: 0, packLeading: false, muleStepFailed: false, biteCostPub: false, lakeAnalyses: { failed: 0, noTime: 0 }, refused: 0 }]));
+  const turns = new Map(ids.map((id): [string, DevTurn] => [id, { month: state.month, id, pubAt: null, payout: null, quoted: null, installs: 0, bought: 0, packLeading: false, muleStepFailed: false, scoutsCut: 0, biteCostPub: false, lakeAnalyses: { failed: 0, noTime: 0 }, refused: 0 }]));
   let waiting = state.month === 1 && cfg.steer.month1WaitsForFirstMule;
   // Whole ticks, so the clock never drifts in floating point: stood waiting, and run.
   let stood = 0;
@@ -247,7 +252,8 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
   for (const s of seats) {
     const turn = turns.get(s.id)!;
     turn.lakeAnalyses = lakeFailures(state, s.developLog());
-    turn.muleStepFailed = s.developLog().some((e) => !e.ok && (e.action.type === 'outfit' || e.action.type === 'install'));
+    turn.scoutsCut = s.developLog().filter((e) => e.why === 'hurry' && (e.action.type === 'analyse' || e.action.type === 'filter')).length;
+    turn.muleStepFailed = s.developLog().some((e) => !e.ok && !e.why?.startsWith('hurry') && (e.action.type === 'outfit' || e.action.type === 'install'));
   }
   moments.raced = raced.size;
   moments.scrambleRacers = seats.reduce((n, s) => n + s.developScramblesRaced(), 0);
