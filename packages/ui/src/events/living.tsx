@@ -395,7 +395,8 @@ function MeteorFall({ ev, seg, size }: { ev: ShowEventView; seg: EventSegment; s
           .map((d) => after - d)
           .filter((v) => v > 0 && v < 1.2)
           .map((v, i) => <span key={i} className="absolute rounded-full border-warn" style={{ ...c, width: `${v * 46}%`, aspectRatio: '1', transform: 'translate(-50%, -50%)', borderWidth: size === 'tv' ? 4 : 2, opacity: 1 - v / 1.2 }} />)}
-      {after >= 0 && <Crater x={o.x} y={o.y} since={reduced ? 9 : after} />}
+      {/* With reduced motion there is no fall: the bowl shows when the map's badge does, at the hit's own landing. */}
+      {(reduced ? t >= eventHitAt(seg, ev, ev.hits[0] ?? null, true, grid) : after >= 0) && <Crater x={o.x} y={o.y} since={reduced ? 9 : after} />}
     </>
   );
 }

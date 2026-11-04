@@ -152,7 +152,7 @@ function offMapEvent(state: GameState, key: OffMapKey, rng: Rng, phase: Phase, p
   if (key === 'meteorStrike') {
     const tile = rng.pick(state.tiles.filter((t) => t.terrain !== 'store'));
     const event = toEvent(state, key, { x: tile.x, y: tile.y }, [tile], undefined, tile.owner ?? undefined, phase);
-    return withPlots(event, { becomes: 'crater', ...(tile.outfit ? { muleLost: true as const } : {}) });
+    return withPlots(event, { becomes: 'crater', ...(tile.special ? { was: tile.special.kind } : {}), ...(tile.outfit ? { muleLost: true as const } : {}) });
   }
   // Off the map: it starts at the store, where every colonist starts development.
   const store = state.tiles.find((t) => t.terrain === 'store');
