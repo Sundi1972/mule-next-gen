@@ -12,6 +12,8 @@ import { AUDIT_JS, MONTH_END_JS, type AuditRead, type AuditScope } from './small
 import { doneThroughTheElection } from './table-steps';
 
 const PHASE_SCALE = 0.1;
+/** A laptop, for the A-5 close read's third size. */
+const LAPTOP = { width: 1440, height: 900 };
 const PRESS_MS = 2_000;
 /** Development's one clock runs on wall time, held or not: enough for two MULEs and every read. */
 const DEV_MS = 120_000;
@@ -153,10 +155,50 @@ try {
   await both('the goods auction', RAIL);
   const done = auction.getByRole('button', { name: /^(Ready|Done with .+)$/ });
   const end = phone.locator('[data-phase=upkeep]');
-  for (let i = 0; i < 40 && !(await end.count()); i++) {
-    await done.or(end).first().waitFor({ timeout: 30_000 });
-    await done.click({ timeout: PRESS_MS }).catch(() => undefined);
+  // A-5: the first good that closes is read whole, its receipt over the board and the month's total under the money.
+  // The close stage is a few server ticks long at this scale, so the server's own view is watched and the room held.
+  let readClose = false;
+  let auctionOver = false;
+  const closeRead = (async () => {
+    while (!auctionOver) {
+      if (server.registry.get(code)?.viewFor(null).game?.auction?.stage === 'close') {
+        // What A-5 adds: the receipt card, its last line the month's total, and the rail header beside it, which must
+        // keep a four-digit balance and the player's name whole (WS6 ruling on #204). The board's names strip under the
+        // card truncates a long name on trunk's walk too ("The Accountant", 78 in 51 px at 667): not this read's to judge.
+        const scope: AuditScope = { roots: [...RAIL.roots, '[data-testid=receipt]'], skip: RAIL.skip };
+        const prep = async () => {
+          await phone.getByTestId('receipt-layer').waitFor({ timeout: PRESS_MS });
+          await phone.getByTestId('receipt-tally').waitFor({ timeout: PRESS_MS });
+        };
+        await held(server, code, async () => {
+          const money = (await phone.getByTestId('money').innerText()).trim();
+          check(/^\d,\d{3} cr$/.test(money), `A-5: the close is read with a four-digit balance, got "${money}"`);
+          const small = await readAt(phone, PHONE_SMALL.viewport, scope, prep);
+          const wide = await readAt(phone, PHONE.viewport, scope, prep);
+          const laptop = await readAt(phone, LAPTOP, scope, prep);
+          await phone.setViewportSize(PHONE_SMALL.viewport);
+          reads.push({ screen: 'the goods auction, a good closed', small, base: wide });
+          // B-AC-11's tap and fit rules are the phones'; at 1440 only the name is asserted (trunk's theme toggle is a 54×22 tap there).
+          for (const f of laptop.fails) console.log(`  at 1440×900, measured, not asserted: ${f}`);
+          check(laptop.name?.text === NAME && laptop.name.whole, `A-5: at 1440×900 the rail header shows ${NAME} whole beside ${money}, got "${laptop.name?.text}"`);
+          console.log(`  the goods auction, a good closed: ${money}, ${NAME} whole at 1440×900 too`);
+        });
+        readClose = true;
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 5));
+    }
+  })();
+  try {
+    for (let i = 0; i < 40 && !(await end.count()); i++) {
+      await done.or(end).first().waitFor({ timeout: 30_000 });
+      await done.click({ timeout: PRESS_MS }).catch(() => undefined);
+    }
+  } finally {
+    auctionOver = true;
+    await closeRead;
   }
+  check(readClose, 'A-5: the auction reached a close stage with its receipt and the tally, read at both sizes');
   await end.getByTestId('league').waitFor({ timeout: 30_000 });
   await monthEnd('month end');
   const air = setAir(code, collapseAir());
