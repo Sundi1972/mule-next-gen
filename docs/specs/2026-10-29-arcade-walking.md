@@ -747,6 +747,11 @@ inside a wall; money and stock change only through game.ts rules; development en
   and the money); no test rewrites money or the corral mid-turn. B-AC-7's negative ("no call when no seat needs a
   MULE") needed exactly such rewrites in a browser test, so it is proven where the rule lives: T-AC-8's negative in
   the engine, and the screens' "no banner without a scramble" unit test.
+  **UBER-AC-3's scramble clause (PM ruling, 2026-11-04):** proved on the same staged corral (`START.storeMules` 3,
+  the host claiming the plot by the store so it is a needer), not in a natural 12-month game: upkeep refills the corral
+  to its target every month (`upkeep.ts:76`), so an ordinary game never runs it down to a scramble. §0's wording
+  stands; this is how its scramble clause is measured (WS5's UBER-AC-3 test). The wolves' and the glint's clauses are
+  still measured in the natural seeded game.
 - **AM-28 (2026-11-04, PR-9's start, by WS6; the frame contract's gap).** The moments' layers (C11, C12) draw the
   wolves, the glint and the scramble on every phone and the TV, but §3's `DevFrame` carried only positions and
   beats, and `ColonistView` only the encounter's stage: the screens had nothing to draw a pack or a glint from.
