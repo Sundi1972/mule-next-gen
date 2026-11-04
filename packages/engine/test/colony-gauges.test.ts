@@ -28,6 +28,9 @@ describe("the colony's gauges and last month's", () => {
   it("the colony's wealth is the fund and every player's money, goods, land and MULEs, before the office line", () => {
     const state = newGame();
     state.treasury.money = 300;
+    const [plot] = state.tiles.filter((t) => t.owner === null && t.terrain !== 'store');
+    Object.assign(plot!, { owner: 'lena', outfit: 'food' });
+    expect(scoreParts(state, 'lena').muleValue, 'Lena has a MULE to count').toBeGreaterThan(0);
     const players = SEATS.reduce((sum, id) => {
       const p = scoreParts(state, id);
       return sum + p.money + p.goods + p.land + p.muleValue;

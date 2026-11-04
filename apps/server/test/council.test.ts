@@ -38,21 +38,23 @@ describe('C45: the server runs the law ballot as it runs the election', () => {
     expect(state.politics!.council!.stage).toBe('ballot');
     expect(state.politics!.council!.done, 'the AI seat abstains at once').toContain('s3');
     expect(game.viewFor(null).phase).toBe('planning');
+    expect(game.viewFor(null).politics!.council!.waitingFor.sort(), 'every screen shows who the ballot waits for').toEqual(['s1', 's2']);
 
-    game.handle('s2', { type: 'voteLaw', yes: false });
-    expect(state.politics!.council!.stage, 'a cast vote is Done, but Heiko has not pressed').toBe('ballot');
     game.handle('s1', { type: 'continue' });
     advance(1_000);
     expect(state.politics!.council!.stage).toBe('reveal');
+    expect(game.viewFor(null).news, 'the news names the phone it closed without, not the host').toContain('Heiko closed the law ballot without Mia.');
     expect(refusal(() => game.handle('s1', { type: 'continue' }))).toBe('The result is being announced');
     advance(POLITICS.council.revealMs + 1_000);
     expect(state.politics!.council!.stage).toBe('over');
-    expect(game.viewFor(null).news.join(' ')).toMatch(/Land tax at 10 (passes|fails)/);
+    expect(game.viewFor(null).news.filter((line) => /Land tax at 10 (passes|fails)/.test(line)), 'the result is news once').toHaveLength(1);
   });
 
   it("B-AC-43: Ready is Done on the open law ballot, and once every player is Done it closes on its own", () => {
     const { game, state, advance } = onTheBallot();
     game.handle('s1', { type: 'ready' });
+    const ready = () => Object.fromEntries(game.viewFor(null).players.map((p) => [p.id, p.ready]));
+    expect(ready(), "every screen shows Heiko Done on the ballot, Mia not yet").toMatchObject({ s1: true, s2: false });
     game.handle('s2', { type: 'voteLaw', yes: true });
     advance(1_000);
     expect(state.politics!.council!.stage).toBe('reveal');
@@ -77,6 +79,7 @@ describe('C45: the server runs the law ballot as it runs the election', () => {
     advance(1_000);
     const shown = game.viewFor(null).politics!.council!.result;
     expect(shown).not.toBeNull();
+    expect(game.viewFor('s2').me?.politics?.lawBallot, "RULE-47: a voter's own ballot shows until the reveal").toBeNull();
     expect(game.viewFor('s1').politics!.council!.result).toEqual(shown);
   });
 });
