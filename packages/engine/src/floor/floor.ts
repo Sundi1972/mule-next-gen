@@ -107,7 +107,7 @@ export interface FloorScramble {
   readonly got: readonly string[];
   /** How it ended: the corral emptied, its clock ran out, or every needer had a MULE; null while it runs. */
   readonly over: 'empty' | 'time' | 'everyone' | null;
-  /** Needers still without a MULE when the corral emptied. */
+  /** Needers who went without a MULE, filled when it ends, however it ends (AM-28); [] while it runs. */
   readonly leftOut: readonly string[];
 }
 

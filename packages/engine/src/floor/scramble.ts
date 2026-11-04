@@ -19,6 +19,10 @@ export function needsMule(state: GameState, id: string): boolean {
 const mules = (n: number) => `${n} MULE${n === 1 ? '' : 's'}`;
 const beat = (who: string | null, text: string): FloorBeat => ({ kind: 'scramble', who, text });
 
+/** The needers who went without, as the scramble ends: no MULE from it, and none led otherwise (AM-28). */
+const wentWithout = (state: GameState, s: FloorScramble, got: readonly string[]): string[] =>
+  s.needers.filter((id) => !got.includes(id) && !player(state, id).carriedMule);
+
 /** After a sale at the corral: the scramble on counts it down (or ends, empty); none yet, the sale may call one. */
 export function afterSale(state: GameState, floor: DevFloor, buyer: string, cfg: FloorConfig): DevFloor {
   const m = floor.moments;
@@ -31,7 +35,7 @@ export function afterSale(state: GameState, floor: DevFloor, buyer: string, cfg:
     const got = [...s.got, buyer];
     if (left <= 0) {
       // The last sale and the empty corral are one line, so a burst of beats at the end never hides who got it.
-      const leftOut = s.needers.filter((id) => !got.includes(id) && !player(state, id).carriedMule);
+      const leftOut = wentWithout(state, s, got);
       beats.push(beat(buyer, `${nameOf(state, buyer)} got the last one: the corral is empty`));
       if (leftOut.length > 0) beats.push(beat(null, `No MULE this turn for ${leftOut.map((id) => nameOf(state, id)).join(', ')}`));
       scramble = { ...s, got, over: 'empty', leftOut };
@@ -57,11 +61,11 @@ export function stepScramble(state: GameState, s: FloorScramble | null, tick: nu
   if (!s || s.over) return s;
   if (tick >= s.untilTick) {
     out.beats.push(beat(null, `The scramble is over: ${mules(state.store.mules)} left`));
-    return { ...s, over: 'time' };
+    return { ...s, over: 'time', leftOut: wentWithout(state, s, s.got) };
   }
   const waiting = s.needers.filter((id) => {
     const p = player(state, id);
     return !p.carriedMule && !p.doneDeveloping;
   });
-  return waiting.length === 0 ? { ...s, over: 'everyone' } : s;
+  return waiting.length === 0 ? { ...s, over: 'everyone', leftOut: wentWithout(state, s, s.got) } : s;
 }
