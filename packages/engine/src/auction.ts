@@ -1,6 +1,7 @@
 import { GOOD_CONFIG, PRICE, UPKEEP, WALK } from './config.js';
 import { colonyPrice, driftReference, monthlyDemand, shelfShort, shipInPort, shipPrice, storeForSale, storeWants, taxSale } from './economy.js';
 import { RuleError } from './errors.js';
+import { chargeExportTax } from './politics.js';
 import { monthNeeds } from './production.js';
 import type { AuctionSide, GameState, Good, GoodReceipt, LiveAuction, ReceiptSide, SkipReason, StatusRow } from './types.js';
 import { chooseAtLine, houseLineAt, stepBoard, stepWalker, stopAtLine, takeSide, tradePossible, type WalkMarket } from './walk.js';
@@ -104,7 +105,7 @@ export function goodsMarket(state: GameState): WalkMarket {
       }
       if (s) {
         s.stock[good]--;
-        const net = taxSale(state, s.id, price);
+        const net = taxSale(state, s.id, price) - (buyer === SHIP_ID ? chargeExportTax(state, s.id, price) : 0);
         s.money += net;
         noteUnit(a, seller, 'sold', price, price - net, buyer);
       } else {
