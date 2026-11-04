@@ -271,7 +271,9 @@ describe('the seat drafts, validates and writes its planning playbook (C4, RULE-
       expect(own, broke).toBeNull();
 
       expect(broken.written, broke).toEqual([]);
-      expect(logged, broke).toHaveBeenCalledTimes(IDS.length * 2 + 1);
+      // Each seat each month: once at its planning draft, once as its land grant reads its part (the land bridge, read
+      // once per grant); and once for the part read above.
+      expect(logged, broke).toHaveBeenCalledTimes(IDS.length * 2 * 2 + 1);
       expect(String(logged.mock.calls[0]!.join(' ')), broke).toContain(`${broke} broke`);
       expect(playOf(broken), broke).toEqual(playOf(base));
       logged.mockRestore();
