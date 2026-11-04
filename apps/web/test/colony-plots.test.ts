@@ -5,6 +5,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { mapTiles } from '../src/game/derive';
+import { freeForDrone, ownerWord } from '../src/phone/hub/tools';
 
 /**
  * C33: the colony's objects stand on their plots, on every map. Every map takes its plots from mapTiles and draws them
@@ -91,5 +92,32 @@ describe('C33: HoloMap draws the object on its plot', () => {
   it("draws no player's tab on the colony's plot", () => {
     expect(tag('owner-0-0')).toBeDefined();
     for (const at of ['2-0', '1-1', '2-1']) expect(tag(`owner-${at}`)).toBeUndefined();
+  });
+});
+
+describe("C33: the colony's plot is nobody's to buy, survey or claim on the phone's tools", () => {
+  const v = view(PROJECTS);
+  const tiles = mapTiles(v);
+  const at = (i: number) => tiles.find((t) => t.x === i % W && t.y === Math.floor(i / W))!;
+
+  it('the geo drone flies over free plots only, never a colony plot', () => {
+    expect(freeForDrone(at(1))).toBe(true);
+    for (const i of [2, 5, 6]) expect(freeForDrone(at(i))).toBe(false);
+    expect(freeForDrone(at(0))).toBe(false);
+  });
+
+  it("Look names the colony's plot as the colony's, not as free", () => {
+    expect(ownerWord(v, v.tiles[5]!, 'mia')).toBe('COLONY');
+    expect(ownerWord(v, v.tiles[1]!, 'mia')).toBe('FREE');
+    expect(ownerWord(v, v.tiles[0]!, 'heiko')).toBe('YOURS');
+  });
+
+  it("draws the object over an assayed plot without the ground's pips: the label still names the ground", () => {
+    const assayed = tiles.map((t) => (t.x === 1 && t.y === 1 ? { ...t, ground: { food: 3 } } : t));
+    const html = renderToStaticMarkup(createElement(HoloMap, { width: W, height: H, tiles: assayed }));
+    const plot = html.slice(html.indexOf('data-testid="map-plot-1-1"'), html.indexOf('data-testid="map-plot-2-1"'));
+    expect(plot).toContain('data-testid="plot-object-1-1"');
+    expect(plot).not.toContain('--color-g-food');
+    expect(html).toContain('aria-label="Plains, Stadium, building: 1 of 3 months, Food 3 of 4"');
   });
 });

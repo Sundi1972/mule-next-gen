@@ -156,7 +156,8 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   style={{ background: `radial-gradient(circle at 50% 55%, rgb(110 82 40 / ${0.25 + t.pollution * 0.18}), rgb(110 82 40 / ${0.12 + t.pollution * 0.12}) 80%)` }}
                 />
               )}
-              {!t.good && ground.length > 0 && (
+              {/* An object's plot shows the object, not the ground under it: the plot's label still names the ground. */}
+              {!t.good && !t.object && ground.length > 0 && (
                 <span className={cx('relative flex flex-col items-center rounded-control bg-map-chip/90 shadow-chip', tv ? 'gap-0.5 px-1.5 py-1' : 'px-[3px] py-[2px]', fade)}>
                   {ground.map(([g, n]) => (
                     <span key={g} className={cx('flex items-center', tv ? 'gap-0.5' : 'flex-col gap-px')}>
