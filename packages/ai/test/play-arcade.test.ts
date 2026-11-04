@@ -248,7 +248,8 @@ describe('the sim referees the floor as the server will (arcade C10)', () => {
         const state = createGame({ seed: 4, players: LEVELS.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
         while (state.phase !== 'development') advancePhase(state);
         // Seats that stand still and never press: nobody goes to the pub, so the turn runs to the bell.
-        const idle = state.players.map((p) => ({ id: p.id, developSteer: () => ({ x: 0, y: 0, act: false }) })) as unknown as AiSeat[];
+        // They log no steps, race nothing.
+        const idle = state.players.map((p) => ({ id: p.id, developSteer: () => ({ x: 0, y: 0, act: false }), developLog: () => [], developRacing: () => null, developScramblesRaced: () => 0 })) as unknown as AiSeat[];
         const phase = playFloorPhase(state, idle);
         let ticks = 0;
         for (let step = phase.next(); !step.done; step = phase.next()) ticks++;
