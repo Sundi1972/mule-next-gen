@@ -845,8 +845,12 @@ export const POLITICS = {
 export const WALK = {
   /** The order goods come up in: raw goods first, then processed ones. */
   order: ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine'] as Good[],
-  /** The status screen before each good: what everyone had, used, made and is short of, and where each player picks a side for the walk. */
-  statusMs: 8_000,
+  /**
+   * The status screen before each good: what everyone had, used, made and is short of, and where each player picks a
+   * side for the walk. null: no clock (A-7, G-7), it waits for every player's Done or the host's Continue; a number
+   * restores a timer.
+   */
+  statusMs: null as number | null,
   /** The walk's clock for one good. */
   goodMs: 20_000,
   /** The close stage after a good's walk: each phone shows its receipt for the good (UX audit G-5), as the land auction's result does. Display and game time only. */

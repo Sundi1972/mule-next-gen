@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 // Types only, erased at run time: the show's own shapes, which @mule/ui keeps structural so it never imports the protocol.
 import type { ShowEventView, ShowTimeline } from '../../../packages/ui/src/events/types.js';
 import { MuleGame } from '../src/mule-game.js';
-import { fakeContext, readyAll, seats } from './fake-context.js';
+import { fakeContext, pressThroughSidePick, readyAll, seats } from './fake-context.js';
 
 /** A month event of `key` that hit one plot; its words and shape don't matter to how long it plays. */
 function event(key: EventKey, phase: Phase = 'production'): MonthEvent {
@@ -42,7 +42,11 @@ function playMonth(keys: EventKey[], phaseScale = 1, phaseOf: Partial<Record<Eve
   const push = state.history.push.bind(state.history);
   state.history.push = (...reports: MonthReport[]) => push(...reports.map((r) => ({ ...r, events: keys.map((k) => event(k, phaseOf[k])) })));
   readyAll(game);
-  for (let i = 0; i < 100_000 && !first.has('upkeep'); i++) fake.advance(100);
+  // A good's side pick has no clock (A-7): the humans press Ready there.
+  for (let i = 0; i < 100_000 && !first.has('upkeep'); i++) {
+    pressThroughSidePick(game);
+    fake.advance(100);
+  }
   const length = (phase: string) => {
     const seen = first.get(phase);
     if (!seen) throw new Error(`month 1 never showed ${phase}`);
@@ -99,6 +103,7 @@ function playRealMonths(lastMonth: number) {
   for (let i = 0; i < 1_000_000 && !months.has(lastMonth); i++) {
     const phase = game.viewFor(null).phase;
     if (phase === 'planning' || phase === 'upkeep') readyAll(game);
+    pressThroughSidePick(game);
     fake.advance(100);
   }
   return (month: number) => {
@@ -339,6 +344,7 @@ describe('T-AC-10: the view carries the current phase\'s events, when their show
     readyAll(game);
     for (let i = 0; i < 100_000 && game.viewFor(null).month < 2; i++) {
       if (game.viewFor(null).phase === 'upkeep') readyAll(game);
+      pressThroughSidePick(game);
       fake.advance(100);
     }
     const view = game.viewFor(null);

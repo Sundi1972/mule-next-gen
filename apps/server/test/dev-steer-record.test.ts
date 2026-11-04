@@ -49,6 +49,10 @@ async function recordedSteeredGame(table: SeatInfo[] = walkers) {
   let extraFrames = { before: '', after: '' };
   for (let i = 0; i < 100_000 && !game.viewFor(null).finished; i++) {
     if (phase() === 'planning' || phase() === 'upkeep') readyAll(game as never);
+    // A good's side pick has no clock (A-7): the seats still picking press Ready, as recorded intents.
+    const v = game.viewFor(null);
+    if (v.phase === 'auction' && v.auction?.stage === 'status')
+      for (const p of v.players) if (!p.isAi && !v.auction.walkers.find((w) => w.id === p.id)?.done) game.handle(p.id, { type: 'ready' });
     if (phase() === 'development' && devStart === null) {
       devStart = fake.ctx.now();
       game.handle(OSSA, { type: 'steer', x: 0.5, y: -0.5 });
