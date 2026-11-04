@@ -1,7 +1,7 @@
 import { applyReach, buildFloor, createGame, DEV_STEER, floorConfig, stepFloor, type DevFloor, type FloorInput, type GameState, type Terrain } from '@mule/engine';
 import type { DevFrame, MuleView, TileView } from '@mule/protocol';
 import { describe, expect, it } from 'vitest';
-import { advanceTo, assayTick, holdUntil, markStale, phoneTick, predictWorld, receiveFrame, shownAt, startPrediction, steerFrom, type Prediction, type PredictWorld } from '../src/phone/arcade/predict';
+import { advanceTo, assayTick, holdUntil, markStale, phoneTick, predictWorld, receiveFrame, shownAt, startPrediction, steerFrom, steerStep, type Prediction, type PredictWorld } from '../src/phone/arcade/predict';
 import { msPerTick, pushFrame, startFrameLog } from '../src/phone/arcade/frames';
 import { gateSteer, heldBack, quantise, startGate, type SteerGate } from '../src/phone/arcade/steer';
 
@@ -318,6 +318,54 @@ describe('T-AC-10: the phone predicts its own colonist (RULE-10)', () => {
     const back = receiveFrame(stale, at(first, 80, 0.5), 5_000, world, base);
     expect(back.status).toBe('live');
     expect(shownAt(back, 5_000, cfg)!.x).toBeCloseTo(first.colonists[0]!.x + 0.5, 6);
+  });
+
+  const LEFT = { x: -1, y: 0 };
+  const STAND = { x: 0, y: 0 };
+
+  /** Lena live from a frame at tick 20, her stick held left and sent, the copy stepped on to tick 30. */
+  function heldLeft() {
+    const { world, base, first } = walking();
+    const sent = steerStep(receiveFrame(startPrediction(), first, 0, world, base), startGate(), LEFT, 0, true);
+    expect(sent.send).toEqual({ ...LEFT, tick: 20 });
+    return { world, base, first, p: advanceTo(sent.p, 30, world), gate: sent.gate };
+  }
+
+  it('T-AC-10 (negative): a dropped socket lets go of her stick on the server; back live, a stick still held is sent again and the copy stands until it is', () => {
+    const { world, base, first, p: walked, gate: held } = heldLeft();
+    const closed = steerStep(walked, held, LEFT, 500, false);
+    expect(closed.send).toBeNull();
+    const stale = markStale(closed.p, 500 + DEV_STEER.staleMs + 1, world.cfg);
+    expect(stale.status).toBe('reconnecting');
+    // Back on a new socket: the first frame has her where the server stood her once it let go.
+    const back = at(first, 80, -0.5);
+    const standing = back.colonists[0]!.x;
+    const live = advanceTo(receiveFrame(stale, back, 5_000, world, base), 85, world);
+    expect(live.status).toBe('live');
+    expect(live.me!.x).toBeCloseTo(standing, 6);
+    // The stick is still held: it goes again, stamped with the copy's tick, and the copy walks with it.
+    const again = steerStep(live, closed.gate, LEFT, 5_000, true);
+    expect(again.send).toEqual({ ...LEFT, tick: 85 });
+    expect(advanceTo(again.p, 90, world).me!.x).toBeLessThan(standing - 0.1);
+  });
+
+  it('T-AC-10 (negative): a stick let go while the socket was down: back live, the copy stands', () => {
+    const { world, base, first, p: walked, gate: held } = heldLeft();
+    const closed = steerStep(walked, held, LEFT, 500, false);
+    const back = at(first, 80, -0.5);
+    const live = advanceTo(receiveFrame(markStale(closed.p, 500 + DEV_STEER.staleMs + 1, world.cfg), back, 5_000, world, base), 85, world);
+    const released = steerStep(live, closed.gate, STAND, 5_000, true);
+    expect(advanceTo(released.p, 95, world).me!.x).toBeCloseTo(back.colonists[0]!.x, 6);
+  });
+
+  it('T-AC-10 (negative): a socket that drops and is back before the frames go stale: the copy stands while it is down, and a held stick goes again', () => {
+    const { world, p: walked, gate: held } = heldLeft();
+    const closed = steerStep(walked, held, LEFT, 500, false);
+    expect(closed.p.status).toBe('live');
+    const down = advanceTo(closed.p, 40, world);
+    expect(down.me!.x).toBeCloseTo(walked.me!.x, 6);
+    const again = steerStep(down, closed.gate, LEFT, 700, true);
+    expect(again.send).toEqual({ ...LEFT, tick: 40 });
   });
 });
 
