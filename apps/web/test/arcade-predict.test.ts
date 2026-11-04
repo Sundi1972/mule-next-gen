@@ -91,6 +91,8 @@ interface Run {
   /** The copy's tick and where it stood, at every phone step after its own view said it assays; and the assay's last tick. */
   trace: { tick: number; x: number; fixes: number }[];
   assayUntilTick: number | null;
+  /** The tick the copy held her until, from her own view's assay end. */
+  holdTick: number | null;
   /** Where the server holds her while she assays. */
   heldX: number | null;
 }
@@ -131,7 +133,7 @@ function playTurn(oneWayMs: number, { spike, stick = STICK, pressAt, hold = true
 
   let p: Prediction = startPrediction();
   let gate: SteerGate = startGate();
-  const run: Run = { compared: 0, corrected: 0, snapped: 0, worst: 0, ahead: 0, inHall: 0, trace: [], assayUntilTick: null, heldX: null };
+  const run: Run = { compared: 0, corrected: 0, snapped: 0, worst: 0, ahead: 0, inHall: 0, trace: [], assayUntilTick: null, holdTick: null, heldX: null };
   let told = false;
   let log = startFrameLog();
   let nextServerAt = TICK * scale;
@@ -158,11 +160,12 @@ function playTurn(oneWayMs: number, { spike, stick = STICK, pressAt, hold = true
       toPhone.push({ due: nextServerAt + delay(nextServerAt), frame: frameOf(floor) });
       nextServerAt += TICK * scale;
     }
-    // The phone: the frames that have arrived, then its copy up to its tick, then its stick.
+    // The phone: the frames that have arrived, each at the ms it came as a socket hands it over, then its copy up to
+    // its tick, then its stick.
     for (const m of toPhone.filter((m) => m.due <= now)) {
       const before = p.stats;
-      p = receiveFrame(p, m.frame, now, world, base);
-      log = pushFrame(log, m.frame, now);
+      p = receiveFrame(p, m.frame, m.due, world, base);
+      log = pushFrame(log, m.frame, m.due);
       if (m.frame.colonists[0]!.space === 'hall') run.inHall++;
       run.compared += p.stats.compared - before.compared;
     }
@@ -170,6 +173,7 @@ function playTurn(oneWayMs: number, { spike, stick = STICK, pressAt, hold = true
     for (const v of views.filter((v) => v.due <= now)) {
       told = true;
       if (hold) p = holdUntil(p, assayTick(p, v.assayUntil, now, now, 2 * oneWayMs, msPerTick(log, TICK)));
+      run.holdTick = p.hold;
     }
     views.splice(0, views.length, ...views.filter((v) => v.due > now));
     const target = phoneTick(p, now, 2 * oneWayMs, cfg, msPerTick(log, TICK));
@@ -244,8 +248,11 @@ describe('T-AC-10: the phone predicts its own colonist (RULE-10)', () => {
     expect(new Set(settled.map((t) => t.x.toFixed(6))).size).toBe(1);
     expect(Math.abs(settled[0]!.x - run.heldX!)).toBeLessThanOrEqual(0.01);
     expect(settled.at(-1)!.fixes).toBe(settled[0]!.fixes);
-    // Then it walks on, left, as the stick still says.
+    // The copy holds to the very tick the server does, and lets go on it: no frame after the assay puts it right.
+    expect(run.holdTick).toBe(until);
     const after = run.trace.filter((t) => t.tick > until + 10);
+    expect(after.at(-1)!.fixes).toBe(settled[0]!.fixes);
+    // Then it walks on, left, as the stick still says.
     expect(after.at(-1)!.x).toBeLessThan(settled[0]!.x - 0.5);
     expect(run.snapped).toBeLessThanOrEqual(1);
   });
@@ -271,23 +278,39 @@ describe('T-AC-10: the phone predicts its own colonist (RULE-10)', () => {
     return { p, world, base, first };
   }
 
-  /** The server's frame at `tick`: Lena `dx` to the right of where the copy had her then, or of `frame` past the copy. */
-  const at = (frame: DevFrame, tick: number, dx: number, p?: Prediction): DevFrame => {
+  /** The server's frame at `tick`: Lena `dx` right and `dy` down of where the copy had her then, or of `frame` past the copy. */
+  const at = (frame: DevFrame, tick: number, dx: number, p?: Prediction, dy = 0): DevFrame => {
     const mine = p?.past.find((e) => e.tick === tick)?.me;
-    return { ...frame, tick, at: tick * TICK, colonists: frame.colonists.map((c, i) => (i === 0 ? { ...c, x: (mine?.x ?? c.x) + dx } : c)) };
+    return { ...frame, tick, at: tick * TICK, colonists: frame.colonists.map((c, i) => (i === 0 ? { ...c, x: (mine?.x ?? c.x) + dx, y: (mine?.y ?? c.y) + dy } : c)) };
   };
 
   it('T-AC-10: within snapTiles the shown colonist eases to the server over correctMs', () => {
     const { p, world, base, first } = walking();
     const before = shownAt(p, 1_000, world.cfg)!;
-    // The server has her 0.1 tiles to the right of where the copy had her at tick 30.
-    const corrected = receiveFrame(p, at(first, 30, 0.1, p), 1_000, world, base);
+    // The server has her 0.1 tiles right of and 0.06 below where the copy had her at tick 30.
+    const corrected = receiveFrame(p, at(first, 30, 0.1, p, 0.06), 1_000, world, base);
     expect(corrected.stats).toMatchObject({ corrected: 1, snapped: 0 });
-    // At once she still stands where she was shown; over correctMs she moves the 0.1 across; then she holds.
-    expect(shownAt(corrected, 1_000, world.cfg)!.x).toBeCloseTo(before.x, 6);
-    expect(shownAt(corrected, 1_000 + DEV_STEER.correctMs / 2, world.cfg)!.x).toBeCloseTo(before.x + 0.05, 6);
-    expect(shownAt(corrected, 1_000 + DEV_STEER.correctMs, world.cfg)!.x).toBeCloseTo(before.x + 0.1, 6);
-    expect(shownAt(corrected, 1_000 + 3 * DEV_STEER.correctMs, world.cfg)!.x).toBeCloseTo(before.x + 0.1, 6);
+    // At once she still stands where she was shown; over correctMs she moves the 0.1 across and the 0.06 down; then she holds.
+    const shown = (ms: number) => shownAt(corrected, 1_000 + ms, world.cfg)!;
+    for (const [ms, share] of [[0, 0], [DEV_STEER.correctMs / 2, 0.5], [DEV_STEER.correctMs, 1], [3 * DEV_STEER.correctMs, 1]] as const) {
+      expect(shown(ms).x).toBeCloseTo(before.x + 0.1 * share, 6);
+      expect(shown(ms).y).toBeCloseTo(before.y + 0.06 * share, 6);
+    }
+  });
+
+  it('T-AC-10: a copy behind the frame, as a tab back from the background has, snaps to it and steps on from the frame\'s tick', () => {
+    const { p, world, base, first } = walking();
+    const ahead = at(first, 60, -1.5);
+    const framed = ahead.colonists[0]!.x;
+    const caught = receiveFrame(p, ahead, 3_000, world, base);
+    expect(caught.stats).toMatchObject({ corrected: 0, snapped: 1 });
+    expect(caught.tick).toBe(60);
+    expect(shownAt(caught, 3_000, world.cfg)!.x).toBeCloseTo(framed, 6);
+    // One tick on is one step left of where the frame has her.
+    const next = advanceTo(caught, 61, world);
+    expect(next.tick).toBe(61);
+    expect(next.me!.x).toBeLessThan(framed);
+    expect(next.me!.x).toBeGreaterThan(framed - 0.5);
   });
 
   it('T-AC-10 (negative): beyond snapTiles it snaps, at once', () => {
