@@ -1,9 +1,9 @@
-import { DEV_STEER, HALL } from '@mule/engine';
+import { HALL } from '@mule/engine';
 import type { ChatMessage, MuleView, MyView } from '@mule/protocol';
 import { LiveWalkers, SeatSpeciesProvider, type Slot } from '@mule/ui';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { seatSpecies } from '../src/game/derive';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
@@ -12,9 +12,7 @@ import { LaptopArcade, PhoneLandscape } from '../src/phone/arcade/Develop';
 import { FRAMES, overlap, phoneLayout, type Box } from '../src/phone/arcade/layout';
 import { StaticLive, type Live } from '../src/phone/arcade/live';
 import { PhoneGameProvider } from '../src/phone/game';
-import { PhoneApp } from '../src/phone/PhoneApp';
-import { fitHall, TvDevelop } from '../src/table/TvDevelop';
-import { TableApp } from '../src/table/TableApp';
+import { fitHall, TvArcade } from '../src/table/TvDevelop';
 import { at, devView, FRAMED, LENAS_PLOTS, lenasMe, NOW, PLAYERS, reach, STORE, tableOf } from './fixtures/arcade';
 
 /**
@@ -80,16 +78,12 @@ function inside(html: string, testid: string): string {
 }
 const text = (html: string, testid: string) => inside(html, testid).replace(/<[^>]+>/g, '');
 
-afterEach(() => {
-  DEV_STEER.on = false;
-});
-
 describe('C11: the phone, held sideways', () => {
   it('C11: the whole map, every colonist where the frames have them, and yours where your own prediction is', () => {
     const html = phone(devView(), live(mine(5.5, 4.5, { moving: true })));
     expect(tag(html, 'phone-game')).toMatch(/data-mode="side"/);
     expect(tag(html, 'phone-game')).toMatch(/data-store="7,4"/);
-    expect(tag(html, 'phone-game')).toMatch(/data-my-plots="3,0 3,3 14,0"/);
+    expect(tag(html, 'phone-game')).toMatch(/data-my-plots="3,0 14,0 3,3"/);
     const map = inside(html, 'walkers-map');
     expect(pct(map, 'colonist-s1', 'left')).toBeCloseTo((5.5 / 15) * 100, 6);
     expect(pct(map, 'colonist-s1', 'top')).toBeCloseTo((4.5 / 9) * 100, 6);
@@ -105,10 +99,10 @@ describe('C11: the phone, held sideways', () => {
     expect(text(buy, 'action-verb')).toBe('BUY MULE');
     expect(text(buy, 'action-detail')).toBe('148 cr');
     expect(tag(buy, 'action-button')).toMatch(/data-enabled="true"/);
-    expect(tag(buy, 'action-button')).not.toMatch(/disabled/);
+    expect(tag(buy, 'action-button')).not.toMatch(/\sdisabled=""/);
     const dim = phone(devView(lenasMe({ reach: reach('TO THE STORE', null, false) })), live(mine(5.5, 4.5)));
     expect(text(dim, 'action-verb')).toBe('TO THE STORE');
-    expect(tag(dim, 'action-button')).toMatch(/disabled/);
+    expect(tag(dim, 'action-button')).toMatch(/\sdisabled=""/);
     expect(tag(dim, 'action-detail')).toBeNull();
   });
 
@@ -166,7 +160,7 @@ describe('C11: the phone, held sideways', () => {
 
   it('C11 (RULE-10): reconnecting says so, and the colonist stands where the last frame had it', () => {
     const html = phone(devView(), live(mine(5.5, 4.5), undefined, 'reconnecting'));
-    expect(text(html, 'reconnecting')).toBe('Reconnecting…');
+    expect(text(html, 'reconnecting')).toBe('RECONNECTING…');
     expect(phone(devView(), live(mine(5.5, 4.5)))).not.toContain('data-testid="reconnecting"');
   });
 
@@ -204,8 +198,11 @@ describe('C11: it fits the phone (B-AC-4\'s layout half, B-AC-11\'s text floor)'
     const html = phone(devView(), live(mine(5.5, 4.5)), 667);
     expect(tag(html, 'phone-game')).toMatch(/data-mode="top"/);
     const L = phoneLayout(FRAMES[667], 'map', 15, 9);
-    const left = pct(html, 'phone-status-bar', 'left');
-    expect(left).toBeGreaterThanOrEqual(((L.stage.x + 4 * L.cell) / FRAMES[667].w) * 100);
+    // Row 0's widest run clear of Lena's Plains 4·1 and Crater 15·1: columns 5 to 14.
+    const left = Number(/left:([\d.]+)px/.exec(tag(html, 'phone-status-bar')!)![1]);
+    const width = Number(/width:([\d.]+)px/.exec(tag(html, 'phone-status-bar')!)![1]);
+    expect(left).toBeGreaterThanOrEqual(L.stage.x + 4 * L.cell);
+    expect(left + width).toBeLessThanOrEqual(L.stage.x + 14 * L.cell);
     expect(tag(html, 'phone-status-left')).toBeNull();
   });
 
@@ -265,32 +262,10 @@ describe('C11: the laptop', () => {
   });
 });
 
-describe('C11, C12: behind DEV_STEER.on, and only there', () => {
-  const phoneApp = (view: MuleView) => renderToStaticMarkup(createElement(ClientProvider, { client: clientFor(view), children: createElement(PhoneApp, { room: 'MULE' }) }));
-  const tv = (view: MuleView) => renderToStaticMarkup(createElement(ClientProvider, { client: clientFor(view, 'board'), children: createElement(TableApp, { room: 'MULE' }) }));
-
-  it('C11: with the flag off (the default) development on the phone is today\'s screen; with it on, the arcade\'s', () => {
-    expect(DEV_STEER.on).toBe(false);
-    const today = phoneApp(devView());
-    expect(today).toContain('data-phase="development"');
-    expect(today).not.toContain('data-testid="phone-game"');
-    DEV_STEER.on = true;
-    expect(phoneApp(devView())).toContain('data-testid="phone-game"');
-  });
-
-  it('C12: with the flag off the TV\'s development is today\'s; with it on, every colonist live', () => {
-    const today = tv(devView());
-    expect(today).toContain('data-phase="development"');
-    expect(today).not.toContain('data-testid="tv-game"');
-    DEV_STEER.on = true;
-    expect(tv(devView())).toContain('data-testid="tv-game"');
-  });
-});
-
 describe('C12: the TV', () => {
   const onTv = (view: MuleView, now: Live, chat: ChatMessage[] = []) =>
     renderToStaticMarkup(
-      createElement(ClientProvider, { client: clientFor(view, 'board', chat), children: createElement(StaticLive, { live: now, children: createElement(TvDevelop, { table: tableOf(view), game: view }) }) }),
+      createElement(ClientProvider, { client: clientFor(view, 'board', chat), children: createElement(StaticLive, { live: now, children: createElement(TvArcade, { game: view }) }) }),
     ).replaceAll('<!-- -->', '');
   const everyone = (): Live => live(null, FRAMED);
 
