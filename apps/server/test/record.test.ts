@@ -776,27 +776,42 @@ describe.runIf(FULL)('a crashed game in the record', { timeout: 60_000 }, () => 
   });
   afterEach(() => {
     spies.arrange = null;
+    spies.playbookFor = null;
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
   const FAULT = 'forced fault entering development';
+  /** A message the record must cut at 120 characters: the words past the cap never reach the file. */
+  const PAST_CAP = 'WORDSPASTTHECAP';
+  const LONG_FAULT = `${FAULT}: ${'x'.repeat(120)} ${PAST_CAP}`;
   /**
    * A bug in the game's own code as month 1's development opens: the engine has already entered the phase, so the
    * state at the error is not the state before the step. Nothing marks it as a test's: the recorder sees a throw from
    * game code, as it would from any bug. The replay's game runs the same code, so it throws there too.
    */
-  const faultIn = (phase: GameState['phase'], thrown: Error[] = []) => (state: GameState) => {
+  const faultIn = (phase: GameState['phase'], thrown: Error[] = [], message = FAULT) => (state: GameState) => {
     if (state.phase !== phase || state.month !== 1) return;
-    const err = new Error(FAULT);
+    const err = new Error(message);
+    thrown.push(err);
+    throw err;
+  };
+  /** A bug in the game's `handle`, after it accepted Heiko's claim: a plain Error, not a RuleError, so no refusal. */
+  const CLAIM_FAULT = 'forced fault after a claim';
+  const faultAfterClaim = (thrown: Error[] = []) => (_seat: string, intent: MuleIntent): null => {
+    if (intent.type !== 'claim') return null;
+    const err = new Error(CLAIM_FAULT);
     thrown.push(err);
     throw err;
   };
 
-  /** Plays the scripted game until the fault ends the room, and returns the file it wrote, as text and parsed. */
-  async function crashedGame() {
+  /**
+   * Plays the scripted game, with the fault `arm` sets up, until the fault ends the room, and returns the file it
+   * wrote, as text and parsed.
+   */
+  async function crashedGame(arm: (thrown: Error[]) => void = (thrown) => (spies.arrange = faultIn('development', thrown))) {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
     const thrown: Error[] = [];
-    spies.arrange = faultIn('development', thrown);
+    arm(thrown);
     const t = table({ dir });
     const removed = () => t.phones[0]!.seen.includes('removed');
     expect(await t.runUntil(removed), 'the fault ended the room').toBe(true);
@@ -808,10 +823,12 @@ describe.runIf(FULL)('a crashed game in the record', { timeout: 60_000 }, () => 
     return { text, record: JSON.parse(text) as MuleRecord, err: thrown[0]! };
   }
 
-  it('T-AC-13: a game error mid-game writes the record with ended "error" and the message, no stack, and its replay throws at the same step, identical', async () => {
-    const { text, record, err } = await crashedGame();
+  it('T-AC-13: a game error mid-game writes the record with ended "error" and the message, capped, no stack, and its replay throws at the same step, identical', async () => {
+    const { text, record, err } = await crashedGame((thrown) => (spies.arrange = faultIn('development', thrown, LONG_FAULT)));
     expect(record.ended).toBe('error');
-    expect(record.error).toBe(FAULT);
+    expect(record.error, 'the message, cut at 120 characters').toBe(LONG_FAULT.slice(0, 120));
+    expect(record.error).toHaveLength(120);
+    expect(text, 'the words past the cap').not.toContain(PAST_CAP);
     expect(record.outcome?.stateHash, 'the state when the error ended the room').toMatch(/^[0-9a-f]{64}$/);
     expect(Object.keys(record.outcome?.scores ?? {}).sort()).toEqual(record.seats.map((s) => s.id).sort());
     const frames = err.stack!.split('\n').slice(1).map((line) => line.trim()).filter((line) => line.length > 0);
@@ -824,11 +841,39 @@ describe.runIf(FULL)('a crashed game in the record', { timeout: 60_000 }, () => 
     expect(last, 'a timer threw as development opened, mid-game').toMatchObject({ type: 'fire' });
     expect(last.seq).toBeGreaterThan(1);
 
-    spies.arrange = faultIn('development');
+    spies.arrange = faultIn('development', [], LONG_FAULT);
     const result = await replay(record);
     expect(result.stateHash.replayed).toBe(record.outcome!.stateHash);
     expect(result.scores.map((s) => s.replayed)).toEqual(result.scores.map((s) => s.recorded));
     expect(result.identical).toBe(true);
+  });
+
+  it('T-AC-13: a game error thrown from handle, not a RuleError, writes the record with ended "error", and its replay throws at that intent, identical', async () => {
+    const { record } = await crashedGame((thrown) => (spies.playbookFor = faultAfterClaim(thrown)));
+    expect(record.ended).toBe('error');
+    expect(record.error).toBe(CLAIM_FAULT);
+    const last = record.events.filter(isStep).at(-1)!;
+    expect(last, "Heiko's claim threw, and is no refusal").toMatchObject({ type: 'intent', seat: 's1', intent: { type: 'claim' } });
+    expect(last.type === 'intent' && last.refused).toBeFalsy();
+
+    spies.playbookFor = faultAfterClaim();
+    const result = await replay(record);
+    expect(result.stateHash.replayed).toBe(record.outcome!.stateHash);
+    expect(result.identical).toBe(true);
+  });
+
+  it('T-AC-13: a game error whose message holds absolute paths writes <path>, never the path', async () => {
+    const cwd = process.cwd();
+    const windows = 'C:\\Users\\heiko\\mule\\data\\records\\game.json';
+    const message = `ENOENT: no such file or directory, open '${cwd}/data/records/game.json' (was ${windows})`;
+    const { text, record } = await crashedGame((thrown) => (spies.arrange = faultIn('development', thrown, message)));
+    expect(record.error).toBe("ENOENT: no such file or directory, open '<path>' (was <path>)");
+    expect(text).not.toContain(cwd);
+    expect(text).not.toContain('C:\\\\Users');
+    expect(text).not.toContain('records/game.json');
+
+    spies.arrange = faultIn('development', [], message);
+    expect((await replay(record)).identical).toBe(true);
   });
 
   it('T-AC-13 (negative): a replay whose game does not throw at the crashed step, or throws at another, is not identical and says why', async () => {
