@@ -1,4 +1,4 @@
-import { EVENT_ENTRY, STORY } from './catalogue';
+import { motionOf, STORY } from './catalogue';
 import type { ShowEventView, ShowHit, ShowMode, ShowPhase, ShowTimeline } from './types';
 
 /**
@@ -18,7 +18,7 @@ export const EVENT_SOLO_PACE = 0.75;
 export function playShare(ev: ShowEventView): number {
   const story = STORY[ev.key];
   if (story) return story.length;
-  switch (EVENT_ENTRY[ev.key].motion) {
+  switch (motionOf(ev.key)) {
     case 'sweep':
       return 3.6;
     case 'spread':
@@ -179,7 +179,7 @@ export function eventHitAt(seg: EventSegment, ev: ShowEventView, h: ShowHit | nu
   const story = STORY[ev.key];
   const after = (() => {
     if (story) return story.lands + (h?.order ?? 0) * (story.step ?? 0.15);
-    switch (EVENT_ENTRY[ev.key].motion) {
+    switch (motionOf(ev.key)) {
       case 'sweep':
         return h ? EVENT_FRONT.lead + sweepShare(ev, h, grid.width, grid.height) * EVENT_FRONT.cross : EVENT_FRONT.lead + EVENT_FRONT.cross / 2;
       case 'spread':

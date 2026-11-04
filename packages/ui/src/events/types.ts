@@ -13,6 +13,19 @@ export type ShowEventKey =
   | 'wildfire'
   | 'bumperHarvest'
   | 'cavernCollapse'
+  | 'federationTax'
+  | 'federationGrant'
+  | 'immigrationWave'
+  | 'inheritance'
+  | 'muleTheft'
+  | 'epidemic'
+  | 'coldSnap'
+  | 'meteorStrike'
+  | 'pirateRaid'
+  | 'storeFire'
+  | 'ratsInSilo'
+  | 'crookedAccountant'
+  | 'packageFromHome'
   // Not an EventKey: development's sick players, each sent as a bulletin (C11; the protocol's EventView widens to match).
   | 'sickness';
 
@@ -46,7 +59,9 @@ export interface ShowEventView {
     /** The special field the plot had until this hit: the map keeps its badge until the hit lands. */
     was?: SpecialKind;
     /** What the plot is after this hit, when the hit changes what it is. */
-    becomes?: 'plain';
+    becomes?: 'plain' | 'crater' | 'idle';
+    /** True when the hit destroyed or took the plot's MULE. */
+    muleLost?: true;
   }[];
   phase: ShowPhase;
   weight: ShowWeight;

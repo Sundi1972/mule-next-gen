@@ -2,7 +2,7 @@ import { endAuction, startAuction } from './auction.js';
 import { RuleError } from './errors.js';
 import { DEFAULT_SPECIES, DEV_STEER, DEVELOPMENT, GAME, GLINT, GOOD_CONFIG, mapSize, MULE, POLLUTION, SPECIES_PERK, START, TAX, UPKEEP, WOLVES } from './config.js';
 import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './economy.js';
-import { rollPlayerEvent } from './events.js';
+import { firePhase, rollPlayerEvent } from './events.js';
 import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
 import { generateMap, tileIndex } from './map.js';
 import { airBand } from './pollution.js';
@@ -53,6 +53,7 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
         hungry: false,
         devSeconds: DEVELOPMENT.fullSeconds,
         sick: false,
+        sickNext: false,
         doneDeveloping: false,
         installedThisTurn: false,
         analysed: [],
@@ -76,6 +77,7 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
     grant: null,
     landRanOutMonth: null,
     history: [],
+    monthEvents: [],
     auction: null,
     listings: [],
     landAuction: null,
@@ -83,6 +85,8 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
   };
   // The first month's prices start where supply and demand put them.
   for (const good of GOODS) state.store.posted[good] = Math.round(targetPrice(state, good));
+  // Month 1's planning rolls here, as every later month's does in advancePhase (none fires before EVENTS.firstMonth).
+  firePhase(state, 'planning');
   openPlanning(state);
   return state;
 }
@@ -207,21 +211,26 @@ function developer(state: GameState, playerId: string): Player {
  * Starts development: one clock, the same full time for every player. A
  * player short of the month's Food is hungry. Each player rolls for
  * sickness (events.ts, likelier in dirty air and for a big polluter); a
- * Medicine cures it, and is used up. Hunger and sickness slow the walk
- * (dev-walk.ts).
+ * player last month's epidemic made sick is sick again. One Medicine cures
+ * being sick this turn, whatever the cause, and is used up. Then
+ * development's events roll (an epidemic, a MULE theft). Hunger and
+ * sickness slow the walk (dev-walk.ts).
  */
 function startDevelopment(state: GameState): void {
   for (const p of state.players) {
     p.hungry = p.stock.food < Math.max(1, needsOf(state, p.id).food);
     p.sick = false;
-    if (rollPlayerEvent(state, 'sickness', 'development', p.id)) {
+    const rolled = rollPlayerEvent(state, 'sickness', 'development', p.id);
+    if (rolled || p.sickNext) {
       if (p.stock.medicine >= 1) p.stock.medicine--;
       else p.sick = true;
     }
+    p.sickNext = false;
     p.devSeconds = DEVELOPMENT.fullSeconds;
     p.doneDeveloping = false;
     p.installedThisTurn = false;
   }
+  firePhase(state, 'development');
 }
 
 /** What this player pays for an empty MULE. Gearlings pay less. */
@@ -510,8 +519,12 @@ export function advancePhase(state: GameState): void {
       colonyFund: state.treasury.money,
       colonistsHungry: false,
     });
+    // What the report filed, so the month's list and the report hold the same production events.
+    state.monthEvents.push(...(state.history.at(-1)!.events ?? []));
   }
   if (next === 'auction') {
+    // A pirate raid or a store fire changes the stock before the prices are posted.
+    firePhase(state, 'auction');
     postPrices(state);
     startAuction(state);
   }
@@ -519,6 +532,7 @@ export function advancePhase(state: GameState): void {
     // Goods the auction didn't reach trade nothing.
     endAuction(state);
     state.auction = null;
+    firePhase(state, 'upkeep');
     const { shortages, hungry } = runUpkeep(state);
     payOffices(state);
     const report = state.history.at(-1);
@@ -527,11 +541,16 @@ export function advancePhase(state: GameState): void {
       report.colonistsHungry = hungry;
       report.storeCapital = state.store.capital;
       report.colonyFund = state.treasury.money;
+      // The month's report keeps every event the month fired, not production's alone; a what-if copy shares the report.
+      if (!state.whatIf) report.events = [...state.monthEvents];
     }
     if (isGameOver(state)) state.phase = 'gameOver';
   }
   if (next === 'planning') {
     state.month++;
+    state.monthEvents = [];
+    // Planning's events roll as the month opens, with or without politics; they move cash and colonists, never land.
+    firePhase(state, 'planning');
     openPlanning(state);
   }
 }
