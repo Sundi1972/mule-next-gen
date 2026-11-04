@@ -281,19 +281,24 @@ describe('the production show plays every event of the month', () => {
     const caveIn = viewOf(month.lines, [collapse]);
     const seg = eventSegments(caveIn, EVENT_AT, 'tv')[0]!;
     const lands = eventHitAt(seg, seg.events[0]!, seg.events[0]!.hits[0]!, false, GRID);
-    const draw = (production: ProductionView, t: number) =>
-      renderToStaticMarkup(createElement(ProductionMap, { width: W, height: H, tiles: after, production, t, slots: { lena: 0, ossa: 1 }, tv: true }));
+    const draw = (production: ProductionView, t: number, reduced = false) =>
+      renderToStaticMarkup(createElement(ProductionMap, { width: W, height: H, tiles: after, production, t, slots: { lena: 0, ossa: 1 }, tv: true, reduced }));
     const badge = /data-testid="special-glyph-1-0" data-kind="crystalCavern"/;
     const cavedIn = /data-testid="mark-1-0"[^]*?\u25BC<\/span>CAVED IN/;
-    for (const t of [0, EVENT_AT, lands - 0.05]) {
-      const html = draw(caveIn, t);
-      expect(html, `the badge at ${t}`).toMatch(badge);
-      expect(html, `no chip yet at ${t}`).not.toContain('data-testid="mark-1-0"');
-    }
-    for (const t of [lands + 0.05, showEnd(caveIn)]) {
-      const html = draw(caveIn, t);
-      expect(html, `no badge at ${t}`).not.toContain('special-glyph-1-0');
-      expect(html, `the chip at ${t}`).toMatch(cavedIn);
+    // With reduced motion the hit lands sooner; the badge goes on that landing, not the full-motion one.
+    for (const reduced of [false, true]) {
+      const at = eventHitAt(seg, seg.events[0]!, seg.events[0]!.hits[0]!, reduced, GRID);
+      for (const t of [0, EVENT_AT, at - 0.05]) {
+        const html = draw(caveIn, t, reduced);
+        expect(html, `the badge at ${t}, reduced ${reduced}`).toMatch(badge);
+        expect(html, `no chip yet at ${t}, reduced ${reduced}`).not.toContain('data-testid="mark-1-0"');
+      }
+      // From the landing instant itself: the chip, never beside the badge.
+      for (const t of [at, at + 0.05, showEnd(caveIn)]) {
+        const html = draw(caveIn, t, reduced);
+        expect(html, `no badge at ${t}, reduced ${reduced}`).not.toContain('special-glyph-1-0');
+        expect(html, `the chip at ${t}, reduced ${reduced}`).toMatch(cavedIn);
+      }
     }
     // A hit that changes no plot's kind reads as its number, and keeps no badge the tiles lack.
     const loss = draw(viewOf(month.lines, [fired('cavernCollapse', 4000, [[1, 0, -1]])]), lands - 0.05);
