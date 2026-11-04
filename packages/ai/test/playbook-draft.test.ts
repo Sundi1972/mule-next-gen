@@ -167,8 +167,6 @@ describe('the draft picks a plan kind and writes its strategy', () => {
       leaning.trader = saved;
     }
   });
-
-  it.todo('B-AC-5: four personas draft four kinds; Rookie drafts no monopolist or spoiler');
 });
 
 /** Plays seed 11's table to the end of month 1's production, keeping a copy of the state at the end of each phase. */

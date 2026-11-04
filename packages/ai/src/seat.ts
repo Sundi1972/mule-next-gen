@@ -12,6 +12,7 @@ import {
   type FloorConfig,
   type FloorInput,
   type GameState,
+  type Playbook,
 } from '@mule/engine';
 import type { Act } from './actions.js';
 import { Brain, type DecisionRecord, type Pending } from './brain.js';
@@ -19,6 +20,7 @@ import type { Decider, TableTalk } from './decider.js';
 import { AuctionHand, type AuctionDebug } from './hands/auction.js';
 import { DevelopHand, type DevWalking } from './hands/develop.js';
 import { PERSONAS } from './personas.js';
+import type { DraftPhase, ValidatePlan } from './playbook/index.js';
 import { landDecision, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
 import { situation } from './summary.js';
 import type { Mind } from './value.js';
@@ -34,6 +36,10 @@ export interface AiSeatOptions {
   decider?: Decider | null;
   /** Every settled decision, with its candidates and scores. */
   onDecision?: (record: DecisionRecord) => void;
+  /** RULE-6 row 1: false plays every phase by today's asks. Unset, AI_PLANS.on decides. */
+  playbook?: boolean;
+  /** Each playbook the seat plays itself, validated: what the game records for it. */
+  onPlaybook?: (playbook: Playbook) => void;
 }
 
 /** What the dev view shows of an AI: its limits and its plan. */
@@ -91,6 +97,21 @@ export class AiSeat {
     const obs = observe(state, this.id);
     this.landMonth = state.month;
     this.land = this.brain.ask('land', landDecision(obs, this.mind), obs, Infinity, null, situation(obs, this.mind));
+  }
+
+  /** The seat's validated draft for a phase. `month` is the month whose land grant it plans. Writes nothing. */
+  draft(_state: GameState, _phase: DraftPhase, _month?: number): Playbook {
+    throw new Error('NotImplemented: AiSeat.draft');
+  }
+
+  /** Puts a playbook's parts in effect for its month (RULE-7). */
+  adopt(_playbook: Playbook): void {
+    throw new Error('NotImplemented: AiSeat.adopt');
+  }
+
+  /** The gate this seat's playbooks pass: its mind, its seed and, for the month it holds one, its pending land pick. */
+  validator(): ValidatePlan {
+    throw new Error('NotImplemented: AiSeat.validator');
   }
 
   /**
