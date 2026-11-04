@@ -376,13 +376,18 @@ export class DevelopHand {
     const store = this.raceFrom(view, { ...c, space: 'hall' });
     const care = Math.hypot(store.x - this.raceFrom(view, c).x, store.y - this.raceFrom(view, c).y) <= view.cfg.scramble.botCareTiles;
     if (!(this.rng.next() < view.cfg.scramble.botShare && care && this.fitsDetour(view, c, store))) return;
+    // Ahead of its next MULE: the steps before the MULE on the list; with none on it yet and one still to be decided, the
+    // whole list; finished (no MULE to come), none. The rest it keeps.
+    const buy = this.queue.findIndex((step) => step.action.type === 'buyMule');
+    const ahead = buy >= 0 ? buy : this.then === 'decide' ? this.queue.length : 0;
     const scouting = (step: DevStep) => step.action.type === 'analyse' || step.action.type === 'filter';
-    if (this.walking && scouting(this.walking)) {
+    const dropped = new Set(this.queue.slice(0, ahead).filter(scouting));
+    if (this.walking && dropped.has(this.walking)) {
       const step = this.walking;
       this.walking = null;
       this.taken(step, false, 'scramble');
     }
-    this.queue = this.queue.filter((step) => !scouting(step));
+    this.queue = this.queue.filter((step) => !dropped.has(step));
     this.scrambleRaced++;
   }
 
