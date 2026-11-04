@@ -182,7 +182,7 @@ export function PhoneLandscape({ size = 844 }: { size?: PhoneSize }) {
           <Money className={compactLeft ? 'text-[11px] [&_*]:whitespace-nowrap' : 'text-base'} />
           {compactLeft ? <CompactClock world={world} tun={tun} /> : <SharedClock seconds={secondsLeft(world, tun)} total={tun.devSeconds} />}
           {markers}
-          {!compactLeft && <Ticker lines={1} wrap />}
+          {compactLeft ? <Ticker lines={1} /> : <Ticker lines={1} wrap />}
           {!keys.focused && !compactLeft && (
             <span className="rounded-chip bg-panel/90 px-1 py-0.5 text-[10px] leading-tight text-ink-2 shadow-chip" data-testid="focus-hint">
               Click the game to steer with the keys
