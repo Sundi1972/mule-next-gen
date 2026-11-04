@@ -3,7 +3,7 @@
  * store-steps' makeHungry seated the human at 2 Food against a need of 5 (nine farms, which also burn Energy).
  * Quick by design: planning is about 4.5 s at the smoke's phase scale, and listedSale has used part of it.
  * B-AC-19 (AM-16), the host's Continue, is run by auction-steps.ts in its month-2 planning; its six-seat TV case
- * (sixSeatsOnTheTv) by shell.ts, in a room of its own; so is E-11's Governor's desk beside the table chat
+ * (sixSeatsOnTheTv) by shell.ts, in a room of its own; so is E-11's Governor's desk above the table chat
  * (governorsDeskFits), a room per phone size.
  */
 import { join } from 'node:path';
@@ -12,7 +12,7 @@ import type { Browser, Page } from 'playwright';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, held as holding, PHONE, TV } from './harness';
 import { ELECTION_WAIT_MS } from './politics-steps';
-import { LAPTOP } from './shell-steps';
+import { LAPTOP, railFits } from './shell-steps';
 
 /** The human sits in seat 1. */
 const SEAT = 's1';
@@ -333,17 +333,17 @@ const GOV_MARGIN_844 = 6;
 /** Every desk tab, on the smaller phone: at least this wide and tall. */
 const TAB_MIN = 32;
 
-/** One read of the Governor's rail: where the row and verdict end against the footer, and what the rail folded. */
+/** One read of the Governor's rail: where the row and verdict end against the footer, and where the table chat is. */
 type GovFit = {
   footerTop: number;
   rowBottom: number;
   verdictBottom: number;
   verdict: string;
   railScroll: number;
+  /** The seat row in the rail's body, under the desk (C20 on a phone), not its header. */
   seatRow: boolean;
   ticker: number;
   names: boolean;
-  spoken: boolean;
   nowFolded: boolean;
   desk: string | null;
   tabs: { id: string; w: number; h: number; clipped: boolean }[];
@@ -372,11 +372,10 @@ const READ_GOV = `(async () => {
     verdictBottom: verdict?.bottom ?? NaN,
     verdict: g?.querySelector('[data-testid=governor-verdict] [aria-hidden]')?.textContent ?? '',
     railScroll: g?.querySelector('header + div')?.scrollTop ?? -1,
-    seatRow: !!g?.querySelector('header [data-testid=seat-row]'),
-    ticker: g?.querySelectorAll('header [data-testid=chat-ticker] li').length ?? 0,
-    // Shown, not just in the markup: folded, the names stay for a screen reader only.
+    seatRow: !!g?.querySelector('header + div [data-testid=seat-row]') && !g?.querySelector('header [data-testid=seat-row]'),
+    ticker: g?.querySelectorAll('[data-testid=chat-ticker] li').length ?? 0,
+    // Shown, not just in the markup: a name kept for a screen reader only would not count.
     names: (() => { const w = g?.querySelector('[data-testid=actions] [data-testid=waiting-for]'); return !!w && !w.closest('.sr-only') && w.getBoundingClientRect().height > 1; })(),
-    spoken: !!g?.querySelector('[data-testid=actions] [data-testid=waiting-for]'),
     nowFolded: g?.querySelector('[data-testid=now]')?.tagName === 'BUTTON',
     desk: g?.querySelector('[data-testid=desks] [aria-selected=true]')?.dataset.testid ?? null,
     tabs,
@@ -384,12 +383,12 @@ const READ_GOV = `(async () => {
 })()`;
 
 /**
- * E-11 (C66, the Governor's desk beside the table chat): Lena, the sitting Governor, plans at `size` with the chat's
- * seat row and a two-line ticker in the rail's header, and Ossa still planning. With her desk open the tax row and its
- * verdict end above the footer, without the rail scrolling, as the desk opens over her promise, after −, and after Set
- * (at 844 × 390 by at least GOV_MARGIN_844); meanwhile the footer folds its "Waiting for" names and the ticker keeps its
- * newest line, the seat row staying. Picking another desk brings both back. Every desk tab is at least TAB_MIN square,
- * its label whole. Clicks are DOM clicks, so the page never scrolls the rail to reach a button: what is measured is
+ * E-11 (C66, the Governor's desk with the table chat): Lena, the sitting Governor, plans at `size` with the chat's seat
+ * row and a two-line ticker, and Ossa still planning. Under C20's rule on a phone the chat follows the rail's content,
+ * so nothing folds: the footer names who is still planning, the ticker keeps both lines, and the seat row sits under the
+ * desk. With her desk open the tax row and its verdict end above the footer, without the rail scrolling, as the desk
+ * opens over her promise, after −, and after Set (at 844 × 390 by at least GOV_MARGIN_844); railFits reads the tax row
+ * as it opens. Every desk tab is at least TAB_MIN square, its label whole. Clicks are DOM clicks, so the page never scrolls the rail to reach a button: what is measured is
  * what shows untouched. With MULE_SHOTS set to a directory, it saves the screen as the desk opens and after Set there.
  * Returns the numbers, to log.
  */
@@ -404,7 +403,7 @@ async function governorDeskFits(lena: Page, size: { width: number; height: numbe
   const seen: string[] = [];
   const fits = (f: GovFit, state: string, verdict: string) => {
     check(f.desk === 'desk-governor', `E-11 at ${at} (${state}): the Governor's desk is open, got ${f.desk}`);
-    check(f.seatRow, `E-11 at ${at} (${state}): the chat's seat row stays in the rail's header`);
+    check(f.seatRow, `E-11 at ${at} (${state}): the chat's seat row is in the rail's body, under the desk (C20)`);
     check(f.nowFolded, `E-11 at ${at} (${state}): the Now card is folded to its title (E-9)`);
     check(f.verdict === verdict, `E-11 at ${at} (${state}): the verdict reads "${verdict}", got "${f.verdict}"`);
     check(f.railScroll === 0, `E-11 at ${at} (${state}): the rail did not scroll, got scrollTop ${f.railScroll}`);
@@ -412,9 +411,8 @@ async function governorDeskFits(lena: Page, size: { width: number; height: numbe
     const chip = f.footerTop - f.verdictBottom;
     seen.push(`${state}: row ${f.rowBottom.toFixed(1)}, verdict ${f.verdictBottom.toFixed(1)}, footer ${f.footerTop.toFixed(1)} (${row.toFixed(1)} / ${chip.toFixed(1)} px clear)`);
     check(row >= floor && chip >= floor, `E-11 at ${at} (${state}): the tax row and its verdict end at least ${floor} px above the footer, got row ${f.rowBottom.toFixed(1)} and verdict ${f.verdictBottom.toFixed(1)} against footer ${f.footerTop.toFixed(1)}`);
-    check(!f.names, `E-11 at ${at} (${state}): the footer folds its "Waiting for" names while the Governor's desk is open`);
-    check(f.spoken, `E-11 at ${at} (${state}): folded, the "Waiting for" names stay for a screen reader`);
-    check(f.ticker === 1, `E-11 at ${at} (${state}): the ticker keeps its newest line while the Governor's desk is open, got ${f.ticker}`);
+    check(f.names, `E-11 at ${at} (${state}): with the Governor's desk open the footer still names who is still planning (no fold)`);
+    check(f.ticker === 2, `E-11 at ${at} (${state}): with the Governor's desk open the ticker keeps its two lines (no fold), got ${f.ticker}`);
   };
 
   const shots = process.env.MULE_SHOTS;
@@ -436,6 +434,7 @@ async function governorDeskFits(lena: Page, size: { width: number; height: numbe
     seen.push(`six tabs ${sixTabs}`);
   }
   fits(opened, 'as it opens', 'breaks it');
+  seen.push(`railFits ${await railFits(lena, { key: 'governor-tax-row', clear: { [GOV_SIZES[0].width]: GOV_MARGIN_844 }, sizes: [size] })}`);
   await click('tax-down');
   await guide.getByTestId('gov-within').waitFor({ timeout });
   fits(await read(), 'after −', 'within');
@@ -443,14 +442,7 @@ async function governorDeskFits(lena: Page, size: { width: number; height: numbe
   await guide.getByTestId('gov-done').waitFor({ timeout });
   await shot('set');
   fits(await read(), 'after Set', 'done');
-
-  // Another desk: the names and the ticker's two lines come back.
-  await guide.getByTestId('desk-colony').click({ timeout });
-  await guide.getByTestId('desk-body-colony').waitFor({ timeout });
-  const away = await read();
-  check(away.names, `E-11 at ${at} (negative): with the Colony desk open the footer names who is still planning again`);
-  check(away.ticker === 2, `E-11 at ${at} (negative): with the Colony desk open the ticker keeps its two lines again, got ${away.ticker}`);
-  return `${at}: ${seen.join('; ')}; another desk unfolds both`;
+  return `${at}: ${seen.join('; ')}`;
 }
 
 /** E-11's fixture: Lena's promise of up to 4%, under the month's 5%, so the desk opens on "breaks it" and − brings it within. */
