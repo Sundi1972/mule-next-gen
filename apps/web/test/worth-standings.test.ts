@@ -180,6 +180,12 @@ describe('N-6 (WS4): a shared win at game over', () => {
     expect(text(element(phone, 'my-place'))).toBe('You share the win!');
     expect(text(phone)).toContain('Game over: you share the win');
 
+    // A phone outside the tie: its place, and the shared line with a mark for each winner.
+    const kai = element(onPhone(tied([KAI, { ...HEIKO, worth: 5_200 }, MIA]), GameOver), 'winner');
+    expect(text(element(kai, 'my-place'))).toBe('You finished 3rd of 3');
+    expect(text(kai)).toContain('Heiko and Mia share the win, each with a Worth of 5,200 cr');
+    expect([...kai.matchAll(/role="img"[^>]*aria-label="([^"]+)"/g)].map((m) => m[1]), "Kai's own mark, then each winner's").toEqual(['Kai', 'Heiko', 'Mia']);
+
     const three = tied([{ ...HEIKO, worth: 5_200 }, MIA, { ...KAI, worth: 5_200 }]);
     expect(text(element(element(tvOf(three), 'tv-winner'), 'winner-line'))).toBe('Heiko, Mia and Kai share the win, each with a Worth of 5,200 cr');
   });

@@ -220,7 +220,9 @@ export function WinnerCard({ view, density, selfId, className }: { view: MuleVie
       </span>
       {!won && (
         <span className="flex items-center justify-center gap-1 text-[11px] leading-snug text-ink-2" data-testid="winner-line">
-          <PlayerMark slot={top.slot} species={top.player.species} size={12} label={top.player.name} />
+          {winners.map((w) => (
+            <PlayerMark key={w.player.id} slot={w.slot} species={w.player.species} size={12} label={w.player.name} />
+          ))}
           {line}
         </span>
       )}

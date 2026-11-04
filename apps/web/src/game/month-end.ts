@@ -90,7 +90,8 @@ export function leaderWords(view: MuleView, lg: League, selfId?: string): { lead
 export function winnerWords(view: MuleView, lg: League): string {
   const top = lg.rows[0];
   if (!lg.leader || !top) return '';
-  const worth = `${fmt(top.total)} cr`;
+  // A no-break space: "cr" never ends up alone on the last line of a wrapped card.
+  const worth = `${fmt(top.total)}\u00a0cr`;
   return lg.leader.level.length > 1
     ? `${listOf(lg.leader.level.map((id) => nameOf(view, id)))} share the win, each with a Worth of ${worth}`
     : `${nameOf(view, lg.leader.id)} wins with a Worth of ${worth}`;
