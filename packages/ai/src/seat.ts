@@ -21,7 +21,7 @@ import type { Decider, TableTalk } from './decider.js';
 import { AuctionHand, type AuctionDebug } from './hands/auction.js';
 import { DevelopHand, type DevWalking } from './hands/develop.js';
 import { PERSONAS } from './personas.js';
-import { draftPlaybook, validatePlaybook, validatorFor, type DraftPhase, type ValidatePlan, type ValidatorProfile } from './playbook/index.js';
+import { draftPlaybook, validatePlaybook, validatorFor, type DraftPhase, type PartKey, type PlayedPart, type ValidatePlan, type ValidatorProfile } from './playbook/index.js';
 import { landDecision, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
 import { situation } from './summary.js';
 import type { Mind } from './value.js';
@@ -129,6 +129,11 @@ export class AiSeat {
     const land = this.landMonth === month ? this.land : null;
     const drafted = draftPlaybook({ state, seat: this.id, mind: this.mind, seed: this.options.seed, phase, land, month });
     return validatePlaybook(this.profileFor(month))(state, this.id, drafted, []).playbook;
+  }
+
+  /** RULE-6: what this month's hand plays for `key`; null plays today's path. */
+  part<K extends PartKey>(_state: GameState, _key: K): PlayedPart<K> | null {
+    throw new Error('NotImplemented: seat-part');
   }
 
   /** Puts a playbook's parts in effect for its month (RULE-7). */
