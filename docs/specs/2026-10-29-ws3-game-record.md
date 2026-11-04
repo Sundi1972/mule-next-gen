@@ -297,7 +297,8 @@ RULE-2 · When the record is written                               shape: decisi
   3  the write fails                               console.error with the path and error code; the room and
                                                    game carry on untouched; nothing retries
   4  the room is disposed before game over         nothing written; the record is dropped with the room
-  5  a game error ends the room                    nothing written (see §7 R-2)
+  5  a game error ends the room                    written as row 2, with `ended: 'error'` and the error's message;
+                                                   the replay reproduces the throw at the same step (AM-5)
 
 unknown  `recordDir` absent means "don't record". It is never a default folder in tests.
 ```
@@ -517,8 +518,8 @@ stay local.
   stream the steps to a file. That's a non-goal now.
 - **R-2, a crashed game leaves no file.** When a game error ends the room, nothing is written (RULE-2 row 5). That's
   exactly the game Heiko would most want replayed. It costs little to write the record with `ended: 'error'`, and the
-  replay would reproduce the throw. It's outside §0's proof, so it's offered as a follow-up for the PM and Heiko to
-  rule on, not built here.
+  replay would reproduce the throw. It was outside §0's proof, so it was offered as a follow-up. **Heiko approved it;
+  it is built as AM-5.**
 - **R-3, Node timer and promise semantics.** RULE-1 assumes a settled decider promise runs its handlers before the
   next timer callback, which holds in Node: microtasks drain between macrotasks. T-AC-1's positive control is the
   check. No spike needed.
@@ -586,6 +587,21 @@ stay local.
   - **Follow-on (2026-10-29, #194 review):** §1 C2 (2) still said `heard` passes through unrecorded. It is now
     restated as a step, matching RULE-1 row 9 and RULE-5. T-AC-12 also pins the replay's `heard` calls exactly, so a
     replay that drops or garbles them goes red.
+
+- **AM-5 (2026-11-04, R-2, Heiko approved): a crashed game writes its record.**
+  - **RULE-2 row 5** is restated above: a game error that ends the room writes the file, as at game over.
+  - **§3, additive (still `v: 1`):** `GameRecord` gains `ended?: 'error'` and `error?: string` (the message only, no
+    stack, since paths and env must not reach the file). The outcome's `stateHash` is the state when the error ended
+    the room. The scores are what `score` gives on that state, or omitted if scoring itself throws. A record without
+    `ended` is a game that ended normally.
+  - **The replay:** it plays the steps, expects the same step to throw, and reports `identical` only if it throws at
+    that step with the same message and the state hash matches. A replay that doesn't throw, or throws elsewhere, is
+    not identical.
+  - **The seam:** the room's existing `onError` / `fail()` path in tabletop. WS3's `record.ts` wraps the game's
+    errors where it already wraps `handle` and fired steps, so no tabletop edit is needed if the throw reaches the
+    recorder first. If it doesn't, the edit is WS4's and is named.
+  - **The test** is T-AC-13: a forced throw mid-game gives a file with `ended: 'error'`, and its replay throws at the
+    same step and is identical. Positive control: a replay that swallows the throw is not identical.
 
 ## §9 · Ownership Boundaries `[handoff]`
 
