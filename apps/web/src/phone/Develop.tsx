@@ -1,4 +1,4 @@
-import { DEV_STEER, DEV_WALK, DEVELOPMENT, UPKEEP, type Good, type Outfit } from '@mule/engine';
+import { DEV_STEER, DEV_WALK, DEVELOPMENT, tileIndex, UPKEEP, type Good, type Outfit } from '@mule/engine';
 import type { PlayerView, TileView } from '@mule/protocol';
 import { AirGauge, Button, cx, GOOD_NAME, GoodIcon, hungerLevel, HoloMap, MuleIcon, paceLine, PlayerMark, SharedClock, sickReason, StoreInterior, TERRAIN_NAME, TimeBar, YourPace, ZoomMap, type Condition, type FoodEaten, type PaceRule, type Shop } from '@mule/ui';
 import { useEffect, useState } from 'react';
@@ -44,6 +44,8 @@ export function Develop() {
   // The thought bubble shows as the card ends, once a turn: the hall remounts on every trip back into the store.
   const clockStartsAt = mounted.wall + (devStartedAt - mounted.at) + FILL_CARD_SECONDS * 1000;
   const [selected, setSelected] = useState<{ x: number; y: number } | null>(null);
+  // The plot you last pressed Install for: a walk there is an install (Analyse and the filter walk to a plot too).
+  const [installing, setInstalling] = useState<{ x: number; y: number } | null>(null);
   // Kept here, not in the map, so the zoom survives a trip into the store.
   const [zoomed, setZoomed] = useState(false);
   const [confirmStart, setConfirmStart] = useState(false);
@@ -93,6 +95,7 @@ export function Develop() {
     carry,
     place,
     atOwnPlot: place === 'map' && mine,
+    walkingTo: installing && self.colonist?.walk && self.colonist.at === tileIndex(view.width, installing.x, installing.y) ? installing : null,
     installed,
     seconds,
     freePlots,
@@ -235,7 +238,10 @@ export function Develop() {
                   size="md"
                   className="whitespace-nowrap px-2"
                   disabled={!outfitted || !mine}
-                  onClick={() => client.intent({ type: 'install', x: tile.x, y: tile.y })}
+                  onClick={() => {
+                    setInstalling({ x: tile.x, y: tile.y });
+                    client.intent({ type: 'install', x: tile.x, y: tile.y });
+                  }}
                 >
                   {outfitted && mine && tile.outfit ? 'Replace MULE' : 'Install here'}
                 </Button>
