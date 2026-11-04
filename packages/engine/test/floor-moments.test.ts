@@ -47,6 +47,12 @@ const FOREST = [
   'fffffffffffffff',
 ];
 
+/**
+ * Forest with the store at the map's west edge, its left door 0.5 of a tile from where the hall puts a colonist coming
+ * in by it: a fight beside that door has the hall's door spot inside its arena, by the numbers if not in the same space.
+ */
+const FOREST_WEST = FOREST.map((row, y) => (y === 5 ? 'fSfffffffffffff' : row.replace('S', 'f')));
+
 /** Plains with a lake: glint land, and no wolves. */
 const PLAINS = FOREST.map((row) => row.replaceAll('f', '.'));
 
@@ -275,26 +281,30 @@ describe('the floor moments: wolves (RULE-4)', () => {
 
 
     // A fight begun beside each wall, the stick pushed one way and then another (round a corner, then along a wall to
-    // the arena's edge): no tick of the fight ends in the band.
+    // the arena's edge): no tick of the fight ends in the band, nor in the hall. The last is beside the west store's left
+    // door, below it: an edge's push there can walk in by the door, and the hall's door spot lies within the arena.
     const ends: string[] = [];
+    const west = world(31, FOREST_WEST);
     const beside = [
       { x: band.x0 - 0.3, y: band.y0 + 0.4 }, { x: band.x1 + 0.3, y: band.y0 + 0.4 }, { x: band.x0 - 0.3, y: band.y1 - 0.4 },
       { x: band.x1 + 0.3, y: band.y1 - 0.4 }, { x: band.x0 + 0.4, y: band.y0 - 0.3 }, { x: band.x1 - 0.4, y: band.y1 + 0.3 },
-    ];
+    ].map((at) => ({ state, at, inBand })).concat([{ state: west, at: { x: 1.05, y: 6.3 }, inBand: (c) => c.x > 1 - body && c.x < 2 + body && c.y > 5 - body && c.y < 6 + body }]);
     const way = (k: number) => ({ x: Math.cos((k / 8) * 2 * Math.PI), y: Math.sin((k / 8) * 2 * Math.PI), act: false });
-    for (const at of beside) {
+    for (const { state: s, at, inBand: within } of beside) {
       for (let first = 0; first < 8; first++) {
         for (let then = 0; then < 8; then++) {
-          let f = fightAt(state, at);
+          let f = fightAt(s, at);
           for (let i = 0; i < ticks(1.5) && seat(f, 'a').encounter?.stage === 'fight'; i++) {
-            f = tick(state, f, { a: way(i < ticks(0.4) ? first : then) });
+            f = tick(s, f, { a: way(i < ticks(0.4) ? first : then) });
             const c = seat(f, 'a');
-            if (c.space === 'map' && inBand(c)) ends.push(`from (${at.x.toFixed(2)}, ${at.y.toFixed(2)}), ${first}/8 then ${then}/8: (${c.x.toFixed(3)}, ${c.y.toFixed(3)})`);
+            const where = `from (${at.x.toFixed(2)}, ${at.y.toFixed(2)}), ${first}/8 then ${then}/8: (${c.x.toFixed(3)}, ${c.y.toFixed(3)})`;
+            if (c.space === 'map' && within(c)) ends.push(`${where} in the band`);
+            if (c.space !== 'map' && c.encounter?.stage === 'fight') ends.push(`${where} in the ${c.space}, still fighting`);
           }
         }
       }
     }
-    expect(ends, 'fight ticks that ended inside the store wall band').toEqual([]);
+    expect(ends, 'fight ticks that ended inside the store wall band or in the hall').toEqual([]);
   });
 
   it('T-AC-6 negative: no wolves in the hall, on plains, or with WOLVES.on false', () => {
