@@ -5,19 +5,18 @@
  * phone and the TV show each seat's final score as the server has it, best first.
  * Run with `pnpm --filter @mule/web exec tsx e2e/full-game.ts`; replay a red run's map with `MULE_E2E_SEED=<seed>`.
  */
-import { GAME, LOTS, TAX, WALK, type Species } from '@mule/engine';
+import { GAME, LOTS, WALK, type Species } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { errors as playwrightErrors, type Browser, type Page } from 'playwright';
 import { GRANT_PASS_MAX_MS, GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, launch, PHONE, startServer, TV } from './harness';
-import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
+import { ELECTION_WAIT_MS, PRESS_MS, readyThroughTheElection } from './politics-steps';
 
 /** Slow enough that a held Up can be let go a few board steps past its target; fast enough for CI. */
 const SCALE = 0.25;
 /** A phase's longest run at this scale, plus room for the browser and the network. */
 const within = (ms: number) => ms * SCALE + 5_000;
-const PRESS_MS = 2_000;
 /** The land grant's light passes every free plot once. */
 const GRANT_WAIT_MS = GRANT_PASS_MAX_MS + 3_000;
 /** A good's stage in the goods auction, its clock slowed the whole time by trading. */
@@ -34,6 +33,8 @@ check(Number.isSafeInteger(SEED), `bad MULE_E2E_SEED "${process.env.MULE_E2E_SEE
 const { server, base } = await startServer({ maxMonths: 2, phaseScale: SCALE, seed: () => SEED });
 const browser = await launch();
 const errors: string[] = [];
+/** Every screen in the game, for the evidence a failed run prints. */
+const screensOpen: { name: string; page: Page }[] = [];
 const started = Date.now();
 let code = '';
 try {
@@ -47,6 +48,7 @@ try {
   check(/^[A-Z]{4}$/.test(code), `room code, got "${code}"`);
   const tv = await (await browser.newContext(TV)).newPage();
   tv.on('pageerror', (e) => errors.push(`tv: ${e.message}`));
+  screensOpen.push({ name: 'the TV', page: tv });
   await tv.goto(`${base}/table?room=${code}`);
   const lena = await joinRoom(await open(browser, 'Lena'), code, 'Lena');
   const ossa = await joinRoom(await open(browser, 'Ossa'), code, 'Ossa');
@@ -70,27 +72,31 @@ try {
   await throughTheLandAuction(phones, truth, null);
   await Promise.all([buyAndInstallAMule(lena), goToThePub(brix), goToThePub(ossa)]);
   const lenaId = truth.seatOf('Lena');
-  check(truth.plotsOf(lenaId).some((t) => t.outfit !== null), `month 1: Lena's plot has the MULE she installed, ${JSON.stringify(truth.plotsOf(lenaId).map((t) => t.outfit))}`);
-  console.log(`✓ month 1: Lena bought a MULE and installed it on her plot`);
+  check(truth.plotsOf(lenaId).some((t) => t.outfit === 'energy'), `month 1: Lena's plot has the Energy MULE she installed, ${JSON.stringify(truth.plotsOf(lenaId).map((t) => t.outfit))}`);
+  console.log(`✓ month 1: Lena bought a MULE, outfitted it for Energy and installed it on her plot`);
   await everyone(phones, (p) => pressDoneThroughTheAuction(p.page));
   await everyone(phones, (p) => p.page.locator('[data-phase=upkeep]').getByTestId('ready').click({ timeout: MONTH_END_MS }));
 
   // Month 2: Brix lists a plot; after the grant, Ossa bids it up past the minimum and wins it at the bell.
   await brix.locator('[data-phase=planning]').waitFor({ timeout: PRESS_MS * 5 });
-  const listed = await listAPlot(brix, 0);
+  const listed = await listAPlot(brix, phones.indexOf(phones.find((p) => p.name === 'Brix')!), truth);
   console.log(`✓ month 2: Brix listed ${listed.id} (plot ${listed.item.x},${listed.item.y}) at ${listed.minimum}`);
   await everyone(phones, (p) => readyThroughTheElection(p.page, within(ELECTION_WAIT_MS) + PRESS_MS));
   await everyone(phones, (p) => claimPlots(p.page));
+  // Read from what the bell leaves behind, the plot's owner and the money, not from its result screen, which shows for
+  // well under a second at this scale. Nothing but the land auction moves money in between: the month's events come in
+  // production, and no one governs, so the tax stays the rate read here.
   const before = truth.moneys();
-  const sale = await throughTheLandAuction(phones, truth, { listing: listed.id, buyer: phones[2]! });
-  check(sale?.kind === 'sold' && sale.buyer === phones[2]!.id, `month 2: Brix's plot is sold to Ossa at the bell, got ${JSON.stringify(sale)}`);
+  const tax = truth.board().treasury.salesTax;
+  const [seller, buyer] = [phones.find((p) => p.name === 'Brix')!, phones.find((p) => p.name === 'Ossa')!];
+  await throughTheLandAuction(phones, truth, { listing: listed.id, buyer });
   const after = truth.moneys();
-  const proceeds = sale.price - Math.round(sale.price * TAX.salesTax);
-  check(sale.price >= listed.minimum, `month 2: the price ${sale.price} is at least the minimum ${listed.minimum}`);
-  check(after[phones[2]!.id] === before[phones[2]!.id]! - sale.price, `month 2: Ossa paid ${sale.price}: ${before[phones[2]!.id]} → ${after[phones[2]!.id]}`);
-  check(after[phones[0]!.id] === before[phones[0]!.id]! + proceeds, `month 2: Brix got ${proceeds} after tax: ${before[phones[0]!.id]} → ${after[phones[0]!.id]}`);
-  check(truth.board().tiles.find((t) => t.x === listed.item.x && t.y === listed.item.y)?.owner === phones[2]!.id, `month 2: plot ${listed.item.x},${listed.item.y} is Ossa's on the server`);
-  console.log(`✓ month 2: Ossa bought Brix's plot at the bell for ${sale.price}; Ossa −${sale.price}, Brix +${proceeds}`);
+  const price = before[buyer.id]! - after[buyer.id]!;
+  const proceeds = price - Math.round(price * tax);
+  check(truth.board().tiles.find((t) => t.x === listed.item.x && t.y === listed.item.y)?.owner === buyer.id, `month 2: plot ${listed.item.x},${listed.item.y}, Brix's listing, is Ossa's on the server after the bell`);
+  check(price >= listed.minimum, `month 2: Ossa paid at least the minimum ${listed.minimum}: ${before[buyer.id]} → ${after[buyer.id]}`);
+  check(after[seller.id] === before[seller.id]! + proceeds, `month 2: Brix got ${proceeds} for ${price} after ${tax * 100}% tax: ${before[seller.id]} → ${after[seller.id]}`);
+  console.log(`✓ month 2: Ossa bought Brix's plot at the bell for ${price}; Ossa −${price}, Brix +${proceeds}`);
   await everyone(phones, (p) => goToThePub(p.page));
   await everyone(phones, (p) => pressDoneThroughTheAuction(p.page));
 
@@ -107,6 +113,7 @@ try {
       check(shown === score, `game over: ${name} shows ${id}'s final score ${shown}, the server's is ${score}`);
     }
     const order = await root.locator('[data-testid^=league-row-]').evaluateAll((rows) => rows.map((r) => r.getAttribute('data-testid')!.slice('league-row-'.length)));
+    check(JSON.stringify([...order].sort()) === JSON.stringify([...best].sort()), `game over: ${name} lists every seat once, got ${order.join(', ')}`);
     check(sameScoreOrder(order, best, scores), `game over: ${name} lists the seats best first, ${order.join(', ')} for ${JSON.stringify(scores)}`);
   }
   console.log(`✓ game over: the three phones and the TV show the server's final scores, best first: ${scores.map((s) => `${s.id} ${s.score}`).join(', ')}`);
@@ -115,6 +122,7 @@ try {
 } catch (err) {
   console.error(`e2e full game: FAILED (room ${code}, seed ${SEED})`);
   if (errors.length > 0) console.error(`page errors: ${errors.join('; ')}`);
+  await printEvidence();
   throw err;
 } finally {
   await browser.close();
@@ -124,7 +132,20 @@ try {
 async function open(browser: Browser, name: string): Promise<Page> {
   const page = await (await browser.newContext(PHONE)).newPage();
   page.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
+  screensOpen.push({ name: `${name}'s phone`, page });
   return page;
+}
+
+/** What a failed run leaves to read: the server's phase and stage, and each screen's phase and words. */
+async function printEvidence(): Promise<void> {
+  const room = code ? server.registry.get(code) : undefined;
+  const game = room?.viewFor(null).game;
+  console.error(`server: ${game ? `month ${game.month}, ${game.phase}, land auction ${game.landAuction?.stage ?? '-'} ${game.landAuction?.lot.id ?? ''}` : 'no game'}`);
+  for (const { name, page } of screensOpen) {
+    const phase = await page.locator('[data-phase]').first().getAttribute('data-phase', { timeout: 500 }).catch(() => '?');
+    const words = await page.locator('body').innerText({ timeout: 500 }).catch(() => '');
+    console.error(`--- ${name} (${phase}): ${words.replace(/\s+/g, ' ').slice(0, 400)}`);
+  }
 }
 
 async function joinRoom(page: Page, code: string, name: string): Promise<Page> {
@@ -166,7 +187,8 @@ type Truth = ReturnType<typeof serverTruth>;
 
 /**
  * Presses CLAIM until this phone has no claims left or the grant is over (the last claim at the table ends it). Two
- * phones can press on the same lit plot; the loser's press is refused and it tries the next one.
+ * phones can press on the same lit plot; the loser's press is refused and it tries the next one. Unlike harness.ts's
+ * claimAPlot, which claims one, this takes every claim the grant gives, so three phones race for the same light.
  */
 async function claimPlots(page: Page): Promise<void> {
   const claim = page.locator('[data-phase=landGrant]').getByRole('button', { name: /CLAIMS LEFT/ });
@@ -188,38 +210,35 @@ async function claimPlots(page: Page): Promise<void> {
 
 /**
  * Plays the land auction to its end, if one runs. Every lot but `sell.listing` is passed: every phone presses Done.
- * On `sell.listing` the buyer holds Up to OVER_THE_MINIMUM past the minimum and lets go, the others press Done.
- * Returns that lot's result as the server rang it, or null when there was none to sell.
+ * On `sell.listing` the buyer holds Up to OVER_THE_MINIMUM past the minimum and lets go, while the others keep pressing
+ * Done, so the bid never holds up their presses. What the lot came to is read afterwards from the server's state.
  */
-async function throughTheLandAuction(phones: Phone[], truth: Truth, sell: { listing: string; buyer: Phone } | null) {
-  type Result = NonNullable<NonNullable<MuleView['landAuction']>['result']>;
+async function throughTheLandAuction(phones: Phone[], truth: Truth, sell: { listing: string; buyer: Phone } | null): Promise<void> {
   const deadline = Date.now() + within(LOTS.maxLotsPerMonth * (LOTS.introMs + LOTS.walkMs + LOTS.resultMs));
-  let sold: Result | null = null;
-  const bidding = new Set<string>();
+  let bid: Promise<void> | null = null;
   while (truth.board().phase === 'landGrant' || truth.board().phase === 'landAuction') {
     check(Date.now() < deadline, 'the land auction ends within its lots');
     const lot = truth.board().landAuction;
-    if (lot?.stage === 'result' && lot.lot.id === sell?.listing) sold = lot.result;
     if (lot?.stage === 'walk') {
       const ours = lot.lot.id === sell?.listing;
+      if (ours && bid === null) {
+        bid = bidUpTo(sell!.buyer.page, lot.lot.minimum + OVER_THE_MINIMUM);
+        // Awaited after the loop; a handler now keeps an early failure from being reported as unhandled meanwhile.
+        bid.catch(() => undefined);
+      }
       await Promise.all(
-        phones.map(async (p) => {
-          if (ours && p.id === sell!.buyer.id) {
-            if (bidding.has(lot.lot.id)) return;
-            bidding.add(lot.lot.id);
-            await bidUpTo(p.page, lot.lot.minimum + OVER_THE_MINIMUM);
-            return;
-          }
-          await p.page.locator('[data-phase=landAuction] [data-testid=done]:not([disabled])').click({ timeout: 200 }).catch(() => undefined);
-        }),
+        phones
+          .filter((p) => !(ours && p.id === sell!.buyer.id))
+          .map((p) => p.page.locator('[data-phase=landAuction] [data-testid=done]:not([disabled])').click({ timeout: 200 }).catch(() => undefined)),
       );
     }
     await new Promise((r) => setTimeout(r, 50));
   }
-  return sold;
+  if (sell) check(bid !== null, `the land auction put up ${sell.listing}`);
+  await bid;
 }
 
-/** Holds Up until the phone's bid reaches `target`, lets go and presses Done. */
+/** Holds Up until the phone's bid reaches `target`, lets go and presses Done; the bell may ring first, which ends the bid too. */
 async function bidUpTo(page: Page, target: number): Promise<void> {
   const up = page.locator('[data-testid=hold-up]:not([disabled])');
   await up.waitFor({ timeout: within(LOTS.introMs) });
@@ -230,10 +249,13 @@ async function bidUpTo(page: Page, target: number): Promise<void> {
       timeout: within(LOTS.walkMs),
       polling: 'raf',
     });
+  } catch (err) {
+    // The bell rang first: whether she won is the plot's owner and her money afterwards, not this wait.
+    if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
   } finally {
     await page.mouse.up();
   }
-  await page.getByTestId('done').click({ timeout: PRESS_MS });
+  await page.locator('[data-phase=landAuction] [data-testid=done]:not([disabled])').click({ timeout: PRESS_MS }).catch(() => undefined);
 }
 
 /** Development: buys a MULE in the store's corral, outfits it for Energy, walks it out and installs it on the plot. */
@@ -273,7 +295,7 @@ async function pressDoneThroughTheAuction(page: Page): Promise<void> {
 }
 
 /** Month 2 planning: lists the first plot of the seat in `slot` (from 0) with the hub's Sell a plot tool at the form's minimum, unsold kept. */
-async function listAPlot(page: Page, slot: number) {
+async function listAPlot(page: Page, slot: number, truth: Truth) {
   const planning = page.locator('[data-phase=planning]');
   await planning.getByTestId('tool-list').click({ timeout: PRESS_MS });
   const mine = planning.getByRole('button', { name: new RegExp(`owned by player ${slot + 1}(,|$)`) });
@@ -285,7 +307,7 @@ async function listAPlot(page: Page, slot: number) {
   await row.waitFor({ timeout: PRESS_MS });
   const id = (await row.getAttribute('data-testid'))!.slice('listing-'.length);
   await planning.getByTestId('tool-look').click({ timeout: PRESS_MS });
-  const listing = serverTruth(server, code).board().listings?.find((l) => l.id === id);
+  const listing = truth.board().listings.find((l) => l.id === id);
   check(listing && listing.item.kind === 'plot', `the server holds listing ${id} as a plot`);
   return listing as typeof listing & { item: { kind: 'plot'; x: number; y: number } };
 }
