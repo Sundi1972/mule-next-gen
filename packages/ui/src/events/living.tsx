@@ -1,12 +1,13 @@
 import { useMemo, type CSSProperties } from 'react';
 import type { MapTile } from '../components/HoloMap';
 import { cx, type Slot } from '../components/tokens';
-import { motionOf, STORY } from './catalogue';
+import { motionOf, offMap, STORY } from './catalogue';
 import { hitText } from './copy';
 import { signLook, useShow, type ShowFrame } from './frame';
 import { band, clamp, Dim, EDGE, OnPlot, ramp, Spotlight, Swarm, Trail } from './fx';
 import { accent, EventDeltaChip, EventGlyph } from './glyphs';
-import { eventHitAt, eventLanded, eventStageAt, eventFrontAt, isRollCall, type EventSegment } from './timing';
+import { storeAt } from './scene';
+import { eventHitAt, eventImpactAt, eventLanded, eventStageAt, eventFrontAt, isRollCall, type EventSegment } from './timing';
 import type { ShowEventKey, ShowEventView, ShowHit, ShowSize } from './types';
 
 /**
@@ -20,32 +21,45 @@ import type { ShowEventKey, ShowEventView, ShowHit, ShowSize } from './types';
 export const cq = (size: ShowSize, tv: number, phone: number) => (size === 'tv' ? tv / 8.2 : phone / 5.4);
 const ease = (v: number) => v * v * (3 - 2 * v);
 
-/** Where an event's story happens, in tiles: its origin; null for the whole map. */
-export function storyPlace(ev: ShowEventView): { x: number; y: number } | null {
-  return STORY[ev.key]?.focus === 'origin' ? ev.origin : null;
+/** Where an event's story happens, in tiles: its origin or the store; null for the whole map. */
+export function storyPlace(frame: Pick<ShowFrame, 'tiles'>, ev: ShowEventView): { x: number; y: number } | null {
+  const focus = STORY[ev.key]?.focus;
+  return focus === 'origin' ? ev.origin : focus === 'store' ? storeAt(frame, ev) : null;
 }
 
-/** When the camera pulls back from a segment's story: at its reveal, or as soon as it plays. */
+/** When the camera pulls back from a segment's story and its card of what changed comes up: at its reveal, or as soon as it plays. */
 export const cardAt = (seg: EventSegment) => seg.playAt + (STORY[seg.events[0]!.key]?.reveal ?? 0) * seg.pace;
 
 // --- What the show does to the whole map --------------------------------------------------------------------------
 
 /** The map's state at `t`: the segment, how dim it is, whose land is in the spotlight, and the camera. */
-export function livingAt({ s, t, reduced, grid, cast }: ShowFrame, size: ShowSize = 'tv') {
+export function livingAt(frame: ShowFrame, size: ShowSize = 'tv') {
+  const { s, t, reduced, grid, cast } = frame;
   const { stage, seg } = eventStageAt(s, t);
   // A phase of only bulletins is as quiet as one with none: no intro card and no dim, only its roll call.
   const quiet = s.segments.every(isRollCall);
   const ev = seg?.events[0];
   const player = ev && ev.weight === 'spotlight' ? cast.playerOf(ev) : undefined;
   const spot = player && seg ? ramp(t, seg.playAt - 0.5, 0.5) * (1 - ramp(t, seg.endAt - 0.5, 0.5)) : 0;
-  // The map dims under the intro and each title card, and clears as the card flies off.
   const story = ev ? STORY[ev.key] : undefined;
-  // A story's jolt shakes the camera for a moment, never with reduced motion.
-  const jolt = s.segments.flatMap((g) => g.events.flatMap((e) => (STORY[e.key]?.jolt !== undefined ? [g.playAt + STORY[e.key]!.jolt! * g.pace] : []))).find((at) => t >= at && t < at + 0.6);
+  // A story's jolt, or a meteor's impact, shakes the camera for a moment, never with reduced motion.
+  const jolts = (g: EventSegment, e: ShowEventView) => (motionOf(e.key) === 'strike' ? [eventImpactAt(g)] : STORY[e.key]?.jolt !== undefined ? [g.playAt + STORY[e.key]!.jolt! * g.pace] : []);
+  const jolt = s.segments.flatMap((g) => g.events.flatMap((e) => jolts(g, e))).find((at) => t >= at && t < at + 0.6);
   const shake = jolt !== undefined && !reduced ? `translate(${Math.sin(t * 80) * cq(size, 5, 2.5) * (1 - (t - jolt) / 0.6)}cqw, ${Math.cos(t * 63) * cq(size, 3, 1.5)}cqw)` : undefined;
-  const dim = quiet ? 0 : stage === 'intro' ? ramp(t, s.start, 0.3) : seg && !isRollCall(seg) && stage === 'announce' ? ramp(t, seg.announceAt, 0.3) * (1 - ramp(t, seg.playAt - 0.5, 0.5)) : 0;
+  // The map dims under the intro and each title card and clears as the card flies off; under a card of changes off
+  // the map (money, goods, gauges) it stays half dim.
+  const changesOffMap = !!ev && offMap(ev.key) && !!ev.effects?.length;
+  const dim = quiet
+    ? 0
+    : stage === 'intro'
+      ? ramp(t, s.start, 0.3)
+      : seg && !isRollCall(seg) && stage === 'announce'
+        ? ramp(t, seg.announceAt, 0.3) * (changesOffMap && !story ? 1 - 0.4 * ramp(t, seg.playAt - 0.5, 0.5) : 1 - ramp(t, seg.playAt - 0.5, 0.5))
+        : seg && changesOffMap && (stage === 'play' || stage === 'settle') && t >= cardAt(seg)
+          ? 0.6 * ramp(t, cardAt(seg), 0.3) * (1 - ramp(t, seg.endAt - 0.4, 0.4))
+          : 0;
   // The camera flies in to where the story happens while it plays, and pulls back after its reveal. Never without motion.
-  const place = ev && seg && !reduced ? storyPlace(ev) : null;
+  const place = ev && seg && !reduced ? storyPlace(frame, ev) : null;
   const lens = place && seg ? ease(ramp(t, seg.playAt - 0.3, 0.8)) * (1 - ease(ramp(t, cardAt(seg) - 0.2, 0.8))) : 0;
   const camera = (() => {
     if (!place || !seg || !story?.zoom) return undefined;
@@ -67,22 +81,29 @@ export function useEventLivingView() {
   return livingAt(useShow());
 }
 
-/** The hits that remove a plot's special field and have not landed by `t`. */
+/** The hits that change a plot's special field (a cavern caves in, a meteor leaves a crater) and have not landed by `t`. */
 export function specialsStanding({ s, t, reduced, grid }: ShowFrame): ShowHit[] {
-  return s.segments.flatMap((seg) => seg.events.flatMap((ev) => ev.hits.filter((hit) => hit.was && t < eventHitAt(seg, ev, hit, reduced, grid))));
+  return s.segments.flatMap((seg) => seg.events.flatMap((ev) => ev.hits.filter((hit) => (hit.was || hit.becomes === 'crater') && t < eventHitAt(seg, ev, hit, reduced, grid))));
 }
 
-/** The map as the show has it at `t`: the view's tiles are after the events, so a caved-in cavern keeps its badge until its hit lands. */
+/**
+ * The map as the show has it at `t`. The view's tiles are after the events, so until its hit lands a plot keeps the
+ * special field it had: a caved-in cavern keeps its badge, and a struck plot shows no crater yet (or what it had, when
+ * the view says). The view does not carry a plot's MULE before a theft or a strike, so the plot stands empty throughout.
+ */
 export function useLiveTiles(frame: ShowFrame): MapTile[] {
   const standing = specialsStanding(frame);
-  const key = standing.map((h) => `${h.x},${h.y},${h.was}`).join('|');
+  const key = standing.map((h) => `${h.x},${h.y},${h.was ?? ''}`).join('|');
   const { tiles } = frame;
   // `standing` is a new array every frame; `key` names its hits, so the map repaints only when one lands.
   return useMemo(() => {
     if (standing.length === 0) return tiles;
     return tiles.map((tile) => {
       const hit = standing.find((h) => h.x === tile.x && h.y === tile.y);
-      return hit ? { ...tile, special: { kind: hit.was! } } : tile;
+      if (!hit) return tile;
+      if (hit.was) return { ...tile, special: { kind: hit.was } };
+      const { special: _crater, ...before } = tile;
+      return before;
     });
   }, [key, tiles]);
 }
@@ -127,6 +148,8 @@ function EventWeather({ ev, seg, size }: { ev: ShowEventView; seg: EventSegment;
       );
     case 'source':
       return ev.key === 'flood' ? <Flood ev={ev} seg={seg} /> : <Ash ev={ev} seg={seg} size={size} />;
+    case 'strike':
+      return <MeteorFall ev={ev} seg={seg} size={size} />;
     default:
       return null;
   }
@@ -140,7 +163,11 @@ const TEXTURE: Partial<Record<ShowEventKey, (angle: number, c: string) => string
   drought: (a, c) => `repeating-linear-gradient(${a + 90}deg, transparent 0 9px, color-mix(in srgb, ${c} 45%, white) 9px 10px, transparent 10px 20px)`,
   acidRain: (a, c) => `repeating-linear-gradient(${a + 70}deg, transparent 0 8px, color-mix(in srgb, ${c} 85%, white) 8px 9.5px, transparent 9.5px 16px)`,
   solarFlare: (_a, c) => `repeating-conic-gradient(from 0deg at 50% -30%, color-mix(in srgb, ${c} 45%, transparent) 0 3deg, transparent 3deg 11deg)`,
+  coldSnap: (_a, c) => `radial-gradient(circle, color-mix(in srgb, ${c} 90%, white) 0 1.6px, transparent 2.2px) 0 0 / 16px 16px`,
 };
+
+/** Where a sweep blows in from: the view's edge, or the event's own (the cold snap's frost comes from the north). */
+const edgeOf = (ev: ShowEventView) => ev.from ?? (ev.key === 'coldSnap' ? 'n' : 'w');
 
 /** A front crosses the map from its edge, in the event's colour and texture: the production show's storm, generalised. */
 function Front({ ev, seg, size }: { ev: ShowEventView; seg: EventSegment; size: ShowSize }) {
@@ -148,7 +175,7 @@ function Front({ ev, seg, size }: { ev: ShowEventView; seg: EventSegment; size: 
   const p = eventFrontAt(seg, t);
   if (reduced || p < -0.2 || p > 1.3) return null;
   const c = accent(ev.key);
-  const dir = ev.from ?? 'w';
+  const dir = edgeOf(ev);
   const front = -45 + p * 100;
   const texture = TEXTURE[ev.key];
   return (
@@ -161,7 +188,7 @@ function Front({ ev, seg, size }: { ev: ShowEventView; seg: EventSegment; size: 
       />
       {texture && (
         <div
-          className={cx('absolute', ev.key !== 'solarFlare' && 'animate-[show-dust-drift_0.5s_linear_infinite]')}
+          className={cx('absolute', ev.key !== 'solarFlare' && ev.key !== 'coldSnap' && 'animate-[show-dust-drift_0.5s_linear_infinite]')}
           style={{ ...band(dir, front - 4, '58%'), background: texture(EDGE[dir].angle, c), maskImage: `linear-gradient(${EDGE[dir].angle}deg, transparent, black 30%, black 70%, transparent)`, opacity: 0.75 }}
         />
       )}
@@ -320,6 +347,74 @@ function Ash({ ev, seg, size }: { ev: ShowEventView; seg: EventSegment; size: Sh
         return k > 0 && <div key={`${h.x},${h.y}`} className="absolute rounded-[10%]" data-testid={`ash-${h.x}-${h.y}`} style={{ ...cell(h.x, h.y), background: 'radial-gradient(circle, color-mix(in srgb, var(--color-g-alloy) 85%, transparent) 0 1.2px, transparent 1.8px) 0 0 / 7px 7px, color-mix(in srgb, var(--color-g-alloy) 25%, transparent)', opacity: k }} />;
       })}
     </>
+  );
+}
+
+/** The meteor's fall and impact: a fireball streaks to the plot, its shadow grows there, a flash and rings, the crater. */
+function MeteorFall({ ev, seg, size }: { ev: ShowEventView; seg: EventSegment; size: ShowSize }) {
+  const { t, reduced, grid, centre } = useShow();
+  const o = ev.origin;
+  const since = t - seg.playAt;
+  if (since < 0) return null;
+  const impact = eventImpactAt(seg) - seg.playAt;
+  const after = since - impact;
+  const c = centre(o.x, o.y);
+  const fall = clamp(since / impact);
+  // It falls from high above, from the side of the map with more room, so the whole streak crosses the map.
+  const dx = o.x >= grid.width / 2 ? -42 : 42;
+  const dy = -75;
+  const tail = (Math.atan2(dy * (grid.height / grid.width), dx) * 180) / Math.PI - 180;
+  return (
+    <>
+      {!reduced && after < 0 && (
+        <div
+          className="absolute"
+          style={{
+            left: `calc(${c.left} + ${(1 - fall) * dx}%)`,
+            top: `calc(${c.top} + ${(1 - fall) * dy}%)`,
+            width: `${cq(size, 240, 80)}cqw`,
+            height: `${cq(size, 18, 7)}cqw`,
+            // The head sits on the falling point; the tail streams back the way it came.
+            transform: `translate(-100%, -50%) rotate(${tail}deg)`,
+            transformOrigin: '100% 50%',
+            background: 'linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-alert) 55%, transparent) 40%, var(--color-warn) 78%, white)',
+            borderRadius: 999,
+            boxShadow: '0 0 26px 8px color-mix(in srgb, var(--color-warn) 50%, transparent)',
+          }}
+          data-testid="meteor-streak"
+        />
+      )}
+      {/* Its shadow on the plot grows as it comes, so the table sees where it will land. */}
+      {!reduced && after < 0 && (
+        <div className="absolute rounded-full" style={{ ...c, width: `${(100 / grid.width) * (0.4 + fall * 1.2)}%`, aspectRatio: '1', transform: 'translate(-50%, -50%)', background: 'radial-gradient(circle, color-mix(in srgb, var(--color-alert) 55%, transparent), transparent 70%)', opacity: 0.4 + fall * 0.6 }} />
+      )}
+      {/* Impact: a white flash over the map, rings running out from the plot. */}
+      {!reduced && after >= 0 && after < 0.35 && <div className="absolute inset-0 bg-white" style={{ opacity: 0.75 * (1 - after / 0.35) }} />}
+      {!reduced &&
+        [0, 0.18, 0.36]
+          .map((d) => after - d)
+          .filter((v) => v > 0 && v < 1.2)
+          .map((v, i) => <span key={i} className="absolute rounded-full border-warn" style={{ ...c, width: `${v * 46}%`, aspectRatio: '1', transform: 'translate(-50%, -50%)', borderWidth: size === 'tv' ? 4 : 2, opacity: 1 - v / 1.2 }} />)}
+      {after >= 0 && <Crater x={o.x} y={o.y} since={reduced ? 9 : after} />}
+    </>
+  );
+}
+
+/** The scorched bowl the meteor leaves, Crystite glinting in it, while its story plays; the map's crater badge stays after. */
+function Crater({ x, y, since }: { x: number; y: number; since: number }) {
+  const { cell } = useShow();
+  const k = clamp(since / 0.6);
+  return (
+    <div className="absolute z-[2]" style={cell(x, y)} data-testid={`crater-${x}-${y}`}>
+      <div className="absolute inset-[6%] rounded-full" style={{ background: 'radial-gradient(circle, var(--color-void) 0 38%, color-mix(in srgb, var(--color-t-crater) 100%, var(--color-void)) 55%, transparent 72%)', transform: `scale(${0.6 + k * 0.4})`, opacity: k }} />
+      {[
+        [38, 40],
+        [58, 52],
+        [46, 62],
+      ].map(([l, tp], i) => (
+        <span key={i} className="absolute size-[10%] rotate-45 rounded-[1px]" style={{ left: `${l}%`, top: `${tp}%`, background: 'var(--color-g-crystite)', opacity: k, boxShadow: '0 0 6px var(--color-g-crystite)' }} />
+      ))}
+    </div>
   );
 }
 

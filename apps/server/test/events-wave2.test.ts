@@ -133,7 +133,7 @@ describe('T-AC-1: each wave-2 event fires in its phase, changes the state as RUL
     expect(money(state)).toEqual(before.players.map((p, i) => p.money - taken[i]!));
     expect(state.treasury.money).toBe(before.treasury.money + taken.reduce((a, b) => a + b, 0));
     expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({ phase: 'planning', kind: 'ledger', hits: [] });
+    expect(events[0]).toMatchObject({ phase: 'planning', kind: 'ledger', hits: [], weight: 'headline' });
     expect(events[0]!.effects).toEqual(state.players.flatMap((p, i) => (taken[i] ? [{ on: p.id, what: 'money', delta: -taken[i]! }] : [])));
   });
 
@@ -164,6 +164,8 @@ describe('T-AC-1: each wave-2 event fires in its phase, changes the state as RUL
       expect(p.money).toBe(before.players[i]!.money + effect!.delta);
       expect(effect!.delta).toBe(inheritanceAmount(before, p.id));
     });
+    // The gallery's bulletin: inheritances share one roll call, not a headline each.
+    expect(events.map((e) => e.weight)).toEqual(state.players.map(() => 'bulletin'));
   });
 
   it("muleTheft: development and the month end each take one of the owner's MULEs; the plot stands idle", () => {
