@@ -79,20 +79,21 @@ const quantile = (values: number[], q: number) => {
 
 /**
  * The arcade floor's report lines (spec §4), only when development played on it: MULEs installed and pub times a turn,
- * the pub payout, month 1's waiting clock; the moments (packs, glints, scrambles) count 0 until they are built (PR-8).
+ * the pub payout, the presses the referee refused, month 1's waiting clock; the moments (packs, glints, scrambles) count 0 until they are built (PR-8).
  */
 function floorLines(turns: readonly DevTurn[], waits: readonly number[], continued: number, seats: number): string[] {
   if (turns.length === 0) return [];
   const reached = turns.filter((t) => t.pubAt !== null);
   const installs = turns.reduce((n, t) => n + t.installs, 0);
   const paid = reached.reduce((n, t) => n + t.payout!, 0);
+  const refused = turns.reduce((n, t) => n + t.refused, 0);
   const at = reached.map((t) => t.pubAt!);
   // literal-ok: the median and 90th percentile the line names
   const [median, ninetieth] = [quantile(at, 0.5), quantile(at, 0.9)];
   const waited = [...waits];
   return [
     // literal-ok: two decimals for the MULEs a turn, display only
-    `     Development on the floor: ${(installs / turns.length).toFixed(2)} MULEs installed a seat a turn; the pub reached in ${pct(reached.length, turns.length)} of ${turns.length} AI turns, at ${median.toFixed(1)} / ${ninetieth.toFixed(1)} s on the clock (median / 90th percentile); ${(paid / Math.max(1, seats)).toFixed(0)} cr pub payout a seat a game (no check)`,
+    `     Development on the floor: ${(installs / turns.length).toFixed(2)} MULEs installed a seat a turn; the pub reached in ${pct(reached.length, turns.length)} of ${turns.length} AI turns, at ${median.toFixed(1)} / ${ninetieth.toFixed(1)} s on the clock (median / 90th percentile); ${(paid / Math.max(1, seats)).toFixed(0)} cr pub payout a seat a game; ${refused} presses refused (no check)`,
     `     Floor moments: packs met 0, glints raced 0, scrambles 0 (built in PR-8)`,
     // literal-ok: the median the line names
     `     Month 1's clock stood ${quantile(waited, 0.5).toFixed(1)} / ${quantile(waited, 1).toFixed(1)} s for first MULEs (median / max), started by the host's stand-in in ${continued} of ${waits.length} games (no check)`,
