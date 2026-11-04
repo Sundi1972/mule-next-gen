@@ -528,18 +528,8 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
     if (verdict.why) refused(verdict.why);
   };
 
-  // Steps 2-4: the strategy's edits, a re-draft if the plan changed, then the parts' edits.
-  edits.forEach((e, i) => STRATEGY_ROOTS.has(parse(e.path)?.[0] ?? '') && apply(e, i));
-  const phase = DRAFTS[draft.phase];
-  const replanned = (['kind', 'moneyMaker', 'monopolyTarget'] as const).some((k) => pb.strategy[k] !== draft.strategy[k]);
-  if (replanned && phase) {
-    const redrafted = draftPlaybook({ state, seat, mind: profile.mind, seed: profile.seed, phase, land: profile.land ?? null, strategy: pb.strategy, month: draft.month });
-    for (const k of PART_KEYS) if (pb[k] !== undefined && redrafted[k] !== undefined) Object.assign(pb, { [k]: redrafted[k] });
-  }
-  edits.forEach((e, i) => !STRATEGY_ROOTS.has(parse(e.path)?.[0] ?? '') && apply(e, i));
-
-  // Step 5: every value that plays, against the same rows. A refused field the playbook may lack is dropped; any other
-  // plays the engine's own draft of what holds it (holderOf), siblings and all, which passes the rows as a whole by INV-1.
+  // Step 5's check: every value that plays, against the same rows. A refused field the playbook may lack is dropped; any
+  // other plays the engine's own draft of what holds it (holderOf), siblings and all, which passes the rows by INV-1.
   /** What step 5 dropped, or replaced whole with the engine's, and what plays there instead: nothing under it is checked again. */
   const settled: { at: string[]; plays: string }[] = [];
   const settledOver = (unit: readonly string[]) => settled.find(({ at }) => at.every((k, n) => unit[n] === k));
@@ -563,17 +553,41 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
     const plays = getAt(engineDraft(unit), holder);
     // The engine drafts nothing there (a good no longer up): it goes.
     if (plays === undefined) return drop(holder, v.refused);
-    const named = holder.length < unit.length ? `${pathOf(holder)} plays` : plays === null || typeof plays !== 'object' ? `draft plays ${show(plays)}` : 'draft value plays';
+    const isStrategyField = unit.length === 2 && unit[0] === 'strategy' && unit[1] !== 'stances'; // literal-ok: a strategy field sits two keys deep
+    const named = isStrategyField ? `draft plays ${show(plays)}` : `${pathOf(holder)} plays`;
     reject(`${v.refused}; the engine's ${named}`);
     putUnit(pb, holder, structuredClone(plays));
     settled.push({ at: holder, plays: `the engine's ${named}` });
   };
-  for (const unit of containersOf(pb)) if (!under(unit) && !isObject(getAt(pb, unit))) settle(unit, refuse('not an object'));
-  for (const unit of unitsOf(pb)) {
-    if (under(unit)) continue;
-    const verdict = unitOf(unit, pb);
-    settle(unit, 'refused' in verdict ? verdict : verdict.row(getAt(pb, unit), ctx, unit));
+  const check = (inStrategy: boolean) => {
+    const mine = (unit: string[]) => STRATEGY_ROOTS.has(unit[0]!) === inStrategy;
+    for (const unit of containersOf(pb).filter(mine)) if (!under(unit) && !isObject(getAt(pb, unit))) settle(unit, refuse('not an object'));
+    for (const unit of unitsOf(pb).filter(mine)) {
+      if (under(unit)) continue;
+      const verdict = unitOf(unit, pb);
+      settle(unit, 'refused' in verdict ? verdict : verdict.row(getAt(pb, unit), ctx, unit));
+    }
+  };
+
+  // A strategy that is not an object plays the engine's, and the edits apply to that.
+  if (!isObject(pb.strategy)) {
+    rejected.push({ path: '/strategy', to: pb.strategy, why: "not an object; the engine's /strategy plays", i: edits.length });
+    pb.strategy = structuredClone(engineDraft(['strategy']).strategy);
   }
+  const planned = { ...pb.strategy };
+
+  // Steps 2-5: the strategy's edits, then its step-5 check, so a part is re-drafted, bounded and replaced under the
+  // strategy that plays; a re-draft if an edit changed the plan; the parts' edits; their step-5 check.
+  edits.forEach((e, i) => STRATEGY_ROOTS.has(parse(e.path)?.[0] ?? '') && apply(e, i));
+  const replanned = (['kind', 'moneyMaker', 'monopolyTarget'] as const).some((k) => pb.strategy[k] !== planned[k]);
+  check(true);
+  const phase = DRAFTS[draft.phase];
+  if (replanned && phase) {
+    const redrafted = draftPlaybook({ state, seat, mind: profile.mind, seed: profile.seed, phase, land: profile.land ?? null, strategy: pb.strategy, month: draft.month });
+    for (const k of PART_KEYS) if (pb[k] !== undefined && redrafted[k] !== undefined) Object.assign(pb, { [k]: redrafted[k] });
+  }
+  edits.forEach((e, i) => !STRATEGY_ROOTS.has(parse(e.path)?.[0] ?? '') && apply(e, i));
+  check(false);
 
   // Step 6: an edit counts as accepted only if its own value plays, and its `to` is that value after step 5. One under a
   // field step 5 dropped or replaced is rejected instead, naming what plays (replacing its clamp, which no longer
