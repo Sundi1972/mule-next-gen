@@ -1,6 +1,6 @@
 import { stepFloor, type FloorColonist, type FloorConfig, type FloorLead, type GameState, type Space } from '@mule/engine';
 import type { DevFrame, MuleView, MyView } from '@mule/protocol';
-import { gateSteer, heldBack, type SteerGate, type Stick } from './steer';
+import { gateSteer, heldBack, unsure, type SteerGate, type Stick } from './steer';
 
 /**
  * Your own colonist on your phone (arcade spec RULE-10, AM-7). The phone runs its own copy of its colonist ahead of the
@@ -153,9 +153,16 @@ export interface Steered {
   wait: number | null;
 }
 
-/** Sends what the stick wants if the gate lets it go; only a live copy on an open socket steers. */
+/**
+ * Sends what the stick wants if the gate lets it go; only a live copy on an open socket steers. The server lets go of
+ * the stick when the socket drops, so while it cannot steer the copy stands from its tick on, and once it can, whatever
+ * the stick wants then is sent.
+ */
 export function steerStep(p: Prediction, gate: SteerGate, want: Stick, nowMs: number, open: boolean): Steered {
-  if (p.status !== 'live' || !open) return { p, gate, send: null, wait: null };
+  if (p.status !== 'live' || !open) {
+    if (gate.sent === null) return { p, gate, send: null, wait: null };
+    return { p: p.status === 'live' ? steerFrom(p, { x: 0, y: 0 }) : p, gate: unsure(gate), send: null, wait: null };
+  }
   const r = gateSteer(gate, want, nowMs);
   if (!r.send) return { p, gate, send: null, wait: heldBack(gate, want, nowMs) };
   const next = steerFrom(p, r.send);
@@ -169,17 +176,18 @@ function fromFrame(c: FramedColonist, base: ColonistBase, id: string): FloorColo
 }
 
 /**
- * A frame from the server. The first after waiting or reconnecting starts the copy where it says. Later ones are
- * compared with the copy at their tick: apart by no more than the wire's rounding, the copy stands; otherwise it starts
- * again from the frame at that tick and steps on with its own inputs, the shown colonist easing there when the two were
- * within snapTiles, snapping when further apart or in different spaces. A copy behind the frame snaps to it.
+ * A frame from the server. The first after waiting or reconnecting starts the copy where it says, standing. Later
+ * ones are compared with the copy at their tick: apart by no more than the wire's rounding, the copy stands; otherwise
+ * it starts again from the frame at that tick and steps on with its own inputs, the shown colonist easing there when
+ * the two were within snapTiles, snapping when further apart or in different spaces. A copy behind the frame snaps to it.
  */
 export function receiveFrame(p: Prediction, frame: DevFrame, nowMs: number, world: PredictWorld, base: ColonistBase): Prediction {
   const server = frame.colonists.find((c) => c.id === world.id);
   if (!server || (p.frame && frame.tick <= p.frame.tick && p.status === 'live')) return p;
   const framed = { tick: frame.tick, recvMs: nowMs, me: server };
   const fresh = fromFrame(server, base, world.id);
-  if (p.status !== 'live' || !p.me) return { ...p, status: 'live', tick: frame.tick, me: fresh, past: [{ tick: frame.tick, me: fresh }], ease: null, frame: framed };
+  // Back from a gap the server may have let go of the stick: the copy stands until the stick is sent again.
+  if (p.status !== 'live' || !p.me) return { ...p, status: 'live', tick: frame.tick, me: fresh, past: [{ tick: frame.tick, me: fresh }], inputs: [], ease: null, frame: framed };
   const mine = p.past.find((e) => e.tick === frame.tick)?.me;
   if (!mine) {
     if (frame.tick < p.tick) return { ...p, frame: framed };

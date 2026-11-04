@@ -25,9 +25,9 @@ export function quantise(x: number, y: number): Stick {
   return { x: tidy(Math.trunc((x / Math.hypot(x, y)) * STEPS) / STEPS), y: tidy(Math.trunc((y / Math.hypot(x, y)) * STEPS) / STEPS) };
 }
 
-/** What the server has (the stick it was last sent; it starts standing) and when it was sent. */
+/** What the server has (the stick it was last sent; it starts standing; null when not known) and when it was sent. */
 export interface SteerGate {
-  sent: Stick;
+  sent: Stick | null;
   sentAt: number;
 }
 
@@ -35,7 +35,10 @@ export function startGate(): SteerGate {
   return { sent: { x: 0, y: 0 }, sentAt: -Infinity };
 }
 
-const same = (a: Stick, b: Stick) => a.x === b.x && a.y === b.y;
+/** The server may have let go of the stick (a dropped socket does), or may not: the next stick goes, standing too. */
+export const unsure = (gate: SteerGate): SteerGate => ({ ...gate, sent: null });
+
+const same = (a: Stick, b: Stick | null) => !!b && a.x === b.x && a.y === b.y;
 
 /**
  * Whether to send `want` now: only when it differs from what the server has, and not sooner than a step of the rate
