@@ -21,6 +21,8 @@ const LAND = pb('land', 2, ['landGrant']);
 const LAND_DEV = pb('landDev', 2, ['landGrant', 'development']);
 const DEV = pb('dev', 2, ['development']);
 const OLD = pb('old', 1, ['planning', 'landGrant', 'development', 'auction']);
+// A written playbook is JSON from outside, so a part can arrive as null; the type says absent, never null.
+const NULL_AUCTION = { ...pb('nullAuction', 2, []), auction: null } as unknown as Playbook;
 
 const CLASSIC: Omit<PathInput, 'key'> = { on: true, playbook: undefined, hasDecider: false, adopted: [], month: 2 };
 const SMART: Omit<PathInput, 'key'> = { ...CLASSIC, hasDecider: true };
@@ -43,6 +45,7 @@ describe('RULE-6, the path a part plays (pure)', () => {
       ['row 2: the newest, the other way round', { ...CLASSIC, adopted: [LAND_DEV, LAND], key: 'landGrant' }, 'adopted:land'],
       ['row 2: a newer one lacking the part falls through', { ...SMART, adopted: [LAND, DEV], key: 'landGrant' }, 'adopted:land'],
       ['row 2: each part its own', { ...SMART, adopted: [LAND, DEV], key: 'development' }, 'adopted:dev'],
+      ['row 2 not met: a part adopted as null is not carried', { ...SMART, adopted: [NULL_AUCTION], key: 'auction' }, 'today'],
       ['row 3: Smart, nothing adopted', { ...SMART, key: 'planning' }, 'today'],
       ['row 3: Smart, nothing adopted carries the part', { ...SMART, adopted: [LAND, DEV], key: 'auction' }, 'today'],
       ['row 4: Classic, nothing adopted', { ...CLASSIC, key: 'development' }, 'own'],
@@ -70,5 +73,14 @@ describe('RULE-6, the path a part plays (pure)', () => {
     const before = [LAND];
     adoptInto(before, DEV);
     expect(tags(before)).toEqual(['land']);
+    // It keeps a copy: changing the playbook it was given afterwards changes nothing it keeps, beside the others of its
+    // month or alone for a later month.
+    for (const [name, list, month] of [['the same month', [LAND], 2], ['a later month', [LAND], 3]] as const) {
+      const given = pb('given', month, ['auction']);
+      const kept = adoptInto(list, given);
+      given.lessons![0] = 'changed';
+      given.strategy.reason = 'changed';
+      expect(kept.at(-1), name).toEqual(pb('given', month, ['auction']));
+    }
   });
 });

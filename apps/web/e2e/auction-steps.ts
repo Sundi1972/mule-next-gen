@@ -449,6 +449,7 @@ const sideOf = (a: AuctionView, id: string) => a.walkers.find((w) => w.id === id
 async function tapSide(truth: Truth, p: Phone, tap: 'buyer' | 'seller', lands: 'buyer' | 'seller' | 'pass', what: string): Promise<void> {
   const id = truth.idOf(p);
   const good = truth.board().auction?.good;
+  await untilNoHeldShow(truth, p, what);
   await p.page.getByTestId(`side-${tap}`).click({ timeout: PRESS_MS });
   const deadline = Date.now() + PRESS_MS;
   for (;;) {
@@ -463,6 +464,22 @@ async function tapSide(truth: Truth, p: Phone, tap: 'buyer' | 'seller', lands: '
     await p.page.evaluate(() => new Promise((r) => requestAnimationFrame(r)));
   }
   await untilShows({ name: `${p.name}'s phone`, page: p.page }, readPicker, { side: lands, sellOff: truth.stockOf(p, good!) === 0 }, what);
+}
+
+/**
+ * Waits out a month's event that the server plays over the auction (a pirate raid, a store fire): while it holds the
+ * phase nobody can act, and the phone's overlay covers the status screen. The seed decides whether one fires. The
+ * status screen has no clock, so waiting costs the step nothing.
+ */
+async function untilNoHeldShow(truth: Truth, p: Phone, what: string): Promise<void> {
+  // `held` says the phase holds for its show; `endsAt` is when, on the server's clock, which is this process's.
+  const show = truth.board().eventShow;
+  if (!show?.held || Date.now() >= show.endsAt) return;
+  await new Promise((r) => setTimeout(r, show.endsAt - Date.now()));
+  await p.page.getByTestId('phone-event-overlay').waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {
+    check(false, `${what}: the event show still covers ${p.name}'s phone 5 s after it ended`);
+  });
+  console.log(`  ${p.name} waited out the event show the server held the auction for`);
 }
 
 /** What a screen draws of the goods auction, as "<good>:<stage>"; null off the auction. */

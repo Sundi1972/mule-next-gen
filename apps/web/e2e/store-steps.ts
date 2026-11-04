@@ -1272,6 +1272,20 @@ export async function wolvesRunOrFight(t: ArcadeTable): Promise<string> {
   return out.join('; ');
 }
 
+/** A walkable map point `tiles` from `from`, toward `toward` if it can: the first of 16 headings that lands on open land. */
+function awayFrom(server: MuleServer, code: string, from: { x: number; y: number }, toward: { x: number; y: number }, tiles: number): SteerTarget {
+  const { state } = gameOf(server, code);
+  const cfg = floorConfig();
+  const start = Math.atan2(toward.y - from.y, toward.x - from.x);
+  for (let i = 0; i < 16; i++) {
+    const a = start + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * (Math.PI / 8);
+    const p = { x: from.x + Math.cos(a) * tiles, y: from.y + Math.sin(a) * tiles };
+    const tile = state.tiles.find((t) => t.x === Math.floor(p.x) && t.y === Math.floor(p.y));
+    if (tile && terrainShare(tile.terrain, cfg) > 0) return { space: 'map', ...p };
+  }
+  throw new Error(`E2E check failed: no open land ${tiles} tiles from ${from.x.toFixed(2)},${from.y.toFixed(2)}`);
+}
+
 /** How far inside its ring a drawn colonist may seem: the wire's rounding and a frame's interpolation. */
 const RING_SLACK = 0.05;
 /** Pushing out of the ring, he gets this near its edge. */
@@ -1327,7 +1341,8 @@ async function aFightLostWithAMule(t: ArcadeTable, store: { x: number; y: number
     `${reads.length} reads, his drawn distance from the ring's centre at most ${farthest.toFixed(3)} of ${WOLVES.arenaTiles}`,
   );
 
-  // The MULE runs its bolt; then it stands loose, off his lead, on his phone where the server has it.
+  // The MULE runs its bolt; then it stands loose, off his lead, on his phone where the server has it. Not "away from him":
+  // the bolt's heading is random and turns off land it cannot cross (RULE-4), so it may stop beside him.
   await heiko.waitForTimeout(((WOLVES.boltTiles / WOLVES.boltSpeed) * 1_000) + 500);
   const mule = colonistOf(server, code, 's1').lead!;
   const loose = await readMoments(heiko);
@@ -1335,7 +1350,7 @@ async function aFightLostWithAMule(t: ArcadeTable, store: { x: number; y: number
   const me = loose.drawn['s1'];
   owe(
     "the bolted MULE runs loose on Heiko's phone, where the server has it, off his lead",
-    !!drawnLoose && !loose.leads.includes('s1') && Math.hypot(drawnLoose.x - mule.x, drawnLoose.y - mule.y) <= 0.3 && !!me && Math.hypot(drawnLoose.x - me.x, drawnLoose.y - me.y) >= 1,
+    !!drawnLoose && !loose.leads.includes('s1') && Math.hypot(drawnLoose.x - mule.x, drawnLoose.y - mule.y) <= 0.3,
     `${framesSay(heardMoments(wires.heiko))}; loose ${JSON.stringify(loose.loose)}, on leads ${JSON.stringify(loose.leads)}, him ${JSON.stringify(me)}, the server's MULE ${mule.x.toFixed(2)},${mule.y.toFixed(2)}`,
   );
 
@@ -1346,6 +1361,9 @@ async function aFightLostWithAMule(t: ArcadeTable, store: { x: number; y: number
     if (steps.at(-1)?.tick !== tick) steps.push({ tick, c: colonistOf(server, code, 's1') });
   }, 2);
   try {
+    // A bolt that stopped beside him leaves too few steps to measure: he walks off first, his MULE still loose.
+    const him = colonistOf(server, code, 's1');
+    if (Math.hypot(mule.x - him.x, mule.y - him.y) < 1.5) await steerTo(heiko, server, code, 's1', awayFrom(server, code, mule, him, 2), { within: 0.3 });
     await steerTo(heiko, server, code, 's1', { space: 'map', x: mule.x, y: mule.y }, { within: 0.3 });
   } finally {
     clearInterval(timer);

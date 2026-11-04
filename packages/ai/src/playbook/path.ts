@@ -29,7 +29,7 @@ export type PlayPath = { by: 'today' } | { by: 'adopted'; playbook: Playbook } |
 /** RULE-6: who plays a month's part, first match wins. Of the playbooks adopted for the month, the newest carrying it. */
 export function pathFor({ on, playbook, hasDecider, adopted, month, key }: PathInput): PlayPath {
   if (!on || playbook === false) return { by: 'today' };
-  const carrying = adopted.filter((pb) => pb.month === month && pb[key] !== undefined).at(-1);
+  const carrying = adopted.filter((pb) => pb.month === month && pb[key] != null).at(-1);
   if (carrying) return { by: 'adopted', playbook: carrying };
   return hasDecider ? { by: 'today' } : { by: 'own' };
 }

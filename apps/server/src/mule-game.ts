@@ -1142,7 +1142,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const state = this.requireState();
     // At once, so an AI Governor's tax lands before a quick table can press ready.
     this.tickVoteHands(0);
-    for (const seat of this.ai.values()) seat.planMonth(state);
+    for (const seat of this.ai.values()) seat.planMonth(state, (action) => this.aiAct(seat.id, action));
   }
 
   /** True while this month's election runs, before planning proper. */
