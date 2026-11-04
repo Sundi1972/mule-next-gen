@@ -15,6 +15,35 @@ export interface FrameLog {
 /** A colonist as a frame carries it. */
 export type Drawn = DevFrame['colonists'][number];
 
+/** One wolf of a pack, as a frame carries it. */
+export interface FrameWolf {
+  x: number;
+  y: number;
+  state: 'prowl' | 'tell' | 'lunge' | 'open' | 'hurt';
+  /** Where a crouched or lunging wolf lands. */
+  target: { x: number; y: number } | null;
+}
+
+/** The pack a colonist met, and the stage of it. */
+export interface FramePack {
+  who: string;
+  stage: 'choose' | 'chase' | 'fight';
+  wolves: FrameWolf[];
+}
+
+/**
+ * The moments on a frame (DevFrame.moments, arcade spec AM-28): the packs met, the glint lit and the corral scramble.
+ * Declared here until the protocol carries it; the frame omits it while nothing is on.
+ */
+export interface FrameMoments {
+  packs: FramePack[];
+  glint: { x: number; y: number; untilTick: number } | null;
+  scramble: { untilTick: number; needers: string[]; got: string[]; over: 'empty' | 'time' | 'everyone' | null; leftOut: string[] } | null;
+}
+
+/** A frame's moments; none while nothing is on. */
+export const momentsOf = (frame: DevFrame): FrameMoments | null => (frame as DevFrame & { moments?: FrameMoments }).moments ?? null;
+
 /** Frames kept: a second's worth at 20 a second, more than interpolateMs ever reaches back. */
 const KEPT = 20;
 
