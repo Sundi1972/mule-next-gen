@@ -142,7 +142,7 @@ export function HallStage({ data, width, density, store = density, interactive =
         wide={store === 'wide'}
         {...(mine && seat
           ? {
-              me: { id: mine.id, slot: mine.slot, leading, x: mine.x, y: mine.y, condition: seat.self.condition, food: { ate: Math.min(seat.me.stock.food, seat.me.needs.food), need: seat.me.needs.food }, moving: mine.moving },
+              me: { id: mine.id, slot: mine.slot, leading, x: mine.x, y: mine.y, facing: mine.facing, condition: seat.self.condition, food: { ate: Math.min(seat.me.stock.food, seat.me.needs.food), need: seat.me.needs.food }, moving: mine.moving },
               paceRule: DEV_WALK,
             }
           : {})}
