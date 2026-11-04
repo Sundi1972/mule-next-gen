@@ -5,22 +5,17 @@ import { useShow } from './frame';
 import { clamp } from './fx';
 import { At, px, type P } from './place';
 import { Sneeze } from './rollcall';
-import type { EventSegment } from './timing';
-import type { ShowEventKey, ShowEventView, ShowSize } from './types';
+import { useStoryClock, type Scene } from './scene';
+import { COLONY_SCENES } from './stories-colony';
+import { LEDGER_SCENES } from './stories-ledger';
+import type { ShowEventKey, ShowSize } from './types';
 
 /**
  * The stories: the camera goes to the place and the event happens on it. Drawn in the map's own space, so the
  * camera's zoom carries them, and sized against the map's width, so a scene plays on the TV and, smaller, on a phone.
- * The bumper harvest and the cavern collapse.
+ * The spotlights' stories are here (bumper harvest, cavern collapse, MULE theft); the ledger's and the colony's are
+ * stories-ledger.tsx and stories-colony.tsx.
  */
-
-/** Seconds into a segment's story, at the TV's pace. */
-export function useStoryClock(seg: EventSegment) {
-  const { t, reduced } = useShow();
-  return { u: (t - seg.playAt) / seg.pace, reduced, t };
-}
-
-type Scene = (p: { ev: ShowEventView; seg: EventSegment; size: ShowSize }) => ReactNode;
 
 /** A bumper harvest: the plot glows, its produce bursts up, and a ×2 stamp lands. */
 const BumperHarvest: Scene = ({ ev, seg, size }) => {
@@ -117,6 +112,8 @@ const SCENE: Partial<Record<ShowEventKey, Scene>> = {
   bumperHarvest: BumperHarvest,
   cavernCollapse: CavernCollapse,
   sickness: Sneeze,
+  ...LEDGER_SCENES,
+  ...COLONY_SCENES,
 };
 
 /** Each segment's story over the map, from when it starts to play. */

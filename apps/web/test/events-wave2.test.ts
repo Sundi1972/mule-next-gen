@@ -71,7 +71,7 @@ function screen(events: ShowEventView[], t: number, where: Where, { reduced = fa
       : where === 'alone'
         ? [createElement(EventLivingMap, { key: 'm', size: 'phone', focusSlot: slot, onSkip: () => undefined }), createElement(EventSoloRail, { key: 'r', me })]
         : [createElement(EventLivingMap, { key: 'm', size: 'phone', focusSlot: slot, light: true }), createElement(EventTvPhoneRail, { key: 'r', me })];
-  return renderToStaticMarkup(createElement(EventShow, { events, introMs: INTRO_MS, t, mode, reduced, width: W, height: H, tiles: map, players }, ...parts));
+  return renderToStaticMarkup(createElement(EventShow, { events, introMs: INTRO_MS, t, mode, reduced, width: W, height: H, tiles: map, players, children: parts }));
 }
 
 /** The first segment's beats on this screen's clock. */
@@ -132,8 +132,8 @@ const PACKAGE = event('packageFromHome', 'upkeep', { title: 'Package from home',
 
 describe('B1 (C5): the ledger stories play the gallery’s own, and say what they changed off the map', () => {
   it.each([
-    { ev: TAX, marks: ['tax-cruiser', 'tax-coin'] },
-    { ev: GRANT, marks: ['tax-cruiser', 'grant-pod'] },
+    { ev: TAX, marks: ['cruiser', 'tax-coin'] },
+    { ev: GRANT, marks: ['cruiser', 'grant-pod'] },
     { ev: PIRATES, marks: ['pirate-ship', 'pirate-crate', 'pirate-hold'] },
   ])('$ev.key: the TV and a phone alone play its story on the map', ({ ev, marks }) => {
     for (const where of ['tv', 'alone'] as const) {

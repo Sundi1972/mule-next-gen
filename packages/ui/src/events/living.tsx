@@ -1,12 +1,13 @@
 import { useMemo, type CSSProperties } from 'react';
 import type { MapTile } from '../components/HoloMap';
 import { cx, type Slot } from '../components/tokens';
-import { motionOf, STORY } from './catalogue';
+import { motionOf, offMap, STORY } from './catalogue';
 import { hitText } from './copy';
 import { signLook, useShow, type ShowFrame } from './frame';
 import { band, clamp, Dim, EDGE, OnPlot, ramp, Spotlight, Swarm, Trail } from './fx';
 import { accent, EventDeltaChip, EventGlyph } from './glyphs';
-import { eventHitAt, eventLanded, eventStageAt, eventFrontAt, isRollCall, type EventSegment } from './timing';
+import { storeAt } from './scene';
+import { eventHitAt, eventImpactAt, eventLanded, eventStageAt, eventFrontAt, isRollCall, type EventSegment } from './timing';
 import type { ShowEventKey, ShowEventView, ShowHit, ShowSize } from './types';
 
 /**
@@ -20,32 +21,45 @@ import type { ShowEventKey, ShowEventView, ShowHit, ShowSize } from './types';
 export const cq = (size: ShowSize, tv: number, phone: number) => (size === 'tv' ? tv / 8.2 : phone / 5.4);
 const ease = (v: number) => v * v * (3 - 2 * v);
 
-/** Where an event's story happens, in tiles: its origin; null for the whole map. */
-export function storyPlace(ev: ShowEventView): { x: number; y: number } | null {
-  return STORY[ev.key]?.focus === 'origin' ? ev.origin : null;
+/** Where an event's story happens, in tiles: its origin or the store; null for the whole map. */
+export function storyPlace(frame: Pick<ShowFrame, 'tiles'>, ev: ShowEventView): { x: number; y: number } | null {
+  const focus = STORY[ev.key]?.focus;
+  return focus === 'origin' ? ev.origin : focus === 'store' ? storeAt(frame, ev) : null;
 }
 
-/** When the camera pulls back from a segment's story: at its reveal, or as soon as it plays. */
+/** When the camera pulls back from a segment's story and its card of what changed comes up: at its reveal, or as soon as it plays. */
 export const cardAt = (seg: EventSegment) => seg.playAt + (STORY[seg.events[0]!.key]?.reveal ?? 0) * seg.pace;
 
 // --- What the show does to the whole map --------------------------------------------------------------------------
 
 /** The map's state at `t`: the segment, how dim it is, whose land is in the spotlight, and the camera. */
-export function livingAt({ s, t, reduced, grid, cast }: ShowFrame, size: ShowSize = 'tv') {
+export function livingAt(frame: ShowFrame, size: ShowSize = 'tv') {
+  const { s, t, reduced, grid, cast } = frame;
   const { stage, seg } = eventStageAt(s, t);
   // A phase of only bulletins is as quiet as one with none: no intro card and no dim, only its roll call.
   const quiet = s.segments.every(isRollCall);
   const ev = seg?.events[0];
   const player = ev && ev.weight === 'spotlight' ? cast.playerOf(ev) : undefined;
   const spot = player && seg ? ramp(t, seg.playAt - 0.5, 0.5) * (1 - ramp(t, seg.endAt - 0.5, 0.5)) : 0;
-  // The map dims under the intro and each title card, and clears as the card flies off.
   const story = ev ? STORY[ev.key] : undefined;
-  // A story's jolt shakes the camera for a moment, never with reduced motion.
-  const jolt = s.segments.flatMap((g) => g.events.flatMap((e) => (STORY[e.key]?.jolt !== undefined ? [g.playAt + STORY[e.key]!.jolt! * g.pace] : []))).find((at) => t >= at && t < at + 0.6);
+  // A story's jolt, or a meteor's impact, shakes the camera for a moment, never with reduced motion.
+  const jolts = (g: EventSegment, e: ShowEventView) => (motionOf(e.key) === 'strike' ? [eventImpactAt(g)] : STORY[e.key]?.jolt !== undefined ? [g.playAt + STORY[e.key]!.jolt! * g.pace] : []);
+  const jolt = s.segments.flatMap((g) => g.events.flatMap((e) => jolts(g, e))).find((at) => t >= at && t < at + 0.6);
   const shake = jolt !== undefined && !reduced ? `translate(${Math.sin(t * 80) * cq(size, 5, 2.5) * (1 - (t - jolt) / 0.6)}cqw, ${Math.cos(t * 63) * cq(size, 3, 1.5)}cqw)` : undefined;
-  const dim = quiet ? 0 : stage === 'intro' ? ramp(t, s.start, 0.3) : seg && !isRollCall(seg) && stage === 'announce' ? ramp(t, seg.announceAt, 0.3) * (1 - ramp(t, seg.playAt - 0.5, 0.5)) : 0;
+  // The map dims under the intro and each title card and clears as the card flies off; under a card of changes off
+  // the map (money, goods, gauges) it stays half dim.
+  const changesOffMap = !!ev && offMap(ev.key) && !!ev.effects?.length;
+  const dim = quiet
+    ? 0
+    : stage === 'intro'
+      ? ramp(t, s.start, 0.3)
+      : seg && !isRollCall(seg) && stage === 'announce'
+        ? ramp(t, seg.announceAt, 0.3) * (changesOffMap && !story ? 1 - 0.4 * ramp(t, seg.playAt - 0.5, 0.5) : 1 - ramp(t, seg.playAt - 0.5, 0.5))
+        : seg && changesOffMap && (stage === 'play' || stage === 'settle') && t >= cardAt(seg)
+          ? 0.6 * ramp(t, cardAt(seg), 0.3) * (1 - ramp(t, seg.endAt - 0.4, 0.4))
+          : 0;
   // The camera flies in to where the story happens while it plays, and pulls back after its reveal. Never without motion.
-  const place = ev && seg && !reduced ? storyPlace(ev) : null;
+  const place = ev && seg && !reduced ? storyPlace(frame, ev) : null;
   const lens = place && seg ? ease(ramp(t, seg.playAt - 0.3, 0.8)) * (1 - ease(ramp(t, cardAt(seg) - 0.2, 0.8))) : 0;
   const camera = (() => {
     if (!place || !seg || !story?.zoom) return undefined;

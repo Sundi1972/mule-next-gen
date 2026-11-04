@@ -1,4 +1,4 @@
-import type { Slot, SpecialKind } from '../components/tokens';
+import type { Good, Slot, SpecialKind } from '../components/tokens';
 
 /** The events the show draws: the engine's EventKey union (packages/engine/src/types.ts). */
 export type ShowEventKey =
@@ -63,11 +63,21 @@ export interface ShowEventView {
     /** True when the hit destroyed or took the plot's MULE. */
     muleLost?: true;
   }[];
+  /** What it changed off the map, in the order it changed it: a player's (by id), the store's or the colony's. */
+  effects?: ShowEffect[];
   phase: ShowPhase;
   weight: ShowWeight;
   playMs: number;
   /** Whose event it is, when it is one player's and on no plot: a sick player (C11). */
   player?: string;
+}
+
+/** One change an event made off the map (the protocol's EventEffect, structurally): whose, of what, by how much. */
+export interface ShowEffect {
+  /** A player's id, 'store' or 'colony'. */
+  on: string;
+  what: Good | 'money' | 'mules' | 'colonists' | 'energyNeed';
+  delta: number;
 }
 
 export type ShowHit = ShowEventView['hits'][number];

@@ -1,13 +1,15 @@
+import type { ReactNode } from 'react';
 import { PlayerMark } from '../components/PlayerMark';
 import { cx } from '../components/tokens';
+import { motionOf, offMap, STORY } from './catalogue';
 import { eventSegLabel, eventWhoLine, introLine, phaseNoun } from './copy';
 import { signLook, useShow } from './frame';
 import { ramp } from './fx';
-import { EventSignBadge } from './glyphs';
-import { cq, useEventLivingView } from './living';
+import { EventEffectChip, EventSignBadge } from './glyphs';
+import { cardAt, cq, useEventLivingView } from './living';
 import { RollCall } from './rollcall';
-import { isRollCall, type EventSegment } from './timing';
-import type { ShowSize } from './types';
+import { eventEffectsAt, isRollCall, type EventSegment } from './timing';
+import type { ShowEffect, ShowEventView, ShowSize } from './types';
 
 /** The cards over the map, outside its camera: the phase's intro card and each event's title card. */
 
@@ -42,15 +44,27 @@ export function IntroCard({ size }: { size: ShowSize }) {
   );
 }
 
+/**
+ * Where the title card flies to as the event begins, in percent of the map from its middle: where it starts on the
+ * map (off-map events start at the store), or down to the players' slots for the ledger; null: the colony's own news,
+ * which swells where it is.
+ */
+function flyTo(ev: ShowEventView, grid: { width: number; height: number }): { x: number; y: number } | null {
+  if (!STORY[ev.key]) {
+    if (motionOf(ev.key) === 'ledger') return { x: 0, y: 65 };
+    if (motionOf(ev.key) === 'colony') return null;
+  }
+  return { x: ((ev.origin.x + 0.5) / grid.width - 0.5) * 100, y: ((ev.origin.y + 0.5) / grid.height - 0.5) * 100 };
+}
+
 /** One event's title card: in the middle of the map, then off to where the event starts. */
 export function TitleCard({ seg, size }: { seg: EventSegment; size: ShowSize }) {
   const { t, reduced, grid, cast } = useShow();
   const ev = seg.events[0]!;
   const z = SIZES[size];
   const k = ramp(t, seg.playAt - 0.5, 0.5);
-  // It flies to where the event starts: in percent of the map, from its middle.
-  const to = { x: ((ev.origin.x + 0.5) / grid.width - 0.5) * 100, y: ((ev.origin.y + 0.5) / grid.height - 0.5) * 100 };
-  const fly = reduced ? 'none' : `translate(${to.x * k}%, ${to.y * k}%) scale(${1 - 0.85 * k})`;
+  const to = flyTo(ev, grid);
+  const fly = reduced ? 'none' : to ? `translate(${to.x * k}%, ${to.y * k}%) scale(${1 - 0.85 * k})` : `scale(${1 + 0.15 * k})`;
   const player = cast.playerOf(ev);
   const slot = player ? cast.slotOf(player) : undefined;
   const sign = signLook(ev.sign);
@@ -78,13 +92,72 @@ export function TitleCard({ seg, size }: { seg: EventSegment; size: ShowSize }) 
   );
 }
 
-/** Everything that goes over the map: the intro, the title card, and the roll call (never a title card of its own). */
+/**
+ * Changes off the map (money, held goods, the store, the colony's gauges) as a card over the dimmed map, from the
+ * story's reveal: each change lands in turn, a row per player in seat order, then the colony's and the store's.
+ */
+export function EffectsCard({ seg, size }: { seg: EventSegment; size: ShowSize }) {
+  const { s, t, reduced, grid, cast } = useShow();
+  const ev = seg.events[0]!;
+  const fx = ev.effects ?? [];
+  if (!fx.length || t < cardAt(seg) || t > seg.endAt) return null;
+  const seen = eventEffectsAt(s, t, reduced, grid)
+    .filter((l) => l.seg === seg)
+    .map((l) => l.effect);
+  const tv = size === 'tv';
+  const rows: { key: string; head: ReactNode; items: ShowEffect[] }[] = [
+    ...cast.players.filter((p) => fx.some((f) => f.on === p.id)).map((p) => ({ key: p.id, head: <SeatHead id={p.id} size={size} />, items: fx.filter((f) => f.on === p.id) })),
+    ...(['colony', 'store'] as const)
+      .filter((on) => fx.some((f) => f.on === on))
+      .map((on) => ({ key: on, head: <span className={cx('label-caps', tv ? 'text-base!' : 'text-[10px]!')}>{on === 'colony' ? 'The colony' : 'The store'}</span>, items: fx.filter((f) => f.on === on) })),
+  ];
+  const out = ramp(t, seg.endAt - 0.4, 0.4);
+  // At the store with no story of its own, the card sits at the map's foot so the store stays in view.
+  const atStore = motionOf(ev.key) === 'store' && !STORY[ev.key];
+  return (
+    <div className={cx('absolute inset-0 z-20 flex justify-center', atStore ? (tv ? 'items-end pb-4' : 'items-end pb-1.5') : 'items-center')} style={{ opacity: 1 - out }} data-testid="effects-card">
+      <div className={cx('flex flex-col rounded-panel border-2 bg-panel/95 shadow-chip', !reduced && 'animate-[ev-pop_0.35s_ease-out]', tv ? 'gap-3 p-5' : 'gap-1.5 p-2.5')} style={{ width: `${cq(size, 520, 300)}cqw`, borderColor: signLook(ev.sign) === 'good' ? 'var(--color-ok)' : 'var(--color-alert)' }}>
+        <span className="flex items-center gap-2">
+          <EventSignBadge ev={ev} size={tv ? 44 : 26} />
+          <span className={cx('font-display font-bold', tv ? 'text-3xl' : 'text-lg')}>{ev.title}</span>
+        </span>
+        {rows.map((r) => (
+          <span key={r.key} className="flex items-center justify-between gap-3">
+            {r.head}
+            <span className="flex flex-wrap justify-end gap-1">
+              {r.items
+                .filter((f) => seen.includes(f))
+                .map((f, i) => (
+                  <EventEffectChip key={i} f={f} size={tv ? 'tv' : 'phone'} className={cx(!reduced && 'animate-[ev-pop_0.3s_ease-out]', tv && 'text-xl!')} />
+                ))}
+            </span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SeatHead({ id, size }: { id: string; size: ShowSize }) {
+  const { cast } = useShow();
+  const slot = cast.slotOf(id);
+  return (
+    <span className={cx('flex items-center gap-2 font-display font-semibold', size === 'tv' ? 'text-2xl' : 'text-sm')}>
+      {slot !== undefined && <PlayerMark slot={slot} size={size === 'tv' ? 34 : 18} />}
+      {cast.name(id)}
+    </span>
+  );
+}
+
+/** Everything that goes over the map: the intro, the title card, a card of changes off the map, the roll call. */
 export function Overlays({ size }: { size: ShowSize }) {
+  const { t } = useShow();
   const { stage, seg, quiet } = useEventLivingView();
   return (
     <>
       {!quiet && stage === 'intro' && <IntroCard size={size} />}
       {seg && stage === 'announce' && !isRollCall(seg) && <TitleCard seg={seg} size={size} />}
+      {seg && offMap(seg.events[0]!.key) && !isRollCall(seg) && t >= seg.playAt && <EffectsCard seg={seg} size={size} />}
       <RollCall size={size} />
     </>
   );

@@ -1,5 +1,5 @@
 import { motionOf, STORY } from './catalogue';
-import type { ShowEventView, ShowHit, ShowMode, ShowPhase, ShowTimeline } from './types';
+import type { ShowEffect, ShowEventView, ShowHit, ShowMode, ShowPhase, ShowTimeline } from './types';
 
 /**
  * The show's timeline, in seconds on the caller's clock. The phase's intro plays first, as long as the server said
@@ -25,10 +25,17 @@ export function playShare(ev: ShowEventView): number {
       return 0.6 + ev.hits.length * 0.9;
     case 'source':
       return 0.8 + ev.hits.length * 0.35;
+    case 'strike':
+      return 3;
     case 'plot':
       return 1.8;
     case 'colonists':
       return 1.6;
+    case 'ledger':
+      return 2;
+    case 'store':
+    case 'colony':
+      return 2.4;
   }
 }
 
@@ -186,6 +193,8 @@ export function eventHitAt(seg: EventSegment, ev: ShowEventView, h: ShowHit | nu
         return 0.4 + (h?.order ?? 0) * 0.9;
       case 'source':
         return 0.5 + (h?.order ?? 0) * 0.35;
+      case 'strike':
+        return EVENT_METEOR_FALL;
       case 'colonists':
         return 0.3 + nth * 0.5;
       default:
@@ -194,6 +203,11 @@ export function eventHitAt(seg: EventSegment, ev: ShowEventView, h: ShowHit | nu
   })();
   return Math.min(seg.settleAt, p + after * seg.pace);
 }
+
+/** Seconds from the meteor's first glint to its impact, at the TV's pace. */
+export const EVENT_METEOR_FALL = 1.4;
+/** When a segment's meteor lands. */
+export const eventImpactAt = (seg: EventSegment) => Math.min(seg.settleAt, seg.playAt + EVENT_METEOR_FALL * seg.pace);
 
 export interface EventLandedHit {
   ev: ShowEventView;
@@ -249,4 +263,26 @@ export function plotUnitsAt(segments: EventSegment[], plot: ShowPlot, t: number,
   return plotStrikes(segments, plot, reduced, grid)
     .filter((s) => t >= s.at)
     .reduce((_, s) => s.after, plot.made);
+}
+
+/** One change off the map that has landed: with its event and segment, and when. */
+export interface EventLandedEffect {
+  ev: ShowEventView;
+  seg: EventSegment;
+  effect: ShowEffect;
+  at: number;
+}
+
+/**
+ * Every change off the map that has landed by `t`: with no plots, as the event lands; with plots, after the last; each
+ * after the one before by the story's step. Never after the segment's settle; without motion, all at once.
+ */
+export function eventEffectsAt(s: EventScript, t: number, reduced: boolean, grid: ShowGrid): EventLandedEffect[] {
+  return s.segments.flatMap((seg) =>
+    seg.events.flatMap((ev) => {
+      const at = Math.max(eventHitAt(seg, ev, null, reduced, grid), ...ev.hits.map((h) => eventHitAt(seg, ev, h, reduced, grid)));
+      const step = (STORY[ev.key]?.step ?? 0.15) * seg.pace;
+      return (ev.effects ?? []).map((effect, i) => ({ ev, seg, effect, at: reduced ? at : Math.min(seg.settleAt, at + i * step) })).filter((l) => t >= l.at);
+    }),
+  );
 }
