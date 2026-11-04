@@ -317,3 +317,44 @@ describe('the production show plays every event of the month', () => {
     expect(plot(after, 4, 0)).not.toContain('data-badge="reason"');
   });
 });
+
+describe('G-1 / C4: a wave-2 production event with no story yet plays on the production map', () => {
+  // As the server sends them: a cold snap hits no plot and says so in effects; a meteor strike hits one plot, 0 delta,
+  // which becomes a crater and loses its MULE.
+  const cold: ProductionEventView = {
+    ...fired('coldSnap', 7000, []),
+    kind: 'sweep',
+    title: 'Cold snap',
+    line: 'A cold snap: every plot needs 2 times its Energy this month.',
+    effects: [{ on: 'colony', what: 'energyNeed', delta: 100 }],
+  };
+  const meteor: ProductionEventView = {
+    ...fired('meteorStrike', 7000, [[1, 0, 0]]),
+    kind: 'strike',
+    title: 'Meteor strike',
+    line: 'A meteor strikes: its MULE is lost and the plot becomes a crater rich in Crystite.',
+    scope: 'local',
+    hits: [{ x: 1, y: 0, order: 0, delta: 0, becomes: 'crater', muleLost: true }],
+  };
+  const lines: ProductionView['lines'] = [{ x: 1, y: 0, owner: 'lena', good: 'food', made: 2, parts: [] }];
+  const month = viewOf(lines, [cold, meteor]);
+
+  it.each([
+    { name: 'the TV', tv: true, mode: 'tv' as const },
+    { name: 'a phone with a TV', tv: false, mode: 'tv' as const },
+    { name: 'a phone alone', tv: false, mode: 'solo' as const },
+  ])('on $name, each shows its title in its segment and no frame throws', ({ tv, mode }) => {
+    const segments = eventSegments(month, EVENT_AT, mode);
+    expect(segments.map((s) => s.events.map((e) => e.key))).toEqual([['coldSnap'], ['meteorStrike']]);
+    for (const [i, ev] of [cold, meteor].entries()) {
+      const seg = segments[i]!;
+      const shown = frames(seg.startAt, seg.endAt).map((t) => render(month, t, { tv, mode }));
+      expect(
+        shown.some((html) => html.includes(ev.title)),
+        `${ev.key} shows its title`,
+      ).toBe(true);
+    }
+    // The goods still fly home after the last event: the show reaches its end.
+    expect(() => render(month, showEnd(month) + 0.1, { tv, mode })).not.toThrow();
+  });
+});

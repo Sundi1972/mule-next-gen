@@ -71,6 +71,21 @@ describe('T-AC-3 (HC-5): a wave-2 event never drives cash or goods below 0', () 
   });
 });
 
+describe('RULE-3 (AM-1 6a): inheritances in one phase are ranked once, by wealth before any payout', () => {
+  it('four players inheriting in the same planning get 300 / 233 / 166 / 100 by their starting wealth', () => {
+    only('inheritance');
+    const state = createGame({ seed: 9, players: [0, 1, 2, 3].map((i) => ({ id: `p${i}`, name: `P${i}`, isAi: false })) });
+    state.month = EVENTS.firstMonth;
+    // Close enough that an earlier payout would reorder later ranks: p0's 100 would lift it past p2.
+    state.players.forEach((p, i) => (p.money = [500, 520, 540, 560][i]!));
+    const fired = firePhase(state, 'planning');
+    expect(fired.map((e) => [e.player, e.effects])).toEqual(
+      [300, 233, 166, 100].map((amount, i) => [`p${i}`, [{ on: `p${i}`, what: 'money', delta: amount }]]),
+    );
+    expect(state.players.map((p) => p.money)).toEqual([800, 753, 706, 660]);
+  });
+});
+
 describe('T-AC-5 (RULE-4): an epidemic sickens for two developments unless a Medicine cures it', () => {
   it('without Medicine sick this development and the next; with one, cured and the Medicine gone', () => {
     only('epidemic');

@@ -209,6 +209,8 @@ describe('T-AC-1: each wave-2 event fires in its phase, changes the state as RUL
     const { state, events } = firedIn('meteorStrike', 'production', 1);
     const [strike] = events;
     expect(strike).toMatchObject({ phase: 'production', kind: 'strike', hits: [{ delta: 0, becomes: 'crater' }] });
+    // The engine may file no good for a tile without a MULE; the view's hit carries no good at all, so none leaks.
+    expect(strike!.hits[0]).not.toHaveProperty('good');
     const tile = state.tiles[strike!.hits[0]!.y * state.width + strike!.hits[0]!.x]!;
     expect(tile.terrain).not.toBe('store');
     expect(tile).toMatchObject({ outfit: null, special: { kind: 'meteorCrater' } });
