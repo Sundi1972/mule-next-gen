@@ -389,11 +389,11 @@ function shipQuote(state: GameState, good: Good): number[] {
 }
 
 /**
- * Whether an AI seat's development turn is over for the tick resolving at `at`: it went to the pub, or the clock
- * ended by the tick's own time. A tick that runs late is still judged at its own time, as the sim's is (HC-4); month
- * 1's waiting clock (`devEndsAt` null) ends no turn by time.
+ * Whether a seat's development turn is over by a given time `at`: it went to the pub, or the clock ended by then. A
+ * steered tick passes its own time, so a tick that runs late is still judged at its own time, as the sim's is (HC-4);
+ * month 1's waiting clock (`devEndsAt` null) ends no turn by time.
  */
-export function aiTurnOver(doneDeveloping: boolean, devEndsAt: number | null, at: number): boolean {
+export function turnOverAt(doneDeveloping: boolean, devEndsAt: number | null, at: number): boolean {
   return doneDeveloping || (devEndsAt !== null && devEndsAt <= at);
 }
 
@@ -899,7 +899,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const state = this.requireState();
     if (state.phase !== 'development') return false;
     const p = state.players.find((q) => q.id === seatId);
-    return aiTurnOver(!!p?.doneDeveloping, this.devEndsAt, at);
+    return turnOverAt(!!p?.doneDeveloping, this.devEndsAt, at);
   }
 
   /**
@@ -1374,7 +1374,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
    * seat's from its hand (C9), computed here inside the tick's recorded step, so a replay computes it again, from the
    * floor before the step and the seconds the tick's presses resolve at, as the sim calls it (HC-4). `held` is the
    * refusal's own test, so the hand never reaches for a press `refusal` would turn down; the press still goes through
-   * it. A seat whose turn is over by the tick's own time `at` stands still (aiTurnOver), however late the tick runs.
+   * it. A seat whose turn is over by the tick's own time `at` stands still (turnOverAt), however late the tick runs.
    */
   private seatInput(steering: Steering, seatId: string, tick: number, at: number, secondsLeft: number): FloorInput {
     const ai = this.ai.get(seatId);

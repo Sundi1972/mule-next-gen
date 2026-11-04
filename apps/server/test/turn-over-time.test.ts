@@ -1,7 +1,7 @@
 import { AiSeat } from '@mule/ai';
 import { DEV_STEER, IDLE_INPUT } from '@mule/engine';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { aiTurnOver } from '../src/mule-game.js';
+import { turnOverAt } from '../src/mule-game.js';
 import { toDevelopment } from './fake-context.js';
 
 /*
@@ -18,9 +18,9 @@ const rows: { name: string; done: boolean; devEndsAt: number | null; at: number;
   { name: 'a late tick before devEndsAt, the wall clock past it', done: false, devEndsAt: END, at: END - 1, now: END + 40, over: false },
 ];
 
-describe("FM-ai-tick-time: an AI seat's turn is over by the tick's own time, not the wall clock", () => {
+describe("FM-ai-tick-time: turnOverAt, a seat's turn is over by a given time, the tick's own, not the wall clock", () => {
   it.each(rows)('$name: over $over', ({ done, devEndsAt, at, over }) => {
-    expect(aiTurnOver(done, devEndsAt, at)).toBe(over);
+    expect(turnOverAt(done, devEndsAt, at)).toBe(over);
   });
 });
 
