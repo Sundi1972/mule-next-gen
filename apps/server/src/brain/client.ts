@@ -241,7 +241,8 @@ export function createToolLoop(
     let seen = prompt.user;
     let model: ModelId | null = null;
     for (let round = 1; ; round++) {
-      const left = call.timeoutMs - (now() - start);
+      // Round 1 has the whole wait; each later round what the rounds before it left.
+      const left = round === 1 ? call.timeoutMs : call.timeoutMs - (now() - start);
       if (signal?.aborted || !(left > 0)) throw new Stopped('deadline', round, model);
       const picked = gate.before(round, { ...prompt, user: seen }, model);
       if (picked === null) throw new Stopped('budget', round, model);
