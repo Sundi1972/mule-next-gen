@@ -48,7 +48,7 @@ process.exit(0);
 
 /**
  * Steered development on flag-on servers of their own (the flag-off server above never sees one), a room per table: two
- * phones and a TV for step 1, B-AC-3, B-AC-4 and B-AC-8; two phones and no TV for B-AC-1; four phones and a TV for
+ * phones and a TV for step 1, B-AC-3, B-AC-4 and B-AC-8, and again for UBER-AC-1 and B-AC-1; four phones and a TV for
  * B-AC-2. phaseScale 1: frames at the tick's 20 Hz, and a stride never carries steerTo past a reach.
  */
 async function arcade(): Promise<void> {
@@ -66,6 +66,6 @@ async function arcade(): Promise<void> {
     console.log(`✓ B-AC-4: ${await phoneFitsAndCoversNothing(table)}`);
     console.log(`✓ B-AC-8: ${await aDroppedPhoneStops(table)}`);
   });
-  await room(['Heiko', 'Mia'], false, async (table) => console.log(`✓ B-AC-1: ${await theWholeErrandByStickAndButton(table)}`));
+  await room(['Heiko', 'Mia'], true, async (table) => console.log(`✓ UBER-AC-1, B-AC-1: ${await theWholeErrandByStickAndButton(table)}`));
   await room(['Heiko', 'Mia', 'Kai', 'Lena'], true, async (table) => console.log(`✓ B-AC-2: ${await theTvDrawsEveryoneLive(table)}`));
 }
