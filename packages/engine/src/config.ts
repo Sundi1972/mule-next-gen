@@ -369,6 +369,12 @@ export const DEV_STEER = {
   botsSpareTime: true as boolean,
   /** An AI colonist drops its errand for the pub once the clock shows no more than its walk there and this many seconds. */
   botPubMarginSeconds: 2,
+  /**
+   * An AI colonist buys a MULE only while its errand, this share longer than estimated, still leaves the pub margin
+   * (botPubMarginSeconds, as the hurry for the pub counts it): a walk that runs a little long then costs the margin
+   * nothing, and the MULE is installed, not walked into the pub (FM-hurry-margin).
+   */
+  botPlanSlackShare: 0.1,
   /** Ticks an AI colonist may push its stick without moving before it gives that step of its errand up. */
   botStuckTicks: 20,
   /** An AI colonist installing on a lake plot from the shore stands this far from the shore tile's middle towards the lake, in tiles. */
@@ -1445,6 +1451,13 @@ export const AI_PLANS = {
     months: 3,
     /** Plots a month the target adds, by plan kind; `other` for every kind not named. */
     perMonth: { landBaron: 2, other: 1 } as Partial<Record<PlanKind, number>> & { other: number },
+  },
+  /** A seat whose money is under its cash reserve lists a plot or a MULE for the land auction, unsold to the store. */
+  sell: {
+    /** Lots a seat lists a month when short, at most. LOTS.perPlayer still caps every seller. */
+    perMonth: 1,
+    /** A lot's minimum, as a share of what it is worth to the seat; never under one credit over what the store pays. */
+    minimumShare: 0.8,
   },
   /** What a playbook may hold: a value outside is clamped or refused. */
   bounds: {

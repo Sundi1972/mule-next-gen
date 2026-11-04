@@ -182,11 +182,19 @@ export function WinnerCard({ view, density, selfId, className }: { view: MuleVie
   const top = lg.rows[0];
   if (!top) return null;
   const line = winnerWords(view, lg);
+  // Everyone level at the top shares the win: each gets a mark, smaller when there are several.
+  const winners = lg.rows.filter((r) => r.rank === 1);
   if (density === 'tv')
     return (
       <div className="relative flex flex-col items-center justify-center gap-3 rounded-panel border-2 border-holo bg-holo-soft p-6 text-center shadow-glow animate-pulse-glow" data-testid="tv-winner">
         <span className="label-caps text-lg!">The colony goes to</span>
-        <PlayerMark slot={top.slot} species={top.player.species} size={112} label={top.player.name} />
+        <ul className="flex items-center justify-center gap-4" data-testid="winner-marks">
+          {winners.map((w) => (
+            <li key={w.player.id}>
+              <PlayerMark slot={w.slot} species={w.player.species} size={winners.length > 1 ? 80 : 112} label={w.player.name} />
+            </li>
+          ))}
+        </ul>
         <span className="font-display text-4xl font-semibold leading-tight" data-testid="winner-line">
           {line}
         </span>
@@ -194,6 +202,7 @@ export function WinnerCard({ view, density, selfId, className }: { view: MuleVie
     );
   const mine = lg.rows.find((r) => r.player.id === selfId) ?? top;
   const won = mine.rank === 1;
+  const shared = winners.length > 1;
   const compact = density === 'compact';
   return (
     <div
@@ -202,7 +211,7 @@ export function WinnerCard({ view, density, selfId, className }: { view: MuleVie
     >
       <span className="contents" data-testid="my-rank">
         <span className="label-caps text-[10px]!" data-testid="my-place">
-          {won ? 'You win the colony!' : `You finished ${ordinal(mine.rank)} of ${view.players.length}`}
+          {won ? (shared ? 'You share the win!' : 'You win the colony!') : `You finished ${ordinal(mine.rank)} of ${view.players.length}`}
         </span>
       </span>
       <PlayerMark slot={mine.slot} species={mine.player.species} size={compact ? 28 : 40} label={mine.player.name} />
@@ -211,7 +220,9 @@ export function WinnerCard({ view, density, selfId, className }: { view: MuleVie
       </span>
       {!won && (
         <span className="flex items-center justify-center gap-1 text-[11px] leading-snug text-ink-2" data-testid="winner-line">
-          <PlayerMark slot={top.slot} species={top.player.species} size={12} label={top.player.name} />
+          {winners.map((w) => (
+            <PlayerMark key={w.player.id} slot={w.slot} species={w.player.species} size={12} label={w.player.name} />
+          ))}
           {line}
         </span>
       )}

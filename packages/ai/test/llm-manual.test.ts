@@ -20,6 +20,9 @@ const EVERY_MOVE: { readonly [T in AiAction['type']]: true } = {
   vote: true,
   setTax: true,
   done: true,
+  drone: true,
+  list: true,
+  unlist: true,
 };
 
 /** The text under one `## ` heading, up to the next. */
@@ -102,8 +105,8 @@ describe('the manual of moves', () => {
     for (const line of ADVICE) expect(advice).toContain(`${line.move} (${line.field}): `);
 
     const when = () => 'when it is a good idea';
-    const noMove = { move: 'list', field: 'PlanningPlay.list', when } as unknown as AdviceLine;
-    expect(() => defaultManual([...ADVICE, noMove])).toThrow(/list/);
+    const noMove = { move: 'sellOut', field: 'PlanningPlay.list', when } as unknown as AdviceLine;
+    expect(() => defaultManual([...ADVICE, noMove])).toThrow(/sellOut/);
     const noField = { move: 'claim', field: 'LandGrantPlay.grab', when } as unknown as AdviceLine;
     expect(() => defaultManual([...ADVICE, noField])).toThrow(/LandGrantPlay\.grab/);
     const noPlay = { move: 'claim', field: 'Shopping.list', when } as unknown as AdviceLine;

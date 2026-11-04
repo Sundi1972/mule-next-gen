@@ -19,9 +19,11 @@ import {
   grantPass,
   installMule,
   lineTrade,
+  list as listLot,
   litPlot,
   lotDone,
   MS_PER_SECOND,
+  orderGeoDrone,
   outfitMule,
   RuleError,
   runFor,
@@ -35,6 +37,7 @@ import {
   stepLandAuction,
   STORE_ID,
   tileIndex,
+  unlist as unlistLot,
   visitPub,
   walkSeconds,
   WALK,
@@ -188,6 +191,15 @@ function applyRule(state: GameState, id: string, action: AiAction, clock?: DevCl
         else if (state.phase === 'planning' && state.politics?.election) electionDone(state, id, action.done);
         else auctionDone(state, id, action.done);
         break;
+      case 'drone':
+        orderGeoDrone(state, id, action.plots);
+        break;
+      case 'list':
+        listLot(state, id, action);
+        break;
+      case 'unlist':
+        unlistLot(state, id, action.id);
+        break;
     }
     return true;
   } catch (err) {
@@ -282,7 +294,7 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
           stepElection(state, WALK.tickMs);
         }
         seats.forEach((_, i) => vote(i));
-        for (const s of seats) s.planMonth(state);
+        for (const s of seats) s.planMonth(state, (a) => applyAction(state, s.id, a));
         break;
       }
       case 'landGrant': {

@@ -5,13 +5,14 @@
  * B-AC-19's six-seat TV case runs here too, in a room of its own (hub-steps.ts), and E-11's Governor's desk beside the
  * table chat, a room per phone size.
  * Steered development (arcade PR-6) runs last, on servers of its own with the floor on: step 1 (the phones, the TV and
- * the server's floor meet), B-AC-1, B-AC-2, B-AC-3, B-AC-4 and B-AC-8. `MULE_E2E_ARCADE=0` leaves it out.
+ * the server's floor meet), B-AC-1, B-AC-2, B-AC-3, B-AC-4 and B-AC-8; then the moments (arcade PR-9), B-AC-5, B-AC-6
+ * and B-AC-7, a room each. `MULE_E2E_ARCADE=0` leaves it out.
  * Run with `pnpm --filter @mule/web e2e`.
  */
 import { check, launch, PHONE, startServer } from './harness';
 import { governorsDeskFits, sixSeatsOnTheTv } from './hub-steps';
 import { shellFillsTheStage } from './shell-steps';
-import { aDroppedPhoneStops, arcadeTable, laptopKeysAndMouse, phoneFitsAndCoversNothing, theTvDrawsEveryoneLive, thePiecesMeet, theWholeErrandByStickAndButton } from './store-steps';
+import { aDroppedPhoneStops, arcadeTable, laptopKeysAndMouse, phoneFitsAndCoversNothing, shortCorral, theGlintRace, theScramble, theTvDrawsEveryoneLive, thePiecesMeet, theWholeErrandByStickAndButton, wolvesRunOrFight } from './store-steps';
 
 const started = Date.now();
 const { server, base } = await startServer({ maxMonths: 1 });
@@ -68,4 +69,19 @@ async function arcade(): Promise<void> {
   });
   await room(['Heiko', 'Mia'], false, async (table) => console.log(`✓ UBER-AC-1, B-AC-1: ${await theWholeErrandByStickAndButton(table)}`));
   await room(['Heiko', 'Mia', 'Kai', 'Lena'], true, async (table) => console.log(`✓ B-AC-2: ${await theTvDrawsEveryoneLive(table)}`));
+  // The moments: each room runs whatever the one before found, and the e2e fails after the last with every one that failed.
+  const failed: string[] = [];
+  const moment = async (ac: string, names: string[], step: (table: Awaited<ReturnType<typeof arcadeTable>>) => Promise<string>) => {
+    try {
+      await room(names, true, async (table) => console.log(`✓ ${ac}: ${await step(table)}`));
+    } catch (err) {
+      console.error(`✗ ${ac}: ${(err as Error).message}`);
+      failed.push(ac);
+    }
+  };
+  await moment('B-AC-5', ['Heiko', 'Mia'], wolvesRunOrFight);
+  await moment('B-AC-6', ['Heiko', 'Mia'], theGlintRace);
+  // Month 1's corral starts short, before the room's server makes its game.
+  await shortCorral(() => moment('B-AC-7', ['Heiko', 'Mia', 'Kai', 'Lena'], theScramble));
+  check(failed.length === 0, `the moments failed: ${failed.join(', ')}`);
 }
