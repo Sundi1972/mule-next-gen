@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, createGame, list, observe, storePaysFor, unlist, type GameState, type Listing, type Outfit, type Playbook, type PlanningPlay } from '@mule/engine';
+import { advancePhase, createGame, DEV_STEER, list, observe, storePaysFor, unlist, type GameState, type Listing, type Outfit, type Playbook, type PlanningPlay } from '@mule/engine';
 import type { AiAction } from '../src/actions.js';
 import type { Decider } from '../src/decider.js';
 import { simSeats } from '../src/lineup.js';
@@ -220,15 +220,25 @@ describe('the seat plays its planning part (C4, RULE-13)', () => {
   });
 
   it("T-AC-10: the sim's planning loop hands each seat its act, so a seat short of cash lists, unsold to the store", () => {
-    const listed: Listing[] = [];
-    // Seed 3's third month is the first in which a seat runs short.
-    playGame(3, simSeats(4, 'trader', 3), {
-      maxMonths: 3,
-      onPhase: (state) => {
-        if (state.phase === 'planning') listed.push(...state.listings.filter((l) => l.seller.startsWith('ai')));
-      },
-    });
-    expect(listed.length).toBeGreaterThan(0);
-    expect(listed.every((l) => l.unsold === 'store')).toBe(true);
+    // The row makes its own seats short: whether a sim seat runs short by itself depends on the economy (walking on or off).
+    const saved = DEV_STEER.on;
+    try {
+      for (const walking of [false, true]) {
+        DEV_STEER.on = walking;
+        const listed: Listing[] = [];
+        playGame(3, simSeats(4, 'trader', 3), {
+          maxMonths: 2,
+          onPhase: (state) => {
+            // Month 1's upkeep leaves every seat with no cash, so month 2's planning finds each one short.
+            if (state.phase === 'upkeep' && state.month === 1) for (const p of state.players) p.money = 0;
+            if (state.phase === 'planning') listed.push(...state.listings.filter((l) => l.seller.startsWith('ai')));
+          },
+        });
+        expect(listed.length, `walking ${walking}`).toBeGreaterThan(0);
+        expect(listed.every((l) => l.unsold === 'store'), `walking ${walking}`).toBe(true);
+      }
+    } finally {
+      DEV_STEER.on = saved;
+    }
   });
 });
