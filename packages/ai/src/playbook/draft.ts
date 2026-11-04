@@ -30,7 +30,7 @@ import {
 import { OPTION_IDS, TopPickDecider, toOptions, type Choice, type DecisionContext, type ShortOption } from '../decider.js';
 import { outlook } from '../outlook.js';
 import { PERSONAS, type DecisionKind } from '../personas.js';
-import { analysesWanted, developDecision, filtersWanted, goodPlan, landDecision, leaderOf, sellWanted, tradeDecision, type DevAction, type LandPlan } from '../strategist.js';
+import { analysesWanted, developDecision, filtersWanted, goodPlan, landDecision, leaderOf, sellWanted, tradeDecision, type DevAction, type DevWalk, type LandPlan } from '../strategist.js';
 import type { Shortlist } from '../utility.js';
 import { beforeTax, canFeed, cashReserve, installGain, type Mind } from '../value.js';
 
@@ -213,6 +213,16 @@ function pendingPlan(land: LandPick): LandPlan {
 /** A MULE's steps in a route: buyMule, outfit, install. */
 const MULE_STEPS = 3; // literal-ok: RULE-1b's MULE is three steps
 const midSeconds = ([lo, hi]: [number, number]) => (lo + hi) / 2 / MS_PER_SECOND; // literal-ok: the midpoint of a range
+
+/**
+ * RULE-9 row 3's own pick: MULE `k` as the development draft would pick it on `input.state`, the same seeded TopPick
+ * of developDecision under the same key, so a stale MULE is replaced by what a fresh draft holds in its place.
+ */
+export function draftMulePick(input: DraftInput, k: number, walk: DevWalk | undefined, focus: Good | null): DevAction {
+  const at: DraftInput = { ...input, phase: 'development' };
+  const obs = observe(at.state, at.seat);
+  return topPick(at, obs, 'develop', `mule:${k}`, developDecision(obs, at.mind, k, walk, focus));
+}
 
 /**
  * RULE-5 · development: the analyses, then each MULE as a pick of developDecision, leaning to the money-maker, on a

@@ -125,8 +125,7 @@ function play(runner: Runner, state: GameState, hand: DevelopHand, hooks?: TurnH
 }
 
 /** The route steps' outcomes, by route index; off-route entries apart. */
-const byIndex = (hand: DevelopHand) => new Map(hand.routeLog().steps.filter((s) => s.route !== undefined).map((s) => [s.route!, s]));
-const offRoute = (hand: DevelopHand) => hand.routeLog().steps.filter((s) => s.route === undefined);
+const byIndex = (hand: DevelopHand, state: GameState) => new Map(hand.routeLog(state).steps.filter((s) => s.route !== undefined).map((s) => [s.route!, s]));
 
 let steer = DEV_STEER.on;
 beforeEach(() => {
@@ -149,7 +148,7 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       const money = me(state).money;
       hand.follow(state.month, drafted(seat, state));
       play(runner, state, hand);
-      const { steps, usedMs } = hand.routeLog();
+      const { steps, usedMs } = hand.routeLog(state);
       const log = JSON.stringify(hand.done);
       expect(steps.length, log).toBeGreaterThan(0);
       expect(steps.every((s) => s.outcome === 'done' && s.note === undefined && s.route !== undefined), log).toBe(true);
@@ -170,7 +169,7 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       const { hand } = seatAndHand();
       hand.follow(state.month, routeOf([{ act: 'analyse', plot: indexOf(state, plots[0]!) }, { act: 'pub' }]));
       play(runner, state, hand);
-      expect(hand.routeLog().steps).toEqual([]);
+      expect(hand.routeLog(state).steps).toEqual([]);
       expect(me(state).analysed).toEqual([]);
     });
 
@@ -180,7 +179,7 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       const { hand } = seatAndHand();
       hand.follow(state.month, routeOf([{ act: 'analyse', plot: a! }, { act: 'analyse', plot: b! }, { act: 'pub' }], { timeBudgetMs: 1 }));
       play(runner, state, hand);
-      const steps = byIndex(hand);
+      const steps = byIndex(hand, state);
       expect(steps.get(0)).toEqual({ route: 0, outcome: 'done' });
       expect(steps.get(1)).toEqual({ route: 1, outcome: 'skipped', note: 'time budget' });
       expect(steps.get(2)).toEqual({ route: 2, outcome: 'done' });
@@ -201,7 +200,7 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       hand.follow(state.month, play0);
       play(runner, state, hand);
       const plot = indexOf(state, drafted0);
-      const stale = hand.routeLog().steps.filter((s) => s.note === `stale: plot ${plot}`);
+      const stale = hand.routeLog(state).steps.filter((s) => s.note === `stale: plot ${plot}`);
       expect(stale.length, JSON.stringify(hand.done)).toBe(3);
       expect(stale.every((s) => s.outcome === 'replaced')).toBe(true);
       // The promise: the MULE went onto the plot it does hold, idle, and none onto the stale one.
@@ -217,7 +216,7 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       const { hand } = seatAndHand();
       hand.follow(state.month, routeOf([{ act: 'analyse', plot: a! }, { act: 'analyse', plot: b! }, { act: 'pub' }]));
       play(runner, state, hand);
-      const steps = byIndex(hand);
+      const steps = byIndex(hand, state);
       expect(steps.get(0)).toEqual({ route: 0, outcome: 'skipped', note: 'already analysed' });
       expect(steps.get(1)).toEqual({ route: 1, outcome: 'done' });
       expect(steps.get(2)).toEqual({ route: 2, outcome: 'done' });
@@ -231,6 +230,8 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       const [a, b, c] = plots.map((t) => indexOf(state, t)) as [number, number, number];
       state.store.mules = 0;
       me(state).stock.alloy = DEVELOPMENT.filterAlloy;
+      // On the floor an unanalysed plot offers ANALYSE before FIT A FILTER: the filter's plot is known ground.
+      me(state).analysed.push(c);
       const { hand } = seatAndHand();
       const route: DevelopmentPlay['route'] = [
         { act: 'buyMule' }, { act: 'outfit', outfit: 'food' }, { act: 'install', plot: a },
@@ -244,13 +245,13 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
 
     it("T-AC-7 row 5 (example 3): corral empty, 'sold out', then the route's filters and the pub (ifSoldOut 'pub')", () => {
       const { state, plots, hand } = soldOut('pub');
-      const steps = byIndex(hand);
-      const notes = hand.routeLog().steps.filter((s) => s.note === 'sold out');
+      const steps = byIndex(hand, state);
+      const notes = hand.routeLog(state).steps.filter((s) => s.note === 'sold out');
       expect(notes.length, JSON.stringify(hand.done)).toBe(1);
       expect(notes[0]!.outcome).toBe('refused');
       expect(notes[0]!.route).toBeLessThan(3);
       for (const i of [3, 4, 5]) expect(steps.has(i), `the second MULE's step ${i} is not reached`).toBe(false);
-      expect(steps.get(6)).toEqual({ route: 6, outcome: 'done' });
+      expect(steps.get(6), JSON.stringify(hand.done)).toEqual({ route: 6, outcome: 'done' });
       expect(steps.get(7)).toEqual({ route: 7, outcome: 'done' });
       expect(plots.map((t) => t.outfit)).toEqual([null, null, null]);
       expect(plots[2]!.filter).toBe(true);
@@ -259,19 +260,20 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
 
     it("T-AC-7 row 5: ifSoldOut 'analyse' plays analysesWanted, then the pub; none of the route's steps after", () => {
       const { state, hand } = soldOut('analyse');
-      const steps = byIndex(hand);
-      expect(hand.routeLog().steps.filter((s) => s.note === 'sold out').length, JSON.stringify(hand.done)).toBe(1);
+      const steps = byIndex(hand, state);
+      expect(hand.routeLog(state).steps.filter((s) => s.note === 'sold out').length, JSON.stringify(hand.done)).toBe(1);
       for (const i of [3, 4, 5, 6, 7]) expect(steps.has(i), `route step ${i} is not reached`).toBe(false);
-      const off = hand.done.filter((e) => e.route === undefined).map((e) => e.action.type);
-      expect(off.at(-1), JSON.stringify(hand.done)).toBe('pub');
-      expect(off.slice(0, -1).every((t) => t === 'analyse')).toBe(true);
+      // Off the route: the analyses it wants now, each done, then the pub.
+      const off = hand.done.filter((e) => e.route === undefined);
+      expect(off.every((e) => (e.action.type === 'analyse' || e.action.type === 'pub') && e.ok), JSON.stringify(hand.done)).toBe(true);
+      expect(me(state).analysed, 'the filter plot, known before, and the ones analysed now').toHaveLength(1 + off.filter((e) => e.action.type === 'analyse').length);
       expect(me(state).doneDeveloping).toBe(true);
     });
 
     it("T-AC-7 row 5: ifSoldOut 'stop' plays nothing more, not even the pub", () => {
       const { state, plots, hand } = soldOut('stop');
-      expect(hand.routeLog().steps.filter((s) => s.note === 'sold out').length, JSON.stringify(hand.done)).toBe(1);
-      expect(hand.routeLog().steps.every((s) => s.route !== undefined && s.route < 3)).toBe(true);
+      expect(hand.routeLog(state).steps.filter((s) => s.note === 'sold out').length, JSON.stringify(hand.done)).toBe(1);
+      expect(hand.routeLog(state).steps.every((s) => s.route !== undefined && s.route < 3)).toBe(true);
       expect(plots[2]!.filter).toBe(false);
       expect(me(state).doneDeveloping).toBe(false);
     });
@@ -285,7 +287,7 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       const { hand } = seatAndHand();
       hand.follow(state.month, routeOf([{ act: 'buyMule' }, { act: 'outfit', outfit: 'food' }, { act: 'install', plot: a }, { act: 'analyse', plot: b }, { act: 'pub' }]));
       play(runner, state, hand);
-      const steps = byIndex(hand);
+      const steps = byIndex(hand, state);
       expect(steps.get(0)).toEqual({ route: 0, outcome: 'done' });
       // Refused: Act false on the tap path, a failed StepRun (the walker's why) on the floor (AM-19).
       expect(steps.get(1)).toEqual({ route: 1, outcome: 'refused', note: runner === 'tick' ? 'refused' : 'offered dim' });
@@ -302,7 +304,7 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       const { hand } = seatAndHand();
       hand.follow(state.month, routeOf([{ act: 'analyse', plot: a }]));
       play(runner, state, hand);
-      expect(hand.routeLog().steps).toEqual([
+      expect(hand.routeLog(state).steps).toEqual([
         { route: 0, outcome: 'done' },
         { outcome: 'done', note: 'pub added' },
       ]);
@@ -315,33 +317,34 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       DEV_STEER.on = true;
     });
 
-    /** Far plots first: walks long enough for the clock to cut. */
-    function farPlots(state: GameState, n: number): number[] {
+    /** Free plains plots, the farthest first; or, given `d`, the nearest at least `d` tiles off: walks long enough for the clock to cut. */
+    function farPlots(state: GameState, n: number, d?: number): number[] {
       const store = state.tiles.find((t) => t.terrain === 'store')!;
       const far = (t: Tile) => Math.abs(t.x - store.x) + Math.abs(t.y - store.y);
-      return state.tiles.filter((t) => t.terrain === 'plains' && t.owner === null).sort((a, b) => far(b) - far(a)).slice(0, n).map((t) => indexOf(state, t));
+      const free = state.tiles.filter((t) => t.terrain === 'plains' && t.owner === null && far(t) >= (d ?? 0));
+      return free.sort((a, b) => (d === undefined ? far(b) - far(a) : far(a) - far(b))).slice(0, n).map((t) => indexOf(state, t));
     }
 
-    it("'no time': an analysis whose walk no longer fits the clock is skipped, and the pub played", () => {
+    it("T-AC-7 AM-19 'no time': an analysis whose walk no longer fits the clock is skipped, and the pub played", () => {
       const { state } = development(0);
       const [a] = farPlots(state, 1) as [number];
       const { hand } = seatAndHand();
       hand.follow(state.month, routeOf([{ act: 'analyse', plot: a }, { act: 'pub' }]));
       floorTurn(state, hand, { leftOf: (_, left) => Math.min(left, 8) });
-      expect(byIndex(hand).get(0)).toEqual({ route: 0, outcome: 'skipped', note: 'no time' });
-      expect(byIndex(hand).get(1)).toEqual({ route: 1, outcome: 'done' });
+      expect(byIndex(hand, state).get(0)).toEqual({ route: 0, outcome: 'skipped', note: 'no time' });
+      expect(byIndex(hand, state).get(1)).toEqual({ route: 1, outcome: 'done' });
       expect(me(state).analysed).toEqual([]);
       expect(me(state).doneDeveloping).toBe(true);
     });
 
-    it("'hurry': the clock cut short mid-walk leaves the step not reached and takes the route's pub", () => {
+    it("T-AC-7 AM-19 'hurry': the clock cut short mid-walk leaves the step not reached and takes the route's pub", () => {
       const { state } = development(0);
-      const [a, b] = farPlots(state, 2) as [number, number];
+      const [a, b] = farPlots(state, 2, 4) as [number, number];
       const { hand } = seatAndHand();
       hand.follow(state.month, routeOf([{ act: 'analyse', plot: a }, { act: 'analyse', plot: b }, { act: 'pub' }]));
       // A few ticks into the walk, the clock drops to what the pub needs: as a bite or a pack would cost it.
-      floorTurn(state, hand, { leftOf: (run, left) => (run < 5 ? left : Math.min(left, 6 - run * 0.01)) });
-      const steps = byIndex(hand);
+      floorTurn(state, hand, { leftOf: (run, left) => (run < 5 ? left : Math.min(left, 4 - run * 0.01)) });
+      const steps = byIndex(hand, state);
       expect(steps.get(0), JSON.stringify(hand.done)).toEqual({ route: 0, outcome: 'not reached', note: 'hurry' });
       expect(steps.has(1)).toBe(false);
       expect(steps.get(2)).toEqual({ route: 2, outcome: 'done' });
@@ -349,13 +352,13 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       expect(me(state).doneDeveloping).toBe(true);
     });
 
-    it("'scramble': racing the scramble skips the scouting ahead of its next MULE, and the MULE is installed", () => {
+    it("T-AC-7 AM-19 'scramble': racing the scramble skips the scouting ahead of its next MULE, and the MULE is installed", () => {
       const { state, plots } = development(1);
       plots[0]!.owner = ME;
-      const [a] = farPlots(state, 1) as [number];
+      const [a, a2] = farPlots(state, 2) as [number, number];
       const b = indexOf(state, plots[0]!);
       const { hand } = seatAndHand();
-      hand.follow(state.month, routeOf([{ act: 'analyse', plot: a }, { act: 'buyMule' }, { act: 'outfit', outfit: 'food' }, { act: 'install', plot: b }, { act: 'pub' }]));
+      hand.follow(state.month, routeOf([{ act: 'analyse', plot: a }, { act: 'analyse', plot: a2 }, { act: 'buyMule' }, { act: 'outfit', outfit: 'food' }, { act: 'install', plot: b }, { act: 'pub' }]));
       let called = false;
       floorTurn(state, hand, {
         between: (floor, run) => {
@@ -364,8 +367,11 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
           return { ...floor, moments: { ...floor.moments, scramble: { sinceTick: floor.tick, untilTick: floor.tick + 200, needers: [ME], got: [], over: null, leftOut: [] } } };
         },
       });
-      const steps = byIndex(hand);
+      const steps = byIndex(hand, state);
+      // The one it was walking, and the one queued behind it.
       expect(steps.get(0), JSON.stringify(hand.done)).toEqual({ route: 0, outcome: 'skipped', note: 'scramble' });
+      expect(steps.get(1)).toEqual({ route: 1, outcome: 'skipped', note: 'scramble' });
+      expect(steps.get(4)).toEqual({ route: 4, outcome: 'done' });
       expect(me(state).analysed).toEqual([]);
       expect(plots[0]!.outfit).toBe('food');
     });
