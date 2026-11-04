@@ -373,6 +373,10 @@ describe('the level bound', () => {
     expect(validatorFor({ mind: levelless, seed: 102 })(at.planning, 'ai2', draft, [edit('/strategy/monopolyTarget', 'smithore')]).rejected).toEqual([
       { path: '/strategy/monopolyTarget', to: 'smithore', why: 'level never corners' },
     ]);
+    // It has no draft of its own to bound a buyer's hold, so it buys nothing.
+    const levellessBuyer = validatorFor({ mind: levelless, seed: 102 })(at.auction, 'ai2', fresh, [edit(`/auction/${good}/role`, 'buyer'), edit(`/auction/${good}/hold`, 5)]);
+    expect(levellessBuyer.rejected).toEqual([{ path: `/auction/${good}/hold`, to: 5, why: 'clamped to 0: level never corners' }]);
+    expect(read(levellessBuyer.playbook, `/auction/${good}/hold`)).toBe(0);
   });
 });
 
