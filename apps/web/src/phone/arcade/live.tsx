@@ -5,7 +5,7 @@ import type { TableClient } from '../../net/client';
 import { useClient } from '../../net/react';
 import { startControls, stickOf, type Controls } from './controls';
 import { msPerTick, othersAt, pushFrame, startFrameLog, type Drawn, type FrameLog } from './frames';
-import { advanceTo, assayTick, holdUntil, markStale, phoneTick, predictWorld, receiveFrame, shownAt, startPrediction, steerStep, type ColonistBase, type Prediction, type Shown } from './predict';
+import { advanceTo, assayTick, holdUntil, markStale, phoneTick, predictWorld, receiveFrame, shownAt, startPrediction, steerStep, wolvesHold, type ColonistBase, type Prediction, type Shown } from './predict';
 import { startGate, type SteerGate } from './steer';
 import { usePhoneGame } from '../game';
 
@@ -78,6 +78,8 @@ export function fromView(p: PlayerView): Drawn | null {
   return { id: p.id, x: c.x, y: c.y, space: c.space, facing: c.facing ?? 'right', moving: !!c.moving, lead: c.lead ?? null };
 }
 
+const shownOf = ({ id: _id, ...at }: Drawn): Shown => at;
+
 /** Your pace as the floor has it: the wire's, else hunger × sickness × the Zipwing's perk. */
 export function paceOf(p: PlayerView): number {
   return p.colonist?.pace ?? (p.condition?.conditionPace ?? 1) * (p.species === 'zipwing' ? SPECIES_PERK.zipwingSpeed : 1);
@@ -144,11 +146,6 @@ export function PhoneLive({ children }: { children: ReactNode }) {
   const state = useRef<{ p: Prediction; log: FrameLog; gate: SteerGate; beats: Beat[]; assaying: number | null }>({ p: startPrediction(), log: startFrameLog(), gate: startGate(), beats: [], assaying: null });
   const ctx = useRef({ world, base, view, self });
   ctx.current = { world, base, view, self };
-  const othersFrom = (log: FrameLog, now: number) => {
-    const drawn = othersAt(log, now, cfg.steer);
-    drawn.delete(me.id);
-    return drawn;
-  };
   const viewOthers = (v: MuleView) => new Map(v.players.filter((p) => p.id !== me.id).flatMap((p) => (fromView(p) ? [[p.id, fromView(p)!] as const] : [])));
   const source = useLoop(
     client,
@@ -170,12 +167,18 @@ export function PhoneLive({ children }: { children: ReactNode }) {
         s.assaying = until;
         s.p = holdUntil(s.p, until === null ? null : assayTick(s.p, until, now, client.serverNow(), rtt, pace));
       }
+      const framed = s.log.frames.length > 0;
+      const drawn = framed ? othersAt(s.log, now, cfg.steer) : null;
+      const framedMe = drawn?.get(me.id) ?? null;
+      drawn?.delete(me.id);
+      // While a pack has you the server moves you: you are drawn from the frames, as everyone else.
+      s.p = wolvesHold(s.p, !!ctx.current.self.colonist?.encounter, ctx.current.base, framedMe, now, cfg);
       // At the frames' own pace, so a table that plays its phases quicker needs no corrections.
       const target = phoneTick(s.p, now, rtt, cfg, pace);
       if (target !== null) s.p = advanceTo(s.p, target, world);
       steerNow(now);
-      const framed = s.log.frames.length > 0;
-      return { me: shownAt(s.p, now, cfg), others: framed ? othersFrom(s.log, now) : viewOthers(ctx.current.view), status: s.p.status, beats: s.beats.filter((b) => now - b.at < BEAT_MS), ...(framed ? { at: now } : {}) };
+      const mine = s.p.wolves && framedMe ? shownOf(framedMe) : shownAt(s.p, now, cfg);
+      return { me: mine, others: drawn ?? viewOthers(ctx.current.view), status: s.p.status, beats: s.beats.filter((b) => now - b.at < BEAT_MS), ...(framed ? { at: now } : {}) };
     },
     () => ({ me: fromView(self), others: viewOthers(view), status: 'waiting', beats: [] }),
   );

@@ -1,4 +1,4 @@
-import { stepFloor, type FloorColonist, type FloorConfig, type FloorLead, type GameState, type Space } from '@mule/engine';
+import { stepFloor, type FloorColonist, type FloorConfig, type FloorLead, type FloorMoments, type GameState, type Space } from '@mule/engine';
 import type { DevFrame, MuleView, MyView } from '@mule/protocol';
 import { gateSteer, heldBack, unsure, type SteerGate, type Stick } from './steer';
 
@@ -28,8 +28,15 @@ export interface PredictWorld {
  */
 export function predictWorld(view: Pick<MuleView, 'width' | 'height' | 'tiles'>, me: Pick<MyView, 'id' | 'carriedMule'>, cfg: FloorConfig): PredictWorld {
   const state = { width: view.width, height: view.height, tiles: view.tiles, players: [{ id: me.id, carriedMule: me.carriedMule, isAi: false }] } as unknown as GameState;
-  return { state, cfg, id: me.id };
+  return { state, cfg: momentsOff(cfg), id: me.id };
 }
+
+/**
+ * The moments are the server's alone: a copy that rolled its own pack or glint would fight the frames. So the copy
+ * steps with every moment switched off, and on a floor where none is on or due.
+ */
+const momentsOff = (cfg: FloorConfig): FloorConfig => ({ ...cfg, wolves: { ...cfg.wolves, on: false }, glint: { ...cfg.glint, on: false }, scramble: { ...cfg.scramble, on: false } });
+const NO_MOMENTS: FloorMoments = { glint: null, glintAfterTick: Infinity, scramble: null, scrambled: true, beats: [], due: [] };
 
 /** Your colonist as a frame carries it. */
 export type FramedColonist = DevFrame['colonists'][number];
@@ -68,12 +75,17 @@ export interface Prediction {
    * starts before it, whatever the stick, as the server holds it. Null when not assaying.
    */
   readonly hold: number | null;
+  /**
+   * A pack has you, as your own view says (ColonistView.encounter): the server moves you on its terms, so the copy
+   * stands where each frame puts it and the screen draws you from the frames, as everyone else.
+   */
+  readonly wolves: boolean;
   /** Frames compared with the copy, corrections eased, snaps, and the furthest apart a compare found them, in tiles. */
   readonly stats: { compared: number; corrected: number; snapped: number; worst: number };
 }
 
 export function startPrediction(): Prediction {
-  return { status: 'waiting', tick: 0, me: null, past: [], inputs: [], ease: null, frame: null, hold: null, stats: { compared: 0, corrected: 0, snapped: 0, worst: 0 } };
+  return { status: 'waiting', tick: 0, me: null, past: [], inputs: [], ease: null, frame: null, hold: null, wolves: false, stats: { compared: 0, corrected: 0, snapped: 0, worst: 0 } };
 }
 
 /** The wire rounds positions to 2 decimals (spec AM-13): a copy this close on each axis agrees with its frame. */
@@ -102,19 +114,21 @@ export function markStale(p: Prediction, nowMs: number, cfg: FloorConfig): Predi
 
 const stickAt = (inputs: readonly Input[], tick: number): Stick => inputs.filter((i) => i.tick <= tick).at(-1) ?? { x: 0, y: 0 };
 
+const STAND: Stick = { x: 0, y: 0 };
+
 function stepMe(me: FloorColonist, tick: number, stick: Stick, world: PredictWorld, hold: number | null): FloorColonist {
   // stepFloor holds an assaying colonist still itself, as on the server, and only on steps that start before the hold.
   const held = hold !== null ? { ...me, assayUntilTick: hold } : me;
-  const next = stepFloor({ tick, colonists: [held] }, world.state, { [world.id]: { x: stick.x, y: stick.y, act: false } }, world.cfg.steer.tickMs, world.cfg);
+  const next = stepFloor({ tick, colonists: [held], moments: NO_MOMENTS }, world.state, { [world.id]: { x: stick.x, y: stick.y, act: false } }, world.cfg.steer.tickMs, world.cfg);
   return next.colonists[0]!;
 }
 
-/** The copy stepped on from (tick, me) to `to`, each step with its tick's stick, and the past those steps add. */
-function replay(from: PastStep, to: number, inputs: readonly Input[], world: PredictWorld, hold: number | null) {
+/** The copy stepped on from (tick, me) to `to`, each step with its tick's stick (none while a pack has you), and the past those steps add. */
+function replay(from: PastStep, to: number, inputs: readonly Input[], world: PredictWorld, hold: number | null, wolves = false) {
   let { tick, me } = from;
   const added: PastStep[] = [];
   while (tick < to) {
-    me = stepMe(me, tick, stickAt(inputs, tick), world, hold);
+    me = stepMe(me, tick, wolves ? STAND : stickAt(inputs, tick), world, hold);
     tick++;
     added.push({ tick, me });
   }
@@ -136,7 +150,7 @@ function trim(p: Prediction, cfg: FloorConfig): Prediction {
 export function advanceTo(p: Prediction, tick: number, world: PredictWorld): Prediction {
   if (p.status !== 'live' || !p.me || tick <= p.tick) return p;
   const to = Math.min(tick, p.tick + world.cfg.steer.catchUpTicks);
-  const run = replay({ tick: p.tick, me: p.me }, to, p.inputs, world, p.hold);
+  const run = replay({ tick: p.tick, me: p.me }, to, p.inputs, world, p.hold, p.wolves);
   return trim({ ...p, tick: run.tick, me: run.me, past: [...p.past, ...run.added] }, world.cfg);
 }
 
@@ -188,6 +202,11 @@ export function receiveFrame(p: Prediction, frame: DevFrame, nowMs: number, worl
   const fresh = fromFrame(server, base, world.id);
   // Back from a gap the server may have let go of the stick: the copy stands until the stick is sent again.
   if (p.status !== 'live' || !p.me) return { ...p, status: 'live', tick: frame.tick, me: fresh, past: [{ tick: frame.tick, me: fresh }], inputs: [], ease: null, frame: framed };
+  if (p.wolves) {
+    const run = replay({ tick: frame.tick, me: fresh }, p.tick, p.inputs, world, p.hold, true);
+    const past = [...p.past.filter((e) => e.tick < frame.tick), { tick: frame.tick, me: fresh }, ...run.added];
+    return trim({ ...p, tick: run.tick, me: run.me, past, ease: null, frame: framed }, world.cfg);
+  }
   const mine = p.past.find((e) => e.tick === frame.tick)?.me;
   if (!mine) {
     if (frame.tick < p.tick) return { ...p, frame: framed };
@@ -222,6 +241,20 @@ export function assayTick(p: Prediction, assayUntilMs: number, nowMs: number, se
 export function holdUntil(p: Prediction, tick: number | null): Prediction {
   const hold = tick !== null && tick > p.tick ? tick : null;
   return hold === p.hold ? p : { ...p, hold };
+}
+
+/**
+ * Your own view says a pack has you (`on`), or has let you go. Let go, the copy walks on from where the frames last
+ * put it, at the pace and with the bite your view says (a chase caught is a bite), the shown colonist easing there
+ * from `shown`, where the frames drew it, when that is within snapTiles.
+ */
+export function wolvesHold(p: Prediction, on: boolean, base: ColonistBase, shown: Pick<Shown, 'x' | 'y' | 'space'> | null, nowMs: number, cfg: FloorConfig): Prediction {
+  if (on === p.wolves) return p;
+  if (on || !p.me) return { ...p, wolves: on, ease: null };
+  const me = { ...p.me, pace: base.pace, bitten: base.bitten, pelts: base.pelts };
+  const past = p.past.map((e) => (e.tick === p.tick ? { tick: e.tick, me } : e));
+  const near = shown && shown.space === me.space && Math.hypot(shown.x - me.x, shown.y - me.y) <= cfg.steer.snapTiles;
+  return { ...p, wolves: false, me, past, ease: near ? { dx: shown.x - me.x, dy: shown.y - me.y, fromMs: nowMs } : null };
 }
 
 /** Your colonist as the screen draws it. */
