@@ -4,6 +4,8 @@ import { cx, fanOut, HoloMap, LiveWalkers, SLOT_COLOR, StoreInterior, type Shop 
 import { createContext, memo, useContext, useMemo, useRef, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import { mapTiles, plotName } from '../../game/derive';
 import { useArcade, useLive } from './live';
+import { GlintOnMap, GlintSightlines, GlintStrip, ScrambleBanner, ScrambleCorral, ScrambleLines, walkerMarks, WolvesOnMap } from './moments';
+import type { PackMarks } from './frames';
 import { suits } from './plots';
 import type { ArcadeColonist, ArcadeSeat, Target } from './seat';
 
@@ -33,6 +35,8 @@ const pct = (v: number, of: number) => `${(v / of) * 100}%`;
 const inHall = (r: HallRect) => ({ left: pct(r.x0, HALL.w), top: pct(r.y0, HALL.h), width: pct(r.x1 - r.x0, HALL.w), height: pct(r.y1 - r.y0, HALL.h) });
 
 const MemoMap = memo(HoloMap);
+
+const NO_MARKS: PackMarks = new Map();
 
 /** Pointer handling for a stage: hold to walk toward the spot, click the lit thing to act. ⌥ is left alone. */
 function usePointer(space: 'map' | 'hall', layer: RefObject<HTMLDivElement | null>, cols: number, rows: number, hits: (p: { x: number; y: number }) => boolean, interactive: boolean) {
@@ -89,7 +93,8 @@ export function MapStage({ data, width, height, density, interactive = false, na
   const door = target && 'door' in target ? target.door : null;
   const ptr = usePointer('map', layer, view.width, view.height, (p) => targetHits(target, store, p, 'map'), interactive);
   const walkers = data.colonists.filter((c) => c.space === 'map' && !c.done);
-  const { at } = useLive();
+  const { at, moments = null, marks = NO_MARKS } = useLive();
+  const marked = walkerMarks({ now: moments, marks, colonists: data.colonists, density, own: interactive ? (seat?.me.id ?? null) : null, names, size: Math.round(cell * 0.62) });
   return (
     <div className={cx('relative overflow-hidden rounded-panel', interactive && 'cursor-crosshair touch-none')} style={{ width, height: viewH }} data-testid={testid} data-camera="whole" {...ptr}>
       <div ref={layer} className="absolute left-0 top-0" style={{ width, height: mapH, transform: `translate(0px, ${-(mapH - viewH) / 2}px)` }}>
@@ -106,7 +111,12 @@ export function MapStage({ data, width, height, density, interactive = false, na
         ))}
         {guide && interactive && seat && <MyPlots seat={seat} />}
         {guide && interactive && seat && <GuideOnMap seat={seat} />}
-        <LiveWalkers walkers={walkers} space="map" cols={view.width} rows={view.height} cell={cell} density={density} names={names} rule={DEV_WALK} at={at} />
+        <GlintOnMap now={moments} cols={view.width} rows={view.height} cell={cell} />
+        {names && <GlintSightlines now={moments} colonists={data.colonists} cols={view.width} rows={view.height} />}
+        {names && <ScrambleLines now={moments} colonists={data.colonists} view={view} space="map" />}
+        {/* Wolves first: a colonist's callout (run or fight?) draws over its pack. */}
+        <WolvesOnMap now={moments} marks={marks} colonists={data.colonists} cols={view.width} rows={view.height} cell={cell} />
+        <LiveWalkers walkers={walkers} space="map" cols={view.width} rows={view.height} cell={cell} density={density} names={names} rule={DEV_WALK} at={at} marks={marked} />
       </div>
     </div>
   );
@@ -130,7 +140,7 @@ export function HallStage({ data, width, density, store = density, interactive =
   const lit = target && 'room' in target && seat?.mine?.space === 'hall' ? target.room : null;
   const mine = interactive && seat ? data.colonists.find((c) => c.id === seat.me.id && c.space === 'hall') : undefined;
   const walkers = data.colonists.filter((c) => c.space === 'hall' && c !== mine);
-  const { at } = useLive();
+  const { at, moments = null } = useLive();
   // Over everyone in the hall, your own visitor included, so it and a walker on its spot move aside by one rule.
   const fan = fanOut(data.colonists.filter((c) => c.space === 'hall'), 'hall');
   const aside = (mine && fan.get(mine.id)) ?? { dx: 0, dy: 0 };
@@ -159,18 +169,32 @@ export function HallStage({ data, width, density, store = density, interactive =
       )}
       {guide && interactive && seat && <GuideInHall seat={seat} lit={lit} />}
       {guide && interactive && seat && <PlotsByOutfitter seat={seat} />}
+      <ScrambleCorral scramble={moments?.moments.scramble} left={view.storeMules} />
+      {names && <ScrambleLines now={moments} colonists={data.colonists} view={view} space="hall" />}
       <LiveWalkers walkers={walkers} space="hall" cols={HALL.w} rows={HALL.h} cell={width / HALL.w} density={density} names={names} rule={DEV_WALK} fan={fan} at={at} />
     </div>
   );
 }
 
-/** Where you are, drawn big: the whole map on the map, the hall inside the store. */
-export function YourStage({ seat, width, height, density, guide = false }: { seat: ArcadeSeat; width: number; height: number; density: Density; guide?: boolean }) {
+/**
+ * Where you are, drawn big: the whole map on the map, the hall inside the store, where a strip says a glint is lit
+ * outside. `banner`: the scramble's banner along the stage's foot (the laptop's; the phone gives it a box of its own).
+ */
+export function YourStage({ seat, width, height, density, guide = false, banner = false }: { seat: ArcadeSeat; width: number; height: number; density: Density; guide?: boolean; banner?: boolean }) {
   const hallW = Math.min(width, (height * HALL.w) / HALL.h);
   const space = seat.mine?.space ?? 'map';
+  const { moments = null } = useLive();
   return (
     <div className="relative flex items-center justify-center overflow-hidden rounded-panel" style={{ width, height }} data-testid="your-stage" data-space={space}>
-      {space === 'hall' ? <HallStage data={seat} width={hallW} density={density} interactive guide={guide} /> : <MapStage data={seat} width={width} height={height} density={density} interactive guide={guide} />}
+      {space === 'hall' ? (
+        <>
+          <HallStage data={seat} width={hallW} density={density} interactive guide={guide} />
+          <GlintStrip now={moments} store={seat.store} />
+        </>
+      ) : (
+        <MapStage data={seat} width={width} height={height} density={density} interactive guide={guide} />
+      )}
+      {banner && <ScrambleBanner seat={seat} scramble={moments?.moments.scramble} />}
     </div>
   );
 }

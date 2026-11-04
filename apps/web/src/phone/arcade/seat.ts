@@ -22,6 +22,8 @@ export interface Where {
 export interface ArcadeColonist extends LiveWalker {
   space: 'map' | 'hall';
   done: boolean;
+  /** Wolf pelts it carries to sell at the store. */
+  pelts: number;
 }
 
 /** The ground under a colonist and what it does to its speed, the parts of RULE-2 a screen can say in words. */
@@ -106,6 +108,7 @@ function walkerOf(view: MuleView, p: PlayerView, at: Drawn, mine: boolean, cfg: 
     condition: p.condition,
     mine,
     done: p.doneDeveloping,
+    pelts: p.colonist?.pelts ?? 0,
   };
 }
 

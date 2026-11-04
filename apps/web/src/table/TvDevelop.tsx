@@ -6,6 +6,8 @@ import { tvSpeakerAt } from '../chat/Chat';
 import { secondsUntil, seatSpecies, toSlot } from '../game/derive';
 import { useServerNow } from '../net/react';
 import { BEAT_MS, BoardLive, useLive } from '../phone/arcade/live';
+import { stillNeeding, tvLines, tvLinesPlace, TV_LINE, type TvLine } from '../phone/arcade/moments';
+import type { MomentsNow } from '../phone/arcade/frames';
 import { colonistsOf, type ArcadeColonist } from '../phone/arcade/seat';
 import { HallStage, MapStage } from '../phone/arcade/stages';
 import { ClockWaits, FirstMules, TvHeader } from './TableApp';
@@ -25,13 +27,23 @@ export function TvDevelop({ game }: { game: MuleView }) {
   );
 }
 
-/** What each colonist is doing, at its row's end, as far as the frames and the view say. */
-const doing = (c: ArcadeColonist | undefined, done: boolean) => (done ? 'PUB' : !c ? '' : c.space === 'hall' ? (c.lead ? 'OUTFIT' : 'STORE') : c.lead?.good ? '→ PLOT' : '→ STORE');
+/** What each colonist is doing, at its row's end, as far as the frames and the view say: a moment first. */
+function doing(c: ArcadeColonist | undefined, done: boolean, now: MomentsNow | null, racing: readonly string[]): string {
+  if (done) return 'PUB';
+  if (!c) return '';
+  if (c.encounter) return c.encounter === 'fight' ? 'FIGHT' : c.encounter === 'chase' ? 'RUN' : 'WOLVES';
+  if (racing.includes(c.id)) return 'CORRAL';
+  if (now?.moments.glint && now.racers.includes(c.id)) return 'GLINT';
+  return c.space === 'hall' ? (c.lead ? 'OUTFIT' : 'STORE') : c.lead?.good ? '→ PLOT' : '→ STORE';
+}
 
 /** The hall at 4:3 in the box the pace list leaves it: as wide as the box, or as tall, whichever is less. */
 export function fitHall(box: { w: number; h: number }): { w: number; h: number } {
   return { w: Math.min(box.w, (box.h * 4) / 3), h: Math.min(box.h, (box.w * 3) / 4) };
 }
+
+/** The TV's map, as wide as the mock draws it. */
+const MAP_W = 740;
 
 /** The hall's box at the mock's four seats, before it is measured: 424 wide at 4:3. */
 const HALL_BOX = { w: 424, h: 318 };
@@ -41,10 +53,12 @@ const useBeforePaint = typeof document === 'undefined' ? useEffect : useLayoutEf
 /** The screen itself, under whichever Live its caller gives it: the board's frames, or a test's moment. */
 export function TvArcade({ game }: { game: MuleView }) {
   const live = useLive();
-  const now = useServerNow(200);
+  const serverNow = useServerNow(200);
   const colonists = colonistsOf(game, live, null);
-  const seconds = secondsUntil(game.phaseEndsAt, now) ?? 0;
-  const rows: PaceRow[] = game.players.map((p) => ({ id: p.id, name: p.name, slot: toSlot(p.slot), condition: p.condition, note: doing(colonists.find((c) => c.id === p.id), p.doneDeveloping), done: p.doneDeveloping }));
+  const seconds = secondsUntil(game.phaseEndsAt, serverNow) ?? 0;
+  const now = live.moments ?? null;
+  const racing = stillNeeding(now?.moments.scramble, colonists);
+  const rows: PaceRow[] = game.players.map((p) => ({ id: p.id, name: p.name, slot: toSlot(p.slot), condition: p.condition, note: doing(colonists.find((c) => c.id === p.id), p.doneDeveloping, now, racing), done: p.doneDeveloping }));
   const data = { view: game, colonists };
   // The hall takes the height the pace list leaves (A-1: six seats and a three-line ticker), at 4:3.
   const box = useRef<HTMLDivElement>(null);
@@ -67,8 +81,8 @@ export function TvArcade({ game }: { game: MuleView }) {
       {game.clockWaitsFor ? <ClockWaits /> : <SharedClock seconds={seconds} total={DEVELOPMENT.fullSeconds} size="tv" />}
       <div className="flex min-h-0 flex-1 gap-6">
         <div className="relative shrink-0 self-start" data-testid="tv-map">
-          <MapStage data={data} width={740} density="tv" names testid="tv-map-stage" />
-          <TvBeats game={game} />
+          <MapStage data={data} width={MAP_W} density="tv" names testid="tv-map-stage" />
+          <TvBeats game={game} colonists={colonists} mapW={MAP_W} />
         </div>
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
           <span className="label-caps text-base!">In the store now</span>
@@ -86,23 +100,38 @@ export function TvArcade({ game }: { game: MuleView }) {
 const STARTED_THE_CLOCK = / started the clock( without |\.)/;
 
 /**
- * The TV's beats along the map's foot: the frames' lines of the last few seconds, and for a few seconds the host
- * starting the clock (A-1). Everyone at the table sees them.
+ * The TV's lines along the map's foot, clear of the store (above it when the store sits too low): the moments now (the
+ * scramble's call, the glint, each colonist meeting wolves), then the frames' latest beats, and for a few seconds the
+ * host starting the clock (A-1). Everyone at the table sees every pack, every fight and every race.
  */
-function TvBeats({ game }: { game: MuleView }) {
+function TvBeats({ game, colonists, mapW }: { game: MuleView; colonists: ArcadeColonist[]; mapW: number }) {
   const live = useLive();
   // The device time each news line was first seen here: a line is a beat for BEAT_MS from then.
   const seen = useRef(new Map<string, number>());
   const now = Date.now();
   const started = game.news.filter((n) => STARTED_THE_CLOCK.test(n)).at(-1);
   if (started && !seen.current.has(started)) seen.current.set(started, now);
-  const lines = [...live.beats.map((b) => b.text), ...(started && now - seen.current.get(started)! < BEAT_MS ? [started] : [])];
+  const host: TvLine[] = started && now - seen.current.get(started)! < BEAT_MS ? [{ key: 'started', text: started, tone: 'warn' }] : [];
+  const place = tvLinesPlace(game, mapW);
+  const lines = [...tvLines({ now: live.moments ?? null, marks: live.marks ?? new Map(), colonists, beats: live.beats.map((b) => b.text), mulesLeft: game.storeMules }), ...host].slice(0, place.most);
   if (lines.length === 0) return null;
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex flex-col items-center gap-1.5" data-testid="tv-beats">
-      {lines.slice(-3).map((text) => (
-        <span key={text} className={cx('rounded-panel border-2 border-warn bg-panel/95 px-4 py-1.5 font-display text-xl font-bold text-warn shadow-glow')} data-testid="tv-beat">
-          {text}
+    <div
+      className={cx('pointer-events-none absolute inset-x-0 z-20 flex flex-col items-center', place.edge === 'bottom' ? 'bottom-3' : 'top-3')}
+      style={{ gap: TV_LINE.gap }}
+      data-testid="tv-beats"
+      data-edge={place.edge}
+    >
+      {lines.map((l) => (
+        <span
+          key={l.key}
+          className={cx(
+            'whitespace-nowrap rounded-panel border-2 bg-panel/95 px-4 py-1.5 font-display text-xl font-bold leading-7 shadow-glow',
+            l.tone === 'alert' ? 'border-alert text-alert' : l.tone === 'ok' ? 'border-ok text-ok' : l.tone === 'glint' ? 'border-g-crystite text-ink' : 'border-warn text-warn',
+          )}
+          data-testid="tv-beat"
+        >
+          {l.text}
         </span>
       ))}
     </div>

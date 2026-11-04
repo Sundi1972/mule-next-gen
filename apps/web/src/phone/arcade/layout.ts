@@ -121,3 +121,37 @@ export function colonistBox(L: Pick<PhoneLayout, 'stage' | 'cell'>, at: { x: num
   const size = Math.round(L.cell * 0.62);
   return { x: L.stage.x + at.x * L.cell - size / 2, y: L.stage.y + at.y * L.cell - 0.85 * size, w: size, h: size };
 }
+
+/** The fewest plots across the banner needs for its words. */
+const BANNER_MIN_CELLS = 4;
+
+/**
+ * The banner's box on the map, clear of `blocked` (your plots and the store): along the bottom rows between the stick
+ * and the button, in the widest run of plots free of them; failing that, along the top rows (below the small phone's
+ * status bar); failing both, the layout's own box. In the hall, the layout's own box across the walkway.
+ */
+export function bannerBox(L: PhoneLayout, space: 'map' | 'hall', rows: number, blocked: readonly { x: number; y: number }[]): Box {
+  if (space === 'hall') return L.banner;
+  const { stage, cell } = L;
+  const h = L.banner.h;
+  const bands = [
+    { y: L.banner.y, from: L.banner.x, to: L.banner.x + L.banner.w },
+    { y: stage.y + (L.mode === 'top' ? cell : 0) + 2, from: stage.x, to: stage.x + stage.w },
+  ];
+  for (const band of bands) {
+    const rowsUnder = [...Array(rows).keys()].filter((r) => stage.y + r * cell < band.y + h && stage.y + (r + 1) * cell > band.y);
+    const first = Math.ceil((band.from - stage.x) / cell - 1e-9);
+    const last = Math.floor((band.to - stage.x) / cell + 1e-9) - 1;
+    const taken = blocked.filter((t) => rowsUnder.includes(t.y)).map((t) => t.x);
+    let best: [number, number] = [0, -1];
+    let start = first;
+    for (let c = first; c <= last + 1; c++) {
+      if (c === last + 1 || taken.includes(c)) {
+        if (c - 1 - start > best[1] - best[0]) best = [start, c - 1];
+        start = c + 1;
+      }
+    }
+    if (best[1] - best[0] + 1 >= BANNER_MIN_CELLS) return { x: stage.x + best[0] * cell + 2, y: band.y, w: (best[1] - best[0] + 1) * cell - 4, h };
+  }
+  return L.banner;
+}
