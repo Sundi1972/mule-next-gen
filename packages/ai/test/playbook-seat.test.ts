@@ -157,12 +157,17 @@ function playedHead(t: ReturnType<typeof playTable>, seat: string, month: number
 /** A written land part's ranking, as many as the dev view shows, by the plots' names. */
 const headOf = (land: LandGrantPlay, state: GameState) => land.ranked.slice(0, 5).map((r) => ({ label: plotName(state.tiles[r.plot]!), value: r.value }));
 
+/**
+ * The budget for these tests, which play months of four seats drafting, or reading their parts, at their draft points:
+ * up to about 1 s each alone, and four to five times that in CI's parallel run, past vitest's 5 s default.
+ */
+const SLOW_MS = 20_000;
+
 const KEYS = ['planning', 'landGrant', 'development', 'auction'] as const;
 /** Each part from its seat's own draft: the draft phase that writes it. */
 const OWN_FROM = { planning: 'planning', landGrant: 'planning', development: 'development', auction: 'auction' } as const;
 
-// Its tests play whole tables: about 1.5 s on a laptop, up to 5 s on a CI runner (T-AC-4 took 4.8 s on #301's run).
-describe('the seat drafts, validates and writes its planning playbook (C4, RULE-6, RULE-7)', { timeout: 30_000 }, () => {
+describe('the seat drafts, validates and writes its planning playbook (C4, RULE-6, RULE-7)', { timeout: SLOW_MS }, () => {
   it("B-AC-7: a keyless seat writes its validated planning draft, by 'engine'", () => {
     const t = playTable(3);
 
@@ -189,7 +194,9 @@ describe('the seat drafts, validates and writes its planning playbook (C4, RULE-
     expect(asked.filter((a) => a.endsWith('/land')).length).toBeGreaterThanOrEqual(IDS.length);
     expect(playOf(smart)).toEqual(playOf(onToday));
     for (const key of KEYS) expect(smart.seats[1]!.part(smart.state, key), key).toBeNull();
+  });
 
+  it('RULE-6 (B-AC-7): row 2, a playbook adopted for a month carries its planning part, so the Classic seat writes none that month', () => {
     // Row 2: a playbook adopted for a month carries the planning part, so the Classic seat does not write its own that
     // month, and writes again the month after. Adopted ahead in month 1: month 2's, then month 1's, which is older than
     // the newest adopted and so ignored (RULE-6's unknown).
@@ -202,7 +209,9 @@ describe('the seat drafts, validates and writes its planning playbook (C4, RULE-
       },
     });
     expect(adopted.written.map((pb) => `${pb.seat}/${pb.month}`)).toEqual(['ai0/1', 'ai1/1', 'ai2/1', 'ai3/1', 'ai0/2', 'ai2/2', 'ai3/2', 'ai0/3', 'ai1/3', 'ai2/3', 'ai3/3']);
+  });
 
+  it("RULE-6 (B-AC-7): part(state, key) reads each adopted part as a copy, and a Classic seat's own part is its draft", () => {
     // At the seat, as each hand reads it: Smart ai1 adopts a landGrant-only playbook, then a development-only one, for
     // month 1; Classic ai0 adopts nothing.
     const landOnly: Playbook[] = [];

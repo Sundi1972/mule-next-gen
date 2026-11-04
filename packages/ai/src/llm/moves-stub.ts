@@ -5,6 +5,7 @@
 import {
   analysisSeconds,
   DEVELOPMENT,
+  LOTS,
   GAME,
   MULE,
   mulePriceFor,
@@ -238,6 +239,59 @@ export const MOVES: MoveTable = {
     ],
     cost: null,
     args: [{ name: 'units', kind: 'number' }],
+  },
+  drone: {
+    type: 'drone',
+    command: 'drone',
+    phases: ['planning'],
+    does: () =>
+      `Sends the geo drone over 1 to ${DEVELOPMENT.dronePlots} free or listed plots for ${DEVELOPMENT.droneFee} credits: its results arrive when the land grant starts.`,
+    legalWhen: () => [
+      refused('it is planning', 'Not allowed during <phase>'),
+      refused('no drone of yours is on its way', 'A drone is already on its way'),
+      refused(`1 to ${DEVELOPMENT.dronePlots} plots`, `Pick 1 to ${DEVELOPMENT.dronePlots} plots`),
+      refused('each plot is free or listed', 'The drone only flies over free or listed plots'),
+      refused(`you have ${DEVELOPMENT.droneFee} credits`, 'Not enough money'),
+    ],
+    cost: () => ({ credits: DEVELOPMENT.droneFee, line: `${DEVELOPMENT.droneFee} credits` }),
+    args: [{ name: 'plots', kind: 'plot' }],
+  },
+  list: {
+    type: 'list',
+    command: 'list',
+    phases: ['planning'],
+    does: () =>
+      `Puts one of your plots, or the MULE on it, up for this month's land auction at a minimum you set; unsold, the lot is kept or sold to the store, as you chose. Up to ${LOTS.perPlayer} lots each, ${LOTS.maxLotsPerMonth} a month from all sellers.`,
+    legalWhen: () => [
+      refused('it is planning', 'Listings are made in planning'),
+      refused('it names one of your plots', 'Not your plot'),
+      refused('for a MULE, the plot has one', 'No MULE on that plot'),
+      refused('the plot is not up for auction already', 'That plot is already up for auction'),
+      refused(`you have fewer than ${LOTS.perPlayer} lots up`, `You can list ${LOTS.perPlayer} lots a month`),
+      refused(`fewer than ${LOTS.maxLotsPerMonth} lots are up`, 'The auction is full this month'),
+      refused('the minimum is a whole number, 1 or more', 'Pick a minimum of 1 or more'),
+      refused('unsold is store or keep', 'Pick store or keep'),
+    ],
+    cost: null,
+    args: [
+      { name: 'item', kind: 'enum', values: ['plot', 'mule'] },
+      PLOT,
+      { name: 'minimum', kind: 'number' },
+      { name: 'unsold', kind: 'enum', values: ['store', 'keep'] },
+    ],
+  },
+  unlist: {
+    type: 'unlist',
+    command: 'unlist',
+    phases: ['planning'],
+    does: () => 'Takes one of your listings back before the land auction.',
+    legalWhen: () => [
+      refused('it is planning', 'Listings are made in planning'),
+      refused('the listing exists', 'No such listing'),
+      refused('it is yours', 'Not your listing'),
+    ],
+    cost: null,
+    args: [{ name: 'id', kind: 'enum' }],
   },
   run: {
     type: 'run',

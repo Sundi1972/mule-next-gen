@@ -17,10 +17,10 @@ export function GameOver() {
   const tv = table.boards > 0;
   const lg = league(view);
   const mine = lg.rows.find((r) => r.player.id === self.id)!;
-  const won = mine.rank === 1 && lg.leader?.level.length === 1;
+  const shared = (lg.leader?.level.length ?? 0) > 1;
   const now: Now = {
     // One line in the rail: the card beside says the rest ("You finished 2nd of 4").
-    title: won ? 'Game over: you win' : `Game over: ${ordinal(mine.rank)} of ${view.players.length}`,
+    title: mine.rank === 1 ? (shared ? 'Game over: you share the win' : 'Game over: you win') : `Game over: ${ordinal(mine.rank)} of ${view.players.length}`,
     detail: `${winnerWords(view, lg)}.`,
   };
   const density = tv ? 'phone' : 'compact';

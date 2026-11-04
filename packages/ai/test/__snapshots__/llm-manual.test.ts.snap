@@ -89,6 +89,24 @@ Does: At the store's or the ship's line during a good's walk: buys or sells that
 Legal when: in the goods auction, a good is up (else: "The auction is not running"); the walk has started, after the good's status screen (else: "Not walking yet"); a whole number of units, at least 1 (else: "Choose at least one unit"); you did not pass on this good (else: "You passed on this good"); you stand at the store's or the ship's line (else: "Walk to the store’s line first"); as a buyer, you can pay for one unit (else: "You can’t pay for one"); as a seller, you have one to sell (else: "You have none to sell").
 Cost: free.
 
+### drone
+In: planning. Args: plots (plot).
+Does: Sends the geo drone over 1 to 2 free or listed plots for 60 credits: its results arrive when the land grant starts.
+Legal when: it is planning (else: "Not allowed during <phase>"); no drone of yours is on its way (else: "A drone is already on its way"); 1 to 2 plots (else: "Pick 1 to 2 plots"); each plot is free or listed (else: "The drone only flies over free or listed plots"); you have 60 credits (else: "Not enough money").
+Cost: yes, as it says under Does.
+
+### list
+In: planning. Args: item (plot | mule), plot (plot), minimum (number), unsold (store | keep).
+Does: Puts one of your plots, or the MULE on it, up for this month's land auction at a minimum you set; unsold, the lot is kept or sold to the store, as you chose. Up to 2 lots each, 4 a month from all sellers.
+Legal when: it is planning (else: "Listings are made in planning"); it names one of your plots (else: "Not your plot"); for a MULE, the plot has one (else: "No MULE on that plot"); the plot is not up for auction already (else: "That plot is already up for auction"); you have fewer than 2 lots up (else: "You can list 2 lots a month"); fewer than 4 lots are up (else: "The auction is full this month"); the minimum is a whole number, 1 or more (else: "Pick a minimum of 1 or more"); unsold is store or keep (else: "Pick store or keep").
+Cost: free.
+
+### unlist
+In: planning. Args: id (enum).
+Does: Takes one of your listings back before the land auction.
+Legal when: it is planning (else: "Listings are made in planning"); the listing exists (else: "No such listing"); it is yours (else: "Not your listing").
+Cost: free.
+
 ### run
 In: planning. Args: office (governor), promise (lower | hold | cap).
 Does: Runs for an office in the next election, moving any run for the other one; null withdraws. Elections open planning in months 1, 4, 7, 10. A Governor run carries a tax promise: lower, hold, or a cap of 0% to 15%.
