@@ -71,7 +71,9 @@ export function stubSource(validate: ValidatePlan = boundsValidate): PlaybookSou
     draft(state, seat) {
       const strategy = draftStrategy(state);
       const landGrant = { ranked: rankingOf(state, seat), pressShare: { ...ENGINE_PRESS }, deny: [], planB: [], claims: GAME.claimsPerGrant as 0 | 1 | 2 };
-      const playbook: Playbook = { v: 1, seat, month: state.month, phase: 'landGrant', strategy, landGrant, by: 'engine' };
+      // As WS9's playbookSource stamps it: the month whose land grant it plans, next month's from the land auction on.
+      const month = state.phase === 'planning' || state.phase === 'landGrant' ? state.month : state.month + 1;
+      const playbook: Playbook = { v: 1, seat, month, phase: 'landGrant', strategy, landGrant, by: 'engine' };
       return { playbook, land: { strategy: structuredClone(strategy), landGrant: structuredClone(landGrant) } };
     },
     validate,
