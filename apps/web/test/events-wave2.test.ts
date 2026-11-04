@@ -272,7 +272,7 @@ const THEFT = event('muleTheft', 'development', {
   scope: 'personal',
   player: OSSA,
   origin: { x: 6, y: 3 },
-  hits: [{ x: 6, y: 3, order: 0, delta: 0, becomes: 'idle', muleLost: true }],
+  hits: [{ x: 6, y: 3, order: 0, delta: 0, becomes: 'idle', muleLost: true, good: 'smithore' }],
 });
 const ROBBED = after({ '6,3': {} });
 const METEOR = event('meteorStrike', 'production', {
@@ -280,7 +280,7 @@ const METEOR = event('meteorStrike', 'production', {
   scope: 'local',
   player: OSSA,
   origin: { x: 7, y: 3 },
-  hits: [{ x: 7, y: 3, order: 0, delta: 0, becomes: 'crater', muleLost: true }],
+  hits: [{ x: 7, y: 3, order: 0, delta: 0, becomes: 'crater', muleLost: true, good: 'energy' }],
 });
 const CRATERED = after({ '7,3': { special: { kind: 'meteorCrater' } } });
 const COLD = event('coldSnap', 'production', { title: 'Cold snap', line: 'A cold snap: every plot needs 2 times its Energy this month.', effects: [{ on: 'colony', what: 'energyNeed', delta: 100 }] });
@@ -328,6 +328,17 @@ describe('B2 (C5): the map and colony stories play the gallery’s own, and chan
     }
     const seg = segOf([THEFT], 'tv');
     expect(has(screen([THEFT], seg.playAt + 0.2, 'tv', { map: ROBBED }), 'mark-6-3'), 'not before it lands').toBe(false);
+  });
+
+  it.each([
+    { events: [THEFT], map: ROBBED, x: 6, y: 3 },
+    { events: [METEOR], map: CRATERED, x: 7, y: 3 },
+  ])('$events.0.key: the plot keeps its MULE until the hit lands, then stands empty, on every screen that draws the map', ({ events, map, x, y }) => {
+    const seg = segOf(events, 'tv');
+    for (const where of ['tv', 'alone'] as const) {
+      expect(has(screen(events, seg.announceAt + 0.1, where, { map }), `installed-${x}-${y}`), `${where}: its MULE while announced`).toBe(true);
+      expect(has(result(events, where, { map }), `installed-${x}-${y}`), `${where}: gone once it lands`).toBe(false);
+    }
   });
 
   it('meteorStrike: the crater appears on the map as the meteor lands, not before, and the plot’s chip says LOST', () => {
@@ -391,8 +402,8 @@ describe('B2 (C5): the map and colony stories play the gallery’s own, and chan
   });
 
   it('the TV log says what each did', () => {
-    expect(text(inside(result([THEFT], 'tv', { map: ROBBED }), 'log'))).toContain('Ossa’s plot stands idle');
-    expect(text(inside(result([METEOR], 'tv', { map: CRATERED }), 'log'))).toContain('Ossa’s plot lost its MULE · a crater');
+    expect(text(inside(result([THEFT], 'tv', { map: ROBBED }), 'log'))).toContain('Ossa’s Smithore mine stands idle');
+    expect(text(inside(result([METEOR], 'tv', { map: CRATERED }), 'log'))).toContain('Ossa’s Energy plant lost its MULE · a crater');
     expect(text(inside(result([COLD], 'tv'), 'log'))).toContain('Energy need +100%');
   });
 

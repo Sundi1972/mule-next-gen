@@ -420,7 +420,8 @@ describe('T-AC-11: a cavern collapse tells every screen what the plot was and wh
       expect(view.production!.events).toEqual(view.events);
       const drought = view.events!.find((e) => e.key === 'drought');
       expect(drought?.hits.some((h) => h.x === farmed.x && h.y === farmed.y), `${id}: the drought reaches the farmed cavern`).toBe(true);
-      for (const hit of drought!.hits) expect(['was' in hit, 'becomes' in hit]).toEqual([false, false]);
+      // A drought takes no MULE, so its hits name no good either.
+      for (const hit of drought!.hits) expect(['was' in hit, 'becomes' in hit, 'good' in hit]).toEqual([false, false, false]);
     }
   });
 });

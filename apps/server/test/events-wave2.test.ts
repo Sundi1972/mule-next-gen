@@ -37,7 +37,8 @@ describe("C1, C4: the server shows this month's events from the month's own list
       expect(view).toMatchObject({
         key: 'meteorStrike',
         phase: 'planning',
-        hits: [{ x: 2, y: 1, order: 0, delta: 0, becomes: 'crater', muleLost: true }],
+        // A MULE lost names its good: the screens draw it on its plot until the hit lands, and say what was lost.
+        hits: [{ x: 2, y: 1, order: 0, delta: 0, becomes: 'crater', muleLost: true, good: 'food' }],
         effects: [
           { on: 's1', what: 'money', delta: -25 },
           { on: 'store', what: 'crystite', delta: -4 },
@@ -173,7 +174,7 @@ describe('T-AC-1: each wave-2 event fires in its phase, changes the state as RUL
   it("muleTheft: development and the month end each take one of the owner's MULEs; the plot stands idle", () => {
     const dev = firedIn('muleTheft', 'development', 1, farms(2));
     const [theft] = dev.events;
-    expect(theft).toMatchObject({ player: 's1', phase: 'development', kind: 'plot', hits: [{ delta: 0, becomes: 'idle', muleLost: true }] });
+    expect(theft).toMatchObject({ player: 's1', phase: 'development', kind: 'plot', hits: [{ delta: 0, becomes: 'idle', muleLost: true, good: 'food' }] });
     const { x, y } = theft!.hits[0]!;
     expect(dev.state.tiles[y * dev.state.width + x]).toMatchObject({ owner: 's1', outfit: null, runMonths: 0 });
     const upkeep = firedIn('muleTheft', 'upkeep', 1, farms(2));
@@ -220,7 +221,7 @@ describe('T-AC-1: each wave-2 event fires in its phase, changes the state as RUL
     const { state, events } = firedIn('meteorStrike', 'production', 1);
     const [strike] = events;
     expect(strike).toMatchObject({ phase: 'production', kind: 'strike', hits: [{ delta: 0, becomes: 'crater' }] });
-    // The engine may file no good for a tile without a MULE; the view's hit carries no good at all, so none leaks.
+    // No MULE on the struck tile, so nothing was lost: the hit names no good (only a MULE lost does).
     expect(strike!.hits[0]).not.toHaveProperty('good');
     const tile = state.tiles[strike!.hits[0]!.y * state.width + strike!.hits[0]!.x]!;
     expect(tile.terrain).not.toBe('store');
