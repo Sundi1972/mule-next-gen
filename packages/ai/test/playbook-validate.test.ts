@@ -116,8 +116,7 @@ describe('the validator holds every playbook to RULE-1', () => {
     expect(one('development', '/auction/food/role', 'buyer').why).toBe('not in this playbook');
     expect(one('planning', '/development/route', [{ act: 'pub' }]).why).toBe('not in this playbook');
     const goods = Object.keys(run('auction', []).playbook.auction!);
-    const missing = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine'].find((g) => !goods.includes(g));
-    if (missing) expect(one('auction', `/auction/${missing}/role`, 'buyer').why).toBe('not in this playbook');
+    expect(one('auction', '/auction/gold/role', 'buyer').why).toBe('not in this playbook');
 
     // P2: the engine's own orderGeoDrone on a copy, in its own words.
     const [f1, f2, f3] = freePlots(at.planning);
@@ -195,6 +194,10 @@ describe('the validator holds every playbook to RULE-1', () => {
     const seller = run('auction', [edit(`/auction/${staple}/role`, 'seller'), edit(`/auction/${staple}/hold`, 0)]);
     expect(read(seller.playbook, `/auction/${staple}/hold`)).toBe(need);
     expect(seller.rejected.find((x) => x.path === `/auction/${staple}/hold`)?.why).toBe(`clamped to ${need}: next month's need`);
+    // Step 5: the same edits the other way round; the hold is checked again against the role that plays.
+    const reversed = run('auction', [edit(`/auction/${staple}/hold`, 0), edit(`/auction/${staple}/role`, 'seller')]);
+    expect(read(reversed.playbook, `/auction/${staple}/hold`)).toBe(need);
+    expect(reversed.rejected).toContainEqual({ path: `/auction/${staple}/hold`, to: 0, why: `clamped to ${need}: next month's need` });
     expect(one('auction', g('walkAway'), 0).plays).toBe(1);
     const buyer = run('auction', [edit(g('role'), 'buyer'), edit(g('start'), part.walkAway + 40)]);
     expect(read(buyer.playbook, g('start'))).toBe(part.walkAway);
