@@ -210,6 +210,11 @@ export interface MyView {
   outfitCosts: Record<Outfit, number>;
   /** Free plots chosen for the geo drone this month. */
   droneOrder: { x: number; y: number }[];
+  /**
+   * The plots this month's drone surveyed, from the land grant until the month ends: the land grant's rail says
+   * "Your drone: …" while one is lit (H-3). Only on this player's own view; absent reads as none.
+   */
+  droneFound?: { x: number; y: number }[];
   /** This player's own side of the election; null when the game plays without politics. */
   politics: MyPoliticsView | null;
   /** True once this player has installed a MULE in this development turn, and until their next one starts. */
