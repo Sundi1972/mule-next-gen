@@ -162,6 +162,13 @@ function table(options: TableOptions) {
     for (const phone of phones) if (game?.viewFor(null).phase === 'upkeep') send(phone, { t: 'intent', intent: { type: 'ready' } });
   };
   readies.push(readyAtMonthEnd);
+  /** A good's side pick has no clock either (A-7): every phone presses Ready there at once, keeping its side. */
+  const readyAtSidePick = () => {
+    const view = game?.viewFor(null);
+    if (view?.phase !== 'auction' || view.auction?.stage !== 'status') return;
+    for (const phone of phones) send(phone, { t: 'intent', intent: { type: 'ready' } });
+  };
+  readies.push(readyAtSidePick);
   /** Runs the fake clock until `done`, or the game's end; false if `done` never held. */
   const runUntil = async (done: () => boolean, limitMs = GAME_LIMIT_MS) => {
     for (let t = 0; t < limitMs && !done(); t += STEP_MS) {

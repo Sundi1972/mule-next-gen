@@ -79,7 +79,7 @@ function phoneScreen(view: MuleView, seatId: string): string {
 
 function tvScreen(view: MuleView): string {
   const client = { intent: () => {}, subscribe: () => () => {}, getState: () => ({ chat: [], view: null, seatId: null }) } as unknown as TableClient;
-  return renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(TvAuction, { table: {} as TableView<MuleView>, game: view, auction: view.auction! }) }));
+  return renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(TvAuction, { table: { hostId: 's1', seats: [] } as unknown as TableView<MuleView>, game: view, auction: view.auction! }) }));
 }
 
 /** The text inside the first element with this test id, tags stripped. */

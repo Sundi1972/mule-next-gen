@@ -200,6 +200,8 @@ export interface PlayOptions {
   onPhase?: (state: GameState) => void;
   /** The host option: false plays without offices, elections or a moving tax. On by default, as in createGame. */
   politics?: boolean;
+  /** The game's length in months, as the server's maxMonths option; GAME.maxMonths by default, as in createGame. */
+  maxMonths?: number;
   /** Whether walking costs development time (DEV_WALK). On unless set false, to compare with the game before walking. */
   walking?: boolean;
   /**
@@ -232,7 +234,7 @@ export async function playGameAsync(seed: number, specs: SeatSpec[], options: Pl
 
 /** The game loop, yielding after every tick where a decider may be waiting, and once at the end of each phase. */
 function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Generator<void, PlayedGame, void> {
-  const state = createGame({ seed, players: specs.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })), politics: options.politics });
+  const state = createGame({ seed, players: specs.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })), politics: options.politics, maxMonths: options.maxMonths });
   // Read per game, so a sim run's --set reaches it.
   const DEV_TICK_MS = AI_HANDS.devTickMs;
   let decisions = 0;
