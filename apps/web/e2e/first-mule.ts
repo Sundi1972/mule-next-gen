@@ -79,6 +79,12 @@ try {
     await page.locator('[data-shop=energy]:not([disabled])').click({ timeout: PRESS_MS * 3 });
     await dev(page).getByRole('button', { name: 'Walk out to the map' }).click({ timeout: PRESS_MS });
     await dev(page).getByRole('button', { name: 'Install here' }).click({ timeout: PRESS_MS });
+    // Installing is a walk to the plot, and a hungry colonist walks slowly: wait on the server's own install, bounded
+    // by when its walk arrives, never by a fixed guess.
+    const arrives = game.viewFor(seat).players.find((p) => p.id === seat)?.colonist?.walk?.arrivesAt ?? Date.now();
+    const until = Math.max(arrives, Date.now()) + PRESS_MS * 3;
+    while (!game.viewFor(seat).me!.installedThisTurn && Date.now() < until) await page.waitForTimeout(100);
+    check(game.viewFor(seat).me!.installedThisTurn, `A-1: ${seat}'s first MULE is in on the server; news: ${game.viewFor(null).news.join(' | ')}`);
   };
   const measures: string[] = [];
   /** Once in, you wait: the guide's detail in view, no plot row, the filter dimmed with its reason, the pub open. */

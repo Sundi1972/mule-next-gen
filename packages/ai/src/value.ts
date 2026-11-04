@@ -34,7 +34,7 @@ import {
   type Stock,
   type Tile,
 } from '@mule/engine';
-import { placePoint, tripSeconds } from './floor-time.js';
+import { standPoint, tripSeconds } from './floor-time.js';
 import { productionsLeft, type Outlook } from './outlook.js';
 
 /** Who is thinking: the seat, its persona and its level. */
@@ -182,7 +182,7 @@ export function monthWalkSeconds(obs: GameState, mind: Mind): number {
     // On the arcade floor, at RULE-2's speed: from the corral out to the plot leading the MULE and back to the corral.
     const cfg = floorConfig();
     const w = { pace: zip, bot: p.isAi };
-    const corral = placePoint('corral', cfg.hall);
+    const corral = standPoint('corral', cfg.hall);
     const floorTrips = plots.reduce((n, t) => n + tripSeconds(obs, cfg, w, corral, tileIndex(obs.width, t.x, t.y), true, 'corral'), 0);
     return (mind.level.mulesPerMonth * floorTrips) / plots.length;
   }

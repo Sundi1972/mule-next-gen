@@ -22,7 +22,7 @@ import {
   type Reach,
 } from '@mule/engine';
 import type { AiAction } from '../actions.js';
-import { doorTable, hallSeconds, mapFactor, placePoint, shoreStands, tileMiddle, walkwayOf } from '../floor-time.js';
+import { backToDoor, doorTable, hallSeconds, mapFactor, placePoint, shoreStands, tileMiddle, walkwayOf } from '../floor-time.js';
 
 /**
  * The develop hand's runner on the dev floor (arcade C9): it walks one step of the to-do list, as a person would, with
@@ -219,10 +219,9 @@ export class FloorWalker {
   /** On the map: to just outside the store door that makes the walk to `place` quickest. */
   private toDoor(view: FloorView, c: FloorColonist, place: HallPlace): StepRun {
     const { state, cfg } = view;
-    const here = tileIndex(state.width, Math.floor(c.x), Math.floor(c.y));
     let best: { door: HallDoor; s: number } | null = null;
     for (const [door, map] of doorTable(state, cfg)) {
-      const s = map[here]! / mapFactor(cfg, c.pace, c.lead !== null, c.bot) + hallSeconds(state, cfg, cfg.hall.spots[door], place, c.pace, c.lead !== null);
+      const s = backToDoor(state, cfg, map, c) / mapFactor(cfg, c.pace, c.lead !== null, c.bot) + hallSeconds(state, cfg, cfg.hall.spots[door], place, c.pace, c.lead !== null);
       if (!best || s < best.s) best = { door, s };
     }
     if (!best || !Number.isFinite(best.s)) return { kind: 'failed', why: 'no open walk to the store' };
@@ -261,7 +260,7 @@ export class FloorWalker {
     const lead = c.lead !== null;
     let best: { door: HallDoor; s: number } = { door: HALL_DOORS[0], s: Infinity };
     for (const [door, map] of doorTable(state, cfg)) {
-      const s = hallSeconds(state, cfg, c, door, c.pace, lead) + map[index]! / mapFactor(cfg, c.pace, lead, c.bot);
+      const s = hallSeconds(state, cfg, c, door, c.pace, lead) + map[index]!.seconds / mapFactor(cfg, c.pace, lead, c.bot);
       if (s < best.s) best = { door, s };
     }
     return best.door;

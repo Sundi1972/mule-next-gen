@@ -23,7 +23,7 @@ export const walkers: SeatInfo[] = [
  * land grant, returned as `plot`. The clock runs from the start, as in any month after the first, unless
  * `firstMonthWaits` keeps month 1's rule: then it waits for every first MULE (A-1).
  */
-export function toDevelopment(options: { players?: SeatInfo[]; phaseScale?: number; claimer?: string; firstMonthWaits?: boolean; prepare?: (state: GameState) => void } = {}) {
+export function toDevelopment(options: { players?: SeatInfo[]; phaseScale?: number; claimer?: string; firstMonthWaits?: boolean; prepare?: (state: GameState) => void; onChanged?: (at: number) => void } = {}) {
   const rule = DEV_STEER.month1WaitsForFirstMule;
   DEV_STEER.month1WaitsForFirstMule = options.firstMonthWaits ?? false;
   try {
@@ -48,8 +48,8 @@ export function clockRunsInMonth1(): void {
   });
 }
 
-function playToDevelopment(options: { players?: SeatInfo[]; phaseScale?: number; claimer?: string; prepare?: (state: GameState) => void }) {
-  const fake = fakeContext({ table: options.players ?? seats });
+function playToDevelopment(options: { players?: SeatInfo[]; phaseScale?: number; claimer?: string; prepare?: (state: GameState) => void; onChanged?: (at: number) => void }) {
+  const fake = fakeContext({ table: options.players ?? seats, onChanged: options.onChanged });
   const game = new MuleGame(fake.ctx, 7, options.phaseScale === undefined ? undefined : { phaseScale: options.phaseScale });
   game.start(options.players ?? seats);
   // The game keeps its engine state private; a test reaches it to arrange its ground truth.
@@ -88,7 +88,8 @@ export function firstHuman(table: { id: string; isAi: boolean }[]): string | nul
 
 /**
  * A game context with a manual clock. `waits` is the wait each scheduled timer
- * was given; `onChanged` is called with the clock's time on every `changed()`.
+ * was given; `onChanged` is called with the clock's time on every `changed()`;
+ * `frames` holds every payload the game sent through `frame()`, in order.
  * The host is `table`'s first human seat (`seats` by default) unless `host` names
  * another or none; `setHost` passes hosting on, as the room does when a phone drops.
  */
@@ -96,6 +97,7 @@ export function fakeContext(options: { onChanged?: (at: number) => void; table?:
   let now = 0;
   let host = options.host === undefined ? firstHuman(options.table ?? seats) : options.host;
   const waits: number[] = [];
+  const frames: unknown[] = [];
   const timers: { at: number; fn: () => void }[] = [];
   const ctx: GameContext = {
     now: () => now,
@@ -109,7 +111,7 @@ export function fakeContext(options: { onChanged?: (at: number) => void; table?:
       };
     },
     changed: () => options.onChanged?.(now),
-    frame: () => {},
+    frame: (payload) => void frames.push(payload),
     hostId: () => host,
   };
   const advance = (ms: number) => {
@@ -130,7 +132,7 @@ export function fakeContext(options: { onChanged?: (at: number) => void; table?:
   const setHost = (id: string | null) => {
     host = id;
   };
-  return { ctx, advance, hold, waits, setHost };
+  return { ctx, advance, hold, waits, frames, setHost };
 }
 
 /**
@@ -144,6 +146,72 @@ export function tapThere(game: MuleGame, fake: { ctx: GameContext; advance: (ms:
   if (walk) fake.advance(walk.arrivesAt - fake.ctx.now());
   const assay = colonist()?.assayUntil;
   if (assay) fake.advance(assay - fake.ctx.now());
+}
+
+/** A point a colonist steers to: map tiles when `space` is 'map', hall units when 'hall'. */
+export interface SteerPoint {
+  space: 'map' | 'hall';
+  x: number;
+  y: number;
+}
+
+/** A stick component as a phone sends it: in steps of 1/8, the vector no longer than 1 (protocol `steer`). */
+const STICK_STEPS = 8;
+const stick = (x: number, y: number) => {
+  const length = Math.hypot(x, y) || 1;
+  const round = (v: number, f: (n: number) => number) => f((v / length) * STICK_STEPS) / STICK_STEPS;
+  const near = { x: round(x, Math.round), y: round(y, Math.round) };
+  return Math.hypot(near.x, near.y) <= 1 ? near : { x: round(x, Math.trunc), y: round(y, Math.trunc) };
+};
+
+/**
+ * The steering twin of tapThere (arcade spec C15): steers the seat's colonist through `route`, point by point, one
+ * steer intent each time its direction changes, letting the fake clock run one development tick (`tickMs` real ms)
+ * between looks, until it stands within `within` of the last point; then it lets go of the stick. Where it stands is
+ * read from the shared view, as the TV reads it. Time moves only through the fake clock, so only the game's own
+ * ctx.schedule timers run (HC-9). Returns the ticks it took; throws when a point is in another space than the
+ * colonist (go through a door with pressAct first) or is not reached in `maxTicks`.
+ */
+export function steerTo(
+  game: Pick<MuleGame, 'handle' | 'viewFor'>,
+  fake: { advance: (ms: number) => void },
+  seatId: string,
+  route: readonly SteerPoint[],
+  { tickMs = DEV_STEER.tickMs, within = 0.2, maxTicks = 2_000 }: { tickMs?: number; within?: number; maxTicks?: number } = {},
+): number {
+  const where = () => {
+    const c = game.viewFor(null).players.find((p) => p.id === seatId)?.colonist;
+    if (c?.x === undefined || c.y === undefined || !c.space) throw new Error(`${seatId} has no steered colonist`);
+    return { space: c.space, x: c.x, y: c.y };
+  };
+  let sent = { x: 0, y: 0 };
+  const steer = (x: number, y: number) => {
+    if (x === sent.x && y === sent.y) return;
+    sent = { x, y };
+    game.handle(seatId, { type: 'steer', x, y });
+  };
+  let ticks = 0;
+  for (const point of route) {
+    for (;;) {
+      const at = where();
+      if (at.space !== point.space) throw new Error(`${seatId} is in the ${at.space}, the point is in the ${point.space}`);
+      const dx = point.x - at.x;
+      const dy = point.y - at.y;
+      if (Math.hypot(dx, dy) <= within) break;
+      if (ticks++ >= maxTicks) throw new Error(`${seatId} did not reach (${point.x}, ${point.y}) in ${maxTicks} ticks; stands at (${at.x}, ${at.y})`);
+      const s = stick(dx, dy);
+      steer(s.x, s.y);
+      fake.advance(tickMs);
+    }
+  }
+  steer(0, 0);
+  return ticks;
+}
+
+/** The one button, pressed as a phone presses it, and one development tick for the tick to apply it. */
+export function pressAct(game: Pick<MuleGame, 'handle'>, fake: { advance: (ms: number) => void }, seatId: string, { tickMs = DEV_STEER.tickMs }: { tickMs?: number } = {}): void {
+  game.handle(seatId, { type: 'act' });
+  fake.advance(tickMs);
 }
 
 /** The first seed whose month-1 roll brings a colony lot for these seats, found by playing the engine, never by mocking its RNG. */
